@@ -46,6 +46,7 @@ n64_kernel_entry:
         li      $k1, ST_CU1
         or      $k0, $k0, $k1
         mtc0    $k0, $12
+        la      $sp, USER_DATA_END
         nop
         nop
         nop
