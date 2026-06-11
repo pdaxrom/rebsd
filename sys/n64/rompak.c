@@ -8,22 +8,35 @@
 static unsigned char
 rom_read8(unsigned offset)
 {
-    return *(const volatile unsigned char *)(N64_ROM_KSEG1_BASE + offset);
+    unsigned word;
+    unsigned shift;
+
+    /* CPU-side PI ROM access must use aligned 32-bit reads. */
+    word = *(const volatile unsigned *)(N64_ROM_KSEG1_BASE +
+        (offset & ~3u));
+    shift = (3u - (offset & 3u)) * 8u;
+    return (unsigned char)(word >> shift);
 }
 
 static unsigned
 rom_read32be(unsigned offset)
 {
+    if ((offset & 3u) == 0u)
+        return *(const volatile unsigned *)(N64_ROM_KSEG1_BASE + offset);
+
     return ((unsigned)rom_read8(offset) << 24) |
         ((unsigned)rom_read8(offset + 1u) << 16) |
         ((unsigned)rom_read8(offset + 2u) << 8) |
         (unsigned)rom_read8(offset + 3u);
 }
 
-const volatile unsigned char *
-n64_rompak_ptr(unsigned offset)
+void
+n64_rompak_copy(unsigned offset, void *dst, unsigned nbytes)
 {
-    return (const volatile unsigned char *)(N64_ROM_KSEG1_BASE + offset);
+    unsigned char *out = dst;
+
+    while (nbytes-- != 0u)
+        *out++ = rom_read8(offset++);
 }
 
 unsigned

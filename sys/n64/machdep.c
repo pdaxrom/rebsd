@@ -19,6 +19,17 @@ early_puts(const char *s)
         n64cart_uart_putc(*s++);
 }
 
+static void
+early_put_hex32(unsigned value)
+{
+    static const char digits[] = "0123456789abcdef";
+    int shift;
+
+    early_puts("0x");
+    for (shift = 28; shift >= 0; shift -= 4)
+        n64cart_uart_putc(digits[(value >> (unsigned)shift) & 0x0f]);
+}
+
 /*
  * Minimal machine startup. Full root device selection and cache/TLB setup
  * will be filled in when the real kernel link is enabled.
@@ -28,6 +39,9 @@ startup(void)
 {
     early_puts("RetroBSD N64 kernel entry\n");
     physmem = n64_rdram_size();
+    early_puts("rdram size=");
+    early_put_hex32(physmem);
+    early_puts("\n");
     pipedev = swapdev;
     boothowto = RB_RDONLY;
 }

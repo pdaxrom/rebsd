@@ -9,7 +9,7 @@ struct n64_rompak_entry {
     unsigned size;
 };
 
-const volatile unsigned char *n64_rompak_ptr(unsigned offset);
+void n64_rompak_copy(unsigned offset, void *dst, unsigned nbytes);
 unsigned n64_rompak_read32(unsigned offset);
 int n64_rompak_find(const char *name, struct n64_rompak_entry *entry);
 
