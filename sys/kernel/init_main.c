@@ -106,11 +106,7 @@ main()
     int s __attribute__((unused));
 
     startup();
-#ifdef N64
-    printf ("%s", version);
-#else
     printf ("\n%s", version);
-#endif
     kconfig();
 
     /*
