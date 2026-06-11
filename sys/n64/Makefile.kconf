@@ -140,10 +140,10 @@ $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 	$(MAKE) -C $(TOPSRC)/src/libc TARGET_PLATFORM=n64
 
 $(N64_USER_SH): $(TOPSRC)/src/libc.a $(N64_SH_SRCS)
-	$(MAKE) -C $(TOPSRC)/src/cmd/sh TARGET_PLATFORM=n64
+	$(MAKE) -B -C $(TOPSRC)/src/cmd/sh TARGET_PLATFORM=n64
 
 $(N64_USER_LS): $(TOPSRC)/src/libc.a $(N64_LS_SRCS)
-	$(MAKE) -C $(TOPSRC)/src/cmd/ls TARGET_PLATFORM=n64
+	$(MAKE) -B -C $(TOPSRC)/src/cmd/ls TARGET_PLATFORM=n64
 
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil

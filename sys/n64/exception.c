@@ -16,6 +16,8 @@
 #define N64_CAUSE_CE1   0x10000000u
 #define N64_CAUSE_IP7   0x00008000u
 
+static int last_user_icache_pid = -1;
+
 static void
 dumpregs(int *frame)
 {
@@ -328,7 +330,12 @@ out:
         addupc((caddr_t)frame[FRAME_PC], &u.u_prof,
             (int)(u.u_ru.ru_stime - syst));
 ret:
-    if (USERMODE(frame[FRAME_STATUS]))
+    if (USERMODE(frame[FRAME_STATUS])) {
+        if (last_user_icache_pid != u.u_procp->p_pid) {
+            n64_sync_user_icache();
+            last_user_icache_pid = u.u_procp->p_pid;
+        }
         n64_restore_user_fpu(frame[FRAME_STATUS]);
+    }
     led_control(LED_KERNEL, 0);
 }
