@@ -140,9 +140,9 @@ uart_putc_raw(char ch)
 static void
 uart_putc(char ch)
 {
-    uart_putc_raw(ch);
     if (ch == '\n')
         uart_putc_raw('\r');
+    uart_putc_raw(ch);
 }
 
 static void

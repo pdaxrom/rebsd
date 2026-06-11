@@ -28,8 +28,11 @@ extern char _n64_exception_vector_end[];
 static void
 early_puts(const char *s)
 {
-    while (*s != '\0')
+    while (*s != '\0') {
+        if (*s == '\n')
+            n64cart_uart_putc('\r');
         n64cart_uart_putc(*s++);
+    }
 }
 
 static void

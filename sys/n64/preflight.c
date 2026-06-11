@@ -6,8 +6,11 @@
 static void
 puts(const char *s)
 {
-    while (*s)
+    while (*s) {
+        if (*s == '\n')
+            n64cart_uart_putc('\r');
         n64cart_uart_putc(*s++);
+    }
 }
 
 static void

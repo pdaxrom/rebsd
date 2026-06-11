@@ -59,9 +59,9 @@ cnioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 void
 cnputc(char c)
 {
-    n64cart_uart_putc(c);
     if (c == '\n')
         n64cart_uart_putc('\r');
+    n64cart_uart_putc(c);
 }
 
 int
