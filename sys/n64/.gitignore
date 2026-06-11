@@ -1,9 +1,11 @@
 .deps/
 *.o
+*.d
 *.elf
 *.bin
 *.dis
 *.nm
+*.z64
 /machine
 /sys
 vers.c
