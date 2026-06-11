@@ -26,7 +26,21 @@ _start:
         bltz    $s0, 2f
         nop
 
-        move    $a0, $s0
+        la      $a0, console_path
+        li      $a1, O_RDWR
+        move    $a2, $zero
+        syscall SYS_open
+        nop
+        nop
+
+        la      $a0, console_path
+        li      $a1, O_RDWR
+        move    $a2, $zero
+        syscall SYS_open
+        nop
+        nop
+
+        li      $a0, 1
         la      $a1, banner
         li      $a2, banner_end - banner
         syscall SYS_write
@@ -44,7 +58,7 @@ _start:
         bne     $t0, $t1, 3f
         nop
 
-        move    $a0, $s0
+        li      $a0, 1
         la      $a1, fpu_ok
         li      $a2, fpu_ok_end - fpu_ok
         syscall SYS_write
@@ -54,7 +68,7 @@ _start:
         nop
 
 3:
-        move    $a0, $s0
+        li      $a0, 1
         la      $a1, fpu_fail
         li      $a2, fpu_fail_end - fpu_fail
         syscall SYS_write
@@ -68,7 +82,7 @@ _start:
         nop
         nop
 
-        move    $a0, $s0
+        li      $a0, 2
         la      $a1, exec_fail
         li      $a2, exec_fail_end - exec_fail
         syscall SYS_write
