@@ -4,8 +4,14 @@
 #ifndef _N64_IO_H_
 #define _N64_IO_H_
 
+#define C0_INDEX        0
+#define C0_ENTRYLO0     2
+#define C0_ENTRYLO1     3
+#define C0_PAGEMASK     5
+#define C0_WIRED        6
 #define C0_BADVADDR     8
 #define C0_COUNT        9
+#define C0_ENTRYHI      10
 #define C0_COMPARE      11
 #define C0_STATUS       12
 #define C0_CAUSE        13
@@ -31,6 +37,7 @@
 #define ST_IM5          0x00002000u
 #define ST_IM6          0x00004000u
 #define ST_IM7          0x00008000u
+#define ST_BEV          0x00400000u
 #define ST_RP           0x08000000u
 #define ST_CU0          0x10000000u
 #define ST_CU1          0x20000000u
@@ -91,6 +98,14 @@
 #define FRAME_PC        32
 #define FRAME_WORDS     33
 
+#define TLB_ENTRYLO_G   0x00000001u
+#define TLB_ENTRYLO_V   0x00000002u
+#define TLB_ENTRYLO_D   0x00000004u
+#define TLB_ENTRYLO_C_SHIFT 3
+#define TLB_CACHE_CNC   3u
+#define TLB_PAGEMASK_4K 0x00000000u
+#define TLB_PAGEMASK_1M 0x001fe000u
+
 #ifndef __ASSEMBLER__
 
 static inline void
@@ -125,6 +140,28 @@ mips_get_stack_pointer(void)
         "nop" \
         : : "r" ((unsigned)(value)), "K" (reg)); \
     } while (0)
+
+static inline void
+mips_tlb_write_indexed(unsigned index, unsigned pagemask, unsigned entryhi,
+    unsigned entrylo0, unsigned entrylo1)
+{
+    asm volatile (
+        "mtc0   %0, $0\n"
+        "mtc0   %1, $5\n"
+        "mtc0   %2, $10\n"
+        "mtc0   %3, $2\n"
+        "mtc0   %4, $3\n"
+        "nop\n"
+        "nop\n"
+        "nop\n"
+        "tlbwi\n"
+        "nop\n"
+        "nop\n"
+        "nop"
+        : : "r" (index), "r" (pagemask), "r" (entryhi),
+            "r" (entrylo0), "r" (entrylo1)
+        : "memory");
+}
 
 static inline int
 mips_intr_disable(void)

@@ -44,11 +44,13 @@
 #define N64_KERNEL_RESERVED     (1024*1024)
 #define N64_BASE_SWAP_RESERVED  (512*1024)
 #define MAXMEM                  (2*1024*1024)
+#define N64_USER_VADDR_START    0x00400000
+#define N64_USER_PHYS_START     N64_KERNEL_RESERVED
 
 #define KERNEL_DATA_START       0x80000000
 #define KERNEL_DATA_END         (KERNEL_DATA_START + N64_KERNEL_RESERVED)
-#define USER_DATA_START         KERNEL_DATA_END
-#define USER_DATA_END           (0x80000000 + N64_RDRAM_SIZE - N64_BASE_SWAP_RESERVED)
+#define USER_DATA_START         N64_USER_VADDR_START
+#define USER_DATA_END           (USER_DATA_START + MAXMEM)
 
 #define stacktop(siz)           (USER_DATA_END)
 #define stackbas(siz)           (USER_DATA_END-(siz))
@@ -82,6 +84,7 @@ void idle(void);
 void udelay(unsigned usec);
 void clkstart(void);
 void led_control(int mask, int on);
+void n64_sync_user_icache(void);
 #endif
 
 #define LED_MISC4       0x80

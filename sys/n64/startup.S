@@ -6,6 +6,7 @@
         .set    noat
 
         .extern u_end
+        .extern u0
         .extern main
 
         .section .startup,"ax",@progbits
@@ -21,7 +22,7 @@ n64_kernel_entry:
          * until the C machine layer explicitly enables them.
          */
         mfc0    $t0, $12
-        li      $t1, ~(ST_IE | ST_CU1)
+        li      $t1, ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_BEV | ST_CU1)
         and     $t0, $t0, $t1
         mtc0    $t0, $12
         nop
@@ -32,21 +33,36 @@ n64_kernel_entry:
         jal     main
         nop
 
+        jal     n64_sync_user_icache
+        nop
+
+        la      $k0, USER_DATA_START
+        mtc0    $k0, $14
+        mfc0    $k0, $12
+        li      $k1, ~(ST_EXL | ST_ERL | ST_KSU)
+        and     $k0, $k0, $k1
+        ori     $k0, $k0, ST_EXL | ST_IE | ST_IM7
+        ori     $k0, $k0, ST_KSU_USER
+        li      $k1, ST_CU1
+        or      $k0, $k0, $k1
+        mtc0    $k0, $12
+        nop
+        nop
+        nop
+        eret
+        nop
+
 1:
         b       1b
         nop
         .end    _start
 
-        .section .exception,"ax",@progbits
-        .globl  _n64_exception_vector
-        .ent    _n64_exception_vector
-_n64_exception_vector:
-        /*
-         * Placeholder copied to 0x80000180 by the future startup path.
-         */
-        b       _n64_exception_vector
+        .weak   n64_sync_user_icache
+        .ent    n64_sync_user_icache
+n64_sync_user_icache:
+        jr      $ra
         nop
-        .end    _n64_exception_vector
+        .end    n64_sync_user_icache
 
         /*
          * Initial user code copied to process 1 by init_main().
@@ -105,6 +121,49 @@ setjmp:
         .globl  longjmp
         .ent    longjmp
 longjmp:
+        mfc0    $t0, $12
+        li      $t1, ~ST_IE
+        and     $t0, $t0, $t1
+        mtc0    $t0, $12
+        nop
+        nop
+        nop
+
+        la      $v0, u
+        beq     $v0, $a0, 2f
+        nop
+
+        la      $a3, u_end
+        la      $a0, u0
+
+        lw      $v1, 0($v0)
+        sw      $a0, 60($v1)
+
+        move    $v1, $v0
+1:
+        lw      $t1, 0($v1)
+        lw      $t0, 0($a0)
+        sw      $t0, 0($v1)
+        sw      $t1, 0($a0)
+        lw      $t1, 4($v1)
+        lw      $t0, 4($a0)
+        sw      $t0, 4($v1)
+        sw      $t1, 4($a0)
+        lw      $t1, 8($v1)
+        lw      $t0, 8($a0)
+        sw      $t0, 8($v1)
+        sw      $t1, 8($a0)
+        lw      $t1, 12($v1)
+        lw      $t0, 12($a0)
+        sw      $t0, 12($v1)
+        sw      $t1, 12($a0)
+        addiu   $v1, $v1, 16
+        bne     $a3, $v1, 1b
+        addiu   $a0, $a0, 16
+
+        lw      $v1, 0($v0)
+        sw      $v0, 60($v1)
+2:
         lw      $s0, (0 * 4)($a1)
         lw      $s1, (1 * 4)($a1)
         lw      $s2, (2 * 4)($a1)
@@ -117,6 +176,13 @@ longjmp:
         lw      $ra, (9 * 4)($a1)
         lw      $gp, (10 * 4)($a1)
         lw      $sp, (11 * 4)($a1)
+
+        mfc0    $t0, $12
+        ori     $t0, $t0, ST_IE
+        mtc0    $t0, $12
+        nop
+        nop
+        nop
         jr      $ra
         li      $v0, 1
         .end    longjmp

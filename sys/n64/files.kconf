@@ -59,6 +59,8 @@ n64/cons.c                      standard
 n64/devsw.c                     standard
 n64/clock.c                     standard
 n64/machdep.c                   standard
+n64/exception_entry.S           standard compile-with "${COMPILE_S}"
+n64/exception.c                 standard
 n64/fpu.S                       standard compile-with "${COMPILE_FPU_S}"
 n64/rompak.c                    standard
 n64/memory.c                    standard
