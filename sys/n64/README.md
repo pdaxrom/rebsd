@@ -18,5 +18,6 @@ Initial boot target:
 2. Kernel detects 4 MiB base RDRAM vs 8 MiB Expansion Pak at startup.
 3. Kernel uses N64cart UART for early console.
 4. Root is a read-only UFS romdisk exposed as block major 0 from ROM TOC.
-5. Swap/temp use a RAM-backed block device.
+5. Swap/temp use a RAM-backed block device: Expansion Pak memory when
+   present, otherwise the top 512 KiB of base RDRAM.
 6. N64cart ROMFS is mounted later as a separate read-only filesystem.

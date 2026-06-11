@@ -4,6 +4,7 @@
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <machine/n64cart_uart.h>
+#include <machine/ramswap.h>
 #include <machine/romdisk.h>
 
 extern struct tty cnttys[];
@@ -74,6 +75,10 @@ const struct bdevsw bdevsw[] = {
     {
         n64romdisk_open, n64romdisk_close, n64romdisk_strategy,
         n64romdisk_size, n64romdisk_ioctl, 0,
+    },
+    {
+        n64ramswap_open, n64ramswap_close, n64ramswap_strategy,
+        n64ramswap_size, n64ramswap_ioctl, 0,
     },
     { 0 },
 };

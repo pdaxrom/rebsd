@@ -42,11 +42,12 @@
 
 #define N64_RDRAM_SIZE          (4*1024*1024)
 #define N64_KERNEL_RESERVED     (1024*1024)
+#define N64_BASE_SWAP_RESERVED  (512*1024)
 
 #define KERNEL_DATA_START       0x80000000
 #define KERNEL_DATA_END         (KERNEL_DATA_START + N64_KERNEL_RESERVED)
 #define USER_DATA_START         KERNEL_DATA_END
-#define USER_DATA_END           (0x80000000 + N64_RDRAM_SIZE)
+#define USER_DATA_END           (0x80000000 + N64_RDRAM_SIZE - N64_BASE_SWAP_RESERVED)
 
 #define stacktop(siz)           (USER_DATA_END)
 #define stackbas(siz)           (USER_DATA_END-(siz))
