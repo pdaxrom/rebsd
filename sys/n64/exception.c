@@ -10,6 +10,7 @@
 #include <sys/vm.h>
 #include <machine/io.h>
 #include <machine/n64.h>
+#include <machine/fpu.h>
 
 #define USER            1
 #define N64_CAUSE_CE1   0x10000000u
@@ -108,12 +109,31 @@ n64_check_user_stack(int *frame)
 }
 
 static void
+n64_save_user_fpu(int status)
+{
+    if (status & ST_CU1)
+        n64_fpu_save(&u.u_fpu);
+}
+
+static void
+n64_restore_user_fpu(int status)
+{
+    if (status & ST_CU1) {
+        int s = mips_intr_disable();
+
+        mips_fpu_enable();
+        n64_fpu_restore(&u.u_fpu);
+        mips_intr_restore(s);
+    }
+}
+
+static void
 n64_syscall(int *frame)
 {
     const struct sysent *callp = &sysent[0];
     int opc = frame[FRAME_PC];
     int code;
-#ifdef N64
+#ifdef N64_TRACE
     int trace_syscall;
     static int syscall_trace_count;
 #endif
@@ -122,7 +142,7 @@ n64_syscall(int *frame)
     code = (*(u_int *)opc >> 6) & 0377;
     if (code < nsysent)
         callp += code;
-#ifdef N64
+#ifdef N64_TRACE
     trace_syscall = syscall_trace_count < 12;
     if (trace_syscall) {
         printf ("n64sys: code=%d pc=%x sp=%x a0=%x a1=%x\n",
@@ -169,7 +189,7 @@ n64_syscall(int *frame)
         frame[FRAME_R8] = u.u_error;
         break;
     }
-#ifdef N64
+#ifdef N64_TRACE
     if (trace_syscall)
         printf ("n64sys: ret code=%d err=%d rval=%d pc=%x\n",
             code, u.u_error, u.u_rval, frame[FRAME_PC]);
@@ -192,6 +212,8 @@ exception(int *frame)
     status = frame[FRAME_STATUS];
     mips_write_c0_register(C0_STATUS, 0,
         status & ~(ST_KSU | ST_EXL | ST_ERL | ST_IE));
+    if (USERMODE(status))
+        n64_save_user_fpu(status);
 
     rawcause = mips_read_c0_register(C0_CAUSE, 0);
     cause = rawcause & CA_EXC_CODE;
@@ -306,5 +328,7 @@ out:
         addupc((caddr_t)frame[FRAME_PC], &u.u_prof,
             (int)(u.u_ru.ru_stime - syst));
 ret:
+    if (USERMODE(frame[FRAME_STATUS]))
+        n64_restore_user_fpu(frame[FRAME_STATUS]);
     led_control(LED_KERNEL, 0);
 }

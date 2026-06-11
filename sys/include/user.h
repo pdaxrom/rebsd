@@ -8,6 +8,9 @@
 #include "exec.h"
 #include "time.h"
 #include "resource.h"
+#ifdef N64
+#include <machine/fpu.h>
+#endif
 #else
 #include <sys/dir.h>
 #include <sys/exec.h>
@@ -59,6 +62,9 @@ struct user {
     int     u_psflags;              /* Process Signal flags */
     struct  sigaltstack u_sigstk;   /* signal stack info */
     u_int   u_sigtramp;             /* pointer to trampoline code in user space */
+#ifdef N64
+    struct  n64_fpu_state u_fpu;    /* saved VR4300 FPU state */
+#endif
 
 /* 1.4 - descriptor management */
     struct  file *u_ofile[NOFILE];  /* file structures for open files */

@@ -20,12 +20,12 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
 {
     register struct buf *bp;
     int s;
-#ifdef N64
+#ifdef N64_TRACE
     static int n64_swap_trace;
 #endif
 
 //printf ("swap (%u, %08x, %d, %s)\n", blkno, coreaddr, count, rdflg ? "R" : "W");
-#ifdef N64
+#ifdef N64_TRACE
     if (n64_swap_trace < 16) {
         printf ("n64swapio: blk=%u addr=%x count=%d %s\n",
             blkno, coreaddr, count, rdflg ? "read" : "write");
@@ -48,7 +48,7 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
         bp->b_blkno = blkno;
         bp->b_addr = (caddr_t) coreaddr;
         (*bdevsw[major(swapdev)].d_strategy) (bp);
-#ifdef N64
+#ifdef N64_TRACE
         if (n64_swap_trace < 16) {
             printf ("n64swapio: strategy flags=%x resid=%d\n",
                 bp->b_flags, bp->b_resid);

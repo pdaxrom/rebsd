@@ -140,7 +140,7 @@ again:
      * here's where it will resume.
      */
     if (setjmp (&u.u_ssave)) {
-#ifdef N64
+#ifdef N64_TRACE
         printf ("n64fork: child resumed pid=%d paddr=%x\n",
             u.u_procp->p_pid, u.u_procp->p_addr);
 #endif
@@ -164,13 +164,13 @@ again:
     parent->p_stat = SIDL;
     child->p_addr = parent->p_addr;
     child->p_stat = SRUN;
-#ifdef N64
+#ifdef N64_TRACE
     printf ("n64fork: before swapout child pid=%d paddr=%x\n",
         child->p_pid, child->p_addr);
 #endif
     swapout (child, X_DONTFREE, X_OLDSIZE, X_OLDSIZE);
     child->p_flag |= SSWAP;
-#ifdef N64
+#ifdef N64_TRACE
     printf ("n64fork: after swapout child pid=%d paddr=%x flag=%x\n",
         child->p_pid, child->p_addr, child->p_flag);
 #endif

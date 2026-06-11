@@ -15,6 +15,9 @@
 #include <sys/dir.h>
 #include <sys/uio.h>
 #include <machine/debug.h>
+#ifdef N64
+#include <machine/fpu.h>
+#endif
 
 /*
  * How memory is set up.
@@ -404,6 +407,9 @@ void exec_clear(struct exec_params *epp)
     u.u_frame [FRAME_LO] = 0;
     u.u_frame [FRAME_HI] = 0;
     u.u_frame [FRAME_GP] = 0;
+#ifdef N64
+    bzero (&u.u_fpu, sizeof u.u_fpu);
+#endif
 
     execsigs (u.u_procp);
 

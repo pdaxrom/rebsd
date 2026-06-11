@@ -32,6 +32,34 @@ _start:
         nop
         nop
 
+        la      $t0, fpu_values
+        lwc1    $f0, 0($t0)
+        lwc1    $f2, 4($t0)
+        add.s   $f4, $f0, $f2
+        la      $t0, fpu_result
+        swc1    $f4, 0($t0)
+        lw      $t0, 0($t0)
+        li      $t1, 0x40700000
+        bne     $t0, $t1, 3f
+        nop
+
+        move    $a0, $s0
+        la      $a1, fpu_ok
+        li      $a2, fpu_ok_end - fpu_ok
+        syscall SYS_write
+        nop
+        nop
+        b       1f
+        nop
+
+3:
+        move    $a0, $s0
+        la      $a1, fpu_fail
+        li      $a2, fpu_fail_end - fpu_fail
+        syscall SYS_write
+        nop
+        nop
+
 1:
         move    $a0, $s0
         la      $a1, input_byte
@@ -64,6 +92,19 @@ banner:
         .ascii  "\nRetroBSD/N64 init\n"
         .ascii  "console echo ready\n"
 banner_end:
+fpu_ok:
+        .ascii  "fpu ok\n"
+fpu_ok_end:
+fpu_fail:
+        .ascii  "fpu failed\n"
+fpu_fail_end:
+
+        .align  2
+fpu_values:
+        .word   0x3fc00000
+        .word   0x40100000
+fpu_result:
+        .word   0
 
         .bss
         .align  2
