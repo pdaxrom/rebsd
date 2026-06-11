@@ -113,11 +113,23 @@ n64_syscall(int *frame)
     const struct sysent *callp = &sysent[0];
     int opc = frame[FRAME_PC];
     int code;
+#ifdef N64
+    int trace_syscall;
+    static int syscall_trace_count;
+#endif
 
     frame[FRAME_PC] = opc + 3 * NBPW;
     code = (*(u_int *)opc >> 6) & 0377;
     if (code < nsysent)
         callp += code;
+#ifdef N64
+    trace_syscall = syscall_trace_count < 12;
+    if (trace_syscall) {
+        printf ("n64sys: code=%d pc=%x sp=%x a0=%x a1=%x\n",
+            code, opc, frame[FRAME_SP], frame[FRAME_R4], frame[FRAME_R5]);
+        syscall_trace_count++;
+    }
+#endif
 
     if (callp->sy_narg) {
         u.u_arg[0] = frame[FRAME_R4];
@@ -157,6 +169,11 @@ n64_syscall(int *frame)
         frame[FRAME_R8] = u.u_error;
         break;
     }
+#ifdef N64
+    if (trace_syscall)
+        printf ("n64sys: ret code=%d err=%d rval=%d pc=%x\n",
+            code, u.u_error, u.u_rval, frame[FRAME_PC]);
+#endif
 }
 
 void

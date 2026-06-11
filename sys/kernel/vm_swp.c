@@ -20,8 +20,18 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
 {
     register struct buf *bp;
     int s;
+#ifdef N64
+    static int n64_swap_trace;
+#endif
 
 //printf ("swap (%u, %08x, %d, %s)\n", blkno, coreaddr, count, rdflg ? "R" : "W");
+#ifdef N64
+    if (n64_swap_trace < 16) {
+        printf ("n64swapio: blk=%u addr=%x count=%d %s\n",
+            blkno, coreaddr, count, rdflg ? "read" : "write");
+        n64_swap_trace++;
+    }
+#endif
 #ifdef UCB_METER
     if (rdflg) {
         cnt.v_kbin += (count + 1023) / 1024;
@@ -38,6 +48,13 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
         bp->b_blkno = blkno;
         bp->b_addr = (caddr_t) coreaddr;
         (*bdevsw[major(swapdev)].d_strategy) (bp);
+#ifdef N64
+        if (n64_swap_trace < 16) {
+            printf ("n64swapio: strategy flags=%x resid=%d\n",
+                bp->b_flags, bp->b_resid);
+            n64_swap_trace++;
+        }
+#endif
         s = splbio();
         while ((bp->b_flags & B_DONE) == 0)
             sleep ((caddr_t)bp, PSWP);

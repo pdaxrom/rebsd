@@ -43,14 +43,37 @@ sched()
     register struct proc *rp;
     struct proc *swapped_out = 0, *in_core = 0;
     register int out_time, rptime;
+#ifdef N64
+    int n64_sched_trace = 0;
+#endif
 
     for (;;) {
         /* Perform swap-out/swap-in action. */
+#ifdef N64
+        if (n64_sched_trace < 24) {
+            printf ("n64sched: top in=%x out=%x\n", in_core, swapped_out);
+            n64_sched_trace++;
+        }
+#endif
         spl0();
-        if (in_core)
+        if (in_core) {
+#ifdef N64
+            if (n64_sched_trace < 24) {
+                printf ("n64sched: swapout pid=%d\n", in_core->p_pid);
+                n64_sched_trace++;
+            }
+#endif
             swapout (in_core, X_FREECORE, X_OLDSIZE, X_OLDSIZE);
-        if (swapped_out)
+        }
+        if (swapped_out) {
+#ifdef N64
+            if (n64_sched_trace < 24) {
+                printf ("n64sched: swapin pid=%d\n", swapped_out->p_pid);
+                n64_sched_trace++;
+            }
+#endif
             swapin (swapped_out);
+        }
         splhigh();
         in_core = 0;
         swapped_out = 0;
@@ -79,6 +102,12 @@ sched()
         if (! swapped_out) {
             ++runout;
             //SETVAL(0);
+#ifdef N64
+            if (n64_sched_trace < 24) {
+                printf ("n64sched: sleep runout\n");
+                n64_sched_trace++;
+            }
+#endif
             sleep ((caddr_t) &runout, PSWP);
             continue;
         }
@@ -98,6 +127,13 @@ sched()
         }
         if (! in_core) {
             /* In-core memory is empty. */
+#ifdef N64
+            if (n64_sched_trace < 24) {
+                printf ("n64sched: no in-core for pid=%d\n",
+                    swapped_out->p_pid);
+                n64_sched_trace++;
+            }
+#endif
             continue;
         }
 

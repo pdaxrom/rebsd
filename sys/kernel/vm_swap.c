@@ -25,6 +25,11 @@ swapin (struct proc *p)
     size_t saddr = USER_DATA_END - p->p_ssize;
     size_t uaddr = (size_t) &u0;
 
+#ifdef N64
+    printf ("n64swapin: pid=%d d=%x/%u s=%x/%u u=%x\n",
+        p->p_pid, p->p_daddr, p->p_dsize, p->p_saddr, p->p_ssize,
+        p->p_addr);
+#endif
     if (p->p_dsize) {
         swap (p->p_daddr, daddr, p->p_dsize, B_READ);
         mfree (swapmap, btod (p->p_dsize), p->p_daddr);
@@ -43,6 +48,10 @@ swapin (struct proc *p)
         setrq (p);
     p->p_flag |= SLOAD;
     p->p_time = 0;
+#ifdef N64
+    printf ("n64swapin: done pid=%d paddr=%x flag=%x\n",
+        p->p_pid, p->p_addr, p->p_flag);
+#endif
 #ifdef UCB_METER
     cnt.v_swpin++;
 #endif
@@ -70,6 +79,11 @@ swapout (struct proc *p, int freecore, u_int odata, u_int ostack)
     if (malloc3 (swapmap, btod (p->p_dsize), btod (p->p_ssize),
         btod (USIZE), a) == NULL)
         panic ("out of swap space");
+#ifdef N64
+    printf ("n64swapout: pid=%d d=%x/%u s=%x/%u u=%x -> %x,%x,%x\n",
+        p->p_pid, p->p_daddr, p->p_dsize, p->p_saddr, p->p_ssize,
+        p->p_addr, a[0], a[1], a[2]);
+#endif
     p->p_flag |= SLOCK;
     if (odata) {
         swap (a[0], p->p_daddr, odata, B_WRITE);
@@ -100,6 +114,10 @@ swapout (struct proc *p, int freecore, u_int odata, u_int ostack)
     p->p_addr = a[2];
     p->p_flag &= ~(SLOAD|SLOCK);
     p->p_time = 0;
+#ifdef N64
+    printf ("n64swapout: done pid=%d paddr=%x flag=%x\n",
+        p->p_pid, p->p_addr, p->p_flag);
+#endif
 
 #ifdef UCB_METER
     cnt.v_swpout++;

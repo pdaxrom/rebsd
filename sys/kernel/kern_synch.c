@@ -460,6 +460,9 @@ loop:
      */
     p = pp;
     if (p == NULL) {
+#ifdef N64
+        printf ("n64swtch: idle\n");
+#endif
         idle();
         goto loop;
     }
@@ -475,6 +478,10 @@ loop:
      */
     n = p->p_flag & SSWAP;
     p->p_flag &= ~SSWAP;
+#ifdef N64
+    printf ("n64swtch: pick pid=%d paddr=%x sswap=%x pri=%d\n",
+        p->p_pid, p->p_addr, n, p->p_pri);
+#endif
     longjmp (p->p_addr, n ? &u.u_ssave : &u.u_rsave);
 }
 
