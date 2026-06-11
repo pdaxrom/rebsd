@@ -35,5 +35,8 @@ file /root/.profile
 file /bin/sh
 mode 0775
 
+file /bin/ls
+mode 0775
+
 file /sbin/init
 mode 0775

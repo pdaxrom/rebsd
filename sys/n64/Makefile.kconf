@@ -20,9 +20,11 @@ N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
 N64_CRT0_SRCS = $(shell find $(TOPSRC)/src/startup-mips -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 N64_SH_SRCS = $(shell find $(TOPSRC)/src/cmd/sh -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_LS_SRCS = $(shell find $(TOPSRC)/src/cmd/ls -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_USER_INIT = n64-init
 N64_USER_SH = $(TOPSRC)/src/cmd/sh/sh
-N64_USERLAND = $(N64_USER_SH)
+N64_USER_LS = $(TOPSRC)/src/cmd/ls/ls
+N64_USERLAND = $(N64_USER_SH) $(N64_USER_LS)
 
 CC              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
 AS              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
@@ -116,6 +118,7 @@ rootfs.img: $(FSUTIL) $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_FILES) $(N64_USER_INIT
 	cp $(N64_USER_INIT) $(N64_ROOTFS_STAGE)/sbin/init
 	mkdir -p $(N64_ROOTFS_STAGE)/bin
 	cp $(N64_USER_SH) $(N64_ROOTFS_STAGE)/bin/sh
+	cp $(N64_USER_LS) $(N64_ROOTFS_STAGE)/bin/ls
 	rm -f $@
 	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_MANIFEST) $@ $(N64_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
@@ -138,6 +141,9 @@ $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 
 $(N64_USER_SH): $(TOPSRC)/src/libc.a $(N64_SH_SRCS)
 	$(MAKE) -C $(TOPSRC)/src/cmd/sh TARGET_PLATFORM=n64
+
+$(N64_USER_LS): $(TOPSRC)/src/libc.a $(N64_LS_SRCS)
+	$(MAKE) -C $(TOPSRC)/src/cmd/ls TARGET_PLATFORM=n64
 
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
