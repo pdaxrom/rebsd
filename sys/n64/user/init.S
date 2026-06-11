@@ -4,6 +4,7 @@
 #define SYS_write       4
 #define SYS_open        5
 #define SYS_execv       11
+#define SYS_dup2        90
 
 #define O_RDWR          2
 
@@ -33,10 +34,9 @@ _start:
         nop
         nop
 
-        la      $a0, console_path
-        li      $a1, O_RDWR
-        move    $a2, $zero
-        syscall SYS_open
+        li      $a0, 1
+        li      $a1, 2
+        syscall SYS_dup2
         nop
         nop
 
@@ -121,9 +121,12 @@ shell_path:
         .ascii  "/bin/sh\0"
 shell_arg0:
         .ascii  "sh\0"
+shell_arg1:
+        .ascii  "-i\0"
         .align  2
 shell_argv:
         .word   shell_arg0
+        .word   shell_arg1
         .word   0
 banner:
         .ascii  "\nRetroBSD/N64 init\n"
