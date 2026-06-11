@@ -19,6 +19,9 @@
 #include <machine/fpu.h>
 #endif
 
+#define STACK_ALIGN     (2 * NBPW)
+#define STACK_ARG_SLOTS 4
+
 /*
  * How memory is set up.
  *
@@ -105,8 +108,9 @@ void exec_setupstack(unsigned entryaddr, struct exec_params *epp)
     topp = (char ***)(epp->stack.vaddr + epp->stack.len - NBPW);            /* Last word of RAM */
     ucp = (char *)((unsigned)topp - roundup(epp->envbc + epp->argbc,NBPW)); /* arg string space */
     envp = (char **)(ucp - (epp->envc+1)*NBPW); /* Make place for envp[...], +1 for the 0 */
-    argp = envp - (epp->argc+1)*NBPW;           /* Make place for argv[...] */
-    u.u_frame [FRAME_SP] = (int)(argp-16);
+    argp = (char **)((char *)envp - (epp->argc+1)*NBPW); /* Make place for argv[...] */
+    u.u_frame [FRAME_SP] = (int)(((unsigned)argp - STACK_ARG_SLOTS * NBPW) &
+        ~(STACK_ALIGN - 1));
     u.u_frame [FRAME_R4] = epp->argc;           /* $a0 := argc */
     u.u_frame [FRAME_R5] = (int)argp;           /* $a1 := argp */
     u.u_frame [FRAME_R6] = (int)envp;           /* $a2 := env */
