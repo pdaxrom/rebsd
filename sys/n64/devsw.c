@@ -4,6 +4,7 @@
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <machine/n64cart_uart.h>
+#include <machine/romdisk.h>
 
 extern struct tty cnttys[];
 
@@ -70,7 +71,10 @@ n64_console_raw_write(dev_t dev, char ch)
     noopen, noopen, n64_nostrategy, nosize, noioctl, 0
 
 const struct bdevsw bdevsw[] = {
-    { NOBDEV },
+    {
+        n64romdisk_open, n64romdisk_close, n64romdisk_strategy,
+        n64romdisk_size, n64romdisk_ioctl, 0,
+    },
     { 0 },
 };
 

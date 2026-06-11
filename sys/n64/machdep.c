@@ -1,8 +1,10 @@
 #include <sys/param.h>
+#include <sys/reboot.h>
 #include <sys/systm.h>
 #include <sys/user.h>
 #include <machine/io.h>
 #include <machine/n64.h>
+#include <machine/romdisk.h>
 
 dev_t rootdev;
 dev_t swapdev;
@@ -19,9 +21,10 @@ void
 startup(void)
 {
     physmem = n64_rdram_size();
-    rootdev = makedev(0, 0);
+    rootdev = makedev(N64_ROMDISK_MAJOR, N64_ROMDISK_ROOT_MINOR);
     swapdev = makedev(0, 1);
     pipedev = swapdev;
+    boothowto = RB_RDONLY;
 }
 
 void
