@@ -60,6 +60,7 @@ typedef struct {
     int             fd;
     unsigned long   seek;
     int             writable;
+    int             big_endian;         /* on-disk byte order */
     int             dirty;              /* sync needed */
     int             modified;           /* write_block was called */
     unsigned char   part_type;
@@ -156,6 +157,10 @@ typedef enum {
 } fs_op_t;
 
 int fs_seek (fs_t *fs, unsigned long offset);
+unsigned fs_get16 (fs_t *fs, const unsigned char *data);
+unsigned fs_get32 (fs_t *fs, const unsigned char *data);
+void fs_put16 (fs_t *fs, unsigned char *data, unsigned val);
+void fs_put32 (fs_t *fs, unsigned char *data, unsigned val);
 int fs_read8 (fs_t *fs, unsigned char *val);
 int fs_read16 (fs_t *fs, unsigned short *val);
 int fs_read32 (fs_t *fs, unsigned *val);
@@ -171,7 +176,7 @@ void fs_close (fs_t *fs);
 int fs_set_partition (fs_t *fs, unsigned pindex);
 int fs_sync (fs_t *fs, int force);
 int fs_create (fs_t *fs, const char *filename, int kbytes,
-    unsigned swap_kbytes);
+    unsigned swap_kbytes, int big_endian);
 int fs_check (fs_t *fs);
 void fs_print (fs_t *fs, FILE *out);
 
@@ -205,8 +210,9 @@ int fs_triple_indirect_block_free (fs_t *fs, unsigned int bno, int nblk);
 
 void fs_directory_scan (fs_inode_t *inode, char *dirname,
     fs_directory_scanner_t scanner, void *arg);
-void fs_dirent_pack (unsigned char *data, fs_dirent_t *dirent);
-void fs_dirent_unpack (fs_dirent_t *dirent, unsigned char *data);
+void fs_dirent_pack (fs_t *fs, unsigned char *data, fs_dirent_t *dirent);
+void fs_dirent_unpack (fs_t *fs, fs_dirent_t *dirent,
+    const unsigned char *data);
 
 int fs_file_create (fs_t *fs, fs_file_t *file, const char *name, int mode);
 int fs_file_open (fs_t *fs, fs_file_t *file, const char *name, int wflag);

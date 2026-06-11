@@ -780,11 +780,8 @@ int op_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
     fs_t *fs = fuse_get_context()->private_data;
     fs_inode_t dir;
     char name [BSDFS_BSIZE - 12];
-    struct {
-        unsigned int inum;
-        unsigned short reclen;
-        unsigned short namlen;
-    } dirent;
+    fs_dirent_t dirent;
+    unsigned char dirent_data [8];
 
     printlog("--- op_readdir(path=\"%s\", buf=%p, filler=%p, offset=%lld, fi=%p)\n",
         path, buf, filler, offset, fi);
@@ -796,13 +793,18 @@ int op_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 
     /* Copy the entire directory into the buffer. */
     for (offset = 0; offset < dir.size; offset += dirent.reclen) {
-        if (! fs_inode_read (&dir, offset, (unsigned char*) &dirent, sizeof(dirent))) {
+        if (! fs_inode_read (&dir, offset, dirent_data, sizeof (dirent_data))) {
             printlog("--- read error at offset %ld\n", offset);
             return -EIO;
         }
-        //printlog("--- readdir offset %lu: inum=%u, reclen=%u, namlen=%u\n", offset, dirent.inum, dirent.reclen, dirent.namlen);
+        fs_dirent_unpack (fs, &dirent, dirent_data);
+        if (dirent.reclen == 0) {
+            printlog("--- zero-length dirent at offset %ld\n", offset);
+            return -EIO;
+        }
+        //printlog("--- readdir offset %lu: inum=%u, reclen=%u, namlen=%u\n", offset, dirent.ino, dirent.reclen, dirent.namlen);
 
-        if (! fs_inode_read (&dir, offset+sizeof(dirent),
+        if (! fs_inode_read (&dir, offset+sizeof(dirent_data),
             (unsigned char*)name, (dirent.namlen + 4) / 4 * 4))
         {
             printlog("--- name read error at offset %ld\n", offset);
@@ -810,7 +812,7 @@ int op_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
         }
         //printlog("--- readdir offset %lu: name='%s'\n", offset, name);
 
-        if (dirent.inum != 0) {
+        if (dirent.ino != 0) {
             //printlog("calling filler with name %s\n", name);
             name[dirent.namlen] = 0;
             if (filler(buf, name, NULL, 0) != 0) {

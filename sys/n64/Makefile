@@ -10,6 +10,10 @@ N64_KERNEL_BASE = -G0 -mno-abicalls -fno-pic -ffreestanding -fno-builtin \
                   -fomit-frame-pointer
 N64_KERNEL_CODE = $(N64_KERNEL_BASE) -msoft-float
 N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
+N64_ROOTFS_KBYTES ?= 512
+N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/n64/rootfs
+N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/n64/rootfs.manifest
+N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
 
 CC              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
 AS              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
@@ -19,6 +23,7 @@ OBJDUMP         = $(N64_PREFIX)objdump
 SIZE            = $(N64_PREFIX)size
 STRIP           = $(N64_PREFIX)strip
 N64_TOOL        = $(N64_TOOLCHAIN)/bin/n64tool
+FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 
 DEPFLAGS        = -MT $@ -MP -MD -MF .deps/$*.dep
 DEFS            = -I. -I$(TOPSRC)/include -DKERNEL -DN64 $(DEPFLAGS)
@@ -35,7 +40,7 @@ OBJS            = startup.o n64cart_uart.o cons.o devsw.o clock.o machdep.o fpu.
 PREFLIGHT_OBJS  = startup.o n64cart_uart.o preflight.o
 STAGE0_OBJS     = stage0.o stage0_loader.o stage0_kernel_blob.o
 
-all: preflight preflight.elf preflight.z64
+all: preflight preflight.elf rootfs.img preflight.z64
 
 preflight: $(OBJS)
 	$(SIZE) $(OBJS)
@@ -60,8 +65,16 @@ stage0.elf: $(STAGE0_OBJS) stage0_linker.ld
 stage0.stripped.elf: stage0.elf
 	$(STRIP) -s -o $@ $<
 
-preflight.z64: stage0.stripped.elf
-	$(N64_TOOL) --toc --title "RETROBSD N64" --output $@ --align 256 stage0.stripped.elf
+rootfs.img: $(FSUTIL) $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_FILES)
+	rm -f $@
+	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_MANIFEST) $@ $(N64_ROOTFS_DIR)
+	$(FSUTIL) --check $@
+
+$(FSUTIL):
+	$(MAKE) -C $(TOPSRC)/tools/fsutil
+
+preflight.z64: stage0.stripped.elf rootfs.img
+	$(N64_TOOL) --toc --title "RETROBSD N64" --output $@ --align 256 stage0.stripped.elf --align 1024 rootfs.img
 
 startup.o: startup.S | machine sys .deps
 	$(AS) $(ASFLAGS) $< -o $@
@@ -82,6 +95,6 @@ sys:
 	mkdir .deps
 
 clean:
-	rm -rf *.o *.elf *.bin *.dis *.nm *.z64 machine sys .deps
+	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 machine sys .deps
 
 .PHONY: all preflight clean

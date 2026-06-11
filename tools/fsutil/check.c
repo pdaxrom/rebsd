@@ -189,8 +189,8 @@ static int scan_indirect_block (fs_inode_t *inode, unsigned blk,
         print_io_error ("READ", blk);
         return SKIP;
     }
-    for (i = 0; i < BSDFS_BSIZE; i+=2) {
-        nb = data [i+1] << 8 | data [i];
+    for (i = 0; i < BSDFS_BSIZE; i+=4) {
+        nb = fs_get32 (inode->fs, &data[i]);
         if (nb) {
             if (double_indirect)
                 ret = scan_indirect_block (inode, nb,
@@ -349,7 +349,7 @@ static int scan_directory (fs_inode_t *inode, unsigned blk, void *arg)
             scan_filesize -= (&buf_data[BSDFS_BSIZE] - dirp);
             return SKIP;
         }
-        fs_dirent_unpack (&direntry, dirp);
+        fs_dirent_unpack (inode->fs, &direntry, dirp);
         if (direntry.reclen == 0)
             break;
 
@@ -358,7 +358,7 @@ static int scan_directory (fs_inode_t *inode, unsigned blk, void *arg)
 
         if (n & ALTERD) {
             if (buf_get (inode->fs, blk)) {
-                fs_dirent_pack (dirp, &direntry);
+                fs_dirent_pack (inode->fs, dirp, &direntry);
                 buf_dirty = 1;
             } else
                 n &= ~ALTERD;
@@ -708,7 +708,7 @@ static unsigned check_free_list (fs_t *fs)
 {
     unsigned *ap, *base;
     unsigned free_blocks, nfree;
-    unsigned data [BSDFS_BSIZE / 4];
+    unsigned char data [BSDFS_BSIZE];
     unsigned list [NICFREE];
     int i;
 
@@ -730,13 +730,13 @@ static unsigned check_free_list (fs_t *fs)
         }
         if (*ap == 0 || pass5 (fs, *ap, &free_blocks) != KEEPON)
             break;
-        if (! fs_read_block (fs, *ap, (unsigned char*) data)) {
+        if (! fs_read_block (fs, *ap, data)) {
             print_io_error ("READ", *ap);
             break;
         }
-        nfree = data[0];
+        nfree = fs_get32 (fs, &data[0]);
         for (i=0; i<NICFREE; ++i)
-            list [i] = data[i+1];
+            list [i] = fs_get32 (fs, &data[(i + 1) * 4]);
         base = list;
     }
     return free_blocks;

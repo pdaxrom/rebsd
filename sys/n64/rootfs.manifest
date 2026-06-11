@@ -1,0 +1,35 @@
+#
+# Minimal read-only root filesystem for the early N64 port.
+#
+default
+owner 0
+group 0
+dirmode 0775
+filemode 0664
+
+dir /bin
+dir /dev
+dir /etc
+dir /root
+dir /tmp
+
+cdev /dev/console
+major 0
+minor 0
+
+cdev /dev/null
+major 1
+minor 2
+mode 666
+
+cdev /dev/zero
+major 1
+minor 3
+mode 666
+
+file /etc/motd
+
+file /root/.profile
+
+file /bin/init.placeholder
+mode 0775

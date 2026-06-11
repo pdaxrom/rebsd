@@ -30,6 +30,64 @@
 
 extern int verbose;
 
+static unsigned get16le (const unsigned char *data)
+{
+    return (unsigned) data[0] | (unsigned) data[1] << 8;
+}
+
+static unsigned get16be (const unsigned char *data)
+{
+    return (unsigned) data[0] << 8 | (unsigned) data[1];
+}
+
+static unsigned get32le (const unsigned char *data)
+{
+    return (unsigned) data[0] | (unsigned) data[1] << 8 |
+        (unsigned) data[2] << 16 | (unsigned) data[3] << 24;
+}
+
+static unsigned get32be (const unsigned char *data)
+{
+    return (unsigned) data[0] << 24 | (unsigned) data[1] << 16 |
+        (unsigned) data[2] << 8 | (unsigned) data[3];
+}
+
+unsigned fs_get16 (fs_t *fs, const unsigned char *data)
+{
+    return fs->big_endian ? get16be (data) : get16le (data);
+}
+
+unsigned fs_get32 (fs_t *fs, const unsigned char *data)
+{
+    return fs->big_endian ? get32be (data) : get32le (data);
+}
+
+void fs_put16 (fs_t *fs, unsigned char *data, unsigned val)
+{
+    if (fs->big_endian) {
+        data[0] = val >> 8;
+        data[1] = val;
+    } else {
+        data[0] = val;
+        data[1] = val >> 8;
+    }
+}
+
+void fs_put32 (fs_t *fs, unsigned char *data, unsigned val)
+{
+    if (fs->big_endian) {
+        data[0] = val >> 24;
+        data[1] = val >> 16;
+        data[2] = val >> 8;
+        data[3] = val;
+    } else {
+        data[0] = val;
+        data[1] = val >> 8;
+        data[2] = val >> 16;
+        data[3] = val >> 24;
+    }
+}
+
 int fs_seek (fs_t *fs, unsigned long offset)
 {
 /*  printf ("seek %ld, block %ld\n", offset, offset / BSDFS_BSIZE);*/
@@ -62,7 +120,7 @@ int fs_read16 (fs_t *fs, unsigned short *val)
             printf ("error read16, seek %ld block %ld\n", fs->seek, fs->seek / BSDFS_BSIZE);
         return 0;
     }
-    *val = data[1] << 8 | data[0];
+    *val = fs_get16 (fs, data);
     return 1;
 }
 
@@ -75,8 +133,7 @@ int fs_read32 (fs_t *fs, unsigned *val)
             printf ("error read32, seek %ld block %ld\n", fs->seek, fs->seek / BSDFS_BSIZE);
         return 0;
     }
-    *val = (unsigned long) data[0] | (unsigned long) data[1] << 8 |
-        data[2] << 16 | data[3] << 24;
+    *val = fs_get32 (fs, data);
     return 1;
 }
 
@@ -91,8 +148,7 @@ int fs_write16 (fs_t *fs, unsigned short val)
 {
     unsigned char data [2];
 
-    data[0] = val;
-    data[1] = val >> 8;
+    fs_put16 (fs, data, val);
     if (write (fs->fd, data, 2) != 2)
         return 0;
     return 1;
@@ -102,10 +158,7 @@ int fs_write32 (fs_t *fs, unsigned val)
 {
     unsigned char data [4];
 
-    data[0] = val;
-    data[1] = val >> 8;
-    data[2] = val >> 16;
-    data[3] = val >> 24;
+    fs_put32 (fs, data, val);
     if (write (fs->fd, data, 4) != 4)
         return 0;
     return 1;
@@ -165,8 +218,8 @@ int fs_set_partition (fs_t *fs, unsigned pindex)
     /* Read partition entry. */
     entry = &buf [446 + (pindex-1)*16];
     fs->part_type = entry [4];
-    fs->part_offset = *(unsigned*) &entry [8];
-    fs->part_nsectors = *(unsigned*) &entry [12];
+    fs->part_offset = get32le (&entry [8]);
+    fs->part_nsectors = get32le (&entry [12]);
     if (fs->part_type == 0) {
         fprintf (stderr, "%s: Partition %u not allocated.\n",
             fs->filename, pindex);
@@ -190,6 +243,7 @@ int fs_open (fs_t *fs, const char *filename, int writable, unsigned pindex)
 {
     int i;
     unsigned magic;
+    unsigned char magic_data [4];
 
     memset (fs, 0, sizeof (*fs));
     fs->filename = filename;
@@ -206,8 +260,16 @@ int fs_open (fs_t *fs, const char *filename, int writable, unsigned pindex)
             return 0;
     }
 
-    if (! fs_read32 (fs, &magic) ||     /* magic word */
-        magic != FSMAGIC1) {
+    if (! fs_read (fs, magic_data, sizeof (magic_data)))
+        return 0;
+    if (get32le (magic_data) == FSMAGIC1) {
+        fs->big_endian = 0;
+        magic = FSMAGIC1;
+    } else if (get32be (magic_data) == FSMAGIC1) {
+        fs->big_endian = 1;
+        magic = FSMAGIC1;
+    } else {
+        magic = get32le (magic_data);
         if (verbose)
             printf ("fs_open: bad magic1 = %08x, expected %08x\n",
                 magic, FSMAGIC1);
@@ -329,6 +391,8 @@ void fs_print (fs_t *fs, FILE *out)
     int i;
 
     fprintf (out, "                File: %s\n", fs->filename);
+    fprintf (out, "          Byte order: %s-endian\n",
+        fs->big_endian ? "big" : "little");
     fprintf (out, "         Volume size: %u blocks\n", fs->fsize);
     fprintf (out, "     Inode list size: %u blocks\n", fs->isize);
     fprintf (out, "           Swap size: %u blocks\n", fs->swapsz);

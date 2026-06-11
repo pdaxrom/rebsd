@@ -30,6 +30,30 @@
 
 extern int verbose;
 
+static int fs_dirent_read_head (fs_inode_t *dir, unsigned long offset,
+    fs_dirent_t *dirent)
+{
+    unsigned char data [8];
+
+    if (! fs_inode_read (dir, offset, data, sizeof (data)))
+        return 0;
+    dirent->ino = fs_get32 (dir->fs, &data[0]);
+    dirent->reclen = fs_get16 (dir->fs, &data[4]);
+    dirent->namlen = fs_get16 (dir->fs, &data[6]);
+    return 1;
+}
+
+static int fs_dirent_write_head (fs_inode_t *dir, unsigned long offset,
+    fs_dirent_t *dirent)
+{
+    unsigned char data [8];
+
+    fs_put32 (dir->fs, &data[0], dirent->ino);
+    fs_put16 (dir->fs, &data[4], dirent->reclen);
+    fs_put16 (dir->fs, &data[6], dirent->namlen);
+    return fs_inode_write (dir, offset, data, sizeof (data));
+}
+
 int fs_inode_get (fs_t *fs, fs_inode_t *inode, unsigned inum)
 {
     unsigned long offset;
@@ -242,33 +266,34 @@ void fs_directory_scan (fs_inode_t *dir, char *dirname,
     fs_inode_t file;
     unsigned long offset;
     unsigned char name [BSDFS_BSIZE - 12];
-    struct {
-        unsigned int inum;
-        unsigned short reclen;
-        unsigned short namlen;
-    } dirent;
+    fs_dirent_t dirent;
 
     /* Variable record per file */
     for (offset = 0; offset < dir->size; offset += dirent.reclen) {
-        if (! fs_inode_read (dir, offset, (unsigned char*) &dirent, sizeof(dirent))) {
+        if (! fs_dirent_read_head (dir, offset, &dirent)) {
             fprintf (stderr, "%s: read error at offset %ld\n",
                 dirname[0] ? dirname : "/", offset);
             return;
         }
+        if (dirent.reclen == 0) {
+            fprintf (stderr, "%s: zero-length dirent at offset %ld\n",
+                dirname[0] ? dirname : "/", offset);
+            return;
+        }
 /*printf ("scan offset %lu: inum=%u, reclen=%u, namlen=%u\n", offset, dirent.inum, dirent.reclen, dirent.namlen);*/
-        if (! fs_inode_read (dir, offset+sizeof(dirent), name, (dirent.namlen + 4) / 4 * 4)) {
+        if (! fs_inode_read (dir, offset+8, name, (dirent.namlen + 4) / 4 * 4)) {
             fprintf (stderr, "%s: name read error at offset %ld\n",
                 dirname[0] ? dirname : "/", offset);
             return;
         }
 /*printf ("scan offset %lu: name='%s'\n", offset, name);*/
 
-        if (dirent.inum == 0 || (name[0]=='.' && name[1]==0) ||
+        if (dirent.ino == 0 || (name[0]=='.' && name[1]==0) ||
             (name[0]=='.' && name[1]=='.' && name[2]==0))
             continue;
 
-        if (! fs_inode_get (dir->fs, &file, dirent.inum)) {
-            fprintf (stderr, "cannot scan inode %d\n", dirent.inum);
+        if (! fs_inode_get (dir->fs, &file, dirent.ino)) {
+            fprintf (stderr, "cannot scan inode %d\n", dirent.ino);
             continue;
         }
         scanner (dir, &file, dirname, (char*) name, arg);
@@ -281,7 +306,7 @@ void fs_directory_scan (fs_inode_t *dir, char *dirname,
  */
 static unsigned map_block (fs_inode_t *inode, unsigned lbn)
 {
-    unsigned block [BSDFS_BSIZE / 4];
+    unsigned char block [BSDFS_BSIZE];
     unsigned int nb, i, j, sh;
 
     /*
@@ -327,7 +352,7 @@ static unsigned map_block (fs_inode_t *inode, unsigned lbn)
 
         sh -= NSHIFT;
         i = (lbn >> sh) & NMASK;
-        nb = block [i];
+        nb = fs_get32 (inode->fs, &block[i * 4]);
         if (nb == 0)
             return 0;
     }
@@ -341,7 +366,7 @@ static unsigned map_block (fs_inode_t *inode, unsigned lbn)
  */
 static unsigned map_block_write (fs_inode_t *inode, unsigned lbn)
 {
-    unsigned block [BSDFS_BSIZE / 4];
+    unsigned char block [BSDFS_BSIZE];
     unsigned int nb, newb, sh, i, j;
 
     /*
@@ -393,7 +418,7 @@ static unsigned map_block_write (fs_inode_t *inode, unsigned lbn)
         if (verbose)
             printf ("inode %d: allocate new block %d\n", inode->number, nb);
         memset (block, 0, BSDFS_BSIZE);
-        if (! fs_write_block (inode->fs, nb, (unsigned char*) block))
+        if (! fs_write_block (inode->fs, nb, block))
             return 0;
         inode->addr [NADDR-j] = nb;
         inode->dirty = 1;
@@ -403,24 +428,24 @@ static unsigned map_block_write (fs_inode_t *inode, unsigned lbn)
      * Fetch through the indirect blocks
      */
     for(; j <= 3; j++) {
-        if (! fs_read_block (inode->fs, nb, (unsigned char*) block))
+        if (! fs_read_block (inode->fs, nb, block))
             return 0;
 
         sh -= NSHIFT;
         i = (lbn >> sh) & NMASK;
-        if (block [i] != 0)
-            nb = block [i];
+        if (fs_get32 (inode->fs, &block[i * 4]) != 0)
+            nb = fs_get32 (inode->fs, &block[i * 4]);
         else {
             /* Allocate new block. */
             if (! fs_block_alloc (inode->fs, &newb))
                 return 0;
             if (verbose)
                 printf ("inode %d: allocate new block %d\n", inode->number, newb);
-            block[i] = newb;
-            if (! fs_write_block (inode->fs, nb, (unsigned char*) block))
+            fs_put32 (inode->fs, &block[i * 4], newb);
+            if (! fs_write_block (inode->fs, nb, block))
                 return 0;
             memset (block, 0, BSDFS_BSIZE);
-            if (! fs_write_block (inode->fs, newb, (unsigned char*) block))
+            if (! fs_write_block (inode->fs, newb, block))
                 return 0;
             nb = newb;
         }
@@ -503,20 +528,18 @@ int fs_inode_write (fs_inode_t *inode, unsigned long offset,
 /*
  * Convert from dirent to raw data.
  */
-void fs_dirent_pack (unsigned char *data, fs_dirent_t *dirent)
+void fs_dirent_pack (fs_t *fs, unsigned char *data, fs_dirent_t *dirent)
 {
     int i;
 
-    *data++ = dirent->ino;
-    *data++ = dirent->ino >> 8;
-    *data++ = dirent->ino >> 16;
-    *data++ = dirent->ino >> 24;
-    *data++ = dirent->reclen;
-    *data++ = dirent->reclen >> 8;
-    *data++ = dirent->namlen;
-    *data++ = dirent->namlen >> 8;
-    for (i=0; dirent->name[i]; ++i)
+    fs_put32 (fs, &data[0], dirent->ino);
+    fs_put16 (fs, &data[4], dirent->reclen);
+    fs_put16 (fs, &data[6], dirent->namlen);
+    data += 8;
+    for (i=0; i < dirent->namlen && dirent->name[i]; ++i)
         *data++ = dirent->name[i];
+    for (; i < dirent->namlen; ++i)
+        *data++ = 0;
     for (; i & 3; ++i)
         *data++ = 0;
 }
@@ -524,17 +547,16 @@ void fs_dirent_pack (unsigned char *data, fs_dirent_t *dirent)
 /*
  * Read dirent from raw data.
  */
-void fs_dirent_unpack (fs_dirent_t *dirent, unsigned char *data)
+void fs_dirent_unpack (fs_t *fs, fs_dirent_t *dirent,
+    const unsigned char *data)
 {
-    dirent->ino = *data++;
-    dirent->ino |= *data++ << 8;
-    dirent->ino |= *data++ << 16;
-    dirent->ino |= *data++ << 24;
-    dirent->reclen = *data++;
-    dirent->reclen |= *data++ << 8;
-    dirent->namlen = *data++;
-    dirent->namlen |= *data++ << 8;
+    dirent->ino = fs_get32 (fs, &data[0]);
+    dirent->reclen = fs_get16 (fs, &data[4]);
+    dirent->namlen = fs_get16 (fs, &data[6]);
+    data += 8;
     memset (dirent->name, 0, sizeof (dirent->name));
+    if (dirent->namlen >= sizeof (dirent->name))
+        dirent->namlen = sizeof (dirent->name) - 1;
     memcpy (dirent->name, data, dirent->namlen);
 }
 
@@ -558,11 +580,7 @@ int fs_inode_by_name (fs_t *fs, fs_inode_t *inode, const char *name,
     int c, namlen, reclen;
     const char *namptr;
     unsigned long offset, last_offset;
-    struct {
-        unsigned int inum;
-        unsigned short reclen;
-        unsigned short namlen;
-    } dirent;
+    fs_dirent_t dirent;
 
     /* Start from root. */
     if (! fs_inode_get (fs, &dir, BSDFS_ROOT_INODE)) {
@@ -606,16 +624,21 @@ cloop:
     for (offset = 0; offset < dir.size; last_offset = offset, offset += dirent.reclen) {
         unsigned char fname [BSDFS_BSIZE - 12];
 
-        if (! fs_inode_read (&dir, offset, (unsigned char*) &dirent, sizeof(dirent))) {
+        if (! fs_dirent_read_head (&dir, offset, &dirent)) {
             fprintf (stderr, "inode %d: read error at offset %ld\n",
                 dir.number, offset);
             return 0;
         }
+        if (dirent.reclen == 0) {
+            fprintf (stderr, "inode %d: zero-length dirent at offset %ld\n",
+                dir.number, offset);
+            return 0;
+        }
         if (verbose > 2)
-            printf ("scan offset %lu: inum=%u, reclen=%u, namlen=%u\n", offset, dirent.inum, dirent.reclen, dirent.namlen);
-        if (dirent.inum == 0 || dirent.namlen != namlen)
+            printf ("scan offset %lu: inum=%u, reclen=%u, namlen=%u\n", offset, dirent.ino, dirent.reclen, dirent.namlen);
+        if (dirent.ino == 0 || dirent.namlen != namlen)
             continue;
-        if (! fs_inode_read (&dir, offset+sizeof(dirent), fname, namlen)) {
+        if (! fs_inode_read (&dir, offset+8, fname, namlen)) {
             fprintf (stderr, "inode %d: name read error at offset %ld\n",
                 dir.number, offset);
             return 0;
@@ -629,8 +652,8 @@ cloop:
             if (op == INODE_OP_DELETE && ! c) {
                 goto delete_file;
             }
-            if (! fs_inode_get (fs, &dir, dirent.inum)) {
-                fprintf (stderr, "inode_open(): cannot get inode %d\n", dirent.inum);
+            if (! fs_inode_get (fs, &dir, dirent.ino)) {
+                fprintf (stderr, "inode_open(): cannot get inode %d\n", dirent.ino);
                 return 0;
             }
             goto cloop;
@@ -662,17 +685,16 @@ create_file:
     time (&inode->ctime);
     if ((inode->mode & INODE_MODE_FMT) == INODE_MODE_FDIR) {
         /* Make link '.' */
-        struct {
-            unsigned int inum;
-            unsigned short reclen;
-            unsigned short namlen;
-            char name [4];
-        } dotent;
-        dotent.inum = inode->number;
+        fs_dirent_t dotent;
+        unsigned char dotbuf [12];
+
+        memset (&dotent, 0, sizeof (dotent));
+        dotent.ino = inode->number;
         dotent.reclen = BSDFS_BSIZE;
         dotent.namlen = 1;
-        memcpy (dotent.name, ".\0\0\0", 4);
-        if (! fs_inode_write (inode, 0, (unsigned char*) &dotent, sizeof(dotent))) {
+        strcpy (dotent.name, ".");
+        fs_dirent_pack (fs, dotbuf, &dotent);
+        if (! fs_inode_write (inode, 0, dotbuf, sizeof (dotbuf))) {
             fprintf (stderr, "inode %d: write error at offset %ld\n",
                 inode->number, 0L);
             return 0;
@@ -696,8 +718,8 @@ create_file:
         dirent.reclen -= reclen;
         if (verbose > 2)
             printf ("*** previous entry %u-%u-%u at offset %lu\n",
-                dirent.inum, dirent.reclen, dirent.namlen, last_offset);
-        if (! fs_inode_write (&dir, last_offset, (unsigned char*) &dirent, sizeof(dirent))) {
+                dirent.ino, dirent.reclen, dirent.namlen, last_offset);
+        if (! fs_dirent_write_head (&dir, last_offset, &dirent)) {
             fprintf (stderr, "inode %d: write error at offset %ld\n",
                 dir.number, last_offset);
             return 0;
@@ -706,26 +728,26 @@ create_file:
         /* No space, extend directory. */
         if (verbose > 2)
             printf ("*** extend dir, previous entry %u-%u-%u at offset %lu\n",
-                dirent.inum, dirent.reclen, dirent.namlen, last_offset);
+                dirent.ino, dirent.reclen, dirent.namlen, last_offset);
         reclen = BSDFS_BSIZE;
     }
     offset = last_offset + dirent.reclen;
-    dirent.inum = inode->number;
+    dirent.ino = inode->number;
     dirent.reclen = reclen;
     dirent.namlen = namlen;
     if (verbose > 2)
-        printf ("*** new entry %u-%u-%u at offset %lu\n", dirent.inum, dirent.reclen, dirent.namlen, offset);
-    if (! fs_inode_write (&dir, offset, (unsigned char*) &dirent, sizeof(dirent))) {
+        printf ("*** new entry %u-%u-%u at offset %lu\n", dirent.ino, dirent.reclen, dirent.namlen, offset);
+    if (! fs_dirent_write_head (&dir, offset, &dirent)) {
         fprintf (stderr, "inode %d: write error at offset %ld\n",
             dir.number, offset);
         return 0;
     }
     if (verbose > 2)
-        printf ("*** name '%.*s' at offset %lu\n", namlen, namptr, offset+sizeof(dirent));
-    if (! fs_inode_write (&dir, offset+sizeof(dirent), (unsigned char*) namptr, namlen) ||
-        ! fs_inode_write (&dir, offset+sizeof(dirent)+namlen, (unsigned char*) "", 1)) {
+        printf ("*** name '%.*s' at offset %lu\n", namlen, namptr, offset+8);
+    if (! fs_inode_write (&dir, offset+8, (unsigned char*) namptr, namlen) ||
+        ! fs_inode_write (&dir, offset+8+namlen, (unsigned char*) "", 1)) {
         fprintf (stderr, "inode %d: write error at offset %ld\n",
-            dir.number, offset+sizeof(dirent));
+            dir.number, offset+8);
         return 0;
     }
     /* Align directory size. */
@@ -741,9 +763,9 @@ create_file:
      */
 delete_file:
     if (verbose > 2)
-        printf ("*** delete inode %d\n", dirent.inum);
-    if (! fs_inode_get (fs, inode, dirent.inum)) {
-        fprintf (stderr, "%s: cannot get inode %d\n", namptr, dirent.inum);
+        printf ("*** delete inode %d\n", dirent.ino);
+    if (! fs_inode_get (fs, inode, dirent.ino)) {
+        fprintf (stderr, "%s: cannot get inode %d\n", namptr, dirent.ino);
         return 0;
     }
     inode->dirty = 1;
@@ -752,19 +774,19 @@ delete_file:
         fs_inode_truncate (inode, 0);
         fs_inode_clear (inode);
         if (inode->fs->ninode < NICINOD) {
-            inode->fs->inode [inode->fs->ninode++] = dirent.inum;
+            inode->fs->inode [inode->fs->ninode++] = dirent.ino;
             inode->fs->dirty = 1;
         }
     }
     /* Extend previous entry to cover the empty space. */
     reclen = dirent.reclen;
-    if (! fs_inode_read (&dir, last_offset, (unsigned char*) &dirent, sizeof(dirent))) {
+    if (! fs_dirent_read_head (&dir, last_offset, &dirent)) {
         fprintf (stderr, "inode %d: read error at offset %ld\n",
             dir.number, last_offset);
         return 0;
     }
     dirent.reclen += reclen;
-    if (! fs_inode_write (&dir, last_offset, (unsigned char*) &dirent, sizeof(dirent))) {
+    if (! fs_dirent_write_head (&dir, last_offset, &dirent)) {
         fprintf (stderr, "inode %d: write error at offset %ld\n",
             dir.number, last_offset);
         return 0;
@@ -788,8 +810,8 @@ create_link:
         dirent.reclen -= reclen;
         if (verbose > 2)
             printf ("*** previous entry %u-%u-%u at offset %lu\n",
-                dirent.inum, dirent.reclen, dirent.namlen, last_offset);
-        if (! fs_inode_write (&dir, last_offset, (unsigned char*) &dirent, sizeof(dirent))) {
+                dirent.ino, dirent.reclen, dirent.namlen, last_offset);
+        if (! fs_dirent_write_head (&dir, last_offset, &dirent)) {
             fprintf (stderr, "inode %d: write error at offset %ld\n",
                 dir.number, last_offset);
             return 0;
@@ -798,26 +820,26 @@ create_link:
         /* No space, extend directory. */
         if (verbose > 2)
             printf ("*** extend dir, previous entry %u-%u-%u at offset %lu\n",
-                dirent.inum, dirent.reclen, dirent.namlen, last_offset);
+                dirent.ino, dirent.reclen, dirent.namlen, last_offset);
         reclen = BSDFS_BSIZE;
     }
     offset = last_offset + dirent.reclen;
-    dirent.inum = mode;
+    dirent.ino = mode;
     dirent.reclen = reclen;
     dirent.namlen = namlen;
     if (verbose > 2)
-        printf ("*** new entry %u-%u-%u at offset %lu\n", dirent.inum, dirent.reclen, dirent.namlen, offset);
-    if (! fs_inode_write (&dir, offset, (unsigned char*) &dirent, sizeof(dirent))) {
+        printf ("*** new entry %u-%u-%u at offset %lu\n", dirent.ino, dirent.reclen, dirent.namlen, offset);
+    if (! fs_dirent_write_head (&dir, offset, &dirent)) {
         fprintf (stderr, "inode %d: write error at offset %ld\n",
             dir.number, offset);
         return 0;
     }
     if (verbose > 2)
-        printf ("*** name '%.*s' at offset %lu\n", namlen, namptr, offset+sizeof(dirent));
-    if (! fs_inode_write (&dir, offset+sizeof(dirent), (unsigned char*) namptr, namlen) ||
-        ! fs_inode_write (&dir, offset+sizeof(dirent)+namlen, (unsigned char*) "", 1)) {
+        printf ("*** name '%.*s' at offset %lu\n", namlen, namptr, offset+8);
+    if (! fs_inode_write (&dir, offset+8, (unsigned char*) namptr, namlen) ||
+        ! fs_inode_write (&dir, offset+8+namlen, (unsigned char*) "", 1)) {
         fprintf (stderr, "inode %d: write error at offset %ld\n",
-            dir.number, offset+sizeof(dirent));
+            dir.number, offset+8);
         return 0;
     }
     if (dir.size % BSDFS_BSIZE) {

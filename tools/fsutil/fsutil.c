@@ -46,6 +46,7 @@ int repartition;
 unsigned kbytes;
 unsigned swap_kbytes;
 unsigned pindex;
+int filesystem_big_endian;
 
 static const char *program_version =
     "BSD 2.x file system utility, version 1.2\n"
@@ -68,8 +69,17 @@ static struct option program_options[] = {
     { "manifest",       required_argument,  0,  'M' },
     { "partition",      required_argument,  0,  'p' },
     { "repartition",    required_argument,  0,  'r' },
+    { "endian",         required_argument,  0,  'E' },
     { 0 }
 };
+
+static void put32le (unsigned char *data, unsigned val)
+{
+    data[0] = val;
+    data[1] = val >> 8;
+    data[2] = val >> 16;
+    data[3] = val >> 24;
+}
 
 static void print_help (char *progname)
 {
@@ -110,6 +120,8 @@ static void print_help (char *progname)
     printf ("                      Install new partition table.\n");
     printf ("  -p NUM, --partition=NUM\n");
     printf ("                      Select a partition.\n");
+    printf ("  --endian=little|big\n");
+    printf ("                      Select on-disk byte order for --new.\n");
     printf ("  -S, --scan          Create a manifest from directory contents.\n");
     printf ("  -v, --verbose       Be verbose.\n");
     printf ("  -V, --version       Print version information and then exit.\n");
@@ -144,7 +156,7 @@ void print_inode (fs_inode_t *inode,
 
 void print_indirect_block (fs_t *fs, unsigned int bno, FILE *out)
 {
-    unsigned short nb;
+    unsigned nb;
     unsigned char data [BSDFS_BSIZE];
     int i;
 
@@ -153,8 +165,8 @@ void print_indirect_block (fs_t *fs, unsigned int bno, FILE *out)
         fprintf (stderr, "read error at block %d\n", bno);
         return;
     }
-    for (i=0; i<BSDFS_BSIZE-2; i+=2) {
-        nb = data [i+1] << 8 | data [i];
+    for (i=0; i<BSDFS_BSIZE; i+=4) {
+        nb = fs_get32 (fs, &data[i]);
         if (nb)
             fprintf (out, " %d", nb);
     }
@@ -162,7 +174,7 @@ void print_indirect_block (fs_t *fs, unsigned int bno, FILE *out)
 
 void print_double_indirect_block (fs_t *fs, unsigned int bno, FILE *out)
 {
-    unsigned short nb;
+    unsigned nb;
     unsigned char data [BSDFS_BSIZE];
     int i;
 
@@ -171,8 +183,8 @@ void print_double_indirect_block (fs_t *fs, unsigned int bno, FILE *out)
         fprintf (stderr, "read error at block %d\n", bno);
         return;
     }
-    for (i=0; i<BSDFS_BSIZE-2; i+=2) {
-        nb = data [i+1] << 8 | data [i];
+    for (i=0; i<BSDFS_BSIZE; i+=4) {
+        nb = fs_get32 (fs, &data[i]);
         if (nb)
             print_indirect_block (fs, nb, out);
     }
@@ -180,7 +192,7 @@ void print_double_indirect_block (fs_t *fs, unsigned int bno, FILE *out)
 
 void print_triple_indirect_block (fs_t *fs, unsigned int bno, FILE *out)
 {
-    unsigned short nb;
+    unsigned nb;
     unsigned char data [BSDFS_BSIZE];
     int i;
 
@@ -189,8 +201,8 @@ void print_triple_indirect_block (fs_t *fs, unsigned int bno, FILE *out)
         fprintf (stderr, "read error at block %d\n", bno);
         return;
     }
-    for (i=0; i<BSDFS_BSIZE-2; i+=2) {
-        nb = data [i+1] << 8 | data [i];
+    for (i=0; i<BSDFS_BSIZE; i+=4) {
+        nb = fs_get32 (fs, &data[i]);
         if (nb)
             print_indirect_block (fs, nb, out);
     }
@@ -676,8 +688,8 @@ void create_partition_table (const char *filename, char *format)
         /* Fill partition entry. */
         entry = &buf [446 + (pindex-1)*16];
         entry [4] = type;
-        *(unsigned*) &entry [8] = offset;
-        *(unsigned*) &entry [12] = len;
+        put32le (&entry [8], offset);
+        put32le (&entry [12], len);
 
         /* Make first FS active. */
         if (type == 0xb7 && ! activated) {
@@ -713,7 +725,7 @@ int main (int argc, char **argv)
     char *partition_format = 0;
 
     for (;;) {
-        key = getopt_long (argc, argv, "vaxmSncfs:M:p:r:",
+        key = getopt_long (argc, argv, "vaxmSncfs:M:p:r:E:",
             program_options, 0);
         if (key == -1)
             break;
@@ -759,6 +771,19 @@ int main (int argc, char **argv)
             ++repartition;
             partition_format = optarg;
             break;
+        case 'E':
+            if (strcmp (optarg, "little") == 0 ||
+                strcmp (optarg, "le") == 0) {
+                filesystem_big_endian = 0;
+            } else if (strcmp (optarg, "big") == 0 ||
+                strcmp (optarg, "be") == 0) {
+                filesystem_big_endian = 1;
+            } else {
+                fprintf (stderr, "Incorrect endian '%s', expected little or big\n",
+                    optarg);
+                return -1;
+            }
+            break;
         case 'V':
             printf ("%s\n", program_version);
             return 0;
@@ -791,7 +816,8 @@ int main (int argc, char **argv)
             return -1;
         }
 
-        if (! fs_create (&fs, argv[i], pindex ? -pindex : kbytes, 0)) {
+        if (! fs_create (&fs, argv[i], pindex ? -pindex : kbytes, 0,
+            filesystem_big_endian)) {
             fprintf (stderr, "%s: cannot create filesystem\n", argv[i]);
             return -1;
         }

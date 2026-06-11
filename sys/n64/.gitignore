@@ -3,6 +3,7 @@
 *.d
 *.elf
 *.bin
+*.img
 *.dis
 *.nm
 *.z64
