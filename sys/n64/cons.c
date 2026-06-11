@@ -24,14 +24,19 @@ cnclose(dev_t dev, int flag, int mode)
 int
 cnread(dev_t dev, struct uio *uio, int flag)
 {
+    int c;
     int error;
 
-    while (uio->uio_resid != 0) {
-        error = ureadc(n64cart_uart_getc(), uio);
-        if (error)
-            return error;
-    }
-    return 0;
+    if (uio->uio_resid == 0)
+        return 0;
+
+    c = n64cart_uart_getc();
+    if (c == '\r')
+        c = '\n';
+    cnputc(c);
+
+    error = ureadc(c, uio);
+    return error;
 }
 
 int
