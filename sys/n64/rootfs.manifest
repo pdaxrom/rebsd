@@ -11,6 +11,7 @@ dir /bin
 dir /dev
 dir /etc
 dir /root
+dir /sbin
 dir /tmp
 
 cdev /dev/console
@@ -31,5 +32,5 @@ file /etc/motd
 
 file /root/.profile
 
-file /bin/init.placeholder
+file /sbin/init
 mode 0775

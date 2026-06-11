@@ -5,6 +5,7 @@ sys
 ioconf.c
 swap*.c
 vers.c
+rootfs.stage/
 *.o
 *.d
 *.elf

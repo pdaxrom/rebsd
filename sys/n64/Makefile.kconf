@@ -14,7 +14,9 @@ N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_ROOTFS_KBYTES ?= 512
 N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/n64/rootfs
 N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/n64/rootfs.manifest
+N64_ROOTFS_STAGE = rootfs.stage
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
+N64_USER_INIT = n64-init.elf
 
 CC              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
 AS              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
@@ -94,10 +96,22 @@ stage0.stripped.elf: stage0.elf
 kernel_stage0.stripped.elf: kernel_stage0.elf
 	$(STRIP) -s -o $@ $<
 
-rootfs.img: $(FSUTIL) $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_FILES)
+rootfs.img: $(FSUTIL) $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_FILES) $(N64_USER_INIT)
+	rm -rf $(N64_ROOTFS_STAGE)
+	mkdir -p $(N64_ROOTFS_STAGE)
+	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
+	mkdir -p $(N64_ROOTFS_STAGE)/sbin
+	cp $(N64_USER_INIT) $(N64_ROOTFS_STAGE)/sbin/init
 	rm -f $@
-	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_MANIFEST) $@ $(N64_ROOTFS_DIR)
+	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_MANIFEST) $@ $(N64_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
+
+n64-init.o: ../user/init.S ../user/user.ld ${SYSTEM_DEP} | machine sys .deps
+	${COMPILE_S}
+
+n64-init.elf: n64-init.o ../user/user.ld
+	$(LD) -nostdlib -T ../user/user.ld -o $@ n64-init.o
+	$(SIZE) $@
 
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
@@ -120,7 +134,8 @@ ioconf.o: ioconf.c ${SYSTEM_DEP}
 ${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
 
 clean:
-	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out .deps machine sys
+	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out .deps machine sys \
+	    $(N64_ROOTFS_STAGE)
 
 clean-all: clean
 	rm -f Makefile ioconf.c swap*.c vers.c
