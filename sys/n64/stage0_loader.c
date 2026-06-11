@@ -5,7 +5,9 @@ typedef unsigned long long u64;
 typedef unsigned int uintptr;
 
 #define RDRAM_KSEG1_BASE        ((uintptr)0xa0000000u)
+#define RDRAM_KSEG0_BASE        ((uintptr)0x80000000u)
 #define N64_BASE_RDRAM_SIZE     0x00400000u
+#define N64_ICACHE_LINE_SIZE    32u
 
 #define N64CART_UART_BASE       ((uintptr)0xbfd01000u)
 #define N64CART_UART_CTRL       0x00u
@@ -57,6 +59,47 @@ static void
 memory_barrier(void)
 {
     __asm__ volatile("" ::: "memory");
+}
+
+static u32
+align_down(u32 value, u32 align)
+{
+    return value & ~(align - 1u);
+}
+
+static void
+sync_memory(void)
+{
+    __asm__ volatile("sync" ::: "memory");
+}
+
+static void
+cache_hit_invalidate_i(uintptr addr)
+{
+    __asm__ volatile("cache 0x10, 0(%0)" :: "r"(addr) : "memory");
+}
+
+static void
+invalidate_instruction_cache_range(uintptr start, uintptr end)
+{
+    uintptr addr;
+
+    if (end <= start)
+        return;
+
+    addr = (uintptr)align_down((u32)start, N64_ICACHE_LINE_SIZE);
+    while (addr < end) {
+        cache_hit_invalidate_i(addr);
+        addr += N64_ICACHE_LINE_SIZE;
+    }
+}
+
+static void
+sync_instruction_range(uintptr start, uintptr end)
+{
+    sync_memory();
+    invalidate_instruction_cache_range(start, end);
+    sync_memory();
 }
 
 static volatile u32 *
@@ -233,6 +276,8 @@ static int
 load_kernel_elf(const struct kernel_elf *kernel)
 {
     u16 i;
+    u32 loaded_start = 0xffffffffu;
+    u32 loaded_end = 0u;
 
     for (i = 0; i < kernel->phnum; ++i) {
         u32 phdr = kernel->phoff + ((u32)i * ELF32_PHDR_SIZE);
@@ -260,7 +305,18 @@ load_kernel_elf(const struct kernel_elf *kernel)
 
         copy_from_kernel_blob(RDRAM_KSEG1_BASE + dst_offset, offset, filesz);
         zero_bytes(RDRAM_KSEG1_BASE + dst_offset + filesz, memsz - filesz);
+
+        if (memsz != 0u) {
+            if (dst_offset < loaded_start)
+                loaded_start = dst_offset;
+            if (dst_offset + memsz > loaded_end)
+                loaded_end = dst_offset + memsz;
+        }
     }
+
+    if (loaded_end > loaded_start)
+        sync_instruction_range(RDRAM_KSEG0_BASE + loaded_start,
+            RDRAM_KSEG0_BASE + loaded_end);
 
     return 0;
 }

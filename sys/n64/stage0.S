@@ -8,10 +8,6 @@
         .section .intvectors, "ax", @progbits
         .globl  n64_stage0_intvectors
 n64_stage0_intvectors:
-        b       n64_stage0_exception
-        nop
-        .space  0x400 - 16, 0
-
 n64_stage0_exception:
         b       n64_stage0_exception
         nop

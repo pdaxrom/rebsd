@@ -4,18 +4,18 @@ ENTRY(_start)
 
 PHDRS
 {
-    irq PT_LOAD AT(0x80000000);
-    main PT_LOAD AT(0x80000400);
+    irq PT_LOAD AT(0x80000180);
+    main PT_LOAD AT(0x80300000);
 }
 
 SECTIONS
 {
-    .intvectors 0x80000000 : {
+    .intvectors 0x80000180 : {
         . = ALIGN(32);
         KEEP(*(.intvectors))
     } :irq
 
-    .text 0x80000400 : {
+    .text 0x80300000 : {
         KEEP(*(.text.boot))
         *(.text)
         *(.text.*)

@@ -49,7 +49,7 @@ COMPILE_FPU_S   = ${ASFPU} ${FPU_ASFLAGS} $< -o $@
 %CFILES
 
 SYSTEM_OBJ      = startup.o ${OBJS} ioconf.o
-SYSTEM_DEP      = Makefile ioconf.c | machine sys .deps
+SYSTEM_DEP      = Makefile ioconf.c
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "2.11 BSD Unix for N64:\\n     local build\\n";' > vers.c; \
                   ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
                   rm -f $@
@@ -116,6 +116,8 @@ startup.o: ../startup.S ${SYSTEM_DEP}
 
 ioconf.o: ioconf.c ${SYSTEM_DEP}
 	${COMPILE_C}
+
+${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
 
 clean:
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out .deps machine sys

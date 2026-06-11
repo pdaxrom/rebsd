@@ -4,12 +4,20 @@
 #include <sys/user.h>
 #include <machine/io.h>
 #include <machine/n64.h>
+#include <machine/n64cart_uart.h>
 
 extern dev_t swapdev;
 dev_t pipedev;
 extern int boothowto;
 
 extern char _end[];
+
+static void
+early_puts(const char *s)
+{
+    while (*s != '\0')
+        n64cart_uart_putc(*s++);
+}
 
 /*
  * Minimal machine startup. Full root device selection and cache/TLB setup
@@ -18,6 +26,7 @@ extern char _end[];
 void
 startup(void)
 {
+    early_puts("RetroBSD N64 kernel entry\n");
     physmem = n64_rdram_size();
     pipedev = swapdev;
     boothowto = RB_RDONLY;
