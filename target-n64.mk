@@ -8,11 +8,12 @@ N64_TOOLCHAIN ?= /Users/sash/Library/n64-toolchain-opengl
 N64_PREFIX    = $(N64_TOOLCHAIN)/bin/mips64-elf-
 
 N64_ARCH      = -EB -march=vr4300 -mtune=vr4300 -mips3 -mabi=32 -mhard-float
-N64_CODE      = -G0 -mno-abicalls -fno-pic -fomit-frame-pointer \
-                -finline-hint-functions
+N64_CODE      = -G0 -mno-abicalls -fno-pic -fomit-frame-pointer
 N64_INCLUDES  = -I$(TOPSRC)/sys/n64/include -I$(TOPSRC)/include
 
-CC            = $(N64_PREFIX)gcc $(N64_ARCH) $(N64_CODE) $(N64_INCLUDES) -Werror
+CC            = $(N64_PREFIX)gcc $(N64_ARCH) $(N64_CODE) $(N64_INCLUDES) \
+                -Werror -Wno-unused-value -Wno-format-overflow \
+                -Wno-attribute-alias -Wno-missing-attributes
 CXX           = $(N64_PREFIX)g++ $(N64_ARCH) $(N64_CODE) $(N64_INCLUDES) -Werror
 LD            = $(N64_PREFIX)ld -m elf32ebmip
 AR            = $(N64_PREFIX)ar
@@ -34,5 +35,5 @@ ELF2AOUT      = $(TOPSRC)/tools/elf2aout/elf2aout
 
 CFLAGS        = -Os -nostdinc
 
-LDFLAGS       = --nmagic -T$(TOPSRC)/src/elf32-mips.ld $(TOPSRC)/src/crt0.o -L$(TOPSRC)/src
+LDFLAGS       = --nmagic -T$(TOPSRC)/sys/n64/user/user.ld $(TOPSRC)/src/crt0.o -L$(TOPSRC)/src
 LIBS          = -lc

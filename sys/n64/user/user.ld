@@ -9,21 +9,57 @@ PHDRS
 
 SECTIONS
 {
+  PROVIDE(__executable_start = 0x00400000);
   . = 0x00400000;
 
   .text : {
-    *(.text .text.*)
-    *(.rodata .rodata.*)
-    *(.data .data.*)
+    _ftext = .;
+    *(.text .stub .text.* .gnu.linkonce.t.*)
+    *(.rodata .rodata.* .gnu.linkonce.r.*)
     . = ALIGN(16);
   } :user
 
+  PROVIDE(__etext = .);
+  PROVIDE(_etext = .);
+  PROVIDE(etext = .);
+
+  .data : {
+    __data_start = .;
+    _fdata = .;
+    *(.data .data.* .gnu.linkonce.d.*)
+    . = ALIGN(16);
+    _gp = . + 0x7ff0;
+    *(.sdata .sdata.* .gnu.linkonce.s.*)
+    *(.lit8)
+    *(.lit4)
+    . = ALIGN(16);
+  } :user
+
+  _edata = .;
+  PROVIDE(edata = .);
+  __bss_start = .;
+  _fbss = .;
+
   .bss (NOLOAD) : {
+    *(.dynsbss)
     *(.sbss .sbss.*)
+    *(.scommon)
+    *(.dynbss)
     *(.bss .bss.*)
     *(COMMON)
     . = ALIGN(16);
   } :user
 
-  /DISCARD/ : { *(.reginfo) *(.MIPS.abiflags) *(.MIPS.options) *(.pdr) }
+  _end = .;
+  PROVIDE(end = .);
+
+  /DISCARD/ : {
+    *(.reginfo)
+    *(.MIPS.abiflags)
+    *(.MIPS.options)
+    *(.pdr)
+    *(.note.GNU-stack)
+    *(.gnu_debuglink)
+    *(.comment)
+  }
 }

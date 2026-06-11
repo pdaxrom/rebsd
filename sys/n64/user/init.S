@@ -3,6 +3,7 @@
 #define SYS_read        3
 #define SYS_write       4
 #define SYS_open        5
+#define SYS_execv       11
 
 #define O_RDWR          2
 
@@ -61,6 +62,20 @@ _start:
         nop
 
 1:
+        la      $a0, shell_path
+        la      $a1, shell_argv
+        syscall SYS_execv
+        nop
+        nop
+
+        move    $a0, $s0
+        la      $a1, exec_fail
+        li      $a2, exec_fail_end - exec_fail
+        syscall SYS_write
+        nop
+        nop
+
+4:
         move    $a0, $s0
         la      $a1, input_byte
         li      $a2, 1
@@ -68,7 +83,7 @@ _start:
         nop
         nop
 
-        blez    $v0, 1b
+        blez    $v0, 4b
         nop
 
         move    $a0, $s0
@@ -77,7 +92,7 @@ _start:
         syscall SYS_write
         nop
         nop
-        b       1b
+        b       4b
         nop
 
 2:
@@ -88,9 +103,16 @@ _start:
         .data
 console_path:
         .ascii  "/dev/console\0"
+shell_path:
+        .ascii  "/bin/sh\0"
+shell_arg0:
+        .ascii  "sh\0"
+        .align  2
+shell_argv:
+        .word   shell_arg0
+        .word   0
 banner:
         .ascii  "\nRetroBSD/N64 init\n"
-        .ascii  "console echo ready\n"
 banner_end:
 fpu_ok:
         .ascii  "fpu ok\n"
@@ -98,6 +120,10 @@ fpu_ok_end:
 fpu_fail:
         .ascii  "fpu failed\n"
 fpu_fail_end:
+exec_fail:
+        .ascii  "exec /bin/sh failed\n"
+        .ascii  "console echo ready\n"
+exec_fail_end:
 
         .align  2
 fpu_values:

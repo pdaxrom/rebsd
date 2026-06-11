@@ -17,7 +17,12 @@ N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/n64/rootfs
 N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/n64/rootfs.manifest
 N64_ROOTFS_STAGE = rootfs.stage
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
+N64_CRT0_SRCS = $(shell find $(TOPSRC)/src/startup-mips -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
+N64_SH_SRCS = $(shell find $(TOPSRC)/src/cmd/sh -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_USER_INIT = n64-init
+N64_USER_SH = $(TOPSRC)/src/cmd/sh/sh
+N64_USERLAND = $(N64_USER_SH)
 
 CC              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
 AS              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
@@ -103,12 +108,14 @@ stage0.stripped.elf: stage0.elf
 kernel_stage0.stripped.elf: kernel_stage0.elf
 	$(STRIP) -s -o $@ $<
 
-rootfs.img: $(FSUTIL) $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_FILES) $(N64_USER_INIT)
+rootfs.img: $(FSUTIL) $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_FILES) $(N64_USER_INIT) $(N64_USERLAND)
 	rm -rf $(N64_ROOTFS_STAGE)
 	mkdir -p $(N64_ROOTFS_STAGE)
 	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	cp $(N64_USER_INIT) $(N64_ROOTFS_STAGE)/sbin/init
+	mkdir -p $(N64_ROOTFS_STAGE)/bin
+	cp $(N64_USER_SH) $(N64_ROOTFS_STAGE)/bin/sh
 	rm -f $@
 	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_MANIFEST) $@ $(N64_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
@@ -122,6 +129,15 @@ n64-init.elf: n64-init.o ../user/user.ld
 
 n64-init: n64-init.elf $(ELF2AOUT)
 	$(ELF2AOUT) $< $@
+
+$(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
+	$(MAKE) -C $(TOPSRC)/src/startup-mips TARGET_PLATFORM=n64
+
+$(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
+	$(MAKE) -C $(TOPSRC)/src/libc TARGET_PLATFORM=n64
+
+$(N64_USER_SH): $(TOPSRC)/src/libc.a $(N64_SH_SRCS)
+	$(MAKE) -C $(TOPSRC)/src/cmd/sh TARGET_PLATFORM=n64
 
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil

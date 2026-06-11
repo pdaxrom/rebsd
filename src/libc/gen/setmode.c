@@ -141,11 +141,13 @@ common:			if (set->cmd2 & CMD2_CLR) {
 #define	ADDCMD(a, b, c, d)						\
 	if (set >= endset) {						\
 		register BITCMD *newset;				\
+		register int setoff;					\
 		setlen += SET_LEN_INCR;					\
+		setoff = set - saveset;					\
 		newset = (BITCMD *)realloc(saveset, sizeof(BITCMD) * setlen); \
-		if (!saveset)						\
+		if (!newset)						\
 			return ((void *)NULL);				\
-		set = newset + (set - saveset);				\
+		set = newset + setoff;					\
 		saveset = newset;					\
 		endset = newset + (setlen - 2);				\
 	}								\
