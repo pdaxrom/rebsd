@@ -1,0 +1,9 @@
+.deps/
+*.o
+*.elf
+*.bin
+*.dis
+*.nm
+/machine
+/sys
+vers.c

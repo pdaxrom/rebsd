@@ -31,6 +31,8 @@ FSUTIL		= tools/fsutil/fsutil
 
 TOPSRC       = $(shell pwd)
 CONFIG       = $(TOPSRC)/tools/kconfig/kconfig
+TARGET_PLATFORM ?= pic32
+KERNEL_DIR   = sys/$(TARGET_PLATFORM)
 
 all: tools
 		$(MAKE) kernel
@@ -42,7 +44,7 @@ all: tools
 .PHONY: kernel
 
 kernel: $(CONFIG) tools
-		$(MAKE) -C sys/pic32 all
+		$(MAKE) -C $(KERNEL_DIR) all
 
 .PHONY: tools
 
@@ -68,11 +70,14 @@ $(CONFIG):
 
 clean:
 		rm -f *~
-		for dir in tools lib src sys/pic32; do $(MAKE) -C $$dir -k clean; done
+		for dir in tools lib src sys/pic32 sys/n64; do \
+			if [ -d $$dir ]; then $(MAKE) -C $$dir -k clean; fi; \
+		done
 
 cleanall:       clean
 		$(MAKE) -C lib clean
 		rm -f sys/pic32/*/unix.hex bin/* sbin/* libexec/*
+		rm -f sys/n64/*.elf sys/n64/*.bin sys/n64/*.o sys/n64/*.nm sys/n64/*.dis
 		rm -f games/[a-k]* games/[m-z]* share/man/cat*/*
 		rm -f games/lib/adventure.dat games/lib/cfscores
 		rm -f share/re.help share/emg.keys share/misc/more.help

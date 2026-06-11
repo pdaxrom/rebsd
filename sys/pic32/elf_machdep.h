@@ -5,6 +5,7 @@
                         break;
 
 #define ARCH_ELFSIZE            32      /* MD native binary size */
+#define ELF_TARGET_DATA         ELFDATA2LSB
 
 /* mips relocs.  */
 

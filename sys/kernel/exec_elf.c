@@ -77,6 +77,10 @@
 
 extern char sigcode[], esigcode[];
 
+#ifndef ELF_TARGET_DATA
+#define ELF_TARGET_DATA ELFDATA2LSB
+#endif
+
 /* round up and down to page boundaries. */
 #define ELF_ROUND(a, b)     (((a) + (b) - 1) & ~((b) - 1))
 #define ELF_TRUNC(a, b)     ((a) & ~((b) - 1))
@@ -97,7 +101,7 @@ exec_elf_check(struct exec_params *epp)
     int error, i, phsize;
 
     const char elfident[] = {ELFMAG0, ELFMAG1, ELFMAG2, ELFMAG3,
-                 ELFCLASS32, ELFDATA2LSB, EV_CURRENT, ELFOSABI_SYSV, 0};
+                 ELFCLASS32, ELF_TARGET_DATA, EV_CURRENT, ELFOSABI_SYSV, 0};
 
     /*
      * Check that this is an ELF file that we can handle,
