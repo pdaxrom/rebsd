@@ -16,7 +16,7 @@ N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/n64/rootfs
 N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/n64/rootfs.manifest
 N64_ROOTFS_STAGE = rootfs.stage
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
-N64_USER_INIT = n64-init.elf
+N64_USER_INIT = n64-init
 
 CC              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
 AS              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
@@ -28,6 +28,9 @@ STRIP           = $(N64_PREFIX)strip
 NM              = $(N64_PREFIX)nm
 N64_TOOL        = $(N64_TOOLCHAIN)/bin/n64tool
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
+ELF2AOUT        = $(TOPSRC)/tools/elf2aout/elf2aout
+ELF2AOUT_SRCS   = $(TOPSRC)/tools/elf2aout/Makefile \
+                  $(TOPSRC)/tools/elf2aout/elf2aout.c
 
 DEPFLAGS        = -MT $@ -MP -MD -MF .deps/$*.dep
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DN64
@@ -113,8 +116,14 @@ n64-init.elf: n64-init.o ../user/user.ld
 	$(LD) -nostdlib -T ../user/user.ld -o $@ n64-init.o
 	$(SIZE) $@
 
+n64-init: n64-init.elf $(ELF2AOUT)
+	$(ELF2AOUT) $< $@
+
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
+
+$(ELF2AOUT): $(ELF2AOUT_SRCS)
+	$(MAKE) -C $(TOPSRC)/tools/elf2aout
 
 preflight.z64: stage0.stripped.elf rootfs.img
 	$(N64_TOOL) --toc --title "RETROBSD N64" --output $@ --align 256 stage0.stripped.elf --align 1024 rootfs.img
@@ -134,8 +143,8 @@ ioconf.o: ioconf.c ${SYSTEM_DEP}
 ${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
 
 clean:
-	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out .deps machine sys \
-	    $(N64_ROOTFS_STAGE)
+	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out n64-init \
+	    .deps machine sys $(N64_ROOTFS_STAGE)
 
 clean-all: clean
 	rm -f Makefile ioconf.c swap*.c vers.c

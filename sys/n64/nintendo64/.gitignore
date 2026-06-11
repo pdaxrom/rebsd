@@ -15,3 +15,4 @@ rootfs.stage/
 *.nm
 *.z64
 a.out
+n64-init

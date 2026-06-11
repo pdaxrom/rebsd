@@ -44,6 +44,12 @@
 #include <stdint.h>
 #include <getopt.h>
 
+#define EI_DATA     5
+#define ELFDATA2LSB 1
+#define ELFDATA2MSB 2
+
+static int target_big_endian;
+
 #ifdef _WIN32
 #include <stdarg.h>
 
@@ -331,6 +337,12 @@ int	phcmp (const void *, const void *);
 char   *save_read (int file, off_t offset, off_t len, const char *name);
 void	copy (int, int, off_t, off_t);
 void	translate_syms (int, int, off_t, off_t, off_t, off_t);
+void	convert_ehdr(Elf32_Ehdr *);
+void	convert_phdrs(Elf32_Phdr *, int);
+void	convert_shdrs(Elf32_Shdr *, int);
+void	write_aout_header(int, const struct exec *);
+uint16_t target16(uint16_t);
+uint32_t target32(uint32_t);
 
 int    *symTypeTable;
 
@@ -390,13 +402,34 @@ usage:                  fprintf(stderr,
 		    argv[0], i ? strerror(errno) : "End of file reached");
 		exit(1);
 	}
+	if (ex.e_ident[0] != 0x7f || ex.e_ident[1] != 'E' ||
+	    ex.e_ident[2] != 'L' || ex.e_ident[3] != 'F') {
+		fprintf(stderr, "%s: not an ELF executable.\n", argv[0]);
+		exit(1);
+	}
+	switch (ex.e_ident[EI_DATA]) {
+	case ELFDATA2LSB:
+		target_big_endian = 0;
+		break;
+	case ELFDATA2MSB:
+		target_big_endian = 1;
+		break;
+	default:
+		fprintf(stderr, "%s: unsupported ELF data encoding %u.\n",
+		    argv[0], ex.e_ident[EI_DATA]);
+		exit(1);
+	}
+	convert_ehdr(&ex);
+
 	/* Read the program headers... */
 	ph = (Elf32_Phdr *) save_read(infile, ex.e_phoff,
 	    ex.e_phnum * sizeof(Elf32_Phdr), "ph");
+	convert_phdrs(ph, ex.e_phnum);
 
 	/* Read the section headers... */
 	sh = (Elf32_Shdr *) save_read(infile, ex.e_shoff,
 	    ex.e_shnum * sizeof(Elf32_Shdr), "sh");
+	convert_shdrs(sh, ex.e_shnum);
 
 	/* Read in the section string table. */
 	shstrtab = save_read(infile, sh[ex.e_shstrndx].sh_offset,
@@ -552,11 +585,7 @@ usage:                  fprintf(stderr,
 		warn("ftruncate %s", argv[1]);
 	}
 	/* Write the header... */
-	i = write(outfile, &aex, sizeof aex);
-	if (i != sizeof aex) {
-		perror("aex: write");
-		exit(1);
-	}
+	write_aout_header(outfile, &aex);
         if (! symflag) {
                 /* Copy the loadable sections.   Zero-fill any gaps less than 64k;
                  * complain about any zero-filling, and die if we're asked to
@@ -598,6 +627,122 @@ usage:                  fprintf(stderr,
         }
 	/* Looks like we won... */
 	return 0;
+}
+
+uint16_t
+target16(uint16_t value)
+{
+	unsigned char *p = (unsigned char *)&value;
+
+	if (target_big_endian)
+		return ((uint16_t)p[0] << 8) | p[1];
+	return p[0] | ((uint16_t)p[1] << 8);
+}
+
+uint32_t
+target32(uint32_t value)
+{
+	unsigned char *p = (unsigned char *)&value;
+
+	if (target_big_endian)
+		return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+		    ((uint32_t)p[2] << 8) | p[3];
+	return p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+	    ((uint32_t)p[3] << 24);
+}
+
+void
+convert_ehdr(Elf32_Ehdr *ex)
+{
+	ex->e_type = target16(ex->e_type);
+	ex->e_machine = target16(ex->e_machine);
+	ex->e_version = target32(ex->e_version);
+	ex->e_entry = target32(ex->e_entry);
+	ex->e_phoff = target32(ex->e_phoff);
+	ex->e_shoff = target32(ex->e_shoff);
+	ex->e_flags = target32(ex->e_flags);
+	ex->e_ehsize = target16(ex->e_ehsize);
+	ex->e_phentsize = target16(ex->e_phentsize);
+	ex->e_phnum = target16(ex->e_phnum);
+	ex->e_shentsize = target16(ex->e_shentsize);
+	ex->e_shnum = target16(ex->e_shnum);
+	ex->e_shstrndx = target16(ex->e_shstrndx);
+}
+
+void
+convert_phdrs(Elf32_Phdr *ph, int count)
+{
+	int i;
+
+	for (i = 0; i < count; i++) {
+		ph[i].p_type = target32(ph[i].p_type);
+		ph[i].p_offset = target32(ph[i].p_offset);
+		ph[i].p_vaddr = target32(ph[i].p_vaddr);
+		ph[i].p_paddr = target32(ph[i].p_paddr);
+		ph[i].p_filesz = target32(ph[i].p_filesz);
+		ph[i].p_memsz = target32(ph[i].p_memsz);
+		ph[i].p_flags = target32(ph[i].p_flags);
+		ph[i].p_align = target32(ph[i].p_align);
+	}
+}
+
+void
+convert_shdrs(Elf32_Shdr *sh, int count)
+{
+	int i;
+
+	for (i = 0; i < count; i++) {
+		sh[i].sh_name = target32(sh[i].sh_name);
+		sh[i].sh_type = target32(sh[i].sh_type);
+		sh[i].sh_flags = target32(sh[i].sh_flags);
+		sh[i].sh_addr = target32(sh[i].sh_addr);
+		sh[i].sh_offset = target32(sh[i].sh_offset);
+		sh[i].sh_size = target32(sh[i].sh_size);
+		sh[i].sh_link = target32(sh[i].sh_link);
+		sh[i].sh_info = target32(sh[i].sh_info);
+		sh[i].sh_addralign = target32(sh[i].sh_addralign);
+		sh[i].sh_entsize = target32(sh[i].sh_entsize);
+	}
+}
+
+static void
+store_target32(unsigned char *p, uint32_t value)
+{
+	if (target_big_endian) {
+		p[0] = value >> 24;
+		p[1] = value >> 16;
+		p[2] = value >> 8;
+		p[3] = value;
+	} else {
+		p[0] = value;
+		p[1] = value >> 8;
+		p[2] = value >> 16;
+		p[3] = value >> 24;
+	}
+}
+
+void
+write_aout_header(int outfile, const struct exec *aex)
+{
+	unsigned char buf[8 * sizeof(uint32_t)];
+	uint32_t fields[8];
+	int i;
+
+	fields[0] = aex->a_magic;
+	fields[1] = aex->a_text;
+	fields[2] = aex->a_data;
+	fields[3] = aex->a_bss;
+	fields[4] = aex->a_reltext;
+	fields[5] = aex->a_reldata;
+	fields[6] = aex->a_syms;
+	fields[7] = aex->a_entry;
+
+	for (i = 0; i < 8; i++)
+		store_target32(buf + i * sizeof(uint32_t), fields[i]);
+	if (write(outfile, buf, sizeof(buf)) != (ssize_t)sizeof(buf)) {
+		perror("aex: write");
+		exit(1);
+	}
 }
 
 /*
@@ -662,11 +807,14 @@ translate_syms(int out, int in, off_t symoff, off_t symsize,
 		/* Do the translation... */
 		for (i = 0; i < cur; i++) {
 			int     binding, type;
+			uint32_t st_name = target32(inbuf[i].st_name);
+			uint32_t st_value = target32(inbuf[i].st_value);
+			uint16_t st_shndx = target16(inbuf[i].st_shndx);
 
 			/* Copy the symbol into the new table, but prepend an
 			 * underscore. */
 			*nsp = '_';
-			strcpy(nsp + 1, oldstrings + inbuf[i].st_name);
+			strcpy(nsp + 1, oldstrings + st_name);
 			outbuf[i].n_un.n_strx = nsp - newstrings + 4;
 			nsp += strlen(nsp) + 1;
 
@@ -678,23 +826,23 @@ translate_syms(int out, int in, off_t symoff, off_t symsize,
 			if (type == STT_FILE)
 				outbuf[i].n_type = N_FN;
 
-			else if (inbuf[i].st_shndx == SHN_UNDEF)
+			else if (st_shndx == SHN_UNDEF)
 				outbuf[i].n_type = N_UNDF;
 
-			else if (inbuf[i].st_shndx == SHN_ABS)
+			else if (st_shndx == SHN_ABS)
 				outbuf[i].n_type = N_ABS;
 
-			else if (inbuf[i].st_shndx == SHN_COMMON)
+			else if (st_shndx == SHN_COMMON)
 				outbuf[i].n_type = N_ABS /*N_COMM*/;
 
 			else
-				outbuf[i].n_type = symTypeTable[inbuf[i].st_shndx];
+				outbuf[i].n_type = symTypeTable[st_shndx];
 
 			if (binding == STB_GLOBAL)
 				outbuf[i].n_type |= N_EXT;
 
 			/* Symbol values in executables should be compatible. */
-			outbuf[i].n_value = inbuf[i].st_value;
+			outbuf[i].n_value = st_value;
 		}
 		/* Write out the symbols... */
 		if ((i = write(out, outbuf, cur * sizeof(struct nlist)))
