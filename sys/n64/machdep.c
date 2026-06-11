@@ -12,13 +12,13 @@ int boothowto;
 extern char _end[];
 
 /*
- * Minimal machine startup. Full memory sizing, root device selection and
- * cache/TLB setup will be filled in when the real kernel link is enabled.
+ * Minimal machine startup. Full root device selection and cache/TLB setup
+ * will be filled in when the real kernel link is enabled.
  */
 void
 startup(void)
 {
-    physmem = N64_RDRAM_SIZE_4M;
+    physmem = n64_rdram_size();
     rootdev = makedev(0, 0);
     swapdev = makedev(0, 1);
     pipedev = swapdev;

@@ -1,4 +1,5 @@
 #include <sys/param.h>
+#include <machine/n64.h>
 #include <machine/n64cart_uart.h>
 #include <machine/rompak.h>
 
@@ -26,6 +27,10 @@ main(void)
     struct n64_rompak_entry rootfs;
 
     puts("\nRetroBSD N64 preflight\n");
+    puts("rdram size=");
+    put_hex32(n64_rdram_size());
+    puts("\n");
+
     if (n64_rompak_find("rootfs.img", &rootfs) == 0) {
         puts("rootfs.img offset=");
         put_hex32(rootfs.offset);

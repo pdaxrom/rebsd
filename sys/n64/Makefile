@@ -36,8 +36,8 @@ STAGE0_CFLAGS   = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
 STAGE0_ASFLAGS  = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
                   -x assembler-with-cpp -MMD -MP -c
 
-OBJS            = startup.o n64cart_uart.o cons.o devsw.o clock.o machdep.o fpu.o rompak.o
-PREFLIGHT_OBJS  = startup.o n64cart_uart.o rompak.o preflight.o
+OBJS            = startup.o n64cart_uart.o cons.o devsw.o clock.o machdep.o fpu.o rompak.o memory.o
+PREFLIGHT_OBJS  = startup.o n64cart_uart.o rompak.o memory.o preflight.o
 STAGE0_OBJS     = stage0.o stage0_loader.o stage0_kernel_blob.o
 
 all: preflight preflight.elf rootfs.img preflight.z64
