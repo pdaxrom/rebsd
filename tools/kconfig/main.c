@@ -84,6 +84,10 @@ int main(int argc, char **argv)
         pic32_ioconf();
         break;
 
+    case ARCH_N64:
+        pic32_ioconf();
+        break;
+
     default:
         printf("Specify architecture, e.g. ``architecture pic32''\n");
         exit(1);

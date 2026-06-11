@@ -31,6 +31,7 @@
 #define ST_IM5          0x00002000u
 #define ST_IM6          0x00004000u
 #define ST_IM7          0x00008000u
+#define ST_RP           0x08000000u
 #define ST_CU0          0x10000000u
 #define ST_CU1          0x20000000u
 

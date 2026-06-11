@@ -1,4 +1,10 @@
 .deps/
+Makefile
+machine
+sys
+ioconf.c
+swap*.c
+vers.c
 *.o
 *.d
 *.elf
@@ -8,7 +14,3 @@
 *.nm
 *.z64
 a.out
-/machine
-/sys
-ioconf.c
-vers.c

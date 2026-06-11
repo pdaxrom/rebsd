@@ -76,10 +76,12 @@
 
 #define noop()          asm volatile("nop")
 
+#ifndef __ASSEMBLER__
 void idle(void);
 void udelay(unsigned usec);
 void clkstart(void);
 void led_control(int mask, int on);
+#endif
 
 #define LED_MISC4       0x80
 #define LED_MISC3       0x40

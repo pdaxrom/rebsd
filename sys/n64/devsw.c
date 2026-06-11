@@ -1,6 +1,7 @@
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
+#include <sys/inode.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <machine/n64cart_uart.h>
@@ -100,3 +101,25 @@ const struct cdevsw cdevsw[] = {
 };
 
 const int nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]) - 1;
+
+int
+iskmemdev(dev_t dev)
+{
+    return 0;
+}
+
+int
+isdisk(dev_t dev, int type)
+{
+    if (type != IFBLK)
+        return 0;
+
+    return major(dev) == N64_ROMDISK_MAJOR ||
+        major(dev) == N64_RAMSWAP_MAJOR;
+}
+
+int
+chrtoblk(dev_t dev)
+{
+    return NODEV;
+}

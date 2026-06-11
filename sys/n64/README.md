@@ -12,6 +12,17 @@ The N64 toolchain is expected at:
 The kernel C code is built without FPU use. Userland is built hard-float.
 The machine layer owns CP1/FPU enable, save and restore.
 
+Build entry point:
+
+```
+make -C sys/n64 all
+```
+
+The `sys/n64/Makefile` wrapper regenerates
+`sys/n64/nintendo64/Makefile`, `ioconf.c`, and `swapunix.c` from
+`sys/n64/nintendo64/Config`, `sys/n64/files.kconf`, and
+`sys/n64/Makefile.kconf`.
+
 Initial boot target:
 
 1. ROM-DOS style stage0 loads an ELF32 big-endian RetroBSD kernel.
