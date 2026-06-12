@@ -1,0 +1,51 @@
+.TH N64INPUT 1 "June 12, 2026"
+.UC 4
+.SH NAME
+n64input \- inspect Nintendo 64 Joybus input devices
+.SH SYNOPSIS
+.B n64input list
+.br
+.B n64input joypad
+[
+.I port
+]
+.br
+.B n64input mouse
+[
+.I port
+]
+.br
+.B n64input kbd
+[
+.I port
+]
+.br
+.B n64input kbd-led
+.I port value
+.SH DESCRIPTION
+.B n64input
+is a smoke-test utility for the RetroBSD/N64 Joybus drivers.
+.PP
+.B list
+prints the current Joybus identifier and status for controller ports 0 through
+3.
+.PP
+.B joypad ,
+.B mouse ,
+and
+.B kbd
+read the selected per-port device node and print one current snapshot.
+The default port is 0.
+.PP
+.B kbd-led
+sets the RandNET keyboard LED byte used by subsequent keyboard polls.
+.SH FILES
+.TP 12
+.I /dev/joypad0
+first N64 controller-port joypad device
+.TP 12
+.I /dev/mouse0
+first N64 controller-port mouse device
+.TP 12
+.I /dev/kbd0
+first N64 controller-port RandNET keyboard device

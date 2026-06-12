@@ -5,7 +5,10 @@
 #define N64_SERIAL_MAJOR 3
 #define N64_RGBLED_MAJOR 4
 #define N64_FB_MAJOR     5
+#define N64_JOYPAD_MAJOR 6
+#define N64_MOUSE_MAJOR  7
 #define N64_PTS_MAJOR    8
 #define N64_PTC_MAJOR    9
+#define N64_KBD_MAJOR    10
 
 #endif

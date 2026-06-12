@@ -24,9 +24,11 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - `/dev/rgbled0` controls the n64cart RGB LED through ioctl.
 - `/dev/fb0` exposes the current 16-bit framebuffer, mode ioctls, and a
   fixed uncached user mapping.
+- `/dev/joypad0`..`/dev/joypad3`, `/dev/mouse0`..`/dev/mouse3`, and
+  `/dev/kbd0`..`/dev/kbd3` expose synchronous Joybus input snapshots.
 - `/dev/romdisk`, `/dev/swap`, `/dev/null`, `/dev/zero`, `/dev/ttyS0`,
-  `/dev/rgbled0`, `/dev/fb0`, and the pty nodes are generated into the root
-  filesystem from kernel device definitions.
+  `/dev/rgbled0`, `/dev/fb0`, Joybus input devices, and the pty nodes are
+  generated into the root filesystem from kernel device definitions.
 - Userland is built from the normal `src/cmd` tree as a.out binaries linked
   for the N64 user address window.
 - The N64 rootfs selects `init`, `getty`, `login`, `sh`, `ls`, and a small
@@ -663,8 +665,11 @@ Current character devices, verified in the generated ROM rootfs:
 /dev/ttyS0    c 3,0
 /dev/rgbled0  c 4,0
 /dev/fb0      c 5,0
+/dev/joypad0  c 6,0
+/dev/mouse0   c 7,0
 /dev/ttyp0    c 8,0
 /dev/ptyp0    c 9,0
+/dev/kbd0     c 10,0
 ```
 
 `/dev/console` is a normal RetroBSD tty endpoint backed by `sys/n64/cons.c`.
@@ -737,6 +742,62 @@ The VI setup reads the IPL TV type byte at `0xa4000009` and chooses PAL, NTSC,
 or MPAL timing. PAL uses the PAL timing registers with a centered 640x480
 active area, so the framebuffer size stays 320x240 or 640x480 rather than
 becoming 640x576.
+
+## Joybus, SI, And Input Devices
+
+The low-level SI transport is `sys/n64/si.c`. It performs one synchronous
+64-byte Joybus/PIF exchange by DMA-writing a block to PIF RAM at `0x1fc007c0`
+and DMA-reading the 64-byte reply back. The first implementation polls the SI
+status bits with a timeout instead of enabling SI interrupts; this keeps the
+bring-up path simple and independent from VI/timer interrupt routing.
+
+`sys/n64/joybus.c` builds the first supported Joybus commands using the same
+layouts used by libdragon and the local test ROMs:
+
+- identify: send length 1, receive length 3, command `0x00`
+- N64 controller read: send length 1, receive length 4, command `0x01`
+- N64 mouse read: same `0x01` command as controller, distinguished by
+  identifier `0x0200`
+- RandNET keyboard read: send length 2, receive length 7, command `0x13`,
+  with the second sent byte carrying the keyboard LED state
+
+N64 assigns local character majors for the first snapshot drivers:
+
+```
+joypad: /dev/joypad0..3  c 6,0..3
+mouse:  /dev/mouse0..3   c 7,0..3
+kbd:    /dev/kbd0..3     c 10,0..3
+```
+
+All three device families infer the controller port from the minor number.
+`read(2)` returns the current binary snapshot structure; userland can also use
+ioctls from `<machine/joybus.h>`:
+
+```
+N64JOYBUSIOC_IDENTIFY   struct n64joybus_port
+N64JOYPADIOC_GETSTATE   struct n64joypad_state
+N64MOUSEIOC_GETSTATE    struct n64mouse_state
+N64KBDIOC_GETSTATE      struct n64keyboard_state
+N64KBDIOC_SETLED        unsigned LED byte
+```
+
+The ROM rootfs includes `/bin/n64input` for hardware smoke-testing:
+
+```
+n64input list
+n64input joypad 0
+n64input mouse 0
+n64input kbd 0
+n64input kbd-led 0 0x04
+```
+
+Hardware smoke-test passed on a real N64 on 2026-06-12 for Joybus identify,
+N64 controller snapshots, N64 mouse snapshots, and RandNET keyboard snapshots.
+Observed identifiers were `0x0500` for controller, `0x0200` for mouse, and
+`0x0002` for keyboard. Keyboard LED ioctl smoke-test is still pending. The
+drivers are intentionally synchronous snapshot devices for this first step.
+The next step is feeding RandNET keyboard input into `/dev/console`; after
+that, the input devices can grow event/blocking semantics.
 
 N64 does not expose `/dev/mem` or `/dev/kmem` in the ROM rootfs. Character
 major 1 is present only for `/dev/null` and `/dev/zero`; minors 0 and 1 return
@@ -840,9 +901,10 @@ The generic `led_control(mask, on)` hook remains a no-op on N64. The RGB LED is
 explicitly controlled through `/dev/rgbled0` so serial activity does not
 implicitly change LED state.
 
-Current transition note: `/dev/console` has N64 framebuffer output but no N64
-keyboard/controller input backend yet. Keep `/dev/ttyS0` enabled for login and
-interactive input until a real system-console input driver exists.
+Current transition note: `/dev/console` has N64 framebuffer output but does
+not yet consume the RandNET keyboard driver. Keep `/dev/ttyS0` enabled for
+login and interactive input until the keyboard-to-console path is implemented
+and tested.
 
 ## Interrupts and timer-driven console input
 
@@ -1139,10 +1201,16 @@ Console and interrupts:
 - `sys/n64/n64cart_rgbled.h`
 - `sys/n64/console_null.c`
 - `sys/n64/n64int.c`
+- `sys/n64/si.c`
+- `sys/n64/si.h`
+- `sys/n64/joybus.c`
+- `sys/n64/joybus.h`
 - `sys/n64/clock.c`
 
 N64 userland additions:
 
+- `src/cmd/fbset/`
+- `src/cmd/n64input/`
 - `src/cmd/ptytest/`
 - `src/cmd/rgbled/`
 - `src/cmd/smux/retro`
@@ -1169,11 +1237,13 @@ Build and generated data:
 - Console input is timer-polled, not driven by a UART interrupt.
 - The n64cart UART backend only works on cartridges with the matching
   register block.
+- Joybus keyboard, mouse, and joypad drivers are built and exposed through
+  `/dev`, but their hardware smoke-test is still pending.
 - Only a small rootfs is present: `init`, `getty`, `login`, `sh`, `ls`,
   selected basic `/bin` tools, `man`/`more`, selected `/sbin` tools,
   generated `/dev` nodes, and static config files.
-- No display, controller, filesystem-writeback, SD, or other cartridge
-  storage drivers are implemented yet.
+- No filesystem-writeback, SD, or other cartridge storage drivers are
+  implemented yet.
 
 ## Bring-up rules
 

@@ -62,6 +62,8 @@ copying binaries manually.
 - [x] Add login profile defaults for `PATH=/bin:/sbin` and `PAGER=/bin/cat`
 - [x] Add selected `/sbin` utilities when the kernel side supports them:
   `reboot`, `mount`, `umount`, and `fsck`
+- [x] Add `/bin/n64input` as the minimal Joybus input smoke-test utility for
+  `/dev/joypadN`, `/dev/mouseN`, and `/dev/kbdN`
 - [x] Keep generated device nodes derived from kernel definitions through
   `sys/n64/devnodes.awk`
 - [x] Keep cartridge root read-only until a writable filesystem target exists
@@ -168,6 +170,31 @@ copying binaries manually.
 - [ ] Add a real N64 system-console input backend, so `/dev/console` can be
   used without the n64cart serial login path
 
+## Joybus, Keyboard, Mouse, And Joypad
+
+- [x] Add an N64 SI driver that performs one synchronous 64-byte PIF-RAM
+  exchange through the SI DMA registers
+- [x] Add a shared N64 Joybus layer for identify, controller/mouse read, and
+  RandNET keyboard read commands
+- [x] Add `/dev/joypad0`..`/dev/joypad3` for N64 controller snapshots
+- [x] Add `/dev/mouse0`..`/dev/mouse3` for N64 mouse snapshots; mouse uses the
+  same Joybus read command as a controller and is distinguished by identifier
+  `0x0200`
+- [x] Add `/dev/kbd0`..`/dev/kbd3` for RandNET keyboard snapshots and LED-byte
+  ioctl control
+- [x] Add `/bin/n64input` through the shared `src/cmd` install flow
+- [x] Hardware smoke-test `n64input list` on real N64 hardware:
+  controller `0x0500`, mouse `0x0200`, and RandNET keyboard `0x0002`
+  are detected on controller ports
+- [x] Hardware smoke-test `n64input joypad N` with an N64 controller
+- [x] Hardware smoke-test `n64input mouse N` with an N64 mouse
+- [x] Hardware smoke-test `n64input kbd N` with a RandNET keyboard
+- [ ] Hardware smoke-test `n64input kbd-led N value` with a RandNET keyboard
+- [ ] Add a keyboard-to-console path so the system console can accept input
+  from an N64 keyboard instead of depending on `/dev/ttyS0`
+- [ ] Add event/blocking semantics after raw snapshots pass on hardware; the
+  first version intentionally uses synchronous polling for bring-up
+
 ## Verification
 
 - [x] Run:
@@ -183,6 +210,8 @@ copying binaries manually.
   not manually copy command binaries from `src/cmd`
 - [x] Confirm `rootfs.generated.manifest` contains only N64-appropriate device
   nodes and files
+- [x] Confirm the generated rootfs includes `/dev/joypad0`..`3`,
+  `/dev/mouse0`..`3`, `/dev/kbd0`..`3`, and `/bin/n64input`
 - [x] Extract `rootfs.img` after packaging and verify manifest-controlled
   additions such as `/bin/rgbled` are present in the actual image, not only in
   `rootfs.stage`

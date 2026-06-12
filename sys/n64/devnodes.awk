@@ -33,6 +33,17 @@ function emit_pty_nodes(i, n) {
     }
 }
 
+function emit_input_nodes(i) {
+    require_value("N64_JOYPAD_MAJOR")
+    require_value("N64_MOUSE_MAJOR")
+    require_value("N64_KBD_MAJOR")
+    for (i = 0; i < 4; i++) {
+        emit_node("cdev", "/dev/joypad" i, defs["N64_JOYPAD_MAJOR"], i, "0666")
+        emit_node("cdev", "/dev/mouse" i, defs["N64_MOUSE_MAJOR"], i, "0666")
+        emit_node("cdev", "/dev/kbd" i, defs["N64_KBD_MAJOR"], i, "0666")
+    }
+}
+
 $1 == "#define" {
     define_value($2, $3)
 }
@@ -66,6 +77,7 @@ END {
     emit_node("cdev", "/dev/ttyS0", defs["N64_SERIAL_MAJOR"], 0, "")
     emit_node("cdev", "/dev/rgbled0", defs["N64_RGBLED_MAJOR"], 0, "")
     emit_node("cdev", "/dev/fb0", defs["N64_FB_MAJOR"], 0, "0666")
+    emit_input_nodes()
     emit_pty_nodes()
     emit_node("cdev", "/dev/null", defs["MEM_MAJOR"], 2, "0666")
     emit_node("cdev", "/dev/zero", defs["MEM_MAJOR"], 3, "0666")

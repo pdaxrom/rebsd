@@ -41,11 +41,11 @@ N64_SRC_LIBS = startup-mips libc libutil
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = env fbset fsck getty hostname id init login ls man more \
-                  mount ptytest reboot rgbled sh smux stty test umount \
-                  uname chown
+                  mount n64input ptytest reboot rgbled sh smux stty test \
+                  umount uname chown
 N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep
 N64_CMD_SCRIPTS = $(N64_CMD_NONE)
-N64_CMD_EXTRA_SUBDIRS = fbset ptytest rgbled
+N64_CMD_EXTRA_SUBDIRS = fbset n64input ptytest rgbled
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
                 $(shell find $(TOPSRC)/src/cmd -maxdepth 3 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null)
 N64_USERLAND_STAMP = n64-userland.stamp

@@ -61,6 +61,8 @@ n64/console_null.c              standard
 n64/video.c                     standard
 n64/video_console.c             standard
 n64/n64int.c                    standard
+n64/si.c                        standard
+n64/joybus.c                    standard
 n64/cons.c                      standard
 n64/devsw.c                     standard
 n64/clock.c                     standard

@@ -98,6 +98,9 @@ mode 0775
 file /bin/mv
 mode 0775
 
+file /bin/n64input
+mode 0775
+
 file /bin/pwd
 mode 0775
 
@@ -151,6 +154,8 @@ file /share/man/cat1/hostname.0
 file /share/man/cat1/fbset.0
 
 file /share/man/cat1/id.0
+
+file /share/man/cat1/n64input.0
 
 file /share/man/cat1/ptytest.0
 

@@ -10,6 +10,7 @@
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
 #include <machine/video.h>
+#include <machine/joybus.h>
 
 #ifdef N64CART_ENABLED
 #include <machine/n64cart_uart.h>
@@ -213,8 +214,22 @@ const struct cdevsw cdevsw[] = {
         n64fb_ioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
     },
-    { NOCDEV },
-    { NOCDEV },
+    {
+#if N64_JOYPAD_MAJOR != 6
+#   error Wrong N64_JOYPAD_MAJOR value!
+#endif
+        n64joypad_open, n64joypad_close, n64joypad_read, norw,
+        n64joypad_ioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0,
+    },
+    {
+#if N64_MOUSE_MAJOR != 7
+#   error Wrong N64_MOUSE_MAJOR value!
+#endif
+        n64mouse_open, n64mouse_close, n64mouse_read, norw,
+        n64mouse_ioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0,
+    },
     {
 #if N64_PTS_MAJOR != 8
 #   error Wrong N64_PTS_MAJOR value!
@@ -238,6 +253,14 @@ const struct cdevsw cdevsw[] = {
 #else
         NOCDEV
 #endif
+    },
+    {
+#if N64_KBD_MAJOR != 10
+#   error Wrong N64_KBD_MAJOR value!
+#endif
+        n64keyboard_open, n64keyboard_close, n64keyboard_read, norw,
+        n64keyboard_ioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0,
     },
     { 0 },
 };
