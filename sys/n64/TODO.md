@@ -80,14 +80,14 @@ copying binaries manually.
   not manually copy command binaries from `src/cmd`
 - [x] Confirm `rootfs.generated.manifest` contains only N64-appropriate device
   nodes and files
-- [ ] Hardware smoke-test on N64:
-  - boot `kernel.z64`
-  - verify `rdram size=0x00800000` on Expansion Pak hardware
-  - verify `root size = 4096 kbytes` or the configured rootfs size
-  - run `ls /`, `ls /bin`, `ls /etc`, and `ls /dev`
-  - after adding basic tools, run `cat /etc/rc`, `pwd`, `uname`, `id`, and
+- [x] Hardware smoke-test on N64:
+  - [x] boot `kernel.z64`
+  - [x] verify `rdram size=0x00800000` on Expansion Pak hardware
+  - [x] verify `root size = 4096 kbytes` or the configured rootfs size
+  - [x] run `ls /`, `ls /bin`, `ls /etc`, and `ls /dev`
+  - [x] after adding basic tools, run `cat /etc/rc`, `pwd`, `uname`, `id`, and
     `stty`
-  - verify `uname -a` ends with `mips`, not `pic32`
+  - [x] verify `uname -a` ends with `mips`, not `pic32`
   - [x] run `sleep 1` and verify it returns by timeout without `Ctrl-C`
   - [x] verify `man uname`, `mount`, and `fsck -n /dev/romdisk` work from the
     default shell environment

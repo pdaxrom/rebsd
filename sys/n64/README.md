@@ -93,6 +93,8 @@ defaults:
 /bin:/sbin
 # echo $PAGER
 /bin/cat
+# uname -a
+2.11BSD  2.11BSD 2.11 BSD Unix for N64: local build  mips
 # mount
 root on / (read-only)
 # fsck -n /dev/romdisk
