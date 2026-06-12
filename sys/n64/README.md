@@ -296,6 +296,38 @@ rootfs is read-only:
   the ROM rootfs. The existing `login`/`libutil` code tolerates this by simply
   skipping accounting writes when those files cannot be opened for writing.
 
+## Signals
+
+N64 uses the same MIPS user signal ABI shape as PIC32. `sendsig()` builds a
+user stack frame with:
+
+- four argument words for the trampoline call area;
+- a `struct sigcontext` containing the interrupted user registers, stack,
+  return address, HI/LO, program counter, signal mask, and alternate-stack
+  state.
+
+The kernel then redirects the saved user frame to call the user handler with:
+
+```
+a0 = signal number
+a1 = signal code
+a2 = &sigcontext
+ra = user sigtramp
+sp = signal frame
+pc = handler
+```
+
+The libc MIPS `sigtramp` executes syscall `SYS_sigreturn` when the handler
+returns. N64 `sigreturn()` validates the user `sigcontext`, restores the saved
+registers and signal mask, and returns with `EJUSTRETURN` so the syscall trap
+path does not overwrite the restored frame.
+
+This matters for the login shell: the first N64 signal stub treated every
+caught signal as fatal. With that stub, `Ctrl-C` during `sleep 10` killed the
+shell and caused `init` to respawn `getty`. With signal frames enabled,
+`Ctrl-C` should interrupt only the foreground command and return to the shell
+prompt.
+
 ## Boot flow
 
 1. The N64 starts stage0 from the ROM.

@@ -97,6 +97,13 @@ copying binaries manually.
 - [x] Hardware smoke-test boot to `login:` and root login with the first
   read-only rootfs account database
 
+## Signals
+
+- [x] Replace the first N64 `sendsig()`/`sigreturn()` fatal stubs with the
+  MIPS signal-frame path used by PIC32
+- [x] Hardware smoke-test `sleep 10` followed by `Ctrl-C`; it must interrupt
+  `sleep` and return to the shell prompt without respawning `getty`
+
 ## Verification
 
 - [x] Run:
