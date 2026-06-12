@@ -61,9 +61,9 @@ copying binaries manually.
 - [x] Add login profile defaults for `PATH=/bin:/sbin` and `PAGER=/bin/cat`
 - [x] Add selected `/sbin` utilities when the kernel side supports them:
   `reboot`, `mount`, `umount`, and `fsck`
-- [ ] Keep generated device nodes derived from kernel definitions through
+- [x] Keep generated device nodes derived from kernel definitions through
   `sys/n64/devnodes.awk`
-- [ ] Keep cartridge root read-only until a writable filesystem target exists
+- [x] Keep cartridge root read-only until a writable filesystem target exists
 
 ## Verification
 
