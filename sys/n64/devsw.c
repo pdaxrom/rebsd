@@ -103,6 +103,11 @@ n64_mmrw(dev_t dev, struct uio *uio, int flag)
         }
 
         switch (minor(dev)) {
+        /*
+         * N64 intentionally exposes only /dev/null and /dev/zero on MEM_MAJOR.
+         * /dev/mem and /dev/kmem remain disabled until there is a concrete
+         * debugger or autoconfig use case.
+         */
         case 2:
             if (uio->uio_rw == UIO_READ)
                 return 0;

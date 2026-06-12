@@ -29,6 +29,19 @@ n64_kernel_entry:
         nop
         nop
 
+        /*
+         * u/u0 live in fixed memory outside the ELF .bss segment. A software
+         * restart through stage0 reloads the kernel but does not clear these
+         * pages, so clear them before using u as the initial kernel stack.
+         */
+        la      $t0, u0
+        la      $t1, u_end
+1:
+        sw      $zero, 0($t0)
+        addiu   $t0, $t0, 4
+        bne     $t0, $t1, 1b
+        nop
+
         la      $sp, u_end - 16
         jal     main
         nop

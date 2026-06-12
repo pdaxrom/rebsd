@@ -126,12 +126,19 @@ copying binaries manually.
   early read-only rootfs
 - [x] Hardware smoke-test the `/dev/rgbled0` ioctl path on real cartridge
   hardware with `/bin/rgbled`
-- [ ] Decide whether N64 should expose `/dev/mem` and `/dev/kmem`; `kmemdev()`,
-  `iskmemdev()`, and character minors 0/1 are still intentionally disabled
-- [ ] Decide whether N64 needs a real board-call ABI for `ucall`, `ufetch`, and
-  `ustore`; the PIC32 implementation is board/autoconfig-specific
-- [ ] Implement real hardware reset for `boot()`/`reboot` instead of printing
-  the request and spinning forever
+- [x] Keep `/dev/mem` and `/dev/kmem` disabled on N64 for the first port;
+  `kmemdev()`, `iskmemdev()`, and character minors 0/1 stay intentionally
+  unavailable
+- [x] Keep `ucall`, `ufetch`, and `ustore` as `ENOSYS` on N64; the PIC32
+  implementation is board/autoconfig-specific and should not be reused as an
+  N64 ABI
+- [x] Hardware smoke-test `/sbin/reboot`; current N64 code syncs buffers,
+  disables interrupt sources, and jumps back to resident stage0 at
+  `0x80300000` for a software restart, then reaches both `ttyS0` and
+  `console` getty login prompts again
+- [x] Do not implement a true hardware reset path for now; local libdragon and
+  n64cart sources handle reset button pre-NMI but do not expose a safe
+  software cold-reset primitive, so N64 uses the stage0 software restart
 
 ## Verification
 

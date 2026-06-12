@@ -364,12 +364,36 @@ prompt.
 7. stage0 jumps to the kernel entry, currently `0x80001000`.
 8. The kernel runs `startup()`:
    - prints `RetroBSD N64 kernel entry`
+   - clears the fixed `u0..u_end` user-area pages that live outside ELF `.bss`
    - installs exception vectors
    - installs the wired user TLB entry
    - initializes MI interrupt masks
    - enables CP0 interrupt masks for MI and timer interrupts
    - detects and prints RDRAM size
    - forces the root filesystem read-only with `RB_RDONLY`
+
+## Reboot Path
+
+`boot()`/`reboot(2)` on N64 no longer only prints the reboot request and spins.
+For a normal reboot, the kernel syncs pending buffers, disables N64 interrupt
+sources, and jumps back to the resident stage0 entry at `0x80300000`.
+Because the cartridge root filesystem is mounted read-only, the N64 reboot
+path does not force the root superblock dirty before `sync()`.
+
+This is a software restart through the ROM-loaded stage0 image, not a full
+console hardware reset. `halt`/`poweroff` requests disable interrupts and stop
+the CPU in a `wait` loop.
+
+Hardware smoke-test passed on Expansion Pak hardware: `/sbin/reboot` syncs,
+jumps through stage0, reloads the kernel, detects `0x00800000` RDRAM, mounts
+the ROM rootfs, starts `init`, and reaches both `ttyS0` and `console` getty
+login prompts.
+
+The local libdragon and n64cart sources handle the console reset button as a
+pre-NMI event. They do not provide a software cold-reset primitive that is safe
+to call from the kernel, so the N64 port does not poke undocumented reset
+registers. If a documented reset path is found later, add it behind an
+explicit N64 implementation.
 
 ## Memory layout
 
@@ -646,6 +670,12 @@ rgbled 0 255 0     # green
 rgbled 0 0 255     # blue
 rgbled 0 0 0       # off
 ```
+
+N64 does not expose `/dev/mem` or `/dev/kmem` in the ROM rootfs. Character
+major 1 is present only for `/dev/null` and `/dev/zero`; minors 0 and 1 return
+`EINVAL` if opened manually. The `kmemdev()` syscall returns `NODEV`, and
+`iskmemdev()` returns false for every device. This is intentional for the
+first N64 port: userland should not depend on direct kernel memory access.
 
 The console tty settings are initialized with echo, CR/LF mapping, erase,
 kill, and control-character echo behavior. Ctrl-C is handled by the tty line
@@ -981,6 +1011,20 @@ make -C sys/n64 N64_TRACE=1 kernel.z64
 The trace currently prints a limited number of syscall entry/exit messages
 from the exception handler. It is intended for bring-up debugging only.
 
+## Disabled board-call ABI
+
+PIC32 implements `ucall`, `ufetch`, and `ustore` as privileged board/autoconfig
+helpers for direct kernel routine calls and PIC32 flash/peripheral register
+access. N64 does not reuse that ABI. The N64 implementations currently return
+`ENOSYS`.
+
+N64 cartridge and console hardware should be exposed through named Config
+devices plus narrow driver interfaces, such as `/dev/ttyS0`,
+`/dev/rgbled0`, block devices, ioctls, or sysctl nodes. If a future debugger or
+loader really needs raw memory or MMIO access, add a separate N64-specific
+interface behind an explicit config option instead of enabling the PIC32 calls
+unchanged.
+
 Useful boot diagnostics:
 
 - `RetroBSD N64 stage0`: stage0 is running.
@@ -1031,7 +1075,9 @@ Console and interrupts:
 
 N64 userland additions:
 
+- `src/cmd/ptytest/`
 - `src/cmd/rgbled/`
+- `src/cmd/smux/retro`
 
 Build and generated data:
 
@@ -1047,6 +1093,10 @@ Build and generated data:
 - Rootfs is intentionally read-only.
 - The user address space is one fixed 2 MiB wired TLB mapping.
 - Swap is RAM-backed, not persistent storage.
+- Reboot is a software restart through the resident stage0 image, not a full
+  hardware reset.
+- `/dev/mem`, `/dev/kmem`, `ucall`, `ufetch`, and `ustore` are intentionally
+  disabled on N64.
 - Console input is timer-polled, not driven by a UART interrupt.
 - The n64cart UART backend only works on cartridges with the matching
   register block.

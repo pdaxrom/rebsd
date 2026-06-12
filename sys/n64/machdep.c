@@ -1,4 +1,6 @@
 #include <sys/param.h>
+#include <sys/buf.h>
+#include <sys/fs.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
 #include <sys/user.h>
@@ -10,6 +12,7 @@
 extern dev_t swapdev;
 dev_t pipedev;
 extern int boothowto;
+extern int waittime;
 
 extern char _end[];
 extern char _n64_exception_vector[];
@@ -242,8 +245,45 @@ copyin(caddr_t from, caddr_t to, u_int nbytes)
 void
 boot(dev_t dev, int howto)
 {
-    printf("reboot requested: dev=%d,%d howto=%#x\n",
-        major(dev), minor(dev), howto);
+    void (*stage0)(void) = (void (*)(void))N64_STAGE0_VADDR;
+
+    if ((howto & RB_NOSYNC) == 0 && waittime < 0 && bfreelist[0].b_forw) {
+        struct fs *fp;
+        struct buf *bp;
+        int iter, nbusy;
+
+        fp = getfs(rootdev);
+        if (fp && !fp->fs_ronly)
+            fp->fs_fmod = 1;
+        waittime = 0;
+        printf("syncing disks... ");
+        (void)splnet();
+        sync();
+        for (iter = 0; iter < 20; iter++) {
+            nbusy = 0;
+            for (bp = &buf[NBUF]; --bp >= buf; )
+                if (bp->b_flags & B_BUSY)
+                    nbusy++;
+            if (nbusy == 0)
+                break;
+            printf("%d ", nbusy);
+            udelay(40000L * iter);
+        }
+        printf("done\n");
+    }
+
+    (void)splhigh();
+    n64_interrupt_shutdown();
+
+    if (howto & RB_HALT) {
+        printf("halted\n");
+        for (;;)
+            asm volatile ("wait");
+    }
+
+    printf("restarting through stage0\n");
+    n64_sync_memory();
+    stage0();
     for (;;)
-        ;
+        asm volatile ("wait");
 }

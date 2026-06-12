@@ -43,6 +43,8 @@
 #define N64_U0AREA_VADDR               0x800f0000
 #define N64_UAREA_VADDR                0x800f1000
 
+#define N64_STAGE0_VADDR               0x80300000
+
 #define N64_USER_VADDR_START           0x00400000
 #define N64_USER_PHYS_START            (N64_KERNEL_PHYS_BASE + N64_KERNEL_RESERVED)
 #define N64_USER_TLB_PAGE_SIZE         N64_SIZE_1M

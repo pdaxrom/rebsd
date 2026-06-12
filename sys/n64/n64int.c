@@ -38,6 +38,13 @@ n64_interrupt_init(void)
     n64_mi_disable(N64_MI_INTERRUPT_ALL);
 }
 
+void
+n64_interrupt_shutdown(void)
+{
+    n64_mi_disable(N64_MI_INTERRUPT_ALL);
+    n64_mi_ack(N64_MI_INTERRUPT_ALL);
+}
+
 unsigned
 n64_mi_pending(void)
 {

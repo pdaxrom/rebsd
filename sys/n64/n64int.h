@@ -42,6 +42,7 @@
 #define N64_PI_CLEAR_INTERRUPT  0x00000002u
 
 void n64_interrupt_init(void);
+void n64_interrupt_shutdown(void);
 void n64_interrupt_handle_mi(void);
 unsigned n64_mi_pending(void);
 void n64_mi_enable(unsigned mask);

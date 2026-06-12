@@ -12,6 +12,10 @@
 void
 ucall(void)
 {
+    /*
+     * PIC32 uses these calls for board autoconfig and MMIO access. N64 keeps
+     * hardware control behind explicit drivers, ioctls, or sysctl nodes.
+     */
     u.u_error = ENOSYS;
 }
 

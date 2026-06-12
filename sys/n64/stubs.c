@@ -12,6 +12,10 @@ void psignal(struct proc *p, int sig);
 void
 kmemdev(void)
 {
+    /*
+     * Keep the historical syscall entry present, but do not publish /dev/kmem
+     * on N64. Direct kernel memory access should not become a default ABI.
+     */
     u.u_rval = NODEV;
 }
 
