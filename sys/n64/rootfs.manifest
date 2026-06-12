@@ -14,6 +14,14 @@ dir /root
 dir /sbin
 dir /tmp
 
+bdev /dev/romdisk
+major 0
+minor 0
+
+bdev /dev/swap
+major 1
+minor 0
+
 cdev /dev/console
 major 0
 minor 0
