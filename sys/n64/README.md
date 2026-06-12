@@ -26,6 +26,9 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
   fixed uncached user mapping.
 - `/dev/joypad0`..`/dev/joypad3`, `/dev/mouse0`..`/dev/mouse3`, and
   `/dev/kbd0`..`/dev/kbd3` expose synchronous Joybus input snapshots.
+- A RandNET keyboard on any controller port is polled through SI/Joybus and
+  feeds `/dev/console` input while `/dev/ttyS0` remains available for serial
+  login.
 - `/dev/romdisk`, `/dev/swap`, `/dev/null`, `/dev/zero`, `/dev/ttyS0`,
   `/dev/rgbled0`, `/dev/fb0`, Joybus input devices, and the pty nodes are
   generated into the root filesystem from kernel device definitions.
@@ -675,8 +678,8 @@ Current character devices, verified in the generated ROM rootfs:
 `/dev/console` is a normal RetroBSD tty endpoint backed by `sys/n64/cons.c`.
 It uses `sys/n64/video_console.c` for VI framebuffer output. The framebuffer
 console does not consume n64cart UART input; serial login input belongs to
-`/dev/ttyS0`. When `n64cart` is configured, console output is also mirrored to
-the UART as a debug stream.
+`/dev/ttyS0`. Console output is not mirrored to the UART, so keyboard echo and
+shell output on `/dev/console` stay separate from serial logins.
 
 The text console draws inside a 5% safe area to keep characters away from CRT
 or capture-device overscan. This margin applies only to `video_console.c`;
@@ -901,10 +904,9 @@ The generic `led_control(mask, on)` hook remains a no-op on N64. The RGB LED is
 explicitly controlled through `/dev/rgbled0` so serial activity does not
 implicitly change LED state.
 
-Current transition note: `/dev/console` has N64 framebuffer output but does
-not yet consume the RandNET keyboard driver. Keep `/dev/ttyS0` enabled for
-login and interactive input until the keyboard-to-console path is implemented
-and tested.
+`/dev/console` consumes RandNET keyboard input through the N64 SI/Joybus path.
+Keep `/dev/ttyS0` enabled as a separate serial login for cartridge access and
+debugging.
 
 ## Interrupts and timer-driven console input
 
@@ -915,8 +917,9 @@ The current serial console input path is timer-polled:
 3. The exception handler reprimes Compare.
 4. The exception handler polls the n64cart serial tty with
    `n64cart_uart_intr()`.
-5. The exception handler calls `cnintr()` for the system console backend.
-6. The exception handler calls `hardclock()`.
+5. The exception handler polls RandNET keyboard input for the system console.
+6. The exception handler calls `cnintr()` for the system console backend.
+7. The exception handler calls `hardclock()`.
 
 This is enough for interactive shell input on `/dev/ttyS0` even though the
 n64cart UART does not currently provide a real interrupt line to the CPU.

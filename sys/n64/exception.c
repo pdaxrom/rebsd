@@ -11,6 +11,7 @@
 #include <machine/io.h>
 #include <machine/n64.h>
 #include <machine/fpu.h>
+#include <machine/joybus.h>
 #include <machine/n64int.h>
 
 #define USER            1
@@ -246,6 +247,7 @@ exception(int *frame)
 #ifdef N64CART_ENABLED
             n64cart_uart_intr();
 #endif
+            n64keyboard_console_intr();
             cnintr();
             hardclock((caddr_t)frame[FRAME_PC], status);
         }

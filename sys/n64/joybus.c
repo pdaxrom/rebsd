@@ -18,17 +18,216 @@
 #define JOYBUS_SEND_KBD                 2
 #define JOYBUS_RECV_KBD                 7
 
+#define N64_KEYBOARD_CONSOLE_QSIZE      64
+#define N64_KEYBOARD_POLL_TICKS         ((HZ + 49) / 50)
+#define N64_KEYBOARD_SCAN_TICKS         ((HZ + 1) / 2)
+
+#define N64_RANDNET_KEY_CAPS_LOCK       0x0f05
+#define N64_RANDNET_KEY_NUM_LOCK        0x0a05
+#define N64_RANDNET_KEY_LEFT_CTRL       0x1107
+#define N64_RANDNET_KEY_LEFT_SHIFT      0x0e01
+#define N64_RANDNET_KEY_RIGHT_SHIFT     0x0e06
+#define N64_RANDNET_KEY_RIGHT           0x0405
+#define N64_RANDNET_KEY_LEFT            0x0205
+#define N64_RANDNET_KEY_DOWN            0x0305
+#define N64_RANDNET_KEY_UP              0x0204
+
+struct n64keyboard_ascii {
+    unsigned code;
+    char normal;
+    char shifted;
+};
+
 static unsigned n64keyboard_led[N64_JOYBUS_PORT_COUNT] = {
     N64_KBD_LED_POWER,
     N64_KBD_LED_POWER,
     N64_KBD_LED_POWER,
     N64_KBD_LED_POWER,
 };
+static unsigned char n64keyboard_console_q[N64_KEYBOARD_CONSOLE_QSIZE];
+static unsigned n64keyboard_console_head;
+static unsigned n64keyboard_console_tail;
+static unsigned n64keyboard_console_prev[N64_JOYBUS_PORT_COUNT][3];
+static int n64keyboard_console_port = -1;
+static unsigned n64keyboard_console_last_poll;
+static unsigned n64keyboard_console_last_scan;
+
+extern volatile unsigned int ct_ticks;
+
+static const struct n64keyboard_ascii n64keyboard_ascii_map[] = {
+    { 0x0d07, 'a', 'A' }, { 0x0708, 'b', 'B' },
+    { 0x0508, 'c', 'C' }, { 0x0507, 'd', 'D' },
+    { 0x0601, 'e', 'E' }, { 0x0607, 'f', 'F' },
+    { 0x0707, 'g', 'G' }, { 0x0807, 'h', 'H' },
+    { 0x0804, 'i', 'I' }, { 0x0907, 'j', 'J' },
+    { 0x0903, 'k', 'K' }, { 0x0803, 'l', 'L' },
+    { 0x0908, 'm', 'M' }, { 0x0808, 'n', 'N' },
+    { 0x0704, 'o', 'O' }, { 0x0604, 'p', 'P' },
+    { 0x0c01, 'q', 'Q' }, { 0x0701, 'r', 'R' },
+    { 0x0c07, 's', 'S' }, { 0x0801, 't', 'T' },
+    { 0x0904, 'u', 'U' }, { 0x0608, 'v', 'V' },
+    { 0x0501, 'w', 'W' }, { 0x0c08, 'x', 'X' },
+    { 0x0901, 'y', 'Y' }, { 0x0d08, 'z', 'Z' },
+    { 0x0c05, '1', '!' }, { 0x0505, '2', '@' },
+    { 0x0605, '3', '#' }, { 0x0705, '4', '$' },
+    { 0x0805, '5', '%' }, { 0x0905, '6', '^' },
+    { 0x0906, '7', '&' }, { 0x0806, '8', '*' },
+    { 0x0706, '9', '(' }, { 0x0606, '0', ')' },
+    { 0x0d04, '\r', '\r' }, { 0x0a08, '\033', '\033' },
+    { 0x0d06, '\177', '\177' }, { 0x0d01, '\t', '\t' },
+    { 0x0602, ' ', ' ' }, { 0x1004, '-', '_' },
+    { 0x0c04, '[', '{' }, { 0x0406, ']', '}' },
+    { 0x1105, ';', ':' }, { 0x0504, '\'', '"' },
+    { 0x0902, ',', '<' }, { 0x0802, '.', '>' },
+    { 0x0702, '/', '?' }, { 0x0603, '*', '*' },
+    { 0x0506, '-', '-' }, { 0x0c06, '+', '+' },
+    { 0x1002, '1', '1' }, { 0x0e02, '2', '2' },
+    { 0x1006, '3', '3' },
+};
 
 static int
 n64joybus_valid_port(unsigned port)
 {
     return port < N64_JOYBUS_PORT_COUNT;
+}
+
+static int
+n64keyboard_code_down(unsigned code, unsigned keys[3])
+{
+    return keys[0] == code || keys[1] == code || keys[2] == code;
+}
+
+static void
+n64keyboard_console_put(int ch)
+{
+    unsigned next;
+
+    next = (n64keyboard_console_head + 1) % N64_KEYBOARD_CONSOLE_QSIZE;
+    if (next == n64keyboard_console_tail)
+        return;
+    n64keyboard_console_q[n64keyboard_console_head] = ch & 0xff;
+    n64keyboard_console_head = next;
+}
+
+static void
+n64keyboard_console_puts(const char *str)
+{
+    while (*str != 0)
+        n64keyboard_console_put(*str++);
+}
+
+static int
+n64keyboard_key_is_modifier(unsigned code)
+{
+    return code == N64_RANDNET_KEY_LEFT_CTRL ||
+        code == N64_RANDNET_KEY_LEFT_SHIFT ||
+        code == N64_RANDNET_KEY_RIGHT_SHIFT;
+}
+
+static int
+n64keyboard_translate_key(unsigned port, unsigned code, int shift, int ctrl)
+{
+    const struct n64keyboard_ascii *map;
+    unsigned i;
+    int ch;
+    int letter;
+
+    map = n64keyboard_ascii_map;
+    for (i = 0; i < sizeof(n64keyboard_ascii_map) /
+        sizeof(n64keyboard_ascii_map[0]); ++i) {
+        if (map[i].code != code)
+            continue;
+
+        ch = map[i].normal;
+        letter = ch >= 'a' && ch <= 'z';
+        if (letter) {
+            if (shift ^ ((n64keyboard_led[port] &
+                N64_KBD_LED_CAPS_LOCK) != 0))
+                ch = map[i].shifted;
+        } else if (shift) {
+            ch = map[i].shifted;
+        }
+        if (ctrl && letter)
+            ch = (ch & 0x1f);
+        return ch;
+    }
+    return -1;
+}
+
+static void
+n64keyboard_console_key(unsigned port, unsigned code, int shift, int ctrl)
+{
+    int ch;
+
+    switch (code) {
+    case 0:
+        return;
+    case N64_RANDNET_KEY_CAPS_LOCK:
+        n64keyboard_led[port] ^= N64_KBD_LED_CAPS_LOCK;
+        return;
+    case N64_RANDNET_KEY_NUM_LOCK:
+        n64keyboard_led[port] ^= N64_KBD_LED_NUM_LOCK;
+        return;
+    case N64_RANDNET_KEY_RIGHT:
+        n64keyboard_console_puts("\033[C");
+        return;
+    case N64_RANDNET_KEY_LEFT:
+        n64keyboard_console_puts("\033[D");
+        return;
+    case N64_RANDNET_KEY_DOWN:
+        n64keyboard_console_puts("\033[B");
+        return;
+    case N64_RANDNET_KEY_UP:
+        n64keyboard_console_puts("\033[A");
+        return;
+    default:
+        break;
+    }
+
+    if (n64keyboard_key_is_modifier(code))
+        return;
+
+    ch = n64keyboard_translate_key(port, code, shift, ctrl);
+    if (ch >= 0)
+        n64keyboard_console_put(ch);
+}
+
+static void
+n64keyboard_console_state(unsigned port, struct n64keyboard_state *state)
+{
+    unsigned i;
+    int shift;
+    int ctrl;
+
+    shift = n64keyboard_code_down(N64_RANDNET_KEY_LEFT_SHIFT, state->key) ||
+        n64keyboard_code_down(N64_RANDNET_KEY_RIGHT_SHIFT, state->key);
+    ctrl = n64keyboard_code_down(N64_RANDNET_KEY_LEFT_CTRL, state->key);
+
+    for (i = 0; i < 3; ++i) {
+        if (state->key[i] == 0)
+            continue;
+        if (n64keyboard_code_down(state->key[i],
+            n64keyboard_console_prev[port]))
+            continue;
+        n64keyboard_console_key(port, state->key[i], shift, ctrl);
+    }
+    bcopy(state->key, n64keyboard_console_prev[port],
+        sizeof(n64keyboard_console_prev[port]));
+}
+
+static int
+n64keyboard_console_find(void)
+{
+    struct n64joybus_port info;
+    unsigned port;
+
+    for (port = 0; port < N64_JOYBUS_PORT_COUNT; ++port) {
+        if (n64joybus_identify_port(port, &info) != 0)
+            continue;
+        if (info.identifier == N64_JOYBUS_ID_RANDNET_KEYBOARD)
+            return port;
+    }
+    return -1;
 }
 
 static void
@@ -203,6 +402,79 @@ n64keyboard_get_state(unsigned port, struct n64keyboard_state *state)
     state->key[1] = ((unsigned)recv[2] << 8) | recv[3];
     state->key[2] = ((unsigned)recv[4] << 8) | recv[5];
     return 0;
+}
+
+void
+n64keyboard_console_intr(void)
+{
+    struct n64keyboard_state state;
+    unsigned ticks;
+    int port;
+    int error;
+
+    ticks = ct_ticks;
+    if (n64keyboard_console_port < 0) {
+        if ((unsigned)(ticks - n64keyboard_console_last_scan) <
+            N64_KEYBOARD_SCAN_TICKS)
+            return;
+        n64keyboard_console_last_scan = ticks;
+        port = n64keyboard_console_find();
+        if (port < 0)
+            return;
+        n64keyboard_console_port = port;
+        bzero(n64keyboard_console_prev[port],
+            sizeof(n64keyboard_console_prev[port]));
+    } else {
+        if ((unsigned)(ticks - n64keyboard_console_last_poll) <
+            N64_KEYBOARD_POLL_TICKS)
+            return;
+    }
+
+    n64keyboard_console_last_poll = ticks;
+    port = n64keyboard_console_port;
+    error = n64keyboard_get_state(port, &state);
+    if (error == EBUSY)
+        return;
+    if (error) {
+        bzero(n64keyboard_console_prev[port],
+            sizeof(n64keyboard_console_prev[port]));
+        n64keyboard_console_port = -1;
+        return;
+    }
+    n64keyboard_console_state(port, &state);
+}
+
+int
+n64keyboard_console_poll(void)
+{
+    int ready;
+    int s;
+
+    s = spltty();
+    ready = n64keyboard_console_head != n64keyboard_console_tail;
+    splx(s);
+    return ready;
+}
+
+int
+n64keyboard_console_getc(void)
+{
+    int ch;
+    int s;
+
+    for (;;) {
+        s = spltty();
+        if (n64keyboard_console_head != n64keyboard_console_tail) {
+            ch = n64keyboard_console_q[n64keyboard_console_tail];
+            n64keyboard_console_tail =
+                (n64keyboard_console_tail + 1) %
+                N64_KEYBOARD_CONSOLE_QSIZE;
+            splx(s);
+            return ch;
+        }
+        splx(s);
+        n64keyboard_console_intr();
+    }
 }
 
 static int

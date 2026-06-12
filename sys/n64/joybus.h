@@ -81,6 +81,9 @@ int n64joybus_identify_port(unsigned port, struct n64joybus_port *info);
 int n64joypad_get_state(unsigned port, struct n64joypad_state *state);
 int n64mouse_get_state(unsigned port, struct n64mouse_state *state);
 int n64keyboard_get_state(unsigned port, struct n64keyboard_state *state);
+void n64keyboard_console_intr(void);
+int n64keyboard_console_poll(void);
+int n64keyboard_console_getc(void);
 
 int n64joypad_open(dev_t dev, int flag, int mode);
 int n64joypad_close(dev_t dev, int flag, int mode);

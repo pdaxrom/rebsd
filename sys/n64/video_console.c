@@ -1,5 +1,6 @@
 #include <sys/param.h>
 #include <machine/console.h>
+#include <machine/joybus.h>
 #include <machine/video.h>
 
 #define N64_CONSOLE_CELL_W      6
@@ -210,20 +211,18 @@ n64_console_draw_char(int ch)
 int
 n64_console_poll(void)
 {
-    return 0;
+    return n64keyboard_console_poll();
 }
 
 int
 n64_console_getc(void)
 {
-    for (;;)
-        ;
+    return n64keyboard_console_getc();
 }
 
 void
 n64_console_putc(int ch)
 {
-    n64_console_debug_putc(ch);
     n64_console_geometry();
 
     switch (ch) {

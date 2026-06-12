@@ -154,8 +154,8 @@ copying binaries manually.
   mode ioctls
 - [x] Add `/bin/fbset` through the shared `src/cmd` install flow and include
   it in the N64 ROM manifest
-- [x] Keep `/dev/ttyS0` as the n64cart serial login/input path and use the
-  UART only as a debug mirror for `/dev/console` output
+- [x] Keep `/dev/ttyS0` as the n64cart serial login/input path, separate from
+  framebuffer `/dev/console` input and output
 - [x] Select VI timing from the IPL TV type byte so PAL, NTSC, and MPAL
   consoles/cartridges are handled by the same backend
 - [ ] Hardware smoke-test default framebuffer console output on real hardware:
@@ -167,8 +167,10 @@ copying binaries manually.
 - [x] Add shared framebuffer access for `/dev/fb0`; current read/write path
   still copies bytes, and real graphics can use the fixed N64 TLB-backed
   mapping returned by `N64FBIOC_GETMAP`
-- [ ] Add a real N64 system-console input backend, so `/dev/console` can be
+- [x] Add a real N64 system-console input backend, so `/dev/console` can be
   used without the n64cart serial login path
+- [ ] Hardware smoke-test `/dev/console` login and shell input from a RandNET
+  keyboard
 
 ## Joybus, Keyboard, Mouse, And Joypad
 
@@ -190,8 +192,10 @@ copying binaries manually.
 - [x] Hardware smoke-test `n64input mouse N` with an N64 mouse
 - [x] Hardware smoke-test `n64input kbd N` with a RandNET keyboard
 - [ ] Hardware smoke-test `n64input kbd-led N value` with a RandNET keyboard
-- [ ] Add a keyboard-to-console path so the system console can accept input
+- [x] Add a keyboard-to-console path so the system console can accept input
   from an N64 keyboard instead of depending on `/dev/ttyS0`
+- [ ] Hardware smoke-test RandNET keyboard console input, including `root`,
+  `ls`, Backspace, Caps Lock LED, and `Ctrl-C`
 - [ ] Add event/blocking semantics after raw snapshots pass on hardware; the
   first version intentionally uses synchronous polling for bring-up
 
