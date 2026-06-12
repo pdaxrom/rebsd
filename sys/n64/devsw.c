@@ -6,6 +6,7 @@
 #include <sys/tty.h>
 #include <sys/uio.h>
 #include <machine/console.h>
+#include <machine/devmajors.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
 
@@ -153,6 +154,14 @@ const struct cdevsw cdevsw[] = {
 #endif
         n64_null_open, n64_null_open, n64_mmrw, n64_mmrw,
         noioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0,
+    },
+    {
+#if N64_TTY_MAJOR != 2
+#   error Wrong N64_TTY_MAJOR value!
+#endif
+        syopen, n64_null_open, syread, sywrite,
+        syioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
     },
     { 0 },

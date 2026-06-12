@@ -31,6 +31,7 @@ END {
     require_value("N64_ROMDISK_ROOT_MINOR")
     require_value("N64_RAMSWAP_MAJOR")
     require_value("N64_RAMSWAP_MINOR")
+    require_value("N64_TTY_MAJOR")
     require_value("MEM_MAJOR")
     require_value("CONS_MAJOR")
     require_value("CONS_MINOR")
@@ -44,6 +45,7 @@ END {
         defs["N64_RAMSWAP_MAJOR"], defs["N64_RAMSWAP_MINOR"], "")
     emit_node("cdev", "/dev/console",
         defs["CONS_MAJOR"], defs["CONS_MINOR"], "")
+    emit_node("cdev", "/dev/tty", defs["N64_TTY_MAJOR"], 0, "")
     emit_node("cdev", "/dev/null", defs["MEM_MAJOR"], 2, 666)
     emit_node("cdev", "/dev/zero", defs["MEM_MAJOR"], 3, 666)
 }

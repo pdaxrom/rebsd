@@ -21,7 +21,9 @@ N64_ROOTFS_STAGE = rootfs.stage
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
 N64_DEVNODES_AWK = $(TOPSRC)/sys/n64/devnodes.awk
 N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h \
-                    $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/include/conf.h
+                    $(TOPSRC)/sys/n64/ramswap.h \
+                    $(TOPSRC)/sys/n64/devmajors.h \
+                    $(TOPSRC)/sys/include/conf.h
 N64_CONS_MAJOR = $(patsubst -DCONS_MAJOR=%,%,$(filter -DCONS_MAJOR=%,$(PARAM)))
 N64_CONS_MINOR = $(patsubst -DCONS_MINOR=%,%,$(filter -DCONS_MINOR=%,$(PARAM)))
 N64_CRT0_SRCS = $(shell find $(TOPSRC)/src/startup-mips -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
@@ -129,7 +131,7 @@ kernel_stage0.stripped.elf: kernel_stage0.elf
 	$(STRIP) -s -o $@ $<
 
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
-	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/include/conf.h > $@
+	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/n64/devmajors.h $(TOPSRC)/sys/include/conf.h > $@
 
 $(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES)
 	cp $(N64_ROOTFS_MANIFEST) $@
