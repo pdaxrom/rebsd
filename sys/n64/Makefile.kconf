@@ -32,6 +32,9 @@ N64_USER_INIT = n64-init
 N64_USER_SH = $(TOPSRC)/src/cmd/sh/sh
 N64_USER_LS = $(TOPSRC)/src/cmd/ls/ls
 N64_USERLAND = $(N64_USER_SH) $(N64_USER_LS)
+N64_PREFLIGHT_CONSOLE_OBJS = $(filter n64cart_uart.o,$(OBJS))
+N64_PREFLIGHT_OBJS = startup.o $(N64_PREFLIGHT_CONSOLE_OBJS) \
+                     rompak.o memory.o preflight.o
 
 CC              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
 AS              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
@@ -85,11 +88,11 @@ all: unix kernel.z64 preflight.z64
 
 %LOAD
 
-preflight: startup.o n64cart_uart.o rompak.o memory.o preflight.o
-	$(SIZE) startup.o n64cart_uart.o rompak.o memory.o preflight.o
+preflight: $(N64_PREFLIGHT_OBJS)
+	$(SIZE) $(N64_PREFLIGHT_OBJS)
 
-preflight.elf: startup.o n64cart_uart.o rompak.o memory.o preflight.o ../n64.ld
-	$(LD) -nostdlib -T ../n64.ld startup.o n64cart_uart.o rompak.o memory.o preflight.o -o $@
+preflight.elf: $(N64_PREFLIGHT_OBJS) ../n64.ld
+	$(LD) -nostdlib -T ../n64.ld $(N64_PREFLIGHT_OBJS) -o $@
 	$(SIZE) $@
 	$(OBJDUMP) -d -S $@ > preflight.dis
 

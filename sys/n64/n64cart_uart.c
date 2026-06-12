@@ -1,4 +1,5 @@
 #include <sys/types.h>
+#include <machine/console.h>
 #include <machine/n64cart_uart.h>
 
 static volatile u_int *
@@ -48,4 +49,22 @@ n64cart_uart_putc(int ch)
 
     n64cart_write(N64CART_UART_RXTX, ch & 0xff);
     (void)n64cart_read(N64CART_UART_CTRL);
+}
+
+int
+n64_console_poll(void)
+{
+    return n64cart_uart_poll();
+}
+
+int
+n64_console_getc(void)
+{
+    return n64cart_uart_getc();
+}
+
+void
+n64_console_putc(int ch)
+{
+    n64cart_uart_putc(ch);
 }

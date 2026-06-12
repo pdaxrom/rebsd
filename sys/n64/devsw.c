@@ -5,7 +5,7 @@
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <sys/uio.h>
-#include <machine/n64cart_uart.h>
+#include <machine/console.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
 
@@ -67,13 +67,13 @@ n64_nullstop(struct tty *tp, int flag)
 static char
 n64_console_raw_read(dev_t dev)
 {
-    return n64cart_uart_getc();
+    return n64_console_getc();
 }
 
 static void
 n64_console_raw_write(dev_t dev, char ch)
 {
-    n64cart_uart_putc(ch);
+    n64_console_putc(ch);
 }
 
 static int

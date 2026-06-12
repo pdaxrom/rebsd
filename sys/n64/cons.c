@@ -3,7 +3,7 @@
 #include <sys/errno.h>
 #include <sys/tty.h>
 #include <sys/uio.h>
-#include <machine/n64cart_uart.h>
+#include <machine/console.h>
 
 struct tty cnttys[1];
 static void cnstart(struct tty *tp);
@@ -70,8 +70,8 @@ cnintr(void)
     if ((cnttys[0].t_state & TS_ISOPEN) == 0)
         return;
 
-    while (n64cart_uart_poll())
-        cninput(n64cart_uart_getc());
+    while (n64_console_poll())
+        cninput(n64_console_getc());
 }
 
 static void
@@ -88,7 +88,7 @@ cnstart(struct tty *tp)
     tp->t_state |= TS_BUSY;
     while ((c = getc(&tp->t_outq)) >= 0) {
         splx(s);
-        n64cart_uart_putc(c);
+        n64_console_putc(c);
         s = spltty();
     }
     tp->t_state &= ~TS_BUSY;
@@ -118,12 +118,12 @@ void
 cnputc(char c)
 {
     if (c == '\n')
-        n64cart_uart_putc('\r');
-    n64cart_uart_putc(c);
+        n64_console_putc('\r');
+    n64_console_putc(c);
 }
 
 int
 cngetc(void)
 {
-    return n64cart_uart_getc();
+    return n64_console_getc();
 }

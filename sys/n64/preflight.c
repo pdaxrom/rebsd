@@ -1,6 +1,6 @@
 #include <sys/param.h>
+#include <machine/console.h>
 #include <machine/n64.h>
-#include <machine/n64cart_uart.h>
 #include <machine/rompak.h>
 
 static void
@@ -8,8 +8,8 @@ puts(const char *s)
 {
     while (*s) {
         if (*s == '\n')
-            n64cart_uart_putc('\r');
-        n64cart_uart_putc(*s++);
+            n64_console_putc('\r');
+        n64_console_putc(*s++);
     }
 }
 
@@ -21,7 +21,7 @@ put_hex32(unsigned value)
 
     puts("0x");
     for (shift = 28; shift >= 0; shift -= 4)
-        n64cart_uart_putc(digits[(value >> (unsigned)shift) & 0x0f]);
+        n64_console_putc(digits[(value >> (unsigned)shift) & 0x0f]);
 }
 
 int

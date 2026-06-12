@@ -3,9 +3,9 @@
 #include <sys/systm.h>
 #include <sys/user.h>
 #include <machine/io.h>
+#include <machine/console.h>
 #include <machine/n64.h>
 #include <machine/n64int.h>
-#include <machine/n64cart_uart.h>
 
 extern dev_t swapdev;
 dev_t pipedev;
@@ -31,8 +31,8 @@ early_puts(const char *s)
 {
     while (*s != '\0') {
         if (*s == '\n')
-            n64cart_uart_putc('\r');
-        n64cart_uart_putc(*s++);
+            n64_console_putc('\r');
+        n64_console_putc(*s++);
     }
 }
 
@@ -44,7 +44,7 @@ early_put_hex32(unsigned value)
 
     early_puts("0x");
     for (shift = 28; shift >= 0; shift -= 4)
-        n64cart_uart_putc(digits[(value >> (unsigned)shift) & 0x0f]);
+        n64_console_putc(digits[(value >> (unsigned)shift) & 0x0f]);
 }
 
 static void
