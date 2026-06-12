@@ -1,6 +1,7 @@
+SMUX_SUBDIRS ?= retro linux
+
 all:
-	${MAKE} -C retro
-	${MAKE} -C linux
+	for i in ${SMUX_SUBDIRS}; do ${MAKE} -C $$i || exit $$?; done
 
 install:
 	${MAKE} -C retro install

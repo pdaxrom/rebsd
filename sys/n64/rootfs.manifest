@@ -98,6 +98,9 @@ mode 0775
 file /bin/pwd
 mode 0775
 
+file /bin/ptytest
+mode 0775
+
 file /bin/rm
 mode 0775
 
@@ -105,6 +108,9 @@ file /bin/rmdir
 mode 0775
 
 file /bin/rgbled
+mode 0775
+
+file /bin/smux
 mode 0775
 
 file /bin/sleep
@@ -140,6 +146,8 @@ file /share/man/cat1/groups.0
 file /share/man/cat1/hostname.0
 
 file /share/man/cat1/id.0
+
+file /share/man/cat1/ptytest.0
 
 file /share/man/cat1/rgbled.0
 

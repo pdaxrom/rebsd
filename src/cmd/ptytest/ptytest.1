@@ -1,0 +1,26 @@
+.TH PTYTEST 1 "June 12, 2026"
+.UC 4
+.SH NAME
+ptytest \- smoke-test a pseudo terminal pair
+.SH SYNOPSIS
+.B ptytest
+[
+.I unit
+]
+.SH DESCRIPTION
+.B ptytest
+opens
+.I /dev/ptypN
+and
+.I /dev/ttypN
+for the selected unit, places the slave in raw mode, and verifies data transfer
+in both directions.
+.PP
+The default unit is 0.
+.SH FILES
+.TP 12
+.I /dev/ptypN
+pseudo terminal master
+.TP 12
+.I /dev/ttypN
+pseudo terminal slave

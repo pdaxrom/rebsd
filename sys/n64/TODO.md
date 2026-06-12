@@ -39,7 +39,8 @@ Exclude PIC32/peripheral-specific commands until compatible N64 devices exist:
 - [x] `portio`: GPIO devices, `/dev/porta`, `sys/gpio.h`
 - [x] `pwm`: PWM devices, `/dev/pwm*`, `pwm.h`
 - [x] `wiznet`: WIZnet stack and GPIO-dependent examples
-- [x] `smux`: depends on pty support; enable after N64 pty support exists
+- [x] `smux`: enabled after N64 pty support and hardware pty smoke-test;
+  N64 builds only the `retro` side through `SMUX_SUBDIRS=retro`
 - [x] `talloc`: depends on `/dev/tempX`; enable only if N64 gets temp devices
 - [x] `devupdate`: depends on `/dev/kmem`; N64 currently generates `/dev`
   nodes at build time
@@ -81,8 +82,11 @@ copying binaries manually.
 - [x] Add N64 cdevsw entries for pty slave/master devices on majors 8 and 9
 - [x] Generate `/dev/ttyp0`..`/dev/ttyp3` and `/dev/ptyp0`..`/dev/ptyp3`
   from kernel device definitions
-- [ ] Hardware smoke-test pty open/read/write before enabling pty-dependent
-  userland such as `smux`
+- [x] Add `/bin/ptytest` as the minimal pty master/slave transfer test before
+  enabling pty-dependent userland
+- [x] Hardware smoke-test pty open/read/write before enabling pty-dependent
+  userland such as `smux`; `ptytest`, `ptytest 1`, and `ptytest 2` pass on
+  N64 hardware
 
 ## Login And Multi-User Boot
 
@@ -120,7 +124,7 @@ copying binaries manually.
 - [x] Hardware smoke-test `/dev/ttyS0` serial login on real cartridge hardware:
   both `ttyS0` and `console` getty prompts appear, and root login works on the
   early read-only rootfs
-- [ ] Hardware smoke-test the `/dev/rgbled0` ioctl path on real cartridge
+- [x] Hardware smoke-test the `/dev/rgbled0` ioctl path on real cartridge
   hardware with `/bin/rgbled`
 - [ ] Decide whether N64 should expose `/dev/mem` and `/dev/kmem`; `kmemdev()`,
   `iskmemdev()`, and character minors 0/1 are still intentionally disabled

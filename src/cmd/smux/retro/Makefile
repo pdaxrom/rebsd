@@ -16,7 +16,7 @@ smux: $(OBJS)
 		${LD} ${LDFLAGS} -o $@.elf ${OBJS} ${LIBS}
 		${OBJDUMP} -S $@.elf > $@.dis
 		${SIZE} $@.elf
-		${ELF2AOUT} $@.elf $@
+		${ELF2AOUT} $@.elf $@ && rm $@.elf
 
 clean:
 		rm -f *.o *.elf *.elf *.dis tags *~ $(BIN)
