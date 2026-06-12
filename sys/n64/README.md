@@ -84,6 +84,29 @@ Additional hardware smoke test on the same class of system, verified
 #
 ```
 
+Additional rootfs/userland smoke test on the same class of system, verified
+2026-06-12 after adding `man`, selected `/sbin` tools, and login profile
+defaults:
+
+```
+# echo $PATH
+/bin:/sbin
+# echo $PAGER
+/bin/cat
+# mount
+root on / (read-only)
+# fsck -n /dev/romdisk
+** /dev/romdisk (NO WRITE)
+...
+72 files, 747 used, 3332 free
+# man uname
+UNAME(1)              General Commands Manual                    UNAME(1)
+...
+# man id
+ID(1)                         General Commands Manual                       ID(1)
+...
+```
+
 ## Toolchain
 
 The default N64 toolchain path is:
@@ -344,11 +367,14 @@ The current manifest includes:
 /bin/cp
 /bin/echo
 /bin/env
+/bin/groups
 /bin/hostname
 /bin/id
 /bin/kill
 /bin/ls
+/bin/man
 /bin/mkdir
+/bin/more
 /bin/mv
 /bin/pwd
 /bin/rm
@@ -358,13 +384,41 @@ The current manifest includes:
 /bin/stty
 /bin/test
 /bin/uname
+/bin/whoami
+/.profile
+/etc/fstab
+/etc/profile
+/root/.profile
+/share/misc/more.help
+/share/man/cat1/groups.0
+/share/man/cat1/hostname.0
+/share/man/cat1/id.0
+/share/man/cat1/stty.0
+/share/man/cat1/test.0
+/share/man/cat1/uname.0
+/share/man/cat1/whoami.0
 /sbin/chown
+/sbin/fsck
 /sbin/init
+/sbin/mount
+/sbin/reboot
+/sbin/umount
 ```
 
 The staging tree may contain extra files installed by selected command
-makefiles, for example `id` installs `groups` and `whoami`. Those files do not
-enter `rootfs.img` until `sys/n64/rootfs.manifest` lists them.
+makefiles, for example `reboot` installs `halt`, `fastboot`, `poweroff`, and
+`bootloader` aliases. Those files do not enter `rootfs.img` until
+`sys/n64/rootfs.manifest` lists them.
+
+`man` is included with the cat pages that are installed by the selected command
+makefiles. It uses `/bin/more -s` as the default pager on an interactive tty,
+so `/bin/more` and `/share/misc/more.help` are part of the ROM rootfs. For the
+first N64 rootfs, `/etc/profile`, `/.profile`, and `/root/.profile` set
+`PAGER=/bin/cat` so manual pages print directly instead of depending on the
+interactive pager. The same profiles set `PATH=/bin:/sbin`, which makes the
+selected `/sbin` tools visible from the shell prompt. The `apropos` and
+`whatis` binaries installed by `src/cmd/man` are intentionally not listed in
+the ROM manifest yet.
 
 The rootfs size defaults to 4096 KiB. The image stays in cartridge ROM and is
 not preloaded into RDRAM:
@@ -733,7 +787,8 @@ Build and generated data:
 - The n64cart UART backend only works on cartridges with the matching
   register block.
 - Only a small rootfs is present: `init`, `sh`, `ls`, selected basic `/bin`
-  tools, `/sbin/chown`, generated `/dev` nodes, and static config files.
+  tools, `man`/`more`, selected `/sbin` tools, generated `/dev` nodes, and
+  static config files.
 - No display, controller, filesystem-writeback, SD, or other cartridge
   storage drivers are implemented yet.
 

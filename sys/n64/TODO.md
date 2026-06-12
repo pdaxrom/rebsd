@@ -34,20 +34,20 @@ adding a separate hand-copied application path.
 
 Exclude PIC32/peripheral-specific commands until compatible N64 devices exist:
 
-- [ ] `adc-demo`: PIC32 ADC devices, `/dev/adc*`, `machine/adc.h`
-- [ ] `glcdtest`: GLCD device, `/dev/glcd0`, `glcd.h`
-- [ ] `portio`: GPIO devices, `/dev/porta`, `sys/gpio.h`
-- [ ] `pwm`: PWM devices, `/dev/pwm*`, `pwm.h`
-- [ ] `wiznet`: WIZnet stack and GPIO-dependent examples
-- [ ] `smux`: depends on pty support; enable after N64 pty support exists
-- [ ] `talloc`: depends on `/dev/tempX`; enable only if N64 gets temp devices
-- [ ] `devupdate`: depends on `/dev/kmem`; N64 currently generates `/dev`
+- [x] `adc-demo`: PIC32 ADC devices, `/dev/adc*`, `machine/adc.h`
+- [x] `glcdtest`: GLCD device, `/dev/glcd0`, `glcd.h`
+- [x] `portio`: GPIO devices, `/dev/porta`, `sys/gpio.h`
+- [x] `pwm`: PWM devices, `/dev/pwm*`, `pwm.h`
+- [x] `wiznet`: WIZnet stack and GPIO-dependent examples
+- [x] `smux`: depends on pty support; enable after N64 pty support exists
+- [x] `talloc`: depends on `/dev/tempX`; enable only if N64 gets temp devices
+- [x] `devupdate`: depends on `/dev/kmem`; N64 currently generates `/dev`
   nodes at build time
 
 Also exclude or defer libraries that only serve unavailable peripherals:
 
-- [ ] `libwiznet`
-- [ ] `libgpanel`
+- [x] `libwiznet`
+- [x] `libgpanel`
 
 ## Rootfs Contents
 
@@ -57,7 +57,9 @@ copying binaries manually.
 - [x] Add basic `/bin` utilities after the shared install flow is in place:
   `cat`, `echo`, `pwd`, `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `chmod`, `chown`,
   `sleep`, `kill`, `stty`, `uname`, `hostname`, `id`, `test`, and `env`
-- [ ] Add selected `/sbin` utilities when the kernel side supports them:
+- [x] Add `man`, `more`, selected installed cat pages, and `/etc/fstab`
+- [x] Add login profile defaults for `PATH=/bin:/sbin` and `PAGER=/bin/cat`
+- [x] Add selected `/sbin` utilities when the kernel side supports them:
   `reboot`, `mount`, `umount`, and `fsck`
 - [ ] Keep generated device nodes derived from kernel definitions through
   `sys/n64/devnodes.awk`
@@ -87,5 +89,7 @@ copying binaries manually.
     `stty`
   - verify `uname -a` ends with `mips`, not `pic32`
   - [x] run `sleep 1` and verify it returns by timeout without `Ctrl-C`
+  - [x] verify `man uname`, `mount`, and `fsck -n /dev/romdisk` work from the
+    default shell environment
 
 Commit only after the generated ROM has passed the hardware smoke test.

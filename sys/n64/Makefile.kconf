@@ -34,7 +34,8 @@ N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -n
 N64_SRC_LIBS = startup-mips libc
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
-N64_CMD_SUBDIRS = env hostname id init ls sh stty test uname chown
+N64_CMD_SUBDIRS = env fsck hostname id init ls man more mount reboot sh \
+                  stty test umount uname chown
 N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep
 N64_CMD_SCRIPTS = $(N64_CMD_NONE)
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
@@ -173,6 +174,7 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS)
 	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin
+	mkdir -p $(N64_ROOTFS_STAGE)/share/misc
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat1
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
 	touch $@
