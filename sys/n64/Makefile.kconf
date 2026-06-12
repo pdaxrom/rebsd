@@ -34,7 +34,7 @@ N64_USER_LS = $(TOPSRC)/src/cmd/ls/ls
 N64_USERLAND = $(N64_USER_SH) $(N64_USER_LS)
 N64_STAGE0_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),stage0_n64cart_uart.o,stage0_console_null.o)
 N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)
-N64_PREFLIGHT_CONSOLE_OBJS = $(filter n64cart_uart.o,$(OBJS))
+N64_PREFLIGHT_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),n64cart_uart.o,console_null.o)
 N64_PREFLIGHT_OBJS = startup.o $(N64_PREFLIGHT_CONSOLE_OBJS) \
                      rompak.o memory.o preflight.o
 
