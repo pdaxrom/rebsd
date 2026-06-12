@@ -1,14 +1,12 @@
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
-#include <sys/inode.h>
 #include <sys/tty.h>
 #include <sys/uio.h>
 #include <machine/n64cart_uart.h>
 
 struct tty cnttys[1];
 static void cnstart(struct tty *tp);
-static int cninput_ready(struct tty *tp);
 static void cninput(int c);
 void cnintr(void);
 void cnputc(char c);
@@ -48,16 +46,8 @@ cnclose(dev_t dev, int flag, int mode)
 int
 cnread(dev_t dev, struct uio *uio, int flag)
 {
-    struct tty *tp = &cnttys[0];
-
-    for (;;) {
-        cnintr();
-        if (cninput_ready(tp))
-            return ttread(tp, uio, flag);
-        if (flag & IO_NDELAY)
-            return EWOULDBLOCK;
-        cninput(n64cart_uart_getc());
-    }
+    cnintr();
+    return ttread(&cnttys[0], uio, flag);
 }
 
 int
@@ -82,15 +72,6 @@ cnintr(void)
 
     while (n64cart_uart_poll())
         cninput(n64cart_uart_getc());
-}
-
-static int
-cninput_ready(struct tty *tp)
-{
-    if (tp->t_flags & (RAW | CBREAK))
-        return tp->t_rawq.c_cc > 0;
-
-    return tp->t_canq.c_cc > 0;
 }
 
 static void

@@ -170,8 +170,12 @@ startup(void)
 void
 idle(void)
 {
-    for (;;)
-        asm volatile ("wait");
+    int s;
+
+    noproc = 1;
+    s = spl0();
+    asm volatile ("wait");
+    splx(s);
 }
 
 void
