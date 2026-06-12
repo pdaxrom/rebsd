@@ -27,8 +27,10 @@ Initial boot target:
 
 1. ROM-DOS style stage0 loads an ELF32 big-endian RetroBSD kernel.
 2. Kernel detects 4 MiB base RDRAM vs 8 MiB Expansion Pak at startup.
-3. Kernel uses N64cart UART for early console.
+3. Kernel uses the `N64CART` Config option for the current cartridge's
+   UART-backed early console and `/dev/console`.
 4. Root is a read-only UFS romdisk exposed as block major 0 from ROM TOC.
 5. Swap/temp use a RAM-backed block device: Expansion Pak memory when
    present, otherwise the top 512 KiB of base RDRAM.
-6. N64cart ROMFS is mounted later as a separate read-only filesystem.
+6. Other cartridge-specific hardware must get its own Config identifier
+   and optional driver files before it is used by the N64 port.

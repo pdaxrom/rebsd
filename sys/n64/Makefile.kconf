@@ -59,9 +59,9 @@ ASFLAGS         = -x assembler-with-cpp -c $(DEFS)
 FPU_ASFLAGS     = -x assembler-with-cpp -c $(DEFS)
 STAGE0_CFLAGS   = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
                   -ffreestanding -fno-builtin -fno-stack-protector \
-                  -fno-pie -Wall -Wextra -Werror -O2 -MMD -MP
+                  -fno-pie -Wall -Wextra -Werror -O2 -MMD -MP $(PARAM)
 STAGE0_ASFLAGS  = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
-                  -x assembler-with-cpp -MMD -MP -c
+                  -x assembler-with-cpp -MMD -MP -c $(PARAM)
 
 COMPILE_C       = ${CC} ${CFLAGS} -c $<
 COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@

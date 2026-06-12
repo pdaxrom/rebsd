@@ -7,5 +7,10 @@ board           "N64"
 
 options         "CONS_MAJOR=0", "CONS_MINOR=0"
 
+#
+# Cartridge-specific hardware used by this board configuration.
+#
+options         "N64CART"       # n64cart cartridge UART/register block
+
 config          unix    root on major 0 minor 0
                         swap on major 1 minor 0

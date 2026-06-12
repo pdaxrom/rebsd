@@ -9,10 +9,12 @@ typedef unsigned int uintptr;
 #define N64_BASE_RDRAM_SIZE     0x00400000u
 #define N64_ICACHE_LINE_SIZE    32u
 
+#ifdef N64CART
 #define N64CART_UART_BASE       ((uintptr)0xbfd01000u)
 #define N64CART_UART_CTRL       0x00u
 #define N64CART_UART_RXTX       0x04u
 #define N64CART_UART_TX_FREE    0x02u
+#endif
 
 #define EI_CLASS        4u
 #define EI_DATA         5u
@@ -102,6 +104,7 @@ sync_instruction_range(uintptr start, uintptr end)
     sync_memory();
 }
 
+#ifdef N64CART
 static volatile u32 *
 n64cart_reg(u32 offset)
 {
@@ -136,6 +139,13 @@ uart_putc_raw(char ch)
     n64cart_io_write(N64CART_UART_RXTX, (u32)(u8)ch);
     (void)n64cart_io_read(N64CART_UART_CTRL);
 }
+#else
+static void
+uart_putc_raw(char ch)
+{
+    (void)ch;
+}
+#endif
 
 static void
 uart_putc(char ch)
