@@ -171,6 +171,10 @@ copying binaries manually.
   used without the n64cart serial login path
 - [ ] Hardware smoke-test `/dev/console` login and shell input from a RandNET
   keyboard
+- [x] Add a visible framebuffer console cursor at the current tty output
+  position
+- [ ] Hardware smoke-test console cursor drawing while typing, after
+  Backspace, and across newlines/scrolling
 
 ## Joybus, Keyboard, Mouse, And Joypad
 

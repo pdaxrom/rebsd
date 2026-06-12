@@ -18,6 +18,9 @@ static unsigned console_cols;
 static unsigned console_rows;
 static unsigned console_col;
 static unsigned console_row;
+static unsigned console_cursor_col;
+static unsigned console_cursor_row;
+static int console_cursor_drawn;
 
 void __attribute__((weak))
 n64_console_debug_putc(int ch)
@@ -152,6 +155,52 @@ n64_console_geometry(void)
     console_rows = (console_height - 2 * console_y0) / N64_CONSOLE_CELL_H;
     console_col = 0;
     console_row = 0;
+    console_cursor_drawn = 0;
+}
+
+static void
+n64_console_toggle_cursor_at(unsigned col, unsigned row)
+{
+    volatile unsigned short *fb;
+    unsigned x0;
+    unsigned y0;
+    unsigned x;
+    unsigned y;
+    volatile unsigned short *pixel;
+
+    if (col >= console_cols || row >= console_rows)
+        return;
+
+    fb = n64_video_framebuffer();
+    x0 = console_x0 + col * N64_CONSOLE_CELL_W;
+    y0 = console_y0 + row * N64_CONSOLE_CELL_H + N64_CONSOLE_CELL_H - 2;
+    for (y = 0; y < 2; ++y) {
+        for (x = 0; x < N64_CONSOLE_CELL_W; ++x) {
+            pixel = &fb[(y0 + y) * console_width + x0 + x];
+            *pixel = (*pixel == N64_CONSOLE_FG) ?
+                N64_CONSOLE_BG : N64_CONSOLE_FG;
+        }
+    }
+}
+
+static void
+n64_console_erase_cursor(void)
+{
+    if (!console_cursor_drawn)
+        return;
+    n64_console_toggle_cursor_at(console_cursor_col, console_cursor_row);
+    console_cursor_drawn = 0;
+}
+
+static void
+n64_console_draw_cursor(void)
+{
+    if (console_cursor_drawn || console_cols == 0 || console_rows == 0)
+        return;
+    console_cursor_col = console_col;
+    console_cursor_row = console_row;
+    n64_console_toggle_cursor_at(console_cursor_col, console_cursor_row);
+    console_cursor_drawn = 1;
 }
 
 static void
@@ -247,6 +296,7 @@ void
 n64_console_putc(int ch)
 {
     n64_console_geometry();
+    n64_console_erase_cursor();
 
     switch (ch) {
     case '\r':
@@ -271,4 +321,5 @@ n64_console_putc(int ch)
             n64_console_draw_char(ch);
         break;
     }
+    n64_console_draw_cursor();
 }
