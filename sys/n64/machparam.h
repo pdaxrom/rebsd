@@ -64,7 +64,12 @@
 #include "machine/io.h"
 
 #define USERMODE(ps)    (((ps) & ST_KSU) == ST_KSU_USER)
-#define BASEPRI(ps)     (((ps) & ST_IM7) == 0)
+/*
+ * The VR4300 CP0 status register has interrupt mask bits, but no PIC32-style
+ * IPL field.  The N64 spl* implementation raises priority by clearing ST_IE,
+ * so a saved status with ST_IE set is the closest equivalent of base priority.
+ */
+#define BASEPRI(ps)     (((ps) & ST_IE) != 0)
 
 #define splbio()        mips_intr_disable()
 #define spltty()        mips_intr_disable()

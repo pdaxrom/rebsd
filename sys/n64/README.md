@@ -21,12 +21,14 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - `/dev/tty` is the controlling tty major.
 - `/dev/romdisk`, `/dev/swap`, `/dev/null`, and `/dev/zero` are generated
   into the root filesystem from kernel device definitions.
-- Userland `init`, `sh`, and `ls` are a.out binaries linked for the N64 user
-  address window.
-- `/sbin/init` is installed from the normal `src/cmd/init` source tree.
+- Userland is built from the normal `src/cmd` tree as a.out binaries linked
+  for the N64 user address window.
+- The N64 rootfs currently selects `init`, `sh`, `ls`, and a small basic
+  command set through the shared `src/cmd/Makefile` install flow.
 - Userland FPU is enabled and the kernel saves/restores FPU state.
 
-Known hardware smoke test on a real 8 MiB system, verified 2026-06-12:
+Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
+the expanded command set:
 
 ```
 RetroBSD N64 stage0
@@ -66,6 +68,20 @@ brw-rw-r--  1 0          0,   0 Jun 12 05:57 romdisk
 brw-rw-r--  1 0          1,   0 Jun 12 05:57 swap
 crw-rw-r--  1 0          2,   0 Jun 12 05:57 tty
 c-w--wx-wT  1 0          1,   3 Jun 12 05:57 zero
+```
+
+Additional hardware smoke test on the same class of system, verified
+2026-06-12 after the N64 `BASEPRI()` timer/callout fix:
+
+```
+# for i in 1 2 3 4 5 6; do echo $i; sleep 1; done
+1
+2
+3
+4
+5
+6
+#
 ```
 
 ## Toolchain
@@ -310,15 +326,45 @@ The root image is built from:
 - `sys/n64/rootfs/`
 - `sys/n64/rootfs.manifest`
 - generated `/dev` nodes
-- `/sbin/init` installed from `src/cmd/init`
-- selected user commands installed into the staging tree with their normal
-  RetroBSD `make install DESTDIR=...` rules
+- selected user commands installed into the staging tree through the normal
+  RetroBSD `src/Makefile` install flow
 
 This follows the same install model as the top-level PIC32 build: commands are
 built from `src/cmd/*`, installed into a `DESTDIR`, and then `fsutil` creates
 the filesystem from the staged tree plus a manifest. The N64 build keeps an
 explicit command subset for the cartridge rootfs, but it does not copy command
 binaries directly out of `src/cmd`.
+
+The current manifest includes:
+
+```
+/bin/[
+/bin/cat
+/bin/chmod
+/bin/cp
+/bin/echo
+/bin/env
+/bin/hostname
+/bin/id
+/bin/kill
+/bin/ls
+/bin/mkdir
+/bin/mv
+/bin/pwd
+/bin/rm
+/bin/rmdir
+/bin/sh
+/bin/sleep
+/bin/stty
+/bin/test
+/bin/uname
+/sbin/chown
+/sbin/init
+```
+
+The staging tree may contain extra files installed by selected command
+makefiles, for example `id` installs `groups` and `whoami`. Those files do not
+enter `rootfs.img` until `sys/n64/rootfs.manifest` lists them.
 
 The rootfs size defaults to 4096 KiB. The image stays in cartridge ROM and is
 not preloaded into RDRAM:
@@ -425,6 +471,14 @@ The current console input path is timer-polled:
 This is enough for interactive shell input even though the n64cart UART does
 not currently provide a real interrupt line to the CPU.
 
+Timer-driven kernel callouts also depend on this path.  Functions such as
+`sleep(1)` use libc `sleep(3)`, which waits through `select(2)` with a timeout;
+that timeout is completed by the kernel callout queue.  On N64, `BASEPRI(ps)`
+is defined from the saved CP0 `ST_IE` bit because the VR4300 status register has
+interrupt mask bits but no PIC32-style IPL field.  This lets `hardclock()` run
+`softclock()` for timer ticks taken at base priority, so `select(2)` timeouts
+and other callout users wake without needing a signal.
+
 MI interrupts are scaffolded separately:
 
 - IP2 is enabled in CP0 Status.
@@ -507,27 +561,66 @@ The N64 board makefile rebuilds:
 
 - `src/startup-mips/crt0.o`
 - `src/libc.a`
-- `src/cmd/init/init`
-- `src/cmd/sh/sh`
-- `src/cmd/ls/ls`
+- the selected command subset through `src/cmd/Makefile`
 
-After building the selected commands, the board makefile invokes their
-existing install targets with:
+The selected source tree subset is controlled by `sys/n64/Makefile.kconf`
+using shared makefile filters:
+
+```
+SRC_ONLY_LIBS
+SRC_ONLY_SUBDIR
+CMD_ONLY_SUBDIR
+CMD_ONLY_STD
+CMD_ONLY_SCRIPT
+CMD_ONLY_NSTD
+CMD_ONLY_SETUID
+CMD_ONLY_OPERATOR
+CMD_ONLY_KMEM
+CMD_ONLY_TTY
+CMD_BUILD_STRIP
+```
+
+PIC32 defaults stay unchanged because empty filter variables select the full
+existing lists. N64 passes `SRC_ONLY_LIBS="startup-mips libc"` and
+`SRC_ONLY_SUBDIR="cmd"` at the `src/Makefile` level, then passes explicit
+`CMD_ONLY_*` values to the command makefile and disables the host-side `strip`
+command build with `CMD_BUILD_STRIP=`.
+
+After building the selected commands, the board makefile invokes the shared
+install target with:
 
 ```
 TARGET_PLATFORM=n64
 DESTDIR=sys/n64/nintendo64/rootfs.stage
 N64_USER_LDSCRIPT=sys/n64/nintendo64/n64-user.ld
+SRC_ONLY_LIBS="startup-mips libc"
+SRC_ONLY_SUBDIR="cmd"
 ```
 
 The installed files are then picked up by `rootfs.manifest` when `fsutil`
 creates `rootfs.img`. The command list is intentionally an N64 subset of the
-normal `src/cmd` tree; each selected command is still built and installed by
-its own existing makefile.
+normal `src/cmd` tree; each selected subdirectory command is still installed
+by its own existing makefile, and simple one-file commands use the shared
+`src/cmd/Makefile` rule.
 
 Those common source directories should not carry N64-only hacks. N64-specific
 linking is controlled by `target-n64.mk` and the generated
 `sys/n64/nintendo64/n64-user.ld` linker script.
+
+The N64 kernel build also sets the generic hardware sysctl identity:
+
+```
+HW_MACHINE_NAME="mips"
+HW_MODEL_NAME="NEC VR4300"
+```
+
+`HW_MACHINE_NAME` is the architecture class used by `uname -m`; the concrete
+N64 CPU model remains in `hw.model`. `uname -a` should therefore end with
+`mips`, and `uname -m` should print:
+
+```
+mips
+```
 
 User executables are linked as ELF first and then converted to a.out with
 `tools/elf2aout/elf2aout`, matching the existing RetroBSD userland format.
@@ -639,8 +732,8 @@ Build and generated data:
 - Console input is timer-polled, not driven by a UART interrupt.
 - The n64cart UART backend only works on cartridges with the matching
   register block.
-- Only a minimal rootfs is present: `init`, `sh`, `ls`, and static config
-  files.
+- Only a small rootfs is present: `init`, `sh`, `ls`, selected basic `/bin`
+  tools, `/sbin/chown`, generated `/dev` nodes, and static config files.
 - No display, controller, filesystem-writeback, SD, or other cartridge
   storage drivers are implemented yet.
 

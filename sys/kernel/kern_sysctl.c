@@ -51,6 +51,13 @@
 #include <machine/cpu.h>
 #include <sys/conf.h>
 
+#ifndef HW_MACHINE_NAME
+#define HW_MACHINE_NAME "pic32"
+#endif
+#ifndef HW_MODEL_NAME
+#define HW_MODEL_NAME "mips"
+#endif
+
 sysctlfn kern_sysctl;
 sysctlfn hw_sysctl;
 #ifdef DEBUG
@@ -269,9 +276,9 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
 
     switch (name[0]) {
     case HW_MACHINE:
-        return (sysctl_rdstring(oldp, oldlenp, newp, "pic32"));
+        return (sysctl_rdstring(oldp, oldlenp, newp, HW_MACHINE_NAME));
     case HW_MODEL:
-        return (sysctl_rdstring(oldp, oldlenp, newp, "mips"));
+        return (sysctl_rdstring(oldp, oldlenp, newp, HW_MODEL_NAME));
     case HW_NCPU:
         return (sysctl_rdint(oldp, oldlenp, newp, 1));  /* XXX */
     case HW_BYTEORDER:

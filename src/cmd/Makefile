@@ -10,7 +10,7 @@ CFLAGS          += -Werror
 
 # Programs that live in subdirectories, and have makefiles of their own.
 # /bin
-SUBDIR		= adb adc-demo aout ar as awk basic calendar cc chflags \
+SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar cc chflags \
                   chpass cpp dc diff emg env fdisk find fold forth \
                   fstat glcdtest hostname id la lcc lcpp ld ls login make \
                   man md5 med more nm passwd pdc picoc portio printf pwm \
@@ -20,7 +20,7 @@ SUBDIR		= adb adc-demo aout ar as awk basic calendar cc chflags \
                   talloc uucp viless virus yacc
 
 # /sbin
-SUBDIR         += chown chroot disktool fsck getty init \
+SUBDIR_ALL    += chown chroot disktool fsck getty init \
                   mkfs mknod mkpasswd mount pstat \
                   reboot shutdown umount update vipw
 
@@ -28,12 +28,12 @@ SUBDIR         += chown chroot disktool fsck getty init \
 
 # Shell scripts that need only be installed and are never removed.
 #
-SCRIPT		= false nohup true #lorder mkdep
+SCRIPT_ALL	= false nohup true #lorder mkdep
 
 # C programs that live in the current directory and do not need
 # explicit make lines.
 #
-STD		= basename cal cat cb chgrp chmod cmp col comm cp dd \
+STD_ALL		= basename cal cat cb chgrp chmod cmp col comm cp dd \
                   diskspeed du echo ed fgrep file grep head hostid join \
                   kill last ln mesg mkdir mv nice od pagesize pr printenv \
                   pwd rev rm rmail rmdir size sleep sort split sum sync \
@@ -41,28 +41,42 @@ STD		= basename cal cat cb chgrp chmod cmp col comm cp dd \
 
 # C programs that live in the current directory and need explicit make lines.
 #
-NSTD		= bc expr egrep
+NSTD_ALL	= bc expr egrep
 
 # Programs that must run setuid to root
 #
-SETUID		= mail su
+SETUID_ALL	= mail su
 
 # Programs that run set-group-id operator
 #
-OPERATOR	= df
+OPERATOR_ALL	= df
 
 # Programs that must run set-group-id kmem.
 #
-KMEM		= ps iostat vmstat
+KMEM_ALL	= ps iostat vmstat
 
 # Programs that must run set-group-id tty.
 #
-TTY		= wall write
+TTY_ALL		= wall write
+
+# Platforms can restrict the command set without duplicating this makefile.
+# Empty CMD_ONLY_* and CMD_EXCLUDE_* variables preserve the full default set.
+CMD_FILTER	= $(filter-out $(CMD_EXCLUDE_$(1)),$(if $(CMD_ONLY_$(1)),$(filter $(CMD_ONLY_$(1)),$($(1)_ALL)),$($(1)_ALL)))
+SUBDIR		= $(call CMD_FILTER,SUBDIR)
+SCRIPT		= $(call CMD_FILTER,SCRIPT)
+STD		= $(call CMD_FILTER,STD)
+NSTD		= $(call CMD_FILTER,NSTD)
+SETUID		= $(call CMD_FILTER,SETUID)
+OPERATOR	= $(call CMD_FILTER,OPERATOR)
+KMEM		= $(call CMD_FILTER,KMEM)
+TTY		= $(call CMD_FILTER,TTY)
 
 # 'strip' is handled specially because 'install -s' now uses 'strip' and
 # thus we can't do a 'install -s strip /bin/strip' without an error.
 #
-BINS		= $(STD) $(NSTD) $(SETUID) $(OPERATOR) $(KMEM) $(TTY) $(SCRIPT) strip
+CMD_BUILD_STRIP ?= strip
+CMD_BIN_PROGS	= $(STD) $(NSTD) $(CMD_BUILD_STRIP)
+BINS		= $(CMD_BIN_PROGS) $(SETUID) $(OPERATOR) $(KMEM) $(TTY) $(SCRIPT)
 
 all:		$(SUBDIR) $(BINS)
 
@@ -89,7 +103,9 @@ $(SCRIPT):
 		install -c $@.sh $@
 
 install:	$(BINS)
-		install $(STD) $(NSTD) strip $(DESTDIR)/bin/
+		@if [ -n "$(strip $(CMD_BIN_PROGS))" ]; then \
+			install $(CMD_BIN_PROGS) $(DESTDIR)/bin/; \
+		fi
 		-for i in $(SUBDIR); do \
 			$(MAKE) -C $$i $(MFLAGS) DESTDIR=$(DESTDIR) install; done
 		-for i in $(SCRIPT); do install $$i.sh $(DESTDIR)/bin/$$i; done

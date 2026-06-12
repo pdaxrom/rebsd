@@ -6,23 +6,23 @@ adding a separate hand-copied application path.
 
 ## Application and Rootfs Build
 
-- [ ] Reuse the existing top-level/PIC32 model for userland:
+- [x] Reuse the existing top-level/PIC32 model for userland:
   - build userland through `src/Makefile`
   - install userland through `make -C src install DESTDIR=...`
   - build the filesystem image from the staged tree with `fsutil` and a
     manifest
-- [ ] Generalize `src/Makefile` without changing PIC32 defaults:
+- [x] Generalize `src/Makefile` without changing PIC32 defaults:
   - introduce overridable source subdir/library lists
   - keep the current default lists equivalent to the existing PIC32 behavior
   - let N64 request only the source subdirs/libraries it can currently build
-- [ ] Generalize `src/cmd/Makefile` without changing PIC32 defaults:
+- [x] Generalize `src/cmd/Makefile` without changing PIC32 defaults:
   - keep canonical command groups in one place: `SUBDIR`, `STD`, `SCRIPT`,
     `SETUID`, `OPERATOR`, `KMEM`, and `TTY`
   - add platform filter variables such as command include/exclude lists
   - make N64 use those filters instead of maintaining a second independent
     command build list
-- [ ] Change the N64 board build to stage applications through the shared
-  install flow:
+- [x] Change the N64 board build to stage applications through the shared
+  `src`/`src/cmd` install flow:
   - remove the N64-only per-command build loop from `sys/n64/Makefile.kconf`
   - call the shared `src`/`src/cmd` install path with
     `TARGET_PLATFORM=n64`, `DESTDIR=rootfs.stage`, and the generated
@@ -54,7 +54,7 @@ Also exclude or defer libraries that only serve unavailable peripherals:
 Add files to the ROM rootfs by updating `sys/n64/rootfs.manifest`, not by
 copying binaries manually.
 
-- [ ] Add basic `/bin` utilities after the shared install flow is in place:
+- [x] Add basic `/bin` utilities after the shared install flow is in place:
   `cat`, `echo`, `pwd`, `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `chmod`, `chown`,
   `sleep`, `kill`, `stty`, `uname`, `hostname`, `id`, `test`, and `env`
 - [ ] Add selected `/sbin` utilities when the kernel side supports them:
@@ -65,7 +65,7 @@ copying binaries manually.
 
 ## Verification
 
-- [ ] Run:
+- [x] Run:
 
   ```
   make -C sys/n64 reconfig
@@ -74,9 +74,9 @@ copying binaries manually.
   make -q -C sys/n64/nintendo64 kernel.z64
   ```
 
-- [ ] Confirm the build log uses shared `src`/`src/cmd` install rules and does
+- [x] Confirm the build log uses shared `src`/`src/cmd` install rules and does
   not manually copy command binaries from `src/cmd`
-- [ ] Confirm `rootfs.generated.manifest` contains only N64-appropriate device
+- [x] Confirm `rootfs.generated.manifest` contains only N64-appropriate device
   nodes and files
 - [ ] Hardware smoke-test on N64:
   - boot `kernel.z64`
@@ -85,5 +85,7 @@ copying binaries manually.
   - run `ls /`, `ls /bin`, `ls /etc`, and `ls /dev`
   - after adding basic tools, run `cat /etc/rc`, `pwd`, `uname`, `id`, and
     `stty`
+  - verify `uname -a` ends with `mips`, not `pic32`
+  - [x] run `sleep 1` and verify it returns by timeout without `Ctrl-C`
 
 Commit only after the generated ROM has passed the hardware smoke test.
