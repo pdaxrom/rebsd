@@ -207,20 +207,26 @@ n64cart_uart_start(struct tty *tp)
     splx(s);
 }
 
-int
+int __attribute__((weak))
 n64_console_poll(void)
 {
     return n64cart_uart_poll();
 }
 
-int
+int __attribute__((weak))
 n64_console_getc(void)
 {
     return n64cart_uart_getc();
 }
 
-void
+void __attribute__((weak))
 n64_console_putc(int ch)
+{
+    n64cart_uart_putc(ch);
+}
+
+void
+n64_console_debug_putc(int ch)
 {
     n64cart_uart_putc(ch);
 }

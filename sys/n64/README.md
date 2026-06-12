@@ -5,8 +5,9 @@ built, and how the early platform code works on real N64 hardware.
 
 The port targets the Nintendo 64 VR4300 as a 32-bit big-endian MIPS III
 machine using the o32 ABI. The current hardware target is a stock N64 with
-4 MiB base RDRAM or 8 MiB with the Expansion Pak. Console I/O currently uses
-the UART/register block provided by the `n64cart` cartridge hardware.
+4 MiB base RDRAM or 8 MiB with the Expansion Pak. The current cartridge
+hardware target is the `n64cart` UART/RGB LED register block; display output
+uses the N64 VI framebuffer.
 
 ## Current status
 
@@ -17,13 +18,14 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - RDRAM size is detected at startup and printed by the kernel.
 - Root is a read-only UFS romdisk stored in the ROM image.
 - Swap is a RAM-backed block device.
-- `/dev/console` is a real tty-backed console.
+- `/dev/console` is a real tty-backed console with VI framebuffer output.
 - `/dev/tty` is the controlling tty major.
 - `/dev/ttyS0` is the n64cart serial tty.
 - `/dev/rgbled0` controls the n64cart RGB LED through ioctl.
+- `/dev/fb0` exposes the current 16-bit framebuffer and mode ioctls.
 - `/dev/romdisk`, `/dev/swap`, `/dev/null`, `/dev/zero`, `/dev/ttyS0`,
-  `/dev/rgbled0`, and the pty nodes are generated into the root filesystem from
-  kernel device definitions.
+  `/dev/rgbled0`, `/dev/fb0`, and the pty nodes are generated into the root
+  filesystem from kernel device definitions.
 - Userland is built from the normal `src/cmd` tree as a.out binaries linked
   for the N64 user address window.
 - The N64 rootfs selects `init`, `getty`, `login`, `sh`, `ls`, and a small
@@ -404,6 +406,7 @@ The first-stage memory map is centralized in `sys/n64/layout.h`.
 ```
 0x00000000..0x000fffff  kernel, vectors, u areas
 0x00100000..0x002fffff  wired kuseg user window
+0x0035a800..0x0037ffff  320x240x16 framebuffer
 0x00380000..0x003fffff  RAM swap fallback
 ```
 
@@ -412,7 +415,8 @@ The first-stage memory map is centralized in `sys/n64/layout.h`.
 ```
 0x00000000..0x000fffff  kernel, vectors, u areas
 0x00100000..0x002fffff  wired kuseg user window
-0x00400000..0x007fffff  Expansion Pak RAM swap
+0x00400000..0x00495fff  max 640x480x16 framebuffer reserve
+0x00496000..0x007fffff  Expansion Pak RAM swap
 ```
 
 Important constants:
@@ -423,7 +427,12 @@ Important constants:
 - `N64_USER_MAXMEM`: 2 MiB user address window.
 - `N64_USER_PHYS_START`: physical backing for user memory, `0x00100000`.
 - `N64_BASE_SWAP_PHYS_START`: 4 MiB fallback swap base, `0x00380000`.
-- `N64_EXPANSION_SWAP_PHYS_START`: 8 MiB swap base, `0x00400000`.
+- `N64_BASE_FB_PHYS_START`: 4 MiB 320x240x16 framebuffer base,
+  `0x0035a800`.
+- `N64_EXPANSION_FB_PHYS_START`: 8 MiB framebuffer reserve base,
+  `0x00400000`.
+- `N64_EXPANSION_SWAP_PHYS_START`: 8 MiB swap base after the maximum
+  framebuffer reserve, `0x00496000`.
 
 `machparam.h` maps the old RetroBSD platform names onto this layout:
 
@@ -511,6 +520,7 @@ The current manifest includes:
 /bin/cp
 /bin/echo
 /bin/env
+/bin/fbset
 /bin/groups
 /bin/hostname
 /bin/id
@@ -547,6 +557,7 @@ The current manifest includes:
 /root/.profile
 /share/misc/more.help
 /share/man/whatis
+/share/man/cat1/fbset.0
 /share/man/cat1/groups.0
 /share/man/cat1/hostname.0
 /share/man/cat1/id.0
@@ -618,13 +629,13 @@ Block major 1 is RAM-backed swap:
 Swap sizing:
 
 - 4 MiB system: top 512 KiB of base RDRAM.
-- 8 MiB system: all Expansion Pak RAM from 4 MiB to detected memory size.
+- 8 MiB system: Expansion Pak RAM after the reserved 640x480x16 framebuffer.
 
 The printed boot sizes therefore differ by installed RDRAM:
 
 ```
 4 MiB: swap size = 512 kbytes
-8 MiB: swap size = 4096 kbytes
+8 MiB: swap size = 3496 kbytes
 ```
 
 ## Character devices and tty
@@ -638,12 +649,20 @@ Current character devices, verified in the generated ROM rootfs:
 /dev/tty      c 2,0
 /dev/ttyS0    c 3,0
 /dev/rgbled0  c 4,0
+/dev/fb0      c 5,0
 /dev/ttyp0    c 8,0
 /dev/ptyp0    c 9,0
 ```
 
 `/dev/console` is a normal RetroBSD tty endpoint backed by `sys/n64/cons.c`.
-It uses the current N64 console backend for raw bytes.
+It uses `sys/n64/video_console.c` for VI framebuffer output. The framebuffer
+console does not consume n64cart UART input; serial login input belongs to
+`/dev/ttyS0`. When `n64cart` is configured, console output is also mirrored to
+the UART as a debug stream.
+
+The text console draws inside a 5% safe area to keep characters away from CRT
+or capture-device overscan. This margin applies only to `video_console.c`;
+`/dev/fb0` still exposes the full framebuffer.
 
 `/dev/tty` is implemented through the standard `tty_tty` cdev entry and
 therefore resolves to the controlling tty for the shell.
@@ -670,6 +689,30 @@ rgbled 0 255 0     # green
 rgbled 0 0 255     # blue
 rgbled 0 0 0       # off
 ```
+
+`/dev/fb0` is the N64 framebuffer character device. It exposes the current
+16-bit RGBA5551 framebuffer through read/write and mode ioctls:
+
+```
+N64FBIOC_GETINFO   struct n64fb_info
+N64FBIOC_SETMODE   struct n64fb_mode
+```
+
+The default framebuffer mode is selected from detected RDRAM: 4 MiB systems
+start in 320x240x16, while 8 MiB systems start in 640x480x16. On 8 MiB
+systems, the Expansion Pak framebuffer reserve is large enough to switch
+between 320x240 and 640x480 at runtime:
+
+```
+fbset          # print current framebuffer mode
+fbset 320x240  # select progressive 320x240
+fbset 640x480  # select interlaced 640x480, Expansion Pak only
+```
+
+The VI setup reads the IPL TV type byte at `0xa4000009` and chooses PAL, NTSC,
+or MPAL timing. PAL uses the PAL timing registers with a centered 640x480
+active area, so the framebuffer size stays 320x240 or 640x480 rather than
+becoming 640x576.
 
 N64 does not expose `/dev/mem` or `/dev/kmem` in the ROM rootfs. Character
 major 1 is present only for `/dev/null` and `/dev/zero`; minors 0 and 1 return
@@ -773,16 +816,13 @@ The generic `led_control(mask, on)` hook remains a no-op on N64. The RGB LED is
 explicitly controlled through `/dev/rgbled0` so serial activity does not
 implicitly change LED state.
 
-Current transition note: until a real N64 system-console backend exists, the
-n64cart UART is still also used for early kernel console bytes. To avoid two
-login processes consuming the same serial input stream, the timer path polls
-`/dev/ttyS0` before `cnintr()`. The serial login should therefore be tested on
-`ttyS0`; a later display/keyboard backend can make `/dev/console` fully
-independent.
+Current transition note: `/dev/console` has N64 framebuffer output but no N64
+keyboard/controller input backend yet. Keep `/dev/ttyS0` enabled for login and
+interactive input until a real system-console input driver exists.
 
 ## Interrupts and timer-driven console input
 
-The current console input path is timer-polled:
+The current serial console input path is timer-polled:
 
 1. `clkstart()` programs CP0 Compare from CP0 Count.
 2. CP0 timer interrupts arrive on IP7.
@@ -807,7 +847,11 @@ MI interrupts are scaffolded separately:
 
 - IP2 is enabled in CP0 Status.
 - `n64_interrupt_init()` disables all MI interrupt sources initially.
-- `n64_interrupt_handle_mi()` acknowledges pending MI interrupt bits.
+- `n64_video_intr_enable()` enables the VI interrupt only when 640x480
+  interlaced mode is active.
+- `n64_interrupt_handle_mi()` lets `n64_video_intr()` update interlaced VI
+  field registers on the VI interrupt boundary, then acknowledges pending MI
+  interrupt bits.
 - MI register addresses, interrupt source bits, and write-mask bits live in
   `sys/n64/n64int.h`; `sys/n64/n64int.c` contains the enable/disable/ack
   logic.

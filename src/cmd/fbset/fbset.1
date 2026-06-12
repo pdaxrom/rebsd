@@ -1,0 +1,50 @@
+.TH FBSET 1 "June 12, 2026"
+.UC 4
+.SH NAME
+fbset \- show or select the N64 framebuffer mode
+.SH SYNOPSIS
+.B fbset
+[
+.I 320x240
+|
+.I 640x480
+]
+.PP
+.B fbset
+[
+.I width height
+]
+.SH DESCRIPTION
+.B fbset
+queries or changes the active N64 framebuffer mode through
+.IR /dev/fb0 .
+The framebuffer is always 16-bit RGBA5551.
+.PP
+With no arguments,
+.B fbset
+prints the current mode, framebuffer address, active TV type, and detected
+RDRAM size.
+.PP
+The 320x240 mode is available on all supported N64 memory configurations.
+The 640x480 mode requires an Expansion Pak and returns an error on a 4 MiB
+system.
+.SH EXAMPLES
+Show the current framebuffer mode:
+.PP
+.RS
+.nf
+fbset
+.fi
+.RE
+.PP
+Switch to 640x480 on an 8 MiB system:
+.PP
+.RS
+.nf
+fbset 640x480
+.fi
+.RE
+.SH FILES
+.TP 12
+.I /dev/fb0
+N64 framebuffer device

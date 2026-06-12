@@ -4,6 +4,7 @@
 #define N64_TTY_MAJOR    2
 #define N64_SERIAL_MAJOR 3
 #define N64_RGBLED_MAJOR 4
+#define N64_FB_MAJOR     5
 #define N64_PTS_MAJOR    8
 #define N64_PTC_MAJOR    9
 

@@ -140,6 +140,34 @@ copying binaries manually.
   n64cart sources handle reset button pre-NMI but do not expose a safe
   software cold-reset primitive, so N64 uses the stage0 software restart
 
+## Video Framebuffer And System Console
+
+- [x] Add an N64-local VI framebuffer layer instead of using n64cart UART as
+  the system console backend
+- [x] Reserve framebuffer memory in `sys/n64/layout.h`:
+  - 4 MiB systems get 320x240x16 only before the base RAM swap region
+  - 8 MiB systems reserve enough Expansion Pak memory for 640x480x16 and can
+    switch between 320x240 and 640x480
+- [x] Add `/dev/fb0` as the framebuffer device with read/write access plus
+  mode ioctls
+- [x] Add `/bin/fbset` through the shared `src/cmd` install flow and include
+  it in the N64 ROM manifest
+- [x] Keep `/dev/ttyS0` as the n64cart serial login/input path and use the
+  UART only as a debug mirror for `/dev/console` output
+- [x] Select VI timing from the IPL TV type byte so PAL, NTSC, and MPAL
+  consoles/cartridges are handled by the same backend
+- [ ] Hardware smoke-test default framebuffer console output on real hardware:
+  320x240 on 4 MiB systems and 640x480 on 8 MiB systems
+- [ ] Hardware smoke-test `fbset`, `/dev/fb0`, and 640x480 mode on an 8 MiB
+  system
+- [ ] Hardware smoke-test PAL and MPAL timing on matching hardware or a
+  trusted hardware-accurate setup
+- [ ] Add shared framebuffer access for `/dev/fb0`; current read/write path
+  copies bytes, but real graphics should get a user-visible mapping through
+  `mmap()` or an equivalent N64 TLB-backed mapping
+- [ ] Add a real N64 system-console input backend, so `/dev/console` can be
+  used without the n64cart serial login path
+
 ## Verification
 
 - [x] Run:

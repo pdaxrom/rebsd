@@ -65,6 +65,9 @@ mode 0775
 file /bin/env
 mode 0775
 
+file /bin/fbset
+mode 0775
+
 file /bin/groups
 mode 0775
 
@@ -144,6 +147,8 @@ file /share/man/whatis
 file /share/man/cat1/groups.0
 
 file /share/man/cat1/hostname.0
+
+file /share/man/cat1/fbset.0
 
 file /share/man/cat1/id.0
 

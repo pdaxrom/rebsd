@@ -9,6 +9,7 @@
 #include <machine/devmajors.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
+#include <machine/video.h>
 
 #ifdef N64CART_ENABLED
 #include <machine/n64cart_uart.h>
@@ -204,7 +205,14 @@ const struct cdevsw cdevsw[] = {
         NOCDEV
 #endif
     },
-    { NOCDEV },
+    {
+#if N64_FB_MAJOR != 5
+#   error Wrong N64_FB_MAJOR value!
+#endif
+        n64fb_open, n64fb_close, n64fb_read, n64fb_write,
+        n64fb_ioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0,
+    },
     { NOCDEV },
     { NOCDEV },
     {

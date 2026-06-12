@@ -8,6 +8,7 @@
 #include <machine/console.h>
 #include <machine/n64.h>
 #include <machine/n64int.h>
+#include <machine/video.h>
 
 extern dev_t swapdev;
 dev_t pipedev;
@@ -156,6 +157,7 @@ startup(void)
     n64_install_exception_vectors();
     n64_tlb_init();
     n64_interrupt_init();
+    n64_video_intr_enable();
 
     status = mips_read_c0_register(C0_STATUS, 0);
     status &= ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_BEV);
