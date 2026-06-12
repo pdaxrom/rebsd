@@ -1,6 +1,19 @@
 #include <sys/types.h>
+#include <sys/kconfig.h>
 #include <machine/console.h>
 #include <machine/n64cart_uart.h>
+
+static int
+n64cart_init(void *arg)
+{
+    (void)arg;
+    return 1;
+}
+
+struct driver n64cartdriver = {
+    "n64cart",
+    n64cart_init,
+};
 
 static volatile u_int *
 n64cart_reg(u_int offset)

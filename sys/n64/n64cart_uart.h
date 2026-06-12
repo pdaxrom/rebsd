@@ -1,8 +1,8 @@
 #ifndef _N64_N64CART_UART_H_
 #define _N64_N64CART_UART_H_
 
-#ifndef N64CART
-#error "n64cart UART requires options \"N64CART\" in kernel Config"
+#ifndef N64CART_ENABLED
+#error "n64cart UART requires device \"n64cart\" in kernel Config"
 #endif
 
 #define N64CART_UART_PHYS       0x1fd01000u
