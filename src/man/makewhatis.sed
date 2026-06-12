@@ -30,6 +30,7 @@
 	s;\n;;
 	# some twits underline the command name
 	s;_;;g
+	s;.;;g
 	/^[^	 ]/b print
 	H
 	b name

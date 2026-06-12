@@ -364,6 +364,7 @@ The current manifest includes:
 
 ```
 /bin/[
+/bin/apropos
 /bin/cat
 /bin/chmod
 /bin/cp
@@ -386,12 +387,14 @@ The current manifest includes:
 /bin/stty
 /bin/test
 /bin/uname
+/bin/whatis
 /bin/whoami
 /.profile
 /etc/fstab
 /etc/profile
 /root/.profile
 /share/misc/more.help
+/share/man/whatis
 /share/man/cat1/groups.0
 /share/man/cat1/hostname.0
 /share/man/cat1/id.0
@@ -412,15 +415,20 @@ makefiles, for example `reboot` installs `halt`, `fastboot`, `poweroff`, and
 `bootloader` aliases. Those files do not enter `rootfs.img` until
 `sys/n64/rootfs.manifest` lists them.
 
-`man` is included with the cat pages that are installed by the selected command
-makefiles. It uses `/bin/more -s` as the default pager on an interactive tty,
-so `/bin/more` and `/share/misc/more.help` are part of the ROM rootfs. For the
+`man`, `apropos`, and `whatis` are included with the cat pages that are
+installed by the selected command makefiles. The N64 build generates
+`/share/man/whatis` from the staged cat pages with the existing
+`src/man/makewhatis.sed` script before creating `rootfs.img`; the database is
+not checked in as a static file. The N64 userland build sets `GROFF_NO_SGR=1`
+so host `nroff` emits the classic overstrike format expected by the existing
+manual index script.
+
+`man` uses `/bin/more -s` as the default pager on an interactive tty, so
+`/bin/more` and `/share/misc/more.help` are part of the ROM rootfs. For the
 first N64 rootfs, `/etc/profile`, `/.profile`, and `/root/.profile` set
 `PAGER=/bin/cat` so manual pages print directly instead of depending on the
 interactive pager. The same profiles set `PATH=/bin:/sbin`, which makes the
-selected `/sbin` tools visible from the shell prompt. The `apropos` and
-`whatis` binaries installed by `src/cmd/man` are intentionally not listed in
-the ROM manifest yet.
+selected `/sbin` tools visible from the shell prompt.
 
 The rootfs size defaults to 4096 KiB. The image stays in cartridge ROM and is
 not preloaded into RDRAM:

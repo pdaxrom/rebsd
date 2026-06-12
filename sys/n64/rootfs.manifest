@@ -40,6 +40,9 @@ file /root/.profile
 file /bin/sh
 mode 0775
 
+file /bin/apropos
+mode 0775
+
 file /bin/cat
 mode 0775
 
@@ -106,10 +109,15 @@ mode 0775
 file /bin/uname
 mode 0775
 
+file /bin/whatis
+mode 0775
+
 file /bin/whoami
 mode 0775
 
 file /share/misc/more.help
+
+file /share/man/whatis
 
 file /share/man/cat1/groups.0
 

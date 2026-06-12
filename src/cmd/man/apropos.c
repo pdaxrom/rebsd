@@ -17,8 +17,11 @@
 #include <ctype.h>
 #include <paths.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include <sys/param.h>
+#include <unistd.h>
 
 #define MAXLINELEN 1000 /* max line handled */
 #define WHATIS "whatis" /* database name */
@@ -28,15 +31,20 @@
 
 static char *myname;
 
+static int a_match(char *bp, char *str);
+static int w_match(char *bp, char *str);
+static void dashtrunc(char *from, char *to);
+static void lowstr(char *from, char *to);
+static void usage(void);
+
 int main(int argc, char **argv)
 {
-    extern char *optarg;
-    extern int optind;
     register char *beg, *end, **C;
     int ch, foundman = NO, *found, isapropos;
-    int a_match(), w_match(), (*match)();
+    int (*match)(char *, char *);
     char *manpath = NULL, buf[MAXLINELEN + 1], fname[MAXPATHLEN + 1];
-    char wbuf[MAXLINELEN + 1], *getenv(), *malloc();
+    char wbuf[MAXLINELEN + 1];
+    size_t len;
 
     myname = (beg = rindex(*argv, '/')) ? beg + 1 : *argv;
     if (!strcmp(myname, "apropos")) {
@@ -61,22 +69,22 @@ int main(int argc, char **argv)
     if (argc < 1)
         usage();
 
-    if (!(manpath = getenv("MANPATH")))
+    if (!manpath && !(manpath = getenv("MANPATH")))
         manpath = _PATH_MAN;
 
     /*NOSTRICT*/
-    if (!(found = (int *)malloc((u_int)argc))) {
+    if (!(found = malloc((u_int)(argc * sizeof(*found))))) {
         fprintf(stderr, "%s: out of space.\n", myname);
         exit(1);
     }
-    bzero((char *)found, argc * sizeof(int));
+    bzero(found, (u_int)(argc * sizeof(*found)));
 
     if (isapropos)
         for (C = argv; *C; ++C) /* convert to lower-case */
             lowstr(*C, *C);
     else
         for (C = argv; *C; ++C) /* trim full paths */
-            if (beg = rindex(*C, '/'))
+            if ((beg = rindex(*C, '/')))
                 *C = beg + 1;
 
     for (beg = manpath; beg; beg = end) { /* through path list */
@@ -91,7 +99,10 @@ int main(int argc, char **argv)
             continue;
 
         /* for each file found */
-        for (foundman = YES; gets(buf);) {
+        for (foundman = YES; fgets(buf, sizeof(buf), stdin);) {
+            len = strlen(buf);
+            if (len && buf[len - 1] == '\n')
+                buf[len - 1] = '\0';
             if (isapropos)
                 lowstr(buf, wbuf);
             else
@@ -116,6 +127,7 @@ int main(int argc, char **argv)
     for (C = argv; *C; ++C)
         if (!found[C - argv])
             printf("%s: %s\n", *C, isapropos ? "nothing appropriate" : "not found");
+    return (0);
 }
 
 /*
@@ -166,12 +178,13 @@ static int w_match(char *bp, char *str)
  * dashtrunc --
  *	truncate a string at " - "
  */
-static int dashtrunc(char *from, char *to)
+static void dashtrunc(char *from, char *to)
 {
-    do {
+    while (*from) {
         if (from[0] == ' ' && from[1] == '-' && from[2] == ' ')
             break;
-    } while (*to++ = *from++);
+        *to++ = *from++;
+    }
     *to = '\0';
 }
 
@@ -179,18 +192,20 @@ static int dashtrunc(char *from, char *to)
  * lowstr --
  *	convert a string to lower case
  */
-static lowstr(char *from, char *to)
+static void lowstr(char *from, char *to)
 {
-    do {
+    while (*from) {
         *to++ = isupper(*from) ? tolower(*from) : *from;
-    } while (*from++);
+        ++from;
+    }
+    *to = '\0';
 }
 
 /*
  * usage --
  *	print usage message and die
  */
-static usage()
+static void usage(void)
 {
     fprintf(stderr, "usage: %s [-M path] string ...\n", myname);
     exit(1);

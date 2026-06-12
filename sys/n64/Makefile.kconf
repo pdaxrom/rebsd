@@ -20,8 +20,10 @@ N64_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 N64_ROOTFS_STAGE = rootfs.stage
 N64_ROOTFS_BASE_STAMP = $(N64_ROOTFS_STAGE)/.base
 N64_ROOTFS_USER_STAMP = $(N64_ROOTFS_STAGE)/.userland
+N64_ROOTFS_WHATIS = $(N64_ROOTFS_STAGE)/share/man/whatis
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
 N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_DIR) -type d 2>/dev/null)
+N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 N64_DEVNODES_AWK = $(TOPSRC)/sys/n64/devnodes.awk
 N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h \
                     $(TOPSRC)/sys/n64/ramswap.h \
@@ -41,7 +43,7 @@ N64_CMD_SCRIPTS = $(N64_CMD_NONE)
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
                 $(shell find $(TOPSRC)/src/cmd -maxdepth 2 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null)
 N64_USERLAND_STAMP = n64-userland.stamp
-N64_SRC_MAKE = $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
+N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
                DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
                SRC_ONLY_LIBS="$(N64_SRC_LIBS)" \
@@ -179,8 +181,15 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS)
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
 	touch $@
 
-$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP)
+$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_MAKEWHATIS_SED)
 	$(N64_SRC_MAKE) install
+	rm -f $(N64_ROOTFS_WHATIS).tmp
+	touch $(N64_ROOTFS_WHATIS).tmp
+	for file in `find $(N64_ROOTFS_STAGE)/share/man/cat* -type f -name '*.0' -print`; do \
+	    sed -n -f $(N64_MAKEWHATIS_SED) $$file >> $(N64_ROOTFS_WHATIS).tmp; \
+	done
+	sort -u $(N64_ROOTFS_WHATIS).tmp > $(N64_ROOTFS_WHATIS)
+	rm -f $(N64_ROOTFS_WHATIS).tmp
 	touch $@
 
 rootfs.img: $(FSUTIL) $(N64_ROOTFS_BUILD_MANIFEST) $(N64_ROOTFS_USER_STAMP)

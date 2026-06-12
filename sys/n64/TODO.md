@@ -65,6 +65,15 @@ copying binaries manually.
   `sys/n64/devnodes.awk`
 - [x] Keep cartridge root read-only until a writable filesystem target exists
 
+## Manual Index
+
+- [x] Fix the shared `src/cmd/man` build so `apropos` is linked from
+  `apropos.c`, while preserving normal PIC32/default command behavior
+- [x] Generate `/share/man/whatis` from staged cat pages during the N64 rootfs
+  build with `src/man/makewhatis.sed`
+- [x] Include `/bin/apropos`, `/bin/whatis`, and `/share/man/whatis` in the
+  ROM manifest only after the generated database exists
+
 ## Verification
 
 - [x] Run:
@@ -91,5 +100,7 @@ copying binaries manually.
   - [x] run `sleep 1` and verify it returns by timeout without `Ctrl-C`
   - [x] verify `man uname`, `mount`, and `fsck -n /dev/romdisk` work from the
     default shell environment
+  - [x] verify `apropos mount`, `apropos system`, `whatis uname`, and
+    `whatis /sbin/mount`
 
 Commit only after the generated ROM has passed the hardware smoke test.

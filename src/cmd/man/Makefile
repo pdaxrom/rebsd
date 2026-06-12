@@ -19,19 +19,21 @@ include $(TOPSRC)/target.mk
 
 CFLAGS		+= -Werror
 
-SRCS		= man.c
-OBJS		= man.o
+SRCS		= man.c apropos.c
+MAN_OBJS	= man.o
+APROPOS_OBJS	= apropos.o
+OBJS		= ${MAN_OBJS} ${APROPOS_OBJS}
 
 all:            man apropos
 
-man:            ${OBJS}
-		${LD} ${LDFLAGS} -o man.elf ${OBJS} ${LIBS}
+man:            ${MAN_OBJS}
+		${LD} ${LDFLAGS} -o man.elf ${MAN_OBJS} ${LIBS}
 		${OBJDUMP} -S man.elf > man.dis
 		${SIZE} man.elf
 		${ELF2AOUT} man.elf $@ && rm man.elf
 
-apropos:        ${OBJS}
-		${LD} ${LDFLAGS} -o apropos.elf ${OBJS} ${LIBS}
+apropos:        ${APROPOS_OBJS}
+		${LD} ${LDFLAGS} -o apropos.elf ${APROPOS_OBJS} ${LIBS}
 		${OBJDUMP} -S apropos.elf > apropos.dis
 		${SIZE} apropos.elf
 		${ELF2AOUT} apropos.elf $@ && rm apropos.elf
@@ -39,8 +41,8 @@ apropos:        ${OBJS}
 clean:
 		rm -f *.o *.elf ${MAN} man apropos *.elf *.dis tags *~
 
-depend:         FRC
-		mkdep ${CFLAGS} ${ASRCS} ${MSRCS}
+depend:         ${SRCS}
+		mkdep ${CFLAGS} ${SRCS}
 
 install:        all
 		@rm -f ${DESTDIR}/bin/whatis ${DESTDIR}/bin/apropos
@@ -48,13 +50,11 @@ install:        all
 		install man ${DESTDIR}/bin/man
 		ln ${DESTDIR}/bin/apropos ${DESTDIR}/bin/whatis
 
-lint:           FRC
-		lint ${CFLAGS} ${ASRCS}
-		lint ${CFLAGS} ${MSRCS}
+lint:           ${SRCS}
+		lint ${CFLAGS} ${SRCS}
 
-tags:           FRC
-		ctags ${ASRCS}
-		ctags ${MSRCS}
+tags:           ${SRCS}
+		ctags ${SRCS}
 		sort -o tags tags
 
 FRC:
