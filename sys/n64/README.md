@@ -411,6 +411,9 @@ MI interrupts are scaffolded separately:
 - IP2 is enabled in CP0 Status.
 - `n64_interrupt_init()` disables all MI interrupt sources initially.
 - `n64_interrupt_handle_mi()` acknowledges pending MI interrupt bits.
+- MI register addresses, interrupt source bits, and write-mask bits live in
+  `sys/n64/n64int.h`; `sys/n64/n64int.c` contains the enable/disable/ack
+  logic.
 
 At this stage, MI handling is present for future N64 hardware drivers, but
 the console does not depend on an MI interrupt source.

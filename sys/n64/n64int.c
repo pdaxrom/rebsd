@@ -3,32 +3,14 @@
 
 #define N64_REG32(addr)         (*(volatile unsigned *)(addr))
 
-#define N64_MI_MODE             N64_REG32(0xa4300000u)
-#define N64_MI_INTERRUPT        N64_REG32(0xa4300008u)
-#define N64_MI_MASK             N64_REG32(0xa430000cu)
-#define N64_VI_CURRENT          N64_REG32(0xa4400010u)
-#define N64_AI_STATUS           N64_REG32(0xa450000cu)
-#define N64_PI_STATUS           N64_REG32(0xa4600010u)
-#define N64_SI_STATUS           N64_REG32(0xa4800018u)
-#define N64_SP_STATUS           N64_REG32(0xa4040010u)
-
-#define N64_MI_WMODE_CLR_DPINT  0x00000800u
-
-#define N64_MI_WMASK_CLR_SP     0x00000001u
-#define N64_MI_WMASK_SET_SP     0x00000002u
-#define N64_MI_WMASK_CLR_SI     0x00000004u
-#define N64_MI_WMASK_SET_SI     0x00000008u
-#define N64_MI_WMASK_CLR_AI     0x00000010u
-#define N64_MI_WMASK_SET_AI     0x00000020u
-#define N64_MI_WMASK_CLR_VI     0x00000040u
-#define N64_MI_WMASK_SET_VI     0x00000080u
-#define N64_MI_WMASK_CLR_PI     0x00000100u
-#define N64_MI_WMASK_SET_PI     0x00000200u
-#define N64_MI_WMASK_CLR_DP     0x00000400u
-#define N64_MI_WMASK_SET_DP     0x00000800u
-
-#define N64_SP_CLEAR_INTERRUPT  0x00000008u
-#define N64_PI_CLEAR_INTERRUPT  0x00000002u
+#define N64_SP_STATUS           N64_REG32(N64_SP_STATUS_ADDR)
+#define N64_MI_MODE             N64_REG32(N64_MI_MODE_ADDR)
+#define N64_MI_INTERRUPT        N64_REG32(N64_MI_INTERRUPT_ADDR)
+#define N64_MI_MASK             N64_REG32(N64_MI_MASK_ADDR)
+#define N64_VI_CURRENT          N64_REG32(N64_VI_CURRENT_ADDR)
+#define N64_AI_STATUS           N64_REG32(N64_AI_STATUS_ADDR)
+#define N64_PI_STATUS           N64_REG32(N64_PI_STATUS_ADDR)
+#define N64_SI_STATUS           N64_REG32(N64_SI_STATUS_ADDR)
 
 static unsigned
 n64_mi_mask_write(unsigned mask, int enable)
