@@ -1,0 +1,89 @@
+# RetroBSD N64 TODO
+
+This file tracks the next N64 porting steps. Keep the N64 application and
+rootfs build aligned with the existing RetroBSD/PIC32 build flow instead of
+adding a separate hand-copied application path.
+
+## Application and Rootfs Build
+
+- [ ] Reuse the existing top-level/PIC32 model for userland:
+  - build userland through `src/Makefile`
+  - install userland through `make -C src install DESTDIR=...`
+  - build the filesystem image from the staged tree with `fsutil` and a
+    manifest
+- [ ] Generalize `src/Makefile` without changing PIC32 defaults:
+  - introduce overridable source subdir/library lists
+  - keep the current default lists equivalent to the existing PIC32 behavior
+  - let N64 request only the source subdirs/libraries it can currently build
+- [ ] Generalize `src/cmd/Makefile` without changing PIC32 defaults:
+  - keep canonical command groups in one place: `SUBDIR`, `STD`, `SCRIPT`,
+    `SETUID`, `OPERATOR`, `KMEM`, and `TTY`
+  - add platform filter variables such as command include/exclude lists
+  - make N64 use those filters instead of maintaining a second independent
+    command build list
+- [ ] Change the N64 board build to stage applications through the shared
+  install flow:
+  - remove the N64-only per-command build loop from `sys/n64/Makefile.kconf`
+  - call the shared `src`/`src/cmd` install path with
+    `TARGET_PLATFORM=n64`, `DESTDIR=rootfs.stage`, and the generated
+    `N64_USER_LDSCRIPT`
+  - keep `sys/n64/rootfs.manifest` as the source of which staged files are
+    included in the cartridge ROM rootfs
+
+## N64 Command Filtering
+
+Exclude PIC32/peripheral-specific commands until compatible N64 devices exist:
+
+- [ ] `adc-demo`: PIC32 ADC devices, `/dev/adc*`, `machine/adc.h`
+- [ ] `glcdtest`: GLCD device, `/dev/glcd0`, `glcd.h`
+- [ ] `portio`: GPIO devices, `/dev/porta`, `sys/gpio.h`
+- [ ] `pwm`: PWM devices, `/dev/pwm*`, `pwm.h`
+- [ ] `wiznet`: WIZnet stack and GPIO-dependent examples
+- [ ] `smux`: depends on pty support; enable after N64 pty support exists
+- [ ] `talloc`: depends on `/dev/tempX`; enable only if N64 gets temp devices
+- [ ] `devupdate`: depends on `/dev/kmem`; N64 currently generates `/dev`
+  nodes at build time
+
+Also exclude or defer libraries that only serve unavailable peripherals:
+
+- [ ] `libwiznet`
+- [ ] `libgpanel`
+
+## Rootfs Contents
+
+Add files to the ROM rootfs by updating `sys/n64/rootfs.manifest`, not by
+copying binaries manually.
+
+- [ ] Add basic `/bin` utilities after the shared install flow is in place:
+  `cat`, `echo`, `pwd`, `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `chmod`, `chown`,
+  `sleep`, `kill`, `stty`, `uname`, `hostname`, `id`, `test`, and `env`
+- [ ] Add selected `/sbin` utilities when the kernel side supports them:
+  `reboot`, `mount`, `umount`, and `fsck`
+- [ ] Keep generated device nodes derived from kernel definitions through
+  `sys/n64/devnodes.awk`
+- [ ] Keep cartridge root read-only until a writable filesystem target exists
+
+## Verification
+
+- [ ] Run:
+
+  ```
+  make -C sys/n64 reconfig
+  make -C sys/n64/nintendo64 clean
+  make -C sys/n64/nintendo64 kernel.z64
+  make -q -C sys/n64/nintendo64 kernel.z64
+  ```
+
+- [ ] Confirm the build log uses shared `src`/`src/cmd` install rules and does
+  not manually copy command binaries from `src/cmd`
+- [ ] Confirm `rootfs.generated.manifest` contains only N64-appropriate device
+  nodes and files
+- [ ] Hardware smoke-test on N64:
+  - boot `kernel.z64`
+  - verify `rdram size=0x00800000` on Expansion Pak hardware
+  - verify `root size = 4096 kbytes` or the configured rootfs size
+  - run `ls /`, `ls /bin`, `ls /etc`, and `ls /dev`
+  - after adding basic tools, run `cat /etc/rc`, `pwd`, `uname`, `id`, and
+    `stty`
+
+Commit only after the generated ROM has passed the hardware smoke test.
