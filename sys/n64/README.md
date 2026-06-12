@@ -23,6 +23,7 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
   into the root filesystem from kernel device definitions.
 - Userland `init`, `sh`, and `ls` are a.out binaries linked for the N64 user
   address window.
+- `/sbin/init` is installed from the normal `src/cmd/init` source tree.
 - Userland FPU is enabled and the kernel saves/restores FPU state.
 
 Known hardware smoke test on a real 8 MiB system, verified 2026-06-12:
@@ -35,27 +36,36 @@ RetroBSD N64 kernel entry
 rdram size=0x00800000
 
 2.11 BSD Unix for N64: local build
-n64romdisk: rootfs offset=26800 size=80000 magic=3c3c5346
+n64romdisk: rootfs offset=26800 size=400000 magic=3c3c5346
 phys mem  = 8192 kbytes
 user mem  = 2048 kbytes
 root dev  = (0,0)
 swap dev  = (1,0)
-root size = 512 kbytes
+root size = 4096 kbytes
 swap size = 4096 kbytes
+June 12 05:57:11 init: kernel security level changed from 0 to 1
+June 12 05:57:11 init: kernel security level changed from 1 to 0
 
-RetroBSD/N64 init
-fpu ok
-# ls /
+# ls
 bin         etc         root        tmp
-dev         lost+found  sbin
+dev         lost+found  sbin        var
+# ls -l /bin
+total 85
+-rwxrwxr-x  1 0           35392 Jun 12 05:57 ls
+-rwxrwxr-x  1 0           50832 Jun 12 05:57 sh
+# ls -l /etc
+total 3
+-rw-rw-r--  1 0              93 Jun 12 05:57 motd
+-rwxrwxr-x  1 0             211 Jun 12 05:57 rc
+-rw-rw-r--  1 0             282 Jun 12 05:57 ttys
 # ls -l /dev
 total 0
-crw-rw-r--  1 0          0,   0 Jun 12 04:42 console
-c-w--wx-wT  1 0          1,   2 Jun 12 04:42 null
-brw-rw-r--  1 0          0,   0 Jun 12 04:42 romdisk
-brw-rw-r--  1 0          1,   0 Jun 12 04:42 swap
-crw-rw-r--  1 0          2,   0 Jun 12 04:42 tty
-c-w--wx-wT  1 0          1,   3 Jun 12 04:42 zero
+crw-rw-r--  1 0          0,   0 Jun 12 05:57 console
+c-w--wx-wT  1 0          1,   2 Jun 12 05:57 null
+brw-rw-r--  1 0          0,   0 Jun 12 05:57 romdisk
+brw-rw-r--  1 0          1,   0 Jun 12 05:57 swap
+crw-rw-r--  1 0          2,   0 Jun 12 05:57 tty
+c-w--wx-wT  1 0          1,   3 Jun 12 05:57 zero
 ```
 
 ## Toolchain
@@ -115,6 +125,8 @@ Generated outputs:
 - `sys/n64/nintendo64/rootfs.img`: generated UFS root filesystem.
 - `sys/n64/nintendo64/n64.ld`: generated kernel linker script.
 - `sys/n64/nintendo64/n64-user.ld`: generated user linker script.
+- `sys/n64/nintendo64/n64-userland.stamp`: local build stamp for the
+  selected N64 user commands.
 
 Do not edit generated files by hand. Edit the source files listed below and
 rerun `make -C sys/n64 reconfig` or `make -C sys/n64 all`.
@@ -298,21 +310,28 @@ The root image is built from:
 - `sys/n64/rootfs/`
 - `sys/n64/rootfs.manifest`
 - generated `/dev` nodes
-- generated `/sbin/init`
-- rebuilt `/bin/sh`
-- rebuilt `/bin/ls`
+- `/sbin/init` installed from `src/cmd/init`
+- selected user commands installed into the staging tree with their normal
+  RetroBSD `make install DESTDIR=...` rules
 
-The rootfs size defaults to 512 KiB:
+This follows the same install model as the top-level PIC32 build: commands are
+built from `src/cmd/*`, installed into a `DESTDIR`, and then `fsutil` creates
+the filesystem from the staged tree plus a manifest. The N64 build keeps an
+explicit command subset for the cartridge rootfs, but it does not copy command
+binaries directly out of `src/cmd`.
+
+The rootfs size defaults to 4096 KiB. The image stays in cartridge ROM and is
+not preloaded into RDRAM:
 
 ```
-N64_ROOTFS_KBYTES ?= 512
+N64_ROOTFS_KBYTES ?= 4096
 ```
 
 It can be overridden on the make command line if the root filesystem needs to
 grow:
 
 ```
-make -C sys/n64 N64_ROOTFS_KBYTES=1024 kernel.z64
+make -C sys/n64 N64_ROOTFS_KBYTES=8192 kernel.z64
 ```
 
 The romdisk block driver is read-only. Attempts to open it for write return
@@ -464,11 +483,16 @@ The FPU path is:
 - `n64_fpu_restore`
 - `n64_fpu_clear`
 
-The early `/sbin/init` performs a simple FPU smoke test and prints:
+The previous bootstrap `/sbin/init` performed a simple FPU smoke test and
+printed:
 
 ```
 fpu ok
 ```
+
+After switching to the normal `src/cmd/init`, FPU support remains enabled in
+the kernel and N64 userland build flags, but the smoke test should live in a
+separate user command instead of inside init.
 
 ## Userland build
 
@@ -483,8 +507,23 @@ The N64 board makefile rebuilds:
 
 - `src/startup-mips/crt0.o`
 - `src/libc.a`
+- `src/cmd/init/init`
 - `src/cmd/sh/sh`
 - `src/cmd/ls/ls`
+
+After building the selected commands, the board makefile invokes their
+existing install targets with:
+
+```
+TARGET_PLATFORM=n64
+DESTDIR=sys/n64/nintendo64/rootfs.stage
+N64_USER_LDSCRIPT=sys/n64/nintendo64/n64-user.ld
+```
+
+The installed files are then picked up by `rootfs.manifest` when `fsutil`
+creates `rootfs.img`. The command list is intentionally an N64 subset of the
+normal `src/cmd` tree; each selected command is still built and installed by
+its own existing makefile.
 
 Those common source directories should not carry N64-only hacks. N64-specific
 linking is controlled by `target-n64.mk` and the generated

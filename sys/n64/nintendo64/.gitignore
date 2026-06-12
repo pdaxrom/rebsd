@@ -18,5 +18,6 @@ rootfs.generated.manifest
 *.z64
 n64.ld
 n64-user.ld
+n64-userland.stamp
 a.out
 n64-init

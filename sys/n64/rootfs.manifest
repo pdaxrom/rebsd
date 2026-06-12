@@ -1,5 +1,5 @@
 #
-# Minimal read-only root filesystem for the early N64 port.
+# Minimal read-only cartridge root filesystem for the N64 port.
 #
 default
 owner 0
@@ -13,8 +13,16 @@ dir /etc
 dir /root
 dir /sbin
 dir /tmp
+dir /var
+dir /var/log
+dir /var/run
 
 file /etc/motd
+
+file /etc/rc
+mode 0775
+
+file /etc/ttys
 
 file /root/.profile
 
