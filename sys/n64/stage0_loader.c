@@ -4,17 +4,12 @@ typedef unsigned int u32;
 typedef unsigned long long u64;
 typedef unsigned int uintptr;
 
+#include "stage0_console.h"
+
 #define RDRAM_KSEG1_BASE        ((uintptr)0xa0000000u)
 #define RDRAM_KSEG0_BASE        ((uintptr)0x80000000u)
 #define N64_BASE_RDRAM_SIZE     0x00400000u
 #define N64_ICACHE_LINE_SIZE    32u
-
-#ifdef N64CART
-#define N64CART_UART_BASE       ((uintptr)0xbfd01000u)
-#define N64CART_UART_CTRL       0x00u
-#define N64CART_UART_RXTX       0x04u
-#define N64CART_UART_TX_FREE    0x02u
-#endif
 
 #define EI_CLASS        4u
 #define EI_DATA         5u
@@ -57,12 +52,6 @@ void stage0_jump_kernel(u32 entry);
 extern const u8 __n64_kernel_elf_start[];
 extern const u8 __n64_kernel_elf_end[];
 
-static void
-memory_barrier(void)
-{
-    __asm__ volatile("" ::: "memory");
-}
-
 static u32
 align_down(u32 value, u32 align)
 {
@@ -104,73 +93,30 @@ sync_instruction_range(uintptr start, uintptr end)
     sync_memory();
 }
 
-#ifdef N64CART
-static volatile u32 *
-n64cart_reg(u32 offset)
-{
-    return (volatile u32 *)(N64CART_UART_BASE + offset);
-}
-
-static u32
-n64cart_io_read(u32 offset)
-{
-    u32 value;
-
-    memory_barrier();
-    value = *n64cart_reg(offset);
-    memory_barrier();
-    return value;
-}
-
 static void
-n64cart_io_write(u32 offset, u32 value)
-{
-    memory_barrier();
-    *n64cart_reg(offset) = value;
-    memory_barrier();
-}
-
-static void
-uart_putc_raw(char ch)
-{
-    while ((n64cart_io_read(N64CART_UART_CTRL) & N64CART_UART_TX_FREE) == 0u)
-        ;
-
-    n64cart_io_write(N64CART_UART_RXTX, (u32)(u8)ch);
-    (void)n64cart_io_read(N64CART_UART_CTRL);
-}
-#else
-static void
-uart_putc_raw(char ch)
-{
-    (void)ch;
-}
-#endif
-
-static void
-uart_putc(char ch)
+stage0_putc(char ch)
 {
     if (ch == '\n')
-        uart_putc_raw('\r');
-    uart_putc_raw(ch);
+        stage0_console_putc('\r');
+    stage0_console_putc(ch);
 }
 
 static void
-uart_puts(const char *text)
+stage0_puts(const char *text)
 {
     while (*text != '\0')
-        uart_putc(*text++);
+        stage0_putc(*text++);
 }
 
 static void
-uart_put_hex32(u32 value)
+stage0_put_hex32(u32 value)
 {
     static const char digits[] = "0123456789abcdef";
     int shift;
 
-    uart_puts("0x");
+    stage0_puts("0x");
     for (shift = 28; shift >= 0; shift -= 4)
-        uart_putc(digits[(value >> (u32)shift) & 0x0fu]);
+        stage0_putc(digits[(value >> (u32)shift) & 0x0fu]);
 }
 
 static u32
@@ -340,25 +286,25 @@ stage0_main(void)
     kernel.phoff = 0;
     kernel.phnum = 0;
 
-    uart_puts("RetroBSD N64 stage0\n");
-    uart_puts("kernel blob size=");
-    uart_put_hex32(kernel_blob_size());
-    uart_puts("\n");
+    stage0_puts("RetroBSD N64 stage0\n");
+    stage0_puts("kernel blob size=");
+    stage0_put_hex32(kernel_blob_size());
+    stage0_puts("\n");
 
     if (validate_kernel_elf(&kernel) != 0) {
-        uart_puts("kernel magic=");
-        uart_put_hex32(elf_read32(E_IDENT));
-        uart_puts("\nkernel ELF32 invalid\n");
+        stage0_puts("kernel magic=");
+        stage0_put_hex32(elf_read32(E_IDENT));
+        stage0_puts("\nkernel ELF32 invalid\n");
         halt();
     }
     if (load_kernel_elf(&kernel) != 0) {
-        uart_puts("kernel ELF32 load failed\n");
+        stage0_puts("kernel ELF32 load failed\n");
         halt();
     }
 
-    uart_puts("jump kernel entry=");
-    uart_put_hex32(kernel.entry);
-    uart_puts("\n");
+    stage0_puts("jump kernel entry=");
+    stage0_put_hex32(kernel.entry);
+    stage0_puts("\n");
     stage0_jump_kernel(kernel.entry);
     halt();
 }

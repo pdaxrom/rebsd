@@ -32,6 +32,8 @@ N64_USER_INIT = n64-init
 N64_USER_SH = $(TOPSRC)/src/cmd/sh/sh
 N64_USER_LS = $(TOPSRC)/src/cmd/ls/ls
 N64_USERLAND = $(N64_USER_SH) $(N64_USER_LS)
+N64_STAGE0_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),stage0_n64cart_uart.o,stage0_console_null.o)
+N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)
 N64_PREFLIGHT_CONSOLE_OBJS = $(filter n64cart_uart.o,$(OBJS))
 N64_PREFLIGHT_OBJS = startup.o $(N64_PREFLIGHT_CONSOLE_OBJS) \
                      rompak.o memory.o preflight.o
@@ -102,17 +104,23 @@ stage0.o: ../stage0.S | .deps
 stage0_loader.o: ../stage0_loader.c | .deps
 	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
 
+stage0_console_null.o: ../stage0_console_null.c ../stage0_console.h | .deps
+	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
+
+stage0_n64cart_uart.o: ../stage0_n64cart_uart.c ../stage0_console.h ../n64cart_uart.h | .deps
+	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
+
 stage0_kernel_blob.o: ../stage0_kernel_blob.S preflight.elf | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath preflight.elf)\" $< -o $@
 
 kernel_stage0_kernel_blob.o: ../stage0_kernel_blob.S unix.elf | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath unix.elf)\" $< -o $@
 
-stage0.elf: stage0.o stage0_loader.o stage0_kernel_blob.o ../stage0_linker.ld
-	$(LD) -T ../stage0_linker.ld -nostdlib -o $@ stage0.o stage0_loader.o stage0_kernel_blob.o
+stage0.elf: $(N64_STAGE0_OBJS) stage0_kernel_blob.o ../stage0_linker.ld
+	$(LD) -T ../stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) stage0_kernel_blob.o
 
-kernel_stage0.elf: stage0.o stage0_loader.o kernel_stage0_kernel_blob.o ../stage0_linker.ld
-	$(LD) -T ../stage0_linker.ld -nostdlib -o $@ stage0.o stage0_loader.o kernel_stage0_kernel_blob.o
+kernel_stage0.elf: $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o ../stage0_linker.ld
+	$(LD) -T ../stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o
 
 stage0.stripped.elf: stage0.elf
 	$(STRIP) -s -o $@ $<
