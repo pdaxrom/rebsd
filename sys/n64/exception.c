@@ -19,8 +19,12 @@
 #define N64_CAUSE_IP7   0x00008000u
 
 static int last_user_icache_pid = -1;
+volatile unsigned int ct_ticks = 0;
 
 extern void cnintr(void);
+#ifdef N64CART_ENABLED
+extern void n64cart_uart_intr(void);
+#endif
 
 static void
 dumpregs(int *frame)
@@ -238,6 +242,10 @@ exception(int *frame)
             n64_interrupt_handle_mi();
         if (rawcause & N64_CAUSE_IP7) {
             n64_reprime_timer();
+            ct_ticks++;
+#ifdef N64CART_ENABLED
+            n64cart_uart_intr();
+#endif
             cnintr();
             hardclock((caddr_t)frame[FRAME_PC], status);
         }

@@ -19,14 +19,17 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - Swap is a RAM-backed block device.
 - `/dev/console` is a real tty-backed console.
 - `/dev/tty` is the controlling tty major.
-- `/dev/romdisk`, `/dev/swap`, `/dev/null`, `/dev/zero`, and the pty nodes are
-  generated into the root filesystem from kernel device definitions.
+- `/dev/ttyS0` is the n64cart serial tty.
+- `/dev/rgbled0` controls the n64cart RGB LED through ioctl.
+- `/dev/romdisk`, `/dev/swap`, `/dev/null`, `/dev/zero`, `/dev/ttyS0`,
+  `/dev/rgbled0`, and the pty nodes are generated into the root filesystem from
+  kernel device definitions.
 - Userland is built from the normal `src/cmd` tree as a.out binaries linked
   for the N64 user address window.
 - The N64 rootfs selects `init`, `getty`, `login`, `sh`, `ls`, and a small
   basic command set through the shared `src/cmd/Makefile` install flow.
-- The normal boot path runs `/etc/rc`, starts `/libexec/getty` for
-  `/dev/console` from `/etc/ttys`, and logs in through `/bin/login`.
+- The normal boot path runs `/etc/rc`, starts `/libexec/getty` for the enabled
+  `/etc/ttys` lines, and logs in through `/bin/login`.
 - Userland FPU is enabled and the kernel saves/restores FPU state.
 
 Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
@@ -276,22 +279,34 @@ an N64-only shell jump:
    PIC32 bootstrap convention and not requesting `-s`;
 3. `init` runs `/etc/rc`;
 4. `init` reads `/etc/ttys`;
-5. the enabled `console` entry starts `/libexec/getty std.default console`;
-6. `getty` opens `/dev/console`, prints the login prompt, and execs
-   `/bin/login`;
+5. the enabled `console` and `ttyS0` entries start
+   `/libexec/getty std.default`;
+6. `getty` opens `/dev/console` or `/dev/ttyS0`, prints the login prompt, and
+   execs `/bin/login`;
 7. `login` authenticates against `/etc/passwd`, reads `/etc/group`, prints
    `/etc/motd`, and starts `/bin/sh` as a login shell.
 
 This intentionally leaves `src/cmd/init` behavior unchanged. If no getty lines
 are enabled, `init` can still fall back to the single-user path after the
-multi-user loop has no children to supervise; N64 avoids that by enabling the
-secure `console` line in `/etc/ttys`.
+multi-user loop has no children to supervise; N64 avoids that by enabling secure
+`console` and `ttyS0` lines in `/etc/ttys`.
+
+Hardware smoke test on real n64cart hardware shows both login paths coming up:
+
+```
+RetroBSD/N64 (Amnesiac) (ttyS0)
+login:
+
+RetroBSD/N64 (Amnesiac) (console)
+login:
+```
 
 The first N64 account database is intentionally small because the cartridge
 rootfs is read-only:
 
 - `root` has an empty password and `/root` as its home directory.
-- `console` is marked `secure` in `/etc/ttys`, so root login is allowed there.
+- `console` and `ttyS0` are marked `secure` in `/etc/ttys`, so root login is
+  allowed there.
 - `/var/run/utmp`, `/var/log/wtmp`, and `/var/log/lastlog` are not writable on
   the ROM rootfs. The existing `login`/`libutil` code tolerates this by simply
   skipping accounting writes when those files cannot be opened for writing.
@@ -477,6 +492,7 @@ The current manifest includes:
 /bin/more
 /bin/mv
 /bin/pwd
+/bin/rgbled
 /bin/rm
 /bin/rmdir
 /bin/sh
@@ -502,6 +518,7 @@ The current manifest includes:
 /share/man/cat1/groups.0
 /share/man/cat1/hostname.0
 /share/man/cat1/id.0
+/share/man/cat1/rgbled.0
 /share/man/cat1/stty.0
 /share/man/cat1/test.0
 /share/man/cat1/uname.0
@@ -579,13 +596,15 @@ The printed boot sizes therefore differ by installed RDRAM:
 
 ## Character devices and tty
 
-Current character devices:
+Current character devices, verified in the generated ROM rootfs:
 
 ```
 /dev/console  c 0,0
 /dev/null     c 1,2
 /dev/zero     c 1,3
 /dev/tty      c 2,0
+/dev/ttyS0    c 3,0
+/dev/rgbled0  c 4,0
 /dev/ttyp0    c 8,0
 /dev/ptyp0    c 9,0
 ```
@@ -595,6 +614,29 @@ It uses the current N64 console backend for raw bytes.
 
 `/dev/tty` is implemented through the standard `tty_tty` cdev entry and
 therefore resolves to the controlling tty for the shell.
+
+`/dev/ttyS0` is a normal tty line for the n64cart serial UART. It has its own
+`struct tty`, line discipline, cdev entry, and `/etc/ttys` login line. Because
+the n64cart UART does not currently raise CPU interrupts, the CP0 timer path
+polls it and feeds received bytes to `ttyinput()`.
+
+`/dev/rgbled0` is a n64cart-specific character device. It is not a tty and is
+not driven by `led_control()`. Userland controls it through:
+
+```
+N64RGBLEDIOC_SET    unsigned 0x00RRGGBB
+N64RGBLEDIOC_GET    unsigned 0x00RRGGBB
+```
+
+The ROM rootfs includes `/bin/rgbled` as the user-facing control utility:
+
+```
+rgbled             # print current red green blue values
+rgbled 255 0 0     # red
+rgbled 0 255 0     # green
+rgbled 0 0 255     # blue
+rgbled 0 0 0       # off
+```
 
 The console tty settings are initialized with echo, CR/LF mapping, erase,
 kill, and control-character echo behavior. Ctrl-C is handled by the tty line
@@ -624,9 +666,9 @@ does not require editing a static rootfs manifest. Pty-dependent userland such
 as `smux` should stay out of the ROM manifest until pty open/read/write has
 been smoke-tested on hardware.
 
-## Console backend and n64cart hardware
+## Console, Serial, And N64cart Hardware
 
-The current real console backend is the n64cart UART/register block:
+The current n64cart register block provides the serial UART and RGB LED:
 
 - config identifier: `device "n64cart"`
 - compile define: `N64CART_ENABLED`
@@ -634,10 +676,13 @@ The current real console backend is the n64cart UART/register block:
 - uncached register base: `0xbfd01000`
 - control register offset: `0x00`
 - RX/TX register offset: `0x04`
+- LED control register offset: `0x08`
 - RX available bit: `0x01`
 - TX free bit: `0x02`
+- LED RGB write mask: `N64CART_LED_RGB = 0x00ffffff`
 
-The kernel driver is `sys/n64/n64cart_uart.c`.
+The serial tty driver is `sys/n64/n64cart_uart.c`.
+The RGB LED ioctl driver is `sys/n64/n64cart_rgbled.c`.
 The stage0 backend is `sys/n64/stage0_n64cart_uart.c`.
 
 If the board config does not include `n64cart_uart.o`, stage0 links
@@ -650,6 +695,26 @@ separate driver files. Do not put new cartridge register assumptions behind
 the existing `n64cart` identifier unless the hardware is actually compatible
 with this UART/register block.
 
+The n64cart RGB LED register matches the `N64CART_LED_CTRL` register used by
+n64cart-manager:
+
+```
+physical  0x1fd01008
+uncached  0xbfd01008
+value     0x00RRGGBB
+```
+
+The generic `led_control(mask, on)` hook remains a no-op on N64. The RGB LED is
+explicitly controlled through `/dev/rgbled0` so serial activity does not
+implicitly change LED state.
+
+Current transition note: until a real N64 system-console backend exists, the
+n64cart UART is still also used for early kernel console bytes. To avoid two
+login processes consuming the same serial input stream, the timer path polls
+`/dev/ttyS0` before `cnintr()`. The serial login should therefore be tested on
+`ttyS0`; a later display/keyboard backend can make `/dev/console` fully
+independent.
+
 ## Interrupts and timer-driven console input
 
 The current console input path is timer-polled:
@@ -657,13 +722,13 @@ The current console input path is timer-polled:
 1. `clkstart()` programs CP0 Compare from CP0 Count.
 2. CP0 timer interrupts arrive on IP7.
 3. The exception handler reprimes Compare.
-4. The exception handler calls `cnintr()`.
-5. `cnintr()` polls the active console backend and feeds received bytes to
-   the tty line discipline.
+4. The exception handler polls the n64cart serial tty with
+   `n64cart_uart_intr()`.
+5. The exception handler calls `cnintr()` for the system console backend.
 6. The exception handler calls `hardclock()`.
 
-This is enough for interactive shell input even though the n64cart UART does
-not currently provide a real interrupt line to the CPU.
+This is enough for interactive shell input on `/dev/ttyS0` even though the
+n64cart UART does not currently provide a real interrupt line to the CPU.
 
 Timer-driven kernel callouts also depend on this path.  Functions such as
 `sleep(1)` use libc `sleep(3)`, which waits through `select(2)` with a timeout;
@@ -708,6 +773,17 @@ On syscall return:
 - normal errors return `-1` in `v0` and the errno in `t0`
 - `ERESTART` rewinds PC to the original syscall instruction
 - `EJUSTRETURN` leaves the user frame as modified by the kernel
+
+N64 keeps a local `ct_ticks` counter on CP0 timer interrupts. The `msec()`
+syscall returns `ct_ticks * (1000 / HZ)`, matching the existing PIC32 behavior
+instead of returning the old N64 bring-up stub value of zero.
+
+The `nosys()` path also follows PIC32 now: nonexistent syscalls deliver
+`SIGSYS`, with `EINVAL` used only when that signal is ignored or held.
+
+User profiling no longer has an empty N64 `addupc()` stub. When `profil(2)` is
+enabled, exception return increments the selected user profiling bucket with
+the same arithmetic used by PIC32.
 
 ## FPU support
 
@@ -909,9 +985,15 @@ Console and interrupts:
 
 - `sys/n64/cons.c`
 - `sys/n64/n64cart_uart.c`
+- `sys/n64/n64cart_rgbled.c`
+- `sys/n64/n64cart_rgbled.h`
 - `sys/n64/console_null.c`
 - `sys/n64/n64int.c`
 - `sys/n64/clock.c`
+
+N64 userland additions:
+
+- `src/cmd/rgbled/`
 
 Build and generated data:
 

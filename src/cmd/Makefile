@@ -59,8 +59,17 @@ KMEM_ALL	= ps iostat vmstat
 #
 TTY_ALL		= wall write
 
-# Platforms can restrict the command set without duplicating this makefile.
-# Empty CMD_ONLY_* and CMD_EXCLUDE_* variables preserve the full default set.
+# Platforms can restrict or extend the command set without duplicating this
+# makefile. Empty CMD_ONLY_*, CMD_EXCLUDE_*, and CMD_EXTRA_* variables preserve
+# the full default set.
+SUBDIR_ALL	+= $(CMD_EXTRA_SUBDIR)
+SCRIPT_ALL	+= $(CMD_EXTRA_SCRIPT)
+STD_ALL		+= $(CMD_EXTRA_STD)
+NSTD_ALL	+= $(CMD_EXTRA_NSTD)
+SETUID_ALL	+= $(CMD_EXTRA_SETUID)
+OPERATOR_ALL	+= $(CMD_EXTRA_OPERATOR)
+KMEM_ALL	+= $(CMD_EXTRA_KMEM)
+TTY_ALL		+= $(CMD_EXTRA_TTY)
 CMD_FILTER	= $(filter-out $(CMD_EXCLUDE_$(1)),$(if $(CMD_ONLY_$(1)),$(filter $(CMD_ONLY_$(1)),$($(1)_ALL)),$($(1)_ALL)))
 SUBDIR		= $(call CMD_FILTER,SUBDIR)
 SCRIPT		= $(call CMD_FILTER,SCRIPT)

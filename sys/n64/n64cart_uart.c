@@ -1,7 +1,16 @@
-#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/conf.h>
+#include <sys/errno.h>
+#include <sys/ioctl.h>
 #include <sys/kconfig.h>
+#include <sys/systm.h>
+#include <sys/tty.h>
+#include <sys/user.h>
 #include <machine/console.h>
 #include <machine/n64cart_uart.h>
+
+struct tty n64cart_uart_ttys[1];
+static void n64cart_uart_start(struct tty *tp);
 
 static int
 n64cart_init(void *arg)
@@ -62,6 +71,140 @@ n64cart_uart_putc(int ch)
 
     n64cart_write(N64CART_UART_RXTX, ch & 0xff);
     (void)n64cart_read(N64CART_UART_CTRL);
+}
+
+void
+n64cart_led_write(unsigned rgb)
+{
+    n64cart_write(N64CART_LED_CTRL, rgb & N64CART_LED_RGB_MASK);
+}
+
+char
+n64cart_uart_raw_read(dev_t dev)
+{
+    (void)dev;
+    return n64cart_uart_getc();
+}
+
+void
+n64cart_uart_raw_write(dev_t dev, char ch)
+{
+    (void)dev;
+    n64cart_uart_putc(ch);
+}
+
+int
+n64cart_uart_open(dev_t dev, int flag, int mode)
+{
+    struct tty *tp;
+
+    if (minor(dev) != 0)
+        return ENXIO;
+
+    tp = &n64cart_uart_ttys[0];
+    tp->t_oproc = n64cart_uart_start;
+    if ((tp->t_state & TS_ISOPEN) == 0) {
+        tp->t_ispeed = B115200;
+        tp->t_ospeed = B115200;
+        ttychars(tp);
+        tp->t_flags = ECHO | XTABS | CRMOD | CRTBS | CRTERA |
+            CTLECH | CRTKIL;
+    }
+    tp->t_state |= TS_CARR_ON;
+    if ((tp->t_state & TS_XCLUDE) && u.u_uid != 0)
+        return EBUSY;
+
+    return ttyopen(dev, tp);
+}
+
+int
+n64cart_uart_close(dev_t dev, int flag, int mode)
+{
+    struct tty *tp = &n64cart_uart_ttys[0];
+
+    if (minor(dev) != 0)
+        return ENXIO;
+    ttywflush(tp);
+    ttyclose(tp);
+    return 0;
+}
+
+int
+n64cart_uart_read(dev_t dev, struct uio *uio, int flag)
+{
+    if (minor(dev) != 0)
+        return ENXIO;
+    n64cart_uart_intr();
+    return ttread(&n64cart_uart_ttys[0], uio, flag);
+}
+
+int
+n64cart_uart_write(dev_t dev, struct uio *uio, int flag)
+{
+    if (minor(dev) != 0)
+        return ENXIO;
+    return ttwrite(&n64cart_uart_ttys[0], uio, flag);
+}
+
+int
+n64cart_uart_select(dev_t dev, int rw)
+{
+    if (minor(dev) != 0)
+        return ENXIO;
+    n64cart_uart_intr();
+    return ttyselect(&n64cart_uart_ttys[0], rw);
+}
+
+int
+n64cart_uart_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
+{
+    int error;
+
+    if (minor(dev) != 0)
+        return ENXIO;
+    error = ttioctl(&n64cart_uart_ttys[0], cmd, addr, flag);
+    if (error < 0)
+        error = ENOTTY;
+    return error;
+}
+
+void
+n64cart_uart_intr(void)
+{
+    struct tty *tp = &n64cart_uart_ttys[0];
+    int c;
+
+    if ((tp->t_state & TS_ISOPEN) == 0)
+        return;
+
+    while (n64cart_uart_poll()) {
+        c = n64cart_uart_getc();
+        if (c == '\r')
+            c = '\n';
+        ttyinput(c, tp);
+    }
+}
+
+static void
+n64cart_uart_start(struct tty *tp)
+{
+    int c;
+    int s;
+
+    s = spltty();
+    if (tp->t_state & (TS_TIMEOUT | TS_BUSY | TS_TTSTOP)) {
+        splx(s);
+        return;
+    }
+    tp->t_state |= TS_BUSY;
+    while ((c = getc(&tp->t_outq)) >= 0) {
+        splx(s);
+        n64cart_uart_putc(c);
+        s = spltty();
+    }
+    tp->t_state &= ~TS_BUSY;
+    ttyowake(tp);
+    splx(s);
 }
 
 int

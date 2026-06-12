@@ -56,6 +56,7 @@ kernel/vm_swp.c                 standard
 # Nintendo 64 platform.
 #
 n64/n64cart_uart.c              optional n64cart
+n64/n64cart_rgbled.c            optional n64cart
 n64/console_null.c              standard
 n64/n64int.c                    standard
 n64/cons.c                      standard

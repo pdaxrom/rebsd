@@ -191,6 +191,8 @@ udelay(unsigned usec)
 void
 led_control(int mask, int on)
 {
+    (void)mask;
+    (void)on;
 }
 
 int

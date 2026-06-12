@@ -41,9 +41,10 @@ N64_SRC_LIBS = startup-mips libc libutil
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = env fsck getty hostname id init login ls man more mount \
-                  reboot sh stty test umount uname chown
+                  reboot rgbled sh stty test umount uname chown
 N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep
 N64_CMD_SCRIPTS = $(N64_CMD_NONE)
+N64_CMD_EXTRA_SUBDIRS = rgbled
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
                 $(shell find $(TOPSRC)/src/cmd -maxdepth 2 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null)
 N64_USERLAND_STAMP = n64-userland.stamp
@@ -60,6 +61,7 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                CMD_ONLY_OPERATOR="$(N64_CMD_NONE)" \
                CMD_ONLY_KMEM="$(N64_CMD_NONE)" \
                CMD_ONLY_TTY="$(N64_CMD_NONE)" \
+               CMD_EXTRA_SUBDIR="$(N64_CMD_EXTRA_SUBDIRS)" \
                CMD_BUILD_STRIP=
 N64_STAGE0_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),stage0_n64cart_uart.o,stage0_console_null.o)
 N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)

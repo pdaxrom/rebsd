@@ -94,6 +94,8 @@ copying binaries manually.
 - [x] Add N64 `/etc/gettytab`, `/etc/passwd`, and `/etc/group` to the ROM
   rootfs manifest
 - [x] Enable `console` in `/etc/ttys` as a secure getty line
+- [x] Add `/dev/ttyS0` for the n64cart serial port and enable a secure getty
+  line for serial login
 - [x] Hardware smoke-test boot to `login:` and root login with the first
   read-only rootfs account database
 
@@ -103,6 +105,29 @@ copying binaries manually.
   MIPS signal-frame path used by PIC32
 - [x] Hardware smoke-test `sleep 10` followed by `Ctrl-C`; it must interrupt
   `sleep` and return to the shell prompt without respawning `getty`
+
+## Platform Stubs
+
+- [x] Replace the N64 `msec()` syscall stub with a timer tick counter, matching
+  the PIC32 `ct_ticks * (1000 / HZ)` behavior
+- [x] Replace N64 `nosys()` with the PIC32-style `SIGSYS` path
+- [x] Replace the empty N64 `addupc()` profiling stub with the existing MIPS
+  profiling counter logic
+- [x] Keep n64cart RGB LED output as a separate `/dev/rgbled0` ioctl device,
+  not as duplicated UART or `led_control()` state
+- [x] Add `/bin/rgbled` as the n64cart userland test/control utility for RGB
+  channel brightness
+- [x] Hardware smoke-test `/dev/ttyS0` serial login on real cartridge hardware:
+  both `ttyS0` and `console` getty prompts appear, and root login works on the
+  early read-only rootfs
+- [ ] Hardware smoke-test the `/dev/rgbled0` ioctl path on real cartridge
+  hardware with `/bin/rgbled`
+- [ ] Decide whether N64 should expose `/dev/mem` and `/dev/kmem`; `kmemdev()`,
+  `iskmemdev()`, and character minors 0/1 are still intentionally disabled
+- [ ] Decide whether N64 needs a real board-call ABI for `ucall`, `ufetch`, and
+  `ustore`; the PIC32 implementation is board/autoconfig-specific
+- [ ] Implement real hardware reset for `boot()`/`reboot` instead of printing
+  the request and spinning forever
 
 ## Verification
 
@@ -119,6 +144,9 @@ copying binaries manually.
   not manually copy command binaries from `src/cmd`
 - [x] Confirm `rootfs.generated.manifest` contains only N64-appropriate device
   nodes and files
+- [x] Extract `rootfs.img` after packaging and verify manifest-controlled
+  additions such as `/bin/rgbled` are present in the actual image, not only in
+  `rootfs.stage`
 - [x] Hardware smoke-test on N64:
   - [x] boot `kernel.z64`
   - [x] verify `rdram size=0x00800000` on Expansion Pak hardware

@@ -104,6 +104,9 @@ mode 0775
 file /bin/rmdir
 mode 0775
 
+file /bin/rgbled
+mode 0775
+
 file /bin/sleep
 mode 0775
 
@@ -137,6 +140,8 @@ file /share/man/cat1/groups.0
 file /share/man/cat1/hostname.0
 
 file /share/man/cat1/id.0
+
+file /share/man/cat1/rgbled.0
 
 file /share/man/cat1/stty.0
 

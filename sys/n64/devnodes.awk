@@ -46,6 +46,8 @@ END {
     require_value("N64_RAMSWAP_MAJOR")
     require_value("N64_RAMSWAP_MINOR")
     require_value("N64_TTY_MAJOR")
+    require_value("N64_SERIAL_MAJOR")
+    require_value("N64_RGBLED_MAJOR")
     require_value("MEM_MAJOR")
     require_value("CONS_MAJOR")
     require_value("CONS_MINOR")
@@ -60,6 +62,8 @@ END {
     emit_node("cdev", "/dev/console",
         defs["CONS_MAJOR"], defs["CONS_MINOR"], "")
     emit_node("cdev", "/dev/tty", defs["N64_TTY_MAJOR"], 0, "")
+    emit_node("cdev", "/dev/ttyS0", defs["N64_SERIAL_MAJOR"], 0, "")
+    emit_node("cdev", "/dev/rgbled0", defs["N64_RGBLED_MAJOR"], 0, "")
     emit_pty_nodes()
     emit_node("cdev", "/dev/null", defs["MEM_MAJOR"], 2, "0666")
     emit_node("cdev", "/dev/zero", defs["MEM_MAJOR"], 3, "0666")

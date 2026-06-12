@@ -10,6 +10,11 @@
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
 
+#ifdef N64CART_ENABLED
+#include <machine/n64cart_uart.h>
+#include <machine/n64cart_rgbled.h>
+#endif
+
 #ifdef PTY_ENABLED
 #include <sys/pty.h>
 #endif
@@ -168,8 +173,32 @@ const struct cdevsw cdevsw[] = {
         syioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
     },
-    { NOCDEV },
-    { NOCDEV },
+    {
+#if N64_SERIAL_MAJOR != 3
+#   error Wrong N64_SERIAL_MAJOR value!
+#endif
+#ifdef N64CART_ENABLED
+        n64cart_uart_open, n64cart_uart_close,
+        n64cart_uart_read, n64cart_uart_write,
+        n64cart_uart_ioctl, n64_nullstop,
+        n64cart_uart_ttys, n64cart_uart_select,
+        n64_nostrategy, n64cart_uart_raw_read, n64cart_uart_raw_write,
+#else
+        NOCDEV
+#endif
+    },
+    {
+#if N64_RGBLED_MAJOR != 4
+#   error Wrong N64_RGBLED_MAJOR value!
+#endif
+#ifdef N64CART_ENABLED
+        n64cart_rgbled_open, n64cart_rgbled_close, norw, norw,
+        n64cart_rgbled_ioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0,
+#else
+        NOCDEV
+#endif
+    },
     { NOCDEV },
     { NOCDEV },
     { NOCDEV },

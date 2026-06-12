@@ -1,0 +1,42 @@
+.TH RGBLED 1 "June 12, 2026"
+.UC 4
+.SH NAME
+rgbled \- set the n64cart RGB LED brightness
+.SH SYNOPSIS
+.B rgbled
+[
+.I red green blue
+]
+.SH DESCRIPTION
+.B rgbled
+controls the n64cart RGB LED through
+.IR /dev/rgbled0 .
+When three arguments are supplied, they set the red, green, and blue channel
+brightness values.  Each channel must be in the range 0 through 255.  Values
+may be decimal or use the C
+.B 0x
+hexadecimal prefix.
+.PP
+With no arguments,
+.B rgbled
+prints the current red, green, and blue values.
+.SH EXAMPLES
+Set the LED to red:
+.PP
+.RS
+.nf
+rgbled 255 0 0
+.fi
+.RE
+.PP
+Turn the LED off:
+.PP
+.RS
+.nf
+rgbled 0 0 0
+.fi
+.RE
+.SH FILES
+.TP 12
+.I /dev/rgbled0
+n64cart RGB LED ioctl device
