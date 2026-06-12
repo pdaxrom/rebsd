@@ -14,28 +14,6 @@ dir /root
 dir /sbin
 dir /tmp
 
-bdev /dev/romdisk
-major 0
-minor 0
-
-bdev /dev/swap
-major 1
-minor 0
-
-cdev /dev/console
-major 0
-minor 0
-
-cdev /dev/null
-major 1
-minor 2
-mode 666
-
-cdev /dev/zero
-major 1
-minor 3
-mode 666
-
 file /etc/motd
 
 file /root/.profile

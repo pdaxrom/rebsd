@@ -15,8 +15,15 @@ N64_TRACE       ?= 0
 N64_ROOTFS_KBYTES ?= 512
 N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/n64/rootfs
 N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/n64/rootfs.manifest
+N64_ROOTFS_DEVNODES = rootfs.devnodes.manifest
+N64_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 N64_ROOTFS_STAGE = rootfs.stage
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
+N64_DEVNODES_AWK = $(TOPSRC)/sys/n64/devnodes.awk
+N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h \
+                    $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/include/conf.h
+N64_CONS_MAJOR = $(patsubst -DCONS_MAJOR=%,%,$(filter -DCONS_MAJOR=%,$(PARAM)))
+N64_CONS_MINOR = $(patsubst -DCONS_MINOR=%,%,$(filter -DCONS_MINOR=%,$(PARAM)))
 N64_CRT0_SRCS = $(shell find $(TOPSRC)/src/startup-mips -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 N64_SH_SRCS = $(shell find $(TOPSRC)/src/cmd/sh -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
@@ -110,7 +117,14 @@ stage0.stripped.elf: stage0.elf
 kernel_stage0.stripped.elf: kernel_stage0.elf
 	$(STRIP) -s -o $@ $<
 
-rootfs.img: $(FSUTIL) $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_FILES) $(N64_USER_INIT) $(N64_USERLAND)
+$(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
+	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/include/conf.h > $@
+
+$(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES)
+	cp $(N64_ROOTFS_MANIFEST) $@
+	cat $(N64_ROOTFS_DEVNODES) >> $@
+
+rootfs.img: $(FSUTIL) $(N64_ROOTFS_BUILD_MANIFEST) $(N64_ROOTFS_FILES) $(N64_USER_INIT) $(N64_USERLAND)
 	rm -rf $(N64_ROOTFS_STAGE)
 	mkdir -p $(N64_ROOTFS_STAGE)
 	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
@@ -120,7 +134,7 @@ rootfs.img: $(FSUTIL) $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_FILES) $(N64_USER_INIT
 	cp $(N64_USER_SH) $(N64_ROOTFS_STAGE)/bin/sh
 	cp $(N64_USER_LS) $(N64_ROOTFS_STAGE)/bin/ls
 	rm -f $@
-	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_MANIFEST) $@ $(N64_ROOTFS_STAGE)
+	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_BUILD_MANIFEST) $@ $(N64_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
 
 n64-init.o: ../user/init.S ../user/user.ld ${SYSTEM_DEP} | machine sys .deps
@@ -170,7 +184,8 @@ ${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
 
 clean:
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out n64-init \
-	    .deps machine sys $(N64_ROOTFS_STAGE)
+	    .deps machine sys $(N64_ROOTFS_STAGE) $(N64_ROOTFS_DEVNODES) \
+	    $(N64_ROOTFS_BUILD_MANIFEST)
 
 clean-all: clean
 	rm -f Makefile ioconf.c swap*.c vers.c

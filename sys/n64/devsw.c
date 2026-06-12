@@ -4,6 +4,7 @@
 #include <sys/inode.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
+#include <sys/uio.h>
 #include <machine/n64cart_uart.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
@@ -20,6 +21,12 @@ int
 noopen(dev_t dev, int flag, int mode)
 {
     return ENXIO;
+}
+
+static int
+n64_null_open(dev_t dev, int flag, int mode)
+{
+    return 0;
 }
 
 int
@@ -69,6 +76,50 @@ n64_console_raw_write(dev_t dev, char ch)
     n64cart_uart_putc(ch);
 }
 
+static int
+n64_mmrw(dev_t dev, struct uio *uio, int flag)
+{
+    register struct iovec *iov;
+    register u_int c;
+
+    while (uio->uio_resid) {
+        iov = uio->uio_iov;
+        if (iov->iov_len == 0) {
+            uio->uio_iov++;
+            uio->uio_iovcnt--;
+            if (uio->uio_iovcnt < 0)
+                panic("n64_mmrw");
+            continue;
+        }
+
+        switch (minor(dev)) {
+        case 2:
+            if (uio->uio_rw == UIO_READ)
+                return 0;
+            c = iov->iov_len;
+            iov->iov_base += c;
+            iov->iov_len -= c;
+            uio->uio_offset += c;
+            uio->uio_resid -= c;
+            break;
+        case 3:
+            if (uio->uio_rw == UIO_WRITE)
+                return EIO;
+            c = iov->iov_len;
+            bzero(iov->iov_base, c);
+            iov->iov_base += c;
+            iov->iov_len -= c;
+            uio->uio_offset += c;
+            uio->uio_resid -= c;
+            break;
+        default:
+            return EINVAL;
+        }
+    }
+
+    return 0;
+}
+
 #define NOBDEV \
     noopen, noopen, n64_nostrategy, nosize, noioctl, 0
 
@@ -96,7 +147,14 @@ const struct cdevsw cdevsw[] = {
         cnioctl, n64_nullstop, cnttys, cnselect,
         n64_nostrategy, n64_console_raw_read, n64_console_raw_write,
     },
-    { NOCDEV },
+    {
+#if MEM_MAJOR != 1
+#   error Wrong MEM_MAJOR value!
+#endif
+        n64_null_open, n64_null_open, n64_mmrw, n64_mmrw,
+        noioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0,
+    },
     { 0 },
 };
 

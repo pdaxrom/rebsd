@@ -6,6 +6,8 @@ ioconf.c
 swap*.c
 vers.c
 rootfs.stage/
+rootfs.devnodes.manifest
+rootfs.generated.manifest
 *.o
 *.d
 *.elf
