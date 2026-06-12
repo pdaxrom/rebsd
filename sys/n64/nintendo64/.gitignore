@@ -16,5 +16,7 @@ rootfs.generated.manifest
 *.dis
 *.nm
 *.z64
+n64.ld
+n64-user.ld
 a.out
 n64-init

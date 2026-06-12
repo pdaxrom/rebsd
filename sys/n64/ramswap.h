@@ -1,9 +1,11 @@
 #ifndef _N64_RAMSWAP_H_
 #define _N64_RAMSWAP_H_
 
+#include <machine/layout.h>
+
 #define N64_RAMSWAP_MAJOR       1
 #define N64_RAMSWAP_MINOR       0
-#define N64_BASE_SWAP_KBYTES    512u
+#define N64_BASE_SWAP_KBYTES    (N64_BASE_SWAP_BYTES >> 10)
 
 struct buf;
 

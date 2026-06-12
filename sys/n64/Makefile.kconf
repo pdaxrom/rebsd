@@ -39,6 +39,8 @@ N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)
 N64_PREFLIGHT_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),n64cart_uart.o,console_null.o)
 N64_PREFLIGHT_OBJS = startup.o $(N64_PREFLIGHT_CONSOLE_OBJS) \
                      rompak.o memory.o preflight.o
+N64_KERNEL_LDSCRIPT = n64.ld
+N64_USER_LDSCRIPT = n64-user.ld
 
 CC              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
 AS              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
@@ -79,11 +81,11 @@ COMPILE_FPU_S   = ${ASFPU} ${FPU_ASFLAGS} $< -o $@
 %CFILES
 
 SYSTEM_OBJ      = startup.o ${OBJS} ioconf.o
-SYSTEM_DEP      = Makefile ioconf.c
+SYSTEM_DEP      = Makefile ioconf.c $(N64_KERNEL_LDSCRIPT)
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "2.11 BSD Unix for N64: local build\n";' > vers.c; \
                   ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
                   rm -f $@
-SYSTEM_LD       = ${LD} -nostdlib -T ../n64.ld ${SYSTEM_OBJ} vers.o -o $@
+SYSTEM_LD       = ${LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@
 SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
@@ -95,8 +97,14 @@ all: unix kernel.z64 preflight.z64
 preflight: $(N64_PREFLIGHT_OBJS)
 	$(SIZE) $(N64_PREFLIGHT_OBJS)
 
-preflight.elf: $(N64_PREFLIGHT_OBJS) ../n64.ld
-	$(LD) -nostdlib -T ../n64.ld $(N64_PREFLIGHT_OBJS) -o $@
+$(N64_KERNEL_LDSCRIPT): ../n64.ld ../layout.h
+	$(N64_PREFIX)gcc -E -P -undef -x c $< -o $@
+
+$(N64_USER_LDSCRIPT): ../user/user.ld.S ../layout.h
+	$(N64_PREFIX)gcc -E -P -undef -x c $< -o $@
+
+preflight.elf: $(N64_PREFLIGHT_OBJS) $(N64_KERNEL_LDSCRIPT)
+	$(LD) -nostdlib -T $(N64_KERNEL_LDSCRIPT) $(N64_PREFLIGHT_OBJS) -o $@
 	$(SIZE) $@
 	$(OBJDUMP) -d -S $@ > preflight.dis
 
@@ -150,11 +158,11 @@ rootfs.img: $(FSUTIL) $(N64_ROOTFS_BUILD_MANIFEST) $(N64_ROOTFS_FILES) $(N64_USE
 	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_BUILD_MANIFEST) $@ $(N64_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
 
-n64-init.o: ../user/init.S ../user/user.ld ${SYSTEM_DEP} | machine sys .deps
+n64-init.o: ../user/init.S $(N64_USER_LDSCRIPT) ${SYSTEM_DEP} | machine sys .deps
 	${COMPILE_FPU_S}
 
-n64-init.elf: n64-init.o ../user/user.ld
-	$(LD) -nostdlib -T ../user/user.ld -o $@ n64-init.o
+n64-init.elf: n64-init.o $(N64_USER_LDSCRIPT)
+	$(LD) -nostdlib -T $(N64_USER_LDSCRIPT) -o $@ n64-init.o
 	$(SIZE) $@
 
 n64-init: n64-init.elf $(ELF2AOUT)
@@ -166,11 +174,11 @@ $(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
 $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 	$(MAKE) -C $(TOPSRC)/src/libc TARGET_PLATFORM=n64
 
-$(N64_USER_SH): $(TOPSRC)/src/libc.a $(N64_SH_SRCS)
-	$(MAKE) -B -C $(TOPSRC)/src/cmd/sh TARGET_PLATFORM=n64
+$(N64_USER_SH): $(N64_USER_LDSCRIPT) $(TOPSRC)/src/libc.a $(N64_SH_SRCS)
+	$(MAKE) -B -C $(TOPSRC)/src/cmd/sh TARGET_PLATFORM=n64 N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT))
 
-$(N64_USER_LS): $(TOPSRC)/src/libc.a $(N64_LS_SRCS)
-	$(MAKE) -B -C $(TOPSRC)/src/cmd/ls TARGET_PLATFORM=n64
+$(N64_USER_LS): $(N64_USER_LDSCRIPT) $(TOPSRC)/src/libc.a $(N64_LS_SRCS)
+	$(MAKE) -B -C $(TOPSRC)/src/cmd/ls TARGET_PLATFORM=n64 N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT))
 
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
@@ -198,7 +206,8 @@ ${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
 clean:
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out n64-init \
 	    .deps machine sys $(N64_ROOTFS_STAGE) $(N64_ROOTFS_DEVNODES) \
-	    $(N64_ROOTFS_BUILD_MANIFEST)
+	    $(N64_ROOTFS_BUILD_MANIFEST) $(N64_KERNEL_LDSCRIPT) \
+	    $(N64_USER_LDSCRIPT)
 
 clean-all: clean
 	rm -f Makefile ioconf.c swap*.c vers.c

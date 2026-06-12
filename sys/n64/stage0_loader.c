@@ -5,10 +5,8 @@ typedef unsigned long long u64;
 typedef unsigned int uintptr;
 
 #include "stage0_console.h"
+#include "layout.h"
 
-#define RDRAM_KSEG1_BASE        ((uintptr)0xa0000000u)
-#define RDRAM_KSEG0_BASE        ((uintptr)0x80000000u)
-#define N64_BASE_RDRAM_SIZE     0x00400000u
 #define N64_ICACHE_LINE_SIZE    32u
 
 #define EI_CLASS        4u
@@ -185,8 +183,8 @@ rdram_offset(u32 addr, u32 *offset)
         *offset = addr;
         return 0;
     }
-    if ((addr & 0xe0000000u) == 0x80000000u) {
-        *offset = addr & 0x1fffffffu;
+    if ((addr & N64_KSEG_ADDR_MASK) == N64_KSEG0_BASE) {
+        *offset = addr & N64_KSEG_PHYS_MASK;
         return *offset < N64_BASE_RDRAM_SIZE ? 0 : -1;
     }
     return -1;
@@ -259,8 +257,10 @@ load_kernel_elf(const struct kernel_elf *kernel)
         if (offset > kernel_blob_size() || filesz > kernel_blob_size() - offset)
             return -1;
 
-        copy_from_kernel_blob(RDRAM_KSEG1_BASE + dst_offset, offset, filesz);
-        zero_bytes(RDRAM_KSEG1_BASE + dst_offset + filesz, memsz - filesz);
+        copy_from_kernel_blob((uintptr)N64_KSEG1_BASE + dst_offset,
+            offset, filesz);
+        zero_bytes((uintptr)N64_KSEG1_BASE + dst_offset + filesz,
+            memsz - filesz);
 
         if (memsz != 0u) {
             if (dst_offset < loaded_start)
@@ -271,8 +271,8 @@ load_kernel_elf(const struct kernel_elf *kernel)
     }
 
     if (loaded_end > loaded_start)
-        sync_instruction_range(RDRAM_KSEG0_BASE + loaded_start,
-            RDRAM_KSEG0_BASE + loaded_end);
+        sync_instruction_range((uintptr)N64_KSEG0_BASE + loaded_start,
+            (uintptr)N64_KSEG0_BASE + loaded_end);
 
     return 0;
 }

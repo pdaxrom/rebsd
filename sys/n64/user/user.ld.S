@@ -1,3 +1,5 @@
+#include "../layout.h"
+
 OUTPUT_FORMAT("elf32-bigmips", "elf32-bigmips", "elf32-littlemips")
 OUTPUT_ARCH(mips)
 ENTRY(_start)
@@ -9,8 +11,8 @@ PHDRS
 
 SECTIONS
 {
-  PROVIDE(__executable_start = 0x00400000);
-  . = 0x00400000;
+  PROVIDE(__executable_start = N64_USER_VADDR_START);
+  . = N64_USER_VADDR_START;
 
   .text : {
     _ftext = .;
@@ -28,7 +30,7 @@ SECTIONS
     _fdata = .;
     *(.data .data.* .gnu.linkonce.d.*)
     . = ALIGN(16);
-    _gp = . + 0x7ff0;
+    _gp = . + N64_USER_GP_OFFSET;
     *(.sdata .sdata.* .gnu.linkonce.s.*)
     *(.lit8)
     *(.lit4)

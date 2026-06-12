@@ -4,14 +4,16 @@
  * Stage0 is expected to load this ELF32 big-endian image into RDRAM and jump
  * to _start. The first version keeps all kernel segments in KSEG0.
  */
+#include "layout.h"
+
 OUTPUT_ARCH(mips)
 ENTRY(_start)
 
 MEMORY
 {
-  kernel      (rwx) : ORIGIN = 0x80001000, LENGTH = 960K
-  u0area      (rw!x): ORIGIN = 0x800f0000, LENGTH = 4K
-  uarea       (rw!x): ORIGIN = 0x800f1000, LENGTH = 4K
+  kernel      (rwx) : ORIGIN = N64_KERNEL_LOAD_VADDR, LENGTH = N64_KERNEL_LINK_LENGTH
+  u0area      (rw!x): ORIGIN = N64_U0AREA_VADDR, LENGTH = N64_UAREA_SIZE
+  uarea       (rw!x): ORIGIN = N64_UAREA_VADDR, LENGTH = N64_UAREA_SIZE
 }
 
 u0      = ORIGIN(u0area);

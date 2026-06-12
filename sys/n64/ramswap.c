@@ -19,11 +19,11 @@ ramswap_configure(void)
 
     memsize = n64_rdram_size();
     if (memsize >= N64_RDRAM_SIZE_8M) {
-        ramswap_base = N64_RDRAM_SIZE_4M;
-        ramswap_bytes = memsize - N64_RDRAM_SIZE_4M;
+        ramswap_base = N64_EXPANSION_SWAP_PHYS_START;
+        ramswap_bytes = memsize - N64_EXPANSION_SWAP_PHYS_START;
     } else {
-        ramswap_bytes = N64_BASE_SWAP_KBYTES << 10;
-        ramswap_base = N64_RDRAM_SIZE_4M - ramswap_bytes;
+        ramswap_base = N64_BASE_SWAP_PHYS_START;
+        ramswap_bytes = N64_BASE_SWAP_BYTES;
     }
 }
 

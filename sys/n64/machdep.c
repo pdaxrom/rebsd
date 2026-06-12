@@ -140,7 +140,7 @@ n64_tlb_init(void)
     mips_tlb_write_indexed(N64_USER_TLB_INDEX, TLB_PAGEMASK_1M,
         USER_DATA_START,
         n64_tlb_entrylo(N64_USER_PHYS_START),
-        n64_tlb_entrylo(N64_USER_PHYS_START + 0x100000u));
+        n64_tlb_entrylo(N64_USER_PHYS_START + N64_USER_TLB_PAGE_SIZE));
     mips_write_c0_register(C0_WIRED, 0, N64_USER_TLB_WIRED);
 }
 

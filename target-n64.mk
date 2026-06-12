@@ -32,8 +32,9 @@ TAGSFILE      = tags
 MANROFF       = nroff -man -h
 DOCROFF       = nroff -mdoc -h
 ELF2AOUT      = $(TOPSRC)/tools/elf2aout/elf2aout
+N64_USER_LDSCRIPT ?= $(error N64_USER_LDSCRIPT must point to a generated N64 user linker script)
 
 CFLAGS        = -Os -nostdinc
 
-LDFLAGS       = --nmagic -T$(TOPSRC)/sys/n64/user/user.ld $(TOPSRC)/src/crt0.o -L$(TOPSRC)/src
+LDFLAGS       = --nmagic -T$(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o -L$(TOPSRC)/src
 LIBS          = -lc
