@@ -11,12 +11,16 @@
 #include <machine/io.h>
 #include <machine/n64.h>
 #include <machine/fpu.h>
+#include <machine/n64int.h>
 
 #define USER            1
 #define N64_CAUSE_CE1   0x10000000u
+#define N64_CAUSE_IP2   0x00000400u
 #define N64_CAUSE_IP7   0x00008000u
 
 static int last_user_icache_pid = -1;
+
+extern void cnintr(void);
 
 static void
 dumpregs(int *frame)
@@ -230,8 +234,11 @@ exception(int *frame)
 #ifdef UCB_METER
         cnt.v_intr++;
 #endif
+        if (rawcause & N64_CAUSE_IP2)
+            n64_interrupt_handle_mi();
         if (rawcause & N64_CAUSE_IP7) {
             n64_reprime_timer();
+            cnintr();
             hardclock((caddr_t)frame[FRAME_PC], status);
         }
         if ((cause & USER) && runrun) {

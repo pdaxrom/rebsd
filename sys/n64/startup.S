@@ -41,7 +41,7 @@ n64_kernel_entry:
         mfc0    $k0, $12
         li      $k1, ~(ST_EXL | ST_ERL | ST_KSU)
         and     $k0, $k0, $k1
-        ori     $k0, $k0, ST_EXL | ST_IE | ST_IM7
+        ori     $k0, $k0, ST_EXL | ST_IE | ST_IM2 | ST_IM7
         ori     $k0, $k0, ST_KSU_USER
         li      $k1, ST_CU1
         or      $k0, $k0, $k1

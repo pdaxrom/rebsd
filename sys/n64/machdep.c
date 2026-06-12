@@ -4,6 +4,7 @@
 #include <sys/user.h>
 #include <machine/io.h>
 #include <machine/n64.h>
+#include <machine/n64int.h>
 #include <machine/n64cart_uart.h>
 
 extern dev_t swapdev;
@@ -151,10 +152,11 @@ startup(void)
     early_puts("RetroBSD N64 kernel entry\n");
     n64_install_exception_vectors();
     n64_tlb_init();
+    n64_interrupt_init();
 
     status = mips_read_c0_register(C0_STATUS, 0);
     status &= ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_BEV);
-    status |= ST_IM7;
+    status |= ST_IM2 | ST_IM7;
     mips_write_c0_register(C0_STATUS, 0, status);
 
     physmem = n64_rdram_size();
