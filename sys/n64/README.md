@@ -22,7 +22,8 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - `/dev/tty` is the controlling tty major.
 - `/dev/ttyS0` is the n64cart serial tty.
 - `/dev/rgbled0` controls the n64cart RGB LED through ioctl.
-- `/dev/fb0` exposes the current 16-bit framebuffer and mode ioctls.
+- `/dev/fb0` exposes the current 16-bit framebuffer, mode ioctls, and a
+  fixed uncached user mapping.
 - `/dev/romdisk`, `/dev/swap`, `/dev/null`, `/dev/zero`, `/dev/ttyS0`,
   `/dev/rgbled0`, `/dev/fb0`, and the pty nodes are generated into the root
   filesystem from kernel device definitions.
@@ -406,7 +407,7 @@ The first-stage memory map is centralized in `sys/n64/layout.h`.
 ```
 0x00000000..0x000fffff  kernel, vectors, u areas
 0x00100000..0x002fffff  wired kuseg user window
-0x0035a800..0x0037ffff  320x240x16 framebuffer
+0x00340000..0x0037ffff  320x240x16 framebuffer reserve
 0x00380000..0x003fffff  RAM swap fallback
 ```
 
@@ -415,8 +416,8 @@ The first-stage memory map is centralized in `sys/n64/layout.h`.
 ```
 0x00000000..0x000fffff  kernel, vectors, u areas
 0x00100000..0x002fffff  wired kuseg user window
-0x00400000..0x00495fff  max 640x480x16 framebuffer reserve
-0x00496000..0x007fffff  Expansion Pak RAM swap
+0x00400000..0x0049ffff  max 640x480x16 framebuffer reserve
+0x004a0000..0x007fffff  Expansion Pak RAM swap
 ```
 
 Important constants:
@@ -427,12 +428,13 @@ Important constants:
 - `N64_USER_MAXMEM`: 2 MiB user address window.
 - `N64_USER_PHYS_START`: physical backing for user memory, `0x00100000`.
 - `N64_BASE_SWAP_PHYS_START`: 4 MiB fallback swap base, `0x00380000`.
-- `N64_BASE_FB_PHYS_START`: 4 MiB 320x240x16 framebuffer base,
-  `0x0035a800`.
+- `N64_BASE_FB_PHYS_START`: 4 MiB framebuffer reserve base, `0x00340000`.
 - `N64_EXPANSION_FB_PHYS_START`: 8 MiB framebuffer reserve base,
   `0x00400000`.
 - `N64_EXPANSION_SWAP_PHYS_START`: 8 MiB swap base after the maximum
-  framebuffer reserve, `0x00496000`.
+  framebuffer reserve, `0x004a0000`.
+- `N64_FB_USER_VADDR_START`: uncached framebuffer user mapping base,
+  `0x00600000`.
 
 `machparam.h` maps the old RetroBSD platform names onto this layout:
 
@@ -473,8 +475,8 @@ rdram size=0x00800000
 
 ## TLB and user address space
 
-The N64 kernel installs one wired TLB entry at index 0. That entry maps a
-2 MiB user window:
+The N64 kernel installs wired TLB entries for the normal user address window
+and the framebuffer mapping. Entry 0 maps a 2 MiB user window:
 
 ```
 virtual  0x00400000..0x005fffff
@@ -483,10 +485,21 @@ physical 0x00100000..0x002fffff
 
 The entry uses two 1 MiB pages through `TLB_PAGEMASK_1M`.
 
+The following wired entries map `/dev/fb0` at `N64_FB_USER_VADDR_START`
+(`0x00600000`) with uncached 64 KiB pages. The usable byte count is reported
+by `N64FBIOC_GETMAP`; the physical reserve is rounded up to the TLB pair size
+so the user-visible mapping never overlaps RAM swap:
+
+```
+4 MiB: 0x00600000..0x0063ffff -> 0x00340000..0x0037ffff
+8 MiB: 0x00600000..0x0069ffff -> 0x00400000..0x0049ffff
+```
+
 The kernel does not currently implement a full VM system for N64. The wired
-window is the fixed first version of the user address space. `copyin`,
-`copyout`, and `baduaddr` reject addresses outside `USER_DATA_START` and
-`USER_DATA_END`.
+process window is the fixed first version of the user address space. `copyin`,
+`copyout`, and `baduaddr` accept normal process memory and the current usable
+framebuffer byte range, but the framebuffer is not part of process heap/stack
+or swap.
 
 On successful `exec` and on process changes, the N64 machine layer flushes
 the user data/instruction cache range so newly copied user code is executable
@@ -635,7 +648,7 @@ The printed boot sizes therefore differ by installed RDRAM:
 
 ```
 4 MiB: swap size = 512 kbytes
-8 MiB: swap size = 3496 kbytes
+8 MiB: swap size = 3456 kbytes
 ```
 
 ## Character devices and tty
@@ -691,12 +704,19 @@ rgbled 0 0 0       # off
 ```
 
 `/dev/fb0` is the N64 framebuffer character device. It exposes the current
-16-bit RGBA5551 framebuffer through read/write and mode ioctls:
+16-bit RGBA5551 framebuffer through read/write, mode ioctls, and a fixed
+uncached user mapping:
 
 ```
 N64FBIOC_GETINFO   struct n64fb_info
 N64FBIOC_SETMODE   struct n64fb_mode
+N64FBIOC_GETMAP    struct n64fb_map
 ```
+
+`N64FBIOC_GETMAP` returns `vaddr`, `bytes`, and `reserved_bytes`. `bytes` is
+the current usable framebuffer length for the selected mode; `reserved_bytes`
+is the TLB-rounded reserve. Programs should write only the `bytes` range at
+`vaddr`.
 
 The default framebuffer mode is selected from detected RDRAM: 4 MiB systems
 start in 320x240x16, while 8 MiB systems start in 640x480x16. On 8 MiB
@@ -707,7 +727,11 @@ between 320x240 and 640x480 at runtime:
 fbset          # print current framebuffer mode
 fbset 320x240  # select progressive 320x240
 fbset 640x480  # select interlaced 640x480, Expansion Pak only
+fbset fill 0x001f  # fill through the fixed user framebuffer mapping
 ```
+
+The fixed framebuffer mapping and `fbset fill` path were hardware
+smoke-tested on an 8 MiB N64 on 2026-06-12.
 
 The VI setup reads the IPL TV type byte at `0xa4000009` and chooses PAL, NTSC,
 or MPAL timing. PAL uses the PAL timing registers with a centered 640x480
@@ -1135,7 +1159,8 @@ Build and generated data:
 ## Current limitations
 
 - Rootfs is intentionally read-only.
-- The user address space is one fixed 2 MiB wired TLB mapping.
+- The process address space is one fixed 2 MiB wired TLB mapping, plus the
+  fixed uncached `/dev/fb0` mapping.
 - Swap is RAM-backed, not persistent storage.
 - Reboot is a software restart through the resident stage0 image, not a full
   hardware reset.

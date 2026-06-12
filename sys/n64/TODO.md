@@ -158,13 +158,13 @@ copying binaries manually.
   consoles/cartridges are handled by the same backend
 - [ ] Hardware smoke-test default framebuffer console output on real hardware:
   320x240 on 4 MiB systems and 640x480 on 8 MiB systems
-- [ ] Hardware smoke-test `fbset`, `/dev/fb0`, and 640x480 mode on an 8 MiB
+- [x] Hardware smoke-test `fbset`, `/dev/fb0`, and 640x480 mode on an 8 MiB
   system
 - [ ] Hardware smoke-test PAL and MPAL timing on matching hardware or a
   trusted hardware-accurate setup
-- [ ] Add shared framebuffer access for `/dev/fb0`; current read/write path
-  copies bytes, but real graphics should get a user-visible mapping through
-  `mmap()` or an equivalent N64 TLB-backed mapping
+- [x] Add shared framebuffer access for `/dev/fb0`; current read/write path
+  still copies bytes, and real graphics can use the fixed N64 TLB-backed
+  mapping returned by `N64FBIOC_GETMAP`
 - [ ] Add a real N64 system-console input backend, so `/dev/console` can be
   used without the n64cart serial login path
 

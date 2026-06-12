@@ -120,6 +120,13 @@ n64_video_fb_ptr(void)
         N64_PHYS_TO_KSEG1(n64_video_info.fb_phys);
 }
 
+static unsigned
+n64_video_reserved_bytes(void)
+{
+    return n64_rdram_size() >= N64_RDRAM_SIZE_8M ?
+        N64_EXPANSION_FB_RESERVED_BYTES : N64_BASE_FB_RESERVED_BYTES;
+}
+
 static void
 n64_video_clear_current(unsigned color)
 {
@@ -256,6 +263,15 @@ n64_video_get_info(struct n64fb_info *info)
     *info = n64_video_info;
 }
 
+static void
+n64_video_get_map(struct n64fb_map *map)
+{
+    n64_video_init();
+    map->vaddr = N64_FB_USER_VADDR_START;
+    map->bytes = n64_video_info.fb_bytes;
+    map->reserved_bytes = n64_video_reserved_bytes();
+}
+
 volatile unsigned short *
 n64_video_framebuffer(void)
 {
@@ -309,6 +325,17 @@ n64_video_intr(void)
             N64_VI_V_BURST_SET(11, 514);
     }
     n64_video_last_field = field;
+}
+
+int
+n64_video_useraddr_valid(caddr_t addr)
+{
+    unsigned a = (unsigned)addr;
+
+    if (a < N64_FB_USER_VADDR_START)
+        return 0;
+    n64_video_init();
+    return a < N64_FB_USER_VADDR_START + n64_video_info.fb_bytes;
 }
 
 int
@@ -403,6 +430,9 @@ n64fb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
     case N64FBIOC_SETMODE:
         mode = (struct n64fb_mode *)data;
         return n64_video_set_mode(mode->mode);
+    case N64FBIOC_GETMAP:
+        n64_video_get_map((struct n64fb_map *)data);
+        return 0;
     default:
         return EINVAL;
     }

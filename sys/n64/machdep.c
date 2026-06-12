@@ -21,7 +21,7 @@ extern char _n64_exception_vector_end[];
 
 #define N64_TLB_ENTRIES         32
 #define N64_USER_TLB_INDEX      0
-#define N64_USER_TLB_WIRED      1
+#define N64_FB_TLB_INDEX        1
 #define N64_VECTOR_TLB_REFILL   0x00000000u
 #define N64_VECTOR_XTLB_REFILL  0x00000080u
 #define N64_VECTOR_CACHE_ERROR  0x00000100u
@@ -123,16 +123,41 @@ n64_install_exception_vectors(void)
 }
 
 static unsigned
-n64_tlb_entrylo(unsigned phys)
+n64_tlb_entrylo_cache(unsigned phys, unsigned cache)
 {
     return (phys >> 6) |
-        (TLB_CACHE_CNC << TLB_ENTRYLO_C_SHIFT) |
+        (cache << TLB_ENTRYLO_C_SHIFT) |
         TLB_ENTRYLO_D | TLB_ENTRYLO_V | TLB_ENTRYLO_G;
+}
+
+static unsigned
+n64_tlb_entrylo(unsigned phys)
+{
+    return n64_tlb_entrylo_cache(phys, TLB_CACHE_CNC);
+}
+
+static unsigned
+n64_fb_tlb_entries(unsigned rdram)
+{
+    unsigned bytes = rdram >= N64_RDRAM_SIZE_8M ?
+        N64_EXPANSION_FB_RESERVED_BYTES : N64_BASE_FB_RESERVED_BYTES;
+
+    return bytes / N64_VIDEO_TLB_PAIR_SIZE;
+}
+
+static unsigned
+n64_fb_tlb_phys(unsigned rdram)
+{
+    return rdram >= N64_RDRAM_SIZE_8M ?
+        N64_EXPANSION_FB_PHYS_START : N64_BASE_FB_PHYS_START;
 }
 
 static void
 n64_tlb_init(void)
 {
+    unsigned rdram = n64_rdram_size();
+    unsigned fb_phys = n64_fb_tlb_phys(rdram);
+    unsigned fb_entries = n64_fb_tlb_entries(rdram);
     unsigned i;
 
     mips_write_c0_register(C0_WIRED, 0, 0);
@@ -145,7 +170,18 @@ n64_tlb_init(void)
         USER_DATA_START,
         n64_tlb_entrylo(N64_USER_PHYS_START),
         n64_tlb_entrylo(N64_USER_PHYS_START + N64_USER_TLB_PAGE_SIZE));
-    mips_write_c0_register(C0_WIRED, 0, N64_USER_TLB_WIRED);
+    for (i = 0; i < fb_entries; ++i) {
+        unsigned vaddr = N64_FB_USER_VADDR_START +
+            i * N64_VIDEO_TLB_PAIR_SIZE;
+        unsigned phys = fb_phys + i * N64_VIDEO_TLB_PAIR_SIZE;
+
+        mips_tlb_write_indexed(N64_FB_TLB_INDEX + i,
+            TLB_PAGEMASK_64K, vaddr,
+            n64_tlb_entrylo_cache(phys, TLB_CACHE_UNCACHED),
+            n64_tlb_entrylo_cache(phys + N64_VIDEO_TLB_PAGE_SIZE,
+                TLB_CACHE_UNCACHED));
+    }
+    mips_write_c0_register(C0_WIRED, 0, N64_FB_TLB_INDEX + fb_entries);
 }
 
 void
@@ -205,7 +241,11 @@ baduaddr(caddr_t addr)
 {
     unsigned a = (unsigned)addr;
 
-    return a < USER_DATA_START || a >= USER_DATA_END;
+    if (a >= USER_DATA_START && a < USER_DATA_END)
+        return 0;
+    if (n64_video_useraddr_valid(addr))
+        return 0;
+    return 1;
 }
 
 int

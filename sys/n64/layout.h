@@ -7,14 +7,14 @@
  * 4 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, u areas
  *   0x00100000..0x002fffff  wired kuseg user window
- *   0x0035a800..0x0037ffff  320x240x16 framebuffer
+ *   0x00340000..0x0037ffff  320x240x16 framebuffer reserve
  *   0x00380000..0x003fffff  RAM swap fallback
  *
  * 8 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, u areas
  *   0x00100000..0x002fffff  wired kuseg user window
- *   0x00400000..0x00495fff  max 640x480x16 framebuffer reserve
- *   0x00496000..0x007fffff  Expansion Pak RAM swap
+ *   0x00400000..0x0049ffff  max 640x480x16 framebuffer reserve
+ *   0x004a0000..0x007fffff  Expansion Pak RAM swap
  */
 #define N64_SIZE_512K                  0x00080000
 #define N64_SIZE_1M                    0x00100000
@@ -54,6 +54,7 @@
 #define N64_USER_MAXMEM                N64_USER_TLB_PAIR_SIZE
 #define N64_USER_VADDR_END             (N64_USER_VADDR_START + N64_USER_MAXMEM)
 #define N64_USER_GP_OFFSET             0x00007ff0
+#define N64_FB_USER_VADDR_START        N64_USER_VADDR_END
 
 #define N64_BASE_SWAP_BYTES            N64_SIZE_512K
 #define N64_BASE_SWAP_PHYS_START       (N64_BASE_RDRAM_SIZE - N64_BASE_SWAP_BYTES)
@@ -65,9 +66,15 @@
 #define N64_VIDEO_640_HEIGHT           480
 #define N64_VIDEO_320_BYTES            (N64_VIDEO_320_WIDTH * N64_VIDEO_320_HEIGHT * N64_VIDEO_BPP_BYTES)
 #define N64_VIDEO_640_BYTES            (N64_VIDEO_640_WIDTH * N64_VIDEO_640_HEIGHT * N64_VIDEO_BPP_BYTES)
-#define N64_BASE_FB_PHYS_START         (N64_BASE_SWAP_PHYS_START - N64_VIDEO_320_BYTES)
+#define N64_VIDEO_TLB_PAGE_SIZE        0x00010000
+#define N64_VIDEO_TLB_PAIR_SIZE        (2 * N64_VIDEO_TLB_PAGE_SIZE)
+#define N64_VIDEO_MAP_ROUND(bytes)     (((bytes) + N64_VIDEO_TLB_PAIR_SIZE - 1) & ~(N64_VIDEO_TLB_PAIR_SIZE - 1))
+#define N64_VIDEO_320_MAP_BYTES        N64_VIDEO_MAP_ROUND(N64_VIDEO_320_BYTES)
+#define N64_VIDEO_640_MAP_BYTES        N64_VIDEO_MAP_ROUND(N64_VIDEO_640_BYTES)
+#define N64_BASE_FB_RESERVED_BYTES     N64_VIDEO_320_MAP_BYTES
+#define N64_BASE_FB_PHYS_START         (N64_BASE_SWAP_PHYS_START - N64_BASE_FB_RESERVED_BYTES)
 #define N64_EXPANSION_FB_PHYS_START    N64_BASE_RDRAM_SIZE
-#define N64_EXPANSION_FB_RESERVED_BYTES N64_VIDEO_640_BYTES
+#define N64_EXPANSION_FB_RESERVED_BYTES N64_VIDEO_640_MAP_BYTES
 #define N64_EXPANSION_SWAP_PHYS_START  (N64_EXPANSION_FB_PHYS_START + N64_EXPANSION_FB_RESERVED_BYTES)
 
 #endif

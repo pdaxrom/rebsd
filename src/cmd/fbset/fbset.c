@@ -17,6 +17,7 @@ usage(void)
 {
     fprintf(stderr, "usage: fbset [320x240|640x480]\n");
     fprintf(stderr, "       fbset [width height]\n");
+    fprintf(stderr, "       fbset fill rgba5551\n");
     exit(1);
 }
 
@@ -76,6 +77,12 @@ parse_mode(int argc, char **argv)
 }
 
 static int
+is_fill(int argc, char **argv)
+{
+    return argc == 3 && strcmp(argv[1], "fill") == 0;
+}
+
+static int
 open_fb(void)
 {
     int fd;
@@ -89,25 +96,43 @@ open_fb(void)
 }
 
 static void
-print_info(const struct n64fb_info *info)
+print_info(const struct n64fb_info *info, const struct n64fb_map *map)
 {
-    printf("%ux%u %u bpp rgba5551 fb=0x%08x bytes=%u tv=%s rdram=0x%08x\n",
+    printf("%ux%u %u bpp rgba5551 fb=0x%08x bytes=%u tv=%s rdram=0x%08x",
         info->width, info->height, info->bpp, info->fb_phys,
         info->fb_bytes, tv_name(info->tv_type), info->rdram_bytes);
+    if (map)
+        printf(" map=0x%08x mapbytes=%u reserved=%u",
+            map->vaddr, map->bytes, map->reserved_bytes);
+    printf("\n");
+}
+
+static void
+fill_fb(const struct n64fb_map *map, unsigned color)
+{
+    volatile unsigned short *fb = (volatile unsigned short *)map->vaddr;
+    unsigned pixels = map->bytes / sizeof(*fb);
+    unsigned i;
+
+    color &= 0xffff;
+    for (i = 0; i < pixels; ++i)
+        fb[i] = color;
 }
 
 int
 main(int argc, char **argv)
 {
     struct n64fb_info info;
+    struct n64fb_map map;
     struct n64fb_mode mode;
+    struct n64fb_map *mapp = NULL;
     int fd;
 
     if (argc != 1 && argc != 2 && argc != 3)
         usage();
 
     fd = open_fb();
-    if (argc != 1) {
+    if (argc != 1 && !is_fill(argc, argv)) {
         mode.mode = parse_mode(argc, argv);
         if (ioctl(fd, N64FBIOC_SETMODE, &mode) < 0) {
             fprintf(stderr, "fbset: set mode: %s\n", strerror(errno));
@@ -122,7 +147,17 @@ main(int argc, char **argv)
         return 1;
     }
 
-    print_info(&info);
+    if (ioctl(fd, N64FBIOC_GETMAP, &map) == 0)
+        mapp = &map;
+    if (is_fill(argc, argv)) {
+        if (mapp == NULL) {
+            fprintf(stderr, "fbset: get map: %s\n", strerror(errno));
+            close(fd);
+            return 1;
+        }
+        fill_fb(mapp, parse_uint(argv[2]));
+    }
+    print_info(&info, mapp);
     close(fd);
     return 0;
 }

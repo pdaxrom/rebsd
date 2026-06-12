@@ -14,6 +14,10 @@ fbset \- show or select the N64 framebuffer mode
 [
 .I width height
 ]
+.PP
+.B fbset
+.B fill
+.I rgba5551
 .SH DESCRIPTION
 .B fbset
 queries or changes the active N64 framebuffer mode through
@@ -24,6 +28,13 @@ With no arguments,
 .B fbset
 prints the current mode, framebuffer address, active TV type, and detected
 RDRAM size.
+.PP
+The
+.B fill
+form fills the current framebuffer with a 16-bit RGBA5551 value through the
+fixed user framebuffer mapping returned by
+.IR /dev/fb0 .
+This is a direct mapping smoke test, not a write(2) transfer.
 .PP
 The 320x240 mode is available on all supported N64 memory configurations.
 The 640x480 mode requires an Expansion Pak and returns an error on a 4 MiB
@@ -42,6 +53,14 @@ Switch to 640x480 on an 8 MiB system:
 .RS
 .nf
 fbset 640x480
+.fi
+.RE
+.PP
+Fill the screen through the user framebuffer mapping:
+.PP
+.RS
+.nf
+fbset fill 0x001f
 .fi
 .RE
 .SH FILES

@@ -29,8 +29,15 @@ struct n64fb_info {
     unsigned tv_type;
 };
 
+struct n64fb_map {
+    unsigned vaddr;
+    unsigned bytes;
+    unsigned reserved_bytes;
+};
+
 #define N64FBIOC_GETINFO        _IOR('F', 1, struct n64fb_info)
 #define N64FBIOC_SETMODE        _IOW('F', 2, struct n64fb_mode)
+#define N64FBIOC_GETMAP         _IOR('F', 3, struct n64fb_map)
 
 #ifdef KERNEL
 struct uio;
@@ -47,6 +54,7 @@ volatile unsigned short *n64_video_framebuffer(void);
 void n64_video_clear(unsigned color);
 void n64_video_intr(void);
 void n64_video_intr_enable(void);
+int n64_video_useraddr_valid(caddr_t addr);
 #endif
 
 #endif
