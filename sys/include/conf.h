@@ -9,6 +9,12 @@ struct uio;
 struct buf;
 struct tty;
 
+struct devspec
+{
+    int     unit;
+    char    *devname;
+};
+
 /*
  * Declaration of block device
  * switch. Each entry (row) is

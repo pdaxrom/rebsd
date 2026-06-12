@@ -10,6 +10,7 @@ filemode 0664
 dir /bin
 dir /dev
 dir /etc
+dir /libexec
 dir /root
 dir /sbin
 dir /share
@@ -32,6 +33,12 @@ file /etc/rc
 mode 0775
 
 file /etc/fstab
+
+file /etc/gettytab
+
+file /etc/group
+
+file /etc/passwd
 
 file /etc/ttys
 
@@ -69,6 +76,9 @@ mode 0775
 
 file /bin/kill
 mode 0775
+
+file /bin/login
+mode 04755
 
 file /bin/ls
 mode 0775
@@ -114,6 +124,9 @@ mode 0775
 
 file /bin/whoami
 mode 0775
+
+file /libexec/getty
+mode 0755
 
 file /share/misc/more.help
 

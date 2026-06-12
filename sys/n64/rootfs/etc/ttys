@@ -1,6 +1,2 @@
-#
-# N64 tty table. Multi-user login is disabled until getty/login and writable
-# utmp/wtmp storage are wired up for the read-only cartridge rootfs.
-#
 # name    getty                           type    status      comments
-console   "/libexec/getty std.default"    vt100   off secure
+console   "/libexec/getty std.default"    vt100   on secure

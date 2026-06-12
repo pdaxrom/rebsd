@@ -19,6 +19,20 @@ function emit_node(type, path, major, minor, mode) {
     print ""
 }
 
+function emit_pty_nodes(i, n) {
+    if (pty_enabled == "")
+        return
+    if (pty_nunits == "")
+        require_value("PTY_NUNITS")
+    n = pty_nunits + 0
+    require_value("N64_PTS_MAJOR")
+    require_value("N64_PTC_MAJOR")
+    for (i = 0; i < n; i++) {
+        emit_node("cdev", "/dev/ttyp" i, defs["N64_PTS_MAJOR"], i, "0666")
+        emit_node("cdev", "/dev/ptyp" i, defs["N64_PTC_MAJOR"], i, "0666")
+    }
+}
+
 $1 == "#define" {
     define_value($2, $3)
 }
@@ -46,6 +60,7 @@ END {
     emit_node("cdev", "/dev/console",
         defs["CONS_MAJOR"], defs["CONS_MINOR"], "")
     emit_node("cdev", "/dev/tty", defs["N64_TTY_MAJOR"], 0, "")
-    emit_node("cdev", "/dev/null", defs["MEM_MAJOR"], 2, 666)
-    emit_node("cdev", "/dev/zero", defs["MEM_MAJOR"], 3, 666)
+    emit_pty_nodes()
+    emit_node("cdev", "/dev/null", defs["MEM_MAJOR"], 2, "0666")
+    emit_node("cdev", "/dev/zero", defs["MEM_MAJOR"], 3, "0666")
 }

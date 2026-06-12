@@ -28,16 +28,20 @@ N64_DEVNODES_AWK = $(TOPSRC)/sys/n64/devnodes.awk
 N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h \
                     $(TOPSRC)/sys/n64/ramswap.h \
                     $(TOPSRC)/sys/n64/devmajors.h \
-                    $(TOPSRC)/sys/include/conf.h
+                    $(TOPSRC)/sys/include/conf.h \
+                    $(TOPSRC)/sys/include/pty.h
 N64_CONS_MAJOR = $(patsubst -DCONS_MAJOR=%,%,$(filter -DCONS_MAJOR=%,$(PARAM)))
 N64_CONS_MINOR = $(patsubst -DCONS_MINOR=%,%,$(filter -DCONS_MINOR=%,$(PARAM)))
+N64_PTY_ENABLED = $(filter -DPTY_ENABLED,$(PARAM))
+N64_PTY_NUNITS = $(patsubst -DPTY_NUNITS=%,%,$(filter -DPTY_NUNITS=%,$(PARAM)))
 N64_CRT0_SRCS = $(shell find $(TOPSRC)/src/startup-mips -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
-N64_SRC_LIBS = startup-mips libc
+N64_LIBUTIL_SRCS = $(shell find $(TOPSRC)/src/libutil -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_SRC_LIBS = startup-mips libc libutil
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
-N64_CMD_SUBDIRS = env fsck hostname id init ls man more mount reboot sh \
-                  stty test umount uname chown
+N64_CMD_SUBDIRS = env fsck getty hostname id init login ls man more mount \
+                  reboot sh stty test umount uname chown
 N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep
 N64_CMD_SCRIPTS = $(N64_CMD_NONE)
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
@@ -164,7 +168,7 @@ kernel_stage0.stripped.elf: kernel_stage0.elf
 	$(STRIP) -s -o $@ $<
 
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
-	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/n64/devmajors.h $(TOPSRC)/sys/include/conf.h > $@
+	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
 
 $(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES)
 	cp $(N64_ROOTFS_MANIFEST) $@
@@ -176,6 +180,7 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS)
 	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin
+	mkdir -p $(N64_ROOTFS_STAGE)/libexec
 	mkdir -p $(N64_ROOTFS_STAGE)/share/misc
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat1
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
@@ -203,7 +208,7 @@ $(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
 $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 	$(N64_SRC_MAKE) libc
 
-$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_USER_SRCS)
+$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBUTIL_SRCS) $(N64_USER_SRCS)
 	$(N64_SRC_MAKE) -B all
 	touch $@
 

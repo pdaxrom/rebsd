@@ -74,6 +74,29 @@ copying binaries manually.
 - [x] Include `/bin/apropos`, `/bin/whatis`, and `/share/man/whatis` in the
   ROM manifest only after the generated database exists
 
+## Pty And Job Control
+
+- [x] Enable the shared `sys/kernel/tty_pty.c` driver through a kconfig
+  `service pty 4`, matching the PIC32 pseudo-device pattern
+- [x] Add N64 cdevsw entries for pty slave/master devices on majors 8 and 9
+- [x] Generate `/dev/ttyp0`..`/dev/ttyp3` and `/dev/ptyp0`..`/dev/ptyp3`
+  from kernel device definitions
+- [ ] Hardware smoke-test pty open/read/write before enabling pty-dependent
+  userland such as `smux`
+
+## Login And Multi-User Boot
+
+- [x] Keep the N64 `icode` boot argument compatible with PIC32 by passing
+  `"-"` to `/sbin/init`, so `init` enters the multi-user path without changing
+  common `src/cmd/init`
+- [x] Build `libutil`, `/libexec/getty`, and `/bin/login` through the shared
+  `src`/`src/cmd` install flow
+- [x] Add N64 `/etc/gettytab`, `/etc/passwd`, and `/etc/group` to the ROM
+  rootfs manifest
+- [x] Enable `console` in `/etc/ttys` as a secure getty line
+- [x] Hardware smoke-test boot to `login:` and root login with the first
+  read-only rootfs account database
+
 ## Verification
 
 - [x] Run:

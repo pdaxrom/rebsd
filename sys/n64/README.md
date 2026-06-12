@@ -19,12 +19,14 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - Swap is a RAM-backed block device.
 - `/dev/console` is a real tty-backed console.
 - `/dev/tty` is the controlling tty major.
-- `/dev/romdisk`, `/dev/swap`, `/dev/null`, and `/dev/zero` are generated
-  into the root filesystem from kernel device definitions.
+- `/dev/romdisk`, `/dev/swap`, `/dev/null`, `/dev/zero`, and the pty nodes are
+  generated into the root filesystem from kernel device definitions.
 - Userland is built from the normal `src/cmd` tree as a.out binaries linked
   for the N64 user address window.
-- The N64 rootfs currently selects `init`, `sh`, `ls`, and a small basic
-  command set through the shared `src/cmd/Makefile` install flow.
+- The N64 rootfs selects `init`, `getty`, `login`, `sh`, `ls`, and a small
+  basic command set through the shared `src/cmd/Makefile` install flow.
+- The normal boot path runs `/etc/rc`, starts `/libexec/getty` for
+  `/dev/console` from `/etc/ttys`, and logs in through `/bin/login`.
 - Userland FPU is enabled and the kernel saves/restores FPU state.
 
 Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
@@ -107,6 +109,38 @@ UNAME(1)              General Commands Manual                    UNAME(1)
 # man id
 ID(1)                         General Commands Manual                       ID(1)
 ...
+```
+
+Additional multi-user login smoke test on a real 8 MiB system, verified
+2026-06-12 after enabling `console` getty/login and pty nodes:
+
+```
+2.11 BSD Unix for N64: local build
+pty: 4 units
+n64romdisk: rootfs offset=27c00 size=400000 magic=3c3c5346
+phys mem  = 8192 kbytes
+user mem  = 2048 kbytes
+root dev  = (0,0)
+swap dev  = (1,0)
+root size = 4096 kbytes
+swap size = 4096 kbytes
+June 12 09:28:46 init: kernel security level changed from 0 to 1
+
+RetroBSD/N64 (Amnesiac) (console)
+
+login: root
+RetroBSD/N64 early rootfs
+
+This read-only filesystem is embedded in the cartridge ROM image.
+# pwd
+/root
+# ls -l /dev
+crw-rw-r--  1 root       0,   0 Jun 12 09:29 console
+crw-rw-rw-  1 root       9,   0 Jun 12 09:28 ptyp0
+crw-rw-rw-  1 root       8,   0 Jun 12 09:28 ttyp0
+...
+# uname -a
+2.11BSD  2.11BSD 2.11 BSD Unix for N64: local build  mips
 ```
 
 ## Toolchain
@@ -231,6 +265,36 @@ The kernel ROM reader uses uncached PI ROM space at `0xb0000000` and searches
 the first MiB of ROM for a TOC. It finds the `rootfs.img` entry by name and
 uses the recorded offset/size as the backing store for the romdisk block
 device.
+
+## Login path
+
+The N64 root filesystem uses the standard RetroBSD multi-user path instead of
+an N64-only shell jump:
+
+1. the kernel starts `/sbin/init`;
+2. the copied `icode` passes `"-"` as the init option string, matching the
+   PIC32 bootstrap convention and not requesting `-s`;
+3. `init` runs `/etc/rc`;
+4. `init` reads `/etc/ttys`;
+5. the enabled `console` entry starts `/libexec/getty std.default console`;
+6. `getty` opens `/dev/console`, prints the login prompt, and execs
+   `/bin/login`;
+7. `login` authenticates against `/etc/passwd`, reads `/etc/group`, prints
+   `/etc/motd`, and starts `/bin/sh` as a login shell.
+
+This intentionally leaves `src/cmd/init` behavior unchanged. If no getty lines
+are enabled, `init` can still fall back to the single-user path after the
+multi-user loop has no children to supervise; N64 avoids that by enabling the
+secure `console` line in `/etc/ttys`.
+
+The first N64 account database is intentionally small because the cartridge
+rootfs is read-only:
+
+- `root` has an empty password and `/root` as its home directory.
+- `console` is marked `secure` in `/etc/ttys`, so root login is allowed there.
+- `/var/run/utmp`, `/var/log/wtmp`, and `/var/log/lastlog` are not writable on
+  the ROM rootfs. The existing `login`/`libutil` code tolerates this by simply
+  skipping accounting writes when those files cannot be opened for writing.
 
 ## Boot flow
 
@@ -374,6 +438,7 @@ The current manifest includes:
 /bin/hostname
 /bin/id
 /bin/kill
+/bin/login
 /bin/ls
 /bin/man
 /bin/mkdir
@@ -391,7 +456,14 @@ The current manifest includes:
 /bin/whoami
 /.profile
 /etc/fstab
+/etc/gettytab
+/etc/group
+/etc/motd
+/etc/passwd
 /etc/profile
+/etc/rc
+/etc/ttys
+/libexec/getty
 /root/.profile
 /share/misc/more.help
 /share/man/whatis
@@ -482,6 +554,8 @@ Current character devices:
 /dev/null     c 1,2
 /dev/zero     c 1,3
 /dev/tty      c 2,0
+/dev/ttyp0    c 8,0
+/dev/ptyp0    c 9,0
 ```
 
 `/dev/console` is a normal RetroBSD tty endpoint backed by `sys/n64/cons.c`.
@@ -493,6 +567,30 @@ therefore resolves to the controlling tty for the shell.
 The console tty settings are initialized with echo, CR/LF mapping, erase,
 kill, and control-character echo behavior. Ctrl-C is handled by the tty line
 discipline after `cnintr()` feeds input into `ttyinput()`.
+
+Pseudo terminals use the existing RetroBSD `sys/kernel/tty_pty.c` driver.
+The N64 board config enables them the same way as PIC32, as a kconfig service:
+
+```
+service         pty     4
+```
+
+That generates `PTY_ENABLED` and `PTY_NUNITS=4`, compiles `tty_pty.o`, and
+adds `ptyattach` to `conf_service_init`. The pty driver is not a hardware
+`device` and must not appear in `conf_device_init` as `ptydriver`.
+
+N64 assigns pty slave and master character majors locally:
+
+```
+slave:  /dev/ttyp0..3   c 8,0..3
+master: /dev/ptyp0..3   c 9,0..3
+```
+
+The nodes are generated by `sys/n64/devnodes.awk` from `PTY_NUNITS` and
+`sys/n64/devmajors.h`, so changing the configured pty count or major numbers
+does not require editing a static rootfs manifest. Pty-dependent userland such
+as `smux` should stay out of the ROM manifest until pty open/read/write has
+been smoke-tested on hardware.
 
 ## Console backend and n64cart hardware
 
@@ -645,7 +743,7 @@ CMD_BUILD_STRIP
 ```
 
 PIC32 defaults stay unchanged because empty filter variables select the full
-existing lists. N64 passes `SRC_ONLY_LIBS="startup-mips libc"` and
+existing lists. N64 passes `SRC_ONLY_LIBS="startup-mips libc libutil"` and
 `SRC_ONLY_SUBDIR="cmd"` at the `src/Makefile` level, then passes explicit
 `CMD_ONLY_*` values to the command makefile and disables the host-side `strip`
 command build with `CMD_BUILD_STRIP=`.
@@ -657,9 +755,13 @@ install target with:
 TARGET_PLATFORM=n64
 DESTDIR=sys/n64/nintendo64/rootfs.stage
 N64_USER_LDSCRIPT=sys/n64/nintendo64/n64-user.ld
-SRC_ONLY_LIBS="startup-mips libc"
+SRC_ONLY_LIBS="startup-mips libc libutil"
 SRC_ONLY_SUBDIR="cmd"
 ```
+
+`libutil` is included because the standard `login` binary links against its
+utmp/wtmp helpers. On the read-only N64 rootfs those helpers skip accounting
+writes when the accounting files cannot be opened for writing.
 
 The installed files are then picked up by `rootfs.manifest` when `fsutil`
 creates `rootfs.img`. The command list is intentionally an N64 subset of the
@@ -796,9 +898,9 @@ Build and generated data:
 - Console input is timer-polled, not driven by a UART interrupt.
 - The n64cart UART backend only works on cartridges with the matching
   register block.
-- Only a small rootfs is present: `init`, `sh`, `ls`, selected basic `/bin`
-  tools, `man`/`more`, selected `/sbin` tools, generated `/dev` nodes, and
-  static config files.
+- Only a small rootfs is present: `init`, `getty`, `login`, `sh`, `ls`,
+  selected basic `/bin` tools, `man`/`more`, selected `/sbin` tools,
+  generated `/dev` nodes, and static config files.
 - No display, controller, filesystem-writeback, SD, or other cartridge
   storage drivers are implemented yet.
 

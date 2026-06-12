@@ -10,6 +10,10 @@
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
 
+#ifdef PTY_ENABLED
+#include <sys/pty.h>
+#endif
+
 extern struct tty cnttys[];
 
 int
@@ -163,6 +167,35 @@ const struct cdevsw cdevsw[] = {
         syopen, n64_null_open, syread, sywrite,
         syioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
+    },
+    { NOCDEV },
+    { NOCDEV },
+    { NOCDEV },
+    { NOCDEV },
+    { NOCDEV },
+    {
+#if N64_PTS_MAJOR != 8
+#   error Wrong N64_PTS_MAJOR value!
+#endif
+#ifdef PTY_ENABLED
+        ptsopen, ptsclose, ptsread, ptswrite,
+        ptyioctl, n64_nullstop, pt_tty, ptcselect,
+        n64_nostrategy, 0, 0,
+#else
+        NOCDEV
+#endif
+    },
+    {
+#if N64_PTC_MAJOR != 9
+#   error Wrong N64_PTC_MAJOR value!
+#endif
+#ifdef PTY_ENABLED
+        ptcopen, ptcclose, ptcread, ptcwrite,
+        ptyioctl, n64_nullstop, pt_tty, ptcselect,
+        n64_nostrategy, 0, 0,
+#else
+        NOCDEV
+#endif
     },
     { 0 },
 };
