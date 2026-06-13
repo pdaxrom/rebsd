@@ -15,6 +15,7 @@
 #ifdef N64CART_ENABLED
 #include <machine/n64cart_uart.h>
 #include <machine/n64cart_rgbled.h>
+#include <machine/n64cart_flash.h>
 #endif
 
 #ifdef PTY_ENABLED
@@ -261,6 +262,18 @@ const struct cdevsw cdevsw[] = {
         n64keyboard_open, n64keyboard_close, n64keyboard_read, norw,
         n64keyboard_ioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
+    },
+    {
+#if N64_CARTFLASH_MAJOR != 11
+#   error Wrong N64_CARTFLASH_MAJOR value!
+#endif
+#ifdef N64CART_ENABLED
+        n64cart_flash_open, n64cart_flash_close, norw, norw,
+        n64cart_flash_ioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0,
+#else
+        NOCDEV
+#endif
     },
     { 0 },
 };

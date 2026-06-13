@@ -108,6 +108,22 @@ copying binaries manually.
 
 ## Cartridge ROMFS And Writable Overlays
 
+- [x] Add an N64cart flash command device, `/dev/cartflash0`, generated from
+  kernel device definitions and guarded by the `n64cart` board option.
+- [x] Add `/bin/romfsctl` as a first hardware diagnostic for the writable
+  N64cart ROMFS map/list implementation before wiring ROMFS into kernel
+  pathname and mount code.
+- [ ] Hardware smoke-test `/dev/cartflash0` and `/bin/romfsctl` on real
+  n64cart hardware:
+  - [x] `romfsctl info`
+  - [x] `romfsctl free`
+  - [x] `romfsctl list /`
+  - [ ] `ls -l /dev/cartflash0`
+  - [ ] `romfsctl list /roms`
+  - [ ] `romfsctl list -h /`
+  - `romfsctl write /retrobsd-test.txt ok`
+  - `romfsctl cat /retrobsd-test.txt`
+  - `romfsctl rm /retrobsd-test.txt`
 - [ ] Add support for the N64cart cartridge ROMFS format used by
   `/Users/sash/Work/N64/N64cart/fw/romfs`, mounted from cartridge flash with
   read/write support. Keep this separate from the current UFS `rootfs.img`

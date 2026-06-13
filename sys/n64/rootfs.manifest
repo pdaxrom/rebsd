@@ -127,6 +127,9 @@ mode 0775
 file /bin/rgbled
 mode 0775
 
+file /bin/romfsctl
+mode 0775
+
 file /bin/smux
 mode 0775
 
@@ -185,6 +188,8 @@ file /share/man/cat1/n64input.0
 file /share/man/cat1/ptytest.0
 
 file /share/man/cat1/rgbled.0
+
+file /share/man/cat1/romfsctl.0
 
 file /share/man/cat1/stty.0
 

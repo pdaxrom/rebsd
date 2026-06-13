@@ -28,6 +28,7 @@ N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 N64_DEVNODES_AWK = $(TOPSRC)/sys/n64/devnodes.awk
 N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h \
                     $(TOPSRC)/sys/n64/ramswap.h \
+                    $(TOPSRC)/sys/n64/n64cart_flash.h \
                     $(TOPSRC)/sys/n64/devmajors.h \
                     $(TOPSRC)/sys/include/conf.h \
                     $(TOPSRC)/sys/include/pty.h
@@ -43,10 +44,10 @@ N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = deco env fbset fsck getty hostname id init login ls man more \
                   mkfs mount n64input ptytest reboot rgbled sh smux stty test \
-                  umount uname chown
+                  umount uname chown romfsctl
 N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep
 N64_CMD_SCRIPTS = $(N64_CMD_NONE)
-N64_CMD_EXTRA_SUBDIRS = deco fbset n64input ptytest rgbled
+N64_CMD_EXTRA_SUBDIRS = deco fbset n64input ptytest rgbled romfsctl
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
                 $(shell find $(TOPSRC)/src/cmd -maxdepth 3 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null)
 N64_USERLAND_STAMP = n64-userland.stamp

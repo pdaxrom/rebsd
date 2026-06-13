@@ -10,5 +10,6 @@
 #define N64_PTS_MAJOR    8
 #define N64_PTC_MAJOR    9
 #define N64_KBD_MAJOR    10
+#define N64_CARTFLASH_MAJOR 11
 
 #endif

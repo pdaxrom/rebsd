@@ -1,0 +1,60 @@
+.Dd June 13, 2026
+.Dt ROMFSCTL 1
+.Os
+.Sh NAME
+.Nm romfsctl
+.Nd inspect and modify the N64cart ROMFS area
+.Sh SYNOPSIS
+.Nm
+.Cm info
+.Nm
+.Cm free
+.Nm
+.Cm list
+.Op Fl h
+.Op Ar path
+.Nm
+.Cm cat
+.Ar path
+.Nm
+.Cm write
+.Ar path
+.Ar text ...
+.Nm
+.Cm rm
+.Ar path
+.Nm
+.Cm mkdir
+.Ar path
+.Nm
+.Cm rmdir
+.Ar path
+.Nm
+.Cm rename
+.Ar oldpath
+.Ar newpath
+.Sh DESCRIPTION
+.Nm
+is a diagnostic utility for the N64cart flash-backed ROMFS.
+It uses
+.Pa /dev/cartflash0
+and the same ROMFS table/map implementation as the cartridge manager.
+.Pp
+The root RetroBSD filesystem is not mounted from ROMFS yet.
+This utility is intended to validate the flash access and ROMFS metadata path
+before wiring ROMFS into the kernel pathname layer.
+.Pp
+The
+.Cm list
+command prints directory entries.
+With
+.Fl h
+it prints human-readable file sizes.
+The listing format matches the host-side
+.Xr usb-romfs 1
+diagnostic utility: mode, type, size, and name.
+.Sh FILES
+.Bl -tag -width /dev/cartflash0
+.It Pa /dev/cartflash0
+N64cart flash command device.
+.El

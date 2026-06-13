@@ -60,6 +60,7 @@ END {
     require_value("N64_TTY_MAJOR")
     require_value("N64_SERIAL_MAJOR")
     require_value("N64_RGBLED_MAJOR")
+    require_value("N64_CARTFLASH_MAJOR")
     require_value("N64_FB_MAJOR")
     require_value("MEM_MAJOR")
     require_value("CONS_MAJOR")
@@ -79,6 +80,8 @@ END {
     emit_node("cdev", "/dev/tty", defs["N64_TTY_MAJOR"], 0, "")
     emit_node("cdev", "/dev/ttyS0", defs["N64_SERIAL_MAJOR"], 0, "")
     emit_node("cdev", "/dev/rgbled0", defs["N64_RGBLED_MAJOR"], 0, "")
+    emit_node("cdev", "/dev/cartflash0",
+        defs["N64_CARTFLASH_MAJOR"], 0, "0600")
     emit_node("cdev", "/dev/fb0", defs["N64_FB_MAJOR"], 0, "0666")
     emit_input_nodes()
     emit_pty_nodes()

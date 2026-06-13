@@ -23,6 +23,8 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - `/dev/tty` is the controlling tty major.
 - `/dev/ttyS0` is the n64cart serial tty.
 - `/dev/rgbled0` controls the n64cart RGB LED through ioctl.
+- `/dev/cartflash0` exposes the n64cart SPI flash command path for controlled
+  sector read/write/erase ioctls.
 - `/dev/fb0` exposes the current 16-bit framebuffer, mode ioctls, and a
   fixed uncached user mapping.
 - `/dev/joypad0`..`/dev/joypad3`, `/dev/mouse0`..`/dev/mouse3`, and
@@ -31,9 +33,9 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
   feeds `/dev/console` input while `/dev/ttyS0` remains available for serial
   login.
 - `/dev/romdisk`, `/dev/swap`, `/dev/ram0`, `/dev/null`,
-  `/dev/zero`, `/dev/ttyS0`, `/dev/rgbled0`, `/dev/fb0`, Joybus input
-  devices, and the pty nodes are generated into the root filesystem from
-  kernel device definitions.
+  `/dev/zero`, `/dev/ttyS0`, `/dev/rgbled0`, `/dev/cartflash0`,
+  `/dev/fb0`, Joybus input devices, and the pty nodes are generated into the
+  root filesystem from kernel device definitions.
 - Userland is built from the normal `src/cmd` tree as a.out binaries linked
   for the N64 user address window.
 - The N64 rootfs selects `init`, `getty`, `login`, `sh`, `ls`, and a small
@@ -290,6 +292,52 @@ the first MiB of ROM for a TOC. It finds the `rootfs.img` entry by name and
 uses the recorded offset/size as the backing store for the romdisk block
 device.
 
+## N64cart flash and ROMFS diagnostic
+
+The n64cart flash support is split into two pieces while the real filesystem
+mount path is still being designed:
+
+- `/dev/cartflash0` is an N64-only character device on the n64cart hardware
+  major. It reads the cartridge JEDEC ID, firmware size register, and flash
+  geometry, then accepts bounded sector read/write/erase ioctls.
+  Flash transactions run with interrupts masked so the timer-driven n64cart
+  UART poll cannot touch the same cartridge register block while SPI command
+  mode is active.
+- `/bin/romfsctl` is a diagnostic user command that vendors the ROMFS map/list
+  implementation from the local n64cart sources and calls it through
+  `/dev/cartflash0`.
+
+This lets the port validate the real cartridge flash protocol and writable
+ROMFS metadata before adding a kernel `mount -t romfs` path. The current UFS
+`rootfs.img` remains the system root and is still demand-read from cartridge
+ROM through the romdisk block driver.
+
+The intended hardware smoke test is:
+
+```
+ls -l /dev/cartflash0
+romfsctl info
+romfsctl free
+romfsctl list /
+romfsctl list /roms
+romfsctl list -h /
+romfsctl write /retrobsd-test.txt ok
+romfsctl cat /retrobsd-test.txt
+romfsctl rm /retrobsd-test.txt
+```
+
+`romfsctl info` reports:
+
+- the flash JEDEC ID;
+- detected cartridge flash size in bytes;
+- n64cart firmware size from the register block;
+- the aligned ROMFS start offset;
+- the 4096-byte erase sector size.
+
+`romfsctl list` uses the same mode/type/size/name output format as the
+host-side `usb-romfs list` utility. `romfsctl list -h` prints human-readable
+file sizes, matching `usb-romfs list -h`.
+
 ## Login path
 
 The N64 root filesystem uses the standard RetroBSD multi-user path instead of
@@ -543,6 +591,7 @@ The current manifest includes:
 /bin/cat
 /bin/chmod
 /bin/cp
+/bin/deco
 /bin/echo
 /bin/env
 /bin/fbset
@@ -556,9 +605,11 @@ The current manifest includes:
 /bin/mkdir
 /bin/more
 /bin/mv
+/bin/n64input
 /bin/pwd
 /bin/ptytest
 /bin/rgbled
+/bin/romfsctl
 /bin/rm
 /bin/rmdir
 /bin/sh
@@ -582,12 +633,15 @@ The current manifest includes:
 /root/.profile
 /share/misc/more.help
 /share/man/whatis
+/share/man/cat1/deco.0
 /share/man/cat1/fbset.0
 /share/man/cat1/groups.0
 /share/man/cat1/hostname.0
 /share/man/cat1/id.0
+/share/man/cat1/n64input.0
 /share/man/cat1/ptytest.0
 /share/man/cat1/rgbled.0
+/share/man/cat1/romfsctl.0
 /share/man/cat1/stty.0
 /share/man/cat1/test.0
 /share/man/cat1/uname.0
