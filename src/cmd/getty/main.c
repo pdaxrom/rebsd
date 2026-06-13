@@ -9,6 +9,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sgtty.h>
 #include <signal.h>
@@ -409,7 +410,7 @@ void putf(char *cp)
 	char *ttyn, *slash;
 	char datebuffer[60];
 	extern char editedhost[];
-	extern char *ttyname(int), *rindex();
+	extern char *ttyname(int);
 
 	while (*cp) {
 		if (*cp != '%') {

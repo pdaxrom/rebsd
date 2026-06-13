@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/dir.h>
 #include <sys/file.h>
 #include <sys/param.h>
@@ -130,7 +131,7 @@ static int manual(MANDIR *section, char *name)
     register char *beg, *end;
     register MANDIR *dp;
     register int res;
-    char fname[MAXPATHLEN + 1], *index();
+    char fname[MAXPATHLEN + 1];
 
     if (strlen(name) > MAXNAMLEN - 2) /* leave room for the ".0" */
         name[MAXNAMLEN - 2] = '\0';

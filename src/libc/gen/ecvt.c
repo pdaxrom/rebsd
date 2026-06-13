@@ -4,6 +4,7 @@
  * decpt is set to the position of the decimal point
  * sign is set to 0 for positive, 1 for negative
  */
+#include <math.h>
 #include <stdlib.h>
 
 #define	NDIG	80
@@ -15,8 +16,6 @@ cvt(double arg, int ndigits, int *decpt, int *sign, int eflag)
 	double fi, fj;
 	register char *p, *p1;
 	static char buf[NDIG];
-	double modf();
-
 	if (ndigits < 0)
 		ndigits = 0;
 	if (ndigits >= NDIG-1)
