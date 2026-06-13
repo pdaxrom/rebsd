@@ -111,7 +111,12 @@ copying binaries manually.
 ## Cartridge ROMFS And Writable Overlays
 
 - [x] Add an N64cart flash command device, `/dev/cartflash0`, generated from
-  kernel device definitions and guarded by the `n64cart` board option.
+  kernel device definitions and guarded by the `n64cart` board option. Keep it
+  as a character-device flash command interface, not a generic block device:
+  ROMFS owns flash erase/program/map/list semantics directly.
+- [x] Add kernel-callable N64cart flash helpers for ROMFS backend use:
+  `n64cart_flash_getinfo`, `n64cart_flash_read_raw`,
+  `n64cart_flash_write_sector_raw`, and `n64cart_flash_erase_sector_raw`.
 - [x] Add `/bin/romfsctl` as a first hardware diagnostic for the writable
   N64cart ROMFS map/list implementation before wiring ROMFS into kernel
   pathname and mount code.
@@ -136,16 +141,21 @@ copying binaries manually.
   `/Users/sash/Work/N64/N64cart/fw/romfs`, mounted from cartridge flash with
   read/write support. Keep this separate from the current UFS `rootfs.img`
   romdisk: UFS remains the system root until the new filesystem path is stable.
-- [ ] Extend kernel mount plumbing beyond the current UFS-only `mountfs()`
+- [x] Extend kernel mount plumbing beyond the current UFS-only `mountfs()`
   path:
   - keep the existing `mount(2)`/UFS behavior working for PIC32 and current
     N64 root
   - add an explicit filesystem type path for `romfs` and later `overlay`
   - report the filesystem type through `statfs`
-- [ ] Add a userland mount entry point for cartridge ROMFS, so
-  `mount -t romfs ... /cart` can mount the cartridge filesystem rather than
-  relying on private N64 test tools.
+- [x] Add a userland mount entry point for cartridge ROMFS, so
+  `mount -t romfs ... /cart` reaches the typed kernel mount path rather than
+  relying on private N64 test tools. Until the ROMFS vnode layer exists this
+  path returns `ENOSYS`.
 - [ ] Implement the first ROMFS version as a real writable filesystem:
+  - keep `/dev/cartflash0` as the mount source and accept a character device in
+    the ROMFS mount path
+  - use the kernel-callable N64cart flash helpers instead of calling the
+    `/dev/cartflash0` ioctl path from inside the kernel
   - lookup, `stat`, `open`, `read`, `write`, `lseek`, directory iteration
   - create, append, truncate, unlink, rename, mkdir, and rmdir through the
     cartridge ROMFS flash map/list implementation

@@ -290,6 +290,8 @@ mountfs(
 	case 0:					/* Child. */
 		if (strcmp(vfstype, "ufs") == 0)
 			_exit(mount_ufs(argc, (char **) argv));
+		if (strcmp(vfstype, "romfs") == 0)
+			_exit(mount_romfs(argc, (char **) argv));
 
 		/* Go find an executable. */
 		edir = edirs;

@@ -8,6 +8,7 @@ dirmode 0775
 filemode 0664
 
 dir /bin
+dir /cart
 dir /dev
 dir /etc
 dir /libexec

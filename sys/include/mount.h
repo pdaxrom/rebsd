@@ -27,17 +27,26 @@ struct statfs {
     char    f_mntfromname[MNAMELEN];/* mounted filesystem */
 };
 
+struct mount;
+
+struct vfsops {
+    int     (*vfs_statfs)(struct mount *mp, struct statfs *sbp);
+    int     (*vfs_sync)(struct mount *mp);
+};
+
 /*
  * File system types.  Since only UFS is supported the others are not
  * specified at this time.
  */
 #define MOUNT_NONE      0
 #define MOUNT_UFS       1   /* Fast Filesystem */
-#define MOUNT_MAXTYPE   1
+#define MOUNT_ROMFS     2   /* N64 cartridge ROMFS */
+#define MOUNT_MAXTYPE   2
 
 #define INITMOUNTNAMES { \
     "none",     /* 0 MOUNT_NONE */ \
     "ufs",      /* 1 MOUNT_UFS */ \
+    "romfs",    /* 2 MOUNT_ROMFS */ \
     0, \
 }
 
@@ -49,6 +58,9 @@ struct statfs {
 struct  mount
 {
     dev_t   m_dev;                  /* device mounted */
+    short   m_type;                 /* filesystem type */
+    struct  vfsops *m_ops;          /* filesystem operation vector */
+    caddr_t m_data;                 /* filesystem private data */
     struct  fs m_filsys;            /* superblock data */
 #define m_flags m_filsys.fs_flags
     struct  inode *m_inodp;         /* pointer to mounted on inode */
@@ -80,6 +92,10 @@ struct  mount
  * support will never be a problem we can avoid making the flags into a 'long.
 */
 #define MNT_UPDATE      0x1000      /* not a real mount, just an update */
+#define MNT_FSTYPE_SHIFT 24         /* private mount(2) filesystem tag */
+#define MNT_FSTYPE_MASK  (0xff << MNT_FSTYPE_SHIFT)
+#define MNT_FSTYPE(flags) (((flags) & MNT_FSTYPE_MASK) >> MNT_FSTYPE_SHIFT)
+#define MNT_SET_FSTYPE(type) ((type) << MNT_FSTYPE_SHIFT)
 
 /*
  * Flags for various system call interfaces.
@@ -93,6 +109,10 @@ struct  mount
 #ifdef KERNEL
 
 extern struct mount mount[];
+extern struct vfsops ufs_vfsops;
+
+int vfs_statfs(struct mount *mp, struct statfs *sbp);
+int vfs_sync(struct mount *mp);
 
 #else
 

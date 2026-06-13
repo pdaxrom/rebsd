@@ -15,14 +15,14 @@
 #include <sys/proc.h>
 
 static int
-statfs1 (struct mount *mp, struct statfs *sbp)
+ufs_statfs (struct mount *mp, struct statfs *sbp)
 {
     struct  statfs  sfs;
     register struct statfs *sfsp;
     struct  fs  *fs = &mp->m_filsys;
 
     sfsp = &sfs;
-    sfsp->f_type = MOUNT_UFS;
+    sfsp->f_type = mp->m_type ? mp->m_type : MOUNT_UFS;
     sfsp->f_bsize = MAXBSIZE;
     sfsp->f_iosize = MAXBSIZE;
     sfsp->f_blocks = fs->fs_fsize - fs->fs_isize;
@@ -35,6 +35,14 @@ statfs1 (struct mount *mp, struct statfs *sbp)
     bcopy (mp->m_mntfrom, sfsp->f_mntfromname, MNAMELEN);
     sfsp->f_flags = mp->m_flags & MNT_VISFLAGMASK;
     return copyout ((caddr_t) sfsp, (caddr_t) sbp, sizeof (struct statfs));
+}
+
+int
+vfs_statfs(struct mount *mp, struct statfs *sbp)
+{
+    if (mp->m_ops == 0 || mp->m_ops->vfs_statfs == 0)
+        return EINVAL;
+    return (*mp->m_ops->vfs_statfs)(mp, sbp);
 }
 
 void
@@ -55,7 +63,7 @@ statfs()
         return;
     mp = (struct mount *)((int)ip->i_fs - offsetof(struct mount, m_filsys));
     iput(ip);
-    u.u_error = statfs1 (mp, uap->buf);
+    u.u_error = vfs_statfs (mp, uap->buf);
 }
 
 void
@@ -72,7 +80,7 @@ fstatfs()
     if (! ip)
         return;
     mp = (struct mount *)((int)ip->i_fs - offsetof(struct mount, m_filsys));
-    u.u_error = statfs1 (mp, uap->buf);
+    u.u_error = vfs_statfs (mp, uap->buf);
 }
 
 void
@@ -94,7 +102,7 @@ getfsstat()
         if (mp->m_inodp == NULL)
             continue;
         if (count < maxcount) {
-            error = statfs1 (mp, sfsp);
+            error = vfs_statfs (mp, sfsp);
             if (error) {
                 u.u_error = error;
                 return;
@@ -172,6 +180,19 @@ ufs_sync(struct mount *mp)
         error = geterror(bp);
     }
     return(error);
+}
+
+struct vfsops ufs_vfsops = {
+    ufs_statfs,
+    ufs_sync,
+};
+
+int
+vfs_sync(struct mount *mp)
+{
+    if (mp->m_ops == 0 || mp->m_ops->vfs_sync == 0)
+        return 0;
+    return (*mp->m_ops->vfs_sync)(mp);
 }
 
 /*

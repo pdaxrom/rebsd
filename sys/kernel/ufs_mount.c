@@ -51,6 +51,32 @@ getmdev (dev_t *pdev, caddr_t fname)
     return (0);
 }
 
+static int
+getcdev(dev_t *pdev, caddr_t fname)
+{
+    register dev_t dev;
+    register struct inode *ip;
+    struct  nameidata nd;
+    register struct nameidata *ndp = &nd;
+
+    if (!suser())
+        return (u.u_error);
+    NDINIT (ndp, LOOKUP, FOLLOW, fname);
+    ip = namei(ndp);
+    if (ip == NULL)
+        return (u.u_error);
+    if ((ip->i_mode&IFMT) != IFCHR) {
+        iput(ip);
+        return (ENODEV);
+    }
+    dev = (dev_t)ip->i_rdev;
+    iput(ip);
+    if (major(dev) >= nchrdev)
+        return (ENXIO);
+    *pdev = dev;
+    return (0);
+}
+
 void
 mount_updname (struct fs *fs, char *on, char *from, int lenon, int lenfrom)
 {
@@ -81,11 +107,25 @@ smount()
     struct  mount   *mp;
     u_int lenon, lenfrom;
     int error = 0;
+    int flags, fstype;
     char    mnton[MNAMELEN], mntfrom[MNAMELEN];
 
-    u.u_error = getmdev (&dev, uap->fspec);
+    flags = uap->flags;
+    fstype = MNT_FSTYPE(flags);
+    flags &= ~MNT_FSTYPE_MASK;
+    if (fstype == MOUNT_NONE)
+        fstype = MOUNT_UFS;
+    if (fstype < MOUNT_UFS || fstype > MOUNT_MAXTYPE) {
+        u.u_error = EINVAL;
+        return;
+    }
+    if (fstype == MOUNT_UFS)
+        u.u_error = getmdev (&dev, uap->fspec);
+    else
+        u.u_error = getcdev (&dev, uap->fspec);
     if (u.u_error)
         return;
+
     NDINIT (ndp, LOOKUP, FOLLOW, uap->freg);
     if ((ip = namei(ndp)) == NULL)
         return;
@@ -96,7 +136,12 @@ smount()
     copystr (uap->freg, mnton, sizeof (mnton) - 1, &lenon);
     copystr (uap->fspec, mntfrom, sizeof (mntfrom) - 1, &lenfrom);
 
-    if (uap->flags & MNT_UPDATE) {
+    if (fstype != MOUNT_UFS) {
+        error = ENOSYS;
+        goto cmnout;
+    }
+
+    if (flags & MNT_UPDATE) {
         fs = ip->i_fs;
         mp = (struct mount *)
             ((int)fs - offsetof(struct mount, m_filsys));
@@ -117,7 +162,7 @@ smount()
          * too much work to port pages of code to do (besides which most
          * programs get very upset at having access yanked out from under them).
          */
-        if (fs->fs_ronly == 0 && (uap->flags & MNT_RDONLY)) {
+        if (fs->fs_ronly == 0 && (flags & MNT_RDONLY)) {
             error = EPERM;      /* ! RW to RO updates */
             goto cmnout;
         }
@@ -125,13 +170,13 @@ smount()
          * However, going from RO to RW is easy.  Then merge in the new
          * flags (async, sync, nodev, etc) passed in from the program.
          */
-        if (fs->fs_ronly && ((uap->flags & MNT_RDONLY) == 0)) {
+        if (fs->fs_ronly && ((flags & MNT_RDONLY) == 0)) {
             fs->fs_ronly = 0;
             mp->m_flags &= ~MNT_RDONLY;
         }
 #define _MF (MNT_NOSUID | MNT_NODEV | MNT_NOEXEC | MNT_ASYNC | MNT_SYNCHRONOUS | MNT_NOATIME)
         mp->m_flags &= ~_MF;
-        mp->m_flags |= (uap->flags & _MF);
+        mp->m_flags |= (flags & _MF);
 #undef _MF
         iput(ip);
         u.u_error = 0;
@@ -149,7 +194,7 @@ smount()
             error = EBUSY;
             goto cmnout;
         }
-        fs = mountfs (dev, uap->flags, ip);
+        fs = mountfs (dev, flags, ip);
         if (fs == 0)
             return;
     }
@@ -205,6 +250,9 @@ mountfs (dev_t dev, int flags, struct inode *ip)
 found:
     mp->m_inodp = ip;   /* reserve slot */
     mp->m_dev = dev;
+    mp->m_type = MOUNT_UFS;
+    mp->m_ops = &ufs_vfsops;
+    mp->m_data = 0;
     fs = &mp->m_filsys;
     bcopy (tp->b_addr, (caddr_t)fs, sizeof(struct fs));
     brelse (tp);
@@ -232,8 +280,13 @@ out:
         error = EIO;
     if (ip)
         iput(ip);
-    if (mp)
+    if (mp) {
         mp->m_inodp = 0;
+        mp->m_dev = 0;
+        mp->m_type = MOUNT_NONE;
+        mp->m_ops = 0;
+        mp->m_data = 0;
+    }
     if (tp)
         brelse(tp);
     if (needclose) {
@@ -265,7 +318,7 @@ found:
     nchinval (dev); /* flush the name cache */
     aflag = mp->m_flags & MNT_ASYNC;
     mp->m_flags &= ~MNT_ASYNC;  /* Don't want async when unmounting */
-    ufs_sync(mp);
+    vfs_sync(mp);
 
     if (iflush(dev) < 0) {
         mp->m_flags |= aflag;
@@ -276,6 +329,9 @@ found:
     irele(ip);
     mp->m_inodp = 0;
     mp->m_dev = 0;
+    mp->m_type = MOUNT_NONE;
+    mp->m_ops = 0;
+    mp->m_data = 0;
     (*bdevsw[major(dev)].d_close)(dev, 0, S_IFBLK);
     binval(dev);
     return (0);

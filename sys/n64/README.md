@@ -25,6 +25,15 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - `/dev/rgbled0` controls the n64cart RGB LED through ioctl.
 - `/dev/cartflash0` exposes the n64cart SPI flash command path for controlled
   sector read/write/erase ioctls.
+- `/dev/cartflash0` is intentionally a character-device flash interface rather
+  than a generic block device; the cartridge ROMFS driver is expected to own
+  erase/program/map/list handling directly.
+- The n64cart flash driver also exposes kernel-callable raw helpers for future
+  ROMFS mounting, so the filesystem implementation can share the same SPI
+  flash access path without routing through the userland ioctl ABI.
+- `mount -t romfs` has a userland entry point and kernel filesystem type tag;
+  the actual ROMFS vnode layer is not implemented yet, so the mount path returns
+  `ENOSYS` until the filesystem is wired into namei/inode operations.
 - `/dev/fb0` exposes the current 16-bit framebuffer, mode ioctls, and a
   fixed uncached user mapping.
 - `/dev/joypad0`..`/dev/joypad3`, `/dev/mouse0`..`/dev/mouse3`, and

@@ -33,6 +33,10 @@ sync()
     for (mp = &mount[0]; mp < &mount[NMOUNT]; mp++) {
         if (mp->m_inodp == NULL || mp->m_dev == NODEV)
             continue;
+        if (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops) {
+            vfs_sync(mp);
+            continue;
+        }
         fs = &mp->m_filsys;
         if (fs->fs_fmod == 0 || fs->fs_ilock || fs->fs_flock)
             continue;

@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1994
- *      The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1993, 1994
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,55 +29,62 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)mntopts.h	8.3.3 (2.11BSD) 1997/6/29
  */
+#include <sys/param.h>
+#include <sys/mount.h>
 
-struct mntopt {
-	char *m_option;		/* option name */
-	int m_inverse;		/* if a negative option, eg "dev" */
-	int m_flag;		/* bit to set, eg. MNT_RDONLY */
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "mntopts.h"
+
+static struct mntopt mopts[] = {
+	MOPT_STDOPTS,
+	MOPT_UPDATE,
+	{ NULL }
 };
 
-/* User-visible MNT_ flags. */
-#define MOPT_ASYNC		{ "async",	0, MNT_ASYNC }
-#define	MOPT_NOATIME		{ "accesstime",	1, MNT_NOATIME }
-#define MOPT_NODEV		{ "dev",	1, MNT_NODEV }
-#define MOPT_NOEXEC		{ "exec",	1, MNT_NOEXEC }
-#define MOPT_NOSUID		{ "suid",	1, MNT_NOSUID }
-#define MOPT_RDONLY		{ "rdonly",	0, MNT_RDONLY }
-#define MOPT_SYNC		{ "sync",	0, MNT_SYNCHRONOUS }
-#define	MOPT_QUOTAS		{ "quotas",	0, 0 }
+void
+romfs_usage()
+{
+	(void)fprintf(stderr, "usage: mount_romfs [-o options] special node\n");
+	exit(1);
+}
 
-/* Control flags. */
-#define MOPT_FORCE		{ "force",	1, MNT_FORCE }
-#define MOPT_UPDATE		{ "update",	0, MNT_UPDATE }
+int
+mount_romfs(
+	int argc,
+	register char *argv[])
+{
+	extern int optreset;
+	int ch, mntflags;
 
-/* Support for old-style "ro", "rw" flags. */
-#define MOPT_RO			{ "ro",		0, MNT_RDONLY }
-#define MOPT_RW			{ "rw",		1, MNT_RDONLY }
-#define MOPT_RQ			{ "rq",		1, MNT_RDONLY }
+	mntflags = 0;
+	optind = optreset = 1;		/* Reset for parse of new argv. */
+	while ((ch = getopt(argc, argv, "o:")) != EOF)
+		switch (ch) {
+		case 'o':
+			getmntopts(optarg, mopts, &mntflags);
+			break;
+		case '?':
+		default:
+			romfs_usage();
+		}
+	argc -= optind;
+	argv += optind;
 
-/* Ignored options (used for control in fstab) */
-#define	MOPT_NOAUTO		{ "na",	},				\
-				{ "auto", }
+	if (argc != 2)
+		romfs_usage();
 
-#define MOPT_FSTAB_COMPAT						\
-	MOPT_RO,							\
-	MOPT_RW,							\
-	MOPT_RQ
-
-/* Standard options which all mounts can understand. */
-#define MOPT_STDOPTS							\
-	MOPT_FSTAB_COMPAT,						\
-	MOPT_QUOTAS,							\
-	MOPT_NOATIME,							\
-	MOPT_NOAUTO,							\
-	MOPT_NODEV,							\
-	MOPT_NOEXEC,							\
-	MOPT_NOSUID,							\
-	MOPT_RDONLY
-
-int mount_ufs(int argc, char *argv[]);
-int mount_romfs(int argc, char *argv[]);
-void getmntopts(char *options, struct mntopt *m0, int *flagp);
+	mntflags |= MNT_SET_FSTYPE(MOUNT_ROMFS);
+	if (mount(argv[0], argv[1], mntflags) < 0) {
+		(void)fprintf(stderr, "%s on %s: %s\n",
+		    argv[0], argv[1], strerror(errno));
+		fflush(stderr);
+		return (1);
+	}
+	return (0);
+}

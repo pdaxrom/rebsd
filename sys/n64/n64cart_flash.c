@@ -189,7 +189,7 @@ n64cart_flash_read(unsigned addr, unsigned char *buffer, unsigned len)
 }
 
 static void
-n64cart_flash_write_sector(unsigned addr, unsigned char *buffer)
+n64cart_flash_write_sector(unsigned addr, const unsigned char *buffer)
 {
     unsigned offset;
 
@@ -256,18 +256,100 @@ n64cart_flash_info(struct n64cart_flash_info *info)
 }
 
 static int
-n64cart_flash_check_io(const struct n64cart_flash_info *info,
-    const struct n64cart_flash_io *io)
+n64cart_flash_check_range(const struct n64cart_flash_info *info,
+    unsigned offset, unsigned size, const void *buffer)
 {
     if (info->rom_size == 0)
         return ENODEV;
-    if (io->size == 0 || io->size > N64CART_FLASH_MAX_TRANSFER)
+    if (size == 0 || size > N64CART_FLASH_MAX_TRANSFER)
         return EINVAL;
-    if (io->buffer == 0)
+    if (buffer == 0)
         return EFAULT;
-    if (io->offset > info->rom_size ||
-        io->size > info->rom_size - io->offset)
+    if (offset > info->rom_size || size > info->rom_size - offset)
         return EINVAL;
+    return 0;
+}
+
+static int
+n64cart_flash_check_io(const struct n64cart_flash_info *info,
+    const struct n64cart_flash_io *io)
+{
+    return n64cart_flash_check_range(info, io->offset, io->size,
+        io->buffer);
+}
+
+int
+n64cart_flash_getinfo(struct n64cart_flash_info *info)
+{
+    return n64cart_flash_info(info);
+}
+
+int
+n64cart_flash_read_raw(unsigned offset, void *buffer, unsigned size)
+{
+    struct n64cart_flash_info info;
+    int error;
+    int s;
+
+    error = n64cart_flash_info(&info);
+    if (error != 0)
+        return error;
+    error = n64cart_flash_check_range(&info, offset, size, buffer);
+    if (error != 0)
+        return error;
+
+    s = splhigh();
+    n64cart_flash_enter_spi_command_mode();
+    n64cart_flash_read(offset, buffer, size);
+    n64cart_flash_restore_quad_rom_mode();
+    splx(s);
+    return 0;
+}
+
+int
+n64cart_flash_write_sector_raw(unsigned offset, const void *buffer)
+{
+    struct n64cart_flash_info info;
+    int error;
+    int s;
+
+    error = n64cart_flash_info(&info);
+    if (error != 0)
+        return error;
+    error = n64cart_flash_check_range(&info, offset, N64CART_FLASH_SECTOR,
+        buffer);
+    if (error != 0)
+        return error;
+    if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0)
+        return EINVAL;
+
+    s = splhigh();
+    n64cart_flash_enter_spi_command_mode();
+    n64cart_flash_write_sector(offset, buffer);
+    n64cart_flash_restore_quad_rom_mode();
+    splx(s);
+    return 0;
+}
+
+int
+n64cart_flash_erase_sector_raw(unsigned offset)
+{
+    struct n64cart_flash_info info;
+    int error;
+    int s;
+
+    error = n64cart_flash_info(&info);
+    if (error != 0)
+        return error;
+    if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0 ||
+        offset >= info.rom_size)
+        return EINVAL;
+
+    s = splhigh();
+    n64cart_flash_enter_spi_command_mode();
+    n64cart_flash_erase_sector(offset);
+    n64cart_flash_restore_quad_rom_mode();
+    splx(s);
     return 0;
 }
 
@@ -298,13 +380,12 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
     struct n64cart_flash_io io;
     unsigned offset;
     int error;
-    int s;
 
     (void)flag;
     if (minor(dev) != 0)
         return ENXIO;
 
-    error = n64cart_flash_info(&info);
+    error = n64cart_flash_getinfo(&info);
     if (cmd == N64CARTFLASHIOC_GETINFO) {
         error = copyout((caddr_t)&info, data, sizeof(info));
         return error;
@@ -320,11 +401,10 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         error = n64cart_flash_check_io(&info, &io);
         if (error != 0)
             return error;
-        s = splhigh();
-        n64cart_flash_enter_spi_command_mode();
-        n64cart_flash_read(io.offset, n64cart_flash_buf, io.size);
-        n64cart_flash_restore_quad_rom_mode();
-        splx(s);
+        error = n64cart_flash_read_raw(io.offset, n64cart_flash_buf,
+            io.size);
+        if (error != 0)
+            return error;
         return copyout((caddr_t)n64cart_flash_buf, io.buffer, io.size);
 
     case N64CARTFLASHIOC_WRITE:
@@ -340,12 +420,7 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         error = copyin(io.buffer, (caddr_t)n64cart_flash_buf, io.size);
         if (error != 0)
             return error;
-        s = splhigh();
-        n64cart_flash_enter_spi_command_mode();
-        n64cart_flash_write_sector(io.offset, n64cart_flash_buf);
-        n64cart_flash_restore_quad_rom_mode();
-        splx(s);
-        return 0;
+        return n64cart_flash_write_sector_raw(io.offset, n64cart_flash_buf);
 
     case N64CARTFLASHIOC_ERASE:
         error = copyin(data, (caddr_t)&offset, sizeof(offset));
@@ -354,12 +429,7 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0 ||
             offset >= info.rom_size)
             return EINVAL;
-        s = splhigh();
-        n64cart_flash_enter_spi_command_mode();
-        n64cart_flash_erase_sector(offset);
-        n64cart_flash_restore_quad_rom_mode();
-        splx(s);
-        return 0;
+        return n64cart_flash_erase_sector_raw(offset);
 
     default:
         return ENOTTY;

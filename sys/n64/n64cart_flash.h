@@ -44,6 +44,10 @@ struct n64cart_flash_io {
 int n64cart_flash_open(dev_t dev, int flag, int mode);
 int n64cart_flash_close(dev_t dev, int flag, int mode);
 int n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag);
+int n64cart_flash_getinfo(struct n64cart_flash_info *info);
+int n64cart_flash_read_raw(unsigned offset, void *buffer, unsigned size);
+int n64cart_flash_write_sector_raw(unsigned offset, const void *buffer);
+int n64cart_flash_erase_sector_raw(unsigned offset);
 #endif
 
 #endif

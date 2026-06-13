@@ -6,8 +6,8 @@ include $(TOPSRC)/target.mk
 
 CFLAGS		+= -Werror
 
-SRCS            = mount.c getmntopts.c mount_ufs.c
-OBJS            = mount.o getmntopts.o mount_ufs.o
+SRCS            = mount.c getmntopts.c mount_ufs.c mount_romfs.c
+OBJS            = mount.o getmntopts.o mount_ufs.o mount_romfs.o
 MAN		= mount.0
 MANSRC		= mount.8
 
