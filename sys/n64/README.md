@@ -312,7 +312,7 @@ ROMFS metadata before adding a kernel `mount -t romfs` path. The current UFS
 `rootfs.img` remains the system root and is still demand-read from cartridge
 ROM through the romdisk block driver.
 
-The intended hardware smoke test is:
+The hardware smoke test used on real n64cart hardware is:
 
 ```
 ls -l /dev/cartflash0
@@ -320,10 +320,19 @@ romfsctl info
 romfsctl free
 romfsctl list /
 romfsctl list /roms
-romfsctl list -h /
-romfsctl write /retrobsd-test.txt ok
-romfsctl cat /retrobsd-test.txt
-romfsctl rm /retrobsd-test.txt
+romfsctl list -h /roms
+romfsctl cat /roms/kernel.z64 >/dev/null
+romfsctl cat /roms/kernel.z64 | wc
+romfsctl mkdir /retrobsd-test
+romfsctl write /retrobsd-test/hello.txt hello from retrobsd
+romfsctl list /retrobsd-test
+romfsctl cat /retrobsd-test/hello.txt
+romfsctl cat /retrobsd-test/hello.txt | wc
+romfsctl rename /retrobsd-test/hello.txt /retrobsd-test/renamed.txt
+romfsctl list /retrobsd-test
+romfsctl cat /retrobsd-test/renamed.txt
+romfsctl rm /retrobsd-test/renamed.txt
+romfsctl rmdir /retrobsd-test
 ```
 
 `romfsctl info` reports:
@@ -726,6 +735,11 @@ The root filesystem stays read-only. `/tmp` is a symlink to `/var/tmp` in the
 ROM rootfs. `/etc/rc` formats the volatile RAM device at each boot with
 `mkfs -i 4096`, mounts `/dev/ram0` on `/var`, sets `/var/tmp` sticky, and
 creates `/var/log`, `/var/run`, `/var/tmp`, and `/var/lock`.
+
+The kernel pipe implementation allocates temporary pipe inodes on `pipedev`.
+The N64 attach code sets `pipedev` to `/dev/ram0`; after `/etc/rc` mounts
+`/var`, shell pipelines use the writable RAM-backed UFS instead of the
+read-only cartridge root.
 
 ## Character devices and tty
 
@@ -1165,6 +1179,9 @@ existing lists. N64 passes `SRC_ONLY_LIBS="startup-mips libc libutil"` and
 command build with `CMD_BUILD_STRIP=`. For `smux`, N64 passes
 `SMUX_SUBDIRS=retro` because only the RetroBSD target side belongs in the
 cartridge rootfs.
+
+The N64 standard command subset includes the small tools needed for console
+smoke tests, including `cat`, `more`, `sh`, `stty`, `romfsctl`, and `wc`.
 
 After building the selected commands, the board makefile invokes the shared
 install target with:

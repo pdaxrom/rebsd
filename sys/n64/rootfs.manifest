@@ -151,6 +151,9 @@ mode 0775
 file /bin/whatis
 mode 0775
 
+file /bin/wc
+mode 0775
+
 file /bin/whoami
 mode 0775
 

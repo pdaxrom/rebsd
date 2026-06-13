@@ -12,6 +12,8 @@
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/map.h>
+#include <sys/systm.h>
+#include <machine/ramswap.h>
 
 int hz = HZ;
 int usechz = (1000000L + HZ - 1) / HZ;
@@ -40,4 +42,10 @@ struct map swapmap[1] = {
 void
 kconfig(void)
 {
+}
+
+void
+nintendoattach(void)
+{
+    pipedev = makedev(N64_RAMSWAP_MAJOR, N64_RAMDISK_VAR_MINOR);
 }

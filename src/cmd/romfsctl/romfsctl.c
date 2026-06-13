@@ -171,6 +171,72 @@ segment_equal(const char *name, const char *segment, size_t len)
 }
 
 static uint32_t
+open_child_dir_by_iterator(const romfs_dir *parent, const char *name,
+    size_t len, romfs_dir *dir)
+{
+    romfs_file entry;
+    uint32_t err;
+
+    if (len == 0 || len >= ROMFS_MAX_NAME_LEN)
+        return ROMFS_ERR_FILE_DATA_TOO_BIG;
+
+    bzero(&entry, sizeof(entry));
+    err = romfs_list_dir(&entry, true, parent, true);
+    while (err == ROMFS_NOERR) {
+        if (entry.entry.attr.names.type == ROMFS_TYPE_DIR &&
+            segment_equal(entry.entry.name, name, len)) {
+            dir->id = entry.entry.attr.names.current;
+            dir->entry_index = entry.nentry - 1;
+            return ROMFS_NOERR;
+        }
+        err = romfs_list_dir(&entry, false, parent, true);
+    }
+
+    if (err == ROMFS_ERR_NO_FREE_ENTRIES)
+        return ROMFS_ERR_NO_ENTRY;
+    return err;
+}
+
+static uint32_t
+open_file_by_iterator(const romfs_dir *parent, const char *name, size_t len,
+    romfs_file *file, uint8_t *buffer)
+{
+    romfs_file entry;
+    uint32_t err;
+
+    if (len == 0 || len >= ROMFS_MAX_NAME_LEN)
+        return ROMFS_ERR_FILE_DATA_TOO_BIG;
+
+    bzero(&entry, sizeof(entry));
+    err = romfs_list_dir(&entry, true, parent, true);
+    while (err == ROMFS_NOERR) {
+        if (entry.entry.attr.names.type != ROMFS_TYPE_DIR &&
+            segment_equal(entry.entry.name, name, len)) {
+            *file = entry;
+            file->op = ROMFS_OP_READ;
+            file->nentry = entry.nentry - 1;
+            file->pos = file->entry.start;
+            file->offset = 0;
+            file->read_offset = 0;
+            file->err = ROMFS_NOERR;
+            file->io_buffer = buffer;
+            file->parent_dir_id = parent->id;
+            file->dir_id = 0;
+            file->buffer_base = 0xffffffffu;
+            file->write_offset = 0;
+            file->buffer_from_flash = false;
+            file->buffer_dirty = false;
+            return ROMFS_NOERR;
+        }
+        err = romfs_list_dir(&entry, false, parent, true);
+    }
+
+    if (err == ROMFS_ERR_NO_FREE_ENTRIES)
+        return ROMFS_ERR_NO_ENTRY;
+    return err;
+}
+
+static uint32_t
 open_dir_by_iterator(const char *path, romfs_dir *dir)
 {
     const char *p;
@@ -191,8 +257,6 @@ open_dir_by_iterator(const char *path, romfs_dir *dir)
     while (*p != '\0') {
         const char *start = p;
         size_t len;
-        romfs_file entry;
-        int found = 0;
 
         while (*p != '\0' && *p != '/')
             p++;
@@ -204,24 +268,83 @@ open_dir_by_iterator(const char *path, romfs_dir *dir)
         if (len >= ROMFS_MAX_NAME_LEN)
             return ROMFS_ERR_FILE_DATA_TOO_BIG;
 
-        bzero(&entry, sizeof(entry));
-        err = romfs_list_dir(&entry, true, &cur, true);
-        while (err == ROMFS_NOERR) {
-            if (entry.entry.attr.names.type == ROMFS_TYPE_DIR &&
-                segment_equal(entry.entry.name, start, len)) {
-                cur.id = entry.entry.attr.names.current;
-                cur.entry_index = entry.nentry - 1;
-                found = 1;
-                break;
-            }
-            err = romfs_list_dir(&entry, false, &cur, true);
-        }
-        if (!found)
-            return ROMFS_ERR_NO_ENTRY;
+        err = open_child_dir_by_iterator(&cur, start, len, &cur);
+        if (err != ROMFS_NOERR)
+            return err;
     }
 
     *dir = cur;
     return ROMFS_NOERR;
+}
+
+static uint32_t
+resolve_parent_by_iterator(const char *path, int create_dirs, romfs_dir *parent,
+    char *leaf, size_t leaf_size)
+{
+    const char *p;
+    romfs_dir cur;
+    uint32_t err;
+
+    if (path == NULL || leaf == NULL || leaf_size == 0)
+        return ROMFS_ERR_DIR_INVALID;
+
+    err = romfs_dir_root(&cur);
+    if (err != ROMFS_NOERR)
+        return err;
+
+    p = path;
+    while (*p == '/')
+        p++;
+
+    for (;;) {
+        char segment[ROMFS_MAX_NAME_LEN];
+        size_t len;
+        size_t i;
+        int last;
+        romfs_dir next;
+
+        while (*p == '/')
+            p++;
+        if (*p == '\0')
+            return ROMFS_ERR_DIR_INVALID;
+
+        len = 0;
+        while (*p != '\0' && *p != '/') {
+            if (len + 1 >= ROMFS_MAX_NAME_LEN)
+                return ROMFS_ERR_FILE_DATA_TOO_BIG;
+            segment[len++] = *p++;
+        }
+        segment[len] = '\0';
+
+        if (len == 0)
+            continue;
+        if ((len == 1 && segment[0] == '.') ||
+            (len == 2 && segment[0] == '.' && segment[1] == '.'))
+            return ROMFS_ERR_DIR_INVALID;
+
+        while (*p == '/')
+            p++;
+        last = (*p == '\0');
+
+        if (len >= leaf_size || len >= ROMFS_MAX_NAME_LEN)
+            return ROMFS_ERR_FILE_DATA_TOO_BIG;
+
+        if (last) {
+            for (i = 0; i < len; i++)
+                leaf[i] = segment[i];
+            leaf[len] = '\0';
+            *parent = cur;
+            return ROMFS_NOERR;
+        }
+
+        err = open_child_dir_by_iterator(&cur, segment, len, &next);
+        if (err == ROMFS_ERR_NO_ENTRY && create_dirs) {
+            err = romfs_dir_create(&cur, segment, &next);
+        }
+        if (err != ROMFS_NOERR)
+            return err;
+        cur = next;
+    }
 }
 
 static void
@@ -279,12 +402,17 @@ static void
 cmd_cat(const char *path)
 {
     romfs_file file;
+    romfs_dir parent;
+    char leaf[ROMFS_MAX_NAME_LEN];
     uint32_t err;
     uint32_t got;
 
     load_romfs();
     bzero(&file, sizeof(file));
-    err = romfs_open_path(path, &file, io_buffer);
+    err = resolve_parent_by_iterator(path, 0, &parent, leaf, sizeof(leaf));
+    if (err == ROMFS_NOERR)
+        err = open_file_by_iterator(&parent, leaf, strlen(leaf), &file,
+            io_buffer);
     if (err != ROMFS_NOERR)
         die_romfs(path, err);
 
@@ -329,6 +457,8 @@ static void
 cmd_write(const char *path, int argc, char **argv)
 {
     romfs_file file;
+    romfs_dir parent;
+    char leaf[ROMFS_MAX_NAME_LEN];
     char *text;
     size_t len;
     uint32_t err;
@@ -337,12 +467,15 @@ cmd_write(const char *path, int argc, char **argv)
     text = join_text(argc, argv);
     len = strlen(text);
 
-    err = romfs_delete_path(path);
+    err = resolve_parent_by_iterator(path, 1, &parent, leaf, sizeof(leaf));
+    if (err != ROMFS_NOERR)
+        die_romfs(path, err);
+    err = romfs_delete_in_dir(&parent, leaf);
     if (err != ROMFS_NOERR && err != ROMFS_ERR_NO_ENTRY)
         die_romfs(path, err);
     bzero(&file, sizeof(file));
-    err = romfs_create_path(path, &file, ROMFS_MODE_READWRITE,
-        ROMFS_TYPE_MISC, io_buffer, true);
+    err = romfs_create_file_in_dir(&parent, leaf, &file, ROMFS_MODE_READWRITE,
+        ROMFS_TYPE_MISC, io_buffer);
     if (err != ROMFS_NOERR)
         die_romfs(path, err);
     if (romfs_write_file(text, len, &file) != len)
@@ -356,10 +489,14 @@ cmd_write(const char *path, int argc, char **argv)
 static void
 cmd_rm(const char *path)
 {
+    romfs_dir parent;
+    char leaf[ROMFS_MAX_NAME_LEN];
     uint32_t err;
 
     load_romfs();
-    err = romfs_delete_path(path);
+    err = resolve_parent_by_iterator(path, 0, &parent, leaf, sizeof(leaf));
+    if (err == ROMFS_NOERR)
+        err = romfs_delete_in_dir(&parent, leaf);
     if (err != ROMFS_NOERR)
         die_romfs(path, err);
 }
@@ -367,10 +504,14 @@ cmd_rm(const char *path)
 static void
 cmd_mkdir(const char *path)
 {
+    romfs_dir parent;
+    char leaf[ROMFS_MAX_NAME_LEN];
     uint32_t err;
 
     load_romfs();
-    err = romfs_mkdir_path(path, true, NULL);
+    err = resolve_parent_by_iterator(path, 1, &parent, leaf, sizeof(leaf));
+    if (err == ROMFS_NOERR)
+        err = romfs_dir_create(&parent, leaf, NULL);
     if (err != ROMFS_NOERR)
         die_romfs(path, err);
 }
@@ -378,10 +519,13 @@ cmd_mkdir(const char *path)
 static void
 cmd_rmdir(const char *path)
 {
+    romfs_dir dir;
     uint32_t err;
 
     load_romfs();
-    err = romfs_rmdir_path(path);
+    err = open_dir_by_iterator(path, &dir);
+    if (err == ROMFS_NOERR)
+        err = romfs_dir_remove(&dir);
     if (err != ROMFS_NOERR)
         die_romfs(path, err);
 }
@@ -389,10 +533,21 @@ cmd_rmdir(const char *path)
 static void
 cmd_rename(const char *src, const char *dst)
 {
+    romfs_dir src_parent;
+    romfs_dir dst_parent;
+    char src_leaf[ROMFS_MAX_NAME_LEN];
+    char dst_leaf[ROMFS_MAX_NAME_LEN];
     uint32_t err;
 
     load_romfs();
-    err = romfs_rename_path(src, dst, true);
+    err = resolve_parent_by_iterator(src, 0, &src_parent, src_leaf,
+        sizeof(src_leaf));
+    if (err == ROMFS_NOERR)
+        err = resolve_parent_by_iterator(dst, 1, &dst_parent, dst_leaf,
+            sizeof(dst_leaf));
+    if (err == ROMFS_NOERR)
+        err = romfs_rename_in_dir(&src_parent, src_leaf, &dst_parent,
+            dst_leaf);
     if (err != ROMFS_NOERR)
         die_romfs(src, err);
 }

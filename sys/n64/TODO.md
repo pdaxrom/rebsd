@@ -96,6 +96,8 @@ copying binaries manually.
 - [x] Teach the N64 boot scripts to create volatile filesystems at startup:
   `mkfs` the RAM disk, mount `/var`, then create required runtime directories
   such as `/var/run`, `/var/log`, `/var/tmp`, and `/var/lock`.
+- [x] Route `pipe(2)` temporary inodes to the writable `/dev/ram0` filesystem
+  through N64 `pipedev` setup, so shell pipelines work after `/var` is mounted.
 - [x] Keep `/tmp` and `/var` volatile for the first version; later ROMFS or
   another writable block device can provide persistent upper storage.
 - [ ] Hardware smoke-test volatile mounts:
@@ -119,11 +121,17 @@ copying binaries manually.
   - [x] `romfsctl free`
   - [x] `romfsctl list /`
   - [ ] `ls -l /dev/cartflash0`
-  - [ ] `romfsctl list /roms`
-  - [ ] `romfsctl list -h /`
-  - `romfsctl write /retrobsd-test.txt ok`
-  - `romfsctl cat /retrobsd-test.txt`
-  - `romfsctl rm /retrobsd-test.txt`
+  - [x] `romfsctl list /roms`
+  - [x] `romfsctl list -h /roms`
+  - [x] `romfsctl cat /roms/kernel.z64 >/dev/null`
+  - [x] `romfsctl cat /roms/kernel.z64 | wc`
+  - [x] `romfsctl mkdir /retrobsd-test`
+  - [x] `romfsctl write /retrobsd-test/hello.txt hello from retrobsd`
+  - [x] `romfsctl cat /retrobsd-test/hello.txt`
+  - [x] `romfsctl cat /retrobsd-test/hello.txt | wc`
+  - [x] `romfsctl rename /retrobsd-test/hello.txt /retrobsd-test/renamed.txt`
+  - [x] `romfsctl rm /retrobsd-test/renamed.txt`
+  - [x] `romfsctl rmdir /retrobsd-test`
 - [ ] Add support for the N64cart cartridge ROMFS format used by
   `/Users/sash/Work/N64/N64cart/fw/romfs`, mounted from cartridge flash with
   read/write support. Keep this separate from the current UFS `rootfs.img`

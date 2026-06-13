@@ -10,7 +10,6 @@
 #include <machine/n64int.h>
 #include <machine/video.h>
 
-extern dev_t swapdev;
 dev_t pipedev;
 extern int boothowto;
 extern int waittime;
@@ -204,7 +203,6 @@ startup(void)
     early_puts("rdram size=");
     early_put_hex32(physmem);
     early_puts("\n");
-    pipedev = swapdev;
     boothowto = RB_RDONLY;
 }
 
