@@ -1,4 +1,6 @@
 #include <sys/param.h>
+#include <sys/ioctl.h>
+#include <sys/tty.h>
 #include <machine/console.h>
 #include <machine/joybus.h>
 #include <machine/video.h>
@@ -947,4 +949,20 @@ n64_console_putc(int ch)
     n64_console_erase_cursor();
     n64_console_put_vt100(ch);
     n64_console_draw_cursor();
+}
+
+void
+n64_console_winsize(struct winsize *ws)
+{
+    n64_console_geometry();
+    ws->ws_row = console_rows;
+    ws->ws_col = console_cols;
+    ws->ws_xpixel = console_cols * N64_CONSOLE_CELL_W;
+    ws->ws_ypixel = console_rows * N64_CONSOLE_CELL_H;
+}
+
+void
+n64_console_tty_winsize(struct tty *tp)
+{
+    n64_console_winsize(&tp->t_winsize);
 }

@@ -13,6 +13,15 @@ struct tty n64cart_uart_ttys[1];
 static void n64cart_uart_start(struct tty *tp);
 static int n64cart_uart_esc_state;
 
+static void
+n64cart_uart_default_winsize(struct tty *tp)
+{
+    if (tp->t_winsize.ws_row == 0)
+        tp->t_winsize.ws_row = 24;
+    if (tp->t_winsize.ws_col == 0)
+        tp->t_winsize.ws_col = 80;
+}
+
 #define N64CART_UART_ESC_NONE   0
 #define N64CART_UART_ESC_ESC    1
 #define N64CART_UART_ESC_CSI    2
@@ -172,6 +181,7 @@ n64cart_uart_open(dev_t dev, int flag, int mode)
         tp->t_flags = ECHO | XTABS | CRMOD | CRTBS | CRTERA |
             CTLECH | CRTKIL;
     }
+    n64cart_uart_default_winsize(tp);
     tp->t_state |= TS_CARR_ON;
     if ((tp->t_state & TS_XCLUDE) && u.u_uid != 0)
         return EBUSY;
@@ -221,12 +231,21 @@ int
 n64cart_uart_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 {
     int error;
+    struct winsize *ws;
 
     if (minor(dev) != 0)
         return ENXIO;
     error = ttioctl(&n64cart_uart_ttys[0], cmd, addr, flag);
     if (error < 0)
         error = ENOTTY;
+    if (error == 0 && cmd == TIOCGWINSZ) {
+        n64cart_uart_default_winsize(&n64cart_uart_ttys[0]);
+        ws = (struct winsize *)addr;
+        if (ws->ws_row == 0)
+            ws->ws_row = 24;
+        if (ws->ws_col == 0)
+            ws->ws_col = 80;
+    }
     return error;
 }
 

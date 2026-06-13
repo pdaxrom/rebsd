@@ -1,6 +1,7 @@
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
+#include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/uio.h>
 #include <machine/console.h>
@@ -28,6 +29,7 @@ cnopen(dev_t dev, int flag, int mode)
         tp->t_flags = ECHO | XTABS | CRMOD | CRTBS | CRTERA |
             CTLECH | CRTKIL;
     }
+    n64_console_tty_winsize(tp);
     tp->t_state |= TS_CARR_ON;
 
     return ttyopen(dev, tp);
@@ -110,6 +112,11 @@ cnioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 {
     int error;
 
+    if (cmd == TIOCGWINSZ) {
+        n64_console_tty_winsize(&cnttys[0]);
+        *(struct winsize *)addr = cnttys[0].t_winsize;
+        return 0;
+    }
     error = ttioctl(&cnttys[0], cmd, addr, flag);
     if (error < 0)
         error = ENOTTY;

@@ -17,7 +17,11 @@
  *      12 - signal mask saved
  *      13 - signal mask
  */
+#if defined(__mips_hard_float)
+typedef int jmp_buf [47];
+#else
 typedef int jmp_buf [14];
+#endif
 typedef jmp_buf sigjmp_buf;
 
 /*

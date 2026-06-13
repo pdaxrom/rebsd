@@ -61,6 +61,42 @@ _setjmp:	.globl 	_setjmp
 		# For compatibility with longjmp and siglongjmp
 		sw	$zero, (12 * 4) ($a0)   # signal mask saved
 		sw	$zero, (13 * 4) ($a0)   # signal mask
+#ifdef __mips_hard_float
+		swc1	$f0,  (14 * 4) ($a0)
+		swc1	$f1,  (15 * 4) ($a0)
+		swc1	$f2,  (16 * 4) ($a0)
+		swc1	$f3,  (17 * 4) ($a0)
+		swc1	$f4,  (18 * 4) ($a0)
+		swc1	$f5,  (19 * 4) ($a0)
+		swc1	$f6,  (20 * 4) ($a0)
+		swc1	$f7,  (21 * 4) ($a0)
+		swc1	$f8,  (22 * 4) ($a0)
+		swc1	$f9,  (23 * 4) ($a0)
+		swc1	$f10, (24 * 4) ($a0)
+		swc1	$f11, (25 * 4) ($a0)
+		swc1	$f12, (26 * 4) ($a0)
+		swc1	$f13, (27 * 4) ($a0)
+		swc1	$f14, (28 * 4) ($a0)
+		swc1	$f15, (29 * 4) ($a0)
+		swc1	$f16, (30 * 4) ($a0)
+		swc1	$f17, (31 * 4) ($a0)
+		swc1	$f18, (32 * 4) ($a0)
+		swc1	$f19, (33 * 4) ($a0)
+		swc1	$f20, (34 * 4) ($a0)
+		swc1	$f21, (35 * 4) ($a0)
+		swc1	$f22, (36 * 4) ($a0)
+		swc1	$f23, (37 * 4) ($a0)
+		swc1	$f24, (38 * 4) ($a0)
+		swc1	$f25, (39 * 4) ($a0)
+		swc1	$f26, (40 * 4) ($a0)
+		swc1	$f27, (41 * 4) ($a0)
+		swc1	$f28, (42 * 4) ($a0)
+		swc1	$f29, (43 * 4) ($a0)
+		swc1	$f30, (44 * 4) ($a0)
+		swc1	$f31, (45 * 4) ($a0)
+		cfc1	$t0, $31
+		sw	$t0,  (46 * 4) ($a0)
+#endif
 
 		j	$ra
 		move	$v0, $zero		# return a zero for the setjmp call
@@ -68,6 +104,42 @@ _setjmp:	.globl 	_setjmp
 		.type	_longjmp, @function
 _longjmp:	.globl	_longjmp
 
+#ifdef __mips_hard_float
+		lw	$t0,  (46 * 4) ($a0)
+		ctc1	$t0, $31
+		lwc1	$f0,  (14 * 4) ($a0)
+		lwc1	$f1,  (15 * 4) ($a0)
+		lwc1	$f2,  (16 * 4) ($a0)
+		lwc1	$f3,  (17 * 4) ($a0)
+		lwc1	$f4,  (18 * 4) ($a0)
+		lwc1	$f5,  (19 * 4) ($a0)
+		lwc1	$f6,  (20 * 4) ($a0)
+		lwc1	$f7,  (21 * 4) ($a0)
+		lwc1	$f8,  (22 * 4) ($a0)
+		lwc1	$f9,  (23 * 4) ($a0)
+		lwc1	$f10, (24 * 4) ($a0)
+		lwc1	$f11, (25 * 4) ($a0)
+		lwc1	$f12, (26 * 4) ($a0)
+		lwc1	$f13, (27 * 4) ($a0)
+		lwc1	$f14, (28 * 4) ($a0)
+		lwc1	$f15, (29 * 4) ($a0)
+		lwc1	$f16, (30 * 4) ($a0)
+		lwc1	$f17, (31 * 4) ($a0)
+		lwc1	$f18, (32 * 4) ($a0)
+		lwc1	$f19, (33 * 4) ($a0)
+		lwc1	$f20, (34 * 4) ($a0)
+		lwc1	$f21, (35 * 4) ($a0)
+		lwc1	$f22, (36 * 4) ($a0)
+		lwc1	$f23, (37 * 4) ($a0)
+		lwc1	$f24, (38 * 4) ($a0)
+		lwc1	$f25, (39 * 4) ($a0)
+		lwc1	$f26, (40 * 4) ($a0)
+		lwc1	$f27, (41 * 4) ($a0)
+		lwc1	$f28, (42 * 4) ($a0)
+		lwc1	$f29, (43 * 4) ($a0)
+		lwc1	$f30, (44 * 4) ($a0)
+		lwc1	$f31, (45 * 4) ($a0)
+#endif
 		lw	$s0, (0 * 4) ($a0)	# restore register variables s0-s8
 		lw	$s1, (1 * 4) ($a0)
 		lw	$s2, (2 * 4) ($a0)

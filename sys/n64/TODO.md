@@ -89,6 +89,14 @@ copying binaries manually.
 - [x] Hardware smoke-test pty open/read/write before enabling pty-dependent
   userland such as `smux`; `ptytest`, `ptytest 1`, and `ptytest 2` pass on
   N64 hardware
+- [x] Fix the shared MIPS libc `getpgrp()` syscall wrapper to pass pid 0 to
+  the historical kernel `getpgrp(pid)` entry. The public header declares
+  POSIX `getpgrp(void)`, and the generated raw syscall stub left `$a0`
+  undefined, which made `/bin/more` think it was not in the foreground pgrp.
+- [x] Hardware smoke-test `/bin/more /etc/ttys` after the `getpgrp()` wrapper
+  fix: the file is displayed and returns to the shell prompt on N64 hardware
+- [ ] Repeat the `/bin/more` smoke test on the other login line if the first
+  run covered only one of `/dev/console` or `/dev/ttyS0`
 
 ## Login And Multi-User Boot
 
@@ -111,6 +119,14 @@ copying binaries manually.
   MIPS signal-frame path used by PIC32
 - [x] Hardware smoke-test `sleep 10` followed by `Ctrl-C`; it must interrupt
   `sleep` and return to the shell prompt without respawning `getty`
+
+## FPU And Userland ABI
+
+- [x] Make shared MIPS libc `setjmp`/`longjmp` save and restore FPU state when
+  compiled for hard-float N64 userland, while keeping the PIC32 soft-float
+  path free of FPU instructions
+- [ ] Hardware smoke-test hard-float `setjmp` users on N64, including
+  `/bin/more`, `login` motd interrupt handling, and any future FPU test command
 
 ## Platform Stubs
 
@@ -197,6 +213,11 @@ copying binaries manually.
   and `CSI ?25h/?25l` cursor visibility
 - [ ] Hardware smoke-test VT100 console output with shell editing, `man`,
   `more`, clear-screen sequences, reverse-video SGR, and cursor hide/show
+- [x] Return framebuffer console text geometry from `/dev/console`
+  `TIOCGWINSZ`; `/dev/ttyS0` supplies an 80x24 fallback when no user winsize
+  has been set
+- [ ] Hardware smoke-test `stty size`, `ls`, `man`, `more`, and smux window
+  sizing on `/dev/console` and `/dev/ttyS0`
 
 ## Joybus, Keyboard, Mouse, And Joypad
 

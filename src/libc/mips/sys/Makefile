@@ -10,7 +10,7 @@ CFLAGS          += -Os
 
 COBJS		= sbrk.o execl.o execle.o execlp.o execv.o
 
-ASMOBJS		= _exit.o _brk.o pipe.o ptrace.o sigaction.o
+ASMOBJS		= _exit.o _brk.o getpgrp.o pipe.o ptrace.o sigaction.o
 
 SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
 		  chflags.o chmod.o chown.o chroot.o close.o connect.o dup.o \
@@ -30,7 +30,7 @@ SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
 		  statfs.o fstatfs.o getfsstat.o \
 		  truncate.o umount.o unlink.o utimes.o wait4.o write.o writev.o \
 		  lseek.o sigsuspend.o \
-		  getgid.o getegid.o getpgrp.o getpid.o \
+		  getgid.o getegid.o getpid.o \
 		  getppid.o getuid.o geteuid.o profil.o sigpending.o sync.o \
                   ufetch.o ustore.o ucall.o umask.o vfork.o vhangup.o \
 		  rdglob.o wrglob.o msec.o kmemdev.o
