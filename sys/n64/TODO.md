@@ -175,6 +175,28 @@ copying binaries manually.
   position
 - [ ] Hardware smoke-test console cursor drawing while typing, after
   Backspace, and across newlines/scrolling
+- [x] Make framebuffer console `\b` move left only, leaving BSD tty erase
+  rendering to the normal `BS SPACE BS` sequence
+- [x] Normalize N64 console and n64cart UART `BS`/`DEL` input to the RetroBSD
+  erase character before `ttyinput()`; n64cart UART also accepts `ESC [ 3 ~`
+  as erase for host terminals that send Delete sequences
+- [x] Enable `cb`, `ce`, and `ck` in the N64 ROM `/etc/gettytab`, because
+  `getty` replaces the kernel-open tty defaults before handing the tty to
+  `login`
+- [x] Run `stty crt` from the N64 ROM `/etc/profile`; stock `login` clears
+  local tty modes with `TIOCLSET 0`, so shell input needs `CRTBS`/`CRTERA`
+  restored after login for visual erase
+- [ ] Hardware smoke-test Backspace erase echo on `/dev/console` and
+  `/dev/ttyS0`
+- [x] Replace the framebuffer console's pixel-only state with an N64-local text
+  cell buffer, so VT100 cursor movement, erase, scroll, and cursor redraw have
+  stable backing state
+- [x] Add a first-pass VT100 output parser to the framebuffer console:
+  CR/LF/TAB/BS, ESC save/restore/reset/index, CSI cursor movement, erase,
+  insert/delete character and line, SGR bold/underline/reverse, OSC skipping,
+  and `CSI ?25h/?25l` cursor visibility
+- [ ] Hardware smoke-test VT100 console output with shell editing, `man`,
+  `more`, clear-screen sequences, reverse-video SGR, and cursor hide/show
 
 ## Joybus, Keyboard, Mouse, And Joypad
 

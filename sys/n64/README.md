@@ -685,6 +685,16 @@ The text console draws inside a 5% safe area to keep characters away from CRT
 or capture-device overscan. This margin applies only to `video_console.c`;
 `/dev/fb0` still exposes the full framebuffer.
 
+The framebuffer console keeps its own text cell buffer and renders that buffer
+into the VI framebuffer. This is intentionally separate from `/dev/fb0`
+graphics access: the console is a tty renderer, while `/dev/fb0` remains the
+raw framebuffer device. The console parser handles the basic VT100 output used
+by shells and pagers: printable ASCII, CR/LF/TAB/BS, ESC save/restore/reset,
+CSI cursor movement, erase line/display, insert/delete character and line, SGR
+bold/underline/reverse attributes, OSC skipping, and `CSI ?25h/?25l` cursor
+visibility. Backspace only moves the console cursor left; BSD tty erase echo
+still performs the visible erase through the normal `BS SPACE BS` sequence.
+
 `/dev/tty` is implemented through the standard `tty_tty` cdev entry and
 therefore resolves to the controlling tty for the shell.
 
@@ -809,8 +819,15 @@ major 1 is present only for `/dev/null` and `/dev/zero`; minors 0 and 1 return
 first N64 port: userland should not depend on direct kernel memory access.
 
 The console tty settings are initialized with echo, CR/LF mapping, erase,
-kill, and control-character echo behavior. Ctrl-C is handled by the tty line
-discipline after `cnintr()` feeds input into `ttyinput()`.
+kill, and control-character echo behavior. `/etc/gettytab` sets `cb`, `ce`,
+and `ck` for N64 login lines before `login` runs. The stock `login` program
+then clears local tty modes with `TIOCLSET 0`, so the N64 `/etc/profile` runs
+`stty crt` after login to restore `CRTBS`, `CRTERA`, `CRTKIL`, and `CTLECH`
+for shell input. The N64 console and n64cart UART drivers normalize both `BS`
+and `DEL` input to the RetroBSD default erase character before calling
+`ttyinput()`. The n64cart UART input path also folds the common terminal
+Delete sequence `ESC [ 3 ~` into erase. Ctrl-C is handled by the tty line
+discipline after input is fed into `ttyinput()`.
 
 Pseudo terminals use the existing RetroBSD `sys/kernel/tty_pty.c` driver.
 The N64 board config enables them the same way as PIC32, as a kconfig service:

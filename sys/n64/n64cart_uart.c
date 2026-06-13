@@ -11,6 +11,68 @@
 
 struct tty n64cart_uart_ttys[1];
 static void n64cart_uart_start(struct tty *tp);
+static int n64cart_uart_esc_state;
+
+#define N64CART_UART_ESC_NONE   0
+#define N64CART_UART_ESC_ESC    1
+#define N64CART_UART_ESC_CSI    2
+#define N64CART_UART_ESC_CSI_3  3
+
+static void
+n64cart_uart_input_normal(struct tty *tp, int c)
+{
+    if (c == '\r')
+        c = '\n';
+    else if (c == '\b' || c == '\177')
+        c = '\177';
+    ttyinput(c, tp);
+}
+
+static void
+n64cart_uart_input(struct tty *tp, int c)
+{
+again:
+    switch (n64cart_uart_esc_state) {
+    case N64CART_UART_ESC_ESC:
+        if (c == '[') {
+            n64cart_uart_esc_state = N64CART_UART_ESC_CSI;
+            return;
+        }
+        ttyinput('\033', tp);
+        n64cart_uart_esc_state = N64CART_UART_ESC_NONE;
+        goto again;
+
+    case N64CART_UART_ESC_CSI:
+        if (c == '3') {
+            n64cart_uart_esc_state = N64CART_UART_ESC_CSI_3;
+            return;
+        }
+        ttyinput('\033', tp);
+        ttyinput('[', tp);
+        n64cart_uart_esc_state = N64CART_UART_ESC_NONE;
+        goto again;
+
+    case N64CART_UART_ESC_CSI_3:
+        n64cart_uart_esc_state = N64CART_UART_ESC_NONE;
+        if (c == '~') {
+            ttyinput('\177', tp);
+            return;
+        }
+        ttyinput('\033', tp);
+        ttyinput('[', tp);
+        ttyinput('3', tp);
+        goto again;
+
+    default:
+        break;
+    }
+
+    if (c == '\033') {
+        n64cart_uart_esc_state = N64CART_UART_ESC_ESC;
+        return;
+    }
+    n64cart_uart_input_normal(tp, c);
+}
 
 static int
 n64cart_init(void *arg)
@@ -179,9 +241,7 @@ n64cart_uart_intr(void)
 
     while (n64cart_uart_poll()) {
         c = n64cart_uart_getc();
-        if (c == '\r')
-            c = '\n';
-        ttyinput(c, tp);
+        n64cart_uart_input(tp, c);
     }
 }
 

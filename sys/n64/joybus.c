@@ -27,6 +27,8 @@
 #define N64_RANDNET_KEY_LEFT_CTRL       0x1107
 #define N64_RANDNET_KEY_LEFT_SHIFT      0x0e01
 #define N64_RANDNET_KEY_RIGHT_SHIFT     0x0e06
+#define N64_RANDNET_KEY_BACKSPACE       0x0d06
+#define N64_RANDNET_KEY_DELETE          0x1008
 #define N64_RANDNET_KEY_RIGHT           0x0405
 #define N64_RANDNET_KEY_LEFT            0x0205
 #define N64_RANDNET_KEY_DOWN            0x0305
@@ -74,7 +76,7 @@ static const struct n64keyboard_ascii n64keyboard_ascii_map[] = {
     { 0x0906, '7', '&' }, { 0x0806, '8', '*' },
     { 0x0706, '9', '(' }, { 0x0606, '0', ')' },
     { 0x0d04, '\r', '\r' }, { 0x0a08, '\033', '\033' },
-    { 0x0d06, '\177', '\177' }, { 0x0d01, '\t', '\t' },
+    { 0x0d01, '\t', '\t' },
     { 0x0602, ' ', ' ' }, { 0x1004, '-', '_' },
     { 0x0c04, '[', '{' }, { 0x0406, ']', '}' },
     { 0x1105, ';', ':' }, { 0x0504, '\'', '"' },
@@ -167,6 +169,10 @@ n64keyboard_console_key(unsigned port, unsigned code, int shift, int ctrl)
         return;
     case N64_RANDNET_KEY_NUM_LOCK:
         n64keyboard_led[port] ^= N64_KBD_LED_NUM_LOCK;
+        return;
+    case N64_RANDNET_KEY_BACKSPACE:
+    case N64_RANDNET_KEY_DELETE:
+        n64keyboard_console_put('\177');
         return;
     case N64_RANDNET_KEY_RIGHT:
         n64keyboard_console_puts("\033[C");

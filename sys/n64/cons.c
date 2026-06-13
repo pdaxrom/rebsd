@@ -61,6 +61,8 @@ cninput(int c)
 {
     if (c == '\r')
         c = '\n';
+    else if (c == '\b' || c == '\177')
+        c = '\177';
     ttyinput(c, &cnttys[0]);
 }
 

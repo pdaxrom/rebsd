@@ -2,4 +2,4 @@ default:\
 	:ap:im=\r\n\r\nRetroBSD/N64 (%h) (%t)\r\n\r\n:
 
 std.default|default-baud:\
-	:
+	:cb:ce:ck:
