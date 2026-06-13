@@ -14,6 +14,10 @@
 #include <sys/systm.h>
 #include <sys/proc.h>
 
+#ifdef N64CART_ENABLED
+extern struct vfsops n64romfs_vfsops;
+#endif
+
 static int
 ufs_statfs (struct mount *mp, struct statfs *sbp)
 {
@@ -35,6 +39,21 @@ ufs_statfs (struct mount *mp, struct statfs *sbp)
     bcopy (mp->m_mntfrom, sfsp->f_mntfromname, MNAMELEN);
     sfsp->f_flags = mp->m_flags & MNT_VISFLAGMASK;
     return copyout ((caddr_t) sfsp, (caddr_t) sbp, sizeof (struct statfs));
+}
+
+struct vfsops *
+vfs_getops(int fstype)
+{
+    switch (fstype) {
+    case MOUNT_UFS:
+        return &ufs_vfsops;
+#ifdef N64CART_ENABLED
+    case MOUNT_ROMFS:
+        return &n64romfs_vfsops;
+#endif
+    default:
+        return 0;
+    }
 }
 
 int
@@ -183,6 +202,11 @@ ufs_sync(struct mount *mp)
 }
 
 struct vfsops ufs_vfsops = {
+    0,
+    0,
+    0,
+    0,
+    0,
     ufs_statfs,
     ufs_sync,
 };

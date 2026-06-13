@@ -105,6 +105,7 @@ smount()
     struct  nameidata nd;
     struct  nameidata *ndp = &nd;
     struct  mount   *mp;
+    struct  vfsops  *ops;
     u_int lenon, lenfrom;
     int error = 0;
     int flags, fstype;
@@ -117,6 +118,11 @@ smount()
         fstype = MOUNT_UFS;
     if (fstype < MOUNT_UFS || fstype > MOUNT_MAXTYPE) {
         u.u_error = EINVAL;
+        return;
+    }
+    ops = vfs_getops(fstype);
+    if (ops == 0) {
+        u.u_error = ENOSYS;
         return;
     }
     if (fstype == MOUNT_UFS)
@@ -135,11 +141,6 @@ smount()
     }
     copystr (uap->freg, mnton, sizeof (mnton) - 1, &lenon);
     copystr (uap->fspec, mntfrom, sizeof (mntfrom) - 1, &lenfrom);
-
-    if (fstype != MOUNT_UFS) {
-        error = ENOSYS;
-        goto cmnout;
-    }
 
     if (flags & MNT_UPDATE) {
         fs = ip->i_fs;
@@ -194,7 +195,10 @@ smount()
             error = EBUSY;
             goto cmnout;
         }
-        fs = mountfs (dev, flags, ip);
+        if (fstype == MOUNT_UFS)
+            fs = mountfs (dev, flags, ip);
+        else
+            fs = vfs_mountfs (fstype, dev, flags, ip);
         if (fs == 0)
             return;
     }
@@ -208,6 +212,67 @@ updname:
 cmnout:
     iput(ip);
     u.u_error = error;
+}
+
+struct fs *
+vfs_mountfs(int fstype, dev_t dev, int flags, struct inode *ip)
+{
+    register struct mount *mp = 0;
+    register struct fs *fs;
+    register struct vfsops *ops;
+    register int error;
+
+    ops = vfs_getops(fstype);
+    if (ops == 0 || ops->vfs_mount == 0) {
+        error = ENOSYS;
+        goto out;
+    }
+    for (mp = &mount[0]; mp < &mount[NMOUNT]; mp++)
+        if (mp->m_inodp != 0 && dev == mp->m_dev &&
+            mp->m_type == fstype) {
+            mp = 0;
+            error = EBUSY;
+            goto out;
+        }
+    for (mp = &mount[0]; mp < &mount[NMOUNT]; mp++)
+        if (mp->m_inodp == 0)
+            goto found;
+    mp = 0;
+    error = EMFILE;
+    goto out;
+found:
+    mp->m_inodp = ip;
+    mp->m_dev = dev;
+    mp->m_type = fstype;
+    mp->m_ops = ops;
+    mp->m_data = 0;
+    fs = &mp->m_filsys;
+    bzero((caddr_t)fs, sizeof(*fs));
+    fs->fs_ronly = (flags & MNT_RDONLY) != 0;
+    fs->fs_flags = flags;
+
+    error = (*ops->vfs_mount)(mp, dev, flags, ip);
+    if (error)
+        goto out;
+
+    if (ip) {
+        ip->i_flag |= IMOUNT;
+        cacheinval(ip);
+        IUNLOCK(ip);
+    }
+    return fs;
+out:
+    if (ip)
+        iput(ip);
+    if (mp) {
+        mp->m_inodp = 0;
+        mp->m_dev = 0;
+        mp->m_type = MOUNT_NONE;
+        mp->m_ops = 0;
+        mp->m_data = 0;
+    }
+    u.u_error = error;
+    return 0;
 }
 
 /*

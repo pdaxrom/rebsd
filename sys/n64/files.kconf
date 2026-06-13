@@ -58,6 +58,8 @@ kernel/vm_swp.c                 standard
 n64/n64cart_uart.c              optional n64cart
 n64/n64cart_rgbled.c            optional n64cart
 n64/n64cart_flash.c             optional n64cart
+n64/romfs_core.c                optional n64cart
+n64/romfs_vfs.c                 optional n64cart
 n64/console_null.c              standard
 n64/video.c                     standard
 n64/video_console.c             standard

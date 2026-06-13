@@ -28,8 +28,17 @@ struct statfs {
 };
 
 struct mount;
+struct inode;
+struct uio;
+struct buf;
 
 struct vfsops {
+    int     (*vfs_mount)(struct mount *mp, dev_t dev, int flags,
+                struct inode *ip);
+    int     (*vfs_unmount)(struct mount *mp);
+    int     (*vfs_load_inode)(struct mount *mp, struct inode *ip);
+    struct  buf *(*vfs_blkatoff)(struct inode *ip, off_t offset, char **res);
+    int     (*vfs_rwip)(struct inode *ip, struct uio *uio, int ioflag);
     int     (*vfs_statfs)(struct mount *mp, struct statfs *sbp);
     int     (*vfs_sync)(struct mount *mp);
 };
@@ -111,6 +120,8 @@ struct  mount
 extern struct mount mount[];
 extern struct vfsops ufs_vfsops;
 
+struct vfsops *vfs_getops(int fstype);
+struct fs *vfs_mountfs(int fstype, dev_t dev, int flags, struct inode *ip);
 int vfs_statfs(struct mount *mp, struct statfs *sbp);
 int vfs_sync(struct mount *mp);
 

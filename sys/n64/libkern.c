@@ -96,6 +96,51 @@ memcpy(void *dst, const void *src, size_t nbytes)
     return dst;
 }
 
+void *
+memmove(void *dst, const void *src, size_t nbytes)
+{
+    bcopy(src, dst, nbytes);
+    return dst;
+}
+
+void *
+memset(void *dst0, int value, size_t nbytes)
+{
+    unsigned char *dst = dst0;
+
+    while (nbytes-- != 0)
+        *dst++ = value;
+    return dst0;
+}
+
+char *
+strncpy(char *dst, const char *src, size_t nbytes)
+{
+    char *start = dst;
+
+    while (nbytes != 0 && *src != '\0') {
+        *dst++ = *src++;
+        nbytes--;
+    }
+    while (nbytes-- != 0)
+        *dst++ = '\0';
+    return start;
+}
+
+int
+strncmp(const char *s1, const char *s2, size_t nbytes)
+{
+    while (nbytes-- != 0) {
+        if (*s1 != *s2)
+            return (unsigned char)*s1 - (unsigned char)*s2;
+        if (*s1 == '\0')
+            return 0;
+        s1++;
+        s2++;
+    }
+    return 0;
+}
+
 void
 bzero(void *dst0, size_t nbytes)
 {

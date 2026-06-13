@@ -60,6 +60,14 @@ blkatoff(struct inode *ip, off_t offset, char **res)
     register struct buf *bp;
     daddr_t bn;
     char *junk;
+    struct mount *mp;
+
+    if (ip->i_fs != 0) {
+        mp = (struct mount *)((int)ip->i_fs - offsetof(struct mount, m_filsys));
+        if (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops &&
+            mp->m_ops->vfs_blkatoff != 0)
+            return (*mp->m_ops->vfs_blkatoff)(ip, offset, res);
+    }
 
     bn = bmap(ip, lbn, B_READ, 0);
     if (u.u_error)

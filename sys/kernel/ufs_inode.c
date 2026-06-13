@@ -109,18 +109,18 @@ loop:
                 sleep((caddr_t)ip, PINOD);
                 goto loop;
             }
-            if ((ip->i_flag&IMOUNT) != 0) {
-                register struct mount *mp;
+	    if ((ip->i_flag&IMOUNT) != 0) {
+		register struct mount *mp;
 
-                for (mp = &mount[0]; mp < &mount[NMOUNT]; mp++)
-                    if(mp->m_inodp == ip) {
-                        dev = mp->m_dev;
-                        fs = &mp->m_filsys;
-                        ino = ROOTINO;
-                        goto loop;
-                    }
-                panic("no imt");
-            }
+		for (mp = &mount[0]; mp < &mount[NMOUNT]; mp++)
+		    if(mp->m_inodp == ip) {
+			dev = mp->m_dev;
+			fs = &mp->m_filsys;
+			ino = ROOTINO;
+			goto loop;
+		    }
+		panic("no imt");
+	    }
             if (ip->i_count == 0) {     /* ino on free list */
                 register struct inode *iq;
 
@@ -172,6 +172,26 @@ loop:
     ip->i_flag = ILOCKED;
     ip->i_count++;
     ip->i_lastr = 0;
+    if (fs != 0) {
+	struct mount *mp = (struct mount *)
+	    ((int)fs - offsetof(struct mount, m_filsys));
+	if (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops &&
+	    mp->m_ops->vfs_load_inode != 0) {
+	    int error;
+
+	    error = (*mp->m_ops->vfs_load_inode)(mp, ip);
+	    if (error) {
+		remque(ip);
+		ip->i_forw = ip;
+		ip->i_back = ip;
+		ip->i_number = 0;
+		iput(ip);
+		u.u_error = error;
+		return(NULL);
+	    }
+	    return(ip);
+	}
+    }
     bp = bread(dev, itod(ino));
     /*
      * Check I/O errors

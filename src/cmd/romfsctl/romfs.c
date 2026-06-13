@@ -4,10 +4,53 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#ifdef KERNEL
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#define memset(dst, ch, len) romfs_kmemset((dst), (ch), (len))
+#define memmove(dst, src, len) romfs_kmemmove((dst), (src), (len))
+#define memcpy(dst, src, len) romfs_kmemmove((dst), (src), (len))
+#define strncpy(dst, src, len) romfs_kstrncpy((dst), (src), (len))
+
+static void *
+romfs_kmemset(void *dst, int ch, size_t len)
+{
+    unsigned char *p = dst;
+
+    while (len-- != 0)
+        *p++ = ch;
+    return dst;
+}
+
+static void *
+romfs_kmemmove(void *dst, const void *src, size_t len)
+{
+    bcopy(src, dst, len);
+    return dst;
+}
+
+static char *
+romfs_kstrncpy(char *dst, const char *src, size_t len)
+{
+    char *start = dst;
+
+    while (len != 0 && *src != '\0') {
+        *dst++ = *src++;
+        len--;
+    }
+    while (len-- != 0)
+        *dst++ = '\0';
+    return start;
+}
+#else
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#endif
 #include "romfs.h"
 
 #ifndef UINT32_MAX

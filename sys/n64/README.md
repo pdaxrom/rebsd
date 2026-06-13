@@ -303,8 +303,8 @@ device.
 
 ## N64cart flash and ROMFS diagnostic
 
-The n64cart flash support is split into two pieces while the real filesystem
-mount path is still being designed:
+The n64cart flash support is split into a raw flash command path and a kernel
+ROMFS mount path:
 
 - `/dev/cartflash0` is an N64-only character device on the n64cart hardware
   major. It reads the cartridge JEDEC ID, firmware size register, and flash
@@ -315,11 +315,15 @@ mount path is still being designed:
 - `/bin/romfsctl` is a diagnostic user command that vendors the ROMFS map/list
   implementation from the local n64cart sources and calls it through
   `/dev/cartflash0`.
+- `mount -t romfs /dev/cartflash0 /cart` uses the same ROMFS core source inside
+  the kernel. The first mounted version loads the cartridge map/list tables,
+  creates synthetic inodes, and supports `stat`, `open`, `read`, `lseek`, and
+  directory iteration. Mutating VFS operations are still pending; direct
+  write/erase diagnostics remain available through `romfsctl`.
 
-This lets the port validate the real cartridge flash protocol and writable
-ROMFS metadata before adding a kernel `mount -t romfs` path. The current UFS
-`rootfs.img` remains the system root and is still demand-read from cartridge
-ROM through the romdisk block driver.
+The current UFS `rootfs.img` remains the system root and is still demand-read
+from cartridge ROM through the romdisk block driver. Cartridge ROMFS is mounted
+separately, initially at `/cart`.
 
 The hardware smoke test used on real n64cart hardware is:
 
@@ -343,6 +347,22 @@ romfsctl cat /retrobsd-test/renamed.txt
 romfsctl rm /retrobsd-test/renamed.txt
 romfsctl rmdir /retrobsd-test
 ```
+
+The kernel ROMFS read smoke test is:
+
+```
+/sbin/mount -t romfs /dev/cartflash0 /cart
+/sbin/mount
+ls -l /cart
+ls -l /cart/roms
+cat /cart/roms/kernel.z64 >/dev/null
+cat /cart/roms/kernel.z64 | wc
+```
+
+This path was verified on real N64cart hardware on 2026-06-14. The test mounted
+`/dev/cartflash0` at `/cart`, listed the root and `/cart/roms`, and read
+`/cart/roms/kernel.z64` both directly to `/dev/null` and through a pipe to
+`wc`.
 
 `romfsctl info` reports:
 

@@ -162,10 +162,17 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
     int n, on, type, resid;
     int error = 0;
     int flags;
+    struct mount *mp;
 
     //if (uio->uio_offset < 0)
         //return (EINVAL);
     type = ip->i_mode & IFMT;
+    if (ip->i_fs != 0) {
+        mp = (struct mount *)((int)ip->i_fs - offsetof(struct mount, m_filsys));
+        if (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops &&
+            mp->m_ops->vfs_rwip != 0)
+            return (*mp->m_ops->vfs_rwip)(ip, uio, ioflag);
+    }
     /*
      * The write case below checks that i/o is done synchronously to directories
      * and that i/o to append only files takes place at the end of file.

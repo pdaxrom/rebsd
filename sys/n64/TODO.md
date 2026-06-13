@@ -149,14 +149,28 @@ copying binaries manually.
   - report the filesystem type through `statfs`
 - [x] Add a userland mount entry point for cartridge ROMFS, so
   `mount -t romfs ... /cart` reaches the typed kernel mount path rather than
-  relying on private N64 test tools. Until the ROMFS vnode layer exists this
-  path returns `ENOSYS`.
-- [ ] Implement the first ROMFS version as a real writable filesystem:
+  relying on private N64 test tools.
+- [x] Add the first kernel ROMFS VFS backend:
+  - reuse the same ROMFS core source as `/bin/romfsctl`
   - keep `/dev/cartflash0` as the mount source and accept a character device in
     the ROMFS mount path
   - use the kernel-callable N64cart flash helpers instead of calling the
     `/dev/cartflash0` ioctl path from inside the kernel
-  - lookup, `stat`, `open`, `read`, `write`, `lseek`, directory iteration
+  - load ROMFS map/list tables from cartridge flash at mount time
+  - support synthetic inode lookup, `stat`, `open`, `read`, `lseek`, directory
+    iteration, and `statfs`
+- [x] Hardware smoke-test kernel ROMFS mount/read path on real N64cart
+  hardware, 2026-06-14:
+  - [x] `mount -t romfs /dev/cartflash0 /cart`
+  - [x] `/sbin/mount` shows `/dev/cartflash0 on /cart`
+  - [x] `ls -l /cart`
+  - [x] `ls -l /cart/roms`
+  - [x] `cat /cart/roms/kernel.z64 >/dev/null`
+  - [x] `cat /cart/roms/kernel.z64 | wc`
+  - [ ] `statfs`/`df` equivalent reports `romfs` type once a user tool is
+    available
+- [ ] Implement ROMFS VFS write support:
+  - `write`
   - create, append, truncate, unlink, rename, mkdir, and rmdir through the
     cartridge ROMFS flash map/list implementation
   - support `ro` mounts by rejecting mutating operations with `EROFS`
