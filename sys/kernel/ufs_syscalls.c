@@ -9,10 +9,24 @@
 #include <sys/inode.h>
 #include <sys/namei.h>
 #include <sys/fs.h>
+#include <sys/mount.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+
+static struct mount *
+nonufs_mount(struct inode *ip)
+{
+    struct mount *mp;
+
+    if (ip == 0 || ip->i_fs == 0)
+        return 0;
+    mp = (struct mount *)((int)ip->i_fs - offsetof(struct mount, m_filsys));
+    if (mp->m_ops == 0 || mp->m_ops == &ufs_vfsops)
+        return 0;
+    return mp;
+}
 
 /*
  * Common routine for chroot and chdir.
@@ -355,6 +369,17 @@ unlink()
     if (ip == NULL)
         return;
     dp = ndp->ni_pdir;
+    {
+        struct mount *mp = nonufs_mount(dp);
+
+        if (mp != 0) {
+            if (mp->m_ops->vfs_remove == 0)
+                u.u_error = EROFS;
+            else
+                u.u_error = (*mp->m_ops->vfs_remove)(dp, ip, ndp);
+            goto out;
+        }
+    }
     if ((ip->i_mode&IFMT) == IFDIR && !suser())
         goto out;
     /*
@@ -784,7 +809,10 @@ rename()
     struct dirtemplate dirbuf;
     int doingdirectory = 0, oldparent = 0, newparent = 0;
     struct  nameidata nd;
+    struct  nameidata tnd;
     register struct nameidata *ndp = &nd;
+    register struct nameidata *tdnp = &tnd;
+    struct mount *mp;
     int error = 0;
 
     NDINIT (ndp, DELETE, LOCKPARENT, uap->from);
@@ -803,6 +831,54 @@ rename()
         else
             iput(ip);
         u.u_error = EPERM;
+        return;
+    }
+    mp = nonufs_mount(dp);
+    if (mp != 0) {
+        struct inode *tdp, *txp;
+        int source_unlocked = 0;
+
+        if (mp->m_ops->vfs_rename == 0) {
+            error = EROFS;
+            goto romfs_rename_out;
+        }
+        if (dp == ip) {
+            error = EINVAL;
+            goto romfs_rename_out;
+        }
+        IUNLOCK(dp);
+        IUNLOCK(ip);
+        source_unlocked = 1;
+        NDINIT(tdnp, CREATE | LOCKPARENT | NOCACHE, NOFOLLOW, uap->to);
+        txp = namei(tdnp);
+        if (u.u_error) {
+            error = u.u_error;
+            goto romfs_rename_out;
+        }
+        tdp = tdnp->ni_pdir;
+        if (nonufs_mount(tdp) != mp)
+            error = EXDEV;
+        else
+            error = (*mp->m_ops->vfs_rename)(dp, ip, ndp, tdp, txp, tdnp);
+        if (txp) {
+            if (txp == tdp)
+                irele(txp);
+            else
+                iput(txp);
+        }
+        if (tdp)
+            iput(tdp);
+romfs_rename_out:
+        if (source_unlocked) {
+            irele(ip);
+            irele(dp);
+        } else if (dp == ip) {
+            irele(ip);
+        } else {
+            iput(ip);
+            iput(dp);
+        }
+        u.u_error = error;
         return;
     }
 
@@ -1075,6 +1151,25 @@ maknode (int mode, struct nameidata *ndp)
 {
     register struct inode *ip;
     register struct inode *pdir = ndp->ni_pdir;
+    struct inode *newip;
+    struct mount *mp;
+
+    mp = nonufs_mount(pdir);
+    if (mp != 0) {
+        if (mp->m_ops->vfs_create == 0) {
+            iput(pdir);
+            u.u_error = EROFS;
+            return (NULL);
+        }
+        u.u_error = (*mp->m_ops->vfs_create)(pdir, ndp, mode, &newip);
+        if (u.u_error) {
+            iput(pdir);
+            return (NULL);
+        }
+        ndp->ni_ip = newip;
+        iput(pdir);
+        return (newip);
+    }
 
     ip = ialloc(pdir);
     if (ip == NULL) {
@@ -1144,6 +1239,18 @@ mkdir()
     dp = ndp->ni_pdir;
     uap->dmode &= 0777;
     uap->dmode |= IFDIR;
+    {
+        struct mount *mp = nonufs_mount(dp);
+
+        if (mp != 0) {
+            if (mp->m_ops->vfs_mkdir == 0)
+                u.u_error = EROFS;
+            else
+                u.u_error = (*mp->m_ops->vfs_mkdir)(dp, ndp, uap->dmode);
+            iput(dp);
+            return;
+        }
+    }
     /*
      * Must simulate part of maknode here
      * in order to acquire the inode, but
@@ -1244,6 +1351,17 @@ rmdir()
         iput(ip);
         u.u_error = EINVAL;
         return;
+    }
+    {
+        struct mount *mp = nonufs_mount(dp);
+
+        if (mp != 0) {
+            if (mp->m_ops->vfs_rmdir == 0)
+                u.u_error = EROFS;
+            else
+                u.u_error = (*mp->m_ops->vfs_rmdir)(dp, ip, ndp);
+            goto out;
+        }
     }
     if ((ip->i_mode&IFMT) != IFDIR) {
         u.u_error = ENOTDIR;

@@ -280,17 +280,37 @@ iput (struct inode *ip)
     irele(ip);
 }
 
+static int
+nonufs_inode(struct inode *ip)
+{
+    struct mount *mp;
+
+    if (ip == 0 || ip->i_fs == 0)
+        return 0;
+    mp = (struct mount *)((int)ip->i_fs - offsetof(struct mount, m_filsys));
+    return (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops);
+}
+
 void
 irele (struct inode *ip)
 {
     if (ip->i_count == 1) {
         ip->i_flag |= ILOCKED;
         if (ip->i_nlink <= 0 && ip->i_fs->fs_ronly == 0) {
-            itrunc (ip, (u_long) 0, 0);
-            ip->i_mode = 0;
-            ip->i_rdev = 0;
-            ip->i_flag |= IUPD|ICHG;
-            ifree(ip, ip->i_number);
+            if (nonufs_inode(ip)) {
+                remque(ip);
+                ip->i_forw = ip;
+                ip->i_back = ip;
+                ip->i_number = 0;
+                ip->i_mode = 0;
+                ip->i_rdev = 0;
+            } else {
+                itrunc (ip, (u_long) 0, 0);
+                ip->i_mode = 0;
+                ip->i_rdev = 0;
+                ip->i_flag |= IUPD|ICHG;
+                ifree(ip, ip->i_number);
+            }
         }
         IUPDAT(ip, &time, &time, 0);
         IUNLOCK(ip);
@@ -336,6 +356,14 @@ iupdat (struct inode *ip, struct timeval *ta, struct timeval *tm, int waitfor)
 
     if ((tip->i_flag & (IUPD|IACC|ICHG|IMOD)) == 0)
         return;
+    if (tip->i_fs != 0) {
+	struct mount *mp = (struct mount *)
+	    ((int)tip->i_fs - offsetof(struct mount, m_filsys));
+	if (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops) {
+	    tip->i_flag &= ~(IUPD|IACC|ICHG|IMOD);
+	    return;
+	}
+    }
     if (tip->i_fs->fs_ronly)
         return;
     bp = bread(tip->i_dev, itod(tip->i_number));
@@ -500,6 +528,18 @@ itrunc (struct inode *oip, u_long length, int ioflags)
     int offset, level;
     struct inode tip;
     int aflags;
+
+    if (oip->i_fs != 0) {
+	struct mount *mp = (struct mount *)
+	    ((int)oip->i_fs - offsetof(struct mount, m_filsys));
+	if (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops) {
+	    if (mp->m_ops->vfs_truncate != 0)
+		u.u_error = (*mp->m_ops->vfs_truncate)(oip, length, ioflags);
+	    else
+		u.u_error = EROFS;
+	    return;
+	}
+    }
 
     aflags = B_CLRBUF;
     if (ioflags & IO_SYNC)

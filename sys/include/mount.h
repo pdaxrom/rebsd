@@ -31,6 +31,7 @@ struct mount;
 struct inode;
 struct uio;
 struct buf;
+struct nameidata;
 
 struct vfsops {
     int     (*vfs_mount)(struct mount *mp, dev_t dev, int flags,
@@ -39,6 +40,17 @@ struct vfsops {
     int     (*vfs_load_inode)(struct mount *mp, struct inode *ip);
     struct  buf *(*vfs_blkatoff)(struct inode *ip, off_t offset, char **res);
     int     (*vfs_rwip)(struct inode *ip, struct uio *uio, int ioflag);
+    int     (*vfs_create)(struct inode *pdir, struct nameidata *ndp,
+                int mode, struct inode **ipp);
+    int     (*vfs_remove)(struct inode *pdir, struct inode *ip,
+                struct nameidata *ndp);
+    int     (*vfs_mkdir)(struct inode *pdir, struct nameidata *ndp, int mode);
+    int     (*vfs_rmdir)(struct inode *pdir, struct inode *ip,
+                struct nameidata *ndp);
+    int     (*vfs_rename)(struct inode *from_pdir, struct inode *from_ip,
+                struct nameidata *from_ndp, struct inode *to_pdir,
+                struct inode *to_ip, struct nameidata *to_ndp);
+    int     (*vfs_truncate)(struct inode *ip, u_long length, int ioflags);
     int     (*vfs_statfs)(struct mount *mp, struct statfs *sbp);
     int     (*vfs_sync)(struct mount *mp);
 };

@@ -362,7 +362,39 @@ cat /cart/roms/kernel.z64 | wc
 This path was verified on real N64cart hardware on 2026-06-14. The test mounted
 `/dev/cartflash0` at `/cart`, listed the root and `/cart/roms`, and read
 `/cart/roms/kernel.z64` both directly to `/dev/null` and through a pipe to
-`wc`.
+`wc`. Unmounting `/cart` with `/sbin/umount /cart` was also verified after the
+ROMFS source device was accepted as a character device by the kernel unmount
+path.
+
+The kernel ROMFS write smoke test is:
+
+```
+/sbin/mount -t romfs /dev/cartflash0 /cart
+mkdir /cart/retrobsd-vfs-test
+echo hello >/cart/retrobsd-vfs-test/hello.txt
+cat /cart/retrobsd-vfs-test/hello.txt
+echo again >>/cart/retrobsd-vfs-test/hello.txt
+cat /cart/retrobsd-vfs-test/hello.txt
+echo reset >/cart/retrobsd-vfs-test/hello.txt
+mv /cart/retrobsd-vfs-test/hello.txt /cart/retrobsd-vfs-test/renamed.txt
+cat /cart/retrobsd-vfs-test/renamed.txt
+rm /cart/retrobsd-vfs-test/renamed.txt
+rmdir /cart/retrobsd-vfs-test
+```
+
+The first writable VFS version creates, writes, appends, truncates, unlinks,
+renames to a free destination, and creates/removes directories through the same
+ROMFS flash map/list implementation used by `romfsctl`. Renaming over an
+existing destination is intentionally rejected with `EEXIST` until overwrite
+semantics are added.
+
+The ROMFS VFS write/delete path was verified on real N64cart hardware on
+2026-06-14. The test wrote and read `/cart/retrobsd-vfs-test/hello.txt`,
+renamed it to `renamed.txt`, read it after the rename, removed it with exit
+status 0, confirmed the directory was empty, and removed the test directory.
+After reboot, mounting `/dev/cartflash0` at `/cart` again showed that the test
+directory stayed deleted, confirming that the ROMFS map/list changes were
+persisted to cartridge flash.
 
 `romfsctl info` reports:
 

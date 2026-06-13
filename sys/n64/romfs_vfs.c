@@ -6,6 +6,7 @@
 #include <sys/dir.h>
 #include <sys/buf.h>
 #include <sys/mount.h>
+#include <sys/namei.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
@@ -38,6 +39,7 @@ static struct n64romfs_mount n64romfs_mount_state;
 static uint16_t n64romfs_flash_map[N64ROMFS_MAX_MAP_SIZE / sizeof(uint16_t)];
 static uint8_t n64romfs_flash_list[N64ROMFS_MAX_LIST_SIZE];
 static uint8_t n64romfs_io_buffer[ROMFS_FLASH_SECTOR];
+static uint8_t n64romfs_write_buffer[512];
 static uint8_t n64romfs_dir_buffer[DIRBLKSIZ];
 
 bool
@@ -100,6 +102,33 @@ n64romfs_entry_by_index(uint32_t index, romfs_file *file)
         err = romfs_list(file, false);
     }
     return ENOENT;
+}
+
+static void
+n64romfs_refresh_counts(struct mount *mp)
+{
+    struct n64romfs_mount *rmp = (struct n64romfs_mount *)mp->m_data;
+    romfs_file file;
+    uint32_t err;
+
+    if (rmp == 0)
+        return;
+    rmp->free_bytes = romfs_free();
+    rmp->files = 0;
+    bzero(&file, sizeof(file));
+    err = romfs_list(&file, true);
+    while (err == ROMFS_NOERR) {
+        rmp->files++;
+        err = romfs_list(&file, false);
+    }
+}
+
+static int
+n64romfs_writable(struct mount *mp)
+{
+    if (mp->m_filsys.fs_ronly || (mp->m_flags & MNT_RDONLY))
+        return EROFS;
+    return 0;
 }
 
 static int
@@ -376,6 +405,75 @@ n64romfs_read_file(struct inode *ip, struct uio *uio)
 }
 
 static int
+n64romfs_open_write_inode(struct inode *ip, romfs_file *file)
+{
+    romfs_dir dir;
+    char name[ROMFS_MAX_NAME_LEN];
+    int error;
+
+    if ((ip->i_mode & IFMT) != IFREG)
+        return EISDIR;
+    error = n64romfs_entry_by_index(N64ROMFS_INO_ENTRY(ip->i_number), file);
+    if (error)
+        return error;
+    if (file->entry.attr.names.type == ROMFS_TYPE_DIR)
+        return EISDIR;
+    bzero(&dir, sizeof(dir));
+    dir.id = file->entry.attr.names.parent;
+    dir.entry_index = ROMFS_INVALID_ENTRY_ID;
+    bzero(name, sizeof(name));
+    bcopy(file->entry.name, name, sizeof(name) - 1);
+    error = n64romfs_error(romfs_open_append_in_dir(&dir, name, file,
+        ROMFS_TYPE_MISC, n64romfs_io_buffer));
+    return error;
+}
+
+static int
+n64romfs_write_file(struct inode *ip, struct uio *uio, int ioflag)
+{
+    struct mount *mp = (struct mount *)
+        ((int)ip->i_fs - offsetof(struct mount, m_filsys));
+    romfs_file file;
+    int error;
+    unsigned n;
+    uint32_t written;
+
+    error = n64romfs_writable(mp);
+    if (error)
+        return error;
+    if (ioflag & IO_APPEND)
+        uio->uio_offset = ip->i_size;
+    if (uio->uio_offset < 0)
+        return EINVAL;
+    error = n64romfs_open_write_inode(ip, &file);
+    if (error)
+        return error;
+    error = n64romfs_error(romfs_seek_file(&file, uio->uio_offset, SEEK_SET));
+    if (error)
+        return error;
+
+    while (uio->uio_resid != 0) {
+        n = MIN((u_int)sizeof(n64romfs_write_buffer), uio->uio_resid);
+        error = uiomove((caddr_t)n64romfs_write_buffer, n, uio);
+        if (error)
+            break;
+        written = romfs_write_file(n64romfs_write_buffer, n, &file);
+        if (written != n) {
+            error = n64romfs_error(file.err);
+            if (error == 0)
+                error = EIO;
+            break;
+        }
+    }
+    if (error == 0)
+        error = n64romfs_error(romfs_close_file(&file));
+    ip->i_size = file.entry.size;
+    ip->i_flag |= IUPD|ICHG;
+    n64romfs_refresh_counts(mp);
+    return error;
+}
+
+static int
 n64romfs_rwip(struct inode *ip, struct uio *uio, int ioflag)
 {
     int type;
@@ -383,12 +481,191 @@ n64romfs_rwip(struct inode *ip, struct uio *uio, int ioflag)
     (void)ioflag;
     type = ip->i_mode & IFMT;
     if (uio->uio_rw != UIO_READ)
-        return EROFS;
+        return n64romfs_write_file(ip, uio, ioflag);
     if (type == IFDIR)
         return n64romfs_read_dir(ip, uio);
     if (type == IFREG)
         return n64romfs_read_file(ip, uio);
     return EFTYPE;
+}
+
+static int
+n64romfs_create(struct inode *pdir, struct nameidata *ndp, int mode,
+    struct inode **ipp)
+{
+    struct mount *mp = (struct mount *)
+        ((int)pdir->i_fs - offsetof(struct mount, m_filsys));
+    romfs_dir dir;
+    romfs_file file;
+    int error;
+    uint32_t err;
+
+    *ipp = 0;
+    error = n64romfs_writable(mp);
+    if (error)
+        return error;
+    if ((mode & IFMT) == 0)
+        mode |= IFREG;
+    if ((mode & IFMT) != IFREG)
+        return EOPNOTSUPP;
+    error = n64romfs_dir_by_inode(pdir->i_number, &dir);
+    if (error)
+        return error;
+    bzero(&file, sizeof(file));
+    err = romfs_create_file_in_dir(&dir, ndp->ni_dent.d_name, &file,
+        ROMFS_MODE_READWRITE, ROMFS_TYPE_MISC, n64romfs_io_buffer);
+    error = n64romfs_error(err);
+    if (error)
+        return error;
+    error = n64romfs_error(romfs_close_file(&file));
+    if (error)
+        return error;
+    n64romfs_refresh_counts(mp);
+    nchinval(pdir->i_dev);
+    *ipp = iget(pdir->i_dev, pdir->i_fs, N64ROMFS_ENTRY_INO(file.nentry));
+    if (*ipp == 0)
+        return u.u_error ? u.u_error : EIO;
+    return 0;
+}
+
+static int
+n64romfs_remove(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
+{
+    struct mount *mp = (struct mount *)
+        ((int)pdir->i_fs - offsetof(struct mount, m_filsys));
+    romfs_dir dir;
+    int error;
+
+    error = n64romfs_writable(mp);
+    if (error)
+        return error;
+    if ((ip->i_mode & IFMT) == IFDIR)
+        return EISDIR;
+    error = n64romfs_dir_by_inode(pdir->i_number, &dir);
+    if (error)
+        return error;
+    error = n64romfs_error(romfs_delete_in_dir(&dir, ndp->ni_dent.d_name));
+    if (error)
+        return error;
+    ip->i_nlink = 0;
+    ip->i_size = 0;
+    cacheinval(ip);
+    n64romfs_refresh_counts(mp);
+    nchinval(pdir->i_dev);
+    return 0;
+}
+
+static int
+n64romfs_mkdir(struct inode *pdir, struct nameidata *ndp, int mode)
+{
+    struct mount *mp = (struct mount *)
+        ((int)pdir->i_fs - offsetof(struct mount, m_filsys));
+    romfs_dir dir;
+    romfs_dir newdir;
+    int error;
+
+    (void)mode;
+    error = n64romfs_writable(mp);
+    if (error)
+        return error;
+    error = n64romfs_dir_by_inode(pdir->i_number, &dir);
+    if (error)
+        return error;
+    error = n64romfs_error(romfs_dir_create(&dir, ndp->ni_dent.d_name,
+        &newdir));
+    if (error)
+        return error;
+    n64romfs_refresh_counts(mp);
+    nchinval(pdir->i_dev);
+    return 0;
+}
+
+static int
+n64romfs_rmdir(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
+{
+    struct mount *mp = (struct mount *)
+        ((int)pdir->i_fs - offsetof(struct mount, m_filsys));
+    romfs_dir dir;
+    int error;
+
+    error = n64romfs_writable(mp);
+    if (error)
+        return error;
+    if ((ip->i_mode & IFMT) != IFDIR)
+        return ENOTDIR;
+    error = n64romfs_dir_by_inode(pdir->i_number, &dir);
+    if (error)
+        return error;
+    error = n64romfs_error(romfs_delete_in_dir(&dir, ndp->ni_dent.d_name));
+    if (error)
+        return error;
+    ip->i_nlink = 0;
+    ip->i_size = 0;
+    cacheinval(ip);
+    n64romfs_refresh_counts(mp);
+    nchinval(pdir->i_dev);
+    return 0;
+}
+
+static int
+n64romfs_rename(struct inode *from_pdir, struct inode *from_ip,
+    struct nameidata *from_ndp, struct inode *to_pdir, struct inode *to_ip,
+    struct nameidata *to_ndp)
+{
+    struct mount *mp = (struct mount *)
+        ((int)from_pdir->i_fs - offsetof(struct mount, m_filsys));
+    romfs_dir from_dir;
+    romfs_dir to_dir;
+    int error;
+
+    error = n64romfs_writable(mp);
+    if (error)
+        return error;
+    if (from_pdir == from_ip)
+        return EINVAL;
+    if (to_ip != 0)
+        return EEXIST;
+    error = n64romfs_dir_by_inode(from_pdir->i_number, &from_dir);
+    if (error)
+        return error;
+    error = n64romfs_dir_by_inode(to_pdir->i_number, &to_dir);
+    if (error)
+        return error;
+    error = n64romfs_error(romfs_rename_in_dir(&from_dir,
+        from_ndp->ni_dent.d_name, &to_dir, to_ndp->ni_dent.d_name));
+    if (error)
+        return error;
+    cacheinval(from_ip);
+    n64romfs_refresh_counts(mp);
+    nchinval(from_pdir->i_dev);
+    return 0;
+}
+
+static int
+n64romfs_truncate(struct inode *ip, u_long length, int ioflags)
+{
+    struct mount *mp = (struct mount *)
+        ((int)ip->i_fs - offsetof(struct mount, m_filsys));
+    romfs_file file;
+    int error;
+
+    (void)ioflags;
+    error = n64romfs_writable(mp);
+    if (error)
+        return error;
+    if (length > 0xffffffffu)
+        return EFBIG;
+    error = n64romfs_open_write_inode(ip, &file);
+    if (error)
+        return error;
+    error = n64romfs_error(romfs_truncate_file(&file, length));
+    if (error)
+        return error;
+    ip->i_size = file.entry.size;
+    ip->i_flag |= IUPD|ICHG;
+    cacheinval(ip);
+    n64romfs_refresh_counts(mp);
+    return 0;
 }
 
 static int
@@ -455,7 +732,7 @@ n64romfs_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
         err = romfs_list(&file, false);
     }
     mp->m_data = (caddr_t)rmp;
-    mp->m_filsys.fs_ronly = 1;
+    mp->m_filsys.fs_ronly = (flags & MNT_RDONLY) != 0;
     mp->m_filsys.fs_flags = flags;
     return 0;
 }
@@ -466,6 +743,12 @@ struct vfsops n64romfs_vfsops = {
     n64romfs_load_inode,
     n64romfs_blkatoff,
     n64romfs_rwip,
+    n64romfs_create,
+    n64romfs_remove,
+    n64romfs_mkdir,
+    n64romfs_rmdir,
+    n64romfs_rename,
+    n64romfs_truncate,
     n64romfs_statfs,
     n64romfs_sync,
 };

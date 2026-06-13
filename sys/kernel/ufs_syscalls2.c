@@ -207,6 +207,12 @@ struct vfsops ufs_vfsops = {
     0,
     0,
     0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     ufs_statfs,
     ufs_sync,
 };

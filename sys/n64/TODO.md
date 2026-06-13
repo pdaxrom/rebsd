@@ -167,17 +167,34 @@ copying binaries manually.
   - [x] `ls -l /cart/roms`
   - [x] `cat /cart/roms/kernel.z64 >/dev/null`
   - [x] `cat /cart/roms/kernel.z64 | wc`
+  - [x] `/sbin/umount /cart`
   - [ ] `statfs`/`df` equivalent reports `romfs` type once a user tool is
     available
-- [ ] Implement ROMFS VFS write support:
-  - `write`
-  - create, append, truncate, unlink, rename, mkdir, and rmdir through the
+- [x] Implement first ROMFS VFS write support:
+  - [x] `write`
+  - [x] create, append, truncate, unlink, rename, mkdir, and rmdir through the
     cartridge ROMFS flash map/list implementation
-  - support `ro` mounts by rejecting mutating operations with `EROFS`
-  - flush metadata/data through cartridge sector erase/write paths and make
-    reboot/sync call the ROMFS flush path
-  - preserve directory entries and file sizes from the cartridge ROMFS entry
+  - [x] support `ro` mounts by rejecting mutating operations with `EROFS`
+  - [x] flush metadata/data through cartridge sector erase/write paths
+  - [x] preserve directory entries and file sizes from the cartridge ROMFS entry
     table
+  - [ ] support `rename` over an existing destination; the first version
+    returns `EEXIST`
+- [x] Hardware smoke-test kernel ROMFS write path on real N64cart hardware,
+  2026-06-14:
+  - [x] `mkdir /cart/retrobsd-vfs-test`
+  - [x] `echo hello >/cart/retrobsd-vfs-test/hello.txt`
+  - [x] `cat /cart/retrobsd-vfs-test/hello.txt`
+  - [x] `echo again >>/cart/retrobsd-vfs-test/hello.txt`
+  - [x] `cat /cart/retrobsd-vfs-test/hello.txt`
+  - [x] `echo reset >/cart/retrobsd-vfs-test/hello.txt`
+  - [x] `mv /cart/retrobsd-vfs-test/hello.txt /cart/retrobsd-vfs-test/renamed.txt`
+  - [x] `cat /cart/retrobsd-vfs-test/renamed.txt`
+  - [x] `rm /cart/retrobsd-vfs-test/renamed.txt`
+  - [x] `echo $?` reports `0`
+  - [x] `ls -l /cart/retrobsd-vfs-test/` shows `total 0`
+  - [x] `rmdir /cart/retrobsd-vfs-test`
+  - [x] reboot, mount `/cart`, and verify deleted test entries stay deleted
 - [ ] Add an overlay filesystem plan after ROMFS can be mounted:
   - lower layer is read-only UFS or ROMFS
   - upper layer is initially RAM-backed, ROMFS, or another writable block

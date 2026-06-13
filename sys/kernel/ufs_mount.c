@@ -373,7 +373,11 @@ unmount1 (caddr_t fname)
     int aflag;
 
     error = getmdev(&dev, fname);
-    if (error)
+    if (error == ENOTBLK) {
+        error = getcdev(&dev, fname);
+        if (error)
+            return (error);
+    } else if (error)
         return (error);
     for (mp = &mount[0]; mp < &mount[NMOUNT]; mp++)
         if (mp->m_inodp != NULL && dev == mp->m_dev)
@@ -389,16 +393,23 @@ found:
         mp->m_flags |= aflag;
         return (EBUSY);
     }
+    if (mp->m_ops != 0 && mp->m_ops->vfs_unmount != 0) {
+        error = (*mp->m_ops->vfs_unmount)(mp);
+        if (error)
+            return (error);
+    }
     ip = mp->m_inodp;
     ip->i_flag &= ~IMOUNT;
     irele(ip);
+    if (mp->m_type == MOUNT_UFS) {
+        (*bdevsw[major(dev)].d_close)(dev, 0, S_IFBLK);
+        binval(dev);
+    }
     mp->m_inodp = 0;
     mp->m_dev = 0;
     mp->m_type = MOUNT_NONE;
     mp->m_ops = 0;
     mp->m_data = 0;
-    (*bdevsw[major(dev)].d_close)(dev, 0, S_IFBLK);
-    binval(dev);
     return (0);
 }
 
