@@ -5,7 +5,11 @@
 
 #define N64_RAMSWAP_MAJOR       1
 #define N64_RAMSWAP_MINOR       0
+#define N64_RAMDISK_VAR_MINOR   1
 #define N64_BASE_SWAP_KBYTES    (N64_BASE_SWAP_BYTES >> 10)
+
+#define N64_RAMDISK_4M_VAR_BYTES    0x00020000
+#define N64_RAMDISK_8M_VAR_BYTES    0x00080000
 
 struct buf;
 

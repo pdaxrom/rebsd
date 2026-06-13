@@ -28,6 +28,9 @@
 #ifndef NFILE
 #define NFILE           32
 #endif
+#ifndef NMOUNT
+#define NMOUNT          8
+#endif
 #define NNAMECACHE      (NINODE * 11/10)
 #define NCALL           (16 + 2 * MAXUSERS)
 #define NCLIST          32

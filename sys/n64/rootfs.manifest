@@ -21,10 +21,13 @@ dir /share/man
 dir /share/man/cat1
 dir /share/man/cat8
 dir /share/misc
-dir /tmp
+symlink /tmp
+target var/tmp
 dir /var
+dir /var/lock
 dir /var/log
 dir /var/run
+dir /var/tmp
 
 file /.profile
 
@@ -197,6 +200,8 @@ file /share/man/cat8/init.0
 
 file /share/man/cat8/mount.0
 
+file /share/man/cat8/mkfs.0
+
 file /share/man/cat8/reboot.0
 
 file /share/man/cat8/umount.0
@@ -208,6 +213,9 @@ file /sbin/fsck
 mode 0775
 
 file /sbin/init
+mode 0775
+
+file /sbin/mkfs
 mode 0775
 
 file /sbin/mount

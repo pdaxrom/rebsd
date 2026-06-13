@@ -67,6 +67,81 @@ copying binaries manually.
 - [x] Keep generated device nodes derived from kernel definitions through
   `sys/n64/devnodes.awk`
 - [x] Keep cartridge root read-only until a writable filesystem target exists
+- [ ] Expand the N64 rootfs toward the normal RetroBSD command set by enabling
+  command groups from `src/cmd/Makefile` in batches, while continuing to
+  exclude PIC32/peripheral-specific tools and commands that require unavailable
+  writable devices.
+- [ ] Increase the default N64 rootfs size once the command set grows; the
+  image remains ROM-backed and demand-read through the romdisk block driver,
+  not copied wholesale into RDRAM.
+
+## Volatile Writable Filesystems
+
+- [x] Add a tmpfs-like writable target for `/var` so the normal multiuser
+  rootfs can keep `/` read-only while commands still have writable scratch and
+  runtime state; `/tmp` is a symlink to `/var/tmp`.
+- [x] Implement the first N64 version with the existing UFS stack on
+  RAM-backed block devices rather than inventing a separate inode filesystem:
+  this keeps mount, namei, read/write, directory, and fsck behavior aligned
+  with the current kernel.
+- [x] Split N64 volatile RAM storage from swap instead of reusing `/dev/swap`
+  directly:
+  - reserve one small RAM disk minor, `/dev/ram0`, for `/var`
+  - size it from detected RDRAM, with conservative 4 MiB defaults and larger
+    8 MiB defaults
+  - subtract the reserved RAM disk bytes from the swap region so the areas do
+    not overlap
+- [x] Generate `/dev/ram0` from kernel device definitions, not by hand-editing
+  the staged rootfs.
+- [x] Teach the N64 boot scripts to create volatile filesystems at startup:
+  `mkfs` the RAM disk, mount `/var`, then create required runtime directories
+  such as `/var/run`, `/var/log`, `/var/tmp`, and `/var/lock`.
+- [x] Keep `/tmp` and `/var` volatile for the first version; later ROMFS or
+  another writable block device can provide persistent upper storage.
+- [ ] Hardware smoke-test volatile mounts:
+  - boot reaches login with `swap size = 2944 kbytes` on 8 MiB hardware
+  - `/dev/ram0` exists as a block device
+  - `mount` shows `/var` mounted read/write
+  - `ls -l /tmp` shows a symlink to `/var/tmp`
+  - `echo ok >/tmp/test`, `cat /tmp/test`, `rm /tmp/test` work
+  - `/var/run`, `/var/log`, `/var/tmp`, and `/var/lock` exist after boot
+
+## Cartridge ROMFS And Writable Overlays
+
+- [ ] Add support for the N64cart cartridge ROMFS format used by
+  `/Users/sash/Work/N64/N64cart/fw/romfs`, mounted from cartridge flash with
+  read/write support. Keep this separate from the current UFS `rootfs.img`
+  romdisk: UFS remains the system root until the new filesystem path is stable.
+- [ ] Extend kernel mount plumbing beyond the current UFS-only `mountfs()`
+  path:
+  - keep the existing `mount(2)`/UFS behavior working for PIC32 and current
+    N64 root
+  - add an explicit filesystem type path for `romfs` and later `overlay`
+  - report the filesystem type through `statfs`
+- [ ] Add a userland mount entry point for cartridge ROMFS, so
+  `mount -t romfs ... /cart` can mount the cartridge filesystem rather than
+  relying on private N64 test tools.
+- [ ] Implement the first ROMFS version as a real writable filesystem:
+  - lookup, `stat`, `open`, `read`, `write`, `lseek`, directory iteration
+  - create, append, truncate, unlink, rename, mkdir, and rmdir through the
+    cartridge ROMFS flash map/list implementation
+  - support `ro` mounts by rejecting mutating operations with `EROFS`
+  - flush metadata/data through cartridge sector erase/write paths and make
+    reboot/sync call the ROMFS flush path
+  - preserve directory entries and file sizes from the cartridge ROMFS entry
+    table
+- [ ] Add an overlay filesystem plan after ROMFS can be mounted:
+  - lower layer is read-only UFS or ROMFS
+  - upper layer is initially RAM-backed, ROMFS, or another writable block
+    filesystem
+  - lookups prefer upper entries, then lower entries unless hidden by a
+    whiteout
+  - first write/truncate/chmod/chown copies a lower file into the upper layer
+  - unlink/rmdir of lower entries creates upper whiteouts
+  - directory reads merge upper and lower entries and hide whiteouts
+- [ ] Keep overlay v1 conservative: no hard-link preservation across layers,
+  no cross-layer rename magic, no writable lower layer, and no persistence when
+  the upper layer is RAM-only.
 
 ## Manual Index
 

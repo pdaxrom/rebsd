@@ -17,7 +17,8 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - The kernel installs exception vectors and a wired TLB mapping for userland.
 - RDRAM size is detected at startup and printed by the kernel.
 - Root is a read-only UFS romdisk stored in the ROM image.
-- Swap is a RAM-backed block device.
+- Swap and volatile `/var` storage are RAM-backed block devices; `/tmp` is a
+  rootfs symlink to `/var/tmp`.
 - `/dev/console` is a real tty-backed console with VI framebuffer output.
 - `/dev/tty` is the controlling tty major.
 - `/dev/ttyS0` is the n64cart serial tty.
@@ -29,9 +30,10 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - A RandNET keyboard on any controller port is polled through SI/Joybus and
   feeds `/dev/console` input while `/dev/ttyS0` remains available for serial
   login.
-- `/dev/romdisk`, `/dev/swap`, `/dev/null`, `/dev/zero`, `/dev/ttyS0`,
-  `/dev/rgbled0`, `/dev/fb0`, Joybus input devices, and the pty nodes are
-  generated into the root filesystem from kernel device definitions.
+- `/dev/romdisk`, `/dev/swap`, `/dev/ram0`, `/dev/null`,
+  `/dev/zero`, `/dev/ttyS0`, `/dev/rgbled0`, `/dev/fb0`, Joybus input
+  devices, and the pty nodes are generated into the root filesystem from
+  kernel device definitions.
 - Userland is built from the normal `src/cmd` tree as a.out binaries linked
   for the N64 user address window.
 - The N64 rootfs selects `init`, `getty`, `login`, `sh`, `ls`, and a small
@@ -42,6 +44,9 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 
 Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
 the expanded command set:
+
+This log predates the volatile `/var` RAM disk. Current 8 MiB builds reserve
+512 KiB for `/var` and print `swap size = 2944 kbytes`.
 
 ```
 RetroBSD N64 stage0
@@ -124,6 +129,8 @@ ID(1)                         General Commands Manual                       ID(1
 
 Additional multi-user login smoke test on a real 8 MiB system, verified
 2026-06-12 after enabling `console` getty/login and pty nodes:
+
+This log also predates the volatile `/var` RAM disk.
 
 ```
 2.11 BSD Unix for N64: local build
@@ -585,9 +592,11 @@ The current manifest includes:
 /share/man/cat1/test.0
 /share/man/cat1/uname.0
 /share/man/cat1/whoami.0
+/share/man/cat8/mkfs.0
 /sbin/chown
 /sbin/fsck
 /sbin/init
+/sbin/mkfs
 /sbin/mount
 /sbin/reboot
 /sbin/umount
@@ -638,23 +647,31 @@ Block major 0 is the ROM-backed root disk:
 /dev/romdisk  b 0,0
 ```
 
-Block major 1 is RAM-backed swap:
+Block major 1 is the N64 RAM-backed block pool. Minor 0 is swap; minor 1 is
+the volatile UFS target for `/var`:
 
 ```
 /dev/swap     b 1,0
+/dev/ram0     b 1,1
 ```
 
-Swap sizing:
+RAM block sizing:
 
-- 4 MiB system: top 512 KiB of base RDRAM.
-- 8 MiB system: Expansion Pak RAM after the reserved 640x480x16 framebuffer.
+- 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB swap.
+- 8 MiB system: 512 KiB `/dev/ram0`, 2944 KiB swap after the reserved
+  640x480x16 framebuffer.
 
 The printed boot sizes therefore differ by installed RDRAM:
 
 ```
-4 MiB: swap size = 512 kbytes
-8 MiB: swap size = 3456 kbytes
+4 MiB: swap size = 384 kbytes
+8 MiB: swap size = 2944 kbytes
 ```
+
+The root filesystem stays read-only. `/tmp` is a symlink to `/var/tmp` in the
+ROM rootfs. `/etc/rc` formats the volatile RAM device at each boot with
+`mkfs -i 4096`, mounts `/dev/ram0` on `/var`, sets `/var/tmp` sticky, and
+creates `/var/log`, `/var/run`, `/var/tmp`, and `/var/lock`.
 
 ## Character devices and tty
 

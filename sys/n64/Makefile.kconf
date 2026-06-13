@@ -42,7 +42,7 @@ N64_SRC_LIBS = startup-mips libc libutil libtermlib
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = deco env fbset fsck getty hostname id init login ls man more \
-                  mount n64input ptytest reboot rgbled sh smux stty test \
+                  mkfs mount n64input ptytest reboot rgbled sh smux stty test \
                   umount uname chown
 N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep
 N64_CMD_SCRIPTS = $(N64_CMD_NONE)
