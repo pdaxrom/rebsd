@@ -213,6 +213,9 @@ copying binaries manually.
   and `CSI ?25h/?25l` cursor visibility
 - [ ] Hardware smoke-test VT100 console output with shell editing, `man`,
   `more`, clear-screen sequences, reverse-video SGR, and cursor hide/show
+- [ ] Hardware smoke-test `/bin/deco` on `/dev/console` and `/dev/ttyS0`;
+  use it as the main interactive stress test for VT100 cursor addressing,
+  reverse video, function keys, redraw, and tty erase handling
 - [x] Return framebuffer console text geometry from `/dev/console`
   `TIOCGWINSZ`; `/dev/ttyS0` supplies an 80x24 fallback when no user winsize
   has been set

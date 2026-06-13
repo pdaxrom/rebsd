@@ -23,6 +23,7 @@ N64_ROOTFS_USER_STAMP = $(N64_ROOTFS_STAGE)/.userland
 N64_ROOTFS_WHATIS = $(N64_ROOTFS_STAGE)/share/man/whatis
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
 N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_DIR) -type d 2>/dev/null)
+N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 N64_DEVNODES_AWK = $(TOPSRC)/sys/n64/devnodes.awk
 N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h \
@@ -37,15 +38,15 @@ N64_PTY_NUNITS = $(patsubst -DPTY_NUNITS=%,%,$(filter -DPTY_NUNITS=%,$(PARAM)))
 N64_CRT0_SRCS = $(shell find $(TOPSRC)/src/startup-mips -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 N64_LIBUTIL_SRCS = $(shell find $(TOPSRC)/src/libutil -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
-N64_SRC_LIBS = startup-mips libc libutil
+N64_SRC_LIBS = startup-mips libc libutil libtermlib
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
-N64_CMD_SUBDIRS = env fbset fsck getty hostname id init login ls man more \
+N64_CMD_SUBDIRS = deco env fbset fsck getty hostname id init login ls man more \
                   mount n64input ptytest reboot rgbled sh smux stty test \
                   umount uname chown
 N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep
 N64_CMD_SCRIPTS = $(N64_CMD_NONE)
-N64_CMD_EXTRA_SUBDIRS = fbset n64input ptytest rgbled
+N64_CMD_EXTRA_SUBDIRS = deco fbset n64input ptytest rgbled
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
                 $(shell find $(TOPSRC)/src/cmd -maxdepth 3 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null)
 N64_USERLAND_STAMP = n64-userland.stamp
@@ -178,10 +179,11 @@ $(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES)
 	cp $(N64_ROOTFS_MANIFEST) $@
 	cat $(N64_ROOTFS_DEVNODES) >> $@
 
-$(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS)
+$(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP)
 	rm -rf $(N64_ROOTFS_STAGE)
 	mkdir -p $(N64_ROOTFS_STAGE)
 	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
+	cp $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin
 	mkdir -p $(N64_ROOTFS_STAGE)/libexec

@@ -30,9 +30,7 @@ n64cart_uart_default_winsize(struct tty *tp)
 static void
 n64cart_uart_input_normal(struct tty *tp, int c)
 {
-    if (c == '\r')
-        c = '\n';
-    else if (c == '\b' || c == '\177')
+    if (c == '\b' || c == '\177')
         c = '\177';
     ttyinput(c, tp);
 }

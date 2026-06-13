@@ -11,6 +11,9 @@ dir /bin
 dir /dev
 dir /etc
 dir /libexec
+dir /lib
+dir /lib/deco
+dir /lib/deco/help
 dir /root
 dir /sbin
 dir /share
@@ -42,6 +45,8 @@ file /etc/passwd
 
 file /etc/ttys
 
+file /etc/termcap
+
 file /root/.profile
 
 file /bin/sh
@@ -57,6 +62,9 @@ file /bin/chmod
 mode 0775
 
 file /bin/cp
+mode 0775
+
+file /bin/deco
 mode 0775
 
 file /bin/echo
@@ -143,6 +151,18 @@ mode 0775
 file /libexec/getty
 mode 0755
 
+file /lib/deco/menu
+
+file /lib/deco/profile
+
+file /lib/deco/help/e.edit
+
+file /lib/deco/help/e.general
+
+file /lib/deco/help/e.hexview
+
+file /lib/deco/help/e.view
+
 file /share/misc/more.help
 
 file /share/man/whatis
@@ -152,6 +172,8 @@ file /share/man/cat1/groups.0
 file /share/man/cat1/hostname.0
 
 file /share/man/cat1/fbset.0
+
+file /share/man/cat1/deco.0
 
 file /share/man/cat1/id.0
 
