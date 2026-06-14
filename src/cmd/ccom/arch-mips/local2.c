@@ -115,7 +115,7 @@ prologue(struct interpass_prolog * ipp)
 #endif
 
 	printf("\tsw %s,4(%s)\n", rnames[RA], rnames[SP]);
-	printf("\tsw %s,(%s)\n", rnames[FP], rnames[SP]);
+	printf("\tsw %s,0(%s)\n", rnames[FP], rnames[SP]);
 	printf("\tmove %s,%s\n", rnames[FP], rnames[SP]);
 
 #ifdef notyet
@@ -923,7 +923,6 @@ upput(NODE * p, int size)
 void
 adrput(FILE * io, NODE * p)
 {
-	int r;
 	/* output an address, with offsets, from p */
 
 	if (p->n_op == FLD)
@@ -939,12 +938,7 @@ adrput(FILE * io, NODE * p)
 		return;
 
 	case OREG:
-		r = p->n_rval;
-
-		if (p->n_lval)
-			fprintf(io, "%d", (int) p->n_lval);
-
-		fprintf(io, "(%s)", rnames[p->n_rval]);
+		fprintf(io, "%d(%s)", (int)p->n_lval, rnames[p->n_rval]);
 		return;
 	case ICON:
 		/* addressable value of the constant */

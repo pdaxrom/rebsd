@@ -98,7 +98,9 @@
 /* #undef HOST_BIG_ENDIAN */
 
 /* Define if host is LITTLE endian */
+#if !defined(HOST_BIG_ENDIAN) && !defined(HOST_LITTLE_ENDIAN)
 #define HOST_LITTLE_ENDIAN
+#endif
 
 /* lex is flex */
 #define ISFLEX 1

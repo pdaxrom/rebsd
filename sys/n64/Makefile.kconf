@@ -26,7 +26,7 @@ N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm
                         file find fold grep head hostid join kill last ln \
                         login ls man mesg mkdir more mv nice od pagesize pr \
                         printenv pwd rev rm rmail rmdir \
-                        sed sh size sleep sort split sum tail tar tee \
+                        sed sh size sleep sort split strip sum tail tar tee \
                         time touch tr true tsort tty uniq w wc whatis who
 N64_ROOTFS_CMD_CAT1_SOURCES = emg:emg env:env sl:sl
 N64_ROOTFS_CAT1_ALIASES = egrep:grep fgrep:grep uncompress:compress \
@@ -67,10 +67,10 @@ N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = calendar chown chroot compress cpp date2 deco diff emg env fbset \
                   fbview find fold forth fsck getty hostname id init \
-                  login ls man md5 med mkfs mknod mkpasswd mount more \
-                  n64input pdc picoc printf ptytest reboot renice \
-                  retroforth rgbled romfsctl sed setty sh shutdown sl smux \
-                  stty sysctl tcl test umount uname xargs
+                  aout ar as cc ccom ld login ls man md5 med mkfs mknod \
+                  mkpasswd mount more n64input nm pdc picoc printf ptytest \
+                  ranlib reboot renice retroforth rgbled romfsctl sed setty \
+                  sh shutdown sl smux stty sysctl tcl test umount uname xargs
 N64_CMD_STDS = basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
                du echo ed fgrep file grep head hostid join kill last ln \
                mesg mkdir mv nice od pagesize pr printenv pwd rev rm rmail \
@@ -79,7 +79,7 @@ N64_CMD_STDS = basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
 N64_CMD_NSTDS = egrep expr
 N64_CMD_OPERATORS = df
 N64_CMD_SCRIPTS = false nohup true
-N64_CMD_EXTRA_SUBDIRS = deco fbset fbview n64input ptytest rgbled romfsctl \
+N64_CMD_EXTRA_SUBDIRS = ccom deco fbset fbview n64input ptytest rgbled romfsctl \
                         tcl
 N64_STB_DIR ?= /Users/sash/Work/N64/N64cart/rom/src/stb
 N64_STB_SRCS = $(wildcard $(N64_STB_DIR)/stb_image.h)
@@ -103,7 +103,7 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                CMD_ONLY_TTY="$(N64_CMD_NONE)" \
                CMD_EXTRA_SUBDIR="$(N64_CMD_EXTRA_SUBDIRS)" \
                SMUX_SUBDIRS=retro \
-               CMD_BUILD_STRIP=
+               CMD_BUILD_STRIP=strip
 N64_AWK_MAKE = $(MAKE) -C $(TOPSRC)/src/cmd/awk TARGET_PLATFORM=n64 \
                N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
                DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
@@ -232,12 +232,14 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP)
 	mkdir -p $(N64_ROOTFS_STAGE)/libexec
 	mkdir -p $(N64_ROOTFS_STAGE)/share/misc
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat1
+	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat5
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
 	touch $@
 
 $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_MAKEWHATIS_SED)
 	$(N64_SRC_MAKE) install
 	$(N64_AWK_MAKE) install
+	cp $(N64_ROOTFS_STAGE)/bin/cc $(N64_ROOTFS_STAGE)/bin/pcc
 	for page in $(N64_ROOTFS_CAT1_PAGES); do \
 	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 > $(N64_ROOTFS_STAGE)/share/man/cat1/$$page.0; \
 	done

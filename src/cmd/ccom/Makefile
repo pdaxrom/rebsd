@@ -11,7 +11,15 @@ MIPDIR          = mip
 CFLAGS          += -DGCC_COMPAT -DPCC_DEBUG -D_ISOC99_SOURCE -DYY_NO_INPUT -Dmach_mips -I. -I${MIPDIR} -I${ARCHDIR}
 CFLAGS		+= -g -Werror -Wall -fcommon -fno-strict-aliasing \
 		   -Wno-strict-aliasing -Wno-unused-but-set-variable
+ifeq ($(TARGET_PLATFORM),n64)
+CFLAGS		+= -DHOST_BIG_ENDIAN
+endif
 LDFLAGS		+= -g
+HOSTCC		?= gcc
+HOSTCFLAGS	?= -O2
+MKEXTFLAGS	= -DGCC_COMPAT -DPCC_DEBUG -D_ISOC99_SOURCE -DYY_NO_INPUT \
+		  -Dmach_mips -DHAVE_STRLCPY=1 -DHAVE_STRLCAT=1 \
+		  -I. -I${MIPDIR} -I${ARCHDIR}
 
 OBJS1           = optim.o pftn.o scan.o trees.o cgram.o inline.o symtabs.o \
                   gcc_compat.o init.o local.o code.o stabs.o builtins.o
@@ -78,7 +86,7 @@ compat.o: $(MIPDIR)/compat.c external.h
 		$(CC) $(CFLAGS) -c -o $@ $(MIPDIR)/compat.c
 
 external.h external.c: ${MIPDIR}/mkext.c $(ARCHDIR)/table.c
-		gcc $(CFLAGS) -DMKEXT -o mkext ${MIPDIR}/mkext.c $(ARCHDIR)/table.c ${MIPDIR}/common.c
+		$(HOSTCC) $(HOSTCFLAGS) $(MKEXTFLAGS) -DMKEXT -o mkext ${MIPDIR}/mkext.c $(ARCHDIR)/table.c ${MIPDIR}/common.c
 		./mkext
 
 trees.c: 	mip/pass2.h external.h

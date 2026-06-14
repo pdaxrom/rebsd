@@ -126,6 +126,13 @@ main()
     for (i = 0; i < sizeof(u.u_rlimit)/sizeof(u.u_rlimit[0]); i++)
         u.u_rlimit[i].rlim_cur = u.u_rlimit[i].rlim_max =
             RLIM_INFINITY;
+#ifdef N64
+    /*
+     * The first N64 systems use a small volatile /var RAM disk.  Keep core
+     * dumps disabled by default so a crashing tool does not consume it.
+     */
+    u.u_rlimit[RLIMIT_CORE].rlim_cur = 0;
+#endif
 
     /* Initialize signal state for process 0 */
     siginit (p);

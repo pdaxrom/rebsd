@@ -41,9 +41,9 @@
 #define N64_KERNEL_LINK_LENGTH         0x000f0000
 #define N64_KERNEL_DATA_START          N64_KERNEL_VADDR_BASE
 #define N64_KERNEL_DATA_END            (N64_KERNEL_DATA_START + N64_KERNEL_RESERVED)
-#define N64_UAREA_SIZE                 0x00001000
+#define N64_UAREA_SIZE                 0x00002000
 #define N64_U0AREA_VADDR               0x800f0000
-#define N64_UAREA_VADDR                0x800f1000
+#define N64_UAREA_VADDR                (N64_U0AREA_VADDR + N64_UAREA_SIZE)
 
 #define N64_STAGE0_VADDR               0x80300000
 

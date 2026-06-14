@@ -194,6 +194,7 @@ int
 vn_closefile(struct file *fp)
 {
     register struct inode *ip = (struct inode *)fp->f_data;
+    register int error;
 
     /*
      * Need to clear the inode pointer in the file structure so that the
@@ -201,6 +202,7 @@ vn_closefile(struct file *fp)
      * devices in closei().
      */
     fp->f_data = (caddr_t)0;    /* XXX */
+    error = closei(ip, fp->f_flag);
     irele(ip);
-    return (closei(ip, fp->f_flag));
+    return (error);
 }

@@ -220,12 +220,25 @@ current N64 work is staged as follows:
   transfers, single/double arithmetic, compare, convert, and `bc1*` branches;
 - `src/cmd/ccom` now builds as an N64 a.out binary with big-endian target
   configuration and without `.abicalls`, `.cpload`, or `.cprestore` output;
+- the N64 `ccom` build uses 8-byte compiler heap alignment for VR4300, because
+  floating constants store `long double` values in AST nodes and hard-float
+  `sdc1` faults on 4-byte-only aligned addresses;
 - libc runtime provides the compiler ABI helpers currently needed by that
   path, including 64-bit shifts, clz/ctz/ffs helpers, and the first
   64-bit integer/double conversion helpers;
-- the remaining required work is target smoke-testing the in-tree assembler
-  and compiler pipeline on N64, then extending instruction support for any
-  additional syntax emitted by `ccom`.
+- the N64 rootfs stages a minimal in-tree toolchain smoke kit: `/bin/pcc`,
+  `/libexec/ccom`, `/bin/as`, `/bin/ld`, `/bin/ar`, `/bin/ranlib`, `/bin/nm`,
+  `/bin/aout`, `/bin/strip`, and no-header smoke sources in `/root`;
+- `/root/pcc-smoke.sh` runs the target smoke from `/var/tmp`, so it does not
+  try to write compiler outputs into the read-only root filesystem;
+- N64 disables core dumps by default because the volatile `/var` filesystem is
+  small. If core dumps are enabled explicitly, a crashing compiler can still
+  exhaust the RAM disk, but that must be reported as an I/O or space error and
+  must not corrupt the kernel inode free list;
+- the current smoke checks compile-to-assembly, assembly, and relocatable link;
+  the remaining required work is building a.out-format `crt0.o` and libc for
+  full executable links, then extending instruction support for any additional
+  syntax emitted by `ccom`.
 
 ## Build entry points
 
@@ -632,6 +645,10 @@ Important constants:
 
 - `N64_KERNEL_LOAD_VADDR`: kernel link/load address, `0x80001000`.
 - `N64_KERNEL_RESERVED`: first 1 MiB reserved for kernel/vectors/u areas.
+- `N64_UAREA_SIZE`: 8 KiB per fixed `u`/`u0` area. The live `struct user`
+  currently occupies about 1.1 KiB; the remaining space is the per-process
+  kernel stack, so the N64 port keeps more headroom than the original PIC32
+  3 KiB u-area for nested `exec`, `namei`, signal, and FPU paths.
 - `N64_USER_VADDR_START`: user virtual base, `0x00400000`.
 - `N64_USER_MAXMEM`: 2 MiB user address window.
 - `N64_USER_PHYS_START`: physical backing for user memory, `0x00100000`.
@@ -708,6 +725,12 @@ process window is the fixed first version of the user address space. `copyin`,
 `copyout`, and `baduaddr` accept normal process memory and the current usable
 framebuffer byte range, but the framebuffer is not part of process heap/stack
 or swap.
+
+User `read(2)`, `write(2)`, `readv(2)`, and `writev(2)` validate every iovec
+against that user address policy before entering filesystem or character-device
+I/O. This is required on N64 because old kernel `uiomove()` paths still use
+direct copies after syscall entry; a crashed or corrupted process must not be
+able to hand the kernel an arbitrary KSEG address and overwrite kernel tables.
 
 On successful `exec` and on process changes, the N64 machine layer flushes
 the user data/instruction cache range so newly copied user code is executable

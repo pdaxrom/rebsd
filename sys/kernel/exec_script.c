@@ -85,8 +85,11 @@ exec_script_check(struct exec_params *epp)
     /*
      * Everything set up, do the recursive exec()
      */
-    if (epp->ip)
-        iput(epp->ip);
+    /*
+     * Keep the script inode owned by the outer execve(); it will release it
+     * after exec_check() returns.  This handler owns only the interpreter
+     * inode found above.
+     */
     epp->ip = ip;
     error = exec_check(epp);
 done:

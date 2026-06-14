@@ -294,6 +294,13 @@ nonufs_inode(struct inode *ip)
 void
 irele (struct inode *ip)
 {
+    if (ip->i_count == 0) {
+        printf("inode: irele zero ip=%x dev=%x ino=%u mode=%x nlink=%d flag=%x freef=%x freeb=%x proc=%d %s\n",
+            ip, ip->i_dev, ip->i_number, ip->i_mode, ip->i_nlink,
+            ip->i_flag, ip->i_freef, ip->i_freeb,
+            u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
+        panic("irele");
+    }
     if (ip->i_count == 1) {
         ip->i_flag |= ILOCKED;
         if (ip->i_nlink <= 0 && ip->i_fs->fs_ronly == 0) {

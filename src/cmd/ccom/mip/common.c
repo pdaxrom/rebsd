@@ -464,12 +464,29 @@ tprint(FILE *fp, TWORD t, TWORD q)
  */
 
 #define	MEMCHUNKSZ  1024     /* 1k per allocation */
+#if defined(TARGET_VR4300)
+#define ALIGNMENT   8
+#else
 #define ALIGNMENT   4
+#endif
 #define	ROUNDUP(x)  (((x) + ((ALIGNMENT)-1)) & ~((ALIGNMENT)-1))
 
 static char *allocpole;
 static int allocleft;
 int permallocsize, tmpallocsize, lostmem;
+
+static void *
+aligned_malloc(int size, void **rawp)
+{
+	void *raw;
+
+	raw = malloc(size + ALIGNMENT - 1);
+	if (raw == NULL)
+		return NULL;
+	if (rawp != NULL)
+		*rawp = raw;
+	return (void *)ROUNDUP((unsigned long)raw);
+}
 
 void *
 permalloc(int size)
@@ -477,7 +494,7 @@ permalloc(int size)
 	void *rv;
 
 	if (size > MEMCHUNKSZ) {
-		if ((rv = malloc(size)) == NULL)
+		if ((rv = aligned_malloc(size, NULL)) == NULL)
 			cerror("permalloc: missing %d bytes", size);
 		return rv;
 	}
@@ -486,7 +503,7 @@ permalloc(int size)
 	if (allocleft < size) {
 		/* looses unused bytes */
 		lostmem += allocleft;
-		if ((allocpole = malloc(MEMCHUNKSZ)) == NULL)
+		if ((allocpole = aligned_malloc(MEMCHUNKSZ, NULL)) == NULL)
 			cerror("permalloc: out of memory");
 		allocleft = MEMCHUNKSZ;
 	}
@@ -533,8 +550,10 @@ tmpstrdup(char *str)
 #define	MAXSZ	(NELEM*ELEMSZ)
 struct xalloc {
 	struct xalloc *next;
+	void *raw;
 	char elm[MAXSZ];
 } *tapole, *tmpole;
+#define XALLOC_HDRSZ ROUNDUP(sizeof(struct xalloc) - MAXSZ)
 int uselem = NELEM; /* next unused element */
 
 void *
@@ -547,11 +566,14 @@ tmpalloc(int size)
 	nelem = ROUNDUP(size)/ELEMSZ;
 	ALLDEBUG(("tmpalloc(%ld,%ld) %d (%zd) ", ELEMSZ, NELEM, size, nelem));
 	if (nelem > NELEM/2) {
-		xp = malloc(size + ROUNDUP(sizeof(struct xalloc *)));
+		void *raw;
+
+		xp = aligned_malloc(size + XALLOC_HDRSZ, &raw);
 		if (xp == NULL)
 			cerror("out of memory");
 		ALLDEBUG(("XMEM! (%ld,%p) ",
-		    size + ROUNDUP(sizeof(struct xalloc *)), xp));
+		    size + XALLOC_HDRSZ, xp));
+		xp->raw = raw;
 		xp->next = tmpole;
 		tmpole = xp;
 		ALLDEBUG(("rv %p\n", &xp->elm[0]));
@@ -560,8 +582,12 @@ tmpalloc(int size)
 	if (nelem + uselem >= NELEM) {
 		ALLDEBUG(("MOREMEM! "));
 		/* alloc more */
-		if ((xp = malloc(sizeof(struct xalloc))) == NULL)
+		void *raw;
+
+		xp = aligned_malloc(sizeof(struct xalloc), &raw);
+		if (xp == NULL)
 			cerror("out of memory");
+		xp->raw = raw;
 		xp->next = tapole;
 		tapole = xp;
 		uselem = 0;
@@ -583,13 +609,13 @@ tmpfree()
 		x1 = tmpole;
 		tmpole = tmpole->next;
 		ALLDEBUG(("XMEM! free %p\n", x1));
-		free(x1);
+		free(x1->raw);
 	}
 	while (tapole && tapole->next) {
 		x1 = tapole;
 		tapole = tapole->next;
 		ALLDEBUG(("MOREMEM! free %p\n", x1));
-		free(x1);
+		free(x1->raw);
 	}
 	if (tapole)
 		uselem = 0;
@@ -617,12 +643,12 @@ markfree(struct mark *m)
 	while (tmpole != m->tmsav) {
 		x1 = tmpole;
 		tmpole = tmpole->next;
-		free(x1);
+		free(x1->raw);
 	}
 	while (tapole != m->tasav) {
 		x1 = tapole;
 		tapole = tapole->next;
-		free(x1);
+		free(x1->raw);
 	}
 	uselem = m->elem;
 }

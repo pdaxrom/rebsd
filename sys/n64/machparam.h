@@ -56,7 +56,7 @@
 #define stacktop(siz)           (USER_DATA_END)
 #define stackbas(siz)           (USER_DATA_END-(siz))
 
-#define USIZE           4096
+#define USIZE           N64_UAREA_SIZE
 #define SSIZE           2048
 
 #if !defined(UCB_METER) && !defined(NO_UCB_METER)

@@ -90,6 +90,20 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   - o32 calling convention compatibility
   - no MIPS32r2-only instruction emission in VR4300 mode
   - generated FPU instructions accepted by the in-tree assembler
+  - failed compiler processes do not corrupt kernel state; N64 disables core
+    dumps by default because `/var` is a small RAM disk, but after explicitly
+    enabling core dumps the failure path must still return a filesystem error
+    cleanly and must not panic the inode cache
+- [x] Add the minimal in-tree toolchain smoke kit to the N64 rootfs:
+  `pcc`, `ccom`, `as`, `ld`, `ar`, `ranlib`, `nm`, `aout`, `strip`,
+  and no-header smoke C sources.
+- [x] Add `/root/pcc-smoke.sh` to run the first target compiler smoke from
+  writable `/var/tmp`: `pcc -S`, `as`, `ld -r`, and FPU compile-to-asm.
+- [x] Increase the N64 `u`/`u0` areas to 8 KiB so the kernel stack has enough
+  headroom for nested `exec`/`namei`/FPU paths during the compiler smoke.
+- [ ] Build a.out-format `/lib/crt0.o` and `/lib/libc.a` for the in-tree
+  `pcc`/`ld` path. Do not stage ELF objects from the external GCC toolchain as
+  compiler runtime files; in-tree `ld` reports those as `bad magic`.
 - [ ] Review secondary compiler/interpreter paths after `ccom` works:
   `smallc`, `smlrc`, `lccom`, and their assembler output.
 
@@ -193,6 +207,8 @@ copying binaries manually.
   - `ls -l /tmp` shows a symlink to `/var/tmp`
   - `echo ok >/tmp/test`, `cat /tmp/test`, `rm /tmp/test` work
   - `/var/run`, `/var/log`, `/var/tmp`, and `/var/lock` exist after boot
+  - a failed root-owned process may try to write a core file in `/var/tmp`;
+    filling `/dev/ram0` should fail cleanly and must not panic the inode cache
 
 ## Cartridge ROMFS And Writable Overlays
 
@@ -289,6 +305,12 @@ copying binaries manually.
   - [x] `ls -l /cart/retrobsd-vfs-test/` shows `total 0`
   - [x] `rmdir /cart/retrobsd-vfs-test`
   - [x] reboot, mount `/cart`, and verify deleted test entries stay deleted
+- [ ] Optimize cartridge ROMFS I/O speed. Baseline from `diskspeed` in `/cart`
+  on real N64cart hardware with 4 KiB blocks:
+  - write: 8 MiB in 923.380 seconds, about 8 KiB/s
+  - read: 8 MiB in 24.980 seconds, about 327 KiB/s
+  - investigate read batching/cache, write-sector erase/program batching, and
+    avoiding unnecessary metadata rewrites during sequential writes
 - [ ] Add an overlay filesystem plan after ROMFS can be mounted:
   - lower layer is read-only UFS or ROMFS
   - upper layer is initially RAM-backed, ROMFS, or another writable block

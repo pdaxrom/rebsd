@@ -792,6 +792,8 @@ int lookacmd()
             return (LNAN);
         break;
     case 'p':
+        if (!strcmp(".p2align", name))
+            return (LALIGN);
         if (!strcmp(".previous", name))
             return (LPREVIOUS);
         break;

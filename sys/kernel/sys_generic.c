@@ -17,6 +17,26 @@
 
 int selwait;
 
+static int
+badiov(register struct iovec *iov, u_int iovcnt)
+{
+    register u_int i;
+
+    for (i = 0; i < iovcnt; i++, iov++) {
+        u_int len = iov->iov_len;
+        u_int start, end;
+
+        if (len == 0)
+            continue;
+        start = (u_int)iov->iov_base;
+        end = start + len - 1;
+        if (end < start || baduaddr((caddr_t)start) ||
+            baduaddr((caddr_t)end))
+            return (1);
+    }
+    return (0);
+}
+
 static void
 rwuio (struct uio *uio)
 {
@@ -41,6 +61,10 @@ rwuio (struct uio *uio)
     uio->uio_resid = total;
     if (uio->uio_resid != total) {      /* check wraparound */
         u.u_error = EINVAL;
+        return;
+    }
+    if (badiov(uio->uio_iov, uio->uio_iovcnt)) {
+        u.u_error = EFAULT;
         return;
     }
     count = uio->uio_resid;

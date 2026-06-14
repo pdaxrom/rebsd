@@ -288,6 +288,15 @@ struct Wflags {
 #ifndef PCC_PTRDIFF_TYPE
 #define PCC_PTRDIFF_TYPE "long int"
 #endif
+#ifndef PCC_MAJOR
+#define PCC_MAJOR 0
+#endif
+#ifndef PCC_MINOR
+#define PCC_MINOR 9
+#endif
+#ifndef PCC_MINORMINOR
+#define PCC_MINORMINOR 9
+#endif
 
 /*
  * Copy src to string dst of size siz.  At most siz-1 characters
@@ -439,7 +448,7 @@ main(int argc, char *argv[])
         if (strcmp ("pcc", progname) == 0) {
                 /* PCC: portable C compiler. */
                 mode = MODE_PCC;
-                cppadd[0] = "-D__PCC__";
+                cppadd[0] = "-D__PCC__=" MKS(PCC_MAJOR);
                 pass0 = LIBEXECDIR "/ccom";
 
         } else if (strcmp ("scc", progname) == 0) {
@@ -852,7 +861,6 @@ main(int argc, char *argv[])
 		if (vflag)
 			av[na++] = "-v";
                 if (mode == MODE_PCC) {
-                        av[na++] = "-D__PCC__=" MKS(PCC_MAJOR);
                         av[na++] = "-D__PCC_MINOR__=" MKS(PCC_MINOR);
                         av[na++] = "-D__PCC_MINORMINOR__=" MKS(PCC_MINORMINOR);
                 }

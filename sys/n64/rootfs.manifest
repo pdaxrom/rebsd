@@ -21,6 +21,7 @@ dir /share
 dir /share/calendar
 dir /share/man
 dir /share/man/cat1
+dir /share/man/cat5
 dir /share/man/cat8
 dir /share/misc
 symlink /tmp
@@ -54,10 +55,26 @@ file /etc/termcap
 
 file /root/.profile
 
+file /root/pcc-fpu-smoke.c
+
+file /root/pcc-smoke.sh
+mode 0775
+
+file /root/pcc-smoke.c
+
 file /bin/[
 mode 0775
 
+file /bin/aout
+mode 0775
+
 file /bin/apropos
+mode 0775
+
+file /bin/ar
+mode 0775
+
+file /bin/as
 mode 0775
 
 file /bin/awk
@@ -76,6 +93,9 @@ file /bin/cat
 mode 0775
 
 file /bin/cb
+mode 0775
+
+file /bin/cc
 mode 0775
 
 file /bin/chgrp
@@ -192,6 +212,9 @@ mode 0775
 file /bin/last
 mode 0775
 
+file /bin/ld
+mode 0775
+
 file /bin/ln
 mode 0775
 
@@ -228,6 +251,9 @@ mode 0775
 file /bin/nice
 mode 0775
 
+file /bin/nm
+mode 0775
+
 file /bin/nohup
 mode 0775
 
@@ -238,6 +264,9 @@ file /bin/pagesize
 mode 0775
 
 file /bin/pdc
+mode 0775
+
+file /bin/pcc
 mode 0775
 
 file /bin/picoc
@@ -268,6 +297,9 @@ file /bin/rev
 mode 0775
 
 file /bin/rgbled
+mode 0775
+
+file /bin/ranlib
 mode 0775
 
 file /bin/rm
@@ -310,6 +342,9 @@ file /bin/split
 mode 0775
 
 file /bin/stty
+mode 0775
+
+file /bin/strip
 mode 0775
 
 file /bin/sum
@@ -404,6 +439,9 @@ file /lib/deco/help/e.view
 
 file /lib/retroImage
 
+file /libexec/ccom
+mode 0755
+
 file /share/misc/more.help
 
 file /share/emg.keys
@@ -428,6 +466,8 @@ file /share/man/whatis
 
 file /share/man/cat1/apropos.0
 
+file /share/man/cat1/ar.0
+
 file /share/man/cat1/awk.0
 
 file /share/man/cat1/basename.0
@@ -439,6 +479,8 @@ file /share/man/cat1/calendar.0
 file /share/man/cat1/cat.0
 
 file /share/man/cat1/cb.0
+
+file /share/man/cat1/ccom.0
 
 file /share/man/cat1/chgrp.0
 
@@ -512,6 +554,8 @@ file /share/man/cat1/kill.0
 
 file /share/man/cat1/last.0
 
+file /share/man/cat1/ld.0
+
 file /share/man/cat1/ln.0
 
 file /share/man/cat1/login.0
@@ -550,6 +594,8 @@ file /share/man/cat1/ptytest.0
 
 file /share/man/cat1/pwd.0
 
+file /share/man/cat1/ranlib.0
+
 file /share/man/cat1/rev.0
 
 file /share/man/cat1/rgbled.0
@@ -567,6 +613,8 @@ file /share/man/cat1/sed.0
 file /share/man/cat1/sh.0
 
 file /share/man/cat1/size.0
+
+file /share/man/cat1/strip.0
 
 file /share/man/cat1/sl.0
 
@@ -619,6 +667,10 @@ file /share/man/cat1/whoami.0
 file /share/man/cat1/xargs.0
 
 file /share/man/cat1/zcat.0
+
+file /share/man/cat5/ar.0
+
+file /share/man/cat5/ranlib.0
 
 file /share/man/cat8/bootloader.0
 
