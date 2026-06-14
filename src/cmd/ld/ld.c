@@ -47,6 +47,7 @@
 #include <ar.h>
 #include <ranlib.h>
 #include <stdarg.h>
+#include "../aoutio.h"
 
 #define W 4              /* word size in bytes */
 #define BADDR 0x7f008000 /* start address in memory */
@@ -147,46 +148,22 @@ char tfname[] = "/tmp/ldaXXXXXX";
 
 unsigned int fgetword(FILE *f)
 {
-    register unsigned int h;
-
-    h = getc(f);
-    h |= getc(f) << 8;
-    h |= getc(f) << 16;
-    h |= getc(f) << 24;
-    return h;
+    return aout_get32(f);
 }
 
 void fputword(unsigned h, FILE *f)
 {
-    putc(h, f);
-    putc(h >> 8, f);
-    putc(h >> 16, f);
-    putc(h >> 24, f);
+    aout_put32(h, f);
 }
 
 int fgethdr(FILE *text, struct exec *h)
 {
-    h->a_midmag = fgetword(text);
-    h->a_text = fgetword(text);
-    h->a_data = fgetword(text);
-    h->a_bss = fgetword(text);
-    h->a_reltext = fgetword(text);
-    h->a_reldata = fgetword(text);
-    h->a_syms = fgetword(text);
-    h->a_entry = fgetword(text);
-    return (1);
+    return aout_read_exec(text, h);
 }
 
 void fputhdr(struct exec *hdr, FILE *coutb)
 {
-    fputword(hdr->a_magic, coutb);
-    fputword(hdr->a_text, coutb);
-    fputword(hdr->a_data, coutb);
-    fputword(hdr->a_bss, coutb);
-    fputword(hdr->a_reltext, coutb);
-    fputword(hdr->a_reldata, coutb);
-    fputword(hdr->a_syms, coutb);
-    fputword(hdr->a_entry, coutb);
+    aout_write_exec(coutb, hdr);
 }
 
 /*
@@ -196,13 +173,10 @@ void fgetrel(FILE *f, struct reloc *r)
 {
     r->flags = getc(f);
     if ((r->flags & RSMASK) == REXT) {
-        r->index = getc(f);
-        r->index |= getc(f) << 8;
-        r->index |= getc(f) << 16;
+        r->index = aout_get24(f);
     }
     if ((r->flags & RFMASK) == RHIGH16 || (r->flags & RFMASK) == RHIGH16S) {
-        r->offset = getc(f);
-        r->offset |= getc(f) << 8;
+        r->offset = aout_get16(f);
     }
 }
 
@@ -216,14 +190,11 @@ unsigned fputrel(struct reloc *r, FILE *f)
 
     putc(r->flags, f);
     if ((r->flags & RSMASK) == REXT) {
-        putc(r->index, f);
-        putc(r->index >> 8, f);
-        putc(r->index >> 16, f);
+        aout_put24(r->index, f);
         nbytes += 3;
     }
     if ((r->flags & RFMASK) == RHIGH16 || (r->flags & RFMASK) == RHIGH16S) {
-        putc(r->offset, f);
-        putc(r->offset >> 8, f);
+        aout_put16(r->offset, f);
         nbytes += 2;
     }
     return nbytes;
@@ -256,32 +227,17 @@ void error(int n, const char *s, ...)
 
 int fgetsym(FILE *text, struct nlist *sym)
 {
-    register int c;
+    int c;
 
-    c = getc(text);
-    if (c <= 0)
-        return 0;
-    sym->n_len = c;
-    sym->n_name = malloc(sym->n_len + 1);
-    if (!sym->n_name)
+    c = aout_read_sym(text, sym, 1);
+    if (c < 0)
         error(2, "out of memory");
-    sym->n_type = getc(text);
-    sym->n_value = fgetword(text);
-    for (c = 0; c < sym->n_len; c++)
-        sym->n_name[c] = getc(text);
-    sym->n_name[sym->n_len] = '\0';
-    return sym->n_len + 6;
+    return c;
 }
 
 void fputsym(struct nlist *s, FILE *file)
 {
-    register int i;
-
-    putc(s->n_len, file);
-    putc(s->n_type, file);
-    fputword(s->n_value, file);
-    for (i = 0; i < s->n_len; i++)
-        putc(s->n_name[i], file);
+    aout_write_sym(file, s);
 }
 
 /*
@@ -403,7 +359,7 @@ int fgetran(FILE *text, struct ranlib *sym)
     sym->ran_name = malloc(sym->ran_len + 1);
     if (!sym->ran_name)
         error(2, "out of memory");
-    sym->ran_off = fgetword(text);
+    sym->ran_off = aout_get32(text);
     for (c = 0; c < sym->ran_len; c++)
         sym->ran_name[c] = getc(text);
     sym->ran_name[sym->ran_len] = '\0';
@@ -1054,6 +1010,18 @@ void pass1(int argc, char **argv)
                 basaddr = atol(ap + i + 1);
                 break;
 
+                /* endianness */
+            case 'E':
+                if (ap[i + 1] == 'L')
+                    aout_set_big_endian(0);
+                else if (ap[i + 1] == 'B')
+                    aout_set_big_endian(1);
+                else
+                    error(2, "bad endian option");
+                while (ap[i + 1])
+                    i++;
+                continue;
+
                 /* library */
             case 'l':
                 save = ap[--i];
@@ -1376,6 +1344,11 @@ void pass2(int argc, char **argv)
             default:
                 continue;
 
+            case 'E':
+                while (ap[i + 1])
+                    i++;
+                continue;
+
             case 'l':
                 ap[--i] = '-';
                 load2arg(&ap[i]);
@@ -1441,9 +1414,15 @@ void finishout()
 
 int main(int argc, char **argv)
 {
+#ifdef TARGET_BIG_ENDIAN
+    aout_set_big_endian(1);
+#else
+    aout_set_big_endian(0);
+#endif
+
     if (argc == 1) {
         printf("Usage:\n");
-        printf("  ld [-sSxXrdt] [-o file] [-lname] [-u name] [-e name] [-T num] file...\n");
+        printf("  ld [-sSxXrdt] [-EL|-EB] [-o file] [-lname] [-u name] [-e name] [-T num] file...\n");
         printf("Options:\n");
         printf("  -o filename     Set output file name, default a.out\n");
         printf("  -llibname       Search for library libname\n");

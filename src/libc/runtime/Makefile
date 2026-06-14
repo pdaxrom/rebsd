@@ -28,11 +28,14 @@ OBJS            = adddf3.o \
                   divsf3.o \
                   extendsfdf2.o \
                   fixdfsi.o \
+                  fixdfdi.o \
                   fixsfsi.o \
                   fixunssfsi.o \
                   fixunsdfsi.o \
+                  floatdidf.o \
                   floatsidf.o \
                   floatsisf.o \
+                  floatundidf.o \
                   floatunsisf.o \
                   fp_mode.o \
                   int_helpers.o \

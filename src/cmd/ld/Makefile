@@ -8,8 +8,8 @@ include $(TOPSRC)/target.mk
 CFLAGS		+= -Werror -Wall -Os
 LDFLAGS		+=
 
-SRCS		= ld.c
-OBJS            = ld.o
+SRCS		= ld.c ../aoutio.c
+OBJS            = ld.o aoutio.o
 MAN		= ld.0
 MANSRC		= ld.1
 
@@ -20,6 +20,9 @@ ld:             ${OBJS}
 		${OBJDUMP} -S ld.elf > ld.dis
 		${SIZE} ld.elf
 		${ELF2AOUT} ld.elf $@ && rm ld.elf
+
+aoutio.o:       ../aoutio.c ../aoutio.h
+		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
 
 $(MAN):         $(MANSRC)
 		${MANROFF} $< > $@

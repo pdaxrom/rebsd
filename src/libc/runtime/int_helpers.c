@@ -137,6 +137,14 @@ __ctzsi2(si_int a)
 }
 
 COMPILER_RT_ABI int
+__ffssi2(si_int a)
+{
+    if (a == 0)
+        return 0;
+    return __ctzsi2(a) + 1;
+}
+
+COMPILER_RT_ABI int
 __clzdi2(di_int a)
 {
     udwords x;

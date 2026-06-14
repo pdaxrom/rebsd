@@ -437,7 +437,9 @@ bjobcode()
 {
 	printf("\t.section .mdebug.abi32\n");
 	printf("\t.previous\n");
+#ifndef TARGET_NO_ABICALLS
 	printf("\t.abicalls\n");
+#endif
 }
 
 #ifdef notdef

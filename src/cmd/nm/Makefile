@@ -4,8 +4,8 @@ include $(TOPSRC)/target.mk
 
 CFLAGS		+= -Werror -Wall -I../ar
 
-SRCS		= nm.c
-OBJS		= nm.o
+SRCS		= nm.c ../aoutio.c
+OBJS		= nm.o aoutio.o
 
 all:            nm
 
@@ -14,6 +14,9 @@ nm:          	${OBJS}
 		${OBJDUMP} -S nm.elf > nm.dis
 		${SIZE} nm.elf
 		${ELF2AOUT} nm.elf $@ && rm nm.elf
+
+aoutio.o:       ../aoutio.c ../aoutio.h
+		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
 
 clean:
 		rm -f *.o *.elf ${MAN} nm *.elf *.dis tags *~

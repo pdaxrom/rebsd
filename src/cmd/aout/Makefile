@@ -8,7 +8,7 @@ include $(TOPSRC)/target.mk
 CFLAGS		+= -Werror -Wall -Os
 LDFLAGS         +=
 
-AOUTOBJS        = aout.o mips-dis.o
+AOUTOBJS        = aout.o mips-dis.o aoutio.o
 
 all:            aout
 
@@ -17,6 +17,9 @@ aout:           $(AOUTOBJS)
 		${OBJDUMP} -S aout.elf > aout.dis
 		${SIZE} aout.elf
 		${ELF2AOUT} aout.elf $@ && rm aout.elf
+
+aoutio.o:       ../aoutio.c ../aoutio.h
+		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
 
 clean:
 		rm -f *.o *.0 *.elf aout tags *~ *.dis

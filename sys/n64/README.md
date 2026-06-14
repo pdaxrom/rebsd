@@ -53,6 +53,9 @@ The current port boots a base RetroBSD system from a cartridge ROM image:
 - The normal boot path runs `/etc/rc`, starts `/libexec/getty` for the enabled
   `/etc/ttys` lines, and logs in through `/bin/login`.
 - Userland FPU is enabled and the kernel saves/restores FPU state.
+- The first in-tree toolchain cleanup is in place: `as`, `ld`, `ranlib`,
+  `nm`, `aout`, `size`, `strip`, and `libc` `nlist()` now use target-endian
+  a.out object I/O, so they no longer assume PIC32 little-endian files.
 
 Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
 the expanded command set:
@@ -201,6 +204,28 @@ Kernel and stage0 code are built with:
 The kernel is compiled with `-msoft-float` so normal C code does not emit FPU
 instructions. The FPU save/restore assembly and N64 userland are built with
 hard-float support.
+
+The in-tree RetroBSD toolchain is not yet the primary N64 build toolchain. Its
+current N64 work is staged as follows:
+
+- target-endian a.out I/O is shared by `as`, `ld`, `ranlib`, `nm`, `aout`,
+  `size`, and `strip`;
+- N64 builds define `TARGET_BIG_ENDIAN`, so those tools default to big-endian
+  a.out and still accept `-EL`/`-EB` where applicable;
+- N64 builds define `TARGET_VR4300`, so the in-tree assembler rejects known
+  MIPS32/MIPS32r2-only mnemonics that the NEC VR4300 cannot execute;
+- the in-tree assembler has the first COP1/FPU subset used by simple
+  hard-float GCC VR4300 output, including `$fN` registers, `lwc1`/`swc1`,
+  `ldc1`/`sdc1`, compiler aliases `l.s`/`s.s`/`l.d`/`s.d`, move/control
+  transfers, single/double arithmetic, compare, convert, and `bc1*` branches;
+- `src/cmd/ccom` now builds as an N64 a.out binary with big-endian target
+  configuration and without `.abicalls`, `.cpload`, or `.cprestore` output;
+- libc runtime provides the compiler ABI helpers currently needed by that
+  path, including 64-bit shifts, clz/ctz/ffs helpers, and the first
+  64-bit integer/double conversion helpers;
+- the remaining required work is target smoke-testing the in-tree assembler
+  and compiler pipeline on N64, then extending instruction support for any
+  additional syntax emitted by `ccom`.
 
 ## Build entry points
 

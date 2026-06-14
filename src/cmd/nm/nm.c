@@ -22,6 +22,7 @@
 #endif
 #include <a.out.h>
 #include <ar.h>
+#include "../aoutio.h"
 
 #ifdef CROSS
 #include "../ar/archive.h"
@@ -137,13 +138,7 @@ off_t nextel(FILE *af, off_t off)
 
 unsigned int fgetword(FILE *f)
 {
-    register unsigned int h;
-
-    h = getc(f);
-    h |= getc(f) << 8;
-    h |= getc(f) << 16;
-    h |= getc(f) << 24;
-    return h;
+    return aout_get32(f);
 }
 
 /*
@@ -265,7 +260,7 @@ void namelist()
     setbuf(fi, ibuf);
 
     off = 0;
-    if (fread((char *)&mag_un, 1, sizeof(mag_un), fi) != sizeof(mag_un)) {
+    if (fread(mag_un.mag_armag, 1, SARMAG, fi) != SARMAG) {
         error(0, "read error");
         goto out;
     }
@@ -273,9 +268,12 @@ void namelist()
     if (strncmp(mag_un.mag_armag, ARMAG, SARMAG) == 0) {
         archive++;
         off = SARMAG;
-    } else if (N_BADMAG(mag_un.mag_exp)) {
-        error(0, "bad format");
-        goto out;
+    } else {
+        rewind(fi);
+        if (!aout_read_exec(fi, &mag_un.mag_exp) || N_BADMAG(mag_un.mag_exp)) {
+            error(0, "bad format");
+            goto out;
+        }
     }
     rewind(fi);
 
@@ -291,7 +289,7 @@ void namelist()
         struct nlist *symp = NULL;
 
         curpos = ftell(fi);
-        if (fread((char *)&mag_un.mag_exp, 1, sizeof(struct exec), fi) != sizeof(struct exec))
+        if (!aout_read_exec(fi, &mag_un.mag_exp))
             continue;
         if (N_BADMAG(mag_un.mag_exp))
             continue;
@@ -364,6 +362,12 @@ out:
 
 int main(int argc, char **argv)
 {
+#ifdef TARGET_BIG_ENDIAN
+    aout_set_big_endian(1);
+#else
+    aout_set_big_endian(0);
+#endif
+
     if (--argc > 0 && argv[1][0] == '-' && argv[1][1] != 0) {
         argv++;
         while (*++*argv)
@@ -386,10 +390,20 @@ int main(int argc, char **argv)
             case 'o':
                 oflg++;
                 continue;
+            case 'E':
+                if ((*argv)[1] == 'L')
+                    aout_set_big_endian(0);
+                else if ((*argv)[1] == 'B')
+                    aout_set_big_endian(1);
+                else
+                    goto usage;
+                while ((*argv)[1])
+                    ++*argv;
+                continue;
             case 'h':
             usage:
                 fprintf(stderr, "Usage:\n");
-                fprintf(stderr, "  nm [-gunrpo] file...\n");
+                fprintf(stderr, "  nm [-gunrpo] [-EL|-EB] file...\n");
                 fprintf(stderr, "Options:\n");
                 fprintf(stderr, "  -g      Display only external symbols\n");
                 fprintf(stderr, "  -u      Display only undefined symbols\n");

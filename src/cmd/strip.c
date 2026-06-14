@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "aoutio.h"
 
 struct  exec head;
 int status;
@@ -20,7 +21,7 @@ int status;
 void
 strip(char *name)
 {
-    register int f;
+    register int f = -1;
     long size;
 
     f = open(name, O_RDWR);
@@ -29,7 +30,7 @@ strip(char *name)
         status = 1;
         goto out;
     }
-    if (read(f, (char *)&head, sizeof (head)) < 0 || N_BADMAG(head)) {
+    if (!aout_read_exec_fd(f, &head) || N_BADMAG(head)) {
         printf("strip: %s not in a.out format\n", name);
         status = 1;
         goto out;
@@ -49,10 +50,11 @@ strip(char *name)
     head.a_reldata = 0;
     head.a_syms = 0;
     (void) lseek(f, (off_t)0, SEEK_SET);
-    if (write(f, (char *)&head, sizeof (head)) != sizeof (head))
+    if (!aout_write_exec_fd(f, &head))
             /* ignore */;
 out:
-    close(f);
+    if (f >= 0)
+        close(f);
 }
 
 int
@@ -60,12 +62,26 @@ main(int argc, char *argv[])
 {
     register int i;
 
-    while ((i = getopt(argc, argv, "h")) != EOF) {
+#ifdef TARGET_BIG_ENDIAN
+    aout_set_big_endian(1);
+#else
+    aout_set_big_endian(0);
+#endif
+
+    while ((i = getopt(argc, argv, "hE:")) != EOF) {
         switch(i) {
+        case 'E':
+            if (optarg[0] == 'L' && optarg[1] == 0)
+                aout_set_big_endian(0);
+            else if (optarg[0] == 'B' && optarg[1] == 0)
+                aout_set_big_endian(1);
+            else
+                goto usage;
+            break;
         case 'h':
         default:
 usage:                  fprintf(stderr, "Usage:\n");
-            fprintf(stderr, "  strip file...\n");
+            fprintf(stderr, "  strip [-EL|-EB] file...\n");
             return(1);
         }
     }

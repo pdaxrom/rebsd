@@ -26,8 +26,10 @@
 #else
 #   include <stdio.h>
 #endif
+#include <string.h>
 #include <unistd.h>
 #include <a.out.h>
+#include "../aoutio.h"
 
 #define USER_CODE_START 0x7f008000
 
@@ -41,26 +43,12 @@ extern int print_insn_mips (unsigned memaddr,
 
 unsigned int fgetword (FILE *f)
 {
-    register unsigned int h;
-
-    h = getc (f);
-    h |= getc (f) << 8;
-    h |= getc (f) << 16;
-    h |= getc (f) << 24;
-    return h;
+    return aout_get32(f);
 }
 
 int fgethdr (FILE *text, struct exec *h)
 {
-    h->a_midmag   = fgetword (text);
-    h->a_text    = fgetword (text);
-    h->a_data    = fgetword (text);
-    h->a_bss     = fgetword (text);
-    h->a_reltext = fgetword (text);
-    h->a_reldata = fgetword (text);
-    h->a_syms    = fgetword (text);
-    h->a_entry   = fgetword (text);
-    return (1);
+    return aout_read_exec(text, h);
 }
 
 /*
@@ -70,15 +58,12 @@ void fgetrel (FILE *f, struct reloc *r)
 {
     r->flags = getc (f);
     if ((r->flags & RSMASK) == REXT) {
-        r->index = getc (f);
-        r->index |= getc (f) << 8;
-        r->index |= getc (f) << 16;
+        r->index = aout_get24(f);
     }
     if ((r->flags & RFMASK) == RHIGH16 ||
         (r->flags & RFMASK) == RHIGH16S)
     {
-        r->offset = getc (f);
-        r->offset |= getc (f) << 8;
+        r->offset = aout_get16(f);
     }
 }
 
@@ -100,7 +85,7 @@ int fgetsym (FILE *text, char *name, unsigned *value, unsigned *type)
     if (len <= 0)
         return -1;
     *type = getc (text);
-    *value = fgetword (text);
+    *value = aout_get32(text);
     nbytes = len + 6;
     while (len-- > 0)
         *name++ = getc (text);
@@ -271,7 +256,13 @@ int main (int argc, char **argv)
 {
     int ch;
 
-    while ((ch = getopt (argc, argv, "rd")) != EOF)
+#ifdef TARGET_BIG_ENDIAN
+    aout_set_big_endian(1);
+#else
+    aout_set_big_endian(0);
+#endif
+
+    while ((ch = getopt (argc, argv, "rdE:")) != EOF)
         switch (ch) {
         case 'r':       /* print relocation info */
             rflag++;
@@ -279,9 +270,17 @@ int main (int argc, char **argv)
         case 'd':       /* do not disassemble */
             dflag++;
             break;
+        case 'E':
+            if (!strcmp(optarg, "L"))
+                aout_set_big_endian(0);
+            else if (!strcmp(optarg, "B"))
+                aout_set_big_endian(1);
+            else
+                goto usage;
+            break;
         default:
 usage:      fprintf (stderr, "Usage:\n");
-            fprintf (stderr, "  aout [-rd] file...\n");
+            fprintf (stderr, "  aout [-rd] [-EL|-EB] file...\n");
             fprintf (stderr, "Options:\n");
             fprintf (stderr, "  -r      Print relocation info\n");
             fprintf (stderr, "  -d      Do not disassemble\n");

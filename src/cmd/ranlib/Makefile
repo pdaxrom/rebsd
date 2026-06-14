@@ -5,8 +5,8 @@ include $(TOPSRC)/target.mk
 CFLAGS		+= -Werror -Wall -g -I. -I../ar
 LDFLAGS		+= -g
 
-SRCS            = ../ar/archive.c ranlib.c
-OBJS            = archive.o ranlib.o
+SRCS            = ../ar/archive.c ranlib.c ../aoutio.c
+OBJS            = archive.o ranlib.o aoutio.o
 MAN		= ranlib.0 ranlib.5.0
 MANSRC		= ranlib.1
 
@@ -20,6 +20,9 @@ ranlib:         ${OBJS}
 
 archive.o:      ../ar/archive.c
 		${CC} ${CFLAGS} -c -o $@ $<
+
+aoutio.o:       ../aoutio.c ../aoutio.h
+		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
 
 ranlib.0:       ranlib.1
 		${MANROFF} $< > $@

@@ -30,6 +30,69 @@ adding a separate hand-copied application path.
   - keep `sys/n64/rootfs.manifest` as the source of which staged files are
     included in the cartridge ROM rootfs
 
+## In-tree Toolchain For VR4300
+
+The current N64 system is still built by the external libdragon/N64 GCC
+toolchain. The in-tree RetroBSD toolchain is being adapted so it can produce
+and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
+
+- [x] Add shared target-endian a.out object helpers for command/toolchain code.
+- [x] Build N64 userland with `TARGET_BIG_ENDIAN`, matching the VR4300 and the
+  big-endian a.out files produced by `tools/elf2aout`.
+- [x] Convert `src/cmd/as` object output to target-endian:
+  - a.out header
+  - emitted words
+  - relocation records
+  - symbol table records
+  - `-EB` and `-EL` option handling
+- [x] Convert `src/cmd/ld` to target-endian a.out and archive-index I/O:
+  - input and output headers
+  - input and output relocation records
+  - input and output symbol table records
+  - `__.SYMDEF` ranlib offsets
+  - `-EB` and `-EL` option handling
+- [x] Convert `src/cmd/ranlib` to read target-endian a.out members and write
+  target-endian `__.SYMDEF` offsets.
+- [x] Convert diagnostic/object utilities used by the toolchain path:
+  `nm`, `aout`, `size`, and `strip`.
+- [x] Fix `libc` `nlist()` symbol-value decoding for target endian.
+- [ ] Add a host-side or target-side smoke test that runs the new in-tree
+  `as`, `ld`, `ranlib`, `nm`, `size`, and `strip` against a tiny relocatable
+  object and verifies the generated big-endian a.out bytes.
+- [x] Add a VR4300 assembler mode:
+  - keep MIPS I/II/III instructions needed by the N64 port
+  - reject MIPS32r2-only instructions such as `clz`, `clo`,
+    `ext`, `ins`, `seb`, `seh`, `wsbh`, `rdhwr`, `di`, `ei`, `ehb`, `mul`,
+    `madd`, and `msub`
+  - keep PIC32/default behavior unchanged
+- [ ] Smoke-test VR4300 assembler gating by running the in-tree `as` and
+  verifying that normal VR4300 instructions assemble while MIPS32r2-only
+  mnemonics fail in `-march=vr4300` mode.
+- [x] Add the first COP1/FPU assembly support needed by hard-float N64
+  userland and current GCC VR4300 smoke output:
+  - `$f0`..`$f31` register parsing
+  - `lwc1`, `swc1`, `ldc1`, `sdc1`, and the compiler aliases
+    `l.s`, `s.s`, `l.d`, and `s.d`
+  - `mtc1`, `mfc1`, `ctc1`, `cfc1`
+  - single/double arithmetic, compare, convert, and `bc1*` branch instructions
+    used by GCC output
+- [ ] Extend COP1/FPU assembler support if the compiler emits additional
+  round/trunc/ceil/floor or condition-code forms beyond the first smoke set.
+- [ ] Smoke-test COP1/FPU assembly by running the in-tree `as` on N64 or a
+  host-compatible build with GCC-generated hard-float VR4300 assembly.
+- [x] Build the first in-tree C compiler path for N64, starting with
+  `src/cmd/ccom`:
+  - big-endian MIPS code generation
+  - no `.abicalls`, `.cpload`, or `.cprestore` output for N64
+  - legacy PCC tentative globals handled with `-fcommon`
+  - strict-aliasing warnings disabled for the old PCC IR type-punning code
+- [ ] Smoke-test the in-tree C compiler path on N64:
+  - o32 calling convention compatibility
+  - no MIPS32r2-only instruction emission in VR4300 mode
+  - generated FPU instructions accepted by the in-tree assembler
+- [ ] Review secondary compiler/interpreter paths after `ccom` works:
+  `smallc`, `smlrc`, `lccom`, and their assembler output.
+
 ## N64 Command Filtering
 
 Exclude PIC32/peripheral-specific commands until compatible N64 devices exist:
@@ -88,9 +151,10 @@ copying binaries manually.
   hooks that are intentionally not provided as the PIC32 implementation.
 - [ ] Revisit `pforth` after fixing its makefile path assumptions and
   dictionary build/install flow for the shared `DESTDIR` rootfs build.
-- [x] Add the missing libgcc-compatible integer runtime helpers to libc for
-  32-bit MIPS userland: 64-bit shifts plus clz/ctz helpers. These are compiler
-  ABI routines, so they live in `src/libc/runtime`, not N64 platform code.
+- [x] Add the missing libgcc-compatible runtime helpers to libc for 32-bit
+  MIPS userland: 64-bit shifts, clz/ctz/ffs helpers, and the first 64-bit
+  integer/double conversion helpers required by `ccom`. These are compiler ABI
+  routines, so they live in `src/libc/runtime`, not N64 platform code.
 - [x] Enable `/bin/cpp` and `/bin/calendar` in the N64 rootfs now that the
   runtime helpers are available; include the installed calendar data under
   `/share/calendar`.

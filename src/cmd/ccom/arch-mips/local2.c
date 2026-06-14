@@ -102,13 +102,17 @@ prologue(struct interpass_prolog * ipp)
 
 	/* for the moment, just emit this PIC stuff - NetBSD does it */
 	printf("\t.frame %s,%d,%s\n", rnames[FP], ARGINIT/SZCHAR, rnames[RA]);
+#ifndef TARGET_NO_ABICALLS
 	printf("\t.set noreorder\n");
 	printf("\t.cpload $25\t# pseudo-op to load GOT ptr into $25\n");
 	printf("\t.set reorder\n");
+#endif
 
 	printf("\tsubu %s,%s,%d\n", rnames[SP], rnames[SP], ARGINIT/SZCHAR);
+#ifndef TARGET_NO_ABICALLS
 	/* for the moment, just emit PIC stuff - NetBSD does it */
 	printf("\t.cprestore 8\t# pseudo-op to store GOT ptr at 8(sp)\n");
+#endif
 
 	printf("\tsw %s,4(%s)\n", rnames[RA], rnames[SP]);
 	printf("\tsw %s,(%s)\n", rnames[FP], rnames[SP]);

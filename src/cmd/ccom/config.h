@@ -153,6 +153,9 @@
 
 /* Define if target defaults to LITTLE endian */
 #define TARGET_LITTLE_ENDIAN 1
+#ifdef TARGET_BIG_ENDIAN
+#undef TARGET_LITTLE_ENDIAN
+#endif
 
 /* Target OS */
 #define TARGOS bsd

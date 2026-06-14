@@ -34,7 +34,7 @@ DOCROFF       = nroff -mdoc -h
 ELF2AOUT      = $(TOPSRC)/tools/elf2aout/elf2aout
 N64_USER_LDSCRIPT ?= $(error N64_USER_LDSCRIPT must point to a generated N64 user linker script)
 
-CFLAGS        = -Os -nostdinc
+CFLAGS        = -Os -nostdinc -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS
 
 LDFLAGS       = --nmagic -T$(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o -L$(TOPSRC)/src
 LIBS          = -lc

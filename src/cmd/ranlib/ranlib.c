@@ -68,6 +68,7 @@
 #include <ar.h>
 #include <ranlib.h>
 #include <a.out.h>
+#include "../aoutio.h"
 
 #ifdef CROSS
 #   include "../ar/archive.h"
@@ -133,13 +134,7 @@ int sgets(
 unsigned int fgetword (
     register FILE *f)
 {
-        register unsigned int h;
-
-        h = getc (f);
-        h |= getc (f) << 8;
-        h |= getc (f) << 16;
-        h |= getc (f) << 24;
-        return h;
+        return aout_get32(f);
 }
 
 /*
@@ -197,8 +192,8 @@ void rexec(
 	w_off = lseek(wfd, (off_t)0, SEEK_CUR);
 
 	/* Read in exec structure. */
-	nr = read(rfd, (char *)&ebuf, sizeof(struct exec));
-	if (nr != sizeof(struct exec))
+	nr = aout_read_exec_fd(rfd, &ebuf);
+	if (! nr)
 		goto bad1;
 
 	/* Check magic number and symbol count. */
@@ -296,8 +291,7 @@ void symobj(void)
                  * 'len' bytes - symbol name. */
 	        unsigned offset = baseoff + rp->pos;
 	        fputc (rp->symlen, fp);
-		if (! fwrite((char *)&offset, 4, 1, fp))
-			error(archive);
+		aout_put32(offset, fp);
 		if (! fwrite(rp->sym, rp->symlen, 1, fp))
 			error(tname);
                 if (verbose)
@@ -426,6 +420,12 @@ int main(
 	char **argv)
 {
 	int ch, eval, tflag;
+
+#ifdef TARGET_BIG_ENDIAN
+	aout_set_big_endian(1);
+#else
+	aout_set_big_endian(0);
+#endif
 
 	tflag = 0;
 	while ((ch = getopt(argc, argv, "tv")) != EOF)

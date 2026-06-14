@@ -85,6 +85,7 @@ TTY		= $(call CMD_FILTER,TTY)
 #
 CMD_BUILD_STRIP ?= strip
 CMD_BIN_PROGS	= $(STD) $(NSTD) $(CMD_BUILD_STRIP)
+CMD_PATTERN_PROGS = $(filter-out size strip,$(CMD_BIN_PROGS))
 BINS		= $(CMD_BIN_PROGS) $(SETUID) $(OPERATOR) $(KMEM) $(TTY) $(SCRIPT)
 
 all:		$(SUBDIR) $(BINS)
@@ -95,7 +96,7 @@ $(SUBDIR):	FRC
 FRC:
 
 # $(STD) $(SETUID) $(KMEM) $(OPERATOR) $(TTY) strip
-$(CMD_BIN_PROGS) $(SETUID) $(KMEM) $(OPERATOR) $(TTY): %: %.c
+$(CMD_PATTERN_PROGS) $(SETUID) $(KMEM) $(OPERATOR) $(TTY): %: %.c
 		$(CC) $(CFLAGS) -c $<
 		$(LD) $(LDFLAGS) -o $@.elf $@.o $(LIBS)
 		$(OBJDUMP) -S $@.elf > $@.dis
@@ -107,6 +108,15 @@ $(CMD_BIN_PROGS) $(SETUID) $(KMEM) $(OPERATOR) $(TTY): %: %.c
 # bc egrep expr
 %.c: %.y
 		$(YACC) $(YFLAGS) -o $@ $<
+
+size strip: %: %.o aoutio.o
+		$(LD) $(LDFLAGS) -o $@.elf $@.o aoutio.o $(LIBS)
+		$(OBJDUMP) -S $@.elf > $@.dis
+		$(SIZE) $@.elf
+		$(ELF2AOUT) $@.elf $@ && /bin/rm $@.elf
+
+aoutio.o:	aoutio.c aoutio.h
+		$(CC) $(CFLAGS) -c aoutio.c
 
 $(SCRIPT):
 		install -c $@.sh $@

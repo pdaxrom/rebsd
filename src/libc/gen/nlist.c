@@ -24,6 +24,22 @@
 
 #define	ISVALID(p)	(p->n_name && p->n_name[0])
 
+static unsigned
+nlist_getword(FILE *fp)
+{
+	unsigned char b[4];
+
+	if (fread(b, 1, sizeof(b), fp) != sizeof(b))
+		return 0;
+#ifdef TARGET_BIG_ENDIAN
+	return ((unsigned)b[0] << 24) | ((unsigned)b[1] << 16) |
+	    ((unsigned)b[2] << 8) | b[3];
+#else
+	return b[0] | ((unsigned)b[1] << 8) | ((unsigned)b[2] << 16) |
+	    ((unsigned)b[3] << 24);
+#endif
+}
+
 int
 nlist(char *name, struct nlist *list)
 {
@@ -74,10 +90,7 @@ nlist(char *name, struct nlist *list)
 			break;
 
                 type = getc (fsym);
-                value = getc (fsym);
-                value |= getc (fsym) << 8;
-                value |= getc (fsym) << 16;
-                value |= getc (fsym) << 24;
+                value = nlist_getword(fsym);
                 for (c=0; c<len && c<maxlen; c++)
                         sbuf [c] = getc (fsym);
                 sbuf [c] = '\0';

@@ -9,6 +9,7 @@
 #include <a.out.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "aoutio.h"
 
 int header;
 
@@ -19,12 +20,27 @@ int main(int argc, char **argv)
     int nfiles, ch, err = 0;
     FILE *f;
 
-    while ((ch = getopt(argc, argv, "h")) != EOF) {
+#ifdef TARGET_BIG_ENDIAN
+    aout_set_big_endian(1);
+#else
+    aout_set_big_endian(0);
+#endif
+
+    while ((ch = getopt(argc, argv, "hE:")) != EOF) {
         switch (ch) {
+        case 'E':
+            if (optarg[0] == 'L' && optarg[1] == 0)
+                aout_set_big_endian(0);
+            else if (optarg[0] == 'B' && optarg[1] == 0)
+                aout_set_big_endian(1);
+            else
+                goto usage;
+            break;
         case 'h':
         default:
+usage:
             fprintf(stderr, "Usage:\n");
-            fprintf(stderr, "  size file...\n");
+            fprintf(stderr, "  size [-EL|-EB] file...\n");
             return (1);
         }
     }
@@ -42,7 +58,7 @@ int main(int argc, char **argv)
             err++;
             continue;
         }
-        if (fread((char *)&buf, sizeof(buf), 1, f) != 1 || N_BADMAG(buf)) {
+        if (!aout_read_exec(f, &buf) || N_BADMAG(buf)) {
             printf("size: %s not an object file\n", *argv);
             fclose(f);
             err++;

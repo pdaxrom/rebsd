@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "../aoutio.h"
 
 #define WORDSZ 4 /* word size in bytes */
 
@@ -49,6 +50,7 @@ enum {
     LEOL,      /* end of line */
     LNAME,     /* identifier */
     LREG,      /* machine register */
+    LFREG,     /* floating-point register */
     LNUM,      /* integer number */
     LLSHIFT,   /* << */
     LRSHIFT,   /* >> */
@@ -78,6 +80,7 @@ enum {
     LFRAME,    /* .frame */
     LMASK,     /* .mask */
     LFMASK,    /* .fmask */
+    LMODULE,   /* .module */
     LEND,      /* .end */
     LSIZE,     /* .size */
     LIDENT,    /* .ident */
@@ -197,6 +200,13 @@ struct optable {
 #define FRTD (1 << 20)    /* set rt to rd number */
 #define FCODE16 (1 << 21) /* immediate shifted <<16 */
 #define FMOD (1 << 22)    /* modifies the first register */
+#define FNO_VR4300 (1 << 23) /* not supported by NEC VR4300 */
+#define FFD1 (1 << 24)    /* fd, ... */
+#define FFS1 (1 << 25)    /* fs, ... */
+#define FFT1 (1 << 26)    /* ft, ... */
+#define FFS2 (1 << 27)    /* .., fs, ... */
+#define FFT2 (1 << 28)    /* .., ft, ... */
+#define FFT3 (1 << 29)    /* .., .., ft */
 
 /*
  * Implement pseudo-instructions.
@@ -214,6 +224,10 @@ const struct optable optable[] = {
     { 0x30000000, "andi", FRT1 | FRS2 | FOFF16 | FMOD },
     { 0x10000000, "b", FAOFF18 | FDSLOT },
     { 0x04110000, "bal", FAOFF18 | FDSLOT },
+    { 0x45000000, "bc1f", FAOFF18 | FDSLOT },
+    { 0x45020000, "bc1fl", FAOFF18 | FDSLOT },
+    { 0x45010000, "bc1t", FAOFF18 | FDSLOT },
+    { 0x45030000, "bc1tl", FAOFF18 | FDSLOT },
     { 0x10000000, "beq", FRS1 | FRT2 | FOFF18 | FDSLOT },
     { 0x50000000, "beql", FRS1 | FRT2 | FOFF18 | FDSLOT },
     { 0x10000000, "beqz", FRS1 | FOFF18 | FDSLOT },
@@ -235,63 +249,80 @@ const struct optable optable[] = {
     { 0x14000000, "bnez", FRS1 | FOFF18 | FDSLOT },
     { 0x54000000, "bnezl", FRS1 | FOFF18 | FDSLOT },
     { 0x0000000d, "break", FCODE16 },
-    { 0x70000021, "clo", FRD1 | FRS2 | FRTD | FMOD },
-    { 0x70000020, "clz", FRD1 | FRS2 | FRTD | FMOD },
-    { 0x4200001f, "deret", 0 },
-    { 0x41606000, "di", FRT1 | FMOD },
+    { 0x70000021, "clo", FRD1 | FRS2 | FRTD | FMOD | FNO_VR4300 },
+    { 0x70000020, "clz", FRD1 | FRS2 | FRTD | FMOD | FNO_VR4300 },
+    { 0x46200032, "c.eq.d", FFS1 | FFT2 },
+    { 0x46000032, "c.eq.s", FFS1 | FFT2 },
+    { 0x4620003e, "c.le.d", FFS1 | FFT2 },
+    { 0x4600003e, "c.le.s", FFS1 | FFT2 },
+    { 0x4620003c, "c.lt.d", FFS1 | FFT2 },
+    { 0x4600003c, "c.lt.s", FFS1 | FFT2 },
+    { 0x44400000, "cfc1", FRT1 | FFS2 | FMOD },
+    { 0x44c00000, "ctc1", FRT1 | FFS2 },
+    { 0x4200001f, "deret", FNO_VR4300 },
+    { 0x41606000, "di", FRT1 | FMOD | FNO_VR4300 },
     { 0x0000001a, "div", FRS1 | FRT2 },
     { 0x0000001b, "divu", FRS1 | FRT2 },
-    { 0x000000c0, "ehb", 0 },
-    { 0x41606020, "ei", FRT1 | FMOD },
+    { 0x000000c0, "ehb", FNO_VR4300 },
+    { 0x41606020, "ei", FRT1 | FMOD | FNO_VR4300 },
     { 0x42000018, "eret", 0 },
-    { 0x7c000000, "ext", FRT1 | FRS2 | FSA | FSIZE | FMOD },
-    { 0x7c000004, "ins", FRT1 | FRS2 | FSA | FMSB | FMOD },
+    { 0x7c000000, "ext", FRT1 | FRS2 | FSA | FSIZE | FMOD | FNO_VR4300 },
+    { 0x7c000004, "ins", FRT1 | FRS2 | FSA | FMSB | FMOD | FNO_VR4300 },
     { 0x08000000, "j", FAOFF28 | FDSLOT },
     { 0x0c000000, "jal", FAOFF28 | FDSLOT },
     { 0x00000009, "jalr", FRD1 | FRS2 | FDSLOT },
-    { 0x00000409, "jalr.hb", FRD1 | FRS2 | FDSLOT },
+    { 0x00000409, "jalr.hb", FRD1 | FRS2 | FDSLOT | FNO_VR4300 },
     { 0x00000008, "jr", FRS1 | FDSLOT },
-    { 0x00000408, "jr.hb", FRS1 | FDSLOT },
+    { 0x00000408, "jr.hb", FRS1 | FDSLOT | FNO_VR4300 },
     { 0, "la", FRT1 | FMOD, emit_la },
     { 0x80000000, "lb", FRT1 | FOFF16 | FRSB | FMOD },
     { 0x90000000, "lbu", FRT1 | FOFF16 | FRSB | FMOD },
+    { 0xd4000000, "l.d", FFT1 | FOFF16 | FRSB },
+    { 0xc4000000, "l.s", FFT1 | FOFF16 | FRSB },
+    { 0xd4000000, "ldc1", FFT1 | FOFF16 | FRSB },
     { 0x84000000, "lh", FRT1 | FOFF16 | FRSB | FMOD },
     { 0x94000000, "lhu", FRT1 | FOFF16 | FRSB | FMOD },
     { 0, "li", FRT1 | FMOD, emit_li },
     { 0xc0000000, "ll", FRT1 | FOFF16 | FRSB | FMOD },
     { 0x3c000000, "lui", FRT1 | FHIGH16 | FMOD },
     { 0x8c000000, "lw", FRT1 | FOFF16 | FRSB | FMOD },
+    { 0xc4000000, "lwc1", FFT1 | FOFF16 | FRSB },
     { 0x88000000, "lwl", FRT1 | FOFF16 | FRSB | FMOD },
     { 0x98000000, "lwr", FRT1 | FOFF16 | FRSB | FMOD },
-    { 0x70000000, "madd", FRS1 | FRT2 | FMOD },
-    { 0x70000001, "maddu", FRS1 | FRT2 | FMOD },
+    { 0x70000000, "madd", FRS1 | FRT2 | FMOD | FNO_VR4300 },
+    { 0x70000001, "maddu", FRS1 | FRT2 | FMOD | FNO_VR4300 },
     { 0x40000000, "mfc0", FRT1 | FRD2 | FSEL | FMOD },
+    { 0x44000000, "mfc1", FRT1 | FFS2 | FMOD },
     { 0x00000010, "mfhi", FRD1 | FMOD },
     { 0x00000012, "mflo", FRD1 | FMOD },
     { 0x00000021, "move", FRD1 | FRS2 | FMOD }, // addu
     { 0x0000000b, "movn", FRD1 | FRS2 | FRT3 | FMOD },
     { 0x0000000a, "movz", FRD1 | FRS2 | FRT3 | FMOD },
-    { 0x70000004, "msub", FRS1 | FRT2 | FMOD },
-    { 0x70000005, "msubu", FRS1 | FRT2 | FMOD },
+    { 0x70000004, "msub", FRS1 | FRT2 | FMOD | FNO_VR4300 },
+    { 0x70000005, "msubu", FRS1 | FRT2 | FMOD | FNO_VR4300 },
     { 0x40800000, "mtc0", FRT1 | FRD2 | FSEL },
+    { 0x44800000, "mtc1", FRT1 | FFS2 },
     { 0x00000011, "mthi", FRS1 },
     { 0x00000013, "mtlo", FRS1 },
-    { 0x70000002, "mul", FRD1 | FRS2 | FRT3 | FMOD },
+    { 0x70000002, "mul", FRD1 | FRS2 | FRT3 | FMOD | FNO_VR4300 },
     { 0x00000018, "mult", FRS1 | FRT2 },
     { 0x00000019, "multu", FRS1 | FRT2 },
     { 0x00000000, "nop", 0 },
     { 0x00000027, "nor", FRD1 | FRS2 | FRT3 | FMOD },
     { 0x00000025, "or", FRD1 | FRS2 | FRT3 | FMOD },
     { 0x34000000, "ori", FRT1 | FRS2 | FOFF16 | FMOD },
-    { 0x7c00003b, "rdhwr", FRT1 | FRD2 | FMOD },
-    { 0x41400000, "rdpgpr", FRD1 | FRT2 | FMOD },
-    { 0x00200002, "ror", FRD1 | FRT2 | FSA | FMOD },
-    { 0x00000046, "rorv", FRD1 | FRT2 | FRS3 | FMOD },
+    { 0x7c00003b, "rdhwr", FRT1 | FRD2 | FMOD | FNO_VR4300 },
+    { 0x41400000, "rdpgpr", FRD1 | FRT2 | FMOD | FNO_VR4300 },
+    { 0x00200002, "ror", FRD1 | FRT2 | FSA | FMOD | FNO_VR4300 },
+    { 0x00000046, "rorv", FRD1 | FRT2 | FRS3 | FMOD | FNO_VR4300 },
     { 0xa0000000, "sb", FRT1 | FOFF16 | FRSB },
     { 0xe0000000, "sc", FRT1 | FOFF16 | FRSB },
-    { 0x7000003f, "sdbbp", FCODE },
-    { 0x7c000420, "seb", FRD1 | FRT2 },
-    { 0x7c000620, "seh", FRD1 | FRT2 },
+    { 0xf4000000, "s.d", FFT1 | FOFF16 | FRSB },
+    { 0xe4000000, "s.s", FFT1 | FOFF16 | FRSB },
+    { 0xf4000000, "sdc1", FFT1 | FOFF16 | FRSB },
+    { 0x7000003f, "sdbbp", FCODE | FNO_VR4300 },
+    { 0x7c000420, "seb", FRD1 | FRT2 | FNO_VR4300 },
+    { 0x7c000620, "seh", FRD1 | FRT2 | FNO_VR4300 },
     { 0xa4000000, "sh", FRT1 | FOFF16 | FRSB },
     { 0x00000000, "sll", FRD1 | FRT2 | FSA | FMOD },
     { 0x00000004, "sllv", FRD1 | FRT2 | FRS3 | FMOD },
@@ -307,6 +338,7 @@ const struct optable optable[] = {
     { 0x00000022, "sub", FRD1 | FRS2 | FRT3 | FMOD },
     { 0x00000023, "subu", FRD1 | FRS2 | FRT3 | FMOD },
     { 0xac000000, "sw", FRT1 | FOFF16 | FRSB },
+    { 0xe4000000, "swc1", FFT1 | FOFF16 | FRSB },
     { 0xa8000000, "swl", FRT1 | FOFF16 | FRSB },
     { 0xb8000000, "swr", FRT1 | FOFF16 | FRSB },
     { 0x0000000f, "sync", FCODE },
@@ -324,10 +356,38 @@ const struct optable optable[] = {
     { 0x00000036, "tne", FRS1 | FRT2 | FCODE },
     { 0x040e0000, "tnei", FRS1 | FOFF16 },
     { 0x42000020, "wait", FCODE },
-    { 0x41c00000, "wrpgpr", FRD1 | FRT2 },
-    { 0x7c0000a0, "wsbh", FRD1 | FRT2 | FMOD },
+    { 0x41c00000, "wrpgpr", FRD1 | FRT2 | FNO_VR4300 },
+    { 0x7c0000a0, "wsbh", FRD1 | FRT2 | FMOD | FNO_VR4300 },
     { 0x00000026, "xor", FRD1 | FRS2 | FRT3 | FMOD },
     { 0x38000000, "xori", FRT1 | FRS2 | FOFF16 | FMOD },
+    { 0x46200000, "add.d", FFD1 | FFS2 | FFT3 },
+    { 0x46000000, "add.s", FFD1 | FFS2 | FFT3 },
+    { 0x46200005, "abs.d", FFD1 | FFS2 },
+    { 0x46000005, "abs.s", FFD1 | FFS2 },
+    { 0x46200021, "cvt.d.d", FFD1 | FFS2 },
+    { 0x46000021, "cvt.d.s", FFD1 | FFS2 },
+    { 0x46a00021, "cvt.d.l", FFD1 | FFS2 },
+    { 0x46800021, "cvt.d.w", FFD1 | FFS2 },
+    { 0x46200025, "cvt.l.d", FFD1 | FFS2 },
+    { 0x46000025, "cvt.l.s", FFD1 | FFS2 },
+    { 0x46200020, "cvt.s.d", FFD1 | FFS2 },
+    { 0x46000020, "cvt.s.s", FFD1 | FFS2 },
+    { 0x46a00020, "cvt.s.l", FFD1 | FFS2 },
+    { 0x46800020, "cvt.s.w", FFD1 | FFS2 },
+    { 0x46200024, "cvt.w.d", FFD1 | FFS2 },
+    { 0x46000024, "cvt.w.s", FFD1 | FFS2 },
+    { 0x46200003, "div.d", FFD1 | FFS2 | FFT3 },
+    { 0x46000003, "div.s", FFD1 | FFS2 | FFT3 },
+    { 0x46200006, "mov.d", FFD1 | FFS2 },
+    { 0x46000006, "mov.s", FFD1 | FFS2 },
+    { 0x46200002, "mul.d", FFD1 | FFS2 | FFT3 },
+    { 0x46000002, "mul.s", FFD1 | FFS2 | FFT3 },
+    { 0x46200007, "neg.d", FFD1 | FFS2 },
+    { 0x46000007, "neg.s", FFD1 | FFS2 },
+    { 0x46200004, "sqrt.d", FFD1 | FFS2 },
+    { 0x46000004, "sqrt.s", FFD1 | FFS2 },
+    { 0x46200001, "sub.d", FFD1 | FFS2 | FFT3 },
+    { 0x46000001, "sub.s", FFD1 | FFS2 | FFT3 },
     { 0, 0, 0 },
 };
 
@@ -376,6 +436,7 @@ int mode_macro;                 /* .set macro option */
 int mode_mips16;                /* .set mips16 option */
 int mode_micromips;             /* .set micromips option */
 int mode_at = 1;                /* .set at option */
+int mode_vr4300;                /* reject opcodes unsupported by NEC VR4300 */
 int reorder_full;               /* instruction buffered for reorder */
 unsigned reorder_word;          /* buffered instruction... */
 unsigned reorder_clobber;       /* ...modified this register */
@@ -411,24 +472,18 @@ void uerror(char *fmt, ...)
 
 /*
  * Read a 4-byte word from the file.
- * Little-endian.
  */
 unsigned fgetword(FILE *f)
 {
-    unsigned int w;
-
-    if (fread(&w, sizeof(w), 1, f) != 1)
-        return 0;
-    return w;
+    return aout_get32(f);
 }
 
 /*
  * Write a 4-byte word to the file.
- * Little-endian.
  */
 void fputword(unsigned w, FILE *f)
 {
-    fwrite(&w, sizeof(w), 1, f);
+    aout_put32(w, f);
 }
 
 /*
@@ -438,13 +493,10 @@ void fgetrel(FILE *f, struct reloc *r)
 {
     r->flags = getc(f);
     if ((r->flags & RSMASK) == REXT) {
-        r->index = getc(f);
-        r->index |= getc(f) << 8;
-        r->index |= getc(f) << 16;
+        r->index = aout_get24(f);
     }
     if ((r->flags & RFMASK) == RHIGH16 || (r->flags & RFMASK) == RHIGH16S) {
-        r->offset = getc(f);
-        r->offset |= getc(f) << 8;
+        r->offset = aout_get16(f);
     }
 }
 
@@ -458,14 +510,11 @@ unsigned fputrel(struct reloc *r, FILE *f)
 
     putc(r->flags, f);
     if ((r->flags & RSMASK) == REXT) {
-        putc(r->index, f);
-        putc(r->index >> 8, f);
-        putc(r->index >> 16, f);
+        aout_put24(r->index, f);
         nbytes += 3;
     }
     if ((r->flags & RFMASK) == RHIGH16 || (r->flags & RFMASK) == RHIGH16S) {
-        putc(r->offset, f);
-        putc(r->offset >> 8, f);
+        aout_put16(r->offset, f);
         nbytes += 2;
     }
     return nbytes;
@@ -473,18 +522,10 @@ unsigned fputrel(struct reloc *r, FILE *f)
 
 /*
  * Write the a.out header to the file.
- * Little-endian.
  */
 void fputhdr(struct exec *filhdr, FILE *coutb)
 {
-    fputword(filhdr->a_magic, coutb);
-    fputword(filhdr->a_text, coutb);
-    fputword(filhdr->a_data, coutb);
-    fputword(filhdr->a_bss, coutb);
-    fputword(filhdr->a_reltext, coutb);
-    fputword(filhdr->a_reldata, coutb);
-    fputword(filhdr->a_syms, coutb);
-    fputword(filhdr->a_entry, coutb);
+    aout_write_exec(coutb, filhdr);
 }
 
 /*
@@ -492,13 +533,11 @@ void fputhdr(struct exec *filhdr, FILE *coutb)
  */
 void fputsym(struct nlist *s, FILE *file)
 {
-    register int i;
+    struct nlist out;
 
-    putc(s->n_len, file);
-    putc(s->n_type & ~N_LOC, file);
-    fputword(s->n_value, file);
-    for (i = 0; i < s->n_len; i++)
-        putc(s->n_name[i], file);
+    out = *s;
+    out.n_type &= ~N_LOC;
+    aout_write_sym(file, &out);
 }
 
 /*
@@ -745,6 +784,8 @@ int lookacmd()
     case 'm':
         if (!strcmp(".mask", name))
             return (LMASK);
+        if (!strcmp(".module", name))
+            return (LMODULE);
         break;
     case 'n':
         if (!strcmp(".nan", name))
@@ -944,6 +985,23 @@ int lookreg()
     return -1;
 }
 
+int lookfreg()
+{
+    int val;
+    char *cp;
+
+    if (name[1] != 'f' || !ISDIGIT(name[2]))
+        return -1;
+    val = 0;
+    for (cp = name + 2; ISDIGIT(*cp); cp++) {
+        val *= 10;
+        val += *cp - '0';
+    }
+    if (*cp != 0 || val > 31)
+        return -1;
+    return val;
+}
+
 int lookcmd()
 {
     register int i, h;
@@ -1108,6 +1166,9 @@ int getlex(int *pval)
                     return (*pval);
             }
             if (name[0] == '$') {
+                *pval = lookfreg();
+                if (*pval != -1)
+                    return (LFREG);
                 *pval = lookreg();
                 if (*pval != -1)
                     return (LREG);
@@ -1398,6 +1459,7 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
     struct reloc relinfo;
     int clex, cval, segment, clobber_reg, negate_literal;
 
+    type &= ~FNO_VR4300;
     offset = 0;
     relinfo.flags = RABS;
     negate_literal = 0;
@@ -1426,6 +1488,24 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
      */
     cval = 0;
     clobber_reg = 0;
+    if (type & FFD1) {
+        clex = getlex(&cval);
+        if (clex != LFREG)
+            uerror("bad fd register");
+        opcode |= cval << 6; /* fd, ... */
+    }
+    if (type & FFS1) {
+        clex = getlex(&cval);
+        if (clex != LFREG)
+            uerror("bad fs register");
+        opcode |= cval << 11; /* fs, ... */
+    }
+    if (type & FFT1) {
+        clex = getlex(&cval);
+        if (clex != LFREG)
+            uerror("bad ft register");
+        opcode |= cval << 16; /* ft, ... */
+    }
     if (type & FRD1) {
         clex = getlex(&cval);
         if (clex != LREG)
@@ -1515,6 +1595,22 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
         }
         opcode |= cval << 21; /* .., rs, ... */
     }
+    if (type & FFS2) {
+        if (getlex(&cval) != ',')
+            uerror("comma expected");
+        clex = getlex(&cval);
+        if (clex != LFREG)
+            uerror("bad fs register");
+        opcode |= cval << 11; /* .., fs, ... */
+    }
+    if (type & FFT2) {
+        if (getlex(&cval) != ',')
+            uerror("comma expected");
+        clex = getlex(&cval);
+        if (clex != LFREG)
+            uerror("bad ft register");
+        opcode |= cval << 16; /* .., ft, ... */
+    }
 
     /*
      * Third register.
@@ -1600,6 +1696,14 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
         if (clex != LREG)
             uerror("bad rs register");
         opcode |= cval << 21; /* .., .., rs */
+    }
+    if (type & FFT3) {
+        if (getlex(&cval) != ',')
+            uerror("comma expected");
+        clex = getlex(&cval);
+        if (clex != LFREG)
+            uerror("bad ft register");
+        opcode |= cval << 16; /* .., .., ft */
     }
 done3:
 
@@ -2117,6 +2221,8 @@ void pass1()
             /* Machine instruction. */
             if (cval < 0)
                 uerror("bad instruction");
+            if (mode_vr4300 && (optable[cval].type & FNO_VR4300))
+                uerror("%s is not supported by VR4300", optable[cval].name);
             ungetlex(clex, tval);
             align(2);
             makecmd(optable[cval].opcode, optable[cval].type, optable[cval].func);
@@ -2365,6 +2471,14 @@ void pass1()
             clex = getlex(&cval);
             if (clex != ',' || getlex(&cval) != LNUM)
                 uerror("bad parameter of .gnu_attribute");
+            break;
+        case LMODULE:
+            /* .module name[=value] - accepted and ignored. */
+            do {
+                clex = getlex(&cval);
+            } while (clex != LEOL && clex != LEOF);
+            if (clex == LEOF)
+                goto done;
             break;
         case LSET:
             /* .set option */
@@ -2819,6 +2933,15 @@ int main(int argc, char *argv[])
     int ofile = 0;
     unsigned rtsize, rdsize;
 
+#ifdef TARGET_BIG_ENDIAN
+    aout_set_big_endian(1);
+#else
+    aout_set_big_endian(0);
+#endif
+#ifdef TARGET_VR4300
+    mode_vr4300 = 1;
+#endif
+
     /*
      * Parse options.
      */
@@ -2881,14 +3004,25 @@ int main(int argc, char *argv[])
                         ;
                     --cp;
                     break;
-                case 'm': /* -mips32r2, -mabi=32 - ignore */
+                case 'm': /* -mips32r2, -mabi=32, -march=vr4300 */
+                    if (strncmp(cp, "march=vr4300", 12) == 0)
+                        mode_vr4300 = 1;
+                    else if (strncmp(cp, "mips3", 5) == 0)
+                        mode_vr4300 = 1;
+                    else if (strncmp(cp, "mips32", 6) == 0 ||
+                             strncmp(cp, "march=mips32", 12) == 0)
+                        mode_vr4300 = 0;
                     while (*++cp)
                         ;
                     --cp;
                     break;
                 case 'E': /* -EL, -EB - endianness */
-                    if (cp[1] != 'L')
-                        uerror("only little endian is supported");
+                    if (cp[1] == 'L')
+                        aout_set_big_endian(0);
+                    else if (cp[1] == 'B')
+                        aout_set_big_endian(1);
+                    else
+                        uerror("bad endian option");
                     while (*++cp)
                         ;
                     --cp;
