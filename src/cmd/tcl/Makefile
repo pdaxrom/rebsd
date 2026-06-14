@@ -3,11 +3,14 @@ include $(TOPSRC)/target.mk
 #include $(TOPSRC)/cross.mk
 
 CFLAGS		+= -Os -Wall -Werror -Wno-error=pointer-sign -Wno-pointer-sign
+ifneq ($(findstring clang,$(CC)),)
+CFLAGS		+= -Wno-deprecated-non-prototype
+endif
 
 LDFLAGS		+=
 
 OBJS		= tclsh.o
-LIBS		= -ltcl
+LIBS		= -ltcl -lc
 
 all:            tcl
 

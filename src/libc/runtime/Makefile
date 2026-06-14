@@ -35,6 +35,7 @@ OBJS            = adddf3.o \
                   floatsisf.o \
                   floatunsisf.o \
                   fp_mode.o \
+                  int_helpers.o \
                   moddi3.o \
                   muldf3.o \
                   mulsf3.o \

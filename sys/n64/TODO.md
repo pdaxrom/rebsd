@@ -64,18 +64,38 @@ copying binaries manually.
   `reboot`, `mount`, `umount`, and `fsck`
 - [x] Add `/bin/n64input` as the minimal Joybus input smoke-test utility for
   `/dev/joypadN`, `/dev/mouseN`, and `/dev/kbdN`
-- [ ] Add `df -h` human-readable output; current N64 rootfs includes `df` and
-  `df -T`, but `-h` is not implemented yet
 - [x] Keep generated device nodes derived from kernel definitions through
   `sys/n64/devnodes.awk`
 - [x] Keep cartridge root read-only until a writable filesystem target exists
-- [ ] Expand the N64 rootfs toward the normal RetroBSD command set by enabling
-  command groups from `src/cmd/Makefile` in batches, while continuing to
-  exclude PIC32/peripheral-specific tools and commands that require unavailable
-  writable devices.
-- [ ] Increase the default N64 rootfs size once the command set grows; the
+- [x] Expand the N64 rootfs toward the normal RetroBSD command set by enabling
+  the first broad batch from `src/cmd/Makefile`: the full simple `STD` group
+  that builds under N64, `egrep`/`expr`, `df`, shell scripts
+  `false`/`nohup`/`true`, and selected portable subdirectory commands such as
+  `awk`, `date`, `diff`, `find`, `fold`, `md5`, `printf`, `sed`, `sysctl`,
+  `xargs`, `compress`, `chroot`, `mknod`, `mkpasswd`, and `shutdown`.
+- [x] Build `libm` for N64 userland so historical tools such as `awk` can link
+  their normal `-lm` dependency.
+- [x] Build the existing terminal and interpreter libraries needed by the
+  expanded userland: `libcurses`, `libvmf`, `libreadline`, and `libtcl`.
+- [x] Add the first library-backed command batch to the N64 rootfs:
+  `emg`, `forth`, `med`, `pdc`, `picoc`, `retroforth`, `setty`, `sl`, and
+  `tcl`.
+- [x] Increase the default N64 rootfs size once the command set grows; the
   image remains ROM-backed and demand-read through the romdisk block driver,
   not copied wholesale into RDRAM.
+- [ ] Revisit `basic` after deciding the N64 replacement for `ufetch` and
+  `ustore`; the common command currently depends on low-level user/IO access
+  hooks that are intentionally not provided as the PIC32 implementation.
+- [ ] Revisit `pforth` after fixing its makefile path assumptions and
+  dictionary build/install flow for the shared `DESTDIR` rootfs build.
+- [x] Add the missing libgcc-compatible integer runtime helpers to libc for
+  32-bit MIPS userland: 64-bit shifts plus clz/ctz helpers. These are compiler
+  ABI routines, so they live in `src/libc/runtime`, not N64 platform code.
+- [x] Enable `/bin/cpp` and `/bin/calendar` in the N64 rootfs now that the
+  runtime helpers are available; include the installed calendar data under
+  `/share/calendar`.
+- [ ] Hardware-smoke `/bin/cpp` and `/bin/calendar` from the generated rootfs,
+  for example using writable `/var/tmp` for a temporary calendar file.
 
 ## Volatile Writable Filesystems
 
@@ -152,6 +172,9 @@ copying binaries manually.
 - [x] Add a userland mount entry point for cartridge ROMFS, so
   `mount -t romfs ... /cart` reaches the typed kernel mount path rather than
   relying on private N64 test tools.
+- [x] Add `/dev/cartflash0` to the N64 `/etc/fstab` and mount `/cart`
+  automatically from `/etc/rc`; the n64cart flash is fixed cartridge hardware,
+  not removable media.
 - [x] Add the first kernel ROMFS VFS backend:
   - reuse the same ROMFS core source as `/bin/romfsctl`
   - keep `/dev/cartflash0` as the mount source and accept a character device in
@@ -163,6 +186,7 @@ copying binaries manually.
     iteration, and `statfs`
 - [x] Hardware smoke-test kernel ROMFS mount/read path on real N64cart
   hardware, 2026-06-14:
+  - [ ] boot reaches login with `/dev/cartflash0` already mounted on `/cart`
   - [x] `mount -t romfs /dev/cartflash0 /cart`
   - [x] `/sbin/mount` shows `/dev/cartflash0 on /cart`
   - [x] `ls -l /cart`

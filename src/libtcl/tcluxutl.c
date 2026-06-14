@@ -974,10 +974,10 @@ TclGetOpenFile(interp, string, filePtrPtr)
 
     if ((string[0] == 'f') && (string[1] == 'i') && (string[2] == 'l')
 	    & (string[3] == 'e')) {
-	unsigned char *end;
+	char *end;
 
-	fd = strtoul(string+4, &end, 10);
-	if ((end == string+4) || (*end != 0)) {
+	fd = strtoul((char *) string+4, &end, 10);
+	if ((end == (char *) string+4) || (*end != 0)) {
 	    goto badId;
 	}
     } else if ((string[0] == 's') && (string[1] == 't')

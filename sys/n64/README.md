@@ -11,7 +11,7 @@ uses the N64 VI framebuffer.
 
 ## Current status
 
-The current port boots a minimal RetroBSD system from a cartridge ROM image:
+The current port boots a base RetroBSD system from a cartridge ROM image:
 
 - stage0 starts from the N64 ROM and loads an ELF32 big-endian kernel blob.
 - The kernel installs exception vectors and a wired TLB mapping for userland.
@@ -31,8 +31,9 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - The n64cart flash driver also exposes kernel-callable raw helpers for future
   ROMFS mounting, so the filesystem implementation can share the same SPI
   flash access path without routing through the userland ioctl ABI.
-- `mount -t romfs /dev/cartflash0 /cart` mounts the writable n64cart ROMFS
-  through the kernel VFS path.
+- `/etc/rc` mounts `/dev/cartflash0` on `/cart` as writable `romfs`; the same
+  path can still be mounted manually with `mount -t romfs /dev/cartflash0
+  /cart`.
 - `/dev/fb0` exposes the current 16-bit framebuffer, mode ioctls, and a
   fixed uncached user mapping.
 - `/dev/joypad0`..`/dev/joypad3`, `/dev/mouse0`..`/dev/mouse3`, and
@@ -46,8 +47,9 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
   root filesystem from kernel device definitions.
 - Userland is built from the normal `src/cmd` tree as a.out binaries linked
   for the N64 user address window.
-- The N64 rootfs selects `init`, `getty`, `login`, `sh`, `ls`, and a small
-  basic command set through the shared `src/cmd/Makefile` install flow.
+- The N64 rootfs selects its BSD command subset, `/sbin` tools, and
+  library-backed interactive utilities through the shared `src/cmd/Makefile`
+  install flow.
 - The normal boot path runs `/etc/rc`, starts `/libexec/getty` for the enabled
   `/etc/ttys` lines, and logs in through `/bin/login`.
 - Userland FPU is enabled and the kernel saves/restores FPU state.
@@ -330,7 +332,9 @@ ROMFS mount path:
 
 The current UFS `rootfs.img` remains the system root and is still demand-read
 from cartridge ROM through the romdisk block driver. Cartridge ROMFS is mounted
-separately, initially at `/cart`.
+separately at `/cart`; because the n64cart flash is fixed cartridge hardware,
+the N64 `/etc/fstab` lists it and `/etc/rc` mounts it automatically during
+multi-user boot.
 
 The hardware smoke test used on real n64cart hardware is:
 
@@ -356,6 +360,18 @@ romfsctl rmdir /retrobsd-test
 ```
 
 The kernel ROMFS read smoke test is:
+
+```
+/sbin/mount
+ls -l /cart
+ls -l /cart/roms
+cat /cart/roms/kernel.z64 >/dev/null
+cat /cart/roms/kernel.z64 | wc
+df -T /cart
+```
+
+If the automatic `/etc/rc` mount was skipped or `/cart` was manually
+unmounted, the manual mount command is:
 
 ```
 /sbin/mount -t romfs /dev/cartflash0 /cart
@@ -423,6 +439,16 @@ df -T /cart
 
 After mounting cartridge ROMFS, `df -T /cart` reports the `romfs` type.
 
+`cpp` and `calendar` can be smoke-tested from the generated rootfs without
+writing to `/`:
+
+```
+printf '#define N64 ok\nN64\n' | cpp
+cd /var/tmp
+echo '#include <calendar.computer>' > calendar
+calendar
+```
+
 `romfsctl info` reports:
 
 - the flash JEDEC ID;
@@ -473,9 +499,9 @@ rootfs is read-only:
 - `root` has an empty password and `/root` as its home directory.
 - `console` and `ttyS0` are marked `secure` in `/etc/ttys`, so root login is
   allowed there.
-- `/var/run/utmp`, `/var/log/wtmp`, and `/var/log/lastlog` are not writable on
-  the ROM rootfs. The existing `login`/`libutil` code tolerates this by simply
-  skipping accounting writes when those files cannot be opened for writing.
+- `/etc/rc` creates volatile `/var/run/utmp` and `/var/log/wtmp` after
+  mounting the RAM-backed `/var`; if those files are unavailable, the existing
+  `login`/`libutil` code still tolerates that by skipping accounting writes.
 
 ## Signals
 
@@ -680,90 +706,46 @@ the filesystem from the staged tree plus a manifest. The N64 build keeps an
 explicit command subset for the cartridge rootfs, but it does not copy command
 binaries directly out of `src/cmd`.
 
-The current manifest includes:
+The current manifest includes a broader first-pass BSD userland:
 
-```
-/bin/[
-/bin/apropos
-/bin/cat
-/bin/chmod
-/bin/cp
-/bin/deco
-/bin/df
-/bin/echo
-/bin/env
-/bin/fbset
-/bin/fbview
-/bin/groups
-/bin/hostname
-/bin/id
-/bin/kill
-/bin/login
-/bin/ls
-/bin/man
-/bin/mkdir
-/bin/more
-/bin/mv
-/bin/n64input
-/bin/pwd
-/bin/ptytest
-/bin/rgbled
-/bin/romfsctl
-/bin/rm
-/bin/rmdir
-/bin/sh
-/bin/smux
-/bin/sleep
-/bin/stty
-/bin/test
-/bin/uname
-/bin/whatis
-/bin/whoami
-/.profile
-/etc/fstab
-/etc/gettytab
-/etc/group
-/etc/motd
-/etc/passwd
-/etc/profile
-/etc/rc
-/etc/ttys
-/libexec/getty
-/root/.profile
-/share/misc/more.help
-/share/man/whatis
-/share/man/cat1/deco.0
-/share/man/cat1/fbset.0
-/share/man/cat1/fbview.0
-/share/man/cat1/groups.0
-/share/man/cat1/hostname.0
-/share/man/cat1/id.0
-/share/man/cat1/n64input.0
-/share/man/cat1/ptytest.0
-/share/man/cat1/rgbled.0
-/share/man/cat1/romfsctl.0
-/share/man/cat1/stty.0
-/share/man/cat1/test.0
-/share/man/cat1/uname.0
-/share/man/cat1/whoami.0
-/share/man/cat8/mkfs.0
-/sbin/chown
-/sbin/fsck
-/sbin/init
-/sbin/mkfs
-/sbin/mount
-/sbin/reboot
-/sbin/umount
-```
+- boot/login configuration: `/.profile`, `/etc/fstab`, `/etc/gettytab`,
+  `/etc/group`, `/etc/motd`, `/etc/passwd`, `/etc/profile`, `/etc/rc`,
+  `/etc/ttys`, `/root/.profile`
+- core `/bin`: `[`, `apropos`, `awk`, `basename`, `cal`, `calendar`, `cat`,
+  `cb`, `chgrp`, `chmod`, `cmp`, `col`, `comm`, `compress`, `cpp`, `cp`,
+  `date`, `dd`,
+  `df`, `diff`, `diskspeed`, `du`, `echo`, `ed`, `egrep`, `env`, `expr`,
+  `false`, `fgrep`, `file`, `find`, `fold`, `forth`, `grep`, `groups`,
+  `head`, `hostid`, `hostname`, `id`, `join`, `kill`, `last`, `ln`, `login`,
+  `ls`, `man`, `md5`, `mesg`, `mkdir`, `more`, `mv`, `nice`, `nohup`, `od`,
+  `pagesize`, `pdc`, `picoc`, `pr`, `printf`, `printenv`, `pwd`, `renice`,
+  `retroforth`, `rev`, `rm`, `rmail`, `rmdir`, `sed`, `sh`, `size`, `sleep`,
+  `sort`, `split`, `stty`, `sum`, `sync`, `tail`, `tar`, `tcl`, `tee`,
+  `test`, `time`, `touch`, `tr`, `true`, `tsort`, `tty`, `uname`,
+  `uncompress`, `uniq`, `w`, `wc`, `whatis`, `whereis`, `who`, `whoami`,
+  `xargs`, and `zcat`
+- terminal and interpreter tools backed by additional shared libraries:
+  `emg`, `med`, `pdc`, `setty`, `sl`, and `tcl`
+- N64 diagnostics and tools: `deco`, `fbset`, `fbview`, `n64input`,
+  `ptytest`, `rgbled`, `romfsctl`, and `smux`
+- `/sbin`: `bootloader`, `chown`, `chroot`, `fastboot`, `fsck`, `halt`,
+  `init`, `mkfs`, `mknod`, `mkpasswd`, `mount`, `poweroff`, `reboot`,
+  `shutdown`, and `umount`
+- required helpers and data: `/libexec/diffh`, `/libexec/getty`,
+  `/lib/deco/*`, `/share/calendar/*`, `/share/misc/more.help`,
+  `/share/man/whatis`, and selected generated cat pages in `/share/man/cat1`
+  and `/share/man/cat8`
 
 The staging tree may contain extra files installed by selected command
 makefiles, for example `reboot` installs `halt`, `fastboot`, `poweroff`, and
 `bootloader` aliases. Those files do not enter `rootfs.img` until
 `sys/n64/rootfs.manifest` lists them.
 
-`man`, `apropos`, and `whatis` are included with the cat pages that are
-installed by the selected command makefiles. The N64 build generates
-`/share/man/whatis` from the staged cat pages with the existing
+`man`, `apropos`, and `whatis` are included with generated cat pages. Some
+selected command makefiles already install their own cat pages; the N64 board
+makefile additionally formats selected portable pages from `src/man/man1`,
+`src/man/man8`, and `src/cmd/env/env.1` into the staging tree. It then
+generates `/share/man/whatis` from the staged cat pages with the existing
 `src/man/makewhatis.sed` script before creating `rootfs.img`; the database is
 not checked in as a static file. The N64 userland build sets `GROFF_NO_SGR=1`
 so host `nroff` emits the classic overstrike format expected by the existing
@@ -776,18 +758,18 @@ first N64 rootfs, `/etc/profile`, `/.profile`, and `/root/.profile` set
 interactive pager. The same profiles set `PATH=/bin:/sbin`, which makes the
 selected `/sbin` tools visible from the shell prompt.
 
-The rootfs size defaults to 4096 KiB. The image stays in cartridge ROM and is
+The rootfs size defaults to 8192 KiB. The image stays in cartridge ROM and is
 not preloaded into RDRAM:
 
 ```
-N64_ROOTFS_KBYTES ?= 4096
+N64_ROOTFS_KBYTES ?= 8192
 ```
 
 It can be overridden on the make command line if the root filesystem needs to
 grow:
 
 ```
-make -C sys/n64 N64_ROOTFS_KBYTES=8192 kernel.z64
+make -C sys/n64 N64_ROOTFS_KBYTES=12288 kernel.z64
 ```
 
 The romdisk block driver is read-only. Attempts to open it for write return
@@ -825,7 +807,11 @@ The printed boot sizes therefore differ by installed RDRAM:
 The root filesystem stays read-only. `/tmp` is a symlink to `/var/tmp` in the
 ROM rootfs. `/etc/rc` formats the volatile RAM device at each boot with
 `mkfs -i 4096`, mounts `/dev/ram0` on `/var`, sets `/var/tmp` sticky, and
-creates `/var/log`, `/var/run`, `/var/tmp`, and `/var/lock`.
+creates `/var/db`, `/var/log`, `/var/run`, `/var/tmp`, and `/var/lock`. It
+also creates volatile `/var/run/utmp` and `/var/log/wtmp` so the normal
+login/accounting tools have writable files after multi-user boot. The same
+script mounts the fixed n64cart ROMFS at `/cart` through the `/etc/fstab`
+entry for `/dev/cartflash0`.
 
 The kernel pipe implementation allocates temporary pipe inodes on `pipedev`.
 The N64 attach code sets `pipedev` to `/dev/ram0`; after `/etc/rc` mounts
@@ -1279,15 +1265,33 @@ CMD_BUILD_STRIP
 ```
 
 PIC32 defaults stay unchanged because empty filter variables select the full
-existing lists. N64 passes `SRC_ONLY_LIBS="startup-mips libc libutil"` and
-`SRC_ONLY_SUBDIR="cmd"` at the `src/Makefile` level, then passes explicit
-`CMD_ONLY_*` values to the command makefile and disables the host-side `strip`
-command build with `CMD_BUILD_STRIP=`. For `smux`, N64 passes
-`SMUX_SUBDIRS=retro` because only the RetroBSD target side belongs in the
-cartridge rootfs.
+existing lists. N64 passes
+`SRC_ONLY_LIBS="startup-mips libc libm libutil libtermlib libcurses libvmf
+libreadline libtcl"` and `SRC_ONLY_SUBDIR="cmd"` at the `src/Makefile` level,
+then passes explicit `CMD_ONLY_*` values to the command makefile and disables
+the host-side `strip` command build with `CMD_BUILD_STRIP=`. For `smux`, N64
+passes `SMUX_SUBDIRS=retro` because only the RetroBSD target side belongs in
+the cartridge rootfs.
 
-The N64 standard command subset includes the small tools needed for console
-smoke tests, including `cat`, `more`, `sh`, `stty`, `romfsctl`, and `wc`.
+The N64 command subset now starts from the normal RetroBSD command groups and
+enables them in safe batches. The first broad batch includes the simple `STD`
+commands that build with the N64 target, `egrep`/`expr`, `df`, scripts
+`false`/`nohup`/`true`, and selected portable subdirectory commands such as
+`awk`, `date`, `diff`, `find`, `fold`, `md5`, `printf`, `sed`, `sysctl`,
+`xargs`, `compress`, `chroot`, `mknod`, `mkpasswd`, and `shutdown`. The next
+batch pulls in the existing terminal and interpreter libraries needed by
+portable user commands: `libcurses`, `libvmf`, `libreadline`, and `libtcl`.
+Those libraries enable `emg`, `med`, `pdc`, `setty`, `sl`, `tcl`, and related
+interactive tools without adding N64-specific source forks. PIC32/peripheral
+tools and commands that need missing runtime support remain excluded. `awk`
+pulls in the historical `-lm` dependency, so N64 includes `libm` in the
+userland library build.
+
+`cpp` and `calendar` are included. `cpp` needs libgcc-compatible integer
+runtime helpers emitted by GCC for 32-bit MIPS userland, so libc runtime now
+provides 64-bit shift helpers and clz/ctz helpers in `src/libc/runtime`.
+`calendar` keeps its normal historical behavior: it invokes `/bin/cpp` at
+runtime and reads the installed data files from `/share/calendar`.
 
 After building the selected commands, the board makefile invokes the shared
 install target with:
@@ -1296,10 +1300,11 @@ install target with:
 TARGET_PLATFORM=n64
 DESTDIR=sys/n64/nintendo64/rootfs.stage
 N64_USER_LDSCRIPT=sys/n64/nintendo64/n64-user.ld
-SRC_ONLY_LIBS="startup-mips libc libutil"
+SRC_ONLY_LIBS="startup-mips libc libm libutil libtermlib libcurses libvmf libreadline libtcl"
 SRC_ONLY_SUBDIR="cmd"
 ```
 
+`libm` is included because the historical `awk` build links with `-lm`.
 `libutil` is included because the standard `login` binary links against its
 utmp/wtmp helpers. On the read-only N64 rootfs those helpers skip accounting
 writes when the accounting files cannot be opened for writing.
@@ -1474,11 +1479,12 @@ Build and generated data:
   register block.
 - Joybus keyboard, mouse, and joypad drivers are built and exposed through
   `/dev`, but their hardware smoke-test is still pending.
-- Only a small rootfs is present: `init`, `getty`, `login`, `sh`, `ls`,
-  selected basic `/bin` tools, `man`/`more`, selected `/sbin` tools,
-  generated `/dev` nodes, and static config files.
-- No filesystem-writeback, SD, or other cartridge storage drivers are
-  implemented yet.
+- The ROM rootfs now contains a broader first batch of normal BSD `/bin` and
+  `/sbin` tools, `man`/`more`, generated `/dev` nodes, and static config
+  files.
+- Writable N64cart ROMFS is available through `/dev/cartflash0` and
+  `mount -t romfs`; SD and other cartridge storage drivers are not implemented
+  yet.
 
 ## Bring-up rules
 

@@ -1,5 +1,5 @@
 #
-# Minimal read-only cartridge root filesystem for the N64 port.
+# Read-only cartridge root filesystem for the N64 port.
 #
 default
 owner 0
@@ -11,13 +11,14 @@ dir /bin
 dir /cart
 dir /dev
 dir /etc
-dir /libexec
 dir /lib
 dir /lib/deco
 dir /lib/deco/help
+dir /libexec
 dir /root
 dir /sbin
 dir /share
+dir /share/calendar
 dir /share/man
 dir /share/man/cat1
 dir /share/man/cat8
@@ -53,19 +54,58 @@ file /etc/termcap
 
 file /root/.profile
 
-file /bin/sh
+file /bin/[
 mode 0775
 
 file /bin/apropos
 mode 0775
 
+file /bin/awk
+mode 0775
+
+file /bin/basename
+mode 0775
+
+file /bin/cal
+mode 0775
+
+file /bin/calendar
+mode 0775
+
 file /bin/cat
+mode 0775
+
+file /bin/cb
+mode 0775
+
+file /bin/chgrp
 mode 0775
 
 file /bin/chmod
 mode 0775
 
+file /bin/cmp
+mode 0775
+
+file /bin/col
+mode 0775
+
+file /bin/comm
+mode 0775
+
+file /bin/compress
+mode 0775
+
 file /bin/cp
+mode 0775
+
+file /bin/cpp
+mode 0775
+
+file /bin/date
+mode 0775
+
+file /bin/dd
 mode 0775
 
 file /bin/deco
@@ -74,10 +114,34 @@ mode 0775
 file /bin/df
 mode 0775
 
+file /bin/diff
+mode 0775
+
+file /bin/diskspeed
+mode 0775
+
+file /bin/du
+mode 0775
+
 file /bin/echo
 mode 0775
 
+file /bin/ed
+mode 0775
+
+file /bin/egrep
+mode 0775
+
+file /bin/emg
+mode 0775
+
 file /bin/env
+mode 0775
+
+file /bin/expr
+mode 0775
+
+file /bin/false
 mode 0775
 
 file /bin/fbset
@@ -86,7 +150,31 @@ mode 0775
 file /bin/fbview
 mode 0775
 
+file /bin/fgrep
+mode 0775
+
+file /bin/file
+mode 0775
+
+file /bin/find
+mode 0775
+
+file /bin/fold
+mode 0775
+
+file /bin/forth
+mode 0775
+
+file /bin/grep
+mode 0775
+
 file /bin/groups
+mode 0775
+
+file /bin/head
+mode 0775
+
+file /bin/hostid
 mode 0775
 
 file /bin/hostname
@@ -95,7 +183,16 @@ mode 0775
 file /bin/id
 mode 0775
 
+file /bin/join
+mode 0775
+
 file /bin/kill
+mode 0775
+
+file /bin/last
+mode 0775
+
+file /bin/ln
 mode 0775
 
 file /bin/login
@@ -105,6 +202,15 @@ file /bin/ls
 mode 0775
 
 file /bin/man
+mode 0775
+
+file /bin/md5
+mode 0775
+
+file /bin/med
+mode 0775
+
+file /bin/mesg
 mode 0775
 
 file /bin/mkdir
@@ -119,50 +225,167 @@ mode 0775
 file /bin/n64input
 mode 0775
 
-file /bin/pwd
+file /bin/nice
+mode 0775
+
+file /bin/nohup
+mode 0775
+
+file /bin/od
+mode 0775
+
+file /bin/pagesize
+mode 0775
+
+file /bin/pdc
+mode 0775
+
+file /bin/picoc
+mode 0775
+
+file /bin/pr
+mode 0775
+
+file /bin/printf
+mode 0775
+
+file /bin/printenv
 mode 0775
 
 file /bin/ptytest
 mode 0775
 
-file /bin/rm
+file /bin/pwd
 mode 0775
 
-file /bin/rmdir
+file /bin/renice
+mode 0775
+
+file /bin/retroforth
+mode 0775
+
+file /bin/rev
 mode 0775
 
 file /bin/rgbled
 mode 0775
 
+file /bin/rm
+mode 0775
+
+file /bin/rmail
+mode 0775
+
+file /bin/rmdir
+mode 0775
+
 file /bin/romfsctl
 mode 0775
 
-file /bin/smux
+file /bin/sed
+mode 0775
+
+file /bin/setty
+mode 0775
+
+file /bin/sh
+mode 0775
+
+file /bin/size
+mode 0775
+
+file /bin/sl
 mode 0775
 
 file /bin/sleep
 mode 0775
 
+file /bin/smux
+mode 0775
+
+file /bin/sort
+mode 0775
+
+file /bin/split
+mode 0775
+
 file /bin/stty
+mode 0775
+
+file /bin/sum
+mode 0775
+
+file /bin/sync
+mode 0775
+
+file /bin/tail
+mode 0775
+
+file /bin/tar
+mode 0775
+
+file /bin/tcl
+mode 0775
+
+file /bin/tee
 mode 0775
 
 file /bin/test
 mode 0775
 
-file /bin/[
+file /bin/time
+mode 0775
+
+file /bin/touch
+mode 0775
+
+file /bin/tr
+mode 0775
+
+file /bin/true
+mode 0775
+
+file /bin/tsort
+mode 0775
+
+file /bin/tty
 mode 0775
 
 file /bin/uname
 mode 0775
 
-file /bin/whatis
+file /bin/uncompress
+mode 0775
+
+file /bin/uniq
+mode 0775
+
+file /bin/w
 mode 0775
 
 file /bin/wc
 mode 0775
 
+file /bin/whatis
+mode 0775
+
+file /bin/whereis
+mode 0775
+
+file /bin/who
+mode 0775
+
 file /bin/whoami
 mode 0775
+
+file /bin/xargs
+mode 0775
+
+file /bin/zcat
+mode 0775
+
+file /libexec/diffh
+mode 0755
 
 file /libexec/getty
 mode 0755
@@ -179,54 +402,278 @@ file /lib/deco/help/e.hexview
 
 file /lib/deco/help/e.view
 
+file /lib/retroImage
+
 file /share/misc/more.help
+
+file /share/emg.keys
+
+file /share/calendar/calendar.birthday
+
+file /share/calendar/calendar.christian
+
+file /share/calendar/calendar.computer
+
+file /share/calendar/calendar.history
+
+file /share/calendar/calendar.holiday
+
+file /share/calendar/calendar.judaic
+
+file /share/calendar/calendar.music
+
+file /share/calendar/calendar.usholiday
 
 file /share/man/whatis
 
-file /share/man/cat1/groups.0
+file /share/man/cat1/apropos.0
 
-file /share/man/cat1/hostname.0
+file /share/man/cat1/awk.0
+
+file /share/man/cat1/basename.0
+
+file /share/man/cat1/cal.0
+
+file /share/man/cat1/calendar.0
+
+file /share/man/cat1/cat.0
+
+file /share/man/cat1/cb.0
+
+file /share/man/cat1/chgrp.0
+
+file /share/man/cat1/chmod.0
+
+file /share/man/cat1/cmp.0
+
+file /share/man/cat1/col.0
+
+file /share/man/cat1/comm.0
+
+file /share/man/cat1/compress.0
+
+file /share/man/cat1/cp.0
+
+file /share/man/cat1/cpp.0
+
+file /share/man/cat1/date.0
+
+file /share/man/cat1/dd.0
+
+file /share/man/cat1/deco.0
+
+file /share/man/cat1/df.0
+
+file /share/man/cat1/diff.0
+
+file /share/man/cat1/du.0
+
+file /share/man/cat1/echo.0
+
+file /share/man/cat1/ed.0
+
+file /share/man/cat1/egrep.0
+
+file /share/man/cat1/emg.0
+
+file /share/man/cat1/env.0
+
+file /share/man/cat1/expr.0
+
+file /share/man/cat1/false.0
 
 file /share/man/cat1/fbset.0
 
 file /share/man/cat1/fbview.0
 
-file /share/man/cat1/deco.0
+file /share/man/cat1/fgrep.0
+
+file /share/man/cat1/file.0
+
+file /share/man/cat1/find.0
+
+file /share/man/cat1/fold.0
+
+file /share/man/cat1/grep.0
+
+file /share/man/cat1/groups.0
+
+file /share/man/cat1/head.0
+
+file /share/man/cat1/hostid.0
+
+file /share/man/cat1/hostname.0
 
 file /share/man/cat1/id.0
 
+file /share/man/cat1/join.0
+
+file /share/man/cat1/kill.0
+
+file /share/man/cat1/last.0
+
+file /share/man/cat1/ln.0
+
+file /share/man/cat1/login.0
+
+file /share/man/cat1/ls.0
+
+file /share/man/cat1/man.0
+
+file /share/man/cat1/md5.0
+
+file /share/man/cat1/mesg.0
+
+file /share/man/cat1/mkdir.0
+
+file /share/man/cat1/more.0
+
+file /share/man/cat1/mv.0
+
 file /share/man/cat1/n64input.0
+
+file /share/man/cat1/nice.0
+
+file /share/man/cat1/nohup.0
+
+file /share/man/cat1/od.0
+
+file /share/man/cat1/pagesize.0
+
+file /share/man/cat1/pr.0
+
+file /share/man/cat1/printf.0
+
+file /share/man/cat1/printenv.0
 
 file /share/man/cat1/ptytest.0
 
+file /share/man/cat1/pwd.0
+
+file /share/man/cat1/rev.0
+
 file /share/man/cat1/rgbled.0
+
+file /share/man/cat1/rm.0
+
+file /share/man/cat1/rmail.0
+
+file /share/man/cat1/rmdir.0
 
 file /share/man/cat1/romfsctl.0
 
+file /share/man/cat1/sed.0
+
+file /share/man/cat1/sh.0
+
+file /share/man/cat1/size.0
+
+file /share/man/cat1/sl.0
+
+file /share/man/cat1/sleep.0
+
+file /share/man/cat1/sort.0
+
+file /share/man/cat1/split.0
+
 file /share/man/cat1/stty.0
+
+file /share/man/cat1/sum.0
+
+file /share/man/cat1/tail.0
+
+file /share/man/cat1/tar.0
+
+file /share/man/cat1/tee.0
 
 file /share/man/cat1/test.0
 
+file /share/man/cat1/time.0
+
+file /share/man/cat1/touch.0
+
+file /share/man/cat1/tr.0
+
+file /share/man/cat1/true.0
+
+file /share/man/cat1/tsort.0
+
+file /share/man/cat1/tty.0
+
 file /share/man/cat1/uname.0
+
+file /share/man/cat1/uncompress.0
+
+file /share/man/cat1/uniq.0
+
+file /share/man/cat1/w.0
+
+file /share/man/cat1/wc.0
+
+file /share/man/cat1/whatis.0
+
+file /share/man/cat1/who.0
 
 file /share/man/cat1/whoami.0
 
+file /share/man/cat1/xargs.0
+
+file /share/man/cat1/zcat.0
+
+file /share/man/cat8/bootloader.0
+
 file /share/man/cat8/chown.0
+
+file /share/man/cat8/chroot.0
+
+file /share/man/cat8/fastboot.0
+
+file /share/man/cat8/fsck.0
+
+file /share/man/cat8/getty.0
+
+file /share/man/cat8/halt.0
 
 file /share/man/cat8/init.0
 
+file /share/man/cat8/mkfs.0
+
+file /share/man/cat8/mknod.0
+
+file /share/man/cat8/mkpasswd.0
+
 file /share/man/cat8/mount.0
 
-file /share/man/cat8/mkfs.0
+file /share/man/cat8/poweroff.0
 
 file /share/man/cat8/reboot.0
 
+file /share/man/cat8/renice.0
+
+file /share/man/cat8/shutdown.0
+
+file /share/man/cat8/sync.0
+
+file /share/man/cat8/sysctl.0
+
 file /share/man/cat8/umount.0
+
+file /sbin/bootloader
+mode 0775
 
 file /sbin/chown
 mode 0775
 
+file /sbin/chroot
+mode 04751
+
+file /sbin/fastboot
+mode 0775
+
 file /sbin/fsck
+mode 0775
+
+file /sbin/halt
 mode 0775
 
 file /sbin/init
@@ -235,11 +682,23 @@ mode 0775
 file /sbin/mkfs
 mode 0775
 
+file /sbin/mknod
+mode 0775
+
+file /sbin/mkpasswd
+mode 0775
+
 file /sbin/mount
+mode 0775
+
+file /sbin/poweroff
 mode 0775
 
 file /sbin/reboot
 mode 0775
+
+file /sbin/shutdown
+mode 04750
 
 file /sbin/umount
 mode 0775

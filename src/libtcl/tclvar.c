@@ -2092,7 +2092,7 @@ ParseSearchId(interp, varPtr, varName, string)
 				 * decimal number and "var" is a variable
 				 * name. */
 {
-    unsigned char *end;
+    char *end;
     int id;
     ArraySearch *searchPtr;
 
@@ -2106,11 +2106,11 @@ ParseSearchId(interp, varPtr, varName, string)
 		"\"", 0);
 	return 0;
     }
-    id = strtoul(string+2, &end, 10);
-    if ((end == (string+2)) || (*end != '-')) {
+    id = strtoul((char *) string+2, &end, 10);
+    if ((end == (char *) string+2) || (*end != '-')) {
 	goto syntax;
     }
-    if (strcmp(end+1, varName) != 0) {
+    if (strcmp((unsigned char *) end+1, varName) != 0) {
 	Tcl_AppendResult(interp, "search identifier \"", string,
 		"\" isn't for variable \"", varName, "\"", 0);
 	return 0;

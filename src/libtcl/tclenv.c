@@ -198,6 +198,7 @@ setenv(name, value, overwrite)
     const char *name;		/* Name of variable whose value is to be
 				 * set. */
     const char *value;		/* New value for variable. */
+    int overwrite;		/* If zero, don't replace existing value. */
 {
     int index, length, nameLength;
     char *p;
@@ -230,6 +231,9 @@ setenv(name, value, overwrite)
 	environ[index+1] = NULL;
 	nameLength = strlen(name);
     } else {
+	if (! overwrite) {
+	    return 0;
+	}
 	/*
 	 * Compare the new value to the existing value.  If they're
 	 * the same then quit immediately (e.g. don't rewrite the

@@ -42,14 +42,14 @@ Tcl_GetInt(interp, string, intPtr)
 				 * integer in a form acceptable to strtol. */
     int *intPtr;		/* Place to store converted result. */
 {
-    unsigned char *end;
+    char *end;
     int i;
 
-    i = strtol(string, &end, 0);
+    i = strtol((char *) string, &end, 0);
     while ((*end != '\0') && isspace(*end)) {
 	end++;
     }
-    if ((end == string) || (*end != 0)) {
+    if ((end == (char *) string) || (*end != 0)) {
 	Tcl_AppendResult(interp, "expected integer but got \"", string,
 		"\"", (char *) 0);
 	return TCL_ERROR;

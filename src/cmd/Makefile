@@ -95,7 +95,7 @@ $(SUBDIR):	FRC
 FRC:
 
 # $(STD) $(SETUID) $(KMEM) $(OPERATOR) $(TTY) strip
-%: %.c
+$(CMD_BIN_PROGS) $(SETUID) $(KMEM) $(OPERATOR) $(TTY): %: %.c
 		$(CC) $(CFLAGS) -c $<
 		$(LD) $(LDFLAGS) -o $@.elf $@.o $(LIBS)
 		$(OBJDUMP) -S $@.elf > $@.dis
@@ -128,7 +128,7 @@ install:	$(BINS)
 			install -m 2751 $$i $(DESTDIR)/bin/$$i; done
 
 clean:
-		/bin/rm -f $(BINS) expr.c a.out core *.s *.o *.dis *.elf *~ y.tab.c errs
+		/bin/rm -f $(BINS) bc.c egrep.c expr.c a.out core *.s *.o *.dis *.elf *~ y.tab.c errs
 		for i in $(SUBDIR); do (cd $$i; $(MAKE) $(MFLAGS) clean); done
 
 depend:		expr.c

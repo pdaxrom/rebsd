@@ -4,6 +4,9 @@ include $(TOPSRC)/target.mk
 
 CFLAGS		+= ${DEFS} -Os -Wall -Werror -Wno-error=pointer-sign -Wno-pointer-sign
 CFLAGS		+= -DTCL_FILE_CMDS -DTCL_ENV_CMDS
+ifneq ($(findstring clang,$(CC)),)
+CFLAGS		+= -Wno-deprecated-non-prototype
+endif
 
 OBJS		= tclget.o tclproc.o tclvar.o tclassem.o \
 		  tclcmdah.o tclcmdmz.o tclhash.o tclparse.o \

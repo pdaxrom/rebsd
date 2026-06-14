@@ -12,7 +12,7 @@ N64_KERNEL_BASE = -G0 -mno-abicalls -fno-pic -ffreestanding -fno-builtin \
 N64_KERNEL_CODE = $(N64_KERNEL_BASE) -msoft-float
 N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
-N64_ROOTFS_KBYTES ?= 4096
+N64_ROOTFS_KBYTES ?= 8192
 N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/n64/rootfs
 N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/n64/rootfs.manifest
 N64_ROOTFS_DEVNODES = rootfs.devnodes.manifest
@@ -21,6 +21,19 @@ N64_ROOTFS_STAGE = rootfs.stage
 N64_ROOTFS_BASE_STAMP = $(N64_ROOTFS_STAGE)/.base
 N64_ROOTFS_USER_STAMP = $(N64_ROOTFS_STAGE)/.userland
 N64_ROOTFS_WHATIS = $(N64_ROOTFS_STAGE)/share/man/whatis
+N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm \
+                        compress cp date dd df diff du echo ed expr false \
+                        file find fold grep head hostid join kill last ln \
+                        login ls man mesg mkdir more mv nice od pagesize pr \
+                        printenv pwd rev rm rmail rmdir \
+                        sed sh size sleep sort split sum tail tar tee \
+                        time touch tr true tsort tty uniq w wc whatis who
+N64_ROOTFS_CMD_CAT1_SOURCES = emg:emg env:env sl:sl
+N64_ROOTFS_CAT1_ALIASES = egrep:grep fgrep:grep uncompress:compress \
+                          zcat:compress nohup:nice
+N64_ROOTFS_CAT8_PAGES = fsck getty sync
+N64_ROOTFS_CAT8_ALIASES = fastboot:reboot halt:reboot poweroff:reboot \
+                          bootloader:reboot
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
 N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_DIR) -type d 2>/dev/null)
 N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
@@ -38,17 +51,36 @@ N64_PTY_ENABLED = $(filter -DPTY_ENABLED,$(PARAM))
 N64_PTY_NUNITS = $(patsubst -DPTY_NUNITS=%,%,$(filter -DPTY_NUNITS=%,$(PARAM)))
 N64_CRT0_SRCS = $(shell find $(TOPSRC)/src/startup-mips -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
+N64_LIBM_SRCS = $(shell find $(TOPSRC)/src/libm -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBUTIL_SRCS = $(shell find $(TOPSRC)/src/libutil -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
-N64_SRC_LIBS = startup-mips libc libutil libtermlib
+N64_LIBTERMLIB_SRCS = $(shell find $(TOPSRC)/src/libtermlib -type f \( -name '*.[chS]' -o -name Makefile -o -name 'termcap.*' \) 2>/dev/null)
+N64_LIBCURSES_SRCS = $(shell find $(TOPSRC)/src/libcurses -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_LIBVMF_SRCS = $(shell find $(TOPSRC)/src/libvmf -type f \( -name '*.[chS]' -o -name Makefile -o -name '*.3' \) 2>/dev/null)
+N64_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_AWK_SRCS = $(shell find $(TOPSRC)/src/cmd/awk -type f \( -name '*.[chly]' -o -name Makefile -o -name tokenscript \) 2>/dev/null)
+N64_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/opt/bison/bin/bison,bison)
+N64_YACC ?= $(N64_BISON) -y
+N64_SRC_LIBS = startup-mips libc libm libutil libtermlib libcurses \
+               libvmf libreadline libtcl
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
-N64_CMD_SUBDIRS = deco env fbset fbview fsck getty hostname id init login ls man more \
-                  mkfs mount n64input ptytest reboot rgbled sh smux stty test \
-                  umount uname chown romfsctl
-N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep wc
+N64_CMD_SUBDIRS = calendar chown chroot compress cpp date2 deco diff emg env fbset \
+                  fbview find fold forth fsck getty hostname id init \
+                  login ls man md5 med mkfs mknod mkpasswd mount more \
+                  n64input pdc picoc printf ptytest reboot renice \
+                  retroforth rgbled romfsctl sed setty sh shutdown sl smux \
+                  stty sysctl tcl test umount uname xargs
+N64_CMD_STDS = basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
+               du echo ed fgrep file grep head hostid join kill last ln \
+               mesg mkdir mv nice od pagesize pr printenv pwd rev rm rmail \
+               rmdir size sleep sort split sum sync tail tar tee time touch \
+               tr tsort tty uniq w wc whereis who
+N64_CMD_NSTDS = egrep expr
 N64_CMD_OPERATORS = df
-N64_CMD_SCRIPTS = $(N64_CMD_NONE)
-N64_CMD_EXTRA_SUBDIRS = deco fbset fbview n64input ptytest rgbled romfsctl
+N64_CMD_SCRIPTS = false nohup true
+N64_CMD_EXTRA_SUBDIRS = deco fbset fbview n64input ptytest rgbled romfsctl \
+                        tcl
 N64_STB_DIR ?= /Users/sash/Work/N64/N64cart/rom/src/stb
 N64_STB_SRCS = $(wildcard $(N64_STB_DIR)/stb_image.h)
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
@@ -64,7 +96,7 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                CMD_ONLY_SUBDIR="$(N64_CMD_SUBDIRS)" \
                CMD_ONLY_STD="$(N64_CMD_STDS)" \
                CMD_ONLY_SCRIPT="$(N64_CMD_SCRIPTS)" \
-               CMD_ONLY_NSTD="$(N64_CMD_NONE)" \
+               CMD_ONLY_NSTD="$(N64_CMD_NSTDS)" \
                CMD_ONLY_SETUID="$(N64_CMD_NONE)" \
                CMD_ONLY_OPERATOR="$(N64_CMD_OPERATORS)" \
                CMD_ONLY_KMEM="$(N64_CMD_NONE)" \
@@ -72,6 +104,10 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                CMD_EXTRA_SUBDIR="$(N64_CMD_EXTRA_SUBDIRS)" \
                SMUX_SUBDIRS=retro \
                CMD_BUILD_STRIP=
+N64_AWK_MAKE = $(MAKE) -C $(TOPSRC)/src/cmd/awk TARGET_PLATFORM=n64 \
+               N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
+               DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
+               YACC="$(N64_YACC)"
 N64_STAGE0_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),stage0_n64cart_uart.o,stage0_console_null.o)
 N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)
 N64_PREFLIGHT_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),n64cart_uart.o,console_null.o)
@@ -190,6 +226,7 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP)
 	mkdir -p $(N64_ROOTFS_STAGE)
 	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
 	cp $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
+	mkdir -p $(N64_ROOTFS_STAGE)/lib
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin
 	mkdir -p $(N64_ROOTFS_STAGE)/libexec
@@ -200,6 +237,28 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP)
 
 $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_MAKEWHATIS_SED)
 	$(N64_SRC_MAKE) install
+	$(N64_AWK_MAKE) install
+	for page in $(N64_ROOTFS_CAT1_PAGES); do \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 > $(N64_ROOTFS_STAGE)/share/man/cat1/$$page.0; \
+	done
+	for spec in $(N64_ROOTFS_CMD_CAT1_SOURCES); do \
+	    dir=$${spec%:*}; page=$${spec#*:}; \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/cmd/$$dir/$$page.1 > $(N64_ROOTFS_STAGE)/share/man/cat1/$$page.0; \
+	done
+	for alias in $(N64_ROOTFS_CAT1_ALIASES); do \
+	    dst=$${alias%:*}; src=$${alias#*:}; \
+	    cp $(N64_ROOTFS_STAGE)/share/man/cat1/$$src.0 $(N64_ROOTFS_STAGE)/share/man/cat1/$$dst.0; \
+	done
+	for page in $(N64_ROOTFS_CAT8_PAGES); do \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man8/$$page.8 > $(N64_ROOTFS_STAGE)/share/man/cat8/$$page.0; \
+	done
+	for alias in $(N64_ROOTFS_CAT8_ALIASES); do \
+	    dst=$${alias%:*}; src=$${alias#*:}; \
+	    if [ ! -e $(N64_ROOTFS_STAGE)/share/man/cat8/$$dst.0 ] || \
+	        ! cmp -s $(N64_ROOTFS_STAGE)/share/man/cat8/$$src.0 $(N64_ROOTFS_STAGE)/share/man/cat8/$$dst.0; then \
+	        cp $(N64_ROOTFS_STAGE)/share/man/cat8/$$src.0 $(N64_ROOTFS_STAGE)/share/man/cat8/$$dst.0; \
+	    fi; \
+	done
 	rm -f $(N64_ROOTFS_WHATIS).tmp
 	touch $(N64_ROOTFS_WHATIS).tmp
 	for file in `find $(N64_ROOTFS_STAGE)/share/man/cat* -type f -name '*.0' -print`; do \
@@ -220,8 +279,9 @@ $(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
 $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 	$(N64_SRC_MAKE) libc
 
-$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBUTIL_SRCS) $(N64_USER_SRCS)
+$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) $(N64_LIBUTIL_SRCS) $(N64_LIBTERMLIB_SRCS) $(N64_LIBCURSES_SRCS) $(N64_LIBVMF_SRCS) $(N64_LIBREADLINE_SRCS) $(N64_LIBTCL_SRCS) $(N64_USER_SRCS) $(N64_AWK_SRCS)
 	$(N64_SRC_MAKE) -B all
+	$(N64_AWK_MAKE) awk
 	touch $@
 
 $(FSUTIL):
@@ -249,6 +309,7 @@ ${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
 
 clean:
 	$(N64_SRC_MAKE) clean
+	$(N64_AWK_MAKE) clean
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out n64-init \
 	    .deps machine sys $(N64_ROOTFS_STAGE) $(N64_ROOTFS_DEVNODES) \
 	    $(N64_ROOTFS_BUILD_MANIFEST) $(N64_KERNEL_LDSCRIPT) \
