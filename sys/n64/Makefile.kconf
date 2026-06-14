@@ -42,17 +42,22 @@ N64_LIBUTIL_SRCS = $(shell find $(TOPSRC)/src/libutil -type f \( -name '*.[chS]'
 N64_SRC_LIBS = startup-mips libc libutil libtermlib
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
-N64_CMD_SUBDIRS = deco env fbset fsck getty hostname id init login ls man more \
+N64_CMD_SUBDIRS = deco env fbset fbview fsck getty hostname id init login ls man more \
                   mkfs mount n64input ptytest reboot rgbled sh smux stty test \
                   umount uname chown romfsctl
 N64_CMD_STDS = cat chmod cp echo kill mkdir mv pwd rm rmdir sleep wc
+N64_CMD_OPERATORS = df
 N64_CMD_SCRIPTS = $(N64_CMD_NONE)
-N64_CMD_EXTRA_SUBDIRS = deco fbset n64input ptytest rgbled romfsctl
+N64_CMD_EXTRA_SUBDIRS = deco fbset fbview n64input ptytest rgbled romfsctl
+N64_STB_DIR ?= /Users/sash/Work/N64/N64cart/rom/src/stb
+N64_STB_SRCS = $(wildcard $(N64_STB_DIR)/stb_image.h)
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
-                $(shell find $(TOPSRC)/src/cmd -maxdepth 3 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null)
+                $(shell find $(TOPSRC)/src/cmd -maxdepth 3 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null) \
+                $(N64_STB_SRCS)
 N64_USERLAND_STAMP = n64-userland.stamp
 N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
+               N64_STB_DIR="$(N64_STB_DIR)" \
                DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
                SRC_ONLY_LIBS="$(N64_SRC_LIBS)" \
                SRC_ONLY_SUBDIR="$(N64_SRC_SUBDIRS)" \
@@ -61,7 +66,7 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                CMD_ONLY_SCRIPT="$(N64_CMD_SCRIPTS)" \
                CMD_ONLY_NSTD="$(N64_CMD_NONE)" \
                CMD_ONLY_SETUID="$(N64_CMD_NONE)" \
-               CMD_ONLY_OPERATOR="$(N64_CMD_NONE)" \
+               CMD_ONLY_OPERATOR="$(N64_CMD_OPERATORS)" \
                CMD_ONLY_KMEM="$(N64_CMD_NONE)" \
                CMD_ONLY_TTY="$(N64_CMD_NONE)" \
                CMD_EXTRA_SUBDIR="$(N64_CMD_EXTRA_SUBDIRS)" \

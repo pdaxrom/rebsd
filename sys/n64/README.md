@@ -31,9 +31,8 @@ The current port boots a minimal RetroBSD system from a cartridge ROM image:
 - The n64cart flash driver also exposes kernel-callable raw helpers for future
   ROMFS mounting, so the filesystem implementation can share the same SPI
   flash access path without routing through the userland ioctl ABI.
-- `mount -t romfs` has a userland entry point and kernel filesystem type tag;
-  the actual ROMFS vnode layer is not implemented yet, so the mount path returns
-  `ENOSYS` until the filesystem is wired into namei/inode operations.
+- `mount -t romfs /dev/cartflash0 /cart` mounts the writable n64cart ROMFS
+  through the kernel VFS path.
 - `/dev/fb0` exposes the current 16-bit framebuffer, mode ioctls, and a
   fixed uncached user mapping.
 - `/dev/joypad0`..`/dev/joypad3`, `/dev/mouse0`..`/dev/mouse3`, and
@@ -219,6 +218,13 @@ make -C sys/n64 clean
 make -C sys/n64 clean-all
 ```
 
+The N64 JPEG framebuffer viewer uses the local n64cart copy of `stb_image.h`.
+Override this path if the n64cart tree is in a different location:
+
+```
+make -C sys/n64 kernel.z64 N64_STB_DIR=/path/to/N64cart/rom/src/stb
+```
+
 The board build directory is `sys/n64/nintendo64`.
 
 Generated outputs:
@@ -317,9 +323,10 @@ ROMFS mount path:
   `/dev/cartflash0`.
 - `mount -t romfs /dev/cartflash0 /cart` uses the same ROMFS core source inside
   the kernel. The first mounted version loads the cartridge map/list tables,
-  creates synthetic inodes, and supports `stat`, `open`, `read`, `lseek`, and
-  directory iteration. Mutating VFS operations are still pending; direct
-  write/erase diagnostics remain available through `romfsctl`.
+  creates synthetic inodes, and supports `stat`, `open`, `read`, `lseek`,
+  directory iteration, `statfs`, create, write, append, truncate, unlink,
+  rename, mkdir, and rmdir. Direct flash diagnostics remain available through
+  `romfsctl`.
 
 The current UFS `rootfs.img` remains the system root and is still demand-read
 from cartridge ROM through the romdisk block driver. Cartridge ROMFS is mounted
@@ -357,14 +364,15 @@ ls -l /cart
 ls -l /cart/roms
 cat /cart/roms/kernel.z64 >/dev/null
 cat /cart/roms/kernel.z64 | wc
+df -T /cart
 ```
 
 This path was verified on real N64cart hardware on 2026-06-14. The test mounted
 `/dev/cartflash0` at `/cart`, listed the root and `/cart/roms`, and read
 `/cart/roms/kernel.z64` both directly to `/dev/null` and through a pipe to
-`wc`. Unmounting `/cart` with `/sbin/umount /cart` was also verified after the
-ROMFS source device was accepted as a character device by the kernel unmount
-path.
+`wc`. `df -T /cart` reported the `romfs` filesystem type. Unmounting `/cart`
+with `/sbin/umount /cart` was also verified after the ROMFS source device was
+accepted as a character device by the kernel unmount path.
 
 The kernel ROMFS write smoke test is:
 
@@ -378,23 +386,42 @@ cat /cart/retrobsd-vfs-test/hello.txt
 echo reset >/cart/retrobsd-vfs-test/hello.txt
 mv /cart/retrobsd-vfs-test/hello.txt /cart/retrobsd-vfs-test/renamed.txt
 cat /cart/retrobsd-vfs-test/renamed.txt
-rm /cart/retrobsd-vfs-test/renamed.txt
+echo overwrite >/cart/retrobsd-vfs-test/other.txt
+mv /cart/retrobsd-vfs-test/renamed.txt /cart/retrobsd-vfs-test/other.txt
+cat /cart/retrobsd-vfs-test/other.txt
+rm /cart/retrobsd-vfs-test/other.txt
 rmdir /cart/retrobsd-vfs-test
 ```
 
 The first writable VFS version creates, writes, appends, truncates, unlinks,
-renames to a free destination, and creates/removes directories through the same
-ROMFS flash map/list implementation used by `romfsctl`. Renaming over an
-existing destination is intentionally rejected with `EEXIST` until overwrite
-semantics are added.
+renames, renames over an existing compatible destination, and creates/removes
+directories through the same ROMFS flash map/list implementation used by
+`romfsctl`. Non-empty destination directories are still rejected through the
+ROMFS delete path. The overwrite path is not fully atomic across the flash-list
+updates, so it is acceptable for bring-up but should be tightened before using
+ROMFS for critical writable state.
 
 The ROMFS VFS write/delete path was verified on real N64cart hardware on
 2026-06-14. The test wrote and read `/cart/retrobsd-vfs-test/hello.txt`,
 renamed it to `renamed.txt`, read it after the rename, removed it with exit
 status 0, confirmed the directory was empty, and removed the test directory.
+The rename-over-existing path was also verified with `/cart/rename-test`:
+after writing `old` to `a.txt` and `new` to `b.txt`, `mv a.txt b.txt` left
+`b.txt` containing `old`.
 After reboot, mounting `/dev/cartflash0` at `/cart` again showed that the test
 directory stayed deleted, confirming that the ROMFS map/list changes were
 persisted to cartridge flash.
+
+`/bin/df` is included in the N64 rootfs. The shared `df` command accepts `-T`
+on N64 and PIC32 builds to print the filesystem type reported by `statfs`:
+
+```
+df
+df -T
+df -T /cart
+```
+
+After mounting cartridge ROMFS, `df -T /cart` reports the `romfs` type.
 
 `romfsctl info` reports:
 
@@ -662,9 +689,11 @@ The current manifest includes:
 /bin/chmod
 /bin/cp
 /bin/deco
+/bin/df
 /bin/echo
 /bin/env
 /bin/fbset
+/bin/fbview
 /bin/groups
 /bin/hostname
 /bin/id
@@ -705,6 +734,7 @@ The current manifest includes:
 /share/man/whatis
 /share/man/cat1/deco.0
 /share/man/cat1/fbset.0
+/share/man/cat1/fbview.0
 /share/man/cat1/groups.0
 /share/man/cat1/hostname.0
 /share/man/cat1/id.0
@@ -903,6 +933,21 @@ fbset fill 0x001f  # fill through the fixed user framebuffer mapping
 
 The fixed framebuffer mapping and `fbset fill` path were hardware
 smoke-tested on an 8 MiB N64 on 2026-06-12.
+
+`/bin/fbview` is a simple framebuffer JPEG viewer for graphics smoke tests:
+
+```
+/sbin/mount -t romfs /dev/cartflash0 /cart
+fbview /cart/background.jpg
+fbview /cart/moon.jpg
+```
+
+It opens `/dev/fb0`, reads the active mode and fixed framebuffer mapping,
+decodes JPEG data through the local n64cart `stb_image.h`, preserves the image
+aspect ratio, clears the screen to black, and writes centered RGBA5551 pixels
+into the mapped framebuffer. Resizing is intentionally a small integer
+nearest-neighbor path in `fbview` itself, so the N64 userland does not pull in
+large 64-bit/double helper code from the STB resize implementation.
 
 The VI setup reads the IPL TV type byte at `0xa4000009` and chooses PAL, NTSC,
 or MPAL timing. PAL uses the PAL timing registers with a centered 640x480

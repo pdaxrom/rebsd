@@ -616,6 +616,8 @@ n64romfs_rename(struct inode *from_pdir, struct inode *from_ip,
         ((int)from_pdir->i_fs - offsetof(struct mount, m_filsys));
     romfs_dir from_dir;
     romfs_dir to_dir;
+    int from_type;
+    int to_type;
     int error;
 
     error = n64romfs_writable(mp);
@@ -623,14 +625,31 @@ n64romfs_rename(struct inode *from_pdir, struct inode *from_ip,
         return error;
     if (from_pdir == from_ip)
         return EINVAL;
-    if (to_ip != 0)
-        return EEXIST;
+    from_type = from_ip->i_mode & IFMT;
+    if (to_ip != 0) {
+        if (to_ip == from_ip)
+            return 0;
+        to_type = to_ip->i_mode & IFMT;
+        if (from_type == IFDIR && to_type != IFDIR)
+            return ENOTDIR;
+        if (from_type != IFDIR && to_type == IFDIR)
+            return EISDIR;
+    }
     error = n64romfs_dir_by_inode(from_pdir->i_number, &from_dir);
     if (error)
         return error;
     error = n64romfs_dir_by_inode(to_pdir->i_number, &to_dir);
     if (error)
         return error;
+    if (to_ip != 0) {
+        error = n64romfs_error(romfs_delete_in_dir(&to_dir,
+            to_ndp->ni_dent.d_name));
+        if (error)
+            return error;
+        to_ip->i_nlink = 0;
+        to_ip->i_size = 0;
+        cacheinval(to_ip);
+    }
     error = n64romfs_error(romfs_rename_in_dir(&from_dir,
         from_ndp->ni_dent.d_name, &to_dir, to_ndp->ni_dent.d_name));
     if (error)

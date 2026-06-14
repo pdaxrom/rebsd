@@ -71,6 +71,9 @@ mode 0775
 file /bin/deco
 mode 0775
 
+file /bin/df
+mode 0775
+
 file /bin/echo
 mode 0775
 
@@ -78,6 +81,9 @@ file /bin/env
 mode 0775
 
 file /bin/fbset
+mode 0775
+
+file /bin/fbview
 mode 0775
 
 file /bin/groups
@@ -182,6 +188,8 @@ file /share/man/cat1/groups.0
 file /share/man/cat1/hostname.0
 
 file /share/man/cat1/fbset.0
+
+file /share/man/cat1/fbview.0
 
 file /share/man/cat1/deco.0
 

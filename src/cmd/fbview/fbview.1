@@ -1,0 +1,21 @@
+.TH FBVIEW 1 "June 14, 2026"
+.SH NAME
+fbview \- display a JPEG image on the N64 framebuffer
+.SH SYNOPSIS
+.B fbview
+.I image.jpg
+.SH DESCRIPTION
+.B fbview
+loads a JPEG image, scales it to fit the current
+.IR /dev/fb0
+mode while preserving aspect ratio, clears the framebuffer, and draws the image
+as 16-bit RGBA5551 pixels.
+.PP
+The current framebuffer mode can be selected with
+.BR fbset (1).
+.SH FILES
+.TP
+.I /dev/fb0
+N64 framebuffer device.
+.SH SEE ALSO
+.BR fbset (1)

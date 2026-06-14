@@ -11,7 +11,7 @@ df \- disk free
 .SH SYNOPSIS
 .B df
 [
-.B \-i
+.B \-iT
 ] [ filesystem ... ] [ file ... ]
 .SH DESCRIPTION
 .I Df
@@ -33,7 +33,11 @@ Other options are:
 .TP
 .B \-i
 Report also the number of inodes which are used and free.
+.TP
+.B \-T
+Report the filesystem type returned by
+.IR statfs (2).
 .SH FILES
 /etc/fstab	list of normally mounted filesystems
 .SH "SEE ALSO"
-fstab(5), icheck(8), quot(8)
+statfs(2), fstab(5), icheck(8), quot(8)

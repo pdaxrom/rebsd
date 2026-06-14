@@ -64,6 +64,8 @@ copying binaries manually.
   `reboot`, `mount`, `umount`, and `fsck`
 - [x] Add `/bin/n64input` as the minimal Joybus input smoke-test utility for
   `/dev/joypadN`, `/dev/mouseN`, and `/dev/kbdN`
+- [ ] Add `df -h` human-readable output; current N64 rootfs includes `df` and
+  `df -T`, but `-h` is not implemented yet
 - [x] Keep generated device nodes derived from kernel definitions through
   `sys/n64/devnodes.awk`
 - [x] Keep cartridge root read-only until a writable filesystem target exists
@@ -137,7 +139,7 @@ copying binaries manually.
   - [x] `romfsctl rename /retrobsd-test/hello.txt /retrobsd-test/renamed.txt`
   - [x] `romfsctl rm /retrobsd-test/renamed.txt`
   - [x] `romfsctl rmdir /retrobsd-test`
-- [ ] Add support for the N64cart cartridge ROMFS format used by
+- [x] Add support for the N64cart cartridge ROMFS format used by
   `/Users/sash/Work/N64/N64cart/fw/romfs`, mounted from cartridge flash with
   read/write support. Keep this separate from the current UFS `rootfs.img`
   romdisk: UFS remains the system root until the new filesystem path is stable.
@@ -168,8 +170,7 @@ copying binaries manually.
   - [x] `cat /cart/roms/kernel.z64 >/dev/null`
   - [x] `cat /cart/roms/kernel.z64 | wc`
   - [x] `/sbin/umount /cart`
-  - [ ] `statfs`/`df` equivalent reports `romfs` type once a user tool is
-    available
+  - [x] `df -T /cart` reports `romfs`
 - [x] Implement first ROMFS VFS write support:
   - [x] `write`
   - [x] create, append, truncate, unlink, rename, mkdir, and rmdir through the
@@ -178,8 +179,8 @@ copying binaries manually.
   - [x] flush metadata/data through cartridge sector erase/write paths
   - [x] preserve directory entries and file sizes from the cartridge ROMFS entry
     table
-  - [ ] support `rename` over an existing destination; the first version
-    returns `EEXIST`
+  - [x] support `rename` over an existing compatible destination; non-empty
+    destination directories still fail through the ROMFS delete path
 - [x] Hardware smoke-test kernel ROMFS write path on real N64cart hardware,
   2026-06-14:
   - [x] `mkdir /cart/retrobsd-vfs-test`
@@ -190,6 +191,11 @@ copying binaries manually.
   - [x] `echo reset >/cart/retrobsd-vfs-test/hello.txt`
   - [x] `mv /cart/retrobsd-vfs-test/hello.txt /cart/retrobsd-vfs-test/renamed.txt`
   - [x] `cat /cart/retrobsd-vfs-test/renamed.txt`
+  - [x] `echo old >/cart/rename-test/a.txt`,
+    `echo new >/cart/rename-test/b.txt`,
+    `mv /cart/rename-test/a.txt /cart/rename-test/b.txt`, and
+    `cat /cart/rename-test/b.txt` reports `old`
+  - [x] `rm /cart/rename-test/b.txt` and `rmdir /cart/rename-test`
   - [x] `rm /cart/retrobsd-vfs-test/renamed.txt`
   - [x] `echo $?` reports `0`
   - [x] `ls -l /cart/retrobsd-vfs-test/` shows `total 0`
@@ -310,6 +316,8 @@ copying binaries manually.
   mode ioctls
 - [x] Add `/bin/fbset` through the shared `src/cmd` install flow and include
   it in the N64 ROM manifest
+- [x] Add `/bin/fbview` as a simple framebuffer JPEG smoke-test viewer using
+  `/dev/fb0` and `stb_image` from the local N64cart source tree
 - [x] Keep `/dev/ttyS0` as the n64cart serial login/input path, separate from
   framebuffer `/dev/console` input and output
 - [x] Select VI timing from the IPL TV type byte so PAL, NTSC, and MPAL
@@ -318,6 +326,8 @@ copying binaries manually.
   320x240 on 4 MiB systems and 640x480 on 8 MiB systems
 - [x] Hardware smoke-test `fbset`, `/dev/fb0`, and 640x480 mode on an 8 MiB
   system
+- [x] Hardware smoke-test `fbview /cart/background.jpg` and
+  `fbview /cart/moon.jpg` after mounting cartridge ROMFS
 - [ ] Hardware smoke-test PAL and MPAL timing on matching hardware or a
   trusted hardware-accurate setup
 - [x] Add shared framebuffer access for `/dev/fb0`; current read/write path
