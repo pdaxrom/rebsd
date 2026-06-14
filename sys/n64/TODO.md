@@ -98,12 +98,19 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   `pcc`, `ccom`, `as`, `ld`, `ar`, `ranlib`, `nm`, `aout`, `strip`,
   and no-header smoke C sources.
 - [x] Add `/root/pcc-smoke.sh` to run the first target compiler smoke from
-  writable `/var/tmp`: `pcc -S`, `as`, `ld -r`, and FPU compile-to-asm.
+  writable `/var/tmp`: `pcc -S`, `as`, `ld -r`, full executable link/run,
+  and FPU compile/link/run.
 - [x] Increase the N64 `u`/`u0` areas to 8 KiB so the kernel stack has enough
   headroom for nested `exec`/`namei`/FPU paths during the compiler smoke.
-- [ ] Build a.out-format `/lib/crt0.o` and `/lib/libc.a` for the in-tree
+- [x] Build a.out-format `/lib/crt0.o` and `/lib/libc.a` for the in-tree
   `pcc`/`ld` path. Do not stage ELF objects from the external GCC toolchain as
   compiler runtime files; in-tree `ld` reports those as `bad magic`.
+- [x] Generate the target `/include` tree and `/lib` compiler runtime/archive
+  set into the N64 rootfs from the shared build outputs, instead of
+  hand-listing static headers or libraries in `rootfs.manifest`.
+- [ ] Hardware-smoke the expanded `/root/pcc-smoke.sh` on N64 and confirm
+  both executable link/run paths complete without filesystem or inode-cache
+  panics.
 - [ ] Review secondary compiler/interpreter paths after `ccom` works:
   `smallc`, `smlrc`, `lccom`, and their assembler output.
 

@@ -229,16 +229,23 @@ current N64 work is staged as follows:
 - the N64 rootfs stages a minimal in-tree toolchain smoke kit: `/bin/pcc`,
   `/libexec/ccom`, `/bin/as`, `/bin/ld`, `/bin/ar`, `/bin/ranlib`, `/bin/nm`,
   `/bin/aout`, `/bin/strip`, and no-header smoke sources in `/root`;
+- the generated rootfs also stages target headers under `/include` and the
+  native compiler runtime/archive set under `/lib`, including `crt0.o`,
+  `libc.a`, and `libm.a`;
+- the `/lib` compiler runtime is generated as big-endian a.out in an isolated
+  `n64-native-runtime` build tree. It is not copied from the normal external
+  GCC/ELF userland artifacts, because the in-tree `ld` correctly rejects ELF
+  objects as `bad magic`;
 - `/root/pcc-smoke.sh` runs the target smoke from `/var/tmp`, so it does not
   try to write compiler outputs into the read-only root filesystem;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
   must not corrupt the kernel inode free list;
-- the current smoke checks compile-to-assembly, assembly, and relocatable link;
-  the remaining required work is building a.out-format `crt0.o` and libc for
-  full executable links, then extending instruction support for any additional
-  syntax emitted by `ccom`.
+- the current smoke checks compile-to-assembly, assembly, relocatable link,
+  full executable link/run, and the first FPU executable link/run path. Further
+  work is extending instruction support for any additional syntax emitted by
+  `ccom` and secondary compiler/interpreter paths.
 
 ## Build entry points
 
@@ -806,18 +813,18 @@ first N64 rootfs, `/etc/profile`, `/.profile`, and `/root/.profile` set
 interactive pager. The same profiles set `PATH=/bin:/sbin`, which makes the
 selected `/sbin` tools visible from the shell prompt.
 
-The rootfs size defaults to 8192 KiB. The image stays in cartridge ROM and is
+The rootfs size defaults to 16384 KiB. The image stays in cartridge ROM and is
 not preloaded into RDRAM:
 
 ```
-N64_ROOTFS_KBYTES ?= 8192
+N64_ROOTFS_KBYTES ?= 16384
 ```
 
 It can be overridden on the make command line if the root filesystem needs to
 grow:
 
 ```
-make -C sys/n64 N64_ROOTFS_KBYTES=12288 kernel.z64
+make -C sys/n64 N64_ROOTFS_KBYTES=24576 kernel.z64
 ```
 
 The romdisk block driver is read-only. Attempts to open it for write return
@@ -1290,8 +1297,8 @@ TARGET_PLATFORM=n64
 
 The N64 board makefile rebuilds:
 
-- `src/startup-mips/crt0.o`
-- `src/libc.a`
+- `src/crt0.o` from `src/startup-mips`
+- `src/libc.a` and the selected library archive set
 - the selected command subset through `src/cmd/Makefile`
 
 The selected source tree subset is controlled by `sys/n64/Makefile.kconf`

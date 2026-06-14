@@ -1,5 +1,6 @@
 basename
 bc
+bc.c
 cal
 cat
 cb
@@ -16,6 +17,7 @@ du
 echo
 ed
 egrep
+egrep.c
 expr
 expr.c
 false

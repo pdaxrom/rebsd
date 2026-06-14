@@ -12,7 +12,7 @@ N64_KERNEL_BASE = -G0 -mno-abicalls -fno-pic -ffreestanding -fno-builtin \
 N64_KERNEL_CODE = $(N64_KERNEL_BASE) -msoft-float
 N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
-N64_ROOTFS_KBYTES ?= 8192
+N64_ROOTFS_KBYTES ?= 16384
 N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/n64/rootfs
 N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/n64/rootfs.manifest
 N64_ROOTFS_DEVNODES = rootfs.devnodes.manifest
@@ -36,6 +36,23 @@ N64_ROOTFS_CAT8_ALIASES = fastboot:reboot halt:reboot poweroff:reboot \
                           bootloader:reboot
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
 N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_DIR) -type d 2>/dev/null)
+N64_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
+                   $(TOPSRC)/sys/n64 -type f -name '*.h' 2>/dev/null)
+N64_NATIVE_DIR = n64-native-runtime
+N64_NATIVE_TREE = $(N64_NATIVE_DIR)/tree
+N64_NATIVE_TOOLS = n64-native-tools
+N64_NATIVE_HOST_INCLUDE = $(N64_NATIVE_TOOLS)/include
+N64_NATIVE_HOST_INCLUDE_STAMP = $(N64_NATIVE_HOST_INCLUDE)/.stamp
+N64_NATIVE_AS = $(N64_NATIVE_TOOLS)/as
+N64_NATIVE_LD = $(N64_NATIVE_TOOLS)/ld
+N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-cc.sh
+N64_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-as.sh
+N64_NATIVE_CC = sh $(abspath $(N64_NATIVE_CC_SCRIPT))
+N64_NATIVE_ASWRAP = sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
+N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/n64/native/mkhostinclude.sh
+N64_NATIVE_AR = $(N64_PREFIX)ar
+N64_NATIVE_STAMP = $(N64_NATIVE_DIR)/.built
+N64_NATIVE_LIBS = crt0.o libc.a libm.a
 N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 N64_DEVNODES_AWK = $(TOPSRC)/sys/n64/devnodes.awk
@@ -58,6 +75,20 @@ N64_LIBCURSES_SRCS = $(shell find $(TOPSRC)/src/libcurses -type f \( -name '*.[c
 N64_LIBVMF_SRCS = $(shell find $(TOPSRC)/src/libvmf -type f \( -name '*.[chS]' -o -name Makefile -o -name '*.3' \) 2>/dev/null)
 N64_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
+                       $(N64_NATIVE_ASWRAP_SCRIPT) \
+                       $(TOPSRC)/src/cmd/as/as.c \
+                       $(TOPSRC)/src/cmd/ld/ld.c \
+                       $(TOPSRC)/src/cmd/aoutio.c \
+                       $(TOPSRC)/src/cmd/aoutio.h \
+                       $(TOPSRC)/include/a.out.h \
+                       $(TOPSRC)/include/ar.h \
+                       $(TOPSRC)/include/nlist.h \
+                       $(TOPSRC)/include/ranlib.h \
+                       $(TOPSRC)/include/sys/exec_aout.h
+N64_NATIVE_RUNTIME_SRCS = $(N64_NATIVE_TOOL_SRCS) $(N64_INCLUDE_SRCS) \
+                          $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) \
+                          $(TOPSRC)/target.mk $(TOPSRC)/target-n64.mk
 N64_AWK_SRCS = $(shell find $(TOPSRC)/src/cmd/awk -type f \( -name '*.[chly]' -o -name Makefile -o -name tokenscript \) 2>/dev/null)
 N64_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/opt/bison/bin/bison,bison)
 N64_YACC ?= $(N64_BISON) -y
@@ -217,15 +248,34 @@ kernel_stage0.stripped.elf: kernel_stage0.elf
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
 	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
 
-$(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES)
+$(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES) $(N64_ROOTFS_USER_STAMP)
 	cp $(N64_ROOTFS_MANIFEST) $@
+	find $(N64_ROOTFS_STAGE)/include -type d | sort | while read path; do \
+	    rel=$${path#$(N64_ROOTFS_STAGE)}; \
+	    printf '\ndir %s\n' "$$rel" >> $@; \
+	done
+	find $(N64_ROOTFS_STAGE)/include -type f ! -name '.gitignore' \
+	    ! -name Makefile ! -name Makefile.install | sort | while read path; do \
+	    rel=$${path#$(N64_ROOTFS_STAGE)}; \
+	    printf '\nfile %s\n' "$$rel" >> $@; \
+	done
+	for lib in $(N64_NATIVE_LIBS); do \
+	    printf '\nfile /lib/%s\n' "$$lib" >> $@; \
+	done
 	cat $(N64_ROOTFS_DEVNODES) >> $@
 
-$(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP)
+$(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP) $(N64_INCLUDE_SRCS)
 	rm -rf $(N64_ROOTFS_STAGE)
 	mkdir -p $(N64_ROOTFS_STAGE)
 	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
 	cp $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
+	mkdir -p $(N64_ROOTFS_STAGE)/include
+	cp -R $(TOPSRC)/include/. $(N64_ROOTFS_STAGE)/include/
+	rm -rf $(N64_ROOTFS_STAGE)/include/machine $(N64_ROOTFS_STAGE)/include/sys
+	cp -R $(TOPSRC)/sys/include $(N64_ROOTFS_STAGE)/include/sys
+	mkdir -p $(N64_ROOTFS_STAGE)/include/machine
+	cp $(TOPSRC)/sys/n64/*.h $(N64_ROOTFS_STAGE)/include/machine/
+	cp $(TOPSRC)/sys/n64/include/machine/types.h $(N64_ROOTFS_STAGE)/include/machine/types.h
 	mkdir -p $(N64_ROOTFS_STAGE)/lib
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin
@@ -236,10 +286,13 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP)
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
 	touch $@
 
-$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_MAKEWHATIS_SED)
+$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_MAKEWHATIS_SED)
 	$(N64_SRC_MAKE) install
 	$(N64_AWK_MAKE) install
 	cp $(N64_ROOTFS_STAGE)/bin/cc $(N64_ROOTFS_STAGE)/bin/pcc
+	for lib in $(N64_NATIVE_LIBS); do \
+	    cp $(N64_NATIVE_DIR)/$$lib $(N64_ROOTFS_STAGE)/lib/$$lib; \
+	done
 	for page in $(N64_ROOTFS_CAT1_PAGES); do \
 	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 > $(N64_ROOTFS_STAGE)/share/man/cat1/$$page.0; \
 	done
@@ -286,6 +339,62 @@ $(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(
 	$(N64_AWK_MAKE) awk
 	touch $@
 
+$(N64_NATIVE_HOST_INCLUDE_STAMP): $(N64_NATIVE_MKHOSTINCLUDE) \
+    $(TOPSRC)/include/a.out.h $(TOPSRC)/include/ar.h \
+    $(TOPSRC)/include/nlist.h $(TOPSRC)/include/ranlib.h \
+    $(TOPSRC)/include/sys/exec_aout.h
+	$(N64_NATIVE_MKHOSTINCLUDE) $(TOPSRC) $(N64_NATIVE_HOST_INCLUDE)
+	touch $@
+
+$(N64_NATIVE_AS): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c \
+    $(TOPSRC)/src/cmd/aoutio.h
+	mkdir -p $(N64_NATIVE_TOOLS)
+	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
+	    -o $@ $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c
+
+$(N64_NATIVE_LD): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c \
+    $(TOPSRC)/src/cmd/aoutio.h
+	mkdir -p $(N64_NATIVE_TOOLS)
+	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
+	    -o $@ $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c
+
+$(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD)
+	rm -rf $(N64_NATIVE_TREE)
+	mkdir -p $(N64_NATIVE_TREE)/src $(N64_NATIVE_TREE)/sys/n64
+	cp -R $(TOPSRC)/include $(N64_NATIVE_TREE)/
+	cp -R $(TOPSRC)/sys/include $(N64_NATIVE_TREE)/sys/
+	cp $(TOPSRC)/sys/n64/*.h $(N64_NATIVE_TREE)/sys/n64/
+	cp -R $(TOPSRC)/sys/n64/include $(N64_NATIVE_TREE)/sys/n64/
+	cp -R $(TOPSRC)/src/startup-mips $(TOPSRC)/src/libc $(TOPSRC)/src/libm \
+	    $(N64_NATIVE_TREE)/src/
+	cp $(TOPSRC)/target.mk $(TOPSRC)/target-n64.mk $(N64_NATIVE_TREE)/
+	N64_AOUT_TOPSRC=$(abspath $(N64_NATIVE_TREE)) \
+	    N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
+	    N64_PREFIX=$(N64_PREFIX) \
+	    $(MAKE) -C $(N64_NATIVE_TREE)/src/startup-mips TARGET_PLATFORM=n64 \
+	    CC="$(N64_NATIVE_CC)" AS="$(N64_NATIVE_ASWRAP)" \
+	    AR=$(N64_NATIVE_AR) RANLIB=true clean all
+	N64_AOUT_TOPSRC=$(abspath $(N64_NATIVE_TREE)) \
+	    N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
+	    N64_PREFIX=$(N64_PREFIX) \
+	    $(MAKE) -C $(N64_NATIVE_TREE)/src/libc TARGET_PLATFORM=n64 \
+	    CC="$(N64_NATIVE_CC)" AS="$(N64_NATIVE_ASWRAP)" \
+	    AR=$(N64_NATIVE_AR) RANLIB=true clean all
+	N64_AOUT_TOPSRC=$(abspath $(N64_NATIVE_TREE)) \
+	    N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
+	    N64_PREFIX=$(N64_PREFIX) \
+	    $(MAKE) -C $(N64_NATIVE_TREE)/src/libm TARGET_PLATFORM=n64 \
+	    CC="$(N64_NATIVE_CC)" AS="$(N64_NATIVE_ASWRAP)" \
+	    AR=$(N64_NATIVE_AR) RANLIB=true clean all
+	cp $(N64_NATIVE_TREE)/src/crt0.o $(N64_NATIVE_DIR)/crt0.o
+	cp $(N64_NATIVE_TREE)/src/libc.a $(N64_NATIVE_DIR)/libc.a
+	cp $(N64_NATIVE_TREE)/src/libm.a $(N64_NATIVE_DIR)/libm.a
+	touch $@
+
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
 
@@ -315,7 +424,8 @@ clean:
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out n64-init \
 	    .deps machine sys $(N64_ROOTFS_STAGE) $(N64_ROOTFS_DEVNODES) \
 	    $(N64_ROOTFS_BUILD_MANIFEST) $(N64_KERNEL_LDSCRIPT) \
-	    $(N64_USER_LDSCRIPT) $(N64_USERLAND_STAMP)
+	    $(N64_USER_LDSCRIPT) $(N64_USERLAND_STAMP) \
+	    $(N64_NATIVE_DIR) $(N64_NATIVE_TOOLS)
 
 clean-all: clean
 	rm -f Makefile ioconf.c swap*.c vers.c

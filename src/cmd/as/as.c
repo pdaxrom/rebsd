@@ -40,7 +40,8 @@
 /*
  * Locals beginning with L or dot are stripped off by -X flag.
  */
-#define IS_LOCAL(s) ((s)->n_name[0] == 'L' || (s)->n_name[0] == '.')
+#define IS_LOCAL(s) ((s)->n_name[0] == 'L' || (s)->n_name[0] == '.' || \
+                     (s)->n_name[0] == '$')
 
 /*
  * Types of lexemes.
@@ -214,6 +215,11 @@ struct optable {
  */
 void emit_li(unsigned, struct reloc *);
 void emit_la(unsigned, struct reloc *);
+void emit_mem_pseudo(unsigned, unsigned, struct reloc *, int);
+void reorder_flush(void);
+void switchsection(int);
+void previoussection(void);
+int has_empty_mem_offset(void);
 
 const struct optable optable[] = {
     { 0x00000020, "add", FRD1 | FRS2 | FRT3 | FMOD },
@@ -253,12 +259,38 @@ const struct optable optable[] = {
     { 0x70000020, "clz", FRD1 | FRS2 | FRTD | FMOD | FNO_VR4300 },
     { 0x46200032, "c.eq.d", FFS1 | FFT2 },
     { 0x46000032, "c.eq.s", FFS1 | FFT2 },
+    { 0x46200030, "c.f.d", FFS1 | FFT2 },
+    { 0x46000030, "c.f.s", FFS1 | FFT2 },
     { 0x4620003e, "c.le.d", FFS1 | FFT2 },
     { 0x4600003e, "c.le.s", FFS1 | FFT2 },
     { 0x4620003c, "c.lt.d", FFS1 | FFT2 },
     { 0x4600003c, "c.lt.s", FFS1 | FFT2 },
-    { 0x44400000, "cfc1", FRT1 | FFS2 | FMOD },
-    { 0x44c00000, "ctc1", FRT1 | FFS2 },
+    { 0x4620003d, "c.nge.d", FFS1 | FFT2 },
+    { 0x4600003d, "c.nge.s", FFS1 | FFT2 },
+    { 0x46200039, "c.ngle.d", FFS1 | FFT2 },
+    { 0x46000039, "c.ngle.s", FFS1 | FFT2 },
+    { 0x4620003b, "c.ngl.d", FFS1 | FFT2 },
+    { 0x4600003b, "c.ngl.s", FFS1 | FFT2 },
+    { 0x4620003f, "c.ngt.d", FFS1 | FFT2 },
+    { 0x4600003f, "c.ngt.s", FFS1 | FFT2 },
+    { 0x46200036, "c.ole.d", FFS1 | FFT2 },
+    { 0x46000036, "c.ole.s", FFS1 | FFT2 },
+    { 0x46200034, "c.olt.d", FFS1 | FFT2 },
+    { 0x46000034, "c.olt.s", FFS1 | FFT2 },
+    { 0x4620003a, "c.seq.d", FFS1 | FFT2 },
+    { 0x4600003a, "c.seq.s", FFS1 | FFT2 },
+    { 0x46200038, "c.sf.d", FFS1 | FFT2 },
+    { 0x46000038, "c.sf.s", FFS1 | FFT2 },
+    { 0x46200033, "c.ueq.d", FFS1 | FFT2 },
+    { 0x46000033, "c.ueq.s", FFS1 | FFT2 },
+    { 0x46200037, "c.ule.d", FFS1 | FFT2 },
+    { 0x46000037, "c.ule.s", FFS1 | FFT2 },
+    { 0x46200035, "c.ult.d", FFS1 | FFT2 },
+    { 0x46000035, "c.ult.s", FFS1 | FFT2 },
+    { 0x46200031, "c.un.d", FFS1 | FFT2 },
+    { 0x46000031, "c.un.s", FFS1 | FFT2 },
+    { 0x44400000, "cfc1", FRT1 | FRD2 | FMOD },
+    { 0x44c00000, "ctc1", FRT1 | FRD2 },
     { 0x4200001f, "deret", FNO_VR4300 },
     { 0x41606000, "di", FRT1 | FMOD | FNO_VR4300 },
     { 0x0000001a, "div", FRS1 | FRT2 },
@@ -384,8 +416,24 @@ const struct optable optable[] = {
     { 0x46000002, "mul.s", FFD1 | FFS2 | FFT3 },
     { 0x46200007, "neg.d", FFD1 | FFS2 },
     { 0x46000007, "neg.s", FFD1 | FFS2 },
+    { 0x4620000a, "ceil.l.d", FFD1 | FFS2 },
+    { 0x4600000a, "ceil.l.s", FFD1 | FFS2 },
+    { 0x4620000e, "ceil.w.d", FFD1 | FFS2 },
+    { 0x4600000e, "ceil.w.s", FFD1 | FFS2 },
+    { 0x4620000b, "floor.l.d", FFD1 | FFS2 },
+    { 0x4600000b, "floor.l.s", FFD1 | FFS2 },
+    { 0x4620000f, "floor.w.d", FFD1 | FFS2 },
+    { 0x4600000f, "floor.w.s", FFD1 | FFS2 },
+    { 0x46200008, "round.l.d", FFD1 | FFS2 },
+    { 0x46000008, "round.l.s", FFD1 | FFS2 },
+    { 0x4620000c, "round.w.d", FFD1 | FFS2 },
+    { 0x4600000c, "round.w.s", FFD1 | FFS2 },
     { 0x46200004, "sqrt.d", FFD1 | FFS2 },
     { 0x46000004, "sqrt.s", FFD1 | FFS2 },
+    { 0x46200009, "trunc.l.d", FFD1 | FFS2 },
+    { 0x46000009, "trunc.l.s", FFD1 | FFS2 },
+    { 0x4620000d, "trunc.w.d", FFD1 | FFS2 },
+    { 0x4600000d, "trunc.w.s", FFD1 | FFS2 },
     { 0x46200001, "sub.d", FFD1 | FFS2 | FFT3 },
     { 0x46000001, "sub.s", FFD1 | FFS2 | FFT3 },
     { 0, 0, 0 },
@@ -413,6 +461,7 @@ const char ctype[256] = {
 FILE *sfile[SABS], *rfile[SABS];
 unsigned count[SABS];
 int segm;
+int prev_segm;
 char *infile, *outfile = "a.out";
 char tfilename[] = "/tmp/asXXXXXX";
 int line; /* Source line number */
@@ -829,6 +878,25 @@ int lookacmd()
     return (-1);
 }
 
+void switchsection(int newsegm)
+{
+    if (newsegm == segm)
+        return;
+    reorder_flush();
+    prev_segm = segm;
+    segm = newsegm;
+}
+
+void previoussection()
+{
+    int newsegm;
+
+    reorder_flush();
+    newsegm = prev_segm;
+    prev_segm = segm;
+    segm = newsegm;
+}
+
 /*
  * Change a segment based on a section name.
  */
@@ -847,8 +915,8 @@ void setsection()
 
     for (p = map; p->name; p++) {
         if (strncmp(name, p->name, p->len) == 0 &&
-            (p->name[p->len] == 0 || p->name[p->len] == '.')) {
-            segm = p->segm;
+            (name[p->len] == 0 || name[p->len] == '.')) {
+            switchsection(p->segm);
             return;
         }
     }
@@ -1016,6 +1084,40 @@ int lookcmd()
             h += HCMDSZ;
     }
     return (-1);
+}
+
+int getgpr(int lex, int *reg)
+{
+    if (lex == LREG)
+        return 1;
+    if (lex == LNUM && intval == 0) {
+        *reg = 0;
+        return 1;
+    }
+    return 0;
+}
+
+int has_empty_mem_offset(void)
+{
+    int c, next;
+
+    do {
+        c = getchar();
+    } while (c == ' ' || c == '\t');
+    if (c != '(') {
+        if (c != EOF)
+            ungetc(c, stdin);
+        return 0;
+    }
+
+    do {
+        next = getchar();
+    } while (next == ' ' || next == '\t');
+    if (next != EOF)
+        ungetc(next, stdin);
+    ungetc(c, stdin);
+
+    return next == '$';
 }
 
 char *alloc(int len)
@@ -1453,6 +1555,32 @@ void emit_la(unsigned opcode, struct reloc *relinfo)
 }
 
 /*
+ * Memory pseudo instruction: load/store reg,symbol.
+ */
+void emit_mem_pseudo(unsigned opcode, unsigned value, struct reloc *relinfo, int clobber_reg)
+{
+    struct reloc hirel, lorel;
+    unsigned hi;
+
+    if (!mode_at)
+        uerror("macro requires $at");
+
+    hirel = *relinfo;
+    lorel = *relinfo;
+
+    hirel.flags &= ~RFMASK;
+    hirel.flags |= RHIGH16S;
+    hirel.offset = value & 0xffff;
+    hi = (value + 0x8000) >> 16;
+    emitword(0x3c010000 | hi, &hirel, 1);
+
+    lorel.flags &= ~RFMASK;
+    opcode &= ~(31 << 21);
+    opcode |= (1 << 21) | (value & 0xffff);
+    emitword(opcode, &lorel, clobber_reg);
+}
+
+/*
  * Build and emit a machine instruction code.
  */
 void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc *))
@@ -1510,20 +1638,20 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
     }
     if (type & FRD1) {
         clex = getlex(&cval);
-        if (clex != LREG)
+        if (!getgpr(clex, &cval))
             uerror("bad rd register");
         opcode |= cval << 11; /* rd, ... */
     }
     if (type & FRT1) {
         clex = getlex(&cval);
-        if (clex != LREG)
+        if (!getgpr(clex, &cval))
             uerror("bad rt register");
         opcode |= cval << 16; /* rt, ... */
     }
     if (type & FRS1) {
     frs1:
         clex = getlex(&cval);
-        if (clex != LREG)
+        if (!getgpr(clex, &cval))
             uerror("bad rs register");
         if (cval == 0 && (opcode == 0x0000001a ||  /* div */
                           opcode == 0x0000001b)) { /* divu */
@@ -1548,7 +1676,7 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
         if (getlex(&cval) != ',')
             uerror("comma expected");
         clex = getlex(&cval);
-        if (clex != LREG)
+        if (!getgpr(clex, &cval))
             uerror("bad rd register");
         opcode |= cval << 11; /* .., rd, ... */
     }
@@ -1556,7 +1684,7 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
         if (getlex(&cval) != ',')
             uerror("comma expected");
         clex = getlex(&cval);
-        if (clex != LREG) {
+        if (!getgpr(clex, &cval)) {
             if ((type & FRD1) && (type & FSA)) {
                 /* Second register operand omitted.
                  * Need to restore the missing operand. */
@@ -1584,7 +1712,39 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
             goto done3;
         }
         clex = getlex(&cval);
-        if (clex != LREG) {
+        if (!getgpr(clex, &cval)) {
+            if ((type & FRD1) && (type & FRT3)) {
+                /* Three-operand ALU instruction used as "op rd, imm".
+                 * Treat it as "op rd, rd, imm". */
+                unsigned newop;
+                switch (opcode & 0xfc0007ff) {
+                case 0x00000020:
+                    newop = 0x20000000;
+                    break; // add -> addi
+                case 0x00000021:
+                    newop = 0x24000000;
+                    break; // addu -> addiu
+                case 0x00000022:
+                    newop = 0x20000000;
+                    negate_literal = 1;
+                    break; // sub -> addi, negate
+                case 0x00000023:
+                    newop = 0x24000000;
+                    negate_literal = 1;
+                    break; // subu -> addiu, negate
+                default:
+                    uerror("bad rs register");
+                    return;
+                }
+                ungetlex(clex, cval);
+                cval = (opcode >> 11) & 31; /* get rd */
+                newop |= cval << 16;        /* rt = rd */
+                newop |= cval << 21;        /* rs = rd */
+                orig_opcode = opcode;
+                opcode = newop;
+                type = FOFF16 | FMOD;
+                goto foff16;
+            }
             if ((type & FRT1) && (type & FOFF16)) {
                 /* Second register operand omitted.
                  * Need to restore the missing operand. */
@@ -1630,7 +1790,7 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
             goto done3;
         }
         clex = getlex(&cval);
-        if (clex != LREG) {
+        if (!getgpr(clex, &cval)) {
             if ((type & FRD1) && (type & FRS2)) {
                 /* Three-operand instruction used with literal operand.
                  * Convert it to immediate type. */
@@ -1695,7 +1855,7 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
             goto done3;
         }
         clex = getlex(&cval);
-        if (clex != LREG)
+        if (!getgpr(clex, &cval))
             uerror("bad rs register");
         opcode |= cval << 21; /* .., .., rs */
     }
@@ -1788,6 +1948,12 @@ done3:
         if ((type & (FOFF16 | FOFF18 | FHIGH16)) && getlex(&cval) != ',')
             uerror("comma expected");
     foff16:
+        if ((type & (FOFF16 | FRSB)) == (FOFF16 | FRSB) && has_empty_mem_offset()) {
+            offset = 0;
+            segment = SABS;
+            relinfo.flags = RABS;
+            goto have_offset;
+        }
         expr_flags = 0;
         offset = getexpr(&segment);
         relinfo.flags = segmrel[segment];
@@ -1795,6 +1961,7 @@ done3:
             relinfo.index = extref;
         if (expr_flags & EXPR_GPREL)
             relinfo.flags |= RGPREL;
+    have_offset:
         switch (type & (FOFF16 | FOFF18 | FAOFF18 | FAOFF28 | FHIGH16)) {
         case FOFF16: /* low 16-bit byte address */
             /* Test whether the immediate is in valid range
@@ -1880,10 +2047,17 @@ done3:
      * Last argument.
      */
     if (type & FRSB) {
-        if (getlex(&cval) != '(')
-            uerror("left par expected");
         clex = getlex(&cval);
-        if (clex != LREG)
+        if (clex != '(') {
+            if (type & FOFF16) {
+                ungetlex(clex, cval);
+                emit_mem_pseudo(opcode, offset, &relinfo, clobber_reg);
+                return;
+            }
+            uerror("left par expected");
+        }
+        clex = getlex(&cval);
+        if (!getgpr(clex, &cval))
             uerror("bad rs register");
         if (getlex(&cval) != ')')
             uerror("right par expected");
@@ -2132,6 +2306,21 @@ void setoption()
     uerror("unknown option %s", option);
 }
 
+int
+skiptoeol_direct()
+{
+    int c;
+
+    do {
+        c = getchar();
+    } while (c != '\n' && c != EOF);
+    if (c == '\n') {
+        ungetc(c, stdin);
+        return (LEOL);
+    }
+    return (LEOF);
+}
+
 /*
  * Align the current segment.
  */
@@ -2163,6 +2352,7 @@ void pass1()
     register unsigned addr;
 
     segm = STEXT;
+    prev_segm = STEXT;
     for (;;) {
         clex = getlex(&cval);
         switch (clex) {
@@ -2242,18 +2432,17 @@ void pass1()
                 uerror("bad digital label");
             continue;
         case LTEXT:
-            segm = STEXT;
-            reorder_flush();
+            switchsection(STEXT);
             break;
         case LDATA:
-            segm = SDATA;
+            switchsection(SDATA);
             break;
         case LSTRNG:
         case LRDATA:
-            segm = SSTRNG;
+            switchsection(SSTRNG);
             break;
         case LBSS:
-            segm = SBSS;
+            switchsection(SBSS);
             break;
         case LWORD:
             reorder_flush();
@@ -2464,7 +2653,7 @@ void pass1()
                 uerror("bad entry size of .section");
             break;
         case LPREVIOUS:
-            /* .previous - ignore */
+            previoussection();
             break;
         case LGNUATTR:
             /* .gnu_attribute num[,num] */
@@ -2476,9 +2665,7 @@ void pass1()
             break;
         case LMODULE:
             /* .module name[=value] - accepted and ignored. */
-            do {
-                clex = getlex(&cval);
-            } while (clex != LEOL && clex != LEOF);
+            clex = skiptoeol_direct();
             if (clex == LEOF)
                 goto done;
             break;

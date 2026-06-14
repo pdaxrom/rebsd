@@ -19,5 +19,7 @@ rootfs.generated.manifest
 n64.ld
 n64-user.ld
 n64-userland.stamp
+n64-native-runtime/
+n64-native-tools/
 a.out
 n64-init
