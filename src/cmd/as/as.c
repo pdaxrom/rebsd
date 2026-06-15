@@ -3126,7 +3126,25 @@ void usage()
     fprintf(stderr, "  -u              Treat undefined names as error\n");
     fprintf(stderr, "  -x              Discard local symbols\n");
     fprintf(stderr, "  -X              Discard locals starting with 'L' or '.'\n");
+    fprintf(stderr, "  -mips3, -march=vr4300\n");
+    fprintf(stderr, "                  Reject MIPS32r2 opcodes unsupported by VR4300\n");
     exit(1);
+}
+
+static void target_info(void)
+{
+    printf("retrobsd-as target_big_endian=%d target_vr4300_default=%d\n",
+#ifdef TARGET_BIG_ENDIAN
+        1,
+#else
+        0,
+#endif
+#ifdef TARGET_VR4300
+        1
+#else
+        0
+#endif
+    );
 }
 
 int main(int argc, char *argv[])
@@ -3149,6 +3167,20 @@ int main(int argc, char *argv[])
      * Parse options.
      */
     for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--target-info") == 0) {
+            target_info();
+            return 0;
+        }
+        if (strcmp(argv[i], "-march=vr4300") == 0 ||
+            strcmp(argv[i], "-mips3") == 0) {
+            mode_vr4300 = 1;
+            continue;
+        }
+        if (strncmp(argv[i], "-march=mips32", 13) == 0 ||
+            strncmp(argv[i], "-mips32", 7) == 0) {
+            mode_vr4300 = 0;
+            continue;
+        }
         switch (argv[i][0]) {
         case '-':
             for (cp = argv[i] + 1; *cp; cp++) {

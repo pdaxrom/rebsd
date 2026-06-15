@@ -8,12 +8,15 @@ KCONFIG_SRCS    = $(KCONFIG_DIR)/Makefile $(KCONFIG_DIR)/config.h \
                   $(KCONFIG_DIR)/main.c $(KCONFIG_DIR)/mkioconf.c \
                   $(KCONFIG_DIR)/mkmakefile.c $(KCONFIG_DIR)/mkswapconf.c
 
-.PHONY: all reconfig clean clean-all unix kernel.z64 preflight.z64
+.PHONY: all reconfig clean clean-all unix kernel.z64 preflight.z64 smoke-as-vr4300
 
 all: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) all
 
 unix kernel.z64 preflight.z64: $(BOARD_DIR)/Makefile
+	$(MAKE) -C $(BOARD_DIR) $@
+
+smoke-as-vr4300: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
 
 reconfig: $(KCONFIG)

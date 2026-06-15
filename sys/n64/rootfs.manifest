@@ -335,6 +335,12 @@ mode 0775
 file /bin/smux
 mode 0775
 
+file /bin/smoke-as-vr4300
+mode 0775
+
+file /bin/smoke-as-vr4300.sh
+mode 0775
+
 file /bin/sort
 mode 0775
 

@@ -47,6 +47,7 @@ N64_NATIVE_AS = $(N64_NATIVE_TOOLS)/as
 N64_NATIVE_LD = $(N64_NATIVE_TOOLS)/ld
 N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-cc.sh
 N64_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-as.sh
+N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/n64/native/smoke-as-vr4300.sh
 N64_NATIVE_CC = sh $(abspath $(N64_NATIVE_CC_SCRIPT))
 N64_NATIVE_ASWRAP = sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/n64/native/mkhostinclude.sh
@@ -77,6 +78,7 @@ N64_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '
 N64_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(N64_NATIVE_ASWRAP_SCRIPT) \
+                       $(N64_NATIVE_AS_SMOKE_SCRIPT) \
                        $(TOPSRC)/src/cmd/as/as.c \
                        $(TOPSRC)/src/cmd/ld/ld.c \
                        $(TOPSRC)/src/cmd/aoutio.c \
@@ -264,7 +266,8 @@ $(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES) $(N6
 	done
 	cat $(N64_ROOTFS_DEVNODES) >> $@
 
-$(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP) $(N64_INCLUDE_SRCS)
+$(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
+    $(N64_TERMCAP) $(N64_INCLUDE_SRCS) $(N64_NATIVE_AS_SMOKE_SCRIPT)
 	rm -rf $(N64_ROOTFS_STAGE)
 	mkdir -p $(N64_ROOTFS_STAGE)
 	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
@@ -284,6 +287,10 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) $(N64_TERMCAP) 
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat1
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat5
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
+	cp $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300
+	cp $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300.sh
+	chmod 0775 $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300 \
+	    $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300.sh
 	touch $@
 
 $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_MAKEWHATIS_SED)
@@ -361,6 +368,10 @@ $(N64_NATIVE_LD): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
 	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c
+
+.PHONY: smoke-as-vr4300
+smoke-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_SMOKE_SCRIPT)
+	$(N64_NATIVE_AS_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS))
 
 $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD)
 	rm -rf $(N64_NATIVE_TREE)

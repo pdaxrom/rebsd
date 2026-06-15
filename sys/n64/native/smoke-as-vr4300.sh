@@ -1,0 +1,127 @@
+#!/bin/sh
+#
+# Simple smoke test for the N64 in-tree assembler build.
+#
+
+if test $# -gt 1; then
+	echo "usage: $0 [/path/to/as]" >&2
+	exit 2
+fi
+
+if test $# -eq 1; then
+	as_bin=$1
+else
+	as_bin=/bin/as
+fi
+
+cd /tmp || cd /var/tmp || exit 1
+
+base=n64-as-vr4300.$$
+valid=$base.valid.s
+valid_o=$base.valid.o
+bad=$base.bad.s
+bad_o=$base.bad.o
+
+rm -f $valid $valid_o $bad $bad_o
+
+$as_bin --target-info || exit 1
+
+echo ".text" > $valid
+echo "start:" >> $valid
+echo '	cache 0x10,0($a0)' >> $valid
+echo '	cache 16,32($sp)' >> $valid
+echo '	tlbp' >> $valid
+echo '	tlbr' >> $valid
+echo '	tlbwi' >> $valid
+echo '	tlbwr' >> $valid
+echo '	wait' >> $valid
+echo '	eret' >> $valid
+echo '	mtc1 $0,$f0' >> $valid
+echo '	mtc1 $0,$f1' >> $valid
+echo '	c.eq.d $f0,$f0' >> $valid
+echo '	bc1t 1f' >> $valid
+echo '	nop' >> $valid
+echo '1:' >> $valid
+echo '	add.d $f2,$f0,$f0' >> $valid
+echo '	round.w.d $f4,$f2' >> $valid
+echo '	cfc1 $2,$31' >> $valid
+echo '	ctc1 $2,$31' >> $valid
+echo '	jr $ra' >> $valid
+echo '	nop' >> $valid
+
+$as_bin -EB -mips3 -march=vr4300 -o $valid_o $valid || exit 1
+
+echo ".text" > $bad
+echo "start:" >> $bad
+echo '	movn $2,$3,$4' >> $bad
+echo "smoke-as-vr4300: expect reject: movn"
+$as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad
+rc=$?
+if test $rc -eq 0; then
+	echo "smoke-as-vr4300: accepted invalid instruction: movn" >&2
+	rm -f $valid $valid_o $bad $bad_o
+	exit 1
+fi
+
+echo ".text" > $bad
+echo "start:" >> $bad
+echo '	movz $2,$3,$4' >> $bad
+echo "smoke-as-vr4300: expect reject: movz"
+$as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad
+rc=$?
+if test $rc -eq 0; then
+	echo "smoke-as-vr4300: accepted invalid instruction: movz" >&2
+	rm -f $valid $valid_o $bad $bad_o
+	exit 1
+fi
+
+echo ".text" > $bad
+echo "start:" >> $bad
+echo '	clz $2,$3' >> $bad
+echo "smoke-as-vr4300: expect reject: clz"
+$as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad
+rc=$?
+if test $rc -eq 0; then
+	echo "smoke-as-vr4300: accepted invalid instruction: clz" >&2
+	rm -f $valid $valid_o $bad $bad_o
+	exit 1
+fi
+
+echo ".text" > $bad
+echo "start:" >> $bad
+echo '	ext $2,$3,0,8' >> $bad
+echo "smoke-as-vr4300: expect reject: ext"
+$as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad
+rc=$?
+if test $rc -eq 0; then
+	echo "smoke-as-vr4300: accepted invalid instruction: ext" >&2
+	rm -f $valid $valid_o $bad $bad_o
+	exit 1
+fi
+
+echo ".text" > $bad
+echo "start:" >> $bad
+echo '	mul $2,$3,$4' >> $bad
+echo "smoke-as-vr4300: expect reject: mul"
+$as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad
+rc=$?
+if test $rc -eq 0; then
+	echo "smoke-as-vr4300: accepted invalid instruction: mul" >&2
+	rm -f $valid $valid_o $bad $bad_o
+	exit 1
+fi
+
+echo ".text" > $bad
+echo "start:" >> $bad
+echo '	cache 32,0($a0)' >> $bad
+echo "smoke-as-vr4300: expect reject: cache 32"
+$as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad
+rc=$?
+if test $rc -eq 0; then
+	echo "smoke-as-vr4300: accepted invalid cache op" >&2
+	rm -f $valid $valid_o $bad $bad_o
+	exit 1
+fi
+
+rm -f $valid $valid_o $bad $bad_o
+echo "n64 as vr4300 smoke ok"

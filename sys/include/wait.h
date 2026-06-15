@@ -15,6 +15,8 @@
  * detailed information about process resource utilization (<vtimes.h>).
  */
 
+#include <machine/machparam.h>
+
 /*
  * Structure of the information in the first word returned by both
  * wait and wait3.  If w_stopval==WSTOPPED, then the second structure
@@ -22,6 +24,24 @@
  */
 union wait  {
     int     w_status;           /* used in syscall */
+#if ENDIAN == BIG
+    /*
+     * GCC lays out int bitfields from the most significant bit on big-endian
+     * MIPS.  The wait status format is numeric, not byte-order dependent:
+     * signal in bits 0..6, core flag in bit 7, exit code in bits 8..15.
+     */
+    struct {
+        unsigned w_Filler  :16;
+        unsigned w_Retcode :8;  /* exit code if w_termsig==0 */
+        unsigned w_Coredump :1; /* core dump indicator */
+        unsigned w_Termsig :7;  /* termination signal */
+    } w_T;
+    struct {
+        unsigned w_Filler  :16;
+        unsigned w_Stopsig :8;  /* signal that stopped us */
+        unsigned w_Stopval :8;  /* == W_STOPPED if stopped */
+    } w_S;
+#else
     /*
      * Terminated process status.
      */
@@ -39,6 +59,7 @@ union wait  {
         unsigned w_Stopval :8;  /* == W_STOPPED if stopped */
         unsigned w_Stopsig :8;  /* signal that stopped us */
     } w_S;
+#endif
 };
 #define w_termsig   w_T.w_Termsig
 #define w_coredump  w_T.w_Coredump
