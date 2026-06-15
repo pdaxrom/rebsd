@@ -297,7 +297,7 @@ const struct optable optable[] = {
     { 0x41606000, "di", FRT1 | FMOD | FNO_VR4300 },
     { 0x0000001a, "div", FRS1 | FRT2 },
     { 0x0000001b, "divu", FRS1 | FRT2 },
-    { 0x000000c0, "ehb", FNO_VR4300 },
+    { 0x000000c0, "ehb", 0 },
     { 0x41606020, "ei", FRT1 | FMOD | FNO_VR4300 },
     { 0x42000018, "eret", 0 },
     { 0x7c000000, "ext", FRT1 | FRS2 | FSA | FSIZE | FMOD | FNO_VR4300 },

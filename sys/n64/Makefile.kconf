@@ -48,10 +48,12 @@ N64_NATIVE_LD = $(N64_NATIVE_TOOLS)/ld
 N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-cc.sh
 N64_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-as.sh
 N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/n64/native/smoke-as-vr4300.sh
+N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/n64/native/matrix-as-vr4300.sh
 N64_NATIVE_CC = sh $(abspath $(N64_NATIVE_CC_SCRIPT))
 N64_NATIVE_ASWRAP = sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/n64/native/mkhostinclude.sh
 N64_NATIVE_AR = $(N64_PREFIX)ar
+N64_GNU_AS ?= $(N64_PREFIX)as
 N64_NATIVE_STAMP = $(N64_NATIVE_DIR)/.built
 N64_NATIVE_LIBS = crt0.o libc.a libm.a
 N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
@@ -79,6 +81,7 @@ N64_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -
 N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(N64_NATIVE_ASWRAP_SCRIPT) \
                        $(N64_NATIVE_AS_SMOKE_SCRIPT) \
+                       $(N64_NATIVE_AS_MATRIX_SCRIPT) \
                        $(TOPSRC)/src/cmd/as/as.c \
                        $(TOPSRC)/src/cmd/ld/ld.c \
                        $(TOPSRC)/src/cmd/aoutio.c \
@@ -372,6 +375,10 @@ $(N64_NATIVE_LD): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
 .PHONY: smoke-as-vr4300
 smoke-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_SMOKE_SCRIPT)
 	$(N64_NATIVE_AS_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS))
+
+.PHONY: matrix-as-vr4300
+matrix-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_MATRIX_SCRIPT)
+	$(N64_NATIVE_AS_MATRIX_SCRIPT) $(abspath $(N64_NATIVE_AS)) $(N64_GNU_AS)
 
 $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD)
 	rm -rf $(N64_NATIVE_TREE)
