@@ -61,11 +61,13 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   object and verifies the generated big-endian a.out bytes.
 - [x] Add a VR4300 assembler mode:
   - keep MIPS I/II/III instructions needed by the N64 port
+  - accept 32-bit VR4300 system/cache instructions used by the kernel:
+    `cache`, `tlbp`, `tlbr`, `tlbwi`, and `tlbwr`
   - reject MIPS32r2-only instructions such as `clz`, `clo`,
     `ext`, `ins`, `seb`, `seh`, `wsbh`, `rdhwr`, `di`, `ei`, `ehb`, `mul`,
-    `madd`, and `msub`
+    `madd`, `msub`, `movn`, and `movz`
   - keep PIC32/default behavior unchanged
-- [ ] Smoke-test VR4300 assembler gating by running the in-tree `as` and
+- [x] Smoke-test VR4300 assembler gating by running the in-tree `as` and
   verifying that normal VR4300 instructions assemble while MIPS32r2-only
   mnemonics fail in `-march=vr4300` mode.
 - [x] Add the first COP1/FPU assembly support needed by hard-float N64
@@ -74,11 +76,10 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   - `lwc1`, `swc1`, `ldc1`, `sdc1`, and the compiler aliases
     `l.s`, `s.s`, `l.d`, and `s.d`
   - `mtc1`, `mfc1`, `ctc1`, `cfc1`
-  - single/double arithmetic, compare, convert, and `bc1*` branch instructions
-    used by GCC output
-- [ ] Extend COP1/FPU assembler support if the compiler emits additional
-  round/trunc/ceil/floor or condition-code forms beyond the first smoke set.
-- [ ] Smoke-test COP1/FPU assembly by running the in-tree `as` on N64 or a
+  - single/double arithmetic, compare, convert, round/trunc/ceil/floor, and
+    `bc1*` branch instructions used by GCC output
+- [x] Add COP1/FPU condition-code forms emitted by GCC/PCC hard-float paths.
+- [x] Smoke-test COP1/FPU assembly by running the in-tree `as` on N64 or a
   host-compatible build with GCC-generated hard-float VR4300 assembly.
 - [x] Build the first in-tree C compiler path for N64, starting with
   `src/cmd/ccom`:

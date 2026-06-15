@@ -213,11 +213,13 @@ current N64 work is staged as follows:
 - N64 builds define `TARGET_BIG_ENDIAN`, so those tools default to big-endian
   a.out and still accept `-EL`/`-EB` where applicable;
 - N64 builds define `TARGET_VR4300`, so the in-tree assembler rejects known
-  MIPS32/MIPS32r2-only mnemonics that the NEC VR4300 cannot execute;
-- the in-tree assembler has the first COP1/FPU subset used by simple
-  hard-float GCC VR4300 output, including `$fN` registers, `lwc1`/`swc1`,
-  `ldc1`/`sdc1`, compiler aliases `l.s`/`s.s`/`l.d`/`s.d`, move/control
-  transfers, single/double arithmetic, compare, convert, and `bc1*` branches;
+  MIPS32/MIPS32r2-only mnemonics that the NEC VR4300 cannot execute, while
+  accepting the 32-bit VR4300 cache/TLB opcodes used by the kernel;
+- the in-tree assembler has the COP1/FPU subset used by hard-float GCC/PCC
+  VR4300 output, including `$fN` registers, `lwc1`/`swc1`, `ldc1`/`sdc1`,
+  compiler aliases `l.s`/`s.s`/`l.d`/`s.d`, move/control transfers,
+  single/double arithmetic, compare, convert, round/trunc/ceil/floor, and
+  `bc1*` branches;
 - `src/cmd/ccom` now builds as an N64 a.out binary with big-endian target
   configuration and without `.abicalls`, `.cpload`, or `.cprestore` output;
 - the N64 `ccom` build uses 8-byte compiler heap alignment for VR4300, because

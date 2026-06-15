@@ -208,6 +208,7 @@ struct optable {
 #define FFS2 (1 << 27)    /* .., fs, ... */
 #define FFT2 (1 << 28)    /* .., ft, ... */
 #define FFT3 (1 << 29)    /* .., .., ft */
+#define FCACHEOP (1 << 30) /* 5-bit cache operation code */
 
 /*
  * Implement pseudo-instructions.
@@ -289,6 +290,7 @@ const struct optable optable[] = {
     { 0x46000035, "c.ult.s", FFS1 | FFT2 },
     { 0x46200031, "c.un.d", FFS1 | FFT2 },
     { 0x46000031, "c.un.s", FFS1 | FFT2 },
+    { 0xbc000000, "cache", FCACHEOP | FOFF16 | FRSB },
     { 0x44400000, "cfc1", FRT1 | FRD2 | FMOD },
     { 0x44c00000, "ctc1", FRT1 | FRD2 },
     { 0x4200001f, "deret", FNO_VR4300 },
@@ -328,8 +330,8 @@ const struct optable optable[] = {
     { 0x00000010, "mfhi", FRD1 | FMOD },
     { 0x00000012, "mflo", FRD1 | FMOD },
     { 0x00000021, "move", FRD1 | FRS2 | FMOD }, // addu
-    { 0x0000000b, "movn", FRD1 | FRS2 | FRT3 | FMOD },
-    { 0x0000000a, "movz", FRD1 | FRS2 | FRT3 | FMOD },
+    { 0x0000000b, "movn", FRD1 | FRS2 | FRT3 | FMOD | FNO_VR4300 },
+    { 0x0000000a, "movz", FRD1 | FRS2 | FRT3 | FMOD | FNO_VR4300 },
     { 0x70000004, "msub", FRS1 | FRT2 | FMOD | FNO_VR4300 },
     { 0x70000005, "msubu", FRS1 | FRT2 | FMOD | FNO_VR4300 },
     { 0x40800000, "mtc0", FRT1 | FRD2 | FSEL },
@@ -387,6 +389,10 @@ const struct optable optable[] = {
     { 0x00000033, "tltu", FRS1 | FRT2 | FCODE },
     { 0x00000036, "tne", FRS1 | FRT2 | FCODE },
     { 0x040e0000, "tnei", FRS1 | FOFF16 },
+    { 0x42000008, "tlbp", 0 },
+    { 0x42000001, "tlbr", 0 },
+    { 0x42000002, "tlbwi", 0 },
+    { 0x42000006, "tlbwr", 0 },
     { 0x42000020, "wait", FCODE },
     { 0x41c00000, "wrpgpr", FRD1 | FRT2 | FNO_VR4300 },
     { 0x7c0000a0, "wsbh", FRD1 | FRT2 | FMOD | FNO_VR4300 },
@@ -1635,6 +1641,14 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
         if (clex != LFREG)
             uerror("bad ft register");
         opcode |= cval << 16; /* ft, ... */
+    }
+    if (type & FCACHEOP) {
+        offset = getexpr(&segment);
+        if (segment != SABS)
+            uerror("absolute value required");
+        if (offset > 31)
+            uerror("bad cache operation");
+        opcode |= (offset & 31) << 16; /* cache op, ... */
     }
     if (type & FRD1) {
         clex = getlex(&cval);
