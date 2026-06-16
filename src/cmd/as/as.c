@@ -216,6 +216,7 @@ struct optable {
  */
 void emit_li(unsigned, struct reloc *);
 void emit_la(unsigned, struct reloc *);
+void emit_mul(unsigned, struct reloc *);
 void emit_mem_pseudo(unsigned, unsigned, struct reloc *, int);
 void reorder_flush(void);
 void switchsection(int);
@@ -1587,6 +1588,21 @@ void emit_mem_pseudo(unsigned opcode, unsigned value, struct reloc *relinfo, int
 }
 
 /*
+ * GAS accepts "mul rd,rs,rt" for VR4300 as a macro.
+ * The real MIPS32 opcode is not present on VR4300.
+ */
+void emit_mul(unsigned opcode, struct reloc *relinfo)
+{
+    unsigned rd = (opcode >> 11) & 31;
+    unsigned rt = (opcode >> 16) & 31;
+    unsigned rs = (opcode >> 21) & 31;
+
+    (void)relinfo;
+    emitword(0x00000019 | (rs << 21) | (rt << 16), &relabs, 0); /* multu rs,rt */
+    emitword(0x00000012 | (rd << 11), &relabs, rd);             /* mflo rd */
+}
+
+/*
  * Build and emit a machine instruction code.
  */
 void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc *))
@@ -2427,6 +2443,12 @@ void pass1()
             /* Machine instruction. */
             if (cval < 0)
                 uerror("bad instruction");
+            if (mode_vr4300 && !strcmp(optable[cval].name, "mul")) {
+                ungetlex(clex, tval);
+                align(2);
+                makecmd(0, optable[cval].type & ~FNO_VR4300, emit_mul);
+                break;
+            }
             if (mode_vr4300 && (optable[cval].type & FNO_VR4300))
                 uerror("%s is not supported by VR4300", optable[cval].name);
             ungetlex(clex, tval);

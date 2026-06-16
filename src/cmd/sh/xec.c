@@ -626,6 +626,11 @@ int execute(struct trenod *argt, int exec_link, int errorflg, int *pf1, int *pf2
             execute(parptr(t)->partre, exec_link, errorflg, NULL, NULL);
             done();
 
+        case TNOT:
+            execute(parptr(t)->partre, exec_link, 0, pf1, pf2);
+            exitval = (exitval == 0);
+            break;
+
         case TFIL: {
             int pv[2];
 

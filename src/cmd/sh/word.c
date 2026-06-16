@@ -20,6 +20,7 @@ int word()
 
     wdnum = 0;
     wdset = 0;
+    word_quoted = 0;
 
     while (1) {
         while (c = nextc(0), space(c)) /* skipc() */
@@ -36,6 +37,7 @@ int word()
     if (!eofmeta(c)) {
         do {
             if (c == LITERAL) {
+                word_quoted = 1;
                 *argp++ = (DQUOTE);
                 while ((c = readc()) && c != LITERAL) {
                     /* @@@ *argp++ = (c | QUOTE); */
@@ -52,6 +54,7 @@ int word()
                 if (!alphanum(c))
                     alpha = 0;
                 if (qotchar(c)) {
+                    word_quoted = 1;
                     d = c;
                     while ((*argp++ = (c = nextc(d))) && c != d) {
                         if (c == NL)
@@ -120,9 +123,11 @@ retry:
             goto retry;
         } else if (quote && c != quote && !escchar(c))
             peekc = c | MARK;
-        else
+        else {
+            word_quoted = 1;
             /* @@@ d = c | QUOTE; */
             d = qmask(c);
+        }
     }
     return (d);
 }

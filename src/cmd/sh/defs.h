@@ -32,6 +32,7 @@
 #define TFORK 0x00A0
 #define TFOR 0x00B0
 #define TFND 0x00C0
+#define TNOT 0x00D0
 
 /* execute table */
 #define SYSSET 1
@@ -82,6 +83,7 @@
 #define IOMOV 128
 #define IORDW 256
 #define IOSTRIP 512
+#define IOQUOTE 1024
 #define INPIPE 0
 #define OTPIPE 1
 
@@ -150,6 +152,7 @@ extern int fndef;
 extern int nohash;
 extern struct argnod *wdarg;
 extern int wdset;
+extern int word_quoted;
 extern BOOL reserv;
 
 /* prompting */

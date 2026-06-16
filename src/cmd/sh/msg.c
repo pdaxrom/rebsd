@@ -86,13 +86,14 @@ char sysprofile[] = "/etc/profile";
  * tables
  */
 
-struct sysnod reserved[] = { { "case", CASYM },  { "do", DOSYM },   { "done", ODSYM },
+struct sysnod reserved[] = { { "!", NOTSYM },    { "case", CASYM }, { "do", DOSYM },
+                             { "done", ODSYM },
                              { "elif", EFSYM },  { "else", ELSYM }, { "esac", ESSYM },
                              { "fi", FISYM },    { "for", FORSYM }, { "if", IFSYM },
                              { "in", INSYM },    { "then", THSYM }, { "until", UNSYM },
                              { "while", WHSYM }, { "{", BRSYM },    { "}", KTSYM } };
 
-int no_reserved = 15;
+int no_reserved = 16;
 
 char *sysmsg[] = {
     0,

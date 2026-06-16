@@ -142,6 +142,7 @@ void copy(struct ionod *ioparg)
     int fd;
     int i;
     int stripflg;
+    int noexpand;
 
     if ((iop = ioparg)) {
         struct tempblk tb;
@@ -149,7 +150,8 @@ void copy(struct ionod *ioparg)
         copy(iop->iolst);
         ends = mactrim(iop->ioname);
         stripflg = iop->iofile & IOSTRIP;
-        if (nosubst)
+        noexpand = nosubst || (iop->iofile & IOQUOTE);
+        if (noexpand)
             iop->iofile &= ~IODOC;
         fd = tmpfil(&tb);
 
@@ -169,7 +171,7 @@ void copy(struct ionod *ioparg)
         }
         for (;;) {
             chkpr();
-            if (nosubst) {
+            if (noexpand) {
                 c = readc();
                 if (stripflg)
                     while (c == '\t')

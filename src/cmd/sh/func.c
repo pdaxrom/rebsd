@@ -47,6 +47,7 @@ static void freetree(struct trenod *t)
             break;
 
         case TPAR:
+        case TNOT:
             freetree(parptr(t)->partre);
             break;
 
@@ -187,6 +188,11 @@ void prf(struct trenod *t)
             prs_buff("( ");
             prf(parptr(t)->partre);
             prs_buff(" )");
+            break;
+
+        case TNOT:
+            prs_buff("! ");
+            prf(parptr(t)->partre);
             break;
 
         case TFIL:

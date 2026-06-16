@@ -15,6 +15,7 @@
 #define ESSYM 0442
 #define IFSYM 0436
 #define FORSYM 0435
+#define NOTSYM 0434
 #define WHSYM 0433
 #define UNSYM 0427
 #define CASYM 0417

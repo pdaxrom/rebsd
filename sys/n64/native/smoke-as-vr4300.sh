@@ -46,6 +46,7 @@ echo '	add.d $f2,$f0,$f0' >> $valid
 echo '	round.w.d $f4,$f2' >> $valid
 echo '	cfc1 $2,$31' >> $valid
 echo '	ctc1 $2,$31' >> $valid
+echo '	mul $2,$3,$4' >> $valid
 echo '	jr $ra' >> $valid
 echo '	nop' >> $valid
 
@@ -95,18 +96,6 @@ $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad
 rc=$?
 if test $rc -eq 0; then
 	echo "smoke-as-vr4300: accepted invalid instruction: ext" >&2
-	rm -f $valid $valid_o $bad $bad_o
-	exit 1
-fi
-
-echo ".text" > $bad
-echo "start:" >> $bad
-echo '	mul $2,$3,$4' >> $bad
-echo "smoke-as-vr4300: expect reject: mul"
-$as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad
-rc=$?
-if test $rc -eq 0; then
-	echo "smoke-as-vr4300: accepted invalid instruction: mul" >&2
 	rm -f $valid $valid_o $bad $bad_o
 	exit 1
 fi

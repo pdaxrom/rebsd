@@ -178,6 +178,8 @@ static struct ionod *inout(struct ionod *lastio)
     }
 
     chkword();
+    if ((iof & IODOC) && word_quoted)
+        iof |= IOQUOTE;
     iop = (struct ionod *)getstor(sizeof(struct ionod));
 
     if (fndef)
@@ -423,6 +425,16 @@ static struct trenod *term(int flg)
         skipnl();
     else
         word();
+    if (wdval == NOTSYM) {
+        register struct parnod *p;
+
+        p = (struct parnod *)getstor(sizeof(struct parnod));
+        p->partyp = TNOT;
+        p->partre = term(NLFLG);
+        if (p->partre == NIL)
+            synbad();
+        return ((struct trenod *)p);
+    }
     if ((t = item(TRUE)) && (wdval == '^' || wdval == '|')) {
         struct trenod *left;
         struct trenod *right;
