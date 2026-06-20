@@ -38,6 +38,10 @@
 #   include <sys/stat.h>
 #endif
 
+#ifdef CROSS
+#define strmode retrobsd_strmode
+#endif
+
 void
 strmode(mode_t mode, char *p)
 {

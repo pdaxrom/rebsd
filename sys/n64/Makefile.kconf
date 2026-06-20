@@ -45,10 +45,13 @@ N64_NATIVE_HOST_INCLUDE = $(N64_NATIVE_TOOLS)/include
 N64_NATIVE_HOST_INCLUDE_STAMP = $(N64_NATIVE_HOST_INCLUDE)/.stamp
 N64_NATIVE_AS = $(N64_NATIVE_TOOLS)/as
 N64_NATIVE_LD = $(N64_NATIVE_TOOLS)/ld
+N64_NATIVE_AOUT_AR = $(N64_NATIVE_TOOLS)/ar
+N64_NATIVE_AOUT_RANLIB = $(N64_NATIVE_TOOLS)/ranlib
 N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-cc.sh
 N64_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-as.sh
 N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/n64/native/smoke-as-vr4300.sh
 N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/n64/native/matrix-as-vr4300.sh
+N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/n64/native/smoke-aout-toolchain.sh
 N64_NATIVE_CC = sh $(abspath $(N64_NATIVE_CC_SCRIPT))
 N64_NATIVE_ASWRAP = sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/n64/native/mkhostinclude.sh
@@ -82,8 +85,22 @@ N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(N64_NATIVE_ASWRAP_SCRIPT) \
                        $(N64_NATIVE_AS_SMOKE_SCRIPT) \
                        $(N64_NATIVE_AS_MATRIX_SCRIPT) \
+                       $(N64_NATIVE_AOUT_SMOKE_SCRIPT) \
                        $(TOPSRC)/src/cmd/as/as.c \
                        $(TOPSRC)/src/cmd/ld/ld.c \
+                       $(TOPSRC)/src/cmd/ar/append.c \
+                       $(TOPSRC)/src/cmd/ar/ar.c \
+                       $(TOPSRC)/src/cmd/ar/archive.c \
+                       $(TOPSRC)/src/cmd/ar/contents.c \
+                       $(TOPSRC)/src/cmd/ar/delete.c \
+                       $(TOPSRC)/src/cmd/ar/extract.c \
+                       $(TOPSRC)/src/cmd/ar/extern.h \
+                       $(TOPSRC)/src/cmd/ar/misc.c \
+                       $(TOPSRC)/src/cmd/ar/move.c \
+                       $(TOPSRC)/src/cmd/ar/print.c \
+                       $(TOPSRC)/src/cmd/ar/replace.c \
+                       $(TOPSRC)/src/cmd/ar/strmode.c \
+                       $(TOPSRC)/src/cmd/ranlib/ranlib.c \
                        $(TOPSRC)/src/cmd/aoutio.c \
                        $(TOPSRC)/src/cmd/aoutio.h \
                        $(TOPSRC)/include/a.out.h \
@@ -377,6 +394,40 @@ $(N64_NATIVE_LD): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c
 
+$(N64_NATIVE_AOUT_AR): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/ar/append.c $(TOPSRC)/src/cmd/ar/ar.c \
+    $(TOPSRC)/src/cmd/ar/archive.c $(TOPSRC)/src/cmd/ar/contents.c \
+    $(TOPSRC)/src/cmd/ar/delete.c $(TOPSRC)/src/cmd/ar/extract.c \
+    $(TOPSRC)/src/cmd/ar/extern.h $(TOPSRC)/src/cmd/ar/misc.c \
+    $(TOPSRC)/src/cmd/ar/move.c $(TOPSRC)/src/cmd/ar/print.c \
+    $(TOPSRC)/src/cmd/ar/replace.c $(TOPSRC)/src/cmd/ar/strmode.c
+	mkdir -p $(N64_NATIVE_TOOLS)
+	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
+	    -I$(TOPSRC)/src/cmd/ar \
+	    -o $@ \
+	    $(TOPSRC)/src/cmd/ar/append.c \
+	    $(TOPSRC)/src/cmd/ar/ar.c \
+	    $(TOPSRC)/src/cmd/ar/archive.c \
+	    $(TOPSRC)/src/cmd/ar/contents.c \
+	    $(TOPSRC)/src/cmd/ar/delete.c \
+	    $(TOPSRC)/src/cmd/ar/extract.c \
+	    $(TOPSRC)/src/cmd/ar/misc.c \
+	    $(TOPSRC)/src/cmd/ar/move.c \
+	    $(TOPSRC)/src/cmd/ar/print.c \
+	    $(TOPSRC)/src/cmd/ar/replace.c \
+	    $(TOPSRC)/src/cmd/ar/strmode.c
+
+$(N64_NATIVE_AOUT_RANLIB): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/ranlib/ranlib.c $(TOPSRC)/src/cmd/ar/archive.c \
+    $(TOPSRC)/src/cmd/aoutio.c $(TOPSRC)/src/cmd/aoutio.h
+	mkdir -p $(N64_NATIVE_TOOLS)
+	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
+	    -I$(TOPSRC)/src/cmd/ar \
+	    -o $@ $(TOPSRC)/src/cmd/ranlib/ranlib.c \
+	    $(TOPSRC)/src/cmd/ar/archive.c $(TOPSRC)/src/cmd/aoutio.c
+
 .PHONY: smoke-as-vr4300
 smoke-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_SMOKE_SCRIPT)
 	$(N64_NATIVE_AS_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS))
@@ -385,7 +436,16 @@ smoke-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_SMOKE_SCRIPT)
 matrix-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_MATRIX_SCRIPT)
 	$(N64_NATIVE_AS_MATRIX_SCRIPT) $(abspath $(N64_NATIVE_AS)) $(N64_GNU_AS)
 
-$(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD)
+.PHONY: smoke-aout-toolchain
+smoke-aout-toolchain: $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
+    $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB) \
+    $(N64_NATIVE_AOUT_SMOKE_SCRIPT)
+	$(N64_NATIVE_AOUT_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS)) \
+	    $(abspath $(N64_NATIVE_LD)) $(abspath $(N64_NATIVE_AOUT_AR)) \
+	    $(abspath $(N64_NATIVE_AOUT_RANLIB))
+
+$(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
+    $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB)
 	rm -rf $(N64_NATIVE_TREE)
 	mkdir -p $(N64_NATIVE_TREE)/src $(N64_NATIVE_TREE)/sys/n64
 	cp -R $(TOPSRC)/include $(N64_NATIVE_TREE)/
@@ -400,19 +460,23 @@ $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD
 	    N64_PREFIX=$(N64_PREFIX) \
 	    $(MAKE) -C $(N64_NATIVE_TREE)/src/startup-mips TARGET_PLATFORM=n64 \
 	    CC="$(N64_NATIVE_CC)" AS="$(N64_NATIVE_ASWRAP)" \
-	    AR=$(N64_NATIVE_AR) RANLIB=true clean all
+	    AR=$(abspath $(N64_NATIVE_AOUT_AR)) \
+	    RANLIB=$(abspath $(N64_NATIVE_AOUT_RANLIB)) clean all
 	N64_AOUT_TOPSRC=$(abspath $(N64_NATIVE_TREE)) \
 	    N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
 	    N64_PREFIX=$(N64_PREFIX) \
 	    $(MAKE) -C $(N64_NATIVE_TREE)/src/libc TARGET_PLATFORM=n64 \
 	    CC="$(N64_NATIVE_CC)" AS="$(N64_NATIVE_ASWRAP)" \
-	    AR=$(N64_NATIVE_AR) RANLIB=true clean all
+	    AR=$(abspath $(N64_NATIVE_AOUT_AR)) \
+	    RANLIB=$(abspath $(N64_NATIVE_AOUT_RANLIB)) clean all
+	$(N64_NATIVE_AOUT_RANLIB) $(N64_NATIVE_TREE)/src/libc.a
 	N64_AOUT_TOPSRC=$(abspath $(N64_NATIVE_TREE)) \
 	    N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
 	    N64_PREFIX=$(N64_PREFIX) \
 	    $(MAKE) -C $(N64_NATIVE_TREE)/src/libm TARGET_PLATFORM=n64 \
 	    CC="$(N64_NATIVE_CC)" AS="$(N64_NATIVE_ASWRAP)" \
-	    AR=$(N64_NATIVE_AR) RANLIB=true clean all
+	    AR=$(abspath $(N64_NATIVE_AOUT_AR)) \
+	    RANLIB=$(abspath $(N64_NATIVE_AOUT_RANLIB)) clean all
 	cp $(N64_NATIVE_TREE)/src/crt0.o $(N64_NATIVE_DIR)/crt0.o
 	cp $(N64_NATIVE_TREE)/src/libc.a $(N64_NATIVE_DIR)/libc.a
 	cp $(N64_NATIVE_TREE)/src/libm.a $(N64_NATIVE_DIR)/libm.a

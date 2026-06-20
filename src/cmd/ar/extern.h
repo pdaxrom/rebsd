@@ -38,4 +38,7 @@ int	 compare(char *dest);
 int	 tmp(void);
 char	*files(char **argv);
 char	*rname(char *path);
+#ifdef CROSS
+#define strmode retrobsd_strmode
+#endif
 void	strmode(mode_t mode, char *p);
