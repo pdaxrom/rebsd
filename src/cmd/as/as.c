@@ -330,7 +330,7 @@ const struct optable optable[] = {
     { 0x44000000, "mfc1", FRT1 | FFS2 | FMOD },
     { 0x00000010, "mfhi", FRD1 | FMOD },
     { 0x00000012, "mflo", FRD1 | FMOD },
-    { 0x00000021, "move", FRD1 | FRS2 | FMOD }, // addu
+    { 0x00000025, "move", FRD1 | FRS2 | FMOD }, // or
     { 0x0000000b, "movn", FRD1 | FRS2 | FRT3 | FMOD | FNO_VR4300 },
     { 0x0000000a, "movz", FRD1 | FRS2 | FRT3 | FMOD | FNO_VR4300 },
     { 0x70000004, "msub", FRS1 | FRT2 | FMOD | FNO_VR4300 },

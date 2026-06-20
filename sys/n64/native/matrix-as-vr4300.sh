@@ -34,6 +34,7 @@ if test $? -ne 0; then
 fi
 
 gnu_as=
+gnu_objcopy=
 if test $target_only -eq 0; then
 	gnu_as=$2
 	if test -z "$gnu_as"; then
@@ -44,6 +45,25 @@ if test $target_only -eq 0; then
 		echo "matrix-as-vr4300: GNU as not found: $gnu_as" >&2
 		exit 2
 	fi
+	case "$gnu_as" in
+	*/mips64-elf-as)
+		gnu_objcopy=`dirname "$gnu_as"`/mips64-elf-objcopy
+		;;
+	mips64-elf-as)
+		gnu_objcopy=mips64-elf-objcopy
+		;;
+	*as)
+		gnu_objcopy=`echo "$gnu_as" | sed 's/as$/objcopy/'`
+		;;
+	*)
+		gnu_objcopy=mips64-elf-objcopy
+		;;
+	esac
+	command -v "$gnu_objcopy" >/dev/null 2>&1
+	if test $? -ne 0; then
+		echo "matrix-as-vr4300: GNU objcopy not found: $gnu_objcopy" >&2
+		exit 2
+	fi
 fi
 
 cd /tmp || cd /var/tmp || exit 1
@@ -52,16 +72,20 @@ base=n64-as-vr4300-matrix.$$
 src=$base.s
 retro_o=$base.retro.o
 gnu_o=$base.gnu.o
+retro_text=$base.retro.text
+gnu_text=$base.gnu.text
 retro_log=$base.retro.log
 gnu_log=$base.gnu.log
+objcopy_log=$base.objcopy.log
 total=207
 
-trap 'rm -f "$src" "$retro_o" "$gnu_o" "$retro_log" "$gnu_log"' 0 1 2 3 15
+trap 'rm -f "$src" "$retro_o" "$gnu_o" "$retro_text" "$gnu_text" "$retro_log" "$gnu_log" "$objcopy_log"' 0 1 2 3 15
 
 while read expect name insn
 do
 	reason=
-	rm -f "$src" "$retro_o" "$gnu_o" "$retro_log" "$gnu_log"
+	rm -f "$src" "$retro_o" "$gnu_o" "$retro_text" "$gnu_text" \
+	    "$retro_log" "$gnu_log" "$objcopy_log"
 	echo ".text" > "$src"
 	echo ".set noreorder" >> "$src"
 	echo ".globl start" >> "$src"
@@ -112,6 +136,45 @@ do
 		;;
 	esac
 
+	if test -z "$reason"; then
+		if test "$expect" = A; then
+			if test $target_only -eq 0; then
+				text_hex=`od -An -tx1 -j 4 -N 4 "$retro_o" | tr -d '[:space:]'`
+				case "$text_hex" in
+				????????)
+					text_size=`printf "%d" "0x$text_hex" 2>/dev/null`
+					if test $? -ne 0; then
+						reason="$name: cannot parse RetroBSD a.out text size"
+					fi
+					;;
+				*)
+					reason="$name: cannot read RetroBSD a.out text size"
+					;;
+				esac
+				if test -z "$reason"; then
+					dd if="$retro_o" of="$retro_text" bs=1 skip=32 \
+					    count="$text_size" > "$objcopy_log" 2>&1
+					if test $? -ne 0; then
+						reason="$name: cannot extract RetroBSD .text"
+					fi
+				fi
+				if test -z "$reason"; then
+					"$gnu_objcopy" -O binary -j .text "$gnu_o" \
+					    "$gnu_text" >> "$objcopy_log" 2>&1
+					if test $? -ne 0; then
+						reason="$name: cannot extract GNU .text"
+					fi
+				fi
+				if test -z "$reason"; then
+					cmp -s "$retro_text" "$gnu_text"
+					if test $? -ne 0; then
+						reason="$name: .text bytes differ from GNU as"
+					fi
+				fi
+			fi
+		fi
+	fi
+
 	if test -n "$reason"; then
 		echo "matrix-as-vr4300: $reason" >&2
 		echo "source:" >&2
@@ -124,7 +187,20 @@ do
 			echo "retrobsd-as:" >&2
 			cat "$retro_log" >&2
 		fi
-		rm -f "$src" "$retro_o" "$gnu_o" "$retro_log" "$gnu_log"
+		if test -s "$objcopy_log"; then
+			echo "extract:" >&2
+			cat "$objcopy_log" >&2
+		fi
+		if test -s "$retro_text"; then
+			echo "retrobsd .text:" >&2
+			od -An -tx4 "$retro_text" >&2
+		fi
+		if test -s "$gnu_text"; then
+			echo "gnu .text:" >&2
+			od -An -tx4 "$gnu_text" >&2
+		fi
+		rm -f "$src" "$retro_o" "$gnu_o" "$retro_text" "$gnu_text" \
+		    "$retro_log" "$gnu_log" "$objcopy_log"
 		exit 1
 	fi
 done <<'MATRIX_EOF'
@@ -143,7 +219,7 @@ A andi andi $2,$3,0x1234
 A or or $2,$3,$4
 A ori ori $2,$3,0x1234
 A xor xor $2,$3,$4
-A xori xori $2,0x1234
+A xori xori $2,$3,0x1234
 A nor nor $2,$3,$4
 A lui lui $2,0x1234
 A sll sll $2,$3,4
@@ -154,8 +230,8 @@ A srlv srlv $2,$3,$4
 A srav srav $2,$3,$4
 A mult mult $2,$3
 A multu multu $2,$3
-A div div $2,$3
-A divu divu $2,$3
+A div div $0,$2,$3
+A divu divu $0,$2,$3
 A mfhi mfhi $2
 A mflo mflo $2
 A mthi mthi $2
@@ -337,6 +413,7 @@ R ei ei
 R cache32 cache 32,0($3)
 MATRIX_EOF
 
-rm -f "$src" "$retro_o" "$gnu_o" "$retro_log" "$gnu_log"
+rm -f "$src" "$retro_o" "$gnu_o" "$retro_text" "$gnu_text" \
+    "$retro_log" "$gnu_log" "$objcopy_log"
 echo "matrix-as-vr4300: $total checks ok"
 exit 0
