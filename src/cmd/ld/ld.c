@@ -50,7 +50,11 @@
 #include "../aoutio.h"
 
 #define W 4              /* word size in bytes */
-#define BADDR 0x7f008000 /* start address in memory */
+#ifdef TARGET_VR4300
+#define BADDR 0x00400000 /* N64 user text base */
+#else
+#define BADDR 0x7f008000 /* PIC32 user text base */
+#endif
 #define SYMDEF "__.SYMDEF"
 #define IS_LOCSYM(s) ((s)->n_name[0] == 'L' || (s)->n_name[0] == '.')
 #define hexdig(c) ((c) <= '9' ? (c) - '0' : ((c) & 7) + 9)
@@ -373,6 +377,8 @@ void getrantab()
     for (p = rantab; p < rantab + RANTABSZ; ++p) {
         if (!fgetran(text, p)) {
             rancount = p - rantab;
+            if (trace > 1)
+                printf("ranlib entries=%d\n", rancount);
             return;
         }
     }
@@ -640,6 +646,7 @@ int getfile(char *cp)
 {
     int c;
     struct stat x;
+    long symdef_date;
     static char libname[] = "/lib/libxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
     char magic[SARMAG];
 
@@ -670,13 +677,28 @@ int getfile(char *cp)
     if (!fgetarhdr(text, &archdr))
         return (0); /* regular file */
     if (strncmp(archdr.ar_name, SYMDEF, sizeof(SYMDEF)) != 0) {
+        if (trace > 1)
+            printf("archive '%s': regular first='%s'\n",
+                filname, archdr.ar_name);
         free(archdr.ar_name);
         return (1); /* regular archive */
     }
+    symdef_date = archdr.ar_date;
+    if (trace > 1)
+        printf("archive '%s': symdef size=%ld date=%ld\n",
+            filname, archdr.ar_size, symdef_date);
     free(archdr.ar_name);
     fstat(fileno(text), &x);
-    if (x.st_mtime > archdr.ar_date + 2)
+    if (trace > 1)
+        printf("archive '%s': mtime=%ld symdef+2=%ld\n",
+            filname, (long)x.st_mtime, symdef_date + 2);
+    if (x.st_mtime > symdef_date + 2) {
+        if (trace > 1)
+            printf("archive '%s': out-of-date ranlib\n", filname);
         return (3); /* out of date archive */
+    }
+    if (trace > 1)
+        printf("archive '%s': randomized ranlib\n", filname);
     return (2);     /* randomized archive */
 }
 
@@ -741,21 +763,11 @@ unsigned hash_rot13(const char *s)
 
 struct nlist **lookup()
 {
-    int clash;
-    register char *cp, *cp1;
     register struct nlist **hp;
 
     hp = &hshtab[hash_rot13(cursym.n_name) % NSYM + 2];
     while (*hp != 0) {
-        cp1 = (*hp)->n_name;
-        clash = 0;
-        for (cp = cursym.n_name; *cp;) {
-            if (*cp++ != *cp1++) {
-                clash = 1;
-                break;
-            }
-        }
-        if (!clash)
+        if (strcmp(cursym.n_name, (*hp)->n_name) == 0)
             break;
         if (++hp >= &hshtab[NSYM + 2])
             hp = hshtab;
@@ -904,16 +916,29 @@ int ldrand()
 {
     register struct ranlib *p;
     struct nlist **pp;
-    unsigned *oldp = libp;
+    int oldn, loaded;
 
+    loaded = 0;
     for (p = rantab; p < rantab + rancount; ++p) {
         pp = slookup(p->ran_name);
         if (!*pp)
             continue;
-        if ((*pp)->n_type == N_EXT + N_UNDF)
+        if ((*pp)->n_type == N_EXT + N_UNDF) {
+            if (trace > 2)
+                printf("ranlib need '%s' offset %08x\n",
+                    p->ran_name, p->ran_off);
+            oldn = libp - liblist;
             step(p->ran_off);
+            if ((int)(libp - liblist) != oldn) {
+                if (trace > 2)
+                    printf("ranlib loaded '%s'\n", p->ran_name);
+                loaded = 1;
+            }
+        }
     }
-    return (oldp != libp);
+    if (trace > 1)
+        printf("ranlib pass loaded=%d\n", loaded);
+    return loaded;
 }
 
 /*
@@ -939,6 +964,9 @@ void load1lib(unsigned off0)
  */
 void load1arg(char *cp)
 {
+    unsigned symdef_size;
+
+    symdef_size = 0;
     switch (getfile(cp)) {
     case 0: /* regular file */
         load1(0L, 0, mkfsym(cp, 0));
@@ -947,11 +975,19 @@ void load1arg(char *cp)
         load1lib(SARMAG);
         break;
     case 2: /* archive with table of contents */
+        symdef_size = archdr.ar_size;
         getrantab();
         while (ldrand())
             continue;
         freerantab();
-        addlibp(-1);
+        /*
+         * The ranlib table is only an accelerator.  Do a normal archive
+         * sweep afterwards so newly-created undefined symbols are resolved
+         * even if a target runtime misses a randomized archive iteration.
+         */
+        if (trace > 1)
+            printf("archive '%s': fallback linear sweep\n", filname);
+        load1lib(SARMAG + symdef_size + ARHDRSZ);
         break;
     case 3: /* out of date table of contents */
         error(0, "out of date (warning)");

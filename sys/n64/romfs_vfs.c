@@ -81,6 +81,8 @@ n64romfs_error(uint32_t err)
         return ENOMEM;
     case ROMFS_ERR_DIR_NOT_EMPTY:
         return ENOTEMPTY;
+    case ROMFS_ERR_PROTECTED:
+        return EROFS;
     case ROMFS_ERR_DIR_LIMIT:
     case ROMFS_ERR_DIR_INVALID:
         return ENOTDIR;
@@ -739,9 +741,11 @@ n64romfs_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
     if (rmp->map_size > sizeof(n64romfs_flash_map) ||
         rmp->list_size > sizeof(n64romfs_flash_list))
         return ENOMEM;
-    if (!romfs_start(rmp->info.fw_size, rmp->info.rom_size,
+    if (!romfs_start(rmp->info.romfs_offset, rmp->info.rom_size,
         n64romfs_flash_map, n64romfs_flash_list))
         return EIO;
+    if (!romfs_validate())
+        return EINVAL;
 
     rmp->free_bytes = romfs_free();
     bzero(&file, sizeof(file));

@@ -35,7 +35,7 @@
  * Machine-dependent defines for both passes.
  */
 
-#if TARGOS == netbsd
+#if defined(netbsd) && TARGOS == netbsd
 #define USE_GAS
 #endif
 

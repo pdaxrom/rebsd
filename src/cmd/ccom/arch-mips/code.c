@@ -42,7 +42,11 @@
 void
 defloc(struct symtab *sp)
 {
+#ifdef USE_GAS
 	static char *loctbl[] = { "text", "data", "section .rodata" };
+#else
+	static char *loctbl[] = { "text", "data", "rdata" };
+#endif
 	static int lastloc = -1;
 	TWORD t;
 	char *n;
@@ -54,11 +58,11 @@ defloc(struct symtab *sp)
 	}
 	t = sp->stype;
 	s = ISFTN(t) ? PROG : ISCON(cqual(t, sp->squal)) ? RDATA : DATA;
-	lastloc = s;
 	if (s == PROG)
 		return; /* text is written in prologue() */
 	if (s != lastloc)
 		printf("	.%s\n", loctbl[s]);
+	lastloc = s;
 	printf("	.p2align %d\n", ispow2(talign(t, sp->sap)));
 	n = sp->soname ? sp->soname : sp->sname;
 	if (sp->sclass == EXTDEF)

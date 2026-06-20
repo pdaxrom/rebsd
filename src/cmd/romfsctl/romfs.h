@@ -67,6 +67,7 @@ enum {
     ROMFS_ERR_DIR_LIMIT,
     ROMFS_ERR_DIR_INVALID,
     ROMFS_ERR_DIR_NOT_EMPTY,
+    ROMFS_ERR_PROTECTED,
 };
 
 typedef struct __attribute__((packed))
@@ -125,6 +126,7 @@ bool romfs_flash_sector_read(uint32_t offset, uint8_t * buffer, uint32_t need);
 
 void romfs_get_buffers_sizes(uint32_t rom_size, uint32_t * map_size, uint32_t * list_size);
 bool romfs_start(uint32_t start, uint32_t rom_size, uint16_t * flash_map, uint8_t * flash_list);
+bool romfs_validate(void);
 bool romfs_format(void);
 uint32_t romfs_free(void);
 uint32_t romfs_list(romfs_file * entry, bool first);

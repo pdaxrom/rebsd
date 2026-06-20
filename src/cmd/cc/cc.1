@@ -42,6 +42,7 @@
 .Op Fl include Ar path
 .Op Fl isystem Ar path
 .Op Fl o Ar outfile
+.Op Fl -sysroot Ar directory
 .Op Fl Wl Ar flags
 .Op Ar
 .Sh DESCRIPTION
@@ -208,6 +209,22 @@ Do not use the system include paths (/usr/include, etc.)
 .It Fl nostdlib
 Do not link with the system C library (libc).
 .\" implies -nostartfiles ??
+.It Fl -sysroot Ar directory
+Use
+.Ar directory
+as the target system root for standard include directories, startup files, and
+.Fl l
+libraries.
+The default system root is
+.Pa / .
+For example, the target path
+.Pa /include
+is searched as
+.Pa directory/include ,
+and
+.Fl lm
+links
+.Pa directory/lib/libm.a .
 .It Fl O
 Enable optimizations.
 Currently passes

@@ -83,6 +83,7 @@ static const char *romfs_errlist[] = {
     "Directory limit reached",
     "Invalid directory",
     "Directory not empty",
+    "Protected entry",
 };
 
 static uint32_t flash_start = 0;
@@ -116,6 +117,40 @@ static void romfs_flush(void);
 static void romfs_operation_enter(void);
 static void romfs_operation_leave(void);
 static void romfs_request_flush(void);
+
+static bool
+romfs_name_equal(const romfs_entry *entry, const char *name)
+{
+    for (uint32_t i = 0; i < ROMFS_MAX_NAME_LEN; i++) {
+        if (name[i] == '\0') {
+            return entry->name[i] == '\0';
+        }
+        if (entry->name[i] != name[i]) {
+            return false;
+        }
+    }
+    return false;
+}
+
+static bool
+romfs_entry_is_protected(const romfs_entry *entry)
+{
+    if (!entry) {
+        return true;
+    }
+    if ((entry->attr.names.mode &
+            (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM | ROMFS_MODE_RESERVED)) != 0) {
+        return true;
+    }
+    switch (entry->attr.names.type) {
+    case ROMFS_TYPE_FIRMWARE:
+    case ROMFS_TYPE_FLASHLIST:
+    case ROMFS_TYPE_FLASHMAP:
+        return true;
+    default:
+        return false;
+    }
+}
 
 static uint32_t romfs_flush_depth;
 static bool romfs_flush_pending;
@@ -298,6 +333,57 @@ bool romfs_start(uint32_t start, uint32_t rom_size, uint16_t *flash_map, uint8_t
     }
 
     return false;
+}
+
+bool romfs_validate(void)
+{
+    if (!flash_list_int || !flash_map_int ||
+            flash_list_size < 3 * sizeof(romfs_entry)) {
+        return false;
+    }
+
+    romfs_entry *entries = (romfs_entry *) flash_list_int;
+    romfs_entry firmware = entries[0];
+    romfs_entry flashlist = entries[1];
+    romfs_entry flashmap = entries[2];
+
+    firmware.attr.raw = from_lsb16(firmware.attr.raw);
+    flashlist.attr.raw = from_lsb16(flashlist.attr.raw);
+    flashmap.attr.raw = from_lsb16(flashmap.attr.raw);
+    firmware.start = from_lsb32(firmware.start);
+    firmware.size = from_lsb32(firmware.size);
+    flashlist.start = from_lsb32(flashlist.start);
+    flashlist.size = from_lsb32(flashlist.size);
+    flashmap.start = from_lsb32(flashmap.start);
+    flashmap.size = from_lsb32(flashmap.size);
+
+    if (!romfs_name_equal(&firmware, "firmware") ||
+            firmware.attr.names.type != ROMFS_TYPE_FIRMWARE ||
+            (firmware.attr.names.mode & (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM)) !=
+            (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM) ||
+            firmware.start != 0 || firmware.size != flash_start) {
+        return false;
+    }
+
+    if (!romfs_name_equal(&flashlist, "flashlist") ||
+            flashlist.attr.names.type != ROMFS_TYPE_FLASHLIST ||
+            (flashlist.attr.names.mode & (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM)) !=
+            (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM) ||
+            flashlist.start != flash_start / ROMFS_FLASH_SECTOR ||
+            flashlist.size != flash_list_size) {
+        return false;
+    }
+
+    if (!romfs_name_equal(&flashmap, "flashmap") ||
+            flashmap.attr.names.type != ROMFS_TYPE_FLASHMAP ||
+            (flashmap.attr.names.mode & (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM)) !=
+            (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM) ||
+            flashmap.start != (flash_start + flash_list_size) / ROMFS_FLASH_SECTOR ||
+            flashmap.size != flash_map_size) {
+        return false;
+    }
+
+    return true;
 }
 
 static void romfs_flush(void)
@@ -784,6 +870,10 @@ uint32_t romfs_write_file(const void *buffer, uint32_t size, romfs_file *file)
         return file ? (file->err = ROMFS_ERR_OPERATION) : ROMFS_ERR_OPERATION;
     }
 
+    if (romfs_entry_is_protected(&file->entry)) {
+        return (file->err = ROMFS_ERR_PROTECTED);
+    }
+
     file->err = ROMFS_NOERR;
 
     if (size == 0) {
@@ -853,6 +943,10 @@ uint32_t romfs_truncate_file(romfs_file *file, uint32_t size)
 {
     if (!file || file->op != ROMFS_OP_WRITE) {
         return file ? (file->err = ROMFS_ERR_OPERATION) : ROMFS_ERR_OPERATION;
+    }
+
+    if (romfs_entry_is_protected(&file->entry)) {
+        return (file->err = ROMFS_ERR_PROTECTED);
     }
 
     if (!file->io_buffer) {
@@ -1347,6 +1441,12 @@ uint32_t romfs_dir_remove(const romfs_dir *dir)
         return ROMFS_ERR_NO_ENTRY;
     }
 
+    romfs_entry existing = ((romfs_entry *) flash_list_int)[entry_index];
+    existing.attr.raw = from_lsb16(existing.attr.raw);
+    if (romfs_entry_is_protected(&existing)) {
+        return ROMFS_ERR_PROTECTED;
+    }
+
     romfs_operation_enter();
     romfs_entry *entries = (romfs_entry *) flash_list_int;
     entries[entry_index].name[0] = ROMFS_DELETED_ENTRY;
@@ -1490,6 +1590,9 @@ uint32_t romfs_open_append_in_dir(const romfs_dir *dir, const char *name, romfs_
         if (file->entry.attr.names.type == ROMFS_TYPE_DIR) {
             return (file->err = ROMFS_ERR_OPERATION);
         }
+        if (romfs_entry_is_protected(&file->entry)) {
+            return (file->err = ROMFS_ERR_PROTECTED);
+        }
 
         return romfs_prepare_write_state(file, file->entry.size);
     }
@@ -1529,6 +1632,10 @@ uint32_t romfs_delete_in_dir(const romfs_dir *dir, const char *name)
     uint32_t res = romfs_find_file_internal(&file, name, dir->id, true);
     if (res != ROMFS_NOERR) {
         return res;
+    }
+
+    if (romfs_entry_is_protected(&file.entry)) {
+        return ROMFS_ERR_PROTECTED;
     }
 
     if (file.entry.attr.names.type == ROMFS_TYPE_DIR) {
@@ -1572,6 +1679,10 @@ uint32_t romfs_rename_in_dir(const romfs_dir *src_dir, const char *src_name,
     uint32_t res = romfs_find_file_internal(&src, src_name, src_dir->id, true);
     if (res != ROMFS_NOERR) {
         return res;
+    }
+
+    if (romfs_entry_is_protected(&src.entry)) {
+        return ROMFS_ERR_PROTECTED;
     }
 
     romfs_file dst_check = {0};

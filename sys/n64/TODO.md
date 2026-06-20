@@ -56,9 +56,12 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Convert diagnostic/object utilities used by the toolchain path:
   `nm`, `aout`, `size`, and `strip`.
 - [x] Fix `libc` `nlist()` symbol-value decoding for target endian.
-- [ ] Add a host-side or target-side smoke test that runs the new in-tree
+- [x] Add a host-side or target-side smoke test that runs the new in-tree
   `as`, `ld`, `ranlib`, `nm`, `size`, and `strip` against a tiny relocatable
   object and verifies the generated big-endian a.out bytes.
+- [x] Set the in-tree `ld` default text base to `0x00400000` for
+  `TARGET_VR4300`; the old `0x7f008000` default is PIC32-specific and produces
+  N64 executables that fault immediately on `exec`.
 - [x] Add a VR4300 assembler mode:
   - keep MIPS I/II/III instructions needed by the N64 port
   - accept 32-bit VR4300 system/cache instructions used by the kernel:
@@ -69,7 +72,8 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   - keep PIC32/default behavior unchanged
 - [x] Smoke-test VR4300 assembler gating by running the in-tree `as` and
   verifying that normal VR4300 instructions assemble while MIPS32r2-only
-  mnemonics fail in `-march=vr4300` mode.
+  mnemonics fail in `-march=vr4300` mode; this is now a permanent host-side
+  target: `make -C sys/n64 smoke-as-vr4300`.
 - [x] Add the first COP1/FPU assembly support needed by hard-float N64
   userland and current GCC VR4300 smoke output:
   - `$f0`..`$f31` register parsing
@@ -87,6 +91,9 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   - no `.abicalls`, `.cpload`, or `.cprestore` output for N64
   - legacy PCC tentative globals handled with `-fcommon`
   - strict-aliasing warnings disabled for the old PCC IR type-punning code
+- [x] Fix N64 `ccom` output for the native assembler path so 64-bit integer
+  initializers do not use GAS-only `.dword`; the current native path emits
+  `.word` pairs accepted by the in-tree `as`.
 - [ ] Smoke-test the in-tree C compiler path on N64:
   - o32 calling convention compatibility
   - no MIPS32r2-only instruction emission in VR4300 mode
@@ -101,6 +108,9 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Add `/root/pcc-smoke.sh` to run the first target compiler smoke from
   writable `/var/tmp`: `pcc -S`, `as`, `ld -r`, full executable link/run,
   and FPU compile/link/run.
+- [x] Add `/root/cc-pcc-smoke.sh` to verify that both `/bin/cc` and `/bin/pcc`
+  use the in-tree PCC path on N64 and can find target headers/start files/libs
+  through the default `/` sysroot; keep one explicit `--sysroot /` check.
 - [x] Increase the N64 `u`/`u0` areas to 8 KiB so the kernel stack has enough
   headroom for nested `exec`/`namei`/FPU paths during the compiler smoke.
 - [x] Build a.out-format `/lib/crt0.o` and `/lib/libc.a` for the in-tree
@@ -109,9 +119,20 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Generate the target `/include` tree and `/lib` compiler runtime/archive
   set into the N64 rootfs from the shared build outputs, instead of
   hand-listing static headers or libraries in `rootfs.manifest`.
-- [ ] Hardware-smoke the expanded `/root/pcc-smoke.sh` on N64 and confirm
+- [x] Run the N64 native `ranlib` again after copying `libc.a` and `libm.a`
+  into `rootfs.stage/lib`, so the staged archive mtimes match `__.SYMDEF` and
+  target `ld` does not warn that `/lib/libc.a` is out of date.
+- [x] Hardware-smoke the expanded `/root/pcc-smoke.sh` on N64 and confirm
   both executable link/run paths complete without filesystem or inode-cache
   panics.
+- [x] Hardware-smoke `/root/cc-pcc-smoke.sh` on N64 and confirm both `/bin/cc`
+  and `/bin/pcc` can compile, assemble, link, and run integer and FPU smoke
+  programs through the default `/` sysroot.
+- [ ] Audit true o32 big-endian `long long` ABI behavior in `ccom`: argument
+  passing, returns, struct layout, external object layout, and helper calls.
+  The old MIPS backend still has PIC32-era comments around 64-bit endian
+  handling, so this should be tested as a focused ABI matrix rather than
+  folded into unrelated compiler fixes.
 - [ ] Review secondary compiler/interpreter paths after `ccom` works:
   `smallc`, `smlrc`, `lccom`, and their assembler output.
 
@@ -227,6 +248,11 @@ copying binaries manually.
 - [x] Add kernel-callable N64cart flash helpers for ROMFS backend use:
   `n64cart_flash_getinfo`, `n64cart_flash_read_raw`,
   `n64cart_flash_write_sector_raw`, and `n64cart_flash_erase_sector_raw`.
+- [x] Protect the cartridge firmware area in the raw flash driver by rejecting
+  sector write/erase requests below `romfs_offset`.
+- [x] Mirror N64cart-manager flash sessions in the kernel flash driver:
+  disable the cartridge interrupt while command mode is active, switch to SPI
+  only for the transaction, and restore quad-ROM mode before releasing the lock.
 - [x] Add `/bin/romfsctl` as a first hardware diagnostic for the writable
   N64cart ROMFS map/list implementation before wiring ROMFS into kernel
   pathname and mount code.
@@ -261,8 +287,10 @@ copying binaries manually.
   `mount -t romfs ... /cart` reaches the typed kernel mount path rather than
   relying on private N64 test tools.
 - [x] Add `/dev/cartflash0` to the N64 `/etc/fstab` and mount `/cart`
-  automatically from `/etc/rc`; the n64cart flash is fixed cartridge hardware,
-  not removable media.
+  automatically read/write from `/etc/rc`; the n64cart flash is fixed cartridge
+  hardware, not removable media.
+- [x] On reboot/halt, force the n64cart flash interface back to idle quad-ROM
+  mode with chip-select high before jumping to stage0 or stopping the CPU.
 - [x] Add the first kernel ROMFS VFS backend:
   - reuse the same ROMFS core source as `/bin/romfsctl`
   - keep `/dev/cartflash0` as the mount source and accept a character device in
@@ -293,6 +321,21 @@ copying binaries manually.
     table
   - [x] support `rename` over an existing compatible destination; non-empty
     destination directories still fail through the ROMFS delete path
+- [x] Protect ROMFS system/read-only entries from mutation:
+  `firmware`, `flashlist`, `flashmap`, and entries marked read-only, system, or
+  reserved cannot be written, truncated, unlinked, renamed, or removed.
+- [x] Validate ROMFS system entries at kernel mount time before enabling
+  writable `/cart`, so a bad map/list start offset or corrupted system entry
+  fails the mount instead of exposing writes to the wrong flash area.
+- [ ] Make ROMFS metadata updates power-loss safe for the writable `/cart`
+  default:
+  - keep redundant flashlist/flashmap copies or a small journal
+  - add sequence/CRC recovery rules
+  - avoid full metadata rewrites on ordinary file writes
+  - [x] mirror N64cart-manager SPI sessions: disable the cartridge interrupt
+    while command mode is active, switch to SPI only for the transaction, and
+    restore quad-ROM mode before releasing the lock
+  - verify interrupted write/erase recovery on real n64cart hardware
 - [x] Hardware smoke-test kernel ROMFS write path on real N64cart hardware,
   2026-06-14:
   - [x] `mkdir /cart/retrobsd-vfs-test`

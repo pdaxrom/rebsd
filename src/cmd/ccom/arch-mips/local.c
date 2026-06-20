@@ -532,13 +532,16 @@ ninval(CONSZ off, int fsz, NODE *p)
         case LDOUBLE:
         case DOUBLE:
                 u.d = (double)p->n_dcon;
-		if (bigendian) {
-	                printf("\t.word\t%d\n", u.i[0]);
-			//printf("\t.word\t%d\n", u.i[1]);
-		} else {
-			//printf("\t.word\t%d\n", u.i[1]);
-	                printf("\t.word\t%d\n", u.i[0]);
-		}
+#if defined(HOST_BIG_ENDIAN)
+		if (bigendian)
+#else
+		if (!bigendian)
+#endif
+	                printf("\t.word\t0x%x\n\t.word\t0x%x\n",
+			    u.i[0], u.i[1]);
+		else
+	                printf("\t.word\t0x%x\n\t.word\t0x%x\n",
+			    u.i[1], u.i[0]);
                 break;
         case FLOAT:
                 u.f = (float)p->n_dcon;

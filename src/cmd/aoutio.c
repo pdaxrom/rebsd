@@ -20,39 +20,48 @@ aout_is_big_endian(void)
 unsigned
 aout_get16(FILE *f)
 {
-    unsigned char b[2];
+    int b0, b1;
 
-    if (fread(b, 1, sizeof(b), f) != sizeof(b))
+    b0 = getc(f);
+    b1 = getc(f);
+    if (b0 == EOF || b1 == EOF)
         return 0;
     if (aout_big_endian)
-        return ((unsigned)b[0] << 8) | b[1];
-    return b[0] | ((unsigned)b[1] << 8);
+        return ((unsigned)b0 << 8) | (unsigned)b1;
+    return (unsigned)b0 | ((unsigned)b1 << 8);
 }
 
 unsigned
 aout_get24(FILE *f)
 {
-    unsigned char b[3];
+    int b0, b1, b2;
 
-    if (fread(b, 1, sizeof(b), f) != sizeof(b))
+    b0 = getc(f);
+    b1 = getc(f);
+    b2 = getc(f);
+    if (b0 == EOF || b1 == EOF || b2 == EOF)
         return 0;
     if (aout_big_endian)
-        return ((unsigned)b[0] << 16) | ((unsigned)b[1] << 8) | b[2];
-    return b[0] | ((unsigned)b[1] << 8) | ((unsigned)b[2] << 16);
+        return ((unsigned)b0 << 16) | ((unsigned)b1 << 8) | (unsigned)b2;
+    return (unsigned)b0 | ((unsigned)b1 << 8) | ((unsigned)b2 << 16);
 }
 
 unsigned
 aout_get32(FILE *f)
 {
-    unsigned char b[4];
+    int b0, b1, b2, b3;
 
-    if (fread(b, 1, sizeof(b), f) != sizeof(b))
+    b0 = getc(f);
+    b1 = getc(f);
+    b2 = getc(f);
+    b3 = getc(f);
+    if (b0 == EOF || b1 == EOF || b2 == EOF || b3 == EOF)
         return 0;
     if (aout_big_endian)
-        return ((unsigned)b[0] << 24) | ((unsigned)b[1] << 16) |
-            ((unsigned)b[2] << 8) | b[3];
-    return b[0] | ((unsigned)b[1] << 8) | ((unsigned)b[2] << 16) |
-        ((unsigned)b[3] << 24);
+        return ((unsigned)b0 << 24) | ((unsigned)b1 << 16) |
+            ((unsigned)b2 << 8) | (unsigned)b3;
+    return (unsigned)b0 | ((unsigned)b1 << 8) | ((unsigned)b2 << 16) |
+        ((unsigned)b3 << 24);
 }
 
 void

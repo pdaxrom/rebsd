@@ -62,6 +62,12 @@
 #   include <stdio.h>
 #   include <errno.h>
 #endif
+#ifdef strlcpy
+#   undef strlcpy
+#endif
+#ifdef strlcat
+#   undef strlcat
+#endif
 
 #define	MKS(x) _MKS(x)
 #define _MKS(x) #x
@@ -106,6 +112,10 @@ char	*tmp_as;
 char	*tmp_cpp;
 char	*outfile, *ermfile;
 char *Bprefix(char *);
+char *sysroot_prefix(char *);
+char *target_prefix(char *);
+char *target_library(char *);
+char *target_link_arg(char *);
 char *copy(char *, int);
 char *setsuf(char *, char);
 int getsuf(char *);
@@ -185,6 +195,9 @@ char *cppadd[] = { "-D__LCC__", "-D__unix__", "-D__BSD__", "-D__RETROBSD__", NUL
 #ifdef __i386__
 #   define	CPPMDADD { "-D__i386__", NULL, }
 #endif
+#ifndef CPPMDADD
+#   define	CPPMDADD { "-D__mips__", NULL, }
+#endif
 
 #ifdef DYNLINKER
 char *dynlinker[] = DYNLINKER;
@@ -236,6 +249,7 @@ char *libdir = LIBDIR;
 char *altincdir;
 char *pccincdir;
 char *pcclibdir;
+char *sysroot = "/";
 
 /* handle gcc warning emulations */
 struct Wflags {
@@ -393,6 +407,7 @@ usage()
 	printf("  -Ipath           Add a directory to preprocessor path\n");
 	printf("  -x <language>    Specify the language of the following input files\n");
 	printf("                   Permissible languages include: c assembler-with-cpp\n");
+	printf("  --sysroot dir    Use dir as root for target headers and libraries\n");
         if (mode == MODE_LCC || mode == MODE_PCC) {
 	printf("  -B <directory>   Add <directory> to the compiler's search paths\n");
 	printf("  -m<option>       Target-dependent options\n");
@@ -445,7 +460,7 @@ main(int argc, char *argv[])
         /*
          * Select a compiler mode.
          */
-        if (strcmp ("pcc", progname) == 0) {
+        if (strcmp ("cc", progname) == 0 || strcmp ("pcc", progname) == 0) {
                 /* PCC: portable C compiler. */
                 mode = MODE_PCC;
                 cppadd[0] = "-D__PCC__=" MKS(PCC_MAJOR);
@@ -491,6 +506,12 @@ main(int argc, char *argv[])
 				if (strcmp(argv[i], "--version") == 0) {
 					printf("%s\n", VERSSTR);
 					return 0;
+				} else if (strncmp(argv[i], "--sysroot=", 10) == 0) {
+					sysroot = argv[i] + 10;
+				} else if (strcmp(argv[i], "--sysroot") == 0) {
+					if (++i >= argc)
+						errorx(1, "--sysroot: argument missing");
+					sysroot = argv[i];
 				} else if (strcmp(argv[i], "--param") == 0)
 					/* NOTHING YET */;
 				else
@@ -918,10 +939,12 @@ main(int argc, char *argv[])
 			av[na++] = *pv;
 		if (!nostdinc) {
                         if (altincdir)
-                                av[na++] = "-S", av[na++] = altincdir;
-			av[na++] = "-S", av[na++] = incdir;
+                                av[na++] = "-S",
+                                av[na++] = sysroot_prefix(altincdir);
+			av[na++] = "-S", av[na++] = sysroot_prefix(incdir);
                         if (pccincdir)
-                                av[na++] = "-S", av[na++] = pccincdir;
+                                av[na++] = "-S",
+                                av[na++] = sysroot_prefix(pccincdir);
 		}
 		if (idirafter) {
 			av[na++] = "-I";
@@ -1100,24 +1123,24 @@ nocom:
 			if (!nostartfiles) {
 #ifdef CRT0FILE_PROFILE
 				if (pgflag) {
-					av[j++] = Bprefix(crt0file_profile);
+					av[j++] = target_prefix(crt0file_profile);
 				} else
 #endif
 				{
 #ifdef CRT0FILE
-					av[j++] = Bprefix(crt0file);
+					av[j++] = target_prefix(crt0file);
 #endif
 				}
 #ifdef STARTFILES_T
 				if (Bstatic) {
 					for (i = 0; startfiles_T[i]; i++)
-						av[j++] = Bprefix(startfiles_T[i]);
+						av[j++] = target_prefix(startfiles_T[i]);
 				} else
 #endif
 				{
 #ifdef STARTFILES
 					for (i = 0; startfiles[i]; i++)
-						av[j++] = Bprefix(startfiles[i]);
+						av[j++] = target_prefix(startfiles[i]);
 #endif
 				}
 			}
@@ -1130,7 +1153,7 @@ nocom:
 		}
 		i = 0;
 		while(i<nl) {
-			av[j++] = llist[i++];
+			av[j++] = target_link_arg(llist[i++]);
 			if (j >= MAXAV)
 				error("Too many ld options");
 		}
@@ -1152,30 +1175,30 @@ nocom:
                         }
 			if (pgflag) {
 				for (i = 0; libclibs_profile[i]; i++)
-					av[j++] = Bprefix(libclibs_profile[i]);
+					av[j++] = target_library(libclibs_profile[i]);
 			} else {
 				for (i = 0; libclibs[i]; i++)
-					av[j++] = Bprefix(libclibs[i]);
+					av[j++] = target_library(libclibs[i]);
 			}
 		}
 		if (!nostartfiles) {
 #ifdef STARTFILES_S
 			if (shared) {
 				for (i = 0; endfiles_S[i]; i++)
-					av[j++] = Bprefix(endfiles_S[i]);
+					av[j++] = target_prefix(endfiles_S[i]);
 			} else
 #endif
 			{
 #ifdef STARTFILES_T
 				if (Bstatic) {
 					for (i = 0; endfiles_T[i]; i++)
-						av[j++] = Bprefix(endfiles_T[i]);
+						av[j++] = target_prefix(endfiles_T[i]);
 				} else
 #endif
 				{
 #ifdef STARTFILES
 					for (i = 0; endfiles[i]; i++)
-						av[j++] = Bprefix(endfiles[i]);
+						av[j++] = target_prefix(endfiles[i]);
 #endif
 				}
 			}
@@ -1275,6 +1298,70 @@ Bprefix(char *s)
 	str = copy(Bflag, i = strlen(suffix));
 	strlcat(str, suffix, strlen(Bflag) + i + 1);
 	return str;
+}
+
+char *
+sysroot_prefix(char *s)
+{
+	char *str;
+	int slen, plen;
+
+	if (sysroot == NULL || s == NULL || s[0] != '/')
+		return s;
+
+	slen = strlen(sysroot);
+	while (slen > 1 && sysroot[slen - 1] == '/')
+		slen--;
+	plen = strlen(s);
+	if (slen == 1 && sysroot[0] == '/')
+		return s;
+
+	str = ccmalloc(slen + plen + 1);
+	memcpy(str, sysroot, slen);
+	str[slen] = '\0';
+	strlcat(str, s, slen + plen + 1);
+	return str;
+}
+
+char *
+target_prefix(char *s)
+{
+	if (Bflag && s && s[0] == '/')
+		return Bprefix(s);
+	return sysroot_prefix(s);
+}
+
+char *
+target_library(char *s)
+{
+	char *name, *str, *dir;
+	int dlen, nlen;
+
+	if (sysroot == NULL || s == NULL || s[0] != '-' || s[1] != 'l')
+		return target_prefix(s);
+
+	name = s + 2;
+	if (*name == '\0')
+		name = "a";
+	dir = sysroot_prefix(libdir);
+	dlen = strlen(dir);
+	nlen = strlen(name);
+	str = ccmalloc(dlen + nlen + sizeof("/lib.a"));
+	strlcpy(str, dir, dlen + nlen + sizeof("/lib.a"));
+	if (dlen == 0 || str[dlen - 1] != '/')
+		strlcat(str, "/", dlen + nlen + sizeof("/lib.a"));
+	strlcat(str, "lib", dlen + nlen + sizeof("/lib.a"));
+	strlcat(str, name, dlen + nlen + sizeof("/lib.a"));
+	strlcat(str, ".a", dlen + nlen + sizeof("/lib.a"));
+	return str;
+}
+
+char *
+target_link_arg(char *s)
+{
+	if (s && s[0] == '-' && s[1] == 'l')
+		return target_library(s);
+	return s;
 }
 
 int

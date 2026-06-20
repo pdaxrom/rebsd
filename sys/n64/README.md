@@ -24,7 +24,9 @@ The current port boots a base RetroBSD system from a cartridge ROM image:
 - `/dev/ttyS0` is the n64cart serial tty.
 - `/dev/rgbled0` controls the n64cart RGB LED through ioctl.
 - `/dev/cartflash0` exposes the n64cart SPI flash command path for controlled
-  sector read/write/erase ioctls.
+  sector read/write/erase ioctls. Write and erase operations are rejected below
+  the reported `romfs_offset`, so the firmware area is protected from ROMFS
+  tools and mounts.
 - `/dev/cartflash0` is intentionally a character-device flash interface rather
   than a generic block device; the cartridge ROMFS driver is expected to own
   erase/program/map/list handling directly.
@@ -212,6 +214,9 @@ current N64 work is staged as follows:
   `size`, and `strip`;
 - N64 builds define `TARGET_BIG_ENDIAN`, so those tools default to big-endian
   a.out and still accept `-EL`/`-EB` where applicable;
+- N64 builds define `TARGET_VR4300`, so the in-tree `ld` default executable
+  text base is `0x00400000`. The original `0x7f008000` default is retained for
+  non-VR4300 targets and is not valid for N64 user `exec`;
 - N64 builds define `TARGET_VR4300`, so the in-tree assembler rejects known
   MIPS32/MIPS32r2-only mnemonics that the NEC VR4300 cannot execute, while
   accepting the 32-bit VR4300 cache/TLB opcodes used by the kernel;
@@ -222,6 +227,10 @@ current N64 work is staged as follows:
   `bc1*` branches;
 - `src/cmd/ccom` now builds as an N64 a.out binary with big-endian target
   configuration and without `.abicalls`, `.cpload`, or `.cprestore` output;
+- the N64 `ccom` path emits native assembler-compatible `.word` pairs for
+  64-bit integer initializers instead of GAS-only `.dword`; full o32
+  big-endian `long long` ABI coverage still needs a focused pass for
+  arguments, returns, structs, and helper-call interactions;
 - the N64 `ccom` build uses 8-byte compiler heap alignment for VR4300, because
   floating constants store `long double` values in AST nodes and hard-float
   `sdc1` faults on 4-byte-only aligned addresses;
@@ -237,9 +246,15 @@ current N64 work is staged as follows:
 - the `/lib` compiler runtime is generated as big-endian a.out in an isolated
   `n64-native-runtime` build tree. It is not copied from the normal external
   GCC/ELF userland artifacts, because the in-tree `ld` correctly rejects ELF
-  objects as `bad magic`;
+  objects as `bad magic`. After staging, `libc.a` and `libm.a` are reindexed
+  with the N64 native `ranlib` so `__.SYMDEF` matches the rootfs file mtimes;
 - `/root/pcc-smoke.sh` runs the target smoke from `/var/tmp`, so it does not
   try to write compiler outputs into the read-only root filesystem;
+- `/root/cc-pcc-smoke.sh` verifies both driver names, `/bin/cc` and
+  `/bin/pcc`: the main checks rely on the default `/` sysroot, and one final
+  FPU check keeps explicit `--sysroot /` covered;
+- `/bin/smoke-as-vr4300` and `/bin/smoke-as-vr4300.sh` run the assembler opcode
+  smoke directly on N64, using `/bin/as` by default;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
@@ -262,6 +277,7 @@ Useful specific targets:
 ```
 make -C sys/n64 kernel.z64
 make -C sys/n64 preflight.z64
+make -C sys/n64 smoke-as-vr4300
 make -C sys/n64 reconfig
 make -C sys/n64 clean
 make -C sys/n64 clean-all
@@ -363,7 +379,9 @@ ROMFS mount path:
 
 - `/dev/cartflash0` is an N64-only character device on the n64cart hardware
   major. It reads the cartridge JEDEC ID, firmware size register, and flash
-  geometry, then accepts bounded sector read/write/erase ioctls.
+  geometry, then accepts bounded sector read/write/erase ioctls. The driver
+  rejects write/erase requests below `romfs_offset`, so raw flash access cannot
+  overwrite the cartridge firmware area.
   Flash transactions run with interrupts masked so the timer-driven n64cart
   UART poll cannot touch the same cartridge register block while SPI command
   mode is active.
@@ -376,12 +394,18 @@ ROMFS mount path:
   directory iteration, `statfs`, create, write, append, truncate, unlink,
   rename, mkdir, and rmdir. Direct flash diagnostics remain available through
   `romfsctl`.
+- The kernel ROMFS mount path validates the system entries before accepting the
+  mount, so a bad map/list start offset or corrupted firmware/list/map entry is
+  rejected before writable access is enabled.
+- The shared ROMFS core protects the system entries `firmware`, `flashlist`,
+  and `flashmap`, plus any read-only/system/reserved entry, from write,
+  truncate, unlink, rename, and rmdir.
 
 The current UFS `rootfs.img` remains the system root and is still demand-read
 from cartridge ROM through the romdisk block driver. Cartridge ROMFS is mounted
 separately at `/cart`; because the n64cart flash is fixed cartridge hardware,
 the N64 `/etc/fstab` lists it and `/etc/rc` mounts it automatically during
-multi-user boot.
+multi-user boot as a writable ROMFS mount.
 
 The hardware smoke test used on real n64cart hardware is:
 
@@ -462,7 +486,9 @@ directories through the same ROMFS flash map/list implementation used by
 `romfsctl`. Non-empty destination directories are still rejected through the
 ROMFS delete path. The overwrite path is not fully atomic across the flash-list
 updates, so it is acceptable for bring-up but should be tightened before using
-ROMFS for critical writable state.
+ROMFS for critical writable state. Power loss during a writable map/list flush
+can still damage ROMFS metadata; the firmware area and system entries are
+protected, but map/list journaling is still planned.
 
 The ROMFS VFS write/delete path was verified on real N64cart hardware on
 2026-06-14. The test wrote and read `/cart/retrobsd-vfs-test/hello.txt`,
@@ -608,10 +634,13 @@ prompt.
 ## Reboot Path
 
 `boot()`/`reboot(2)` on N64 no longer only prints the reboot request and spins.
-For a normal reboot, the kernel syncs pending buffers, disables N64 interrupt
-sources, and jumps back to the resident stage0 entry at `0x80300000`.
-Because the cartridge root filesystem is mounted read-only, the N64 reboot
-path does not force the root superblock dirty before `sync()`.
+For a normal reboot, the kernel syncs pending buffers, forces the n64cart flash
+interface back to idle quad-ROM mode with chip-select high, disables N64
+interrupt sources, and jumps back to the resident stage0 entry at `0x80300000`.
+The system UFS root is mounted read-only, so the N64 reboot path does not force
+the root superblock dirty before `sync()`. The cartridge ROMFS mount at `/cart`
+is writable by default, and all flash transactions return the n64cart hardware
+to quad-ROM mode before reboot jumps back to stage0.
 
 This is a software restart through the ROM-loaded stage0 image, not a full
 console hardware reset. `halt`/`poweroff` requests disable interrupts and stop

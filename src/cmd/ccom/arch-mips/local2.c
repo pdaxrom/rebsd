@@ -92,6 +92,7 @@ prologue(struct interpass_prolog * ipp)
 	int i, j;
 
 	ftype = ipp->ipp_type;
+	printf("\t.text\n");
 	printf("\t.align 2\n");
 	if (ipp->ipp_vis)
 		printf("\t.globl %s\n", ipp->ipp_name);

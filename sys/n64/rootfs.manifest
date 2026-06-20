@@ -55,6 +55,9 @@ file /etc/termcap
 
 file /root/.profile
 
+file /root/cc-pcc-smoke.sh
+mode 0775
+
 file /root/pcc-fpu-smoke.c
 
 file /root/pcc-smoke.sh

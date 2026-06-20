@@ -39,6 +39,12 @@ static const struct n64cart_flash_chip n64cart_flash_chips[] = {
 };
 
 static unsigned char n64cart_flash_buf[N64CART_FLASH_SECTOR];
+static int n64cart_flash_access_depth;
+static unsigned n64cart_flash_access_status;
+
+#ifndef N64CART_FLASH_WRITE_ENABLE
+#define N64CART_FLASH_WRITE_ENABLE 1
+#endif
 
 static volatile u_int *
 n64cart_flash_reg(u_int offset)
@@ -111,6 +117,45 @@ static void
 n64cart_flash_restore_quad_rom_mode(void)
 {
     n64cart_flash_mode(1);
+}
+
+static void
+n64cart_flash_access_lock(void)
+{
+    if (n64cart_flash_access_depth++ == 0) {
+        n64cart_flash_access_status =
+            mips_read_c0_register(C0_STATUS, 0);
+        mips_write_c0_register(C0_STATUS, 0,
+            n64cart_flash_access_status & ~(ST_IE | ST_IM3));
+        n64cart_flash_cs_force(1);
+        n64cart_flash_enter_spi_command_mode();
+    }
+}
+
+static void
+n64cart_flash_access_unlock(void)
+{
+    if (n64cart_flash_access_depth <= 0) {
+        n64cart_flash_access_depth = 0;
+        return;
+    }
+    if (--n64cart_flash_access_depth == 0) {
+        n64cart_flash_cs_force(1);
+        n64cart_flash_restore_quad_rom_mode();
+        mips_write_c0_register(C0_STATUS, 0,
+            n64cart_flash_access_status);
+    }
+}
+
+void
+n64cart_flash_shutdown(void)
+{
+    n64cart_flash_access_status = mips_read_c0_register(C0_STATUS, 0);
+    mips_write_c0_register(C0_STATUS, 0,
+        n64cart_flash_access_status & ~(ST_IE | ST_IM3));
+    n64cart_flash_cs_force(1);
+    n64cart_flash_restore_quad_rom_mode();
+    mips_write_c0_register(C0_STATUS, 0, n64cart_flash_access_status);
 }
 
 static void
@@ -226,16 +271,13 @@ n64cart_flash_info(struct n64cart_flash_info *info)
     unsigned mf;
     unsigned id;
     unsigned i;
-    int s;
 
     bzero(info, sizeof(*info));
 
-    s = splhigh();
-    n64cart_flash_enter_spi_command_mode();
+    n64cart_flash_access_lock();
     n64cart_flash_do_cmd(N64CART_FLASH_CMD_JEDEC, 0, jedec, sizeof(jedec));
-    n64cart_flash_restore_quad_rom_mode();
+    n64cart_flash_access_unlock();
     info->fw_size = n64cart_flash_fw_size();
-    splx(s);
 
     mf = jedec[0];
     id = ((unsigned)jedec[1] << 8) | jedec[2];
@@ -278,6 +320,46 @@ n64cart_flash_check_io(const struct n64cart_flash_info *info,
         io->buffer);
 }
 
+static int
+n64cart_flash_check_write_range(const struct n64cart_flash_info *info,
+    unsigned offset, unsigned size, const void *buffer)
+{
+    int error;
+
+#if !N64CART_FLASH_WRITE_ENABLE
+    (void)info;
+    (void)offset;
+    (void)size;
+    (void)buffer;
+    return EROFS;
+#endif
+    error = n64cart_flash_check_range(info, offset, size, buffer);
+    if (error != 0)
+        return error;
+    if (offset < info->romfs_offset)
+        return EROFS;
+    return 0;
+}
+
+static int
+n64cart_flash_check_erase_range(const struct n64cart_flash_info *info,
+    unsigned offset)
+{
+#if !N64CART_FLASH_WRITE_ENABLE
+    (void)info;
+    (void)offset;
+    return EROFS;
+#endif
+    if (info->rom_size == 0)
+        return ENODEV;
+    if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0 ||
+        offset >= info->rom_size)
+        return EINVAL;
+    if (offset < info->romfs_offset)
+        return EROFS;
+    return 0;
+}
+
 int
 n64cart_flash_getinfo(struct n64cart_flash_info *info)
 {
@@ -289,7 +371,6 @@ n64cart_flash_read_raw(unsigned offset, void *buffer, unsigned size)
 {
     struct n64cart_flash_info info;
     int error;
-    int s;
 
     error = n64cart_flash_info(&info);
     if (error != 0)
@@ -298,11 +379,9 @@ n64cart_flash_read_raw(unsigned offset, void *buffer, unsigned size)
     if (error != 0)
         return error;
 
-    s = splhigh();
-    n64cart_flash_enter_spi_command_mode();
+    n64cart_flash_access_lock();
     n64cart_flash_read(offset, buffer, size);
-    n64cart_flash_restore_quad_rom_mode();
-    splx(s);
+    n64cart_flash_access_unlock();
     return 0;
 }
 
@@ -311,23 +390,20 @@ n64cart_flash_write_sector_raw(unsigned offset, const void *buffer)
 {
     struct n64cart_flash_info info;
     int error;
-    int s;
 
     error = n64cart_flash_info(&info);
     if (error != 0)
         return error;
-    error = n64cart_flash_check_range(&info, offset, N64CART_FLASH_SECTOR,
+    error = n64cart_flash_check_write_range(&info, offset, N64CART_FLASH_SECTOR,
         buffer);
     if (error != 0)
         return error;
     if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0)
         return EINVAL;
 
-    s = splhigh();
-    n64cart_flash_enter_spi_command_mode();
+    n64cart_flash_access_lock();
     n64cart_flash_write_sector(offset, buffer);
-    n64cart_flash_restore_quad_rom_mode();
-    splx(s);
+    n64cart_flash_access_unlock();
     return 0;
 }
 
@@ -336,20 +412,17 @@ n64cart_flash_erase_sector_raw(unsigned offset)
 {
     struct n64cart_flash_info info;
     int error;
-    int s;
 
     error = n64cart_flash_info(&info);
     if (error != 0)
         return error;
-    if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0 ||
-        offset >= info.rom_size)
-        return EINVAL;
+    error = n64cart_flash_check_erase_range(&info, offset);
+    if (error != 0)
+        return error;
 
-    s = splhigh();
-    n64cart_flash_enter_spi_command_mode();
+    n64cart_flash_access_lock();
     n64cart_flash_erase_sector(offset);
-    n64cart_flash_restore_quad_rom_mode();
-    splx(s);
+    n64cart_flash_access_unlock();
     return 0;
 }
 
@@ -411,7 +484,8 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         error = copyin(data, (caddr_t)&io, sizeof(io));
         if (error != 0)
             return error;
-        error = n64cart_flash_check_io(&info, &io);
+        error = n64cart_flash_check_write_range(&info, io.offset,
+            io.size, io.buffer);
         if (error != 0)
             return error;
         if ((io.offset & (N64CART_FLASH_SECTOR - 1)) != 0 ||
@@ -426,9 +500,9 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         error = copyin(data, (caddr_t)&offset, sizeof(offset));
         if (error != 0)
             return error;
-        if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0 ||
-            offset >= info.rom_size)
-            return EINVAL;
+        error = n64cart_flash_check_erase_range(&info, offset);
+        if (error != 0)
+            return error;
         return n64cart_flash_erase_sector_raw(offset);
 
     default:

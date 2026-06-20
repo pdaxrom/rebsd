@@ -47,6 +47,9 @@ N64_NATIVE_AS = $(N64_NATIVE_TOOLS)/as
 N64_NATIVE_LD = $(N64_NATIVE_TOOLS)/ld
 N64_NATIVE_AOUT_AR = $(N64_NATIVE_TOOLS)/ar
 N64_NATIVE_AOUT_RANLIB = $(N64_NATIVE_TOOLS)/ranlib
+N64_NATIVE_AOUT_NM = $(N64_NATIVE_TOOLS)/nm
+N64_NATIVE_AOUT_SIZE = $(N64_NATIVE_TOOLS)/size
+N64_NATIVE_AOUT_STRIP = $(N64_NATIVE_TOOLS)/strip
 N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-cc.sh
 N64_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-as.sh
 N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/n64/native/smoke-as-vr4300.sh
@@ -101,6 +104,9 @@ N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(TOPSRC)/src/cmd/ar/replace.c \
                        $(TOPSRC)/src/cmd/ar/strmode.c \
                        $(TOPSRC)/src/cmd/ranlib/ranlib.c \
+                       $(TOPSRC)/src/cmd/nm/nm.c \
+                       $(TOPSRC)/src/cmd/size.c \
+                       $(TOPSRC)/src/cmd/strip.c \
                        $(TOPSRC)/src/cmd/aoutio.c \
                        $(TOPSRC)/src/cmd/aoutio.h \
                        $(TOPSRC)/include/a.out.h \
@@ -325,6 +331,9 @@ $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_N
 	for lib in $(N64_NATIVE_LIBS); do \
 	    cp $(N64_NATIVE_DIR)/$$lib $(N64_ROOTFS_STAGE)/lib/$$lib; \
 	done
+	for lib in libc.a libm.a; do \
+	    $(N64_NATIVE_AOUT_RANLIB) $(N64_ROOTFS_STAGE)/lib/$$lib; \
+	done
 	for page in $(N64_ROOTFS_CAT1_PAGES); do \
 	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 > $(N64_ROOTFS_STAGE)/share/man/cat1/$$page.0; \
 	done
@@ -428,6 +437,31 @@ $(N64_NATIVE_AOUT_RANLIB): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
 	    -o $@ $(TOPSRC)/src/cmd/ranlib/ranlib.c \
 	    $(TOPSRC)/src/cmd/ar/archive.c $(TOPSRC)/src/cmd/aoutio.c
 
+$(N64_NATIVE_AOUT_NM): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c \
+    $(TOPSRC)/src/cmd/aoutio.h
+	mkdir -p $(N64_NATIVE_TOOLS)
+	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
+	    -I$(TOPSRC)/src/cmd/ar \
+	    -o $@ $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c
+
+$(N64_NATIVE_AOUT_SIZE): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c \
+    $(TOPSRC)/src/cmd/aoutio.h
+	mkdir -p $(N64_NATIVE_TOOLS)
+	cc -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
+	    -o $@ $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c
+
+$(N64_NATIVE_AOUT_STRIP): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c \
+    $(TOPSRC)/src/cmd/aoutio.h
+	mkdir -p $(N64_NATIVE_TOOLS)
+	cc -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
+	    -o $@ $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c
+
 .PHONY: smoke-as-vr4300
 smoke-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_SMOKE_SCRIPT)
 	$(N64_NATIVE_AS_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS))
@@ -439,10 +473,12 @@ matrix-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_MATRIX_SCRIPT)
 .PHONY: smoke-aout-toolchain
 smoke-aout-toolchain: $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
     $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB) \
+    $(N64_NATIVE_AOUT_NM) $(N64_NATIVE_AOUT_SIZE) $(N64_NATIVE_AOUT_STRIP) \
     $(N64_NATIVE_AOUT_SMOKE_SCRIPT)
 	$(N64_NATIVE_AOUT_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS)) \
 	    $(abspath $(N64_NATIVE_LD)) $(abspath $(N64_NATIVE_AOUT_AR)) \
-	    $(abspath $(N64_NATIVE_AOUT_RANLIB))
+	    $(abspath $(N64_NATIVE_AOUT_RANLIB)) $(abspath $(N64_NATIVE_AOUT_NM)) \
+	    $(abspath $(N64_NATIVE_AOUT_SIZE)) $(abspath $(N64_NATIVE_AOUT_STRIP))
 
 $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
     $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB)

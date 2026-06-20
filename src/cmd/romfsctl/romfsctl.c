@@ -109,7 +109,7 @@ load_romfs(void)
         fprintf(stderr, "romfsctl: no memory for romfs tables\n");
         exit(1);
     }
-    if (!romfs_start(flash_info.fw_size, flash_info.rom_size,
+    if (!romfs_start(flash_info.romfs_offset, flash_info.rom_size,
         flash_map, flash_list)) {
         fprintf(stderr, "romfsctl: cannot start romfs\n");
         exit(1);
