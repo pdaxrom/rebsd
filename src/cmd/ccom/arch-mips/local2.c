@@ -543,6 +543,10 @@ static void
 emulop(NODE *p)
 {
 	char *ch = NULL;
+	int llongop, twollargs;
+
+	llongop = (DEUNSIGN(p->n_type) == LONGLONG);
+	twollargs = (p->n_op == DIV || p->n_op == MOD);
 
 	if (p->n_op == LS && DEUNSIGN(p->n_type) == LONGLONG) ch = "ashldi3";
 	else if (p->n_op == LS && (DEUNSIGN(p->n_type) == LONG ||
@@ -583,10 +587,28 @@ emulop(NODE *p)
 	else if (p->n_op == UMINUS && p->n_type == LONG) ch = "negsi2";
 
 	else ch = 0, comperr("ZE");
+	if (llongop) {
+		printf("\tmove %s,%s\t# longlong helper ABI: arg0 high/low\n",
+		    rnames[V0], rnames[A0]);
+		printf("\tmove %s,%s\n", rnames[A0], rnames[A1]);
+		printf("\tmove %s,%s\n", rnames[A1], rnames[V0]);
+		if (twollargs) {
+			printf("\tmove %s,%s\t# longlong helper ABI: arg1 high/low\n",
+			    rnames[V0], rnames[A2]);
+			printf("\tmove %s,%s\n", rnames[A2], rnames[A3]);
+			printf("\tmove %s,%s\n", rnames[A3], rnames[V0]);
+		}
+	}
 	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\tjal __%s\t# emulated operation\n", exname(ch));
 	printf("\tnop\n");
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
+	if (llongop) {
+		printf("\tmove %s,%s\t# longlong helper ABI: result low/high\n",
+		    rnames[A0], rnames[V0]);
+		printf("\tmove %s,%s\n", rnames[V0], rnames[V1]);
+		printf("\tmove %s,%s\n", rnames[V1], rnames[A0]);
+	}
 }
 
 /*
@@ -1033,13 +1055,17 @@ offchg(NODE *p, void *arg)
 		break;
 	case LONGLONG:
 	case ULONGLONG:
+		/*
+		 * This backend stores 64-bit integers as low word at AL and
+		 * high word at UL even for big-endian N64 output.
+		 */
 		if (DEUNSIGN(p->n_type) == CHAR)
-			l->n_lval += 7;
+			l->n_lval += 3;
 		else if (DEUNSIGN(p->n_type) == SHORT)
-			l->n_lval += 6;
+			l->n_lval += 2;
 		else if (DEUNSIGN(p->n_type) == INT ||
 		    DEUNSIGN(p->n_type) == LONG)
-			l->n_lval += 4;
+			;
 		break;
 	default:
 		comperr("offchg: unknown type");

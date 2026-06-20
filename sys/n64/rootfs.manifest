@@ -58,6 +58,11 @@ file /root/.profile
 file /root/cc-pcc-smoke.sh
 mode 0775
 
+file /root/ll-smoke.sh
+mode 0775
+
+file /root/ll-smoke.c
+
 file /root/pcc-fpu-smoke.c
 
 file /root/pcc-smoke.sh

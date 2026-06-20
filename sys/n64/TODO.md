@@ -128,11 +128,23 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Hardware-smoke `/root/cc-pcc-smoke.sh` on N64 and confirm both `/bin/cc`
   and `/bin/pcc` can compile, assemble, link, and run integer and FPU smoke
   programs through the default `/` sysroot.
+- [x] Add `/root/ll-smoke.sh` and `/root/ll-smoke.c` to exercise the first
+  native `long long` runtime cases through both `/bin/cc` and `/bin/pcc`:
+  global initializers, signed/unsigned shifts, arithmetic, compares, mixed
+  register arguments, returns, and struct layout.
+- [x] Bridge `ccom` long-long helper calls to the compiler-runtime ABI:
+  internal pairs are low/high, while `__divdi3`, `__udivdi3`, `__moddi3`,
+  `__umoddi3`, and shift helpers use normal o32 high/low arguments and return
+  values.
+- [x] Hardware-smoke `/root/ll-smoke.sh` on N64.
 - [ ] Audit true o32 big-endian `long long` ABI behavior in `ccom`: argument
   passing, returns, struct layout, external object layout, and helper calls.
   The old MIPS backend still has PIC32-era comments around 64-bit endian
   handling, so this should be tested as a focused ABI matrix rather than
   folded into unrelated compiler fixes.
+- [ ] Fix `ccom` stack `FUNARG` generation for `long long`/`double` arguments
+  after the four o32 argument registers are exhausted; the old MIPS backend has
+  the relevant `FUNARG` table entries disabled under `#if 0`.
 - [ ] Review secondary compiler/interpreter paths after `ccom` works:
   `smallc`, `smlrc`, `lccom`, and their assembler output.
 

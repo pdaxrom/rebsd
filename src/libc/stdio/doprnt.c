@@ -48,6 +48,8 @@
 
 static unsigned char *ksprintn (unsigned char *buf, unsigned long v, unsigned char base,
 	int width, unsigned char *lp);
+static unsigned char *ksprintnll (unsigned char *buf, unsigned long long v,
+	unsigned char base, int width, unsigned char *lp);
 static unsigned char mkhex (unsigned char ch);
 
 static int cvt (double number, int prec, int sharpflag, unsigned char *negp,
@@ -62,6 +64,7 @@ _doprnt (char const *fmt, va_list ap, FILE *stream)
 	unsigned char c, base, lflag, ladjust, sharpflag, neg, dot, size;
 	int n, width, dwidth, retval, uppercase, extrazeros, sign;
 	unsigned long ul;
+	unsigned long long ull;
 
 	if (! stream)
 		return 0;
@@ -176,20 +179,26 @@ reswitch:	switch (c = *fmt++) {
 
 		case 'd':
 		case 'i':
-			ul = lflag ? va_arg (ap, long) : va_arg (ap, int);
+			if (lflag > 1)
+				ull = va_arg (ap, long long);
+			else
+				ull = lflag ? va_arg (ap, long) : va_arg (ap, int);
 			if (! sign) sign = 1;
 			base = 10;
-			goto number;
+			goto numberll;
 
 		case 'l':
-			lflag = 1;
+			lflag = lflag ? 2 : 1;
 			goto reswitch;
 
 		case 'o':
-			ul = lflag ? va_arg (ap, unsigned long) :
-				va_arg (ap, unsigned int);
+			if (lflag > 1)
+				ull = va_arg (ap, unsigned long long);
+			else
+				ull = lflag ? va_arg (ap, unsigned long) :
+					va_arg (ap, unsigned int);
 			base = 8;
-			goto nosign;
+			goto nosignll;
 
 		case 'p':
 			ul = (size_t) va_arg (ap, void*);
@@ -199,14 +208,18 @@ reswitch:	switch (c = *fmt++) {
 			}
 			base = 16;
 			sharpflag = (width == 0);
-			goto nosign;
+			ull = ul;
+			goto nosignll;
 
 		case 'n': /* TBD!!! fix this non-standard %n */
-			ul = lflag ? va_arg (ap, unsigned long) :
-				sign ? (unsigned long) va_arg (ap, int) :
-				va_arg (ap, unsigned int);
+			if (lflag > 1)
+				ull = va_arg (ap, unsigned long long);
+			else
+				ull = lflag ? va_arg (ap, unsigned long) :
+					sign ? (unsigned long) va_arg (ap, int) :
+					va_arg (ap, unsigned int);
 			base = 10;
-			goto number;
+			goto numberll;
 
 		case 's':
 			s = va_arg (ap, unsigned char*);
@@ -247,7 +260,8 @@ cnt_unknown:				if (ladjust)
 				if (ul >= -2) {
 					ul = -3;
 					neg = '>';
-					goto nosign;
+					ull = ul;
+					goto nosignll;
 				}
 			} else {
 				ul = va_arg (ap, unsigned int);
@@ -256,38 +270,49 @@ cnt_unknown:				if (ladjust)
 				if (ul >= (unsigned short) -2) {
 					ul = (unsigned short) -3;
 					neg = '>';
-					goto nosign;
+					ull = ul;
+					goto nosignll;
 				}
 			}
-			goto nosign;
+			ull = ul;
+			goto nosignll;
 
 		case 'u':
-			ul = lflag ? va_arg (ap, unsigned long) :
-				va_arg (ap, unsigned int);
+			if (lflag > 1)
+				ull = va_arg (ap, unsigned long long);
+			else
+				ull = lflag ? va_arg (ap, unsigned long) :
+					va_arg (ap, unsigned int);
 			base = 10;
-			goto nosign;
+			goto nosignll;
 
 		case 'x':
 		case 'X':
-			ul = lflag ? va_arg (ap, unsigned long) :
-				va_arg (ap, unsigned int);
+			if (lflag > 1)
+				ull = va_arg (ap, unsigned long long);
+			else
+				ull = lflag ? va_arg (ap, unsigned long) :
+					va_arg (ap, unsigned int);
 			base = 16;
 			uppercase = (c == 'X');
-			goto nosign;
+			goto nosignll;
 		case 'z':
 		case 'Z':
-			ul = lflag ? va_arg (ap, unsigned long) :
-				sign ? (unsigned long) va_arg (ap, int) :
-				va_arg (ap, unsigned int);
+			if (lflag > 1)
+				ull = va_arg (ap, unsigned long long);
+			else
+				ull = lflag ? va_arg (ap, unsigned long) :
+					sign ? (unsigned long) va_arg (ap, int) :
+					va_arg (ap, unsigned int);
 			base = 16;
 			uppercase = (c == 'Z');
-			goto number;
+			goto numberll;
 
-nosign:			sign = 0;
-number:			if (sign) {
-				if ((long) ul < 0L) {
+nosignll:		sign = 0;
+numberll:		if (sign) {
+				if ((long long) ull < 0LL) {
 					neg = '-';
-					ul = -(long) ul;
+					ull = -(long long) ull;
 				} else if (sign < 0)
 					neg = '+';
 			}
@@ -295,8 +320,8 @@ number:			if (sign) {
 				extrazeros = dwidth - sizeof(nbuf) + 1;
 				dwidth = sizeof(nbuf) - 1;
 			}
-			s = ksprintn (nbuf, ul, base, dwidth, &size);
-			if (sharpflag && ul != 0) {
+			s = ksprintnll (nbuf, ull, base, dwidth, &size);
+			if (sharpflag && ull != 0) {
 				if (base == 8)
 					size++;
 				else if (base == 16)
@@ -314,7 +339,7 @@ number:			if (sign) {
 			if (neg)
 				PUTC (neg);
 
-			if (sharpflag && ul != 0) {
+			if (sharpflag && ull != 0) {
 				if (base == 8) {
 					PUTC ('0');
 				} else if (base == 16) {
@@ -463,6 +488,27 @@ ksprintn (unsigned char *nbuf, unsigned long ul, unsigned char base, int width,
 		if (--width > 0)
 			continue;
 		if (! ul)
+			break;
+	}
+	if (lenp)
+		*lenp = p - nbuf;
+	return (p);
+}
+
+static unsigned char *
+ksprintnll (unsigned char *nbuf, unsigned long long ull, unsigned char base,
+	int width, unsigned char *lenp)
+{
+	unsigned char *p;
+
+	p = nbuf;
+	*p = 0;
+	for (;;) {
+		*++p = mkhex (ull % base);
+		ull /= base;
+		if (--width > 0)
+			continue;
+		if (! ull)
 			break;
 	}
 	if (lenp)

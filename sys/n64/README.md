@@ -253,6 +253,15 @@ current N64 work is staged as follows:
 - `/root/cc-pcc-smoke.sh` verifies both driver names, `/bin/cc` and
   `/bin/pcc`: the main checks rely on the default `/` sysroot, and one final
   FPU check keeps explicit `--sysroot /` covered;
+- `/root/ll-smoke.sh` verifies the first `long long` runtime cases through
+  both `/bin/cc` and `/bin/pcc`: global initializers, signed/unsigned shifts,
+  arithmetic, compares, mixed register arguments, returns, and struct layout.
+  Native `ccom` depends on target libc `%ll` formatting when it prints
+  64-bit constants, and `ccom` bridges its internal low/high register pairs to
+  the normal o32 high/low ABI when calling `__*di3` compiler runtime helpers.
+  This smoke has been confirmed on N64 with both driver names.
+  It intentionally does not yet cover stack-passed `long long` arguments,
+  because the old MIPS `ccom` backend still has that `FUNARG` path disabled;
 - `/bin/smoke-as-vr4300` and `/bin/smoke-as-vr4300.sh` run the assembler opcode
   smoke directly on N64, using `/bin/as` by default;
 - N64 disables core dumps by default because the volatile `/var` filesystem is

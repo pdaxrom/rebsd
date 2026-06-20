@@ -881,6 +881,10 @@ int lookacmd()
         if (!strcmp(".weak", name))
             return (LWEAK);
         break;
+    case 'z':
+        if (!strcmp(".zero", name))
+            return (LSPACE);
+        break;
     }
     return (-1);
 }

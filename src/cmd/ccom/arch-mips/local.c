@@ -140,8 +140,13 @@ clocal(NODE *p)
 			if (coptype(l->n_op) != BITYPE)
 				break;
 			if (l->n_right->n_op == ICON) {
+				ty = l->n_left->n_type;
 				r = l->n_left->n_left;
 				if (r->n_type >= FLOAT && r->n_type <= LDOUBLE)
+					break;
+				if ((DEUNSIGN(ty) == LONGLONG ||
+				    DEUNSIGN(r->n_type) == LONGLONG) &&
+				    ty != r->n_type)
 					break;
 				/* Type must be correct */
 				ty = r->n_type;
