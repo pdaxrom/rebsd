@@ -87,6 +87,52 @@ check_mixed_reg_args(a, b)
 	return a == 0x11 && b == 0x0102030405060708ULL;
 }
 
+int
+check_stack_int(a, b, c, d, e)
+	int a;
+	int b;
+	int c;
+	int d;
+	int e;
+{
+	return a == 1 && b == 2 && c == 3 && d == 4 && e == 0x55667788;
+}
+
+int
+check_stack_ull_after3(a, b, c, d)
+	int a;
+	int b;
+	int c;
+	ullong d;
+{
+	return a == 1 && b == 2 && c == 3 &&
+	    d == 0x1122334455667788ULL;
+}
+
+int
+check_stack_ull_after4(a, b, c, d, e)
+	int a;
+	int b;
+	int c;
+	int d;
+	ullong e;
+{
+	return a == 1 && b == 2 && c == 3 && d == 4 &&
+	    e == 0x8877665544332211ULL;
+}
+
+int
+check_stack_double(a, b, c, d, e)
+	int a;
+	int b;
+	int c;
+	int d;
+	double e;
+{
+	return a == 1 && b == 2 && c == 3 && d == 4 &&
+	    e > 3.249 && e < 3.251;
+}
+
 main()
 {
 	llong s;
@@ -137,6 +183,14 @@ main()
 		return bad("return unsigned");
 	if (! check_mixed_reg_args(0x11, 0x0102030405060708ULL))
 		return bad("mixed register args");
+	if (! check_stack_int(1, 2, 3, 4, 0x55667788))
+		return bad("stack int arg");
+	if (! check_stack_ull_after3(1, 2, 3, 0x1122334455667788ULL))
+		return bad("stack ull arg after 3");
+	if (! check_stack_ull_after4(1, 2, 3, 4, 0x8877665544332211ULL))
+		return bad("stack ull arg after 4");
+	if (! check_stack_double(1, 2, 3, 4, 3.25))
+		return bad("stack double arg");
 
 	r = gr;
 	if (sizeof(struct llrec) != 24)

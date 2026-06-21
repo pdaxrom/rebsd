@@ -243,11 +243,13 @@ current N64 work is staged as follows:
 - the generated rootfs also stages target headers under `/include` and the
   native compiler runtime/archive set under `/lib`, including `crt0.o`,
   `libc.a`, and `libm.a`;
-- the `/lib` compiler runtime is generated as big-endian a.out in an isolated
-  `n64-native-runtime` build tree. It is not copied from the normal external
-  GCC/ELF userland artifacts, because the in-tree `ld` correctly rejects ELF
-  objects as `bad magic`. After staging, `libc.a` and `libm.a` are reindexed
-  with the N64 native `ranlib` so `__.SYMDEF` matches the rootfs file mtimes;
+- the `/lib` compiler runtime is generated as big-endian a.out for the in-tree
+  toolchain. `crt0.o` is assembled directly by the N64 native `as` from
+  `lib/startup/crt0.s`; `libc.a` and `libm.a` are built in an isolated
+  `n64-native-runtime` tree and reindexed with the N64 native `ranlib` after
+  staging, so `__.SYMDEF` matches the rootfs file mtimes. Nothing in `/lib` is
+  copied from the normal external GCC/ELF userland artifacts, because the
+  in-tree `ld` correctly rejects ELF objects as `bad magic`;
 - `/root/pcc-smoke.sh` runs the target smoke from `/var/tmp`, so it does not
   try to write compiler outputs into the read-only root filesystem;
 - `/root/cc-pcc-smoke.sh` verifies both driver names, `/bin/cc` and
@@ -255,13 +257,26 @@ current N64 work is staged as follows:
   FPU check keeps explicit `--sysroot /` covered;
 - `/root/ll-smoke.sh` verifies the first `long long` runtime cases through
   both `/bin/cc` and `/bin/pcc`: global initializers, signed/unsigned shifts,
-  arithmetic, compares, mixed register arguments, returns, and struct layout.
+  arithmetic, compares, mixed register arguments, stack-passed `int`,
+  `long long`, and `double` arguments, returns, and struct layout.
   Native `ccom` depends on target libc `%ll` formatting when it prints
   64-bit constants, and `ccom` bridges its internal low/high register pairs to
   the normal o32 high/low ABI when calling `__*di3` compiler runtime helpers.
-  This smoke has been confirmed on N64 with both driver names.
-  It intentionally does not yet cover stack-passed `long long` arguments,
-  because the old MIPS `ccom` backend still has that `FUNARG` path disabled;
+  The pre-stack-argument version of this smoke has been confirmed on N64 with
+  both driver names; the stack-argument expansion is host-built and staged for
+  the next hardware smoke;
+- `/root/types-smoke.sh` is the broad scalar/aggregate type smoke for both
+  `/bin/cc` and `/bin/pcc`. It covers signed and unsigned `char`, `short`,
+  `int`, `long`, `long long`, `enum`, pointers, function pointers, `float`,
+  `double`, `long double`, stack-passed scalar/FPU arguments, return values,
+  static/global/local initialization, `const` objects and pointers, struct
+  layout, bitfields, and big-endian union byte order;
+- N64 native `as`/`ld` keep text segments 8-byte aligned in the a.out path.
+  This is required because PCC emits local hard-float double literals in text
+  and the VR4300 faults on `ldc1` from 4-byte-only aligned addresses. The
+  linker also emits real padding between input text segments, so a start file
+  or other object with a 4-byte-only text length cannot shift the following PCC
+  object and break its internal `.p2align` guarantees;
 - `/bin/smoke-as-vr4300` and `/bin/smoke-as-vr4300.sh` run the assembler opcode
   smoke directly on N64, using `/bin/as` by default;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
@@ -1340,6 +1355,11 @@ The N64 board makefile rebuilds:
 - `src/crt0.o` from `src/startup-mips`
 - `src/libc.a` and the selected library archive set
 - the selected command subset through `src/cmd/Makefile`
+
+The native `/lib/crt0.o` staged for target-side `cc`/`pcc` is separate from
+`src/crt0.o`: it is assembled by the N64 native `as` from
+`lib/startup/crt0.s`, so target-side links do not depend on a GCC-generated
+start object.
 
 The selected source tree subset is controlled by `sys/n64/Makefile.kconf`
 using shared makefile filters:

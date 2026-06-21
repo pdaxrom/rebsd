@@ -1038,7 +1038,14 @@ offchg(NODE *p, void *arg)
 	if (l->n_op != OREG)
 		return;
 
-	switch (l->n_type) {
+	if (ISPTR(l->n_type) || ISARY(l->n_type) || ISFTN(l->n_type))
+		return;
+
+	switch (BTYPE(l->n_type)) {
+	case CHAR:
+	case UCHAR:
+	case BOOL:
+		break;
 	case SHORT:
 	case USHORT:
 		if (DEUNSIGN(p->n_type) == CHAR)
@@ -1067,8 +1074,13 @@ offchg(NODE *p, void *arg)
 		    DEUNSIGN(p->n_type) == LONG)
 			;
 		break;
+	case FLOAT:
+	case DOUBLE:
+	case LDOUBLE:
+		break;
 	default:
-		comperr("offchg: unknown type");
+		comperr("offchg: unknown type src=%x base=%x dst=%x op=%d",
+		    l->n_type, BTYPE(l->n_type), p->n_type, p->n_op);
 		break;
 	}
 }

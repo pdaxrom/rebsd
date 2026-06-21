@@ -114,8 +114,10 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Increase the N64 `u`/`u0` areas to 8 KiB so the kernel stack has enough
   headroom for nested `exec`/`namei`/FPU paths during the compiler smoke.
 - [x] Build a.out-format `/lib/crt0.o` and `/lib/libc.a` for the in-tree
-  `pcc`/`ld` path. Do not stage ELF objects from the external GCC toolchain as
-  compiler runtime files; in-tree `ld` reports those as `bad magic`.
+  `pcc`/`ld` path. `/lib/crt0.o` is assembled by the N64 native `as` from
+  `lib/startup/crt0.s`; do not stage ELF objects from the external GCC
+  toolchain as compiler runtime files, because in-tree `ld` reports those as
+  `bad magic`.
 - [x] Generate the target `/include` tree and `/lib` compiler runtime/archive
   set into the N64 rootfs from the shared build outputs, instead of
   hand-listing static headers or libraries in `rootfs.manifest`.
@@ -137,14 +139,33 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   `__umoddi3`, and shift helpers use normal o32 high/low arguments and return
   values.
 - [x] Hardware-smoke `/root/ll-smoke.sh` on N64.
+- [x] Add `/root/types-smoke.sh` and `/root/types-smoke.c` as a broad
+  target-side type implementation smoke for both `/bin/cc` and `/bin/pcc`.
+  It covers scalar sizes/returns/arguments, stack-passed scalar and FPU
+  arguments, pointer/function-pointer behavior, `float`, `double`,
+  `long double`, static/global/local initialization, `const` objects and
+  pointers, struct layout, bitfields, and big-endian union byte order.
+- [ ] Hardware-smoke `/root/types-smoke.sh` on N64 and fix any backend/FPU ABI
+  failures it exposes.
 - [ ] Audit true o32 big-endian `long long` ABI behavior in `ccom`: argument
   passing, returns, struct layout, external object layout, and helper calls.
   The old MIPS backend still has PIC32-era comments around 64-bit endian
   handling, so this should be tested as a focused ABI matrix rather than
   folded into unrelated compiler fixes.
-- [ ] Fix `ccom` stack `FUNARG` generation for `long long`/`double` arguments
+- [x] Fix `ccom` stack `FUNARG` generation for `long long`/`double` arguments
   after the four o32 argument registers are exhausted; the old MIPS backend has
-  the relevant `FUNARG` table entries disabled under `#if 0`.
+  the relevant `FUNARG` table entries disabled under `#if 0`. The host-side
+  check now builds `/root/ll-smoke.c` through a big-endian host `ccom`, then
+  assembles and links the generated a.out relocatable with the N64 native
+  `as`/`ld -r`; `kernel.z64` also builds cleanly with `fsutil --check`.
+- [x] Fix VR4300 text alignment in the in-tree a.out `as`/`ld` path. The
+  stack-argument long-long smoke exposed a hard-float `ldc1` from an address
+  shifted to 4-byte alignment after linking with a 4-byte-only start object.
+  N64 `as` now finishes text sections on an 8-byte boundary, and N64 `ld`
+  inserts real zero padding between input text segments so in-text double
+  literals remain 8-byte aligned after final link.
+- [ ] Hardware-smoke `/root/ll-smoke.sh` v3 on N64 and confirm the new stack
+  argument cases pass through both `/bin/cc` and `/bin/pcc`.
 - [ ] Review secondary compiler/interpreter paths after `ccom` works:
   `smallc`, `smlrc`, `lccom`, and their assembler output.
 

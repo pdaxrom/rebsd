@@ -1,0 +1,5 @@
+.deps/
+rootfs.stage/
+machine
+sys
+vers.c

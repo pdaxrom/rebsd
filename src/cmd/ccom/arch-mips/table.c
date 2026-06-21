@@ -1404,14 +1404,12 @@ struct optab table[] = {
  *  Function arguments
  */
 
-#if 0
-
 /* intentionally write out the register for (u)short/(u)char */
 { FUNARG,       FOREFF,
         SAREG,  TWORD|TPOINT|TUSHORT|TSHORT|TUCHAR|TCHAR,
         SANY,   TWORD|TPOINT|TUSHORT|TSHORT|TUCHAR|TCHAR,
                 0,      0,
-                "	subu $sp,$sp,4		# save function arg to stack\n"
+                "	addiu $sp,$sp,-4	# save function arg to stack\n"
 		"	sw AL,($sp)\n"
 		"	#nop\n", },
 
@@ -1419,7 +1417,7 @@ struct optab table[] = {
 	SBREG,	TLONGLONG|TULONGLONG,
 	SANY,	TLONGLONG|TULONGLONG,
 		0,	0,
-		"	addi $sp,$sp,-8		# save function arg to stack (endian problem here?\n"
+		"	addiu $sp,$sp,-8	# save function arg to stack\n"
 		"	sw UL,4($sp)\n"
 		"	sw AL,($sp)\n"
 		"	#nop\n", },
@@ -1428,7 +1426,7 @@ struct optab table[] = {
 	SCREG,	TFLOAT,
 	SANY,	TFLOAT,
 		0,	0,
-		"	addi $sp,$sp,-4		# save function arg to stack\n"
+		"	addiu $sp,$sp,-4	# save function arg to stack\n"
 		"	s.s AL,($sp)\n"
 		"	#nop\n", },
 
@@ -1436,11 +1434,9 @@ struct optab table[] = {
 	SCREG,	TDOUBLE|TLDOUBLE,
 	SANY,	TDOUBLE|TLDOUBLE,
 		0,	0,
-		"	addi $sp,$sp,-8		# save function arg to stack\n"
+		"	addiu $sp,$sp,-8	# save function arg to stack\n"
 		"	s.d AL,($sp)\n"
 		"	#nop\n", },
-
-#endif
 
 { STARG,	FOREFF,
 	SAREG,		TANY,

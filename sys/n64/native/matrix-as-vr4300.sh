@@ -152,17 +152,23 @@ do
 					;;
 				esac
 				if test -z "$reason"; then
-					dd if="$retro_o" of="$retro_text" bs=1 skip=32 \
-					    count="$text_size" > "$objcopy_log" 2>&1
-					if test $? -ne 0; then
-						reason="$name: cannot extract RetroBSD .text"
-					fi
-				fi
-				if test -z "$reason"; then
 					"$gnu_objcopy" -O binary -j .text "$gnu_o" \
 					    "$gnu_text" >> "$objcopy_log" 2>&1
 					if test $? -ne 0; then
 						reason="$name: cannot extract GNU .text"
+					fi
+				fi
+				if test -z "$reason"; then
+					gnu_size=`wc -c < "$gnu_text" | tr -d '[:space:]'`
+					if test "$text_size" -lt "$gnu_size"; then
+						reason="$name: RetroBSD .text shorter than GNU .text"
+					fi
+				fi
+				if test -z "$reason"; then
+					dd if="$retro_o" of="$retro_text" bs=1 skip=32 \
+					    count="$gnu_size" > "$objcopy_log" 2>&1
+					if test $? -ne 0; then
+						reason="$name: cannot extract RetroBSD .text"
 					fi
 				fi
 				if test -z "$reason"; then

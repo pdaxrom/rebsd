@@ -42,6 +42,8 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
     bp = geteblk();         /* allocate a buffer header */
 
     while (count) {
+        int n;
+
         bp->b_flags = B_BUSY | B_PHYS | B_INVAL | rdflg;
         bp->b_dev = swapdev;
         bp->b_bcount = count;
@@ -61,9 +63,10 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
         splx (s);
         if ((bp->b_flags & B_ERROR) || bp->b_resid)
             panic ("hard err: swap");
-        count -= count;
-        coreaddr += count;
-        blkno += btod (count);
+        n = bp->b_bcount;
+        count -= n;
+        coreaddr += n;
+        blkno += btod (n);
     }
     brelse(bp);
 }

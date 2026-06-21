@@ -151,7 +151,7 @@ check_field()
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_leaf_o" "$chain_leaf_s" || exit 1
 
 check_exec "$main_o" 00000106 00000010
-check_exec "$foo_o" 00000106 0000000c
+check_exec "$foo_o" 00000106 00000010
 
 "$nm_bin" -p "$main_o" > "$nm_main" || exit 1
 if ! grep ' T start' "$nm_main" >/dev/null; then

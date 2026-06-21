@@ -36,6 +36,11 @@
 #include "../aoutio.h"
 
 #define WORDSZ 4 /* word size in bytes */
+#ifdef TARGET_VR4300
+#define TEXT_ALIGN_BITS 3 /* VR4300 double loads require 8-byte alignment. */
+#else
+#define TEXT_ALIGN_BITS 2
+#endif
 
 /*
  * Locals beginning with L or dot are stripped off by -X flag.
@@ -87,6 +92,7 @@ enum {
     LIDENT,    /* .ident */
     LWEAK,     /* .weak */
     LLOCAL,    /* .local */
+    LLCOMM,    /* .lcomm */
     LNAN,      /* .nan */
 };
 
@@ -834,6 +840,8 @@ int lookacmd()
             return (LIDENT);
         break;
     case 'l':
+        if (!strcmp(".lcomm", name))
+            return (LLCOMM);
         if (!strcmp(".local", name))
             return (LLOCAL);
         break;
@@ -2394,7 +2402,7 @@ void pass1()
         done:
             reorder_flush();
             segm = STEXT;
-            align(2);
+            align(TEXT_ALIGN_BITS);
             segm = SDATA;
             align(2);
             segm = SSTRNG;
@@ -2525,8 +2533,13 @@ void pass1()
             nbytes = 0;
             for (;;) {
                 getexpr(&cval);
-                fputc(intval, sfile[segm]);
-                fputc(intval >> 8, sfile[segm]);
+#ifdef TARGET_BIG_ENDIAN
+                    fputc(intval >> 8, sfile[segm]);
+                    fputc(intval, sfile[segm]);
+#else
+                    fputc(intval, sfile[segm]);
+                    fputc(intval >> 8, sfile[segm]);
+#endif
                 nbytes += 2;
                 clex = getlex(&cval);
                 if (clex != ',') {
@@ -2620,14 +2633,15 @@ void pass1()
             stab[cval].n_type |= segmtype[csegm];
             break;
         case LCOMM:
-            /* .comm name,len[,alignment] */
+        case LLCOMM:
+            /* .comm/.lcomm name,len[,alignment] */
             if (getlex(&cval) != LNAME)
                 uerror("bad parameter of .comm");
             cval = lookname();
             if (stab[cval].n_type != N_UNDF && stab[cval].n_type != N_LOC &&
                 (stab[cval].n_type & N_TYPE) != N_COMM)
                 uerror("name already defined");
-            if (stab[cval].n_type & N_LOC)
+            if (stab[cval].n_type & N_LOC || clex == LLCOMM)
                 stab[cval].n_type = N_COMM;
             else
                 stab[cval].n_type = N_EXT | N_COMM;

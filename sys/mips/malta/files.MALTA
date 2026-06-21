@@ -1,0 +1,7 @@
+mips/malta/uart.c               optional malta_uart
+mips/malta/devsw.c              standard
+mips/malta/clock.c              standard
+mips/malta/machdep.c            standard
+mips/malta/romdisk.c            standard
+mips/malta/ramswap.c            standard
+mips/malta/config.c             standard

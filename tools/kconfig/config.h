@@ -129,6 +129,7 @@ extern int arch;
 extern char *archname;
 #define ARCH_PIC32 1
 #define ARCH_N64 2
+#define ARCH_MIPS 3
 
 /*
  * For each architecture, a set of CPU's may be specified as supported.

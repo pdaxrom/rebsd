@@ -1,0 +1,16 @@
+#
+# QEMU Malta, big-endian MIPS.
+#
+architecture    "mips"
+cpu             "MIPS32"
+board           "MALTA"
+
+options         "CONS_MAJOR=0", "CONS_MINOR=0"
+
+device          "malta_uart"
+
+service         malta
+service         pty     4
+
+config          unix    root on major 0 minor 0
+                        swap on major 1 minor 0

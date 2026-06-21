@@ -1,0 +1,13 @@
+#!/bin/sh
+HOME=/; export HOME
+PATH=/bin:/sbin; export PATH
+PAGER=/bin/cat; export PAGER
+
+if /sbin/mount /var >/dev/null 2>&1; then
+        :
+else
+        /sbin/mkfs /dev/ram0 >/dev/null 2>&1
+        /sbin/mount /var >/dev/null 2>&1
+fi
+
+exit 0

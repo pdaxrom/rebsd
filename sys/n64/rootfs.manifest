@@ -63,6 +63,17 @@ mode 0775
 
 file /root/ll-smoke.c
 
+file /root/sh-fail-smoke.sh
+mode 0775
+
+file /root/sh-comsubst-smoke.sh
+mode 0775
+
+file /root/types-smoke.sh
+mode 0775
+
+file /root/types-smoke.c
+
 file /root/pcc-fpu-smoke.c
 
 file /root/pcc-smoke.sh

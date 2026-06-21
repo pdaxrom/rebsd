@@ -3,7 +3,7 @@ cd /var/tmp || exit 1
 rm -f ll-cc ll-cc.s ll-cc.o ll-cc.ro \
     ll-pcc ll-pcc.s ll-pcc.o ll-pcc.ro
 
-echo "ll-smoke diag v2"
+echo "ll-smoke diag v3"
 
 echo "step 1: cc long long -S"
 cc -S -o ll-cc.s /root/ll-smoke.c || exit 1

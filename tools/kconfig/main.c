@@ -88,8 +88,12 @@ int main(int argc, char **argv)
         pic32_ioconf();
         break;
 
+    case ARCH_MIPS:
+        pic32_ioconf();
+        break;
+
     default:
-        printf("Specify architecture, e.g. ``architecture pic32''\n");
+        printf("Specify architecture, e.g. ``architecture pic32'' or ``architecture mips''\n");
         exit(1);
     }
     makefile(); /* build Makefile */

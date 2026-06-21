@@ -1,0 +1,117 @@
+#
+# Makefile template for shared MIPS ports.
+#
+include ../../../target-mips.mk
+
+TOPSRC          = ../../..
+S               = ../..
+BOARD_SRC       = ../malta
+MIPS_ROOTFS_KBYTES ?= 1024
+MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/n64/nintendo64/rootfs.stage
+MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
+MIPS_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
+MIPS_ROOTFS_STAGE = rootfs.stage
+MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
+MIPS_TRACE       ?= 0
+FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
+
+CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS
+ifeq ($(MIPS_TRACE),1)
+CPPFLAGS        += -DMIPS_TRACE
+endif
+CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc \
+                  $(CPPFLAGS) -MT $@ -MP -MD -MF .deps/$*.dep
+VERS_CFLAGS     = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(CPPFLAGS)
+ASFLAGS         = -x assembler-with-cpp -c $(CPPFLAGS) -MT $@ -MP -MD \
+                  -MF .deps/$*.dep
+FPU_ASFLAGS     = $(ASFLAGS)
+
+COMPILE_C       = ${CC} ${CFLAGS} -c $<
+COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
+COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
+
+%OBJS
+
+%CFILES
+
+SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
+SYSTEM_DEP      = Makefile ioconf.c ../malta/malta.ld
+SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "2.11 BSD Unix for Malta: local build\n";' > vers.c; \
+                  ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
+                  rm -f $@
+SYSTEM_LD       = ${LD} -nostdlib -T ../malta/malta.ld ${SYSTEM_OBJ} vers.o -o $@
+SYSTEM_LD_TAIL  = ${SIZE} $@; \
+                  ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
+                  ${NM} -n $@ > $(basename $@).nm
+
+all: unix malta-early.elf
+
+kernel: unix
+
+malta-early.o: ../malta/early_uart.S | .deps
+	$(CC) $(ASFLAGS) $< -o $@
+
+malta-early.elf: malta-early.o ../malta/malta.ld
+	$(LD) -nostdlib -T ../malta/malta.ld malta-early.o -o $@
+	$(SIZE) $@
+	$(OBJDUMP) -d -S $@ > malta-early.dis
+
+run-early: malta-early.elf
+	qemu-system-mips -M malta -m 8M -nographic -serial mon:stdio \
+	    -no-reboot -kernel malta-early.elf
+
+$(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_MANIFEST)
+	rm -rf $(MIPS_ROOTFS_STAGE)
+	mkdir -p $(MIPS_ROOTFS_STAGE)
+	cp -R $(MIPS_ROOTFS_OVERLAY)/. $(MIPS_ROOTFS_STAGE)/
+	mkdir -p $(MIPS_ROOTFS_STAGE)/bin $(MIPS_ROOTFS_STAGE)/sbin \
+	    $(MIPS_ROOTFS_STAGE)/libexec $(MIPS_ROOTFS_STAGE)/etc \
+	    $(MIPS_ROOTFS_STAGE)/root
+	for path in bin/cat bin/chmod bin/echo bin/login bin/ls bin/mkdir \
+	    bin/pwd bin/sh bin/stty bin/uname sbin/init sbin/mkfs sbin/mount \
+	    libexec/getty etc/gettytab \
+	    etc/group etc/passwd etc/profile; do \
+	    cp $(MIPS_ROOTFS_SRC)/$$path $(MIPS_ROOTFS_STAGE)/$$path; \
+	done
+	touch $@
+
+rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_MANIFEST)
+	rm -f $@
+	$(FSUTIL) --new --endian=big --size=$(MIPS_ROOTFS_KBYTES) \
+	    --manifest=$(MIPS_ROOTFS_MANIFEST) $@ $(MIPS_ROOTFS_STAGE)
+	$(FSUTIL) --check $@
+
+rootfs.o: rootfs.img
+	$(LD) -r -b binary -o $@ rootfs.img
+	$(OBJCOPY) --rename-section .data=.rootfs,alloc,load,readonly,data,contents $@
+
+ioconf.o: ioconf.c ${SYSTEM_DEP} | machine sys .deps
+	${COMPILE_C}
+
+${SYSTEM_OBJ} swapunix.o: | machine sys .deps
+
+$(FSUTIL):
+	$(MAKE) -C $(TOPSRC)/tools/fsutil
+
+reconfig ioconf.c swapunix.c: Config ../../../tools/kconfig/kconfig | machine sys
+	../../../tools/kconfig/kconfig Config
+	$(MAKE) clean
+
+machine:
+	ln -s .. $@
+
+sys:
+	ln -s ../../include $@
+
+clean clean-all:
+	rm -rf *.o *.elf *.bin *.img *.dis *.nm a.out .deps machine sys \
+	    vers.c rootfs.stage
+
+.deps:
+	mkdir -p .deps
+
+%LOAD
+
+%RULES
+
+-include .deps/*.dep

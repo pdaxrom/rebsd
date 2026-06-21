@@ -1,0 +1,103 @@
+default
+owner 0
+group 0
+dirmode 0775
+filemode 0664
+
+dir /bin
+dir /dev
+dir /etc
+dir /libexec
+dir /root
+dir /sbin
+symlink /tmp
+target var/tmp
+dir /var
+dir /var/tmp
+
+file /etc/fstab
+file /etc/gettytab
+file /etc/group
+file /etc/motd
+file /etc/passwd
+file /etc/profile
+file /etc/rc
+mode 0775
+file /etc/ttys
+
+file /root/.profile
+
+file /sbin/init
+mode 0700
+
+file /libexec/getty
+mode 0775
+
+file /bin/cat
+mode 0775
+file /bin/chmod
+mode 0775
+file /bin/echo
+mode 0775
+file /bin/login
+mode 0775
+file /bin/ls
+mode 0775
+file /bin/mkdir
+mode 0775
+file /sbin/mount
+mode 0775
+file /sbin/mkfs
+mode 0775
+file /bin/pwd
+mode 0775
+file /bin/sh
+mode 0775
+file /bin/stty
+mode 0775
+file /bin/uname
+mode 0775
+
+bdev /dev/romdisk
+major 0
+minor 0
+
+bdev /dev/swap
+major 1
+minor 0
+
+bdev /dev/ram0
+major 1
+minor 1
+
+cdev /dev/console
+major 0
+minor 0
+
+cdev /dev/null
+major 1
+minor 2
+mode 0666
+
+cdev /dev/zero
+major 1
+minor 3
+mode 0666
+
+cdev /dev/tty
+major 2
+minor 0
+
+cdev /dev/ttyS0
+major 3
+minor 0
+
+cdev /dev/ttyp0
+major 8
+minor 0
+mode 0666
+
+cdev /dev/ptyp0
+major 9
+minor 0
+mode 0666

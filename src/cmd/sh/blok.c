@@ -19,6 +19,74 @@ struct blk *bloktop; /* top of arena (last blok) */
 
 char *brkbegin;
 
+#ifdef TARGET_VR4300
+static void
+sh_diag_puts(const char *s)
+{
+    while (*s)
+        write(2, s++, 1);
+}
+
+static void
+sh_diag_hex(unsigned value)
+{
+    static const char digits[] = "0123456789abcdef";
+    char buf[10];
+    int i;
+
+    buf[0] = '0';
+    buf[1] = 'x';
+    for (i = 0; i < 8; i++)
+        buf[2 + i] = digits[(value >> (28 - i * 4)) & 0x0f];
+    write(2, buf, sizeof(buf));
+}
+
+static int
+sh_bad_blk(struct blk *p)
+{
+    if (p == NIL)
+        return 1;
+    if (brkbegin == NIL || bloktop == NIL)
+        return 0;
+    if ((char *)p < brkbegin || p > bloktop)
+        return 1;
+    if (Rcheat(p) & (BYTESPERWORD - 1))
+        return 1;
+    return 0;
+}
+
+static void
+sh_alloc_corrupt(const char *where, struct blk *p, struct blk *q,
+    unsigned rbytes)
+{
+    sh_diag_puts("sh alloc corrupt: ");
+    sh_diag_puts(where);
+    sh_diag_puts(" brkbegin=");
+    sh_diag_hex((unsigned)brkbegin);
+    sh_diag_puts(" blokp=");
+    sh_diag_hex((unsigned)blokp);
+    sh_diag_puts(" bloktop=");
+    sh_diag_hex((unsigned)bloktop);
+    sh_diag_puts(" p=");
+    sh_diag_hex((unsigned)p);
+    sh_diag_puts(" q=");
+    sh_diag_hex((unsigned)q);
+    sh_diag_puts(" rbytes=");
+    sh_diag_hex(rbytes);
+    sh_diag_puts("\n");
+    _exit(125);
+}
+
+static void
+sh_alloc_check(struct blk *p, const char *where, unsigned rbytes)
+{
+    if (sh_bad_blk(p))
+        sh_alloc_corrupt(where, p, NIL, rbytes);
+}
+#else
+#define sh_alloc_check(p, where, rbytes) ((void)0)
+#endif
+
 char *alloc(unsigned nbytes)
 {
     register unsigned rbytes = round(nbytes + BYTESPERWORD, BYTESPERWORD);
@@ -29,9 +97,17 @@ char *alloc(unsigned nbytes)
         register struct blk *q;
 
         do {
+            sh_alloc_check(p, "scan", rbytes);
             if (!busy(p)) {
-                while (!busy(q = p->word))
+                q = p->word;
+                sh_alloc_check((struct blk *)(Rcheat(q) & ~BUSY),
+                    "next", rbytes);
+                while (!busy(q)) {
                     p->word = q->word;
+                    q = p->word;
+                    sh_alloc_check((struct blk *)(Rcheat(q) & ~BUSY),
+                        "coalesce", rbytes);
+                }
                 if ((char *)q - (char *)p >= rbytes) {
                     blokp = (struct blk *)((char *)p + rbytes);
                     if (q > blokp)
@@ -42,6 +118,7 @@ char *alloc(unsigned nbytes)
             }
             q = p;
             p = (struct blk *)(Rcheat(p->word) & ~BUSY);
+            sh_alloc_check(p, "advance", rbytes);
         } while (p > q || (c++) == 0);
         addblok(rbytes);
     }
@@ -89,10 +166,18 @@ void free(void *ap)
     register struct blk *p;
 
     if ((p = ap) && p < bloktop) {
+#ifdef TARGET_VR4300
+        if (sh_bad_blk(p) || p <= (struct blk *)brkbegin)
+            sh_alloc_corrupt("free-arg", p, NIL, 0);
+#endif
 #ifdef DEBUG
         chkbptr(p);
 #endif
         --p;
+#ifdef TARGET_VR4300
+        if (sh_bad_blk(p))
+            sh_alloc_corrupt("free-head", p, NIL, 0);
+#endif
         p->word = (struct blk *)(Rcheat(p->word) & ~BUSY);
     }
 }

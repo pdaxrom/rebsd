@@ -51,8 +51,10 @@
 
 #define W 4              /* word size in bytes */
 #ifdef TARGET_VR4300
+#define TEXT_ALIGN 8     /* Preserve 8-byte alignment of in-text FPU literals. */
 #define BADDR 0x00400000 /* N64 user text base */
 #else
+#define TEXT_ALIGN W
 #define BADDR 0x7f008000 /* PIC32 user text base */
 #endif
 #define SYMDEF "__.SYMDEF"
@@ -870,7 +872,7 @@ int load1(unsigned loc, int libflg, int nloc)
         nsym += nsymbol;
 
         /* Alignment. */
-        tsize = (tsize + 3) & ~3;
+        tsize = ALIGN(tsize, TEXT_ALIGN);
         dsize = (dsize + 3) & ~3;
         bsize = (bsize + 3) & ~3;
         return (1);
@@ -1321,11 +1323,19 @@ void load2(unsigned loc)
     relocate(lp, doutb, droutb, filhdr.a_data, dorigin);
 
     torigin += filhdr.a_text;
+    while (torigin % TEXT_ALIGN) {
+        struct reloc relabs = { RABS };
+
+        fputword(0, toutb);
+        if (output_relinfo)
+            fputrel(&relabs, troutb);
+        torigin += W;
+    }
     dorigin += filhdr.a_data;
     borigin += filhdr.a_bss;
 
     /* Alignment. */
-    torigin = (torigin + 3) & ~3;
+    torigin = ALIGN(torigin, TEXT_ALIGN);
     dorigin = (dorigin + 3) & ~3;
     borigin = (borigin + 3) & ~3;
 }
