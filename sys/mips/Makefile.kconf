@@ -83,13 +83,13 @@ run-early: malta-early.elf
 $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_MANIFEST) $(MIPS_ROOTFS_OVERLAY_FILES) $(MIPS_ROOTFS_COPY_FILES)
 	rm -rf $(MIPS_ROOTFS_STAGE)
 	mkdir -p $(MIPS_ROOTFS_STAGE)
-	cp -R $(MIPS_ROOTFS_OVERLAY)/. $(MIPS_ROOTFS_STAGE)/
+	cp -pR $(MIPS_ROOTFS_OVERLAY)/. $(MIPS_ROOTFS_STAGE)/
 	mkdir -p $(MIPS_ROOTFS_STAGE)/bin $(MIPS_ROOTFS_STAGE)/sbin \
 	    $(MIPS_ROOTFS_STAGE)/lib $(MIPS_ROOTFS_STAGE)/libexec \
 	    $(MIPS_ROOTFS_STAGE)/etc \
 	    $(MIPS_ROOTFS_STAGE)/root
 	for path in $(MIPS_ROOTFS_COPY_PATHS); do \
-	    cp $(MIPS_ROOTFS_SRC)/$$path $(MIPS_ROOTFS_STAGE)/$$path; \
+	    cp -p $(MIPS_ROOTFS_SRC)/$$path $(MIPS_ROOTFS_STAGE)/$$path; \
 	done
 	touch $@
 
