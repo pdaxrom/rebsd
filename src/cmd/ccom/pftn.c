@@ -599,8 +599,24 @@ dclargs()
 		/* Must recalculate offset for oldstyle args here */
 		argoff = ARGINIT;
 		for (i = 0; i < nparams; i++) {
+			TWORD stype;
+			union dimfun *sdf;
+			struct attr *sap;
+
 			parr[i]->soffset = NOOFFSET;
-			oalloc(parr[i], &argoff);
+			if (parr[i]->stype == FLOAT) {
+				stype = parr[i]->stype;
+				sdf = parr[i]->sdf;
+				sap = parr[i]->sap;
+				parr[i]->stype = DOUBLE;
+				parr[i]->sdf = NULL;
+				parr[i]->sap = MKAP(DOUBLE);
+				oalloc(parr[i], &argoff);
+				parr[i]->stype = stype;
+				parr[i]->sdf = sdf;
+				parr[i]->sap = sap;
+			} else
+				oalloc(parr[i], &argoff);
 		}
 	}
 
@@ -1277,7 +1293,7 @@ oalloc(struct symtab *p, int *poff )
 	if (p->sclass == PARAM && (p->stype == CHAR || p->stype == UCHAR ||
 	    p->stype == SHORT || p->stype == USHORT || p->stype == BOOL)) {
 		off = upoff(SZINT, ALINT, &noff);
-#ifndef RTOLBYTES
+#if !defined(RTOLBYTES) || defined(TARGET_BIG_ENDIAN)
 		off = noff - tsz;
 #endif
 	} else {

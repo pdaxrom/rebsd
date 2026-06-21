@@ -83,7 +83,7 @@ N64_CONS_MAJOR = $(patsubst -DCONS_MAJOR=%,%,$(filter -DCONS_MAJOR=%,$(PARAM)))
 N64_CONS_MINOR = $(patsubst -DCONS_MINOR=%,%,$(filter -DCONS_MINOR=%,$(PARAM)))
 N64_PTY_ENABLED = $(filter -DPTY_ENABLED,$(PARAM))
 N64_PTY_NUNITS = $(patsubst -DPTY_NUNITS=%,%,$(filter -DPTY_NUNITS=%,$(PARAM)))
-N64_CRT0_SRCS = $(shell find $(TOPSRC)/src/startup-mips -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_CRT0_SRCS = $(N64_NATIVE_CRT0_SRC)
 N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 N64_LIBM_SRCS = $(shell find $(TOPSRC)/src/libm -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBUTIL_SRCS = $(shell find $(TOPSRC)/src/libutil -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
@@ -133,8 +133,7 @@ N64_NATIVE_RUNTIME_SRCS = $(N64_NATIVE_TOOL_SRCS) $(N64_INCLUDE_SRCS) \
 N64_AWK_SRCS = $(shell find $(TOPSRC)/src/cmd/awk -type f \( -name '*.[chly]' -o -name Makefile -o -name tokenscript \) 2>/dev/null)
 N64_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/opt/bison/bin/bison,bison)
 N64_YACC ?= $(N64_BISON) -y
-N64_SRC_LIBS = startup-mips libc libm libutil libtermlib libcurses \
-               libvmf libreadline libtcl
+N64_SRC_LIBS = libc libm libutil libtermlib libcurses libvmf libreadline libtcl
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = calendar chown chroot compress cpp date2 deco diff emg env fbset \
@@ -383,12 +382,12 @@ rootfs.img: $(FSUTIL) $(N64_ROOTFS_BUILD_MANIFEST) $(N64_ROOTFS_USER_STAMP)
 	$(FSUTIL) --check $@
 
 $(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
-	$(N64_SRC_MAKE) startup-mips
+	$(N64_PREFIX)gcc $(N64_ARCH) $(N64_CODE) -x assembler-with-cpp -c $< -o $@
 
 $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 	$(N64_SRC_MAKE) libc
 
-$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) $(N64_LIBUTIL_SRCS) $(N64_LIBTERMLIB_SRCS) $(N64_LIBCURSES_SRCS) $(N64_LIBVMF_SRCS) $(N64_LIBREADLINE_SRCS) $(N64_LIBTCL_SRCS) $(N64_USER_SRCS) $(N64_AWK_SRCS)
+$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) $(N64_LIBUTIL_SRCS) $(N64_LIBTERMLIB_SRCS) $(N64_LIBCURSES_SRCS) $(N64_LIBVMF_SRCS) $(N64_LIBREADLINE_SRCS) $(N64_LIBTCL_SRCS) $(N64_USER_SRCS) $(N64_AWK_SRCS)
 	$(N64_SRC_MAKE) -B all
 	$(N64_AWK_MAKE) awk
 	touch $@

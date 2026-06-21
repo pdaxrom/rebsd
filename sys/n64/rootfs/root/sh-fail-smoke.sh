@@ -14,8 +14,7 @@ echo ".text" > $src
 echo "start:" >> $src
 echo '	movn $2,$3,$4' >> $src
 
-i=0
-while test $i -lt 8
+for i in 0 1 2 3 4 5 6 7
 do
 	echo "sh-fail-smoke: iteration $i"
 	if as -EB -mips3 -march=vr4300 -o $obj $src
@@ -25,7 +24,6 @@ do
 		exit 1
 	fi
 	echo "sh-fail-smoke: parent shell survived $i"
-	i=`expr $i + 1`
 done
 
 rm -f $src $obj

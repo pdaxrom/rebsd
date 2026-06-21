@@ -331,6 +331,52 @@ param_float(struct symtab *sym, int *regp, int dotemps)
 	NODE *p, *q, *t;
 	int tmpnr;
 
+	if (oldstyle) {
+		int reg = *regp;
+		int navail;
+		TWORD stype;
+		union dimfun *sdf;
+		struct attr *sap;
+
+		++reg;
+		reg &= ~1;
+		navail = nargregs - (reg - A0);
+
+		if (navail >= 2) {
+			t = tempnode(0, LONGLONG, 0, MKAP(LONGLONG));
+			tmpnr = regno(t);
+			q = block(REG, NIL, NIL, LONGLONG, 0, MKAP(LONGLONG));
+			q->n_rval = A0A1 + (reg - A0);
+			p = buildtree(ASSIGN, t, q);
+			ecomp(p);
+
+			q = tempnode(tmpnr, DOUBLE, 0, MKAP(DOUBLE));
+			*regp = reg + 2;
+		} else {
+			stype = sym->stype;
+			sdf = sym->sdf;
+			sap = sym->sap;
+			sym->stype = DOUBLE;
+			sym->sdf = NULL;
+			sym->sap = MKAP(DOUBLE);
+			q = nametree(sym);
+			sym->stype = stype;
+			sym->sdf = sdf;
+			sym->sap = sap;
+			*regp = reg + 2;
+		}
+
+		if (dotemps) {
+			p = tempnode(0, FLOAT, 0, MKAP(FLOAT));
+			sym->soffset = regno(p);
+			sym->sflags |= STNODE;
+		} else
+			p = nametree(sym);
+		p = buildtree(ASSIGN, p, q);
+		ecomp(p);
+		return;
+	}
+
 	t = tempnode(0, INT, 0, MKAP(INT));
 	tmpnr = regno(t);
 	q = block(REG, NIL, NIL, INT, 0, MKAP(INT));
@@ -385,9 +431,12 @@ bfcode(struct symtab **sp, int cnt)
         /* recalculate the arg offset and create TEMP moves */
         for (i = 0; i < cnt; i++) {
 
-		if ((reg > lastreg) && !xtemps)
-			break;
-		else if (reg > lastreg) 
+		if ((reg > lastreg) && !xtemps) {
+			if (oldstyle && sp[i]->stype == FLOAT)
+				param_float(sp[i], &reg, 1);
+			else
+				break;
+		} else if (reg > lastreg)
 			putintemp(sp[i]);
 		else if (sp[i]->stype == STRTY || sp[i]->stype == UNIONTY)
 			param_struct(sp[i], &reg);

@@ -7,6 +7,7 @@ filemode 0664
 dir /bin
 dir /dev
 dir /etc
+dir /lib
 dir /libexec
 dir /root
 dir /sbin
@@ -27,35 +28,116 @@ file /etc/ttys
 
 file /root/.profile
 
+file /root/cc-pcc-smoke.sh
+mode 0775
+
+file /root/ll-smoke.c
+
+file /root/ll-smoke.sh
+mode 0775
+
+file /root/pcc-fpu-smoke.c
+
+file /root/pcc-smoke.c
+
+file /root/pcc-smoke.sh
+mode 0775
+
+file /root/sh-comsubst-smoke.sh
+mode 0775
+
+file /root/sh-fail-smoke.sh
+mode 0775
+
+file /root/types-smoke.c
+
+file /root/types-smoke.sh
+mode 0775
+
 file /sbin/init
 mode 0700
+
+file /sbin/mkfs
+mode 0775
+
+file /sbin/mount
+mode 0775
+
+file /lib/crt0.o
+
+file /lib/libc.a
+
+file /lib/libm.a
+
+file /libexec/ccom
+mode 0775
 
 file /libexec/getty
 mode 0775
 
+file /bin/ar
+mode 0775
+
+file /bin/as
+mode 0775
+
 file /bin/cat
+mode 0775
+file /bin/cc
 mode 0775
 file /bin/chmod
 mode 0775
+file /bin/cpp
+mode 0775
 file /bin/echo
+mode 0775
+file /bin/expr
+mode 0775
+file /bin/false
+mode 0775
+file /bin/ld
 mode 0775
 file /bin/login
 mode 0775
 file /bin/ls
 mode 0775
+file /bin/matrix-as-vr4300
+mode 0775
 file /bin/mkdir
 mode 0775
-file /sbin/mount
+file /bin/nm
 mode 0775
-file /sbin/mkfs
+file /bin/od
+mode 0775
+file /bin/pcc
 mode 0775
 file /bin/pwd
 mode 0775
+file /bin/ranlib
+mode 0775
+file /bin/rm
+mode 0775
+file /bin/sed
+mode 0775
 file /bin/sh
+mode 0775
+file /bin/size
+mode 0775
+file /bin/smoke-as-vr4300
+mode 0775
+file /bin/strip
 mode 0775
 file /bin/stty
 mode 0775
+file /bin/test
+mode 0775
+file /bin/tr
+mode 0775
+file /bin/true
+mode 0775
 file /bin/uname
+mode 0775
+file /bin/wc
 mode 0775
 
 bdev /dev/romdisk

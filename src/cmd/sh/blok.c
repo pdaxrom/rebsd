@@ -50,6 +50,8 @@ sh_bad_blk(struct blk *p)
         return 0;
     if ((char *)p < brkbegin || p > bloktop)
         return 1;
+    if (brkend != NIL && (char *)p >= brkend)
+        return 1;
     if (Rcheat(p) & (BYTESPERWORD - 1))
         return 1;
     return 0;
@@ -147,6 +149,19 @@ void addblok(unsigned reqd)
     reqd += brkincr;
     reqd &= ~(brkincr - 1);
     blokp = bloktop;
+#ifdef TARGET_VR4300
+    {
+        char *needbrk;
+        unsigned grow;
+
+        needbrk = (char *)((struct blk *)(Rcheat(bloktop) + reqd) + 2);
+        if (needbrk > brkend) {
+            grow = round((unsigned)(needbrk - brkend), BRKINCR);
+            if (setbrk(grow) == (char *)-1)
+                error(nostack);
+        }
+    }
+#endif
     bloktop = bloktop->word = (struct blk *)(Rcheat(bloktop) + reqd);
     bloktop->word = (struct blk *)(brkbegin + 1);
     {

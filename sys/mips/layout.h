@@ -20,9 +20,9 @@
  *   0x00000000..0x000fffff  firmware/vectors/unused low RAM
  *   0x00100000..0x002fffff  kernel ELF
  *   0x00300000..0x004fffff  wired kuseg user window
- *   0x00500000..0x0057ffff  /var ramdisk
- *   0x00580000..0x007fffff  RAM swap
- *   0x1fc80000..0x1fd7ffff  root filesystem in Malta boot ROM window
+ *   0x00500000..0x005fffff  /var ramdisk
+ *   0x00600000..0x007fffff  RAM swap
+ *   0x1fc80000..0x1fe7ffff  root filesystem in Malta boot ROM window
  */
 #define MALTA_PHYS_RAM_BASE            0x00000000
 #define MALTA_RAM_SIZE                 MIPS_SIZE_8M
@@ -44,8 +44,9 @@
 #define MIPS_USER_VADDR_END            (MIPS_USER_VADDR_START + MIPS_USER_MAXMEM)
 
 #define MALTA_RAMDISK_VAR_PHYS_START   0x00500000
-#define MALTA_RAMDISK_VAR_BYTES        MIPS_SIZE_512K
-#define MALTA_RAMSWAP_PHYS_START       0x00580000
+#define MALTA_RAMDISK_VAR_BYTES        MIPS_SIZE_1M
+#define MALTA_RAMSWAP_PHYS_START       (MALTA_RAMDISK_VAR_PHYS_START + \
+                                         MALTA_RAMDISK_VAR_BYTES)
 #define MALTA_RAMSWAP_BYTES            (MALTA_RAM_SIZE - MALTA_RAMSWAP_PHYS_START)
 
 #endif

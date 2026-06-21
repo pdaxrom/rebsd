@@ -19,8 +19,7 @@ echo '	.half 0x9abc' >> $src
 
 as -EB -mips3 -march=vr4300 -o $obj $src || exit 1
 
-i=0
-while test $i -lt 8
+for i in 0 1 2 3 4 5 6 7
 do
 	echo "sh-comsubst-smoke: iteration $i"
 	bytes=`od -b $obj | tr -d ' \n'`
@@ -34,7 +33,6 @@ do
 		;;
 	esac
 	echo "sh-comsubst-smoke: parent shell survived $i"
-	i=`expr $i + 1`
 done
 
 rm -f $src $obj

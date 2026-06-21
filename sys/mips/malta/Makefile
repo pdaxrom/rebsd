@@ -6,6 +6,8 @@ PARAM += -DPTY_ENABLED
 PARAM += -DPTY_NUNITS=4
 PARAM += -DCONS_MINOR=0
 PARAM += -DCONS_MAJOR=0
+PARAM += -DHW_MACHINE_NAME=\"mips\"
+PARAM += -DHW_MODEL_NAME='"MIPS Malta 24Kf"'
 MALTA_CPU_TUNE ?= 24kf
 MIPS_ARCH ?= -EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE)
 #
@@ -16,16 +18,26 @@ include ../../../target-mips.mk
 TOPSRC          = ../../..
 S               = ../..
 BOARD_SRC       = ../malta
-MIPS_ROOTFS_KBYTES ?= 1024
+MIPS_ROOTFS_KBYTES ?= 2048
 MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/n64/nintendo64/rootfs.stage
 MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
-MIPS_ROOTFS_COPY_PATHS = bin/cat bin/chmod bin/echo bin/login bin/ls bin/mkdir \
-    bin/pwd bin/sh bin/stty bin/uname sbin/init sbin/mkfs sbin/mount \
-    libexec/getty etc/gettytab etc/group etc/passwd etc/profile
+MIPS_ROOTFS_COPY_PATHS = \
+    bin/ar bin/as bin/cat bin/cc bin/chmod bin/cpp bin/echo bin/expr \
+    bin/false bin/ld bin/login bin/ls bin/matrix-as-vr4300 bin/mkdir \
+    bin/nm bin/od bin/pcc bin/pwd bin/ranlib bin/rm bin/sed bin/sh \
+    bin/size bin/smoke-as-vr4300 bin/strip bin/stty bin/test bin/tr \
+    bin/true bin/uname bin/wc \
+    sbin/init sbin/mkfs sbin/mount \
+    lib/crt0.o lib/libc.a lib/libm.a libexec/ccom libexec/getty \
+    etc/gettytab etc/group etc/passwd etc/profile \
+    root/cc-pcc-smoke.sh root/ll-smoke.c root/ll-smoke.sh \
+    root/pcc-fpu-smoke.c root/pcc-smoke.c root/pcc-smoke.sh \
+    root/sh-comsubst-smoke.sh root/sh-fail-smoke.sh root/types-smoke.c \
+    root/types-smoke.sh
 MIPS_ROOTFS_COPY_FILES = $(addprefix $(MIPS_ROOTFS_SRC)/,$(MIPS_ROOTFS_COPY_PATHS))
 MIPS_TRACE       ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
@@ -119,7 +131,8 @@ $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_MANIFEST) $(MIPS_ROOTFS_OVERLAY_FILES) $(MIP
 	mkdir -p $(MIPS_ROOTFS_STAGE)
 	cp -R $(MIPS_ROOTFS_OVERLAY)/. $(MIPS_ROOTFS_STAGE)/
 	mkdir -p $(MIPS_ROOTFS_STAGE)/bin $(MIPS_ROOTFS_STAGE)/sbin \
-	    $(MIPS_ROOTFS_STAGE)/libexec $(MIPS_ROOTFS_STAGE)/etc \
+	    $(MIPS_ROOTFS_STAGE)/lib $(MIPS_ROOTFS_STAGE)/libexec \
+	    $(MIPS_ROOTFS_STAGE)/etc \
 	    $(MIPS_ROOTFS_STAGE)/root
 	for path in $(MIPS_ROOTFS_COPY_PATHS); do \
 	    cp $(MIPS_ROOTFS_SRC)/$$path $(MIPS_ROOTFS_STAGE)/$$path; \

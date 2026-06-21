@@ -51,6 +51,7 @@ $BB0_8:                                 #   in Loop: Header=BB0_4 Depth=1
 	.set	at
 	.set	macro
 	.set	reorder
+	.end	_start
                                         # -- End function
 	.type	$LC0,@object                   # @.str
 	.section	.rodata.str1.1,"aMS",@progbits,1

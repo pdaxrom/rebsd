@@ -61,8 +61,16 @@ void tdystak(char *x) /* try to bring stack back to x */
 
 void stakchk()
 {
-    if ((brkend - stakbas) > BRKINCR + BRKINCR)
+    if ((brkend - stakbas) > BRKINCR + BRKINCR) {
+#ifdef TARGET_VR4300
+        extern struct blk *bloktop;
+        char *newbrk = brkend - BRKINCR;
+
+        if (bloktop != NIL && newbrk <= (char *)(bloktop + 2))
+            return;
+#endif
         setbrk(-BRKINCR);
+    }
 }
 
 char *cpystak(char *x)
