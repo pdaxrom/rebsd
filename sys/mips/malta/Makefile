@@ -33,7 +33,8 @@ MIPS_ROOTFS_COPY_PATHS = \
     sbin/init sbin/mkfs sbin/mount \
     lib/crt0.o lib/libc.a lib/libm.a libexec/ccom libexec/getty \
     etc/gettytab etc/group etc/passwd etc/profile \
-    root/cc-pcc-smoke.sh root/ll-smoke.c root/ll-smoke.sh \
+    root/cc-pcc-smoke.sh root/ll-abi-smoke.c root/ll-abi-smoke.s \
+    root/ll-abi-smoke.sh root/ll-smoke.c root/ll-smoke.sh \
     root/pcc-fpu-smoke.c root/pcc-smoke.c root/pcc-smoke.sh \
     root/sh-comsubst-smoke.sh root/sh-fail-smoke.sh root/types-smoke.c \
     root/types-smoke.sh

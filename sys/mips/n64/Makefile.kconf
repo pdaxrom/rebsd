@@ -511,11 +511,21 @@ smoke-aout-toolchain: $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
 .PHONY: smoke-host-pcc smoke-host-ccom
 smoke-host-pcc: $(N64_HOST_CPP) $(N64_HOST_CCOM) $(N64_NATIVE_AS) \
     $(N64_NATIVE_LD) $(N64_HOST_PCC_SMOKE_SCRIPT) \
-    $(TOPSRC)/sys/mips/n64/rootfs/root/types-smoke.c
+    $(TOPSRC)/sys/mips/n64/rootfs/root/types-smoke.c \
+    $(TOPSRC)/sys/mips/n64/rootfs/root/ll-smoke.c \
+    $(TOPSRC)/sys/mips/n64/rootfs/root/ll-abi-smoke.c
 	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
 	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
 	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
 	    $(TOPSRC)/sys/mips/n64/rootfs/root/types-smoke.c
+	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
+	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
+	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
+	    $(TOPSRC)/sys/mips/n64/rootfs/root/ll-smoke.c
+	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
+	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
+	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
+	    $(TOPSRC)/sys/mips/n64/rootfs/root/ll-abi-smoke.c
 
 smoke-host-ccom: smoke-host-pcc
 

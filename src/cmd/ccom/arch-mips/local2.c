@@ -543,10 +543,6 @@ static void
 emulop(NODE *p)
 {
 	char *ch = NULL;
-	int llongop, twollargs;
-
-	llongop = (DEUNSIGN(p->n_type) == LONGLONG);
-	twollargs = (p->n_op == DIV || p->n_op == MOD);
 
 	if (p->n_op == LS && DEUNSIGN(p->n_type) == LONGLONG) ch = "ashldi3";
 	else if (p->n_op == LS && (DEUNSIGN(p->n_type) == LONG ||
@@ -587,28 +583,10 @@ emulop(NODE *p)
 	else if (p->n_op == UMINUS && p->n_type == LONG) ch = "negsi2";
 
 	else ch = 0, comperr("ZE");
-	if (llongop) {
-		printf("\tmove %s,%s\t# longlong helper ABI: arg0 high/low\n",
-		    rnames[V0], rnames[A0]);
-		printf("\tmove %s,%s\n", rnames[A0], rnames[A1]);
-		printf("\tmove %s,%s\n", rnames[A1], rnames[V0]);
-		if (twollargs) {
-			printf("\tmove %s,%s\t# longlong helper ABI: arg1 high/low\n",
-			    rnames[V0], rnames[A2]);
-			printf("\tmove %s,%s\n", rnames[A2], rnames[A3]);
-			printf("\tmove %s,%s\n", rnames[A3], rnames[V0]);
-		}
-	}
 	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\tjal __%s\t# emulated operation\n", exname(ch));
 	printf("\tnop\n");
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
-	if (llongop) {
-		printf("\tmove %s,%s\t# longlong helper ABI: result low/high\n",
-		    rnames[A0], rnames[V0]);
-		printf("\tmove %s,%s\n", rnames[V0], rnames[V1]);
-		printf("\tmove %s,%s\n", rnames[V1], rnames[A0]);
-	}
 }
 
 /*
@@ -900,9 +878,15 @@ insput(NODE * p)
 static void
 print_reg64name(FILE *fp, int rval, int hi)
 {
-        int off = 4 * (hi != 0);
+        int off;
 	char *regname = rnames[rval];
 
+#ifdef TARGET_BIG_ENDIAN
+	if (GCLASS(rval) == CLASSB)
+		hi = !hi;
+#endif
+
+        off = 4 * (hi != 0);
         fprintf(fp, "%c%c",
                  regname[off],
                  regname[off + 1]);
@@ -1062,17 +1046,20 @@ offchg(NODE *p, void *arg)
 		break;
 	case LONGLONG:
 	case ULONGLONG:
-		/*
-		 * This backend stores 64-bit integers as low word at AL and
-		 * high word at UL even for big-endian N64 output.
-		 */
+#ifdef TARGET_BIG_ENDIAN
+		if (DEUNSIGN(p->n_type) == CHAR)
+			l->n_lval += 7;
+		else if (DEUNSIGN(p->n_type) == SHORT)
+			l->n_lval += 6;
+		else if (DEUNSIGN(p->n_type) == INT ||
+		    DEUNSIGN(p->n_type) == LONG)
+			l->n_lval += 4;
+#else
 		if (DEUNSIGN(p->n_type) == CHAR)
 			l->n_lval += 3;
 		else if (DEUNSIGN(p->n_type) == SHORT)
 			l->n_lval += 2;
-		else if (DEUNSIGN(p->n_type) == INT ||
-		    DEUNSIGN(p->n_type) == LONG)
-			;
+#endif
 		break;
 	case FLOAT:
 	case DOUBLE:
@@ -1152,7 +1139,13 @@ rmove(int s, int d, TWORD t)
         switch (t) {
         case LONGLONG:
         case ULONGLONG:
-                if (s == d+1) {
+		{
+		int low_first = (s == d + 1);
+#ifdef TARGET_BIG_ENDIAN
+		if (GCLASS(s) == CLASSB && GCLASS(d) == CLASSB)
+			low_first = (d == s + 1);
+#endif
+                if (low_first) {
                         /* dh = sl, copy low word first */
                         printf("\tmove ");
 			print_reg64name(stdout, d, 0);
@@ -1177,6 +1170,7 @@ rmove(int s, int d, TWORD t)
 			print_reg64name(stdout, s, 0);
 			printf("\n");
                 }
+		}
                 break;
 	case FLOAT:
 	case DOUBLE:

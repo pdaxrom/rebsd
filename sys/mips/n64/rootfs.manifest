@@ -63,6 +63,13 @@ mode 0775
 
 file /root/ll-smoke.c
 
+file /root/ll-abi-smoke.sh
+mode 0775
+
+file /root/ll-abi-smoke.c
+
+file /root/ll-abi-smoke.s
+
 file /root/sh-fail-smoke.sh
 mode 0775
 

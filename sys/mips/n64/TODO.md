@@ -134,10 +134,10 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   native `long long` runtime cases through both `/bin/cc` and `/bin/pcc`:
   global initializers, signed/unsigned shifts, arithmetic, compares, mixed
   register arguments, returns, and struct layout.
-- [x] Bridge `ccom` long-long helper calls to the compiler-runtime ABI:
-  internal pairs are low/high, while `__divdi3`, `__udivdi3`, `__moddi3`,
-  `__umoddi3`, and shift helpers use normal o32 high/low arguments and return
-  values.
+- [x] Make `ccom` emit big-endian integer 64-bit pairs through the normal o32
+  high/low physical register ABI while keeping its internal pair bookkeeping
+  low/high. This also makes `__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`,
+  and shift helper calls use the ABI order without an ad-hoc swap wrapper.
 - [x] Hardware-smoke `/root/ll-smoke.sh` on N64.
 - [x] Add `/root/types-smoke.sh` and `/root/types-smoke.c` as a broad
   target-side type implementation smoke for both `/bin/cc` and `/bin/pcc`.
@@ -147,11 +147,13 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   pointers, struct layout, bitfields, and big-endian union byte order.
 - [x] Hardware-smoke `/root/types-smoke.sh` on N64 and confirm the broad
   backend/FPU ABI type matrix passes.
-- [ ] Audit true o32 big-endian `long long` ABI behavior in `ccom`: argument
-  passing, returns, struct layout, external object layout, and helper calls.
-  The old MIPS backend still has PIC32-era comments around 64-bit endian
-  handling, so this should be tested as a focused ABI matrix rather than
-  folded into unrelated compiler fixes.
+- [x] Audit and fix true o32 big-endian `long long` ABI behavior in `ccom`:
+  register arguments, stack arguments, returns, struct layout/alignment,
+  external object layout, and helper calls.
+- [x] QEMU-smoke `/root/ll-abi-smoke.sh` on Malta and confirm both `/bin/cc`
+  and `/bin/pcc` pass the focused C/assembly `long long` ABI matrix.
+- [x] Hardware-smoke `/root/ll-abi-smoke.sh` on N64. This is the focused
+  C/assembly ABI check for the `long long` fixes above.
 - [x] Fix `ccom` stack `FUNARG` generation for `long long`/`double` arguments
   after the four o32 argument registers are exhausted; the old MIPS backend has
   the relevant `FUNARG` table entries disabled under `#if 0`. The host-side

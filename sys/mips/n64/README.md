@@ -260,10 +260,16 @@ current N64 work is staged as follows:
   arithmetic, compares, mixed register arguments, stack-passed `int`,
   `long long`, and `double` arguments, returns, and struct layout.
   Native `ccom` depends on target libc `%ll` formatting when it prints
-  64-bit constants, and `ccom` bridges its internal low/high register pairs to
-  the normal o32 high/low ABI when calling `__*di3` compiler runtime helpers.
+  64-bit constants. On big-endian MIPS, `ccom` keeps its internal 64-bit
+  register pair order as low/high, but emits integer pairs through the normal
+  o32 high/low physical register ABI and stores 64-bit objects high word first.
   The current v3 smoke, including the stack-argument expansion, has been
   confirmed on N64 with both driver names;
+- `/root/ll-abi-smoke.sh` is the focused o32 big-endian `long long` ABI
+  check. It combines C and hand-written assembly to verify external object
+  layout, struct member layout/alignment, register arguments, stack arguments,
+  C-to-assembly calls, assembly-to-C calls, and return values through both
+  `/bin/cc` and `/bin/pcc`;
 - `/root/types-smoke.sh` is the broad scalar/aggregate type smoke for both
   `/bin/cc` and `/bin/pcc`. It covers signed and unsigned `char`, `short`,
   `int`, `long`, `long long`, `enum`, pointers, function pointers, `float`,

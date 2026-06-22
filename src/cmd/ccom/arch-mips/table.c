@@ -45,6 +45,40 @@
 #define TSWORD TINT|TLONG
 #define TWORD TUWORD|TSWORD
 
+#ifdef TARGET_BIG_ENDIAN
+#define MIPS_LL_STORE_MEM \
+	"	sw UR,AL		# store (u)longlong\n" \
+	"	nop\n" \
+	"	sw AR,UL\n" \
+	"	nop\n"
+#define MIPS_LL_LOAD_MEM \
+	"	lw U1,AL	# load (u)longlong to reg\n" \
+	"	nop\n" \
+	"	lw A1,UL\n" \
+	"	nop\n"
+#define MIPS_LL_PUSH_ARG \
+	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
+	"	sw UL,($sp)\n" \
+	"	sw AL,4($sp)\n" \
+	"	#nop\n"
+#else
+#define MIPS_LL_STORE_MEM \
+	"	sw UR,UL		# store (u)longlong\n" \
+	"	nop\n" \
+	"	sw AR,AL\n" \
+	"	nop\n"
+#define MIPS_LL_LOAD_MEM \
+	"	lw U1,UL	# load (u)longlong to reg\n" \
+	"	nop\n" \
+	"	lw A1,AL\n" \
+	"	nop\n"
+#define MIPS_LL_PUSH_ARG \
+	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
+	"	sw UL,4($sp)\n" \
+	"	sw AL,($sp)\n" \
+	"	#nop\n"
+#endif
+
 struct optab table[] = {
 /* First entry must be an empty entry */
 { -1, FOREFF, SANY, TANY, SANY, TANY, 0, 0, "", },
@@ -904,10 +938,7 @@ struct optab table[] = {
 	SOREG|SNAME,	TLONGLONG|TULONGLONG,
 	SBREG,		TLONGLONG|TULONGLONG,
 		0,	RDEST,
-      		"	sw UR,UL		# store (u)longlong\n"
-		"	nop\n"
-      		"	sw AR,AL\n"
-		"	nop\n", },
+		MIPS_LL_STORE_MEM, },
 
 { ASSIGN,	FOREFF|INBREG,
 	SBREG,		TLONGLONG|TULONGLONG,
@@ -1103,10 +1134,7 @@ struct optab table[] = {
 	SANY,		TANY,
 	SOREG|SNAME,	TLONGLONG|TULONGLONG,
 		NBREG,	RESC1,
-		"	lw U1,UL	# load (u)longlong to reg\n"
-		"	nop\n"
-		"	lw A1,AL\n"
-      		"	nop\n", },
+		MIPS_LL_LOAD_MEM, },
 
 { OPLTYPE,	INAREG,
 	SANY,	TANY,
@@ -1417,10 +1445,7 @@ struct optab table[] = {
 	SBREG,	TLONGLONG|TULONGLONG,
 	SANY,	TLONGLONG|TULONGLONG,
 		0,	0,
-		"	addiu $sp,$sp,-8	# save function arg to stack\n"
-		"	sw UL,4($sp)\n"
-		"	sw AL,($sp)\n"
-		"	#nop\n", },
+		MIPS_LL_PUSH_ARG, },
 
 { FUNARG,	FOREFF,
 	SCREG,	TFLOAT,

@@ -498,9 +498,9 @@ ninval(CONSZ off, int fsz, NODE *p)
                 j = p->n_lval & 0xffffffff;
                 p->n_type = INT;
 		if (bigendian) {
-			p->n_lval = j;
-	                ninval(off, 32, p);
 			p->n_lval = i;
+	                ninval(off, 32, p);
+			p->n_lval = j;
 			ninval(off+32, 32, p);
 		} else {
 			p->n_lval = i;
