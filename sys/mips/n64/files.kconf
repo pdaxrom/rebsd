@@ -55,30 +55,30 @@ kernel/vm_swp.c                 standard
 #
 # Nintendo 64 platform.
 #
-n64/n64cart_uart.c              optional n64cart
-n64/n64cart_rgbled.c            optional n64cart
-n64/n64cart_flash.c             optional n64cart
-n64/romfs_core.c                optional n64cart
-n64/romfs_vfs.c                 optional n64cart
-n64/console_null.c              standard
-n64/video.c                     standard
-n64/video_console.c             standard
-n64/n64int.c                    standard
-n64/si.c                        standard
-n64/joybus.c                    standard
-n64/cons.c                      standard
-n64/devsw.c                     standard
-n64/clock.c                     standard
-n64/machdep.c                   standard
-n64/exception_entry.S           standard compile-with "${COMPILE_S}"
-n64/exception.c                 standard
-n64/fpu.S                       standard compile-with "${COMPILE_FPU_S}"
-n64/rompak.c                    standard
-n64/memory.c                    standard
-n64/romdisk.c                   standard
-n64/ramswap.c                   standard
-n64/signal.c                    standard
-n64/sysctl.c                    standard
-n64/config.c                    standard
-n64/libkern.c                   standard
-n64/stubs.c                     standard
+mips/n64/n64cart_uart.c              optional n64cart
+mips/n64/n64cart_rgbled.c            optional n64cart
+mips/n64/n64cart_flash.c             optional n64cart
+mips/n64/romfs_core.c                optional n64cart
+mips/n64/romfs_vfs.c                 optional n64cart
+mips/n64/console_null.c              standard
+mips/n64/video.c                     standard
+mips/n64/video_console.c             standard
+mips/n64/n64int.c                    standard
+mips/n64/si.c                        standard
+mips/n64/joybus.c                    standard
+mips/n64/cons.c                      standard
+mips/n64/devsw.c                     standard
+mips/n64/clock.c                     standard
+mips/n64/machdep.c                   standard
+mips/n64/exception_entry.S           standard compile-with "${COMPILE_S}"
+mips/n64/exception.c                 standard
+mips/n64/fpu.S                       standard compile-with "${COMPILE_FPU_S}"
+mips/n64/rompak.c                    standard
+mips/n64/memory.c                    standard
+mips/n64/romdisk.c                   standard
+mips/n64/ramswap.c                   standard
+mips/common/signal.c            standard
+mips/n64/sysctl.c                    standard
+mips/n64/config.c                    standard
+mips/common/libkern.c           standard
+mips/common/stubs.c             standard

@@ -2,7 +2,7 @@
 
 This tree is the shared home for big-endian MIPS ports.
 
-Planned layout:
+Layout:
 
 - `common/` - MIPS CPU, exception, FPU, TLB and userland ABI code shared by
   all MIPS boards.
@@ -11,6 +11,6 @@ Planned layout:
 - `malta/` - QEMU Malta board support: 8 MB RAM, 16550 serial console,
   ROM/initrd root filesystem and RAM-backed swap.
 
-The existing `sys/n64` port remains the active N64 build while the shared MIPS
-tree is brought up.  After Malta boots under `qemu-system-mips`, move the
-already-working N64 files into `sys/mips/n64` in small tested steps.
+Both Malta and N64 are built as boards under the shared `sys/mips` architecture.
+Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
+`make -C sys/mips BOARD=malta kernel` for the QEMU Malta kernel.

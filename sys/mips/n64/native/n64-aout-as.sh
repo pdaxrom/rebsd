@@ -41,7 +41,7 @@ eval "${N64_PREFIX}gcc" \
     -EB -march=vr4300 -mtune=vr4300 -mips3 -mabi=32 \
     -G0 -mno-abicalls -fno-pic \
     -I. \
-    -I"'$N64_AOUT_TOPSRC'"/sys/n64/include \
+    -I"'$N64_AOUT_TOPSRC'"/sys/mips/n64/include \
     -I"'$N64_AOUT_TOPSRC'"/include \
     $args -x assembler-with-cpp -E -P "'$src'" -o "'$tmp'"
 

@@ -7,13 +7,23 @@ KCONFIG_SRCS    = $(KCONFIG_DIR)/Makefile $(KCONFIG_DIR)/config.h \
                   $(KCONFIG_DIR)/config.y $(KCONFIG_DIR)/lang.l \
                   $(KCONFIG_DIR)/main.c $(KCONFIG_DIR)/mkioconf.c \
                   $(KCONFIG_DIR)/mkmakefile.c $(KCONFIG_DIR)/mkswapconf.c
+BOARD_KCONFIG_SRCS = $(wildcard $(BOARD_DIR)/Makefile.kconf \
+                     $(BOARD_DIR)/files.kconf $(BOARD_DIR)/devices.kconf)
+ifeq ($(BOARD_KCONFIG_SRCS),)
+BOARD_KCONFIG_SRCS = Makefile.kconf files.kconf devices.kconf
+endif
 
-.PHONY: all reconfig clean clean-all unix kernel
+.PHONY: all reconfig clean clean-all unix kernel kernel.z64 preflight.z64 \
+        smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain \
+        smoke-host-pcc smoke-host-ccom
 
 all: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) all
 
-unix kernel: $(BOARD_DIR)/Makefile
+unix kernel kernel.z64 preflight.z64: $(BOARD_DIR)/Makefile
+	$(MAKE) -C $(BOARD_DIR) $@
+
+smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain smoke-host-pcc smoke-host-ccom: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
 
 reconfig: $(KCONFIG)
@@ -34,7 +44,7 @@ clean-all:
 	    $(BOARD_DIR)/a.out $(BOARD_DIR)/.deps $(BOARD_DIR)/machine \
 	    $(BOARD_DIR)/sys $(BOARD_DIR)/vers.c
 
-$(BOARD_DIR)/Makefile: $(BOARD_DIR)/Config files.kconf devices.kconf Makefile.kconf $(KCONFIG)
+$(BOARD_DIR)/Makefile: $(BOARD_DIR)/Config $(BOARD_KCONFIG_SRCS) $(KCONFIG)
 	cd $(BOARD_DIR) && ../../../tools/kconfig/kconfig Config
 
 $(KCONFIG): $(KCONFIG_SRCS)

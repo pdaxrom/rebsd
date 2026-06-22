@@ -84,10 +84,6 @@ int main(int argc, char **argv)
         pic32_ioconf();
         break;
 
-    case ARCH_N64:
-        pic32_ioconf();
-        break;
-
     case ARCH_MIPS:
         pic32_ioconf();
         break;

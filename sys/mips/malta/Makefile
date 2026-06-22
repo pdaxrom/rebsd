@@ -6,20 +6,19 @@ PARAM += -DPTY_ENABLED
 PARAM += -DPTY_NUNITS=4
 PARAM += -DCONS_MINOR=0
 PARAM += -DCONS_MAJOR=0
-PARAM += -DHW_MACHINE_NAME=\"mips\"
-PARAM += -DHW_MODEL_NAME='"MIPS Malta 24Kf"'
-MALTA_CPU_TUNE ?= 24kf
-MIPS_ARCH ?= -EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE)
 #
 # Makefile template for shared MIPS ports.
 #
+MALTA_CPU_TUNE ?= 24kf
+MIPS_ARCH ?= -EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE)
+
 include ../../../target-mips.mk
 
 TOPSRC          = ../../..
 S               = ../..
 BOARD_SRC       = ../malta
 MIPS_ROOTFS_KBYTES ?= 2048
-MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/n64/nintendo64/rootfs.stage
+MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/mips/n64/rootfs.stage
 MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_STAGE = rootfs.stage
@@ -42,7 +41,9 @@ MIPS_ROOTFS_COPY_FILES = $(addprefix $(MIPS_ROOTFS_SRC)/,$(MIPS_ROOTFS_COPY_PATH
 MIPS_TRACE       ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 
-CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS
+CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
+                  -DHW_MACHINE_NAME=\"mips\" \
+                  -DHW_MODEL_NAME='"MIPS Malta 24Kf"'
 ifeq ($(MIPS_TRACE),1)
 CPPFLAGS        += -DMIPS_TRACE
 endif

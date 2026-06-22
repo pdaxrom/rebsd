@@ -13,8 +13,8 @@ N64_KERNEL_CODE = $(N64_KERNEL_BASE) -msoft-float
 N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
 N64_ROOTFS_KBYTES ?= 16384
-N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/n64/rootfs
-N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/n64/rootfs.manifest
+N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/mips/n64/rootfs
+N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/n64/rootfs.manifest
 N64_ROOTFS_DEVNODES = rootfs.devnodes.manifest
 N64_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 N64_ROOTFS_STAGE = rootfs.stage
@@ -37,7 +37,10 @@ N64_ROOTFS_CAT8_ALIASES = fastboot:reboot halt:reboot poweroff:reboot \
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
 N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_DIR) -type d 2>/dev/null)
 N64_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
-                   $(TOPSRC)/sys/n64 -type f -name '*.h' 2>/dev/null)
+                   $(TOPSRC)/sys/mips/n64/include -type f -name '*.h' \
+                   2>/dev/null) \
+                   $(wildcard $(TOPSRC)/sys/mips/*.h \
+                   $(TOPSRC)/sys/mips/n64/*.h)
 N64_NATIVE_DIR = n64-native-runtime
 N64_NATIVE_TREE = $(N64_NATIVE_DIR)/tree
 N64_NATIVE_TOOLS = n64-native-tools
@@ -55,28 +58,28 @@ N64_HOST_CPP_BUILD = $(N64_NATIVE_TOOLS)/cpp-host-build
 N64_HOST_CCOM = $(N64_NATIVE_TOOLS)/ccom-host
 N64_HOST_CCOM_BUILD = $(N64_NATIVE_TOOLS)/ccom-host-build
 N64_NATIVE_CRT0_SRC = $(TOPSRC)/lib/startup/crt0.s
-N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-cc.sh
-N64_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/n64/native/n64-aout-as.sh
-N64_HOST_CPP_BUILD_SCRIPT = $(TOPSRC)/sys/n64/native/build-host-cpp.sh
-N64_HOST_CCOM_BUILD_SCRIPT = $(TOPSRC)/sys/n64/native/build-host-ccom.sh
-N64_HOST_PCC_SMOKE_SCRIPT = $(TOPSRC)/sys/n64/native/smoke-host-pcc.sh
-N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/n64/native/smoke-as-vr4300.sh
-N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/n64/native/matrix-as-vr4300.sh
-N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/n64/native/smoke-aout-toolchain.sh
+N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-cc.sh
+N64_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-as.sh
+N64_HOST_CPP_BUILD_SCRIPT = $(TOPSRC)/sys/mips/n64/native/build-host-cpp.sh
+N64_HOST_CCOM_BUILD_SCRIPT = $(TOPSRC)/sys/mips/n64/native/build-host-ccom.sh
+N64_HOST_PCC_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-pcc.sh
+N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
+N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
+N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
 N64_NATIVE_CC = sh $(abspath $(N64_NATIVE_CC_SCRIPT))
 N64_NATIVE_ASWRAP = sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
-N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/n64/native/mkhostinclude.sh
+N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
 N64_NATIVE_AR = $(N64_PREFIX)ar
 N64_GNU_AS ?= $(N64_PREFIX)as
 N64_NATIVE_STAMP = $(N64_NATIVE_DIR)/.built
 N64_NATIVE_LIBS = crt0.o libc.a libm.a
 N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
-N64_DEVNODES_AWK = $(TOPSRC)/sys/n64/devnodes.awk
-N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h \
-                    $(TOPSRC)/sys/n64/ramswap.h \
-                    $(TOPSRC)/sys/n64/n64cart_flash.h \
-                    $(TOPSRC)/sys/n64/devmajors.h \
+N64_DEVNODES_AWK = $(TOPSRC)/sys/mips/n64/devnodes.awk
+N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h \
+                    $(TOPSRC)/sys/mips/n64/ramswap.h \
+                    $(TOPSRC)/sys/mips/n64/n64cart_flash.h \
+                    $(TOPSRC)/sys/mips/n64/devmajors.h \
                     $(TOPSRC)/sys/include/conf.h \
                     $(TOPSRC)/sys/include/pty.h
 N64_CONS_MAJOR = $(patsubst -DCONS_MAJOR=%,%,$(filter -DCONS_MAJOR=%,$(PARAM)))
@@ -244,10 +247,10 @@ all: unix kernel.z64 preflight.z64
 preflight: $(N64_PREFLIGHT_OBJS)
 	$(SIZE) $(N64_PREFLIGHT_OBJS)
 
-$(N64_KERNEL_LDSCRIPT): ../n64.ld ../layout.h
+$(N64_KERNEL_LDSCRIPT): n64.ld.S layout.h
 	$(N64_PREFIX)gcc -E -P -undef -x c $< -o $@
 
-$(N64_USER_LDSCRIPT): ../user/user.ld.S ../layout.h
+$(N64_USER_LDSCRIPT): user/user.ld.S layout.h
 	$(N64_PREFIX)gcc -E -P -undef -x c $< -o $@
 
 preflight.elf: $(N64_PREFLIGHT_OBJS) $(N64_KERNEL_LDSCRIPT)
@@ -255,29 +258,29 @@ preflight.elf: $(N64_PREFLIGHT_OBJS) $(N64_KERNEL_LDSCRIPT)
 	$(SIZE) $@
 	$(OBJDUMP) -d -S $@ > preflight.dis
 
-stage0.o: ../stage0.S | .deps
+stage0.o: stage0.S | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) $< -o $@
 
-stage0_loader.o: ../stage0_loader.c | .deps
+stage0_loader.o: stage0_loader.c | .deps
 	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
 
-stage0_console_null.o: ../stage0_console_null.c ../stage0_console.h | .deps
+stage0_console_null.o: stage0_console_null.c stage0_console.h | .deps
 	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
 
-stage0_n64cart_uart.o: ../stage0_n64cart_uart.c ../stage0_console.h ../n64cart_uart.h | .deps
+stage0_n64cart_uart.o: stage0_n64cart_uart.c stage0_console.h n64cart_uart.h | .deps
 	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
 
-stage0_kernel_blob.o: ../stage0_kernel_blob.S preflight.elf | .deps
+stage0_kernel_blob.o: stage0_kernel_blob.S preflight.elf | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath preflight.elf)\" $< -o $@
 
-kernel_stage0_kernel_blob.o: ../stage0_kernel_blob.S unix.elf | .deps
+kernel_stage0_kernel_blob.o: stage0_kernel_blob.S unix.elf | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath unix.elf)\" $< -o $@
 
-stage0.elf: $(N64_STAGE0_OBJS) stage0_kernel_blob.o ../stage0_linker.ld
-	$(LD) -T ../stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) stage0_kernel_blob.o
+stage0.elf: $(N64_STAGE0_OBJS) stage0_kernel_blob.o stage0_linker.ld
+	$(LD) -T stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) stage0_kernel_blob.o
 
-kernel_stage0.elf: $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o ../stage0_linker.ld
-	$(LD) -T ../stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o
+kernel_stage0.elf: $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o stage0_linker.ld
+	$(LD) -T stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o
 
 stage0.stripped.elf: stage0.elf
 	$(STRIP) -s -o $@ $<
@@ -286,7 +289,7 @@ kernel_stage0.stripped.elf: kernel_stage0.elf
 	$(STRIP) -s -o $@ $<
 
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
-	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/n64/romdisk.h $(TOPSRC)/sys/n64/ramswap.h $(TOPSRC)/sys/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
+	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/n64/ramswap.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
 
 $(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES) $(N64_ROOTFS_USER_STAMP)
 	cp $(N64_ROOTFS_MANIFEST) $@
@@ -309,15 +312,20 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
     $(N64_NATIVE_AS_MATRIX_SCRIPT)
 	rm -rf $(N64_ROOTFS_STAGE)
 	mkdir -p $(N64_ROOTFS_STAGE)
-	cp -R $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
-	cp $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
+	cp -pR $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
+	cp -p $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
 	mkdir -p $(N64_ROOTFS_STAGE)/include
-	cp -R $(TOPSRC)/include/. $(N64_ROOTFS_STAGE)/include/
+	cp -pR $(TOPSRC)/include/. $(N64_ROOTFS_STAGE)/include/
 	rm -rf $(N64_ROOTFS_STAGE)/include/machine $(N64_ROOTFS_STAGE)/include/sys
-	cp -R $(TOPSRC)/sys/include $(N64_ROOTFS_STAGE)/include/sys
+	cp -pR $(TOPSRC)/sys/include $(N64_ROOTFS_STAGE)/include/sys
+	mkdir -p $(N64_ROOTFS_STAGE)/include/mips
+	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_STAGE)/include/mips/
 	mkdir -p $(N64_ROOTFS_STAGE)/include/machine
-	cp $(TOPSRC)/sys/n64/*.h $(N64_ROOTFS_STAGE)/include/machine/
-	cp $(TOPSRC)/sys/n64/include/machine/types.h $(N64_ROOTFS_STAGE)/include/machine/types.h
+	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_ROOTFS_STAGE)/include/machine/
+	cp -p $(TOPSRC)/sys/mips/elf_machdep.h $(N64_ROOTFS_STAGE)/include/machine/elf_machdep.h
+	cp -p $(TOPSRC)/sys/mips/float.h $(N64_ROOTFS_STAGE)/include/machine/float.h
+	cp -p $(TOPSRC)/sys/mips/limits.h $(N64_ROOTFS_STAGE)/include/machine/limits.h
+	cp -p $(TOPSRC)/sys/mips/n64/include/machine/types.h $(N64_ROOTFS_STAGE)/include/machine/types.h
 	mkdir -p $(N64_ROOTFS_STAGE)/lib
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin
@@ -326,10 +334,10 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat1
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat5
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
-	cp $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300
-	cp $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300.sh
-	cp $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300
-	cp $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300.sh
+	cp -p $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300
+	cp -p $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300.sh
+	cp -p $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300
+	cp -p $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300.sh
 	chmod 0775 $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300 \
 	    $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300.sh \
 	    $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300 \
@@ -339,9 +347,11 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_MAKEWHATIS_SED)
 	$(N64_SRC_MAKE) install
 	$(N64_AWK_MAKE) install
-	cp $(N64_ROOTFS_STAGE)/bin/cc $(N64_ROOTFS_STAGE)/bin/pcc
+	mkdir -p $(N64_ROOTFS_STAGE)/include/mips
+	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_STAGE)/include/mips/
+	cp -p $(N64_ROOTFS_STAGE)/bin/cc $(N64_ROOTFS_STAGE)/bin/pcc
 	for lib in $(N64_NATIVE_LIBS); do \
-	    cp $(N64_NATIVE_DIR)/$$lib $(N64_ROOTFS_STAGE)/lib/$$lib; \
+	    cp -p $(N64_NATIVE_DIR)/$$lib $(N64_ROOTFS_STAGE)/lib/$$lib; \
 	done
 	for lib in libc.a libm.a; do \
 	    $(N64_NATIVE_AOUT_RANLIB) $(N64_ROOTFS_STAGE)/lib/$$lib; \
@@ -501,11 +511,11 @@ smoke-aout-toolchain: $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
 .PHONY: smoke-host-pcc smoke-host-ccom
 smoke-host-pcc: $(N64_HOST_CPP) $(N64_HOST_CCOM) $(N64_NATIVE_AS) \
     $(N64_NATIVE_LD) $(N64_HOST_PCC_SMOKE_SCRIPT) \
-    $(TOPSRC)/sys/n64/rootfs/root/types-smoke.c
+    $(TOPSRC)/sys/mips/n64/rootfs/root/types-smoke.c
 	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
 	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
 	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/n64/rootfs/root/types-smoke.c
+	    $(TOPSRC)/sys/mips/n64/rootfs/root/types-smoke.c
 
 smoke-host-ccom: smoke-host-pcc
 
@@ -517,13 +527,14 @@ $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD
     $(N64_NATIVE_DIR)/crt0.o \
     $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB)
 	rm -rf $(N64_NATIVE_TREE)
-	mkdir -p $(N64_NATIVE_TREE)/src $(N64_NATIVE_TREE)/sys/n64
-	cp -R $(TOPSRC)/include $(N64_NATIVE_TREE)/
-	cp -R $(TOPSRC)/sys/include $(N64_NATIVE_TREE)/sys/
-	cp $(TOPSRC)/sys/n64/*.h $(N64_NATIVE_TREE)/sys/n64/
-	cp -R $(TOPSRC)/sys/n64/include $(N64_NATIVE_TREE)/sys/n64/
-	cp -R $(TOPSRC)/src/libc $(TOPSRC)/src/libm $(N64_NATIVE_TREE)/src/
-	cp $(TOPSRC)/target.mk $(TOPSRC)/target-n64.mk $(N64_NATIVE_TREE)/
+	mkdir -p $(N64_NATIVE_TREE)/src $(N64_NATIVE_TREE)/sys/mips/n64
+	cp -pR $(TOPSRC)/include $(N64_NATIVE_TREE)/
+	cp -pR $(TOPSRC)/sys/include $(N64_NATIVE_TREE)/sys/
+	cp -p $(TOPSRC)/sys/mips/*.h $(N64_NATIVE_TREE)/sys/mips/
+	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_NATIVE_TREE)/sys/mips/n64/
+	cp -pR $(TOPSRC)/sys/mips/n64/include $(N64_NATIVE_TREE)/sys/mips/n64/
+	cp -pR $(TOPSRC)/src/libc $(TOPSRC)/src/libm $(N64_NATIVE_TREE)/src/
+	cp -p $(TOPSRC)/target.mk $(TOPSRC)/target-n64.mk $(N64_NATIVE_TREE)/
 	N64_AOUT_TOPSRC=$(abspath $(N64_NATIVE_TREE)) \
 	    N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
 	    N64_PREFIX=$(N64_PREFIX) \
@@ -555,13 +566,13 @@ preflight.z64: stage0.stripped.elf rootfs.img
 kernel.z64: kernel_stage0.stripped.elf rootfs.img
 	$(N64_TOOL) --toc --title "RETROBSD N64" --output $@ --align 256 kernel_stage0.stripped.elf --align 1024 rootfs.img
 
-preflight.o: ../preflight.c ${SYSTEM_DEP}
+preflight.o: preflight.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
-preflight_n64cart_uart.o: ../preflight_n64cart_uart.c ../n64cart_uart.h ${SYSTEM_DEP}
+preflight_n64cart_uart.o: preflight_n64cart_uart.c n64cart_uart.h ${SYSTEM_DEP}
 	${COMPILE_C}
 
-startup.o: ../startup.S ${SYSTEM_DEP}
+startup.o: startup.S ${SYSTEM_DEP}
 	${COMPILE_S}
 
 ioconf.o: ioconf.c ${SYSTEM_DEP}
@@ -586,7 +597,7 @@ reconfig ioconf.c swapunix.c: Config ../../../tools/kconfig/kconfig | machine sy
 	$(MAKE) clean
 
 machine:
-	ln -s .. $@
+	ln -s . $@
 
 sys:
 	ln -s ../../include $@

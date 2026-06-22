@@ -9,7 +9,7 @@ N64_PREFIX    = $(N64_TOOLCHAIN)/bin/mips64-elf-
 
 N64_ARCH      = -EB -march=vr4300 -mtune=vr4300 -mips3 -mabi=32 -mhard-float
 N64_CODE      = -G0 -mno-abicalls -fno-pic -fomit-frame-pointer
-N64_INCLUDES  = -I$(TOPSRC)/sys/n64/include -I$(TOPSRC)/include
+N64_INCLUDES  = -I$(TOPSRC)/sys/mips/n64/include -I$(TOPSRC)/include
 
 CC            = $(N64_PREFIX)gcc $(N64_ARCH) $(N64_CODE) $(N64_INCLUDES) \
                 -Werror -Wno-unused-value -Wno-format-overflow \

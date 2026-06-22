@@ -23,11 +23,11 @@ adding a separate hand-copied application path.
     command build list
 - [x] Change the N64 board build to stage applications through the shared
   `src`/`src/cmd` install flow:
-  - remove the N64-only per-command build loop from `sys/n64/Makefile.kconf`
+  - remove the N64-only per-command build loop from `sys/mips/n64/Makefile.kconf`
   - call the shared `src`/`src/cmd` install path with
     `TARGET_PLATFORM=n64`, `DESTDIR=rootfs.stage`, and the generated
     `N64_USER_LDSCRIPT`
-  - keep `sys/n64/rootfs.manifest` as the source of which staged files are
+  - keep `sys/mips/n64/rootfs.manifest` as the source of which staged files are
     included in the cartridge ROM rootfs
 
 ## In-tree Toolchain For VR4300
@@ -73,7 +73,7 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Smoke-test VR4300 assembler gating by running the in-tree `as` and
   verifying that normal VR4300 instructions assemble while MIPS32r2-only
   mnemonics fail in `-march=vr4300` mode; this is now a permanent host-side
-  target: `make -C sys/n64 smoke-as-vr4300`.
+  target: `make -C sys/mips BOARD=n64 smoke-as-vr4300`.
 - [x] Add the first COP1/FPU assembly support needed by hard-float N64
   userland and current GCC VR4300 smoke output:
   - `$f0`..`$f31` register parsing
@@ -191,7 +191,7 @@ Also exclude or defer libraries that only serve unavailable peripherals:
 
 ## Rootfs Contents
 
-Add files to the ROM rootfs by updating `sys/n64/rootfs.manifest`, not by
+Add files to the ROM rootfs by updating `sys/mips/n64/rootfs.manifest`, not by
 copying binaries manually.
 
 - [x] Add basic `/bin` utilities after the shared install flow is in place:
@@ -204,7 +204,7 @@ copying binaries manually.
 - [x] Add `/bin/n64input` as the minimal Joybus input smoke-test utility for
   `/dev/joypadN`, `/dev/mouseN`, and `/dev/kbdN`
 - [x] Keep generated device nodes derived from kernel definitions through
-  `sys/n64/devnodes.awk`
+  `sys/mips/n64/devnodes.awk`
 - [x] Keep cartridge root read-only until a writable filesystem target exists
 - [x] Expand the N64 rootfs toward the normal RetroBSD command set by enabling
   the first broad batch from `src/cmd/Makefile`: the full simple `STD` group
@@ -502,7 +502,7 @@ copying binaries manually.
 
 - [x] Add an N64-local VI framebuffer layer instead of using n64cart UART as
   the system console backend
-- [x] Reserve framebuffer memory in `sys/n64/layout.h`:
+- [x] Reserve framebuffer memory in `sys/mips/n64/layout.h`:
   - 4 MiB systems get 320x240x16 only before the base RAM swap region
   - 8 MiB systems reserve enough Expansion Pak memory for 640x480x16 and can
     switch between 320x240 and 640x480
@@ -598,10 +598,10 @@ copying binaries manually.
 - [x] Run:
 
   ```
-  make -C sys/n64 reconfig
-  make -C sys/n64/nintendo64 clean
-  make -C sys/n64/nintendo64 kernel.z64
-  make -q -C sys/n64/nintendo64 kernel.z64
+  make -C sys/mips BOARD=n64 reconfig
+  make -C sys/mips BOARD=n64 clean
+  make -C sys/mips BOARD=n64 kernel.z64
+  make -q -C sys/mips BOARD=n64 kernel.z64
   ```
 
 - [x] Confirm the build log uses shared `src`/`src/cmd` install rules and does

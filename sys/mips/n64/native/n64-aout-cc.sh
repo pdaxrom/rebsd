@@ -48,7 +48,7 @@ if [ "$mode" = c ]; then
         -nostdinc \
         -Wno-unused-value -Wno-format-overflow -Wno-attribute-alias \
         -Wno-missing-attributes \
-        -I"'$N64_AOUT_TOPSRC'"/sys/n64/include \
+        -I"'$N64_AOUT_TOPSRC'"/sys/mips/n64/include \
         -I"'$N64_AOUT_TOPSRC'"/include \
         $args -S -o "'$tmp'" "'$src'"
 else
@@ -57,7 +57,7 @@ else
         -G0 -mno-abicalls -fno-pic \
         -nostdinc \
         -I. \
-        -I"'$N64_AOUT_TOPSRC'"/sys/n64/include \
+        -I"'$N64_AOUT_TOPSRC'"/sys/mips/n64/include \
         -I"'$N64_AOUT_TOPSRC'"/include \
         $args -x assembler-with-cpp -E -P "'$src'" -o "'$tmp'"
 fi

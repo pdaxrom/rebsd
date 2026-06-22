@@ -13,7 +13,7 @@
 
 #include <machine/n64cart_flash.h>
 
-#include "../../src/cmd/romfsctl/romfs.h"
+#include "../../../src/cmd/romfsctl/romfs.h"
 
 #define N64ROMFS_MAX_ROM_SIZE   (128u * 1024u * 1024u)
 #define N64ROMFS_MAX_MAP_SIZE   \

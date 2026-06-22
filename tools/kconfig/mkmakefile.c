@@ -149,11 +149,15 @@ void read_files()
     int nreqs, first = 1, isdup, std, filetype;
 
     ftab = 0;
-    (void)strcpy(fname, "../files.kconf");
+    (void)strcpy(fname, "files.kconf");
     fp = fopen(fname, "r");
     if (fp == 0) {
-        perror(fname);
-        exit(1);
+        (void)strcpy(fname, "../files.kconf");
+        fp = fopen(fname, "r");
+        if (fp == 0) {
+            perror(fname);
+            exit(1);
+        }
     }
 next:
     /*
@@ -284,15 +288,39 @@ doneparam:
     goto next;
 }
 
+static void emit_makefile_word(FILE *fp, char *word, int *lpos, int *first)
+{
+    int len;
+
+    len = strlen(word);
+    if (*first) {
+        if (*lpos + len > 72) {
+            fputs("\\\n\t", fp);
+            *lpos = 8;
+        }
+        *first = 0;
+    } else if (*lpos + 1 + len > 72) {
+        fputs(" \\\n\t", fp);
+        *lpos = 8;
+    } else {
+        putc(' ', fp);
+        ++*lpos;
+    }
+    fputs(word, fp);
+    *lpos += len;
+}
+
 void do_objs(FILE *fp)
 {
     register struct file_list *tp, *fl;
-    register int lpos, len;
+    int lpos, len;
     register char *cp, och, *sp;
     char swapname[32];
+    int first;
 
     fprintf(fp, "OBJS = ");
     lpos = 6;
+    first = 1;
     for (tp = ftab; tp != 0; tp = tp->f_next) {
         if (tp->f_type == INVISIBLE)
             continue;
@@ -307,54 +335,42 @@ void do_objs(FILE *fp)
         cp = sp + (len = strlen(sp)) - 1;
         och = *cp;
         *cp = 'o';
-        if (len + lpos > 72) {
-            lpos = 8;
-            fprintf(fp, "\\\n\t");
-        }
-        fprintf(fp, "%s ", sp);
-        lpos += len + 1;
+        emit_makefile_word(fp, sp, &lpos, &first);
         *cp = och;
     cont:;
     }
-    if (lpos != 8)
-        putc('\n', fp);
+    putc('\n', fp);
 }
 
 void do_cfiles(FILE *fp)
 {
     register struct file_list *tp, *fl;
-    register int lpos, len;
+    int lpos, len;
     char swapname[32];
+    char item[256];
+    int first;
 
     fputs("CFILES = ", fp);
     lpos = 8;
+    first = 1;
     for (tp = ftab; tp; tp = tp->f_next)
         if (tp->f_type != INVISIBLE) {
             len = strlen(tp->f_fn);
             if (tp->f_fn[len - 1] != 'c')
                 continue;
-            if ((len = 3 + len) + lpos > 72) {
-                lpos = 8;
-                fputs("\\\n\t", fp);
-            }
-            fprintf(fp, "$S/%s ", tp->f_fn);
-            lpos += len + 1;
+            sprintf(item, "$S/%s", tp->f_fn);
+            emit_makefile_word(fp, item, &lpos, &first);
         }
     for (fl = conf_list; fl; fl = fl->f_next)
         if (fl->f_type == SYSTEMSPEC) {
             (void)sprintf(swapname, "swap%s.c", fl->f_fn);
-            if ((len = 3 + strlen(swapname)) + lpos > 72) {
-                lpos = 8;
-                fputs("\\\n\t", fp);
-            }
             if (eq(fl->f_fn, "generic"))
-                fprintf(fp, "$A/%s/%s ", archname, swapname);
+                sprintf(item, "$A/%s/%s", archname, swapname);
             else
-                fprintf(fp, "%s ", swapname);
-            lpos += len + 1;
+                sprintf(item, "%s", swapname);
+            emit_makefile_word(fp, item, &lpos, &first);
         }
-    if (lpos != 8)
-        putc('\n', fp);
+    putc('\n', fp);
 }
 
 /*
@@ -447,12 +463,16 @@ void makefile()
     struct device *dp;
 
     read_files();
-    strcpy(line, "../Makefile.kconf");
+    strcpy(line, "Makefile.kconf");
     // strcat(line, archname);
     ifp = fopen(line, "r");
     if (ifp == 0) {
-        perror(line);
-        exit(1);
+        strcpy(line, "../Makefile.kconf");
+        ifp = fopen(line, "r");
+        if (ifp == 0) {
+            perror(line);
+            exit(1);
+        }
     }
     ofp = fopen("Makefile", "w");
     if (ofp == 0) {

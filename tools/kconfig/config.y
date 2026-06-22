@@ -168,9 +168,6 @@ Config_spec:
             if (strcmp($2, "pic32") == 0) {
                 arch = ARCH_PIC32;
                 archname = "pic32";
-            } else if (strcmp($2, "n64") == 0) {
-                arch = ARCH_N64;
-                archname = "n64";
             } else if (strcmp($2, "mips") == 0) {
                 arch = ARCH_MIPS;
                 archname = "mips";
@@ -794,7 +791,6 @@ void check_nexus(struct device *dev, int num)
     switch (arch) {
 
     case ARCH_PIC32:
-    case ARCH_N64:
     case ARCH_MIPS:
         break;
     }

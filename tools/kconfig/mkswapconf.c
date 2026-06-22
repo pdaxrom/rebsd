@@ -121,15 +121,20 @@ static struct devdescription {
 void initdevtable()
 {
     char buf[BUFSIZ], name[BUFSIZ], *p;
+    char fname[32];
     int maj;
     register struct devdescription **dp = &devtable;
     FILE *fp;
 
-    (void)sprintf(buf, "../devices.kconf");
-    fp = fopen(buf, "r");
+    (void)strcpy(fname, "devices.kconf");
+    fp = fopen(fname, "r");
     if (fp == NULL) {
-        fprintf(stderr, "config: can't open %s\n", buf);
-        exit(1);
+        (void)strcpy(fname, "../devices.kconf");
+        fp = fopen(fname, "r");
+        if (fp == NULL) {
+            fprintf(stderr, "config: can't open %s\n", fname);
+            exit(1);
+        }
     }
     while (fgets(buf, sizeof(buf), fp)) {
         for (p = buf; *p; p++)
@@ -138,7 +143,7 @@ void initdevtable()
         if (*p == '#' || *p == '\n' || *p == '\r')
             continue;
         if (sscanf(p, "%s %d", name, &maj) != 2) {
-            fprintf(stderr, "../devices.kconf: unrecognized line %s\n", buf);
+            fprintf(stderr, "%s: unrecognized line %s\n", fname, buf);
             exit(1);
         }
         *dp = (struct devdescription *)malloc(sizeof(**dp));

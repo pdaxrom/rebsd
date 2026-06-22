@@ -78,11 +78,11 @@ Attempts to compile a kernel that had configuration errors
 are likely to fail.
 .Sh FILES
 .Bl -tag -width ../Makefile.kconf -compact
-.It Pa ../Makefile.kconf
-generic makefile for the platform
-.It Pa ../files.kconf
+.It Pa Makefile.kconf , ../Makefile.kconf
+makefile template for the board or platform
+.It Pa files.kconf , ../files.kconf
 list of files kernel is built from
-.It Pa ../devices.kconf
+.It Pa devices.kconf , ../devices.kconf
 name to major device mapping file
 .El
 .Sh SEE ALSO

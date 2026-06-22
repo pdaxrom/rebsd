@@ -33,6 +33,12 @@ TOPSRC       = $(shell pwd)
 CONFIG       = $(TOPSRC)/tools/kconfig/kconfig
 TARGET_PLATFORM ?= pic32
 KERNEL_DIR   = sys/$(TARGET_PLATFORM)
+KERNEL_MAKE_ARGS =
+
+ifeq ($(TARGET_PLATFORM),n64)
+KERNEL_DIR = sys/mips
+KERNEL_MAKE_ARGS = BOARD=n64
+endif
 
 all: tools
 		$(MAKE) kernel
@@ -44,7 +50,7 @@ all: tools
 .PHONY: kernel
 
 kernel: $(CONFIG) tools
-		$(MAKE) -C $(KERNEL_DIR) all
+		$(MAKE) -C $(KERNEL_DIR) $(KERNEL_MAKE_ARGS) all
 
 .PHONY: tools
 
@@ -70,14 +76,15 @@ $(CONFIG):
 
 clean:
 		rm -f *~
-		for dir in tools lib src sys/pic32 sys/n64; do \
+		for dir in tools lib src sys/pic32 sys/mips; do \
 			if [ -d $$dir ]; then $(MAKE) -C $$dir -k clean; fi; \
 		done
+		if [ -d sys/mips/n64 ]; then $(MAKE) -C sys/mips BOARD=n64 -k clean; fi
 
 cleanall:       clean
 		$(MAKE) -C lib clean
 		rm -f sys/pic32/*/unix.hex bin/* sbin/* libexec/*
-		rm -f sys/n64/*.elf sys/n64/*.bin sys/n64/*.o sys/n64/*.nm sys/n64/*.dis
+		rm -f sys/mips/n64/*.elf sys/mips/n64/*.bin sys/mips/n64/*.o sys/mips/n64/*.nm sys/mips/n64/*.dis
 		rm -f games/[a-k]* games/[m-z]* share/man/cat*/*
 		rm -f games/lib/adventure.dat games/lib/cfscores
 		rm -f share/re.help share/emg.keys share/misc/more.help
