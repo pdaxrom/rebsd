@@ -27,10 +27,10 @@ MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type
 MIPS_ROOTFS_COPY_PATHS = \
     bin/ar bin/as bin/cat bin/cc bin/chmod bin/cpp bin/echo bin/expr \
     bin/false bin/ld bin/login bin/ls bin/matrix-as-vr4300 bin/mkdir \
-    bin/nm bin/od bin/pcc bin/pwd bin/ranlib bin/rm bin/sed bin/sh \
+    bin/nm bin/od bin/pcc bin/ps bin/pwd bin/ranlib bin/rm bin/sed bin/sh \
     bin/size bin/smoke-as-vr4300 bin/strip bin/stty bin/test bin/tr \
-    bin/true bin/uname bin/wc \
-    sbin/init sbin/mkfs sbin/mount \
+    bin/true bin/uname bin/vmstat bin/w bin/wc \
+    sbin/init sbin/mkfs sbin/mount sbin/pstat \
     lib/crt0.o lib/libc.a lib/libm.a libexec/ccom libexec/getty \
     etc/gettytab etc/group etc/passwd etc/profile \
     root/cc-pcc-smoke.sh root/ll-abi-smoke.c root/ll-abi-smoke.s \

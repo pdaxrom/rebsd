@@ -85,6 +85,8 @@ END {
     emit_node("cdev", "/dev/fb0", defs["N64_FB_MAJOR"], 0, "0666")
     emit_input_nodes()
     emit_pty_nodes()
+    emit_node("cdev", "/dev/mem", defs["MEM_MAJOR"], 0, "0640")
+    emit_node("cdev", "/dev/kmem", defs["MEM_MAJOR"], 1, "0640")
     emit_node("cdev", "/dev/null", defs["MEM_MAJOR"], 2, "0666")
     emit_node("cdev", "/dev/zero", defs["MEM_MAJOR"], 3, "0666")
 }

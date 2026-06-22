@@ -57,7 +57,7 @@ int *dr_select;
 int dk_ndrive;
 int ndrives = 0;
 char *defdrives[] = { "sd0", 0 };
-double stat1(int row);
+static long stat1(int row);
 int hz;
 
 struct {
@@ -80,7 +80,7 @@ struct {
 #define forkstat s.Forkstat
 
 struct vmsum osum;
-double etime;
+long etime;
 int mf;
 time_t now, boottime;
 int lines = 1;
@@ -314,7 +314,6 @@ loop:
         printf("%4ld%3ld ", rate.v_swpin / nintv, rate.v_swpout / nintv);
     }
 
-    etime /= (float)hz;
     for (i = 0; i < dk_ndrive; i++) {
         if (dr_select[i])
             stats(i);
@@ -325,12 +324,12 @@ loop:
     printf("%4ld", rate.v_swtch / nintv);
 
     for (i = 0; i < CPUSTATES; i++) {
-        float f = stat1(i);
+        long f = stat1(i);
         if (!pflag && i == 0) { /* US+NI */
             i++;
             f += stat1(i);
         }
-        printf(" %3.0f", f);
+        printf(" %3ld", f);
     }
     printf("\n");
     fflush(stdout);
@@ -376,36 +375,45 @@ void dosum()
 
 void doforkst()
 {
+    long avg;
+
     lseek(mf, (long)nl[X_FORKSTAT].n_value, L_SET);
     read(mf, &forkstat, sizeof forkstat);
-    if (forkstat.cntfork != 0)
-        printf("%ld forks, %ld kbytes, average=%.2f\n", forkstat.cntfork, forkstat.sizfork,
-               (float)forkstat.sizfork / forkstat.cntfork);
-    if (forkstat.cntvfork != 0)
-        printf("%ld vforks, %ld kbytes, average=%.2f\n", forkstat.cntvfork, forkstat.sizvfork,
-               (float)forkstat.sizvfork / forkstat.cntvfork);
+    if (forkstat.cntfork != 0) {
+        avg = forkstat.sizfork * 100 / forkstat.cntfork;
+        printf("%ld forks, %ld kbytes, average=%ld.%02ld\n",
+               forkstat.cntfork, forkstat.sizfork, avg / 100, avg % 100);
+    }
+    if (forkstat.cntvfork != 0) {
+        avg = forkstat.sizvfork * 100 / forkstat.cntvfork;
+        printf("%ld vforks, %ld kbytes, average=%ld.%02ld\n",
+               forkstat.cntvfork, forkstat.sizvfork, avg / 100, avg % 100);
+    }
 }
 
 void stats(int dn)
 {
+    long xfer;
+
     if (dn >= dk_ndrive) {
         printf("   0");
         return;
     }
-    printf("%4.0f", s.xfer[dn] / etime);
+    xfer = (etime > 0) ? (s.xfer[dn] * hz + etime / 2) / etime : 0;
+    printf("%4ld", xfer);
 }
 
-double stat1(int row)
+static long stat1(int row)
 {
-    double t;
+    long t;
     int i;
 
     t = 0;
     for (i = 0; i < CPUSTATES; i++)
         t += s.time[i];
-    if (t == 0.)
-        t = 1.;
-    return (s.time[row] * 100. / t);
+    if (t == 0)
+        t = 1;
+    return (s.time[row] * 100 + t / 2) / t;
 }
 
 void dointr(long nintv)

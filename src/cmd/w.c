@@ -167,7 +167,7 @@ int main(int argc, char **argv)
                 nusers++;
         }
         rewind(ut);
-        printf("  %d user%c", nusers, nusers > 1 ? 's' : '\0');
+        printf("  %d user%s", nusers, nusers > 1 ? "s" : "");
 
         if (getloadavg(avenrun, sizeof(avenrun) / sizeof(avenrun[0])) == -1)
             printf(", no load average information available\n");

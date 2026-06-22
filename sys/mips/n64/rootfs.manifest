@@ -307,6 +307,9 @@ mode 0775
 file /bin/printenv
 mode 0775
 
+file /bin/ps
+mode 02751
+
 file /bin/ptytest
 mode 0775
 
@@ -432,6 +435,9 @@ mode 0775
 
 file /bin/uniq
 mode 0775
+
+file /bin/vmstat
+mode 02751
 
 file /bin/w
 mode 0775
@@ -624,6 +630,8 @@ file /share/man/cat1/pagesize.0
 
 file /share/man/cat1/pr.0
 
+file /share/man/cat1/ps.0
+
 file /share/man/cat1/printf.0
 
 file /share/man/cat1/printenv.0
@@ -692,6 +700,8 @@ file /share/man/cat1/uncompress.0
 
 file /share/man/cat1/uniq.0
 
+file /share/man/cat1/vmstat.0
+
 file /share/man/cat1/w.0
 
 file /share/man/cat1/wc.0
@@ -733,6 +743,8 @@ file /share/man/cat8/mknod.0
 file /share/man/cat8/mkpasswd.0
 
 file /share/man/cat8/mount.0
+
+file /share/man/cat8/pstat.0
 
 file /share/man/cat8/poweroff.0
 
@@ -780,6 +792,9 @@ mode 0775
 
 file /sbin/mount
 mode 0775
+
+file /sbin/pstat
+mode 02755
 
 file /sbin/poweroff
 mode 0775

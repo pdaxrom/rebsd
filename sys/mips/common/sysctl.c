@@ -3,10 +3,19 @@
 #include <sys/errno.h>
 #include <sys/user.h>
 #include <sys/proc.h>
+#include <sys/dk.h>
 #include <sys/file.h>
 #include <sys/inode.h>
+#include <sys/kernel.h>
+#include <sys/map.h>
+#include <sys/namei.h>
+#ifdef PTY_ENABLED
+#include <sys/pty.h>
+#endif
+#include <sys/ptrace.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
+#include <sys/vm.h>
 #include <machine/cpu.h>
 #include <machine/layout.h>
 
@@ -98,6 +107,64 @@ static const char *errlist[] = {
     "Need authenticator",                   /* 81 - ENEEDAUTH */
 };
 
+/*
+ * Kernel symbol name list for historical diagnostics using knlist(3).
+ * These tools still read selected kernel tables through /dev/kmem.
+ */
+static const struct {
+    const char *name;
+    int addr;
+} nlist[] = {
+    { "_boottime",      (int)&boottime      },  /* vmstat */
+    { "_cnttys",        (int)&cnttys        },  /* pstat */
+    { "_cp_time",       (int)&cp_time       },  /* vmstat */
+#ifdef UCB_METER
+    { "_dk_busy",       (int)&dk_busy       },  /* iostat */
+    { "_dk_name",       (int)&dk_name       },  /* vmstat */
+    { "_dk_ndrive",     (int)&dk_ndrive     },  /* vmstat */
+    { "_dk_unit",       (int)&dk_unit       },  /* vmstat */
+    { "_dk_bytes",      (int)&dk_bytes      },  /* iostat */
+    { "_dk_xfer",       (int)&dk_xfer       },  /* vmstat */
+#endif
+    { "_file",          (int)&file          },  /* pstat */
+    { "_forkstat",      (int)&forkstat      },  /* vmstat */
+#ifdef UCB_METER
+    { "_freemem",       (int)&freemem       },  /* vmstat */
+#endif
+    { "_hz",            (int)&hz            },  /* ps */
+    { "_inode",         (int)&inode         },  /* pstat */
+    { "_ipc",           (int)&ipc           },  /* ps */
+    { "_lbolt",         (int)&lbolt         },  /* ps */
+    { "_memlock",       (int)&memlock       },  /* ps */
+    { "_nchstats",      (int)&nchstats      },  /* vmstat */
+    { "_nproc",         (int)&nproc         },  /* ps, pstat */
+    { "_nswap",         (int)&nswap         },  /* pstat */
+    { "_proc",          (int)&proc          },  /* ps, pstat */
+#ifdef UCB_METER
+    { "_rate",          (int)&rate          },  /* vmstat */
+#endif
+    { "_runin",         (int)&runin         },  /* ps */
+    { "_runout",        (int)&runout        },  /* ps */
+    { "_selwait",       (int)&selwait       },  /* ps */
+#ifdef UCB_METER
+    { "_sum",           (int)&sum           },  /* vmstat */
+#endif
+    { "_swapmap",       (int)&swapmap       },  /* pstat */
+    { "_tk_nin",        (int)&tk_nin        },  /* iostat */
+    { "_tk_nout",       (int)&tk_nout       },  /* iostat */
+    { "_total",         (int)&total         },  /* vmstat */
+    { "_u",             (int)&u             },  /* ps */
+#ifdef PTY_ENABLED
+    { "_npty",          (int)&npty          },  /* pstat */
+    { "_pt_tty",        (int)&pt_tty        },  /* pstat */
+#endif
+    { "_bdevsw",        (int)&bdevsw        },  /* devupdate */
+    { "_cdevsw",        (int)&cdevsw        },  /* devupdate */
+    { "_nblkdev",       (int)&nblkdev       },  /* devupdate */
+    { "_nchrdev",       (int)&nchrdev       },  /* devupdate */
+    { 0, 0 },
+};
+
 void
 ucall(void)
 {
@@ -124,7 +191,7 @@ int
 cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     void *newp, size_t newlen)
 {
-    int value;
+    int i, value;
     dev_t dev;
 
     switch (name[0]) {
@@ -141,6 +208,20 @@ cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
             return EOPNOTSUPP;
         return sysctl_string(oldp, oldlenp, 0, 0,
             (char *)errlist[name[1]], 1 + strlen(errlist[name[1]]));
+    case CPU_NLIST:
+        for (i = 0; nlist[i].name; i++) {
+            if (strncmp(newp, nlist[i].name, newlen) == 0) {
+                value = nlist[i].addr;
+                if (!oldp)
+                    return 0;
+                if (*oldlenp < sizeof(value))
+                    return ENOMEM;
+                *oldlenp = sizeof(value);
+                return copyout((caddr_t)&value, (caddr_t)oldp,
+                    sizeof(value));
+            }
+        }
+        return EOPNOTSUPP;
     case CPU_FREQ_KHZ:
         if (namelen != 1)
             return ENOTDIR;

@@ -1115,11 +1115,14 @@ drivers are intentionally synchronous snapshot devices for this first step.
 The next step is feeding RandNET keyboard input into `/dev/console`; after
 that, the input devices can grow event/blocking semantics.
 
-N64 does not expose `/dev/mem` or `/dev/kmem` in the ROM rootfs. Character
-major 1 is present only for `/dev/null` and `/dev/zero`; minors 0 and 1 return
-`EINVAL` if opened manually. The `kmemdev()` syscall returns `NODEV`, and
-`iskmemdev()` returns false for every device. This is intentional for the
-first N64 port: userland should not depend on direct kernel memory access.
+N64 exposes `/dev/mem` and `/dev/kmem` for the historical BSD diagnostics
+that still read kernel memory directly, including `w`, `ps`, `vmstat`, and
+`pstat`. Character major 1 minors 0 and 1 accept reads from valid user or
+kernel address ranges; `/dev/null` and `/dev/zero` remain minors 2 and 3.
+`kmemdev()` returns `/dev/kmem`, and `iskmemdev()` marks minors 0 and 1 so
+securelevel still blocks write opens. New N64-specific userland should prefer
+sysctl/ioctl interfaces, but these devices keep the stock BSD monitoring tools
+usable.
 
 The console tty settings are initialized with echo, CR/LF mapping, erase,
 kill, and control-character echo behavior. `/etc/gettytab` sets `cb`, `ce`,

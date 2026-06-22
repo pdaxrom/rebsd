@@ -486,9 +486,10 @@ copying binaries manually.
   early read-only rootfs
 - [x] Hardware smoke-test the `/dev/rgbled0` ioctl path on real cartridge
   hardware with `/bin/rgbled`
-- [x] Keep `/dev/mem` and `/dev/kmem` disabled on N64 for the first port;
-  `kmemdev()`, `iskmemdev()`, and character minors 0/1 stay intentionally
-  unavailable
+- [x] Enable `/dev/mem` and `/dev/kmem` read access for historical BSD
+  diagnostics (`w`, `ps`, `vmstat`, `pstat`). Securelevel still blocks write
+  opens through `iskmemdev()`, and this remains a compatibility path rather
+  than a preferred new N64 ABI.
 - [x] Keep `ucall`, `ufetch`, and `ustore` as `ENOSYS` on N64; the PIC32
   implementation is board/autoconfig-specific and should not be reused as an
   N64 ABI

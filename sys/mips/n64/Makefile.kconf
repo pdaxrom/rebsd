@@ -24,10 +24,10 @@ N64_ROOTFS_WHATIS = $(N64_ROOTFS_STAGE)/share/man/whatis
 N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm \
                         compress cp date dd df diff du echo ed expr false \
                         file find fold grep head hostid join kill last ln \
-                        login ls man mesg mkdir more mv nice od pagesize pr \
+                        login ls man mesg mkdir more mv nice od pagesize pr ps \
                         printenv pwd rev rm rmail rmdir \
                         sed sh size sleep sort split strip sum tail tar tee \
-                        time touch tr true tsort tty uniq w wc whatis who
+                        time touch tr true tsort tty uniq vmstat w wc whatis who
 N64_ROOTFS_CMD_CAT1_SOURCES = emg:emg env:env sl:sl
 N64_ROOTFS_CAT1_ALIASES = egrep:grep fgrep:grep uncompress:compress \
                           zcat:compress nohup:nice
@@ -142,7 +142,7 @@ N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = calendar chown chroot compress cpp date2 deco diff emg env fbset \
                   fbview find fold forth fsck getty hostname id init \
                   aout ar as cc ccom ld login ls man md5 med mkfs mknod \
-                  mkpasswd mount more n64input nm pdc picoc printf ptytest \
+                  mkpasswd mount more n64input nm pdc picoc printf pstat ptytest \
                   ranlib reboot renice retroforth rgbled romfsctl sed setty \
                   sh shutdown sl smux stty sysctl tcl test umount uname xargs
 N64_CMD_STDS = basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
@@ -173,7 +173,7 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                CMD_ONLY_NSTD="$(N64_CMD_NSTDS)" \
                CMD_ONLY_SETUID="$(N64_CMD_NONE)" \
                CMD_ONLY_OPERATOR="$(N64_CMD_OPERATORS)" \
-               CMD_ONLY_KMEM="$(N64_CMD_NONE)" \
+               CMD_ONLY_KMEM="ps vmstat" \
                CMD_ONLY_TTY="$(N64_CMD_NONE)" \
                CMD_EXTRA_SUBDIR="$(N64_CMD_EXTRA_SUBDIRS)" \
                SMUX_SUBDIRS=retro \
@@ -344,7 +344,7 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 	    $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300.sh
 	touch $@
 
-$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_MAKEWHATIS_SED)
+$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_MAKEWHATIS_SED) Makefile
 	$(N64_SRC_MAKE) install
 	$(N64_AWK_MAKE) install
 	mkdir -p $(N64_ROOTFS_STAGE)/include/mips
@@ -397,7 +397,7 @@ $(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
 $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 	$(N64_SRC_MAKE) libc
 
-$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) $(N64_LIBUTIL_SRCS) $(N64_LIBTERMLIB_SRCS) $(N64_LIBCURSES_SRCS) $(N64_LIBVMF_SRCS) $(N64_LIBREADLINE_SRCS) $(N64_LIBTCL_SRCS) $(N64_USER_SRCS) $(N64_AWK_SRCS)
+$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) $(N64_LIBUTIL_SRCS) $(N64_LIBTERMLIB_SRCS) $(N64_LIBCURSES_SRCS) $(N64_LIBVMF_SRCS) $(N64_LIBREADLINE_SRCS) $(N64_LIBTCL_SRCS) $(N64_USER_SRCS) $(N64_AWK_SRCS) Makefile
 	$(N64_SRC_MAKE) -B all
 	$(N64_AWK_MAKE) awk
 	touch $@

@@ -118,6 +118,10 @@ file /bin/od
 mode 0775
 file /bin/pcc
 mode 0775
+
+file /bin/ps
+mode 02751
+
 file /bin/pwd
 mode 0775
 file /bin/ranlib
@@ -144,8 +148,18 @@ file /bin/true
 mode 0775
 file /bin/uname
 mode 0775
+
+file /bin/vmstat
+mode 02751
+
+file /bin/w
+mode 0775
+
 file /bin/wc
 mode 0775
+
+file /sbin/pstat
+mode 02755
 
 bdev /dev/romdisk
 major 0
@@ -162,6 +176,16 @@ minor 1
 cdev /dev/console
 major 0
 minor 0
+
+cdev /dev/mem
+major 1
+minor 0
+mode 0640
+
+cdev /dev/kmem
+major 1
+minor 1
+mode 0640
 
 cdev /dev/null
 major 1

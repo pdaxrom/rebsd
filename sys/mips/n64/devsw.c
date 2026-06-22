@@ -93,9 +93,11 @@ static int
 n64_mmrw(dev_t dev, struct uio *uio, int flag)
 {
     register struct iovec *iov;
+    int error;
     register u_int c;
 
-    while (uio->uio_resid) {
+    error = 0;
+    while (uio->uio_resid && error == 0) {
         iov = uio->uio_iov;
         if (iov->iov_len == 0) {
             uio->uio_iov++;
@@ -106,11 +108,15 @@ n64_mmrw(dev_t dev, struct uio *uio, int flag)
         }
 
         switch (minor(dev)) {
-        /*
-         * N64 intentionally exposes only /dev/null and /dev/zero on MEM_MAJOR.
-         * /dev/mem and /dev/kmem remain disabled until there is a concrete
-         * debugger or autoconfig use case.
-         */
+        case 0:
+        case 1:
+            if ((badkaddr((caddr_t)uio->uio_offset) &&
+                baduaddr((caddr_t)uio->uio_offset)) ||
+                (badkaddr((caddr_t)(uio->uio_offset + iov->iov_len - 1)) &&
+                baduaddr((caddr_t)(uio->uio_offset + iov->iov_len - 1))))
+                return EFAULT;
+            error = uiomove((caddr_t)uio->uio_offset, iov->iov_len, uio);
+            break;
         case 2:
             if (uio->uio_rw == UIO_READ)
                 return 0;
@@ -135,7 +141,7 @@ n64_mmrw(dev_t dev, struct uio *uio, int flag)
         }
     }
 
-    return 0;
+    return error;
 }
 
 #define NOBDEV \
@@ -283,7 +289,7 @@ const int nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]) - 1;
 int
 iskmemdev(dev_t dev)
 {
-    return 0;
+    return major(dev) == MEM_MAJOR && minor(dev) < 2;
 }
 
 int
