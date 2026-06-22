@@ -63,7 +63,7 @@ Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
 the expanded command set:
 
 This log predates the volatile `/var` RAM disk. Current 8 MiB builds reserve
-512 KiB for `/var` and print `swap size = 2944 kbytes`.
+1024 KiB for `/var` and print `swap size = 2432 kbytes`.
 
 ```
 RetroBSD N64 stage0
@@ -262,15 +262,15 @@ current N64 work is staged as follows:
   Native `ccom` depends on target libc `%ll` formatting when it prints
   64-bit constants, and `ccom` bridges its internal low/high register pairs to
   the normal o32 high/low ABI when calling `__*di3` compiler runtime helpers.
-  The pre-stack-argument version of this smoke has been confirmed on N64 with
-  both driver names; the stack-argument expansion is host-built and staged for
-  the next hardware smoke;
+  The current v3 smoke, including the stack-argument expansion, has been
+  confirmed on N64 with both driver names;
 - `/root/types-smoke.sh` is the broad scalar/aggregate type smoke for both
   `/bin/cc` and `/bin/pcc`. It covers signed and unsigned `char`, `short`,
   `int`, `long`, `long long`, `enum`, pointers, function pointers, `float`,
   `double`, `long double`, stack-passed scalar/FPU arguments, return values,
   static/global/local initialization, `const` objects and pointers, struct
-  layout, bitfields, and big-endian union byte order;
+  layout, bitfields, and big-endian union byte order. It has been confirmed on
+  N64 after increasing the volatile `/var` RAM disk to 1 MiB;
 - N64 native `as`/`ld` keep text segments 8-byte aligned in the a.out path.
   This is required because PCC emits local hard-float double literals in text
   and the VR4300 faults on `ldc1` from 4-byte-only aligned addresses. The
@@ -279,6 +279,9 @@ current N64 work is staged as follows:
   object and break its internal `.p2align` guarantees;
 - `/bin/smoke-as-vr4300` and `/bin/smoke-as-vr4300.sh` run the assembler opcode
   smoke directly on N64, using `/bin/as` by default;
+- `/bin/matrix-as-vr4300` and `/bin/matrix-as-vr4300.sh` run the broader
+  target-side VR4300 instruction matrix directly on N64. The current matrix has
+  207 checks and has been confirmed on hardware;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
@@ -904,14 +907,14 @@ the volatile UFS target for `/var`:
 RAM block sizing:
 
 - 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB swap.
-- 8 MiB system: 512 KiB `/dev/ram0`, 2944 KiB swap after the reserved
+- 8 MiB system: 1024 KiB `/dev/ram0`, 2432 KiB swap after the reserved
   640x480x16 framebuffer.
 
 The printed boot sizes therefore differ by installed RDRAM:
 
 ```
 4 MiB: swap size = 384 kbytes
-8 MiB: swap size = 2944 kbytes
+8 MiB: swap size = 2432 kbytes
 ```
 
 The root filesystem stays read-only. `/tmp` is a symlink to `/var/tmp` in the
@@ -1269,8 +1272,8 @@ the console does not depend on an MI interrupt source.
 
 ## Exception handling and syscalls
 
-The N64 exception vector is copied to the normal MIPS exception vector
-locations in low physical memory. All vectors branch to `n64_exception_entry`.
+The shared MIPS exception vector is copied to the normal MIPS exception vector
+locations in low physical memory. All vectors branch to `mips_exception_entry`.
 
 The assembly entry code:
 
@@ -1318,11 +1321,15 @@ The FPU path is:
 6. Before returning to user mode, the kernel restores FPU state if `ST_CU1`
    is set in the user frame.
 
-`sys/mips/n64/fpu.S` contains:
+`sys/mips/common/fpu.S` contains the shared Malta/N64 FPU helpers:
 
-- `n64_fpu_save`
-- `n64_fpu_restore`
-- `n64_fpu_clear`
+- `mips_fpu_save`
+- `mips_fpu_restore`
+- `mips_fpu_clear`
+
+N64 forces CP0 `Status.FR=0` on kernel entry, lazy CP1 enable, and user-mode
+return.  That keeps VR4300 in the o32-compatible 32-bit FPR mode expected by
+the shared FPU save/restore code and by hard-float N64 userland.
 
 N64 userland uses the MIPS o32 hard-float ABI. The shared MIPS libc
 `setjmp`, `_setjmp`, `longjmp`, and `_longjmp` paths therefore save and
@@ -1531,13 +1538,13 @@ and root mount fails.
 
 Platform core:
 
+- `sys/mips/common/startup.S`
+- `sys/mips/common/exception_entry.S`
+- `sys/mips/common/exception.c`
+- `sys/mips/common/fpu.S`
 - `sys/mips/n64/layout.h`
 - `sys/mips/n64/machparam.h`
 - `sys/mips/n64/machdep.c`
-- `sys/mips/n64/exception.c`
-- `sys/mips/n64/exception_entry.S`
-- `sys/mips/n64/startup.S`
-- `sys/mips/n64/fpu.S`
 
 Boot and ROM:
 

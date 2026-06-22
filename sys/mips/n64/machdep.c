@@ -18,8 +18,8 @@ extern int boothowto;
 extern int waittime;
 
 extern char _end[];
-extern char _n64_exception_vector[];
-extern char _n64_exception_vector_end[];
+extern char _mips_exception_vector[];
+extern char _mips_exception_vector_end[];
 
 #define N64_TLB_ENTRIES         32
 #define N64_USER_TLB_INDEX      0
@@ -72,7 +72,7 @@ n64_cache_hit_invalidate_i(unsigned addr)
 }
 
 void
-n64_sync_user_icache(void)
+mips_sync_user_icache(void)
 {
     unsigned addr;
 
@@ -103,8 +103,8 @@ static void
 n64_install_vector(unsigned phys)
 {
     volatile unsigned *dst = (volatile unsigned *)N64_PHYS_TO_KSEG1(phys);
-    const unsigned *src = (const unsigned *)_n64_exception_vector;
-    unsigned bytes = _n64_exception_vector_end - _n64_exception_vector;
+    const unsigned *src = (const unsigned *)_mips_exception_vector;
+    unsigned bytes = _mips_exception_vector_end - _mips_exception_vector;
     unsigned words = (bytes + sizeof(unsigned) - 1) / sizeof(unsigned);
     unsigned i;
 

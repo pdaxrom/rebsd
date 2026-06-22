@@ -90,7 +90,7 @@ void idle(void);
 void udelay(unsigned usec);
 void clkstart(void);
 void led_control(int mask, int on);
-void n64_sync_user_icache(void);
+void mips_sync_user_icache(void);
 #endif
 
 #define LED_MISC4       0x80

@@ -572,7 +572,7 @@ preflight.o: preflight.c ${SYSTEM_DEP}
 preflight_n64cart_uart.o: preflight_n64cart_uart.c n64cart_uart.h ${SYSTEM_DEP}
 	${COMPILE_C}
 
-startup.o: startup.S ${SYSTEM_DEP}
+startup.o: $S/mips/common/startup.S ${SYSTEM_DEP}
 	${COMPILE_S}
 
 ioconf.o: ioconf.c ${SYSTEM_DEP}

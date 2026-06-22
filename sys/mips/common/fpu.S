@@ -1,7 +1,11 @@
 #include <machine/fpu.h>
 
         .set    noreorder
+#ifdef N64
+        .set    mips3
+#else
         .set    mips32
+#endif
         .set    noat
 
         .text
@@ -51,6 +55,9 @@ mips_fpu_save:
 mips_fpu_restore:
         lw      $t0, 128($a0)
         ctc1    $t0, $31
+        nop
+        nop
+        nop
         lwc1    $f0,   0($a0)
         lwc1    $f1,   4($a0)
         lwc1    $f2,   8($a0)
@@ -91,6 +98,9 @@ mips_fpu_restore:
         .ent    mips_fpu_clear
 mips_fpu_clear:
         ctc1    $zero, $31
+        nop
+        nop
+        nop
         mtc1    $zero, $f0
         mtc1    $zero, $f1
         mtc1    $zero, $f2

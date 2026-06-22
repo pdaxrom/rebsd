@@ -62,10 +62,7 @@ struct user {
     int     u_psflags;              /* Process Signal flags */
     struct  sigaltstack u_sigstk;   /* signal stack info */
     u_int   u_sigtramp;             /* pointer to trampoline code in user space */
-#ifdef N64
-    struct  n64_fpu_state u_fpu;    /* saved VR4300 FPU state */
-#endif
-#ifdef MIPS
+#if defined(MIPS) || defined(N64)
     struct  mips_fpu_state u_fpu;   /* saved MIPS FPU state */
 #endif
 

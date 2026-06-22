@@ -10,17 +10,36 @@
 #include <sys/vm.h>
 #include <machine/io.h>
 #include <machine/fpu.h>
+#ifdef N64
+#include <machine/n64.h>
+#include <machine/joybus.h>
+#include <machine/n64int.h>
+#else
 #include <machine/layout.h>
+#endif
 
 #define USER            1
 #define MIPS_CAUSE_CE1   0x10000000u
+#define MIPS_CAUSE_IP2   0x00000400u
 #define MIPS_CAUSE_IP7   0x00008000u
+
+#ifdef N64
+#define MIPS_TIMER_COUNT_KHZ    N64_COUNT_KHZ
+#else
+#define MIPS_TIMER_COUNT_KHZ    MIPS_COUNT_KHZ
+#endif
 
 static int last_user_icache_pid = -1;
 volatile unsigned int ct_ticks = 0;
 
 extern void cnintr(void);
+#ifdef N64
+#ifdef N64CART_ENABLED
+extern void n64cart_uart_intr(void);
+#endif
+#else
 extern void malta_uart_intr(void);
+#endif
 
 static void
 dumpregs(int *frame)
@@ -90,7 +109,7 @@ dumpregs(int *frame)
 static void
 mips_reprime_timer(void)
 {
-    unsigned delta = (MIPS_COUNT_KHZ * 1000u + HZ - 1) / HZ;
+    unsigned delta = (MIPS_TIMER_COUNT_KHZ * 1000u + HZ - 1) / HZ;
     unsigned compare = mips_read_c0_register(C0_COMPARE, 0);
 
     do {
@@ -144,6 +163,17 @@ mips_syscall(int *frame)
     code = (*(u_int *)opc >> 6) & 0377;
     if (code < nsysent)
         callp += code;
+#ifdef N64_TRACE
+    {
+        static int syscall_trace_count;
+        if (syscall_trace_count < 12) {
+            printf("n64sys: code=%d pc=%x sp=%x a0=%x a1=%x\n",
+                code, opc, frame[FRAME_SP], frame[FRAME_R4],
+                frame[FRAME_R5]);
+            syscall_trace_count++;
+        }
+    }
+#endif
 
     if (callp->sy_narg) {
         u.u_arg[0] = frame[FRAME_R4];
@@ -217,10 +247,21 @@ exception(int *frame)
 #ifdef UCB_METER
         cnt.v_intr++;
 #endif
+#ifdef N64
+        if (rawcause & MIPS_CAUSE_IP2)
+            n64_interrupt_handle_mi();
+#endif
         if (rawcause & MIPS_CAUSE_IP7) {
             mips_reprime_timer();
             ct_ticks++;
+#ifdef N64
+#ifdef N64CART_ENABLED
+            n64cart_uart_intr();
+#endif
+            n64keyboard_console_intr();
+#else
             malta_uart_intr();
+#endif
             cnintr();
             hardclock((caddr_t)frame[FRAME_PC], status);
         }
@@ -251,7 +292,7 @@ exception(int *frame)
 
     case CA_CPU + USER:
         if ((rawcause & CA_CE) == MIPS_CAUSE_CE1) {
-            frame[FRAME_STATUS] |= ST_CU1;
+            frame[FRAME_STATUS] = (frame[FRAME_STATUS] | ST_CU1) & ~ST_FR;
             goto ret;
         }
         psig = SIGEMT;
@@ -321,6 +362,7 @@ out:
             (int)(u.u_ru.ru_stime - syst));
 ret:
     if (USERMODE(frame[FRAME_STATUS])) {
+        frame[FRAME_STATUS] &= ~ST_FR;
         if (last_user_icache_pid != u.u_procp->p_pid) {
             mips_sync_user_icache();
             last_user_icache_pid = u.u_procp->p_pid;

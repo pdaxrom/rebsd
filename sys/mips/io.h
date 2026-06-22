@@ -38,6 +38,7 @@
 #define ST_IM6          0x00004000u
 #define ST_IM7          0x00008000u
 #define ST_BEV          0x00400000u
+#define ST_FR           0x04000000u
 #define ST_RP           0x08000000u
 #define ST_CU0          0x10000000u
 #define ST_CU1          0x20000000u
@@ -223,7 +224,8 @@ mips_fpu_enable(void)
 {
     unsigned status = mips_read_c0_register(C0_STATUS, 0);
 
-    mips_write_c0_register(C0_STATUS, 0, status | ST_CU1);
+    mips_write_c0_register(C0_STATUS, 0, (status | ST_CU1) & ~ST_FR);
+    mips_ehb();
 }
 
 static inline void
@@ -231,7 +233,8 @@ mips_fpu_disable(void)
 {
     unsigned status = mips_read_c0_register(C0_STATUS, 0);
 
-    mips_write_c0_register(C0_STATUS, 0, status & ~ST_CU1);
+    mips_write_c0_register(C0_STATUS, 0, status & ~(ST_CU1 | ST_FR));
+    mips_ehb();
 }
 
 #endif /* __ASSEMBLER__ */

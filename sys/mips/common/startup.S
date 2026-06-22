@@ -2,7 +2,11 @@
 #include <machine/machparam.h>
 
         .set    noreorder
+#ifdef N64
+        .set    mips3
+#else
         .set    mips32
+#endif
         .set    noat
 
         .extern u_end
@@ -22,7 +26,7 @@ mips_kernel_entry:
          * until the C machine layer explicitly enables them.
          */
         mfc0    $t0, $12
-        li      $t1, ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_BEV | ST_CU1)
+        li      $t1, ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_BEV | ST_FR | ST_CU1)
         and     $t0, $t0, $t1
         mtc0    $t0, $12
         nop
@@ -52,7 +56,7 @@ mips_kernel_entry:
         la      $k0, USER_DATA_START
         mtc0    $k0, $14
         mfc0    $k0, $12
-        li      $k1, ~(ST_EXL | ST_ERL | ST_KSU)
+        li      $k1, ~(ST_EXL | ST_ERL | ST_KSU | ST_FR)
         and     $k0, $k0, $k1
 #ifdef MALTA
         ori     $k0, $k0, ST_EXL | ST_IE | ST_IM7

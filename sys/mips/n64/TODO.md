@@ -145,8 +145,8 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   arguments, pointer/function-pointer behavior, `float`, `double`,
   `long double`, static/global/local initialization, `const` objects and
   pointers, struct layout, bitfields, and big-endian union byte order.
-- [ ] Hardware-smoke `/root/types-smoke.sh` on N64 and fix any backend/FPU ABI
-  failures it exposes.
+- [x] Hardware-smoke `/root/types-smoke.sh` on N64 and confirm the broad
+  backend/FPU ABI type matrix passes.
 - [ ] Audit true o32 big-endian `long long` ABI behavior in `ccom`: argument
   passing, returns, struct layout, external object layout, and helper calls.
   The old MIPS backend still has PIC32-era comments around 64-bit endian
@@ -164,7 +164,7 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   N64 `as` now finishes text sections on an 8-byte boundary, and N64 `ld`
   inserts real zero padding between input text segments so in-text double
   literals remain 8-byte aligned after final link.
-- [ ] Hardware-smoke `/root/ll-smoke.sh` v3 on N64 and confirm the new stack
+- [x] Hardware-smoke `/root/ll-smoke.sh` v3 on N64 and confirm the new stack
   argument cases pass through both `/bin/cc` and `/bin/pcc`.
 - [ ] Review secondary compiler/interpreter paths after `ccom` works:
   `smallc`, `smlrc`, `lccom`, and their assembler output.
@@ -262,8 +262,8 @@ copying binaries manually.
   through N64 `pipedev` setup, so shell pipelines work after `/var` is mounted.
 - [x] Keep `/tmp` and `/var` volatile for the first version; later ROMFS or
   another writable block device can provide persistent upper storage.
-- [ ] Hardware smoke-test volatile mounts:
-  - boot reaches login with `swap size = 2944 kbytes` on 8 MiB hardware
+- [x] Hardware smoke-test volatile mounts:
+  - boot reaches login with `swap size = 2432 kbytes` on 8 MiB hardware
   - `/dev/ram0` exists as a block device
   - `mount` shows `/var` mounted read/write
   - `ls -l /tmp` shows a symlink to `/var/tmp`

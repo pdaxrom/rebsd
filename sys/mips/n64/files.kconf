@@ -70,9 +70,9 @@ mips/n64/cons.c                      standard
 mips/n64/devsw.c                     standard
 mips/n64/clock.c                     standard
 mips/n64/machdep.c                   standard
-mips/n64/exception_entry.S           standard compile-with "${COMPILE_S}"
-mips/n64/exception.c                 standard
-mips/n64/fpu.S                       standard compile-with "${COMPILE_FPU_S}"
+mips/common/exception_entry.S        standard compile-with "${COMPILE_S}"
+mips/common/exception.c              standard
+mips/common/fpu.S                    standard compile-with "${COMPILE_FPU_S}"
 mips/n64/rompak.c                    standard
 mips/n64/memory.c                    standard
 mips/n64/romdisk.c                   standard

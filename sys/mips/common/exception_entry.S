@@ -1,7 +1,11 @@
 #include <machine/io.h>
 
         .set    noreorder
+#ifdef N64
+        .set    mips3
+#else
         .set    mips32
+#endif
         .set    noat
 
         .extern u_end

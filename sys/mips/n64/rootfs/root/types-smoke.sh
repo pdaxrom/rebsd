@@ -23,6 +23,7 @@ if test $? != 0; then
     exit 1
 fi
 echo "cc types smoke ok"
+rm -f types-cc types-cc.s types-cc.o types-cc.ro
 
 echo "step 5: pcc types -S"
 pcc -S -o types-pcc.s /root/types-smoke.c || exit 1
