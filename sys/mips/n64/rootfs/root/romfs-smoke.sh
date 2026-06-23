@@ -57,6 +57,32 @@ if test "$got" != reset; then
         exit 1
 fi
 
+echo "romfs-smoke: protected system entries"
+set -- `romfsctl cat /firmware | wc`
+fwbytes=$3
+echo bad >/cart/firmware 2>/dev/null
+set -- `romfsctl cat /firmware | wc`
+if test "$3" != "$fwbytes"; then
+        echo "romfs-smoke: firmware changed after vfs write" >&2
+        exit 1
+fi
+if rm /cart/firmware 2>/dev/null; then
+        echo "romfs-smoke: firmware remove unexpectedly succeeded" >&2
+        exit 1
+fi
+if romfsctl write /firmware bad >/dev/null 2>&1; then
+        echo "romfs-smoke: romfsctl firmware write unexpectedly succeeded" >&2
+        exit 1
+fi
+if romfsctl rm /flashlist >/dev/null 2>&1; then
+        echo "romfs-smoke: romfsctl flashlist remove unexpectedly succeeded" >&2
+        exit 1
+fi
+if romfsctl rename /flashmap /flashmap.bad >/dev/null 2>&1; then
+        echo "romfs-smoke: romfsctl flashmap rename unexpectedly succeeded" >&2
+        exit 1
+fi
+
 echo "romfs-smoke: vfs cleanup"
 rm $base/b.txt || exit 1
 rmdir $base || exit 1
