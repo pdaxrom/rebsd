@@ -16,4 +16,6 @@ chmod 1777 /var/tmp
 : >/var/log/wtmp
 chmod 664 /var/run/utmp /var/log/wtmp
 
+mount /cart
+
 exit 0

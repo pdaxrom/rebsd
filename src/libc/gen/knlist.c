@@ -20,12 +20,16 @@ knlist(struct nlist *list)
 	 * versions cleared other and desc as well.
 	 */
 	for (p=list; p->n_name && p->n_name[0]; ++p) {
+                p->n_type = N_UNDF;
+                p->n_value = 0;
                 size = sizeof(p->n_value);
                 if (sysctl(mib, 2, &p->n_value, &size,
                     p->n_name, 1 + strlen(p->n_name)) < 0) {
-                        p->n_value = 0;
                         continue;
                 }
+                if (p->n_value == 0)
+                        continue;
+                p->n_type = N_DATA;
                 ++entries;
 	}
 	return entries;

@@ -69,6 +69,7 @@ N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchai
 N64_NATIVE_CC = sh $(abspath $(N64_NATIVE_CC_SCRIPT))
 N64_NATIVE_ASWRAP = sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
+N64_COMMON_MACHINE_HEADERS = cpu elf_machdep float fpu io limits
 N64_NATIVE_AR = $(N64_PREFIX)ar
 N64_GNU_AS ?= $(N64_PREFIX)as
 N64_NATIVE_STAMP = $(N64_NATIVE_DIR)/.built
@@ -211,6 +212,7 @@ CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DN64 \
 ifeq ($(N64_TRACE),1)
 CPPFLAGS        += -DN64_TRACE
 endif
+CPPFLAGS        += -DROMFS_ENABLED
 DEFS            = $(CPPFLAGS) $(DEPFLAGS)
 CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(DEFS)
 VERS_CFLAGS     = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(CPPFLAGS)
@@ -322,10 +324,14 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_STAGE)/include/mips/
 	mkdir -p $(N64_ROOTFS_STAGE)/include/machine
 	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_ROOTFS_STAGE)/include/machine/
-	cp -p $(TOPSRC)/sys/mips/elf_machdep.h $(N64_ROOTFS_STAGE)/include/machine/elf_machdep.h
-	cp -p $(TOPSRC)/sys/mips/float.h $(N64_ROOTFS_STAGE)/include/machine/float.h
-	cp -p $(TOPSRC)/sys/mips/limits.h $(N64_ROOTFS_STAGE)/include/machine/limits.h
+	for header in $(N64_COMMON_MACHINE_HEADERS); do \
+	    cp -p $(TOPSRC)/sys/mips/$$header.h \
+	        $(N64_ROOTFS_STAGE)/include/machine/$$header.h; \
+	done
 	cp -p $(TOPSRC)/sys/mips/n64/include/machine/types.h $(N64_ROOTFS_STAGE)/include/machine/types.h
+	sed 's|#include "../cartflash.h"|#include <mips/cartflash.h>|' \
+	    $(TOPSRC)/sys/mips/n64/n64cart_flash.h \
+	    > $(N64_ROOTFS_STAGE)/include/machine/n64cart_flash.h
 	mkdir -p $(N64_ROOTFS_STAGE)/lib
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin

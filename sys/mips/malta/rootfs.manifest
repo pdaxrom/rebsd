@@ -5,6 +5,7 @@ dirmode 0775
 filemode 0664
 
 dir /bin
+dir /cart
 dir /dev
 dir /etc
 dir /lib
@@ -70,6 +71,9 @@ mode 0775
 file /sbin/mount
 mode 0775
 
+file /sbin/umount
+mode 0775
+
 file /lib/crt0.o
 
 file /lib/libc.a
@@ -96,6 +100,8 @@ file /bin/chmod
 mode 0775
 file /bin/cpp
 mode 0775
+file /bin/df
+mode 0775
 file /bin/echo
 mode 0775
 file /bin/expr
@@ -112,6 +118,8 @@ file /bin/matrix-as-vr4300
 mode 0775
 file /bin/mkdir
 mode 0775
+file /bin/mv
+mode 0775
 file /bin/nm
 mode 0775
 file /bin/od
@@ -127,6 +135,10 @@ mode 0775
 file /bin/ranlib
 mode 0775
 file /bin/rm
+mode 0775
+file /bin/rmdir
+mode 0775
+file /bin/romfsctl
 mode 0775
 file /bin/sed
 mode 0775
@@ -186,6 +198,11 @@ cdev /dev/kmem
 major 1
 minor 1
 mode 0640
+
+cdev /dev/cartflash0
+major 11
+minor 0
+mode 0600
 
 cdev /dev/null
 major 1

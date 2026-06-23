@@ -14,3 +14,45 @@ Layout:
 Both Malta and N64 are built as boards under the shared `sys/mips` architecture.
 Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
 `make -C sys/mips BOARD=malta kernel` for the QEMU Malta kernel.
+
+## ROMFS and cart flash
+
+The writable cartridge ROMFS VFS code lives in `sys/mips/common` and uses a
+small board backend instead of calling N64 hardware directly.
+
+- N64 uses `sys/mips/n64/romfs_backend.c`, which routes sector read/write/erase
+  to the n64cart flash driver.
+- Malta uses `sys/mips/malta/cartflash.c`, which exposes `/dev/cartflash0` as
+  an 8 MiB sparse NOR-flash emulator. Unallocated sectors read as `0xff`, erase
+  frees a sector, and writes enforce NOR `1 -> 0` programming semantics. This
+  keeps QEMU ROMFS tests close to real flash behavior without reserving an 8 MiB
+  kernel `.bss` image.
+
+Malta mounts the fake flash automatically:
+
+```
+/dev/cartflash0 /cart romfs rw 0 0
+```
+
+Useful QEMU smoke checks:
+
+```
+make -C sys/mips/malta
+qemu-system-mips -M malta -m 8M -nographic -serial mon:stdio \
+    -no-reboot -kernel sys/mips/malta/unix.elf
+```
+
+After logging in as `root`:
+
+```
+mount
+romfsctl info
+df -T /cart
+mkdir /cart/malta-test
+echo hello >/cart/malta-test/a.txt
+cat /cart/malta-test/a.txt
+mv /cart/malta-test/a.txt /cart/malta-test/b.txt
+rm /cart/malta-test/b.txt
+rmdir /cart/malta-test
+/sbin/umount /cart
+```

@@ -5,5 +5,6 @@
 #define MIPS_SERIAL_MAJOR       3
 #define MIPS_PTS_MAJOR          8
 #define MIPS_PTC_MAJOR          9
+#define MIPS_CARTFLASH_MAJOR    11
 
 #endif

@@ -490,6 +490,10 @@ copying binaries manually.
   diagnostics (`w`, `ps`, `vmstat`, `pstat`). Securelevel still blocks write
   opens through `iskmemdev()`, and this remains a compatibility path rather
   than a preferred new N64 ABI.
+- [x] Move N64 kernel namelist export to the shared MIPS `CPU_NLIST` sysctl
+  path. `knlist(3)` now works without a `/vmunix` file, and Malta QEMU smoke
+  covers `w`, `ps ax`, `vmstat`, `vmstat -f`, `/sbin/pstat -T`, and
+  `/sbin/pstat -p`.
 - [x] Keep `ucall`, `ufetch`, and `ustore` as `ENOSYS` on N64; the PIC32
   implementation is board/autoconfig-specific and should not be reused as an
   N64 ABI

@@ -4,6 +4,7 @@ PARAM += -DMALTA_UART_ENABLED
 PARAM += -DMALTA_ENABLED
 PARAM += -DPTY_ENABLED
 PARAM += -DPTY_NUNITS=4
+PARAM += -DROMFS_ENABLED
 PARAM += -DCONS_MINOR=0
 PARAM += -DCONS_MAJOR=0
 #
@@ -25,12 +26,13 @@ MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
 MIPS_ROOTFS_COPY_PATHS = \
-    bin/ar bin/as bin/cat bin/cc bin/chmod bin/cpp bin/echo bin/expr \
+    bin/ar bin/as bin/cat bin/cc bin/chmod bin/cpp bin/df bin/echo bin/expr \
     bin/false bin/ld bin/login bin/ls bin/matrix-as-vr4300 bin/mkdir \
-    bin/nm bin/od bin/pcc bin/ps bin/pwd bin/ranlib bin/rm bin/sed bin/sh \
+    bin/mv bin/nm bin/od bin/pcc bin/ps bin/pwd bin/ranlib bin/rm bin/rmdir \
+    bin/romfsctl bin/sed bin/sh \
     bin/size bin/smoke-as-vr4300 bin/strip bin/stty bin/test bin/tr \
     bin/true bin/uname bin/vmstat bin/w bin/wc \
-    sbin/init sbin/mkfs sbin/mount sbin/pstat \
+    sbin/init sbin/mkfs sbin/mount sbin/pstat sbin/umount \
     lib/crt0.o lib/libc.a lib/libm.a libexec/ccom libexec/getty \
     etc/gettytab etc/group etc/passwd etc/profile \
     root/cc-pcc-smoke.sh root/ll-abi-smoke.c root/ll-abi-smoke.s \
@@ -71,7 +73,8 @@ OBJS = exec_aout.o exec_conf.o exec_elf.o exec_script.o exec_subr.o \
 	ufs_syscalls2.o vfs_vnops.o vm_sched.o vm_swap.o vm_swp.o \
 	startup.o exception_entry.o exception.o fpu.o cons.o signal.o \
 	sysctl.o libkern.o stubs.o uart.o devsw.o clock.o machdep.o \
-	romdisk.o ramswap.o config.o
+	romdisk.o ramswap.o cartflash.o romfs_core.o romfs_vfs.o \
+	config.o
 
 CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/kernel/exec_script.c $S/kernel/exec_subr.c \
@@ -100,7 +103,9 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/mips/common/stubs.c $S/mips/malta/uart.c \
 	$S/mips/malta/devsw.c $S/mips/malta/clock.c \
 	$S/mips/malta/machdep.c $S/mips/malta/romdisk.c \
-	$S/mips/malta/ramswap.c $S/mips/malta/config.c swapunix.c
+	$S/mips/malta/ramswap.c $S/mips/malta/cartflash.c \
+	$S/mips/common/romfs_core.c $S/mips/common/romfs_vfs.c \
+	$S/mips/malta/config.c swapunix.c
 
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
 SYSTEM_DEP      = Makefile ioconf.c ../malta/malta.ld
@@ -381,6 +386,15 @@ romdisk.o: $S/mips/malta/romdisk.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 ramswap.o: $S/mips/malta/ramswap.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+cartflash.o: $S/mips/malta/cartflash.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+romfs_core.o: $S/mips/common/romfs_core.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+romfs_vfs.o: $S/mips/common/romfs_vfs.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 config.o: $S/mips/malta/config.c ${SYSTEM_DEP}

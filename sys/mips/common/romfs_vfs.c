@@ -11,57 +11,57 @@
 #include <sys/uio.h>
 #include <sys/kernel.h>
 
-#include <machine/n64cart_flash.h>
+#include "romfs_backend.h"
 
 #include "../../../src/cmd/romfsctl/romfs.h"
 
-#define N64ROMFS_MAX_ROM_SIZE   (128u * 1024u * 1024u)
-#define N64ROMFS_MAX_MAP_SIZE   \
-    (((N64ROMFS_MAX_ROM_SIZE / ROMFS_FLASH_SECTOR) * sizeof(uint16_t) + \
+#define MIPSROMFS_MAX_ROM_SIZE   (128u * 1024u * 1024u)
+#define MIPSROMFS_MAX_MAP_SIZE   \
+    (((MIPSROMFS_MAX_ROM_SIZE / ROMFS_FLASH_SECTOR) * sizeof(uint16_t) + \
     (ROMFS_FLASH_SECTOR - 1)) & ~(ROMFS_FLASH_SECTOR - 1))
-#define N64ROMFS_MAX_LIST_SIZE  \
-    (((N64ROMFS_MAX_ROM_SIZE / ROMFS_MB) * sizeof(romfs_entry) + \
+#define MIPSROMFS_MAX_LIST_SIZE  \
+    (((MIPSROMFS_MAX_ROM_SIZE / ROMFS_MB) * sizeof(romfs_entry) + \
     (ROMFS_FLASH_SECTOR - 1)) & ~(ROMFS_FLASH_SECTOR - 1))
 
-#define N64ROMFS_INO_BASE       16
-#define N64ROMFS_ENTRY_INO(n)   ((ino_t)((n) + N64ROMFS_INO_BASE))
-#define N64ROMFS_INO_ENTRY(i)   ((uint32_t)((i) - N64ROMFS_INO_BASE))
+#define MIPSROMFS_INO_BASE       16
+#define MIPSROMFS_ENTRY_INO(n)   ((ino_t)((n) + MIPSROMFS_INO_BASE))
+#define MIPSROMFS_INO_ENTRY(i)   ((uint32_t)((i) - MIPSROMFS_INO_BASE))
 
-struct n64romfs_mount {
-    struct n64cart_flash_info info;
+struct mipsromfs_mount {
+    struct mipsromfs_flash_info info;
     uint32_t map_size;
     uint32_t list_size;
     uint32_t files;
     uint32_t free_bytes;
 };
 
-static struct n64romfs_mount n64romfs_mount_state;
-static uint16_t n64romfs_flash_map[N64ROMFS_MAX_MAP_SIZE / sizeof(uint16_t)];
-static uint8_t n64romfs_flash_list[N64ROMFS_MAX_LIST_SIZE];
-static uint8_t n64romfs_io_buffer[ROMFS_FLASH_SECTOR];
-static uint8_t n64romfs_write_buffer[512];
-static uint8_t n64romfs_dir_buffer[DIRBLKSIZ];
+static struct mipsromfs_mount mipsromfs_mount_state;
+static uint16_t mipsromfs_flash_map[MIPSROMFS_MAX_MAP_SIZE / sizeof(uint16_t)];
+static uint8_t mipsromfs_flash_list[MIPSROMFS_MAX_LIST_SIZE];
+static uint8_t mipsromfs_io_buffer[ROMFS_FLASH_SECTOR];
+static uint8_t mipsromfs_write_buffer[512];
+static uint8_t mipsromfs_dir_buffer[DIRBLKSIZ];
 
 bool
 romfs_flash_sector_read(uint32_t offset, uint8_t *buffer, uint32_t need)
 {
-    return n64cart_flash_read_raw(offset, buffer, need) == 0;
+    return (*mipsromfs_backend.read)(offset, buffer, need) == 0;
 }
 
 bool
 romfs_flash_sector_write(uint32_t offset, uint8_t *buffer)
 {
-    return n64cart_flash_write_sector_raw(offset, buffer) == 0;
+    return (*mipsromfs_backend.write_sector)(offset, buffer) == 0;
 }
 
 bool
 romfs_flash_sector_erase(uint32_t offset)
 {
-    return n64cart_flash_erase_sector_raw(offset) == 0;
+    return (*mipsromfs_backend.erase_sector)(offset) == 0;
 }
 
 static int
-n64romfs_error(uint32_t err)
+mipsromfs_error(uint32_t err)
 {
     switch (err) {
     case ROMFS_NOERR:
@@ -92,7 +92,7 @@ n64romfs_error(uint32_t err)
 }
 
 static int
-n64romfs_entry_by_index(uint32_t index, romfs_file *file)
+mipsromfs_entry_by_index(uint32_t index, romfs_file *file)
 {
     uint32_t err;
 
@@ -107,9 +107,9 @@ n64romfs_entry_by_index(uint32_t index, romfs_file *file)
 }
 
 static void
-n64romfs_refresh_counts(struct mount *mp)
+mipsromfs_refresh_counts(struct mount *mp)
 {
-    struct n64romfs_mount *rmp = (struct n64romfs_mount *)mp->m_data;
+    struct mipsromfs_mount *rmp = (struct mipsromfs_mount *)mp->m_data;
     romfs_file file;
     uint32_t err;
 
@@ -126,7 +126,7 @@ n64romfs_refresh_counts(struct mount *mp)
 }
 
 static int
-n64romfs_writable(struct mount *mp)
+mipsromfs_writable(struct mount *mp)
 {
     if (mp->m_filsys.fs_ronly || (mp->m_flags & MNT_RDONLY))
         return EROFS;
@@ -134,7 +134,7 @@ n64romfs_writable(struct mount *mp)
 }
 
 static int
-n64romfs_dir_by_inode(ino_t ino, romfs_dir *dir)
+mipsromfs_dir_by_inode(ino_t ino, romfs_dir *dir)
 {
     romfs_file file;
     int error;
@@ -144,9 +144,9 @@ n64romfs_dir_by_inode(ino_t ino, romfs_dir *dir)
         dir->entry_index = ROMFS_INVALID_ENTRY_ID;
         return 0;
     }
-    if (ino < N64ROMFS_INO_BASE)
+    if (ino < MIPSROMFS_INO_BASE)
         return ENOENT;
-    error = n64romfs_entry_by_index(N64ROMFS_INO_ENTRY(ino), &file);
+    error = mipsromfs_entry_by_index(MIPSROMFS_INO_ENTRY(ino), &file);
     if (error)
         return error;
     if (file.entry.attr.names.type != ROMFS_TYPE_DIR)
@@ -157,7 +157,7 @@ n64romfs_dir_by_inode(ino_t ino, romfs_dir *dir)
 }
 
 static int
-n64romfs_dir_parent_ino(uint8_t dir_id, ino_t *ino)
+mipsromfs_dir_parent_ino(uint8_t dir_id, ino_t *ino)
 {
     romfs_file file;
     uint8_t parent;
@@ -188,7 +188,7 @@ n64romfs_dir_parent_ino(uint8_t dir_id, ino_t *ino)
     while (err == ROMFS_NOERR) {
         if (file.entry.attr.names.type == ROMFS_TYPE_DIR &&
             file.entry.attr.names.current == parent) {
-            *ino = N64ROMFS_ENTRY_INO(file.nentry - 1);
+            *ino = MIPSROMFS_ENTRY_INO(file.nentry - 1);
             return 0;
         }
         err = romfs_list(&file, false);
@@ -197,7 +197,7 @@ n64romfs_dir_parent_ino(uint8_t dir_id, ino_t *ino)
 }
 
 static void
-n64romfs_emit_dirent(char *block, off_t block_base, off_t *offp, ino_t ino,
+mipsromfs_emit_dirent(char *block, off_t block_base, off_t *offp, ino_t ino,
     const char *name)
 {
     struct direct d;
@@ -233,7 +233,7 @@ n64romfs_emit_dirent(char *block, off_t block_base, off_t *offp, ino_t ino,
 }
 
 static off_t
-n64romfs_dir_build(ino_t ino, char *block, off_t block_base)
+mipsromfs_dir_build(ino_t ino, char *block, off_t block_base)
 {
     romfs_dir dir;
     romfs_file entry;
@@ -243,18 +243,18 @@ n64romfs_dir_build(ino_t ino, char *block, off_t block_base)
 
     if (block != 0)
         bzero(block, DIRBLKSIZ);
-    if (n64romfs_dir_by_inode(ino, &dir))
+    if (mipsromfs_dir_by_inode(ino, &dir))
         return 0;
-    (void)n64romfs_dir_parent_ino(dir.id, &parent_ino);
+    (void)mipsromfs_dir_parent_ino(dir.id, &parent_ino);
 
-    n64romfs_emit_dirent(block, block_base, &off, ino, ".");
-    n64romfs_emit_dirent(block, block_base, &off, parent_ino, "..");
+    mipsromfs_emit_dirent(block, block_base, &off, ino, ".");
+    mipsromfs_emit_dirent(block, block_base, &off, parent_ino, "..");
 
     bzero(&entry, sizeof(entry));
     err = romfs_list_dir(&entry, true, &dir, true);
     while (err == ROMFS_NOERR) {
-        n64romfs_emit_dirent(block, block_base, &off,
-            N64ROMFS_ENTRY_INO(entry.nentry - 1), entry.entry.name);
+        mipsromfs_emit_dirent(block, block_base, &off,
+            MIPSROMFS_ENTRY_INO(entry.nentry - 1), entry.entry.name);
         err = romfs_list_dir(&entry, false, &dir, true);
     }
 
@@ -276,7 +276,7 @@ n64romfs_dir_build(ino_t ino, char *block, off_t block_base)
 }
 
 static int
-n64romfs_load_inode(struct mount *mp, struct inode *ip)
+mipsromfs_load_inode(struct mount *mp, struct inode *ip)
 {
     romfs_file file;
     int error;
@@ -294,19 +294,19 @@ n64romfs_load_inode(struct mount *mp, struct inode *ip)
     if (ip->i_number == ROOTINO) {
         ip->i_mode = IFDIR | 0777;
         ip->i_nlink = 2;
-        ip->i_size = n64romfs_dir_build(ROOTINO, 0, 0);
+        ip->i_size = mipsromfs_dir_build(ROOTINO, 0, 0);
         return 0;
     }
-    if (ip->i_number < N64ROMFS_INO_BASE)
+    if (ip->i_number < MIPSROMFS_INO_BASE)
         return ENOENT;
 
-    error = n64romfs_entry_by_index(N64ROMFS_INO_ENTRY(ip->i_number), &file);
+    error = mipsromfs_entry_by_index(MIPSROMFS_INO_ENTRY(ip->i_number), &file);
     if (error)
         return error;
     if (file.entry.attr.names.type == ROMFS_TYPE_DIR) {
         ip->i_mode = IFDIR | 0777;
         ip->i_nlink = 2;
-        ip->i_size = n64romfs_dir_build(ip->i_number, 0, 0);
+        ip->i_size = mipsromfs_dir_build(ip->i_number, 0, 0);
     } else {
         ip->i_mode = IFREG | 0666;
         ip->i_nlink = 1;
@@ -317,13 +317,13 @@ n64romfs_load_inode(struct mount *mp, struct inode *ip)
 }
 
 static struct buf *
-n64romfs_blkatoff(struct inode *ip, off_t offset, char **res)
+mipsromfs_blkatoff(struct inode *ip, off_t offset, char **res)
 {
     struct buf *bp;
 
     bp = geteblk();
     bzero(bp->b_addr, MAXBSIZE);
-    n64romfs_dir_build(ip->i_number, bp->b_addr,
+    mipsromfs_dir_build(ip->i_number, bp->b_addr,
         offset & ~(DIRBLKSIZ - 1));
     bp->b_resid = 0;
     bp->b_flags |= B_DONE;
@@ -333,7 +333,7 @@ n64romfs_blkatoff(struct inode *ip, off_t offset, char **res)
 }
 
 static int
-n64romfs_read_dir(struct inode *ip, struct uio *uio)
+mipsromfs_read_dir(struct inode *ip, struct uio *uio)
 {
     off_t size;
     off_t block_base;
@@ -348,10 +348,10 @@ n64romfs_read_dir(struct inode *ip, struct uio *uio)
         n = MIN((u_int)(DIRBLKSIZ - on), uio->uio_resid);
         if (uio->uio_offset + n > size)
             n = size - uio->uio_offset;
-        bzero(n64romfs_dir_buffer, sizeof(n64romfs_dir_buffer));
-        n64romfs_dir_build(ip->i_number, (char *)n64romfs_dir_buffer,
+        bzero(mipsromfs_dir_buffer, sizeof(mipsromfs_dir_buffer));
+        mipsromfs_dir_build(ip->i_number, (char *)mipsromfs_dir_buffer,
             block_base);
-        error = uiomove((caddr_t)n64romfs_dir_buffer + on, n, uio);
+        error = uiomove((caddr_t)mipsromfs_dir_buffer + on, n, uio);
         if (error)
             return error;
     }
@@ -359,47 +359,47 @@ n64romfs_read_dir(struct inode *ip, struct uio *uio)
 }
 
 static int
-n64romfs_read_file(struct inode *ip, struct uio *uio)
+mipsromfs_read_file(struct inode *ip, struct uio *uio)
 {
     romfs_file file;
     int error;
     uint32_t got;
     unsigned n;
 
-    error = n64romfs_entry_by_index(N64ROMFS_INO_ENTRY(ip->i_number), &file);
+    error = mipsromfs_entry_by_index(MIPSROMFS_INO_ENTRY(ip->i_number), &file);
     if (error)
         return error;
     file.op = ROMFS_OP_READ;
-    file.nentry = N64ROMFS_INO_ENTRY(ip->i_number);
+    file.nentry = MIPSROMFS_INO_ENTRY(ip->i_number);
     file.pos = file.entry.start;
     file.offset = 0;
     file.read_offset = 0;
     file.err = ROMFS_NOERR;
-    file.io_buffer = n64romfs_io_buffer;
+    file.io_buffer = mipsromfs_io_buffer;
     file.buffer_base = 0xffffffffu;
     file.buffer_from_flash = false;
     file.buffer_dirty = false;
     if (uio->uio_offset != 0) {
-        error = n64romfs_error(romfs_seek_file(&file, uio->uio_offset,
+        error = mipsromfs_error(romfs_seek_file(&file, uio->uio_offset,
             SEEK_SET));
         if (error)
             return error;
     }
 
     while (uio->uio_resid != 0 && uio->uio_offset < ip->i_size) {
-        n = MIN((u_int)sizeof(n64romfs_io_buffer), uio->uio_resid);
+        n = MIN((u_int)sizeof(mipsromfs_io_buffer), uio->uio_resid);
         if (uio->uio_offset + n > ip->i_size)
             n = ip->i_size - uio->uio_offset;
-        got = romfs_read_file(n64romfs_io_buffer, n, &file);
+        got = romfs_read_file(mipsromfs_io_buffer, n, &file);
         if (got != 0) {
-            error = uiomove((caddr_t)n64romfs_io_buffer, got, uio);
+            error = uiomove((caddr_t)mipsromfs_io_buffer, got, uio);
             if (error)
                 return error;
         }
         if (file.err == ROMFS_ERR_EOF)
             return 0;
         if (file.err != ROMFS_NOERR)
-            return n64romfs_error(file.err);
+            return mipsromfs_error(file.err);
         if (got == 0)
             return 0;
     }
@@ -407,7 +407,7 @@ n64romfs_read_file(struct inode *ip, struct uio *uio)
 }
 
 static int
-n64romfs_open_write_inode(struct inode *ip, romfs_file *file)
+mipsromfs_open_write_inode(struct inode *ip, romfs_file *file)
 {
     romfs_dir dir;
     char name[ROMFS_MAX_NAME_LEN];
@@ -415,7 +415,7 @@ n64romfs_open_write_inode(struct inode *ip, romfs_file *file)
 
     if ((ip->i_mode & IFMT) != IFREG)
         return EISDIR;
-    error = n64romfs_entry_by_index(N64ROMFS_INO_ENTRY(ip->i_number), file);
+    error = mipsromfs_entry_by_index(MIPSROMFS_INO_ENTRY(ip->i_number), file);
     if (error)
         return error;
     if (file->entry.attr.names.type == ROMFS_TYPE_DIR)
@@ -425,13 +425,13 @@ n64romfs_open_write_inode(struct inode *ip, romfs_file *file)
     dir.entry_index = ROMFS_INVALID_ENTRY_ID;
     bzero(name, sizeof(name));
     bcopy(file->entry.name, name, sizeof(name) - 1);
-    error = n64romfs_error(romfs_open_append_in_dir(&dir, name, file,
-        ROMFS_TYPE_MISC, n64romfs_io_buffer));
+    error = mipsromfs_error(romfs_open_append_in_dir(&dir, name, file,
+        ROMFS_TYPE_MISC, mipsromfs_io_buffer));
     return error;
 }
 
 static int
-n64romfs_write_file(struct inode *ip, struct uio *uio, int ioflag)
+mipsromfs_write_file(struct inode *ip, struct uio *uio, int ioflag)
 {
     struct mount *mp = (struct mount *)
         ((int)ip->i_fs - offsetof(struct mount, m_filsys));
@@ -440,59 +440,59 @@ n64romfs_write_file(struct inode *ip, struct uio *uio, int ioflag)
     unsigned n;
     uint32_t written;
 
-    error = n64romfs_writable(mp);
+    error = mipsromfs_writable(mp);
     if (error)
         return error;
     if (ioflag & IO_APPEND)
         uio->uio_offset = ip->i_size;
     if (uio->uio_offset < 0)
         return EINVAL;
-    error = n64romfs_open_write_inode(ip, &file);
+    error = mipsromfs_open_write_inode(ip, &file);
     if (error)
         return error;
-    error = n64romfs_error(romfs_seek_file(&file, uio->uio_offset, SEEK_SET));
+    error = mipsromfs_error(romfs_seek_file(&file, uio->uio_offset, SEEK_SET));
     if (error)
         return error;
 
     while (uio->uio_resid != 0) {
-        n = MIN((u_int)sizeof(n64romfs_write_buffer), uio->uio_resid);
-        error = uiomove((caddr_t)n64romfs_write_buffer, n, uio);
+        n = MIN((u_int)sizeof(mipsromfs_write_buffer), uio->uio_resid);
+        error = uiomove((caddr_t)mipsromfs_write_buffer, n, uio);
         if (error)
             break;
-        written = romfs_write_file(n64romfs_write_buffer, n, &file);
+        written = romfs_write_file(mipsromfs_write_buffer, n, &file);
         if (written != n) {
-            error = n64romfs_error(file.err);
+            error = mipsromfs_error(file.err);
             if (error == 0)
                 error = EIO;
             break;
         }
     }
     if (error == 0)
-        error = n64romfs_error(romfs_close_file(&file));
+        error = mipsromfs_error(romfs_close_file(&file));
     ip->i_size = file.entry.size;
     ip->i_flag |= IUPD|ICHG;
-    n64romfs_refresh_counts(mp);
+    mipsromfs_refresh_counts(mp);
     return error;
 }
 
 static int
-n64romfs_rwip(struct inode *ip, struct uio *uio, int ioflag)
+mipsromfs_rwip(struct inode *ip, struct uio *uio, int ioflag)
 {
     int type;
 
     (void)ioflag;
     type = ip->i_mode & IFMT;
     if (uio->uio_rw != UIO_READ)
-        return n64romfs_write_file(ip, uio, ioflag);
+        return mipsromfs_write_file(ip, uio, ioflag);
     if (type == IFDIR)
-        return n64romfs_read_dir(ip, uio);
+        return mipsromfs_read_dir(ip, uio);
     if (type == IFREG)
-        return n64romfs_read_file(ip, uio);
+        return mipsromfs_read_file(ip, uio);
     return EFTYPE;
 }
 
 static int
-n64romfs_create(struct inode *pdir, struct nameidata *ndp, int mode,
+mipsromfs_create(struct inode *pdir, struct nameidata *ndp, int mode,
     struct inode **ipp)
 {
     struct mount *mp = (struct mount *)
@@ -503,62 +503,62 @@ n64romfs_create(struct inode *pdir, struct nameidata *ndp, int mode,
     uint32_t err;
 
     *ipp = 0;
-    error = n64romfs_writable(mp);
+    error = mipsromfs_writable(mp);
     if (error)
         return error;
     if ((mode & IFMT) == 0)
         mode |= IFREG;
     if ((mode & IFMT) != IFREG)
         return EOPNOTSUPP;
-    error = n64romfs_dir_by_inode(pdir->i_number, &dir);
+    error = mipsromfs_dir_by_inode(pdir->i_number, &dir);
     if (error)
         return error;
     bzero(&file, sizeof(file));
     err = romfs_create_file_in_dir(&dir, ndp->ni_dent.d_name, &file,
-        ROMFS_MODE_READWRITE, ROMFS_TYPE_MISC, n64romfs_io_buffer);
-    error = n64romfs_error(err);
+        ROMFS_MODE_READWRITE, ROMFS_TYPE_MISC, mipsromfs_io_buffer);
+    error = mipsromfs_error(err);
     if (error)
         return error;
-    error = n64romfs_error(romfs_close_file(&file));
+    error = mipsromfs_error(romfs_close_file(&file));
     if (error)
         return error;
-    n64romfs_refresh_counts(mp);
+    mipsromfs_refresh_counts(mp);
     nchinval(pdir->i_dev);
-    *ipp = iget(pdir->i_dev, pdir->i_fs, N64ROMFS_ENTRY_INO(file.nentry));
+    *ipp = iget(pdir->i_dev, pdir->i_fs, MIPSROMFS_ENTRY_INO(file.nentry));
     if (*ipp == 0)
         return u.u_error ? u.u_error : EIO;
     return 0;
 }
 
 static int
-n64romfs_remove(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
+mipsromfs_remove(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
 {
     struct mount *mp = (struct mount *)
         ((int)pdir->i_fs - offsetof(struct mount, m_filsys));
     romfs_dir dir;
     int error;
 
-    error = n64romfs_writable(mp);
+    error = mipsromfs_writable(mp);
     if (error)
         return error;
     if ((ip->i_mode & IFMT) == IFDIR)
         return EISDIR;
-    error = n64romfs_dir_by_inode(pdir->i_number, &dir);
+    error = mipsromfs_dir_by_inode(pdir->i_number, &dir);
     if (error)
         return error;
-    error = n64romfs_error(romfs_delete_in_dir(&dir, ndp->ni_dent.d_name));
+    error = mipsromfs_error(romfs_delete_in_dir(&dir, ndp->ni_dent.d_name));
     if (error)
         return error;
     ip->i_nlink = 0;
     ip->i_size = 0;
     cacheinval(ip);
-    n64romfs_refresh_counts(mp);
+    mipsromfs_refresh_counts(mp);
     nchinval(pdir->i_dev);
     return 0;
 }
 
 static int
-n64romfs_mkdir(struct inode *pdir, struct nameidata *ndp, int mode)
+mipsromfs_mkdir(struct inode *pdir, struct nameidata *ndp, int mode)
 {
     struct mount *mp = (struct mount *)
         ((int)pdir->i_fs - offsetof(struct mount, m_filsys));
@@ -567,50 +567,50 @@ n64romfs_mkdir(struct inode *pdir, struct nameidata *ndp, int mode)
     int error;
 
     (void)mode;
-    error = n64romfs_writable(mp);
+    error = mipsromfs_writable(mp);
     if (error)
         return error;
-    error = n64romfs_dir_by_inode(pdir->i_number, &dir);
+    error = mipsromfs_dir_by_inode(pdir->i_number, &dir);
     if (error)
         return error;
-    error = n64romfs_error(romfs_dir_create(&dir, ndp->ni_dent.d_name,
+    error = mipsromfs_error(romfs_dir_create(&dir, ndp->ni_dent.d_name,
         &newdir));
     if (error)
         return error;
-    n64romfs_refresh_counts(mp);
+    mipsromfs_refresh_counts(mp);
     nchinval(pdir->i_dev);
     return 0;
 }
 
 static int
-n64romfs_rmdir(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
+mipsromfs_rmdir(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
 {
     struct mount *mp = (struct mount *)
         ((int)pdir->i_fs - offsetof(struct mount, m_filsys));
     romfs_dir dir;
     int error;
 
-    error = n64romfs_writable(mp);
+    error = mipsromfs_writable(mp);
     if (error)
         return error;
     if ((ip->i_mode & IFMT) != IFDIR)
         return ENOTDIR;
-    error = n64romfs_dir_by_inode(pdir->i_number, &dir);
+    error = mipsromfs_dir_by_inode(pdir->i_number, &dir);
     if (error)
         return error;
-    error = n64romfs_error(romfs_delete_in_dir(&dir, ndp->ni_dent.d_name));
+    error = mipsromfs_error(romfs_delete_in_dir(&dir, ndp->ni_dent.d_name));
     if (error)
         return error;
     ip->i_nlink = 0;
     ip->i_size = 0;
     cacheinval(ip);
-    n64romfs_refresh_counts(mp);
+    mipsromfs_refresh_counts(mp);
     nchinval(pdir->i_dev);
     return 0;
 }
 
 static int
-n64romfs_rename(struct inode *from_pdir, struct inode *from_ip,
+mipsromfs_rename(struct inode *from_pdir, struct inode *from_ip,
     struct nameidata *from_ndp, struct inode *to_pdir, struct inode *to_ip,
     struct nameidata *to_ndp)
 {
@@ -622,7 +622,7 @@ n64romfs_rename(struct inode *from_pdir, struct inode *from_ip,
     int to_type;
     int error;
 
-    error = n64romfs_writable(mp);
+    error = mipsromfs_writable(mp);
     if (error)
         return error;
     if (from_pdir == from_ip)
@@ -637,14 +637,14 @@ n64romfs_rename(struct inode *from_pdir, struct inode *from_ip,
         if (from_type != IFDIR && to_type == IFDIR)
             return EISDIR;
     }
-    error = n64romfs_dir_by_inode(from_pdir->i_number, &from_dir);
+    error = mipsromfs_dir_by_inode(from_pdir->i_number, &from_dir);
     if (error)
         return error;
-    error = n64romfs_dir_by_inode(to_pdir->i_number, &to_dir);
+    error = mipsromfs_dir_by_inode(to_pdir->i_number, &to_dir);
     if (error)
         return error;
     if (to_ip != 0) {
-        error = n64romfs_error(romfs_delete_in_dir(&to_dir,
+        error = mipsromfs_error(romfs_delete_in_dir(&to_dir,
             to_ndp->ni_dent.d_name));
         if (error)
             return error;
@@ -652,18 +652,18 @@ n64romfs_rename(struct inode *from_pdir, struct inode *from_ip,
         to_ip->i_size = 0;
         cacheinval(to_ip);
     }
-    error = n64romfs_error(romfs_rename_in_dir(&from_dir,
+    error = mipsromfs_error(romfs_rename_in_dir(&from_dir,
         from_ndp->ni_dent.d_name, &to_dir, to_ndp->ni_dent.d_name));
     if (error)
         return error;
     cacheinval(from_ip);
-    n64romfs_refresh_counts(mp);
+    mipsromfs_refresh_counts(mp);
     nchinval(from_pdir->i_dev);
     return 0;
 }
 
 static int
-n64romfs_truncate(struct inode *ip, u_long length, int ioflags)
+mipsromfs_truncate(struct inode *ip, u_long length, int ioflags)
 {
     struct mount *mp = (struct mount *)
         ((int)ip->i_fs - offsetof(struct mount, m_filsys));
@@ -671,28 +671,28 @@ n64romfs_truncate(struct inode *ip, u_long length, int ioflags)
     int error;
 
     (void)ioflags;
-    error = n64romfs_writable(mp);
+    error = mipsromfs_writable(mp);
     if (error)
         return error;
     if (length > 0xffffffffu)
         return EFBIG;
-    error = n64romfs_open_write_inode(ip, &file);
+    error = mipsromfs_open_write_inode(ip, &file);
     if (error)
         return error;
-    error = n64romfs_error(romfs_truncate_file(&file, length));
+    error = mipsromfs_error(romfs_truncate_file(&file, length));
     if (error)
         return error;
     ip->i_size = file.entry.size;
     ip->i_flag |= IUPD|ICHG;
     cacheinval(ip);
-    n64romfs_refresh_counts(mp);
+    mipsromfs_refresh_counts(mp);
     return 0;
 }
 
 static int
-n64romfs_statfs(struct mount *mp, struct statfs *sbp)
+mipsromfs_statfs(struct mount *mp, struct statfs *sbp)
 {
-    struct n64romfs_mount *rmp = (struct n64romfs_mount *)mp->m_data;
+    struct mipsromfs_mount *rmp = (struct mipsromfs_mount *)mp->m_data;
     struct statfs sfs;
 
     bzero(&sfs, sizeof(sfs));
@@ -711,16 +711,16 @@ n64romfs_statfs(struct mount *mp, struct statfs *sbp)
 }
 
 static int
-n64romfs_sync(struct mount *mp)
+mipsromfs_sync(struct mount *mp)
 {
     (void)mp;
     return 0;
 }
 
 static int
-n64romfs_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
+mipsromfs_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
 {
-    struct n64romfs_mount *rmp = &n64romfs_mount_state;
+    struct mipsromfs_mount *rmp = &mipsromfs_mount_state;
     romfs_file file;
     uint32_t err;
     int error;
@@ -729,20 +729,20 @@ n64romfs_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
     (void)flags;
     (void)ip;
     bzero(rmp, sizeof(*rmp));
-    error = n64cart_flash_getinfo(&rmp->info);
+    error = (*mipsromfs_backend.getinfo)(&rmp->info);
     if (error)
         return error;
     if (rmp->info.rom_size == 0 ||
-        rmp->info.rom_size > N64ROMFS_MAX_ROM_SIZE)
+        rmp->info.rom_size > MIPSROMFS_MAX_ROM_SIZE)
         return ENXIO;
 
     romfs_get_buffers_sizes(rmp->info.rom_size, &rmp->map_size,
         &rmp->list_size);
-    if (rmp->map_size > sizeof(n64romfs_flash_map) ||
-        rmp->list_size > sizeof(n64romfs_flash_list))
+    if (rmp->map_size > sizeof(mipsromfs_flash_map) ||
+        rmp->list_size > sizeof(mipsromfs_flash_list))
         return ENOMEM;
     if (!romfs_start(rmp->info.romfs_offset, rmp->info.rom_size,
-        n64romfs_flash_map, n64romfs_flash_list))
+        mipsromfs_flash_map, mipsromfs_flash_list))
         return EIO;
     if (!romfs_validate())
         return EINVAL;
@@ -760,18 +760,18 @@ n64romfs_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
     return 0;
 }
 
-struct vfsops n64romfs_vfsops = {
-    n64romfs_mount,
+struct vfsops mipsromfs_vfsops = {
+    mipsromfs_mount,
     0,
-    n64romfs_load_inode,
-    n64romfs_blkatoff,
-    n64romfs_rwip,
-    n64romfs_create,
-    n64romfs_remove,
-    n64romfs_mkdir,
-    n64romfs_rmdir,
-    n64romfs_rename,
-    n64romfs_truncate,
-    n64romfs_statfs,
-    n64romfs_sync,
+    mipsromfs_load_inode,
+    mipsromfs_blkatoff,
+    mipsromfs_rwip,
+    mipsromfs_create,
+    mipsromfs_remove,
+    mipsromfs_mkdir,
+    mipsromfs_rmdir,
+    mipsromfs_rename,
+    mipsromfs_truncate,
+    mipsromfs_statfs,
+    mipsromfs_sync,
 };

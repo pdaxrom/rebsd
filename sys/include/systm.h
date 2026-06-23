@@ -118,7 +118,11 @@ int strncmp (const char *s1, const char *s2, size_t n);
 void bzero (void *s, size_t nbytes);
 void bcopy (const void *src, void *dest, size_t nbytes);
 int bcmp (const void *a, const void *b, size_t nbytes);
+void *memcpy (void *dest, const void *src, size_t nbytes);
+void *memmove (void *dest, const void *src, size_t nbytes);
+void *memset (void *s, int c, size_t nbytes);
 int copystr (caddr_t src, caddr_t dest, u_int maxlen, u_int *copied);
+char *strncpy (char *dest, const char *src, size_t nbytes);
 size_t strlen (const char *s);
 int ffs (u_long i);         /* find the index of the lsb set bit */
 void insque (void *element, void *pred);

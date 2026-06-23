@@ -914,6 +914,48 @@ memcpy(void *dst, const void *src, size_t nbytes)
     return dst;
 }
 
+void *
+memmove(void *dst0, const void *src0, size_t nbytes)
+{
+    unsigned char *dst = dst0;
+    const unsigned char *src = src0;
+
+    if (dst > src && dst < src + nbytes) {
+        dst += nbytes;
+        src += nbytes;
+        while (nbytes-- != 0)
+            *--dst = *--src;
+    } else {
+        while (nbytes-- != 0)
+            *dst++ = *src++;
+    }
+    return dst0;
+}
+
+void *
+memset(void *dst0, int value, size_t nbytes)
+{
+    unsigned char *dst = dst0;
+
+    while (nbytes-- != 0)
+        *dst++ = value;
+    return dst0;
+}
+
+char *
+strncpy(char *dst, const char *src, size_t nbytes)
+{
+    char *start = dst;
+
+    while (nbytes != 0 && *src != '\0') {
+        *dst++ = *src++;
+        nbytes--;
+    }
+    while (nbytes-- != 0)
+        *dst++ = '\0';
+    return start;
+}
+
 /*
  * Fill the array with zeroes.
  */

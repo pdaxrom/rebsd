@@ -1,10 +1,7 @@
 #ifndef _N64_N64CART_FLASH_H_
 #define _N64_N64CART_FLASH_H_
 
-#include <sys/ioctl.h>
-
-#define N64CART_FLASH_SECTOR       4096u
-#define N64CART_FLASH_MAX_TRANSFER N64CART_FLASH_SECTOR
+#include "../cartflash.h"
 
 #define N64CART_SSI_SR             0x10u
 #define N64CART_SSI_DR0            0x14u
@@ -16,25 +13,6 @@
 
 #define N64CART_SSI_SR_TFNF        0x01u
 #define N64CART_SSI_SR_RFNE        0x02u
-
-struct n64cart_flash_info {
-    unsigned jedec_id;
-    unsigned rom_size;
-    unsigned fw_size;
-    unsigned romfs_offset;
-    unsigned sector_size;
-};
-
-struct n64cart_flash_io {
-    unsigned offset;
-    unsigned size;
-    char *buffer;
-};
-
-#define N64CARTFLASHIOC_GETINFO _IOR('F', 1, struct n64cart_flash_info)
-#define N64CARTFLASHIOC_READ    _IOW('F', 2, struct n64cart_flash_io)
-#define N64CARTFLASHIOC_WRITE   _IOW('F', 3, struct n64cart_flash_io)
-#define N64CARTFLASHIOC_ERASE   _IOW('F', 4, unsigned)
 
 #ifdef KERNEL
 #ifndef N64CART_ENABLED

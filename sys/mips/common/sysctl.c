@@ -18,6 +18,27 @@
 #include <sys/vm.h>
 #include <machine/cpu.h>
 #include <machine/layout.h>
+#ifdef N64
+#include <machine/n64.h>
+#endif
+
+#ifdef N64
+#define MIPS_SYSCTL_CPU_KHZ     N64_CPU_KHZ
+#define MIPS_SYSCTL_COUNT_KHZ   N64_COUNT_KHZ
+static int
+mips_sysctl_ram_bytes(void)
+{
+    return n64_rdram_size();
+}
+#else
+#define MIPS_SYSCTL_CPU_KHZ     MALTA_CPU_KHZ
+#define MIPS_SYSCTL_COUNT_KHZ   MIPS_COUNT_KHZ
+static int
+mips_sysctl_ram_bytes(void)
+{
+    return MALTA_RAM_SIZE;
+}
+#endif
 
 /*
  * Errno messages used by libc strerror(3) through machdep.errmsg.
@@ -225,17 +246,17 @@ cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     case CPU_FREQ_KHZ:
         if (namelen != 1)
             return ENOTDIR;
-        value = MALTA_CPU_KHZ;
+        value = MIPS_SYSCTL_CPU_KHZ;
         return sysctl_rdstruct(oldp, oldlenp, newp, &value, sizeof(value));
     case CPU_COUNT_KHZ:
         if (namelen != 1)
             return ENOTDIR;
-        value = MIPS_COUNT_KHZ;
+        value = MIPS_SYSCTL_COUNT_KHZ;
         return sysctl_rdstruct(oldp, oldlenp, newp, &value, sizeof(value));
     case CPU_RAM_BYTES:
         if (namelen != 1)
             return ENOTDIR;
-        value = MALTA_RAM_SIZE;
+        value = mips_sysctl_ram_bytes();
         return sysctl_rdstruct(oldp, oldlenp, newp, &value, sizeof(value));
     default:
         return EOPNOTSUPP;

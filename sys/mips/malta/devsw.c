@@ -24,6 +24,9 @@ int malta_uart_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag);
 int malta_uart_select(dev_t dev, int rw);
 char malta_uart_raw_read(dev_t dev);
 void malta_uart_raw_write(dev_t dev, char ch);
+int malta_cartflash_open(dev_t dev, int flag, int mode);
+int malta_cartflash_close(dev_t dev, int flag, int mode);
+int malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag);
 
 int
 nulldev(void)
@@ -227,6 +230,15 @@ const struct cdevsw cdevsw[] = {
 #else
         NOCDEV
 #endif
+    },
+    { NOCDEV },
+    {
+#if MIPS_CARTFLASH_MAJOR != 11
+#   error Wrong MIPS_CARTFLASH_MAJOR value!
+#endif
+        malta_cartflash_open, malta_cartflash_close, norw, norw,
+        malta_cartflash_ioctl, mips_nullstop, 0, mips_seltrue,
+        mips_nostrategy, 0, 0,
     },
     { 0 },
 };

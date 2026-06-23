@@ -14,8 +14,8 @@
 #include <sys/systm.h>
 #include <sys/proc.h>
 
-#ifdef N64CART_ENABLED
-extern struct vfsops n64romfs_vfsops;
+#ifdef ROMFS_ENABLED
+extern struct vfsops mipsromfs_vfsops;
 #endif
 
 static int
@@ -47,9 +47,9 @@ vfs_getops(int fstype)
     switch (fstype) {
     case MOUNT_UFS:
         return &ufs_vfsops;
-#ifdef N64CART_ENABLED
+#ifdef ROMFS_ENABLED
     case MOUNT_ROMFS:
-        return &n64romfs_vfsops;
+        return &mipsromfs_vfsops;
 #endif
     default:
         return 0;

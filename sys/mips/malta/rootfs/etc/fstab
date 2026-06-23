@@ -1,3 +1,4 @@
 /dev/romdisk    /       ufs     ro      0       0
 /dev/ram0       /var    ufs     rw      0       0
+/dev/cartflash0 /cart   romfs   rw      0       0
 /dev/swap       none    swap    sw      0       0

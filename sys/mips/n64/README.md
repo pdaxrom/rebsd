@@ -1124,6 +1124,14 @@ securelevel still blocks write opens. New N64-specific userland should prefer
 sysctl/ioctl interfaces, but these devices keep the stock BSD monitoring tools
 usable.
 
+The kernel symbol lookup for those tools goes through the shared MIPS
+`machdep.nlist` sysctl (`knlist(3)`), not a `/vmunix` a.out namelist file.
+N64 and Malta therefore use the same `sys/mips/common/sysctl.c` symbol export
+table for `_proc`, `_nproc`, `_inode`, `_file`, `_cp_time`, `_sum`, and related
+diagnostic variables. Malta QEMU smoke-testing should include `w`, `ps ax`,
+`vmstat`, `vmstat -f`, `/sbin/pstat -T`, and `/sbin/pstat -p` before trying the
+same ROM on real N64 hardware.
+
 The console tty settings are initialized with echo, CR/LF mapping, erase,
 kill, and control-character echo behavior. `/etc/gettytab` sets `cb`, `ce`,
 and `ck` for N64 login lines before `login` runs. The stock `login` program
