@@ -38,8 +38,8 @@ MIPS_ROOTFS_COPY_PATHS = \
     root/cc-pcc-smoke.sh root/ll-abi-smoke.c root/ll-abi-smoke.s \
     root/ll-abi-smoke.sh root/ll-smoke.c root/ll-smoke.sh \
     root/pcc-fpu-smoke.c root/pcc-smoke.c root/pcc-smoke.sh \
-    root/sh-comsubst-smoke.sh root/sh-fail-smoke.sh root/types-smoke.c \
-    root/types-smoke.sh
+    root/romfs-smoke.sh root/sh-comsubst-smoke.sh root/sh-fail-smoke.sh \
+    root/types-smoke.c root/types-smoke.sh
 MIPS_ROOTFS_COPY_FILES = $(addprefix $(MIPS_ROOTFS_SRC)/,$(MIPS_ROOTFS_COPY_PATHS))
 MIPS_TRACE       ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil

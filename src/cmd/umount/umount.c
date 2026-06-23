@@ -99,7 +99,7 @@ main(
 		errs = umountall();
 	} else
 		for (errs = 0; *argv != NULL; ++argv)
-			if (umountfs(*argv) == 0)
+			if (umountfs(*argv) != 0)
 				errs = 1;
 	exit(errs);
 }

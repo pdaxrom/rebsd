@@ -51,6 +51,9 @@ file /root/pcc-smoke.c
 file /root/pcc-smoke.sh
 mode 0775
 
+file /root/romfs-smoke.sh
+mode 0775
+
 file /root/sh-comsubst-smoke.sh
 mode 0775
 

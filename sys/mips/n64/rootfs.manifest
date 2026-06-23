@@ -88,6 +88,9 @@ mode 0775
 
 file /root/pcc-smoke.c
 
+file /root/romfs-smoke.sh
+mode 0775
+
 file /bin/[
 mode 0775
 
