@@ -721,7 +721,7 @@ static bool romfs_journal_primary_needs_recovery(void)
 
     list_crc = romfs_checksum(flash_list_int, flash_list_size);
     map_crc = romfs_checksum(flash_map_int, flash_map_size);
-    return list_crc == from_lsb32(best_header.list_crc) &&
+    return list_crc != from_lsb32(best_header.list_crc) ||
            map_crc != from_lsb32(best_header.map_crc);
 }
 

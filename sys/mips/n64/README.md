@@ -440,6 +440,22 @@ ROMFS mount path:
   from an interrupted metadata flush when a valid committed journal entry is
   present.
 
+The host-side synthetic journal test is:
+
+```
+make -C src/cmd/romfsctl host-journal-test
+```
+
+It links the ROMFS core with an in-memory NOR flash backend, injects deterministic
+erase/write failures across a metadata-only rename flush, restarts the ROMFS
+state, and verifies that pre-commit failures keep the old name while post-commit
+failures recover the new name from the valid journal. It also corrupts the
+primary flashlist and flashmap sectors after a clean journaled update and checks
+that journal recovery restores a mountable image. This test deliberately does
+not open `/dev/cartflash0`. As of this note, the new journal power-cut matrix
+has been verified on the host synthetic backend and the Malta/QEMU ROMFS path;
+the deliberate power-cut test has not yet been run on real N64cart hardware.
+
 The current UFS `rootfs.img` remains the system root and is still demand-read
 from cartridge ROM through the romdisk block driver. Cartridge ROMFS is mounted
 separately at `/cart`; because the n64cart flash is fixed cartridge hardware,

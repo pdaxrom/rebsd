@@ -369,6 +369,10 @@ copying binaries manually.
   - [x] add sequence/CRC recovery rules for journaled metadata commits
   - [x] recover from an interrupted metadata flush when a valid journal commit
     is present
+  - [x] add a host-side synthetic power-cut test for journaled metadata
+    updates, using an emulated NOR flash backend instead of `/dev/cartflash0`
+  - [x] run Malta/QEMU ROMFS smoke after the journal recovery change, so the
+    shared kernel/VFS backend still mounts, writes, unmounts, and remounts
   - [x] mirror N64cart-manager SPI sessions: disable the cartridge interrupt
     while command mode is active, switch to SPI only for the transaction, and
     restore quad-ROM mode before releasing the lock
