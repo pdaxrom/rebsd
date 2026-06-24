@@ -404,8 +404,24 @@ copying binaries manually.
   on real N64cart hardware with 4 KiB blocks:
   - write: 8 MiB in 923.380 seconds, about 8 KiB/s
   - read: 8 MiB in 24.980 seconds, about 327 KiB/s
-  - investigate read batching/cache, write-sector erase/program batching, and
-    avoiding unnecessary metadata rewrites during sequential writes
+  - [x] cache N64 flash info probing so every read/write/erase does not re-read
+    JEDEC and firmware metadata
+  - [x] defer ROMFS file metadata flushes from every VFS `write(2)` to
+    `sync(2)`/`umount(8)`, while keeping data-sector writes synchronous
+  - [x] raise the ROMFS VFS write staging buffer from 512 bytes to one 4 KiB
+    flash sector
+  - [x] add host regression coverage for deferred metadata and failed data
+    sector writes, so a failed backend write cannot commit stale metadata
+  - [x] run the synthetic Malta `/cart` smoke with `diskspeed -m 1`, remount,
+    and a second `/root/romfs-smoke.sh`
+  - [x] run the same performance/safety checks on real N64cart hardware:
+    `/root/romfs-smoke.sh`, `/cart` `diskspeed`, `sync`, `umount`, remount, and
+    a second `/root/romfs-smoke.sh` passed
+  - current real N64cart numbers after deferred metadata flush:
+    - write: 8 MiB in 101.210 seconds, about 80 KiB/s
+    - read: 8 MiB in 24.960 seconds, about 328 KiB/s
+  - [ ] investigate read batching/cache and write-sector erase/program batching
+    after real hardware numbers are remeasured
 - [ ] Add an overlay filesystem plan after ROMFS can be mounted:
   - lower layer is read-only UFS or ROMFS
   - upper layer is initially RAM-backed, ROMFS, or another writable block

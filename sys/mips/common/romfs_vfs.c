@@ -39,7 +39,7 @@ static struct mipsromfs_mount mipsromfs_mount_state;
 static uint16_t mipsromfs_flash_map[MIPSROMFS_MAX_MAP_SIZE / sizeof(uint16_t)];
 static uint8_t mipsromfs_flash_list[MIPSROMFS_MAX_LIST_SIZE];
 static uint8_t mipsromfs_io_buffer[ROMFS_FLASH_SECTOR];
-static uint8_t mipsromfs_write_buffer[512];
+static uint8_t mipsromfs_write_buffer[ROMFS_FLASH_SECTOR];
 static uint8_t mipsromfs_dir_buffer[DIRBLKSIZ];
 
 bool
@@ -468,7 +468,7 @@ mipsromfs_write_file(struct inode *ip, struct uio *uio, int ioflag)
         }
     }
     if (error == 0)
-        error = mipsromfs_error(romfs_close_file(&file));
+        error = mipsromfs_error(romfs_flush_file_deferred(&file));
     ip->i_size = file.entry.size;
     ip->i_flag |= IUPD|ICHG;
     mipsromfs_refresh_counts(mp);
@@ -714,6 +714,7 @@ static int
 mipsromfs_sync(struct mount *mp)
 {
     (void)mp;
+    (void)romfs_sync_metadata();
     if (mipsromfs_backend.sync != 0)
         return (*mipsromfs_backend.sync)();
     return 0;

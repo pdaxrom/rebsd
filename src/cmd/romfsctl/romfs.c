@@ -857,6 +857,8 @@ bool romfs_start(uint32_t start, uint32_t rom_size, uint16_t *flash_map, uint8_t
     flash_list_int = flash_list;
     romfs_journal_enabled = false;
     romfs_journal_sequence = 0;
+    romfs_flush_depth = 0;
+    romfs_flush_pending = false;
 
     //    printf("romfs memory size %d\n", mem_size);
     //    printf("romfs map size %d\n", flash_map_size);
@@ -1320,8 +1322,17 @@ static uint32_t romfs_allocate_sector_after(romfs_file *file, uint32_t prev_sect
     }
     flash_map_int[sector] = to_lsb16(sector);
 
-    romfs_flash_sector_erase(sector * ROMFS_FLASH_SECTOR);
-    romfs_flash_sector_write(sector * ROMFS_FLASH_SECTOR, (uint8_t *) buffer);
+    if (!romfs_flash_sector_erase(sector * ROMFS_FLASH_SECTOR) ||
+            !romfs_flash_sector_write(sector * ROMFS_FLASH_SECTOR,
+                (uint8_t *) buffer)) {
+        if (prev_sector == 0xffff) {
+            file->entry.start = 0xffff;
+        } else {
+            flash_map_int[prev_sector] = to_lsb16(prev_sector);
+        }
+        flash_map_int[sector] = 0xffff;
+        return (file->err = ROMFS_ERR_OPERATION);
+    }
 
     if (sector_out) {
         *sector_out = sector;
@@ -1383,8 +1394,11 @@ static uint32_t romfs_flush_write_buffer(romfs_file *file)
         return (file->err = ROMFS_ERR_OPERATION);
     }
 
-    romfs_flash_sector_erase(file->pos * ROMFS_FLASH_SECTOR);
-    romfs_flash_sector_write(file->pos * ROMFS_FLASH_SECTOR, file->io_buffer);
+    if (!romfs_flash_sector_erase(file->pos * ROMFS_FLASH_SECTOR) ||
+            !romfs_flash_sector_write(file->pos * ROMFS_FLASH_SECTOR,
+                file->io_buffer)) {
+        return (file->err = ROMFS_ERR_OPERATION);
+    }
     file->buffer_dirty = false;
     file->buffer_from_flash = true;
     return (file->err = ROMFS_NOERR);
@@ -1550,6 +1564,34 @@ uint32_t romfs_flush_file(romfs_file *file)
     return ROMFS_NOERR;
 }
 
+uint32_t romfs_flush_file_deferred(romfs_file *file)
+{
+    uint32_t status;
+
+    if (!file) {
+        return ROMFS_ERR_OPERATION;
+    }
+
+    if (file->op != ROMFS_OP_WRITE) {
+        return ROMFS_NOERR;
+    }
+
+    status = romfs_sync_write_file(file);
+    if (status == ROMFS_NOERR) {
+        romfs_flush_pending = true;
+    }
+    return status;
+}
+
+uint32_t romfs_sync_metadata(void)
+{
+    if (romfs_flush_pending) {
+        romfs_flush();
+        romfs_flush_pending = false;
+    }
+    return ROMFS_NOERR;
+}
+
 uint32_t romfs_close_file(romfs_file *file)
 {
     return romfs_flush_file(file);
@@ -1620,10 +1662,18 @@ uint32_t romfs_truncate_file(romfs_file *file, uint32_t size)
 
         uint32_t tail = size % ROMFS_FLASH_SECTOR;
         if (tail != 0) {
-            romfs_flash_sector_read(last_kept * ROMFS_FLASH_SECTOR, file->io_buffer, ROMFS_FLASH_SECTOR);
+            if (!romfs_flash_sector_read(last_kept * ROMFS_FLASH_SECTOR,
+                    file->io_buffer, ROMFS_FLASH_SECTOR)) {
+                status = ROMFS_ERR_OPERATION;
+                goto out;
+            }
             memset(&file->io_buffer[tail], 0, ROMFS_FLASH_SECTOR - tail);
-            romfs_flash_sector_erase(last_kept * ROMFS_FLASH_SECTOR);
-            romfs_flash_sector_write(last_kept * ROMFS_FLASH_SECTOR, file->io_buffer);
+            if (!romfs_flash_sector_erase(last_kept * ROMFS_FLASH_SECTOR) ||
+                    !romfs_flash_sector_write(last_kept * ROMFS_FLASH_SECTOR,
+                        file->io_buffer)) {
+                status = ROMFS_ERR_OPERATION;
+                goto out;
+            }
         }
     }
 
@@ -1714,7 +1764,11 @@ uint32_t romfs_read_file(void *buffer, uint32_t size, romfs_file *file)
         uint32_t space = ROMFS_FLASH_SECTOR - file->offset;
         uint32_t chunk = readable < space ? readable : space;
 
-        romfs_flash_sector_read(file->pos * ROMFS_FLASH_SECTOR + file->offset, &dst[total_read], chunk);
+        if (!romfs_flash_sector_read(file->pos * ROMFS_FLASH_SECTOR +
+                file->offset, &dst[total_read], chunk)) {
+            file->err = ROMFS_ERR_OPERATION;
+            return total_read;
+        }
 
         file->offset += chunk;
         file->read_offset += chunk;

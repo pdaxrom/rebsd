@@ -105,6 +105,8 @@ file /bin/cpp
 mode 0775
 file /bin/df
 mode 0775
+file /bin/diskspeed
+mode 0775
 file /bin/echo
 mode 0775
 file /bin/expr
@@ -154,6 +156,8 @@ mode 0775
 file /bin/strip
 mode 0775
 file /bin/stty
+mode 0775
+file /bin/sync
 mode 0775
 file /bin/test
 mode 0775

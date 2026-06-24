@@ -26,11 +26,12 @@ MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
 MIPS_ROOTFS_COPY_PATHS = \
-    bin/ar bin/as bin/cat bin/cc bin/chmod bin/cpp bin/df bin/echo bin/expr \
+    bin/ar bin/as bin/cat bin/cc bin/chmod bin/cpp bin/df bin/diskspeed \
+    bin/echo bin/expr \
     bin/false bin/ld bin/login bin/ls bin/matrix-as-vr4300 bin/mkdir \
     bin/mv bin/nm bin/od bin/pcc bin/ps bin/pwd bin/ranlib bin/rm bin/rmdir \
     bin/romfsctl bin/sed bin/sh \
-    bin/size bin/smoke-as-vr4300 bin/strip bin/stty bin/test bin/tr \
+    bin/size bin/smoke-as-vr4300 bin/strip bin/stty bin/sync bin/test bin/tr \
     bin/true bin/uname bin/vmstat bin/w bin/wc \
     sbin/init sbin/mkfs sbin/mount sbin/pstat sbin/umount \
     lib/crt0.o lib/libc.a lib/libm.a libexec/ccom libexec/getty \

@@ -18,6 +18,8 @@
 #define TEST_ROMFS_OFFSET   0x10000u
 #define TEST_PAYLOAD        "journal-payload"
 #define TEST_PAYLOAD_LEN    ((uint32_t)(sizeof(TEST_PAYLOAD) - 1))
+#define TEST_APPEND         "-deferred"
+#define TEST_APPEND_LEN     ((uint32_t)(sizeof(TEST_APPEND) - 1))
 
 /*
  * With TEST_ROM_SIZE, ROMFS list and map are one sector each.  A metadata-only
@@ -188,6 +190,32 @@ read_file_exact(const char *path)
     return true;
 }
 
+static bool
+read_file_payload(const char *path, const char *payload, uint32_t payload_len)
+{
+    romfs_file file;
+    char buffer[64];
+    uint32_t got;
+    uint32_t err;
+
+    if (payload_len > sizeof(buffer))
+        die("read_file_payload buffer too small");
+
+    memset(&file, 0, sizeof(file));
+    err = romfs_open_path(path, &file, io_buffer);
+    if (err == ROMFS_ERR_NO_ENTRY)
+        return false;
+    if (err != ROMFS_NOERR)
+        die_romfs(path, err);
+    if (file.entry.size != payload_len)
+        die("file payload size mismatch");
+    memset(buffer, 0, sizeof(buffer));
+    got = romfs_read_file(buffer, payload_len, &file);
+    if (got != payload_len || memcmp(buffer, payload, payload_len) != 0)
+        die("file payload mismatch");
+    return true;
+}
+
 static void
 check_state_after_restart(int fail_after)
 {
@@ -261,6 +289,94 @@ run_primary_corruption_recovery(void)
     check_state_after_restart(TEST_VALID_JOURNAL_OPS);
 }
 
+static void
+run_deferred_metadata_flush(void)
+{
+    romfs_file file;
+    char appended[sizeof(TEST_PAYLOAD) + sizeof(TEST_APPEND)];
+    uint32_t appended_len;
+    uint32_t err;
+
+    memcpy(flash_image, base_image, TEST_ROM_SIZE);
+    start_romfs_or_die();
+
+    memset(&file, 0, sizeof(file));
+    err = romfs_open_append_path("/before.txt", &file, ROMFS_TYPE_MISC,
+        io_buffer, false);
+    if (err != ROMFS_NOERR)
+        die_romfs("open append deferred", err);
+    if (romfs_write_file(TEST_APPEND, TEST_APPEND_LEN, &file) !=
+        TEST_APPEND_LEN)
+        die_romfs("write deferred append", file.err);
+    err = romfs_flush_file_deferred(&file);
+    if (err != ROMFS_NOERR)
+        die_romfs("flush deferred append", err);
+
+    memcpy(appended, TEST_PAYLOAD, TEST_PAYLOAD_LEN);
+    memcpy(appended + TEST_PAYLOAD_LEN, TEST_APPEND, TEST_APPEND_LEN);
+    appended_len = TEST_PAYLOAD_LEN + TEST_APPEND_LEN;
+
+    if (!read_file_payload("/before.txt", appended, appended_len))
+        die("deferred metadata is not visible in memory");
+
+    start_romfs_or_die();
+    if (!read_file_payload("/before.txt", TEST_PAYLOAD, TEST_PAYLOAD_LEN))
+        die("unsynced deferred metadata survived restart");
+
+    memset(&file, 0, sizeof(file));
+    err = romfs_open_append_path("/before.txt", &file, ROMFS_TYPE_MISC,
+        io_buffer, false);
+    if (err != ROMFS_NOERR)
+        die_romfs("open append deferred sync", err);
+    if (romfs_write_file(TEST_APPEND, TEST_APPEND_LEN, &file) !=
+        TEST_APPEND_LEN)
+        die_romfs("write deferred sync append", file.err);
+    err = romfs_flush_file_deferred(&file);
+    if (err != ROMFS_NOERR)
+        die_romfs("flush deferred sync append", err);
+    err = romfs_sync_metadata();
+    if (err != ROMFS_NOERR)
+        die_romfs("sync deferred metadata", err);
+
+    start_romfs_or_die();
+    if (!read_file_payload("/before.txt", appended, appended_len))
+        die("synced deferred metadata did not survive restart");
+}
+
+static void
+run_data_write_failure(void)
+{
+    romfs_file file;
+    uint32_t err;
+
+    memcpy(flash_image, base_image, TEST_ROM_SIZE);
+    start_romfs_or_die();
+
+    memset(&file, 0, sizeof(file));
+    err = romfs_create_path("/writefail.txt", &file, ROMFS_MODE_READWRITE,
+        ROMFS_TYPE_MISC, io_buffer, false);
+    if (err != ROMFS_NOERR)
+        die_romfs("create writefail", err);
+    if (romfs_write_file(TEST_PAYLOAD, TEST_PAYLOAD_LEN, &file) !=
+        TEST_PAYLOAD_LEN)
+        die_romfs("write writefail", file.err);
+
+    fail_enabled = true;
+    fail_tripped = false;
+    fail_after_ops = 0;
+    write_erase_ops = 0;
+    err = romfs_flush_file_deferred(&file);
+    fail_enabled = false;
+    if (err == ROMFS_NOERR)
+        die("data write failure was reported as success");
+    if (!fail_tripped)
+        die("data write failure trigger did not trip");
+
+    start_romfs_or_die();
+    if (read_file_payload("/writefail.txt", TEST_PAYLOAD, TEST_PAYLOAD_LEN))
+        die("failed data write became visible after restart");
+}
+
 int
 main(void)
 {
@@ -270,6 +386,8 @@ main(void)
     for (int fail_after = 0; fail_after <= TEST_FLUSH_OPS; fail_after++)
         run_rename_power_cut_case(fail_after);
     run_primary_corruption_recovery();
+    run_deferred_metadata_flush();
+    run_data_write_failure();
 
     printf("romfs journal host power-cut test ok\n");
     return 0;

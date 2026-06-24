@@ -12,7 +12,12 @@
 #define MALTA_CARTFLASH_FW_SIZE     0x4000u
 #define MALTA_CARTFLASH_ROMFS_OFF   0x8000u
 #define MALTA_CARTFLASH_JEDEC       0xc22015u
-#define MALTA_CARTFLASH_SLOTS       128u
+/*
+ * Sparse flash sectors kept in RAM for Malta tests.  384 sectors covers the
+ * 1MB diskspeed smoke plus ROMFS metadata without consuming a full 8MB flash
+ * image inside the 8MB guest.
+ */
+#define MALTA_CARTFLASH_SLOTS       384u
 #define MALTA_CARTFLASH_MAP_SIZE    \
     (((MALTA_CARTFLASH_SIZE / ROMFS_FLASH_SECTOR) * sizeof(uint16_t) + \
     (ROMFS_FLASH_SECTOR - 1)) & ~(ROMFS_FLASH_SECTOR - 1))

@@ -41,6 +41,8 @@ static const struct n64cart_flash_chip n64cart_flash_chips[] = {
 static unsigned char n64cart_flash_buf[N64CART_FLASH_SECTOR];
 static int n64cart_flash_access_depth;
 static unsigned n64cart_flash_access_status;
+static struct n64cart_flash_info n64cart_flash_cached_info;
+static int n64cart_flash_info_cached;
 
 #ifndef N64CART_FLASH_WRITE_ENABLE
 #define N64CART_FLASH_WRITE_ENABLE 1
@@ -275,7 +277,7 @@ n64cart_flash_fw_size(void)
 }
 
 static int
-n64cart_flash_info(struct n64cart_flash_info *info)
+n64cart_flash_probe_info(struct n64cart_flash_info *info)
 {
     unsigned char jedec[4];
     unsigned mf;
@@ -305,6 +307,27 @@ n64cart_flash_info(struct n64cart_flash_info *info)
         }
     }
     return ENODEV;
+}
+
+static int
+n64cart_flash_info(struct n64cart_flash_info *info)
+{
+    struct n64cart_flash_info probed;
+    int error;
+
+    if (n64cart_flash_info_cached) {
+        bcopy(&n64cart_flash_cached_info, info, sizeof(*info));
+        return 0;
+    }
+
+    error = n64cart_flash_probe_info(&probed);
+    if (error != 0)
+        return error;
+
+    bcopy(&probed, &n64cart_flash_cached_info, sizeof(probed));
+    n64cart_flash_info_cached = 1;
+    bcopy(&probed, info, sizeof(*info));
+    return 0;
 }
 
 static int

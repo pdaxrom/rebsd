@@ -134,6 +134,8 @@ uint32_t romfs_delete(const char *name);
 uint32_t romfs_create_file(const char *name, romfs_file * file, uint16_t mode, uint16_t type, uint8_t * io_buffer);
 uint32_t romfs_write_file(const void *buffer, uint32_t size, romfs_file * file);
 uint32_t romfs_flush_file(romfs_file * file);
+uint32_t romfs_flush_file_deferred(romfs_file * file);
+uint32_t romfs_sync_metadata(void);
 uint32_t romfs_close_file(romfs_file * file);
 uint32_t romfs_open_file(const char *name, romfs_file * file, uint8_t * io_buffer);
 uint32_t romfs_read_map_table(uint16_t * map_buffer, uint32_t map_size, romfs_file * file);
