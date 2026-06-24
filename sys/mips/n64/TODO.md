@@ -432,8 +432,11 @@ copying binaries manually.
   - current real N64cart numbers after 32 KiB read-ahead:
     - write: 8 MiB in 101.740 seconds, about 80 KiB/s
     - read: 8 MiB in 5.750 seconds, about 1424 KiB/s
-  - [ ] investigate the faster n64cart PI ROM window/ROM lookup read path after
-    real hardware numbers are remeasured with the safe read-ahead path
+  - [ ] Design a safe n64cart firmware-assisted fast read path before using the
+    PI ROM window/ROM lookup table from the kernel. The current firmware owns
+    the lookup table for the selected boot ROM, so kernel-side temporary lookup
+    rewrites are not safe enough without an explicit firmware protocol or
+    reserved scratch window.
 - [ ] Add an overlay filesystem plan after ROMFS can be mounted:
   - lower layer is read-only UFS or ROMFS
   - upper layer is initially RAM-backed, ROMFS, or another writable block
