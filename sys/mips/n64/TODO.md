@@ -420,8 +420,20 @@ copying binaries manually.
   - current real N64cart numbers after deferred metadata flush:
     - write: 8 MiB in 101.210 seconds, about 80 KiB/s
     - read: 8 MiB in 24.960 seconds, about 328 KiB/s
-  - [ ] investigate read batching/cache and write-sector erase/program batching
-    after real hardware numbers are remeasured
+  - [x] add a 32 KiB read-ahead cache in the N64 n64cart flash driver for
+    sequential physical flash reads; invalidate it on sector write/erase
+  - [x] build `make -C sys/mips BOARD=n64 kernel.z64` after the read-ahead
+    change
+  - [x] run Malta/QEMU `/root/romfs-smoke.sh` and `diskspeed -m 1` on `/cart`
+    after the read-ahead change
+  - [x] run real N64cart hardware performance smoke after the read-ahead change:
+    `/root/romfs-smoke.sh`, `/cart` `diskspeed`, `sync`, `umount`, remount, and
+    a second `/root/romfs-smoke.sh` passed
+  - current real N64cart numbers after 32 KiB read-ahead:
+    - write: 8 MiB in 101.740 seconds, about 80 KiB/s
+    - read: 8 MiB in 5.750 seconds, about 1424 KiB/s
+  - [ ] investigate the faster n64cart PI ROM window/ROM lookup read path after
+    real hardware numbers are remeasured with the safe read-ahead path
 - [ ] Add an overlay filesystem plan after ROMFS can be mounted:
   - lower layer is read-only UFS or ROMFS
   - upper layer is initially RAM-backed, ROMFS, or another writable block

@@ -21,6 +21,9 @@
 #define N64CART_FLASH_CMD_ADDR_LEN     5u
 #define N64CART_FLASH_CMD_DUMMY_LEN    1u
 #define N64CART_FLASH_PAGE             256u
+#define N64CART_FLASH_READAHEAD_SECTORS 8u
+#define N64CART_FLASH_READAHEAD_SIZE   \
+    (N64CART_FLASH_SECTOR * N64CART_FLASH_READAHEAD_SECTORS)
 
 struct n64cart_flash_chip {
     unsigned mf;
@@ -39,6 +42,10 @@ static const struct n64cart_flash_chip n64cart_flash_chips[] = {
 };
 
 static unsigned char n64cart_flash_buf[N64CART_FLASH_SECTOR];
+static unsigned char n64cart_flash_read_cache[N64CART_FLASH_READAHEAD_SIZE];
+static unsigned n64cart_flash_read_cache_base;
+static unsigned n64cart_flash_read_cache_len;
+static int n64cart_flash_read_cache_valid;
 static int n64cart_flash_access_depth;
 static unsigned n64cart_flash_access_status;
 static struct n64cart_flash_info n64cart_flash_cached_info;
@@ -246,6 +253,74 @@ n64cart_flash_read(unsigned addr, unsigned char *buffer, unsigned len)
 }
 
 static void
+n64cart_flash_read_cache_invalidate(void)
+{
+    n64cart_flash_read_cache_valid = 0;
+    n64cart_flash_read_cache_base = 0;
+    n64cart_flash_read_cache_len = 0;
+}
+
+static int
+n64cart_flash_read_cache_contains(unsigned offset, unsigned size)
+{
+    unsigned end;
+    unsigned cache_end;
+
+    if (!n64cart_flash_read_cache_valid)
+        return 0;
+    if (offset < n64cart_flash_read_cache_base)
+        return 0;
+    end = offset + size;
+    cache_end = n64cart_flash_read_cache_base + n64cart_flash_read_cache_len;
+    if (end < offset)
+        return 0;
+    return end <= cache_end;
+}
+
+static unsigned
+n64cart_flash_read_cache_size(const struct n64cart_flash_info *info,
+    unsigned base)
+{
+    unsigned size = N64CART_FLASH_READAHEAD_SIZE;
+
+    if (base >= info->rom_size)
+        return 0;
+    if (size > info->rom_size - base)
+        size = info->rom_size - base;
+    return size;
+}
+
+static int
+n64cart_flash_read_cached(const struct n64cart_flash_info *info,
+    unsigned offset, void *buffer, unsigned size)
+{
+    unsigned base;
+    unsigned len;
+
+    if (n64cart_flash_read_cache_contains(offset, size)) {
+        bcopy((caddr_t)&n64cart_flash_read_cache[
+            offset - n64cart_flash_read_cache_base], (caddr_t)buffer, size);
+        return 0;
+    }
+
+    base = offset & ~(N64CART_FLASH_SECTOR - 1);
+    len = n64cart_flash_read_cache_size(info, base);
+    if (len == 0 || offset + size > base + len)
+        return EINVAL;
+
+    n64cart_flash_access_lock();
+    n64cart_flash_read(base, n64cart_flash_read_cache, len);
+    n64cart_flash_access_unlock();
+
+    n64cart_flash_read_cache_base = base;
+    n64cart_flash_read_cache_len = len;
+    n64cart_flash_read_cache_valid = 1;
+    bcopy((caddr_t)&n64cart_flash_read_cache[offset - base],
+        (caddr_t)buffer, size);
+    return 0;
+}
+
+static void
 n64cart_flash_write_sector(unsigned addr, const unsigned char *buffer)
 {
     unsigned offset;
@@ -412,10 +487,7 @@ n64cart_flash_read_raw(unsigned offset, void *buffer, unsigned size)
     if (error != 0)
         return error;
 
-    n64cart_flash_access_lock();
-    n64cart_flash_read(offset, buffer, size);
-    n64cart_flash_access_unlock();
-    return 0;
+    return n64cart_flash_read_cached(&info, offset, buffer, size);
 }
 
 int
@@ -434,6 +506,7 @@ n64cart_flash_write_sector_raw(unsigned offset, const void *buffer)
     if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0)
         return EINVAL;
 
+    n64cart_flash_read_cache_invalidate();
     n64cart_flash_access_lock();
     n64cart_flash_write_sector(offset, buffer);
     n64cart_flash_access_unlock();
@@ -453,6 +526,7 @@ n64cart_flash_erase_sector_raw(unsigned offset)
     if (error != 0)
         return error;
 
+    n64cart_flash_read_cache_invalidate();
     n64cart_flash_access_lock();
     n64cart_flash_erase_sector(offset);
     n64cart_flash_access_unlock();

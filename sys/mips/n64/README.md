@@ -563,6 +563,24 @@ again. The ROMFS VFS `sync` and `unmount` callbacks call the board flash
 backend `sync` hook, and the N64 reboot path calls `n64cart_flash_shutdown()`,
 which waits for flash WIP to clear before restoring quad-ROM mode.
 
+The N64 n64cart flash backend keeps a 32 KiB read-ahead cache above the SPI
+command path. A miss reads up to eight contiguous 4 KiB flash sectors in one
+transaction; later reads inside that window are copied from RAM. Sector
+write/erase invalidates the cache. This is a conservative read optimization:
+it does not rewrite the N64cart ROM lookup table and it does not change the
+ROMFS on-flash format. The change has been built with
+`make -C sys/mips BOARD=n64 kernel.z64`, Malta/QEMU passed
+`/root/romfs-smoke.sh` plus `cd /cart && diskspeed -m 1`, and real N64cart
+hardware passed `/root/romfs-smoke.sh`, `/cart` `diskspeed`, `sync`,
+`umount`, remount, and a second `/root/romfs-smoke.sh`.
+
+Real N64cart `diskspeed` numbers with 4 KiB blocks after read-ahead:
+
+```
+Write speed: 8 Mbytes in 101.740 seconds = 80 kbytes/sec
+ Read speed: 8 Mbytes in 5.750 seconds = 1424 kbytes/sec
+```
+
 `/bin/df` is included in the N64 rootfs. The shared `df` command accepts `-T`
 on N64 and PIC32 builds to print the filesystem type reported by `statfs`:
 

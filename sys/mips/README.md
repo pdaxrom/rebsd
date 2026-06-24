@@ -48,11 +48,17 @@ After logging in as `root`:
 mount
 romfsctl info
 df -T /cart
+cd /cart && diskspeed -m 1
 mkdir /cart/malta-test
 echo hello >/cart/malta-test/a.txt
 cat /cart/malta-test/a.txt
 mv /cart/malta-test/a.txt /cart/malta-test/b.txt
 rm /cart/malta-test/b.txt
 rmdir /cart/malta-test
+cd /
 /sbin/umount /cart
 ```
+
+The Malta sparse flash backend intentionally keeps a limited number of RAM
+sectors, so use `diskspeed -m 1` for QEMU smoke runs instead of the command's
+default 8 MiB test size.
