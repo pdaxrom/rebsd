@@ -433,6 +433,12 @@ ROMFS mount path:
 - The shared ROMFS core protects the system entries `firmware`, `flashlist`,
   and `flashmap`, plus any read-only/system/reserved entry, from write,
   truncate, unlink, rename, and rmdir.
+- The shared ROMFS core can use an opt-in metadata journal stored as ROMFS
+  files created by `romfsctl format`. Existing cartridge ROMFS images that do
+  not contain the journal files continue to work without journal recovery.
+  Journal entries carry sequence and CRC checks so mount/update code can recover
+  from an interrupted metadata flush when a valid committed journal entry is
+  present.
 
 The current UFS `rootfs.img` remains the system root and is still demand-read
 from cartridge ROM through the romdisk block driver. Cartridge ROMFS is mounted
@@ -513,15 +519,14 @@ rm /cart/retrobsd-vfs-test/other.txt
 rmdir /cart/retrobsd-vfs-test
 ```
 
-The first writable VFS version creates, writes, appends, truncates, unlinks,
-renames, renames over an existing compatible destination, and creates/removes
-directories through the same ROMFS flash map/list implementation used by
-`romfsctl`. Non-empty destination directories are still rejected through the
-ROMFS delete path. The overwrite path is not fully atomic across the flash-list
-updates, so it is acceptable for bring-up but should be tightened before using
-ROMFS for critical writable state. Power loss during a writable map/list flush
-can still damage ROMFS metadata; the firmware area and system entries are
-protected, but map/list journaling is still planned.
+The writable VFS version creates, writes, appends, truncates, unlinks, renames,
+renames over an existing compatible destination, and creates/removes directories
+through the same ROMFS flash map/list implementation used by `romfsctl`.
+Non-empty destination directories are still rejected through the ROMFS delete
+path. The firmware area and system entries are protected, and journaled ROMFS
+images can recover metadata from the latest valid committed journal entry.
+Older ROMFS images without journal files remain writable, but they do not get
+journal recovery until reformatted with journal support.
 
 The ROMFS VFS write/delete path was verified on real N64cart hardware on
 2026-06-14. The test wrote and read `/cart/retrobsd-vfs-test/hello.txt`,
@@ -533,6 +538,14 @@ after writing `old` to `a.txt` and `new` to `b.txt`, `mv a.txt b.txt` left
 After reboot, mounting `/dev/cartflash0` at `/cart` again showed that the test
 directory stayed deleted, confirming that the ROMFS map/list changes were
 persisted to cartridge flash.
+
+On 2026-06-24, the ROMFS unmount and reboot flash barriers were verified on
+real N64cart hardware. `/root/romfs-smoke.sh` passed, `/sbin/umount /cart`
+returned 0, and a later `/root/romfs-smoke.sh && reboot` returned through
+stage0, remounted `/dev/cartflash0` on `/cart`, and passed `/root/romfs-smoke.sh`
+again. The ROMFS VFS `sync` and `unmount` callbacks call the board flash
+backend `sync` hook, and the N64 reboot path calls `n64cart_flash_shutdown()`,
+which waits for flash WIP to clear before restoring quad-ROM mode.
 
 `/bin/df` is included in the N64 rootfs. The shared `df` command accepts `-T`
 on N64 and PIC32 builds to print the filesystem type reported by `statfs`:
@@ -668,12 +681,13 @@ prompt.
 
 `boot()`/`reboot(2)` on N64 no longer only prints the reboot request and spins.
 For a normal reboot, the kernel syncs pending buffers, forces the n64cart flash
-interface back to idle quad-ROM mode with chip-select high, disables N64
-interrupt sources, and jumps back to the resident stage0 entry at `0x80300000`.
+interface to finish any pending SPI flash write/erase, restores idle quad-ROM
+mode with chip-select high, disables N64 interrupt sources, and jumps back to
+the resident stage0 entry at `0x80300000`.
 The system UFS root is mounted read-only, so the N64 reboot path does not force
 the root superblock dirty before `sync()`. The cartridge ROMFS mount at `/cart`
-is writable by default, and all flash transactions return the n64cart hardware
-to quad-ROM mode before reboot jumps back to stage0.
+is writable by default; ROMFS unmount and reboot both wait for the flash WIP bit
+to clear before reboot jumps back to stage0.
 
 This is a software restart through the ROM-loaded stage0 image, not a full
 console hardware reset. `halt`/`poweroff` requests disable interrupts and stop

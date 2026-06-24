@@ -26,6 +26,7 @@ int n64cart_flash_getinfo(struct n64cart_flash_info *info);
 int n64cart_flash_read_raw(unsigned offset, void *buffer, unsigned size);
 int n64cart_flash_write_sector_raw(unsigned offset, const void *buffer);
 int n64cart_flash_erase_sector_raw(unsigned offset);
+int n64cart_flash_sync(void);
 void n64cart_flash_shutdown(void);
 #endif
 

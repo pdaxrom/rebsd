@@ -362,15 +362,20 @@ copying binaries manually.
 - [x] Validate ROMFS system entries at kernel mount time before enabling
   writable `/cart`, so a bad map/list start offset or corrupted system entry
   fails the mount instead of exposing writes to the wrong flash area.
-- [ ] Make ROMFS metadata updates power-loss safe for the writable `/cart`
+- [x] Make ROMFS metadata updates more power-loss safe for the writable `/cart`
   default:
-  - keep redundant flashlist/flashmap copies or a small journal
-  - add sequence/CRC recovery rules
-  - avoid full metadata rewrites on ordinary file writes
+  - [x] keep a small opt-in journal in ROMFS files created by `romfsctl format`;
+    existing cartridges without journal files keep working without journal
+  - [x] add sequence/CRC recovery rules for journaled metadata commits
+  - [x] recover from an interrupted metadata flush when a valid journal commit
+    is present
   - [x] mirror N64cart-manager SPI sessions: disable the cartridge interrupt
     while command mode is active, switch to SPI only for the transaction, and
     restore quad-ROM mode before releasing the lock
-  - verify interrupted write/erase recovery on real n64cart hardware
+  - [x] make ROMFS `sync`, `umount`, and N64 reboot wait until pending flash
+    write/erase operations finish before restoring quad-ROM mode
+  - [ ] run a deliberate power-cut test during metadata update on real
+    n64cart hardware
 - [x] Hardware smoke-test kernel ROMFS write path on real N64cart hardware,
   2026-06-14:
   - [x] `mkdir /cart/retrobsd-vfs-test`

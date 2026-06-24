@@ -16,6 +16,7 @@ struct mipsromfs_backend {
     int (*read)(unsigned offset, void *buffer, unsigned size);
     int (*write_sector)(unsigned offset, const void *buffer);
     int (*erase_sector)(unsigned offset);
+    int (*sync)(void);
 };
 
 extern const struct mipsromfs_backend mipsromfs_backend;

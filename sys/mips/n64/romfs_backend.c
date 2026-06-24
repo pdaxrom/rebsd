@@ -26,4 +26,5 @@ const struct mipsromfs_backend mipsromfs_backend = {
     n64cart_flash_read_raw,
     n64cart_flash_write_sector_raw,
     n64cart_flash_erase_sector_raw,
+    n64cart_flash_sync,
 };

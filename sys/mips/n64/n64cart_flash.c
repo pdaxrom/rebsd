@@ -150,6 +150,7 @@ n64cart_flash_access_unlock(void)
 void
 n64cart_flash_shutdown(void)
 {
+    n64cart_flash_sync();
     n64cart_flash_access_status = mips_read_c0_register(C0_STATUS, 0);
     mips_write_c0_register(C0_STATUS, 0,
         n64cart_flash_access_status & ~(ST_IE | ST_IM3));
@@ -209,6 +210,15 @@ n64cart_flash_wait_ready(void)
     do {
         n64cart_flash_do_cmd(N64CART_FLASH_CMD_RDSR, 0, &status, 1);
     } while (status & 1);
+}
+
+int
+n64cart_flash_sync(void)
+{
+    n64cart_flash_access_lock();
+    n64cart_flash_wait_ready();
+    n64cart_flash_access_unlock();
+    return 0;
 }
 
 static void

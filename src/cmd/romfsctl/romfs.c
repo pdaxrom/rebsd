@@ -100,8 +100,34 @@ static bool romfs_garbage_collect(void);
 #define ROMFS_LIST_INCLUDE_DIRS 0x02
 #define ROMFS_BUFFER_NONE 0xffffffffu
 
+#define ROMFS_JOURNAL_MAGIC 0x5246534au /* RFSJ */
+#define ROMFS_JOURNAL_VERSION 1u
+#define ROMFS_JOURNAL_STATE_WRITING 0x57524954u /* WRIT */
+#define ROMFS_JOURNAL_STATE_VALID 0x56414c44u /* VALD */
+#define ROMFS_JOURNAL_SLOTS 2u
+#define ROMFS_JOURNAL_NAME0 ".romfs_journal0"
+#define ROMFS_JOURNAL_NAME1 ".romfs_journal1"
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t state;
+    uint32_t sequence;
+    uint32_t flash_start;
+    uint32_t mem_size;
+    uint32_t flash_list_size;
+    uint32_t flash_map_size;
+    uint32_t list_crc;
+    uint32_t map_crc;
+    uint32_t header_crc;
+    uint32_t reserved[5];
+} romfs_journal_header;
+
 static uint16_t romfs_dir_entry_index[ROMFS_MAX_DIRS];
 static uint16_t romfs_dir_used_mask = (1u << ROMFS_ROOT_DIR_ID);
+static uint8_t romfs_journal_sector[ROMFS_FLASH_SECTOR];
+static uint32_t romfs_journal_sequence;
+static bool romfs_journal_enabled;
 
 static void romfs_dir_index_reset(void);
 static void romfs_dir_index_rebuild(void);
@@ -117,6 +143,14 @@ static void romfs_flush(void);
 static void romfs_operation_enter(void);
 static void romfs_operation_leave(void);
 static void romfs_request_flush(void);
+static uint32_t romfs_metadata_end(void);
+static bool romfs_map_consistent(void);
+static bool romfs_primary_blank(void);
+static void romfs_journal_prepare(void);
+static void romfs_journal_scan_sequence(void);
+static bool romfs_journal_load_best(uint32_t *sequence);
+static bool romfs_journal_primary_needs_recovery(void);
+static bool romfs_sector_reserved_by_layout(uint32_t sector);
 
 static bool
 romfs_name_equal(const romfs_entry *entry, const char *name)
@@ -267,6 +301,510 @@ static void romfs_request_flush(void)
     }
 }
 
+static uint32_t romfs_checksum(const void *buffer, uint32_t size)
+{
+    const uint8_t *p = (const uint8_t *) buffer;
+    uint32_t hash = 2166136261u;
+
+    while (size-- != 0) {
+        hash ^= *p++;
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static bool romfs_sequence_after(uint32_t a, uint32_t b)
+{
+    return (int32_t)(a - b) > 0;
+}
+
+static bool romfs_map_consistent(void)
+{
+    romfs_entry *entries;
+    uint32_t total_entries;
+    uint32_t total_sectors;
+
+    if (!flash_list_int || !flash_map_int) {
+        return false;
+    }
+    entries = (romfs_entry *) flash_list_int;
+    total_entries = flash_list_size / sizeof(romfs_entry);
+    total_sectors = flash_map_size / sizeof(uint16_t);
+
+    if (romfs_metadata_end() / ROMFS_FLASH_SECTOR > total_sectors) {
+        return false;
+    }
+    for (uint32_t i = 0; i < romfs_metadata_end() / ROMFS_FLASH_SECTOR; i++) {
+        if (flash_map_int[i] == 0xffff) {
+            return false;
+        }
+    }
+
+    for (uint32_t i = 0; i < total_entries; i++) {
+        romfs_entry entry = entries[i];
+        uint32_t sectors;
+        uint32_t sector;
+
+        if (entry.name[0] == ROMFS_EMPTY_ENTRY ||
+                entry.name[0] == ROMFS_DELETED_ENTRY) {
+            continue;
+        }
+        entry.attr.raw = from_lsb16(entry.attr.raw);
+        if (romfs_entry_is_protected(&entry) ||
+                entry.attr.names.type == ROMFS_TYPE_DIR) {
+            continue;
+        }
+        entry.start = from_lsb32(entry.start);
+        entry.size = from_lsb32(entry.size);
+        if (entry.size == 0) {
+            continue;
+        }
+        if (entry.start == 0xffff || entry.start >= total_sectors) {
+            return false;
+        }
+
+        sectors = (entry.size + (ROMFS_FLASH_SECTOR - 1)) / ROMFS_FLASH_SECTOR;
+        sector = entry.start;
+        for (uint32_t n = 0; n < sectors; n++) {
+            uint32_t next;
+
+            if (sector >= total_sectors || flash_map_int[sector] == 0xffff) {
+                return false;
+            }
+            next = from_lsb16(flash_map_int[sector]);
+            if (n + 1 == sectors) {
+                if (next != sector) {
+                    return false;
+                }
+            } else {
+                if (next == sector || next >= total_sectors) {
+                    return false;
+                }
+                sector = next;
+            }
+        }
+    }
+    return true;
+}
+
+static bool romfs_primary_blank(void)
+{
+    uint8_t *map = (uint8_t *) flash_map_int;
+
+    if (!flash_list_int || !flash_map_int) {
+        return false;
+    }
+    for (uint32_t i = 0; i < flash_list_size; i++) {
+        if (flash_list_int[i] != 0xff) {
+            return false;
+        }
+    }
+    for (uint32_t i = 0; i < flash_map_size; i++) {
+        if (map[i] != 0xff) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static uint32_t romfs_metadata_end(void)
+{
+    return flash_start + flash_list_size + flash_map_size;
+}
+
+static uint32_t romfs_journal_slot_size(void)
+{
+    return ROMFS_FLASH_SECTOR + flash_list_size + flash_map_size;
+}
+
+static bool romfs_journal_geometry_valid(void)
+{
+    uint32_t meta_end;
+    uint32_t slot_size;
+
+    if (flash_list_size == 0 || flash_map_size == 0 || mem_size == 0) {
+        return false;
+    }
+    if (flash_start > UINT32_MAX - flash_list_size) {
+        return false;
+    }
+    if (flash_start + flash_list_size > UINT32_MAX - flash_map_size) {
+        return false;
+    }
+    meta_end = romfs_metadata_end();
+    slot_size = romfs_journal_slot_size();
+    if (slot_size < flash_list_size || slot_size < flash_map_size) {
+        return false;
+    }
+    if (slot_size > (UINT32_MAX - meta_end) / ROMFS_JOURNAL_SLOTS) {
+        return false;
+    }
+    return meta_end + slot_size * ROMFS_JOURNAL_SLOTS <= mem_size;
+}
+
+static uint32_t romfs_journal_slot_offset(uint32_t slot)
+{
+    return romfs_metadata_end() + romfs_journal_slot_size() * slot;
+}
+
+static bool romfs_journal_header_valid(const romfs_journal_header *header, uint32_t state)
+{
+    romfs_journal_header copy = *header;
+    uint32_t expected_crc = from_lsb32(copy.header_crc);
+
+    copy.header_crc = 0;
+    if (romfs_checksum(&copy, sizeof(copy)) != expected_crc) {
+        return false;
+    }
+    if (from_lsb32(header->magic) != ROMFS_JOURNAL_MAGIC ||
+            from_lsb32(header->version) != ROMFS_JOURNAL_VERSION ||
+            from_lsb32(header->state) != state) {
+        return false;
+    }
+    if (from_lsb32(header->flash_start) != flash_start ||
+            from_lsb32(header->mem_size) != mem_size ||
+            from_lsb32(header->flash_list_size) != flash_list_size ||
+            from_lsb32(header->flash_map_size) != flash_map_size) {
+        return false;
+    }
+    return true;
+}
+
+static bool romfs_journal_read_header(uint32_t slot, romfs_journal_header *header)
+{
+    if (!romfs_journal_geometry_valid() || slot >= ROMFS_JOURNAL_SLOTS) {
+        return false;
+    }
+    return romfs_flash_sector_read(romfs_journal_slot_offset(slot),
+                                   (uint8_t *) header, sizeof(*header));
+}
+
+static const char *romfs_journal_name(uint32_t slot)
+{
+    return slot == 0 ? ROMFS_JOURNAL_NAME0 : ROMFS_JOURNAL_NAME1;
+}
+
+static uint32_t romfs_journal_slot_sector(uint32_t slot)
+{
+    return romfs_journal_slot_offset(slot) / ROMFS_FLASH_SECTOR;
+}
+
+static bool romfs_sector_reserved_by_layout(uint32_t sector)
+{
+    uint32_t meta_sectors;
+    uint32_t first_journal_sector;
+    uint32_t end_journal_sector;
+
+    meta_sectors = romfs_metadata_end() / ROMFS_FLASH_SECTOR;
+    if (sector < meta_sectors) {
+        return true;
+    }
+    if (!romfs_journal_enabled || !romfs_journal_geometry_valid()) {
+        return false;
+    }
+    first_journal_sector = romfs_journal_slot_sector(0);
+    end_journal_sector = (romfs_journal_slot_offset(ROMFS_JOURNAL_SLOTS - 1) +
+                          romfs_journal_slot_size()) / ROMFS_FLASH_SECTOR;
+    return sector >= first_journal_sector && sector < end_journal_sector;
+}
+
+static bool romfs_sector_chain_valid(uint32_t start, uint32_t size)
+{
+    uint32_t total_sectors = flash_map_size / sizeof(uint16_t);
+    uint32_t sectors;
+    uint32_t sector;
+
+    if (size == 0) {
+        return true;
+    }
+    if (start == 0xffff || start >= total_sectors) {
+        return false;
+    }
+    sectors = (size + (ROMFS_FLASH_SECTOR - 1)) / ROMFS_FLASH_SECTOR;
+    sector = start;
+    for (uint32_t n = 0; n < sectors; n++) {
+        uint32_t next;
+
+        if (sector >= total_sectors || flash_map_int[sector] == 0xffff) {
+            return false;
+        }
+        next = from_lsb16(flash_map_int[sector]);
+        if (n + 1 == sectors) {
+            return next == sector;
+        }
+        if (next == sector || next >= total_sectors) {
+            return false;
+        }
+        sector = next;
+    }
+    return true;
+}
+
+static bool romfs_journal_find_entry(uint32_t slot, romfs_entry *out)
+{
+    romfs_entry *entries = (romfs_entry *) flash_list_int;
+    uint32_t total_entries = flash_list_size / sizeof(romfs_entry);
+    const char *name;
+
+    if (slot >= ROMFS_JOURNAL_SLOTS || !flash_list_int) {
+        return false;
+    }
+    name = romfs_journal_name(slot);
+
+    for (uint32_t i = 0; i < total_entries; i++) {
+        romfs_entry entry = entries[i];
+
+        if (entry.name[0] == ROMFS_EMPTY_ENTRY ||
+                entry.name[0] == ROMFS_DELETED_ENTRY) {
+            continue;
+        }
+        if (!romfs_name_equal(&entry, name)) {
+            continue;
+        }
+        entry.attr.raw = from_lsb16(entry.attr.raw);
+        entry.start = from_lsb32(entry.start);
+        entry.size = from_lsb32(entry.size);
+        if ((entry.attr.names.mode &
+                (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM | ROMFS_MODE_RESERVED)) !=
+                (ROMFS_MODE_READONLY | ROMFS_MODE_SYSTEM | ROMFS_MODE_RESERVED) ||
+                entry.attr.names.type != ROMFS_TYPE_MISC ||
+                entry.start != romfs_journal_slot_sector(slot) ||
+                entry.size != romfs_journal_slot_size() ||
+                !romfs_sector_chain_valid(entry.start, entry.size)) {
+            return false;
+        }
+        if (out) {
+            *out = entry;
+        }
+        return true;
+    }
+    return false;
+}
+
+static bool romfs_journal_entries_present(void)
+{
+    if (!romfs_journal_geometry_valid() || !flash_map_int || !flash_list_int) {
+        return false;
+    }
+    return romfs_journal_find_entry(0, 0) &&
+           romfs_journal_find_entry(1, 0);
+}
+
+static void romfs_journal_prepare(void)
+{
+    romfs_journal_enabled = false;
+    if (!romfs_journal_entries_present()) {
+        return;
+    }
+    romfs_journal_enabled = true;
+}
+
+static void romfs_journal_make_header(romfs_journal_header *header,
+                                      uint32_t state, uint32_t sequence)
+{
+    memset(header, 0, sizeof(*header));
+    header->magic = to_lsb32(ROMFS_JOURNAL_MAGIC);
+    header->version = to_lsb32(ROMFS_JOURNAL_VERSION);
+    header->state = to_lsb32(state);
+    header->sequence = to_lsb32(sequence);
+    header->flash_start = to_lsb32(flash_start);
+    header->mem_size = to_lsb32(mem_size);
+    header->flash_list_size = to_lsb32(flash_list_size);
+    header->flash_map_size = to_lsb32(flash_map_size);
+    header->list_crc = to_lsb32(romfs_checksum(flash_list_int, flash_list_size));
+    header->map_crc = to_lsb32(romfs_checksum(flash_map_int, flash_map_size));
+    header->header_crc = 0;
+    header->header_crc = to_lsb32(romfs_checksum(header, sizeof(*header)));
+}
+
+static bool romfs_journal_write_header(uint32_t offset, uint32_t state,
+                                       uint32_t sequence)
+{
+    romfs_journal_header header;
+
+    memset(romfs_journal_sector, 0xff, sizeof(romfs_journal_sector));
+    romfs_journal_make_header(&header, state, sequence);
+    memmove(romfs_journal_sector, &header, sizeof(header));
+    if (!romfs_flash_sector_erase(offset)) {
+        return false;
+    }
+    return romfs_flash_sector_write(offset, romfs_journal_sector);
+}
+
+static bool romfs_journal_write_slot(uint32_t slot, uint32_t sequence)
+{
+    uint32_t offset;
+
+    if (!romfs_journal_enabled || slot >= ROMFS_JOURNAL_SLOTS) {
+        return false;
+    }
+    offset = romfs_journal_slot_offset(slot);
+    if (!romfs_journal_write_header(offset, ROMFS_JOURNAL_STATE_WRITING,
+                                    sequence)) {
+        return false;
+    }
+
+    offset += ROMFS_FLASH_SECTOR;
+    for (uint32_t i = 0; i < flash_list_size; i += ROMFS_FLASH_SECTOR) {
+        if (!romfs_flash_sector_erase(offset + i) ||
+                !romfs_flash_sector_write(offset + i, &flash_list_int[i])) {
+            return false;
+        }
+    }
+
+    offset += flash_list_size;
+    for (uint32_t i = 0; i < flash_map_size; i += ROMFS_FLASH_SECTOR) {
+        uint8_t *src = &((uint8_t *) flash_map_int)[i];
+
+        if (!romfs_flash_sector_erase(offset + i) ||
+                !romfs_flash_sector_write(offset + i, src)) {
+            return false;
+        }
+    }
+
+    offset = romfs_journal_slot_offset(slot);
+    return romfs_journal_write_header(offset, ROMFS_JOURNAL_STATE_VALID,
+                                      sequence);
+}
+
+static void romfs_journal_scan_sequence(void)
+{
+    bool found = false;
+    uint32_t best = 0;
+
+    romfs_journal_sequence = 0;
+    for (uint32_t i = 0; i < ROMFS_JOURNAL_SLOTS; i++) {
+        romfs_journal_header header;
+        uint32_t sequence;
+
+        if (!romfs_journal_read_header(i, &header) ||
+                !romfs_journal_header_valid(&header, ROMFS_JOURNAL_STATE_VALID)) {
+            continue;
+        }
+        sequence = from_lsb32(header.sequence);
+        if (!found || romfs_sequence_after(sequence, best)) {
+            best = sequence;
+            found = true;
+        }
+    }
+    if (found) {
+        romfs_journal_sequence = best;
+    }
+}
+
+static bool romfs_journal_primary_needs_recovery(void)
+{
+    bool found = false;
+    romfs_journal_header best_header;
+    uint32_t best = 0;
+    uint32_t list_crc;
+    uint32_t map_crc;
+
+    for (uint32_t i = 0; i < ROMFS_JOURNAL_SLOTS; i++) {
+        romfs_journal_header header;
+        uint32_t sequence;
+
+        if (!romfs_journal_read_header(i, &header) ||
+                !romfs_journal_header_valid(&header, ROMFS_JOURNAL_STATE_VALID)) {
+            continue;
+        }
+        sequence = from_lsb32(header.sequence);
+        if (!found || romfs_sequence_after(sequence, best)) {
+            best = sequence;
+            best_header = header;
+            found = true;
+        }
+    }
+    if (!found) {
+        return false;
+    }
+
+    list_crc = romfs_checksum(flash_list_int, flash_list_size);
+    map_crc = romfs_checksum(flash_map_int, flash_map_size);
+    return list_crc == from_lsb32(best_header.list_crc) &&
+           map_crc != from_lsb32(best_header.map_crc);
+}
+
+static bool romfs_journal_load_slot(uint32_t slot, uint32_t *sequence)
+{
+    romfs_journal_header header;
+    uint32_t offset;
+
+    if (!romfs_journal_read_header(slot, &header) ||
+            !romfs_journal_header_valid(&header, ROMFS_JOURNAL_STATE_VALID)) {
+        return false;
+    }
+
+    offset = romfs_journal_slot_offset(slot) + ROMFS_FLASH_SECTOR;
+    for (uint32_t i = 0; i < flash_list_size; i += ROMFS_FLASH_SECTOR) {
+        if (!romfs_flash_sector_read(offset + i, &flash_list_int[i],
+                                     ROMFS_FLASH_SECTOR)) {
+            return false;
+        }
+    }
+    if (romfs_checksum(flash_list_int, flash_list_size) !=
+            from_lsb32(header.list_crc)) {
+        return false;
+    }
+
+    offset += flash_list_size;
+    for (uint32_t i = 0; i < flash_map_size; i += ROMFS_FLASH_SECTOR) {
+        if (!romfs_flash_sector_read(offset + i,
+                                     &((uint8_t *) flash_map_int)[i],
+                                     ROMFS_FLASH_SECTOR)) {
+            return false;
+        }
+    }
+    if (romfs_checksum(flash_map_int, flash_map_size) !=
+            from_lsb32(header.map_crc) ||
+            !romfs_validate() || !romfs_map_consistent()) {
+        return false;
+    }
+
+    if (sequence) {
+        *sequence = from_lsb32(header.sequence);
+    }
+    return true;
+}
+
+static bool romfs_journal_load_best(uint32_t *sequence)
+{
+    int best_slot = -1;
+    int second_slot = -1;
+    uint32_t best_sequence = 0;
+    uint32_t second_sequence = 0;
+
+    for (uint32_t i = 0; i < ROMFS_JOURNAL_SLOTS; i++) {
+        romfs_journal_header header;
+        uint32_t current_sequence;
+
+        if (!romfs_journal_read_header(i, &header) ||
+                !romfs_journal_header_valid(&header, ROMFS_JOURNAL_STATE_VALID)) {
+            continue;
+        }
+        current_sequence = from_lsb32(header.sequence);
+        if (best_slot < 0 || romfs_sequence_after(current_sequence, best_sequence)) {
+            second_slot = best_slot;
+            second_sequence = best_sequence;
+            best_slot = (int) i;
+            best_sequence = current_sequence;
+        } else if (second_slot < 0 ||
+                   romfs_sequence_after(current_sequence, second_sequence)) {
+            second_slot = (int) i;
+            second_sequence = current_sequence;
+        }
+    }
+
+    if (best_slot >= 0 && romfs_journal_load_slot((uint32_t) best_slot, sequence)) {
+        return true;
+    }
+    if (second_slot >= 0 && romfs_journal_load_slot((uint32_t) second_slot,
+                                                   sequence)) {
+        return true;
+    }
+    return false;
+}
+
 static bool romfs_dir_is_empty_internal(uint8_t dir_id)
 {
     romfs_entry *entries = (romfs_entry *) flash_list_int;
@@ -309,11 +847,16 @@ void romfs_get_buffers_sizes(uint32_t rom_size, uint32_t *map_size, uint32_t *li
 
 bool romfs_start(uint32_t start, uint32_t rom_size, uint16_t *flash_map, uint8_t *flash_list)
 {
+    bool primary_valid;
+    uint32_t sequence;
+
     flash_start = (start + 0x7fff) & ~0x7fff;
     mem_size = rom_size;
 
     flash_map_int = flash_map;
     flash_list_int = flash_list;
+    romfs_journal_enabled = false;
+    romfs_journal_sequence = 0;
 
     //    printf("romfs memory size %d\n", mem_size);
     //    printf("romfs map size %d\n", flash_map_size);
@@ -327,6 +870,22 @@ bool romfs_start(uint32_t start, uint32_t rom_size, uint16_t *flash_map, uint8_t
         }
         for (uint32_t i = 0; i < flash_map_size; i += ROMFS_FLASH_SECTOR) {
             romfs_flash_sector_read(flash_start + flash_list_size + i, &((uint8_t *) flash_map_int)[i], ROMFS_FLASH_SECTOR);
+        }
+        primary_valid = romfs_validate() && romfs_map_consistent();
+        romfs_journal_scan_sequence();
+        if ((!primary_valid || romfs_journal_primary_needs_recovery()) &&
+                romfs_journal_load_best(&sequence)) {
+            romfs_journal_sequence = sequence;
+            primary_valid = true;
+        }
+        if (primary_valid) {
+            romfs_journal_prepare();
+        }
+        if (!primary_valid) {
+            if (romfs_primary_blank()) {
+                return true;
+            }
+            return false;
         }
         romfs_dir_index_rebuild();
         return true;
@@ -388,6 +947,21 @@ bool romfs_validate(void)
 
 static void romfs_flush(void)
 {
+    uint32_t sequence;
+    uint32_t slot;
+
+    romfs_journal_prepare();
+    if (romfs_journal_enabled) {
+        sequence = romfs_journal_sequence + 1;
+        if (sequence == 0) {
+            sequence = 1;
+        }
+        slot = sequence % ROMFS_JOURNAL_SLOTS;
+        if (romfs_journal_write_slot(slot, sequence)) {
+            romfs_journal_sequence = sequence;
+        }
+    }
+
     for (uint32_t i = 0; i < flash_list_size; i += ROMFS_FLASH_SECTOR) {
         romfs_flash_sector_erase(flash_start + i);
         romfs_flash_sector_write(flash_start + i, &flash_list_int[i]);
@@ -399,8 +973,20 @@ static void romfs_flush(void)
     }
 }
 
+static void romfs_mark_sector_chain(uint32_t start, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t sector = start + i;
+        uint32_t next = (i + 1 == count) ? sector : sector + 1;
+
+        flash_map_int[sector] = to_lsb16(next);
+    }
+}
+
 bool romfs_format(void)
 {
+    bool journal_format;
+
     romfs_operation_enter();
     memset(flash_list_int, 0xff, flash_list_size);
     romfs_dir_index_reset();
@@ -436,11 +1022,41 @@ bool romfs_format(void)
     entry[2].start = to_lsb32((flash_start + flash_list_size) / ROMFS_FLASH_SECTOR);
     entry[2].size = to_lsb32(flash_map_size);
 
+    journal_format = romfs_journal_geometry_valid() &&
+                     flash_list_size >= (3 + ROMFS_JOURNAL_SLOTS) * sizeof(romfs_entry);
+    if (journal_format) {
+        for (uint32_t slot = 0; slot < ROMFS_JOURNAL_SLOTS; slot++) {
+            romfs_entry *journal = &entry[3 + slot];
+
+            strncpy(journal->name, romfs_journal_name(slot),
+                    ROMFS_MAX_NAME_LEN - 1);
+            journal->name[ROMFS_MAX_NAME_LEN - 1] = '\0';
+            tmp.attr.names.mode = ROMFS_MODE_READONLY |
+                                  ROMFS_MODE_SYSTEM |
+                                  ROMFS_MODE_RESERVED;
+            tmp.attr.names.type = ROMFS_TYPE_MISC;
+            raw = (tmp.attr.names.mode & ROMFS_MODE_MASK) |
+                  (tmp.attr.names.type << ROMFS_TYPE_SHIFT);
+            journal->attr.raw = to_lsb16(raw);
+            journal->start = to_lsb32(romfs_journal_slot_sector(slot));
+            journal->size = to_lsb32(romfs_journal_slot_size());
+        }
+    }
+
     memset((uint8_t *) flash_map_int, 0xff, flash_map_size);
 
     for (uint32_t i = 0; i < (flash_start + flash_list_size + flash_map_size) / ROMFS_FLASH_SECTOR; i++) {
         flash_map_int[i] = to_lsb16(i + 1);
     }
+    if (journal_format) {
+        uint32_t count = romfs_journal_slot_size() / ROMFS_FLASH_SECTOR;
+
+        for (uint32_t slot = 0; slot < ROMFS_JOURNAL_SLOTS; slot++) {
+            romfs_mark_sector_chain(romfs_journal_slot_sector(slot), count);
+        }
+    }
+    romfs_journal_sequence = 0;
+    romfs_journal_prepare();
 
     romfs_request_flush();
     romfs_operation_leave();
@@ -670,13 +1286,13 @@ static bool romfs_garbage_collect(void)
 static uint32_t romfs_find_free_sector(uint32_t start, bool reclaim)
 {
     for (uint32_t i = start; i < flash_map_size / sizeof(uint16_t); i++) {
-        if (flash_map_int[i] == 0xffff) {
+        if (!romfs_sector_reserved_by_layout(i) && flash_map_int[i] == 0xffff) {
             return i;
         }
     }
 
     for (uint32_t i = 0; i < start; i++) {
-        if (flash_map_int[i] == 0xffff) {
+        if (!romfs_sector_reserved_by_layout(i) && flash_map_int[i] == 0xffff) {
             return i;
         }
     }

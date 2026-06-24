@@ -714,6 +714,20 @@ static int
 mipsromfs_sync(struct mount *mp)
 {
     (void)mp;
+    if (mipsromfs_backend.sync != 0)
+        return (*mipsromfs_backend.sync)();
+    return 0;
+}
+
+static int
+mipsromfs_unmount(struct mount *mp)
+{
+    int error;
+
+    error = mipsromfs_sync(mp);
+    if (error)
+        return error;
+    mp->m_data = 0;
     return 0;
 }
 
@@ -762,7 +776,7 @@ mipsromfs_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
 
 struct vfsops mipsromfs_vfsops = {
     mipsromfs_mount,
-    0,
+    mipsromfs_unmount,
     mipsromfs_load_inode,
     mipsromfs_blkatoff,
     mipsromfs_rwip,

@@ -254,11 +254,18 @@ malta_cartflash_backend_erase_sector(unsigned offset)
     return 0;
 }
 
+static int
+malta_cartflash_backend_sync(void)
+{
+    return 0;
+}
+
 const struct mipsromfs_backend mipsromfs_backend = {
     malta_cartflash_backend_getinfo,
     malta_cartflash_backend_read,
     malta_cartflash_backend_write_sector,
     malta_cartflash_backend_erase_sector,
+    malta_cartflash_backend_sync,
 };
 
 int
