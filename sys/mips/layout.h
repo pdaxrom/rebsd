@@ -6,6 +6,8 @@
 #define MIPS_SIZE_2M                   0x00200000
 #define MIPS_SIZE_4M                   0x00400000
 #define MIPS_SIZE_8M                   0x00800000
+#define MIPS_SIZE_16M                  0x01000000
+#define MIPS_SIZE_32M                  0x02000000
 
 #define MIPS_KSEG0_BASE                0x80000000
 #define MIPS_KSEG1_BASE                0xa0000000
@@ -21,11 +23,11 @@
  *   0x00100000..0x002fffff  kernel ELF
  *   0x00300000..0x004fffff  wired kuseg user window
  *   0x00500000..0x005fffff  /var ramdisk
- *   0x00600000..0x007fffff  RAM swap
- *   0x1fc80000..0x1fe7ffff  root filesystem in Malta boot ROM window
+ *   0x00600000..0x015fffff  root filesystem loaded by QEMU
+ *   0x01600000..0x01ffffff  RAM swap
  */
 #define MALTA_PHYS_RAM_BASE            0x00000000
-#define MALTA_RAM_SIZE                 MIPS_SIZE_8M
+#define MALTA_RAM_SIZE                 MIPS_SIZE_32M
 #define MALTA_CPU_KHZ                  100000u
 #define MIPS_COUNT_KHZ                 50000u
 #define MALTA_KERNEL_LOAD_VADDR        0x80100000
@@ -45,8 +47,10 @@
 
 #define MALTA_RAMDISK_VAR_PHYS_START   0x00500000
 #define MALTA_RAMDISK_VAR_BYTES        MIPS_SIZE_1M
-#define MALTA_RAMSWAP_PHYS_START       (MALTA_RAMDISK_VAR_PHYS_START + \
-                                         MALTA_RAMDISK_VAR_BYTES)
+#define MALTA_ROMDISK_PHYS_START       0x00600000
+#define MALTA_ROMDISK_BYTES            MIPS_SIZE_16M
+#define MALTA_RAMSWAP_PHYS_START       (MALTA_ROMDISK_PHYS_START + \
+                                         MALTA_ROMDISK_BYTES)
 #define MALTA_RAMSWAP_BYTES            (MALTA_RAM_SIZE - MALTA_RAMSWAP_PHYS_START)
 
 #endif

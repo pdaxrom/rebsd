@@ -4,13 +4,19 @@ include $(TOPSRC)/target.mk
 
 OBJS            = cc.o
 
+CC_STDINC	?= /include
+CC_LIBDIR	?= /lib
+CC_LIBEXECDIR	?= /libexec
+CC_CRT0FILE	?= /lib/crt0.o
+CC_CRT0FILE_PROFILE ?= /lib/mcrt0.o
+
 CFLAGS		+= -Werror -Wall -DGCC_COMPAT
 CFLAGS          += -DVERSSTR=\"1.0\" \
-                   -DSTDINC=\"/include\" \
-                   -DLIBDIR=\"/lib\" \
-                   -DLIBEXECDIR=\"/libexec\" \
-                   -DCRT0FILE=\"/lib/crt0.o\" \
-                   -DCRT0FILE_PROFILE=\"/lib/mcrt0.o\"
+                   -DSTDINC=\"$(CC_STDINC)\" \
+                   -DLIBDIR=\"$(CC_LIBDIR)\" \
+                   -DLIBEXECDIR=\"$(CC_LIBEXECDIR)\" \
+                   -DCRT0FILE=\"$(CC_CRT0FILE)\" \
+                   -DCRT0FILE_PROFILE=\"$(CC_CRT0FILE_PROFILE)\"
 
 all:            cc
 

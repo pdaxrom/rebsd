@@ -1,6 +1,6 @@
 #!/bin/sh
 HOME=/; export HOME
-PATH=/bin:/sbin; export PATH
+PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 
 # The cartridge root remains read-only. Create one volatile UFS filesystem for
 # runtime state; /tmp is a rootfs symlink to /var/tmp.

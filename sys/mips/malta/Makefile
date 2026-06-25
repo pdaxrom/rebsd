@@ -4,7 +4,6 @@ PARAM += -DMALTA_UART_ENABLED
 PARAM += -DMALTA_ENABLED
 PARAM += -DPTY_ENABLED
 PARAM += -DPTY_NUNITS=4
-PARAM += -DROMFS_ENABLED
 PARAM += -DCONS_MINOR=0
 PARAM += -DCONS_MAJOR=0
 #
@@ -12,40 +11,47 @@ PARAM += -DCONS_MAJOR=0
 #
 MALTA_CPU_TUNE ?= 24kf
 MIPS_ARCH ?= -EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE)
+MALTA_QEMU_RAM ?= 32M
 
 include ../../../target-mips.mk
 
 TOPSRC          = ../../..
 S               = ../..
 BOARD_SRC       = ../malta
-MIPS_ROOTFS_KBYTES ?= 2048
+MIPS_ROOTFS_KBYTES ?= 16384
 MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/mips/n64/rootfs.stage
 MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
+MIPS_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
+MIPS_ROOTFS_COPY_DIRS = usr/include
 MIPS_ROOTFS_COPY_PATHS = \
-    bin/ar bin/as bin/cat bin/cc bin/chmod bin/cpp bin/df bin/diskspeed \
-    bin/echo bin/expr \
-    bin/false bin/ld bin/login bin/ls bin/matrix-as-vr4300 bin/mkdir \
-    bin/mv bin/nm bin/od bin/pcc bin/ps bin/pwd bin/ranlib bin/rm bin/rmdir \
-    bin/romfsctl bin/sed bin/sh \
-    bin/size bin/smoke-as-vr4300 bin/strip bin/stty bin/sync bin/test bin/tr \
-    bin/true bin/uname bin/vmstat bin/w bin/wc \
+    bin/cat bin/chmod bin/df bin/diskspeed bin/echo bin/expr bin/false \
+    bin/login bin/ls bin/mkdir bin/mv bin/od bin/ps bin/pwd bin/rm \
+    bin/rmdir bin/romfsctl bin/sed bin/sh bin/stty bin/sync bin/test \
+    bin/tr bin/true bin/uname bin/vmstat bin/w bin/wc \
+    usr/bin/ar usr/bin/as usr/bin/cc usr/bin/cpp usr/bin/ld \
+    usr/bin/matrix-as-vr4300 usr/bin/matrix-as-vr4300.sh usr/bin/nm \
+    usr/bin/pcc usr/bin/ranlib usr/bin/size usr/bin/smoke-as-vr4300 \
+    usr/bin/smoke-as-vr4300.sh usr/bin/strip \
     sbin/init sbin/mkfs sbin/mount sbin/pstat sbin/umount \
-    lib/crt0.o lib/libc.a lib/libm.a libexec/ccom libexec/getty \
+    usr/lib/crt0.o usr/lib/libc.a usr/lib/libm.a usr/libexec/ccom \
+    libexec/getty \
     etc/gettytab etc/group etc/passwd etc/profile \
-    root/cc-pcc-smoke.sh root/ll-abi-smoke.c root/ll-abi-smoke.s \
-    root/ll-abi-smoke.sh root/ll-smoke.c root/ll-smoke.sh \
+    root/cc-pcc-smoke.sh root/ll-smoke.c root/ll-smoke.sh \
+    root/ll-abi-smoke.c root/ll-abi-smoke.s root/ll-abi-smoke.sh \
+    root/romfs-smoke.sh \
     root/pcc-fpu-smoke.c root/pcc-smoke.c root/pcc-smoke.sh \
-    root/romfs-smoke.sh root/sh-comsubst-smoke.sh root/sh-fail-smoke.sh \
-    root/types-smoke.c root/types-smoke.sh
+    root/sh-comsubst-smoke.sh root/sh-fail-smoke.sh root/types-smoke.c \
+    root/types-smoke.sh
 MIPS_ROOTFS_COPY_FILES = $(addprefix $(MIPS_ROOTFS_SRC)/,$(MIPS_ROOTFS_COPY_PATHS))
 MIPS_TRACE       ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
+                  -DROMFS_ENABLED \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"MIPS Malta 24Kf"'
 ifeq ($(MIPS_TRACE),1)
@@ -74,7 +80,7 @@ OBJS = exec_aout.o exec_conf.o exec_elf.o exec_script.o exec_subr.o \
 	ufs_syscalls2.o vfs_vnops.o vm_sched.o vm_swap.o vm_swp.o \
 	startup.o exception_entry.o exception.o fpu.o cons.o signal.o \
 	sysctl.o libkern.o stubs.o uart.o devsw.o clock.o machdep.o \
-	romdisk.o ramswap.o cartflash.o romfs_core.o romfs_vfs.o \
+	romdisk.o romfs_core.o romfs_vfs.o cartflash.o ramswap.o \
 	config.o
 
 CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
@@ -104,8 +110,8 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/mips/common/stubs.c $S/mips/malta/uart.c \
 	$S/mips/malta/devsw.c $S/mips/malta/clock.c \
 	$S/mips/malta/machdep.c $S/mips/malta/romdisk.c \
-	$S/mips/malta/ramswap.c $S/mips/malta/cartflash.c \
 	$S/mips/common/romfs_core.c $S/mips/common/romfs_vfs.c \
+	$S/mips/malta/cartflash.c $S/mips/malta/ramswap.c \
 	$S/mips/malta/config.c swapunix.c
 
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
@@ -131,8 +137,12 @@ malta-early.elf: malta-early.o ../malta/malta.ld
 	$(OBJDUMP) -d -S $@ > malta-early.dis
 
 run-early: malta-early.elf
-	qemu-system-mips -M malta -m 8M -nographic -serial mon:stdio \
+	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel malta-early.elf
+
+run: unix.elf
+	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
+	    -no-reboot -kernel unix.elf
 
 $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_MANIFEST) $(MIPS_ROOTFS_OVERLAY_FILES) $(MIPS_ROOTFS_COPY_FILES)
 	rm -rf $(MIPS_ROOTFS_STAGE)
@@ -140,17 +150,41 @@ $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_MANIFEST) $(MIPS_ROOTFS_OVERLAY_FILES) $(MIP
 	cp -pR $(MIPS_ROOTFS_OVERLAY)/. $(MIPS_ROOTFS_STAGE)/
 	mkdir -p $(MIPS_ROOTFS_STAGE)/bin $(MIPS_ROOTFS_STAGE)/sbin \
 	    $(MIPS_ROOTFS_STAGE)/lib $(MIPS_ROOTFS_STAGE)/libexec \
-	    $(MIPS_ROOTFS_STAGE)/etc \
-	    $(MIPS_ROOTFS_STAGE)/root
+	    $(MIPS_ROOTFS_STAGE)/usr/bin $(MIPS_ROOTFS_STAGE)/usr/lib \
+	    $(MIPS_ROOTFS_STAGE)/usr/libexec $(MIPS_ROOTFS_STAGE)/usr/include \
+	    $(MIPS_ROOTFS_STAGE)/etc $(MIPS_ROOTFS_STAGE)/root
+	for path in . $(MIPS_ROOTFS_COPY_DIRS); do \
+	    test "$$path" != . || continue; \
+	    mkdir -p $(MIPS_ROOTFS_STAGE)/$$path; \
+	    cp -pR $(MIPS_ROOTFS_SRC)/$$path/. $(MIPS_ROOTFS_STAGE)/$$path/; \
+	done
 	for path in $(MIPS_ROOTFS_COPY_PATHS); do \
 	    cp -p $(MIPS_ROOTFS_SRC)/$$path $(MIPS_ROOTFS_STAGE)/$$path; \
 	done
 	touch $@
 
-rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_MANIFEST)
+$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MANIFEST) $(MIPS_ROOTFS_STAMP)
+	cp $(MIPS_ROOTFS_MANIFEST) $@
+	find $(MIPS_ROOTFS_STAGE)/usr/include -mindepth 1 -type d | sort | while read path; do \
+	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
+	    printf '\ndir %s\n' "$$rel" >> $@; \
+	done
+	find $(MIPS_ROOTFS_STAGE)/usr/include -type f ! -name '.gitignore' \
+	    ! -name Makefile ! -name Makefile.install | sort | while read path; do \
+	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
+	    printf '\nfile %s\n' "$$rel" >> $@; \
+	done
+	find $(MIPS_ROOTFS_STAGE)/usr/include -maxdepth 1 -type l ! -name pic32 | \
+	    sort | while read path; do \
+	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
+	    target=$$(readlink "$$path"); \
+	    printf '\nsymlink %s\ntarget %s\n' "$$rel" "$$target" >> $@; \
+	done
+
+rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_BUILD_MANIFEST)
 	rm -f $@
 	$(FSUTIL) --new --endian=big --size=$(MIPS_ROOTFS_KBYTES) \
-	    --manifest=$(MIPS_ROOTFS_MANIFEST) $@ $(MIPS_ROOTFS_STAGE)
+	    --manifest=$(MIPS_ROOTFS_BUILD_MANIFEST) $@ $(MIPS_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
 
 rootfs.o: rootfs.img
@@ -177,7 +211,7 @@ sys:
 
 clean clean-all:
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm a.out .deps machine sys \
-	    vers.c rootfs.stage
+	    vers.c rootfs.stage rootfs.generated.manifest
 
 .deps:
 	mkdir -p .deps
@@ -386,16 +420,16 @@ machdep.o: $S/mips/malta/machdep.c ${SYSTEM_DEP}
 romdisk.o: $S/mips/malta/romdisk.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
-ramswap.o: $S/mips/malta/ramswap.c ${SYSTEM_DEP}
+romfs_core.o: $S/mips/common/romfs_core.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+romfs_vfs.o: $S/mips/common/romfs_vfs.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 cartflash.o: $S/mips/malta/cartflash.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
-romfs_core.o: $S/mips/common/romfs_core.c ${SYSTEM_DEP}
-	${COMPILE_C}
-
-romfs_vfs.o: $S/mips/common/romfs_vfs.c ${SYSTEM_DEP}
+ramswap.o: $S/mips/malta/ramswap.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 config.o: $S/mips/malta/config.c ${SYSTEM_DEP}

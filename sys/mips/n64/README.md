@@ -237,19 +237,23 @@ current N64 work is staged as follows:
 - libc runtime provides the compiler ABI helpers currently needed by that
   path, including 64-bit shifts, clz/ctz/ffs helpers, and the first
   64-bit integer/double conversion helpers;
-- the N64 rootfs stages a minimal in-tree toolchain smoke kit: `/bin/pcc`,
-  `/libexec/ccom`, `/bin/as`, `/bin/ld`, `/bin/ar`, `/bin/ranlib`, `/bin/nm`,
-  `/bin/aout`, `/bin/strip`, and no-header smoke sources in `/root`;
-- the generated rootfs also stages target headers under `/include` and the
-  native compiler runtime/archive set under `/lib`, including `crt0.o`,
+- the N64 rootfs stages the in-tree toolchain under `/usr`: `/usr/bin/pcc`,
+  `/usr/libexec/ccom`, `/usr/bin/as`, `/usr/bin/ld`, `/usr/bin/ar`,
+  `/usr/bin/ranlib`, `/usr/bin/nm`, `/usr/bin/aout`, `/usr/bin/strip`, and
+  no-header smoke sources in `/root`;
+- the generated rootfs also stages target headers under `/usr/include` and the
+  native compiler runtime/archive set under `/usr/lib`, including `crt0.o`,
   `libc.a`, and `libm.a`;
-- the `/lib` compiler runtime is generated as big-endian a.out for the in-tree
+- the `/usr/lib` compiler runtime is generated as big-endian a.out for the in-tree
   toolchain. `crt0.o` is assembled directly by the N64 native `as` from
   `lib/startup/crt0.s`; `libc.a` and `libm.a` are built in an isolated
   `n64-native-runtime` tree and reindexed with the N64 native `ranlib` after
-  staging, so `__.SYMDEF` matches the rootfs file mtimes. Nothing in `/lib` is
+  staging, so `__.SYMDEF` matches the rootfs file mtimes. Nothing in `/usr/lib` is
   copied from the normal external GCC/ELF userland artifacts, because the
   in-tree `ld` correctly rejects ELF objects as `bad magic`;
+- compatibility symlinks keep old absolute paths working where existing tools
+  still expect them: `/include -> usr/include`, `/lib/crt0.o`,
+  `/lib/libc.a`, `/lib/libm.a`, `/libexec/ccom`, and `/bin/cpp`;
 - `/root/pcc-smoke.sh` runs the target smoke from `/var/tmp`, so it does not
   try to write compiler outputs into the read-only root filesystem;
 - `/root/cc-pcc-smoke.sh` verifies both driver names, `/bin/cc` and
@@ -283,11 +287,18 @@ current N64 work is staged as follows:
   linker also emits real padding between input text segments, so a start file
   or other object with a 4-byte-only text length cannot shift the following PCC
   object and break its internal `.p2align` guarantees;
-- `/bin/smoke-as-vr4300` and `/bin/smoke-as-vr4300.sh` run the assembler opcode
-  smoke directly on N64, using `/bin/as` by default;
-- `/bin/matrix-as-vr4300` and `/bin/matrix-as-vr4300.sh` run the broader
+- `/usr/bin/smoke-as-vr4300` and `/usr/bin/smoke-as-vr4300.sh` run the
+  assembler opcode smoke directly on N64, using `/usr/bin/as` by default;
+- `/usr/bin/matrix-as-vr4300` and `/usr/bin/matrix-as-vr4300.sh` run the broader
   target-side VR4300 instruction matrix directly on N64. The current matrix has
   207 checks and has been confirmed on hardware;
+- on 2026-06-25, the `/usr` rootfs split was confirmed on real N64 hardware:
+  `PATH` was `/bin:/sbin:/usr/bin:/usr/sbin`, `/usr/bin/as`, `/usr/bin/cc`,
+  `/usr/libexec/ccom`, `/bin/cpp -> ../usr/bin/cpp`, `/include -> usr/include`,
+  and `/lib/crt0.o -> ../usr/lib/crt0.o` were present, and
+  `smoke-as-vr4300`, `matrix-as-vr4300`, `/root/cc-pcc-smoke.sh`,
+  `/root/types-smoke.sh`, `/root/ll-smoke.sh`, and `/root/ll-abi-smoke.sh`
+  all passed;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
@@ -562,6 +573,9 @@ stage0, remounted `/dev/cartflash0` on `/cart`, and passed `/root/romfs-smoke.sh
 again. The ROMFS VFS `sync` and `unmount` callbacks call the board flash
 backend `sync` hook, and the N64 reboot path calls `n64cart_flash_shutdown()`,
 which waits for flash WIP to clear before restoring quad-ROM mode.
+
+On 2026-06-25, the same ROMFS smoke also passed on the `/usr` rootfs split
+image before and after `sync`, `/sbin/umount /cart`, `mount /cart`.
 
 The N64 n64cart flash backend keeps a 32 KiB read-ahead cache above the SPI
 command path. A miss reads up to eight contiguous 4 KiB flash sectors in one
@@ -878,30 +892,37 @@ The current manifest includes a broader first-pass BSD userland:
 - boot/login configuration: `/.profile`, `/etc/fstab`, `/etc/gettytab`,
   `/etc/group`, `/etc/motd`, `/etc/passwd`, `/etc/profile`, `/etc/rc`,
   `/etc/ttys`, `/root/.profile`
-- core `/bin`: `[`, `apropos`, `awk`, `basename`, `cal`, `calendar`, `cat`,
-  `cb`, `chgrp`, `chmod`, `cmp`, `col`, `comm`, `compress`, `cpp`, `cp`,
+- core `/bin`: `[`, `aout`, `apropos`, `ar`, `as`, `awk`, `basename`, `cal`,
+  `calendar`, `cat`, `cb`, `cc`, `chgrp`, `chmod`, `cmp`, `col`, `comm`,
+  `compress`, `cpp`, `cp`,
   `date`, `dd`,
   `df`, `diff`, `diskspeed`, `du`, `echo`, `ed`, `egrep`, `env`, `expr`,
   `false`, `fgrep`, `file`, `find`, `fold`, `forth`, `grep`, `groups`,
-  `head`, `hostid`, `hostname`, `id`, `join`, `kill`, `last`, `ln`, `login`,
-  `ls`, `man`, `md5`, `mesg`, `mkdir`, `more`, `mv`, `nice`, `nohup`, `od`,
-  `pagesize`, `pdc`, `picoc`, `pr`, `printf`, `printenv`, `pwd`, `renice`,
-  `retroforth`, `rev`, `rm`, `rmail`, `rmdir`, `sed`, `sh`, `size`, `sleep`,
-  `sort`, `split`, `stty`, `sum`, `sync`, `tail`, `tar`, `tcl`, `tee`,
+  `head`, `hostid`, `hostname`, `id`, `join`, `kill`, `last`, `lcc`, `ld`,
+  `ln`, `login`, `ls`, `man`, `md5`, `mesg`, `mkdir`, `more`, `mv`, `nice`,
+  `nm`, `nohup`, `od`, `pagesize`, `pcc`, `pdc`, `picoc`, `pr`, `printf`,
+  `printenv`, `ps`, `pwd`, `ranlib`, `renice`, `retroforth`, `rev`, `rm`,
+  `rmail`, `rmdir`, `scc`, `sed`, `sh`, `size`, `sleep`, `sort`, `split`,
+  `strip`, `stty`, `sum`, `sync`, `sysctl`, `tail`, `tar`, `tcl`, `tee`,
   `test`, `time`, `touch`, `tr`, `true`, `tsort`, `tty`, `uname`,
-  `uncompress`, `uniq`, `w`, `wc`, `whatis`, `whereis`, `who`, `whoami`,
-  `xargs`, and `zcat`
+  `uncompress`, `uniq`, `vmstat`, `w`, `wc`, `whatis`, `whereis`, `who`,
+  `whoami`, `xargs`, and `zcat`
 - terminal and interpreter tools backed by additional shared libraries:
   `emg`, `med`, `pdc`, `setty`, `sl`, and `tcl`
 - N64 diagnostics and tools: `deco`, `fbset`, `fbview`, `n64input`,
   `ptytest`, `rgbled`, `romfsctl`, and `smux`
 - `/sbin`: `bootloader`, `chown`, `chroot`, `fastboot`, `fsck`, `halt`,
-  `init`, `mkfs`, `mknod`, `mkpasswd`, `mount`, `poweroff`, `reboot`,
-  `shutdown`, and `umount`
-- required helpers and data: `/libexec/diffh`, `/libexec/getty`,
-  `/lib/deco/*`, `/share/calendar/*`, `/share/misc/more.help`,
-  `/share/man/whatis`, and selected generated cat pages in `/share/man/cat1`
-  and `/share/man/cat8`
+  `init`, `mkfs`, `mknod`, `mkpasswd`, `mount`, `poweroff`, `pstat`,
+  `reboot`, `shutdown`, `umount`, and `updatedb`
+- required helpers and data: `/usr/libexec/bigram`, `/usr/libexec/code`,
+  `/libexec/diffh`, `/libexec/getty`, `/lib/deco/*`, `/usr/share/calendar/*`,
+  `/usr/share/misc/more.help`, `/usr/share/man/whatis`, and selected generated
+  cat pages in `/usr/share/man/cat1` and `/usr/share/man/cat8`
+
+The generated manifest stages headers under `/usr/include` and preserves
+top-level compatibility symlinks needed by old target-side paths, including
+`/include -> usr/include`. The PIC32 compatibility symlink from the common
+include tree is not included in the N64 root image.
 
 The staging tree may contain extra files installed by selected command
 makefiles, for example `reboot` installs `halt`, `fastboot`, `poweroff`, and
@@ -912,18 +933,19 @@ makefiles, for example `reboot` installs `halt`, `fastboot`, `poweroff`, and
 selected command makefiles already install their own cat pages; the N64 board
 makefile additionally formats selected portable pages from `src/man/man1`,
 `src/man/man8`, and `src/cmd/env/env.1` into the staging tree. It then
-generates `/share/man/whatis` from the staged cat pages with the existing
+generates `/usr/share/man/whatis` from the staged cat pages with the existing
 `src/man/makewhatis.sed` script before creating `rootfs.img`; the database is
 not checked in as a static file. The N64 userland build sets `GROFF_NO_SGR=1`
 so host `nroff` emits the classic overstrike format expected by the existing
 manual index script.
 
 `man` uses `/bin/more -s` as the default pager on an interactive tty, so
-`/bin/more` and `/share/misc/more.help` are part of the ROM rootfs. For the
+`/bin/more` and `/usr/share/misc/more.help` are part of the ROM rootfs. For the
 first N64 rootfs, `/etc/profile`, `/.profile`, and `/root/.profile` set
 `PAGER=/bin/cat` so manual pages print directly instead of depending on the
-interactive pager. The same profiles set `PATH=/bin:/sbin`, which makes the
-selected `/sbin` tools visible from the shell prompt.
+interactive pager. The same profiles set `PATH=/bin:/sbin:/usr/bin:/usr/sbin`,
+which makes the selected `/sbin` and `/usr/bin` tools visible from the shell
+prompt.
 
 The rootfs size defaults to 16384 KiB. The image stays in cartridge ROM and is
 not preloaded into RDRAM:
@@ -1473,6 +1495,10 @@ interactive tools without adding N64-specific source forks. PIC32/peripheral
 tools and commands that need missing runtime support remain excluded. `awk`
 pulls in the historical `-lm` dependency, so N64 includes `libm` in the
 userland library build.
+The manifest includes the extra files produced by those selected install
+rules, such as `cc` aliases `lcc` and `scc`, `find` helpers `bigram` and
+`code`, and the `updatedb` script, so the cartridge image matches the staged
+BSD rootfs instead of silently dropping installed helpers.
 
 `cpp` and `calendar` are included. `cpp` needs libgcc-compatible integer
 runtime helpers emitted by GCC for 32-bit MIPS userland, so libc runtime now

@@ -18,9 +18,18 @@ N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/n64/rootfs.manifest
 N64_ROOTFS_DEVNODES = rootfs.devnodes.manifest
 N64_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 N64_ROOTFS_STAGE = rootfs.stage
+N64_ROOTFS_USR_BIN = $(N64_ROOTFS_STAGE)/usr/bin
+N64_ROOTFS_USR_LIB = $(N64_ROOTFS_STAGE)/usr/lib
+N64_ROOTFS_USR_LIBEXEC = $(N64_ROOTFS_STAGE)/usr/libexec
+N64_ROOTFS_USR_INCLUDE = $(N64_ROOTFS_STAGE)/usr/include
+N64_ROOTFS_USR_SHARE = $(N64_ROOTFS_STAGE)/usr/share
 N64_ROOTFS_BASE_STAMP = $(N64_ROOTFS_STAGE)/.base
 N64_ROOTFS_USER_STAMP = $(N64_ROOTFS_STAGE)/.userland
-N64_ROOTFS_WHATIS = $(N64_ROOTFS_STAGE)/share/man/whatis
+N64_ROOTFS_WHATIS = $(N64_ROOTFS_USR_SHARE)/man/whatis
+N64_USR_BIN_FILES = aout ar as cc cpp lcc ld matrix-as-vr4300 \
+                    matrix-as-vr4300.sh nm pcc ranlib scc size \
+                    smoke-as-vr4300 smoke-as-vr4300.sh strip
+N64_USR_LIBEXEC_FILES = bigram ccom code
 N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm \
                         compress cp date dd df diff du echo ed expr false \
                         file find fold grep head hostid join kill last ln \
@@ -41,6 +50,8 @@ N64_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
                    2>/dev/null) \
                    $(wildcard $(TOPSRC)/sys/mips/*.h \
                    $(TOPSRC)/sys/mips/n64/*.h)
+N64_INCLUDE_LINKS = $(shell find $(TOPSRC)/include -maxdepth 1 -type l \
+                    2>/dev/null)
 N64_NATIVE_DIR = n64-native-runtime
 N64_NATIVE_TREE = $(N64_NATIVE_DIR)/tree
 N64_NATIVE_TOOLS = n64-native-tools
@@ -166,6 +177,11 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
                N64_STB_DIR="$(N64_STB_DIR)" \
                DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
+               CC_STDINC=/usr/include \
+               CC_LIBDIR=/usr/lib \
+               CC_LIBEXECDIR=/usr/libexec \
+               CC_CRT0FILE=/usr/lib/crt0.o \
+               CC_CRT0FILE_PROFILE=/usr/lib/mcrt0.o \
                SRC_ONLY_LIBS="$(N64_SRC_LIBS)" \
                SRC_ONLY_SUBDIR="$(N64_SRC_SUBDIRS)" \
                CMD_ONLY_SUBDIR="$(N64_CMD_SUBDIRS)" \
@@ -295,43 +311,50 @@ $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
 
 $(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES) $(N64_ROOTFS_USER_STAMP)
 	cp $(N64_ROOTFS_MANIFEST) $@
-	find $(N64_ROOTFS_STAGE)/include -type d | sort | while read path; do \
+	find $(N64_ROOTFS_USR_INCLUDE) -type d | sort | while read path; do \
 	    rel=$${path#$(N64_ROOTFS_STAGE)}; \
 	    printf '\ndir %s\n' "$$rel" >> $@; \
 	done
-	find $(N64_ROOTFS_STAGE)/include -type f ! -name '.gitignore' \
+	find $(N64_ROOTFS_USR_INCLUDE) -type f ! -name '.gitignore' \
 	    ! -name Makefile ! -name Makefile.install | sort | while read path; do \
 	    rel=$${path#$(N64_ROOTFS_STAGE)}; \
 	    printf '\nfile %s\n' "$$rel" >> $@; \
 	done
+	find $(N64_ROOTFS_USR_INCLUDE) -maxdepth 1 -type l ! -name pic32 | \
+	    sort | while read path; do \
+	    rel=$${path#$(N64_ROOTFS_STAGE)}; \
+	    target=$$(readlink "$$path"); \
+	    printf '\nsymlink %s\ntarget %s\n' "$$rel" "$$target" >> $@; \
+	done
 	for lib in $(N64_NATIVE_LIBS); do \
-	    printf '\nfile /lib/%s\n' "$$lib" >> $@; \
+	    printf '\nfile /usr/lib/%s\n' "$$lib" >> $@; \
 	done
 	cat $(N64_ROOTFS_DEVNODES) >> $@
 
 $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
-    $(N64_TERMCAP) $(N64_INCLUDE_SRCS) $(N64_NATIVE_AS_SMOKE_SCRIPT) \
+    $(N64_TERMCAP) $(N64_INCLUDE_SRCS) $(N64_INCLUDE_LINKS) \
+    $(N64_NATIVE_AS_SMOKE_SCRIPT) \
     $(N64_NATIVE_AS_MATRIX_SCRIPT)
 	rm -rf $(N64_ROOTFS_STAGE)
 	mkdir -p $(N64_ROOTFS_STAGE)
 	cp -pR $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
 	cp -p $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
-	mkdir -p $(N64_ROOTFS_STAGE)/include
-	cp -pR $(TOPSRC)/include/. $(N64_ROOTFS_STAGE)/include/
-	rm -rf $(N64_ROOTFS_STAGE)/include/machine $(N64_ROOTFS_STAGE)/include/sys
-	cp -pR $(TOPSRC)/sys/include $(N64_ROOTFS_STAGE)/include/sys
-	mkdir -p $(N64_ROOTFS_STAGE)/include/mips
-	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_STAGE)/include/mips/
-	mkdir -p $(N64_ROOTFS_STAGE)/include/machine
-	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_ROOTFS_STAGE)/include/machine/
+	mkdir -p $(N64_ROOTFS_USR_INCLUDE)
+	cp -pR $(TOPSRC)/include/. $(N64_ROOTFS_USR_INCLUDE)/
+	rm -rf $(N64_ROOTFS_USR_INCLUDE)/machine $(N64_ROOTFS_USR_INCLUDE)/sys
+	cp -pR $(TOPSRC)/sys/include $(N64_ROOTFS_USR_INCLUDE)/sys
+	mkdir -p $(N64_ROOTFS_USR_INCLUDE)/mips
+	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_USR_INCLUDE)/mips/
+	mkdir -p $(N64_ROOTFS_USR_INCLUDE)/machine
+	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_ROOTFS_USR_INCLUDE)/machine/
 	for header in $(N64_COMMON_MACHINE_HEADERS); do \
 	    cp -p $(TOPSRC)/sys/mips/$$header.h \
-	        $(N64_ROOTFS_STAGE)/include/machine/$$header.h; \
+	        $(N64_ROOTFS_USR_INCLUDE)/machine/$$header.h; \
 	done
-	cp -p $(TOPSRC)/sys/mips/n64/include/machine/types.h $(N64_ROOTFS_STAGE)/include/machine/types.h
+	cp -p $(TOPSRC)/sys/mips/n64/include/machine/types.h $(N64_ROOTFS_USR_INCLUDE)/machine/types.h
 	sed 's|#include "../cartflash.h"|#include <mips/cartflash.h>|' \
 	    $(TOPSRC)/sys/mips/n64/n64cart_flash.h \
-	    > $(N64_ROOTFS_STAGE)/include/machine/n64cart_flash.h
+	    > $(N64_ROOTFS_USR_INCLUDE)/machine/n64cart_flash.h
 	mkdir -p $(N64_ROOTFS_STAGE)/lib
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin
@@ -340,52 +363,78 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat1
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat5
 	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
-	cp -p $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300
-	cp -p $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300.sh
-	cp -p $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300
-	cp -p $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300.sh
-	chmod 0775 $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300 \
-	    $(N64_ROOTFS_STAGE)/bin/smoke-as-vr4300.sh \
-	    $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300 \
-	    $(N64_ROOTFS_STAGE)/bin/matrix-as-vr4300.sh
+	mkdir -p $(N64_ROOTFS_USR_BIN)
+	mkdir -p $(N64_ROOTFS_USR_LIB)
+	mkdir -p $(N64_ROOTFS_USR_LIBEXEC)
+	mkdir -p $(N64_ROOTFS_USR_SHARE)/misc
+	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat1
+	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat5
+	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat8
+	cp -p $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_USR_BIN)/smoke-as-vr4300
+	cp -p $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_USR_BIN)/smoke-as-vr4300.sh
+	cp -p $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300
+	cp -p $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300.sh
+	chmod 0775 $(N64_ROOTFS_USR_BIN)/smoke-as-vr4300 \
+	    $(N64_ROOTFS_USR_BIN)/smoke-as-vr4300.sh \
+	    $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300 \
+	    $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300.sh
 	touch $@
 
 $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_MAKEWHATIS_SED) Makefile
 	$(N64_SRC_MAKE) install
 	$(N64_AWK_MAKE) install
-	mkdir -p $(N64_ROOTFS_STAGE)/include/mips
-	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_STAGE)/include/mips/
 	cp -p $(N64_ROOTFS_STAGE)/bin/cc $(N64_ROOTFS_STAGE)/bin/pcc
+	mkdir -p $(N64_ROOTFS_USR_BIN) $(N64_ROOTFS_USR_LIB) \
+	    $(N64_ROOTFS_USR_LIBEXEC) $(N64_ROOTFS_USR_SHARE)
+	for bin in $(N64_USR_BIN_FILES); do \
+	    if [ -e $(N64_ROOTFS_STAGE)/bin/$$bin ]; then \
+	        mv -f $(N64_ROOTFS_STAGE)/bin/$$bin $(N64_ROOTFS_USR_BIN)/$$bin; \
+	    fi; \
+	done
+	for file in $(N64_USR_LIBEXEC_FILES); do \
+	    if [ -e $(N64_ROOTFS_STAGE)/libexec/$$file ]; then \
+	        mv -f $(N64_ROOTFS_STAGE)/libexec/$$file $(N64_ROOTFS_USR_LIBEXEC)/$$file; \
+	    fi; \
+	done
+	if [ -d $(N64_ROOTFS_STAGE)/share ]; then \
+	    cp -pR $(N64_ROOTFS_STAGE)/share/. $(N64_ROOTFS_USR_SHARE)/; \
+	    rm -rf $(N64_ROOTFS_STAGE)/share; \
+	fi
+	mkdir -p $(N64_ROOTFS_USR_INCLUDE)/mips
+	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_USR_INCLUDE)/mips/
 	for lib in $(N64_NATIVE_LIBS); do \
-	    cp -p $(N64_NATIVE_DIR)/$$lib $(N64_ROOTFS_STAGE)/lib/$$lib; \
+	    cp -p $(N64_NATIVE_DIR)/$$lib $(N64_ROOTFS_USR_LIB)/$$lib; \
 	done
 	for lib in libc.a libm.a; do \
-	    $(N64_NATIVE_AOUT_RANLIB) $(N64_ROOTFS_STAGE)/lib/$$lib; \
+	    $(N64_NATIVE_AOUT_RANLIB) $(N64_ROOTFS_USR_LIB)/$$lib; \
 	done
+	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat1 \
+	    $(N64_ROOTFS_USR_SHARE)/man/cat5 \
+	    $(N64_ROOTFS_USR_SHARE)/man/cat8
 	for page in $(N64_ROOTFS_CAT1_PAGES); do \
-	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 > $(N64_ROOTFS_STAGE)/share/man/cat1/$$page.0; \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 > $(N64_ROOTFS_USR_SHARE)/man/cat1/$$page.0; \
 	done
 	for spec in $(N64_ROOTFS_CMD_CAT1_SOURCES); do \
 	    dir=$${spec%:*}; page=$${spec#*:}; \
-	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/cmd/$$dir/$$page.1 > $(N64_ROOTFS_STAGE)/share/man/cat1/$$page.0; \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/cmd/$$dir/$$page.1 > $(N64_ROOTFS_USR_SHARE)/man/cat1/$$page.0; \
 	done
 	for alias in $(N64_ROOTFS_CAT1_ALIASES); do \
 	    dst=$${alias%:*}; src=$${alias#*:}; \
-	    cp $(N64_ROOTFS_STAGE)/share/man/cat1/$$src.0 $(N64_ROOTFS_STAGE)/share/man/cat1/$$dst.0; \
+	    cp $(N64_ROOTFS_USR_SHARE)/man/cat1/$$src.0 $(N64_ROOTFS_USR_SHARE)/man/cat1/$$dst.0; \
 	done
 	for page in $(N64_ROOTFS_CAT8_PAGES); do \
-	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man8/$$page.8 > $(N64_ROOTFS_STAGE)/share/man/cat8/$$page.0; \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man8/$$page.8 > $(N64_ROOTFS_USR_SHARE)/man/cat8/$$page.0; \
 	done
 	for alias in $(N64_ROOTFS_CAT8_ALIASES); do \
 	    dst=$${alias%:*}; src=$${alias#*:}; \
-	    if [ ! -e $(N64_ROOTFS_STAGE)/share/man/cat8/$$dst.0 ] || \
-	        ! cmp -s $(N64_ROOTFS_STAGE)/share/man/cat8/$$src.0 $(N64_ROOTFS_STAGE)/share/man/cat8/$$dst.0; then \
-	        cp $(N64_ROOTFS_STAGE)/share/man/cat8/$$src.0 $(N64_ROOTFS_STAGE)/share/man/cat8/$$dst.0; \
+	    if [ ! -e $(N64_ROOTFS_USR_SHARE)/man/cat8/$$dst.0 ] || \
+	        ! cmp -s $(N64_ROOTFS_USR_SHARE)/man/cat8/$$src.0 $(N64_ROOTFS_USR_SHARE)/man/cat8/$$dst.0; then \
+	        cp $(N64_ROOTFS_USR_SHARE)/man/cat8/$$src.0 $(N64_ROOTFS_USR_SHARE)/man/cat8/$$dst.0; \
 	    fi; \
 	done
 	rm -f $(N64_ROOTFS_WHATIS).tmp
 	touch $(N64_ROOTFS_WHATIS).tmp
-	for file in `find $(N64_ROOTFS_STAGE)/share/man/cat* -type f -name '*.0' -print`; do \
+	for file in `find $(N64_ROOTFS_USR_SHARE)/man/cat* -type f -name '*.0' -print`; do \
 	    sed -n -f $(N64_MAKEWHATIS_SED) $$file >> $(N64_ROOTFS_WHATIS).tmp; \
 	done
 	sort -u $(N64_ROOTFS_WHATIS).tmp > $(N64_ROOTFS_WHATIS)

@@ -17,13 +17,31 @@ dir /lib/deco/help
 dir /libexec
 dir /root
 dir /sbin
-dir /share
-dir /share/calendar
-dir /share/man
-dir /share/man/cat1
-dir /share/man/cat5
-dir /share/man/cat8
-dir /share/misc
+dir /usr
+dir /usr/bin
+dir /usr/lib
+dir /usr/libexec
+dir /usr/share
+dir /usr/share/calendar
+dir /usr/share/man
+dir /usr/share/man/cat1
+dir /usr/share/man/cat5
+dir /usr/share/man/cat8
+dir /usr/share/misc
+symlink /include
+target usr/include
+symlink /share
+target usr/share
+symlink /bin/cpp
+target ../usr/bin/cpp
+symlink /lib/crt0.o
+target ../usr/lib/crt0.o
+symlink /lib/libc.a
+target ../usr/lib/libc.a
+symlink /lib/libm.a
+target ../usr/lib/libm.a
+symlink /libexec/ccom
+target ../usr/libexec/ccom
 symlink /tmp
 target var/tmp
 dir /var
@@ -94,16 +112,16 @@ mode 0775
 file /bin/[
 mode 0775
 
-file /bin/aout
+file /usr/bin/aout
 mode 0775
 
 file /bin/apropos
 mode 0775
 
-file /bin/ar
+file /usr/bin/ar
 mode 0775
 
-file /bin/as
+file /usr/bin/as
 mode 0775
 
 file /bin/awk
@@ -124,7 +142,7 @@ mode 0775
 file /bin/cb
 mode 0775
 
-file /bin/cc
+file /usr/bin/cc
 mode 0775
 
 file /bin/chgrp
@@ -148,7 +166,7 @@ mode 0775
 file /bin/cp
 mode 0775
 
-file /bin/cpp
+file /usr/bin/cpp
 mode 0775
 
 file /bin/date
@@ -241,7 +259,10 @@ mode 0775
 file /bin/last
 mode 0775
 
-file /bin/ld
+file /usr/bin/lcc
+mode 0775
+
+file /usr/bin/ld
 mode 0775
 
 file /bin/ln
@@ -280,7 +301,7 @@ mode 0775
 file /bin/nice
 mode 0775
 
-file /bin/nm
+file /usr/bin/nm
 mode 0775
 
 file /bin/nohup
@@ -295,7 +316,7 @@ mode 0775
 file /bin/pdc
 mode 0775
 
-file /bin/pcc
+file /usr/bin/pcc
 mode 0775
 
 file /bin/picoc
@@ -331,7 +352,7 @@ mode 0775
 file /bin/rgbled
 mode 0775
 
-file /bin/ranlib
+file /usr/bin/ranlib
 mode 0775
 
 file /bin/rm
@@ -346,6 +367,9 @@ mode 0775
 file /bin/romfsctl
 mode 0775
 
+file /usr/bin/scc
+mode 0775
+
 file /bin/sed
 mode 0775
 
@@ -355,7 +379,7 @@ mode 0775
 file /bin/sh
 mode 0775
 
-file /bin/size
+file /usr/bin/size
 mode 0775
 
 file /bin/sl
@@ -367,16 +391,16 @@ mode 0775
 file /bin/smux
 mode 0775
 
-file /bin/smoke-as-vr4300
+file /usr/bin/smoke-as-vr4300
 mode 0775
 
-file /bin/smoke-as-vr4300.sh
+file /usr/bin/smoke-as-vr4300.sh
 mode 0775
 
-file /bin/matrix-as-vr4300
+file /usr/bin/matrix-as-vr4300
 mode 0775
 
-file /bin/matrix-as-vr4300.sh
+file /usr/bin/matrix-as-vr4300.sh
 mode 0775
 
 file /bin/sort
@@ -388,7 +412,10 @@ mode 0775
 file /bin/stty
 mode 0775
 
-file /bin/strip
+file /usr/bin/strip
+mode 0775
+
+file /bin/sysctl
 mode 0775
 
 file /bin/sum
@@ -472,6 +499,12 @@ mode 0755
 file /libexec/getty
 mode 0755
 
+file /usr/libexec/bigram
+mode 0755
+
+file /usr/libexec/code
+mode 0755
+
 file /lib/deco/menu
 
 file /lib/deco/profile
@@ -486,282 +519,282 @@ file /lib/deco/help/e.view
 
 file /lib/retroImage
 
-file /libexec/ccom
+file /usr/libexec/ccom
 mode 0755
 
-file /share/misc/more.help
+file /usr/share/misc/more.help
 
-file /share/emg.keys
+file /usr/share/emg.keys
 
-file /share/calendar/calendar.birthday
+file /usr/share/calendar/calendar.birthday
 
-file /share/calendar/calendar.christian
+file /usr/share/calendar/calendar.christian
 
-file /share/calendar/calendar.computer
+file /usr/share/calendar/calendar.computer
 
-file /share/calendar/calendar.history
+file /usr/share/calendar/calendar.history
 
-file /share/calendar/calendar.holiday
+file /usr/share/calendar/calendar.holiday
 
-file /share/calendar/calendar.judaic
+file /usr/share/calendar/calendar.judaic
 
-file /share/calendar/calendar.music
+file /usr/share/calendar/calendar.music
 
-file /share/calendar/calendar.usholiday
+file /usr/share/calendar/calendar.usholiday
 
-file /share/man/whatis
+file /usr/share/man/whatis
 
-file /share/man/cat1/apropos.0
+file /usr/share/man/cat1/apropos.0
 
-file /share/man/cat1/ar.0
+file /usr/share/man/cat1/ar.0
 
-file /share/man/cat1/awk.0
+file /usr/share/man/cat1/awk.0
 
-file /share/man/cat1/basename.0
+file /usr/share/man/cat1/basename.0
 
-file /share/man/cat1/cal.0
+file /usr/share/man/cat1/cal.0
 
-file /share/man/cat1/calendar.0
+file /usr/share/man/cat1/calendar.0
 
-file /share/man/cat1/cat.0
+file /usr/share/man/cat1/cat.0
 
-file /share/man/cat1/cb.0
+file /usr/share/man/cat1/cb.0
 
-file /share/man/cat1/ccom.0
+file /usr/share/man/cat1/ccom.0
 
-file /share/man/cat1/chgrp.0
+file /usr/share/man/cat1/chgrp.0
 
-file /share/man/cat1/chmod.0
+file /usr/share/man/cat1/chmod.0
 
-file /share/man/cat1/cmp.0
+file /usr/share/man/cat1/cmp.0
 
-file /share/man/cat1/col.0
+file /usr/share/man/cat1/col.0
 
-file /share/man/cat1/comm.0
+file /usr/share/man/cat1/comm.0
 
-file /share/man/cat1/compress.0
+file /usr/share/man/cat1/compress.0
 
-file /share/man/cat1/cp.0
+file /usr/share/man/cat1/cp.0
 
-file /share/man/cat1/cpp.0
+file /usr/share/man/cat1/cpp.0
 
-file /share/man/cat1/date.0
+file /usr/share/man/cat1/date.0
 
-file /share/man/cat1/dd.0
+file /usr/share/man/cat1/dd.0
 
-file /share/man/cat1/deco.0
+file /usr/share/man/cat1/deco.0
 
-file /share/man/cat1/df.0
+file /usr/share/man/cat1/df.0
 
-file /share/man/cat1/diff.0
+file /usr/share/man/cat1/diff.0
 
-file /share/man/cat1/du.0
+file /usr/share/man/cat1/du.0
 
-file /share/man/cat1/echo.0
+file /usr/share/man/cat1/echo.0
 
-file /share/man/cat1/ed.0
+file /usr/share/man/cat1/ed.0
 
-file /share/man/cat1/egrep.0
+file /usr/share/man/cat1/egrep.0
 
-file /share/man/cat1/emg.0
+file /usr/share/man/cat1/emg.0
 
-file /share/man/cat1/env.0
+file /usr/share/man/cat1/env.0
 
-file /share/man/cat1/expr.0
+file /usr/share/man/cat1/expr.0
 
-file /share/man/cat1/false.0
+file /usr/share/man/cat1/false.0
 
-file /share/man/cat1/fbset.0
+file /usr/share/man/cat1/fbset.0
 
-file /share/man/cat1/fbview.0
+file /usr/share/man/cat1/fbview.0
 
-file /share/man/cat1/fgrep.0
+file /usr/share/man/cat1/fgrep.0
 
-file /share/man/cat1/file.0
+file /usr/share/man/cat1/file.0
 
-file /share/man/cat1/find.0
+file /usr/share/man/cat1/find.0
 
-file /share/man/cat1/fold.0
+file /usr/share/man/cat1/fold.0
 
-file /share/man/cat1/grep.0
+file /usr/share/man/cat1/grep.0
 
-file /share/man/cat1/groups.0
+file /usr/share/man/cat1/groups.0
 
-file /share/man/cat1/head.0
+file /usr/share/man/cat1/head.0
 
-file /share/man/cat1/hostid.0
+file /usr/share/man/cat1/hostid.0
 
-file /share/man/cat1/hostname.0
+file /usr/share/man/cat1/hostname.0
 
-file /share/man/cat1/id.0
+file /usr/share/man/cat1/id.0
 
-file /share/man/cat1/join.0
+file /usr/share/man/cat1/join.0
 
-file /share/man/cat1/kill.0
+file /usr/share/man/cat1/kill.0
 
-file /share/man/cat1/last.0
+file /usr/share/man/cat1/last.0
 
-file /share/man/cat1/ld.0
+file /usr/share/man/cat1/ld.0
 
-file /share/man/cat1/ln.0
+file /usr/share/man/cat1/ln.0
 
-file /share/man/cat1/login.0
+file /usr/share/man/cat1/login.0
 
-file /share/man/cat1/ls.0
+file /usr/share/man/cat1/ls.0
 
-file /share/man/cat1/man.0
+file /usr/share/man/cat1/man.0
 
-file /share/man/cat1/md5.0
+file /usr/share/man/cat1/md5.0
 
-file /share/man/cat1/mesg.0
+file /usr/share/man/cat1/mesg.0
 
-file /share/man/cat1/mkdir.0
+file /usr/share/man/cat1/mkdir.0
 
-file /share/man/cat1/more.0
+file /usr/share/man/cat1/more.0
 
-file /share/man/cat1/mv.0
+file /usr/share/man/cat1/mv.0
 
-file /share/man/cat1/n64input.0
+file /usr/share/man/cat1/n64input.0
 
-file /share/man/cat1/nice.0
+file /usr/share/man/cat1/nice.0
 
-file /share/man/cat1/nohup.0
+file /usr/share/man/cat1/nohup.0
 
-file /share/man/cat1/od.0
+file /usr/share/man/cat1/od.0
 
-file /share/man/cat1/pagesize.0
+file /usr/share/man/cat1/pagesize.0
 
-file /share/man/cat1/pr.0
+file /usr/share/man/cat1/pr.0
 
-file /share/man/cat1/ps.0
+file /usr/share/man/cat1/ps.0
 
-file /share/man/cat1/printf.0
+file /usr/share/man/cat1/printf.0
 
-file /share/man/cat1/printenv.0
+file /usr/share/man/cat1/printenv.0
 
-file /share/man/cat1/ptytest.0
+file /usr/share/man/cat1/ptytest.0
 
-file /share/man/cat1/pwd.0
+file /usr/share/man/cat1/pwd.0
 
-file /share/man/cat1/ranlib.0
+file /usr/share/man/cat1/ranlib.0
 
-file /share/man/cat1/rev.0
+file /usr/share/man/cat1/rev.0
 
-file /share/man/cat1/rgbled.0
+file /usr/share/man/cat1/rgbled.0
 
-file /share/man/cat1/rm.0
+file /usr/share/man/cat1/rm.0
 
-file /share/man/cat1/rmail.0
+file /usr/share/man/cat1/rmail.0
 
-file /share/man/cat1/rmdir.0
+file /usr/share/man/cat1/rmdir.0
 
-file /share/man/cat1/romfsctl.0
+file /usr/share/man/cat1/romfsctl.0
 
-file /share/man/cat1/sed.0
+file /usr/share/man/cat1/sed.0
 
-file /share/man/cat1/sh.0
+file /usr/share/man/cat1/sh.0
 
-file /share/man/cat1/size.0
+file /usr/share/man/cat1/size.0
 
-file /share/man/cat1/strip.0
+file /usr/share/man/cat1/strip.0
 
-file /share/man/cat1/sl.0
+file /usr/share/man/cat1/sl.0
 
-file /share/man/cat1/sleep.0
+file /usr/share/man/cat1/sleep.0
 
-file /share/man/cat1/sort.0
+file /usr/share/man/cat1/sort.0
 
-file /share/man/cat1/split.0
+file /usr/share/man/cat1/split.0
 
-file /share/man/cat1/stty.0
+file /usr/share/man/cat1/stty.0
 
-file /share/man/cat1/sum.0
+file /usr/share/man/cat1/sum.0
 
-file /share/man/cat1/tail.0
+file /usr/share/man/cat1/tail.0
 
-file /share/man/cat1/tar.0
+file /usr/share/man/cat1/tar.0
 
-file /share/man/cat1/tee.0
+file /usr/share/man/cat1/tee.0
 
-file /share/man/cat1/test.0
+file /usr/share/man/cat1/test.0
 
-file /share/man/cat1/time.0
+file /usr/share/man/cat1/time.0
 
-file /share/man/cat1/touch.0
+file /usr/share/man/cat1/touch.0
 
-file /share/man/cat1/tr.0
+file /usr/share/man/cat1/tr.0
 
-file /share/man/cat1/true.0
+file /usr/share/man/cat1/true.0
 
-file /share/man/cat1/tsort.0
+file /usr/share/man/cat1/tsort.0
 
-file /share/man/cat1/tty.0
+file /usr/share/man/cat1/tty.0
 
-file /share/man/cat1/uname.0
+file /usr/share/man/cat1/uname.0
 
-file /share/man/cat1/uncompress.0
+file /usr/share/man/cat1/uncompress.0
 
-file /share/man/cat1/uniq.0
+file /usr/share/man/cat1/uniq.0
 
-file /share/man/cat1/vmstat.0
+file /usr/share/man/cat1/vmstat.0
 
-file /share/man/cat1/w.0
+file /usr/share/man/cat1/w.0
 
-file /share/man/cat1/wc.0
+file /usr/share/man/cat1/wc.0
 
-file /share/man/cat1/whatis.0
+file /usr/share/man/cat1/whatis.0
 
-file /share/man/cat1/who.0
+file /usr/share/man/cat1/who.0
 
-file /share/man/cat1/whoami.0
+file /usr/share/man/cat1/whoami.0
 
-file /share/man/cat1/xargs.0
+file /usr/share/man/cat1/xargs.0
 
-file /share/man/cat1/zcat.0
+file /usr/share/man/cat1/zcat.0
 
-file /share/man/cat5/ar.0
+file /usr/share/man/cat5/ar.0
 
-file /share/man/cat5/ranlib.0
+file /usr/share/man/cat5/ranlib.0
 
-file /share/man/cat8/bootloader.0
+file /usr/share/man/cat8/bootloader.0
 
-file /share/man/cat8/chown.0
+file /usr/share/man/cat8/chown.0
 
-file /share/man/cat8/chroot.0
+file /usr/share/man/cat8/chroot.0
 
-file /share/man/cat8/fastboot.0
+file /usr/share/man/cat8/fastboot.0
 
-file /share/man/cat8/fsck.0
+file /usr/share/man/cat8/fsck.0
 
-file /share/man/cat8/getty.0
+file /usr/share/man/cat8/getty.0
 
-file /share/man/cat8/halt.0
+file /usr/share/man/cat8/halt.0
 
-file /share/man/cat8/init.0
+file /usr/share/man/cat8/init.0
 
-file /share/man/cat8/mkfs.0
+file /usr/share/man/cat8/mkfs.0
 
-file /share/man/cat8/mknod.0
+file /usr/share/man/cat8/mknod.0
 
-file /share/man/cat8/mkpasswd.0
+file /usr/share/man/cat8/mkpasswd.0
 
-file /share/man/cat8/mount.0
+file /usr/share/man/cat8/mount.0
 
-file /share/man/cat8/pstat.0
+file /usr/share/man/cat8/pstat.0
 
-file /share/man/cat8/poweroff.0
+file /usr/share/man/cat8/poweroff.0
 
-file /share/man/cat8/reboot.0
+file /usr/share/man/cat8/reboot.0
 
-file /share/man/cat8/renice.0
+file /usr/share/man/cat8/renice.0
 
-file /share/man/cat8/shutdown.0
+file /usr/share/man/cat8/shutdown.0
 
-file /share/man/cat8/sync.0
+file /usr/share/man/cat8/sync.0
 
-file /share/man/cat8/sysctl.0
+file /usr/share/man/cat8/sysctl.0
 
-file /share/man/cat8/umount.0
+file /usr/share/man/cat8/umount.0
 
 file /sbin/bootloader
 mode 0775
@@ -809,4 +842,7 @@ file /sbin/shutdown
 mode 04750
 
 file /sbin/umount
+mode 0775
+
+file /sbin/updatedb
 mode 0775

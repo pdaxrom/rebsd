@@ -11,7 +11,7 @@ fi
 if test $# -eq 1; then
 	as_bin=$1
 else
-	as_bin=/bin/as
+	as_bin=/usr/bin/as
 fi
 
 cd /tmp || cd /var/tmp || exit 1

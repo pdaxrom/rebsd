@@ -14,8 +14,9 @@ as -o cc-smoke.o cc-smoke.s || exit 1
 echo "step 3: ld -r"
 ld -r -o cc-smoke.ro cc-smoke.o || exit 1
 test -f cc-smoke.ro || exit 1
-echo "step 4: direct ld with /lib/libc.a"
-ld -X -d -e _start -o cc-direct /lib/crt0.o cc-smoke.o /lib/libc.a || exit 1
+echo "step 4: direct ld with /usr/lib/libc.a"
+ld -X -d -e _start -o cc-direct /usr/lib/crt0.o cc-smoke.o \
+    /usr/lib/libc.a || exit 1
 test -f cc-direct || exit 1
 ./cc-direct || exit 1
 echo "direct ld link/run smoke ok"

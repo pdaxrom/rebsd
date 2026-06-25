@@ -102,9 +102,10 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
     dumps by default because `/var` is a small RAM disk, but after explicitly
     enabling core dumps the failure path must still return a filesystem error
     cleanly and must not panic the inode cache
-- [x] Add the minimal in-tree toolchain smoke kit to the N64 rootfs:
-  `pcc`, `ccom`, `as`, `ld`, `ar`, `ranlib`, `nm`, `aout`, `strip`,
-  and no-header smoke C sources.
+- [x] Add the in-tree toolchain smoke kit to the N64 rootfs under `/usr`:
+  `/usr/bin/pcc`, `/usr/libexec/ccom`, `/usr/bin/as`, `/usr/bin/ld`,
+  `/usr/bin/ar`, `/usr/bin/ranlib`, `/usr/bin/nm`, `/usr/bin/aout`,
+  `/usr/bin/strip`, and no-header smoke C sources.
 - [x] Add `/root/pcc-smoke.sh` to run the first target compiler smoke from
   writable `/var/tmp`: `pcc -S`, `as`, `ld -r`, full executable link/run,
   and FPU compile/link/run.
@@ -113,17 +114,21 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   through the default `/` sysroot; keep one explicit `--sysroot /` check.
 - [x] Increase the N64 `u`/`u0` areas to 8 KiB so the kernel stack has enough
   headroom for nested `exec`/`namei`/FPU paths during the compiler smoke.
-- [x] Build a.out-format `/lib/crt0.o` and `/lib/libc.a` for the in-tree
-  `pcc`/`ld` path. `/lib/crt0.o` is assembled by the N64 native `as` from
+- [x] Build a.out-format `/usr/lib/crt0.o` and `/usr/lib/libc.a` for the in-tree
+  `pcc`/`ld` path. `/usr/lib/crt0.o` is assembled by the N64 native `as` from
   `lib/startup/crt0.s`; do not stage ELF objects from the external GCC
   toolchain as compiler runtime files, because in-tree `ld` reports those as
   `bad magic`.
-- [x] Generate the target `/include` tree and `/lib` compiler runtime/archive
-  set into the N64 rootfs from the shared build outputs, instead of
+- [x] Generate the target `/usr/include` tree and `/usr/lib` compiler
+  runtime/archive set into the N64 rootfs from the shared build outputs, instead of
   hand-listing static headers or libraries in `rootfs.manifest`.
 - [x] Run the N64 native `ranlib` again after copying `libc.a` and `libm.a`
-  into `rootfs.stage/lib`, so the staged archive mtimes match `__.SYMDEF` and
-  target `ld` does not warn that `/lib/libc.a` is out of date.
+  into `rootfs.stage/usr/lib`, so the staged archive mtimes match `__.SYMDEF`
+  and target `ld` does not warn that `/usr/lib/libc.a` is out of date.
+- [x] Hardware-smoke the `/usr` rootfs split on N64: PATH includes
+  `/usr/bin`, toolchain binaries live under `/usr/bin`, compiler runtime
+  files live under `/usr/lib`, `ccom` lives under `/usr/libexec`, and the
+  compatibility links `/bin/cpp`, `/include`, and `/lib/crt0.o` resolve.
 - [x] Hardware-smoke the expanded `/root/pcc-smoke.sh` on N64 and confirm
   both executable link/run paths complete without filesystem or inode-cache
   panics.
@@ -200,7 +205,8 @@ copying binaries manually.
   `cat`, `echo`, `pwd`, `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `chmod`, `chown`,
   `sleep`, `kill`, `stty`, `uname`, `hostname`, `id`, `test`, and `env`
 - [x] Add `man`, `more`, selected installed cat pages, and `/etc/fstab`
-- [x] Add login profile defaults for `PATH=/bin:/sbin` and `PAGER=/bin/cat`
+- [x] Add login profile defaults for `PATH=/bin:/sbin:/usr/bin:/usr/sbin` and
+  `PAGER=/bin/cat`
 - [x] Add selected `/sbin` utilities when the kernel side supports them:
   `reboot`, `mount`, `umount`, and `fsck`
 - [x] Add `/bin/n64input` as the minimal Joybus input smoke-test utility for
@@ -221,6 +227,13 @@ copying binaries manually.
 - [x] Add the first library-backed command batch to the N64 rootfs:
   `emg`, `forth`, `med`, `pdc`, `picoc`, `retroforth`, `setty`, `sl`, and
   `tcl`.
+- [x] Include all files installed by the selected shared command makefiles that
+  are needed for the normal rootfs rather than leaving staged artifacts out of
+  `rootfs.img`: `cc` aliases `lcc`/`scc`, `/bin/sysctl`,
+  `/sbin/updatedb`, `/usr/libexec/bigram`, `/usr/libexec/code`, generated
+  `/usr/include` headers, and compatibility links such as `/include`,
+  `/bin/cpp`, `/lib/crt0.o`, `/lib/libc.a`, `/lib/libm.a`, and
+  `/libexec/ccom`.
 - [x] Increase the default N64 rootfs size once the command set grows; the
   image remains ROM-backed and demand-read through the romdisk block driver,
   not copied wholesale into RDRAM.

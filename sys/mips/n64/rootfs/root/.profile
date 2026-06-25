@@ -1,3 +1,3 @@
-PATH=/bin:/sbin
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
 PAGER=/bin/cat
 export PATH PAGER

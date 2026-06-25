@@ -3,7 +3,7 @@
 # Test the RetroBSD assembler for the 32-bit instruction subset we expect
 # to use on NEC VR4300.  With a GNU as argument, compare accept/reject
 # behavior against GNU as.  With no GNU as argument, run as a target-side
-# self-test against /bin/as.
+# self-test against /usr/bin/as.
 #
 # Keep the target-side runner deliberately simple: the historic shell keeps
 # function bodies in its small heap, so a matrix implemented as hundreds of
@@ -16,7 +16,7 @@ if test $# -gt 2; then
 fi
 
 if test $# -eq 0; then
-	retro_as=/bin/as
+	retro_as=/usr/bin/as
 	target_only=1
 else
 	retro_as=$1

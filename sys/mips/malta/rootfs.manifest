@@ -12,6 +12,23 @@ dir /lib
 dir /libexec
 dir /root
 dir /sbin
+dir /usr
+dir /usr/bin
+dir /usr/include
+dir /usr/lib
+dir /usr/libexec
+symlink /include
+target usr/include
+symlink /bin/cpp
+target ../usr/bin/cpp
+symlink /lib/crt0.o
+target ../usr/lib/crt0.o
+symlink /lib/libc.a
+target ../usr/lib/libc.a
+symlink /lib/libm.a
+target ../usr/lib/libm.a
+symlink /libexec/ccom
+target ../usr/libexec/ccom
 symlink /tmp
 target var/tmp
 dir /var
@@ -77,31 +94,31 @@ mode 0775
 file /sbin/umount
 mode 0775
 
-file /lib/crt0.o
+file /usr/lib/crt0.o
 
-file /lib/libc.a
+file /usr/lib/libc.a
 
-file /lib/libm.a
+file /usr/lib/libm.a
 
-file /libexec/ccom
+file /usr/libexec/ccom
 mode 0775
 
 file /libexec/getty
 mode 0775
 
-file /bin/ar
+file /usr/bin/ar
 mode 0775
 
-file /bin/as
+file /usr/bin/as
 mode 0775
 
 file /bin/cat
 mode 0775
-file /bin/cc
+file /usr/bin/cc
 mode 0775
 file /bin/chmod
 mode 0775
-file /bin/cpp
+file /usr/bin/cpp
 mode 0775
 file /bin/df
 mode 0775
@@ -113,23 +130,25 @@ file /bin/expr
 mode 0775
 file /bin/false
 mode 0775
-file /bin/ld
+file /usr/bin/ld
 mode 0775
 file /bin/login
 mode 0775
 file /bin/ls
 mode 0775
-file /bin/matrix-as-vr4300
+file /usr/bin/matrix-as-vr4300
+mode 0775
+file /usr/bin/matrix-as-vr4300.sh
 mode 0775
 file /bin/mkdir
 mode 0775
 file /bin/mv
 mode 0775
-file /bin/nm
+file /usr/bin/nm
 mode 0775
 file /bin/od
 mode 0775
-file /bin/pcc
+file /usr/bin/pcc
 mode 0775
 
 file /bin/ps
@@ -137,7 +156,7 @@ mode 02751
 
 file /bin/pwd
 mode 0775
-file /bin/ranlib
+file /usr/bin/ranlib
 mode 0775
 file /bin/rm
 mode 0775
@@ -149,11 +168,13 @@ file /bin/sed
 mode 0775
 file /bin/sh
 mode 0775
-file /bin/size
+file /usr/bin/size
 mode 0775
-file /bin/smoke-as-vr4300
+file /usr/bin/smoke-as-vr4300
 mode 0775
-file /bin/strip
+file /usr/bin/smoke-as-vr4300.sh
+mode 0775
+file /usr/bin/strip
 mode 0775
 file /bin/stty
 mode 0775

@@ -8,8 +8,8 @@ Layout:
   all MIPS boards.
 - `n64/` - Nintendo 64 board support: RDRAM layout, video, SI/Joybus and
   n64cart hardware.
-- `malta/` - QEMU Malta board support: 8 MB RAM, 16550 serial console,
-  ROM/initrd root filesystem and RAM-backed swap.
+- `malta/` - QEMU Malta board support: 32 MB RAM, 16550 serial console,
+  16 MB RAM-loaded ROM root filesystem and RAM-backed swap.
 
 Both Malta and N64 are built as boards under the shared `sys/mips` architecture.
 Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
@@ -38,9 +38,32 @@ Useful QEMU smoke checks:
 
 ```
 make -C sys/mips/malta
-qemu-system-mips -M malta -m 8M -nographic -serial mon:stdio \
+qemu-system-mips -M malta -m 32M -nographic -serial mon:stdio \
     -no-reboot -kernel sys/mips/malta/unix.elf
 ```
+
+The generated `run` target uses the current Malta layout:
+
+```
+make -C sys/mips/malta run
+```
+
+This starts QEMU with `-m 32M`. The kernel keeps the normal 2 MiB user window,
+loads the root filesystem at physical `0x00600000`, reserves 16 MiB for that
+image, keeps `/var` on a 1 MiB RAM disk, and uses the remaining high RAM for
+swap.
+
+To increase the Malta root filesystem, keep these three values in sync:
+
+- `MIPS_ROOTFS_KBYTES` in `sys/mips/Makefile.kconf`;
+- `MALTA_ROMDISK_BYTES` and the following `MALTA_RAMSWAP_PHYS_START` layout in
+  `sys/mips/layout.h`;
+- the `romdisk` memory region length in `sys/mips/malta/malta.ld`.
+
+If the root image grows past the current 32 MiB address plan, also raise
+`MALTA_QEMU_RAM` and `MALTA_RAM_SIZE`. The current `/cart` device is separate:
+it is an 8 MiB sparse RAM-backed NOR flash emulator for ROMFS tests, not the
+boot root filesystem.
 
 After logging in as `root`:
 
