@@ -37,11 +37,13 @@ trap 'rm -rf "$tmpdir"' 0 1 2 3 15
 
 main_s=$tmpdir/main.s
 foo_s=$tmpdir/foo.s
+data_s=$tmpdir/data.s
 chain_main_s=$tmpdir/chain-main.s
 chain_mid_s=$tmpdir/chain-mid.s
 chain_leaf_s=$tmpdir/chain-leaf.s
 main_o=$tmpdir/main.o
 foo_o=$tmpdir/foo.o
+data_o=$tmpdir/data.o
 chain_main_o=$tmpdir/chain-main.o
 chain_mid_o=$tmpdir/chain-mid.o
 chain_leaf_o=$tmpdir/chain-leaf.o
@@ -49,6 +51,7 @@ partial_o=$tmpdir/partial.o
 libfoo=$tmpdir/libfoo.a
 libchain=$tmpdir/libchain.a
 app=$tmpdir/app
+app_data=$tmpdir/app-data
 app_chain=$tmpdir/app-chain
 stripped=$tmpdir/app.stripped
 list_before=$tmpdir/list-before
@@ -76,6 +79,19 @@ foo:
 	addiu $2,$0,42
 	jr $31
 	nop
+EOF
+
+cat > "$data_s" <<'EOF'
+.text
+.set noreorder
+.globl start
+start:
+	jr $31
+	nop
+.data
+.globl dataptr
+dataptr:
+	.word start
 EOF
 
 cat > "$chain_main_s" <<'EOF'
@@ -146,12 +162,15 @@ check_field()
 
 "$as_bin" -EB -mips3 -march=vr4300 -o "$main_o" "$main_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$foo_o" "$foo_s" || exit 1
+"$as_bin" -EB -mips3 -march=vr4300 -o "$data_o" "$data_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_main_o" "$chain_main_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_mid_o" "$chain_mid_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_leaf_o" "$chain_leaf_s" || exit 1
 
 check_exec "$main_o" 00000106 00000010
 check_exec "$foo_o" 00000106 00000010
+check_exec "$data_o" 00000106 00000008
+check_field "$data_o" 8 00000004
 
 "$nm_bin" -p "$main_o" > "$nm_main" || exit 1
 if ! grep ' T start' "$nm_main" >/dev/null; then
@@ -174,6 +193,12 @@ fi
 
 "$ld_bin" -EB -r -o "$partial_o" "$main_o" "$foo_o" || exit 1
 check_exec "$partial_o" 00000106 00000020
+
+"$ld_bin" -EB -e start -o "$app_data" "$data_o" || exit 1
+check_exec "$app_data" 00000107 00000010
+check_field "$app_data" 8 00000004
+check_field "$app_data" 28 00400000
+check_field "$app_data" 48 00400000
 
 "$ar_bin" qc "$libfoo" "$foo_o" || exit 1
 "$ar_bin" t "$libfoo" > "$list_before" || exit 1

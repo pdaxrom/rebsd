@@ -30,6 +30,19 @@ adding a separate hand-copied application path.
   - keep `sys/mips/rootfs.manifest` as the shared source of which staged files
     are included in the MIPS ROM rootfs; board-specific manifests add devices
     and board-only entries
+- [x] Move shared rootfs overlay files into `sys/mips/rootfs` so Malta and N64
+  consume the same account database, shell profiles, and `/root` smoke tests.
+  Board overlays now carry only board-local `/etc` policy, device manifests,
+  and hardware-specific files.
+- [x] Hardware-smoke the shared rootfs overlay on N64 after moving it to
+  `sys/mips/rootfs`: `smoke-as-vr4300`, `matrix-as-vr4300`,
+  `/root/types-smoke.sh`, `/root/ll-smoke.sh`, `/root/ll-abi-smoke.sh`,
+  `/root/cc-pcc-smoke.sh`, `mount`, `df`, `w`, `ps aux`, `/sbin/pstat -T`,
+  and `/root/romfs-smoke.sh` all passed.
+- [x] Fix incremental N64 rootfs staging so legacy `/share` install
+  directories are recreated before every userland install; repeated
+  `kernel.z64` builds no longer fail after `/share` has been moved under
+  `/usr/share`.
 
 ## In-tree Toolchain For VR4300
 
@@ -60,6 +73,9 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Add a host-side or target-side smoke test that runs the new in-tree
   `as`, `ld`, `ranlib`, `nm`, `size`, and `strip` against a tiny relocatable
   object and verifies the generated big-endian a.out bytes.
+- [x] Extend the host a.out toolchain smoke with a `.data` relocation check
+  (`.word start`) so the big-endian `as`/`ld` path verifies data-section
+  relocation bytes, not only text and archive handling.
 - [x] Set the in-tree `ld` default text base to `0x00400000` for
   `TARGET_VR4300`; the old `0x7f008000` default is PIC32-specific and produces
   N64 executables that fault immediately on `exec`.

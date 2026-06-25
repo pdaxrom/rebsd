@@ -13,7 +13,8 @@ N64_KERNEL_CODE = $(N64_KERNEL_BASE) -msoft-float
 N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
 N64_ROOTFS_KBYTES ?= 16384
-N64_ROOTFS_DIR  ?= $(TOPSRC)/sys/mips/n64/rootfs
+N64_ROOTFS_COMMON_DIR ?= $(TOPSRC)/sys/mips/rootfs
+N64_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/n64/rootfs
 N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
 N64_ROOTFS_DEVNODES = rootfs.devnodes.manifest
 N64_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
@@ -51,8 +52,10 @@ N64_ROOTFS_CAT1_ALIASES = egrep:grep fgrep:grep uncompress:compress \
 N64_ROOTFS_CAT8_PAGES = fsck getty sync
 N64_ROOTFS_CAT8_ALIASES = fastboot:reboot halt:reboot poweroff:reboot \
                           bootloader:reboot
-N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_DIR) -type f 2>/dev/null)
-N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_DIR) -type d 2>/dev/null)
+N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_COMMON_DIR) \
+                   $(N64_ROOTFS_BOARD_DIR) -type f 2>/dev/null)
+N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_COMMON_DIR) \
+                  $(N64_ROOTFS_BOARD_DIR) -type d 2>/dev/null)
 N64_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
                    $(TOPSRC)/sys/mips/include $(TOPSRC)/sys/mips/n64/include \
                    -type f -name '*.h' \
@@ -343,7 +346,8 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
     $(N64_NATIVE_AS_MATRIX_SCRIPT)
 	rm -rf $(N64_ROOTFS_STAGE)
 	mkdir -p $(N64_ROOTFS_STAGE)
-	cp -pR $(N64_ROOTFS_DIR)/. $(N64_ROOTFS_STAGE)/
+	cp -pR $(N64_ROOTFS_COMMON_DIR)/. $(N64_ROOTFS_STAGE)/
+	cp -pR $(N64_ROOTFS_BOARD_DIR)/. $(N64_ROOTFS_STAGE)/
 	cp -p $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
 	mkdir -p $(N64_ROOTFS_USR_INCLUDE)
 	cp -pR $(TOPSRC)/include/. $(N64_ROOTFS_USR_INCLUDE)/
@@ -387,6 +391,10 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 	touch $@
 
 $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_MAKEWHATIS_SED) Makefile
+	mkdir -p $(N64_ROOTFS_STAGE)/share/misc \
+	    $(N64_ROOTFS_STAGE)/share/man/cat1 \
+	    $(N64_ROOTFS_STAGE)/share/man/cat5 \
+	    $(N64_ROOTFS_STAGE)/share/man/cat8
 	$(N64_SRC_MAKE) install
 	$(N64_AWK_MAKE) install
 	cp -p $(N64_ROOTFS_STAGE)/bin/cc $(N64_ROOTFS_STAGE)/bin/pcc
@@ -572,21 +580,21 @@ smoke-aout-toolchain: $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
 .PHONY: smoke-host-pcc smoke-host-ccom
 smoke-host-pcc: $(N64_HOST_CPP) $(N64_HOST_CCOM) $(N64_NATIVE_AS) \
     $(N64_NATIVE_LD) $(N64_HOST_PCC_SMOKE_SCRIPT) \
-    $(TOPSRC)/sys/mips/n64/rootfs/root/types-smoke.c \
-    $(TOPSRC)/sys/mips/n64/rootfs/root/ll-smoke.c \
-    $(TOPSRC)/sys/mips/n64/rootfs/root/ll-abi-smoke.c
+    $(TOPSRC)/sys/mips/rootfs/root/types-smoke.c \
+    $(TOPSRC)/sys/mips/rootfs/root/ll-smoke.c \
+    $(TOPSRC)/sys/mips/rootfs/root/ll-abi-smoke.c
 	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
 	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
 	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/n64/rootfs/root/types-smoke.c
+	    $(TOPSRC)/sys/mips/rootfs/root/types-smoke.c
 	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
 	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
 	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/n64/rootfs/root/ll-smoke.c
+	    $(TOPSRC)/sys/mips/rootfs/root/ll-smoke.c
 	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
 	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
 	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/n64/rootfs/root/ll-abi-smoke.c
+	    $(TOPSRC)/sys/mips/rootfs/root/ll-abi-smoke.c
 
 smoke-host-ccom: smoke-host-pcc
 

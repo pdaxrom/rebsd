@@ -55,7 +55,8 @@ swap.
 
 Malta and N64 use the same shared MIPS rootfs manifest,
 `sys/mips/rootfs.manifest`. The board build first stages the common userland
-layout, then applies the board overlay and board-specific device manifest.
+layout from `sys/mips/rootfs`, then applies the board overlay and
+board-specific device manifest.
 Malta reuses the generated N64 userland staging tree so missing utilities are
 caught in QEMU before flashing hardware, but it rebuilds `/usr/include/machine`
 from generic `sys/mips` headers and overlays Malta-specific `/etc` files.

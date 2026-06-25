@@ -305,6 +305,11 @@ current N64 work is staged as follows:
   command set, `/usr/bin` carried diagnostics and the native toolchain, PATH
   resolved both, and the assembler, compiler, type, `long long`, ABI, ROMFS,
   and `diskspeed -m 1` smoke tests all passed;
+- on 2026-06-25, the shared `sys/mips/rootfs` overlay move was smoke-tested on
+  real N64 hardware: `smoke-as-vr4300`, `matrix-as-vr4300`,
+  `/root/types-smoke.sh`, `/root/ll-smoke.sh`, `/root/ll-abi-smoke.sh`,
+  `/root/cc-pcc-smoke.sh`, `mount`, `df`, `w`, `ps aux`, `/sbin/pstat -T`,
+  and `/root/romfs-smoke.sh` all passed;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
@@ -387,7 +392,8 @@ the generated target header list, and device nodes derived from the kernel
 headers:
 
 - shared source: `sys/mips/rootfs.manifest`
-- source: `sys/mips/n64/rootfs/`
+- shared source: `sys/mips/rootfs/`
+- board source: `sys/mips/n64/rootfs/`
 - source: `sys/mips/n64/devnodes.awk`
 - source: `sys/mips/n64/romdisk.h`
 - source: `sys/mips/n64/ramswap.h`
@@ -882,7 +888,8 @@ Root is a read-only UFS image stored in ROM as `rootfs.img`.
 
 The root image is built from:
 
-- `sys/mips/n64/rootfs/`
+- common overlay files in `sys/mips/rootfs/`
+- N64-specific overlay files in `sys/mips/n64/rootfs/`
 - `sys/mips/rootfs.manifest`
 - generated `/dev` nodes
 - selected user commands installed into the staging tree through the normal
