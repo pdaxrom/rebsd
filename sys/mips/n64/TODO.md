@@ -27,8 +27,9 @@ adding a separate hand-copied application path.
   - call the shared `src`/`src/cmd` install path with
     `TARGET_PLATFORM=n64`, `DESTDIR=rootfs.stage`, and the generated
     `N64_USER_LDSCRIPT`
-  - keep `sys/mips/n64/rootfs.manifest` as the source of which staged files are
-    included in the cartridge ROM rootfs
+  - keep `sys/mips/rootfs.manifest` as the shared source of which staged files
+    are included in the MIPS ROM rootfs; board-specific manifests add devices
+    and board-only entries
 
 ## In-tree Toolchain For VR4300
 
@@ -109,9 +110,10 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Add `/root/pcc-smoke.sh` to run the first target compiler smoke from
   writable `/var/tmp`: `pcc -S`, `as`, `ld -r`, full executable link/run,
   and FPU compile/link/run.
-- [x] Add `/root/cc-pcc-smoke.sh` to verify that both `/bin/cc` and `/bin/pcc`
-  use the in-tree PCC path on N64 and can find target headers/start files/libs
-  through the default `/` sysroot; keep one explicit `--sysroot /` check.
+- [x] Add `/root/cc-pcc-smoke.sh` to verify that both driver names, `cc` and
+  `pcc`, resolve from `/usr/bin`, use the in-tree PCC path on N64, and can
+  find target headers/start files/libs through the default `/` sysroot; keep
+  one explicit `--sysroot /` check.
 - [x] Increase the N64 `u`/`u0` areas to 8 KiB so the kernel stack has enough
   headroom for nested `exec`/`namei`/FPU paths during the compiler smoke.
 - [x] Build a.out-format `/usr/lib/crt0.o` and `/usr/lib/libc.a` for the in-tree
@@ -120,8 +122,9 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   toolchain as compiler runtime files, because in-tree `ld` reports those as
   `bad magic`.
 - [x] Generate the target `/usr/include` tree and `/usr/lib` compiler
-  runtime/archive set into the N64 rootfs from the shared build outputs, instead of
-  hand-listing static headers or libraries in `rootfs.manifest`.
+  runtime/archive set into the N64 rootfs from the shared build outputs,
+  instead of hand-listing static headers or libraries in the shared rootfs
+  manifest.
 - [x] Run the N64 native `ranlib` again after copying `libc.a` and `libm.a`
   into `rootfs.stage/usr/lib`, so the staged archive mtimes match `__.SYMDEF`
   and target `ld` does not warn that `/usr/lib/libc.a` is out of date.
@@ -132,11 +135,11 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Hardware-smoke the expanded `/root/pcc-smoke.sh` on N64 and confirm
   both executable link/run paths complete without filesystem or inode-cache
   panics.
-- [x] Hardware-smoke `/root/cc-pcc-smoke.sh` on N64 and confirm both `/bin/cc`
-  and `/bin/pcc` can compile, assemble, link, and run integer and FPU smoke
-  programs through the default `/` sysroot.
+- [x] Hardware-smoke `/root/cc-pcc-smoke.sh` on N64 and confirm both
+  `/usr/bin/cc` and `/usr/bin/pcc` can compile, assemble, link, and run integer
+  and FPU smoke programs through the default `/` sysroot.
 - [x] Add `/root/ll-smoke.sh` and `/root/ll-smoke.c` to exercise the first
-  native `long long` runtime cases through both `/bin/cc` and `/bin/pcc`:
+  native `long long` runtime cases through both `/usr/bin/cc` and `/usr/bin/pcc`:
   global initializers, signed/unsigned shifts, arithmetic, compares, mixed
   register arguments, returns, and struct layout.
 - [x] Make `ccom` emit big-endian integer 64-bit pairs through the normal o32
@@ -145,7 +148,7 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   and shift helper calls use the ABI order without an ad-hoc swap wrapper.
 - [x] Hardware-smoke `/root/ll-smoke.sh` on N64.
 - [x] Add `/root/types-smoke.sh` and `/root/types-smoke.c` as a broad
-  target-side type implementation smoke for both `/bin/cc` and `/bin/pcc`.
+  target-side type implementation smoke for both `/usr/bin/cc` and `/usr/bin/pcc`.
   It covers scalar sizes/returns/arguments, stack-passed scalar and FPU
   arguments, pointer/function-pointer behavior, `float`, `double`,
   `long double`, static/global/local initialization, `const` objects and
@@ -155,8 +158,9 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Audit and fix true o32 big-endian `long long` ABI behavior in `ccom`:
   register arguments, stack arguments, returns, struct layout/alignment,
   external object layout, and helper calls.
-- [x] QEMU-smoke `/root/ll-abi-smoke.sh` on Malta and confirm both `/bin/cc`
-  and `/bin/pcc` pass the focused C/assembly `long long` ABI matrix.
+- [x] QEMU-smoke `/root/ll-abi-smoke.sh` on Malta and confirm both
+  `/usr/bin/cc` and `/usr/bin/pcc` pass the focused C/assembly `long long` ABI
+  matrix.
 - [x] Hardware-smoke `/root/ll-abi-smoke.sh` on N64. This is the focused
   C/assembly ABI check for the `long long` fixes above.
 - [x] Fix `ccom` stack `FUNARG` generation for `long long`/`double` arguments
@@ -172,7 +176,7 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   inserts real zero padding between input text segments so in-text double
   literals remain 8-byte aligned after final link.
 - [x] Hardware-smoke `/root/ll-smoke.sh` v3 on N64 and confirm the new stack
-  argument cases pass through both `/bin/cc` and `/bin/pcc`.
+  argument cases pass through both `/usr/bin/cc` and `/usr/bin/pcc`.
 - [ ] Review secondary compiler/interpreter paths after `ccom` works:
   `smallc`, `smlrc`, `lccom`, and their assembler output.
 
@@ -198,8 +202,9 @@ Also exclude or defer libraries that only serve unavailable peripherals:
 
 ## Rootfs Contents
 
-Add files to the ROM rootfs by updating `sys/mips/n64/rootfs.manifest`, not by
-copying binaries manually.
+Add shared files to the ROM rootfs by updating `sys/mips/rootfs.manifest`, not
+by copying binaries manually. Board-only device nodes and additions belong in
+the board-specific generated/appended manifest.
 
 - [x] Add basic `/bin` utilities after the shared install flow is in place:
   `cat`, `echo`, `pwd`, `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `chmod`, `chown`,
@@ -209,7 +214,7 @@ copying binaries manually.
   `PAGER=/bin/cat`
 - [x] Add selected `/sbin` utilities when the kernel side supports them:
   `reboot`, `mount`, `umount`, and `fsck`
-- [x] Add `/bin/n64input` as the minimal Joybus input smoke-test utility for
+- [x] Add `/usr/bin/n64input` as the minimal Joybus input smoke-test utility for
   `/dev/joypadN`, `/dev/mouseN`, and `/dev/kbdN`
 - [x] Keep generated device nodes derived from kernel definitions through
   `sys/mips/n64/devnodes.awk`
@@ -229,7 +234,7 @@ copying binaries manually.
   `tcl`.
 - [x] Include all files installed by the selected shared command makefiles that
   are needed for the normal rootfs rather than leaving staged artifacts out of
-  `rootfs.img`: `cc` aliases `lcc`/`scc`, `/bin/sysctl`,
+  `rootfs.img`: `cc` aliases `lcc`/`scc`, `/usr/bin/sysctl`,
   `/sbin/updatedb`, `/usr/libexec/bigram`, `/usr/libexec/code`, generated
   `/usr/include` headers, and compatibility links such as `/include`,
   `/bin/cpp`, `/lib/crt0.o`, `/lib/libc.a`, `/lib/libm.a`, and
@@ -246,11 +251,11 @@ copying binaries manually.
   MIPS userland: 64-bit shifts, clz/ctz/ffs helpers, and the first 64-bit
   integer/double conversion helpers required by `ccom`. These are compiler ABI
   routines, so they live in `src/libc/runtime`, not N64 platform code.
-- [x] Enable `/bin/cpp` and `/bin/calendar` in the N64 rootfs now that the
-  runtime helpers are available; include the installed calendar data under
-  `/share/calendar`.
-- [ ] Hardware-smoke `/bin/cpp` and `/bin/calendar` from the generated rootfs,
-  for example using writable `/var/tmp` for a temporary calendar file.
+- [x] Enable `/bin/cpp` compatibility and `/usr/bin/calendar` in the N64 rootfs
+  now that the runtime helpers are available; include the installed calendar
+  data under `/share/calendar`.
+- [ ] Hardware-smoke `/bin/cpp` and `/usr/bin/calendar` from the generated
+  rootfs, for example using writable `/var/tmp` for a temporary calendar file.
 
 ## Volatile Writable Filesystems
 
@@ -301,10 +306,10 @@ copying binaries manually.
 - [x] Mirror N64cart-manager flash sessions in the kernel flash driver:
   disable the cartridge interrupt while command mode is active, switch to SPI
   only for the transaction, and restore quad-ROM mode before releasing the lock.
-- [x] Add `/bin/romfsctl` as a first hardware diagnostic for the writable
+- [x] Add `/usr/bin/romfsctl` as a first hardware diagnostic for the writable
   N64cart ROMFS map/list implementation before wiring ROMFS into kernel
   pathname and mount code.
-- [ ] Hardware smoke-test `/dev/cartflash0` and `/bin/romfsctl` on real
+- [ ] Hardware smoke-test `/dev/cartflash0` and `/usr/bin/romfsctl` on real
   n64cart hardware:
   - [x] `romfsctl info`
   - [x] `romfsctl free`
@@ -340,7 +345,7 @@ copying binaries manually.
 - [x] On reboot/halt, force the n64cart flash interface back to idle quad-ROM
   mode with chip-select high before jumping to stage0 or stopping the CPU.
 - [x] Add the first kernel ROMFS VFS backend:
-  - reuse the same ROMFS core source as `/bin/romfsctl`
+  - reuse the same ROMFS core source as `/usr/bin/romfsctl`
   - keep `/dev/cartflash0` as the mount source and accept a character device in
     the ROMFS mount path
   - use the kernel-callable N64cart flash helpers instead of calling the
@@ -469,7 +474,7 @@ copying binaries manually.
   `apropos.c`, while preserving normal PIC32/default command behavior
 - [x] Generate `/share/man/whatis` from staged cat pages during the N64 rootfs
   build with `src/man/makewhatis.sed`
-- [x] Include `/bin/apropos`, `/bin/whatis`, and `/share/man/whatis` in the
+- [x] Include `/usr/bin/apropos`, `/usr/bin/whatis`, and `/share/man/whatis` in the
   ROM manifest only after the generated database exists
 
 ## Pty And Job Control
@@ -487,10 +492,10 @@ copying binaries manually.
 - [x] Fix the shared MIPS libc `getpgrp()` syscall wrapper to pass pid 0 to
   the historical kernel `getpgrp(pid)` entry. The public header declares
   POSIX `getpgrp(void)`, and the generated raw syscall stub left `$a0`
-  undefined, which made `/bin/more` think it was not in the foreground pgrp.
-- [x] Hardware smoke-test `/bin/more /etc/ttys` after the `getpgrp()` wrapper
+  undefined, which made `/usr/bin/more` think it was not in the foreground pgrp.
+- [x] Hardware smoke-test `more /etc/ttys` after the `getpgrp()` wrapper
   fix: the file is displayed and returns to the shell prompt on N64 hardware
-- [ ] Repeat the `/bin/more` smoke test on the other login line if the first
+- [ ] Repeat the `more` smoke test on the other login line if the first
   run covered only one of `/dev/console` or `/dev/ttyS0`
 
 ## Login And Multi-User Boot
@@ -521,7 +526,7 @@ copying binaries manually.
   compiled for hard-float N64 userland, while keeping the PIC32 soft-float
   path free of FPU instructions
 - [ ] Hardware smoke-test hard-float `setjmp` users on N64, including
-  `/bin/more`, `login` motd interrupt handling, and any future FPU test command
+  `/usr/bin/more`, `login` motd interrupt handling, and any future FPU test command
 
 ## Platform Stubs
 
@@ -638,7 +643,7 @@ copying binaries manually.
   `0x0200`
 - [x] Add `/dev/kbd0`..`/dev/kbd3` for RandNET keyboard snapshots and LED-byte
   ioctl control
-- [x] Add `/bin/n64input` through the shared `src/cmd` install flow
+- [x] Add `/usr/bin/n64input` through the shared `src/cmd` install flow
 - [x] Hardware smoke-test `n64input list` on real N64 hardware:
   controller `0x0500`, mouse `0x0200`, and RandNET keyboard `0x0002`
   are detected on controller ports
@@ -669,7 +674,7 @@ copying binaries manually.
 - [x] Confirm `rootfs.generated.manifest` contains only N64-appropriate device
   nodes and files
 - [x] Confirm the generated rootfs includes `/dev/joypad0`..`3`,
-  `/dev/mouse0`..`3`, `/dev/kbd0`..`3`, and `/bin/n64input`
+  `/dev/mouse0`..`3`, `/dev/kbd0`..`3`, and `/usr/bin/n64input`
 - [x] Extract `rootfs.img` after packaging and verify manifest-controlled
   additions such as `/bin/rgbled` are present in the actual image, not only in
   `rootfs.stage`

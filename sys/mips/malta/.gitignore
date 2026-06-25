@@ -1,5 +1,6 @@
 .deps/
 rootfs.stage/
+rootfs.generated.manifest
 machine
 sys
 vers.c

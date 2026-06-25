@@ -1,5 +1,5 @@
 #
-# Read-only cartridge root filesystem for the N64 port.
+# Shared MIPS root filesystem layout for the N64 and Malta ports.
 #
 default
 owner 0
@@ -109,13 +109,19 @@ file /root/pcc-smoke.c
 file /root/romfs-smoke.sh
 mode 0775
 
+file /usr/lib/crt0.o
+
+file /usr/lib/libc.a
+
+file /usr/lib/libm.a
+
 file /bin/[
 mode 0775
 
 file /usr/bin/aout
 mode 0775
 
-file /bin/apropos
+file /usr/bin/apropos
 mode 0775
 
 file /usr/bin/ar
@@ -124,43 +130,43 @@ mode 0775
 file /usr/bin/as
 mode 0775
 
-file /bin/awk
+file /usr/bin/awk
 mode 0775
 
-file /bin/basename
+file /usr/bin/basename
 mode 0775
 
-file /bin/cal
+file /usr/bin/cal
 mode 0775
 
-file /bin/calendar
+file /usr/bin/calendar
 mode 0775
 
 file /bin/cat
 mode 0775
 
-file /bin/cb
+file /usr/bin/cb
 mode 0775
 
 file /usr/bin/cc
 mode 0775
 
-file /bin/chgrp
+file /usr/bin/chgrp
 mode 0775
 
 file /bin/chmod
 mode 0775
 
-file /bin/cmp
+file /usr/bin/cmp
 mode 0775
 
-file /bin/col
+file /usr/bin/col
 mode 0775
 
-file /bin/comm
+file /usr/bin/comm
 mode 0775
 
-file /bin/compress
+file /usr/bin/compress
 mode 0775
 
 file /bin/cp
@@ -175,34 +181,34 @@ mode 0775
 file /bin/dd
 mode 0775
 
-file /bin/deco
+file /usr/bin/deco
 mode 0775
 
 file /bin/df
 mode 0775
 
-file /bin/diff
+file /usr/bin/diff
 mode 0775
 
-file /bin/diskspeed
+file /usr/bin/diskspeed
 mode 0775
 
-file /bin/du
+file /usr/bin/du
 mode 0775
 
 file /bin/echo
 mode 0775
 
-file /bin/ed
+file /usr/bin/ed
 mode 0775
 
-file /bin/egrep
+file /usr/bin/egrep
 mode 0775
 
-file /bin/emg
+file /usr/bin/emg
 mode 0775
 
-file /bin/env
+file /usr/bin/env
 mode 0775
 
 file /bin/expr
@@ -211,52 +217,52 @@ mode 0775
 file /bin/false
 mode 0775
 
-file /bin/fbset
+file /usr/bin/fbset
 mode 0775
 
-file /bin/fbview
+file /usr/bin/fbview
 mode 0775
 
-file /bin/fgrep
+file /usr/bin/fgrep
 mode 0775
 
-file /bin/file
+file /usr/bin/file
 mode 0775
 
-file /bin/find
+file /usr/bin/find
 mode 0775
 
-file /bin/fold
+file /usr/bin/fold
 mode 0775
 
-file /bin/forth
+file /usr/bin/forth
 mode 0775
 
-file /bin/grep
+file /usr/bin/grep
 mode 0775
 
-file /bin/groups
+file /usr/bin/groups
 mode 0775
 
-file /bin/head
+file /usr/bin/head
 mode 0775
 
-file /bin/hostid
+file /usr/bin/hostid
 mode 0775
 
 file /bin/hostname
 mode 0775
 
-file /bin/id
+file /usr/bin/id
 mode 0775
 
-file /bin/join
+file /usr/bin/join
 mode 0775
 
 file /bin/kill
 mode 0775
 
-file /bin/last
+file /usr/bin/last
 mode 0775
 
 file /usr/bin/lcc
@@ -274,82 +280,82 @@ mode 04755
 file /bin/ls
 mode 0775
 
-file /bin/man
+file /usr/bin/man
 mode 0775
 
-file /bin/md5
+file /usr/bin/md5
 mode 0775
 
-file /bin/med
+file /usr/bin/med
 mode 0775
 
-file /bin/mesg
+file /usr/bin/mesg
 mode 0775
 
 file /bin/mkdir
 mode 0775
 
-file /bin/more
+file /usr/bin/more
 mode 0775
 
 file /bin/mv
 mode 0775
 
-file /bin/n64input
+file /usr/bin/n64input
 mode 0775
 
-file /bin/nice
+file /usr/bin/nice
 mode 0775
 
 file /usr/bin/nm
 mode 0775
 
-file /bin/nohup
+file /usr/bin/nohup
 mode 0775
 
-file /bin/od
+file /usr/bin/od
 mode 0775
 
-file /bin/pagesize
+file /usr/bin/pagesize
 mode 0775
 
-file /bin/pdc
+file /usr/bin/pdc
 mode 0775
 
 file /usr/bin/pcc
 mode 0775
 
-file /bin/picoc
+file /usr/bin/picoc
 mode 0775
 
-file /bin/pr
+file /usr/bin/pr
 mode 0775
 
-file /bin/printf
+file /usr/bin/printf
 mode 0775
 
-file /bin/printenv
+file /usr/bin/printenv
 mode 0775
 
-file /bin/ps
+file /usr/bin/ps
 mode 02751
 
-file /bin/ptytest
+file /usr/bin/ptytest
 mode 0775
 
 file /bin/pwd
 mode 0775
 
-file /bin/renice
+file /usr/bin/renice
 mode 0775
 
-file /bin/retroforth
+file /usr/bin/retroforth
 mode 0775
 
-file /bin/rev
+file /usr/bin/rev
 mode 0775
 
-file /bin/rgbled
+file /usr/bin/rgbled
 mode 0775
 
 file /usr/bin/ranlib
@@ -358,13 +364,13 @@ mode 0775
 file /bin/rm
 mode 0775
 
-file /bin/rmail
+file /usr/bin/rmail
 mode 0775
 
 file /bin/rmdir
 mode 0775
 
-file /bin/romfsctl
+file /usr/bin/romfsctl
 mode 0775
 
 file /usr/bin/scc
@@ -373,7 +379,7 @@ mode 0775
 file /bin/sed
 mode 0775
 
-file /bin/setty
+file /usr/bin/setty
 mode 0775
 
 file /bin/sh
@@ -382,13 +388,13 @@ mode 0775
 file /usr/bin/size
 mode 0775
 
-file /bin/sl
+file /usr/bin/sl
 mode 0775
 
 file /bin/sleep
 mode 0775
 
-file /bin/smux
+file /usr/bin/smux
 mode 0775
 
 file /usr/bin/smoke-as-vr4300
@@ -403,10 +409,10 @@ mode 0775
 file /usr/bin/matrix-as-vr4300.sh
 mode 0775
 
-file /bin/sort
+file /usr/bin/sort
 mode 0775
 
-file /bin/split
+file /usr/bin/split
 mode 0775
 
 file /bin/stty
@@ -415,34 +421,34 @@ mode 0775
 file /usr/bin/strip
 mode 0775
 
-file /bin/sysctl
+file /usr/bin/sysctl
 mode 0775
 
-file /bin/sum
+file /usr/bin/sum
 mode 0775
 
 file /bin/sync
 mode 0775
 
-file /bin/tail
+file /usr/bin/tail
 mode 0775
 
-file /bin/tar
+file /usr/bin/tar
 mode 0775
 
-file /bin/tcl
+file /usr/bin/tcl
 mode 0775
 
-file /bin/tee
+file /usr/bin/tee
 mode 0775
 
 file /bin/test
 mode 0775
 
-file /bin/time
+file /usr/bin/time
 mode 0775
 
-file /bin/touch
+file /usr/bin/touch
 mode 0775
 
 file /bin/tr
@@ -451,46 +457,46 @@ mode 0775
 file /bin/true
 mode 0775
 
-file /bin/tsort
+file /usr/bin/tsort
 mode 0775
 
-file /bin/tty
+file /usr/bin/tty
 mode 0775
 
 file /bin/uname
 mode 0775
 
-file /bin/uncompress
+file /usr/bin/uncompress
 mode 0775
 
-file /bin/uniq
+file /usr/bin/uniq
 mode 0775
 
-file /bin/vmstat
+file /usr/bin/vmstat
 mode 02751
 
-file /bin/w
+file /usr/bin/w
 mode 0775
 
-file /bin/wc
+file /usr/bin/wc
 mode 0775
 
-file /bin/whatis
+file /usr/bin/whatis
 mode 0775
 
-file /bin/whereis
+file /usr/bin/whereis
 mode 0775
 
-file /bin/who
+file /usr/bin/who
 mode 0775
 
-file /bin/whoami
+file /usr/bin/whoami
 mode 0775
 
-file /bin/xargs
+file /usr/bin/xargs
 mode 0775
 
-file /bin/zcat
+file /usr/bin/zcat
 mode 0775
 
 file /libexec/diffh

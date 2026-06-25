@@ -12,33 +12,16 @@ S               = ../..
 BOARD_SRC       = ../malta
 MIPS_ROOTFS_KBYTES ?= 16384
 MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/mips/n64/rootfs.stage
+MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland
 MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
-MIPS_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
+MIPS_ROOTFS_COMMON_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
+MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
-MIPS_ROOTFS_COPY_DIRS = usr/include
-MIPS_ROOTFS_COPY_PATHS = \
-    bin/cat bin/chmod bin/df bin/diskspeed bin/echo bin/expr bin/false \
-    bin/login bin/ls bin/mkdir bin/mv bin/od bin/ps bin/pwd bin/rm \
-    bin/rmdir bin/romfsctl bin/sed bin/sh bin/stty bin/sync bin/test \
-    bin/tr bin/true bin/uname bin/vmstat bin/w bin/wc \
-    usr/bin/ar usr/bin/as usr/bin/cc usr/bin/cpp usr/bin/ld \
-    usr/bin/matrix-as-vr4300 usr/bin/matrix-as-vr4300.sh usr/bin/nm \
-    usr/bin/pcc usr/bin/ranlib usr/bin/size usr/bin/smoke-as-vr4300 \
-    usr/bin/smoke-as-vr4300.sh usr/bin/strip \
-    sbin/init sbin/mkfs sbin/mount sbin/pstat sbin/umount \
-    usr/lib/crt0.o usr/lib/libc.a usr/lib/libm.a usr/libexec/ccom \
-    libexec/getty \
-    etc/gettytab etc/group etc/passwd etc/profile \
-    root/cc-pcc-smoke.sh root/ll-smoke.c root/ll-smoke.sh \
-    root/ll-abi-smoke.c root/ll-abi-smoke.s root/ll-abi-smoke.sh \
-    root/romfs-smoke.sh \
-    root/pcc-fpu-smoke.c root/pcc-smoke.c root/pcc-smoke.sh \
-    root/sh-comsubst-smoke.sh root/sh-fail-smoke.sh root/types-smoke.c \
-    root/types-smoke.sh
-MIPS_ROOTFS_COPY_FILES = $(addprefix $(MIPS_ROOTFS_SRC)/,$(MIPS_ROOTFS_COPY_PATHS))
+MIPS_COMMON_MACHINE_HEADERS = console cpu devmajors elf_machdep float fpu io \
+                              layout limits machparam ramswap romdisk
 MIPS_TRACE       ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 
@@ -94,28 +77,27 @@ run: unix.elf
 	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel unix.elf
 
-$(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_MANIFEST) $(MIPS_ROOTFS_OVERLAY_FILES) $(MIPS_ROOTFS_COPY_FILES)
+$(MIPS_ROOTFS_SRC_STAMP):
+	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
+
+$(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
 	rm -rf $(MIPS_ROOTFS_STAGE)
 	mkdir -p $(MIPS_ROOTFS_STAGE)
+	cp -pR $(MIPS_ROOTFS_SRC)/. $(MIPS_ROOTFS_STAGE)/
 	cp -pR $(MIPS_ROOTFS_OVERLAY)/. $(MIPS_ROOTFS_STAGE)/
-	mkdir -p $(MIPS_ROOTFS_STAGE)/bin $(MIPS_ROOTFS_STAGE)/sbin \
-	    $(MIPS_ROOTFS_STAGE)/lib $(MIPS_ROOTFS_STAGE)/libexec \
-	    $(MIPS_ROOTFS_STAGE)/usr/bin $(MIPS_ROOTFS_STAGE)/usr/lib \
-	    $(MIPS_ROOTFS_STAGE)/usr/libexec $(MIPS_ROOTFS_STAGE)/usr/include \
-	    $(MIPS_ROOTFS_STAGE)/etc $(MIPS_ROOTFS_STAGE)/root
-	for path in . $(MIPS_ROOTFS_COPY_DIRS); do \
-	    test "$$path" != . || continue; \
-	    mkdir -p $(MIPS_ROOTFS_STAGE)/$$path; \
-	    cp -pR $(MIPS_ROOTFS_SRC)/$$path/. $(MIPS_ROOTFS_STAGE)/$$path/; \
+	rm -rf $(MIPS_ROOTFS_STAGE)/usr/include/machine
+	mkdir -p $(MIPS_ROOTFS_STAGE)/usr/include/machine
+	for header in $(MIPS_COMMON_MACHINE_HEADERS); do \
+	    cp -p $(TOPSRC)/sys/mips/$$header.h \
+	        $(MIPS_ROOTFS_STAGE)/usr/include/machine/$$header.h; \
 	done
-	for path in $(MIPS_ROOTFS_COPY_PATHS); do \
-	    cp -p $(MIPS_ROOTFS_SRC)/$$path $(MIPS_ROOTFS_STAGE)/$$path; \
-	done
+	cp -p $(TOPSRC)/sys/mips/include/machine/types.h \
+	    $(MIPS_ROOTFS_STAGE)/usr/include/machine/types.h
 	touch $@
 
-$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MANIFEST) $(MIPS_ROOTFS_STAMP)
-	cp $(MIPS_ROOTFS_MANIFEST) $@
-	find $(MIPS_ROOTFS_STAGE)/usr/include -mindepth 1 -type d | sort | while read path; do \
+$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_COMMON_MANIFEST) $(MIPS_ROOTFS_BOARD_MANIFEST) $(MIPS_ROOTFS_STAMP)
+	cp $(MIPS_ROOTFS_COMMON_MANIFEST) $@
+	find $(MIPS_ROOTFS_STAGE)/usr/include -type d | sort | while read path; do \
 	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
 	    printf '\ndir %s\n' "$$rel" >> $@; \
 	done
@@ -130,6 +112,7 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MANIFEST) $(MIPS_ROOTFS_STAMP)
 	    target=$$(readlink "$$path"); \
 	    printf '\nsymlink %s\ntarget %s\n' "$$rel" "$$target" >> $@; \
 	done
+	cat $(MIPS_ROOTFS_BOARD_MANIFEST) >> $@
 
 rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_BUILD_MANIFEST)
 	rm -f $@

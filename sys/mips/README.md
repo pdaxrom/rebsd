@@ -53,6 +53,20 @@ loads the root filesystem at physical `0x00600000`, reserves 16 MiB for that
 image, keeps `/var` on a 1 MiB RAM disk, and uses the remaining high RAM for
 swap.
 
+Malta and N64 use the same shared MIPS rootfs manifest,
+`sys/mips/rootfs.manifest`. The board build first stages the common userland
+layout, then applies the board overlay and board-specific device manifest.
+Malta reuses the generated N64 userland staging tree so missing utilities are
+caught in QEMU before flashing hardware, but it rebuilds `/usr/include/machine`
+from generic `sys/mips` headers and overlays Malta-specific `/etc` files.
+
+Both boards keep the same small `/bin` boot/single-user command set. Diagnostics
+and the native toolchain live under `/usr/bin`, with headers and archives under
+`/usr/include` and `/usr/lib`. The login profile sets
+`PATH=/bin:/sbin:/usr/bin:/usr/sbin`, so target-side smoke scripts can call
+`as`, `cc`, `pcc`, `romfsctl`, `ps`, `vmstat`, `w`, and `wc` without hard-coded
+absolute paths.
+
 To increase the Malta root filesystem, keep these three values in sync:
 
 - `MIPS_ROOTFS_KBYTES` in `sys/mips/Makefile.kconf`;

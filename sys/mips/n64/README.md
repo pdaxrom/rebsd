@@ -256,13 +256,14 @@ current N64 work is staged as follows:
   `/lib/libc.a`, `/lib/libm.a`, `/libexec/ccom`, and `/bin/cpp`;
 - `/root/pcc-smoke.sh` runs the target smoke from `/var/tmp`, so it does not
   try to write compiler outputs into the read-only root filesystem;
-- `/root/cc-pcc-smoke.sh` verifies both driver names, `/bin/cc` and
-  `/bin/pcc`: the main checks rely on the default `/` sysroot, and one final
-  FPU check keeps explicit `--sysroot /` covered;
+- `/root/cc-pcc-smoke.sh` verifies both driver names, `cc` and `pcc`, which
+  resolve from `/usr/bin`: the main checks rely on the default `/` sysroot, and
+  one final FPU check keeps explicit `--sysroot /` covered;
 - `/root/ll-smoke.sh` verifies the first `long long` runtime cases through
-  both `/bin/cc` and `/bin/pcc`: global initializers, signed/unsigned shifts,
-  arithmetic, compares, mixed register arguments, stack-passed `int`,
-  `long long`, and `double` arguments, returns, and struct layout.
+  both `/usr/bin/cc` and `/usr/bin/pcc`: global initializers,
+  signed/unsigned shifts, arithmetic, compares, mixed register arguments,
+  stack-passed `int`, `long long`, and `double` arguments, returns, and struct
+  layout.
   Native `ccom` depends on target libc `%ll` formatting when it prints
   64-bit constants. On big-endian MIPS, `ccom` keeps its internal 64-bit
   register pair order as low/high, but emits integer pairs through the normal
@@ -273,9 +274,9 @@ current N64 work is staged as follows:
   check. It combines C and hand-written assembly to verify external object
   layout, struct member layout/alignment, register arguments, stack arguments,
   C-to-assembly calls, assembly-to-C calls, and return values through both
-  `/bin/cc` and `/bin/pcc`;
+  `/usr/bin/cc` and `/usr/bin/pcc`;
 - `/root/types-smoke.sh` is the broad scalar/aggregate type smoke for both
-  `/bin/cc` and `/bin/pcc`. It covers signed and unsigned `char`, `short`,
+  `/usr/bin/cc` and `/usr/bin/pcc`. It covers signed and unsigned `char`, `short`,
   `int`, `long`, `long long`, `enum`, pointers, function pointers, `float`,
   `double`, `long double`, stack-passed scalar/FPU arguments, return values,
   static/global/local initialization, `const` objects and pointers, struct
@@ -299,6 +300,11 @@ current N64 work is staged as follows:
   `smoke-as-vr4300`, `matrix-as-vr4300`, `/root/cc-pcc-smoke.sh`,
   `/root/types-smoke.sh`, `/root/ll-smoke.sh`, and `/root/ll-abi-smoke.sh`
   all passed;
+- on 2026-06-25, the follow-up `/bin`/`/usr/bin` split was smoke-tested on
+  Malta/QEMU before hardware testing: `/bin` kept only the boot/single-user
+  command set, `/usr/bin` carried diagnostics and the native toolchain, PATH
+  resolved both, and the assembler, compiler, type, `long long`, ABI, ROMFS,
+  and `diskspeed -m 1` smoke tests all passed;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
@@ -376,10 +382,11 @@ The linker scripts are also generated for the board build:
 - generated: `sys/mips/n64/n64.ld`
 - generated: `sys/mips/n64/n64-user.ld`
 
-The root filesystem manifest is generated from a static base manifest plus
-device nodes derived from the kernel headers:
+The root filesystem manifest is generated from the shared MIPS base manifest,
+the generated target header list, and device nodes derived from the kernel
+headers:
 
-- source: `sys/mips/n64/rootfs.manifest`
+- shared source: `sys/mips/rootfs.manifest`
 - source: `sys/mips/n64/rootfs/`
 - source: `sys/mips/n64/devnodes.awk`
 - source: `sys/mips/n64/romdisk.h`
@@ -429,7 +436,7 @@ ROMFS mount path:
   Flash transactions run with interrupts masked so the timer-driven n64cart
   UART poll cannot touch the same cartridge register block while SPI command
   mode is active.
-- `/bin/romfsctl` is a diagnostic user command that vendors the ROMFS map/list
+- `/usr/bin/romfsctl` is a diagnostic user command that vendors the ROMFS map/list
   implementation from the local n64cart sources and calls it through
   `/dev/cartflash0`.
 - `mount -t romfs /dev/cartflash0 /cart` uses the same ROMFS core source inside
@@ -876,7 +883,7 @@ Root is a read-only UFS image stored in ROM as `rootfs.img`.
 The root image is built from:
 
 - `sys/mips/n64/rootfs/`
-- `sys/mips/n64/rootfs.manifest`
+- `sys/mips/rootfs.manifest`
 - generated `/dev` nodes
 - selected user commands installed into the staging tree through the normal
   RetroBSD `src/Makefile` install flow
@@ -887,26 +894,18 @@ the filesystem from the staged tree plus a manifest. The N64 build keeps an
 explicit command subset for the cartridge rootfs, but it does not copy command
 binaries directly out of `src/cmd`.
 
-The current manifest includes a broader first-pass BSD userland:
+The current shared manifest includes a broader first-pass BSD userland:
 
 - boot/login configuration: `/.profile`, `/etc/fstab`, `/etc/gettytab`,
   `/etc/group`, `/etc/motd`, `/etc/passwd`, `/etc/profile`, `/etc/rc`,
   `/etc/ttys`, `/root/.profile`
-- core `/bin`: `[`, `aout`, `apropos`, `ar`, `as`, `awk`, `basename`, `cal`,
-  `calendar`, `cat`, `cb`, `cc`, `chgrp`, `chmod`, `cmp`, `col`, `comm`,
-  `compress`, `cpp`, `cp`,
-  `date`, `dd`,
-  `df`, `diff`, `diskspeed`, `du`, `echo`, `ed`, `egrep`, `env`, `expr`,
-  `false`, `fgrep`, `file`, `find`, `fold`, `forth`, `grep`, `groups`,
-  `head`, `hostid`, `hostname`, `id`, `join`, `kill`, `last`, `lcc`, `ld`,
-  `ln`, `login`, `ls`, `man`, `md5`, `mesg`, `mkdir`, `more`, `mv`, `nice`,
-  `nm`, `nohup`, `od`, `pagesize`, `pcc`, `pdc`, `picoc`, `pr`, `printf`,
-  `printenv`, `ps`, `pwd`, `ranlib`, `renice`, `retroforth`, `rev`, `rm`,
-  `rmail`, `rmdir`, `scc`, `sed`, `sh`, `size`, `sleep`, `sort`, `split`,
-  `strip`, `stty`, `sum`, `sync`, `sysctl`, `tail`, `tar`, `tcl`, `tee`,
-  `test`, `time`, `touch`, `tr`, `true`, `tsort`, `tty`, `uname`,
-  `uncompress`, `uniq`, `vmstat`, `w`, `wc`, `whatis`, `whereis`, `who`,
-  `whoami`, `xargs`, and `zcat`
+- core `/bin`: the small boot/single-user set (`sh`, `login`, `ls`, `cat`,
+  `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `chmod`, `date`, `dd`, `df`, `echo`,
+  `expr`, `hostname`, `kill`, `ln`, `pwd`, `sed`, `sleep`, `stty`, `sync`,
+  `test`, `tr`, `uname`, `true`, `false`, and `[`)
+- main `/usr/bin`: the broader BSD command set, diagnostics, native a.out
+  toolchain (`as`, `ld`, `ar`, `ranlib`, `nm`, `strip`, `cc`, `pcc`, `cpp`,
+  `ccom` via `/usr/libexec`), interpreter tools, and smoke scripts
 - terminal and interpreter tools backed by additional shared libraries:
   `emg`, `med`, `pdc`, `setty`, `sl`, and `tcl`
 - N64 diagnostics and tools: `deco`, `fbset`, `fbview`, `n64input`,
@@ -926,8 +925,8 @@ include tree is not included in the N64 root image.
 
 The staging tree may contain extra files installed by selected command
 makefiles, for example `reboot` installs `halt`, `fastboot`, `poweroff`, and
-`bootloader` aliases. Those files do not enter `rootfs.img` until
-`sys/mips/n64/rootfs.manifest` lists them.
+`bootloader` aliases. Those files do not enter `rootfs.img` until the shared
+MIPS manifest or the board-specific generated manifest lists them.
 
 `man`, `apropos`, and `whatis` are included with generated cat pages. Some
 selected command makefiles already install their own cat pages; the N64 board
@@ -939,8 +938,8 @@ not checked in as a static file. The N64 userland build sets `GROFF_NO_SGR=1`
 so host `nroff` emits the classic overstrike format expected by the existing
 manual index script.
 
-`man` uses `/bin/more -s` as the default pager on an interactive tty, so
-`/bin/more` and `/usr/share/misc/more.help` are part of the ROM rootfs. For the
+`man` uses `more -s` as the default pager on an interactive tty, so
+`/usr/bin/more` and `/usr/share/misc/more.help` are part of the ROM rootfs. For the
 first N64 rootfs, `/etc/profile`, `/.profile`, and `/root/.profile` set
 `PAGER=/bin/cat` so manual pages print directly instead of depending on the
 interactive pager. The same profiles set `PATH=/bin:/sbin:/usr/bin:/usr/sbin`,
@@ -1167,7 +1166,7 @@ N64KBDIOC_GETSTATE      struct n64keyboard_state
 N64KBDIOC_SETLED        unsigned LED byte
 ```
 
-The ROM rootfs includes `/bin/n64input` for hardware smoke-testing:
+The ROM rootfs includes `/usr/bin/n64input` for hardware smoke-testing:
 
 ```
 n64input list
@@ -1522,7 +1521,7 @@ SRC_ONLY_SUBDIR="cmd"
 utmp/wtmp helpers. On the read-only N64 rootfs those helpers skip accounting
 writes when the accounting files cannot be opened for writing.
 
-The installed files are then picked up by `rootfs.manifest` when `fsutil`
+The installed files are then picked up by the generated rootfs manifest when `fsutil`
 creates `rootfs.img`. The command list is intentionally an N64 subset of the
 normal `src/cmd` tree; each selected subdirectory command is still installed
 by its own existing makefile, and simple one-file commands use the shared
@@ -1673,7 +1672,7 @@ Build and generated data:
 - `sys/mips/n64/Makefile`
 - `sys/mips/n64/Makefile.kconf`
 - `sys/mips/n64/Config`
-- `sys/mips/n64/rootfs.manifest`
+- `sys/mips/rootfs.manifest`
 - `sys/mips/n64/devnodes.awk`
 - `target-n64.mk`
 

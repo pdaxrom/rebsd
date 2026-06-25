@@ -1,205 +1,7 @@
-default
-owner 0
-group 0
-dirmode 0775
-filemode 0664
-
-dir /bin
-dir /cart
-dir /dev
-dir /etc
-dir /lib
-dir /libexec
-dir /root
-dir /sbin
-dir /usr
-dir /usr/bin
-dir /usr/include
-dir /usr/lib
-dir /usr/libexec
-symlink /include
-target usr/include
-symlink /bin/cpp
-target ../usr/bin/cpp
-symlink /lib/crt0.o
-target ../usr/lib/crt0.o
-symlink /lib/libc.a
-target ../usr/lib/libc.a
-symlink /lib/libm.a
-target ../usr/lib/libm.a
-symlink /libexec/ccom
-target ../usr/libexec/ccom
-symlink /tmp
-target var/tmp
-dir /var
-dir /var/tmp
-
-file /etc/fstab
-file /etc/gettytab
-file /etc/group
-file /etc/motd
-file /etc/passwd
-file /etc/profile
-file /etc/rc
-mode 0775
-file /etc/ttys
-
-file /root/.profile
-
-file /root/cc-pcc-smoke.sh
-mode 0775
-
-file /root/ll-smoke.c
-
-file /root/ll-smoke.sh
-mode 0775
-
-file /root/ll-abi-smoke.c
-
-file /root/ll-abi-smoke.s
-
-file /root/ll-abi-smoke.sh
-mode 0775
-
-file /root/pcc-fpu-smoke.c
-
-file /root/pcc-smoke.c
-
-file /root/pcc-smoke.sh
-mode 0775
-
-file /root/romfs-smoke.sh
-mode 0775
-
-file /root/sh-comsubst-smoke.sh
-mode 0775
-
-file /root/sh-fail-smoke.sh
-mode 0775
-
-file /root/types-smoke.c
-
-file /root/types-smoke.sh
-mode 0775
-
-file /sbin/init
-mode 0700
-
-file /sbin/mkfs
-mode 0775
-
-file /sbin/mount
-mode 0775
-
-file /sbin/umount
-mode 0775
-
-file /usr/lib/crt0.o
-
-file /usr/lib/libc.a
-
-file /usr/lib/libm.a
-
-file /usr/libexec/ccom
-mode 0775
-
-file /libexec/getty
-mode 0775
-
-file /usr/bin/ar
-mode 0775
-
-file /usr/bin/as
-mode 0775
-
-file /bin/cat
-mode 0775
-file /usr/bin/cc
-mode 0775
-file /bin/chmod
-mode 0775
-file /usr/bin/cpp
-mode 0775
-file /bin/df
-mode 0775
-file /bin/diskspeed
-mode 0775
-file /bin/echo
-mode 0775
-file /bin/expr
-mode 0775
-file /bin/false
-mode 0775
-file /usr/bin/ld
-mode 0775
-file /bin/login
-mode 0775
-file /bin/ls
-mode 0775
-file /usr/bin/matrix-as-vr4300
-mode 0775
-file /usr/bin/matrix-as-vr4300.sh
-mode 0775
-file /bin/mkdir
-mode 0775
-file /bin/mv
-mode 0775
-file /usr/bin/nm
-mode 0775
-file /bin/od
-mode 0775
-file /usr/bin/pcc
-mode 0775
-
-file /bin/ps
-mode 02751
-
-file /bin/pwd
-mode 0775
-file /usr/bin/ranlib
-mode 0775
-file /bin/rm
-mode 0775
-file /bin/rmdir
-mode 0775
-file /bin/romfsctl
-mode 0775
-file /bin/sed
-mode 0775
-file /bin/sh
-mode 0775
-file /usr/bin/size
-mode 0775
-file /usr/bin/smoke-as-vr4300
-mode 0775
-file /usr/bin/smoke-as-vr4300.sh
-mode 0775
-file /usr/bin/strip
-mode 0775
-file /bin/stty
-mode 0775
-file /bin/sync
-mode 0775
-file /bin/test
-mode 0775
-file /bin/tr
-mode 0775
-file /bin/true
-mode 0775
-file /bin/uname
-mode 0775
-
-file /bin/vmstat
-mode 02751
-
-file /bin/w
-mode 0775
-
-file /bin/wc
-mode 0775
-
-file /sbin/pstat
-mode 02755
+#
+# Malta-specific rootfs additions.  Shared MIPS userland layout comes from
+# sys/mips/rootfs.manifest; this file only describes Malta device nodes.
+#
 
 bdev /dev/romdisk
 major 0
@@ -255,7 +57,37 @@ major 8
 minor 0
 mode 0666
 
+cdev /dev/ttyp1
+major 8
+minor 1
+mode 0666
+
+cdev /dev/ttyp2
+major 8
+minor 2
+mode 0666
+
+cdev /dev/ttyp3
+major 8
+minor 3
+mode 0666
+
 cdev /dev/ptyp0
 major 9
 minor 0
+mode 0666
+
+cdev /dev/ptyp1
+major 9
+minor 1
+mode 0666
+
+cdev /dev/ptyp2
+major 9
+minor 2
+mode 0666
+
+cdev /dev/ptyp3
+major 9
+minor 3
 mode 0666
