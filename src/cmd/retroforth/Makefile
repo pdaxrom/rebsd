@@ -7,6 +7,14 @@ SRCS		= retro.c
 OBJS		= retro.o
 BIN             = retroforth
 LIBS            += -ltermcap
+HOST_CC         ?= cc
+
+ifneq (,$(findstring -DTARGET_BIG_ENDIAN,$(CFLAGS)))
+CFLAGS          += -DRXBE
+RETRO_IMAGE     = retroImageBE
+else
+RETRO_IMAGE     = retroImage
+endif
 
 all:            $(BIN)
 
@@ -17,12 +25,20 @@ $(BIN):         ${SRCS}
 		${OBJDUMP} -S $(BIN).elf > $(BIN).dis
 		${ELF2AOUT} $(BIN).elf $@ && rm $(BIN).elf
 
-clean:
-		rm -f *.o *.elf $(BIN) *.elf *.dis *~
+retroImageBE:   retroImage retroImage-convert
+		./retroImage-convert
 
-install:        all
+clean:
+		rm -f *.o *.elf $(BIN) *.elf *.dis *~ retroImage-convert \
+		    retroImage16 retroImage64 retroImage16BE retroImageBE \
+		    retroImage64BE
+
+retroImage-convert: tools/convert.c
+		${HOST_CC} -O2 -Wall -Werror -o $@ tools/convert.c
+
+install:        all $(RETRO_IMAGE)
 		install $(BIN) $(DESTDIR)/bin/
-		cp retroImage $(DESTDIR)/lib/
+		cp $(RETRO_IMAGE) $(DESTDIR)/lib/
 
 image:          $(BIN)
 		cat image/meta.rx image/kernel.rx > core.rx

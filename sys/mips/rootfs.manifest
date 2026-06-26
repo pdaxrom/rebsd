@@ -94,6 +94,9 @@ mode 0775
 file /root/sh-comsubst-smoke.sh
 mode 0775
 
+file /root/lang-smoke.sh
+mode 0775
+
 file /root/types-smoke.sh
 mode 0775
 
@@ -523,7 +526,7 @@ file /lib/deco/help/e.hexview
 
 file /lib/deco/help/e.view
 
-file /lib/retroImage
+file /lib/retroImageBE
 
 file /usr/libexec/ccom
 mode 0755

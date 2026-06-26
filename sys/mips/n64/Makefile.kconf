@@ -468,6 +468,7 @@ $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 
 $(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) $(N64_LIBUTIL_SRCS) $(N64_LIBTERMLIB_SRCS) $(N64_LIBCURSES_SRCS) $(N64_LIBVMF_SRCS) $(N64_LIBREADLINE_SRCS) $(N64_LIBTCL_SRCS) $(N64_USER_SRCS) $(N64_AWK_SRCS) Makefile
 	$(N64_SRC_MAKE) -B all
+	$(N64_AWK_MAKE) clean
 	$(N64_AWK_MAKE) awk
 	touch $@
 
@@ -575,7 +576,8 @@ smoke-aout-toolchain: $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
 	$(N64_NATIVE_AOUT_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS)) \
 	    $(abspath $(N64_NATIVE_LD)) $(abspath $(N64_NATIVE_AOUT_AR)) \
 	    $(abspath $(N64_NATIVE_AOUT_RANLIB)) $(abspath $(N64_NATIVE_AOUT_NM)) \
-	    $(abspath $(N64_NATIVE_AOUT_SIZE)) $(abspath $(N64_NATIVE_AOUT_STRIP))
+	    $(abspath $(N64_NATIVE_AOUT_SIZE)) $(abspath $(N64_NATIVE_AOUT_STRIP)) \
+	    $(N64_GNU_AS)
 
 .PHONY: smoke-host-pcc smoke-host-ccom
 smoke-host-pcc: $(N64_HOST_CPP) $(N64_HOST_CCOM) $(N64_NATIVE_AS) \

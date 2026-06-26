@@ -27,6 +27,9 @@ MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
+MIPS_ROOTFS_SRC_FILES = $(shell find $(TOPSRC)/sys/mips/rootfs \
+                         $(TOPSRC)/sys/mips/n64/rootfs \
+                         \( -type f -o -type l \) 2>/dev/null)
 MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
 MIPS_COMMON_MACHINE_HEADERS = console cpu devmajors elf_machdep float fpu io \
                               layout limits machparam ramswap romdisk
@@ -127,10 +130,15 @@ run: unix.elf
 	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel unix.elf
 
-$(MIPS_ROOTFS_SRC_STAMP):
+.PHONY: n64-rootfs-stage
+n64-rootfs-stage:
 	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
 
-$(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
+n64-rootfs-stage: $(MIPS_ROOTFS_SRC_FILES)
+
+$(MIPS_ROOTFS_SRC_STAMP): n64-rootfs-stage
+
+$(MIPS_ROOTFS_STAMP): n64-rootfs-stage $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
 	rm -rf $(MIPS_ROOTFS_STAGE)
 	mkdir -p $(MIPS_ROOTFS_STAGE)
 	cp -pR $(MIPS_ROOTFS_SRC)/. $(MIPS_ROOTFS_STAGE)/

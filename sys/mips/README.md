@@ -97,6 +97,23 @@ cd /
 /sbin/umount /cart
 ```
 
+Shared target-side regression checks that should pass on Malta before moving a
+new rootfs or toolchain change to N64 hardware:
+
+```
+/root/lang-smoke.sh
+/root/types-smoke.sh
+/root/ll-smoke.sh
+/root/ll-abi-smoke.sh
+/root/cc-pcc-smoke.sh
+smoke-as-vr4300
+matrix-as-vr4300
+```
+
+`lang-smoke.sh` covers the installed scripting/interpreter tools in the shared
+MIPS rootfs: shell failure handling and command substitution, `awk`, `pdc`,
+classic `forth`, `retroforth`, `picoc`, and `tcl`.
+
 The Malta sparse flash backend intentionally keeps a limited number of RAM
 sectors, so use `diskspeed -m 1` for QEMU smoke runs instead of the command's
 default 8 MiB test size.

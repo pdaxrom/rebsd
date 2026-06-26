@@ -6,7 +6,12 @@
 node *ALLOC(int n)
 {
 	register node *x;
-	x = (node *) malloc(sizeof(node) + (n-1)*sizeof(node *));
+	int extra;
+
+	extra = n - BOTCH;
+	if (extra < 0)
+		extra = 0;
+	x = (node *) malloc(sizeof(node) + extra * sizeof(node *));
 	if (x == NULL)
 		error(FATAL, "out of space in ALLOC");
 	return(x);

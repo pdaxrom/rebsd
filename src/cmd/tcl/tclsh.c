@@ -8,6 +8,7 @@
 #   include <stdio.h>
 #endif
 #include <stdlib.h>
+#include <unistd.h>
 #include <tcl/tcl.h>
 
 /*
@@ -123,27 +124,30 @@ help_cmd (void *arg, Tcl_Interp *interp, int argc, unsigned char **argv)
  * Read a newline-terminated string from stream.
  */
 static unsigned char *
-getlin (FILE *input, FILE *output, unsigned char *buf, int len)
+getlin (FILE *input, FILE *output, unsigned char *buf, int len, int interactive)
 {
 	int c;
 	unsigned char *s;
 
 	s = buf;
         while (--len > 0) {
-                fflush (output);
+		if (interactive)
+			fflush (output);
 		c = getc (input);
 		if (feof (input))
 			return 0;
 		if (c == '\b') {
 			if (s > buf) {
 				--s;
-				fputs ("\b \b", output);
+				if (interactive)
+					fputs ("\b \b", output);
 			}
 			continue;
 		}
 		if (c == '\r')
 			c = '\n';
-		putc (c, output);
+		if (interactive)
+			putc (c, output);
 		*s++ = c;
 		if (c == '\n')
 			break;
@@ -152,7 +156,7 @@ getlin (FILE *input, FILE *output, unsigned char *buf, int len)
 	return buf;
 }
 
-void tcl_main ()
+void tcl_main (int interactive)
 {
 	FILE *input = stdin;
 	FILE *output = stdout;
@@ -161,9 +165,11 @@ void tcl_main ()
 	unsigned char line [200], *cmd;
 	int result, got_partial, quit_flag;
 
-	fputs ("\n\nTCL Shell\n", stdout);
-	fputs ("~~~~~~~~~\n", stdout);
-	fputs ("\nEnter \"help\" for a list of commands\n\n", stdout);
+	if (interactive) {
+		fputs ("\n\nTCL Shell\n", stdout);
+		fputs ("~~~~~~~~~\n", stdout);
+		fputs ("\nEnter \"help\" for a list of commands\n\n", stdout);
+	}
 
 	interp = Tcl_CreateInterp ();
 	Tcl_CreateCommand (interp, (unsigned char*) "loop", loop_cmd, output, 0);
@@ -175,10 +181,10 @@ void tcl_main ()
 	quit_flag = 0;
 	while (! quit_flag) {
 		/*clearerr (input);*/
-		if (! got_partial) {
+		if (! got_partial && interactive) {
 			fputs ("% ", output);
 		}
-		if (! getlin (input, output, line, sizeof (line))) {
+		if (! getlin (input, output, line, sizeof (line), interactive)) {
 			if (! got_partial)
 				break;
 
@@ -216,6 +222,14 @@ void tcl_main ()
 
 int main (void)
 {
+	int interactive;
+
+	interactive = isatty (fileno (stdin));
+	if (! interactive) {
+		tcl_main (0);
+		return 0;
+	}
+
 	for (;;)
-		tcl_main ();
+		tcl_main (1);
 }

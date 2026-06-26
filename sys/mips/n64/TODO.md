@@ -171,6 +171,11 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   pointers, struct layout, bitfields, and big-endian union byte order.
 - [x] Hardware-smoke `/root/types-smoke.sh` on N64 and confirm the broad
   backend/FPU ABI type matrix passes.
+- [x] Add `/root/lang-smoke.sh` as the shared MIPS language/interpreter smoke:
+  shell failure and command-substitution regressions, `awk`, `pdc`, classic
+  `forth`, `retroforth`, `picoc`, and `tcl`.
+- [x] QEMU-smoke `/root/lang-smoke.sh` on Malta.
+- [x] Hardware-smoke `/root/lang-smoke.sh` on N64, verified 2026-06-26.
 - [x] Audit and fix true o32 big-endian `long long` ABI behavior in `ccom`:
   register arguments, stack arguments, returns, struct layout/alignment,
   external object layout, and helper calls.
@@ -193,8 +198,10 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   literals remain 8-byte aligned after final link.
 - [x] Hardware-smoke `/root/ll-smoke.sh` v3 on N64 and confirm the new stack
   argument cases pass through both `/usr/bin/cc` and `/usr/bin/pcc`.
-- [ ] Review secondary compiler/interpreter paths after `ccom` works:
-  `smallc`, `smlrc`, `lccom`, and their assembler output.
+- [ ] Review secondary compiler paths after `ccom` works: `smallc`, `smlrc`,
+  `lccom`, and their assembler output. These are not part of the current
+  shared MIPS rootfs smoke; installed interpreter coverage is tracked by
+  `/root/lang-smoke.sh`.
 
 ## N64 Command Filtering
 

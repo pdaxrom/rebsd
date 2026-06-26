@@ -86,6 +86,13 @@ typedef struct nd node;
 extern node	*winner;
 extern node	*nullstat;
 
+#ifndef YYSTYPE_IS_DECLARED
+#define YYSTYPE node *
+#define YYSTYPE_IS_DECLARED 1
+#endif
+
+int yyparse(void);
+
 /* otypes */
 #define OCELL	0
 #define OEXPR	1

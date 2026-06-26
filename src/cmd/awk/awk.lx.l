@@ -6,6 +6,16 @@
 #include	"awk.def.h"
 #include	"awk.h"
 #define YY_NO_INPUT	/* defeat lex */
+#define YY_USER_INIT	BEGIN A
+#define YY_INPUT(buf,result,max_size) do { \
+	int c = awk_input(); \
+	if (c == 0) \
+		result = YY_NULL; \
+	else { \
+		(buf)[0] = c; \
+		result = 1; \
+	} \
+} while (0)
 extern int	mustfld;
 
 int	lineno	= 1;
@@ -15,6 +25,7 @@ char	cbuf[CBUFLEN];
 int	clen, cflag;
 
 cell *fieldadr(int n);
+static int awk_input(void);
 %}
 
 A	[a-zA-Z_]
@@ -107,6 +118,9 @@ WS	[ \t]
 
 <A>.		{ yylval = (node *) (int) yytext[0]; return(yytext[0]); }
 
+<sc>.|\n	{ BEGIN A; yyless(0); return('}'); }
+<sc><<EOF>>	{ BEGIN A; return('}'); }
+
 <reg>"["	{ BEGIN chc; clen=0; cflag=0; }
 <reg>"[^"	{ BEGIN chc; clen=0; cflag=1; }
 
@@ -148,14 +162,21 @@ WS	[ \t]
 
 %%
 
-int
-input()
+static int
+awk_input()
 {
 	int c;
 	extern char *lexprog;
+	static int lexprog_eof;
 
-	if (yyin == NULL)
+	if (lexprog != NULL) {
 		c = *lexprog++;
+		if (c == 0) {
+			lexprog = NULL;
+			lexprog_eof = 1;
+		}
+	} else if (lexprog_eof)
+		c = 0;
 	else
 		c = getc(yyin);
 	if (c == '\n')

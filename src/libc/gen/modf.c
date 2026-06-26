@@ -8,17 +8,21 @@
  */
 #include <math.h>
 
-/* Get two 32 bit ints from a double.  */
+/* Get two 32 bit words from a double. */
+#define EXTRACT_WORDS(high, low, d) do { \
+	union { double f64; unsigned long long u64; } ew_u; \
+	ew_u.f64 = (d); \
+	(high) = (long) (ew_u.u64 >> 32); \
+	(low) = (long) ew_u.u64; \
+} while (0)
 
-#define EXTRACT_WORDS(high,low,d) \
-        high = *(unsigned long long*) &d; \
-        low  = (*(unsigned long long*) &d) >> 32
-
-
-/* Set a double from two 32 bit ints.  */
-
-#define INSERT_WORDS(d,high,low) \
-        *(unsigned long long*) &(x) = (unsigned long long) (high) << 32 | (low)
+/* Set a double from two 32 bit words. */
+#define INSERT_WORDS(d, high, low) do { \
+	union { double f64; unsigned long long u64; } iw_u; \
+	iw_u.u64 = ((unsigned long long) ((unsigned long) (high) & 0xffffffffUL) << 32) | \
+	    ((unsigned long) (low) & 0xffffffffUL); \
+	(d) = iw_u.f64; \
+} while (0)
 
 /*
  * modf(double x, double *iptr)

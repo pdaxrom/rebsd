@@ -45,6 +45,11 @@ STDOBJ		= abort.o alarm.o atof.o atoi.o atol.o calloc.o closedir.o crypt.o \
 		  telldir.o time.o timezone.o ttyname.o ttyslot.o ualarm.o usleep.o \
 		  strdup.o uname.o wait.o wait3.o waitpid.o
 
+ifeq ($(TARGET_PLATFORM),n64)
+STDSRC		+= modf.c
+STDOBJ		+= modf.o
+endif
+
 gen.a:		${OBJS}
 		@echo "buiding gen.a"
 		@$(AR) cru gen.a ${OBJS}

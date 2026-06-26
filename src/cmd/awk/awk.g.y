@@ -1,8 +1,4 @@
 /*	awk.g.y	4.1	82/05/07	*/
-%code requires {
-#define YYSTYPE node *
-#define YYSTYPE_IS_DECLARED 1
-}
 
 %token	FIRSTTOKEN	/*must be first*/
 %token	FINAL FATAL

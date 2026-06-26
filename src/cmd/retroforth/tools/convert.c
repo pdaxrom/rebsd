@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 int32_t input[1000000];
 int16_t output16[1000000];
@@ -14,15 +15,14 @@ int16_t output16BE[1000000];
 int32_t output32BE[1000000];
 int64_t output64BE[1000000];
 
-#ifdef RXBE
-uint32_t bitswap32(uint32_t x)
+static uint32_t
+retro_bswap32(uint32_t x)
 {
   return ((x << 24) & 0xff000000) |
          ((x <<  8) & 0x00ff0000) |
-         ((x <<  8) & 0x0000ff00) |
-         ((x << 24) & 0x000000ff);
+         ((x >>  8) & 0x0000ff00) |
+         ((x >> 24) & 0x000000ff);
 }
-#endif
 
 int load_image(char *image)
 {
@@ -45,17 +45,13 @@ int save_image()
 {
   FILE *fp[5];
   int x[5], i;
-  u_int32_t image_size = input[3];
+  uint32_t image_size = input[3];
 
-#ifdef RXBE
-  image_size = bitswap32(image_size);
-#endif
-
-  if ((fp[0] = fopen("retroImage16", "w")) == NULL) exit(-1);
-  if ((fp[1] = fopen("retroImage64", "w")) == NULL) exit(-1);
-  if ((fp[2] = fopen("retroImage16BE", "w")) == NULL) exit(-1);
-  if ((fp[3] = fopen("retroImageBE", "w")) == NULL) exit(-1);
-  if ((fp[4] = fopen("retroImage64BE", "w")) == NULL) exit(-1);
+  if ((fp[0] = fopen("retroImage16", "wb")) == NULL) exit(-1);
+  if ((fp[1] = fopen("retroImage64", "wb")) == NULL) exit(-1);
+  if ((fp[2] = fopen("retroImage16BE", "wb")) == NULL) exit(-1);
+  if ((fp[3] = fopen("retroImageBE", "wb")) == NULL) exit(-1);
+  if ((fp[4] = fopen("retroImage64BE", "wb")) == NULL) exit(-1);
 
   x[0] = fwrite(output16,   sizeof(int16_t), image_size, fp[0]);
   x[1] = fwrite(output64,   sizeof(int64_t), image_size, fp[1]);
@@ -84,7 +80,7 @@ void convert()
   fprintf(stderr, "Converting...\n");
   for (i = 0; i < cells; i++)
   {
-    be = bswap32(input[i]);
+    be = (int32_t) retro_bswap32((uint32_t) input[i]);
     output16[i] = (int16_t)input[i];
     output64[i] = (int64_t)input[i];
     output16BE[i] = (int16_t)be;

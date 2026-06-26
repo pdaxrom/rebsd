@@ -30,6 +30,15 @@
 static union AnyValue LexAnyValue;
 static struct Value LexValue = { &VoidType, &LexAnyValue, NULL, FALSE, FALSE, FALSE };
 
+static void LexCopyTokenValue(void *To, const void *From, int Size)
+{
+    unsigned char *ToBytes = To;
+    const unsigned char *FromBytes = From;
+
+    while (Size-- > 0)
+        *ToBytes++ = *FromBytes++;
+}
+
 struct ReservedWord
 {
     const char *Word;
@@ -540,7 +549,7 @@ void *LexTokenise(struct LexState *Lexer, int *TokenLen)
         if (ValueSize > 0)
         { 
             /* store a value as well */
-            memcpy((void *)TokenPos, (void *)GotValue->Val, ValueSize);
+            LexCopyTokenValue(TokenPos, GotValue->Val, ValueSize);
             TokenPos += ValueSize;
             MemUsed += ValueSize;
         }
@@ -706,7 +715,7 @@ enum LexToken LexGetRawToken(struct ParseState *Parser, struct Value **Value, in
                 default: break;
             }
             
-            memcpy((void *)LexValue.Val, (void *)((char *)Parser->Pos + TOKEN_DATA_OFFSET), ValueSize);
+            LexCopyTokenValue(LexValue.Val, (char *)Parser->Pos + TOKEN_DATA_OFFSET, ValueSize);
             LexValue.ValOnHeap = FALSE;
             LexValue.ValOnStack = FALSE;
             LexValue.IsLValue = FALSE;

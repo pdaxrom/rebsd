@@ -7,11 +7,12 @@
 #   - ld -r preserves relocatable a.out;
 #   - ar creates archives that our ranlib can index;
 #   - ld can resolve an undefined symbol from a ranlib-indexed archive;
-#   - nm, size, and strip read/write the same big-endian a.out objects.
+#   - nm, size, and strip read/write the same big-endian a.out objects;
+#   - when GNU as is supplied, RetroBSD as emits the same VR4300 text bytes.
 #
 
-if test $# -ne 7; then
-	echo "usage: $0 /path/to/as /path/to/ld /path/to/ar /path/to/ranlib /path/to/nm /path/to/size /path/to/strip" >&2
+if test $# -ne 7 && test $# -ne 8; then
+	echo "usage: $0 /path/to/as /path/to/ld /path/to/ar /path/to/ranlib /path/to/nm /path/to/size /path/to/strip [/path/to/gnu-as]" >&2
 	exit 2
 fi
 
@@ -22,6 +23,11 @@ ranlib_bin=$4
 nm_bin=$5
 size_bin=$6
 strip_bin=$7
+gnu_as=
+gnu_objcopy=
+if test $# -eq 8; then
+	gnu_as=$8
+fi
 
 for tool in "$as_bin" "$ld_bin" "$ar_bin" "$ranlib_bin" "$nm_bin" "$size_bin" "$strip_bin"; do
 	if test ! -x "$tool"; then
@@ -29,6 +35,32 @@ for tool in "$as_bin" "$ld_bin" "$ar_bin" "$ranlib_bin" "$nm_bin" "$size_bin" "$
 		exit 2
 	fi
 done
+if test -n "$gnu_as"; then
+	command -v "$gnu_as" >/dev/null 2>&1
+	if test $? -ne 0; then
+		echo "smoke-aout-toolchain: GNU as not found: $gnu_as" >&2
+		exit 2
+	fi
+	case "$gnu_as" in
+	*/mips64-elf-as)
+		gnu_objcopy=`dirname "$gnu_as"`/mips64-elf-objcopy
+		;;
+	mips64-elf-as)
+		gnu_objcopy=mips64-elf-objcopy
+		;;
+	*as)
+		gnu_objcopy=`echo "$gnu_as" | sed 's/as$/objcopy/'`
+		;;
+	*)
+		gnu_objcopy=mips64-elf-objcopy
+		;;
+	esac
+	command -v "$gnu_objcopy" >/dev/null 2>&1
+	if test $? -ne 0; then
+		echo "smoke-aout-toolchain: GNU objcopy not found: $gnu_objcopy" >&2
+		exit 2
+	fi
+fi
 
 tmpdir=${TMPDIR:-/tmp}/n64-aout-toolchain.$$
 rm -rf "$tmpdir"
@@ -59,6 +91,11 @@ list_after=$tmpdir/list-after
 chain_list_after=$tmpdir/chain-list-after
 nm_main=$tmpdir/nm-main
 size_main=$tmpdir/size-main
+gnu_o=$tmpdir/gnu.o
+gnu_text=$tmpdir/gnu.text
+retro_text=$tmpdir/retro.text
+gnu_log=$tmpdir/gnu.log
+objcopy_log=$tmpdir/objcopy.log
 
 cat > "$main_s" <<'EOF'
 .text
@@ -160,12 +197,56 @@ check_field()
 	fi
 }
 
+check_gnu_text()
+{
+	retro_o=$1
+	src=$2
+	name=$3
+
+	if test -z "$gnu_as"; then
+		return 0
+	fi
+
+	rm -f "$gnu_o" "$gnu_text" "$retro_text" "$gnu_log" "$objcopy_log"
+	"$gnu_as" -EB -mips3 -march=vr4300 -o "$gnu_o" "$src" > "$gnu_log" 2>&1
+	if test $? -ne 0; then
+		echo "smoke-aout-toolchain: GNU as rejected $name" >&2
+		cat "$gnu_log" >&2
+		exit 1
+	fi
+	"$gnu_objcopy" -O binary -j .text "$gnu_o" "$gnu_text" \
+	    > "$objcopy_log" 2>&1
+	if test $? -ne 0; then
+		echo "smoke-aout-toolchain: GNU objcopy failed for $name" >&2
+		cat "$objcopy_log" >&2
+		exit 1
+	fi
+	gnu_size=`wc -c < "$gnu_text" | tr -d '[:space:]'`
+	dd if="$retro_o" of="$retro_text" bs=1 skip=32 count="$gnu_size" \
+	    > /dev/null 2>&1
+	if test $? -ne 0; then
+		echo "smoke-aout-toolchain: cannot extract RetroBSD text for $name" >&2
+		exit 1
+	fi
+	if ! cmp -s "$retro_text" "$gnu_text"; then
+		echo "smoke-aout-toolchain: text bytes differ from GNU as for $name" >&2
+		exit 1
+	fi
+}
+
 "$as_bin" -EB -mips3 -march=vr4300 -o "$main_o" "$main_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$foo_o" "$foo_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$data_o" "$data_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_main_o" "$chain_main_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_mid_o" "$chain_mid_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_leaf_o" "$chain_leaf_s" || exit 1
+
+check_gnu_text "$main_o" "$main_s" main
+check_gnu_text "$foo_o" "$foo_s" foo
+check_gnu_text "$data_o" "$data_s" data
+check_gnu_text "$chain_main_o" "$chain_main_s" chain-main
+check_gnu_text "$chain_mid_o" "$chain_mid_s" chain-mid
+check_gnu_text "$chain_leaf_o" "$chain_leaf_s" chain-leaf
 
 check_exec "$main_o" 00000106 00000010
 check_exec "$foo_o" 00000106 00000010
