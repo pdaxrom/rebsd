@@ -111,7 +111,7 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Fix N64 `ccom` output for the native assembler path so 64-bit integer
   initializers do not use GAS-only `.dword`; the current native path emits
   `.word` pairs accepted by the in-tree `as`.
-- [ ] Smoke-test the in-tree C compiler path on N64:
+- [x] Smoke-test the in-tree C compiler path on N64:
   - o32 calling convention compatibility
   - no MIPS32r2-only instruction emission in VR4300 mode
   - generated FPU instructions accepted by the in-tree assembler
@@ -119,6 +119,10 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
     dumps by default because `/var` is a small RAM disk, but after explicitly
     enabling core dumps the failure path must still return a filesystem error
     cleanly and must not panic the inode cache
+  Hardware coverage now includes `/root/cc-pcc-smoke.sh`,
+  `/root/types-smoke.sh`, `/root/ll-smoke.sh`, `/root/ll-abi-smoke.sh`,
+  `smoke-as-vr4300`, `matrix-as-vr4300`, `/root/lang-smoke.sh`, and
+  `/root/secondary-cc-smoke.sh`, all verified on N64 by 2026-06-27.
 - [x] Add the in-tree toolchain smoke kit to the N64 rootfs under `/usr`:
   `/usr/bin/pcc`, `/usr/libexec/ccom`, `/usr/bin/as`, `/usr/bin/ld`,
   `/usr/bin/ar`, `/usr/bin/ranlib`, `/usr/bin/nm`, `/usr/bin/aout`,
@@ -198,7 +202,7 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   literals remain 8-byte aligned after final link.
 - [x] Hardware-smoke `/root/ll-smoke.sh` v3 on N64 and confirm the new stack
   argument cases pass through both `/usr/bin/cc` and `/usr/bin/pcc`.
-- [ ] Review secondary compiler paths after `ccom` works: `smallc`, `smlrc`,
+- [x] Review secondary compiler paths after `ccom` works: `smallc`, `smlrc`,
   `lccom`, and their assembler output. These are not part of the current
   shared MIPS rootfs smoke; installed interpreter coverage is tracked by
   `/root/lang-smoke.sh`.
@@ -282,11 +286,13 @@ the board-specific generated/appended manifest.
 - [x] Increase the default N64 rootfs size once the command set grows; the
   image remains ROM-backed and demand-read through the romdisk block driver,
   not copied wholesale into RDRAM.
-- [ ] Revisit `basic` after deciding the N64 replacement for `ufetch` and
-  `ustore`; the common command currently depends on low-level user/IO access
-  hooks that are intentionally not provided as the PIC32 implementation.
-- [ ] Revisit `pforth` after fixing its makefile path assumptions and
-  dictionary build/install flow for the shared `DESTDIR` rootfs build.
+- [x] Enable `basic` on N64 with the same no-low-level-I/O behavior used by
+  cross builds: `INP()` returns zero and `OUT` is ignored because the PIC32
+  `ufetch`/`ustore` hooks are intentionally not provided on N64.
+- [ ] Enable `pforth` only after its dictionary generation is endian-safe for
+  big-endian MIPS. The bundled `pfdicdat.h`/`pforth.dic` are little-endian;
+  the pForth generator keeps pointers in 32-bit `cell_t` and does not run on a
+  64-bit macOS host without a low-address allocator or user-mode MIPS runner.
 - [x] Add the missing libgcc-compatible runtime helpers to libc for 32-bit
   MIPS userland: 64-bit shifts, clz/ctz/ffs helpers, and the first 64-bit
   integer/double conversion helpers required by `ccom`. These are compiler ABI

@@ -145,6 +145,9 @@ mode 0775
 file /usr/bin/basename
 mode 0775
 
+file /usr/bin/basic
+mode 0775
+
 file /usr/bin/cal
 mode 0775
 
@@ -356,6 +359,9 @@ file /bin/pwd
 mode 0775
 
 file /usr/bin/renice
+mode 0775
+
+file /usr/bin/renumber
 mode 0775
 
 file /usr/bin/retroforth

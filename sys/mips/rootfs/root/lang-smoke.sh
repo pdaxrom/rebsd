@@ -88,7 +88,21 @@ grep '^picoc ok 10 103$' "$tmp/picoc.out" >/dev/null || {
 	exit 1
 }
 
-echo "step 7: tcl"
+echo "step 7: basic"
+{
+cat <<'EOF'
+10 PRINT 6*7
+20 EXIT
+RUN
+EOF
+} | basic > "$tmp/basic.out" || exit 1
+grep '42' "$tmp/basic.out" >/dev/null || {
+	echo "lang-smoke: basic failed"
+	cat "$tmp/basic.out"
+	exit 1
+}
+
+echo "step 8: tcl"
 cat > "$tmp/tcl.in" <<'EOF'
 set a 2
 set b 5

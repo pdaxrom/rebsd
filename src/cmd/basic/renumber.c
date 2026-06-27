@@ -15,6 +15,9 @@
 #ifdef CROSS
 #   include </usr/include/stdio.h>
 #   include </usr/include/ctype.h>
+#elif defined(TARGET_VR4300)
+#   include <stdio.h>
+#   include <ctype.h>
 #else
 #   include <stdio.h>
 #   include <ctype.h>

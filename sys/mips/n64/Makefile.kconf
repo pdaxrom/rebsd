@@ -27,13 +27,13 @@ N64_ROOTFS_USR_SHARE = $(N64_ROOTFS_STAGE)/usr/share
 N64_ROOTFS_BASE_STAMP = $(N64_ROOTFS_STAGE)/.base
 N64_ROOTFS_USER_STAMP = $(N64_ROOTFS_STAGE)/.userland
 N64_ROOTFS_WHATIS = $(N64_ROOTFS_USR_SHARE)/man/whatis
-N64_USR_BIN_FILES = aout apropos ar as awk basename cal calendar cb cc chgrp \
+N64_USR_BIN_FILES = aout apropos ar as awk basename basic cal calendar cb cc chgrp \
                     cmp col comm compress cpp deco diff diskspeed du ed egrep \
                     emg env fbset fbview fgrep file find fold forth grep \
                     groups head hostid id join last lcc ld man \
                     matrix-as-vr4300 matrix-as-vr4300.sh md5 med mesg more \
                     n64input nice nm nohup od pagesize pcc pdc picoc pr \
-                    printf printenv ps ptytest ranlib renice retroforth rev \
+                    printf printenv ps ptytest ranlib renice renumber retroforth rev \
                     rgbled rmail romfsctl scc setty size sl smux \
                     smoke-as-vr4300 smoke-as-vr4300.sh sort split strip sum \
                     sysctl tail tar tcl tee time touch tsort tty uncompress \
@@ -163,7 +163,7 @@ N64_YACC ?= $(N64_BISON) -y
 N64_SRC_LIBS = libc libm libutil libtermlib libcurses libvmf libreadline libtcl
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
-N64_CMD_SUBDIRS = calendar chown chroot compress cpp date2 deco diff emg env fbset \
+N64_CMD_SUBDIRS = basic calendar chown chroot compress cpp date2 deco diff emg env fbset \
                   fbview find fold forth fsck getty hostname id init \
                   aout ar as cc ccom lccom ld login ls man md5 med mkfs mknod \
                   mkpasswd mount more n64input nm pdc picoc printf pstat ptytest \
