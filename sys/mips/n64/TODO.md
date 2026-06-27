@@ -202,6 +202,23 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   `lccom`, and their assembler output. These are not part of the current
   shared MIPS rootfs smoke; installed interpreter coverage is tracked by
   `/root/lang-smoke.sh`.
+  - [x] Initial N64-toolchain build review: `smallc` builds as a target a.out
+    binary; `smlrc` and `lccom` needed warning-clean fixes under the N64
+    `-Werror` build.
+  - [x] Fix the `smlrc`/`lccom` clean-warning build failures without relaxing
+    warning coverage globally.
+  - [x] Install `/usr/libexec/smallc`, `/usr/libexec/smlrc`, and
+    `/usr/libexec/lccom` in the shared MIPS rootfs so existing `scc` and `lcc`
+    aliases are not dangling.
+  - [x] Add shared `/root/secondary-cc-smoke.sh` coverage that tests generated
+    MIPS assembly through the in-tree VR4300 `as`/`ld -r` path.
+  - [x] QEMU-smoke `/root/secondary-cc-smoke.sh` on Malta. The smoke covers
+    the different front-end dialects separately: Small-C old-style function
+    definitions for `scc`, ANSI C for `smlrc` and `lcc`. The `lcc` driver path
+    now passes `-target=mips-eb -pic=0`, so the backend does not emit
+    `.cpload`/`.cprestore` directives for the RetroBSD static a.out path.
+  - [x] Hardware-smoke `/root/secondary-cc-smoke.sh` on N64, verified
+    2026-06-27.
 
 ## N64 Command Filtering
 
@@ -277,8 +294,12 @@ the board-specific generated/appended manifest.
 - [x] Enable `/bin/cpp` compatibility and `/usr/bin/calendar` in the N64 rootfs
   now that the runtime helpers are available; include the installed calendar
   data under `/share/calendar`.
-- [ ] Hardware-smoke `/bin/cpp` and `/usr/bin/calendar` from the generated
-  rootfs, for example using writable `/var/tmp` for a temporary calendar file.
+- [x] Add shared `/root/cpp-calendar-smoke.sh` coverage for `/bin/cpp` and
+  `/usr/bin/calendar` using writable `/var/tmp` for a temporary calendar file.
+- [x] QEMU-smoke `/root/cpp-calendar-smoke.sh` on Malta after the shared MIPS
+  rootfs rebuild.
+- [x] Hardware-smoke `/root/cpp-calendar-smoke.sh` from the generated N64
+  rootfs, verified 2026-06-27.
 
 ## Volatile Writable Filesystems
 

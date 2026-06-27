@@ -19,7 +19,7 @@ smallc: 	$(OBJS)
 		${ELF2AOUT} $@.elf $@
 
 install:        smallc
-		cp smallc $(TOPSRC)/libexec/
+		install smallc $(DESTDIR)/libexec/
 
 
 clean:

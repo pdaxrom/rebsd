@@ -76,6 +76,9 @@ file /root/.profile
 file /root/cc-pcc-smoke.sh
 mode 0775
 
+file /root/cpp-calendar-smoke.sh
+mode 0775
+
 file /root/ll-smoke.sh
 mode 0775
 
@@ -110,6 +113,9 @@ mode 0775
 file /root/pcc-smoke.c
 
 file /root/romfs-smoke.sh
+mode 0775
+
+file /root/secondary-cc-smoke.sh
 mode 0775
 
 file /usr/lib/crt0.o
@@ -529,6 +535,15 @@ file /lib/deco/help/e.view
 file /lib/retroImageBE
 
 file /usr/libexec/ccom
+mode 0755
+
+file /usr/libexec/lccom
+mode 0755
+
+file /usr/libexec/smallc
+mode 0755
+
+file /usr/libexec/smlrc
 mode 0755
 
 file /usr/share/misc/more.help

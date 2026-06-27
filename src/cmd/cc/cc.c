@@ -1010,6 +1010,12 @@ main(int argc, char *argv[])
 			av[na++] = xlist[j];
 		for (j = 0; j < nm; j++)
 			av[na++] = mlist[j];
+#ifdef TARGET_BIG_ENDIAN
+		if (mode == MODE_LCC) {
+			av[na++] = "-target=mips-eb";
+			av[na++] = "-pic=0";
+		}
+#endif
 		if (getsuf(clist[i])=='i')
 			av[na++] = clist[i];
 		else

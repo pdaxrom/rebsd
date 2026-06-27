@@ -157,9 +157,6 @@ unsigned strlen(const char* str)
 #ifndef __SMALLER_C_16__
   const char* s;
 
-  if (str == NULL)
-    return 0;
-
   for (s = str; *s; ++s);
 
   return s - str;

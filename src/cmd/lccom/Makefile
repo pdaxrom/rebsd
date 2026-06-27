@@ -25,7 +25,8 @@ T               = $(TSTDIR)/
 all:            build $Blburg lccom liblcc.a
 
 clean:
-		rm -rf lccom *.a *.dis *~ $B $T/*.1 $T/*.2 $T/*.s
+		rm -rf lccom *.a *.dis *~ $B $T/*.1 $T/*.2 $T/*.s \
+		    lburg/gram.c
 		rm -f $T8q $Tarray $Tcf $Tcq $Tcvt $Tfields $Tfront $Tincr \
                     $Tinit $Tlimits $Tparanoia $Tsort $Tspill $Tstdarg \
                     $Tstruct $Tswitch $Twf1 $Tyacc

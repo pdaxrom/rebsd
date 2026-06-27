@@ -94,9 +94,13 @@ void vfprint(FILE *f, char *bp, const char *fmt, va_list ap) {
 			case 'c': if (f) fputc(va_arg(ap, int), f); else *bp++ = va_arg(ap, int); break;
 			case 'S': { char *s = va_arg(ap, char *);
 				    int n = va_arg(ap, int);
-				    if (s)
-				    	for ( ; n-- > 0; s++)
-				    		if (f) (void)putc(*s, f); else *bp++ = *s;
+				    if (s) {
+					    for ( ; n-- > 0; s++)
+						    if (f)
+							    (void)putc(*s, f);
+						    else
+							    *bp++ = *s;
+				    }
 				  } break;
 			case 'k': { int t = va_arg(ap, int);
 				    static char *tokens[] = {

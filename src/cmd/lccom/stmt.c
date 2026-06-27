@@ -185,8 +185,10 @@ void statement(int loop, Swtch swp, int lev) {
 		       	use(p, src);
 		       	branch(p->u.l.label);
 		       	t = gettok();
-		       } else
-		       	error("missing label in goto\n"); expect(';');
+		       } else {
+			       error("missing label in goto\n");
+		       }
+		       expect(';');
 					  break;
 
 	case ID:       if (getchr() == ':') {

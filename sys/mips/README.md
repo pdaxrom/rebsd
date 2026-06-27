@@ -102,6 +102,8 @@ new rootfs or toolchain change to N64 hardware:
 
 ```
 /root/lang-smoke.sh
+/root/cpp-calendar-smoke.sh
+/root/secondary-cc-smoke.sh
 /root/types-smoke.sh
 /root/ll-smoke.sh
 /root/ll-abi-smoke.sh
@@ -113,6 +115,13 @@ matrix-as-vr4300
 `lang-smoke.sh` covers the installed scripting/interpreter tools in the shared
 MIPS rootfs: shell failure handling and command substitution, `awk`, `pdc`,
 classic `forth`, `retroforth`, `picoc`, and `tcl`.
+
+`cpp-calendar-smoke.sh` covers the `/bin/cpp` compatibility link and
+`calendar(1)` preprocessing of a writable `/var/tmp` calendar file.
+
+`secondary-cc-smoke.sh` covers the currently staged secondary C compiler
+backends (`scc`, direct `smlrc`, and `lcc`) through assembly and `ld -r` only.
+It is not a full executable ABI smoke; use the `cc`/`pcc` tests for that.
 
 The Malta sparse flash backend intentionally keeps a limited number of RAM
 sectors, so use `diskspeed -m 1` for QEMU smoke runs instead of the command's
