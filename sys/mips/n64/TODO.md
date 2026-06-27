@@ -179,7 +179,8 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   shell failure and command-substitution regressions, `awk`, `pdc`, classic
   `forth`, `retroforth`, `picoc`, and `tcl`.
 - [x] QEMU-smoke `/root/lang-smoke.sh` on Malta.
-- [x] Hardware-smoke `/root/lang-smoke.sh` on N64, verified 2026-06-26.
+- [x] Hardware-smoke `/root/lang-smoke.sh` on N64, including the `basic`
+  interpreter step, verified 2026-06-27.
 - [x] Audit and fix true o32 big-endian `long long` ABI behavior in `ccom`:
   register arguments, stack arguments, returns, struct layout/alignment,
   external object layout, and helper calls.
