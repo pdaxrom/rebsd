@@ -178,6 +178,35 @@ crw-rw-rw-  1 root       8,   0 Jun 12 09:28 ttyp0
 2.11BSD  2.11BSD 2.11 BSD Unix for N64: local build  mips
 ```
 
+## Loopback networking
+
+The N64 kernel now builds the shared MIPS INET and AF_UNIX stack.  The first
+N64 network configuration is loopback-only: no cartridge or external network
+device driver is enabled yet.
+
+The same stack and rootfs scripts passed on Malta/QEMU on 2026-06-28:
+
+```
+/root/net-smoke.sh
+/root/net-header-smoke.sh
+```
+
+The N64 hardware smoke test is still pending.  After flashing `kernel.z64`,
+log in as root and run:
+
+```
+/sbin/ifconfig lo0
+/sbin/ifconfig lo0 inet 127.0.0.1 up
+/usr/bin/ping -c 1 127.0.0.1
+/root/net-smoke.sh
+/root/net-header-smoke.sh
+```
+
+`/root/net-smoke.sh` also compiles and runs a target-side socket program,
+checks UDP and TCP loopback, exercises AF_UNIX sockets, verifies `netstat`,
+checks TCP `TIME_WAIT`, and fails if `netstat -m` reports mbuf allocation
+drops, waits, or protocol drain calls.
+
 ## Toolchain
 
 The default N64 toolchain path is:
