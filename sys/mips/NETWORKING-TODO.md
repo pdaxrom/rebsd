@@ -82,10 +82,13 @@ Source reference:
 
 ## Phase 2: User ABI and libc
 
-- [ ] Verify all socket syscall numbers in `include/syscall.h` match the
-  kernel syscall table.
-- [ ] Add missing MIPS libc syscall wrappers if any generated wrapper is not
-  built or installed.
+- [x] Verify socket syscall numbers in `include/syscall.h` match the kernel
+  syscall table for the enabled socket/select/ioctl calls.
+- [x] Verify MIPS libc syscall wrappers are generated, archived, and reachable
+  for the current smoke coverage:
+  - `accept`, `bind`, `connect`, `getpeername`, `getsockname`,
+    `getsockopt`, `ioctl`, `listen`, `recv`, `recvfrom`, `send`, `sendto`,
+    `select`, `setsockopt`, `shutdown`, `socketpair`
 - [ ] Audit public headers used by native `cc`/`pcc`; `unistd.h` still has
   prototypes that older PCC syntax rejects.
 - [x] Install public socket/network headers into the target `/usr/include`
@@ -124,8 +127,10 @@ Source reference:
   - configure `lo0 127.0.0.1` (verified)
   - ping `127.0.0.1` (verified)
   - UDP loopback smoke (verified)
-  - TCP loopback listen/connect/read/write smoke (verified)
+  - TCP loopback listen/connect/send/recv smoke (verified)
   - route table smoke (`route add/delete` verified)
+  - `getpeername` and `getsockopt(SO_TYPE)` smoke
+  - `shutdown` smoke
   - netstat smoke for `-i`, `-r`, `-s`, `-m`, `-u`, `-p tcp`
     output diagnostics
 

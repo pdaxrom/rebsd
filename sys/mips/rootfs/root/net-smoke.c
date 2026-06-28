@@ -11,13 +11,18 @@ int accept();
 int bind();
 int connect();
 int fork();
+int getpeername();
 int getsockname();
+int getsockopt();
 int ioctl();
 int listen();
 int read();
+int recv();
 int recvfrom();
+int send();
 int sendto();
 int select();
+int shutdown();
 int socketpair();
 int setsockopt();
 int system();
@@ -263,9 +268,9 @@ tcp_select_ioctl_smoke(fd, buf)
 		printf("ioctl tcp fionread=%ld\n", nread);
 		return (1);
 	}
-	n = read(fd, buf, 4);
+	n = recv(fd, buf, 4, 0);
 	if (n != 3)
-		return (fail("read tcp loopback"));
+		return (fail("recv tcp loopback"));
 	if (buf[0] != 't' || buf[1] != 'c' || buf[2] != 'p') {
 		printf("tcp loopback data mismatch\n");
 		return (1);
@@ -301,10 +306,10 @@ int
 main()
 {
 	struct sockaddr_in sin, dst, from;
-	struct sockaddr_in got;
+	struct sockaddr_in got, peer;
 	int fd, rfd, sfd, ufd, lfd, cfd, afd;
 	int sv[2];
-	int len, n, pid, status;
+	int len, n, pid, status, optval;
 	char buf[4];
 
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -393,13 +398,15 @@ main()
 		dst.sin_zero[4] = dst.sin_zero[5] = dst.sin_zero[6] = dst.sin_zero[7] = 0;
 		if (connect(cfd, (struct sockaddr *)&dst, sizeof(dst)) < 0)
 			_exit(3);
-		if (write(cfd, "tcp", 3) != 3)
+		if (send(cfd, "tcp", 3, 0) != 3)
 			_exit(4);
-		n = read(cfd, buf, 2);
+		n = recv(cfd, buf, 2, 0);
 		if (n != 2 || buf[0] != 'o' || buf[1] != 'k')
 			_exit(5);
-		if (close(cfd) < 0)
+		if (shutdown(cfd, 1) < 0)
 			_exit(6);
+		if (close(cfd) < 0)
+			_exit(7);
 		_exit(0);
 	}
 
@@ -407,12 +414,29 @@ main()
 	afd = accept(lfd, (struct sockaddr *)&from, &len);
 	if (afd < 0)
 		return (fail("accept tcp loopback"));
+	len = sizeof(peer);
+	if (getpeername(afd, (struct sockaddr *)&peer, &len) < 0)
+		return (fail("getpeername tcp loopback"));
+	if (peer.sin_family != AF_INET ||
+	    peer.sin_addr.s_addr != htonl(0x7f000001L)) {
+		printf("tcp peer mismatch family=%d addr=%lx\n",
+		    peer.sin_family, peer.sin_addr.s_addr);
+		return (1);
+	}
+	len = sizeof(optval);
+	if (getsockopt(afd, SOL_SOCKET, SO_TYPE,
+	    (char *)&optval, &len) < 0)
+		return (fail("getsockopt tcp type"));
+	if (optval != SOCK_STREAM) {
+		printf("tcp socket type=%d\n", optval);
+		return (1);
+	}
 	if (tcp_select_ioctl_smoke(afd, buf) != 0)
 		return (1);
 	if (tcp_netstat() != 0)
 		return (1);
-	if (write(afd, "ok", 2) != 2)
-		return (fail("write tcp loopback"));
+	if (send(afd, "ok", 2, 0) != 2)
+		return (fail("send tcp loopback"));
 	if (close(afd) < 0)
 		return (fail("close tcp accepted"));
 	if (close(lfd) < 0)
