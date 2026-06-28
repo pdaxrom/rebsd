@@ -164,9 +164,17 @@ Source reference:
   defaults to N64; `/root/net-smoke.sh` now verifies `netstat -m` reports no
   mbuf allocation drops, waits, or protocol drain calls after the loopback
   socket smoke.
-- [ ] Review historical 2.11BSD network families not enabled in the current
-  MIPS first pass, including AF_NS/Xerox NS and AF_IMPLINK/IMP, before deciding
-  whether to port their kernel sources and `netstat` decoders.
+- [x] Review historical 2.11BSD network families not enabled in the current
+  MIPS first pass:
+  - the original 2.11BSD tree has Xerox NS sources under `usr/sys/netns`
+    and IMP sources under `usr/sys/netimp`.
+  - the current MIPS import keeps public `AF_NS` and `AF_IMPLINK` constants
+    in `sys/include/socket.h`, but does not import/register `nsdomain` or
+    `impdomain` for Malta.
+  - current MIPS `netstat` intentionally walks the enabled `AF_INET` and
+    `AF_UNIX` tables only; NS/IMP table decoders need a separate import.
+  - do not silently enable either family in this first pass.  Treat NS/IMP
+    as a separate porting decision after loopback INET/UNIX remains stable.
 
 ## Phase 5: N64 Enablement
 
