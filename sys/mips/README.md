@@ -53,6 +53,7 @@ Useful first checks after login:
 mount
 df -T
 /root/net-smoke.sh
+/root/net-header-smoke.sh
 /root/types-smoke.sh
 ```
 

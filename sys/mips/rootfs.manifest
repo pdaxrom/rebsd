@@ -123,6 +123,11 @@ mode 0775
 
 file /root/net-smoke.c
 
+file /root/net-header-smoke.sh
+mode 0775
+
+file /root/net-header-smoke.c
+
 file /usr/lib/crt0.o
 
 file /usr/lib/libc.a

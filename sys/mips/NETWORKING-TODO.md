@@ -89,8 +89,16 @@ Source reference:
   - `accept`, `bind`, `connect`, `getpeername`, `getsockname`,
     `getsockopt`, `ioctl`, `listen`, `recv`, `recvfrom`, `send`, `sendto`,
     `select`, `setsockopt`, `shutdown`, `socketpair`
-- [ ] Audit public headers used by native `cc`/`pcc`; `unistd.h` still has
-  prototypes that older PCC syntax rejects.
+- [x] Audit public headers used by native `cc`/`pcc`; verified on Malta with
+  `/root/net-header-smoke.sh`:
+  - `sys/types.h`
+  - `sys/time.h`
+  - `sys/select.h`
+  - `sys/socket.h`
+  - `sys/ioctl.h`
+  - `sys/un.h`
+  - `netinet/in.h`
+  - `unistd.h`
 - [x] Install public socket/network headers into the target `/usr/include`
   tree through the existing generated header flow.
 - [x] Stage a tiny target-side socket ABI smoke first:
