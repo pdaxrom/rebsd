@@ -85,6 +85,28 @@ The generated `run` target uses the current Malta layout:
 make -C sys/mips/malta run
 ```
 
+For Ethernet bring-up in QEMU, use the ISA NE2000 virtual adapter target:
+
+```
+make -C sys/mips/malta run-net
+```
+
+This starts QEMU with `ne2k_isa` at I/O base `0x300`, IRQ `9`, and MAC
+`52:54:00:12:34:56`.  After logging in as `root`, a minimal external-network
+smoke is:
+
+```
+/sbin/ifconfig ne0 inet 10.0.2.15 netmask 255.255.255.0 up
+/sbin/route add default 10.0.2.2 1
+/usr/bin/ping -c 1 10.0.2.2
+/usr/bin/netstat -i
+/usr/bin/netstat -r
+```
+
+Keep this as the real-device bring-up path until the Malta virtual NIC is
+stable.  The N64 hardware network backend is expected to be a later USB network
+adapter design, not a direct first step.
+
 This starts QEMU with `-m 32M`. The kernel keeps the normal 2 MiB user window,
 loads the root filesystem at physical `0x00600000`, reserves 16 MiB for that
 image, keeps `/var` on a 1 MiB RAM disk, and uses the remaining high RAM for

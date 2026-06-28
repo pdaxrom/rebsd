@@ -4,6 +4,9 @@ PARAM += -DMALTA_UART_ENABLED
 PARAM += -DMALTA_ENABLED
 PARAM += -DPTY_ENABLED
 PARAM += -DPTY_NUNITS=4
+PARAM += -DETHER_ENABLED
+PARAM += -DETHER_NUNITS=1
+PARAM += -DMALTA_NE_ENABLED
 PARAM += -DINET_ENABLED
 PARAM += -DUNIXDOMAIN_ENABLED
 PARAM += -DCONS_MINOR=0
@@ -78,13 +81,14 @@ OBJS = exec_aout.o exec_conf.o exec_elf.o exec_script.o exec_subr.o \
 	ufs_syscalls2.o vfs_vnops.o vm_sched.o vm_swap.o vm_swp.o \
 	sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
 	uipc_usrreq.o uipc_socket.o uipc_socket2.o uipc_syscalls.o af.o \
-	if.o if_loop.o raw_cb.o raw_usrreq.o route.o in.o in_pcb.o \
-	in_proto.o ip_icmp.o ip_input.o ip_output.o raw_ip.o tcp_debug.o \
-	tcp_input.o tcp_output.o tcp_subr.o tcp_timer.o tcp_usrreq.o \
-	udp_usrreq.o startup.o exception_entry.o exception.o fpu.o \
-	cons.o in_cksum.o net_glue.o netinit.o signal.o sysctl.o \
-	libkern.o stubs.o uart.o devsw.o clock.o machdep.o romdisk.o \
-	romfs_core.o romfs_vfs.o cartflash.o ramswap.o config.o
+	if.o if_loop.o if_ether.o raw_cb.o raw_usrreq.o route.o in.o \
+	in_pcb.o in_proto.o ip_icmp.o ip_input.o ip_output.o raw_ip.o \
+	tcp_debug.o tcp_input.o tcp_output.o tcp_subr.o tcp_timer.o \
+	tcp_usrreq.o udp_usrreq.o startup.o exception_entry.o \
+	exception.o fpu.o cons.o in_cksum.o net_glue.o netinit.o \
+	signal.o sysctl.o libkern.o stubs.o uart.o devsw.o clock.o \
+	machdep.o romdisk.o romfs_core.o romfs_vfs.o cartflash.o \
+	ramswap.o config.o if_ne.o
 
 CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/kernel/exec_script.c $S/kernel/exec_subr.c \
@@ -112,10 +116,10 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/kernel/uipc_proto.c $S/kernel/uipc_usrreq.c \
 	$S/kernel/uipc_socket.c $S/kernel/uipc_socket2.c \
 	$S/kernel/uipc_syscalls.c $S/net/af.c $S/net/if.c \
-	$S/net/if_loop.c $S/net/raw_cb.c $S/net/raw_usrreq.c \
-	$S/net/route.c $S/netinet/in.c $S/netinet/in_pcb.c \
-	$S/netinet/in_proto.c $S/netinet/ip_icmp.c $S/netinet/ip_input.c \
-	$S/netinet/ip_output.c $S/netinet/raw_ip.c \
+	$S/net/if_loop.c $S/netinet/if_ether.c $S/net/raw_cb.c \
+	$S/net/raw_usrreq.c $S/net/route.c $S/netinet/in.c \
+	$S/netinet/in_pcb.c $S/netinet/in_proto.c $S/netinet/ip_icmp.c \
+	$S/netinet/ip_input.c $S/netinet/ip_output.c $S/netinet/raw_ip.c \
 	$S/netinet/tcp_debug.c $S/netinet/tcp_input.c \
 	$S/netinet/tcp_output.c $S/netinet/tcp_subr.c \
 	$S/netinet/tcp_timer.c $S/netinet/tcp_usrreq.c \
@@ -128,7 +132,7 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/mips/malta/machdep.c $S/mips/malta/romdisk.c \
 	$S/mips/common/romfs_core.c $S/mips/common/romfs_vfs.c \
 	$S/mips/malta/cartflash.c $S/mips/malta/ramswap.c \
-	$S/mips/malta/config.c swapunix.c
+	$S/mips/malta/config.c $S/mips/malta/if_ne.c swapunix.c
 
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
 SYSTEM_DEP      = Makefile ioconf.c ../malta/malta.ld
@@ -159,6 +163,12 @@ run-early: malta-early.elf
 run: unix.elf
 	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel unix.elf
+
+run-net: unix.elf
+	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
+	    -no-reboot -kernel unix.elf \
+	    -netdev user,id=net0 \
+	    -device ne2k_isa,netdev=net0,iobase=0x300,irq=9,mac=52:54:00:12:34:56
 
 $(MIPS_ROOTFS_SRC_STAMP): $(MIPS_ROOTFS_COMMON_FILES)
 	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
@@ -427,6 +437,9 @@ if.o: $S/net/if.c ${SYSTEM_DEP}
 if_loop.o: $S/net/if_loop.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
+if_ether.o: $S/netinet/if_ether.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
 raw_cb.o: $S/net/raw_cb.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
@@ -542,6 +555,9 @@ ramswap.o: $S/mips/malta/ramswap.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 config.o: $S/mips/malta/config.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+if_ne.o: $S/mips/malta/if_ne.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 

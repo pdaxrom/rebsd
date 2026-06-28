@@ -43,6 +43,9 @@ extern void n64cart_uart_intr(void);
 #endif
 #else
 extern void malta_uart_intr(void);
+#ifdef MALTA_NE_ENABLED
+extern void malta_nepoll(void);
+#endif
 #endif
 
 static void
@@ -265,6 +268,9 @@ exception(int *frame)
             n64keyboard_console_intr();
 #else
             malta_uart_intr();
+#ifdef MALTA_NE_ENABLED
+            malta_nepoll();
+#endif
 #endif
             cnintr();
             hardclock((caddr_t)frame[FRAME_PC], status);

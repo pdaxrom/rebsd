@@ -17,12 +17,16 @@ struct conf_device conf_device_init[] = {
 };
 void maltaattach(int);
 void ptyattach(int);
+void etherattach(int);
+void malta_neattach(int);
 void inetattach(int);
 void unixdomainattach(int);
 
 struct conf_service conf_service_init[] = {
     { maltaattach },
     { ptyattach },
+    { etherattach },
+    { malta_neattach },
     { inetattach },
     { unixdomainattach },
     { 0 }

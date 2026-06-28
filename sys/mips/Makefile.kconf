@@ -90,6 +90,12 @@ run: unix.elf
 	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel unix.elf
 
+run-net: unix.elf
+	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
+	    -no-reboot -kernel unix.elf \
+	    -netdev user,id=net0 \
+	    -device ne2k_isa,netdev=net0,iobase=0x300,irq=9,mac=52:54:00:12:34:56
+
 $(MIPS_ROOTFS_SRC_STAMP): $(MIPS_ROOTFS_COMMON_FILES)
 	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
 

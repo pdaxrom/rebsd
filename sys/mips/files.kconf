@@ -63,6 +63,7 @@ kernel/uipc_syscalls.c          optional inet
 net/af.c                        optional inet
 net/if.c                        optional inet
 net/if_loop.c                   optional inet
+netinet/if_ether.c              optional ether
 net/raw_cb.c                    optional inet
 net/raw_usrreq.c                optional inet
 net/route.c                     optional inet

@@ -11,9 +11,9 @@ ENTRY(_start)
 
 MEMORY
 {
-  kernel (rwx) : ORIGIN = 0x80100000, LENGTH = 1984K
-  u0area (rw!x): ORIGIN = 0x802f0000, LENGTH = 8K
-  uarea  (rw!x): ORIGIN = 0x802f2000, LENGTH = 8K
+  kernel (rwx) : ORIGIN = 0x80100000, LENGTH = 2032K
+  u0area (rw!x): ORIGIN = 0x802fc000, LENGTH = 8K
+  uarea  (rw!x): ORIGIN = 0x802fe000, LENGTH = 8K
   romdisk (rx) : ORIGIN = 0x80600000, LENGTH = 16384K
 }
 

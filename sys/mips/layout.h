@@ -20,7 +20,8 @@
  * Initial Malta layout for QEMU bring-up.
  *
  *   0x00000000..0x000fffff  firmware/vectors/unused low RAM
- *   0x00100000..0x002fffff  kernel ELF
+ *   0x00100000..0x002fbfff  kernel ELF
+ *   0x002fc000..0x002fffff  fixed u0/u areas
  *   0x00300000..0x004fffff  wired kuseg user window
  *   0x00500000..0x005fffff  /var ramdisk
  *   0x00600000..0x015fffff  root filesystem loaded by QEMU
@@ -35,7 +36,7 @@
 #define MALTA_KERNEL_DATA_START        MIPS_KSEG0_BASE
 #define MALTA_KERNEL_DATA_END          (MIPS_KSEG0_BASE + 0x00300000)
 #define MALTA_UAREA_SIZE               0x00002000
-#define MALTA_U0AREA_VADDR             0x802f0000
+#define MALTA_U0AREA_VADDR             0x802fc000
 #define MALTA_UAREA_VADDR              (MALTA_U0AREA_VADDR + MALTA_UAREA_SIZE)
 
 #define MIPS_USER_VADDR_START          0x00400000

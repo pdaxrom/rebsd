@@ -8,3 +8,4 @@ mips/common/romfs_vfs.c         standard
 mips/malta/cartflash.c          standard
 mips/malta/ramswap.c            standard
 mips/malta/config.c             standard
+mips/malta/if_ne.c              optional malta_ne

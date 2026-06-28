@@ -187,10 +187,14 @@ Source reference:
   - UDP loopback smoke
   - TCP loopback smoke
 - [ ] Design real network-device support now that N64 loopback works:
-  - first bring up a QEMU virtual NIC on Malta and debug the generic driver
-    path there;
-  - after the Malta virtual NIC path works, design the N64 hardware backend as
-    a USB network adapter path.
+  - [x] first bring up a QEMU virtual NIC on Malta and debug the generic driver
+    path there:
+    - `make -C sys/mips/malta run-net`
+    - `ifconfig ne0 inet 10.0.2.15 netmask 255.255.255.0 up`
+    - `route add default 10.0.2.2 1`
+    - `ping -c 1 10.0.2.2`
+  - [ ] after the Malta virtual NIC path works, design the N64 hardware
+    backend as a USB network adapter path.
 
 ## Deferred Items For First Pass
 

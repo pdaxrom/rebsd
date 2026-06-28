@@ -80,7 +80,7 @@ struct	arptab {
 };
 
 #ifdef	SUPERVISOR
-u_char etherbroadcastaddr[6];
+extern u_char etherbroadcastaddr[6];
 struct	arptab *arptnew();
 char *ether_sprintf();
 #endif
