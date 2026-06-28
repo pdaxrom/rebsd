@@ -186,11 +186,16 @@ Source reference:
   - `ping 127.0.0.1`
   - UDP loopback smoke
   - TCP loopback smoke
-- [ ] Design real network-device support now that N64 loopback works.
+- [ ] Design real network-device support now that N64 loopback works:
+  - first bring up a QEMU virtual NIC on Malta and debug the generic driver
+    path there;
+  - after the Malta virtual NIC path works, design the N64 hardware backend as
+    a USB network adapter path.
 
 ## Deferred Items For First Pass
 
-- No N64 hardware networking driver.
+- No N64 hardware networking driver until the Malta/QEMU virtual NIC path is
+  working.
 - No SLIP/PPP until loopback and core socket behavior are stable.
 - No changes to the N64 config while Malta is failing.
 - No rewriting userland tools before the kernel ABI is proven.
