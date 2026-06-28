@@ -181,12 +181,12 @@ Source reference:
 - [x] Keep N64 `INET` disabled until all Malta tests pass repeatedly.
 - [x] After Malta is stable, enable the shared MIPS network stack for N64.
 - [x] Start N64 with loopback only; no cartridge/network hardware driver yet.
-- [ ] Hardware-smoke on N64:
+- [x] Hardware-smoke on N64:
   - `ifconfig lo0`
   - `ping 127.0.0.1`
   - UDP loopback smoke
   - TCP loopback smoke
-- [ ] Only after loopback works on N64, design real network-device support.
+- [ ] Design real network-device support now that N64 loopback works.
 
 ## Deferred Items For First Pass
 

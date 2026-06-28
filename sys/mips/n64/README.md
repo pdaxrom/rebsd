@@ -191,8 +191,8 @@ The same stack and rootfs scripts passed on Malta/QEMU on 2026-06-28:
 /root/net-header-smoke.sh
 ```
 
-The N64 hardware smoke test is still pending.  After flashing `kernel.z64`,
-log in as root and run:
+The same loopback stack passed on real N64 hardware on 2026-06-28.  After
+flashing `kernel.z64`, log in as root and run:
 
 ```
 /sbin/ifconfig lo0
@@ -206,6 +206,11 @@ log in as root and run:
 checks UDP and TCP loopback, exercises AF_UNIX sockets, verifies `netstat`,
 checks TCP `TIME_WAIT`, and fails if `netstat -m` reports mbuf allocation
 drops, waits, or protocol drain calls.
+
+The verified N64 hardware run showed `lo0` up, `ping -c 1 127.0.0.1`
+successful after `/root/net-smoke.sh` configured the address, TCP loopback
+connections visible in `netstat`, `net socket smoke ok`, `net-smoke ok`, and
+both `cc` and `pcc` header smoke passes.
 
 ## Toolchain
 
