@@ -160,8 +160,10 @@ Source reference:
   - `FIONREAD` before TCP stream read
   - write readiness through `select`
   - `FIONBIO` empty read returns `EWOULDBLOCK`
-- [ ] Review memory pressure from mbufs on Malta before carrying the same
-  defaults to N64.
+- [x] Review memory pressure from mbufs on Malta before carrying the same
+  defaults to N64; `/root/net-smoke.sh` now verifies `netstat -m` reports no
+  mbuf allocation drops, waits, or protocol drain calls after the loopback
+  socket smoke.
 - [ ] Review historical 2.11BSD network families not enabled in the current
   MIPS first pass, including AF_NS/Xerox NS and AF_IMPLINK/IMP, before deciding
   whether to port their kernel sources and `netstat` decoders.

@@ -37,5 +37,26 @@ if ! egrep 'TIME_WAIT' $base.timewait >/dev/null; then
 	rm -f $base $base.s $base.o $base.ro $base.timewait
 	exit 1
 fi
-rm -f $base $base.s $base.o $base.ro $base.timewait
+/usr/bin/netstat -m > $base.mbuf || exit 1
+if egrep 'read error|bad read|not in namelist|no kernel namelist|cannot open|mbufs missing' $base.mbuf >/dev/null; then
+	cat $base.mbuf
+	rm -f $base $base.s $base.o $base.ro $base.timewait $base.mbuf
+	exit 1
+fi
+if ! egrep '^0 requests for memory denied' $base.mbuf >/dev/null; then
+	cat $base.mbuf
+	rm -f $base $base.s $base.o $base.ro $base.timewait $base.mbuf
+	exit 1
+fi
+if ! egrep '^0 requests for memory delayed' $base.mbuf >/dev/null; then
+	cat $base.mbuf
+	rm -f $base $base.s $base.o $base.ro $base.timewait $base.mbuf
+	exit 1
+fi
+if ! egrep '^0 calls to protocol drain routines' $base.mbuf >/dev/null; then
+	cat $base.mbuf
+	rm -f $base $base.s $base.o $base.ro $base.timewait $base.mbuf
+	exit 1
+fi
+rm -f $base $base.s $base.o $base.ro $base.timewait $base.mbuf
 echo "net-smoke ok"
