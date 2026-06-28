@@ -30,6 +30,12 @@ ld -r -o $base.ro $base.o || exit 1
 cc -o $base /root/net-smoke.c || exit 1
 ./$base
 status=$?
-rm -f $base $base.s $base.o $base.ro
 test $status -eq 0 || exit $status
+/usr/bin/netstat -a -f inet > $base.timewait || exit 1
+if ! egrep 'TIME_WAIT' $base.timewait >/dev/null; then
+	cat $base.timewait
+	rm -f $base $base.s $base.o $base.ro $base.timewait
+	exit 1
+fi
+rm -f $base $base.s $base.o $base.ro $base.timewait
 echo "net-smoke ok"

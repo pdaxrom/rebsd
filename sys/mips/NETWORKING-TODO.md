@@ -152,8 +152,9 @@ Source reference:
 - [x] Add first TCP reuse/netstat coverage:
   - run `netstat -a -f inet` while the TCP loopback connection is active
   - close and bind/listen the same local port again with `SO_REUSEADDR`
-- [ ] Add TCP TIME_WAIT coverage once the first reuse test remains stable:
-  - show closing/TIME_WAIT TCP entries with `netstat`
+- [x] Add TCP TIME_WAIT coverage once the first reuse test remains stable:
+  - show closing/TIME_WAIT TCP entries with `netstat`; verified by
+    `/root/net-smoke.sh` on Malta.
 - [x] Extend `select`/`ioctl` smoke to TCP sockets:
   - blocking read readiness through `select`
   - `FIONREAD` before TCP stream read
