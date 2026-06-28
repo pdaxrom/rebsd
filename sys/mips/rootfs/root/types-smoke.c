@@ -1,3 +1,6 @@
+#include <sys/types.h>
+#include <netinet/in.h>
+
 typedef signed char schar;
 typedef unsigned char uchar;
 typedef unsigned short ushort;
@@ -41,6 +44,16 @@ struct init_rec {
 	float f;
 	double d;
 	char text[4];
+};
+
+struct one_ulong_rec {
+	ulong u;
+};
+
+struct byte_ulong_rec {
+	char c;
+	ulong u;
+	char tail;
 };
 
 schar gsc = -5;
@@ -272,6 +285,14 @@ check_sizes()
 		return bad("sizeof long double");
 	if (sizeof(enum small_enum) != 4)
 		return bad("sizeof enum");
+	if (sizeof(struct one_ulong_rec) != 4)
+		return bad("sizeof struct ulong");
+	if (sizeof(struct byte_ulong_rec) != 12)
+		return bad("sizeof struct byte ulong");
+	if (sizeof(struct in_addr) != 4)
+		return bad("sizeof struct in_addr");
+	if (sizeof(struct sockaddr_in) != 16)
+		return bad("sizeof struct sockaddr_in");
 	return 0;
 }
 

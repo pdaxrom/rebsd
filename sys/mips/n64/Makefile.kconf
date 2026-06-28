@@ -164,10 +164,10 @@ N64_SRC_LIBS = libc libm libutil libtermlib libcurses libvmf libreadline libtcl
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = basic calendar chown chroot compress cpp date2 deco diff emg env fbset \
-                  fbview find fold forth fsck getty hostname id init \
+                  fbview find fold forth fsck getty hostname id ifconfig init \
                   aout ar as cc ccom lccom ld login ls man md5 med mkfs mknod \
-                  mkpasswd mount more n64input nm pdc picoc printf pstat ptytest \
-                  ranlib reboot renice retroforth rgbled romfsctl sed setty \
+                  mkpasswd mount more n64input netstat nm pdc picoc ping printf pstat ptytest \
+                  ranlib reboot renice retroforth rgbled romfsctl route sed setty \
                   sh shutdown sl smallc smlrc smux stty sysctl tcl test \
                   umount uname xargs
 N64_CMD_STDS = basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \

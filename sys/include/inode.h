@@ -78,6 +78,7 @@ struct inode {
     struct icommon1 i_ic1;
     u_int           i_flags;        /* user changeable flags */
     struct icommon2 i_ic2;
+    struct socket   *i_socket;      /* AF_UNIX socket bound to inode */
 };
 
 /*

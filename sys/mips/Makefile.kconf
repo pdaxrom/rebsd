@@ -19,6 +19,8 @@ MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
+MIPS_ROOTFS_COMMON_FILES = $(shell find $(TOPSRC)/sys/mips/rootfs \
+                           -type f -o -type l 2>/dev/null)
 MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
 MIPS_COMMON_MACHINE_HEADERS = console cpu devmajors elf_machdep float fpu io \
                               layout limits machparam ramswap romdisk
@@ -29,11 +31,22 @@ CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
                   -DROMFS_ENABLED \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"MIPS Malta 24Kf"'
+ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
+CPPFLAGS        += -I$(TOPSRC)/include/sys -I$(TOPSRC)/sys \
+                  -I$(TOPSRC)/sys/net \
+                  -I$(TOPSRC)/sys/netinet -DINET -DSUPERVISOR
+INET_CWARN      = -Wno-comment -Wno-endif-labels -Wno-implicit-int \
+                  -Wno-implicit-function-declaration -Wno-parentheses \
+                  -Wno-return-mismatch -Wno-return-type
+endif
+ifneq ($(filter -DUNIXDOMAIN_ENABLED,$(PARAM)),)
+CPPFLAGS        += -DUNIXDOMAIN
+endif
 ifeq ($(MIPS_TRACE),1)
 CPPFLAGS        += -DMIPS_TRACE
 endif
 CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc \
-                  $(CPPFLAGS) -MT $@ -MP -MD -MF .deps/$*.dep
+                  $(CPPFLAGS) $(INET_CWARN) -MT $@ -MP -MD -MF .deps/$*.dep
 VERS_CFLAGS     = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(CPPFLAGS)
 ASFLAGS         = -x assembler-with-cpp -c $(CPPFLAGS) -MT $@ -MP -MD \
                   -MF .deps/$*.dep
@@ -77,7 +90,7 @@ run: unix.elf
 	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel unix.elf
 
-$(MIPS_ROOTFS_SRC_STAMP):
+$(MIPS_ROOTFS_SRC_STAMP): $(MIPS_ROOTFS_COMMON_FILES)
 	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
 
 $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)

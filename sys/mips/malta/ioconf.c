@@ -17,9 +17,13 @@ struct conf_device conf_device_init[] = {
 };
 void maltaattach(int);
 void ptyattach(int);
+void inetattach(int);
+void unixdomainattach(int);
 
 struct conf_service conf_service_init[] = {
     { maltaattach },
     { ptyattach },
+    { inetattach },
+    { unixdomainattach },
     { 0 }
 };

@@ -118,6 +118,11 @@ mode 0775
 file /root/secondary-cc-smoke.sh
 mode 0775
 
+file /root/net-smoke.sh
+mode 0775
+
+file /root/net-smoke.c
+
 file /usr/lib/crt0.o
 
 file /usr/lib/libc.a
@@ -316,6 +321,9 @@ mode 0775
 file /usr/bin/n64input
 mode 0775
 
+file /usr/bin/netstat
+mode 0775
+
 file /usr/bin/nice
 mode 0775
 
@@ -338,6 +346,9 @@ file /usr/bin/pcc
 mode 0775
 
 file /usr/bin/picoc
+mode 0775
+
+file /usr/bin/ping
 mode 0775
 
 file /usr/bin/pr
@@ -839,6 +850,12 @@ file /sbin/fastboot
 mode 0775
 
 file /sbin/fsck
+mode 0775
+
+file /sbin/ifconfig
+mode 0775
+
+file /sbin/route
 mode 0775
 
 file /sbin/halt

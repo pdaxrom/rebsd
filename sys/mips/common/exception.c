@@ -33,6 +33,10 @@ static int last_user_icache_pid = -1;
 volatile unsigned int ct_ticks = 0;
 
 extern void cnintr(void);
+#ifdef INET
+extern int netisr;
+extern void netintr(void);
+#endif
 #ifdef N64
 #ifdef N64CART_ENABLED
 extern void n64cart_uart_intr(void);
@@ -264,6 +268,10 @@ exception(int *frame)
 #endif
             cnintr();
             hardclock((caddr_t)frame[FRAME_PC], status);
+#ifdef INET
+            if (netisr)
+                netintr();
+#endif
         }
         if ((cause & USER) && runrun) {
             u.u_frame = frame;

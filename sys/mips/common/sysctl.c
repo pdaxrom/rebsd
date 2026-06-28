@@ -12,10 +12,39 @@
 #ifdef PTY_ENABLED
 #include <sys/pty.h>
 #endif
+#if defined(INET) || defined(UNIXDOMAIN)
+#include <sys/domain.h>
+#include <sys/mbuf.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#endif
 #include <sys/ptrace.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
 #include <sys/vm.h>
+#ifdef INET
+#include <net/if.h>
+#include <net/route.h>
+#include <net/raw_cb.h>
+#include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/in_pcb.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/icmp_var.h>
+#include <netinet/ip_var.h>
+#include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
+#include <netinet/udp.h>
+#include <netinet/udp_var.h>
+
+extern int rthashsize;
+#endif
+#ifdef UNIXDOMAIN
+extern struct protosw unixsw[];
+#endif
 #include <machine/cpu.h>
 #include <machine/layout.h>
 #ifdef N64
@@ -149,6 +178,11 @@ static const struct {
 #endif
     { "_file",          (int)&file          },  /* pstat */
     { "_forkstat",      (int)&forkstat      },  /* vmstat */
+#ifdef INET
+    { "_icmpstat",      (int)&icmpstat      },  /* netstat */
+    { "_ifnet",         (int)&ifnet         },  /* netstat */
+    { "_ipstat",        (int)&ipstat        },  /* netstat */
+#endif
 #ifdef UCB_METER
     { "_freemem",       (int)&freemem       },  /* vmstat */
 #endif
@@ -178,6 +212,21 @@ static const struct {
 #ifdef PTY_ENABLED
     { "_npty",          (int)&npty          },  /* pstat */
     { "_pt_tty",        (int)&pt_tty        },  /* pstat */
+#endif
+#ifdef INET
+    { "_mbstat",        (int)&mbstat        },  /* netstat */
+    { "_rawcb",         (int)&rawcb         },  /* netstat */
+    { "_rthashsize",    (int)&rthashsize    },  /* netstat */
+    { "_rthost",        (int)&rthost        },  /* netstat */
+    { "_rtnet",         (int)&rtnet         },  /* netstat */
+    { "_rtstat",        (int)&rtstat        },  /* netstat */
+    { "_tcb",           (int)&tcb           },  /* netstat */
+    { "_tcpstat",       (int)&tcpstat       },  /* netstat */
+    { "_udb",           (int)&udb           },  /* netstat */
+    { "_udpstat",       (int)&udpstat       },  /* netstat */
+#endif
+#ifdef UNIXDOMAIN
+    { "_unixsw",        (int)&unixsw        },  /* netstat */
 #endif
     { "_bdevsw",        (int)&bdevsw        },  /* devupdate */
     { "_cdevsw",        (int)&cdevsw        },  /* devupdate */

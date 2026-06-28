@@ -4,6 +4,8 @@ PARAM += -DMALTA_UART_ENABLED
 PARAM += -DMALTA_ENABLED
 PARAM += -DPTY_ENABLED
 PARAM += -DPTY_NUNITS=4
+PARAM += -DINET_ENABLED
+PARAM += -DUNIXDOMAIN_ENABLED
 PARAM += -DCONS_MINOR=0
 PARAM += -DCONS_MAJOR=0
 #
@@ -27,9 +29,8 @@ MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
 MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
-MIPS_ROOTFS_SRC_FILES = $(shell find $(TOPSRC)/sys/mips/rootfs \
-                         $(TOPSRC)/sys/mips/n64/rootfs \
-                         \( -type f -o -type l \) 2>/dev/null)
+MIPS_ROOTFS_COMMON_FILES = $(shell find $(TOPSRC)/sys/mips/rootfs \
+                           -type f -o -type l 2>/dev/null)
 MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
 MIPS_COMMON_MACHINE_HEADERS = console cpu devmajors elf_machdep float fpu io \
                               layout limits machparam ramswap romdisk
@@ -40,11 +41,22 @@ CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
                   -DROMFS_ENABLED \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"MIPS Malta 24Kf"'
+ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
+CPPFLAGS        += -I$(TOPSRC)/include/sys -I$(TOPSRC)/sys \
+                  -I$(TOPSRC)/sys/net \
+                  -I$(TOPSRC)/sys/netinet -DINET -DSUPERVISOR
+INET_CWARN      = -Wno-comment -Wno-endif-labels -Wno-implicit-int \
+                  -Wno-implicit-function-declaration -Wno-parentheses \
+                  -Wno-return-mismatch -Wno-return-type
+endif
+ifneq ($(filter -DUNIXDOMAIN_ENABLED,$(PARAM)),)
+CPPFLAGS        += -DUNIXDOMAIN
+endif
 ifeq ($(MIPS_TRACE),1)
 CPPFLAGS        += -DMIPS_TRACE
 endif
 CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc \
-                  $(CPPFLAGS) -MT $@ -MP -MD -MF .deps/$*.dep
+                  $(CPPFLAGS) $(INET_CWARN) -MT $@ -MP -MD -MF .deps/$*.dep
 VERS_CFLAGS     = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(CPPFLAGS)
 ASFLAGS         = -x assembler-with-cpp -c $(CPPFLAGS) -MT $@ -MP -MD \
                   -MF .deps/$*.dep
@@ -64,10 +76,15 @@ OBJS = exec_aout.o exec_conf.o exec_elf.o exec_script.o exec_subr.o \
 	ufs_alloc.o ufs_bio.o ufs_bmap.o ufs_dsort.o ufs_fio.o \
 	ufs_inode.o ufs_mount.o ufs_namei.o ufs_subr.o ufs_syscalls.o \
 	ufs_syscalls2.o vfs_vnops.o vm_sched.o vm_swap.o vm_swp.o \
-	startup.o exception_entry.o exception.o fpu.o cons.o signal.o \
-	sysctl.o libkern.o stubs.o uart.o devsw.o clock.o machdep.o \
-	romdisk.o romfs_core.o romfs_vfs.o cartflash.o ramswap.o \
-	config.o
+	sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
+	uipc_usrreq.o uipc_socket.o uipc_socket2.o uipc_syscalls.o af.o \
+	if.o if_loop.o raw_cb.o raw_usrreq.o route.o in.o in_pcb.o \
+	in_proto.o ip_icmp.o ip_input.o ip_output.o raw_ip.o tcp_debug.o \
+	tcp_input.o tcp_output.o tcp_subr.o tcp_timer.o tcp_usrreq.o \
+	udp_usrreq.o startup.o exception_entry.o exception.o fpu.o \
+	cons.o in_cksum.o net_glue.o netinit.o signal.o sysctl.o \
+	libkern.o stubs.o uart.o devsw.o clock.o machdep.o romdisk.o \
+	romfs_core.o romfs_vfs.o cartflash.o ramswap.o config.o
 
 CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/kernel/exec_script.c $S/kernel/exec_subr.c \
@@ -90,11 +107,24 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/kernel/ufs_namei.c $S/kernel/ufs_subr.c \
 	$S/kernel/ufs_syscalls.c $S/kernel/ufs_syscalls2.c \
 	$S/kernel/vfs_vnops.c $S/kernel/vm_sched.c $S/kernel/vm_swap.c \
-	$S/kernel/vm_swp.c $S/mips/common/exception.c \
-	$S/mips/common/cons.c $S/mips/common/signal.c \
-	$S/mips/common/sysctl.c $S/mips/common/libkern.c \
-	$S/mips/common/stubs.c $S/mips/malta/uart.c \
-	$S/mips/malta/devsw.c $S/mips/malta/clock.c \
+	$S/kernel/vm_swp.c $S/kernel/sys_socket.c \
+	$S/kernel/uipc_domain.c $S/kernel/uipc_mbuf.c \
+	$S/kernel/uipc_proto.c $S/kernel/uipc_usrreq.c \
+	$S/kernel/uipc_socket.c $S/kernel/uipc_socket2.c \
+	$S/kernel/uipc_syscalls.c $S/net/af.c $S/net/if.c \
+	$S/net/if_loop.c $S/net/raw_cb.c $S/net/raw_usrreq.c \
+	$S/net/route.c $S/netinet/in.c $S/netinet/in_pcb.c \
+	$S/netinet/in_proto.c $S/netinet/ip_icmp.c $S/netinet/ip_input.c \
+	$S/netinet/ip_output.c $S/netinet/raw_ip.c \
+	$S/netinet/tcp_debug.c $S/netinet/tcp_input.c \
+	$S/netinet/tcp_output.c $S/netinet/tcp_subr.c \
+	$S/netinet/tcp_timer.c $S/netinet/tcp_usrreq.c \
+	$S/netinet/udp_usrreq.c $S/mips/common/exception.c \
+	$S/mips/common/cons.c $S/mips/common/in_cksum.c \
+	$S/mips/common/net_glue.c $S/mips/common/netinit.c \
+	$S/mips/common/signal.c $S/mips/common/sysctl.c \
+	$S/mips/common/libkern.c $S/mips/common/stubs.c \
+	$S/mips/malta/uart.c $S/mips/malta/devsw.c $S/mips/malta/clock.c \
 	$S/mips/malta/machdep.c $S/mips/malta/romdisk.c \
 	$S/mips/common/romfs_core.c $S/mips/common/romfs_vfs.c \
 	$S/mips/malta/cartflash.c $S/mips/malta/ramswap.c \
@@ -130,15 +160,10 @@ run: unix.elf
 	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel unix.elf
 
-.PHONY: n64-rootfs-stage
-n64-rootfs-stage:
+$(MIPS_ROOTFS_SRC_STAMP): $(MIPS_ROOTFS_COMMON_FILES)
 	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
 
-n64-rootfs-stage: $(MIPS_ROOTFS_SRC_FILES)
-
-$(MIPS_ROOTFS_SRC_STAMP): n64-rootfs-stage
-
-$(MIPS_ROOTFS_STAMP): n64-rootfs-stage $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
+$(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
 	rm -rf $(MIPS_ROOTFS_STAGE)
 	mkdir -p $(MIPS_ROOTFS_STAGE)
 	cp -pR $(MIPS_ROOTFS_SRC)/. $(MIPS_ROOTFS_STAGE)/
@@ -369,6 +394,90 @@ vm_swap.o: $S/kernel/vm_swap.c ${SYSTEM_DEP}
 vm_swp.o: $S/kernel/vm_swp.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
+sys_socket.o: $S/kernel/sys_socket.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+uipc_domain.o: $S/kernel/uipc_domain.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+uipc_mbuf.o: $S/kernel/uipc_mbuf.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+uipc_proto.o: $S/kernel/uipc_proto.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+uipc_usrreq.o: $S/kernel/uipc_usrreq.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+uipc_socket.o: $S/kernel/uipc_socket.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+uipc_socket2.o: $S/kernel/uipc_socket2.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+uipc_syscalls.o: $S/kernel/uipc_syscalls.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+af.o: $S/net/af.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+if.o: $S/net/if.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+if_loop.o: $S/net/if_loop.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+raw_cb.o: $S/net/raw_cb.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+raw_usrreq.o: $S/net/raw_usrreq.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+route.o: $S/net/route.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+in.o: $S/netinet/in.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+in_pcb.o: $S/netinet/in_pcb.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+in_proto.o: $S/netinet/in_proto.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ip_icmp.o: $S/netinet/ip_icmp.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ip_input.o: $S/netinet/ip_input.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ip_output.o: $S/netinet/ip_output.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+raw_ip.o: $S/netinet/raw_ip.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tcp_debug.o: $S/netinet/tcp_debug.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tcp_input.o: $S/netinet/tcp_input.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tcp_output.o: $S/netinet/tcp_output.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tcp_subr.o: $S/netinet/tcp_subr.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tcp_timer.o: $S/netinet/tcp_timer.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tcp_usrreq.o: $S/netinet/tcp_usrreq.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+udp_usrreq.o: $S/netinet/udp_usrreq.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
 startup.o: $S/mips/common/startup.S ${SYSTEM_DEP}
 	${COMPILE_S}
 
@@ -382,6 +491,15 @@ fpu.o: $S/mips/common/fpu.S ${SYSTEM_DEP}
 	${COMPILE_FPU_S}
 
 cons.o: $S/mips/common/cons.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+in_cksum.o: $S/mips/common/in_cksum.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+net_glue.o: $S/mips/common/net_glue.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+netinit.o: $S/mips/common/netinit.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 signal.o: $S/mips/common/signal.c ${SYSTEM_DEP}

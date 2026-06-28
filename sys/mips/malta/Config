@@ -11,6 +11,8 @@ device          "malta_uart"
 
 service         malta
 service         pty     4
+service         inet
+service         unixdomain
 
 config          unix    root on major 0 minor 0
                         swap on major 1 minor 0

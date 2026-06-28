@@ -25,6 +25,8 @@ typedef unsigned short  u_short;
 typedef unsigned int    u_int;
 typedef unsigned long   u_long;     /* see this! unsigned longs at last! */
 typedef unsigned short  ushort;     /* sys III compat */
+typedef u_int           memaddr;    /* core or swap address */
+typedef unsigned long   ubadr_t;    /* bus address */
 
 #ifdef pdp11
 typedef struct  label_t {

@@ -43,6 +43,15 @@
 #define DEV_BMASK       (DEV_BSIZE-1)
 #define btod(x)         (((x) + DEV_BSIZE-1) >> DEV_BSHIFT)
 
+#define NBPG            1024
+#define PGOFSET         (NBPG - 1)
+#define CLSIZE          1
+#define CLSHIFT         10
+#define CLBYTES         (CLSIZE * NBPG)
+#define CLOFSET         (CLBYTES - 1)
+#define btoc(x)         (((x) + NBPG - 1) / NBPG)
+#define ctob(x)         ((x) * NBPG)
+
 #include <machine/layout.h>
 
 #define MAXMEM                  MIPS_USER_MAXMEM
@@ -73,6 +82,7 @@
 #define splclock()      mips_intr_disable()
 #define splhigh()       mips_intr_disable()
 #define splnet()        mips_intr_disable()
+#define splimp()        mips_intr_disable()
 #define splsoftclock()  mips_intr_enable()
 #define spl0()          mips_intr_enable()
 #define splx(s)         mips_intr_restore(s)

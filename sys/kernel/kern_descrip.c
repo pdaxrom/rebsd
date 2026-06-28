@@ -199,7 +199,7 @@ fgetown(struct file *fp, int *valuep)
 
 #ifdef INET
     if (fp->f_type == DTYPE_SOCKET) {
-        *valuep = mfsd(&fp->f_socket->so_pgrp);
+        *valuep = fp->f_socket->so_pgrp;
         return (0);
     }
 #endif
@@ -216,7 +216,7 @@ fsetown(struct file *fp, int value)
 {
 #ifdef INET
     if (fp->f_type == DTYPE_SOCKET) {
-        mtsd(&fp->f_socket->so_pgrp, value);
+        fp->f_socket->so_pgrp = value;
         return (0);
     }
 #endif

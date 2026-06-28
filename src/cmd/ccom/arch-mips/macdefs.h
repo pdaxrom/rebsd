@@ -41,7 +41,7 @@
 
 /*
  * Convert (multi-)character constant to integer.
- * Assume: If only one value; store at left side (char size), otherwise 
+ * Assume: If only one value; store at left side (char size), otherwise
  * treat it as an integer.
  */
 #define makecc(val,i)	lastcon = (lastcon<<8)|((val<<24)>>24);
@@ -76,8 +76,8 @@
 #define ALLONGLONG	64
 #define ALSHORT		16
 #define ALPOINT		32
-#define ALSTRUCT	64
-#define ALSTACK		32 
+#define ALSTRUCT	32
+#define ALSTACK		32
 
 /*
  * Min/max values.
@@ -248,7 +248,7 @@ typedef long long OFFSZ;
 	\
 	SBREG|TEMPREG,							\
 	SBREG|TEMPREG, SBREG|TEMPREG, SBREG|TEMPREG,			\
- 	SBREG|TEMPREG,							\
+		SBREG|TEMPREG,							\
 	SBREG|TEMPREG, SBREG|TEMPREG, SBREG|TEMPREG,			\
 	SBREG|TEMPREG, SBREG|TEMPREG,					\
 	SBREG|TEMPREG, SBREG|TEMPREG, SBREG|TEMPREG, SBREG|TEMPREG,	\

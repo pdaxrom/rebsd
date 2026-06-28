@@ -43,6 +43,15 @@
 #define DEV_BMASK       (DEV_BSIZE-1)
 #define btod(x)         (((x) + DEV_BSIZE-1) >> DEV_BSHIFT)
 
+#define NBPG            1024
+#define PGOFSET         (NBPG - 1)
+#define CLSIZE          1
+#define CLSHIFT         10
+#define CLBYTES         (CLSIZE * NBPG)
+#define CLOFSET         (CLBYTES - 1)
+#define btoc(x)         (((x) + NBPG - 1) / NBPG)
+#define ctob(x)         ((x) * NBPG)
+
 #include <machine/layout.h>
 
 #define N64_RDRAM_SIZE          N64_BASE_RDRAM_SIZE
