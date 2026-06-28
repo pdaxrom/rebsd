@@ -88,6 +88,7 @@
 #define splclock()      mips_intr_disable()
 #define splhigh()       mips_intr_disable()
 #define splnet()        mips_intr_disable()
+#define splimp()        mips_intr_disable()
 #define splsoftclock()  mips_intr_enable()
 #define spl0()          mips_intr_enable()
 #define splx(s)         mips_intr_restore(s)

@@ -235,15 +235,26 @@ ELF2AOUT_SRCS   = $(TOPSRC)/tools/elf2aout/Makefile \
                   $(TOPSRC)/tools/elf2aout/elf2aout.c
 
 DEPFLAGS        = -MT $@ -MP -MD -MF .deps/$*.dep
-CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DN64 \
+CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DN64 -DMIPS \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"NEC VR4300"'
+ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
+CPPFLAGS        += -I$(TOPSRC)/include/sys -I$(TOPSRC)/sys \
+                  -I$(TOPSRC)/sys/net \
+                  -I$(TOPSRC)/sys/netinet -DINET -DSUPERVISOR
+INET_CWARN      = -Wno-comment -Wno-endif-labels -Wno-implicit-int \
+                  -Wno-implicit-function-declaration -Wno-parentheses \
+                  -Wno-return-mismatch -Wno-return-type
+endif
+ifneq ($(filter -DUNIXDOMAIN_ENABLED,$(PARAM)),)
+CPPFLAGS        += -DUNIXDOMAIN
+endif
 ifeq ($(N64_TRACE),1)
 CPPFLAGS        += -DN64_TRACE
 endif
 CPPFLAGS        += -DROMFS_ENABLED
 DEFS            = $(CPPFLAGS) $(DEPFLAGS)
-CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(DEFS)
+CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(DEFS) $(INET_CWARN)
 VERS_CFLAGS     = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(CPPFLAGS)
 ASFLAGS         = -x assembler-with-cpp -c $(DEFS)
 FPU_ASFLAGS     = -x assembler-with-cpp -c $(DEFS)

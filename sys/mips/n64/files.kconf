@@ -36,6 +36,14 @@ kernel/tty.c                    standard
 kernel/tty_pty.c                optional pty
 kernel/tty_subr.c               standard
 kernel/tty_tty.c                standard
+kernel/sys_socket.c             optional inet
+kernel/uipc_domain.c            optional inet
+kernel/uipc_mbuf.c              optional inet
+kernel/uipc_proto.c             optional inet
+kernel/uipc_usrreq.c            optional unixdomain
+kernel/uipc_socket.c            optional inet
+kernel/uipc_socket2.c           optional inet
+kernel/uipc_syscalls.c          optional inet
 kernel/ufs_alloc.c              standard
 kernel/ufs_bio.c                standard
 kernel/ufs_bmap.c               standard
@@ -51,6 +59,30 @@ kernel/vfs_vnops.c              standard
 kernel/vm_sched.c               standard
 kernel/vm_swap.c                standard
 kernel/vm_swp.c                 standard
+
+#
+# Network stack.
+#
+net/af.c                        optional inet
+net/if.c                        optional inet
+net/if_loop.c                   optional inet
+net/raw_cb.c                    optional inet
+net/raw_usrreq.c                optional inet
+net/route.c                     optional inet
+netinet/in.c                    optional inet
+netinet/in_pcb.c                optional inet
+netinet/in_proto.c              optional inet
+netinet/ip_icmp.c               optional inet
+netinet/ip_input.c              optional inet
+netinet/ip_output.c             optional inet
+netinet/raw_ip.c                optional inet
+netinet/tcp_debug.c             optional inet
+netinet/tcp_input.c             optional inet
+netinet/tcp_output.c            optional inet
+netinet/tcp_subr.c              optional inet
+netinet/tcp_timer.c             optional inet
+netinet/tcp_usrreq.c            optional inet
+netinet/udp_usrreq.c            optional inet
 
 #
 # Nintendo 64 platform.
@@ -74,6 +106,9 @@ mips/n64/machdep.c                   standard
 mips/common/exception_entry.S        standard compile-with "${COMPILE_S}"
 mips/common/exception.c              standard
 mips/common/fpu.S                    standard compile-with "${COMPILE_FPU_S}"
+mips/common/in_cksum.c          optional inet
+mips/common/net_glue.c          optional inet
+mips/common/netinit.c           optional inet
 mips/n64/rompak.c                    standard
 mips/n64/memory.c                    standard
 mips/n64/romdisk.c                   standard
