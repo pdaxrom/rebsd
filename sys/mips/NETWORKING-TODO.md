@@ -68,6 +68,17 @@ Source reference:
 - [x] Build Malta kernel with `INET`.
 - [x] Boot Malta kernel with `INET` in QEMU.
 - [x] Enable AF_UNIX on Malta and verify `socketpair(AF_UNIX, SOCK_STREAM)`.
+- [x] Verify AF_UNIX pathname stream sockets on Malta:
+  - bind/listen on `/tmp/net-smoke-unix.$$`
+  - connect/accept
+  - byte read/write
+  - close and unlink the socket path
+- [x] Verify basic socket `select`/`ioctl` behavior on Malta:
+  - zero-timeout read `select` on an empty AF_UNIX socket
+  - write readiness through `select`
+  - read readiness after a byte write
+  - `FIONREAD` before and after read
+  - `FIONBIO` empty read returns `EWOULDBLOCK`
 
 ## Phase 2: User ABI and libc
 
@@ -86,6 +97,7 @@ Source reference:
   - raw ICMP socket open/close
   - `socket(AF_UNIX, SOCK_STREAM, 0)`
   - `socketpair(AF_UNIX, SOCK_STREAM, 0)` plus byte read/write
+  - `bind`/`listen`/`connect`/`accept` with an AF_UNIX pathname socket
 - [x] Extend target-side socket smoke after QEMU boots:
   - `bind(127.0.0.1:port)`
   - `sendto`/`recvfrom` over `lo0`
@@ -124,10 +136,16 @@ Source reference:
   - listen/connect on `127.0.0.1`
   - send/receive a short payload
   - close client, accepted socket, and listener cleanly
-- [ ] Add TCP reuse/TIME_WAIT coverage once the basic loopback test remains
-  stable:
-  - close and reuse port after timeout
-  - show active/closing TCP entries with `netstat`
+- [x] Add first TCP reuse/netstat coverage:
+  - run `netstat -a -f inet` while the TCP loopback connection is active
+  - close and bind/listen the same local port again with `SO_REUSEADDR`
+- [ ] Add TCP TIME_WAIT coverage once the first reuse test remains stable:
+  - show closing/TIME_WAIT TCP entries with `netstat`
+- [x] Extend `select`/`ioctl` smoke to TCP sockets:
+  - blocking read readiness through `select`
+  - `FIONREAD` before TCP stream read
+  - write readiness through `select`
+  - `FIONBIO` empty read returns `EWOULDBLOCK`
 - [ ] Review memory pressure from mbufs on Malta before carrying the same
   defaults to N64.
 - [ ] Review historical 2.11BSD network families not enabled in the current

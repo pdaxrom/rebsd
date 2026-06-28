@@ -1,5 +1,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include <errno.h>
 #include <stdio.h>
@@ -10,14 +12,29 @@ int bind();
 int connect();
 int fork();
 int getsockname();
+int ioctl();
 int listen();
 int read();
 int recvfrom();
 int sendto();
+int select();
 int socketpair();
+int setsockopt();
+int system();
+int unlink();
 int wait();
 int write();
+int getpid();
 void _exit();
+
+typedef struct smoke_fd_set {
+	long fds_bits[1];
+} smoke_fd_set;
+
+#define FIONREAD_SMOKE	0x40046661L
+#define FIONBIO_SMOKE	0x80046660L
+
+static smoke_fd_set *no_fds;
 
 static int
 fail(name)
@@ -25,6 +42,259 @@ fail(name)
 {
 	printf("%s failed errno=%d\n", name, errno);
 	return (1);
+}
+
+static int
+fd_is_set(fd, set)
+	int fd;
+	smoke_fd_set *set;
+{
+	return ((set->fds_bits[0] & (1L << fd)) != 0);
+}
+
+static void
+fd_set_one(fd, set)
+	int fd;
+	smoke_fd_set *set;
+{
+	set->fds_bits[0] = 1L << fd;
+}
+
+static int
+tcp_netstat()
+{
+	int status;
+
+	status = system("/usr/bin/netstat -a -f inet");
+	if (status != 0) {
+		printf("netstat tcp status=%d\n", status);
+		return (1);
+	}
+	return (0);
+}
+
+static int
+tcp_reuse_bind(addr)
+	struct sockaddr_in *addr;
+{
+	int fd, one;
+
+	fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0)
+		return (fail("socket tcp reuse"));
+	one = 1;
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+	    (char *)&one, sizeof(one)) < 0)
+		return (fail("setsockopt tcp reuse"));
+	if (bind(fd, (struct sockaddr *)addr, sizeof(*addr)) < 0)
+		return (fail("bind tcp reuse"));
+	if (listen(fd, 1) < 0)
+		return (fail("listen tcp reuse"));
+	if (close(fd) < 0)
+		return (fail("close tcp reuse"));
+	return (0);
+}
+
+static void
+unix_addr(sun, path)
+	struct sockaddr_un *sun;
+	char *path;
+{
+	int i;
+
+	sun->sun_family = AF_UNIX;
+	for (i = 0; i < sizeof(sun->sun_path); i++)
+		sun->sun_path[i] = 0;
+	for (i = 0; path[i] && i < sizeof(sun->sun_path) - 1; i++)
+		sun->sun_path[i] = path[i];
+}
+
+static int
+unix_path_smoke()
+{
+	struct sockaddr_un sun, from;
+	int lfd, cfd, afd, len;
+	char path[64];
+	char ch;
+
+	sprintf(path, "/tmp/net-smoke-unix.%d", getpid());
+	(void)unlink(path);
+	lfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (lfd < 0)
+		return (fail("socket unix listen"));
+	unix_addr(&sun, path);
+	if (bind(lfd, (struct sockaddr *)&sun, sizeof(sun)) < 0)
+		return (fail("bind unix path"));
+	if (listen(lfd, 1) < 0)
+		return (fail("listen unix path"));
+
+	cfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (cfd < 0)
+		return (fail("socket unix connect"));
+	if (connect(cfd, (struct sockaddr *)&sun, sizeof(sun)) < 0)
+		return (fail("connect unix path"));
+	len = sizeof(from);
+	afd = accept(lfd, (struct sockaddr *)&from, &len);
+	if (afd < 0)
+		return (fail("accept unix path"));
+	ch = 'u';
+	if (write(cfd, &ch, 1) != 1)
+		return (fail("write unix path"));
+	ch = 0;
+	if (read(afd, &ch, 1) != 1)
+		return (fail("read unix path"));
+	if (ch != 'u') {
+		printf("unix path data mismatch\n");
+		return (1);
+	}
+	if (close(afd) < 0)
+		return (fail("close unix accepted"));
+	if (close(cfd) < 0)
+		return (fail("close unix connect"));
+	if (close(lfd) < 0)
+		return (fail("close unix listen"));
+	if (unlink(path) < 0)
+		return (fail("unlink unix path"));
+	return (0);
+}
+
+static int
+select_ioctl_smoke(rd, wr)
+	int rd, wr;
+{
+	smoke_fd_set rfds, wfds;
+	struct timeval tv;
+	long nread;
+	int n, on;
+	char ch;
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	fd_set_one(rd, &rfds);
+	n = select(rd + 1, &rfds, no_fds, no_fds, &tv);
+	if (n < 0)
+		return (fail("select unix empty"));
+	if (n != 0) {
+		printf("select unix empty returned %d\n", n);
+		return (1);
+	}
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	fd_set_one(wr, &wfds);
+	n = select(wr + 1, no_fds, &wfds, no_fds, &tv);
+	if (n < 0)
+		return (fail("select unix write"));
+	if (n != 1 || !fd_is_set(wr, &wfds)) {
+		printf("select unix write returned %d\n", n);
+		return (1);
+	}
+
+	ch = 'x';
+	if (write(wr, &ch, 1) != 1)
+		return (fail("write unix stream"));
+	if (ioctl(rd, FIONREAD_SMOKE, &nread) < 0)
+		return (fail("ioctl unix fionread"));
+	if (nread != 1) {
+		printf("ioctl unix fionread=%ld\n", nread);
+		return (1);
+	}
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	fd_set_one(rd, &rfds);
+	n = select(rd + 1, &rfds, no_fds, no_fds, &tv);
+	if (n < 0)
+		return (fail("select unix read"));
+	if (n != 1 || !fd_is_set(rd, &rfds)) {
+		printf("select unix read returned %d\n", n);
+		return (1);
+	}
+	ch = 0;
+	if (read(rd, &ch, 1) != 1)
+		return (fail("read unix stream"));
+	if (ch != 'x') {
+		printf("unix stream data mismatch\n");
+		return (1);
+	}
+	if (ioctl(rd, FIONREAD_SMOKE, &nread) < 0)
+		return (fail("ioctl unix fionread empty"));
+	if (nread != 0) {
+		printf("ioctl unix fionread empty=%ld\n", nread);
+		return (1);
+	}
+	on = 1;
+	if (ioctl(rd, FIONBIO_SMOKE, &on) < 0)
+		return (fail("ioctl unix fionbio on"));
+	errno = 0;
+	n = read(rd, &ch, 1);
+	if (n != -1 || errno != EWOULDBLOCK) {
+		printf("nonblocking unix read n=%d errno=%d\n", n, errno);
+		return (1);
+	}
+	on = 0;
+	if (ioctl(rd, FIONBIO_SMOKE, &on) < 0)
+		return (fail("ioctl unix fionbio off"));
+	return (0);
+}
+
+static int
+tcp_select_ioctl_smoke(fd, buf)
+	int fd;
+	char *buf;
+{
+	smoke_fd_set rfds, wfds;
+	struct timeval tv;
+	long nread;
+	int n, on;
+
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+	fd_set_one(fd, &rfds);
+	n = select(fd + 1, &rfds, no_fds, no_fds, &tv);
+	if (n < 0)
+		return (fail("select tcp read"));
+	if (n != 1 || !fd_is_set(fd, &rfds)) {
+		printf("select tcp read returned %d\n", n);
+		return (1);
+	}
+	if (ioctl(fd, FIONREAD_SMOKE, &nread) < 0)
+		return (fail("ioctl tcp fionread"));
+	if (nread < 3) {
+		printf("ioctl tcp fionread=%ld\n", nread);
+		return (1);
+	}
+	n = read(fd, buf, 4);
+	if (n != 3)
+		return (fail("read tcp loopback"));
+	if (buf[0] != 't' || buf[1] != 'c' || buf[2] != 'p') {
+		printf("tcp loopback data mismatch\n");
+		return (1);
+	}
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	fd_set_one(fd, &wfds);
+	n = select(fd + 1, no_fds, &wfds, no_fds, &tv);
+	if (n < 0)
+		return (fail("select tcp write"));
+	if (n != 1 || !fd_is_set(fd, &wfds)) {
+		printf("select tcp write returned %d\n", n);
+		return (1);
+	}
+
+	on = 1;
+	if (ioctl(fd, FIONBIO_SMOKE, &on) < 0)
+		return (fail("ioctl tcp fionbio on"));
+	errno = 0;
+	n = read(fd, buf, 1);
+	if (n != -1 || errno != EWOULDBLOCK) {
+		printf("nonblocking tcp read n=%d errno=%d\n", n, errno);
+		return (1);
+	}
+	on = 0;
+	if (ioctl(fd, FIONBIO_SMOKE, &on) < 0)
+		return (fail("ioctl tcp fionbio off"));
+	return (0);
 }
 
 int
@@ -35,7 +305,7 @@ main()
 	int fd, rfd, sfd, ufd, lfd, cfd, afd;
 	int sv[2];
 	int len, n, pid, status;
-	char ch, buf[4];
+	char buf[4];
 
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0)
@@ -137,13 +407,10 @@ main()
 	afd = accept(lfd, (struct sockaddr *)&from, &len);
 	if (afd < 0)
 		return (fail("accept tcp loopback"));
-	n = read(afd, buf, sizeof(buf));
-	if (n != 3)
-		return (fail("read tcp loopback"));
-	if (buf[0] != 't' || buf[1] != 'c' || buf[2] != 'p') {
-		printf("tcp loopback data mismatch\n");
+	if (tcp_select_ioctl_smoke(afd, buf) != 0)
 		return (1);
-	}
+	if (tcp_netstat() != 0)
+		return (1);
 	if (write(afd, "ok", 2) != 2)
 		return (fail("write tcp loopback"));
 	if (close(afd) < 0)
@@ -156,6 +423,8 @@ main()
 		printf("tcp loopback child status=%d\n", status);
 		return (1);
 	}
+	if (tcp_reuse_bind(&got) != 0)
+		return (1);
 
 	rfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (rfd < 0)
@@ -171,20 +440,14 @@ main()
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0)
 		return (fail("socketpair unix stream"));
-	ch = 'x';
-	if (write(sv[0], &ch, 1) != 1)
-		return (fail("write unix stream"));
-	ch = 0;
-	if (read(sv[1], &ch, 1) != 1)
-		return (fail("read unix stream"));
-	if (ch != 'x') {
-		printf("unix stream data mismatch\n");
+	if (select_ioctl_smoke(sv[1], sv[0]) != 0)
 		return (1);
-	}
 	if (close(sv[0]) < 0)
 		return (fail("close unix stream 0"));
 	if (close(sv[1]) < 0)
 		return (fail("close unix stream 1"));
+	if (unix_path_smoke() != 0)
+		return (1);
 
 	printf("net socket smoke ok\n");
 	return (0);
