@@ -111,7 +111,7 @@
 #define MAXHOSTNAMELEN  64
 
 #if defined(KERNEL) && defined(INET)
-#   include <machine/net_mac.h>
+#   include <mips/net_mac.h>
 #endif
 
 /*

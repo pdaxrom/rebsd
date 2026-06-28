@@ -15,6 +15,50 @@ Both Malta and N64 are built as boards under the shared `sys/mips` architecture.
 Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
 `make -C sys/mips BOARD=malta kernel` for the QEMU Malta kernel.
 
+## Running Malta in QEMU
+
+Build the Malta root filesystem and kernel from the repository root:
+
+```
+make -C sys/mips/malta rootfs.img kernel
+```
+
+Run QEMU through the board makefile:
+
+```
+make -C sys/mips/malta run
+```
+
+Or run the generated kernel directly:
+
+```
+qemu-system-mips -M malta -m 32M -nographic -serial mon:stdio \
+    -no-reboot -kernel sys/mips/malta/unix.elf
+```
+
+Do not lower `-m 32M` for the current Malta layout. The kernel root filesystem
+is linked at physical `0x00600000`, reserves 16 MiB, and RAM swap starts after
+that image. Booting with less RAM can corrupt the first process swap image and
+produce misleading scheduler or `longjmp` crashes.
+
+At the login prompt, use the passwordless root account:
+
+```
+login: root
+```
+
+Useful first checks after login:
+
+```
+mount
+df -T
+/root/net-smoke.sh
+/root/types-smoke.sh
+```
+
+The serial console is attached to stdio. Exit QEMU with `Ctrl-A x` when using
+`-serial mon:stdio`.
+
 ## ROMFS and cart flash
 
 The writable cartridge ROMFS VFS code lives in `sys/mips/common` and uses a
@@ -32,14 +76,6 @@ Malta mounts the fake flash automatically:
 
 ```
 /dev/cartflash0 /cart romfs rw 0 0
-```
-
-Useful QEMU smoke checks:
-
-```
-make -C sys/mips/malta
-qemu-system-mips -M malta -m 32M -nographic -serial mon:stdio \
-    -no-reboot -kernel sys/mips/malta/unix.elf
 ```
 
 The generated `run` target uses the current Malta layout:

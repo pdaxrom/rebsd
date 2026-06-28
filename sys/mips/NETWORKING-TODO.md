@@ -56,7 +56,12 @@ Source reference:
   - `ip_output.c`
   - `raw_ip.c`
   - `udp_usrreq.c`
-  - TCP files only after ICMP/UDP are stable
+  - `tcp_debug.c`
+  - `tcp_input.c`
+  - `tcp_output.c`
+  - `tcp_subr.c`
+  - `tcp_timer.c`
+  - `tcp_usrreq.c`
 - [x] Add a portable MIPS `in_cksum()` implementation.
 - [x] Add a MIPS `netinit()` path that initializes mbufs, interfaces,
   loopback, and domains without PDP/UNIBUS code.
@@ -107,16 +112,22 @@ Source reference:
   - configure `lo0 127.0.0.1` (verified)
   - ping `127.0.0.1` (verified)
   - UDP loopback smoke (verified)
+  - TCP loopback listen/connect/read/write smoke (verified)
   - route table smoke (`route add/delete` verified)
-  - netstat smoke for `-i`, `-r`, `-s`, `-m`, `-u` output diagnostics
+  - netstat smoke for `-i`, `-r`, `-s`, `-m`, `-u`, `-p tcp`
+    output diagnostics
 
 ## Phase 4: TCP and Extended Coverage
 
-- [ ] Enable TCP files once ICMP/UDP loopback are stable.
-- [ ] Add simple TCP loopback smoke:
+- [x] Enable TCP files once ICMP/UDP loopback are stable.
+- [x] Add simple TCP loopback smoke:
   - listen/connect on `127.0.0.1`
   - send/receive a short payload
+  - close client, accepted socket, and listener cleanly
+- [ ] Add TCP reuse/TIME_WAIT coverage once the basic loopback test remains
+  stable:
   - close and reuse port after timeout
+  - show active/closing TCP entries with `netstat`
 - [ ] Review memory pressure from mbufs on Malta before carrying the same
   defaults to N64.
 - [ ] Review historical 2.11BSD network families not enabled in the current

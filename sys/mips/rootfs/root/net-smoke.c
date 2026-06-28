@@ -5,11 +5,19 @@
 #include <stdio.h>
 
 int close();
+int accept();
+int bind();
+int connect();
+int fork();
+int getsockname();
+int listen();
 int read();
 int recvfrom();
 int sendto();
 int socketpair();
+int wait();
 int write();
+void _exit();
 
 static int
 fail(name)
@@ -24,9 +32,9 @@ main()
 {
 	struct sockaddr_in sin, dst, from;
 	struct sockaddr_in got;
-	int fd, rfd, sfd, ufd;
+	int fd, rfd, sfd, ufd, lfd, cfd, afd;
 	int sv[2];
-	int len, n;
+	int len, n, pid, status;
 	char ch, buf[4];
 
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -84,6 +92,70 @@ main()
 		return (fail("close udp send"));
 	if (close(rfd) < 0)
 		return (fail("close udp recv"));
+
+	lfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (lfd < 0)
+		return (fail("socket tcp listen"));
+	sin.sin_family = AF_INET;
+	sin.sin_port = 0;
+	sin.sin_addr.s_addr = htonl(0x7f000001L);
+	sin.sin_zero[0] = sin.sin_zero[1] = sin.sin_zero[2] = sin.sin_zero[3] = 0;
+	sin.sin_zero[4] = sin.sin_zero[5] = sin.sin_zero[6] = sin.sin_zero[7] = 0;
+	if (bind(lfd, (struct sockaddr *)&sin, sizeof(sin)) < 0)
+		return (fail("bind tcp loopback"));
+	if (listen(lfd, 1) < 0)
+		return (fail("listen tcp loopback"));
+	len = sizeof(got);
+	if (getsockname(lfd, (struct sockaddr *)&got, &len) < 0)
+		return (fail("getsockname tcp loopback"));
+
+	pid = fork();
+	if (pid < 0)
+		return (fail("fork tcp loopback"));
+	if (pid == 0) {
+		cfd = socket(AF_INET, SOCK_STREAM, 0);
+		if (cfd < 0)
+			_exit(2);
+		dst.sin_family = AF_INET;
+		dst.sin_port = got.sin_port;
+		dst.sin_addr.s_addr = htonl(0x7f000001L);
+		dst.sin_zero[0] = dst.sin_zero[1] = dst.sin_zero[2] = dst.sin_zero[3] = 0;
+		dst.sin_zero[4] = dst.sin_zero[5] = dst.sin_zero[6] = dst.sin_zero[7] = 0;
+		if (connect(cfd, (struct sockaddr *)&dst, sizeof(dst)) < 0)
+			_exit(3);
+		if (write(cfd, "tcp", 3) != 3)
+			_exit(4);
+		n = read(cfd, buf, 2);
+		if (n != 2 || buf[0] != 'o' || buf[1] != 'k')
+			_exit(5);
+		if (close(cfd) < 0)
+			_exit(6);
+		_exit(0);
+	}
+
+	len = sizeof(from);
+	afd = accept(lfd, (struct sockaddr *)&from, &len);
+	if (afd < 0)
+		return (fail("accept tcp loopback"));
+	n = read(afd, buf, sizeof(buf));
+	if (n != 3)
+		return (fail("read tcp loopback"));
+	if (buf[0] != 't' || buf[1] != 'c' || buf[2] != 'p') {
+		printf("tcp loopback data mismatch\n");
+		return (1);
+	}
+	if (write(afd, "ok", 2) != 2)
+		return (fail("write tcp loopback"));
+	if (close(afd) < 0)
+		return (fail("close tcp accepted"));
+	if (close(lfd) < 0)
+		return (fail("close tcp listen"));
+	if (wait(&status) != pid)
+		return (fail("wait tcp loopback"));
+	if (status != 0) {
+		printf("tcp loopback child status=%d\n", status);
+		return (1);
+	}
 
 	rfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (rfd < 0)

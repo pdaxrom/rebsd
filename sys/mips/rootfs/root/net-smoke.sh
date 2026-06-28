@@ -16,6 +16,12 @@ for opt in -i -r -s -m -u; do
 		exit 1
 	fi
 done
+/usr/bin/netstat -p tcp > $base.netstat || exit 1
+if egrep 'read error|bad read|not in namelist|no kernel namelist|cannot open' $base.netstat >/dev/null; then
+	cat $base.netstat
+	rm -f $base.netstat
+	exit 1
+fi
 rm -f $base.netstat
 rm -f $base $base.s $base.o $base.ro
 cc -S -o $base.s /root/net-smoke.c || exit 1
