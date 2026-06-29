@@ -19,6 +19,7 @@ void maltaattach(int);
 void ptyattach(int);
 void etherattach(int);
 void malta_neattach(int);
+void usbnetattach(int);
 void inetattach(int);
 void unixdomainattach(int);
 
@@ -27,6 +28,7 @@ struct conf_service conf_service_init[] = {
     { ptyattach },
     { etherattach },
     { malta_neattach },
+    { usbnetattach },
     { inetattach },
     { unixdomainattach },
     { 0 }

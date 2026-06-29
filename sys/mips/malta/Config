@@ -11,8 +11,9 @@ device          "malta_uart"
 
 service         malta
 service         pty     4
-service         ether   1
+service         ether   2
 service         malta_ne
+service         usbnet
 service         inet
 service         unixdomain
 

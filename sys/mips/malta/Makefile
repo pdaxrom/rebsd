@@ -5,8 +5,9 @@ PARAM += -DMALTA_ENABLED
 PARAM += -DPTY_ENABLED
 PARAM += -DPTY_NUNITS=4
 PARAM += -DETHER_ENABLED
-PARAM += -DETHER_NUNITS=1
+PARAM += -DETHER_NUNITS=2
 PARAM += -DMALTA_NE_ENABLED
+PARAM += -DUSBNET_ENABLED
 PARAM += -DINET_ENABLED
 PARAM += -DUNIXDOMAIN_ENABLED
 PARAM += -DCONS_MINOR=0
@@ -88,7 +89,7 @@ OBJS = exec_aout.o exec_conf.o exec_elf.o exec_script.o exec_subr.o \
 	exception.o fpu.o cons.o in_cksum.o net_glue.o netinit.o \
 	signal.o sysctl.o libkern.o stubs.o uart.o devsw.o clock.o \
 	machdep.o romdisk.o romfs_core.o romfs_vfs.o cartflash.o \
-	ramswap.o config.o if_ne.o
+	ramswap.o config.o if_ne.o if_usbn.o if_usbn_fake.o
 
 CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/kernel/exec_script.c $S/kernel/exec_subr.c \
@@ -132,7 +133,8 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/mips/malta/machdep.c $S/mips/malta/romdisk.c \
 	$S/mips/common/romfs_core.c $S/mips/common/romfs_vfs.c \
 	$S/mips/malta/cartflash.c $S/mips/malta/ramswap.c \
-	$S/mips/malta/config.c $S/mips/malta/if_ne.c swapunix.c
+	$S/mips/malta/config.c $S/mips/malta/if_ne.c \
+	$S/mips/common/if_usbn.c $S/mips/malta/if_usbn_fake.c swapunix.c
 
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
 SYSTEM_DEP      = Makefile ioconf.c ../malta/malta.ld
@@ -558,6 +560,12 @@ config.o: $S/mips/malta/config.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 if_ne.o: $S/mips/malta/if_ne.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+if_usbn.o: $S/mips/common/if_usbn.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+if_usbn_fake.o: $S/mips/malta/if_usbn_fake.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 

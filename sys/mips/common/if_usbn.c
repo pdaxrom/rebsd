@@ -78,6 +78,12 @@ usbnattach(int unit)
 }
 
 void
+usbnetattach(int unit)
+{
+    usbnattach(unit);
+}
+
+void
 usbnpoll(void)
 {
     usbn_hw_poll();

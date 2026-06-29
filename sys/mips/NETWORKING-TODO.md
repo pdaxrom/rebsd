@@ -209,7 +209,9 @@ Source reference:
       hardware.
     - [ ] Split implementation into a reusable framing layer, an N64cart USB
       device-controller layer, and an `if_usbn` Ethernet interface upper half.
-    - [ ] Test the `if_usbn` upper half on Malta/fake transport before enabling
+    - [x] Add a Malta fake transport for `if_usbn` so ARP/IP/ICMP can be
+      validated without N64 USB hardware.
+    - [x] Test the `if_usbn` upper half on Malta/fake transport before enabling
       the N64 USB controller backend.
     - [ ] On N64, start with timer polling, then move to CART USB IRQ once the
       device path is stable.

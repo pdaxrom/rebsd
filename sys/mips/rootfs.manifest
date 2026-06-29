@@ -138,6 +138,9 @@ mode 0775
 
 file /root/ne2k-smoke.c
 
+file /root/usbn-smoke.sh
+mode 0775
+
 file /root/dhcp-dns-smoke.sh
 mode 0775
 
