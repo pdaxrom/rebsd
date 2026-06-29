@@ -312,9 +312,16 @@ exception(int *frame)
     status = frame[FRAME_STATUS];
     rawcause = mips_read_c0_register(C0_CAUSE, 0);
     badvaddr = mips_read_c0_register(C0_BADVADDR, 0);
-    if (mips_exception_entry_pc(frame[FRAME_PC])) {
+    if (mips_exception_entry_pc(frame[FRAME_PC]) &&
+        (rawcause & CA_EXC_CODE) != CA_Int) {
         exception_prepare_panic_console();
-        printf("*** exception while restoring trap frame\n");
+        printf("*** exception inside mips_exception_entry\n");
+        printf("*** current exception: frame=%08x pc=%08x sp=%08x ra=%08x\n",
+            (unsigned)frame, frame[FRAME_PC], frame[FRAME_SP],
+            frame[FRAME_RA]);
+        printf("*** current exception: status=%08x cause=%08x badvaddr=%08x pid=%d comm=%s\n",
+            status, rawcause, badvaddr,
+            u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
         if (last_exception.valid)
             exception_dump_snapshot("previous exception", &last_exception);
     }
@@ -465,5 +472,7 @@ ret:
         }
         mips_restore_user_fpu(frame[FRAME_STATUS]);
     }
+    mips_intr_disable();
+    mips_ehb();
     led_control(LED_KERNEL, 0);
 }
