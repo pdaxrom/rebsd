@@ -18,6 +18,7 @@ static char sccsid[] = "@(#)res_comp.c	6.13 (Berkeley) 3/13/88";
 #include <stdio.h>
 #include <arpa/nameser.h>
 
+static int dn_find();
 
 /*
  * Expand compressed domain name 'comp_dn' to full domain name.
@@ -112,7 +113,7 @@ dn_comp(exp_dn, comp_dn, length, dnptrs, lastdnptr)
 {
 	register u_char *cp, *dn;
 	register int c, l;
-	u_char **cpp, **lpp, *sp, *eob;
+	u_char **cpp = NULL, **lpp = NULL, *sp, *eob;
 	u_char *msg;
 
 	dn = exp_dn;

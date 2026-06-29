@@ -11,6 +11,8 @@ static char sccsid[] = "@(#)herror.c	6.1 (Berkeley) 12/4/87";
 #include <sys/types.h>
 #include <sys/uio.h>
 
+#include <string.h>
+
 char	*h_errlist[] = {
 	"Error 0",
 	"Unknown host",				/* 1 HOST_NOT_FOUND */

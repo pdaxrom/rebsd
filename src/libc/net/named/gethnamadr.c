@@ -58,7 +58,7 @@ static union {
 } align;
 
 
-int h_errno;
+extern int h_errno;
 extern errno;
 
 static struct hostent *
@@ -209,7 +209,7 @@ gethostbyname(name)
 	querybuf buf;
 	register char *cp;
 	int n;
-	struct hostent *hp, *gethostdomain();
+	struct hostent *gethostdomain();
 	extern struct hostent *_gethtbyname();
 
 	/*
@@ -233,10 +233,7 @@ gethostbyname(name)
 		if (_res.options & RES_DEBUG)
 			printf("res_search failed\n");
 #endif
-		if (errno == ECONNREFUSED)
-			return (_gethtbyname(name));
-		else
-			return ((struct hostent *) NULL);
+		return (_gethtbyname(name));
 	}
 	return (getanswer(&buf, n, 0));
 }
@@ -265,9 +262,7 @@ gethostbyaddr(addr, len, type)
 		if (_res.options & RES_DEBUG)
 			printf("res_query failed\n");
 #endif
-		if (errno == ECONNREFUSED)
-			hp = _gethtbyaddr(addr, len, type);
-		return ((struct hostent *) NULL);
+		return (_gethtbyaddr(addr, len, type));
 	}
 	hp = getanswer(&buf, n, 1);
 	if (hp == NULL)

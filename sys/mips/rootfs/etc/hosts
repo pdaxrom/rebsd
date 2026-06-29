@@ -1,0 +1,4 @@
+127.0.0.1       localhost
+10.0.2.2        qemu-gw
+10.0.2.3        qemu-dns
+10.0.2.100      qemu-guestfwd

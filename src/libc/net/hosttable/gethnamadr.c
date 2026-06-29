@@ -23,7 +23,7 @@ static char hostbuf[256];
 static char *host_aliases[MAXALIASES];
 static char *host_addrs[MAXADDRS];
 
-int h_errno;
+extern int h_errno;
 
 /*
  * The following is shared with gethostent.c

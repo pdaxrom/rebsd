@@ -65,7 +65,12 @@ file /etc/gettytab
 
 file /etc/group
 
+file /etc/hosts
+
 file /etc/passwd
+
+symlink /etc/resolv.conf
+target ../var/run/resolv.conf
 
 file /etc/ttys
 
@@ -132,6 +137,11 @@ file /root/ne2k-smoke.sh
 mode 0775
 
 file /root/ne2k-smoke.c
+
+file /root/dhcp-dns-smoke.sh
+mode 0775
+
+file /root/dns-smoke.c
 
 file /root/runtime-stress.sh
 mode 0775
@@ -863,6 +873,9 @@ file /sbin/fastboot
 mode 0775
 
 file /sbin/fsck
+mode 0775
+
+file /sbin/dhclient
 mode 0775
 
 file /sbin/ifconfig

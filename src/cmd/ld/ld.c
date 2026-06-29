@@ -88,7 +88,7 @@ struct local {
 #define NSYM 1500
 #define NSYMPR 500
 #define NLIBS 256
-#define RANTABSZ 500
+#define RANTAB_CHUNK 512
 
 struct nlist cursym;            /* current symbol */
 struct nlist symtab[NSYM];      /* table of symbols */
@@ -98,8 +98,9 @@ struct nlist *hshtab[NSYM + 2]; /* hash table for symbols */
 struct local local[NSYMPR];
 int symindex;             /* next free entry of symbol table */
 unsigned basaddr = BADDR; /* base address of loading */
-struct ranlib rantab[RANTABSZ];
+struct ranlib *rantab;
 int rancount; /* number of elements in rantab */
+int rantabsz;
 
 /*
  * library management
@@ -346,6 +347,10 @@ void freerantab()
 
     for (p = rantab; p < rantab + rancount; ++p)
         free(p->ran_name);
+    free(rantab);
+    rantab = 0;
+    rancount = 0;
+    rantabsz = 0;
 }
 
 int fgetran(FILE *text, struct ranlib *sym)
@@ -374,17 +379,30 @@ int fgetran(FILE *text, struct ranlib *sym)
 
 void getrantab()
 {
-    register struct ranlib *p;
+    struct ranlib ent;
+    struct ranlib *newtab;
+    int newsz;
 
-    for (p = rantab; p < rantab + RANTABSZ; ++p) {
-        if (!fgetran(text, p)) {
-            rancount = p - rantab;
+    rancount = 0;
+    for (;;) {
+        if (!fgetran(text, &ent)) {
             if (trace > 1)
                 printf("ranlib entries=%d\n", rancount);
             return;
         }
+        if (rancount >= rantabsz) {
+            newsz = rantabsz ? rantabsz * 2 : RANTAB_CHUNK;
+            newtab = (struct ranlib *)realloc(rantab,
+                newsz * sizeof(struct ranlib));
+            if (newtab == 0) {
+                free(ent.ran_name);
+                error(2, "out of memory");
+            }
+            rantab = newtab;
+            rantabsz = newsz;
+        }
+        rantab[rancount++] = ent;
     }
-    error(2, "ranlib buffer overflow");
 }
 
 void ldrsym(struct nlist *sp, unsigned val, int type)

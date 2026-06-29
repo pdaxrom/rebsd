@@ -14,12 +14,31 @@ static char sccsid[] = "@(#)ruserpass.c	5.2.1 (2.11BSD) 1996/11/16";
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <paths.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 
-char	*renvlook();
-struct	utmp *getutmp();
+extern char **environ;
+
+static int renv();
+static char *renvlook();
+static int rnetrc();
+static int token();
+static char *nbsencrypt();
+static char *nbsdecrypt();
+static char *nbs8encrypt();
+static char *nbs8decrypt();
+static int enblkclr();
+static char *deblkclr();
+static int enblknot();
+static char *deblknot();
+static int nbssetkey();
+static int blkencrypt();
+static struct utmp *getutmp();
+static int sreverse();
+static char *mkenvkey();
+
 static	FILE *cfile;
 
 ruserpass(host, aname, apass)
@@ -54,7 +73,7 @@ renv(host, aname, apass)
 	char *host, **aname, **apass;
 {
 	register char *cp;
-	char *stemp, fgetlogin, *comma;
+	char *comma;
 
 	cp = renvlook(host);
 	if (cp == NULL)
@@ -239,8 +258,6 @@ token()
 }
 /* rest is nbs.c stolen from berknet */
 
-char *deblknot(), *deblkclr();
-char *nbs8decrypt(), *nbs8encrypt();
 static char	E[48];
 
 /*
@@ -624,8 +641,10 @@ char *block;
 	/*
 	 * First, permute the bits in the input
 	 */
-	for (j=0; j<64; j++)
+	for (j=0; j<32; j++)
 		L[j] = block[IP[j]-1];
+	for (j=0; j<32; j++)
+		R[j] = block[IP[j+32]-1];
 	/*
 	 * Perform an encryption operation 16 times.
 	 */
@@ -699,8 +718,10 @@ char *block;
 	 * The final output
 	 * gets the inverse permutation of the very original.
 	 */
-	for (j=0; j<64; j++)
-		block[j] = L[FP[j]-1];
+	for (j=0; j<64; j++) {
+		t = FP[j] - 1;
+		block[j] = (t < 32) ? L[t] : R[t - 32];
+	}
 }
 /*
 	getutmp()

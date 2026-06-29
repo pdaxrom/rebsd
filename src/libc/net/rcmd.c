@@ -31,8 +31,12 @@ static char sccsid[] = "@(#)rcmd.c	5.20.1 (2.11BSD) 1999/10/24";
 
 #include <netinet/in.h>
 
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <errno.h>
+#include <strings.h>
+
+static int _checkhost();
 
 rcmd(ahost, rport, locuser, remuser, cmd, fd2p)
 	char **ahost;
@@ -42,7 +46,7 @@ rcmd(ahost, rport, locuser, remuser, cmd, fd2p)
 {
 	int s, timo = 1, pid;
 	sigset_t oldmask, nmask;
-	struct sockaddr_in sin, sin2, from;
+	struct sockaddr_in sin, from;
 	char c;
 	int lport = IPPORT_RESERVED - 1;
 	struct hostent *hp;
