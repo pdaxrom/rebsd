@@ -195,33 +195,43 @@ Source reference:
     - `ping -c 1 10.0.2.2`
     - `/root/ne2k-smoke.sh` covers gateway ICMP, route/interface counters,
       and TCP echo over QEMU `guestfwd` to host `/bin/cat`.
-  - [ ] after the Malta virtual NIC path works, design the N64 hardware
+  - [x] after the Malta virtual NIC path works, design the N64 hardware
     backend as a USB network adapter path.
   - [ ] N64 cartridge USB Ethernet gadget:
     - [x] Confirmed the existing N64cart USB example is a device/gadget
       implementation, not USB host support; first hardware network path will
       expose N64 as a USB Ethernet-like device to a host bridge.
-    - [ ] Keep the first protocol vendor-specific bulk USB over EP1 OUT/EP2 IN,
+    - [x] Keep the first protocol vendor-specific bulk USB over EP1 OUT/EP2 IN,
       matching the existing N64cart USB device plumbing; defer CDC ECM/RNDIS
       until the basic data path is stable.
-    - [ ] Use a small Ethernet-frame framing header plus 64-byte USB bulk
+    - [x] Use a small Ethernet-frame framing header plus 64-byte USB bulk
       fragmentation/reassembly.  Host tests must pass before touching N64
       hardware.
-    - [ ] Split implementation into a reusable framing layer, an N64cart USB
+    - [x] Split implementation into a reusable framing layer, an N64cart USB
       device-controller layer, and an `if_usbn` Ethernet interface upper half.
     - [x] Add a Malta fake transport for `if_usbn` so ARP/IP/ICMP can be
       validated without N64 USB hardware.
     - [x] Test the `if_usbn` upper half on Malta/fake transport before enabling
       the N64 USB controller backend.
-    - [ ] On N64, start with timer polling, then move to CART USB IRQ once the
-      device path is stable.
+    - [x] Add the N64cart USB device-controller backend and poll it from the
+      CP0 timer path.  Hardware link testing is still pending.
+    - [ ] Move from timer polling to CART USB IRQ once the device path is
+      stable.
     - [ ] USB networking must not touch flash erase/write/read mode transitions;
       ROMFS/cartflash locking stays separate from USB packet I/O.
+    - [ ] Add the host-side bridge that exposes the vendor-specific bulk USB
+      framing as a normal host TAP/TUN or socket-backed Ethernet endpoint.
+    - [ ] Test `usbn0` on real N64 hardware with the host bridge:
+      - USB enumeration
+      - `ifconfig usbn0 inet ... up`
+      - ARP exchange
+      - ICMP ping across the USB link
+      - TCP smoke across the USB link
 
 ## Deferred Items For First Pass
 
-- No N64 hardware networking driver until the Malta/QEMU virtual NIC path is
-  working.
+- Do not treat the N64 USB network path as hardware-verified until the
+  host-side bridge and real N64 smoke pass.
 - No SLIP/PPP until loopback and core socket behavior are stable.
 - No changes to the N64 config while Malta is failing.
 - No rewriting userland tools before the kernel ABI is proven.

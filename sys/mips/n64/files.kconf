@@ -65,6 +65,7 @@ kernel/vm_swp.c                 standard
 #
 net/af.c                        optional inet
 net/if.c                        optional inet
+netinet/if_ether.c              optional ether
 net/if_loop.c                   optional inet
 net/raw_cb.c                    optional inet
 net/raw_usrreq.c                optional inet
@@ -110,6 +111,8 @@ mips/common/in_cksum.c          optional inet
 mips/common/net_glue.c          optional inet
 mips/common/netinit.c           optional inet
 mips/common/if_usbn.c           optional usbnet
+mips/common/n64usbnet_proto.c   optional usbnet
+mips/n64/n64cart_usbnet.c       optional usbnet
 mips/n64/rompak.c                    standard
 mips/n64/memory.c                    standard
 mips/n64/romdisk.c                   standard

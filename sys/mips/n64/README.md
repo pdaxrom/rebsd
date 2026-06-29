@@ -180,9 +180,11 @@ crw-rw-rw-  1 root       8,   0 Jun 12 09:28 ttyp0
 
 ## Loopback networking
 
-The N64 kernel now builds the shared MIPS INET and AF_UNIX stack.  The first
-N64 network configuration is loopback-only: no cartridge or external network
-device driver is enabled yet.
+The N64 kernel now builds the shared MIPS INET and AF_UNIX stack.  Loopback is
+the verified hardware baseline.  The tree also builds `usbn0`, a first
+N64cart USB Ethernet gadget backend using the cartridge USB device controller
+and the shared `if_usbn` upper half, but real USB link testing still requires
+the host-side bridge.
 
 The same stack and rootfs scripts passed on Malta/QEMU on 2026-06-28:
 
@@ -211,6 +213,13 @@ The verified N64 hardware run showed `lo0` up, `ping -c 1 127.0.0.1`
 successful after `/root/net-smoke.sh` configured the address, TCP loopback
 connections visible in `netstat`, `net socket smoke ok`, `net-smoke ok`, and
 both `cc` and `pcc` header smoke passes.
+
+The current N64 USB network backend is intentionally separate from ROMFS flash
+access.  It uses the n64cart USB controller registers and EP1 OUT/EP2 IN bulk
+packets only; it must not switch SPI/QSPI flash modes or touch flash
+erase/write/read sequencing.  Initial polling is done from the CP0 timer path.
+Once the host bridge exists, the first hardware checks should be USB
+enumeration, `ifconfig usbn0`, ARP, ICMP ping, and a TCP smoke across the link.
 
 ## Toolchain
 

@@ -40,6 +40,9 @@ extern void cnintr(void);
 extern int netisr;
 extern void netintr(void);
 #endif
+#ifdef USBNET_ENABLED
+extern void usbnpoll(void);
+#endif
 #ifdef N64
 #ifdef N64CART_ENABLED
 extern void n64cart_uart_intr(void);
@@ -354,6 +357,9 @@ exception(int *frame)
 #ifdef N64
 #ifdef N64CART_ENABLED
             n64cart_uart_intr();
+#endif
+#ifdef USBNET_ENABLED
+            usbnpoll();
 #endif
             n64keyboard_console_intr();
 #else
