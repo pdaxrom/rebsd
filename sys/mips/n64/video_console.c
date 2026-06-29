@@ -47,6 +47,7 @@ static unsigned console_csi_count;
 static unsigned console_csi_params[N64_CONSOLE_CSI_PARAMS];
 static unsigned char console_cells[N64_CONSOLE_MAX_ROWS][N64_CONSOLE_MAX_COLS];
 static unsigned char console_attrs[N64_CONSOLE_MAX_ROWS][N64_CONSOLE_MAX_COLS];
+static int console_panic_mirror;
 
 static void n64_console_reset_screen(void);
 static void n64_console_render_all(void);
@@ -945,10 +946,26 @@ n64_console_getc(void)
 void
 n64_console_putc(int ch)
 {
+    if (console_panic_mirror)
+        n64_console_debug_putc(ch);
     n64_console_geometry();
     n64_console_erase_cursor();
     n64_console_put_vt100(ch);
     n64_console_draw_cursor();
+}
+
+void
+n64_console_panic_mode(void)
+{
+    struct n64fb_info info;
+
+    console_panic_mirror = 1;
+    n64_video_get_info(&info);
+    if (info.mode != N64FB_MODE_320X240)
+        (void)n64_video_set_mode(N64FB_MODE_320X240);
+    console_mode = ~0u;
+    n64_console_geometry();
+    n64_console_reset_screen();
 }
 
 void

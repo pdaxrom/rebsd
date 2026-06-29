@@ -11,6 +11,7 @@
 #include <machine/io.h>
 #include <machine/fpu.h>
 #ifdef N64
+#include <machine/console.h>
 #include <machine/n64.h>
 #include <machine/joybus.h>
 #include <machine/n64int.h>
@@ -32,6 +33,8 @@
 static int last_user_icache_pid = -1;
 volatile unsigned int ct_ticks = 0;
 
+extern char mips_exception_entry[];
+extern char mips_exception_entry_end[];
 extern void cnintr(void);
 #ifdef INET
 extern int netisr;
@@ -48,12 +51,79 @@ extern void malta_nepoll(void);
 #endif
 #endif
 
+struct mips_exception_snapshot {
+    int valid;
+    unsigned frame;
+    unsigned pc;
+    unsigned sp;
+    unsigned ra;
+    unsigned status;
+    unsigned cause;
+    unsigned badvaddr;
+    int pid;
+    char comm[MAXCOMLEN + 1];
+};
+
+static struct mips_exception_snapshot last_exception;
+static int exception_panic_prepared;
+
+static int
+mips_exception_entry_pc(unsigned pc)
+{
+    return pc >= (unsigned)mips_exception_entry &&
+        pc < (unsigned)mips_exception_entry_end;
+}
+
+static void
+exception_prepare_panic_console(void)
+{
+    if (exception_panic_prepared)
+        return;
+    exception_panic_prepared = 1;
+#ifdef N64
+    n64_console_panic_mode();
+#endif
+}
+
+static void
+exception_save_snapshot(int *frame, unsigned rawcause, unsigned badvaddr)
+{
+    struct proc *p;
+    int i;
+
+    p = u.u_procp;
+    last_exception.valid = 1;
+    last_exception.frame = (unsigned)frame;
+    last_exception.pc = frame[FRAME_PC];
+    last_exception.sp = frame[FRAME_SP];
+    last_exception.ra = frame[FRAME_RA];
+    last_exception.status = frame[FRAME_STATUS];
+    last_exception.cause = rawcause;
+    last_exception.badvaddr = badvaddr;
+    last_exception.pid = p ? p->p_pid : -1;
+    for (i = 0; i < MAXCOMLEN && u.u_comm[i]; ++i)
+        last_exception.comm[i] = u.u_comm[i];
+    last_exception.comm[i] = 0;
+}
+
+static void
+exception_dump_snapshot(char *tag, struct mips_exception_snapshot *snap)
+{
+    printf("*** %s: frame=%08x pc=%08x sp=%08x ra=%08x\n",
+        tag, snap->frame, snap->pc, snap->sp, snap->ra);
+    printf("*** %s: status=%08x cause=%08x badvaddr=%08x pid=%d comm=%s\n",
+        tag, snap->status, snap->cause, snap->badvaddr, snap->pid,
+        snap->comm);
+}
+
 static void
 dumpregs(int *frame)
 {
     unsigned cause = mips_read_c0_register(C0_CAUSE, 0);
+    unsigned badvaddr = mips_read_c0_register(C0_BADVADDR, 0);
     const char *code = 0;
 
+    exception_prepare_panic_console();
     printf("\n*** 0x%08x: exception ", frame[FRAME_PC]);
     switch (cause & CA_EXC_CODE) {
     case CA_Int:    code = "Interrupt"; break;
@@ -83,9 +153,13 @@ dumpregs(int *frame)
     case CA_TLBS:
     case CA_AdEL:
     case CA_AdES:
-        printf("*** badvaddr = 0x%08x\n",
-            mips_read_c0_register(C0_BADVADDR, 0));
+        printf("*** badvaddr = 0x%08x\n", badvaddr);
     }
+    printf("*** frame=%08x saved_sp=%08x current pid=%d comm=%s\n",
+        (unsigned)frame, frame[FRAME_SP],
+        u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
+    if (mips_exception_entry_pc(frame[FRAME_PC]))
+        printf("*** exception occurred inside mips_exception_entry\n");
 
     printf("*** registers:\n");
     printf("                t0 = %8x   s0 = %8x   t8 = %8x   lo = %8x\n",
@@ -226,7 +300,7 @@ void
 exception(int *frame)
 {
     time_t syst;
-    unsigned rawcause, cause, status;
+    unsigned rawcause, cause, status, badvaddr;
     int psig = 0;
 
     led_control(LED_KERNEL, 1);
@@ -236,12 +310,21 @@ exception(int *frame)
     }
 
     status = frame[FRAME_STATUS];
+    rawcause = mips_read_c0_register(C0_CAUSE, 0);
+    badvaddr = mips_read_c0_register(C0_BADVADDR, 0);
+    if (mips_exception_entry_pc(frame[FRAME_PC])) {
+        exception_prepare_panic_console();
+        printf("*** exception while restoring trap frame\n");
+        if (last_exception.valid)
+            exception_dump_snapshot("previous exception", &last_exception);
+    }
+    exception_save_snapshot(frame, rawcause, badvaddr);
+
     mips_write_c0_register(C0_STATUS, 0,
         status & ~(ST_KSU | ST_EXL | ST_ERL | ST_IE));
     if (USERMODE(status))
         mips_save_user_fpu(status);
 
-    rawcause = mips_read_c0_register(C0_CAUSE, 0);
     cause = rawcause & CA_EXC_CODE;
     if (USERMODE(status))
         cause |= USER;
@@ -327,8 +410,7 @@ exception(int *frame)
         case CA_AdEL + USER:
         case CA_AdES + USER:
             printf("*** 0x%08x: %s: bad address 0x%08x\n",
-                frame[FRAME_PC], u.u_comm,
-                mips_read_c0_register(C0_BADVADDR, 0));
+                frame[FRAME_PC], u.u_comm, badvaddr);
             psig = SIGSEGV;
             break;
         case CA_IBE + USER:

@@ -15,6 +15,7 @@
         .globl  _mips_exception_vector
         .globl  _mips_exception_vector_end
         .globl  mips_exception_entry
+        .globl  mips_exception_entry_end
 
         .ent    _mips_exception_vector
 _mips_exception_vector:
@@ -143,4 +144,5 @@ mips_exception_entry:
         lw      $sp, (16+FRAME_SP*4)($sp)
         eret
         nop
+mips_exception_entry_end:
         .end    mips_exception_entry
