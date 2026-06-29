@@ -16,6 +16,8 @@
         .globl  _mips_exception_vector_end
         .globl  mips_exception_entry
         .globl  mips_exception_entry_end
+        .globl  mips_exception_restore_start
+        .globl  mips_exception_restore_end
 
         .ent    _mips_exception_vector
 _mips_exception_vector:
@@ -79,6 +81,7 @@ mips_exception_entry:
         jal     exception
         nop
 
+mips_exception_restore_start:
         /*
          * exception() may return with interrupts enabled after signal,
          * network, or scheduler work.  Keep the restore path atomic: it uses
@@ -90,6 +93,11 @@ mips_exception_entry:
         and     $k0, $k0, $k1
         ori     $k0, $k0, ST_EXL
         mtc0    $k0, $12
+        nop
+        nop
+        nop
+        nop
+        nop
         nop
         nop
         nop
@@ -133,9 +141,19 @@ mips_exception_entry:
         nop
         nop
         nop
+        nop
+        nop
+        nop
+        nop
+        nop
 
         lw      $k0, (16+FRAME_PC*4)($sp)
         mtc0    $k0, $14
+        nop
+        nop
+        nop
+        nop
+        nop
         nop
         nop
         nop
@@ -144,5 +162,6 @@ mips_exception_entry:
         lw      $sp, (16+FRAME_SP*4)($sp)
         eret
         nop
+mips_exception_restore_end:
 mips_exception_entry_end:
         .end    mips_exception_entry

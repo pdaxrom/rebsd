@@ -35,6 +35,8 @@ volatile unsigned int ct_ticks = 0;
 
 extern char mips_exception_entry[];
 extern char mips_exception_entry_end[];
+extern char mips_exception_restore_start[];
+extern char mips_exception_restore_end[];
 extern void cnintr(void);
 #ifdef INET
 extern int netisr;
@@ -75,6 +77,29 @@ mips_exception_entry_pc(unsigned pc)
 {
     return pc >= (unsigned)mips_exception_entry &&
         pc < (unsigned)mips_exception_entry_end;
+}
+
+static int
+mips_exception_restore_pc(unsigned pc)
+{
+    return pc >= (unsigned)mips_exception_restore_start &&
+        pc < (unsigned)mips_exception_restore_end;
+}
+
+static void
+exception_dump_entry_word(unsigned pc)
+{
+    unsigned instr = *(volatile unsigned *)pc;
+    unsigned uncached = *(volatile unsigned *)(0xa0000000u |
+        (pc & 0x1fffffffu));
+
+    printf("*** entry word: pc=%08x instr=%08x uncached=%08x\n",
+        pc, instr, uncached);
+    printf("*** entry range: entry=%08x restore=%08x-%08x end=%08x\n",
+        (unsigned)mips_exception_entry,
+        (unsigned)mips_exception_restore_start,
+        (unsigned)mips_exception_restore_end,
+        (unsigned)mips_exception_entry_end);
 }
 
 static void
@@ -161,8 +186,12 @@ dumpregs(int *frame)
     printf("*** frame=%08x saved_sp=%08x current pid=%d comm=%s\n",
         (unsigned)frame, frame[FRAME_SP],
         u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
-    if (mips_exception_entry_pc(frame[FRAME_PC]))
+    if (mips_exception_entry_pc(frame[FRAME_PC])) {
         printf("*** exception occurred inside mips_exception_entry\n");
+        if (mips_exception_restore_pc(frame[FRAME_PC]))
+            printf("*** exception occurred inside restore path\n");
+        exception_dump_entry_word(frame[FRAME_PC]);
+    }
 
     printf("*** registers:\n");
     printf("                t0 = %8x   s0 = %8x   t8 = %8x   lo = %8x\n",
@@ -319,12 +348,15 @@ exception(int *frame)
         (rawcause & CA_EXC_CODE) != CA_Int) {
         exception_prepare_panic_console();
         printf("*** exception inside mips_exception_entry\n");
+        if (mips_exception_restore_pc(frame[FRAME_PC]))
+            printf("*** exception inside restore path\n");
         printf("*** current exception: frame=%08x pc=%08x sp=%08x ra=%08x\n",
             (unsigned)frame, frame[FRAME_PC], frame[FRAME_SP],
             frame[FRAME_RA]);
         printf("*** current exception: status=%08x cause=%08x badvaddr=%08x pid=%d comm=%s\n",
             status, rawcause, badvaddr,
             u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
+        exception_dump_entry_word(frame[FRAME_PC]);
         if (last_exception.valid)
             exception_dump_snapshot("previous exception", &last_exception);
     }
