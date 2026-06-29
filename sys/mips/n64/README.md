@@ -218,8 +218,10 @@ The current N64 USB network backend is intentionally separate from ROMFS flash
 access.  It uses the n64cart USB controller registers and EP1 OUT/EP2 IN bulk
 packets only; it must not switch SPI/QSPI flash modes or touch flash
 erase/write/read sequencing.  Initial polling is done from the CP0 timer path.
-Once the host bridge exists, the first hardware checks should be USB
-enumeration, `ifconfig usbn0`, ARP, ICMP ping, and a TCP smoke across the link.
+The first host bridge is `tools/n64usbnet/n64usbnet-bridge`; see
+`tools/n64usbnet/README.md` for TAP setup.  The first hardware checks should
+be USB enumeration, `ifconfig usbn0`, ARP, ICMP ping, and a TCP smoke across
+the link.
 
 ## Toolchain
 

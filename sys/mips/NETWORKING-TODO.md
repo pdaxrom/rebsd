@@ -219,8 +219,10 @@ Source reference:
       stable.
     - [ ] USB networking must not touch flash erase/write/read mode transitions;
       ROMFS/cartflash locking stays separate from USB packet I/O.
-    - [ ] Add the host-side bridge that exposes the vendor-specific bulk USB
+    - [x] Add the host-side bridge that exposes the vendor-specific bulk USB
       framing as a normal host TAP/TUN or socket-backed Ethernet endpoint.
+      Current first pass is `tools/n64usbnet/n64usbnet-bridge`, a libusb to
+      TAP bridge.
     - [ ] Test `usbn0` on real N64 hardware with the host bridge:
       - USB enumeration
       - `ifconfig usbn0 inet ... up`
