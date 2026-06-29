@@ -128,6 +128,9 @@ mode 0775
 
 file /root/net-header-smoke.c
 
+file /root/runtime-stress.sh
+mode 0775
+
 file /usr/lib/crt0.o
 
 file /usr/lib/libc.a

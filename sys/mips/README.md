@@ -167,6 +167,7 @@ new rootfs or toolchain change to N64 hardware:
 /root/ll-smoke.sh
 /root/ll-abi-smoke.sh
 /root/cc-pcc-smoke.sh
+/root/runtime-stress.sh quick
 smoke-as-vr4300
 matrix-as-vr4300
 ```
@@ -181,6 +182,13 @@ classic `forth`, `retroforth`, `picoc`, and `tcl`.
 `secondary-cc-smoke.sh` covers the currently staged secondary C compiler
 backends (`scc`, direct `smlrc`, and `lcc`) through assembly and `ld -r` only.
 It is not a full executable ABI smoke; use the `cc`/`pcc` tests for that.
+
+`runtime-stress.sh` is the long-running Malta/N64 runtime stress.  Use
+`/root/runtime-stress.sh quick` for a short QEMU sanity run.  For a multi-hour
+hardware or QEMU run, start `/root/runtime-stress.sh` with no arguments and
+stop it with `Ctrl-C`.  It writes only to `/var/tmp` and repeatedly exercises
+`date`, `sleep`, fork/exec, pipes, shell child commands, and the kmem-reading
+diagnostics (`ps`, `vmstat`, `w`, and `pstat`).
 
 The Malta sparse flash backend intentionally keeps a limited number of RAM
 sectors, so use `diskspeed -m 1` for QEMU smoke runs instead of the command's

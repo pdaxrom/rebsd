@@ -1242,6 +1242,13 @@ diagnostic variables. Malta QEMU smoke-testing should include `w`, `ps ax`,
 `vmstat`, `vmstat -f`, `/sbin/pstat -T`, and `/sbin/pstat -p` before trying the
 same ROM on real N64 hardware.
 
+The shared rootfs also includes `/root/runtime-stress.sh` for multi-hour
+runtime checks on Malta and N64.  Run `/root/runtime-stress.sh quick` for a
+short QEMU sanity pass, or `/root/runtime-stress.sh` with no arguments for an
+open-ended run stopped by `Ctrl-C`.  The stress writes only to `/var/tmp` and
+exercises repeated `date`/`sleep`, fork/exec, pipes, shell child commands, and
+the kmem-reading diagnostics.
+
 The console tty settings are initialized with echo, CR/LF mapping, erase,
 kill, and control-character echo behavior. `/etc/gettytab` sets `cb`, `ce`,
 and `ck` for N64 login lines before `login` runs. The stock `login` program

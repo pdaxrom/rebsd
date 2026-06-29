@@ -78,6 +78,21 @@ mips_exception_entry:
         jal     exception
         nop
 
+        /*
+         * exception() may return with interrupts enabled after signal,
+         * network, or scheduler work.  Keep the restore path atomic: it uses
+         * k0/k1 as scratch registers, and nested interrupts are allowed to
+         * clobber them.
+         */
+        mfc0    $k0, $12
+        li      $k1, ~ST_IE
+        and     $k0, $k0, $k1
+        ori     $k0, $k0, ST_EXL
+        mtc0    $k0, $12
+        nop
+        nop
+        nop
+
         lw      $a0, (16+FRAME_LO*4)($sp)
         mtlo    $a0
         lw      $a0, (16+FRAME_HI*4)($sp)
