@@ -2,8 +2,14 @@
 #include <sys/errno.h>
 #include <sys/conf.h>
 #include <sys/signalvar.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/systm.h>
+#if defined(MIPS) || defined(N64)
+#include <machine/io.h>
+#endif
 
 long dumplo;
 extern volatile unsigned int ct_ticks;
@@ -19,6 +25,25 @@ kmemdev(void)
 void
 nosys(void)
 {
+#if defined(MIPS) || defined(N64)
+    int *frame = u.u_frame;
+
+    if (frame) {
+        unsigned pc = frame[FRAME_PC];
+        unsigned inst = 0;
+        unsigned code = ~0;
+
+        if (!baduaddr((caddr_t)pc)) {
+            inst = *(u_int *)pc;
+            code = (inst >> 6) & 0377;
+        }
+        uprintf("nosys: pid=%d comm=%s code=%u pc=%x sp=%x "
+            "a0=%x a1=%x a2=%x a3=%x inst=%x\n",
+            u.u_procp ? u.u_procp->p_pid : -1, u.u_comm, code, pc,
+            frame[FRAME_SP], frame[FRAME_R4], frame[FRAME_R5],
+            frame[FRAME_R6], frame[FRAME_R7], inst);
+    }
+#endif
     if (u.u_signal[SIGSYS] == SIG_IGN || u.u_signal[SIGSYS] == SIG_HOLD)
         u.u_error = EINVAL;
     psignal(u.u_procp, SIGSYS);
