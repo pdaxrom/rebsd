@@ -128,6 +128,11 @@ mode 0775
 
 file /root/net-header-smoke.c
 
+file /root/ne2k-smoke.sh
+mode 0775
+
+file /root/ne2k-smoke.c
+
 file /root/runtime-stress.sh
 mode 0775
 

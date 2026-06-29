@@ -167,7 +167,7 @@ run: unix.elf
 run-net: unix.elf
 	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel unix.elf \
-	    -netdev user,id=net0 \
+	    -netdev user,id=net0,guestfwd=tcp:10.0.2.100:2323-cmd:/bin/cat \
 	    -device ne2k_isa,netdev=net0,iobase=0x300,irq=9,mac=52:54:00:12:34:56
 
 $(MIPS_ROOTFS_SRC_STAMP): $(MIPS_ROOTFS_COMMON_FILES)

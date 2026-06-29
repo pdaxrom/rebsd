@@ -101,7 +101,13 @@ smoke is:
 /usr/bin/ping -c 1 10.0.2.2
 /usr/bin/netstat -i
 /usr/bin/netstat -r
+/root/ne2k-smoke.sh
 ```
+
+`run-net` also enables QEMU user networking `guestfwd` at
+`10.0.2.100:2323`, connected to host `/bin/cat`.  The staged
+`/root/ne2k-smoke.sh` test uses that endpoint to verify a real TCP send/receive
+path through the NE2K driver, not just loopback.
 
 Keep this as the real-device bring-up path until the Malta virtual NIC is
 stable.  The N64 hardware network backend is expected to be a later USB network
@@ -167,6 +173,7 @@ new rootfs or toolchain change to N64 hardware:
 /root/ll-smoke.sh
 /root/ll-abi-smoke.sh
 /root/cc-pcc-smoke.sh
+/root/ne2k-smoke.sh
 /root/runtime-stress.sh quick
 smoke-as-vr4300
 matrix-as-vr4300

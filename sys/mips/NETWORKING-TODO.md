@@ -193,6 +193,8 @@ Source reference:
     - `ifconfig ne0 inet 10.0.2.15 netmask 255.255.255.0 up`
     - `route add default 10.0.2.2 1`
     - `ping -c 1 10.0.2.2`
+    - `/root/ne2k-smoke.sh` covers gateway ICMP, route/interface counters,
+      and TCP echo over QEMU `guestfwd` to host `/bin/cat`.
   - [ ] after the Malta virtual NIC path works, design the N64 hardware
     backend as a USB network adapter path.
 
