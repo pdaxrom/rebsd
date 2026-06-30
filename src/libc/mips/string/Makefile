@@ -10,9 +10,12 @@ CFLAGS		+= ${DEFS}
 
 #
 # Endian-independent assembly-code aliases for unaligned memory accesses.
-# Little endian.
 #
+ifneq ($(findstring -DTARGET_BIG_ENDIAN,$(CFLAGS)),)
+ASFLAGS		+= -DLWHI=lwl -DLWLO=lwr -DSWHI=swl -DSWLO=swr
+else
 ASFLAGS		+= -DLWHI=lwr -DLWLO=lwl -DSWHI=swr -DSWLO=swl
+endif
 
 SRCS		= bcopy.S bzero.S ffs.S memcpy.S memmove.S memset.S \
                   strlen.S bcmp.S index.S rindex.S strcmp.S

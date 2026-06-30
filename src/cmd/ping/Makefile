@@ -5,6 +5,7 @@ CFLAGS += -Wall -Werror -fno-builtin \
     -Wno-implicit-function-declaration -Wno-implicit-int \
     -Wno-return-type -Wno-return-mismatch \
     -Wno-unused-variable -Wno-parentheses \
+    -Wno-deprecated-non-prototype \
     -Wno-comment -Wno-endif-labels \
     -I$(TOPSRC)/sys -I$(TOPSRC)/sys/include
 

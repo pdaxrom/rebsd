@@ -22,6 +22,7 @@
 #define USER            1
 #define MIPS_CAUSE_CE1   0x10000000u
 #define MIPS_CAUSE_IP2   0x00000400u
+#define MIPS_CAUSE_IP3   0x00000800u
 #define MIPS_CAUSE_IP7   0x00008000u
 
 #ifdef N64
@@ -382,6 +383,10 @@ exception(int *frame)
 #ifdef N64
         if (rawcause & MIPS_CAUSE_IP2)
             n64_interrupt_handle_mi();
+#ifdef USBNET_ENABLED
+        if (rawcause & MIPS_CAUSE_IP3)
+            usbnpoll();
+#endif
 #endif
         if (rawcause & MIPS_CAUSE_IP7) {
             mips_reprime_timer();
@@ -389,9 +394,6 @@ exception(int *frame)
 #ifdef N64
 #ifdef N64CART_ENABLED
             n64cart_uart_intr();
-#endif
-#ifdef USBNET_ENABLED
-            usbnpoll();
 #endif
             n64keyboard_console_intr();
 #else

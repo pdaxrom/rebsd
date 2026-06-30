@@ -1,7 +1,8 @@
 #!/bin/sh
 #
-# Malta fake USB Ethernet smoke.  The fake lower half emulates one peer at
-# 10.64.0.1 and loops ARP/ICMP back through the generic if_usbn upper half.
+# USB Ethernet smoke.  On Malta the fake lower half emulates one peer at
+# 10.64.0.1.  On N64, run n64usbnet-bridge on the host first; its utun/TAP side
+# should use the same host peer address.
 #
 
 echo "usbn-smoke diag v1"
@@ -14,7 +15,7 @@ echo "step 1: configure usbn0"
 /sbin/ifconfig usbn0 inet 10.64.0.2 netmask 255.255.255.0 up || exit 1
 /sbin/ifconfig usbn0 || exit 1
 
-echo "step 2: ping fake USB peer"
+echo "step 2: ping USB peer"
 /usr/bin/ping -c 1 10.64.0.1 || exit 1
 
 echo "step 3: inspect interface and routes"

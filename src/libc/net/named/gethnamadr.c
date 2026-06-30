@@ -72,7 +72,7 @@ getanswer(answer, anslen, iquery)
 	register int n;
 	u_char *eom;
 	char *bp, **ap;
-	int type, class, buflen, ancount, qdcount;
+	int type, class, buflen, ancount, qdcount, rdlen, skip;
 	int haveanswer, getclass = C_ANY;
 	char **hap;
 
@@ -98,10 +98,22 @@ getanswer(answer, anslen, iquery)
 			n = strlen(bp) + 1;
 			bp += n;
 			buflen -= n;
-		} else
-			cp += dn_skipname(cp, eom) + QFIXEDSZ;
-		while (--qdcount > 0)
-			cp += dn_skipname(cp, eom) + QFIXEDSZ;
+		} else {
+			skip = dn_skipname(cp, eom);
+			if (skip < 0 || cp + skip + QFIXEDSZ > eom) {
+				h_errno = NO_RECOVERY;
+				return ((struct hostent *) NULL);
+			}
+			cp += skip + QFIXEDSZ;
+		}
+		while (--qdcount > 0) {
+			skip = dn_skipname(cp, eom);
+			if (skip < 0 || cp + skip + QFIXEDSZ > eom) {
+				h_errno = NO_RECOVERY;
+				return ((struct hostent *) NULL);
+			}
+			cp += skip + QFIXEDSZ;
+		}
 	} else if (iquery) {
 		if (hp->aa)
 			h_errno = HOST_NOT_FOUND;
@@ -120,14 +132,16 @@ getanswer(answer, anslen, iquery)
 		if ((n = dn_expand((char *)answer->buf, eom, cp, bp, buflen)) < 0)
 			break;
 		cp += n;
+		if (cp + RRFIXEDSZ > eom)
+			break;
 		type = _getshort(cp);
- 		cp += sizeof(u_short);
-		class = _getshort(cp);
- 		cp += sizeof(u_short) + sizeof(u_long);
-		n = _getshort(cp);
-		cp += sizeof(u_short);
+		class = _getshort(cp + 2);
+		rdlen = _getshort(cp + 8);
+		cp += RRFIXEDSZ;
+		if (cp + rdlen > eom)
+			break;
 		if (type == T_CNAME) {
-			cp += n;
+			cp += rdlen;
 			if (ap >= &host_aliases[MAXALIASES-1])
 				continue;
 			*ap++ = bp;
@@ -139,10 +153,10 @@ getanswer(answer, anslen, iquery)
 		if (iquery && type == T_PTR) {
 			if ((n = dn_expand((char *)answer->buf, eom,
 			    cp, bp, buflen)) < 0) {
-				cp += n;
+				cp += rdlen;
 				continue;
 			}
-			cp += n;
+			cp += rdlen;
 			host.h_name = bp;
 			return(&host);
 		}
@@ -150,22 +164,22 @@ getanswer(answer, anslen, iquery)
 #ifdef DEBUG
 			if (_res.options & RES_DEBUG)
 				printf("unexpected answer type %d, size %d\n",
-					type, n);
+					type, rdlen);
 #endif
-			cp += n;
+			cp += rdlen;
 			continue;
 		}
 		if (haveanswer) {
-			if (n != host.h_length) {
-				cp += n;
+			if (rdlen != host.h_length) {
+				cp += rdlen;
 				continue;
 			}
 			if (class != getclass) {
-				cp += n;
+				cp += rdlen;
 				continue;
 			}
 		} else {
-			host.h_length = n;
+			host.h_length = rdlen;
 			getclass = class;
 			host.h_addrtype = (class == C_IN) ? AF_INET : AF_UNSPEC;
 			if (!iquery) {
@@ -176,16 +190,16 @@ getanswer(answer, anslen, iquery)
 
 		bp += sizeof(align) - ((u_long)bp % sizeof(align));
 
-		if (bp + n >= &hostbuf[sizeof(hostbuf)]) {
+		if (bp + rdlen > &hostbuf[sizeof(hostbuf)]) {
 #ifdef DEBUG
 			if (_res.options & RES_DEBUG)
-				printf("size (%d) too big\n", n);
+				printf("size (%d) too big\n", rdlen);
 #endif
 			break;
 		}
-		bcopy(cp, *hap++ = bp, n);
-		bp +=n;
-		cp += n;
+		bcopy(cp, *hap++ = bp, rdlen);
+		bp += rdlen;
+		cp += rdlen;
 		haveanswer++;
 	}
 	if (haveanswer) {

@@ -89,6 +89,8 @@
 
 #define USB_PACKET_SIZE                 64u
 #define USB_NET_UNIT                    0
+#define N64USB_DEBUG                    0
+#define USB_NUM_ENDPOINTS               16u
 
 struct n64usb_ep {
     unsigned char addr;
@@ -179,6 +181,9 @@ static int n64usb_configured;
 static int n64usb_should_set_addr;
 static unsigned char n64usb_dev_addr;
 static int n64usb_tx_usb_busy;
+#if N64USB_DEBUG
+static unsigned n64usb_debug_events;
+#endif
 
 static void n64usb_poll_controller(void);
 
@@ -254,6 +259,53 @@ n64usb_usb_mode(int bswap)
 }
 
 static void
+n64usb_enable_cart_interrupt(void)
+{
+    unsigned status;
+
+    status = mips_read_c0_register(C0_STATUS, 0);
+    mips_write_c0_register(C0_STATUS, 0, status | ST_IM3);
+}
+
+#if N64USB_DEBUG
+static void
+n64usb_debug_dump(const char *tag)
+{
+    unsigned cfg, main_ctrl, sie_ctrl, sie_status, ints, inte;
+    unsigned buff_status, muxing, pwr, mi_int, mi_mask;
+
+    cfg = n64usb_read_phys(N64CART_USBCFG_PHYS);
+    main_ctrl = n64usb_reg_read(USB_MAIN_CTRL);
+    sie_ctrl = n64usb_reg_read(USB_SIE_CTRL);
+    sie_status = n64usb_reg_read(USB_SIE_STATUS);
+    ints = n64usb_reg_read(USB_INTS);
+    inte = n64usb_reg_read(USB_INTE);
+    buff_status = n64usb_reg_read(USB_BUFF_STATUS);
+    muxing = n64usb_reg_read(USB_USB_MUXING);
+    pwr = n64usb_reg_read(USB_USB_PWR);
+    mi_int = *(volatile unsigned *)N64_MI_INTERRUPT_ADDR;
+    mi_mask = *(volatile unsigned *)N64_MI_MASK_ADDR;
+
+    printf("n64usb %s: cfg=%x main=%x sie=%x sstat=%x ints=%x "
+        "inte=%x buff=%x mux=%x pwr=%x mi=%x/%x conf=%d\n",
+        tag, cfg, main_ctrl, sie_ctrl, sie_status, ints, inte,
+        buff_status, muxing, pwr, mi_int, mi_mask, n64usb_configured);
+}
+
+static void
+n64usb_debug_event(const char *tag)
+{
+    if (n64usb_debug_events < 32) {
+        n64usb_debug_events++;
+        n64usb_debug_dump(tag);
+    }
+}
+#else
+#define n64usb_debug_dump(tag)          do { } while (0)
+#define n64usb_debug_event(tag)         do { } while (0)
+#endif
+
+static void
 n64usb_copyin_words(unsigned offset, unsigned char *buf, unsigned len)
 {
     unsigned words, i;
@@ -290,7 +342,10 @@ n64usb_copyout_words(unsigned offset, const unsigned char *buf, unsigned len)
 static unsigned
 n64usb_get16(const unsigned char *p)
 {
-    return (unsigned)p[0] | ((unsigned)p[1] << 8);
+    unsigned value;
+
+    value = ((unsigned)p[0] << 8) | (unsigned)p[1];
+    return ((value & 0xff00) >> 8) | ((value & 0x00ff) << 8);
 }
 
 static struct n64usb_ep *
@@ -446,6 +501,15 @@ n64usb_handle_setup(void)
     wlength = n64usb_get16(setup + 6);
     (void)windex;
 
+#if N64USB_DEBUG
+    if (n64usb_debug_events < 32) {
+        n64usb_debug_events++;
+        printf("n64usb setup: type=%x req=%x value=%x index=%x len=%x\n",
+            reqtype, req, wvalue, windex, wlength);
+        n64usb_debug_dump("setup");
+    }
+#endif
+
     n64usb_find_ep(EP0_IN_ADDR)->next_pid = 1;
     if (reqtype == USB_DIR_OUT) {
         if (req == USB_REQUEST_SET_ADDRESS) {
@@ -454,6 +518,7 @@ n64usb_handle_setup(void)
             n64usb_ep0_ack();
         } else if (req == USB_REQUEST_SET_CONFIGURATION) {
             n64usb_configured = 1;
+            n64usb_debug_event("configured");
             n64usb_ep0_ack();
             n64usb_start_transfer(n64usb_find_ep(EP1_OUT_ADDR), 0,
                 USB_PACKET_SIZE);
@@ -571,7 +636,7 @@ n64usb_handle_buff_status(void)
     status = n64usb_reg_read(USB_BUFF_STATUS);
     remaining = status;
     bit = 1;
-    for (i = 0; remaining && i < 32; i++) {
+    for (i = 0; remaining && i < USB_NUM_ENDPOINTS * 2; i++) {
         if (remaining & bit) {
             n64usb_reg_clear(USB_BUFF_STATUS, bit);
             n64usb_handle_buff_done(i >> 1, (i & 1) == 0);
@@ -584,21 +649,31 @@ n64usb_handle_buff_status(void)
 static void
 n64usb_poll_controller(void)
 {
-    unsigned status;
+    unsigned status, handled;
 
     status = n64usb_reg_read(USB_INTS);
-    if (status == 0)
+    if (status == 0) {
+        (void)n64usb_read_phys(N64CART_USBCFG_PHYS);
         return;
+    }
+    handled = 0;
     if (status & USB_INTS_SETUP_REQ) {
+        handled |= USB_INTS_SETUP_REQ;
         n64usb_reg_clear(USB_SIE_STATUS, USB_SIE_STATUS_SETUP_REC);
+        n64usb_debug_event("setup-irq");
         n64usb_handle_setup();
     }
-    if (status & USB_INTS_BUFF_STATUS)
+    if (status & USB_INTS_BUFF_STATUS) {
+        handled |= USB_INTS_BUFF_STATUS;
         n64usb_handle_buff_status();
+    }
     if (status & USB_INTS_BUS_RESET) {
+        handled |= USB_INTS_BUS_RESET;
         n64usb_reg_clear(USB_SIE_STATUS, USB_SIE_STATUS_BUS_RESET);
         n64usb_bus_reset();
+        n64usb_debug_event("bus-reset");
     }
+    (void)handled;
     (void)n64usb_read_phys(N64CART_USBCFG_PHYS);
 }
 
@@ -626,9 +701,12 @@ n64usb_hw_start(void)
     for (i = 0; i < sizeof(n64usb_eps) / sizeof(n64usb_eps[0]); i++)
         n64usb_setup_endpoint(&n64usb_eps[i]);
 
+    n64usb_enable_cart_interrupt();
+
     n64usb_reg_write(USB_REG_SET + USB_SIE_CTRL,
         USB_SIE_CTRL_PULLUP_EN);
     n64usb_usb_mode(0);
+    n64usb_debug_dump("start");
 }
 
 int

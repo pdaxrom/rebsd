@@ -72,6 +72,7 @@ static char sccsid[] = "@(#)ping.c	8.1.2 (2.11BSD) 1996/1/18";
 #include <netinet/ip_icmp.h>
 #include <netinet/ip_var.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
@@ -148,6 +149,7 @@ main(argc, argv)
 	int ch, fdmask, hold, packlen, preload;
 	u_char *datap, *packet;
 	char *target, *malloc();
+	struct hostent *hp;
 #ifdef IP_OPTIONS
 	char rspace[3 + 4 * NROUTES + 1];	/* record route space */
 #endif
@@ -240,11 +242,22 @@ main(argc, argv)
 	to->sin_family = AF_INET;
 	to->sin_addr.s_addr = inet_addr(target);
 	if (to->sin_addr.s_addr == -1L) {
-		(void)fprintf(stderr,
-		    "ping: bad inet address %s\n", target);
-		exit(1);
+		hp = gethostbyname(target);
+		if (hp == NULL) {
+			herror(target);
+			exit(1);
+		}
+		if (hp->h_addrtype != AF_INET || hp->h_length != 4 ||
+		    hp->h_addr == NULL) {
+			(void)fprintf(stderr,
+			    "ping: bad host address %s\n", target);
+			exit(1);
+		}
+		bcopy(hp->h_addr, (char *)&to->sin_addr, hp->h_length);
+		hostname = hp->h_name;
+	} else {
+		hostname = target;
 	}
-	hostname = target;
 
 	if (options & F_FLOOD && options & F_INTERVAL) {
 		(void)fprintf(stderr,

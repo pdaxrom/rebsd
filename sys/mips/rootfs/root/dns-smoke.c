@@ -13,7 +13,9 @@ static void
 print_addr(p)
     unsigned char *p;
 {
-    printf("%u.%u.%u.%u", p[0], p[1], p[2], p[3]);
+    printf("%u.%u.%u.%u",
+        ((unsigned int)p[0] & 0xff), ((unsigned int)p[1] & 0xff),
+        ((unsigned int)p[2] & 0xff), ((unsigned int)p[3] & 0xff));
 }
 
 static void
