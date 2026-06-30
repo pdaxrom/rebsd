@@ -270,6 +270,42 @@ usbnwatchdog(int unit)
 }
 
 void
+usbn_input_error(int unit)
+{
+    struct usbn_softc *sc;
+    int s;
+
+    if (unit < 0 || unit >= USBN_NUNITS)
+        return;
+    sc = &usbn_softc[unit];
+    if (!sc->sc_present)
+        return;
+    s = splimp();
+    sc->sc_if.if_ierrors++;
+    splx(s);
+}
+
+void
+usbn_link_reset(int unit)
+{
+    struct usbn_softc *sc;
+    int s;
+
+    if (unit < 0 || unit >= USBN_NUNITS)
+        return;
+    sc = &usbn_softc[unit];
+    if (!sc->sc_present)
+        return;
+    s = splimp();
+    if (sc->sc_tx_busy) {
+        sc->sc_tx_busy = 0;
+        sc->sc_if.if_timer = 0;
+        sc->sc_if.if_oerrors++;
+    }
+    splx(s);
+}
+
+void
 usbn_tx_done(int unit, int error)
 {
     struct usbn_softc *sc;

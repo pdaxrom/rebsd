@@ -4,6 +4,8 @@
 void usbnattach(int unit);
 void usbnpoll(void);
 void usbn_input(int unit, const unsigned char *frame, unsigned len);
+void usbn_input_error(int unit);
+void usbn_link_reset(int unit);
 void usbn_tx_done(int unit, int error);
 
 /*

@@ -363,7 +363,7 @@ list_usb_devices(libusb_context *ctx)
 }
 
 static int
-open_usb(struct bridge *br, unsigned vid, unsigned pid)
+open_usb(struct bridge *br, unsigned vid, unsigned pid, int quiet)
 {
     int ret;
 
@@ -374,8 +374,10 @@ open_usb(struct bridge *br, unsigned vid, unsigned pid)
     }
     br->usb_dev = libusb_open_device_with_vid_pid(br->usb_ctx, vid, pid);
     if (br->usb_dev == 0) {
-        fprintf(stderr, "USB device %04x:%04x not found\n", vid, pid);
-        list_usb_devices(br->usb_ctx);
+        if (!quiet) {
+            fprintf(stderr, "USB device %04x:%04x not found\n", vid, pid);
+            list_usb_devices(br->usb_ctx);
+        }
         return -1;
     }
     ret = libusb_set_configuration(br->usb_dev, 1);
@@ -396,16 +398,34 @@ open_usb(struct bridge *br, unsigned vid, unsigned pid)
 }
 
 static void
-close_bridge(struct bridge *br)
+close_usb(struct bridge *br)
 {
     if (br->usb_dev != 0) {
         libusb_release_interface(br->usb_dev, N64USB_IFACE);
         libusb_close(br->usb_dev);
+        br->usb_dev = 0;
     }
-    if (br->usb_ctx != 0)
+    if (br->usb_ctx != 0) {
         libusb_exit(br->usb_ctx);
+        br->usb_ctx = 0;
+    }
+    n64usbnet_rx_reset(&br->rx);
+    br->tx.active = 0;
+}
+
+static void
+close_bridge(struct bridge *br)
+{
+    close_usb(br);
     if (br->net_fd >= 0)
         close(br->net_fd);
+}
+
+static int
+usb_disconnected(int ret)
+{
+    return ret == LIBUSB_ERROR_NO_DEVICE || ret == LIBUSB_ERROR_IO ||
+        ret == LIBUSB_ERROR_OTHER;
 }
 
 static int
@@ -427,7 +447,7 @@ send_frame_usb(struct bridge *br, const unsigned char *frame, unsigned len)
             &actual, 1000);
         if (ret != 0) {
             fprintf(stderr, "USB OUT: %s\n", libusb_error_name(ret));
-            return -1;
+            return usb_disconnected(ret) ? -2 : -1;
         }
         if ((unsigned)actual != packet_len) {
             fprintf(stderr, "USB OUT short write %d/%u\n", actual,
@@ -553,6 +573,7 @@ static int
 read_tap(struct bridge *br)
 {
     unsigned char frame[N64USBNET_FRAME_MAX];
+    int ret;
     ssize_t n;
 
     for (;;) {
@@ -565,8 +586,9 @@ read_tap(struct bridge *br)
         }
         if (n == 0)
             return 0;
-        if (send_frame_usb(br, frame, (unsigned)n) < 0)
-            return -1;
+        ret = send_frame_usb(br, frame, (unsigned)n);
+        if (ret < 0)
+            return ret;
     }
 }
 
@@ -594,6 +616,7 @@ read_utun(struct bridge *br)
 #ifdef __APPLE__
     unsigned char buf[4 + N64USBNET_FRAME_MAX];
     uint32_t family;
+    int ret;
     ssize_t n;
 
     for (;;) {
@@ -610,8 +633,9 @@ read_utun(struct bridge *br)
         if (ntohl(family) != AF_INET)
             continue;
         debug_ip_packet(br, "utun -> usb", buf + 4, (unsigned)n - 4);
-        if (send_utun_packet(br, buf + 4, (unsigned)n - 4) < 0)
-            return -1;
+        ret = send_utun_packet(br, buf + 4, (unsigned)n - 4);
+        if (ret < 0)
+            return ret;
     }
 #else
     (void)br;
@@ -631,9 +655,7 @@ read_backend(struct bridge *br)
 static int
 write_usb_frame(struct bridge *br, const unsigned char *frame, unsigned len)
 {
-    if (write_backend_frame(br, frame, len) < 0)
-        return -1;
-    return 0;
+    return write_backend_frame(br, frame, len);
 }
 
 static int
@@ -649,7 +671,7 @@ poll_usb(struct bridge *br)
         return 0;
     if (ret != 0) {
         fprintf(stderr, "USB IN: %s\n", libusb_error_name(ret));
-        return -1;
+        return usb_disconnected(ret) ? -2 : -1;
     }
     if (actual <= 0)
         return 0;
@@ -676,7 +698,7 @@ main(int argc, char **argv)
     int list_only = 0;
     unsigned vid = N64USB_VID;
     unsigned pid = N64USB_PID;
-    int i;
+    int i, ret;
 
     memset(&br, 0, sizeof(br));
     br.net_fd = -1;
@@ -775,7 +797,7 @@ main(int argc, char **argv)
             return 1;
         }
     }
-    if (open_usb(&br, vid, pid) < 0) {
+    if (open_usb(&br, vid, pid, 0) < 0) {
         close_bridge(&br);
         return 1;
     }
@@ -806,9 +828,31 @@ main(int argc, char **argv)
         fprintf(stderr, "  /usr/bin/ping -c 1 %s\n", host);
     }
     while (!stop_requested) {
-        if (read_backend(&br) < 0)
+        if (br.usb_dev == 0) {
+            if (open_usb(&br, vid, pid, 1) == 0) {
+                if (br.verbose)
+                    fprintf(stderr, "USB device reconnected\n");
+            } else {
+                close_usb(&br);
+                usleep(250000);
+            }
+            continue;
+        }
+
+        ret = read_backend(&br);
+        if (ret == -2) {
+            close_usb(&br);
+            continue;
+        }
+        if (ret < 0)
             break;
-        if (poll_usb(&br) < 0)
+
+        ret = poll_usb(&br);
+        if (ret == -2) {
+            close_usb(&br);
+            continue;
+        }
+        if (ret < 0)
             break;
     }
 

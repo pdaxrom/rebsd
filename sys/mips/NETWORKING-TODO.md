@@ -213,22 +213,25 @@ Source reference:
       validated without N64 USB hardware.
     - [x] Test the `if_usbn` upper half on Malta/fake transport before enabling
       the N64 USB controller backend.
-    - [x] Add the N64cart USB device-controller backend and poll it from the
-      CP0 timer path.  Hardware link testing is still pending.
-    - [ ] Move from timer polling to CART USB IRQ once the device path is
-      stable.
+    - [x] Add the N64cart USB device-controller backend.
+    - [x] Move the N64 backend from CP0 timer polling to CART USB IRQ/IP3.
     - [ ] USB networking must not touch flash erase/write/read mode transitions;
       ROMFS/cartflash locking stays separate from USB packet I/O.
     - [x] Add the host-side bridge that exposes the vendor-specific bulk USB
       framing as a normal host TAP/TUN or socket-backed Ethernet endpoint.
       Current first pass is `tools/n64usbnet/n64usbnet-bridge`, a libusb to
       TAP bridge.
-    - [ ] Test `usbn0` on real N64 hardware with the host bridge:
+    - [x] Test `usbn0` on real N64 hardware with the host bridge:
       - USB enumeration
       - `ifconfig usbn0 inet ... up`
       - ARP exchange
       - ICMP ping across the USB link
-      - TCP smoke across the USB link
+      - physical USB cable unplug/replug with re-enumeration
+    - [ ] Add a TCP smoke across the USB link.
+    - [ ] Replace the vendor-specific bridge protocol with a standard USB
+      Ethernet gadget class.  CDC ECM should be first because Linux and macOS
+      bind it without a userspace bridge; RNDIS can be added later if Windows
+      is a target.
 
 ## Deferred Items For First Pass
 

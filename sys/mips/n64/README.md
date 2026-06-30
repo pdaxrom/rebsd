@@ -217,11 +217,12 @@ both `cc` and `pcc` header smoke passes.
 The current N64 USB network backend is intentionally separate from ROMFS flash
 access.  It uses the n64cart USB controller registers and EP1 OUT/EP2 IN bulk
 packets only; it must not switch SPI/QSPI flash modes or touch flash
-erase/write/read sequencing.  Initial polling is done from the CP0 timer path.
-The first host bridge is `tools/n64usbnet/n64usbnet-bridge`; see
-`tools/n64usbnet/README.md` for TAP setup.  The first hardware checks should
-be USB enumeration, `ifconfig usbn0`, ARP, ICMP ping, and a TCP smoke across
-the link.
+erase/write/read sequencing.  USB device events are handled through the
+n64cart CART interrupt on CP0 IP3; the timer path is not the normal transport
+driver.  The first host bridge is `tools/n64usbnet/n64usbnet-bridge`; see
+`tools/n64usbnet/README.md` for TAP/utun setup.  Hardware checks have covered
+USB enumeration, `ifconfig usbn0`, ARP, ICMP ping, and error-free interface
+counters.  A TCP smoke and a standard CDC ECM gadget mode are still pending.
 
 ## Toolchain
 
