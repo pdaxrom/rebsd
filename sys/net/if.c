@@ -291,6 +291,11 @@ ifioctl(so, cmd, data)
 		ifr->ifr_metric = ifp->if_metric;
 		break;
 
+	case SIOCGIFHWADDR:
+		if (ifp->if_ioctl == 0)
+			return (EOPNOTSUPP);
+		return ((*ifp->if_ioctl)(ifp, cmd, data));
+
 	case SIOCSIFFLAGS:
 		if (!suser())
 			return (u.u_error);

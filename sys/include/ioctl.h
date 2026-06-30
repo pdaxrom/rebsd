@@ -251,6 +251,7 @@ struct ttysize {
 #define SIOCSIFNETMASK  _IOW ('i',22, struct ifreq)     /* set net addr mask */
 #define SIOCGIFMETRIC   _IOWR('i',23, struct ifreq)     /* get IF metric */
 #define SIOCSIFMETRIC   _IOW ('i',24, struct ifreq)     /* set IF metric */
+#define SIOCGIFHWADDR   _IOWR('i',25, struct ifreq)     /* get hardware addr */
 
 #define SIOCSARP        _IOW ('i',30, struct arpreq)    /* set arp entry */
 #define SIOCGARP        _IOWR('i',31, struct arpreq)    /* get arp entry */

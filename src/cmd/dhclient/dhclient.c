@@ -10,7 +10,9 @@
 #include <sys/time.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 
+#include <net/if.h>
 #include <netinet/in.h>
 
 #include <stdio.h>
@@ -356,6 +358,29 @@ run(cmd)
 }
 
 static int
+get_hwaddr(mac)
+    unsigned char *mac;
+{
+    struct ifreq ifr;
+    int fd;
+
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0)
+        return 0;
+    if (ioctl(fd, SIOCGIFHWADDR, (char *)&ifr) < 0) {
+        close(fd);
+        return 0;
+    }
+    close(fd);
+    if (ifr.ifr_addr.sa_family != AF_UNSPEC)
+        return 0;
+    memcpy(mac, ifr.ifr_addr.sa_data, DHCP_HLEN_ETHER);
+    return 1;
+}
+
+static int
 apply_lease(lease)
     struct dhcp_lease *lease;
 {
@@ -436,12 +461,17 @@ main(argc, argv)
         usage();
 
     xid = ((unsigned int)getpid() << 16) ^ (unsigned int)time((time_t *)0);
-    mac[0] = 0x02;
-    mac[1] = 0x52;
-    mac[2] = 0x42;
-    mac[3] = 0x44;
-    mac[4] = (xid >> 8) & 0xff;
-    mac[5] = xid & 0xff;
+    if (!get_hwaddr(mac)) {
+        mac[0] = 0x02;
+        mac[1] = 0x52;
+        mac[2] = 0x42;
+        mac[3] = 0x44;
+        mac[4] = (xid >> 8) & 0xff;
+        mac[5] = xid & 0xff;
+    }
+    if (verbose)
+        printf("dhclient: chaddr %02x:%02x:%02x:%02x:%02x:%02x\n",
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     sprintf(cmd, "/sbin/ifconfig %s inet 0.0.0.0 netmask 0.0.0.0 up",
         ifname);

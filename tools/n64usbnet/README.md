@@ -80,6 +80,22 @@ On N64:
 /usr/bin/ping -c 1 10.64.0.1
 ```
 
+For TCP smoke testing over CDC ECM or the vendor-specific bridge, use the
+included echo server.  Plain `nc -lk` is not an echo server on macOS; it prints
+received data to the terminal and does not send it back on the same connection.
+
+Host:
+
+```
+tools/n64usbnet/n64usbnet-echo 10.64.0.1 2323
+```
+
+N64:
+
+```
+/root/usbn-tcp-smoke.sh
+```
+
 This is a host-link configuration.  Reaching external hosts through `utun`
 also needs a default route and resolver on RetroBSD plus host-side forwarding
 and NAT on macOS.  The bridge does not install PF rules or provide a DNS

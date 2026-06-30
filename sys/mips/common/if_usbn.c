@@ -111,6 +111,15 @@ usbnioctl(struct ifnet *ifp, int cmd, caddr_t data)
 
     s = splimp();
     switch (cmd) {
+    case SIOCGIFHWADDR:
+        ((struct ifreq *)data)->ifr_addr.sa_family = AF_UNSPEC;
+        bzero((caddr_t)((struct ifreq *)data)->ifr_addr.sa_data,
+            sizeof(((struct ifreq *)data)->ifr_addr.sa_data));
+        bcopy((caddr_t)sc->sc_ac.ac_enaddr,
+            (caddr_t)((struct ifreq *)data)->ifr_addr.sa_data,
+            sizeof(sc->sc_ac.ac_enaddr));
+        break;
+
     case SIOCSIFADDR:
         ifp->if_flags |= IFF_UP;
         sc->sc_ac.ac_ipaddr = IA_SIN(ia)->sin_addr;

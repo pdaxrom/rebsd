@@ -230,13 +230,21 @@ Source reference:
       - ARP exchange
       - ICMP ping across the USB link
       - physical USB cable unplug/replug with re-enumeration
-    - [ ] Test the default CDC ECM `usbn0` backend on real N64 hardware:
+    - [x] Test the default CDC ECM `usbn0` backend on real N64 hardware:
       - USB enumeration as a host CDC ECM Ethernet interface
       - `ifconfig usbn0 inet ... up`
       - ARP exchange
       - ICMP ping across the USB link without `n64usbnet-bridge`
       - physical USB cable unplug/replug with re-enumeration
-    - [ ] Add a TCP smoke across the USB link.
+    - [x] Add `/root/usbn-tcp-smoke.sh` for TCP echo coverage across the USB
+      link.  It requires a host echo listener on `10.64.0.1:2323`.
+    - [x] Test TCP echo across the USB link on real N64 CDC ECM hardware.
+    - [x] Verify `/sbin/dhclient -v ne0` on Malta QEMU user networking with
+      `/root/dhcp-dns-smoke.sh`.
+    - [x] Add `/root/usbn-dhcp-smoke.sh` for target-side DHCP coverage on
+      USB Ethernet.
+    - [x] Verify `/sbin/dhclient -v usbn0` on real N64 CDC ECM hardware
+      against a host DHCP server.
     - [ ] Consider RNDIS later only if Windows support becomes a target.
 
 ## Deferred Items For First Pass

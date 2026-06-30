@@ -245,8 +245,43 @@ make -C sys/mips BOARD=n64 kernel.z64
 
 Vendor-specific hardware checks have covered USB enumeration, `ifconfig usbn0`,
 ARP, ICMP ping, cable unplug/replug with re-enumeration, and error-free
-interface counters.  CDC ECM currently enumerates on macOS through
-`AppleUserECM`; ARP/ICMP verification is in progress.
+interface counters.  CDC ECM has been verified on macOS through
+`AppleUserECM`: macOS creates an `en*` Ethernet interface with host MAC
+`02:64:00:00:00:01`, N64 uses `02:64:00:00:00:10`, ARP resolves correctly,
+ICMP works in both directions, and cable unplug/replug recovers.
+
+For a static CDC ECM smoke on macOS:
+
+```
+sudo ifconfig en11 10.64.0.1 netmask 255.255.255.0 up
+/sbin/ifconfig usbn0 inet 10.64.0.2 netmask 255.255.255.0 up
+/usr/bin/ping -c 3 10.64.0.1
+```
+
+For TCP coverage, start an echo listener on the host and run the target smoke:
+
+```
+tools/n64usbnet/n64usbnet-echo 10.64.0.1 2323
+/root/usbn-tcp-smoke.sh
+```
+
+If the link is configured through DHCP instead, run the echo helper on the
+host-side DHCP address and pass that address to the target smoke, for example:
+
+```
+tools/n64usbnet/n64usbnet-echo 192.168.2.1 2323
+/root/usbn-tcp-smoke.sh 192.168.2.1
+```
+
+The DHCP-mode TCP smoke has been verified on real N64 hardware with macOS as
+the host: N64 obtained `192.168.2.3`, connected to host `192.168.2.1:2323`,
+and completed the echo check.
+
+For DHCP coverage, run a DHCP server on the host ECM interface and then:
+
+```
+/root/usbn-dhcp-smoke.sh
+```
 
 ## Toolchain
 
