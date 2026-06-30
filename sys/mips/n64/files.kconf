@@ -111,8 +111,9 @@ mips/common/in_cksum.c          optional inet
 mips/common/net_glue.c          optional inet
 mips/common/netinit.c           optional inet
 mips/common/if_usbn.c           optional usbnet
-mips/common/n64usbnet_proto.c   optional usbnet
-mips/n64/n64cart_usbnet.c       optional usbnet
+mips/common/n64usbnet_proto.c   optional usbnet_vendor
+mips/n64/n64cart_usbnet.c       optional usbnet_vendor
+mips/n64/n64cart_usbecm.c       optional usbnet_ecm
 mips/n64/rompak.c                    standard
 mips/n64/memory.c                    standard
 mips/n64/romdisk.c                   standard

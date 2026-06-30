@@ -181,10 +181,10 @@ crw-rw-rw-  1 root       8,   0 Jun 12 09:28 ttyp0
 ## Loopback networking
 
 The N64 kernel now builds the shared MIPS INET and AF_UNIX stack.  Loopback is
-the verified hardware baseline.  The tree also builds `usbn0`, a first
-N64cart USB Ethernet gadget backend using the cartridge USB device controller
-and the shared `if_usbn` upper half, but real USB link testing still requires
-the host-side bridge.
+the verified hardware baseline.  The tree also builds `usbn0`, an N64cart USB
+Ethernet gadget using the cartridge USB device controller and the shared
+`if_usbn` upper half.  The default N64 configuration exposes this link as a
+standard CDC ECM USB Ethernet gadget.
 
 The same stack and rootfs scripts passed on Malta/QEMU on 2026-06-28:
 
@@ -219,10 +219,34 @@ access.  It uses the n64cart USB controller registers and EP1 OUT/EP2 IN bulk
 packets only; it must not switch SPI/QSPI flash modes or touch flash
 erase/write/read sequencing.  USB device events are handled through the
 n64cart CART interrupt on CP0 IP3; the timer path is not the normal transport
-driver.  The first host bridge is `tools/n64usbnet/n64usbnet-bridge`; see
-`tools/n64usbnet/README.md` for TAP/utun setup.  Hardware checks have covered
-USB enumeration, `ifconfig usbn0`, ARP, ICMP ping, and error-free interface
-counters.  A TCP smoke and a standard CDC ECM gadget mode are still pending.
+driver.
+
+Two N64 USB lower drivers are available for `usbn0`:
+
+- `USBNET_ECM` is the default.  It builds `n64cart_usbecm.c` and enumerates as
+  CDC ECM, so Linux and macOS can bind a normal USB Ethernet interface without
+  `n64usbnet-bridge`.  The ECM descriptor advertises the host-side MAC address
+  `02:64:00:00:00:01`; the N64 `usbn0` interface uses
+  `02:64:00:00:00:10`.  Keep these distinct so ARP does not see frames from
+  the host's own MAC address.
+- `USBNET_VENDOR` builds `n64cart_usbnet.c`, the original vendor-specific
+  EP1/EP2 bulk protocol.  Use this only with
+  `tools/n64usbnet/n64usbnet-bridge`; see `tools/n64usbnet/README.md` for
+  TAP/utun setup.
+
+Switching backend is done in `sys/mips/n64/Config` by keeping `service usbnet`
+and selecting exactly one of `options "USBNET_ECM"` or
+`options "USBNET_VENDOR"`, then running:
+
+```
+make -C sys/mips BOARD=n64 reconfig
+make -C sys/mips BOARD=n64 kernel.z64
+```
+
+Vendor-specific hardware checks have covered USB enumeration, `ifconfig usbn0`,
+ARP, ICMP ping, cable unplug/replug with re-enumeration, and error-free
+interface counters.  CDC ECM currently enumerates on macOS through
+`AppleUserECM`; ARP/ICMP verification is in progress.
 
 ## Toolchain
 

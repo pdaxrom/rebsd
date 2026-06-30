@@ -17,6 +17,7 @@ service         nintendo
 service         pty     4
 service         ether   1
 service         usbnet
+options         "USBNET_ECM"
 service         inet
 service         unixdomain
 

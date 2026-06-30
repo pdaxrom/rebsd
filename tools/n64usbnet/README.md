@@ -4,6 +4,10 @@
 It talks to the n64cart USB device with the RetroBSD vendor-specific bulk
 framing and forwards Ethernet frames to a host TAP device.
 
+The default N64 kernel now uses CDC ECM instead.  This bridge is only needed
+when `sys/mips/n64/Config` selects `options "USBNET_VENDOR"` instead of
+`options "USBNET_ECM"`.
+
 Build:
 
 ```

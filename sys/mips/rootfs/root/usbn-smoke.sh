@@ -1,8 +1,9 @@
 #!/bin/sh
 #
 # USB Ethernet smoke.  On Malta the fake lower half emulates one peer at
-# 10.64.0.1.  On N64, run n64usbnet-bridge on the host first; its utun/TAP side
-# should use the same host peer address.
+# 10.64.0.1.  On N64 CDC ECM, configure the host USB Ethernet side as
+# 10.64.0.1.  On N64 USBNET_VENDOR, run n64usbnet-bridge on the host first;
+# its utun/TAP side should use the same host peer address.
 #
 
 echo "usbn-smoke diag v1"

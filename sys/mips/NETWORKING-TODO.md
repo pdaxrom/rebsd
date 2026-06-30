@@ -201,9 +201,9 @@ Source reference:
     - [x] Confirmed the existing N64cart USB example is a device/gadget
       implementation, not USB host support; first hardware network path will
       expose N64 as a USB Ethernet-like device to a host bridge.
-    - [x] Keep the first protocol vendor-specific bulk USB over EP1 OUT/EP2 IN,
-      matching the existing N64cart USB device plumbing; defer CDC ECM/RNDIS
-      until the basic data path is stable.
+    - [x] Keep the original vendor-specific bulk USB over EP1 OUT/EP2 IN as
+      the `USBNET_VENDOR` fallback backend, matching the existing N64cart USB
+      device plumbing.
     - [x] Use a small Ethernet-frame framing header plus 64-byte USB bulk
       fragmentation/reassembly.  Host tests must pass before touching N64
       hardware.
@@ -213,7 +213,9 @@ Source reference:
       validated without N64 USB hardware.
     - [x] Test the `if_usbn` upper half on Malta/fake transport before enabling
       the N64 USB controller backend.
-    - [x] Add the N64cart USB device-controller backend.
+    - [x] Add the N64cart USB vendor-specific device-controller backend.
+    - [x] Add a second N64cart USB backend for CDC ECM and make it the default
+      `usbn0` backend in `sys/mips/n64/Config`.
     - [x] Move the N64 backend from CP0 timer polling to CART USB IRQ/IP3.
     - [ ] USB networking must not touch flash erase/write/read mode transitions;
       ROMFS/cartflash locking stays separate from USB packet I/O.
@@ -221,17 +223,21 @@ Source reference:
       framing as a normal host TAP/TUN or socket-backed Ethernet endpoint.
       Current first pass is `tools/n64usbnet/n64usbnet-bridge`, a libusb to
       TAP bridge.
-    - [x] Test `usbn0` on real N64 hardware with the host bridge:
+    - [x] Test `usbn0` on real N64 hardware with the vendor-specific host
+      bridge:
       - USB enumeration
       - `ifconfig usbn0 inet ... up`
       - ARP exchange
       - ICMP ping across the USB link
       - physical USB cable unplug/replug with re-enumeration
+    - [ ] Test the default CDC ECM `usbn0` backend on real N64 hardware:
+      - USB enumeration as a host CDC ECM Ethernet interface
+      - `ifconfig usbn0 inet ... up`
+      - ARP exchange
+      - ICMP ping across the USB link without `n64usbnet-bridge`
+      - physical USB cable unplug/replug with re-enumeration
     - [ ] Add a TCP smoke across the USB link.
-    - [ ] Replace the vendor-specific bridge protocol with a standard USB
-      Ethernet gadget class.  CDC ECM should be first because Linux and macOS
-      bind it without a userspace bridge; RNDIS can be added later if Windows
-      is a target.
+    - [ ] Consider RNDIS later only if Windows support becomes a target.
 
 ## Deferred Items For First Pass
 

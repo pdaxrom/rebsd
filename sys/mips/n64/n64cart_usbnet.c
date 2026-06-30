@@ -1,10 +1,11 @@
 /*
- * N64cart USB bulk transport for the generic usbn(4) interface.
+ * N64cart USB transport for the generic usbn(4) interface.
  *
  * The cartridge exposes an RP2040-style USB device controller through PI
- * address space.  This driver keeps the controller in a vendor-specific
- * two-bulk-endpoint mode compatible with the N64cart firmware descriptor,
- * but carries Ethernet frames using the shared n64usbnet framing.
+ * address space.  By default this file builds the original vendor-specific
+ * two-bulk-endpoint transport.  n64cart_usbecm.c includes this file with
+ * N64USB_CDC_ECM set and exposes the same if_usbn lower-half API as a CDC ECM
+ * USB Ethernet gadget.
  */
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -13,7 +14,12 @@
 #include <machine/n64int.h>
 #include <machine/n64cart_uart.h>
 #include <mips/common/if_usbn.h>
+#ifndef N64USB_CDC_ECM
+#define N64USB_CDC_ECM 0
+#endif
+#if !N64USB_CDC_ECM
 #include <mips/common/n64usbnet_proto.h>
+#endif
 
 #define N64_PI_STATUS_DMA_BUSY          0x01u
 #define N64_PI_STATUS_IO_BUSY           0x02u
@@ -43,13 +49,16 @@
 #define USB_DPRAM_SETUP                 0x000u
 #define USB_DPRAM_EP1_OUT_CTRL          0x00cu
 #define USB_DPRAM_EP2_IN_CTRL           0x010u
+#define USB_DPRAM_EP3_IN_CTRL           0x018u
 #define USB_DPRAM_EP0_IN_BUF_CTRL       0x080u
 #define USB_DPRAM_EP0_OUT_BUF_CTRL      0x084u
 #define USB_DPRAM_EP1_OUT_BUF_CTRL      0x08cu
 #define USB_DPRAM_EP2_IN_BUF_CTRL       0x090u
+#define USB_DPRAM_EP3_IN_BUF_CTRL       0x098u
 #define USB_DPRAM_EP0_BUF               0x100u
 #define USB_DPRAM_EP1_OUT_BUF           0x180u
 #define USB_DPRAM_EP2_IN_BUF            0x1c0u
+#define USB_DPRAM_EP3_IN_BUF            0x200u
 #define USB_DPRAM_SIZE                  4096u
 
 #define USB_BUF_CTRL_FULL               0x00008000u
@@ -65,9 +74,19 @@
 #define USB_DT_DEVICE                   0x01u
 #define USB_DT_CONFIG                   0x02u
 #define USB_DT_STRING                   0x03u
+#define USB_DT_INTERFACE                0x04u
+#define USB_DT_ENDPOINT                 0x05u
+#define USB_DT_INTERFACE_ASSOCIATION    0x0bu
+#define USB_DT_CS_INTERFACE             0x24u
 #define USB_REQUEST_GET_DESCRIPTOR      0x06u
 #define USB_REQUEST_SET_ADDRESS         0x05u
 #define USB_REQUEST_SET_CONFIGURATION   0x09u
+#define USB_REQUEST_GET_INTERFACE       0x0au
+#define USB_REQUEST_SET_INTERFACE       0x0bu
+#define USB_CDC_SET_ETHERNET_PACKET_FILTER 0x43u
+#define USB_CDC_GET_ETHERNET_STATISTIC  0x44u
+#define USB_CDC_NOTIFY_NETWORK_CONNECTION 0x00u
+#define USB_CDC_NOTIFY_CONNECTION_SPEED_CHANGE 0x2au
 
 #define USB_MAIN_CTRL_CONTROLLER_EN     0x00000001u
 #define USB_SIE_CTRL_EP0_INT_1BUF       0x20000000u
@@ -88,10 +107,13 @@
 #define EP0_IN_ADDR                     0x80u
 #define EP1_OUT_ADDR                    0x01u
 #define EP2_IN_ADDR                     0x82u
+#define EP3_IN_ADDR                     0x83u
 
 #define USB_PACKET_SIZE                 64u
 #define USB_NET_UNIT                    0
 #define USB_NUM_ENDPOINTS               16u
+#define N64USB_FRAME_MAX                1518u
+#define N64USB_ETH_HEADER_LEN           14u
 
 struct n64usb_ep {
     unsigned char addr;
@@ -107,6 +129,9 @@ static void n64usb_ep0_in(unsigned char *buf, unsigned len);
 static void n64usb_ep0_out(unsigned char *buf, unsigned len);
 static void n64usb_ep1_out(unsigned char *buf, unsigned len);
 static void n64usb_ep2_in(unsigned char *buf, unsigned len);
+#if N64USB_CDC_ECM
+static void n64usb_ep3_in(unsigned char *buf, unsigned len);
+#endif
 
 static struct n64usb_ep n64usb_eps[] = {
     { EP0_OUT_ADDR, 0, 0, USB_DPRAM_EP0_OUT_BUF_CTRL, USB_DPRAM_EP0_BUF,
@@ -117,19 +142,60 @@ static struct n64usb_ep n64usb_eps[] = {
         USB_DPRAM_EP1_OUT_BUF, 0, n64usb_ep1_out },
     { EP2_IN_ADDR, 2, USB_DPRAM_EP2_IN_CTRL, USB_DPRAM_EP2_IN_BUF_CTRL,
         USB_DPRAM_EP2_IN_BUF, 0, n64usb_ep2_in },
+#if N64USB_CDC_ECM
+    { EP3_IN_ADDR, 3, USB_DPRAM_EP3_IN_CTRL, USB_DPRAM_EP3_IN_BUF_CTRL,
+        USB_DPRAM_EP3_IN_BUF, 0, n64usb_ep3_in },
+#endif
 };
 
 static const unsigned char n64usb_device_desc[] = {
     18, USB_DT_DEVICE,
     0x00, 0x02,
+#if N64USB_CDC_ECM
+    0xef, 0x02, 0x01, USB_PACKET_SIZE,
+#else
     0, 0, 0, USB_PACKET_SIZE,
+#endif
     0x09, 0x12,
     0x00, 0x68,
+#if N64USB_CDC_ECM
+    0x01, 0x00,
+#else
     0x00, 0x00,
+#endif
     1, 2, 0, 1
 };
 
 static const unsigned char n64usb_config_desc[] = {
+#if N64USB_CDC_ECM
+    9, USB_DT_CONFIG,
+    79, 0,
+    2, 1, 0, 0xc0, 0x32,
+
+    8, USB_DT_INTERFACE_ASSOCIATION,
+    0, 2, 0x02, 0x06, 0x00, 0,
+
+    9, USB_DT_INTERFACE,
+    0, 0, 1, 0x02, 0x06, 0x00, 0,
+    5, USB_DT_CS_INTERFACE,
+    0x00, 0x10, 0x01,
+    5, USB_DT_CS_INTERFACE,
+    0x06, 0, 1,
+    13, USB_DT_CS_INTERFACE,
+    0x0f, 3,
+    0x00, 0x00, 0x00, 0x00,
+    0xea, 0x05,
+    0x00, 0x00, 0,
+    7, USB_DT_ENDPOINT,
+    EP3_IN_ADDR, 3, 16, 0, 16,
+
+    9, USB_DT_INTERFACE,
+    1, 0, 2, 0x0a, 0x00, 0x00, 0,
+    7, USB_DT_ENDPOINT,
+    EP1_OUT_ADDR, 2, 64, 0, 0,
+    7, USB_DT_ENDPOINT,
+    EP2_IN_ADDR, 2, 64, 0, 0
+#else
     9, USB_DT_CONFIG,
     32, 0,
     1, 1, 0, 0xc0, 0x32,
@@ -139,12 +205,14 @@ static const unsigned char n64usb_config_desc[] = {
     EP1_OUT_ADDR, 2, 64, 0, 0,
     7, 5,
     EP2_IN_ADDR, 2, 64, 0, 0
+#endif
 };
 
 static const unsigned char n64usb_lang_desc[] = {
     4, USB_DT_STRING, 0x09, 0x04
 };
 
+#if !N64USB_CDC_ECM
 static const unsigned char n64usb_ms_os_string[] = {
     0x12, USB_DT_STRING,
     'M', 0, 'S', 0, 'F', 0, 'T', 0, '1', 0, '0', 0, '0', 0,
@@ -166,17 +234,39 @@ static const unsigned char n64usb_ms_winusb_desc[] = {
     0x00, 0x00, 0x00, 0x00,
     0x00, 0x00
 };
+#endif
 
 static const char n64usb_vendor[] = "pdaXrom.org";
+#if N64USB_CDC_ECM
+static const char n64usb_product[] = "N64cart CDC ECM";
+static const char n64usb_host_mac_string[] = "026400000001";
+#else
 static const char n64usb_product[] = "N64cart USBNet";
+#endif
 
-static unsigned char n64usb_mac[6] =
+static unsigned char n64usb_device_mac[6] =
     { 0x02, 0x64, 0x00, 0x00, 0x00, 0x10 };
 static unsigned char n64usb_ep0_buf[USB_PACKET_SIZE];
+static const unsigned char *n64usb_ep0_data;
+static unsigned n64usb_ep0_len;
+static unsigned n64usb_ep0_pos;
 static unsigned n64usb_io_words[USB_PACKET_SIZE / sizeof(unsigned)];
+#if N64USB_CDC_ECM
+static const unsigned char *n64usb_tx_frame;
+static unsigned n64usb_tx_len;
+static unsigned n64usb_tx_pos;
+static int n64usb_tx_zlp;
+static unsigned char n64usb_rx_frame[N64USB_FRAME_MAX];
+static unsigned n64usb_rx_pos;
+static int n64usb_data_alt;
+static unsigned char n64usb_ecm_notify_buf[16];
+static int n64usb_ecm_notify_busy;
+static int n64usb_ecm_speed_pending;
+#else
 static struct n64usbnet_tx n64usb_tx;
 static struct n64usbnet_rx n64usb_rx;
 static unsigned n64usb_tx_seq;
+#endif
 static int n64usb_initialized;
 static int n64usb_configured;
 static int n64usb_should_set_addr;
@@ -379,6 +469,76 @@ n64usb_string_descriptor(const char *str, unsigned char *buf)
     return len;
 }
 
+#if N64USB_CDC_ECM
+static void
+n64usb_put32le(unsigned char *p, unsigned value)
+{
+
+    p[0] = value;
+    p[1] = value >> 8;
+    p[2] = value >> 16;
+    p[3] = value >> 24;
+}
+
+static void
+n64usb_ecm_notify_speed(void)
+{
+
+    n64usb_ecm_notify_buf[0] = 0xa1;
+    n64usb_ecm_notify_buf[1] = USB_CDC_NOTIFY_CONNECTION_SPEED_CHANGE;
+    n64usb_ecm_notify_buf[2] = 0;
+    n64usb_ecm_notify_buf[3] = 0;
+    n64usb_ecm_notify_buf[4] = 0;
+    n64usb_ecm_notify_buf[5] = 0;
+    n64usb_ecm_notify_buf[6] = 8;
+    n64usb_ecm_notify_buf[7] = 0;
+    n64usb_put32le(n64usb_ecm_notify_buf + 8, 12000000);
+    n64usb_put32le(n64usb_ecm_notify_buf + 12, 12000000);
+    n64usb_start_transfer(n64usb_find_ep(EP3_IN_ADDR),
+        n64usb_ecm_notify_buf, 16);
+}
+
+static void
+n64usb_ecm_notify_link_up(void)
+{
+
+    if (!n64usb_configured || n64usb_ecm_notify_busy) {
+        n64usb_ecm_speed_pending = 1;
+        return;
+    }
+    n64usb_ecm_notify_busy = 1;
+    n64usb_ecm_speed_pending = 1;
+    n64usb_ecm_notify_buf[0] = 0xa1;
+    n64usb_ecm_notify_buf[1] = USB_CDC_NOTIFY_NETWORK_CONNECTION;
+    n64usb_ecm_notify_buf[2] = 1;
+    n64usb_ecm_notify_buf[3] = 0;
+    n64usb_ecm_notify_buf[4] = 0;
+    n64usb_ecm_notify_buf[5] = 0;
+    n64usb_ecm_notify_buf[6] = 0;
+    n64usb_ecm_notify_buf[7] = 0;
+    n64usb_start_transfer(n64usb_find_ep(EP3_IN_ADDR),
+        n64usb_ecm_notify_buf, 8);
+}
+#endif
+
+static void
+n64usb_ep0_send_next(void)
+{
+    struct n64usb_ep *ep;
+    unsigned chunk;
+
+    ep = n64usb_find_ep(EP0_IN_ADDR);
+    if (ep == 0)
+        return;
+    chunk = n64usb_ep0_len - n64usb_ep0_pos;
+    if (chunk > USB_PACKET_SIZE)
+        chunk = USB_PACKET_SIZE;
+    n64usb_start_transfer(ep,
+        n64usb_ep0_data ? n64usb_ep0_data + n64usb_ep0_pos : 0,
+        chunk);
+    n64usb_ep0_pos += chunk;
+}
+
 static void
 n64usb_ep0_send(const unsigned char *buf, unsigned len, unsigned wlength)
 {
@@ -386,13 +546,14 @@ n64usb_ep0_send(const unsigned char *buf, unsigned len, unsigned wlength)
 
     if (len > wlength)
         len = wlength;
-    if (len > USB_PACKET_SIZE)
-        len = USB_PACKET_SIZE;
     ep = n64usb_find_ep(EP0_IN_ADDR);
     if (ep == 0)
         return;
     ep->next_pid = 1;
-    n64usb_start_transfer(ep, buf, len);
+    n64usb_ep0_data = buf;
+    n64usb_ep0_len = len;
+    n64usb_ep0_pos = 0;
+    n64usb_ep0_send_next();
 }
 
 static void
@@ -406,10 +567,24 @@ n64usb_reset_state(void)
 {
     n64usb_dev_addr = 0;
     n64usb_should_set_addr = 0;
+    n64usb_ep0_data = 0;
+    n64usb_ep0_len = 0;
+    n64usb_ep0_pos = 0;
     n64usb_configured = 0;
     n64usb_tx_usb_busy = 0;
+#if N64USB_CDC_ECM
+    n64usb_tx_frame = 0;
+    n64usb_tx_len = 0;
+    n64usb_tx_pos = 0;
+    n64usb_tx_zlp = 0;
+    n64usb_rx_pos = 0;
+    n64usb_data_alt = 0;
+    n64usb_ecm_notify_busy = 0;
+    n64usb_ecm_speed_pending = 0;
+#else
     n64usb_tx.active = 0;
     n64usbnet_rx_reset(&n64usb_rx);
+#endif
     n64usb_reset_endpoint_toggles();
     usbn_link_reset(USB_NET_UNIT);
 }
@@ -460,9 +635,11 @@ n64usb_handle_get_descriptor(const unsigned char *setup)
         if (dindex == 0)
             n64usb_ep0_send(n64usb_lang_desc, sizeof(n64usb_lang_desc),
                 wlength);
+#if !N64USB_CDC_ECM
         else if (dindex == 0xee)
             n64usb_ep0_send(n64usb_ms_os_string,
                 sizeof(n64usb_ms_os_string), wlength);
+#endif
         else if (dindex == 1) {
             len = n64usb_string_descriptor(n64usb_vendor,
                 n64usb_ep0_buf);
@@ -471,6 +648,12 @@ n64usb_handle_get_descriptor(const unsigned char *setup)
             len = n64usb_string_descriptor(n64usb_product,
                 n64usb_ep0_buf);
             n64usb_ep0_send(n64usb_ep0_buf, len, wlength);
+#if N64USB_CDC_ECM
+        } else if (dindex == 3) {
+            len = n64usb_string_descriptor(n64usb_host_mac_string,
+                n64usb_ep0_buf);
+            n64usb_ep0_send(n64usb_ep0_buf, len, wlength);
+#endif
         } else
             n64usb_ep0_send(0, 0, wlength);
         break;
@@ -496,6 +679,7 @@ n64usb_handle_setup(void)
     (void)windex;
 
     n64usb_find_ep(EP0_IN_ADDR)->next_pid = 1;
+    n64usb_find_ep(EP0_OUT_ADDR)->next_pid = 1;
     if (reqtype == USB_DIR_OUT) {
         if (req == USB_REQUEST_SET_ADDRESS) {
             n64usb_dev_addr = wvalue & 0x7f;
@@ -503,24 +687,103 @@ n64usb_handle_setup(void)
             n64usb_ep0_ack();
         } else if (req == USB_REQUEST_SET_CONFIGURATION) {
             n64usb_configured = 1;
+#if N64USB_CDC_ECM
+            n64usb_data_alt = 1;
+#endif
             n64usb_ep0_ack();
+#if N64USB_CDC_ECM
             n64usb_start_transfer(n64usb_find_ep(EP1_OUT_ADDR), 0,
                 USB_PACKET_SIZE);
+            n64usb_ecm_notify_link_up();
+#else
+            n64usb_start_transfer(n64usb_find_ep(EP1_OUT_ADDR), 0,
+                USB_PACKET_SIZE);
+#endif
+        } else if (req == USB_REQUEST_SET_INTERFACE) {
+#if N64USB_CDC_ECM
+            if (windex == 1) {
+                n64usb_data_alt = (wvalue & 0xff) == 0;
+                n64usb_ep0_ack();
+                if (n64usb_configured && n64usb_data_alt)
+                    n64usb_start_transfer(n64usb_find_ep(EP1_OUT_ADDR),
+                        0, USB_PACKET_SIZE);
+                if (n64usb_configured && n64usb_data_alt)
+                    n64usb_ecm_notify_link_up();
+            } else
+                n64usb_ep0_ack();
+#else
+            n64usb_ep0_ack();
+#endif
         } else
             n64usb_ep0_ack();
     } else if (reqtype == USB_DIR_IN) {
         if (req == USB_REQUEST_GET_DESCRIPTOR)
             n64usb_handle_get_descriptor(setup);
-        else
+        else if (req == USB_REQUEST_GET_INTERFACE) {
+#if N64USB_CDC_ECM
+            n64usb_ep0_buf[0] = 0;
+            n64usb_ep0_send(n64usb_ep0_buf, 1, wlength);
+#else
             n64usb_ep0_send(0, 0, wlength);
+#endif
+        } else
+            n64usb_ep0_send(0, 0, wlength);
+#if N64USB_CDC_ECM
+    } else if (reqtype == 0xa1 &&
+        req == USB_CDC_GET_ETHERNET_STATISTIC) {
+        n64usb_ep0_buf[0] = 0;
+        n64usb_ep0_buf[1] = 0;
+        n64usb_ep0_buf[2] = 0;
+        n64usb_ep0_buf[3] = 0;
+        n64usb_ep0_send(n64usb_ep0_buf, 4, wlength);
+    } else if (reqtype == 0x21 &&
+        req == USB_CDC_SET_ETHERNET_PACKET_FILTER) {
+        n64usb_ep0_ack();
+        n64usb_ecm_notify_link_up();
+#endif
+#if !N64USB_CDC_ECM
     } else if (reqtype == 0xc0 && req == n64usb_ms_os_string[16] &&
         windex == 0x04) {
         n64usb_ep0_send(n64usb_ms_winusb_desc,
             sizeof(n64usb_ms_winusb_desc), wlength);
+#endif
     } else
         n64usb_ep0_ack();
 }
 
+#if N64USB_CDC_ECM
+static void
+n64usb_send_next_tx(void)
+{
+    unsigned char empty;
+    unsigned chunk;
+
+    if (!n64usb_configured || !n64usb_data_alt || n64usb_tx_frame == 0) {
+        n64usb_tx_usb_busy = 0;
+        usbn_tx_done(USB_NET_UNIT,
+            (n64usb_configured && n64usb_data_alt) ? 0 : 1);
+        return;
+    }
+    if (n64usb_tx_pos < n64usb_tx_len) {
+        chunk = n64usb_tx_len - n64usb_tx_pos;
+        if (chunk > USB_PACKET_SIZE)
+            chunk = USB_PACKET_SIZE;
+        n64usb_start_transfer(n64usb_find_ep(EP2_IN_ADDR),
+            n64usb_tx_frame + n64usb_tx_pos, chunk);
+        n64usb_tx_pos += chunk;
+        return;
+    }
+    if (n64usb_tx_zlp) {
+        n64usb_tx_zlp = 0;
+        empty = 0;
+        n64usb_start_transfer(n64usb_find_ep(EP2_IN_ADDR), &empty, 0);
+        return;
+    }
+    n64usb_tx_usb_busy = 0;
+    n64usb_tx_frame = 0;
+    usbn_tx_done(USB_NET_UNIT, 0);
+}
+#else
 static void
 n64usb_send_next_tx(void)
 {
@@ -542,6 +805,7 @@ n64usb_send_next_tx(void)
     n64usb_start_transfer(n64usb_find_ep(EP2_IN_ADDR), packet,
         packet_len);
 }
+#endif
 
 static void
 n64usb_ep0_in(unsigned char *buf, unsigned len)
@@ -551,8 +815,14 @@ n64usb_ep0_in(unsigned char *buf, unsigned len)
     if (n64usb_should_set_addr) {
         n64usb_reg_write(USB_ADDR_ENDP, n64usb_dev_addr);
         n64usb_should_set_addr = 0;
-    } else
+    } else if (n64usb_ep0_pos < n64usb_ep0_len)
+        n64usb_ep0_send_next();
+    else {
+        n64usb_ep0_data = 0;
+        n64usb_ep0_len = 0;
+        n64usb_ep0_pos = 0;
         n64usb_start_transfer(n64usb_find_ep(EP0_OUT_ADDR), 0, 0);
+    }
 }
 
 static void
@@ -565,6 +835,28 @@ n64usb_ep0_out(unsigned char *buf, unsigned len)
 static void
 n64usb_ep1_out(unsigned char *buf, unsigned len)
 {
+#if N64USB_CDC_ECM
+    if (!n64usb_configured || !n64usb_data_alt)
+        return;
+    if (n64usb_rx_pos + len > sizeof(n64usb_rx_frame)) {
+        usbn_input_error(USB_NET_UNIT);
+        n64usb_rx_pos = 0;
+    } else if (len != 0) {
+        bcopy((caddr_t)buf, (caddr_t)(n64usb_rx_frame + n64usb_rx_pos),
+            len);
+        n64usb_rx_pos += len;
+    }
+    if (len < USB_PACKET_SIZE) {
+        if (n64usb_rx_pos >= N64USB_ETH_HEADER_LEN)
+            usbn_input(USB_NET_UNIT, n64usb_rx_frame, n64usb_rx_pos);
+        else if (n64usb_rx_pos != 0)
+            usbn_input_error(USB_NET_UNIT);
+        n64usb_rx_pos = 0;
+    }
+    if (n64usb_configured && n64usb_data_alt)
+        n64usb_start_transfer(n64usb_find_ep(EP1_OUT_ADDR), 0,
+            USB_PACKET_SIZE);
+#else
     int ret;
 
     ret = n64usbnet_rx_push(&n64usb_rx, buf, len);
@@ -578,6 +870,7 @@ n64usb_ep1_out(unsigned char *buf, unsigned len)
     if (n64usb_configured)
         n64usb_start_transfer(n64usb_find_ep(EP1_OUT_ADDR), 0,
             USB_PACKET_SIZE);
+#endif
 }
 
 static void
@@ -585,13 +878,37 @@ n64usb_ep2_in(unsigned char *buf, unsigned len)
 {
     (void)buf;
     (void)len;
+#if N64USB_CDC_ECM
+    if (n64usb_tx_frame != 0)
+        n64usb_send_next_tx();
+    else {
+        n64usb_tx_usb_busy = 0;
+        usbn_tx_done(USB_NET_UNIT, 0);
+    }
+#else
     if (n64usb_tx.active)
         n64usb_send_next_tx();
     else {
         n64usb_tx_usb_busy = 0;
         usbn_tx_done(USB_NET_UNIT, 0);
     }
+#endif
 }
+
+#if N64USB_CDC_ECM
+static void
+n64usb_ep3_in(unsigned char *buf, unsigned len)
+{
+    (void)buf;
+    (void)len;
+    if (n64usb_ecm_speed_pending) {
+        n64usb_ecm_speed_pending = 0;
+        n64usb_ecm_notify_speed();
+        return;
+    }
+    n64usb_ecm_notify_busy = 0;
+}
+#endif
 
 static void
 n64usb_handle_buff_done(unsigned epnum, int in)
@@ -716,9 +1033,12 @@ usbn_hw_init(int unit, unsigned char *enaddr)
 {
     if (unit != USB_NET_UNIT)
         return 0;
-    bcopy((caddr_t)n64usb_mac, (caddr_t)enaddr, sizeof(n64usb_mac));
+    bcopy((caddr_t)n64usb_device_mac, (caddr_t)enaddr,
+        sizeof(n64usb_device_mac));
     if (!n64usb_initialized) {
+#if !N64USB_CDC_ECM
         n64usbnet_rx_reset(&n64usb_rx);
+#endif
         n64usb_hw_start();
         n64usb_initialized = 1;
     }
@@ -731,9 +1051,18 @@ usbn_hw_send(int unit, const unsigned char *frame, unsigned len)
     if (unit != USB_NET_UNIT || !n64usb_initialized ||
         !n64usb_configured || n64usb_tx_usb_busy)
         return EBUSY;
+#if N64USB_CDC_ECM
+    if (!n64usb_data_alt || len > N64USB_FRAME_MAX)
+        return EBUSY;
+    n64usb_tx_frame = frame;
+    n64usb_tx_len = len;
+    n64usb_tx_pos = 0;
+    n64usb_tx_zlp = (len & (USB_PACKET_SIZE - 1)) == 0;
+#else
     if (n64usbnet_tx_begin(&n64usb_tx, frame, len, ++n64usb_tx_seq) !=
         N64USBNET_MORE)
         return EINVAL;
+#endif
     n64usb_tx_usb_busy = 1;
     n64usb_send_next_tx();
     return 0;
