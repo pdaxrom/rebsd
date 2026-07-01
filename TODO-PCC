@@ -110,9 +110,10 @@ test gate.
     283 passed, 28 failed; Malta runtime 246 linked binaries, 234 passed,
     12 failed.
   - Current ReBSD/PCC run after `ld` `-L/-l` ordering, hard-float helper
-    prototypes, `sqrt(-1.0)`, raw `signbit`, `double -> float` NaN-sign, and
-    unsigned bitfield assignment fixes: 311 checks total, 290 passed, 21
-    failed; Malta runtime 253 linked binaries, 242 passed, 11 failed.
+    prototypes, `sqrt(-1.0)`, raw `signbit`, `double -> float` NaN-sign,
+    unsigned bitfield assignment, and MIPS `ZF` helper ABI fixes: 311 checks
+    total, 290 passed, 21 failed; Malta runtime 253 linked binaries, 243
+    passed, 10 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -137,7 +138,7 @@ test gate.
     ReBSD/MIPS currently defines `long double` as 64-bit double, while the test
     assumes an extended long double format and hard-codes values around
     `1.1897314953572317650E+4932L`.
-  - Floating-point/NaN/signbit behavior: `c99/basic008`, `pcclist/basic005`.
+  - Floating-point/NaN/signbit behavior: `c99/basic008`.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Likely aggregate return/temporary struct ABI issues: `c99/func003`,
@@ -148,16 +149,17 @@ test gate.
   - Likely bitfield signedness/assignment issue: `jira/PCC-462`.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
-- [ ] Audit MIPS backend `ZF` soft-float helper calls under the ReBSD
+- [x] Audit MIPS backend `ZF` soft-float helper calls under the ReBSD
   hard-float o32 ABI.
   - Current ReBSD/MIPS table bypasses hardware `cvt.s.d` for `double -> float`
     and calls `__truncdfsf2` with the hard-float ABI to preserve NaN sign bits.
   - Separate raw `cvt.s.d` assembly check returned mask `2` on both Malta QEMU
     and real N64/VR4300 hardware: `-1.0` keeps its sign after conversion, but
     `-NaN` is canonicalized to a positive single-precision NaN.
-  - `arch/mips/local2.c` still has the older `ZF` helper path that passes FP
-    helper arguments through integer registers; this must be fixed or avoided
-    before enabling helper-backed long long/FP conversions broadly.
+  - ReBSD `ZF` conversions now pass FP helper arguments in `$f12` for the
+    hard-float o32 ABI, and FP-to-`long long` helper results are modeled as
+    `$v0/$v1` returns instead of stale `$a0/$a1` arguments.
+  - This fixed `pcclist/basic005` on Malta.
 - [ ] Turn the temporary `pcc-tests` harness into a tracked test target.
   - It must add runtime payload files to the generated Malta rootfs manifest,
     not only copy them into `rootfs.stage`, because `fsutil` installs strictly

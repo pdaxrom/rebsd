@@ -40,6 +40,7 @@
 #endif
 
 #if defined(os_rebsd)
+#define MIPS_HARDFLOAT_O32_ABI 1
 #define TARGET_NO_ABICALLS
 #define TARGET_NO_REORDER
 #endif

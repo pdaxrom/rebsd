@@ -48,6 +48,7 @@ int bigendian = 0;
 int nargregs = MIPS_O32_NARGREGS;
 
 static int argsiz(NODE *p);
+static void print_reg64name(FILE *fp, int rval, int hi);
 
 void
 deflab(int label)
@@ -524,6 +525,21 @@ fpemulop(NODE *p)
 	if (ch == NULL) comperr("ZF: op=0x%x (%d)\n", p->n_op, p->n_op);
 
 	if (p->n_op == SCONV) {
+#ifdef MIPS_HARDFLOAT_O32_ABI
+		if (l->n_type == FLOAT) {
+			printf("\tmov.s ");
+			print_reg64name(stdout, F12, 0);
+			printf(",");
+			adrput(stdout, l);
+			printf("\n");
+		} else if (l->n_type == DOUBLE || l->n_type == LDOUBLE) {
+			printf("\tmov.d ");
+			print_reg64name(stdout, F12, 0);
+			printf(",");
+			adrput(stdout, l);
+			printf("\n");
+		}
+#else
 		if (l->n_type == FLOAT) {
 			printf("\tmfc1 %s,", rnames[A0]);
 			adrput(stdout, l);
@@ -536,6 +552,7 @@ fpemulop(NODE *p)
 			adrput(stdout, l);
 			printf("\n\tnop\n");
 		}
+#endif
 	} else {
 		comperr("ZF: incomplete softfloat - put args in registers");
 	}

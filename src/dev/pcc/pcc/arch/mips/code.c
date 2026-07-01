@@ -49,10 +49,6 @@
 #define n_df pdf
 #endif
 
-#if defined(os_rebsd)
-#define MIPS_HARDFLOAT_O32_ABI 1
-#endif
-
 #ifdef MIPS_HARDFLOAT_O32_ABI
 static int
 mips_fp_arg_type(TWORD t)
