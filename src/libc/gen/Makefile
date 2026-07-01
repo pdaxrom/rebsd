@@ -46,8 +46,8 @@ STDOBJ		= abort.o alarm.o atof.o atoi.o atol.o calloc.o closedir.o crypt.o \
 		  strdup.o uname.o wait.o wait3.o waitpid.o
 
 ifeq ($(TARGET_PLATFORM),n64)
-STDSRC		+= modf.c
-STDOBJ		+= modf.o
+STDSRC		+= isinf.c isnan.c modf.c
+STDOBJ		+= isinf.o isnan.o modf.o
 endif
 
 gen.a:		${OBJS}

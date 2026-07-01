@@ -109,9 +109,10 @@ test gate.
   - ReBSD/PCC run with `libpcc.a` and default `crt0.o`: 311 checks total,
     283 passed, 28 failed; Malta runtime 246 linked binaries, 234 passed,
     12 failed.
-  - Current ReBSD/PCC run after `ld` `-L/-l` ordering and `signbit`
-    normalization: 311 checks total, 290 passed, 21 failed; Malta runtime
-    260 linked binaries, 245 passed, 15 failed.
+  - Current ReBSD/PCC run after `ld` `-L/-l` ordering, hard-float helper
+    prototypes, `sqrt(-1.0)`, `signbit`, and `double -> float` NaN-sign
+    fixes: 311 checks total, 290 passed, 21 failed; Malta runtime 253 linked
+    binaries, 240 passed, 13 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -133,8 +134,7 @@ test gate.
     the form expected by `jira/PCC-194`.
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
   - Floating-point/NaN/signbit/long-double behavior:
-    `c99/arith002`, `c99/arith003`, `c99/fpoint001`, `c99/basic008`,
-    `pcclist/basic005`.
+    `c99/arith003`, `c99/basic008`, `pcclist/basic005`.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Likely aggregate return/temporary struct ABI issues: `c99/func003`,
@@ -146,6 +146,16 @@ test gate.
     `jira/PCC-477`.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
+- [ ] Audit MIPS backend `ZF` soft-float helper calls under the ReBSD
+  hard-float o32 ABI.
+  - Current ReBSD/MIPS table bypasses hardware `cvt.s.d` for `double -> float`
+    and calls `__truncdfsf2` with the hard-float ABI to preserve NaN sign bits.
+  - Separate raw `cvt.s.d` assembly check returned mask `2` on both Malta QEMU
+    and real N64/VR4300 hardware: `-1.0` keeps its sign after conversion, but
+    `-NaN` is canonicalized to a positive single-precision NaN.
+  - `arch/mips/local2.c` still has the older `ZF` helper path that passes FP
+    helper arguments through integer registers; this must be fixed or avoided
+    before enabling helper-backed long long/FP conversions broadly.
 - [ ] Turn the temporary `pcc-tests` harness into a tracked test target.
   - It must add runtime payload files to the generated Malta rootfs manifest,
     not only copy them into `rootfs.stage`, because `fsutil` installs strictly
@@ -198,8 +208,9 @@ test gate.
   contract.
   - Current work only provides builtin-backed constants/helpers such as
     `HUGE_VAL*`, `INFINITY`, `NAN`, `nan*`, and `signbit` for GCC/PCC.
-  - `signbit` is normalized to 0/1, which fixed `jira/PCC-382`; remaining
-    NaN/signbit cases still fail in `c99/fpoint001` and the arithmetic tests.
+  - `signbit` is normalized to 0/1 and PCC now routes float/double/long double
+    helpers by argument type; remaining floating-point regressions are in the
+    arithmetic/runtime behavior tests.
   - Confirm fallback behavior for non-GCC/PCC compilers, add missing C99
     classification/finite APIs if needed, and verify Malta/N64 hardware-FPU
     behavior for NaN/Inf/signbit cases.

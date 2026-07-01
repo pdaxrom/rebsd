@@ -47,7 +47,7 @@ float modff (float fx, float *iptr)
         return x.f32;
 }
 
-#ifndef TARGET_VR4300
+#ifdef TARGET_DOUBLE_IS_FLOAT
 /*
  * For PIC32, double is the same as float.
  */

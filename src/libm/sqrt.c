@@ -14,9 +14,13 @@ sqrt(double arg)
 	int exp;
 	int i;
 
+	if (arg != arg)
+		return arg;
 	if(arg <= 0.) {
-		if(arg < 0.)
+		if(arg < 0.) {
 			errno = EDOM;
+			return(nan(""));
+		}
 		return(0.);
 	}
 	x = frexp(arg,&exp);

@@ -27,4 +27,6 @@ int isinff (float x)
 /*
  * For PIC32, double is the same as float.
  */
+#ifdef TARGET_DOUBLE_IS_FLOAT
 int isinf (double x) __attribute__((alias ("isinff")));
+#endif

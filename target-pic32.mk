@@ -27,7 +27,7 @@ MANROFF		= nroff -man -h
 DOCROFF		= nroff -mdoc -h
 ELF2AOUT	= $(TOPSRC)/tools/elf2aout/elf2aout
 
-CFLAGS		= -Os -nostdinc
+CFLAGS		= -Os -nostdinc -DTARGET_DOUBLE_IS_FLOAT
 
 LDFLAGS		= --nmagic -T$(TOPSRC)/src/elf32-mips.ld $(TOPSRC)/src/crt0.o -L$(TOPSRC)/src
 LIBS		= -lc

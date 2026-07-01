@@ -27,4 +27,6 @@ int isnanf (float x)
 /*
  * For PIC32, double is the same as float.
  */
+#ifdef TARGET_DOUBLE_IS_FLOAT
 int isnan (double x) __attribute__((alias ("isnanf")));
+#endif

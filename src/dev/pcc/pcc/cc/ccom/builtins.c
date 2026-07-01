@@ -541,7 +541,12 @@ binhelp(P1ND *a, TWORD rt, char *n)
 		dimfuncnt++;
 		f->n_sp->sdf->dlst = 0;
 	}
+	if (a != NULL && f->n_sp->sdf != NULL && f->n_sp->sdf->dlst == 0)
+		f->n_sp->sdf->dlst = pr_arglst(a);
 	f->n_type = f->n_sp->stype;
+	f->n_df = f->n_sp->sdf;
+	f->pss = f->n_sp->sss;
+	f->n_ap = f->n_sp->sap;
 	f = clocal(f);
 	return buildtree(CALL, f, a);
 }
@@ -767,6 +772,22 @@ builtin_islessgreater(const struct bitable *bt, P1ND *a)
 static P1ND *
 builtin_signbit(const struct bitable *bt, P1ND *a)
 {
+	TWORD t;
+
+	if (a == NULL || a->n_op == CM) {
+		uerror("wrong argument count to %s", bt->name);
+		if (a != NULL)
+			p1tfree(a);
+		return bcon(0);
+	}
+
+	t = BTYPE(a->n_type);
+	if (t == FLOAT)
+		return binhelp(a, INT, "__signbitf");
+	if (t == LDOUBLE)
+		return binhelp(a, INT, "__signbitl");
+	if (t != DOUBLE)
+		a = cast(a, DOUBLE, 0);
 	return binhelp(a, INT, "__signbitd");
 }
 static P1ND *
@@ -982,7 +1003,7 @@ static const struct bitable bitable[] = {
 	{ "__builtin_scalbnl", builtin_unimp, 0, 2, scalbnlt, LDOUBLE },
 
 	{ "__builtin_signbitf", builtin_signbitf, 0, 1, scalbnft, INT },
-	{ "__builtin_signbit", builtin_signbit, 0, 1, scalbnt, INT },
+	{ "__builtin_signbit", builtin_signbit, BTNOPROTO, 1, NULL, INT },
 	{ "__builtin_signbitl", builtin_signbitl, 0, 1, scalbnlt, INT },
 
 	{ "__builtin_strcmp", builtin_unimp, 0, 2, strcmpt, INT },

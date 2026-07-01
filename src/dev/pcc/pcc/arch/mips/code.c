@@ -49,6 +49,44 @@
 #define n_df pdf
 #endif
 
+#if defined(os_rebsd)
+#define MIPS_HARDFLOAT_O32_ABI 1
+#endif
+
+#ifdef MIPS_HARDFLOAT_O32_ABI
+static int
+mips_fp_arg_type(TWORD t)
+{
+	return t == FLOAT || t == DOUBLE || t == LDOUBLE;
+}
+
+static int
+mips_next_fp_argreg(int *fpregp)
+{
+	int fpreg = *fpregp;
+
+	if (fpreg > F14)
+		return -1;
+	*fpregp = fpreg == F12 ? F14 : F16;
+	return fpreg;
+}
+
+static void
+mips_advance_arg_slots(TWORD t, int *regp)
+{
+	int reg = *regp;
+
+	if (t == DOUBLE || t == LDOUBLE) {
+		++reg;
+		reg &= ~1;
+		reg += 2;
+	} else {
+		++reg;
+	}
+	*regp = reg;
+}
+#endif
+
 /*
  * Print out assembler segment name.
  */
@@ -279,6 +317,32 @@ param_32bit(struct symtab *sym, int *regp, int dotemps)
 	ecomp(p);
 }
 
+#ifdef MIPS_HARDFLOAT_O32_ABI
+static void
+param_fpabi(struct symtab *sym, int *regp, int *fpregp, int dotemps)
+{
+	NODE *p, *q;
+	int fpreg;
+
+	fpreg = mips_next_fp_argreg(fpregp);
+	if (fpreg < 0)
+		cerror("param_fpabi");
+
+	q = block(REG, NIL, NIL, sym->stype, sym->sdf, sym->sap);
+	q->n_rval = fpreg;
+	if (dotemps) {
+		p = tempnode(0, sym->stype, sym->sdf, sym->sap);
+		sym->soffset = regno(p);
+		sym->sflags |= STNODE;
+	} else {
+		p = nametree(sym);
+	}
+	p = buildtree(ASSIGN, p, q);
+	ecomp(p);
+	mips_advance_arg_slots(sym->stype, regp);
+}
+#endif
+
 /*
  * XXX This is a hack.  We cannot have (l)doubles in more than one
  * register class.  So we bounce them in and out of temps to
@@ -366,6 +430,9 @@ bfcode(struct symtab **sp, int cnt)
 	int lastreg = A0 + nargregs - 1;
 	int saveallargs = 0;
 	int i, reg;
+#ifdef MIPS_HARDFLOAT_O32_ABI
+	int fp_leading, fpreg;
+#endif
 
 	/*
 	 * Detect if this function has ellipses and save all
@@ -375,16 +442,35 @@ bfcode(struct symtab **sp, int cnt)
 		saveallargs = pr_hasell(cftnsp->sdf->dlst);
 
 	reg = A0;
+#ifdef MIPS_HARDFLOAT_O32_ABI
+	fp_leading = !oldstyle && !saveallargs;
+	fpreg = F12;
+#endif
 
 	/* assign hidden return structure to temporary */
 	if (cftnsp->stype == STRTY+FTN || cftnsp->stype == UNIONTY+FTN) {
 		param_retptr();
 		++reg;
+#ifdef MIPS_HARDFLOAT_O32_ABI
+		fp_leading = 0;
+#endif
 	}
 
         /* recalculate the arg offset and create TEMP moves */
         for (i = 0; i < cnt; i++) {
 
+#ifdef MIPS_HARDFLOAT_O32_ABI
+		if (fp_leading && mips_fp_arg_type(sp[i]->stype)) {
+			if (fpreg <= F14) {
+				param_fpabi(sp[i], &reg, &fpreg,
+				    xtemps && !saveallargs);
+				continue;
+			}
+			fp_leading = 0;
+		} else if (fp_leading) {
+			fp_leading = 0;
+		}
+#endif
 		if ((reg > lastreg) && !xtemps)
 			break;
 		else if (reg > lastreg) 
@@ -621,15 +707,57 @@ movearg_32bit(NODE *p, int *regp)
 	return q;
 }
 
+#ifdef MIPS_HARDFLOAT_O32_ABI
 static NODE *
-moveargs(NODE *p, int *regp)
+movearg_fpabi(NODE *p, int *regp, int *fpregp)
+{
+	NODE *q;
+	int fpreg;
+
+	fpreg = mips_next_fp_argreg(fpregp);
+	if (fpreg < 0)
+		cerror("movearg_fpabi");
+
+	q = block(REG, NIL, NIL, p->n_type, p->n_df, p->n_ap);
+	q->n_rval = fpreg;
+	q = buildtree(ASSIGN, q, p);
+
+	mips_advance_arg_slots(p->n_type, regp);
+	return q;
+}
+
+static int
+call_fpabi(NODE *p)
+{
+	NODE *l;
+
+	if (p->n_op == UCALL)
+		return 0;
+
+	l = p->n_left;
+	if (l->n_df == NULL || l->n_df->dlst == 0)
+		return 0;
+	return pr_hasell(l->n_df->dlst) == 0;
+}
+#endif
+
+static NODE *
+moveargs(NODE *p, int *regp
+#ifdef MIPS_HARDFLOAT_O32_ABI
+    , int *fpregp, int *fp_leadingp
+#endif
+    )
 {
         NODE *r, **rp;
 	int lastreg;
 	int reg;
 
         if (p->n_op == CM) {
-                p->n_left = moveargs(p->n_left, regp);
+                p->n_left = moveargs(p->n_left, regp
+#ifdef MIPS_HARDFLOAT_O32_ABI
+		    , fpregp, fp_leadingp
+#endif
+		    );
                 r = p->n_right;
 		rp = &p->n_right;
         } else {
@@ -639,6 +767,19 @@ moveargs(NODE *p, int *regp)
 
  	lastreg = A0 + nargregs - 1;
         reg = *regp;
+
+#ifdef MIPS_HARDFLOAT_O32_ABI
+	if (*fp_leadingp && mips_fp_arg_type(r->n_type)) {
+		if (*fpregp <= F14) {
+			*rp = movearg_fpabi(r, regp, fpregp);
+			return p;
+		}
+		*fp_leadingp = 0;
+	} else if (*fp_leadingp) {
+		*fp_leadingp = 0;
+	}
+	reg = *regp;
+#endif
 
 	if (reg > lastreg && r->n_op != STARG)
 		*rp = block(FUNARG, r, NIL, r->n_type, r->n_df, r->n_ap);
@@ -689,9 +830,16 @@ funcode(NODE *p)
 	int regnum = A0;
 	NODE *l, *r, *t, *q;
 	int ty;
+#ifdef MIPS_HARDFLOAT_O32_ABI
+	int fpreg = F12;
+	int fp_leading;
+#endif
 
 	l = p->n_left;
 	r = p->n_right;
+#ifdef MIPS_HARDFLOAT_O32_ABI
+	fp_leading = call_fpabi(p);
+#endif
 
 	/*
 	 * if returning a structure, make the first argument
@@ -711,9 +859,16 @@ funcode(NODE *p)
 			t->n_left = block(CM, q, t->n_left, INCREF(ty),
 			    l->n_df, l->n_ap);
 		}
+#ifdef MIPS_HARDFLOAT_O32_ABI
+		fp_leading = 0;
+#endif
 	}
 
-	p->n_right = moveargs(p->n_right, &regnum);
+	p->n_right = moveargs(p->n_right, &regnum
+#ifdef MIPS_HARDFLOAT_O32_ABI
+	    , &fpreg, &fp_leading
+#endif
+	    );
 
 	return p;
 }

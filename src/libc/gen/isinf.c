@@ -11,12 +11,15 @@
  */
 int isinf (double x)
 {
-	long hx, lx;
+	union {
+		unsigned long long u64;
+		double f64;
+	} u;
+	unsigned long long abs;
 
-        lx = *(unsigned long long*) &x;
-        hx = (*(unsigned long long*) &x) >> 32;
-
-	lx |= (hx & 0x7fffffff) ^ 0x7ff00000;
-	lx |= -lx;
-	return ~(lx >> 31) & (hx >> 30);
+	u.f64 = x;
+	abs = u.u64 & 0x7fffffffffffffffULL;
+	if (abs != 0x7ff0000000000000ULL)
+		return 0;
+	return (u.u64 >> 63) ? -1 : 1;
 }

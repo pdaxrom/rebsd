@@ -417,11 +417,23 @@ struct optab table[] = {
 		NCREG,	RESC1,
 		"	cvt.d.s A1,AL	# convert float to (l)double\n", },
 
+#ifdef os_rebsd
+{ SCONV,	INCREG,
+	SCREG,	TDOUBLE|TLDOUBLE,
+	SCREG,	TFLOAT,
+		NEEDS(NREG(C, 1), NRES(F0)),	RESC1,
+		"	mov.d $f12,AL	# convert (l)double to float via helper\n"
+		"	subu $sp,$sp,16 # call __truncdfsf2\n"
+		"	jal __truncdfsf2\n"
+		"	nop\n"
+		"	addiu $sp,$sp,16\n", },
+#else
 { SCONV,	INCREG,
 	SCREG,	TDOUBLE|TLDOUBLE,
 	SCREG,	TFLOAT,
 		NCREG,	RESC1,
 		"	cvt.s.d A1,AL	# convert (l)double to float\n", },
+#endif
 
 { SCONV,	INCREG,
 	SAREG,	TWORD,

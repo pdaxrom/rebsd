@@ -14,13 +14,13 @@
  */
 int isnan (double x)
 {
-	long hx, lx;
+	union {
+		unsigned long long u64;
+		double f64;
+	} u;
+	unsigned long long abs;
 
-        lx = *(unsigned long long*) &x;
-        hx = (*(unsigned long long*) &x) >> 32;
-
-	hx &= 0x7fffffff;
-	hx |= (unsigned long) (lx | (-lx)) >> 31;
-	hx = 0x7ff00000 - hx;
-	return (int) (((unsigned long) hx) >> 31);
+	u.f64 = x;
+	abs = u.u64 & 0x7fffffffffffffffULL;
+	return abs > 0x7ff0000000000000ULL;
 }
