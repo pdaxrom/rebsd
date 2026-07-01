@@ -48,6 +48,7 @@ int bigendian = 0;
 int nargregs = MIPS_O32_NARGREGS;
 
 static int argsiz(NODE *p);
+static int funargpushsiz(NODE *p);
 static void print_reg64name(FILE *fp, int rval, int hi);
 
 void
@@ -1305,7 +1306,7 @@ gclass(TWORD t)
 void
 lastcall(NODE *p)
 {
-	int sz;
+	int pad, pushsz, sz;
 
 #ifdef PCC_DEBUG
 	if (x2debug)
@@ -1317,13 +1318,18 @@ lastcall(NODE *p)
 		return;
 
 	sz = argsiz(p->n_right);
+	pushsz = funargpushsiz(p->n_right);
+	pad = (pushsz & 7) != 0 ? 4 : 0;
 
 	if ((sz > 4*nargregs) && (sz & 7) != 0) {
-		printf("\tsubu %s,%s,4\t# align stack\n",
-		    rnames[SP], rnames[SP]);
 		sz += 4;
 		assert((sz & 7) == 0);
 	}
+	if (sz < 4*nargregs + pushsz + pad)
+		sz = 4*nargregs + pushsz + pad;
+	if (pad)
+		printf("\tsubu %s,%s,%d\t# align stack\n",
+		    rnames[SP], rnames[SP], pad);
 
 	p->n_qual = sz; /* XXX */
 }
@@ -1362,6 +1368,34 @@ argsiz(NODE *p)
 
 //	printf("size=%d, sz=%d -> %d\n", size, sz, size + sz);
 	return (size + sz);
+}
+
+static int
+funargpushsiz(NODE *p)
+{
+	TWORD t;
+	int sz;
+
+	if (p == NIL)
+		return 0;
+	if (p->n_op == CM)
+		return funargpushsiz(p->n_left) + funargpushsiz(p->n_right);
+	if (p->n_op != FUNARG)
+		return 0;
+
+	t = p->n_type;
+	if (t == STRTY || t == UNIONTY)
+		sz = attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0);
+	else if (t < LONGLONG || t > BTMASK)
+		sz = 4;
+	else if (DEUNSIGN(t) == LONGLONG)
+		sz = 8;
+	else if (t == DOUBLE || t == LDOUBLE)
+		sz = 8;
+	else
+		sz = 4;
+
+	return (sz + 3) & ~3;
 }
 
 /*

@@ -111,9 +111,10 @@ test gate.
     12 failed.
   - Current ReBSD/PCC run after `ld` `-L/-l` ordering, hard-float helper
     prototypes, `sqrt(-1.0)`, raw `signbit`, `double -> float` NaN-sign,
-    unsigned bitfield assignment, MIPS `ZF` helper ABI fixes, and MIPS
-    aggregate-return ABI fixes: 311 checks total, 290 passed, 21 failed;
-    Malta runtime 253 linked binaries, 245 passed, 8 failed.
+    unsigned bitfield assignment, MIPS `ZF` helper ABI fixes, MIPS
+    aggregate-return ABI fixes, and MIPS stack-argument alignment fixes: 311
+    checks total, 290 passed, 21 failed; Malta runtime 253 linked binaries,
+    246 passed, 7 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -126,8 +127,16 @@ test gate.
     `cstknode()` instead of a single temp word.
   - Callee parameter stack offsets are shifted by one o32 slot after the hidden
     `$a0` result pointer.
-  - This fixed `c99/func003` and `jira/PCC-138`; `jira/PCC-85` now reaches a
-    separate `_doprnt`/stack failure after the first line is printed.
+  - This fixed `c99/func003` and `jira/PCC-138`; it also exposed the separate
+    `jira/PCC-85` stack alignment failure fixed below.
+- [x] Fix MIPS o32 stack alignment for stack-passed call arguments.
+  - `lastcall()` now computes the real `FUNARG` push size after target
+    lowering and emits a pre-argument pad when the pushed stack arguments would
+    leave `$sp` only 4-byte aligned.
+  - This keeps the ABI position of the first stack argument intact while
+    preserving the existing rounded post-call cleanup.
+  - This fixed `jira/PCC-85`, which was faulting in `_doprnt` at
+    `sdc1 $f26,504(sp)` because `$sp` reached GCC-built libc misaligned.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - ReBSD assembler/linker incompatibilities: non-relocatable expressions
     (`c99/basic004`, `c99/func004`, `c99/oper001`, `jira/PCC-23`,
@@ -150,10 +159,6 @@ test gate.
   - Floating-point/NaN/signbit behavior: `c99/basic008`.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
-  - Remaining `jira/PCC-85` failure is no longer the fixed aggregate-return
-    overlap: manual Malta run prints the first line, then faults in `_doprnt`
-    prologue at `sdc1 $f26,504(sp)` with bad address `0x005ffe0c`. Triage this
-    as stack/varargs/libc/FPU-save behavior.
   - Wide-char/wide-stdio stub is still too small: `jira/PCC-21`.
   - Likely printf/float constant or libc formatting issue: `jira/PCC-225`.
   - Likely bool-to-float/codegen issue: `jira/PCC-236`.
