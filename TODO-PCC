@@ -134,7 +134,7 @@ test gate.
     expectations, macro-expanded `#include` line-end consumption, floating
     NaN/Inf static initializer folding, and MIPS computed-goto support:
     311 checks total, 308 passed, 3 failed; Malta runtime 271 linked
-    binaries, 270 passed, 1 failed.
+    binaries, 270 passed, 1 deferred ctor/dtor runtime failure.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -245,9 +245,12 @@ test gate.
     `gcccompat/typeof001` uses x86 inline-asm constraints `=d`/`=a`;
     `misc/shlib3` uses unsupported `-fPIC -shared` output;
     `pcclist/init004` requires TLS, which the ReBSD target currently rejects.
-- [ ] Fix or classify `pcc-tests` Malta runtime failures.
-  - Constructor/destructor attribute tests remain expected failures until
-    `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
+- [x] Classify `pcc-tests` Malta runtime failures for the current C-only gate.
+  - `pcclist/init006` exercises constructor/destructor attributes, using the
+    same runtime machinery needed for future C++ global constructors and
+    destructors.
+  - ReBSD does not currently ship a PCC C++ compiler, so ctor/dtor runtime
+    support is deferred and does not block the first native C compiler gate.
   - Do not enable `crtbegin.o`/`crtend.o` in the default PCC link path until
     ReBSD `as`/`ld` can preserve or collect `.ctors`/`.dtors` separately from
     ordinary `.data`; otherwise constructor lists can include unrelated data
@@ -316,7 +319,7 @@ test gate.
   - Decide only if tests prove it needed: stage `libpccsoftfloat.a`.
   - Defer `pcc-libs/csu` until the a.out toolchain has a safe ctor/dtor
     representation, or until C++/constructor attributes become a supported
-    gate.
+    gate after the native C compiler work.
   - Keep hardware-FPU Malta/N64 builds free of unnecessary soft-float runtime
     dependencies.
 - [ ] Boot Malta with native PCC installed.
