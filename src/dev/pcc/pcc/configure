@@ -3026,6 +3026,15 @@ case "$target_os" in
 	esac
 	;;
 
+    rebsd*|retrobsd*)
+	targos=rebsd
+	abi=aout
+	wchar_type=USHORT
+	case "$target_cpu" in
+	    mips*) targmach=mips endian=big ;;
+	esac
+	;;
+
     midnightbsd*)
 	targos=midnightbsd
 	abi=elf
@@ -7233,4 +7242,3 @@ echo "Type of wchar_t is ............... ${wchar_type} (${wchar_size} chars)"
 echo
 echo "Configure finished.  Do 'make && make install' to compile and install.
 "
-

@@ -39,6 +39,11 @@
 #define USE_GAS
 #endif
 
+#if defined(os_rebsd)
+#define TARGET_NO_ABICALLS
+#define TARGET_NO_REORDER
+#endif
+
 /*
  * Convert (multi-)character constant to integer.
  * Assume: If only one value; store at left side (char size), otherwise 
@@ -120,7 +125,11 @@ typedef long long OFFSZ;
 #define STACK_DOWN 		/* stack grows negatively for automatics */
 
 #undef	FIELDOPS		/* no bit-field instructions */
+#ifdef TARGET_BIG_ENDIAN
+#define TARGET_ENDIAN TARGET_BE
+#else
 #define TARGET_ENDIAN TARGET_LE
+#endif
 #define	MYALIGN
 
 /* Definitions mostly used in pass2 */

@@ -137,6 +137,15 @@ case "$target_os" in
 	esac
 	;;
 
+    rebsd*|retrobsd*)
+	targos=rebsd
+	abi=aout
+	wchar_type=USHORT
+	case "$target_cpu" in
+	    mips*) targmach=mips endian=big ;;
+	esac
+	;;
+
     midnightbsd*)
 	targos=midnightbsd
 	abi=elf

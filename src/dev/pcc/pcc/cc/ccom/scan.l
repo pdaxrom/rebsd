@@ -588,6 +588,10 @@ printdotfile(char *file)
 {
 	char *p;
 
+#ifdef os_rebsd
+	(void)file;
+	return;
+#endif
 	if ((p = strrchr(file, '/')) == NULL)
 		p = file;
 	else

@@ -150,8 +150,13 @@ clocal(NODE *p)
 			if (coptype(l->n_op) != BITYPE)
 				break;
 			if (l->n_right->n_op == ICON) {
+				ty = l->n_left->n_type;
 				r = l->n_left->n_left;
 				if (r->n_type >= FLOAT && r->n_type <= LDOUBLE)
+					break;
+				if ((DEUNSIGN(ty) == LONGLONG ||
+				    DEUNSIGN(r->n_type) == LONGLONG) &&
+				    ty != r->n_type)
 					break;
 				/* Type must be correct */
 				ty = r->n_type;
@@ -284,8 +289,12 @@ clocal(NODE *p)
 			l->n_ap = 0;
 			nfree(p);
 			return l;
-		} else if (l->n_op == FCON)
-			cerror("SCONV FCON");
+		} else if (l->n_op == FCON) {
+			if (concast(l, m) == 0)
+				break;
+			nfree(p);
+			p = clocal(l);
+		}
 		break;
 
 	case MOD:
@@ -338,7 +347,18 @@ myp2tree(NODE *p)
 	sp->sflags = 0;
 	sp->stype = p->n_type;
 	sp->squal = (CON >> TSHIFT);
+	sp->sdf = NULL;
+#ifndef LANG_CXX
+	sp->sss = NULL;
+#endif
+	sp->sname = NULL;
+#ifdef sap
+#undef sap
+	sp->sap = NULL;
+#define	sap sss
+#endif
 
+	defalign(talign(sp->stype, sp->sap));
 	defloc(sp);
 	ninval(0, tsize(sp->stype, sp->sdf, sp->sap), p);
 
@@ -401,10 +421,18 @@ spalloc(NODE *t, NODE *p, OFFSZ off)
 int
 ninval(CONSZ off, int fsz, NODE *p)
 {
-        struct symtab *q;
-        TWORD t;
+	struct symtab *q;
+#ifndef LANG_CXX
+	uint32_t *ufp;
+#endif
+	TWORD t;
+#ifndef LANG_CXX
+	int nbits;
+#endif
 #ifndef USE_GAS
-        int i, j;
+	int i, j;
+#elif !defined(LANG_CXX)
+	int i;
 #endif
 
         t = p->n_type;
@@ -415,6 +443,24 @@ ninval(CONSZ off, int fsz, NODE *p)
                 uerror("element not constant");
 
         switch (t) {
+#ifndef LANG_CXX
+	case FLOAT:
+	case DOUBLE:
+	case LDOUBLE:
+		ufp = soft_toush(p->n_scon, t, &nbits);
+#if TARGET_ENDIAN == TARGET_BE
+		for (i = sztable[t] - SZINT; i >= 0; i -= SZINT) {
+			printf("\t.word %u\n",
+			    (i < nbits ? ufp[i/SZINT] : 0));
+		}
+#else
+		for (i = 0; i < sztable[t]; i += SZINT) {
+			printf("\t.word %u\n",
+			    (i < nbits ? ufp[i/SZINT] : 0));
+		}
+#endif
+		break;
+#endif
         case LONGLONG:
         case ULONGLONG:
 #ifdef USE_GAS
@@ -424,9 +470,9 @@ ninval(CONSZ off, int fsz, NODE *p)
                 j = glval(p) & 0xffffffff;
                 p->n_type = INT;
 		if (bigendian) {
-			slval(p, j);
-	                ninval(off, 32, p);
 			slval(p, i);
+	                ninval(off, 32, p);
+			slval(p, j);
 			ninval(off+32, 32, p);
 		} else {
 			slval(p, i);

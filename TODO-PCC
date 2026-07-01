@@ -1,0 +1,151 @@
+# ReBSD PCC Port TODO
+
+Status: active
+Scope: bring the imported Portable C Compiler to ReBSD/MIPS without changing
+the default GCC-based kernel and userland builds until PCC passes the Malta
+test gate.
+
+## Ground Rules
+
+- Kernel builds stay on the existing GCC flow for now.
+- Userland builds stay on GCC until PCC passes the full Malta test set.
+- `N64_USERLAND_COMPILER=pcc` remains reserved until that gate is green.
+- ReBSD must keep using its existing `as`, `ld`, `ar`, and `ranlib`; no GNU
+  binutils or LLVM dependency is allowed for the target toolchain.
+- First working target is big-endian MIPS o32 for Malta and N64/VR4300-class
+  hardware.
+- PCC may expose ReBSD macros, but it must keep RetroBSD compatibility macros
+  while the tree and ports still expect them.
+
+## Completed Gate
+
+- [x] Rebrand committed as ReBSD with RetroBSD origin documented.
+- [x] GCC-based Malta build completed.
+- [x] Malta QEMU smoke tests completed.
+- [x] GCC-based N64 build completed.
+- [x] N64 image confirmed on hardware.
+- [x] PCC userland selector is present but intentionally blocked.
+
+## Phase 1: Host PCC Configuration
+
+- [x] Add a ReBSD OS configuration to imported PCC.
+  - Target aliases: `mips-rebsd`, `mips-unknown-rebsd`.
+  - Compatibility aliases: `mips-retrobsd`, `mips-unknown-retrobsd`.
+  - ABI: static MIPS o32, big-endian, no PIC/TLS/threads/C++.
+- [x] Define ReBSD preprocessor macros.
+  - Required compatibility: `__retrobsd__`, `__RETROBSD__`.
+  - Required Unix/MIPS: `__unix__`, `unix`, `__mips__`, `mips`,
+    `__MIPSEB__`, `_MIPSEB`, `__mips_o32`.
+  - ReBSD identity: `__rebsd__`, `__REBSD__`.
+- [x] Teach PCC configure scripts about the ReBSD target.
+- [x] Fix PCC MIPS target endian selection for big-endian output.
+- [x] Keep PCC assembly output compatible with ReBSD `as` for the first smoke.
+- [x] Build host cross PCC out of tree in `/private/tmp`.
+- [x] Compile a trivial C file to assembly with host PCC.
+- [x] Assemble and link a trivial ReBSD a.out using ReBSD `as` and `ld`.
+  - Smoke binary: `/private/tmp/rebsd-pcc-smoke`.
+  - Configure/build dir: `/private/tmp/rebsd-pcc-build`.
+  - Install prefix: `/private/tmp/rebsd-pcc-install`.
+
+## Phase 2: Host PCC Smoke Tests
+
+- [x] Add a make target for host PCC smoke testing.
+  - Malta target: `make -C sys/mips/malta smoke-host-portablecc`.
+  - Shared MIPS dispatcher: `make -C sys/mips smoke-host-portablecc`.
+- [x] Verify generated objects with existing ReBSD tools.
+  - `mips-rebsd-pcc -S`, `-c`, and full link pass with ReBSD native
+    `as`/`ld`.
+- [x] Run a minimal linked binary under Malta.
+  - Temporary QEMU rootfs smoke ran `/root/rebsd-pcc-smoke`.
+  - Expected output observed: `rebsd-pcc-smoke:6`.
+- [x] Use the old `src/cmd/ccom/arch-mips` backend as the compatibility oracle
+  for imported PCC MIPS fixes.
+  - Big-endian `long long` load/store/FUNARG word order.
+  - Big-endian `CLASSB` register word selection and overlapping `rmove()`.
+  - Direct `SOREG` conversions for scalar and `long long` narrowing/widening.
+  - Floating constant conversion and synthetic literal storage.
+  - Big-endian `long long`, float, and double static initializer emission.
+  - Big-endian offset handling for narrowing conversions.
+- [x] Expand PCC smoke tests to cover core scalar and ABI cases.
+  - Host `-S`, `-c`, and full link pass for `types-smoke.c`, `ll-smoke.c`,
+    `ll-abi-smoke.c`, and `pcc-fpu-smoke.c`.
+  - Malta runtime status: `types-status:0`, `ll-status:0`, `llabi-status:0`,
+    `fpu-status:0`.
+  - Covered areas include scalar initializers, global/static objects, pointer
+    initializers, floating literals, stack-passed narrow arguments, `long long`
+    arithmetic/conversions, hardware FPU double operations, and C/assembly o32
+    ABI handoff.
+- [x] Confirm current target links do not use `src/dev/pcc/pcc-libs`.
+  - `os/rebsd/ccconfig.h` sets `PCCLIBDIR` to `NULL`.
+  - Host `mips-rebsd-pcc -v` links only `/usr/lib/crt0.o`, the object file,
+    and `/usr/lib/libc.a`.
+  - `libpcc.a` and `libpccsoftfloat.a` are not built, installed, or linked for
+    the current ReBSD target smoke.
+- [x] Run upstream `src/dev/pcc/pcc-tests/regress` against ReBSD/MIPS PCC.
+  - Cross-aware compile/link/preprocess gate: 300 checks total, 268 passed,
+    32 failed.
+  - Malta runtime gate: 239 linked binaries ran, 230 passed, 9 failed.
+  - Skipped by policy for this target: PIC/shared-library groups and GNU
+    linker-flag-specific cases.
+  - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/summary.json`,
+    `compile-results.csv`, `runtime.log`, and per-test logs.
+- [ ] Fix or classify `pcc-tests` compile/link failures.
+  - Missing ReBSD target headers/macros: `INFINITY`, `iso646.h`, `wchar.h`,
+    `sys/cdefs.h`, `stderr`, `signbit`.
+  - Missing compiler helper routines: `__fixunsdfdi`, `__fixunssfdi`, `div`;
+    this ties into the `pcc-libs`/libc helper-routine policy.
+  - ReBSD assembler incompatibilities: non-relocatable expressions, unsupported
+    `.section` forms, unsupported emitted instructions, UCN/non-ASCII assembly
+    output, and unresolved internal labels.
+  - Frontend/codegen rejects still needing triage: `Cannot generate code` for
+    `GOTO`, unsupported inline-asm constraints, constant-expression cases,
+    string-literal lvalue cases, and syntax regressions.
+- [ ] Fix or classify `pcc-tests` Malta runtime failures.
+  - Harness artifact: `c99/basic006` expects `argv[0] == "./basic006.out"`.
+  - Likely aggregate return/temporary struct ABI issues: `c99/func003`,
+    `jira/PCC-85`, `jira/PCC-138`.
+  - Likely libc/ctype issue: `jira/PCC-77`.
+  - Likely printf/float constant or libc formatting issue: `jira/PCC-225`.
+  - Likely bool-to-float/codegen issue: `jira/PCC-236`.
+  - Likely bitfield signedness/assignment issues: `jira/PCC-462`,
+    `jira/PCC-477`.
+- [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
+  structs/unions, pointer arithmetic stress, and basic shell build workloads.
+
+## Phase 3: Native PCC in Malta Rootfs
+
+- [ ] Package PCC native driver and internal passes into the rootfs.
+  - Public commands: `/usr/bin/cc`, `/usr/bin/cpp`.
+  - Internal stages: `/usr/libexec/pcc/`.
+  - Headers: `/usr/include`.
+  - Libraries/start files: `/usr/lib`.
+- [ ] Decide the ReBSD policy for `src/dev/pcc/pcc-libs`.
+  - Option A: port and stage `libpcc.a` and, if needed, `libpccsoftfloat.a`.
+  - Option B: keep target links self-contained with ReBSD `crt0.o` and
+    `libc.a`, adding required compiler helper routines there instead.
+  - Keep hardware-FPU Malta/N64 builds free of unnecessary soft-float runtime
+    dependencies.
+- [ ] Boot Malta with native PCC installed.
+- [ ] Compile, assemble, link, and run programs inside Malta.
+- [ ] Run the full PCC Malta test gate.
+
+## Phase 4: Selectable Compiler Mode
+
+- [ ] Make userland compiler selection explicit after Malta is green.
+  - Default remains GCC until intentionally changed.
+  - Supported values should include `gcc` and `pcc`.
+- [ ] Add documentation for the compiler selector.
+- [ ] Build full userland with PCC on Malta.
+- [ ] Re-run Malta smoke and regression tests with PCC userland.
+- [ ] Build N64 artifacts with the selected compiler mode.
+- [ ] Leave N64 hardware validation to the operator.
+
+## Phase 5: Cleanup and Commit Gates
+
+- [ ] Remove temporary build-only hacks.
+- [ ] Keep generated build artifacts out of git unless they are source inputs
+  already tracked by the project.
+- [ ] Update `docs/PCC_PORTING_NOTES.md` with the final target details.
+- [ ] Run `git diff --check` outside imported upstream vendor whitespace where
+  applicable.
+- [ ] Commit each stable milestone separately.

@@ -100,6 +100,7 @@ prologue(struct interpass_prolog * ipp)
 
 	addto = offcalc(ipp);
 
+#ifndef TARGET_NO_ABICALLS
 	/* emit PIC only if -fpic or -fPIC set */
 	if (kflag > 0) {
 		printf("\t.frame %s,%d,%s\n",
@@ -108,16 +109,21 @@ prologue(struct interpass_prolog * ipp)
 		printf("\t.cpload $25\t# pseudo-op to load GOT ptr into $25\n");
 		printf("\t.set reorder\n");
 	}
+#endif
 
 	printf("\t.frame %s,%d,%s\n", rnames[FP], ARGINIT/SZCHAR, rnames[RA]);
+#ifndef TARGET_NO_ABICALLS
 	printf("\t.set noreorder\n");
 	printf("\t.cpload $25\t# pseudo-op to load GOT ptr into $25\n");
 	printf("\t.set reorder\n");
+#endif
 
 	printf("\tsubu %s,%s,%d\n", rnames[SP], rnames[SP], ARGINIT/SZCHAR);
+#ifndef TARGET_NO_ABICALLS
 	/* emit PIC only if -fpic or -fPIC set */
 	if (kflag > 0)
 		printf("\t.cprestore 8\t# pseudo-op to store GOT ptr at 8(sp)\n");
+#endif
 
 	printf("\tsw %s,4(%s)\n", rnames[RA], rnames[SP]);
 	printf("\tsw %s,(%s)\n", rnames[FP], rnames[SP]);
@@ -883,9 +889,15 @@ insput(NODE * p)
 static void
 print_reg64name(FILE *fp, int rval, int hi)
 {
-        int off = 4 * (hi != 0);
+        int off;
 	char *regname = rnames[rval];
 
+#ifdef TARGET_BIG_ENDIAN
+	if (GCLASS(rval) == CLASSB)
+		hi = !hi;
+#endif
+
+        off = 4 * (hi != 0);
         fprintf(fp, "%c%c",
                  regname[off],
                  regname[off + 1]);
@@ -1024,7 +1036,14 @@ offchg(NODE *p, void *arg)
 	if (l->n_op != OREG)
 		return;
 
-	switch (l->n_type) {
+	if (ISPTR(l->n_type) || ISARY(l->n_type) || ISFTN(l->n_type))
+		return;
+
+	switch (BTYPE(l->n_type)) {
+	case CHAR:
+	case UCHAR:
+	case BOOL:
+		break;
 	case SHORT:
 	case USHORT:
 		if (DEUNSIGN(p->n_type) == CHAR)
@@ -1035,22 +1054,65 @@ offchg(NODE *p, void *arg)
 	case INT:
 	case UNSIGNED:
 		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l + 3));
+			setlval(l, getlval(l) + 3);
 		else if (DEUNSIGN(p->n_type) == SHORT)
-			setlval(l, getlval(l + 2));
+			setlval(l, getlval(l) + 2);
 		break;
 	case LONGLONG:
 	case ULONGLONG:
+#ifdef TARGET_BIG_ENDIAN
 		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l + 7));
+			setlval(l, getlval(l) + 7);
 		else if (DEUNSIGN(p->n_type) == SHORT)
-			setlval(l, getlval(l + 6));
+			setlval(l, getlval(l) + 6);
 		else if (DEUNSIGN(p->n_type) == INT ||
 		    DEUNSIGN(p->n_type) == LONG)
-			setlval(l, getlval(l + 4));
+			setlval(l, getlval(l) + 4);
+#else
+		if (DEUNSIGN(p->n_type) == CHAR)
+			setlval(l, getlval(l) + 3);
+		else if (DEUNSIGN(p->n_type) == SHORT)
+			setlval(l, getlval(l) + 2);
+#endif
+		break;
+	case FLOAT:
+	case DOUBLE:
+	case LDOUBLE:
 		break;
 	default:
-		comperr("offchg: unknown type");
+		comperr("offchg: unknown type src=%x base=%x dst=%x op=%d",
+		    l->n_type, BTYPE(l->n_type), p->n_type, p->n_op);
+		break;
+	}
+}
+
+/*
+ * Stack-passed sub-word parameters occupy 32-bit ABI slots.  On big-endian
+ * targets the addressable byte/half object lives at the end of that slot.
+ */
+static void
+stackargoffchg(NODE *p, void *arg)
+{
+	CONSZ off;
+
+	if (p->n_op != OREG || p->n_rval != FP)
+		return;
+
+	off = getlval(p);
+	if (off < ARGINIT/SZCHAR + 4 * SZINT/SZCHAR)
+		return;
+
+	switch (BTYPE(p->n_type)) {
+	case CHAR:
+	case UCHAR:
+	case BOOL:
+		setlval(p, off + 3);
+		break;
+	case SHORT:
+	case USHORT:
+		setlval(p, off + 2);
+		break;
+	default:
 		break;
 	}
 }
@@ -1104,8 +1166,10 @@ myoptim(struct interpass * ipole)
 	DLIST_FOREACH(ip, ipole, qelem) {
 		if (ip->type != IP_NODE)
 			continue;
-		if (bigendian)
+		if (bigendian) {
 			walkf(ip->ip_node, offchg, 0);
+			walkf(ip->ip_node, stackargoffchg, 0);
+		}
 #if 0
 		walkf(ip->ip_node, calcstacksize, 0);
 #endif
@@ -1119,10 +1183,16 @@ myoptim(struct interpass * ipole)
 void
 rmove(int s, int d, TWORD t)
 {
-        switch (t) {
-        case LONGLONG:
-        case ULONGLONG:
-                if (s == d+1) {
+	switch (t) {
+	case LONGLONG:
+	case ULONGLONG:
+		{
+		int low_first = (s == d + 1);
+#ifdef TARGET_BIG_ENDIAN
+		if (GCLASS(s) == CLASSB && GCLASS(d) == CLASSB)
+			low_first = (d == s + 1);
+#endif
+                if (low_first) {
                         /* dh = sl, copy low word first */
                         printf("\tmove ");
 			print_reg64name(stdout, d, 0);
@@ -1147,6 +1217,7 @@ rmove(int s, int d, TWORD t)
 			print_reg64name(stdout, s, 0);
 			printf("\n");
                 }
+		}
                 break;
 	case FLOAT:
 	case DOUBLE:

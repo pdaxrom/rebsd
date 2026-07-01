@@ -430,12 +430,17 @@ ejobcode(int flag)
 void
 bjobcode(void)
 {
+#ifdef TARGET_NO_REORDER
+	printf("\t.set noreorder\n");
+#endif
+#ifndef TARGET_NO_ABICALLS
 	printf("\t.section .mdebug.abi32\n");
 	printf("\t.previous\n");
 
 	/* only if -fpic or -fPIC */
 	if (kflag > 0)
 		printf("\t.abicalls\n");
+#endif
 }
 
 #ifdef notdef
@@ -729,8 +734,7 @@ builtin_frame_address(const struct bitable *bt, NODE *a)
 
 NODE *
 builtin_return_address(const struct bitable *bt, NODE *a)
-{       
+{
 	uerror("missing builtin_return_address");
 	return bcon(0);
 }
-

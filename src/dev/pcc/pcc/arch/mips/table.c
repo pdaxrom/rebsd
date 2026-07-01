@@ -45,6 +45,40 @@
 #define TSWORD TINT|TLONG
 #define TWORD TUWORD|TSWORD
 
+#ifdef TARGET_BIG_ENDIAN
+#define MIPS_LL_STORE_MEM \
+	"	sw UR,AL		# store (u)longlong\n" \
+	"	nop\n" \
+	"	sw AR,UL\n" \
+	"	nop\n"
+#define MIPS_LL_LOAD_MEM \
+	"	lw U1,AL	# load (u)longlong to reg\n" \
+	"	nop\n" \
+	"	lw A1,UL\n" \
+	"	nop\n"
+#define MIPS_LL_PUSH_ARG \
+	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
+	"	sw UL,($sp)\n" \
+	"	sw AL,4($sp)\n" \
+	"	#nop\n"
+#else
+#define MIPS_LL_STORE_MEM \
+	"	sw UR,UL		# store (u)longlong\n" \
+	"	nop\n" \
+	"	sw AR,AL\n" \
+	"	nop\n"
+#define MIPS_LL_LOAD_MEM \
+	"	lw U1,UL	# load (u)longlong to reg\n" \
+	"	nop\n" \
+	"	lw A1,AL\n" \
+	"	nop\n"
+#define MIPS_LL_PUSH_ARG \
+	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
+	"	sw UL,4($sp)\n" \
+	"	sw AL,($sp)\n" \
+	"	#nop\n"
+#endif
+
 #define XSL(c)	NEEDS(NREG(c, 1), NSL(c))
 #define NAREG	NEEDS(NREG(A, 1))
 #define NBREG	NEEDS(NREG(B, 1))
@@ -85,6 +119,178 @@ struct optab table[] = {
  * unsigned -> smaller unsigned - clear the top bits (of dest type)
  *
  */
+
+{ SCONV,	INAREG,
+	SOREG,	TCHAR,
+	SAREG,	TSWORD|TSHORT,
+		NAREG,	RESC1,
+		"	lb A1,AL	# convert oreg char to short/int\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TCHAR,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
+		NAREG,	RESC1,
+		"	lbu A1,AL	# convert oreg char to uchar/ushort/uint\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TUCHAR,
+	SAREG,	TWORD|TSHORT|TUSHORT,
+		NAREG,	RESC1,
+		"	lbu A1,AL	# convert oreg uchar to (u)short/(u)int\n"
+		"	nop\n", },
+
+{ SCONV,	INBREG,
+	SOREG,	TCHAR,
+	SBREG,	TLONGLONG,
+		NBREG,	RESC1,
+		"	lb A1,AL	# convert oreg char to longlong\n"
+		"	nop\n"
+		"	sra U1,A1,31\n", },
+
+{ SCONV,	INBREG,
+	SOREG,	TUCHAR,
+	SBREG,	TLONGLONG|TULONGLONG,
+		NBREG,	RESC1,
+		"	lbu A1,AL	# convert oreg uchar to (u)longlong\n"
+		"	move U1,$zero\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TSHORT|TUSHORT,
+	SAREG,	TCHAR,
+		NAREG,	RESC1,
+		"	lb A1,AL	# convert oreg (u)short to char\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TSHORT|TUSHORT,
+	SAREG,	TUCHAR,
+		NAREG,	RESC1,
+		"	lbu A1,AL	# convert oreg (u)short to uchar\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TSHORT,
+	SAREG,	TSWORD,
+		NAREG,	RESC1,
+		"	lh A1,AL	# convert oreg short to int\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TSHORT,
+	SAREG,	TUWORD,
+		NAREG,	RESC1,
+		"	lhu A1,AL	# convert oreg short to uint\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TUSHORT,
+	SAREG,	TWORD,
+		NAREG,	RESC1,
+		"	lhu A1,AL	# convert oreg ushort to (u)int\n"
+		"	nop\n", },
+
+{ SCONV,	INBREG,
+	SOREG,	TSHORT,
+	SBREG,	TLONGLONG,
+		NBREG,	RESC1,
+		"	lh A1,AL	# convert oreg short to longlong\n"
+		"	nop\n"
+		"	sra U1,A1,31\n", },
+
+{ SCONV,	INBREG,
+	SOREG,	TSHORT,
+	SBREG,	TULONGLONG,
+		NBREG,	RESC1,
+		"	lhu A1,AL	# convert oreg short to ulonglong\n"
+		"	nop\n"
+		"	move U1,$zero\n", },
+
+{ SCONV,	INBREG,
+	SOREG,	TUSHORT,
+	SBREG,	TLONGLONG|TULONGLONG,
+		NBREG,	RESC1,
+		"	lhu A1,AL	# convert oreg ushort to (u)longlong\n"
+		"	move U1,$zero\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TWORD,
+	SAREG,	TCHAR,
+		NAREG,	RESC1,
+		"	lb A1,AL	# convert oreg word to char\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TWORD,
+	SAREG,	TUCHAR,
+		NAREG,	RESC1,
+		"	lbu A1,AL	# convert oreg word to uchar\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TWORD,
+	SAREG,	TSHORT,
+		NAREG,	RESC1,
+		"	lh A1,AL	# convert oreg word to short\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TWORD,
+	SAREG,	TUSHORT,
+		NAREG,	RESC1,
+		"	lhu A1,AL	# convert oreg word to ushort\n"
+		"	nop\n", },
+
+{ SCONV,	INBREG,
+	SOREG,	TSWORD,
+	SBREG,	TLONGLONG|TULONGLONG,
+		NBREG,	RESC1,
+		"	lw A1,AL	# convert oreg int/long to (u)llong\n"
+		"	nop\n"
+		"	sra U1,A1,31\n" },
+
+{ SCONV,	INBREG,
+	SOREG,	TUWORD,
+	SBREG,	TLONGLONG|TULONGLONG,
+		NBREG,	RESC1,
+		"	lw A1,AL	# convert oreg (u)int to (u)llong\n"
+		"	move U1,$zero\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TLONGLONG|TULONGLONG,
+	SAREG,	TCHAR,
+		NAREG,	RESC1,
+		"	lb A1,AL	# convert oreg (u)llong to char\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TLONGLONG|TULONGLONG,
+	SAREG,	TUCHAR,
+		NAREG,	RESC1,
+		"	lbu A1,AL	# convert oreg (u)llong to uchar\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TLONGLONG|TULONGLONG,
+	SAREG,	TSHORT,
+		NAREG,	RESC1,
+		"	lh A1,AL	# convert oreg (u)llong to short\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TLONGLONG|TULONGLONG,
+	SAREG,	TUSHORT,
+		NAREG,	RESC1,
+		"	lhu A1,AL	# convert oreg (u)llong to ushort\n"
+		"	nop\n", },
+
+{ SCONV,	INAREG,
+	SOREG,	TLONGLONG|TULONGLONG,
+	SAREG,	TWORD,
+		NAREG,	RESC1,
+		"	lw A1,AL	# convert oreg (u)llong to (u)int\n"
+		"	nop\n", },
 
 /* convert between int and ptr */
 { SCONV,	INAREG,
@@ -664,10 +870,7 @@ struct optab table[] = {
 	SOREG|SNAME,	TLONGLONG|TULONGLONG,
 	SBREG,		TLONGLONG|TULONGLONG,
 		0,	RDEST,
-		"	sw UR,UL		# store (u)longlong\n"
-		"	nop\n"
-		"	sw AR,AL\n"
-		"	nop\n", },
+		MIPS_LL_STORE_MEM, },
 
 { ASSIGN,	FOREFF|INBREG,
 	SBREG,		TLONGLONG|TULONGLONG,
@@ -863,10 +1066,7 @@ struct optab table[] = {
 	SANY,		TANY,
 	SOREG|SNAME,	TLONGLONG|TULONGLONG,
 		NBREG,	RESC1,
-		"	lw U1,UL	# load (u)longlong to reg\n"
-		"	nop\n"
-		"	lw A1,AL\n"
-		"	nop\n", },
+		MIPS_LL_LOAD_MEM, },
 
 { OPLTYPE,	INAREG,
 	SANY,	TANY,
@@ -1164,8 +1364,6 @@ struct optab table[] = {
  *  Function arguments
  */
 
-#if 0
-
 /* intentionally write out the register for (u)short/(u)char */
 { FUNARG,	FOREFF,
 	SAREG,	TWORD|TPOINT|TUSHORT|TSHORT|TUCHAR|TCHAR,
@@ -1179,10 +1377,7 @@ struct optab table[] = {
 	SBREG,	TLONGLONG|TULONGLONG,
 	SANY,	TLONGLONG|TULONGLONG,
 		0,	0,
-		"	addi $sp,$sp,-8		# save function arg to stack (endian problem here?\n"
-		"	sw UL,4($sp)\n"
-		"	sw AL,($sp)\n"
-		"	#nop\n", },
+		MIPS_LL_PUSH_ARG, },
 
 { FUNARG,	FOREFF,
 	SCREG,	TFLOAT,
@@ -1199,8 +1394,6 @@ struct optab table[] = {
 		"	addi $sp,$sp,-8		# save function arg to stack\n"
 		"	s.d AL,($sp)\n"
 		"	#nop\n", },
-
-#endif
 
 { STARG,	FOREFF,
 	SAREG,		TANY,
