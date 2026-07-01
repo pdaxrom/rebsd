@@ -110,9 +110,9 @@ test gate.
     283 passed, 28 failed; Malta runtime 246 linked binaries, 234 passed,
     12 failed.
   - Current ReBSD/PCC run after `ld` `-L/-l` ordering, hard-float helper
-    prototypes, `sqrt(-1.0)`, raw `signbit`, and `double -> float` NaN-sign
-    fixes: 311 checks total, 290 passed, 21 failed; Malta runtime 253 linked
-    binaries, 241 passed, 12 failed.
+    prototypes, `sqrt(-1.0)`, raw `signbit`, `double -> float` NaN-sign, and
+    unsigned bitfield assignment fixes: 311 checks total, 290 passed, 21
+    failed; Malta runtime 253 linked binaries, 242 passed, 11 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -141,12 +141,11 @@ test gate.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Likely aggregate return/temporary struct ABI issues: `c99/func003`,
-    `jira/PCC-85`, `jira/PCC-138`, `pcclist/func008`.
+    `jira/PCC-85`, `jira/PCC-138`.
   - Wide-char/wide-stdio stub is still too small: `jira/PCC-21`.
   - Likely printf/float constant or libc formatting issue: `jira/PCC-225`.
   - Likely bool-to-float/codegen issue: `jira/PCC-236`.
-  - Likely bitfield signedness/assignment issues: `jira/PCC-462`,
-    `jira/PCC-477`.
+  - Likely bitfield signedness/assignment issue: `jira/PCC-462`.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
 - [ ] Audit MIPS backend `ZF` soft-float helper calls under the ReBSD

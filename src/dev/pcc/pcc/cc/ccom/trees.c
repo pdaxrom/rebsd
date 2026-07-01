@@ -635,7 +635,7 @@ runtime:
 
 	/* fixup type in bit-field assignment */
 	if (p->n_op == ASSIGN && l->n_op == FLD && UPKFSZ(l->n_rval) < SZINT)
-		p = makety(p, tdint);
+		p = makety(p, ISUNSIGNED(l->n_type) ? mkqtyp(UNSIGNED) : tdint);
 
 	/*
 	 * Allow (void)0 casts.
@@ -1253,9 +1253,9 @@ stref(P1ND *p)
 		p = block(FLD, p, NULL, ftyp, 0, s->sss);
 		p->n_qual = td->qual;
 		p->n_rval = PKFIELD(fsz, s->soffset%fal);
-		/* make type int or some other signed type */
+		/* make type int/unsigned int or some wider base type */
 		if (fsz < SZINT)
-			ftyp = INT;
+			ftyp = ISUNSIGNED(ftyp) ? UNSIGNED : INT;
 		else if (fsz > SZINT && fsz < SZLONG && ftyp < LONG)
 			ftyp = LONG;
 		else if (fsz > SZLONG && fsz < SZLONGLONG && ftyp < LONGLONG)
@@ -2578,7 +2578,7 @@ wrualfld(P1ND *val, P1ND *d, TWORD t, TWORD ct, int off, int fsz)
 static P1ND *
 rmfldops(P1ND *p)
 {
-	TWORD t, ct;
+	TWORD t, ct, ft;
 	P1ND *q, *r, *t1, *t2, *bt;
 	int fsz, foff;
 
@@ -2628,6 +2628,7 @@ rmfldops(P1ND *p)
 		q = p->n_left;
 		fsz = UPKFSZ(q->n_rval);
 		foff = UPKFOFF(q->n_rval);
+		ft = q->n_type;
 		t = q->n_left->n_type;
 #if TARGET_ENDIAN == TARGET_BE
 		foff = (int)tsize(t, 0, 0) - fsz - foff;
@@ -2674,14 +2675,7 @@ rmfldops(P1ND *p)
 			cerror("NOTASSIGN!");
 
 		t = p->n_type;
-		if (ISUNSIGNED(p->n_type)) {
-			/* mask away unwanted bits */
-			if ((t == LONGLONG && fsz == SZLONGLONG-1) ||
-			    (t == LONG && fsz == SZLONG-1) ||
-			    (t == INT && fsz == SZINT-1))
-				p = buildtree(AND, p,
-				    xbcon((1LL << fsz)-1, 0, t));
-		} else {
+		if (!ISUNSIGNED(ft)) {
 			/* Correct value in case of signed bitfield.  */
 			if (t == LONGLONG)
 				fsz = SZLONGLONG - fsz;
