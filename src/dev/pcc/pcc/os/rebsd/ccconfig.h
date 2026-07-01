@@ -6,6 +6,7 @@
 
 /* common cpp predefines */
 #define CPPADD	{ \
+	"-T", \
 	"-D__ReBSD__", "-D__REBSD__", "-D__rebsd__", \
 	"-D__RETROBSD__", "-D__retrobsd__", \
 	"-D__BSD__", "-D__unix__", "-Dunix", \

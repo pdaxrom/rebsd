@@ -126,11 +126,12 @@ test gate.
     ReBSD 16-bit `wchar_t` ABI fixes for PCC wide strings, target-neutral
     `long double` limits in `c99/arith003`, self-contained `assert.h`,
     ReBSD `as` absolute `la` pseudo-op support, libc `strtof`/`strtold`
-    wrappers for the ReBSD IEEE64 `long double` ABI, and ReBSD `as`
-    `.eh_frame`/`neg`/`negu` compatibility, and ReBSD `as`
-    `symbol+-offset`/UTF-8 identifier compatibility:
-    311 checks total, 300 passed, 11 failed; Malta runtime 263 linked
-    binaries, 261 passed, 2 failed.
+    wrappers for the ReBSD IEEE64 `long double` ABI, ReBSD `as`
+    `.eh_frame`/`neg`/`negu` compatibility, ReBSD `as`
+    `symbol+-offset`/UTF-8 identifier compatibility, and ReBSD PCC
+    trigraph preprocessing:
+    311 checks total, 301 passed, 10 failed; Malta runtime 264 linked
+    binaries, 263 passed, 1 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -196,22 +197,23 @@ test gate.
   - UTF-8 bytes are accepted in symbol names, so UCN-derived identifiers can
     be assembled as emitted by PCC.
   - This fixed PCC compile/link `misc/array001` and moved `misc/ucn001` from
-    an assembler failure to a runtime failure. `misc/array001` passes on Malta
-    QEMU runtime; `misc/ucn001` still needs the trigraph preprocessing fix
-    noted below.
+    an assembler failure to the trigraph preprocessing issue fixed below.
+    `misc/array001` passes on Malta QEMU runtime.
+- [x] Enable trigraph conversion in the ReBSD PCC target configuration.
+  - PCC's `cpp` already has a `-T` trigraph translation pass; ReBSD now enables
+    it by default for the target driver instead of adding another preprocessor.
+  - This fixed PCC compile/link and Malta runtime `c99/trigraph001`.
+  - It also fixed Malta runtime `misc/ucn001`, where `??/u023e` must become
+    `\u023e` before UCN and string handling.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - ReBSD assembler/linker incompatibilities still visible in the current run:
     unsupported shared-library forms (`misc/shlib3`) and unresolved internal
     labels (`pcclist/init013`).
   - Frontend/codegen rejects still needing triage: `Cannot generate code` for
     `GOTO`, unsupported inline-asm constraints, constant-expression cases,
-    string-literal lvalue cases, trigraph preprocessing, syntax regressions,
-    and unsupported TLS (`pcclist/init004`).
+    string-literal lvalue cases, syntax regressions, and unsupported TLS
+    (`pcclist/init004`).
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
-  - `misc/ucn001` now compiles and links, but still returns 1 at runtime
-    because the `s??/u023e...` string is not translated through the trigraph
-    `??/` -> backslash step before UCN/string handling; track this with the
-    `c99/trigraph001` frontend work.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Do not enable `crtbegin.o`/`crtend.o` in the default PCC link path until
@@ -268,6 +270,14 @@ test gate.
   - Internal stages: `/usr/libexec/pcc/`.
   - Headers: `/usr/include`.
   - Libraries/start files: `/usr/lib`.
+- [ ] Replace the legacy rootfs compiler stack after native PCC is packaged.
+  - Remove the old `cpp`, legacy `cc`/`pcc` alias, `lcc`/`lccom`, and
+    `smallc`/`smlrc` from the default rootfs install profile.
+  - Keep ReBSD `as`, `ld`, `ar`, and `ranlib`; imported PCC must continue to
+    use the native a.out toolchain.
+  - Do not create a gap where Malta/N64 rootfs has no native C compiler: first
+    install imported PCC as `/usr/bin/cc` and `/usr/bin/cpp`, then remove the
+    legacy compiler commands.
 - [ ] Decide the ReBSD policy for `src/dev/pcc/pcc-libs`.
   - Current policy: port and stage `libpcc.a` for compiler helper routines.
   - Still decide whether any helpers should move into libc long term.
