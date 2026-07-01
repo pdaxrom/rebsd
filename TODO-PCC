@@ -25,6 +25,10 @@ test gate.
 - [x] GCC-based N64 build completed.
 - [x] N64 image confirmed on hardware.
 - [x] PCC userland selector is present but intentionally blocked.
+- [x] ReBSD `ld` accepts `-L` and `-l` library search options.
+- [x] `libpcc/ssp.c` builds without local ReBSD hacks.
+  - ReBSD headers expose `__progname` as the mutable pointer used by `crt0`.
+  - ReBSD `as` accepts GCC constructor/destructor sections as data sections.
 
 ## Phase 1: Host PCC Configuration
 
@@ -75,25 +79,37 @@ test gate.
     initializers, floating literals, stack-passed narrow arguments, `long long`
     arithmetic/conversions, hardware FPU double operations, and C/assembly o32
     ABI handoff.
-- [x] Confirm current target links do not use `src/dev/pcc/pcc-libs`.
-  - `os/rebsd/ccconfig.h` sets `PCCLIBDIR` to `NULL`.
-  - Host `mips-rebsd-pcc -v` links only `/usr/lib/crt0.o`, the object file,
-    and `/usr/lib/libc.a`.
-  - `libpcc.a` and `libpccsoftfloat.a` are not built, installed, or linked for
-    the current ReBSD target smoke.
+- [x] Link ReBSD PCC programs through `src/dev/pcc/pcc-libs/libpcc`.
+  - `libpcc.a` is built as a ReBSD a.out archive by the existing N64 native
+    runtime path, using the GCC-to-ReBSD-assembler wrapper for now.
+  - Rootfs staging installs `/usr/lib/libpcc.a` and `/lib/libpcc.a`.
+  - `os/rebsd/ccconfig.h` now uses `-lpcc -lc -lpcc` with `-L` library paths,
+    so this depends on ReBSD `ld` support for `-L` and `-l`.
+  - `libpccsoftfloat.a` is still not staged for hardware-FPU Malta/N64 builds.
+- [x] Inspect `src/dev/pcc/pcc-libs/csu` for ctor/dtor support.
+  - `crtbegin.o`/`crtend.o` are primarily for C++ global constructors and
+    destructors, plus C constructor/destructor attributes.
+  - They are not enabled in the default ReBSD C link path yet.
+  - Current blocker: ReBSD a.out `as` accepts `.ctors`/`.dtors` syntax but maps
+    those sections into the normal data segment, so PCC's csu list walk can
+    treat unrelated data as function pointers.
 - [x] Run upstream `src/dev/pcc/pcc-tests/regress` against ReBSD/MIPS PCC.
-  - Cross-aware compile/link/preprocess gate: 300 checks total, 268 passed,
-    32 failed.
-  - Malta runtime gate: 239 linked binaries ran, 230 passed, 9 failed.
+  - Baseline without `libpcc.a`: 300 checks total, 268 passed, 32 failed;
+    Malta runtime 239 linked binaries, 230 passed, 9 failed.
+  - With `libpcc.a`: 300 checks total, 271 passed, 29 failed; Malta runtime
+    242 linked binaries, 231 passed, 11 failed.
+  - Current ReBSD/PCC run with `libpcc.a` and default `crt0.o`: 311 checks
+    total, 283 passed, 28 failed; Malta runtime 246 linked binaries, 234
+    passed, 12 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
-  - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/summary.json`,
-    `compile-results.csv`, `runtime.log`, and per-test logs.
+  - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
+    `compile.log`, `malta-runtime.log`, and generated test binaries.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - Missing ReBSD target headers/macros: `INFINITY`, `iso646.h`, `wchar.h`,
-    `sys/cdefs.h`, `stderr`, `signbit`.
-  - Missing compiler helper routines: `__fixunsdfdi`, `__fixunssfdi`, `div`;
-    this ties into the `pcc-libs`/libc helper-routine policy.
+    `sys/cdefs.h`, `stderr`.
+  - Remaining missing libc/helper routines include `div`; unsigned
+    float-to-`long long` helpers now come from `libpcc.a`.
   - ReBSD assembler incompatibilities: non-relocatable expressions, unsupported
     `.section` forms, unsupported emitted instructions, UCN/non-ASCII assembly
     output, and unresolved internal labels.
@@ -101,7 +117,10 @@ test gate.
     `GOTO`, unsupported inline-asm constraints, constant-expression cases,
     string-literal lvalue cases, and syntax regressions.
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
-  - Harness artifact: `c99/basic006` expects `argv[0] == "./basic006.out"`.
+  - Newly linked via `libpcc.a`, now real runtime failures:
+    `c99/arith003`, `c99/basic008`, `pcclist/basic005`.
+  - Constructor/destructor attribute tests remain expected failures until
+    `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Likely aggregate return/temporary struct ABI issues: `c99/func003`,
     `jira/PCC-85`, `jira/PCC-138`.
   - Likely libc/ctype issue: `jira/PCC-77`.
@@ -120,9 +139,12 @@ test gate.
   - Headers: `/usr/include`.
   - Libraries/start files: `/usr/lib`.
 - [ ] Decide the ReBSD policy for `src/dev/pcc/pcc-libs`.
-  - Option A: port and stage `libpcc.a` and, if needed, `libpccsoftfloat.a`.
-  - Option B: keep target links self-contained with ReBSD `crt0.o` and
-    `libc.a`, adding required compiler helper routines there instead.
+  - Current policy: port and stage `libpcc.a` for compiler helper routines.
+  - Still decide whether any helpers should move into libc long term.
+  - Decide only if tests prove it needed: stage `libpccsoftfloat.a`.
+  - Defer `pcc-libs/csu` until the a.out toolchain has a safe ctor/dtor
+    representation, or until C++/constructor attributes become a supported
+    gate.
   - Keep hardware-FPU Malta/N64 builds free of unnecessary soft-float runtime
     dependencies.
 - [ ] Boot Malta with native PCC installed.

@@ -28,7 +28,7 @@ Initial ReBSD target behavior should be conservative:
 - target machine: big-endian MIPS o32
 - object/link path: existing ReBSD a.out tools
 - default startup: `/usr/lib/crt0.o`
-- default libraries: `/usr/lib/libc.a`
+- default libraries: `-lpcc -lc -lpcc` from `/usr/lib`
 - no shared libraries, PIC, TLS, C++, or kernel build switch in the first pcc
   milestone
 
@@ -40,7 +40,7 @@ Current first milestone status:
   `mips-rebsd` and `mips-retrobsd` targets.
 - `os/rebsd/ccconfig.h` defines ReBSD identity macros, RetroBSD compatibility
   macros, MIPS big-endian/o32 macros, ReBSD include paths, `crt0.o`, and
-  direct `libc.a` linkage.
+  default `-lpcc -lc -lpcc` linkage.
 - The MIPS backend selects big-endian output for `TARGET_BIG_ENDIAN`.
 - ReBSD disables unsupported MIPS ABI/PIC assembler pseudo-ops such as
   `.abicalls`, `.cpload`, and `.cprestore`.
@@ -64,9 +64,31 @@ Current first milestone status:
   and `llabi-status:0`.
 - The standalone Malta FPU smoke passes with `fpu-status:0`.
 
-The linker invocation intentionally passes direct archive paths instead of
-`-L`/`-l`, because the existing ReBSD linker does not implement the GNU-style
-library search flags.
+The ReBSD linker now supports `-L` and `-l` library search flags, so PCC can
+use normal library arguments while still producing ReBSD a.out output.
+
+The current upstream `pcc-tests` checkpoint for ReBSD/MIPS is 311 compile/link
+checks with 283 passing, and 246 Malta runtime candidates with 234 passing.
+Constructor/destructor attribute coverage is intentionally not part of the
+green gate yet.
+
+## Runtime Libraries
+
+`src/dev/pcc/pcc-libs/libpcc` is staged as `/usr/lib/libpcc.a` for ReBSD/MIPS.
+It is built as a ReBSD a.out archive by the same native runtime path that
+builds `crt0.o`, `libc.a`, and `libm.a`; the wrapper uses GCC for C-to-assembly
+for now, then the ReBSD assembler and archive tools for target object format.
+
+`libpccsoftfloat.a` is not staged for the current Malta/N64 hardware-FPU
+target.  Add it only if tests show a real soft-float dependency.
+
+`src/dev/pcc/pcc-libs/csu` has the upstream PCC `crtbegin.o`/`crtend.o`
+implementation for global constructors/destructors.  ReBSD does not enable it
+in the default C link path yet: the current a.out assembler accepts
+`.ctors`/`.dtors` syntax only by folding those sections into the normal data
+segment, which is not a safe representation for PCC's constructor-list walker.
+This is deferred until C++ or C constructor/destructor attributes become part
+of the supported target gate.
 
 ## MIPS Backend Fixes
 

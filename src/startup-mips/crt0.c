@@ -55,7 +55,7 @@
 extern int main (int, char **, char **);
 
 char **environ;
-const char *__progname = "";
+char *__progname = "";
 
 void _start (int, char **, char **);
 

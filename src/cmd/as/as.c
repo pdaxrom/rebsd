@@ -844,6 +844,8 @@ int lookacmd()
             return (LLCOMM);
         if (!strcmp(".local", name))
             return (LLOCAL);
+        if (!strcmp(".long", name))
+            return (LWORD);
         break;
     case 'm':
         if (!strcmp(".mask", name))
@@ -899,8 +901,10 @@ int lookacmd()
 
 void switchsection(int newsegm)
 {
-    if (newsegm == segm)
+    if (newsegm == segm) {
+        prev_segm = segm;
         return;
+    }
     reorder_flush();
     prev_segm = segm;
     segm = newsegm;
@@ -929,6 +933,9 @@ void setsection()
         { ".text", 5, STEXT },    { ".data", 5, SDATA },
         { ".sdata", 6, SDATA },   { ".rodata", 7, SSTRNG },
         { ".bss", 4, SBSS },      { ".sbss", 5, SBSS },
+        { ".init", 5, STEXT },     { ".fini", 5, STEXT },
+        { ".ctors", 6, SDATA },   { ".dtors", 6, SDATA },
+        { ".init_array", 11, SDATA }, { ".fini_array", 11, SDATA },
         { ".mdebug", 7, SSTRNG }, { 0 },
     };
 
@@ -3160,7 +3167,7 @@ void makesymtab()
 void usage()
 {
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  as [-uxX] [-o outfile] [infile]\n");
+    fprintf(stderr, "  as [-kuxX] [-o outfile] [infile]\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -o filename     Set output file name, default stdout\n");
     fprintf(stderr, "  -u              Treat undefined names as error\n");
@@ -3252,6 +3259,8 @@ int main(int argc, char *argv[])
                     break;
                 case 'g': /* debug mode */
                     // TODO
+                    break;
+                case 'k': /* PIC compatibility option from PCC */
                     break;
                 case 'I': /* include dir */
                     // TODO

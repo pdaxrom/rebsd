@@ -88,6 +88,7 @@ struct local {
 #define NSYM 1500
 #define NSYMPR 500
 #define NLIBS 256
+#define NLIBDIRS 64
 #define RANTAB_CHUNK 512
 
 struct nlist cursym;            /* current symbol */
@@ -106,6 +107,9 @@ int rantabsz;
  * library management
  */
 unsigned liblist[NLIBS], *libp;
+char *libdirs[NLIBDIRS];
+int nlibdirs;
+char *stdlibdirs[] = { "/lib", "/usr/lib", "/usr/local/lib", 0 };
 
 /*
  * internal symbols
@@ -662,32 +666,96 @@ int mkfsym(char *s, int wflag)
     return (cursym.n_len + 6);
 }
 
+char *savestr(const char *s)
+{
+    char *p;
+
+    p = malloc(strlen(s) + 1);
+    if (!p)
+        error(2, "out of memory");
+    strcpy(p, s);
+    return p;
+}
+
+void addlibdir(char *dir)
+{
+    if (nlibdirs >= NLIBDIRS)
+        error(2, "too many -L directories");
+    libdirs[nlibdirs++] = savestr(dir);
+}
+
+char *makelibpath(const char *dir, const char *name)
+{
+    char *path;
+    int need_slash;
+    size_t len;
+
+    need_slash = dir[0] != '\0' && dir[strlen(dir) - 1] != '/';
+    len = strlen(dir) + need_slash + 3 + strlen(name) + 2 + 1;
+    path = malloc(len);
+    if (!path)
+        error(2, "out of memory");
+    strcpy(path, dir);
+    if (need_slash)
+        strcat(path, "/");
+    strcat(path, "lib");
+    strcat(path, name);
+    strcat(path, ".a");
+    return path;
+}
+
+int openfile(char *path)
+{
+    text = fopen(path, "r");
+    if (!text)
+        return 0;
+    reloc = fopen(path, "r");
+    if (!reloc) {
+        fclose(text);
+        text = 0;
+        return 0;
+    }
+    filname = path;
+    return 1;
+}
+
+int openlib(char *name)
+{
+    char *path;
+    int i;
+
+    if (*name == '\0')
+        error(2, "-l: argument missing");
+    for (i = 0; i < nlibdirs; i++) {
+        path = makelibpath(libdirs[i], name);
+        if (openfile(path))
+            return 1;
+        free(path);
+    }
+    for (i = 0; stdlibdirs[i]; i++) {
+        path = makelibpath(stdlibdirs[i], name);
+        if (openfile(path))
+            return 1;
+        free(path);
+    }
+    filname = name;
+    return 0;
+}
+
 int getfile(char *cp)
 {
-    int c;
     struct stat x;
     long symdef_date;
-    static char libname[] = "/lib/libxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
     char magic[SARMAG];
 
     text = 0;
-    filname = cp;
     if (cp[0] == '-' && cp[1] == 'l') {
-        if (cp[2] == '\0')
-            cp = "-la";
-        filname = libname;
-        for (c = 0; cp[c + 2]; c++)
-            filname[c + 8] = cp[c + 2];
-        filname[c + 8] = '.';
-        filname[c + 8 + 1] = 'a';
-        filname[c + 8 + 2] = '\0';
+        if (!openlib(cp + 2))
+            error(2, "cannot find library");
+    } else if (!openfile(cp)) {
+        filname = cp;
+        error(2, "cannot open");
     }
-    text = fopen(filname, "r");
-    if (!text)
-        error(2, "cannot open");
-    reloc = fopen(filname, "r");
-    if (!reloc)
-        error(2, "cannot open");
 
     /* Read file magic. */
     if (fread(magic, 1, SARMAG, text) != SARMAG)
@@ -1018,11 +1086,23 @@ void load1arg(char *cp)
     fclose(reloc);
 }
 
+void load1libarg(char *name)
+{
+    char *arg;
+
+    arg = malloc(strlen(name) + 3);
+    if (!arg)
+        error(2, "out of memory");
+    strcpy(arg, "-l");
+    strcat(arg, name);
+    load1arg(arg);
+    free(arg);
+}
+
 void pass1(int argc, char **argv)
 {
     register int c, i;
     register char *ap, **p;
-    char save;
 
     /* scan files once to find symdefs */
 
@@ -1036,6 +1116,8 @@ void pass1(int argc, char **argv)
             load1arg(ap);
             continue;
         }
+        if (strcmp(ap, "--fatal-warnings") == 0)
+            continue;
         for (i = 1; ap[i]; i++) {
             switch (ap[i]) {
                 /* output file name */
@@ -1080,11 +1162,29 @@ void pass1(int argc, char **argv)
 
                 /* library */
             case 'l':
-                save = ap[--i];
-                ap[i] = '-';
-                load1arg(&ap[i]);
-                ap[i] = save;
-                break;
+                if (ap[i + 1]) {
+                    load1libarg(&ap[i + 1]);
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-l: argument missing");
+                    load1libarg(*p++);
+                }
+                continue;
+
+                /* library search path */
+            case 'L':
+                if (ap[i + 1]) {
+                    addlibdir(&ap[i + 1]);
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-L: argument missing");
+                    addlibdir(*p++);
+                }
+                continue;
 
                 /* discard local symbols */
             case 'x':
@@ -1384,6 +1484,19 @@ void load2arg(char *arname)
     fclose(reloc);
 }
 
+void load2libarg(char *name)
+{
+    char *arg;
+
+    arg = malloc(strlen(name) + 3);
+    if (!arg)
+        error(2, "out of memory");
+    strcpy(arg, "-l");
+    strcat(arg, name);
+    load2arg(arg);
+    free(arg);
+}
+
 void pass2(int argc, char **argv)
 {
     register int c, i;
@@ -1391,12 +1504,15 @@ void pass2(int argc, char **argv)
 
     p = argv + 1;
     libp = liblist;
+    nlibdirs = 0;
     for (c = 1; c < argc; c++) {
         ap = *p++;
         if (*ap != '-') {
             load2arg(ap);
             continue;
         }
+        if (strcmp(ap, "--fatal-warnings") == 0)
+            continue;
         for (i = 1; ap[i]; i++) {
             switch (ap[i]) {
             case 'u':
@@ -1413,10 +1529,29 @@ void pass2(int argc, char **argv)
                     i++;
                 continue;
 
+            case 'L':
+                if (ap[i + 1]) {
+                    addlibdir(&ap[i + 1]);
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-L: argument missing");
+                    addlibdir(*p++);
+                }
+                continue;
+
             case 'l':
-                ap[--i] = '-';
-                load2arg(&ap[i]);
-                break;
+                if (ap[i + 1]) {
+                    load2libarg(&ap[i + 1]);
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-l: argument missing");
+                    load2libarg(*p++);
+                }
+                continue;
             }
             break;
         }
@@ -1486,9 +1621,10 @@ int main(int argc, char **argv)
 
     if (argc == 1) {
         printf("Usage:\n");
-        printf("  ld [-sSxXrdt] [-EL|-EB] [-o file] [-lname] [-u name] [-e name] [-T num] file...\n");
+        printf("  ld [-sSxXrdt] [-EL|-EB] [-L dir] [-o file] [-lname] [-u name] [-e name] [-T num] file...\n");
         printf("Options:\n");
         printf("  -o filename     Set output file name, default a.out\n");
+        printf("  -L dirname      Add a library search directory\n");
         printf("  -llibname       Search for library libname\n");
         printf("  -u symbol       Start with undefined reference to symbol\n");
         printf("  -e symbol       Set start address\n");

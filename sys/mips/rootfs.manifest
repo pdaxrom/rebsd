@@ -40,6 +40,8 @@ symlink /lib/libc.a
 target ../usr/lib/libc.a
 symlink /lib/libm.a
 target ../usr/lib/libm.a
+symlink /lib/libpcc.a
+target ../usr/lib/libpcc.a
 symlink /libexec/ccom
 target ../usr/libexec/ccom
 symlink /tmp
@@ -177,6 +179,8 @@ file /usr/lib/crt0.o
 file /usr/lib/libc.a
 
 file /usr/lib/libm.a
+
+file /usr/lib/libpcc.a
 
 file /bin/[
 mode 0775

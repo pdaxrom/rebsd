@@ -148,7 +148,7 @@ int     execve __UNISTD_P((const char *path, char *const arg0[], char *const env
 int     execvp __UNISTD_P((const char *file, char *const argv[]));
 
 extern  char    **environ;              /* Environment, from crt0. */
-extern  __UNISTD_CONST char *__progname;        /* Program name, from crt0. */
+extern  char    *__progname;            /* Program name, from crt0. */
 
 int     getopt __UNISTD_P((int argc, char * const argv[], const char *optstring));
 

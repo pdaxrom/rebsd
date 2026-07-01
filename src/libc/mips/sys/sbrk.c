@@ -22,7 +22,7 @@ sbrk (int incr)
 			/* add increment to curbrk */
 			_curbrk = addr;
 		} else {
-                        extern const char *__progname;
+                        extern char *__progname;
                         if (__progname && *__progname) {
                                 static const char message[] = ": Out of memory\n";
                                 write(2, __progname, strlen(__progname));

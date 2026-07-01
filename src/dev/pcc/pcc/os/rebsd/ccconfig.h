@@ -28,10 +28,10 @@
 
 #define CRT0		LIBDIR "crt0.o"
 
-#define DEFLIBDIRS	{ NULL }
-#define DEFLIBS		{ LIBDIR "libc.a", NULL }
-#define DEFPROFLIBS	{ LIBDIR "libc.a", NULL }
-#define DEFCXXLIBS	{ LIBDIR "libc.a", NULL }
+#define DEFLIBDIRS	{ LIBDIR, NULL }
+#define DEFLIBS		{ "-lpcc", "-lc", "-lpcc", NULL }
+#define DEFPROFLIBS	{ "-lpcc", "-lc", "-lpcc", NULL }
+#define DEFCXXLIBS	{ "-lpcc", "-lc", "-lpcc", NULL }
 
 #define STARTLABEL	"_start"
 #define TARGET_NO_ABICALLS

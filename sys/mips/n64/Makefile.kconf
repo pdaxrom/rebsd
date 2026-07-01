@@ -97,7 +97,7 @@ N64_COMMON_MACHINE_HEADERS = cpu elf_machdep float fpu io limits
 N64_NATIVE_AR = $(N64_PREFIX)ar
 N64_GNU_AS ?= $(N64_PREFIX)as
 N64_NATIVE_STAMP = $(N64_NATIVE_DIR)/.built
-N64_NATIVE_LIBS = crt0.o libc.a libm.a
+N64_NATIVE_LIBS = crt0.o libc.a libm.a libpcc.a
 N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 N64_DEVNODES_AWK = $(TOPSRC)/sys/mips/n64/devnodes.awk
@@ -114,6 +114,16 @@ N64_PTY_NUNITS = $(patsubst -DPTY_NUNITS=%,%,$(filter -DPTY_NUNITS=%,$(PARAM)))
 N64_CRT0_SRCS = $(N64_NATIVE_CRT0_SRC)
 N64_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 N64_LIBM_SRCS = $(shell find $(TOPSRC)/src/libm -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+N64_LIBPCC_DIR = $(TOPSRC)/src/dev/pcc/pcc-libs/libpcc
+N64_LIBPCC_OBJS = cmpdi2.o divdi3.o fixdfdi.o fixsfdi.o fixunsdfdi.o \
+                  fixunssfdi.o floatdidf.o floatdisf.o floatunsdidf.o \
+                  isinf_sign.o moddi3.o muldi3.o negdi2.o qdivrem.o \
+                  ucmpdi2.o udivdi3.o umoddi3.o cxmuldiv.o \
+                  ashldi3.o ashrdi3.o lshrdi3.o \
+                  _alloca.o unwind.o ssp.o signbit.o
+N64_LIBPCC_SRCS = $(addprefix $(N64_LIBPCC_DIR)/,$(N64_LIBPCC_OBJS:.o=.c)) \
+                  $(N64_LIBPCC_DIR)/quad.h \
+                  $(shell find $(N64_LIBPCC_DIR)/include -type f 2>/dev/null)
 N64_LIBUTIL_SRCS = $(shell find $(TOPSRC)/src/libutil -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBTERMLIB_SRCS = $(shell find $(TOPSRC)/src/libtermlib -type f \( -name '*.[chS]' -o -name Makefile -o -name 'termcap.*' \) 2>/dev/null)
 N64_LIBCURSES_SRCS = $(shell find $(TOPSRC)/src/libcurses -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
@@ -156,7 +166,8 @@ N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(TOPSRC)/include/ranlib.h \
                        $(TOPSRC)/include/sys/exec_aout.h
 N64_NATIVE_RUNTIME_SRCS = $(N64_NATIVE_TOOL_SRCS) $(N64_INCLUDE_SRCS) \
-                          $(N64_NATIVE_CRT0_SRC) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) \
+                          $(N64_NATIVE_CRT0_SRC) $(N64_LIBC_SRCS) \
+                          $(N64_LIBM_SRCS) $(N64_LIBPCC_SRCS) \
                           $(TOPSRC)/target.mk $(TOPSRC)/target-n64.mk
 N64_AWK_SRCS = $(shell find $(TOPSRC)/src/cmd/awk -type f \( -name '*.[chly]' -o -name Makefile -o -name tokenscript \) 2>/dev/null)
 N64_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/opt/bison/bin/bison,bison)
@@ -460,7 +471,7 @@ $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_N
 	for lib in $(N64_NATIVE_LIBS); do \
 	    cp -p $(N64_NATIVE_DIR)/$$lib $(N64_ROOTFS_USR_LIB)/$$lib; \
 	done
-	for lib in libc.a libm.a; do \
+	for lib in libc.a libm.a libpcc.a; do \
 	    $(N64_NATIVE_AOUT_RANLIB) $(N64_ROOTFS_USR_LIB)/$$lib; \
 	done
 	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat1 \
@@ -646,8 +657,7 @@ $(N64_NATIVE_DIR)/crt0.o: $(N64_NATIVE_AS) $(N64_NATIVE_CRT0_SRC)
 	$(N64_NATIVE_AS) -EB -mips3 -march=vr4300 -o $@ $(N64_NATIVE_CRT0_SRC)
 
 $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
-    $(N64_NATIVE_DIR)/crt0.o \
-    $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB)
+    $(N64_NATIVE_DIR)/crt0.o $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB)
 	rm -rf $(N64_NATIVE_TREE)
 	mkdir -p $(N64_NATIVE_TREE)/src $(N64_NATIVE_TREE)/sys/mips/n64
 	cp -pR $(TOPSRC)/include $(N64_NATIVE_TREE)/
@@ -672,6 +682,23 @@ $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD
 	    CC="$(N64_NATIVE_CC)" AS="$(N64_NATIVE_ASWRAP)" \
 	    AR=$(abspath $(N64_NATIVE_AOUT_AR)) \
 	    RANLIB=$(abspath $(N64_NATIVE_AOUT_RANLIB)) clean all
+	rm -rf $(N64_NATIVE_DIR)/libpcc-build
+	mkdir -p $(N64_NATIVE_DIR)/libpcc-build
+	set -e; for obj in $(N64_LIBPCC_OBJS); do \
+	    src=$(abspath $(N64_LIBPCC_DIR))/$${obj%.o}.c; \
+	    N64_AOUT_TOPSRC=$(abspath $(N64_NATIVE_TREE)) \
+	        N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
+	        N64_PREFIX=$(N64_PREFIX) \
+	        $(N64_NATIVE_CC) -O -fno-builtin -fno-stack-protector \
+	        -DTARGET_BIG_ENDIAN=1 -Dos_rebsd -Dmach_mips \
+	        -I$(abspath $(N64_LIBPCC_DIR)) \
+	        -I$(abspath $(N64_LIBPCC_DIR))/include \
+	        -c -o $(N64_NATIVE_DIR)/libpcc-build/$$obj $$src; \
+	done
+	rm -f $(N64_NATIVE_DIR)/libpcc.a
+	cd $(N64_NATIVE_DIR)/libpcc-build && \
+	    $(abspath $(N64_NATIVE_AOUT_AR)) r ../libpcc.a $(N64_LIBPCC_OBJS)
+	$(N64_NATIVE_AOUT_RANLIB) $(N64_NATIVE_DIR)/libpcc.a
 	cp $(N64_NATIVE_TREE)/src/libc.a $(N64_NATIVE_DIR)/libc.a
 	cp $(N64_NATIVE_TREE)/src/libm.a $(N64_NATIVE_DIR)/libm.a
 	touch $@

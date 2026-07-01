@@ -177,7 +177,7 @@ run-net: unix.elf
 	    -netdev user,id=net0,guestfwd=tcp:10.0.2.100:2323-cmd:/bin/cat \
 	    -device ne2k_isa,netdev=net0,iobase=0x300,irq=9,mac=52:54:00:12:34:56
 
-.PHONY: smoke-host-portablecc
+.PHONY: smoke-host-portablecc FORCE
 smoke-host-portablecc: $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SMOKE_SCRIPT)
 	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
@@ -185,7 +185,9 @@ smoke-host-portablecc: $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SMOKE_SCRIPT)
 	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/lib) \
 	    $(abspath $(PCC_HOST_AS)) $(abspath $(PCC_HOST_LD))
 
-$(MIPS_ROOTFS_SRC_STAMP): $(MIPS_ROOTFS_COMMON_FILES)
+FORCE:
+
+$(MIPS_ROOTFS_SRC_STAMP): FORCE
 	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
 
 $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
