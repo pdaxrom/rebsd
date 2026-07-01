@@ -7,6 +7,9 @@ telnetd \- small TELNET login daemon
 .B \-d
 ]
 [
+.B \-i
+]
+[
 .B \-1
 ]
 [
@@ -29,6 +32,9 @@ on the slave side.
 .PP
 .B \-d
 keeps the server in the foreground.
+.B \-i
+runs one session on file descriptor 0, as when started by
+.IR inetd (8).
 .B \-1
 accepts one connection in the foreground and exits when that session ends.
 .B \-K

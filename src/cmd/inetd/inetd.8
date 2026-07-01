@@ -1,0 +1,45 @@
+.Dd July 1, 2026
+.Dt INETD 8
+.Os
+.Sh NAME
+.Nm inetd
+.Nd small Internet super-server
+.Sh SYNOPSIS
+.Nm inetd
+.Op Fl d
+.Op Fl 1
+.Op Fl f Ar config
+.Sh DESCRIPTION
+.Nm
+listens for configured TCP services and starts the requested server when a
+connection arrives.
+The RetroBSD/MIPS implementation supports the standard
+.Pa /etc/inetd.conf
+line shape for the first network images:
+.Bd -literal
+service stream tcp nowait root server argv...
+.Ed
+.Pp
+Only external
+.Dv stream/tcp/nowait/root
+services are supported.  Datagram, wait, non-root and internal services are
+ignored or rejected.
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl d
+Do not detach from the controlling terminal.
+.It Fl 1
+Serve one connection and exit.  This is used by smoke tests.
+.It Fl f Ar config
+Read an alternate configuration file.
+.El
+.Sh FILES
+.Bl -tag -width /etc/inetd.conf
+.It Pa /etc/inetd.conf
+Service configuration.
+.It Pa /etc/services
+Service name to TCP port database.
+.El
+.Sh SEE ALSO
+.Xr services 5 ,
+.Xr telnetd 8

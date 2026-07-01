@@ -45,4 +45,25 @@ grep 'telnet-crypto-smoke-ok' telnet-crypto-smoke.out >/dev/null || {
 
 wait $server >/dev/null 2>&1
 rm -f telnet-crypto-smoke.out
+
+echo "step 7: start inetd telnet service"
+cat >/var/tmp/telnet-smoke-inetd.conf <<EOF
+telnet-smoke stream tcp nowait root /usr/libexec/telnetd telnetd -i -s /bin/sh
+EOF
+/sbin/inetd -1 -f /var/tmp/telnet-smoke-inetd.conf &
+server=$!
+sleep 1
+
+echo "step 8: inetd telnet shell"
+telnet -c 'echo telnet-inetd-smoke-ok; exit' 127.0.0.1 2323 >telnet-smoke.out
+
+echo "step 9: validate inetd output"
+grep 'telnet-inetd-smoke-ok' telnet-smoke.out >/dev/null || {
+        cat telnet-smoke.out
+        kill $server >/dev/null 2>&1
+        exit 1
+}
+
+wait $server >/dev/null 2>&1
+rm -f telnet-smoke.out /var/tmp/telnet-smoke-inetd.conf
 echo "telnet-smoke ok"

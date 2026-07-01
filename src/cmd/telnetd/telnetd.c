@@ -33,7 +33,8 @@ static struct rtel_session *active_crypto;
 static void
 usage()
 {
-    fprintf(stderr, "usage: telnetd [-d] [-1] [-K key] [-p port] [-s shell]\n");
+    fprintf(stderr,
+        "usage: telnetd [-d] [-i] [-1] [-K key] [-p port] [-s shell]\n");
     exit(1);
 }
 
@@ -418,13 +419,17 @@ main(argc, argv)
     char **argv;
 {
     struct sockaddr_in from;
-    int port, debug, oneshot, i, net, fromlen, pid;
+    int port, debug, inetd_mode, oneshot, i, net, fromlen, pid;
 
     port = 23;
     debug = 0;
+    inetd_mode = 0;
     oneshot = 0;
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-d") == 0) {
+            debug = 1;
+        } else if (strcmp(argv[i], "-i") == 0) {
+            inetd_mode = 1;
             debug = 1;
         } else if (strcmp(argv[i], "-1") == 0) {
             oneshot = 1;
@@ -447,6 +452,16 @@ main(argc, argv)
     }
     if (port <= 0 || port > 65535)
         usage();
+
+    if (inetd_mode) {
+        memset(&from, 0, sizeof(from));
+        fromlen = sizeof(from);
+        if (getpeername(0, (struct sockaddr *)&from, &fromlen) < 0)
+            from.sin_addr.s_addr = 0;
+        signal(SIGPIPE, SIG_IGN);
+        session(0, &from);
+        return 0;
+    }
 
     listenfd = listen_socket(port);
     if (listenfd < 0)

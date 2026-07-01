@@ -67,7 +67,11 @@ file /etc/group
 
 file /etc/hosts
 
+file /etc/inetd.conf
+
 file /etc/passwd
+
+file /etc/services
 
 symlink /etc/resolv.conf
 target ../var/run/resolv.conf
@@ -867,6 +871,8 @@ file /usr/share/man/cat8/fsck.0
 
 file /usr/share/man/cat8/getty.0
 
+file /usr/share/man/cat8/inetd.0
+
 file /usr/share/man/cat8/halt.0
 
 file /usr/share/man/cat8/init.0
@@ -916,6 +922,9 @@ file /sbin/dhclient
 mode 0775
 
 file /sbin/ifconfig
+mode 0775
+
+file /sbin/inetd
 mode 0775
 
 file /sbin/route

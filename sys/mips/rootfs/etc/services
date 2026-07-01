@@ -1,0 +1,22 @@
+# Minimal network services database for RetroBSD/MIPS.
+#
+# Keep this file small for the cartridge rootfs; add entries as daemons are
+# staged.
+#
+tcpmux          1/tcp
+echo            7/tcp
+discard         9/tcp
+daytime         13/tcp
+ftp             21/tcp
+telnet          23/tcp
+smtp            25/tcp
+time            37/tcp
+domain          53/tcp
+domain          53/udp
+http            80/tcp          www
+ntp             123/udp
+https           443/tcp
+
+# Test-only local services.
+telnet-smoke    2323/tcp
+rtelnet-smoke   2324/tcp
