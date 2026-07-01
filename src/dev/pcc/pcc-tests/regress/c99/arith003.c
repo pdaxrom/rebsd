@@ -25,9 +25,13 @@
 }
 
 
-/* ifdef IEEE */
+#ifdef __LDBL_MIN__
+long double ldmin = __LDBL_MIN__;
+long double ldmax = __LDBL_MAX__;
+#else
 long double ldmin = 3.3621031431120935063E-4932L;
 long double ldmax = 1.1897314953572317650E+4932L;
+#endif
 long double ldinf = __builtin_infl();
 long double ldnan = __builtin_nanl("");
 long double ldzero = 0.0L;
@@ -54,7 +58,11 @@ long double mxild = (-0x7fffffffffffffffLL-1);
 long double xldinf = 0x1.1p77777;
 double xdinf = 0x1.1p77777;
 float xfinf = 0x1.1p77777;
+#ifdef __LDBL_MIN__
+long double d = (__LDBL_MIN__ / 3.L) / 3.L;
+#else
 long double d = (0x1p-16382L / 3.L) / 3.L;
+#endif
 
 #define	Z(cmp, e1, e2, e3, e4, e5)				\
 	if ((1.0000000 cmp 1.0000000) == !e1) exit(1);		\

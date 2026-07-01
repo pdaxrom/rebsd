@@ -123,9 +123,10 @@ test gate.
     aggregate-return ABI fixes, MIPS stack-argument alignment fixes, MIPS
     memory integer-to-double conversion fixes, MIPS big-endian sub-word
     bitfield fixes, ReBSD a.out text/data/BSS 8-byte alignment fixes, and
-    ReBSD 16-bit `wchar_t` ABI fixes for PCC wide strings:
+    ReBSD 16-bit `wchar_t` ABI fixes for PCC wide strings, and target-neutral
+    `long double` limits in `c99/arith003`:
     311 checks total, 290 passed, 21 failed; Malta runtime 253 linked
-    binaries, 251 passed, 2 failed.
+    binaries, 252 passed, 1 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -177,12 +178,20 @@ test gate.
   - ReBSD libc/header gap still visible in tests: `stderr` is not exposed in
     the form expected by `jira/PCC-194`.
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
-  - Expected long-double width mismatch for this target: `c99/arith003`.
-    ReBSD/MIPS currently defines `long double` as 64-bit double, while the test
-    assumes an extended long double format and hard-codes values around
-    `1.1897314953572317650E+4932L`.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
+  - Do not enable `crtbegin.o`/`crtend.o` in the default PCC link path until
+    ReBSD `as`/`ld` can preserve or collect `.ctors`/`.dtors` separately from
+    ordinary `.data`; otherwise constructor lists can include unrelated data
+    words as function pointers.
+- [x] Make `c99/arith003` respect target `long double` limits.
+  - ReBSD/MIPS intentionally uses IEEE64 `long double`, with PCC reporting
+    `__LDBL_MAX_EXP__ == 1024` and `__LDBL_MANT_DIG__ == 53`.
+  - The upstream test hard-coded extended-range values such as
+    `1.1897314953572317650E+4932L`, which fold to infinity on IEEE64
+    `long double` targets.
+  - The test now uses compiler-provided `__LDBL_MIN__`/`__LDBL_MAX__` when
+    available, and keeps the old constants as a fallback.
 - [x] Align ReBSD `wchar_t` ABI with PCC wide strings.
   - `include/wchar.h` now keeps ReBSD/MIPS `wchar_t` at 16 bits, matching
     PCC's `WCHAR_TYPE USHORT`/`WCHAR_SIZE 2`, even when libc is built by a
