@@ -124,10 +124,11 @@ test gate.
     memory integer-to-double conversion fixes, MIPS big-endian sub-word
     bitfield fixes, ReBSD a.out text/data/BSS 8-byte alignment fixes,
     ReBSD 16-bit `wchar_t` ABI fixes for PCC wide strings, target-neutral
-    `long double` limits in `c99/arith003`, self-contained `assert.h`, and
-    ReBSD `as` absolute `la` pseudo-op support:
-    311 checks total, 295 passed, 16 failed; Malta runtime 258 linked
-    binaries, 257 passed, 1 failed.
+    `long double` limits in `c99/arith003`, self-contained `assert.h`,
+    ReBSD `as` absolute `la` pseudo-op support, and libc `strtof`/`strtold`
+    wrappers for the ReBSD IEEE64 `long double` ABI:
+    311 checks total, 296 passed, 15 failed; Malta runtime 259 linked
+    binaries, 258 passed, 1 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -175,9 +176,14 @@ test gate.
     constants; ReBSD `as` now treats absolute `la` operands like `li`.
   - This fixed `c99/basic004`, `c99/func004`, `c99/oper001`, `jira/PCC-178`,
     and `jira/PCC-194` in the PCC compile/link pass.
+- [x] Add libc `strtof` and `strtold` wrappers for the current MIPS ABI.
+  - ReBSD/MIPS currently uses 8-byte IEEE64 `long double`
+    (`__LDBL_MANT_DIG__ == 53`), matching `double`.
+  - `strtof()` now casts from `strtod()`, and `strtold()` returns the same
+    parsed value as `strtod()` under this ABI.
+  - This fixed PCC compile/link and Malta runtime `jira/PCC-23`.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - ReBSD assembler/linker incompatibilities still visible in the current run:
-    unresolved libc entry points (`jira/PCC-23` wants `strtof`/`strtold`),
     unsupported `.section`/shared-library forms (`jira/PCC-228`,
     `misc/shlib3`), unsupported emitted instructions (`jira/PCC-464`),
     UCN/non-ASCII assembly output (`misc/ucn001`), array operand syntax

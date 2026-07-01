@@ -198,3 +198,13 @@ done:
 
 	return sign ? -fraction : fraction;
 }
+
+float strtof (const char *string, char **endPtr)
+{
+	return (float) strtod(string, endPtr);
+}
+
+long double strtold (const char *string, char **endPtr)
+{
+	return (long double) strtod(string, endPtr);
+}

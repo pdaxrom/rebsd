@@ -103,7 +103,9 @@ char    *setstate(char *);
 void    srandom(unsigned);
 
 double  atof(const char *);
+float   strtof(const char *, char **);
 double  strtod(const char *, char **);
+long double strtold(const char *, char **);
 char    *ecvt(double, int, int *, int *);
 char    *fcvt(double, int, int *, int *);
 char    *gcvt(double, int, char *);
