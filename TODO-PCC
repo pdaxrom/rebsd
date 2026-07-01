@@ -240,8 +240,9 @@ test gate.
     offsets before printing `LABFMT`, so `&&label` arrays produce `L259`
     instead of an undefined external `L-259`.
   - This fixed PCC compile/link and Malta runtime `gcccompat/extension004`.
-- [ ] Fix or classify `pcc-tests` compile/link failures.
-  - Current remaining compile/link failures:
+- [x] Classify `pcc-tests` compile/link failures for the current C-only gate.
+  - Current remaining compile/link failures are outside the first ReBSD/MIPS C
+    compiler gate:
     `gcccompat/typeof001` uses x86 inline-asm constraints `=d`/`=a`;
     `misc/shlib3` uses unsupported `-fPIC -shared` output;
     `pcclist/init004` requires TLS, which the ReBSD target currently rejects.
