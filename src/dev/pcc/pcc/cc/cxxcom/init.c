@@ -735,8 +735,10 @@ insbf(OFFSZ off, int fsz, int val)
 	if (fsz == 0)
 		return;
 
-	/* small opt: do char instead of bf asg */
+	/* small opt: do byte writes for clears contained in one byte */
 	if ((off & (ALCHAR-1)) == 0 && fsz == SZCHAR)
+		typ = CHAR;
+	else if ((off & (ALCHAR-1)) + fsz <= SZCHAR)
 		typ = CHAR;
 	else
 		typ = INT;
@@ -747,7 +749,8 @@ insbf(OFFSZ off, int fsz, int val)
 	sym.sdf = 0;
 	sym.sap = NULL;
 	sym.soffset = (int)off;
-	sym.sclass = (char)(typ == INT ? FIELD | fsz : MOU);
+	sym.sclass = (char)(fsz == SZCHAR && (off & (ALCHAR-1)) == 0 ?
+	    MOU : FIELD | fsz);
 	r = xbcon(0, &sym, typ);
 	p = block(STREF, p, r, INT, 0, 0);
 	ecomp(buildtree(ASSIGN, stref(p), bcon(val)));

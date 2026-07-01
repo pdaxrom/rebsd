@@ -2612,7 +2612,7 @@ rmfldops(P1ND *p)
 #endif
 			bt = bcon(0);
 #if TARGET_ENDIAN == TARGET_BE
-		foff = (int)tsize(t, 0, 0) - fsz - foff;
+		foff = (int)tsize(ct, 0, 0) - fsz - foff;
 #endif
 		q = rdualfld(q, t, ct, foff, fsz);
 		if (fsz < SZINT)

@@ -112,9 +112,10 @@ test gate.
   - Current ReBSD/PCC run after `ld` `-L/-l` ordering, hard-float helper
     prototypes, `sqrt(-1.0)`, raw `signbit`, `double -> float` NaN-sign,
     unsigned bitfield assignment, MIPS `ZF` helper ABI fixes, MIPS
-    aggregate-return ABI fixes, MIPS stack-argument alignment fixes, and MIPS
-    memory integer-to-double conversion fixes: 311 checks total, 290 passed,
-    21 failed; Malta runtime 253 linked binaries, 247 passed, 6 failed.
+    aggregate-return ABI fixes, MIPS stack-argument alignment fixes, MIPS
+    memory integer-to-double conversion fixes, and MIPS big-endian sub-word
+    bitfield fixes: 311 checks total, 290 passed, 21 failed; Malta runtime
+    253 linked binaries, 248 passed, 5 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -143,6 +144,14 @@ test gate.
   - The old `l.d` form required 8-byte alignment and read past the integer
     slot.
   - This fixed `jira/PCC-236`.
+- [x] Fix MIPS big-endian sub-word bitfield reads and padding clears.
+  - `rmfldops()` now computes big-endian bit offsets from the actual storage
+    unit type (`char`, `short`, `int`, or `long long`) instead of the promoted
+    result type.
+  - Automatic aggregate initialization now clears sub-byte padding spans with
+    byte-sized bitfield stores, avoiding unaligned word RMW sequences.
+  - This fixed `jira/PCC-462`; it changed the failure from an unaligned memory
+    fault, through a diagnostic return code of 4, to a clean Malta pass.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - ReBSD assembler/linker incompatibilities: non-relocatable expressions
     (`c99/basic004`, `c99/func004`, `c99/oper001`, `jira/PCC-23`,
@@ -167,7 +176,13 @@ test gate.
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Wide-char/wide-stdio stub is still too small: `jira/PCC-21`.
   - Likely printf/float constant or libc formatting issue: `jira/PCC-225`.
-  - Likely bitfield signedness/assignment issue: `jira/PCC-462`.
+- [ ] Add targeted value regression for mixed `long long` bitfields.
+  - A temporary diagnostic for `jira/PCC-462` showed the official test now
+    passes, but some layouts involving a following signed `long long`
+    bitfield still read `f0` as `0` instead of `2`.
+  - The upstream `jira/PCC-462` comparison does not expose this because
+    `0 > -2` remains true, so add a stricter local check before considering
+    this class fully closed.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
 - [x] Audit MIPS backend `ZF` soft-float helper calls under the ReBSD

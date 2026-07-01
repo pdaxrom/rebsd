@@ -2545,6 +2545,9 @@ rmfldops(NODE *p)
 		} else
 #endif
 			bt = bcon(0);
+#if TARGET_ENDIAN == TARGET_BE
+		foff = (int)tsize(ct, 0, 0) - fsz - foff;
+#endif
 		q = rdualfld(q, t, ct, foff, fsz);
 		p->n_left = bt;
 		p->n_right = q;
