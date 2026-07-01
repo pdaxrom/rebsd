@@ -110,9 +110,9 @@ test gate.
     283 passed, 28 failed; Malta runtime 246 linked binaries, 234 passed,
     12 failed.
   - Current ReBSD/PCC run after `ld` `-L/-l` ordering, hard-float helper
-    prototypes, `sqrt(-1.0)`, `signbit`, and `double -> float` NaN-sign
+    prototypes, `sqrt(-1.0)`, raw `signbit`, and `double -> float` NaN-sign
     fixes: 311 checks total, 290 passed, 21 failed; Malta runtime 253 linked
-    binaries, 240 passed, 13 failed.
+    binaries, 241 passed, 12 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -133,8 +133,11 @@ test gate.
   - ReBSD libc/header gap still visible in tests: `stderr` is not exposed in
     the form expected by `jira/PCC-194`.
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
-  - Floating-point/NaN/signbit/long-double behavior:
-    `c99/arith003`, `c99/basic008`, `pcclist/basic005`.
+  - Expected long-double width mismatch for this target: `c99/arith003`.
+    ReBSD/MIPS currently defines `long double` as 64-bit double, while the test
+    assumes an extended long double format and hard-codes values around
+    `1.1897314953572317650E+4932L`.
+  - Floating-point/NaN/signbit behavior: `c99/basic008`, `pcclist/basic005`.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Likely aggregate return/temporary struct ABI issues: `c99/func003`,
@@ -208,9 +211,10 @@ test gate.
   contract.
   - Current work only provides builtin-backed constants/helpers such as
     `HUGE_VAL*`, `INFINITY`, `NAN`, `nan*`, and `signbit` for GCC/PCC.
-  - `signbit` is normalized to 0/1 and PCC now routes float/double/long double
-    helpers by argument type; remaining floating-point regressions are in the
-    arithmetic/runtime behavior tests.
+  - `signbit` uses the raw compiler builtin in `math.h` because wrapping the
+    builtin in `!= 0` exposed a PCC comparison inversion in `jira/PCC-382`.
+    The ReBSD helper functions still return normalized 0/1 values and PCC now
+    routes float/double/long double helpers by argument type.
   - Confirm fallback behavior for non-GCC/PCC compilers, add missing C99
     classification/finite APIs if needed, and verify Malta/N64 hardware-FPU
     behavior for NaN/Inf/signbit cases.

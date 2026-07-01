@@ -22,7 +22,7 @@ double  y0(double), y1(double), yn(int, double);
 #define nan(x)      __builtin_nan(x)
 #define nanf(x)     __builtin_nanf(x)
 #define nanl(x)     __builtin_nanl(x)
-#define signbit(x)  (__builtin_signbit(x) != 0)
+#define signbit(x)  __builtin_signbit(x)
 #else
 #define HUGE_VAL    1.7976931348623157e+308
 #define HUGE_VALF   3.40282347e+38F
