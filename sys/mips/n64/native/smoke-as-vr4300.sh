@@ -19,12 +19,16 @@ cd /tmp || cd /var/tmp || exit 1
 base=n64-as-vr4300.$$
 valid=$base.valid.s
 valid_o=$base.valid.o
+expr=$base.expr.s
+expr_o=$base.expr.o
+utf8=$base.utf8.s
+utf8_o=$base.utf8.o
 half=$base.half.s
 half_o=$base.half.o
 bad=$base.bad.s
 bad_o=$base.bad.o
 
-rm -f $valid $valid_o $half $half_o $bad $bad_o
+rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
 
 $as_bin --target-info || exit 1
 
@@ -49,10 +53,25 @@ echo '	round.w.d $f4,$f2' >> $valid
 echo '	cfc1 $2,$31' >> $valid
 echo '	ctc1 $2,$31' >> $valid
 echo '	mul $2,$3,$4' >> $valid
+echo '	neg $2,$2' >> $valid
+echo '	negu $3,$3' >> $valid
 echo '	jr $ra' >> $valid
 echo '	nop' >> $valid
 
 $as_bin -EB -mips3 -march=vr4300 -o $valid_o $valid || exit 1
+
+echo ".data" > $expr
+echo "sym:" >> $expr
+echo '	.word 0' >> $expr
+echo ".text" >> $expr
+echo "expr_start:" >> $expr
+echo '	la $2,sym+-8' >> $expr
+echo '	jr $ra' >> $expr
+echo '	nop' >> $expr
+$as_bin -EB -mips3 -march=vr4300 -o $expr_o $expr || exit 1
+
+printf '.data\n\t.globl \303\244\n\303\244:\n\t.word 1\n' > $utf8
+$as_bin -EB -mips3 -march=vr4300 -o $utf8_o $utf8 || exit 1
 
 echo ".data" > $half
 echo "halfprobe:" >> $half
@@ -67,7 +86,7 @@ case "$bytes" in
 *)
 	echo "smoke-as-vr4300: bad .half big-endian output" >&2
 	od -b $half_o
-	rm -f $valid $valid_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
 	exit 1
 	;;
 esac
@@ -78,7 +97,7 @@ echo '	movn $2,$3,$4' >> $bad
 echo "smoke-as-vr4300: expect reject: movn"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid instruction: movn" >&2
-	rm -f $valid $valid_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
 	exit 1
 fi
 
@@ -88,7 +107,7 @@ echo '	movz $2,$3,$4' >> $bad
 echo "smoke-as-vr4300: expect reject: movz"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid instruction: movz" >&2
-	rm -f $valid $valid_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
 	exit 1
 fi
 
@@ -98,7 +117,7 @@ echo '	clz $2,$3' >> $bad
 echo "smoke-as-vr4300: expect reject: clz"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid instruction: clz" >&2
-	rm -f $valid $valid_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
 	exit 1
 fi
 
@@ -108,7 +127,7 @@ echo '	ext $2,$3,0,8' >> $bad
 echo "smoke-as-vr4300: expect reject: ext"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid instruction: ext" >&2
-	rm -f $valid $valid_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
 	exit 1
 fi
 
@@ -118,9 +137,9 @@ echo '	cache 32,0($a0)' >> $bad
 echo "smoke-as-vr4300: expect reject: cache 32"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid cache op" >&2
-	rm -f $valid $valid_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
 	exit 1
 fi
 
-rm -f $valid $valid_o $half $half_o $bad $bad_o
+rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
 echo "n64 as vr4300 smoke ok"

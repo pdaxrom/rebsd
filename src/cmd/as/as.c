@@ -462,6 +462,8 @@ const struct optable optable[] = {
 #define ISOCTAL(c) (ctype[(c) & 0377] & 2)
 #define ISDIGIT(c) (ctype[(c) & 0377] & 4)
 #define ISLETTER(c) (ctype[(c) & 0377] & 8)
+#define ISNONASCII(c) ((c) >= 0200)
+#define ISSYMCHAR(c) (ISLETTER(c) || ISDIGIT(c) || ISNONASCII(c))
 
 const char ctype[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -734,7 +736,7 @@ void getname(int c)
 {
     register char *cp;
 
-    for (cp = name; ISLETTER(c) || ISDIGIT(c); c = getchar())
+    for (cp = name; ISSYMCHAR(c); c = getchar())
         *cp++ = c;
     *cp = 0;
     ungetc(c, stdin);
@@ -1288,7 +1290,7 @@ int getlex(int *pval)
             getnum(c);
             return (LNUM);
         default:
-            if (!ISLETTER(c))
+            if (!ISLETTER(c) && !ISNONASCII(c))
                 uerror("bad character: \\%o", c & 0377);
             getname(c);
             if (name[0] == '.') {
@@ -1331,6 +1333,14 @@ int getterm()
     switch (getlex(&cval)) {
     default:
         uerror("operand missed");
+    case '+':
+        return getterm();
+    case '-':
+        s = getterm();
+        if (s != SABS)
+            uerror("too complex expression");
+        intval = -intval;
+        return SABS;
     case LNUM:
         cval = getchar();
         if (cval == 'b' || cval == 'B')

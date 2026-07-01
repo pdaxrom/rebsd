@@ -127,9 +127,10 @@ test gate.
     `long double` limits in `c99/arith003`, self-contained `assert.h`,
     ReBSD `as` absolute `la` pseudo-op support, libc `strtof`/`strtold`
     wrappers for the ReBSD IEEE64 `long double` ABI, and ReBSD `as`
-    `.eh_frame`/`neg`/`negu` compatibility:
-    311 checks total, 298 passed, 13 failed; Malta runtime 261 linked
-    binaries, 260 passed, 1 failed.
+    `.eh_frame`/`neg`/`negu` compatibility, and ReBSD `as`
+    `symbol+-offset`/UTF-8 identifier compatibility:
+    311 checks total, 300 passed, 11 failed; Malta runtime 263 linked
+    binaries, 261 passed, 2 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -189,16 +190,28 @@ test gate.
   - `neg`/`negu` assemble as two-operand aliases of `sub`/`subu` with `$zero`.
   - This fixed PCC compile/link `jira/PCC-228` and `jira/PCC-464`; both pass
     on Malta QEMU runtime.
+- [x] Extend ReBSD `as` expression and identifier parsing for PCC output.
+  - Unary `+`/`-` terms are accepted in expressions, so PCC output such as
+    `yycrank+-8` assembles without rewriting compiler output.
+  - UTF-8 bytes are accepted in symbol names, so UCN-derived identifiers can
+    be assembled as emitted by PCC.
+  - This fixed PCC compile/link `misc/array001` and moved `misc/ucn001` from
+    an assembler failure to a runtime failure. `misc/array001` passes on Malta
+    QEMU runtime; `misc/ucn001` still needs the trigraph preprocessing fix
+    noted below.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - ReBSD assembler/linker incompatibilities still visible in the current run:
-    unsupported shared-library forms (`misc/shlib3`), UCN/non-ASCII assembly
-    output (`misc/ucn001`), array operand syntax (`misc/array001`), and
-    unresolved internal labels (`pcclist/init013`).
+    unsupported shared-library forms (`misc/shlib3`) and unresolved internal
+    labels (`pcclist/init013`).
   - Frontend/codegen rejects still needing triage: `Cannot generate code` for
     `GOTO`, unsupported inline-asm constraints, constant-expression cases,
     string-literal lvalue cases, trigraph preprocessing, syntax regressions,
     and unsupported TLS (`pcclist/init004`).
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
+  - `misc/ucn001` now compiles and links, but still returns 1 at runtime
+    because the `s??/u023e...` string is not translated through the trigraph
+    `??/` -> backslash step before UCN/string handling; track this with the
+    `c99/trigraph001` frontend work.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Do not enable `crtbegin.o`/`crtend.o` in the default PCC link path until
