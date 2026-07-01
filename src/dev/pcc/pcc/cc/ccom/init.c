@@ -173,6 +173,16 @@ struct initctx {
 	int numents;
 };
 
+static void
+markstrref(NODE *p, void *arg)
+{
+	(void)arg;
+
+	if ((p->n_op == NAME || p->n_op == ICON) && p->n_sp &&
+	    (p->n_sp->sflags & SMASK) == SSTRING)
+		p->n_sp->sflags |= SASG;
+}
+
 static struct ilist *
 getil(struct ilist *next, CONSZ b, int sz, NODE *n, NODE *oldp)
 {
@@ -1281,9 +1291,7 @@ simpleinit(struct symtab *sp, NODE *p)
 		}
 #endif
 #endif
-		if (p->n_op == NAME && p->n_sp &&
-		    (p->n_sp->sflags & SMASK) == SSTRING)
-			p->n_sp->sflags |= SASG;
+		p1walkf(p, markstrref, NULL);
 		p = optloop(buildtree(ASSIGN, nt, p));
 		q = p->n_right;
 		t = q->n_type;

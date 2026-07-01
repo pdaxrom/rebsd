@@ -129,9 +129,10 @@ test gate.
     wrappers for the ReBSD IEEE64 `long double` ABI, ReBSD `as`
     `.eh_frame`/`neg`/`negu` compatibility, ReBSD `as`
     `symbol+-offset`/UTF-8 identifier compatibility, and ReBSD PCC
-    trigraph preprocessing:
-    311 checks total, 301 passed, 10 failed; Malta runtime 264 linked
-    binaries, 263 passed, 1 failed.
+    trigraph preprocessing, and cast-wrapped string literals in static
+    initializers:
+    311 checks total, 302 passed, 9 failed; Malta runtime 265 linked
+    binaries, 264 passed, 1 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -205,10 +206,15 @@ test gate.
   - This fixed PCC compile/link and Malta runtime `c99/trigraph001`.
   - It also fixed Malta runtime `misc/ucn001`, where `??/u023e` must become
     `\u023e` before UCN and string handling.
+- [x] Mark static-initializer string literals through cast wrappers.
+  - PCC saves string literal bodies until `strprint()`, and only emits literals
+    whose `SSTRING` symbol has been marked referenced.
+  - ReBSD now walks the static initializer expression before constant emission,
+    so casts like `(struct a *)"FOO"` still mark the underlying string symbol.
+  - This fixed PCC compile/link and Malta runtime `pcclist/init013`.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - ReBSD assembler/linker incompatibilities still visible in the current run:
-    unsupported shared-library forms (`misc/shlib3`) and unresolved internal
-    labels (`pcclist/init013`).
+    unsupported shared-library forms (`misc/shlib3`).
   - Frontend/codegen rejects still needing triage: `Cannot generate code` for
     `GOTO`, unsupported inline-asm constraints, constant-expression cases,
     string-literal lvalue cases, syntax regressions, and unsupported TLS
