@@ -125,10 +125,11 @@ test gate.
     bitfield fixes, ReBSD a.out text/data/BSS 8-byte alignment fixes,
     ReBSD 16-bit `wchar_t` ABI fixes for PCC wide strings, target-neutral
     `long double` limits in `c99/arith003`, self-contained `assert.h`,
-    ReBSD `as` absolute `la` pseudo-op support, and libc `strtof`/`strtold`
-    wrappers for the ReBSD IEEE64 `long double` ABI:
-    311 checks total, 296 passed, 15 failed; Malta runtime 259 linked
-    binaries, 258 passed, 1 failed.
+    ReBSD `as` absolute `la` pseudo-op support, libc `strtof`/`strtold`
+    wrappers for the ReBSD IEEE64 `long double` ABI, and ReBSD `as`
+    `.eh_frame`/`neg`/`negu` compatibility:
+    311 checks total, 298 passed, 13 failed; Malta runtime 261 linked
+    binaries, 260 passed, 1 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -182,12 +183,17 @@ test gate.
   - `strtof()` now casts from `strtod()`, and `strtold()` returns the same
     parsed value as `strtod()` under this ABI.
   - This fixed PCC compile/link and Malta runtime `jira/PCC-23`.
+- [x] Extend ReBSD `as` for PCC `.eh_frame` and `neg`/`negu` output.
+  - `.eh_frame` section attributes now assemble into the a.out string/rodata
+    compatibility section instead of being rejected as an unknown section.
+  - `neg`/`negu` assemble as two-operand aliases of `sub`/`subu` with `$zero`.
+  - This fixed PCC compile/link `jira/PCC-228` and `jira/PCC-464`; both pass
+    on Malta QEMU runtime.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - ReBSD assembler/linker incompatibilities still visible in the current run:
-    unsupported `.section`/shared-library forms (`jira/PCC-228`,
-    `misc/shlib3`), unsupported emitted instructions (`jira/PCC-464`),
-    UCN/non-ASCII assembly output (`misc/ucn001`), array operand syntax
-    (`misc/array001`), and unresolved internal labels (`pcclist/init013`).
+    unsupported shared-library forms (`misc/shlib3`), UCN/non-ASCII assembly
+    output (`misc/ucn001`), array operand syntax (`misc/array001`), and
+    unresolved internal labels (`pcclist/init013`).
   - Frontend/codegen rejects still needing triage: `Cannot generate code` for
     `GOTO`, unsupported inline-asm constraints, constant-expression cases,
     string-literal lvalue cases, trigraph preprocessing, syntax regressions,

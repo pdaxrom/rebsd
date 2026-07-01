@@ -349,6 +349,8 @@ const struct optable optable[] = {
     { 0x70000002, "mul", FRD1 | FRS2 | FRT3 | FMOD | FNO_VR4300 },
     { 0x00000018, "mult", FRS1 | FRT2 },
     { 0x00000019, "multu", FRS1 | FRT2 },
+    { 0x00000022, "neg", FRD1 | FRT2 | FMOD },
+    { 0x00000023, "negu", FRD1 | FRT2 | FMOD },
     { 0x00000000, "nop", 0 },
     { 0x00000027, "nor", FRD1 | FRS2 | FRT3 | FMOD },
     { 0x00000025, "or", FRD1 | FRS2 | FRT3 | FMOD },
@@ -937,7 +939,7 @@ void setsection()
         { ".init", 5, STEXT },     { ".fini", 5, STEXT },
         { ".ctors", 6, SDATA },   { ".dtors", 6, SDATA },
         { ".init_array", 11, SDATA }, { ".fini_array", 11, SDATA },
-        { ".mdebug", 7, SSTRNG }, { 0 },
+        { ".eh_frame", 9, SSTRNG }, { ".mdebug", 7, SSTRNG }, { 0 },
     };
 
     for (p = map; p->name; p++) {
