@@ -332,6 +332,7 @@ extern	P1ND
 	*p1alloc(void),
 	*optim(P1ND *),
 	*clocal(P1ND *),
+	*cstknode(TWORD, union dimfun *, struct ssdesc *),
 	*tempnode(int, TWORD, union dimfun *, struct ssdesc *),
 	*tmpnod(int, struct tdef *),
 	*eve(P1ND *),

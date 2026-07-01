@@ -615,6 +615,10 @@ runtime:
 			p->pss = l->pss;
 #ifdef NEWPARAMS
 			p = fun_call(p);
+#else
+			if (o == UCALL && (p->n_type == STRTY ||
+			    p->n_type == UNIONTY))
+				p = funcode(p);
 #endif
 			if (p->n_type == STRTY || p->n_type == UNIONTY) {
 				/* function returning structure */

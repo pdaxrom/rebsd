@@ -222,6 +222,19 @@ param_retptr(void)
 	ecomp(p);
 }
 
+static void
+param_shift_stret_slots(struct symtab **sp, int cnt)
+{
+	int i;
+
+	for (i = 0; i < cnt; i++) {
+		if (sp[i] == NULL || sp[i]->sclass != PARAM ||
+		    sp[i]->stype == VOID || sp[i]->soffset == NOOFFSET)
+			continue;
+		sp[i]->soffset += SZINT;
+	}
+}
+
 /* setup struct parameter
  * push the registers out to memory
  * used by bfcode() */
@@ -445,6 +458,7 @@ bfcode(struct symtab **sp, int cnt)
 
 	/* assign hidden return structure to temporary */
 	if (cftnsp->stype == STRTY+FTN || cftnsp->stype == UNIONTY+FTN) {
+		param_shift_stret_slots(sp, cnt);
 		param_retptr();
 		++reg;
 #ifdef MIPS_HARDFLOAT_O32_ABI
@@ -844,9 +858,12 @@ funcode(NODE *p)
 	ty = DECREF(l->n_type);
 	if (ty == STRTY+FTN || ty == UNIONTY+FTN) {
 		ty = DECREF(l->n_type) - FTN;
-		q = tempnode(0, ty, l->n_df, l->n_ap);
+		q = cstknode(ty, l->n_df, l->n_ap);
 		q = buildtree(ADDROF, q, NIL);
-		if (r->n_op != CM) {
+		if (p->n_op == UCALL) {
+			p->n_op = CALL;
+			p->n_right = q;
+		} else if (r->n_op != CM) {
 			p->n_right = block(CM, q, r, INCREF(ty),
 			    l->n_df, l->n_ap);
 		} else {
