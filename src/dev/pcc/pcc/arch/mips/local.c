@@ -487,7 +487,8 @@ ninval(CONSZ off, int fsz, NODE *p)
                 printf("\t.word " CONFMT, (CONSZ)glval(p));
                 if ((q = p->n_sp) != NULL) {
                         if ((q->sclass == STATIC && q->slevel > 0)) {
-                                printf("+" LABFMT, q->soffset);
+                                int o = q->soffset;
+                                printf("+" LABFMT, o < 0 ? -o : o);
                         } else
                                 printf("+%s", getexname(q));
                 }

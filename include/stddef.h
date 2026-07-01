@@ -8,6 +8,16 @@ typedef int ptrdiff_t;
 typedef unsigned size_t;
 #endif
 
+#ifndef _WCHAR_T
+#define _WCHAR_T
+#if defined(__WCHAR_TYPE__) && defined(__SIZEOF_WCHAR_T__) && \
+    __SIZEOF_WCHAR_T__ == 2
+typedef __WCHAR_TYPE__ wchar_t;
+#else
+typedef unsigned short wchar_t;
+#endif
+#endif
+
 #ifndef NULL
 #define NULL    0
 #endif

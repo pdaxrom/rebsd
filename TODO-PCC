@@ -129,10 +129,12 @@ test gate.
     wrappers for the ReBSD IEEE64 `long double` ABI, ReBSD `as`
     `.eh_frame`/`neg`/`negu` compatibility, ReBSD `as`
     `symbol+-offset`/UTF-8 identifier compatibility, and ReBSD PCC
-    trigraph preprocessing, and cast-wrapped string literals in static
-    initializers:
-    311 checks total, 302 passed, 9 failed; Malta runtime 265 linked
-    binaries, 264 passed, 1 failed.
+    trigraph preprocessing, cast-wrapped string literals in static
+    initializers, `stddef.h` `wchar_t`, ABI-neutral wide-string test
+    expectations, macro-expanded `#include` line-end consumption, floating
+    NaN/Inf static initializer folding, and MIPS computed-goto support:
+    311 checks total, 308 passed, 3 failed; Malta runtime 271 linked
+    binaries, 270 passed, 1 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -212,13 +214,37 @@ test gate.
   - ReBSD now walks the static initializer expression before constant emission,
     so casts like `(struct a *)"FOO"` still mark the underlying string symbol.
   - This fixed PCC compile/link and Malta runtime `pcclist/init013`.
+- [x] Expose ReBSD `wchar_t` through `stddef.h` and keep wide-string tests
+  ABI-neutral.
+  - `include/stddef.h` now exports the same 16-bit `wchar_t` ABI as
+    `include/wchar.h` for ReBSD/MIPS.
+  - `misc/str001` now declares expected wide-string arrays as `wchar_t`
+    instead of assuming `wchar_t == int`, so the test remains architecture
+    independent.
+  - This fixed PCC compile/link and Malta runtime `misc/str001`.
+- [x] Consume macro-expansion residue after macro-expanded `#include` names.
+  - PCC `cpp` now eats trailing whitespace and internal macro-service bytes
+    after a macro-expanded include filename before returning to directive
+    parsing.
+  - This fixed PCC compile/link and Malta runtime `pcclist/prep003`.
+- [x] Fold floating NaN/Inf constant expressions in static initializers.
+  - PCC already uses host-independent softfloat for frontend floating
+    constants, so ReBSD no longer punts floating divide-by-zero folds to
+    runtime codegen when a constant initializer is required.
+  - Integer constant division by zero remains protected in `conval()`.
+  - This fixed PCC compile/link and Malta runtime `jira/PCC-180` and
+    `jira/PCC-215`.
+- [x] Add MIPS computed-goto support for GCC-compatible label values.
+  - The MIPS pass2 table now emits `jr` for computed `goto`.
+  - MIPS static initializer emission now normalizes negative temporary label
+    offsets before printing `LABFMT`, so `&&label` arrays produce `L259`
+    instead of an undefined external `L-259`.
+  - This fixed PCC compile/link and Malta runtime `gcccompat/extension004`.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
-  - ReBSD assembler/linker incompatibilities still visible in the current run:
-    unsupported shared-library forms (`misc/shlib3`).
-  - Frontend/codegen rejects still needing triage: `Cannot generate code` for
-    `GOTO`, unsupported inline-asm constraints, constant-expression cases,
-    string-literal lvalue cases, syntax regressions, and unsupported TLS
-    (`pcclist/init004`).
+  - Current remaining compile/link failures:
+    `gcccompat/typeof001` uses x86 inline-asm constraints `=d`/`=a`;
+    `misc/shlib3` uses unsupported `-fPIC -shared` output;
+    `pcclist/init004` requires TLS, which the ReBSD target currently rejects.
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.

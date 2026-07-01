@@ -775,6 +775,24 @@ chkfile(register const char *file, register const char *path)
 	return NULL;
 }
 
+static void
+include_end(void)
+{
+	register int ch;
+
+	while ((ch = cinput()) > 0) {
+		if (ch == '\n') {
+			cunput(ch);
+			return;
+		}
+		if (ch == ' ' || ch == '\t')
+			continue;
+		if (ch < ' ' || ch >= 0x80)
+			continue;
+		error("bad #include");
+	}
+}
+
 /*
  * Include a file. Include order:
  * - For <...> files, first search -I directories, then system directories.
@@ -800,6 +818,7 @@ include(void)
 		error("bad #include");
 	readinc = 0;
 	ob = yynode.nd_ob;
+	include_end();
 	ob->buf[ob->cptr-1] = 0; /* last \" */
 	fname = (char *)&ob->buf[1];
 
@@ -842,6 +861,7 @@ include_next(void)
 		error("bad #include_next");
 	readinc = 0;
 	ob = yynode.nd_ob;
+	include_end();
 	ob->buf[ob->cptr-1] = 0; /* last \" */
 
 	idx = ifiles->idx;
@@ -2532,4 +2552,3 @@ addblock(register int sz)
 	nbase += sz;
 	return str;
 }
-

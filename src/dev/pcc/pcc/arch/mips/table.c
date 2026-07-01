@@ -1162,6 +1162,16 @@ struct optab table[] = {
 		"	nop\n"
 		"	nop\n", },
 
+#if defined(GCC_COMPAT) || defined(LANG_F77)
+{ GOTO,		FOREFF,
+	SAREG,	TANY,
+	SANY,	TANY,
+		0,	RNOP,
+		"	jr AL		# computed goto\n"
+		"	nop\n"
+		"	nop\n", },
+#endif
+
 /*
  * Subroutine calls.
  */

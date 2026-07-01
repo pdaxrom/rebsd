@@ -284,12 +284,6 @@ buildtree(int o, P1ND *l, P1ND *r)
 	    o == MUL || o == DIV || (o >= EQ && o <= GT) )) {
 		/* at least one side is FCON */
 
-#ifndef CC_DIV_0
-		if (o == DIV &&
-		    ((r->n_op == ICON && glval(r) == 0) ||
-		     (r->n_op == FCON && FLOAT_ISZERO(r->n_scon))))
-				goto runtime; /* HW dependent */
-#endif
 		if (l->n_op == ICON) {
 			if (!concast(l, r->n_type))
 				cerror("fail cast const");
@@ -406,9 +400,6 @@ buildtree(int o, P1ND *l, P1ND *r)
 	}
 
 
-#ifndef CC_DIV_0
-runtime:
-#endif
 	/* its real; we must make a new node */
 
 	p = blk(o, l, r, tdint);
