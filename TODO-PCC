@@ -26,6 +26,9 @@ test gate.
 - [x] N64 image confirmed on hardware.
 - [x] PCC userland selector is present but intentionally blocked.
 - [x] ReBSD `ld` accepts `-L` and `-l` library search options.
+  - `ld` now collects all `-L` search directories before resolving any `-l`
+    library, so `cc file.c -lm` works even when the compiler driver appends
+    default library paths after user arguments.
 - [x] `libpcc/ssp.c` builds without local ReBSD hacks.
   - ReBSD headers expose `__progname` as the mutable pointer used by `crt0`.
   - ReBSD `as` accepts GCC constructor/destructor sections as data sections.
@@ -103,38 +106,52 @@ test gate.
     Malta runtime 239 linked binaries, 230 passed, 9 failed.
   - With `libpcc.a`: 300 checks total, 271 passed, 29 failed; Malta runtime
     242 linked binaries, 231 passed, 11 failed.
-  - Current ReBSD/PCC run with `libpcc.a` and default `crt0.o`: 311 checks
-    total, 283 passed, 28 failed; Malta runtime 246 linked binaries, 234
-    passed, 12 failed.
+  - ReBSD/PCC run with `libpcc.a` and default `crt0.o`: 311 checks total,
+    283 passed, 28 failed; Malta runtime 246 linked binaries, 234 passed,
+    12 failed.
+  - Current ReBSD/PCC run after `ld` `-L/-l` ordering and `signbit`
+    normalization: 311 checks total, 290 passed, 21 failed; Malta runtime
+    260 linked binaries, 245 passed, 15 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
-    `compile.log`, `malta-runtime.log`, and generated test binaries.
+    `compile.log`, `/private/tmp/rebsd-pcc-runtime.log`, and generated test
+    binaries.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
-  - Missing ReBSD target headers/macros: `INFINITY`, `iso646.h`, `wchar.h`,
-    `sys/cdefs.h`, `stderr`.
-  - Remaining missing libc/helper routines include `div`; unsigned
-    float-to-`long long` helpers now come from `libpcc.a`.
-  - ReBSD assembler incompatibilities: non-relocatable expressions, unsupported
-    `.section` forms, unsupported emitted instructions, UCN/non-ASCII assembly
-    output, and unresolved internal labels.
+  - ReBSD assembler/linker incompatibilities: non-relocatable expressions
+    (`c99/basic004`, `c99/func004`, `c99/oper001`, `jira/PCC-23`,
+    `jira/PCC-178`), unsupported `.section`/shared-library forms
+    (`jira/PCC-228`, `misc/shlib3`), unsupported emitted instructions
+    (`jira/PCC-464`), UCN/non-ASCII assembly output (`misc/ucn001`), array
+    operand syntax (`misc/array001`), and unresolved internal labels
+    (`pcclist/init013`).
   - Frontend/codegen rejects still needing triage: `Cannot generate code` for
     `GOTO`, unsupported inline-asm constraints, constant-expression cases,
-    string-literal lvalue cases, and syntax regressions.
+    string-literal lvalue cases, trigraph preprocessing, syntax regressions,
+    and unsupported TLS (`pcclist/init004`).
+  - ReBSD libc/header gap still visible in tests: `stderr` is not exposed in
+    the form expected by `jira/PCC-194`.
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
-  - Newly linked via `libpcc.a`, now real runtime failures:
-    `c99/arith003`, `c99/basic008`, `pcclist/basic005`.
+  - Floating-point/NaN/signbit/long-double behavior:
+    `c99/arith002`, `c99/arith003`, `c99/fpoint001`, `c99/basic008`,
+    `pcclist/basic005`.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Likely aggregate return/temporary struct ABI issues: `c99/func003`,
-    `jira/PCC-85`, `jira/PCC-138`.
-  - Likely libc/ctype issue: `jira/PCC-77`.
+    `jira/PCC-85`, `jira/PCC-138`, `pcclist/func008`.
+  - Wide-char/wide-stdio stub is still too small: `jira/PCC-21`.
   - Likely printf/float constant or libc formatting issue: `jira/PCC-225`.
   - Likely bool-to-float/codegen issue: `jira/PCC-236`.
   - Likely bitfield signedness/assignment issues: `jira/PCC-462`,
     `jira/PCC-477`.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
+- [ ] Turn the temporary `pcc-tests` harness into a tracked test target.
+  - It must add runtime payload files to the generated Malta rootfs manifest,
+    not only copy them into `rootfs.stage`, because `fsutil` installs strictly
+    from the manifest.
+  - It must preserve upstream test expectations such as `c99/basic006`
+    observing `argv[0] == "./basic006.out"`.
 
 ## Phase 3: Native PCC in Malta Rootfs
 
@@ -181,6 +198,8 @@ test gate.
   contract.
   - Current work only provides builtin-backed constants/helpers such as
     `HUGE_VAL*`, `INFINITY`, `NAN`, `nan*`, and `signbit` for GCC/PCC.
+  - `signbit` is normalized to 0/1, which fixed `jira/PCC-382`; remaining
+    NaN/signbit cases still fail in `c99/fpoint001` and the arithmetic tests.
   - Confirm fallback behavior for non-GCC/PCC compilers, add missing C99
     classification/finite APIs if needed, and verify Malta/N64 hardware-FPU
     behavior for NaN/Inf/signbit cases.

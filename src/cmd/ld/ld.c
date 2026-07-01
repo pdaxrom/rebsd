@@ -684,6 +684,70 @@ void addlibdir(char *dir)
     libdirs[nlibdirs++] = savestr(dir);
 }
 
+void collectlibdirs(int argc, char **argv)
+{
+    register int c, i;
+    register char *ap, **p;
+
+    /*
+     * Make all -L directories visible before resolving any -l option.
+     * This matches the usual linker semantics and lets compiler drivers put
+     * default -L options after user objects/libraries.
+     */
+    p = argv + 1;
+    nlibdirs = 0;
+    for (c = 1; c < argc; c++) {
+        ap = *p++;
+        if (*ap != '-')
+            continue;
+        if (strcmp(ap, "--fatal-warnings") == 0)
+            continue;
+        for (i = 1; ap[i]; i++) {
+            switch (ap[i]) {
+            case 'L':
+                if (ap[i + 1]) {
+                    addlibdir(&ap[i + 1]);
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-L: argument missing");
+                    addlibdir(*p++);
+                }
+                continue;
+
+            case 'l':
+                if (ap[i + 1]) {
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-l: argument missing");
+                    p++;
+                }
+                continue;
+
+            case 'o':
+            case 'u':
+            case 'e':
+                if (++c >= argc)
+                    error(2, "option argument missing");
+                p++;
+                continue;
+
+            case 'E':
+            case 'T':
+                while (ap[i + 1])
+                    i++;
+                continue;
+
+            default:
+                continue;
+            }
+        }
+    }
+}
+
 char *makelibpath(const char *dir, const char *name)
 {
     char *path;
@@ -1176,13 +1240,12 @@ void pass1(int argc, char **argv)
                 /* library search path */
             case 'L':
                 if (ap[i + 1]) {
-                    addlibdir(&ap[i + 1]);
                     while (ap[i + 1])
                         i++;
                 } else {
                     if (++c >= argc)
                         error(2, "-L: argument missing");
-                    addlibdir(*p++);
+                    p++;
                 }
                 continue;
 
@@ -1504,7 +1567,6 @@ void pass2(int argc, char **argv)
 
     p = argv + 1;
     libp = liblist;
-    nlibdirs = 0;
     for (c = 1; c < argc; c++) {
         ap = *p++;
         if (*ap != '-') {
@@ -1531,13 +1593,12 @@ void pass2(int argc, char **argv)
 
             case 'L':
                 if (ap[i + 1]) {
-                    addlibdir(&ap[i + 1]);
                     while (ap[i + 1])
                         i++;
                 } else {
                     if (++c >= argc)
                         error(2, "-L: argument missing");
-                    addlibdir(*p++);
+                    p++;
                 }
                 continue;
 
@@ -1647,6 +1708,7 @@ int main(int argc, char **argv)
      * First pass: compute lengths of segments, symbol name table
      * and entry address.
      */
+    collectlibdirs(argc, argv);
     pass1(argc, argv);
     filname = 0;
 
