@@ -247,10 +247,41 @@ Source reference:
       against a host DHCP server.
     - [ ] Consider RNDIS later only if Windows support becomes a target.
 
+## Phase 6: Network Userland Tools
+
+- [x] Add a small plain-HTTP downloader:
+  - `/usr/bin/wget`
+  - supports `http://host[:port]/path`
+  - supports `-O file` and `-q`
+  - DNS lookup goes through `gethostbyname`
+  - verified on Malta with `/root/wget-smoke.sh` against a host HTTP
+    server through QEMU user networking.
+- [x] Add TELNET client and daemon:
+  - `/usr/bin/telnet`
+  - `/usr/libexec/telnetd`
+  - shared TELNET option constants in `include/arpa/telnet.h`
+  - interactive client raw-tty mode and command mode with `telnet -c`
+  - daemon uses ptys and runs `/bin/login -h host` by default.
+  - optional `-K key` mode uses a PSK handshake and encrypted stream for
+    controlled lab sessions where plain TELNET is not acceptable.
+  - verified on Malta with `/root/telnet-smoke.sh` using a one-shot
+    daemon and `/bin/sh` for controlled local smoke coverage, including
+    the `-K` encrypted path.
+- [x] Stage wget/telnet/telnetd in the shared MIPS rootfs manifest and the
+  N64 generated rootfs flow.
+- [x] Add man pages to the generated rootfs:
+  - `telnet(1)`
+  - `wget(1)`
+  - `telnetd(8)`
+- [ ] Verify `/root/wget-smoke.sh` and `/root/telnet-smoke.sh` on real N64
+  hardware after the next image is flashed.
+- [ ] Decide whether the PSK telnet mode is enough for the N64 lab workflow or
+  whether to port a real SSH-compatible daemon later.
+
 ## Deferred Items For First Pass
 
-- Do not treat the N64 USB network path as hardware-verified until the
-  host-side bridge and real N64 smoke pass.
+- Keep plain TELNET off by default for production-style images; it is a lab
+  diagnostic tool until an encrypted login service exists.
 - No SLIP/PPP until loopback and core socket behavior are stable.
 - No changes to the N64 config while Malta is failing.
 - No rewriting userland tools before the kernel ABI is proven.

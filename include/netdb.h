@@ -68,4 +68,4 @@ struct protoent	*getprotobyname(), *getprotobynumber(), *getprotoent();
 #define	NO_DATA		4 /* Valid name, no data record of requested type */
 #define	NO_ADDRESS	NO_DATA		/* no address, look for MX record */
 
-unsigned long	gethostid();
+long		gethostid();

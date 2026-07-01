@@ -1,0 +1,49 @@
+.TH TELNETD 8 "June 30, 2026"
+.SH NAME
+telnetd \- small TELNET login daemon
+.SH SYNOPSIS
+.B telnetd
+[
+.B \-d
+]
+[
+.B \-1
+]
+[
+.B \-K
+.I key
+]
+[
+.B \-p
+.I port
+]
+[
+.B \-s
+.I shell
+]
+.SH DESCRIPTION
+.I Telnetd
+listens for TELNET connections, allocates a pseudo-terminal, and runs
+.IR login (1)
+on the slave side.
+.PP
+.B \-d
+keeps the server in the foreground.
+.B \-1
+accepts one connection in the foreground and exits when that session ends.
+.B \-K
+requires a RetroBSD pre-shared-key handshake and encrypts the byte stream.
+Clients must connect with
+.IR telnet (1)
+using the same key.  This is a compact lab transport, not TLS or SSH.
+.B \-p
+selects the TCP port; the default is 23.
+.B \-s
+runs the named shell instead of
+.IR login (1).
+This is intended for diagnostics and controlled maintenance sessions.
+.SH BUGS
+Plain TELNET mode is not encrypted.  The
+.B \-K
+mode avoids plaintext, but it is not compatible with standard TELNET clients
+and should not be confused with SSH.

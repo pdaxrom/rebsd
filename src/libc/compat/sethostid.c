@@ -33,8 +33,8 @@
 #include <sys/param.h>
 #include <sys/sysctl.h>
 
-u_long
-sethostid(u_long hostid)
+int
+sethostid(long hostid)
 {
 	int mib[2];
 

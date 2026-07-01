@@ -1,0 +1,42 @@
+.TH TELNET 1 "June 30, 2026"
+.SH NAME
+telnet \- small TELNET client
+.SH SYNOPSIS
+.B telnet
+[
+.B \-K
+.I key
+]
+[
+.B \-c
+.I command
+]
+.I host
+[
+.I port
+]
+.SH DESCRIPTION
+.I Telnet
+opens an interactive TCP connection and performs the small subset of TELNET
+option negotiation needed by the RetroBSD network port.
+.PP
+The client accepts remote echo and suppress-go-ahead options, rejects other
+options, doubles TELNET IAC bytes, and puts the local terminal in raw mode
+while connected.
+.PP
+With
+.B \-K ,
+the client performs a RetroBSD pre-shared-key handshake before TELNET option
+negotiation and encrypts the byte stream.  The peer must be
+.IR telnetd (8)
+started with the same key.  This is a compact lab transport, not TLS or SSH.
+.PP
+With
+.B \-c ,
+the client sends one command line after connecting, closes the write side of
+the TCP connection, and continues reading until the server closes the session.
+.SH BUGS
+Plain TELNET mode is not encrypted.  The
+.B \-K
+mode avoids plaintext, but it is not compatible with standard TELNET clients
+and should not be confused with SSH.

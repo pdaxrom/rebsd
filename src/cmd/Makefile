@@ -15,7 +15,7 @@ SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar cc chflags \
                   fstat glcdtest hostname id la lcc lcpp ld ls login make \
                   man md5 med more netstat nm passwd pdc picoc ping portio printf pwm \
                   ranlib re renice retroforth scm sed setty sh sl smallc \
-                  smlrc smux stty sysctl test uname wiznet xargs \
+                  smlrc smux stty sysctl telnet telnetd test uname wget wiznet xargs \
                   zmodem gtest msec cron compress date2 tip \
                   talloc uucp viless virus yacc
 

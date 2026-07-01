@@ -36,8 +36,9 @@ N64_USR_BIN_FILES = aout apropos ar as awk basename basic cal calendar cb cc chg
                     printf printenv ps ptytest ranlib renice renumber retroforth rev \
                     rgbled rmail romfsctl scc setty size sl smux \
                     smoke-as-vr4300 smoke-as-vr4300.sh sort split strip sum \
-                    sysctl tail tar tcl tee time touch tsort tty uncompress \
-                    uniq vmstat w wc whatis whereis who whoami xargs zcat
+                    sysctl tail tar tcl tee telnet time touch tsort tty \
+                    uncompress uniq vmstat w wc wget whatis whereis who \
+                    whoami xargs zcat
 N64_USR_LIBEXEC_FILES = bigram ccom code lccom smallc smlrc
 N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm \
                         compress cp date dd df diff du echo ed expr false \
@@ -46,7 +47,7 @@ N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm
                         printenv pwd rev rm rmail rmdir \
                         sed sh size sleep sort split strip sum tail tar tee \
                         time touch tr true tsort tty uniq vmstat w wc whatis who
-N64_ROOTFS_CMD_CAT1_SOURCES = emg:emg env:env sl:sl
+N64_ROOTFS_CMD_CAT1_SOURCES = emg:emg env:env sl:sl wget:wget
 N64_ROOTFS_CAT1_ALIASES = egrep:grep fgrep:grep uncompress:compress \
                           zcat:compress nohup:nice
 N64_ROOTFS_CAT8_PAGES = fsck getty sync
@@ -168,8 +169,8 @@ N64_CMD_SUBDIRS = basic calendar chown chroot compress cpp date2 deco dhclient d
                   aout ar as cc ccom lccom ld login ls man md5 med mkfs mknod \
                   mkpasswd mount more n64input netstat nm pdc picoc ping printf pstat ptytest \
                   ranlib reboot renice retroforth rgbled romfsctl route sed setty \
-                  sh shutdown sl smallc smlrc smux stty sysctl tcl test \
-                  umount uname xargs
+                  sh shutdown sl smallc smlrc smux stty sysctl tcl telnet \
+                  telnetd test wget umount uname xargs
 N64_CMD_STDS = basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
                du echo ed fgrep file grep head hostid join kill last ln \
                mesg mkdir mv nice od pagesize pr printenv pwd rev rm rmail \

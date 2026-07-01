@@ -138,6 +138,9 @@ mode 0775
 
 file /root/net-header-smoke.c
 
+file /root/telnet-smoke.sh
+mode 0775
+
 file /root/ne2k-smoke.sh
 mode 0775
 
@@ -153,6 +156,9 @@ file /root/usbn-tcp-smoke.sh
 mode 0775
 
 file /root/usbn-tcp-smoke.c
+
+file /root/wget-smoke.sh
+mode 0775
 
 file /root/dhcp-dns-smoke.sh
 mode 0775
@@ -507,6 +513,9 @@ mode 0775
 file /usr/bin/tee
 mode 0775
 
+file /usr/bin/telnet
+mode 0775
+
 file /bin/test
 mode 0775
 
@@ -544,6 +553,9 @@ file /usr/bin/w
 mode 0775
 
 file /usr/bin/wc
+mode 0775
+
+file /usr/bin/wget
 mode 0775
 
 file /usr/bin/whatis
@@ -600,6 +612,9 @@ file /usr/libexec/smallc
 mode 0755
 
 file /usr/libexec/smlrc
+mode 0755
+
+file /usr/libexec/telnetd
 mode 0755
 
 file /usr/share/misc/more.help
@@ -796,6 +811,8 @@ file /usr/share/man/cat1/tar.0
 
 file /usr/share/man/cat1/tee.0
 
+file /usr/share/man/cat1/telnet.0
+
 file /usr/share/man/cat1/test.0
 
 file /usr/share/man/cat1/time.0
@@ -821,6 +838,8 @@ file /usr/share/man/cat1/vmstat.0
 file /usr/share/man/cat1/w.0
 
 file /usr/share/man/cat1/wc.0
+
+file /usr/share/man/cat1/wget.0
 
 file /usr/share/man/cat1/whatis.0
 
@@ -871,6 +890,8 @@ file /usr/share/man/cat8/renice.0
 file /usr/share/man/cat8/shutdown.0
 
 file /usr/share/man/cat8/sync.0
+
+file /usr/share/man/cat8/telnetd.0
 
 file /usr/share/man/cat8/sysctl.0
 

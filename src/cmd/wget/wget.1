@@ -1,0 +1,36 @@
+.TH WGET 1 "June 30, 2026"
+.SH NAME
+wget \- retrieve a file using HTTP
+.SH SYNOPSIS
+.B wget
+[
+.B \-q
+] [
+.B \-O
+.I file
+]
+.I url
+.SH DESCRIPTION
+.B Wget
+downloads the object named by
+.I url.
+Only
+.B http://
+URLs are supported.
+.PP
+The options are:
+.TP
+.BI \-O " file"
+Write output to
+.I file.
+If
+.I file
+is
+.B \-
+write the response body to standard output.
+.TP
+.B \-q
+Do not print the transfer summary.
+.SH EXIT STATUS
+.B Wget
+exits 0 on success, and >0 if an error occurs.
