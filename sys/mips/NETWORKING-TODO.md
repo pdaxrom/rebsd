@@ -245,6 +245,8 @@ Source reference:
       USB Ethernet.
     - [x] Verify `/sbin/dhclient -v usbn0` on real N64 CDC ECM hardware
       against a host DHCP server.
+    - [x] Verify `/root/usbn-dhcp-smoke.sh` on real N64 CDC ECM hardware:
+      lease `192.168.2.3`, router/DNS `192.168.2.1`, router ICMP ok.
     - [ ] Consider RNDIS later only if Windows support becomes a target.
 
 ## Phase 6: Network Userland Tools
@@ -281,8 +283,12 @@ Source reference:
   - `telnet(1)`
   - `wget(1)`
   - `telnetd(8)`
-- [ ] Verify `/root/wget-smoke.sh` and `/root/telnet-smoke.sh` on real N64
-  hardware after the next image is flashed.
+- [x] Verify `/root/wget-smoke.sh` and `/root/telnet-smoke.sh` on real N64
+  hardware after the next image is flashed:
+  - `/root/telnet-smoke.sh` passed direct telnetd, encrypted `-K`, and
+    `inetd -> telnetd -i`.
+  - `/root/wget-smoke.sh http://10.64.0.1:8080/wget-smoke.txt` passed against
+    a host HTTP server.
 - [ ] Decide whether the PSK telnet mode is enough for the N64 lab workflow or
   whether to port a real SSH-compatible daemon later.
 

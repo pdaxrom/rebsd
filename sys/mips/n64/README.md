@@ -283,6 +283,10 @@ For DHCP coverage, run a DHCP server on the host ECM interface and then:
 /root/usbn-dhcp-smoke.sh
 ```
 
+The DHCP smoke has been verified on real N64 hardware: N64 obtained
+`192.168.2.3`, installed default route `192.168.2.1`, wrote resolver
+`192.168.2.1`, and pinged the DHCP router successfully.
+
 ## Network userland tools
 
 The MIPS rootfs includes the first network userland set:
@@ -307,12 +311,18 @@ The current post-flash userland network smoke set is:
 ```
 /root/usbn-dhcp-smoke.sh
 /root/usbn-tcp-smoke.sh 192.168.2.1
-/root/wget-smoke.sh
+/root/wget-smoke.sh http://10.64.0.1:8080/wget-smoke.txt
 /root/telnet-smoke.sh
 ```
 
 Use the actual host-side USB Ethernet address for the TCP smoke argument.  On
 the macOS DHCP setup used during bring-up that address was `192.168.2.1`.
+For `wget-smoke`, serve a file containing `retrobsd wget smoke` from the host
+HTTP server and pass the reachable URL explicitly.
+
+This smoke set has been verified on real N64 hardware with macOS as the host:
+DHCP, TCP echo across USB, HTTP download over USB, direct telnetd, encrypted
+`telnetd -K`, and `inetd -> telnetd -i` all passed.
 
 `telnetd` defaults to `/bin/login` and can also run a controlled shell for
 smoke tests with `-s /bin/sh`.  The shipped `/etc/inetd.conf` keeps plain
