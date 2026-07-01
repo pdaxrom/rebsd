@@ -9,8 +9,8 @@ include $(TOPSRC)/target.mk
 DEFS		=
 CFLAGS		+= ${DEFS} -Os
 
-SRCS		= getopt.c getsubopt.c strtol.c strtoul.c strtod.c
-OBJS		= getopt.o getsubopt.o strtol.o strtoul.o strtod.o
+SRCS		= div.c getopt.c getsubopt.c strtol.c strtoul.c strtod.c
+OBJS		= div.o getopt.o getsubopt.o strtol.o strtoul.o strtod.o
 
 all:		stdlib.a
 

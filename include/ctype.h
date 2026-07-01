@@ -21,6 +21,6 @@ extern char _ctype_[];
 #define isgraph(c)      ((_ctype_+1)[(int)(c)]&(_P|_U|_L|_N))
 #define iscntrl(c)      ((_ctype_+1)[(int)(c)]&_C)
 #define isascii(c)      ((unsigned)(c)<=0177)
-#define toupper(c)      ((c)-'a'+'A')
-#define tolower(c)      ((c)-'A'+'a')
+#define toupper(c)      (islower(c) ? (c)-'a'+'A' : (c))
+#define tolower(c)      (isupper(c) ? (c)-'A'+'a' : (c))
 #define toascii(c)      ((c)&0177)

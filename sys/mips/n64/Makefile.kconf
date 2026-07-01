@@ -31,7 +31,7 @@ N64_USR_BIN_FILES = aout apropos ar as awk basename basic cal calendar cb cc chg
                     cmp col comm compress cpp deco diff diskspeed du ed egrep \
                     emg env fbset fbview fgrep file find fold forth grep \
                     groups head hostid id join last lcc ld man \
-                    matrix-as-vr4300 matrix-as-vr4300.sh md5 med mesg more \
+                    matrix-as-vr4300 matrix-as-vr4300.sh make md5 med mesg more \
                     n64input nice nm nohup od pagesize pcc pdc picoc pr \
                     printf printenv ps ptytest ranlib renice renumber retroforth rev \
                     rgbled rmail romfsctl scc setty size sl smux \
@@ -43,7 +43,7 @@ N64_USR_LIBEXEC_FILES = bigram ccom code lccom smallc smlrc
 N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm \
                         compress cp date dd df diff du echo ed expr false \
                         file find fold grep head hostid join kill last ln \
-                        login ls man mesg mkdir more mv nice od pagesize pr ps \
+                        login ls make man mesg mkdir more mv nice od pagesize pr ps \
                         printenv pwd rev rm rmail rmdir \
                         sed sh size sleep sort split strip sum tail tar tee \
                         time touch tr true tsort tty uniq vmstat w wc whatis who
@@ -177,7 +177,7 @@ N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = basic calendar chown chroot compress cpp date2 deco dhclient diff emg env fbset \
                   fbview find fold forth fsck getty hostname id ifconfig inetd init \
-                  aout ar as cc ccom lccom ld login ls man md5 med mkfs mknod \
+                  aout ar as cc ccom lccom ld login ls make man md5 med mkfs mknod \
                   mkpasswd mount more n64input netstat nm pdc picoc ping printf pstat ptytest \
                   ranlib reboot renice retroforth rgbled romfsctl route sed setty \
                   sh shutdown sl smallc smlrc smux stty sysctl tcl telnet \

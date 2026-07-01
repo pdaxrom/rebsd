@@ -52,6 +52,11 @@
 
 #define RAND_MAX        0x7fff
 
+typedef struct {
+        int quot;
+        int rem;
+} div_t;
+
 #ifndef _SIZE_T
 #define _SIZE_T
 typedef unsigned size_t;
@@ -63,6 +68,7 @@ int     atexit(void (*)(void));
 int     atoi(const char *);
 long    atol(const char *);
 void    *calloc(size_t, size_t);
+div_t   div(int, int);
 void    exit(int);
 void    free(void *);
 char    *getenv(const char *);

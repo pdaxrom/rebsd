@@ -29,6 +29,11 @@ test gate.
 - [x] `libpcc/ssp.c` builds without local ReBSD hacks.
   - ReBSD headers expose `__progname` as the mutable pointer used by `crt0`.
   - ReBSD `as` accepts GCC constructor/destructor sections as data sections.
+- [x] BSD make is included in the GCC-built ReBSD rootfs.
+  - Built from the existing `src/cmd/make` sources.
+  - Installed as `/usr/bin/make` with `/usr/share/man/cat1/make.0`.
+  - Malta QEMU smoke ran `/usr/bin/make -f /tmp/mk` and printed
+    `MAKE_SMOKE_OK`.
 
 ## Phase 1: Host PCC Configuration
 
@@ -150,6 +155,35 @@ test gate.
 - [ ] Boot Malta with native PCC installed.
 - [ ] Compile, assemble, link, and run programs inside Malta.
 - [ ] Run the full PCC Malta test gate.
+
+## Temporary Compatibility Stubs To Close
+
+- [ ] Replace the minimal `include/wchar.h` with a deliberate ReBSD wide-char
+  ABI.
+  - Current stub only defines `wchar_t`, `wint_t`, `NULL`, and `wprintf`.
+  - Decide target width/sign for `wchar_t` and align it with PCC configure,
+    libc, and any future C++/locale policy.
+  - Add the expected C/POSIX declarations only after the ABI decision is made.
+- [ ] Replace `src/libc/stdio/wprintf.c` with a real wide-stdio
+  implementation or explicitly drop wide-stdio support from the PCC test gate.
+  - Current stub is ASCII-only and only handles plain characters, `%%`, `%ls`,
+    and `%lc`.
+  - It ignores width, precision, flags, numeric conversions, locale,
+    multibyte conversion, and error accounting beyond `ferror(stdout)`.
+- [ ] Audit and complete `sys/include/cdefs.h`.
+  - Current file is a small BSD-compatibility subset for PCC/imported tests:
+    declaration wrappers, `__P`, selected compiler attributes, `__CONCAT`,
+    `__STRING`, and `__const`.
+  - Decide which BSD `cdefs.h` surface ReBSD actually supports, add missing
+    macros as real compatibility policy, and avoid silently accepting semantics
+    the kernel/userland cannot honor.
+- [ ] Turn the C99 math additions in `include/math.h` into a supported libm
+  contract.
+  - Current work only provides builtin-backed constants/helpers such as
+    `HUGE_VAL*`, `INFINITY`, `NAN`, `nan*`, and `signbit` for GCC/PCC.
+  - Confirm fallback behavior for non-GCC/PCC compilers, add missing C99
+    classification/finite APIs if needed, and verify Malta/N64 hardware-FPU
+    behavior for NaN/Inf/signbit cases.
 
 ## Phase 4: Selectable Compiler Mode
 

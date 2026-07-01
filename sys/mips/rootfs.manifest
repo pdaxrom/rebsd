@@ -350,6 +350,9 @@ mode 04755
 file /bin/ls
 mode 0775
 
+file /usr/bin/make
+mode 0775
+
 file /usr/bin/man
 mode 0775
 
@@ -744,6 +747,8 @@ file /usr/share/man/cat1/ln.0
 file /usr/share/man/cat1/login.0
 
 file /usr/share/man/cat1/ls.0
+
+file /usr/share/man/cat1/make.0
 
 file /usr/share/man/cat1/man.0
 

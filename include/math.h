@@ -13,7 +13,22 @@ double  sinh(double), cosh(double), tanh(double);
 double  j0(double), j1(double), jn(int, double);
 double  y0(double), y1(double), yn(int, double);
 
-#define HUGE_VAL    3.40282347e+38 /* TBD??? use infinity? */
+#if defined(__GNUC__) || defined(__PCC__)
+#define HUGE_VAL    __builtin_huge_val()
+#define HUGE_VALF   __builtin_huge_valf()
+#define HUGE_VALL   __builtin_huge_vall()
+#define INFINITY    __builtin_inff()
+#define NAN         __builtin_nanf("")
+#define nan(x)      __builtin_nan(x)
+#define nanf(x)     __builtin_nanf(x)
+#define nanl(x)     __builtin_nanl(x)
+#define signbit(x)  __builtin_signbit(x)
+#else
+#define HUGE_VAL    1.7976931348623157e+308
+#define HUGE_VALF   3.40282347e+38F
+#define HUGE_VALL   HUGE_VAL
+#define INFINITY    HUGE_VALF
+#endif
 
 int isnanf(float x);
 int isnan(double x);
