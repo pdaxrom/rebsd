@@ -29,6 +29,14 @@ test gate.
   - `ld` now collects all `-L` search directories before resolving any `-l`
     library, so `cc file.c -lm` works even when the compiler driver appends
     default library paths after user arguments.
+- [x] ReBSD `ld` preserves 8-byte MIPS alignment across linked a.out inputs.
+  - `TEXT_ALIGN`, `DATA_ALIGN`, and `BSS_ALIGN` are target-selectable so
+    MIPS FPU literals and BSS `double` objects do not move to 4-byte-only
+    addresses when multiple objects and libraries are linked together.
+  - N64 native host tools define `TARGET_MIPS_STRICT_ALIGN64` through
+    `sys/mips/n64/Makefile.kconf`; this avoids editing generated Makefiles.
+  - This fixed Malta SIGSEGVs in `c99/basic008`, `c99/init007`,
+    `jira/PCC-62`, and `jira/PCC-225`.
 - [x] `libpcc/ssp.c` builds without local ReBSD hacks.
   - ReBSD headers expose `__progname` as the mutable pointer used by `crt0`.
   - ReBSD `as` accepts GCC constructor/destructor sections as data sections.
@@ -114,8 +122,9 @@ test gate.
     unsigned bitfield assignment, MIPS `ZF` helper ABI fixes, MIPS
     aggregate-return ABI fixes, MIPS stack-argument alignment fixes, MIPS
     memory integer-to-double conversion fixes, and MIPS big-endian sub-word
-    bitfield fixes: 311 checks total, 290 passed, 21 failed; Malta runtime
-    253 linked binaries, 248 passed, 5 failed.
+    bitfield fixes, plus ReBSD a.out text/data/BSS 8-byte alignment fixes:
+    311 checks total, 290 passed, 21 failed; Malta runtime 253 linked
+    binaries, 250 passed, 3 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -171,11 +180,9 @@ test gate.
     ReBSD/MIPS currently defines `long double` as 64-bit double, while the test
     assumes an extended long double format and hard-codes values around
     `1.1897314953572317650E+4932L`.
-  - Floating-point/NaN/signbit behavior: `c99/basic008`.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Wide-char/wide-stdio stub is still too small: `jira/PCC-21`.
-  - Likely printf/float constant or libc formatting issue: `jira/PCC-225`.
 - [ ] Add targeted value regression for mixed `long long` bitfields.
   - A temporary diagnostic for `jira/PCC-462` showed the official test now
     passes, but some layouts involving a following signed `long long`

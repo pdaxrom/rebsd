@@ -132,6 +132,9 @@ N64_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '
 N64_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_CPP_SRCS = $(shell find $(TOPSRC)/src/cmd/cpp -type f \( -name '*.[chly]' -o -name Makefile \) 2>/dev/null)
 N64_CCOM_SRCS = $(shell find $(TOPSRC)/src/cmd/ccom -type f \( -name '*.[chly]' -o -name Makefile \) 2>/dev/null)
+N64_NATIVE_TARGET_FLAGS = -DTARGET_BIG_ENDIAN -DTARGET_VR4300 \
+                          -DTARGET_MIPS_STRICT_ALIGN64 \
+                          -DTARGET_NO_ABICALLS
 N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(N64_NATIVE_ASWRAP_SCRIPT) \
                        $(N64_HOST_CPP_BUILD_SCRIPT) \
@@ -535,7 +538,7 @@ $(N64_NATIVE_AS): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c \
     $(TOPSRC)/src/cmd/aoutio.h
 	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c
 
@@ -543,7 +546,7 @@ $(N64_NATIVE_LD): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c \
     $(TOPSRC)/src/cmd/aoutio.h
 	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c
 
@@ -555,7 +558,7 @@ $(N64_NATIVE_AOUT_AR): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/ar/move.c $(TOPSRC)/src/cmd/ar/print.c \
     $(TOPSRC)/src/cmd/ar/replace.c $(TOPSRC)/src/cmd/ar/strmode.c
 	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -I$(TOPSRC)/src/cmd/ar \
 	    -o $@ \
@@ -575,7 +578,7 @@ $(N64_NATIVE_AOUT_RANLIB): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/ranlib/ranlib.c $(TOPSRC)/src/cmd/ar/archive.c \
     $(TOPSRC)/src/cmd/aoutio.c $(TOPSRC)/src/cmd/aoutio.h
 	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -I$(TOPSRC)/src/cmd/ar \
 	    -o $@ $(TOPSRC)/src/cmd/ranlib/ranlib.c \
@@ -585,7 +588,7 @@ $(N64_NATIVE_AOUT_NM): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c \
     $(TOPSRC)/src/cmd/aoutio.h
 	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -I$(TOPSRC)/src/cmd/ar \
 	    -o $@ $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c
@@ -594,7 +597,7 @@ $(N64_NATIVE_AOUT_SIZE): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c \
     $(TOPSRC)/src/cmd/aoutio.h
 	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	cc $(N64_NATIVE_TARGET_FLAGS) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c
 
@@ -602,7 +605,7 @@ $(N64_NATIVE_AOUT_STRIP): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c \
     $(TOPSRC)/src/cmd/aoutio.h
 	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS \
+	cc $(N64_NATIVE_TARGET_FLAGS) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c
 

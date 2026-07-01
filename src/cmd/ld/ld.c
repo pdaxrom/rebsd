@@ -50,11 +50,18 @@
 #include "../aoutio.h"
 
 #define W 4              /* word size in bytes */
-#ifdef TARGET_VR4300
+#if defined(TARGET_VR4300) || defined(TARGET_MIPS_STRICT_ALIGN64)
 #define TEXT_ALIGN 8     /* Preserve 8-byte alignment of in-text FPU literals. */
-#define BADDR 0x00400000 /* N64 user text base */
+#define DATA_ALIGN 8     /* Preserve 8-byte alignment across linked data input. */
+#define BSS_ALIGN 8      /* Preserve 8-byte alignment across linked BSS input. */
 #else
 #define TEXT_ALIGN W
+#define DATA_ALIGN W
+#define BSS_ALIGN W
+#endif
+#ifdef TARGET_VR4300
+#define BADDR 0x00400000 /* N64 user text base */
+#else
 #define BADDR 0x7f008000 /* PIC32 user text base */
 #endif
 #define SYMDEF "__.SYMDEF"
@@ -1023,8 +1030,8 @@ int load1(unsigned loc, int libflg, int nloc)
 
         /* Alignment. */
         tsize = ALIGN(tsize, TEXT_ALIGN);
-        dsize = (dsize + 3) & ~3;
-        bsize = (bsize + 3) & ~3;
+        dsize = ALIGN(dsize, DATA_ALIGN);
+        bsize = ALIGN(bsize, BSS_ALIGN);
         return (1);
     }
 
@@ -1346,7 +1353,7 @@ void middle()
                 t = sp->n_value;
                 sp->n_value = cmsize;
                 cmsize += t;
-                cmsize = (cmsize + 3) & ~3;
+                cmsize = ALIGN(cmsize, BSS_ALIGN);
             }
         }
     }
@@ -1513,12 +1520,20 @@ void load2(unsigned loc)
         torigin += W;
     }
     dorigin += filhdr.a_data;
+    while (dorigin % DATA_ALIGN) {
+        struct reloc relabs = { RABS };
+
+        fputword(0, doutb);
+        if (output_relinfo)
+            fputrel(&relabs, droutb);
+        dorigin += W;
+    }
     borigin += filhdr.a_bss;
 
     /* Alignment. */
     torigin = ALIGN(torigin, TEXT_ALIGN);
-    dorigin = (dorigin + 3) & ~3;
-    borigin = (borigin + 3) & ~3;
+    dorigin = ALIGN(dorigin, DATA_ALIGN);
+    borigin = ALIGN(borigin, BSS_ALIGN);
 }
 
 void load2arg(char *arname)
