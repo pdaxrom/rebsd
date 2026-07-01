@@ -283,6 +283,49 @@ For DHCP coverage, run a DHCP server on the host ECM interface and then:
 /root/usbn-dhcp-smoke.sh
 ```
 
+## Network userland tools
+
+The MIPS rootfs includes the first network userland set:
+
+- `/sbin/dhclient`
+- `/usr/bin/ping`
+- `/usr/bin/netstat`
+- `/sbin/ifconfig`
+- `/sbin/route`
+- `/usr/bin/wget`
+- `/usr/bin/telnet`
+- `/usr/libexec/telnetd`
+- `/sbin/inetd`
+
+`dhclient` writes `/var/run/dhclient.lease` and `/var/run/resolv.conf`; the
+rootfs keeps `/etc/resolv.conf` as a symlink to the writable resolver file.
+After a successful DHCP lease, DNS-backed tools can resolve host names through
+`gethostbyname`.
+
+The current post-flash userland network smoke set is:
+
+```
+/root/usbn-dhcp-smoke.sh
+/root/usbn-tcp-smoke.sh 192.168.2.1
+/root/wget-smoke.sh
+/root/telnet-smoke.sh
+```
+
+Use the actual host-side USB Ethernet address for the TCP smoke argument.  On
+the macOS DHCP setup used during bring-up that address was `192.168.2.1`.
+
+`telnetd` defaults to `/bin/login` and can also run a controlled shell for
+smoke tests with `-s /bin/sh`.  The shipped `/etc/inetd.conf` keeps plain
+TELNET disabled by default:
+
+```
+#telnet stream tcp nowait root /usr/libexec/telnetd telnetd -i
+```
+
+For lab-only encrypted TELNET tests, run `telnetd` manually with `-K key` and
+connect with the same key from `telnet -K key`.  This is a small PSK stream
+mode for controlled testing, not an SSH replacement.
+
 ## Toolchain
 
 The default N64 toolchain path is:
