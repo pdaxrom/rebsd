@@ -2,13 +2,17 @@
 #include <stdio.h>
 #include <wchar.h>
 
+static const wchar_t wnull[] = {
+        '(', 'n', 'u', 'l', 'l', ')', 0
+};
+
 static int
 wputstr(const wchar_t *s)
 {
         int n;
 
         if (s == NULL)
-                s = L"(null)";
+                s = wnull;
         for (n = 0; *s; s++, n++)
                 putchar((unsigned char)*s);
         return n;
@@ -23,24 +27,24 @@ wprintf(const wchar_t *fmt, ...)
         va_start(ap, fmt);
         count = 0;
         while (*fmt) {
-                if (*fmt != L'%') {
+                if (*fmt != '%') {
                         putchar((unsigned char)*fmt++);
                         count++;
                         continue;
                 }
                 fmt++;
-                if (*fmt == L'%') {
+                if (*fmt == '%') {
                         putchar('%');
                         fmt++;
                         count++;
                         continue;
                 }
-                if (*fmt == L'l' && fmt[1] == L's') {
+                if (*fmt == 'l' && fmt[1] == 's') {
                         count += wputstr(va_arg(ap, const wchar_t *));
                         fmt += 2;
                         continue;
                 }
-                if (*fmt == L'l' && fmt[1] == L'c') {
+                if (*fmt == 'l' && fmt[1] == 'c') {
                         putchar((unsigned char)va_arg(ap, wint_t));
                         fmt += 2;
                         count++;
