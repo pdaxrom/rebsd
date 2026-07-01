@@ -220,6 +220,7 @@ struct optable {
  * Implement pseudo-instructions.
  * TODO: bge, bgeu, bgt, bgtu, ble, bleu, blt, bltu
  */
+void emit_abs_load(unsigned, struct reloc *, unsigned);
 void emit_li(unsigned, struct reloc *);
 void emit_la(unsigned, struct reloc *);
 void emit_mul(unsigned, struct reloc *);
@@ -1517,19 +1518,14 @@ void emitword(unsigned w, struct reloc *r, int clobber_reg)
 }
 
 /*
- * LI pseudo instruction.
+ * Load an absolute immediate value into a register.
  */
-void emit_li(unsigned opcode, struct reloc *relinfo)
+void emit_abs_load(unsigned opcode, struct reloc *relinfo, unsigned value)
 {
-    register unsigned value;
-    int cval, segment, reg;
+    int reg;
 
-    if (getlex(&cval) != ',')
-        uerror("comma expected");
-    value = getexpr(&segment);
     reg = opcode >> 16;
-    if (segment != SABS)
-        uerror("absolute value required");
+    relinfo->flags = RABS;
     if (value <= 0xffff) {
         /* ori d, $zero, value */
         opcode |= 0x34000000 | value;
@@ -1549,6 +1545,22 @@ void emit_li(unsigned opcode, struct reloc *relinfo)
 }
 
 /*
+ * LI pseudo instruction.
+ */
+void emit_li(unsigned opcode, struct reloc *relinfo)
+{
+    register unsigned value;
+    int cval, segment;
+
+    if (getlex(&cval) != ',')
+        uerror("comma expected");
+    value = getexpr(&segment);
+    if (segment != SABS)
+        uerror("absolute value required");
+    emit_abs_load(opcode, relinfo, value);
+}
+
+/*
  * LA pseudo instruction.
  */
 void emit_la(unsigned opcode, struct reloc *relinfo)
@@ -1560,8 +1572,10 @@ void emit_la(unsigned opcode, struct reloc *relinfo)
         uerror("comma expected");
     expr_flags = 0;
     value = getexpr(&segment);
-    if (segment == SABS)
-        uerror("relocatable value required");
+    if (segment == SABS) {
+        emit_abs_load(opcode, relinfo, value);
+        return;
+    }
     relinfo->flags = segmrel[segment];
     if (relinfo->flags == REXT)
         relinfo->index = extref;

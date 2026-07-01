@@ -122,11 +122,12 @@ test gate.
     unsigned bitfield assignment, MIPS `ZF` helper ABI fixes, MIPS
     aggregate-return ABI fixes, MIPS stack-argument alignment fixes, MIPS
     memory integer-to-double conversion fixes, MIPS big-endian sub-word
-    bitfield fixes, ReBSD a.out text/data/BSS 8-byte alignment fixes, and
-    ReBSD 16-bit `wchar_t` ABI fixes for PCC wide strings, and target-neutral
-    `long double` limits in `c99/arith003`:
-    311 checks total, 290 passed, 21 failed; Malta runtime 253 linked
-    binaries, 252 passed, 1 failed.
+    bitfield fixes, ReBSD a.out text/data/BSS 8-byte alignment fixes,
+    ReBSD 16-bit `wchar_t` ABI fixes for PCC wide strings, target-neutral
+    `long double` limits in `c99/arith003`, self-contained `assert.h`, and
+    ReBSD `as` absolute `la` pseudo-op support:
+    311 checks total, 295 passed, 16 failed; Malta runtime 258 linked
+    binaries, 257 passed, 1 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -163,20 +164,28 @@ test gate.
     byte-sized bitfield stores, avoiding unaligned word RMW sequences.
   - This fixed `jira/PCC-462`; it changed the failure from an unaligned memory
     fault, through a diagnostic return code of 4, to a clean Malta pass.
+- [x] Make ReBSD `assert.h` self-contained for active assertions.
+  - `assert.h` now has an include guard and includes `stdio.h`/`stdlib.h`
+    when `NDEBUG` is not set, so `assert()` exposes `stderr`, `fprintf`, and
+    `exit` regardless of include order.
+  - The macro now uses a `do { ... } while (0)` statement form and compiles
+    PCC `jira/PCC-194` through the frontend.
+- [x] Let ReBSD `as` accept absolute `la` pseudo-op operands.
+  - GNU-compatible MIPS assembly can use `la $reg,0` for null pointer
+    constants; ReBSD `as` now treats absolute `la` operands like `li`.
+  - This fixed `c99/basic004`, `c99/func004`, `c99/oper001`, `jira/PCC-178`,
+    and `jira/PCC-194` in the PCC compile/link pass.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
-  - ReBSD assembler/linker incompatibilities: non-relocatable expressions
-    (`c99/basic004`, `c99/func004`, `c99/oper001`, `jira/PCC-23`,
-    `jira/PCC-178`), unsupported `.section`/shared-library forms
-    (`jira/PCC-228`, `misc/shlib3`), unsupported emitted instructions
-    (`jira/PCC-464`), UCN/non-ASCII assembly output (`misc/ucn001`), array
-    operand syntax (`misc/array001`), and unresolved internal labels
-    (`pcclist/init013`).
+  - ReBSD assembler/linker incompatibilities still visible in the current run:
+    unresolved libc entry points (`jira/PCC-23` wants `strtof`/`strtold`),
+    unsupported `.section`/shared-library forms (`jira/PCC-228`,
+    `misc/shlib3`), unsupported emitted instructions (`jira/PCC-464`),
+    UCN/non-ASCII assembly output (`misc/ucn001`), array operand syntax
+    (`misc/array001`), and unresolved internal labels (`pcclist/init013`).
   - Frontend/codegen rejects still needing triage: `Cannot generate code` for
     `GOTO`, unsupported inline-asm constraints, constant-expression cases,
     string-literal lvalue cases, trigraph preprocessing, syntax regressions,
     and unsupported TLS (`pcclist/init004`).
-  - ReBSD libc/header gap still visible in tests: `stderr` is not exposed in
-    the form expected by `jira/PCC-194`.
 - [ ] Fix or classify `pcc-tests` Malta runtime failures.
   - Constructor/destructor attribute tests remain expected failures until
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
