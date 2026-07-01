@@ -186,7 +186,7 @@ Source reference:
   - `ping 127.0.0.1`
   - UDP loopback smoke
   - TCP loopback smoke
-- [ ] Design real network-device support now that N64 loopback works:
+- [x] Design real network-device support now that N64 loopback works:
   - [x] first bring up a QEMU virtual NIC on Malta and debug the generic driver
     path there:
     - `make -C sys/mips/malta run-net`
@@ -197,7 +197,7 @@ Source reference:
       and TCP echo over QEMU `guestfwd` to host `/bin/cat`.
   - [x] after the Malta virtual NIC path works, design the N64 hardware
     backend as a USB network adapter path.
-  - [ ] N64 cartridge USB Ethernet gadget:
+  - [x] N64 cartridge USB Ethernet gadget:
     - [x] Confirmed the existing N64cart USB example is a device/gadget
       implementation, not USB host support; first hardware network path will
       expose N64 as a USB Ethernet-like device to a host bridge.
@@ -217,8 +217,12 @@ Source reference:
     - [x] Add a second N64cart USB backend for CDC ECM and make it the default
       `usbn0` backend in `sys/mips/n64/Config`.
     - [x] Move the N64 backend from CP0 timer polling to CART USB IRQ/IP3.
-    - [ ] USB networking must not touch flash erase/write/read mode transitions;
-      ROMFS/cartflash locking stays separate from USB packet I/O.
+    - [x] USB networking must not touch flash erase/write/read mode transitions;
+      ROMFS/cartflash locking stays separate from USB packet I/O.  Source audit
+      confirms `if_usbn`, `n64cart_usbnet`, and `n64cart_usbecm` do not depend on
+      `cartflash`, `romfs`, `n64cart_flash`, SPI/QSPI mode switching, erase, or
+      program paths; flash ownership remains in `n64cart_flash.c`,
+      `romfs_backend.c`, and `romfs_vfs.c`.
     - [x] Add the host-side bridge that exposes the vendor-specific bulk USB
       framing as a normal host TAP/TUN or socket-backed Ethernet endpoint.
       Current first pass is `tools/n64usbnet/n64usbnet-bridge`, a libusb to
@@ -248,6 +252,8 @@ Source reference:
     - [x] Verify `/root/usbn-dhcp-smoke.sh` on real N64 CDC ECM hardware:
       lease `192.168.2.3`, router/DNS `192.168.2.1`, router ICMP ok.
     - [ ] Consider RNDIS later only if Windows support becomes a target.
+      Prefer CDC NCM for a future standards-based high-throughput USB backend
+      before adding RNDIS.
 
 ## Phase 6: Network Userland Tools
 

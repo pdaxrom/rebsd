@@ -221,6 +221,13 @@ erase/write/read sequencing.  USB device events are handled through the
 n64cart CART interrupt on CP0 IP3; the timer path is not the normal transport
 driver.
 
+This separation is part of the driver contract.  The USB Ethernet upper half
+(`if_usbn`) and both N64cart USB lower halves (`n64cart_usbnet` and
+`n64cart_usbecm`) do not include or call `cartflash`, `romfs`, or
+`n64cart_flash` code.  Flash mode transitions, write/erase waits, reboot
+shutdown, and ROMFS synchronization remain owned by `n64cart_flash.c`,
+`romfs_backend.c`, and `romfs_vfs.c`.
+
 Two N64 USB lower drivers are available for `usbn0`:
 
 - `USBNET_ECM` is the default.  It builds `n64cart_usbecm.c` and enumerates as
@@ -233,6 +240,11 @@ Two N64 USB lower drivers are available for `usbn0`:
   EP1/EP2 bulk protocol.  Use this only with
   `tools/n64usbnet/n64usbnet-bridge`; see `tools/n64usbnet/README.md` for
   TAP/utun setup.
+
+Future USB network backends should keep the same separation.  CDC NCM is the
+preferred next standards-based candidate if ECM throughput becomes limiting;
+RNDIS should stay deferred unless Windows host support becomes a concrete
+target.
 
 Switching backend is done in `sys/mips/n64/Config` by keeping `service usbnet`
 and selecting exactly one of `options "USBNET_ECM"` or
