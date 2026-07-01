@@ -29,7 +29,7 @@ main(void)
 {
     struct n64_rompak_entry rootfs;
 
-    puts("\nRetroBSD N64 preflight\n");
+    puts("\nReBSD N64 preflight\n");
     puts("rdram size=");
     put_hex32(n64_rdram_size());
     puts("\n");

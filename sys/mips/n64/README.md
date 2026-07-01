@@ -1,4 +1,4 @@
-# RetroBSD N64 port notes
+# ReBSD N64 port notes
 
 This document describes the current Nintendo 64 port state, how the ROM is
 built, and how the early platform code works on real N64 hardware.
@@ -66,10 +66,10 @@ This log predates the volatile `/var` RAM disk. Current 8 MiB builds reserve
 1024 KiB for `/var` and print `swap size = 2432 kbytes`.
 
 ```
-RetroBSD N64 stage0
+ReBSD N64 stage0
 kernel blob size=0x00023020
 jump kernel entry=0x80001000
-RetroBSD N64 kernel entry
+ReBSD N64 kernel entry
 rdram size=0x00800000
 
 2.11 BSD Unix for N64: local build
@@ -161,10 +161,10 @@ root size = 4096 kbytes
 swap size = 4096 kbytes
 June 12 09:28:46 init: kernel security level changed from 0 to 1
 
-RetroBSD/N64 (Amnesiac) (console)
+ReBSD/N64 (Amnesiac) (console)
 
 login: root
-RetroBSD/N64 early rootfs
+ReBSD/N64 early rootfs
 
 This read-only filesystem is embedded in the cartridge ROM image.
 # pwd
@@ -581,7 +581,7 @@ regenerated from the same definitions instead of drifting.
 The ROM image is produced by `n64tool` with a TOC:
 
 ```
-n64tool --toc --title "RETROBSD N64" \
+n64tool --toc --title "REBSD N64" \
     --output kernel.z64 \
     --align 256 kernel_stage0.stripped.elf \
     --align 1024 rootfs.img
@@ -836,10 +836,10 @@ multi-user loop has no children to supervise; N64 avoids that by enabling secure
 Hardware smoke test on real n64cart hardware shows both login paths coming up:
 
 ```
-RetroBSD/N64 (Amnesiac) (ttyS0)
+ReBSD/N64 (Amnesiac) (ttyS0)
 login:
 
-RetroBSD/N64 (Amnesiac) (console)
+ReBSD/N64 (Amnesiac) (console)
 login:
 ```
 
@@ -899,7 +899,7 @@ prompt.
 6. stage0 invalidates the instruction cache for the loaded kernel range.
 7. stage0 jumps to the kernel entry, currently `0x80001000`.
 8. The kernel runs `startup()`:
-   - prints `RetroBSD N64 kernel entry`
+   - prints `ReBSD N64 kernel entry`
    - clears the fixed `u0..u_end` user-area pages that live outside ELF `.bss`
    - installs exception vectors
    - installs the wired user TLB entry
@@ -1793,10 +1793,10 @@ unchanged.
 
 Useful boot diagnostics:
 
-- `RetroBSD N64 stage0`: stage0 is running.
+- `ReBSD N64 stage0`: stage0 is running.
 - `kernel blob size=...`: embedded kernel ELF size.
 - `jump kernel entry=0x80001000`: stage0 validated and loaded the kernel.
-- `RetroBSD N64 kernel entry`: kernel `startup()` is running.
+- `ReBSD N64 kernel entry`: kernel `startup()` is running.
 - `rdram size=...`: final kernel RDRAM detection.
 - `n64romdisk: rootfs offset=... size=... magic=...`: rootfs TOC entry found.
 

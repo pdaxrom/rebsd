@@ -138,7 +138,7 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
 SYSTEM_DEP      = Makefile ioconf.c ../malta/malta.ld
-SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "2.11 BSD Unix for Malta: local build\n";' > vers.c; \
+SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for Malta: local build\n";' > vers.c; \
                   ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
                   rm -f $@
 SYSTEM_LD       = ${LD} -nostdlib -T ../malta/malta.ld ${SYSTEM_OBJ} vers.o -o $@
@@ -229,7 +229,6 @@ $(FSUTIL):
 
 reconfig ioconf.c swapunix.c: Config ../../../tools/kconfig/kconfig | machine sys
 	../../../tools/kconfig/kconfig Config
-	$(MAKE) clean
 
 machine:
 	ln -s .. $@

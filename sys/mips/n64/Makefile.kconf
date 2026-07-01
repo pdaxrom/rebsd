@@ -187,10 +187,33 @@ N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
                 $(shell find $(TOPSRC)/src/cmd -maxdepth 3 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null) \
                 $(N64_STB_SRCS)
 N64_USERLAND_STAMP = n64-userland.stamp
+N64_USERLAND_COMPILER ?= gcc
+N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
+                        -I$(abspath $(TOPSRC)/include)
+
+ifeq ($(N64_USERLAND_COMPILER),gcc)
+N64_USERLAND_CC = $(N64_PREFIX)gcc $(N64_ARCH) $(N64_CODE) $(N64_USERLAND_INCLUDES) \
+                -Werror -Wno-unused-value -Wno-format-overflow \
+                -Wno-attribute-alias -Wno-missing-attributes
+N64_USERLAND_AS = $(N64_USERLAND_CC) -x assembler-with-cpp -c
+N64_USERLAND_LD = $(N64_PREFIX)ld -m elf32ebmip
+N64_USERLAND_AR = $(N64_PREFIX)ar
+N64_USERLAND_RANLIB = $(N64_PREFIX)ranlib
+else ifeq ($(N64_USERLAND_COMPILER),pcc)
+$(error N64_USERLAND_COMPILER=pcc is reserved until ReBSD pcc passes Malta tests)
+else
+$(error Unsupported N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER))
+endif
+
 N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
                N64_STB_DIR="$(N64_STB_DIR)" \
                DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
+               CC="$(N64_USERLAND_CC)" \
+               AS="$(N64_USERLAND_AS)" \
+               LD="$(N64_USERLAND_LD)" \
+               AR="$(N64_USERLAND_AR)" \
+               RANLIB="$(N64_USERLAND_RANLIB)" \
                CC_STDINC=/usr/include \
                CC_LIBDIR=/usr/lib \
                CC_LIBEXECDIR=/usr/libexec \
@@ -212,6 +235,11 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
 N64_AWK_MAKE = $(MAKE) -C $(TOPSRC)/src/cmd/awk TARGET_PLATFORM=n64 \
                N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
                DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
+               CC="$(N64_USERLAND_CC)" \
+               AS="$(N64_USERLAND_AS)" \
+               LD="$(N64_USERLAND_LD)" \
+               AR="$(N64_USERLAND_AR)" \
+               RANLIB="$(N64_USERLAND_RANLIB)" \
                YACC="$(N64_YACC)"
 N64_STAGE0_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),stage0_n64cart_uart.o,stage0_console_null.o)
 N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)
@@ -275,7 +303,7 @@ COMPILE_FPU_S   = ${ASFPU} ${FPU_ASFLAGS} $< -o $@
 
 SYSTEM_OBJ      = startup.o ${OBJS} ioconf.o
 SYSTEM_DEP      = Makefile ioconf.c $(N64_KERNEL_LDSCRIPT)
-SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "2.11 BSD Unix for N64: local build\n";' > vers.c; \
+SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for N64: local build\n";' > vers.c; \
                   ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
                   rm -f $@
 SYSTEM_LD       = ${LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@
@@ -655,10 +683,10 @@ $(ELF2AOUT): $(ELF2AOUT_SRCS)
 	$(MAKE) -C $(TOPSRC)/tools/elf2aout
 
 preflight.z64: stage0.stripped.elf rootfs.img
-	$(N64_TOOL) --toc --title "RETROBSD N64" --output $@ --align 256 stage0.stripped.elf --align 1024 rootfs.img
+	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 stage0.stripped.elf --align 1024 rootfs.img
 
 kernel.z64: kernel_stage0.stripped.elf rootfs.img
-	$(N64_TOOL) --toc --title "RETROBSD N64" --output $@ --align 256 kernel_stage0.stripped.elf --align 1024 rootfs.img
+	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 kernel_stage0.stripped.elf --align 1024 rootfs.img
 
 preflight.o: preflight.c ${SYSTEM_DEP}
 	${COMPILE_C}
@@ -688,7 +716,6 @@ clean-all: clean
 
 reconfig ioconf.c swapunix.c: Config ../../../tools/kconfig/kconfig | machine sys
 	../../../tools/kconfig/kconfig Config
-	$(MAKE) clean
 
 machine:
 	ln -s . $@

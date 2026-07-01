@@ -254,7 +254,7 @@ int main(int argc, char *argv[])
                 sprintf(buffer, "%s\r", password);
                 rv = write(pipe_fd, buffer, strlen(buffer));
             }
-            if(string_contains(buffer, "Welcome to RetroBSD", nr)) {
+            if(string_contains(buffer, "Welcome to ReBSD", nr)) {
                 break;
             }
         }

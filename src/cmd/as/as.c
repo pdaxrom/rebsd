@@ -3173,7 +3173,7 @@ void usage()
 
 static void target_info(void)
 {
-    printf("retrobsd-as target_big_endian=%d target_vr4300_default=%d\n",
+    printf("rebsd-as target_big_endian=%d target_vr4300_default=%d\n",
 #ifdef TARGET_BIG_ENDIAN
         1,
 #else

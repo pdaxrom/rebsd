@@ -1,3 +1,3 @@
-RetroBSD/N64 early rootfs
+ReBSD/N64 early rootfs
 
 This read-only filesystem is embedded in the cartridge ROM image.

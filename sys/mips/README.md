@@ -1,4 +1,4 @@
-# RetroBSD MIPS ports
+# ReBSD MIPS ports
 
 This tree is the shared home for big-endian MIPS ports.
 

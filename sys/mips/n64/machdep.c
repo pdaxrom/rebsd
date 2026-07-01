@@ -191,7 +191,7 @@ startup(void)
 {
     unsigned status;
 
-    early_puts("RetroBSD N64 kernel entry\n");
+    early_puts("ReBSD N64 kernel entry\n");
     n64_install_exception_vectors();
     n64_tlb_init();
     n64_interrupt_init();

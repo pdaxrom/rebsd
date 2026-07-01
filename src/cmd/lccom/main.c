@@ -1,7 +1,7 @@
 #include "c.h"
 #include <unistd.h>
 
-static const char *version = "RetroBSD revision " VERSION;
+static const char *version = "ReBSD revision " VERSION;
 
 static void typestab(Symbol, void *);
 

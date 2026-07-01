@@ -1,4 +1,10 @@
-# This is the RetroBSD source directory.
+# ReBSD
+
+ReBSD is a fork of RetroBSD with MMU support, ported to Nintendo 64 and
+vintage MMU-enabled MIPS hardware.
+
+The original RetroBSD project remains the historical base for this source tree.
+See `docs/ORIGIN.md` for attribution and compatibility policy.
 
 ## Source Roadmap
 
@@ -68,7 +74,7 @@ $ pic32prog sys/pic32/explorer16/unix.hex
 ```
 
 ## Simulate
-RetroBSD can be simulated using [QEMU for pic32](https://github.com/sergev/qemu).
+ReBSD can be simulated using [QEMU for pic32](https://github.com/sergev/qemu).
 Use kernel for Explorer 16 board. For example:
 ```
 $ qemu-pic32 -machine pic32mx7-explorer16 -nographic -monitor none \

@@ -58,5 +58,5 @@ malta_early_putc:
 
         .section .rodata,"a",@progbits
 malta_early_banner:
-        .ascii  "RetroBSD Malta early UART ok\r\n"
+        .ascii  "ReBSD Malta early UART ok\r\n"
         .byte   0

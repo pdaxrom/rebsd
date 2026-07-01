@@ -2,7 +2,7 @@ TOPSRC          = $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
 
 CFLAGS          = -Os -Wall -DMIPS -DNO_ANNOTATIONS -DNO_PREPROCESSOR \
-                  -DNO_PPACK -D_RETROBSD -D__SMALLER_C_SCHAR__ \
+                  -DNO_PPACK -D_REBSD -D_RETROBSD -D__SMALLER_C_SCHAR__ \
                   -D__SMALLER_C__ -D__SMALLER_C_32__ -DSTATIC \
                   -DNO_EXTRA_WARNS -DSYNTAX_STACK_MAX=3200
 #CFLAGS += -mips16

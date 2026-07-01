@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Test the RetroBSD assembler for the 32-bit instruction subset we expect
+# Test the ReBSD assembler for the 32-bit instruction subset we expect
 # to use on NEC VR4300.  With a GNU as argument, compare accept/reject
 # behavior against GNU as.  With no GNU as argument, run as a target-side
 # self-test against /usr/bin/as.
@@ -11,7 +11,7 @@
 #
 
 if test $# -gt 2; then
-	echo "usage: $0 [/path/to/retrobsd-as [/path/to/gnu-as]]" >&2
+	echo "usage: $0 [/path/to/rebsd-as [/path/to/gnu-as]]" >&2
 	exit 2
 fi
 
@@ -29,7 +29,7 @@ fi
 
 test -x "$retro_as"
 if test $? -ne 0; then
-	echo "matrix-as-vr4300: retrobsd as is not executable: $retro_as" >&2
+	echo "matrix-as-vr4300: ReBSD as is not executable: $retro_as" >&2
 	exit 2
 fi
 
@@ -115,7 +115,7 @@ do
 		fi
 		if test -z "$reason"; then
 			if test $retro_rc -ne 0; then
-				reason="$name: RetroBSD as rejected expected-valid instruction"
+				reason="$name: ReBSD as rejected expected-valid instruction"
 			fi
 		fi
 		;;
@@ -127,7 +127,7 @@ do
 		fi
 		if test -z "$reason"; then
 			if test $retro_rc -eq 0; then
-				reason="$name: RetroBSD as accepted expected-invalid instruction"
+				reason="$name: ReBSD as accepted expected-invalid instruction"
 			fi
 		fi
 		;;
@@ -144,11 +144,11 @@ do
 				????????)
 					text_size=`printf "%d" "0x$text_hex" 2>/dev/null`
 					if test $? -ne 0; then
-						reason="$name: cannot parse RetroBSD a.out text size"
+			reason="$name: cannot parse ReBSD a.out text size"
 					fi
 					;;
 				*)
-					reason="$name: cannot read RetroBSD a.out text size"
+			reason="$name: cannot read ReBSD a.out text size"
 					;;
 				esac
 				if test -z "$reason"; then
@@ -161,14 +161,14 @@ do
 				if test -z "$reason"; then
 					gnu_size=`wc -c < "$gnu_text" | tr -d '[:space:]'`
 					if test "$text_size" -lt "$gnu_size"; then
-						reason="$name: RetroBSD .text shorter than GNU .text"
+			reason="$name: ReBSD .text shorter than GNU .text"
 					fi
 				fi
 				if test -z "$reason"; then
 					dd if="$retro_o" of="$retro_text" bs=1 skip=32 \
 					    count="$gnu_size" > "$objcopy_log" 2>&1
 					if test $? -ne 0; then
-						reason="$name: cannot extract RetroBSD .text"
+			reason="$name: cannot extract ReBSD .text"
 					fi
 				fi
 				if test -z "$reason"; then
@@ -190,7 +190,7 @@ do
 			cat "$gnu_log" >&2
 		fi
 		if test -s "$retro_log"; then
-			echo "retrobsd-as:" >&2
+			echo "rebsd-as:" >&2
 			cat "$retro_log" >&2
 		fi
 		if test -s "$objcopy_log"; then
@@ -198,7 +198,7 @@ do
 			cat "$objcopy_log" >&2
 		fi
 		if test -s "$retro_text"; then
-			echo "retrobsd .text:" >&2
+			echo "ReBSD .text:" >&2
 			od -An -tx4 "$retro_text" >&2
 		fi
 		if test -s "$gnu_text"; then

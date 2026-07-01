@@ -1,0 +1,25 @@
+# PortableCC Import For ReBSD
+
+This directory contains vendored PortableCC sources imported for the ReBSD
+MIPS/N64 system compiler work.
+
+Upstream repositories:
+
+- `pcc`: https://github.com/PortableCC/pcc.git
+- `pcc-libs`: https://github.com/PortableCC/pcc-libs.git
+- `pcc-tests`: https://github.com/PortableCC/pcc-tests.git
+
+Exact imported commits are recorded in `UPSTREAM-HASHES`.
+
+Local ReBSD patches live on top of these upstream snapshots. The old in-tree
+`cc`/`pcc` path remains the compatibility oracle until the new PortableCC-based
+pcc passes the full QEMU Malta regression suite.
+
+Porting constraints:
+
+- QEMU Malta is the mandatory test target before N64 hardware testing.
+- Existing ReBSD `as`, `ld`, `ar`, and `ranlib` must be used.
+- GNU binutils, LLVM tools, a second assembler, a second linker, or a new
+  archive format must not be imported as part of this pcc adaptation.
+- Kernel and userland builds continue to default to GCC until the pcc port is
+  explicitly enabled after tests pass.

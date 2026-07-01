@@ -18,7 +18,7 @@ telnet \- small TELNET client
 .SH DESCRIPTION
 .I Telnet
 opens an interactive TCP connection and performs the small subset of TELNET
-option negotiation needed by the RetroBSD network port.
+option negotiation needed by the ReBSD network port.
 .PP
 The client accepts remote echo and suppress-go-ahead options, rejects other
 options, doubles TELNET IAC bytes, and puts the local terminal in raw mode
@@ -26,7 +26,7 @@ while connected.
 .PP
 With
 .B \-K ,
-the client performs a RetroBSD pre-shared-key handshake before TELNET option
+the client performs a ReBSD pre-shared-key handshake before TELNET option
 negotiation and encrypts the byte stream.  The peer must be
 .IR telnetd (8)
 started with the same key.  This is a compact lab transport, not TLS or SSH.

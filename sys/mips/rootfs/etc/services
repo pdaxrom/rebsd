@@ -1,4 +1,4 @@
-# Minimal network services database for RetroBSD/MIPS.
+# Minimal network services database for ReBSD/MIPS.
 #
 # Keep this file small for the cartridge rootfs; add entries as daemons are
 # staged.

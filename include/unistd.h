@@ -32,7 +32,7 @@
  */
 
 /*
- * Modified for 2.11BSD.  The RetroBSD PCC frontend accepts old-style
+ * Modified for 2.11BSD.  The ReBSD PCC frontend accepts old-style
  * system declarations more reliably than full prototypes, even when the
  * driver enables GCC compatibility defines.  Expose K&R declarations to
  * PCC and typed prototypes to compilers that can parse them.

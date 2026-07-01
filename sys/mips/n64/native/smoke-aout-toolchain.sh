@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Host-side smoke test for the RetroBSD/N64 a.out toolchain.
+# Host-side smoke test for the ReBSD/N64 a.out toolchain.
 #
 # This validates the native host tools used to produce target a.out objects:
 #   - as writes big-endian RMAGIC objects;
@@ -8,7 +8,7 @@
 #   - ar creates archives that our ranlib can index;
 #   - ld can resolve an undefined symbol from a ranlib-indexed archive;
 #   - nm, size, and strip read/write the same big-endian a.out objects;
-#   - when GNU as is supplied, RetroBSD as emits the same VR4300 text bytes.
+#   - when GNU as is supplied, ReBSD as emits the same VR4300 text bytes.
 #
 
 if test $# -ne 7 && test $# -ne 8; then

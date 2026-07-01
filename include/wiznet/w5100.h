@@ -7,7 +7,7 @@
  * published by the Free Software Foundation.
  *
  * Updated  August/3/2011 by Lowell Scott Hanson to be compatable with chipKIT boards
- * Updated  April/13/2012 by Serge Vakulenko for RetroBSD project
+ * Updated  April/13/2012 by Serge Vakulenko for ReBSD project
  */
 #ifndef W5100_H_INCLUDED
 #define W5100_H_INCLUDED

@@ -1,4 +1,4 @@
-# RetroBSD MIPS Networking TODO
+# ReBSD MIPS Networking TODO
 
 This tracks the first networking branch.  Bring the stack up on Malta first;
 do not enable or test it on N64 until the Malta path is stable.

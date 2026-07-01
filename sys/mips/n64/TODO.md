@@ -1,4 +1,4 @@
-# RetroBSD N64 TODO
+# ReBSD N64 TODO
 
 This file tracks the next N64 porting steps. Keep the N64 application and
 rootfs build aligned with the existing RetroBSD/PIC32 build flow instead of

@@ -155,7 +155,7 @@ startup(void)
 {
     unsigned status;
 
-    early_puts("RetroBSD Malta kernel entry\n");
+    early_puts("ReBSD Malta kernel entry\n");
     mips_install_exception_vectors();
     mips_tlb_init();
 

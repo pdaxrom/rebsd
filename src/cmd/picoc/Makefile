@@ -14,7 +14,7 @@ SRCS            = picoc.c table.c lex.c parse.c expression.c heap.c type.c \
                   platform/platform_unix.c platform/library_unix.c \
                   cstdlib/stdio.c cstdlib/math.c cstdlib/string.c cstdlib/stdlib.c \
                   cstdlib/time.c cstdlib/errno.c cstdlib/ctype.c cstdlib/stdbool.c \
-                  cstdlib/unistd.c retrobsd.c
+                  cstdlib/unistd.c rebsd.c
 OBJS            := $(SRCS:%.c=%.o)
 
 all:            $(TARGET)

@@ -2,7 +2,7 @@ TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
 #include $(TOPSRC)/cross.mk
 
-OBJS            = lcc.o retrobsd.o
+OBJS            = lcc.o rebsd.o
 MAN             = lcc.0
 MANSRC          = lcc.1
 

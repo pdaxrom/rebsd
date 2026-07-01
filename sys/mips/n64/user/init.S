@@ -129,7 +129,7 @@ shell_argv:
         .word   shell_arg1
         .word   0
 banner:
-        .ascii  "\nRetroBSD/N64 init\n"
+        .ascii  "\nReBSD/N64 init\n"
 banner_end:
 fpu_ok:
         .ascii  "fpu ok\n"

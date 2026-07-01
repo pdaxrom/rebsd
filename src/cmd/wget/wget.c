@@ -176,7 +176,7 @@ send_request(fd, u)
     sprintf(req,
         "GET %s HTTP/1.0\r\n"
         "Host: %s\r\n"
-        "User-Agent: RetroBSD-wget/0.1\r\n"
+        "User-Agent: ReBSD-wget/0.1\r\n"
         "Connection: close\r\n"
         "\r\n",
         u->path, u->host);

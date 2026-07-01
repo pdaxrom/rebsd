@@ -286,7 +286,7 @@ stage0_main(void)
     kernel.phoff = 0;
     kernel.phnum = 0;
 
-    stage0_puts("RetroBSD N64 stage0\n");
+    stage0_puts("ReBSD N64 stage0\n");
     stage0_puts("kernel blob size=");
     stage0_put_hex32(kernel_blob_size());
     stage0_puts("\n");

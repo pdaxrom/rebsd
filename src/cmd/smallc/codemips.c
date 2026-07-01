@@ -20,7 +20,7 @@
 void header()
 {
     output_string ("#\tSmall C for MIPS32\n");
-    output_string ("#\tRetroBSD Project\n");
+    output_string ("#\tReBSD Project\n");
     output_string ("#\n");
     output_string ("\t.set\tnoreorder\n");
     //output_line ("global\tTlneg");
