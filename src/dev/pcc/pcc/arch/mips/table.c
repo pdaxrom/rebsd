@@ -467,7 +467,7 @@ struct optab table[] = {
 	SOREG,	TWORD,
 	SCREG,	TDOUBLE|TLDOUBLE,
 		NCREG,	RESC1,
-		"	l.d A1,AL	# convert (u)int to (l)double\n"
+		"	l.s A1,AL	# convert (u)int to (l)double\n"
 		"	nop\n"
 		"	cvt.d.w A1,A1\n", },
 

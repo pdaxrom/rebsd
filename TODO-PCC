@@ -112,9 +112,9 @@ test gate.
   - Current ReBSD/PCC run after `ld` `-L/-l` ordering, hard-float helper
     prototypes, `sqrt(-1.0)`, raw `signbit`, `double -> float` NaN-sign,
     unsigned bitfield assignment, MIPS `ZF` helper ABI fixes, MIPS
-    aggregate-return ABI fixes, and MIPS stack-argument alignment fixes: 311
-    checks total, 290 passed, 21 failed; Malta runtime 253 linked binaries,
-    246 passed, 7 failed.
+    aggregate-return ABI fixes, MIPS stack-argument alignment fixes, and MIPS
+    memory integer-to-double conversion fixes: 311 checks total, 290 passed,
+    21 failed; Malta runtime 253 linked binaries, 247 passed, 6 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -137,6 +137,12 @@ test gate.
     preserving the existing rounded post-call cleanup.
   - This fixed `jira/PCC-85`, which was faulting in `_doprnt` at
     `sdc1 $f26,504(sp)` because `$sp` reached GCC-built libc misaligned.
+- [x] Fix MIPS memory integer-to-double conversion.
+  - `SOREG TWORD -> double/long double` conversion now loads the 32-bit
+    integer word into an FPU register with `l.s` before `cvt.d.w`.
+  - The old `l.d` form required 8-byte alignment and read past the integer
+    slot.
+  - This fixed `jira/PCC-236`.
 - [ ] Fix or classify `pcc-tests` compile/link failures.
   - ReBSD assembler/linker incompatibilities: non-relocatable expressions
     (`c99/basic004`, `c99/func004`, `c99/oper001`, `jira/PCC-23`,
@@ -161,7 +167,6 @@ test gate.
     `pcc-libs/csu` can be enabled safely for ReBSD a.out: `pcclist/init006`.
   - Wide-char/wide-stdio stub is still too small: `jira/PCC-21`.
   - Likely printf/float constant or libc formatting issue: `jira/PCC-225`.
-  - Likely bool-to-float/codegen issue: `jira/PCC-236`.
   - Likely bitfield signedness/assignment issue: `jira/PCC-462`.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
