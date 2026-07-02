@@ -370,10 +370,20 @@ test gate.
   - Default remains GCC until explicitly changed.
   - Add documented `gcc`/`pcc` selection, then build full userland with PCC on
     Malta and later N64.
-- [ ] Decide long-term runtime policy for PCC support libraries.
-  - Keep `libpcc.a` staged for compiler helper routines.
-  - Decide whether any helpers should move into libc.
-  - Stage `libpccsoftfloat.a` only if a future target or test proves it needed.
+- [x] Decide long-term runtime policy for PCC support libraries.
+  - Keep `libpcc.a` staged as PCC's compiler runtime. It owns helpers that
+    PCC-generated code may reference directly, such as arithmetic, conversion,
+    stack-protector, and other compiler-private `__...` routines.
+  - Public C/POSIX/BSD compatibility functions must live in ReBSD libc or
+    libm, not in `libpcc.a`. If PCC-built userland exposes missing standard
+    or compatibility symbols, add them to the system library that owns that
+    API.
+  - When closing libc/libm gaps, add the related function family or interface
+    surface together instead of growing the ABI as disconnected one-off
+    stubs.
+  - Do not stage `libpccsoftfloat.a` for current hard-float Malta/N64 builds.
+    Add it only if a future no-FPU target or concrete test failure proves it
+    is needed.
 - [ ] Decide the C++ and `pcc-libs/csu` policy.
   - Current flat ctor/dtor ranges are enough for C constructor/destructor
     attributes.
@@ -397,7 +407,13 @@ test gate.
   - Expand smoke coverage for libc-heavy programs, varargs, structs/unions,
     pointer arithmetic stress, and shell build workloads.
 - [ ] Replace temporary compatibility stubs with real policy.
-  - Complete the wide-char/wide-stdio story.
+  - Core wide-char and wide-stdio APIs now live in libc as a coherent
+    ASCII/byte-oriented ReBSD wide ABI surface.
+  - Move stubbed or missing public compatibility functions into libc or libm,
+    together with their companion declarations and closely related functions,
+    so ReBSD does not accumulate partial API fragments.
+  - Decide whether ReBSD will grow locale-aware multibyte/wide semantics, or
+    explicitly document the current single-byte execution character policy.
   - Audit BSD compatibility headers such as `cdefs.h`.
   - Turn current C99 math additions into a supported libm contract.
 - [ ] Document the final ReBSD/PCC target details and clean up build artifacts.
@@ -422,7 +438,10 @@ test gate.
     legacy compiler commands.
 - [x] Decide the first ReBSD policy for `src/dev/pcc/pcc-libs`.
   - Current policy: port and stage `libpcc.a` for compiler helper routines.
-  - Still decide whether any helpers should move into libc long term.
+  - Public C/POSIX/BSD compatibility routines and missing libc-era helpers go
+    into ReBSD libc or libm, not `libpcc.a`.
+  - Add related libc/libm functions as coherent API groups where practical,
+    rather than leaving isolated compatibility stubs.
   - Decide only if tests prove it needed: stage `libpccsoftfloat.a`.
   - `pcc-libs/csu` is still not staged by default. ReBSD now has safe flat
     linker-defined ctor/dtor ranges for C constructor/destructor attributes,
@@ -462,17 +481,29 @@ test gate.
     fails with `compiler error: cdope missing op 93`.
   - Re-enable `/usr/bin/p++` only together with a target-side compile/link/run
     gate and the C++ ctor/dtor runtime policy above.
-- [ ] Expand `include/wchar.h` beyond the current minimal ReBSD wide-char ABI.
-  - Current header fixes `wchar_t` at the ReBSD/PCC 16-bit ABI and defines
-    `wint_t`, `NULL`, and `wprintf`.
-  - Add the expected C/POSIX declarations only after the libc, locale, and
-    future C++ policy is decided.
-- [ ] Replace `src/libc/stdio/wprintf.c` with a real wide-stdio
-  implementation or explicitly drop wide-stdio support from the PCC test gate.
-  - Current stub is ASCII-only and only handles plain characters, `%%`, `%ls`,
-    and `%lc`.
-  - It ignores width, precision, flags, numeric conversions, locale,
-    multibyte conversion, and error accounting beyond `ferror(stdout)`.
+- [x] Expand `include/wchar.h` beyond the minimal ReBSD wide-char ABI.
+  - `wchar_t` remains the ReBSD/PCC 16-bit ABI.
+  - `wchar.h` now declares a coherent libc-owned core: wide stdio entry
+    points, `wcs*`, `wmem*`, `wcsto*`, and byte-oriented `mbr*`/`wcrtomb`
+    conversion helpers.
+  - `src/libc/string/wchar.c` implements the wide string, memory, conversion,
+    and numeric parsing helpers in libc rather than `libpcc.a`.
+- [x] Replace the one-off `src/libc/stdio/wprintf.c` stub with a libc
+  wide-stdio family.
+  - Implemented `fwide`, `fputwc`, `putwc`, `putwchar`, `fputws`,
+    `fwprintf`, `vfwprintf`, `vwprintf`, `wprintf`, `swprintf`, and
+    `vswprintf`.
+  - The formatter handles narrow and wide `%s`/`%c`, width/precision/flags,
+    integer formats, pointer formats, ReBSD `%b`, and float formats by
+    routing scalar formatting through the existing libc printf machinery.
+  - Current policy remains single-byte/ASCII-oriented. Full locale-aware
+    multibyte conversion and non-ASCII wide I/O are still future policy work,
+    not `libpcc` work.
+- [ ] Decide and document the full locale/multibyte policy for wide-char APIs.
+  - Current `mbr*`/`wcrtomb`/`mbstowcs`/`wcstombs` helpers intentionally
+    implement the ReBSD single-byte ASCII execution character model.
+  - If ReBSD later adds locale or UTF-8 semantics, update the whole conversion
+    family and error policy together instead of changing isolated functions.
 - [ ] Audit and complete `sys/include/cdefs.h`.
   - Current file is a small BSD-compatibility subset for PCC/imported tests:
     declaration wrappers, `__P`, selected compiler attributes, `__CONCAT`,
