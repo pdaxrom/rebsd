@@ -263,6 +263,17 @@ test gate.
     `gcccompat/typeof001` uses x86 inline-asm constraints `=d`/`=a`;
     `misc/shlib3` uses unsupported `-fPIC -shared` output;
     `pcclist/init004` requires TLS, which the ReBSD target currently rejects.
+  - `gcccompat/typeof001` is not a portable `typeof` failure: the test embeds
+    x86 instructions and register constraints (`eax`/`edx`/`ecx`, `a`, `d`).
+    Keep it expected-fail for MIPS, or add a target guard/MIPS-specific
+    equivalent if this upstream test is kept in the ReBSD gate.
+  - `misc/shlib3` is a shared-library/PIC policy failure: static and combined
+    variants of the same source pass, including constructor/destructor
+    attributes, but ReBSD a.out does not implement `-shared`, runtime shared
+    object loading, `-rpath`, or a shared-library ABI.
+  - `pcclist/init004` is a TLS policy failure: PCC reports "thread-local
+    storage not supported for this target", matching the current ReBSD/MIPS
+    target configuration and runtime ABI.
 - [x] Support ReBSD a.out ctor/dtor collection in `as`, `ld`, and libc startup.
   - The root cause was in the a.out toolchain rather than PCC: ReBSD `as`
     accepted `.ctors`/`.dtors` syntax but flattened those sections into normal
@@ -327,6 +338,55 @@ test gate.
   - `libm.a` now includes `fabs.o`, so Linpack links cleanly with `-lm`.
   - Clean Malta runtime baseline: GCC about 14.7 MFLOPS and PCC about
     12.4-13.0 MFLOPS with `LINPACK_RC:0` at the default smoke size.
+
+## Current Remaining PCC Work
+
+- [ ] Package imported PCC as the native rootfs compiler.
+  - Install the driver as `/usr/bin/cc` and `/usr/bin/cpp`.
+  - Install internal passes under `/usr/libexec/pcc/`.
+  - Stage headers, `crt0.o`, `libc.a`, `libm.a`, and `libpcc.a` coherently for
+    native use.
+- [ ] Replace the legacy compiler stack only after native PCC is usable.
+  - Remove the old `cpp`, legacy `cc`/`pcc`, `lcc`/`lccom`, and
+    `smallc`/`smlrc` from the default rootfs once imported PCC can compile,
+    assemble, link, and run programs inside Malta.
+- [ ] Run the native Malta PCC gate from inside ReBSD.
+  - Boot Malta with imported PCC installed.
+  - Compile, assemble, link, and run representative programs on the target.
+  - Then run the full PCC test gate from the target environment.
+- [ ] Make the userland compiler selectable.
+  - Default remains GCC until explicitly changed.
+  - Add documented `gcc`/`pcc` selection, then build full userland with PCC on
+    Malta and later N64.
+- [ ] Decide long-term runtime policy for PCC support libraries.
+  - Keep `libpcc.a` staged for compiler helper routines.
+  - Decide whether any helpers should move into libc.
+  - Stage `libpccsoftfloat.a` only if a future target or test proves it needed.
+- [ ] Decide the C++ and `pcc-libs/csu` policy.
+  - Current flat ctor/dtor ranges are enough for C constructor/destructor
+    attributes.
+  - Full C++ needs a startup policy for `crtbegin.o`/`crtend.o`, sentinel
+    entries, priorities, destructor ordering, and partial links.
+- [ ] Decide whether ReBSD will support TLS and shared libraries.
+  - TLS is currently rejected by the target and blocks only `pcclist/init004`.
+  - Shared libraries/PIC are currently out of scope for static a.out and block
+    only `misc/shlib3`.
+- [ ] Add or keep target-aware handling for architecture-specific upstream
+  tests.
+  - `gcccompat/typeof001` is x86 inline asm, not a MIPS C frontend failure.
+  - Either keep it expected-fail on MIPS or add a MIPS-specific replacement.
+- [ ] Close remaining test-coverage gaps.
+  - Add the stricter mixed `long long` bitfield value regression.
+  - Expand smoke coverage for libc-heavy programs, varargs, structs/unions,
+    pointer arithmetic stress, and shell build workloads.
+- [ ] Replace temporary compatibility stubs with real policy.
+  - Complete the wide-char/wide-stdio story.
+  - Audit BSD compatibility headers such as `cdefs.h`.
+  - Turn current C99 math additions into a supported libm contract.
+- [ ] Document the final ReBSD/PCC target details and clean up build artifacts.
+  - Update `docs/PCC_PORTING_NOTES.md`.
+  - Keep generated build artifacts out of git unless they are tracked source
+    inputs.
 
 ## Phase 3: Native PCC in Malta Rootfs
 
