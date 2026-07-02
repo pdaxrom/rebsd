@@ -130,7 +130,9 @@ char *stdlibdirs[] = { "/lib", "/usr/lib", "/usr/local/lib", 0 };
 /*
  * internal symbols
  */
-struct nlist *p_etext, *p_edata, *p_end, *p_gp, *entrypt;
+struct nlist *p_etext, *p_edata, *p_end;
+struct nlist *p_c_etext, *p_c_edata, *p_c_end;
+struct nlist *p_gp, *entrypt;
 struct nlist *p_ctor_list, *p_ctor_end, *p_dtor_list, *p_dtor_end;
 
 /*
@@ -973,37 +975,32 @@ int enter(struct nlist **hp)
 
 void symreloc()
 {
-    switch (cursym.n_type) {
+    switch (cursym.n_type & N_TYPE) {
     case N_TEXT:
-    case N_EXT + N_TEXT:
         cursym.n_value += ctrel;
         return;
     case N_DATA:
-    case N_EXT + N_DATA:
         cursym.n_value += cdrel;
         return;
     case N_CTORS:
-    case N_EXT + N_CTORS:
         cursym.n_value += cctorrel;
         if (final_layout)
-            cursym.n_type += N_DATA - N_CTORS;
+            cursym.n_type = (cursym.n_type & ~N_TYPE) | N_DATA;
         return;
     case N_DTORS:
-    case N_EXT + N_DTORS:
         cursym.n_value += cdtorrel;
         if (final_layout)
-            cursym.n_type += N_DATA - N_DTORS;
+            cursym.n_type = (cursym.n_type & ~N_TYPE) | N_DATA;
         return;
     case N_BSS:
-    case N_EXT + N_BSS:
         cursym.n_value += cbrel;
         return;
-    case N_EXT + N_UNDF:
-    case N_EXT + N_COMM:
+    case N_UNDF:
+    case N_COMM:
         return;
     }
     if (cursym.n_type & N_EXT)
-        cursym.n_type = N_EXT + N_ABS;
+        cursym.n_type = (cursym.n_type & ~N_TYPE) | N_ABS;
 }
 
 /*
@@ -1118,17 +1115,23 @@ int load1(unsigned loc, int libflg, int nloc)
         if (cursym.n_type == N_EXT + N_UNDF)
             continue;
         sp = lastsym;
-        if (sp->n_type == N_EXT + N_UNDF || sp->n_type == N_EXT + N_COMM) {
-            if (cursym.n_type == N_EXT + N_COMM) {
+        if ((sp->n_type & N_TYPE) == N_UNDF || (sp->n_type & N_TYPE) == N_COMM) {
+            if ((cursym.n_type & N_TYPE) == N_COMM) {
                 sp->n_type = cursym.n_type;
                 if (cursym.n_value > sp->n_value)
                     sp->n_value = cursym.n_value;
-            } else if (sp->n_type == N_EXT + N_UNDF || cursym.n_type == N_EXT + N_DATA ||
-                       cursym.n_type == N_EXT + N_BSS) {
+            } else if ((sp->n_type & N_TYPE) == N_UNDF ||
+                       (cursym.n_type & N_TYPE) != N_UNDF) {
                 ndef++;
                 sp->n_type = cursym.n_type;
                 sp->n_value = cursym.n_value;
             }
+        } else if ((sp->n_type & N_WEAK) && !(cursym.n_type & N_WEAK) &&
+                   (cursym.n_type & N_TYPE) != N_UNDF &&
+                   (cursym.n_type & N_TYPE) != N_COMM) {
+            ndef++;
+            sp->n_type = cursym.n_type;
+            sp->n_value = cursym.n_value;
         }
     }
     if (!libflg || ndef) {
@@ -1430,6 +1433,9 @@ void middle()
     p_etext = *slookup("_etext");
     p_edata = *slookup("_edata");
     p_end = *slookup("_end");
+    p_c_etext = *slookup("etext");
+    p_c_edata = *slookup("edata");
+    p_c_end = *slookup("end");
     p_gp = *slookup("_gp");
     p_ctor_list = *slookup("__CTOR_LIST__");
     p_ctor_end = *slookup("__CTOR_END__");
@@ -1443,6 +1449,7 @@ void middle()
     if (!output_relinfo) {
         for (sp = symtab; sp < symp; sp++)
             if (sp->n_type == N_EXT + N_UNDF && sp != p_end && sp != p_edata && sp != p_etext &&
+                sp != p_c_end && sp != p_c_edata && sp != p_c_etext &&
                 sp != p_gp && sp != p_ctor_list && sp != p_ctor_end &&
                 sp != p_dtor_list && sp != p_dtor_end) {
                 output_relinfo++;
@@ -1462,6 +1469,7 @@ void middle()
     normal_dsize = dsize;
     if (dflag || !output_relinfo) {
         ldrsym(p_etext, tsize, N_EXT + N_TEXT);
+        ldrsym(p_c_etext, tsize, N_EXT + N_TEXT);
 
         ldrsym(p_ctor_list, dsize, N_EXT + N_DATA);
         dsize += ctorsize;
@@ -1473,6 +1481,8 @@ void middle()
 
         ldrsym(p_edata, dsize, N_EXT + N_DATA);
         ldrsym(p_end, bsize, N_EXT + N_BSS);
+        ldrsym(p_c_edata, dsize, N_EXT + N_DATA);
+        ldrsym(p_c_end, bsize, N_EXT + N_BSS);
 
         /* Set GP as offset from the start of data segment. */
         ldrsym(p_gp, gpoffset, N_EXT + N_DATA);
@@ -1509,6 +1519,7 @@ void middle()
             if (!rflag) {
                 errlev |= 1;
                 if (sp == p_end || sp == p_edata || sp == p_etext || sp == p_gp ||
+                    sp == p_c_end || sp == p_c_edata || sp == p_c_etext ||
                     sp == p_ctor_list || sp == p_ctor_end ||
                     sp == p_dtor_list || sp == p_dtor_end)
                     break;
@@ -1642,18 +1653,23 @@ void load2(unsigned loc)
         }
         if (!(sp = *lookup()))
             error(2, "internal error: symbol not found");
-        free(cursym.n_name);
         if (cursym.n_type == N_EXT + N_UNDF || cursym.n_type == N_EXT + N_COMM) {
             if (lp >= &local[NSYMPR])
                 error(2, "local symbol table overflow");
             lp->locindex = symno;
             lp++->locsymbol = sp;
+            free(cursym.n_name);
             continue;
         }
         if (cursym.n_type != sp->n_type || cursym.n_value != sp->n_value) {
+            if (cursym.n_type & N_WEAK) {
+                free(cursym.n_name);
+                continue;
+            }
             printf("%s: ", cursym.n_name);
             error(1, "name redefined");
         }
+        free(cursym.n_name);
     }
 
     count = loc + filhdr.a_text + filhdr.a_data;

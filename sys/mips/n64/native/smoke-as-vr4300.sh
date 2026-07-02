@@ -55,6 +55,10 @@ echo '	ctc1 $2,$31' >> $valid
 echo '	mul $2,$3,$4' >> $valid
 echo '	neg $2,$2' >> $valid
 echo '	negu $3,$3' >> $valid
+echo '	lw $2,46928($4)' >> $valid
+echo '	sw $3,44876($4)' >> $valid
+echo '	lh $5,-40000($4)' >> $valid
+echo '	sh $5,-40000($4)' >> $valid
 echo '	jr $ra' >> $valid
 echo '	nop' >> $valid
 

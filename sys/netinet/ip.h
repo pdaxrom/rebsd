@@ -29,7 +29,7 @@
 #define	BYTE_ORDER	BIG_ENDIAN	/* mc68000, tahoe, most others */
 #endif
 #endif
-#endif BYTE_ORDER
+#endif /* BYTE_ORDER */
 
 /*
  * Definitions for internet protocol version 4.

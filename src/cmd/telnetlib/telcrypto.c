@@ -385,10 +385,7 @@ read_hello(fd, nonce)
 }
 
 int
-rtel_client_handshake(fd, key, ses)
-    int fd;
-    char *key;
-    struct rtel_session *ses;
+rtel_client_handshake(int fd, char *key, struct rtel_session *ses)
 {
     unsigned char cnonce[32], snonce[RTEL_NONCE_LEN];
     unsigned char expect[RTEL_PROOF_LEN], got[RTEL_PROOF_LEN];
@@ -412,10 +409,7 @@ rtel_client_handshake(fd, key, ses)
 }
 
 int
-rtel_server_handshake(fd, key, ses)
-    int fd;
-    char *key;
-    struct rtel_session *ses;
+rtel_server_handshake(int fd, char *key, struct rtel_session *ses)
 {
     unsigned char cnonce[RTEL_NONCE_LEN], snonce[32];
     unsigned char expect[RTEL_PROOF_LEN], got[RTEL_PROOF_LEN];
@@ -441,11 +435,7 @@ rtel_server_handshake(fd, key, ses)
 }
 
 int
-rtel_read(fd, ses, buf, len)
-    int fd;
-    struct rtel_session *ses;
-    unsigned char *buf;
-    int len;
+rtel_read(int fd, struct rtel_session *ses, unsigned char *buf, int len)
 {
     int n;
 
@@ -456,11 +446,7 @@ rtel_read(fd, ses, buf, len)
 }
 
 int
-rtel_write(fd, ses, buf, len)
-    int fd;
-    struct rtel_session *ses;
-    unsigned char *buf;
-    int len;
+rtel_write(int fd, struct rtel_session *ses, unsigned char *buf, int len)
 {
     unsigned char tmp[128];
     int n;

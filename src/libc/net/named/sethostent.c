@@ -6,7 +6,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 static char sccsid[] = "@(#)sethostent.c	6.3 (Berkeley) 4/10/86";
-#endif LIBC_SCCS and not lint
+#endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <arpa/nameser.h>

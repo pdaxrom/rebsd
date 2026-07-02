@@ -216,7 +216,7 @@ parse(
 	lp = &secondlevel[indx];
 	if (lp->list == 0) {
 		fprintf(stderr, "%s: class is not implemented\n",
-		    topname[indx]);
+		    topname[indx].ctl_name);
 		return;
 	}
 	if (bufp == NULL) {

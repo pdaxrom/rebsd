@@ -307,6 +307,28 @@ test gate.
   - Added `jira/PCC-462-1`, which checks exact `f0 == 2` and `f1 == -2`
     values for global initialization, automatic initialization, and both
     bitfield assignment orders.
+- [x] Fix native PCC regressions found by the target-side Malta gate.
+  - MIPS `STASG`/`STARG` hidden `memcpy` calls now mark all caller-saved
+    registers unavailable, so native tools do not keep live values across the
+    helper call.
+  - Big-endian memory narrowing uses the addressed low-order byte/half/word
+    instead of mutating OREG offsets globally.
+  - MIPS unsigned 32-bit comparisons now emit real unsigned compare branches,
+    including constant cases; this fixed native `as` encoding negative `li`
+    operands as raw illegal-instruction words.
+  - Bitfield value contexts now apply integer promotions before usual
+    arithmetic conversions, and assignment to bitfields narrower than `int`
+    yields an `int` value.  This fixed `jira/PCC-462` and `jira/PCC-476-1`.
+  - Added strict regressions `misc/stasg001` and `misc/ucmp001`.
+  - Clean Malta target-side result after rebuilding generated/rootfs artifacts:
+    `NATIVE_PCC_REGRESS_TOTAL:316`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+    `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RC:0`.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
 - [x] Audit MIPS backend `ZF` soft-float helper calls under the ReBSD
@@ -358,9 +380,9 @@ test gate.
 - [x] Run the full PCC test gate from the target environment.
   - The native rootfs harness stages `src/dev/pcc/pcc-tests/regress` under
     `/root/pcc-tests` and runs `/root/run-native-pcc-regress.sh` on Malta.
-  - Current Malta target-side result with native `/usr/bin/cc` and `DEBUGFP`
-    enabled: 312 total checks, 282 compile pass, 30 expected compile fail,
-    0 unexpected compile fail; 272 runtime candidates, 272 pass,
+  - Current clean Malta target-side result with native `/usr/bin/cc`:
+    316 total checks, 286 compile pass, 30 expected compile fail,
+    0 unexpected compile fail; 276 runtime candidates, 276 pass,
     0 unexpected runtime fail.
   - ReBSD/native PCC `DEBUGFP` now decodes big-endian IEEE64 softfloat words
     before comparing against native FPU results, treats NaN payload/sign
@@ -453,12 +475,12 @@ test gate.
 - [x] Compile, assemble, link, and run C programs inside Malta.
 - [x] Run the full PCC Malta test gate.
   - `make -C sys/mips native-pcc-regress-runtime` passed on Malta QEMU.
-  - Result: `NATIVE_PCC_REGRESS_TOTAL:312`,
-    `NATIVE_PCC_REGRESS_COMPILE_PASS:282`,
+  - Result: `NATIVE_PCC_REGRESS_TOTAL:316`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
     `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
-    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:272`,
-    `NATIVE_PCC_REGRESS_RUNTIME_PASS:272`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
     `NATIVE_PCC_REGRESS_RC:0`.
 

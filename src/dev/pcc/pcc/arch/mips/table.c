@@ -96,6 +96,12 @@
 #define NABSL	NEEDS(NREG(A, 1), NREG(B, 1), NSL(A))
 #define NDIVB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1))
 #define NSHB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2), NRES(V0V1))
+#define MIPS_MEMCPY_NEVER \
+	NEVER(V0), NEVER(V1), \
+	NEVER(A0), NEVER(A1), NEVER(A2), NEVER(A3), \
+	NEVER(T0), NEVER(T1), NEVER(T2), NEVER(T3), \
+	NEVER(T4), NEVER(T5), NEVER(T6), NEVER(T7), \
+	NEVER(T8), NEVER(T9)
 
 struct optab table[] = {
 /* First entry must be an empty entry */
@@ -106,7 +112,7 @@ struct optab table[] = {
 	SAREG,	TWORD|TPOINT,
 	SAREG,	TWORD|TPOINT,
 		0,	RLEFT,
-		"	# convert between word and pointer", },
+		"	# convert between word and pointer\n", },
 
 /*
  * Conversions of integral types (register-register)
@@ -164,14 +170,14 @@ struct optab table[] = {
 	SOREG,	TSHORT|TUSHORT,
 	SAREG,	TCHAR,
 		NAREG,	RESC1,
-		"	lb A1,AL	# convert oreg (u)short to char\n"
+		"	lb A1,ZJ	# convert oreg (u)short to char\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
 	SOREG,	TSHORT|TUSHORT,
 	SAREG,	TUCHAR,
 		NAREG,	RESC1,
-		"	lbu A1,AL	# convert oreg (u)short to uchar\n"
+		"	lbu A1,ZJ	# convert oreg (u)short to uchar\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
@@ -222,28 +228,28 @@ struct optab table[] = {
 	SOREG,	TWORD,
 	SAREG,	TCHAR,
 		NAREG,	RESC1,
-		"	lb A1,AL	# convert oreg word to char\n"
+		"	lb A1,ZJ	# convert oreg word to char\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
 	SOREG,	TWORD,
 	SAREG,	TUCHAR,
 		NAREG,	RESC1,
-		"	lbu A1,AL	# convert oreg word to uchar\n"
+		"	lbu A1,ZJ	# convert oreg word to uchar\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
 	SOREG,	TWORD,
 	SAREG,	TSHORT,
 		NAREG,	RESC1,
-		"	lh A1,AL	# convert oreg word to short\n"
+		"	lh A1,ZJ	# convert oreg word to short\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
 	SOREG,	TWORD,
 	SAREG,	TUSHORT,
 		NAREG,	RESC1,
-		"	lhu A1,AL	# convert oreg word to ushort\n"
+		"	lhu A1,ZJ	# convert oreg word to ushort\n"
 		"	nop\n", },
 
 { SCONV,	INBREG,
@@ -265,35 +271,35 @@ struct optab table[] = {
 	SOREG,	TLONGLONG|TULONGLONG,
 	SAREG,	TCHAR,
 		NAREG,	RESC1,
-		"	lb A1,AL	# convert oreg (u)llong to char\n"
+		"	lb A1,ZJ	# convert oreg (u)llong to char\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
 	SOREG,	TLONGLONG|TULONGLONG,
 	SAREG,	TUCHAR,
 		NAREG,	RESC1,
-		"	lbu A1,AL	# convert oreg (u)llong to uchar\n"
+		"	lbu A1,ZJ	# convert oreg (u)llong to uchar\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
 	SOREG,	TLONGLONG|TULONGLONG,
 	SAREG,	TSHORT,
 		NAREG,	RESC1,
-		"	lh A1,AL	# convert oreg (u)llong to short\n"
+		"	lh A1,ZJ	# convert oreg (u)llong to short\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
 	SOREG,	TLONGLONG|TULONGLONG,
 	SAREG,	TUSHORT,
 		NAREG,	RESC1,
-		"	lhu A1,AL	# convert oreg (u)llong to ushort\n"
+		"	lhu A1,ZJ	# convert oreg (u)llong to ushort\n"
 		"	nop\n", },
 
 { SCONV,	INAREG,
 	SOREG,	TLONGLONG|TULONGLONG,
 	SAREG,	TWORD,
 		NAREG,	RESC1,
-		"	lw A1,AL	# convert oreg (u)llong to (u)int\n"
+		"	lw A1,ZJ	# convert oreg (u)llong to (u)int\n"
 		"	nop\n", },
 
 /* convert between int and ptr */
@@ -653,21 +659,40 @@ struct optab table[] = {
 		"	addu U1,UL,UR\n"
 		"	addu U1,U1,A2\n", },
 
+{ PLUS, FOREFF,
+	SAREG,	TWORD|TPOINT|TSHORT|TUSHORT|TUCHAR|TCHAR,
+	SCON,	TANY,
+		0,	RNOP,
+		"", },
+
 { PLUS, INAREG,
 	SAREG,	TSWORD|TSHORT|TCHAR,
-	SSCON,	TANY,
+	SCON,	TANY,
 		XSL(A), RESC1,
-		"	addi A1,AL,AR\n", },
+		"ZA", },
 
 { PLUS, INAREG,
 	SAREG,	TUWORD|TPOINT|TUSHORT|TUCHAR,
-	SSCON,	TANY,
+	SCON,	TANY,
 		XSL(A), RESC1,
-		"	addiu A1,AL,AR\n", },
+		"ZB", },
 
 { PLUS, INAREG,
 	SAREG,	TUWORD|TPOINT|TUSHORT|TUCHAR,
 	SAREG,	TUWORD|TUSHORT|TUCHAR,
+		XSL(A), RESC1,
+		"	addu A1,AL,AR\n", },
+
+{ PLUS, INAREG,
+	SCON,	TPOINT,
+	SAREG,	TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		NEEDS(NREG(A, 1), NSR(A)), RRIGHT|RESC1,
+		"	la $at,AL\n"
+		"	addu A1,$at,AR\n", },
+
+{ PLUS, INAREG,
+	SAREG,	TPOINT,
+	SAREG,	TSWORD|TSHORT|TCHAR,
 		XSL(A), RESC1,
 		"	addu A1,AL,AR\n", },
 
@@ -698,17 +723,42 @@ struct optab table[] = {
 		"	subu U1,UL,UR\n"
 		"	subu U1,U1,A2\n", },
 
+{ MINUS,	FOREFF,
+	SAREG,	TWORD|TPOINT|TSHORT|TUSHORT|TUCHAR|TCHAR,
+	SCON,	TANY,
+		0,	RNOP,
+		"", },
+
 { MINUS,	INAREG,
 	SAREG,	TUWORD|TPOINT|TUSHORT|TUCHAR,
-	SSCON,	TANY,
+	SCON,	TANY,
+		XSL(A), RESC1,
+		"ZN", },
+
+{ MINUS,	INAREG,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
 		XSL(A), RESC1,
 		"	subu A1,AL,AR\n", },
 
 { MINUS,	INAREG,
 	SAREG,	TSWORD|TSHORT|TCHAR,
-	SSCON,	TANY,
+	SCON,	TANY,
 		XSL(A), RESC1,
-		"	sub A1,AL,AR\n", },
+		"ZM", },
+
+{ MINUS,	INAREG,
+	SAREG,	TPOINT,
+	SAREG,	TSWORD|TSHORT|TCHAR,
+		XSL(A), RESC1,
+		"	subu A1,AL,AR\n", },
+
+{ MINUS,	INAREG,
+	SCON,	TPOINT,
+	SAREG,	TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		NEEDS(NREG(A, 1), NSR(A)), RRIGHT|RESC1,
+		"	la $at,AL\n"
+		"	subu A1,$at,AR\n", },
 
 { MINUS,	INAREG,
 	SAREG,	TSWORD|TSHORT|TCHAR,
@@ -727,6 +777,12 @@ struct optab table[] = {
 	SCREG,	TDOUBLE|TLDOUBLE,
 		XSL(C), RESC1,
 		"	sub.d A1,AL,AR\n", },
+
+{ UMINUS,	INAREG,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
+	SANY,	TANY,
+		XSL(A), RESC1,
+		"	subu A1,$zero,AL\n", },
 
 { UMINUS,	INAREG,
 	SAREG,	TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
@@ -983,7 +1039,7 @@ struct optab table[] = {
 { STASG,	INAREG|FOREFF,
 	SOREG|SNAME,	TANY,
 	SAREG,		TPTRTO|TANY,
-		NEEDS(NEVER(A0), NRIGHT(A1), NEVER(A2)),       RDEST,
+		NEEDS(MIPS_MEMCPY_NEVER, NRIGHT(A1)),       RDEST,
 		"ZQ", },
 
 /*
@@ -1003,6 +1059,78 @@ struct optab table[] = {
 		0,	RESCC,
 		"	bne AL,AR,LC\n"
 		"	nop\n", },
+
+{ ULT,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SZERO,		TANY,
+		0,	RESCC,
+		"ZK", },
+
+{ ULE,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SZERO,		TANY,
+		0,	RESCC,
+		"ZK", },
+
+{ UGE,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SZERO,		TANY,
+		0,	RESCC,
+		"ZK", },
+
+{ UGT,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SZERO,		TANY,
+		0,	RESCC,
+		"ZK", },
+
+{ ULT,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		XSL(A),	RESCC,
+		"ZK", },
+
+{ ULE,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		XSL(A),	RESCC,
+		"ZK", },
+
+{ UGE,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		XSL(A),	RESCC,
+		"ZK", },
+
+{ UGT,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		XSL(A),	RESCC,
+		"ZK", },
+
+{ ULT,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SSCON,		TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		XSL(A),	RESCC,
+		"ZK", },
+
+{ ULE,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SSCON,		TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		XSL(A),	RESCC,
+		"ZK", },
+
+{ UGE,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SSCON,		TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		XSL(A),	RESCC,
+		"ZK", },
+
+{ UGT,	FORCC,
+	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
+	SSCON,		TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
+		XSL(A),	RESCC,
+		"ZK", },
 
 { OPLOG,	FORCC,
 	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
@@ -1084,6 +1212,13 @@ struct optab table[] = {
 		NBREG,	RESC1,
 		MIPS_LL_LOAD_MEM, },
 
+{ OPLTYPE,	INBREG,
+	SANY,		TANY,
+	SBREG,		TLONGLONG|TULONGLONG,
+		NBREG,	RESC1,
+		"	move A1,AL	# load (u)longlong reg\n"
+		"	move U1,UL\n", },
+
 { OPLTYPE,	INAREG,
 	SANY,	TANY,
 	SCON,	TPOINT,
@@ -1100,7 +1235,7 @@ struct optab table[] = {
 	SANY,	TANY,
 	SCON,	TANY,
 		NAREG,	RESC1,
-		"	li A1,AL	# load constant to reg\n", },
+		"ZL", },
 
 { OPLTYPE,	INBREG,
 	SANY,	TANY,
@@ -1121,6 +1256,18 @@ struct optab table[] = {
 	SANY,	TANY,
 		NAREG,	RESC1,
 		"	move A1,AL\n", },
+
+{ OPLTYPE,	INCREG,
+	SANY,	TANY,
+	SCREG,	TFLOAT,
+		NCREG,	RESC1,
+		"	mov.s A1,AL	# load floating-point reg\n", },
+
+{ OPLTYPE,	INCREG,
+	SANY,	TANY,
+	SCREG,	TDOUBLE|TLDOUBLE,
+		NCREG,	RESC1,
+		"	mov.d A1,AL	# load double floating-point reg\n", },
 
 { OPLTYPE,	INCREG,
 	SANY,	TANY,
@@ -1146,7 +1293,7 @@ struct optab table[] = {
 
 { OPLTYPE,	INCREG,
 	SANY,	TANY,
-	OREG|SNAME,	TDOUBLE|TLDOUBLE,
+	SOREG|SNAME,	TDOUBLE|TLDOUBLE,
 		NCREG,	RESC1,
 		"	l.d A1,AL	# load into double floating-point reg\n"
 		"	nop\n", },
@@ -1378,7 +1525,7 @@ struct optab table[] = {
 { STCALL,      INAREG,
 	SAREG,	TANY,
 	SANY,		TANY,
-		0,	0,
+		XSL(A),	RESC1,
 		"	subu $sp,$sp,16\n"
 		"	move $25,AL\n"
 		"	jal $25\n"
@@ -1424,7 +1571,7 @@ struct optab table[] = {
 { STARG,	FOREFF,
 	SAREG,		TANY,
 	SANY,		TSTRUCT,
-		NEEDS(NEVER(A0), NLEFT(A1), NEVER(A2)), 0,
+		NEEDS(MIPS_MEMCPY_NEVER, NLEFT(A1)), 0,
 		"ZH", },
 
 /*
@@ -1455,10 +1602,7 @@ struct optab table[] = {
 	SANY,	TLONGLONG|TULONGLONG,
 	SOREG,	TLONGLONG|TULONGLONG,
 		NBREG,	RESC1,
-		"	lw A1,AL		# (u)longlong load - endian problem here?\n"
-		"	nop\n"
-		"	lw U1,UL\n"
-		"	nop\n", },
+		MIPS_LL_LOAD_MEM, },
 
 { UMUL, INCREG,
 	SANY,	TFLOAT,

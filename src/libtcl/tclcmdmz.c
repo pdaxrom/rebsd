@@ -61,11 +61,7 @@ static unsigned char *	TraceVarProc (void *clientData,
 
 	/* ARGSUSED */
 int
-Tcl_RegexpCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_RegexpCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     int noCase = 0;
     int indices = 0;
@@ -195,11 +191,7 @@ Tcl_RegexpCmd(dummy, interp, argc, argv)
 
 	/* ARGSUSED */
 int
-Tcl_RegsubCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_RegsubCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     int noCase = 0, all = 0;
     regexp_t *regexpPtr;
@@ -415,11 +407,7 @@ Tcl_RegsubCmd(dummy, interp, argc, argv)
 
 	/* ARGSUSED */
 int
-Tcl_RenameCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_RenameCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     register Command *cmdPtr;
     Interp *iPtr = (Interp *) interp;
@@ -477,11 +465,7 @@ Tcl_RenameCmd(dummy, interp, argc, argv)
 
 	/* ARGSUSED */
 int
-Tcl_ReturnCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_ReturnCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     if (argc > 2) {
 	Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
@@ -506,11 +490,7 @@ Tcl_ReturnCmd(dummy, interp, argc, argv)
  */
 	/* ARGSUSED */
 int
-Tcl_ScanCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_ScanCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     int arg1Length;			/* Number of bytes in argument to be
 					 * scanned.  This gives an upper limit
@@ -714,11 +694,7 @@ Tcl_ScanCmd(dummy, interp, argc, argv)
 
 	/* ARGSUSED */
 int
-Tcl_SplitCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_SplitCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     unsigned char *splitChars;
     register unsigned char *p, *p2;
@@ -790,11 +766,7 @@ Tcl_SplitCmd(dummy, interp, argc, argv)
 
 	/* ARGSUSED */
 int
-Tcl_StringCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_StringCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     int length;
     register unsigned char *p, c;
@@ -1049,11 +1021,7 @@ Tcl_StringCmd(dummy, interp, argc, argv)
 
 	/* ARGSUSED */
 int
-Tcl_TraceCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_TraceCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     char c;
     int length;
@@ -1221,14 +1189,8 @@ Tcl_TraceCmd(dummy, interp, argc, argv)
 
 	/* ARGSUSED */
 static unsigned char *
-TraceVarProc(clientData, interp, name1, name2, flags)
-    void *clientData;		/* Information about the variable trace. */
-    Tcl_Interp *interp;		/* Interpreter containing variable. */
-    unsigned char *name1;	/* Name of variable or array. */
-    unsigned char *name2;	/* Name of element within array;  NULL means
-				 * scalar variable is being referenced. */
-    int flags;			/* OR-ed bits giving operation and other
-				 * information. */
+TraceVarProc(void *clientData, Tcl_Interp *interp, unsigned char *name1,
+    unsigned char *name2, int flags)
 {
     TraceVarInfo *tvarPtr = (TraceVarInfo *) clientData;
     unsigned char *result;
@@ -1327,11 +1289,7 @@ TraceVarProc(clientData, interp, name1, name2, flags)
 
 	/* ARGSUSED */
 int
-Tcl_WhileCmd(dummy, interp, argc, argv)
-    void *dummy;			/* Not used. */
-    Tcl_Interp *interp;			/* Current interpreter. */
-    int argc;				/* Number of arguments. */
-    unsigned char **argv;		/* Argument strings. */
+Tcl_WhileCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 {
     int result, value;
 

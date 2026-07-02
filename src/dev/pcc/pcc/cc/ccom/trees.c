@@ -552,6 +552,9 @@ buildtree(int o, P1ND *l, P1ND *r)
 		case RETURN:
 		case ASSIGN:
 		case CAST:
+			if (!ISSOU(BTYPE(p->n_type)) || ISPTR(p->n_type))
+				break;
+
 			/* structure assignment */
 			/* take the addresses of the two sides; then make an
 			 * operator using STASG and
@@ -630,7 +633,7 @@ buildtree(int o, P1ND *l, P1ND *r)
 
 	/* fixup type in bit-field assignment */
 	if (p->n_op == ASSIGN && l->n_op == FLD && UPKFSZ(l->n_rval) < SZINT)
-		p = makety(p, ISUNSIGNED(l->n_type) ? mkqtyp(UNSIGNED) : tdint);
+		p = makety(p, tdint);
 
 	/*
 	 * Allow (void)0 casts.
@@ -784,7 +787,7 @@ ccast(P1ND *p, TWORD t, TWORD u, union dimfun *df, struct ssdesc *ss)
 	/* let buildtree do typechecking (and casting) */ 
 	q = block(NAME, NULL, NULL, t, df, ss);
 	p = buildtree(ASSIGN, q, p);
-	if (ISSOU(t)) {
+	if (ISSOU(BTYPE(t)) && !ISPTR(t)) {
 		p = p1nfree(p);
 		p1nfree(p->n_left);
 		q = p->n_right;
@@ -1142,6 +1145,8 @@ chkpun(P1ND *p)
 	} else {
 		if (t1 == t2) {
 			if (ISSOU(BTYPE(t1)) &&
+			    p->n_left->n_td->ss != NULL &&
+			    p->n_right->n_td->ss != NULL &&
 			    !suemeq(p->n_left->n_td->ss, p->n_right->n_td->ss))
 				werror("illegal structure pointer combination");
 			return;
@@ -1600,6 +1605,13 @@ tymatch(P1ND *p)
 		t = p->n_type = l->n_type;
 		p->n_ap = l->n_ap;
 	} else {
+		p->n_left = l = intprom(l);
+		p->n_right = r = intprom(r);
+		tl = l->n_type;
+		tr = r->n_type;
+		if (tl == BOOL) tl = BOOL_TYPE;
+		if (tr == BOOL) tr = BOOL_TYPE;
+
 		t = tl > tr ? tl : tr; /* MAX */
 		/* This depends on ctype() called early */
 		if (o != COLON && t < INT)
@@ -3600,6 +3612,9 @@ P1ND *
 intprom(P1ND *n)
 {
 	if (n->n_op == FLD && UPKFSZ(n->n_rval) < SZINT)
+		return makety(n, tdint);
+	if (n->n_op == SCONV && n->n_left->n_op == FLD &&
+	    UPKFSZ(n->n_left->n_rval) < SZINT)
 		return makety(n, tdint);
 
 	if ((n->n_type >= CHAR && n->n_type < INT) || n->n_type == BOOL) {

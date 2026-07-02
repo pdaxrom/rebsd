@@ -79,9 +79,7 @@ int			unsetenv (const char *name);
  */
 
 void
-TclSetupEnv(interp)
-    Tcl_Interp *interp;		/* Interpreter whose "env" array is to be
-				 * managed. */
+TclSetupEnv(Tcl_Interp *interp)
 {
     EnvInterp *eiPtr;
     int i;
@@ -151,12 +149,7 @@ TclSetupEnv(interp)
  */
 
 static int
-FindVariable(name, lengthPtr)
-    const char *name;		/* Name of desired environment variable. */
-    int *lengthPtr;		/* Used to return length of name (for
-				 * successful searches) or number of non-NULL
-				 * entries in environ (for unsuccessful
-				 * searches). */
+FindVariable(const char *name, int *lengthPtr)
 {
     int i;
     const register char *p1, *p2;
@@ -194,11 +187,7 @@ FindVariable(name, lengthPtr)
  */
 
 int
-setenv(name, value, overwrite)
-    const char *name;		/* Name of variable whose value is to be
-				 * set. */
-    const char *value;		/* New value for variable. */
-    int overwrite;		/* If zero, don't replace existing value. */
+setenv(const char *name, const char *value, int overwrite)
 {
     int index, length, nameLength;
     char *p;
@@ -294,9 +283,7 @@ setenv(name, value, overwrite)
  */
 
 int
-putenv(string)
-    char *string;		/* Info about environment variable in the
-				 * form NAME=value. */
+putenv(char *string)
 {
     int nameLength;
     char *name, *value;
@@ -344,8 +331,7 @@ putenv(string)
  */
 
 int
-unsetenv(name)
-    const char *name;			/* Name of variable to remove. */
+unsetenv(const char *name)
 {
     int index, dummy;
     char **envPtr;
@@ -406,14 +392,8 @@ unsetenv(name)
 
 	/* ARGSUSED */
 static unsigned char *
-EnvTraceProc(clientData, interp, name1, name2, flags)
-    void *clientData;           /* Not used. */
-    Tcl_Interp *interp;		/* Interpreter whose "env" variable is
-				 * being modified. */
-    unsigned char *name1;	/* Better be "env". */
-    unsigned char *name2;	/* Name of variable being modified, or
-				 * NULL if whole array is being deleted. */
-    int flags;			/* Indicates what's happening. */
+EnvTraceProc(void *clientData, Tcl_Interp *interp, unsigned char *name1,
+    unsigned char *name2, int flags)
 {
     /*
      * First see if the whole "env" variable is being deleted.  If
@@ -482,7 +462,7 @@ EnvTraceProc(clientData, interp, name1, name2, flags)
  */
 
 static void
-EnvInit()
+EnvInit(void)
 {
     char **newEnviron;
     int i, length;

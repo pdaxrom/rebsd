@@ -172,6 +172,8 @@ void    box (WINDOW *, char, char);
 void    endwin (void);
 int     printw (char *, ...);
 int     wprintw (WINDOW *, char *, ...);
+int     scanw (char *, ...);
+int     wscanw (WINDOW *, char *, ...);
 int     scroll (WINDOW *);
 void    wclrtoeol (WINDOW *);
 void    werase (WINDOW *);
@@ -185,6 +187,8 @@ void    overwrite(WINDOW *win1, WINDOW *win2);
 void    wclrtobot(WINDOW *win);
 int     mvprintw(int y, int x, char *fmt, ...);
 int     mvwprintw(WINDOW *win, int y, int x, char *fmt, ...);
+int     mvscanw(int y, int x, char *fmt, ...);
+int     mvwscanw(WINDOW *win, int y, int x, char *fmt, ...);
 
 /*
  * Used to be in unctrl.h.

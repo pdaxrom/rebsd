@@ -47,9 +47,9 @@
 	1/*.*/ + DBL_DIG+1/*max fractional digits*/ + 1/*NUL*/)
 
 static unsigned char *ksprintn (unsigned char *buf, unsigned long v, unsigned char base,
-	int width, unsigned char *lp);
+	int width, int *lp);
 static unsigned char *ksprintnll (unsigned char *buf, unsigned long long v,
-	unsigned char base, int width, unsigned char *lp);
+	unsigned char base, int width, int *lp);
 static unsigned char mkhex (unsigned char ch);
 
 static int cvt (double number, int prec, int sharpflag, unsigned char *negp,
@@ -61,8 +61,8 @@ _doprnt (char const *fmt, va_list ap, FILE *stream)
 #define PUTC(c) { putc (c, stream); ++retval; }
 	unsigned char nbuf [MAXNBUF], padding, *q;
 	const unsigned char *s;
-	unsigned char c, base, lflag, ladjust, sharpflag, neg, dot, size;
-	int n, width, dwidth, retval, uppercase, extrazeros, sign;
+	unsigned char c, base, lflag, ladjust, sharpflag, neg, dot;
+	int n, width, dwidth, retval, uppercase, extrazeros, sign, size;
 	unsigned long ul;
 	unsigned long long ull;
 
@@ -476,7 +476,7 @@ numberll:		if (sign) {
  */
 static unsigned char *
 ksprintn (unsigned char *nbuf, unsigned long ul, unsigned char base, int width,
-	unsigned char *lenp)
+	int *lenp)
 {
 	unsigned char *p;
 
@@ -497,7 +497,7 @@ ksprintn (unsigned char *nbuf, unsigned long ul, unsigned char base, int width,
 
 static unsigned char *
 ksprintnll (unsigned char *nbuf, unsigned long long ull, unsigned char base,
-	int width, unsigned char *lenp)
+	int width, int *lenp)
 {
 	unsigned char *p;
 

@@ -237,9 +237,11 @@ void emit_li(unsigned, struct reloc *);
 void emit_la(unsigned, struct reloc *);
 void emit_mul(unsigned, struct reloc *);
 void emit_mem_pseudo(unsigned, unsigned, struct reloc *, int);
+void emit_mem_base_pseudo(unsigned, unsigned, struct reloc *, int, int, int);
 void reorder_flush(void);
 void switchsection(int);
 void previoussection(void);
+int fits_signed16(unsigned);
 int has_empty_mem_offset(void);
 
 const struct optable optable[] = {
@@ -668,12 +670,12 @@ void hashinit()
 
     for (i = 0; i < HCMDSZ; i++)
         hashctab[i] = -1;
-    for (p = optable; p->name; p++) {
+    for (i = 0, p = optable; p->name; i++, p++) {
         h = hash_rot13(p->name) & (HCMDSZ - 1);
         while (hashctab[h] != -1)
             if (--h < 0)
                 h += HCMDSZ;
-        hashctab[h] = p - optable;
+        hashctab[h] = i;
     }
     for (i = 0; i < HASHSZ; i++)
         hashtab[i] = -1;
@@ -1568,6 +1570,14 @@ void emit_abs_load(unsigned opcode, struct reloc *relinfo, unsigned value)
     emitword(opcode, relinfo, reg);
 }
 
+int
+fits_signed16(unsigned value)
+{
+    int svalue = (int)value;
+
+    return svalue >= -0x8000 && svalue <= 0x7fff;
+}
+
 /*
  * LI pseudo instruction.
  */
@@ -1645,6 +1655,47 @@ void emit_mem_pseudo(unsigned opcode, unsigned value, struct reloc *relinfo, int
 }
 
 /*
+ * Memory pseudo instruction: load/store reg,offset(base).
+ */
+void emit_mem_base_pseudo(unsigned opcode, unsigned value, struct reloc *relinfo,
+    int base_reg, int clobber_reg, int type)
+{
+    struct reloc hirel, lorel;
+    unsigned hi;
+
+    if (!mode_at)
+        uerror("macro requires $at");
+    if (base_reg == 1)
+        uerror("macro requires non-$at base register");
+    if ((type & FRT1) && ((opcode >> 16) & 31) == 1)
+        uerror("macro requires non-$at target register");
+
+    hirel = *relinfo;
+    lorel = *relinfo;
+
+    if (relinfo->flags == RABS) {
+        emit_abs_load(1 << 16, &relabs, value);
+    } else {
+        hirel.flags &= ~RFMASK;
+        hirel.flags |= RHIGH16S;
+        hirel.offset = value & 0xffff;
+        hi = (value + 0x8000) >> 16;
+        emitword(0x3c010000 | hi, &hirel, 1); /* lui $at,%hi(value) */
+
+        lorel.flags &= ~RFMASK;
+        emitword(0x24210000 | (value & 0xffff), &lorel, 1); /* addiu $at,$at,%lo(value) */
+    }
+
+    /* addu $at,$at,base */
+    emitword(0x00000021 | (1 << 21) | (base_reg << 16) | (1 << 11),
+        &relabs, 1);
+
+    opcode &= ~((31 << 21) | 0xffff);
+    opcode |= 1 << 21; /* 0($at) */
+    emitword(opcode, &relabs, clobber_reg);
+}
+
+/*
  * GAS accepts "mul rd,rs,rt" for VR4300 as a macro.
  * The real MIPS32 opcode is not present on VR4300.
  */
@@ -1666,12 +1717,13 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
 {
     unsigned offset, orig_opcode = 0;
     struct reloc relinfo;
-    int clex, cval, segment, clobber_reg, negate_literal;
+    int clex, cval, segment, clobber_reg, negate_literal, mem_offset_fits;
 
     type &= ~FNO_VR4300;
     offset = 0;
     relinfo.flags = RABS;
     negate_literal = 0;
+    mem_offset_fits = 1;
 
     /*
      * GCC can generate "j" instead of "jr".
@@ -2062,7 +2114,7 @@ done3:
             switch (opcode & 0xfc000000) {
             default: /* addi, addiu, slti, sltiu, lw, sw */
                 /* 16-bit signed value. */
-                valid_range = (offset >= -0x8000) || (offset <= 0x7fff);
+                valid_range = fits_signed16(offset);
                 break;
             case 0x30000000: /* andi */
             case 0x34000000: /* ori */
@@ -2073,6 +2125,8 @@ done3:
             }
             if (valid_range) {
                 opcode |= offset & 0xffff;
+            } else if (type & FRSB) {
+                mem_offset_fits = 0;
             } else if (orig_opcode == 0 || !mode_at) {
                 uerror("value out of range");
             } else {
@@ -2148,6 +2202,11 @@ done3:
             uerror("bad rs register");
         if (getlex(&cval) != ')')
             uerror("right par expected");
+        if ((type & FOFF16) && !mem_offset_fits) {
+            emit_mem_base_pseudo(opcode, offset, &relinfo, cval,
+                clobber_reg, type);
+            return;
+        }
         opcode |= cval << 21; /* ... (rs) */
     }
     if (type & FSIZE) {

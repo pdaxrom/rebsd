@@ -30,8 +30,8 @@
 #define	SB_MAX	SB_MAXCOUNT	/* Sun has to be a little bit different... */
 #else
 #define SB_MAX	8192		/* XXX */
-#endif	SB_MAXCOUNT
-#endif	SB_MAX
+#endif /* SB_MAXCOUNT */
+#endif /* SB_MAX */
 
 #ifndef IP_MAXPACKET
 #define	IP_MAXPACKET	65535L		/* maximum packet size */

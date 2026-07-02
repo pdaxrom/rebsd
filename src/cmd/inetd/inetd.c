@@ -285,8 +285,7 @@ reap(sig)
 }
 
 static void
-serve(svc)
-    struct service *svc;
+serve(struct service *svc)
 {
     struct sockaddr_in from;
     int len, fd, pid, i;

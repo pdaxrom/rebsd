@@ -623,6 +623,8 @@ iterate(struct p2env *p2e, struct dlnod *dl)
 					comperr("deljumps: unexpected op");
 				}
 				q->n_op = i;
+				if (q->n_su != 0)
+					(void)geninsn(q, FORCC);
 				nchange++;
 			}
 		}

@@ -6,7 +6,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 static char sccsid[] = "@(#)getservent.c	5.3.1 (2.11BSD GTE) 6/27/94";
-#endif LIBC_SCCS and not lint
+#endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
 #include <sys/types.h>

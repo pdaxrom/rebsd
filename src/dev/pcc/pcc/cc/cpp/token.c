@@ -217,9 +217,21 @@ inpbuf(void)
 	for (len = 0;;) {
 		if ((ch = getc(ifiles->ifp)) < 0)
 			break;
+		if (ch == '\r') {
+			ch = getc(ifiles->ifp);
+			if (ch != '\n' && ch >= 0)
+				ungetc(ch, ifiles->ifp);
+			ch = '\n';
+		}
 		if (ch == '\\') {
 			ADDCH(ninp, len, ch);
 			ch = fgetc(ifiles->ifp);
+			if (ch == '\r') {
+				ch = getc(ifiles->ifp);
+				if (ch != '\n' && ch >= 0)
+					ungetc(ch, ifiles->ifp);
+				ch = '\n';
+			}
 			if (ch == '\\') {
 				ADDCH(ninp, len, ch);
 				continue;

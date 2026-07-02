@@ -103,7 +103,7 @@ res_init()
 #ifdef DEBUG
                     if ( _res.options & RES_DEBUG )
                         printf("MAXNS reached, reading resolv.conf\n");
-#endif DEBUG
+#endif /* DEBUG */
                 }
                 continue;
             }

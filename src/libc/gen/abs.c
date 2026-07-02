@@ -4,8 +4,10 @@
  * specifies the terms and conditions for redistribution.
  */
 
-abs(arg)
-	int arg;
+#include <stdlib.h>
+
+int
+abs(int arg)
 {
 	return(arg < 0 ? -arg : arg);
 }

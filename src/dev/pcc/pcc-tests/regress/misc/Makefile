@@ -9,8 +9,8 @@ LDFLAGS=
 LOG=misc.log
 MAKE=make
 
-REGRESS_TARGETS = arith001 char001 func001 str001 ucn001 array001
-OPTIM_TARGETS = optim001 optim002
+REGRESS_TARGETS = arith001 arith002 stasg001 ucmp001 char001 func001 str001 ucn001 array001
+OPTIM_TARGETS = optim001 optim002 optim003
 PIC_TARGETS = pic001
 
 REGRESS_TARGETS_FAIL = 
@@ -79,6 +79,14 @@ page:
 			printf "<td align=\"center\" bgcolor=\"red\" > %s </td></tr>\n" "failed" >> ${LOG} || \
 			printf "<td align=\"center\" bgcolor=\"green\"> %s </td></tr>\n" "passed" >> ${LOG}  ;\
 	done
+	@for TARGET in ${OPTIM_TARGETS} ;\
+	do \
+		printf  "<tr><td bgcolor=\"#dcdcdc\"> %s </td>" " $$TARGET " >> ${LOG} ;\
+		${CC} -O ${CFLAGS} -o $$TARGET.out $$TARGET.c 2>/dev/null && \
+			./$$TARGET.out >/dev/null && \
+			printf "<td align=\"center\" bgcolor=\"green\" > %s </td></tr>\n" "passed" >> ${LOG} || \
+			printf "<td align=\"center\" bgcolor=\"red\" > %s </td></tr>\n" "failed" >> ${LOG} ;\
+	done
 	@cd shlib && ${MAKE} clean 
 	@printf  "<tr><td bgcolor=\"#dcdcdc\"> %s </td>" "shlib1" >> ${LOG} ; 
 	@cd shlib && ${MAKE} combined_check 1>/dev/null 2>/dev/null && \
@@ -101,4 +109,3 @@ clean:
 	/bin/rm -rf *.out 
 	/bin/rm -rf *.core
 	/bin/rm -rf ${LOG}
-

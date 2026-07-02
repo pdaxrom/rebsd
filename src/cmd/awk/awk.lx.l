@@ -17,6 +17,7 @@
 	} \
 } while (0)
 extern int	mustfld;
+extern YYSTYPE	yylval;
 
 int	lineno	= 1;
 #define	CADD	cbuf[clen++]=yytext[0]; if(clen>=CBUFLEN-1) {yyerror("string too long"); BEGIN A;}

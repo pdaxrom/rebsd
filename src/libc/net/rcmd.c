@@ -38,6 +38,7 @@ static char sccsid[] = "@(#)rcmd.c	5.20.1 (2.11BSD) 1999/10/24";
 
 static int _checkhost();
 
+int
 rcmd(ahost, rport, locuser, remuser, cmd, fd2p)
 	char **ahost;
 	u_short rport;
@@ -182,6 +183,7 @@ bad:
 	return (-1);
 }
 
+int
 rresvport(alport)
 	int *alport;
 {
@@ -212,6 +214,7 @@ rresvport(alport)
 
 int	_check_rhosts_file = 1;
 
+int
 ruserok(rhost, superuser, ruser, luser)
 	char *rhost;
 	int superuser;
@@ -272,10 +275,8 @@ again:
 }
 
 /* don't make static, used by lpd(8) */
-_validuser(hostf, rhost, luser, ruser, baselen)
-	char *rhost, *luser, *ruser;
-	FILE *hostf;
-	int baselen;
+int
+_validuser(FILE *hostf, char *rhost, char *luser, char *ruser, int baselen)
 {
 	char *user;
 	char ahost[MAXHOSTNAMELEN];
@@ -305,7 +306,7 @@ _validuser(hostf, rhost, luser, ruser, baselen)
 	return (-1);
 }
 
-static
+static int
 _checkhost(rhost, lhost, len)
 	char *rhost, *lhost;
 	int len;

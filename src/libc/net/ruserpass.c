@@ -6,7 +6,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 static char sccsid[] = "@(#)ruserpass.c	5.2.1 (2.11BSD) 1996/11/16";
-#endif LIBC_SCCS and not lint
+#endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>
 #include <utmp.h>
@@ -16,27 +16,31 @@ static char sccsid[] = "@(#)ruserpass.c	5.2.1 (2.11BSD) 1996/11/16";
 #include <errno.h>
 #include <paths.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <stdlib.h>
 
 extern char **environ;
 
-static int renv();
+void mkpwunclear();
+void mkpwclear();
+
+static void renv();
 static char *renvlook();
-static int rnetrc();
+static void rnetrc();
 static int token();
 static char *nbsencrypt();
 static char *nbsdecrypt();
 static char *nbs8encrypt();
 static char *nbs8decrypt();
-static int enblkclr();
+static void enblkclr();
 static char *deblkclr();
-static int enblknot();
+static void enblknot();
 static char *deblknot();
-static int nbssetkey();
-static int blkencrypt();
+static void nbssetkey();
+static void blkencrypt();
 static struct utmp *getutmp();
-static int sreverse();
+static void sreverse();
 static char *mkenvkey();
 
 static	FILE *cfile;
@@ -68,7 +72,7 @@ ruserpass(host, aname, apass)
 	}
 }
 
-static
+static void
 renv(host, aname, apass)
 	char *host, **aname, **apass;
 {
@@ -149,7 +153,7 @@ static struct toktab {
 	0,		0
 };
 
-static
+static void
 rnetrc(host, aname, apass)
 	char *host, **aname, **apass;
 {
@@ -342,7 +346,7 @@ char *crp, *key; {
 	return(deblkclr(blk));
 }
 
-static
+static void
 enblkclr(blk,str)		/* ignores top bit of chars in string str */
 char *blk,*str; {
 	register int i,j;
@@ -373,7 +377,7 @@ char *blk; {
 	return(iobuf);
 	}
 
-static
+static void
 enblknot(blk,crp)
 char *blk;
 char *crp; {
@@ -506,7 +510,7 @@ static	char	KS[16][48];
  * Set up the key schedule from the key.
  */
 
-static
+static void
 nbssetkey(key)
 char *key;
 {
@@ -631,7 +635,7 @@ static	char	preS[48];
  * The payoff: encrypt a block.
  */
 
-static
+static void
 blkencrypt(block, edflag)
 char *block;
 {
@@ -751,7 +755,7 @@ char *sttyname;
 	return(NULL);
 }
 
-static
+static void
 sreverse(sto, sfrom)
 	register char *sto, *sfrom;
 {
@@ -796,6 +800,7 @@ char *mkenvkey(mch)
 	return (skey);
 }
 
+void
 mkpwunclear(spasswd,mch,sencpasswd)
 	char mch, *spasswd, *sencpasswd;
 {
@@ -813,6 +818,7 @@ mkpwunclear(spasswd,mch,sencpasswd)
 	nbsencrypt(spasswd, skey, sencpasswd);
 }
 
+void
 mkpwclear(sencpasswd,mch,spasswd)
 	char mch, *spasswd, *sencpasswd;
 {

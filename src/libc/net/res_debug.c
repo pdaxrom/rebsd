@@ -76,9 +76,8 @@ p_query(msg)
  * Print the contents of a query.
  * This is intended to be primarily a debugging routine.
  */
-fp_query(msg,file)
-	char *msg;
-	FILE *file;
+int
+fp_query(char *msg, FILE *file)
 {
 #ifdef DEBUG
 	register char *cp;
@@ -167,9 +166,7 @@ fp_query(msg,file)
 }
 
 char *
-p_cdname(cp, msg, file)
-	char *cp, *msg;
-	FILE *file;
+p_cdname(char *cp, char *msg, FILE *file)
 {
 #ifdef DEBUG
 	char name[MAXDNAME];
@@ -190,9 +187,7 @@ p_cdname(cp, msg, file)
  * Print resource record fields in human readable form.
  */
 char *
-p_rr(cp, msg, file)
-	char *cp, *msg;
-	FILE *file;
+p_rr(char *cp, char *msg, FILE *file)
 {
 #ifdef DEBUG
 	int type, class, dlen, n, c;

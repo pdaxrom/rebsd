@@ -70,12 +70,14 @@ trap 'rm -rf "$tmpdir"' 0 1 2 3 15
 main_s=$tmpdir/main.s
 foo_s=$tmpdir/foo.s
 data_s=$tmpdir/data.s
+end_s=$tmpdir/end.s
 chain_main_s=$tmpdir/chain-main.s
 chain_mid_s=$tmpdir/chain-mid.s
 chain_leaf_s=$tmpdir/chain-leaf.s
 main_o=$tmpdir/main.o
 foo_o=$tmpdir/foo.o
 data_o=$tmpdir/data.o
+end_o=$tmpdir/end.o
 chain_main_o=$tmpdir/chain-main.o
 chain_mid_o=$tmpdir/chain-mid.o
 chain_leaf_o=$tmpdir/chain-leaf.o
@@ -84,6 +86,7 @@ libfoo=$tmpdir/libfoo.a
 libchain=$tmpdir/libchain.a
 app=$tmpdir/app
 app_data=$tmpdir/app-data
+app_end=$tmpdir/app-end
 app_chain=$tmpdir/app-chain
 stripped=$tmpdir/app.stripped
 list_before=$tmpdir/list-before
@@ -129,6 +132,19 @@ start:
 .globl dataptr
 dataptr:
 	.word start
+EOF
+
+cat > "$end_s" <<'EOF'
+.text
+.set noreorder
+.globl start
+start:
+	la $2,end
+	la $3,edata
+	la $4,etext
+	la $5,_end
+	jr $31
+	nop
 EOF
 
 cat > "$chain_main_s" <<'EOF'
@@ -237,6 +253,7 @@ check_gnu_text()
 "$as_bin" -EB -mips3 -march=vr4300 -o "$main_o" "$main_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$foo_o" "$foo_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$data_o" "$data_s" || exit 1
+"$as_bin" -EB -mips3 -march=vr4300 -o "$end_o" "$end_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_main_o" "$chain_main_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_mid_o" "$chain_mid_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_leaf_o" "$chain_leaf_s" || exit 1
@@ -244,6 +261,7 @@ check_gnu_text()
 check_gnu_text "$main_o" "$main_s" main
 check_gnu_text "$foo_o" "$foo_s" foo
 check_gnu_text "$data_o" "$data_s" data
+check_gnu_text "$end_o" "$end_s" end
 check_gnu_text "$chain_main_o" "$chain_main_s" chain-main
 check_gnu_text "$chain_mid_o" "$chain_mid_s" chain-mid
 check_gnu_text "$chain_leaf_o" "$chain_leaf_s" chain-leaf
@@ -280,6 +298,9 @@ check_exec "$app_data" 00000107 00000010
 check_field "$app_data" 8 00000008
 check_field "$app_data" 28 00400000
 check_field "$app_data" 48 00400000
+
+"$ld_bin" -EB -e start -o "$app_end" "$end_o" || exit 1
+check_exec "$app_end" 00000107 00000030
 
 "$ar_bin" qc "$libfoo" "$foo_o" || exit 1
 "$ar_bin" t "$libfoo" > "$list_before" || exit 1

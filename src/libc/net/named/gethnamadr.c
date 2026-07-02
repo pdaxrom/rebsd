@@ -62,10 +62,7 @@ extern int h_errno;
 extern errno;
 
 static struct hostent *
-getanswer(answer, anslen, iquery)
-	querybuf *answer;
-	int anslen;
-	int iquery;
+getanswer(querybuf *answer, int anslen, int iquery)
 {
 	register HEADER *hp;
 	register u_char *cp;

@@ -50,10 +50,16 @@
 typedef struct ssdesc mips_ap_t;
 #define MIPS_STACKTEMP_FLAGS SSTMT
 #define MIPS_NODE_QUAL(p) ((p)->pqual)
+#define MIPS_SYM_AP(sp) ((sp)->sss)
+#define MIPS_SET_SYM_AP(sp, ap) ((sp)->sss = (ap))
+#define MIPS_TCOPY(p) p1tcopy(p)
 #else
 typedef struct attr mips_ap_t;
 #define MIPS_STACKTEMP_FLAGS STEMP
 #define MIPS_NODE_QUAL(p) ((p)->n_qual)
+#define MIPS_SYM_AP(sp) ((sp)->sap)
+#define MIPS_SET_SYM_AP(sp, ap) ((sp)->sap = (ap))
+#define MIPS_TCOPY(p) tcopy(p)
 #endif
 
 #ifdef MIPS_HARDFLOAT_O32_ABI
@@ -140,7 +146,7 @@ defloc(struct symtab *sp)
 		    ISFTN(sp->stype) ? "function" : "object");
 		if (!ISFTN(sp->stype))
 			printf("\t.size %s," CONFMT "\n", n,
-			    tsize(sp->stype, sp->sdf, sp->sap));
+			    tsize(sp->stype, sp->sdf, MIPS_SYM_AP(sp)));
 #endif
 		printf("%s:\n", n);
 	} else
@@ -178,24 +184,24 @@ efcode(void)
 
 	ty = cftnsp->stype - FTN;
 
-	q = block(REG, NIL, NIL, INCREF(ty), 0, cftnsp->sap);
+	q = block(REG, NIL, NIL, INCREF(ty), 0, MIPS_SYM_AP(cftnsp));
 	q->n_rval = V0;
-	p = tempnode(0, INCREF(ty), 0, cftnsp->sap);
+	p = tempnode(0, INCREF(ty), 0, MIPS_SYM_AP(cftnsp));
 	tempnr = regno(p);
 	p = buildtree(ASSIGN, p, q);
 	ecomp(p);
 
-	q = tempnode(tempnr, INCREF(ty), 0, cftnsp->sap);
+	q = tempnode(tempnr, INCREF(ty), 0, MIPS_SYM_AP(cftnsp));
 	q = buildtree(UMUL, q, NIL);
 
-	p = tempnode(rvnr, INCREF(ty), 0, cftnsp->sap);
+	p = tempnode(rvnr, INCREF(ty), 0, MIPS_SYM_AP(cftnsp));
 	p = buildtree(UMUL, p, NIL);
 
 	p = buildtree(ASSIGN, p, q);
 	ecomp(p);
 
-	q = tempnode(rvnr, INCREF(ty), 0, cftnsp->sap);
-	p = block(REG, NIL, NIL, INCREF(ty), 0, cftnsp->sap);
+	q = tempnode(rvnr, INCREF(ty), 0, MIPS_SYM_AP(cftnsp));
+	p = block(REG, NIL, NIL, INCREF(ty), 0, MIPS_SYM_AP(cftnsp));
 	p->n_rval = V0;
 	p = buildtree(ASSIGN, p, q);
 	ecomp(p);
@@ -207,7 +213,7 @@ static void
 putintemp(struct symtab *sym)
 {
 	NODE *p;
-	p = tempnode(0, sym->stype, sym->sdf, sym->sap);
+	p = tempnode(0, sym->stype, sym->sdf, MIPS_SYM_AP(sym));
 	p = buildtree(ASSIGN, p, nametree(sym));
 	sym->soffset = regno(p->n_left);
 	sym->sflags |= STNODE;
@@ -234,9 +240,9 @@ param_retptr(void)
 {
 	NODE *p, *q;
 
-	p = tempnode(0, PTR+STRTY, 0, cftnsp->sap);
+	p = tempnode(0, PTR+STRTY, 0, MIPS_SYM_AP(cftnsp));
 	rvnr = regno(p);
-	q = block(REG, NIL, NIL, PTR+STRTY, 0, cftnsp->sap);
+	q = block(REG, NIL, NIL, PTR+STRTY, 0, MIPS_SYM_AP(cftnsp));
 	q->n_rval = A0;
 	p = buildtree(ASSIGN, p, q);
 	ecomp(p);
@@ -270,7 +276,7 @@ param_struct(struct symtab *sym, int *regp)
 	int i;
 
 	navail = nargregs - (reg - A0);
-	sz = tsize(sym->stype, sym->sdf, sym->sap) / SZINT;
+	sz = tsize(sym->stype, sym->sdf, MIPS_SYM_AP(sym)) / SZINT;
 	off = ARGINIT/SZINT + (reg - A0);
 	num = sz > navail ? navail : sz;
 	for (i = 0; i < num; i++) {
@@ -312,10 +318,10 @@ param_64bit(struct symtab *sym, int *regp, int dotemps)
 		return;
 	}
 
-	q = block(REG, NIL, NIL, sym->stype, sym->sdf, sym->sap);
+	q = block(REG, NIL, NIL, sym->stype, sym->sdf, MIPS_SYM_AP(sym));
 	q->n_rval = A0A1 + (reg - A0);
 	if (dotemps) {
-		p = tempnode(0, sym->stype, sym->sdf, sym->sap);
+		p = tempnode(0, sym->stype, sym->sdf, MIPS_SYM_AP(sym));
 		sym->soffset = regno(p);
 		sym->sflags |= STNODE;
 	} else {
@@ -333,10 +339,10 @@ param_32bit(struct symtab *sym, int *regp, int dotemps)
 {
 	NODE *p, *q;
 
-	q = block(REG, NIL, NIL, sym->stype, sym->sdf, sym->sap);
+	q = block(REG, NIL, NIL, sym->stype, sym->sdf, MIPS_SYM_AP(sym));
 	q->n_rval = (*regp)++;
 	if (dotemps) {
-		p = tempnode(0, sym->stype, sym->sdf, sym->sap);
+		p = tempnode(0, sym->stype, sym->sdf, MIPS_SYM_AP(sym));
 		sym->soffset = regno(p);
 		sym->sflags |= STNODE;
 	} else {
@@ -357,10 +363,10 @@ param_fpabi(struct symtab *sym, int *regp, int *fpregp, int dotemps)
 	if (fpreg < 0)
 		cerror("param_fpabi");
 
-	q = block(REG, NIL, NIL, sym->stype, sym->sdf, sym->sap);
+	q = block(REG, NIL, NIL, sym->stype, sym->sdf, MIPS_SYM_AP(sym));
 	q->n_rval = fpreg;
 	if (dotemps) {
-		p = tempnode(0, sym->stype, sym->sdf, sym->sap);
+		p = tempnode(0, sym->stype, sym->sdf, MIPS_SYM_AP(sym));
 		sym->soffset = regno(p);
 		sym->sflags |= STNODE;
 	} else {
@@ -606,7 +612,7 @@ mips_stacktemp(TWORD t, union dimfun *df, mips_ap_t *ap)
 	sp->stype = t;
 	sp->squal = 0;
 	sp->sdf = df;
-	sp->sap = ap;
+	MIPS_SET_SYM_AP(sp, ap);
 	sp->sclass = AUTO;
 	sp->soffset = NOOFFSET;
 	sp->sflags = 0;
@@ -621,17 +627,45 @@ mips_stackview(struct symtab *sp, TWORD t)
 }
 
 static NODE *
-movearg_struct(NODE *p, NODE *parent, int *regp)
+cmappend(NODE *q, NODE *r)
+{
+	NODE *p;
+
+	if (q == NIL)
+		return r;
+	if (q->n_op != CM)
+		return block(CM, r, q, INT, 0, 0);
+	for (p = q; p->n_left->n_op == CM; p = p->n_left)
+		;
+	p->n_left = block(CM, r, p->n_left, INT, 0, 0);
+	return q;
+}
+
+static NODE *
+mips_struct_word(NODE *p, int off)
+{
+	p->n_type = PTR+INT;
+	p->n_df = NULL;
+	p->n_ap = NULL;
+	MIPS_NODE_QUAL(p) = 0;
+	if (off != 0)
+		p = block(PLUS, p, bcon(off), PTR+INT, 0, 0);
+	return buildtree(UMUL, p, NIL);
+}
+
+static NODE *
+movearg_struct(NODE *p, NODE *prefix, int *regp)
 {
 	int reg = *regp;
 	NODE *l, *q, *t, *r;
-	int tmpnr;
+	struct symtab *addrsp;
 	int navail;
 	int off;
 	int num;
         int sz;
 	int ty;
 	int i;
+	int direct;
 
 	navail = nargregs - (reg - A0);
 	sz = tsize(p->n_type, p->n_df, p->n_ap) / SZINT;
@@ -640,37 +674,31 @@ movearg_struct(NODE *p, NODE *parent, int *regp)
 	l = p->n_left;
 	nfree(p);
 	ty = l->n_type;
-	t = tempnode(0, l->n_type, l->n_df, l->n_ap);
-	tmpnr = regno(t);
-	l = buildtree(ASSIGN, t, l);
-
-	if (p != parent) {
-		q = parent->n_left;
-	} else
-		q = NULL;
+	direct = 0;
+	addrsp = NULL;
+	q = prefix;
+	if (!direct) {
+		addrsp = mips_stacktemp(l->n_type, l->n_df, l->n_ap);
+		t = mips_stackview(addrsp, l->n_type);
+		l = buildtree(ASSIGN, t, l);
+		q = cmappend(q, l);
+	}
 
 	/* copy structure into registers */
 	for (i = 0; i < num; i++) {
-		t = tempnode(tmpnr, ty, 0, 0);
-		t = block(SCONV, t, NIL, PTR+INT, 0, 0);
-		t = block(PLUS, t, bcon(4*i), PTR+INT, 0, 0);
-		t = buildtree(UMUL, t, NIL);
+		t = direct ? MIPS_TCOPY(l) : mips_stackview(addrsp, ty);
+		t = mips_struct_word(t, 4*i);
 
 		r = block(REG, NIL, NIL, INT, 0, 0);
 		r->n_rval = reg++;
 
                	r = buildtree(ASSIGN, r, t);
-		if (q == NULL)
-			q = r;
-		else 
-			q = block(CM, q, r, INT, 0, 0);
+		q = cmappend(q, r);
 	}
 	off = ARGINIT/SZINT + nargregs;
 	for (i = num; i < sz; i++) {
-		t = tempnode(tmpnr, ty, 0, 0);
-		t = block(SCONV, t, NIL, PTR+INT, 0, 0);
-		t = block(PLUS, t, bcon(4*i), PTR+INT, 0, 0);
-		t = buildtree(UMUL, t, NIL);
+		t = direct ? MIPS_TCOPY(l) : mips_stackview(addrsp, ty);
+		t = mips_struct_word(t, 4*i);
 
 		r = block(REG, NIL, NIL, INT, 0, 0);
 		r->n_rval = FP;
@@ -678,19 +706,11 @@ movearg_struct(NODE *p, NODE *parent, int *regp)
 		r = block(UMUL, r, NIL, INT, 0, 0);
 
                	r = buildtree(ASSIGN, r, t);
-		if (q == NULL)
-			q = r;
-		else
-			q = block(CM, q, r, INT, 0, 0);
+		q = cmappend(q, r);
 	}
 
-	if (parent->n_op == CM) {
-		parent->n_left = q;
-		q = l;
-	} else {
-		q = block(CM, q, l, INT, 0, 0);
-	}
-
+	if (direct)
+		tfree(l);
 	*regp = reg;
 	return q;
 }
@@ -815,7 +835,12 @@ moveargs(NODE *p, int *regp
 	if (reg > lastreg && r->n_op != STARG)
 		*rp = block(FUNARG, r, NIL, r->n_type, r->n_df, r->n_ap);
 	else if (r->n_op == STARG) {
-		*rp = movearg_struct(r, p, regp);
+		if (p->n_op == CM) {
+			NODE *l = p->n_left;
+			nfree(p);
+			return movearg_struct(r, l, regp);
+		}
+		return movearg_struct(r, NIL, regp);
 	} else if (DEUNSIGN(r->n_type) == LONGLONG) {
 		*rp = movearg_64bit(r, regp);
 	} else if (r->n_type == DOUBLE || r->n_type == LDOUBLE) {

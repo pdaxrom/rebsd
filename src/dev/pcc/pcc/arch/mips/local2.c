@@ -49,6 +49,8 @@ int nargregs = MIPS_O32_NARGREGS;
 
 static int funargpushsiz(NODE *p);
 static void print_reg64name(FILE *fp, int rval, int hi);
+static void adrput_lowpart(FILE *io, NODE *p, TWORD dst);
+static void ucmpbr(NODE *p);
 
 void
 deflab(int label)
@@ -68,6 +70,7 @@ offcalc(struct interpass_prolog * ipp)
 	int i, j, addto;
 
 	addto = p2maxautooff;
+	SETOFF(addto, SZINT / SZCHAR);
 
 	for (i = p2env.p_regs[0], j = 0; i; i >>= 1, j++) {
 		if (i & 1) {
@@ -346,6 +349,30 @@ starg(NODE *p)
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
 }
 
+static void
+load_oreg_addr(int dst, NODE *p, const char *comment)
+{
+	CONSZ off = getlval(p);
+	int base = p->n_rval;
+
+	if (off >= -32768 && off <= 32767) {
+		printf("\taddiu %s,%s," CONFMT "\t# %s\n",
+		    rnames[dst], rnames[base], off, comment);
+		return;
+	}
+
+	if (base == AT) {
+		printf("\tmove %s,%s\n", rnames[dst], rnames[base]);
+		printf("\tli %s," CONFMT "\n", rnames[AT], off);
+		printf("\taddu %s,%s,%s\t# %s\n",
+		    rnames[dst], rnames[dst], rnames[AT], comment);
+	} else {
+		printf("\tli %s," CONFMT "\n", rnames[AT], off);
+		printf("\taddu %s,%s,%s\t# %s\n",
+		    rnames[dst], rnames[base], rnames[AT], comment);
+	}
+}
+
 /*
  * Structure assignment.
  */
@@ -357,9 +384,7 @@ stasg(NODE *p)
 	printf("\tli %s,%d\t# structure size\n", rnames[A2],
 	    attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0));
 	if (p->n_left->n_op == OREG) {
-		printf("\taddiu %s,%s," CONFMT "\t# dest address\n",
-		    rnames[A0], rnames[p->n_left->n_rval],
-		    getlval(p->n_left));
+		load_oreg_addr(A0, p->n_left, "dest address");
 	} else if (p->n_left->n_op == NAME) {
 		printf("\tla %s,", rnames[A0]);
 		adrput(stdout, p->n_left);
@@ -680,6 +705,55 @@ twollcomp(NODE *p)
 }
 
 static void
+ucmpbr(NODE *p)
+{
+	NODE *r = p->n_right;
+	const char *br;
+	int swap;
+
+	if (r->n_op == ICON && r->n_name[0] == '\0' && getlval(r) == 0) {
+		switch (p->n_op) {
+		case ULT:
+			return;
+		case UGE:
+			printf("\tbeq %s,%s," LABFMT "\n",
+			    rnames[ZERO], rnames[ZERO], p->n_label);
+			printf("\tnop\n");
+			return;
+		case ULE:
+			expand(p, 0, "\tbeqz AL,LC\n\tnop\n");
+			return;
+		case UGT:
+			expand(p, 0, "\tbnez AL,LC\n\tnop\n");
+			return;
+		default:
+			comperr("ucmpbr bad zero op %d", p->n_op);
+		}
+	}
+
+	swap = p->n_op == UGT || p->n_op == ULE;
+	br = (p->n_op == ULT || p->n_op == UGT) ? "bnez" : "beqz";
+
+	if (r->n_op == ICON && r->n_name[0] == '\0') {
+		printf("\tli %s,", rnames[AT]);
+		conput(stdout, r);
+		printf("\n");
+		if (swap)
+			expand(p, 0, "\tsltu A1,$at,AL\n");
+		else
+			expand(p, 0, "\tsltu A1,AL,$at\n");
+	} else if (swap) {
+		expand(p, 0, "\tsltu A1,AR,AL\n");
+	} else {
+		expand(p, 0, "\tsltu A1,AL,AR\n");
+	}
+	printf("\t%s ", br);
+	expand(p, 0, "A1");
+	printf("," LABFMT "\n", p->n_label);
+	printf("\tnop\n");
+}
+
+static void
 fpcmpops(NODE *p)
 {
 	NODE *l = p->n_left;
@@ -731,12 +805,57 @@ fpcmpops(NODE *p)
 	printf("\tnop\n\tnop\n");
 }
 
+static void
+addsubcon(NODE *p, int sub, int unsig)
+{
+	NODE *r = p->n_right;
+	CONSZ val, imm;
+	const char *op;
+
+	if (r->n_op != ICON)
+		comperr("addsubcon non-ICON");
+
+	val = getlval(r);
+	if (r->n_name[0] == '\0') {
+		imm = sub ? -val : val;
+		if (imm >= -32768 && imm <= 32767) {
+			printf("\t%s ", unsig ? "addiu" : "addi");
+			expand(p, 0, "A1,AL,");
+			printf(CONFMT "\n", imm);
+			return;
+		}
+	}
+
+	if (r->n_name[0] != '\0') {
+		printf("\tla %s,", rnames[AT]);
+		adrput(stdout, r);
+		printf("\n");
+	} else {
+		printf("\tli %s,", rnames[AT]);
+		conput(stdout, r);
+		printf("\n");
+	}
+
+	op = sub ? (unsig ? "subu" : "sub") : (unsig ? "addu" : "add");
+	printf("\t%s ", op);
+	expand(p, 0, "A1,AL,");
+	printf("%s\n", rnames[AT]);
+}
+
 void
 zzzcode(NODE * p, int c)
 {
 	int sz;
 
 	switch (c) {
+
+	case 'A':	/* signed add with constant */
+		addsubcon(p, 0, 0);
+		break;
+
+	case 'B':	/* unsigned/pointer add with constant */
+		addsubcon(p, 0, 1);
+		break;
 
 	case 'C':	/* remove arguments from stack after subroutine call */
 		sz = p->n_qual > 16 ? p->n_qual : 16;
@@ -767,6 +886,33 @@ zzzcode(NODE * p, int c)
 		if (p->n_name[0] != '\0')
 			comperr("named highword");
 		printf(CONFMT, (getlval(p) >> 32) & 0xffffffff);
+		break;
+
+	case 'J':		/* low-order memory part for narrowing conversions */
+		if (p->n_op != SCONV)
+			comperr("ZJ non-SCONV");
+		adrput_lowpart(stdout, p->n_left, p->n_type);
+		break;
+
+	case 'K':		/* unsigned comparison branch */
+		ucmpbr(p);
+		break;
+
+	case 'L':		/* load constant, using la for named constants */
+		if (p->n_op != ICON)
+			comperr("ZL non-ICON");
+		if (p->n_name[0] != '\0')
+			expand(p, 0, "\tla A1,AL\t# load named constant to reg\n");
+		else
+			expand(p, 0, "\tli A1,AL\t# load constant to reg\n");
+		break;
+
+	case 'M':	/* signed subtract with constant */
+		addsubcon(p, 1, 0);
+		break;
+
+	case 'N':	/* unsigned/pointer subtract with constant */
+		addsubcon(p, 1, 1);
 		break;
 
         case 'O': /* 64-bit left and right shift operators */
@@ -955,6 +1101,57 @@ upput(NODE * p, int size)
 	}
 }
 
+static int
+mips_type_size(TWORD t)
+{
+	switch (DEUNSIGN(t)) {
+	case CHAR:
+		return 1;
+	case SHORT:
+		return 2;
+	case INT:
+	case LONG:
+		return 4;
+	case LONGLONG:
+		return 8;
+	default:
+		return 0;
+	}
+}
+
+static void
+adrput_lowpart(FILE *io, NODE *p, TWORD dst)
+{
+	CONSZ off;
+	int srcsz = 0, dstsz = 0;
+
+	if (p->n_op == FLD)
+		p = p->n_left;
+
+	off = 0;
+#ifdef TARGET_BIG_ENDIAN
+	srcsz = mips_type_size(p->n_type);
+	dstsz = mips_type_size(dst);
+	if (srcsz > dstsz && dstsz != 0)
+		off = srcsz - dstsz;
+#else
+	(void)srcsz;
+	(void)dstsz;
+#endif
+
+	switch (p->n_op) {
+	case NAME:
+	case OREG:
+		setlval(p, getlval(p) + off);
+		adrput(io, p);
+		setlval(p, getlval(p) - off);
+		break;
+	default:
+		adrput(io, p);
+		break;
+	}
+}
+
 void
 adrput(FILE * io, NODE * p)
 {
@@ -1034,74 +1231,6 @@ calcstacksize(NODE *p, void *arg)
 #endif
 
 /*
- * If we're big endian, then all OREG loads of a type
- * larger than the destination, must have the
- * offset changed to point to the correct bytes in memory.
- */
-static void
-offchg(NODE *p, void *arg)
-{
-	NODE *l;
-
-	if (p->n_op != SCONV)
-		return;
-
-	l = p->n_left;
-
-	if (l->n_op != OREG)
-		return;
-
-	if (ISPTR(l->n_type) || ISARY(l->n_type) || ISFTN(l->n_type))
-		return;
-
-	switch (BTYPE(l->n_type)) {
-	case CHAR:
-	case UCHAR:
-	case BOOL:
-		break;
-	case SHORT:
-	case USHORT:
-		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l) + 1);
-		break;
-	case LONG:
-	case ULONG:
-	case INT:
-	case UNSIGNED:
-		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l) + 3);
-		else if (DEUNSIGN(p->n_type) == SHORT)
-			setlval(l, getlval(l) + 2);
-		break;
-	case LONGLONG:
-	case ULONGLONG:
-#ifdef TARGET_BIG_ENDIAN
-		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l) + 7);
-		else if (DEUNSIGN(p->n_type) == SHORT)
-			setlval(l, getlval(l) + 6);
-		else if (DEUNSIGN(p->n_type) == INT ||
-		    DEUNSIGN(p->n_type) == LONG)
-			setlval(l, getlval(l) + 4);
-#else
-		if (DEUNSIGN(p->n_type) == CHAR)
-			setlval(l, getlval(l) + 3);
-		else if (DEUNSIGN(p->n_type) == SHORT)
-			setlval(l, getlval(l) + 2);
-#endif
-		break;
-	case FLOAT:
-	case DOUBLE:
-	case LDOUBLE:
-		break;
-	default:
-		comperr("offchg: unknown type src=%x base=%x dst=%x op=%d",
-		    l->n_type, BTYPE(l->n_type), p->n_type, p->n_op);
-		break;
-	}
-}
-
-/*
  * Stack-passed sub-word parameters occupy 32-bit ABI slots.  On big-endian
  * targets the addressable byte/half object lives at the end of that slot.
  */
@@ -1115,6 +1244,8 @@ stackargoffchg(NODE *p, void *arg)
 
 	off = getlval(p);
 	if (off < ARGINIT/SZCHAR + 4 * SZINT/SZCHAR)
+		return;
+	if (ISPTR(p->n_type) || ISARY(p->n_type) || ISFTN(p->n_type))
 		return;
 
 	switch (BTYPE(p->n_type)) {
@@ -1181,10 +1312,8 @@ myoptim(struct interpass * ipole)
 	DLIST_FOREACH(ip, ipole, qelem) {
 		if (ip->type != IP_NODE)
 			continue;
-		if (bigendian) {
-			walkf(ip->ip_node, offchg, 0);
+		if (bigendian)
 			walkf(ip->ip_node, stackargoffchg, 0);
-		}
 #if 0
 		walkf(ip->ip_node, calcstacksize, 0);
 #endif

@@ -19,35 +19,47 @@ include $(TOPSRC)/target.mk
 
 CFLAGS          += ${DEFS}
 
+PCC_CC          = $(findstring pcc,$(notdir $(firstword $(CC))))
+
+# PCC owns these compiler helper ABIs through libpcc.a.  Do not also archive
+# same-name helpers into a PCC-built libc.a: libc.a is scanned before the
+# trailing -lpcc and would otherwise win archive resolution for objects pulled
+# from libc itself.
+ifeq ($(PCC_CC),)
+LIBPCC_HELPER_OBJS = divdi3.o \
+                  fixdfdi.o \
+                  floatdidf.o \
+                  moddi3.o \
+                  udivdi3.o \
+                  udivmoddi4.o \
+                  umoddi3.o
+else
+LIBPCC_HELPER_OBJS =
+endif
+
 OBJS            = adddf3.o \
                   addsf3.o \
                   comparedf2.o \
                   comparesf2.o \
                   divdf3.o \
-                  divdi3.o \
                   divsf3.o \
                   extendsfdf2.o \
                   fixdfsi.o \
-                  fixdfdi.o \
                   fixsfsi.o \
                   fixunssfsi.o \
                   fixunsdfsi.o \
-                  floatdidf.o \
                   floatsidf.o \
                   floatsisf.o \
                   floatundidf.o \
                   floatunsisf.o \
                   fp_mode.o \
                   int_helpers.o \
-                  moddi3.o \
+                  $(LIBPCC_HELPER_OBJS) \
                   muldf3.o \
                   mulsf3.o \
                   subdf3.o \
                   subsf3.o \
                   truncdfsf2.o \
-                  udivdi3.o \
-                  udivmoddi4.o \
-                  umoddi3.o \
 		  floatunsidf.o
 
 runtime.a:      ${OBJS}

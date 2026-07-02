@@ -89,7 +89,7 @@ extern int op_argflag[];
 static int expr_is_false(struct value *val);
 static int posix_unary_op(char **argv);
 static int posix_binary_op(char **argv);
-static int lookup_op(char *name, char table[][4]);
+static int lookup_op();
 
 /*
  * Execute an operator.  Op is the operator.  Sp is the stack pointer;
@@ -480,7 +480,7 @@ main(
 done:	return (expr_is_false(&valstack[0]));
 }
 
-int
+static int
 expr_is_false(
 	register struct value *val)
 {
@@ -495,10 +495,10 @@ expr_is_false(
 	return (0);
 }
 
-int
+static int
 lookup_op(
 	char *name,
-	char table[][4])
+	char (*table)[4])
 {
 	char c;
 	int  i;
@@ -511,7 +511,7 @@ lookup_op(
 	return (-1);
 }
 
-int
+static int
 posix_unary_op(
 	char **argv)
 {
@@ -536,7 +536,7 @@ posix_unary_op(
 	return (valp.u.num == 0);
 }
 
-int
+static int
 posix_binary_op(
 	char  **argv)
 {

@@ -69,7 +69,7 @@ res_send(buf, buflen, answer, anslen)
 		printf("res_send()\n");
 		p_query(buf);
 	}
-#endif DEBUG
+#endif /* DEBUG */
 	if (!(_res.options & RES_INIT))
 		if (res_init() == -1) {
 			return(-1);
@@ -85,7 +85,7 @@ res_send(buf, buflen, answer, anslen)
 		if (_res.options & RES_DEBUG)
 			printf("Querying server (# %d) address = %s\n", ns+1,
 			      inet_ntoa(_res.nsaddr_list[ns].sin_addr));
-#endif DEBUG
+#endif /* DEBUG */
 		if (v_circuit) {
 			int truncated = 0;
 
@@ -99,7 +99,7 @@ res_send(buf, buflen, answer, anslen)
 #ifdef DEBUG
 					if (_res.options & RES_DEBUG)
 					    perror("socket failed");
-#endif DEBUG
+#endif /* DEBUG */
 					continue;
 				}
 				if (connect(s, &(_res.nsaddr_list[ns]),
@@ -108,7 +108,7 @@ res_send(buf, buflen, answer, anslen)
 #ifdef DEBUG
 					if (_res.options & RES_DEBUG)
 					    perror("connect failed");
-#endif DEBUG
+#endif /* DEBUG */
 					(void) close(s);
 					s = -1;
 					continue;
@@ -127,7 +127,7 @@ res_send(buf, buflen, answer, anslen)
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					perror("write failed");
-#endif DEBUG
+#endif /* DEBUG */
 				(void) close(s);
 				s = -1;
 				continue;
@@ -147,7 +147,7 @@ res_send(buf, buflen, answer, anslen)
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					perror("read failed");
-#endif DEBUG
+#endif /* DEBUG */
 				(void) close(s);
 				s = -1;
 				continue;
@@ -157,7 +157,7 @@ res_send(buf, buflen, answer, anslen)
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					fprintf(stderr, "response truncated\n");
-#endif DEBUG
+#endif /* DEBUG */
 				len = anslen;
 				truncated = 1;
 			} else
@@ -172,7 +172,7 @@ res_send(buf, buflen, answer, anslen)
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					perror("read failed");
-#endif DEBUG
+#endif /* DEBUG */
 				(void) close(s);
 				s = -1;
 				continue;
@@ -212,7 +212,7 @@ res_send(buf, buflen, answer, anslen)
 #ifdef DEBUG
 						if (_res.options & RES_DEBUG)
 							perror("connect");
-#endif DEBUG
+#endif /* DEBUG */
 						continue;
 					}
 					connected = 1;
@@ -221,17 +221,17 @@ res_send(buf, buflen, answer, anslen)
 #ifdef DEBUG
 					if (_res.options & RES_DEBUG)
 						perror("send");
-#endif DEBUG
+#endif /* DEBUG */
 					continue;
 				}
 			} else
-#endif BSD
+#endif /* BSD */
 			if (sendto(s, buf, buflen, 0, &_res.nsaddr_list[ns],
 			    sizeof(struct sockaddr)) != buflen) {
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					perror("sendto");
-#endif DEBUG
+#endif /* DEBUG */
 				continue;
 			}
 
@@ -252,7 +252,7 @@ wait:
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					perror("select");
-#endif DEBUG
+#endif /* DEBUG */
 				continue;
 			}
 			if (n == 0) {
@@ -262,7 +262,7 @@ wait:
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					printf("timeout\n");
-#endif DEBUG
+#endif /* DEBUG */
 				/*
 				 * Disconnect if we want to listen
 				 * for responses from more than one server.
@@ -279,7 +279,7 @@ wait:
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					perror("recvfrom");
-#endif DEBUG
+#endif /* DEBUG */
 				continue;
 			}
 			gotsomewhere = 1;
@@ -292,7 +292,7 @@ wait:
 					printf("old answer:\n");
 					p_query(answer);
 				}
-#endif DEBUG
+#endif /* DEBUG */
 				goto wait;
 			}
 			if (!(_res.options & RES_IGNTC) && anhp->tc) {
@@ -302,7 +302,7 @@ wait:
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)
 					printf("truncated answer\n");
-#endif DEBUG
+#endif /* DEBUG */
 				(void) close(s);
 				s = -1;
 				/*
@@ -319,7 +319,7 @@ wait:
 			printf("got answer:\n");
 			p_query(answer);
 		}
-#endif DEBUG
+#endif /* DEBUG */
 		/*
 		 * We are going to assume that the first server is preferred
 		 * over the rest (i.e. it is on the local machine) and only

@@ -138,9 +138,6 @@ file /root/pcc-smoke.c
 file /root/romfs-smoke.sh
 mode 0775
 
-file /root/secondary-cc-smoke.sh
-mode 0775
-
 file /root/net-smoke.sh
 mode 0775
 
@@ -661,8 +658,6 @@ file /usr/share/man/cat1/cat.0
 
 file /usr/share/man/cat1/cb.0
 
-file /usr/share/man/cat1/ccom.0
-
 file /usr/share/man/cat1/chgrp.0
 
 file /usr/share/man/cat1/chmod.0
@@ -676,8 +671,6 @@ file /usr/share/man/cat1/comm.0
 file /usr/share/man/cat1/compress.0
 
 file /usr/share/man/cat1/cp.0
-
-file /usr/share/man/cat1/cpp.0
 
 file /usr/share/man/cat1/date.0
 

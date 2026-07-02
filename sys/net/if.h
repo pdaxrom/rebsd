@@ -219,6 +219,6 @@ extern struct	ifqueue rawintrq;	/* raw packet input queue */
 extern struct	ifnet *ifnet;
 struct	ifaddr *ifa_ifwithaddr(), *ifa_ifwithnet();
 struct	ifaddr *ifa_ifwithdstaddr();
-#else KERNEL
+#else /* KERNEL */
 #include <net/if_arp.h>
-#endif KERNEL
+#endif /* KERNEL */

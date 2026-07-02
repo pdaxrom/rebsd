@@ -24,15 +24,9 @@ static char sccsid[] = "@(#)res_mkquery.c	6.7 (Berkeley) 3/7/88";
  * Form all types of queries.
  * Returns the size of the result or -1.
  */
-res_mkquery(op, dname, class, type, data, datalen, newrr, buf, buflen)
-	int op;			/* opcode of query */
-	char *dname;		/* domain name */
-	int class, type;	/* class and type of query */
-	char *data;		/* resource record data */
-	int datalen;		/* length of data */
-	struct rrec *newrr;	/* new rr for modify or append */
-	char *buf;		/* buffer to put query */
-	int buflen;		/* size of buffer */
+int
+res_mkquery(int op, char *dname, int class, int type, char *data, int datalen,
+	struct rrec *newrr, char *buf, int buflen)
 {
 	register HEADER *hp;
 	register char *cp;
@@ -44,7 +38,7 @@ res_mkquery(op, dname, class, type, data, datalen, newrr, buf, buflen)
 #ifdef DEBUG
 	if (_res.options & RES_DEBUG)
 		printf("res_mkquery(%d, %s, %d, %d)\n", op, dname, class, type);
-#endif DEBUG
+#endif /* DEBUG */
 	/*
 	 * Initialize header fields.
 	 */
@@ -194,7 +188,7 @@ res_mkquery(op, dname, class, type, data, datalen, newrr, buf, buflen)
 		hp->ancount = htons(0);
 		break;
 
-#endif ALLOW_UPDATES
+#endif /* ALLOW_UPDATES */
 	}
 	return (cp - buf);
 }

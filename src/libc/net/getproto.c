@@ -6,7 +6,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 static char sccsid[] = "@(#)getproto.c	5.3 (Berkeley) 5/19/86";
-#endif LIBC_SCCS and not lint
+#endif /* LIBC_SCCS and not lint */
 
 #include <netdb.h>
 

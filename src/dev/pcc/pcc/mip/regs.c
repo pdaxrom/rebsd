@@ -1340,8 +1340,24 @@ xasmconstr(NODE *p, void *arg)
 	if (t[i] != f[i]) v = 1
 #define	SETEMPTY(t,sz)	memset(t, 0, BIT2BYTE(sz))
 
+static int deldead(NODE *, bittype *, int);
+
 static int
-deldead(NODE *p, bittype *lvar)
+deldeadarg(NODE *p, bittype *lvar)
+{
+	int rv = 0;
+
+	if (p->n_op == CM) {
+		rv |= deldeadarg(p->n_left, lvar);
+		rv |= deldeadarg(p->n_right, lvar);
+	} else {
+		rv |= deldead(p, lvar, 1);
+	}
+	return rv;
+}
+
+static int
+deldead(NODE *p, bittype *lvar, int keepasg)
 {
 	NODE *q;
 	int ty, rv = 0;
@@ -1349,7 +1365,8 @@ deldead(NODE *p, bittype *lvar)
 #define	BNO(p) (regno(p) - tempmin+MAXREGS)
 	if (p->n_op == TEMP)
 		BITSET(lvar, BNO(p));
-	if (asgop(p->n_op) && p->n_left->n_op == TEMP &&
+	ty = optype(p->n_op);
+	if (keepasg == 0 && asgop(p->n_op) && p->n_left->n_op == TEMP &&
 	    TESTBIT(lvar, BNO(p->n_left)) == 0) {
 		/*
 		 * Not live, must delete the right tree at least 
@@ -1360,14 +1377,18 @@ deldead(NODE *p, bittype *lvar)
 		q = p->n_right;
 		*p = *q;
 		nfree(q);
-		deldead(p, lvar);
+		deldead(p, lvar, 0);
 		return 1;
 	}
-	ty = optype(p->n_op);
+	if (callop(p->n_op) && ty == BITYPE) {
+		rv |= deldead(p->n_left, lvar, 0);
+		rv |= deldeadarg(p->n_right, lvar);
+		return rv;
+	}
 	if (ty != LTYPE)
-		rv |= deldead(p->n_left, lvar);
+		rv |= deldead(p->n_left, lvar, 0);
 	if (ty == BITYPE)
-		rv |= deldead(p->n_right, lvar);
+		rv |= deldead(p->n_right, lvar, 0);
 	return rv;
 }
 
@@ -1419,7 +1440,8 @@ dce(struct p2env *p2e)
 		    bbnum, bb->first, bb->last));
 		SETCOPY(lvar, out[bbnum], i, xbits);
 		for (ip = bb->last; ; ip = DLIST_PREV(ip, qelem)) {
-			if (ip->type == IP_NODE && deldead(ip->ip_node, lvar)) {
+			if (ip->type == IP_NODE &&
+			    deldead(ip->ip_node, lvar, 0)) {
 				if ((p = deluseless(ip->ip_node)) == NULL) {
 					struct interpass *previp;
 					struct basicblock *prevbb;

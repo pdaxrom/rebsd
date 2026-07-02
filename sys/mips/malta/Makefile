@@ -26,7 +26,8 @@ S               = ../..
 BOARD_SRC       = ../malta
 MIPS_ROOTFS_KBYTES ?= 16384
 MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/mips/n64/rootfs.stage
-MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland
+MIPS_ROOTFS_COMPILER ?= gcc
+MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland.$(MIPS_ROOTFS_COMPILER)
 MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_COMMON_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
@@ -299,7 +300,9 @@ native-pcc-regress-runtime: native-pcc-regress-stage $(MALTA_RUN_COMMAND_SCRIPT)
 FORCE:
 
 $(MIPS_ROOTFS_SRC_STAMP): FORCE
-	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
+	$(MAKE) -C $(TOPSRC)/sys/mips/n64 \
+	    N64_USERLAND_COMPILER=$(MIPS_ROOTFS_COMPILER) \
+	    rootfs.stage/.userland.$(MIPS_ROOTFS_COMPILER)
 
 $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
 	rm -rf $(MIPS_ROOTFS_STAGE)
