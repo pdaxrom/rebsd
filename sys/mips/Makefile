@@ -18,7 +18,7 @@ endif
         smoke-host-pcc smoke-host-ccom smoke-host-portablecc \
         pcc-regress-compile pcc-regress-stage pcc-regress-runtime \
         pcc-regress-summary linpack-smoke-build linpack-smoke-stage \
-        linpack-smoke-runtime
+        linpack-smoke-runtime native-pcc-smoke-runtime
 
 all: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) all
@@ -26,7 +26,7 @@ all: $(BOARD_DIR)/Makefile
 unix kernel kernel.z64 preflight.z64: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
 
-smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain smoke-host-pcc smoke-host-ccom smoke-host-portablecc pcc-regress-compile pcc-regress-stage pcc-regress-runtime pcc-regress-summary linpack-smoke-build linpack-smoke-stage linpack-smoke-runtime: $(BOARD_DIR)/Makefile
+smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain smoke-host-pcc smoke-host-ccom smoke-host-portablecc pcc-regress-compile pcc-regress-stage pcc-regress-runtime pcc-regress-summary linpack-smoke-build linpack-smoke-stage linpack-smoke-runtime native-pcc-smoke-runtime: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
 
 reconfig: $(KCONFIG)

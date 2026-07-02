@@ -101,8 +101,8 @@ struct data_sections {
     unsigned dtors;
 };
 
-#define NSYM 1500
-#define NSYMPR 500
+#define NSYM 8192
+#define NSYMPR 4096
 #define NLIBS 256
 #define NLIBDIRS 64
 #define RANTAB_CHUNK 512

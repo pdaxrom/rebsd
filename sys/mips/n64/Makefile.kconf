@@ -90,6 +90,7 @@ N64_HOST_PCC_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-pcc.sh
 N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
 N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
+N64_NATIVE_PCC_BUILD_SCRIPT = $(TOPSRC)/sys/mips/tools/native-pcc-build.py
 N64_NATIVE_CC = sh $(abspath $(N64_NATIVE_CC_SCRIPT))
 N64_NATIVE_ASWRAP = sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
@@ -98,6 +99,9 @@ N64_NATIVE_AR = $(N64_PREFIX)ar
 N64_GNU_AS ?= $(N64_PREFIX)as
 N64_NATIVE_STAMP = $(N64_NATIVE_DIR)/.built
 N64_NATIVE_LIBS = crt0.o libc.a libm.a libpcc.a
+N64_NATIVE_PCC_BUILD = n64-native-pcc-build
+N64_NATIVE_PCC_DIR = n64-native-pcc
+N64_NATIVE_PCC_STAMP = $(N64_NATIVE_PCC_DIR)/.built
 N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 N64_DEVNODES_AWK = $(TOPSRC)/sys/mips/n64/devnodes.awk
@@ -132,6 +136,10 @@ N64_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '
 N64_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_CPP_SRCS = $(shell find $(TOPSRC)/src/cmd/cpp -type f \( -name '*.[chly]' -o -name Makefile \) 2>/dev/null)
 N64_CCOM_SRCS = $(shell find $(TOPSRC)/src/cmd/ccom -type f \( -name '*.[chly]' -o -name Makefile \) 2>/dev/null)
+N64_DEV_PCC_SRCS = $(N64_NATIVE_PCC_BUILD_SCRIPT) \
+                   $(shell find $(TOPSRC)/src/dev/pcc/pcc -type f \
+                   \( -name '*.[chly]' -o -name '*.h' -o -name Makefile.in \) \
+                   2>/dev/null)
 N64_NATIVE_TARGET_FLAGS = -DTARGET_BIG_ENDIAN -DTARGET_VR4300 \
                           -DTARGET_MIPS_STRICT_ALIGN64 \
                           -DTARGET_NO_ABICALLS
@@ -445,7 +453,7 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 	    $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300.sh
 	touch $@
 
-$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_MAKEWHATIS_SED) Makefile
+$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_NATIVE_PCC_STAMP) $(N64_MAKEWHATIS_SED) Makefile
 	mkdir -p $(N64_ROOTFS_STAGE)/share/misc \
 	    $(N64_ROOTFS_STAGE)/share/man/cat1 \
 	    $(N64_ROOTFS_STAGE)/share/man/cat5 \
@@ -465,6 +473,18 @@ $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_N
 	        mv -f $(N64_ROOTFS_STAGE)/libexec/$$file $(N64_ROOTFS_USR_LIBEXEC)/$$file; \
 	    fi; \
 	done
+	rm -f $(N64_ROOTFS_USR_BIN)/cc $(N64_ROOTFS_USR_BIN)/cpp \
+	    $(N64_ROOTFS_USR_BIN)/pcc $(N64_ROOTFS_USR_BIN)/p++ \
+	    $(N64_ROOTFS_USR_BIN)/lcc $(N64_ROOTFS_USR_BIN)/scc
+	rm -f $(N64_ROOTFS_USR_LIBEXEC)/ccom $(N64_ROOTFS_USR_LIBEXEC)/lccom \
+	    $(N64_ROOTFS_USR_LIBEXEC)/smallc $(N64_ROOTFS_USR_LIBEXEC)/smlrc
+	rm -f $(N64_ROOTFS_USR_LIBEXEC)/pcc/cxxcom
+	mkdir -p $(N64_ROOTFS_USR_LIBEXEC)/pcc
+	cp -p $(N64_NATIVE_PCC_DIR)/cc $(N64_ROOTFS_USR_BIN)/cc
+	cp -p $(N64_NATIVE_PCC_DIR)/cc $(N64_ROOTFS_USR_BIN)/pcc
+	cp -p $(N64_NATIVE_PCC_DIR)/cc $(N64_ROOTFS_USR_BIN)/cpp
+	cp -p $(N64_NATIVE_PCC_DIR)/cpp $(N64_ROOTFS_USR_LIBEXEC)/pcc/cpp
+	cp -p $(N64_NATIVE_PCC_DIR)/ccom $(N64_ROOTFS_USR_LIBEXEC)/pcc/ccom
 	if [ -d $(N64_ROOTFS_STAGE)/share ]; then \
 	    cp -pR $(N64_ROOTFS_STAGE)/share/. $(N64_ROOTFS_USR_SHARE)/; \
 	    rm -rf $(N64_ROOTFS_STAGE)/share; \
@@ -706,6 +726,23 @@ $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD
 	cp $(N64_NATIVE_TREE)/src/libm.a $(N64_NATIVE_DIR)/libm.a
 	touch $@
 
+$(N64_NATIVE_PCC_STAMP): $(N64_DEV_PCC_SRCS) $(N64_NATIVE_STAMP) \
+    $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_DIR)/crt0.o \
+    $(N64_NATIVE_DIR)/libc.a $(N64_NATIVE_DIR)/libm.a \
+    $(N64_NATIVE_DIR)/libpcc.a Makefile
+	python3 $(N64_NATIVE_PCC_BUILD_SCRIPT) \
+	    --top $(abspath $(TOPSRC)) \
+	    --build $(abspath $(N64_NATIVE_PCC_BUILD)) \
+	    --out $(abspath $(N64_NATIVE_PCC_DIR)) \
+	    --gcc-wrapper $(abspath $(N64_NATIVE_CC_SCRIPT)) \
+	    --gcc-prefix $(N64_PREFIX) \
+	    --as $(abspath $(N64_NATIVE_AS)) \
+	    --ld $(abspath $(N64_NATIVE_LD)) \
+	    --crt0 $(abspath $(N64_NATIVE_DIR)/crt0.o) \
+	    --libdir $(abspath $(N64_NATIVE_DIR)) \
+	    --bison $(N64_BISON)
+	touch $@
+
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
 
@@ -739,7 +776,8 @@ clean:
 	    .deps machine sys $(N64_ROOTFS_STAGE) $(N64_ROOTFS_DEVNODES) \
 	    $(N64_ROOTFS_BUILD_MANIFEST) $(N64_KERNEL_LDSCRIPT) \
 	    $(N64_USER_LDSCRIPT) $(N64_USERLAND_STAMP) \
-	    $(N64_NATIVE_DIR) $(N64_NATIVE_TOOLS)
+	    $(N64_NATIVE_DIR) $(N64_NATIVE_TOOLS) \
+	    $(N64_NATIVE_PCC_BUILD) $(N64_NATIVE_PCC_DIR)
 
 clean-all: clean
 	rm -f Makefile ioconf.c swap*.c vers.c

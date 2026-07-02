@@ -21,6 +21,8 @@ char    *strstr (const char *, const char *);
 
 int     strcmp (const char *, const char *);
 int     strncmp (const char *, const char *, size_t);
+int     strcasecmp(const char *, const char *);
+int     strncasecmp(const char *, const char *, size_t);
 size_t  strlen (const char *);
 
 int     memcmp (const void *, const void *, size_t);

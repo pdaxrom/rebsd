@@ -116,9 +116,10 @@ enum {
  * Sizes of tables.
  * Hash sizes should be powers of 2!
  */
-#define HASHSZ 1024              /* symbol name hash table size */
+#define HASHSZ 8192              /* symbol name hash table size */
 #define HCMDSZ 256               /* instruction hash table size */
-#define STSIZE (HASHSZ * 9 / 10) /* symbol name table size */
+#define STSIZE (HASHSZ * 3 / 4)  /* symbol name table size */
+#define STSPACE (STSIZE * 32)    /* symbol string storage size */
 #define MAXRLAB 200              /* max relative (digit) labels */
 
 /*
@@ -500,7 +501,7 @@ int stalign;  /* Symbol table alignment */
 unsigned tbase, dbase, adbase, ctbase, dtbase, bbase;
 struct nlist stab[STSIZE];
 int stabfree;
-char space[STSIZE * 8]; /* Area for symbol names */
+char space[STSPACE]; /* Area for symbol names */
 int lastfree;           /* Free space offset */
 char name[256];
 unsigned intval;

@@ -341,19 +341,25 @@ test gate.
 
 ## Current Remaining PCC Work
 
-- [ ] Package imported PCC as the native rootfs compiler.
-  - Install the driver as `/usr/bin/cc` and `/usr/bin/cpp`.
-  - Install internal passes under `/usr/libexec/pcc/`.
+- [x] Package imported PCC as the native C rootfs compiler.
+  - Install the driver as `/usr/bin/cc`, `/usr/bin/pcc`, and `/usr/bin/cpp`.
+  - Install C-only internal passes under `/usr/libexec/pcc/`.
   - Stage headers, `crt0.o`, `libc.a`, `libm.a`, and `libpcc.a` coherently for
     native use.
-- [ ] Replace the legacy compiler stack only after native PCC is usable.
+- [x] Replace the legacy compiler stack after native C PCC became usable.
   - Remove the old `cpp`, legacy `cc`/`pcc`, `lcc`/`lccom`, and
-    `smallc`/`smlrc` from the default rootfs once imported PCC can compile,
-    assemble, link, and run programs inside Malta.
-- [ ] Run the native Malta PCC gate from inside ReBSD.
-  - Boot Malta with imported PCC installed.
-  - Compile, assemble, link, and run representative programs on the target.
-  - Then run the full PCC test gate from the target environment.
+    `smallc`/`smlrc` from the default rootfs install profile.
+  - Imported PCC now compiles, assembles, links, and runs C programs inside
+    Malta using the native ReBSD `as`/`ld` and staged `libpcc.a`.
+- [x] Run the native C Malta PCC gate from inside ReBSD.
+  - Boot Malta with imported C PCC installed.
+  - Compile, assemble, link, and run representative C programs on the target.
+  - Verified result: `NATIVE_PCC_SMOKE_RC:0`.
+- [ ] Run the full PCC test gate from the target environment.
+  - The host-driven PCC regress gate is green for the current C policy except
+    expected policy/architecture skips.
+  - A fully native target-side regress run still needs a practical harness and
+    filesystem/time budget decision.
 - [ ] Make the userland compiler selectable.
   - Default remains GCC until explicitly changed.
   - Add documented `gcc`/`pcc` selection, then build full userland with PCC on
@@ -367,6 +373,11 @@ test gate.
     attributes.
   - Full C++ needs a startup policy for `crtbegin.o`/`crtend.o`, sentinel
     entries, priorities, destructor ordering, and partial links.
+  - Do not install `/usr/bin/p++` or `/usr/libexec/pcc/cxxcom` into the default
+    rootfs until C++ has a real compile/link/runtime gate.
+  - Current imported `cxxcom` is not ready: constructor syntax is rejected, and
+    even a basic class/member-function compile currently fails with
+    `compiler error: cdope missing op 93`.
 - [ ] Decide whether ReBSD will support TLS and shared libraries.
   - TLS is currently rejected by the target and blocks only `pcclist/init004`.
   - Shared libraries/PIC are currently out of scope for static a.out and block
@@ -390,20 +401,20 @@ test gate.
 
 ## Phase 3: Native PCC in Malta Rootfs
 
-- [ ] Package PCC native driver and internal passes into the rootfs.
-  - Public commands: `/usr/bin/cc`, `/usr/bin/cpp`.
-  - Internal stages: `/usr/libexec/pcc/`.
+- [x] Package PCC native C driver and internal passes into the rootfs.
+  - Public commands: `/usr/bin/cc`, `/usr/bin/pcc`, `/usr/bin/cpp`.
+  - Internal C stages: `/usr/libexec/pcc/cpp`, `/usr/libexec/pcc/ccom`.
   - Headers: `/usr/include`.
   - Libraries/start files: `/usr/lib`.
-- [ ] Replace the legacy rootfs compiler stack after native PCC is packaged.
+- [x] Replace the legacy rootfs compiler stack after native C PCC is packaged.
   - Remove the old `cpp`, legacy `cc`/`pcc` alias, `lcc`/`lccom`, and
     `smallc`/`smlrc` from the default rootfs install profile.
   - Keep ReBSD `as`, `ld`, `ar`, and `ranlib`; imported PCC must continue to
     use the native a.out toolchain.
-  - Do not create a gap where Malta/N64 rootfs has no native C compiler: first
-    install imported PCC as `/usr/bin/cc` and `/usr/bin/cpp`, then remove the
+  - ReBSD rootfs now keeps a native C compiler by installing imported PCC as
+    `/usr/bin/cc`, `/usr/bin/pcc`, and `/usr/bin/cpp` before removing the
     legacy compiler commands.
-- [ ] Decide the ReBSD policy for `src/dev/pcc/pcc-libs`.
+- [x] Decide the first ReBSD policy for `src/dev/pcc/pcc-libs`.
   - Current policy: port and stage `libpcc.a` for compiler helper routines.
   - Still decide whether any helpers should move into libc long term.
   - Decide only if tests prove it needed: stage `libpccsoftfloat.a`.
@@ -413,8 +424,8 @@ test gate.
     are enabled.
   - Keep hardware-FPU Malta/N64 builds free of unnecessary soft-float runtime
     dependencies.
-- [ ] Boot Malta with native PCC installed.
-- [ ] Compile, assemble, link, and run programs inside Malta.
+- [x] Boot Malta with native C PCC installed.
+- [x] Compile, assemble, link, and run C programs inside Malta.
 - [ ] Run the full PCC Malta test gate.
 
 ## Temporary Compatibility Stubs To Close
@@ -427,6 +438,15 @@ test gate.
   - Partial links with `ld -r` must either preserve ReBSD ctor/dtor metadata or
     reject unsupported ctor/dtor inputs before this is treated as a complete
     C++ runtime model.
+- [ ] Fix or intentionally disable the PCC C++ frontend before publishing
+  `p++`.
+  - The native build does not compile or publish `cxxcom` by default. A
+    diagnostic `--with-cxx` build can still be used while bringing C++ up.
+  - Basic C++ smoke attempts fail in the frontend before reaching ReBSD `as` or
+    `ld`: constructor syntax is rejected, and a class/member-function compile
+    fails with `compiler error: cdope missing op 93`.
+  - Re-enable `/usr/bin/p++` only together with a target-side compile/link/run
+    gate and the C++ ctor/dtor runtime policy above.
 - [ ] Expand `include/wchar.h` beyond the current minimal ReBSD wide-char ABI.
   - Current header fixes `wchar_t` at the ReBSD/PCC 16-bit ABI and defines
     `wint_t`, `NULL`, and `wprintf`.

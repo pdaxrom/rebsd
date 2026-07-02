@@ -58,6 +58,8 @@ LINPACK_SMOKE_MANIFEST ?= /private/tmp/rebsd-linpack-smoke.manifest
 LINPACK_SMOKE_LOG ?= /private/tmp/rebsd-linpack-smoke.log
 LINPACK_SMOKE_ARRAY_SIZE ?= 120
 LINPACK_SMOKE_MIN_SECONDS ?= 1
+MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
+NATIVE_PCC_SMOKE_LOG ?= /private/tmp/rebsd-native-pcc-smoke.log
 
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
                   -DROMFS_ENABLED \
@@ -192,7 +194,8 @@ run-net: unix.elf
 
 .PHONY: smoke-host-portablecc pcc-regress-compile pcc-regress-stage \
         pcc-regress-runtime pcc-regress-summary linpack-smoke-build \
-        linpack-smoke-stage linpack-smoke-runtime FORCE
+        linpack-smoke-stage linpack-smoke-runtime \
+        native-pcc-smoke-runtime FORCE
 smoke-host-portablecc: $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SMOKE_SCRIPT)
 	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
@@ -258,6 +261,16 @@ linpack-smoke-runtime: linpack-smoke-stage
 	    --ram $(MALTA_QEMU_RAM) \
 	    --array-size $(LINPACK_SMOKE_ARRAY_SIZE) \
 	    --min-seconds $(LINPACK_SMOKE_MIN_SECONDS)
+
+native-pcc-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) unix.elf
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel unix.elf \
+	    --log $(NATIVE_PCC_SMOKE_LOG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --command '/root/native-pcc-smoke.sh; echo NATIVE_PCC_SMOKE_RC:$$?' \
+	    --expect "NATIVE_PCC_SMOKE_RC:0"
 
 FORCE:
 

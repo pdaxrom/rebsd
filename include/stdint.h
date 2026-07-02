@@ -12,6 +12,11 @@ typedef unsigned short int  uint16_t;
 typedef unsigned int        uint32_t;
 typedef unsigned long long  uint64_t;
 
+typedef int                 intptr_t;
+typedef unsigned int        uintptr_t;
+typedef long long           intmax_t;
+typedef unsigned long long  uintmax_t;
+
 #define INT8_C(x)	x
 #define UINT8_C(x)	x##U
 
