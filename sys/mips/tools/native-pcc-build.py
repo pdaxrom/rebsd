@@ -128,6 +128,7 @@ class Builder:
             "-O2",
             "-DGCC_COMPAT",
             "-DPCC_DEBUG",
+            "-DPCC_DEBUGFP_NATIVE_STRTOLD",
             "-D_ISOC99_SOURCE",
             "-Dos_rebsd",
             "-Dmach_mips",

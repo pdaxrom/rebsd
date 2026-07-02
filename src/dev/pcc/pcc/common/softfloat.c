@@ -46,7 +46,37 @@ int sfdebug=0;
 #else
 #define SD(x)
 #endif
-#define sfp2ld(x) (x)->debugfp
+
+#ifdef USE_IEEEFP_X80
+#define	SZLD 10 /* less than SZLDOUBLE, avoid cmp junk */
+#else
+#define SZLD sizeof(long double)
+#endif
+
+#ifdef DEBUGFP
+static int debugfp_mismatch(long double, long double);
+
+static long double
+sfp2ld(SFP sfp)
+{
+#if defined(HOST_BIG_ENDIAN) && defined(USE_IEEEFP_64) && SZLDOUBLE == 64
+	union {
+		double d;
+		uint32_t w[2];
+	} u;
+
+	/*
+	 * Softfloat stores IEEE64 words as fp[0]=low, fp[1]=high.
+	 * Native big-endian double/long double memory order is high,low.
+	 */
+	u.w[0] = sfp->fp[1];
+	u.w[1] = sfp->fp[0];
+	return (long double)u.d;
+#else
+	return sfp->debugfp;
+#endif
+}
+#endif
 
 /*
  * Description of a floating point format.
@@ -566,15 +596,19 @@ FPI fpi_binaryx80 = {
 };      
 #endif
 
-#ifdef USE_IEEEFP_X80
-#define	SZLD 10 /* less than SZLDOUBLE, avoid cmp junk */
-#else
-#define SZLD sizeof(long double)
-#endif
-
 #define FPI_FLOAT	C(FLT_PREFIX,_FPI)
 #define FPI_DOUBLE	C(DBL_PREFIX,_FPI)
 #define FPI_LDOUBLE	C(LDBL_PREFIX,_FPI)
+
+#ifdef DEBUGFP
+static int
+debugfp_mismatch(long double soft, long double hard)
+{
+	if (soft != soft && hard != hard)
+		return 0;
+	return memcmp(&soft, &hard, SZLD) != 0;
+}
+#endif
 
 /*
  * IEEE specials:
@@ -755,8 +789,8 @@ soft_int2fp(SFP rv, CONSZ l, TWORD f, TWORD t)
 		dl = ISUNSIGNED(f) ? (long double)(U_CONSZ)(debl) :
 		    (long double)(CONSZ)(debl);
 		dl = t == FLOAT ? (float)dl : t == DOUBLE ? (double)dl : dl;
-		if (dl != rv->debugfp)
-			fpwarn("soft_int2fp", rv->debugfp, dl);
+		if (debugfp_mismatch(sfp2ld(rv), dl))
+			fpwarn("soft_int2fp", sfp2ld(rv), dl);
 	}
 #endif
 }
@@ -779,10 +813,12 @@ soft_fp2fp(SFP sfp, TWORD t)
 	LDBLPTR->make(&rv, c, s, e, &m);
 
 #ifdef DEBUGFP
-	{ long double l = (t == DOUBLE ? (double)sfp->debugfp :
-	    (t == FLOAT ? (float)sfp->debugfp : sfp->debugfp));
-	if (memcmp(&l, &rv.debugfp, SZLD))
-		fpwarn("soft_fp2fp", rv.debugfp, l);
+	{ long double sld = sfp2ld(sfp);
+	long double rld = sfp2ld(&rv);
+	long double l = (t == DOUBLE ? (double)sld :
+	    (t == FLOAT ? (float)sld : sld));
+	if (debugfp_mismatch(rld, l))
+		fpwarn("soft_fp2fp", rld, l);
 	}
 #endif
 	*sfp = rv;
@@ -853,14 +889,14 @@ soft_fp2int(SFP sfp, TWORD t)
 	}
 
 #ifdef notdef /* cannot runtime check conversion */
-	if (!ovf) { uint64_t u = (uint64_t)sfp->debugfp;
-	  int64_t ss = (int64_t)sfp->debugfp;
+	if (!ovf) { uint64_t u = (uint64_t)sfp2ld(sfp);
+	  int64_t ss = (int64_t)sfp2ld(sfp);
 		if (ISUNSIGNED(t)) {
 			if (u != (U_CONSZ)rv)
-				fpwarn("soft_fp2int:u", 0.0, sfp->debugfp);
+				fpwarn("soft_fp2int:u", 0.0, sfp2ld(sfp));
 		} else {
 			if (ss != (int64_t)rv)
-				fpwarn("soft_fp2int:s", 0.0, sfp->debugfp);
+				fpwarn("soft_fp2int:s", 0.0, sfp2ld(sfp));
 		}
 	}
 #endif
@@ -941,8 +977,8 @@ soft_plus(SFP x1p, SFP x2p, TWORD t)
 #ifdef DEBUGFP
 	{ long double ldd = sfp2ld(x1p) + sfp2ld(x2p);
 	  long double sp = sfp2ld(&rv);
-	if (memcmp(&ldd, &sp, SZLD))
-	  fpwarn("soft_plus", sfp2ld(&rv), ldd);
+	if (debugfp_mismatch(sp, ldd))
+	  fpwarn("soft_plus", sp, ldd);
 	}
 #endif
 	*x1p = rv;
@@ -1007,8 +1043,8 @@ soft_mul(SFP x1p, SFP x2p, TWORD t)
 #ifdef DEBUGFP
 	{ long double ldd = sfp2ld(x1p) * sfp2ld(x2p);
 	  long double sp = sfp2ld(&rv);
-	if (memcmp(&ldd, &sp, SZLD))
-	  fpwarn("soft_mul", sfp2ld(&rv), ldd);
+	if (debugfp_mismatch(sp, ldd))
+	  fpwarn("soft_mul", sp, ldd);
 	}
 #endif
         *x1p = rv;
@@ -1082,8 +1118,8 @@ soft_div(SFP x1p, SFP x2p, TWORD t)
 #ifdef DEBUGFP
 	{ long double ldd = sfp2ld(x1p) / sfp2ld(x2p);
 	  long double sp = sfp2ld(&rv);
-	if (memcmp(&ldd, &sp, SZLD))
-		fpwarn("soft_div", sfp2ld(&rv), ldd);
+	if (debugfp_mismatch(sp, ldd))
+		fpwarn("soft_div", sp, ldd);
 	}
 #endif
 	*x1p = rv;
@@ -1101,8 +1137,10 @@ soft_isz(SFP sfp)
 {
 	int r = LDBLPTR->classify(sfp) == SOFT_ZERO;
 #ifdef DEBUGFP
-	if ((sfp->debugfp == 0.0 && r == 0) || (sfp->debugfp != 0.0 && r == 1))
-		fpwarn("soft_isz", sfp->debugfp, (long double)r);
+	{ long double ld = sfp2ld(sfp);
+	if ((ld == 0.0 && r == 0) || (ld != 0.0 && r == 1))
+		fpwarn("soft_isz", ld, (long double)r);
+	}
 #endif
 	return r;
 }
@@ -1477,11 +1515,11 @@ strtosf(SFP sfp, char *str, TWORD tw)
 	LDBLPTR->make(sfp, rv, 0, e, &m);
 //	soft_fp2fp(sfp, tw);
 
-#ifdef DEBUGFP
+#if defined(DEBUGFP) && defined(PCC_DEBUGFP_NATIVE_STRTOLD)
 	{
 		long double ld = strtold(str, NULL);
 //		ld = tw == DOUBLE ? (double)ld : tw == FLOAT ? (float)ld : ld;
-		if (ld != sfp2ld(sfp))
+		if (debugfp_mismatch(sfp2ld(sfp), ld))
 			fpwarn("strtosf", sfp2ld(sfp), ld);
 	}
 #endif
@@ -1498,8 +1536,8 @@ soft_huge_val(SFP sfp)
 	LDBLPTR->make(sfp, SOFT_INFINITE, 0, 0, &a);
 
 #if defined(DEBUGFP) && defined(__builtin_huge_vall)
-	if (sfp->debugfp != __builtin_huge_vall())
-		fpwarn("soft_huge_val", sfp->debugfp, __builtin_huge_vall());
+	if (debugfp_mismatch(sfp2ld(sfp), __builtin_huge_vall()))
+		fpwarn("soft_huge_val", sfp2ld(sfp), __builtin_huge_vall());
 #endif
 }
 
@@ -1525,7 +1563,7 @@ soft_toush(SFP sfp, TWORD t, int *nbits)
 	MINTDECL(mant);
 
 #ifdef DEBUGFP
-	SD(("soft_toush: sfp %Lf %La t %d\n", sfp->debugfp, sfp->debugfp, t));
+	SD(("soft_toush: sfp %Lf %La t %d\n", sfp2ld(sfp), sfp2ld(sfp), t));
 #endif
 #if (SZLDOUBLE > 64)
 	SD(("soft_toushLD: %x %x %x\n", sfp->fp[2], sfp->fp[1], sfp->fp[0]));
@@ -1533,7 +1571,7 @@ soft_toush(SFP sfp, TWORD t, int *nbits)
 #ifdef DEBUGFP
 	if (sfdebug) {
 	union { double d; int i[2]; } di;
-	di.d = sfp->debugfp;
+	di.d = sfp2ld(sfp);
 	printf("soft_toush-D: d %08x %08x\n", di.i[1], di.i[0]);
 	}
 #endif
@@ -1545,19 +1583,20 @@ soft_toush(SFP sfp, TWORD t, int *nbits)
 	fpis[MKSF(t)]->make(&sf, typ, sign, exp, &mant);
 
 #ifdef DEBUGFP
-	if (0) { float ldf; double ldd; long double ldt;
+	if (0) { float ldf; double ldd; long double ldt, sfld;
 	ldt = (t == FLOAT ? (float)sfp2ld(sfp) :
 	    t == DOUBLE ? (double)sfp2ld(sfp) : (long double)sfp2ld(sfp));
+	sfld = sfp2ld(&sf);
 	ldf = ldt;
 	ldd = ldt;
-	if (t == FLOAT && memcmp(&ldf, &sf.debugfp, sizeof(float))) {
+	if (t == FLOAT && debugfp_mismatch(sfld, ldf)) {
 		fpwarn("soft_toush2", ldf, ldt);
 	}
-	if (t == DOUBLE && memcmp(&ldd, &sf.debugfp, sizeof(double))) {
+	if (t == DOUBLE && debugfp_mismatch(sfld, ldd)) {
 		fpwarn("soft_toush3", ldd, ldt);
 	}
-	if (t == LDOUBLE && memcmp(&ldt, &sf.debugfp, SZLD))
-		fpwarn("soft_toush4", (long double)sf.debugfp, ldt);
+	if (t == LDOUBLE && debugfp_mismatch(sfld, ldt))
+		fpwarn("soft_toush4", sfld, ldt);
 	}
 #endif
 	*nbits = fpis[MKSF(t)]->storage;
@@ -1831,4 +1870,3 @@ mdiv(MINT *n, MINT *d, MINT *q, MINT *r)
 	}
 	chomp(q);
 }
-

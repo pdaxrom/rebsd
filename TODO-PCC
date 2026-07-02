@@ -355,11 +355,17 @@ test gate.
   - Boot Malta with imported C PCC installed.
   - Compile, assemble, link, and run representative C programs on the target.
   - Verified result: `NATIVE_PCC_SMOKE_RC:0`.
-- [ ] Run the full PCC test gate from the target environment.
-  - The host-driven PCC regress gate is green for the current C policy except
-    expected policy/architecture skips.
-  - A fully native target-side regress run still needs a practical harness and
-    filesystem/time budget decision.
+- [x] Run the full PCC test gate from the target environment.
+  - The native rootfs harness stages `src/dev/pcc/pcc-tests/regress` under
+    `/root/pcc-tests` and runs `/root/run-native-pcc-regress.sh` on Malta.
+  - Current Malta target-side result with native `/usr/bin/cc` and `DEBUGFP`
+    enabled: 311 total checks, 281 compile pass, 30 expected compile fail,
+    0 unexpected compile fail; 271 runtime candidates, 271 pass,
+    0 unexpected runtime fail.
+  - ReBSD/native PCC `DEBUGFP` now decodes big-endian IEEE64 softfloat words
+    before comparing against native FPU results, treats NaN payload/sign
+    differences as class-equal, and keeps the `strtold()` oracle only for
+    host builds where native libc is a valid parser oracle.
 - [ ] Make the userland compiler selectable.
   - Default remains GCC until explicitly changed.
   - Add documented `gcc`/`pcc` selection, then build full userland with PCC on
@@ -426,7 +432,16 @@ test gate.
     dependencies.
 - [x] Boot Malta with native C PCC installed.
 - [x] Compile, assemble, link, and run C programs inside Malta.
-- [ ] Run the full PCC Malta test gate.
+- [x] Run the full PCC Malta test gate.
+  - `make -C sys/mips native-pcc-regress-runtime` passed on Malta QEMU.
+  - Result: `NATIVE_PCC_REGRESS_TOTAL:311`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:281`,
+    `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:271`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:271`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RC:0`.
 
 ## Temporary Compatibility Stubs To Close
 

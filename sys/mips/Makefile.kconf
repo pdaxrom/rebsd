@@ -37,6 +37,10 @@ PCC_REGRESS_SCRIPT = $(TOPSRC)/sys/mips/tools/pcc-regress.py
 PCC_REGRESS_OUT ?= /private/tmp/rebsd-pcc-tests
 PCC_REGRESS_MANIFEST ?= /private/tmp/rebsd-pcc-tests.manifest
 PCC_REGRESS_LOG ?= /private/tmp/rebsd-pcc-runtime.log
+NATIVE_PCC_REGRESS_MANIFEST ?= /private/tmp/rebsd-native-pcc-tests.manifest
+NATIVE_PCC_REGRESS_LOG ?= /private/tmp/rebsd-native-pcc-tests.log
+NATIVE_PCC_REGRESS_TIMEOUT ?= 1200
+NATIVE_PCC_REGRESS_SILENCE_TIMEOUT ?= 300
 LINPACK_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/tools/linpack-smoke.py
 LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
 LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-linpack-smoke
@@ -119,7 +123,8 @@ run-net: unix.elf
 .PHONY: smoke-host-portablecc pcc-regress-compile pcc-regress-stage \
         pcc-regress-runtime pcc-regress-summary linpack-smoke-build \
         linpack-smoke-stage linpack-smoke-runtime \
-        native-pcc-smoke-runtime FORCE
+        native-pcc-smoke-runtime native-pcc-regress-stage \
+        native-pcc-regress-runtime FORCE
 smoke-host-portablecc: $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SMOKE_SCRIPT)
 	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
@@ -195,6 +200,25 @@ native-pcc-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	    --ram $(MALTA_QEMU_RAM) \
 	    --command '/root/native-pcc-smoke.sh; echo NATIVE_PCC_SMOKE_RC:$$?' \
 	    --expect "NATIVE_PCC_SMOKE_RC:0"
+
+native-pcc-regress-stage: $(MIPS_ROOTFS_BUILD_MANIFEST) $(PCC_REGRESS_SCRIPT)
+	python3 $(PCC_REGRESS_SCRIPT) native-stage \
+	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
+	    --manifest $(abspath $(MIPS_ROOTFS_BUILD_MANIFEST)) \
+	    --manifest-out $(NATIVE_PCC_REGRESS_MANIFEST)
+	cp $(NATIVE_PCC_REGRESS_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
+
+native-pcc-regress-runtime: native-pcc-regress-stage $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) unix.elf
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel unix.elf \
+	    --log $(NATIVE_PCC_REGRESS_LOG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout $(NATIVE_PCC_REGRESS_TIMEOUT) \
+	    --silence-timeout $(NATIVE_PCC_REGRESS_SILENCE_TIMEOUT) \
+	    --command '/root/run-native-pcc-regress.sh; echo NATIVE_PCC_REGRESS_RC:$$?' \
+	    --expect "NATIVE_PCC_REGRESS_RC:0"
 
 FORCE:
 

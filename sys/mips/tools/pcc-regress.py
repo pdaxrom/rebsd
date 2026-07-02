@@ -173,6 +173,194 @@ def build_test_list(rootfs):
     return tests
 
 
+def shell_quote(value):
+    return shlex.quote(str(value))
+
+
+def native_out_name(test):
+    name = test["name"]
+    flags = list(test["flags"])
+    if "-S" in flags:
+        return f"{out_name(name)}.s"
+    if "-c" in flags:
+        return f"{out_name(name)}.o"
+    if "-E" in flags:
+        return f"{out_name(name)}.i"
+    if "-shared" in flags:
+        return f"{out_name(name)}.so"
+    if name == "c99__basic006":
+        return "basic006.out"
+    return out_name(name)
+
+
+def native_test_command(test):
+    flags = list(test["flags"])
+    srcs = list(test["srcs"])
+    post_flags = [
+        f for f in flags
+        if str(f).endswith(".a") or str(f).startswith("-l") or str(f).startswith("-L")
+    ]
+    pre_flags = [f for f in flags if f not in post_flags]
+    post_flags = ["/usr/lib/libm.a" if str(f).endswith("libm.a") else f for f in post_flags]
+    return " ".join([
+        *(shell_quote(part) for part in pre_flags),
+        "-o",
+        f'"$bindir/{native_out_name(test)}"',
+        *(shell_quote(part) for part in srcs),
+        *(shell_quote(part) for part in post_flags),
+    ])
+
+
+def native_emit_compile_result(lines, test, expected_compile_failures):
+    name = test["name"]
+    kind = test["kind"]
+    expected = name in expected_compile_failures
+    out = f'"$bindir/{native_out_name(test)}"'
+    lines.append("rc=$?")
+    lines.append('cd "$work" || exit 99')
+    if kind == "expect-fail":
+        lines += [
+            "if [ $rc -ne 0 ]; then",
+            "    expected_compile_fail=`expr $expected_compile_fail + 1`",
+            f"    echo NATIVE_PCC_RESULT {name} compile-expected-fail $rc",
+            "else",
+            "    unexpected_compile_fail=`expr $unexpected_compile_fail + 1`",
+            f"    echo NATIVE_PCC_RESULT {name} compile-unexpected-pass $rc",
+            f"    rm -f {out}",
+            "fi",
+        ]
+        return
+
+    lines += [
+        "if [ $rc -ne 0 ]; then",
+    ]
+    if expected:
+        lines += [
+            "    expected_compile_fail=`expr $expected_compile_fail + 1`",
+            f"    echo NATIVE_PCC_RESULT {name} compile-expected-fail $rc",
+        ]
+    else:
+        lines += [
+            "    unexpected_compile_fail=`expr $unexpected_compile_fail + 1`",
+            f"    echo NATIVE_PCC_RESULT {name} compile-unexpected-fail $rc",
+        ]
+    lines += [
+        "else",
+        f"    if [ ! -s {out} ]; then",
+        "        unexpected_compile_fail=`expr $unexpected_compile_fail + 1`",
+        f"        echo NATIVE_PCC_RESULT {name} compile-empty-output 0",
+        "    else",
+        "        compile_pass=`expr $compile_pass + 1`",
+        f"        echo NATIVE_PCC_RESULT {name} compile-pass 0",
+    ]
+    if kind == "runtime":
+        args = " ".join(shell_quote(a) for a in test.get("args", []))
+        binary = native_out_name(test)
+        lines += [
+            "        runtime_total=`expr $runtime_total + 1`",
+            f"        echo NATIVE_PCC_RUN {name}",
+            '        cd "$bindir" || exit 99',
+            f"        ./{shell_quote(binary)} {args} >/dev/null 2>&1",
+            "        rc=$?",
+            '        cd "$work" || exit 99',
+            f"        echo NATIVE_PCC_RESULT {name} runtime $rc",
+            "        if [ $rc -eq 0 ]; then",
+            "            runtime_pass=`expr $runtime_pass + 1`",
+            "        else",
+            "            unexpected_runtime_fail=`expr $unexpected_runtime_fail + 1`",
+            "        fi",
+        ]
+    lines += [
+        "    fi",
+        f"    rm -f {out}",
+        "fi",
+    ]
+
+
+def native_regress_script(expected_compile_failures):
+    tests = build_test_list(Path("/"))
+    lines = [
+        "#!/bin/sh",
+        "src=/root/pcc-tests/regress",
+        "work=/var/tmp/native-pcc-regress",
+        'bindir="$work/bin"',
+        'rm -rf "$work"',
+        'mkdir -p "$bindir" || exit 1',
+        "total=0",
+        "compile_pass=0",
+        "expected_compile_fail=0",
+        "unexpected_compile_fail=0",
+        "runtime_total=0",
+        "runtime_pass=0",
+        "unexpected_runtime_fail=0",
+        "echo NATIVE_PCC_REGRESS_BEGIN",
+    ]
+
+    for test in tests:
+        cwd = Path(test["cwd"]).relative_to(REGRESS)
+        lines += [
+            "total=`expr $total + 1`",
+            f"echo NATIVE_PCC_COMPILE {test['name']}",
+            f'cd "$src/{cwd.as_posix()}" || exit 99',
+            f"cc {native_test_command(test)}",
+        ]
+        native_emit_compile_result(lines, test, expected_compile_failures)
+
+    lines += [
+        "total=`expr $total + 1`",
+        "echo NATIVE_PCC_COMPILE misc__shlib2",
+        'shlibwork="$work/misc-shlib2"',
+        'mkdir -p "$shlibwork" || exit 1',
+        'cd "$src/misc/shlib" || exit 99',
+        'cc -c -o "$shlibwork/lib.o" lib.c',
+        "rc=$?",
+        "if [ $rc -eq 0 ]; then",
+        '    ar r "$shlibwork/lib.a" "$shlibwork/lib.o"',
+        "    rc=$?",
+        "fi",
+        "if [ $rc -eq 0 ]; then",
+        '    cc -Wall -o "$bindir/misc__shlib2" main.c "$shlibwork/lib.a"',
+        "    rc=$?",
+        "fi",
+        'cd "$work" || exit 99',
+        "if [ $rc -ne 0 ]; then",
+        "    unexpected_compile_fail=`expr $unexpected_compile_fail + 1`",
+        "    echo NATIVE_PCC_RESULT misc__shlib2 compile-unexpected-fail $rc",
+        "else",
+        "    compile_pass=`expr $compile_pass + 1`",
+        "    echo NATIVE_PCC_RESULT misc__shlib2 compile-pass 0",
+        "    runtime_total=`expr $runtime_total + 1`",
+        "    echo NATIVE_PCC_RUN misc__shlib2",
+        '    cd "$bindir" || exit 99',
+        "    ./misc__shlib2 >/dev/null 2>&1",
+        "    rc=$?",
+        '    cd "$work" || exit 99',
+        "    echo NATIVE_PCC_RESULT misc__shlib2 runtime $rc",
+        "    if [ $rc -eq 0 ]; then",
+        "        runtime_pass=`expr $runtime_pass + 1`",
+        "    else",
+        "        unexpected_runtime_fail=`expr $unexpected_runtime_fail + 1`",
+        "    fi",
+        "fi",
+        'rm -rf "$shlibwork" "$bindir/misc__shlib2"',
+        'rm -rf "$work"',
+        "echo NATIVE_PCC_REGRESS_TOTAL:$total",
+        "echo NATIVE_PCC_REGRESS_COMPILE_PASS:$compile_pass",
+        "echo NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:$expected_compile_fail",
+        "echo NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:$unexpected_compile_fail",
+        "echo NATIVE_PCC_REGRESS_RUNTIME_TOTAL:$runtime_total",
+        "echo NATIVE_PCC_REGRESS_RUNTIME_PASS:$runtime_pass",
+        "echo NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:$unexpected_runtime_fail",
+        "if [ $unexpected_compile_fail -eq 0 ]; then",
+        "    if [ $unexpected_runtime_fail -eq 0 ]; then",
+        "        exit 0",
+        "    fi",
+        "fi",
+        "exit 1",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 class CompilerRun:
     def __init__(self, pcc, rootfs, out, ar):
         self.pcc = Path(pcc)
@@ -381,6 +569,61 @@ def command_stage(args):
     return 0
 
 
+def manifest_path(rootfs, path):
+    return "/" + path.relative_to(rootfs).as_posix()
+
+
+def command_native_stage(args):
+    rootfs = Path(args.rootfs)
+    manifest = Path(args.manifest)
+    manifest_out = Path(args.manifest_out)
+    expected = set(DEFAULT_COMPILE_FAILURES)
+    expected.update(args.expected_compile_fail)
+
+    test_root = rootfs / "root/pcc-tests"
+    regress_dst = test_root / "regress"
+    if test_root.exists():
+        shutil.rmtree(test_root)
+    regress_dst.mkdir(parents=True)
+    for src in REGRESS.rglob("*"):
+        rel = src.relative_to(REGRESS)
+        dst = regress_dst / rel
+        if src.is_dir():
+            dst.mkdir(parents=True, exist_ok=True)
+        elif src.is_file():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+            os.chmod(dst, 0o644)
+
+    run_dst = rootfs / "root/run-native-pcc-regress.sh"
+    run_dst.write_text(native_regress_script(expected))
+    os.chmod(run_dst, 0o775)
+
+    dirs = [test_root] + sorted(
+        [p for p in test_root.rglob("*") if p.is_dir()],
+        key=lambda p: p.as_posix(),
+    )
+    files = sorted(
+        [p for p in test_root.rglob("*") if p.is_file()],
+        key=lambda p: p.as_posix(),
+    )
+
+    text = manifest.read_text()
+    with manifest_out.open("w") as f:
+        f.write(text)
+        if text and not text.endswith("\n"):
+            f.write("\n")
+        for path in dirs:
+            f.write(f"dir {manifest_path(rootfs, path)}\nmode 0775\n")
+        for path in files:
+            f.write(f"file {manifest_path(rootfs, path)}\nmode 0644\n")
+        f.write("file /root/run-native-pcc-regress.sh\nmode 0775\n")
+
+    print(f"staged {len(files)} pcc-test source files")
+    print(manifest_out)
+    return 0
+
+
 def parse_runtime_log(log):
     text = Path(log).read_text(errors="replace")
     return [(name, int(rc)) for name, rc in re.findall(r"RESULT\s+([^ \r\n]+)\s+([0-9]+)", text)]
@@ -523,6 +766,13 @@ def main():
     p.add_argument("--manifest", required=True)
     p.add_argument("--manifest-out", required=True)
     p.set_defaults(func=command_stage)
+
+    p = sub.add_parser("native-stage")
+    p.add_argument("--rootfs", required=True)
+    p.add_argument("--manifest", required=True)
+    p.add_argument("--manifest-out", required=True)
+    p.add_argument("--expected-compile-fail", action="append", default=[])
+    p.set_defaults(func=command_native_stage)
 
     p = sub.add_parser("run")
     p.add_argument("--malta-dir", required=True)
