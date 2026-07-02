@@ -157,6 +157,20 @@ test gate.
     preserving the existing rounded post-call cleanup.
   - This fixed `jira/PCC-85`, which was faulting in `_doprnt` at
     `sdc1 $f26,504(sp)` because `$sp` reached GCC-built libc misaligned.
+  - The Linpack smoke exposed a second case in the same area: internal MIPS
+    FP bit-bounce argument nodes must not be counted as extra stack-pushed
+    arguments during post-call cleanup.
+  - `lastcall()` now derives the cleanup size from actual `FUNARG` pushes plus
+    the ABI home area/pad, fixing an 8-byte stack over-clean after calls such
+    as `daxpy_r(int, double, ptr, int, ptr, int)`.
+- [x] Keep MIPS register coalescing inside a single register class.
+  - The optimizer now refuses GP/FP cross-class move coalescing instead of
+    assigning one temporary to incompatible integer and FPU registers.
+  - FP register arguments and varargs bit-copies are lowered through typed
+    stack views, so the allocator does not see one temp as both raw integer
+    bits and a floating-point value.
+  - This fixed invalid optimized MIPS/FPU output seen while bringing up the
+    PCC-built Linpack benchmark.
 - [x] Fix MIPS memory integer-to-double conversion.
   - `SOREG TWORD -> double/long double` conversion now loads the 32-bit
     integer word into an FPU register with `l.s` before `cvt.d.w`.
@@ -292,12 +306,24 @@ test gate.
     hard-float o32 ABI, and FP-to-`long long` helper results are modeled as
     `$v0/$v1` returns instead of stale `$a0/$a1` arguments.
   - This fixed `pcclist/basic005` on Malta.
-- [ ] Turn the temporary `pcc-tests` harness into a tracked test target.
-  - It must add runtime payload files to the generated Malta rootfs manifest,
-    not only copy them into `rootfs.stage`, because `fsutil` installs strictly
-    from the manifest.
-  - It must preserve upstream test expectations such as `c99/basic006`
+- [x] Turn the temporary `pcc-tests` harness into a tracked test target.
+  - `make -C sys/mips pcc-regress-compile` builds the upstream
+    `src/dev/pcc/pcc-tests/regress` matrix with the host ReBSD/MIPS PCC.
+  - `make -C sys/mips pcc-regress-runtime` stages linked runtime binaries
+    through the generated Malta rootfs manifest, rebuilds `unix.elf`, and runs
+    them under Malta QEMU.
+  - The harness preserves upstream runtime expectations such as `c99/basic006`
     observing `argv[0] == "./basic006.out"`.
+- [x] Add a Linpack GCC/PCC smoke benchmark.
+  - `make -C sys/mips linpack-smoke-runtime` builds the same Linpack source
+    with the existing GCC wrapper and imported PCC, stages `/root/linpack-gcc`
+    plus `/root/linpack-pcc`, then runs both on Malta.
+  - Runtime defaults are `LINPACK_ARRAY_SIZE=120` and
+    `LINPACK_MIN_SECONDS=1`; the make variables `LINPACK_SMOKE_ARRAY_SIZE`
+    and `LINPACK_SMOKE_MIN_SECONDS` override them for longer comparisons.
+  - `libm.a` now includes `fabs.o`, so Linpack links cleanly with `-lm`.
+  - Clean Malta runtime baseline: GCC about 14.7 MFLOPS and PCC about
+    12.4-13.0 MFLOPS with `LINPACK_RC:0` at the default smoke size.
 
 ## Phase 3: Native PCC in Malta Rootfs
 

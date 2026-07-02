@@ -116,6 +116,11 @@ mode 0775
 
 file /root/libc-string-smoke.c
 
+file /root/linpack.c
+
+file /root/linpack-smoke.sh
+mode 0775
+
 file /root/types-smoke.sh
 mode 0775
 

@@ -47,6 +47,13 @@
 #define	n_type ptype
 #undef n_df
 #define n_df pdf
+typedef struct ssdesc mips_ap_t;
+#define MIPS_STACKTEMP_FLAGS SSTMT
+#define MIPS_NODE_QUAL(p) ((p)->pqual)
+#else
+typedef struct attr mips_ap_t;
+#define MIPS_STACKTEMP_FLAGS STEMP
+#define MIPS_NODE_QUAL(p) ((p)->n_qual)
 #endif
 
 #ifdef MIPS_HARDFLOAT_O32_ABI
@@ -207,6 +214,19 @@ putintemp(struct symtab *sym)
 	ecomp(p);
 }
 
+static NODE *
+mips_symview(struct symtab *sp, TWORD t)
+{
+	NODE *p;
+
+	p = nametree(sp);
+	p->n_type = t;
+	p->n_df = NULL;
+	p->n_ap = NULL;
+	MIPS_NODE_QUAL(p) = 0;
+	return p;
+}
+
 /* setup the hidden pointer to struct return parameter
  * used by bfcode() */
 static void
@@ -361,9 +381,8 @@ static void
 param_double(struct symtab *sym, int *regp, int dotemps)
 {
 	int reg = *regp;
-	NODE *p, *q, *t;
+	NODE *p, *q;
 	int navail;
-	int tmpnr;
 
 	/* alignment */
 	++reg;
@@ -381,23 +400,13 @@ param_double(struct symtab *sym, int *regp, int dotemps)
 		return;
 	}
 
-	t = tempnode(0, LONGLONG, 0, 0);
-	tmpnr = regno(t);
 	q = block(REG, NIL, NIL, LONGLONG, 0, 0);
 	q->n_rval = A0A1 + (reg - A0);
-	p = buildtree(ASSIGN, t, q);
+	p = mips_symview(sym, LONGLONG);
+	p = buildtree(ASSIGN, p, q);
 	ecomp(p);
-
-	if (dotemps) {
-		sym->soffset = tmpnr;
-		sym->sflags |= STNODE;
-	} else {
-		q = tempnode(tmpnr, sym->stype, sym->sdf, sym->sap);
-		p = nametree(sym);
-		p = buildtree(ASSIGN, p, q);
-		ecomp(p);
-	}
 	*regp = reg + 2;
+	(void)dotemps;
 }
 
 /*
@@ -408,25 +417,14 @@ param_double(struct symtab *sym, int *regp, int dotemps)
 static void
 param_float(struct symtab *sym, int *regp, int dotemps)
 {
-	NODE *p, *q, *t;
-	int tmpnr;
+	NODE *p, *q;
 
-	t = tempnode(0, INT, 0, 0);
-	tmpnr = regno(t);
 	q = block(REG, NIL, NIL, INT, 0, 0);
 	q->n_rval = (*regp)++;
-	p = buildtree(ASSIGN, t, q);
+	p = mips_symview(sym, INT);
+	p = buildtree(ASSIGN, p, q);
 	ecomp(p);
-
-	if (dotemps) {
-		sym->soffset = tmpnr;
-		sym->sflags |= STNODE;
-	} else {
-		q = tempnode(tmpnr, sym->stype, sym->sdf, sym->sap);
-		p = nametree(sym);
-		p = buildtree(ASSIGN, p, q);
-		ecomp(p);
-	}
+	(void)dotemps;
 }
 
 /*
@@ -599,6 +597,29 @@ mygenswitch(int num, TWORD type, struct swents **p, int n)
 
 /* setup call stack with a structure */
 /* called from moveargs() */
+static struct symtab *
+mips_stacktemp(TWORD t, union dimfun *df, mips_ap_t *ap)
+{
+	struct symtab *sp;
+
+	sp = getsymtab("0mipsarg", MIPS_STACKTEMP_FLAGS);
+	sp->stype = t;
+	sp->squal = 0;
+	sp->sdf = df;
+	sp->sap = ap;
+	sp->sclass = AUTO;
+	sp->soffset = NOOFFSET;
+	sp->sflags = 0;
+	oalloc(sp, &autooff);
+	return sp;
+}
+
+static NODE *
+mips_stackview(struct symtab *sp, TWORD t)
+{
+	return mips_symview(sp, t);
+}
+
 static NODE *
 movearg_struct(NODE *p, NODE *parent, int *regp)
 {
@@ -798,11 +819,15 @@ moveargs(NODE *p, int *regp
 	} else if (DEUNSIGN(r->n_type) == LONGLONG) {
 		*rp = movearg_64bit(r, regp);
 	} else if (r->n_type == DOUBLE || r->n_type == LDOUBLE) {
-		/* XXX bounce in and out of temporary to change to longlong */
-		NODE *t1 = tempnode(0, LONGLONG, 0, 0);
-		int tmpnr = regno(t1);
-		NODE *t2 = tempnode(tmpnr, r->n_type, r->n_df, r->n_ap);
-		t1 =  movearg_64bit(t1, regp);
+		/*
+		 * Varargs pass FP values through integer argument slots.  Keep
+		 * the bit bounce in memory so xtemps does not assign one TEMP
+		 * to both FP and integer register classes.
+		 */
+		struct symtab *sp = mips_stacktemp(r->n_type, r->n_df, r->n_ap);
+		NODE *t1 = mips_stackview(sp, LONGLONG);
+		NODE *t2 = mips_stackview(sp, r->n_type);
+		t1 = movearg_64bit(t1, regp);
 		r = block(ASSIGN, t2, r, r->n_type, r->n_df, r->n_ap);
 		if (p->n_op == CM) {
 			p->n_left = buildtree(CM, p->n_left, t1);
@@ -811,11 +836,14 @@ moveargs(NODE *p, int *regp
 			p = buildtree(CM, t1, r);
 		}
 	} else if (r->n_type == FLOAT) {
-		/* XXX bounce in and out of temporary to change to int */
-		NODE *t1 = tempnode(0, INT, 0, 0);
-		int tmpnr = regno(t1);
-		NODE *t2 = tempnode(tmpnr, r->n_type, r->n_df, r->n_ap);
-		t1 =  movearg_32bit(t1, regp);
+		/*
+		 * Same memory bounce as double, but through a single integer
+		 * argument slot.
+		 */
+		struct symtab *sp = mips_stacktemp(r->n_type, r->n_df, r->n_ap);
+		NODE *t1 = mips_stackview(sp, INT);
+		NODE *t2 = mips_stackview(sp, r->n_type);
+		t1 = movearg_32bit(t1, regp);
 		r = block(ASSIGN, t2, r, r->n_type, r->n_df, r->n_ap);
 		if (p->n_op == CM) {
 			p->n_left = buildtree(CM, p->n_left, t1);

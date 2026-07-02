@@ -804,6 +804,13 @@ moveadd(REGW *def, REGW *use)
 
 	if (def == use)
 		return; /* no move to itself XXX - ``shouldn't happen'' */
+	if (CLASS(def) != CLASS(use)) {
+#ifdef PCC_DEBUG
+		RDEBUG(("moveadd: skip class-crossing move def %d:%d use %d:%d\n",
+		    ASGNUM(def), CLASS(def), ASGNUM(use), CLASS(use)));
+#endif
+		return;
+	}
 #ifdef PCC_DEBUG
 	RDEBUG(("moveadd: def %d use %d\n", ASGNUM(def), ASGNUM(use)));
 #endif
@@ -2391,7 +2398,7 @@ colfind(int okColors, REGW *r)
 		if (ONLIST(w) != &coloredNodes && ONLIST(w) != &precolored)
 			continue; /* Not yet colored */
 		if (CLASS(w) != CLASS(r))
-			comperr("colfind: move between classes");
+			continue; /* Different classes cannot share a color. */
 
 		for (c = 0; c < regK[CLASS(w)]; c++)
 			if (color2reg(c, CLASS(w)) == COLOR(w))
