@@ -104,6 +104,14 @@ N64_NATIVE_LIBS = crt0.o libc.a libm.a libpcc.a
 N64_NATIVE_PCC_BUILD = n64-native-pcc-build
 N64_NATIVE_PCC_DIR = n64-native-pcc
 N64_NATIVE_PCC_STAMP = $(N64_NATIVE_PCC_DIR)/.built
+N64_PCC_REGRESS_SCRIPT = $(TOPSRC)/sys/mips/tools/pcc-regress.py
+N64_PCC_TEST_SRCS = $(shell find $(TOPSRC)/src/dev/pcc/pcc-tests/regress \
+                   -type f 2>/dev/null)
+N64_PCC_HW_REGRESS_MANIFEST = rootfs.pcc-hw-regress.manifest
+N64_LINPACK_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/tools/linpack-smoke.py
+N64_LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
+N64_LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-n64-linpack-smoke
+N64_LINPACK_SMOKE_MANIFEST = rootfs.linpack-smoke.manifest
 N64_PCC_HOST_BUILD ?= /private/tmp/rebsd-n64-pcc-build
 N64_PCC_HOST_PREFIX ?= /private/tmp/rebsd-n64-pcc-install
 N64_HOST_PCC = $(N64_PCC_HOST_PREFIX)/bin/mips-rebsd-pcc
@@ -582,6 +590,36 @@ rootfs.img: $(FSUTIL) $(N64_ROOTFS_BUILD_MANIFEST) $(N64_ROOTFS_USER_STAMP)
 	rm -f $@
 	$(FSUTIL) --new --endian=big --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_BUILD_MANIFEST) $@ $(N64_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
+
+.PHONY: pcc-hw-test-stage pcc-hw-test-image
+pcc-hw-test-stage: $(N64_ROOTFS_BUILD_MANIFEST) $(N64_HOST_PCC) \
+    $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_AOUT_AR) \
+    $(N64_LINPACK_SMOKE_SCRIPT) $(N64_LINPACK_SMOKE_SRC) \
+    $(N64_PCC_REGRESS_SCRIPT) $(N64_PCC_TEST_SRCS)
+	python3 $(N64_LINPACK_SMOKE_SCRIPT) build \
+	    --source $(abspath $(N64_LINPACK_SMOKE_SRC)) \
+	    --out $(N64_LINPACK_SMOKE_OUT) \
+	    --top $(abspath $(TOPSRC)) \
+	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
+	    --gcc-wrapper $(abspath $(N64_NATIVE_CC_SCRIPT)) \
+	    --gcc-prefix $(N64_PREFIX) \
+	    --as $(abspath $(N64_NATIVE_AS)) \
+	    --ld $(abspath $(N64_NATIVE_LD)) \
+	    --pcc $(abspath $(N64_HOST_PCC))
+	python3 $(N64_LINPACK_SMOKE_SCRIPT) stage \
+	    --out $(N64_LINPACK_SMOKE_OUT) \
+	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
+	    --manifest $(abspath $(N64_ROOTFS_BUILD_MANIFEST)) \
+	    --manifest-out $(abspath $(N64_LINPACK_SMOKE_MANIFEST))
+	python3 $(N64_PCC_REGRESS_SCRIPT) native-stage \
+	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
+	    --manifest $(abspath $(N64_LINPACK_SMOKE_MANIFEST)) \
+	    --manifest-out $(abspath $(N64_PCC_HW_REGRESS_MANIFEST))
+
+pcc-hw-test-image: pcc-hw-test-stage
+	rm -f rootfs.img kernel.z64 preflight.z64
+	$(MAKE) N64_ROOTFS_BUILD_MANIFEST=$(N64_PCC_HW_REGRESS_MANIFEST) \
+	    rootfs.img kernel.z64 preflight.z64
 
 $(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
 	$(N64_PREFIX)gcc $(N64_ARCH) $(N64_CODE) -x assembler-with-cpp -c $< -o $@
