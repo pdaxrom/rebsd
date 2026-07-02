@@ -47,6 +47,8 @@
  */
 #define IS_LOCAL(s) ((s)->n_name[0] == 'L' || (s)->n_name[0] == '.' || \
                      (s)->n_name[0] == '$')
+#define REBSD_CTORS_SIZE_SYM ".__rebsd_ctors_size"
+#define REBSD_DTORS_SIZE_SYM ".__rebsd_dtors_size"
 
 /*
  * Types of lexemes.
@@ -103,6 +105,8 @@ enum {
     STEXT,
     SDATA,
     SSTRNG,
+    SCTORS,
+    SDTORS,
     SBSS,
     SEXT,
     SABS, /* special case for getexpr() */
@@ -131,6 +135,8 @@ const int segmtype[] = {
     N_TEXT,  /* STEXT */
     N_DATA,  /* SDATA */
     N_STRNG, /* SSTRNG */
+    N_CTORS, /* SCTORS */
+    N_DTORS, /* SDTORS */
     N_BSS,   /* SBSS */
     N_UNDF,  /* SEXT */
     N_ABS,   /* SABS */
@@ -143,6 +149,8 @@ const int segmrel[] = {
     RTEXT,  /* STEXT */
     RDATA,  /* SDATA */
     RSTRNG, /* SSTRNG */
+    RCTORS, /* SCTORS */
+    RDTORS, /* SDTORS */
     RBSS,   /* SBSS */
     REXT,   /* SEXT */
     RABS,   /* SABS */
@@ -158,6 +166,9 @@ const int typesegm[] = {
     SDATA,  /* N_DATA */
     SBSS,   /* N_BSS */
     SSTRNG, /* N_STRNG */
+    SEXT,   /* N_COMM */
+    SCTORS, /* N_CTORS */
+    SDTORS, /* N_DTORS */
 };
 
 /*
@@ -486,7 +497,7 @@ int line; /* Source line number */
 int xflags, Xflag, uflag;
 int stlength; /* Symbol table size in bytes */
 int stalign;  /* Symbol table alignment */
-unsigned tbase, dbase, adbase, bbase;
+unsigned tbase, dbase, adbase, ctbase, dtbase, bbase;
 struct nlist stab[STSIZE];
 int stabfree;
 char space[STSIZE * 8]; /* Area for symbol names */
@@ -608,7 +619,7 @@ void fputsym(struct nlist *s, FILE *file)
 }
 
 /*
- * Create temporary files for STEXT, SDATA and SSTRNG segments.
+ * Create temporary files for allocatable output segments.
  */
 void startup()
 {
@@ -939,8 +950,8 @@ void setsection()
         { ".sdata", 6, SDATA },   { ".rodata", 7, SSTRNG },
         { ".bss", 4, SBSS },      { ".sbss", 5, SBSS },
         { ".init", 5, STEXT },     { ".fini", 5, STEXT },
-        { ".ctors", 6, SDATA },   { ".dtors", 6, SDATA },
-        { ".init_array", 11, SDATA }, { ".fini_array", 11, SDATA },
+        { ".ctors", 6, SCTORS },   { ".dtors", 6, SDTORS },
+        { ".init_array", 11, SCTORS }, { ".fini_array", 11, SDTORS },
         { ".eh_frame", 9, SSTRNG }, { ".mdebug", 7, SSTRNG }, { 0 },
     };
 
@@ -2440,6 +2451,10 @@ void pass1()
             align(2);
             segm = SSTRNG;
             align(2);
+            segm = SCTORS;
+            align(2);
+            segm = SDTORS;
+            align(2);
             segm = SBSS;
             align(2);
             return;
@@ -2880,9 +2895,32 @@ int findlabel(int addr, int sym)
     return 0;
 }
 
+int is_rebsd_metadata_symbol(struct nlist *sp)
+{
+    return strcmp(sp->n_name, REBSD_CTORS_SIZE_SYM) == 0 ||
+        strcmp(sp->n_name, REBSD_DTORS_SIZE_SYM) == 0;
+}
+
+void define_rebsd_metadata_symbol(const char *sym, unsigned value)
+{
+    int idx;
+
+    if (strlen(sym) >= sizeof(name))
+        uerror("metadata symbol name too long");
+    strcpy(name, sym);
+    idx = lookname();
+    stab[idx].n_value = value;
+    stab[idx].n_type = N_ABS;
+}
+
 void middle()
 {
     register int i, snum, nbytes;
+
+    if (count[SCTORS] || count[SDTORS]) {
+        define_rebsd_metadata_symbol(REBSD_CTORS_SIZE_SYM, count[SCTORS]);
+        define_rebsd_metadata_symbol(REBSD_DTORS_SIZE_SYM, count[SDTORS]);
+    }
 
     stlength = 0;
     for (snum = 0, i = 0; i < stabfree; i++) {
@@ -2906,7 +2944,9 @@ void middle()
         if (xflags)
             newindex[i] = snum;
 
-        if (!xflags || (stab[i].n_type & N_EXT) || (Xflag && !IS_LOCAL(&stab[i]))) {
+        if (!xflags || (stab[i].n_type & N_EXT) ||
+            is_rebsd_metadata_symbol(&stab[i]) ||
+            (Xflag && !IS_LOCAL(&stab[i]))) {
             stlength += 2 + WORDSZ + stab[i].n_len;
             snum++;
         }
@@ -2925,7 +2965,7 @@ void makeheader(int rtsize, int rdsize)
 
     hdr.a_midmag = RMAGIC;
     hdr.a_text = count[STEXT];
-    hdr.a_data = count[SDATA] + count[SSTRNG];
+    hdr.a_data = count[SDATA] + count[SSTRNG] + count[SCTORS] + count[SDTORS];
     hdr.a_bss = count[SBSS];
     hdr.a_reltext = rtsize;
     hdr.a_reldata = rdsize;
@@ -2989,6 +3029,12 @@ unsigned makeword(unsigned opcode, struct reloc *relinfo, unsigned offset)
     case RSTRNG:
         opcode = relocate(opcode, adbase, relinfo);
         break;
+    case RCTORS:
+        opcode = relocate(opcode, ctbase, relinfo);
+        break;
+    case RDTORS:
+        opcode = relocate(opcode, dtbase, relinfo);
+        break;
     case RBSS:
         opcode = relocate(opcode, bbase, relinfo);
         break;
@@ -3019,6 +3065,10 @@ unsigned makeword(unsigned opcode, struct reloc *relinfo, unsigned offset)
                 offset -= dbase;
             else if (segm == SSTRNG)
                 offset -= adbase;
+            else if (segm == SCTORS)
+                offset -= ctbase;
+            else if (segm == SDTORS)
+                offset -= dtbase;
             offset += (opcode & 0xffff) << 2;
             opcode &= ~0xffff;
             opcode |= (offset >> 2) & 0xffff;
@@ -3045,7 +3095,9 @@ void pass2()
     tbase = 0;
     dbase = tbase + count[STEXT];
     adbase = dbase + count[SDATA];
-    bbase = adbase + count[SSTRNG];
+    ctbase = adbase + count[SSTRNG];
+    dtbase = ctbase + count[SCTORS];
+    bbase = dtbase + count[SDTORS];
 
     /* Adjust indexes in symbol name */
     for (i = 0; i < stabfree; i++) {
@@ -3062,6 +3114,12 @@ void pass2()
         case N_STRNG:
             stab[i].n_value += adbase;
             stab[i].n_type += N_DATA - N_STRNG;
+            break;
+        case N_CTORS:
+            stab[i].n_value += ctbase;
+            break;
+        case N_DTORS:
+            stab[i].n_value += dtbase;
             break;
         case N_BSS:
             stab[i].n_value += bbase;
@@ -3107,6 +3165,10 @@ int typerel(int t)
         return (RBSS);
     case N_STRNG:
         return (RDATA);
+    case N_CTORS:
+        return (RCTORS);
+    case N_DTORS:
+        return (RDTORS);
     case N_UNDF:
     case N_COMM:
     case N_FN:
@@ -3182,7 +3244,9 @@ void makesymtab()
     register int i;
 
     for (i = 0; i < stabfree; i++) {
-        if (!xflags || (stab[i].n_type & N_EXT) || (Xflag && stab[i].n_name[0] != 'L')) {
+        if (!xflags || (stab[i].n_type & N_EXT) ||
+            is_rebsd_metadata_symbol(&stab[i]) ||
+            (Xflag && stab[i].n_name[0] != 'L')) {
             fputsym(&stab[i], stdout);
         }
     }
@@ -3368,8 +3432,10 @@ int main(int argc, char *argv[])
     pass2();                   /* Second pass */
     rtsize = makereloc(STEXT); /* Emit relocation info: text */
     rtsize = alignreloc(rtsize);
-    rdsize = makereloc(SDATA);   /* data */
-    rdsize += makereloc(SSTRNG); /* rodata */
+    rdsize = makereloc(SDATA);    /* data */
+    rdsize += makereloc(SSTRNG);  /* rodata */
+    rdsize += makereloc(SCTORS);  /* constructors */
+    rdsize += makereloc(SDTORS);  /* destructors */
     rdsize = alignreloc(rdsize);
     makesymtab();               /* Emit symbol table */
     makeheader(rtsize, rdsize); /* Write a.out header */

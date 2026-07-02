@@ -277,7 +277,7 @@ check_exec "$partial_o" 00000106 00000020
 
 "$ld_bin" -EB -e start -o "$app_data" "$data_o" || exit 1
 check_exec "$app_data" 00000107 00000010
-check_field "$app_data" 8 00000004
+check_field "$app_data" 8 00000008
 check_field "$app_data" 28 00400000
 check_field "$app_data" 48 00400000
 

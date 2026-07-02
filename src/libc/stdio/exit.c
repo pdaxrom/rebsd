@@ -10,6 +10,7 @@ int errno;
 struct atexit *__atexit;        /* points to head of LIFO stack */
 
 extern void _cleanup();
+extern void __do_global_dtors();
 
 void
 exit (int code)
@@ -18,6 +19,7 @@ exit (int code)
 
     for (p = __atexit; p; p = p->next)
         (*p->func)();
+    __do_global_dtors();
     _cleanup();
     _exit (code);
 }

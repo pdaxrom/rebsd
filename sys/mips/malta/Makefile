@@ -45,6 +45,19 @@ PCC_HOST_BUILD ?= /private/tmp/rebsd-pcc-build
 PCC_HOST_PREFIX ?= /private/tmp/rebsd-pcc-install
 PCC_HOST_AS     = $(TOPSRC)/sys/mips/n64/n64-native-tools/as
 PCC_HOST_LD     = $(TOPSRC)/sys/mips/n64/n64-native-tools/ld
+PCC_HOST_AR     = $(TOPSRC)/sys/mips/n64/n64-native-tools/ar
+PCC_HOST_PCC    = $(PCC_HOST_PREFIX)/bin/mips-rebsd-pcc
+PCC_REGRESS_SCRIPT = $(TOPSRC)/sys/mips/tools/pcc-regress.py
+PCC_REGRESS_OUT ?= /private/tmp/rebsd-pcc-tests
+PCC_REGRESS_MANIFEST ?= /private/tmp/rebsd-pcc-tests.manifest
+PCC_REGRESS_LOG ?= /private/tmp/rebsd-pcc-runtime.log
+LINPACK_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/tools/linpack-smoke.py
+LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
+LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-linpack-smoke
+LINPACK_SMOKE_MANIFEST ?= /private/tmp/rebsd-linpack-smoke.manifest
+LINPACK_SMOKE_LOG ?= /private/tmp/rebsd-linpack-smoke.log
+LINPACK_SMOKE_ARRAY_SIZE ?= 120
+LINPACK_SMOKE_MIN_SECONDS ?= 1
 
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
                   -DROMFS_ENABLED \
@@ -177,13 +190,74 @@ run-net: unix.elf
 	    -netdev user,id=net0,guestfwd=tcp:10.0.2.100:2323-cmd:/bin/cat \
 	    -device ne2k_isa,netdev=net0,iobase=0x300,irq=9,mac=52:54:00:12:34:56
 
-.PHONY: smoke-host-portablecc FORCE
+.PHONY: smoke-host-portablecc pcc-regress-compile pcc-regress-stage \
+        pcc-regress-runtime pcc-regress-summary linpack-smoke-build \
+        linpack-smoke-stage linpack-smoke-runtime FORCE
 smoke-host-portablecc: $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SMOKE_SCRIPT)
 	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
 	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/include) \
 	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/lib) \
 	    $(abspath $(PCC_HOST_AS)) $(abspath $(PCC_HOST_LD))
+
+pcc-regress-compile: smoke-host-portablecc $(PCC_REGRESS_SCRIPT)
+	python3 $(PCC_REGRESS_SCRIPT) compile \
+	    --pcc $(abspath $(PCC_HOST_PCC)) \
+	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
+	    --out $(PCC_REGRESS_OUT) \
+	    --ar $(abspath $(PCC_HOST_AR))
+
+pcc-regress-stage: pcc-regress-compile $(MIPS_ROOTFS_BUILD_MANIFEST)
+	python3 $(PCC_REGRESS_SCRIPT) stage \
+	    --out $(PCC_REGRESS_OUT) \
+	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
+	    --manifest $(abspath $(MIPS_ROOTFS_BUILD_MANIFEST)) \
+	    --manifest-out $(PCC_REGRESS_MANIFEST)
+	cp $(PCC_REGRESS_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
+
+pcc-regress-runtime: pcc-regress-stage
+	$(MAKE) unix.elf
+	python3 $(PCC_REGRESS_SCRIPT) run \
+	    --malta-dir $(abspath .) \
+	    --kernel unix.elf \
+	    --log $(PCC_REGRESS_LOG) \
+	    --ram $(MALTA_QEMU_RAM)
+
+pcc-regress-summary: $(PCC_REGRESS_SCRIPT)
+	python3 $(PCC_REGRESS_SCRIPT) summarize \
+	    --out $(PCC_REGRESS_OUT) \
+	    --log $(PCC_REGRESS_LOG)
+
+linpack-smoke-build: smoke-host-portablecc $(LINPACK_SMOKE_SCRIPT) \
+    $(LINPACK_SMOKE_SRC)
+	python3 $(LINPACK_SMOKE_SCRIPT) build \
+	    --source $(abspath $(LINPACK_SMOKE_SRC)) \
+	    --out $(LINPACK_SMOKE_OUT) \
+	    --top $(abspath $(TOPSRC)) \
+	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
+	    --gcc-wrapper $(abspath $(TOPSRC)/sys/mips/n64/native/n64-aout-cc.sh) \
+	    --gcc-prefix $(MIPS_PREFIX) \
+	    --as $(abspath $(PCC_HOST_AS)) \
+	    --ld $(abspath $(PCC_HOST_LD)) \
+	    --pcc $(abspath $(PCC_HOST_PCC))
+
+linpack-smoke-stage: linpack-smoke-build $(MIPS_ROOTFS_BUILD_MANIFEST)
+	python3 $(LINPACK_SMOKE_SCRIPT) stage \
+	    --out $(LINPACK_SMOKE_OUT) \
+	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
+	    --manifest $(abspath $(MIPS_ROOTFS_BUILD_MANIFEST)) \
+	    --manifest-out $(LINPACK_SMOKE_MANIFEST)
+	cp $(LINPACK_SMOKE_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
+
+linpack-smoke-runtime: linpack-smoke-stage
+	$(MAKE) unix.elf
+	python3 $(LINPACK_SMOKE_SCRIPT) run \
+	    --malta-dir $(abspath .) \
+	    --kernel unix.elf \
+	    --log $(LINPACK_SMOKE_LOG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --array-size $(LINPACK_SMOKE_ARRAY_SIZE) \
+	    --min-seconds $(LINPACK_SMOKE_MIN_SECONDS)
 
 FORCE:
 

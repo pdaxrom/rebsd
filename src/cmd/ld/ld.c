@@ -66,6 +66,8 @@
 #endif
 #define SYMDEF "__.SYMDEF"
 #define IS_LOCSYM(s) ((s)->n_name[0] == 'L' || (s)->n_name[0] == '.')
+#define REBSD_CTORS_SIZE_SYM ".__rebsd_ctors_size"
+#define REBSD_DTORS_SIZE_SYM ".__rebsd_dtors_size"
 #define hexdig(c) ((c) <= '9' ? (c) - '0' : ((c) & 7) + 9)
 
 struct exec filhdr; /* aout header */
@@ -84,12 +86,19 @@ struct archdr { /* archive header */
 FILE *text, *reloc; /* input management */
 
 /* output management */
-FILE *outb, *toutb, *doutb, *troutb, *droutb, *soutb;
+FILE *outb, *toutb, *doutb, *ctoroutb, *dtoroutb;
+FILE *troutb, *droutb, *ctorroutb, *dtorroutb, *soutb;
 
 /* symbol management */
 struct local {
     unsigned locindex;       /* index to symbol in file */
     struct nlist *locsymbol; /* ptr to symbol table */
+};
+
+struct data_sections {
+    unsigned normal;
+    unsigned ctors;
+    unsigned dtors;
 };
 
 #define NSYM 1500
@@ -122,6 +131,7 @@ char *stdlibdirs[] = { "/lib", "/usr/lib", "/usr/local/lib", 0 };
  * internal symbols
  */
 struct nlist *p_etext, *p_edata, *p_end, *p_gp, *entrypt;
+struct nlist *p_ctor_list, *p_ctor_end, *p_dtor_list, *p_dtor_end;
 
 /*
  * options
@@ -135,21 +145,24 @@ int output_relinfo;
 int sflag;   /* discard all symbols */
 int dflag;   /* define common even with rflag */
 int verbose; /* verbose mode */
+int final_layout;
 
 /*
  * cumulative sizes set in pass 1
  */
-unsigned tsize, dsize, bsize, ssize, nsym;
+unsigned tsize, dsize, ctorsize, dtorsize, bsize, ssize, nsym;
+unsigned normal_dsize;
 
 /*
  * symbol relocation; both passes
  */
-unsigned ctrel, cdrel, cbrel;
+unsigned ctrel, cdrel, cctorrel, cdtorrel, cbrel;
 
 /*
  * used after pass 1
  */
-unsigned torigin, dorigin, borigin;
+unsigned torigin, dorigin, ctorigin, dtorigin, borigin;
+unsigned data_origin, ctor_origin, dtor_origin;
 
 /* gp control, MIPS specific */
 unsigned gpoffset = 0x8000; /* offset from data start */
@@ -256,6 +269,38 @@ int fgetsym(FILE *text, struct nlist *sym)
 void fputsym(struct nlist *s, FILE *file)
 {
     aout_write_sym(file, s);
+}
+
+int is_rebsd_metadata_symbol(struct nlist *sp)
+{
+    return strcmp(sp->n_name, REBSD_CTORS_SIZE_SYM) == 0 ||
+        strcmp(sp->n_name, REBSD_DTORS_SIZE_SYM) == 0;
+}
+
+void read_data_sections(unsigned loc, struct data_sections *sec)
+{
+    int symlen;
+
+    sec->ctors = 0;
+    sec->dtors = 0;
+    fseek(text, loc + N_SYMOFF(filhdr), 0);
+    for (;;) {
+        symlen = fgetsym(text, &cursym);
+        if (symlen == 0)
+            break;
+        if (is_rebsd_metadata_symbol(&cursym)) {
+            if ((cursym.n_type & N_TYPE) == N_ABS) {
+                if (strcmp(cursym.n_name, REBSD_CTORS_SIZE_SYM) == 0)
+                    sec->ctors = cursym.n_value;
+                else
+                    sec->dtors = cursym.n_value;
+            }
+        }
+        free(cursym.n_name);
+    }
+    if (sec->ctors > filhdr.a_data || sec->dtors > filhdr.a_data - sec->ctors)
+        error(2, "bad .ctors/.dtors metadata");
+    sec->normal = filhdr.a_data - sec->ctors - sec->dtors;
 }
 
 /*
@@ -449,6 +494,10 @@ int reltype(int stype)
         return (RTEXT);
     case N_DATA:
         return (RDATA);
+    case N_CTORS:
+        return (RCTORS);
+    case N_DTORS:
+        return (RDTORS);
     case N_BSS:
         return (RBSS);
     case N_STRNG:
@@ -545,6 +594,12 @@ unsigned relword(struct local *lp, unsigned word, struct reloc *rel, unsigned of
     case RDATA:
         delta = cdrel;
         break;
+    case RCTORS:
+        delta = cctorrel;
+        break;
+    case RDTORS:
+        delta = cdtorrel;
+        break;
     case RBSS:
         delta = cbrel;
         break;
@@ -631,6 +686,41 @@ void relocate(struct local *lp, FILE *b1, FILE *b2, unsigned len, unsigned origi
         fputword(word, b1);
         if (output_relinfo)
             fputrel(&rel, b2);
+    }
+}
+
+void relocate_data_sections(struct local *lp, struct data_sections *sec)
+{
+    unsigned word, offset, outoff, origin;
+    unsigned ctor_start, dtor_start;
+    FILE *data, *rdata;
+    struct reloc rel;
+
+    ctor_start = sec->normal;
+    dtor_start = sec->normal + sec->ctors;
+    for (offset = 0; offset < filhdr.a_data; offset += W) {
+        word = fgetword(text);
+        fgetrel(reloc, &rel);
+        if (offset < ctor_start) {
+            outoff = offset;
+            origin = dorigin;
+            data = doutb;
+            rdata = droutb;
+        } else if (offset < dtor_start) {
+            outoff = offset - ctor_start;
+            origin = ctorigin;
+            data = ctoroutb;
+            rdata = ctorroutb;
+        } else {
+            outoff = offset - dtor_start;
+            origin = dtorigin;
+            data = dtoroutb;
+            rdata = dtorroutb;
+        }
+        word = relword(lp, word, &rel, outoff + origin);
+        fputword(word, data);
+        if (output_relinfo)
+            fputrel(&rel, rdata);
     }
 }
 
@@ -892,6 +982,18 @@ void symreloc()
     case N_EXT + N_DATA:
         cursym.n_value += cdrel;
         return;
+    case N_CTORS:
+    case N_EXT + N_CTORS:
+        cursym.n_value += cctorrel;
+        if (final_layout)
+            cursym.n_type += N_DATA - N_CTORS;
+        return;
+    case N_DTORS:
+    case N_EXT + N_DTORS:
+        cursym.n_value += cdtorrel;
+        if (final_layout)
+            cursym.n_type += N_DATA - N_DTORS;
+        return;
     case N_BSS:
     case N_EXT + N_BSS:
         cursym.n_value += cbrel;
@@ -964,16 +1066,20 @@ int load1(unsigned loc, int libflg, int nloc)
 {
     register struct nlist *sp;
     int savindex, ndef, type, symlen, nsymbol;
+    struct data_sections sec;
 
     readhdr(loc);
     if (N_GETMAGIC(filhdr) != RMAGIC) {
         error(1, "file not relocatable");
         return (0);
     }
+    read_data_sections(loc, &sec);
     fseek(reloc, loc + N_SYMOFF(filhdr), 0);
 
     ctrel = tsize;
     cdrel = dsize - filhdr.a_text;
+    cctorrel = ctorsize - filhdr.a_text - sec.normal;
+    cdtorrel = dtorsize - filhdr.a_text - sec.normal - sec.ctors;
     cbrel = bsize - (filhdr.a_text + filhdr.a_data);
 
     loc += HDRSZ + filhdr.a_text + filhdr.a_data + filhdr.a_reltext + filhdr.a_reldata;
@@ -994,6 +1100,10 @@ int load1(unsigned loc, int libflg, int nloc)
             continue;
         }
         if (!(type & N_EXT)) {
+            if (is_rebsd_metadata_symbol(&cursym)) {
+                free(cursym.n_name);
+                continue;
+            }
             if (!(sflag || xflag || (Xflag && IS_LOCSYM(&cursym)))) {
                 nsymbol++;
                 nloc += symlen;
@@ -1023,7 +1133,9 @@ int load1(unsigned loc, int libflg, int nloc)
     }
     if (!libflg || ndef) {
         tsize += filhdr.a_text;
-        dsize += filhdr.a_data;
+        dsize += sec.normal;
+        ctorsize += sec.ctors;
+        dtorsize += sec.dtors;
         bsize += filhdr.a_bss;
         ssize += nloc;
         nsym += nsymbol;
@@ -1031,6 +1143,8 @@ int load1(unsigned loc, int libflg, int nloc)
         /* Alignment. */
         tsize = ALIGN(tsize, TEXT_ALIGN);
         dsize = ALIGN(dsize, DATA_ALIGN);
+        ctorsize = ALIGN(ctorsize, W);
+        dtorsize = ALIGN(dtorsize, W);
         bsize = ALIGN(bsize, BSS_ALIGN);
         return (1);
     }
@@ -1317,6 +1431,10 @@ void middle()
     p_edata = *slookup("_edata");
     p_end = *slookup("_end");
     p_gp = *slookup("_gp");
+    p_ctor_list = *slookup("__CTOR_LIST__");
+    p_ctor_end = *slookup("__CTOR_END__");
+    p_dtor_list = *slookup("__DTOR_LIST__");
+    p_dtor_end = *slookup("__DTOR_END__");
 
     /*
      * If there are any undefined symbols, save the relocation bits.
@@ -1325,7 +1443,8 @@ void middle()
     if (!output_relinfo) {
         for (sp = symtab; sp < symp; sp++)
             if (sp->n_type == N_EXT + N_UNDF && sp != p_end && sp != p_edata && sp != p_etext &&
-                sp != p_gp) {
+                sp != p_gp && sp != p_ctor_list && sp != p_ctor_end &&
+                sp != p_dtor_list && sp != p_dtor_end) {
                 output_relinfo++;
                 dflag = 0;
                 break;
@@ -1340,8 +1459,18 @@ void middle()
      */
     cmsize = 0;
     tsize = (tsize + 15) & ~15;
+    normal_dsize = dsize;
     if (dflag || !output_relinfo) {
         ldrsym(p_etext, tsize, N_EXT + N_TEXT);
+
+        ldrsym(p_ctor_list, dsize, N_EXT + N_DATA);
+        dsize += ctorsize;
+        ldrsym(p_ctor_end, dsize, N_EXT + N_DATA);
+        ldrsym(p_dtor_list, dsize, N_EXT + N_DATA);
+        dsize += dtorsize;
+        ldrsym(p_dtor_end, dsize, N_EXT + N_DATA);
+        dsize = ALIGN(dsize, DATA_ALIGN);
+
         ldrsym(p_edata, dsize, N_EXT + N_DATA);
         ldrsym(p_end, bsize, N_EXT + N_BSS);
 
@@ -1356,6 +1485,8 @@ void middle()
                 cmsize = ALIGN(cmsize, BSS_ALIGN);
             }
         }
+    } else {
+        dsize = ALIGN(dsize + ctorsize + dtorsize, DATA_ALIGN);
     }
 
     /*
@@ -1363,6 +1494,11 @@ void middle()
      */
     torigin = basaddr;
     dorigin = torigin + tsize;
+    data_origin = dorigin;
+    ctor_origin = data_origin + normal_dsize;
+    dtor_origin = ctor_origin + ctorsize;
+    ctorigin = ctor_origin;
+    dtorigin = dtor_origin;
     gp = dorigin + gpoffset;
     cmorigin = dorigin + dsize;
     borigin = cmorigin + cmsize;
@@ -1372,7 +1508,9 @@ void middle()
         case N_EXT + N_UNDF:
             if (!rflag) {
                 errlev |= 1;
-                if (sp == p_end || sp == p_edata || sp == p_etext || sp == p_gp)
+                if (sp == p_end || sp == p_edata || sp == p_etext || sp == p_gp ||
+                    sp == p_ctor_list || sp == p_ctor_end ||
+                    sp == p_dtor_list || sp == p_dtor_end)
                     break;
                 if (!nund)
                     printf("Undefined:\n");
@@ -1389,6 +1527,14 @@ void middle()
         case N_EXT + N_DATA:
             sp->n_value += dorigin;
             break;
+        case N_EXT + N_CTORS:
+            sp->n_type = N_EXT + N_DATA;
+            sp->n_value += ctor_origin;
+            break;
+        case N_EXT + N_DTORS:
+            sp->n_type = N_EXT + N_DATA;
+            sp->n_value += dtor_origin;
+            break;
         case N_EXT + N_BSS:
             sp->n_value += borigin;
             break;
@@ -1399,6 +1545,7 @@ void middle()
             break;
         }
     }
+    final_layout = 1;
     if (sflag || xflag)
         ssize = 0;
     bsize += cmsize;
@@ -1430,12 +1577,16 @@ void setupout()
 
     tcreat(&toutb, 1);
     tcreat(&doutb, 1);
+    tcreat(&ctoroutb, 1);
+    tcreat(&dtoroutb, 1);
 
     if (!sflag || !xflag)
         tcreat(&soutb, 1);
     if (output_relinfo) {
         tcreat(&troutb, 1);
         tcreat(&droutb, 1);
+        tcreat(&ctorroutb, 1);
+        tcreat(&dtorroutb, 1);
     }
     fseek(outb, sizeof(filhdr), 0);
 }
@@ -1447,14 +1598,19 @@ void load2(unsigned loc)
     register int symno;
     int type;
     unsigned count;
+    struct data_sections sec;
 
     readhdr(loc);
+    read_data_sections(loc, &sec);
     ctrel = torigin;
     cdrel = dorigin - filhdr.a_text;
+    cctorrel = ctorigin - filhdr.a_text - sec.normal;
+    cdtorrel = dtorigin - filhdr.a_text - sec.normal - sec.ctors;
     cbrel = borigin - (filhdr.a_text + filhdr.a_data);
 
     if (trace > 1)
-        printf("ctrel=%08x, cdrel=%08x, cbrel=%08x\n", ctrel, cdrel, cbrel);
+        printf("ctrel=%08x, cdrel=%08x, cctorrel=%08x, cdtorrel=%08x, cbrel=%08x\n",
+            ctrel, cdrel, cctorrel, cdtorrel, cbrel);
     /*
      * Reread the symbol table, recording the numbering
      * of symbols for fixing external references.
@@ -1475,6 +1631,10 @@ void load2(unsigned loc)
             continue;
         }
         if (!(type & N_EXT)) {
+            if (is_rebsd_metadata_symbol(&cursym)) {
+                free(cursym.n_name);
+                continue;
+            }
             if (!(sflag || xflag || (Xflag && IS_LOCSYM(&cursym))))
                 fputsym(&cursym, soutb);
             free(cursym.n_name);
@@ -1508,7 +1668,7 @@ void load2(unsigned loc)
         printf("-- data --\n");
     fseek(text, loc + filhdr.a_text, 0);
     fseek(reloc, count + filhdr.a_reltext, 0);
-    relocate(lp, doutb, droutb, filhdr.a_data, dorigin);
+    relocate_data_sections(lp, &sec);
 
     torigin += filhdr.a_text;
     while (torigin % TEXT_ALIGN) {
@@ -1519,7 +1679,7 @@ void load2(unsigned loc)
             fputrel(&relabs, troutb);
         torigin += W;
     }
-    dorigin += filhdr.a_data;
+    dorigin += sec.normal;
     while (dorigin % DATA_ALIGN) {
         struct reloc relabs = { RABS };
 
@@ -1528,11 +1688,15 @@ void load2(unsigned loc)
             fputrel(&relabs, droutb);
         dorigin += W;
     }
+    ctorigin += sec.ctors;
+    dtorigin += sec.dtors;
     borigin += filhdr.a_bss;
 
     /* Alignment. */
     torigin = ALIGN(torigin, TEXT_ALIGN);
     dorigin = ALIGN(dorigin, DATA_ALIGN);
+    ctorigin = ALIGN(ctorigin, W);
+    dtorigin = ALIGN(dtorigin, W);
     borigin = ALIGN(borigin, BSS_ALIGN);
 }
 
@@ -1645,7 +1809,13 @@ void finishout()
         /* Align text size. */
         putc(0, outb);
     }
-    copy_and_close(doutb);
+    n = copy_and_close(doutb);
+    n += copy_and_close(ctoroutb);
+    n += copy_and_close(dtoroutb);
+    while (n++ < dsize) {
+        /* Align data size. */
+        putc(0, outb);
+    }
     if (output_relinfo) {
         rtsize = copy_and_close(troutb);
         while (rtsize % W) {
@@ -1653,6 +1823,8 @@ void finishout()
             rtsize++;
         }
         rdsize = copy_and_close(droutb);
+        rdsize += copy_and_close(ctorroutb);
+        rdsize += copy_and_close(dtorroutb);
         while (rdsize % W) {
             putc(0, outb);
             rdsize++;

@@ -106,9 +106,11 @@ test gate.
   - `crtbegin.o`/`crtend.o` are primarily for C++ global constructors and
     destructors, plus C constructor/destructor attributes.
   - They are not enabled in the default ReBSD C link path yet.
-  - Current blocker: ReBSD a.out `as` accepts `.ctors`/`.dtors` syntax but maps
-    those sections into the normal data segment, so PCC's csu list walk can
-    treat unrelated data as function pointers.
+  - ReBSD now supports the C constructor/destructor attribute gate without
+    changing PCC code generation: `as` preserves `.ctors`/`.dtors` and
+    `.init_array`/`.fini_array` as a.out pseudo-sections, `ld` collects them
+    after normal data, and libc startup/shutdown walks the linker-defined
+    `__CTOR_LIST__`/`__CTOR_END__` and `__DTOR_LIST__`/`__DTOR_END__` ranges.
 - [x] Run upstream `src/dev/pcc/pcc-tests/regress` against ReBSD/MIPS PCC.
   - Baseline without `libpcc.a`: 300 checks total, 268 passed, 32 failed;
     Malta runtime 239 linked binaries, 230 passed, 9 failed.
@@ -132,9 +134,10 @@ test gate.
     trigraph preprocessing, cast-wrapped string literals in static
     initializers, `stddef.h` `wchar_t`, ABI-neutral wide-string test
     expectations, macro-expanded `#include` line-end consumption, floating
-    NaN/Inf static initializer folding, and MIPS computed-goto support:
+    NaN/Inf static initializer folding, MIPS computed-goto support, and
+    ReBSD a.out ctor/dtor collection:
     311 checks total, 308 passed, 3 failed; Malta runtime 271 linked
-    binaries, 270 passed, 1 deferred ctor/dtor runtime failure.
+    binaries, 271 passed, 0 failed.
   - Skipped by policy for this target: PIC/shared-library groups and GNU
     linker-flag-specific cases.
   - Raw artifacts from this run: `/private/tmp/rebsd-pcc-tests/compile-summary.json`,
@@ -260,16 +263,16 @@ test gate.
     `gcccompat/typeof001` uses x86 inline-asm constraints `=d`/`=a`;
     `misc/shlib3` uses unsupported `-fPIC -shared` output;
     `pcclist/init004` requires TLS, which the ReBSD target currently rejects.
-- [x] Classify `pcc-tests` Malta runtime failures for the current C-only gate.
-  - `pcclist/init006` exercises constructor/destructor attributes, using the
-    same runtime machinery needed for future C++ global constructors and
-    destructors.
-  - ReBSD does not currently ship a PCC C++ compiler, so ctor/dtor runtime
-    support is deferred and does not block the first native C compiler gate.
-  - Do not enable `crtbegin.o`/`crtend.o` in the default PCC link path until
-    ReBSD `as`/`ld` can preserve or collect `.ctors`/`.dtors` separately from
-    ordinary `.data`; otherwise constructor lists can include unrelated data
-    words as function pointers.
+- [x] Support ReBSD a.out ctor/dtor collection in `as`, `ld`, and libc startup.
+  - The root cause was in the a.out toolchain rather than PCC: ReBSD `as`
+    accepted `.ctors`/`.dtors` syntax but flattened those sections into normal
+    `.data`, and ReBSD `ld` had no way to preserve constructor/destructor list
+    boundaries across linked inputs.
+  - ReBSD `as` now emits local size metadata for ctor/dtor tails, and ReBSD
+    `ld` uses that metadata to split each input's normal data, constructor
+    table, and destructor table before writing the final data segment.
+  - `pcclist/init006` now passes on Malta; current expected runtime failures
+    are empty.
 - [x] Make `c99/arith003` respect target `long double` limits.
   - ReBSD/MIPS intentionally uses IEEE64 `long double`, with PCC reporting
     `__LDBL_MAX_EXP__ == 1024` and `__LDBL_MANT_DIG__ == 53`.
@@ -344,9 +347,10 @@ test gate.
   - Current policy: port and stage `libpcc.a` for compiler helper routines.
   - Still decide whether any helpers should move into libc long term.
   - Decide only if tests prove it needed: stage `libpccsoftfloat.a`.
-  - Defer `pcc-libs/csu` until the a.out toolchain has a safe ctor/dtor
-    representation, or until C++/constructor attributes become a supported
-    gate after the native C compiler work.
+  - `pcc-libs/csu` is still not staged by default. ReBSD now has safe flat
+    linker-defined ctor/dtor ranges for C constructor/destructor attributes,
+    but `crtbegin.o`/`crtend.o` need a separate C++ startup policy before they
+    are enabled.
   - Keep hardware-FPU Malta/N64 builds free of unnecessary soft-float runtime
     dependencies.
 - [ ] Boot Malta with native PCC installed.
@@ -355,6 +359,14 @@ test gate.
 
 ## Temporary Compatibility Stubs To Close
 
+- [ ] Decide and implement the full C++ ctor/dtor startup model.
+  - Current ReBSD startup walks flat linker-defined ctor/dtor ranges and is
+    enough for PCC C constructor/destructor attributes.
+  - It does not yet enable PCC `crtbegin.o`/`crtend.o`, sentinel entries,
+    constructor priorities, or a C++ global initialization/destruction policy.
+  - Partial links with `ld -r` must either preserve ReBSD ctor/dtor metadata or
+    reject unsupported ctor/dtor inputs before this is treated as a complete
+    C++ runtime model.
 - [ ] Expand `include/wchar.h` beyond the current minimal ReBSD wide-char ABI.
   - Current header fixes `wchar_t` at the ReBSD/PCC 16-bit ABI and defines
     `wint_t`, `NULL`, and `wprintf`.

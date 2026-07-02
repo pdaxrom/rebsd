@@ -53,6 +53,7 @@
  * the __progname and then calls main.
  */
 extern int main (int, char **, char **);
+extern void __do_global_ctors (void);
 
 char **environ;
 char *__progname = "";
@@ -74,5 +75,6 @@ _start (int argc, char **argv, char **env)
 			if (*s == '/')
 				__progname = s + 1;
 	}
+	__do_global_ctors ();
 	exit (main (argc, argv, env));
 }

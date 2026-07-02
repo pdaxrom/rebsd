@@ -34,6 +34,15 @@ SECTIONS
     *(.sdata .sdata.* .gnu.linkonce.s.*)
     *(.lit8)
     *(.lit4)
+    . = ALIGN(4);
+    PROVIDE(__CTOR_LIST__ = .);
+    KEEP(*(.ctors .ctors.*))
+    KEEP(*(.init_array .init_array.*))
+    PROVIDE(__CTOR_END__ = .);
+    PROVIDE(__DTOR_LIST__ = .);
+    KEEP(*(.dtors .dtors.*))
+    KEEP(*(.fini_array .fini_array.*))
+    PROVIDE(__DTOR_END__ = .);
     . = ALIGN(16);
   } :user
 

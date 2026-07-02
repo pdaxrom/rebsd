@@ -12,6 +12,9 @@ _start:                                 # @_start
 	.set	noat
 	addiu	$sp, $sp, -24
 	sw	$ra, 20($sp)                    # 4-byte Folded Spill
+	sw	$4, 0($sp)
+	sw	$5, 4($sp)
+	sw	$6, 8($sp)
 
 	lui	$gp, %hi(_gp)
 	addiu	$gp, $gp, %lo(_gp)
@@ -24,6 +27,11 @@ _start:                                 # @_start
 	bnez	$3, $BB0_3
 	nop
 $BB0_2:
+	jal	__do_global_ctors
+	nop
+	lw	$4, 0($sp)
+	lw	$5, 4($sp)
+	lw	$6, 8($sp)
 	jal	main
 	nop
 	jal	exit

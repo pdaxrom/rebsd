@@ -23,9 +23,7 @@ DEFAULT_COMPILE_FAILURES = {
     "pcclist__init004",
 }
 
-DEFAULT_RUNTIME_FAILURES = {
-    "pcclist__init006",
-}
+DEFAULT_RUNTIME_FAILURES = set()
 
 
 def make_vars(makefile):

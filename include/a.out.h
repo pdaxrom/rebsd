@@ -43,9 +43,11 @@ struct reloc {
     unsigned flags;
 #define RSMASK  0x70            /* bitmask for segments */
 #define RABS        0
+#define RCTORS      0x10        /* .ctors pseudo-segment (for assembler/linker) */
 #define RTEXT       0x20
 #define RDATA       0x30
 #define RBSS        0x40
+#define RDTORS      0x50        /* .dtors pseudo-segment (for assembler/linker) */
 #define RSTRNG      0x60        /* for assembler */
 #define REXT        0x70        /* externals and bitmask */
 

@@ -55,6 +55,8 @@ struct  nlist {
 #define N_BSS   0x04        /* bss segment */
 #define N_STRNG 0x05        /* string segment (for assembler) */
 #define N_COMM  0x06        /* .comm segment (for assembler) */
+#define N_CTORS 0x07        /* .ctors pseudo-segment (for assembler/linker) */
+#define N_DTORS 0x08        /* .dtors pseudo-segment (for assembler/linker) */
 #define N_FN    0x1f        /* file name */
 
 #define N_TYPE  0x1f        /* mask for all the type bits */
