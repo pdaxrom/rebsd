@@ -300,13 +300,13 @@ test gate.
     so it reads PCC-generated wide strings as 16-bit elements.
   - This fixed Malta runtime `jira/PCC-21` and removed the associated
     bad-address fault.
-- [ ] Add targeted value regression for mixed `long long` bitfields.
+- [x] Add targeted value regression for mixed `long long` bitfields.
   - A temporary diagnostic for `jira/PCC-462` showed the official test now
     passes, but some layouts involving a following signed `long long`
     bitfield still read `f0` as `0` instead of `2`.
-  - The upstream `jira/PCC-462` comparison does not expose this because
-    `0 > -2` remains true, so add a stricter local check before considering
-    this class fully closed.
+  - Added `jira/PCC-462-1`, which checks exact `f0 == 2` and `f1 == -2`
+    values for global initialization, automatic initialization, and both
+    bitfield assignment orders.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
 - [x] Audit MIPS backend `ZF` soft-float helper calls under the ReBSD
@@ -359,8 +359,8 @@ test gate.
   - The native rootfs harness stages `src/dev/pcc/pcc-tests/regress` under
     `/root/pcc-tests` and runs `/root/run-native-pcc-regress.sh` on Malta.
   - Current Malta target-side result with native `/usr/bin/cc` and `DEBUGFP`
-    enabled: 311 total checks, 281 compile pass, 30 expected compile fail,
-    0 unexpected compile fail; 271 runtime candidates, 271 pass,
+    enabled: 312 total checks, 282 compile pass, 30 expected compile fail,
+    0 unexpected compile fail; 272 runtime candidates, 272 pass,
     0 unexpected runtime fail.
   - ReBSD/native PCC `DEBUGFP` now decodes big-endian IEEE64 softfloat words
     before comparing against native FPU results, treats NaN payload/sign
@@ -403,7 +403,7 @@ test gate.
   - `gcccompat/typeof001` is x86 inline asm, not a MIPS C frontend failure.
   - Either keep it expected-fail on MIPS or add a MIPS-specific replacement.
 - [ ] Close remaining test-coverage gaps.
-  - Add the stricter mixed `long long` bitfield value regression.
+  - Keep expanding strict PCC runtime coverage as backend issues are fixed.
   - Expand smoke coverage for libc-heavy programs, varargs, structs/unions,
     pointer arithmetic stress, and shell build workloads.
 - [ ] Replace temporary compatibility stubs with real policy.
@@ -453,12 +453,12 @@ test gate.
 - [x] Compile, assemble, link, and run C programs inside Malta.
 - [x] Run the full PCC Malta test gate.
   - `make -C sys/mips native-pcc-regress-runtime` passed on Malta QEMU.
-  - Result: `NATIVE_PCC_REGRESS_TOTAL:311`,
-    `NATIVE_PCC_REGRESS_COMPILE_PASS:281`,
+  - Result: `NATIVE_PCC_REGRESS_TOTAL:312`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:282`,
     `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
-    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:271`,
-    `NATIVE_PCC_REGRESS_RUNTIME_PASS:271`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:272`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:272`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
     `NATIVE_PCC_REGRESS_RC:0`.
 

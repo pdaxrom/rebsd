@@ -973,9 +973,7 @@ adrput(FILE * io, NODE * p)
 		return;
 
 	case OREG:
-		if (getlval(p))
-			fprintf(io, "%d", (int) getlval(p));
-		fprintf(io, "(%s)", rnames[p->n_rval]);
+		fprintf(io, "%d(%s)", (int)getlval(p), rnames[p->n_rval]);
 		return;
 
 	case ICON:

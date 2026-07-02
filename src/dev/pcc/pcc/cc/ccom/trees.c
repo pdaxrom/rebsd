@@ -2567,6 +2567,23 @@ wrualfld(P1ND *val, P1ND *d, TWORD t, TWORD ct, int off, int fsz)
 	return rn;
 }
 
+#if TARGET_ENDIAN == TARGET_BE
+static int
+befldoff(TWORD *ctp, int off, int fsz)
+{
+	int woff;
+
+	if (ISLONGLONG(*ctp)) {
+		woff = off % SZINT;
+		if (woff + fsz <= SZINT) {
+			*ctp = UNSIGNED;
+			return (off / SZINT) * SZINT + (SZINT - fsz - woff);
+		}
+	}
+	return (int)tsize(*ctp, 0, 0) - fsz - off;
+}
+#endif
+
 /*
  * Rewrite bitfield operations to shifts.
  */
@@ -2603,7 +2620,7 @@ rmfldops(P1ND *p)
 #endif
 			bt = bcon(0);
 #if TARGET_ENDIAN == TARGET_BE
-		foff = (int)tsize(ct, 0, 0) - fsz - foff;
+		foff = befldoff(&ct, foff, fsz);
 #endif
 		q = rdualfld(q, t, ct, foff, fsz);
 		if (fsz < SZINT)
@@ -2626,7 +2643,10 @@ rmfldops(P1ND *p)
 		ft = q->n_type;
 		t = q->n_left->n_type;
 #if TARGET_ENDIAN == TARGET_BE
-		foff = (int)tsize(t, 0, 0) - fsz - foff;
+		ct = t;
+		foff = befldoff(&ct, foff, fsz);
+#else
+		ct = t;
 #endif
 		bt = NULL;
 		if (p->n_right->n_op != ICON && p->n_right->n_op != NAME) {
@@ -2635,7 +2655,6 @@ rmfldops(P1ND *p)
 		} else
 			t2 = p->n_right;
 
-		ct = t;
 #ifdef GCC_COMPAT
 #ifndef UNALIGNED_ACCESS
 		if (attr_find(q->n_ap, GCC_ATYP_PACKED))

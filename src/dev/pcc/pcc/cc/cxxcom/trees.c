@@ -2516,6 +2516,23 @@ wrualfld(NODE *val, NODE *d, TWORD t, TWORD ct, int off, int fsz)
 	return rn;
 }
 
+#if TARGET_ENDIAN == TARGET_BE
+static int
+befldoff(TWORD *ctp, int off, int fsz)
+{
+	int woff;
+
+	if (ISLONGLONG(*ctp)) {
+		woff = off % SZINT;
+		if (woff + fsz <= SZINT) {
+			*ctp = UNSIGNED;
+			return (off / SZINT) * SZINT + (SZINT - fsz - woff);
+		}
+	}
+	return (int)tsize(*ctp, 0, 0) - fsz - off;
+}
+#endif
+
 /*
  * Rewrite bitfield operations to shifts.
  */
@@ -2546,7 +2563,7 @@ rmfldops(NODE *p)
 #endif
 			bt = bcon(0);
 #if TARGET_ENDIAN == TARGET_BE
-		foff = (int)tsize(ct, 0, 0) - fsz - foff;
+		foff = befldoff(&ct, foff, fsz);
 #endif
 		q = rdualfld(q, t, ct, foff, fsz);
 		p->n_left = bt;
@@ -2564,7 +2581,10 @@ rmfldops(NODE *p)
 		foff = UPKFOFF(q->n_rval);
 		t = q->n_left->n_type;
 #if TARGET_ENDIAN == TARGET_BE
-		foff = (int)tsize(t, 0, 0) - fsz - foff;
+		ct = t;
+		foff = befldoff(&ct, foff, fsz);
+#else
+		ct = t;
 #endif
 		bt = NULL;
 		if (p->n_right->n_op != ICON && p->n_right->n_op != NAME) {
@@ -2573,7 +2593,6 @@ rmfldops(NODE *p)
 		} else
 			t2 = p->n_right;
 
-		ct = t;
 #ifdef GCC_COMPAT
 #ifndef UNALIGNED_ACCESS
 		if (attr_find(q->n_ap, GCC_ATYP_PACKED))
