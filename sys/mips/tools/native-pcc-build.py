@@ -178,6 +178,8 @@ class Builder:
                 f"-DCPPROGNAME={q('cpp')}",
                 f"-DCC0={q('cc0')}",
                 f"-DCC1={q('cc1')}",
+                f"-DASSEMBLER={q('/usr/bin/as')}",
+                f"-DLINKER={q('/usr/bin/ld')}",
             ]
         return [str(f) for f in flags]
 

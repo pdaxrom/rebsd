@@ -9,8 +9,12 @@
 #include <machine/devmajors.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
+#ifdef VIDEO_ENABLED
 #include <machine/video.h>
+#endif
+#ifdef INPUT_ENABLED
 #include <machine/joybus.h>
+#endif
 
 #ifdef N64CART_ENABLED
 #include <machine/n64cart_uart.h>
@@ -217,25 +221,37 @@ const struct cdevsw cdevsw[] = {
 #if N64_FB_MAJOR != 5
 #   error Wrong N64_FB_MAJOR value!
 #endif
+#ifdef VIDEO_ENABLED
         n64fb_open, n64fb_close, n64fb_read, n64fb_write,
         n64fb_ioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
+#else
+        NOCDEV
+#endif
     },
     {
 #if N64_JOYPAD_MAJOR != 6
 #   error Wrong N64_JOYPAD_MAJOR value!
 #endif
+#ifdef INPUT_ENABLED
         n64joypad_open, n64joypad_close, n64joypad_read, norw,
         n64joypad_ioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
+#else
+        NOCDEV
+#endif
     },
     {
 #if N64_MOUSE_MAJOR != 7
 #   error Wrong N64_MOUSE_MAJOR value!
 #endif
+#ifdef INPUT_ENABLED
         n64mouse_open, n64mouse_close, n64mouse_read, norw,
         n64mouse_ioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
+#else
+        NOCDEV
+#endif
     },
     {
 #if N64_PTS_MAJOR != 8
@@ -265,9 +281,13 @@ const struct cdevsw cdevsw[] = {
 #if N64_KBD_MAJOR != 10
 #   error Wrong N64_KBD_MAJOR value!
 #endif
+#ifdef INPUT_ENABLED
         n64keyboard_open, n64keyboard_close, n64keyboard_read, norw,
         n64keyboard_ioctl, n64_nullstop, 0, n64_seltrue,
         n64_nostrategy, 0, 0,
+#else
+        NOCDEV
+#endif
     },
     {
 #if N64_CARTFLASH_MAJOR != 11

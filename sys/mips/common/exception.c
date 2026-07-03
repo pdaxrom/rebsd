@@ -13,7 +13,9 @@
 #ifdef N64
 #include <machine/console.h>
 #include <machine/n64.h>
+#ifdef INPUT_ENABLED
 #include <machine/joybus.h>
+#endif
 #include <machine/n64int.h>
 #else
 #include <machine/layout.h>
@@ -277,7 +279,7 @@ mips_syscall(int *frame)
     code = (*(u_int *)opc >> 6) & 0377;
     if (code < nsysent)
         callp += code;
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     {
         static int syscall_trace_count;
         if (syscall_trace_count < 12) {
@@ -345,6 +347,16 @@ exception(int *frame)
     status = frame[FRAME_STATUS];
     rawcause = mips_read_c0_register(C0_CAUSE, 0);
     badvaddr = mips_read_c0_register(C0_BADVADDR, 0);
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+    {
+        static int exception_trace_count;
+        if (exception_trace_count < 32) {
+            printf("mipstrap: status=%08x cause=%08x pc=%08x sp=%08x\n",
+                status, rawcause, frame[FRAME_PC], frame[FRAME_SP]);
+            exception_trace_count++;
+        }
+    }
+#endif
     if (mips_exception_entry_pc(frame[FRAME_PC]) &&
         (rawcause & CA_EXC_CODE) != CA_Int) {
         exception_prepare_panic_console();
@@ -395,7 +407,9 @@ exception(int *frame)
 #ifdef N64CART_ENABLED
             n64cart_uart_intr();
 #endif
+#ifdef INPUT_ENABLED
             n64keyboard_console_intr();
+#endif
 #else
             malta_uart_intr();
 #ifdef MALTA_NE_ENABLED
@@ -458,6 +472,9 @@ exception(int *frame)
         case CA_AdES + USER:
             printf("*** 0x%08x: %s: bad address 0x%08x\n",
                 frame[FRAME_PC], u.u_comm, badvaddr);
+            printf("*** user exception: exc=%u cause=%08x sp=%08x ra=%08x\n",
+                rawcause >> 2 & 31, rawcause, frame[FRAME_SP],
+                frame[FRAME_RA]);
             psig = SIGSEGV;
             break;
         case CA_IBE + USER:
@@ -477,6 +494,15 @@ exception(int *frame)
             break;
         case CA_Ov + USER:
         case CA_FPE + USER:
+#ifdef N64_PCC_FPE_TRACE
+            if ((cause & ~USER) == CA_FPE) {
+                printf("*** user fpe: pc=%08x status=%08x cause=%08x "
+                    "fcsr=%08x sp=%08x ra=%08x pid=%d comm=%s\n",
+                    frame[FRAME_PC], status, rawcause, u.u_fpu.fcsr,
+                    frame[FRAME_SP], frame[FRAME_RA],
+                    u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
+            }
+#endif
             psig = SIGFPE;
             break;
         }

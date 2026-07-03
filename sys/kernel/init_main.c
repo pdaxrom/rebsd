@@ -185,27 +185,27 @@ main()
     printf ("swap size = %u kbytes\n", nswap * DEV_BSIZE / 1024);
 
     /* Kick off timeout driven events by calling first time. */
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("n64boot: before schedcpu\n");
 #endif
     schedcpu (0);
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("n64boot: after schedcpu\n");
 #endif
 
     /* Set up the root file system. */
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("n64boot: before rootdir iget\n");
 #endif
     rootdir = iget (rootdev, &mount[0].m_filsys, (ino_t) ROOTINO);
     iunlock (rootdir);
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("n64boot: after rootdir iget\n");
 #endif
     u.u_cdir = iget (rootdev, &mount[0].m_filsys, (ino_t) ROOTINO);
     iunlock (u.u_cdir);
     u.u_rdir = NULL;
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("n64boot: before newproc\n");
 #endif
 
@@ -215,14 +215,14 @@ main()
     if (newproc (0) == 0) {
         /* Parent process with pid 0: swapper.
          * No return from sched. */
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
         printf ("n64boot: proc0 entering sched\n");
 #endif
         sched();
     }
 
     /* Child process with pid 1: init. */
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("n64boot: proc1 child path pid=%d\n", u.u_procp->p_pid);
 #endif
     s = splhigh();
@@ -232,7 +232,7 @@ main()
     p->p_ssize = 1024;              /* one kbyte of stack */
     p->p_saddr = USER_DATA_END - 1024;
     bcopy ((caddr_t) icode, (caddr_t) USER_DATA_START, icodeend - icode);
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("n64boot: copied icode size=%u\n", icodeend - icode);
 #endif
 
@@ -248,7 +248,7 @@ main()
      * return goes to location 0 of user init code
      * just copied out.
      */
-#ifdef N64_TRACE
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("n64boot: returning to startup\n");
 #endif
     return 0;

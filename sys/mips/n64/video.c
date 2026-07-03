@@ -7,6 +7,77 @@
 #include <machine/n64int.h>
 #include <machine/video.h>
 
+#ifndef VIDEO_ENABLED
+int
+n64_video_set_mode(unsigned mode)
+{
+    return ENXIO;
+}
+
+void
+n64_video_get_info(struct n64fb_info *info)
+{
+    bzero(info, sizeof(*info));
+}
+
+volatile unsigned short *
+n64_video_framebuffer(void)
+{
+    return 0;
+}
+
+void
+n64_video_clear(unsigned color)
+{
+}
+
+void
+n64_video_intr_enable(void)
+{
+}
+
+void
+n64_video_intr(void)
+{
+}
+
+int
+n64_video_useraddr_valid(caddr_t addr)
+{
+    return 0;
+}
+
+int
+n64fb_open(dev_t dev, int flag, int mode)
+{
+    return ENXIO;
+}
+
+int
+n64fb_close(dev_t dev, int flag, int mode)
+{
+    return 0;
+}
+
+int
+n64fb_read(dev_t dev, struct uio *uio, int flag)
+{
+    return ENXIO;
+}
+
+int
+n64fb_write(dev_t dev, struct uio *uio, int flag)
+{
+    return ENXIO;
+}
+
+int
+n64fb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
+{
+    return ENXIO;
+}
+#else
+
 #define N64_VI_REGS            ((volatile unsigned *)0xa4400000u)
 #define N64_VI_CTRL            0
 #define N64_VI_ORIGIN          1
@@ -437,3 +508,4 @@ n64fb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         return EINVAL;
     }
 }
+#endif

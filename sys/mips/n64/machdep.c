@@ -23,7 +23,7 @@ extern char _mips_exception_vector_end[];
 
 #define N64_TLB_ENTRIES         32
 #define N64_USER_TLB_INDEX      0
-#define N64_FB_TLB_INDEX        1
+#define N64_FB_TLB_INDEX        (N64_USER_TLB_INDEX + N64_USER_TLB_PAIRS)
 #define N64_VECTOR_TLB_REFILL   0x00000000u
 #define N64_VECTOR_XTLB_REFILL  0x00000080u
 #define N64_VECTOR_CACHE_ERROR  0x00000100u
@@ -141,10 +141,15 @@ n64_tlb_entrylo(unsigned phys)
 static unsigned
 n64_fb_tlb_entries(unsigned rdram)
 {
+#ifndef VIDEO_ENABLED
+    (void)rdram;
+    return 0;
+#else
     unsigned bytes = rdram >= N64_RDRAM_SIZE_8M ?
         N64_EXPANSION_FB_RESERVED_BYTES : N64_BASE_FB_RESERVED_BYTES;
 
     return bytes / N64_VIDEO_TLB_PAIR_SIZE;
+#endif
 }
 
 static unsigned
@@ -168,10 +173,14 @@ n64_tlb_init(void)
             0x40000000u + i * 0x2000u, 0, 0);
     }
 
-    mips_tlb_write_indexed(N64_USER_TLB_INDEX, TLB_PAGEMASK_1M,
-        USER_DATA_START,
-        n64_tlb_entrylo(N64_USER_PHYS_START),
-        n64_tlb_entrylo(N64_USER_PHYS_START + N64_USER_TLB_PAGE_SIZE));
+    for (i = 0; i < N64_USER_TLB_PAIRS; ++i) {
+        unsigned vaddr = USER_DATA_START + i * N64_USER_TLB_PAIR_SIZE;
+        unsigned phys = N64_USER_PHYS_START + i * N64_USER_TLB_PAIR_SIZE;
+
+        mips_tlb_write_indexed(N64_USER_TLB_INDEX + i, TLB_PAGEMASK_1M,
+            vaddr, n64_tlb_entrylo(phys),
+            n64_tlb_entrylo(phys + N64_USER_TLB_PAGE_SIZE));
+    }
     for (i = 0; i < fb_entries; ++i) {
         unsigned vaddr = N64_FB_USER_VADDR_START +
             i * N64_VIDEO_TLB_PAIR_SIZE;

@@ -6,6 +6,7 @@ cpu             "VR4300"
 board           "N64"
 
 options         "CONS_MAJOR=0", "CONS_MINOR=0"
+options         "VIDEO_ENABLED", "INPUT_ENABLED"
 
 #
 # Cartridge-specific hardware used by this board configuration.

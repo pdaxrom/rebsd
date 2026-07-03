@@ -24,8 +24,12 @@ ramswap_configure(void)
 
     memsize = n64_rdram_size();
     if (memsize >= N64_RDRAM_SIZE_8M) {
+#ifdef N64_DEBUG_USERMEM_4M
+        pool_base = N64_USER_PHYS_END;
+#else
         pool_base = N64_EXPANSION_SWAP_PHYS_START;
-        pool_bytes = memsize - N64_EXPANSION_SWAP_PHYS_START;
+#endif
+        pool_bytes = memsize - pool_base;
         var_bytes = N64_RAMDISK_8M_VAR_BYTES;
     } else {
         pool_base = N64_BASE_SWAP_PHYS_START;
