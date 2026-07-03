@@ -761,6 +761,18 @@ test gate.
     `N64_PCC_DEBUG_MOUNT_DIRECT_RC 1` and skips the runner because `/var` was
     already in an interrupted/re-entry state.  Do not treat that partial block
     as compiler evidence.
+- [ ] Run the expanded N64 PCC debug image on real hardware.
+  - The boot-time C runner now reports `N64_PCC_DEBUG_MODE all` and executes
+    the staged extended JIRA regression subset after the already-green primary
+    hardware probes.
+  - Clean local `make -C sys/mips/n64 pcc-debug-image` completed after this
+    runner change.  `fsutil --check` reports the same 6144 KB debug rootfs,
+    322 files, 3222 used blocks, and 2897 free blocks; `strings` on
+    `sys/mips/n64/pcc-debug.z64` confirms `N64_PCC_DEBUG_MODE` and the
+    extended test names are present in the image.
+  - Keep the generated shell scripts staged only for comparison; the hardware
+    gate must continue using direct `fork`/`exec` from the C runner until the
+    PCC-built shell regressions are separately fixed.
 - [ ] Add a libc regression for `printf(stdout)` followed by
   `freopen(stdout, ...)` and later `malloc()` traffic.
   - The `ccom -v` crash path strongly suggested this stream transition can

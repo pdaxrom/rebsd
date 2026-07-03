@@ -798,6 +798,7 @@ run_debug(int run_extended)
 	char probe_path[128];
 
 	printf("N64_PCC_DEBUG_BEGIN\n");
+	printf("N64_PCC_DEBUG_MODE %s\n", run_extended ? "all" : "primary");
 	print_mem("begin");
 	fails = run_native_fpu_probe();
 	if (ensure_dir("/var/tmp") || ensure_dir(WORKDIR) ||
@@ -838,7 +839,7 @@ run_boot_rc(void)
 		"/sbin/mount", "-o", "rw", "/dev/ram0", "/var", NULL
 	};
 	char *runner_argv[] = {
-		"/root/n64-pcc-debug-runner", NULL
+		"/root/n64-pcc-debug-runner", "all", NULL
 	};
 
 	setup_console();
