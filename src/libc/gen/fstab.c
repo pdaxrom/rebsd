@@ -62,6 +62,7 @@ fstabscan()
 #define	MAXLINELENGTH	256
 	static char line[MAXLINELENGTH];
 	char subline[MAXLINELENGTH], *colon = ":";
+	char *line_save, *opt_save;
 	int typexx;
 
 	for (;;) {
@@ -97,24 +98,25 @@ fstabscan()
 			goto bad;
 		}
 /* OLD_STYLE_FSTAB */
-		_fs_fstab.fs_spec = strtok(cp, " \t");
+		_fs_fstab.fs_spec = strtok_r(cp, " \t", &line_save);
 		if (!_fs_fstab.fs_spec || *_fs_fstab.fs_spec == '#')
 			continue;
-		_fs_fstab.fs_file = strtok((char *)NULL, " \t");
-		_fs_fstab.fs_vfstype = strtok((char *)NULL, " \t");
-		_fs_fstab.fs_mntops = strtok((char *)NULL, " \t");
+		_fs_fstab.fs_file = strtok_r((char *)NULL, " \t", &line_save);
+		_fs_fstab.fs_vfstype = strtok_r((char *)NULL, " \t", &line_save);
+		_fs_fstab.fs_mntops = strtok_r((char *)NULL, " \t", &line_save);
 		if (_fs_fstab.fs_mntops == NULL)
 			goto bad;
 		_fs_fstab.fs_freq = 0;
 		_fs_fstab.fs_passno = 0;
-		if ((cp = strtok((char *)NULL, " \t")) != NULL) {
+		if ((cp = strtok_r((char *)NULL, " \t", &line_save)) != NULL) {
 			_fs_fstab.fs_freq = atoi(cp);
-			if ((cp = strtok((char *)NULL, " \t")) != NULL)
+			if ((cp = strtok_r((char *)NULL, " \t",
+			    &line_save)) != NULL)
 				_fs_fstab.fs_passno = atoi(cp);
 		}
 		strcpy(subline, _fs_fstab.fs_mntops);
-		for (typexx = 0, cp = strtok(subline, ","); cp;
-		     cp = strtok((char *)NULL, ",")) {
+		for (typexx = 0, cp = strtok_r(subline, ",", &opt_save); cp;
+		     cp = strtok_r((char *)NULL, ",", &opt_save)) {
 			if (strlen(cp) != 2)
 				continue;
 			if (!strcmp(cp, FSTAB_RW)) {

@@ -149,7 +149,7 @@ main(
 				*/
 				if (fs->fs_mntops &&
 				    (na = strstr(fs->fs_mntops, "na")) &&
-				    ((na = fs->fs_mntops) || na[-1] == ',') &&
+				    (na == fs->fs_mntops || na[-1] == ',') &&
 				    (na[2] == ',' || na[2] == '\0')) {
 				    continue;
 				}

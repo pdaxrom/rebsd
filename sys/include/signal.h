@@ -50,12 +50,6 @@ typedef int sig_atomic_t;
 
 typedef unsigned long sigset_t;
 
-#ifdef __PCC__
-#define __SIGNAL_P(args)        ()
-#else
-#define __SIGNAL_P(args)        args
-#endif
-
 /*
  * Signal vector "template" used in sigaction call.
  */
@@ -173,24 +167,22 @@ extern const char sigprop [NSIG + 1];
 /*
  * Send an interrupt to process.
  */
-void sendsig __SIGNAL_P((sig_t p, int sig, long mask));
+void sendsig(sig_t p, int sig, long mask);
 
 #else /* KERNEL */
 
-sig_t   signal __SIGNAL_P((int, sig_t));
-int     sigaction __SIGNAL_P((int signum, const struct sigaction *act,
-                   struct sigaction *oldact));
-int     sigvec __SIGNAL_P((int sig, struct sigvec *vec, struct sigvec *ovec));
-int     kill __SIGNAL_P((pid_t pid, int sig));
-int     sigpause __SIGNAL_P((int mask));
-int     sigblock __SIGNAL_P((int mask));
-int     sigsetmask __SIGNAL_P((int mask));
-int     sigprocmask __SIGNAL_P((int how, const sigset_t *set, sigset_t *oldset));
-int     siginterrupt __SIGNAL_P((int sig, int flag));
-int     sigsuspend __SIGNAL_P((const sigset_t *mask));
+sig_t   signal(int, sig_t);
+int     sigaction(int signum, const struct sigaction *act,
+                   struct sigaction *oldact);
+int     sigvec(int sig, struct sigvec *vec, struct sigvec *ovec);
+int     kill(pid_t pid, int sig);
+int     sigpause(int mask);
+int     sigblock(int mask);
+int     sigsetmask(int mask);
+int     sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+int     siginterrupt(int sig, int flag);
+int     sigsuspend(const sigset_t *mask);
 
 #endif /* KERNEL */
-
-#undef __SIGNAL_P
 
 #endif /* NSIG */

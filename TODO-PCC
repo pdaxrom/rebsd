@@ -683,6 +683,37 @@ test gate.
 
 ## Temporary Compatibility Stubs To Close
 
+- [ ] Audit and eliminate diagnostic workarounds rather than promoting them
+  into normal builds.
+  - Real fixes that should stay: absolute native PCC tool paths for
+    `/usr/bin/as` and `/usr/bin/ld`, `TMPDIR`-aware compiler temporaries,
+    correct compiler-driver child wait status handling, compiler diagnostics
+    on stderr, `sbrk()` returning `(void *)-1` with `ENOMEM`, and the
+    FCSR-safe ReBSD/MIPS `DEBUGFP` oracle.
+  - Diagnostic-only paths that must not become the normal system contract:
+    staging the N64 PCC C runner as `/bin/sh`, the shell-stub sleep path,
+    mounting `/var` with the explicit `/sbin/mount -o rw /dev/ram0 /var`
+    form to bypass the crashing `/sbin/mount /var` path, and the
+    `N64_DEBUG_UART_ONLY` no-op `usbnetattach()`/`usbnpoll()` compatibility
+    symbols.
+  - Closed: the real `/sbin/mount /var` path is fixed in libc fstab parsing;
+    an explicit Malta64 runtime check now passes `umount /var`, `mkfs
+    /dev/ram0`, and `/sbin/mount /var` with `MOUNT_VAR_RC:0`.
+  - Closed: PCC-specific K&R declaration switches were removed from public
+    headers. `include/unistd.h` and `sys/include/signal.h` no longer hide
+    typed prototypes behind `#ifdef __PCC__`; the PCC-built N64 rootfs
+    rebuilds with normal prototypes, so future failures must be fixed in PCC
+    or in the exact public type declarations, not by reverting to empty
+    argument lists.
+  - Verification after the header/fstab cleanup: `make -C sys/mips/n64
+    N64_USERLAND_COMPILER=pcc rootfs.stage/.userland.pcc` passes; full native
+    PCC regressions with `MIPS_ROOTFS_COMPILER=pcc` pass on both
+    `BOARD=malta64` and `BOARD=malta` with 316 total, 286 compile-pass, 30
+    expected compile-fail, 0 unexpected compile-fail, and 276/276 runtime
+    pass.
+  - Remaining closures: fix the PCC-built shell/login/redirection path, then
+    replace the UART-only no-op USBNet symbols with a generated config that
+    does not emit the USBNet attach entry.
 - [x] Re-run the N64 native PCC debug image after absolute native tool paths,
   native FPU/FCSR probes, PCC FP-folding probes, and shell-stub sleep fix.
   - The old `manual__min` driver-stack failure is no longer present in the
