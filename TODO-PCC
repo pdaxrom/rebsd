@@ -417,7 +417,7 @@ test gate.
     before comparing against native FPU results, treats NaN payload/sign
     differences as class-equal, and keeps the `strtold()` oracle only for
     host builds where native libc is a valid parser oracle.
-- [ ] Add a VR4300-like Malta QEMU gate before claiming N64 hardware readiness.
+- [x] Add a VR4300-like Malta QEMU gate before claiming N64 hardware readiness.
   - The previous green Malta result used `qemu-system-mips -M malta` without
     `-cpu`, which is not a VR4300-class CPU model.
   - Local QEMU exposes no exact VR4300.  The closest automated profile is
@@ -425,10 +425,23 @@ test gate.
     a later NEC VR-family probe.
   - Current `qemu-system-mips64` big-endian machine list is `malta`,
     `magnum`, and `pica61`; there is no `n64`/`vr4300` board model.
-  - ReBSD has a Malta port only.  A smoke boot with
-    `qemu-system-mips64 -M malta -cpu R4000` and with `-cpu VR5432` currently
-    times out before serial output, so this is not yet a usable replacement
-    for N64 hardware validation.
+  - ReBSD now has a separate `sys/mips/malta64` port for this gate.  It uses
+    `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`, keeps the
+    normal `sys/mips/malta` port unchanged, and builds the kernel with
+    MIPS3/R4000 flags plus the 64-bit Malta stage0 wrapper.
+  - Clean R4000/Malta64 native PCC gate on 2026-07-03 after the N64 debug
+    isolation work:
+    `NATIVE_PCC_REGRESS_TOTAL:316`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+    `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RC:0`.
+  - This gate is useful for catching MIPS3/R4000 regressions, but it still
+    does not reproduce the real N64 intermittent `ccom` bad-address faults.
+    Keep real hardware logs as the deciding evidence for N64 readiness.
   - N64 hardware native PCC output showed real unexpected failures:
     `c99__arith002`, `c99__arith003`, and `jira__PCC-185` link with
     `Undefined: main`; `jira__PCC-152` reports empty compiler output; several
@@ -553,9 +566,16 @@ test gate.
     `fp__builtin_nan`, and `fp__isnan_call`.
   - Rebuilt `sys/mips/n64/pcc-debug.z64` on 2026-07-03 after a clean N64
     rebuild.  The image contains the absolute-tool fix, the FP probes, the
-    FCSR-safe/helper-based `DEBUGFP` oracle, and the deterministic
-    `darray005` test; `fsutil --check` reports 321 files, 3213 blocks used,
-    and 2906 blocks free.
+    FCSR-safe/helper-based `DEBUGFP` oracle, the deterministic `darray005`
+    test, and the `ccom-stress.sh` smoke; `fsutil --check` reports 322 files,
+    3222 blocks used, and 2897 blocks free.
+  - The latest debug image also isolates the PCC hardware run from unrelated
+    N64 video/input/USB activity: `N64_DEBUG_UART_ONLY=1` removes the VI,
+    SI/joybus, and N64cart USB Ethernet backend objects from the kernel.  A
+    binary symbol/string check found no `n64usb`, `n64cart_usbecm`,
+    `n64cart_usbnet`, `n64_video`, `usbn0`, or `usb ethernet` path in
+    `pcc-debug.z64`; only no-op `usbnetattach`/`usbnpoll` remain to satisfy
+    the generated `ioconf.c` entry from the shared N64 `Config`.
   - Add the closest usable VR4300-like QEMU/Malta profile if we can make one
     boot, but do not treat the current default Malta 24Kf/MIPS32 pass as N64
     hardware readiness.
@@ -706,16 +726,21 @@ test gate.
     diagnostic.  This is intended to distinguish bad driver temp-file content,
     `/tmp` symlink/ramfs behavior, and `ccom` input-path sensitivity on real
     N64 hardware.
-  - `make -C sys/mips/malta native-pcc-regress-runtime-vr4300` currently does
-    not provide usable evidence here: it launches `qemu-system-mips64 --cpu
-    R4000`, then produces no UART log and had to be interrupted.  Do not cite
-    that target as passing until its boot/console path is fixed.
-  - The ordinary Malta native PCC regression still passes after the FCSR and
-    driver-temp changes: 316 total, 286 compile-pass, 30 expected compile-fail,
-    0 unexpected compile-fail, 276/276 runtime pass.
+  - The separate `sys/mips/malta64` R4000 gate now provides usable QEMU
+    evidence: `make -C sys/mips BOARD=malta64 native-pcc-regress-runtime
+    MIPS_ROOTFS_COMPILER=pcc` boots with `qemu-system-mips64 -M malta -cpu
+    R4000 -m 32M -nographic` and passes 316 total checks, 286 compile-pass,
+    30 expected compile-fail, 0 unexpected compile-fail, and 276/276 runtime
+    pass.
+  - The ordinary Malta native PCC regression also still passes after the FCSR
+    and driver-temp changes: 316 total, 286 compile-pass, 30 expected
+    compile-fail, 0 unexpected compile-fail, 276/276 runtime pass.
+  - The R4000/Malta64 pass does not reproduce the intermittent N64 `ccom`
+    bad-address faults, so it is a regression gate, not a substitute for real
+    N64 hardware validation.
   - Rebuilt `sys/mips/n64/pcc-debug.z64` on 2026-07-03 from a clean N64
-    `pcc-debug-image` build after the Malta run.  The debug rootfs remains
-    6144 KB with 321 files, 3212 used blocks, and 2907 free blocks.
+    `pcc-debug-image` build after the Malta64 run.  The debug rootfs remains
+    6144 KB with 322 files, 3222 used blocks, and 2897 free blocks.
   - The shell-stub path now sleeps forever for `argv0="sh"` and `argv0="-"`,
     so the next hardware log should not contain repeated test passes after
     `N64_PCC_DEBUG_RC_END`.
