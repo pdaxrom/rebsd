@@ -770,6 +770,13 @@ test gate.
     322 files, 3222 used blocks, and 2897 free blocks; `strings` on
     `sys/mips/n64/pcc-debug.z64` confirms `N64_PCC_DEBUG_MODE` and the
     extended test names are present in the image.
+  - Malta64/R4000 target-side native PCC regression was re-run after this
+    runner change with `MIPS_ROOTFS_COMPILER=pcc`.  The QEMU command used
+    `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`; the summary
+    in `/private/tmp/rebsd-malta64-native-pcc-regress-after-n64-debug-all.log`
+    is 316 total, 286 compile-pass, 30 expected compile-fail, 0 unexpected
+    compile-fail, 276/276 runtime pass, 0 unexpected runtime failures, and
+    `NATIVE_PCC_REGRESS_RC:0`.
   - Keep the generated shell scripts staged only for comparison; the hardware
     gate must continue using direct `fork`/`exec` from the C runner until the
     PCC-built shell regressions are separately fixed.
