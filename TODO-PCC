@@ -853,9 +853,17 @@ test gate.
     marker strings are present in the normal staged rootfs.
   - Latest `fsutil --check` for the generated normal `rootfs.img` reports
     628 files, 12766 used blocks, and 3553 free blocks in the 16 MB image.
-  - Hardware re-validation is pending for the sysroot fix: boot
-    `sys/mips/n64/kernel.z64` on N64 and run `/root/pcc-smoke-all.sh`; the
-    expected final status is `PCC_SMOKE_ALL_OK` and `PCC_SMOKE_ALL_RC:0`.
+  - Hardware re-validation after the target sysroot fix passed on real N64.
+    The supplied 2026-07-04 UART log contains two complete
+    `/root/pcc-smoke-all.sh` runs from the normal PCC rootfs; both end with
+    `PCC_SMOKE_ALL_FAILURES 0`, `PCC_SMOKE_ALL_OK`, and
+    `PCC_SMOKE_ALL_RC:0`.
+  - The same N64 log confirms the target PCC driver now passes `--sysroot=/`
+    to ReBSD `ld`, the target linker accepts it, and the library search path
+    is normalized as `-L/usr/lib/` rather than `-L//usr/lib`.
+  - N64 Linpack smoke in that log passes for both compilers at array size 120:
+    GCC reports about 4.0 MFLOPS and PCC about 2.5 MFLOPS on the real
+    hardware smoke configuration.
 - [ ] Add a libc regression for `printf(stdout)` followed by
   `freopen(stdout, ...)` and later `malloc()` traffic.
   - The `ccom -v` crash path strongly suggested this stream transition can
