@@ -683,7 +683,7 @@ test gate.
 
 ## Temporary Compatibility Stubs To Close
 
-- [ ] Re-run the N64 native PCC debug image after absolute native tool paths,
+- [x] Re-run the N64 native PCC debug image after absolute native tool paths,
   native FPU/FCSR probes, PCC FP-folding probes, and shell-stub sleep fix.
   - The old `manual__min` driver-stack failure is no longer present in the
     latest supplied hardware log: `manual__min` passes `cc -v -S`, direct
@@ -744,8 +744,23 @@ test gate.
   - The shell-stub path now sleeps forever for `argv0="sh"` and `argv0="-"`,
     so the next hardware log should not contain repeated test passes after
     `N64_PCC_DEBUG_RC_END`.
-  - Next required evidence is the first `N64_PCC_DEBUG_RC_BEGIN` to
-    `N64_PCC_DEBUG_RC_END` UART block from this exact image.
+  - The next supplied N64 hardware log from `/Users/sash/pcc-debug.log`
+    contains three complete full diagnostic passes from this image.  Each pass
+    starts with `N64_PCC_DEBUG_RC_BEGIN`, formats and mounts the 2 MB `/var`
+    ramdisk, reports clean FPU/FCSR probes, passes all manual PCC pipeline
+    probes (`manual__min`, `fp__div_zero`, `fp__nan_zero`,
+    `fp__builtin_inf`, `fp__builtin_nan`, `fp__isnan_call`), passes
+    `c99__arith002`, `c99__arith003`, `jira__PCC-70`, `jira__PCC-77`,
+    `jira__PCC-152`, and `jira__PCC-185`, and ends with
+    `N64_PCC_DEBUG_END 0` plus `N64_PCC_DEBUG_RUNNER_RC 0`.
+  - The same hardware log has no `bad address`, no `N64_PCC_SIGNAL`, no EMT
+    trap, no compile failure, and no runtime failure in any complete
+    diagnostic pass.  The previous `usbn0` attach line is gone, confirming the
+    UART-only debug kernel is not initializing the N64cart USB Ethernet path.
+  - One partial block immediately after a user interrupt (`^C`) reports
+    `N64_PCC_DEBUG_MOUNT_DIRECT_RC 1` and skips the runner because `/var` was
+    already in an interrupted/re-entry state.  Do not treat that partial block
+    as compiler evidence.
 - [ ] Add a libc regression for `printf(stdout)` followed by
   `freopen(stdout, ...)` and later `malloc()` traffic.
   - The `ccom -v` crash path strongly suggested this stream transition can
