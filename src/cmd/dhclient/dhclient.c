@@ -50,6 +50,9 @@
 #define DHCP_REQUEST  3
 #define DHCP_ACK      5
 
+#define DHCP_DEFAULT_RETRIES 4
+#define DHCP_DEFAULT_TIMEOUT 4
+
 struct dhcp_packet {
     unsigned char op;
     unsigned char htype;
@@ -79,12 +82,27 @@ struct dhcp_lease {
 
 static char *ifname;
 static int verbose;
+static int retries = DHCP_DEFAULT_RETRIES;
+static int timeout = DHCP_DEFAULT_TIMEOUT;
 
 static void
 usage()
 {
-    fprintf(stderr, "usage: dhclient [-v] interface\n");
+    fprintf(stderr, "usage: dhclient [-v] [-r retries] [-t seconds] interface\n");
     exit(1);
+}
+
+static int
+parse_positive(arg)
+    char *arg;
+{
+    char *end;
+    long value;
+
+    value = strtol(arg, &end, 10);
+    if (arg == end || *end != 0 || value <= 0 || value > 60)
+        usage();
+    return (int)value;
 }
 
 static void
@@ -216,35 +234,38 @@ parse_options(pkt, lease)
 }
 
 static void
-init_packet(pkt, xid, mac)
+init_packet(pkt, xid, mac, secs)
     struct dhcp_packet *pkt;
     unsigned int xid;
     unsigned char *mac;
+    unsigned int secs;
 {
     memset(pkt, 0, sizeof(*pkt));
     pkt->op = DHCP_BOOTREQUEST;
     pkt->htype = DHCP_HTYPE_ETHER;
     pkt->hlen = DHCP_HLEN_ETHER;
     pkt->xid = htonl(xid);
+    pkt->secs = htons((unsigned short)secs);
     pkt->flags = htons(0x8000);
     memcpy(pkt->chaddr, mac, DHCP_HLEN_ETHER);
 }
 
 static int
-make_request(pkt, xid, mac, msgtype, requested, server)
+make_request(pkt, xid, mac, msgtype, requested, server, secs)
     struct dhcp_packet *pkt;
     unsigned int xid;
     unsigned char *mac;
     int msgtype;
     unsigned int requested;
     unsigned int server;
+    unsigned int secs;
 {
     unsigned char *cp;
     static unsigned char params[] = {
         DHCP_OPT_SUBNET_MASK, DHCP_OPT_ROUTER, DHCP_OPT_DNS
     };
 
-    init_packet(pkt, xid, mac);
+    init_packet(pkt, xid, mac, secs);
     cp = pkt->options;
     *cp++ = 99;
     *cp++ = 130;
@@ -299,11 +320,12 @@ send_dhcp(fd, pkt, len)
 }
 
 static int
-recv_dhcp(fd, xid, want, lease)
+recv_dhcp(fd, xid, want, lease, seconds)
     int fd;
     unsigned int xid;
     int want;
     struct dhcp_lease *lease;
+    int seconds;
 {
     struct dhcp_packet pkt;
     struct sockaddr_in from;
@@ -314,7 +336,7 @@ recv_dhcp(fd, xid, want, lease)
     for (;;) {
         FD_ZERO(&rfds);
         FD_SET(fd, &rfds);
-        tv.tv_sec = 4;
+        tv.tv_sec = seconds;
         tv.tv_usec = 0;
         n = select(fd + 1, &rfds, (fd_set *)0, (fd_set *)0, &tv);
         if (n < 0) {
@@ -446,12 +468,16 @@ main(argc, argv)
     struct dhcp_lease offer, ack;
     unsigned char mac[DHCP_HLEN_ETHER];
     unsigned int xid;
-    int fd, i, len, on;
+    int fd, i, len, on, got_offer, got_ack;
     char cmd[80];
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0)
             verbose = 1;
+        else if (strcmp(argv[i], "-r") == 0 && i + 1 < argc)
+            retries = parse_positive(argv[++i]);
+        else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc)
+            timeout = parse_positive(argv[++i]);
         else if (argv[i][0] == '-')
             usage();
         else
@@ -496,16 +522,25 @@ main(argc, argv)
         return 1;
     }
 
-    len = make_request(&pkt, xid, mac, DHCP_DISCOVER, 0, 0);
-    if (verbose)
-        printf("dhclient: discover xid=%x\n", xid);
-    if (send_dhcp(fd, &pkt, len) != len) {
-        perror("dhclient: send discover");
-        close(fd);
-        return 1;
+    got_offer = 0;
+    for (i = 0; i < retries; i++) {
+        len = make_request(&pkt, xid, mac, DHCP_DISCOVER, 0, 0,
+            (unsigned int)(i * timeout));
+        if (verbose)
+            printf("dhclient: discover xid=%x try=%d/%d\n", xid,
+                i + 1, retries);
+        if (send_dhcp(fd, &pkt, len) != len) {
+            perror("dhclient: send discover");
+            close(fd);
+            return 1;
+        }
+        if (recv_dhcp(fd, xid, DHCP_OFFER, &offer, timeout)) {
+            got_offer = 1;
+            break;
+        }
     }
-    if (!recv_dhcp(fd, xid, DHCP_OFFER, &offer)) {
-        fprintf(stderr, "dhclient: no offer\n");
+    if (!got_offer) {
+        fprintf(stderr, "dhclient: no offer after %d tries\n", retries);
         close(fd);
         return 1;
     }
@@ -513,15 +548,25 @@ main(argc, argv)
         printf("dhclient: offer %s server %s\n", iptoa(offer.yiaddr),
             iptoa(offer.server));
 
-    len = make_request(&pkt, xid, mac, DHCP_REQUEST, offer.yiaddr,
-        offer.server);
-    if (send_dhcp(fd, &pkt, len) != len) {
-        perror("dhclient: send request");
-        close(fd);
-        return 1;
+    got_ack = 0;
+    for (i = 0; i < retries; i++) {
+        len = make_request(&pkt, xid, mac, DHCP_REQUEST, offer.yiaddr,
+            offer.server, (unsigned int)(i * timeout));
+        if (verbose)
+            printf("dhclient: request xid=%x try=%d/%d\n", xid,
+                i + 1, retries);
+        if (send_dhcp(fd, &pkt, len) != len) {
+            perror("dhclient: send request");
+            close(fd);
+            return 1;
+        }
+        if (recv_dhcp(fd, xid, DHCP_ACK, &ack, timeout)) {
+            got_ack = 1;
+            break;
+        }
     }
-    if (!recv_dhcp(fd, xid, DHCP_ACK, &ack)) {
-        fprintf(stderr, "dhclient: no ack\n");
+    if (!got_ack) {
+        fprintf(stderr, "dhclient: no ack after %d tries\n", retries);
         close(fd);
         return 1;
     }

@@ -7,7 +7,14 @@
 echo "usbn-dhcp-smoke diag v1"
 
 echo "step 1: request lease on usbn0"
-/sbin/dhclient -v usbn0 || exit 1
+if /sbin/dhclient -v usbn0; then
+        :
+else
+        echo "usbn-dhcp-smoke: dhclient failed"
+        /sbin/ifconfig usbn0
+        /usr/bin/netstat -i
+        exit 1
+fi
 
 echo "step 2: inspect interface and lease"
 /sbin/ifconfig usbn0 || exit 1
