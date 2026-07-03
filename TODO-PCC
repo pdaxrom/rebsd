@@ -761,7 +761,7 @@ test gate.
     `N64_PCC_DEBUG_MOUNT_DIRECT_RC 1` and skips the runner because `/var` was
     already in an interrupted/re-entry state.  Do not treat that partial block
     as compiler evidence.
-- [ ] Run the expanded N64 PCC debug image on real hardware.
+- [x] Run the expanded N64 PCC debug image on real hardware.
   - The boot-time C runner now reports `N64_PCC_DEBUG_MODE all` and executes
     the staged extended JIRA regression subset after the already-green primary
     hardware probes.
@@ -777,6 +777,15 @@ test gate.
     is 316 total, 286 compile-pass, 30 expected compile-fail, 0 unexpected
     compile-fail, 276/276 runtime pass, 0 unexpected runtime failures, and
     `NATIVE_PCC_REGRESS_RC:0`.
+  - The next supplied N64 hardware log from `/Users/sash/pcc-debug.log`
+    contains two complete expanded runs.  Each run reports
+    `N64_PCC_DEBUG_MODE all`, executes 45 compile/run tests, and ends with
+    `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and
+    `N64_PCC_DEBUG_RC_END`.
+  - The same log has no non-zero `N64_PCC_*_RC` status, no
+    `N64_PCC_SIGNAL`, no `FAIL`, no `bad address`, no EMT trap, and no panic.
+    The last test in each expanded run is `jira__PCC-204`, which compiles and
+    runs successfully.
   - Keep the generated shell scripts staged only for comparison; the hardware
     gate must continue using direct `fork`/`exec` from the C runner until the
     PCC-built shell regressions are separately fixed.
