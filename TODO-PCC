@@ -820,6 +820,22 @@ test gate.
   - Keep the generated shell scripts staged only for comparison; the hardware
     gate must continue using direct `fork`/`exec` from the C runner until the
     PCC-built shell regressions are separately fixed.
+- [x] Restore the normal N64 PCC rootfs image path after the debug gate.
+  - The tracked normal N64 `/etc/rc` now mounts `/var` through `/etc/fstab`
+    with `mount /var`; the explicit `/sbin/mount -o rw /dev/ram0 /var` path
+    remains diagnostic-only for the PCC debug image.
+  - Clean local build completed on 2026-07-03:
+    `make -C sys/mips/n64 clean` followed by
+    `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
+  - The normal PCC rootfs is not the shell-stub/debug-runner image: staged
+    `/bin/sh`, `/sbin/init`, `/libexec/getty`, and `/bin/login` are real
+    userland binaries, `.userland.pcc` is present, and no `N64_PCC`/debug
+    marker strings are present in the normal staged rootfs.
+  - `fsutil --check` for the generated normal `rootfs.img` reports 625 files,
+    12683 used blocks, and 3636 free blocks in the 16 MB image.
+  - Hardware validation is still pending for the restored normal path:
+    boot `sys/mips/n64/kernel.z64` on N64 and verify `/sbin/init` -> `/etc/rc`
+    -> `/sbin/mount /var` -> getty/login -> `/bin/sh`.
 - [ ] Add a libc regression for `printf(stdout)` followed by
   `freopen(stdout, ...)` and later `malloc()` traffic.
   - The `ccom -v` crash path strongly suggested this stream transition can

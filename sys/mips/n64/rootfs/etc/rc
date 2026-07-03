@@ -5,7 +5,7 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 # The cartridge root remains read-only. Create one volatile UFS filesystem for
 # runtime state; /tmp is a rootfs symlink to /var/tmp.
 if mkfs -i 4096 /dev/ram0 >/dev/null; then
-	if mount -o rw /dev/ram0 /var; then
+	if mount /var; then
 		mkdir /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
 		chmod 1777 /var/tmp
 		: >/var/run/utmp
