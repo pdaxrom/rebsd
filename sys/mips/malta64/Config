@@ -1,0 +1,21 @@
+#
+# QEMU Malta under qemu-system-mips64 with an R4000-class CPU.
+#
+architecture    "mips"
+cpu             "MIPS3"
+board           "MALTA64"
+
+options         "CONS_MAJOR=0", "CONS_MINOR=0"
+
+device          "malta_uart"
+
+service         malta
+service         pty     4
+service         ether   2
+service         malta_ne
+service         usbnet
+service         inet
+service         unixdomain
+
+config          unix    root on major 0 minor 0
+                        swap on major 1 minor 0

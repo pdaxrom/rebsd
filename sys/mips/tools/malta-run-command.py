@@ -18,6 +18,10 @@ def command_run(args):
         args.qemu,
         "-M",
         "malta",
+    ]
+    if args.cpu:
+        cmd += ["-cpu", args.cpu]
+    cmd += [
         "-m",
         args.ram,
         "-nographic",
@@ -115,6 +119,7 @@ def main():
     parser.add_argument("--command", required=True)
     parser.add_argument("--expect", required=True)
     parser.add_argument("--qemu", default="qemu-system-mips")
+    parser.add_argument("--cpu")
     parser.add_argument("--ram", default="32M")
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--silence-timeout", type=int, default=45)

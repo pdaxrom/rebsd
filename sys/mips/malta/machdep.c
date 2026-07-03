@@ -160,7 +160,7 @@ startup(void)
     mips_tlb_init();
 
     status = mips_read_c0_register(C0_STATUS, 0);
-    status &= ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_BEV);
+    status &= ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_IM | ST_BEV);
     status |= ST_IM7;
     mips_write_c0_register(C0_STATUS, 0, status);
 

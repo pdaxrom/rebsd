@@ -1,7 +1,7 @@
 #include <machine/io.h>
 
         .set    noreorder
-#ifdef N64
+#if defined(N64) || defined(MIPS3) || defined(MALTA64)
         .set    mips3
 #else
         .set    mips32

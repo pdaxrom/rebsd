@@ -2,7 +2,7 @@
 #include <machine/machparam.h>
 
         .set    noreorder
-#ifdef N64
+#if defined(N64) || defined(MIPS3) || defined(MALTA64)
         .set    mips3
 #else
         .set    mips32
@@ -56,9 +56,9 @@ mips_kernel_entry:
         la      $k0, USER_DATA_START
         mtc0    $k0, $14
         mfc0    $k0, $12
-        li      $k1, ~(ST_EXL | ST_ERL | ST_KSU | ST_FR)
+        li      $k1, ~(ST_EXL | ST_ERL | ST_KSU | ST_IM | ST_FR)
         and     $k0, $k0, $k1
-#ifdef MALTA
+#if defined(MALTA) || defined(MALTA64) || defined(MALTA_ENABLED)
         ori     $k0, $k0, ST_EXL | ST_IE | ST_IM7
 #else
         ori     $k0, $k0, ST_EXL | ST_IE | ST_IM2 | ST_IM7

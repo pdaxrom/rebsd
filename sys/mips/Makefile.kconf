@@ -1,18 +1,40 @@
 #
 # Makefile template for shared MIPS ports.
 #
-MALTA_CPU_TUNE ?= 24kf
-MIPS_ARCH ?= -EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE)
+MALTA_PORT64 = $(filter -DMALTA64,$(PARAM))
+MALTA_CPU_TUNE ?= $(if $(MALTA_PORT64),r4000,24kf)
+MIPS_ARCH ?= $(if $(MALTA_PORT64),-EB -mips3 -mabi=32 -mtune=$(MALTA_CPU_TUNE),-EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE))
 MALTA_QEMU_RAM ?= 32M
+MALTA_QEMU ?= $(if $(MALTA_PORT64),qemu-system-mips64,qemu-system-mips)
+MALTA_QEMU_CPU ?= $(if $(MALTA_PORT64),R4000,)
+MALTA_QEMU_CPU_OPT = $(if $(MALTA_QEMU_CPU),-cpu $(MALTA_QEMU_CPU),)
+MALTA_QEMU_CPU_ARG = $(if $(MALTA_QEMU_CPU),--cpu $(MALTA_QEMU_CPU),)
+MALTA_VR4300_QEMU ?= qemu-system-mips64
+MALTA_VR4300_CPU ?= R4000
 
 include ../../../target-mips.mk
 
 TOPSRC          = ../../..
 S               = ../..
 BOARD_SRC       = ../malta
+MALTA_HW_MODEL ?= $(if $(MALTA_PORT64),MIPS Malta R4000,MIPS Malta 24Kf)
+MALTA_VERSION_NAME ?= $(if $(MALTA_PORT64),Malta64,Malta)
+MALTA_KERNEL_LD_SCRIPT ?= ../malta/malta.ld
+MALTA_RUNTIME_KERNEL ?= $(if $(MALTA_PORT64),malta64.elf,unix.elf)
+MALTA_EARLY_TARGET ?= $(if $(MALTA_PORT64),malta64-early.elf,malta-early.elf)
+MALTA64_STAGE_ARCH ?= -EB -mips3 -mabi=64 -mtune=r4000
+MALTA64_STAGE_CC = $(MIPS_PREFIX)gcc $(MALTA64_STAGE_ARCH) $(MIPS_CODE)
+MALTA64_STAGE_ASFLAGS = -x assembler-with-cpp -c -I. -I$(TOPSRC)/include \
+                        $(PARAM) -DKERNEL -DMIPS -Wa,-I.
+MALTA64_STAGE_LD ?= ld.lld
+MALTA64_STAGE_LDFLAGS ?= -m elf64btsmip -nostdlib
+MALTA64_LLVM_BINDIR ?= /opt/homebrew/opt/llvm/bin
+MALTA64_STAGE_SIZE ?= $(MALTA64_LLVM_BINDIR)/llvm-size
+MALTA64_STAGE_OBJDUMP ?= $(MALTA64_LLVM_BINDIR)/llvm-objdump
 MIPS_ROOTFS_KBYTES ?= 16384
 MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/mips/n64/rootfs.stage
-MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland
+MIPS_ROOTFS_COMPILER ?= gcc
+MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland.$(MIPS_ROOTFS_COMPILER)
 MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_COMMON_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
@@ -54,7 +76,7 @@ NATIVE_PCC_SMOKE_LOG ?= /private/tmp/rebsd-native-pcc-smoke.log
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
                   -DROMFS_ENABLED \
                   -DHW_MACHINE_NAME=\"mips\" \
-                  -DHW_MODEL_NAME='"MIPS Malta 24Kf"'
+                  -DHW_MODEL_NAME='"$(MALTA_HW_MODEL)"'
 ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
 CPPFLAGS        += -I$(TOPSRC)/include/sys -I$(TOPSRC)/sys \
                   -I$(TOPSRC)/sys/net \
@@ -85,18 +107,18 @@ COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
 %CFILES
 
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
-SYSTEM_DEP      = Makefile ioconf.c ../malta/malta.ld
-SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for Malta: local build\n";' > vers.c; \
+SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT)
+SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): local build\n";' > vers.c; \
                   ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
                   rm -f $@
-SYSTEM_LD       = ${LD} -nostdlib -T ../malta/malta.ld ${SYSTEM_OBJ} vers.o -o $@
+SYSTEM_LD       = ${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o $@
 SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
 
-all: unix malta-early.elf
+all: unix $(MALTA_EARLY_TARGET) $(if $(MALTA_PORT64),malta64.elf,)
 
-kernel: unix
+kernel: unix $(if $(MALTA_PORT64),malta64.elf,)
 
 malta-early.o: ../malta/early_uart.S | .deps
 	$(CC) $(ASFLAGS) $< -o $@
@@ -106,25 +128,58 @@ malta-early.elf: malta-early.o ../malta/malta.ld
 	$(SIZE) $@
 	$(OBJDUMP) -d -S $@ > malta-early.dis
 
-run-early: malta-early.elf
-	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
-	    -no-reboot -kernel malta-early.elf
+unix.bin: unix.elf
+	$(OBJCOPY) -O binary unix.elf unix.bin
 
-run: unix.elf
-	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
+malta64-stage0.o: ../malta64/stage0.S | .deps
+	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
+
+malta64-stage0-kernel.o: ../malta64/stage0_kernel_blob.S unix.bin | .deps
+	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
+
+malta64.elf: malta64-stage0.o malta64-stage0-kernel.o ../malta64/stage0_linker.ld
+	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \
+	    -T ../malta64/stage0_linker.ld \
+	    malta64-stage0.o malta64-stage0-kernel.o -o $@
+	$(MALTA64_STAGE_SIZE) $@
+	$(MALTA64_STAGE_OBJDUMP) -d -S $@ > malta64.dis
+
+malta64-early.o: ../malta64/early_uart64.S | .deps
+	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
+
+malta64-early.elf: malta64-early.o ../malta64/stage0_linker.ld
+	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \
+	    -T ../malta64/stage0_linker.ld malta64-early.o -o $@
+	$(MALTA64_STAGE_SIZE) $@
+	$(MALTA64_STAGE_OBJDUMP) -d -S $@ > malta64-early.dis
+
+run-early: $(MALTA_EARLY_TARGET)
+	$(MALTA_QEMU) -M malta $(MALTA_QEMU_CPU_OPT) -m $(MALTA_QEMU_RAM) \
+	    -nographic -serial mon:stdio -no-reboot -kernel $(MALTA_EARLY_TARGET)
+
+run: $(MALTA_RUNTIME_KERNEL)
+	$(MALTA_QEMU) -M malta $(MALTA_QEMU_CPU_OPT) -m $(MALTA_QEMU_RAM) \
+	    -nographic -serial mon:stdio -no-reboot -kernel $(MALTA_RUNTIME_KERNEL)
+
+run-vr4300: unix.elf
+	$(MALTA_VR4300_QEMU) -M malta -cpu $(MALTA_VR4300_CPU) \
+	    -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
 	    -no-reboot -kernel unix.elf
 
-run-net: unix.elf
-	qemu-system-mips -M malta -m $(MALTA_QEMU_RAM) -nographic -serial mon:stdio \
-	    -no-reboot -kernel unix.elf \
+run-net: $(MALTA_RUNTIME_KERNEL)
+	$(MALTA_QEMU) -M malta $(MALTA_QEMU_CPU_OPT) -m $(MALTA_QEMU_RAM) \
+	    -nographic -serial mon:stdio -no-reboot -kernel $(MALTA_RUNTIME_KERNEL) \
 	    -netdev user,id=net0,guestfwd=tcp:10.0.2.100:2323-cmd:/bin/cat \
 	    -device ne2k_isa,netdev=net0,iobase=0x300,irq=9,mac=52:54:00:12:34:56
 
 .PHONY: smoke-host-portablecc pcc-regress-compile pcc-regress-stage \
-        pcc-regress-runtime pcc-regress-summary linpack-smoke-build \
+        pcc-regress-runtime pcc-regress-runtime-vr4300 \
+        pcc-regress-summary linpack-smoke-build \
         linpack-smoke-stage linpack-smoke-runtime \
-        native-pcc-smoke-runtime native-pcc-regress-stage \
-        native-pcc-regress-runtime FORCE
+        linpack-smoke-runtime-vr4300 native-pcc-smoke-runtime \
+        native-pcc-smoke-runtime-vr4300 native-pcc-regress-stage \
+        native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 \
+        FORCE
 smoke-host-portablecc: $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SMOKE_SCRIPT)
 	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
@@ -148,12 +203,19 @@ pcc-regress-stage: pcc-regress-compile $(MIPS_ROOTFS_BUILD_MANIFEST)
 	cp $(PCC_REGRESS_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
 
 pcc-regress-runtime: pcc-regress-stage
-	$(MAKE) unix.elf
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
 	python3 $(PCC_REGRESS_SCRIPT) run \
 	    --malta-dir $(abspath .) \
-	    --kernel unix.elf \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
 	    --log $(PCC_REGRESS_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
 	    --ram $(MALTA_QEMU_RAM)
+
+pcc-regress-runtime-vr4300:
+	$(MAKE) pcc-regress-runtime \
+	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
+	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
+	    PCC_REGRESS_LOG=/private/tmp/rebsd-pcc-runtime-vr4300.log
 
 pcc-regress-summary: $(PCC_REGRESS_SCRIPT)
 	python3 $(PCC_REGRESS_SCRIPT) summarize \
@@ -182,24 +244,38 @@ linpack-smoke-stage: linpack-smoke-build $(MIPS_ROOTFS_BUILD_MANIFEST)
 	cp $(LINPACK_SMOKE_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
 
 linpack-smoke-runtime: linpack-smoke-stage
-	$(MAKE) unix.elf
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
 	python3 $(LINPACK_SMOKE_SCRIPT) run \
 	    --malta-dir $(abspath .) \
-	    --kernel unix.elf \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
 	    --log $(LINPACK_SMOKE_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
 	    --ram $(MALTA_QEMU_RAM) \
 	    --array-size $(LINPACK_SMOKE_ARRAY_SIZE) \
 	    --min-seconds $(LINPACK_SMOKE_MIN_SECONDS)
 
+linpack-smoke-runtime-vr4300:
+	$(MAKE) linpack-smoke-runtime \
+	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
+	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
+	    LINPACK_SMOKE_LOG=/private/tmp/rebsd-linpack-smoke-vr4300.log
+
 native-pcc-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
-	$(MAKE) unix.elf
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
 	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
 	    --malta-dir $(abspath .) \
-	    --kernel unix.elf \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
 	    --log $(NATIVE_PCC_SMOKE_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
 	    --ram $(MALTA_QEMU_RAM) \
 	    --command '/root/native-pcc-smoke.sh; echo NATIVE_PCC_SMOKE_RC:$$?' \
 	    --expect "NATIVE_PCC_SMOKE_RC:0"
+
+native-pcc-smoke-runtime-vr4300:
+	$(MAKE) native-pcc-smoke-runtime \
+	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
+	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
+	    NATIVE_PCC_SMOKE_LOG=/private/tmp/rebsd-native-pcc-smoke-vr4300.log
 
 native-pcc-regress-stage: $(MIPS_ROOTFS_BUILD_MANIFEST) $(PCC_REGRESS_SCRIPT)
 	python3 $(PCC_REGRESS_SCRIPT) native-stage \
@@ -209,21 +285,30 @@ native-pcc-regress-stage: $(MIPS_ROOTFS_BUILD_MANIFEST) $(PCC_REGRESS_SCRIPT)
 	cp $(NATIVE_PCC_REGRESS_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
 
 native-pcc-regress-runtime: native-pcc-regress-stage $(MALTA_RUN_COMMAND_SCRIPT)
-	$(MAKE) unix.elf
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
 	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
 	    --malta-dir $(abspath .) \
-	    --kernel unix.elf \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
 	    --log $(NATIVE_PCC_REGRESS_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
 	    --ram $(MALTA_QEMU_RAM) \
 	    --timeout $(NATIVE_PCC_REGRESS_TIMEOUT) \
 	    --silence-timeout $(NATIVE_PCC_REGRESS_SILENCE_TIMEOUT) \
 	    --command '/root/run-native-pcc-regress.sh; echo NATIVE_PCC_REGRESS_RC:$$?' \
 	    --expect "NATIVE_PCC_REGRESS_RC:0"
 
+native-pcc-regress-runtime-vr4300:
+	$(MAKE) native-pcc-regress-runtime \
+	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
+	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
+	    NATIVE_PCC_REGRESS_LOG=/private/tmp/rebsd-native-pcc-tests-vr4300.log
+
 FORCE:
 
 $(MIPS_ROOTFS_SRC_STAMP): FORCE
-	$(MAKE) -C $(TOPSRC)/sys/mips/n64 rootfs.stage/.userland
+	$(MAKE) -C $(TOPSRC)/sys/mips/n64 \
+	    N64_USERLAND_COMPILER=$(MIPS_ROOTFS_COMPILER) \
+	    rootfs.stage/.userland.$(MIPS_ROOTFS_COMPILER)
 
 $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
 	rm -rf $(MIPS_ROOTFS_STAGE)

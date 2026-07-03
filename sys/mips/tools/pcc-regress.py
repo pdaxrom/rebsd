@@ -637,6 +637,10 @@ def command_run(args):
     cmd = [
         args.qemu,
         "-M", "malta",
+    ]
+    if args.cpu:
+        cmd += ["-cpu", args.cpu]
+    cmd += [
         "-m", args.ram,
         "-nographic",
         "-serial", "mon:stdio",
@@ -779,6 +783,7 @@ def main():
     p.add_argument("--kernel", default="unix.elf")
     p.add_argument("--log", required=True)
     p.add_argument("--qemu", default="qemu-system-mips")
+    p.add_argument("--cpu")
     p.add_argument("--ram", default="32M")
     p.add_argument("--timeout", type=int, default=240)
     p.add_argument("--silence-timeout", type=int, default=30)
