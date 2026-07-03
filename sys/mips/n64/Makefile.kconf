@@ -15,8 +15,9 @@ N64_TRACE       ?= 0
 N64_DEBUG_UART_ONLY ?= 0
 N64_BUILD_MODE_STAMP = .build-mode.$(N64_DEBUG_UART_ONLY)
 ifeq ($(N64_DEBUG_UART_ONLY),1)
-PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED,$(PARAM))
-PARAM += -DN64_DEBUG_USERMEM_4M -DN64_PCC_FPE_TRACE
+PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
+    -DUSBNET_ENABLED -DUSBNET_ECM -DUSBNET_VENDOR,$(PARAM))
+PARAM += -DN64_DEBUG_UART_ONLY -DN64_DEBUG_USERMEM_4M -DN64_PCC_FPE_TRACE
 endif
 N64_ROOTFS_KBYTES ?= 16384
 N64_ROOTFS_COMMON_DIR ?= $(TOPSRC)/sys/mips/rootfs
@@ -389,11 +390,16 @@ COMPILE_FPU_S   = ${ASFPU} ${FPU_ASFLAGS} $< -o $@
 %CFILES
 
 ifeq ($(N64_DEBUG_UART_ONLY),1)
-OBJS := $(filter-out video_console.o si.o joybus.o,$(OBJS))
+OBJS := $(filter-out video.o video_console.o si.o joybus.o \
+    n64usbnet_proto.o n64cart_usbnet.o n64cart_usbecm.o,$(OBJS))
 CFILES := $(filter-out \
+    $S/mips/n64/video.c \
     $S/mips/n64/video_console.c \
     $S/mips/n64/si.c \
-    $S/mips/n64/joybus.c,$(CFILES))
+    $S/mips/n64/joybus.c \
+    $S/mips/common/n64usbnet_proto.c \
+    $S/mips/n64/n64cart_usbnet.c \
+    $S/mips/n64/n64cart_usbecm.c,$(CFILES))
 endif
 
 SYSTEM_OBJ      = startup.o ${OBJS} ioconf.o

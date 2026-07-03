@@ -1,6 +1,8 @@
 #include <sys/param.h>
 #include <machine/n64int.h>
+#ifdef VIDEO_ENABLED
 #include <machine/video.h>
+#endif
 
 #define N64_REG32(addr)         (*(volatile unsigned *)(addr))
 
@@ -89,7 +91,10 @@ n64_interrupt_handle_mi(void)
     if (pending == 0)
         return;
 
-    if (pending & N64_MI_INTERRUPT_VI)
+    if (pending & N64_MI_INTERRUPT_VI) {
+#ifdef VIDEO_ENABLED
         n64_video_intr();
+#endif
+    }
     n64_mi_ack(pending);
 }

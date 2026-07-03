@@ -1,3 +1,18 @@
+#include <sys/param.h>
+
+#ifdef N64_DEBUG_UART_ONLY
+void
+usbnetattach(int unit)
+{
+    (void)unit;
+}
+
+void
+usbnpoll(void)
+{
+}
+#else
+
 /*
  * Generic USB Ethernet-like interface upper half.
  *
@@ -5,7 +20,6 @@
  * such as the N64cart USB device endpoints.  This file only handles BSD ifnet,
  * ARP, queues, and mbuf handoff.
  */
-#include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
@@ -429,3 +443,5 @@ usbn_input(int unit, const unsigned char *frame, unsigned len)
     sc->sc_if.if_ipackets++;
     splx(s);
 }
+
+#endif

@@ -204,7 +204,9 @@ startup(void)
     n64_install_exception_vectors();
     n64_tlb_init();
     n64_interrupt_init();
+#ifdef VIDEO_ENABLED
     n64_video_intr_enable();
+#endif
 
     status = mips_read_c0_register(C0_STATUS, 0);
     status &= ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_BEV);
@@ -253,8 +255,10 @@ baduaddr(caddr_t addr)
 
     if (a >= USER_DATA_START && a < USER_DATA_END)
         return 0;
+#ifdef VIDEO_ENABLED
     if (n64_video_useraddr_valid(addr))
         return 0;
+#endif
     return 1;
 }
 
