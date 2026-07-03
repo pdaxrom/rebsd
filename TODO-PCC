@@ -824,6 +824,13 @@ test gate.
   - The tracked normal N64 `/etc/rc` now mounts `/var` through `/etc/fstab`
     with `mount /var`; the explicit `/sbin/mount -o rw /dev/ram0 /var` path
     remains diagnostic-only for the PCC debug image.
+  - The normal PCC rootfs now stages `/root/pcc-smoke-all.sh`, a single
+    UART-friendly runner for the manual hardware pass. It runs the native PCC,
+    cc/pcc driver, type, `long long`, ABI, libc string, shell, repeated
+    `ccom`, Linpack, and quick runtime stress smokes without network tests.
+  - Normal N64 PCC images now stage prebuilt `/root/linpack-gcc` and
+    `/root/linpack-pcc` before rootfs packaging, so `/root/linpack-smoke.sh`
+    no longer fails with a missing benchmark binary.
   - Clean local build completed on 2026-07-03:
     `make -C sys/mips/n64 clean` followed by
     `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
@@ -831,8 +838,8 @@ test gate.
     `/bin/sh`, `/sbin/init`, `/libexec/getty`, and `/bin/login` are real
     userland binaries, `.userland.pcc` is present, and no `N64_PCC`/debug
     marker strings are present in the normal staged rootfs.
-  - `fsutil --check` for the generated normal `rootfs.img` reports 625 files,
-    12683 used blocks, and 3636 free blocks in the 16 MB image.
+  - Latest `fsutil --check` for the generated normal `rootfs.img` reports
+    628 files, 12761 used blocks, and 3558 free blocks in the 16 MB image.
   - Hardware validation is still pending for the restored normal path:
     boot `sys/mips/n64/kernel.z64` on N64 and verify `/sbin/init` -> `/etc/rc`
     -> `/sbin/mount /var` -> getty/login -> `/bin/sh`.

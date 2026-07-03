@@ -10,9 +10,17 @@ export LINPACK_ARRAY_SIZE
 export LINPACK_MIN_SECONDS
 
 echo "linpack smoke: gcc"
+if test ! -x /root/linpack-gcc; then
+    echo "linpack smoke: missing /root/linpack-gcc"
+    exit 1
+fi
 /root/linpack-gcc || exit 1
 
 echo "linpack smoke: pcc"
+if test ! -x /root/linpack-pcc; then
+    echo "linpack smoke: missing /root/linpack-pcc"
+    exit 1
+fi
 /root/linpack-pcc || exit 1
 
 echo "linpack smoke ok"
