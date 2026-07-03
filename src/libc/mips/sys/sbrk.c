@@ -27,8 +27,9 @@ sbrk (int incr)
                                 static const char message[] = ": Out of memory\n";
                                 write(2, __progname, strlen(__progname));
                                 write(2, message, sizeof(message) - 1);
-                                errno = ENOMEM;
                         }
+                        errno = ENOMEM;
+                        return (void*) -1;
                 }
 	}
 	/* return old break address */

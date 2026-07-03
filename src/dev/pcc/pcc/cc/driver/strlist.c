@@ -189,5 +189,6 @@ strlist_prepend_list(struct strlist *l, const struct strlist *l2)
 			l->first = s3;
 		else
 			s2->next = s3;
+		s2 = s3;
 	}
 }

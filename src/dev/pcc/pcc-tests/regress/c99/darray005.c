@@ -17,9 +17,15 @@ int main(int argc, char *argv[])
 	int T1[a][c] ;
 	int T2[a][c] ;
 	int T3[a][c] ;
+	int i,j;
+
+	for (i=0 ; i < a ; i++)
+		for (j=0 ; j < c ; j++) {
+			T1[i][j] = i + j;
+			T2[i][j] = i - j;
+		}
 
 	add(a,b,T1,T2,T3); 
 
 	return 0; 
 }
-

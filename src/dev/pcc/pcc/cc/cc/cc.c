@@ -1038,7 +1038,7 @@ main(int argc, char *argv[])
 	if (pcclibdir)
 		strlist_append(&crtdirs, pcclibdir);
 	for (j = 0; deflibdirs[j]; j++) {
-		if (sysroot)
+		if (sysroot && *sysroot)
 			deflibdirs[j] = cat(sysroot, deflibdirs[j]);
 		strlist_append(&crtdirs, deflibdirs[j]);
 	}
@@ -1253,6 +1253,8 @@ find_file(const char *file, struct strlist *path, int mode)
 	int need_sep;
 
 	lf = strlen(file);
+	if (lf > 0 && file[0] == '/')
+		return xstrdup(file);
 	STRLIST_FOREACH(s, path) {
 		lp = strlen(s->value);
 		need_sep = (lp && s->value[lp - 1] != '/') ? 1 : 0;
@@ -1576,6 +1578,7 @@ strlist_exec(struct strlist *l)
 	size_t argc;
 	ssize_t result;
 	int rv;
+	int status;
 
 	strlist_make_array(l, &argv, &argc);
 	if (vflag) {
@@ -1597,9 +1600,16 @@ strlist_exec(struct strlist *l)
 	case -1:
 		errorx(1, "fork failed");
 	default:
-		while (waitpid(child, &rv, 0) == -1 && errno == EINTR)
+		while ((rv = waitpid(child, &status, 0)) == -1 && errno == EINTR)
 			/* nothing */(void)0;
-		rv = WEXITSTATUS(rv);
+		if (rv == -1)
+			errorx(1, "waitpid failed");
+		if (WIFSIGNALED(status))
+			errorx(1, "%s terminated with signal %d",
+			    argv[0], WTERMSIG(status));
+		if (!WIFEXITED(status))
+			errorx(1, "%s terminated abnormally", argv[0]);
+		rv = WEXITSTATUS(status);
 		if (rv)
 			errorx(1, "%s terminated with status %d", argv[0], rv);
 		while (argc-- > 0)
@@ -1659,9 +1669,18 @@ gettmp(void)
 char *
 gettmp(void)
 {
-	char *sfn = xstrdup("/tmp/ctm.XXXXXX");
+	const char *tmpdir;
+	size_t len;
+	char *sfn;
 	int fd = -1;
 
+	tmpdir = getenv("TMPDIR");
+	if (tmpdir == NULL || tmpdir[0] == '\0')
+		tmpdir = "/tmp";
+	len = strlen(tmpdir);
+	sfn = xmalloc(len + sizeof("/ctm.XXXXXX"));
+	snprintf(sfn, len + sizeof("/ctm.XXXXXX"), "%s%sctm.XXXXXX",
+	    tmpdir, tmpdir[len - 1] == '/' ? "" : "/");
 	if ((fd = mkstemp(sfn)) == -1)
 		errorx(8, "%s: %s\n", sfn, strerror(errno));
 	close(fd);

@@ -241,7 +241,7 @@ main(int argc, char *argv[])
 			break;
 
 		case 'v':
-			printf("ccom: %s\n", VERSSTR);
+			fprintf(stderr, "ccom: %s\n", VERSSTR);
 			break;
 
 		case '?':
