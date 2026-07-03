@@ -148,6 +148,7 @@ int sflag;   /* discard all symbols */
 int dflag;   /* define common even with rflag */
 int verbose; /* verbose mode */
 int final_layout;
+char *sysroot = "/"; /* root for standard library search directories */
 
 /*
  * cumulative sizes set in pass 1
@@ -783,10 +784,28 @@ void addlibdir(char *dir)
     libdirs[nlibdirs++] = savestr(dir);
 }
 
+int consumelongopt(char *ap, int *cp, int argc, char ***pp)
+{
+    if (strcmp(ap, "--fatal-warnings") == 0)
+        return 1;
+    if (strncmp(ap, "--sysroot=", 10) == 0) {
+        sysroot = ap + 10;
+        return 1;
+    }
+    if (strcmp(ap, "--sysroot") == 0) {
+        if (++*cp >= argc)
+            error(2, "--sysroot: argument missing");
+        sysroot = **pp;
+        (*pp)++;
+        return 1;
+    }
+    return 0;
+}
+
 void collectlibdirs(int argc, char **argv)
 {
-    register int c, i;
-    register char *ap, **p;
+    int c, i;
+    char *ap, **p;
 
     /*
      * Make all -L directories visible before resolving any -l option.
@@ -799,7 +818,7 @@ void collectlibdirs(int argc, char **argv)
         ap = *p++;
         if (*ap != '-')
             continue;
-        if (strcmp(ap, "--fatal-warnings") == 0)
+        if (consumelongopt(ap, &c, argc, &p))
             continue;
         for (i = 1; ap[i]; i++) {
             switch (ap[i]) {
@@ -867,6 +886,31 @@ char *makelibpath(const char *dir, const char *name)
     return path;
 }
 
+char *makesyslibpath(const char *dir, const char *name)
+{
+    char *dirpath, *path;
+    int need_slash;
+    size_t len;
+
+    if (sysroot[0] == '\0' || strcmp(sysroot, "/") == 0)
+        return makelibpath(dir, name);
+
+    need_slash = sysroot[strlen(sysroot) - 1] != '/';
+    if (dir[0] == '/')
+        dir++;
+    len = strlen(sysroot) + need_slash + strlen(dir) + 1;
+    dirpath = malloc(len);
+    if (!dirpath)
+        error(2, "out of memory");
+    strcpy(dirpath, sysroot);
+    if (need_slash)
+        strcat(dirpath, "/");
+    strcat(dirpath, dir);
+    path = makelibpath(dirpath, name);
+    free(dirpath);
+    return path;
+}
+
 int openfile(char *path)
 {
     text = fopen(path, "r");
@@ -896,7 +940,7 @@ int openlib(char *name)
         free(path);
     }
     for (i = 0; stdlibdirs[i]; i++) {
-        path = makelibpath(stdlibdirs[i], name);
+        path = makesyslibpath(stdlibdirs[i], name);
         if (openfile(path))
             return 1;
         free(path);
@@ -1289,8 +1333,8 @@ void load1libarg(char *name)
 
 void pass1(int argc, char **argv)
 {
-    register int c, i;
-    register char *ap, **p;
+    int c, i;
+    char *ap, **p;
 
     /* scan files once to find symdefs */
 
@@ -1304,7 +1348,7 @@ void pass1(int argc, char **argv)
             load1arg(ap);
             continue;
         }
-        if (strcmp(ap, "--fatal-warnings") == 0)
+        if (consumelongopt(ap, &c, argc, &p))
             continue;
         for (i = 1; ap[i]; i++) {
             switch (ap[i]) {
@@ -1757,8 +1801,8 @@ void load2libarg(char *name)
 
 void pass2(int argc, char **argv)
 {
-    register int c, i;
-    register char *ap, **p;
+    int c, i;
+    char *ap, **p;
 
     p = argv + 1;
     libp = liblist;
@@ -1768,7 +1812,7 @@ void pass2(int argc, char **argv)
             load2arg(ap);
             continue;
         }
-        if (strcmp(ap, "--fatal-warnings") == 0)
+        if (consumelongopt(ap, &c, argc, &p))
             continue;
         for (i = 1; ap[i]; i++) {
             switch (ap[i]) {
@@ -1885,10 +1929,11 @@ int main(int argc, char **argv)
 
     if (argc == 1) {
         printf("Usage:\n");
-        printf("  ld [-sSxXrdt] [-EL|-EB] [-L dir] [-o file] [-lname] [-u name] [-e name] [-T num] file...\n");
+        printf("  ld [-sSxXrdt] [-EL|-EB] [--sysroot dir] [-L dir] [-o file] [-lname] [-u name] [-e name] [-T num] file...\n");
         printf("Options:\n");
         printf("  -o filename     Set output file name, default a.out\n");
         printf("  -L dirname      Add a library search directory\n");
+        printf("  --sysroot dir   Set root for standard library directories, default /\n");
         printf("  -llibname       Search for library libname\n");
         printf("  -u symbol       Start with undefined reference to symbol\n");
         printf("  -e symbol       Set start address\n");

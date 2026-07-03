@@ -170,7 +170,7 @@ char	*pass0 = COMPILER;
 char	*passxx0 = CXXCOMPILER;
 char	*as = ASSEMBLER;
 char	*ld = LINKER;
-char	*sysroot = "", *isysroot;
+char	*sysroot = "/", *isysroot;
 
 
 /* crt files using pcc default names */
@@ -272,6 +272,7 @@ static int strlist_exec(struct strlist *l);
 static char *select_linker(char *);
 
 char *cat(const char *, const char *);
+static char *cat_sysroot(const char *, const char *);
 char *setsuf(char *, char);
 int cxxsuf(char *);
 int getsuf(char *);
@@ -1039,7 +1040,7 @@ main(int argc, char *argv[])
 		strlist_append(&crtdirs, pcclibdir);
 	for (j = 0; deflibdirs[j]; j++) {
 		if (sysroot && *sysroot)
-			deflibdirs[j] = cat(sysroot, deflibdirs[j]);
+			deflibdirs[j] = cat_sysroot(sysroot, deflibdirs[j]);
 		strlist_append(&crtdirs, deflibdirs[j]);
 	}
 
@@ -1637,6 +1638,43 @@ cat(const char *a, const char *b)
 	return rv;
 }
 
+static char *
+cat_sysroot(const char *root, const char *path)
+{
+	size_t root_len, path_len, copy_path_len;
+	int need_slash, skip_path_slash;
+	char *rv;
+
+	if (root == NULL || root[0] == '\0')
+		root = "/";
+	if (path == NULL)
+		path = "";
+
+	root_len = strlen(root);
+	path_len = strlen(path);
+	need_slash = 0;
+	skip_path_slash = 0;
+
+	if (root_len == 1 && root[0] == '/' && path[0] == '/') {
+		root_len = 0;
+	} else if (root_len != 0 && root[root_len - 1] == '/' &&
+	    path[0] == '/') {
+		skip_path_slash = 1;
+	} else if (root_len != 0 && root[root_len - 1] != '/' &&
+	    path[0] != '\0' && path[0] != '/') {
+		need_slash = 1;
+	}
+
+	copy_path_len = path_len - skip_path_slash;
+	rv = xmalloc(root_len + need_slash + copy_path_len + 1);
+	memcpy(rv, root, root_len);
+	if (need_slash)
+		rv[root_len++] = '/';
+	memcpy(rv + root_len, path + skip_path_slash, copy_path_len);
+	rv[root_len + copy_path_len] = '\0';
+	return rv;
+}
+
 int
 cunlink(char *f)
 {
@@ -1696,7 +1734,7 @@ expand_sysroot(void)
 	    &user_sysincdirs, &libdirs, &progdirs, &dirafterdirs, NULL };
 	const char *sysroots[] = { sysroot, isysroot, isysroot, isysroot,
 	    sysroot, sysroot, isysroot, NULL };
-	size_t i, sysroot_len, value_len;
+	size_t i;
 	char *path;
 
 	assert(sizeof(lists) / sizeof(lists[0]) ==
@@ -1706,12 +1744,7 @@ expand_sysroot(void)
 		STRLIST_FOREACH(s, lists[i]) {
 			if (s->value[0] != '=')
 				continue;
-			sysroot_len = strlen(sysroots[i]);
-			/* Skipped '=' compensates additional space for '\0' */
-			value_len = strlen(s->value);
-			path = xmalloc(sysroot_len + value_len);
-			memcpy(path, sysroots[i], sysroot_len);
-			memcpy(path + sysroot_len, s->value + 1, value_len);
+			path = cat_sysroot(sysroots[i], s->value + 1);
 			free(s->value);
 			s->value = path;
 		}

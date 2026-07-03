@@ -831,18 +831,31 @@ test gate.
   - Normal N64 PCC images now stage prebuilt `/root/linpack-gcc` and
     `/root/linpack-pcc` before rootfs packaging, so `/root/linpack-smoke.sh`
     no longer fails with a missing benchmark binary.
+  - The 2026-07-04 N64 hardware `/root/pcc-smoke-all.sh` log showed the
+    restored normal PCC rootfs booting through login and `/var` mount.  All
+    smokes passed except `cc-pcc`: `/usr/bin/cc --sysroot / -v ...` handed
+    `--sysroot=/` to ReBSD `ld`, and the target linker rejected it as
+    `unknown flag`.
+  - The active PCC driver in `src/dev/pcc/pcc/cc/cc/cc.c` already accepts
+    both `--sysroot DIR` and `--sysroot=DIR`; it now treats an unset target
+    sysroot as `/` and joins `=/usr/lib` style paths without producing
+    `//usr/lib`.  ReBSD `ld` now accepts `--sysroot[=DIR]`, defaults to `/`,
+    and applies it only to standard library directories, leaving explicit
+    `-L` paths unchanged.
   - Clean local build completed on 2026-07-03:
     `make -C sys/mips/n64 clean` followed by
     `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
+  - Clean local build repeated on 2026-07-04 after the target sysroot fix:
+    `rootfs.img`, `kernel.z64`, and `preflight.z64` all rebuilt successfully.
   - The normal PCC rootfs is not the shell-stub/debug-runner image: staged
     `/bin/sh`, `/sbin/init`, `/libexec/getty`, and `/bin/login` are real
     userland binaries, `.userland.pcc` is present, and no `N64_PCC`/debug
     marker strings are present in the normal staged rootfs.
   - Latest `fsutil --check` for the generated normal `rootfs.img` reports
-    628 files, 12761 used blocks, and 3558 free blocks in the 16 MB image.
-  - Hardware validation is still pending for the restored normal path:
-    boot `sys/mips/n64/kernel.z64` on N64 and verify `/sbin/init` -> `/etc/rc`
-    -> `/sbin/mount /var` -> getty/login -> `/bin/sh`.
+    628 files, 12766 used blocks, and 3553 free blocks in the 16 MB image.
+  - Hardware re-validation is pending for the sysroot fix: boot
+    `sys/mips/n64/kernel.z64` on N64 and run `/root/pcc-smoke-all.sh`; the
+    expected final status is `PCC_SMOKE_ALL_OK` and `PCC_SMOKE_ALL_RC:0`.
 - [ ] Add a libc regression for `printf(stdout)` followed by
   `freopen(stdout, ...)` and later `malloc()` traffic.
   - The `ccom -v` crash path strongly suggested this stream transition can

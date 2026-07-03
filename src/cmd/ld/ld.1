@@ -95,6 +95,14 @@ to the list of directories in which libraries are searched for.
 Directories specified with 
 .B \-L
 are searched before the standard directories.
+.TP
+.BI \-\-sysroot " dir"
+Use
+.I dir
+as the root for standard library directories.
+The default sysroot is `/'.  Explicit
+.B \-L
+directories are used as written.
 .TP 
 .BI \-l x
 This
