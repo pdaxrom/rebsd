@@ -86,6 +86,9 @@ file /root/.profile
 file /root/cc-pcc-smoke.sh
 mode 0775
 
+file /root/ccom-stress.sh
+mode 0775
+
 file /root/cpp-calendar-smoke.sh
 mode 0775
 

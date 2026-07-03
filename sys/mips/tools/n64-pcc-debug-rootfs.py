@@ -70,6 +70,7 @@ COPY_PATHS = [
     "/etc/passwd",
     "/etc/termcap",
     "/libexec/getty",
+    "/root/ccom-stress.sh",
     "/sbin/init",
     "/sbin/mkfs",
     "/sbin/mount",
