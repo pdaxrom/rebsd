@@ -380,14 +380,185 @@ test gate.
 - [x] Run the full PCC test gate from the target environment.
   - The native rootfs harness stages `src/dev/pcc/pcc-tests/regress` under
     `/root/pcc-tests` and runs `/root/run-native-pcc-regress.sh` on Malta.
-  - Current clean Malta target-side result with native `/usr/bin/cc`:
+  - Current clean Malta target-side result with native `/usr/bin/cc` on the
+    default QEMU Malta 24Kf/MIPS32 profile:
     316 total checks, 286 compile pass, 30 expected compile fail,
     0 unexpected compile fail; 276 runtime candidates, 276 pass,
     0 unexpected runtime fail.
+  - Re-run on 2026-07-03 with `make -C sys/mips/malta
+    native-pcc-regress-runtime` stayed green with the same summary and
+    `NATIVE_PCC_REGRESS_RC:0`.
+  - Re-run again on 2026-07-03 after making the PCC softfloat `DEBUGFP`
+    oracle FCSR-safe on MIPS stayed green:
+    `NATIVE_PCC_REGRESS_TOTAL:316`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+    `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RC:0`.
+  - Re-run again on 2026-07-03 after replacing the MIPS/ReBSD
+    `DEBUGFP` `double -> float -> double` oracle path with
+    `__truncdfsf2`/`__extendsfdf2` stayed green:
+    `NATIVE_PCC_REGRESS_TOTAL:316`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+    `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
+    `NATIVE_PCC_REGRESS_RC:0`.
+  - `c99/darray005` now initializes the VLA inputs it passes to `add()`.  The
+    old test read uninitialized stack integers, which could trap as signed
+    arithmetic overflow on target hardware and was not a valid compiler
+    regression.
   - ReBSD/native PCC `DEBUGFP` now decodes big-endian IEEE64 softfloat words
     before comparing against native FPU results, treats NaN payload/sign
     differences as class-equal, and keeps the `strtold()` oracle only for
     host builds where native libc is a valid parser oracle.
+- [ ] Add a VR4300-like Malta QEMU gate before claiming N64 hardware readiness.
+  - The previous green Malta result used `qemu-system-mips -M malta` without
+    `-cpu`, which is not a VR4300-class CPU model.
+  - Local QEMU exposes no exact VR4300.  The closest automated profile is
+    `qemu-system-mips64 -M malta -cpu R4000`; `-cpu VR5432` is available as
+    a later NEC VR-family probe.
+  - Current `qemu-system-mips64` big-endian machine list is `malta`,
+    `magnum`, and `pica61`; there is no `n64`/`vr4300` board model.
+  - ReBSD has a Malta port only.  A smoke boot with
+    `qemu-system-mips64 -M malta -cpu R4000` and with `-cpu VR5432` currently
+    times out before serial output, so this is not yet a usable replacement
+    for N64 hardware validation.
+  - N64 hardware native PCC output showed real unexpected failures:
+    `c99__arith002`, `c99__arith003`, and `jira__PCC-185` link with
+    `Undefined: main`; `jira__PCC-152` reports empty compiler output; several
+    runtime candidates print shell `syntax error`/`Memory fault` noise that
+    the hardware harness must isolate instead of masking.
+  - Added a dedicated N64 hardware diagnostic image target:
+    `make -C sys/mips/n64 pcc-debug-image`.
+    It does a clean N64 rebuild, forces `N64_DEBUG_UART_ONLY=1`, builds the
+    rootfs userland with native PCC, disables video/input console paths, and
+    packages a 6 MB minimal test rootfs as `sys/mips/n64/pcc-debug.z64`.
+  - The debug rootfs auto-runs `/root/n64-pcc-debug-runner` on boot.  This
+    runner is a standalone ReBSD a.out binary built with the N64 GCC wrapper
+    plus ReBSD `as`/`ld`; it executes `/usr/bin/cc`, `/usr/bin/size`,
+    `/usr/bin/aout`, and test binaries directly through `fork`/`exec`, without
+    shell conditionals, `$?`, or redirection.  The primary pass isolates the
+    first N64-only symptoms: `c99__arith002`, `c99__arith003`, `jira__PCC-70`,
+    `jira__PCC-77`, `jira__PCC-152`, and `jira__PCC-185`.
+  - The legacy `/root/run-n64-pcc-debug.sh` and
+    `/root/run-n64-pcc-debug-all.sh` scripts are still staged for comparison,
+    but they are not the boot-time harness until the N64 shell issue is fixed.
+  - The first boot of this image reached `/etc/rc`, then the PCC-built
+    `/bin/sh` faulted in `stoi()` at PC `0x0040f588` on address `0x00000001`.
+    The immediate trigger was shell fd-move redirection (`2>&1`) in the debug
+    rc script, before any PCC tests ran.  Keep this as a real N64/PCC shell
+    regression to isolate and fix; the debug rc now avoids fd-move redirection
+    only so the hardware test can progress.
+  - A later debug boot faulted on `/etc/rc` line 4 (`exec </dev/console`) and
+    then failed to mount `/var`; the runner could only report
+    `N64_PCC_MKDIR_FAIL /var/tmp/n64-pcc-debug 30` because the cartridge
+    rootfs was still read-only.  The debug rc now leaves the inherited console
+    descriptors alone and prints explicit `mkfs`, `mount`, and runner return
+    markers so the next hardware log separates shell redirection faults from
+    ramdisk/mount failures.
+  - The next debug boot produced no `/etc/rc` marker at all.  `init` opens `/`
+    and duplicates that fd to stdout/stderr before `execl("/bin/sh",
+    "/bin/sh", "/etc/rc", "autoboot")`; the old shell redirection had been the
+    only thing reconnecting output to `/dev/console`, and that redirection is
+    part of the broken shell path.  The N64 debug rootfs now stages the C
+    runner as `/bin/sh` as well as `/root/n64-pcc-debug-runner`; when invoked
+    as `/bin/sh /etc/rc`, it opens `/dev/console`, formats `/dev/ram0`, mounts
+    `/var`, creates runtime state, and then runs the same PCC diagnostic path
+    without using shell parsing or redirection.
+  - A later N64 boot reached `/root/run-n64-pcc-debug.sh` and failed with
+    `bad number` before the first test marker; this is another shell runner
+    failure, not a compiler-test result.  Interactive `login` then looped
+    because it starts `/bin/sh` as the root login shell, so a broken shell
+    makes login look like authentication failed.  The debug image now disables
+    getty in `/etc/ttys` and relies on the boot-time UART runner until the
+    shell/login path is fixed.
+  - Earlier 2026-07-03 hardware logs showed `/var` formatting and mounting
+    successfully, then repeated `/etc/rc`/single-user re-entry after the test
+    runner returned.  The repeated runs produced `/dev/ram0 on /var: Device
+    busy` and `/var: bad dir I=28 off 0: mangled entry` noise, so only the
+    first `N64_PCC_DEBUG_RC_BEGIN` to `N64_PCC_DEBUG_RC_END` block should be
+    used as valid evidence.
+  - The debug runner now treats both `argv0="sh"` and `argv0="-"` as shell
+    stubs.  Unsupported shell-stub invocation now sleeps forever after
+    printing `N64_PCC_SH_STUB`, preventing `init` from repeatedly re-entering
+    the PCC tests after the first diagnostic pass.
+  - The N64 8 MB `/dev/ram0` allocation for `/var` was increased from 1 MB to
+    2 MB for the PCC debug image.  The follow-up hardware log confirmed this
+    part is clean: `/dev/ram0` formatted as 2048 kbytes/512 inodes, mounted
+    with `N64_PCC_DEBUG_MOUNT_RC 0`, and `manual__min` passed the full direct
+    pipeline through `/usr/bin/cc`, direct `ccom`, direct `/usr/bin/as`, and
+    `aout -d`.
+  - The same first valid log block ended with `N64_PCC_DEBUG_END 6`.  Three
+    failures were driver environment/tool lookup bugs: `jira__PCC-70`,
+    `jira__PCC-77`, and `jira__PCC-152` generated assembly and assembled
+    through direct `/usr/bin/as`, but the PCC driver compile/object path
+    reported `Exec of as failed` / `as terminated with status 127`.
+  - The `as` lookup failure is caused by the target PCC driver executing bare
+    `as` from a boot-time environment without the login shell `PATH`; ReBSD's
+    fallback `_PATH_STDPATH` is only `/bin`, while native `as` lives in
+    `/usr/bin`.  The native PCC build now defines `ASSEMBLER=/usr/bin/as` and
+    `LINKER=/usr/bin/ld`, and the PCC driver `find_file()` now preserves
+    absolute tool paths instead of searching `progdirs`.
+  - The next supplied hardware log confirmed the absolute-tool fix was real:
+    `manual__min` passed and the old `Exec of as failed` path did not return.
+    The remaining failures moved to `/usr/libexec/pcc/cpp`/`ccom` signal 8
+    on FP-heavy tests such as `c99__arith002` and `c99__arith003`.
+  - A follow-up debug boot exposed another pre-test harness failure:
+    PCC-built `/sbin/mount /var` crashed with SIGSEGV while the explicit
+    `/sbin/mount -o rw /dev/ram0 /var` form succeeded.  The boot runner now
+    uses only the explicit form before PCC tests, and the shorthand
+    fstab/getfsfile path is tracked as a separate userland regression.
+  - A temporary `-DCROSS_COMPILING` target-PCC build proved useful only as a
+    diagnostic, because it removed PCC's softfloat native-FPU debug oracle
+    from `ccom`; it is not an acceptable final fix and has been removed.
+  - The next N64 signal path was narrowed by the latest supplied hardware log:
+    `/var` formatting/mounting is clean, `manual__min` passes the direct
+    `/usr/bin/cc`, `ccom`, `/usr/bin/as`, and `aout -d` pipeline, and the
+    absolute-tool lookup failures did not return.  The remaining compiler
+    failures were in PCC FP folding: `fp__builtin_inf` faulted in direct
+    `ccom` with signal 11, while `c99__arith002`, `c99__arith003`, and
+    `jira__PCC-185` faulted in direct `ccom` with signal 8.
+  - The signal 8 cases were traced to the same raw MIPS FPU conversion class
+    as the earlier `double -> float` NaN-sign fix.  The N64 FPE trace pointed
+    at `soft_fp2fp()` inside the PCC softfloat `DEBUGFP` oracle, where the
+    native C cast emitted `cvt.s.d; cvt.d.s`; the faulting instruction was the
+    `cvt.d.s` with FCSR `0x00020040` (unimplemented operation).
+  - The native FPU probe in that log produced correct IEEE results
+    (`inf_ok=1`, `nan_ok=1`) but reported a contradictory child exit status;
+    keep the wait-status/reporting path under suspicion, but do not treat the
+    whole VR4300 FPU as broken from that probe alone.
+  - PCC's softfloat `DEBUGFP` native-FPU oracle is now FCSR-safe on MIPS: it
+    saves the incoming FCSR, clears exception flags, exception enables, and
+    cause bits while executing oracle expressions, then restores the original
+    FCSR.  This keeps `DEBUGFP` enabled for target `ccom` without using the
+    rejected `-DCROSS_COMPILING` workaround.
+  - The same oracle now uses the ReBSD/MIPS runtime helper path for
+    `double -> float` checking: `__truncdfsf2` rounds to single precision and
+    `__extendsfdf2` widens back for the `long double` comparison.  This keeps
+    the oracle active, but removes the raw `cvt.s.d`/`cvt.d.s` sequence from
+    target `ccom`.
+  - Binary check after a clean N64 rebuild: `soft_fp2fp` in
+    `rootfs.pcc-debug.stage/usr/libexec/pcc/ccom` calls `__truncdfsf2` at
+    `0x0043bd48` and `__extendsfdf2` at `0x00438ea8`; no `cvt.s.d` or
+    `cvt.d.s` remains in the disassembled `ccom`.
+  - The N64 debug runner now starts with a GCC-built native FPU/FCSR child
+    probe, then a small PCC FP-folding probe matrix before the full primary
+    tests: `fp__div_zero`, `fp__nan_zero`, `fp__builtin_inf`,
+    `fp__builtin_nan`, and `fp__isnan_call`.
+  - Rebuilt `sys/mips/n64/pcc-debug.z64` on 2026-07-03 after a clean N64
+    rebuild.  The image contains the absolute-tool fix, the FP probes, the
+    FCSR-safe/helper-based `DEBUGFP` oracle, and the deterministic
+    `darray005` test; `fsutil --check` reports 321 files, 3213 blocks used,
+    and 2906 blocks free.
+  - Add the closest usable VR4300-like QEMU/Malta profile if we can make one
+    boot, but do not treat the current default Malta 24Kf/MIPS32 pass as N64
+    hardware readiness.
 - [ ] Make the userland compiler selectable.
   - Default remains GCC until explicitly changed.
   - Add documented `gcc`/`pcc` selection, then build full userland with PCC on
@@ -428,6 +599,12 @@ test gate.
   - Keep expanding strict PCC runtime coverage as backend issues are fixed.
   - Expand smoke coverage for libc-heavy programs, varargs, structs/unions,
     pointer arithmetic stress, and shell build workloads.
+- [ ] Make `fsutil` fail hard on rootfs population errors.
+  - The first 4 MB N64 PCC debug rootfs exposed `inode_alloc: out of in-core
+    inodes` and missing file/device creation while `fsutil --new` still
+    returned success and `fsutil --check` passed the truncated image.
+  - Treat failed manifest entries as fatal before relying on generated images
+    in hardware gates.
 - [ ] Replace temporary compatibility stubs with real policy.
   - Core wide-char and wide-stdio APIs now live in libc as a coherent
     ASCII/byte-oriented ReBSD wide ABI surface.
@@ -486,6 +663,70 @@ test gate.
 
 ## Temporary Compatibility Stubs To Close
 
+- [ ] Re-run the N64 native PCC debug image after absolute native tool paths,
+  native FPU/FCSR probes, PCC FP-folding probes, and shell-stub sleep fix.
+  - The old `manual__min` driver-stack failure is no longer present in the
+    latest supplied hardware log: `manual__min` passes `cc -v -S`, direct
+    `ccom -v`, direct `ccom`, direct `/usr/bin/as`, and `aout -d`.
+  - The first valid log block has exactly six failures: three driver
+    environment/tool lookup failures (`jira__PCC-70`, `jira__PCC-77`,
+    `jira__PCC-152`) and three direct `ccom` signal-8 failures
+    (`c99__arith002`, `c99__arith003`, `jira__PCC-185`).
+  - The driver failures are fixed in the new image by baking absolute
+    `/usr/bin/as` and `/usr/bin/ld` into the native PCC driver and teaching
+    `find_file()` to return absolute tools directly.
+  - The boot runner now avoids the crashing `/sbin/mount /var` shorthand and
+    mounts `/var` with the explicit device/path form before setting up
+    `/var/tmp`; the shorthand mount path remains a separate regression to
+    debug.
+  - The latest hardware log showed the `ccom` failures are concentrated in
+    PCC FP folding rather than the driver, assembler, linker, `/var`, or rootfs
+    setup.  `fp__builtin_inf` faults in direct `ccom` with signal 11;
+    `c99__arith002`, `c99__arith003`, and `jira__PCC-185` fault in direct
+    `ccom` with signal 8.
+  - PCC softfloat `DEBUGFP` now guards its native-FPU oracle on MIPS by saving
+    FCSR, clearing exception flags/enables/cause bits around oracle
+    expressions, and restoring FCSR afterwards.  This must be verified on real
+    N64 hardware because default Malta QEMU does not reproduce the VR4300 FCSR
+    behavior.
+  - The 2026-07-03 N64 UART log after the FCSR-safe oracle confirmed
+    `fp__builtin_inf` now passes through `cc -S`, direct `ccom`, direct `as`,
+    and `aout -d`.
+  - The remaining fresh N64 failures in that log are no longer the same direct
+    softfloat/FCSR crashes: `manual__min` and `fp__nan_zero` fail only in the
+    full driver path where `/usr/bin/cc -v -S` feeds `ccom` from
+    `/tmp/ctm.*`; the saved preprocessed `.i` file under
+    `/var/tmp/n64-pcc-debug` compiles with direct `ccom`.
+  - The native PCC driver now makes `gettmp()` honor `TMPDIR` instead of
+    hardcoding `/tmp/ctm.XXXXXX`.
+  - The N64 debug runner now prints raw FPU child wait status, preserves
+    driver temp files with `-X` after a failed `cc -S`, dumps the resulting
+    `/tmp/ctm.*` files, checks direct `ccom` on a copied `/tmp` input, and
+    reruns the same compile with `TMPDIR=/var/tmp/n64-pcc-debug` as an A/B
+    diagnostic.  This is intended to distinguish bad driver temp-file content,
+    `/tmp` symlink/ramfs behavior, and `ccom` input-path sensitivity on real
+    N64 hardware.
+  - `make -C sys/mips/malta native-pcc-regress-runtime-vr4300` currently does
+    not provide usable evidence here: it launches `qemu-system-mips64 --cpu
+    R4000`, then produces no UART log and had to be interrupted.  Do not cite
+    that target as passing until its boot/console path is fixed.
+  - The ordinary Malta native PCC regression still passes after the FCSR and
+    driver-temp changes: 316 total, 286 compile-pass, 30 expected compile-fail,
+    0 unexpected compile-fail, 276/276 runtime pass.
+  - Rebuilt `sys/mips/n64/pcc-debug.z64` on 2026-07-03 from a clean N64
+    `pcc-debug-image` build after the Malta run.  The debug rootfs remains
+    6144 KB with 321 files, 3212 used blocks, and 2907 free blocks.
+  - The shell-stub path now sleeps forever for `argv0="sh"` and `argv0="-"`,
+    so the next hardware log should not contain repeated test passes after
+    `N64_PCC_DEBUG_RC_END`.
+  - Next required evidence is the first `N64_PCC_DEBUG_RC_BEGIN` to
+    `N64_PCC_DEBUG_RC_END` UART block from this exact image.
+- [ ] Add a libc regression for `printf(stdout)` followed by
+  `freopen(stdout, ...)` and later `malloc()` traffic.
+  - The `ccom -v` crash path strongly suggested this stream transition can
+    corrupt or expose corruption in the old malloc/stdio interaction on N64.
+  - Even though PCC should not print compiler diagnostics to the assembly
+    output stream, libc should still survive this valid stdio sequence.
 - [ ] Decide and implement the full C++ ctor/dtor startup model.
   - Current ReBSD startup walks flat linker-defined ctor/dtor ranges and is
     enough for PCC C constructor/destructor attributes.
@@ -498,6 +739,19 @@ test gate.
   `p++`.
   - The native build does not compile or publish `cxxcom` by default. A
     diagnostic `--with-cxx` build can still be used while bringing C++ up.
+- [ ] Formalize the N64 UART-only debug video policy.
+  - `N64_DEBUG_UART_ONLY=1` filters out `video.o`, `video_console.o`, `si.o`,
+    `joybus.o`, `n64cart_usbnet.o`, `n64cart_usbecm.o`, and
+    `n64usbnet_proto.o`; it removes `VIDEO_ENABLED`, `INPUT_ENABLED`, and
+    `USBNET_ENABLED` from kernel flags so the VI/framebuffer path and N64cart
+    USB Ethernet backend are not initialized during PCC hardware diagnosis.
+  - The current debug build keeps no-op `usbnetattach()`/`usbnpoll()` in
+    `if_usbn.c` only because the shared N64 `Config` still emits a
+    `usbnetattach` entry in generated `ioconf.c`. Replace that compatibility
+    stub with a dedicated minimal kconfig board/config if UART-only N64
+    diagnostics become a supported build profile.
+  - Keep this as a diagnostic build mode, or split it into a documented board
+    config if UART-only N64 images become a supported target.
   - Basic C++ smoke attempts fail in the frontend before reaching ReBSD `as` or
     `ld`: constructor syntax is rejected, and a class/member-function compile
     fails with `compiler error: cdope missing op 93`.
