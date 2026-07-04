@@ -3135,10 +3135,13 @@ unsigned makeword(unsigned opcode, struct reloc *relinfo, unsigned offset)
             relinfo->flags = RABS;
             return opcode;
         case RHIGH16:
-            value += relinfo->offset;
-            break;
         case RHIGH16S:
-            value += (signed short)relinfo->offset;
+            /*
+             * relocate() reconstructs the high/low pair using relinfo->offset.
+             * Do not fold the addend into value here, or the high relocation
+             * gets the low addend twice while the matching low relocation does
+             * not.  That mislinks forward references like %hi(s+field).
+             */
             break;
         }
         opcode = relocate(opcode, value, relinfo);

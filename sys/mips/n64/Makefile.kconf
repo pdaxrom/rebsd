@@ -282,7 +282,8 @@ N64_USERLAND_LDFLAGS = -nostartfiles \
                        -L$(abspath $(N64_NATIVE_DIR))
 N64_USERLAND_EXTRA_DEPS = $(N64_HOST_PCC) $(N64_NATIVE_AOUT_AR) \
                           $(N64_NATIVE_AOUT_RANLIB) $(N64_NATIVE_AOUT_NM) \
-                          $(N64_NATIVE_AOUT_SIZE) $(N64_NATIVE_LD) \
+                          $(N64_NATIVE_AOUT_SIZE) $(N64_NATIVE_AS) \
+                          $(N64_NATIVE_LD) \
                           $(N64_NATIVE_DIR)/libpcc.a
 else
 $(error Unsupported N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER))

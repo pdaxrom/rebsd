@@ -74,6 +74,7 @@ end_s=$tmpdir/end.s
 chain_main_s=$tmpdir/chain-main.s
 chain_mid_s=$tmpdir/chain-mid.s
 chain_leaf_s=$tmpdir/chain-leaf.s
+hilo_s=$tmpdir/hilo.s
 main_o=$tmpdir/main.o
 foo_o=$tmpdir/foo.o
 data_o=$tmpdir/data.o
@@ -81,6 +82,7 @@ end_o=$tmpdir/end.o
 chain_main_o=$tmpdir/chain-main.o
 chain_mid_o=$tmpdir/chain-mid.o
 chain_leaf_o=$tmpdir/chain-leaf.o
+hilo_o=$tmpdir/hilo.o
 partial_o=$tmpdir/partial.o
 libfoo=$tmpdir/libfoo.a
 libchain=$tmpdir/libchain.a
@@ -88,6 +90,7 @@ app=$tmpdir/app
 app_data=$tmpdir/app-data
 app_end=$tmpdir/app-end
 app_chain=$tmpdir/app-chain
+app_hilo=$tmpdir/app-hilo
 stripped=$tmpdir/app.stripped
 list_before=$tmpdir/list-before
 list_after=$tmpdir/list-after
@@ -179,6 +182,21 @@ leaf:
 	nop
 EOF
 
+cat > "$hilo_s" <<'EOF'
+.text
+.set noreorder
+.globl start
+start:
+	lui $1,%hi(big+0x748)
+	sw $2,%lo(big+0x748)($1)
+	jr $31
+	nop
+.bss
+	.space 0x77f8
+big:
+	.space 0x800
+EOF
+
 be32()
 {
 	od -An -tx1 -j "$2" -N 4 "$1" | tr -d '[:space:]'
@@ -257,6 +275,7 @@ check_gnu_text()
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_main_o" "$chain_main_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_mid_o" "$chain_mid_s" || exit 1
 "$as_bin" -EB -mips3 -march=vr4300 -o "$chain_leaf_o" "$chain_leaf_s" || exit 1
+"$as_bin" -EB -mips3 -march=vr4300 -o "$hilo_o" "$hilo_s" || exit 1
 
 check_gnu_text "$main_o" "$main_s" main
 check_gnu_text "$foo_o" "$foo_s" foo
@@ -301,6 +320,11 @@ check_field "$app_data" 48 00400000
 
 "$ld_bin" -EB -e start -o "$app_end" "$end_o" || exit 1
 check_exec "$app_end" 00000107 00000030
+
+"$ld_bin" -EB -e start -o "$app_hilo" "$hilo_o" || exit 1
+check_exec "$app_hilo" 00000107 00000010
+check_field "$app_hilo" 32 3c010040
+check_field "$app_hilo" 36 ac227f50
 
 "$ar_bin" qc "$libfoo" "$foo_o" || exit 1
 "$ar_bin" t "$libfoo" > "$list_before" || exit 1
