@@ -640,13 +640,14 @@ userland build unchanged.
 - [ ] Replace temporary compatibility stubs with real policy.
   - Core wide-char and wide-stdio APIs now live in libc as a coherent
     ASCII/byte-oriented ReBSD wide ABI surface.
+  - C99 floating-point classification and NaN constructor APIs now live in
+    libc/libm as a supported ReBSD/PCC math surface.
   - Move stubbed or missing public compatibility functions into libc or libm,
     together with their companion declarations and closely related functions,
     so ReBSD does not accumulate partial API fragments.
   - Decide whether ReBSD will grow locale-aware multibyte/wide semantics, or
     explicitly document the current single-byte execution character policy.
   - Audit BSD compatibility headers such as `cdefs.h`.
-  - Turn current C99 math additions into a supported libm contract.
 - [ ] Document the final ReBSD/PCC target details and clean up build artifacts.
   - Update `docs/PCC_PORTING_NOTES.md`.
   - Keep generated build artifacts out of git unless they are tracked source
@@ -986,17 +987,24 @@ userland build unchanged.
   - Decide which BSD `cdefs.h` surface ReBSD actually supports, add missing
     macros as real compatibility policy, and avoid silently accepting semantics
     the kernel/userland cannot honor.
-- [ ] Turn the C99 math additions in `include/math.h` into a supported libm
-  contract.
-  - Current work only provides builtin-backed constants/helpers such as
-    `HUGE_VAL*`, `INFINITY`, `NAN`, `nan*`, and `signbit` for GCC/PCC.
-  - `signbit` uses the raw compiler builtin in `math.h` because wrapping the
-    builtin in `!= 0` exposed a PCC comparison inversion in `jira/PCC-382`.
-    The ReBSD helper functions still return normalized 0/1 values and PCC now
-    routes float/double/long double helpers by argument type.
-  - Confirm fallback behavior for non-GCC/PCC compilers, add missing C99
-    classification/finite APIs if needed, and verify Malta/N64 hardware-FPU
-    behavior for NaN/Inf/signbit cases.
+- [x] Turn the C99 math additions in `include/math.h` into a supported
+  libc/libm contract.
+  - `include/math.h` now exposes the C99 `FP_*` classes, `fpclassify`,
+    `isfinite`, `isnormal`, `isnan`, `isinf`, `HUGE_VAL*`, `INFINITY`, `NAN`,
+    `nan*`, and `signbit` as one coherent ReBSD/PCC surface.
+  - Classification, finite/normal tests, signed infinity tests, fallback
+    signbit helpers, and `nan*` constructors live in libc
+    (`src/libc/gen/mathclass.c`, `src/libc/gen/nan.c`) because normal userland
+    can need those APIs without explicitly linking `-lm`.
+  - `signbit` still uses the raw compiler builtin for GCC/PCC in `math.h`;
+    wrapping the builtin in `!= 0` previously exposed the PCC comparison
+    inversion tracked in `jira/PCC-382`.  The libc helper names deliberately
+    avoid the `libpcc.a` `__signbit*` compiler-runtime ABI.
+  - `/root/math-class-smoke.sh` is part of `/root/pcc-smoke-all.sh` and
+    builds/runs the classification contract with both `cc` and `pcc`.
+  - Verified after cleaning generated port build stages with N64 PCC image
+    build, Malta PCC rootfs/full smoke, and Malta64/R4000 PCC rootfs/full
+    smoke.
 
 ## Phase 4: Selectable Compiler Mode
 

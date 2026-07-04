@@ -3,6 +3,7 @@
  * Changed to return -1 for -Inf by Ulrich Drepper <drepper@cygnus.com>.
  * Public domain.
  */
+#define _MATH_IMPL
 #include <math.h>
 
 /*

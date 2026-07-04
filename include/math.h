@@ -4,6 +4,9 @@
  * specifies the terms and conditions for redistribution.
  */
 
+#ifndef _MATH_H_
+#define _MATH_H_
+
 double  fabs(double), floor(double), ceil(double);
 double  sqrt(double), hypot(double, double);
 double  sin(double), cos(double), tan(double);
@@ -12,6 +15,32 @@ double  exp(double), log(double), log10(double), pow(double, double);
 double  sinh(double), cosh(double), tanh(double);
 double  j0(double), j1(double), jn(int, double);
 double  y0(double), y1(double), yn(int, double);
+
+#define FP_NAN          0
+#define FP_INFINITE     1
+#define FP_ZERO         2
+#define FP_SUBNORMAL    3
+#define FP_NORMAL       4
+
+int __fpclassifyf(float);
+int __fpclassifyd(double);
+int __fpclassifyl(long double);
+int __isfinitef(float);
+int __isfinited(double);
+int __isfinitel(long double);
+int __isnormalf(float);
+int __isnormald(double);
+int __isnormall(long double);
+int __rebsd_isinff(float);
+int __rebsd_isinfd(double);
+int __rebsd_isinfl(long double);
+int __rebsd_signbitf(float);
+int __rebsd_signbitd(double);
+int __rebsd_signbitl(long double);
+
+double nan(const char *);
+float nanf(const char *);
+long double nanl(const char *);
 
 #if defined(__GNUC__) || defined(__PCC__)
 #define HUGE_VAL    __builtin_huge_val()
@@ -28,6 +57,11 @@ double  y0(double), y1(double), yn(int, double);
 #define HUGE_VALF   3.40282347e+38F
 #define HUGE_VALL   HUGE_VAL
 #define INFINITY    HUGE_VALF
+#define NAN         nanf("")
+#define signbit(x) \
+    (sizeof(x) == sizeof(float) ? __rebsd_signbitf((float)(x)) : \
+    ((sizeof(x) == sizeof(long double) && sizeof(long double) != sizeof(double)) ? \
+    __rebsd_signbitl((long double)(x)) : __rebsd_signbitd((double)(x))))
 #endif
 
 int isnanf(float x);
@@ -47,6 +81,26 @@ double ldexp(double x, int exp);
 
 double fmod(double x, double y);
 
+#ifndef _MATH_IMPL
+#define fpclassify(x) \
+    (sizeof(x) == sizeof(float) ? __fpclassifyf((float)(x)) : \
+    ((sizeof(x) == sizeof(long double) && sizeof(long double) != sizeof(double)) ? \
+    __fpclassifyl((long double)(x)) : __fpclassifyd((double)(x))))
+#define isfinite(x) \
+    (sizeof(x) == sizeof(float) ? __isfinitef((float)(x)) : \
+    ((sizeof(x) == sizeof(long double) && sizeof(long double) != sizeof(double)) ? \
+    __isfinitel((long double)(x)) : __isfinited((double)(x))))
+#define isnormal(x) \
+    (sizeof(x) == sizeof(float) ? __isnormalf((float)(x)) : \
+    ((sizeof(x) == sizeof(long double) && sizeof(long double) != sizeof(double)) ? \
+    __isnormall((long double)(x)) : __isnormald((double)(x))))
+#define isinf(x) \
+    (sizeof(x) == sizeof(float) ? __rebsd_isinff((float)(x)) : \
+    ((sizeof(x) == sizeof(long double) && sizeof(long double) != sizeof(double)) ? \
+    __rebsd_isinfl((long double)(x)) : __rebsd_isinfd((double)(x))))
+#define isnan(x) (fpclassify(x) == FP_NAN)
+#endif
+
 #if !defined(_ANSI_SOURCE) && !defined(_POSIX_SOURCE)
 
 #define M_E             2.7182818284590452354   /* e */
@@ -64,3 +118,5 @@ double fmod(double x, double y);
 #define M_SQRT1_2       0.70710678118654752440  /* 1/sqrt(2) */
 
 #endif /* !_ANSI_SOURCE && !_POSIX_SOURCE */
+
+#endif /* _MATH_H_ */

@@ -5,6 +5,7 @@
  * software is freely granted, provided that this notice
  * is preserved.
  */
+#define _MATH_IMPL
 #include <math.h>
 
 /*

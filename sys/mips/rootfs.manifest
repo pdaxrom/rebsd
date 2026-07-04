@@ -118,6 +118,11 @@ mode 0775
 
 file /root/libc-string-smoke.c
 
+file /root/math-class-smoke.sh
+mode 0775
+
+file /root/math-class-smoke.c
+
 file /root/linpack.c
 
 file /root/linpack-smoke.sh
