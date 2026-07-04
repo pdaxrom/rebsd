@@ -625,12 +625,18 @@ userland build unchanged.
   - Keep expanding strict PCC runtime coverage as backend issues are fixed.
   - Expand smoke coverage for libc-heavy programs, varargs, structs/unions,
     pointer arithmetic stress, and shell build workloads.
-- [ ] Make `fsutil` fail hard on rootfs population errors.
+- [x] Make `fsutil` fail hard on rootfs population errors.
   - The first 4 MB N64 PCC debug rootfs exposed `inode_alloc: out of in-core
     inodes` and missing file/device creation while `fsutil --new` still
     returned success and `fsutil --check` passed the truncated image.
-  - Treat failed manifest entries as fatal before relying on generated images
-    in hardware gates.
+  - `fsutil --new ... --manifest` now propagates file, directory, device,
+    hardlink, symlink, and final sync failures through `add_contents()` and
+    returns non-zero instead of publishing a silently truncated image.
+  - `fsutil --add` now propagates `add_object()` and final sync failures too.
+  - Verified with missing-file and inode-exhaustion negative tests
+    (`FSUTIL_*_RC:255`), a positive image plus `fsutil --check`, Malta
+    `MIPS_ROOTFS_COMPILER=pcc rootfs.img`, and N64
+    `N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
 - [ ] Replace temporary compatibility stubs with real policy.
   - Core wide-char and wide-stdio APIs now live in libc as a coherent
     ASCII/byte-oriented ReBSD wide ABI surface.
