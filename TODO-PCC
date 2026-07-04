@@ -3,7 +3,8 @@
 Status: active
 Scope: maintain the imported Portable C Compiler as a supported opt-in
 ReBSD/MIPS C userland compiler while keeping the default GCC-based kernel and
-userland build unchanged.
+userland build unchanged.  TLS/shared libraries and `p++`/C++ are future work,
+not active items for the current C/static-a.out PCC milestone.
 
 ## Ground Rules
 
@@ -46,6 +47,24 @@ userland build unchanged.
   - Installed as `/usr/bin/make` with `/usr/share/man/cat1/make.0`.
   - Malta QEMU smoke ran `/usr/bin/make -f /tmp/mk` and printed
     `MAKE_SMOKE_OK`.
+
+## Future Work, Not Current PCC Milestone
+
+- [ ] TLS support.
+  - The current ReBSD/MIPS PCC target is static a.out and deliberately rejects
+    thread-local storage.
+  - Keep TLS-only upstream tests as expected-fail policy cases until ReBSD has
+    a concrete TLS ABI and runtime plan.
+- [ ] Shared libraries/PIC support.
+  - The current target has no `-shared`, runtime shared object loader, `rpath`,
+    or shared-library ABI.
+  - Keep shared-library/PIC upstream tests as expected-fail policy cases until
+    ReBSD has a concrete shared-library ABI and loader plan.
+- [ ] `p++`/C++ frontend and runtime.
+  - Do not publish `/usr/bin/p++` or `/usr/libexec/pcc/cxxcom` in default
+    rootfs images for now.
+  - Revisit only as a separate C++ phase with frontend coverage, target
+    compile/link/run gates, and a ctor/dtor startup policy.
 
 ## Phase 1: Host PCC Configuration
 
