@@ -155,9 +155,10 @@ C++ is not published.  Before enabling `/usr/bin/p++` or
 startup policy for `crtbegin.o`/`crtend.o`, sentinel entries, constructor
 priorities, destructor ordering, and partial links.
 
-TLS and shared libraries are not supported by the current static a.out target.
-Keep the corresponding upstream PCC tests expected-fail unless ReBSD grows a
-concrete ABI and runtime policy for them.
+TLS and shared libraries are explicitly deferred to future work.  They are not
+supported by the current static a.out target.  Keep the corresponding upstream
+PCC tests expected-fail unless ReBSD grows a concrete ABI and runtime policy for
+them.
 
 Locale-aware multibyte and UTF-8 wide-character semantics are not part of the
 current PCC milestone.  The existing wide-character libc surface documents the

@@ -613,10 +613,13 @@ userland build unchanged.
   - Current imported `cxxcom` is not ready: constructor syntax is rejected, and
     even a basic class/member-function compile currently fails with
     `compiler error: cdope missing op 93`.
-- [ ] Decide whether ReBSD will support TLS and shared libraries.
-  - TLS is currently rejected by the target and blocks only `pcclist/init004`.
-  - Shared libraries/PIC are currently out of scope for static a.out and block
-    only `misc/shlib3`.
+- [x] Defer TLS and shared libraries to future work.
+  - TLS remains rejected by the current static ReBSD/MIPS target and blocks
+    only `pcclist/init004`.
+  - Shared libraries/PIC remain out of scope for static a.out and block only
+    `misc/shlib3`.
+  - Keep both as expected-fail policy cases until ReBSD grows a concrete TLS
+    or shared-library ABI/runtime plan.
 - [ ] Add or keep target-aware handling for architecture-specific upstream
   tests.
   - `gcccompat/typeof001` is x86 inline asm, not a MIPS C frontend failure.
