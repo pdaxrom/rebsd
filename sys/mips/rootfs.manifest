@@ -90,6 +90,11 @@ file /root/ll-abi-smoke.c
 
 file /root/ll-abi-smoke.s
 
+file /root/libpcc-helper-smoke.sh
+mode 0775
+
+file /root/libpcc-helper-smoke.c
+
 file /root/sh-fail-smoke.sh
 mode 0775
 

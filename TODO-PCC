@@ -699,6 +699,11 @@ not active items for the current C/static-a.out PCC milestone.
   - Covered now by `/root/libc-abi-smoke.sh`: libc-heavy varargs,
     structs/unions, qsort callbacks, `setjmp`/`longjmp`, stdio file I/O, and
     key pointer arithmetic cases.
+  - Covered now by `/root/libpcc-helper-smoke.sh`: direct `libpcc.a`
+    compiler-runtime helper calls for 64-bit shifts, signed and unsigned
+    division/modulo, multiplication, and double/unsigned-double conversion
+    helpers.  The smoke runs through both `/usr/bin/cc` and `/usr/bin/pcc`
+    and is included in `/root/pcc-smoke-all.sh`.
   - Still worth expanding: larger pointer/aliasing stress, shell build
     workloads, and additional real utility compile/run workloads.
 - [x] Make `fsutil` fail hard on rootfs population errors.
@@ -768,6 +773,9 @@ not active items for the current C/static-a.out PCC milestone.
     `/root/pcc-smoke-all.sh` with zero failures.
   - N64 hardware also passes the same rootfs smoke suite with
     `PCC_SMOKE_ALL_RC:0`.
+  - The rootfs smoke suite now includes `/root/libpcc-helper-smoke.sh`, which
+    calls the staged `libpcc.a` helper ABI directly instead of relying only on
+    compiler-generated calls.
   - `pcc-libs/csu` is still not staged by default. ReBSD now has safe flat
     linker-defined ctor/dtor ranges for C constructor/destructor attributes,
     but `crtbegin.o`/`crtend.o` need a separate C++ startup policy before they

@@ -47,6 +47,7 @@ run_smoke cc-pcc /root/cc-pcc-smoke.sh
 run_smoke types /root/types-smoke.sh
 run_smoke long-long /root/ll-smoke.sh
 run_smoke long-long-abi /root/ll-abi-smoke.sh
+run_smoke libpcc-helper /root/libpcc-helper-smoke.sh
 run_smoke pcc /root/pcc-smoke.sh
 run_smoke math-class /root/math-class-smoke.sh
 run_smoke libc-string /root/libc-string-smoke.sh
