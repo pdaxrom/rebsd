@@ -242,7 +242,13 @@ N64_STB_SRCS = $(wildcard $(N64_STB_DIR)/stb_image.h)
 N64_USER_SRCS = $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
                 $(shell find $(TOPSRC)/src/cmd -maxdepth 3 -type f \( -name '*.[chSy]' -o -name '*.[0-9]' -o -name '*.sh' -o -name Makefile \) 2>/dev/null) \
                 $(N64_STB_SRCS)
-N64_USERLAND_COMPILER ?= gcc
+N64_USERLAND_COMPILER ?= $(if $(MIPS_ROOTFS_COMPILER),$(MIPS_ROOTFS_COMPILER),gcc)
+N64_USERLAND_COMPILERS = gcc pcc
+ifneq ($(MIPS_ROOTFS_COMPILER),)
+ifneq ($(N64_USERLAND_COMPILER),$(MIPS_ROOTFS_COMPILER))
+$(error N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER) conflicts with MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER))
+endif
+endif
 N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).stamp
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
@@ -286,7 +292,7 @@ N64_USERLAND_EXTRA_DEPS = $(N64_HOST_PCC) $(N64_NATIVE_AOUT_AR) \
                           $(N64_NATIVE_LD) \
                           $(N64_NATIVE_DIR)/libpcc.a
 else
-$(error Unsupported N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER))
+$(error Unsupported N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER); expected one of $(N64_USERLAND_COMPILERS))
 endif
 
 N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \

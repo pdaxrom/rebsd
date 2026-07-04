@@ -21,7 +21,7 @@ Likely first local glue files:
 - `src/dev/pcc/pcc/cc/driver/platform.c`, only if `ccconfig.h` is not enough
   to express ReBSD include paths, library paths, startup files, and macros
 
-Initial ReBSD target behavior should be conservative:
+Current ReBSD target behavior is conservative:
 
 - target triples: `mips-rebsd`, `mips-unknown-rebsd`
 - compatibility aliases: `mips-retrobsd`, `mips-unknown-retrobsd`
@@ -29,12 +29,28 @@ Initial ReBSD target behavior should be conservative:
 - object/link path: existing ReBSD a.out tools
 - default startup: `/usr/lib/crt0.o`
 - default libraries: `-lpcc -lc -lpcc` from `/usr/lib`
-- no shared libraries, PIC, TLS, C++, or kernel build switch in the first pcc
-  milestone
+- no shared libraries, PIC, TLS, C++, or kernel build switch in the supported
+  C milestone
+
+## Selectable Userland Compiler
+
+The default kernel and userland compiler remains the existing GCC flow.  PCC is
+supported as an explicit opt-in userland/rootfs compiler:
+
+- Malta/Malta64: `MIPS_ROOTFS_COMPILER=pcc`
+- N64: `N64_USERLAND_COMPILER=pcc`
+
+Both selectors accept `gcc` and `pcc`.  They are aliases for the same compiler
+mode at different make entry points: Malta/Malta64 use the shared MIPS rootfs
+wrapper, which forwards the selected mode into the N64/common rootfs userland
+builder.  If both variables are set and disagree, make aborts before any
+build.  In PCC mode the imported compiler frontend builds target userland
+while ReBSD continues to use its own a.out `as`, `ld`, `ar`, and `ranlib`.
+The selector does not change the kernel or N64 stage0 compiler.
 
 ## Host Cross Smoke
 
-Current first milestone status:
+Current milestone status:
 
 - `configure.ac`, generated `configure`, and `config.sub` recognize
   `mips-rebsd` and `mips-retrobsd` targets.
@@ -67,10 +83,11 @@ Current first milestone status:
 The ReBSD linker now supports `-L` and `-l` library search flags, so PCC can
 use normal library arguments while still producing ReBSD a.out output.
 
-The current upstream `pcc-tests` checkpoint for ReBSD/MIPS is 311 compile/link
-checks with 283 passing, and 246 Malta runtime candidates with 234 passing.
-Constructor/destructor attribute coverage is intentionally not part of the
-green gate yet.
+The current ReBSD/MIPS native PCC regression gate has 316 total checks:
+286 compile/link pass, 30 expected compile/link fail, and 276/276 runtime
+candidates pass.  The same target-side gate passes on Malta and on the
+Malta64/R4000 QEMU profile used as the closest automated N64-class CPU check.
+The real N64 hardware smoke also passes with the normal PCC rootfs.
 
 ## Runtime Libraries
 
@@ -84,11 +101,12 @@ target.  Add it only if tests show a real soft-float dependency.
 
 `src/dev/pcc/pcc-libs/csu` has the upstream PCC `crtbegin.o`/`crtend.o`
 implementation for global constructors/destructors.  ReBSD does not enable it
-in the default C link path yet: the current a.out assembler accepts
-`.ctors`/`.dtors` syntax only by folding those sections into the normal data
-segment, which is not a safe representation for PCC's constructor-list walker.
-This is deferred until C++ or C constructor/destructor attributes become part
-of the supported target gate.
+in the default C link path yet.  The current a.out toolchain and libc startup
+support flat linker-defined ctor/dtor ranges, which is enough for C
+constructor/destructor attributes in the current gate.  Full C++ still needs a
+startup policy for `crtbegin.o`/`crtend.o`, sentinel entries, constructor
+priorities, destructor ordering, and partial links before `/usr/bin/p++` is
+published.
 
 ## MIPS Backend Fixes
 

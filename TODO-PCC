@@ -1,15 +1,16 @@
 # ReBSD PCC Port TODO
 
 Status: active
-Scope: bring the imported Portable C Compiler to ReBSD/MIPS without changing
-the default GCC-based kernel and userland builds until PCC passes the Malta
-test gate.
+Scope: maintain the imported Portable C Compiler as a supported opt-in
+ReBSD/MIPS C userland compiler while keeping the default GCC-based kernel and
+userland build unchanged.
 
 ## Ground Rules
 
 - Kernel builds stay on the existing GCC flow for now.
-- Userland builds stay on GCC until PCC passes the full Malta test set.
-- `N64_USERLAND_COMPILER=pcc` remains reserved until that gate is green.
+- Userland builds default to GCC.
+- `MIPS_ROOTFS_COMPILER=pcc` and `N64_USERLAND_COMPILER=pcc` are supported
+  opt-in C userland modes after the Malta, Malta64/R4000, and real N64 gates.
 - ReBSD must keep using its existing `as`, `ld`, `ar`, and `ranlib`; no GNU
   binutils or LLVM dependency is allowed for the target toolchain.
 - First working target is big-endian MIPS o32 for Malta and N64/VR4300-class
@@ -24,7 +25,7 @@ test gate.
 - [x] Malta QEMU smoke tests completed.
 - [x] GCC-based N64 build completed.
 - [x] N64 image confirmed on hardware.
-- [x] PCC userland selector is present but intentionally blocked.
+- [x] PCC userland selector is supported as an opt-in mode.
 - [x] ReBSD `ld` accepts `-L` and `-l` library search options.
   - `ld` now collects all `-L` search directories before resolving any `-l`
     library, so `cc file.c -lm` works even when the compiler driver appends
@@ -579,10 +580,17 @@ test gate.
   - Add the closest usable VR4300-like QEMU/Malta profile if we can make one
     boot, but do not treat the current default Malta 24Kf/MIPS32 pass as N64
     hardware readiness.
-- [ ] Make the userland compiler selectable.
+- [x] Make the userland compiler selectable.
   - Default remains GCC until explicitly changed.
-  - Add documented `gcc`/`pcc` selection, then build full userland with PCC on
-    Malta and later N64.
+  - `MIPS_ROOTFS_COMPILER=gcc|pcc` selects the shared Malta/Malta64 rootfs
+    compiler mode.
+  - `N64_USERLAND_COMPILER=gcc|pcc` selects the direct N64 userland compiler
+    mode.
+  - These are aliases for the same compiler choice at different make entry
+    points.  If only one is set, the other entry point inherits it; if both
+    are set and conflict, make aborts.
+  - PCC mode keeps the kernel, stage0, and target binary tools on the existing
+    ReBSD/GCC/a.out flow.
 - [x] Decide long-term runtime policy for PCC support libraries.
   - Keep `libpcc.a` staged as PCC's compiler runtime. It owns helpers that
     PCC-generated code may reference directly, such as arithmetic, conversion,
@@ -969,14 +977,38 @@ test gate.
 
 ## Phase 4: Selectable Compiler Mode
 
-- [ ] Make userland compiler selection explicit after Malta is green.
+- [x] Make userland compiler selection explicit after Malta is green.
   - Default remains GCC until intentionally changed.
-  - Supported values should include `gcc` and `pcc`.
-- [ ] Add documentation for the compiler selector.
-- [ ] Build full userland with PCC on Malta.
-- [ ] Re-run Malta smoke and regression tests with PCC userland.
-- [ ] Build N64 artifacts with the selected compiler mode.
-- [ ] Leave N64 hardware validation to the operator.
+  - Supported values are `gcc` and `pcc`.
+  - Shared MIPS ports use `MIPS_ROOTFS_COMPILER`.
+  - Direct N64 builds use `N64_USERLAND_COMPILER`.
+  - The two names are aliases for the same selected compiler mode and are
+    validated for conflicts.
+- [x] Add documentation for the compiler selector.
+  - `docs/TOOLCHAIN.md` documents the policy, supported values, and common
+    Malta/Malta64/N64 command forms.
+  - `docs/PCC_PORTING_NOTES.md` records PCC as a supported opt-in C userland
+    compiler while leaving C++/TLS/shared-library policy out of the C gate.
+- [x] Build full userland with PCC on Malta.
+- [x] Re-run Malta smoke and regression tests with PCC userland.
+  - Native PCC regressions pass with 316 total checks, 286 compile-pass,
+    30 expected compile-fail, 0 unexpected compile-fail, and 276/276 runtime
+    pass.
+  - Linpack smoke passes with `LINPACK_RC:0`; latest default-size Malta
+    numbers are GCC about 14.7 MFLOPS and PCC about 13.4 MFLOPS.
+- [x] Re-run Malta64/R4000 smoke and regression tests with PCC userland.
+  - Native PCC regressions pass with the same 316/286/30 and 276/276 runtime
+    result under `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`.
+  - Linpack smoke passes with `LINPACK_RC:0`; latest default-size Malta64
+    numbers are GCC about 14.4 MFLOPS and PCC about 12.2 MFLOPS.
+- [x] Build N64 artifacts with the selected compiler mode.
+  - `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`
+    builds the normal PCC rootfs image.
+- [x] Leave N64 hardware validation to the operator.
+  - Real N64 hardware validation passed `/root/pcc-smoke-all.sh` with
+    `PCC_SMOKE_ALL_RC:0`.
+  - N64 Linpack smoke passes for both compilers at array size 120; latest
+    hardware numbers are GCC about 4.0 MFLOPS and PCC about 2.6 MFLOPS.
 
 ## Phase 5: Cleanup and Commit Gates
 
