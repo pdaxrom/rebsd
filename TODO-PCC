@@ -897,12 +897,17 @@ userland build unchanged.
     `192.168.2.1`, configured `usbn0` as `192.168.2.3/24`, installed the
     default route and resolver, and pinged both the DHCP router and external
     hosts (`ya.ru`) with 0% packet loss.
-- [ ] Add a libc regression for `printf(stdout)` followed by
+- [x] Add a libc regression for `printf(stdout)` followed by
   `freopen(stdout, ...)` and later `malloc()` traffic.
   - The `ccom -v` crash path strongly suggested this stream transition can
     corrupt or expose corruption in the old malloc/stdio interaction on N64.
   - Even though PCC should not print compiler diagnostics to the assembly
     output stream, libc should still survive this valid stdio sequence.
+  - Added to `/root/native-pcc-smoke.sh` as step 7: compile and run a target
+    PCC binary that prints to stdout, redirects stdout with `freopen()`, then
+    stresses `malloc()`/`free()` traffic and verifies both output streams.
+  - Verified on PCC-built rootfs with Malta and Malta64/R4000:
+    `NATIVE_PCC_SMOKE_RC:0`.
 - [ ] Decide and implement the full C++ ctor/dtor startup model.
   - Current ReBSD startup walks flat linker-defined ctor/dtor ranges and is
     enough for PCC C constructor/destructor attributes.

@@ -26,8 +26,9 @@ done
 
 tmp=/var/tmp/native-pcc-smoke.$$
 rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.s" "$tmp.o" "$tmp.pcc" \
-    "$tmp.ctime" "$tmp.ctime.c" "$tmp.out"
-trap 'rc=$?; rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.s" "$tmp.o" "$tmp.pcc" "$tmp.ctime" "$tmp.ctime.c" "$tmp.out"; exit $rc' 0 1 2 3 15
+    "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" \
+    "$tmp.freopen.out" "$tmp.out"
+trap 'rc=$?; rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.s" "$tmp.o" "$tmp.pcc" "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" "$tmp.freopen.out" "$tmp.out"; exit $rc' 0 1 2 3 15
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>
@@ -129,5 +130,50 @@ cc -o "$tmp.ctime" "$tmp.ctime.c" || exit 1
 "$tmp.ctime" > "$tmp.out" || exit 1
 grep native-pcc-ctime-1 "$tmp.out" >/dev/null || exit 1
 grep native-pcc-localtime-2 "$tmp.out" >/dev/null || exit 1
+
+cat > "$tmp.freopen.c" <<'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int
+main(int argc, char **argv)
+{
+    char *p;
+    int i, j, n;
+
+    if (argc != 2)
+        return 2;
+
+    fprintf(stdout, "native-pcc-freopen-before\n");
+    fflush(stdout);
+    if (freopen(argv[1], "w", stdout) == NULL)
+        return 3;
+
+    fprintf(stdout, "native-pcc-freopen-after\n");
+    for (i = 0; i != 64; ++i) {
+        n = 32 + i;
+        p = malloc(n);
+        if (p == NULL)
+            return 4;
+        memset(p, 0x5a, n);
+        for (j = 0; j != n; ++j) {
+            if ((unsigned char)p[j] != 0x5a)
+                return 5;
+        }
+        free(p);
+    }
+    fprintf(stdout, "native-pcc-freopen-malloc-ok\n");
+    fflush(stdout);
+    return ferror(stdout) ? 6 : 0;
+}
+EOF
+
+echo "step 7: stdout freopen/malloc link/run"
+cc -o "$tmp.freopen" "$tmp.freopen.c" || exit 1
+"$tmp.freopen" "$tmp.freopen.out" > "$tmp.out" || exit 1
+grep native-pcc-freopen-before "$tmp.out" >/dev/null || exit 1
+grep native-pcc-freopen-after "$tmp.freopen.out" >/dev/null || exit 1
+grep native-pcc-freopen-malloc-ok "$tmp.freopen.out" >/dev/null || exit 1
 
 echo "native pcc smoke ok"
