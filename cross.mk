@@ -15,8 +15,8 @@ OBJDUMP		= sync --
 INSTALL		= install -m 644
 INSTALLDIR	= install -m 755 -d
 TAGSFILE	= tags
-MANROFF		= nroff -man -h
-DOCROFF		= nroff -mdoc -h
+MANROFF		= nroff -Tascii -man -h
+DOCROFF		= nroff -Tascii -mdoc -h
 ELF2AOUT	= cp
 
 CFLAGS		= -O -DCROSS

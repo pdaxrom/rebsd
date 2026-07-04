@@ -54,12 +54,12 @@ N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm
                         compress cp date dd df diff du echo ed expr false \
                         file find fold grep head hostid join kill last ln \
                         login ls make man mesg mkdir more mv nice od pagesize pr ps \
-                        printenv pwd rev rm rmail rmdir \
+                        pcc printenv pwd rev rm rmail rmdir \
                         sed sh size sleep sort split strip sum tail tar tee \
                         time touch tr true tsort tty uniq vmstat w wc whatis who
-N64_ROOTFS_CMD_CAT1_SOURCES = emg:emg env:env sl:sl wget:wget
+N64_ROOTFS_CMD_CAT1_SOURCES = as:as emg:emg env:env nm:nm sl:sl wget:wget
 N64_ROOTFS_CAT1_ALIASES = egrep:grep fgrep:grep uncompress:compress \
-                          zcat:compress nohup:nice
+                          zcat:compress nohup:nice cc:pcc cpp:pcc
 N64_ROOTFS_CAT8_PAGES = fsck getty sync
 N64_ROOTFS_CAT8_ALIASES = fastboot:reboot halt:reboot poweroff:reboot \
                           bootloader:reboot
