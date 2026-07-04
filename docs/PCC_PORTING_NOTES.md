@@ -20,7 +20,8 @@ ReBSD/GCC build flow unless a command explicitly says otherwise.
 
 PCC defines both ReBSD identity macros and RetroBSD compatibility macros because
 parts of the tree still carry RetroBSD-era conditionals.  The target also
-defines the normal Unix and MIPS big-endian/o32 preprocessor surface.
+defines the normal Unix and MIPS big-endian/o32 preprocessor surface, including
+`__mips_hard_float` for the current hardware-FPU ABI.
 
 ReBSD/MIPS currently treats `long double` as IEEE64, matching `double`.  PCC and
 the public headers must therefore report the target `long double` limits rather
@@ -120,9 +121,10 @@ The ReBSD a.out toolchain is part of the supported PCC target:
 
 The imported PCC MIPS backend carries ReBSD fixes for big-endian `long long`,
 sub-word stack arguments, hard-float o32 helper calls, aggregate return ABI,
-stack alignment, unsigned narrow memory loads, MIPS unsigned comparisons,
-computed goto, static initializer string references, floating NaN/Inf folding,
-and FCSR-safe `DEBUGFP` oracle checks.
+stack alignment, mixed aggregate/64-bit stack slot accounting, unsigned narrow
+memory loads, MIPS unsigned comparisons, computed goto, static initializer
+string references, floating NaN/Inf folding, and FCSR-safe `DEBUGFP` oracle
+checks.
 
 ## Validation Gates
 
@@ -143,6 +145,14 @@ The native PCC regression gate currently reports:
 - 277 runtime candidates.
 - 277 runtime passes.
 - 0 unexpected runtime failures.
+
+The native smoke gate also runs `/root/libc-abi-smoke.sh` with both `cc` and
+`pcc`.  It covers struct return/by-value calls, stack-passed 64-bit arguments,
+qsort callbacks, varargs and `vsnprintf`, parsing, `setjmp`/`longjmp`, and stdio
+file I/O.  This smoke caught a real target ABI/header mismatch: PCC did not
+define `__mips_hard_float`, so `setjmp.h` exposed a 14-word `jmp_buf` while the
+hard-float MIPS `setjmp.S` saved 47 words and overwrote the following global.
+The target macro and smoke guard are now part of the C gate.
 
 The expected compile/link failures are target-aware policy cases for
 `mips-rebsd`, not generic PCC failures:

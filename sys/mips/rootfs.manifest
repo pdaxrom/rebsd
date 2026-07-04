@@ -104,6 +104,11 @@ mode 0775
 
 file /root/libc-string-smoke.c
 
+file /root/libc-abi-smoke.sh
+mode 0775
+
+file /root/libc-abi-smoke.c
+
 file /root/math-class-smoke.sh
 mode 0775
 

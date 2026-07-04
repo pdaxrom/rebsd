@@ -18,17 +18,28 @@
 #include <stdarg.h>
 
 int
-snprintf (char *str, size_t nbytes, const char *fmt, ...)
+vsnprintf(char *str, size_t nbytes, const char *fmt, va_list args)
 {
 	FILE _strbuf;
-	va_list args;
 
+	if (nbytes == 0)
+		return 0;
 	_strbuf._flag = _IOWRT+_IOSTRG;
 	_strbuf._ptr = str;
-	_strbuf._cnt = nbytes;
-	va_start (args, fmt);
+	_strbuf._cnt = nbytes - 1;
 	_doprnt (fmt, args, &_strbuf);
-	va_end (args);
 	*_strbuf._ptr = 0;
 	return _strbuf._ptr - str;
+}
+
+int
+snprintf (char *str, size_t nbytes, const char *fmt, ...)
+{
+	va_list args;
+	int n;
+
+	va_start (args, fmt);
+	n = vsnprintf(str, nbytes, fmt, args);
+	va_end (args);
+	return n;
 }

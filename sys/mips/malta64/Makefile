@@ -370,7 +370,7 @@ native-pcc-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	    --log $(NATIVE_PCC_SMOKE_LOG) \
 	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
 	    --ram $(MALTA_QEMU_RAM) \
-	    --command '/root/native-pcc-smoke.sh; echo NATIVE_PCC_SMOKE_RC:$$?' \
+	    --command '/root/native-pcc-smoke.sh && /root/libc-abi-smoke.sh; echo NATIVE_PCC_SMOKE_RC:$$?' \
 	    --expect "NATIVE_PCC_SMOKE_RC:0"
 
 native-pcc-smoke-runtime-vr4300:

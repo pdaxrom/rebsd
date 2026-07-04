@@ -56,7 +56,7 @@ userland build unchanged.
 - [x] Define ReBSD preprocessor macros.
   - Required compatibility: `__retrobsd__`, `__RETROBSD__`.
   - Required Unix/MIPS: `__unix__`, `unix`, `__mips__`, `mips`,
-    `__MIPSEB__`, `_MIPSEB`, `__mips_o32`.
+    `__MIPSEB__`, `_MIPSEB`, `__mips_o32`, `__mips_hard_float`.
   - ReBSD identity: `__rebsd__`, `__REBSD__`.
 - [x] Teach PCC configure scripts about the ReBSD target.
 - [x] Fix PCC MIPS target endian selection for big-endian output.
@@ -96,6 +96,11 @@ userland build unchanged.
     initializers, floating literals, stack-passed narrow arguments, `long long`
     arithmetic/conversions, hardware FPU double operations, and C/assembly o32
     ABI handoff.
+  - The target native smoke now also runs `/root/libc-abi-smoke.sh`, which
+    compiles and runs the same libc/ABI stress source with both `cc` and `pcc`.
+    It covers struct return/by-value arguments, stack-passed 64-bit arguments,
+    qsort callbacks, varargs, `vsnprintf`, parsing, `setjmp`/`longjmp`, and
+    stdio file I/O.
 - [x] Link ReBSD PCC programs through `src/dev/pcc/pcc-libs/libpcc`.
   - `libpcc.a` is built as a ReBSD a.out archive by the existing N64 native
     runtime path, using the GCC-to-ReBSD-assembler wrapper for now.
@@ -167,6 +172,24 @@ userland build unchanged.
   - `lastcall()` now derives the cleanup size from actual `FUNARG` pushes plus
     the ABI home area/pad, fixing an 8-byte stack over-clean after calls such
     as `daxpy_r(int, double, ptr, int, ptr, int)`.
+- [x] Fix MIPS o32 stack slot accounting for mixed aggregate/64-bit calls.
+  - Hidden struct-return pointers now shift following callee parameter offsets
+    while preserving 8-byte alignment for `long long`, `double`, and
+    `long double`.
+  - Stack-only `long long`/`double` arguments now emit their ABI padding slot at
+    the correct call-site position instead of relying on a trailing whole-call
+    stack pad.
+  - By-value struct/union arguments now pass the stack tail as normal `FUNARG`
+    words in callee-visible order instead of writing fixed offsets from the
+    caller frame.
+  - PCC's ReBSD/MIPS predefined macros now include `__mips_hard_float`, so
+    public headers expose the hard-float `jmp_buf` size expected by `setjmp.S`.
+    Without this, `setjmp()` saved 47 words into a 14-word buffer and overwrote
+    the following `__atexit` global.
+  - Added libc `vsnprintf()` as the real `snprintf()` worker so target varargs
+    code can link without a private stub.
+  - Added `/root/libc-abi-smoke.c` and `/root/libc-abi-smoke.sh`; Malta and
+    Malta64/R4000 both pass it through native `cc` and `pcc`.
 - [x] Keep MIPS register coalescing inside a single register class.
   - The optimizer now refuses GP/FP cross-class move coalescing instead of
     assigning one temporary to incompatible integer and FPU registers.
@@ -633,8 +656,11 @@ userland build unchanged.
     rejection, and static a.out TLS rejection.
 - [ ] Close remaining test-coverage gaps.
   - Keep expanding strict PCC runtime coverage as backend issues are fixed.
-  - Expand smoke coverage for libc-heavy programs, varargs, structs/unions,
-    pointer arithmetic stress, and shell build workloads.
+  - Covered now by `/root/libc-abi-smoke.sh`: libc-heavy varargs,
+    structs/unions, qsort callbacks, `setjmp`/`longjmp`, stdio file I/O, and
+    key pointer arithmetic cases.
+  - Still worth expanding: larger pointer/aliasing stress, shell build
+    workloads, and additional real utility compile/run workloads.
 - [x] Make `fsutil` fail hard on rootfs population errors.
   - The first 4 MB N64 PCC debug rootfs exposed `inode_alloc: out of in-core
     inodes` and missing file/device creation while `fsutil --new` still

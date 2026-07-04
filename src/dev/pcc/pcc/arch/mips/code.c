@@ -251,13 +251,22 @@ param_retptr(void)
 static void
 param_shift_stret_slots(struct symtab **sp, int cnt)
 {
-	int i;
+	int extra, i, off;
+
+	extra = SZINT;
 
 	for (i = 0; i < cnt; i++) {
 		if (sp[i] == NULL || sp[i]->sclass != PARAM ||
 		    sp[i]->stype == VOID || sp[i]->soffset == NOOFFSET)
 			continue;
-		sp[i]->soffset += SZINT;
+		off = sp[i]->soffset + extra;
+		if ((DEUNSIGN(sp[i]->stype) == LONGLONG ||
+		    sp[i]->stype == DOUBLE || sp[i]->stype == LDOUBLE) &&
+		    (off & (2 * SZINT - 1)) != 0) {
+			off += SZINT;
+			extra += SZINT;
+		}
+		sp[i]->soffset = off;
 	}
 }
 
@@ -656,11 +665,11 @@ mips_struct_word(NODE *p, int off)
 static NODE *
 movearg_struct(NODE *p, NODE *prefix, int *regp)
 {
-	int reg = *regp;
+	int sreg = *regp;
+	int reg = sreg;
 	NODE *l, *q, *t, *r;
 	struct symtab *addrsp;
 	int navail;
-	int off;
 	int num;
         int sz;
 	int ty;
@@ -668,6 +677,8 @@ movearg_struct(NODE *p, NODE *prefix, int *regp)
 	int direct;
 
 	navail = nargregs - (reg - A0);
+	if (navail < 0)
+		navail = 0;
 	sz = tsize(p->n_type, p->n_df, p->n_ap) / SZINT;
 	num = sz > navail ? navail : sz;
 
@@ -695,34 +706,35 @@ movearg_struct(NODE *p, NODE *prefix, int *regp)
                	r = buildtree(ASSIGN, r, t);
 		q = cmappend(q, r);
 	}
-	off = ARGINIT/SZINT + nargregs;
-	for (i = num; i < sz; i++) {
+	/*
+	 * Push the stack part in reverse word order.  The normal FUNARG
+	 * expansion decrements $sp before each store, so the last emitted
+	 * word becomes the first stack slot visible to the callee.
+	 */
+	for (i = sz - 1; i >= num; i--) {
 		t = direct ? MIPS_TCOPY(l) : mips_stackview(addrsp, ty);
 		t = mips_struct_word(t, 4*i);
-
-		r = block(REG, NIL, NIL, INT, 0, 0);
-		r->n_rval = FP;
-		r = block(PLUS, r, bcon(4*off++), INT, 0, 0);
-		r = block(UMUL, r, NIL, INT, 0, 0);
-
-               	r = buildtree(ASSIGN, r, t);
+		r = block(FUNARG, t, NIL, t->n_type, t->n_df, t->n_ap);
 		q = cmappend(q, r);
 	}
 
 	if (direct)
 		tfree(l);
-	*regp = reg;
+	*regp = sreg + sz;
 	return q;
 }
 
 /* setup call stack with 64-bit argument */
 /* called from moveargs() */
 static NODE *
-movearg_64bit(NODE *p, int *regp)
+movearg_64bit(NODE *p, int *regp, NODE **padp)
 {
 	int reg = *regp;
+	int oreg = reg;
 	NODE *q;
 	int lastarg;
+
+	*padp = NIL;
 
 	/* alignment */
 	++reg;
@@ -730,8 +742,11 @@ movearg_64bit(NODE *p, int *regp)
 
 	lastarg = A0 + nargregs - 1;
 	if (reg > lastarg) {
-		*regp = reg;
-		return block(FUNARG, p, NIL, p->n_type, p->n_df, p->n_ap);
+		q = block(FUNARG, p, NIL, p->n_type, p->n_df, p->n_ap);
+		if (oreg > lastarg && oreg != reg)
+			*padp = block(FUNARG, bcon(0), NIL, INT, 0, 0);
+		*regp = reg + 2;
+		return q;
 	}
 
 	q = block(REG, NIL, NIL, p->n_type, p->n_df, p->n_ap);
@@ -749,7 +764,13 @@ movearg_32bit(NODE *p, int *regp)
 {
 	int reg = *regp;
 	NODE *q;
+	int lastarg;
 
+	lastarg = A0 + nargregs - 1;
+	if (reg > lastarg) {
+		*regp = reg + 1;
+		return block(FUNARG, p, NIL, p->n_type, p->n_df, p->n_ap);
+	}
 	q = block(REG, NIL, NIL, p->n_type, p->n_df, p->n_ap);
 	q->n_rval = reg++;
 	q = buildtree(ASSIGN, q, p);
@@ -800,8 +821,6 @@ moveargs(NODE *p, int *regp
     )
 {
         NODE *r, **rp;
-	int lastreg;
-	int reg;
 
         if (p->n_op == CM) {
                 p->n_left = moveargs(p->n_left, regp
@@ -816,9 +835,6 @@ moveargs(NODE *p, int *regp
 		rp = &p;
 	}
 
- 	lastreg = A0 + nargregs - 1;
-        reg = *regp;
-
 #ifdef MIPS_HARDFLOAT_O32_ABI
 	if (*fp_leadingp && mips_fp_arg_type(r->n_type)) {
 		if (*fpregp <= F14) {
@@ -829,12 +845,9 @@ moveargs(NODE *p, int *regp
 	} else if (*fp_leadingp) {
 		*fp_leadingp = 0;
 	}
-	reg = *regp;
 #endif
 
-	if (reg > lastreg && r->n_op != STARG)
-		*rp = block(FUNARG, r, NIL, r->n_type, r->n_df, r->n_ap);
-	else if (r->n_op == STARG) {
+	if (r->n_op == STARG) {
 		if (p->n_op == CM) {
 			NODE *l = p->n_left;
 			nfree(p);
@@ -842,7 +855,15 @@ moveargs(NODE *p, int *regp
 		}
 		return movearg_struct(r, NIL, regp);
 	} else if (DEUNSIGN(r->n_type) == LONGLONG) {
-		*rp = movearg_64bit(r, regp);
+		NODE *pad;
+
+		*rp = movearg_64bit(r, regp, &pad);
+		if (pad != NIL) {
+			if (p->n_op == CM)
+				p->n_left = block(CM, p->n_left, pad, INT, 0, 0);
+			else
+				p = block(CM, pad, *rp, INT, 0, 0);
+		}
 	} else if (r->n_type == DOUBLE || r->n_type == LDOUBLE) {
 		/*
 		 * Varargs pass FP values through integer argument slots.  Keep
@@ -852,12 +873,18 @@ moveargs(NODE *p, int *regp
 		struct symtab *sp = mips_stacktemp(r->n_type, r->n_df, r->n_ap);
 		NODE *t1 = mips_stackview(sp, LONGLONG);
 		NODE *t2 = mips_stackview(sp, r->n_type);
-		t1 = movearg_64bit(t1, regp);
+		NODE *pad;
+		t1 = movearg_64bit(t1, regp, &pad);
 		r = block(ASSIGN, t2, r, r->n_type, r->n_df, r->n_ap);
 		if (p->n_op == CM) {
-			p->n_left = buildtree(CM, p->n_left, t1);
+			NODE *l = p->n_left;
+			if (pad != NIL)
+				l = block(CM, l, pad, INT, 0, 0);
+			p->n_left = buildtree(CM, l, t1);
 			p->n_right = r;
 		} else {
+			if (pad != NIL)
+				t1 = block(CM, pad, t1, INT, 0, 0);
 			p = buildtree(CM, t1, r);
 		}
 	} else if (r->n_type == FLOAT) {

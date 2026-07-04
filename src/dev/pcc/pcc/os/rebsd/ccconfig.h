@@ -17,6 +17,7 @@
 	"-D__mips__", "-Dmips", "-D__mips=32", \
 	"-D__MIPSEB__", "-D__MIPSEB", "-DMIPSEB", "-D_MIPSEB", \
 	"-D__mips_o32", \
+	"-D__mips_hard_float", \
 	NULL, \
 }
 
