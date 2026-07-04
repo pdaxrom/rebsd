@@ -150,10 +150,15 @@ with both GCC and PCC.
 
 ## Out Of Scope For The C Gate
 
-C++ is not published.  Before enabling `/usr/bin/p++` or
-`/usr/libexec/pcc/cxxcom`, ReBSD needs a real C++ frontend gate and a runtime
-startup policy for `crtbegin.o`/`crtend.o`, sentinel entries, constructor
-priorities, destructor ordering, and partial links.
+C++ is explicitly deferred to future work.  `/usr/bin/p++` and
+`/usr/libexec/pcc/cxxcom` are not published in any default rootfs.  The current
+diagnostic `cxxcom` is not a usable ReBSD C++ compiler: it only handles a very
+narrow C-like subset, still emits assembler directives that the ReBSD assembler
+rejects, and fails on core C++ features such as classes, constructors,
+references, overloads, templates, and `extern "C"`.  Before enabling C++, ReBSD
+needs a real frontend gate plus a runtime startup policy for `crtbegin.o`,
+`crtend.o`, sentinel entries, constructor priorities, destructor ordering, and
+partial links.
 
 TLS and shared libraries are explicitly deferred to future work.  They are not
 supported by the current static a.out target.  Keep the corresponding upstream

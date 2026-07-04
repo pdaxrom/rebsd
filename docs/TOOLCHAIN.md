@@ -12,7 +12,7 @@ Current policy:
 - Userland build: GCC by default.
 - Supported userland compiler selectors: `gcc` and `pcc`.
 - Native `/usr/bin/cc` and `/usr/bin/pcc`: imported PCC in the rootfs.
-- C++/`p++`: not installed by default; it needs a separate runtime gate.
+- C++/`p++`: deferred to future work and not installed by default.
 
 The userland compiler selector is intentionally separate from the kernel
 compiler.  There are two make variable names because the tree has two entry

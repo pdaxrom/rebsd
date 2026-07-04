@@ -603,16 +603,20 @@ userland build unchanged.
   - Do not stage `libpccsoftfloat.a` for current hard-float Malta/N64 builds.
     Add it only if a future no-FPU target or concrete test failure proves it
     is needed.
-- [ ] Decide the C++ and `pcc-libs/csu` policy.
+- [x] Defer C++ and `pcc-libs/csu` integration to future work.
   - Current flat ctor/dtor ranges are enough for C constructor/destructor
     attributes.
   - Full C++ needs a startup policy for `crtbegin.o`/`crtend.o`, sentinel
     entries, priorities, destructor ordering, and partial links.
-  - Do not install `/usr/bin/p++` or `/usr/libexec/pcc/cxxcom` into the default
-    rootfs until C++ has a real compile/link/runtime gate.
-  - Current imported `cxxcom` is not ready: constructor syntax is rejected, and
-    even a basic class/member-function compile currently fails with
-    `compiler error: cdope missing op 93`.
+  - Do not install `/usr/bin/p++` or `/usr/libexec/pcc/cxxcom` into any default
+    rootfs until a future C++ phase has a real compile/link/runtime gate.
+  - Current imported `cxxcom` is not ready: the diagnostic `p++` driver does
+    not find the prefixed `mips-rebsd-cxxcom`, successful direct `cxxcom`
+    output still emits `.file` directives rejected by ReBSD `as`, and real C++
+    features such as `extern "C"`, `bool`, references, overloads, structs,
+    classes, constructors, member functions, and templates fail in the
+    frontend.  `new`/`delete` can emit calls, but they need a missing C++
+    runtime (`_Znwm`/`_ZdlPv`).
 - [x] Defer TLS and shared libraries to future work.
   - TLS remains rejected by the current static ReBSD/MIPS target and blocks
     only `pcclist/init004`.
@@ -931,7 +935,7 @@ userland build unchanged.
     stresses `malloc()`/`free()` traffic and verifies both output streams.
   - Verified on PCC-built rootfs with Malta and Malta64/R4000:
     `NATIVE_PCC_SMOKE_RC:0`.
-- [ ] Decide and implement the full C++ ctor/dtor startup model.
+- [ ] Future: implement the full C++ ctor/dtor startup model.
   - Current ReBSD startup walks flat linker-defined ctor/dtor ranges and is
     enough for PCC C constructor/destructor attributes.
   - It does not yet enable PCC `crtbegin.o`/`crtend.o`, sentinel entries,
@@ -939,10 +943,12 @@ userland build unchanged.
   - Partial links with `ld -r` must either preserve ReBSD ctor/dtor metadata or
     reject unsupported ctor/dtor inputs before this is treated as a complete
     C++ runtime model.
-- [ ] Fix or intentionally disable the PCC C++ frontend before publishing
-  `p++`.
+- [x] Keep the PCC C++ frontend disabled before publishing `p++`.
   - The native build does not compile or publish `cxxcom` by default. A
     diagnostic `--with-cxx` build can still be used while bringing C++ up.
+  - Re-enable `/usr/bin/p++` only in a future C++ phase, together with a
+    target-side compile/link/run gate and the C++ ctor/dtor runtime policy
+    above.
 - [x] Formalize the N64 UART-only debug video policy.
   - `N64_DEBUG_UART_ONLY=1` filters out `video.o`, `video_console.o`, `si.o`,
     `joybus.o`, `if_usbn.o`, `n64cart_usbnet.o`, `n64cart_usbecm.o`, and
