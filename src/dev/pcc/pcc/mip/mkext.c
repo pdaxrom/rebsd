@@ -205,25 +205,25 @@ main(int argc, char *argv[])
 	/* create fast-lookup tables */
 	mktables();
 
-	/* create efficient bitset sizes */
-	if (sizeof(long) == 8) { /* 64-bit arch */
-		bitary = "long";
-		bitsz = 64;
-	} else {
-		bitary = "int";
-		bitsz = sizeof(int) == 4 ? 32 : 16;
-	}
+	/*
+	 * Generate target-portable bitsets.  external.h is produced by a build
+	 * host helper, but it is also compiled into native target tools; using
+	 * sizeof(long) here makes a 64-bit build host emit unusable 64-bit
+	 * bitsets for a 32-bit target-hosted ccom.
+	 */
+	bitary = "unsigned int";
+	bitsz = 32;
 	fprintf(fh, "#define NUMBITS %d\n", bitsz);
 	fprintf(fh, "#define BIT2BYTE(bits) "
 	     "((((bits)+NUMBITS-1)/NUMBITS)*(NUMBITS/8))\n");
 	fprintf(fh, "#define BITSET(arr, bit) "
-	     "(arr[bit/NUMBITS] |= ((%s)1 << (bit & (NUMBITS-1))))\n",
+	     "((arr)[(bit)/NUMBITS] |= ((%s)1U << ((bit) & (NUMBITS-1))))\n",
 	     bitary);
 	fprintf(fh, "#define BITCLEAR(arr, bit) "
-	     "(arr[bit/NUMBITS] &= ~((%s)1 << (bit & (NUMBITS-1))))\n",
+	     "((arr)[(bit)/NUMBITS] &= ~((%s)1U << ((bit) & (NUMBITS-1))))\n",
 	     bitary);
 	fprintf(fh, "#define TESTBIT(arr, bit) "
-	     "(arr[bit/NUMBITS] & ((%s)1 << (bit & (NUMBITS-1))))\n",
+	     "((arr)[(bit)/NUMBITS] & ((%s)1U << ((bit) & (NUMBITS-1))))\n",
 	     bitary);
 	fprintf(fh, "typedef %s bittype;\n", bitary);
 

@@ -1,13 +1,14 @@
 //===-- int_helpers.c - libgcc-compatible integer helpers -----------------===//
 //
-// These helpers are emitted by GCC for 64-bit integer operations on 32-bit
-// targets.  Keep them in libc runtime, not in platform code: they are compiler
-// ABI, not board ABI.
+// These helpers are emitted by compilers for integer operations on 32-bit
+// targets.  When PCC's libpcc is linked, libpcc owns the 64-bit shift helpers
+// and libc keeps only the non-overlapping bit-scan helpers here.
 //
 //===----------------------------------------------------------------------===//
 
 #include "int_lib.h"
 
+#ifndef LIBC_USES_LIBPCC_RUNTIME
 COMPILER_RT_ABI di_int
 __ashldi3(di_int a, int b)
 {
@@ -73,6 +74,7 @@ __lshrdi3(di_int a, int b)
     }
     return (di_int)r.all;
 }
+#endif
 
 COMPILER_RT_ABI int
 __clzsi2(si_int a)

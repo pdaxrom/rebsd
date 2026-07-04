@@ -3,8 +3,20 @@ cd /var/tmp || exit 1
 rm -f a.out pcc-smoke pcc-smoke.s pcc-smoke.o pcc-smoke.ro \
     pcc-fpu-smoke pcc-fpu-smoke.s pcc-fpu-smoke.o pcc-fpu-smoke.ro
 
+dump_asm_failure()
+{
+	file=$1
+	echo "pcc-smoke: assembler input head: $file"
+	sed -n '1,16p' "$file"
+	echo "pcc-smoke: assembler input bytes: $file"
+	od -c "$file" | sed -n '1,8p'
+}
+
 pcc -S -o pcc-smoke.s /root/pcc-smoke.c || exit 1
-as -o pcc-smoke.o pcc-smoke.s || exit 1
+as -o pcc-smoke.o pcc-smoke.s || {
+	dump_asm_failure pcc-smoke.s
+	exit 1
+}
 ld -r -o pcc-smoke.ro pcc-smoke.o || exit 1
 test -f pcc-smoke.ro || exit 1
 echo "pcc/as/ld -r smoke ok"

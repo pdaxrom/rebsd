@@ -270,6 +270,47 @@ param_shift_stret_slots(struct symtab **sp, int cnt)
 	}
 }
 
+static int
+param_stack_subword_delta(TWORD t)
+{
+#ifdef TARGET_BIG_ENDIAN
+	if (ISPTR(t) || ISARY(t) || ISFTN(t))
+		return 0;
+
+	switch (BTYPE(t)) {
+	case CHAR:
+	case UCHAR:
+	case BOOL:
+		return SZINT - SZCHAR;
+	case SHORT:
+	case USHORT:
+		return SZINT - SZSHORT;
+	default:
+		break;
+	}
+#else
+	(void)t;
+#endif
+	return 0;
+}
+
+static void
+param_adjust_stack_subwords(struct symtab **sp, int cnt)
+{
+	int delta, first_stack, i;
+
+	first_stack = ARGINIT + nargregs * SZINT;
+
+	for (i = 0; i < cnt; i++) {
+		if (sp[i] == NULL || sp[i]->sclass != PARAM ||
+		    sp[i]->soffset == NOOFFSET || sp[i]->soffset < first_stack)
+			continue;
+		delta = param_stack_subword_delta(sp[i]->stype);
+		if (delta != 0)
+			sp[i]->soffset += delta;
+	}
+}
+
 /* setup struct parameter
  * push the registers out to memory
  * used by bfcode() */
@@ -478,6 +519,7 @@ bfcode(struct symtab **sp, int cnt)
 		fp_leading = 0;
 #endif
 	}
+	param_adjust_stack_subwords(sp, cnt);
 
         /* recalculate the arg offset and create TEMP moves */
         for (i = 0; i < cnt; i++) {

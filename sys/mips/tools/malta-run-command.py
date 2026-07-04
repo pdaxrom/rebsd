@@ -11,6 +11,34 @@ import time
 from pathlib import Path
 
 
+COMMAND_DONE = "__MALTA_RUN_COMMAND_DONE__:"
+
+
+def write_all(master, data):
+    view = memoryview(data)
+    while view:
+        try:
+            written = os.write(master, view)
+            view = view[written:]
+        except BlockingIOError:
+            select.select([], [master], [], 1.0)
+
+
+def write_command(master, command, line_delay, chunk_size, chunk_delay):
+    wrapped = command + "\necho " + COMMAND_DONE + "$?\n"
+    for line in wrapped.splitlines(True):
+        data = line.encode("ascii")
+        if chunk_size:
+            for off in range(0, len(data), chunk_size):
+                write_all(master, data[off:off + chunk_size])
+                if chunk_delay:
+                    time.sleep(chunk_delay)
+        else:
+            write_all(master, data)
+        if len(line) > 1 and line_delay:
+            time.sleep(line_delay)
+
+
 def command_run(args):
     malta = Path(args.malta_dir)
     log = Path(args.log)
@@ -78,10 +106,15 @@ def command_run(args):
                     state = "shell"
                     buf = ""
                 elif state == "shell" and re.search(r"(?:^|[\r\n])#\s*$", buf):
-                    os.write(master, (args.command + "\n").encode("ascii"))
+                    write_command(
+                        master, args.command, args.line_delay,
+                        args.write_chunk_size, args.chunk_delay)
                     state = "running"
                     buf = ""
-                elif state == "running" and re.search(r"(?:^|[\r\n])#\s*$", buf):
+                elif (state == "running" and
+                      re.search(r"(?:^|[\r\n])#?\s*" +
+                                re.escape(COMMAND_DONE), buf) and
+                      re.search(r"(?:^|[\r\n])#\s*$", buf)):
                     break
 
                 if time.time() - started > args.timeout:
@@ -123,6 +156,9 @@ def main():
     parser.add_argument("--ram", default="32M")
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--silence-timeout", type=int, default=45)
+    parser.add_argument("--line-delay", type=float, default=0.06)
+    parser.add_argument("--write-chunk-size", type=int, default=0)
+    parser.add_argument("--chunk-delay", type=float, default=0.0)
     args = parser.parse_args()
     return command_run(args)
 

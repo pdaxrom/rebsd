@@ -51,6 +51,7 @@ run_smoke pcc /root/pcc-smoke.sh
 run_smoke math-class /root/math-class-smoke.sh
 run_smoke libc-string /root/libc-string-smoke.sh
 run_smoke libc-abi /root/libc-abi-smoke.sh
+run_smoke build-workload /root/build-workload-smoke.sh
 run_smoke sh-fail /root/sh-fail-smoke.sh
 run_smoke sh-comsubst /root/sh-comsubst-smoke.sh
 run_smoke ccom-stress /root/ccom-stress.sh "$CCOM_STRESS_COUNT"

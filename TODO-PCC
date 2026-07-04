@@ -632,9 +632,18 @@ not active items for the current C/static-a.out PCC milestone.
   - PCC mode keeps the kernel, stage0, and target binary tools on the existing
     ReBSD/GCC/a.out flow.
 - [x] Decide long-term runtime policy for PCC support libraries.
-  - Keep `libpcc.a` staged as PCC's compiler runtime. It owns helpers that
-    PCC-generated code may reference directly, such as arithmetic, conversion,
-    stack-protector, and other compiler-private `__...` routines.
+  - Keep `libpcc.a` staged as PCC's compiler runtime. In PCC-target builds,
+    libc is built without the overlapping compiler helper symbols and the
+    canonical implementations live in `libpcc.a`: `__divdi3`, `__moddi3`,
+    `__udivdi3`, `__umoddi3`, `__fixdfdi`, `__floatdidf`, and the 64-bit
+    shift helpers.
+  - Legacy GCC-only rootfs links still use libc as their compiler-runtime
+    fallback until that link path is migrated to an explicit runtime library.
+  - `libpcc.a` still carries compiler-private helpers such as `__muldi3`,
+    compare helpers, stack protector support, and remaining conversion
+    helpers.
+  - Future work: optimize the hot MIPS helper routines in assembly after the
+    C implementations are stable on Malta64 and N64.
   - Public C/POSIX/BSD compatibility functions must live in ReBSD libc or
     libm, not in `libpcc.a`. If PCC-built userland exposes missing standard
     or compatibility symbols, add them to the system library that owns that
@@ -645,6 +654,18 @@ not active items for the current C/static-a.out PCC milestone.
   - Do not stage `libpccsoftfloat.a` for current hard-float Malta/N64 builds.
     Add it only if a future no-FPU target or concrete test failure proves it
     is needed.
+  - Verification on 2026-07-04 after the helper ownership cleanup:
+    `nm libc.a` has no public `T` definitions for the overlapping compiler
+    helpers in PCC-target runtime builds, `nm libpcc.a` owns those symbols,
+    and both Malta64/R4000 and Malta pass `/root/pcc-smoke-all.sh` with
+    `CCOM_STRESS_COUNT=20`, `LINPACK_MIN_SECONDS=1`, and
+    `PCC_SMOKE_ALL_RC:0`.
+  - N64 hardware verification on 2026-07-04: after rebuilding the PCC rootfs,
+    two full `/root/pcc-smoke-all.sh` runs passed with
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`; `ccom-stress`
+    completed 100 iterations.  The earlier one-off
+    `as: pcc-smoke.s, 4: bad instruction` failure did not reproduce, and the
+    smoke script now prints the assembler input head if that path fails again.
 - [x] Defer C++ and `pcc-libs/csu` integration to future work.
   - Current flat ctor/dtor ranges are enough for C constructor/destructor
     attributes.
@@ -730,12 +751,23 @@ not active items for the current C/static-a.out PCC milestone.
     `/usr/bin/cc`, `/usr/bin/pcc`, and `/usr/bin/cpp` before removing the
     legacy compiler commands.
 - [x] Decide the first ReBSD policy for `src/dev/pcc/pcc-libs`.
-  - Current policy: port and stage `libpcc.a` for compiler helper routines.
+  - Current policy: port and stage `libpcc.a` as the PCC compiler runtime.
+  - Do not duplicate `divdi3`/`moddi3`/`udivdi3`/`umoddi3`-class helpers
+    between PCC-target libc and target `libpcc.a`; they live in `libpcc.a`.
+    Legacy GCC-only links keep libc fallback helpers until that path is
+    migrated separately.
   - Public C/POSIX/BSD compatibility routines and missing libc-era helpers go
     into ReBSD libc or libm, not `libpcc.a`.
   - Add related libc/libm functions as coherent API groups where practical,
     rather than leaving isolated compatibility stubs.
+  - Future work: add MIPS assembly implementations for selected hot helpers
+    once the C helper set is proven correct.
   - Decide only if tests prove it needed: stage `libpccsoftfloat.a`.
+  - Verification on 2026-07-04: after rebuilding `libc.a` and `libpcc.a` with
+    this split, Malta64/R4000 and ordinary Malta both pass
+    `/root/pcc-smoke-all.sh` with zero failures.
+  - N64 hardware also passes the same rootfs smoke suite with
+    `PCC_SMOKE_ALL_RC:0`.
   - `pcc-libs/csu` is still not staged by default. ReBSD now has safe flat
     linker-defined ctor/dtor ranges for C constructor/destructor attributes,
     but `crtbegin.o`/`crtend.o` need a separate C++ startup policy before they

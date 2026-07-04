@@ -45,8 +45,10 @@ __lshrdi3(quad_t a, qshift_t shift)
 	union uu aa;
 
 	if (shift == 0)
-		return(a);
+		return (a);
 	aa.q = a;
+	if (shift >= QUAD_BITS)
+		return (0);
 	if (shift >= INT_BITS) {
 		aa.ul[L] = aa.ul[H] >> (shift - INT_BITS);
 		aa.ul[H] = 0;

@@ -270,7 +270,7 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         linpack-smoke-runtime-vr4300 native-pcc-smoke-runtime \
         native-pcc-smoke-runtime-vr4300 native-pcc-regress-stage \
         native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 \
-        FORCE
+        rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
 smoke-host-portablecc: $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SMOKE_SCRIPT)
 	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
@@ -370,7 +370,7 @@ native-pcc-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	    --log $(NATIVE_PCC_SMOKE_LOG) \
 	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
 	    --ram $(MALTA_QEMU_RAM) \
-	    --command '/root/native-pcc-smoke.sh && /root/libc-abi-smoke.sh; echo NATIVE_PCC_SMOKE_RC:$$?' \
+	    --command '/root/native-pcc-smoke.sh && /root/libc-abi-smoke.sh && /root/build-workload-smoke.sh; echo NATIVE_PCC_SMOKE_RC:$$?' \
 	    --expect "NATIVE_PCC_SMOKE_RC:0"
 
 native-pcc-smoke-runtime-vr4300:
@@ -460,6 +460,59 @@ rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_IMAGE_MANIFEST)
 rootfs.o: rootfs.img
 	$(LD) -r -b binary -o $@ rootfs.img
 	$(OBJCOPY) --rename-section .data=.romdisk,alloc,load,readonly,data,contents $@
+
+MIPS_ROOTFS_PATCH_DIR ?= /private/tmp/rebsd-rootfs-patch
+MIPS_ROOTFS_PATCH_FILES ?=
+MIPS_ROOTFS_PATCH_MANIFEST ?= rootfs.patch.manifest
+MIPS_ROOTFS_PATCH_SCRIPT = $(TOPSRC)/sys/mips/tools/rootfs-patch.py
+
+rootfs-patch: $(FSUTIL) $(MIPS_ROOTFS_PATCH_SCRIPT)
+	@if [ -z "$(MIPS_ROOTFS_PATCH_FILES)" ]; then \
+	    echo "Set MIPS_ROOTFS_PATCH_FILES to paths under MIPS_ROOTFS_PATCH_DIR"; \
+	    exit 2; \
+	fi
+	@if [ ! -d $(MIPS_ROOTFS_STAGE) ] || [ ! -f $(MIPS_ROOTFS_IMAGE_MANIFEST) ]; then \
+	    echo "rootfs stage/manifest is missing; build the rootfs once before using rootfs-patch"; \
+	    exit 2; \
+	fi
+	python3 $(MIPS_ROOTFS_PATCH_SCRIPT) \
+	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
+	    --manifest $(abspath $(MIPS_ROOTFS_IMAGE_MANIFEST)) \
+	    --manifest-out $(abspath $(MIPS_ROOTFS_PATCH_MANIFEST)) \
+	    --patch-dir $(abspath $(MIPS_ROOTFS_PATCH_DIR)) \
+	    $(MIPS_ROOTFS_PATCH_FILES)
+	rm -f rootfs.img
+	$(FSUTIL) --new --endian=big --size=$(MIPS_ROOTFS_KBYTES) \
+	    --manifest=$(MIPS_ROOTFS_PATCH_MANIFEST) rootfs.img $(MIPS_ROOTFS_STAGE)
+	$(FSUTIL) --check rootfs.img
+
+rootfs-repack-kernel:
+	@if [ ! -f rootfs.img ]; then \
+	    echo "rootfs.img is missing; build the rootfs once before using rootfs-repack-kernel"; \
+	    exit 2; \
+	fi
+	$(LD) -r -b binary -o rootfs.o rootfs.img
+	$(OBJCOPY) --rename-section .data=.romdisk,alloc,load,readonly,data,contents rootfs.o
+	printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): local build\n";' > vers.c
+	${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o
+	rm -f unix.elf
+	${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o unix.elf swapunix.o
+	${SIZE} unix.elf
+	${OBJDUMP} -d -S unix.elf > unix.dis
+	${NM} -n unix.elf > unix.nm
+ifneq ($(MALTA_PORT64),)
+	$(OBJCOPY) -O binary unix.elf unix.bin
+	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) \
+	    ../malta64/stage0_kernel_blob.S -o malta64-stage0-kernel.o
+	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \
+	    -T ../malta64/stage0_linker.ld \
+	    malta64-stage0.o malta64-stage0-kernel.o -o malta64.elf
+	$(MALTA64_STAGE_SIZE) malta64.elf
+	$(MALTA64_STAGE_OBJDUMP) -d -S malta64.elf > malta64.dis
+endif
+
+rootfs-patch-kernel: rootfs-patch
+	$(MAKE) rootfs-repack-kernel
 
 ioconf.o: ioconf.c ${SYSTEM_DEP} | machine sys .deps
 	${COMPILE_C}

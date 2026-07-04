@@ -739,7 +739,7 @@ MkWorklist(void)
 static void
 addalledges(REGW *e)
 {
-	int i, j, k;
+	int i, j;
 	struct lives *l;
 
 #ifdef PCC_DEBUG
@@ -757,29 +757,15 @@ addalledges(REGW *e)
 	/* First add to long-lived temps and hard regs */
 	RDEBUG(("addalledges longlived "));
 	for (i = 0; i < xbits; i += NUMBITS) {
-		if ((k = (int)live[i/NUMBITS])) {
-			while (k) {
-				j = ffs(k)-1;
-				if (i+j < MAXREGS)
-					AddEdge(&ablock[i+j], e);
-				else
-					AddEdge(&nblock[i+j+tempmin-MAXREGS],e);
-				RRDEBUG(("%d ", i+j+tempmin));
-				k &= ~(1 << j);
-			}
-		}
-#if NUMBITS > 32 /* XXX hack for LP64 */
-		k = (int)(live[i/NUMBITS] >> 32);
-		while (k) {
-			j = ffs(k)-1;
-			if (i+j+32 < MAXREGS)
-				AddEdge(&ablock[i+j+32], e);
+		for (j = 0; j < NUMBITS && i + j < xbits; j++) {
+			if (!TESTBIT(live, i + j))
+				continue;
+			if (i + j < MAXREGS)
+				AddEdge(&ablock[i+j], e);
 			else
-				AddEdge(&nblock[i+j+tempmin-MAXREGS+32], e);
-			RRDEBUG(("%d ", i+j+tempmin+32));
-			k &= ~(1 << j);
+				AddEdge(&nblock[i+j+tempmin-MAXREGS], e);
+			RRDEBUG(("%d ", i+j+tempmin));
 		}
-#endif
 	}
 	RDEBUG(("done\n"));
 	/* short-lived temps */
@@ -3076,6 +3062,16 @@ onlyperm: /* XXX - should not have to redo all */
 	nodepole = NIL;
 	RDEBUG(("nsucomp allocated %d temps (%d,%d)\n", 
 	    tempmax-tempmin, tempmin, tempmax));
+
+	/*
+	 * Permanent-register temps can remain visible in the live sets even
+	 * after a spill pass marks them saved in nsavregs[].  Give every
+	 * reserved permanent slot a class before Build() can create
+	 * interference edges involving it.
+	 */
+	for (i = 0; i < (NPERMREG-1); i++) {
+		nblock[i+tempmin].r_class = GCLASS(permregs[i]);
+	}
 
 #ifdef PCC_DEBUG
 	use_regw = 1;

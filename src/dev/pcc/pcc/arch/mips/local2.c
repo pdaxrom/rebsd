@@ -1231,39 +1231,6 @@ calcstacksize(NODE *p, void *arg)
 #endif
 
 /*
- * Stack-passed sub-word parameters occupy 32-bit ABI slots.  On big-endian
- * targets the addressable byte/half object lives at the end of that slot.
- */
-static void
-stackargoffchg(NODE *p, void *arg)
-{
-	CONSZ off;
-
-	if (p->n_op != OREG || p->n_rval != FP)
-		return;
-
-	off = getlval(p);
-	if (off < ARGINIT/SZCHAR + 4 * SZINT/SZCHAR)
-		return;
-	if (ISPTR(p->n_type) || ISARY(p->n_type) || ISFTN(p->n_type))
-		return;
-
-	switch (BTYPE(p->n_type)) {
-	case CHAR:
-	case UCHAR:
-	case BOOL:
-		setlval(p, off + 3);
-		break;
-	case SHORT:
-	case USHORT:
-		setlval(p, off + 2);
-		break;
-	default:
-		break;
-	}
-}
-
-/*
  * Remove some PCONVs after OREGs are created.
  */
 static void
@@ -1312,8 +1279,6 @@ myoptim(struct interpass * ipole)
 	DLIST_FOREACH(ip, ipole, qelem) {
 		if (ip->type != IP_NODE)
 			continue;
-		if (bigendian)
-			walkf(ip->ip_node, stackargoffchg, 0);
 #if 0
 		walkf(ip->ip_node, calcstacksize, 0);
 #endif

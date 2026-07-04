@@ -109,6 +109,9 @@ mode 0775
 
 file /root/libc-abi-smoke.c
 
+file /root/build-workload-smoke.sh
+mode 0775
+
 file /root/math-class-smoke.sh
 mode 0775
 

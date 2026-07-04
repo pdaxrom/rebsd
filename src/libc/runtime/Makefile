@@ -19,22 +19,20 @@ include $(TOPSRC)/target.mk
 
 CFLAGS          += ${DEFS}
 
-PCC_CC          = $(findstring pcc,$(notdir $(firstword $(CC))))
-
-# PCC owns these compiler helper ABIs through libpcc.a.  Do not also archive
-# same-name helpers into a PCC-built libc.a: libc.a is scanned before the
-# trailing -lpcc and would otherwise win archive resolution for objects pulled
-# from libc itself.
-ifeq ($(PCC_CC),)
-LIBPCC_HELPER_OBJS = divdi3.o \
+# Legacy GCC-only links use libc as their compiler-runtime fallback.
+# PCC links use libpcc.a for these symbols; do not duplicate them in libc.
+LIBC_COMPILER_RUNTIME ?= libc
+ifeq ($(LIBC_COMPILER_RUNTIME),libpcc)
+CFLAGS          += -DLIBC_USES_LIBPCC_RUNTIME
+COMPILER_HELPER_OBJS =
+else
+COMPILER_HELPER_OBJS = divdi3.o \
                   fixdfdi.o \
                   floatdidf.o \
                   moddi3.o \
                   udivdi3.o \
                   udivmoddi4.o \
                   umoddi3.o
-else
-LIBPCC_HELPER_OBJS =
 endif
 
 OBJS            = adddf3.o \
@@ -54,7 +52,7 @@ OBJS            = adddf3.o \
                   floatunsisf.o \
                   fp_mode.o \
                   int_helpers.o \
-                  $(LIBPCC_HELPER_OBJS) \
+                  $(COMPILER_HELPER_OBJS) \
                   muldf3.o \
                   mulsf3.o \
                   subdf3.o \

@@ -311,6 +311,7 @@ N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
                OBJDUMP="$(N64_USERLAND_OBJDUMP)" \
                ELF2AOUT="$(N64_USERLAND_ELF2AOUT)" \
                LDFLAGS="$(N64_USERLAND_LDFLAGS)" \
+               LIBC_COMPILER_RUNTIME=$(if $(filter pcc,$(N64_USERLAND_COMPILER)),libpcc,libc) \
                CC_STDINC=/usr/include \
                CC_LIBDIR=/usr/lib \
                CC_LIBEXECDIR=/usr/libexec \
@@ -909,7 +910,8 @@ $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD
 	    $(MAKE) -C $(N64_NATIVE_TREE)/src/libc TARGET_PLATFORM=n64 \
 	    CC="$(N64_NATIVE_CC)" AS="$(N64_NATIVE_ASWRAP)" \
 	    AR=$(abspath $(N64_NATIVE_AOUT_AR)) \
-	    RANLIB=$(abspath $(N64_NATIVE_AOUT_RANLIB)) clean all
+	    RANLIB=$(abspath $(N64_NATIVE_AOUT_RANLIB)) \
+	    LIBC_COMPILER_RUNTIME=libpcc clean all
 	$(N64_NATIVE_AOUT_RANLIB) $(N64_NATIVE_TREE)/src/libc.a
 	N64_AOUT_TOPSRC=$(abspath $(N64_NATIVE_TREE)) \
 	    N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
