@@ -3320,12 +3320,13 @@ void makesymtab()
 void usage()
 {
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  as [-kuxX] [-o outfile] [infile]\n");
+    fprintf(stderr, "  as [-gkuvxX] [-EL|-EB] [-o outfile] [infile]\n");
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -o filename     Set output file name, default stdout\n");
+    fprintf(stderr, "  -o filename     Set output file name, default a.out\n");
     fprintf(stderr, "  -u              Treat undefined names as error\n");
     fprintf(stderr, "  -x              Discard local symbols\n");
     fprintf(stderr, "  -X              Discard locals starting with 'L' or '.'\n");
+    fprintf(stderr, "  -EL, -EB        Select output byte order\n");
     fprintf(stderr, "  -mips3, -march=vr4300\n");
     fprintf(stderr, "                  Reject MIPS32r2 opcodes unsupported by VR4300\n");
     exit(1);

@@ -12,14 +12,14 @@ dir /cart
 dir /dev
 dir /etc
 dir /lib
-dir /lib/deco
-dir /lib/deco/help
 dir /libexec
 dir /root
 dir /sbin
 dir /usr
 dir /usr/bin
 dir /usr/lib
+dir /usr/lib/deco
+dir /usr/lib/deco/help
 dir /usr/libexec
 dir /usr/libexec/pcc
 dir /usr/share
@@ -29,20 +29,8 @@ dir /usr/share/man/cat1
 dir /usr/share/man/cat5
 dir /usr/share/man/cat8
 dir /usr/share/misc
-symlink /include
-target usr/include
-symlink /share
-target usr/share
 symlink /bin/cpp
 target ../usr/bin/cpp
-symlink /lib/crt0.o
-target ../usr/lib/crt0.o
-symlink /lib/libc.a
-target ../usr/lib/libc.a
-symlink /lib/libm.a
-target ../usr/lib/libm.a
-symlink /lib/libpcc.a
-target ../usr/lib/libpcc.a
 symlink /tmp
 target var/tmp
 dir /var
@@ -50,8 +38,6 @@ dir /var/lock
 dir /var/log
 dir /var/run
 dir /var/tmp
-
-file /.profile
 
 file /etc/motd
 
@@ -613,17 +599,17 @@ mode 0755
 file /usr/libexec/code
 mode 0755
 
-file /lib/deco/menu
+file /usr/lib/deco/menu
 
-file /lib/deco/profile
+file /usr/lib/deco/profile
 
-file /lib/deco/help/e.edit
+file /usr/lib/deco/help/e.edit
 
-file /lib/deco/help/e.general
+file /usr/lib/deco/help/e.general
 
-file /lib/deco/help/e.hexview
+file /usr/lib/deco/help/e.hexview
 
-file /lib/deco/help/e.view
+file /usr/lib/deco/help/e.view
 
 file /lib/retroImageBE
 
@@ -662,6 +648,8 @@ file /usr/share/man/cat1/apropos.0
 
 file /usr/share/man/cat1/ar.0
 
+file /usr/share/man/cat1/as.0
+
 file /usr/share/man/cat1/awk.0
 
 file /usr/share/man/cat1/basename.0
@@ -673,6 +661,8 @@ file /usr/share/man/cat1/calendar.0
 file /usr/share/man/cat1/cat.0
 
 file /usr/share/man/cat1/cb.0
+
+file /usr/share/man/cat1/cc.0
 
 file /usr/share/man/cat1/chgrp.0
 
@@ -687,6 +677,8 @@ file /usr/share/man/cat1/comm.0
 file /usr/share/man/cat1/compress.0
 
 file /usr/share/man/cat1/cp.0
+
+file /usr/share/man/cat1/cpp.0
 
 file /usr/share/man/cat1/date.0
 
@@ -770,11 +762,15 @@ file /usr/share/man/cat1/n64input.0
 
 file /usr/share/man/cat1/nice.0
 
+file /usr/share/man/cat1/nm.0
+
 file /usr/share/man/cat1/nohup.0
 
 file /usr/share/man/cat1/od.0
 
 file /usr/share/man/cat1/pagesize.0
+
+file /usr/share/man/cat1/pcc.0
 
 file /usr/share/man/cat1/pr.0
 

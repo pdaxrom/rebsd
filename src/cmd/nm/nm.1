@@ -1,0 +1,102 @@
+.TH NM 1 "July 4, 2026" "ReBSD"
+.SH NAME
+nm \- display symbols from ReBSD a.out object files
+.SH SYNOPSIS
+.B nm
+[
+.B \-gunrpo
+]
+[
+.B \-EL
+|
+.B \-EB
+]
+[
+.I file
+\&...
+]
+.SH DESCRIPTION
+.B nm
+prints the symbol table from ReBSD
+.B a.out
+object files, executables, and archives.
+If no
+.I file
+is specified,
+.B nm
+reads
+.IR a.out .
+.PP
+For each symbol,
+.B nm
+prints the value, a type character, and the symbol name.
+Undefined symbols are printed without an address.
+When more than one file is examined, or when an archive member is printed,
+the file or member name is shown before the symbols unless
+.B \-o
+requests one-line prefixes.
+.SH OPTIONS
+.TP
+.B \-g
+Display only external symbols.
+.TP
+.B \-u
+Display only undefined symbols.
+.TP
+.B \-n
+Sort symbols numerically by address instead of by name.
+.TP
+.B \-r
+Reverse the selected sort order.
+.TP
+.B \-p
+Do not sort; print symbols in object-file order.
+.TP
+.B \-o
+Precede each symbol with the file name.
+.TP
+.B \-EL
+Read little-endian
+.B a.out
+objects.
+.TP
+.B \-EB
+Read big-endian
+.B a.out
+objects.
+.SH SYMBOL TYPES
+The type letter describes the section or class of the symbol.
+Upper-case letters are external symbols; lower-case letters are local
+symbols.
+.TP
+.B U
+Undefined symbol.
+.TP
+.B A
+Absolute symbol.
+.TP
+.B T
+Text symbol.
+.TP
+.B D
+Data symbol.
+.TP
+.B B
+Bss symbol.
+.TP
+.B S
+String or read-only data symbol.
+.TP
+.B C
+Common symbol.
+.TP
+.B F
+Source-file symbol.
+.TP
+.B W
+Weak symbol.
+.SH SEE ALSO
+.BR as (1),
+.BR ld (1),
+.BR ar (1),
+.BR a.out (5)

@@ -31,30 +31,37 @@
 .\"
 .\"     @(#)ranlib.1	6.7 (Berkeley) 5/9/91
 .\"
-.TH RANLIB 1 "May 9, 1991"
+.TH RANLIB 1 "July 4, 2026" "ReBSD"
 .AT 3
 .UC 6
 .SH NAME
-ranlib \- table-of-contents for archive libraries
+ranlib \- create an index for ReBSD archive libraries
 .SH SYNOPSIS
-.nf
-.ft B
-ranlib [-t] file ...
-.fi
-.ft R
+.B ranlib
+[
+.B \-tv
+]
+.I file
+\&...
 .SH DESCRIPTION
-.I Ranlib
-creates a table of external references for archive libraries,
-normally used by the loader,
-.IR ld (1) .
-This table is is named ``__.SYMDEF'' and is prepended to the archive.
-Files in the archive which are not executable and symbols which are
-uninteresting to the loader are ignored.
+.B ranlib
+creates the
+.B __.SYMDEF
+symbol table used by
+.BR ld (1)
+when searching ReBSD
+.B a.out
+archive libraries.
+The table is prepended to the archive.
+Archive members that are not ReBSD object files, and symbols not useful to
+the linker, are ignored.
 .PP
 The options are as follows:
 .TP
-\-t
-Set the modification time of the __.SYMDEF file.
+.B \-t
+Update the modification time of an existing
+.B __.SYMDEF
+member.
 This time is compared by the loader with the modification time of the
 archive to verify that the table is up-to-date with respect to the
 archive.
@@ -62,9 +69,12 @@ If the modification time has been changed without any change to the
 archive (for example, by a
 .IR cp (1) ) ,
 the
-.I \-t
+.B \-t
 option can be used to ``touch'' the modification time so that it
 appears that the table is up-to-date.
+.TP
+.B \-v
+Print the generated symbol map.
 .SH FILES
 .TP 14
 /tmp
@@ -80,5 +90,5 @@ temporary file names
 .IR ranlib (5)
 .SH HISTORY
 A
-.I ranlib
+.B ranlib
 command appeared in Version 7 AT&T UNIX.

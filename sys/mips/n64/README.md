@@ -421,9 +421,9 @@ current N64 work is staged as follows:
   staging, so `__.SYMDEF` matches the rootfs file mtimes. Nothing in `/usr/lib` is
   copied from the normal external GCC/ELF userland artifacts, because the
   in-tree `ld` correctly rejects ELF objects as `bad magic`;
-- compatibility symlinks keep old absolute paths working where existing tools
-  still expect them: `/include -> usr/include`, `/lib/crt0.o`,
-  `/lib/libc.a`, `/lib/libm.a`, `/libexec/ccom`, and `/bin/cpp`;
+- the shared rootfs no longer exposes root-level `/include`, `/.profile`, or
+  `/lib/*.a` compatibility entries; target headers and static compiler runtime
+  archives live under `/usr/include` and `/usr/lib`;
 - `/root/pcc-smoke.sh` runs the target smoke from `/var/tmp`, so it does not
   try to write compiler outputs into the read-only root filesystem;
 - `/root/cc-pcc-smoke.sh` verifies both driver names, `cc` and `pcc`, which
@@ -465,8 +465,7 @@ current N64 work is staged as follows:
   207 checks and has been confirmed on hardware;
 - on 2026-06-25, the `/usr` rootfs split was confirmed on real N64 hardware:
   `PATH` was `/bin:/sbin:/usr/bin:/usr/sbin`, `/usr/bin/as`, `/usr/bin/cc`,
-  `/usr/libexec/ccom`, `/bin/cpp -> ../usr/bin/cpp`, `/include -> usr/include`,
-  and `/lib/crt0.o -> ../usr/lib/crt0.o` were present, and
+  `/usr/libexec/ccom`, and `/bin/cpp -> ../usr/bin/cpp` were present, and
   `smoke-as-vr4300`, `matrix-as-vr4300`, `/root/cc-pcc-smoke.sh`,
   `/root/types-smoke.sh`, `/root/ll-smoke.sh`, and `/root/ll-abi-smoke.sh`
   all passed;
@@ -1073,9 +1072,9 @@ binaries directly out of `src/cmd`.
 
 The current shared manifest includes a broader first-pass BSD userland:
 
-- boot/login configuration: `/.profile`, `/etc/fstab`, `/etc/gettytab`,
-  `/etc/group`, `/etc/motd`, `/etc/passwd`, `/etc/profile`, `/etc/rc`,
-  `/etc/ttys`, `/root/.profile`
+- boot/login configuration: `/etc/fstab`, `/etc/gettytab`, `/etc/group`,
+  `/etc/motd`, `/etc/passwd`, `/etc/profile`, `/etc/rc`, `/etc/ttys`,
+  `/root/.profile`
 - core `/bin`: the small boot/single-user set (`sh`, `login`, `ls`, `cat`,
   `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `chmod`, `date`, `dd`, `df`, `echo`,
   `expr`, `hostname`, `kill`, `ln`, `pwd`, `sed`, `sleep`, `stty`, `sync`,
@@ -1091,14 +1090,13 @@ The current shared manifest includes a broader first-pass BSD userland:
   `init`, `mkfs`, `mknod`, `mkpasswd`, `mount`, `poweroff`, `pstat`,
   `reboot`, `shutdown`, `umount`, and `updatedb`
 - required helpers and data: `/usr/libexec/bigram`, `/usr/libexec/code`,
-  `/libexec/diffh`, `/libexec/getty`, `/lib/deco/*`, `/usr/share/calendar/*`,
-  `/usr/share/misc/more.help`, `/usr/share/man/whatis`, and selected generated
-  cat pages in `/usr/share/man/cat1` and `/usr/share/man/cat8`
+  `/libexec/diffh`, `/libexec/getty`, `/usr/lib/deco/*`,
+  `/usr/share/calendar/*`, `/usr/share/misc/more.help`,
+  `/usr/share/man/whatis`, and selected generated cat pages in
+  `/usr/share/man/cat1` and `/usr/share/man/cat8`
 
-The generated manifest stages headers under `/usr/include` and preserves
-top-level compatibility symlinks needed by old target-side paths, including
-`/include -> usr/include`. The PIC32 compatibility symlink from the common
-include tree is not included in the N64 root image.
+The generated manifest stages headers under `/usr/include`; root-level
+`/include` is intentionally not included in the N64 root image.
 
 The staging tree may contain extra files installed by selected command
 makefiles, for example `reboot` installs `halt`, `fastboot`, `poweroff`, and
@@ -1117,7 +1115,7 @@ manual index script.
 
 `man` uses `more -s` as the default pager on an interactive tty, so
 `/usr/bin/more` and `/usr/share/misc/more.help` are part of the ROM rootfs. For the
-first N64 rootfs, `/etc/profile`, `/.profile`, and `/root/.profile` set
+first N64 rootfs, `/etc/profile` and `/root/.profile` set
 `PAGER=/bin/cat` so manual pages print directly instead of depending on the
 interactive pager. The same profiles set `PATH=/bin:/sbin:/usr/bin:/usr/sbin`,
 which makes the selected `/sbin` and `/usr/bin` tools visible from the shell
@@ -1633,7 +1631,7 @@ The N64 board makefile rebuilds:
 - `src/libc.a` and the selected library archive set
 - the selected command subset through `src/cmd/Makefile`
 
-The native `/lib/crt0.o` staged for target-side `cc`/`pcc` is separate from
+The native `/usr/lib/crt0.o` staged for target-side `cc`/`pcc` is separate from
 `src/crt0.o`: it is assembled by the N64 native `as` from
 `lib/startup/crt0.s`, so target-side links do not depend on a GCC-generated
 start object.
@@ -1687,7 +1685,7 @@ BSD rootfs instead of silently dropping installed helpers.
 runtime helpers emitted by GCC for 32-bit MIPS userland, so libc runtime now
 provides 64-bit shift helpers and clz/ctz helpers in `src/libc/runtime`.
 `calendar` keeps its normal historical behavior: it invokes `/bin/cpp` at
-runtime and reads the installed data files from `/share/calendar`.
+runtime and reads the installed data files from `/usr/share/calendar`.
 
 After building the selected commands, the board makefile invokes the shared
 install target with:

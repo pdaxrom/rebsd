@@ -150,8 +150,8 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   and target `ld` does not warn that `/usr/lib/libc.a` is out of date.
 - [x] Hardware-smoke the `/usr` rootfs split on N64: PATH includes
   `/usr/bin`, toolchain binaries live under `/usr/bin`, compiler runtime
-  files live under `/usr/lib`, `ccom` lives under `/usr/libexec`, and the
-  compatibility links `/bin/cpp`, `/include`, and `/lib/crt0.o` resolve.
+  files live under `/usr/lib`, `ccom` lives under `/usr/libexec`, and
+  `/bin/cpp` resolves.
 - [x] Hardware-smoke the expanded `/root/pcc-smoke.sh` on N64 and confirm
   both executable link/run paths complete without filesystem or inode-cache
   panics.
@@ -281,9 +281,8 @@ the board-specific generated/appended manifest.
   are needed for the normal rootfs rather than leaving staged artifacts out of
   `rootfs.img`: `cc` aliases `lcc`/`scc`, `/usr/bin/sysctl`,
   `/sbin/updatedb`, `/usr/libexec/bigram`, `/usr/libexec/code`, generated
-  `/usr/include` headers, and compatibility links such as `/include`,
-  `/bin/cpp`, `/lib/crt0.o`, `/lib/libc.a`, `/lib/libm.a`, and
-  `/libexec/ccom`.
+  `/usr/include` headers, `/usr/lib` compiler runtime archives, `/bin/cpp`,
+  and `/libexec/ccom`.
 - [x] Increase the default N64 rootfs size once the command set grows; the
   image remains ROM-backed and demand-read through the romdisk block driver,
   not copied wholesale into RDRAM.
@@ -300,7 +299,7 @@ the board-specific generated/appended manifest.
   routines, so they live in `src/libc/runtime`, not N64 platform code.
 - [x] Enable `/bin/cpp` compatibility and `/usr/bin/calendar` in the N64 rootfs
   now that the runtime helpers are available; include the installed calendar
-  data under `/share/calendar`.
+  data under `/usr/share/calendar`.
 - [x] Add shared `/root/cpp-calendar-smoke.sh` coverage for `/bin/cpp` and
   `/usr/bin/calendar` using writable `/var/tmp` for a temporary calendar file.
 - [x] QEMU-smoke `/root/cpp-calendar-smoke.sh` on Malta after the shared MIPS
@@ -523,10 +522,15 @@ the board-specific generated/appended manifest.
 
 - [x] Fix the shared `src/cmd/man` build so `apropos` is linked from
   `apropos.c`, while preserving normal PIC32/default command behavior
-- [x] Generate `/share/man/whatis` from staged cat pages during the N64 rootfs
+- [x] Generate `/usr/share/man/whatis` from staged cat pages during the N64 rootfs
   build with `src/man/makewhatis.sed`
-- [x] Include `/usr/bin/apropos`, `/usr/bin/whatis`, and `/share/man/whatis` in the
+- [x] Include `/usr/bin/apropos`, `/usr/bin/whatis`, and `/usr/share/man/whatis` in the
   ROM manifest only after the generated database exists
+- [x] Remove root-level `/share`, `/include`, `/.profile`, and `/lib/*.a`
+  compatibility entries from the shared MIPS rootfs manifest; keep headers and
+  compiler archives under `/usr/include` and `/usr/lib`.
+- [x] Install Deco under `/usr`: `/usr/bin/deco`, `/usr/lib/deco`, and
+  `/usr/share/man/cat1/deco.0`.
 
 ## Pty And Job Control
 

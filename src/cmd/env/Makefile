@@ -6,11 +6,11 @@ OBJS            = env.o
 
 CFLAGS		+= -Werror -Wall -DGCC_COMPAT
 CFLAGS          += -DVERSSTR=\"1.0\" \
-                   -DSTDINC=\"/include\" \
-                   -DLIBDIR=\"/lib\" \
-                   -DLIBEXECDIR=\"/libexec\"
-                   -DCRT0FILE=\"/lib/crt0.o\" \
-                   -DCRT0FILE_PROFILE=\"/lib/gcrt0.o\"
+                   -DSTDINC=\"/usr/include\" \
+                   -DLIBDIR=\"/usr/lib\" \
+                   -DLIBEXECDIR=\"/usr/libexec\" \
+                   -DCRT0FILE=\"/usr/lib/crt0.o\" \
+                   -DCRT0FILE_PROFILE=\"/usr/lib/gcrt0.o\"
 
 all:            env
 

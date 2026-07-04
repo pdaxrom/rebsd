@@ -33,7 +33,7 @@ giving preference to commands over library subroutines, and displays the
 first manual page it finds, if any.  If the \fI-a\fP option is supplied,
 \fIman\fP displays all applicable manual pages.
 .PP
-Normally \fIman\fP checks in standard locations (/usr/man and /usr/local/man)
+Normally \fIman\fP checks in standard locations (/usr/share/man and /usr/local/man)
 for manual information.  This can be changed by supplying a search path (a
 la the Bourne shell) with the \fB-M\fP flag.  The search path is a colon
 (``:'') separated list of directories in which \fIman\fP expects to find
@@ -55,9 +55,9 @@ local manual may be specified by appending a number to the \fIsection\fP,
 i.e. ``l5'' would indicate section 5 of the local manual.
 .SH FILES
 .nf
-.ta \w'/usr/local/man/man?/*   'u
-/usr/man	standard manual area
-/usr/man/cat?/*	directories containing standard manual pages
+.ta \w'/usr/share/man/cat?/*   'u
+/usr/share/man	standard manual area
+/usr/share/man/cat?/*	directories containing standard manual pages
 /usr/local/man/cat?/*	directories containing local manual pages
 /usr/src/man	directories containing unformatted manual pages
 .fi

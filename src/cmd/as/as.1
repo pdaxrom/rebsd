@@ -1,0 +1,117 @@
+.TH AS 1 "July 4, 2026" "ReBSD"
+.SH NAME
+as \- ReBSD MIPS assembler
+.SH SYNOPSIS
+.B as
+[
+.B \-gkuvxX
+]
+[
+.B \-o
+.I outfile
+]
+[
+.B \-I
+.I dir
+]
+[
+.B \-EL
+|
+.B \-EB
+]
+[
+.B \-mips3
+|
+.B \-march=vr4300
+|
+.B \-mips32
+]
+[
+.I infile
+]
+.SH DESCRIPTION
+.B as
+assembles MIPS source into the ReBSD
+.B a.out
+object format used by the native toolchain.
+The accepted input syntax is the GCC/PCC MIPS assembler syntax emitted by
+the ReBSD C compiler driver.
+.PP
+If
+.I infile
+is not specified, input is read from standard input.
+The output file defaults to
+.IR a.out ;
+normal compiler invocations pass
+.B \-o
+explicitly.
+.PP
+The assembler supports the standard ReBSD text, data, bss, rodata,
+constructor, destructor, and exception-frame sections, MIPS relocation
+records, and the
+.B .set reorder
+and
+.B .set noreorder
+instruction scheduling modes required by compiler output.
+.SH OPTIONS
+.TP
+.BI \-o " outfile"
+Write the object file to
+.IR outfile .
+.TP
+.B \-u
+Treat undefined symbols as errors.
+.TP
+.B \-x
+Discard local symbols.
+.TP
+.B \-X
+Discard local symbols whose names start with
+.B L
+or
+.BR . .
+.TP
+.B \-EL
+Emit little-endian
+.B a.out
+objects.
+.TP
+.B \-EB
+Emit big-endian
+.B a.out
+objects.
+.TP
+.B \-mips3
+.TQ
+.B \-march=vr4300
+Enable the VR4300-compatible instruction checks used by the N64 and
+Malta64 compatibility ports.
+Instructions known to require later MIPS32 revisions are rejected.
+.TP
+.B \-mips32
+.TQ
+.BI \-march= mips32
+Use the generic MIPS32 acceptance mode.
+.TP
+.BI \-I " dir"
+Accepted for compiler-driver compatibility.
+.TP
+.B \-g
+.TQ
+.B \-k
+.TQ
+.BI \-O level
+Accepted for compiler-driver compatibility.
+.TP
+.B \-\-target-info
+Print the assembler target defaults and exit.
+.SH FILES
+.TP
+.I /tmp/asXXXXXX
+Temporary files.
+.SH SEE ALSO
+.BR cc (1),
+.BR pcc (1),
+.BR ld (1),
+.BR nm (1),
+.BR a.out (5)

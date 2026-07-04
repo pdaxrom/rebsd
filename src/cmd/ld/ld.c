@@ -1929,7 +1929,7 @@ int main(int argc, char **argv)
 
     if (argc == 1) {
         printf("Usage:\n");
-        printf("  ld [-sSxXrdt] [-EL|-EB] [--sysroot dir] [-L dir] [-o file] [-lname] [-u name] [-e name] [-T num] file...\n");
+        printf("  ld [-sSxXrdtv] [-EL|-EB] [--sysroot dir|--sysroot=dir] [-L dir] [-o file] [-lname] [-u name] [-e name] [-Taddr] file...\n");
         printf("Options:\n");
         printf("  -o filename     Set output file name, default a.out\n");
         printf("  -L dirname      Add a library search directory\n");
@@ -1937,7 +1937,7 @@ int main(int argc, char **argv)
         printf("  -llibname       Search for library libname\n");
         printf("  -u symbol       Start with undefined reference to symbol\n");
         printf("  -e symbol       Set start address\n");
-        printf("  -T address      Set address of .text segment, default %#x\n", basaddr);
+        printf("  -Taddress       Set address of .text segment, default %#x\n", basaddr);
         printf("  -s              Discard all symbols\n");
         printf("  -S              Discard all symbols except locals and globals\n");
         printf("  -x              Discard local symbols\n");
@@ -1945,6 +1945,7 @@ int main(int argc, char **argv)
         printf("  -r              Generate relocatable output\n");
         printf("  -d              Force common symbols to be defined\n");
         printf("  -t              Increase trace verbosity (up to 3)\n");
+        printf("  -v              Enable verbose diagnostics\n");
         exit(4);
     }
     if (signal(SIGINT, SIG_IGN) != SIG_IGN)

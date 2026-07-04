@@ -1,18 +1,44 @@
 .\"	@(#)size.1	6.1 (Berkeley) 4/29/85
 .\"
-.TH SIZE 1 "April 29, 1985"
+.TH SIZE 1 "July 4, 2026" "ReBSD"
 .AT 3
 .SH NAME
-size \- size of an object file
+size \- display section sizes of ReBSD a.out files
 .SH SYNOPSIS
 .B size
-[ object ... ]
+[
+.B \-EL
+|
+.B \-EB
+]
+[
+.I file
+\&...
+]
 .SH DESCRIPTION
-.I Size
-prints the (decimal) number of bytes required by the text, data, and
-bss portions, and their sum in hex and decimal, of each object-file argument.
-If no file is specified,
+.B size
+prints the number of bytes used by the text, data, and bss sections of
+each ReBSD
+.B a.out
+object or executable file.
+It also prints the sum in decimal and hexadecimal.
+If no
+.I file
+is specified,
 .B a.out
 is used.
+.SH OPTIONS
+.TP
+.B \-EL
+Read little-endian
+.B a.out
+files.
+.TP
+.B \-EB
+Read big-endian
+.B a.out
+files.
 .SH "SEE ALSO"
-a.out(5)
+.BR a.out (5),
+.BR nm (1),
+.BR strip (1)

@@ -45,11 +45,13 @@ clean:
 		rm -f *.o *.elf $(MAN) *.dis tags *~ $(BIN)
 
 install:	all
-		install -m 755 $(BIN) $(DESTDIR)/bin
-		cp $(MAN) $(DESTDIR)/share/man/cat1/
-		mkdir -p $(DESTDIR)/lib/deco/help
-		cp menu profile $(DESTDIR)/lib/deco/
-		cp $(HELP) $(DESTDIR)/lib/deco/help/
+		mkdir -p $(DESTDIR)/usr/bin
+		mkdir -p $(DESTDIR)/usr/share/man/cat1
+		mkdir -p $(DESTDIR)/usr/lib/deco/help
+		install -m 755 $(BIN) $(DESTDIR)/usr/bin
+		cp $(MAN) $(DESTDIR)/usr/share/man/cat1/
+		cp menu profile $(DESTDIR)/usr/lib/deco/
+		cp $(HELP) $(DESTDIR)/usr/lib/deco/help/
 
 lint:		$(SRCS)
 		lint -hax $(SRCS)

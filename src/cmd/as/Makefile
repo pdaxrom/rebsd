@@ -9,8 +9,10 @@ CFLAGS		+= -Werror -Wall -Os
 LDFLAGS         +=
 
 OBJS            = as.o aoutio.o
+MAN             = as.0
+MANSRC          = as.1
 
-all:            as
+all:            as $(MAN)
 
 as:             ${OBJS}
 		${LD} ${LDFLAGS} -o as.elf ${OBJS} ${LIBS}
@@ -21,8 +23,12 @@ as:             ${OBJS}
 aoutio.o:       ../aoutio.c ../aoutio.h
 		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
 
+$(MAN):         $(MANSRC)
+		${MANROFF} $< > $@
+
 clean:
-		rm -f *.o *.0 *.elf as tags *~ *.dis tests/*.dis tests/*.gcc-dis tests/*.o
+		rm -f *.o *.0 *.elf ${MAN} as tags *~ *.dis tests/*.dis tests/*.gcc-dis tests/*.o
 
 install:        all
 		install as $(DESTDIR)/bin/
+		cp ${MAN} ${DESTDIR}/share/man/cat1/

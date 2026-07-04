@@ -1,0 +1,189 @@
+.TH PCC 1 "July 4, 2026" "ReBSD"
+.SH NAME
+pcc, cc, cpp \- ReBSD Portable C Compiler driver
+.SH SYNOPSIS
+.B pcc
+[
+.I option
+\&...
+]
+.I file
+\&...
+.br
+.B cc
+[
+.I option
+\&...
+]
+.I file
+\&...
+.br
+.B cpp
+[
+.I option
+\&...
+]
+.I file
+\&...
+.SH DESCRIPTION
+.B pcc
+is the ReBSD native C compiler driver.
+It runs the PCC preprocessor, compiler, assembler, and linker as needed
+for each input file.
+.B cc
+is the system C compiler name and invokes the same driver.
+When invoked as
+.B cpp
+the driver stops after preprocessing.
+.PP
+Files ending in
+.B .c
+are preprocessed, compiled, assembled, and linked.
+Files ending in
+.B .S
+are preprocessed and assembled.
+Files ending in
+.B .s
+are assembled.
+Files ending in
+.B .o
+and archives are passed to the linker.
+.PP
+On a ReBSD target the default sysroot is
+.IR / .
+The default link includes the ReBSD start file and the standard libraries
+.BR \-lpcc ,
+.BR \-lc ,
+and
+.BR \-lpcc .
+.SH OPTIONS
+.TP
+.B \-c
+Compile or assemble input files and stop after producing object files.
+.TP
+.B \-S
+Compile input files and stop after producing assembler output.
+.TP
+.B \-E
+Preprocess input files and write the result to standard output.
+.TP
+.BI \-o " file"
+Write the final output, or the single requested intermediate output, to
+.IR file .
+.TP
+.BI \-I " dir"
+Add
+.I dir
+to the preprocessor include search path.
+.TP
+.BI \-D " name"
+.TQ
+.BI \-D " name=value"
+Define a preprocessor macro.
+.TP
+.BI \-U " name"
+Undefine a preprocessor macro.
+.TP
+.BI \-L " dir"
+Add
+.I dir
+to the library search path used by the linker.
+.TP
+.BI \-l " name"
+Link with
+.BI lib name .a
+from the library search path.
+.TP
+.BI \-\-sysroot= dir
+Use
+.I dir
+as the root for standard include and library directories.
+If no sysroot is specified on a ReBSD target,
+.I /
+is used.
+.TP
+.B \-nostdinc
+Do not search the standard system include directories.
+.TP
+.B \-nostartfiles
+Do not pass the standard start files to the linker.
+.TP
+.B \-nodefaultlibs
+Do not pass the default libraries to the linker.
+.TP
+.B \-nostdlib
+Do not pass standard start files or default libraries to the linker.
+.TP
+.BI \-Wa, option
+Pass
+.I option
+to
+.BR as (1).
+.TP
+.BI \-Wl, option
+Pass
+.I option
+to
+.BR ld (1).
+.TP
+.BI \-Wp, option
+Pass
+.I option
+to the preprocessor.
+.TP
+.BI \-Wc, option
+Pass
+.I option
+to the compiler proper.
+.TP
+.B \-mips3
+.TQ
+.B \-march=vr4300
+Select the VR4300-compatible MIPS code generation mode used by the N64
+and Malta64 compatibility ports.
+.TP
+.B \-mhard-float
+.TQ
+.B \-msoft-float
+Select hardware or software floating-point code generation when supported
+by the target configuration.
+.TP
+.B \-g
+Request debug information.
+.TP
+.BI \-O level
+Select an optimization level.
+.TP
+.B \-v
+Print commands as they are run.
+.TP
+.B \-\&#\&#\&#
+Print the commands that would be run, but do not execute them.
+.SH FILES
+.TP
+.I /usr/libexec/pcc/cpp
+PCC preprocessor.
+.TP
+.I /usr/libexec/pcc/ccom
+PCC C compiler proper.
+.TP
+.I /usr/bin/as
+Assembler.
+.TP
+.I /usr/bin/ld
+Link editor.
+.TP
+.I /usr/lib/crt0.o
+Program start file.
+.TP
+.I /usr/lib/libpcc.a
+PCC runtime helper library.
+.TP
+.I /usr/lib/libc.a
+System C library.
+.SH SEE ALSO
+.BR as (1),
+.BR ld (1),
+.BR nm (1),
+.BR ranlib (1),
+.BR size (1)
