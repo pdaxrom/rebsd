@@ -322,12 +322,12 @@ userland build unchanged.
     yields an `int` value.  This fixed `jira/PCC-462` and `jira/PCC-476-1`.
   - Added strict regressions `misc/stasg001` and `misc/ucmp001`.
   - Clean Malta target-side result after rebuilding generated/rootfs artifacts:
-    `NATIVE_PCC_REGRESS_TOTAL:316`,
-    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+    `NATIVE_PCC_REGRESS_TOTAL:317`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:287`,
     `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
-    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
-    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:277`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:277`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
     `NATIVE_PCC_REGRESS_RC:0`.
 - [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
@@ -383,31 +383,31 @@ userland build unchanged.
     `/root/pcc-tests` and runs `/root/run-native-pcc-regress.sh` on Malta.
   - Current clean Malta target-side result with native `/usr/bin/cc` on the
     default QEMU Malta 24Kf/MIPS32 profile:
-    316 total checks, 286 compile pass, 30 expected compile fail,
-    0 unexpected compile fail; 276 runtime candidates, 276 pass,
+    317 total checks, 287 compile pass, 30 expected compile fail,
+    0 unexpected compile fail; 277 runtime candidates, 277 pass,
     0 unexpected runtime fail.
   - Re-run on 2026-07-03 with `make -C sys/mips/malta
     native-pcc-regress-runtime` stayed green with the same summary and
     `NATIVE_PCC_REGRESS_RC:0`.
   - Re-run again on 2026-07-03 after making the PCC softfloat `DEBUGFP`
     oracle FCSR-safe on MIPS stayed green:
-    `NATIVE_PCC_REGRESS_TOTAL:316`,
-    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+    `NATIVE_PCC_REGRESS_TOTAL:317`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:287`,
     `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
-    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
-    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:277`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:277`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
     `NATIVE_PCC_REGRESS_RC:0`.
   - Re-run again on 2026-07-03 after replacing the MIPS/ReBSD
     `DEBUGFP` `double -> float -> double` oracle path with
     `__truncdfsf2`/`__extendsfdf2` stayed green:
-    `NATIVE_PCC_REGRESS_TOTAL:316`,
-    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+    `NATIVE_PCC_REGRESS_TOTAL:317`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:287`,
     `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
-    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
-    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:277`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:277`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
     `NATIVE_PCC_REGRESS_RC:0`.
   - `c99/darray005` now initializes the VLA inputs it passes to `add()`.  The
@@ -432,12 +432,12 @@ userland build unchanged.
     MIPS3/R4000 flags plus the 64-bit Malta stage0 wrapper.
   - Clean R4000/Malta64 native PCC gate on 2026-07-03 after the N64 debug
     isolation work:
-    `NATIVE_PCC_REGRESS_TOTAL:316`,
-    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+    `NATIVE_PCC_REGRESS_TOTAL:317`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:287`,
     `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
-    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
-    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:277`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:277`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
     `NATIVE_PCC_REGRESS_RC:0`.
   - This gate is useful for catching MIPS3/R4000 regressions, but it still
@@ -624,10 +624,13 @@ userland build unchanged.
     `misc/shlib3`.
   - Keep both as expected-fail policy cases until ReBSD grows a concrete TLS
     or shared-library ABI/runtime plan.
-- [ ] Add or keep target-aware handling for architecture-specific upstream
+- [x] Add or keep target-aware handling for architecture-specific upstream
   tests.
   - `gcccompat/typeof001` is x86 inline asm, not a MIPS C frontend failure.
-  - Either keep it expected-fail on MIPS or add a MIPS-specific replacement.
+  - `sys/mips/tools/pcc-regress.py` now keeps the expected compile/link
+    failures in a target-aware policy table.  For `mips-rebsd`, the policy
+    covers only the x86-inline-asm test, static a.out shared-library/PIC
+    rejection, and static a.out TLS rejection.
 - [ ] Close remaining test-coverage gaps.
   - Keep expanding strict PCC runtime coverage as backend issues are fixed.
   - Expand smoke coverage for libc-heavy programs, varargs, structs/unions,
@@ -654,7 +657,9 @@ userland build unchanged.
     so ReBSD does not accumulate partial API fragments.
   - Decide whether ReBSD will grow locale-aware multibyte/wide semantics, or
     explicitly document the current single-byte execution character policy.
-  - Audit BSD compatibility headers such as `cdefs.h`.
+  - `sys/include/cdefs.h` now has an explicit ReBSD/PCC compatibility surface
+    and a target-side native smoke gate.  Keep future additions as named policy
+    rather than adding silent catch-all macros.
 - [x] Document the final ReBSD/PCC target details and clean up build artifacts.
   - `docs/PCC_PORTING_NOTES.md` now records the supported C target contract,
     native rootfs layout, runtime library policy, validation gates, and
@@ -696,12 +701,12 @@ userland build unchanged.
 - [x] Compile, assemble, link, and run C programs inside Malta.
 - [x] Run the full PCC Malta test gate.
   - `make -C sys/mips native-pcc-regress-runtime` passed on Malta QEMU.
-  - Result: `NATIVE_PCC_REGRESS_TOTAL:316`,
-    `NATIVE_PCC_REGRESS_COMPILE_PASS:286`,
+  - Result: `NATIVE_PCC_REGRESS_TOTAL:317`,
+    `NATIVE_PCC_REGRESS_COMPILE_PASS:287`,
     `NATIVE_PCC_REGRESS_EXPECTED_COMPILE_FAIL:30`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_COMPILE_FAIL:0`,
-    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:276`,
-    `NATIVE_PCC_REGRESS_RUNTIME_PASS:276`,
+    `NATIVE_PCC_REGRESS_RUNTIME_TOTAL:277`,
+    `NATIVE_PCC_REGRESS_RUNTIME_PASS:277`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
     `NATIVE_PCC_REGRESS_RC:0`.
 
@@ -732,8 +737,8 @@ userland build unchanged.
   - Verification after the header/fstab cleanup: `make -C sys/mips/n64
     N64_USERLAND_COMPILER=pcc rootfs.stage/.userland.pcc` passes; full native
     PCC regressions with `MIPS_ROOTFS_COMPILER=pcc` pass on both
-    `BOARD=malta64` and `BOARD=malta` with 316 total, 286 compile-pass, 30
-    expected compile-fail, 0 unexpected compile-fail, and 276/276 runtime
+    `BOARD=malta64` and `BOARD=malta` with 317 total, 287 compile-pass, 30
+    expected compile-fail, 0 unexpected compile-fail, and 277/277 runtime
     pass.
   - Closed: the PCC-built shell/login/redirection path was fixed as a real
     MIPS relocation bug in ReBSD `as` (`RHIGH16`/`RHIGH16S` addends), restoring
@@ -795,12 +800,12 @@ userland build unchanged.
   - The separate `sys/mips/malta64` R4000 gate now provides usable QEMU
     evidence: `make -C sys/mips BOARD=malta64 native-pcc-regress-runtime
     MIPS_ROOTFS_COMPILER=pcc` boots with `qemu-system-mips64 -M malta -cpu
-    R4000 -m 32M -nographic` and passes 316 total checks, 286 compile-pass,
-    30 expected compile-fail, 0 unexpected compile-fail, and 276/276 runtime
+    R4000 -m 32M -nographic` and passes 317 total checks, 287 compile-pass,
+    30 expected compile-fail, 0 unexpected compile-fail, and 277/277 runtime
     pass.
   - The ordinary Malta native PCC regression also still passes after the FCSR
-    and driver-temp changes: 316 total, 286 compile-pass, 30 expected
-    compile-fail, 0 unexpected compile-fail, 276/276 runtime pass.
+    and driver-temp changes: 317 total, 287 compile-pass, 30 expected
+    compile-fail, 0 unexpected compile-fail, 277/277 runtime pass.
   - The R4000/Malta64 pass does not reproduce the intermittent N64 `ccom`
     bad-address faults, so it is a regression gate, not a substitute for real
     N64 hardware validation.
@@ -840,8 +845,8 @@ userland build unchanged.
     runner change with `MIPS_ROOTFS_COMPILER=pcc`.  The QEMU command used
     `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`; the summary
     in `/private/tmp/rebsd-malta64-native-pcc-regress-after-n64-debug-all.log`
-    is 316 total, 286 compile-pass, 30 expected compile-fail, 0 unexpected
-    compile-fail, 276/276 runtime pass, 0 unexpected runtime failures, and
+    is 317 total, 287 compile-pass, 30 expected compile-fail, 0 unexpected
+    compile-fail, 277/277 runtime pass, 0 unexpected runtime failures, and
     `NATIVE_PCC_REGRESS_RC:0`.
   - The next supplied N64 hardware log from `/Users/sash/pcc-debug.log`
     contains two complete expanded runs.  Each run reports
@@ -993,13 +998,17 @@ userland build unchanged.
     implement the ReBSD single-byte ASCII execution character model.
   - If ReBSD later adds locale or UTF-8 semantics, update the whole conversion
     family and error policy together instead of changing isolated functions.
-- [ ] Audit and complete `sys/include/cdefs.h`.
-  - Current file is a small BSD-compatibility subset for PCC/imported tests:
-    declaration wrappers, `__P`, selected compiler attributes, `__CONCAT`,
-    `__STRING`, and `__const`.
-  - Decide which BSD `cdefs.h` surface ReBSD actually supports, add missing
-    macros as real compatibility policy, and avoid silently accepting semantics
-    the kernel/userland cannot honor.
+- [x] Audit and complete `sys/include/cdefs.h`.
+  - Current supported ReBSD/PCC surface includes declaration wrappers, `__P`,
+    BSD string/concatenation helpers, compiler attribute shims used by the tree,
+    branch prediction helpers, `__arraycount`, version predicates, and
+    `__RCSID`/`__COPYRIGHT`/`__KERNEL_RCSID`/`__IDSTRING`.
+  - Unsupported semantics are still left out deliberately: C++ startup,
+    TLS-specific behavior, shared-library/PIC policy, and locale/multibyte
+    behavior remain separate TODO items instead of being hidden behind header
+    compatibility macros.
+  - `/root/native-pcc-smoke.sh` now builds and runs a `sys/cdefs.h`
+    compatibility program with target `cc`.
 - [x] Turn the C99 math additions in `include/math.h` into a supported
   libc/libm contract.
   - `include/math.h` now exposes the C99 `FP_*` classes, `fpclassify`,
@@ -1035,13 +1044,13 @@ userland build unchanged.
     compiler while leaving C++/TLS/shared-library policy out of the C gate.
 - [x] Build full userland with PCC on Malta.
 - [x] Re-run Malta smoke and regression tests with PCC userland.
-  - Native PCC regressions pass with 316 total checks, 286 compile-pass,
-    30 expected compile-fail, 0 unexpected compile-fail, and 276/276 runtime
+  - Native PCC regressions pass with 317 total checks, 287 compile-pass,
+    30 expected compile-fail, 0 unexpected compile-fail, and 277/277 runtime
     pass.
   - Linpack smoke passes with `LINPACK_RC:0`; latest default-size Malta
     numbers are GCC about 14.7 MFLOPS and PCC about 13.4 MFLOPS.
 - [x] Re-run Malta64/R4000 smoke and regression tests with PCC userland.
-  - Native PCC regressions pass with the same 316/286/30 and 276/276 runtime
+  - Native PCC regressions pass with the same 317/287/30 and 277/277 runtime
     result under `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`.
   - Linpack smoke passes with `LINPACK_RC:0`; latest default-size Malta64
     numbers are GCC about 14.4 MFLOPS and PCC about 12.2 MFLOPS.

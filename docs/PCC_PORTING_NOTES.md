@@ -30,6 +30,13 @@ ReBSD/MIPS keeps `wchar_t` as a 16-bit ABI type for PCC and libc.  The current
 wide-character conversion policy is single-byte ASCII-oriented; full locale or
 UTF-8 semantics are future policy work.
 
+`sys/cdefs.h` is a supported BSD-compatibility surface for the C gate.  It
+provides declaration wrappers, `__P`, BSD string/concatenation helpers, selected
+compiler attributes, branch prediction helpers, `__arraycount`, compiler version
+predicates, and the `__RCSID`/`__COPYRIGHT`/`__KERNEL_RCSID`/`__IDSTRING`
+metadata macros used by imported BSD/PCC sources.  It does not promise C++
+startup, TLS, shared-library/PIC, or locale/multibyte behavior.
+
 ## Compiler Selection
 
 GCC remains the default compiler for kernel and userland builds.  PCC is a
@@ -129,15 +136,16 @@ The current C gate is green in these environments:
 
 The native PCC regression gate currently reports:
 
-- 316 total compile/link checks.
-- 286 compile/link passes.
+- 317 total compile/link checks.
+- 287 compile/link passes.
 - 30 expected compile/link failures.
 - 0 unexpected compile/link failures.
-- 276 runtime candidates.
-- 276 runtime passes.
+- 277 runtime candidates.
+- 277 runtime passes.
 - 0 unexpected runtime failures.
 
-The expected compile/link failures are outside the current static C gate:
+The expected compile/link failures are target-aware policy cases for
+`mips-rebsd`, not generic PCC failures:
 
 - `gcccompat/typeof001` embeds x86 inline assembly constraints.
 - `misc/shlib3` requires shared-library/PIC support.

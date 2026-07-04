@@ -27,8 +27,8 @@ done
 tmp=/var/tmp/native-pcc-smoke.$$
 rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.s" "$tmp.o" "$tmp.pcc" \
     "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" \
-    "$tmp.freopen.out" "$tmp.out"
-trap 'rc=$?; rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.s" "$tmp.o" "$tmp.pcc" "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" "$tmp.freopen.out" "$tmp.out"; exit $rc' 0 1 2 3 15
+    "$tmp.freopen.out" "$tmp.cdefs" "$tmp.cdefs.c" "$tmp.out"
+trap 'rc=$?; rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.s" "$tmp.o" "$tmp.pcc" "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" "$tmp.freopen.out" "$tmp.cdefs" "$tmp.cdefs.c" "$tmp.out"; exit $rc' 0 1 2 3 15
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>
@@ -175,5 +175,108 @@ cc -o "$tmp.freopen" "$tmp.freopen.c" || exit 1
 grep native-pcc-freopen-before "$tmp.out" >/dev/null || exit 1
 grep native-pcc-freopen-after "$tmp.freopen.out" >/dev/null || exit 1
 grep native-pcc-freopen-malloc-ok "$tmp.freopen.out" >/dev/null || exit 1
+
+cat > "$tmp.cdefs.c" <<'EOF'
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/cdefs.h>
+
+__RCSID("native-pcc-cdefs");
+__COPYRIGHT("native-pcc-cdefs copyright");
+__KERNEL_RCSID(1, "native-pcc-cdefs kernel");
+__IDSTRING(cdefs_id, "native-pcc-cdefs id");
+
+struct cdefs_packed {
+    char c;
+    int i;
+} __packed;
+
+static int used_value __used = 7;
+
+static int __printflike(1, 2)
+cdefs_printf(const char *fmt, ...)
+{
+    va_list ap;
+    int n;
+
+    va_start(ap, fmt);
+    n = vprintf(fmt, ap);
+    va_end(ap);
+    return n;
+}
+
+static int __scanflike(1, 2)
+cdefs_scanf(const char *fmt, ...)
+{
+    (void)fmt;
+    return 0;
+}
+
+static int __pure
+cdefs_const_fn(int x)
+{
+    return x + 1;
+}
+
+static int __pure2
+cdefs_pure_fn(int x)
+{
+    return x + used_value;
+}
+
+static void * __malloclike
+cdefs_alloc(void)
+{
+    return malloc(4);
+}
+
+static int __noinline
+cdefs_noinline(void)
+{
+    return 3;
+}
+
+static __always_inline int
+cdefs_inline(void)
+{
+    return 4;
+}
+
+int
+main(void)
+{
+    int a[3];
+    void *p;
+
+    if (__arraycount(a) != 3)
+        return 2;
+    if (__CONCAT(cdefs_, const_fn)(1) != 2)
+        return 3;
+    if (cdefs_pure_fn(1) != 8)
+        return 4;
+    if (sizeof(struct cdefs_packed) >= sizeof(int) * 2)
+        return 5;
+    if (!__predict_true(1) || __predict_false(0))
+        return 6;
+    if (!__GNUC_PREREQ__(0, 0) || !__PCC_PREREQ__(0, 0))
+        return 7;
+    if (cdefs_noinline() + cdefs_inline() != 7)
+        return 8;
+    if (cdefs_scanf("%d", &a[0]) != 0)
+        return 9;
+    p = cdefs_alloc();
+    if (p == NULL)
+        return 10;
+    free(p);
+    cdefs_printf("native-pcc-cdefs-ok:%s\n", __STRING(done));
+    return 0;
+}
+EOF
+
+echo "step 8: sys/cdefs compatibility link/run"
+cc -o "$tmp.cdefs" "$tmp.cdefs.c" || exit 1
+"$tmp.cdefs" > "$tmp.out" || exit 1
+grep native-pcc-cdefs-ok:done "$tmp.out" >/dev/null || exit 1
 
 echo "native pcc smoke ok"

@@ -17,13 +17,32 @@ from pathlib import Path
 TOP = Path(__file__).resolve().parents[3]
 REGRESS = TOP / "src/dev/pcc/pcc-tests/regress"
 
-DEFAULT_COMPILE_FAILURES = {
-    "gcccompat__typeof001",
-    "misc__shlib3",
-    "pcclist__init004",
+DEFAULT_TARGET = "mips-rebsd"
+
+EXPECTED_COMPILE_FAILURE_POLICY = {
+    "gcccompat__typeof001": {
+        "targets": {"mips-rebsd"},
+        "reason": "upstream test embeds x86 inline asm registers/constraints",
+    },
+    "misc__shlib3": {
+        "targets": {"mips-rebsd"},
+        "reason": "static ReBSD a.out target has no shared-library/PIC ABI",
+    },
+    "pcclist__init004": {
+        "targets": {"mips-rebsd"},
+        "reason": "static ReBSD a.out target has no TLS ABI",
+    },
 }
 
 DEFAULT_RUNTIME_FAILURES = set()
+
+
+def expected_compile_failure_policy(target):
+    return {
+        name: policy["reason"]
+        for name, policy in EXPECTED_COMPILE_FAILURE_POLICY.items()
+        if target in policy["targets"] or "all" in policy["targets"]
+    }
 
 
 def make_vars(makefile):
@@ -363,12 +382,12 @@ def native_regress_script(expected_compile_failures):
 
 class CompilerRun:
     def __init__(self, pcc, rootfs, out, ar):
-        self.pcc = Path(pcc)
-        self.rootfs = Path(rootfs)
-        self.out = Path(out)
+        self.pcc = Path(pcc).resolve()
+        self.rootfs = Path(rootfs).resolve()
+        self.out = Path(out).resolve()
         self.bin = self.out / "bin"
         self.log = self.out / "compile.log"
-        self.ar = Path(ar)
+        self.ar = Path(ar).resolve()
         self.incdir = self.rootfs / "usr/include"
         self.libdir = self.rootfs / "usr/lib"
         self.env = os.environ.copy()
@@ -476,7 +495,7 @@ class CompilerRun:
         script.write_text("\n".join(lines) + "\n")
         script.chmod(0o775)
 
-    def compile_all(self, expected_failures):
+    def compile_all(self, expected_failures, expected_reasons=None, target=DEFAULT_TARGET):
         if not self.pcc.is_file():
             raise FileNotFoundError(self.pcc)
         if not self.incdir.is_dir():
@@ -497,11 +516,16 @@ class CompilerRun:
         runtime_candidates = [r for r in results if r["kind"] == "runtime" and r.get("compile_ok")]
         unexpected = [r for r in compile_fail if r["name"] not in expected_failures]
         summary = {
+            "target": target,
             "total": len(results),
             "compile_pass": len(results) - len(compile_fail),
             "compile_fail": len(compile_fail),
             "runtime_candidates": len(runtime_candidates),
             "expected_compile_failures": sorted(r["name"] for r in compile_fail if r["name"] in expected_failures),
+            "expected_compile_failure_reasons": {
+                name: (expected_reasons or {}).get(name, "command-line expected failure")
+                for name in sorted(r["name"] for r in compile_fail if r["name"] in expected_failures)
+            },
             "unexpected_compile_failures": unexpected,
             "compile_failures": compile_fail,
         }
@@ -513,10 +537,11 @@ class CompilerRun:
 
 
 def command_compile(args):
-    expected = set(DEFAULT_COMPILE_FAILURES)
+    expected_policy = expected_compile_failure_policy(args.target)
+    expected = set(expected_policy)
     expected.update(args.expected_compile_fail)
     runner = CompilerRun(args.pcc, args.rootfs, args.out, args.ar)
-    return runner.compile_all(expected)
+    return runner.compile_all(expected, expected_policy, args.target)
 
 
 def runtime_names_from_script(run_script):
@@ -577,7 +602,8 @@ def command_native_stage(args):
     rootfs = Path(args.rootfs)
     manifest = Path(args.manifest)
     manifest_out = Path(args.manifest_out)
-    expected = set(DEFAULT_COMPILE_FAILURES)
+    expected_policy = expected_compile_failure_policy(args.target)
+    expected = set(expected_policy)
     expected.update(args.expected_compile_fail)
 
     test_root = rootfs / "root/pcc-tests"
@@ -761,6 +787,7 @@ def main():
     p.add_argument("--rootfs", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--ar", required=True)
+    p.add_argument("--target", default=DEFAULT_TARGET)
     p.add_argument("--expected-compile-fail", action="append", default=[])
     p.set_defaults(func=command_compile)
 
@@ -775,6 +802,7 @@ def main():
     p.add_argument("--rootfs", required=True)
     p.add_argument("--manifest", required=True)
     p.add_argument("--manifest-out", required=True)
+    p.add_argument("--target", default=DEFAULT_TARGET)
     p.add_argument("--expected-compile-fail", action="append", default=[])
     p.set_defaults(func=command_native_stage)
 

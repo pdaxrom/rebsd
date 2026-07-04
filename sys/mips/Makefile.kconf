@@ -48,6 +48,7 @@ MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_COMMON_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
+MIPS_ROOTFS_IMAGE_MANIFEST ?= $(MIPS_ROOTFS_BUILD_MANIFEST)
 MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_COMMON_FILES = $(shell find $(TOPSRC)/sys/mips/rootfs \
@@ -217,7 +218,8 @@ pcc-regress-stage: pcc-regress-compile $(MIPS_ROOTFS_BUILD_MANIFEST)
 	cp $(PCC_REGRESS_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
 
 pcc-regress-runtime: pcc-regress-stage
-	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL) \
+	    MIPS_ROOTFS_IMAGE_MANIFEST=$(abspath $(PCC_REGRESS_MANIFEST))
 	python3 $(PCC_REGRESS_SCRIPT) run \
 	    --malta-dir $(abspath .) \
 	    --kernel $(MALTA_RUNTIME_KERNEL) \
@@ -267,7 +269,8 @@ linpack-smoke-stage: linpack-smoke-build $(MIPS_ROOTFS_BUILD_MANIFEST)
 	cp $(LINPACK_SMOKE_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
 
 linpack-smoke-runtime: linpack-smoke-stage
-	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL) \
+	    MIPS_ROOTFS_IMAGE_MANIFEST=$(abspath $(LINPACK_SMOKE_MANIFEST))
 	python3 $(LINPACK_SMOKE_SCRIPT) run \
 	    --malta-dir $(abspath .) \
 	    --kernel $(MALTA_RUNTIME_KERNEL) \
@@ -308,7 +311,8 @@ native-pcc-regress-stage: $(MIPS_ROOTFS_BUILD_MANIFEST) $(PCC_REGRESS_SCRIPT)
 	cp $(NATIVE_PCC_REGRESS_MANIFEST) $(MIPS_ROOTFS_BUILD_MANIFEST)
 
 native-pcc-regress-runtime: native-pcc-regress-stage $(MALTA_RUN_COMMAND_SCRIPT)
-	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL) \
+	    MIPS_ROOTFS_IMAGE_MANIFEST=$(abspath $(NATIVE_PCC_REGRESS_MANIFEST))
 	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
 	    --malta-dir $(abspath .) \
 	    --kernel $(MALTA_RUNTIME_KERNEL) \
@@ -371,10 +375,10 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_COMMON_MANIFEST) $(MIPS_ROOTFS_BOAR
 	    printf '\nfile /root/linpack-pcc\nmode 0775\n' >> $@; \
 	fi
 
-rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_BUILD_MANIFEST)
+rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_IMAGE_MANIFEST)
 	rm -f $@
 	$(FSUTIL) --new --endian=big --size=$(MIPS_ROOTFS_KBYTES) \
-	    --manifest=$(MIPS_ROOTFS_BUILD_MANIFEST) $@ $(MIPS_ROOTFS_STAGE)
+	    --manifest=$(MIPS_ROOTFS_IMAGE_MANIFEST) $@ $(MIPS_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
 
 rootfs.o: rootfs.img
