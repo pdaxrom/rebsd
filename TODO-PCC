@@ -691,7 +691,7 @@ userland build unchanged.
 
 ## Temporary Compatibility Stubs To Close
 
-- [ ] Audit and eliminate diagnostic workarounds rather than promoting them
+- [x] Audit and eliminate diagnostic workarounds rather than promoting them
   into normal builds.
   - Real fixes that should stay: absolute native PCC tool paths for
     `/usr/bin/as` and `/usr/bin/ld`, `TMPDIR`-aware compiler temporaries,
@@ -719,9 +719,19 @@ userland build unchanged.
     `BOARD=malta64` and `BOARD=malta` with 316 total, 286 compile-pass, 30
     expected compile-fail, 0 unexpected compile-fail, and 276/276 runtime
     pass.
-  - Remaining closures: fix the PCC-built shell/login/redirection path, then
-    replace the UART-only no-op USBNet symbols with a generated config that
-    does not emit the USBNet attach entry.
+  - Closed: the PCC-built shell/login/redirection path was fixed as a real
+    MIPS relocation bug in ReBSD `as` (`RHIGH16`/`RHIGH16S` addends), restoring
+    normal N64 login and repeated shell startup without shell-runner
+    workarounds in the normal PCC rootfs.
+  - Closed: `N64_DEBUG_UART_ONLY=1` now switches to a dedicated
+    `ioconf.debug-uart.o` and filters out `if_usbn.o`; the old no-op
+    `usbnetattach()`/`usbnpoll()` compatibility branch was removed from
+    `if_usbn.c`.
+  - Verification: `make -C sys/mips/n64 N64_DEBUG_UART_ONLY=1
+    N64_USERLAND_COMPILER=pcc pcc-debug.z64` passes, the debug kernel symbol
+    table contains no `usbnetattach`/`usbnpoll`, and the normal
+    `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`
+    path still links the real USBNet symbols.
 - [x] Re-run the N64 native PCC debug image after absolute native tool paths,
   native FPU/FCSR probes, PCC FP-folding probes, and shell-stub sleep fix.
   - The old `manual__min` driver-stack failure is no longer present in the

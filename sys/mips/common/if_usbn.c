@@ -1,18 +1,5 @@
 #include <sys/param.h>
 
-#ifdef N64_DEBUG_UART_ONLY
-void
-usbnetattach(int unit)
-{
-    (void)unit;
-}
-
-void
-usbnpoll(void)
-{
-}
-#else
-
 /*
  * Generic USB Ethernet-like interface upper half.
  *
@@ -443,5 +430,3 @@ usbn_input(int unit, const unsigned char *frame, unsigned len)
     sc->sc_if.if_ipackets++;
     splx(s);
 }
-
-#endif

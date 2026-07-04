@@ -14,10 +14,12 @@ N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
 N64_DEBUG_UART_ONLY ?= 0
 N64_BUILD_MODE_STAMP = .build-mode.$(N64_DEBUG_UART_ONLY)
+N64_IOCONF      = ioconf
 ifeq ($(N64_DEBUG_UART_ONLY),1)
 PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
     -DUSBNET_ENABLED -DUSBNET_ECM -DUSBNET_VENDOR,$(PARAM))
 PARAM += -DN64_DEBUG_UART_ONLY -DN64_DEBUG_USERMEM_4M -DN64_PCC_FPE_TRACE
+N64_IOCONF = ioconf.debug-uart
 endif
 N64_ROOTFS_KBYTES ?= 16384
 N64_ROOTFS_COMMON_DIR ?= $(TOPSRC)/sys/mips/rootfs
@@ -403,19 +405,20 @@ COMPILE_FPU_S   = ${ASFPU} ${FPU_ASFLAGS} $< -o $@
 
 ifeq ($(N64_DEBUG_UART_ONLY),1)
 OBJS := $(filter-out video.o video_console.o si.o joybus.o \
-    n64usbnet_proto.o n64cart_usbnet.o n64cart_usbecm.o,$(OBJS))
+    if_usbn.o n64usbnet_proto.o n64cart_usbnet.o n64cart_usbecm.o,$(OBJS))
 CFILES := $(filter-out \
     $S/mips/n64/video.c \
     $S/mips/n64/video_console.c \
     $S/mips/n64/si.c \
     $S/mips/n64/joybus.c \
+    $S/mips/common/if_usbn.c \
     $S/mips/common/n64usbnet_proto.c \
     $S/mips/n64/n64cart_usbnet.c \
     $S/mips/n64/n64cart_usbecm.c,$(CFILES))
 endif
 
-SYSTEM_OBJ      = startup.o ${OBJS} ioconf.o
-SYSTEM_DEP      = Makefile ioconf.c $(N64_KERNEL_LDSCRIPT)
+SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o
+SYSTEM_DEP      = Makefile $(N64_IOCONF).c $(N64_KERNEL_LDSCRIPT)
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for N64: local build\n";' > vers.c; \
                   ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
                   rm -f $@
@@ -975,6 +978,9 @@ startup.o: $S/mips/common/startup.S ${SYSTEM_DEP}
 	${COMPILE_S}
 
 ioconf.o: ioconf.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ioconf.debug-uart.o: ioconf.debug-uart.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 ${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
