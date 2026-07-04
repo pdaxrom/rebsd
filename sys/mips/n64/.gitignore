@@ -8,6 +8,10 @@ vers.c
 rootfs.stage/
 rootfs.devnodes.manifest
 rootfs.generated.manifest
+rootfs.linpack-smoke.manifest
+rootfs.pcc-debug.manifest
+rootfs.pcc-debug.stage/
+rootfs.pcc-hw-regress.manifest
 *.o
 *.d
 *.elf
@@ -19,7 +23,10 @@ rootfs.generated.manifest
 n64.ld
 n64-user.ld
 n64-userland.stamp
+n64-userland.*.stamp
 n64-native-runtime/
 n64-native-tools/
+n64-native-pcc/
+n64-native-pcc-build/
 a.out
 n64-init

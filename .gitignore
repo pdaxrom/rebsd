@@ -32,5 +32,6 @@ Makefile.user
 *.log
 *.txt
 *.c-
+__pycache__/
 
 TODO

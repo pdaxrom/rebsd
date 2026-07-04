@@ -1,129 +1,170 @@
-# PortableCC Porting Notes
+# ReBSD PCC Porting Notes
 
-Initial upstream layout notes after importing PortableCC:
+This document records the current ReBSD/MIPS Portable C Compiler integration
+state.  The supported milestone is a C userland compiler for static ReBSD
+a.out systems.  Kernel, stage0, and target binary tools still use the existing
+ReBSD/GCC build flow unless a command explicitly says otherwise.
 
-- MIPS backend already exists in `src/dev/pcc/pcc/arch/mips`.
-- OS-specific compiler configuration lives under `src/dev/pcc/pcc/os/<os>`.
-- Driver defaults and predefined macros are centralized in
-  `src/dev/pcc/pcc/cc/driver/platform.c` and `os/<os>/ccconfig.h`.
-- `configure.ac` maps target triples to `targmach`, `targos`, `abi`, and
-  endianness. ReBSD should add `rebsd*` OS handling there, with
-  `mipseb`/`mips` mapping to `targmach=mips` and big-endian output.
-- Existing `os/none` is too freestanding for native `/usr/bin/cc`; existing
-  `os/bsd` is close historically but only covers older non-MIPS assumptions.
+## Target Contract
 
-Likely first local glue files:
+- Target triples: `mips-rebsd`, `mips-unknown-rebsd`.
+- Compatibility aliases: `mips-retrobsd`, `mips-unknown-retrobsd`.
+- Target machine: big-endian MIPS o32.
+- Object format: ReBSD a.out.
+- Target tools: ReBSD `as`, `ld`, `ar`, `ranlib`, `nm`, and `size`.
+- Startup file: `/usr/lib/crt0.o`.
+- Default system include path: `/usr/include`.
+- Default system library path: `/usr/lib`.
+- Default PCC helper linkage: `-lpcc -lc -lpcc`.
+- Default target sysroot: `/` when no `--sysroot` is supplied.
 
-- `src/dev/pcc/pcc/os/rebsd/ccconfig.h`
-- `src/dev/pcc/pcc/configure.ac`
-- generated `src/dev/pcc/pcc/configure`, unless the build flow gains an
-  explicit autoreconf step
-- `src/dev/pcc/pcc/cc/driver/platform.c`, only if `ccconfig.h` is not enough
-  to express ReBSD include paths, library paths, startup files, and macros
+PCC defines both ReBSD identity macros and RetroBSD compatibility macros because
+parts of the tree still carry RetroBSD-era conditionals.  The target also
+defines the normal Unix and MIPS big-endian/o32 preprocessor surface.
 
-Current ReBSD target behavior is conservative:
+ReBSD/MIPS currently treats `long double` as IEEE64, matching `double`.  PCC and
+the public headers must therefore report the target `long double` limits rather
+than assuming an extended 80-bit or 128-bit format.
 
-- target triples: `mips-rebsd`, `mips-unknown-rebsd`
-- compatibility aliases: `mips-retrobsd`, `mips-unknown-retrobsd`
-- target machine: big-endian MIPS o32
-- object/link path: existing ReBSD a.out tools
-- default startup: `/usr/lib/crt0.o`
-- default libraries: `-lpcc -lc -lpcc` from `/usr/lib`
-- no shared libraries, PIC, TLS, C++, or kernel build switch in the supported
-  C milestone
+ReBSD/MIPS keeps `wchar_t` as a 16-bit ABI type for PCC and libc.  The current
+wide-character conversion policy is single-byte ASCII-oriented; full locale or
+UTF-8 semantics are future policy work.
 
-## Selectable Userland Compiler
+## Compiler Selection
 
-The default kernel and userland compiler remains the existing GCC flow.  PCC is
-supported as an explicit opt-in userland/rootfs compiler:
+GCC remains the default compiler for kernel and userland builds.  PCC is a
+supported opt-in C userland compiler:
 
-- Malta/Malta64: `MIPS_ROOTFS_COMPILER=pcc`
-- N64: `N64_USERLAND_COMPILER=pcc`
+```sh
+make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
+```
 
-Both selectors accept `gcc` and `pcc`.  They are aliases for the same compiler
-mode at different make entry points: Malta/Malta64 use the shared MIPS rootfs
-wrapper, which forwards the selected mode into the N64/common rootfs userland
-builder.  If both variables are set and disagree, make aborts before any
-build.  In PCC mode the imported compiler frontend builds target userland
-while ReBSD continues to use its own a.out `as`, `ld`, `ar`, and `ranlib`.
-The selector does not change the kernel or N64 stage0 compiler.
+`MIPS_ROOTFS_COMPILER` and `N64_USERLAND_COMPILER` are aliases for the same
+userland compiler choice at different make entry points.  If only one is set,
+the other entry point inherits it.  If both are set and disagree, make aborts.
+The supported values are `gcc` and `pcc`.
 
-## Host Cross Smoke
+PCC mode changes the target userland/rootfs compiler only.  It does not switch
+the kernel, N64 stage0, host bootstrap tools, or target a.out binary tools away
+from the existing flow.
 
-Current milestone status:
+## Native Rootfs Layout
 
-- `configure.ac`, generated `configure`, and `config.sub` recognize
-  `mips-rebsd` and `mips-retrobsd` targets.
-- `os/rebsd/ccconfig.h` defines ReBSD identity macros, RetroBSD compatibility
-  macros, MIPS big-endian/o32 macros, ReBSD include paths, `crt0.o`, and
-  default `-lpcc -lc -lpcc` linkage.
-- The MIPS backend selects big-endian output for `TARGET_BIG_ENDIAN`.
-- ReBSD disables unsupported MIPS ABI/PIC assembler pseudo-ops such as
-  `.abicalls`, `.cpload`, and `.cprestore`.
-- ReBSD C output suppresses `.file`, which the current ReBSD assembler rejects.
-- Out-of-tree host build succeeds in `/private/tmp/rebsd-pcc-build` with
-  install prefix `/private/tmp/rebsd-pcc-install`.
-- A trivial program compiles with
-  `/private/tmp/rebsd-pcc-install/bin/mips-rebsd-pcc` through assembly, object,
-  and linked a.out output using the ReBSD `as` and `ld`.
-- The linked smoke binary boots and runs under QEMU Malta when temporarily
-  staged as `/root/rebsd-pcc-smoke`; expected output `rebsd-pcc-smoke:6` was
-  observed.
-- `make -C sys/mips/malta smoke-host-portablecc` builds and installs a host
-  `mips-rebsd-pcc` cross compiler in `/private/tmp/rebsd-pcc-install`.
-- The expanded host smoke compiles `types-smoke.c`, `ll-smoke.c`, and
-  `ll-abi-smoke.c` through `-S`, `-c`, and linked a.out binaries.
-- The standalone FPU smoke compiles `pcc-fpu-smoke.c` through `-S`, `-c`, and
-  linked a.out output; generated assembly uses hardware double instructions
-  including `l.d`, `s.d`, `mul.d`, `c.lt.d`, and `bc1f`.
-- The expanded Malta runtime smoke passes with `types-status:0`, `ll-status:0`,
-  and `llabi-status:0`.
-- The standalone Malta FPU smoke passes with `fpu-status:0`.
+In a PCC-built rootfs the native C compiler is installed as:
 
-The ReBSD linker now supports `-L` and `-l` library search flags, so PCC can
-use normal library arguments while still producing ReBSD a.out output.
+- `/usr/bin/cc`
+- `/usr/bin/pcc`
+- `/usr/bin/cpp`
+- `/usr/libexec/pcc/cpp`
+- `/usr/libexec/pcc/ccom`
 
-The current ReBSD/MIPS native PCC regression gate has 316 total checks:
-286 compile/link pass, 30 expected compile/link fail, and 276/276 runtime
-candidates pass.  The same target-side gate passes on Malta and on the
-Malta64/R4000 QEMU profile used as the closest automated N64-class CPU check.
-The real N64 hardware smoke also passes with the normal PCC rootfs.
+The default rootfs does not install the legacy `cc`/`pcc`, old `cpp`, `lcc`,
+`lccom`, `smallc`, or `smlrc` compiler stack.  It also does not publish
+`/usr/bin/p++` or `/usr/libexec/pcc/cxxcom`.
+
+Development headers live under `/usr/include`.  Static system libraries and
+start files live under `/usr/lib`.  The root directory should not contain
+development trees such as `/include`, `/share/man`, or static libraries under
+`/lib`.
+
+Manual pages for the native toolchain are installed under `/usr/share/man`.
+Preformatted cat pages are generated with `nroff -Tascii` so target consoles do
+not see UTF-8 typographic hyphen bytes as corrupted text.
 
 ## Runtime Libraries
 
-`src/dev/pcc/pcc-libs/libpcc` is staged as `/usr/lib/libpcc.a` for ReBSD/MIPS.
-It is built as a ReBSD a.out archive by the same native runtime path that
-builds `crt0.o`, `libc.a`, and `libm.a`; the wrapper uses GCC for C-to-assembly
-for now, then the ReBSD assembler and archive tools for target object format.
+`src/dev/pcc/pcc-libs/libpcc` is staged as `/usr/lib/libpcc.a`.  It owns
+compiler-private helper routines that PCC-generated code may reference directly,
+including arithmetic, conversion, and stack-protector helpers.
 
-`libpccsoftfloat.a` is not staged for the current Malta/N64 hardware-FPU
-target.  Add it only if tests show a real soft-float dependency.
+Public C, POSIX, BSD, math, and compatibility APIs belong in ReBSD libc or libm,
+not in `libpcc.a`.  When a PCC-built userland exposes a missing public symbol,
+add the related API family to the owning system library instead of growing a
+collection of isolated stubs.
 
-`src/dev/pcc/pcc-libs/csu` has the upstream PCC `crtbegin.o`/`crtend.o`
-implementation for global constructors/destructors.  ReBSD does not enable it
-in the default C link path yet.  The current a.out toolchain and libc startup
-support flat linker-defined ctor/dtor ranges, which is enough for C
-constructor/destructor attributes in the current gate.  Full C++ still needs a
+`libpccsoftfloat.a` is not staged for the current hard-float Malta, Malta64, or
+N64 targets.  Add it only if a no-FPU target or a concrete test failure proves a
+runtime dependency.
+
+`src/dev/pcc/pcc-libs/csu` provides upstream PCC `crtbegin.o` and `crtend.o`,
+but ReBSD does not enable them in the default C link path.  The current a.out
+toolchain and libc startup support flat linker-defined ctor/dtor ranges, which
+is enough for C constructor/destructor attributes in the C gate.
+
+## Toolchain Requirements
+
+The ReBSD a.out toolchain is part of the supported PCC target:
+
+- `ld` accepts `-L`, `-l`, and `--sysroot[=DIR]`, defaults sysroot to `/`, and
+  applies sysroot only to standard library directories.
+- `ld` preserves 8-byte text/data/BSS alignment needed by MIPS FPU literals and
+  `double` storage.
+- `as` accepts the GCC/PCC MIPS syntax used by the imported backend, including
+  ctor/dtor sections, `.init_array`/`.fini_array`, `.eh_frame`, `neg`/`negu`,
+  absolute `la`, `symbol+-offset` expressions, UTF-8 symbol bytes, and the
+  relocation forms needed by PCC-built shell/login paths.
+- `as` has a VR4300-compatible instruction checking mode used by N64 and the
+  Malta64/R4000 compatibility gate.
+- Target `cc` invokes absolute `/usr/bin/as` and `/usr/bin/ld` so boot-time and
+  non-login environments do not depend on shell `PATH`.
+- Target `cc` honors `TMPDIR` for compiler temporaries.
+
+The imported PCC MIPS backend carries ReBSD fixes for big-endian `long long`,
+sub-word stack arguments, hard-float o32 helper calls, aggregate return ABI,
+stack alignment, unsigned narrow memory loads, MIPS unsigned comparisons,
+computed goto, static initializer string references, floating NaN/Inf folding,
+and FCSR-safe `DEBUGFP` oracle checks.
+
+## Validation Gates
+
+The current C gate is green in these environments:
+
+- Host cross smoke with ReBSD `as`/`ld`.
+- Malta QEMU PCC userland.
+- Malta64/R4000 QEMU PCC userland using
+  `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`.
+- Real N64 hardware normal PCC rootfs smoke.
+
+The native PCC regression gate currently reports:
+
+- 316 total compile/link checks.
+- 286 compile/link passes.
+- 30 expected compile/link failures.
+- 0 unexpected compile/link failures.
+- 276 runtime candidates.
+- 276 runtime passes.
+- 0 unexpected runtime failures.
+
+The expected compile/link failures are outside the current static C gate:
+
+- `gcccompat/typeof001` embeds x86 inline assembly constraints.
+- `misc/shlib3` requires shared-library/PIC support.
+- `pcclist/init004` requires TLS.
+
+The N64 hardware smoke uses `/root/pcc-smoke-all.sh` from the normal PCC rootfs.
+It covers native PCC compile/link/run, shell/login-sensitive paths, repeated
+`ccom`, libc/math smoke tests, DHCP receive support, and Linpack binaries built
+with both GCC and PCC.
+
+## Out Of Scope For The C Gate
+
+C++ is not published.  Before enabling `/usr/bin/p++` or
+`/usr/libexec/pcc/cxxcom`, ReBSD needs a real C++ frontend gate and a runtime
 startup policy for `crtbegin.o`/`crtend.o`, sentinel entries, constructor
-priorities, destructor ordering, and partial links before `/usr/bin/p++` is
-published.
+priorities, destructor ordering, and partial links.
 
-## MIPS Backend Fixes
+TLS and shared libraries are not supported by the current static a.out target.
+Keep the corresponding upstream PCC tests expected-fail unless ReBSD grows a
+concrete ABI and runtime policy for them.
 
-The old RetroBSD `src/cmd/ccom/arch-mips` backend is the reference for
-ReBSD-specific MIPS behavior while the imported PortableCC backend is brought
-up.  Fixes already carried into `src/dev/pcc/pcc/arch/mips` include:
+Locale-aware multibyte and UTF-8 wide-character semantics are not part of the
+current PCC milestone.  The existing wide-character libc surface documents the
+current single-byte execution character model.
 
-- suppressing unsupported ABI/PIC assembly for ReBSD: `.mdebug.abi32`,
-  `.abicalls`, `.cpload`, and `.cprestore`;
-- emitting `.set noreorder` for ReBSD so assembler pseudo-ops such as `la` are
-  not reordered into branch delay slots;
-- big-endian `long long` memory load/store and stack argument word order;
-- big-endian `CLASSB` register word selection and overlapping register moves;
-- direct `SOREG` conversion table entries for scalar and `long long`
-  narrowing/widening, matching the old backend's `offchg()` expectations;
-- big-endian offset handling for narrowing conversions and stack-passed
-  sub-word ABI slots;
-- static initializer emission for big-endian `long long`, `float`, `double`,
-  and `long double`;
-- synthetic floating literal symbols with target alignment before `defloc()`.
+## Build Artifacts
+
+Generated rootfs stages, native PCC build trees, port object files, ROM images,
+catman outputs, and temporary manifests are build artifacts.  They must stay
+ignored unless a generated file is already a tracked project source input.

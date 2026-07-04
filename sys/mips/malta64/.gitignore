@@ -1,0 +1,15 @@
+.deps/
+rootfs.stage/
+rootfs.generated.manifest
+machine
+sys
+vers.c
+*.o
+*.d
+*.elf
+*.bin
+*.img
+*.dis
+*.nm
+*.z64
+st[0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z]

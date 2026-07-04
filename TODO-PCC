@@ -648,9 +648,13 @@ userland build unchanged.
   - Decide whether ReBSD will grow locale-aware multibyte/wide semantics, or
     explicitly document the current single-byte execution character policy.
   - Audit BSD compatibility headers such as `cdefs.h`.
-- [ ] Document the final ReBSD/PCC target details and clean up build artifacts.
-  - Update `docs/PCC_PORTING_NOTES.md`.
-  - Keep generated build artifacts out of git unless they are tracked source
+- [x] Document the final ReBSD/PCC target details and clean up build artifacts.
+  - `docs/PCC_PORTING_NOTES.md` now records the supported C target contract,
+    native rootfs layout, runtime library policy, validation gates, and
+    intentionally out-of-scope C++/TLS/shared-library work.
+  - `.gitignore` coverage now keeps the generated native PCC build trees,
+    Malta64 stages, N64 PCC manifests/stamps, command binaries, Python caches,
+    and retroforth generated images out of git unless they are tracked source
     inputs.
 
 ## Phase 3: Native PCC in Malta Rootfs
@@ -1043,10 +1047,16 @@ userland build unchanged.
 
 ## Phase 5: Cleanup and Commit Gates
 
-- [ ] Remove temporary build-only hacks.
-- [ ] Keep generated build artifacts out of git unless they are source inputs
+- [x] Remove temporary build-only hacks.
+  - The normal PCC rootfs no longer uses the diagnostic shell-stub image,
+    explicit `/var` mount workaround, temporary `-DCROSS_COMPILING`, or N64
+    USBNet no-op compatibility symbols.
+  - `N64_DEBUG_UART_ONLY=1` remains as an intentional diagnostic build mode.
+- [x] Keep generated build artifacts out of git unless they are source inputs
   already tracked by the project.
-- [ ] Update `docs/PCC_PORTING_NOTES.md` with the final target details.
-- [ ] Run `git diff --check` outside imported upstream vendor whitespace where
+- [x] Update `docs/PCC_PORTING_NOTES.md` with the final target details.
+- [x] Run `git diff --check` outside imported upstream vendor whitespace where
   applicable.
-- [ ] Commit each stable milestone separately.
+- [x] Commit each stable milestone separately.
+  - This documentation/build-artifact cleanup is kept as its own milestone
+    after the rootfs layout and ASCII manpage commits.
