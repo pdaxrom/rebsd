@@ -884,6 +884,11 @@ test gate.
     `/root/dhcp-recv-smoke.sh`, `/root/linpack-gcc`, and `/root/linpack-pcc`,
     and the freshly installed N64 host PCC also emits `lbu`/`lhu` for
     `misc/ucharload001`.
+  - Real N64 hardware validation after this build passed
+    `/root/usbn-dhcp-smoke.sh`: `dhclient` received OFFER and ACK from
+    `192.168.2.1`, configured `usbn0` as `192.168.2.3/24`, installed the
+    default route and resolver, and pinged both the DHCP router and external
+    hosts (`ya.ru`) with 0% packet loss.
 - [ ] Add a libc regression for `printf(stdout)` followed by
   `freopen(stdout, ...)` and later `malloc()` traffic.
   - The `ccom -v` crash path strongly suggested this stream transition can
