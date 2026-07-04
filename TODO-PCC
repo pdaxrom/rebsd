@@ -572,11 +572,9 @@ userland build unchanged.
     3222 blocks used, and 2897 blocks free.
   - The latest debug image also isolates the PCC hardware run from unrelated
     N64 video/input/USB activity: `N64_DEBUG_UART_ONLY=1` removes the VI,
-    SI/joybus, and N64cart USB Ethernet backend objects from the kernel.  A
-    binary symbol/string check found no `n64usb`, `n64cart_usbecm`,
-    `n64cart_usbnet`, `n64_video`, `usbn0`, or `usb ethernet` path in
-    `pcc-debug.z64`; only no-op `usbnetattach`/`usbnpoll` remain to satisfy
-    the generated `ioconf.c` entry from the shared N64 `Config`.
+    SI/joybus, and N64cart USB Ethernet backend objects from the kernel.
+    `ioconf.debug-uart.o` provides a matching service list without USBNet, so
+    no no-op `usbnetattach`/`usbnpoll` compatibility symbols are needed.
   - Add the closest usable VR4300-like QEMU/Malta profile if we can make one
     boot, but do not treat the current default Malta 24Kf/MIPS32 pass as N64
     hardware readiness.
@@ -732,6 +730,7 @@ userland build unchanged.
     table contains no `usbnetattach`/`usbnpoll`, and the normal
     `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`
     path still links the real USBNet symbols.
+  - Real N64 hardware validation after this cleanup passed.
 - [x] Re-run the N64 native PCC debug image after absolute native tool paths,
   native FPU/FCSR probes, PCC FP-folding probes, and shell-stub sleep fix.
   - The old `manual__min` driver-stack failure is no longer present in the
@@ -930,19 +929,22 @@ userland build unchanged.
   `p++`.
   - The native build does not compile or publish `cxxcom` by default. A
     diagnostic `--with-cxx` build can still be used while bringing C++ up.
-- [ ] Formalize the N64 UART-only debug video policy.
+- [x] Formalize the N64 UART-only debug video policy.
   - `N64_DEBUG_UART_ONLY=1` filters out `video.o`, `video_console.o`, `si.o`,
-    `joybus.o`, `n64cart_usbnet.o`, `n64cart_usbecm.o`, and
+    `joybus.o`, `if_usbn.o`, `n64cart_usbnet.o`, `n64cart_usbecm.o`, and
     `n64usbnet_proto.o`; it removes `VIDEO_ENABLED`, `INPUT_ENABLED`, and
     `USBNET_ENABLED` from kernel flags so the VI/framebuffer path and N64cart
     USB Ethernet backend are not initialized during PCC hardware diagnosis.
-  - The current debug build keeps no-op `usbnetattach()`/`usbnpoll()` in
-    `if_usbn.c` only because the shared N64 `Config` still emits a
-    `usbnetattach` entry in generated `ioconf.c`. Replace that compatibility
-    stub with a dedicated minimal kconfig board/config if UART-only N64
-    diagnostics become a supported build profile.
-  - Keep this as a diagnostic build mode, or split it into a documented board
-    config if UART-only N64 images become a supported target.
+  - `N64_DEBUG_UART_ONLY=1` uses `ioconf.debug-uart.o`, whose service list has
+    no USBNet attach entry.  `if_usbn.c` no longer carries no-op debug
+    `usbnetattach()`/`usbnpoll()` symbols.
+  - Policy: this remains a diagnostic build mode for PCC hardware work, not a
+    separate supported N64 board profile.
+  - Verified locally with `make -C sys/mips/n64 N64_DEBUG_UART_ONLY=1
+    N64_USERLAND_COMPILER=pcc pcc-debug.z64` and normal
+    `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`;
+    the operator also reported that the updated image passes on real N64
+    hardware.
   - Basic C++ smoke attempts fail in the frontend before reaching ReBSD `as` or
     `ld`: constructor syntax is rejected, and a class/member-function compile
     fails with `compiler error: cdope missing op 93`.
