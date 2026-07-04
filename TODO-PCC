@@ -864,6 +864,26 @@ test gate.
   - N64 Linpack smoke in that log passes for both compilers at array size 120:
     GCC reports about 4.0 MFLOPS and PCC about 2.5 MFLOPS on the real
     hardware smoke configuration.
+- [x] Fix PCC MIPS unsigned narrow memory loads exposed by DHCP.
+  - PCC-generated `dhclient` rejected valid DHCP replies because the options
+    cookie byte `130` was loaded as a signed `char` value.  The MIPS backend
+    now emits `lbu` for `unsigned char` and `lhu` for `unsigned short`, while
+    keeping `lb`/`lh` for signed types.
+  - Added strict regression `misc/ucharload001` for volatile
+    `unsigned char` and `unsigned short` loads.
+  - Added `/root/dhcp-recv-smoke.sh` plus UDP input/output counters in
+    `netstat -s` so DHCP receive path failures are visible on Malta and N64.
+  - Verified with host-cross PCC assembly (`lbu`/`lhu` only for unsigned
+    loads), Malta/PCC `PCC_SMOKE_ALL_RC:0`, Malta/PCC
+    `DHCP_RECV_RC:0` and `DHCP_DNS_RC:0`, and Malta64/R4000/PCC
+    `NATIVE_PCC_SMOKE_RC:0` plus `DHCP_DNS_RC:0`.
+  - Clean N64 PCC image build after the fix completed with
+    `make -C sys/mips/n64 clean` followed by
+    `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64
+    preflight.z64`.  The generated rootfs is marked `.userland.pcc`, contains
+    `/root/dhcp-recv-smoke.sh`, `/root/linpack-gcc`, and `/root/linpack-pcc`,
+    and the freshly installed N64 host PCC also emits `lbu`/`lhu` for
+    `misc/ucharload001`.
 - [ ] Add a libc regression for `printf(stdout)` followed by
   `freopen(stdout, ...)` and later `malloc()` traffic.
   - The `ccom -v` crash path strongly suggested this stream transition can

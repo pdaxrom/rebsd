@@ -220,11 +220,16 @@ udp_stats(off, name)
 	read(kmem, (char *)&udpstat, sizeof (udpstat));
 	printf("%s:\n", name);
 #define	p(f, m) printf(m, udpstat.f, plural(udpstat.f))
+	p(udps_ipackets, "\t%lu total input packet%s\n");
+	p(udps_opackets, "\t%lu total output packet%s\n");
 	p(udps_hdrops, "\t%lu incomplete header%s\n");
 	p(udps_badlen, "\t%lu bad data length field%s\n");
 	p(udps_badsum, "\t%lu bad checksum%s\n");
 	p(udps_noport, "\t%lu no port%s\n");
 	p(udps_noportbcast, "\t%lu (arrived as bcast) no port%s\n");
+	p(udps_fullsock, "\t%lu packet%s not delivered, socket full\n");
+	printf("\t%lu pcb cache miss%s\n", udpstat.udpps_pcbcachemiss,
+	    udpstat.udpps_pcbcachemiss == 1 ? "" : "es");
 #undef p
 }
 

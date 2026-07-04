@@ -70,6 +70,11 @@ LINPACK_SMOKE_MANIFEST ?= /private/tmp/rebsd-linpack-smoke.manifest
 LINPACK_SMOKE_LOG ?= /private/tmp/rebsd-linpack-smoke.log
 LINPACK_SMOKE_ARRAY_SIZE ?= 120
 LINPACK_SMOKE_MIN_SECONDS ?= 1
+MIPS_LINPACK_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.linpack-smoke
+MIPS_ROOTFS_EXTRA_STAMPS =
+ifeq ($(MIPS_ROOTFS_COMPILER),pcc)
+MIPS_ROOTFS_EXTRA_STAMPS += $(MIPS_LINPACK_ROOTFS_STAMP)
+endif
 MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
 NATIVE_PCC_SMOKE_LOG ?= /private/tmp/rebsd-native-pcc-smoke.log
 
@@ -235,6 +240,15 @@ linpack-smoke-build: smoke-host-portablecc $(LINPACK_SMOKE_SCRIPT) \
 	    --ld $(abspath $(PCC_HOST_LD)) \
 	    --pcc $(abspath $(PCC_HOST_PCC))
 
+$(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_STAMP) linpack-smoke-build
+	cp -p $(LINPACK_SMOKE_OUT)/linpack-gcc \
+	    $(MIPS_ROOTFS_STAGE)/root/linpack-gcc
+	cp -p $(LINPACK_SMOKE_OUT)/linpack-pcc \
+	    $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
+	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-gcc \
+	    $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
+	touch $@
+
 linpack-smoke-stage: linpack-smoke-build $(MIPS_ROOTFS_BUILD_MANIFEST)
 	python3 $(LINPACK_SMOKE_SCRIPT) stage \
 	    --out $(LINPACK_SMOKE_OUT) \
@@ -325,7 +339,7 @@ $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
 	    $(MIPS_ROOTFS_STAGE)/usr/include/machine/types.h
 	touch $@
 
-$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_COMMON_MANIFEST) $(MIPS_ROOTFS_BOARD_MANIFEST) $(MIPS_ROOTFS_STAMP)
+$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_COMMON_MANIFEST) $(MIPS_ROOTFS_BOARD_MANIFEST) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_EXTRA_STAMPS)
 	cp $(MIPS_ROOTFS_COMMON_MANIFEST) $@
 	find $(MIPS_ROOTFS_STAGE)/usr/include -type d | sort | while read path; do \
 	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
@@ -343,6 +357,10 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_COMMON_MANIFEST) $(MIPS_ROOTFS_BOAR
 	    printf '\nsymlink %s\ntarget %s\n' "$$rel" "$$target" >> $@; \
 	done
 	cat $(MIPS_ROOTFS_BOARD_MANIFEST) >> $@
+	if [ "$(MIPS_ROOTFS_COMPILER)" = "pcc" ]; then \
+	    printf '\nfile /root/linpack-gcc\nmode 0775\n' >> $@; \
+	    printf '\nfile /root/linpack-pcc\nmode 0775\n' >> $@; \
+	fi
 
 rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_BUILD_MANIFEST)
 	rm -f $@

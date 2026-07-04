@@ -90,15 +90,16 @@ def command_stage(args):
         dst = rootfs / "root" / name
         shutil.copy2(src, dst)
         os.chmod(dst, 0o775)
-        entries.append(f"file /root/{name}\nmode 0775")
+        entries.append((f"/root/{name}", f"file /root/{name}\nmode 0775"))
 
     text = manifest.read_text()
     with manifest_out.open("w") as f:
         f.write(text)
         if text and not text.endswith("\n"):
             f.write("\n")
-        for entry in entries:
-            f.write(entry + "\n")
+        for path, entry in entries:
+            if f"file {path}\n" not in text:
+                f.write(entry + "\n")
 
     print(f"staged {len(entries)} linpack binaries")
     print(manifest_out)

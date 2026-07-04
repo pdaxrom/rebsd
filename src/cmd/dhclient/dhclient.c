@@ -189,8 +189,12 @@ parse_options(pkt, lease)
     cp = pkt->options;
     end = pkt->options + sizeof(pkt->options);
 
-    if (cp[0] != 99 || cp[1] != 130 || cp[2] != 83 || cp[3] != 99)
+    if (cp[0] != 99 || cp[1] != 130 || cp[2] != 83 || cp[3] != 99) {
+        if (verbose)
+            printf("dhclient: bad options cookie %u.%u.%u.%u\n",
+                cp[0], cp[1], cp[2], cp[3]);
         return 0;
+    }
     cp += 4;
 
     while (cp < end) {
@@ -353,13 +357,35 @@ recv_dhcp(fd, xid, want, lease, seconds)
             perror("dhclient: recvfrom");
             return 0;
         }
-        if (n < 240 || pkt.op != DHCP_BOOTREPLY ||
-            ntohl(pkt.xid) != xid)
+        if (verbose)
+            printf("dhclient: recv n=%d op=%u xid=%x want=%d from=%s:%u\n",
+                n, pkt.op, ntohl(pkt.xid), want,
+                iptoa(from.sin_addr.s_addr), ntohs(from.sin_port));
+        if (n < 240) {
+            if (verbose)
+                printf("dhclient: ignore short packet n=%d\n", n);
             continue;
+        }
+        if (pkt.op != DHCP_BOOTREPLY) {
+            if (verbose)
+                printf("dhclient: ignore op=%u\n", pkt.op);
+            continue;
+        }
+        if (ntohl(pkt.xid) != xid) {
+            if (verbose)
+                printf("dhclient: ignore xid=%x expected=%x\n",
+                    ntohl(pkt.xid), xid);
+            continue;
+        }
 
         memset(lease, 0, sizeof(*lease));
         lease->yiaddr = pkt.yiaddr;
         msgtype = parse_options(&pkt, lease);
+        if (verbose)
+            printf("dhclient: recv msgtype=%d yiaddr=%s server=%s mask=%s router=%s dns=%d\n",
+                msgtype, iptoa(lease->yiaddr), iptoa(lease->server),
+                iptoa(lease->mask), iptoa(lease->router),
+                lease->dns_count);
         if (msgtype == want)
             return 1;
     }

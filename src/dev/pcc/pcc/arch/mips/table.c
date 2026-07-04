@@ -1585,17 +1585,31 @@ struct optab table[] = {
 		"	nop\n", },
 
 { UMUL, INAREG,
-	SANY,	TSHORT|TUSHORT,
-	SOREG,	TSHORT|TUSHORT,
+	SANY,	TSHORT,
+	SOREG,	TSHORT,
 		NAREG,	   RESC1,
-		"	lh A1,AL		# (u)short load\n"
+		"	lh A1,AL		# short load\n"
 		"	nop\n", },
 
 { UMUL, INAREG,
-	SANY,	TCHAR|TUCHAR,
-	SOREG,	TCHAR|TUCHAR,
+	SANY,	TUSHORT,
+	SOREG,	TUSHORT,
 		NAREG,	   RESC1,
-		"	lb A1,AL		# (u)char load\n"
+		"	lhu A1,AL		# ushort load\n"
+		"	nop\n", },
+
+{ UMUL, INAREG,
+	SANY,	TCHAR,
+	SOREG,	TCHAR,
+		NAREG,	   RESC1,
+		"	lb A1,AL		# char load\n"
+		"	nop\n", },
+
+{ UMUL, INAREG,
+	SANY,	TUCHAR,
+	SOREG,	TUCHAR,
+		NAREG,	   RESC1,
+		"	lbu A1,AL		# uchar load\n"
 		"	nop\n", },
 
 { UMUL, INBREG,
