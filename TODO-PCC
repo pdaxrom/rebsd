@@ -704,8 +704,17 @@ not active items for the current C/static-a.out PCC milestone.
     division/modulo, multiplication, and double/unsigned-double conversion
     helpers.  The smoke runs through both `/usr/bin/cc` and `/usr/bin/pcc`
     and is included in `/root/pcc-smoke-all.sh`.
-  - Still worth expanding: larger pointer/aliasing stress, shell build
-    workloads, and additional real utility compile/run workloads.
+  - Covered now by `/root/utility-workload-smoke.sh`: real ReBSD utility
+    rebuilds for `basename`, `sum`, and `size` from staged `src/cmd` sources,
+    through both `/usr/bin/cc` and `/usr/bin/pcc`.  This covers normal
+    utility source, stdio file I/O, `getopt`, multi-source links, and a.out
+    header parsing through `aoutio.c`.
+  - Covered now by `/root/wide-policy-smoke.sh`: ReBSD's current 16-bit
+    `wchar_t`, ASCII-only byte/wide conversion contract, non-ASCII rejection,
+    wide string/memory helpers, and wide numeric parsers through both native
+    compiler driver names.
+  - Still worth expanding: larger pointer/aliasing stress and more shell build
+    workloads.
 - [x] Make `fsutil` fail hard on rootfs population errors.
   - The first 4 MB N64 PCC debug rootfs exposed `inode_alloc: out of in-core
     inodes` and missing file/device creation while `fsutil --new` still
@@ -718,7 +727,7 @@ not active items for the current C/static-a.out PCC milestone.
     (`FSUTIL_*_RC:255`), a positive image plus `fsutil --check`, Malta
     `MIPS_ROOTFS_COMPILER=pcc rootfs.img`, and N64
     `N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
-- [ ] Replace temporary compatibility stubs with real policy.
+- [x] Replace temporary compatibility stubs with real policy.
   - Core wide-char and wide-stdio APIs now live in libc as a coherent
     ASCII/byte-oriented ReBSD wide ABI surface.
   - C99 floating-point classification and NaN constructor APIs now live in
@@ -731,6 +740,13 @@ not active items for the current C/static-a.out PCC milestone.
   - `sys/include/cdefs.h` now has an explicit ReBSD/PCC compatibility surface
     and a target-side native smoke gate.  Keep future additions as named policy
     rather than adding silent catch-all macros.
+  - `docs/PCC_PORTING_NOTES.md` now records the compatibility ownership
+    policy: compiler-runtime helpers stay in `libpcc.a`, public C/POSIX/BSD
+    and math APIs live in libc/libm, and locale/C++/TLS/shared-library
+    semantics must not be hidden behind placeholder functions.
+  - `/root/wide-policy-smoke.sh` is now part of `/root/pcc-smoke-all.sh`, so
+    the current ASCII-only wide-char policy is a runtime contract instead of
+    documentation only.
 - [x] Document the final ReBSD/PCC target details and clean up build artifacts.
   - `docs/PCC_PORTING_NOTES.md` now records the supported C target contract,
     native rootfs layout, runtime library policy, validation gates, and
@@ -1078,11 +1094,14 @@ not active items for the current C/static-a.out PCC milestone.
   - Current policy remains single-byte/ASCII-oriented. Full locale-aware
     multibyte conversion and non-ASCII wide I/O are still future policy work,
     not `libpcc` work.
-- [ ] Decide and document the full locale/multibyte policy for wide-char APIs.
+- [x] Decide and document the full locale/multibyte policy for wide-char APIs.
   - Current `mbr*`/`wcrtomb`/`mbstowcs`/`wcstombs` helpers intentionally
     implement the ReBSD single-byte ASCII execution character model.
   - If ReBSD later adds locale or UTF-8 semantics, update the whole conversion
     family and error policy together instead of changing isolated functions.
+  - `docs/PCC_PORTING_NOTES.md` now states this as the current C milestone
+    contract, and `/root/wide-policy-smoke.sh` verifies ASCII conversion plus
+    non-ASCII rejection with both `cc` and `pcc`.
 - [x] Audit and complete `sys/include/cdefs.h`.
   - Current supported ReBSD/PCC surface includes declaration wrappers, `__P`,
     BSD string/concatenation helpers, compiler attribute shims used by the tree,

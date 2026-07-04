@@ -67,6 +67,11 @@ N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_COMMON_DIR) \
                    $(N64_ROOTFS_BOARD_DIR) -type f 2>/dev/null)
 N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_COMMON_DIR) \
                   $(N64_ROOTFS_BOARD_DIR) -type d 2>/dev/null)
+N64_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
+                         $(TOPSRC)/src/cmd/sum.c \
+                         $(TOPSRC)/src/cmd/size.c \
+                         $(TOPSRC)/src/cmd/aoutio.c \
+                         $(TOPSRC)/src/cmd/aoutio.h
 N64_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
                    $(TOPSRC)/sys/mips/include $(TOPSRC)/sys/mips/n64/include \
                    -type f -name '*.h' \
@@ -528,6 +533,7 @@ $(N64_LINPACK_ROOTFS_STAMP): $(N64_ROOTFS_USER_STAMP) $(N64_HOST_PCC) \
 	touch $@
 
 $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
+    $(N64_UTILITY_SMOKE_SRCS) \
     $(N64_TERMCAP) $(N64_INCLUDE_SRCS) $(N64_INCLUDE_LINKS) \
     $(N64_NATIVE_AS_SMOKE_SCRIPT) \
     $(N64_NATIVE_AS_MATRIX_SCRIPT)
@@ -535,6 +541,10 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 	mkdir -p $(N64_ROOTFS_STAGE)
 	cp -pR $(N64_ROOTFS_COMMON_DIR)/. $(N64_ROOTFS_STAGE)/
 	cp -pR $(N64_ROOTFS_BOARD_DIR)/. $(N64_ROOTFS_STAGE)/
+	mkdir -p $(N64_ROOTFS_STAGE)/root/utility-src
+	for src in $(N64_UTILITY_SMOKE_SRCS); do \
+	    cp -p $$src $(N64_ROOTFS_STAGE)/root/utility-src/; \
+	done
 	cp -p $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
 	mkdir -p $(N64_ROOTFS_USR_INCLUDE)
 	cp -pR $(TOPSRC)/include/. $(N64_ROOTFS_USR_INCLUDE)/

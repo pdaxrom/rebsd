@@ -28,8 +28,10 @@ the public headers must therefore report the target `long double` limits rather
 than assuming an extended 80-bit or 128-bit format.
 
 ReBSD/MIPS keeps `wchar_t` as a 16-bit ABI type for PCC and libc.  The current
-wide-character conversion policy is single-byte ASCII-oriented; full locale or
-UTF-8 semantics are future policy work.
+wide-character conversion policy is single-byte ASCII-oriented: byte/wide
+conversion routines accept `0x00..0x7f`, reject non-ASCII bytes or wide
+characters with `(size_t)-1` or `WEOF` as appropriate, and keep `mbstate_t`
+stateless.  Full locale or UTF-8 semantics are future policy work.
 
 `sys/cdefs.h` is a supported BSD-compatibility surface for the C gate.  It
 provides declaration wrappers, `__P`, BSD string/concatenation helpers, selected
@@ -91,6 +93,18 @@ Public C, POSIX, BSD, math, and compatibility APIs belong in ReBSD libc or libm,
 not in `libpcc.a`.  When a PCC-built userland exposes a missing public symbol,
 add the related API family to the owning system library instead of growing a
 collection of isolated stubs.
+
+The current C milestone treats compatibility surfaces as explicit library
+policy, not as compiler-runtime helpers:
+
+- C99 math classification, NaN constructors, and sign tests are libc/libm
+  owned.
+- Wide-character strings, memory routines, numeric parsers, byte/wide
+  conversion helpers, and wide stdio are libc owned.
+- `sys/cdefs.h` compatibility macros are named and limited to the C/static
+  a.out target contract.
+- Locale-aware multibyte, UTF-8, C++ startup, TLS, and shared-library behavior
+  are intentionally not hidden behind placeholder functions.
 
 `libpccsoftfloat.a` is not staged for the current hard-float Malta, Malta64, or
 N64 targets.  Add it only if a no-FPU target or a concrete test failure proves a
@@ -163,8 +177,8 @@ The expected compile/link failures are target-aware policy cases for
 
 The N64 hardware smoke uses `/root/pcc-smoke-all.sh` from the normal PCC rootfs.
 It covers native PCC compile/link/run, shell/login-sensitive paths, repeated
-`ccom`, libc/math smoke tests, DHCP receive support, and Linpack binaries built
-with both GCC and PCC.
+`ccom`, libc/math/wide-character policy smoke tests, DHCP receive support, real
+small utility rebuilds, and Linpack binaries built with both GCC and PCC.
 
 ## Out Of Scope For The C Gate
 

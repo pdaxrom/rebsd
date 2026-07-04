@@ -117,10 +117,30 @@ file /root/libc-abi-smoke.c
 file /root/build-workload-smoke.sh
 mode 0775
 
+file /root/utility-workload-smoke.sh
+mode 0775
+
+dir /root/utility-src
+
+file /root/utility-src/aoutio.c
+
+file /root/utility-src/aoutio.h
+
+file /root/utility-src/basename.c
+
+file /root/utility-src/size.c
+
+file /root/utility-src/sum.c
+
 file /root/math-class-smoke.sh
 mode 0775
 
 file /root/math-class-smoke.c
+
+file /root/wide-policy-smoke.sh
+mode 0775
+
+file /root/wide-policy-smoke.c
 
 file /root/linpack.c
 
