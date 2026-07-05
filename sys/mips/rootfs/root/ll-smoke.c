@@ -8,6 +8,14 @@ struct llrec {
 	int c;
 };
 
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+#define EXPECT_LLREC_OFFSET 4
+#define EXPECT_LLREC_SIZE 16
+#else
+#define EXPECT_LLREC_OFFSET 8
+#define EXPECT_LLREC_SIZE 24
+#endif
+
 llong gs = 0x1122334455667788LL;
 ullong gu = 0x8877665544332211ULL;
 struct llrec gr = { 0x12345678, 0x1122334455667788LL, 0x55667788 };
@@ -193,9 +201,9 @@ main()
 		return bad("stack double arg");
 
 	r = gr;
-	if (sizeof(struct llrec) != 24)
+	if (sizeof(struct llrec) != EXPECT_LLREC_SIZE)
 		return bad("struct size");
-	if ((int)((char *)&r.b - (char *)&r) != 8)
+	if ((int)((char *)&r.b - (char *)&r) != EXPECT_LLREC_OFFSET)
 		return bad("struct offset");
 	if (r.a != 0x12345678 ||
 	    r.b != 0x1122334455667788LL ||

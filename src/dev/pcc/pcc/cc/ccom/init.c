@@ -372,7 +372,8 @@ zbits(OFFSZ off, int fsz)
 
 #ifdef PCC_DEBUG
 	if (idebug)
-		printf("zbits off " CONFMT ", fsz %d inbits %d\n", off, fsz, inbits);
+		printf("zbits off " CONFMT ", fsz %d inbits %d\n",
+		    (CONSZ)off, fsz, inbits);
 #endif
 #if TARGET_ENDIAN == TARGET_BE
 	if ((m = (inbits % SZCHAR))) {
@@ -625,7 +626,7 @@ findoff(struct initctx *ctx)
 	}
 #ifdef PCC_DEBUG
 	if (idebug>1) {
-		printf("findoff: off " CONFMT "\n", off);
+		printf("findoff: off " CONFMT "\n", (CONSZ)off);
 		prtstk(ctx->pstk);
 	}
 #endif
@@ -765,7 +766,8 @@ insbf(struct initctx *ctx, OFFSZ off, int fsz, int val)
 
 #ifdef PCC_DEBUG
 	if (idebug > 1)
-		printf("insbf: off " CONFMT " fsz %d val %d\n", off, fsz, val);
+		printf("insbf: off " CONFMT " fsz %d val %d\n",
+		    (CONSZ)off, fsz, val);
 #endif
 
 	if (fsz == 0)
@@ -855,7 +857,8 @@ endinit(struct initctx *ctx, int seg)
 #ifdef PCC_DEBUG
 			if (idebug > 1) {
 				printf("off " CONFMT " size %d val " CONFMT " type ",
-				    ll->begsz+il->off, il->fsz, glval(il->n));
+				    (CONSZ)(ll->begsz+il->off), il->fsz,
+				    glval(il->n));
 				tprint(il->n->n_type, 0);
 				printf("\n");
 			}

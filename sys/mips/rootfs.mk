@@ -211,9 +211,11 @@ MIPS_NATIVE_LIBS = crt0.o libc.a libm.a libpcc.a
 MIPS_NATIVE_SOFTFLOAT_LIBS = libpcc.a
 MIPS_NATIVE_TARGET_FLAGS_vr4300 = $(MIPS_ROOTFS_ENDIAN_CPP) -DTARGET_VR4300 \
                                   -DTARGET_MIPS_STRICT_ALIGN64 \
+                                  -DTARGET_MIPS_SH_ALLOC_GUARD \
                                   -DTARGET_NO_ABICALLS
 MIPS_NATIVE_TARGET_FLAGS_mips32r2 = $(MIPS_ROOTFS_ENDIAN_CPP) \
                                     -DTARGET_MIPS32R2 \
+                                    -DTARGET_MIPS_SH_ALLOC_GUARD \
                                     -DTARGET_NO_ABICALLS
 MIPS_NATIVE_TARGET_FLAGS ?= $(MIPS_NATIVE_TARGET_FLAGS_$(MIPS_ROOTFS_CPU))
 MIPS_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
@@ -703,11 +705,11 @@ rootfs.o: rootfs.img
 
 .PHONY: mips-rootfs-userland-clean mips-rootfs-clean
 mips-rootfs-userland-clean:
-	$(MIPS_SRC_MAKE) clean
-	$(MIPS_AWK_MAKE) clean
+	@MAKEFLAGS="$(MAKEFLAGS) -s" $(MIPS_SRC_MAKE) clean
+	@MAKEFLAGS="$(MAKEFLAGS) -s" $(MIPS_AWK_MAKE) clean
 
 mips-rootfs-clean: mips-rootfs-userland-clean
-	rm -rf $(MIPS_ROOTFS_CLEAN_ARTIFACTS)
+	@rm -rf $(MIPS_ROOTFS_CLEAN_ARTIFACTS)
 
 $(TOPSRC)/src/crt0.o: $(MIPS_NATIVE_CRT0_SRC)
 	$(MIPS_ROOTFS_GCC_PREFIX)gcc $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) -x assembler-with-cpp -c $< -o $@
@@ -718,8 +720,13 @@ $(MIPS_ROOTFS_USERLAND_STAMP): $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(MIPS_LIBCURSES_SRCS) $(MIPS_LIBVMF_SRCS) $(MIPS_LIBREADLINE_SRCS) \
     $(MIPS_LIBTCL_SRCS) $(MIPS_USER_SRCS) $(MIPS_AWK_SRCS) \
     $(MIPS_USERLAND_EXTRA_DEPS) $(MIPS_ROOTFS_MAKEFILE) Makefile
-	$(MIPS_SRC_MAKE) clean all
-	$(MIPS_AWK_MAKE) clean awk
+	$(MIPS_SRC_MAKE) clean
+	if [ "$(MIPS_ROOTFS_COMPILER)" = "gcc" ]; then \
+	    $(MAKE) $(TOPSRC)/src/crt0.o; \
+	fi
+	$(MIPS_SRC_MAKE) all
+	$(MIPS_AWK_MAKE) clean
+	$(MIPS_AWK_MAKE) awk
 	rm -f mips-userland*.stamp n64-userland*.stamp
 	touch $@
 

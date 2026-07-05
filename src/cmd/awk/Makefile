@@ -23,6 +23,8 @@ awk.h:          y.tab.h
 
 $(FILES):	awk.h awk.def.h
 
+awk.lx.o:	CFLAGS += -Wno-error
+
 token.h:	awk.h tokenscript
 		ex - < tokenscript
 

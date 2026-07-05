@@ -391,7 +391,7 @@ TWORD ctype(TWORD);
 void inval(CONSZ, int, P1ND *);
 int ninval(CONSZ, int, P1ND *);
 void infld(CONSZ, int, CONSZ);
-void zbits(CONSZ, int);
+void zbits(OFFSZ, int);
 void instring(struct symtab *);
 void inwstring(struct symtab *);
 void plabel(int);

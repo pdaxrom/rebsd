@@ -9,10 +9,18 @@ asm_check_reg:
 	bne	$a0,$t0,Lasm_check_reg_done
 	nop
 	li	$t0,0x11223344
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+	bne	$a1,$t0,Lasm_check_reg_done
+#else
 	bne	$a2,$t0,Lasm_check_reg_done
+#endif
 	nop
 	li	$t0,0x55667788
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+	bne	$a2,$t0,Lasm_check_reg_done
+#else
 	bne	$a3,$t0,Lasm_check_reg_done
+#endif
 	nop
 	li	$v0,1
 Lasm_check_reg_done:
@@ -24,8 +32,13 @@ Lasm_check_reg_done:
 	.globl asm_echo_reg
 	.ent asm_echo_reg
 asm_echo_reg:
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+	move	$v0,$a1
+	move	$v1,$a2
+#else
 	move	$v0,$a2
 	move	$v1,$a3
+#endif
 	jr	$ra
 	nop
 	.end asm_echo_reg
@@ -44,11 +57,19 @@ asm_check_stack3:
 	li	$t0,3
 	bne	$a2,$t0,Lasm_check_stack3_done
 	nop
-	lw	$t0,16($sp)
 	li	$t1,0x11223344
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+	bne	$a3,$t1,Lasm_check_stack3_done
+#else
+	lw	$t0,16($sp)
 	bne	$t0,$t1,Lasm_check_stack3_done
+#endif
 	nop
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+	lw	$t0,16($sp)
+#else
 	lw	$t0,20($sp)
+#endif
 	li	$t1,0x55667788
 	bne	$t0,$t1,Lasm_check_stack3_done
 	nop
@@ -106,8 +127,13 @@ asm_call_c_check:
 	addiu	$sp,$sp,-32
 	sw	$ra,28($sp)
 	li	$a0,0x33
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+	li	$a1,0x01020304
+	li	$a2,0x05060708
+#else
 	li	$a2,0x01020304
 	li	$a3,0x05060708
+#endif
 	jal	c_check_reg
 	nop
 	lw	$ra,28($sp)

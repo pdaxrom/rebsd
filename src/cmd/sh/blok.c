@@ -19,7 +19,7 @@ struct blk *bloktop; /* top of arena (last blok) */
 
 char *brkbegin;
 
-#ifdef TARGET_VR4300
+#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
 static void
 sh_diag_puts(const char *s)
 {
@@ -149,7 +149,7 @@ void addblok(unsigned reqd)
     reqd += brkincr;
     reqd &= ~(brkincr - 1);
     blokp = bloktop;
-#ifdef TARGET_VR4300
+#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
     {
         char *needbrk;
         unsigned grow;
@@ -181,7 +181,7 @@ void free(void *ap)
     register struct blk *p;
 
     if ((p = ap) && p < bloktop) {
-#ifdef TARGET_VR4300
+#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
         if (sh_bad_blk(p) || p <= (struct blk *)brkbegin)
             sh_alloc_corrupt("free-arg", p, NIL, 0);
 #endif
@@ -189,7 +189,7 @@ void free(void *ap)
         chkbptr(p);
 #endif
         --p;
-#ifdef TARGET_VR4300
+#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
         if (sh_bad_blk(p))
             sh_alloc_corrupt("free-head", p, NIL, 0);
 #endif

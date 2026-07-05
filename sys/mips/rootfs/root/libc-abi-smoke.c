@@ -223,17 +223,27 @@ jump_out(int value)
 static int
 check_setjmp(void)
 {
-    int rc;
+	int rc;
 
-#if defined(__mips__) && !defined(__mips_hard_float)
-    return bad("mips hard-float macro");
+#if defined(__mips__)
+# if defined(__mips_hard_float) && defined(__mips_soft_float)
+	return bad("mips float macro conflict");
+# endif
+# if !defined(__mips_hard_float) && !defined(__mips_soft_float)
+	return bad("mips float macro missing");
+# endif
+# if defined(__mips_hard_float)
+	if (sizeof(jump_env) != 47 * sizeof(int))
+		return bad("jmp_buf hard-float size");
+# else
+	if (sizeof(jump_env) != 14 * sizeof(int))
+		return bad("jmp_buf soft-float size");
+# endif
 #endif
-    if (sizeof(jump_env) < 47 * sizeof(int))
-        return bad("jmp_buf hard-float size");
 
-    rc = setjmp(jump_env);
-    if (rc == 0)
-        jump_out(23);
+	rc = setjmp(jump_env);
+	if (rc == 0)
+		jump_out(23);
     if (rc != 23)
         return bad("setjmp value");
     return 0;

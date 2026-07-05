@@ -87,6 +87,11 @@
 #define NARL	NEEDS(NREG(A, 1), NSL(A), NSR(A))
 #define NBRL	NEEDS(NREG(B, 1), NSL(B), NSR(B))
 #define NBBL	NEEDS(NREG(A, 1), NREG(B, 1), NSL(B))
+#define NICALL	NEEDS(NLEFT(T9))
+#define NICALLA	NEEDS(NREG(A, 1), NLEFT(T9))
+#define NICALLB	NEEDS(NREG(B, 1), NLEFT(T9))
+#define NICALLC	NEEDS(NREG(C, 1), NLEFT(T9))
+#define XSLT9(c) NEEDS(NREG(c, 1), NSL(c), NLEFT(T9))
 #define NSCBC	NEEDS(NREG(C, 1), NLEFT(A0A1), NRES(F0))
 #ifdef os_rebsd
 #define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(V0V1))
@@ -924,10 +929,10 @@ struct optab table[] = {
 	SBREG,	TLONGLONG|TULONGLONG,
 	SANY,	TANY,
 		NABSL,	RESC2,
-		"	subu A1,$zero,AL\n"
-		"	subu U1,$zero,UL\n"
-		"	sltu A2,$zero,A1\n"
-		"	subu U1,U1,A2\n", },
+		"	subu A2,$zero,AL\n"
+		"	subu U2,$zero,UL\n"
+		"	sltu A1,$zero,A2\n"
+		"	subu U2,U2,A1\n", },
 
 { UMINUS,	INCREG,
 	SCREG,	TFLOAT,
@@ -1585,9 +1590,8 @@ struct optab table[] = {
 { CALL,		FOREFF,
 	SAREG,		TANY,
 	SANY,		TANY,
-		0,	0,
+		NICALL,	0,
 		"	subu $sp,$sp,16 # call (args, no result) to reg\n"
-		"	move $25,AL\n"
 		"	jal $25\n"
 		"	nop\n"
 		"ZC", },
@@ -1595,17 +1599,15 @@ struct optab table[] = {
 { UCALL,	FOREFF,
 	SAREG,		TANY,
 	SANY,		TANY,
-		0,	0,
-		"	move $25,AL\n"
+		NICALL,	0,
 		"	jal $25			# call (no args, no result) to reg\n"
 		"	nop\n", },
 
 { CALL,		INAREG,
 	SAREG,		TANY,
 	SAREG,		TANY,
-		NAREG,	   RESC1,  /* should be 0 */
+		NICALLA,   RESC1,  /* should be 0 */
 		"	subu $sp,$sp,16 # call (args, result) to reg\n"
-		"	move $25,AL\n"
 		"	jal $25\n"
 		"	nop\n"
 		"ZC", },
@@ -1613,17 +1615,15 @@ struct optab table[] = {
 { UCALL,	INAREG,
 	SAREG,		TANY,
 	SAREG,		TANY,
-		NAREG,	   RESC1,  /* should be 0 */
-		"	move $25,AL\n"
+		NICALLA,   RESC1,  /* should be 0 */
 		"	jal $25		# call (no args, result) to reg\n"
 		"	nop\n", },
 
 { CALL,		INBREG,
 	SAREG,		TANY,
 	SBREG,		TANY,
-		NBREG,	   RESC1,  /* should be 0 */
+		NICALLB,   RESC1,  /* should be 0 */
 		"	subu $sp,$sp,16 # call (args, result) to reg\n"
-		"	move $25,AL\n"
 		"	jal $25\n"
 		"	nop\n"
 		"ZC", },
@@ -1631,26 +1631,23 @@ struct optab table[] = {
 { UCALL,	INBREG,
 	SAREG,		TANY,
 	SBREG,		TANY,
-		NBREG,	   RESC1,  /* should be 0 */
-		"	move $25,AL\n"
+		NICALLB,   RESC1,  /* should be 0 */
 		"	jal $25			# call (no args, result) to reg\n"
 		"	nop\n", },
 
 { CALL,		INCREG,
 	SAREG,		TANY,
 	SCREG,		TANY,
-		NCREG,	   RESC1,  /* should be 0 */
+		NICALLC,   RESC1,  /* should be 0 */
 		"	subu $sp,$sp,16 # call (args, result) to reg\n"
-		"	move $25,AL\n"
 		"	jal $25\n"
 		"	nop\n"
 		"ZC", },
 
 { UCALL,	INCREG,
+	SAREG,		TANY,
 	SCREG,		TANY,
-	SCREG,		TANY,
-		NCREG,	   RESC1,  /* should be 0 */
-		"	move $25,AL\n"
+		NICALLC,   RESC1,  /* should be 0 */
 		"	jal $25			# call (no args, result) to reg\n"
 		"	nop\n", },
 
@@ -1666,8 +1663,7 @@ struct optab table[] = {
 { USTCALL,	FOREFF,
 	SAREG,		TANY,
 	SANY,		TANY,
-		0,	0,
-		"	move $25,AL\n"
+		NICALL,	0,
 		"	jal $25\n"
 		"	nop\n", },
 
@@ -1681,8 +1677,7 @@ struct optab table[] = {
 { USTCALL,	INAREG,
 	SAREG,		TANY,
 	SANY,		TANY,
-		XSL(A), RESC1,
-		"	move $25,AL\n"
+		XSLT9(A), RESC1,
 		"	jal $25\n"
 		"	nop\n", },
 
@@ -1698,9 +1693,8 @@ struct optab table[] = {
 { STCALL,      FOREFF,
 	SAREG,	TANY,
 	SANY,		TANY,
-		0,	0,
+		NICALL,	0,
 		"	subu $sp,$sp,16\n"
-		"	move $25,AL\n"
 		"	jal $25\n"
 		"	nop\n"
 		"ZC", },
@@ -1717,9 +1711,8 @@ struct optab table[] = {
 { STCALL,      INAREG,
 	SAREG,	TANY,
 	SANY,		TANY,
-		XSL(A),	RESC1,
+		XSLT9(A),	RESC1,
 		"	subu $sp,$sp,16\n"
-		"	move $25,AL\n"
 		"	jal $25\n"
 		"	nop\n"
 		"ZC", },

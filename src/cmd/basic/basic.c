@@ -287,7 +287,7 @@ void delay (int msec)
     usleep (msec * 1000);
 }
 
-int sigint(int sn)
+void sigint(int sn)
 {
     nocbreak();
     echo();

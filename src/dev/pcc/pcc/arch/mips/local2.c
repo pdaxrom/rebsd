@@ -1105,16 +1105,23 @@ adrcon(CONSZ val)
 void
 conput(FILE *fp, NODE *p)
 {
-	int val = getlval(p);
+	CONSZ val;
+	U_CONSZ uval;
 
 	switch (p->n_op) {
 	case ICON:
+		val = getlval(p);
 		if (p->n_name[0] != '\0') {
 			fprintf(fp, "%s", p->n_name);
-			if (getlval(p))
-				fprintf(fp, "+%d", val);
-		} else
-			fprintf(fp, "%d", val);
+			if (val)
+				fprintf(fp, "+" CONFMT, val);
+		} else {
+			uval = (U_CONSZ)val & 0xffffffffULL;
+			if (uval <= (U_CONSZ)MAX_INT)
+				fprintf(fp, CONFMT, (CONSZ)uval);
+			else
+				fprintf(fp, "0x%llx", uval);
+		}
 		return;
 
 	default:

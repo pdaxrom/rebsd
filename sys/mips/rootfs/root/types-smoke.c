@@ -56,6 +56,16 @@ struct byte_ulong_rec {
 	char tail;
 };
 
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+#define EXPECT_LAYOUT_DOUBLE_OFFSET 20
+#define EXPECT_LAYOUT_TAIL_OFFSET 28
+#define EXPECT_LAYOUT_SIZE 32
+#else
+#define EXPECT_LAYOUT_DOUBLE_OFFSET 24
+#define EXPECT_LAYOUT_TAIL_OFFSET 32
+#define EXPECT_LAYOUT_SIZE 40
+#endif
+
 schar gsc = -5;
 uchar guc = 250;
 short gss = -1234;
@@ -613,11 +623,11 @@ check_aggregate_types()
 		return bad("struct long long offset");
 	if ((int)((char *)&r.f - (char *)&r) != 16)
 		return bad("struct float offset");
-	if ((int)((char *)&r.d - (char *)&r) != 24)
+	if ((int)((char *)&r.d - (char *)&r) != EXPECT_LAYOUT_DOUBLE_OFFSET)
 		return bad("struct double offset");
-	if ((int)((char *)&r.tail - (char *)&r) != 32)
+	if ((int)((char *)&r.tail - (char *)&r) != EXPECT_LAYOUT_TAIL_OFFSET)
 		return bad("struct tail offset");
-	if (sizeof(struct layout_rec) != 40)
+	if (sizeof(struct layout_rec) != EXPECT_LAYOUT_SIZE)
 		return bad("struct size");
 
 	r.c = -1;

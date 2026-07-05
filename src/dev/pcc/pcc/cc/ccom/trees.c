@@ -1189,7 +1189,8 @@ static P1ND *
 offplus(P1ND *p, int off, struct tdef *td)
 {
 	if (off != 0) {
-		p = blk(PLUS, p, offcon(off, td), td);
+		P1ND *q = offcon(off, td);
+		p = blk(PLUS, p, q, td);
 		p = optim(p);
 	}
 

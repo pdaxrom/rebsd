@@ -7,6 +7,12 @@ struct abi_rec {
 	int tail;
 };
 
+#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
+#define EXPECT_ABI_VALUE_OFFSET 4
+#else
+#define EXPECT_ABI_VALUE_OFFSET 8
+#endif
+
 ullong abi_global = 0x1122334455667788ULL;
 struct abi_rec abi_record = {
 	0x12345678,
@@ -65,7 +71,8 @@ main()
 		return bad("global object high/low order");
 
 	putstr("check struct object\n");
-	if ((int)((char *)&abi_record.value - (char *)&abi_record) != 8)
+	if ((int)((char *)&abi_record.value - (char *)&abi_record) !=
+	    EXPECT_ABI_VALUE_OFFSET)
 		return bad("struct long long alignment");
 	p = (ulong *)&abi_record.value;
 	if (abi_record.tag != 0x12345678 || abi_record.tail != 0x55667788)

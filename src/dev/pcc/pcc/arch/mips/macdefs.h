@@ -134,7 +134,11 @@
  */
 typedef	long long CONSZ;
 typedef	unsigned long long U_CONSZ;
+#if defined(os_rebsd)
+typedef long OFFSZ;
+#else
 typedef long long OFFSZ;
+#endif
 
 #define CONFMT	"%lld"		/* format for printing constants */
 #ifdef USE_GAS
@@ -306,7 +310,7 @@ typedef long long OFFSZ;
 	{ T2T3, T3T4, -1 },		/* $t3 */			\
 	{ T3T4, T4T5, -1 },		/* $t4 */			\
 	{ T4T5, T5T6, -1 },		/* $t5 */			\
-	{ T5T6, T6T7, -1 },		/* $t6 */			\
+	{ T6T7, T7T8, -1 },		/* $t6 */			\
 	{ T7T8, T8T9, -1 },		/* $t7 */			\
 	\
 	{ S0S1, -1 },			/* $s0 */			\

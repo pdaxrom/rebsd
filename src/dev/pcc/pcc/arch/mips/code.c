@@ -770,6 +770,115 @@ cmappend_tree(NODE *q, NODE *r)
 	return cmappend(q, r);
 }
 
+static int mips_arg_precompute(NODE *);
+
+static int
+mips_argreg64(int rval)
+{
+	return rval >= A0A1 && rval <= A2A3;
+}
+
+static int
+mips_arg_addr_leaf(NODE *p)
+{
+	if (p == NIL)
+		return 0;
+	switch (p->n_op) {
+	case ICON:
+	case NAME:
+	case REG:
+		return 1;
+	case PLUS:
+	case MINUS:
+		return (p->n_right->n_op == ICON &&
+		    mips_arg_addr_leaf(p->n_left));
+	case PCONV:
+	case SCONV:
+		return mips_arg_addr_leaf(p->n_left);
+	default:
+		return 0;
+	}
+}
+
+static int
+mips_arg_rhs_leaf(NODE *p)
+{
+	switch (p->n_op) {
+	case ICON:
+	case NAME:
+	case REG:
+		return 1;
+	case UMUL:
+		return mips_arg_addr_leaf(p->n_left);
+	case PCONV:
+	case SCONV:
+		return mips_arg_rhs_leaf(p->n_left);
+	default:
+		return 0;
+	}
+}
+
+static int
+mips_arg_assign_needs_temp(NODE *p)
+{
+	if (p == NIL || p->n_op != ASSIGN || p->n_left->n_op != REG)
+		return 0;
+	if (DEUNSIGN(p->n_type) != LONGLONG)
+		return 0;
+	if (!mips_argreg64(p->n_left->n_rval))
+		return 0;
+	return !mips_arg_rhs_leaf(p->n_right);
+}
+
+static NODE *
+mips_arg_precompute_reg_rhs(NODE *p, NODE **prepp)
+{
+	struct symtab *sp;
+	NODE *store;
+
+	if (p == NIL)
+		return p;
+	if (p->n_op == CM) {
+		p->n_left = mips_arg_precompute_reg_rhs(p->n_left, prepp);
+		p->n_right = mips_arg_precompute_reg_rhs(p->n_right, prepp);
+		if (p->n_left == NIL) {
+			NODE *r = p->n_right;
+			nfree(p);
+			return r;
+		}
+		if (p->n_right == NIL) {
+			NODE *l = p->n_left;
+			nfree(p);
+			return l;
+		}
+		return p;
+	}
+	if (mips_arg_precompute(p)) {
+		*prepp = cmappend(*prepp, p);
+		return NIL;
+	}
+	if (!mips_arg_assign_needs_temp(p))
+		return p;
+
+	sp = mips_stacktemp(p->n_type, p->n_df, p->n_ap);
+	store = buildtree(ASSIGN, mips_stackview(sp, p->n_type), p->n_right);
+	p->n_right = mips_stackview(sp, p->n_type);
+	*prepp = cmappend(*prepp, store);
+	return p;
+}
+
+static NODE *
+mips_arg_precomputes(NODE *p)
+{
+	NODE *prep;
+
+	prep = NIL;
+	p = mips_arg_precompute_reg_rhs(p, &prep);
+	if (prep != NIL)
+		p = cmappend(prep, p);
+	return p;
+}
+
 static int
 mips_arg_precompute(NODE *p)
 {
@@ -780,12 +889,20 @@ mips_arg_precompute(NODE *p)
 	return p->n_left->n_op != REG;
 }
 
+static int
+mips_arg_regassign(NODE *p)
+{
+	return p != NIL && p->n_op == ASSIGN && p->n_left->n_op == REG;
+}
+
 static void
 mips_delay_left_precompute(NODE *p)
 {
 	NODE *l, *pre;
 
 	if (p->n_op != CM || p->n_left == NIL || p->n_left->n_op != CM)
+		return;
+	if (!mips_arg_regassign(p->n_right))
 		return;
 	l = p->n_left;
 	if (!mips_arg_precompute(l->n_right))
@@ -1067,7 +1184,10 @@ moveargs(NODE *p, int *regp
 			NODE *l = p->n_left;
 			if (pad != NIL)
 				l = block(CM, l, pad, INT, 0, 0);
-			p->n_left = cmappend_tree(l, t1);
+			if (t1->n_op == CM)
+				p->n_left = cmappend_tree(l, t1);
+			else
+				p->n_left = buildtree(CM, l, t1);
 			p->n_right = r;
 		} else {
 			if (pad != NIL)
@@ -1152,6 +1272,7 @@ funcode(NODE *p)
 	    , &fpreg, &fp_leading
 #endif
 	    );
+	p->n_right = mips_arg_precomputes(p->n_right);
 
 	return p;
 }

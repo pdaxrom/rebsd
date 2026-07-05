@@ -390,14 +390,8 @@ andable(NODE *p)
 int
 cisreg(TWORD t)
 {
-	/*
-	 * The generic pass1 STNODE path creates symbol-backed temporaries
-	 * before the pass2 prologue temp range is fixed.  The MIPS graph
-	 * allocator can then miss or mis-spill them and emit bogus OREGs.
-	 * Keep automatic objects in their stack homes; expression temps are
-	 * still allocated normally after the prologue.
-	 */
-	(void)t;
+	if (t == INT || t == UNSIGNED || t == LONG || t == ULONG)
+		return(1);
 	return 0; /* XXX - fix reg assignment in pftn.c */
 }
 
@@ -700,7 +694,8 @@ mips_builtin_va_arg(const struct bitable *bt, NODE *a)
 
 	/* alignment */
 	p = tcopy(a->n_left);
-	if (sz > SZINT/SZCHAR && r->n_type != UNIONTY && r->n_type != STRTY) {
+	if (MIPS_ALIGN64 > SZINT && sz > SZINT/SZCHAR &&
+	    r->n_type != UNIONTY && r->n_type != STRTY) {
 		p = buildtree(PLUS, p, bcon(7));
 		p = block(AND, p, bcon(-8), p->n_type, p->n_df, p->n_ap);
 	}

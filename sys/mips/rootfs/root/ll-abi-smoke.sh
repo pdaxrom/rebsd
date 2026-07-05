@@ -7,7 +7,7 @@ rm -f llabi-asm.o \
 echo "ll-abi-smoke diag v1"
 
 echo "step 1: as ABI checker"
-as -o llabi-asm.o /root/ll-abi-smoke.s || exit 1
+cc -x assembler-with-cpp -c -o llabi-asm.o /root/ll-abi-smoke.s || exit 1
 
 echo "step 2: cc ABI -S"
 cc -S -o llabi-cc.s /root/ll-abi-smoke.c || exit 1

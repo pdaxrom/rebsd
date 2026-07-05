@@ -2522,6 +2522,15 @@ longtemp(NODE *p, void *arg)
 #ifdef MYLONGTEMP
 		MYLONGTEMP(p, w);
 #endif
+		/*
+		 * r_class normally holds the register class.  During leaf
+		 * rewriting it is reused as the base register for an existing
+		 * stack slot (see temparg()).  Do not treat a raw class value as
+		 * a base register; otherwise CLASSA becomes register 1, which is
+		 * $at on MIPS.
+		 */
+		if (w->r_class >= CLASSA && w->r_class <= CLASSG)
+			w->r_class = 0;
 		if (w->r_class == 0) {
 			w->r_color = freetemp(szty(p->n_type));
 			w->r_class = FPREG; /* XXX - assumption? */
@@ -2729,6 +2738,7 @@ treerewrite(struct interpass *ipole, REGW *rpole)
 	REGW *w, longregs;
 
 	spole = rpole;
+	longsp = NULL;
 
 	DLIST_FOREACH(ip, ipole, qelem) {
 		if (ip->type != IP_NODE)
