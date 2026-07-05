@@ -86,6 +86,18 @@ MIPS_ROOTFS_USER_LDSCRIPT ?= mips-user.ld
 MIPS_ROOTFS_USER_LDSCRIPT_SRC ?= $(TOPSRC)/sys/mips/user/user.ld.S
 MIPS_ROOTFS_USERLAND_STAMP_PREFIX ?= mips-userland
 MIPS_ROOTFS_USERLAND_STAMP = $(MIPS_ROOTFS_USERLAND_STAMP_PREFIX).$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_ABI).stamp
+MIPS_ROOTFS_CLEAN_ARTIFACTS = $(MIPS_ROOTFS_STAGE) \
+                              $(MIPS_ROOTFS_BUILD_MANIFEST) \
+                              rootfs.*.manifest rootfs.img rootfs.o \
+                              $(MIPS_ROOTFS_USER_LDSCRIPT) \
+                              $(MIPS_ROOTFS_USERLAND_STAMP_PREFIX)*.stamp \
+                              mips-userland*.stamp n64-userland*.stamp \
+                              $(MIPS_NATIVE_TOOLS) $(MIPS_NATIVE_DIR) \
+                              $(MIPS_NATIVE_PCC_BUILD) $(MIPS_NATIVE_PCC_DIR) \
+                              mips-native-runtime* mips-native-tools \
+                              mips-native-pcc-build* mips-native-pcc* \
+                              n64-native-runtime* n64-native-tools \
+                              n64-native-pcc-build* n64-native-pcc*
 
 MIPS_ROOTFS_FILES = $(shell find $(MIPS_ROOTFS_COMMON_DIR) \
                    $(MIPS_ROOTFS_BOARD_DIR) -type f 2>/dev/null)
@@ -688,6 +700,14 @@ rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_BUILD_MANIFEST) $(MIPS_ROOTFS_USER_STAMP)
 rootfs.o: rootfs.img
 	$(LD) -r -b binary -o $@ rootfs.img
 	$(OBJCOPY) --rename-section .data=.romdisk,alloc,load,readonly,data,contents $@
+
+.PHONY: mips-rootfs-userland-clean mips-rootfs-clean
+mips-rootfs-userland-clean:
+	$(MIPS_SRC_MAKE) clean
+	$(MIPS_AWK_MAKE) clean
+
+mips-rootfs-clean: mips-rootfs-userland-clean
+	rm -rf $(MIPS_ROOTFS_CLEAN_ARTIFACTS)
 
 $(TOPSRC)/src/crt0.o: $(MIPS_NATIVE_CRT0_SRC)
 	$(MIPS_ROOTFS_GCC_PREFIX)gcc $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) -x assembler-with-cpp -c $< -o $@

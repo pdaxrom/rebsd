@@ -557,9 +557,9 @@ machine:
 sys:
 	ln -s ../../include $@
 
-clean clean-all:
+clean clean-all: mips-rootfs-clean
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm a.out .deps machine sys \
-	    vers.c rootfs.stage rootfs.generated.manifest
+	    vers.c
 
 .deps:
 	mkdir -p .deps
