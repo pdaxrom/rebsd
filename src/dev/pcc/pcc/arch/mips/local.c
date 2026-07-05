@@ -31,6 +31,15 @@
 
 #include "pass1.h"
 
+#ifdef PASS1
+#ifdef MIPS_CPU_DEFAULT
+int mips_cpu = MIPS_CPU_DEFAULT;
+#else
+int mips_cpu = 0;
+#endif
+int mips_soft_float = 0;
+#endif
+
 #ifndef LANG_CXX
 #define NODE P1ND
 #define ccopy p1tcopy

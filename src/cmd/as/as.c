@@ -37,9 +37,9 @@
 
 #define WORDSZ 4 /* word size in bytes */
 #ifdef TARGET_VR4300
-#define TEXT_ALIGN_BITS 3 /* VR4300 double loads require 8-byte alignment. */
+#define DEFAULT_TEXT_ALIGN_BITS 3 /* VR4300 double loads require 8-byte alignment. */
 #else
-#define TEXT_ALIGN_BITS 2
+#define DEFAULT_TEXT_ALIGN_BITS 2
 #endif
 
 /*
@@ -63,6 +63,7 @@ enum {
     LLSHIFT,   /* << */
     LRSHIFT,   /* >> */
     LASCII,    /* .ascii */
+    LFCC,      /* floating-point condition-code register */
     LBSS,      /* .bss */
     LCOMM,     /* .comm */
     LDATA,     /* .data */
@@ -236,6 +237,8 @@ void emit_abs_load(unsigned, struct reloc *, unsigned);
 void emit_li(unsigned, struct reloc *);
 void emit_la(unsigned, struct reloc *);
 void emit_mul(unsigned, struct reloc *);
+void emit_fp4(unsigned, struct reloc *);
+void emit_fpidxmem(unsigned, struct reloc *);
 void emit_mem_pseudo(unsigned, unsigned, struct reloc *, int);
 void emit_mem_base_pseudo(unsigned, unsigned, struct reloc *, int, int, int);
 void reorder_flush(void);
@@ -336,6 +339,7 @@ const struct optable optable[] = {
     { 0xd4000000, "l.d", FFT1 | FOFF16 | FRSB },
     { 0xc4000000, "l.s", FFT1 | FOFF16 | FRSB },
     { 0xd4000000, "ldc1", FFT1 | FOFF16 | FRSB },
+    { 0x4c000001, "ldxc1", FNO_VR4300, emit_fpidxmem },
     { 0x84000000, "lh", FRT1 | FOFF16 | FRSB | FMOD },
     { 0x94000000, "lhu", FRT1 | FOFF16 | FRSB | FMOD },
     { 0, "li", FRT1 | FMOD, emit_li },
@@ -343,6 +347,7 @@ const struct optable optable[] = {
     { 0x3c000000, "lui", FRT1 | FHIGH16 | FMOD },
     { 0x8c000000, "lw", FRT1 | FOFF16 | FRSB | FMOD },
     { 0xc4000000, "lwc1", FFT1 | FOFF16 | FRSB },
+    { 0x4c000000, "lwxc1", FNO_VR4300, emit_fpidxmem },
     { 0x88000000, "lwl", FRT1 | FOFF16 | FRSB | FMOD },
     { 0x98000000, "lwr", FRT1 | FOFF16 | FRSB | FMOD },
     { 0x70000000, "madd", FRS1 | FRT2 | FMOD | FNO_VR4300 },
@@ -356,6 +361,14 @@ const struct optable optable[] = {
     { 0x0000000a, "movz", FRD1 | FRS2 | FRT3 | FMOD | FNO_VR4300 },
     { 0x70000004, "msub", FRS1 | FRT2 | FMOD | FNO_VR4300 },
     { 0x70000005, "msubu", FRS1 | FRT2 | FMOD | FNO_VR4300 },
+    { 0x4c000021, "madd.d", FNO_VR4300, emit_fp4 },
+    { 0x4c000020, "madd.s", FNO_VR4300, emit_fp4 },
+    { 0x4c000029, "msub.d", FNO_VR4300, emit_fp4 },
+    { 0x4c000028, "msub.s", FNO_VR4300, emit_fp4 },
+    { 0x4c000031, "nmadd.d", FNO_VR4300, emit_fp4 },
+    { 0x4c000030, "nmadd.s", FNO_VR4300, emit_fp4 },
+    { 0x4c000039, "nmsub.d", FNO_VR4300, emit_fp4 },
+    { 0x4c000038, "nmsub.s", FNO_VR4300, emit_fp4 },
     { 0x40800000, "mtc0", FRT1 | FRD2 | FSEL },
     { 0x44800000, "mtc1", FRT1 | FFS2 },
     { 0x00000011, "mthi", FRS1 },
@@ -378,6 +391,7 @@ const struct optable optable[] = {
     { 0xf4000000, "s.d", FFT1 | FOFF16 | FRSB },
     { 0xe4000000, "s.s", FFT1 | FOFF16 | FRSB },
     { 0xf4000000, "sdc1", FFT1 | FOFF16 | FRSB },
+    { 0x4c000009, "sdxc1", FNO_VR4300, emit_fpidxmem },
     { 0x7000003f, "sdbbp", FCODE | FNO_VR4300 },
     { 0x7c000420, "seb", FRD1 | FRT2 | FNO_VR4300 },
     { 0x7c000620, "seh", FRD1 | FRT2 | FNO_VR4300 },
@@ -397,6 +411,7 @@ const struct optable optable[] = {
     { 0x00000023, "subu", FRD1 | FRS2 | FRT3 | FMOD },
     { 0xac000000, "sw", FRT1 | FOFF16 | FRSB },
     { 0xe4000000, "swc1", FFT1 | FOFF16 | FRSB },
+    { 0x4c000008, "swxc1", FNO_VR4300, emit_fpidxmem },
     { 0xa8000000, "swl", FRT1 | FOFF16 | FRSB },
     { 0xb8000000, "swr", FRT1 | FOFF16 | FRSB },
     { 0x0000000f, "sync", FCODE },
@@ -518,6 +533,7 @@ int mode_mips16;                /* .set mips16 option */
 int mode_micromips;             /* .set micromips option */
 int mode_at = 1;                /* .set at option */
 int mode_vr4300;                /* reject opcodes unsupported by NEC VR4300 */
+int text_align_bits = DEFAULT_TEXT_ALIGN_BITS;
 int reorder_full;               /* instruction buffered for reorder */
 unsigned reorder_word;          /* buffered instruction... */
 unsigned reorder_clobber;       /* ...modified this register */
@@ -531,6 +547,13 @@ int expr_flags;      /* flags set by getexpr */
 
 /* Forward declarations. */
 unsigned getexpr(int *s);
+
+static void
+set_cpu_vr4300(int enabled)
+{
+    mode_vr4300 = enabled;
+    text_align_bits = enabled ? 3 : 2;
+}
 
 /*
  * Fatal error message.
@@ -1117,6 +1140,23 @@ int lookfreg()
     return val;
 }
 
+int lookfcc()
+{
+    int val;
+    char *cp;
+
+    if (strncmp(name, "$fcc", 4) != 0 || !ISDIGIT(name[4]))
+        return -1;
+    val = 0;
+    for (cp = name + 4; ISDIGIT(*cp); cp++) {
+        val *= 10;
+        val += *cp - '0';
+    }
+    if (*cp != 0 || val > 7)
+        return -1;
+    return val;
+}
+
 int lookcmd()
 {
     register int i, h;
@@ -1315,6 +1355,9 @@ int getlex(int *pval)
                     return (*pval);
             }
             if (name[0] == '$') {
+                *pval = lookfcc();
+                if (*pval != -1)
+                    return (LFCC);
                 *pval = lookfreg();
                 if (*pval != -1)
                     return (LFREG);
@@ -1710,6 +1753,75 @@ void emit_mul(unsigned opcode, struct reloc *relinfo)
     emitword(0x00000012 | (rd << 11), &relabs, rd);             /* mflo rd */
 }
 
+static int
+get_fpreg_operand(const char *name)
+{
+    int clex, cval;
+
+    clex = getlex(&cval);
+    if (clex != LFREG)
+        uerror("bad %s register", name);
+    return cval;
+}
+
+static void
+need_comma(void)
+{
+    int cval;
+
+    if (getlex(&cval) != ',')
+        uerror("comma expected");
+}
+
+void
+emit_fp4(unsigned opcode, struct reloc *relinfo)
+{
+    int fd, fr, fs, ft;
+
+    fd = get_fpreg_operand("fd");
+    need_comma();
+    fr = get_fpreg_operand("fr");
+    need_comma();
+    fs = get_fpreg_operand("fs");
+    need_comma();
+    ft = get_fpreg_operand("ft");
+
+    opcode |= fr << 21;
+    opcode |= ft << 16;
+    opcode |= fs << 11;
+    opcode |= fd << 6;
+    emitword(opcode, relinfo, fd);
+}
+
+void
+emit_fpidxmem(unsigned opcode, struct reloc *relinfo)
+{
+    int ft, index, base, clex, cval;
+
+    ft = get_fpreg_operand("ft");
+    need_comma();
+    clex = getlex(&cval);
+    if (!getgpr(clex, &cval))
+        uerror("bad index register");
+    index = cval;
+    if (getlex(&cval) != '(')
+        uerror("left par expected");
+    clex = getlex(&cval);
+    if (!getgpr(clex, &cval))
+        uerror("bad base register");
+    base = cval;
+    if (getlex(&cval) != ')')
+        uerror("right par expected");
+
+    opcode |= base << 21;
+    opcode |= index << 16;
+    if (opcode & 8)
+        opcode |= ft << 11;
+    else
+        opcode |= ft << 6;
+    emitword(opcode, relinfo, 0);
+}
+
 /*
  * Build and emit a machine instruction code.
  */
@@ -1757,6 +1869,14 @@ void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc 
     }
     if (type & FFS1) {
         clex = getlex(&cval);
+        if (clex == LFCC && (type & FFT2)) {
+            if (mode_vr4300 && cval != 0)
+                uerror("bad fcc register");
+            opcode |= cval << 8;
+            if (getlex(&cval) != ',')
+                uerror("comma expected");
+            clex = getlex(&cval);
+        }
         if (clex != LFREG)
             uerror("bad fs register");
         opcode |= cval << 11; /* fs, ... */
@@ -2084,6 +2204,18 @@ done3:
         /* Relocatable offset */
         int valid_range;
 
+        if ((type & FAOFF18) && (opcode & 0xff000000) == 0x45000000) {
+            clex = getlex(&cval);
+            if (clex == LFCC) {
+                if (mode_vr4300 && cval != 0)
+                    uerror("bad fcc register");
+                opcode |= cval << 18;
+                if (getlex(&cval) != ',')
+                    uerror("comma expected");
+            } else {
+                ungetlex(clex, cval);
+            }
+        }
         if ((type & (FOFF16 | FOFF18 | FHIGH16)) && getlex(&cval) != ',')
             uerror("comma expected");
     foff16:
@@ -2506,7 +2638,7 @@ void pass1()
         done:
             reorder_flush();
             segm = STEXT;
-            align(TEXT_ALIGN_BITS);
+            align(text_align_bits);
             segm = SDATA;
             align(2);
             segm = SSTRNG;
@@ -3328,7 +3460,9 @@ void usage()
     fprintf(stderr, "  -X              Discard locals starting with 'L' or '.'\n");
     fprintf(stderr, "  -EL, -EB        Select output byte order\n");
     fprintf(stderr, "  -mips3, -march=vr4300\n");
-    fprintf(stderr, "                  Reject MIPS32r2 opcodes unsupported by VR4300\n");
+    fprintf(stderr, "                  Select VR4300 ISA checks and 8-byte text alignment\n");
+    fprintf(stderr, "  -mips32r2, -march=mips32r2\n");
+    fprintf(stderr, "                  Select MIPS32R2 mode and 4-byte text alignment\n");
     exit(1);
 }
 
@@ -3361,7 +3495,7 @@ int main(int argc, char *argv[])
     aout_set_big_endian(0);
 #endif
 #ifdef TARGET_VR4300
-    mode_vr4300 = 1;
+    set_cpu_vr4300(1);
 #endif
 
     /*
@@ -3374,12 +3508,12 @@ int main(int argc, char *argv[])
         }
         if (strcmp(argv[i], "-march=vr4300") == 0 ||
             strcmp(argv[i], "-mips3") == 0) {
-            mode_vr4300 = 1;
+            set_cpu_vr4300(1);
             continue;
         }
         if (strncmp(argv[i], "-march=mips32", 13) == 0 ||
             strncmp(argv[i], "-mips32", 7) == 0) {
-            mode_vr4300 = 0;
+            set_cpu_vr4300(0);
             continue;
         }
         switch (argv[i][0]) {
@@ -3444,12 +3578,12 @@ int main(int argc, char *argv[])
                     break;
                 case 'm': /* -mips32r2, -mabi=32, -march=vr4300 */
                     if (strncmp(cp, "march=vr4300", 12) == 0)
-                        mode_vr4300 = 1;
+                        set_cpu_vr4300(1);
                     else if (strncmp(cp, "mips3", 5) == 0)
-                        mode_vr4300 = 1;
+                        set_cpu_vr4300(1);
                     else if (strncmp(cp, "mips32", 6) == 0 ||
                              strncmp(cp, "march=mips32", 12) == 0)
-                        mode_vr4300 = 0;
+                        set_cpu_vr4300(0);
                     while (*++cp)
                         ;
                     --cp;

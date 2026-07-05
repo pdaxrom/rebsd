@@ -14,11 +14,51 @@
 }
 
 #define	CPPMDADD { \
-	"-D__mips__", "-Dmips", "-D__mips=32", \
+	"-D__mips__", "-Dmips", \
 	"-D__MIPSEB__", "-D__MIPSEB", "-DMIPSEB", "-D_MIPSEB", \
 	"-D__mips_o32", \
-	"-D__mips_hard_float", \
 	NULL, \
+}
+
+#define TARGET_GLOBALS \
+	int mips_cpu = MIPS_CPU_DEFAULT;
+
+#define PCC_HANDLE_MFLAG { \
+	if (match(argp, "-march=vr4300") || match(argp, "-mips3")) { \
+		mips_cpu = MIPS_CPU_VR4300; \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-march=mips32r2") || match(argp, "-mips32r2") || \
+	    match(argp, "-march=mips32")) { \
+		mips_cpu = MIPS_CPU_MIPS32R2; \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-mbig-endian")) { \
+		bigendian = 1; \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-mlittle-endian")) \
+		errorx(8, "-mlittle-endian is not supported by big-endian mips-rebsd"); \
+}
+
+#define PCC_SETUP_CPP_ARGS { \
+	if (mips_cpu == MIPS_CPU_MIPS32R2) { \
+		strlist_prepend(&preprocessor_flags, "-D__mips=32"); \
+		strlist_prepend(&preprocessor_flags, "-D__mips_isa_rev=2"); \
+		strlist_prepend(&preprocessor_flags, "-D__mips32"); \
+		strlist_prepend(&preprocessor_flags, "-D__mips32r2"); \
+	} else { \
+		strlist_prepend(&preprocessor_flags, "-D__mips=3"); \
+		strlist_prepend(&preprocessor_flags, "-D__mips3"); \
+		strlist_prepend(&preprocessor_flags, "-D__vr4300__"); \
+	} \
+	if (softfloat) \
+		strlist_prepend(&preprocessor_flags, "-D__mips_soft_float"); \
+	else \
+		strlist_prepend(&preprocessor_flags, "-D__mips_hard_float"); \
 }
 
 #define CRTBEGIN	0
@@ -37,6 +77,10 @@
 
 #define STARTLABEL	"_start"
 #define TARGET_NO_ABICALLS
+
+#define PCC_SETUP_AS_ARGS \
+	strlist_append(&assembler_flags, \
+	    mips_cpu == MIPS_CPU_MIPS32R2 ? "-march=mips32r2" : "-march=vr4300");
 
 #define PCC_SETUP_LD_ARGS \
 	strlist_append(&early_linker_flags, "-X");

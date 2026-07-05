@@ -46,6 +46,7 @@ OBJS            = adddf3.o \
                   fixsfsi.o \
                   fixunssfsi.o \
                   fixunsdfsi.o \
+                  floatunsdisf.o \
                   floatsidf.o \
                   floatsisf.o \
                   floatundidf.o \
@@ -55,6 +56,8 @@ OBJS            = adddf3.o \
                   $(COMPILER_HELPER_OBJS) \
                   muldf3.o \
                   mulsf3.o \
+                  negdf2.o \
+                  negsf2.o \
                   subdf3.o \
                   subsf3.o \
                   truncdfsf2.o \

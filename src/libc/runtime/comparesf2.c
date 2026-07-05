@@ -81,6 +81,12 @@ COMPILER_RT_ABI enum LE_RESULT __lesf2(fp_t a, fp_t b) {
   }
 }
 
+#if defined(__PCC__)
+COMPILER_RT_ABI int __cmpsf2(fp_t a, fp_t b) { return __lesf2(a, b); }
+COMPILER_RT_ABI int __eqsf2(fp_t a, fp_t b) { return __lesf2(a, b); }
+COMPILER_RT_ABI int __ltsf2(fp_t a, fp_t b) { return __lesf2(a, b); }
+COMPILER_RT_ABI int __nesf2(fp_t a, fp_t b) { return __lesf2(a, b); }
+#else
 #if defined(__ELF__)
 // Alias for libgcc compatibility
 COMPILER_RT_ALIAS(__lesf2, __cmpsf2)
@@ -88,6 +94,7 @@ COMPILER_RT_ALIAS(__lesf2, __cmpsf2)
 COMPILER_RT_ALIAS(__lesf2, __eqsf2)
 COMPILER_RT_ALIAS(__lesf2, __ltsf2)
 COMPILER_RT_ALIAS(__lesf2, __nesf2)
+#endif
 
 enum GE_RESULT {
   GE_LESS = -1,
@@ -124,7 +131,11 @@ COMPILER_RT_ABI enum GE_RESULT __gesf2(fp_t a, fp_t b) {
   }
 }
 
+#if defined(__PCC__)
+COMPILER_RT_ABI int __gtsf2(fp_t a, fp_t b) { return __gesf2(a, b); }
+#else
 COMPILER_RT_ALIAS(__gesf2, __gtsf2)
+#endif
 
 COMPILER_RT_ABI int
 __unordsf2(fp_t a, fp_t b) {
@@ -141,7 +152,7 @@ COMPILER_RT_ALIAS(__unordsf2, __aeabi_fcmpun)
 #endif
 #endif
 
-#if defined(_WIN32) && !defined(__MINGW32__)
+#if defined(_WIN32) && !defined(__MINGW32__) && !defined(__PCC__)
 // The alias mechanism doesn't work on Windows except for MinGW, so emit
 // wrapper functions.
 int __eqsf2(fp_t a, fp_t b) { return __lesf2(a, b); }

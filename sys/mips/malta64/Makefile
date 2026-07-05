@@ -57,12 +57,22 @@ endif
 ifeq ($(filter $(MIPS_ROOTFS_COMPILER),$(MIPS_ROOTFS_COMPILERS)),)
 $(error Unsupported MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER); expected one of $(MIPS_ROOTFS_COMPILERS))
 endif
+MIPS_ROOTFS_CPU ?= $(if $(N64_USERLAND_CPU),$(N64_USERLAND_CPU),$(if $(MALTA_PORT64),vr4300,mips32r2))
+MIPS_ROOTFS_CPUS = vr4300 mips32r2
+ifneq ($(N64_USERLAND_CPU),)
+ifneq ($(MIPS_ROOTFS_CPU),$(N64_USERLAND_CPU))
+$(error MIPS_ROOTFS_CPU=$(MIPS_ROOTFS_CPU) conflicts with N64_USERLAND_CPU=$(N64_USERLAND_CPU))
+endif
+endif
+ifeq ($(filter $(MIPS_ROOTFS_CPU),$(MIPS_ROOTFS_CPUS)),)
+$(error Unsupported MIPS_ROOTFS_CPU=$(MIPS_ROOTFS_CPU); expected one of $(MIPS_ROOTFS_CPUS))
+endif
 MIPS_KERNEL_COMPILER ?= gcc
 MIPS_KERNEL_COMPILERS = gcc pcc
 ifeq ($(filter $(MIPS_KERNEL_COMPILER),$(MIPS_KERNEL_COMPILERS)),)
 $(error Unsupported MIPS_KERNEL_COMPILER=$(MIPS_KERNEL_COMPILER); expected one of $(MIPS_KERNEL_COMPILERS))
 endif
-MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland.$(MIPS_ROOTFS_COMPILER)
+MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_CPU)
 MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_COMMON_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
@@ -78,8 +88,8 @@ MIPS_COMMON_MACHINE_HEADERS = console cpu devmajors elf_machdep float fpu io \
 MIPS_TRACE       ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 PCC_HOST_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
-PCC_HOST_BUILD ?= /private/tmp/rebsd-pcc-build
-PCC_HOST_PREFIX ?= /private/tmp/rebsd-pcc-install
+PCC_HOST_BUILD ?= /private/tmp/rebsd-pcc-build-$(MIPS_ROOTFS_CPU)
+PCC_HOST_PREFIX ?= /private/tmp/rebsd-pcc-install-$(MIPS_ROOTFS_CPU)
 PCC_HOST_AS     = $(TOPSRC)/sys/mips/n64/n64-native-tools/as
 PCC_HOST_LD     = $(TOPSRC)/sys/mips/n64/n64-native-tools/ld
 PCC_HOST_AR     = $(TOPSRC)/sys/mips/n64/n64-native-tools/ar
@@ -308,7 +318,8 @@ $(PCC_HOST_PCC): $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SRCS) $(PCC_HOST_AS) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
 	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/include) \
 	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/lib) \
-	    $(abspath $(PCC_HOST_AS)) $(abspath $(PCC_HOST_LD))
+	    $(abspath $(PCC_HOST_AS)) $(abspath $(PCC_HOST_LD)) \
+	    $(MIPS_ROOTFS_CPU)
 
 smoke-host-portablecc: $(PCC_HOST_PCC)
 	@echo "smoke-host-portablecc: ok"
@@ -351,7 +362,7 @@ pcc-regress-summary: $(PCC_REGRESS_SCRIPT)
 
 linpack-smoke-build: smoke-host-portablecc $(LINPACK_SMOKE_SCRIPT) \
     $(LINPACK_SMOKE_SRC)
-	python3 $(LINPACK_SMOKE_SCRIPT) build \
+	N64_AOUT_CPU=$(MIPS_ROOTFS_CPU) python3 $(LINPACK_SMOKE_SCRIPT) build \
 	    --source $(abspath $(LINPACK_SMOKE_SRC)) \
 	    --out $(LINPACK_SMOKE_OUT) \
 	    --top $(abspath $(TOPSRC)) \
@@ -446,7 +457,8 @@ FORCE:
 $(MIPS_ROOTFS_SRC_STAMP): FORCE
 	$(MAKE) -C $(TOPSRC)/sys/mips/n64 \
 	    N64_USERLAND_COMPILER=$(MIPS_ROOTFS_COMPILER) \
-	    rootfs.stage/.userland.$(MIPS_ROOTFS_COMPILER)
+	    N64_USERLAND_CPU=$(MIPS_ROOTFS_CPU) \
+	    rootfs.stage/.userland.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_CPU)
 
 $(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
 	rm -rf $(MIPS_ROOTFS_STAGE)

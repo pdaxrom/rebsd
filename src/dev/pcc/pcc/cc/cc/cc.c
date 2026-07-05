@@ -699,6 +699,9 @@ main(int argc, char *argv[])
 			break;
 
 		case 'm': /* target-dependent options */
+#ifdef PCC_HANDLE_MFLAG
+			PCC_HANDLE_MFLAG
+#endif
 			if (strncmp(argp, "-march=", 6) == 0) {
 				strlist_append(&compiler_flags, argp);
 				break;
@@ -1993,6 +1996,9 @@ setup_cpp_flags(void)
 		strlist_prepend(&preprocessor_flags, cppadd[i]);
 	for (i = 0; cppmdadd[i]; i++)
 		strlist_prepend(&preprocessor_flags, cppmdadd[i]);
+#ifdef PCC_SETUP_CPP_ARGS
+	PCC_SETUP_CPP_ARGS
+#endif
 
 	/* Include dirs */
 	strlist_append(&sysincdirs, "=" INCLUDEDIR "pcc/");

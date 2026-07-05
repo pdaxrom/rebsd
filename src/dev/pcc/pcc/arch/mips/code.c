@@ -506,7 +506,7 @@ bfcode(struct symtab **sp, int cnt)
 
 	reg = A0;
 #ifdef MIPS_HARDFLOAT_O32_ABI
-	fp_leading = !oldstyle && !saveallargs;
+	fp_leading = !mips_soft_float && !oldstyle && !saveallargs;
 	fpreg = F12;
 #endif
 
@@ -970,7 +970,7 @@ funcode(NODE *p)
 	l = p->n_left;
 	r = p->n_right;
 #ifdef MIPS_HARDFLOAT_O32_ABI
-	fp_leading = call_fpabi(p);
+	fp_leading = !mips_soft_float && call_fpabi(p);
 #endif
 
 	/*

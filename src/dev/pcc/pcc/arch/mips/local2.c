@@ -45,12 +45,19 @@ int bigendian = 1;
 int bigendian = 0;
 #endif
 
+#ifdef MIPS_CPU_DEFAULT
+int mips_cpu = MIPS_CPU_DEFAULT;
+#else
+int mips_cpu = 0;
+#endif
+int mips_soft_float = 0;
 int nargregs = MIPS_O32_NARGREGS;
 
 static int funargpushsiz(NODE *p);
 static void print_reg64name(FILE *fp, int rval, int hi);
 static void adrput_lowpart(FILE *io, NODE *p, TWORD dst);
 static void ucmpbr(NODE *p);
+static int mips_is_soft_fp64(TWORD t);
 
 void
 deflab(int label)
@@ -452,52 +459,52 @@ fpemulop(NODE *p)
 
 	if (p->n_op == PLUS && p->n_type == FLOAT) ch = "addsf3";
 	else if (p->n_op == PLUS && p->n_type == DOUBLE) ch = "adddf3";
-	else if (p->n_op == PLUS && p->n_type == LDOUBLE) ch = "addtf3";
+	else if (p->n_op == PLUS && p->n_type == LDOUBLE) ch = "adddf3";
 
 	else if (p->n_op == MINUS && p->n_type == FLOAT) ch = "subsf3";
 	else if (p->n_op == MINUS && p->n_type == DOUBLE) ch = "subdf3";
-	else if (p->n_op == MINUS && p->n_type == LDOUBLE) ch = "subtf3";
+	else if (p->n_op == MINUS && p->n_type == LDOUBLE) ch = "subdf3";
 
 	else if (p->n_op == MUL && p->n_type == FLOAT) ch = "mulsf3";
 	else if (p->n_op == MUL && p->n_type == DOUBLE) ch = "muldf3";
-	else if (p->n_op == MUL && p->n_type == LDOUBLE) ch = "multf3";
+	else if (p->n_op == MUL && p->n_type == LDOUBLE) ch = "muldf3";
 
 	else if (p->n_op == DIV && p->n_type == FLOAT) ch = "divsf3";
 	else if (p->n_op == DIV && p->n_type == DOUBLE) ch = "divdf3";
-	else if (p->n_op == DIV && p->n_type == LDOUBLE) ch = "divtf3";
+	else if (p->n_op == DIV && p->n_type == LDOUBLE) ch = "divdf3";
 
 	else if (p->n_op == UMINUS && p->n_type == FLOAT) ch = "negsf2";
 	else if (p->n_op == UMINUS && p->n_type == DOUBLE) ch = "negdf2";
-	else if (p->n_op == UMINUS && p->n_type == LDOUBLE) ch = "negtf2";
+	else if (p->n_op == UMINUS && p->n_type == LDOUBLE) ch = "negdf2";
 
 	else if (p->n_op == EQ && l->n_type == FLOAT) ch = "eqsf2";
 	else if (p->n_op == EQ && l->n_type == DOUBLE) ch = "eqdf2";
-	else if (p->n_op == EQ && l->n_type == LDOUBLE) ch = "eqtf2";
+	else if (p->n_op == EQ && l->n_type == LDOUBLE) ch = "eqdf2";
 
 	else if (p->n_op == NE && l->n_type == FLOAT) ch = "nesf2";
 	else if (p->n_op == NE && l->n_type == DOUBLE) ch = "nedf2";
-	else if (p->n_op == NE && l->n_type == LDOUBLE) ch = "netf2";
+	else if (p->n_op == NE && l->n_type == LDOUBLE) ch = "nedf2";
 
 	else if (p->n_op == GE && l->n_type == FLOAT) ch = "gesf2";
 	else if (p->n_op == GE && l->n_type == DOUBLE) ch = "gedf2";
-	else if (p->n_op == GE && l->n_type == LDOUBLE) ch = "getf2";
+	else if (p->n_op == GE && l->n_type == LDOUBLE) ch = "gedf2";
 
 	else if (p->n_op == LE && l->n_type == FLOAT) ch = "lesf2";
 	else if (p->n_op == LE && l->n_type == DOUBLE) ch = "ledf2";
-	else if (p->n_op == LE && l->n_type == LDOUBLE) ch = "letf2";
+	else if (p->n_op == LE && l->n_type == LDOUBLE) ch = "ledf2";
 
 	else if (p->n_op == GT && l->n_type == FLOAT) ch = "gtsf2";
 	else if (p->n_op == GT && l->n_type == DOUBLE) ch = "gtdf2";
-	else if (p->n_op == GT && l->n_type == LDOUBLE) ch = "gttf2";
+	else if (p->n_op == GT && l->n_type == LDOUBLE) ch = "gtdf2";
 
 	else if (p->n_op == LT && l->n_type == FLOAT) ch = "ltsf2";
 	else if (p->n_op == LT && l->n_type == DOUBLE) ch = "ltdf2";
-	else if (p->n_op == LT && l->n_type == LDOUBLE) ch = "lttf2";
+	else if (p->n_op == LT && l->n_type == LDOUBLE) ch = "ltdf2";
 
 	else if (p->n_op == SCONV && p->n_type == FLOAT) {
 		if (l->n_type == DOUBLE) ch = "truncdfsf2";
-		else if (l->n_type == LDOUBLE) ch = "trunctfsf2";
-		else if (l->n_type == ULONGLONG) ch = "floatdisf"; /**/
+		else if (l->n_type == LDOUBLE) ch = "truncdfsf2";
+		else if (l->n_type == ULONGLONG) ch = "floatunsdisf";
 		else if (l->n_type == LONGLONG) ch = "floatdisf";
 		else if (l->n_type == LONG) ch = "floatsisf";
 		else if (l->n_type == ULONG) ch = "floatunsisf";
@@ -505,7 +512,7 @@ fpemulop(NODE *p)
 		else if (l->n_type == UNSIGNED) ch = "floatunsisf";
 	} else if (p->n_op == SCONV && p->n_type == DOUBLE) {
 		if (l->n_type == FLOAT) ch = "extendsfdf2";
-		else if (l->n_type == LDOUBLE) ch = "trunctfdf2";
+		else if (l->n_type == LDOUBLE) ch = NULL;
 		else if (l->n_type == ULONGLONG) ch = "floatunsdidf";
 		else if (l->n_type == LONGLONG) ch = "floatdidf";
 		else if (l->n_type == LONG) ch = "floatsidf";
@@ -513,12 +520,12 @@ fpemulop(NODE *p)
 		else if (l->n_type == INT) ch = "floatsidf";
 		else if (l->n_type == UNSIGNED) ch = "floatunsidf";
 	} else if (p->n_op == SCONV && p->n_type == LDOUBLE) {
-		if (l->n_type == FLOAT) ch = "extendsftf2";
-		else if (l->n_type == DOUBLE) ch = "extenddfdf2";
+		if (l->n_type == FLOAT) ch = "extendsfdf2";
+		else if (l->n_type == DOUBLE) ch = NULL;
 		else if (l->n_type == ULONGLONG) ch = "floatunsdidf";
 		else if (l->n_type == LONGLONG) ch = "floatdidf";
 		else if (l->n_type == LONG) ch = "floatsidf";
-		else if (l->n_type == ULONG) ch = "floatunssidf";
+		else if (l->n_type == ULONG) ch = "floatunsidf";
 		else if (l->n_type == INT) ch = "floatsidf";
 		else if (l->n_type == UNSIGNED) ch = "floatunsidf";
 	} else if (p->n_op == SCONV && p->n_type == ULONGLONG) {
@@ -549,7 +556,7 @@ fpemulop(NODE *p)
 
 	if (ch == NULL) comperr("ZF: op=0x%x (%d)\n", p->n_op, p->n_op);
 
-	if (p->n_op == SCONV) {
+	if (p->n_op == SCONV && !mips_soft_float) {
 #ifdef MIPS_HARDFLOAT_O32_ABI
 		if (l->n_type == FLOAT) {
 			printf("\tmov.s ");
@@ -578,15 +585,39 @@ fpemulop(NODE *p)
 			printf("\n\tnop\n");
 		}
 #endif
-	} else {
-		comperr("ZF: incomplete softfloat - put args in registers");
 	}
 
+	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\tjal __%s\t# softfloat operation\n", exname(ch));
 	printf("\tnop\n");
+	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
 
-	if (p->n_op >= EQ && p->n_op <= GT)
-		printf("\tcmp %s,0\n", rnames[V0]);
+	if (p->n_op >= EQ && p->n_op <= GT) {
+		switch (p->n_op) {
+		case EQ:
+			printf("\tbeqz %s,", rnames[V0]);
+			break;
+		case NE:
+			printf("\tbnez %s,", rnames[V0]);
+			break;
+		case LT:
+			printf("\tbltz %s,", rnames[V0]);
+			break;
+		case LE:
+			printf("\tblez %s,", rnames[V0]);
+			break;
+		case GT:
+			printf("\tbgtz %s,", rnames[V0]);
+			break;
+		case GE:
+			printf("\tbgez %s,", rnames[V0]);
+			break;
+		default:
+			comperr("fpemulop branch");
+		}
+		printf(LABFMT "\n", p->n_label);
+		printf("\tnop\n");
+	}
 }
 
 /*
@@ -1289,12 +1320,22 @@ myoptim(struct interpass * ipole)
  * Move data between registers.  While basic registers aren't a problem,
  * we have to handle the special case of overlapping composite registers.
  */
+static int
+mips_is_soft_fp64(TWORD t)
+{
+	return mips_soft_float && (t == DOUBLE || t == LDOUBLE);
+}
+
 void
 rmove(int s, int d, TWORD t)
 {
 	switch (t) {
 	case LONGLONG:
 	case ULONGLONG:
+	case DOUBLE:
+	case LDOUBLE:
+		if ((t == DOUBLE || t == LDOUBLE) && !mips_is_soft_fp64(t))
+			goto hardfp;
 		{
 		int low_first = (s == d + 1);
 #ifdef TARGET_BIG_ENDIAN
@@ -1329,8 +1370,12 @@ rmove(int s, int d, TWORD t)
 		}
                 break;
 	case FLOAT:
-	case DOUBLE:
-        case LDOUBLE:
+		if (mips_soft_float) {
+			printf("\tmove %s,%s\t# soft-float rmove\n",
+			    rnames[d], rnames[s]);
+			break;
+		}
+hardfp:
 		if (t == FLOAT)
 			printf("\tmov.s ");
 		else
@@ -1386,7 +1431,11 @@ gclass(TWORD t)
 {
 	if (t == LONGLONG || t == ULONGLONG)
 		return CLASSB;
-	if (t >= FLOAT && t <= LDOUBLE)
+	if (t == FLOAT)
+		return mips_soft_float ? CLASSA : CLASSC;
+	if (t == DOUBLE || t == LDOUBLE)
+		return mips_soft_float ? CLASSB : CLASSC;
+	if (t > FLOAT && t <= LDOUBLE)
 		return CLASSC;
 	return CLASSA;
 }
@@ -1474,9 +1523,31 @@ void
 mflags(char *str)
 {
 	if (strcasecmp(str, "big-endian") == 0) {
+#if defined(os_rebsd) && !defined(TARGET_BIG_ENDIAN)
+		fprintf(stderr, "big-endian mode is not supported by this target\n");
+		exit(1);
+#endif
 		bigendian = 1;
 	} else if (strcasecmp(str, "little-endian") == 0) {
+#if defined(os_rebsd) && defined(TARGET_BIG_ENDIAN)
+		fprintf(stderr,
+		    "little-endian mode is not supported by big-endian mips-rebsd\n");
+		exit(1);
+#endif
 		bigendian = 0;
+#ifdef MIPS_CPU_DEFAULT
+	} else if (strcasecmp(str, "arch=vr4300") == 0 ||
+	    strcasecmp(str, "ips3") == 0) {
+		mips_cpu = MIPS_CPU_VR4300;
+	} else if (strcasecmp(str, "arch=mips32r2") == 0 ||
+	    strcasecmp(str, "ips32r2") == 0 ||
+	    strcasecmp(str, "arch=mips32") == 0) {
+		mips_cpu = MIPS_CPU_MIPS32R2;
+#endif
+	} else if (strcasecmp(str, "hard-float") == 0) {
+		mips_soft_float = 0;
+	} else if (strcasecmp(str, "soft-float") == 0) {
+		mips_soft_float = 1;
 	} else {
 		fprintf(stderr, "unknown m option '%s'\n", str);
 		exit(1);
@@ -1497,6 +1568,18 @@ mflags(char *str)
 		nargregs = MIPS_N32_NARGREGS;
 	}
 #endif
+}
+
+int
+features(int mask)
+{
+	if (mask == 0)
+		return 1;
+	if ((mask & FEATURE_HARDFLOAT) && mips_soft_float)
+		return 0;
+	if ((mask & FEATURE_SOFTFLOAT) && !mips_soft_float)
+		return 0;
+	return (mask & ~(FEATURE_HARDFLOAT|FEATURE_SOFTFLOAT)) == 0;
 }
 /*
  * Do something target-dependent for xasm arguments.

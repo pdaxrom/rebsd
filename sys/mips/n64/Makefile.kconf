@@ -34,7 +34,7 @@ N64_ROOTFS_USR_LIBEXEC = $(N64_ROOTFS_STAGE)/usr/libexec
 N64_ROOTFS_USR_INCLUDE = $(N64_ROOTFS_STAGE)/usr/include
 N64_ROOTFS_USR_SHARE = $(N64_ROOTFS_STAGE)/usr/share
 N64_ROOTFS_BASE_STAMP = $(N64_ROOTFS_STAGE)/.base
-N64_ROOTFS_USER_STAMP = $(N64_ROOTFS_STAGE)/.userland.$(N64_USERLAND_COMPILER)
+N64_ROOTFS_USER_STAMP = $(N64_ROOTFS_STAGE)/.userland.$(N64_USERLAND_COMPILER).$(N64_USERLAND_CPU)
 N64_ROOTFS_USER_COMPAT_STAMP = $(N64_ROOTFS_STAGE)/.userland
 N64_ROOTFS_WHATIS = $(N64_ROOTFS_USR_SHARE)/man/whatis
 N64_USR_BIN_FILES = aout apropos ar as awk basename basic cal calendar cb chgrp \
@@ -80,7 +80,7 @@ N64_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
                    $(TOPSRC)/sys/mips/n64/*.h)
 N64_INCLUDE_LINKS = $(shell find $(TOPSRC)/include -maxdepth 1 -type l \
                     2>/dev/null)
-N64_NATIVE_DIR = n64-native-runtime
+N64_NATIVE_DIR = n64-native-runtime.$(N64_USERLAND_CPU)
 N64_NATIVE_TREE = $(N64_NATIVE_DIR)/tree
 N64_NATIVE_TOOLS = n64-native-tools
 N64_NATIVE_HOST_INCLUDE = $(N64_NATIVE_TOOLS)/include
@@ -107,16 +107,16 @@ N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
 N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
 N64_NATIVE_PCC_BUILD_SCRIPT = $(TOPSRC)/sys/mips/tools/native-pcc-build.py
-N64_NATIVE_CC = sh $(abspath $(N64_NATIVE_CC_SCRIPT))
-N64_NATIVE_ASWRAP = sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
+N64_NATIVE_CC = N64_AOUT_CPU=$(N64_USERLAND_CPU) sh $(abspath $(N64_NATIVE_CC_SCRIPT))
+N64_NATIVE_ASWRAP = N64_AOUT_CPU=$(N64_USERLAND_CPU) sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
 N64_COMMON_MACHINE_HEADERS = cpu elf_machdep float fpu io limits
 N64_NATIVE_AR = $(N64_PREFIX)ar
 N64_GNU_AS ?= $(N64_PREFIX)as
 N64_NATIVE_STAMP = $(N64_NATIVE_DIR)/.built
 N64_NATIVE_LIBS = crt0.o libc.a libm.a libpcc.a
-N64_NATIVE_PCC_BUILD = n64-native-pcc-build
-N64_NATIVE_PCC_DIR = n64-native-pcc
+N64_NATIVE_PCC_BUILD = n64-native-pcc-build.$(N64_USERLAND_CPU)
+N64_NATIVE_PCC_DIR = n64-native-pcc.$(N64_USERLAND_CPU)
 N64_NATIVE_PCC_STAMP = $(N64_NATIVE_PCC_DIR)/.built
 N64_PCC_REGRESS_SCRIPT = $(TOPSRC)/sys/mips/tools/pcc-regress.py
 N64_PCC_TEST_SRCS = $(shell find $(TOPSRC)/src/dev/pcc/pcc-tests/regress \
@@ -140,8 +140,8 @@ N64_ROOTFS_EXTRA_STAMPS =
 ifeq ($(N64_USERLAND_COMPILER),pcc)
 N64_ROOTFS_EXTRA_STAMPS += $(N64_LINPACK_ROOTFS_STAMP)
 endif
-N64_PCC_HOST_BUILD ?= /private/tmp/rebsd-n64-pcc-build
-N64_PCC_HOST_PREFIX ?= /private/tmp/rebsd-n64-pcc-install
+N64_PCC_HOST_BUILD ?= /private/tmp/rebsd-n64-pcc-build-$(N64_USERLAND_CPU)
+N64_PCC_HOST_PREFIX ?= /private/tmp/rebsd-n64-pcc-install-$(N64_USERLAND_CPU)
 N64_HOST_PCC = $(N64_PCC_HOST_PREFIX)/bin/mips-rebsd-pcc
 N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
@@ -256,17 +256,33 @@ ifneq ($(N64_USERLAND_COMPILER),$(MIPS_ROOTFS_COMPILER))
 $(error N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER) conflicts with MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER))
 endif
 endif
+N64_USERLAND_CPU ?= $(if $(MIPS_ROOTFS_CPU),$(MIPS_ROOTFS_CPU),vr4300)
+N64_USERLAND_CPUS = vr4300 mips32r2
+ifneq ($(MIPS_ROOTFS_CPU),)
+ifneq ($(N64_USERLAND_CPU),$(MIPS_ROOTFS_CPU))
+$(error N64_USERLAND_CPU=$(N64_USERLAND_CPU) conflicts with MIPS_ROOTFS_CPU=$(MIPS_ROOTFS_CPU))
+endif
+endif
+ifeq ($(filter $(N64_USERLAND_CPU),$(N64_USERLAND_CPUS)),)
+$(error Unsupported N64_USERLAND_CPU=$(N64_USERLAND_CPU); expected one of $(N64_USERLAND_CPUS))
+endif
+N64_USERLAND_ARCH_vr4300 = -EB -march=vr4300 -mtune=vr4300 -mips3 -mabi=32 -mhard-float
+N64_USERLAND_ARCH_mips32r2 = -EB -march=mips32r2 -mips32r2 -mtune=24kf -mabi=32 -mhard-float
+N64_USERLAND_AS_CPU_vr4300 = -march=vr4300
+N64_USERLAND_AS_CPU_mips32r2 = -march=mips32r2
+N64_USERLAND_ARCH = $(N64_USERLAND_ARCH_$(N64_USERLAND_CPU))
+N64_USERLAND_AS_CPU = $(N64_USERLAND_AS_CPU_$(N64_USERLAND_CPU))
 N64_KERNEL_COMPILER ?= gcc
 N64_KERNEL_COMPILERS = gcc pcc
 ifeq ($(filter $(N64_KERNEL_COMPILER),$(N64_KERNEL_COMPILERS)),)
 $(error Unsupported N64_KERNEL_COMPILER=$(N64_KERNEL_COMPILER); expected one of $(N64_KERNEL_COMPILERS))
 endif
-N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).stamp
+N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).$(N64_USERLAND_CPU).stamp
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
 
 ifeq ($(N64_USERLAND_COMPILER),gcc)
-N64_USERLAND_CC = $(N64_PREFIX)gcc $(N64_ARCH) $(N64_CODE) $(N64_USERLAND_INCLUDES) \
+N64_USERLAND_CC = $(N64_PREFIX)gcc $(N64_USERLAND_ARCH) $(N64_CODE) $(N64_USERLAND_INCLUDES) \
                 -Werror -Wno-unused-value -Wno-format-overflow \
                 -Wno-attribute-alias -Wno-missing-attributes
 N64_USERLAND_AS = $(N64_USERLAND_CC) -x assembler-with-cpp -c
@@ -282,12 +298,13 @@ N64_USERLAND_LDFLAGS = --nmagic -T$(abspath $(N64_USER_LDSCRIPT)) \
                        -L$(abspath $(TOPSRC)/src)
 N64_USERLAND_EXTRA_DEPS = $(N64_USERLAND_ELF2AOUT)
 else ifeq ($(N64_USERLAND_COMPILER),pcc)
-N64_USERLAND_CC = $(N64_HOST_PCC) $(N64_USERLAND_INCLUDES)
+N64_USERLAND_CC = $(N64_HOST_PCC) -march=$(N64_USERLAND_CPU) $(N64_USERLAND_INCLUDES)
 N64_USERLAND_AS = N64_AOUT_TOPSRC=$(abspath $(TOPSRC)) \
                   N64_AOUT_AS=$(abspath $(N64_NATIVE_AS)) \
+                  N64_AOUT_CPU=$(N64_USERLAND_CPU) \
                   N64_PREFIX=$(N64_PREFIX) \
                   sh $(abspath $(N64_NATIVE_ASWRAP_SCRIPT))
-N64_USERLAND_LD = $(N64_HOST_PCC)
+N64_USERLAND_LD = $(N64_HOST_PCC) -march=$(N64_USERLAND_CPU)
 N64_USERLAND_AR = $(abspath $(N64_NATIVE_AOUT_AR))
 N64_USERLAND_RANLIB = $(abspath $(N64_NATIVE_AOUT_RANLIB))
 N64_USERLAND_NM = $(abspath $(N64_NATIVE_AOUT_NM))
@@ -541,7 +558,7 @@ $(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES) $(N6
 $(N64_LINPACK_ROOTFS_STAMP): $(N64_ROOTFS_USER_STAMP) $(N64_HOST_PCC) \
     $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_LINPACK_SMOKE_SCRIPT) \
     $(N64_LINPACK_SMOKE_SRC)
-	python3 $(N64_LINPACK_SMOKE_SCRIPT) build \
+	N64_AOUT_CPU=$(N64_USERLAND_CPU) python3 $(N64_LINPACK_SMOKE_SCRIPT) build \
 	    --source $(abspath $(N64_LINPACK_SMOKE_SRC)) \
 	    --out $(N64_LINPACK_SMOKE_OUT) \
 	    --top $(abspath $(TOPSRC)) \
@@ -688,8 +705,8 @@ $(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_N
 	done
 	sort -u $(N64_ROOTFS_WHATIS).tmp > $(N64_ROOTFS_WHATIS)
 	rm -f $(N64_ROOTFS_WHATIS).tmp
-	rm -f $(N64_ROOTFS_STAGE)/.userland.gcc \
-	    $(N64_ROOTFS_STAGE)/.userland.pcc \
+	rm -f $(N64_ROOTFS_STAGE)/.userland.gcc* \
+	    $(N64_ROOTFS_STAGE)/.userland.pcc* \
 	    $(N64_ROOTFS_USER_COMPAT_STAMP)
 	touch $@
 	touch $(N64_ROOTFS_USER_COMPAT_STAMP)
@@ -748,7 +765,7 @@ pcc-hw-test-stage: $(N64_ROOTFS_BUILD_MANIFEST) $(N64_HOST_PCC) \
     $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_AOUT_AR) \
     $(N64_LINPACK_SMOKE_SCRIPT) $(N64_LINPACK_SMOKE_SRC) \
     $(N64_PCC_REGRESS_SCRIPT) $(N64_PCC_TEST_SRCS)
-	python3 $(N64_LINPACK_SMOKE_SCRIPT) build \
+	N64_AOUT_CPU=$(N64_USERLAND_CPU) python3 $(N64_LINPACK_SMOKE_SCRIPT) build \
 	    --source $(abspath $(N64_LINPACK_SMOKE_SRC)) \
 	    --out $(N64_LINPACK_SMOKE_OUT) \
 	    --top $(abspath $(TOPSRC)) \
@@ -774,7 +791,7 @@ pcc-hw-test-image: pcc-hw-test-stage
 	    rootfs.img kernel.z64 preflight.z64
 
 $(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
-	$(N64_PREFIX)gcc $(N64_ARCH) $(N64_CODE) -x assembler-with-cpp -c $< -o $@
+	$(N64_PREFIX)gcc $(N64_USERLAND_ARCH) $(N64_CODE) -x assembler-with-cpp -c $< -o $@
 
 $(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
 	$(N64_SRC_MAKE) libc
@@ -786,7 +803,7 @@ $(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o $(N64_CRT0_SRCS
 	$(N64_SRC_MAKE) -B all
 	$(N64_AWK_MAKE) clean
 	$(N64_AWK_MAKE) awk
-	rm -f n64-userland.gcc.stamp n64-userland.pcc.stamp n64-userland.stamp
+	rm -f n64-userland.gcc*.stamp n64-userland.pcc*.stamp n64-userland.stamp
 	touch $@
 
 $(N64_NATIVE_HOST_INCLUDE_STAMP): $(N64_NATIVE_MKHOSTINCLUDE) \
@@ -884,7 +901,8 @@ $(N64_HOST_PCC): $(N64_HOST_PORTABLECC_SCRIPT) $(N64_DEV_PCC_SRCS) \
 	    $(abspath $(N64_PCC_HOST_PREFIX)) \
 	    $(abspath $(N64_ROOTFS_USR_INCLUDE)) \
 	    $(abspath $(N64_NATIVE_DIR)) \
-	    $(abspath $(N64_NATIVE_AS)) $(abspath $(N64_NATIVE_LD))
+	    $(abspath $(N64_NATIVE_AS)) $(abspath $(N64_NATIVE_LD)) \
+	    $(N64_USERLAND_CPU)
 
 .PHONY: smoke-as-vr4300
 smoke-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_SMOKE_SCRIPT)
@@ -928,7 +946,7 @@ smoke-host-ccom: smoke-host-pcc
 
 $(N64_NATIVE_DIR)/crt0.o: $(N64_NATIVE_AS) $(N64_NATIVE_CRT0_SRC)
 	mkdir -p $(N64_NATIVE_DIR)
-	$(N64_NATIVE_AS) -EB -mips3 -march=vr4300 -o $@ $(N64_NATIVE_CRT0_SRC)
+	$(N64_NATIVE_AS) -EB $(N64_USERLAND_AS_CPU) -o $@ $(N64_NATIVE_CRT0_SRC)
 
 $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
     $(N64_NATIVE_DIR)/crt0.o $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB)
@@ -988,6 +1006,7 @@ $(N64_NATIVE_PCC_STAMP): $(N64_DEV_PCC_SRCS) $(N64_NATIVE_STAMP) \
 	    --out $(abspath $(N64_NATIVE_PCC_DIR)) \
 	    --gcc-wrapper $(abspath $(N64_NATIVE_CC_SCRIPT)) \
 	    --gcc-prefix $(N64_PREFIX) \
+	    --cpu $(N64_USERLAND_CPU) \
 	    --as $(abspath $(N64_NATIVE_AS)) \
 	    --ld $(abspath $(N64_NATIVE_LD)) \
 	    --crt0 $(abspath $(N64_NATIVE_DIR)/crt0.o) \
@@ -1035,7 +1054,8 @@ clean:
 	    $(N64_PCC_DEBUG_ROOTFS_MANIFEST) $(N64_KERNEL_LDSCRIPT) \
 	    $(N64_USER_LDSCRIPT) n64-userland*.stamp .build-mode.* \
 	    $(N64_PCC_DEBUG_RUNNER) $(N64_NATIVE_DIR) $(N64_NATIVE_TOOLS) \
-	    $(N64_NATIVE_PCC_BUILD) $(N64_NATIVE_PCC_DIR)
+	    $(N64_NATIVE_PCC_BUILD) $(N64_NATIVE_PCC_DIR) \
+	    n64-native-runtime.* n64-native-pcc-build.* n64-native-pcc.*
 
 clean-all: clean
 	rm -f Makefile ioconf.c swap*.c vers.c

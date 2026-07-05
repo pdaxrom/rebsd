@@ -43,6 +43,12 @@
 #define MIPS_HARDFLOAT_O32_ABI 1
 #define TARGET_NO_ABICALLS
 #define TARGET_NO_REORDER
+#define MIPS_CPU_VR4300		1
+#define MIPS_CPU_MIPS32R2	2
+#ifndef MIPS_CPU_DEFAULT
+#define MIPS_CPU_DEFAULT	MIPS_CPU_VR4300
+#endif
+#define MIPS_ALIGN64		(mips_cpu == MIPS_CPU_MIPS32R2 ? 32 : 64)
 #endif
 
 /*
@@ -76,13 +82,26 @@
 #define ALBOOL		32
 #define ALINT		32
 #define ALFLOAT		32
+#if defined(os_rebsd)
+#define ALDOUBLE	MIPS_ALIGN64
+#define ALLDOUBLE	MIPS_ALIGN64
+#else
 #define ALDOUBLE	64
 #define ALLDOUBLE	64
+#endif
 #define ALLONG		32
+#if defined(os_rebsd)
+#define ALLONGLONG	MIPS_ALIGN64
+#else
 #define ALLONGLONG	64
+#endif
 #define ALSHORT		16
 #define ALPOINT		32
+#if defined(os_rebsd)
+#define ALSTRUCT	MIPS_ALIGN64
+#else
 #define ALSTRUCT	64
+#endif
 #define ALSTACK		32 
 
 /*
@@ -233,7 +252,11 @@ typedef long long OFFSZ;
 #define MAXREGS 64
 #define NUMCLASS 3
 
-#define RETREG(x)	(DEUNSIGN(x) == LONGLONG ? V0V1 : \
+#define RETREG(x)	(mips_soft_float && (x) == FLOAT ? V0 : \
+			    mips_soft_float && ((x) == DOUBLE || \
+			    (x) == LDOUBLE || DEUNSIGN(x) == LONGLONG) ? \
+			    V0V1 : \
+			    DEUNSIGN(x) == LONGLONG ? V0V1 : \
 			    (x) == DOUBLE || (x) == LDOUBLE || (x) == FLOAT ? \
 			    F0 : V0)
 #define FPREG	FP	/* frame pointer */
@@ -337,9 +360,15 @@ typedef long long OFFSZ;
 #define ENCRD(x)	(x)			/* Encode dest reg in n_reg */
 
 int COLORMAP(int c, int *r);
+int features(int f);
 
 extern int bigendian;
+extern int mips_cpu;
+extern int mips_soft_float;
 extern int nargregs;
+
+#define FEATURE_HARDFLOAT	0x00010000
+#define FEATURE_SOFTFLOAT	0x00020000
 
 #define SPCON           (MAXSPECIAL+1)  /* positive constant */
 

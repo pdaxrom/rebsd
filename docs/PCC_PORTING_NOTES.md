@@ -60,6 +60,42 @@ PCC mode changes the target userland/rootfs compiler only.  It does not switch
 the kernel, N64 stage0, host bootstrap tools, or target a.out binary tools away
 from the existing flow.
 
+## Active PCC Work Queue
+
+The current PCC milestone is a selectable MIPS CPU userland compiler plus
+compiler-level MIPS soft-float support.  Endianness remains fixed by the PCC
+target build: the current `mips-rebsd` target is big-endian, and a future Malta
+little-endian port should use a separate `mipsel-rebsd` target rather than a
+runtime `-EL` switch on this compiler.
+
+Completed for this milestone:
+
+- ReBSD/MIPS PCC CPU switches for `vr4300` and `mips32r2`.  Accept both
+  GCC-style aliases (`-march=vr4300`, `-mips3`, `-march=mips32r2`,
+  `-mips32r2`) and pass the selected CPU to both `ccom` and `as`.
+- The selected CPU is part of the C ABI layout.  `vr4300` keeps the current
+  8-byte alignment policy; `mips32r2` uses the 4-byte Malta o32 layout.
+- Keep big-endian/little-endian selection target-build-time only for PCC.
+  Reject little-endian command-line mode on the current big-endian target
+  instead of silently producing mixed-mode objects.
+- The ReBSD assembler's VR4300 instruction checking and mips32r2/VR4300
+  text alignment are selected by the `-march`/`-mips*` mode passed by PCC, not
+  only by the assembler binary's compile-time default.
+- Make selectors for userland/rootfs CPU mode include CPU in build stamps so
+  Malta, Malta64/R4000, and N64 rootfs stages cannot be accidentally reused
+  across incompatible CPU ABI variants.
+- MIPS soft-float mode in PCC updates preprocessor macros, code generation,
+  helper calls, and libc runtime helper symbols.
+
+Remaining work:
+
+- Add an explicit rootfs/userland float-ABI selector once the soft-float
+  compiler smoke is ready to become a full userland build mode.  Include that
+  float ABI in rootfs stamps before mixing hard-float and soft-float rootfs
+  artifacts.
+- Validate full soft-float userlands in this order: host cross PCC smoke,
+  Malta64/R4000 QEMU userland, Malta QEMU userland, then real N64 hardware.
+
 ## Known Kernel PCC Blocker
 
 Kernel PCC builds are not a supported gate yet.  Experimental selectors may be
@@ -97,12 +133,11 @@ frontend error `compiler error: strmemb` when `-Werror` is removed.  Treat this
 as a PCC frontend bug, not as a kernel source issue.  Do not add local kernel
 workarounds for these `rdwri()` call sites just to make PCC proceed.
 
-PCC also does not currently provide a usable MIPS soft-float code generation
-mode.  The ReBSD target rejects both `-msoft-float` and `-mhard-float`; the
-MIPS backend only handles endian `-m` options in the active code path and the
-target ABI is hard-float o32.  Any future kernel PCC gate must either implement
-real soft-float support where needed or keep an explicit COP1/FPU instruction
-guard around PCC-generated kernel C assembly.
+PCC now has compiler-level MIPS soft-float support for targeted userland smoke
+tests, but kernel PCC builds still need an explicit FPU policy before becoming
+a supported gate.  Kernel builds should either use soft-float deliberately or
+keep an explicit COP1/FPU instruction guard around PCC-generated kernel C
+assembly.
 
 ## Native Rootfs Layout
 

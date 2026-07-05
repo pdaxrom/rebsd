@@ -12,6 +12,9 @@ Current policy:
   currently blocked by a documented PCC frontend bug.
 - Userland build: GCC by default.
 - Supported userland compiler selectors: `gcc` and `pcc`.
+- Current PCC target endianness: build-time big-endian `mips-rebsd`.
+- PCC CPU selectors: `vr4300` and `mips32r2`, with CPU-specific instruction
+  mode and C ABI alignment.
 - Native `/usr/bin/cc` and `/usr/bin/pcc`: imported PCC in the rootfs.
 - C++/`p++`: deferred to future work and not installed by default.
 
@@ -41,5 +44,9 @@ make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
 not switch the kernel, N64 stage0, or host-side bootstrap tools away from the
 existing GCC-based flow.  Kernel PCC experiments must be requested explicitly
 with `MIPS_KERNEL_COMPILER=pcc` or `N64_KERNEL_COMPILER=pcc`; they are expected
-to fail until the `rdwri()` frontend bug and the missing MIPS soft-float mode
-are fixed in PCC.
+to fail until the documented `rdwri()` frontend bug is fixed.
+
+For the current big-endian PCC target, CPU/ISA selection is a runtime compiler
+mode but endian selection is not.  A future little-endian Malta port should use
+a separate `mipsel-rebsd` compiler target so headers, predefined macros, and
+libraries stay internally consistent.

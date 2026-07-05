@@ -17,6 +17,14 @@ def q(value):
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def mips_cpu_default(cpu):
+    if cpu == "vr4300":
+        return "MIPS_CPU_VR4300"
+    if cpu == "mips32r2":
+        return "MIPS_CPU_MIPS32R2"
+    raise ValueError(f"unsupported MIPS CPU: {cpu}")
+
+
 def run(cmd, *, cwd=None, env=None):
     print("$ " + " ".join(str(c) for c in cmd))
     subprocess.run([str(c) for c in cmd], cwd=cwd, env=env, check=True)
@@ -85,6 +93,8 @@ class Builder:
         self.rootfs = Path(args.rootfs).resolve() if args.rootfs else None
         self.gcc_wrapper = Path(args.gcc_wrapper).resolve()
         self.gcc_prefix = args.gcc_prefix
+        self.cpu = args.cpu
+        self.cpu_default = mips_cpu_default(args.cpu)
         self.rebsd_as = Path(args.as_).resolve()
         self.rebsd_ld = Path(args.ld).resolve()
         self.crt0 = Path(args.crt0).resolve()
@@ -97,6 +107,7 @@ class Builder:
         self.env["N64_AOUT_TOPSRC"] = str(self.top)
         self.env["N64_AOUT_AS"] = str(self.rebsd_as)
         self.env["N64_PREFIX"] = self.gcc_prefix
+        self.env["N64_AOUT_CPU"] = self.cpu
         self.host_config = self.builddir / "host-config"
         self.target_config = self.builddir / "target-config"
         self.objects = self.builddir / "obj"
@@ -156,6 +167,7 @@ class Builder:
             "-Dmach_mips",
             "-DTARGOSVER=0",
             "-DTARGET_BIG_ENDIAN=1",
+            f"-DMIPS_CPU_DEFAULT={self.cpu_default}",
             "-I", self.target_config,
             "-I", component_build,
             "-I", component_src,
@@ -380,6 +392,8 @@ def main():
     parser.add_argument("--rootfs")
     parser.add_argument("--gcc-wrapper", required=True)
     parser.add_argument("--gcc-prefix", required=True)
+    parser.add_argument("--cpu", choices=["vr4300", "mips32r2"],
+                        default="vr4300")
     parser.add_argument("--as", dest="as_", required=True)
     parser.add_argument("--ld", required=True)
     parser.add_argument("--crt0", required=True)
