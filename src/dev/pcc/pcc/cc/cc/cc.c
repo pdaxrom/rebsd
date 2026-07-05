@@ -2014,7 +2014,9 @@ setup_cpp_flags(void)
 struct flgcheck ccomflgcheck[] = {
 	{ &Oflag, 1, "-xtemps" },
 	{ &Oflag, 1, "-xdeljumps" },
+#ifndef PCC_DISABLE_AUTO_XINLINE
 	{ &Oflag, 1, "-xinline" },
+#endif
 	{ &Oflag, 1, "-xdce" },
 	{ &Oflag, 1, "-xssa" },
 	{ &freestanding, 1, "-ffreestanding" },

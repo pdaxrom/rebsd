@@ -138,7 +138,16 @@ setorder(NODE * p)
 int *
 livecall(NODE *p)
 {
-	static int r[1] = { -1 }; /* Terminate with -1 */
+	static int r[] = {
+		V0, V1,
+		A0, A1, A2, A3,
+		T0, T1, T2, T3, T4, T5, T6, T7, T8, T9,
+		V0V1,
+		A0A1, A1A2, A2A3, A3T0,
+		T0T1, T1T2, T2T3, T3T4, T4T5, T5T6, T6T7,
+		T7T8, T8T9,
+		-1
+	};
 
 	return &r[0];
 }

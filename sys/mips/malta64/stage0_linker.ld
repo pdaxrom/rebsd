@@ -3,7 +3,7 @@ ENTRY(_start)
 
 MEMORY
 {
-  stage0 (rwx) : ORIGIN = 0xffffffff80010000, LENGTH = 30M
+  stage0 (rwx) : ORIGIN = 0xffffffff80010000, LENGTH = 48M
 }
 
 SECTIONS

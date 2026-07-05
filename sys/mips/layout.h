@@ -26,9 +26,16 @@
  *   0x00500000..0x005fffff  /var ramdisk
  *   0x00600000..0x015fffff  root filesystem loaded by QEMU
  *   0x01600000..0x01ffffff  RAM swap
+ *
+ * Malta PCC smoke builds may override the RAM and root filesystem sizes from
+ * the board makefile when the staged userland no longer fits in 16 MiB.
  */
 #define MALTA_PHYS_RAM_BASE            0x00000000
+#ifdef MALTA_RAM_SIZE_OVERRIDE
+#define MALTA_RAM_SIZE                 MALTA_RAM_SIZE_OVERRIDE
+#else
 #define MALTA_RAM_SIZE                 MIPS_SIZE_32M
+#endif
 #define MALTA_CPU_KHZ                  100000u
 #define MIPS_COUNT_KHZ                 50000u
 #define MALTA_KERNEL_LOAD_VADDR        0x80100000
@@ -45,11 +52,16 @@
 #define MIPS_USER_TLB_PAIR_SIZE        (2 * MIPS_USER_TLB_PAGE_SIZE)
 #define MIPS_USER_MAXMEM               MIPS_USER_TLB_PAIR_SIZE
 #define MIPS_USER_VADDR_END            (MIPS_USER_VADDR_START + MIPS_USER_MAXMEM)
+#define MIPS_USER_GP_OFFSET            0x00007ff0
 
 #define MALTA_RAMDISK_VAR_PHYS_START   0x00500000
 #define MALTA_RAMDISK_VAR_BYTES        MIPS_SIZE_1M
 #define MALTA_ROMDISK_PHYS_START       0x00600000
+#ifdef MALTA_ROMDISK_BYTES_OVERRIDE
+#define MALTA_ROMDISK_BYTES            MALTA_ROMDISK_BYTES_OVERRIDE
+#else
 #define MALTA_ROMDISK_BYTES            MIPS_SIZE_16M
+#endif
 #define MALTA_RAMSWAP_PHYS_START       (MALTA_ROMDISK_PHYS_START + \
                                          MALTA_ROMDISK_BYTES)
 #define MALTA_RAMSWAP_BYTES            (MALTA_RAM_SIZE - MALTA_RAMSWAP_PHYS_START)

@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-if [ $# -ne 7 ] && [ $# -ne 8 ]; then
-	echo "usage: $0 topsrc builddir prefix include-dir lib-dir rebsd-as rebsd-ld [cpu]" >&2
+if [ $# -ne 6 ] && [ $# -ne 7 ] && [ $# -ne 8 ] && [ $# -ne 9 ]; then
+	echo "usage: $0 topsrc builddir prefix include-dir rebsd-as rebsd-ld [cpu] [float-abi] [endian]" >&2
 	exit 2
 fi
 
@@ -10,11 +10,20 @@ topsrc=$1
 builddir=$2
 prefix=$3
 incdir=$4
-libdir=$5
-as=$6
-ld=$7
-cpu=${8:-vr4300}
+as=$5
+ld=$6
+cpu=${7:-vr4300}
+float_abi=${8:-hard}
+endian=${9:-big}
 pcc_src=$topsrc/src/dev/pcc/pcc
+target=mips-rebsd
+target_root=$prefix/$target
+target_incdir=$target_root/include
+target_libdir=$target_root/lib
+target_softfloat_libdir=$target_libdir/softfloat
+target_bindir=$prefix/bin
+target_as=$target_bindir/$target-as
+target_ld=$target_bindir/$target-ld
 
 case "$cpu" in
 vr4300)
@@ -28,33 +37,79 @@ mips32r2)
 	exit 2
 	;;
 esac
+case "$float_abi" in
+hard)
+	float_cflags="-DMIPS_SOFT_FLOAT_DEFAULT=0"
+	;;
+soft)
+	float_cflags="-DSOFTFLOAT -DMIPS_SOFT_FLOAT_DEFAULT=1"
+	;;
+*)
+	echo "unsupported PCC float ABI default: $float_abi" >&2
+	exit 2
+	;;
+esac
+case "$endian" in
+big)
+	endian_cflags="-DTARGET_BIG_ENDIAN=1"
+	;;
+little)
+	echo "PCC endian '$endian' is reserved for the future mipsel port" >&2
+	exit 2
+	;;
+*)
+	echo "unsupported PCC endian default: $endian" >&2
+	exit 2
+	;;
+esac
 
 test -x "$pcc_src/configure"
 test -d "$incdir"
-test -d "$libdir"
 test -x "$as"
 test -x "$ld"
 
-mkdir -p "$builddir" "$prefix"
+mkdir -p "$builddir" "$target_bindir"
+rm -rf "$target_incdir" "$target_libdir"
+mkdir -p "$target_incdir" "$target_libdir" "$target_softfloat_libdir"
+cp -pR "$incdir"/. "$target_incdir"/
+cp -p "$as" "$target_as"
+cp -p "$ld" "$target_ld"
+tool_src_dir=$(dirname "$as")
+for tool in aout ar ranlib nm size strip; do
+	if [ -x "$tool_src_dir/$tool" ]; then
+		cp -p "$tool_src_dir/$tool" "$target_bindir/$target-$tool"
+		ln -sf "$target-$tool" "$target_bindir/$tool"
+	fi
+done
+ln -sf "$target-as" "$target_bindir/as"
+ln -sf "$target-ld" "$target_bindir/ld"
 cd "$builddir"
 
-CFLAGS="${CFLAGS:-} -DMIPS_CPU_DEFAULT=$cpu_default" \
+CFLAGS="${CFLAGS:-} $endian_cflags -DMIPS_CPU_DEFAULT=$cpu_default $float_cflags" \
 "$pcc_src/configure" \
-	--target=mips-rebsd \
+	--target="$target" \
 	--prefix="$prefix" \
-	--with-incdir="$incdir" \
-	--with-libdir="$libdir" \
-	--with-assembler="$as" \
-	--with-linker="$ld"
+	--with-incdir="$target_incdir" \
+	--with-libdir="$target_libdir" \
+	--with-assembler="$target_as" \
+	--with-linker="$target_ld"
 
-${MAKE:-make} -B all
-${MAKE:-make} install
+${MAKE:-make} -B -C cc/cc all
+${MAKE:-make} -B -C cc/cpp all
+${MAKE:-make} -B -C cc/ccom all
+${MAKE:-make} -C cc/cc install
+${MAKE:-make} -C cc/cpp install
+${MAKE:-make} -C cc/ccom install
 
-pcc=$prefix/bin/mips-rebsd-pcc
+pcc=$target_bindir/$target-pcc
 test -x "$pcc"
+ln -sf "$target-pcc" "$target_bindir/pcc"
+ln -sf "$target-pcc" "$target_bindir/cc"
+ln -sf "$target-pcc" "$target_bindir/$target-cc"
+ln -sf "$target-pcpp" "$target_bindir/cpp"
 
 tmp=${TMPDIR:-/tmp}/rebsd-host-portablecc.$$
-trap 'rm -f "$tmp" "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros"' 0 1 2 3 15
+trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros"' 0 1 2 3 15
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>
@@ -77,8 +132,7 @@ EOF
 
 "$pcc" -S -o "$tmp.s" "$tmp.c"
 "$pcc" -c -o "$tmp.o" "$tmp.c"
-"$pcc" -o "$tmp" "$tmp.c"
-test -s "$tmp"
+test -s "$tmp.o"
 
 cat > "$tmp.c" <<'EOF'
 struct sd {
@@ -96,5 +150,14 @@ grep '^#define __mips32r2' "$tmp.macros" >/dev/null
 "$pcc" -march=vr4300 -E -dM "$tmp.c" > "$tmp.macros"
 grep '^#define __mips 3$' "$tmp.macros" >/dev/null
 grep '^#define __vr4300__' "$tmp.macros" >/dev/null
+"$pcc" -E -dM "$tmp.c" > "$tmp.macros"
+if [ "$float_abi" = soft ]; then
+	grep '^#define __mips_soft_float' "$tmp.macros" >/dev/null
+else
+	grep '^#define __mips_hard_float' "$tmp.macros" >/dev/null
+fi
+if [ "$endian" = big ]; then
+	grep '^#define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__$' "$tmp.macros" >/dev/null
+fi
 
 echo "smoke-host-portablecc: ok"

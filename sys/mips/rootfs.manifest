@@ -173,9 +173,6 @@ file /root/pcc-smoke.c
 file /root/pcc-smoke-all.sh
 mode 0775
 
-file /root/romfs-smoke.sh
-mode 0775
-
 file /root/net-smoke.sh
 mode 0775
 
@@ -334,12 +331,6 @@ mode 0775
 file /bin/false
 mode 0775
 
-file /usr/bin/fbset
-mode 0775
-
-file /usr/bin/fbview
-mode 0775
-
 file /usr/bin/fgrep
 mode 0775
 
@@ -418,9 +409,6 @@ mode 0775
 file /bin/mv
 mode 0775
 
-file /usr/bin/n64input
-mode 0775
-
 file /usr/bin/netstat
 mode 0775
 
@@ -481,9 +469,6 @@ mode 0775
 file /usr/bin/rev
 mode 0775
 
-file /usr/bin/rgbled
-mode 0775
-
 file /usr/bin/ranlib
 mode 0775
 
@@ -494,9 +479,6 @@ file /usr/bin/rmail
 mode 0775
 
 file /bin/rmdir
-mode 0775
-
-file /usr/bin/romfsctl
 mode 0775
 
 file /bin/sed
@@ -747,10 +729,6 @@ file /usr/share/man/cat1/expr.0
 
 file /usr/share/man/cat1/false.0
 
-file /usr/share/man/cat1/fbset.0
-
-file /usr/share/man/cat1/fbview.0
-
 file /usr/share/man/cat1/fgrep.0
 
 file /usr/share/man/cat1/file.0
@@ -799,8 +777,6 @@ file /usr/share/man/cat1/more.0
 
 file /usr/share/man/cat1/mv.0
 
-file /usr/share/man/cat1/n64input.0
-
 file /usr/share/man/cat1/nice.0
 
 file /usr/share/man/cat1/nm.0
@@ -829,15 +805,11 @@ file /usr/share/man/cat1/ranlib.0
 
 file /usr/share/man/cat1/rev.0
 
-file /usr/share/man/cat1/rgbled.0
-
 file /usr/share/man/cat1/rm.0
 
 file /usr/share/man/cat1/rmail.0
 
 file /usr/share/man/cat1/rmdir.0
-
-file /usr/share/man/cat1/romfsctl.0
 
 file /usr/share/man/cat1/sed.0
 

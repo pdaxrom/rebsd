@@ -1,0 +1,76 @@
+#include "../layout.h"
+
+OUTPUT_FORMAT("elf32-bigmips", "elf32-bigmips", "elf32-littlemips")
+OUTPUT_ARCH(mips)
+ENTRY(_start)
+
+PHDRS
+{
+  user PT_LOAD FLAGS(7);
+}
+
+SECTIONS
+{
+  PROVIDE(__executable_start = MIPS_USER_VADDR_START);
+  . = MIPS_USER_VADDR_START;
+
+  .text : {
+    _ftext = .;
+    *(.text .stub .text.* .gnu.linkonce.t.*)
+    *(.rodata .rodata.* .gnu.linkonce.r.*)
+    . = ALIGN(16);
+  } :user
+
+  PROVIDE(__etext = .);
+  PROVIDE(_etext = .);
+  PROVIDE(etext = .);
+
+  .data : {
+    __data_start = .;
+    _fdata = .;
+    *(.data .data.* .gnu.linkonce.d.*)
+    . = ALIGN(16);
+    _gp = . + MIPS_USER_GP_OFFSET;
+    *(.sdata .sdata.* .gnu.linkonce.s.*)
+    *(.lit8)
+    *(.lit4)
+    . = ALIGN(4);
+    PROVIDE(__CTOR_LIST__ = .);
+    KEEP(*(.ctors .ctors.*))
+    KEEP(*(.init_array .init_array.*))
+    PROVIDE(__CTOR_END__ = .);
+    PROVIDE(__DTOR_LIST__ = .);
+    KEEP(*(.dtors .dtors.*))
+    KEEP(*(.fini_array .fini_array.*))
+    PROVIDE(__DTOR_END__ = .);
+    . = ALIGN(16);
+  } :user
+
+  _edata = .;
+  PROVIDE(edata = .);
+  __bss_start = .;
+  _fbss = .;
+
+  .bss (NOLOAD) : {
+    *(.dynsbss)
+    *(.sbss .sbss.*)
+    *(.scommon)
+    *(.dynbss)
+    *(.bss .bss.*)
+    *(COMMON)
+    . = ALIGN(16);
+  } :user
+
+  _end = .;
+  PROVIDE(end = .);
+
+  /DISCARD/ : {
+    *(.reginfo)
+    *(.MIPS.abiflags)
+    *(.MIPS.options)
+    *(.pdr)
+    *(.note.GNU-stack)
+    *(.gnu_debuglink)
+    *(.comment)
+  }
+}

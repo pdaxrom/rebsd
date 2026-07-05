@@ -23,6 +23,13 @@
 #define TARGET_GLOBALS \
 	int mips_cpu = MIPS_CPU_DEFAULT;
 
+/*
+ * The PCC inline pass currently corrupts trees in ReBSD/MIPS optimized
+ * soft-float builds. Keep explicit -Wc,-xinline available, but do not enable
+ * it automatically as part of -O/-O2 for this target.
+ */
+#define PCC_DISABLE_AUTO_XINLINE
+
 #define PCC_HANDLE_MFLAG { \
 	if (match(argp, "-march=vr4300") || match(argp, "-mips3")) { \
 		mips_cpu = MIPS_CPU_VR4300; \
@@ -55,10 +62,13 @@
 		strlist_prepend(&preprocessor_flags, "-D__mips3"); \
 		strlist_prepend(&preprocessor_flags, "-D__vr4300__"); \
 	} \
-	if (softfloat) \
+	if (softfloat) { \
 		strlist_prepend(&preprocessor_flags, "-D__mips_soft_float"); \
-	else \
+		strlist_append(&compiler_flags, "-msoft-float"); \
+	} else { \
 		strlist_prepend(&preprocessor_flags, "-D__mips_hard_float"); \
+		strlist_append(&compiler_flags, "-mhard-float"); \
+	} \
 }
 
 #define CRTBEGIN	0
@@ -71,6 +81,7 @@
 #define CRT0		LIBDIR "crt0.o"
 
 #define DEFLIBDIRS	{ LIBDIR, NULL }
+#define SOFTFLOATLIBDIR	LIBDIR "softfloat/"
 #define DEFLIBS		{ "-lpcc", "-lc", "-lpcc", NULL }
 #define DEFPROFLIBS	{ "-lpcc", "-lc", "-lpcc", NULL }
 #define DEFCXXLIBS	{ "-lpcc", "-lc", "-lpcc", NULL }
@@ -82,8 +93,12 @@
 	strlist_append(&assembler_flags, \
 	    mips_cpu == MIPS_CPU_MIPS32R2 ? "-march=mips32r2" : "-march=vr4300");
 
-#define PCC_SETUP_LD_ARGS \
-	strlist_append(&early_linker_flags, "-X");
+#define PCC_SETUP_LD_ARGS { \
+	strlist_append(&early_linker_flags, "-X"); \
+	if (softfloat && !nostdlib) \
+		strlist_append(&early_linker_flags, \
+		    cat("-L", cat_sysroot(sysroot, SOFTFLOATLIBDIR))); \
+}
 
 #define PCC_SIZE_TYPE		"unsigned int"
 #define PCC_PTRDIFF_TYPE	"int"

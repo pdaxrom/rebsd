@@ -50,7 +50,7 @@ int mips_cpu = MIPS_CPU_DEFAULT;
 #else
 int mips_cpu = 0;
 #endif
-int mips_soft_float = 0;
+int mips_soft_float = MIPS_SOFT_FLOAT_DEFAULT;
 int nargregs = MIPS_O32_NARGREGS;
 
 static int funargpushsiz(NODE *p);
@@ -58,6 +58,9 @@ static void print_reg64name(FILE *fp, int rval, int hi);
 static void adrput_lowpart(FILE *io, NODE *p, TWORD dst);
 static void ucmpbr(NODE *p);
 static int mips_is_soft_fp64(TWORD t);
+static int mips_split_hardfp64_mem(void);
+static void mips_hardfp64_load(NODE *p);
+static void mips_hardfp64_store(NODE *p);
 
 void
 deflab(int label)
@@ -677,61 +680,102 @@ emulop(NODE *p)
  * Emit code to compare two longlong numbers.
  */
 static void
+twollbr(NODE *p, const char *op, const char *l, const char *r, int lab)
+{
+	printf("\t%s ", op);
+	expand(p, 0, l);
+	printf(",");
+	expand(p, 0, r);
+	printf("," LABFMT "\n", lab);
+	printf("\tnop\n");
+}
+
+static void
+twollslt(NODE *p, int unsig, const char *l, const char *r)
+{
+	printf("\t%s ", unsig ? "sltu" : "slt");
+	expand(p, 0, "A1");
+	printf(",");
+	expand(p, 0, l);
+	printf(",");
+	expand(p, 0, r);
+	printf("\n");
+}
+
+static void
+twollbrtmp(NODE *p, const char *op, int lab)
+{
+	printf("\t%s ", op);
+	expand(p, 0, "A1");
+	printf("," LABFMT "\n", lab);
+	printf("\tnop\n");
+}
+
+static void
+twolljump(int lab)
+{
+	printf("\tj " LABFMT "\n", lab);
+	printf("\tnop\n");
+}
+
+static void
 twollcomp(NODE *p)
 {
 	int o = p->n_op;
 	int s = getlab2();
 	int e = p->n_label;
-	int cb1, cb2;
+	int unsig = o >= ULE;
 
-	if (o >= ULE)
-		o -= (ULE-LE);
 	switch (o) {
-	case NE:
-		cb1 = 0;
-		cb2 = NE;
-		break;
 	case EQ:
-		cb1 = NE;
-		cb2 = 0;
+		twollbr(p, "bne", "UL", "UR", s);
+		twollbr(p, "beq", "AL", "AR", e);
+		break;
+	case NE:
+		twollbr(p, "bne", "UL", "UR", e);
+		twollbr(p, "bne", "AL", "AR", e);
+		break;
+	case LT:
+	case ULT:
+		twollslt(p, unsig, "UL", "UR");
+		twollbrtmp(p, "bnez", e);
+		twollslt(p, unsig, "UR", "UL");
+		twollbrtmp(p, "bnez", s);
+		twollslt(p, 1, "AL", "AR");
+		twollbrtmp(p, "bnez", e);
 		break;
 	case LE:
-	case LT:
-		cb1 = GT;
-		cb2 = LT;
+	case ULE:
+		twollslt(p, unsig, "UL", "UR");
+		twollbrtmp(p, "bnez", e);
+		twollslt(p, unsig, "UR", "UL");
+		twollbrtmp(p, "bnez", s);
+		twollslt(p, 1, "AR", "AL");
+		twollbrtmp(p, "bnez", s);
+		twolljump(e);
+		break;
+	case GT:
+	case UGT:
+		twollslt(p, unsig, "UR", "UL");
+		twollbrtmp(p, "bnez", e);
+		twollslt(p, unsig, "UL", "UR");
+		twollbrtmp(p, "bnez", s);
+		twollslt(p, 1, "AR", "AL");
+		twollbrtmp(p, "bnez", e);
 		break;
 	case GE:
-	case GT:
-		cb1 = LT;
-		cb2 = GT;
+	case UGE:
+		twollslt(p, unsig, "UL", "UR");
+		twollbrtmp(p, "bnez", s);
+		twollslt(p, unsig, "UR", "UL");
+		twollbrtmp(p, "bnez", e);
+		twollslt(p, 1, "AL", "AR");
+		twollbrtmp(p, "bnez", s);
+		twolljump(e);
 		break;
-	
 	default:
-		cb1 = cb2 = 0; /* XXX gcc */
+		comperr("twollcomp bad op %d", o);
 	}
-	if (p->n_op >= ULE)
-		cb1 += 4, cb2 += 4;
-	expand(p, 0, "\tsub A1,UL,UR\t# compare 64-bit values (upper)\n");
-	if (cb1) {
-		printf("\t");
-		hopcode(' ', cb1);
-		expand(p, 0, "A1");
-		printf("," LABFMT "\n", s);
-		printf("\tnop\n");
-	}
-	if (cb2) {
-		printf("\t");
-		hopcode(' ', cb2);
-		expand(p, 0, "A1");
-		printf("," LABFMT "\n", e);
-		printf("\tnop\n");
-	}
-	expand(p, 0, "\tsub A1,AL,AR\t# (and lower)\n");
-	printf("\t");
-	hopcode(' ', o);
-	expand(p, 0, "A1");
-	printf("," LABFMT "\n", e);
-	printf("\tnop\n");
 	deflab(s);
 }
 
@@ -952,6 +996,14 @@ zzzcode(NODE * p, int c)
 
 	case 'Q':		/* emit struct assign */
 		stasg(p);
+		break;
+
+	case 'R':		/* hard-float double load */
+		mips_hardfp64_load(p);
+		break;
+
+	case 'S':		/* hard-float double store */
+		mips_hardfp64_store(p);
 		break;
 
 	default:
@@ -1324,6 +1376,59 @@ static int
 mips_is_soft_fp64(TWORD t)
 {
 	return mips_soft_float && (t == DOUBLE || t == LDOUBLE);
+}
+
+static int
+mips_split_hardfp64_mem(void)
+{
+#ifdef MIPS_ALIGN64
+	return !mips_soft_float && MIPS_ALIGN64 <= SZINT;
+#else
+	return 0;
+#endif
+}
+
+static void
+mips_hardfp64_load(NODE *p)
+{
+	if (!mips_split_hardfp64_mem()) {
+		expand(p, 0, "\tl.d A1,AL\t# load double floating-point reg\n"
+		    "\tnop\n");
+		return;
+	}
+#ifdef TARGET_BIG_ENDIAN
+	expand(p, 0, "\tlwc1 U1,AL\t# split double load\n"
+	    "\tnop\n"
+	    "\tlwc1 A1,UL\n"
+	    "\tnop\n");
+#else
+	expand(p, 0, "\tlwc1 A1,AL\t# split double load\n"
+	    "\tnop\n"
+	    "\tlwc1 U1,UL\n"
+	    "\tnop\n");
+#endif
+}
+
+static void
+mips_hardfp64_store(NODE *p)
+{
+	if (!mips_split_hardfp64_mem()) {
+		expand(p, 0,
+		    "\ts.d AR,AL\t\t# store double floating-point reg\n"
+		    "\tnop\n");
+		return;
+	}
+#ifdef TARGET_BIG_ENDIAN
+	expand(p, 0, "\tswc1 UR,AL\t\t# split double store\n"
+	    "\tnop\n"
+	    "\tswc1 AR,UL\n"
+	    "\tnop\n");
+#else
+	expand(p, 0, "\tswc1 AR,AL\t\t# split double store\n"
+	    "\tnop\n"
+	    "\tswc1 UR,UL\n"
+	    "\tnop\n");
+#endif
 }
 
 void

@@ -6,6 +6,7 @@ set -e
 
 N64_PREFIX=${N64_PREFIX:-/Users/sash/Library/n64-toolchain-opengl/bin/mips64-elf-}
 N64_AOUT_CPU=${N64_AOUT_CPU:-vr4300}
+N64_AOUT_FLOAT=${N64_AOUT_FLOAT:-hard}
 case "$N64_AOUT_CPU" in
 vr4300)
     arch_flags="-EB -march=vr4300 -mtune=vr4300 -mips3 -mabi=32"
@@ -17,6 +18,18 @@ mips32r2)
     ;;
 *)
     echo "n64-aout-cc: unsupported N64_AOUT_CPU=$N64_AOUT_CPU" >&2
+    exit 1
+    ;;
+esac
+case "$N64_AOUT_FLOAT" in
+hard)
+    float_flag="-mhard-float"
+    ;;
+soft)
+    float_flag="-msoft-float"
+    ;;
+*)
+    echo "n64-aout-cc: unsupported N64_AOUT_FLOAT=$N64_AOUT_FLOAT" >&2
     exit 1
     ;;
 esac
@@ -58,7 +71,7 @@ trap 'rm -f "$tmp"' 0 1 2 3 15
 
 if [ "$mode" = c ]; then
     eval "${N64_PREFIX}gcc" \
-        $arch_flags -mhard-float \
+        $arch_flags $float_flag \
         -G0 -mno-abicalls -fno-pic -fomit-frame-pointer \
         -nostdinc \
         -Wno-unused-value -Wno-format-overflow -Wno-attribute-alias \
@@ -68,7 +81,7 @@ if [ "$mode" = c ]; then
         $args -S -o "'$tmp'" "'$src'"
 else
     eval "${N64_PREFIX}gcc" \
-        $arch_flags \
+        $arch_flags $float_flag \
         -G0 -mno-abicalls -fno-pic \
         -nostdinc \
         -I. \

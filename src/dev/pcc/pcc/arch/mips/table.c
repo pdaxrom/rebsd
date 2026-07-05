@@ -96,20 +96,27 @@
 #define NABSL	NEEDS(NREG(A, 1), NREG(B, 1), NSL(A))
 #define NDIVB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1))
 #define NSHB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2), NRES(V0V1))
-#define NSF_AA	NEEDS(NREG(A, 1), NLEFT(A0), NRES(V0))
-#define NSF_AB	NEEDS(NREG(B, 1), NLEFT(A0), NRES(V0V1))
-#define NSF_BA	NEEDS(NREG(A, 1), NLEFT(A0A1), NRES(V0))
-#define NSF_BB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRES(V0V1))
-#define NSF_BIN_A NEEDS(NREG(A, 1), NLEFT(A0), NRIGHT(A1), NRES(V0))
-#define NSF_BIN_B NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1))
-#define NSF_CMP_A NEEDS(NLEFT(A0), NRIGHT(A1))
-#define NSF_CMP_B NEEDS(NLEFT(A0A1), NRIGHT(A2A3))
-#define MIPS_MEMCPY_NEVER \
+#define MIPS_CALLER_SAVED_NEVER \
 	NEVER(V0), NEVER(V1), \
 	NEVER(A0), NEVER(A1), NEVER(A2), NEVER(A3), \
 	NEVER(T0), NEVER(T1), NEVER(T2), NEVER(T3), \
 	NEVER(T4), NEVER(T5), NEVER(T6), NEVER(T7), \
 	NEVER(T8), NEVER(T9)
+#define NSF_AA	NEEDS(NREG(A, 1), NLEFT(A0), NRES(V0), \
+		    MIPS_CALLER_SAVED_NEVER)
+#define NSF_AB	NEEDS(NREG(B, 1), NLEFT(A0), NRES(V0V1), \
+		    MIPS_CALLER_SAVED_NEVER)
+#define NSF_BA	NEEDS(NREG(A, 1), NLEFT(A0A1), NRES(V0), \
+		    MIPS_CALLER_SAVED_NEVER)
+#define NSF_BB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRES(V0V1), \
+		    MIPS_CALLER_SAVED_NEVER)
+#define NSF_BIN_A NEEDS(NREG(A, 1), NLEFT(A0), NRIGHT(A1), NRES(V0), \
+		    MIPS_CALLER_SAVED_NEVER)
+#define NSF_BIN_B NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), \
+		    NRES(V0V1), MIPS_CALLER_SAVED_NEVER)
+#define NSF_CMP_A NEEDS(NLEFT(A0), NRIGHT(A1), MIPS_CALLER_SAVED_NEVER)
+#define NSF_CMP_B NEEDS(NLEFT(A0A1), NRIGHT(A2A3), MIPS_CALLER_SAVED_NEVER)
+#define MIPS_MEMCPY_NEVER MIPS_CALLER_SAVED_NEVER
 
 struct optab table[] = {
 /* First entry must be an empty entry */
@@ -506,7 +513,7 @@ struct optab table[] = {
 { SCONV,	INCREG,
 	SCREG,	TDOUBLE|TLDOUBLE,
 	SCREG,	TFLOAT,
-		NEEDS(NREG(C, 1), NRES(F0)),	RESC1,
+		NEEDS(NREG(C, 1), NRES(F0), MIPS_CALLER_SAVED_NEVER),	RESC1,
 		"	mov.d $f12,AL	# convert (l)double to float via helper\n"
 		"	subu $sp,$sp,16 # call __truncdfsf2\n"
 		"	jal __truncdfsf2\n"
@@ -1135,8 +1142,7 @@ struct optab table[] = {
 	SNAME|SOREG,	TDOUBLE|TLDOUBLE,
 	SCREG,		TDOUBLE|TLDOUBLE,
 		0,	RDEST,
-		"	s.d AR,AL		# store double floating-point reg to oreg/sname\n"
-		"	nop\n", },
+		"ZS", },
 
 { ASSIGN,	FOREFF|INAREG,
 	SFLD,		TANY,
@@ -1482,8 +1488,7 @@ struct optab table[] = {
 	SANY,	TANY,
 	SOREG|SNAME,	TDOUBLE|TLDOUBLE,
 		NCREG,	RESC1,
-		"	l.d A1,AL	# load into double floating-point reg\n"
-		"	nop\n", },
+		"ZR", },
     
 /*
  * Jumps.
@@ -1843,8 +1848,7 @@ struct optab table[] = {
 	SANY,	TDOUBLE|TLDOUBLE,
 	SOREG,	TDOUBLE|TLDOUBLE,
 		NCREG,	RESC1,
-		"	l.d A1,AL		# float load\n"
-		"	nop\n", },
+		"ZR", },
 
 #if 0
 { UMUL, INCREG,

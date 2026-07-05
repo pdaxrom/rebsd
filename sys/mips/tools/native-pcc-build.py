@@ -25,9 +25,33 @@ def mips_cpu_default(cpu):
     raise ValueError(f"unsupported MIPS CPU: {cpu}")
 
 
+def mips_float_flags(float_abi):
+    if float_abi == "hard":
+        return ["-DMIPS_SOFT_FLOAT_DEFAULT=0"]
+    if float_abi == "soft":
+        return ["-DSOFTFLOAT", "-DMIPS_SOFT_FLOAT_DEFAULT=1"]
+    raise ValueError(f"unsupported MIPS float ABI: {float_abi}")
+
+
 def run(cmd, *, cwd=None, env=None):
     print("$ " + " ".join(str(c) for c in cmd))
     subprocess.run([str(c) for c in cmd], cwd=cwd, env=env, check=True)
+
+
+def tool_arg(value):
+    if os.sep in value or (os.altsep and os.altsep in value):
+        return str(Path(value).resolve())
+    return value
+
+
+def check_tool(value):
+    if os.sep in value or (os.altsep and os.altsep in value):
+        path = Path(value)
+        if not path.exists():
+            raise FileNotFoundError(path)
+        return
+    if shutil.which(value) is None:
+        raise FileNotFoundError(value)
 
 
 def write_config(path, *, host_big_endian, pointer_size, have_strl):
@@ -91,12 +115,17 @@ class Builder:
         self.builddir = Path(args.build).resolve()
         self.out = Path(args.out).resolve()
         self.rootfs = Path(args.rootfs).resolve() if args.rootfs else None
-        self.gcc_wrapper = Path(args.gcc_wrapper).resolve()
-        self.gcc_prefix = args.gcc_prefix
         self.cpu = args.cpu
         self.cpu_default = mips_cpu_default(args.cpu)
-        self.rebsd_as = Path(args.as_).resolve()
-        self.rebsd_ld = Path(args.ld).resolve()
+        self.float_abi = args.float_abi
+        self.float_flags = mips_float_flags(args.float_abi)
+        self.target_cc = tool_arg(args.target_cc)
+        self.target_cc_flags = [
+            f"-march={self.cpu}",
+            f"-m{self.float_abi}-float",
+        ]
+        self.rebsd_as = tool_arg(args.as_)
+        self.rebsd_ld = tool_arg(args.ld)
         self.crt0 = Path(args.crt0).resolve()
         self.libdir = Path(args.libdir).resolve()
         self.host_cc = args.host_cc
@@ -104,19 +133,16 @@ class Builder:
         self.flex = args.flex
         self.with_cxx = args.with_cxx
         self.env = os.environ.copy()
-        self.env["N64_AOUT_TOPSRC"] = str(self.top)
-        self.env["N64_AOUT_AS"] = str(self.rebsd_as)
-        self.env["N64_PREFIX"] = self.gcc_prefix
-        self.env["N64_AOUT_CPU"] = self.cpu
         self.host_config = self.builddir / "host-config"
         self.target_config = self.builddir / "target-config"
         self.objects = self.builddir / "obj"
 
     def check(self):
-        for path in [self.src, self.gcc_wrapper, self.rebsd_as,
-                     self.rebsd_ld, self.crt0, self.libdir]:
+        for path in [self.src, self.crt0, self.libdir]:
             if not path.exists():
                 raise FileNotFoundError(path)
+        for tool in [self.target_cc, self.rebsd_as, self.rebsd_ld]:
+            check_tool(tool)
 
     def prepare(self):
         if self.builddir.exists():
@@ -168,6 +194,7 @@ class Builder:
             "-DTARGOSVER=0",
             "-DTARGET_BIG_ENDIAN=1",
             f"-DMIPS_CPU_DEFAULT={self.cpu_default}",
+            *self.float_flags,
             "-I", self.target_config,
             "-I", component_build,
             "-I", component_src,
@@ -227,7 +254,8 @@ class Builder:
 
     def compile_target(self, component, name, source, flags):
         obj = self.obj_path(component, name)
-        run([self.gcc_wrapper, *flags, "-c", "-o", obj, source],
+        run([self.target_cc, *self.target_cc_flags, *flags,
+             "-c", "-o", obj, source],
             env=self.env)
         return obj
 
@@ -242,9 +270,10 @@ class Builder:
             output,
             self.crt0,
             *objects,
-            "-L",
-            self.libdir,
         ]
+        if self.float_abi == "soft":
+            cmd += ["-L", self.libdir / "softfloat"]
+        cmd += ["-L", self.libdir]
         if need_math:
             cmd.append("-lm")
         cmd += ["-lc", "-lpcc"]
@@ -390,10 +419,11 @@ def main():
     parser.add_argument("--build", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--rootfs")
-    parser.add_argument("--gcc-wrapper", required=True)
-    parser.add_argument("--gcc-prefix", required=True)
+    parser.add_argument("--target-cc", required=True)
     parser.add_argument("--cpu", choices=["vr4300", "mips32r2"],
                         default="vr4300")
+    parser.add_argument("--float-abi", choices=["hard", "soft"],
+                        default="hard")
     parser.add_argument("--as", dest="as_", required=True)
     parser.add_argument("--ld", required=True)
     parser.add_argument("--crt0", required=True)

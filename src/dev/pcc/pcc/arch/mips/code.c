@@ -79,20 +79,54 @@ mips_next_fp_argreg(int *fpregp)
 	*fpregp = fpreg == F12 ? F14 : F16;
 	return fpreg;
 }
+#endif
+
+static NODE *mips_lvalue_word(NODE *, int);
+
+static int
+mips_64bit_arg_aligned(void)
+{
+#ifdef MIPS_ALIGN64
+	return MIPS_ALIGN64 > SZINT;
+#else
+	return 1;
+#endif
+}
 
 static void
-mips_advance_arg_slots(TWORD t, int *regp)
+mips_align_64bit_argreg(int *regp)
 {
 	int reg = *regp;
 
-	if (t == DOUBLE || t == LDOUBLE) {
+	if (mips_64bit_arg_aligned()) {
 		++reg;
 		reg &= ~1;
-		reg += 2;
-	} else {
-		++reg;
 	}
 	*regp = reg;
+}
+
+static void
+mips_advance_64bit_arg_slots(int *regp)
+{
+	mips_align_64bit_argreg(regp);
+	*regp += 2;
+}
+
+static int
+mips_64bit_arg_splits(int reg)
+{
+	mips_align_64bit_argreg(&reg);
+	return reg == A0 + nargregs - 1;
+}
+
+#ifdef MIPS_HARDFLOAT_O32_ABI
+static void
+mips_advance_arg_slots(TWORD t, int *regp)
+{
+	if (t == DOUBLE || t == LDOUBLE)
+		mips_advance_64bit_arg_slots(regp);
+	else
+		++*regp;
 }
 #endif
 
@@ -262,6 +296,7 @@ param_shift_stret_slots(struct symtab **sp, int cnt)
 		off = sp[i]->soffset + extra;
 		if ((DEUNSIGN(sp[i]->stype) == LONGLONG ||
 		    sp[i]->stype == DOUBLE || sp[i]->stype == LDOUBLE) &&
+		    mips_64bit_arg_aligned() &&
 		    (off & (2 * SZINT - 1)) != 0) {
 			off += SZINT;
 			extra += SZINT;
@@ -352,13 +387,20 @@ param_64bit(struct symtab *sym, int *regp, int dotemps)
 	NODE *p, *q;
 	int navail;
 
-	/* alignment */
-	++reg;
-	reg &= ~1;
+	mips_align_64bit_argreg(&reg);
 
 	navail = nargregs - (reg - A0);
 
 	if (navail < 2) {
+		if (navail == 1) {
+			q = block(REG, NIL, NIL, INT, 0, 0);
+			q->n_rval = reg;
+			p = mips_lvalue_word(nametree(sym), 0);
+			p = buildtree(ASSIGN, p, q);
+			ecomp(p);
+			*regp = reg + 2;
+			return;
+		}
 		/* would have appeared half in registers/half
 		 * on the stack, but alignment ensures it
 		 * appears on the stack */
@@ -440,13 +482,20 @@ param_double(struct symtab *sym, int *regp, int dotemps)
 	NODE *p, *q;
 	int navail;
 
-	/* alignment */
-	++reg;
-	reg &= ~1;
+	mips_align_64bit_argreg(&reg);
 
 	navail = nargregs - (reg - A0);
 
 	if (navail < 2) {
+		if (navail == 1) {
+			q = block(REG, NIL, NIL, INT, 0, 0);
+			q->n_rval = reg;
+			p = mips_lvalue_word(nametree(sym), 0);
+			p = buildtree(ASSIGN, p, q);
+			ecomp(p);
+			*regp = reg + 2;
+			return;
+		}
 		/* would have appeared half in registers/half
 		 * on the stack, but alignment ensures it
 		 * appears on the stack */
@@ -536,20 +585,18 @@ bfcode(struct symtab **sp, int cnt)
 			fp_leading = 0;
 		}
 #endif
-		if ((reg > lastreg) && !xtemps)
+		if (reg > lastreg)
 			break;
-		else if (reg > lastreg) 
-			putintemp(sp[i]);
 		else if (sp[i]->stype == STRTY || sp[i]->stype == UNIONTY)
 			param_struct(sp[i], &reg);
 		else if (DEUNSIGN(sp[i]->stype) == LONGLONG)
-			param_64bit(sp[i], &reg, xtemps && !saveallargs);
+			param_64bit(sp[i], &reg, 0);
 		else if (sp[i]->stype == DOUBLE || sp[i]->stype == LDOUBLE)
-			param_double(sp[i], &reg, xtemps && !saveallargs);
+			param_double(sp[i], &reg, 0);
 		else if (sp[i]->stype == FLOAT)
-			param_float(sp[i], &reg, xtemps && !saveallargs);
+			param_float(sp[i], &reg, 0);
 		else
-			param_32bit(sp[i], &reg, xtemps && !saveallargs);
+			param_32bit(sp[i], &reg, 0);
 	}
 
 	/* if saveallargs, save the rest of the args onto the stack */
@@ -678,6 +725,19 @@ mips_stackview(struct symtab *sp, TWORD t)
 }
 
 static NODE *
+mips_lvalue_word(NODE *p, int off)
+{
+	p = buildtree(ADDROF, p, NIL);
+	p->n_type = PTR+INT;
+	p->n_df = NULL;
+	p->n_ap = NULL;
+	MIPS_NODE_QUAL(p) = 0;
+	if (off != 0)
+		p = block(PLUS, p, bcon(off), PTR+INT, 0, 0);
+	return block(UMUL, p, NIL, INT, 0, 0);
+}
+
+static NODE *
 cmappend(NODE *q, NODE *r)
 {
 	NODE *p;
@@ -690,6 +750,50 @@ cmappend(NODE *q, NODE *r)
 		;
 	p->n_left = block(CM, r, p->n_left, INT, 0, 0);
 	return q;
+}
+
+static NODE *
+cmappend_tree(NODE *q, NODE *r)
+{
+	NODE *l, *rr;
+
+	if (r == NIL)
+		return q;
+	if (r->n_op == CM) {
+		l = r->n_left;
+		rr = r->n_right;
+		nfree(r);
+		q = cmappend_tree(q, l);
+		q = cmappend_tree(q, rr);
+		return q;
+	}
+	return cmappend(q, r);
+}
+
+static int
+mips_arg_precompute(NODE *p)
+{
+	if (p == NIL || p->n_op != ASSIGN)
+		return 0;
+	if (p->n_type != FLOAT && p->n_type != DOUBLE && p->n_type != LDOUBLE)
+		return 0;
+	return p->n_left->n_op != REG;
+}
+
+static void
+mips_delay_left_precompute(NODE *p)
+{
+	NODE *l, *pre;
+
+	if (p->n_op != CM || p->n_left == NIL || p->n_left->n_op != CM)
+		return;
+	l = p->n_left;
+	if (!mips_arg_precompute(l->n_right))
+		return;
+
+	pre = l->n_right;
+	l->n_right = p->n_right;
+	p->n_right = pre;
 }
 
 static NODE *
@@ -773,14 +877,12 @@ movearg_64bit(NODE *p, int *regp, NODE **padp)
 {
 	int reg = *regp;
 	int oreg = reg;
-	NODE *q;
+	NODE *q, *qreg;
 	int lastarg;
 
 	*padp = NIL;
 
-	/* alignment */
-	++reg;
-	reg &= ~1;
+	mips_align_64bit_argreg(&reg);
 
 	lastarg = A0 + nargregs - 1;
 	if (reg > lastarg) {
@@ -789,6 +891,16 @@ movearg_64bit(NODE *p, int *regp, NODE **padp)
 			*padp = block(FUNARG, bcon(0), NIL, INT, 0, 0);
 		*regp = reg + 2;
 		return q;
+	}
+	if (reg == lastarg) {
+		qreg = block(REG, NIL, NIL, INT, 0, 0);
+		qreg->n_rval = reg;
+		qreg = buildtree(ASSIGN, qreg,
+		    mips_lvalue_word(MIPS_TCOPY(p), 0));
+		q = block(FUNARG, mips_lvalue_word(p, SZINT/SZCHAR),
+		    NIL, INT, 0, 0);
+		*regp = reg + 2;
+		return block(CM, qreg, q, INT, 0, 0);
 	}
 
 	q = block(REG, NIL, NIL, p->n_type, p->n_df, p->n_ap);
@@ -897,9 +1009,42 @@ moveargs(NODE *p, int *regp
 		}
 		return movearg_struct(r, NIL, regp);
 	} else if (DEUNSIGN(r->n_type) == LONGLONG) {
-		NODE *pad;
+		NODE *arg, *pad;
 
-		*rp = movearg_64bit(r, regp, &pad);
+		if (mips_64bit_arg_splits(*regp)) {
+			struct symtab *sp = mips_stacktemp(r->n_type,
+			    r->n_df, r->n_ap);
+			NODE *store = buildtree(ASSIGN,
+			    mips_stackview(sp, r->n_type), r);
+			NODE *src = mips_stackview(sp, r->n_type);
+
+			arg = movearg_64bit(src, regp, &pad);
+			if (p->n_op == CM) {
+				NODE *l = p->n_left;
+				if (pad != NIL)
+					l = block(CM, l, pad, INT, 0, 0);
+				l = cmappend(l, store);
+				nfree(p);
+				return cmappend_tree(l, arg);
+			}
+			if (pad != NIL)
+				store = block(CM, pad, store, INT, 0, 0);
+			return cmappend_tree(store, arg);
+		}
+		arg = movearg_64bit(r, regp, &pad);
+		if (arg->n_op == CM) {
+			if (p->n_op == CM) {
+				NODE *l = p->n_left;
+				if (pad != NIL)
+					l = block(CM, l, pad, INT, 0, 0);
+				nfree(p);
+				return cmappend_tree(l, arg);
+			}
+			if (pad != NIL)
+				arg = block(CM, pad, arg, INT, 0, 0);
+			return arg;
+		}
+		*rp = arg;
 		if (pad != NIL) {
 			if (p->n_op == CM)
 				p->n_left = block(CM, p->n_left, pad, INT, 0, 0);
@@ -922,11 +1067,13 @@ moveargs(NODE *p, int *regp
 			NODE *l = p->n_left;
 			if (pad != NIL)
 				l = block(CM, l, pad, INT, 0, 0);
-			p->n_left = buildtree(CM, l, t1);
+			p->n_left = cmappend_tree(l, t1);
 			p->n_right = r;
 		} else {
 			if (pad != NIL)
 				t1 = block(CM, pad, t1, INT, 0, 0);
+			if (t1->n_op == CM)
+				t1 = cmappend_tree(NIL, t1);
 			p = buildtree(CM, t1, r);
 		}
 	} else if (r->n_type == FLOAT) {
@@ -949,6 +1096,7 @@ moveargs(NODE *p, int *regp
 		*rp = movearg_32bit(r, regp);
 	}
 
+	mips_delay_left_precompute(p);
 	return p;
 }
 

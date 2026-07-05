@@ -37,7 +37,7 @@ int mips_cpu = MIPS_CPU_DEFAULT;
 #else
 int mips_cpu = 0;
 #endif
-int mips_soft_float = 0;
+int mips_soft_float = MIPS_SOFT_FLOAT_DEFAULT;
 #endif
 
 #ifndef LANG_CXX
@@ -390,8 +390,14 @@ andable(NODE *p)
 int
 cisreg(TWORD t)
 {
-	if (t == INT || t == UNSIGNED || t == LONG || t == ULONG)
-		return(1);
+	/*
+	 * The generic pass1 STNODE path creates symbol-backed temporaries
+	 * before the pass2 prologue temp range is fixed.  The MIPS graph
+	 * allocator can then miss or mis-spill them and emit bogus OREGs.
+	 * Keep automatic objects in their stack homes; expression temps are
+	 * still allocated normally after the prologue.
+	 */
+	(void)t;
 	return 0; /* XXX - fix reg assignment in pftn.c */
 }
 

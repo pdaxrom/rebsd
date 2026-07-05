@@ -16,12 +16,14 @@ ReBSD/GCC build flow unless a command explicitly says otherwise.
 - Default system include path: `/usr/include`.
 - Default system library path: `/usr/lib`.
 - Default PCC helper linkage: `-lpcc -lc -lpcc`.
+- Soft-float helper override path: `/usr/lib/softfloat/libpcc.a`.
 - Default target sysroot: `/` when no `--sysroot` is supplied.
 
 PCC defines both ReBSD identity macros and RetroBSD compatibility macros because
 parts of the tree still carry RetroBSD-era conditionals.  The target also
-defines the normal Unix and MIPS big-endian/o32 preprocessor surface, including
-`__mips_hard_float` for the current hardware-FPU ABI.
+defines the normal Unix and MIPS big-endian/o32 preprocessor surface.  The
+selected float ABI controls whether PCC defines `__mips_hard_float` or
+`__mips_soft_float`.
 
 ReBSD/MIPS currently treats `long double` as IEEE64, matching `double`.  PCC and
 the public headers must therefore report the target `long double` limits rather
@@ -47,7 +49,9 @@ supported opt-in C userland compiler:
 
 ```sh
 make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
 make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
 ```
 
@@ -59,6 +63,15 @@ The supported values are `gcc` and `pcc`.
 PCC mode changes the target userland/rootfs compiler only.  It does not switch
 the kernel, N64 stage0, host bootstrap tools, or target a.out binary tools away
 from the existing flow.
+
+The rootfs selectors shared by Malta, Malta64, and N64 are:
+
+- `MIPS_ROOTFS_CPU=vr4300|mips32r2`
+- `MIPS_ROOTFS_FLOAT=hard|soft`
+- `MIPS_ROOTFS_ENDIAN=big`
+
+`MIPS_ROOTFS_ENDIAN=little` is reserved for the future mipsel Malta port and is
+rejected by the current big-endian `mips-rebsd` PCC target.
 
 ## Active PCC Work Queue
 
@@ -86,15 +99,66 @@ Completed for this milestone:
   across incompatible CPU ABI variants.
 - MIPS soft-float mode in PCC updates preprocessor macros, code generation,
   helper calls, and libc runtime helper symbols.
+- Rootfs/userland float ABI selectors (`hard` and `soft`) are part of the ABI
+  stamp, so hard-float and soft-float runtime, native PCC, rootfs, and smoke
+  artifacts do not share directories.
+- PCC userland runtime uses a wrapper-free two-stage bootstrap: build standalone
+  cross a.out tools plus cross PCC without target runtime libraries, then use
+  that cross PCC to build `crt0.o`, libc, libm, and `libpcc.a`, then build
+  native PCC and the rootfs against the PCC-built runtime.
+- Cross SDK and target rootfs layouts keep hard-float and soft-float compiler
+  runtime libraries separate.  The normal runtime lives in `lib/libpcc.a`; the
+  soft-float override lives in `lib/softfloat/libpcc.a`.
+- Soft-float `libpcc.a` includes the compiler-private compiler-rt helpers that
+  PCC-generated code and other `libpcc` helpers can reference directly.
 
 Remaining work:
 
-- Add an explicit rootfs/userland float-ABI selector once the soft-float
-  compiler smoke is ready to become a full userland build mode.  Include that
-  float ABI in rootfs stamps before mixing hard-float and soft-float rootfs
-  artifacts.
-- Validate full soft-float userlands in this order: host cross PCC smoke,
-  Malta64/R4000 QEMU userland, Malta QEMU userland, then real N64 hardware.
+- Run the same soft-float userland/rootfs gates on real N64 hardware after the
+  Malta64/R4000 and Malta QEMU runs stay stable.
+
+## Standalone Cross SDK
+
+The standalone SDK is built by `sys/mips/tools/build-cross-pcc-sdk.sh` or
+`sys/mips/sdk.mk`:
+
+```sh
+sys/mips/tools/build-cross-pcc-sdk.sh --cpu vr4300 --float soft --endian big --prefix /path/cross-pcc
+make -C sys/mips -f sdk.mk cross-pcc-sdk CPU=mips32r2 FLOAT=hard ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
+make -C sys/mips -f sdk.mk cross-pcc-sdk-tools CPU=mips32r2 FLOAT=soft ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
+make -C sys/mips -f sdk.mk cross-pcc-sdk-runtime CPU=mips32r2 FLOAT=soft ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
+```
+
+The intended installed layout is:
+
+```text
+cross-pcc/bin/mips-rebsd-pcc
+cross-pcc/bin/mips-rebsd-cc
+cross-pcc/bin/mips-rebsd-as
+cross-pcc/bin/mips-rebsd-ld
+cross-pcc/bin/mips-rebsd-aout
+cross-pcc/mips-rebsd/lib/crt0.o
+cross-pcc/mips-rebsd/lib/libc.a
+cross-pcc/mips-rebsd/lib/libm.a
+cross-pcc/mips-rebsd/lib/libpcc.a
+cross-pcc/mips-rebsd/lib/softfloat/libpcc.a
+```
+
+The SDK is usable directly through the installed binaries; no PCC wrapper is
+required for normal compile, assemble, link, or `aout` inspection paths.  GCC
+wrapper scripts remain only for the legacy GCC-based userland path.
+
+Rootfs builds normally use the standalone SDK with:
+
+```sh
+make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_PCC_PROVIDER=cross MIPS_PCC_HOST_PREFIX=/path/cross-pcc \
+    linpack-smoke-runtime
+```
+
+`MIPS_PCC_PROVIDER=system` remains valid for a ReBSD build host with a
+compatible native compiler and target tools; a host PCC build is not mandatory
+in that case.
 
 ## Known Kernel PCC Blocker
 
@@ -185,9 +249,11 @@ policy, not as compiler-runtime helpers:
 - Locale-aware multibyte, UTF-8, C++ startup, TLS, and shared-library behavior
   are intentionally not hidden behind placeholder functions.
 
-`libpccsoftfloat.a` is not staged for the current hard-float Malta, Malta64, or
-N64 targets.  Add it only if a no-FPU target or a concrete test failure proves a
-runtime dependency.
+Soft-float mode uses an ABI-specific compiler runtime archive staged as
+`/usr/lib/softfloat/libpcc.a`.  The normal hard-float archive remains
+`/usr/lib/libpcc.a`.  Keeping both archives in the rootfs and SDK lets target
+PCC and future kernel builds select the correct compiler helpers without
+wrapper scripts or rebuilding the SDK.
 
 `src/dev/pcc/pcc-libs/csu` provides upstream PCC `crtbegin.o` and `crtend.o`,
 but ReBSD does not enable them in the default C link path.  The current a.out
@@ -224,8 +290,9 @@ checks.
 The current C gate is green in these environments:
 
 - Host cross smoke with ReBSD `as`/`ld`.
-- Malta QEMU PCC userland.
-- Malta64/R4000 QEMU PCC userland using
+- Malta QEMU PCC userland, including hard-float and soft-float LINPACK smoke.
+- Malta64/R4000 QEMU PCC userland, including hard-float and soft-float LINPACK
+  smoke, using
   `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`.
 - Real N64 hardware normal PCC rootfs smoke.
 

@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 COMMAND_DONE = "__MALTA_RUN_COMMAND_DONE__:"
+SHELL_PROMPT_RE = re.compile(r"(?:^|[\r\n])#\s*$")
 
 
 def write_all(master, data):
@@ -100,12 +101,15 @@ def command_run(args):
                         buf = buf[-20000:]
                     last = time.time()
 
-                if state == "login" and "login:" in buf:
-                    time.sleep(0.1)
-                    os.write(master, b"root\n")
-                    state = "shell"
-                    buf = ""
-                elif state == "shell" and re.search(r"(?:^|[\r\n])#\s*$", buf):
+                if state == "login":
+                    if "login:" in buf:
+                        time.sleep(0.1)
+                        os.write(master, b"root\n")
+                        state = "shell"
+                        buf = ""
+                    elif SHELL_PROMPT_RE.search(buf):
+                        state = "shell"
+                elif state == "shell" and SHELL_PROMPT_RE.search(buf):
                     write_command(
                         master, args.command, args.line_delay,
                         args.write_chunk_size, args.chunk_delay)

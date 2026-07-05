@@ -18,7 +18,8 @@ PARAM += -DCONS_MAJOR=0
 MALTA_PORT64 = $(filter -DMALTA64,$(PARAM))
 MALTA_CPU_TUNE ?= $(if $(MALTA_PORT64),r4000,24kf)
 MIPS_ARCH ?= $(if $(MALTA_PORT64),-EB -mips3 -mabi=32 -mtune=$(MALTA_CPU_TUNE),-EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE))
-MALTA_QEMU_RAM ?= 32M
+MALTA_QEMU_RAM ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),64M,32M)
+MALTA_RAM_KBYTES ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),65536,32768)
 MALTA_QEMU ?= $(if $(MALTA_PORT64),qemu-system-mips64,qemu-system-mips)
 MALTA_QEMU_CPU ?= $(if $(MALTA_PORT64),R4000,)
 MALTA_QEMU_CPU_OPT = $(if $(MALTA_QEMU_CPU),-cpu $(MALTA_QEMU_CPU),)
@@ -45,8 +46,6 @@ MALTA64_STAGE_LDFLAGS ?= -m elf64btsmip -nostdlib
 MALTA64_LLVM_BINDIR ?= /opt/homebrew/opt/llvm/bin
 MALTA64_STAGE_SIZE ?= $(MALTA64_LLVM_BINDIR)/llvm-size
 MALTA64_STAGE_OBJDUMP ?= $(MALTA64_LLVM_BINDIR)/llvm-objdump
-MIPS_ROOTFS_KBYTES ?= 16384
-MIPS_ROOTFS_SRC ?= $(TOPSRC)/sys/mips/n64/rootfs.stage
 MIPS_ROOTFS_COMPILER ?= $(if $(N64_USERLAND_COMPILER),$(N64_USERLAND_COMPILER),gcc)
 MIPS_ROOTFS_COMPILERS = gcc pcc
 ifneq ($(N64_USERLAND_COMPILER),)
@@ -57,6 +56,7 @@ endif
 ifeq ($(filter $(MIPS_ROOTFS_COMPILER),$(MIPS_ROOTFS_COMPILERS)),)
 $(error Unsupported MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER); expected one of $(MIPS_ROOTFS_COMPILERS))
 endif
+MIPS_ROOTFS_KBYTES ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),32768,16384)
 MIPS_ROOTFS_CPU ?= $(if $(N64_USERLAND_CPU),$(N64_USERLAND_CPU),$(if $(MALTA_PORT64),vr4300,mips32r2))
 MIPS_ROOTFS_CPUS = vr4300 mips32r2
 ifneq ($(N64_USERLAND_CPU),)
@@ -67,13 +67,32 @@ endif
 ifeq ($(filter $(MIPS_ROOTFS_CPU),$(MIPS_ROOTFS_CPUS)),)
 $(error Unsupported MIPS_ROOTFS_CPU=$(MIPS_ROOTFS_CPU); expected one of $(MIPS_ROOTFS_CPUS))
 endif
+MIPS_ROOTFS_FLOAT ?= $(if $(N64_USERLAND_FLOAT),$(N64_USERLAND_FLOAT),hard)
+MIPS_ROOTFS_FLOATS = hard soft
+ifneq ($(N64_USERLAND_FLOAT),)
+ifneq ($(MIPS_ROOTFS_FLOAT),$(N64_USERLAND_FLOAT))
+$(error MIPS_ROOTFS_FLOAT=$(MIPS_ROOTFS_FLOAT) conflicts with N64_USERLAND_FLOAT=$(N64_USERLAND_FLOAT))
+endif
+endif
+ifeq ($(filter $(MIPS_ROOTFS_FLOAT),$(MIPS_ROOTFS_FLOATS)),)
+$(error Unsupported MIPS_ROOTFS_FLOAT=$(MIPS_ROOTFS_FLOAT); expected one of $(MIPS_ROOTFS_FLOATS))
+endif
+MIPS_ROOTFS_ENDIAN ?= $(if $(N64_USERLAND_ENDIAN),$(N64_USERLAND_ENDIAN),big)
+MIPS_ROOTFS_ENDIANS = big little
+ifneq ($(N64_USERLAND_ENDIAN),)
+ifneq ($(MIPS_ROOTFS_ENDIAN),$(N64_USERLAND_ENDIAN))
+$(error MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN) conflicts with N64_USERLAND_ENDIAN=$(N64_USERLAND_ENDIAN))
+endif
+endif
+ifeq ($(filter $(MIPS_ROOTFS_ENDIAN),$(MIPS_ROOTFS_ENDIANS)),)
+$(error Unsupported MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN); expected one of $(MIPS_ROOTFS_ENDIANS))
+endif
+MIPS_ROOTFS_ABI = $(MIPS_ROOTFS_ENDIAN).$(MIPS_ROOTFS_CPU).$(MIPS_ROOTFS_FLOAT)
 MIPS_KERNEL_COMPILER ?= gcc
 MIPS_KERNEL_COMPILERS = gcc pcc
 ifeq ($(filter $(MIPS_KERNEL_COMPILER),$(MIPS_KERNEL_COMPILERS)),)
 $(error Unsupported MIPS_KERNEL_COMPILER=$(MIPS_KERNEL_COMPILER); expected one of $(MIPS_KERNEL_COMPILERS))
 endif
-MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_CPU)
-MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_COMMON_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_BUILD_MANIFEST = rootfs.generated.manifest
@@ -82,14 +101,17 @@ MIPS_ROOTFS_STAGE = rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_COMMON_FILES = $(shell find $(TOPSRC)/sys/mips/rootfs \
                            -type f -o -type l 2>/dev/null)
-MIPS_ROOTFS_OVERLAY_FILES = $(shell find $(MIPS_ROOTFS_OVERLAY) -type f -o -type l 2>/dev/null)
+MIPS_ROOTFS_OVERLAY_FILES =
 MIPS_COMMON_MACHINE_HEADERS = console cpu devmajors elf_machdep float fpu io \
                               layout limits machparam ramswap romdisk
 MIPS_TRACE       ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 PCC_HOST_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
-PCC_HOST_BUILD ?= /private/tmp/rebsd-pcc-build-$(MIPS_ROOTFS_CPU)
-PCC_HOST_PREFIX ?= /private/tmp/rebsd-pcc-install-$(MIPS_ROOTFS_CPU)
+PCC_HOST_BUILD ?= /private/tmp/rebsd-pcc-build-$(MIPS_ROOTFS_ABI)
+PCC_HOST_PREFIX ?= /private/tmp/rebsd-pcc-install-$(MIPS_ROOTFS_ABI)
+PCC_HOST_TARGET = $(PCC_HOST_PREFIX)/mips-rebsd
+PCC_HOST_LIB = $(PCC_HOST_TARGET)/lib
+PCC_HOST_SOFTFLOAT_LIB = $(PCC_HOST_LIB)/softfloat
 PCC_HOST_AS     = $(TOPSRC)/sys/mips/n64/n64-native-tools/as
 PCC_HOST_LD     = $(TOPSRC)/sys/mips/n64/n64-native-tools/ld
 PCC_HOST_AR     = $(TOPSRC)/sys/mips/n64/n64-native-tools/ar
@@ -114,16 +136,27 @@ LINPACK_SMOKE_MANIFEST ?= /private/tmp/rebsd-linpack-smoke.manifest
 LINPACK_SMOKE_LOG ?= /private/tmp/rebsd-linpack-smoke.log
 LINPACK_SMOKE_ARRAY_SIZE ?= 120
 LINPACK_SMOKE_MIN_SECONDS ?= 1
-MIPS_LINPACK_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.linpack-smoke
-MIPS_ROOTFS_EXTRA_STAMPS =
-ifeq ($(MIPS_ROOTFS_COMPILER),pcc)
-MIPS_ROOTFS_EXTRA_STAMPS += $(MIPS_LINPACK_ROOTFS_STAMP)
-endif
 MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
 NATIVE_PCC_SMOKE_LOG ?= /private/tmp/rebsd-native-pcc-smoke.log
+MIPS_LEGACY_ROOTFS_RULES ?= 0
+MIPS_ROOTFS_BOARD_DIR = $(TOPSRC)/sys/mips/malta/rootfs
+MIPS_ROOTFS_BOARD_MANIFEST = $(TOPSRC)/sys/mips/malta/rootfs.manifest
+MIPS_ROOTFS_TARGET_PLATFORM = mips
+MIPS_ROOTFS_USERLAND_STAMP_PREFIX = mips-userland
+MIPS_ROOTFS_USER_LDSCRIPT = mips-user.ld
+MIPS_ROOTFS_USER_LDSCRIPT_SRC = $(TOPSRC)/sys/mips/user/user.ld.S
+MIPS_PCC_HOST_BUILD ?= $(PCC_HOST_BUILD)
+MIPS_PCC_HOST_PREFIX ?= $(PCC_HOST_PREFIX)
+MIPS_LINPACK_SMOKE_OUT ?= $(LINPACK_SMOKE_OUT)
+MIPS_LINPACK_SMOKE_MANIFEST ?= $(LINPACK_SMOKE_MANIFEST)
+
+.DEFAULT_GOAL := all
+include ../rootfs.mk
 
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
                   -DROMFS_ENABLED \
+                  -DMALTA_RAM_SIZE_OVERRIDE='($(MALTA_RAM_KBYTES) * 1024u)' \
+                  -DMALTA_ROMDISK_BYTES_OVERRIDE='($(MIPS_ROOTFS_KBYTES) * 1024u)' \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"$(MALTA_HW_MODEL)"'
 ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
@@ -154,8 +187,8 @@ COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
 COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
                   -MF .deps/vers.dep -c vers.c -o vers.o
 ifeq ($(MIPS_KERNEL_COMPILER),pcc)
-KERNEL_CC       = $(PCC_HOST_PCC)
-KERNEL_COMPILER_DEPS = $(PCC_HOST_PCC)
+KERNEL_CC       = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) -msoft-float
+KERNEL_COMPILER_DEPS = $(MIPS_PCC_PROVIDER_DEPS)
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
                   if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
                       echo "error: PCC kernel C emitted COP1/FPU instructions in .deps/$(@:.o=.s)" >&2; exit 1; \
@@ -312,24 +345,34 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         native-pcc-smoke-runtime-vr4300 native-pcc-regress-stage \
         native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 \
         rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
+ifeq ($(MIPS_LEGACY_ROOTFS_RULES),1)
 $(PCC_HOST_PCC): $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SRCS) $(PCC_HOST_AS) \
     $(PCC_HOST_LD)
 	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
 	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/include) \
-	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/lib) \
 	    $(abspath $(PCC_HOST_AS)) $(abspath $(PCC_HOST_LD)) \
-	    $(MIPS_ROOTFS_CPU)
+	    $(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT) $(MIPS_ROOTFS_ENDIAN)
+	mkdir -p $(PCC_HOST_LIB) $(PCC_HOST_SOFTFLOAT_LIB)
+	for lib in crt0.o libc.a libm.a libpcc.a; do \
+	    cp -p $(MIPS_ROOTFS_STAGE)/usr/lib/$$lib $(PCC_HOST_LIB)/$$lib; \
+	done
+	if [ -f $(MIPS_ROOTFS_STAGE)/usr/lib/softfloat/libpcc.a ]; then \
+	    cp -p $(MIPS_ROOTFS_STAGE)/usr/lib/softfloat/libpcc.a \
+	        $(PCC_HOST_SOFTFLOAT_LIB)/libpcc.a; \
+	fi
 
 smoke-host-portablecc: $(PCC_HOST_PCC)
 	@echo "smoke-host-portablecc: ok"
+endif
 
-pcc-regress-compile: smoke-host-portablecc $(PCC_REGRESS_SCRIPT)
+pcc-regress-compile: $(MIPS_ROOTFS_USER_STAMP) smoke-host-portablecc \
+    $(PCC_REGRESS_SCRIPT)
 	python3 $(PCC_REGRESS_SCRIPT) compile \
-	    --pcc $(abspath $(PCC_HOST_PCC)) \
+	    --pcc $(MIPS_PCC_CC) \
 	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
 	    --out $(PCC_REGRESS_OUT) \
-	    --ar $(abspath $(PCC_HOST_AR))
+	    --ar $(MIPS_PCC_AR)
 
 pcc-regress-stage: pcc-regress-compile $(MIPS_ROOTFS_BUILD_MANIFEST)
 	python3 $(PCC_REGRESS_SCRIPT) stage \
@@ -360,27 +403,16 @@ pcc-regress-summary: $(PCC_REGRESS_SCRIPT)
 	    --out $(PCC_REGRESS_OUT) \
 	    --log $(PCC_REGRESS_LOG)
 
-linpack-smoke-build: smoke-host-portablecc $(LINPACK_SMOKE_SCRIPT) \
-    $(LINPACK_SMOKE_SRC)
-	N64_AOUT_CPU=$(MIPS_ROOTFS_CPU) python3 $(LINPACK_SMOKE_SCRIPT) build \
-	    --source $(abspath $(LINPACK_SMOKE_SRC)) \
-	    --out $(LINPACK_SMOKE_OUT) \
-	    --top $(abspath $(TOPSRC)) \
-	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
-	    --gcc-wrapper $(abspath $(TOPSRC)/sys/mips/n64/native/n64-aout-cc.sh) \
-	    --gcc-prefix $(MIPS_PREFIX) \
-	    --as $(abspath $(PCC_HOST_AS)) \
-	    --ld $(abspath $(PCC_HOST_LD)) \
-	    --pcc $(abspath $(PCC_HOST_PCC))
+linpack-smoke-build: $(MIPS_LINPACK_ROOTFS_STAMP)
+	@echo "linpack-smoke-build: ok"
 
+ifeq ($(MIPS_LEGACY_ROOTFS_RULES),1)
 $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_STAMP) linpack-smoke-build
-	cp -p $(LINPACK_SMOKE_OUT)/linpack-gcc \
-	    $(MIPS_ROOTFS_STAGE)/root/linpack-gcc
 	cp -p $(LINPACK_SMOKE_OUT)/linpack-pcc \
 	    $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
-	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-gcc \
-	    $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
+	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
 	touch $@
+endif
 
 linpack-smoke-stage: linpack-smoke-build $(MIPS_ROOTFS_BUILD_MANIFEST)
 	python3 $(LINPACK_SMOKE_SCRIPT) stage \
@@ -454,60 +486,6 @@ native-pcc-regress-runtime-vr4300:
 
 FORCE:
 
-$(MIPS_ROOTFS_SRC_STAMP): FORCE
-	$(MAKE) -C $(TOPSRC)/sys/mips/n64 \
-	    N64_USERLAND_COMPILER=$(MIPS_ROOTFS_COMPILER) \
-	    N64_USERLAND_CPU=$(MIPS_ROOTFS_CPU) \
-	    rootfs.stage/.userland.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_CPU)
-
-$(MIPS_ROOTFS_STAMP): $(MIPS_ROOTFS_SRC_STAMP) $(MIPS_ROOTFS_OVERLAY_FILES)
-	rm -rf $(MIPS_ROOTFS_STAGE)
-	mkdir -p $(MIPS_ROOTFS_STAGE)
-	cp -pR $(MIPS_ROOTFS_SRC)/. $(MIPS_ROOTFS_STAGE)/
-	cp -pR $(MIPS_ROOTFS_OVERLAY)/. $(MIPS_ROOTFS_STAGE)/
-	rm -rf $(MIPS_ROOTFS_STAGE)/usr/include/machine
-	mkdir -p $(MIPS_ROOTFS_STAGE)/usr/include/machine
-	for header in $(MIPS_COMMON_MACHINE_HEADERS); do \
-	    cp -p $(TOPSRC)/sys/mips/$$header.h \
-	        $(MIPS_ROOTFS_STAGE)/usr/include/machine/$$header.h; \
-	done
-	cp -p $(TOPSRC)/sys/mips/include/machine/types.h \
-	    $(MIPS_ROOTFS_STAGE)/usr/include/machine/types.h
-	touch $@
-
-$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_COMMON_MANIFEST) $(MIPS_ROOTFS_BOARD_MANIFEST) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_EXTRA_STAMPS)
-	cp $(MIPS_ROOTFS_COMMON_MANIFEST) $@
-	find $(MIPS_ROOTFS_STAGE)/usr/include -type d | sort | while read path; do \
-	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
-	    printf '\ndir %s\n' "$$rel" >> $@; \
-	done
-	find $(MIPS_ROOTFS_STAGE)/usr/include -type f ! -name '.gitignore' \
-	    ! -name Makefile ! -name Makefile.install | sort | while read path; do \
-	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
-	    printf '\nfile %s\n' "$$rel" >> $@; \
-	done
-	find $(MIPS_ROOTFS_STAGE)/usr/include -maxdepth 1 -type l ! -name pic32 | \
-	    sort | while read path; do \
-	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
-	    target=$$(readlink "$$path"); \
-	    printf '\nsymlink %s\ntarget %s\n' "$$rel" "$$target" >> $@; \
-	done
-	cat $(MIPS_ROOTFS_BOARD_MANIFEST) >> $@
-	if [ "$(MIPS_ROOTFS_COMPILER)" = "pcc" ]; then \
-	    printf '\nfile /root/linpack-gcc\nmode 0775\n' >> $@; \
-	    printf '\nfile /root/linpack-pcc\nmode 0775\n' >> $@; \
-	fi
-
-rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_STAMP) $(MIPS_ROOTFS_IMAGE_MANIFEST)
-	rm -f $@
-	$(FSUTIL) --new --endian=big --size=$(MIPS_ROOTFS_KBYTES) \
-	    --manifest=$(MIPS_ROOTFS_IMAGE_MANIFEST) $@ $(MIPS_ROOTFS_STAGE)
-	$(FSUTIL) --check $@
-
-rootfs.o: rootfs.img
-	$(LD) -r -b binary -o $@ rootfs.img
-	$(OBJCOPY) --rename-section .data=.romdisk,alloc,load,readonly,data,contents $@
-
 MIPS_ROOTFS_PATCH_DIR ?= /private/tmp/rebsd-rootfs-patch
 MIPS_ROOTFS_PATCH_FILES ?=
 MIPS_ROOTFS_PATCH_MANIFEST ?= rootfs.patch.manifest
@@ -529,7 +507,8 @@ rootfs-patch: $(FSUTIL) $(MIPS_ROOTFS_PATCH_SCRIPT)
 	    --patch-dir $(abspath $(MIPS_ROOTFS_PATCH_DIR)) \
 	    $(MIPS_ROOTFS_PATCH_FILES)
 	rm -f rootfs.img
-	$(FSUTIL) --new --endian=big --size=$(MIPS_ROOTFS_KBYTES) \
+	$(FSUTIL) --new --endian=$(MIPS_ROOTFS_ENDIAN) \
+	    --size=$(MIPS_ROOTFS_KBYTES) \
 	    --manifest=$(MIPS_ROOTFS_PATCH_MANIFEST) rootfs.img $(MIPS_ROOTFS_STAGE)
 	$(FSUTIL) --check rootfs.img
 

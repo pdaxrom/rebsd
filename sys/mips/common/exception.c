@@ -494,14 +494,14 @@ exception(int *frame)
             break;
         case CA_Ov + USER:
         case CA_FPE + USER:
-#ifdef N64_PCC_FPE_TRACE
-            if ((cause & ~USER) == CA_FPE) {
-                printf("*** user fpe: pc=%08x status=%08x cause=%08x "
-                    "fcsr=%08x sp=%08x ra=%08x pid=%d comm=%s\n",
-                    frame[FRAME_PC], status, rawcause, u.u_fpu.fcsr,
-                    frame[FRAME_SP], frame[FRAME_RA],
-                    u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
-            }
+#if defined(N64_PCC_FPE_TRACE) || defined(MIPS_TRACE)
+            printf("*** user arithmetic exception: pc=%08x status=%08x "
+                "cause=%08x", frame[FRAME_PC], status, rawcause);
+            if ((cause & ~USER) == CA_FPE)
+                printf(" fcsr=%08x", u.u_fpu.fcsr);
+            printf(" sp=%08x ra=%08x pid=%d comm=%s\n",
+                frame[FRAME_SP], frame[FRAME_RA],
+                u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
 #endif
             psig = SIGFPE;
             break;

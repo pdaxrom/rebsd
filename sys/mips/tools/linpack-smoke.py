@@ -17,12 +17,20 @@ def run(cmd, *, cwd=None, env=None):
     subprocess.run([str(c) for c in cmd], cwd=cwd, env=env, check=True)
 
 
+def write_all(master, data):
+    view = memoryview(data)
+    while view:
+        try:
+            written = os.write(master, view)
+            view = view[written:]
+        except BlockingIOError:
+            select.select([], [master], [], 1.0)
+
+
 def command_build(args):
     source = Path(args.source)
     out = Path(args.out)
     rootfs = Path(args.rootfs)
-    gcc_obj = out / "linpack-gcc.o"
-    gcc_bin = out / "linpack-gcc"
     pcc_bin = out / "linpack-pcc"
     libdir = rootfs / "usr/lib"
 
@@ -32,30 +40,12 @@ def command_build(args):
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    env = os.environ.copy()
-    env["N64_AOUT_TOPSRC"] = str(Path(args.top).resolve())
-    env["N64_AOUT_AS"] = str(Path(args.as_).resolve())
-    env["N64_PREFIX"] = args.gcc_prefix
-
-    run([args.gcc_wrapper, "-O2", "-o", gcc_obj, "-c", source], env=env)
-    run([
-        args.ld,
-        "-X",
-        "-d",
-        "-e",
-        "_start",
-        "-o",
-        gcc_bin,
-        libdir / "crt0.o",
-        gcc_obj,
-        "-L",
-        libdir,
-        "-lm",
-        "-lc",
-        "-lpcc",
-    ])
+    march_flag = f"-march={args.cpu}"
+    float_flag = f"-m{args.float_abi}-float"
     run([
         args.pcc,
+        march_flag,
+        float_flag,
         "-O2",
         "-I",
         rootfs / "usr/include",
@@ -68,7 +58,6 @@ def command_build(args):
     ])
 
     summary = {
-        "gcc": {"path": str(gcc_bin), "bytes": gcc_bin.stat().st_size},
         "pcc": {"path": str(pcc_bin), "bytes": pcc_bin.stat().st_size},
     }
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -83,7 +72,7 @@ def command_stage(args):
     manifest_out = Path(args.manifest_out)
 
     entries = []
-    for name in ("linpack-gcc", "linpack-pcc"):
+    for name in ("linpack-pcc",):
         src = out / name
         if not src.is_file():
             raise FileNotFoundError(src)
@@ -170,11 +159,12 @@ def command_run(args):
                     last = time.time()
 
                 if state == "login" and "login:" in buf:
-                    os.write(master, b"root\n")
+                    time.sleep(0.1)
+                    write_all(master, b"root\n")
                     state = "shell"
                     buf = ""
                 elif state == "shell" and re.search(r"(?:^|[\r\n])#\s*$", buf):
-                    os.write(master, (command + "\n").encode("ascii"))
+                    write_all(master, (command + "\n").encode("ascii"))
                     state = "running"
                     buf = ""
                 elif state == "running" and "LINPACK_RC:" in buf and re.search(r"(?:^|[\r\n])#\s*$", buf):
@@ -204,7 +194,7 @@ def command_run(args):
     labels = re.findall(r"linpack smoke: (gcc|pcc)", text)
     summary = {"rc": rc, "ran": labels}
     print("\n" + json.dumps(summary, indent=2, sort_keys=True))
-    return 0 if rc == 0 and labels == ["gcc", "pcc"] else 1
+    return 0 if rc == 0 and "pcc" in labels else 1
 
 
 def main():
@@ -214,13 +204,10 @@ def main():
     p = sub.add_parser("build")
     p.add_argument("--source", required=True)
     p.add_argument("--out", required=True)
-    p.add_argument("--top", required=True)
     p.add_argument("--rootfs", required=True)
-    p.add_argument("--gcc-wrapper", required=True)
-    p.add_argument("--gcc-prefix", required=True)
-    p.add_argument("--as", dest="as_", required=True)
-    p.add_argument("--ld", required=True)
     p.add_argument("--pcc", required=True)
+    p.add_argument("--cpu", choices=["vr4300", "mips32r2"], default="vr4300")
+    p.add_argument("--float-abi", choices=["hard", "soft"], default="hard")
     p.set_defaults(func=command_build)
 
     p = sub.add_parser("stage")

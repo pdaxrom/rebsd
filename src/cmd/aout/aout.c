@@ -31,8 +31,6 @@
 #include <a.out.h>
 #include "../aoutio.h"
 
-#define USER_CODE_START 0x7f008000
-
 struct exec hdr;                /* a.out header */
 FILE *text, *rel;
 int rflag, dflag;
@@ -232,7 +230,7 @@ void disasm (char *fname)
     printf ("    a_syms    = %08x (%u bytes)\n", hdr.a_syms, hdr.a_syms);
     printf ("    a_entry   = %08x\n", hdr.a_entry);
 
-    addr = ((hdr.a_magic) == RMAGIC) ? 0 : USER_CODE_START;
+    addr = ((hdr.a_magic) == RMAGIC) ? 0 : hdr.a_entry;
 
     if (hdr.a_text > 0) {
         printf ("\nSection .text:\n");
