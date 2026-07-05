@@ -256,6 +256,11 @@ ifneq ($(N64_USERLAND_COMPILER),$(MIPS_ROOTFS_COMPILER))
 $(error N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER) conflicts with MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER))
 endif
 endif
+N64_KERNEL_COMPILER ?= gcc
+N64_KERNEL_COMPILERS = gcc pcc
+ifeq ($(filter $(N64_KERNEL_COMPILER),$(N64_KERNEL_COMPILERS)),)
+$(error Unsupported N64_KERNEL_COMPILER=$(N64_KERNEL_COMPILER); expected one of $(N64_KERNEL_COMPILERS))
+endif
 N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).stamp
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
@@ -401,7 +406,28 @@ STAGE0_CFLAGS   = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
 STAGE0_ASFLAGS  = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
                   -x assembler-with-cpp -MMD -MP -c $(PARAM)
 
-COMPILE_C       = ${CC} ${CFLAGS} -c $<
+KERNEL_CC       = ${CC}
+KERNEL_AS       = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE) \
+                  -x assembler -c
+KERNEL_COMPILER_DEPS =
+COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
+COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
+                  -MF .deps/vers.dep -c vers.c -o vers.o
+ifeq ($(N64_KERNEL_COMPILER),pcc)
+KERNEL_CC       = $(N64_HOST_PCC)
+KERNEL_COMPILER_DEPS = $(N64_HOST_PCC)
+COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
+                  if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
+                      echo "error: PCC kernel C emitted COP1/FPU instructions in .deps/$(@:.o=.s)" >&2; exit 1; \
+                  fi && \
+                  ${KERNEL_AS} .deps/$(@:.o=.s) -o $@
+COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
+                  -MF .deps/vers.dep -S -o .deps/vers.s vers.c && \
+                  if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/vers.s; then \
+                      echo "error: PCC kernel C emitted COP1/FPU instructions in .deps/vers.s" >&2; exit 1; \
+                  fi && \
+                  ${KERNEL_AS} .deps/vers.s -o vers.o
+endif
 COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${ASFPU} ${FPU_ASFLAGS} $< -o $@
 
@@ -424,9 +450,10 @@ CFILES := $(filter-out \
 endif
 
 SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o
-SYSTEM_DEP      = Makefile $(N64_IOCONF).c $(N64_KERNEL_LDSCRIPT)
+SYSTEM_DEP      = Makefile $(N64_IOCONF).c $(N64_KERNEL_LDSCRIPT) \
+                  $(KERNEL_COMPILER_DEPS)
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for N64: local build\n";' > vers.c; \
-                  ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
+                  ${COMPILE_VERS_C}; \
                   rm -f $@
 SYSTEM_LD       = ${LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@
 SYSTEM_LD_TAIL  = ${SIZE} $@; \

@@ -8,7 +8,8 @@ real N64 C userland gates, but it is still not the default compiler.
 
 Current policy:
 
-- Kernel build: GCC only.
+- Kernel build: GCC by default.  PCC kernel builds are experimental only and
+  currently blocked by a documented PCC frontend bug.
 - Userland build: GCC by default.
 - Supported userland compiler selectors: `gcc` and `pcc`.
 - Native `/usr/bin/cc` and `/usr/bin/pcc`: imported PCC in the rootfs.
@@ -38,4 +39,7 @@ make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
 
 `pcc` mode controls how the target userland and libraries are built.  It does
 not switch the kernel, N64 stage0, or host-side bootstrap tools away from the
-existing GCC-based flow.
+existing GCC-based flow.  Kernel PCC experiments must be requested explicitly
+with `MIPS_KERNEL_COMPILER=pcc` or `N64_KERNEL_COMPILER=pcc`; they are expected
+to fail until the `rdwri()` frontend bug and the missing MIPS soft-float mode
+are fixed in PCC.

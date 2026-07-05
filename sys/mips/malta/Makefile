@@ -57,6 +57,11 @@ endif
 ifeq ($(filter $(MIPS_ROOTFS_COMPILER),$(MIPS_ROOTFS_COMPILERS)),)
 $(error Unsupported MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER); expected one of $(MIPS_ROOTFS_COMPILERS))
 endif
+MIPS_KERNEL_COMPILER ?= gcc
+MIPS_KERNEL_COMPILERS = gcc pcc
+ifeq ($(filter $(MIPS_KERNEL_COMPILER),$(MIPS_KERNEL_COMPILERS)),)
+$(error Unsupported MIPS_KERNEL_COMPILER=$(MIPS_KERNEL_COMPILER); expected one of $(MIPS_KERNEL_COMPILERS))
+endif
 MIPS_ROOTFS_SRC_STAMP ?= $(MIPS_ROOTFS_SRC)/.userland.$(MIPS_ROOTFS_COMPILER)
 MIPS_ROOTFS_OVERLAY ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_COMMON_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
@@ -79,6 +84,11 @@ PCC_HOST_AS     = $(TOPSRC)/sys/mips/n64/n64-native-tools/as
 PCC_HOST_LD     = $(TOPSRC)/sys/mips/n64/n64-native-tools/ld
 PCC_HOST_AR     = $(TOPSRC)/sys/mips/n64/n64-native-tools/ar
 PCC_HOST_PCC    = $(PCC_HOST_PREFIX)/bin/mips-rebsd-pcc
+PCC_HOST_SRCS   = $(PCC_HOST_SMOKE_SCRIPT) \
+                  $(shell find $(TOPSRC)/src/dev/pcc/pcc -type f \
+                  \( -name '*.[chly]' -o -name '*.h' -o -name Makefile.in \
+                  -o -name configure -o -name config.sub \
+                  -o -name config.guess \) 2>/dev/null)
 PCC_REGRESS_SCRIPT = $(TOPSRC)/sys/mips/tools/pcc-regress.py
 PCC_REGRESS_OUT ?= /private/tmp/rebsd-pcc-tests
 PCC_REGRESS_MANIFEST ?= /private/tmp/rebsd-pcc-tests.manifest
@@ -127,7 +137,27 @@ ASFLAGS         = -x assembler-with-cpp -c $(CPPFLAGS) -MT $@ -MP -MD \
                   -MF .deps/$*.dep
 FPU_ASFLAGS     = $(ASFLAGS)
 
-COMPILE_C       = ${CC} ${CFLAGS} -c $<
+KERNEL_CC       = ${CC}
+KERNEL_AS       = ${CC} -x assembler -c
+KERNEL_COMPILER_DEPS =
+COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
+COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
+                  -MF .deps/vers.dep -c vers.c -o vers.o
+ifeq ($(MIPS_KERNEL_COMPILER),pcc)
+KERNEL_CC       = $(PCC_HOST_PCC)
+KERNEL_COMPILER_DEPS = $(PCC_HOST_PCC)
+COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
+                  if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
+                      echo "error: PCC kernel C emitted COP1/FPU instructions in .deps/$(@:.o=.s)" >&2; exit 1; \
+                  fi && \
+                  ${KERNEL_AS} .deps/$(@:.o=.s) -o $@
+COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
+                  -MF .deps/vers.dep -S -o .deps/vers.s vers.c && \
+                  if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/vers.s; then \
+                      echo "error: PCC kernel C emitted COP1/FPU instructions in .deps/vers.s" >&2; exit 1; \
+                  fi && \
+                  ${KERNEL_AS} .deps/vers.s -o vers.o
+endif
 COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
 
@@ -198,9 +228,10 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 	$S/mips/common/if_usbn.c $S/mips/malta/if_usbn_fake.c swapunix.c
 
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
-SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT)
+SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
+                  $(KERNEL_COMPILER_DEPS)
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): local build\n";' > vers.c; \
-                  ${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o; \
+                  ${COMPILE_VERS_C}; \
                   rm -f $@
 SYSTEM_LD       = ${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o $@
 SYSTEM_LD_TAIL  = ${SIZE} $@; \
@@ -271,12 +302,16 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         native-pcc-smoke-runtime-vr4300 native-pcc-regress-stage \
         native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 \
         rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
-smoke-host-portablecc: $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SMOKE_SCRIPT)
+$(PCC_HOST_PCC): $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SRCS) $(PCC_HOST_AS) \
+    $(PCC_HOST_LD)
 	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
 	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/include) \
 	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/lib) \
 	    $(abspath $(PCC_HOST_AS)) $(abspath $(PCC_HOST_LD))
+
+smoke-host-portablecc: $(PCC_HOST_PCC)
+	@echo "smoke-host-portablecc: ok"
 
 pcc-regress-compile: smoke-host-portablecc $(PCC_REGRESS_SCRIPT)
 	python3 $(PCC_REGRESS_SCRIPT) compile \

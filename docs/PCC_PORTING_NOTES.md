@@ -60,6 +60,50 @@ PCC mode changes the target userland/rootfs compiler only.  It does not switch
 the kernel, N64 stage0, host bootstrap tools, or target a.out binary tools away
 from the existing flow.
 
+## Known Kernel PCC Blocker
+
+Kernel PCC builds are not a supported gate yet.  Experimental selectors may be
+used to reproduce the current blocker:
+
+```sh
+make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc native-pcc-smoke-runtime
+make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc native-pcc-smoke-runtime
+make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc kernel.z64
+```
+
+As of the 2026-07-05 investigation, the first Malta64 kernel C compile stops in
+`sys/kernel/exec_aout.c` on the prototyped `rdwri()` call:
+
+```text
+../../kernel/exec_aout.c, line 82: warning: illegal combination of pointer and integer
+../../kernel/exec_aout.c, line 82: warning: illegal combination of pointer and integer
+../../kernel/exec_aout.c, line 82: cannot recover from earlier errors: goodbye!
+error: /private/tmp/rebsd-pcc-install/libexec/mips-rebsd-ccom terminated with status 1
+```
+
+The same frontend issue is expected at the equivalent `rdwri()` calls in
+`sys/kernel/exec_elf.c`.  The prototype is visible to PCC:
+
+```c
+int rdwri(enum uio_rw rw, struct inode *ip, caddr_t base, int len,
+    off_t offset, int ioflg, int *aresid);
+```
+
+The original kernel call passes `0` for the optional `aresid` pointer, which is
+a valid null pointer constant in C.  A reduced standalone call with the same
+basic typedefs compiles, but the full preprocessed kernel translation unit
+emits the two pointer/integer diagnostics and can also hit the internal PCC
+frontend error `compiler error: strmemb` when `-Werror` is removed.  Treat this
+as a PCC frontend bug, not as a kernel source issue.  Do not add local kernel
+workarounds for these `rdwri()` call sites just to make PCC proceed.
+
+PCC also does not currently provide a usable MIPS soft-float code generation
+mode.  The ReBSD target rejects both `-msoft-float` and `-mhard-float`; the
+MIPS backend only handles endian `-m` options in the active code path and the
+target ABI is hard-float o32.  Any future kernel PCC gate must either implement
+real soft-float support where needed or keep an explicit COP1/FPU instruction
+guard around PCC-generated kernel C assembly.
+
 ## Native Rootfs Layout
 
 In a PCC-built rootfs the native C compiler is installed as:
