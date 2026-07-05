@@ -53,7 +53,9 @@ run_smoke math-class /root/math-class-smoke.sh
 run_smoke wide-policy /root/wide-policy-smoke.sh
 run_smoke libc-string /root/libc-string-smoke.sh
 run_smoke libc-abi /root/libc-abi-smoke.sh
+run_smoke alias-stress /root/alias-stress-smoke.sh
 run_smoke build-workload /root/build-workload-smoke.sh
+run_smoke make-workload /root/make-workload-smoke.sh
 run_smoke utility-workload /root/utility-workload-smoke.sh
 run_smoke sh-fail /root/sh-fail-smoke.sh
 run_smoke sh-comsubst /root/sh-comsubst-smoke.sh

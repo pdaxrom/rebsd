@@ -65,6 +65,13 @@ not active items for the current C/static-a.out PCC milestone.
     rootfs images for now.
   - Revisit only as a separate C++ phase with frontend coverage, target
     compile/link/run gates, and a ctor/dtor startup policy.
+- [ ] Optimize hot MIPS `libpcc.a` helpers in assembly.
+  - The current canonical helper implementations are C, which keeps the
+    correctness work auditable while Malta64 and N64 validation are still
+    being hardened.
+  - After the C helper set stays stable, add MIPS assembly implementations for
+    selected hot 64-bit arithmetic, shift, and conversion helpers and keep the
+    C versions as the reference oracle/fallback.
 
 ## Phase 1: Host PCC Configuration
 
@@ -372,8 +379,16 @@ not active items for the current C/static-a.out PCC milestone.
     `NATIVE_PCC_REGRESS_RUNTIME_PASS:277`,
     `NATIVE_PCC_REGRESS_UNEXPECTED_RUNTIME_FAIL:0`,
     `NATIVE_PCC_REGRESS_RC:0`.
-- [ ] Continue expanding smoke tests to cover libc-heavy programs, varargs,
+- [x] Continue expanding smoke tests to cover libc-heavy programs, varargs,
   structs/unions, pointer arithmetic stress, and basic shell build workloads.
+  - `/root/alias-stress-smoke.sh` now covers larger pointer arithmetic,
+    nested structs/unions, char-alias access, function pointer dispatch,
+    struct-by-value copies, and overlapping struct `memmove()` through both
+    `/usr/bin/cc` and `/usr/bin/pcc`.
+  - `/root/make-workload-smoke.sh` now covers a second native shell build:
+    two static libraries, dependent `-L/-l` link order, `nm`, `size`, archive
+    probing, `make clean`, and a clean rebuild through both compiler driver
+    names.
 - [x] Audit MIPS backend `ZF` soft-float helper calls under the ReBSD
   hard-float o32 ABI.
   - Current ReBSD/MIPS table bypasses hardware `cvt.s.d` for `double -> float`
@@ -694,7 +709,7 @@ not active items for the current C/static-a.out PCC milestone.
     failures in a target-aware policy table.  For `mips-rebsd`, the policy
     covers only the x86-inline-asm test, static a.out shared-library/PIC
     rejection, and static a.out TLS rejection.
-- [ ] Close remaining test-coverage gaps.
+- [x] Close remaining test-coverage gaps.
   - Keep expanding strict PCC runtime coverage as backend issues are fixed.
   - Covered now by `/root/libc-abi-smoke.sh`: libc-heavy varargs,
     structs/unions, qsort callbacks, `setjmp`/`longjmp`, stdio file I/O, and
@@ -713,8 +728,12 @@ not active items for the current C/static-a.out PCC milestone.
     `wchar_t`, ASCII-only byte/wide conversion contract, non-ASCII rejection,
     wide string/memory helpers, and wide numeric parsers through both native
     compiler driver names.
-  - Still worth expanding: larger pointer/aliasing stress and more shell build
-    workloads.
+  - Covered now by `/root/alias-stress-smoke.sh`: larger pointer/aliasing
+    stress, nested structs/unions, function pointer dispatch, struct-by-value
+    copies, and overlapping struct `memmove()`.
+  - Covered now by `/root/make-workload-smoke.sh`: an additional shell build
+    workload with two static libraries, dependent `-L/-l` ordering, `nm`,
+    `size`, archive probing, `make clean`, and rebuild checks.
 - [x] Make `fsutil` fail hard on rootfs population errors.
   - The first 4 MB N64 PCC debug rootfs exposed `inode_alloc: out of in-core
     inodes` and missing file/device creation while `fsutil --new` still
