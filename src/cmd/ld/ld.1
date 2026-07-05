@@ -1,4 +1,4 @@
-.TH LD 1 "July 4, 2026" "ReBSD"
+.TH LD 1 "July 5, 2026" "ReBSD"
 .SH NAME
 ld \- ReBSD MIPS link editor
 .SH SYNOPSIS
@@ -75,6 +75,12 @@ and
 .BR end .
 It also defines the constructor and destructor range symbols used by the
 ReBSD C runtime.
+MIPS text/data/BSS alignment from input objects is preserved in the output;
+this keeps VR4300 8-byte text alignment and Malta MIPS32r2 4-byte text
+alignment compatible with the CPU mode selected by
+.BR as (1)
+and
+.BR pcc (1).
 .SH OPTIONS
 .TP
 .BI \-o " file"
@@ -114,6 +120,12 @@ The standard library directories are
 and
 .IR /usr/local/lib ,
 under the selected sysroot.
+Soft-float PCC links normally add
+.I /usr/lib/softfloat
+before
+.I /usr/lib
+so compiler helper routines are selected from the soft-float
+.BR libpcc.a .
 .TP
 .BI \-u " symbol"
 Enter

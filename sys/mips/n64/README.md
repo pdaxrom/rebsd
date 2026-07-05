@@ -399,9 +399,9 @@ current N64 work is staged as follows:
   The old `src/cmd/cc`, `src/cmd/cpp`, and `src/cmd/ccom` sources have been
   removed so there is only one PCC implementation in the tree;
 - the PCC `ccom` backend emits native assembler-compatible `.word` pairs for
-  64-bit integer initializers instead of GAS-only `.dword`; full o32
-  big-endian `long long` ABI coverage still needs a focused pass for
-  arguments, returns, structs, and helper-call interactions;
+  64-bit integer initializers instead of GAS-only `.dword`; the focused o32
+  big-endian `long long` ABI smoke now covers arguments, returns, structs,
+  external objects, and helper-call interactions for both `cc` and `pcc`;
 - the PCC build uses 8-byte compiler heap alignment for VR4300, because
   floating constants store `long double` values in AST nodes and hard-float
   `sdc1` faults on 4-byte-only aligned addresses;
@@ -415,7 +415,8 @@ current N64 work is staged as follows:
   no-header smoke sources in `/root`;
 - the generated rootfs also stages target headers under `/usr/include` and the
   native compiler runtime/archive set under `/usr/lib`, including `crt0.o`,
-  `libc.a`, and `libm.a`;
+  `libc.a`, `libm.a`, and `libpcc.a`. PCC soft-float builds also stage the
+  ABI-specific helper archive under `/usr/lib/softfloat/libpcc.a`;
 - the `/usr/lib` compiler runtime is generated as big-endian a.out for the in-tree
   toolchain. `crt0.o` is assembled directly by the N64 native `as` from
   `lib/startup/crt0.s`; `libc.a` and `libm.a` are built in an isolated

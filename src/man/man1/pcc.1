@@ -1,4 +1,4 @@
-.TH PCC 1 "July 4, 2026" "ReBSD"
+.TH PCC 1 "July 5, 2026" "ReBSD"
 .SH NAME
 pcc, cc, cpp \- ReBSD Portable C Compiler driver
 .SH SYNOPSIS
@@ -56,6 +56,9 @@ The default link includes the ReBSD start file and the standard libraries
 .BR \-lc ,
 and
 .BR \-lpcc .
+The default MIPS CPU and floating-point ABI are selected when the rootfs or
+standalone SDK compiler is built, and may be overridden with the MIPS options
+below.
 .SH OPTIONS
 .TP
 .B \-c
@@ -141,12 +144,35 @@ to the compiler proper.
 .B \-march=vr4300
 Select the VR4300\-compatible MIPS code generation mode used by the N64
 and Malta64 compatibility ports.
+This mode uses the older MIPS III instruction set and the ReBSD VR4300
+8-byte aggregate alignment policy.
+.TP
+.B \-mips32r2
+.TQ
+.B \-march=mips32r2
+Select the MIPS32 revision 2 code generation mode used by the Malta port.
+This mode enables MIPS32r2 instruction selection, passes
+.B \-march=mips32r2
+to
+.BR as (1),
+and uses the Malta o32 4-byte aggregate alignment policy.
 .TP
 .B \-mhard\-float
 .TQ
 .B \-msoft\-float
 Select hardware or software floating\-point code generation when supported
 by the target configuration.
+Hard-float mode defines
+.B __mips_hard_float
+and uses
+.IR /usr/lib/libpcc.a .
+Soft-float mode defines
+.B __mips_soft_float
+and searches
+.I /usr/lib/softfloat
+before the normal system library directory so soft-float helper routines are
+taken from
+.IR /usr/lib/softfloat/libpcc.a .
 .TP
 .B \-g
 Request debug information.
@@ -159,6 +185,17 @@ Print commands as they are run.
 .TP
 .B \-\&#\&#\&#
 Print the commands that would be run, but do not execute them.
+.SH TARGET MODES
+The current ReBSD
+.B mips-rebsd
+PCC target is big-endian o32.  Endianness is selected when PCC is built; the
+current target does not accept a runtime little-endian mode.  A future mipsel
+port should use a separate compiler target.
+.PP
+The CPU option is passed to both the compiler proper and the assembler.  This
+keeps generated instructions, assembler instruction checks, and C ABI layout in
+the same mode.  Mixing VR4300 objects and MIPS32r2 objects in one rootfs is not
+a supported ABI.
 .SH FILES
 .TP
 .I /usr/libexec/pcc/cpp
@@ -179,8 +216,14 @@ Program start file.
 .I /usr/lib/libpcc.a
 PCC runtime helper library.
 .TP
+.I /usr/lib/softfloat/libpcc.a
+Soft-float PCC runtime helper library.
+.TP
 .I /usr/lib/libc.a
 System C library.
+.TP
+.I /usr/lib/libm.a
+System math library.
 .SH SEE ALSO
 .BR as (1),
 .BR ld (1),

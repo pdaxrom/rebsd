@@ -114,8 +114,9 @@ Completed for this milestone:
 
 Remaining work:
 
-- Run the same soft-float userland/rootfs gates on real N64 hardware after the
-  Malta64/R4000 and Malta QEMU runs stay stable.
+- Run the updated PCC userland/rootfs gate on real N64 hardware in both
+  hard-float and soft-float modes after the Malta64/R4000 and Malta QEMU
+  matrix stays stable.
 
 ## Standalone Cross SDK
 
@@ -279,22 +280,48 @@ The ReBSD a.out toolchain is part of the supported PCC target:
 - Target `cc` honors `TMPDIR` for compiler temporaries.
 
 The imported PCC MIPS backend carries ReBSD fixes for big-endian `long long`,
-sub-word stack arguments, hard-float o32 helper calls, aggregate return ABI,
-stack alignment, mixed aggregate/64-bit stack slot accounting, unsigned narrow
-memory loads, MIPS unsigned comparisons, computed goto, static initializer
-string references, floating NaN/Inf folding, and FCSR-safe `DEBUGFP` oracle
-checks.
+sub-word stack arguments, hard-float and soft-float o32 helper calls, aggregate
+return ABI, stack alignment, mixed aggregate/64-bit stack slot accounting,
+unsigned narrow memory loads, MIPS unsigned comparisons, computed goto, static
+initializer string references, floating NaN/Inf folding, and FCSR-safe
+`DEBUGFP` oracle checks.  The current branch also fixes the MIPS
+call/register allocator path used by
+indirect calls through `$25`, avoids clobbering 64-bit argument registers while
+precomputing complex call arguments, corrects the `$t6` register-pair map, keeps
+ReBSD `OFFSZ` at the target ABI width, prints unsigned 32-bit constants without
+sign-extension in assembler output, and keeps the shell allocator safety guard
+enabled for both `vr4300` and `mips32r2` userlands.
 
 ## Validation Gates
 
 The current C gate is green in these environments:
 
 - Host cross smoke with ReBSD `as`/`ld`.
-- Malta QEMU PCC userland, including hard-float and soft-float LINPACK smoke.
+- Malta QEMU PCC userland, including `mips32r2` hard-float and soft-float
+  `/root/pcc-smoke-all.sh` plus LINPACK smoke.
 - Malta64/R4000 QEMU PCC userland, including hard-float and soft-float LINPACK
-  smoke, using
-  `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`.
-- Real N64 hardware normal PCC rootfs smoke.
+  smoke for the `vr4300` ABI, using
+  `qemu-system-mips64 -M malta -cpu R4000 -m 64M -nographic`.
+- Real N64 hardware normal hard-float PCC rootfs smoke from the earlier gate.
+  The updated hard/soft split still needs a fresh real-hardware pass.
+
+The 2026-07-05 QEMU smoke matrix finished with:
+
+```text
+malta64 vr4300  hard  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+malta64 vr4300  soft  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+malta   mips32r2 hard  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+malta   mips32r2 soft  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+```
+
+The same runs included `linpack-pcc`:
+
+```text
+malta64 vr4300 hard:   11384.472 and 11252.091 KFLOPS
+malta64 vr4300 soft:     604.800, 775.384, and 775.385 KFLOPS
+malta mips32r2 hard:   10996.368 and 10518.260 KFLOPS
+malta mips32r2 soft:     817.298 and 742.086 KFLOPS
+```
 
 The native PCC regression gate currently reports:
 

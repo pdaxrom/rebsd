@@ -3,8 +3,10 @@
 The kernel and userland build with the existing GCC-based toolchain by default.
 
 PortableCC/pcc is available as a supported opt-in userland compiler for the
-MIPS rootfs and N64 userland.  It has passed the Malta, Malta64/R4000, and
-real N64 C userland gates, but it is still not the default compiler.
+MIPS rootfs and N64 userland.  It has passed the Malta and Malta64/R4000 QEMU
+hard-float and soft-float rootfs gates, plus the earlier normal hard-float N64
+hardware C userland gate.  The updated soft-float PCC path still needs the real
+N64 hardware pass before becoming the N64 hardware baseline.
 
 Current policy:
 
@@ -49,6 +51,19 @@ make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
 make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
 ```
+
+The QEMU PCC smoke matrix verified on 2026-07-05 is:
+
+```text
+malta64 vr4300  hard  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
+malta64 vr4300  soft  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
+malta   mips32r2 hard  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
+malta   mips32r2 soft  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
+```
+
+The same runs included `linpack-pcc`; representative results were about
+11.3 MFLOPS for VR4300 hard-float, 10.5-11.0 MFLOPS for mips32r2 hard-float,
+and 0.7-0.8 MFLOPS for soft-float.
 
 `pcc` mode controls how the target userland and libraries are built.  It does
 not switch the kernel, N64 stage0, or target a.out binary tools away from the

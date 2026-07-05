@@ -1,4 +1,4 @@
-.TH AS 1 "July 4, 2026" "ReBSD"
+.TH AS 1 "July 5, 2026" "ReBSD"
 .SH NAME
 as \- ReBSD MIPS assembler
 .SH SYNOPSIS
@@ -25,6 +25,10 @@ as \- ReBSD MIPS assembler
 .B \-march=vr4300
 |
 .B \-mips32
+|
+.B \-mips32r2
+|
+.B \-march=mips32r2
 ]
 [
 .I infile
@@ -53,6 +57,8 @@ records, and the
 and
 .B .set noreorder
 instruction scheduling modes required by compiler output.
+The selected CPU mode controls instruction acceptance and the text alignment
+policy used for compiler-generated code.
 .SH OPTIONS
 .TP
 .BI \-o " outfile"
@@ -87,11 +93,20 @@ objects.
 Enable the VR4300\-compatible instruction checks used by the N64 and
 Malta64 compatibility ports.
 Instructions known to require later MIPS32 revisions are rejected.
+Text sections are finished on an 8-byte boundary for this mode so hard-float
+VR4300 code can safely load in-text double constants.
 .TP
 .B \-mips32
 .TQ
 .BI \-march= mips32
 Use the generic MIPS32 acceptance mode.
+.TP
+.B \-mips32r2
+.TQ
+.BI \-march= mips32r2
+Use the MIPS32 revision 2 acceptance mode used by the Malta port.
+This enables MIPS32r2 instructions rejected by the VR4300 mode and uses the
+Malta 4-byte text alignment policy.
 .TP
 .BI \-I " dir"
 Accepted for compiler\-driver compatibility.
