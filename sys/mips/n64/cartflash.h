@@ -1,10 +1,14 @@
-#ifndef _MIPS_CARTFLASH_H_
-#define _MIPS_CARTFLASH_H_
+#ifndef _N64_CARTFLASH_H_
+#define _N64_CARTFLASH_H_
 
-#include <sys/ioctl.h>
+#ifdef KERNEL
+#include "../romfs_flash.h"
+#else
+#include <mips/romfs_flash.h>
+#endif
 
-#define N64CART_FLASH_SECTOR       4096u
-#define N64CART_FLASH_MAX_TRANSFER N64CART_FLASH_SECTOR
+#define N64CART_FLASH_SECTOR       MIPS_ROMFS_FLASH_SECTOR
+#define N64CART_FLASH_MAX_TRANSFER MIPS_ROMFS_FLASH_MAX_TRANSFER
 
 struct n64cart_flash_info {
     unsigned jedec_id;

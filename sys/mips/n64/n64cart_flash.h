@@ -1,7 +1,7 @@
 #ifndef _N64_N64CART_FLASH_H_
 #define _N64_N64CART_FLASH_H_
 
-#include "../cartflash.h"
+#include "cartflash.h"
 
 #define N64CART_SSI_SR             0x10u
 #define N64CART_SSI_DR0            0x14u

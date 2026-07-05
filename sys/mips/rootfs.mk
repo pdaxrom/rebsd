@@ -570,13 +570,6 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 	done
 	cp -p $(TOPSRC)/sys/mips/include/machine/types.h \
 	    $(MIPS_ROOTFS_USR_INCLUDE)/machine/types.h
-	if [ -f $(MIPS_ROOTFS_USR_INCLUDE)/machine/n64cart_flash.h ]; then \
-	    sed 's|#include "../cartflash.h"|#include <mips/cartflash.h>|' \
-	        $(MIPS_ROOTFS_USR_INCLUDE)/machine/n64cart_flash.h \
-	        > $(MIPS_ROOTFS_USR_INCLUDE)/machine/n64cart_flash.h.tmp; \
-	    mv $(MIPS_ROOTFS_USR_INCLUDE)/machine/n64cart_flash.h.tmp \
-	        $(MIPS_ROOTFS_USR_INCLUDE)/machine/n64cart_flash.h; \
-	fi
 	mkdir -p $(MIPS_ROOTFS_STAGE)/lib
 	mkdir -p $(MIPS_ROOTFS_STAGE)/sbin
 	mkdir -p $(MIPS_ROOTFS_STAGE)/bin

@@ -495,7 +495,6 @@ N64_ROOTFS_WHATIS = $(MIPS_ROOTFS_WHATIS)
 N64_ROOTFS_EXTRA_STAMPS = $(MIPS_ROOTFS_EXTRA_STAMPS)
 N64_USERLAND_ABI = $(MIPS_ROOTFS_ABI)
 N64_USERLAND_FLOAT_FLAG = $(MIPS_ROOTFS_FLOAT_FLAG)
-N64_USERLAND_ENDIAN = $(MIPS_ROOTFS_ENDIAN)
 N64_USERLAND_ARCH = $(MIPS_ROOTFS_ARCH)
 N64_USERLAND_AS_CPU = $(MIPS_ROOTFS_AS_CPU)
 N64_USERLAND_STAMP = $(MIPS_ROOTFS_USERLAND_STAMP)
@@ -780,9 +779,6 @@ $(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
 	        $(N64_ROOTFS_USR_INCLUDE)/machine/$$header.h; \
 	done
 	cp -p $(TOPSRC)/sys/mips/include/machine/types.h $(N64_ROOTFS_USR_INCLUDE)/machine/types.h
-	sed 's|#include "../cartflash.h"|#include <mips/cartflash.h>|' \
-	    $(TOPSRC)/sys/mips/n64/n64cart_flash.h \
-	    > $(N64_ROOTFS_USR_INCLUDE)/machine/n64cart_flash.h
 	mkdir -p $(N64_ROOTFS_STAGE)/lib
 	mkdir -p $(N64_ROOTFS_STAGE)/sbin
 	mkdir -p $(N64_ROOTFS_STAGE)/bin

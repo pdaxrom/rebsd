@@ -3,7 +3,7 @@
 #include <sys/errno.h>
 #include <sys/systm.h>
 
-#include <machine/cartflash.h>
+#include <machine/romfs_flash.h>
 
 #include "../common/romfs_backend.h"
 #include "../../../src/cmd/romfsctl/romfs.h"
@@ -28,11 +28,11 @@
 struct malta_cartflash_slot {
     unsigned offset;
     int valid;
-    unsigned char data[N64CART_FLASH_SECTOR];
+    unsigned char data[MIPS_ROMFS_FLASH_SECTOR];
 };
 
 static struct malta_cartflash_slot malta_cartflash_slots[MALTA_CARTFLASH_SLOTS];
-static unsigned char malta_cartflash_buf[N64CART_FLASH_SECTOR];
+static unsigned char malta_cartflash_buf[MIPS_ROMFS_FLASH_SECTOR];
 static uint16_t malta_cartflash_map[MALTA_CARTFLASH_MAP_SIZE / sizeof(uint16_t)];
 static uint8_t malta_cartflash_list[MALTA_CARTFLASH_LIST_SIZE];
 static int malta_cartflash_ready;
@@ -49,7 +49,7 @@ malta_cartflash_clear_slots(void)
 static struct malta_cartflash_slot *
 malta_cartflash_find_slot(unsigned offset)
 {
-    unsigned base = offset & ~(N64CART_FLASH_SECTOR - 1);
+    unsigned base = offset & ~(MIPS_ROMFS_FLASH_SECTOR - 1);
     unsigned i;
 
     for (i = 0; i < MALTA_CARTFLASH_SLOTS; i++) {
@@ -63,7 +63,7 @@ malta_cartflash_find_slot(unsigned offset)
 static struct malta_cartflash_slot *
 malta_cartflash_alloc_slot(unsigned offset)
 {
-    unsigned base = offset & ~(N64CART_FLASH_SECTOR - 1);
+    unsigned base = offset & ~(MIPS_ROMFS_FLASH_SECTOR - 1);
     unsigned i;
 
     for (i = 0; i < MALTA_CARTFLASH_SLOTS; i++) {
@@ -83,7 +83,7 @@ malta_cartflash_erased(const unsigned char *data)
 {
     unsigned i;
 
-    for (i = 0; i < N64CART_FLASH_SECTOR; i++) {
+    for (i = 0; i < MIPS_ROMFS_FLASH_SECTOR; i++) {
         if (data[i] != 0xff)
             return 0;
     }
@@ -98,14 +98,14 @@ malta_cartflash_info(struct mipsromfs_flash_info *info)
     info->rom_size = MALTA_CARTFLASH_SIZE;
     info->fw_size = MALTA_CARTFLASH_FW_SIZE;
     info->romfs_offset = MALTA_CARTFLASH_ROMFS_OFF;
-    info->sector_size = N64CART_FLASH_SECTOR;
+    info->sector_size = MIPS_ROMFS_FLASH_SECTOR;
 }
 
 static int
 malta_cartflash_check_range(const struct mipsromfs_flash_info *info,
     unsigned offset, unsigned size, const void *buffer)
 {
-    if (size == 0 || size > N64CART_FLASH_MAX_TRANSFER)
+    if (size == 0 || size > MIPS_ROMFS_FLASH_MAX_TRANSFER)
         return EINVAL;
     if (buffer == 0)
         return EFAULT;
@@ -132,7 +132,7 @@ static int
 malta_cartflash_check_erase_range(const struct mipsromfs_flash_info *info,
     unsigned offset)
 {
-    if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0 ||
+    if ((offset & (MIPS_ROMFS_FLASH_SECTOR - 1)) != 0 ||
         offset >= info->rom_size)
         return EINVAL;
     if (offset < info->romfs_offset)
@@ -186,8 +186,8 @@ malta_cartflash_backend_read(unsigned offset, void *buffer, unsigned size)
         return error;
     dst = (unsigned char *)buffer;
     while (size != 0) {
-        pos = offset & (N64CART_FLASH_SECTOR - 1);
-        chunk = N64CART_FLASH_SECTOR - pos;
+        pos = offset & (MIPS_ROMFS_FLASH_SECTOR - 1);
+        chunk = MIPS_ROMFS_FLASH_SECTOR - pos;
         if (chunk > size)
             chunk = size;
         slot = malta_cartflash_find_slot(offset);
@@ -214,10 +214,10 @@ malta_cartflash_backend_write_sector(unsigned offset, const void *buffer)
     malta_cartflash_init();
     malta_cartflash_info(&info);
     error = malta_cartflash_check_write_range(&info, offset,
-        N64CART_FLASH_SECTOR, buffer);
+        MIPS_ROMFS_FLASH_SECTOR, buffer);
     if (error)
         return error;
-    if ((offset & (N64CART_FLASH_SECTOR - 1)) != 0)
+    if ((offset & (MIPS_ROMFS_FLASH_SECTOR - 1)) != 0)
         return EINVAL;
 
     slot = malta_cartflash_find_slot(offset);
@@ -228,7 +228,7 @@ malta_cartflash_backend_write_sector(unsigned offset, const void *buffer)
         if (slot == 0)
             return ENOSPC;
     }
-    for (i = 0; i < N64CART_FLASH_SECTOR; i++) {
+    for (i = 0; i < MIPS_ROMFS_FLASH_SECTOR; i++) {
         if ((slot->data[i] & src[i]) != src[i])
             return EIO;
     }
@@ -236,7 +236,7 @@ malta_cartflash_backend_write_sector(unsigned offset, const void *buffer)
         slot->valid = 0;
         return 0;
     }
-    for (i = 0; i < N64CART_FLASH_SECTOR; i++)
+    for (i = 0; i < MIPS_ROMFS_FLASH_SECTOR; i++)
         slot->data[i] &= src[i];
     return 0;
 }
@@ -298,8 +298,8 @@ int
 malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
 {
     struct mipsromfs_flash_info minfo;
-    struct n64cart_flash_info info;
-    struct n64cart_flash_io io;
+    struct mipsromfs_flash_info info;
+    struct mipsromfs_flash_io io;
     unsigned offset;
     int error;
 
@@ -309,7 +309,7 @@ malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
     malta_cartflash_init();
     malta_cartflash_info(&minfo);
 
-    if (cmd == N64CARTFLASHIOC_GETINFO) {
+    if (cmd == MIPSROMFSFLASHIOC_GETINFO) {
         info.jedec_id = minfo.jedec_id;
         info.rom_size = minfo.rom_size;
         info.fw_size = minfo.fw_size;
@@ -319,7 +319,7 @@ malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
     }
 
     switch (cmd) {
-    case N64CARTFLASHIOC_READ:
+    case MIPSROMFSFLASHIOC_READ:
         error = copyin(data, (caddr_t)&io, sizeof(io));
         if (error)
             return error;
@@ -333,7 +333,7 @@ malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
             return error;
         return copyout((caddr_t)malta_cartflash_buf, io.buffer, io.size);
 
-    case N64CARTFLASHIOC_WRITE:
+    case MIPSROMFSFLASHIOC_WRITE:
         error = copyin(data, (caddr_t)&io, sizeof(io));
         if (error)
             return error;
@@ -341,8 +341,8 @@ malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
             io.size, io.buffer);
         if (error)
             return error;
-        if ((io.offset & (N64CART_FLASH_SECTOR - 1)) != 0 ||
-            io.size != N64CART_FLASH_SECTOR)
+        if ((io.offset & (MIPS_ROMFS_FLASH_SECTOR - 1)) != 0 ||
+            io.size != MIPS_ROMFS_FLASH_SECTOR)
             return EINVAL;
         error = copyin(io.buffer, (caddr_t)malta_cartflash_buf, io.size);
         if (error)
@@ -350,7 +350,7 @@ malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         return malta_cartflash_backend_write_sector(io.offset,
             malta_cartflash_buf);
 
-    case N64CARTFLASHIOC_ERASE:
+    case MIPSROMFSFLASHIOC_ERASE:
         error = copyin(data, (caddr_t)&offset, sizeof(offset));
         if (error)
             return error;
