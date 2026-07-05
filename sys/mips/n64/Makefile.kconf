@@ -93,17 +93,10 @@ N64_NATIVE_AOUT_RANLIB = $(N64_NATIVE_TOOLS)/ranlib
 N64_NATIVE_AOUT_NM = $(N64_NATIVE_TOOLS)/nm
 N64_NATIVE_AOUT_SIZE = $(N64_NATIVE_TOOLS)/size
 N64_NATIVE_AOUT_STRIP = $(N64_NATIVE_TOOLS)/strip
-N64_HOST_CPP = $(N64_NATIVE_TOOLS)/cpp-host
-N64_HOST_CPP_BUILD = $(N64_NATIVE_TOOLS)/cpp-host-build
-N64_HOST_CCOM = $(N64_NATIVE_TOOLS)/ccom-host
-N64_HOST_CCOM_BUILD = $(N64_NATIVE_TOOLS)/ccom-host-build
 N64_NATIVE_CRT0_SRC = $(TOPSRC)/lib/startup/crt0.s
 N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-cc.sh
 N64_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-as.sh
 N64_HOST_PORTABLECC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
-N64_HOST_CPP_BUILD_SCRIPT = $(TOPSRC)/sys/mips/n64/native/build-host-cpp.sh
-N64_HOST_CCOM_BUILD_SCRIPT = $(TOPSRC)/sys/mips/n64/native/build-host-ccom.sh
-N64_HOST_PCC_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-pcc.sh
 N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
 N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
@@ -203,8 +196,6 @@ N64_LIBCURSES_SRCS = $(shell find $(TOPSRC)/src/libcurses -type f \( -name '*.[c
 N64_LIBVMF_SRCS = $(shell find $(TOPSRC)/src/libvmf -type f \( -name '*.[chS]' -o -name Makefile -o -name '*.3' \) 2>/dev/null)
 N64_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
-N64_CPP_SRCS = $(shell find $(TOPSRC)/src/cmd/cpp -type f \( -name '*.[chly]' -o -name Makefile \) 2>/dev/null)
-N64_CCOM_SRCS = $(shell find $(TOPSRC)/src/cmd/ccom -type f \( -name '*.[chly]' -o -name Makefile \) 2>/dev/null)
 N64_DEV_PCC_SRCS = $(N64_NATIVE_PCC_BUILD_SCRIPT) \
                    $(shell find $(TOPSRC)/src/dev/pcc/pcc -type f \
                    \( -name '*.[chly]' -o -name '*.h' -o -name Makefile.in \) \
@@ -214,9 +205,6 @@ N64_NATIVE_TARGET_FLAGS = $(N64_USERLAND_ENDIAN_CPP) -DTARGET_VR4300 \
                           -DTARGET_NO_ABICALLS
 N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(N64_NATIVE_ASWRAP_SCRIPT) \
-                       $(N64_HOST_CPP_BUILD_SCRIPT) \
-                       $(N64_HOST_CCOM_BUILD_SCRIPT) \
-                       $(N64_HOST_PCC_SMOKE_SCRIPT) \
                        $(N64_NATIVE_AS_SMOKE_SCRIPT) \
                        $(N64_NATIVE_AS_MATRIX_SCRIPT) \
                        $(N64_NATIVE_AOUT_SMOKE_SCRIPT) \
@@ -531,8 +519,6 @@ N64_NATIVE_PCC_BUILD = $(MIPS_NATIVE_PCC_BUILD)
 N64_NATIVE_PCC_DIR = $(MIPS_NATIVE_PCC_DIR)
 N64_NATIVE_PCC_STAMP = $(MIPS_NATIVE_PCC_STAMP)
 N64_NATIVE_CC = $(MIPS_PCC_RUNTIME_CC)
-N64_HOST_CPP = $(MIPS_HOST_CPP)
-N64_HOST_CCOM = $(MIPS_HOST_CCOM)
 N64_HOST_PCC = $(MIPS_HOST_PCC)
 N64_CROSS_PCC_AS = $(MIPS_CROSS_PCC_AS)
 N64_CROSS_PCC_LD = $(MIPS_CROSS_PCC_LD)
@@ -1074,12 +1060,6 @@ $(N64_NATIVE_AOUT_STRIP): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
 	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c
 
-$(N64_HOST_CCOM): $(N64_HOST_CCOM_BUILD_SCRIPT) $(N64_CCOM_SRCS)
-	sh $(N64_HOST_CCOM_BUILD_SCRIPT) $(TOPSRC) $(N64_HOST_CCOM_BUILD) $@
-
-$(N64_HOST_CPP): $(N64_HOST_CPP_BUILD_SCRIPT) $(N64_CPP_SRCS)
-	sh $(N64_HOST_CPP_BUILD_SCRIPT) $(TOPSRC) $(N64_HOST_CPP_BUILD) $@
-
 $(N64_HOST_PCC): $(N64_HOST_PORTABLECC_SCRIPT) $(N64_DEV_PCC_SRCS) \
     $(N64_ROOTFS_BASE_STAMP) $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
     $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB) \
@@ -1110,27 +1090,6 @@ smoke-aout-toolchain: $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
 	    $(abspath $(N64_NATIVE_AOUT_RANLIB)) $(abspath $(N64_NATIVE_AOUT_NM)) \
 	    $(abspath $(N64_NATIVE_AOUT_SIZE)) $(abspath $(N64_NATIVE_AOUT_STRIP)) \
 	    $(N64_GNU_AS)
-
-.PHONY: smoke-host-pcc smoke-host-ccom
-smoke-host-pcc: $(N64_HOST_CPP) $(N64_HOST_CCOM) $(N64_NATIVE_AS) \
-    $(N64_NATIVE_LD) $(N64_HOST_PCC_SMOKE_SCRIPT) \
-    $(TOPSRC)/sys/mips/rootfs/root/types-smoke.c \
-    $(TOPSRC)/sys/mips/rootfs/root/ll-smoke.c \
-    $(TOPSRC)/sys/mips/rootfs/root/ll-abi-smoke.c
-	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
-	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
-	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/rootfs/root/types-smoke.c
-	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
-	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
-	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/rootfs/root/ll-smoke.c
-	sh $(N64_HOST_PCC_SMOKE_SCRIPT) $(abspath $(N64_HOST_CPP)) \
-	    $(abspath $(N64_HOST_CCOM)) $(abspath $(N64_NATIVE_AS)) \
-	    $(abspath $(N64_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/rootfs/root/ll-abi-smoke.c
-
-smoke-host-ccom: smoke-host-pcc
 
 $(N64_NATIVE_DIR)/crt0.o: $(N64_NATIVE_AS) $(N64_NATIVE_CRT0_SRC)
 	mkdir -p $(N64_NATIVE_DIR)

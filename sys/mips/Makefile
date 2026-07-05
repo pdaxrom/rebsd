@@ -17,7 +17,7 @@ endif
         run-vr4300 kernel.z64 preflight.z64 \
         cross-pcc-sdk cross-pcc-sdk-tools clean-cross-pcc-sdk \
         smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain \
-        smoke-host-pcc smoke-host-ccom smoke-host-portablecc \
+        smoke-host-portablecc \
         pcc-regress-compile pcc-regress-stage pcc-regress-runtime \
         pcc-regress-summary linpack-smoke-build linpack-smoke-stage \
         linpack-smoke-runtime native-pcc-smoke-runtime \
@@ -32,7 +32,7 @@ unix kernel kernel.z64 preflight.z64: $(BOARD_DIR)/Makefile
 run run-early run-net run-vr4300: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
 
-smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain smoke-host-pcc smoke-host-ccom smoke-host-portablecc pcc-regress-compile pcc-regress-stage pcc-regress-runtime pcc-regress-summary linpack-smoke-build linpack-smoke-stage linpack-smoke-runtime native-pcc-smoke-runtime native-pcc-regress-stage native-pcc-regress-runtime: $(BOARD_DIR)/Makefile
+smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain smoke-host-portablecc pcc-regress-compile pcc-regress-stage pcc-regress-runtime pcc-regress-summary linpack-smoke-build linpack-smoke-stage linpack-smoke-runtime native-pcc-smoke-runtime native-pcc-regress-stage native-pcc-regress-runtime: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
 
 cross-pcc-sdk cross-pcc-sdk-tools clean-cross-pcc-sdk:

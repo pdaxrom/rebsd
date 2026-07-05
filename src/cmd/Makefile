@@ -10,12 +10,12 @@ CFLAGS          += -Werror
 
 # Programs that live in subdirectories, and have makefiles of their own.
 # /bin
-SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar cc chflags \
-                  chpass cpp dc diff emg env fdisk find fold forth \
-                  fstat glcdtest hostname id la lcc lcpp ld ls login make \
+SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar chflags \
+                  chpass dc diff emg env fdisk find fold forth \
+                  fstat glcdtest hostname id la ld ls login make \
                   man md5 med more netstat nm passwd pdc picoc ping portio printf pwm \
-                  ranlib re renice retroforth scm sed setty sh sl smallc \
-                  smlrc smux stty sysctl telnet telnetd test uname wget wiznet xargs \
+                  ranlib re renice retroforth scm sed setty sh sl \
+                  smux stty sysctl telnet telnetd test uname wget wiznet xargs \
                   zmodem gtest msec cron compress date2 tip \
                   talloc uucp viless virus yacc
 
@@ -24,7 +24,7 @@ SUBDIR_ALL    += chown chroot dhclient disktool fsck getty ifconfig inetd init \
                   mkfs mknod mkpasswd mount pstat \
                   reboot route shutdown umount update vipw
 
-# TODO: ccom lex m4 reloc sre pforth
+# TODO: lex m4 reloc sre pforth
 
 # Shell scripts that need only be installed and are never removed.
 #

@@ -178,8 +178,6 @@ MIPS_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name 
 MIPS_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBM_SRCS = $(shell find $(TOPSRC)/src/libm -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
-MIPS_CPP_SRCS = $(shell find $(TOPSRC)/src/cmd/cpp -type f \( -name '*.[chly]' -o -name Makefile \) 2>/dev/null)
-MIPS_CCOM_SRCS = $(shell find $(TOPSRC)/src/cmd/ccom -type f \( -name '*.[chly]' -o -name Makefile \) 2>/dev/null)
 
 MIPS_NATIVE_DIR ?= mips-native-runtime.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_TREE = $(MIPS_NATIVE_DIR)/tree
@@ -209,17 +207,10 @@ MIPS_NATIVE_TARGET_FLAGS ?= $(MIPS_NATIVE_TARGET_FLAGS_$(MIPS_ROOTFS_CPU))
 MIPS_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
 MIPS_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-cc.sh
 MIPS_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-as.sh
-MIPS_HOST_CPP_BUILD_SCRIPT = $(TOPSRC)/sys/mips/n64/native/build-host-cpp.sh
-MIPS_HOST_CCOM_BUILD_SCRIPT = $(TOPSRC)/sys/mips/n64/native/build-host-ccom.sh
 MIPS_HOST_PORTABLECC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
-MIPS_HOST_PCC_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-pcc.sh
 MIPS_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 MIPS_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
 MIPS_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
-MIPS_HOST_CPP = $(MIPS_NATIVE_TOOLS)/cpp-host
-MIPS_HOST_CPP_BUILD = $(MIPS_NATIVE_TOOLS)/cpp-host-build
-MIPS_HOST_CCOM = $(MIPS_NATIVE_TOOLS)/ccom-host
-MIPS_HOST_CCOM_BUILD = $(MIPS_NATIVE_TOOLS)/ccom-host-build
 MIPS_NATIVE_PCC_BUILD_SCRIPT = $(TOPSRC)/sys/mips/tools/native-pcc-build.py
 MIPS_NATIVE_PCC_BUILD ?= mips-native-pcc-build.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_PCC_DIR ?= mips-native-pcc.$(MIPS_ROOTFS_ABI)
@@ -251,9 +242,6 @@ MIPS_DEV_PCC_SRCS = $(MIPS_NATIVE_PCC_BUILD_SCRIPT) \
                    -o -name config.guess \) 2>/dev/null)
 MIPS_NATIVE_TOOL_SRCS = $(MIPS_NATIVE_MKHOSTINCLUDE) $(MIPS_NATIVE_CC_SCRIPT) \
                        $(MIPS_NATIVE_ASWRAP_SCRIPT) \
-                       $(MIPS_HOST_CPP_BUILD_SCRIPT) \
-                       $(MIPS_HOST_CCOM_BUILD_SCRIPT) \
-                       $(MIPS_HOST_PCC_SMOKE_SCRIPT) \
                        $(MIPS_NATIVE_AS_SMOKE_SCRIPT) \
                        $(MIPS_NATIVE_AS_MATRIX_SCRIPT) \
                        $(MIPS_NATIVE_AOUT_SMOKE_SCRIPT) \
@@ -809,12 +797,6 @@ $(MIPS_NATIVE_AOUT_STRIP): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c
 
-$(MIPS_HOST_CCOM): $(MIPS_HOST_CCOM_BUILD_SCRIPT) $(MIPS_CCOM_SRCS)
-	sh $(MIPS_HOST_CCOM_BUILD_SCRIPT) $(TOPSRC) $(MIPS_HOST_CCOM_BUILD) $@
-
-$(MIPS_HOST_CPP): $(MIPS_HOST_CPP_BUILD_SCRIPT) $(MIPS_CPP_SRCS)
-	sh $(MIPS_HOST_CPP_BUILD_SCRIPT) $(TOPSRC) $(MIPS_HOST_CPP_BUILD) $@
-
 $(MIPS_HOST_PCC): $(MIPS_HOST_PORTABLECC_SCRIPT) $(MIPS_DEV_PCC_SRCS) \
     $(MIPS_ROOTFS_BASE_STAMP) $(MIPS_NATIVE_AS) $(MIPS_NATIVE_LD) \
     $(MIPS_NATIVE_AOUT) $(MIPS_NATIVE_AOUT_AR) $(MIPS_NATIVE_AOUT_RANLIB) \
@@ -828,7 +810,7 @@ $(MIPS_HOST_PCC): $(MIPS_HOST_PORTABLECC_SCRIPT) $(MIPS_DEV_PCC_SRCS) \
 	    $(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT) $(MIPS_ROOTFS_ENDIAN)
 
 .PHONY: smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain \
-        smoke-host-pcc smoke-host-ccom smoke-host-portablecc
+        smoke-host-portablecc
 smoke-as-vr4300: $(MIPS_NATIVE_AS) $(MIPS_NATIVE_AS_SMOKE_SCRIPT)
 	$(MIPS_NATIVE_AS_SMOKE_SCRIPT) $(abspath $(MIPS_NATIVE_AS))
 
@@ -844,26 +826,6 @@ smoke-aout-toolchain: $(MIPS_NATIVE_AS) $(MIPS_NATIVE_LD) \
 	    $(abspath $(MIPS_NATIVE_AOUT_RANLIB)) $(abspath $(MIPS_NATIVE_AOUT_NM)) \
 	    $(abspath $(MIPS_NATIVE_AOUT_SIZE)) $(abspath $(MIPS_NATIVE_AOUT_STRIP)) \
 	    $(MIPS_ROOTFS_GCC_PREFIX)as
-
-smoke-host-pcc: $(MIPS_HOST_CPP) $(MIPS_HOST_CCOM) $(MIPS_NATIVE_AS) \
-    $(MIPS_NATIVE_LD) $(MIPS_HOST_PCC_SMOKE_SCRIPT) \
-    $(TOPSRC)/sys/mips/rootfs/root/types-smoke.c \
-    $(TOPSRC)/sys/mips/rootfs/root/ll-smoke.c \
-    $(TOPSRC)/sys/mips/rootfs/root/ll-abi-smoke.c
-	sh $(MIPS_HOST_PCC_SMOKE_SCRIPT) $(abspath $(MIPS_HOST_CPP)) \
-	    $(abspath $(MIPS_HOST_CCOM)) $(abspath $(MIPS_NATIVE_AS)) \
-	    $(abspath $(MIPS_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/rootfs/root/types-smoke.c
-	sh $(MIPS_HOST_PCC_SMOKE_SCRIPT) $(abspath $(MIPS_HOST_CPP)) \
-	    $(abspath $(MIPS_HOST_CCOM)) $(abspath $(MIPS_NATIVE_AS)) \
-	    $(abspath $(MIPS_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/rootfs/root/ll-smoke.c
-	sh $(MIPS_HOST_PCC_SMOKE_SCRIPT) $(abspath $(MIPS_HOST_CPP)) \
-	    $(abspath $(MIPS_HOST_CCOM)) $(abspath $(MIPS_NATIVE_AS)) \
-	    $(abspath $(MIPS_NATIVE_LD)) $(abspath $(TOPSRC)/include) \
-	    $(TOPSRC)/sys/mips/rootfs/root/ll-abi-smoke.c
-
-smoke-host-ccom: smoke-host-pcc
 
 ifeq ($(MIPS_PCC_PROVIDER),cross)
 smoke-host-portablecc: $(MIPS_HOST_PCC)

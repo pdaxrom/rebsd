@@ -395,20 +395,22 @@ current N64 work is staged as follows:
   compiler aliases `l.s`/`s.s`/`l.d`/`s.d`, move/control transfers,
   single/double arithmetic, compare, convert, round/trunc/ceil/floor, and
   `bc1*` branches;
-- `src/cmd/ccom` now builds as an N64 a.out binary with big-endian target
-  configuration and without `.abicalls`, `.cpload`, or `.cprestore` output;
-- the N64 `ccom` path emits native assembler-compatible `.word` pairs for
+- the active native C compiler path is the imported PCC under `src/dev/pcc/pcc`.
+  The old `src/cmd/cc`, `src/cmd/cpp`, and `src/cmd/ccom` sources have been
+  removed so there is only one PCC implementation in the tree;
+- the PCC `ccom` backend emits native assembler-compatible `.word` pairs for
   64-bit integer initializers instead of GAS-only `.dword`; full o32
   big-endian `long long` ABI coverage still needs a focused pass for
   arguments, returns, structs, and helper-call interactions;
-- the N64 `ccom` build uses 8-byte compiler heap alignment for VR4300, because
+- the PCC build uses 8-byte compiler heap alignment for VR4300, because
   floating constants store `long double` values in AST nodes and hard-float
   `sdc1` faults on 4-byte-only aligned addresses;
 - libc runtime provides the compiler ABI helpers currently needed by that
   path, including 64-bit shifts, clz/ctz/ffs helpers, and the first
   64-bit integer/double conversion helpers;
 - the N64 rootfs stages the in-tree toolchain under `/usr`: `/usr/bin/pcc`,
-  `/usr/libexec/ccom`, `/usr/bin/as`, `/usr/bin/ld`, `/usr/bin/ar`,
+  `/usr/bin/cc`, `/usr/bin/cpp`, `/usr/libexec/pcc/cpp`,
+  `/usr/libexec/pcc/ccom`, `/usr/bin/as`, `/usr/bin/ld`, `/usr/bin/ar`,
   `/usr/bin/ranlib`, `/usr/bin/nm`, `/usr/bin/aout`, `/usr/bin/strip`, and
   no-header smoke sources in `/root`;
 - the generated rootfs also stages target headers under `/usr/include` and the
@@ -434,8 +436,8 @@ current N64 work is staged as follows:
   signed/unsigned shifts, arithmetic, compares, mixed register arguments,
   stack-passed `int`, `long long`, and `double` arguments, returns, and struct
   layout.
-  Native `ccom` depends on target libc `%ll` formatting when it prints
-  64-bit constants. On big-endian MIPS, `ccom` keeps its internal 64-bit
+  PCC `ccom` depends on target libc `%ll` formatting when it prints
+  64-bit constants. On big-endian MIPS, PCC `ccom` keeps its internal 64-bit
   register pair order as low/high, but emits integer pairs through the normal
   o32 high/low physical register ABI and stores 64-bit objects high word first.
   The current v3 smoke, including the stack-argument expansion, has been
@@ -465,7 +467,7 @@ current N64 work is staged as follows:
   207 checks and has been confirmed on hardware;
 - on 2026-06-25, the `/usr` rootfs split was confirmed on real N64 hardware:
   `PATH` was `/bin:/sbin:/usr/bin:/usr/sbin`, `/usr/bin/as`, `/usr/bin/cc`,
-  `/usr/libexec/ccom`, and `/bin/cpp -> ../usr/bin/cpp` were present, and
+  `/usr/libexec/pcc/ccom`, and `/bin/cpp -> ../usr/bin/cpp` were present, and
   `smoke-as-vr4300`, `matrix-as-vr4300`, `/root/cc-pcc-smoke.sh`,
   `/root/types-smoke.sh`, `/root/ll-smoke.sh`, and `/root/ll-abi-smoke.sh`
   all passed;
@@ -486,7 +488,7 @@ current N64 work is staged as follows:
 - the current smoke checks compile-to-assembly, assembly, relocatable link,
   full executable link/run, and the first FPU executable link/run path. Further
   work is extending instruction support for any additional syntax emitted by
-  `ccom` and secondary compiler/interpreter paths.
+  PCC `ccom` and interpreter paths.
 
 ## Build entry points
 
@@ -1081,7 +1083,7 @@ The current shared manifest includes a broader first-pass BSD userland:
   `test`, `tr`, `uname`, `true`, `false`, and `[`)
 - main `/usr/bin`: the broader BSD command set, diagnostics, native a.out
   toolchain (`as`, `ld`, `ar`, `ranlib`, `nm`, `strip`, `cc`, `pcc`, `cpp`,
-  `ccom` via `/usr/libexec`), interpreter tools, and smoke scripts
+  PCC `ccom` via `/usr/libexec/pcc`), interpreter tools, and smoke scripts
 - terminal and interpreter tools backed by additional shared libraries:
   `emg`, `med`, `pdc`, `setty`, `sl`, and `tcl`
 - N64 diagnostics and tools: `deco`, `fbset`, `fbview`, `n64input`,
@@ -1677,9 +1679,9 @@ tools and commands that need missing runtime support remain excluded. `awk`
 pulls in the historical `-lm` dependency, so N64 includes `libm` in the
 userland library build.
 The manifest includes the extra files produced by those selected install
-rules, such as `cc` aliases `lcc` and `scc`, `find` helpers `bigram` and
-`code`, and the `updatedb` script, so the cartridge image matches the staged
-BSD rootfs instead of silently dropping installed helpers.
+rules, such as the PCC `cc`/`cpp` aliases, `find` helpers `bigram` and `code`,
+and the `updatedb` script, so the cartridge image matches the staged BSD
+rootfs instead of silently dropping installed helpers.
 
 `cpp` and `calendar` are included. `cpp` needs libgcc-compatible integer
 runtime helpers emitted by GCC for 32-bit MIPS userland, so libc runtime now

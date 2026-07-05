@@ -102,8 +102,10 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Add COP1/FPU condition-code forms emitted by GCC/PCC hard-float paths.
 - [x] Smoke-test COP1/FPU assembly by running the in-tree `as` on N64 or a
   host-compatible build with GCC-generated hard-float VR4300 assembly.
-- [x] Build the first in-tree C compiler path for N64, starting with
-  `src/cmd/ccom`:
+- [x] Build the first in-tree C compiler path for N64. This was originally
+  prototyped through the legacy `src/cmd/ccom`; the active compiler source is
+  now the imported PCC under `src/dev/pcc/pcc`, and the legacy compiler sources
+  have been removed:
   - big-endian MIPS code generation
   - no `.abicalls`, `.cpload`, or `.cprestore` output for N64
   - legacy PCC tentative globals handled with `-fcommon`
@@ -150,7 +152,7 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   and target `ld` does not warn that `/usr/lib/libc.a` is out of date.
 - [x] Hardware-smoke the `/usr` rootfs split on N64: PATH includes
   `/usr/bin`, toolchain binaries live under `/usr/bin`, compiler runtime
-  files live under `/usr/lib`, `ccom` lives under `/usr/libexec`, and
+  files live under `/usr/lib`, PCC `ccom` lives under `/usr/libexec/pcc`, and
   `/bin/cpp` resolves.
 - [x] Hardware-smoke the expanded `/root/pcc-smoke.sh` on N64 and confirm
   both executable link/run paths complete without filesystem or inode-cache
@@ -203,27 +205,11 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   literals remain 8-byte aligned after final link.
 - [x] Hardware-smoke `/root/ll-smoke.sh` v3 on N64 and confirm the new stack
   argument cases pass through both `/usr/bin/cc` and `/usr/bin/pcc`.
-- [x] Review secondary compiler paths after `ccom` works: `smallc`, `smlrc`,
-  `lccom`, and their assembler output. These are not part of the current
-  shared MIPS rootfs smoke; installed interpreter coverage is tracked by
-  `/root/lang-smoke.sh`.
-  - [x] Initial N64-toolchain build review: `smallc` builds as a target a.out
-    binary; `smlrc` and `lccom` needed warning-clean fixes under the N64
-    `-Werror` build.
-  - [x] Fix the `smlrc`/`lccom` clean-warning build failures without relaxing
-    warning coverage globally.
-  - [x] Install `/usr/libexec/smallc`, `/usr/libexec/smlrc`, and
-    `/usr/libexec/lccom` in the shared MIPS rootfs so existing `scc` and `lcc`
-    aliases are not dangling.
-  - [x] Add shared `/root/secondary-cc-smoke.sh` coverage that tests generated
-    MIPS assembly through the in-tree VR4300 `as`/`ld -r` path.
-  - [x] QEMU-smoke `/root/secondary-cc-smoke.sh` on Malta. The smoke covers
-    the different front-end dialects separately: Small-C old-style function
-    definitions for `scc`, ANSI C for `smlrc` and `lcc`. The `lcc` driver path
-    now passes `-target=mips-eb -pic=0`, so the backend does not emit
-    `.cpload`/`.cprestore` directives for the RetroBSD static a.out path.
-  - [x] Hardware-smoke `/root/secondary-cc-smoke.sh` on N64, verified
-    2026-06-27.
+- [x] Remove obsolete secondary compiler paths after the imported PCC became
+  the active compiler implementation. The shared MIPS rootfs now exposes
+  `/usr/bin/cc`, `/usr/bin/pcc`, `/usr/bin/cpp`, `/usr/libexec/pcc/cpp`, and
+  `/usr/libexec/pcc/ccom`; old `lcc`, `lccom`, `smallc`, `smlrc`, and legacy
+  `src/cmd/cc`/`src/cmd/cpp`/`src/cmd/ccom` sources are no longer installed.
 
 ## N64 Command Filtering
 
@@ -279,10 +265,10 @@ the board-specific generated/appended manifest.
   `tcl`.
 - [x] Include all files installed by the selected shared command makefiles that
   are needed for the normal rootfs rather than leaving staged artifacts out of
-  `rootfs.img`: `cc` aliases `lcc`/`scc`, `/usr/bin/sysctl`,
-  `/sbin/updatedb`, `/usr/libexec/bigram`, `/usr/libexec/code`, generated
-  `/usr/include` headers, `/usr/lib` compiler runtime archives, `/bin/cpp`,
-  and `/libexec/ccom`.
+  `rootfs.img`: PCC `cc`/`cpp` aliases, `/usr/bin/sysctl`, `/sbin/updatedb`,
+  `/usr/libexec/bigram`, `/usr/libexec/code`, generated `/usr/include`
+  headers, `/usr/lib` compiler runtime archives, `/bin/cpp`, and
+  `/usr/libexec/pcc/ccom`.
 - [x] Increase the default N64 rootfs size once the command set grows; the
   image remains ROM-backed and demand-read through the romdisk block driver,
   not copied wholesale into RDRAM.
