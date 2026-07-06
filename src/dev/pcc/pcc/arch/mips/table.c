@@ -811,7 +811,7 @@ struct optab table[] = {
 	SAREG,	TSWORD|TSHORT|TCHAR,
 	SAREG,	TSWORD|TSHORT|TCHAR,
 		XSL(A), RESC1,
-		"	add A1,AL,AR\n", },
+		"	addu A1,AL,AR\n", },
 
 { PLUS, INCREG,
 	SCREG,	TFLOAT,
@@ -887,7 +887,7 @@ struct optab table[] = {
 	SAREG,	TSWORD|TSHORT|TCHAR,
 	SAREG,	TSWORD|TSHORT|TCHAR,
 		XSL(A), RESC1,
-		"	sub A1,AL,AR\n", },
+		"	subu A1,AL,AR\n", },
 
 { MINUS,	INCREG,
 	SCREG,	TFLOAT,
@@ -1309,7 +1309,7 @@ struct optab table[] = {
 	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
 	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
 		XSL(A),	    RESCC,
-		"	sub A1,AL,AR\n"
+		"	subu A1,AL,AR\n"
 		"	O A1,LC\n"
 		"	nop\n", },
 
@@ -1317,7 +1317,7 @@ struct optab table[] = {
 	SAREG,		TWORD|TPOINT|TSHORT|TUSHORT|TCHAR|TUCHAR,
 	SSCON,		TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
 		XSL(A),	    RESCC,
-		"	sub A1,AL,AR\n"
+		"	subu A1,AL,AR\n"
 		"	O A1,LC\n"
 		"	nop\n", },
 
@@ -1755,7 +1755,7 @@ struct optab table[] = {
 	SCREG,	TFLOAT,
 	SANY,	TFLOAT,
 		0,	0,
-		"	addi $sp,$sp,-4		# save function arg to stack\n"
+		"	addiu $sp,$sp,-4	# save function arg to stack\n"
 		"	s.s AL,($sp)\n"
 		"	#nop\n", },
 
@@ -1763,7 +1763,7 @@ struct optab table[] = {
 	SCREG,	TDOUBLE|TLDOUBLE,
 	SANY,	TDOUBLE|TLDOUBLE,
 		0,	0,
-		"	addi $sp,$sp,-8		# save function arg to stack\n"
+		"	addiu $sp,$sp,-8	# save function arg to stack\n"
 		"	s.d AL,($sp)\n"
 		"	#nop\n", },
 

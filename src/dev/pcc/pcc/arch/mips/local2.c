@@ -894,7 +894,7 @@ addsubcon(NODE *p, int sub, int unsig)
 	if (r->n_name[0] == '\0') {
 		imm = sub ? -val : val;
 		if (imm >= -32768 && imm <= 32767) {
-			printf("\t%s ", unsig ? "addiu" : "addi");
+			printf("\taddiu ");
 			expand(p, 0, "A1,AL,");
 			printf(CONFMT "\n", imm);
 			return;
@@ -911,7 +911,7 @@ addsubcon(NODE *p, int sub, int unsig)
 		printf("\n");
 	}
 
-	op = sub ? (unsig ? "subu" : "sub") : (unsig ? "addu" : "add");
+	op = sub ? "subu" : "addu";
 	printf("\t%s ", op);
 	expand(p, 0, "A1,AL,");
 	printf("%s\n", rnames[AT]);
