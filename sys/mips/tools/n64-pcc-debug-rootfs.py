@@ -57,7 +57,6 @@ N64_LOG_TESTS = PRIMARY_TESTS + [
 ]
 
 COPY_PATHS = [
-    "/.profile",
     "/bin/cat",
     "/bin/chmod",
     "/bin/ls",

@@ -13,9 +13,20 @@ N64_KERNEL_CODE = $(N64_KERNEL_BASE) -msoft-float
 N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
 N64_DEBUG_UART_ONLY ?= 0
+N64_MINIMAL_UART_ONLY ?= 0
 N64_HIGHRES_FB ?= 0
 N64_ZSWAP ?= 1
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_DEBUG_UART_ONLY).$(N64_HIGHRES_FB).$(N64_ZSWAP)
+N64_ENABLE_ROMFS ?= 1
+N64_MINIMAL_ROOTFS ?= $(N64_MINIMAL_UART_ONLY)
+N64_MINIMAL_ROOTFS_KBYTES ?= 2048
+N64_MINIMAL_ROOTFS_STAGE = rootfs.minimal.stage
+N64_MINIMAL_ROOTFS_MANIFEST = rootfs.minimal.manifest
+N64_MINIMAL_ROOTFS_IMG = rootfs.minimal.img
+N64_ROM_ROOTFS_IMG = $(if $(filter 1,$(N64_MINIMAL_ROOTFS)),$(N64_MINIMAL_ROOTFS_IMG),rootfs.img)
+ifeq ($(N64_MINIMAL_UART_ONLY),1)
+N64_DEBUG_UART_ONLY = 1
+endif
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_DEBUG_UART_ONLY).$(N64_MINIMAL_UART_ONLY).$(N64_HIGHRES_FB).$(N64_ZSWAP)
 N64_IOCONF      = ioconf
 ifeq ($(N64_HIGHRES_FB),1)
 PARAM += -DN64_HIGHRES_FB
@@ -28,6 +39,13 @@ PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
     -DUSBNET_ENABLED -DUSBNET_ECM -DUSBNET_VENDOR,$(PARAM))
 PARAM += -DN64_DEBUG_UART_ONLY -DN64_DEBUG_USERMEM_4M -DN64_PCC_FPE_TRACE
 N64_IOCONF = ioconf.debug-uart
+endif
+ifeq ($(N64_MINIMAL_UART_ONLY),1)
+PARAM := $(filter-out -DPTY_ENABLED -DPTY_NUNITS=% \
+    -DETHER_ENABLED -DETHER_NUNITS=% -DINET_ENABLED \
+    -DUNIXDOMAIN_ENABLED,$(PARAM))
+PARAM += -DN64_MINIMAL_UART_ONLY -DN64_CART_UART_ONLY
+N64_ENABLE_ROMFS = 0
 endif
 N64_ROOTFS_KBYTES ?= 16384
 N64_ROOTFS_COMMON_DIR ?= $(TOPSRC)/sys/mips/rootfs
@@ -433,6 +451,60 @@ N64_AWK_MAKE = $(MAKE) -C $(TOPSRC)/src/cmd/awk TARGET_PLATFORM=n64 \
                LDFLAGS="$(N64_USERLAND_LDFLAGS)" \
                YACC="$(N64_YACC)"
 
+N64_MINIMAL_ROOTFS_CMD_SUBDIRS = getty init ls mkfs mount sh
+N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod mkdir
+N64_MINIMAL_ROOTFS_FILES = \
+    $(TOPSRC)/sys/mips/rootfs/etc/group \
+    $(TOPSRC)/sys/mips/rootfs/etc/passwd \
+    $(TOPSRC)/sys/mips/rootfs/etc/profile \
+    $(TOPSRC)/sys/mips/n64/rootfs/etc/gettytab \
+    $(TOPSRC)/sys/mips/n64/rootfs/etc/motd \
+    $(TOPSRC)/sys/mips/n64/rootfs/etc/ttys
+N64_MINIMAL_USERLAND_CC = $(N64_PREFIX)gcc $(N64_USERLAND_ARCH) \
+                          $(N64_CODE) $(N64_USERLAND_INCLUDES) \
+                          -Werror -Wno-unused-value \
+                          -Wno-format-overflow -Wno-attribute-alias \
+                          -Wno-missing-attributes \
+                          -Wno-discarded-qualifiers
+N64_MINIMAL_USERLAND_AS = $(N64_MINIMAL_USERLAND_CC) \
+                          -x assembler-with-cpp -c
+N64_MINIMAL_USERLAND_LD = $(N64_PREFIX)ld -m elf32ebmip
+N64_MINIMAL_USERLAND_RANLIB = $(N64_PREFIX)ranlib
+N64_MINIMAL_USERLAND_NM = $(N64_PREFIX)nm
+N64_MINIMAL_USERLAND_SIZE = $(N64_PREFIX)size
+N64_MINIMAL_USERLAND_OBJDUMP = $(N64_PREFIX)objdump
+N64_MINIMAL_USERLAND_ELF2AOUT = $(abspath $(ELF2AOUT))
+N64_MINIMAL_USERLAND_LDFLAGS = --nmagic \
+                               -T$(abspath $(N64_USER_LDSCRIPT)) \
+                               $(abspath $(TOPSRC)/src/crt0.o) \
+                               -L$(abspath $(TOPSRC)/src)
+N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src \
+               TARGET_PLATFORM=n64 \
+               N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
+               DESTDIR=$(abspath $(N64_MINIMAL_ROOTFS_STAGE)) \
+               CC="$(N64_MINIMAL_USERLAND_CC)" \
+               AS="$(N64_MINIMAL_USERLAND_AS)" \
+               LD="$(N64_MINIMAL_USERLAND_LD)" \
+               AR="$(N64_NATIVE_AR)" \
+               RANLIB="$(N64_MINIMAL_USERLAND_RANLIB)" \
+               NM="$(N64_MINIMAL_USERLAND_NM)" \
+               SIZE="$(N64_MINIMAL_USERLAND_SIZE)" \
+               OBJDUMP="$(N64_MINIMAL_USERLAND_OBJDUMP)" \
+               ELF2AOUT="$(N64_MINIMAL_USERLAND_ELF2AOUT)" \
+               LDFLAGS="$(N64_MINIMAL_USERLAND_LDFLAGS)" \
+               SRC_ONLY_LIBS="startup-mips libc" \
+               SRC_ONLY_SUBDIR="cmd" \
+               CMD_ONLY_SUBDIR="$(N64_MINIMAL_ROOTFS_CMD_SUBDIRS)" \
+               CMD_ONLY_STD="$(N64_MINIMAL_ROOTFS_CMD_STDS)" \
+               CMD_ONLY_SCRIPT="$(N64_CMD_NONE)" \
+               CMD_ONLY_NSTD="$(N64_CMD_NONE)" \
+               CMD_ONLY_SETUID="$(N64_CMD_NONE)" \
+               CMD_ONLY_OPERATOR="$(N64_CMD_NONE)" \
+               CMD_ONLY_KMEM="$(N64_CMD_NONE)" \
+               CMD_ONLY_TTY="$(N64_CMD_NONE)" \
+               CMD_EXTRA_SUBDIR="" \
+               CMD_BUILD_STRIP=""
+
 N64_LEGACY_ROOTFS_RULES ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 
@@ -473,6 +545,10 @@ MIPS_PCC_HOST_BUILD ?= /private/tmp/rebsd-n64-pcc-build-$(MIPS_ROOTFS_ABI)
 MIPS_PCC_HOST_PREFIX ?= /private/tmp/rebsd-n64-pcc-install-$(MIPS_ROOTFS_ABI)
 MIPS_LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-n64-linpack-smoke
 MIPS_LINPACK_SMOKE_MANIFEST ?= rootfs.linpack-smoke.manifest
+ifeq ($(N64_MINIMAL_ROOTFS),1)
+MIPS_PCC_HOST_INCLUDE = n64-pcc-host-include
+MIPS_PCC_HOST_INCLUDE_STAMP = $(MIPS_PCC_HOST_INCLUDE)/.stamp
+endif
 
 .DEFAULT_GOAL := all
 include ../rootfs.mk
@@ -529,6 +605,8 @@ N64_NATIVE_PCC_DIR = $(MIPS_NATIVE_PCC_DIR)
 N64_NATIVE_PCC_STAMP = $(MIPS_NATIVE_PCC_STAMP)
 N64_NATIVE_CC = $(MIPS_PCC_RUNTIME_CC)
 N64_HOST_PCC = $(MIPS_HOST_PCC)
+N64_PCC_HOST_INCLUDE = $(MIPS_PCC_HOST_INCLUDE)
+N64_PCC_HOST_INCLUDE_STAMP = $(MIPS_PCC_HOST_INCLUDE_STAMP)
 N64_CROSS_PCC_AS = $(MIPS_CROSS_PCC_AS)
 N64_CROSS_PCC_LD = $(MIPS_CROSS_PCC_LD)
 N64_CROSS_PCC_AR = $(MIPS_CROSS_PCC_AR)
@@ -584,7 +662,9 @@ endif
 ifeq ($(N64_TRACE),1)
 CPPFLAGS        += -DN64_TRACE
 endif
+ifeq ($(N64_ENABLE_ROMFS),1)
 CPPFLAGS        += -DROMFS_ENABLED
+endif
 DEFS            = $(CPPFLAGS) $(DEPFLAGS)
 CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(DEFS) $(INET_CWARN)
 VERS_CFLAGS     = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(CPPFLAGS)
@@ -604,7 +684,8 @@ COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
 COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
                   -MF .deps/vers.dep -c vers.c -o vers.o
 ifeq ($(N64_KERNEL_COMPILER),pcc)
-KERNEL_CC       = $(N64_HOST_PCC) -march=vr4300 -msoft-float
+KERNEL_CC       = $(N64_HOST_PCC) -march=vr4300 -msoft-float \
+                  -fomit-frame-pointer
 KERNEL_COMPILER_DEPS = $(N64_HOST_PCC)
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
                   if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
@@ -643,6 +724,55 @@ CFILES := $(filter-out \
     $S/mips/common/n64usbnet_proto.c \
     $S/mips/n64/n64cart_usbnet.c \
     $S/mips/n64/n64cart_usbecm.c,$(CFILES))
+endif
+ifeq ($(N64_MINIMAL_UART_ONLY),1)
+OBJS := $(filter-out tty_pty.o sys_socket.o uipc_domain.o uipc_mbuf.o \
+    uipc_proto.o uipc_usrreq.o uipc_socket.o uipc_socket2.o \
+    uipc_syscalls.o af.o if.o if_ether.o if_loop.o raw_cb.o \
+    raw_usrreq.o route.o in.o in_pcb.o in_proto.o ip_icmp.o ip_input.o \
+    ip_output.o raw_ip.o tcp_debug.o tcp_input.o tcp_output.o \
+    tcp_subr.o tcp_timer.o tcp_usrreq.o udp_usrreq.o in_cksum.o \
+    net_glue.o netinit.o n64cart_rgbled.o n64cart_flash.o \
+    romfs_backend.o romfs_core.o romfs_vfs.o,$(OBJS))
+CFILES := $(filter-out \
+    $S/kernel/tty_pty.c \
+    $S/kernel/sys_socket.c \
+    $S/kernel/uipc_domain.c \
+    $S/kernel/uipc_mbuf.c \
+    $S/kernel/uipc_proto.c \
+    $S/kernel/uipc_usrreq.c \
+    $S/kernel/uipc_socket.c \
+    $S/kernel/uipc_socket2.c \
+    $S/kernel/uipc_syscalls.c \
+    $S/net/af.c \
+    $S/net/if.c \
+    $S/net/if_ether.c \
+    $S/net/if_loop.c \
+    $S/net/raw_cb.c \
+    $S/net/raw_usrreq.c \
+    $S/net/route.c \
+    $S/netinet/in.c \
+    $S/netinet/in_pcb.c \
+    $S/netinet/in_proto.c \
+    $S/netinet/ip_icmp.c \
+    $S/netinet/ip_input.c \
+    $S/netinet/ip_output.c \
+    $S/netinet/raw_ip.c \
+    $S/netinet/tcp_debug.c \
+    $S/netinet/tcp_input.c \
+    $S/netinet/tcp_output.c \
+    $S/netinet/tcp_subr.c \
+    $S/netinet/tcp_timer.c \
+    $S/netinet/tcp_usrreq.c \
+    $S/netinet/udp_usrreq.c \
+    $S/mips/common/in_cksum.c \
+    $S/mips/common/net_glue.c \
+    $S/mips/common/netinit.c \
+    $S/mips/n64/n64cart_rgbled.c \
+    $S/mips/n64/n64cart_flash.c \
+    $S/mips/n64/romfs_backend.c \
+    $S/mips/common/romfs_core.c \
+    $S/mips/common/romfs_vfs.c,$(CFILES))
 endif
 
 SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o
@@ -709,6 +839,26 @@ kernel_stage0.stripped.elf: kernel_stage0.elf
 $(N64_BUILD_MODE_STAMP):
 	rm -f .build-mode.*
 	touch $@
+
+ifeq ($(N64_MINIMAL_ROOTFS),1)
+$(N64_PCC_HOST_INCLUDE_STAMP): $(N64_INCLUDE_SRCS) $(N64_INCLUDE_LINKS)
+	rm -rf $(N64_PCC_HOST_INCLUDE)
+	mkdir -p $(N64_PCC_HOST_INCLUDE)
+	cp -pR $(TOPSRC)/include/. $(N64_PCC_HOST_INCLUDE)/
+	rm -rf $(N64_PCC_HOST_INCLUDE)/machine $(N64_PCC_HOST_INCLUDE)/sys
+	cp -pR $(TOPSRC)/sys/include $(N64_PCC_HOST_INCLUDE)/sys
+	mkdir -p $(N64_PCC_HOST_INCLUDE)/mips
+	cp -p $(TOPSRC)/sys/mips/*.h $(N64_PCC_HOST_INCLUDE)/mips/
+	mkdir -p $(N64_PCC_HOST_INCLUDE)/machine
+	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_PCC_HOST_INCLUDE)/machine/
+	for header in $(N64_COMMON_MACHINE_HEADERS); do \
+	    cp -p $(TOPSRC)/sys/mips/$$header.h \
+	        $(N64_PCC_HOST_INCLUDE)/machine/$$header.h; \
+	done
+	cp -p $(TOPSRC)/sys/mips/include/machine/types.h \
+	    $(N64_PCC_HOST_INCLUDE)/machine/types.h
+	touch $@
+endif
 
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
 	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/n64/ramswap.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
@@ -904,6 +1054,105 @@ rootfs.img: $(FSUTIL) $(N64_ROOTFS_BUILD_MANIFEST) $(N64_ROOTFS_USER_STAMP)
 	$(FSUTIL) --check $@
 endif
 
+$(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(N64_USER_LDSCRIPT) \
+    $(N64_MINIMAL_ROOTFS_FILES) $(N64_TERMCAP) $(ELF2AOUT) \
+    $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile Makefile
+	$(N64_MINIMAL_SRC_MAKE) clean
+	rm -rf $(N64_MINIMAL_ROOTFS_STAGE)
+	mkdir -p $(N64_MINIMAL_ROOTFS_STAGE)/bin \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/dev \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/libexec \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/sbin \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/share/man/cat8 \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/var/db \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/var/lock \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/var/log \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/var/run \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/var/tmp
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/group \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/group
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/passwd \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/passwd
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/profile \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/profile
+	cp -p $(TOPSRC)/sys/mips/n64/rootfs/etc/gettytab \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/gettytab
+	cp -p $(TOPSRC)/sys/mips/n64/rootfs/etc/motd \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/motd
+	cp -p $(TOPSRC)/sys/mips/n64/rootfs/etc/ttys \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/ttys
+	cp -p $(N64_TERMCAP) $(N64_MINIMAL_ROOTFS_STAGE)/etc/termcap
+	cp -p $(TOPSRC)/sys/mips/rootfs/root/.profile \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/.profile
+	ln -s var/tmp $(N64_MINIMAL_ROOTFS_STAGE)/tmp
+	{ \
+	    printf '%s\n' '#!/bin/sh'; \
+	    printf '%s\n' 'PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH'; \
+	    printf '%s\n' 'echo N64_MINIMAL_RC_BEGIN'; \
+	    printf '%s\n' 'if mkfs -i 4096 /dev/ram0 >/dev/null; then'; \
+	    printf '%s\n' '	if mount /var >/dev/null; then'; \
+	    printf '%s\n' '		mkdir /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null'; \
+	    printf '%s\n' '		chmod 1777 /var/tmp'; \
+	    printf '%s\n' '		: >/var/run/utmp'; \
+	    printf '%s\n' '		: >/var/log/wtmp'; \
+	    printf '%s\n' '		chmod 664 /var/run/utmp /var/log/wtmp'; \
+	    printf '%s\n' '	else'; \
+	    printf '%s\n' '		echo N64_MINIMAL_VAR_MOUNT_FAIL'; \
+	    printf '%s\n' '	fi'; \
+	    printf '%s\n' 'else'; \
+	    printf '%s\n' '	echo N64_MINIMAL_VAR_MKFS_FAIL'; \
+	    printf '%s\n' 'fi'; \
+	    printf '%s\n' 'echo N64_MINIMAL_RC_END'; \
+	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc
+	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc
+	{ \
+	    printf '%s\n' '/dev/romdisk	/	ufs	ro	0	0'; \
+	    printf '%s\n' '/dev/ram0	/var	ufs	rw	0	0'; \
+	    printf '%s\n' '/dev/swap	none	swap	sw	0	0'; \
+	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/fstab
+	$(N64_MINIMAL_SRC_MAKE) all install
+	rm -rf $(N64_MINIMAL_ROOTFS_STAGE)/share
+	touch $@
+
+$(N64_MINIMAL_ROOTFS_MANIFEST): $(N64_MINIMAL_ROOTFS_STAGE)/.stamp \
+    $(N64_ROOTFS_DEVNODES)
+	rm -f $@
+	{ \
+	    printf '%s\n' '#'; \
+	    printf '%s\n' '# Minimal N64 UART-only boot root filesystem.'; \
+	    printf '%s\n\n' '#'; \
+	    printf '%s\n' 'default'; \
+	    printf '%s\n' 'owner 0'; \
+	    printf '%s\n' 'group 0'; \
+	    printf '%s\n' 'dirmode 0775'; \
+	    printf '%s\n\n' 'filemode 0664'; \
+	    find $(N64_MINIMAL_ROOTFS_STAGE) -type d | sort | while read path; do \
+	        rel=$${path#$(N64_MINIMAL_ROOTFS_STAGE)}; \
+	        if [ -n "$$rel" ]; then printf 'dir %s\n\n' "$$rel"; fi; \
+	    done; \
+	    find $(N64_MINIMAL_ROOTFS_STAGE) -type l | sort | while read path; do \
+	        rel=$${path#$(N64_MINIMAL_ROOTFS_STAGE)}; \
+	        target=$$(readlink "$$path"); \
+	        printf 'symlink %s\ntarget %s\n\n' "$$rel" "$$target"; \
+	    done; \
+	    find $(N64_MINIMAL_ROOTFS_STAGE) -type f | sort | while read path; do \
+	        rel=$${path#$(N64_MINIMAL_ROOTFS_STAGE)}; \
+	        if [ -x "$$path" ]; then mode=0775; else mode=0664; fi; \
+	        printf 'file %s\nmode %s\n\n' "$$rel" "$$mode"; \
+	    done; \
+	    cat $(N64_ROOTFS_DEVNODES); \
+	} > $@
+
+$(N64_MINIMAL_ROOTFS_IMG): $(FSUTIL) $(N64_MINIMAL_ROOTFS_MANIFEST)
+	rm -f $@
+	$(FSUTIL) --new --endian=$(N64_USERLAND_ENDIAN) \
+	    --size=$(N64_MINIMAL_ROOTFS_KBYTES) \
+	    --manifest=$(N64_MINIMAL_ROOTFS_MANIFEST) \
+	    $@ $(N64_MINIMAL_ROOTFS_STAGE)
+	$(FSUTIL) --check $@
+
 .PHONY: pcc-debug-stage pcc-debug-image pcc-hw-test-stage pcc-hw-test-image
 $(N64_PCC_DEBUG_RUNNER_OBJ): $(N64_PCC_DEBUG_RUNNER_SRC) \
     $(N64_NATIVE_STAMP) $(N64_NATIVE_AS)
@@ -1076,14 +1325,14 @@ $(N64_NATIVE_AOUT_STRIP): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
 	    -o $@ $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c
 
 $(N64_HOST_PCC): $(N64_HOST_PORTABLECC_SCRIPT) $(N64_DEV_PCC_SRCS) \
-    $(N64_ROOTFS_BASE_STAMP) $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
+    $(N64_PCC_HOST_INCLUDE_STAMP) $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
     $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB) \
     $(N64_NATIVE_AOUT_NM) $(N64_NATIVE_AOUT_SIZE) \
     $(N64_NATIVE_AOUT_STRIP)
 	sh $(N64_HOST_PORTABLECC_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(N64_PCC_HOST_BUILD)) \
 	    $(abspath $(N64_PCC_HOST_PREFIX)) \
-	    $(abspath $(N64_ROOTFS_USR_INCLUDE)) \
+	    $(abspath $(N64_PCC_HOST_INCLUDE)) \
 	    $(abspath $(N64_NATIVE_AS)) $(abspath $(N64_NATIVE_LD)) \
 	    $(N64_USERLAND_CPU) $(N64_USERLAND_FLOAT)
 
@@ -1218,11 +1467,11 @@ $(FSUTIL):
 $(ELF2AOUT): $(ELF2AOUT_SRCS)
 	$(MAKE) -C $(TOPSRC)/tools/elf2aout
 
-preflight.z64: stage0.stripped.elf rootfs.img
-	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 stage0.stripped.elf --align 1024 rootfs.img
+preflight.z64: stage0.stripped.elf $(N64_ROM_ROOTFS_IMG)
+	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 stage0.stripped.elf --align 1024 $(N64_ROM_ROOTFS_IMG)
 
-kernel.z64: kernel_stage0.stripped.elf rootfs.img
-	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 kernel_stage0.stripped.elf --align 1024 rootfs.img
+kernel.z64: kernel_stage0.stripped.elf $(N64_ROM_ROOTFS_IMG)
+	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 kernel_stage0.stripped.elf --align 1024 $(N64_ROM_ROOTFS_IMG)
 
 preflight.o: preflight.c ${SYSTEM_DEP}
 	${COMPILE_C}
@@ -1246,6 +1495,8 @@ ${SYSTEM_OBJ} swapunix.o preflight.o $(N64_STAGE0_OBJS) \
 clean: mips-rootfs-clean
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out n64-init \
 	    .deps machine sys $(N64_PCC_DEBUG_ROOTFS_STAGE) \
+	    $(N64_MINIMAL_ROOTFS_STAGE) $(N64_MINIMAL_ROOTFS_MANIFEST) \
+	    $(N64_PCC_HOST_INCLUDE) \
 	    $(N64_KERNEL_LDSCRIPT) .build-mode.* $(N64_PCC_DEBUG_RUNNER) \
 	    n64-native-runtime-seed.*
 

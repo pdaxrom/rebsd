@@ -175,7 +175,8 @@ COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
 COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
                   -MF .deps/vers.dep -c vers.c -o vers.o
 ifeq ($(MIPS_KERNEL_COMPILER),pcc)
-KERNEL_CC       = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) -msoft-float
+KERNEL_CC       = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) -msoft-float \
+                  -fomit-frame-pointer
 KERNEL_COMPILER_DEPS = $(MIPS_PCC_PROVIDER_DEPS)
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
                   if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \

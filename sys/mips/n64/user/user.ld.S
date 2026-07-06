@@ -1,5 +1,12 @@
 #include "../layout.h"
 
+#ifdef mips
+#undef mips
+#endif
+#ifdef MIPS
+#undef MIPS
+#endif
+
 OUTPUT_FORMAT("elf32-bigmips", "elf32-bigmips", "elf32-littlemips")
 OUTPUT_ARCH(mips)
 ENTRY(_start)

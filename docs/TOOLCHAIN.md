@@ -19,6 +19,10 @@ Current policy:
 - PCC CPU selectors: `vr4300` and `mips32r2`, with CPU-specific instruction
   mode and C ABI alignment.
 - PCC float ABI selectors: `hard` and `soft`, with ABI-specific build stamps.
+- PCC MIPS code generation supports `-fomit-frame-pointer`; PCC kernel builds
+  use it to match the historical GCC kernel stack layout more closely while
+  preserving `$fp` in functions whose frame cannot be safely addressed from
+  `$sp`.
 - Native `/usr/bin/cc` and `/usr/bin/pcc`: imported PCC in the rootfs.
 - C++/`p++`: deferred to future work and not installed by default.
 
@@ -71,6 +75,14 @@ malta   mips32r2 soft  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
 The same runs included `linpack-pcc`; representative results were about
 11.3 MFLOPS for VR4300 hard-float, 10.5-11.0 MFLOPS for mips32r2 hard-float,
 and 0.7-0.8 MFLOPS for soft-float.
+
+The PCC hard-float kernel/rootfs gates were rerun on 2026-07-06 after the MIPS
+`-fomit-frame-pointer` pass-ordering fix:
+
+```text
+malta64 vr4300  hard  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0  linpack 12095.997 / 11946.666 KFLOPS
+malta   mips32r2 hard  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0  linpack 10996.365 / 10692.598 KFLOPS
+```
 
 For N64-like Malta/Malta64 low-memory smoke, keep QEMU backing RAM large enough
 for the staged root image but cap kernel-visible RAM and swap explicitly:

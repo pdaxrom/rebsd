@@ -22,6 +22,7 @@
 #include <sys/ptrace.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
+#include <sys/tty.h>
 #include <sys/vm.h>
 #ifdef INET
 #include <net/if.h>
@@ -68,6 +69,8 @@ mips_sysctl_ram_bytes(void)
     return MALTA_RAM_SIZE;
 }
 #endif
+
+extern struct tty cnttys[];
 
 /*
  * Errno messages used by libc strerror(3) through machdep.errmsg.

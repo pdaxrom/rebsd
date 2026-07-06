@@ -118,6 +118,13 @@ Completed for this milestone:
   soft-float override lives in `lib/softfloat/libpcc.a`.
 - Soft-float `libpcc.a` includes the compiler-private compiler-rt helpers that
   PCC-generated code and other `libpcc` helpers can reference directly.
+- MIPS `-fomit-frame-pointer` is implemented in PCC for kernel builds.  The
+  backend decides whether `$fp` is required before register allocation, then
+  performs the final `$fp` to `$sp` rewrite only after `ngenregs()` knows the
+  final spill frame size.  It keeps `$fp` for functions that need a stable
+  frame base, including non-leaf functions while MIPS call templates adjust
+  `$sp`, raw frame-address users, `alloca` users, and code that explicitly
+  assigns `$fp`.
 - PCC kernel builds now use the standalone cross PCC path without GCC wrapper
   scripts.  The verified Malta and Malta64 QEMU hard-float gates compile the
   kernel with PCC, build the PCC rootfs, boot, and run `/root/pcc-smoke-all.sh`.
@@ -211,6 +218,12 @@ The fixed 2026-07-06 PCC kernel issues were:
   `.bss` sections into the Malta rootfs blob.
 - MIPS C integer arithmetic now uses non-trapping `addu`, `subu`, and `addiu`
   forms where the language requires wraparound or non-trapping behavior.
+- MIPS `-fomit-frame-pointer` now removes `$fp` from PCC-generated kernel
+  frames while preserving a frame pointer for functions that cannot be safely
+  rewritten.  The 2026-07-06 follow-up fixed the pass2 ordering bug where an
+  early optimizer call rewrote frame references before the backend knew that a
+  later call/argument path required `$fp`, which produced mixed `$fp` prologues
+  with `$sp`-relative frame references.
 
 The Malta64 PCC hard-float kernel/rootfs QEMU gate booted with:
 
@@ -218,6 +231,7 @@ The Malta64 PCC hard-float kernel/rootfs QEMU gate booted with:
 ReBSD for Malta64: built on sash@sashz-mbp with pcc Portable C Compiler 1.2.0.DEVEL 20231021 for mips-unknown-rebsd, cpu=vr4300, float=hard, endian=big
 PCC_SMOKE_ALL_FAILURES 0
 PCC_SMOKE_ALL_RC:0
+linpack-pcc: 12095.997 and 11946.666 KFLOPS
 ```
 
 The Malta PCC hard-float kernel/rootfs QEMU gate booted with:
@@ -226,6 +240,7 @@ The Malta PCC hard-float kernel/rootfs QEMU gate booted with:
 ReBSD for Malta: built on sash@sashz-mbp with pcc Portable C Compiler 1.2.0.DEVEL 20231021 for mips-unknown-rebsd, cpu=mips32r2, float=hard, endian=big
 PCC_SMOKE_ALL_FAILURES 0
 PCC_SMOKE_ALL_RC:0
+linpack-pcc: 10996.365 and 10692.598 KFLOPS
 ```
 
 ## Native Rootfs Layout

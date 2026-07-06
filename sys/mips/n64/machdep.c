@@ -8,7 +8,7 @@
 #include <machine/console.h>
 #include <machine/n64.h>
 #include <machine/n64int.h>
-#ifdef N64CART_ENABLED
+#if defined(N64CART_ENABLED) && !defined(N64_CART_UART_ONLY)
 #include <machine/n64cart_flash.h>
 #endif
 #include <machine/video.h>
@@ -351,7 +351,7 @@ boot(dev_t dev, int howto)
     }
 
     (void)splhigh();
-#ifdef N64CART_ENABLED
+#if defined(N64CART_ENABLED) && !defined(N64_CART_UART_ONLY)
     n64cart_flash_shutdown();
 #endif
     n64_interrupt_shutdown();

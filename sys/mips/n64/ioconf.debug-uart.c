@@ -15,17 +15,37 @@ struct conf_device conf_device_init[] = {
     { &n64cartdriver,	0,		-2,	0,	-2,	0x0,	{0} },
     { 0 }
 };
+#ifdef NINTENDO_ENABLED
 void nintendoattach(int);
+#endif
+#ifdef PTY_ENABLED
 void ptyattach(int);
+#endif
+#ifdef ETHER_ENABLED
 void etherattach(int);
+#endif
+#ifdef INET_ENABLED
 void inetattach(int);
+#endif
+#ifdef UNIXDOMAIN_ENABLED
 void unixdomainattach(int);
+#endif
 
 struct conf_service conf_service_init[] = {
+#ifdef NINTENDO_ENABLED
     { nintendoattach },
+#endif
+#ifdef PTY_ENABLED
     { ptyattach },
+#endif
+#ifdef ETHER_ENABLED
     { etherattach },
+#endif
+#ifdef INET_ENABLED
     { inetattach },
+#endif
+#ifdef UNIXDOMAIN_ENABLED
     { unixdomainattach },
+#endif
     { 0 }
 };
