@@ -7,9 +7,11 @@ and N64 userland.  PCC kernel builds are also available as explicit gates for
 Malta, Malta64, and N64.  PCC has passed the Malta and Malta64/R4000 QEMU
 hard-float and soft-float rootfs gates, plus hard-float PCC kernel/rootfs QEMU
 gates for Malta and Malta64.  The updated N64 UART-only boot matrix passed on
-real hardware with PCC and GCC kernels, raw swap, and zswap.  The full updated
-N64 hard/soft PCC rootfs smoke still needs fresh real hardware passes before
-becoming the N64 hardware baseline.
+real hardware with PCC and GCC kernels, raw swap, and zswap.  The current N64
+hard-float PCC full zswap ROM boots on real hardware to root login and basic
+shell use (`ls`, `uptime`).  The full updated N64 hard/soft PCC rootfs smoke
+still needs fresh real hardware passes before becoming the N64 hardware
+baseline.
 
 Current policy:
 
@@ -129,6 +131,11 @@ use `N64_MINIMAL_UART_ONLY=1` and a small rootfs containing `/sbin/init`,
 `/libexec/getty`, `/bin/login`, `/bin/sh`, and the basic mount/fs tools.  The
 minimal rootfs must keep `/bin/login`; without it `getty` accepts a username,
 fails its login exec, exits, and `init` immediately respawns a new login prompt.
+
+The full 2026-07-06 N64 hard-float PCC zswap ROM also reached root login on
+real hardware.  Basic shell commands including `ls -l /` and `uptime` worked.
+The full smoke is not closed yet: `uname -a` currently triggers a kernel
+`TLB load/fetch` panic after login, so that path remains an open runtime issue.
 
 Standalone cross SDK builds use common MIPS selectors:
 

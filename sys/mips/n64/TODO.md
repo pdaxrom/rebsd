@@ -222,8 +222,11 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   all reached login on 2026-07-06.  The minimal rootfs now includes
   `/bin/login`, so `getty` can exec the login program instead of respawning the
   prompt after a username is entered.
+- [x] Boot the updated hard-float PCC full zswap N64 rootfs on real hardware:
+  root login works, the ROM rootfs layout is visible, and `uptime` runs.
 - [ ] Hardware-smoke the updated PCC hard-float N64 rootfs on real hardware
-  after the QEMU matrix stays stable.
+  with `/root/pcc-smoke-all.sh`; `uname -a` currently panics with a kernel
+  `TLB load/fetch` after login, so full runtime validation is still open.
 - [ ] Hardware-smoke the updated PCC soft-float N64 rootfs on real hardware.
 
 ## N64 Command Filtering
@@ -748,6 +751,9 @@ the board-specific generated/appended manifest.
   - [x] after adding basic tools, run `cat /etc/rc`, `pwd`, `uname`, `id`, and
     `stty`
   - [x] verify `uname -a` ends with `mips`, not `pic32`
+  - [ ] Re-check `uname -a` on the current PCC full zswap ROM; the 2026-07-06
+    hardware boot reaches root login and runs `uptime`, but `uname -a` now
+    panics with `TLB load/fetch`
   - [x] run `sleep 1` and verify it returns by timeout without `Ctrl-C`
   - [x] verify `man uname`, `mount`, and `fsck -n /dev/romdisk` work from the
     default shell environment

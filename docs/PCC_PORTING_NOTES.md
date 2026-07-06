@@ -350,8 +350,9 @@ The current C gate is green in these environments:
   rootfs includes `/bin/login`; without it `getty` respawns after username
   entry because `/bin/login` cannot be executed.
 - N64 hard-float PCC kernel/userland full rootfs ROM build with `N64_ZSWAP=1`.
-  The ROM build is ready for the next full real-hardware smoke; runtime
-  validation of the full rootfs is still pending.
+  The ROM boots on real hardware to root login and basic shell use; `ls -l /`
+  and `uptime` work.  Full runtime validation is still pending because
+  `uname -a` currently triggers a kernel `TLB load/fetch` panic after login.
 
 The 2026-07-05 QEMU smoke matrix finished with:
 
@@ -429,6 +430,11 @@ swap-regression comparison.  The smoke covers native PCC compile/link/run,
 shell/login-sensitive paths, repeated `ccom`, libc/math/wide-character policy
 smoke tests, DHCP receive support, real small utility rebuilds, and Linpack
 binaries built with both GCC and PCC.
+
+The current hard-float PCC full zswap ROM has reached root login on real N64
+hardware and can run basic shell commands.  It is slow on hardware, and the
+`uname -a` panic suggests an unresolved timing/race or interrupt-path issue
+rather than a rootfs packaging failure.
 
 ## Out Of Scope For The C Gate
 

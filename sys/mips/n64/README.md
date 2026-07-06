@@ -490,6 +490,12 @@ current N64 work is staged as follows:
   use `N64_MINIMAL_UART_ONLY=1`; the minimal rootfs must include `/bin/login`
   in addition to `/libexec/getty`, otherwise entering `root` only respawns the
   login prompt because `getty` cannot exec the login program;
+- on 2026-07-06, the full hard-float PCC zswap ROM booted on real N64 hardware
+  to `ttyS0` root login.  The full rootfs mounted from ROM, `ls -l /` showed
+  the expected `/bin`, `/sbin`, `/usr`, `/var`, and `/cart` layout, and
+  `uptime` worked.  The full smoke remains open because `uname -a` triggered a
+  kernel `TLB load/fetch` panic after login; this points at a remaining runtime
+  timing/race or interrupt-path issue rather than a rootfs packaging failure;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
