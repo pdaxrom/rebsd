@@ -618,6 +618,12 @@ COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
                   fi && \
                   ${KERNEL_AS} .deps/vers.s -o vers.o
 endif
+SYSTEM_BUILD_USER ?= $(shell id -un 2>/dev/null || echo unknown)
+SYSTEM_BUILD_HOST ?= $(shell hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)
+SYSTEM_COMPILER_VERSION_gcc = $(shell $(firstword $(CC)) --version 2>/dev/null | sed -n '1p')
+SYSTEM_COMPILER_VERSION_pcc = $(shell $(firstword $(N64_HOST_PCC)) -v 2>&1 | sed -n '/Portable C Compiler/{p;q;}')
+SYSTEM_COMPILER_VERSION = $(or $(SYSTEM_COMPILER_VERSION_$(N64_KERNEL_COMPILER)),unknown)
+SYSTEM_BUILD_INFO = built on $(SYSTEM_BUILD_USER)@$(SYSTEM_BUILD_HOST) with $(N64_KERNEL_COMPILER) $(SYSTEM_COMPILER_VERSION), cpu=$(N64_USERLAND_CPU), float=$(N64_USERLAND_FLOAT), endian=$(N64_USERLAND_ENDIAN)
 COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${ASFPU} ${FPU_ASFLAGS} $< -o $@
 
@@ -642,7 +648,7 @@ endif
 SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o
 SYSTEM_DEP      = Makefile $(N64_IOCONF).c $(N64_KERNEL_LDSCRIPT) \
                   $(KERNEL_COMPILER_DEPS)
-SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for N64: local build\n";' > vers.c; \
+SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for N64: $(SYSTEM_BUILD_INFO)\n";' > vers.c; \
                   ${COMPILE_VERS_C}; \
                   rm -f $@
 SYSTEM_LD       = ${LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@

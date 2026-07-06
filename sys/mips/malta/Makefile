@@ -203,6 +203,12 @@ COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
                   fi && \
                   ${KERNEL_AS} .deps/vers.s -o vers.o
 endif
+SYSTEM_BUILD_USER ?= $(shell id -un 2>/dev/null || echo unknown)
+SYSTEM_BUILD_HOST ?= $(shell hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)
+SYSTEM_COMPILER_VERSION_gcc = $(shell $(firstword $(CC)) --version 2>/dev/null | sed -n '1p')
+SYSTEM_COMPILER_VERSION_pcc = $(shell $(firstword $(MIPS_PCC_CC)) -v 2>&1 | sed -n '/Portable C Compiler/{p;q;}')
+SYSTEM_COMPILER_VERSION = $(or $(SYSTEM_COMPILER_VERSION_$(MIPS_KERNEL_COMPILER)),unknown)
+SYSTEM_BUILD_INFO = built on $(SYSTEM_BUILD_USER)@$(SYSTEM_BUILD_HOST) with $(MIPS_KERNEL_COMPILER) $(SYSTEM_COMPILER_VERSION), cpu=$(MIPS_ROOTFS_CPU), float=$(MIPS_ROOTFS_FLOAT), endian=$(MIPS_ROOTFS_ENDIAN)
 COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
 
@@ -275,7 +281,7 @@ CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
 SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
                   $(KERNEL_COMPILER_DEPS)
-SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): local build\n";' > vers.c; \
+SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): $(SYSTEM_BUILD_INFO)\n";' > vers.c; \
                   ${COMPILE_VERS_C}; \
                   rm -f $@
 SYSTEM_LD       = ${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o $@
@@ -526,8 +532,8 @@ rootfs-repack-kernel:
 	fi
 	$(LD) -r -b binary -o rootfs.o rootfs.img
 	$(OBJCOPY) --rename-section .data=.romdisk,alloc,load,readonly,data,contents rootfs.o
-	printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): local build\n";' > vers.c
-	${CC} ${VERS_CFLAGS} -MT vers.o -MP -MD -MF .deps/vers.dep -c vers.c -o vers.o
+	printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): $(SYSTEM_BUILD_INFO)\n";' > vers.c
+	${COMPILE_VERS_C}
 	rm -f unix.elf
 	${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o unix.elf swapunix.o
 	${SIZE} unix.elf

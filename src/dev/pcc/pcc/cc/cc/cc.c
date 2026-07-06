@@ -1021,8 +1021,13 @@ main(int argc, char *argv[])
 	case SC11: c89defs = c11defs = 1; break;
 	}
 
-	if (ninput == 0 && !(printprogname || printfilename || printsearchdirs))
+	if (ninput == 0 && !(printprogname || printfilename || printsearchdirs)) {
+		if (vflag && outfile == NULL && cflag == 0 && Sflag == 0 &&
+		    Eflag == 0 && Mflag == 0 && MDflag == 0 && MMDflag == 0 &&
+		    needM == 0)
+			return 0;
 		errorx(8, "no input files");
+	}
 	if (outfile && (cflag || Sflag || Eflag) && ninput > 1)
 		errorx(8, "-o given with -c || -E || -S and more than one file");
 #if 0

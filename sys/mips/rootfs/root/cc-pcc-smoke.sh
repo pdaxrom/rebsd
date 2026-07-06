@@ -5,7 +5,7 @@ rm -f cc-smoke cc-smoke.s cc-smoke.o cc-smoke.ro \
     cc-fpu-smoke cc-fpu-smoke.s cc-fpu-smoke.o \
     pcc-sysroot-smoke pcc-sysroot-smoke.s pcc-sysroot-smoke.o \
     pcc-sysroot-smoke.ro pcc-sysroot-fpu-smoke \
-    pcc-sysroot-fpu-smoke.s pcc-sysroot-fpu-smoke.o
+    pcc-sysroot-fpu-smoke.s pcc-sysroot-fpu-smoke.o pcc-version.out
 
 echo "step 1: cc -S"
 cc -S -o cc-smoke.s /root/pcc-smoke.c || exit 1
@@ -34,22 +34,27 @@ test -f cc-fpu-smoke || exit 1
 ./cc-fpu-smoke || exit 1
 echo "cc default sysroot fpu smoke ok"
 
-echo "step 8: pcc -S"
+echo "step 8: pcc version"
+pcc -v > pcc-version.out 2>&1 || exit 1
+grep 'Portable C Compiler' pcc-version.out >/dev/null || exit 1
+echo "pcc version smoke ok"
+
+echo "step 9: pcc -S"
 pcc -S -o pcc-sysroot-smoke.s /root/pcc-smoke.c || exit 1
-echo "step 9: pcc as"
+echo "step 10: pcc as"
 as -o pcc-sysroot-smoke.o pcc-sysroot-smoke.s || exit 1
-echo "step 10: pcc ld -r"
+echo "step 11: pcc ld -r"
 ld -r -o pcc-sysroot-smoke.ro pcc-sysroot-smoke.o || exit 1
 test -f pcc-sysroot-smoke.ro || exit 1
-echo "step 11: pcc link"
+echo "step 12: pcc link"
 pcc -v -o pcc-sysroot-smoke /root/pcc-smoke.c || exit 1
 test -f pcc-sysroot-smoke || exit 1
 ./pcc-sysroot-smoke || exit 1
 echo "pcc default sysroot smoke ok"
 
-echo "step 12: pcc --sysroot fpu compile"
+echo "step 13: pcc --sysroot fpu compile"
 pcc --sysroot / -S -o pcc-sysroot-fpu-smoke.s /root/pcc-fpu-smoke.c || exit 1
-echo "step 13: pcc --sysroot fpu link"
+echo "step 14: pcc --sysroot fpu link"
 pcc --sysroot / -v -o pcc-sysroot-fpu-smoke /root/pcc-fpu-smoke.c || exit 1
 test -f pcc-sysroot-fpu-smoke || exit 1
 ./pcc-sysroot-fpu-smoke || exit 1
@@ -60,4 +65,4 @@ rm -f cc-smoke cc-smoke.s cc-smoke.o cc-smoke.ro \
     cc-fpu-smoke cc-fpu-smoke.s cc-fpu-smoke.o \
     pcc-sysroot-smoke pcc-sysroot-smoke.s pcc-sysroot-smoke.o \
     pcc-sysroot-smoke.ro pcc-sysroot-fpu-smoke \
-    pcc-sysroot-fpu-smoke.s pcc-sysroot-fpu-smoke.o
+    pcc-sysroot-fpu-smoke.s pcc-sysroot-fpu-smoke.o pcc-version.out
