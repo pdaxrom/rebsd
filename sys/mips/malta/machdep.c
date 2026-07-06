@@ -147,7 +147,12 @@ mips_tlb_init(void)
         USER_DATA_START,
         mips_tlb_entrylo(MIPS_USER_PHYS_START),
         mips_tlb_entrylo(MIPS_USER_PHYS_START + MIPS_USER_TLB_PAGE_SIZE));
-    mips_write_c0_register(C0_WIRED, 0, 1);
+    mips_tlb_write_indexed(MIPS_USER_TLB_INDEX + 1, TLB_PAGEMASK_1M,
+        USER_DATA_START + MIPS_USER_TLB_PAIR_SIZE,
+        mips_tlb_entrylo(MIPS_USER_PHYS_START + MIPS_USER_TLB_PAIR_SIZE),
+        mips_tlb_entrylo(MIPS_USER_PHYS_START + MIPS_USER_TLB_PAIR_SIZE +
+            MIPS_USER_TLB_PAGE_SIZE));
+    mips_write_c0_register(C0_WIRED, 0, MIPS_USER_TLB_PAIRS);
 }
 
 void

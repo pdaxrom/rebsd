@@ -329,8 +329,8 @@ the board-specific generated/appended manifest.
 - [x] Keep `/tmp` and `/var` volatile for the first version; later ROMFS or
   another writable block device can provide persistent upper storage.
 - [x] Hardware smoke-test volatile mounts:
-  - boot reaches login with `swap size = 4608 kbytes` on default 8 MiB
-    zswap hardware builds, or `2304 kbytes` with `N64_ZSWAP=0`
+  - boot reaches login with `swap size = 3584 kbytes` on default 8 MiB
+    zswap hardware builds, or `1792 kbytes` with `N64_ZSWAP=0`
   - `/dev/ram0` exists as a block device
   - `mount` shows `/var` mounted read/write
   - `ls -l /tmp` shows a symlink to `/var/tmp`

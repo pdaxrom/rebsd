@@ -20,6 +20,7 @@ MALTA_CPU_TUNE ?= $(if $(MALTA_PORT64),r4000,24kf)
 MIPS_ARCH ?= $(if $(MALTA_PORT64),-EB -mips3 -mabi=32 -mtune=$(MALTA_CPU_TUNE),-EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE))
 MALTA_QEMU_RAM ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),64M,32M)
 MALTA_RAM_KBYTES ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),65536,32768)
+MALTA_RAMSWAP_KBYTES ?=
 MALTA_QEMU ?= $(if $(MALTA_PORT64),qemu-system-mips64,qemu-system-mips)
 MALTA_QEMU_CPU ?= $(if $(MALTA_PORT64),R4000,)
 MALTA_QEMU_CPU_OPT = $(if $(MALTA_QEMU_CPU),-cpu $(MALTA_QEMU_CPU),)
@@ -157,6 +158,7 @@ CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
                   -DROMFS_ENABLED \
                   -DMALTA_RAM_SIZE_OVERRIDE='($(MALTA_RAM_KBYTES) * 1024u)' \
                   -DMALTA_ROMDISK_BYTES_OVERRIDE='($(MIPS_ROOTFS_KBYTES) * 1024u)' \
+                  $(if $(MALTA_RAMSWAP_KBYTES),-DMALTA_RAMSWAP_BYTES_OVERRIDE='($(MALTA_RAMSWAP_KBYTES) * 1024u)',) \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"$(MALTA_HW_MODEL)"'
 ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
@@ -294,7 +296,7 @@ malta-early.elf: malta-early.o ../malta/malta.ld
 	$(OBJDUMP) -d -S $@ > malta-early.dis
 
 unix.bin: unix.elf
-	$(OBJCOPY) -O binary unix.elf unix.bin
+	$(OBJCOPY) -O binary --remove-section=.romdisk unix.elf unix.bin
 
 malta64-stage0.o: ../malta64/stage0.S | .deps
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
@@ -302,10 +304,15 @@ malta64-stage0.o: ../malta64/stage0.S | .deps
 malta64-stage0-kernel.o: ../malta64/stage0_kernel_blob.S unix.bin | .deps
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
 
-malta64.elf: malta64-stage0.o malta64-stage0-kernel.o ../malta64/stage0_linker.ld
+malta64-stage0-rootfs.o: ../malta64/stage0_rootfs_blob.S rootfs.img | .deps
+	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
+
+malta64.elf: malta64-stage0.o malta64-stage0-kernel.o \
+              malta64-stage0-rootfs.o ../malta64/stage0_linker.ld
 	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \
 	    -T ../malta64/stage0_linker.ld \
-	    malta64-stage0.o malta64-stage0-kernel.o -o $@
+	    malta64-stage0.o malta64-stage0-kernel.o \
+	    malta64-stage0-rootfs.o -o $@
 	$(MALTA64_STAGE_SIZE) $@
 	$(MALTA64_STAGE_OBJDUMP) -d -S $@ > malta64.dis
 

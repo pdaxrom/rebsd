@@ -65,6 +65,22 @@ The same runs included `linpack-pcc`; representative results were about
 11.3 MFLOPS for VR4300 hard-float, 10.5-11.0 MFLOPS for mips32r2 hard-float,
 and 0.7-0.8 MFLOPS for soft-float.
 
+For N64-like Malta/Malta64 low-memory smoke, keep QEMU backing RAM large enough
+for the staged root image but cap kernel-visible RAM and swap explicitly:
+
+```sh
+make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 \
+    MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_KBYTES=16384 \
+    MALTA_RAM_KBYTES=8192 MALTA_RAMSWAP_KBYTES=4608 MALTA_QEMU_RAM=64M kernel
+```
+
+This layout maps the Malta root image at physical `0x00800000`, gives the guest
+4 MiB of user memory with 8 MiB `physmem`, and keeps the rootfs outside
+kernel-visible RAM.  QEMU Malta's real BIOS/pflash ROM window is 4 MiB, so it
+is too small for the normal PCC rootfs.  The 2026-07-06 low-memory
+`/root/pcc-smoke-all.sh` gate passed on both Malta64/VR4300 hard-float and
+Malta/MIPS32r2 hard-float with `PCC_SMOKE_ALL_RC:0`.
+
 `pcc` mode controls how the target userland and libraries are built.  It does
 not switch the kernel, N64 stage0, or target a.out binary tools away from the
 existing flow.  PCC runtime builds do not use GCC wrappers: the standalone

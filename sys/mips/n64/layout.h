@@ -14,11 +14,13 @@
  *   0x00000000..0x000fffff  kernel, vectors, u areas
  *   0x00100000..0x004fffff  wired kuseg user window
  *   0x00500000..0x0053ffff  320x240x16 framebuffer reserve
- *   0x00540000..0x007fffff  Expansion Pak RAM block pool
+ *   0x00540000..0x0063ffff  /var RAM disk
+ *   0x00640000..0x007fffff  Expansion Pak RAM swap store
  *
  * With N64_HIGHRES_FB:
  *   0x00500000..0x0059ffff  max 640x480x16 framebuffer reserve
- *   0x005a0000..0x007fffff  Expansion Pak RAM block pool
+ *   0x005a0000..0x0069ffff  /var RAM disk
+ *   0x006a0000..0x007fffff  Expansion Pak RAM swap store
  */
 #define N64_SIZE_512K                  0x00080000
 #define N64_SIZE_1M                    0x00100000

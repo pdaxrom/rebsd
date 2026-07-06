@@ -8,8 +8,8 @@ Layout:
   all MIPS boards.
 - `n64/` - Nintendo 64 board support: RDRAM layout, video, SI/Joybus and
   n64cart hardware.
-- `malta/` - QEMU Malta board support: 32 MB RAM, 16550 serial console,
-  16 MB RAM-loaded ROM root filesystem and RAM-backed swap.
+- `malta/` - QEMU Malta board support: 16550 serial console, QEMU-loaded
+  read-only root filesystem, 4 MiB wired user window, and RAM-backed swap.
 
 Both Malta and N64 are built as boards under the shared `sys/mips` architecture.
 Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
@@ -36,10 +36,13 @@ qemu-system-mips -M malta -m 32M -nographic -serial mon:stdio \
     -no-reboot -kernel sys/mips/malta/unix.elf
 ```
 
-Do not lower `-m 32M` for the current Malta layout. The kernel root filesystem
-is linked at physical `0x00600000`, reserves 16 MiB, and RAM swap starts after
-that image. Booting with less RAM can corrupt the first process swap image and
-produce misleading scheduler or `longjmp` crashes.
+The Malta kernel-visible RAM size is controlled by `MALTA_RAM_KBYTES`; QEMU's
+`-m`/`MALTA_QEMU_RAM` must still be large enough to contain the QEMU-loaded
+root image and optional RAM swap backing.  The root filesystem is linked at
+physical `0x00800000`, outside `physmem` in 8 MiB low-memory smoke runs, and
+RAM swap starts after that image unless `MALTA_RAMSWAP_KBYTES` overrides the
+logical swap size.  QEMU Malta's real BIOS/pflash ROM window is only 4 MiB, so
+the normal 16-32 MiB PCC rootfs cannot be stored there.
 
 At the login prompt, use the passwordless root account:
 
@@ -138,12 +141,15 @@ To increase the Malta root filesystem, keep these three values in sync:
 - `MIPS_ROOTFS_KBYTES` in `sys/mips/Makefile.kconf`;
 - `MALTA_ROMDISK_BYTES` and the following `MALTA_RAMSWAP_PHYS_START` layout in
   `sys/mips/layout.h`;
-- the `romdisk` memory region length in `sys/mips/malta/malta.ld`.
+- the `romdisk` memory region length in `sys/mips/malta/malta.ld` and
+  `sys/mips/malta/malta64.ld`;
+- the `rootfs` region length in `sys/mips/malta64/stage0_linker.ld`.
 
 If the root image grows past the current 32 MiB address plan, also raise
-`MALTA_QEMU_RAM` and `MALTA_RAM_SIZE`. The current `/cart` device is separate:
-it is an 8 MiB sparse RAM-backed NOR flash emulator for ROMFS tests, not the
-boot root filesystem.
+`MALTA_QEMU_RAM`.  Raise `MALTA_RAM_KBYTES` only when the guest should see more
+kernel-visible RAM. The current `/cart` device is separate: it is an 8 MiB
+sparse RAM-backed NOR flash emulator for ROMFS tests, not the boot root
+filesystem.
 
 After logging in as `root`:
 

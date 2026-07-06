@@ -63,10 +63,10 @@ Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
 the expanded command set:
 
 This log predates the volatile `/var` RAM disk, expanded 8 MiB user window,
-and compressed RAM swap. Current default 8 MiB builds reserve 512 KiB for
+and compressed RAM swap. Current default 8 MiB builds reserve 1 MiB for
 `/var` and print `user mem = 4096 kbytes` and
-`swap size = 4608 kbytes`.  With `N64_ZSWAP=0`, the same physical RAM pool is
-exposed as raw 2304 KiB swap.
+`swap size = 3584 kbytes`.  With `N64_ZSWAP=0`, the same physical RAM pool is
+exposed as raw 1792 KiB swap.
 
 ```
 ReBSD N64 stage0
@@ -1182,10 +1182,10 @@ the volatile UFS target for `/var`:
 RAM block sizing:
 
 - 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB physical swap store.
-- 8 MiB default system: 512 KiB `/dev/ram0`, 2304 KiB physical swap store
+- 8 MiB default system: 1 MiB `/dev/ram0`, 1792 KiB physical swap store
   after the 4 MiB user window and reserved 320x240x16 framebuffer.
-- 8 MiB high-resolution framebuffer build (`N64_HIGHRES_FB=1`): 512 KiB
-  `/dev/ram0`, 1920 KiB physical swap store after the 4 MiB user window and
+- 8 MiB high-resolution framebuffer build (`N64_HIGHRES_FB=1`): 1 MiB
+  `/dev/ram0`, 1408 KiB physical swap store after the 4 MiB user window and
   reserved 640x480x16 framebuffer.
 
 `N64_ZSWAP=1` is the default.  It keeps the same physical RAM store but exposes
@@ -1199,8 +1199,8 @@ The printed boot sizes therefore differ by installed RDRAM:
 
 ```
 4 MiB: swap size = 768 kbytes with zswap, 384 kbytes raw
-8 MiB: swap size = 4608 kbytes with zswap, 2304 kbytes raw
-8 MiB high-res: swap size = 3840 kbytes with zswap, 1920 kbytes raw
+8 MiB: swap size = 3584 kbytes with zswap, 1792 kbytes raw
+8 MiB high-res: swap size = 2816 kbytes with zswap, 1408 kbytes raw
 ```
 
 The root filesystem stays read-only. `/tmp` is a symlink to `/var/tmp` in the

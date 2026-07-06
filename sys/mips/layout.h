@@ -22,10 +22,10 @@
  *   0x00000000..0x000fffff  firmware/vectors/unused low RAM
  *   0x00100000..0x002fbfff  kernel ELF
  *   0x002fc000..0x002fffff  fixed u0/u areas
- *   0x00300000..0x004fffff  wired kuseg user window
- *   0x00500000..0x005fffff  /var ramdisk
- *   0x00600000..0x015fffff  root filesystem loaded by QEMU
- *   0x01600000..0x01ffffff  RAM swap
+ *   0x00300000..0x006fffff  wired kuseg user window
+ *   0x00700000..0x007fffff  /var ramdisk
+ *   0x00800000..             root filesystem loaded by QEMU outside physmem
+ *                             in low-memory smoke configurations
  *
  * Malta PCC smoke builds may override the RAM and root filesystem sizes from
  * the board makefile when the staged userland no longer fits in 16 MiB.
@@ -50,13 +50,15 @@
 #define MIPS_USER_PHYS_START           0x00300000
 #define MIPS_USER_TLB_PAGE_SIZE        MIPS_SIZE_1M
 #define MIPS_USER_TLB_PAIR_SIZE        (2 * MIPS_USER_TLB_PAGE_SIZE)
-#define MIPS_USER_MAXMEM               MIPS_USER_TLB_PAIR_SIZE
+#define MIPS_USER_TLB_PAIRS            2
+#define MIPS_USER_MAXMEM               (MIPS_USER_TLB_PAIRS * \
+                                         MIPS_USER_TLB_PAIR_SIZE)
 #define MIPS_USER_VADDR_END            (MIPS_USER_VADDR_START + MIPS_USER_MAXMEM)
 #define MIPS_USER_GP_OFFSET            0x00007ff0
 
-#define MALTA_RAMDISK_VAR_PHYS_START   0x00500000
+#define MALTA_RAMDISK_VAR_PHYS_START   0x00700000
 #define MALTA_RAMDISK_VAR_BYTES        MIPS_SIZE_1M
-#define MALTA_ROMDISK_PHYS_START       0x00600000
+#define MALTA_ROMDISK_PHYS_START       0x00800000
 #ifdef MALTA_ROMDISK_BYTES_OVERRIDE
 #define MALTA_ROMDISK_BYTES            MALTA_ROMDISK_BYTES_OVERRIDE
 #else
@@ -64,6 +66,11 @@
 #endif
 #define MALTA_RAMSWAP_PHYS_START       (MALTA_ROMDISK_PHYS_START + \
                                          MALTA_ROMDISK_BYTES)
-#define MALTA_RAMSWAP_BYTES            (MALTA_RAM_SIZE - MALTA_RAMSWAP_PHYS_START)
+#ifdef MALTA_RAMSWAP_BYTES_OVERRIDE
+#define MALTA_RAMSWAP_BYTES            MALTA_RAMSWAP_BYTES_OVERRIDE
+#else
+#define MALTA_RAMSWAP_BYTES            (MALTA_RAM_SIZE > MALTA_RAMSWAP_PHYS_START ? \
+                                         MALTA_RAM_SIZE - MALTA_RAMSWAP_PHYS_START : 0)
+#endif
 
 #endif

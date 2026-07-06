@@ -325,6 +325,33 @@ malta mips32r2 hard:   10996.368 and 10518.260 KFLOPS
 malta mips32r2 soft:     817.298 and 742.086 KFLOPS
 ```
 
+The Malta64 low-memory swap check on 2026-07-06 used the N64-sized profile
+`MALTA_RAM_KBYTES=8192 MALTA_RAMSWAP_KBYTES=4608 MALTA_QEMU_RAM=64M` with the
+rootfs linked at physical `0x00800000`.  Boot reported `phys mem = 8192 kbytes`,
+`user mem = 4096 kbytes`, `root size = 16384 kbytes`, and
+`swap size = 4608 kbytes`; `/root/pcc-smoke-all.sh` finished with
+`PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  The `linpack-pcc` result
+inside that run was `12096.004` and `12172.076` KFLOPS.
+
+The 32-bit Malta low-memory swap check on 2026-07-06 used the same profile with
+`MIPS_ROOTFS_CPU=mips32r2` and hard-float PCC userland.  Boot again reported
+`phys mem = 8192 kbytes`, `user mem = 4096 kbytes`, `root size = 16384 kbytes`,
+and `swap size = 4608 kbytes`; `/root/pcc-smoke-all.sh` finished with
+`PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  The `linpack-pcc` result
+inside that run was `10751.999`, `10294.467`, and `10132.773` KFLOPS.
+
+On real 8 MiB N64 hardware, the native utility workload needs more writable
+temporary space than the original 512 KiB `/var` RAM disk can provide.  The N64
+default `/dev/ram0` reservation is therefore 1 MiB.  The 4 MiB user window is
+unchanged; with zswap the expected 8 MiB boot report becomes
+`user mem = 4096 kbytes` and `swap size = 3584 kbytes`.
+
+QEMU Malta exposes only a 4 MiB BIOS/pflash ROM window.  The normal PCC rootfs
+does not fit there, so the smoke layout keeps the rootfs outside guest
+`physmem` rather than in true pflash ROM.  On Malta64, stage0 copies only the
+kernel blob; the rootfs is a separate stage0 section at the same address used
+by the kernel romdisk symbols.
+
 The native PCC regression gate currently reports:
 
 - 317 total compile/link checks.

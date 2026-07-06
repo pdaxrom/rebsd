@@ -3,7 +3,8 @@ ENTRY(_start)
 
 MEMORY
 {
-  stage0 (rwx) : ORIGIN = 0xffffffff80010000, LENGTH = 48M
+  stage0 (rwx) : ORIGIN = 0xffffffff80010000, LENGTH = 8128K
+  rootfs (r)   : ORIGIN = 0xffffffff80800000, LENGTH = 32M
 }
 
 SECTIONS
@@ -26,6 +27,12 @@ SECTIONS
     KEEP(*(.kernel_blob))
     . = ALIGN(16);
   } > stage0
+
+  .rootfs_blob : {
+    . = ALIGN(16);
+    KEEP(*(.rootfs_blob))
+    . = ALIGN(16);
+  } > rootfs
 
   .bss (NOLOAD) : {
     *(.sbss .sbss.*)
