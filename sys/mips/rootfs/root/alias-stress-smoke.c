@@ -5,6 +5,23 @@
 #define NODE_COUNT 6
 #define LEAF_COUNT 3
 
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define SMOKE_LITTLE_ENDIAN 1
+#elif defined(__MIPSEL__) || defined(__mipsel__) || defined(TARGET_LITTLE_ENDIAN)
+#define SMOKE_LITTLE_ENDIAN 1
+#else
+#define SMOKE_LITTLE_ENDIAN 0
+#endif
+
+#if SMOKE_LITTLE_ENDIAN
+#define EXPECT_FORWARD_CHECKSUM 2594742500UL
+#define EXPECT_CHAR_ALIAS_CHECKSUM 4598874UL
+#else
+#define EXPECT_FORWARD_CHECKSUM 2085209764UL
+#define EXPECT_CHAR_ALIAS_CHECKSUM 2759576698UL
+#endif
+
 struct alias_leaf {
 	unsigned char code;
 	short delta;
@@ -139,8 +156,8 @@ check_pointer_and_dispatch(void)
 	walkers[0] = checksum_forward;
 	walkers[1] = checksum_reverse;
 	got = (*walkers[0])(nodes, NODE_COUNT);
-	if (got != 2085209764UL)
-		return bad_ulong("forward checksum", got, 2085209764UL);
+	if (got != EXPECT_FORWARD_CHECKSUM)
+		return bad_ulong("forward checksum", got, EXPECT_FORWARD_CHECKSUM);
 	got = (*walkers[1])(nodes, NODE_COUNT);
 	if (got != 499871515UL)
 		return bad_ulong("reverse checksum", got, 499871515UL);
@@ -164,8 +181,9 @@ check_char_alias(void)
 		return bad_ulong("char alias update",
 		    (unsigned long)nodes[2].leaf[1].code, 112UL);
 	got = checksum_forward(nodes, NODE_COUNT);
-	if (got != 2759576698UL)
-		return bad_ulong("char alias checksum", got, 2759576698UL);
+	if (got != EXPECT_CHAR_ALIAS_CHECKSUM)
+		return bad_ulong("char alias checksum", got,
+		    EXPECT_CHAR_ALIAS_CHECKSUM);
 	return 0;
 }
 

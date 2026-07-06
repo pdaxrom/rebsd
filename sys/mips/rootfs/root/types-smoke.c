@@ -37,6 +37,15 @@ union endian_word {
 	uchar b[4];
 };
 
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define SMOKE_LITTLE_ENDIAN 1
+#elif defined(__MIPSEL__) || defined(__mipsel__) || defined(TARGET_LITTLE_ENDIAN)
+#define SMOKE_LITTLE_ENDIAN 1
+#else
+#define SMOKE_LITTLE_ENDIAN 0
+#endif
+
 struct init_rec {
 	int a;
 	ulong u;
@@ -363,9 +372,15 @@ check_local_init()
 	    r.text[0] != 'l' || r.text[1] != 'c' ||
 	    r.text[2] != 'l' || r.text[3] != 0)
 		return bad("local struct init");
-	if (u.b[0] != 0xaa || u.b[1] != 0xbb ||
-	    u.b[2] != 0xcc || u.b[3] != 0xdd)
-		return bad("local union init");
+	if (SMOKE_LITTLE_ENDIAN) {
+		if (u.b[0] != 0xdd || u.b[1] != 0xcc ||
+		    u.b[2] != 0xbb || u.b[3] != 0xaa)
+			return bad("local union init");
+	} else {
+		if (u.b[0] != 0xaa || u.b[1] != 0xbb ||
+		    u.b[2] != 0xcc || u.b[3] != 0xdd)
+			return bad("local union init");
+	}
 	return 0;
 }
 
@@ -650,9 +665,15 @@ check_aggregate_types()
 		return bad("bitfields");
 
 	u.w = 0x11223344UL;
-	if (u.b[0] != 0x11 || u.b[1] != 0x22 ||
-	    u.b[2] != 0x33 || u.b[3] != 0x44)
-		return bad("big-endian union");
+	if (SMOKE_LITTLE_ENDIAN) {
+		if (u.b[0] != 0x44 || u.b[1] != 0x33 ||
+		    u.b[2] != 0x22 || u.b[3] != 0x11)
+			return bad("endian union");
+	} else {
+		if (u.b[0] != 0x11 || u.b[1] != 0x22 ||
+		    u.b[2] != 0x33 || u.b[3] != 0x44)
+			return bad("endian union");
+	}
 	return 0;
 }
 

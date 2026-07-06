@@ -1,6 +1,23 @@
 	.text
 	.set noreorder
 	.align 2
+
+#if defined(__MIPSEL__) || defined(__mipsel__) || defined(TARGET_LITTLE_ENDIAN)
+#define ABI_WORD0_1122334455667788 0x55667788
+#define ABI_WORD1_1122334455667788 0x11223344
+#define ABI_WORD0_0102030405060708 0x05060708
+#define ABI_WORD1_0102030405060708 0x01020304
+#define ABI_WORD0_8877665544332211 0x44332211
+#define ABI_WORD1_8877665544332211 0x88776655
+#else
+#define ABI_WORD0_1122334455667788 0x11223344
+#define ABI_WORD1_1122334455667788 0x55667788
+#define ABI_WORD0_0102030405060708 0x01020304
+#define ABI_WORD1_0102030405060708 0x05060708
+#define ABI_WORD0_8877665544332211 0x88776655
+#define ABI_WORD1_8877665544332211 0x44332211
+#endif
+
 	.globl asm_check_reg
 	.ent asm_check_reg
 asm_check_reg:
@@ -8,14 +25,14 @@ asm_check_reg:
 	li	$t0,0x11
 	bne	$a0,$t0,Lasm_check_reg_done
 	nop
-	li	$t0,0x11223344
+	li	$t0,ABI_WORD0_1122334455667788
 #if defined(__mips32r2) || defined(TARGET_MIPS32R2)
 	bne	$a1,$t0,Lasm_check_reg_done
 #else
 	bne	$a2,$t0,Lasm_check_reg_done
 #endif
 	nop
-	li	$t0,0x55667788
+	li	$t0,ABI_WORD1_1122334455667788
 #if defined(__mips32r2) || defined(TARGET_MIPS32R2)
 	bne	$a2,$t0,Lasm_check_reg_done
 #else
@@ -57,7 +74,7 @@ asm_check_stack3:
 	li	$t0,3
 	bne	$a2,$t0,Lasm_check_stack3_done
 	nop
-	li	$t1,0x11223344
+	li	$t1,ABI_WORD0_1122334455667788
 #if defined(__mips32r2) || defined(TARGET_MIPS32R2)
 	bne	$a3,$t1,Lasm_check_stack3_done
 #else
@@ -70,7 +87,7 @@ asm_check_stack3:
 #else
 	lw	$t0,20($sp)
 #endif
-	li	$t1,0x55667788
+	li	$t1,ABI_WORD1_1122334455667788
 	bne	$t0,$t1,Lasm_check_stack3_done
 	nop
 	li	$v0,1
@@ -97,11 +114,11 @@ asm_check_stack4:
 	bne	$a3,$t0,Lasm_check_stack4_done
 	nop
 	lw	$t0,16($sp)
-	li	$t1,0x88776655
+	li	$t1,ABI_WORD0_8877665544332211
 	bne	$t0,$t1,Lasm_check_stack4_done
 	nop
 	lw	$t0,20($sp)
-	li	$t1,0x44332211
+	li	$t1,ABI_WORD1_8877665544332211
 	bne	$t0,$t1,Lasm_check_stack4_done
 	nop
 	li	$v0,1
@@ -114,8 +131,8 @@ Lasm_check_stack4_done:
 	.globl asm_ret_ull
 	.ent asm_ret_ull
 asm_ret_ull:
-	li	$v0,0x88776655
-	li	$v1,0x44332211
+	li	$v0,ABI_WORD0_8877665544332211
+	li	$v1,ABI_WORD1_8877665544332211
 	jr	$ra
 	nop
 	.end asm_ret_ull
@@ -128,11 +145,11 @@ asm_call_c_check:
 	sw	$ra,28($sp)
 	li	$a0,0x33
 #if defined(__mips32r2) || defined(TARGET_MIPS32R2)
-	li	$a1,0x01020304
-	li	$a2,0x05060708
+	li	$a1,ABI_WORD0_0102030405060708
+	li	$a2,ABI_WORD1_0102030405060708
 #else
-	li	$a2,0x01020304
-	li	$a3,0x05060708
+	li	$a2,ABI_WORD0_0102030405060708
+	li	$a3,ABI_WORD1_0102030405060708
 #endif
 	jal	c_check_reg
 	nop
@@ -151,10 +168,10 @@ asm_call_c_ret:
 	move	$t2,$zero
 	jal	c_ret_ull
 	nop
-	li	$t0,0x88776655
+	li	$t0,ABI_WORD0_8877665544332211
 	bne	$v0,$t0,Lasm_call_c_ret_done
 	nop
-	li	$t0,0x44332211
+	li	$t0,ABI_WORD1_8877665544332211
 	bne	$v1,$t0,Lasm_call_c_ret_done
 	nop
 	li	$t2,1

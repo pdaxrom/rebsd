@@ -13,6 +13,15 @@ struct abi_rec {
 #define EXPECT_ABI_VALUE_OFFSET 8
 #endif
 
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define SMOKE_LITTLE_ENDIAN 1
+#elif defined(__MIPSEL__) || defined(__mipsel__) || defined(TARGET_LITTLE_ENDIAN)
+#define SMOKE_LITTLE_ENDIAN 1
+#else
+#define SMOKE_LITTLE_ENDIAN 0
+#endif
+
 ullong abi_global = 0x1122334455667788ULL;
 struct abi_rec abi_record = {
 	0x12345678,
@@ -67,7 +76,10 @@ main()
 
 	putstr("check global object\n");
 	p = (ulong *)&abi_global;
-	if (p[0] != 0x11223344UL || p[1] != 0x55667788UL)
+	if (SMOKE_LITTLE_ENDIAN) {
+		if (p[0] != 0x55667788UL || p[1] != 0x11223344UL)
+			return bad("global object word order");
+	} else if (p[0] != 0x11223344UL || p[1] != 0x55667788UL)
 		return bad("global object high/low order");
 
 	putstr("check struct object\n");
@@ -77,7 +89,10 @@ main()
 	p = (ulong *)&abi_record.value;
 	if (abi_record.tag != 0x12345678 || abi_record.tail != 0x55667788)
 		return bad("struct surrounding fields");
-	if (p[0] != 0x01020304UL || p[1] != 0x05060708UL)
+	if (SMOKE_LITTLE_ENDIAN) {
+		if (p[0] != 0x05060708UL || p[1] != 0x01020304UL)
+			return bad("struct long long word order");
+	} else if (p[0] != 0x01020304UL || p[1] != 0x05060708UL)
 		return bad("struct long long high/low order");
 
 	putstr("check C to asm register argument\n");

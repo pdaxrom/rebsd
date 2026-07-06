@@ -484,9 +484,9 @@ ninval(CONSZ off, int fsz, NODE *p)
 			slval(p, j);
 			ninval(off+32, 32, p);
 		} else {
-			slval(p, i);
-	                ninval(off, 32, p);
 			slval(p, j);
+	                ninval(off, 32, p);
+			slval(p, i);
 			ninval(off+32, 32, p);
 		}
 #endif

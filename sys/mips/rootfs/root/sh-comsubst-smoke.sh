@@ -8,6 +8,14 @@ cd /tmp || cd /var/tmp || exit 1
 
 src=sh-comsubst-smoke.$$.s
 obj=sh-comsubst-smoke.$$.o
+as_endian=-EB
+half_pattern='*022064377376126170232274*'
+
+if cc -dM -E - </dev/null 2>/dev/null | grep '^#define __MIPSEL__' >/dev/null
+then
+	as_endian=-EL
+	half_pattern='*064022376377170126274232*'
+fi
 
 rm -f $src $obj
 echo ".data" > $src
@@ -17,14 +25,14 @@ echo '	.half 0xfffe' >> $src
 echo '	.half 0x5678' >> $src
 echo '	.half 0x9abc' >> $src
 
-as -EB -mips3 -march=vr4300 -o $obj $src || exit 1
+as $as_endian -mips3 -march=vr4300 -o $obj $src || exit 1
 
 for i in 0 1 2 3 4 5 6 7
 do
 	echo "sh-comsubst-smoke: iteration $i"
 	bytes=`od -b $obj | tr -d ' \n'`
 	case "$bytes" in
-	*022064377376126170232274*) ;;
+	$half_pattern) ;;
 	*)
 		echo "sh-comsubst-smoke: bad .half bytes" >&2
 		od -b $obj

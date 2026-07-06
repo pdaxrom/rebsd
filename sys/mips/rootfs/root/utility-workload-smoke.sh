@@ -10,6 +10,12 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin
 export PATH
 
 src=/root/utility-src
+endian_cflag=-DTARGET_BIG_ENDIAN
+
+if cc -dM -E - </dev/null 2>/dev/null | grep '^#define __MIPSEL__' >/dev/null
+then
+	endian_cflag=-DTARGET_LITTLE_ENDIAN
+fi
 
 cd /var/tmp || exit 1
 
@@ -62,7 +68,7 @@ run_compiler()
 	grep '^48897[ 	][ 	]*1$' sum.out >/dev/null ||
 	    fail "$cc sum output"
 
-	$cc -O -DTARGET_BIG_ENDIAN -I. -o size size.c aoutio.c ||
+	$cc -O $endian_cflag -I. -o size size.c aoutio.c ||
 	    fail "$cc size compile"
 	./size ./basename > size.out || fail "$cc size run"
 	grep '^text' size.out >/dev/null || fail "$cc size header"

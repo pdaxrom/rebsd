@@ -51,18 +51,18 @@ long double nanl(const char *);
 #define nan(x)      __builtin_nan(x)
 #define nanf(x)     __builtin_nanf(x)
 #define nanl(x)     __builtin_nanl(x)
-#define signbit(x)  __builtin_signbit(x)
 #else
 #define HUGE_VAL    1.7976931348623157e+308
 #define HUGE_VALF   3.40282347e+38F
 #define HUGE_VALL   HUGE_VAL
 #define INFINITY    HUGE_VALF
 #define NAN         nanf("")
+#endif
+
 #define signbit(x) \
     (sizeof(x) == sizeof(float) ? __rebsd_signbitf((float)(x)) : \
     ((sizeof(x) == sizeof(long double) && sizeof(long double) != sizeof(double)) ? \
     __rebsd_signbitl((long double)(x)) : __rebsd_signbitd((double)(x))))
-#endif
 
 int isnanf(float x);
 int isnan(double x);
