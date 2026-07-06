@@ -451,7 +451,7 @@ N64_AWK_MAKE = $(MAKE) -C $(TOPSRC)/src/cmd/awk TARGET_PLATFORM=n64 \
                LDFLAGS="$(N64_USERLAND_LDFLAGS)" \
                YACC="$(N64_YACC)"
 
-N64_MINIMAL_ROOTFS_CMD_SUBDIRS = getty init ls mkfs mount sh
+N64_MINIMAL_ROOTFS_CMD_SUBDIRS = getty init login ls mkfs mount sh
 N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod mkdir
 N64_MINIMAL_ROOTFS_FILES = \
     $(TOPSRC)/sys/mips/rootfs/etc/group \
@@ -492,7 +492,7 @@ N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src \
                OBJDUMP="$(N64_MINIMAL_USERLAND_OBJDUMP)" \
                ELF2AOUT="$(N64_MINIMAL_USERLAND_ELF2AOUT)" \
                LDFLAGS="$(N64_MINIMAL_USERLAND_LDFLAGS)" \
-               SRC_ONLY_LIBS="startup-mips libc" \
+               SRC_ONLY_LIBS="startup-mips libc libutil" \
                SRC_ONLY_SUBDIR="cmd" \
                CMD_ONLY_SUBDIR="$(N64_MINIMAL_ROOTFS_CMD_SUBDIRS)" \
                CMD_ONLY_STD="$(N64_MINIMAL_ROOTFS_CMD_STDS)" \
