@@ -24,6 +24,7 @@
 #define MALTA_CARTFLASH_LIST_SIZE   \
     (((MALTA_CARTFLASH_SIZE / ROMFS_MB) * sizeof(romfs_entry) + \
     (ROMFS_FLASH_SECTOR - 1)) & ~(ROMFS_FLASH_SECTOR - 1))
+#define MALTA_CARTFLASH_STORAGE     __attribute__((section(".cartflash_bss")))
 
 struct malta_cartflash_slot {
     unsigned offset;
@@ -31,10 +32,15 @@ struct malta_cartflash_slot {
     unsigned char data[MIPS_ROMFS_FLASH_SECTOR];
 };
 
-static struct malta_cartflash_slot malta_cartflash_slots[MALTA_CARTFLASH_SLOTS];
-static unsigned char malta_cartflash_buf[MIPS_ROMFS_FLASH_SECTOR];
-static uint16_t malta_cartflash_map[MALTA_CARTFLASH_MAP_SIZE / sizeof(uint16_t)];
-static uint8_t malta_cartflash_list[MALTA_CARTFLASH_LIST_SIZE];
+static struct malta_cartflash_slot
+    malta_cartflash_slots[MALTA_CARTFLASH_SLOTS] MALTA_CARTFLASH_STORAGE;
+static unsigned char
+    malta_cartflash_buf[MIPS_ROMFS_FLASH_SECTOR] MALTA_CARTFLASH_STORAGE;
+static uint16_t
+    malta_cartflash_map[MALTA_CARTFLASH_MAP_SIZE / sizeof(uint16_t)]
+    MALTA_CARTFLASH_STORAGE;
+static uint8_t
+    malta_cartflash_list[MALTA_CARTFLASH_LIST_SIZE] MALTA_CARTFLASH_STORAGE;
 static int malta_cartflash_ready;
 
 static void

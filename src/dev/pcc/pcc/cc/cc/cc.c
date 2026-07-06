@@ -367,6 +367,8 @@ struct Wflags {
 	{ "deprecated-declarations", INWEXTRA },
 	{ "attributes", 0 },
 	{ "uninitialized", INWEXTRA },
+	{ "return-type", INWALL },
+	{ "return-mismatch", 0 },
 	{ NULL, 0 },
 };
 

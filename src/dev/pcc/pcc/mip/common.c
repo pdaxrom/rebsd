@@ -225,6 +225,9 @@ struct Warning Warnings[] = {
 	}, {
 		"uninitialized", 0, 0,
 		"uninitialized variable"
+	}, {
+		"return-type", 1, 0,
+		"returning value from void function"
 	}, {	NULL	}
 };
 
@@ -275,6 +278,8 @@ Wflags(char *str)
 		str += 6;
 		iserr = 1;
 	}
+	if (strcmp("return-mismatch", str) == 0)
+		str = "return-type";
 
 	for (w = Warnings; w->flag; w++) {
 		if (strcmp(w->flag, str) != 0)

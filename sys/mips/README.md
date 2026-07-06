@@ -72,9 +72,10 @@ small board backend instead of calling N64 hardware directly.
   to the n64cart flash driver.
 - Malta uses `sys/mips/malta/cartflash.c`, which exposes `/dev/cartflash0` as
   an 8 MiB sparse NOR-flash emulator. Unallocated sectors read as `0xff`, erase
-  frees a sector, and writes enforce NOR `1 -> 0` programming semantics. This
-  keeps QEMU ROMFS tests close to real flash behavior without reserving an 8 MiB
-  kernel `.bss` image.
+  frees a sector, and writes enforce NOR `1 -> 0` programming semantics. The
+  sparse sector backing store is linked after the QEMU-loaded root image, not in
+  the kernel `.bss`, so PCC kernel builds do not consume the fixed 2 MiB kernel
+  link area with test flash storage.
 
 Malta mounts the fake flash automatically:
 

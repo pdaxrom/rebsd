@@ -1700,5 +1700,27 @@ features(int mask)
 int
 myxasm(struct interpass *ip, NODE *p)
 {
+	int cw;
+	char *c;
+	CONSZ v;
+
+	(void)ip;
+	cw = xasmcode(p->n_name);
+	switch (XASMVAL(cw)) {
+	case 'K':	/* unsigned 16-bit immediate */
+		if (p->n_left->n_op != ICON) {
+			uerror("constant required");
+			return 1;
+		}
+		v = getlval(p->n_left);
+		if (v < 0 || v > 0xffff) {
+			uerror("impossible constraint");
+			return 1;
+		}
+		p->n_name = tmpstrdup(p->n_name);
+		c = strchr(p->n_name, 'K');
+		*c = 'i';
+		return 0;
+	}
 	return 0;
 }

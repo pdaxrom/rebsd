@@ -408,6 +408,28 @@ pr_tell(void)
 	return w;
 }
 
+static int
+proto_has_ss(TWORD type)
+{
+	type = BTYPE(type);
+	return ISSOU(type) || type == ENUMTY;
+}
+
+static TWORD
+proto_type(TWORD type, struct ssdesc *ss)
+{
+	struct symtab *sp;
+
+	if (BTYPE(type) == ENUMTY) {
+		if (ss != NULL && (sp = strmemb(ss)) != NULL &&
+		    sp->stype != ENUMTY)
+			MODTYPE(type, sp->stype);
+		else
+			MODTYPE(type, INT);
+	}
+	return type;
+}
+
 /*
  * Write prototype info for one parameter.
  */
@@ -442,7 +464,7 @@ argeval(P1ND *p)
 		type = ISPTR(sp->stype) ? PTR|VOID : sp->stype;
 	}
 #endif
-	if (ISSOU(BTYPE(type)))
+	if (proto_has_ss(type))
 		ptr1 = (uintptr_t)p->n_td->ss;
 	for (tw = type; ISPTR(tw); tw = DECREF(tw))
 		;
@@ -475,7 +497,7 @@ if (pdebug) printf("pr_hasell: dsym %d\n", dsym);
 	while (t != TNULL) {
 		if (t == TELLIPSIS)
 			return 1;
-		if (ISSOU(BTYPE(t)))
+		if (proto_has_ss(t))
 			(void)pr_rptr();
 		for (; t > BTMASK; t = DECREF(t))
 			if (ISFTN(t) || ISARY(t))
@@ -561,7 +583,9 @@ int
 pr_ckproto(int usym, int udef, int old)
 {
 	union dimfun *u1, *u2;
+	struct ssdesc *s1, *s2;
 	int t1, t2, tt2, ty, tyn;
+	TWORD tc1, tc2;
 
 	if (pdebug)
 		printf("pr_ckproto: usym %d udef %d old %d\n",
@@ -578,15 +602,26 @@ pr_ckproto(int usym, int udef, int old)
 	while (t1 != TNULL) {
 		if (pdebug)
 			printf("pr_ckproto2: t1 %#x t2 %#x\n", t1, t2);
-		if (t1 == t2)
+		s1 = s2 = NULL;
+		if (proto_has_ss(t1)) {
+			SEEKRDP(usym, s1);
+			usym += sizeof(intptr_t);
+		}
+		if (proto_has_ss(t2)) {
+			SEEKRDP(udef, s2);
+			udef += sizeof(intptr_t);
+		}
+		tc1 = proto_type(t1, s1);
+		tc2 = proto_type(t2, s2);
+		if (tc1 == tc2)
 			goto done;
 		/*
 		 * If an old-style declaration, then all types smaller than
 		 * int are given as int parameters.
 		 */
 		if (old) {
-			ty = BTYPE(t1);
-			tyn = BTYPE(t2);
+			ty = BTYPE(tc1);
+			tyn = BTYPE(tc2);
 			if (ty == tyn || ty != INT)
 				return 1;
 			if (tyn == CHAR || tyn == UCHAR ||
@@ -596,14 +631,10 @@ pr_ckproto(int usym, int udef, int old)
 		} else
 			return 1;
 
-done:		ty = BTYPE(t1);
-		tt2 = t1;
+done:		ty = BTYPE(tc1);
+		tt2 = tc1;
 		if (ISSOU(ty)) {
-			SEEKRDP(usym, u1);
-			SEEKRDP(udef, u2);
-			usym += sizeof(intptr_t), udef += sizeof(intptr_t);
-			if (suemeq((struct ssdesc *)u1,
-			    (struct ssdesc *)u2) == 0)
+			if (suemeq(s1, s2) == 0)
 				return 1;
 		}
 
@@ -715,7 +746,10 @@ protoarg(P1ND *p)
 	/* Check structs (tn=type, tp=arrt) */
 	an = p->n_ap;
 #endif
-	ss = ISSOU(BTYPE(tp)) ? (void *)pr_rptr() : NULL;
+	ss = proto_has_ss(tp) ? (void *)pr_rptr() : NULL;
+	tp = proto_type(tp, ss);
+	if (ISSOU(BTYPE(tp)) == 0)
+		ss = NULL;
 	for (t = tp; ISPTR(t); t = DECREF(t))
 		;
 	dp = t > BTMASK ? (void *)pr_rptr() : NULL;
@@ -818,6 +852,11 @@ pr_alprnt(int off, int in)
 			ss = (struct ssdesc *)pr_rptr();
 			printf(" (size %d align %d)", (int)tsize(t, 0, ss),
 			    (int)talign(t, ss));
+		} else if (BTYPE(t) == ENUMTY) {
+			ss = (struct ssdesc *)pr_rptr();
+			printf(" (enum as ");
+			tprint(proto_type(t, ss), 0);
+			printf(")");
 		}
 		printf("\n");
 	}
@@ -825,4 +864,3 @@ pr_alprnt(int off, int in)
 		printf("end arglist\n");
 }
 #endif
-

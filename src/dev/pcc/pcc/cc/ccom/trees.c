@@ -1102,7 +1102,7 @@ chkpun(P1ND *p)
 		if (t1 == VOID && t2 == VOID)
 			return;
 		if (t1 == VOID) {
-			werror("returning value from void function");
+			warner(Wreturn_type);
 			return;
 		}
 		if (t2 == VOID) {

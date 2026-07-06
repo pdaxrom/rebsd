@@ -401,6 +401,7 @@ extern	int warniserr;		/* treat warnings as errors */
 #define	Wdeprecated_declarations	10
 #define	Wattributes			11
 #define	Wuninitialized			12
+#define	Wreturn_type			13
 
 void warner(int type, ...);
 int Wset(char *, int, int);
