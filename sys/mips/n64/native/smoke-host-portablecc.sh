@@ -16,14 +16,6 @@ cpu=${7:-vr4300}
 float_abi=${8:-hard}
 endian=${9:-big}
 pcc_src=$topsrc/src/dev/pcc/pcc
-target=mips-rebsd
-target_root=$prefix/$target
-target_incdir=$target_root/include
-target_libdir=$target_root/lib
-target_softfloat_libdir=$target_libdir/softfloat
-target_bindir=$prefix/bin
-target_as=$target_bindir/$target-as
-target_ld=$target_bindir/$target-ld
 
 case "$cpu" in
 vr4300)
@@ -51,17 +43,25 @@ soft)
 esac
 case "$endian" in
 big)
+	target=mips-rebsd
 	endian_cflags="-DTARGET_BIG_ENDIAN=1"
 	;;
 little)
-	echo "PCC endian '$endian' is reserved for the future mipsel port" >&2
-	exit 2
+	target=mipsel-rebsd
+	endian_cflags="-DTARGET_LITTLE_ENDIAN=1"
 	;;
 *)
 	echo "unsupported PCC endian default: $endian" >&2
 	exit 2
 	;;
 esac
+target_root=$prefix/$target
+target_incdir=$target_root/include
+target_libdir=$target_root/lib
+target_softfloat_libdir=$target_libdir/softfloat
+target_bindir=$prefix/bin
+target_as=$target_bindir/$target-as
+target_ld=$target_bindir/$target-ld
 
 test -x "$pcc_src/configure"
 test -d "$incdir"
@@ -158,6 +158,10 @@ else
 fi
 if [ "$endian" = big ]; then
 	grep '^#define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__$' "$tmp.macros" >/dev/null
+	grep '^#define __MIPSEB__' "$tmp.macros" >/dev/null
+else
+	grep '^#define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__$' "$tmp.macros" >/dev/null
+	grep '^#define __MIPSEL__' "$tmp.macros" >/dev/null
 fi
 
 echo "smoke-host-portablecc: ok"

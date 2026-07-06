@@ -27,10 +27,6 @@ endif
 ifeq ($(filter $(MIPS_SDK_ENDIAN),$(MIPS_SDK_ENDIANS)),)
 $(error Unsupported MIPS_SDK_ENDIAN=$(MIPS_SDK_ENDIAN); expected one of $(MIPS_SDK_ENDIANS))
 endif
-ifneq ($(MIPS_SDK_ENDIAN),big)
-$(error MIPS_SDK_ENDIAN=$(MIPS_SDK_ENDIAN) is reserved for the future mipsel port; current mips-rebsd PCC is big-endian only)
-endif
-
 MIPS_SDK_ABI = $(MIPS_SDK_ENDIAN).$(MIPS_SDK_CPU).$(MIPS_SDK_FLOAT)
 MIPS_SDK_BUILD ?= /private/tmp/rebsd-cross-pcc-build-$(MIPS_SDK_ABI)
 MIPS_SDK_PREFIX ?= $(TOPSRC)/cross-pcc

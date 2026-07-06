@@ -2203,6 +2203,7 @@ case "$target_os" in
 	case "$target_cpu" in
 	    i?86) targmach=i386 ;;
 	    mips64el) targmach=mips ;;
+	    mipsel*) targmach=mips endian=little ;;
 	    mips64) targmach=mips endian=big ;;
 	    powerpc) targmach=powerpc endian=big ;;
 	    sparc64) targmach=sparc64 endian=big ;;

@@ -13,15 +13,33 @@
 	NULL, \
 }
 
+#ifdef TARGET_BIG_ENDIAN
+#define CPPMD_ENDIAN "-D__MIPSEB__", "-D__MIPSEB", "-DMIPSEB", "-D_MIPSEB",
+#else
+#define CPPMD_ENDIAN \
+	"-D__MIPSEL__", "-D__MIPSEL", "-DMIPSEL", "-D_MIPSEL", \
+	"-D__mipsel__", "-D__mipsel",
+#endif
+
 #define	CPPMDADD { \
 	"-D__mips__", "-Dmips", \
-	"-D__MIPSEB__", "-D__MIPSEB", "-DMIPSEB", "-D_MIPSEB", \
+	CPPMD_ENDIAN \
 	"-D__mips_o32", \
 	NULL, \
 }
 
 #define TARGET_GLOBALS \
 	int mips_cpu = MIPS_CPU_DEFAULT;
+
+#ifdef TARGET_BIG_ENDIAN
+#define PCC_REBSD_CHECK_BIG_ENDIAN() ((void)0)
+#define PCC_REBSD_CHECK_LITTLE_ENDIAN() \
+	errorx(8, "-mlittle-endian is not supported by big-endian mips-rebsd")
+#else
+#define PCC_REBSD_CHECK_BIG_ENDIAN() \
+	errorx(8, "-mbig-endian is not supported by little-endian mipsel-rebsd")
+#define PCC_REBSD_CHECK_LITTLE_ENDIAN() ((void)0)
+#endif
 
 /*
  * The PCC inline pass currently corrupts trees in ReBSD/MIPS optimized
@@ -43,12 +61,17 @@
 		break; \
 	} \
 	if (match(argp, "-mbig-endian")) { \
+		PCC_REBSD_CHECK_BIG_ENDIAN(); \
 		bigendian = 1; \
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \
-	if (match(argp, "-mlittle-endian")) \
-		errorx(8, "-mlittle-endian is not supported by big-endian mips-rebsd"); \
+	if (match(argp, "-mlittle-endian")) { \
+		PCC_REBSD_CHECK_LITTLE_ENDIAN(); \
+		bigendian = 0; \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
 }
 
 #define PCC_SETUP_CPP_ARGS { \
@@ -89,11 +112,14 @@
 #define STARTLABEL	"_start"
 #define TARGET_NO_ABICALLS
 
-#define PCC_SETUP_AS_ARGS \
+#define PCC_SETUP_AS_ARGS { \
+	strlist_append(&assembler_flags, bigendian ? "-EB" : "-EL"); \
 	strlist_append(&assembler_flags, \
-	    mips_cpu == MIPS_CPU_MIPS32R2 ? "-march=mips32r2" : "-march=vr4300");
+	    mips_cpu == MIPS_CPU_MIPS32R2 ? "-march=mips32r2" : "-march=vr4300"); \
+}
 
 #define PCC_SETUP_LD_ARGS { \
+	strlist_append(&early_linker_flags, bigendian ? "-EB" : "-EL"); \
 	strlist_append(&early_linker_flags, "-X"); \
 	if (softfloat && !nostdlib) \
 		strlist_append(&early_linker_flags, \

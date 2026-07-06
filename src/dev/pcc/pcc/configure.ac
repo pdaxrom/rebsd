@@ -142,6 +142,7 @@ case "$target_os" in
 	abi=aout
 	wchar_type=USHORT
 	case "$target_cpu" in
+	    mipsel*) targmach=mips endian=little ;;
 	    mips*) targmach=mips endian=big ;;
 	esac
 	;;
