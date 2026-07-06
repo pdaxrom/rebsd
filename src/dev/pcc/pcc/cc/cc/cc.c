@@ -313,6 +313,7 @@ int	kflag;	/* generate PIC/pic code */
 int	Mflag, needM, MDflag, MMDflag;	/* dependencies only */
 int	pgflag;
 int	pieflag;
+int	omit_frame_pointer;
 int	Xflag;
 int	nostartfiles, Bstatic, shared;
 int	nostdinc, nostdlib;
@@ -635,6 +636,8 @@ main(int argc, char *argv[])
 				kflag = j ? 0 : *u == 'P' ? F_PIC : F_pic;
 			} else if (match(u, "freestanding")) {
 				freestanding = j ? 0 : 1;
+			} else if (match(u, "omit-frame-pointer")) {
+				omit_frame_pointer = j ? 0 : 1;
 			} else if (match(u, "signed-char")) {
 				xuchar = j ? 1 : 0;
 			} else if (match(u, "unsigned-char")) {
@@ -2032,6 +2035,7 @@ struct flgcheck ccomflgcheck[] = {
 	{ &xgnu89, 1, "-xgnu89" },
 	{ &xgnu99, 1, "-xgnu99" },
 	{ &xuchar, 1, "-xuchar" },
+	{ &omit_frame_pointer, 1, "-fomit-frame-pointer" },
 #if !defined(os_sunos) && !defined(mach_i386)
 	{ &vflag, 1, "-v" },
 #endif

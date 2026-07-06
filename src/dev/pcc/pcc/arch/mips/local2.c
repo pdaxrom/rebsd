@@ -70,22 +70,48 @@ deflab(int label)
 
 static int regoff[32];
 static TWORD ftype;
+static int mips_frame_adjust;
+static int mips_omit_fp;
+
+static int
+mips_can_omit_fp(struct interpass_prolog *ipp)
+{
+	return xomitframe && (ipp->ipp_flags & IF_NEEDFP) == 0;
+}
+
+static void
+mips_adjust_frame_ref(CONSZ *off, int *base)
+{
+	if (mips_omit_fp && *base == FPREG) {
+		*off += mips_frame_adjust;
+		*base = SP;
+	}
+}
 
 /*
  * calculate stack size and offsets
  */
 static int
-offcalc(struct interpass_prolog * ipp)
+offcalc(struct interpass_prolog * ipp, int omitfp)
 {
 	int i, j, addto;
 
+	(void)ipp;
+	memset(regoff, 0, sizeof(regoff));
 	addto = p2maxautooff;
 	SETOFF(addto, SZINT / SZCHAR);
 
-	for (i = p2env.p_regs[0], j = 0; i; i >>= 1, j++) {
-		if (i & 1) {
+	if (omitfp) {
+		for (j = S0; j <= S7; j++) {
 			addto += SZINT / SZCHAR;
 			regoff[j] = addto;
+		}
+	} else {
+		for (i = p2env.p_regs[0], j = 0; i; i >>= 1, j++) {
+			if (i & 1) {
+				addto += SZINT / SZCHAR;
+				regoff[j] = addto;
+			}
 		}
 	}
 
@@ -112,7 +138,9 @@ prologue(struct interpass_prolog * ipp)
 	printf("\t.ent %s\n", ipp->ipp_name);
 	printf("%s:\n", ipp->ipp_name);
 
-	addto = offcalc(ipp);
+	mips_omit_fp = mips_can_omit_fp(ipp);
+	addto = offcalc(ipp, mips_omit_fp);
+	mips_frame_adjust = addto;
 
 #ifndef TARGET_NO_ABICALLS
 	/* emit PIC only if -fpic or -fPIC set */
@@ -125,7 +153,8 @@ prologue(struct interpass_prolog * ipp)
 	}
 #endif
 
-	printf("\t.frame %s,%d,%s\n", rnames[FP], ARGINIT/SZCHAR, rnames[RA]);
+	printf("\t.frame %s,%d,%s\n",
+	    rnames[mips_omit_fp ? SP : FP], ARGINIT/SZCHAR, rnames[RA]);
 #ifndef TARGET_NO_ABICALLS
 	printf("\t.set noreorder\n");
 	printf("\t.cpload $25\t# pseudo-op to load GOT ptr into $25\n");
@@ -140,8 +169,10 @@ prologue(struct interpass_prolog * ipp)
 #endif
 
 	printf("\tsw %s,4(%s)\n", rnames[RA], rnames[SP]);
-	printf("\tsw %s,(%s)\n", rnames[FP], rnames[SP]);
-	printf("\tmove %s,%s\n", rnames[FP], rnames[SP]);
+	if (!mips_omit_fp) {
+		printf("\tsw %s,(%s)\n", rnames[FP], rnames[SP]);
+		printf("\tmove %s,%s\n", rnames[FP], rnames[SP]);
+	}
 
 #ifdef notyet
 	/* profiling */
@@ -162,8 +193,10 @@ prologue(struct interpass_prolog * ipp)
 
 	for (i = p2env.p_regs[0], j = 0; i; i >>= 1, j++)
 		if (i & 1)
-			printf("\tsw %s,-%d(%s) # save permanent\n",
-				rnames[j], regoff[j], rnames[FP]);
+			printf("\tsw %s,%d(%s) # save permanent\n",
+				rnames[j],
+				mips_omit_fp ? addto - regoff[j] : -regoff[j],
+				rnames[mips_omit_fp ? SP : FP]);
 
 }
 
@@ -172,24 +205,43 @@ eoftn(struct interpass_prolog * ipp)
 {
 	int i, j;
 
-	(void) offcalc(ipp);
+	(void) offcalc(ipp, mips_omit_fp);
 
-	if (ipp->ipp_ip.ip_lbl == 0)
+	if (ipp->ipp_ip.ip_lbl == 0) {
+		mips_omit_fp = 0;
+		mips_frame_adjust = 0;
 		return;		/* no code needs to be generated */
+	}
 
 	/* return from function code */
 	for (i = p2env.p_regs[0], j = 0; i; i >>= 1, j++) {
 		if (i & 1)
-			printf("\tlw %s,-%d(%s)\n\tnop\n",
-				rnames[j], regoff[j], rnames[FP]);
+			printf("\tlw %s,%d(%s)\n\tnop\n",
+				rnames[j],
+				mips_omit_fp ? mips_frame_adjust - regoff[j] : -regoff[j],
+				rnames[mips_omit_fp ? SP : FP]);
 	}
 
-	printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[FP], ARGINIT/SZCHAR);
-	printf("\tlw %s,%d(%s)\n", rnames[RA], 4-ARGINIT/SZCHAR,  rnames[SP]);
-	printf("\tlw %s,%d(%s)\n", rnames[FP], 0-ARGINIT/SZCHAR,  rnames[SP]);
+	if (mips_omit_fp) {
+		if (mips_frame_adjust)
+			printf("\taddiu %s,%s,%d\n",
+			    rnames[SP], rnames[SP], mips_frame_adjust);
+		printf("\tlw %s,4(%s)\n", rnames[RA], rnames[SP]);
+		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP],
+		    ARGINIT/SZCHAR);
+	} else {
+		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[FP],
+		    ARGINIT/SZCHAR);
+		printf("\tlw %s,%d(%s)\n", rnames[RA], 4-ARGINIT/SZCHAR,
+		    rnames[SP]);
+		printf("\tlw %s,%d(%s)\n", rnames[FP], 0-ARGINIT/SZCHAR,
+		    rnames[SP]);
+	}
 
 	printf("\tjr %s\n", rnames[RA]);
 	printf("\tnop\n");
+	mips_omit_fp = 0;
+	mips_frame_adjust = 0;
 
 #ifdef USE_GAS
 	printf("\t.end %s\n", ipp->ipp_name);
@@ -364,6 +416,8 @@ load_oreg_addr(int dst, NODE *p, const char *comment)
 {
 	CONSZ off = getlval(p);
 	int base = p->n_rval;
+
+	mips_adjust_frame_ref(&off, &base);
 
 	if (off >= -32768 && off <= 32767) {
 		printf("\taddiu %s,%s," CONFMT "\t# %s\n",
@@ -1245,6 +1299,9 @@ adrput_lowpart(FILE *io, NODE *p, TWORD dst)
 void
 adrput(FILE * io, NODE * p)
 {
+	CONSZ off;
+	int base;
+
 	/* output an address, with offsets, from p */
 
 	if (p->n_op == FLD)
@@ -1260,7 +1317,10 @@ adrput(FILE * io, NODE * p)
 		return;
 
 	case OREG:
-		fprintf(io, "%d(%s)", (int)getlval(p), rnames[p->n_rval]);
+		off = getlval(p);
+		base = p->n_rval;
+		mips_adjust_frame_ref(&off, &base);
+		fprintf(io, "%d(%s)", (int)off, rnames[base]);
 		return;
 
 	case ICON:
@@ -1282,6 +1342,169 @@ adrput(FILE * io, NODE * p)
 	}
 }
 
+static int
+mips_frame_ref_offset(NODE *p, CONSZ *offp)
+{
+	NODE *l, *r;
+
+	if (p == NIL)
+		return 0;
+
+	if (p->n_op == REG && p->n_rval == FPREG) {
+		*offp = 0;
+		return 1;
+	}
+
+	if (p->n_op != PLUS && p->n_op != MINUS)
+		return 0;
+
+	l = p->n_left;
+	r = p->n_right;
+	if (l == NIL || r == NIL || l->n_op != REG || l->n_rval != FPREG ||
+	    r->n_op != ICON || r->n_name[0] != '\0')
+		return 0;
+
+	*offp = getlval(r);
+	if (p->n_op == MINUS)
+		*offp = -*offp;
+	return 1;
+}
+
+static int
+mips_rewrite_frame_umul(NODE *p)
+{
+	NODE *old;
+	CONSZ off;
+
+	if (p->n_op != UMUL || !mips_frame_ref_offset(p->n_left, &off))
+		return 0;
+
+	old = p->n_left;
+	p->n_op = OREG;
+	p->n_name = "";
+	setlval(p, off + mips_frame_adjust);
+	p->n_rval = SP;
+	p->n_regw = NULL;
+	p->n_su = 0;
+	tfree(old);
+	return 1;
+}
+
+static void
+mips_rewrite_frame_ref(NODE *p)
+{
+	NODE *l, *r;
+	CONSZ off;
+	int base, opty;
+
+	if (!mips_omit_fp || p == NIL)
+		return;
+
+	if (mips_rewrite_frame_umul(p))
+		return;
+
+	if (p->n_op == OREG) {
+		off = getlval(p);
+		base = p->n_rval;
+		mips_adjust_frame_ref(&off, &base);
+		setlval(p, off);
+		p->n_rval = base;
+		return;
+	}
+
+	if (mips_frame_ref_offset(p, &off)) {
+		if (p->n_op == REG) {
+			if (mips_frame_adjust == 0) {
+				p->n_rval = SP;
+				return;
+			}
+			p->n_op = PLUS;
+			p->n_left = mklnode(REG, 0, SP, p->n_type);
+			p->n_right = mklnode(ICON, mips_frame_adjust, 0, INT);
+			p->n_regw = NULL;
+			p->n_su = 0;
+			return;
+		}
+		l = p->n_left;
+		r = p->n_right;
+		setlval(r, off + mips_frame_adjust);
+		l->n_rval = SP;
+		if (p->n_op == MINUS)
+			p->n_op = PLUS;
+		return;
+	}
+
+	opty = optype(p->n_op);
+	if (opty != LTYPE)
+		mips_rewrite_frame_ref(p->n_left);
+	if (opty == BITYPE)
+		mips_rewrite_frame_ref(p->n_right);
+}
+
+static void
+mips_find_need_fp(NODE *p, void *arg)
+{
+	int *needfp = arg;
+	CONSZ off;
+
+	if (*needfp)
+		return;
+
+	if (p->n_op == ASSIGN && p->n_left->n_op == REG &&
+	    regno(p->n_left) == FPREG) {
+		*needfp = 1;
+		return;
+	}
+
+	/*
+	 * FUNARG nodes decrement $sp while outgoing stack arguments are
+	 * prepared.  PCC's MIPS call templates may still reference locals
+	 * during that window, so such functions need a stable $fp base.
+	 */
+	if (p->n_op == FUNARG) {
+		*needfp = 1;
+		return;
+	}
+
+	/*
+	 * Late omit-FP rewriting can safely retarget already addressable
+	 * memory references, but raw frame-address values need instruction
+	 * selection to materialize them.  Keep $fp for those functions rather
+	 * than creating post-regalloc address expressions such as
+	 * "move $reg,off($sp)".
+	 */
+	if (mips_frame_ref_offset(p, &off)) {
+		*needfp = 1;
+		return;
+	}
+
+	/*
+	 * The current MIPS call templates temporarily decrement $sp while
+	 * preparing each call.  Keep a stable $fp in non-leaf functions until
+	 * outgoing call space is modeled as part of the fixed frame.
+	 */
+	if (callop(p->n_op)) {
+		*needfp = 1;
+		return;
+	}
+}
+
+static int
+mips_ipole_needs_fp(struct interpass *ipole)
+{
+	struct interpass *ip;
+	int needfp = 0;
+
+	DLIST_FOREACH(ip, ipole, qelem) {
+		if (ip->type != IP_NODE)
+			continue;
+		walkf(ip->ip_node, mips_find_need_fp, &needfp);
+		if (needfp)
+			break;
+	}
+	return needfp;
+}
+
 /* printf conditional and unconditional branches */
 void
 cbgen(int o, int lab)
@@ -1291,6 +1514,16 @@ cbgen(int o, int lab)
 void
 myreader(struct interpass * ipole)
 {
+}
+
+void
+myoptim_pre(struct interpass *ipole)
+{
+	struct interpass_prolog *ipp;
+
+	ipp = p2env.ipp;
+	if (mips_can_omit_fp(ipp) && mips_ipole_needs_fp(ipole))
+		ipp->ipp_flags |= IF_NEEDFP;
 }
 
 #if 0
@@ -1356,11 +1589,26 @@ void
 myoptim(struct interpass * ipole)
 {
 	struct interpass *ip;
+	struct interpass_prolog *ipp;
 
 #ifdef PCC_DEBUG
 	if (x2debug)
 		printf("myoptim:\n");
 #endif
+
+	ipp = p2env.ipp;
+	mips_omit_fp = mips_can_omit_fp(ipp);
+	if (mips_omit_fp && mips_ipole_needs_fp(ipole)) {
+		ipp->ipp_flags |= IF_NEEDFP;
+		mips_omit_fp = 0;
+	}
+	if (!p2regalloc_done) {
+		mips_omit_fp = 0;
+		return;
+	}
+	if (!mips_omit_fp)
+		return;
+	mips_frame_adjust = offcalc(ipp, 1);
 
 #if 0
 	stacksize = 0;
@@ -1369,10 +1617,12 @@ myoptim(struct interpass * ipole)
 	DLIST_FOREACH(ip, ipole, qelem) {
 		if (ip->type != IP_NODE)
 			continue;
+		mips_rewrite_frame_ref(ip->ip_node);
 #if 0
 		walkf(ip->ip_node, calcstacksize, 0);
 #endif
 	}
+	mips_omit_fp = 0;
 }
 
 /*

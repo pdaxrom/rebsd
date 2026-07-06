@@ -74,6 +74,7 @@ int nrecur;
 int thisline;
 int fregs;
 int p2autooff, p2maxautooff;
+int p2regalloc_done;
 
 NODE *nodepole;
 struct interpass prepole;
@@ -762,8 +763,14 @@ pass2_compile(struct interpass *ip)
 
 	fixxasm(p2e); /* setup for extended asm */
 
+	myoptim_pre(&p2e->ipole);
+	p2regalloc_done = 0;
 	optimize(p2e);
+	myoptim_pre(&p2e->ipole);
 	ngenregs(p2e);
+	p2regalloc_done = 1;
+	myoptim(&p2e->ipole);
+	p2regalloc_done = 0;
 
 	if (xtemps && xdeljumps)
 		deljumps(p2e);

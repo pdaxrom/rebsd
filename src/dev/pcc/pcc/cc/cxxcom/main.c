@@ -44,6 +44,7 @@ int b2debug, c2debug, e2debug, f2debug, g2debug, o2debug;
 int r2debug, s2debug, t2debug, u2debug, x2debug;
 int gflag, kflag, pflag, sflag;
 int sspflag;
+int xomitframe;
 int xscp, xssa, xtailcall, xtemps, xdeljumps, xdce, xinline, xccp, xgnu89, xgnu99;
 int xuchar;
 int freestanding;
@@ -109,7 +110,9 @@ fflags(char *str)
 		flagval = 0;
 	}
 
-	if (strcmp(str, "stack-protector") == 0)
+	if (strcmp(str, "omit-frame-pointer") == 0)
+		xomitframe = flagval;
+	else if (strcmp(str, "stack-protector") == 0)
 		sspflag = flagval;
 	else if (strcmp(str, "stack-protector-all") == 0)
 		sspflag = flagval;

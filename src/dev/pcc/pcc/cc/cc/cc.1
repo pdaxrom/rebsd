@@ -169,6 +169,14 @@ Generate PIC code.
 Tells C compiler to generate PIC code
 and tells assembler that PIC code has been generated.
 .\" TODO: document difference between PIC and pic
+.It Fl fomit-frame-pointer
+Do not keep a dedicated frame pointer register in functions where the target
+backend can address the stack frame relative to the stack pointer.
+On MIPS, the backend keeps a frame pointer for functions that need a stable
+frame base, including non-leaf functions, functions using
+.Fn alloca ,
+raw frame-address users, and code that explicitly assigns the frame pointer
+register.
 .It Fl funsigned-char
 Tell the compiler to treat
 .Sq char
