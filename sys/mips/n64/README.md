@@ -485,6 +485,11 @@ current N64 work is staged as follows:
   `/root/types-smoke.sh`, `/root/ll-smoke.sh`, `/root/ll-abi-smoke.sh`,
   `/root/cc-pcc-smoke.sh`, `mount`, `df`, `w`, `ps aux`, `/sbin/pstat -T`,
   and `/root/romfs-smoke.sh` all passed;
+- on 2026-07-06, the UART-only boot isolation ROMs all booted on real N64
+  hardware: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap. These builds
+  use `N64_MINIMAL_UART_ONLY=1`; the minimal rootfs must include `/bin/login`
+  in addition to `/libexec/getty`, otherwise entering `root` only respawns the
+  login prompt because `getty` cannot exec the login program;
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
@@ -1194,6 +1199,13 @@ logical 1 KiB swap block is stored as zero, raw, or compressed data in 256-byte
 physical units.  If a process image cannot be represented in the physical
 store, swapout fails with `ENOMEM` instead of panicking.  `N64_ZSWAP=0` restores
 the raw RAM swap sizing for comparison.
+
+For boot isolation, `N64_MINIMAL_UART_ONLY=1` forces UART-only console/debug
+drivers and builds a small rootfs while still packaging it as `rootfs.img` in
+the ROM TOC.  This keeps the kernel/rootfs lookup path identical to normal
+ROMs.  The minimal rootfs intentionally carries `init`, `getty`, `login`, `sh`,
+`mount`, `mkfs`, and a few file utilities so a successful boot can reach a
+usable root shell.
 
 The printed boot sizes therefore differ by installed RDRAM:
 

@@ -6,8 +6,10 @@ PortableCC/pcc is available as a supported opt-in compiler for the MIPS rootfs
 and N64 userland.  PCC kernel builds are also available as explicit gates for
 Malta, Malta64, and N64.  PCC has passed the Malta and Malta64/R4000 QEMU
 hard-float and soft-float rootfs gates, plus hard-float PCC kernel/rootfs QEMU
-gates for Malta and Malta64.  The updated N64 hard/soft PCC paths still need
-fresh real hardware passes before becoming the N64 hardware baseline.
+gates for Malta and Malta64.  The updated N64 UART-only boot matrix passed on
+real hardware with PCC and GCC kernels, raw swap, and zswap.  The full updated
+N64 hard/soft PCC rootfs smoke still needs fresh real hardware passes before
+becoming the N64 hardware baseline.
 
 Current policy:
 
@@ -61,6 +63,7 @@ make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.
 make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc malta64.elf
 make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc unix.elf
 make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
+make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 N64_ZSWAP=1 kernel.z64 preflight.z64
 ```
 
 The QEMU PCC smoke matrix verified on 2026-07-05 is:
@@ -119,6 +122,13 @@ N64 builds default to `N64_ZSWAP=1`.  The compressed RAM swap backend exposes a
 larger logical swap map on real hardware while keeping the same physical RDRAM
 pool.  Use `N64_ZSWAP=0` only when comparing against the old raw RAM swap
 layout.
+
+The 2026-07-06 real N64 UART-only boot isolation matrix passed for all four
+debug ROMs: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap.  These ROMs
+use `N64_MINIMAL_UART_ONLY=1` and a small rootfs containing `/sbin/init`,
+`/libexec/getty`, `/bin/login`, `/bin/sh`, and the basic mount/fs tools.  The
+minimal rootfs must keep `/bin/login`; without it `getty` accepts a username,
+fails its login exec, exits, and `init` immediately respawns a new login prompt.
 
 Standalone cross SDK builds use common MIPS selectors:
 

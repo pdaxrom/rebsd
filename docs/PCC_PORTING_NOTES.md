@@ -128,7 +128,9 @@ Completed for this milestone:
 - PCC kernel builds now use the standalone cross PCC path without GCC wrapper
   scripts.  The verified Malta and Malta64 QEMU hard-float gates compile the
   kernel with PCC, build the PCC rootfs, boot, and run `/root/pcc-smoke-all.sh`.
-  The N64 PCC hard-float ROM build also completes for hardware smoke.
+  The N64 PCC hard-float full zswap ROM build also completes for hardware
+  smoke, and the UART-only real-hardware boot isolation matrix passed with PCC
+  and GCC kernels, raw swap, and zswap.
 - Kernel version strings now include a detailed build banner:
   builder user/host, selected compiler and compiler version, CPU, float ABI,
   and endian ABI.
@@ -343,9 +345,13 @@ The current C gate is green in these environments:
   `qemu-system-mips64 -M malta -cpu R4000 -m 64M -nographic`.
 - Real N64 hardware normal hard-float PCC rootfs smoke from the earlier gate.
   The updated hard/soft split still needs a fresh real-hardware pass.
-- N64 hard-float PCC kernel/userland ROM build with `N64_ZSWAP=1`.  The ROM
-  build is ready for the next real-hardware smoke; runtime validation is still
-  pending.
+- N64 UART-only boot isolation on real hardware passed on 2026-07-06 for
+  PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap.  The minimal debug
+  rootfs includes `/bin/login`; without it `getty` respawns after username
+  entry because `/bin/login` cannot be executed.
+- N64 hard-float PCC kernel/userland full rootfs ROM build with `N64_ZSWAP=1`.
+  The ROM build is ready for the next full real-hardware smoke; runtime
+  validation of the full rootfs is still pending.
 
 The 2026-07-05 QEMU smoke matrix finished with:
 

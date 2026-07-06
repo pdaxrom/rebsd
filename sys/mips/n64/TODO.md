@@ -217,6 +217,11 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   2026-07-05 for `malta64/vr4300 hard`, `malta64/vr4300 soft`,
   `malta/mips32r2 hard`, and `malta/mips32r2 soft` with
   `/root/pcc-smoke-all.sh` and `linpack-pcc`.
+- [x] Boot-isolate the updated N64 kernel/rootfs path on real hardware with
+  UART-only minimal ROMs: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap
+  all reached login on 2026-07-06.  The minimal rootfs now includes
+  `/bin/login`, so `getty` can exec the login program instead of respawning the
+  prompt after a username is entered.
 - [ ] Hardware-smoke the updated PCC hard-float N64 rootfs on real hardware
   after the QEMU matrix stays stable.
 - [ ] Hardware-smoke the updated PCC soft-float N64 rootfs on real hardware.
@@ -626,6 +631,8 @@ the board-specific generated/appended manifest.
 - [x] Add N64 compressed RAM swap (`N64_ZSWAP=1` by default) so native PCC
   smoke can use a larger logical swap map without stealing more physical RDRAM
   from user memory or the framebuffer reserve
+- [x] Confirm the UART-only `N64_ZSWAP=1` and `N64_ZSWAP=0` debug ROMs boot on
+  real N64 hardware with both PCC-built and GCC-built kernels.
 - [x] Add `/dev/fb0` as the framebuffer device with read/write access plus
   mode ioctls
 - [x] Add `/bin/fbset` through the shared `src/cmd` install flow and include
