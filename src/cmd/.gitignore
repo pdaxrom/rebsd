@@ -23,6 +23,7 @@ expr.c
 false
 fgrep
 file
+free
 grep
 head
 hostid
@@ -59,12 +60,14 @@ tail
 tar
 tee
 time
+top
 touch
 tr
 true
 tsort
 tty
 uniq
+uptime
 vmstat
 w
 wall

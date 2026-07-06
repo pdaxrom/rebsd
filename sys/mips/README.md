@@ -1,6 +1,6 @@
 # ReBSD MIPS ports
 
-This tree is the shared home for big-endian MIPS ports.
+This tree is the shared home for MIPS ports.
 
 Layout:
 
@@ -10,10 +10,14 @@ Layout:
   n64cart hardware.
 - `malta/` - QEMU Malta board support: 16550 serial console, QEMU-loaded
   read-only root filesystem, 4 MiB wired user window, and RAM-backed swap.
+- `maltael/` - little-endian QEMU Malta board config.  It reuses the Malta
+  board support code and builds the root filesystem with external `mipsel` GCC.
 
 Both Malta and N64 are built as boards under the shared `sys/mips` architecture.
 Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
 `make -C sys/mips BOARD=malta kernel` for the QEMU Malta kernel.
+Use `make -C sys/mips BOARD=maltael rootfs.img kernel` for the little-endian
+Malta GCC-only bring-up.
 
 ## Running Malta in QEMU
 
@@ -34,6 +38,21 @@ Or run the generated kernel directly:
 ```
 qemu-system-mips -M malta -m 32M -nographic -serial mon:stdio \
     -no-reboot -kernel sys/mips/malta/unix.elf
+```
+
+For little-endian Malta, build with the mipsel GCC toolchain:
+
+```
+make -C sys/mips BOARD=maltael rootfs.img kernel
+```
+
+The `maltael` config defaults to
+`/Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-`, sets
+`MIPS_ROOTFS_ENDIAN=little`, and disables target-side PCC staging until PCC is
+ready for little endian.  Run it with:
+
+```
+make -C sys/mips BOARD=maltael run
 ```
 
 The Malta kernel-visible RAM size is controlled by `MALTA_RAM_KBYTES`; QEMU's

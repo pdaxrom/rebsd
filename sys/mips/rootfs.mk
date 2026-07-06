@@ -30,8 +30,10 @@ MIPS_ROOTFS_ENDIANS = big little
 ifeq ($(filter $(MIPS_ROOTFS_ENDIAN),$(MIPS_ROOTFS_ENDIANS)),)
 $(error Unsupported MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN); expected one of $(MIPS_ROOTFS_ENDIANS))
 endif
+ifeq ($(MIPS_ROOTFS_COMPILER),pcc)
 ifneq ($(MIPS_ROOTFS_ENDIAN),big)
-$(error MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN) is reserved for the future mipsel port; current mips-rebsd PCC is big-endian only)
+$(error MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN) is not supported by current mips-rebsd PCC; use MIPS_ROOTFS_COMPILER=gcc for mipsel)
+endif
 endif
 
 MIPS_ROOTFS_ABI = $(MIPS_ROOTFS_ENDIAN).$(MIPS_ROOTFS_CPU).$(MIPS_ROOTFS_FLOAT)
@@ -235,6 +237,16 @@ MIPS_NATIVE_PCC_BUILD_SCRIPT = $(TOPSRC)/sys/mips/tools/native-pcc-build.py
 MIPS_NATIVE_PCC_BUILD ?= mips-native-pcc-build.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_PCC_DIR ?= mips-native-pcc.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_PCC_STAMP = $(MIPS_NATIVE_PCC_DIR)/.built
+MIPS_ROOTFS_NATIVE_PCC ?= $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),0,1)
+ifeq ($(MIPS_ROOTFS_COMPILER),pcc)
+ifneq ($(MIPS_ROOTFS_NATIVE_PCC),1)
+$(error MIPS_ROOTFS_COMPILER=pcc requires MIPS_ROOTFS_NATIVE_PCC=1)
+endif
+endif
+MIPS_ROOTFS_NATIVE_PCC_STAMPS =
+ifeq ($(MIPS_ROOTFS_NATIVE_PCC),1)
+MIPS_ROOTFS_NATIVE_PCC_STAMPS = $(MIPS_NATIVE_STAMP) $(MIPS_NATIVE_PCC_STAMP)
+endif
 
 MIPS_LIBPCC_DIR = $(TOPSRC)/src/dev/pcc/pcc-libs/libpcc
 MIPS_LIBPCC_OBJS = cmpdi2.o divdi3.o fixdfdi.o fixsfdi.o fixunsdfdi.o \
@@ -488,6 +500,21 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
     $(MIPS_ROOTFS_BOARD_MANIFEST) $(MIPS_ROOTFS_USER_STAMP) \
     $(MIPS_ROOTFS_EXTRA_STAMPS)
 	cp $(MIPS_ROOTFS_MANIFEST) $@
+	if [ "$(MIPS_ROOTFS_NATIVE_PCC)" != "1" ]; then \
+	    awk 'BEGIN { skip = 0 } \
+	        /^symlink \/bin\/cpp$$/ { skip = 1; next } \
+	        skip && /^target / { skip = 0; next } \
+	        /^dir \/usr\/libexec\/pcc$$/ { next } \
+	        /^file \/(usr\/bin\/(cc|cpp|pcc)|usr\/lib\/libpcc\.a|usr\/libexec\/pcc\/(ccom|cpp))$$/ { skip = 1; next } \
+	        skip && /^mode / { skip = 0; next } \
+	        { skip = 0; print }' $@ > $@.tmp; \
+	    mv $@.tmp $@; \
+	fi
+	if [ "$(MIPS_ROOTFS_ENDIAN)" = "little" ]; then \
+	    sed 's|^file /lib/retroImageBE$$|file /lib/retroImage|' \
+	        $@ > $@.tmp; \
+	    mv $@.tmp $@; \
+	fi
 	if [ -n "$(MIPS_ROOTFS_BOARD_MANIFEST)" ] && \
 	    [ -f "$(MIPS_ROOTFS_BOARD_MANIFEST)" ]; then \
 	    cat $(MIPS_ROOTFS_BOARD_MANIFEST) >> $@; \
@@ -601,8 +628,8 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 	touch $@
 
 $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
-    $(MIPS_ROOTFS_USERLAND_STAMP) $(MIPS_NATIVE_STAMP) \
-    $(MIPS_NATIVE_PCC_STAMP) $(MIPS_MAKEWHATIS_SED) \
+    $(MIPS_ROOTFS_USERLAND_STAMP) $(MIPS_ROOTFS_NATIVE_PCC_STAMPS) \
+    $(MIPS_MAKEWHATIS_SED) \
     $(MIPS_ROOTFS_MAKEFILE) Makefile
 	mkdir -p $(MIPS_ROOTFS_STAGE)/share/misc \
 	    $(MIPS_ROOTFS_STAGE)/share/man/cat1 \
@@ -623,37 +650,47 @@ $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
 	        mv -f $(MIPS_ROOTFS_STAGE)/libexec/$$file $(MIPS_ROOTFS_USR_LIBEXEC)/$$file; \
 	    fi; \
 	done
-	rm -f $(MIPS_ROOTFS_USR_BIN)/cc $(MIPS_ROOTFS_USR_BIN)/cpp \
-	    $(MIPS_ROOTFS_USR_BIN)/pcc $(MIPS_ROOTFS_USR_BIN)/p++ \
-	    $(MIPS_ROOTFS_USR_BIN)/lcc $(MIPS_ROOTFS_USR_BIN)/scc
-	rm -f $(MIPS_ROOTFS_USR_LIBEXEC)/ccom $(MIPS_ROOTFS_USR_LIBEXEC)/lccom \
-	    $(MIPS_ROOTFS_USR_LIBEXEC)/smallc $(MIPS_ROOTFS_USR_LIBEXEC)/smlrc
-	rm -f $(MIPS_ROOTFS_USR_LIBEXEC)/pcc/cxxcom
-	mkdir -p $(MIPS_ROOTFS_USR_LIBEXEC)/pcc
-	cp -p $(MIPS_NATIVE_PCC_DIR)/cc $(MIPS_ROOTFS_USR_BIN)/cc
-	cp -p $(MIPS_NATIVE_PCC_DIR)/cc $(MIPS_ROOTFS_USR_BIN)/pcc
-	cp -p $(MIPS_NATIVE_PCC_DIR)/cc $(MIPS_ROOTFS_USR_BIN)/cpp
-	cp -p $(MIPS_NATIVE_PCC_DIR)/cpp $(MIPS_ROOTFS_USR_LIBEXEC)/pcc/cpp
-	cp -p $(MIPS_NATIVE_PCC_DIR)/ccom $(MIPS_ROOTFS_USR_LIBEXEC)/pcc/ccom
+	if [ "$(MIPS_ROOTFS_NATIVE_PCC)" = "1" ]; then \
+	    rm -f $(MIPS_ROOTFS_USR_BIN)/cc $(MIPS_ROOTFS_USR_BIN)/cpp \
+	        $(MIPS_ROOTFS_USR_BIN)/pcc $(MIPS_ROOTFS_USR_BIN)/p++ \
+	        $(MIPS_ROOTFS_USR_BIN)/lcc $(MIPS_ROOTFS_USR_BIN)/scc; \
+	    rm -f $(MIPS_ROOTFS_USR_LIBEXEC)/ccom $(MIPS_ROOTFS_USR_LIBEXEC)/lccom \
+	        $(MIPS_ROOTFS_USR_LIBEXEC)/smallc $(MIPS_ROOTFS_USR_LIBEXEC)/smlrc; \
+	    rm -f $(MIPS_ROOTFS_USR_LIBEXEC)/pcc/cxxcom; \
+	    mkdir -p $(MIPS_ROOTFS_USR_LIBEXEC)/pcc; \
+	    cp -p $(MIPS_NATIVE_PCC_DIR)/cc $(MIPS_ROOTFS_USR_BIN)/cc; \
+	    cp -p $(MIPS_NATIVE_PCC_DIR)/cc $(MIPS_ROOTFS_USR_BIN)/pcc; \
+	    cp -p $(MIPS_NATIVE_PCC_DIR)/cc $(MIPS_ROOTFS_USR_BIN)/cpp; \
+	    cp -p $(MIPS_NATIVE_PCC_DIR)/cpp $(MIPS_ROOTFS_USR_LIBEXEC)/pcc/cpp; \
+	    cp -p $(MIPS_NATIVE_PCC_DIR)/ccom $(MIPS_ROOTFS_USR_LIBEXEC)/pcc/ccom; \
+	fi
 	if [ -d $(MIPS_ROOTFS_STAGE)/share ]; then \
 	    cp -pR $(MIPS_ROOTFS_STAGE)/share/. $(MIPS_ROOTFS_USR_SHARE)/; \
 	    rm -rf $(MIPS_ROOTFS_STAGE)/share; \
 	fi
 	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/mips
 	cp -p $(TOPSRC)/sys/mips/*.h $(MIPS_ROOTFS_USR_INCLUDE)/mips/
-	for lib in $(MIPS_NATIVE_LIBS); do \
-	    cp -p $(MIPS_NATIVE_DIR)/$$lib $(MIPS_ROOTFS_USR_LIB)/$$lib; \
-	done
-	for lib in $(MIPS_NATIVE_SOFTFLOAT_LIBS); do \
-	    cp -p $(MIPS_NATIVE_SOFTFLOAT_DIR)/$$lib \
-	        $(MIPS_ROOTFS_USR_LIB)/softfloat/$$lib; \
-	done
-	for lib in libc.a libm.a libpcc.a; do \
-	    $(MIPS_PCC_RANLIB) $(MIPS_ROOTFS_USR_LIB)/$$lib; \
-	done
-	for lib in $(MIPS_NATIVE_SOFTFLOAT_LIBS); do \
-	    $(MIPS_PCC_RANLIB) $(MIPS_ROOTFS_USR_LIB)/softfloat/$$lib; \
-	done
+	if [ "$(MIPS_ROOTFS_NATIVE_PCC)" = "1" ]; then \
+	    for lib in $(MIPS_NATIVE_LIBS); do \
+	        cp -p $(MIPS_NATIVE_DIR)/$$lib $(MIPS_ROOTFS_USR_LIB)/$$lib; \
+	    done; \
+	    for lib in $(MIPS_NATIVE_SOFTFLOAT_LIBS); do \
+	        cp -p $(MIPS_NATIVE_SOFTFLOAT_DIR)/$$lib \
+	            $(MIPS_ROOTFS_USR_LIB)/softfloat/$$lib; \
+	    done; \
+	    for lib in libc.a libm.a libpcc.a; do \
+	        $(MIPS_PCC_RANLIB) $(MIPS_ROOTFS_USR_LIB)/$$lib; \
+	    done; \
+	    for lib in $(MIPS_NATIVE_SOFTFLOAT_LIBS); do \
+	        $(MIPS_PCC_RANLIB) $(MIPS_ROOTFS_USR_LIB)/softfloat/$$lib; \
+	    done; \
+	else \
+	    cp -p $(TOPSRC)/src/crt0.o $(MIPS_ROOTFS_USR_LIB)/crt0.o; \
+	    cp -p $(TOPSRC)/src/libc.a $(MIPS_ROOTFS_USR_LIB)/libc.a; \
+	    cp -p $(TOPSRC)/src/libm.a $(MIPS_ROOTFS_USR_LIB)/libm.a; \
+	    $(MIPS_USERLAND_RANLIB) $(MIPS_ROOTFS_USR_LIB)/libc.a; \
+	    $(MIPS_USERLAND_RANLIB) $(MIPS_ROOTFS_USR_LIB)/libm.a; \
+	fi
 	mkdir -p $(MIPS_ROOTFS_USR_SHARE)/man/cat1 \
 	    $(MIPS_ROOTFS_USR_SHARE)/man/cat5 \
 	    $(MIPS_ROOTFS_USR_SHARE)/man/cat8

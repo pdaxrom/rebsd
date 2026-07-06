@@ -13,7 +13,7 @@ ifeq ($(BOARD_KCONFIG_SRCS),)
 BOARD_KCONFIG_SRCS = Makefile.kconf files.kconf devices.kconf
 endif
 
-.PHONY: all reconfig clean clean-all unix kernel run run-early run-net \
+.PHONY: all reconfig clean clean-all unix kernel rootfs.img run run-early run-net \
         run-vr4300 kernel.z64 preflight.z64 \
         cross-pcc-sdk cross-pcc-sdk-tools clean-cross-pcc-sdk \
         smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain \
@@ -26,7 +26,7 @@ endif
 all: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) all
 
-unix kernel kernel.z64 preflight.z64: $(BOARD_DIR)/Makefile
+unix kernel rootfs.img kernel.z64 preflight.z64: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
 
 run run-early run-net run-vr4300: $(BOARD_DIR)/Makefile

@@ -35,9 +35,9 @@ TARGET_PLATFORM ?= pic32
 KERNEL_DIR   = sys/$(TARGET_PLATFORM)
 KERNEL_MAKE_ARGS =
 
-ifeq ($(TARGET_PLATFORM),n64)
+ifneq ($(filter $(TARGET_PLATFORM),n64 malta malta64 maltael),)
 KERNEL_DIR = sys/mips
-KERNEL_MAKE_ARGS = BOARD=n64
+KERNEL_MAKE_ARGS = BOARD=$(TARGET_PLATFORM)
 endif
 
 all: tools

@@ -1,4 +1,4 @@
-PARAM = -DMALTA
+PARAM = -DMALTAEL
 PARAM += -DMIPS32
 PARAM += -DMALTA_UART_ENABLED
 PARAM += -DMALTA_ENABLED
@@ -12,6 +12,16 @@ PARAM += -DINET_ENABLED
 PARAM += -DUNIXDOMAIN_ENABLED
 PARAM += -DCONS_MINOR=0
 PARAM += -DCONS_MAJOR=0
+MALTA_HW_MODEL = MIPS Malta 24Kf little-endian
+MALTA_VERSION_NAME = MaltaEL
+MALTA_QEMU = qemu-system-mipsel
+MIPS_ROOTFS_NATIVE_PCC = 0
+MIPS_KERNEL_COMPILER = gcc
+MIPS_ROOTFS_COMPILER = gcc
+MIPS_TARGET_ENDIAN = little
+MIPS_ROOTFS_ENDIAN = little
+MIPS_PREFIX = /Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-
+MIPS_TOOLCHAIN = /Users/sash/Library/mipsel-toolchain
 #
 # Makefile template for shared MIPS ports.
 #

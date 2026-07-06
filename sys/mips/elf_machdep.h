@@ -5,7 +5,11 @@
                         break;
 
 #define ARCH_ELFSIZE            32
+#ifdef TARGET_LITTLE_ENDIAN
+#define ELF_TARGET_DATA         ELFDATA2LSB
+#else
 #define ELF_TARGET_DATA         ELFDATA2MSB
+#endif
 
 #define R_MIPS_NONE             0
 #define R_MIPS_16               1

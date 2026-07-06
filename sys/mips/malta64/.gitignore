@@ -1,6 +1,8 @@
 .deps/
 rootfs.stage/
 rootfs.generated.manifest
+mips-user.ld
+mips-userland*.stamp
 machine
 sys
 vers.c

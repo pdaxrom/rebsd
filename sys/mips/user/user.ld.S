@@ -7,7 +7,11 @@
 #undef MIPS
 #endif
 
+#ifdef TARGET_LITTLE_ENDIAN
+OUTPUT_FORMAT("elf32-littlemips", "elf32-bigmips", "elf32-littlemips")
+#else
 OUTPUT_FORMAT("elf32-bigmips", "elf32-bigmips", "elf32-littlemips")
+#endif
 OUTPUT_ARCH(mips)
 ENTRY(_start)
 

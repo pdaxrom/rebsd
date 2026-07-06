@@ -3,7 +3,8 @@
 #
 MALTA_PORT64 = $(filter -DMALTA64,$(PARAM))
 MALTA_CPU_TUNE ?= $(if $(MALTA_PORT64),r4000,24kf)
-MIPS_ARCH ?= $(if $(MALTA_PORT64),-EB -mips3 -mabi=32 -mtune=$(MALTA_CPU_TUNE),-EB -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE))
+MIPS_ARCH_ENDIAN ?= $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),-EL,-EB)
+MIPS_ARCH ?= $(if $(MALTA_PORT64),$(MIPS_ARCH_ENDIAN) -mips3 -mabi=32 -mtune=$(MALTA_CPU_TUNE),$(MIPS_ARCH_ENDIAN) -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE))
 MALTA_QEMU_RAM ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),64M,32M)
 MALTA_RAM_KBYTES ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),65536,32768)
 MALTA_RAMSWAP_KBYTES ?=
@@ -141,6 +142,7 @@ MIPS_LINPACK_SMOKE_MANIFEST ?= $(LINPACK_SMOKE_MANIFEST)
 include ../rootfs.mk
 
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
+                  $(MIPS_TARGET_ENDIAN_CFLAGS_$(MIPS_TARGET_ENDIAN)) \
                   -DROMFS_ENABLED \
                   -DMALTA_RAM_SIZE_OVERRIDE='($(MALTA_RAM_KBYTES) * 1024u)' \
                   -DMALTA_ROMDISK_BYTES_OVERRIDE='($(MIPS_ROOTFS_KBYTES) * 1024u)' \

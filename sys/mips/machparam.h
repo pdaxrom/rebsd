@@ -1,11 +1,15 @@
 /*
- * Machine dependent constants for big-endian MIPS ports.
+ * Machine dependent constants for MIPS ports.
  */
 #ifndef ENDIAN
 #define LITTLE          1234
 #define BIG             4321
 #define PDP             3412
+#ifdef TARGET_LITTLE_ENDIAN
+#define ENDIAN          LITTLE
+#else
 #define ENDIAN          BIG
+#endif
 
 #define MAXSLP          20
 

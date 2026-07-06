@@ -1,0 +1,32 @@
+#
+# QEMU Malta, little-endian MIPS.
+#
+architecture    "mips"
+cpu             "MIPS32"
+board           "MALTAEL"
+
+makeoptions     MIPS_TOOLCHAIN="/Users/sash/Library/mipsel-toolchain",
+                MIPS_PREFIX="/Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-",
+                MIPS_ROOTFS_ENDIAN=little,
+                MIPS_TARGET_ENDIAN=little,
+                MIPS_ROOTFS_COMPILER=gcc,
+                MIPS_KERNEL_COMPILER=gcc,
+                MIPS_ROOTFS_NATIVE_PCC=0,
+                MALTA_QEMU=qemu-system-mipsel,
+                MALTA_VERSION_NAME=MaltaEL,
+                MALTA_HW_MODEL="MIPS Malta 24Kf little-endian"
+
+options         "CONS_MAJOR=0", "CONS_MINOR=0"
+
+device          "malta_uart"
+
+service         malta
+service         pty     4
+service         ether   2
+service         malta_ne
+service         usbnet
+service         inet
+service         unixdomain
+
+config          unix    root on major 0 minor 0
+                        swap on major 1 minor 0
