@@ -49,7 +49,7 @@ make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
-make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
+make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
 ```
 
 The QEMU PCC smoke matrix verified on 2026-07-05 is:
@@ -74,6 +74,11 @@ libraries, then uses that cross PCC to build `crt0.o`, libc, libm, and
 PCC-built libraries.  Kernel PCC experiments must be requested explicitly with
 `MIPS_KERNEL_COMPILER=pcc` or `N64_KERNEL_COMPILER=pcc`; they are expected to
 fail until the documented `rdwri()` frontend bug is fixed.
+
+N64 builds default to `N64_ZSWAP=1`.  The compressed RAM swap backend exposes a
+larger logical swap map on real hardware while keeping the same physical RDRAM
+pool.  Use `N64_ZSWAP=0` only when comparing against the old raw RAM swap
+layout.
 
 Standalone cross SDK builds use common MIPS selectors:
 

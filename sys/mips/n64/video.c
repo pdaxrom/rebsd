@@ -279,7 +279,8 @@ n64_video_fill_info(unsigned mode, struct n64fb_info *info)
         info->fb_bytes = N64_VIDEO_320_BYTES;
         break;
     case N64FB_MODE_640X480:
-        if (rdram < N64_RDRAM_SIZE_8M)
+        if (rdram < N64_RDRAM_SIZE_8M ||
+            N64_EXPANSION_FB_RESERVED_BYTES < N64_VIDEO_640_BYTES)
             return ENOMEM;
         info->width = N64_VIDEO_640_WIDTH;
         info->height = N64_VIDEO_640_HEIGHT;
@@ -320,8 +321,12 @@ static void
 n64_video_init(void)
 {
     if (!n64_video_initialized) {
+#ifdef N64_HIGHRES_FB
         unsigned mode = n64_rdram_size() >= N64_RDRAM_SIZE_8M ?
             N64FB_MODE_640X480 : N64FB_MODE_320X240;
+#else
+        unsigned mode = N64FB_MODE_320X240;
+#endif
 
         (void)n64_video_set_mode(mode);
     }

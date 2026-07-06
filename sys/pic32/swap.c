@@ -27,7 +27,7 @@ extern dev_t swapdev;
 extern int physio(void (*strat) (struct buf*),
     struct buf *bp, dev_t dev, int rw, struct uio *uio);
 
-extern void swap(size_t blkno, size_t coreaddr, register int count, int rdflg);
+extern int swap(size_t blkno, size_t coreaddr, register int count, int rdflg);
 
 int swopen(dev_t dev, int mode, int flag)
 {

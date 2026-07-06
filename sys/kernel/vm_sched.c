@@ -63,7 +63,16 @@ sched()
                 n64_sched_trace++;
             }
 #endif
-            swapout (in_core, X_FREECORE, X_OLDSIZE, X_OLDSIZE);
+            if (swapout (in_core, X_FREECORE, X_OLDSIZE, X_OLDSIZE) != 0) {
+                in_core->p_flag |= SLOAD;
+                if (in_core->p_stat == SRUN)
+                    setrq (in_core);
+                in_core = 0;
+                swapped_out = 0;
+                ++runin;
+                sleep ((caddr_t)&runin, PSWP);
+                continue;
+            }
         }
         if (swapped_out) {
 #ifdef N64_TRACE

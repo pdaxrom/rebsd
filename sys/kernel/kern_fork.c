@@ -17,9 +17,49 @@
 int mpid;                   /* generic for unique process id's */
 struct forkstat forkstat;
 
+static void
+newproc_fail(struct proc *child)
+{
+    struct proc **pp;
+    struct file *fp;
+    int n;
+
+    for (n = 0; n <= u.u_lastfile; n++) {
+        fp = u.u_ofile[n];
+        if (fp != NULL)
+            fp->f_count--;
+    }
+    u.u_cdir->i_count--;
+    if (u.u_rdir)
+        u.u_rdir->i_count--;
+
+    if ((*child->p_prev = child->p_nxt) != NULL)
+        child->p_nxt->p_prev = child->p_prev;
+    for (pp = &pidhash[PIDHASH(child->p_pid)]; *pp; pp = &(*pp)->p_hash) {
+        if (*pp == child) {
+            *pp = child->p_hash;
+            break;
+        }
+    }
+
+    child->p_stat = 0;
+    child->p_pid = 0;
+    child->p_ppid = 0;
+    child->p_pgrp = 0;
+    child->p_flag = 0;
+    child->p_wchan = 0;
+    child->p_sig = 0;
+    child->p_sigcatch = 0;
+    child->p_sigignore = 0;
+    child->p_sigmask = 0;
+    child->p_pptr = 0;
+    child->p_nxt = freeproc;
+    freeproc = child;
+}
+
 /*
  * Create a new process -- the internal version of system call fork.
- * It returns 1 in the new process, 0 in the old.
+ * It returns 1 in the new process, 0 in the old, -1 on failure.
  */
 int
 newproc (int isvfork)
@@ -168,7 +208,12 @@ again:
     printf ("n64fork: before swapout child pid=%d paddr=%x\n",
         child->p_pid, child->p_addr);
 #endif
-    swapout (child, X_DONTFREE, X_OLDSIZE, X_OLDSIZE);
+    if (swapout (child, X_DONTFREE, X_OLDSIZE, X_OLDSIZE) != 0) {
+        parent->p_stat = SRUN;
+        u.u_procp = parent;
+        newproc_fail(child);
+        return -1;
+    }
     child->p_flag |= SSWAP;
 #ifdef N64_TRACE
     printf ("n64fork: after swapout child pid=%d paddr=%x flag=%x\n",
@@ -234,7 +279,16 @@ fork1 (int isvfork)
         return;
     }
     p1 = u.u_procp;
-    if (newproc (isvfork)) {
+    if (!swapout_possible(p1->p_dsize, p1->p_ssize)) {
+        u.u_error = ENOMEM;
+        return;
+    }
+    a = newproc (isvfork);
+    if (a < 0) {
+        u.u_error = ENOMEM;
+        return;
+    }
+    if (a) {
         /* Child */
         u.u_rval = 0;
         u.u_start = time.tv_sec;

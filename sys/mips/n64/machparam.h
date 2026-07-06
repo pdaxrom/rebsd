@@ -55,12 +55,21 @@
 #include <machine/layout.h>
 
 #define N64_RDRAM_SIZE          N64_BASE_RDRAM_SIZE
-#define MAXMEM                  N64_USER_MAXMEM
 
 #define KERNEL_DATA_START       N64_KERNEL_DATA_START
 #define KERNEL_DATA_END         N64_KERNEL_DATA_END
 #define USER_DATA_START         N64_USER_VADDR_START
+
+#if defined(KERNEL) && !defined(__ASSEMBLER__)
+unsigned n64_user_maxmem(void);
+unsigned n64_user_data_end(void);
+
+#define MAXMEM                  n64_user_maxmem()
+#define USER_DATA_END           n64_user_data_end()
+#else
+#define MAXMEM                  N64_USER_MAXMEM
 #define USER_DATA_END           N64_USER_VADDR_END
+#endif
 
 #define stacktop(siz)           (USER_DATA_END)
 #define stackbas(siz)           (USER_DATA_END-(siz))

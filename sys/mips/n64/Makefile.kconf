@@ -13,8 +13,16 @@ N64_KERNEL_CODE = $(N64_KERNEL_BASE) -msoft-float
 N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
 N64_DEBUG_UART_ONLY ?= 0
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_DEBUG_UART_ONLY)
+N64_HIGHRES_FB ?= 0
+N64_ZSWAP ?= 1
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_DEBUG_UART_ONLY).$(N64_HIGHRES_FB).$(N64_ZSWAP)
 N64_IOCONF      = ioconf
+ifeq ($(N64_HIGHRES_FB),1)
+PARAM += -DN64_HIGHRES_FB
+endif
+ifeq ($(N64_ZSWAP),1)
+PARAM += -DN64_ZSWAP
+endif
 ifeq ($(N64_DEBUG_UART_ONLY),1)
 PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
     -DUSBNET_ENABLED -DUSBNET_ECM -DUSBNET_VENDOR,$(PARAM))
@@ -39,24 +47,25 @@ N64_ROOTFS_USER_COMPAT_STAMP = $(N64_ROOTFS_STAGE)/.userland
 N64_ROOTFS_WHATIS = $(N64_ROOTFS_USR_SHARE)/man/whatis
 N64_USR_BIN_FILES = aout apropos ar as awk basename basic cal calendar cb chgrp \
                     cmp col comm compress deco diff diskspeed du ed egrep \
-                    emg env fbset fbview fgrep file find fold forth grep \
+                    emg env fbset fbview fgrep file find fold forth free grep \
                     groups head hostid id join last ld man matrix-as-vr4300 \
                     matrix-as-vr4300.sh make md5 med mesg more \
                     n64input nice nm nohup od pagesize pdc picoc pr \
                     printf printenv ps ptytest ranlib renice renumber retroforth rev \
                     rgbled rmail romfsctl setty size sl smux \
                     smoke-as-vr4300 smoke-as-vr4300.sh sort split strip sum \
-                    sysctl tail tar tcl tee telnet time touch tsort tty \
-                    uncompress uniq vmstat w wc wget whatis whereis who \
-                    whoami xargs zcat
+                    sysctl tail tar tcl tee telnet time top touch tsort tty \
+                    uncompress uniq uptime vmstat w wc wget whatis whereis \
+                    who whoami xargs zcat
 N64_USR_LIBEXEC_FILES = bigram code
 N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm \
                         compress cp date dd df diff du echo ed expr false \
-                        file find fold grep head hostid join kill last ln \
+                        file find fold free grep head hostid join kill last ln \
                         login ls make man mesg mkdir more mv nice od pagesize pr ps \
                         pcc printenv pwd rev rm rmail rmdir \
                         sed sh size sleep sort split strip sum tail tar tee \
-                        time touch tr true tsort tty uniq vmstat w wc whatis who
+                        time top touch tr true tsort tty uniq uptime vmstat w \
+                        wc whatis who
 N64_ROOTFS_CMD_CAT1_SOURCES = as:as emg:emg env:env nm:nm sl:sl wget:wget
 N64_ROOTFS_CAT1_ALIASES = egrep:grep fgrep:grep uncompress:compress \
                           zcat:compress nohup:nice cc:pcc cpp:pcc
@@ -251,10 +260,10 @@ N64_CMD_SUBDIRS = basic calendar chown chroot compress date2 deco dhclient diff 
                   sh shutdown sl smux stty sysctl tcl telnet \
                   telnetd test wget umount uname xargs
 N64_CMD_STDS = basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
-               du echo ed fgrep file grep head hostid join kill last ln \
+               du echo ed fgrep file free grep head hostid join kill last ln \
                mesg mkdir mv nice od pagesize pr printenv pwd rev rm rmail \
                rmdir size sleep sort split sum sync tail tar tee time touch \
-               tr tsort tty uniq w wc whereis who
+               top tr tsort tty uniq uptime w wc whereis who
 N64_CMD_NSTDS = egrep expr
 N64_CMD_OPERATORS = df
 N64_CMD_SCRIPTS = false nohup true
@@ -692,7 +701,7 @@ kernel_stage0.stripped.elf: kernel_stage0.elf
 	$(STRIP) -s -o $@ $<
 
 $(N64_BUILD_MODE_STAMP):
-	rm -f .build-mode.0 .build-mode.1
+	rm -f .build-mode.*
 	touch $@
 
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile

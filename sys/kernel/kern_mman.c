@@ -21,7 +21,8 @@ brk()
     newsize = ((struct a*)u.u_arg)->naddr - u.u_procp->p_daddr;
     if (newsize < 0)
         newsize = 0;
-    if (u.u_tsize + newsize + u.u_ssize > MAXMEM) {
+    if (u.u_tsize + newsize + u.u_ssize > MAXMEM ||
+        !swapout_possible(newsize, u.u_ssize)) {
         u.u_error = ENOMEM;
         return;
     }

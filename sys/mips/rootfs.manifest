@@ -337,6 +337,9 @@ mode 0775
 file /usr/bin/file
 mode 0775
 
+file /usr/bin/free
+mode 0775
+
 file /usr/bin/find
 mode 0775
 
@@ -556,6 +559,9 @@ mode 0775
 file /usr/bin/time
 mode 0775
 
+file /usr/bin/top
+mode 0775
+
 file /usr/bin/touch
 mode 0775
 
@@ -578,6 +584,9 @@ file /usr/bin/uncompress
 mode 0775
 
 file /usr/bin/uniq
+mode 0775
+
+file /usr/bin/uptime
 mode 0775
 
 file /usr/bin/vmstat
@@ -737,6 +746,8 @@ file /usr/share/man/cat1/find.0
 
 file /usr/share/man/cat1/fold.0
 
+file /usr/share/man/cat1/free.0
+
 file /usr/share/man/cat1/grep.0
 
 file /usr/share/man/cat1/groups.0
@@ -843,6 +854,8 @@ file /usr/share/man/cat1/test.0
 
 file /usr/share/man/cat1/time.0
 
+file /usr/share/man/cat1/top.0
+
 file /usr/share/man/cat1/touch.0
 
 file /usr/share/man/cat1/tr.0
@@ -858,6 +871,8 @@ file /usr/share/man/cat1/uname.0
 file /usr/share/man/cat1/uncompress.0
 
 file /usr/share/man/cat1/uniq.0
+
+file /usr/share/man/cat1/uptime.0
 
 file /usr/share/man/cat1/vmstat.0
 

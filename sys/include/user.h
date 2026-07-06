@@ -24,7 +24,9 @@
  * 0x80007400; contains the system stack (and possibly network stack) per
  * user; is cross referenced with the proc structure for the same process.
  */
+#ifndef MAXCOMLEN
 #define MAXCOMLEN   MAXNAMLEN   /* <= MAXNAMLEN, >= sizeof(ac_comm) */
+#endif
 
 struct user {
     struct  proc *u_procp;          /* pointer to proc structure */

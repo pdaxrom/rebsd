@@ -32,6 +32,26 @@ extern char _mips_exception_vector_end[];
 #define N64_DCACHE_LINE         16u
 #define N64_ICACHE_LINE         32u
 
+static unsigned
+n64_user_tlb_pairs_for_rdram(unsigned rdram)
+{
+    return rdram >= N64_RDRAM_SIZE_8M ?
+        N64_USER_TLB_PAIRS_8M : N64_USER_TLB_PAIRS_4M;
+}
+
+unsigned
+n64_user_maxmem(void)
+{
+    return n64_user_tlb_pairs_for_rdram(n64_rdram_size()) *
+        N64_USER_TLB_PAIR_SIZE;
+}
+
+unsigned
+n64_user_data_end(void)
+{
+    return USER_DATA_START + n64_user_maxmem();
+}
+
 static void
 early_puts(const char *s)
 {
@@ -75,14 +95,15 @@ void
 mips_sync_user_icache(void)
 {
     unsigned addr;
+    unsigned end = USER_DATA_END;
 
     n64_sync_memory();
     for (addr = USER_DATA_START & ~(N64_DCACHE_LINE - 1);
-        addr < USER_DATA_END; addr += N64_DCACHE_LINE)
+        addr < end; addr += N64_DCACHE_LINE)
         n64_cache_hit_writeback_invalidate_d(addr);
     n64_sync_memory();
     for (addr = USER_DATA_START & ~(N64_ICACHE_LINE - 1);
-        addr < USER_DATA_END; addr += N64_ICACHE_LINE)
+        addr < end; addr += N64_ICACHE_LINE)
         n64_cache_hit_invalidate_i(addr);
     n64_sync_memory();
 }
@@ -163,6 +184,7 @@ static void
 n64_tlb_init(void)
 {
     unsigned rdram = n64_rdram_size();
+    unsigned user_pairs = n64_user_tlb_pairs_for_rdram(rdram);
     unsigned fb_phys = n64_fb_tlb_phys(rdram);
     unsigned fb_entries = n64_fb_tlb_entries(rdram);
     unsigned i;
@@ -173,7 +195,7 @@ n64_tlb_init(void)
             0x40000000u + i * 0x2000u, 0, 0);
     }
 
-    for (i = 0; i < N64_USER_TLB_PAIRS; ++i) {
+    for (i = 0; i < user_pairs; ++i) {
         unsigned vaddr = USER_DATA_START + i * N64_USER_TLB_PAIR_SIZE;
         unsigned phys = N64_USER_PHYS_START + i * N64_USER_TLB_PAIR_SIZE;
 

@@ -196,7 +196,7 @@ void exit (int rv);
 /*
  * Swap I/O.
  */
-void swap (size_t blkno, size_t coreaddr, int count, int rdflg);
+int swap (size_t blkno, size_t coreaddr, int count, int rdflg);
 
 /*
  * Kill a process when ran out of swap space.
@@ -233,7 +233,12 @@ void hardclock (caddr_t pc, int ps);
 /*
  * Swap out a process.
  */
-void swapout (struct proc *p, int freecore, u_int odata, u_int ostack);
+int swapout (struct proc *p, int freecore, u_int odata, u_int ostack);
+
+/*
+ * Test whether a process image can be placed in the current swap map.
+ */
+int swapout_possible (u_int dsize, u_int ssize);
 
 /*
  * Swap a process in.
@@ -255,7 +260,8 @@ int suser (void);
  * controlling terminal device, and controlling terminal pointer.
  */
 struct tty;
-void fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp);
+void fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp,
+    char *comm, size_t commlen);
 
 /*
  * Grow the stack to include the SP.

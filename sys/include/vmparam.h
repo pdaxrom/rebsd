@@ -3,6 +3,8 @@
  * All rights reserved.  The Berkeley software License Agreement
  * specifies the terms and conditions for redistribution.
  */
+#ifndef _SYS_VMPARAM_H_
+#define _SYS_VMPARAM_H_
 
 /*
  * CTL_VM identifiers
@@ -10,6 +12,7 @@
 #define VM_METER    1       /* struct vmmeter */
 #define VM_LOADAVG  2       /* struct loadavg */
 #define VM_SWAPMAP  3       /* struct mapent _swapmap[] */
+#define VM_SWAPTOTAL 4      /* long: total swap bytes */
 #define VM_MAXID    5       /* number of valid vm ids */
 
 #ifndef KERNEL
@@ -18,5 +21,8 @@
     { "vmmeter", CTLTYPE_STRUCT }, \
     { "loadavg", CTLTYPE_STRUCT }, \
     { "swapmap", CTLTYPE_STRUCT }, \
+    { "swap_total", CTLTYPE_LONG }, \
 }
 #endif
+
+#endif /* _SYS_VMPARAM_H_ */

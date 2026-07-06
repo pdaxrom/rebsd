@@ -40,6 +40,9 @@
  * These are for the eproc, etext, einode, efile and map structures.
  */
 #ifndef KERNEL
+#ifndef MAXCOMLEN
+#include <sys/param.h>
+#endif
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/file.h>
@@ -186,6 +189,7 @@ struct kinfo_proc {
         pid_t   e_tpgid;        /* tty process group id */
         uid_t   e_ruid;         /* real uid */
     } kp_eproc;
+    char    ki_comm[MAXCOMLEN + 1]; /* BSD-style command name */
 };
 
 /*

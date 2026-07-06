@@ -228,6 +228,9 @@ int exec_estab(struct exec_params *epp)
     if (epp->text.len + epp->data.len + epp->heap.len + epp->stack.len > MAXMEM)
         return ENOMEM;
 
+    if (!swapout_possible(epp->data.len + epp->bss.len, epp->stack.len))
+        return ENOMEM;
+
     /*
      * Check for bss and data addresses over limit
     */

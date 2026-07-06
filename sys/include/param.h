@@ -25,6 +25,9 @@
 #define NOFILE      30      /* max open files per process */
 #define NCARGS      5120    /* # characters in exec arglist */
 #define NGROUPS     16      /* max number groups */
+#ifndef MAXCOMLEN
+#define MAXCOMLEN   63      /* max command name saved in u_comm */
+#endif
 
 #define NOGROUP     65535   /* marker for empty group set member */
 

@@ -285,10 +285,8 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
         return (sysctl_rdint(oldp, oldlenp, newp, ENDIAN));
     case HW_PHYSMEM:
         return (sysctl_rdlong(oldp, oldlenp, newp, physmem));
-#ifdef UCB_METER
     case HW_USERMEM:
-        return (sysctl_rdlong(oldp, oldlenp, newp, freemem));
-#endif
+        return (sysctl_rdlong(oldp, oldlenp, newp, MAXMEM));
     case HW_PAGESIZE:
         return (sysctl_rdint(oldp, oldlenp, newp, DEV_BSIZE));
     default:
@@ -342,8 +340,8 @@ debug_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, 
  * user.  Eventually (after all applications which look up the load average
  * the old way) have been converted we can change things.
  *
- * We do not call vmtotal(), that could get rather expensive, rather we rely
- * on the 5 second update.
+ * VM_METER refreshes vmtotal() before copying the cached totals so short
+ * lived commands see current memory counters.
  *
  * The swapmap case is 2.11BSD extension.
  */
@@ -365,9 +363,7 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
         return (sysctl_rdstruct(oldp, oldlenp, newp, &averunnable,
             sizeof(averunnable)));
     case VM_METER:
-#ifdef  notsure
-        vmtotal();  /* could be expensive to do this every time */
-#endif
+        vmtotal();
         return (sysctl_rdstruct(oldp, oldlenp, newp, &total,
             sizeof(total)));
     case VM_SWAPMAP:
@@ -376,8 +372,11 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
                     (char *)swapmap[0].m_map;
             return(0);
         }
-        return (sysctl_rdstruct(oldp, oldlenp, newp, swapmap,
+        return (sysctl_rdstruct(oldp, oldlenp, newp, swapmap[0].m_map,
             (int)swapmap[0].m_limit - (int)swapmap[0].m_map));
+    case VM_SWAPTOTAL:
+        return (sysctl_rdlong(oldp, oldlenp, newp,
+            (long)nswap * DEV_BSIZE));
     default:
         return (EOPNOTSUPP);
     }
@@ -671,7 +670,8 @@ sysctl_inode (char *where, size_t *sizep)
  * XXX - is 856 bytes long.
  */
 void
-fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp)
+fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp,
+    char *comm, size_t commlen)
 {
     register struct buf *bp;
     dev_t   ttyd;
@@ -679,16 +679,27 @@ fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp)
     struct  tty *ttyp;
     struct  user    *up;
 
+    if (comm && commlen)
+        comm[0] = '\0';
     if (p->p_stat == SZOMB) {
         ruid = (uid_t)-2;
         ttyp = NULL;
         ttyd = NODEV;
+        if (comm && commlen) {
+            strncpy(comm, "zombie", commlen - 1);
+            comm[commlen - 1] = '\0';
+        }
         goto out;
     }
     if (p->p_flag & SLOAD) {
-        ttyd = ((struct user *)p->p_addr)->u_ttyd;
-        ttyp = ((struct user *)p->p_addr)->u_ttyp;
-        ruid = ((struct user *)p->p_addr)->u_ruid;
+        up = (struct user *)p->p_addr;
+        ttyd = up->u_ttyd;
+        ttyp = up->u_ttyp;
+        ruid = up->u_ruid;
+        if (comm && commlen) {
+            strncpy(comm, up->u_comm, commlen - 1);
+            comm[commlen - 1] = '\0';
+        }
     } else {
         bp = geteblk();
         bp->b_dev = swapdev;
@@ -708,6 +719,10 @@ fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp)
             ruid = up->u_ruid;  /* u_ruid = offset 164 */
             ttyd = up->u_ttyd;  /* u_ttyd = offset 654 */
             ttyp = up->u_ttyp;  /* u_ttyp = offset 652 */
+            if (comm && commlen) {
+                strncpy(comm, up->u_comm, commlen - 1);
+                comm[commlen - 1] = '\0';
+            }
         }
         bp->b_flags |= B_AGE;
         brelse(bp);
@@ -729,12 +744,13 @@ out:
  * to expand the proc struct so we take a slight speed hit here.
  */
 static void
-fill_eproc(struct proc *p, struct eproc *ep)
+fill_eproc(struct proc *p, struct eproc *ep, char *comm, size_t commlen)
 {
     struct  tty *ttyp;
 
     ep->e_paddr = p;
-    fill_from_u(p, &ep->e_ruid, &ttyp, &ep->e_tdev);
+    fill_from_u(p, &ep->e_ruid, &ttyp, &ep->e_tdev,
+        comm, commlen);
     if  (ttyp)
         ep->e_tpgid = ttyp->t_pgrp;
     else
@@ -755,6 +771,7 @@ sysctl_doproc(int *name, u_int namelen, char *where, size_t *sizep)
     int buflen = where != NULL ? *sizep : 0;
     int doingzomb;
     struct eproc eproc;
+    char comm[MAXCOMLEN + 1];
     int error = 0;
     dev_t ttyd;
     uid_t ruid;
@@ -790,7 +807,7 @@ again:
             break;
 
         case KERN_PROC_TTY:
-            fill_from_u(p, &ruid, &ttyp, &ttyd);
+            fill_from_u(p, &ruid, &ttyp, &ttyd, NULL, 0);
             if (!ttyp || ttyd != (dev_t)name[1])
                 continue;
             break;
@@ -801,7 +818,7 @@ again:
             break;
 
         case KERN_PROC_RUID:
-            fill_from_u(p, &ruid, &ttyp, &ttyd);
+            fill_from_u(p, &ruid, &ttyp, &ttyd, NULL, 0);
             if (ruid != (uid_t)name[1])
                 continue;
             break;
@@ -812,13 +829,17 @@ again:
             return(EINVAL);
         }
         if (buflen >= sizeof(struct kinfo_proc)) {
-            fill_eproc(p, &eproc);
+            fill_eproc(p, &eproc, comm, sizeof(comm));
             error = copyout ((caddr_t) p, (caddr_t) &dp->kp_proc,
                 sizeof(struct proc));
             if (error)
                 return (error);
             error = copyout ((caddr_t)&eproc, (caddr_t) &dp->kp_eproc,
                 sizeof(eproc));
+            if (error)
+                return (error);
+            error = copyout ((caddr_t)comm, (caddr_t)dp->ki_comm,
+                sizeof(comm));
             if (error)
                 return (error);
             dp++;

@@ -1,0 +1,40 @@
+.TH TOP 1
+.UC
+.SH NAME
+top \- display active processes
+.SH SYNOPSIS
+.B top
+[
+.B \-d
+.I seconds
+]
+[
+.B \-l
+.I lines
+]
+[
+.B \-n
+.I count
+]
+.SH DESCRIPTION
+.I Top
+prints a small process table sorted by the kernel scheduler CPU usage
+counter.
+It also prints load average and a compact memory summary.
+The memory summary reports the live user process image, including swapped
+processes.
+.PP
+The
+.B \-d
+option sets the refresh delay.
+The
+.B \-l
+option sets the number of process rows.
+The
+.B \-n
+option limits the number of refreshes.
+Use
+.B "top -n 1"
+for a one-shot snapshot.
+.SH SEE ALSO
+free(1), ps(1), uptime(1), vmstat(1)

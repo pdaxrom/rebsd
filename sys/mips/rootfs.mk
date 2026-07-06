@@ -140,10 +140,10 @@ MIPS_CMD_SUBDIRS ?= basic calendar chown chroot compress date2 deco dhclient dif
                   telnetd test wget umount uname xargs
 MIPS_CMD_SUBDIRS += $(MIPS_BOARD_CMD_SUBDIRS)
 MIPS_CMD_STDS ?= basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
-               du echo ed fgrep file grep head hostid join kill last ln \
+               du echo ed fgrep file free grep head hostid join kill last ln \
                mesg mkdir mv nice od pagesize pr printenv pwd rev rm rmail \
                rmdir size sleep sort split sum sync tail tar tee time touch \
-               tr tsort tty uniq w wc whereis who
+               top tr tsort tty uniq uptime w wc whereis who
 MIPS_CMD_NSTDS ?= egrep expr
 MIPS_CMD_OPERATORS ?= df
 MIPS_CMD_SCRIPTS ?= false nohup true
@@ -152,24 +152,25 @@ MIPS_STB_DIR ?=
 MIPS_STB_SRCS = $(wildcard $(MIPS_STB_DIR)/stb_image.h)
 MIPS_USR_BIN_FILES ?= aout apropos ar as awk basename basic cal calendar cb \
                     chgrp cmp col comm compress deco diff diskspeed du ed \
-                    egrep emg env fgrep file find fold forth grep groups head \
+                    egrep emg env fgrep file find fold forth free grep groups head \
                     hostid id join last ld man matrix-as-vr4300 \
                     matrix-as-vr4300.sh make md5 med mesg more nice nm nohup \
                     od pagesize pdc picoc pr printf printenv ps ptytest \
                     ranlib renice renumber retroforth rev rmail \
                     setty size sl smux smoke-as-vr4300 smoke-as-vr4300.sh \
                     sort split strip sum sysctl tail tar tcl tee telnet time \
-                    touch tsort tty uncompress uniq vmstat w wc wget whatis \
-                    whereis who whoami xargs zcat $(MIPS_BOARD_USR_BIN_FILES)
+                    top touch tsort tty uncompress uniq uptime vmstat w wc \
+                    wget whatis whereis who whoami xargs zcat \
+                    $(MIPS_BOARD_USR_BIN_FILES)
 MIPS_USR_LIBEXEC_FILES ?= bigram code
 MIPS_ROOTFS_CAT1_PAGES ?= apropos awk basename cal cat cb chgrp chmod cmp col \
                         comm compress cp date dd df diff du echo ed expr \
-                        false file find fold grep head hostid join kill last \
+                        false file find fold free grep head hostid join kill last \
                         ln login ls make man mesg mkdir more mv nice od \
                         pagesize pr ps pcc printenv pwd rev rm rmail rmdir \
                         sed sh size sleep sort split strip sum tail tar tee \
-                        time touch tr true tsort tty uniq vmstat w wc whatis \
-                        who
+                        time top touch tr true tsort tty uniq uptime vmstat w \
+                        wc whatis who
 MIPS_ROOTFS_CMD_CAT1_SOURCES ?= as:as emg:emg env:env nm:nm sl:sl wget:wget
 MIPS_ROOTFS_BOARD_CMD_CAT1_SOURCES ?=
 MIPS_ROOTFS_CAT1_ALIASES ?= egrep:grep fgrep:grep uncompress:compress \

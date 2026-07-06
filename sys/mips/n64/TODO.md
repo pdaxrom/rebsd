@@ -329,7 +329,8 @@ the board-specific generated/appended manifest.
 - [x] Keep `/tmp` and `/var` volatile for the first version; later ROMFS or
   another writable block device can provide persistent upper storage.
 - [x] Hardware smoke-test volatile mounts:
-  - boot reaches login with `swap size = 2432 kbytes` on 8 MiB hardware
+  - boot reaches login with `swap size = 4608 kbytes` on default 8 MiB
+    zswap hardware builds, or `2304 kbytes` with `N64_ZSWAP=0`
   - `/dev/ram0` exists as a block device
   - `mount` shows `/var` mounted read/write
   - `ls -l /tmp` shows a symlink to `/var/tmp`
@@ -620,8 +621,11 @@ the board-specific generated/appended manifest.
   the system console backend
 - [x] Reserve framebuffer memory in `sys/mips/n64/layout.h`:
   - 4 MiB systems get 320x240x16 only before the base RAM swap region
-  - 8 MiB systems reserve enough Expansion Pak memory for 640x480x16 and can
-    switch between 320x240 and 640x480
+  - 8 MiB systems get a 4 MiB user window and default to a 320x240x16 reserve
+    for more RAM swap; `N64_HIGHRES_FB=1` restores the 640x480x16 reserve
+- [x] Add N64 compressed RAM swap (`N64_ZSWAP=1` by default) so native PCC
+  smoke can use a larger logical swap map without stealing more physical RDRAM
+  from user memory or the framebuffer reserve
 - [x] Add `/dev/fb0` as the framebuffer device with read/write access plus
   mode ioctls
 - [x] Add `/bin/fbset` through the shared `src/cmd` install flow and include

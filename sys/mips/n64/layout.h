@@ -12,9 +12,13 @@
  *
  * 8 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, u areas
- *   0x00100000..0x002fffff  wired kuseg user window
- *   0x00400000..0x0049ffff  max 640x480x16 framebuffer reserve
- *   0x004a0000..0x007fffff  Expansion Pak RAM swap
+ *   0x00100000..0x004fffff  wired kuseg user window
+ *   0x00500000..0x0053ffff  320x240x16 framebuffer reserve
+ *   0x00540000..0x007fffff  Expansion Pak RAM block pool
+ *
+ * With N64_HIGHRES_FB:
+ *   0x00500000..0x0059ffff  max 640x480x16 framebuffer reserve
+ *   0x005a0000..0x007fffff  Expansion Pak RAM block pool
  */
 #define N64_SIZE_512K                  0x00080000
 #define N64_SIZE_1M                    0x00100000
@@ -51,14 +55,18 @@
 #define N64_USER_PHYS_START            (N64_KERNEL_PHYS_BASE + N64_KERNEL_RESERVED)
 #define N64_USER_TLB_PAGE_SIZE         N64_SIZE_1M
 #define N64_USER_TLB_PAIR_SIZE         (2 * N64_USER_TLB_PAGE_SIZE)
-#ifdef N64_DEBUG_USERMEM_4M
-#define N64_USER_TLB_PAIRS             2
-#else
-#define N64_USER_TLB_PAIRS             1
-#endif
-#define N64_USER_MAXMEM                (N64_USER_TLB_PAIRS * N64_USER_TLB_PAIR_SIZE)
-#define N64_USER_VADDR_END             (N64_USER_VADDR_START + N64_USER_MAXMEM)
-#define N64_USER_PHYS_END              (N64_USER_PHYS_START + N64_USER_MAXMEM)
+#define N64_USER_TLB_PAIRS_4M          1
+#define N64_USER_TLB_PAIRS_8M          2
+#define N64_USER_TLB_PAIRS             N64_USER_TLB_PAIRS_8M
+#define N64_USER_MAXMEM_4M             (N64_USER_TLB_PAIRS_4M * N64_USER_TLB_PAIR_SIZE)
+#define N64_USER_MAXMEM_8M             (N64_USER_TLB_PAIRS_8M * N64_USER_TLB_PAIR_SIZE)
+#define N64_USER_MAXMEM                N64_USER_MAXMEM_8M
+#define N64_USER_VADDR_END_4M          (N64_USER_VADDR_START + N64_USER_MAXMEM_4M)
+#define N64_USER_VADDR_END_8M          (N64_USER_VADDR_START + N64_USER_MAXMEM_8M)
+#define N64_USER_VADDR_END             N64_USER_VADDR_END_8M
+#define N64_USER_PHYS_END_4M           (N64_USER_PHYS_START + N64_USER_MAXMEM_4M)
+#define N64_USER_PHYS_END_8M           (N64_USER_PHYS_START + N64_USER_MAXMEM_8M)
+#define N64_USER_PHYS_END              N64_USER_PHYS_END_8M
 #define N64_USER_GP_OFFSET             0x00007ff0
 #define N64_FB_USER_VADDR_START        N64_USER_VADDR_END
 
@@ -79,8 +87,12 @@
 #define N64_VIDEO_640_MAP_BYTES        N64_VIDEO_MAP_ROUND(N64_VIDEO_640_BYTES)
 #define N64_BASE_FB_RESERVED_BYTES     N64_VIDEO_320_MAP_BYTES
 #define N64_BASE_FB_PHYS_START         (N64_BASE_SWAP_PHYS_START - N64_BASE_FB_RESERVED_BYTES)
-#define N64_EXPANSION_FB_PHYS_START    N64_BASE_RDRAM_SIZE
+#define N64_EXPANSION_FB_PHYS_START    N64_USER_PHYS_END_8M
+#ifdef N64_HIGHRES_FB
 #define N64_EXPANSION_FB_RESERVED_BYTES N64_VIDEO_640_MAP_BYTES
+#else
+#define N64_EXPANSION_FB_RESERVED_BYTES N64_VIDEO_320_MAP_BYTES
+#endif
 #define N64_EXPANSION_SWAP_PHYS_START  (N64_EXPANSION_FB_PHYS_START + N64_EXPANSION_FB_RESERVED_BYTES)
 
 #endif

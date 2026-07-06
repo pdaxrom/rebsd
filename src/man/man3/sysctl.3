@@ -426,6 +426,11 @@ An array of
 \fIstruct kinfo_proc\fP
 structures is returned,
 whose size depends on the current number of such objects in the system.
+The
+\fIki_comm\fP
+member contains the process command name as a null-terminated
+\fIMAXCOMLEN+1\fP
+string.
 .sp
 .in -.5i
 The third and fourth level names are as follows:
@@ -836,8 +841,8 @@ privilege may change the value.
 	Second level name	Type	Changeable
 	VM\_LOADAVG	struct loadavg	no
 	VM\_METER	struct vmtotal	no
-	VM\_SWAPMAP	struct map	no
-	VM\_COREMAP	struct map	no
+	VM\_SWAPMAP	struct mapent[]	no
+	VM\_SWAPTOTAL	long	no
 .fi
 .PP
 VM_LOADAVG
@@ -860,16 +865,16 @@ The returned data consists of a
 VM_SWAPMAP
 .br
 .in +.5i
-Return the swapmap.  The size of this structure is fixed and may be
+Return the swapmap.  The size of this table is fixed and may be
 determined by specifying a \fBoldlenp\fP initialized to zero, the kernel
 will fill in the size of the swapmap.
 .in -.5i
 .sp
-VM_COREMAP
+VM_SWAPTOTAL
 .br
 .in +.5i
-Same as for swapmap above except that the core allocation map is
-returned.
+Return the total logical swap size in bytes.  Compressed swap devices report
+the logical size visible to the swap allocator, not the raw backing store size.
 .in -.5i
 .SH RETURN VALUES
 If the call to
@@ -953,7 +958,7 @@ The
 .B sysctl
 function first appeared in 4.4BSD.
 .PP
-The KERN_TEXT, KERN_MAXTEXTS, VM_SWAPMAP, VM_COREMAP options are
+The KERN_TEXT, KERN_MAXTEXTS, VM_SWAPMAP, and VM_SWAPTOTAL options are
 2.11BSD specific extensions to the 4.4BSD \fIsysctl\fP implmentation.
 .PP
 Having KERN_FILE return the address of the file structure before the

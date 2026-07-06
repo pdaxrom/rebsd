@@ -1,0 +1,31 @@
+.TH FREE 1
+.UC
+.SH NAME
+free \- display memory usage
+.SH SYNOPSIS
+.B free
+[
+.B \-h
+]
+.SH DESCRIPTION
+.I Free
+prints a compact memory summary from kernel
+.IR sysctl (2)
+data.
+The default output is in kilobytes.
+The
+.B Mem
+line reports the total live user process image, including processes currently
+swapped out.  On single user-memory-window ports this is more useful than the
+resident process size, which is often just the
+.I free
+process itself.
+The swap line reports the logical swap size visible to the kernel swap
+allocator.  On systems with compressed RAM swap, this can be larger than the
+raw backing store.
+.PP
+The
+.B \-h
+option keeps the same units but uses a shorter display for small consoles.
+.SH SEE ALSO
+top(1), vmstat(1)

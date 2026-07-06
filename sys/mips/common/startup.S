@@ -53,6 +53,11 @@ mips_kernel_entry:
         jal     mips_sync_user_icache
         nop
 
+#ifdef N64
+        jal     n64_user_data_end
+        nop
+        move    $t2, $v0
+#endif
         la      $k0, USER_DATA_START
         mtc0    $k0, $14
         mfc0    $k0, $12
@@ -67,7 +72,11 @@ mips_kernel_entry:
         li      $k1, ST_CU1
         or      $k0, $k0, $k1
         mtc0    $k0, $12
+#ifdef N64
+        move    $sp, $t2
+#else
         la      $sp, USER_DATA_END
+#endif
         nop
         nop
         nop
@@ -85,6 +94,15 @@ mips_sync_user_icache:
         jr      $ra
         nop
         .end    mips_sync_user_icache
+
+#ifdef N64
+        .weak   n64_user_data_end
+        .ent    n64_user_data_end
+n64_user_data_end:
+        jr      $ra
+        li      $v0, USER_DATA_END
+        .end    n64_user_data_end
+#endif
 
         /*
          * Initial user code copied to process 1 by init_main().

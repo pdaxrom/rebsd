@@ -37,8 +37,10 @@ fixed user framebuffer mapping returned by
 This is a direct mapping smoke test, not a write(2) transfer.
 .PP
 The 320x240 mode is available on all supported N64 memory configurations.
-The 640x480 mode requires an Expansion Pak and returns an error on a 4 MiB
-system.
+The 640x480 mode requires an Expansion Pak kernel built with
+.BR N64_HIGHRES_FB=1 .
+It returns an error on a 4 MiB system and on the default 8 MiB build, which
+keeps the extra memory available for swap.
 .SH EXAMPLES
 Show the current framebuffer mode:
 .PP

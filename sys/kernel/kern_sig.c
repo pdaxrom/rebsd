@@ -33,7 +33,7 @@ cansignal (struct proc *q, int signum)
     register struct proc *curp = u.u_procp;
     uid_t   ruid;
 
-    fill_from_u(q, &ruid, NULL, NULL);  /* XXX */
+    fill_from_u(q, &ruid, NULL, NULL, NULL, 0); /* XXX */
     if (curp->p_uid == 0 ||     /* c effective root */
         u.u_ruid == ruid ||     /* c real = t real */
         curp->p_uid == ruid ||      /* c effective = t real */

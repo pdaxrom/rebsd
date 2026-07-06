@@ -3,6 +3,9 @@
  * All rights reserved.  The Berkeley software License Agreement
  * specifies the terms and conditions for redistribution.
  */
+#ifndef _SYS_VM_H_
+#define _SYS_VM_H_
+
 #ifdef KERNEL
 #include "vmparam.h"
 #include "vmmac.h"
@@ -14,3 +17,5 @@
 #include <sys/vmmeter.h>
 #include <sys/vmsystm.h>
 #endif
+
+#endif /* _SYS_VM_H_ */

@@ -34,10 +34,11 @@ SCRIPT_ALL	= false nohup true #lorder mkdep
 # explicit make lines.
 #
 STD_ALL		= basename cal cat cb chgrp chmod cmp col comm cp dd \
-                  diskspeed du echo ed fgrep file grep head hostid join \
+                  diskspeed du echo ed fgrep file free grep head hostid join \
                   kill last ln mesg mkdir mv nice od pagesize pr printenv \
                   pwd rev rm rmail rmdir size sleep sort split sum sync \
-                  tail tar tee time touch tr tsort tty uniq w wc whereis who
+                  tail tar tee time top touch tr tsort tty uniq uptime w wc \
+                  whereis who
 
 # C programs that live in the current directory and need explicit make lines.
 #

@@ -116,7 +116,9 @@ Remaining work:
 
 - Run the updated PCC userland/rootfs gate on real N64 hardware in both
   hard-float and soft-float modes after the Malta64/R4000 and Malta QEMU
-  matrix stays stable.
+  matrix stays stable.  Default N64 hardware builds use `N64_ZSWAP=1` so the
+  old whole-process swapper gets a larger logical swap map without reducing the
+  4 MiB Expansion Pak user window.
 
 ## Standalone Cross SDK
 
@@ -349,9 +351,11 @@ The expected compile/link failures are target-aware policy cases for
 - `pcclist/init004` requires TLS.
 
 The N64 hardware smoke uses `/root/pcc-smoke-all.sh` from the normal PCC rootfs.
-It covers native PCC compile/link/run, shell/login-sensitive paths, repeated
-`ccom`, libc/math/wide-character policy smoke tests, DHCP receive support, real
-small utility rebuilds, and Linpack binaries built with both GCC and PCC.
+Default hardware ROMs use `N64_ZSWAP=1`; use `N64_ZSWAP=0` only for raw
+swap-regression comparison.  The smoke covers native PCC compile/link/run,
+shell/login-sensitive paths, repeated `ccom`, libc/math/wide-character policy
+smoke tests, DHCP receive support, real small utility rebuilds, and Linpack
+binaries built with both GCC and PCC.
 
 ## Out Of Scope For The C Gate
 

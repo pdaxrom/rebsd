@@ -7,6 +7,8 @@
  *
  *  @(#)vmsystm.h   7.2.1 (2.11BSD GTE) 1/15/95
  */
+#ifndef _SYS_VMSYSTM_H_
+#define _SYS_VMSYSTM_H_
 
 /*
  * Fork/vfork accounting.
@@ -32,3 +34,5 @@ extern int maxslp;          /* max sleep time before very swappable */
 
 extern struct forkstat forkstat;
 #endif
+
+#endif /* _SYS_VMSYSTM_H_ */

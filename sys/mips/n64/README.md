@@ -62,8 +62,11 @@ The current port boots a base RetroBSD system from a cartridge ROM image:
 Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
 the expanded command set:
 
-This log predates the volatile `/var` RAM disk. Current 8 MiB builds reserve
-1024 KiB for `/var` and print `swap size = 2432 kbytes`.
+This log predates the volatile `/var` RAM disk, expanded 8 MiB user window,
+and compressed RAM swap. Current default 8 MiB builds reserve 512 KiB for
+`/var` and print `user mem = 4096 kbytes` and
+`swap size = 4608 kbytes`.  With `N64_ZSWAP=0`, the same physical RAM pool is
+exposed as raw 2304 KiB swap.
 
 ```
 ReBSD N64 stage0
@@ -954,9 +957,18 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 
 ```
 0x00000000..0x000fffff  kernel, vectors, u areas
-0x00100000..0x002fffff  wired kuseg user window
-0x00400000..0x0049ffff  max 640x480x16 framebuffer reserve
-0x004a0000..0x007fffff  Expansion Pak RAM swap
+0x00100000..0x004fffff  wired kuseg user window
+0x00500000..0x0053ffff  320x240x16 framebuffer reserve
+0x00540000..0x007fffff  Expansion Pak RAM block pool
+```
+
+8 MiB high-resolution framebuffer build (`N64_HIGHRES_FB=1`):
+
+```
+0x00000000..0x000fffff  kernel, vectors, u areas
+0x00100000..0x004fffff  wired kuseg user window
+0x00500000..0x0059ffff  max 640x480x16 framebuffer reserve
+0x005a0000..0x007fffff  Expansion Pak RAM block pool
 ```
 
 Important constants:
@@ -968,16 +980,18 @@ Important constants:
   kernel stack, so the N64 port keeps more headroom than the original PIC32
   3 KiB u-area for nested `exec`, `namei`, signal, and FPU paths.
 - `N64_USER_VADDR_START`: user virtual base, `0x00400000`.
-- `N64_USER_MAXMEM`: 2 MiB user address window.
+- `N64_USER_MAXMEM_4M`: 2 MiB user address window for base systems.
+- `N64_USER_MAXMEM_8M`: 4 MiB user address window for Expansion Pak systems.
 - `N64_USER_PHYS_START`: physical backing for user memory, `0x00100000`.
 - `N64_BASE_SWAP_PHYS_START`: 4 MiB fallback swap base, `0x00380000`.
 - `N64_BASE_FB_PHYS_START`: 4 MiB framebuffer reserve base, `0x00340000`.
 - `N64_EXPANSION_FB_PHYS_START`: 8 MiB framebuffer reserve base,
-  `0x00400000`.
-- `N64_EXPANSION_SWAP_PHYS_START`: 8 MiB swap base after the maximum
-  framebuffer reserve, `0x004a0000`.
+  `0x00500000`.
+- `N64_EXPANSION_SWAP_PHYS_START`: 8 MiB RAM block pool base after the
+  framebuffer reserve, `0x00540000` by default or `0x005a0000` with
+  `N64_HIGHRES_FB=1`.
 - `N64_FB_USER_VADDR_START`: uncached framebuffer user mapping base,
-  `0x00600000`.
+  `0x00800000`.
 
 `machparam.h` maps the old RetroBSD platform names onto this layout:
 
@@ -1019,23 +1033,31 @@ rdram size=0x00800000
 ## TLB and user address space
 
 The N64 kernel installs wired TLB entries for the normal user address window
-and the framebuffer mapping. Entry 0 maps a 2 MiB user window:
+and the framebuffer mapping. Base 4 MiB systems get one 2 MiB user TLB pair:
 
 ```
 virtual  0x00400000..0x005fffff
 physical 0x00100000..0x002fffff
 ```
 
-The entry uses two 1 MiB pages through `TLB_PAGEMASK_1M`.
+Expansion Pak systems get two 2 MiB user TLB pairs:
+
+```
+virtual  0x00400000..0x007fffff
+physical 0x00100000..0x004fffff
+```
+
+Each entry uses two 1 MiB pages through `TLB_PAGEMASK_1M`.
 
 The following wired entries map `/dev/fb0` at `N64_FB_USER_VADDR_START`
-(`0x00600000`) with uncached 64 KiB pages. The usable byte count is reported
+(`0x00800000`) with uncached 64 KiB pages. The usable byte count is reported
 by `N64FBIOC_GETMAP`; the physical reserve is rounded up to the TLB pair size
 so the user-visible mapping never overlaps RAM swap:
 
 ```
-4 MiB: 0x00600000..0x0063ffff -> 0x00340000..0x0037ffff
-8 MiB: 0x00600000..0x0069ffff -> 0x00400000..0x0049ffff
+4 MiB: 0x00800000..0x0083ffff -> 0x00340000..0x0037ffff
+8 MiB: 0x00800000..0x0083ffff -> 0x00500000..0x0053ffff
+8 MiB high-res: 0x00800000..0x0089ffff -> 0x00500000..0x0059ffff
 ```
 
 The kernel does not currently implement a full VM system for N64. The wired
@@ -1159,15 +1181,26 @@ the volatile UFS target for `/var`:
 
 RAM block sizing:
 
-- 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB swap.
-- 8 MiB system: 1024 KiB `/dev/ram0`, 2432 KiB swap after the reserved
-  640x480x16 framebuffer.
+- 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB physical swap store.
+- 8 MiB default system: 512 KiB `/dev/ram0`, 2304 KiB physical swap store
+  after the 4 MiB user window and reserved 320x240x16 framebuffer.
+- 8 MiB high-resolution framebuffer build (`N64_HIGHRES_FB=1`): 512 KiB
+  `/dev/ram0`, 1920 KiB physical swap store after the 4 MiB user window and
+  reserved 640x480x16 framebuffer.
+
+`N64_ZSWAP=1` is the default.  It keeps the same physical RAM store but exposes
+twice as many logical swap blocks to the old whole-process swapper.  Each
+logical 1 KiB swap block is stored as zero, raw, or compressed data in 256-byte
+physical units.  If a process image cannot be represented in the physical
+store, swapout fails with `ENOMEM` instead of panicking.  `N64_ZSWAP=0` restores
+the raw RAM swap sizing for comparison.
 
 The printed boot sizes therefore differ by installed RDRAM:
 
 ```
-4 MiB: swap size = 384 kbytes
-8 MiB: swap size = 2432 kbytes
+4 MiB: swap size = 768 kbytes with zswap, 384 kbytes raw
+8 MiB: swap size = 4608 kbytes with zswap, 2304 kbytes raw
+8 MiB high-res: swap size = 3840 kbytes with zswap, 1920 kbytes raw
 ```
 
 The root filesystem stays read-only. `/tmp` is a symlink to `/var/tmp` in the
@@ -1271,15 +1304,15 @@ the current usable framebuffer length for the selected mode; `reserved_bytes`
 is the TLB-rounded reserve. Programs should write only the `bytes` range at
 `vaddr`.
 
-The default framebuffer mode is selected from detected RDRAM: 4 MiB systems
-start in 320x240x16, while 8 MiB systems start in 640x480x16. On 8 MiB
-systems, the Expansion Pak framebuffer reserve is large enough to switch
-between 320x240 and 640x480 at runtime:
+The default framebuffer mode is 320x240x16 on all N64 memory configurations.
+The 640x480 interlaced mode is available only in an 8 MiB build made with
+`N64_HIGHRES_FB=1`; the default build keeps that memory in the RAM block pool
+for swap pressure from the native compiler workload:
 
 ```
 fbset          # print current framebuffer mode
 fbset 320x240  # select progressive 320x240
-fbset 640x480  # select interlaced 640x480, Expansion Pak only
+fbset 640x480  # select interlaced 640x480, high-res reserve only
 fbset fill 0x001f  # fill through the fixed user framebuffer mapping
 ```
 

@@ -5,6 +5,8 @@
  * All rights reserved.  The Berkeley software License Agreement
  * specifies the terms and conditions for redistribution.
  */
+#ifndef _SYS_MAP_H_
+#define _SYS_MAP_H_
 
 /*
  * Associated routines manage allocation of an address space using
@@ -51,3 +53,5 @@ void mfree (struct map *mp, size_t nbytes, size_t addr);
 size_t malloc3 (struct map *mp, size_t d_size, size_t s_size, size_t u_size, size_t a[3]);
 
 #endif
+
+#endif /* _SYS_MAP_H_ */

@@ -8,6 +8,7 @@
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
+#include <sys/errno.h>
 #include <sys/systm.h>
 #include <sys/vm.h>
 #include <sys/uio.h>
@@ -15,11 +16,12 @@
 /*
  * swap I/O
  */
-void
+int
 swap (size_t blkno, size_t coreaddr, int count, int rdflg)
 {
     register struct buf *bp;
     int s;
+    int error = 0;
 #ifdef N64_TRACE
     static int n64_swap_trace;
 #endif
@@ -61,14 +63,17 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
         while ((bp->b_flags & B_DONE) == 0)
             sleep ((caddr_t)bp, PSWP);
         splx (s);
-        if ((bp->b_flags & B_ERROR) || bp->b_resid)
-            panic ("hard err: swap");
+        if ((bp->b_flags & B_ERROR) || bp->b_resid) {
+            error = (bp->b_flags & B_ERROR) ? geterror(bp) : EIO;
+            break;
+        }
         n = bp->b_bcount;
         count -= n;
         coreaddr += n;
         blkno += btod (n);
     }
     brelse(bp);
+    return error;
 }
 
 /*
