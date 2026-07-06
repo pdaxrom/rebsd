@@ -2,16 +2,17 @@
 
 The kernel and userland build with the existing GCC-based toolchain by default.
 
-PortableCC/pcc is available as a supported opt-in userland compiler for the
-MIPS rootfs and N64 userland.  It has passed the Malta and Malta64/R4000 QEMU
-hard-float and soft-float rootfs gates, plus the earlier normal hard-float N64
-hardware C userland gate.  The updated soft-float PCC path still needs the real
-N64 hardware pass before becoming the N64 hardware baseline.
+PortableCC/pcc is available as a supported opt-in compiler for the MIPS rootfs
+and N64 userland.  PCC kernel builds are also available as explicit gates for
+Malta, Malta64, and N64.  PCC has passed the Malta and Malta64/R4000 QEMU
+hard-float and soft-float rootfs gates, plus hard-float PCC kernel/rootfs QEMU
+gates for Malta and Malta64.  The updated N64 hard/soft PCC paths still need
+fresh real hardware passes before becoming the N64 hardware baseline.
 
 Current policy:
 
-- Kernel build: GCC by default.  PCC kernel builds are experimental only and
-  currently blocked by a documented PCC frontend bug.
+- Kernel build: GCC by default.  PCC kernel builds are opt-in with
+  `MIPS_KERNEL_COMPILER=pcc` or `N64_KERNEL_COMPILER=pcc`.
 - Userland build: GCC by default.
 - Supported userland compiler selectors: `gcc` and `pcc`.
 - Current PCC target endianness: build-time big-endian `mips-rebsd`.
@@ -34,6 +35,9 @@ points into the same userland/rootfs choice:
 - `MIPS_ROOTFS_ENDIAN` selects the future rootfs endian ABI.  The current
   supported value is `big`; `little` is reserved for the later mipsel Malta
   port.
+- `N64_USERLAND_CPU`, `N64_USERLAND_FLOAT`, and `N64_USERLAND_ENDIAN` are N64
+  aliases for the same ABI selectors.  If both alias families are set, they
+  must agree.
 
 They are aliases for the same compiler mode.  If only one is set, the other
 entry point inherits it.  If both are set to different values, the build fails
@@ -50,6 +54,9 @@ make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_RO
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
 make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
+make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc malta64.elf
+make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc unix.elf
+make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
 ```
 
 The QEMU PCC smoke matrix verified on 2026-07-05 is:
@@ -82,14 +89,19 @@ is too small for the normal PCC rootfs.  The 2026-07-06 low-memory
 Malta/MIPS32r2 hard-float with `PCC_SMOKE_ALL_RC:0`.
 
 `pcc` mode controls how the target userland and libraries are built.  It does
-not switch the kernel, N64 stage0, or target a.out binary tools away from the
-existing flow.  PCC runtime builds do not use GCC wrappers: the standalone
-cross SDK first builds the a.out tools and cross PCC without target runtime
-libraries, then uses that cross PCC to build `crt0.o`, libc, libm, and
+not switch the kernel, N64 stage0, or target a.out binary tools by itself.
+Kernel PCC builds must be requested explicitly with `MIPS_KERNEL_COMPILER=pcc`
+or `N64_KERNEL_COMPILER=pcc`.  PCC runtime builds do not use GCC wrappers: the
+standalone cross SDK first builds the a.out tools and cross PCC without target
+runtime libraries, then uses that cross PCC to build `crt0.o`, libc, libm, and
 `libpcc.a`, then builds the target rootfs and native PCC against those
-PCC-built libraries.  Kernel PCC experiments must be requested explicitly with
-`MIPS_KERNEL_COMPILER=pcc` or `N64_KERNEL_COMPILER=pcc`; they are expected to
-fail until the documented `rdwri()` frontend bug is fixed.
+PCC-built libraries.
+
+Kernel version banners record the selected compiler and ABI, for example:
+
+```text
+ReBSD for Malta64: built on user@host with pcc Portable C Compiler ..., cpu=vr4300, float=hard, endian=big
+```
 
 N64 builds default to `N64_ZSWAP=1`.  The compressed RAM swap backend exposes a
 larger logical swap map on real hardware while keeping the same physical RDRAM

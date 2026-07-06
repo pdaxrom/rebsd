@@ -1,9 +1,11 @@
 # ReBSD PCC Porting Notes
 
 This document records the current ReBSD/MIPS Portable C Compiler integration
-state.  The supported milestone is a C userland compiler for static ReBSD
-a.out systems.  Kernel, stage0, and target binary tools still use the existing
-ReBSD/GCC build flow unless a command explicitly says otherwise.
+state.  The supported milestone is a C compiler for static ReBSD a.out systems.
+GCC remains the default compiler.  PCC is supported for opt-in userland/rootfs
+builds and for explicit kernel build gates on Malta, Malta64, and N64.  Stage0
+and the target binary tools still use the existing ReBSD flow unless a command
+explicitly says otherwise.
 
 ## Target Contract
 
@@ -45,7 +47,7 @@ startup, TLS, shared-library/PIC, or locale/multibyte behavior.
 ## Compiler Selection
 
 GCC remains the default compiler for kernel and userland builds.  PCC is a
-supported opt-in C userland compiler:
+supported opt-in userland/rootfs compiler:
 
 ```sh
 make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
@@ -60,15 +62,20 @@ userland compiler choice at different make entry points.  If only one is set,
 the other entry point inherits it.  If both are set and disagree, make aborts.
 The supported values are `gcc` and `pcc`.
 
-PCC mode changes the target userland/rootfs compiler only.  It does not switch
-the kernel, N64 stage0, host bootstrap tools, or target a.out binary tools away
-from the existing flow.
+These selectors change the target userland/rootfs compiler only.  The kernel
+compiler is selected independently with `MIPS_KERNEL_COMPILER` for Malta and
+Malta64, or `N64_KERNEL_COMPILER` for N64.  PCC kernel builds are explicit
+gates; the default remains GCC.
 
 The rootfs selectors shared by Malta, Malta64, and N64 are:
 
 - `MIPS_ROOTFS_CPU=vr4300|mips32r2`
 - `MIPS_ROOTFS_FLOAT=hard|soft`
 - `MIPS_ROOTFS_ENDIAN=big`
+
+The N64 entry point also accepts the alias variables
+`N64_USERLAND_CPU`, `N64_USERLAND_FLOAT`, and `N64_USERLAND_ENDIAN`.  If both
+the N64 and common `MIPS_ROOTFS_*` names are set, they must agree.
 
 `MIPS_ROOTFS_ENDIAN=little` is reserved for the future mipsel Malta port and is
 rejected by the current big-endian `mips-rebsd` PCC target.
@@ -111,6 +118,13 @@ Completed for this milestone:
   soft-float override lives in `lib/softfloat/libpcc.a`.
 - Soft-float `libpcc.a` includes the compiler-private compiler-rt helpers that
   PCC-generated code and other `libpcc` helpers can reference directly.
+- PCC kernel builds now use the standalone cross PCC path without GCC wrapper
+  scripts.  The verified Malta and Malta64 QEMU hard-float gates compile the
+  kernel with PCC, build the PCC rootfs, boot, and run `/root/pcc-smoke-all.sh`.
+  The N64 PCC hard-float ROM build also completes for hardware smoke.
+- Kernel version strings now include a detailed build banner:
+  builder user/host, selected compiler and compiler version, CPU, float ABI,
+  and endian ABI.
 
 Remaining work:
 
@@ -119,6 +133,9 @@ Remaining work:
   matrix stays stable.  Default N64 hardware builds use `N64_ZSWAP=1` so the
   old whole-process swapper gets a larger logical swap map without reducing the
   4 MiB Expansion Pak user window.
+- Decide the long-term PCC kernel FPU policy for soft-float kernel builds.  The
+  current validated kernel gates are hard-float unless a test explicitly states
+  otherwise.
 
 ## Standalone Cross SDK
 
@@ -163,48 +180,53 @@ make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc \
 compatible native compiler and target tools; a host PCC build is not mandatory
 in that case.
 
-## Known Kernel PCC Blocker
+## PCC Kernel Build Status
 
-Kernel PCC builds are not a supported gate yet.  Experimental selectors may be
-used to reproduce the current blocker:
+Kernel PCC builds are explicit opt-in gates.  They are not the default build
+policy, but the previous PCC frontend/kernel blocker is fixed.  Representative
+commands are:
 
 ```sh
-make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc native-pcc-smoke-runtime
-make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc native-pcc-smoke-runtime
-make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc kernel.z64
+make -C sys/mips/malta64 malta64.elf \
+    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_ROOTFS_CPU=vr4300 MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_ENDIAN=big \
+    MIPS_PCC_PROVIDER=cross
+
+make -C sys/mips/malta unix.elf \
+    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_ENDIAN=big \
+    MIPS_PCC_PROVIDER=cross
+
+make -C sys/mips/n64 kernel.z64 preflight.z64 \
+    N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
+    N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
+    N64_USERLAND_ENDIAN=big N64_ZSWAP=1
 ```
 
-As of the 2026-07-05 investigation, the first Malta64 kernel C compile stops in
-`sys/kernel/exec_aout.c` on the prototyped `rdwri()` call:
+The fixed 2026-07-06 PCC kernel issues were:
+
+- PCC frontend handling of kernel enum prototypes and null pointer constants.
+- MIPS inline-assembler constraint handling needed by kernel helpers.
+- Kernel image linking with PCC output without accidentally carrying temporary
+  `.bss` sections into the Malta rootfs blob.
+- MIPS C integer arithmetic now uses non-trapping `addu`, `subu`, and `addiu`
+  forms where the language requires wraparound or non-trapping behavior.
+
+The Malta64 PCC hard-float kernel/rootfs QEMU gate booted with:
 
 ```text
-../../kernel/exec_aout.c, line 82: warning: illegal combination of pointer and integer
-../../kernel/exec_aout.c, line 82: warning: illegal combination of pointer and integer
-../../kernel/exec_aout.c, line 82: cannot recover from earlier errors: goodbye!
-error: /private/tmp/rebsd-pcc-install/libexec/mips-rebsd-ccom terminated with status 1
+ReBSD for Malta64: built on sash@sashz-mbp with pcc Portable C Compiler 1.2.0.DEVEL 20231021 for mips-unknown-rebsd, cpu=vr4300, float=hard, endian=big
+PCC_SMOKE_ALL_FAILURES 0
+PCC_SMOKE_ALL_RC:0
 ```
 
-The same frontend issue is expected at the equivalent `rdwri()` calls in
-`sys/kernel/exec_elf.c`.  The prototype is visible to PCC:
+The Malta PCC hard-float kernel/rootfs QEMU gate booted with:
 
-```c
-int rdwri(enum uio_rw rw, struct inode *ip, caddr_t base, int len,
-    off_t offset, int ioflg, int *aresid);
+```text
+ReBSD for Malta: built on sash@sashz-mbp with pcc Portable C Compiler 1.2.0.DEVEL 20231021 for mips-unknown-rebsd, cpu=mips32r2, float=hard, endian=big
+PCC_SMOKE_ALL_FAILURES 0
+PCC_SMOKE_ALL_RC:0
 ```
-
-The original kernel call passes `0` for the optional `aresid` pointer, which is
-a valid null pointer constant in C.  A reduced standalone call with the same
-basic typedefs compiles, but the full preprocessed kernel translation unit
-emits the two pointer/integer diagnostics and can also hit the internal PCC
-frontend error `compiler error: strmemb` when `-Werror` is removed.  Treat this
-as a PCC frontend bug, not as a kernel source issue.  Do not add local kernel
-workarounds for these `rdwri()` call sites just to make PCC proceed.
-
-PCC now has compiler-level MIPS soft-float support for targeted userland smoke
-tests, but kernel PCC builds still need an explicit FPU policy before becoming
-a supported gate.  Kernel builds should either use soft-float deliberately or
-keep an explicit COP1/FPU instruction guard around PCC-generated kernel C
-assembly.
 
 ## Native Rootfs Layout
 
@@ -306,6 +328,9 @@ The current C gate is green in these environments:
   `qemu-system-mips64 -M malta -cpu R4000 -m 64M -nographic`.
 - Real N64 hardware normal hard-float PCC rootfs smoke from the earlier gate.
   The updated hard/soft split still needs a fresh real-hardware pass.
+- N64 hard-float PCC kernel/userland ROM build with `N64_ZSWAP=1`.  The ROM
+  build is ready for the next real-hardware smoke; runtime validation is still
+  pending.
 
 The 2026-07-05 QEMU smoke matrix finished with:
 
