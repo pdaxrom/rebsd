@@ -16,8 +16,16 @@ struct conf_device conf_device_init[] = {
     { 0 }
 };
 void creatorattach(int);
+void etherattach(int);
+void ci20_dm9000attach(int);
+void inetattach(int);
+void unixdomainattach(int);
 
 struct conf_service conf_service_init[] = {
     { creatorattach },
+    { etherattach },
+    { ci20_dm9000attach },
+    { inetattach },
+    { unixdomainattach },
     { 0 }
 };

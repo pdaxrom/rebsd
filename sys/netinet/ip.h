@@ -11,19 +11,31 @@
  *
  *	@(#)ip.h	7.6.1.2 (2.11BSD) 1995/10/09
  */
-#ifndef BYTE_ORDER
 /*
  * Definitions for byte order,
  * according to byte significance from low address to high.
  */
+#ifndef LITTLE_ENDIAN
 #define	LITTLE_ENDIAN	1234	/* least-significant byte first (vax) */
+#endif
+#ifndef BIG_ENDIAN
 #define	BIG_ENDIAN	4321	/* most-significant byte first (IBM, net) */
+#endif
+#ifndef PDP_ENDIAN
 #define	PDP_ENDIAN	3412	/* LSB first in word, MSW first in long (pdp) */
+#endif
 
-#ifdef vax
-#define	BYTE_ORDER	LITTLE_ENDIAN
+#ifndef BYTE_ORDER
+#ifdef ENDIAN
+#define	BYTE_ORDER	ENDIAN
 #else
-#ifdef pdp11
+#if defined(TARGET_LITTLE_ENDIAN) || defined(__MIPSEL__) || defined(__mipsel__)
+#define	BYTE_ORDER	LITTLE_ENDIAN
+#elif defined(TARGET_BIG_ENDIAN) || defined(__MIPSEB__) || defined(__mipseb__)
+#define	BYTE_ORDER	BIG_ENDIAN
+#elif defined(vax)
+#define	BYTE_ORDER	LITTLE_ENDIAN
+#elif defined(pdp11)
 #define	BYTE_ORDER	PDP_ENDIAN
 #else
 #define	BYTE_ORDER	BIG_ENDIAN	/* mc68000, tahoe, most others */

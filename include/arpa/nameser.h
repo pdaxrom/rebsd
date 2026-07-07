@@ -115,20 +115,28 @@
 #define CONV_BADCKSUM -3
 #define CONV_BADBUFLEN -4
 
-#ifndef BYTE_ORDER
+#ifndef LITTLE_ENDIAN
 #define	LITTLE_ENDIAN	1234	/* least-significant byte first (vax) */
+#endif
+#ifndef BIG_ENDIAN
 #define	BIG_ENDIAN	4321	/* most-significant byte first (IBM, net) */
+#endif
+#ifndef PDP_ENDIAN
 #define	PDP_ENDIAN	3412	/* LSB first in word, MSW first in long (pdp) */
+#endif
 
-#if defined(vax) || defined(ns32000) || defined(sun386) || \
-    defined(BIT_ZERO_ON_RIGHT) || defined(__MIPSEL__)
+#ifndef BYTE_ORDER
+#ifdef ENDIAN
+#define BYTE_ORDER	ENDIAN
+#elif defined(vax) || defined(ns32000) || defined(sun386) || \
+    defined(BIT_ZERO_ON_RIGHT) || defined(TARGET_LITTLE_ENDIAN) || \
+    defined(__MIPSEL__) || defined(__mipsel__)
 #define BYTE_ORDER	LITTLE_ENDIAN
 
-#endif
-#if defined(sel) || defined(pyr) || defined(mc68000) || defined(sparc) || \
+#elif defined(sel) || defined(pyr) || defined(mc68000) || defined(sparc) || \
     defined(is68k) || defined (tahoe) || defined (BIT_ZERO_ON_LEFT) || \
-    defined(TARGET_BIG_ENDIAN) || defined(__MIPSEB__) || \
-    (defined(__mips__) && !defined(__MIPSEL__))
+    defined(TARGET_BIG_ENDIAN) || defined(__MIPSEB__) || defined(__mipseb__) || \
+    (defined(__mips__) && !defined(__MIPSEL__) && !defined(__mipsel__))
 #define BYTE_ORDER	BIG_ENDIAN
 #endif
 #endif /* BYTE_ORDER */

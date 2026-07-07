@@ -34,7 +34,7 @@ loopback_init(void)
     bzero((caddr_t)&ifr, sizeof(ifr));
     sin = (struct sockaddr_in *)&ifr.ifr_addr;
     sin->sin_family = AF_INET;
-    sin->sin_addr.s_addr = ((u_long)IN_LOOPBACKNET << 24) | 1;
+    sin->sin_addr.s_addr = htonl(((u_long)IN_LOOPBACKNET << 24) | 1);
     error = in_control((struct socket *)0, SIOCSIFADDR, (caddr_t)&ifr,
         &loif);
     if (error)

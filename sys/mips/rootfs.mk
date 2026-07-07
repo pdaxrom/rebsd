@@ -124,12 +124,16 @@ MIPS_ROOTFS_FILES = $(shell find $(MIPS_ROOTFS_COMMON_DIR) \
                    $(MIPS_ROOTFS_BOARD_DIR) -type f 2>/dev/null)
 MIPS_ROOTFS_DIRS = $(shell find $(MIPS_ROOTFS_COMMON_DIR) \
                   $(MIPS_ROOTFS_BOARD_DIR) -type d 2>/dev/null)
+MIPS_NET_INCLUDE_SRCS = $(shell find $(TOPSRC)/sys/net $(TOPSRC)/sys/netinet \
+                   -maxdepth 1 -type f -name '*.h' 2>/dev/null)
+MIPS_NETINET_USER_HEADERS = $(filter-out $(TOPSRC)/sys/netinet/in.h,$(wildcard $(TOPSRC)/sys/netinet/*.h))
 MIPS_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
                    $(TOPSRC)/sys/mips/include $(TOPSRC)/sys/mips/n64/include \
                    -type f -name '*.h' \
                    2>/dev/null) \
                    $(wildcard $(TOPSRC)/sys/mips/*.h \
-                   $(TOPSRC)/sys/mips/n64/*.h)
+                   $(TOPSRC)/sys/mips/n64/*.h) \
+                   $(MIPS_NET_INCLUDE_SRCS)
 MIPS_INCLUDE_LINKS = $(shell find $(TOPSRC)/include -maxdepth 1 -type l \
                     2>/dev/null)
 MIPS_COMMON_MACHINE_HEADERS ?= console cpu devmajors elf_machdep float fpu io \
@@ -649,6 +653,12 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 	cp -pR $(TOPSRC)/include/. $(MIPS_ROOTFS_USR_INCLUDE)/
 	rm -rf $(MIPS_ROOTFS_USR_INCLUDE)/machine $(MIPS_ROOTFS_USR_INCLUDE)/sys
 	cp -pR $(TOPSRC)/sys/include $(MIPS_ROOTFS_USR_INCLUDE)/sys
+	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/net
+	cp -p $(TOPSRC)/sys/net/*.h $(MIPS_ROOTFS_USR_INCLUDE)/net/
+	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/netinet
+	for header in $(MIPS_NETINET_USER_HEADERS); do \
+	    cp -p $$header $(MIPS_ROOTFS_USR_INCLUDE)/netinet/; \
+	done
 	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/mips
 	cp -p $(TOPSRC)/sys/mips/*.h $(MIPS_ROOTFS_USR_INCLUDE)/mips/
 	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/machine
@@ -825,6 +835,7 @@ $(MIPS_ROOTFS_USERLAND_STAMP): $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(MIPS_LIBM_SRCS) $(MIPS_LIBUTIL_SRCS) $(MIPS_LIBTERMLIB_SRCS) \
     $(MIPS_LIBCURSES_SRCS) $(MIPS_LIBVMF_SRCS) $(MIPS_LIBREADLINE_SRCS) \
     $(MIPS_LIBTCL_SRCS) $(MIPS_USER_SRCS) $(MIPS_AWK_SRCS) \
+    $(MIPS_INCLUDE_SRCS) $(MIPS_INCLUDE_LINKS) \
     $(MIPS_USERLAND_EXTRA_DEPS) $(MIPS_ROOTFS_MAKEFILE) Makefile
 	$(MIPS_SRC_MAKE) clean
 	if [ "$(MIPS_ROOTFS_COMPILER)" = "gcc" ]; then \

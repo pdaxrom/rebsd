@@ -44,6 +44,10 @@ in_cksum(struct mbuf *m, int len)
     while (sum >> 16)
         sum = (sum & 0xffff) + (sum >> 16);
 
-    return (int)(~sum & 0xffff);
+    sum = ~sum & 0xffff;
+#if ENDIAN == LITTLE
+    sum = ((sum & 0x00ff) << 8) | ((sum & 0xff00) >> 8);
+#endif
+    return (int)sum;
 }
 #endif

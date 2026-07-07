@@ -14,32 +14,67 @@
 #include <sys/mbuf.h>
 #include <netinet/in.h>
 
+#if ENDIAN == LITTLE
+static u_short
+net_bswap16(x)
+	u_short x;
+{
+	return ((x & 0x00ff) << 8) | ((x & 0xff00) >> 8);
+}
+
+static u_long
+net_bswap32(x)
+	u_long x;
+{
+	return ((x & 0x000000ffUL) << 24) |
+	    ((x & 0x0000ff00UL) << 8) |
+	    ((x & 0x00ff0000UL) >> 8) |
+	    ((x & 0xff000000UL) >> 24);
+}
+#endif
+
 u_short
 htons(x)
 	u_short x;
 {
+#if ENDIAN == LITTLE
+	return (net_bswap16(x));
+#else
 	return (x);
+#endif
 }
 
 u_short
 ntohs(x)
 	u_short x;
 {
+#if ENDIAN == LITTLE
+	return (net_bswap16(x));
+#else
 	return (x);
+#endif
 }
 
 u_long
 htonl(x)
 	u_long x;
 {
+#if ENDIAN == LITTLE
+	return (net_bswap32(x));
+#else
 	return (x);
+#endif
 }
 
 u_long
 ntohl(x)
 	u_long x;
 {
+#if ENDIAN == LITTLE
+	return (net_bswap32(x));
+#else
 	return (x);
+#endif
 }
 
 cpfromkern(src, dst, len)

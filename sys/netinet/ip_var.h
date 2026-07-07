@@ -15,6 +15,34 @@
 /*
  * Overlay for ip header used by other protocols (tcp, udp).
  */
+#ifndef LITTLE_ENDIAN
+#define	LITTLE_ENDIAN	1234
+#endif
+#ifndef BIG_ENDIAN
+#define	BIG_ENDIAN	4321
+#endif
+#ifndef PDP_ENDIAN
+#define	PDP_ENDIAN	3412
+#endif
+
+#ifndef BYTE_ORDER
+#ifdef ENDIAN
+#define	BYTE_ORDER	ENDIAN
+#else
+#if defined(TARGET_LITTLE_ENDIAN) || defined(__MIPSEL__) || defined(__mipsel__)
+#define	BYTE_ORDER	LITTLE_ENDIAN
+#elif defined(TARGET_BIG_ENDIAN) || defined(__MIPSEB__) || defined(__mipseb__)
+#define	BYTE_ORDER	BIG_ENDIAN
+#elif defined(vax)
+#define	BYTE_ORDER	LITTLE_ENDIAN
+#elif defined(pdp11)
+#define	BYTE_ORDER	PDP_ENDIAN
+#else
+#define	BYTE_ORDER	BIG_ENDIAN
+#endif
+#endif
+#endif
+
 struct ipovly {
 	caddr_t	ih_next, ih_prev;	/* for protocol sequence q's */
 #ifdef pdp11

@@ -191,7 +191,8 @@ void
 udelay(unsigned usec)
 {
     unsigned start = mips_read_c0_register(C0_COUNT, 0);
-    unsigned ticks = (MIPS_COUNT_KHZ * usec + 999u) / 1000u;
+    unsigned ticks = (MIPS_COUNT_KHZ / 1000u) * usec +
+        ((MIPS_COUNT_KHZ % 1000u) * usec + 999u) / 1000u;
 
     while ((unsigned)(mips_read_c0_register(C0_COUNT, 0) - start) < ticks)
         ;

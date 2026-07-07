@@ -25,6 +25,10 @@ options         "CONS_MAJOR=0", "CONS_MINOR=0"
 device          "ci20_uart"
 
 service         creator
+service         ether   1
+service         "ci20_dm9000"
+service         inet
+service         unixdomain
 
 config          unix    root on major 0 minor 0
                         swap on major 1 minor 0

@@ -47,6 +47,9 @@ static int ci20_uart_esc_state;
 static int ci20_uart_attached;
 void ci20_uart_intr(void);
 extern int ci20_clock_intr(int *frame, unsigned status);
+#ifdef CI20_DM9000_ENABLED
+extern void ci20_dm9000poll(void);
+#endif
 
 static volatile unsigned char *
 uart_reg(unsigned offset)
@@ -384,6 +387,9 @@ void
 mips_board_timer_intr(void)
 {
     ci20_uart_intr();
+#ifdef CI20_DM9000_ENABLED
+    ci20_dm9000poll();
+#endif
 }
 
 void

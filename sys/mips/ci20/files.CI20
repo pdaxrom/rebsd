@@ -1,4 +1,5 @@
 mips/ci20/uart.c               optional ci20_uart
+mips/ci20/if_dm9000.c          optional ci20_dm9000
 mips/ci20/devsw.c              standard
 mips/ci20/clock.c              standard
 mips/ci20/machdep.c            standard

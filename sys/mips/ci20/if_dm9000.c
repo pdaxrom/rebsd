@@ -1,0 +1,831 @@
+/*
+ * Davicom DM9000 Ethernet driver for Creator Ci20.
+ *
+ * This first pass is polling-only.  The board has a wired DM9000 interrupt,
+ * but the timer is already proven on Ci20 and keeps the first network bringup
+ * independent from another interrupt-routing variable.
+ */
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/mbuf.h>
+#include <sys/socket.h>
+#include <sys/errno.h>
+#include <sys/ioctl.h>
+#include <sys/domain.h>
+#include <sys/protosw.h>
+#include <sys/kernel.h>
+
+#include <net/if.h>
+#include <net/netisr.h>
+#include <net/route.h>
+#include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/in_var.h>
+#include <netinet/ip.h>
+#include <netinet/if_ether.h>
+
+#define CI20_CPM                0xb0000000u
+#define CI20_GPIO               0xb0010000u
+
+#define CPM_CLKGR0              0x20
+#define CPM_CLKGR0_MAC          (1u << 23)
+#define CPM_CLKGR0_NEMC         (1u << 0)
+
+#define GPIO_PXINTC(n)          (0x18 + (n) * 0x100)
+#define GPIO_PXMASKS(n)         (0x24 + (n) * 0x100)
+#define GPIO_PXMASKC(n)         (0x28 + (n) * 0x100)
+#define GPIO_PXPAT1S(n)         (0x34 + (n) * 0x100)
+#define GPIO_PXPAT1C(n)         (0x38 + (n) * 0x100)
+#define GPIO_PXPAT0S(n)         (0x44 + (n) * 0x100)
+#define GPIO_PXPAT0C(n)         (0x48 + (n) * 0x100)
+#define GPIO_PXPENS(n)          (0x74 + (n) * 0x100)
+
+#define DM9000_IO_ADDR          0xb6000000u
+#define DM9000_DATA_ADDR        (DM9000_IO_ADDR + 2)
+
+#define DM9000_ID               0x90000a46u
+#define DM9000_PKT_RDY          0x01
+#define DM9000_PKT_MAX          1536
+#define DM9000_TX_MAX           1600
+
+#define DM9000_NCR              0x00
+#define DM9000_NSR              0x01
+#define DM9000_TCR              0x02
+#define DM9000_RCR              0x05
+#define DM9000_BPTR             0x08
+#define DM9000_FCTR             0x09
+#define DM9000_FCR              0x0a
+#define DM9000_EPCR             0x0b
+#define DM9000_EPAR             0x0c
+#define DM9000_EPDRL            0x0d
+#define DM9000_EPDRH            0x0e
+#define DM9000_PAR              0x10
+#define DM9000_MAR              0x16
+#define DM9000_GPCR             0x1e
+#define DM9000_GPR              0x1f
+#define DM9000_VIDL             0x28
+#define DM9000_VIDH             0x29
+#define DM9000_PIDL             0x2a
+#define DM9000_PIDH             0x2b
+#define DM9000_SMCR             0x2f
+#define DM9000_MRCMDX           0xf0
+#define DM9000_MRCMD            0xf2
+#define DM9000_MWCMD            0xf8
+#define DM9000_TXPLL            0xfc
+#define DM9000_TXPLH            0xfd
+#define DM9000_ISR              0xfe
+#define DM9000_IMR              0xff
+
+#define NCR_LBK_INT_MAC         (1u << 1)
+#define NCR_RST                 (1u << 0)
+
+#define NSR_WAKEST              (1u << 5)
+#define NSR_TX2END              (1u << 3)
+#define NSR_TX1END              (1u << 2)
+#define NSR_RXOV                (1u << 1)
+
+#define TCR_TXREQ               (1u << 0)
+
+#define RCR_DIS_LONG            (1u << 5)
+#define RCR_DIS_CRC             (1u << 4)
+#define RCR_RXEN                (1u << 0)
+
+#define BPTR_BPHW(x)            ((x) << 4)
+#define BPTR_JPT_600US          0x0f
+#define FCTR_HWOT(x)            (((x) & 0x0f) << 4)
+#define FCTR_LWOT(x)            ((x) & 0x0f)
+
+#define GPCR_GPIO0_OUT          (1u << 0)
+
+#define ISR_ROOS                (1u << 3)
+#define ISR_ROS                 (1u << 2)
+#define ISR_PTS                 (1u << 1)
+#define ISR_PRS                 (1u << 0)
+#define ISR_BUS_MODE_MASK       (3u << 6)
+
+#define IMR_PAR                 (1u << 7)
+
+#define DM9000_BUS_16           16
+#define DM9000_BUS_8            8
+
+struct dm9000_softc {
+    struct arpcom sc_ac;
+#define sc_if sc_ac.ac_if
+    int sc_present;
+    int sc_hw_ready;
+    int sc_tx_busy;
+    int sc_bus_width;
+    unsigned char sc_txbuf[DM9000_TX_MAX];
+};
+
+static struct dm9000_softc dm9000_softc[1];
+
+static int dm9000output(struct ifnet *ifp, struct mbuf *m0,
+    struct sockaddr *dst);
+static int dm9000ioctl(struct ifnet *ifp, int cmd, caddr_t data);
+static int dm9000init(int unit);
+static int dm9000start(int unit);
+static int dm9000watchdog(int unit);
+static void dm9000poll(int unit);
+static void dm9000recv(struct dm9000_softc *sc);
+static struct mbuf *dm9000get(struct ifnet *ifp, unsigned char *buf,
+    int len);
+static int dm9000_hw_probe(struct dm9000_softc *sc);
+static void dm9000_chip_init(struct dm9000_softc *sc);
+
+extern void udelay(unsigned usec);
+
+static volatile unsigned *
+ci20_reg(unsigned base, unsigned offset)
+{
+    return (volatile unsigned *)(base + offset);
+}
+
+static unsigned
+ci20_read(unsigned base, unsigned offset)
+{
+    return *ci20_reg(base, offset);
+}
+
+static void
+ci20_write(unsigned base, unsigned offset, unsigned value)
+{
+    *ci20_reg(base, offset) = value;
+}
+
+static void
+ci20_clock_enable(unsigned mask)
+{
+    ci20_write(CI20_CPM, CPM_CLKGR0, ci20_read(CI20_CPM, CPM_CLKGR0) & ~mask);
+}
+
+static void
+ci20_gpio_write(int port, int pin, int value)
+{
+    ci20_write(CI20_GPIO, value ? GPIO_PXPAT0S(port) : GPIO_PXPAT0C(port),
+        1u << pin);
+}
+
+static void
+ci20_gpio_output(int port, int pin, int value)
+{
+    ci20_write(CI20_GPIO, GPIO_PXINTC(port), 1u << pin);
+    ci20_write(CI20_GPIO, GPIO_PXMASKS(port), 1u << pin);
+    ci20_write(CI20_GPIO, GPIO_PXPAT1C(port), 1u << pin);
+    ci20_gpio_write(port, pin, value);
+}
+
+static void
+ci20_dm9000_pinmux(void)
+{
+    ci20_write(CI20_GPIO, GPIO_PXINTC(0), 0x04030000u);
+    ci20_write(CI20_GPIO, GPIO_PXMASKC(0), 0x04030000u);
+    ci20_write(CI20_GPIO, GPIO_PXPAT1C(0), 0x04030000u);
+    ci20_write(CI20_GPIO, GPIO_PXPAT0C(0), 0x04030000u);
+    ci20_write(CI20_GPIO, GPIO_PXPENS(0), 0x04030000u);
+}
+
+static volatile unsigned char *
+dm9000_io8(void)
+{
+    return (volatile unsigned char *)DM9000_IO_ADDR;
+}
+
+static volatile unsigned char *
+dm9000_data8(void)
+{
+    return (volatile unsigned char *)DM9000_DATA_ADDR;
+}
+
+static volatile unsigned short *
+dm9000_data16(void)
+{
+    return (volatile unsigned short *)DM9000_DATA_ADDR;
+}
+
+static unsigned
+dm9000_read(unsigned reg)
+{
+    *dm9000_io8() = reg & 0xff;
+    return *dm9000_data8() & 0xff;
+}
+
+static void
+dm9000_write(unsigned reg, unsigned value)
+{
+    *dm9000_io8() = reg & 0xff;
+    *dm9000_data8() = value & 0xff;
+}
+
+static void
+dm9000_write_fifo8(const unsigned char *buf, unsigned count)
+{
+    volatile unsigned char *data = dm9000_data8();
+    unsigned i;
+
+    for (i = 0; i < count; i++)
+        *data = buf[i];
+}
+
+static void
+dm9000_read_fifo8(unsigned char *buf, unsigned count)
+{
+    volatile unsigned char *data = dm9000_data8();
+    unsigned i;
+
+    for (i = 0; i < count; i++)
+        buf[i] = *data;
+}
+
+static void
+dm9000_write_fifo16(const unsigned char *buf, unsigned count)
+{
+    volatile unsigned short *data = dm9000_data16();
+    unsigned value;
+
+    while (count >= 2) {
+        value = buf[0] | (buf[1] << 8);
+        *data = value;
+        buf += 2;
+        count -= 2;
+    }
+    if (count)
+        *data = buf[0];
+}
+
+static void
+dm9000_read_fifo16(unsigned char *buf, unsigned count)
+{
+    volatile unsigned short *data = dm9000_data16();
+    unsigned value;
+
+    while (count >= 2) {
+        value = *data;
+        buf[0] = value & 0xff;
+        buf[1] = (value >> 8) & 0xff;
+        buf += 2;
+        count -= 2;
+    }
+    if (count) {
+        value = *data;
+        buf[0] = value & 0xff;
+    }
+}
+
+static void
+dm9000_write_fifo(struct dm9000_softc *sc, const unsigned char *buf,
+    unsigned count)
+{
+    *dm9000_io8() = DM9000_MWCMD;
+    if (sc->sc_bus_width == DM9000_BUS_16)
+        dm9000_write_fifo16(buf, count);
+    else
+        dm9000_write_fifo8(buf, count);
+}
+
+static void
+dm9000_read_fifo(struct dm9000_softc *sc, unsigned char *buf, unsigned count)
+{
+    if (sc->sc_bus_width == DM9000_BUS_16)
+        dm9000_read_fifo16(buf, count);
+    else
+        dm9000_read_fifo8(buf, count);
+}
+
+static unsigned
+dm9000_read_word_data(struct dm9000_softc *sc)
+{
+    unsigned lo, hi;
+
+    if (sc->sc_bus_width == DM9000_BUS_16)
+        return *dm9000_data16() & 0xffff;
+    lo = *dm9000_data8() & 0xff;
+    hi = *dm9000_data8() & 0xff;
+    return lo | (hi << 8);
+}
+
+static void
+dm9000_rx_status(struct dm9000_softc *sc, unsigned *status, unsigned *len)
+{
+    *dm9000_io8() = DM9000_MRCMD;
+    *status = dm9000_read_word_data(sc);
+    *len = dm9000_read_word_data(sc);
+}
+
+static unsigned
+dm9000_id(void)
+{
+    return dm9000_read(DM9000_VIDL) |
+        (dm9000_read(DM9000_VIDH) << 8) |
+        (dm9000_read(DM9000_PIDL) << 16) |
+        (dm9000_read(DM9000_PIDH) << 24);
+}
+
+static int
+dm9000_detect_bus(struct dm9000_softc *sc)
+{
+    unsigned mode = dm9000_read(DM9000_ISR) & ISR_BUS_MODE_MASK;
+
+    switch (mode >> 6) {
+    case 0:
+        sc->sc_bus_width = DM9000_BUS_16;
+        return 1;
+    case 2:
+        sc->sc_bus_width = DM9000_BUS_8;
+        return 1;
+    default:
+        printf("dm0: unsupported bus mode %u at 0x%x\n",
+            mode >> 6, DM9000_IO_ADDR);
+        return 0;
+    }
+}
+
+static int
+dm9000_reset(void)
+{
+    int tries;
+
+    dm9000_write(DM9000_GPCR, GPCR_GPIO0_OUT);
+    dm9000_write(DM9000_GPR, 0);
+    dm9000_write(DM9000_NCR, NCR_LBK_INT_MAC | NCR_RST);
+    for (tries = 1000; tries > 0; tries--) {
+        if ((dm9000_read(DM9000_NCR) & NCR_RST) == 0)
+            break;
+        udelay(25);
+    }
+    if (tries == 0)
+        return 0;
+
+    dm9000_write(DM9000_NCR, 0);
+    dm9000_write(DM9000_NCR, NCR_LBK_INT_MAC | NCR_RST);
+    for (tries = 1000; tries > 0; tries--) {
+        if ((dm9000_read(DM9000_NCR) & NCR_RST) == 0)
+            break;
+        udelay(25);
+    }
+    if (tries == 0)
+        return 0;
+
+    return dm9000_id() == DM9000_ID;
+}
+
+static int
+dm9000_valid_enaddr(const unsigned char *enaddr)
+{
+    int i, allzero = 1, allff = 1;
+
+    for (i = 0; i < 6; i++) {
+        if (enaddr[i] != 0x00)
+            allzero = 0;
+        if (enaddr[i] != 0xff)
+            allff = 0;
+    }
+    return !allzero && !allff && (enaddr[0] & 1) == 0;
+}
+
+static void
+dm9000_get_enaddr(unsigned char *enaddr)
+{
+    int i;
+
+    for (i = 0; i < 6; i++)
+        enaddr[i] = dm9000_read(DM9000_PAR + i);
+    if (dm9000_valid_enaddr(enaddr))
+        return;
+
+    enaddr[0] = 0x02;
+    enaddr[1] = 0x20;
+    enaddr[2] = 0x00;
+    enaddr[3] = 0x00;
+    enaddr[4] = 0x00;
+    enaddr[5] = 0x20;
+}
+
+static void
+dm9000_fallback_enaddr(unsigned char *enaddr)
+{
+    enaddr[0] = 0x02;
+    enaddr[1] = 0x20;
+    enaddr[2] = 0x00;
+    enaddr[3] = 0x00;
+    enaddr[4] = 0x00;
+    enaddr[5] = 0x20;
+}
+
+static int
+dm9000_hw_probe(struct dm9000_softc *sc)
+{
+    unsigned id;
+
+    if (sc->sc_hw_ready)
+        return 1;
+
+    ci20_dm9000_pinmux();
+    ci20_clock_enable(CPM_CLKGR0_MAC | CPM_CLKGR0_NEMC);
+    ci20_gpio_output(1, 25, 1);
+    if (!dm9000_reset())
+        printf("dm0: reset warning, probing id anyway\n");
+    id = dm9000_id();
+    if (id != DM9000_ID) {
+        printf("dm0: not found at 0x%x id=0x%x\n", DM9000_IO_ADDR, id);
+        return 0;
+    }
+    if (!dm9000_detect_bus(sc))
+        return 0;
+
+    dm9000_get_enaddr(sc->sc_ac.ac_enaddr);
+    sc->sc_hw_ready = 1;
+    printf("dm0: dm9000 id=0x%x %d-bit address %s\n", id,
+        sc->sc_bus_width, ether_sprintf(sc->sc_ac.ac_enaddr));
+    return 1;
+}
+
+static void
+dm9000_chip_init(struct dm9000_softc *sc)
+{
+    int i;
+
+    dm9000_write(DM9000_NCR, 0);
+    dm9000_write(DM9000_TCR, 0);
+    dm9000_write(DM9000_BPTR, BPTR_BPHW(3) | BPTR_JPT_600US);
+    dm9000_write(DM9000_FCTR, FCTR_HWOT(3) | FCTR_LWOT(8));
+    dm9000_write(DM9000_FCR, 0);
+    dm9000_write(DM9000_SMCR, 0);
+    dm9000_write(DM9000_NSR, NSR_WAKEST | NSR_TX2END | NSR_TX1END);
+    dm9000_write(DM9000_ISR, ISR_ROOS | ISR_ROS | ISR_PTS | ISR_PRS);
+
+    for (i = 0; i < 6; i++)
+        dm9000_write(DM9000_PAR + i, sc->sc_ac.ac_enaddr[i]);
+    for (i = 0; i < 8; i++)
+        dm9000_write(DM9000_MAR + i, 0xff);
+
+    dm9000_write(DM9000_RCR, RCR_DIS_LONG | RCR_DIS_CRC | RCR_RXEN);
+    dm9000_write(DM9000_IMR, IMR_PAR);
+}
+
+void
+ci20_dm9000attach(void)
+{
+    struct dm9000_softc *sc = &dm9000_softc[0];
+    struct ifnet *ifp = &sc->sc_if;
+
+    dm9000_fallback_enaddr(sc->sc_ac.ac_enaddr);
+    sc->sc_present = 1;
+    sc->sc_hw_ready = 0;
+    sc->sc_bus_width = DM9000_BUS_8;
+    ifp->if_name = "dm";
+    ifp->if_unit = 0;
+    ifp->if_mtu = ETHERMTU;
+    ifp->if_flags = IFF_BROADCAST | IFF_NOTRAILERS;
+    ifp->if_init = dm9000init;
+    ifp->if_output = dm9000output;
+    ifp->if_ioctl = dm9000ioctl;
+    ifp->if_watchdog = dm9000watchdog;
+    if_attach(ifp);
+    printf("dm0: dm9000 deferred probe at 0x%x address %s\n", DM9000_IO_ADDR,
+        ether_sprintf(sc->sc_ac.ac_enaddr));
+}
+
+static int
+dm9000init(int unit)
+{
+    struct dm9000_softc *sc = &dm9000_softc[unit];
+
+    if (!sc->sc_present)
+        return 0;
+    if (!dm9000_hw_probe(sc)) {
+        sc->sc_if.if_flags &= ~IFF_RUNNING;
+        return 0;
+    }
+
+    dm9000_chip_init(sc);
+    sc->sc_tx_busy = 0;
+    sc->sc_if.if_flags |= IFF_RUNNING;
+    dm9000start(unit);
+    return 0;
+}
+
+static int
+dm9000ioctl(struct ifnet *ifp, int cmd, caddr_t data)
+{
+    struct dm9000_softc *sc = &dm9000_softc[ifp->if_unit];
+    struct in_ifaddr *ia = (struct in_ifaddr *)data;
+    int s, error = 0;
+
+    s = splimp();
+    switch (cmd) {
+    case SIOCGIFHWADDR:
+        ((struct ifreq *)data)->ifr_addr.sa_family = AF_UNSPEC;
+        bzero((caddr_t)((struct ifreq *)data)->ifr_addr.sa_data,
+            sizeof(((struct ifreq *)data)->ifr_addr.sa_data));
+        bcopy((caddr_t)sc->sc_ac.ac_enaddr,
+            (caddr_t)((struct ifreq *)data)->ifr_addr.sa_data,
+            sizeof(sc->sc_ac.ac_enaddr));
+        break;
+
+    case SIOCSIFADDR:
+        ifp->if_flags |= IFF_UP;
+        sc->sc_ac.ac_ipaddr = IA_SIN(ia)->sin_addr;
+        dm9000init(ifp->if_unit);
+        break;
+
+    case SIOCSIFFLAGS:
+        if ((ifp->if_flags & IFF_UP) == 0)
+            ifp->if_flags &= ~IFF_RUNNING;
+        else if ((ifp->if_flags & IFF_RUNNING) == 0)
+            dm9000init(ifp->if_unit);
+        break;
+
+    default:
+        error = EINVAL;
+        break;
+    }
+    splx(s);
+    return error;
+}
+
+static int
+dm9000output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst)
+{
+    struct dm9000_softc *sc = &dm9000_softc[ifp->if_unit];
+    struct mbuf *m = m0;
+    struct ether_header *eh;
+    struct in_addr idst;
+    unsigned char edst[6];
+    int error, off, s, type, usetrailers;
+
+    if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) !=
+        (IFF_UP | IFF_RUNNING)) {
+        error = ENETDOWN;
+        goto bad;
+    }
+
+    switch (dst->sa_family) {
+    case AF_INET:
+        idst = ((struct sockaddr_in *)dst)->sin_addr;
+        if (!arpresolve(&sc->sc_ac, m, &idst, edst, &usetrailers))
+            return 0;
+        off = ntohs((u_short)mtod(m, struct ip *)->ip_len) - m->m_len;
+        type = ETHERTYPE_IP;
+        break;
+
+    case AF_UNSPEC:
+        eh = (struct ether_header *)dst->sa_data;
+        bcopy((caddr_t)eh->ether_dhost, (caddr_t)edst, sizeof(edst));
+        type = eh->ether_type;
+        off = 0;
+        break;
+
+    default:
+        printf("dm%d: can't handle af%d\n", ifp->if_unit, dst->sa_family);
+        error = EAFNOSUPPORT;
+        goto bad;
+    }
+    (void)off;
+
+    if (m->m_off > MMAXOFF ||
+        MMINOFF + sizeof(struct ether_header) > m->m_off) {
+        m = m_get(M_DONTWAIT, MT_HEADER);
+        if (m == 0) {
+            error = ENOBUFS;
+            goto bad;
+        }
+        m->m_next = m0;
+        m->m_off = MMINOFF;
+        m->m_len = sizeof(struct ether_header);
+    } else {
+        m->m_off -= sizeof(struct ether_header);
+        m->m_len += sizeof(struct ether_header);
+    }
+
+    eh = mtod(m, struct ether_header *);
+    eh->ether_type = htons((u_short)type);
+    bcopy((caddr_t)edst, (caddr_t)eh->ether_dhost, sizeof(edst));
+    bcopy((caddr_t)sc->sc_ac.ac_enaddr, (caddr_t)eh->ether_shost,
+        sizeof(sc->sc_ac.ac_enaddr));
+
+    s = splimp();
+    if (IF_QFULL(&ifp->if_snd)) {
+        IF_DROP(&ifp->if_snd);
+        splx(s);
+        m_freem(m);
+        return ENOBUFS;
+    }
+    IF_ENQUEUE(&ifp->if_snd, m);
+    dm9000start(ifp->if_unit);
+    splx(s);
+    return 0;
+
+bad:
+    m_freem(m0);
+    return error;
+}
+
+static int
+dm9000start(int unit)
+{
+    struct dm9000_softc *sc = &dm9000_softc[unit];
+    struct mbuf *m, *n;
+    unsigned count = 0;
+    unsigned mincount;
+    int len;
+
+    if (sc->sc_tx_busy)
+        return 0;
+    if (!sc->sc_hw_ready)
+        return 0;
+    IF_DEQUEUE(&sc->sc_if.if_snd, m);
+    if (m == 0)
+        return 0;
+
+    while (m) {
+        len = m->m_len;
+        if (count + len > sizeof(sc->sc_txbuf))
+            len = sizeof(sc->sc_txbuf) - count;
+        if (len > 0) {
+            bcopy(mtod(m, caddr_t), (caddr_t)&sc->sc_txbuf[count], len);
+            count += len;
+        }
+        MFREE(m, n);
+        m = n;
+    }
+    mincount = ETHERMIN + sizeof(struct ether_header);
+    if (count < mincount) {
+        bzero((caddr_t)&sc->sc_txbuf[count], mincount - count);
+        count = mincount;
+    }
+
+    sc->sc_tx_busy = 1;
+    dm9000_write(DM9000_ISR, ISR_PTS);
+    dm9000_write_fifo(sc, sc->sc_txbuf, count);
+    dm9000_write(DM9000_TXPLL, count & 0xff);
+    dm9000_write(DM9000_TXPLH, (count >> 8) & 0xff);
+    dm9000_write(DM9000_TCR, TCR_TXREQ);
+    sc->sc_if.if_timer = 2;
+    return 0;
+}
+
+static int
+dm9000watchdog(int unit)
+{
+    struct dm9000_softc *sc = &dm9000_softc[unit];
+
+    dm9000poll(unit);
+    if (sc->sc_tx_busy) {
+        sc->sc_tx_busy = 0;
+        sc->sc_if.if_oerrors++;
+        dm9000_chip_init(sc);
+        dm9000start(unit);
+    }
+    return 0;
+}
+
+static void
+dm9000poll(int unit)
+{
+    struct dm9000_softc *sc = &dm9000_softc[unit];
+    unsigned isr, nsr;
+
+    if (!sc->sc_present || !sc->sc_hw_ready ||
+        (sc->sc_if.if_flags & IFF_RUNNING) == 0)
+        return;
+
+    isr = dm9000_read(DM9000_ISR);
+    nsr = dm9000_read(DM9000_NSR);
+    if (isr & (ISR_ROOS | ISR_ROS | ISR_PTS | ISR_PRS))
+        dm9000_write(DM9000_ISR, isr & (ISR_ROOS | ISR_ROS | ISR_PTS |
+            ISR_PRS));
+    if (nsr & (NSR_WAKEST | NSR_TX2END | NSR_TX1END))
+        dm9000_write(DM9000_NSR, nsr & (NSR_WAKEST | NSR_TX2END |
+            NSR_TX1END));
+
+    if (isr & (ISR_ROOS | ISR_ROS) || nsr & NSR_RXOV)
+        sc->sc_if.if_ierrors++;
+    if (sc->sc_tx_busy &&
+        ((isr & ISR_PTS) || (nsr & (NSR_TX2END | NSR_TX1END)))) {
+        sc->sc_tx_busy = 0;
+        sc->sc_if.if_timer = 0;
+        sc->sc_if.if_opackets++;
+        dm9000start(unit);
+    }
+    if (isr & ISR_PRS)
+        dm9000recv(sc);
+}
+
+void
+ci20_dm9000poll(void)
+{
+    dm9000poll(0);
+}
+
+static struct mbuf *
+dm9000get(struct ifnet *ifp, unsigned char *buf, int len)
+{
+    struct mbuf *top, **mp, *m;
+    int n;
+
+    top = 0;
+    mp = &top;
+    while (len > 0) {
+        MGET(m, M_DONTWAIT, MT_DATA);
+        if (m == 0)
+            goto bad;
+        m->m_off = MMINOFF;
+        if (ifp) {
+            m->m_len = MIN(MLEN - sizeof(struct ifnet *), len);
+            m->m_off += sizeof(struct ifnet *);
+        } else
+            m->m_len = MIN(MLEN, len);
+        n = m->m_len;
+        bcopy((caddr_t)buf, mtod(m, caddr_t), n);
+        buf += n;
+        len -= n;
+        *mp = m;
+        mp = &m->m_next;
+        if (ifp) {
+            m->m_len += sizeof(struct ifnet *);
+            m->m_off -= sizeof(struct ifnet *);
+            *(mtod(m, struct ifnet **)) = ifp;
+            ifp = 0;
+        }
+    }
+    return top;
+
+bad:
+    m_freem(top);
+    return 0;
+}
+
+static void
+dm9000recv(struct dm9000_softc *sc)
+{
+    struct ether_header *eh;
+    struct ifqueue *inq;
+    struct mbuf *m;
+    unsigned char frame[DM9000_PKT_MAX];
+    unsigned status, len, rxbyte;
+    int s, type;
+
+    for (;;) {
+        (void)dm9000_read(DM9000_MRCMDX);
+        rxbyte = *dm9000_data8() & 0x03;
+        if (rxbyte > DM9000_PKT_RDY) {
+            dm9000_write(DM9000_RCR, 0);
+            dm9000_write(DM9000_IMR, IMR_PAR);
+            sc->sc_if.if_ierrors++;
+            return;
+        }
+        if (rxbyte != DM9000_PKT_RDY)
+            return;
+
+        dm9000_rx_status(sc, &status, &len);
+        if ((status & 0xbf00) || len < sizeof(struct ether_header) ||
+            len > sizeof(frame)) {
+            sc->sc_if.if_ierrors++;
+            if (len > sizeof(frame)) {
+                dm9000_chip_init(sc);
+                return;
+            }
+            if (len > 0 && len <= sizeof(frame))
+                dm9000_read_fifo(sc, frame, len);
+            continue;
+        }
+
+        dm9000_read_fifo(sc, frame, len);
+        eh = (struct ether_header *)frame;
+        type = ntohs((u_short)eh->ether_type);
+        len -= sizeof(struct ether_header);
+        m = dm9000get(&sc->sc_if, frame + sizeof(struct ether_header), len);
+        if (m == 0) {
+            sc->sc_if.if_ierrors++;
+            continue;
+        }
+
+        switch (type) {
+        case ETHERTYPE_IP:
+            schednetisr(NETISR_IP);
+            inq = &ipintrq;
+            break;
+
+        case ETHERTYPE_ARP:
+            arpinput(&sc->sc_ac, m);
+            sc->sc_if.if_ipackets++;
+            continue;
+
+        default:
+            m_freem(m);
+            continue;
+        }
+
+        s = splimp();
+        if (IF_QFULL(inq)) {
+            IF_DROP(inq);
+            splx(s);
+            m_freem(m);
+            continue;
+        }
+        IF_ENQUEUE(inq, m);
+        sc->sc_if.if_ipackets++;
+        splx(s);
+    }
+}
