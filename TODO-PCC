@@ -1395,6 +1395,30 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - Callee-saved restore cleanup landed on 2026-07-08: `eoftn()` no longer
+    prints a `nop` after each restored permanent register load because the
+    epilogue does not consume restored `$sN` values before returning.  `$ra`,
+    `$fp`, and stack handling stay unchanged.
+  - Post-callee-saved-restore-cleanup `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 3403 instructions
+      and 949 `nop` to 3388 instructions and 934 `nop`; total improvement
+      from the original baseline is -299 instructions and -299 `nop`.
+      PCC/GCC instruction ratio improved from the original 3.240 to 2.977,
+      and `nop` ratio from 29.357 to 22.238.  The branch/jump delay-slot
+      `nop` counter remains 184.
+    - Malta/mips32r2 big-endian PCC Linpack changed from the previous 3715
+      instructions and 949 `nop` to 3700 instructions and 934 `nop`; total
+      improvement from the original baseline is -619 instructions and -619
+      `nop`.  PCC/GCC instruction ratio improved from the original 3.992 to
+      3.420, and `nop` ratio from 310.600 to 186.800.  The branch/jump
+      delay-slot `nop` counter remains 184.
+    - MaltaEL/mips32r2 little-endian matched the big-endian mips32r2 result.
+  - Post-callee-saved-restore-cleanup QEMU correctness gates passed with
+    `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian, and
+    MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
   - Audit integer loads and hard-float load templates that append `nop` after
     memory operations.
   - Land this in small patches, each followed by PCC regressions plus Linpack
@@ -1455,9 +1479,10 @@ Milestone order:
 - [x] Milestone A: scripted baseline and assembly counters, no codegen change.
 - [ ] Milestone B: remove provably redundant `nop` sequences from jump and
   memory templates.
-  - Control-transfer, store-side, paired-load, omit-frame epilogue, and
-    call-delay-slot patches are complete and green; remaining load-use and FP
-    load/compute scheduling needs the compact late scheduler.
+  - Control-transfer, store-side, paired-load, omit-frame epilogue,
+    call-delay-slot, and callee-saved restore patches are complete and green;
+    remaining load-use and FP load/compute scheduling needs the compact late
+    scheduler.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.

@@ -216,7 +216,7 @@ eoftn(struct interpass_prolog * ipp)
 	/* return from function code */
 	for (i = p2env.p_regs[0], j = 0; i; i >>= 1, j++) {
 		if (i & 1)
-			printf("\tlw %s,%d(%s)\n\tnop\n",
+			printf("\tlw %s,%d(%s)\n",
 				rnames[j],
 				mips_omit_fp ? mips_frame_adjust - regoff[j] : -regoff[j],
 				rnames[mips_omit_fp ? SP : FP]);
