@@ -51,7 +51,6 @@
 	"	sw AR,UL\n"
 #define MIPS_LL_LOAD_MEM \
 	"	lw U1,AL	# load (u)longlong to reg\n" \
-	"	nop\n" \
 	"	lw A1,UL\n" \
 	"	nop\n"
 #define MIPS_LL_PUSH_ARG \
@@ -65,7 +64,6 @@
 	"	sw AR,AL\n"
 #define MIPS_LL_LOAD_MEM \
 	"	lw U1,UL	# load (u)longlong to reg\n" \
-	"	nop\n" \
 	"	lw A1,AL\n" \
 	"	nop\n"
 #define MIPS_LL_PUSH_ARG \

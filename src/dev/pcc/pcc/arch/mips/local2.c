@@ -1655,12 +1655,10 @@ mips_hardfp64_load(NODE *p)
 	}
 #ifdef TARGET_BIG_ENDIAN
 	expand(p, 0, "\tlwc1 U1,AL\t# split double load\n"
-	    "\tnop\n"
 	    "\tlwc1 A1,UL\n"
 	    "\tnop\n");
 #else
 	expand(p, 0, "\tlwc1 A1,AL\t# split double load\n"
-	    "\tnop\n"
 	    "\tlwc1 U1,UL\n"
 	    "\tnop\n");
 #endif
