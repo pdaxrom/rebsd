@@ -139,7 +139,7 @@ case "$target_os" in
 
     rebsd*|retrobsd*)
 	targos=rebsd
-	abi=aout
+	abi=elf
 	wchar_type=USHORT
 	case "$target_cpu" in
 	    mipsel*) targmach=mips endian=little ;;

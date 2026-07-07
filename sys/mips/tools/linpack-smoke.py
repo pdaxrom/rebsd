@@ -33,6 +33,11 @@ def command_build(args):
     rootfs = Path(args.rootfs)
     pcc_bin = out / "linpack-pcc"
     libdir = rootfs / "usr/lib"
+    ldscript_name = {
+        "big": "elf32-bigmips.ld",
+        "little": "elf32-littlemips.ld",
+    }[args.endian]
+    ldscript = libdir / "ldscripts" / ldscript_name
 
     if not source.is_file():
         raise FileNotFoundError(source)
@@ -42,11 +47,15 @@ def command_build(args):
 
     march_flag = f"-march={args.cpu}"
     float_flag = f"-m{args.float_abi}-float"
-    run([
+    cmd = [
         args.pcc,
         march_flag,
         float_flag,
         "-O2",
+    ]
+    if ldscript.is_file():
+        cmd += ["-T", ldscript]
+    cmd += [
         "-I",
         rootfs / "usr/include",
         "-L",
@@ -55,7 +64,8 @@ def command_build(args):
         pcc_bin,
         source,
         "-lm",
-    ])
+    ]
+    run(cmd)
 
     summary = {
         "pcc": {"path": str(pcc_bin), "bytes": pcc_bin.stat().st_size},
@@ -208,6 +218,7 @@ def main():
     p.add_argument("--pcc", required=True)
     p.add_argument("--cpu", choices=["vr4300", "mips32r2"], default="vr4300")
     p.add_argument("--float-abi", choices=["hard", "soft"], default="hard")
+    p.add_argument("--endian", choices=["big", "little"], required=True)
     p.set_defaults(func=command_build)
 
     p = sub.add_parser("stage")

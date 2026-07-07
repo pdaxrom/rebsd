@@ -40,6 +40,7 @@ MIPS_ROOTFS_ENDIAN_CPP = $(MIPS_ROOTFS_ENDIAN_CPP_$(MIPS_ROOTFS_ENDIAN))
 MIPS_ROOTFS_ENDIAN_CPP1_big = -DTARGET_BIG_ENDIAN=1
 MIPS_ROOTFS_ENDIAN_CPP1_little = -DTARGET_LITTLE_ENDIAN=1
 MIPS_ROOTFS_ENDIAN_CPP1 = $(MIPS_ROOTFS_ENDIAN_CPP1_$(MIPS_ROOTFS_ENDIAN))
+MIPS_ROOTFS_TOOLCHAIN_CPP = -DREBSD_TOOLCHAIN_ELF_DEFAULT
 MIPS_ROOTFS_LD_EMULATION_big = elf32ebmip
 MIPS_ROOTFS_LD_EMULATION_little = elf32elmip
 MIPS_ROOTFS_LD_EMULATION = $(MIPS_ROOTFS_LD_EMULATION_$(MIPS_ROOTFS_ENDIAN))
@@ -85,6 +86,11 @@ MIPS_PCC_HOST_INCLUDE_STAMP ?= $(MIPS_ROOTFS_BASE_STAMP)
 MIPS_ROOTFS_TARGET_PLATFORM ?= mips
 MIPS_ROOTFS_USER_LDSCRIPT ?= mips-user.ld
 MIPS_ROOTFS_USER_LDSCRIPT_SRC ?= $(TOPSRC)/sys/mips/user/user.ld.S
+MIPS_ROOTFS_LDSCRIPTS_DIR ?= ldscripts
+MIPS_ROOTFS_INSTALLED_LDSCRIPT_big = $(MIPS_ROOTFS_LDSCRIPTS_DIR)/elf32-bigmips.ld
+MIPS_ROOTFS_INSTALLED_LDSCRIPT_little = $(MIPS_ROOTFS_LDSCRIPTS_DIR)/elf32-littlemips.ld
+MIPS_ROOTFS_INSTALLED_LDSCRIPT ?= $(MIPS_ROOTFS_INSTALLED_LDSCRIPT_$(MIPS_ROOTFS_ENDIAN))
+MIPS_ROOTFS_INSTALLED_LDSCRIPT_PATH = /usr/lib/$(MIPS_ROOTFS_INSTALLED_LDSCRIPT)
 MIPS_ROOTFS_USERLAND_STAMP_PREFIX ?= mips-userland
 MIPS_ROOTFS_USERLAND_STAMP = $(MIPS_ROOTFS_USERLAND_STAMP_PREFIX).$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_ABI).stamp
 MIPS_ROOTFS_CLEAN_ARTIFACTS = $(MIPS_ROOTFS_STAGE) \
@@ -121,7 +127,8 @@ MIPS_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
                          $(TOPSRC)/src/cmd/sum.c \
                          $(TOPSRC)/src/cmd/size.c \
                          $(TOPSRC)/src/cmd/aoutio.c \
-                         $(TOPSRC)/src/cmd/aoutio.h
+                         $(TOPSRC)/src/cmd/aoutio.h \
+                         $(TOPSRC)/src/cmd/elf32_mips.h
 MIPS_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 MIPS_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 MIPS_AWK_SRCS = $(shell find $(TOPSRC)/src/cmd/awk -type f \( -name '*.[chly]' -o -name Makefile -o -name tokenscript \) 2>/dev/null)
@@ -214,11 +221,13 @@ MIPS_NATIVE_SOFTFLOAT_LIBS = libpcc.a
 MIPS_NATIVE_TARGET_FLAGS_vr4300 = $(MIPS_ROOTFS_ENDIAN_CPP) -DTARGET_VR4300 \
                                   -DTARGET_MIPS_STRICT_ALIGN64 \
                                   -DTARGET_MIPS_SH_ALLOC_GUARD \
-                                  -DTARGET_NO_ABICALLS
+                                  -DTARGET_NO_ABICALLS \
+                                  $(MIPS_ROOTFS_TOOLCHAIN_CPP)
 MIPS_NATIVE_TARGET_FLAGS_mips32r2 = $(MIPS_ROOTFS_ENDIAN_CPP) \
                                     -DTARGET_MIPS32R2 \
                                     -DTARGET_MIPS_SH_ALLOC_GUARD \
-                                    -DTARGET_NO_ABICALLS
+                                    -DTARGET_NO_ABICALLS \
+                                    $(MIPS_ROOTFS_TOOLCHAIN_CPP)
 MIPS_NATIVE_TARGET_FLAGS ?= $(MIPS_NATIVE_TARGET_FLAGS_$(MIPS_ROOTFS_CPU))
 MIPS_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
 MIPS_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-cc.sh
@@ -292,6 +301,7 @@ MIPS_NATIVE_TOOL_SRCS = $(MIPS_NATIVE_MKHOSTINCLUDE) $(MIPS_NATIVE_CC_SCRIPT) \
                        $(TOPSRC)/src/cmd/nm/nm.c \
                        $(TOPSRC)/src/cmd/size.c \
                        $(TOPSRC)/src/cmd/strip.c \
+                       $(TOPSRC)/src/cmd/elf32_mips.h \
                        $(TOPSRC)/src/cmd/aoutio.c \
                        $(TOPSRC)/src/cmd/aoutio.h \
                        $(TOPSRC)/include/a.out.h \
@@ -315,6 +325,7 @@ MIPS_PCC_HOST_PREFIX ?= /private/tmp/rebsd-mips-pcc-install-$(MIPS_ROOTFS_ABI)
 MIPS_CROSS_PCC_TRIPLE ?= $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),mipsel-rebsd,mips-rebsd)
 MIPS_CROSS_PCC_TARGET = $(MIPS_PCC_HOST_PREFIX)/$(MIPS_CROSS_PCC_TRIPLE)
 MIPS_CROSS_PCC_LIB = $(MIPS_CROSS_PCC_TARGET)/lib
+MIPS_CROSS_PCC_LDSCRIPTS = $(MIPS_CROSS_PCC_LIB)/ldscripts
 MIPS_CROSS_PCC_SOFTFLOAT_LIB = $(MIPS_CROSS_PCC_LIB)/softfloat
 MIPS_HOST_PCC = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-pcc
 MIPS_CROSS_PCC_AS = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-as
@@ -373,7 +384,7 @@ MIPS_ROOTFS_INCLUDES = -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)/machine) \
                        -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE))
 
 ifeq ($(MIPS_ROOTFS_COMPILER),gcc)
-MIPS_USERLAND_CC = $(MIPS_ROOTFS_GCC_PREFIX)gcc $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) $(MIPS_ROOTFS_INCLUDES) \
+MIPS_USERLAND_CC = $(MIPS_ROOTFS_GCC_PREFIX)gcc $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) $(MIPS_ROOTFS_TOOLCHAIN_CPP) $(MIPS_ROOTFS_INCLUDES) \
                 -Werror -Wno-unused-value -Wno-format-overflow \
                 -Wno-attribute-alias -Wno-missing-attributes
 MIPS_USERLAND_AS = $(MIPS_USERLAND_CC) -x assembler-with-cpp -c
@@ -383,15 +394,16 @@ MIPS_USERLAND_RANLIB = $(MIPS_ROOTFS_GCC_PREFIX)ranlib
 MIPS_USERLAND_NM = $(MIPS_ROOTFS_GCC_PREFIX)nm
 MIPS_USERLAND_SIZE = $(MIPS_ROOTFS_GCC_PREFIX)size
 MIPS_USERLAND_OBJDUMP = $(MIPS_ROOTFS_GCC_PREFIX)objdump
-MIPS_USERLAND_ELF2AOUT = $(abspath $(TOPSRC)/tools/elf2aout/elf2aout)
+MIPS_USERLAND_ELF2AOUT = cp
 MIPS_USERLAND_LDFLAGS = --nmagic -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
                        $(abspath $(TOPSRC)/src/crt0.o) \
                        -L$(abspath $(TOPSRC)/src)
 MIPS_USERLAND_CRT0_DEPS = $(TOPSRC)/src/crt0.o
-MIPS_USERLAND_EXTRA_DEPS = $(MIPS_USERLAND_ELF2AOUT)
+MIPS_USERLAND_EXTRA_DEPS =
 else ifeq ($(MIPS_ROOTFS_COMPILER),pcc)
 MIPS_USERLAND_CC = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) \
-                  $(MIPS_ROOTFS_FLOAT_FLAG) $(MIPS_ROOTFS_INCLUDES)
+                  $(MIPS_ROOTFS_FLOAT_FLAG) $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
+                  $(MIPS_ROOTFS_INCLUDES)
 MIPS_USERLAND_AS = $(MIPS_USERLAND_CC) -x assembler-with-cpp -c
 MIPS_USERLAND_LD = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) \
                   $(MIPS_ROOTFS_FLOAT_FLAG)
@@ -402,6 +414,7 @@ MIPS_USERLAND_SIZE = $(MIPS_PCC_SIZE)
 MIPS_USERLAND_OBJDUMP = true
 MIPS_USERLAND_ELF2AOUT = cp
 MIPS_USERLAND_LDFLAGS = -nostartfiles \
+                       -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
                        $(abspath $(MIPS_NATIVE_DIR)/crt0.o) \
                        -L$(abspath $(TOPSRC)/src) \
                        $(if $(filter soft,$(MIPS_ROOTFS_FLOAT)),-L$(abspath $(MIPS_NATIVE_SOFTFLOAT_DIR)),) \
@@ -545,6 +558,7 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
 	    page=$${spec#*:}; \
 	    printf '\nfile /usr/share/man/cat1/%s.0\n' "$$page" >> $@; \
 	done
+	printf '\nfile %s\n' "$(MIPS_ROOTFS_INSTALLED_LDSCRIPT_PATH)" >> $@
 	if [ "$(MIPS_ROOTFS_COMPILER)" = "pcc" ]; then \
 	    printf '\ndir /usr/lib/softfloat\n' >> $@; \
 	    printf '\nfile /usr/lib/softfloat/libpcc.a\n' >> $@; \
@@ -559,7 +573,8 @@ $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS
 	    --rootfs $(abspath $(MIPS_ROOTFS_STAGE)) \
 	    --pcc $(MIPS_PCC_CC) \
 	    --cpu $(MIPS_ROOTFS_CPU) \
-	    --float-abi $(MIPS_ROOTFS_FLOAT)
+	    --float-abi $(MIPS_ROOTFS_FLOAT) \
+	    --endian $(MIPS_ROOTFS_ENDIAN)
 	cp -p $(MIPS_LINPACK_SMOKE_OUT)/linpack-pcc \
 	    $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
 	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
@@ -633,8 +648,13 @@ $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
 	$(MIPS_SRC_MAKE) install
 	$(MIPS_AWK_MAKE) install
 	mkdir -p $(MIPS_ROOTFS_USR_BIN) $(MIPS_ROOTFS_USR_LIB) \
+	    $(MIPS_ROOTFS_USR_LIB)/$(MIPS_ROOTFS_LDSCRIPTS_DIR) \
 	    $(MIPS_ROOTFS_USR_LIB)/softfloat \
 	    $(MIPS_ROOTFS_USR_LIBEXEC) $(MIPS_ROOTFS_USR_SHARE)
+	rm -f $(MIPS_ROOTFS_USR_LIB)/elf32-mips.ld
+	rm -f $(MIPS_ROOTFS_USR_LIB)/$(MIPS_ROOTFS_LDSCRIPTS_DIR)/elf32-mips.ld
+	cp -p $(MIPS_ROOTFS_USER_LDSCRIPT) \
+	    $(MIPS_ROOTFS_USR_LIB)/$(MIPS_ROOTFS_INSTALLED_LDSCRIPT)
 	for bin in $(MIPS_USR_BIN_FILES); do \
 	    if [ -e $(MIPS_ROOTFS_STAGE)/bin/$$bin ]; then \
 	        mv -f $(MIPS_ROOTFS_STAGE)/bin/$$bin $(MIPS_ROOTFS_USR_BIN)/$$bin; \
@@ -839,7 +859,7 @@ $(MIPS_NATIVE_AOUT_RANLIB): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 
 $(MIPS_NATIVE_AOUT_NM): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h
+    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/src/cmd/elf32_mips.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc -DCROSS $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
@@ -848,7 +868,7 @@ $(MIPS_NATIVE_AOUT_NM): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 
 $(MIPS_NATIVE_AOUT_SIZE): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h
+    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/src/cmd/elf32_mips.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
@@ -856,7 +876,7 @@ $(MIPS_NATIVE_AOUT_SIZE): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 
 $(MIPS_NATIVE_AOUT_STRIP): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h
+    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/src/cmd/elf32_mips.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
@@ -866,13 +886,14 @@ $(MIPS_HOST_PCC): $(MIPS_HOST_PORTABLECC_SCRIPT) $(MIPS_DEV_PCC_SRCS) \
     $(MIPS_PCC_HOST_INCLUDE_STAMP) $(MIPS_NATIVE_AS) $(MIPS_NATIVE_LD) \
     $(MIPS_NATIVE_AOUT) $(MIPS_NATIVE_AOUT_AR) $(MIPS_NATIVE_AOUT_RANLIB) \
     $(MIPS_NATIVE_AOUT_NM) $(MIPS_NATIVE_AOUT_SIZE) \
-    $(MIPS_NATIVE_AOUT_STRIP)
+    $(MIPS_NATIVE_AOUT_STRIP) $(MIPS_ROOTFS_USER_LDSCRIPT)
 	sh $(MIPS_HOST_PORTABLECC_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(MIPS_PCC_HOST_BUILD)) \
 	    $(abspath $(MIPS_PCC_HOST_PREFIX)) \
 	    $(abspath $(MIPS_PCC_HOST_INCLUDE)) \
 	    $(abspath $(MIPS_NATIVE_AS)) $(abspath $(MIPS_NATIVE_LD)) \
-	    $(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT) $(MIPS_ROOTFS_ENDIAN)
+	    $(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT) $(MIPS_ROOTFS_ENDIAN) \
+	    $(abspath $(MIPS_ROOTFS_USER_LDSCRIPT))
 
 .PHONY: smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain \
         smoke-host-portablecc
@@ -999,7 +1020,8 @@ $(MIPS_NATIVE_STAMP): $(MIPS_NATIVE_RUNTIME_SRCS) $(MIPS_PCC_PROVIDER_DEPS) \
 $(MIPS_NATIVE_PCC_STAMP): $(MIPS_DEV_PCC_SRCS) $(MIPS_NATIVE_STAMP) \
     $(MIPS_NATIVE_DIR)/crt0.o $(MIPS_NATIVE_DIR)/libc.a \
     $(MIPS_NATIVE_DIR)/libm.a $(MIPS_NATIVE_DIR)/libpcc.a \
-    $(MIPS_NATIVE_SOFTFLOAT_DIR)/libpcc.a $(MIPS_ROOTFS_MAKEFILE) Makefile
+    $(MIPS_NATIVE_SOFTFLOAT_DIR)/libpcc.a $(MIPS_ROOTFS_USER_LDSCRIPT) \
+    $(MIPS_ROOTFS_MAKEFILE) Makefile
 	python3 $(MIPS_NATIVE_PCC_BUILD_SCRIPT) \
 	    --top $(abspath $(TOPSRC)) \
 	    --build $(abspath $(MIPS_NATIVE_PCC_BUILD)) \
@@ -1010,6 +1032,7 @@ $(MIPS_NATIVE_PCC_STAMP): $(MIPS_DEV_PCC_SRCS) $(MIPS_NATIVE_STAMP) \
 	    --endian $(MIPS_ROOTFS_ENDIAN) \
 	    --as $(MIPS_PCC_AS) \
 	    --ld $(MIPS_PCC_LD) \
+	    --ldscript $(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
 	    --crt0 $(abspath $(MIPS_NATIVE_DIR)/crt0.o) \
 	    --libdir $(abspath $(MIPS_NATIVE_DIR)) \
 	    --bison $(MIPS_BISON)

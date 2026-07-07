@@ -23,6 +23,7 @@
 #include <a.out.h>
 #include <ar.h>
 #include "../aoutio.h"
+#include "../elf32_mips.h"
 
 #ifdef CROSS
 #include "../ar/archive.h"
@@ -141,6 +142,268 @@ unsigned int fgetword(FILE *f)
     return aout_get32(f);
 }
 
+int compare(const void *, const void *);
+void psyms(struct nlist *, int);
+
+static int
+elf_get16(const unsigned char *p, int le)
+{
+    if (le)
+        return p[0] | (p[1] << 8);
+    return (p[0] << 8) | p[1];
+}
+
+static unsigned
+elf_get32(const unsigned char *p, int le)
+{
+    if (le)
+        return (unsigned)p[0] | ((unsigned)p[1] << 8) |
+            ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
+    return ((unsigned)p[0] << 24) | ((unsigned)p[1] << 16) |
+        ((unsigned)p[2] << 8) | (unsigned)p[3];
+}
+
+static int
+elf_read_ehdr_at(FILE *f, off_t base, Elf32_Ehdr *eh, int *le)
+{
+    unsigned char b[52];
+
+    if (fseek(f, base, SEEK_SET) != 0)
+        return 0;
+    if (fread(b, 1, sizeof(b), f) != sizeof(b))
+        return 0;
+    if (b[0] != ELFMAG0 || b[1] != ELFMAG1 ||
+        b[2] != ELFMAG2 || b[3] != ELFMAG3)
+        return 0;
+    if (b[4] != ELFCLASS32 ||
+        (b[EI_DATA] != ELFDATA2LSB && b[EI_DATA] != ELFDATA2MSB))
+        return 0;
+    *le = b[EI_DATA] == ELFDATA2LSB;
+    memcpy(eh->e_ident, b, sizeof(eh->e_ident));
+    eh->e_type = elf_get16(b + 16, *le);
+    eh->e_machine = elf_get16(b + 18, *le);
+    eh->e_version = elf_get32(b + 20, *le);
+    eh->e_entry = elf_get32(b + 24, *le);
+    eh->e_phoff = elf_get32(b + 28, *le);
+    eh->e_shoff = elf_get32(b + 32, *le);
+    eh->e_flags = elf_get32(b + 36, *le);
+    eh->e_ehsize = elf_get16(b + 40, *le);
+    eh->e_phentsize = elf_get16(b + 42, *le);
+    eh->e_phnum = elf_get16(b + 44, *le);
+    eh->e_shentsize = elf_get16(b + 46, *le);
+    eh->e_shnum = elf_get16(b + 48, *le);
+    eh->e_shstrndx = elf_get16(b + 50, *le);
+    return eh->e_machine == EM_MIPS && eh->e_version == EV_CURRENT;
+}
+
+static int
+elf_read_shdr_at(FILE *f, off_t base, const Elf32_Ehdr *eh, int le,
+    int idx, Elf32_Shdr *sh)
+{
+    unsigned char b[40];
+
+    if (eh->e_shentsize < sizeof(b))
+        return 0;
+    if (fseek(f, base + eh->e_shoff + idx * eh->e_shentsize, SEEK_SET) != 0)
+        return 0;
+    if (fread(b, 1, sizeof(b), f) != sizeof(b))
+        return 0;
+    sh->sh_name = elf_get32(b + 0, le);
+    sh->sh_type = elf_get32(b + 4, le);
+    sh->sh_flags = elf_get32(b + 8, le);
+    sh->sh_addr = elf_get32(b + 12, le);
+    sh->sh_offset = elf_get32(b + 16, le);
+    sh->sh_size = elf_get32(b + 20, le);
+    sh->sh_link = elf_get32(b + 24, le);
+    sh->sh_info = elf_get32(b + 28, le);
+    sh->sh_addralign = elf_get32(b + 32, le);
+    sh->sh_entsize = elf_get32(b + 36, le);
+    return 1;
+}
+
+static int
+elf_read_sym_at(FILE *f, off_t base, const Elf32_Shdr *symtab, int le,
+    int idx, Elf32_Sym *sym)
+{
+    unsigned char b[16];
+    unsigned entsize;
+
+    entsize = symtab->sh_entsize ? symtab->sh_entsize : sizeof(b);
+    if (entsize < sizeof(b))
+        return 0;
+    if (fseek(f, base + symtab->sh_offset + idx * entsize, SEEK_SET) != 0)
+        return 0;
+    if (fread(b, 1, sizeof(b), f) != sizeof(b))
+        return 0;
+    sym->st_name = elf_get32(b + 0, le);
+    sym->st_value = elf_get32(b + 4, le);
+    sym->st_size = elf_get32(b + 8, le);
+    sym->st_info = b[12];
+    sym->st_other = b[13];
+    sym->st_shndx = elf_get16(b + 14, le);
+    return 1;
+}
+
+static char *
+elf_read_string(FILE *f, off_t base, const Elf32_Shdr *strtab, unsigned off)
+{
+    char *s;
+    int c;
+    unsigned len;
+
+    if (off >= strtab->sh_size)
+        return NULL;
+    if (fseek(f, base + strtab->sh_offset + off, SEEK_SET) != 0)
+        return NULL;
+    len = 0;
+    while (off + len < strtab->sh_size) {
+        c = getc(f);
+        if (c == EOF)
+            return NULL;
+        if (c == 0)
+            break;
+        len++;
+    }
+    if (off + len >= strtab->sh_size)
+        return NULL;
+    s = malloc(len + 1);
+    if (!s)
+        error(1, "out of memory");
+    if (fseek(f, base + strtab->sh_offset + off, SEEK_SET) != 0) {
+        free(s);
+        return NULL;
+    }
+    if (fread(s, 1, len, f) != len) {
+        free(s);
+        return NULL;
+    }
+    s[len] = 0;
+    return s;
+}
+
+static unsigned short
+elf_sym_type(const Elf32_Sym *sym, const Elf32_Shdr *shdrs, int shnum)
+{
+    unsigned short t, bind;
+    const Elf32_Shdr *sh;
+
+    bind = ELF_ST_BIND(sym->st_info);
+    if (sym->st_shndx == SHN_UNDEF)
+        t = N_UNDF;
+    else if (sym->st_shndx == SHN_ABS)
+        t = N_ABS;
+    else if (sym->st_shndx == SHN_COMMON)
+        t = N_COMM;
+    else if (sym->st_shndx < shnum) {
+        sh = &shdrs[sym->st_shndx];
+        if (sh->sh_type == SHT_NOBITS)
+            t = N_BSS;
+        else if (sh->sh_flags & SHF_EXECINSTR)
+            t = N_TEXT;
+        else if (sh->sh_flags & SHF_WRITE)
+            t = N_DATA;
+        else
+            t = N_TEXT;
+    } else
+        t = N_ABS;
+    if (bind == STB_GLOBAL)
+        t |= N_EXT;
+    else if (bind == STB_WEAK)
+        t |= N_EXT | N_WEAK;
+    return t;
+}
+
+static int
+elf_namelist(FILE *fi, off_t base)
+{
+    Elf32_Ehdr eh;
+    Elf32_Shdr *shdrs, symtab, strtab;
+    struct nlist *symp;
+    int le, i, n, nsyms, symtab_idx;
+
+    if (!elf_read_ehdr_at(fi, base, &eh, &le))
+        return 0;
+    if (eh.e_shoff == 0 || eh.e_shnum == 0) {
+        error(0, "no name list");
+        return 1;
+    }
+    shdrs = malloc(eh.e_shnum * sizeof(*shdrs));
+    if (!shdrs)
+        error(1, "out of memory");
+    for (i = 0; i < eh.e_shnum; i++) {
+        if (!elf_read_shdr_at(fi, base, &eh, le, i, &shdrs[i])) {
+            free(shdrs);
+            error(0, "bad format");
+            return 1;
+        }
+    }
+    symtab_idx = -1;
+    for (i = 0; i < eh.e_shnum; i++) {
+        if (shdrs[i].sh_type == SHT_SYMTAB) {
+            symtab_idx = i;
+            break;
+        }
+    }
+    if (symtab_idx < 0) {
+        free(shdrs);
+        error(0, "no name list");
+        return 1;
+    }
+    symtab = shdrs[symtab_idx];
+    if (symtab.sh_link >= eh.e_shnum ||
+        shdrs[symtab.sh_link].sh_type != SHT_STRTAB) {
+        free(shdrs);
+        error(0, "bad format");
+        return 1;
+    }
+    strtab = shdrs[symtab.sh_link];
+    nsyms = symtab.sh_size / (symtab.sh_entsize ? symtab.sh_entsize : 16);
+    if (nsyms == 0) {
+        free(shdrs);
+        error(0, "no name list");
+        return 1;
+    }
+    symp = malloc(nsyms * sizeof(*symp));
+    if (!symp)
+        error(1, "out of memory");
+    n = 0;
+    for (i = 0; i < nsyms; i++) {
+        Elf32_Sym esym;
+        unsigned short type, bind, stype;
+        char *name;
+
+        if (!elf_read_sym_at(fi, base, &symtab, le, i, &esym))
+            break;
+        bind = ELF_ST_BIND(esym.st_info);
+        stype = ELF_ST_TYPE(esym.st_info);
+        if (stype == STT_SECTION || stype == STT_FILE || esym.st_name == 0)
+            continue;
+        if (gflg && bind != STB_GLOBAL && bind != STB_WEAK)
+            continue;
+        type = elf_sym_type(&esym, shdrs, eh.e_shnum);
+        if (uflg && (type & N_TYPE) == N_UNDF && esym.st_value != 0)
+            continue;
+        name = elf_read_string(fi, base, &strtab, esym.st_name);
+        if (!name)
+            continue;
+        symp[n].n_name = name;
+        symp[n].n_len = strlen(name);
+        symp[n].n_type = type;
+        symp[n].n_value = esym.st_value;
+        n++;
+    }
+    if (pflg == 0)
+        qsort(symp, n, sizeof(struct nlist), compare);
+    if ((archive || narg > 1) && oflg == 0)
+        printf("\n%s:\n", archive ? chdr.name : *xargv);
+    psyms(symp, n);
+    for (i = 0; i < n; i++)
+        free(symp[i].n_name);
+    free(symp);
+    free(shdrs);
+    return 1;
+}
+
 /*
  * Read a symbol table entry.
  * Return a number of bytes read, or -1 on EOF.
@@ -249,6 +512,8 @@ void namelist()
 {
     off_t off;
     char ibuf[BUFSIZ];
+    Elf32_Ehdr eh;
+    int ele;
     register FILE *fi;
 
     archive = 0;
@@ -270,9 +535,12 @@ void namelist()
         off = SARMAG;
     } else {
         rewind(fi);
-        if (!aout_read_exec(fi, &mag_un.mag_exp) || N_BADMAG(mag_un.mag_exp)) {
-            error(0, "bad format");
-            goto out;
+        if (!elf_read_ehdr_at(fi, 0, &eh, &ele)) {
+            rewind(fi);
+            if (!aout_read_exec(fi, &mag_un.mag_exp) || N_BADMAG(mag_un.mag_exp)) {
+                error(0, "bad format");
+                goto out;
+            }
         }
     }
     rewind(fi);
@@ -289,6 +557,9 @@ void namelist()
         struct nlist *symp = NULL;
 
         curpos = ftell(fi);
+        if (elf_namelist(fi, curpos))
+            continue;
+        fseek(fi, curpos, SEEK_SET);
         if (!aout_read_exec(fi, &mag_un.mag_exp))
             continue;
         if (N_BADMAG(mag_un.mag_exp))
@@ -350,8 +621,8 @@ void namelist()
 
         psyms(symp, i);
         if (symp) {
-            for (n = 0; n > i; n++)
-                free(symp[i].n_name);
+            for (n = 0; n < i; n++)
+                free(symp[n].n_name);
             free((char *)symp);
             symp = NULL;
         }

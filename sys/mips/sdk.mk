@@ -68,6 +68,7 @@ cross-pcc-sdk-tools: $(MIPS_HOST_PCC)
 cross-pcc-sdk-runtime: $(MIPS_NATIVE_STAMP)
 	@test -f $(MIPS_CROSS_PCC_LIB)/libpcc.a
 	@test -f $(MIPS_CROSS_PCC_SOFTFLOAT_LIB)/libpcc.a
+	@test -f $(MIPS_CROSS_PCC_LDSCRIPTS)/$(notdir $(MIPS_ROOTFS_INSTALLED_LDSCRIPT))
 
 clean-cross-pcc-sdk:
 	rm -rf $(MIPS_SDK_BUILD)

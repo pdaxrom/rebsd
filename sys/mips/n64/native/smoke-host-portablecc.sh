@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-if [ $# -ne 6 ] && [ $# -ne 7 ] && [ $# -ne 8 ] && [ $# -ne 9 ]; then
-	echo "usage: $0 topsrc builddir prefix include-dir rebsd-as rebsd-ld [cpu] [float-abi] [endian]" >&2
+if [ $# -ne 6 ] && [ $# -ne 7 ] && [ $# -ne 8 ] && [ $# -ne 9 ] && [ $# -ne 10 ]; then
+	echo "usage: $0 topsrc builddir prefix include-dir rebsd-as rebsd-ld [cpu] [float-abi] [endian] [ldscript]" >&2
 	exit 2
 fi
 
@@ -15,6 +15,7 @@ ld=$6
 cpu=${7:-vr4300}
 float_abi=${8:-hard}
 endian=${9:-big}
+ldscript=${10:-}
 pcc_src=$topsrc/src/dev/pcc/pcc
 
 case "$cpu" in
@@ -45,10 +46,12 @@ case "$endian" in
 big)
 	target=mips-rebsd
 	endian_cflags="-DTARGET_BIG_ENDIAN=1"
+	ldscript_name=elf32-bigmips.ld
 	;;
 little)
 	target=mipsel-rebsd
 	endian_cflags="-DTARGET_LITTLE_ENDIAN=1"
+	ldscript_name=elf32-littlemips.ld
 	;;
 *)
 	echo "unsupported PCC endian default: $endian" >&2
@@ -58,6 +61,8 @@ esac
 target_root=$prefix/$target
 target_incdir=$target_root/include
 target_libdir=$target_root/lib
+target_ldscript_dir=$target_libdir/ldscripts
+target_ldscript=$target_ldscript_dir/$ldscript_name
 target_softfloat_libdir=$target_libdir/softfloat
 target_bindir=$prefix/bin
 target_as=$target_bindir/$target-as
@@ -67,11 +72,18 @@ test -x "$pcc_src/configure"
 test -d "$incdir"
 test -x "$as"
 test -x "$ld"
+if [ -n "$ldscript" ]; then
+	test -f "$ldscript"
+fi
 
 mkdir -p "$builddir" "$target_bindir"
 rm -rf "$target_incdir" "$target_libdir"
 mkdir -p "$target_incdir" "$target_libdir" "$target_softfloat_libdir"
 cp -pR "$incdir"/. "$target_incdir"/
+if [ -n "$ldscript" ]; then
+	mkdir -p "$target_ldscript_dir"
+	cp -p "$ldscript" "$target_ldscript"
+fi
 cp -p "$as" "$target_as"
 cp -p "$ld" "$target_ld"
 tool_src_dir=$(dirname "$as")

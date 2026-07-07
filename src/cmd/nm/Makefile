@@ -20,6 +20,8 @@ nm:          	${OBJS}
 aoutio.o:       ../aoutio.c ../aoutio.h
 		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
 
+nm.o:           ../elf32_mips.h
+
 $(MAN):         $(MANSRC)
 		${MANROFF} $< > $@
 

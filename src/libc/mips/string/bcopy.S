@@ -81,7 +81,7 @@ FUNCTION:
 	# on a halfword boundary.
 	#
 	andi	$t1,DSTREG,3		# get last 3 bits of dest
-	bne	$t1,$zero,3f
+	bne	$t1,$zero,Lbcopy_forward_bytecopy
 	andi	$t0,SRCREG,3		# get last 3 bits of src
 	bne	$t0,$zero,5f
 
@@ -125,7 +125,7 @@ FUNCTION:
 2:	# wordcopy
 	andi	$t2,SIZEREG,3		# get byte count / 4
 	subu	$t2,SIZEREG,$t2		# t2 = number of words to copy * 4
-	beq	$t2,$zero,3f
+	beq	$t2,$zero,Lbcopy_forward_bytecopy
 	addu	$t0,SRCREG,$t2		# stop at t0
 	subu	SIZEREG,SIZEREG,$t2
 1:
@@ -135,7 +135,7 @@ FUNCTION:
 	bne	SRCREG,$t0,1b
 	addiu	DSTREG,4
 
-3:	# bytecopy
+Lbcopy_forward_bytecopy:
 	beq	SIZEREG,$zero,4f	# nothing left to do?
 	nop
 1:
@@ -156,7 +156,7 @@ FUNCTION:
 5:	# destaligned
 	andi	$t0,SIZEREG,3		# t0 = bytecount mod 4
 	subu	$a3,SIZEREG,$t0		# number of words to transfer
-	beq	$a3,$zero,3b
+	beq	$a3,$zero,Lbcopy_forward_bytecopy
 	nop
 	move	SIZEREG,$t0		# this many to do after we are done
 	addu	$a3,SRCREG,$a3		# stop point
@@ -169,14 +169,14 @@ FUNCTION:
 	bne	SRCREG,$a3,1b
 	addi	DSTREG,4
 
-	j	3b
+	j	Lbcopy_forward_bytecopy
 	nop
 
 6:	# backcopy -- based on above
 	addu	SRCREG,SIZEREG
 	addu	DSTREG,SIZEREG
 	andi	$t1,DSTREG,3		# get last 3 bits of dest
-	bne	$t1,$zero,3f
+	bne	$t1,$zero,Lbcopy_backward_bytecopy
 	andi	$t0,SRCREG,3		# get last 3 bits of src
 	bne	$t0,$zero,5f
 
@@ -219,7 +219,7 @@ FUNCTION:
 2:	# wordcopy
 	andi	$t2,SIZEREG,3		# get byte count / 4
 	subu	$t2,SIZEREG,$t2		# t2 = number of words to copy * 4
-	beq	$t2,$zero,3f
+	beq	$t2,$zero,Lbcopy_backward_bytecopy
 	subu	$t0,SRCREG,$t2		# stop at t0
 	subu	SIZEREG,SIZEREG,$t2
 1:
@@ -229,7 +229,7 @@ FUNCTION:
 	bne	SRCREG,$t0,1b
 	addiu	DSTREG,-4
 
-3:	# bytecopy
+Lbcopy_backward_bytecopy:
 	beq	SIZEREG,$zero,4f	# nothing left to do?
 	nop
 1:
@@ -250,7 +250,7 @@ FUNCTION:
 5:	# destaligned
 	andi	$t0,SIZEREG,3		# t0 = bytecount mod 4
 	subu	$a3,SIZEREG,$t0		# number of words to transfer
-	beq	$a3,$zero,3b
+	beq	$a3,$zero,Lbcopy_backward_bytecopy
 	nop
 	move	SIZEREG,$t0		# this many to do after we are done
 	subu	$a3,SRCREG,$a3		# stop point
@@ -263,7 +263,7 @@ FUNCTION:
 	bne	SRCREG,$a3,1b
 	addiu	DSTREG,-4
 
-	j	3b
+	j	Lbcopy_backward_bytecopy
 	nop
 
 	.set	reorder

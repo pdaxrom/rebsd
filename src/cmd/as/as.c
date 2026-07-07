@@ -34,6 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "../aoutio.h"
+#include "../elf32_mips.h"
 
 #define WORDSZ 4 /* word size in bytes */
 #ifdef TARGET_VR4300
@@ -68,6 +69,7 @@ enum {
     LCOMM,     /* .comm */
     LDATA,     /* .data */
     LGLOBL,    /* .globl */
+    LEXTERN,   /* .extern */
     LHALF,     /* .half */
     LSTRNG,    /* .strng */
     LRDATA,    /* .rdata */
@@ -122,6 +124,8 @@ enum {
 #define STSIZE (HASHSZ * 3 / 4)  /* symbol name table size */
 #define STSPACE (STSIZE * 32)    /* symbol string storage size */
 #define MAXRLAB 200              /* max relative (digit) labels */
+#define MAXSEGM 128              /* max output sections in ELF mode */
+#define SECTION_RELOC_INDEX_BASE STSIZE
 
 /*
  * On second pass, hashtab[] is not needed.
@@ -179,6 +183,19 @@ const int typesegm[] = {
 struct labeltab {
     int num;
     int value;
+};
+
+struct asm_section {
+    const char *name;
+    unsigned type;
+    unsigned flags;
+    unsigned align;
+    int ntype;
+    int rel;
+    int valid;
+    int touched;
+    int shndx;
+    int symndx;
 };
 
 #define RLAB_OFFSET (1 << 23) /* index offset of relative label */
@@ -505,8 +522,8 @@ const char ctype[256] = {
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0,
 };
 
-FILE *sfile[SABS], *rfile[SABS];
-unsigned count[SABS];
+FILE *sfile[MAXSEGM], *rfile[MAXSEGM];
+unsigned count[MAXSEGM];
 int segm;
 int prev_segm;
 char *infile, *outfile = "a.out";
@@ -517,6 +534,8 @@ int stlength; /* Symbol table size in bytes */
 int stalign;  /* Symbol table alignment */
 unsigned tbase, dbase, adbase, ctbase, dtbase, bbase;
 struct nlist stab[STSIZE];
+unsigned char stabsegm[STSIZE];
+unsigned commalign[STSIZE];
 int stabfree;
 char space[STSPACE]; /* Area for symbol names */
 int lastfree;           /* Free space offset */
@@ -538,7 +557,11 @@ int reorder_full;               /* instruction buffered for reorder */
 unsigned reorder_word;          /* buffered instruction... */
 unsigned reorder_clobber;       /* ...modified this register */
 struct reloc reorder_rel;       /* buffered relocation */
+int reorder_segm;               /* section for buffered instruction */
 struct reloc relabs = { RABS }; /* absolute relocation */
+struct asm_section sections[MAXSEGM];
+int maxsegm = SABS + 1;
+int elf_output;
 
 int expr_flags;      /* flags set by getexpr */
 #define EXPR_GPREL 1 /* gp relative relocation */
@@ -644,6 +667,251 @@ void fputsym(struct nlist *s, FILE *file)
     aout_write_sym(file, &out);
 }
 
+size_t xstrlen(const char *s)
+{
+    const char *p;
+
+    p = s;
+    while (*p)
+        p++;
+    return p - s;
+}
+
+char *xstrdup(const char *s)
+{
+    char *p;
+    size_t len;
+    size_t i;
+
+    len = xstrlen(s) + 1;
+    p = malloc(len);
+    if (!p)
+        uerror("out of memory");
+    for (i = 0; i < len; i++)
+        p[i] = s[i];
+    return p;
+}
+
+void xstrcpy(char *dst, const char *src)
+{
+    while ((*dst++ = *src++) != 0)
+        ;
+}
+
+void xstrcat(char *dst, const char *src)
+{
+    while (*dst)
+        dst++;
+    xstrcpy(dst, src);
+}
+
+unsigned
+align_up(unsigned value, unsigned align)
+{
+    if (align <= 1)
+        return value;
+    return (value + align - 1) & ~(align - 1);
+}
+
+int
+valid_section(int s)
+{
+    return s >= 0 && s < MAXSEGM && sections[s].valid;
+}
+
+int
+section_has_contents(int s)
+{
+    return valid_section(s) && sections[s].type != SHT_NOBITS;
+}
+
+int
+section_is_text(int s)
+{
+    return valid_section(s) && (sections[s].flags & SHF_EXECINSTR) != 0;
+}
+
+int
+section_nlist_type(int s)
+{
+    if (!valid_section(s))
+        return segmtype[s];
+    return sections[s].ntype;
+}
+
+int
+section_reloc_type(int s)
+{
+    if (!valid_section(s))
+        return segmrel[s];
+    return sections[s].rel;
+}
+
+int
+section_from_nlist_type(int t)
+{
+    return typesegm[t & N_TYPE];
+}
+
+void
+open_section_files(int s)
+{
+    if (sfile[s])
+        return;
+    sfile[s] = fopen(tfilename, "w+");
+    if (!sfile[s])
+        uerror("cannot open %s", tfilename);
+    unlink(tfilename);
+    rfile[s] = fopen(tfilename, "w+");
+    if (!rfile[s])
+        uerror("cannot open %s", tfilename);
+    unlink(tfilename);
+}
+
+void
+define_section(int s, const char *secname, unsigned type, unsigned flags,
+    unsigned align, int ntype, int rel)
+{
+    sections[s].name = secname;
+    sections[s].type = type;
+    sections[s].flags = flags;
+    sections[s].align = align;
+    sections[s].ntype = ntype;
+    sections[s].rel = rel;
+    sections[s].valid = 1;
+    sections[s].touched = 0;
+    sections[s].shndx = 0;
+    sections[s].symndx = 0;
+    if (s >= maxsegm)
+        maxsegm = s + 1;
+}
+
+void
+init_sections(void)
+{
+    memset(sections, 0, sizeof(sections));
+    maxsegm = SABS + 1;
+    define_section(STEXT, ".text", SHT_PROGBITS,
+        SHF_ALLOC | SHF_EXECINSTR, 1U << text_align_bits, N_TEXT, RTEXT);
+    define_section(SDATA, ".data", SHT_PROGBITS,
+        SHF_ALLOC | SHF_WRITE, WORDSZ, N_DATA, RDATA);
+    define_section(SSTRNG, ".rodata", SHT_PROGBITS,
+        SHF_ALLOC, WORDSZ, N_STRNG, RSTRNG);
+    define_section(SCTORS, ".ctors", SHT_PROGBITS,
+        SHF_ALLOC | SHF_WRITE, WORDSZ, N_CTORS, RCTORS);
+    define_section(SDTORS, ".dtors", SHT_PROGBITS,
+        SHF_ALLOC | SHF_WRITE, WORDSZ, N_DTORS, RDTORS);
+    define_section(SBSS, ".bss", SHT_NOBITS,
+        SHF_ALLOC | SHF_WRITE, WORDSZ, N_BSS, RBSS);
+}
+
+unsigned
+default_section_flags(const char *secname)
+{
+    if (strncmp(secname, ".text", 5) == 0 &&
+        (secname[5] == 0 || secname[5] == '.'))
+        return SHF_ALLOC | SHF_EXECINSTR;
+    if (strncmp(secname, ".rodata", 7) == 0 &&
+        (secname[7] == 0 || secname[7] == '.'))
+        return SHF_ALLOC;
+    if (strncmp(secname, ".data", 5) == 0 &&
+        (secname[5] == 0 || secname[5] == '.') )
+        return SHF_ALLOC | SHF_WRITE;
+    if (strncmp(secname, ".sdata", 6) == 0 &&
+        (secname[6] == 0 || secname[6] == '.') )
+        return SHF_ALLOC | SHF_WRITE;
+    if (strncmp(secname, ".bss", 4) == 0 &&
+        (secname[4] == 0 || secname[4] == '.') )
+        return SHF_ALLOC | SHF_WRITE;
+    if (strncmp(secname, ".sbss", 5) == 0 &&
+        (secname[5] == 0 || secname[5] == '.') )
+        return SHF_ALLOC | SHF_WRITE;
+    if (strcmp(secname, ".ctors") == 0 || strcmp(secname, ".dtors") == 0 ||
+        strcmp(secname, ".init_array") == 0 ||
+        strcmp(secname, ".fini_array") == 0)
+        return SHF_ALLOC | SHF_WRITE;
+    if (strcmp(secname, ".init") == 0 || strcmp(secname, ".fini") == 0)
+        return SHF_ALLOC | SHF_EXECINSTR;
+    if (strcmp(secname, ".eh_frame") == 0)
+        return SHF_ALLOC;
+    return 0;
+}
+
+unsigned
+default_section_type(const char *secname)
+{
+    if ((strncmp(secname, ".bss", 4) == 0 &&
+         (secname[4] == 0 || secname[4] == '.')) ||
+        (strncmp(secname, ".sbss", 5) == 0 &&
+         (secname[5] == 0 || secname[5] == '.')))
+        return SHT_NOBITS;
+    return SHT_PROGBITS;
+}
+
+unsigned
+default_section_align(unsigned flags)
+{
+    if (flags & SHF_EXECINSTR)
+        return 1U << text_align_bits;
+    return WORDSZ;
+}
+
+int
+default_section_nlist_type(unsigned type, unsigned flags)
+{
+    if (type == SHT_NOBITS)
+        return N_BSS;
+    if (flags & SHF_EXECINSTR)
+        return N_TEXT;
+    if ((flags & SHF_ALLOC) && !(flags & SHF_WRITE))
+        return N_STRNG;
+    return N_DATA;
+}
+
+int
+default_section_reloc_type(int ntype)
+{
+    switch (ntype) {
+    case N_TEXT:
+        return RTEXT;
+    case N_STRNG:
+        return RSTRNG;
+    case N_CTORS:
+        return RCTORS;
+    case N_DTORS:
+        return RDTORS;
+    case N_BSS:
+        return RBSS;
+    case N_DATA:
+    default:
+        return RDATA;
+    }
+}
+
+void
+mark_section_touched(int s)
+{
+    if (valid_section(s))
+        sections[s].touched = 1;
+}
+
+void
+set_reloc_segment(struct reloc *r, int format, int segment)
+{
+    r->flags = format;
+    r->index = 0;
+    r->offset = 0;
+    if (segment == SEXT) {
+        r->flags |= REXT;
+        r->index = extref;
+    } else if (elf_output && segment != SABS) {
+        r->flags |= REXT;
+        r->index = SECTION_RELOC_INDEX_BASE + segment;
+    } else {
+        r->flags |= section_reloc_type(segment);
+    }
+}
+
 /*
  * Create temporary files for allocatable output segments.
  */
@@ -657,15 +925,9 @@ void startup()
     } else {
         close(fd);
     }
-    for (i = STEXT; i < SBSS; i++) {
-        sfile[i] = fopen(tfilename, "w+");
-        if (!sfile[i])
-            uerror("cannot open %s", tfilename);
-        unlink(tfilename);
-        rfile[i] = fopen(tfilename, "w+");
-        if (!rfile[i])
-            uerror("cannot open %s", tfilename);
-        unlink(tfilename);
+    init_sections();
+    for (i = STEXT; i <= SBSS; i++) {
+        open_section_files(i);
     }
     line = 1;
 }
@@ -725,6 +987,8 @@ void gethnum()
     c = getchar();
     for (cp = name; ISHEX(c); c = getchar())
         *cp++ = hexdig(c);
+    while (c == 'u' || c == 'U' || c == 'l' || c == 'L')
+        c = getchar();
     ungetc(c, stdin);
     intval = 0;
     for (c = 0; c < 32; c += 4) {
@@ -747,6 +1011,8 @@ void getnum(int c)
     leadingzero = (c == '0');
     for (cp = name; ISDIGIT(c); c = getchar())
         *cp++ = hexdig(c);
+    while (c == 'u' || c == 'U' || c == 'l' || c == 'L')
+        c = getchar();
     ungetc(c, stdin);
     intval = 0;
     if (leadingzero) {
@@ -858,6 +1124,8 @@ int lookacmd()
             return (LEND);
         if (!strcmp(".ent", name))
             return (LENT);
+        if (!strcmp(".extern", name))
+            return (LEXTERN);
         break;
     case 'f':
         if (!strcmp(".file", name))
@@ -943,13 +1211,18 @@ int lookacmd()
 
 void switchsection(int newsegm)
 {
+    if (!valid_section(newsegm))
+        uerror("bad section");
     if (newsegm == segm) {
         prev_segm = segm;
+        mark_section_touched(segm);
         return;
     }
     reorder_flush();
     prev_segm = segm;
     segm = newsegm;
+    open_section_files(segm);
+    mark_section_touched(segm);
 }
 
 void previoussection()
@@ -958,14 +1231,120 @@ void previoussection()
 
     reorder_flush();
     newsegm = prev_segm;
+    if (!valid_section(newsegm))
+        uerror("bad previous section");
     prev_segm = segm;
     segm = newsegm;
+    open_section_files(segm);
+    mark_section_touched(segm);
 }
 
-/*
- * Change a segment based on a section name.
- */
-void setsection()
+void
+read_quoted_string(char *buf, size_t len)
+{
+    int c;
+    char *p, *end;
+
+    p = buf;
+    end = buf + len - 1;
+    for (;;) {
+        c = getchar();
+        switch (c) {
+        case EOF:
+            uerror("EOF in string");
+        case '"':
+            *p = 0;
+            return;
+        case '\\':
+            c = getchar();
+            if (c == EOF)
+                uerror("EOF in string");
+            break;
+        }
+        if (p < end)
+            *p++ = c;
+    }
+}
+
+unsigned
+section_flags_from_string(const char *flags)
+{
+    unsigned value;
+
+    value = 0;
+    for (; *flags; flags++) {
+        switch (*flags) {
+        case 'a':
+            value |= SHF_ALLOC;
+            break;
+        case 'w':
+            value |= SHF_WRITE;
+            break;
+        case 'x':
+            value |= SHF_EXECINSTR;
+            break;
+        case 'M':
+        case 'S':
+        case 'G':
+        case 'T':
+        case 'e':
+        case 'o':
+            /* Accepted for common ELF .section syntax; unsupported flags are
+             * ignored because this assembler does not implement their
+             * associated metadata fields. */
+            break;
+        default:
+            uerror("bad .section flags");
+        }
+    }
+    return value;
+}
+
+unsigned
+section_type_from_name(const char *type_name)
+{
+    if (strcmp(type_name, "@progbits") == 0)
+        return SHT_PROGBITS;
+    if (strcmp(type_name, "@nobits") == 0)
+        return SHT_NOBITS;
+    if (strcmp(type_name, "@note") == 0)
+        return SHT_PROGBITS;
+    if (strcmp(type_name, "@init_array") == 0 ||
+        strcmp(type_name, "@fini_array") == 0 ||
+        strcmp(type_name, "@preinit_array") == 0)
+        return SHT_PROGBITS;
+    uerror("bad type of .section");
+    return SHT_PROGBITS;
+}
+
+int
+find_or_create_elf_section(const char *secname, unsigned type, unsigned flags)
+{
+    int s, ntype, rel;
+
+    for (s = 0; s < maxsegm; s++) {
+        if (!valid_section(s))
+            continue;
+        if (strcmp(sections[s].name, secname) == 0 &&
+            sections[s].type == type && sections[s].flags == flags)
+            return s;
+    }
+    for (s = SABS + 1; s < MAXSEGM; s++) {
+        if (!valid_section(s))
+            break;
+    }
+    if (s >= MAXSEGM)
+        uerror("too many sections");
+    ntype = default_section_nlist_type(type, flags);
+    rel = default_section_reloc_type(ntype);
+    define_section(s, xstrdup(secname), type, flags,
+        default_section_align(flags), ntype, rel);
+    open_section_files(s);
+    return s;
+}
+
+int
+section_from_name_aout(const char *secname)
 {
     struct {
         const char *name;
@@ -982,13 +1361,33 @@ void setsection()
     };
 
     for (p = map; p->name; p++) {
-        if (strncmp(name, p->name, p->len) == 0 &&
-            (name[p->len] == 0 || name[p->len] == '.')) {
-            switchsection(p->segm);
-            return;
+        if (strncmp(secname, p->name, p->len) == 0 &&
+            (secname[p->len] == 0 || secname[p->len] == '.')) {
+            return p->segm;
         }
     }
     uerror("bad .section name");
+    return STEXT;
+}
+
+/*
+ * Change a segment based on a section name.
+ */
+void setsection(const char *secname, unsigned flags, int has_flags,
+    unsigned type, int has_type)
+{
+    int newsegm;
+
+    if (!elf_output) {
+        switchsection(section_from_name_aout(secname));
+        return;
+    }
+    if (!has_flags)
+        flags = default_section_flags(secname);
+    if (!has_type)
+        type = default_section_type(secname);
+    newsegm = find_or_create_elf_section(secname, type, flags);
+    switchsection(newsegm);
 }
 
 int lookreg()
@@ -1232,11 +1631,13 @@ int lookname()
     /* Add a new symbol to table. */
     if ((i = stabfree++) >= STSIZE)
         uerror("symbol table overflow");
-    stab[i].n_len = strlen(name);
+    stab[i].n_len = xstrlen(name);
     stab[i].n_name = alloc(1 + stab[i].n_len);
-    strcpy(stab[i].n_name, name);
+    xstrcpy(stab[i].n_name, name);
     stab[i].n_value = 0;
     stab[i].n_type = N_UNDF;
+    stabsegm[i] = SEXT;
+    commalign[i] = WORDSZ;
     hashtab[h] = i;
     return (i);
 }
@@ -1398,6 +1799,12 @@ int getterm()
             uerror("too complex expression");
         intval = -intval;
         return SABS;
+    case '~':
+        s = getterm();
+        if (s != SABS)
+            uerror("too complex expression");
+        intval = ~intval;
+        return SABS;
     case LNUM:
         cval = getchar();
         if (cval == 'b' || cval == 'B')
@@ -1423,7 +1830,9 @@ int getterm()
             return (SEXT);
         }
         intval = stab[cval].n_value;
-        return (typesegm[ty]);
+        if (elf_output && ty != N_ABS)
+            return stabsegm[cval];
+        return (section_from_nlist_type(ty));
     case '.':
         intval = count[segm];
         return (segm);
@@ -1450,102 +1859,57 @@ int getterm()
     }
 }
 
-/*
- * Get an expression.
- * Return a value, put a base segment id to *s.
- * A copy of value is saved in intval.
- *
- * expression = [term] {op term}...
- * term       = LNAME | LNUM | "." | "(" expression ")"
- * op         = "+" | "-" | "&" | "|" | "^" | "~" | "<<" | ">>" | "/" | "*"
- */
-unsigned getexpr(int *s)
+int
+expr_start(int ty)
 {
-    register int clex;
-    int cval, s2;
+    return ty == LNUM || ty == LNAME || ty == '.' || ty == '(' ||
+        ty == '%' || ty == '+' || ty == '-' || ty == '~';
+}
+
+void
+expr_abs_only(int s1, int s2)
+{
+    if (s1 != SABS || s2 != SABS)
+        uerror("too complex expression");
+}
+
+void
+expr_add_segment(int *s, int s2)
+{
+    if (*s == SABS)
+        *s = s2;
+    else if (s2 != SABS)
+        uerror("too complex expression");
+}
+
+void
+expr_sub_segment(int *s, int s2)
+{
+    if (s2 == *s && s2 != SEXT)
+        *s = SABS;
+    else if (s2 != SABS)
+        uerror("too complex expression");
+}
+
+unsigned
+getmul(int *s)
+{
+    int clex, cval, s2;
     unsigned rez;
 
-    /* look a first lexeme */
-    switch (clex = getlex(&cval)) {
-    default:
-        ungetlex(clex, cval);
-        rez = 0;
-        *s = SABS;
-        break;
-    case LNUM:
-    case LNAME:
-    case '.':
-    case '(':
-    case '%':
-        ungetlex(clex, cval);
-        *s = getterm();
-        rez = intval;
-        break;
-    }
+    *s = getterm();
+    rez = intval;
     for (;;) {
-        switch (clex = getlex(&cval)) {
-        case '+':
-            s2 = getterm();
-            if (*s == SABS)
-                *s = s2;
-            else if (s2 != SABS)
-                uerror("too complex expression");
-            rez += intval;
-            break;
-        case '-':
-            s2 = getterm();
-            if (s2 == *s && s2 != SEXT)
-                *s = SABS;
-            else if (s2 != SABS)
-                uerror("too complex expression");
-            rez -= intval;
-            break;
-        case '&':
-            s2 = getterm();
-            if (*s != SABS || s2 != SABS)
-                uerror("too complex expression");
-            rez &= intval;
-            break;
-        case '|':
-            s2 = getterm();
-            if (*s != SABS || s2 != SABS)
-                uerror("too complex expression");
-            rez |= intval;
-            break;
-        case '^':
-            s2 = getterm();
-            if (*s != SABS || s2 != SABS)
-                uerror("too complex expression");
-            rez ^= intval;
-            break;
-        case '~':
-            s2 = getterm();
-            if (*s != SABS || s2 != SABS)
-                uerror("too complex expression");
-            rez ^= ~intval;
-            break;
-        case LLSHIFT: /* сдвиг влево */
-            s2 = getterm();
-            if (*s != SABS || s2 != SABS)
-                uerror("too complex expression");
-            rez <<= intval & 037;
-            break;
-        case LRSHIFT: /* сдвиг вправо */
-            s2 = getterm();
-            if (*s != SABS || s2 != SABS)
-                uerror("too complex expression");
-            rez >>= intval & 037;
-            break;
+        clex = getlex(&cval);
+        switch (clex) {
         case '*':
             s2 = getterm();
-            if (*s != SABS || s2 != SABS)
-                uerror("too complex expression");
+            expr_abs_only(*s, s2);
             rez *= intval;
             break;
         case '/':
             s2 = getterm();
-            if (*s != SABS || s2 != SABS)
-                uerror("too complex expression");
+            expr_abs_only(*s, s2);
             if (intval == 0)
                 uerror("division by zero");
             rez /= intval;
@@ -1553,17 +1917,159 @@ unsigned getexpr(int *s)
         default:
             ungetlex(clex, cval);
             intval = rez;
-            return (rez);
+            return rez;
         }
     }
+}
+
+unsigned
+getadd(int *s)
+{
+    int clex, cval, s2;
+    unsigned rez;
+
+    rez = getmul(s);
+    for (;;) {
+        clex = getlex(&cval);
+        switch (clex) {
+        case '+':
+            getmul(&s2);
+            expr_add_segment(s, s2);
+            rez += intval;
+            break;
+        case '-':
+            getmul(&s2);
+            expr_sub_segment(s, s2);
+            rez -= intval;
+            break;
+        default:
+            ungetlex(clex, cval);
+            intval = rez;
+            return rez;
+        }
+    }
+}
+
+unsigned
+getshift(int *s)
+{
+    int clex, cval, s2;
+    unsigned rez;
+
+    rez = getadd(s);
+    for (;;) {
+        clex = getlex(&cval);
+        switch (clex) {
+        case LLSHIFT:
+            getadd(&s2);
+            expr_abs_only(*s, s2);
+            rez <<= intval & 037;
+            break;
+        case LRSHIFT:
+            getadd(&s2);
+            expr_abs_only(*s, s2);
+            rez >>= intval & 037;
+            break;
+        default:
+            ungetlex(clex, cval);
+            intval = rez;
+            return rez;
+        }
+    }
+}
+
+unsigned
+getand(int *s)
+{
+    int clex, cval, s2;
+    unsigned rez;
+
+    rez = getshift(s);
+    for (;;) {
+        clex = getlex(&cval);
+        if (clex != '&') {
+            ungetlex(clex, cval);
+            intval = rez;
+            return rez;
+        }
+        getshift(&s2);
+        expr_abs_only(*s, s2);
+        rez &= intval;
+    }
+}
+
+unsigned
+getxor(int *s)
+{
+    int clex, cval, s2;
+    unsigned rez;
+
+    rez = getand(s);
+    for (;;) {
+        clex = getlex(&cval);
+        if (clex != '^') {
+            ungetlex(clex, cval);
+            intval = rez;
+            return rez;
+        }
+        getand(&s2);
+        expr_abs_only(*s, s2);
+        rez ^= intval;
+    }
+}
+
+unsigned
+getor(int *s)
+{
+    int clex, cval, s2;
+    unsigned rez;
+
+    rez = getxor(s);
+    for (;;) {
+        clex = getlex(&cval);
+        if (clex != '|') {
+            ungetlex(clex, cval);
+            intval = rez;
+            return rez;
+        }
+        getxor(&s2);
+        expr_abs_only(*s, s2);
+        rez |= intval;
+    }
+}
+
+/*
+ * Get an expression.
+ * Return a value, put a base segment id to *s.
+ * A copy of value is saved in intval.
+ *
+ * expression = [term] {op term}..., with C-like operator precedence.
+ * term       = LNAME | LNUM | "." | "(" expression ")"
+ * op         = "+" | "-" | "&" | "|" | "^" | "~" | "<<" | ">>" | "/" | "*"
+ */
+unsigned getexpr(int *s)
+{
+    register int clex;
+    int cval;
+
+    /* look a first lexeme */
+    clex = getlex(&cval);
+    if (!expr_start(clex)) {
+        ungetlex(clex, cval);
+        *s = SABS;
+        intval = 0;
+        return 0;
+    }
+    ungetlex(clex, cval);
+    return getor(s);
     /* NOTREACHED */
 }
 
 void reorder_flush()
 {
     if (reorder_full) {
-        fputword(reorder_word, sfile[STEXT]);
-        fputrel(&reorder_rel, rfile[STEXT]);
+        fputword(reorder_word, sfile[reorder_segm]);
+        fputrel(&reorder_rel, rfile[reorder_segm]);
         reorder_full = 0;
     }
 }
@@ -1573,10 +2079,11 @@ void reorder_flush()
  */
 void emitword(unsigned w, struct reloc *r, int clobber_reg)
 {
-    if (mode_reorder && segm == STEXT) {
+    if (mode_reorder && section_is_text(segm)) {
         reorder_flush();
         reorder_word = w;
         reorder_rel = *r;
+        reorder_segm = segm;
         reorder_full = 1;
         reorder_clobber = clobber_reg & 31;
     } else {
@@ -1653,9 +2160,7 @@ void emit_la(unsigned opcode, struct reloc *relinfo)
         emit_abs_load(opcode, relinfo, value);
         return;
     }
-    relinfo->flags = segmrel[segment];
-    if (relinfo->flags == REXT)
-        relinfo->index = extref;
+    set_reloc_segment(relinfo, 0, segment);
     if (expr_flags & EXPR_GPREL)
         relinfo->flags |= RGPREL;
 
@@ -2227,9 +2732,7 @@ done3:
         }
         expr_flags = 0;
         offset = getexpr(&segment);
-        relinfo.flags = segmrel[segment];
-        if (relinfo.flags == REXT)
-            relinfo.index = extref;
+        set_reloc_segment(&relinfo, 0, segment);
         if (expr_flags & EXPR_GPREL)
             relinfo.flags |= RGPREL;
     have_offset:
@@ -2364,7 +2867,7 @@ done:
     /* Output resulting values. */
     if (emitfunc) {
         emitfunc(opcode, &relinfo);
-    } else if (mode_reorder && (type & FDSLOT) && segm == STEXT) {
+    } else if (mode_reorder && (type & FDSLOT) && section_is_text(segm)) {
         /* Need a delay slot. */
         if (reorder_full && reorder_clobber != 0) {
             /* Analyse register dependency.
@@ -2410,7 +2913,7 @@ void add_space(unsigned nbytes, unsigned fill_data)
 {
     unsigned c;
 
-    if (segm < SBSS) {
+    if (section_has_contents(segm)) {
         /* Emit data and relocation. */
         for (c = 0; c < nbytes; c++) {
             count[segm]++;
@@ -2576,6 +3079,13 @@ void setoption()
         mode_micromips = enable;
         return;
     }
+    if (!strcmp("mips3", option) || !strcmp("mips32", option) ||
+        !strcmp("mips32r2", option)) {
+        if (!enable)
+            return;
+        set_cpu_vr4300(strcmp("mips3", option) == 0);
+        return;
+    }
     if (!strcmp("at", option)) {
         /* at mode */
         mode_at = enable;
@@ -2607,11 +3117,13 @@ void align(int align_bits)
     unsigned nbytes, align_mask, c;
 
     align_mask = (1 << align_bits) - 1;
+    if (valid_section(segm) && (1U << align_bits) > sections[segm].align)
+        sections[segm].align = 1U << align_bits;
     nbytes = count[segm] & align_mask;
     if (nbytes == 0)
         return;
     nbytes = align_mask + 1 - nbytes;
-    if (segm < SBSS) {
+    if (section_has_contents(segm)) {
         /* Emit data and relocation. */
         for (c = 0; c < nbytes; c++) {
             count[segm]++;
@@ -2626,29 +3138,45 @@ void align(int align_bits)
 void pass1()
 {
     register int clex;
-    int cval, tval, csegm, nbytes;
+    int cval, tval, csegm, nbytes, symidx;
     register unsigned addr;
 
     segm = STEXT;
     prev_segm = STEXT;
+    mark_section_touched(segm);
     for (;;) {
         clex = getlex(&cval);
         switch (clex) {
         case LEOF:
         done:
             reorder_flush();
-            segm = STEXT;
-            align(text_align_bits);
-            segm = SDATA;
-            align(2);
-            segm = SSTRNG;
-            align(2);
-            segm = SCTORS;
-            align(2);
-            segm = SDTORS;
-            align(2);
-            segm = SBSS;
-            align(2);
+            if (elf_output) {
+                int s;
+                for (s = 0; s < maxsegm; s++) {
+                    unsigned a, bits;
+
+                    if (!valid_section(s))
+                        continue;
+                    a = sections[s].align;
+                    for (bits = 0; (1U << bits) < a; bits++)
+                        ;
+                    segm = s;
+                    align(bits);
+                }
+            } else {
+                segm = STEXT;
+                align(text_align_bits);
+                segm = SDATA;
+                align(2);
+                segm = SSTRNG;
+                align(2);
+                segm = SCTORS;
+                align(2);
+                segm = SDTORS;
+                align(2);
+                segm = SBSS;
+                align(2);
+            }
             return;
         case LEOL:
             continue;
@@ -2680,7 +3208,8 @@ void pass1()
                 cval = lookname();
                 stab[cval].n_value = count[segm];
                 stab[cval].n_type &= ~N_TYPE;
-                stab[cval].n_type |= segmtype[segm];
+                stab[cval].n_type |= section_nlist_type(segm);
+                stabsegm[cval] = segm;
                 continue;
             } else if (clex == '=') {
                 /* Symbol definition. */
@@ -2689,7 +3218,8 @@ void pass1()
                 if (csegm == SEXT)
                     uerror("indirect equivalence");
                 stab[cval].n_type &= N_EXT;
-                stab[cval].n_type |= segmtype[csegm];
+                stab[cval].n_type |= section_nlist_type(csegm);
+                stabsegm[cval] = csegm;
                 break;
             }
             /* Machine instruction. */
@@ -2739,9 +3269,7 @@ void pass1()
                 struct reloc relinfo;
                 expr_flags = 0;
                 getexpr(&cval);
-                relinfo.flags = RBYTE32 | segmrel[cval];
-                if (cval == SEXT)
-                    relinfo.index = extref;
+                set_reloc_segment(&relinfo, RBYTE32, cval);
                 if (expr_flags & EXPR_GPREL)
                     relinfo.flags |= RGPREL;
                 emitword(intval, &relinfo, 0);
@@ -2807,11 +3335,12 @@ void pass1()
             makeascii();
             break;
         case LGLOBL:
-            /* .globl name, ... */
+        case LEXTERN:
+            /* .globl/.extern name, ... */
             for (;;) {
                 clex = getlex(&cval);
                 if (clex != LNAME)
-                    uerror("bad parameter of .globl");
+                    uerror("bad parameter of .globl/.extern");
                 cval = lookname();
                 if (stab[cval].n_type & N_LOC)
                     uerror("local name redefined as global");
@@ -2870,7 +3399,8 @@ void pass1()
             if (csegm == SEXT)
                 uerror("indirect equivalence");
             stab[cval].n_type &= N_EXT;
-            stab[cval].n_type |= segmtype[csegm];
+            stab[cval].n_type |= section_nlist_type(csegm);
+            stabsegm[cval] = csegm;
             break;
         case LCOMM:
         case LLCOMM:
@@ -2878,6 +3408,7 @@ void pass1()
             if (getlex(&cval) != LNAME)
                 uerror("bad parameter of .comm");
             cval = lookname();
+            symidx = cval;
             if (stab[cval].n_type != N_UNDF && stab[cval].n_type != N_LOC &&
                 (stab[cval].n_type & N_TYPE) != N_COMM)
                 uerror("name already defined");
@@ -2903,6 +3434,7 @@ void pass1()
             getexpr(&tval);
             if (tval != SABS)
                 uerror("bad .comm alignment");
+            commalign[symidx] = intval;
             break;
         case LFILE:
             /* .file line filename */
@@ -2916,36 +3448,54 @@ void pass1()
             break;
         case LSECTION:
             /* .section name[,"flags"[,type[,entsize]]] */
+        {
+            char secname[256];
+            char flagsbuf[64];
+            unsigned secflags, sectype;
+            int has_flags, has_type;
+
+            secflags = 0;
+            sectype = SHT_PROGBITS;
+            has_flags = 0;
+            has_type = 0;
             clex = getlex(&cval);
             if (clex != LNAME && clex != LBSS && clex != LTEXT && clex != LDATA)
                 uerror("bad name of .section");
-            setsection();
+            xstrcpy(secname, name);
             clex = getlex(&cval);
             if (clex != ',') {
                 ungetlex(clex, cval);
+                setsection(secname, secflags, has_flags, sectype, has_type);
                 break;
             }
             clex = getlex(&cval);
             if (clex == '"') {
-                ungetlex(clex, cval);
-                skipstring();
+                read_quoted_string(flagsbuf, sizeof(flagsbuf));
+                secflags = section_flags_from_string(flagsbuf);
+                has_flags = 1;
             } else if (clex != LNAME)
                 uerror("bad type of .section");
             clex = getlex(&cval);
             if (clex != ',') {
                 ungetlex(clex, cval);
+                setsection(secname, secflags, has_flags, sectype, has_type);
                 break;
             }
             if (getlex(&cval) != LSECTYPE)
                 uerror("bad type of .section");
+            sectype = section_type_from_name(name);
+            has_type = 1;
             clex = getlex(&cval);
             if (clex != ',') {
                 ungetlex(clex, cval);
+                setsection(secname, secflags, has_flags, sectype, has_type);
                 break;
             }
             if (getlex(&cval) != LNUM)
                 uerror("bad entry size of .section");
+            setsection(secname, secflags, has_flags, sectype, has_type);
             break;
+        }
         case LPREVIOUS:
             previoussection();
             break;
@@ -3097,9 +3647,9 @@ void define_rebsd_metadata_symbol(const char *sym, unsigned value)
 {
     int idx;
 
-    if (strlen(sym) >= sizeof(name))
+    if (xstrlen(sym) >= sizeof(name))
         uerror("metadata symbol name too long");
-    strcpy(name, sym);
+    xstrcpy(name, sym);
     idx = lookname();
     stab[idx].n_value = value;
     stab[idx].n_type = N_ABS;
@@ -3126,10 +3676,12 @@ void middle()
         case N_COMM:
             /* Allocate a local common block */
             /* Align BSS count. */
-            count[SBSS] = (count[SBSS] + WORDSZ - 1) & ~(WORDSZ - 1);
+            count[SBSS] = align_up(count[SBSS],
+                commalign[i] ? commalign[i] : WORDSZ);
             nbytes = stab[i].n_value;
             stab[i].n_value = count[SBSS];
             stab[i].n_type = N_BSS;
+            stabsegm[i] = SBSS;
             count[SBSS] += nbytes;
             break;
         }
@@ -3209,6 +3761,26 @@ unsigned makeword(unsigned opcode, struct reloc *relinfo, unsigned offset)
     struct nlist *sym;
     unsigned value;
 
+    if (elf_output) {
+        if ((relinfo->flags & RSMASK) != REXT)
+            return opcode;
+        if (relinfo->index < RLAB_OFFSET - RLAB_MAXVAL)
+            return opcode;
+        value = findlabel(offset, relinfo->index - RLAB_OFFSET);
+        if ((relinfo->flags & RFMASK) == RWORD16) {
+            offset = value - offset - 4;
+            offset += (opcode & 0xffff) << 2;
+            opcode &= ~0xffff;
+            opcode |= (offset >> 2) & 0xffff;
+            relinfo->flags = RABS;
+            return opcode;
+        }
+        relinfo->flags &= RGPREL | RFMASK;
+        relinfo->flags |= REXT;
+        relinfo->index = SECTION_RELOC_INDEX_BASE + segm;
+        return opcode;
+    }
+
     switch (relinfo->flags & RSMASK) {
     case RABS:
         break;
@@ -3237,7 +3809,7 @@ unsigned makeword(unsigned opcode, struct reloc *relinfo, unsigned offset)
             sym = 0;
             value = findlabel(offset, relinfo->index - RLAB_OFFSET);
             relinfo->flags &= RGPREL | RFMASK;
-            relinfo->flags |= segmrel[segm];
+            relinfo->flags |= section_reloc_type(segm);
         } else {
             /* Symbol name. */
             sym = &stab[relinfo->index];
@@ -3250,7 +3822,7 @@ unsigned makeword(unsigned opcode, struct reloc *relinfo, unsigned offset)
         case RWORD16:
             /* Relative word address.
              * Change relocation to absolute. */
-            if (sym && (sym->n_type & N_TYPE) != segmtype[segm])
+            if (sym && stabsegm[relinfo->index] != segm)
                 uerror("%s: bad segment for relative relocation, offset %u", sym->n_name, offset);
             offset = value - offset - 4;
             if (segm == SDATA)
@@ -3282,10 +3854,602 @@ unsigned makeword(unsigned opcode, struct reloc *relinfo, unsigned offset)
     return opcode;
 }
 
+struct strtab {
+    char *data;
+    unsigned len;
+    unsigned cap;
+    int heap;
+};
+
+struct elf_outsec {
+    Elf32_Shdr sh;
+    int kind;
+    int src;
+};
+
+enum {
+    ESEC_NONE,
+    ESEC_INPUT,
+    ESEC_REL,
+    ESEC_SYMTAB,
+    ESEC_STRTAB,
+    ESEC_SHSTRTAB,
+};
+
+void
+strtab_init(struct strtab *t)
+{
+    t->cap = 256;
+    t->data = malloc(t->cap);
+    if (!t->data)
+        uerror("out of memory");
+    t->heap = 1;
+    t->data[0] = 0;
+    t->len = 1;
+}
+
+void
+strtab_init_static(struct strtab *t, char *storage, unsigned cap)
+{
+    t->data = storage;
+    t->cap = cap;
+    t->heap = 0;
+    t->data[0] = 0;
+    t->len = 1;
+}
+
+void
+strtab_free(struct strtab *t)
+{
+    if (t->heap)
+        free(t->data);
+}
+
+unsigned
+strtab_add(struct strtab *t, const char *s)
+{
+    unsigned off, len;
+    char *p;
+    unsigned i;
+
+    off = t->len;
+    len = xstrlen(s) + 1;
+    if (t->len + len > t->cap) {
+        while (t->len + len > t->cap)
+            t->cap *= 2;
+        if (t->heap) {
+            p = realloc(t->data, t->cap);
+        } else {
+            p = malloc(t->cap);
+            if (p) {
+                unsigned j;
+
+                for (j = 0; j < t->len; j++)
+                    p[j] = t->data[j];
+            }
+            t->heap = 1;
+        }
+        if (!p)
+            uerror("out of memory");
+        t->data = p;
+    }
+    for (i = 0; i < len; i++)
+        t->data[t->len + i] = s[i];
+    t->len += len;
+    return off;
+}
+
+void
+elf_write_bytes(const void *data, unsigned len, FILE *f)
+{
+    const unsigned char *p;
+    unsigned i;
+
+    p = data;
+    for (i = 0; i < len; i++)
+        putc(p[i], f);
+}
+
+void
+elf_put16(unsigned value, FILE *f)
+{
+    aout_put16(value, f);
+}
+
+void
+elf_put32(unsigned value, FILE *f)
+{
+    aout_put32(value, f);
+}
+
+void
+elf_write_ehdr(const Elf32_Ehdr *h, FILE *f)
+{
+    elf_write_bytes(h->e_ident, sizeof(h->e_ident), f);
+    elf_put16(h->e_type, f);
+    elf_put16(h->e_machine, f);
+    elf_put32(h->e_version, f);
+    elf_put32(h->e_entry, f);
+    elf_put32(h->e_phoff, f);
+    elf_put32(h->e_shoff, f);
+    elf_put32(h->e_flags, f);
+    elf_put16(h->e_ehsize, f);
+    elf_put16(h->e_phentsize, f);
+    elf_put16(h->e_phnum, f);
+    elf_put16(h->e_shentsize, f);
+    elf_put16(h->e_shnum, f);
+    elf_put16(h->e_shstrndx, f);
+}
+
+void
+elf_write_shdr(const Elf32_Shdr *h, FILE *f)
+{
+    elf_put32(h->sh_name, f);
+    elf_put32(h->sh_type, f);
+    elf_put32(h->sh_flags, f);
+    elf_put32(h->sh_addr, f);
+    elf_put32(h->sh_offset, f);
+    elf_put32(h->sh_size, f);
+    elf_put32(h->sh_link, f);
+    elf_put32(h->sh_info, f);
+    elf_put32(h->sh_addralign, f);
+    elf_put32(h->sh_entsize, f);
+}
+
+void
+elf_write_sym(const Elf32_Sym *s, FILE *f)
+{
+    elf_put32(s->st_name, f);
+    elf_put32(s->st_value, f);
+    elf_put32(s->st_size, f);
+    putc(s->st_info, f);
+    putc(s->st_other, f);
+    elf_put16(s->st_shndx, f);
+}
+
+void
+elf_write_rel(const Elf32_Rel *r, FILE *f)
+{
+    elf_put32(r->r_offset, f);
+    elf_put32(r->r_info, f);
+}
+
+void
+emit_padding(unsigned *pos, unsigned target)
+{
+    while (*pos < target) {
+        putchar(0);
+        (*pos)++;
+    }
+}
+
+void
+copy_temp_file(FILE *f, unsigned size)
+{
+    unsigned i;
+    int c;
+
+    rewind(f);
+    for (i = 0; i < size; i++) {
+        c = getc(f);
+        if (c == EOF)
+            c = 0;
+        putchar(c);
+    }
+}
+
+void
+append_elf_sym(Elf32_Sym **tab, unsigned *n, unsigned *cap,
+    const Elf32_Sym *sym)
+{
+    Elf32_Sym *p;
+
+    if (*n >= *cap) {
+        *cap = *cap ? *cap * 2 : 128;
+        p = realloc(*tab, *cap * sizeof(**tab));
+        if (!p)
+            uerror("out of memory");
+        *tab = p;
+    }
+    (*tab)[(*n)++] = *sym;
+}
+
+int
+elf_section_should_output(int s)
+{
+    if (!valid_section(s))
+        return 0;
+    if (s <= SBSS)
+        return 1;
+    return sections[s].touched || count[s] != 0;
+}
+
+unsigned
+elf_count_relocs(int s)
+{
+    unsigned i, n;
+    struct reloc relinfo;
+
+    if (!elf_section_should_output(s) || !section_has_contents(s))
+        return 0;
+    rewind(rfile[s]);
+    n = 0;
+    for (i = 0; i < count[s]; i += WORDSZ) {
+        fgetrel(rfile[s], &relinfo);
+        if ((relinfo.flags & RSMASK) != RABS)
+            n++;
+    }
+    return n;
+}
+
+int
+elf_symbol_bind(int i)
+{
+    if (stab[i].n_type & N_WEAK)
+        return STB_WEAK;
+    if (stab[i].n_type & N_EXT)
+        return STB_GLOBAL;
+    return STB_LOCAL;
+}
+
+unsigned
+elf_symbol_shndx(int i)
+{
+    int type, s;
+
+    type = stab[i].n_type & N_TYPE;
+    switch (type) {
+    case N_UNDF:
+        return SHN_UNDEF;
+    case N_ABS:
+        return SHN_ABS;
+    case N_COMM:
+        return SHN_COMMON;
+    default:
+        s = stabsegm[i];
+        if (!valid_section(s))
+            s = section_from_nlist_type(type);
+        if (!valid_section(s) || !sections[s].shndx)
+            uerror("symbol %s has no ELF section", stab[i].n_name);
+        return sections[s].shndx;
+    }
+}
+
+void
+make_elf_symbol(int i, struct strtab *strtab, Elf32_Sym *sym)
+{
+    int bind, type;
+
+    memset(sym, 0, sizeof(*sym));
+    bind = elf_symbol_bind(i);
+    type = stab[i].n_type & N_TYPE;
+    sym->st_name = strtab_add(strtab, stab[i].n_name);
+    sym->st_info = ELF_ST_INFO(bind, STT_NOTYPE);
+    sym->st_shndx = elf_symbol_shndx(i);
+    if (type == N_COMM) {
+        sym->st_value = commalign[i] ? commalign[i] : WORDSZ;
+        sym->st_size = stab[i].n_value;
+    } else {
+        sym->st_value = stab[i].n_value;
+        sym->st_size = 0;
+    }
+}
+
+unsigned
+elf_reloc_type(struct reloc *r)
+{
+    if (r->flags & RGPREL) {
+        if ((r->flags & RFMASK) == RBYTE32)
+            return R_MIPS_GPREL32;
+        return R_MIPS_GPREL16;
+    }
+    switch (r->flags & RFMASK) {
+    case RBYTE32:
+        return R_MIPS_32;
+    case RBYTE16:
+        return R_MIPS_LO16;
+    case RHIGH16:
+    case RHIGH16S:
+        return R_MIPS_HI16;
+    case RWORD16:
+        return R_MIPS_PC16;
+    case RWORD26:
+        return R_MIPS_26;
+    default:
+        return R_MIPS_NONE;
+    }
+}
+
+unsigned
+elf_reloc_symbol(struct reloc *r, int *symndx)
+{
+    int source, s;
+
+    source = r->flags & RSMASK;
+    if (source == REXT) {
+        if (r->index >= SECTION_RELOC_INDEX_BASE) {
+            s = r->index - SECTION_RELOC_INDEX_BASE;
+            if (!valid_section(s) || !sections[s].symndx)
+                uerror("bad ELF section relocation");
+            return sections[s].symndx;
+        }
+        if (r->index >= (unsigned)stabfree || !symndx[r->index])
+            uerror("bad ELF symbol relocation");
+        return symndx[r->index];
+    }
+    switch (source) {
+    case RTEXT:
+        s = STEXT;
+        break;
+    case RDATA:
+        s = SDATA;
+        break;
+    case RSTRNG:
+        s = SSTRNG;
+        break;
+    case RCTORS:
+        s = SCTORS;
+        break;
+    case RDTORS:
+        s = SDTORS;
+        break;
+    case RBSS:
+        s = SBSS;
+        break;
+    default:
+        uerror("bad ELF relocation source");
+        return 0;
+    }
+    if (!sections[s].symndx)
+        uerror("bad ELF relocation section");
+    return sections[s].symndx;
+}
+
+void
+elf_write_relocs(int s, int *symndx)
+{
+    unsigned i;
+    struct reloc relinfo;
+    Elf32_Rel rel;
+
+    rewind(rfile[s]);
+    for (i = 0; i < count[s]; i += WORDSZ) {
+        fgetrel(rfile[s], &relinfo);
+        if ((relinfo.flags & RSMASK) == RABS)
+            continue;
+        rel.r_offset = i;
+        rel.r_info = ELF_R_INFO(elf_reloc_symbol(&relinfo, symndx),
+            elf_reloc_type(&relinfo));
+        elf_write_rel(&rel, stdout);
+    }
+}
+
+void
+makeelf(void)
+{
+    struct strtab shstrtab, strtab;
+    static char shstrtab_storage[MAXSEGM * 320];
+    static char strtab_storage[STSIZE * 16];
+    struct elf_outsec out[MAXSEGM * 2 + 8];
+    unsigned relcounts[MAXSEGM];
+    Elf32_Sym *symtab;
+    Elf32_Sym sym;
+    Elf32_Ehdr ehdr;
+    unsigned symcap, nsyms, first_global;
+    unsigned nout, symtab_index, strtab_index, shstrtab_index;
+    unsigned off, i, pos;
+    int symndx[STSIZE];
+    int s;
+
+    memset(out, 0, sizeof(out));
+    memset(relcounts, 0, sizeof(relcounts));
+    memset(symndx, 0, sizeof(symndx));
+    strtab_init_static(&shstrtab, shstrtab_storage, sizeof(shstrtab_storage));
+    strtab_init_static(&strtab, strtab_storage, sizeof(strtab_storage));
+
+    nout = 1;
+    for (s = 0; s < maxsegm; s++) {
+        if (!elf_section_should_output(s))
+            continue;
+        sections[s].shndx = nout;
+        out[nout].kind = ESEC_INPUT;
+        out[nout].src = s;
+        out[nout].sh.sh_name = strtab_add(&shstrtab, sections[s].name);
+        out[nout].sh.sh_type = sections[s].type;
+        out[nout].sh.sh_flags = sections[s].flags;
+        out[nout].sh.sh_size = count[s];
+        out[nout].sh.sh_addralign = sections[s].align ? sections[s].align : 1;
+        nout++;
+    }
+
+    symtab = 0;
+    symcap = 0;
+    nsyms = 0;
+    memset(&sym, 0, sizeof(sym));
+    append_elf_sym(&symtab, &nsyms, &symcap, &sym);
+    for (s = 0; s < maxsegm; s++) {
+        if (!sections[s].shndx)
+            continue;
+        memset(&sym, 0, sizeof(sym));
+        sym.st_info = ELF_ST_INFO(STB_LOCAL, STT_SECTION);
+        sym.st_shndx = sections[s].shndx;
+        sections[s].symndx = nsyms;
+        append_elf_sym(&symtab, &nsyms, &symcap, &sym);
+    }
+    for (i = 0; i < (unsigned)stabfree; i++) {
+        if (elf_symbol_bind(i) != STB_LOCAL)
+            continue;
+        make_elf_symbol(i, &strtab, &sym);
+        symndx[i] = nsyms;
+        append_elf_sym(&symtab, &nsyms, &symcap, &sym);
+    }
+    first_global = nsyms;
+    for (i = 0; i < (unsigned)stabfree; i++) {
+        if (elf_symbol_bind(i) == STB_LOCAL)
+            continue;
+        make_elf_symbol(i, &strtab, &sym);
+        symndx[i] = nsyms;
+        append_elf_sym(&symtab, &nsyms, &symcap, &sym);
+    }
+
+    for (s = 0; s < maxsegm; s++) {
+        char relname[300];
+
+        relcounts[s] = elf_count_relocs(s);
+        if (relcounts[s] == 0)
+            continue;
+        if (xstrlen(sections[s].name) + 5 >= sizeof(relname))
+            uerror("section name too long");
+        xstrcpy(relname, ".rel");
+        xstrcat(relname, sections[s].name);
+        out[nout].kind = ESEC_REL;
+        out[nout].src = s;
+        out[nout].sh.sh_name = strtab_add(&shstrtab, relname);
+        out[nout].sh.sh_type = SHT_REL;
+        out[nout].sh.sh_info = sections[s].shndx;
+        out[nout].sh.sh_size = relcounts[s] * sizeof(Elf32_Rel);
+        out[nout].sh.sh_addralign = WORDSZ;
+        out[nout].sh.sh_entsize = sizeof(Elf32_Rel);
+        nout++;
+    }
+
+    symtab_index = nout;
+    out[nout].kind = ESEC_SYMTAB;
+    out[nout].sh.sh_name = strtab_add(&shstrtab, ".symtab");
+    out[nout].sh.sh_type = SHT_SYMTAB;
+    out[nout].sh.sh_size = nsyms * sizeof(Elf32_Sym);
+    out[nout].sh.sh_addralign = WORDSZ;
+    out[nout].sh.sh_entsize = sizeof(Elf32_Sym);
+    out[nout].sh.sh_info = first_global;
+    nout++;
+
+    strtab_index = nout;
+    out[nout].kind = ESEC_STRTAB;
+    out[nout].sh.sh_name = strtab_add(&shstrtab, ".strtab");
+    out[nout].sh.sh_type = SHT_STRTAB;
+    out[nout].sh.sh_size = strtab.len;
+    out[nout].sh.sh_addralign = 1;
+    nout++;
+
+    shstrtab_index = nout;
+    out[nout].kind = ESEC_SHSTRTAB;
+    out[nout].sh.sh_name = strtab_add(&shstrtab, ".shstrtab");
+    out[nout].sh.sh_type = SHT_STRTAB;
+    out[nout].sh.sh_size = shstrtab.len;
+    out[nout].sh.sh_addralign = 1;
+    nout++;
+
+    out[symtab_index].sh.sh_link = strtab_index;
+    for (i = 1; i < nout; i++) {
+        if (out[i].sh.sh_type == SHT_REL)
+            out[i].sh.sh_link = symtab_index;
+    }
+
+    off = sizeof(Elf32_Ehdr);
+    for (i = 1; i < nout; i++) {
+        if (out[i].sh.sh_type == SHT_NOBITS) {
+            out[i].sh.sh_offset = off;
+            continue;
+        }
+        off = align_up(off, out[i].sh.sh_addralign);
+        out[i].sh.sh_offset = off;
+        off += out[i].sh.sh_size;
+    }
+    off = align_up(off, WORDSZ);
+
+    memset(&ehdr, 0, sizeof(ehdr));
+    ehdr.e_ident[0] = ELFMAG0;
+    ehdr.e_ident[1] = ELFMAG1;
+    ehdr.e_ident[2] = ELFMAG2;
+    ehdr.e_ident[3] = ELFMAG3;
+    ehdr.e_ident[4] = ELFCLASS32;
+    ehdr.e_ident[EI_DATA] = aout_is_big_endian() ? ELFDATA2MSB : ELFDATA2LSB;
+    ehdr.e_ident[6] = EV_CURRENT;
+    ehdr.e_type = ET_REL;
+    ehdr.e_machine = EM_MIPS;
+    ehdr.e_version = EV_CURRENT;
+    ehdr.e_shoff = off;
+    ehdr.e_flags = EF_MIPS_NOREORDER | EF_MIPS_ABI_O32;
+    ehdr.e_flags |= mode_vr4300 ? EF_MIPS_ARCH_3 : EF_MIPS_ARCH_32R2;
+    ehdr.e_ehsize = sizeof(Elf32_Ehdr);
+    ehdr.e_shentsize = sizeof(Elf32_Shdr);
+    ehdr.e_shnum = nout;
+    ehdr.e_shstrndx = shstrtab_index;
+
+    fseek(stdout, 0, SEEK_SET);
+    elf_write_ehdr(&ehdr, stdout);
+    pos = sizeof(Elf32_Ehdr);
+    for (i = 1; i < nout; i++) {
+        if (out[i].sh.sh_type == SHT_NOBITS)
+            continue;
+        emit_padding(&pos, out[i].sh.sh_offset);
+        switch (out[i].kind) {
+        case ESEC_INPUT:
+            copy_temp_file(sfile[out[i].src], out[i].sh.sh_size);
+            break;
+        case ESEC_REL:
+            elf_write_relocs(out[i].src, symndx);
+            break;
+        case ESEC_SYMTAB:
+            for (s = 0; s < (int)nsyms; s++)
+                elf_write_sym(&symtab[s], stdout);
+            break;
+        case ESEC_STRTAB:
+            elf_write_bytes(strtab.data, strtab.len, stdout);
+            break;
+        case ESEC_SHSTRTAB:
+            elf_write_bytes(shstrtab.data, shstrtab.len, stdout);
+            break;
+        }
+        pos += out[i].sh.sh_size;
+    }
+    emit_padding(&pos, ehdr.e_shoff);
+    for (i = 0; i < nout; i++)
+        elf_write_shdr(&out[i].sh, stdout);
+
+    free(symtab);
+    strtab_free(&strtab);
+    strtab_free(&shstrtab);
+}
+
 void pass2()
 {
     register int i;
     register unsigned h;
+
+    if (elf_output) {
+        for (segm = 0; segm < maxsegm; segm++) {
+            FILE *sfd, *rfd;
+
+            if (!elf_section_should_output(segm) || !section_has_contents(segm))
+                continue;
+            sfd = fopen(tfilename, "w+");
+            if (!sfd)
+                uerror("cannot open %s", tfilename);
+            unlink(tfilename);
+            rfd = fopen(tfilename, "w+");
+            if (!rfd)
+                uerror("cannot open %s", tfilename);
+            unlink(tfilename);
+
+            rewind(sfile[segm]);
+            rewind(rfile[segm]);
+            for (h = 0; h < count[segm]; h += WORDSZ) {
+                struct reloc relinfo;
+                unsigned word = fgetword(sfile[segm]);
+                fgetrel(rfile[segm], &relinfo);
+                word = makeword(word, &relinfo, h);
+                fputword(word, sfd);
+                fputrel(&relinfo, rfd);
+            }
+            fclose(sfile[segm]);
+            fclose(rfile[segm]);
+            sfile[segm] = sfd;
+            rfile[segm] = rfd;
+        }
+        makeelf();
+        return;
+    }
 
     tbase = 0;
     dbase = tbase + count[STEXT];
@@ -3452,13 +4616,15 @@ void makesymtab()
 void usage()
 {
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  as [-gkuvxX] [-EL|-EB] [-o outfile] [infile]\n");
+    fprintf(stderr, "  as [--elf|--aout] [-gkuvxX] [-EL|-EB] [-o outfile] [infile]\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -o filename     Set output file name, default a.out\n");
     fprintf(stderr, "  -u              Treat undefined names as error\n");
     fprintf(stderr, "  -x              Discard local symbols\n");
     fprintf(stderr, "  -X              Discard locals starting with 'L' or '.'\n");
     fprintf(stderr, "  -EL, -EB        Select output byte order\n");
+    fprintf(stderr, "  --elf           Write ELF32 MIPS relocatable object\n");
+    fprintf(stderr, "  --aout          Write legacy ReBSD a.out relocatable object\n");
     fprintf(stderr, "  -mips3, -march=vr4300\n");
     fprintf(stderr, "                  Select VR4300 ISA checks and 8-byte text alignment\n");
     fprintf(stderr, "  -mips32r2, -march=mips32r2\n");
@@ -3468,13 +4634,18 @@ void usage()
 
 static void target_info(void)
 {
-    printf("rebsd-as target_big_endian=%d target_vr4300_default=%d\n",
+    printf("rebsd-as target_big_endian=%d target_vr4300_default=%d elf_default=%d\n",
 #ifdef TARGET_BIG_ENDIAN
         1,
 #else
         0,
 #endif
 #ifdef TARGET_VR4300
+        1,
+#else
+        0,
+#endif
+#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
         1
 #else
         0
@@ -3497,6 +4668,9 @@ int main(int argc, char *argv[])
 #ifdef TARGET_VR4300
     set_cpu_vr4300(1);
 #endif
+#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
+    elf_output = 1;
+#endif
 
     /*
      * Parse options.
@@ -3505,6 +4679,14 @@ int main(int argc, char *argv[])
         if (strcmp(argv[i], "--target-info") == 0) {
             target_info();
             return 0;
+        }
+        if (strcmp(argv[i], "--elf") == 0) {
+            elf_output = 1;
+            continue;
+        }
+        if (strcmp(argv[i], "--aout") == 0) {
+            elf_output = 0;
+            continue;
         }
         if (strcmp(argv[i], "-march=vr4300") == 0 ||
             strcmp(argv[i], "-mips3") == 0) {
@@ -3628,6 +4810,8 @@ int main(int argc, char *argv[])
     pass1();                   /* First pass */
     middle();                  /* Prepare symbol table */
     pass2();                   /* Second pass */
+    if (elf_output)
+        return 0;
     rtsize = makereloc(STEXT); /* Emit relocation info: text */
     rtsize = alignreloc(rtsize);
     rdsize = makereloc(SDATA);    /* data */

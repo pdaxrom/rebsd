@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <string.h>
+#include <strings.h>
 
 static char pattern[64];
 static char expect[64];

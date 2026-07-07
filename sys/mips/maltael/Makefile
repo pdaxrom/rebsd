@@ -195,6 +195,7 @@ FPU_ASFLAGS     = $(ASFLAGS)
 
 KERNEL_CC       = ${CC}
 KERNEL_AS       = ${CC} -x assembler -c
+KERNEL_LD       = ${LD}
 KERNEL_COMPILER_DEPS =
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
 COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
@@ -202,6 +203,9 @@ COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
 ifeq ($(MIPS_KERNEL_COMPILER),pcc)
 KERNEL_CC       = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) -msoft-float \
                   -fomit-frame-pointer
+KERNEL_AS       = $(MIPS_PCC_AS) --elf $(MIPS_ROOTFS_ENDIAN_FLAG) \
+                  $(MIPS_ROOTFS_AS_CPU)
+KERNEL_LD       = $(MIPS_PCC_LD) --elf $(MIPS_ROOTFS_ENDIAN_FLAG)
 KERNEL_COMPILER_DEPS = $(MIPS_PCC_PROVIDER_DEPS)
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
                   if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
@@ -223,6 +227,11 @@ SYSTEM_COMPILER_VERSION = $(or $(SYSTEM_COMPILER_VERSION_$(MIPS_KERNEL_COMPILER)
 SYSTEM_BUILD_INFO = built on $(SYSTEM_BUILD_USER)@$(SYSTEM_BUILD_HOST) with $(MIPS_KERNEL_COMPILER) $(SYSTEM_COMPILER_VERSION), cpu=$(MIPS_ROOTFS_CPU), float=$(MIPS_ROOTFS_FLOAT), endian=$(MIPS_ROOTFS_ENDIAN)
 COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
+ifeq ($(MIPS_KERNEL_COMPILER),pcc)
+COMPILE_S       = ${KERNEL_CC} ${CPPFLAGS} -E $< > .deps/$(@:.o=.s) && \
+                  ${KERNEL_AS} .deps/$(@:.o=.s) -o $@
+COMPILE_FPU_S   = ${COMPILE_S}
+endif
 
 OBJS = exec_aout.o exec_conf.o exec_elf.o exec_script.o exec_subr.o \
 	init_main.o init_sysent.o kern_clock.o kern_descrip.o \
@@ -296,7 +305,7 @@ SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): $(SYSTEM_BUILD_INFO)\n";' > vers.c; \
                   ${COMPILE_VERS_C}; \
                   rm -f $@
-SYSTEM_LD       = ${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o $@
+SYSTEM_LD       = ${KERNEL_LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o $@
 SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
@@ -547,7 +556,7 @@ rootfs-repack-kernel:
 	printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): $(SYSTEM_BUILD_INFO)\n";' > vers.c
 	${COMPILE_VERS_C}
 	rm -f unix.elf
-	${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o unix.elf swapunix.o
+	${SYSTEM_LD} swapunix.o
 	${SIZE} unix.elf
 	${OBJDUMP} -d -S unix.elf > unix.dis
 	${NM} -n unix.elf > unix.nm

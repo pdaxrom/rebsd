@@ -26,7 +26,7 @@ rm -rf "$dir"
 mkdir "$dir" || exit 1
 cd "$dir" || exit 1
 cp "$src"/basename.c "$src"/sum.c "$src"/size.c \
-    "$src"/aoutio.c "$src"/aoutio.h . || exit 1
+    "$src"/aoutio.c "$src"/aoutio.h "$src"/elf32_mips.h . || exit 1
 
 cleanup()
 {

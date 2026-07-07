@@ -268,14 +268,14 @@ check_gnu_text()
 	fi
 }
 
-"$as_bin" -EB -mips3 -march=vr4300 -o "$main_o" "$main_s" || exit 1
-"$as_bin" -EB -mips3 -march=vr4300 -o "$foo_o" "$foo_s" || exit 1
-"$as_bin" -EB -mips3 -march=vr4300 -o "$data_o" "$data_s" || exit 1
-"$as_bin" -EB -mips3 -march=vr4300 -o "$end_o" "$end_s" || exit 1
-"$as_bin" -EB -mips3 -march=vr4300 -o "$chain_main_o" "$chain_main_s" || exit 1
-"$as_bin" -EB -mips3 -march=vr4300 -o "$chain_mid_o" "$chain_mid_s" || exit 1
-"$as_bin" -EB -mips3 -march=vr4300 -o "$chain_leaf_o" "$chain_leaf_s" || exit 1
-"$as_bin" -EB -mips3 -march=vr4300 -o "$hilo_o" "$hilo_s" || exit 1
+"$as_bin" --aout -EB -mips3 -march=vr4300 -o "$main_o" "$main_s" || exit 1
+"$as_bin" --aout -EB -mips3 -march=vr4300 -o "$foo_o" "$foo_s" || exit 1
+"$as_bin" --aout -EB -mips3 -march=vr4300 -o "$data_o" "$data_s" || exit 1
+"$as_bin" --aout -EB -mips3 -march=vr4300 -o "$end_o" "$end_s" || exit 1
+"$as_bin" --aout -EB -mips3 -march=vr4300 -o "$chain_main_o" "$chain_main_s" || exit 1
+"$as_bin" --aout -EB -mips3 -march=vr4300 -o "$chain_mid_o" "$chain_mid_s" || exit 1
+"$as_bin" --aout -EB -mips3 -march=vr4300 -o "$chain_leaf_o" "$chain_leaf_s" || exit 1
+"$as_bin" --aout -EB -mips3 -march=vr4300 -o "$hilo_o" "$hilo_s" || exit 1
 
 check_gnu_text "$main_o" "$main_s" main
 check_gnu_text "$foo_o" "$foo_s" foo
@@ -290,7 +290,7 @@ check_exec "$foo_o" 00000106 00000010
 check_exec "$data_o" 00000106 00000008
 check_field "$data_o" 8 00000004
 
-"$nm_bin" -p "$main_o" > "$nm_main" || exit 1
+"$nm_bin" -pEB "$main_o" > "$nm_main" || exit 1
 if ! grep ' T start' "$nm_main" >/dev/null; then
 	echo "smoke-aout-toolchain: nm did not report start text symbol" >&2
 	cat "$nm_main" >&2
@@ -302,26 +302,26 @@ if ! grep ' U foo' "$nm_main" >/dev/null; then
 	exit 1
 fi
 
-"$size_bin" "$main_o" > "$size_main" || exit 1
+"$size_bin" -EB "$main_o" > "$size_main" || exit 1
 if ! grep '16	0	0	16	10' "$size_main" >/dev/null; then
 	echo "smoke-aout-toolchain: size output is unexpected" >&2
 	cat "$size_main" >&2
 	exit 1
 fi
 
-"$ld_bin" -EB -r -o "$partial_o" "$main_o" "$foo_o" || exit 1
+"$ld_bin" --aout -EB -r -o "$partial_o" "$main_o" "$foo_o" || exit 1
 check_exec "$partial_o" 00000106 00000020
 
-"$ld_bin" -EB -e start -o "$app_data" "$data_o" || exit 1
+"$ld_bin" --aout -EB -e start -o "$app_data" "$data_o" || exit 1
 check_exec "$app_data" 00000107 00000010
 check_field "$app_data" 8 00000008
 check_field "$app_data" 28 00400000
 check_field "$app_data" 48 00400000
 
-"$ld_bin" -EB -e start -o "$app_end" "$end_o" || exit 1
+"$ld_bin" --aout -EB -e start -o "$app_end" "$end_o" || exit 1
 check_exec "$app_end" 00000107 00000030
 
-"$ld_bin" -EB -e start -o "$app_hilo" "$hilo_o" || exit 1
+"$ld_bin" --aout -EB -e start -o "$app_hilo" "$hilo_o" || exit 1
 check_exec "$app_hilo" 00000107 00000010
 check_field "$app_hilo" 32 3c010040
 check_field "$app_hilo" 36 ac227f50
@@ -347,7 +347,7 @@ if test "`sed -n '2p' "$list_after"`" != "foo.o"; then
 	exit 1
 fi
 
-"$ld_bin" -EB -e start -o "$app" "$main_o" "$libfoo" || exit 1
+"$ld_bin" --aout -EB -e start -o "$app" "$main_o" "$libfoo" || exit 1
 check_exec "$app" 00000107 00000020
 check_field "$app" 28 00400000
 
@@ -369,12 +369,12 @@ if test "`sed -n '3p' "$chain_list_after"`" != "chain-mid.o"; then
 	cat "$chain_list_after" >&2
 	exit 1
 fi
-"$ld_bin" -EB -e start -o "$app_chain" "$chain_main_o" "$libchain" || exit 1
+"$ld_bin" --aout -EB -e start -o "$app_chain" "$chain_main_o" "$libchain" || exit 1
 check_exec "$app_chain" 00000107 00000030
 check_field "$app_chain" 28 00400000
 
 cp "$app" "$stripped"
-"$strip_bin" "$stripped" || exit 1
+"$strip_bin" -EB "$stripped" || exit 1
 check_exec "$stripped" 00000107 00000020
 check_field "$stripped" 24 00000000
 check_field "$stripped" 28 00400000

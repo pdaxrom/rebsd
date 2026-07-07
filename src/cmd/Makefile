@@ -116,6 +116,8 @@ size strip: %: %.o aoutio.o
 		$(SIZE) $@.elf
 		$(ELF2AOUT) $@.elf $@ && /bin/rm $@.elf
 
+size.o strip.o: elf32_mips.h
+
 aoutio.o:	aoutio.c aoutio.h
 		$(CC) $(CFLAGS) -c aoutio.c
 

@@ -18,6 +18,7 @@ dir /sbin
 dir /usr
 dir /usr/bin
 dir /usr/lib
+dir /usr/lib/ldscripts
 dir /usr/lib/deco
 dir /usr/lib/deco/help
 dir /usr/libexec
@@ -133,6 +134,8 @@ dir /root/utility-src
 file /root/utility-src/aoutio.c
 
 file /root/utility-src/aoutio.h
+
+file /root/utility-src/elf32_mips.h
 
 file /root/utility-src/basename.c
 

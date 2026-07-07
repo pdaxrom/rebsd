@@ -25,6 +25,7 @@ SECTIONS
 {
   .text : {
     *(.startup)
+    *(.exception .exception.*)
     *(.text .text.*)
     *(.rodata .rodata.*)
     . = ALIGN(16);

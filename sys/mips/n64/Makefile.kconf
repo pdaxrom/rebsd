@@ -519,8 +519,6 @@ MIPS_ROOTFS_FLOAT = $(N64_USERLAND_FLOAT)
 MIPS_ROOTFS_ENDIAN = $(N64_USERLAND_ENDIAN)
 MIPS_ROOTFS_TARGET_PLATFORM = n64
 MIPS_ROOTFS_USERLAND_STAMP_PREFIX = n64-userland
-MIPS_ROOTFS_USER_LDSCRIPT = n64-user.ld
-MIPS_ROOTFS_USER_LDSCRIPT_SRC = user/user.ld.S
 MIPS_ROOTFS_BOARD_DIR = $(TOPSRC)/sys/mips/n64/rootfs
 MIPS_ROOTFS_BOARD_MANIFEST = $(N64_ROOTFS_DEVNODES)
 MIPS_ROOTFS_BOARD_MANIFEST_0775 = /root/romfs-smoke.sh \
@@ -901,7 +899,8 @@ $(N64_LINPACK_ROOTFS_STAMP): $(N64_ROOTFS_USER_STAMP) $(N64_HOST_PCC) \
 	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
 	    --pcc $(abspath $(N64_HOST_PCC)) \
 	    --cpu $(N64_USERLAND_CPU) \
-	    --float-abi $(N64_USERLAND_FLOAT)
+	    --float-abi $(N64_USERLAND_FLOAT) \
+	    --endian $(N64_USERLAND_ENDIAN)
 	cp -p $(N64_LINPACK_SMOKE_OUT)/linpack-pcc \
 	    $(N64_ROOTFS_STAGE)/root/linpack-pcc
 	chmod 0775 $(N64_ROOTFS_STAGE)/root/linpack-pcc
@@ -1213,7 +1212,8 @@ pcc-hw-test-stage: $(N64_ROOTFS_BUILD_MANIFEST) $(MIPS_PCC_PROVIDER_DEPS) \
 	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
 	    --pcc $(MIPS_PCC_CC) \
 	    --cpu $(N64_USERLAND_CPU) \
-	    --float-abi $(N64_USERLAND_FLOAT)
+	    --float-abi $(N64_USERLAND_FLOAT) \
+	    --endian $(N64_USERLAND_ENDIAN)
 	python3 $(N64_LINPACK_SMOKE_SCRIPT) stage \
 	    --out $(N64_LINPACK_SMOKE_OUT) \
 	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
@@ -1449,7 +1449,8 @@ $(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_HOST_PCC) \
 $(N64_NATIVE_PCC_STAMP): $(N64_DEV_PCC_SRCS) $(N64_NATIVE_STAMP) \
     $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_DIR)/crt0.o \
     $(N64_NATIVE_DIR)/libc.a $(N64_NATIVE_DIR)/libm.a \
-    $(N64_NATIVE_DIR)/libpcc.a $(N64_NATIVE_SOFTFLOAT_DIR)/libpcc.a Makefile
+    $(N64_NATIVE_DIR)/libpcc.a $(N64_NATIVE_SOFTFLOAT_DIR)/libpcc.a \
+    $(N64_USER_LDSCRIPT) Makefile
 	python3 $(N64_NATIVE_PCC_BUILD_SCRIPT) \
 	    --top $(abspath $(TOPSRC)) \
 	    --build $(abspath $(N64_NATIVE_PCC_BUILD)) \
@@ -1459,6 +1460,7 @@ $(N64_NATIVE_PCC_STAMP): $(N64_DEV_PCC_SRCS) $(N64_NATIVE_STAMP) \
 	    --float-abi $(N64_USERLAND_FLOAT) \
 	    --as $(abspath $(N64_CROSS_PCC_AS)) \
 	    --ld $(abspath $(N64_CROSS_PCC_LD)) \
+	    --ldscript $(abspath $(N64_USER_LDSCRIPT)) \
 	    --crt0 $(abspath $(N64_NATIVE_DIR)/crt0.o) \
 	    --libdir $(abspath $(N64_NATIVE_DIR)) \
 	    --bison $(N64_BISON)
