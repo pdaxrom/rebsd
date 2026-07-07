@@ -183,6 +183,8 @@ char tfname[] = "/tmp/ldaXXXXXX";
 
 #define ALIGN(x, y) ((x) + (y) - 1 - ((x) + (y) - 1) % (y))
 
+static void aout_handle_t_option(char *arg);
+
 unsigned int fgetword(FILE *f)
 {
     return aout_get32(f);
@@ -868,7 +870,22 @@ void collectlibdirs(int argc, char **argv)
                 continue;
 
             case 'E':
+                while (ap[i + 1])
+                    i++;
+                continue;
+
             case 'T':
+                if (ap[i + 1]) {
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-%c: argument missing", ap[i]);
+                    p++;
+                }
+                continue;
+
+            case 'G':
                 while (ap[i + 1])
                     i++;
                 continue;
@@ -1391,8 +1408,16 @@ void pass1(int argc, char **argv)
 
                 /* base address of loading */
             case 'T':
-                basaddr = atol(ap + i + 1);
-                break;
+                if (ap[i + 1]) {
+                    aout_handle_t_option(&ap[i + 1]);
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-T: argument missing");
+                    aout_handle_t_option(*p++);
+                }
+                continue;
 
                 /* endianness */
             case 'E':
@@ -1842,6 +1867,17 @@ void pass2(int argc, char **argv)
             case 'E':
                 while (ap[i + 1])
                     i++;
+                continue;
+
+            case 'T':
+                if (ap[i + 1]) {
+                    while (ap[i + 1])
+                        i++;
+                } else {
+                    if (++c >= argc)
+                        error(2, "-T: argument missing");
+                    p++;
+                }
                 continue;
 
             case 'L':
@@ -3048,6 +3084,85 @@ script_parse_file(const char *path)
             error(2, "bad linker script command");
         }
     }
+}
+
+static int
+aout_parse_t_address(char *arg, unsigned *addrp)
+{
+    char *endp;
+    unsigned addr;
+
+    addr = elf_number(arg, &endp);
+    if (endp == arg)
+        return 0;
+    while (*endp == ' ' || *endp == '\t' || *endp == '\n' ||
+        *endp == '\r')
+        endp++;
+    if (*endp)
+        return 0;
+    *addrp = addr;
+    return 1;
+}
+
+static void
+aout_apply_script_base(int prestart, int outstart)
+{
+    unsigned seqdot, candidate;
+    int i, have_candidate, saw_dot;
+
+    seqdot = basaddr;
+    candidate = basaddr;
+    have_candidate = 0;
+    saw_dot = 0;
+    for (i = prestart; i < neprestmt; i++) {
+        if (eprestmt[i].kind == ESTMT_DOTASSIGN) {
+            seqdot = elf_eval_expr(eprestmt[i].expr, seqdot);
+            candidate = seqdot;
+            have_candidate = 1;
+            saw_dot = 1;
+            continue;
+        }
+        if (eprestmt[i].kind == ESTMT_ASSIGN && eprestmt[i].name &&
+            strcmp(eprestmt[i].name, "__executable_start") == 0 &&
+            !have_candidate) {
+            candidate = elf_eval_expr(eprestmt[i].expr, seqdot);
+            have_candidate = 1;
+        }
+    }
+    if (saw_dot || have_candidate) {
+        basaddr = candidate;
+        return;
+    }
+
+    for (i = outstart; i < neout; i++) {
+        if (eout[i].has_addr) {
+            basaddr = elf_eval_expr(eout[i].addr_expr, basaddr);
+            return;
+        }
+    }
+}
+
+static void
+aout_handle_t_option(char *arg)
+{
+    unsigned addr;
+    int prestart, outstart;
+
+    if (aout_parse_t_address(arg, &addr)) {
+        basaddr = addr;
+        return;
+    }
+
+    prestart = neprestmt;
+    outstart = neout;
+    script_parse_file(arg);
+    aout_apply_script_base(prestart, outstart);
+    if (elf_entry_symbol && !entrypt) {
+        enter(slookup(elf_entry_symbol));
+        entrypt = lastsym;
+    }
+    if (trace)
+        printf("linker script '%s': a.out text base %#x\n", arg, basaddr);
 }
 
 static void
@@ -5147,7 +5262,7 @@ int main(int argc, char **argv)
 
     if (argc == 1) {
         printf("Usage:\n");
-        printf("  ld [--elf -T script] [-sSxXrdtv] [-EL|-EB] [--sysroot dir|--sysroot=dir] [-L dir] [-o file] [-lname] [-u name] [-e name] [-Taddr] file...\n");
+        printf("  ld [--elf|--aout] [-sSxXrdtv] [-EL|-EB] [--sysroot dir|--sysroot=dir] [-L dir] [-o file] [-lname] [-u name] [-e name] [-Taddr|-T script] file...\n");
         printf("Options:\n");
         printf("  -o filename     Set output file name, default a.out\n");
         printf("  -L dirname      Add a library search directory\n");
@@ -5156,6 +5271,7 @@ int main(int argc, char **argv)
         printf("  -u symbol       Start with undefined reference to symbol\n");
         printf("  -e symbol       Set start address\n");
         printf("  -Taddress       Set address of .text segment, default %#x\n", basaddr);
+        printf("  -T script       Read linker script; a.out uses ENTRY() and initial . address\n");
         printf("  -s              Discard all symbols\n");
         printf("  -S              Discard all symbols except locals and globals\n");
         printf("  -x              Discard local symbols\n");

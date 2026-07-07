@@ -102,7 +102,17 @@ endif
 ifeq ($(filter $(MIPS_ROOTFS_ENDIAN),$(MIPS_ROOTFS_ENDIANS)),)
 $(error Unsupported MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN); expected one of $(MIPS_ROOTFS_ENDIANS))
 endif
-MIPS_ROOTFS_ABI = $(MIPS_ROOTFS_ENDIAN).$(MIPS_ROOTFS_CPU).$(MIPS_ROOTFS_FLOAT)
+MIPS_ROOTFS_EXEC_FORMAT ?= $(if $(N64_USERLAND_EXEC_FORMAT),$(N64_USERLAND_EXEC_FORMAT),elf)
+MIPS_ROOTFS_EXEC_FORMATS = aout elf
+ifneq ($(N64_USERLAND_EXEC_FORMAT),)
+ifneq ($(MIPS_ROOTFS_EXEC_FORMAT),$(N64_USERLAND_EXEC_FORMAT))
+$(error MIPS_ROOTFS_EXEC_FORMAT=$(MIPS_ROOTFS_EXEC_FORMAT) conflicts with N64_USERLAND_EXEC_FORMAT=$(N64_USERLAND_EXEC_FORMAT))
+endif
+endif
+ifeq ($(filter $(MIPS_ROOTFS_EXEC_FORMAT),$(MIPS_ROOTFS_EXEC_FORMATS)),)
+$(error Unsupported MIPS_ROOTFS_EXEC_FORMAT=$(MIPS_ROOTFS_EXEC_FORMAT); expected one of $(MIPS_ROOTFS_EXEC_FORMATS))
+endif
+MIPS_ROOTFS_ABI = $(MIPS_ROOTFS_ENDIAN).$(MIPS_ROOTFS_CPU).$(MIPS_ROOTFS_FLOAT).$(MIPS_ROOTFS_EXEC_FORMAT)
 MIPS_KERNEL_COMPILER ?= gcc
 MIPS_KERNEL_COMPILERS = gcc pcc
 ifeq ($(filter $(MIPS_KERNEL_COMPILER),$(MIPS_KERNEL_COMPILERS)),)
@@ -153,7 +163,6 @@ LINPACK_SMOKE_ARRAY_SIZE ?= 120
 LINPACK_SMOKE_MIN_SECONDS ?= 1
 MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
 NATIVE_PCC_SMOKE_LOG ?= /private/tmp/rebsd-native-pcc-smoke.log
-MIPS_LEGACY_ROOTFS_RULES ?= 0
 MIPS_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_TARGET_PLATFORM ?= mips
@@ -396,26 +405,6 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         native-pcc-smoke-runtime-vr4300 native-pcc-regress-stage \
         native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 \
         rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
-ifeq ($(MIPS_LEGACY_ROOTFS_RULES),1)
-$(PCC_HOST_PCC): $(MIPS_ROOTFS_STAMP) $(PCC_HOST_SRCS) $(PCC_HOST_AS) \
-    $(PCC_HOST_LD)
-	sh $(PCC_HOST_SMOKE_SCRIPT) $(abspath $(TOPSRC)) \
-	    $(abspath $(PCC_HOST_BUILD)) $(abspath $(PCC_HOST_PREFIX)) \
-	    $(abspath $(MIPS_ROOTFS_STAGE)/usr/include) \
-	    $(abspath $(PCC_HOST_AS)) $(abspath $(PCC_HOST_LD)) \
-	    $(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT) $(MIPS_ROOTFS_ENDIAN)
-	mkdir -p $(PCC_HOST_LIB) $(PCC_HOST_SOFTFLOAT_LIB)
-	for lib in crt0.o libc.a libm.a libpcc.a; do \
-	    cp -p $(MIPS_ROOTFS_STAGE)/usr/lib/$$lib $(PCC_HOST_LIB)/$$lib; \
-	done
-	if [ -f $(MIPS_ROOTFS_STAGE)/usr/lib/softfloat/libpcc.a ]; then \
-	    cp -p $(MIPS_ROOTFS_STAGE)/usr/lib/softfloat/libpcc.a \
-	        $(PCC_HOST_SOFTFLOAT_LIB)/libpcc.a; \
-	fi
-
-smoke-host-portablecc: $(PCC_HOST_PCC)
-	@echo "smoke-host-portablecc: ok"
-endif
 
 pcc-regress-compile: $(MIPS_ROOTFS_USER_STAMP) smoke-host-portablecc \
     $(PCC_REGRESS_SCRIPT)
@@ -456,14 +445,6 @@ pcc-regress-summary: $(PCC_REGRESS_SCRIPT)
 
 linpack-smoke-build: $(MIPS_LINPACK_ROOTFS_STAMP)
 	@echo "linpack-smoke-build: ok"
-
-ifeq ($(MIPS_LEGACY_ROOTFS_RULES),1)
-$(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_STAMP) linpack-smoke-build
-	cp -p $(LINPACK_SMOKE_OUT)/linpack-pcc \
-	    $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
-	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
-	touch $@
-endif
 
 linpack-smoke-stage: linpack-smoke-build $(MIPS_ROOTFS_BUILD_MANIFEST)
 	python3 $(LINPACK_SMOKE_SCRIPT) stage \

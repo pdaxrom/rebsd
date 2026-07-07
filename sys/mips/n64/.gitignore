@@ -23,6 +23,7 @@ rootfs.pcc-hw-regress.manifest
 *.z64
 n64.ld
 n64-user.ld
+mips-user.ld
 n64-userland.stamp
 n64-userland.*.stamp
 n64-native-runtime*/

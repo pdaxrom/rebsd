@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-if [ $# -ne 6 ] && [ $# -ne 7 ] && [ $# -ne 8 ] && [ $# -ne 9 ] && [ $# -ne 10 ]; then
-	echo "usage: $0 topsrc builddir prefix include-dir rebsd-as rebsd-ld [cpu] [float-abi] [endian] [ldscript]" >&2
+if [ $# -lt 6 ] || [ $# -gt 11 ]; then
+	echo "usage: $0 topsrc builddir prefix include-dir rebsd-as rebsd-ld [cpu] [float-abi] [endian] [ldscript] [exec-format]" >&2
 	exit 2
 fi
 
@@ -16,6 +16,7 @@ cpu=${7:-vr4300}
 float_abi=${8:-hard}
 endian=${9:-big}
 ldscript=${10:-}
+exec_format=${11:-elf}
 pcc_src=$topsrc/src/dev/pcc/pcc
 
 case "$cpu" in
@@ -58,6 +59,18 @@ little)
 	exit 2
 	;;
 esac
+case "$exec_format" in
+elf)
+	format_cflags="-DREBSD_TOOLCHAIN_ELF_DEFAULT"
+	;;
+aout)
+	format_cflags=
+	;;
+*)
+	echo "unsupported PCC executable format default: $exec_format" >&2
+	exit 2
+	;;
+esac
 target_root=$prefix/$target
 target_incdir=$target_root/include
 target_libdir=$target_root/lib
@@ -97,7 +110,7 @@ ln -sf "$target-as" "$target_bindir/as"
 ln -sf "$target-ld" "$target_bindir/ld"
 cd "$builddir"
 
-CFLAGS="${CFLAGS:-} $endian_cflags -DMIPS_CPU_DEFAULT=$cpu_default $float_cflags" \
+CFLAGS="${CFLAGS:-} $endian_cflags -DMIPS_CPU_DEFAULT=$cpu_default $float_cflags $format_cflags" \
 "$pcc_src/configure" \
 	--target="$target" \
 	--prefix="$prefix" \

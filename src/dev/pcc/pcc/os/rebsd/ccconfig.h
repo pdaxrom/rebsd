@@ -112,15 +112,21 @@
 #define STARTLABEL	"_start"
 #define TARGET_NO_ABICALLS
 
+#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
+#define PCC_REBSD_EXEC_FORMAT "--elf"
+#else
+#define PCC_REBSD_EXEC_FORMAT "--aout"
+#endif
+
 #define PCC_SETUP_AS_ARGS { \
-	strlist_append(&assembler_flags, "--elf"); \
+	strlist_append(&assembler_flags, PCC_REBSD_EXEC_FORMAT); \
 	strlist_append(&assembler_flags, bigendian ? "-EB" : "-EL"); \
 	strlist_append(&assembler_flags, \
 	    mips_cpu == MIPS_CPU_MIPS32R2 ? "-march=mips32r2" : "-march=vr4300"); \
 }
 
 #define PCC_SETUP_LD_ARGS { \
-	strlist_append(&early_linker_flags, "--elf"); \
+	strlist_append(&early_linker_flags, PCC_REBSD_EXEC_FORMAT); \
 	strlist_append(&early_linker_flags, bigendian ? "-EB" : "-EL"); \
 	strlist_append(&early_linker_flags, "-X"); \
 	if (softfloat && !nostdlib) \

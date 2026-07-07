@@ -55,6 +55,14 @@ def mips_endian_ldflag(endian):
     raise ValueError(f"unsupported MIPS endian: {endian}")
 
 
+def mips_exec_format_ldflag(exec_format):
+    if exec_format == "elf":
+        return "--elf"
+    if exec_format == "aout":
+        return "--aout"
+    raise ValueError(f"unsupported executable format: {exec_format}")
+
+
 def mips_cpu_default(cpu):
     if cpu == "vr4300":
         return "MIPS_CPU_VR4300"
@@ -163,6 +171,12 @@ class Builder:
         self.endian_flags = mips_endian_flags(args.endian)
         self.endian_mflag = mips_endian_mflag(args.endian)
         self.endian_ldflag = mips_endian_ldflag(args.endian)
+        self.exec_format = args.exec_format
+        self.exec_format_ldflag = mips_exec_format_ldflag(args.exec_format)
+        self.exec_format_flags = (
+            ["-DREBSD_TOOLCHAIN_ELF_DEFAULT"]
+            if args.exec_format == "elf" else []
+        )
         self.target_triple = mips_target_triple(args.endian)
         self.target_cc = tool_arg(args.target_cc)
         self.target_cc_flags = [
@@ -248,6 +262,7 @@ class Builder:
             "-Dmach_mips",
             "-DTARGOSVER=0",
             *self.endian_flags,
+            *self.exec_format_flags,
             f"-DMIPS_CPU_DEFAULT={self.cpu_default}",
             *self.float_flags,
             "-I", self.target_config,
@@ -317,7 +332,7 @@ class Builder:
     def link_target(self, output, objects, *, need_math=True):
         cmd = [
             self.rebsd_ld,
-            "--elf",
+            self.exec_format_ldflag,
             self.endian_ldflag,
             "-T",
             self.ldscript,
@@ -485,6 +500,8 @@ def main():
                         default="hard")
     parser.add_argument("--endian", choices=["big", "little"],
                         default="big")
+    parser.add_argument("--exec-format", choices=["aout", "elf"],
+                        default="elf")
     parser.add_argument("--as", dest="as_", required=True)
     parser.add_argument("--ld", required=True)
     parser.add_argument("--ldscript", required=True)

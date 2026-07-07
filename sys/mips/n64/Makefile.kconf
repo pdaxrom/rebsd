@@ -329,6 +329,16 @@ endif
 ifeq ($(filter $(N64_USERLAND_ENDIAN),$(N64_USERLAND_ENDIANS)),)
 $(error Unsupported N64_USERLAND_ENDIAN=$(N64_USERLAND_ENDIAN); expected one of $(N64_USERLAND_ENDIANS))
 endif
+N64_USERLAND_EXEC_FORMAT ?= $(if $(MIPS_ROOTFS_EXEC_FORMAT),$(MIPS_ROOTFS_EXEC_FORMAT),aout)
+N64_USERLAND_EXEC_FORMATS = aout elf
+ifneq ($(MIPS_ROOTFS_EXEC_FORMAT),)
+ifneq ($(N64_USERLAND_EXEC_FORMAT),$(MIPS_ROOTFS_EXEC_FORMAT))
+$(error N64_USERLAND_EXEC_FORMAT=$(N64_USERLAND_EXEC_FORMAT) conflicts with MIPS_ROOTFS_EXEC_FORMAT=$(MIPS_ROOTFS_EXEC_FORMAT))
+endif
+endif
+ifeq ($(filter $(N64_USERLAND_EXEC_FORMAT),$(N64_USERLAND_EXEC_FORMATS)),)
+$(error Unsupported N64_USERLAND_EXEC_FORMAT=$(N64_USERLAND_EXEC_FORMAT); expected one of $(N64_USERLAND_EXEC_FORMATS))
+endif
 N64_USERLAND_ENDIAN_FLAG_big = -EB
 N64_USERLAND_ENDIAN_FLAG_little = -EL
 N64_USERLAND_ENDIAN_FLAG = $(N64_USERLAND_ENDIAN_FLAG_$(N64_USERLAND_ENDIAN))
@@ -341,7 +351,7 @@ N64_USERLAND_ENDIAN_CPP1 = $(N64_USERLAND_ENDIAN_CPP1_$(N64_USERLAND_ENDIAN))
 N64_USERLAND_FLOAT_FLAG_hard = -mhard-float
 N64_USERLAND_FLOAT_FLAG_soft = -msoft-float
 N64_USERLAND_FLOAT_FLAG = $(N64_USERLAND_FLOAT_FLAG_$(N64_USERLAND_FLOAT))
-N64_USERLAND_ABI = $(N64_USERLAND_ENDIAN).$(N64_USERLAND_CPU).$(N64_USERLAND_FLOAT)
+N64_USERLAND_ABI = $(N64_USERLAND_ENDIAN).$(N64_USERLAND_CPU).$(N64_USERLAND_FLOAT).$(N64_USERLAND_EXEC_FORMAT)
 N64_USERLAND_ARCH_vr4300 = $(N64_USERLAND_ENDIAN_FLAG) \
                            -march=vr4300 -mtune=vr4300 -mips3 \
                            -mabi=32 $(N64_USERLAND_FLOAT_FLAG)
@@ -360,96 +370,6 @@ endif
 N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).$(N64_USERLAND_ABI).stamp
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
-
-ifeq ($(N64_USERLAND_COMPILER),gcc)
-N64_USERLAND_CC = $(N64_PREFIX)gcc $(N64_USERLAND_ARCH) $(N64_CODE) $(N64_USERLAND_INCLUDES) \
-                -Werror -Wno-unused-value -Wno-format-overflow \
-                -Wno-attribute-alias -Wno-missing-attributes
-N64_USERLAND_AS = $(N64_USERLAND_CC) -x assembler-with-cpp -c
-N64_USERLAND_LD = $(N64_PREFIX)ld -m elf32ebmip
-N64_USERLAND_AR = $(N64_PREFIX)ar
-N64_USERLAND_RANLIB = $(N64_PREFIX)ranlib
-N64_USERLAND_NM = $(N64_PREFIX)nm
-N64_USERLAND_SIZE = $(N64_PREFIX)size
-N64_USERLAND_OBJDUMP = $(N64_PREFIX)objdump
-N64_USERLAND_ELF2AOUT = $(abspath $(TOPSRC)/tools/elf2aout/elf2aout)
-N64_USERLAND_LDFLAGS = --nmagic -T$(abspath $(N64_USER_LDSCRIPT)) \
-                       $(abspath $(TOPSRC)/src/crt0.o) \
-                       -L$(abspath $(TOPSRC)/src)
-N64_USERLAND_EXTRA_DEPS = $(N64_USERLAND_ELF2AOUT)
-else ifeq ($(N64_USERLAND_COMPILER),pcc)
-N64_USERLAND_CC = $(N64_HOST_PCC) -march=$(N64_USERLAND_CPU) \
-                  $(N64_USERLAND_FLOAT_FLAG) $(N64_USERLAND_INCLUDES)
-N64_USERLAND_AS = $(N64_USERLAND_CC) -x assembler-with-cpp -c
-N64_USERLAND_LD = $(N64_HOST_PCC) -march=$(N64_USERLAND_CPU) \
-                  $(N64_USERLAND_FLOAT_FLAG)
-N64_USERLAND_AR = $(abspath $(N64_CROSS_PCC_AR))
-N64_USERLAND_RANLIB = $(abspath $(N64_CROSS_PCC_RANLIB))
-N64_USERLAND_NM = $(abspath $(N64_CROSS_PCC_NM))
-N64_USERLAND_SIZE = $(abspath $(N64_CROSS_PCC_SIZE))
-N64_USERLAND_OBJDUMP = true
-N64_USERLAND_ELF2AOUT = cp
-N64_USERLAND_LDFLAGS = -nostartfiles \
-                       $(abspath $(N64_NATIVE_DIR)/crt0.o) \
-                       -L$(abspath $(TOPSRC)/src) \
-                       -L$(abspath $(N64_NATIVE_DIR))
-N64_USERLAND_EXTRA_DEPS = $(N64_HOST_PCC) $(N64_NATIVE_AOUT_AR) \
-                          $(N64_NATIVE_AOUT_RANLIB) $(N64_NATIVE_AOUT_NM) \
-                          $(N64_NATIVE_AOUT_SIZE) $(N64_NATIVE_AS) \
-                          $(N64_NATIVE_LD) \
-                          $(N64_NATIVE_DIR)/libpcc.a \
-                          $(N64_NATIVE_SOFTFLOAT_DIR)/libpcc.a
-else
-$(error Unsupported N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER); expected one of $(N64_USERLAND_COMPILERS))
-endif
-
-N64_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src TARGET_PLATFORM=n64 \
-               N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
-               N64_STB_DIR="$(N64_STB_DIR)" \
-               DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
-               CC="$(N64_USERLAND_CC)" \
-               AS="$(N64_USERLAND_AS)" \
-               LD="$(N64_USERLAND_LD)" \
-               AR="$(N64_USERLAND_AR)" \
-               RANLIB="$(N64_USERLAND_RANLIB)" \
-               NM="$(N64_USERLAND_NM)" \
-               SIZE="$(N64_USERLAND_SIZE)" \
-               OBJDUMP="$(N64_USERLAND_OBJDUMP)" \
-               ELF2AOUT="$(N64_USERLAND_ELF2AOUT)" \
-               LDFLAGS="$(N64_USERLAND_LDFLAGS)" \
-               LIBC_COMPILER_RUNTIME=$(if $(filter pcc,$(N64_USERLAND_COMPILER)),libpcc,libc) \
-               CC_STDINC=/usr/include \
-               CC_LIBDIR=/usr/lib \
-               CC_LIBEXECDIR=/usr/libexec \
-               CC_CRT0FILE=/usr/lib/crt0.o \
-               CC_CRT0FILE_PROFILE=/usr/lib/mcrt0.o \
-               SRC_ONLY_LIBS="$(N64_SRC_LIBS)" \
-               SRC_ONLY_SUBDIR="$(N64_SRC_SUBDIRS)" \
-               CMD_ONLY_SUBDIR="$(N64_CMD_SUBDIRS)" \
-               CMD_ONLY_STD="$(N64_CMD_STDS)" \
-               CMD_ONLY_SCRIPT="$(N64_CMD_SCRIPTS)" \
-               CMD_ONLY_NSTD="$(N64_CMD_NSTDS)" \
-               CMD_ONLY_SETUID="$(N64_CMD_NONE)" \
-               CMD_ONLY_OPERATOR="$(N64_CMD_OPERATORS)" \
-               CMD_ONLY_KMEM="ps vmstat" \
-               CMD_ONLY_TTY="$(N64_CMD_NONE)" \
-               CMD_EXTRA_SUBDIR="$(N64_CMD_EXTRA_SUBDIRS)" \
-               SMUX_SUBDIRS=retro \
-               CMD_BUILD_STRIP=strip
-N64_AWK_MAKE = $(MAKE) -C $(TOPSRC)/src/cmd/awk TARGET_PLATFORM=n64 \
-               N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
-               DESTDIR=$(abspath $(N64_ROOTFS_STAGE)) \
-               CC="$(N64_USERLAND_CC)" \
-               AS="$(N64_USERLAND_AS)" \
-               LD="$(N64_USERLAND_LD)" \
-               AR="$(N64_USERLAND_AR)" \
-               RANLIB="$(N64_USERLAND_RANLIB)" \
-               NM="$(N64_USERLAND_NM)" \
-               SIZE="$(N64_USERLAND_SIZE)" \
-               OBJDUMP="$(N64_USERLAND_OBJDUMP)" \
-               ELF2AOUT="$(N64_USERLAND_ELF2AOUT)" \
-               LDFLAGS="$(N64_USERLAND_LDFLAGS)" \
-               YACC="$(N64_YACC)"
 
 N64_MINIMAL_ROOTFS_CMD_SUBDIRS = getty init login ls mkfs mount sh
 N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod mkdir
@@ -473,7 +393,12 @@ N64_MINIMAL_USERLAND_RANLIB = $(N64_PREFIX)ranlib
 N64_MINIMAL_USERLAND_NM = $(N64_PREFIX)nm
 N64_MINIMAL_USERLAND_SIZE = $(N64_PREFIX)size
 N64_MINIMAL_USERLAND_OBJDUMP = $(N64_PREFIX)objdump
-N64_MINIMAL_USERLAND_ELF2AOUT = $(abspath $(ELF2AOUT))
+N64_MINIMAL_USERLAND_ELF2AOUT_aout = $(abspath $(ELF2AOUT))
+N64_MINIMAL_USERLAND_ELF2AOUT_elf = cp
+N64_MINIMAL_USERLAND_ELF2AOUT = $(N64_MINIMAL_USERLAND_ELF2AOUT_$(N64_USERLAND_EXEC_FORMAT))
+N64_MINIMAL_USERLAND_EXTRA_DEPS_aout = $(ELF2AOUT)
+N64_MINIMAL_USERLAND_EXTRA_DEPS_elf =
+N64_MINIMAL_USERLAND_EXTRA_DEPS = $(N64_MINIMAL_USERLAND_EXTRA_DEPS_$(N64_USERLAND_EXEC_FORMAT))
 N64_MINIMAL_USERLAND_LDFLAGS = --nmagic \
                                -T$(abspath $(N64_USER_LDSCRIPT)) \
                                $(abspath $(TOPSRC)/src/crt0.o) \
@@ -505,18 +430,19 @@ N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src \
                CMD_EXTRA_SUBDIR="" \
                CMD_BUILD_STRIP=""
 
-N64_LEGACY_ROOTFS_RULES ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 
 N64_USERLAND_COMPILER := $(N64_USERLAND_COMPILER)
 N64_USERLAND_CPU := $(N64_USERLAND_CPU)
 N64_USERLAND_FLOAT := $(N64_USERLAND_FLOAT)
 N64_USERLAND_ENDIAN := $(N64_USERLAND_ENDIAN)
+N64_USERLAND_EXEC_FORMAT := $(N64_USERLAND_EXEC_FORMAT)
 MIPS_ROOTFS_KBYTES ?= $(N64_ROOTFS_KBYTES)
 MIPS_ROOTFS_COMPILER = $(N64_USERLAND_COMPILER)
 MIPS_ROOTFS_CPU = $(N64_USERLAND_CPU)
 MIPS_ROOTFS_FLOAT = $(N64_USERLAND_FLOAT)
 MIPS_ROOTFS_ENDIAN = $(N64_USERLAND_ENDIAN)
+MIPS_ROOTFS_EXEC_FORMAT = $(N64_USERLAND_EXEC_FORMAT)
 MIPS_ROOTFS_TARGET_PLATFORM = n64
 MIPS_ROOTFS_USERLAND_STAMP_PREFIX = n64-userland
 MIPS_ROOTFS_BOARD_DIR = $(TOPSRC)/sys/mips/n64/rootfs
@@ -569,6 +495,7 @@ N64_ROOTFS_USER_COMPAT_STAMP = $(MIPS_ROOTFS_USER_COMPAT_STAMP)
 N64_ROOTFS_WHATIS = $(MIPS_ROOTFS_WHATIS)
 N64_ROOTFS_EXTRA_STAMPS = $(MIPS_ROOTFS_EXTRA_STAMPS)
 N64_USERLAND_ABI = $(MIPS_ROOTFS_ABI)
+N64_USERLAND_EXEC_FORMAT = $(MIPS_ROOTFS_EXEC_FORMAT)
 N64_USERLAND_FLOAT_FLAG = $(MIPS_ROOTFS_FLOAT_FLAG)
 N64_USERLAND_ARCH = $(MIPS_ROOTFS_ARCH)
 N64_USERLAND_AS_CPU = $(MIPS_ROOTFS_AS_CPU)
@@ -643,8 +570,6 @@ NM              = $(N64_PREFIX)nm
 N64_TOOL        = $(N64_TOOLCHAIN)/bin/n64tool
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
 ELF2AOUT        = $(TOPSRC)/tools/elf2aout/elf2aout
-ELF2AOUT_SRCS   = $(TOPSRC)/tools/elf2aout/Makefile \
-                  $(TOPSRC)/tools/elf2aout/elf2aout.c
 
 DEPFLAGS        = -MT $@ -MP -MD -MF .deps/$*.dep
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DN64 -DMIPS \
@@ -805,11 +730,6 @@ preflight: $(N64_PREFLIGHT_OBJS)
 $(N64_KERNEL_LDSCRIPT): n64.ld.S layout.h
 	$(N64_PREFIX)gcc -E -P -undef -x c $< -o $@
 
-ifeq ($(N64_LEGACY_ROOTFS_RULES),1)
-$(N64_USER_LDSCRIPT): user/user.ld.S layout.h
-	$(N64_PREFIX)gcc -E -P -undef -x c $< -o $@
-endif
-
 preflight.elf: $(N64_PREFLIGHT_OBJS) $(N64_KERNEL_LDSCRIPT)
 	$(LD) -nostdlib -T $(N64_KERNEL_LDSCRIPT) $(N64_PREFLIGHT_OBJS) -o $@
 	$(SIZE) $@
@@ -872,200 +792,9 @@ endif
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
 	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/n64/ramswap.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
 
-ifeq ($(N64_LEGACY_ROOTFS_RULES),1)
-$(N64_ROOTFS_BUILD_MANIFEST): $(N64_ROOTFS_MANIFEST) $(N64_ROOTFS_DEVNODES) $(N64_ROOTFS_USER_STAMP) $(N64_ROOTFS_EXTRA_STAMPS)
-	cp $(N64_ROOTFS_MANIFEST) $@
-	find $(N64_ROOTFS_USR_INCLUDE) -type d | sort | while read path; do \
-	    rel=$${path#$(N64_ROOTFS_STAGE)}; \
-	    printf '\ndir %s\n' "$$rel" >> $@; \
-	done
-	find $(N64_ROOTFS_USR_INCLUDE) -type f ! -name '.gitignore' \
-	    ! -name Makefile ! -name Makefile.install | sort | while read path; do \
-	    rel=$${path#$(N64_ROOTFS_STAGE)}; \
-	    printf '\nfile %s\n' "$$rel" >> $@; \
-	done
-	find $(N64_ROOTFS_USR_INCLUDE) -maxdepth 1 -type l ! -name pic32 | \
-	    sort | while read path; do \
-	    rel=$${path#$(N64_ROOTFS_STAGE)}; \
-	    target=$$(readlink "$$path"); \
-	    printf '\nsymlink %s\ntarget %s\n' "$$rel" "$$target" >> $@; \
-	done
-	cat $(N64_ROOTFS_DEVNODES) >> $@
-	if [ "$(N64_USERLAND_COMPILER)" = "pcc" ]; then \
-	    printf '\ndir /usr/lib/softfloat\n' >> $@; \
-	    printf '\nfile /usr/lib/softfloat/libpcc.a\n' >> $@; \
-	    printf '\nfile /root/linpack-pcc\nmode 0775\n' >> $@; \
-	fi
-
-$(N64_LINPACK_ROOTFS_STAMP): $(N64_ROOTFS_USER_STAMP) $(N64_HOST_PCC) \
-    $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_LINPACK_SMOKE_SCRIPT) \
-    $(N64_LINPACK_SMOKE_SRC)
-	python3 $(N64_LINPACK_SMOKE_SCRIPT) build \
-	    --source $(abspath $(N64_LINPACK_SMOKE_SRC)) \
-	    --out $(N64_LINPACK_SMOKE_OUT) \
-	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
-	    --pcc $(abspath $(N64_HOST_PCC)) \
-	    --cpu $(N64_USERLAND_CPU) \
-	    --float-abi $(N64_USERLAND_FLOAT) \
-	    --endian $(N64_USERLAND_ENDIAN)
-	cp -p $(N64_LINPACK_SMOKE_OUT)/linpack-pcc \
-	    $(N64_ROOTFS_STAGE)/root/linpack-pcc
-	chmod 0775 $(N64_ROOTFS_STAGE)/root/linpack-pcc
-	touch $@
-
-$(N64_ROOTFS_BASE_STAMP): $(N64_ROOTFS_FILES) $(N64_ROOTFS_DIRS) \
-    $(N64_UTILITY_SMOKE_SRCS) \
-    $(N64_TERMCAP) $(N64_INCLUDE_SRCS) $(N64_INCLUDE_LINKS) \
-    $(N64_NATIVE_AS_SMOKE_SCRIPT) \
-    $(N64_NATIVE_AS_MATRIX_SCRIPT)
-	rm -rf $(N64_ROOTFS_STAGE)
-	mkdir -p $(N64_ROOTFS_STAGE)
-	cp -pR $(N64_ROOTFS_COMMON_DIR)/. $(N64_ROOTFS_STAGE)/
-	cp -pR $(N64_ROOTFS_BOARD_DIR)/. $(N64_ROOTFS_STAGE)/
-	mkdir -p $(N64_ROOTFS_STAGE)/root/utility-src
-	for src in $(N64_UTILITY_SMOKE_SRCS); do \
-	    cp -p $$src $(N64_ROOTFS_STAGE)/root/utility-src/; \
-	done
-	cp -p $(N64_TERMCAP) $(N64_ROOTFS_STAGE)/etc/termcap
-	mkdir -p $(N64_ROOTFS_USR_INCLUDE)
-	cp -pR $(TOPSRC)/include/. $(N64_ROOTFS_USR_INCLUDE)/
-	rm -rf $(N64_ROOTFS_USR_INCLUDE)/machine $(N64_ROOTFS_USR_INCLUDE)/sys
-	cp -pR $(TOPSRC)/sys/include $(N64_ROOTFS_USR_INCLUDE)/sys
-	mkdir -p $(N64_ROOTFS_USR_INCLUDE)/mips
-	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_USR_INCLUDE)/mips/
-	mkdir -p $(N64_ROOTFS_USR_INCLUDE)/machine
-	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_ROOTFS_USR_INCLUDE)/machine/
-	for header in $(N64_COMMON_MACHINE_HEADERS); do \
-	    cp -p $(TOPSRC)/sys/mips/$$header.h \
-	        $(N64_ROOTFS_USR_INCLUDE)/machine/$$header.h; \
-	done
-	cp -p $(TOPSRC)/sys/mips/include/machine/types.h $(N64_ROOTFS_USR_INCLUDE)/machine/types.h
-	mkdir -p $(N64_ROOTFS_STAGE)/lib
-	mkdir -p $(N64_ROOTFS_STAGE)/sbin
-	mkdir -p $(N64_ROOTFS_STAGE)/bin
-	mkdir -p $(N64_ROOTFS_STAGE)/libexec
-	mkdir -p $(N64_ROOTFS_STAGE)/share/misc
-	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat1
-	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat5
-	mkdir -p $(N64_ROOTFS_STAGE)/share/man/cat8
-	mkdir -p $(N64_ROOTFS_USR_BIN)
-	mkdir -p $(N64_ROOTFS_USR_LIB)
-	mkdir -p $(N64_ROOTFS_USR_LIBEXEC)
-	mkdir -p $(N64_ROOTFS_USR_SHARE)/misc
-	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat1
-	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat5
-	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat8
-	cp -p $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_USR_BIN)/smoke-as-vr4300
-	cp -p $(N64_NATIVE_AS_SMOKE_SCRIPT) $(N64_ROOTFS_USR_BIN)/smoke-as-vr4300.sh
-	cp -p $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300
-	cp -p $(N64_NATIVE_AS_MATRIX_SCRIPT) $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300.sh
-	chmod 0775 $(N64_ROOTFS_USR_BIN)/smoke-as-vr4300 \
-	    $(N64_ROOTFS_USR_BIN)/smoke-as-vr4300.sh \
-	    $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300 \
-	    $(N64_ROOTFS_USR_BIN)/matrix-as-vr4300.sh
-	touch $@
-
-$(N64_ROOTFS_USER_STAMP): $(N64_ROOTFS_BASE_STAMP) $(N64_USERLAND_STAMP) $(N64_NATIVE_STAMP) $(N64_NATIVE_PCC_STAMP) $(N64_MAKEWHATIS_SED) Makefile
-	mkdir -p $(N64_ROOTFS_STAGE)/share/misc \
-	    $(N64_ROOTFS_STAGE)/share/man/cat1 \
-	    $(N64_ROOTFS_STAGE)/share/man/cat5 \
-	    $(N64_ROOTFS_STAGE)/share/man/cat8
-	$(N64_SRC_MAKE) install
-	$(N64_AWK_MAKE) install
-	mkdir -p $(N64_ROOTFS_USR_BIN) $(N64_ROOTFS_USR_LIB) \
-	    $(N64_ROOTFS_USR_LIB)/softfloat \
-	    $(N64_ROOTFS_USR_LIBEXEC) $(N64_ROOTFS_USR_SHARE)
-	for bin in $(N64_USR_BIN_FILES); do \
-	    if [ -e $(N64_ROOTFS_STAGE)/bin/$$bin ]; then \
-	        mv -f $(N64_ROOTFS_STAGE)/bin/$$bin $(N64_ROOTFS_USR_BIN)/$$bin; \
-	    fi; \
-	done
-	for file in $(N64_USR_LIBEXEC_FILES); do \
-	    if [ -e $(N64_ROOTFS_STAGE)/libexec/$$file ]; then \
-	        mv -f $(N64_ROOTFS_STAGE)/libexec/$$file $(N64_ROOTFS_USR_LIBEXEC)/$$file; \
-	    fi; \
-	done
-	rm -f $(N64_ROOTFS_USR_BIN)/cc $(N64_ROOTFS_USR_BIN)/cpp \
-	    $(N64_ROOTFS_USR_BIN)/pcc $(N64_ROOTFS_USR_BIN)/p++ \
-	    $(N64_ROOTFS_USR_BIN)/lcc $(N64_ROOTFS_USR_BIN)/scc
-	rm -f $(N64_ROOTFS_USR_LIBEXEC)/ccom $(N64_ROOTFS_USR_LIBEXEC)/lccom \
-	    $(N64_ROOTFS_USR_LIBEXEC)/smallc $(N64_ROOTFS_USR_LIBEXEC)/smlrc
-	rm -f $(N64_ROOTFS_USR_LIBEXEC)/pcc/cxxcom
-	mkdir -p $(N64_ROOTFS_USR_LIBEXEC)/pcc
-	cp -p $(N64_NATIVE_PCC_DIR)/cc $(N64_ROOTFS_USR_BIN)/cc
-	cp -p $(N64_NATIVE_PCC_DIR)/cc $(N64_ROOTFS_USR_BIN)/pcc
-	cp -p $(N64_NATIVE_PCC_DIR)/cc $(N64_ROOTFS_USR_BIN)/cpp
-	cp -p $(N64_NATIVE_PCC_DIR)/cpp $(N64_ROOTFS_USR_LIBEXEC)/pcc/cpp
-	cp -p $(N64_NATIVE_PCC_DIR)/ccom $(N64_ROOTFS_USR_LIBEXEC)/pcc/ccom
-	if [ -d $(N64_ROOTFS_STAGE)/share ]; then \
-	    cp -pR $(N64_ROOTFS_STAGE)/share/. $(N64_ROOTFS_USR_SHARE)/; \
-	    rm -rf $(N64_ROOTFS_STAGE)/share; \
-	fi
-	mkdir -p $(N64_ROOTFS_USR_INCLUDE)/mips
-	cp -p $(TOPSRC)/sys/mips/*.h $(N64_ROOTFS_USR_INCLUDE)/mips/
-	for lib in $(N64_NATIVE_LIBS); do \
-	    cp -p $(N64_NATIVE_DIR)/$$lib $(N64_ROOTFS_USR_LIB)/$$lib; \
-	done
-	for lib in $(N64_NATIVE_SOFTFLOAT_LIBS); do \
-	    cp -p $(N64_NATIVE_SOFTFLOAT_DIR)/$$lib \
-	        $(N64_ROOTFS_USR_LIB)/softfloat/$$lib; \
-	done
-	for lib in libc.a libm.a libpcc.a; do \
-	    $(N64_NATIVE_AOUT_RANLIB) $(N64_ROOTFS_USR_LIB)/$$lib; \
-	done
-	for lib in $(N64_NATIVE_SOFTFLOAT_LIBS); do \
-	    $(N64_NATIVE_AOUT_RANLIB) $(N64_ROOTFS_USR_LIB)/softfloat/$$lib; \
-	done
-	mkdir -p $(N64_ROOTFS_USR_SHARE)/man/cat1 \
-	    $(N64_ROOTFS_USR_SHARE)/man/cat5 \
-	    $(N64_ROOTFS_USR_SHARE)/man/cat8
-	for page in $(N64_ROOTFS_CAT1_PAGES); do \
-	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 > $(N64_ROOTFS_USR_SHARE)/man/cat1/$$page.0; \
-	done
-	for spec in $(N64_ROOTFS_CMD_CAT1_SOURCES); do \
-	    dir=$${spec%:*}; page=$${spec#*:}; \
-	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/cmd/$$dir/$$page.1 > $(N64_ROOTFS_USR_SHARE)/man/cat1/$$page.0; \
-	done
-	for alias in $(N64_ROOTFS_CAT1_ALIASES); do \
-	    dst=$${alias%:*}; src=$${alias#*:}; \
-	    cp $(N64_ROOTFS_USR_SHARE)/man/cat1/$$src.0 $(N64_ROOTFS_USR_SHARE)/man/cat1/$$dst.0; \
-	done
-	for page in $(N64_ROOTFS_CAT8_PAGES); do \
-	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man8/$$page.8 > $(N64_ROOTFS_USR_SHARE)/man/cat8/$$page.0; \
-	done
-	for alias in $(N64_ROOTFS_CAT8_ALIASES); do \
-	    dst=$${alias%:*}; src=$${alias#*:}; \
-	    if [ ! -e $(N64_ROOTFS_USR_SHARE)/man/cat8/$$dst.0 ] || \
-	        ! cmp -s $(N64_ROOTFS_USR_SHARE)/man/cat8/$$src.0 $(N64_ROOTFS_USR_SHARE)/man/cat8/$$dst.0; then \
-	        cp $(N64_ROOTFS_USR_SHARE)/man/cat8/$$src.0 $(N64_ROOTFS_USR_SHARE)/man/cat8/$$dst.0; \
-	    fi; \
-	done
-	rm -f $(N64_ROOTFS_WHATIS).tmp
-	touch $(N64_ROOTFS_WHATIS).tmp
-	for file in `find $(N64_ROOTFS_USR_SHARE)/man/cat* -type f -name '*.0' -print`; do \
-	    sed -n -f $(N64_MAKEWHATIS_SED) $$file >> $(N64_ROOTFS_WHATIS).tmp; \
-	done
-	sort -u $(N64_ROOTFS_WHATIS).tmp > $(N64_ROOTFS_WHATIS)
-	rm -f $(N64_ROOTFS_WHATIS).tmp
-	rm -f $(N64_ROOTFS_STAGE)/.userland.gcc* \
-	    $(N64_ROOTFS_STAGE)/.userland.pcc* \
-	    $(N64_ROOTFS_USER_COMPAT_STAMP)
-	touch $@
-	touch $(N64_ROOTFS_USER_COMPAT_STAMP)
-
-$(N64_ROOTFS_USER_COMPAT_STAMP): $(N64_ROOTFS_USER_STAMP)
-	touch $@
-
-rootfs.img: $(FSUTIL) $(N64_ROOTFS_BUILD_MANIFEST) $(N64_ROOTFS_USER_STAMP)
-	rm -f $@
-	$(FSUTIL) --new --endian=$(N64_USERLAND_ENDIAN) \
-	    --size=$(N64_ROOTFS_KBYTES) --manifest=$(N64_ROOTFS_BUILD_MANIFEST) \
-	    $@ $(N64_ROOTFS_STAGE)
-	$(FSUTIL) --check $@
-endif
-
 $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(N64_USER_LDSCRIPT) \
-    $(N64_MINIMAL_ROOTFS_FILES) $(N64_TERMCAP) $(ELF2AOUT) \
+    $(N64_MINIMAL_ROOTFS_FILES) $(N64_TERMCAP) \
+    $(N64_MINIMAL_USERLAND_EXTRA_DEPS) \
     $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile Makefile
 	$(N64_MINIMAL_SRC_MAKE) clean
 	rm -rf $(N64_MINIMAL_ROOTFS_STAGE)
@@ -1236,249 +965,8 @@ pcc-hw-test-image: pcc-hw-test-stage
 	$(MAKE) N64_ROOTFS_BUILD_MANIFEST=$(N64_PCC_HW_REGRESS_MANIFEST) \
 	    rootfs.img kernel.z64 preflight.z64
 
-ifeq ($(N64_LEGACY_ROOTFS_RULES),1)
-$(TOPSRC)/src/crt0.o: $(N64_CRT0_SRCS)
-	$(N64_PREFIX)gcc $(N64_USERLAND_ARCH) $(N64_CODE) -x assembler-with-cpp -c $< -o $@
-
-$(TOPSRC)/src/libc.a: $(TOPSRC)/src/crt0.o $(N64_LIBC_SRCS)
-	$(N64_SRC_MAKE) libc
-
-$(N64_USERLAND_STAMP): $(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o $(N64_CRT0_SRCS) $(N64_LIBC_SRCS) $(N64_LIBM_SRCS) $(N64_LIBUTIL_SRCS) $(N64_LIBTERMLIB_SRCS) $(N64_LIBCURSES_SRCS) $(N64_LIBVMF_SRCS) $(N64_LIBREADLINE_SRCS) $(N64_LIBTCL_SRCS) $(N64_USER_SRCS) $(N64_AWK_SRCS) $(N64_USERLAND_EXTRA_DEPS) Makefile
-	$(N64_SRC_MAKE) clean
-	$(N64_AWK_MAKE) clean
-	$(MAKE) $(TOPSRC)/src/crt0.o
-	$(N64_SRC_MAKE) -B all
-	$(N64_AWK_MAKE) clean
-	$(N64_AWK_MAKE) awk
-	rm -f n64-userland.gcc*.stamp n64-userland.pcc*.stamp n64-userland.stamp
-	touch $@
-
-$(N64_NATIVE_HOST_INCLUDE_STAMP): $(N64_NATIVE_MKHOSTINCLUDE) \
-    $(TOPSRC)/include/a.out.h $(TOPSRC)/include/ar.h \
-    $(TOPSRC)/include/nlist.h $(TOPSRC)/include/ranlib.h \
-    $(TOPSRC)/include/sys/exec_aout.h
-	$(N64_NATIVE_MKHOSTINCLUDE) $(TOPSRC) $(N64_NATIVE_HOST_INCLUDE)
-	touch $@
-
-$(N64_NATIVE_AS): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h
-	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
-	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -o $@ $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c
-
-$(N64_NATIVE_LD): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h
-	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
-	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -o $@ $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c
-
-$(N64_NATIVE_AOUT_AR): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/ar/append.c $(TOPSRC)/src/cmd/ar/ar.c \
-    $(TOPSRC)/src/cmd/ar/archive.c $(TOPSRC)/src/cmd/ar/contents.c \
-    $(TOPSRC)/src/cmd/ar/delete.c $(TOPSRC)/src/cmd/ar/extract.c \
-    $(TOPSRC)/src/cmd/ar/extern.h $(TOPSRC)/src/cmd/ar/misc.c \
-    $(TOPSRC)/src/cmd/ar/move.c $(TOPSRC)/src/cmd/ar/print.c \
-    $(TOPSRC)/src/cmd/ar/replace.c $(TOPSRC)/src/cmd/ar/strmode.c
-	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
-	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -I$(TOPSRC)/src/cmd/ar \
-	    -o $@ \
-	    $(TOPSRC)/src/cmd/ar/append.c \
-	    $(TOPSRC)/src/cmd/ar/ar.c \
-	    $(TOPSRC)/src/cmd/ar/archive.c \
-	    $(TOPSRC)/src/cmd/ar/contents.c \
-	    $(TOPSRC)/src/cmd/ar/delete.c \
-	    $(TOPSRC)/src/cmd/ar/extract.c \
-	    $(TOPSRC)/src/cmd/ar/misc.c \
-	    $(TOPSRC)/src/cmd/ar/move.c \
-	    $(TOPSRC)/src/cmd/ar/print.c \
-	    $(TOPSRC)/src/cmd/ar/replace.c \
-	    $(TOPSRC)/src/cmd/ar/strmode.c
-
-$(N64_NATIVE_AOUT_RANLIB): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/ranlib/ranlib.c $(TOPSRC)/src/cmd/ar/archive.c \
-    $(TOPSRC)/src/cmd/aoutio.c $(TOPSRC)/src/cmd/aoutio.h
-	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
-	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -I$(TOPSRC)/src/cmd/ar \
-	    -o $@ $(TOPSRC)/src/cmd/ranlib/ranlib.c \
-	    $(TOPSRC)/src/cmd/ar/archive.c $(TOPSRC)/src/cmd/aoutio.c
-
-$(N64_NATIVE_AOUT_NM): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h
-	mkdir -p $(N64_NATIVE_TOOLS)
-	cc -DCROSS $(N64_NATIVE_TARGET_FLAGS) \
-	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -I$(TOPSRC)/src/cmd/ar \
-	    -o $@ $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c
-
-$(N64_NATIVE_AOUT_SIZE): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h
-	mkdir -p $(N64_NATIVE_TOOLS)
-	cc $(N64_NATIVE_TARGET_FLAGS) \
-	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -o $@ $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c
-
-$(N64_NATIVE_AOUT_STRIP): $(N64_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h
-	mkdir -p $(N64_NATIVE_TOOLS)
-	cc $(N64_NATIVE_TARGET_FLAGS) \
-	    -I$(N64_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -o $@ $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c
-
-$(N64_HOST_PCC): $(N64_HOST_PORTABLECC_SCRIPT) $(N64_DEV_PCC_SRCS) \
-    $(N64_PCC_HOST_INCLUDE_STAMP) $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
-    $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB) \
-    $(N64_NATIVE_AOUT_NM) $(N64_NATIVE_AOUT_SIZE) \
-    $(N64_NATIVE_AOUT_STRIP)
-	sh $(N64_HOST_PORTABLECC_SCRIPT) $(abspath $(TOPSRC)) \
-	    $(abspath $(N64_PCC_HOST_BUILD)) \
-	    $(abspath $(N64_PCC_HOST_PREFIX)) \
-	    $(abspath $(N64_PCC_HOST_INCLUDE)) \
-	    $(abspath $(N64_NATIVE_AS)) $(abspath $(N64_NATIVE_LD)) \
-	    $(N64_USERLAND_CPU) $(N64_USERLAND_FLOAT)
-
-.PHONY: smoke-as-vr4300
-smoke-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_SMOKE_SCRIPT)
-	$(N64_NATIVE_AS_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS))
-
-.PHONY: matrix-as-vr4300
-matrix-as-vr4300: $(N64_NATIVE_AS) $(N64_NATIVE_AS_MATRIX_SCRIPT)
-	$(N64_NATIVE_AS_MATRIX_SCRIPT) $(abspath $(N64_NATIVE_AS)) $(N64_GNU_AS)
-
-.PHONY: smoke-aout-toolchain
-smoke-aout-toolchain: $(N64_NATIVE_AS) $(N64_NATIVE_LD) \
-    $(N64_NATIVE_AOUT_AR) $(N64_NATIVE_AOUT_RANLIB) \
-    $(N64_NATIVE_AOUT_NM) $(N64_NATIVE_AOUT_SIZE) $(N64_NATIVE_AOUT_STRIP) \
-    $(N64_NATIVE_AOUT_SMOKE_SCRIPT)
-	$(N64_NATIVE_AOUT_SMOKE_SCRIPT) $(abspath $(N64_NATIVE_AS)) \
-	    $(abspath $(N64_NATIVE_LD)) $(abspath $(N64_NATIVE_AOUT_AR)) \
-	    $(abspath $(N64_NATIVE_AOUT_RANLIB)) $(abspath $(N64_NATIVE_AOUT_NM)) \
-	    $(abspath $(N64_NATIVE_AOUT_SIZE)) $(abspath $(N64_NATIVE_AOUT_STRIP)) \
-	    $(N64_GNU_AS)
-
-$(N64_NATIVE_DIR)/crt0.o: $(N64_NATIVE_AS) $(N64_NATIVE_CRT0_SRC)
-	mkdir -p $(N64_NATIVE_DIR)
-	$(N64_NATIVE_AS) $(N64_USERLAND_ENDIAN_FLAG) \
-	    $(N64_USERLAND_AS_CPU) -o $@ $(N64_NATIVE_CRT0_SRC)
-
-$(N64_NATIVE_DIR)/libc.a $(N64_NATIVE_DIR)/libm.a \
-    $(N64_NATIVE_DIR)/libpcc.a $(N64_NATIVE_SOFTFLOAT_DIR)/libpcc.a: \
-    $(N64_NATIVE_STAMP)
-	@test -f $@
-
-$(N64_NATIVE_STAMP): $(N64_NATIVE_RUNTIME_SRCS) $(N64_HOST_PCC) \
-    $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_DIR)/crt0.o
-	rm -rf $(N64_NATIVE_TREE)
-	mkdir -p $(N64_NATIVE_TREE)/src $(N64_NATIVE_TREE)/sys/mips/n64
-	cp -pR $(TOPSRC)/include $(N64_NATIVE_TREE)/
-	cp -pR $(TOPSRC)/sys/include $(N64_NATIVE_TREE)/sys/
-	cp -p $(TOPSRC)/sys/mips/*.h $(N64_NATIVE_TREE)/sys/mips/
-	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_NATIVE_TREE)/sys/mips/n64/
-	cp -pR $(TOPSRC)/sys/mips/n64/include $(N64_NATIVE_TREE)/sys/mips/n64/
-	cp -pR $(TOPSRC)/src/libc $(TOPSRC)/src/libm $(N64_NATIVE_TREE)/src/
-	cp -p $(TOPSRC)/target.mk $(TOPSRC)/target-n64.mk $(N64_NATIVE_TREE)/
-	$(MAKE) -C $(N64_NATIVE_TREE)/src/libc TARGET_PLATFORM=n64 \
-	    CC="$(N64_PCC_RUNTIME_CC)" AS="$(N64_PCC_RUNTIME_AS)" \
-	    AR=$(abspath $(N64_CROSS_PCC_AR)) \
-	    RANLIB=$(abspath $(N64_CROSS_PCC_RANLIB)) \
-	    LIBC_COMPILER_RUNTIME=libpcc clean all
-	$(N64_CROSS_PCC_RANLIB) $(N64_NATIVE_TREE)/src/libc.a
-	$(MAKE) -C $(N64_NATIVE_TREE)/src/libm TARGET_PLATFORM=n64 \
-	    CC="$(N64_PCC_RUNTIME_CC)" AS="$(N64_PCC_RUNTIME_AS)" \
-	    AR=$(abspath $(N64_CROSS_PCC_AR)) \
-	    RANLIB=$(abspath $(N64_CROSS_PCC_RANLIB)) clean all
-	rm -rf $(N64_NATIVE_DIR)/libpcc-build
-	mkdir -p $(N64_NATIVE_DIR)/libpcc-build
-	set -e; for obj in $(N64_LIBPCC_OBJS); do \
-	    src=$(abspath $(N64_LIBPCC_DIR))/$${obj%.o}.c; \
-	    $(N64_PCC_RUNTIME_CC) -O -fno-builtin -fno-stack-protector \
-	        $(N64_USERLAND_ENDIAN_CPP1) -Dos_rebsd -Dmach_mips \
-	        -I$(abspath $(N64_LIBPCC_DIR)) \
-	        -I$(abspath $(N64_LIBPCC_DIR))/include \
-	        -c -o $(N64_NATIVE_DIR)/libpcc-build/$$obj $$src; \
-	done
-	set -e; for obj in $(N64_LIBPCC_RUNTIME_OBJS); do \
-	    src=$(abspath $(N64_LIBPCC_RUNTIME_DIR))/$${obj%.o}.c; \
-	    $(N64_PCC_RUNTIME_CC) -O -fno-builtin -fno-stack-protector \
-	        $(N64_USERLAND_ENDIAN_CPP1) -Dos_rebsd -Dmach_mips \
-	        -I$(abspath $(N64_LIBPCC_RUNTIME_DIR)) \
-	        -c -o $(N64_NATIVE_DIR)/libpcc-build/$$obj $$src; \
-	done
-	rm -f $(N64_NATIVE_DIR)/libpcc.a
-	cd $(N64_NATIVE_DIR)/libpcc-build && \
-	    $(abspath $(N64_CROSS_PCC_AR)) r ../libpcc.a \
-	        $(N64_LIBPCC_OBJS) $(N64_LIBPCC_RUNTIME_OBJS)
-	$(N64_CROSS_PCC_RANLIB) $(N64_NATIVE_DIR)/libpcc.a
-	rm -rf $(N64_NATIVE_DIR)/softfloat-build
-	mkdir -p $(N64_NATIVE_DIR)/softfloat-build $(N64_NATIVE_SOFTFLOAT_DIR)
-	set -e; for obj in $(N64_LIBPCC_OBJS); do \
-	    src=$(abspath $(N64_LIBPCC_DIR))/$${obj%.o}.c; \
-	    $(N64_PCC_RUNTIME_SOFT_CC) -O -fno-builtin -fno-stack-protector \
-	        $(N64_USERLAND_ENDIAN_CPP1) -Dos_rebsd -Dmach_mips \
-	        -I$(abspath $(N64_LIBPCC_DIR)) \
-	        -I$(abspath $(N64_LIBPCC_DIR))/include \
-	        -c -o $(N64_NATIVE_DIR)/softfloat-build/$$obj $$src; \
-	done
-	set -e; for obj in $(N64_LIBPCC_RUNTIME_OBJS); do \
-	    src=$(abspath $(N64_LIBPCC_RUNTIME_DIR))/$${obj%.o}.c; \
-	    $(N64_PCC_RUNTIME_SOFT_CC) -O -fno-builtin -fno-stack-protector \
-	        $(N64_USERLAND_ENDIAN_CPP1) -Dos_rebsd -Dmach_mips \
-	        -I$(abspath $(N64_LIBPCC_RUNTIME_DIR)) \
-	        -c -o $(N64_NATIVE_DIR)/softfloat-build/$$obj $$src; \
-	done
-	rm -f $(N64_NATIVE_SOFTFLOAT_DIR)/libpcc.a
-	cd $(N64_NATIVE_DIR)/softfloat-build && \
-	    $(abspath $(N64_CROSS_PCC_AR)) r ../softfloat/libpcc.a \
-	        $(N64_LIBPCC_OBJS) $(N64_LIBPCC_RUNTIME_OBJS)
-	$(N64_CROSS_PCC_RANLIB) $(N64_NATIVE_SOFTFLOAT_DIR)/libpcc.a
-	cp $(N64_NATIVE_TREE)/src/libc.a $(N64_NATIVE_DIR)/libc.a
-	cp $(N64_NATIVE_TREE)/src/libm.a $(N64_NATIVE_DIR)/libm.a
-	mkdir -p $(N64_CROSS_PCC_LIB) $(N64_CROSS_PCC_SOFTFLOAT_LIB)
-	for lib in $(N64_NATIVE_LIBS); do \
-	    cp -p $(N64_NATIVE_DIR)/$$lib $(N64_CROSS_PCC_LIB)/$$lib; \
-	done
-	for lib in $(N64_NATIVE_SOFTFLOAT_LIBS); do \
-	    cp -p $(N64_NATIVE_SOFTFLOAT_DIR)/$$lib \
-	        $(N64_CROSS_PCC_SOFTFLOAT_LIB)/$$lib; \
-	done
-	touch $@
-
-$(N64_NATIVE_PCC_STAMP): $(N64_DEV_PCC_SRCS) $(N64_NATIVE_STAMP) \
-    $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_DIR)/crt0.o \
-    $(N64_NATIVE_DIR)/libc.a $(N64_NATIVE_DIR)/libm.a \
-    $(N64_NATIVE_DIR)/libpcc.a $(N64_NATIVE_SOFTFLOAT_DIR)/libpcc.a \
-    $(N64_USER_LDSCRIPT) Makefile
-	python3 $(N64_NATIVE_PCC_BUILD_SCRIPT) \
-	    --top $(abspath $(TOPSRC)) \
-	    --build $(abspath $(N64_NATIVE_PCC_BUILD)) \
-	    --out $(abspath $(N64_NATIVE_PCC_DIR)) \
-	    --target-cc $(abspath $(N64_HOST_PCC)) \
-	    --cpu $(N64_USERLAND_CPU) \
-	    --float-abi $(N64_USERLAND_FLOAT) \
-	    --as $(abspath $(N64_CROSS_PCC_AS)) \
-	    --ld $(abspath $(N64_CROSS_PCC_LD)) \
-	    --ldscript $(abspath $(N64_USER_LDSCRIPT)) \
-	    --crt0 $(abspath $(N64_NATIVE_DIR)/crt0.o) \
-	    --libdir $(abspath $(N64_NATIVE_DIR)) \
-	    --bison $(N64_BISON)
-	touch $@
-endif
-
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
-
-$(ELF2AOUT): $(ELF2AOUT_SRCS)
-	$(MAKE) -C $(TOPSRC)/tools/elf2aout
 
 preflight.z64: stage0.stripped.elf $(N64_ROM_ROOTFS_IMG)
 	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 stage0.stripped.elf --align 1024 $(N64_ROM_ROOTFS_IMG)
