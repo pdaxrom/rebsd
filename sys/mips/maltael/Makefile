@@ -161,6 +161,14 @@ LINPACK_SMOKE_MANIFEST ?= /private/tmp/rebsd-linpack-smoke.manifest
 LINPACK_SMOKE_LOG ?= /private/tmp/rebsd-linpack-smoke.log
 LINPACK_SMOKE_ARRAY_SIZE ?= 120
 LINPACK_SMOKE_MIN_SECONDS ?= 1
+PCC_ASM_COUNTER_SCRIPT = $(TOPSRC)/sys/mips/tools/mips-asm-counters.py
+PCC_PERF_OUT ?= /private/tmp/rebsd-pcc-perf-$(notdir $(abspath .))-$(MIPS_ROOTFS_ABI)
+PCC_PERF_SOURCE ?= $(LINPACK_SMOKE_SRC)
+PCC_PERF_NAME ?= linpack
+PCC_SMOKE_ALL_LOG ?= /private/tmp/rebsd-pcc-smoke-all-$(notdir $(abspath .))-$(MIPS_ROOTFS_ABI).log
+PCC_SMOKE_ALL_TIMEOUT ?= 1800
+PCC_SMOKE_ALL_SILENCE_TIMEOUT ?= 300
+PCC_SMOKE_ALL_CCOM_STRESS_COUNT ?= 100
 MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
 NATIVE_PCC_SMOKE_LOG ?= /private/tmp/rebsd-native-pcc-smoke.log
 MIPS_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/malta/rootfs
@@ -404,6 +412,8 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         linpack-smoke-runtime-vr4300 native-pcc-smoke-runtime \
         native-pcc-smoke-runtime-vr4300 native-pcc-regress-stage \
         native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 \
+        pcc-perf-baseline pcc-smoke-all-runtime \
+        pcc-smoke-all-runtime-vr4300 \
         rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
 
 pcc-regress-compile: $(MIPS_ROOTFS_USER_STAMP) smoke-host-portablecc \
@@ -471,6 +481,48 @@ linpack-smoke-runtime-vr4300:
 	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
 	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
 	    LINPACK_SMOKE_LOG=/private/tmp/rebsd-linpack-smoke-vr4300.log
+
+pcc-perf-baseline: $(MIPS_ROOTFS_USER_STAMP) smoke-host-portablecc \
+    $(PCC_ASM_COUNTER_SCRIPT)
+	rm -rf $(PCC_PERF_OUT)
+	mkdir -p $(PCC_PERF_OUT)
+	$(MIPS_ROOTFS_GCC_PREFIX)gcc $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) \
+	    $(MIPS_ROOTFS_TOOLCHAIN_CPP) -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
+	    -O2 -S -o $(PCC_PERF_OUT)/$(PCC_PERF_NAME)-gcc.s \
+	    $(PCC_PERF_SOURCE)
+	$(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT_FLAG) \
+	    $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
+	    -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
+	    -O2 -S -o $(PCC_PERF_OUT)/$(PCC_PERF_NAME)-pcc.s \
+	    $(PCC_PERF_SOURCE)
+	python3 $(PCC_ASM_COUNTER_SCRIPT) \
+	    --metadata board=$(notdir $(abspath .)) \
+	    --metadata cpu=$(MIPS_ROOTFS_CPU) \
+	    --metadata endian=$(MIPS_ROOTFS_ENDIAN) \
+	    --metadata float=$(MIPS_ROOTFS_FLOAT) \
+	    --metadata exec=$(MIPS_ROOTFS_EXEC_FORMAT) \
+	    --out $(PCC_PERF_OUT)/$(PCC_PERF_NAME)-asm-summary.json \
+	    --input gcc=$(PCC_PERF_OUT)/$(PCC_PERF_NAME)-gcc.s \
+	    --input pcc=$(PCC_PERF_OUT)/$(PCC_PERF_NAME)-pcc.s
+
+pcc-smoke-all-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(PCC_SMOKE_ALL_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout $(PCC_SMOKE_ALL_TIMEOUT) \
+	    --silence-timeout $(PCC_SMOKE_ALL_SILENCE_TIMEOUT) \
+	    --command 'CCOM_STRESS_COUNT=$(PCC_SMOKE_ALL_CCOM_STRESS_COUNT) LINPACK_ARRAY_SIZE=$(LINPACK_SMOKE_ARRAY_SIZE) LINPACK_MIN_SECONDS=$(LINPACK_SMOKE_MIN_SECONDS) /root/pcc-smoke-all.sh; echo PCC_SMOKE_ALL_RC:$$?' \
+	    --expect "PCC_SMOKE_ALL_RC:0"
+
+pcc-smoke-all-runtime-vr4300:
+	$(MAKE) pcc-smoke-all-runtime \
+	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
+	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
+	    PCC_SMOKE_ALL_LOG=/private/tmp/rebsd-pcc-smoke-all-vr4300.log
 
 native-pcc-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	$(MAKE) $(MALTA_RUNTIME_KERNEL)
