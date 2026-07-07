@@ -417,9 +417,8 @@ starg(NODE *p)
 	/* A0 = dest, A1 = src, A2 = len */
 	printf("\tmove %s,%s\n", rnames[A0], rnames[SP]);
 	printf("\tli %s,%d\t# structure size\n", rnames[A2], sz);
-	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\tjal %s\t# structure copy\n", exname("memcpy"));
-	printf("\tnop\n");
+	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
 }
 
@@ -466,9 +465,8 @@ stasg(NODE *p)
 		adrput(stdout, p->n_left);
 		printf("\n");
 	}
-	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\tjal %s\t# structure copy\n", exname("memcpy"));
-	printf("\tnop\n");
+	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
 }
 
@@ -656,9 +654,8 @@ fpemulop(NODE *p)
 #endif
 	}
 
-	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\tjal __%s\t# softfloat operation\n", exname(ch));
-	printf("\tnop\n");
+	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
 
 	if (p->n_op >= EQ && p->n_op <= GT) {
@@ -736,9 +733,8 @@ emulop(NODE *p)
 	else if (p->n_op == UMINUS && p->n_type == LONG) ch = "negsi2";
 
 	else ch = 0, comperr("ZE");
-	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\tjal __%s\t# emulated operation\n", exname(ch));
-	printf("\tnop\n");
+	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
 }
 
