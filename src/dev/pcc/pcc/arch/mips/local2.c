@@ -931,7 +931,7 @@ fpcmpops(NODE *p)
 		expand(p, 0, "\tnop\n\tbc1f LC\n");
 		break;
 	}
-	printf("\tnop\n\tnop\n");
+	printf("\tnop\n");
 }
 
 static void

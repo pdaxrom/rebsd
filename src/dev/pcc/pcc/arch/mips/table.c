@@ -1503,7 +1503,6 @@ struct optab table[] = {
 	SANY,	TANY,
 		0,	RNOP,
 		"	j LL		# goto label\n"
-		"	nop\n"
 		"	nop\n", },
 
 #if defined(GCC_COMPAT) || defined(LANG_F77)
@@ -1512,7 +1511,6 @@ struct optab table[] = {
 	SANY,	TANY,
 		0,	RNOP,
 		"	jr AL		# computed goto\n"
-		"	nop\n"
 		"	nop\n", },
 #endif
 

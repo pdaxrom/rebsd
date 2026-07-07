@@ -1261,6 +1261,29 @@ Backend work, kept small:
 - [ ] Remove obviously over-conservative unconditional `nop` emission.
   - Start with jump templates that currently emit more than the single
     architectural delay slot.
+  - First control-transfer cleanup landed on 2026-07-08: direct `j LL`,
+    computed `jr AL`, and hard-float compare branches now keep exactly one
+    required delay-slot `nop` instead of emitting an extra unconditional `nop`.
+    This deliberately does not touch load-use, multiply/divide, or FPU memory
+    padding yet.
+  - Post-cleanup `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from 3687 instructions and 1233
+      `nop` to 3619 instructions and 1165 `nop`; PCC/GCC instruction ratio
+      improved from 3.240 to 3.180, and `nop` ratio from 29.357 to 27.738.
+    - Malta/mips32r2 big-endian PCC Linpack changed from 4319 instructions
+      and 1553 `nop` to 4251 instructions and 1485 `nop`; PCC/GCC
+      instruction ratio improved from 3.992 to 3.929, and `nop` ratio from
+      310.600 to 297.000.
+    - MaltaEL/mips32r2 little-endian matched the big-endian mips32r2 result.
+      The branch/jump delay-slot `nop` counter remains 229 because this patch
+      removes only the redundant second `nop`, not the architectural delay
+      slot.
+  - Post-cleanup QEMU correctness gates passed with `PCC_SMOKE_ALL_RC:0` on
+    Malta64/VR4300, Malta/mips32r2 big-endian, and MaltaEL/mips32r2
+    little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
   - Audit integer load/store and hard-float load/store templates that append
     `nop` after every memory operation.
   - Land this in small patches, each followed by PCC regressions plus Linpack
@@ -1321,6 +1344,8 @@ Milestone order:
 - [x] Milestone A: scripted baseline and assembly counters, no codegen change.
 - [ ] Milestone B: remove provably redundant `nop` sequences from jump and
   memory templates.
+  - Control-transfer first patch is complete and green; load/store and FPU
+    memory template auditing remains.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
