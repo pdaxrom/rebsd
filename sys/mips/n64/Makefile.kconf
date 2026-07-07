@@ -681,6 +681,9 @@ STAGE0_ASFLAGS  = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
 KERNEL_CC       = ${CC}
 KERNEL_AS       = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE) \
                   -x assembler -c
+KERNEL_CPP_AS   = ${AS}
+KERNEL_FPU_CPP_AS = ${ASFPU}
+KERNEL_LD       = ${LD}
 KERNEL_COMPILER_DEPS =
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
 COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
@@ -688,7 +691,11 @@ COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
 ifeq ($(N64_KERNEL_COMPILER),pcc)
 KERNEL_CC       = $(N64_HOST_PCC) -march=vr4300 -msoft-float \
                   -fomit-frame-pointer
-KERNEL_COMPILER_DEPS = $(N64_HOST_PCC)
+KERNEL_AS       = $(N64_CROSS_PCC_AS) --elf -EB -march=vr4300
+KERNEL_LD       = $(N64_CROSS_PCC_LD) --elf -EB
+KERNEL_CPP_AS   = $(KERNEL_CC)
+KERNEL_FPU_CPP_AS = $(KERNEL_CC)
+KERNEL_COMPILER_DEPS = $(N64_HOST_PCC) $(N64_CROSS_PCC_AS) $(N64_CROSS_PCC_LD)
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
                   if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
                       echo "error: PCC kernel C emitted COP1/FPU instructions in .deps/$(@:.o=.s)" >&2; exit 1; \
@@ -707,8 +714,8 @@ SYSTEM_COMPILER_VERSION_gcc = $(shell $(firstword $(CC)) --version 2>/dev/null |
 SYSTEM_COMPILER_VERSION_pcc = $(shell $(firstword $(N64_HOST_PCC)) -v 2>&1 | sed -n '/Portable C Compiler/{p;q;}')
 SYSTEM_COMPILER_VERSION = $(or $(SYSTEM_COMPILER_VERSION_$(N64_KERNEL_COMPILER)),unknown)
 SYSTEM_BUILD_INFO = built on $(SYSTEM_BUILD_USER)@$(SYSTEM_BUILD_HOST) with $(N64_KERNEL_COMPILER) $(SYSTEM_COMPILER_VERSION), cpu=$(N64_USERLAND_CPU), float=$(N64_USERLAND_FLOAT), endian=$(N64_USERLAND_ENDIAN)
-COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
-COMPILE_FPU_S   = ${ASFPU} ${FPU_ASFLAGS} $< -o $@
+COMPILE_S       = ${KERNEL_CPP_AS} ${ASFLAGS} $< -o $@
+COMPILE_FPU_S   = ${KERNEL_FPU_CPP_AS} ${FPU_ASFLAGS} $< -o $@
 
 %OBJS
 
@@ -783,7 +790,7 @@ SYSTEM_DEP      = Makefile $(N64_IOCONF).c $(N64_KERNEL_LDSCRIPT) \
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for N64: $(SYSTEM_BUILD_INFO)\n";' > vers.c; \
                   ${COMPILE_VERS_C}; \
                   rm -f $@
-SYSTEM_LD       = ${LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@
+SYSTEM_LD       = ${KERNEL_LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@
 SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm

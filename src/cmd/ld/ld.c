@@ -2004,6 +2004,8 @@ struct elf_outsec {
     char *name;
     char *region;
     char *phdr;
+    char *addr_expr;
+    int has_addr;
     int noload;
     int firststmt;
     int nstmt;
@@ -2629,6 +2631,40 @@ script_collect_until(int delim)
     return elf_strndup_trim(start, script_p - start);
 }
 
+static char *
+script_collect_from_until(char *start, int delim)
+{
+    int depth, quote;
+
+    depth = 0;
+    quote = 0;
+    while (*script_p) {
+        if (quote) {
+            if (*script_p == quote)
+                quote = 0;
+            script_p++;
+            continue;
+        }
+        if (*script_p == '"' || *script_p == '\'') {
+            quote = *script_p++;
+            continue;
+        }
+        if (*script_p == delim && depth == 0) {
+            char *s = elf_strndup_trim(start, script_p - start);
+            script_p++;
+            return s;
+        }
+        if (*script_p == '(')
+            depth++;
+        else if (*script_p == ')') {
+            if (depth > 0)
+                depth--;
+        }
+        script_p++;
+    }
+    return elf_strndup_trim(start, script_p - start);
+}
+
 static void
 script_add_pattern(const char *pat)
 {
@@ -2932,13 +2968,20 @@ script_parse_sections(void)
                 script_expect(')');
                 k2 = script_next();
             }
-            if (k2 != ':')
-                error(2, "bad output section");
+            if (k2 != ':') {
+                if (k2 != STOK_NAME && k2 != '.')
+                    error(2, "bad output section");
+                st.expr = script_collect_from_until(
+                    script_p - strlen(script_tok), ':');
+            } else
+                st.expr = 0;
             ELF_RESERVE(eout, ceout, neout + 1, ELF_MAX_OUTSECS,
                 "output sections");
             outidx = neout++;
             memset(&eout[outidx], 0, sizeof(eout[outidx]));
             eout[outidx].name = elf_strdup(lhs);
+            eout[outidx].addr_expr = st.expr;
+            eout[outidx].has_addr = st.expr != 0;
             eout[outidx].noload = noload;
             eout[outidx].align = W;
             script_expect('{');
@@ -3593,12 +3636,15 @@ elf_layout(void)
             m = elf_find_mem(out->region);
             if (m < 0)
                 error(2, "unknown MEMORY region %s", out->region);
+        }
+        if (out->has_addr)
+            dot = elf_eval_expr(out->addr_expr, seqdot);
+        else if (out->region) {
             dot = emem[m].cursor;
         } else
             dot = seqdot;
         start = dot;
         have_content = 0;
-        out->flags |= SHF_ALLOC;
         for (j = 0; j < out->nstmt; j++) {
             struct elf_stmt *st = &estmt[out->firststmt + j];
 
