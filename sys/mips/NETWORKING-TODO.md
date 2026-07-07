@@ -298,6 +298,29 @@ Source reference:
 - [ ] Decide whether the PSK telnet mode is enough for the N64 lab workflow or
   whether to port a real SSH-compatible daemon later.
 
+## Ci20 Follow-up
+
+- [x] Bring up Creator Ci20 DM9000 Ethernet with real device interrupts:
+  - DM9000 probes at `0xb6000000` in 8-bit mode.
+  - GPIOE19 routes as level-high interrupt through INTC irq 13.
+  - `/sbin/dhclient dm0` obtains a lease and installs the default route.
+  - ICMP to the local gateway and external hosts works with no packet loss in
+    the observed smoke runs.
+- [x] Add temporary latency diagnostics for the Ci20 first Ethernet bringup:
+  - `machdep.dm9000_stats` records IRQ/poll/RX/TX counters and ICMP echo RTTs
+    seen at the driver receive path.
+  - `machdep.timer_stats` records common MIPS timer IRQ counts and lateness;
+    Ci20 TCU0 now feeds the same counter path as CP0 timer based boards.
+- [ ] Defer periodic ping spike investigation as a separate measurement task:
+  - Ci20 showed occasional local-gateway spikes around 30-250 ms, while
+    DM9000 IRQ counters stayed clean and TCU timer lateness stayed at zero in
+    the latest run.
+  - Similar periodic spikes were also observed on N64 and on the Mac pinging
+    external hosts, so do not treat this as Ci20 DM9000 bringup blocker.
+  - Next pass should compare wired host, Wi-Fi host, router, Ci20, and N64
+    traces on the same gateway, and only then decide whether there is still a
+    ReBSD network scheduling issue to chase.
+
 ## Deferred Items For First Pass
 
 - Keep plain TELNET off by default for production-style images; it is a lab

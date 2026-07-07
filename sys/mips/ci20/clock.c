@@ -1,5 +1,6 @@
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/time.h>
 #include <machine/io.h>
 
 #define CI20_INTC       0xb0001000u
@@ -30,10 +31,17 @@
 #define CI20_TCU_DIVISOR    64u
 #define CI20_TCU_RATE       (CI20_EXTCLK_HZ / CI20_TCU_DIVISOR)
 #define CI20_TCU_PERIOD     ((CI20_TCU_RATE + HZ / 2) / HZ)
+#define CI20_COUNT_PERIOD   ((MIPS_COUNT_KHZ * 1000u + HZ - 1) / HZ)
 
 #if CI20_TCU_PERIOD > 0xffffu
 #error CI20_TCU_PERIOD does not fit the JZ4780 TCU channel counter
 #endif
+
+extern unsigned long mips_timer_count_to_usec(unsigned count);
+extern void mips_timer_record(unsigned long late_us, unsigned long clock_us);
+
+static unsigned ci20_clock_last_count;
+static int ci20_clock_last_count_valid;
 
 static volatile unsigned *
 tcu_reg(unsigned offset)
@@ -102,9 +110,22 @@ int
 ci20_clock_intr(int *frame, unsigned status)
 {
     unsigned bit = 1u << CI20_TCU_CHANNEL;
+    unsigned start_count;
+    unsigned elapsed;
+    unsigned late;
+    unsigned long late_us = 0;
+    unsigned long clock_us;
 
     if ((tcu_read(TCU_TFR) & TCU_FFLAG(CI20_TCU_CHANNEL)) == 0)
         return 0;
+
+    start_count = mips_read_c0_register(C0_COUNT, 0);
+    if (ci20_clock_last_count_valid) {
+        elapsed = start_count - ci20_clock_last_count;
+        late = elapsed - CI20_COUNT_PERIOD;
+        if ((int)late > 0)
+            late_us = mips_timer_count_to_usec(late);
+    }
 
     tcu_write(TCU_TECR, bit);
     tcu_write(TCU_TFCR, TCU_FFLAG(CI20_TCU_CHANNEL));
@@ -112,5 +133,29 @@ ci20_clock_intr(int *frame, unsigned status)
     tcu_write(TCU_TESR, bit);
 
     mips_clock_intr(frame, status);
+    clock_us = mips_timer_count_to_usec(
+        mips_read_c0_register(C0_COUNT, 0) - start_count);
+    mips_timer_record(late_us, clock_us);
+    ci20_clock_last_count = start_count;
+    ci20_clock_last_count_valid = 1;
+    return 1;
+}
+
+int
+mips_board_microtime(struct timeval *tv, u_int tick_usec)
+{
+    unsigned count;
+    unsigned usec;
+
+    count = tcu_read(TCU_TCNT(CI20_TCU_CHANNEL));
+    usec = (count * 1000u) / (CI20_TCU_RATE / 1000u);
+    if (usec >= tick_usec)
+        usec = tick_usec - 1;
+
+    tv->tv_usec += usec;
+    if (tv->tv_usec >= 1000000L) {
+        tv->tv_sec += tv->tv_usec / 1000000L;
+        tv->tv_usec %= 1000000L;
+    }
     return 1;
 }

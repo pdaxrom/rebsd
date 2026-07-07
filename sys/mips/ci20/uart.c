@@ -39,6 +39,7 @@
 #define INTC_PENDING    0x10
 #define INTC_CHIP_SIZE  0x20
 #define CI20_TCU_IRQ    25
+#define CI20_GPIOE_IRQ  13
 #define CI20_UART4_IRQ  34
 
 struct tty ci20_uart_ttys[1];
@@ -48,7 +49,11 @@ static int ci20_uart_attached;
 void ci20_uart_intr(void);
 extern int ci20_clock_intr(int *frame, unsigned status);
 #ifdef CI20_DM9000_ENABLED
-extern void ci20_dm9000poll(void);
+extern int ci20_dm9000_intr(void);
+#endif
+#ifdef INET
+extern int netisr;
+extern void netintr(void);
 #endif
 
 static volatile unsigned char *
@@ -92,6 +97,12 @@ static void
 intc_unmask(unsigned irq)
 {
     *intc_reg(irq, INTC_CLEAR_MASK) = intc_bit(irq);
+}
+
+void
+ci20_intc_unmask_irq(unsigned irq)
+{
+    intc_unmask(irq);
 }
 
 static void
@@ -387,9 +398,6 @@ void
 mips_board_timer_intr(void)
 {
     ci20_uart_intr();
-#ifdef CI20_DM9000_ENABLED
-    ci20_dm9000poll();
-#endif
 }
 
 void
@@ -397,6 +405,14 @@ mips_board_intr(int *frame, unsigned status)
 {
     if (intc_pending(CI20_TCU_IRQ))
         ci20_clock_intr(frame, status);
+#ifdef CI20_DM9000_ENABLED
+    if (intc_pending(CI20_GPIOE_IRQ) && ci20_dm9000_intr()) {
+#ifdef INET
+        if (netisr)
+            netintr();
+#endif
+    }
+#endif
     if (intc_pending(CI20_UART4_IRQ))
         ci20_uart_intr();
 }

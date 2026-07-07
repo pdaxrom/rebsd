@@ -34,6 +34,16 @@
 #endif
 
 static int last_user_icache_pid = -1;
+static volatile unsigned mips_last_clock_count;
+static volatile int mips_last_clock_count_valid;
+static volatile unsigned long mips_timer_irq_count;
+static volatile unsigned long mips_timer_late_count;
+static volatile unsigned long mips_timer_late_last_us;
+static volatile unsigned long mips_timer_late_max_us;
+static volatile unsigned long mips_timer_late_last_tick;
+static volatile unsigned long mips_timer_late_max_tick;
+static volatile unsigned long mips_timer_clock_last_us;
+static volatile unsigned long mips_timer_clock_max_us;
 volatile unsigned int ct_ticks = 0;
 
 extern char mips_exception_entry[];
@@ -55,6 +65,8 @@ extern void n64cart_uart_intr(void);
 #else
 void mips_board_intr(int *frame, unsigned status) __attribute__((weak));
 void mips_board_timer_intr(void) __attribute__((weak));
+int mips_board_microtime(struct timeval *tv, u_int tick_usec)
+    __attribute__((weak));
 #endif
 
 struct mips_exception_snapshot {
@@ -232,6 +244,167 @@ mips_reprime_timer(void)
     } while ((int)(compare - mips_read_c0_register(C0_COUNT, 0)) < 0);
 }
 
+unsigned long
+mips_timer_count_to_usec(unsigned count)
+{
+    unsigned long usec;
+
+    usec = (count / MIPS_TIMER_COUNT_KHZ) * 1000u;
+    usec += ((count % MIPS_TIMER_COUNT_KHZ) * 1000u) /
+        MIPS_TIMER_COUNT_KHZ;
+    return usec;
+}
+
+static void
+mips_timer_note_late_usec(unsigned long usec)
+{
+    if (usec < 1000)
+        return;
+
+    mips_timer_late_count++;
+    mips_timer_late_last_us = usec;
+    mips_timer_late_last_tick = ct_ticks;
+    if (usec > mips_timer_late_max_us) {
+        mips_timer_late_max_us = usec;
+        mips_timer_late_max_tick = ct_ticks;
+    }
+}
+
+void
+mips_timer_record(unsigned long late_us, unsigned long clock_us)
+{
+    mips_timer_irq_count++;
+    mips_timer_note_late_usec(late_us);
+
+    mips_timer_clock_last_us = clock_us;
+    if (clock_us > mips_timer_clock_max_us)
+        mips_timer_clock_max_us = clock_us;
+}
+
+static unsigned long
+mips_timer_late_usec(void)
+{
+    unsigned now;
+    unsigned compare;
+    unsigned late;
+
+    now = mips_read_c0_register(C0_COUNT, 0);
+    compare = mips_read_c0_register(C0_COMPARE, 0);
+    late = now - compare;
+    if ((int)late <= 0)
+        return 0;
+
+    return mips_timer_count_to_usec(late);
+}
+
+static char *
+mips_timer_stats_puts(char *p, char *end, const char *s)
+{
+    while (p < end && *s)
+        *p++ = *s++;
+    return p;
+}
+
+static char *
+mips_timer_stats_putul(char *p, char *end, unsigned long value)
+{
+    char tmp[10 * sizeof(unsigned long)];
+    int n = 0;
+
+    do {
+        tmp[n++] = '0' + value % 10;
+        value /= 10;
+    } while (value && n < sizeof(tmp));
+
+    while (p < end && n > 0)
+        *p++ = tmp[--n];
+    return p;
+}
+
+static char *
+mips_timer_stats_putkv(char *p, char *end, const char *key,
+    unsigned long value)
+{
+    p = mips_timer_stats_puts(p, end, key);
+    if (p < end)
+        *p++ = '=';
+    p = mips_timer_stats_putul(p, end, value);
+    if (p < end)
+        *p++ = ' ';
+    return p;
+}
+
+int
+mips_timer_stats(char *buf, int len)
+{
+    char *p, *end;
+    int s;
+
+    if (len <= 0)
+        return 0;
+
+    p = buf;
+    end = buf + len - 1;
+
+    s = splhigh();
+    p = mips_timer_stats_putkv(p, end, "timer_irq",
+        mips_timer_irq_count);
+    p = mips_timer_stats_putkv(p, end, "timer_late",
+        mips_timer_late_count);
+    p = mips_timer_stats_putkv(p, end, "late_last_us",
+        mips_timer_late_last_us);
+    p = mips_timer_stats_putkv(p, end, "late_max_us",
+        mips_timer_late_max_us);
+    p = mips_timer_stats_putkv(p, end, "late_last_tick",
+        mips_timer_late_last_tick);
+    p = mips_timer_stats_putkv(p, end, "late_max_tick",
+        mips_timer_late_max_tick);
+    p = mips_timer_stats_putkv(p, end, "clock_last_us",
+        mips_timer_clock_last_us);
+    p = mips_timer_stats_putkv(p, end, "clock_max_us",
+        mips_timer_clock_max_us);
+    splx(s);
+
+    if (p > buf && p[-1] == ' ')
+        p--;
+    *p = 0;
+    return 0;
+}
+
+void
+mips_microtime(struct timeval *tv, u_int tick_usec)
+{
+    unsigned now;
+    unsigned last;
+    unsigned delta;
+    unsigned usec;
+
+    if (tick_usec == 0)
+        return;
+
+#ifndef N64
+    if (mips_board_microtime && mips_board_microtime(tv, tick_usec))
+        return;
+#endif
+
+    if (!mips_last_clock_count_valid)
+        return;
+
+    last = mips_last_clock_count;
+    now = mips_read_c0_register(C0_COUNT, 0);
+    delta = now - last;
+
+    usec = mips_timer_count_to_usec(delta);
+    if (usec >= tick_usec)
+        usec = tick_usec - 1;
+
+    tv->tv_usec += usec;
+    if (tv->tv_usec >= 1000000L) {
+        tv->tv_sec += tv->tv_usec / 1000000L;
+        tv->tv_usec %= 1000000L;
+    }
+}
+
 void
 mips_clock_intr(int *frame, unsigned status)
 {
@@ -249,6 +422,8 @@ mips_clock_intr(int *frame, unsigned status)
 #endif
     cnintr();
     hardclock((caddr_t)frame[FRAME_PC], status);
+    mips_last_clock_count = mips_read_c0_register(C0_COUNT, 0);
+    mips_last_clock_count_valid = 1;
 #ifdef INET
     if (netisr)
         netintr();
@@ -428,8 +603,15 @@ exception(int *frame)
         }
 #endif
         if (rawcause & MIPS_CAUSE_IP7) {
+            unsigned clock_start;
+            unsigned long late_us;
+
+            late_us = mips_timer_late_usec();
+            clock_start = mips_read_c0_register(C0_COUNT, 0);
             mips_reprime_timer();
             mips_clock_intr(frame, status);
+            mips_timer_record(late_us, mips_timer_count_to_usec(
+                mips_read_c0_register(C0_COUNT, 0) - clock_start));
         }
         if ((cause & USER) && runrun) {
             u.u_frame = frame;

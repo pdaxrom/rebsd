@@ -14,6 +14,10 @@ struct timeval time;
 int adjdelta;
 int lbolt;                  /* awoken once a second */
 
+#ifdef MIPS
+void mips_microtime(struct timeval *tv, u_int tick_usec);
+#endif
+
 static void
 setthetime (struct timeval *tv)
 {
@@ -59,6 +63,22 @@ setthetime (struct timeval *tv)
  * the time-of-day.
  */
 void
+microtime(struct timeval *tv)
+{
+    int s;
+    register u_int ms;
+
+    s = splhigh();
+    *tv = time;
+    ms = lbolt;
+    tv->tv_usec = (long)ms * usechz;
+#ifdef MIPS
+    mips_microtime(tv, usechz);
+#endif
+    splx(s);
+}
+
+void
 gettimeofday()
 {
     register struct a {
@@ -66,19 +86,9 @@ gettimeofday()
         struct  timezone *tzp;
     } *uap = (struct a *)u.u_arg;
     struct timeval atv;
-    int s;
-    register u_int  ms;
 
     if (uap->tp) {
-        /*
-         * We don't resolve the milliseconds on every clock tick; it's
-         * easier to do it here.  Long casts are out of paranoia.
-         */
-        s = splhigh();
-        atv = time;
-        ms = lbolt;
-        splx(s);
-        atv.tv_usec = (long)ms * usechz;
+        microtime(&atv);
         u.u_error = copyout ((caddr_t) &atv, (caddr_t) uap->tp,
             sizeof(atv));
         if (u.u_error)

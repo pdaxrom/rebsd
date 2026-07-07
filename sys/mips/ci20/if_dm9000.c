@@ -1,9 +1,5 @@
 /*
  * Davicom DM9000 Ethernet driver for Creator Ci20.
- *
- * This first pass is polling-only.  The board has a wired DM9000 interrupt,
- * but the timer is already proven on Ci20 and keeps the first network bringup
- * independent from another interrupt-routing variable.
  */
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -14,6 +10,7 @@
 #include <sys/domain.h>
 #include <sys/protosw.h>
 #include <sys/kernel.h>
+#include <sys/time.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
@@ -22,6 +19,7 @@
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
 #include <netinet/if_ether.h>
 
 #define CI20_CPM                0xb0000000u
@@ -34,11 +32,18 @@
 #define GPIO_PXINTC(n)          (0x18 + (n) * 0x100)
 #define GPIO_PXMASKS(n)         (0x24 + (n) * 0x100)
 #define GPIO_PXMASKC(n)         (0x28 + (n) * 0x100)
+#define GPIO_PXINTS(n)          (0x14 + (n) * 0x100)
 #define GPIO_PXPAT1S(n)         (0x34 + (n) * 0x100)
 #define GPIO_PXPAT1C(n)         (0x38 + (n) * 0x100)
 #define GPIO_PXPAT0S(n)         (0x44 + (n) * 0x100)
 #define GPIO_PXPAT0C(n)         (0x48 + (n) * 0x100)
+#define GPIO_PXFLG(n)           (0x50 + (n) * 0x100)
+#define GPIO_PXFLGC(n)          (0x58 + (n) * 0x100)
 #define GPIO_PXPENS(n)          (0x74 + (n) * 0x100)
+
+#define CI20_DM9000_IRQ_PORT    4
+#define CI20_DM9000_IRQ_PIN     19
+#define CI20_DM9000_INTC_IRQ    13
 
 #define DM9000_IO_ADDR          0xb6000000u
 #define DM9000_DATA_ADDR        (DM9000_IO_ADDR + 2)
@@ -104,6 +109,9 @@
 #define ISR_BUS_MODE_MASK       (3u << 6)
 
 #define IMR_PAR                 (1u << 7)
+#define IMR_PTM                 (1u << 1)
+#define IMR_PRM                 (1u << 0)
+#define DM9000_IMR_ENABLE       (IMR_PAR | IMR_PTM | IMR_PRM)
 
 #define DM9000_BUS_16           16
 #define DM9000_BUS_8            8
@@ -115,6 +123,28 @@ struct dm9000_softc {
     int sc_hw_ready;
     int sc_tx_busy;
     int sc_bus_width;
+    int sc_irq_enabled;
+    unsigned long sc_irq_calls;
+    unsigned long sc_irq_events;
+    unsigned long sc_irq_empty;
+    unsigned long sc_irq_looplimit;
+    unsigned long sc_polls;
+    unsigned long sc_empty_polls;
+    unsigned long sc_rx_irq;
+    unsigned long sc_tx_irq;
+    unsigned long sc_over_irq;
+    unsigned long sc_rx_frames;
+    unsigned long sc_rx_eof;
+    unsigned long sc_rx_badready;
+    unsigned long sc_rx_badstatus;
+    unsigned long sc_icmp_rx;
+    unsigned long sc_icmp_slow;
+    unsigned long sc_icmp_last_seq;
+    unsigned long sc_icmp_last_rtt_us;
+    unsigned long sc_icmp_max_seq;
+    unsigned long sc_icmp_max_rtt_us;
+    unsigned long sc_icmp_slow_seq;
+    unsigned long sc_icmp_slow_rtt_us;
     unsigned char sc_txbuf[DM9000_TX_MAX];
 };
 
@@ -127,13 +157,22 @@ static int dm9000init(int unit);
 static int dm9000start(int unit);
 static int dm9000watchdog(int unit);
 static void dm9000poll(int unit);
-static void dm9000recv(struct dm9000_softc *sc);
+static unsigned dm9000recv(struct dm9000_softc *sc);
+static void dm9000_trace_icmp(struct dm9000_softc *sc, unsigned char *frame,
+    unsigned frame_len);
 static struct mbuf *dm9000get(struct ifnet *ifp, unsigned char *buf,
     int len);
 static int dm9000_hw_probe(struct dm9000_softc *sc);
 static void dm9000_chip_init(struct dm9000_softc *sc);
+static void dm9000_stop(struct dm9000_softc *sc);
+static void ci20_dm9000_irq_setup(struct dm9000_softc *sc);
+static char *dm9000_stats_puts(char *p, char *end, const char *s);
+static char *dm9000_stats_putul(char *p, char *end, unsigned long value);
+static char *dm9000_stats_putkv(char *p, char *end, const char *key,
+    unsigned long value);
 
 extern void udelay(unsigned usec);
+extern void ci20_intc_unmask_irq(unsigned irq);
 
 static volatile unsigned *
 ci20_reg(unsigned base, unsigned offset)
@@ -183,6 +222,214 @@ ci20_dm9000_pinmux(void)
     ci20_write(CI20_GPIO, GPIO_PXPAT1C(0), 0x04030000u);
     ci20_write(CI20_GPIO, GPIO_PXPAT0C(0), 0x04030000u);
     ci20_write(CI20_GPIO, GPIO_PXPENS(0), 0x04030000u);
+}
+
+static unsigned
+ci20_dm9000_irq_bit(void)
+{
+    return 1u << CI20_DM9000_IRQ_PIN;
+}
+
+static void
+ci20_dm9000_gpio_irq_ack(void)
+{
+    ci20_write(CI20_GPIO, GPIO_PXFLGC(CI20_DM9000_IRQ_PORT),
+        ci20_dm9000_irq_bit());
+}
+
+static void
+ci20_dm9000_gpio_irq_mask(void)
+{
+    ci20_write(CI20_GPIO, GPIO_PXMASKS(CI20_DM9000_IRQ_PORT),
+        ci20_dm9000_irq_bit());
+}
+
+static void
+ci20_dm9000_gpio_irq_unmask(void)
+{
+    ci20_write(CI20_GPIO, GPIO_PXMASKC(CI20_DM9000_IRQ_PORT),
+        ci20_dm9000_irq_bit());
+}
+
+static int
+ci20_dm9000_gpio_irq_pending(void)
+{
+    return (ci20_read(CI20_GPIO, GPIO_PXFLG(CI20_DM9000_IRQ_PORT)) &
+        ci20_dm9000_irq_bit()) != 0;
+}
+
+static void
+ci20_dm9000_irq_setup(struct dm9000_softc *sc)
+{
+    unsigned bit = ci20_dm9000_irq_bit();
+
+    ci20_dm9000_gpio_irq_mask();
+    ci20_write(CI20_GPIO, GPIO_PXINTS(CI20_DM9000_IRQ_PORT), bit);
+    ci20_write(CI20_GPIO, GPIO_PXPAT1C(CI20_DM9000_IRQ_PORT), bit);
+    ci20_write(CI20_GPIO, GPIO_PXPAT0S(CI20_DM9000_IRQ_PORT), bit);
+    ci20_dm9000_gpio_irq_ack();
+    ci20_dm9000_gpio_irq_unmask();
+    ci20_intc_unmask_irq(CI20_DM9000_INTC_IRQ);
+
+    if (!sc->sc_irq_enabled) {
+        sc->sc_irq_enabled = 1;
+        printf("dm0: irq gpe%u level-high intc %u enabled\n",
+            CI20_DM9000_IRQ_PIN, CI20_DM9000_INTC_IRQ);
+    }
+}
+
+static char *
+dm9000_stats_puts(char *p, char *end, const char *s)
+{
+    while (p < end && *s)
+        *p++ = *s++;
+    return p;
+}
+
+static char *
+dm9000_stats_putul(char *p, char *end, unsigned long value)
+{
+    char tmp[10 * sizeof(unsigned long)];
+    int n = 0;
+
+    do {
+        tmp[n++] = '0' + value % 10;
+        value /= 10;
+    } while (value && n < sizeof(tmp));
+
+    while (p < end && n > 0)
+        *p++ = tmp[--n];
+    return p;
+}
+
+static char *
+dm9000_stats_putkv(char *p, char *end, const char *key, unsigned long value)
+{
+    p = dm9000_stats_puts(p, end, key);
+    if (p < end)
+        *p++ = '=';
+    p = dm9000_stats_putul(p, end, value);
+    if (p < end)
+        *p++ = ' ';
+    return p;
+}
+
+int
+ci20_dm9000_stats(char *buf, int len)
+{
+    struct dm9000_softc *sc = &dm9000_softc[0];
+    char *p, *end;
+    int s;
+
+    if (len <= 0)
+        return 0;
+
+    p = buf;
+    end = buf + len - 1;
+
+    s = splimp();
+    p = dm9000_stats_putkv(p, end, "irq_calls", sc->sc_irq_calls);
+    p = dm9000_stats_putkv(p, end, "irq_events", sc->sc_irq_events);
+    p = dm9000_stats_putkv(p, end, "irq_empty", sc->sc_irq_empty);
+    p = dm9000_stats_putkv(p, end, "irq_limit", sc->sc_irq_looplimit);
+    p = dm9000_stats_putkv(p, end, "polls", sc->sc_polls);
+    p = dm9000_stats_putkv(p, end, "empty_polls", sc->sc_empty_polls);
+    p = dm9000_stats_putkv(p, end, "rx_irq", sc->sc_rx_irq);
+    p = dm9000_stats_putkv(p, end, "tx_irq", sc->sc_tx_irq);
+    p = dm9000_stats_putkv(p, end, "over_irq", sc->sc_over_irq);
+    p = dm9000_stats_putkv(p, end, "rx_frames", sc->sc_rx_frames);
+    p = dm9000_stats_putkv(p, end, "rx_eof", sc->sc_rx_eof);
+    p = dm9000_stats_putkv(p, end, "rx_badready", sc->sc_rx_badready);
+    p = dm9000_stats_putkv(p, end, "rx_badstatus", sc->sc_rx_badstatus);
+    p = dm9000_stats_putkv(p, end, "icmp_rx", sc->sc_icmp_rx);
+    p = dm9000_stats_putkv(p, end, "icmp_slow", sc->sc_icmp_slow);
+    p = dm9000_stats_putkv(p, end, "icmp_last_seq",
+        sc->sc_icmp_last_seq);
+    p = dm9000_stats_putkv(p, end, "icmp_last_us",
+        sc->sc_icmp_last_rtt_us);
+    p = dm9000_stats_putkv(p, end, "icmp_max_seq", sc->sc_icmp_max_seq);
+    p = dm9000_stats_putkv(p, end, "icmp_max_us",
+        sc->sc_icmp_max_rtt_us);
+    p = dm9000_stats_putkv(p, end, "icmp_slow_seq",
+        sc->sc_icmp_slow_seq);
+    p = dm9000_stats_putkv(p, end, "icmp_slow_us",
+        sc->sc_icmp_slow_rtt_us);
+    p = dm9000_stats_putkv(p, end, "ipkts", sc->sc_if.if_ipackets);
+    p = dm9000_stats_putkv(p, end, "opkts", sc->sc_if.if_opackets);
+    p = dm9000_stats_putkv(p, end, "ierr", sc->sc_if.if_ierrors);
+    p = dm9000_stats_putkv(p, end, "oerr", sc->sc_if.if_oerrors);
+    splx(s);
+
+    if (p > buf && p[-1] == ' ')
+        p--;
+    *p = 0;
+    return 0;
+}
+
+static unsigned long
+dm9000_rtt_us(struct timeval *now, struct timeval *sent)
+{
+    long sec;
+    long usec;
+
+    sec = now->tv_sec - sent->tv_sec;
+    usec = now->tv_usec - sent->tv_usec;
+    if (usec < 0) {
+        usec += 1000000L;
+        sec--;
+    }
+    if (sec < 0 || sec > 3600)
+        return 0;
+    return (unsigned long)sec * 1000000UL + (unsigned long)usec;
+}
+
+static void
+dm9000_trace_icmp(struct dm9000_softc *sc, unsigned char *frame,
+    unsigned frame_len)
+{
+    struct timeval now, sent;
+    unsigned ipoff, iphlen, icmpoff, seq;
+    u_short seq16;
+    unsigned long rtt;
+
+    ipoff = sizeof(struct ether_header);
+    if (frame_len < ipoff + 20)
+        return;
+    if ((frame[ipoff] >> 4) != IPVERSION)
+        return;
+    iphlen = (frame[ipoff] & 0x0f) << 2;
+    if (iphlen < 20 || frame_len < ipoff + iphlen + ICMP_MINLEN)
+        return;
+    if (frame[ipoff + 9] != IPPROTO_ICMP)
+        return;
+
+    icmpoff = ipoff + iphlen;
+    if (frame[icmpoff] != ICMP_ECHOREPLY || frame[icmpoff + 1] != 0)
+        return;
+    if (frame_len < icmpoff + ICMP_MINLEN + sizeof(struct timeval))
+        return;
+
+    bcopy((caddr_t)&frame[icmpoff + 6], (caddr_t)&seq16, sizeof(seq16));
+    seq = seq16;
+    bcopy((caddr_t)&frame[icmpoff + ICMP_MINLEN], (caddr_t)&sent,
+        sizeof(sent));
+    microtime(&now);
+    rtt = dm9000_rtt_us(&now, &sent);
+    if (rtt == 0)
+        return;
+
+    sc->sc_icmp_rx++;
+    sc->sc_icmp_last_seq = seq;
+    sc->sc_icmp_last_rtt_us = rtt;
+    if (rtt > sc->sc_icmp_max_rtt_us) {
+        sc->sc_icmp_max_rtt_us = rtt;
+        sc->sc_icmp_max_seq = seq;
+    }
+    if (rtt >= 10000UL) {
+        sc->sc_icmp_slow++;
+        sc->sc_icmp_slow_seq = seq;
+        sc->sc_icmp_slow_rtt_us = rtt;
+    }
 }
 
 static volatile unsigned char *
@@ -445,6 +692,7 @@ dm9000_chip_init(struct dm9000_softc *sc)
 {
     int i;
 
+    dm9000_write(DM9000_IMR, IMR_PAR);
     dm9000_write(DM9000_NCR, 0);
     dm9000_write(DM9000_TCR, 0);
     dm9000_write(DM9000_BPTR, BPTR_BPHW(3) | BPTR_JPT_600US);
@@ -460,7 +708,28 @@ dm9000_chip_init(struct dm9000_softc *sc)
         dm9000_write(DM9000_MAR + i, 0xff);
 
     dm9000_write(DM9000_RCR, RCR_DIS_LONG | RCR_DIS_CRC | RCR_RXEN);
+    ci20_dm9000_irq_setup(sc);
+    dm9000_write(DM9000_IMR, DM9000_IMR_ENABLE);
+}
+
+static void
+dm9000_stop(struct dm9000_softc *sc)
+{
+    unsigned reg_save;
+
+    if (!sc->sc_hw_ready)
+        return;
+
+    reg_save = *dm9000_io8();
     dm9000_write(DM9000_IMR, IMR_PAR);
+    dm9000_write(DM9000_RCR, 0);
+    dm9000_write(DM9000_ISR, ISR_ROOS | ISR_ROS | ISR_PTS | ISR_PRS);
+    dm9000_write(DM9000_NSR, NSR_WAKEST | NSR_TX2END | NSR_TX1END);
+    ci20_dm9000_gpio_irq_ack();
+    *dm9000_io8() = reg_save;
+
+    sc->sc_tx_busy = 0;
+    sc->sc_if.if_timer = 0;
 }
 
 void
@@ -530,9 +799,10 @@ dm9000ioctl(struct ifnet *ifp, int cmd, caddr_t data)
         break;
 
     case SIOCSIFFLAGS:
-        if ((ifp->if_flags & IFF_UP) == 0)
+        if ((ifp->if_flags & IFF_UP) == 0) {
+            dm9000_stop(sc);
             ifp->if_flags &= ~IFF_RUNNING;
-        else if ((ifp->if_flags & IFF_RUNNING) == 0)
+        } else if ((ifp->if_flags & IFF_RUNNING) == 0)
             dm9000init(ifp->if_unit);
         break;
 
@@ -684,14 +954,27 @@ static void
 dm9000poll(int unit)
 {
     struct dm9000_softc *sc = &dm9000_softc[unit];
+    unsigned reg_save;
     unsigned isr, nsr;
 
     if (!sc->sc_present || !sc->sc_hw_ready ||
         (sc->sc_if.if_flags & IFF_RUNNING) == 0)
         return;
 
+    reg_save = *dm9000_io8();
+    dm9000_write(DM9000_IMR, IMR_PAR);
     isr = dm9000_read(DM9000_ISR);
     nsr = dm9000_read(DM9000_NSR);
+    sc->sc_polls++;
+    if ((isr & (ISR_ROOS | ISR_ROS | ISR_PTS | ISR_PRS)) == 0 &&
+        (nsr & (NSR_WAKEST | NSR_TX2END | NSR_TX1END | NSR_RXOV)) == 0)
+        sc->sc_empty_polls++;
+    if (isr & ISR_PRS)
+        sc->sc_rx_irq++;
+    if ((isr & ISR_PTS) || (nsr & (NSR_TX2END | NSR_TX1END)))
+        sc->sc_tx_irq++;
+    if ((isr & (ISR_ROOS | ISR_ROS)) || (nsr & NSR_RXOV))
+        sc->sc_over_irq++;
     if (isr & (ISR_ROOS | ISR_ROS | ISR_PTS | ISR_PRS))
         dm9000_write(DM9000_ISR, isr & (ISR_ROOS | ISR_ROS | ISR_PTS |
             ISR_PRS));
@@ -709,13 +992,34 @@ dm9000poll(int unit)
         dm9000start(unit);
     }
     if (isr & ISR_PRS)
-        dm9000recv(sc);
+        sc->sc_rx_frames += dm9000recv(sc);
+
+    dm9000_write(DM9000_IMR, DM9000_IMR_ENABLE);
+    *dm9000_io8() = reg_save;
 }
 
-void
-ci20_dm9000poll(void)
+int
+ci20_dm9000_intr(void)
 {
-    dm9000poll(0);
+    struct dm9000_softc *sc = &dm9000_softc[0];
+    int handled = 0;
+    int limit = 16;
+
+    sc->sc_irq_calls++;
+    ci20_dm9000_gpio_irq_mask();
+    while (limit-- > 0 && ci20_dm9000_gpio_irq_pending()) {
+        sc->sc_irq_events++;
+        ci20_dm9000_gpio_irq_ack();
+        dm9000poll(0);
+        handled = 1;
+    }
+    if (!handled)
+        sc->sc_irq_empty++;
+    if (limit < 0 && ci20_dm9000_gpio_irq_pending())
+        sc->sc_irq_looplimit++;
+    ci20_dm9000_gpio_irq_ack();
+    ci20_dm9000_gpio_irq_unmask();
+    return handled;
 }
 
 static struct mbuf *
@@ -756,7 +1060,7 @@ bad:
     return 0;
 }
 
-static void
+static unsigned
 dm9000recv(struct dm9000_softc *sc)
 {
     struct ether_header *eh;
@@ -764,6 +1068,7 @@ dm9000recv(struct dm9000_softc *sc)
     struct mbuf *m;
     unsigned char frame[DM9000_PKT_MAX];
     unsigned status, len, rxbyte;
+    unsigned received = 0;
     int s, type;
 
     for (;;) {
@@ -771,20 +1076,24 @@ dm9000recv(struct dm9000_softc *sc)
         rxbyte = *dm9000_data8() & 0x03;
         if (rxbyte > DM9000_PKT_RDY) {
             dm9000_write(DM9000_RCR, 0);
-            dm9000_write(DM9000_IMR, IMR_PAR);
+            dm9000_write(DM9000_IMR, DM9000_IMR_ENABLE);
+            sc->sc_rx_badready++;
             sc->sc_if.if_ierrors++;
-            return;
+            return received;
         }
-        if (rxbyte != DM9000_PKT_RDY)
-            return;
+        if (rxbyte != DM9000_PKT_RDY) {
+            sc->sc_rx_eof++;
+            return received;
+        }
 
         dm9000_rx_status(sc, &status, &len);
         if ((status & 0xbf00) || len < sizeof(struct ether_header) ||
             len > sizeof(frame)) {
+            sc->sc_rx_badstatus++;
             sc->sc_if.if_ierrors++;
             if (len > sizeof(frame)) {
                 dm9000_chip_init(sc);
-                return;
+                return received;
             }
             if (len > 0 && len <= sizeof(frame))
                 dm9000_read_fifo(sc, frame, len);
@@ -792,8 +1101,11 @@ dm9000recv(struct dm9000_softc *sc)
         }
 
         dm9000_read_fifo(sc, frame, len);
+        received++;
         eh = (struct ether_header *)frame;
         type = ntohs((u_short)eh->ether_type);
+        if (type == ETHERTYPE_IP)
+            dm9000_trace_icmp(sc, frame, len);
         len -= sizeof(struct ether_header);
         m = dm9000get(&sc->sc_if, frame + sizeof(struct ether_header), len);
         if (m == 0) {

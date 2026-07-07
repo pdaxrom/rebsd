@@ -81,6 +81,7 @@ int itimerfix (struct timeval *tv);
  */
 void timevaladd (struct timeval *t1, struct timeval *t2);
 void timevalsub (struct timeval *t1, struct timeval *t2);
+void microtime (struct timeval *tv);
 
 /*
  * Compute number of hz until specified time.
