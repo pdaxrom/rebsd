@@ -1510,9 +1510,8 @@ struct optab table[] = {
 	SCON,		TANY,
 	SANY,		TANY,
 		0,	0,
-		"	subu $sp,$sp,16 # call (args, no result) to scon/sname\n"
-		"	jal CL\n"
-		"	nop\n"
+		"	jal CL		# call (args, no result) to scon/sname\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { UCALL,	FOREFF,
@@ -1526,9 +1525,8 @@ struct optab table[] = {
 	SCON,		TANY,
 	SAREG,		TANY,
 		NAREG,	   RESC1,  /* should be 0 */
-		"	subu $sp,$sp,16 # call (args, result in v0) to scon/sname\n"
-		"	jal CL\n"
-		"	nop\n"
+		"	jal CL		# call (args, result in v0) to scon/sname\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { UCALL,	INAREG,
@@ -1543,9 +1541,8 @@ struct optab table[] = {
 	SCON,		TANY,
 	SBREG,		TANY,
 		NBREG,	   RESC1,  /* should be 0 */
-		"	subu $sp,$sp,16 # call (args, result in v0:v1) to scon/sname\n"
-		"	jal CL\n"
-		"	nop\n"
+		"	jal CL		# call (args, result in v0:v1) to scon/sname\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { UCALL,	INBREG,
@@ -1560,9 +1557,8 @@ struct optab table[] = {
 	SCON,		TANY,
 	SCREG,		TANY,
 		NCREG,	   RESC1,  /* should be 0 */
-		"	subu $sp,$sp,16 # call (args, result in f0:f1) to scon/sname\n"
-		"	jal CL\n"
-		"	nop\n"
+		"	jal CL		# call (args, result in f0:f1) to scon/sname\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { UCALL,	INCREG,
@@ -1577,9 +1573,8 @@ struct optab table[] = {
 	SAREG,		TANY,
 	SANY,		TANY,
 		NICALL,	0,
-		"	subu $sp,$sp,16 # call (args, no result) to reg\n"
-		"	jal $25\n"
-		"	nop\n"
+		"	jal $25		# call (args, no result) to reg\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { UCALL,	FOREFF,
@@ -1593,9 +1588,8 @@ struct optab table[] = {
 	SAREG,		TANY,
 	SAREG,		TANY,
 		NICALLA,   RESC1,  /* should be 0 */
-		"	subu $sp,$sp,16 # call (args, result) to reg\n"
-		"	jal $25\n"
-		"	nop\n"
+		"	jal $25		# call (args, result) to reg\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { UCALL,	INAREG,
@@ -1609,9 +1603,8 @@ struct optab table[] = {
 	SAREG,		TANY,
 	SBREG,		TANY,
 		NICALLB,   RESC1,  /* should be 0 */
-		"	subu $sp,$sp,16 # call (args, result) to reg\n"
-		"	jal $25\n"
-		"	nop\n"
+		"	jal $25		# call (args, result) to reg\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { UCALL,	INBREG,
@@ -1625,9 +1618,8 @@ struct optab table[] = {
 	SAREG,		TANY,
 	SCREG,		TANY,
 		NICALLC,   RESC1,  /* should be 0 */
-		"	subu $sp,$sp,16 # call (args, result) to reg\n"
-		"	jal $25\n"
-		"	nop\n"
+		"	jal $25		# call (args, result) to reg\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { UCALL,	INCREG,
@@ -1671,36 +1663,32 @@ struct optab table[] = {
 	SCON|SNAME,	TANY,
 	SANY,		TANY,
 		0,	0,
-		"	subu $sp,$sp,16\n"
 		"	jal CL\n"
-		"	nop\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { STCALL,      FOREFF,
 	SAREG,	TANY,
 	SANY,		TANY,
 		NICALL,	0,
-		"	subu $sp,$sp,16\n"
 		"	jal $25\n"
-		"	nop\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { STCALL,      INAREG,
 	SCON|SNAME,	TANY,
 	SANY,		TANY,
 		XSL(A), RESC1,
-		"	subu $sp,$sp,16\n"
 		"	jal CL\n"
-		"	nop\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 { STCALL,      INAREG,
 	SAREG,	TANY,
 	SANY,		TANY,
 		XSLT9(A),	RESC1,
-		"	subu $sp,$sp,16\n"
 		"	jal $25\n"
-		"	nop\n"
+		"	subu $sp,$sp,16\n"
 		"ZC", },
 
 
