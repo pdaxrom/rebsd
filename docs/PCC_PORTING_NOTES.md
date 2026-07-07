@@ -131,6 +131,19 @@ Completed for this milestone:
   The N64 PCC hard-float full zswap ROM build also completes for hardware
   smoke, and the UART-only real-hardware boot isolation matrix passed with PCC
   and GCC kernels, raw swap, and zswap.
+- N64 PCC kernel builds assemble PCC-generated kernel `.s` files with the
+  ReBSD assembler in ELF mode and link the final kernel with the ReBSD linker
+  in ELF mode: `mips-rebsd-as --elf -EB -march=vr4300` and
+  `mips-rebsd-ld --elf -EB`.  The N64 stage0 path remains on the external N64
+  GCC toolchain.
+- The 2026-07-07 N64 build-only gate completed both full hard-float
+  PCC-userland ROM variants:
+  `N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768`
+  and
+  `N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768`.
+  Both generated root images passed `fsutil --check`; the resulting kernel
+  ELFs are big-endian MIPS-III ELF executables.  This was not a real-hardware
+  smoke pass.
 - Kernel version strings now include a detailed build banner:
   builder user/host, selected compiler and compiler version, CPU, float ABI,
   and endian ABI.
@@ -210,6 +223,11 @@ make -C sys/mips/n64 kernel.z64 preflight.z64 \
     N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
     N64_USERLAND_ENDIAN=big N64_ZSWAP=1
+
+make -C sys/mips/n64 kernel.z64 \
+    N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
+    N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
+    N64_USERLAND_ENDIAN=big N64_ROOTFS_KBYTES=32768
 ```
 
 The fixed 2026-07-06 PCC kernel issues were:

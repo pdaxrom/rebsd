@@ -11,7 +11,9 @@ real hardware with PCC and GCC kernels, raw swap, and zswap.  The current N64
 hard-float PCC full zswap ROM boots on real hardware to root login and basic
 shell use (`ls`, `uptime`).  The full updated N64 hard/soft PCC rootfs smoke
 still needs fresh real hardware passes before becoming the N64 hardware
-baseline.
+baseline.  On 2026-07-07 the full N64 hard-float PCC userland build gate
+completed with both GCC and PCC kernels; both images used a 32768 KiB rootfs
+and passed `fsutil --check`.
 
 Current policy:
 
@@ -27,6 +29,10 @@ Current policy:
   use it to match the historical GCC kernel stack layout more closely while
   preserving `$fp` in functions whose frame cannot be safely addressed from
   `$sp`.
+- PCC kernel builds use the in-tree ReBSD assembler and linker.  For N64 this
+  means PCC-generated kernel assembly is assembled with
+  `mips-rebsd-as --elf -EB -march=vr4300`, and the final kernel link uses
+  `mips-rebsd-ld --elf -EB`.
 - Native `/usr/bin/cc` and `/usr/bin/pcc`: imported PCC in the rootfs.
 - C++/`p++`: deferred to future work and not installed by default.
 
@@ -64,6 +70,8 @@ make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-
 make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
 make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc malta64.elf
 make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc unix.elf
+make -C sys/mips/n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
+make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
 make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
 make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 N64_ZSWAP=1 kernel.z64 preflight.z64
 ```
@@ -106,13 +114,15 @@ is too small for the normal PCC rootfs.  The 2026-07-06 low-memory
 Malta/MIPS32r2 hard-float with `PCC_SMOKE_ALL_RC:0`.
 
 `pcc` mode controls how the target userland and libraries are built.  It does
-not switch the kernel, N64 stage0, or target a.out binary tools by itself.
-Kernel PCC builds must be requested explicitly with `MIPS_KERNEL_COMPILER=pcc`
-or `N64_KERNEL_COMPILER=pcc`.  PCC runtime builds do not use GCC wrappers: the
-standalone cross SDK first builds the a.out tools and cross PCC without target
-runtime libraries, then uses that cross PCC to build `crt0.o`, libc, libm, and
-`libpcc.a`, then builds the target rootfs and native PCC against those
-PCC-built libraries.
+not switch the kernel or N64 stage0 by itself.  Kernel PCC builds must be
+requested explicitly with `MIPS_KERNEL_COMPILER=pcc` or
+`N64_KERNEL_COMPILER=pcc`.  When that selector is active, the kernel assembly
+and link steps still use ReBSD tools, not GNU `as`/`ld`; N64 stage0 remains on
+the external N64 GCC toolchain.  PCC runtime builds do not use GCC wrappers:
+the standalone cross SDK first builds the ReBSD tools and cross PCC without
+target runtime libraries, then uses that cross PCC to build `crt0.o`, libc,
+libm, and `libpcc.a`, then builds the target rootfs and native PCC against
+those PCC-built libraries.
 
 Kernel version banners record the selected compiler and ABI, for example:
 
@@ -136,6 +146,10 @@ The full 2026-07-06 N64 hard-float PCC zswap ROM also reached root login on
 real hardware.  Basic shell commands including `ls -l /` and `uptime` worked.
 The full smoke is not closed yet: `uname -a` currently triggers a kernel
 `TLB load/fetch` panic after login, so that path remains an open runtime issue.
+The 2026-07-07 build-only gate produced two full PCC-userland N64 ROMs, one
+with a GCC kernel and one with a PCC kernel, using `N64_ROOTFS_KBYTES=32768`.
+These ROMs still require real-hardware smoke before replacing the 2026-07-06
+hardware notes.
 
 Standalone cross SDK builds use common MIPS selectors:
 

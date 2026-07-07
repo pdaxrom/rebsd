@@ -380,6 +380,19 @@ The kernel is compiled with `-msoft-float` so normal C code does not emit FPU
 instructions. The FPU save/restore assembly and N64 userland are built with
 hard-float support.
 
+GCC remains the default kernel compiler.  `N64_KERNEL_COMPILER=pcc` is an
+explicit gate.  In that mode, PCC compiles kernel C to assembly, the ReBSD
+assembler assembles it as ELF big-endian VR4300 code, and the final kernel link
+uses the ReBSD linker in ELF mode:
+
+```
+mips-rebsd-as --elf -EB -march=vr4300
+mips-rebsd-ld --elf -EB
+```
+
+Stage0 still uses the external N64 GCC toolchain because it is cartridge boot
+glue, not the ReBSD kernel image.
+
 The in-tree RetroBSD toolchain is not yet the primary N64 build toolchain. Its
 current N64 work is staged as follows:
 
@@ -523,6 +536,21 @@ make -C sys/mips BOARD=n64 reconfig
 make -C sys/mips BOARD=n64 clean
 make -C sys/mips BOARD=n64 clean-all
 ```
+
+Full PCC userland builds need a larger root image than the historical default.
+The current build gate uses 32768 KiB and covers both kernel compiler choices:
+
+```
+make -C sys/mips/n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc \
+    N64_ROOTFS_KBYTES=32768 kernel.z64
+
+make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
+    N64_ROOTFS_KBYTES=32768 kernel.z64
+```
+
+The 2026-07-07 run completed both variants, built `linpack-pcc`, passed
+`fsutil --check`, and produced big-endian MIPS-III ELF kernels.  That was a
+build-only gate; real-hardware smoke is tracked separately.
 
 The N64 JPEG framebuffer viewer uses the local n64cart copy of `stb_image.h`.
 Override this path if the n64cart tree is in a different location:
@@ -1169,6 +1197,12 @@ grow:
 
 ```
 make -C sys/mips BOARD=n64 N64_ROOTFS_KBYTES=24576 kernel.z64
+```
+
+Full PCC userland currently requires 32768 KiB:
+
+```
+make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
 ```
 
 The romdisk block driver is read-only. Attempts to open it for write return
