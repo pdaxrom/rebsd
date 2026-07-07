@@ -25,12 +25,15 @@ MIPS_TOOLCHAIN = /Users/sash/Library/mipsel-toolchain
 # Makefile template for shared MIPS ports.
 #
 MALTA_PORT64 = $(filter -DMALTA64,$(PARAM))
+CI20_PORT = $(filter -DCI20,$(PARAM))
 MALTA_CPU_TUNE ?= $(if $(MALTA_PORT64),r4000,24kf)
 MIPS_ARCH_ENDIAN ?= $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),-EL,-EB)
 MIPS_ARCH ?= $(if $(MALTA_PORT64),$(MIPS_ARCH_ENDIAN) -mips3 -mabi=32 -mtune=$(MALTA_CPU_TUNE),$(MIPS_ARCH_ENDIAN) -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE))
-MALTA_QEMU_RAM ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),64M,32M)
-MALTA_RAM_KBYTES ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),65536,32768)
+MALTA_QEMU_RAM ?= $(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),64M,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),64M,32M))
+MALTA_RAM_KBYTES ?= $(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),65536,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),65536,32768))
 MALTA_RAMSWAP_KBYTES ?=
+CI20_RAM_KBYTES ?= 262144
+CI20_RAMSWAP_KBYTES ?= $(if $(CI20_PORT),32768,)
 MALTA_QEMU ?= $(if $(MALTA_PORT64),qemu-system-mips64,qemu-system-mips)
 MALTA_QEMU_CPU ?= $(if $(MALTA_PORT64),R4000,)
 MALTA_QEMU_CPU_OPT = $(if $(MALTA_QEMU_CPU),-cpu $(MALTA_QEMU_CPU),)
@@ -42,12 +45,12 @@ include ../../../target-mips.mk
 
 TOPSRC          = ../../..
 S               = ../..
-BOARD_SRC       = ../malta
+BOARD_SRC       ?= ../malta
 MALTA_HW_MODEL ?= $(if $(MALTA_PORT64),MIPS Malta R4000,MIPS Malta 24Kf)
 MALTA_VERSION_NAME ?= $(if $(MALTA_PORT64),Malta64,Malta)
 MALTA_KERNEL_LD_SCRIPT ?= ../malta/malta.ld
 MALTA_RUNTIME_KERNEL ?= $(if $(MALTA_PORT64),malta64.elf,unix.elf)
-MALTA_EARLY_TARGET ?= $(if $(MALTA_PORT64),malta64-early.elf,malta-early.elf)
+MALTA_EARLY_TARGET ?= $(if $(CI20_PORT),,$(if $(MALTA_PORT64),malta64-early.elf,malta-early.elf))
 MALTA64_STAGE_ARCH ?= -EB -mips3 -mabi=64 -mtune=r4000
 MALTA64_STAGE_CC = $(MIPS_PREFIX)gcc $(MALTA64_STAGE_ARCH) $(MIPS_CODE)
 MALTA64_STAGE_ASFLAGS = -x assembler-with-cpp -c -I. -I$(TOPSRC)/include \
@@ -67,7 +70,8 @@ endif
 ifeq ($(filter $(MIPS_ROOTFS_COMPILER),$(MIPS_ROOTFS_COMPILERS)),)
 $(error Unsupported MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER); expected one of $(MIPS_ROOTFS_COMPILERS))
 endif
-MIPS_ROOTFS_KBYTES ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),32768,16384)
+MIPS_ROOTFS_NATIVE_PCC ?= 1
+MIPS_ROOTFS_KBYTES ?= $(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),32768,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),32768,16384))
 MIPS_ROOTFS_CPU ?= $(if $(N64_USERLAND_CPU),$(N64_USERLAND_CPU),$(if $(MALTA_PORT64),vr4300,mips32r2))
 MIPS_ROOTFS_CPUS = vr4300 mips32r2
 ifneq ($(N64_USERLAND_CPU),)
@@ -113,7 +117,7 @@ MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_COMMON_FILES = $(shell find $(TOPSRC)/sys/mips/rootfs \
                            -type f -o -type l 2>/dev/null)
 MIPS_ROOTFS_OVERLAY_FILES =
-MIPS_COMMON_MACHINE_HEADERS = console cpu devmajors elf_machdep float fpu io \
+MIPS_COMMON_MACHINE_HEADERS ?= console cpu devmajors elf_machdep float fpu io \
                               layout limits machparam ramswap romdisk
 MIPS_TRACE       ?= 0
 FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
@@ -150,12 +154,12 @@ LINPACK_SMOKE_MIN_SECONDS ?= 1
 MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
 NATIVE_PCC_SMOKE_LOG ?= /private/tmp/rebsd-native-pcc-smoke.log
 MIPS_LEGACY_ROOTFS_RULES ?= 0
-MIPS_ROOTFS_BOARD_DIR = $(TOPSRC)/sys/mips/malta/rootfs
-MIPS_ROOTFS_BOARD_MANIFEST = $(TOPSRC)/sys/mips/malta/rootfs.manifest
-MIPS_ROOTFS_TARGET_PLATFORM = mips
-MIPS_ROOTFS_USERLAND_STAMP_PREFIX = mips-userland
-MIPS_ROOTFS_USER_LDSCRIPT = mips-user.ld
-MIPS_ROOTFS_USER_LDSCRIPT_SRC = $(TOPSRC)/sys/mips/user/user.ld.S
+MIPS_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/malta/rootfs
+MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
+MIPS_ROOTFS_TARGET_PLATFORM ?= mips
+MIPS_ROOTFS_USERLAND_STAMP_PREFIX ?= mips-userland
+MIPS_ROOTFS_USER_LDSCRIPT ?= mips-user.ld
+MIPS_ROOTFS_USER_LDSCRIPT_SRC ?= $(TOPSRC)/sys/mips/user/user.ld.S
 MIPS_PCC_HOST_BUILD ?= $(PCC_HOST_BUILD)
 MIPS_PCC_HOST_PREFIX ?= $(PCC_HOST_PREFIX)
 MIPS_LINPACK_SMOKE_OUT ?= $(LINPACK_SMOKE_OUT)
@@ -169,7 +173,9 @@ CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DMIPS \
                   -DROMFS_ENABLED \
                   -DMALTA_RAM_SIZE_OVERRIDE='($(MALTA_RAM_KBYTES) * 1024u)' \
                   -DMALTA_ROMDISK_BYTES_OVERRIDE='($(MIPS_ROOTFS_KBYTES) * 1024u)' \
+                  $(if $(CI20_PORT),-DCI20_RAM_SIZE_OVERRIDE='($(CI20_RAM_KBYTES) * 1024u)' -DCI20_ROMDISK_BYTES_OVERRIDE='($(MIPS_ROOTFS_KBYTES) * 1024u)',) \
                   $(if $(MALTA_RAMSWAP_KBYTES),-DMALTA_RAMSWAP_BYTES_OVERRIDE='($(MALTA_RAMSWAP_KBYTES) * 1024u)',) \
+                  $(if $(CI20_PORT),$(if $(CI20_RAMSWAP_KBYTES),-DCI20_RAMSWAP_BYTES_OVERRIDE='($(CI20_RAMSWAP_KBYTES) * 1024u)',),) \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"$(MALTA_HW_MODEL)"'
 ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
@@ -195,7 +201,6 @@ FPU_ASFLAGS     = $(ASFLAGS)
 
 KERNEL_CC       = ${CC}
 KERNEL_AS       = ${CC} -x assembler -c
-KERNEL_LD       = ${LD}
 KERNEL_COMPILER_DEPS =
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
 COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
@@ -203,9 +208,6 @@ COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
 ifeq ($(MIPS_KERNEL_COMPILER),pcc)
 KERNEL_CC       = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) -msoft-float \
                   -fomit-frame-pointer
-KERNEL_AS       = $(MIPS_PCC_AS) --elf $(MIPS_ROOTFS_ENDIAN_FLAG) \
-                  $(MIPS_ROOTFS_AS_CPU)
-KERNEL_LD       = $(MIPS_PCC_LD) --elf $(MIPS_ROOTFS_ENDIAN_FLAG)
 KERNEL_COMPILER_DEPS = $(MIPS_PCC_PROVIDER_DEPS)
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
                   if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
@@ -227,11 +229,6 @@ SYSTEM_COMPILER_VERSION = $(or $(SYSTEM_COMPILER_VERSION_$(MIPS_KERNEL_COMPILER)
 SYSTEM_BUILD_INFO = built on $(SYSTEM_BUILD_USER)@$(SYSTEM_BUILD_HOST) with $(MIPS_KERNEL_COMPILER) $(SYSTEM_COMPILER_VERSION), cpu=$(MIPS_ROOTFS_CPU), float=$(MIPS_ROOTFS_FLOAT), endian=$(MIPS_ROOTFS_ENDIAN)
 COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
-ifeq ($(MIPS_KERNEL_COMPILER),pcc)
-COMPILE_S       = ${KERNEL_CC} ${CPPFLAGS} -E $< > .deps/$(@:.o=.s) && \
-                  ${KERNEL_AS} .deps/$(@:.o=.s) -o $@
-COMPILE_FPU_S   = ${COMPILE_S}
-endif
 
 OBJS = exec_aout.o exec_conf.o exec_elf.o exec_script.o exec_subr.o \
 	init_main.o init_sysent.o kern_clock.o kern_descrip.o \
@@ -305,7 +302,7 @@ SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): $(SYSTEM_BUILD_INFO)\n";' > vers.c; \
                   ${COMPILE_VERS_C}; \
                   rm -f $@
-SYSTEM_LD       = ${KERNEL_LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o $@
+SYSTEM_LD       = ${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o $@
 SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
@@ -313,6 +310,26 @@ SYSTEM_LD_TAIL  = ${SIZE} $@; \
 all: unix $(MALTA_EARLY_TARGET) $(if $(MALTA_PORT64),malta64.elf,)
 
 kernel: unix $(if $(MALTA_PORT64),malta64.elf,)
+
+ifneq ($(CI20_PORT),)
+CI20_BINARY ?= ci20.bin
+CI20_UIMAGE ?= ci20.uImage
+CI20_UIMAGE_LOAD ?= 0x80100000
+CI20_UIMAGE_ENTRY ?= 0x80100000
+CI20_MKIMAGE ?= python3 $(TOPSRC)/sys/mips/tools/mkimage-legacy.py
+
+all: $(CI20_UIMAGE)
+
+kernel: $(CI20_UIMAGE)
+
+$(CI20_BINARY): unix.elf
+	$(OBJCOPY) -O binary unix.elf $@
+
+$(CI20_UIMAGE): $(CI20_BINARY)
+	$(CI20_MKIMAGE) -A mips -O linux -T kernel -C none \
+	    -a $(CI20_UIMAGE_LOAD) -e $(CI20_UIMAGE_ENTRY) \
+	    -n "ReBSD Ci20" -d $(CI20_BINARY) $@
+endif
 
 malta-early.o: ../malta/early_uart.S | .deps
 	$(CC) $(ASFLAGS) $< -o $@
@@ -556,7 +573,7 @@ rootfs-repack-kernel:
 	printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): $(SYSTEM_BUILD_INFO)\n";' > vers.c
 	${COMPILE_VERS_C}
 	rm -f unix.elf
-	${SYSTEM_LD} swapunix.o
+	${LD} -nostdlib -T $(MALTA_KERNEL_LD_SCRIPT) ${SYSTEM_OBJ} vers.o -o unix.elf swapunix.o
 	${SIZE} unix.elf
 	${OBJDUMP} -d -S unix.elf > unix.dis
 	${NM} -n unix.elf > unix.nm
@@ -585,8 +602,10 @@ $(FSUTIL):
 reconfig ioconf.c swapunix.c: Config ../../../tools/kconfig/kconfig | machine sys
 	../../../tools/kconfig/kconfig Config
 
+MIPS_MACHINE_LINK_TARGET ?= ..
+
 machine:
-	ln -s .. $@
+	ln -s $(MIPS_MACHINE_LINK_TARGET) $@
 
 sys:
 	ln -s ../../include $@

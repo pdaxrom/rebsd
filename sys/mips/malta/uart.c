@@ -268,6 +268,19 @@ malta_uart_intr(void)
     }
 }
 
+#ifdef MALTA_NE_ENABLED
+extern void malta_nepoll(void);
+#endif
+
+void
+mips_board_timer_intr(void)
+{
+    malta_uart_intr();
+#ifdef MALTA_NE_ENABLED
+    malta_nepoll();
+#endif
+}
+
 static void
 malta_uart_start(struct tty *tp)
 {

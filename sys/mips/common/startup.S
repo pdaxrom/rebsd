@@ -63,7 +63,9 @@ mips_kernel_entry:
         mfc0    $k0, $12
         li      $k1, ~(ST_EXL | ST_ERL | ST_KSU | ST_IM | ST_FR)
         and     $k0, $k0, $k1
-#if defined(MALTA) || defined(MALTA64) || defined(MALTA_ENABLED)
+#if defined(CI20)
+        ori     $k0, $k0, ST_EXL | ST_IE | ST_IM2
+#elif defined(MALTA) || defined(MALTA64) || defined(MALTA_ENABLED)
         ori     $k0, $k0, ST_EXL | ST_IE | ST_IM7
 #else
         ori     $k0, $k0, ST_EXL | ST_IE | ST_IM2 | ST_IM7

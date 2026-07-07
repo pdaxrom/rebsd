@@ -82,9 +82,11 @@ def command_stage(args):
     manifest_out = Path(args.manifest_out)
 
     entries = []
-    for name in ("linpack-pcc",):
+    for name in ("linpack-gcc", "linpack-pcc"):
         src = out / name
         if not src.is_file():
+            if name == "linpack-gcc":
+                continue
             raise FileNotFoundError(src)
         dst = rootfs / "root" / name
         shutil.copy2(src, dst)

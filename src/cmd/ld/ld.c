@@ -2576,24 +2576,6 @@ script_skip_parens(void)
     }
 }
 
-static void
-script_skip_block(void)
-{
-    int k, depth;
-
-    script_expect('{');
-    depth = 1;
-    while (depth > 0) {
-        k = script_next();
-        if (k == STOK_EOF)
-            error(2, "unterminated linker script block");
-        if (k == '{')
-            depth++;
-        else if (k == '}')
-            depth--;
-    }
-}
-
 static char *
 script_collect_until(int delim)
 {

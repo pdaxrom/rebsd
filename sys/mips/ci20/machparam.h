@@ -1,15 +1,11 @@
 /*
- * Machine dependent constants for MIPS ports.
+ * Machine dependent constants for MIPS Creator Ci20 / Ingenic JZ4780.
  */
 #ifndef ENDIAN
 #define LITTLE          1234
 #define BIG             4321
 #define PDP             3412
-#ifdef TARGET_LITTLE_ENDIAN
 #define ENDIAN          LITTLE
-#else
-#define ENDIAN          BIG
-#endif
 
 #define MAXSLP          20
 
@@ -60,15 +56,15 @@
 
 #define MAXMEM                  MIPS_USER_MAXMEM
 
-#define KERNEL_DATA_START       MALTA_KERNEL_DATA_START
-#define KERNEL_DATA_END         MALTA_KERNEL_DATA_END
+#define KERNEL_DATA_START       CI20_KERNEL_DATA_START
+#define KERNEL_DATA_END         CI20_KERNEL_DATA_END
 #define USER_DATA_START         MIPS_USER_VADDR_START
 #define USER_DATA_END           MIPS_USER_VADDR_END
 
 #define stacktop(siz)           (USER_DATA_END)
 #define stackbas(siz)           (USER_DATA_END-(siz))
 
-#define USIZE           MALTA_UAREA_SIZE
+#define USIZE           CI20_UAREA_SIZE
 #define SSIZE           2048
 
 #if !defined(UCB_METER) && !defined(NO_UCB_METER)

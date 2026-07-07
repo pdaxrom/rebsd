@@ -1,0 +1,48 @@
+#
+# Ci20 first-boot rootfs additions.  Shared MIPS userland layout comes from
+# sys/mips/rootfs.manifest; this file only describes Ci20 device nodes.
+#
+
+bdev /dev/romdisk
+major 0
+minor 0
+
+bdev /dev/swap
+major 1
+minor 0
+
+bdev /dev/ram0
+major 1
+minor 1
+
+cdev /dev/console
+major 0
+minor 0
+
+cdev /dev/mem
+major 1
+minor 0
+mode 0640
+
+cdev /dev/kmem
+major 1
+minor 1
+mode 0640
+
+cdev /dev/null
+major 1
+minor 2
+mode 0666
+
+cdev /dev/zero
+major 1
+minor 3
+mode 0666
+
+cdev /dev/tty
+major 2
+minor 0
+
+cdev /dev/ttyS0
+major 3
+minor 0

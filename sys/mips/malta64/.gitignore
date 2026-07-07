@@ -3,6 +3,7 @@ rootfs.stage/
 rootfs.generated.manifest
 mips-user.ld
 mips-userland*.stamp
+mips-native-*/
 machine
 sys
 vers.c

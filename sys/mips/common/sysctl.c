@@ -60,6 +60,14 @@ mips_sysctl_ram_bytes(void)
 {
     return n64_rdram_size();
 }
+#elif defined(CI20)
+#define MIPS_SYSCTL_CPU_KHZ     CI20_CPU_KHZ
+#define MIPS_SYSCTL_COUNT_KHZ   MIPS_COUNT_KHZ
+static int
+mips_sysctl_ram_bytes(void)
+{
+    return CI20_RAM_SIZE;
+}
 #else
 #define MIPS_SYSCTL_CPU_KHZ     MALTA_CPU_KHZ
 #define MIPS_SYSCTL_COUNT_KHZ   MIPS_COUNT_KHZ

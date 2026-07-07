@@ -1,0 +1,10 @@
+mips/ci20/uart.c               optional ci20_uart
+mips/ci20/devsw.c              standard
+mips/ci20/clock.c              standard
+mips/ci20/machdep.c            standard
+mips/ci20/romdisk.c            standard
+mips/ci20/romfs_backend.c      standard
+mips/common/romfs_core.c       standard
+mips/common/romfs_vfs.c        standard
+mips/ci20/ramswap.c            standard
+mips/ci20/config.c             standard

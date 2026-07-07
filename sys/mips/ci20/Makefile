@@ -1,3 +1,23 @@
+PARAM = -DCI20
+PARAM += -DMIPS32
+PARAM += -DCI20_UART_ENABLED
+PARAM += -DCREATOR_ENABLED
+PARAM += -DCONS_MINOR=0
+PARAM += -DCONS_MAJOR=0
+MALTA_HW_MODEL = MIPS Creator Ci20 / Ingenic JZ4780
+MALTA_VERSION_NAME = Ci20
+MALTA_KERNEL_LD_SCRIPT = ci20.ld
+MIPS_COMMON_MACHINE_HEADERS = cpu elf_machdep float fpu io limits
+MIPS_BOARD_MACHINE_HEADER_DIR = .
+MIPS_ROOTFS_BOARD_MANIFEST = rootfs.manifest
+MIPS_ROOTFS_BOARD_DIR = rootfs
+MIPS_MACHINE_LINK_TARGET = .
+MIPS_KERNEL_COMPILER = gcc
+MIPS_ROOTFS_COMPILER = gcc
+MIPS_TARGET_ENDIAN = little
+MIPS_ROOTFS_ENDIAN = little
+MIPS_PREFIX = /Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-
+MIPS_TOOLCHAIN = /Users/sash/Library/mipsel-toolchain
 #
 # Makefile template for shared MIPS ports.
 #
@@ -207,9 +227,50 @@ SYSTEM_BUILD_INFO = built on $(SYSTEM_BUILD_USER)@$(SYSTEM_BUILD_HOST) with $(MI
 COMPILE_S       = ${AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
 
-%OBJS
+OBJS = exec_aout.o exec_conf.o exec_elf.o exec_script.o exec_subr.o \
+	init_main.o init_sysent.o kern_clock.o kern_descrip.o \
+	kern_exec.o kern_exit.o kern_fork.o kern_glob.o kern_mman.o \
+	kern_proc.o kern_prot.o kern_prot2.o kern_resource.o kern_sig.o \
+	kern_sig2.o kern_subr.o kern_synch.o kern_sysctl.o kern_time.o \
+	subr_prf.o subr_rmap.o sys_generic.o sys_inode.o sys_pipe.o \
+	sys_process.o syscalls.o tty.o tty_subr.o tty_tty.o ufs_alloc.o \
+	ufs_bio.o ufs_bmap.o ufs_dsort.o ufs_fio.o ufs_inode.o \
+	ufs_mount.o ufs_namei.o ufs_subr.o ufs_syscalls.o \
+	ufs_syscalls2.o vfs_vnops.o vm_sched.o vm_swap.o vm_swp.o \
+	startup.o exception_entry.o exception.o fpu.o cons.o signal.o \
+	sysctl.o libkern.o stubs.o uart.o devsw.o clock.o machdep.o \
+	romdisk.o romfs_backend.o romfs_core.o romfs_vfs.o ramswap.o \
+	config.o
 
-%CFILES
+CFILES = $S/kernel/exec_aout.c $S/kernel/exec_conf.c $S/kernel/exec_elf.c \
+	$S/kernel/exec_script.c $S/kernel/exec_subr.c \
+	$S/kernel/init_main.c $S/kernel/init_sysent.c \
+	$S/kernel/kern_clock.c $S/kernel/kern_descrip.c \
+	$S/kernel/kern_exec.c $S/kernel/kern_exit.c \
+	$S/kernel/kern_fork.c $S/kernel/kern_glob.c \
+	$S/kernel/kern_mman.c $S/kernel/kern_proc.c \
+	$S/kernel/kern_prot.c $S/kernel/kern_prot2.c \
+	$S/kernel/kern_resource.c $S/kernel/kern_sig.c \
+	$S/kernel/kern_sig2.c $S/kernel/kern_subr.c \
+	$S/kernel/kern_synch.c $S/kernel/kern_sysctl.c \
+	$S/kernel/kern_time.c $S/kernel/subr_prf.c $S/kernel/subr_rmap.c \
+	$S/kernel/sys_generic.c $S/kernel/sys_inode.c \
+	$S/kernel/sys_pipe.c $S/kernel/sys_process.c \
+	$S/kernel/syscalls.c $S/kernel/tty.c $S/kernel/tty_subr.c \
+	$S/kernel/tty_tty.c $S/kernel/ufs_alloc.c $S/kernel/ufs_bio.c \
+	$S/kernel/ufs_bmap.c $S/kernel/ufs_dsort.c $S/kernel/ufs_fio.c \
+	$S/kernel/ufs_inode.c $S/kernel/ufs_mount.c \
+	$S/kernel/ufs_namei.c $S/kernel/ufs_subr.c \
+	$S/kernel/ufs_syscalls.c $S/kernel/ufs_syscalls2.c \
+	$S/kernel/vfs_vnops.c $S/kernel/vm_sched.c $S/kernel/vm_swap.c \
+	$S/kernel/vm_swp.c $S/mips/common/exception.c \
+	$S/mips/common/cons.c $S/mips/common/signal.c \
+	$S/mips/common/sysctl.c $S/mips/common/libkern.c \
+	$S/mips/common/stubs.c $S/mips/ci20/uart.c $S/mips/ci20/devsw.c \
+	$S/mips/ci20/clock.c $S/mips/ci20/machdep.c \
+	$S/mips/ci20/romdisk.c $S/mips/ci20/romfs_backend.c \
+	$S/mips/common/romfs_core.c $S/mips/common/romfs_vfs.c \
+	$S/mips/ci20/ramswap.c $S/mips/ci20/config.c swapunix.c
 
 SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
 SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
@@ -532,8 +593,221 @@ clean clean-all: mips-rootfs-clean
 .deps:
 	mkdir -p .deps
 
-%LOAD
+unix: unix.elf
 
-%RULES
+unix.elf: ${SYSTEM_DEP} ${SYSTEM_OBJ} swapunix.o
+	${SYSTEM_LD_HEAD}
+	${SYSTEM_LD} swapunix.o
+	${SYSTEM_LD_TAIL}
+
+swapunix.o: swapunix.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+all: unix
+
+exec_aout.o: $S/kernel/exec_aout.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+exec_conf.o: $S/kernel/exec_conf.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+exec_elf.o: $S/kernel/exec_elf.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+exec_script.o: $S/kernel/exec_script.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+exec_subr.o: $S/kernel/exec_subr.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+init_main.o: $S/kernel/init_main.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+init_sysent.o: $S/kernel/init_sysent.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_clock.o: $S/kernel/kern_clock.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_descrip.o: $S/kernel/kern_descrip.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_exec.o: $S/kernel/kern_exec.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_exit.o: $S/kernel/kern_exit.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_fork.o: $S/kernel/kern_fork.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_glob.o: $S/kernel/kern_glob.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_mman.o: $S/kernel/kern_mman.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_proc.o: $S/kernel/kern_proc.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_prot.o: $S/kernel/kern_prot.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_prot2.o: $S/kernel/kern_prot2.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_resource.o: $S/kernel/kern_resource.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_sig.o: $S/kernel/kern_sig.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_sig2.o: $S/kernel/kern_sig2.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_subr.o: $S/kernel/kern_subr.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_synch.o: $S/kernel/kern_synch.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_sysctl.o: $S/kernel/kern_sysctl.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+kern_time.o: $S/kernel/kern_time.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+subr_prf.o: $S/kernel/subr_prf.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+subr_rmap.o: $S/kernel/subr_rmap.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+sys_generic.o: $S/kernel/sys_generic.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+sys_inode.o: $S/kernel/sys_inode.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+sys_pipe.o: $S/kernel/sys_pipe.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+sys_process.o: $S/kernel/sys_process.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+syscalls.o: $S/kernel/syscalls.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tty.o: $S/kernel/tty.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tty_subr.o: $S/kernel/tty_subr.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+tty_tty.o: $S/kernel/tty_tty.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_alloc.o: $S/kernel/ufs_alloc.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_bio.o: $S/kernel/ufs_bio.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_bmap.o: $S/kernel/ufs_bmap.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_dsort.o: $S/kernel/ufs_dsort.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_fio.o: $S/kernel/ufs_fio.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_inode.o: $S/kernel/ufs_inode.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_mount.o: $S/kernel/ufs_mount.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_namei.o: $S/kernel/ufs_namei.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_subr.o: $S/kernel/ufs_subr.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_syscalls.o: $S/kernel/ufs_syscalls.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ufs_syscalls2.o: $S/kernel/ufs_syscalls2.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+vfs_vnops.o: $S/kernel/vfs_vnops.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+vm_sched.o: $S/kernel/vm_sched.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+vm_swap.o: $S/kernel/vm_swap.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+vm_swp.o: $S/kernel/vm_swp.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+startup.o: $S/mips/common/startup.S ${SYSTEM_DEP}
+	${COMPILE_S}
+
+exception_entry.o: $S/mips/common/exception_entry.S ${SYSTEM_DEP}
+	${COMPILE_S}
+
+exception.o: $S/mips/common/exception.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+fpu.o: $S/mips/common/fpu.S ${SYSTEM_DEP}
+	${COMPILE_FPU_S}
+
+cons.o: $S/mips/common/cons.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+signal.o: $S/mips/common/signal.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+sysctl.o: $S/mips/common/sysctl.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+libkern.o: $S/mips/common/libkern.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+stubs.o: $S/mips/common/stubs.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+uart.o: $S/mips/ci20/uart.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+devsw.o: $S/mips/ci20/devsw.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+clock.o: $S/mips/ci20/clock.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+machdep.o: $S/mips/ci20/machdep.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+romdisk.o: $S/mips/ci20/romdisk.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+romfs_backend.o: $S/mips/ci20/romfs_backend.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+romfs_core.o: $S/mips/common/romfs_core.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+romfs_vfs.o: $S/mips/common/romfs_vfs.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+ramswap.o: $S/mips/ci20/ramswap.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+config.o: $S/mips/ci20/config.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
 
 -include .deps/*.dep

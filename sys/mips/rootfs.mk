@@ -30,6 +30,7 @@ MIPS_ROOTFS_ENDIANS = big little
 ifeq ($(filter $(MIPS_ROOTFS_ENDIAN),$(MIPS_ROOTFS_ENDIANS)),)
 $(error Unsupported MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN); expected one of $(MIPS_ROOTFS_ENDIANS))
 endif
+MIPS_ROOTFS_NATIVE_PCC ?= 1
 MIPS_ROOTFS_ABI = $(MIPS_ROOTFS_ENDIAN).$(MIPS_ROOTFS_CPU).$(MIPS_ROOTFS_FLOAT)
 MIPS_ROOTFS_ENDIAN_FLAG_big = -EB
 MIPS_ROOTFS_ENDIAN_FLAG_little = -EL
@@ -60,7 +61,7 @@ MIPS_ROOTFS_AS_CPU = $(MIPS_ROOTFS_AS_CPU_$(MIPS_ROOTFS_CPU))
 MIPS_ROOTFS_CODE ?= $(if $(N64_CODE),$(N64_CODE),$(MIPS_CODE))
 MIPS_ROOTFS_GCC_PREFIX ?= $(if $(N64_PREFIX),$(N64_PREFIX),$(MIPS_PREFIX))
 
-MIPS_ROOTFS_KBYTES ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),32768,16384)
+MIPS_ROOTFS_KBYTES ?= $(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),32768,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),32768,16384))
 MIPS_ROOTFS_COMMON_DIR ?= $(TOPSRC)/sys/mips/rootfs
 MIPS_ROOTFS_BOARD_DIR ?=
 MIPS_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
@@ -240,7 +241,6 @@ MIPS_NATIVE_PCC_BUILD_SCRIPT = $(TOPSRC)/sys/mips/tools/native-pcc-build.py
 MIPS_NATIVE_PCC_BUILD ?= mips-native-pcc-build.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_PCC_DIR ?= mips-native-pcc.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_PCC_STAMP = $(MIPS_NATIVE_PCC_DIR)/.built
-MIPS_ROOTFS_NATIVE_PCC ?= $(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),1,$(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),0,1))
 ifeq ($(MIPS_ROOTFS_COMPILER),pcc)
 ifneq ($(MIPS_ROOTFS_NATIVE_PCC),1)
 $(error MIPS_ROOTFS_COMPILER=pcc requires MIPS_ROOTFS_NATIVE_PCC=1)
@@ -486,8 +486,9 @@ MIPS_LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
 MIPS_LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-mips-linpack-smoke
 MIPS_LINPACK_SMOKE_MANIFEST ?= rootfs.linpack-smoke.manifest
 MIPS_LINPACK_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.linpack-smoke.$(MIPS_ROOTFS_ABI)
+MIPS_ROOTFS_LINPACK_GCC ?= $(if $(filter gcc,$(MIPS_ROOTFS_COMPILER)),1,0)
 MIPS_ROOTFS_EXTRA_STAMPS ?=
-ifeq ($(MIPS_ROOTFS_COMPILER),pcc)
+ifeq ($(MIPS_ROOTFS_NATIVE_PCC),1)
 MIPS_ROOTFS_EXTRA_STAMPS += $(MIPS_LINPACK_ROOTFS_STAMP)
 endif
 
@@ -559,9 +560,12 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
 	    printf '\nfile /usr/share/man/cat1/%s.0\n' "$$page" >> $@; \
 	done
 	printf '\nfile %s\n' "$(MIPS_ROOTFS_INSTALLED_LDSCRIPT_PATH)" >> $@
-	if [ "$(MIPS_ROOTFS_COMPILER)" = "pcc" ]; then \
+	if [ "$(MIPS_ROOTFS_NATIVE_PCC)" = "1" ]; then \
 	    printf '\ndir /usr/lib/softfloat\n' >> $@; \
 	    printf '\nfile /usr/lib/softfloat/libpcc.a\n' >> $@; \
+	    if [ "$(MIPS_ROOTFS_LINPACK_GCC)" = "1" ]; then \
+	        printf '\nfile /root/linpack-gcc\nmode 0775\n' >> $@; \
+	    fi; \
 	    printf '\nfile /root/linpack-pcc\nmode 0775\n' >> $@; \
 	fi
 
@@ -575,6 +579,22 @@ $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS
 	    --cpu $(MIPS_ROOTFS_CPU) \
 	    --float-abi $(MIPS_ROOTFS_FLOAT) \
 	    --endian $(MIPS_ROOTFS_ENDIAN)
+	if [ "$(MIPS_ROOTFS_LINPACK_GCC)" = "1" ]; then \
+	    $(MIPS_ROOTFS_GCC_PREFIX)gcc $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) \
+	        $(MIPS_ROOTFS_TOOLCHAIN_CPP) -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
+	        -O2 -c -o $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.o \
+	        $(MIPS_LINPACK_SMOKE_SRC); \
+	    $(MIPS_ROOTFS_GCC_PREFIX)ld -m $(MIPS_ROOTFS_LD_EMULATION) \
+	        --nmagic -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
+	        $(abspath $(TOPSRC)/src/crt0.o) \
+	        $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.o \
+	        -L$(abspath $(TOPSRC)/src) \
+	        -o $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc \
+	        -lm -lc; \
+	    cp -p $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc \
+	        $(MIPS_ROOTFS_STAGE)/root/linpack-gcc; \
+	    chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-gcc; \
+	fi
 	cp -p $(MIPS_LINPACK_SMOKE_OUT)/linpack-pcc \
 	    $(MIPS_ROOTFS_STAGE)/root/linpack-pcc
 	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-pcc

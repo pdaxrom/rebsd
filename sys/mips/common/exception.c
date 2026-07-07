@@ -53,10 +53,8 @@ extern void usbnpoll(void);
 extern void n64cart_uart_intr(void);
 #endif
 #else
-extern void malta_uart_intr(void);
-#ifdef MALTA_NE_ENABLED
-extern void malta_nepoll(void);
-#endif
+void mips_board_intr(int *frame, unsigned status) __attribute__((weak));
+void mips_board_timer_intr(void) __attribute__((weak));
 #endif
 
 struct mips_exception_snapshot {
@@ -234,6 +232,29 @@ mips_reprime_timer(void)
     } while ((int)(compare - mips_read_c0_register(C0_COUNT, 0)) < 0);
 }
 
+void
+mips_clock_intr(int *frame, unsigned status)
+{
+    ct_ticks++;
+#ifdef N64
+#ifdef N64CART_ENABLED
+    n64cart_uart_intr();
+#endif
+#ifdef INPUT_ENABLED
+    n64keyboard_console_intr();
+#endif
+#else
+    if (mips_board_timer_intr)
+        mips_board_timer_intr();
+#endif
+    cnintr();
+    hardclock((caddr_t)frame[FRAME_PC], status);
+#ifdef INET
+    if (netisr)
+        netintr();
+#endif
+}
+
 static int
 mips_check_user_stack(int *frame)
 {
@@ -399,29 +420,16 @@ exception(int *frame)
         if (rawcause & MIPS_CAUSE_IP3)
             usbnpoll();
 #endif
+#else
+        if (rawcause & MIPS_CAUSE_IP2) {
+            if (mips_board_intr)
+                mips_board_intr(frame, status);
+            cnintr();
+        }
 #endif
         if (rawcause & MIPS_CAUSE_IP7) {
             mips_reprime_timer();
-            ct_ticks++;
-#ifdef N64
-#ifdef N64CART_ENABLED
-            n64cart_uart_intr();
-#endif
-#ifdef INPUT_ENABLED
-            n64keyboard_console_intr();
-#endif
-#else
-            malta_uart_intr();
-#ifdef MALTA_NE_ENABLED
-            malta_nepoll();
-#endif
-#endif
-            cnintr();
-            hardclock((caddr_t)frame[FRAME_PC], status);
-#ifdef INET
-            if (netisr)
-                netintr();
-#endif
+            mips_clock_intr(frame, status);
         }
         if ((cause & USER) && runrun) {
             u.u_frame = frame;

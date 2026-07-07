@@ -1,4 +1,5 @@
 .deps/
+.build-mode.*
 Makefile
 machine
 sys
@@ -24,6 +25,10 @@ n64.ld
 n64-user.ld
 n64-userland.stamp
 n64-userland.*.stamp
+n64-native-runtime*/
+n64-native-tools*/
+n64-native-pcc*/
+n64-native-pcc-build*/
 n64-native-runtime/
 n64-native-tools/
 n64-native-pcc/

@@ -1,0 +1,30 @@
+#
+# MIPS Creator Ci20 / Ingenic JZ4780.
+#
+architecture    "mips"
+cpu             "MIPS32"
+board           "CI20"
+
+makeoptions     MIPS_TOOLCHAIN="/Users/sash/Library/mipsel-toolchain",
+                MIPS_PREFIX="/Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-",
+                MIPS_ROOTFS_ENDIAN=little,
+                MIPS_TARGET_ENDIAN=little,
+                MIPS_ROOTFS_COMPILER=gcc,
+                MIPS_KERNEL_COMPILER=gcc,
+                MIPS_MACHINE_LINK_TARGET=".",
+                MIPS_ROOTFS_BOARD_DIR=rootfs,
+                MIPS_ROOTFS_BOARD_MANIFEST="rootfs.manifest",
+                MIPS_BOARD_MACHINE_HEADER_DIR=".",
+                MIPS_COMMON_MACHINE_HEADERS="cpu elf_machdep float fpu io limits",
+                MALTA_KERNEL_LD_SCRIPT="ci20.ld",
+                MALTA_VERSION_NAME="Ci20",
+                MALTA_HW_MODEL="MIPS Creator Ci20 / Ingenic JZ4780"
+
+options         "CONS_MAJOR=0", "CONS_MINOR=0"
+
+device          "ci20_uart"
+
+service         creator
+
+config          unix    root on major 0 minor 0
+                        swap on major 1 minor 0
