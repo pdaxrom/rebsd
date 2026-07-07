@@ -1671,20 +1671,15 @@ mips_hardfp64_store(NODE *p)
 {
 	if (!mips_split_hardfp64_mem()) {
 		expand(p, 0,
-		    "\ts.d AR,AL\t\t# store double floating-point reg\n"
-		    "\tnop\n");
+		    "\ts.d AR,AL\t\t# store double floating-point reg\n");
 		return;
 	}
 #ifdef TARGET_BIG_ENDIAN
 	expand(p, 0, "\tswc1 UR,AL\t\t# split double store\n"
-	    "\tnop\n"
-	    "\tswc1 AR,UL\n"
-	    "\tnop\n");
+	    "\tswc1 AR,UL\n");
 #else
 	expand(p, 0, "\tswc1 AR,AL\t\t# split double store\n"
-	    "\tnop\n"
-	    "\tswc1 UR,UL\n"
-	    "\tnop\n");
+	    "\tswc1 UR,UL\n");
 #endif
 }
 

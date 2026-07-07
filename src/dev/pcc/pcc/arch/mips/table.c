@@ -48,9 +48,7 @@
 #ifdef TARGET_BIG_ENDIAN
 #define MIPS_LL_STORE_MEM \
 	"	sw UR,AL		# store (u)longlong\n" \
-	"	nop\n" \
-	"	sw AR,UL\n" \
-	"	nop\n"
+	"	sw AR,UL\n"
 #define MIPS_LL_LOAD_MEM \
 	"	lw U1,AL	# load (u)longlong to reg\n" \
 	"	nop\n" \
@@ -64,9 +62,7 @@
 #else
 #define MIPS_LL_STORE_MEM \
 	"	sw UR,UL		# store (u)longlong\n" \
-	"	nop\n" \
-	"	sw AR,AL\n" \
-	"	nop\n"
+	"	sw AR,AL\n"
 #define MIPS_LL_LOAD_MEM \
 	"	lw U1,UL	# load (u)longlong to reg\n" \
 	"	nop\n" \
@@ -577,8 +573,7 @@ struct optab table[] = {
 	SOREG,	TWORD,
 		NCREG,	RDEST,
 		"	cvt.w.s A1,AL	# convert float to (u)int\n"
-		"	s.s A1,AR\n"
-		"	nop\n", },
+		"	s.s A1,AR\n", },
 
 { SCONV,	INAREG,
 	SCREG,	TDOUBLE|TLDOUBLE,
@@ -1068,22 +1063,19 @@ struct optab table[] = {
 	SOREG|SNAME,	TWORD|TPOINT,
 	SAREG,		TWORD|TPOINT,
 		0,	RDEST,
-		"	sw AR,AL		# store (u)int/(u)long\n"
-		"	nop\n", },
+		"	sw AR,AL		# store (u)int/(u)long\n", },
 
 { ASSIGN,	FOREFF|INAREG,
 	SOREG|SNAME,	TSHORT|TUSHORT,
 	SAREG,		TSHORT|TUSHORT,
 		0,	RDEST,
-		"	sh AR,AL		# store (u)short\n"
-		"	nop\n", },	
+		"	sh AR,AL		# store (u)short\n", },
 
 { ASSIGN,	FOREFF|INAREG,
 	SOREG|SNAME,	TCHAR|TUCHAR,
 	SAREG,		TCHAR|TUCHAR,
 		0,	RDEST,
-		"	sb AR,AL		# store (u)char\n"
-		"	nop\n", },	
+		"	sb AR,AL		# store (u)char\n", },
 
 { ASSIGN,	FOREFF|INBREG,
 	SOREG|SNAME,	TLONGLONG|TULONGLONG,
@@ -1095,8 +1087,7 @@ struct optab table[] = {
 	SOREG|SNAME,	TFLOAT,
 	SAREG,		TFLOAT,
 		0,	RDEST,
-		"	sw AR,AL		# store soft-float word\n"
-		"	nop\n", },
+		"	sw AR,AL		# store soft-float word\n", },
 
 { ASSIGN,	FOREFF|INBREG|FEATURE_SOFTFLOAT,
 	SOREG|SNAME,	TDOUBLE|TLDOUBLE,
@@ -1140,8 +1131,7 @@ struct optab table[] = {
 	SNAME|SOREG,	TFLOAT,
 	SCREG,		TFLOAT,
 		0,	RDEST,
-		"	s.s AR,AL		# store floating-point reg to oreg/sname\n"
-		"	nop\n", },
+		"	s.s AR,AL		# store floating-point reg to oreg/sname\n", },
 
 { ASSIGN,	FOREFF|INCREG,
 	SNAME|SOREG,	TDOUBLE|TLDOUBLE,
