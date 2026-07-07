@@ -223,12 +223,24 @@ eoftn(struct interpass_prolog * ipp)
 	}
 
 	if (mips_omit_fp) {
-		if (mips_frame_adjust)
+		if (mips_frame_adjust > 0 && mips_frame_adjust <= 32763) {
+			printf("\tlw %s,%d(%s)\n", rnames[RA],
+			    mips_frame_adjust + 4, rnames[SP]);
 			printf("\taddiu %s,%s,%d\n",
 			    rnames[SP], rnames[SP], mips_frame_adjust);
-		printf("\tlw %s,4(%s)\n", rnames[RA], rnames[SP]);
-		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP],
-		    ARGINIT/SZCHAR);
+			printf("\tjr %s\n", rnames[RA]);
+			printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP],
+			    ARGINIT/SZCHAR);
+		} else {
+			if (mips_frame_adjust)
+				printf("\taddiu %s,%s,%d\n",
+				    rnames[SP], rnames[SP], mips_frame_adjust);
+			printf("\tlw %s,4(%s)\n", rnames[RA], rnames[SP]);
+			printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP],
+			    ARGINIT/SZCHAR);
+			printf("\tjr %s\n", rnames[RA]);
+			printf("\tnop\n");
+		}
 	} else {
 		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[FP],
 		    ARGINIT/SZCHAR);
@@ -236,10 +248,10 @@ eoftn(struct interpass_prolog * ipp)
 		    rnames[SP]);
 		printf("\tlw %s,%d(%s)\n", rnames[FP], 0-ARGINIT/SZCHAR,
 		    rnames[SP]);
+		printf("\tjr %s\n", rnames[RA]);
+		printf("\tnop\n");
 	}
 
-	printf("\tjr %s\n", rnames[RA]);
-	printf("\tnop\n");
 	mips_omit_fp = 0;
 	mips_frame_adjust = 0;
 
