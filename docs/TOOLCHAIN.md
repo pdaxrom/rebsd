@@ -21,7 +21,10 @@ Current policy:
   `MIPS_KERNEL_COMPILER=pcc` or `N64_KERNEL_COMPILER=pcc`.
 - Userland build: GCC by default.
 - Supported userland compiler selectors: `gcc` and `pcc`.
-- Current PCC target endianness: build-time big-endian `mips-rebsd`.
+- Supported rootfs endian selectors: `big` and `little`.  Big-endian PCC uses
+  the `mips-rebsd` cross target; little-endian PCC uses `mipsel-rebsd`.
+  The current `maltael` board build is GCC-only until the little-endian PCC
+  rootfs gate is validated for that board.
 - PCC CPU selectors: `vr4300` and `mips32r2`, with CPU-specific instruction
   mode and C ABI alignment.
 - PCC float ABI selectors: `hard` and `soft`, with ABI-specific build stamps.
@@ -46,9 +49,8 @@ points into the same userland/rootfs choice:
   `vr4300` and `mips32r2`.
 - `N64_USERLAND_FLOAT` and `MIPS_ROOTFS_FLOAT` select the userland/rootfs float
   ABI when PCC is used.  Supported values are `hard` and `soft`.
-- `MIPS_ROOTFS_ENDIAN` selects the future rootfs endian ABI.  The current
-  supported value is `big`; `little` is reserved for the later mipsel Malta
-  port.
+- `MIPS_ROOTFS_ENDIAN` selects the rootfs endian ABI.  Supported values are
+  `big` and `little`; `little` is used by `BOARD=maltael`.
 - `N64_USERLAND_CPU`, `N64_USERLAND_FLOAT`, and `N64_USERLAND_ENDIAN` are N64
   aliases for the same ABI selectors.  If both alias families are set, they
   must agree.
@@ -56,8 +58,40 @@ points into the same userland/rootfs choice:
 They are aliases for the same compiler mode.  If only one is set, the other
 entry point inherits it.  If both are set to different values, the build fails
 early.  Both variables default to `gcc`; `pcc` selects the imported PCC
-frontend for userland while keeping the in-tree ReBSD a.out `as`, `ld`, `ar`,
-and `ranlib` as the target binary tools.
+frontend for userland while keeping the in-tree ReBSD `as`, `ld`, `ar`, and
+`ranlib` as the target binary tools.
+
+## MIPS ELF Support
+
+MIPS userland is now linked as static ELF32 and the kernel keeps compatibility
+with legacy a.out exec.  The in-tree ReBSD MIPS tools are still the required
+assembler/linker/archive tools; they are not replaced by GNU binutils:
+
+- `as` accepts `--elf`, `-EB`, `-EL`, and CPU selectors such as
+  `-march=vr4300` or `-march=mips32r2`.
+- `ld` accepts `--elf`, `-EB`, `-EL`, `-T script`, `-L`, `-l`, and standard
+  linker-script constructs used by the current MIPS scripts, including
+  `MEMORY`, `SECTIONS`, `NOLOAD`, explicit section addresses, `> region`,
+  `/DISCARD/`, `KEEP`, `PROVIDE`, and `ASSERT`.
+- The installed user linker scripts live under `/usr/lib/ldscripts`, not
+  directly under `/usr/lib`.
+- Big-endian rootfs builds install `/usr/lib/ldscripts/elf32-bigmips.ld`.
+- Little-endian rootfs builds install `/usr/lib/ldscripts/elf32-littlemips.ld`.
+- The old compatibility path `/usr/lib/elf32-mips.ld` is deliberately not
+  installed.
+
+For cross PCC SDKs, the same scripts are installed under the target sysroot
+inside the SDK:
+
+```text
+cross-pcc/mips-rebsd/lib/ldscripts/elf32-bigmips.ld
+cross-pcc/mipsel-rebsd/lib/ldscripts/elf32-littlemips.ld
+```
+
+The ReBSD linker chooses the default script from its own target name and endian
+mode.  A `mips-rebsd-ld` search uses the big-endian target directory, while a
+`mipsel-rebsd-ld` search uses the little-endian target directory.  Passing
+`-T/path/to/script.ld` remains the explicit override.
 
 Common build forms:
 
@@ -67,6 +101,7 @@ make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
+make -C sys/mips BOARD=maltael rootfs.img kernel
 make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
 make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc malta64.elf
 make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc unix.elf
@@ -155,6 +190,7 @@ Standalone cross SDK builds use common MIPS selectors:
 
 ```sh
 sys/mips/tools/build-cross-pcc-sdk.sh --cpu vr4300 --float soft --endian big --prefix /path/cross-pcc
+sys/mips/tools/build-cross-pcc-sdk.sh --cpu mips32r2 --float hard --endian little --prefix /path/cross-pcc
 make -C sys/mips -f sdk.mk cross-pcc-sdk CPU=mips32r2 FLOAT=hard ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
 make -C sys/mips -f sdk.mk cross-pcc-sdk-tools CPU=mips32r2 FLOAT=soft ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
 make -C sys/mips -f sdk.mk cross-pcc-sdk-runtime CPU=mips32r2 FLOAT=soft ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
@@ -173,14 +209,18 @@ cross-pcc/mips-rebsd/lib/libc.a
 cross-pcc/mips-rebsd/lib/libm.a
 cross-pcc/mips-rebsd/lib/libpcc.a
 cross-pcc/mips-rebsd/lib/softfloat/libpcc.a
+cross-pcc/mips-rebsd/lib/ldscripts/elf32-bigmips.ld
 ```
+
+For `--endian little`, replace `mips-rebsd` with `mipsel-rebsd` and
+`elf32-bigmips.ld` with `elf32-littlemips.ld`.
 
 For rootfs builds, `MIPS_PCC_PROVIDER=cross` uses
 `MIPS_PCC_HOST_PREFIX=/path/cross-pcc`.  `MIPS_PCC_PROVIDER=system` may be used
 on a ReBSD host with a compatible CPU/toolchain, so the build does not require
 building a host PCC unconditionally.
 
-For the current big-endian PCC target, CPU/ISA selection is a runtime compiler
-mode but endian selection is not.  A future little-endian Malta port should use
-a separate `mipsel-rebsd` compiler target so headers, predefined macros, and
+CPU/ISA and float ABI are runtime compiler modes.  Endian is target identity:
+big-endian SDKs install `mips-rebsd-*` tools and little-endian SDKs install
+`mipsel-rebsd-*` tools so headers, predefined macros, linker scripts, and
 libraries stay internally consistent.

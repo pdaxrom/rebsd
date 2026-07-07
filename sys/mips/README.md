@@ -10,6 +10,8 @@ Layout:
   n64cart hardware.
 - `malta/` - QEMU Malta board support: 16550 serial console, QEMU-loaded
   read-only root filesystem, 4 MiB wired user window, and RAM-backed swap.
+- `malta64/` - QEMU Malta/R4000 compatibility board config.  It uses the same
+  shared Malta support with the VR4300/MIPS-III ABI profile.
 - `maltael/` - little-endian QEMU Malta board config.  It reuses the Malta
   board support code and builds the root filesystem with external `mipsel` GCC.
 
@@ -18,6 +20,67 @@ Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
 `make -C sys/mips BOARD=malta kernel` for the QEMU Malta kernel.
 Use `make -C sys/mips BOARD=maltael rootfs.img kernel` for the little-endian
 Malta GCC-only bring-up.
+
+## Build Matrix
+
+The shared MIPS rootfs rules support these compiler and ABI selectors:
+
+```text
+MIPS_ROOTFS_COMPILER=gcc|pcc
+MIPS_KERNEL_COMPILER=gcc|pcc
+MIPS_ROOTFS_CPU=vr4300|mips32r2
+MIPS_ROOTFS_FLOAT=hard|soft
+MIPS_ROOTFS_ENDIAN=big|little
+```
+
+The normal big-endian boards are:
+
+```sh
+make -C sys/mips BOARD=malta rootfs.img kernel
+make -C sys/mips BOARD=malta64 rootfs.img kernel
+make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc unix.elf
+make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc malta64.elf
+```
+
+The little-endian board is currently the GCC bring-up path:
+
+```sh
+make -C sys/mips BOARD=maltael rootfs.img kernel
+```
+
+`maltael` sets `MIPS_ROOTFS_ENDIAN=little`, uses
+`qemu-system-mipsel`, and defaults to
+`/Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-`.  It keeps
+`MIPS_ROOTFS_COMPILER=gcc` until the little-endian PCC rootfs gate is validated
+for the board.
+
+## ELF Userland
+
+MIPS userland is linked as static ELF32.  The kernel can execute both the new
+ELF binaries and legacy a.out binaries.  Rootfs endian is carried through all
+generated artifacts:
+
+- `MIPS_ROOTFS_ENDIAN=big` uses `-EB`, `elf32ebmip`, and
+  `/usr/lib/ldscripts/elf32-bigmips.ld`.
+- `MIPS_ROOTFS_ENDIAN=little` uses `-EL`, `elf32elmip`, and
+  `/usr/lib/ldscripts/elf32-littlemips.ld`.
+
+The linker scripts are installed under `/usr/lib/ldscripts` in the target
+rootfs.  The old flat `/usr/lib/elf32-mips.ld` path is not installed.  Native
+and cross PCC builds use the ReBSD MIPS `as` and `ld` in ELF mode; GNU binutils
+are not part of the PCC target toolchain.
+
+Standalone PCC SDK builds use the same selectors:
+
+```sh
+sys/mips/tools/build-cross-pcc-sdk.sh --cpu vr4300 --float hard --endian big --prefix /path/cross-pcc
+sys/mips/tools/build-cross-pcc-sdk.sh --cpu mips32r2 --float hard --endian little --prefix /path/cross-pcc
+```
+
+Big-endian SDKs install `mips-rebsd-*` tools and
+`mips-rebsd/lib/ldscripts/elf32-bigmips.ld`.  Little-endian SDKs install
+`mipsel-rebsd-*` tools and
+`mipsel-rebsd/lib/ldscripts/elf32-littlemips.ld`.
 
 ## Running Malta in QEMU
 

@@ -1,31 +1,38 @@
 # ReBSD PCC Porting Notes
 
 This document records the current ReBSD/MIPS Portable C Compiler integration
-state.  The supported milestone is a C compiler for static ReBSD a.out systems.
-GCC remains the default compiler.  PCC is supported for opt-in userland/rootfs
+state.  The supported milestone is a C compiler for static ReBSD ELF userland
+while preserving kernel exec compatibility with legacy a.out binaries.  GCC
+remains the default compiler.  PCC is supported for opt-in userland/rootfs
 builds and for explicit kernel build gates on Malta, Malta64, and N64.  Stage0
 and the target binary tools still use the existing ReBSD flow unless a command
 explicitly says otherwise.
 
 ## Target Contract
 
-- Target triples: `mips-rebsd`, `mips-unknown-rebsd`.
-- Compatibility aliases: `mips-retrobsd`, `mips-unknown-retrobsd`.
-- Target machine: big-endian MIPS o32.
-- Object format: ReBSD a.out.
-- Target tools: ReBSD `as`, `ld`, `ar`, `ranlib`, `nm`, and `size`.
+- Target triples: `mips-rebsd`, `mipsel-rebsd`, `mips-unknown-rebsd`, and
+  `mipsel-unknown-rebsd`.
+- Compatibility aliases: `mips-retrobsd`, `mipsel-retrobsd`,
+  `mips-unknown-retrobsd`, and `mipsel-unknown-retrobsd`.
+- Target machine: MIPS o32, big-endian for `mips-rebsd` and little-endian for
+  `mipsel-rebsd`.
+- Object format: static ELF32 for new MIPS userland, with legacy ReBSD a.out
+  support retained in the kernel and tools.
+- Target tools: ReBSD `as`, `ld`, `ar`, `ranlib`, `nm`, `size`, and `aout`.
 - Startup file: `/usr/lib/crt0.o`.
 - Default system include path: `/usr/include`.
 - Default system library path: `/usr/lib`.
+- Default linker script path: `/usr/lib/ldscripts/elf32-bigmips.ld` or
+  `/usr/lib/ldscripts/elf32-littlemips.ld`, selected by target endian.
 - Default PCC helper linkage: `-lpcc -lc -lpcc`.
 - Soft-float helper override path: `/usr/lib/softfloat/libpcc.a`.
 - Default target sysroot: `/` when no `--sysroot` is supplied.
 
 PCC defines both ReBSD identity macros and RetroBSD compatibility macros because
 parts of the tree still carry RetroBSD-era conditionals.  The target also
-defines the normal Unix and MIPS big-endian/o32 preprocessor surface.  The
-selected float ABI controls whether PCC defines `__mips_hard_float` or
-`__mips_soft_float`.
+defines the normal Unix and MIPS o32 preprocessor surface, including endian
+macros selected by the target triple.  The selected float ABI controls whether
+PCC defines `__mips_hard_float` or `__mips_soft_float`.
 
 ReBSD/MIPS currently treats `long double` as IEEE64, matching `double`.  PCC and
 the public headers must therefore report the target `long double` limits rather
@@ -71,22 +78,22 @@ The rootfs selectors shared by Malta, Malta64, and N64 are:
 
 - `MIPS_ROOTFS_CPU=vr4300|mips32r2`
 - `MIPS_ROOTFS_FLOAT=hard|soft`
-- `MIPS_ROOTFS_ENDIAN=big`
+- `MIPS_ROOTFS_ENDIAN=big|little`
 
 The N64 entry point also accepts the alias variables
 `N64_USERLAND_CPU`, `N64_USERLAND_FLOAT`, and `N64_USERLAND_ENDIAN`.  If both
 the N64 and common `MIPS_ROOTFS_*` names are set, they must agree.
 
-`MIPS_ROOTFS_ENDIAN=little` is reserved for the future mipsel Malta port and is
-rejected by the current big-endian `mips-rebsd` PCC target.
+`MIPS_ROOTFS_ENDIAN=little` selects the `mipsel-rebsd` cross target for PCC
+SDK/rootfs flows.  The checked-in `maltael` board build currently keeps
+`MIPS_ROOTFS_COMPILER=gcc` and uses the external mipsel GCC toolchain until the
+little-endian PCC rootfs gate is validated for that board.
 
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus
-compiler-level MIPS soft-float support.  Endianness remains fixed by the PCC
-target build: the current `mips-rebsd` target is big-endian, and a future Malta
-little-endian port should use a separate `mipsel-rebsd` target rather than a
-runtime `-EL` switch on this compiler.
+compiler-level MIPS soft-float support.  Endianness is fixed by the PCC target
+triple: `mips-rebsd` is big-endian, and `mipsel-rebsd` is little-endian.
 
 Completed for this milestone:
 
@@ -95,9 +102,9 @@ Completed for this milestone:
   `-mips32r2`) and pass the selected CPU to both `ccom` and `as`.
 - The selected CPU is part of the C ABI layout.  `vr4300` keeps the current
   8-byte alignment policy; `mips32r2` uses the 4-byte Malta o32 layout.
-- Keep big-endian/little-endian selection target-build-time only for PCC.
-  Reject little-endian command-line mode on the current big-endian target
-  instead of silently producing mixed-mode objects.
+- Keep big-endian/little-endian selection as target identity for PCC.  Do not
+  rely on a runtime `-EL`/`-EB` switch to mutate a compiler target into the
+  opposite endian ABI.
 - The ReBSD assembler's VR4300 instruction checking and mips32r2/VR4300
   text alignment are selected by the `-march`/`-mips*` mode passed by PCC, not
   only by the assembler binary's compile-time default.
@@ -110,9 +117,15 @@ Completed for this milestone:
   stamp, so hard-float and soft-float runtime, native PCC, rootfs, and smoke
   artifacts do not share directories.
 - PCC userland runtime uses a wrapper-free two-stage bootstrap: build standalone
-  cross a.out tools plus cross PCC without target runtime libraries, then use
+  ReBSD tools plus cross PCC without target runtime libraries, then use
   that cross PCC to build `crt0.o`, libc, libm, and `libpcc.a`, then build
   native PCC and the rootfs against the PCC-built runtime.
+- The ReBSD assembler and linker support ELF mode for MIPS.  Kernel PCC gates
+  invoke `as --elf` and `ld --elf`; userland links with the board-generated
+  ELF linker script.
+- Rootfs and SDK installs use `/usr/lib/ldscripts/elf32-bigmips.ld` or
+  `/usr/lib/ldscripts/elf32-littlemips.ld`.  The old flat
+  `/usr/lib/elf32-mips.ld` path is intentionally not installed.
 - Cross SDK and target rootfs layouts keep hard-float and soft-float compiler
   runtime libraries separate.  The normal runtime lives in `lib/libpcc.a`; the
   soft-float override lives in `lib/softfloat/libpcc.a`.
@@ -166,6 +179,7 @@ The standalone SDK is built by `sys/mips/tools/build-cross-pcc-sdk.sh` or
 
 ```sh
 sys/mips/tools/build-cross-pcc-sdk.sh --cpu vr4300 --float soft --endian big --prefix /path/cross-pcc
+sys/mips/tools/build-cross-pcc-sdk.sh --cpu mips32r2 --float hard --endian little --prefix /path/cross-pcc
 make -C sys/mips -f sdk.mk cross-pcc-sdk CPU=mips32r2 FLOAT=hard ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
 make -C sys/mips -f sdk.mk cross-pcc-sdk-tools CPU=mips32r2 FLOAT=soft ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
 make -C sys/mips -f sdk.mk cross-pcc-sdk-runtime CPU=mips32r2 FLOAT=soft ENDIAN=big MIPS_SDK_PREFIX=/path/cross-pcc
@@ -184,7 +198,11 @@ cross-pcc/mips-rebsd/lib/libc.a
 cross-pcc/mips-rebsd/lib/libm.a
 cross-pcc/mips-rebsd/lib/libpcc.a
 cross-pcc/mips-rebsd/lib/softfloat/libpcc.a
+cross-pcc/mips-rebsd/lib/ldscripts/elf32-bigmips.ld
 ```
+
+For `--endian little`, the installed target prefix is `mipsel-rebsd` and the
+installed script is `mipsel-rebsd/lib/ldscripts/elf32-littlemips.ld`.
 
 The SDK is usable directly through the installed binaries; no PCC wrapper is
 required for normal compile, assemble, link, or `aout` inspection paths.  GCC
@@ -305,7 +323,7 @@ policy, not as compiler-runtime helpers:
 - Wide-character strings, memory routines, numeric parsers, byte/wide
   conversion helpers, and wide stdio are libc owned.
 - `sys/cdefs.h` compatibility macros are named and limited to the C/static
-  a.out target contract.
+  MIPS target contract.
 - Locale-aware multibyte, UTF-8, C++ startup, TLS, and shared-library behavior
   are intentionally not hidden behind placeholder functions.
 
@@ -316,22 +334,26 @@ PCC and future kernel builds select the correct compiler helpers without
 wrapper scripts or rebuilding the SDK.
 
 `src/dev/pcc/pcc-libs/csu` provides upstream PCC `crtbegin.o` and `crtend.o`,
-but ReBSD does not enable them in the default C link path.  The current a.out
-toolchain and libc startup support flat linker-defined ctor/dtor ranges, which
-is enough for C constructor/destructor attributes in the C gate.
+but ReBSD does not enable them in the default C link path.  The current static
+ELF toolchain and libc startup support flat linker-defined ctor/dtor ranges,
+which is enough for C constructor/destructor attributes in the C gate.
 
 ## Toolchain Requirements
 
-The ReBSD a.out toolchain is part of the supported PCC target:
+The ReBSD MIPS toolchain is part of the supported PCC target:
 
-- `ld` accepts `-L`, `-l`, and `--sysroot[=DIR]`, defaults sysroot to `/`, and
-  applies sysroot only to standard library directories.
+- `ld` accepts `--elf`, `-EB`, `-EL`, `-T`, `-L`, `-l`, and
+  `--sysroot[=DIR]`, defaults sysroot to `/`, and applies sysroot only to
+  standard library directories.
+- `ld` reads installed ELF scripts from `/usr/lib/ldscripts` in rootfs builds
+  and from `$prefix/mips*-rebsd/lib/ldscripts` in cross SDK builds.
 - `ld` preserves 8-byte text/data/BSS alignment needed by MIPS FPU literals and
   `double` storage.
-- `as` accepts the GCC/PCC MIPS syntax used by the imported backend, including
-  ctor/dtor sections, `.init_array`/`.fini_array`, `.eh_frame`, `neg`/`negu`,
-  absolute `la`, `symbol+-offset` expressions, UTF-8 symbol bytes, and the
-  relocation forms needed by PCC-built shell/login paths.
+- `as` accepts `--elf`, `-EB`, `-EL`, and the GCC/PCC MIPS syntax used by the
+  imported backend, including ctor/dtor sections, `.init_array`/`.fini_array`,
+  `.eh_frame`, `neg`/`negu`, absolute `la`, `symbol+-offset` expressions,
+  UTF-8 symbol bytes, and the relocation forms needed by PCC-built shell/login
+  paths.
 - `as` has a VR4300-compatible instruction checking mode used by N64 and the
   Malta64/R4000 compatibility gate.
 - Target `cc` invokes absolute `/usr/bin/as` and `/usr/bin/ld` so boot-time and
@@ -467,7 +489,7 @@ needs a real frontend gate plus a runtime startup policy for `crtbegin.o`,
 partial links.
 
 TLS and shared libraries are explicitly deferred to future work.  They are not
-supported by the current static a.out target.  Keep the corresponding upstream
+supported by the current static ELF target.  Keep the corresponding upstream
 PCC tests expected-fail unless ReBSD grows a concrete ABI and runtime policy for
 them.
 

@@ -47,17 +47,18 @@ The current port boots a base RetroBSD system from a cartridge ROM image:
   `/dev/zero`, `/dev/ttyS0`, `/dev/rgbled0`, `/dev/cartflash0`,
   `/dev/fb0`, Joybus input devices, and the pty nodes are generated into the
   root filesystem from kernel device definitions.
-- Userland is built from the normal `src/cmd` tree as a.out binaries linked
-  for the N64 user address window.
+- Userland is built from the normal `src/cmd` tree as static ELF32 big-endian
+  binaries linked for the N64 user address window.  The kernel also keeps
+  legacy a.out exec compatibility.
 - The N64 rootfs selects its BSD command subset, `/sbin` tools, and
   library-backed interactive utilities through the shared `src/cmd/Makefile`
   install flow.
 - The normal boot path runs `/etc/rc`, starts `/libexec/getty` for the enabled
   `/etc/ttys` lines, and logs in through `/bin/login`.
 - Userland FPU is enabled and the kernel saves/restores FPU state.
-- The first in-tree toolchain cleanup is in place: `as`, `ld`, `ranlib`,
-  `nm`, `aout`, `size`, `strip`, and `libc` `nlist()` now use target-endian
-  a.out object I/O, so they no longer assume PIC32 little-endian files.
+- The in-tree ReBSD toolchain supports the current ELF userland path and still
+  keeps target-endian a.out object I/O for legacy compatibility in `as`, `ld`,
+  `ranlib`, `nm`, `aout`, `size`, `strip`, and libc `nlist()`.
 
 Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
 the expanded command set:
@@ -396,10 +397,12 @@ glue, not the ReBSD kernel image.
 The in-tree RetroBSD toolchain is not yet the primary N64 build toolchain. Its
 current N64 work is staged as follows:
 
-- target-endian a.out I/O is shared by `as`, `ld`, `ranlib`, `nm`, `aout`,
+- target-endian object I/O is shared by `as`, `ld`, `ranlib`, `nm`, `aout`,
   `size`, and `strip`;
 - N64 builds define `TARGET_BIG_ENDIAN`, so those tools default to big-endian
-  a.out and still accept `-EL`/`-EB` where applicable;
+  output and still accept `-EL`/`-EB` where applicable;
+- the ReBSD assembler and linker accept ELF mode.  N64 PCC kernel builds use
+  `mips-rebsd-as --elf -EB -march=vr4300` and `mips-rebsd-ld --elf -EB`;
 - N64 builds define `TARGET_VR4300`, so the in-tree `ld` default executable
   text base is `0x00400000`. The original `0x7f008000` default is retained for
   non-VR4300 targets and is not valid for N64 user `exec`;
@@ -433,13 +436,14 @@ current N64 work is staged as follows:
   native compiler runtime/archive set under `/usr/lib`, including `crt0.o`,
   `libc.a`, `libm.a`, and `libpcc.a`. PCC soft-float builds also stage the
   ABI-specific helper archive under `/usr/lib/softfloat/libpcc.a`;
-- the `/usr/lib` compiler runtime is generated as big-endian a.out for the in-tree
-  toolchain. `crt0.o` is assembled directly by the N64 native `as` from
-  `lib/startup/crt0.s`; `libc.a` and `libm.a` are built in an isolated
-  `n64-native-runtime` tree and reindexed with the N64 native `ranlib` after
-  staging, so `__.SYMDEF` matches the rootfs file mtimes. Nothing in `/usr/lib` is
-  copied from the normal external GCC/ELF userland artifacts, because the
-  in-tree `ld` correctly rejects ELF objects as `bad magic`;
+- the `/usr/lib` compiler runtime is generated as big-endian ELF for the
+  in-tree toolchain. `crt0.o` is assembled directly by the ReBSD assembler from
+  `lib/startup/crt0.s`; `libc.a`, `libm.a`, and `libpcc.a` are built in an
+  isolated `n64-native-runtime` tree and reindexed with the ReBSD `ranlib`
+  after staging, so `__.SYMDEF` matches the rootfs file mtimes;
+- the generated N64 user linker script is installed as
+  `/usr/lib/ldscripts/elf32-bigmips.ld`.  The old flat
+  `/usr/lib/elf32-mips.ld` path is not installed;
 - the shared rootfs no longer exposes root-level `/include`, `/.profile`, or
   `/lib/*.a` compatibility entries; target headers and static compiler runtime
   archives live under `/usr/include` and `/usr/lib`;
@@ -471,7 +475,8 @@ current N64 work is staged as follows:
   static/global/local initialization, `const` objects and pointers, struct
   layout, bitfields, and big-endian union byte order. It has been confirmed on
   N64 after increasing the volatile `/var` RAM disk to 1 MiB;
-- N64 native `as`/`ld` keep text segments 8-byte aligned in the a.out path.
+- N64 native `as`/`ld` keep text segments 8-byte aligned in ELF and legacy
+  a.out paths.
   This is required because PCC emits local hard-float double literals in text
   and the VR4300 faults on `ldc1` from 4-byte-only aligned addresses. The
   linker also emits real padding between input text segments, so a start file
@@ -1143,7 +1148,7 @@ The current shared manifest includes a broader first-pass BSD userland:
   `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `chmod`, `date`, `dd`, `df`, `echo`,
   `expr`, `hostname`, `kill`, `ln`, `pwd`, `sed`, `sleep`, `stty`, `sync`,
   `test`, `tr`, `uname`, `true`, `false`, and `[`)
-- main `/usr/bin`: the broader BSD command set, diagnostics, native a.out
+- main `/usr/bin`: the broader BSD command set, diagnostics, native ReBSD
   toolchain (`as`, `ld`, `ar`, `ranlib`, `nm`, `strip`, `cc`, `pcc`, `cpp`,
   PCC `ccom` via `/usr/libexec/pcc`), interpreter tools, and smoke scripts
 - terminal and interpreter tools backed by additional shared libraries:
@@ -1816,8 +1821,8 @@ N64 CPU model remains in `hw.model`. `uname -a` should therefore end with
 mips
 ```
 
-User executables are linked as ELF first and then converted to a.out with
-`tools/elf2aout/elf2aout`, matching the existing RetroBSD userland format.
+User executables are linked as static ELF32.  Legacy a.out execution remains
+available in the kernel, but the current N64 rootfs installs ELF binaries.
 
 ## Linker scripts
 
@@ -1844,6 +1849,10 @@ It includes `layout.h` and is preprocessed into:
 ```
 sys/mips/n64/n64-user.ld
 ```
+
+The rootfs installs this user script as
+`/usr/lib/ldscripts/elf32-bigmips.ld`.  The old flat
+`/usr/lib/elf32-mips.ld` path is not installed.
 
 The preprocessing rule uses `-undef` so the compiler's predefined `mips`
 macro cannot corrupt `OUTPUT_ARCH(mips)`.
