@@ -242,7 +242,6 @@ struct optab table[] = {
 	SBREG,	TULONGLONG,
 		NBREG,	RESC1,
 		"	lhu A1,AL	# convert oreg short to ulonglong\n"
-		"	nop\n"
 		"	move U1,$zero\n", },
 
 { SCONV,	INBREG,

@@ -1475,6 +1475,19 @@ Backend work, kept small:
     smoke with a native assembler error.  Keep that shape for the future
     compact late scheduler, where final instruction order can be validated
     with explicit dependency checks instead of ad hoc node markers.
+  - Narrow unsigned conversion cleanup landed on 2026-07-08: the
+    memory-source `short -> unsigned long long` conversion now uses its
+    existing independent `move U1,$zero` as the `lhu` load-use spacer instead
+    of emitting an explicit `nop`.  This is a one-rule table cleanup and does
+    not affect the Linpack hot path: Malta64/VR4300 stayed at 3380
+    instructions and 926 `nop`; Malta/mips32r2 big-endian and
+    MaltaEL/mips32r2 little-endian stayed at 3692 instructions and 926 `nop`.
+  - Post-narrow-conversion-cleanup QEMU correctness gates passed with
+    `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian, and
+    MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
   - Audit integer loads and hard-float load templates that append `nop` after
     memory operations.
   - Land this in small patches, each followed by PCC regressions plus Linpack
