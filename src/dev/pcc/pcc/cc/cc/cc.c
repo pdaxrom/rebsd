@@ -1837,6 +1837,50 @@ mips_fold_move_addiu_line(const char *move, const char *add, char *out,
 }
 
 static int
+mips_parse_signed_imm16(const char *tok, int *imm)
+{
+	char *end;
+	long val;
+
+	if (strcmp(tok, "0xffffffff") == 0 || strcmp(tok, "0xFFFFFFFF") == 0) {
+		*imm = -1;
+		return 1;
+	}
+	errno = 0;
+	val = strtol(tok, &end, 0);
+	if (errno != 0 || *end != '\0' || val < -32768 || val > 32767)
+		return 0;
+	*imm = (int)val;
+	return 1;
+}
+
+static int
+mips_fold_li_addiu_line(const char *line, char *out, size_t outsz)
+{
+	char op[16], dst[16], imm[64];
+	const char *s, *comment;
+	int dstreg, immval;
+	int n;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) || strcmp(op, "li") != 0)
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (!mips_parse_gpr_operand(&s, dst, sizeof(dst), &dstreg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_tail_operand(s, imm, sizeof(imm), &comment) ||
+	    !mips_parse_signed_imm16(imm, &immval))
+		return 0;
+	if (comment != NULL)
+		n = snprintf(out, outsz, "\taddiu %s,$zero,%d\t%s",
+		    dst, immval, comment);
+	else
+		n = snprintf(out, outsz, "\taddiu %s,$zero,%d\n",
+		    dst, immval);
+	return n > 0 && (size_t)n < outsz;
+}
+
+static int
 mips_is_plain_jump(const char *line)
 {
 	char op[16];
@@ -2037,6 +2081,7 @@ mips_fold_late_peepholes(char *path)
 {
 	char line[4096], next[4096], after[4096], folded[4096];
 	FILE *in, *out;
+	const char *delay;
 	char *tmp;
 	long pos;
 	long pos2;
@@ -2076,14 +2121,22 @@ mips_fold_late_peepholes(char *path)
 					changed = 1;
 					continue;
 				}
+				delay = NULL;
 				if (mips_can_move_to_plain_control_delay(line,
-				    next)) {
+				    next))
+					delay = line;
+				else if (mips_fold_li_addiu_line(line, folded,
+				    sizeof(folded)) &&
+				    mips_can_move_to_plain_control_delay(folded,
+				    next))
+					delay = folded;
+				if (delay != NULL) {
 					pos2 = ftell(in);
 					if (pos2 != -1 &&
 					    fgets(after, sizeof(after), in) != NULL) {
 						if (mips_is_nop(after)) {
 							fputs(next, out);
-							fputs(line, out);
+							fputs(delay, out);
 							prev_control = 0;
 							changed = 1;
 							continue;
