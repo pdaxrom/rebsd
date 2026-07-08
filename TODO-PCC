@@ -2041,11 +2041,50 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - Shift-before-load delay fill landed on 2026-07-08: the MIPS final
+    postprocess rewrites only the conservative `sll`/`srl`/`sra`; `lw`;
+    `nop`; immediate load-use pattern into `lw`; shift; load-use.  The shift
+    must not already be in a branch delay slot, must not affect the load
+    address or destination, and the pass is limited to ordinary GPR `lw`.
+  - Post-shift-load-delay-fill `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 2963 instructions
+      and 623 `nop` to 2919 instructions and 579 `nop`; total improvement
+      from the original baseline is -768 instructions and -654 `nop`.
+      PCC/GCC instruction ratio improved to 2.565, `nop` ratio improved to
+      13.786, and multiply/divide count stayed 61.
+    - Malta/mips32r2 big-endian PCC Linpack changed from the previous 3098
+      instructions and 505 `nop` to 3054 instructions and 461 `nop`; total
+      improvement from the original baseline is -1265 instructions and -1092
+      `nop`.  PCC/GCC instruction ratio improved to 2.823, `nop` ratio
+      improved to 92.200, and multiply/divide count stayed 2.
+    - MaltaEL/mips32r2 little-endian PCC Linpack changed from the previous
+      3011 instructions and 418 `nop` to 2967 instructions and 374 `nop`;
+      total improvement from the original baseline is -1352 instructions and
+      -1179 `nop`.  PCC/GCC instruction ratio improved to 2.742, `nop` ratio
+      improved to 74.800, and multiply/divide count stayed 2.
+      Counter artifacts:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`,
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`,
+      and
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-shift-load-delay-fill QEMU correctness gates passed with
+    `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian, and
+    MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
   - A broader independent integer-load gap fill was tested but not landed: it
     saved about 20 Linpack instructions/`nop` on the counters, but failed the
     Malta native `libc-abi` assembler smoke with
     `as: libc-abi-cc.s, 712: bad instruction arguments`.  Keep this as a
     scheduler TODO until the exact assembler/codegen interaction is understood.
+  - A VR4300-only `l.d; nop; s.d` double-copy fold was tested but not landed:
+    current Linpack has about 40 same-FPR FPU copy patterns, but rewriting them
+    to integer `ld`/`sd` makes the current ReBSD target assembler fail with
+    `bad instruction`.  Revisit only after explicit MIPS3/VR4300 `ld`/`sd`
+    support is added to the assembler and validated in o32 userland, interrupt
+    handling, Malta64 smoke, and real N64 hardware.  Keep it VR4300/MIPS3-only;
+    it must not be enabled for MIPS32R2.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.

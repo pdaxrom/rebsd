@@ -1918,6 +1918,69 @@ mips_fold_li_addiu_line(const char *line, char *out, size_t outsz)
 }
 
 static int
+mips_parse_shift_imm_gprs(const char *line, unsigned long long *regsp)
+{
+	char op[16], tok[16], imm[64];
+	const char *s, *comment;
+	char *end;
+	long val;
+	int dstreg, srcreg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    (strcmp(op, "sll") != 0 && strcmp(op, "srl") != 0 &&
+	    strcmp(op, "sra") != 0))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &srcreg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_tail_operand(s, imm, sizeof(imm), &comment))
+		return 0;
+	errno = 0;
+	val = strtol(imm, &end, 0);
+	if (errno != 0 || *end != '\0' || val < 0 || val > 31)
+		return 0;
+	*regsp = (1ULL << dstreg) | (1ULL << srcreg);
+	return 1;
+}
+
+static int
+mips_is_lw_load(const char *line, struct mips_load_dest *destp)
+{
+	char op[16];
+	struct mips_load_dest dest;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) || strcmp(op, "lw") != 0)
+		return 0;
+	dest = mips_load_dest(line);
+	if (dest.kind != MIPS_LOAD_GPR)
+		return 0;
+	*destp = dest;
+	return 1;
+}
+
+static int
+mips_can_fill_shift_load_delay(const char *shift, const char *load,
+    const char *next)
+{
+	struct mips_load_dest dest;
+	unsigned long long shift_regs;
+
+	if (!mips_parse_shift_imm_gprs(shift, &shift_regs) ||
+	    !mips_is_lw_load(load, &dest))
+		return 0;
+	if (!mips_is_load_gap_insn(next, &dest) ||
+	    !mips_line_touches_load(next, &dest))
+		return 0;
+	if (mips_line_touches_gpr(load, shift_regs) ||
+	    mips_line_touches_load(shift, &dest))
+		return 0;
+	return 1;
+}
+
+static int
 mips_is_plain_jump(const char *line)
 {
 	char op[16];
@@ -2198,6 +2261,100 @@ mips_repair_vr4300_multiply_errata(char *path, int warn_delay_slot)
 }
 
 static int
+mips_fill_shift_load_delay_nops(char *path)
+{
+	char line[4096], load[4096], nop[4096], next[4096];
+	FILE *in, *out;
+	char *tmp;
+	long pos;
+	int prev_delay_slot;
+	int changed;
+	int failed;
+
+	tmp = mips_asm_temp_name(path);
+	if (tmp == NULL)
+		return 1;
+	in = fopen(path, "r");
+	if (in == NULL) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	out = fopen(tmp, "w");
+	if (out == NULL) {
+		fclose(in);
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+
+	prev_delay_slot = 0;
+	changed = 0;
+	while (fgets(line, sizeof(line), in) != NULL) {
+		if (!prev_delay_slot && mips_is_instruction(line)) {
+			pos = ftell(in);
+			if (pos != -1 && fgets(load, sizeof(load), in) != NULL) {
+				if (fgets(nop, sizeof(nop), in) != NULL &&
+				    fgets(next, sizeof(next), in) != NULL &&
+				    mips_is_nop(nop) &&
+				    mips_can_fill_shift_load_delay(line, load,
+				    next)) {
+					fputs(load, out);
+					fputs(line, out);
+					fputs(next, out);
+					prev_delay_slot = mips_has_delay_slot(next);
+					changed = 1;
+					continue;
+				}
+				if (ferror(in) ||
+				    fseek(in, pos, SEEK_SET) == -1) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
+			} else if (pos != -1) {
+				if (ferror(in)) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
+			}
+		}
+		fputs(line, out);
+		if (mips_is_instruction(line))
+			prev_delay_slot = mips_has_delay_slot(line);
+	}
+
+	failed = ferror(in) || ferror(out);
+	if (fclose(out) == EOF)
+		failed = 1;
+	if (fclose(in) == EOF)
+		failed = 1;
+	if (failed) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	if (changed) {
+		if (rename(tmp, path) == -1) {
+			unlink(tmp);
+			free(tmp);
+			return 1;
+		}
+	} else {
+		unlink(tmp);
+	}
+	free(tmp);
+	return 0;
+}
+
+static int
 mips_fold_late_peepholes(char *path)
 {
 	char line[4096], next[4096], after[4096], folded[4096];
@@ -2322,6 +2479,8 @@ mips_fold_late_peepholes(char *path)
 static int
 mips_postprocess_asm(char *path)
 {
+	if (mips_fill_shift_load_delay_nops(path))
+		return 1;
 	if (mips_trim_load_delay_nops(path))
 		return 1;
 	if (mips_fold_late_peepholes(path))
