@@ -1837,6 +1837,14 @@ mips_fold_move_addiu_line(const char *move, const char *add, char *out,
 }
 
 static int
+mips_is_plain_jump(const char *line)
+{
+	char op[16];
+
+	return mips_parse_opcode(line, op, sizeof(op)) && strcmp(op, "j") == 0;
+}
+
+static int
 mips_can_trim_load_nop(FILE *in, const char *next,
     const struct mips_load_dest *dest)
 {
@@ -1974,10 +1982,13 @@ mips_trim_load_delay_nops(char *path)
 static int
 mips_fold_move_peepholes(char *path)
 {
-	char line[4096], next[4096], folded[4096];
+	char line[4096], next[4096], after[4096], folded[4096];
+	char mdst[16], msrc[16];
 	FILE *in, *out;
 	char *tmp;
 	long pos;
+	long pos2;
+	int mdstreg, msrcreg;
 	int prev_control;
 	int changed;
 	int failed;
@@ -2013,6 +2024,30 @@ mips_fold_move_peepholes(char *path)
 					prev_control = mips_is_control_transfer(folded);
 					changed = 1;
 					continue;
+				}
+				if (mips_parse_move_gprs(line, mdst, sizeof(mdst),
+				    msrc, sizeof(msrc), &mdstreg, &msrcreg) &&
+				    mips_is_plain_jump(next)) {
+					pos2 = ftell(in);
+					if (pos2 != -1 &&
+					    fgets(after, sizeof(after), in) != NULL) {
+						if (mips_is_nop(after)) {
+							fputs(next, out);
+							fputs(line, out);
+							prev_control = 0;
+							changed = 1;
+							continue;
+						}
+					} else if (pos2 != -1) {
+						if (ferror(in)) {
+							fclose(out);
+							fclose(in);
+							unlink(tmp);
+							free(tmp);
+							return 1;
+						}
+						clearerr(in);
+					}
 				}
 				if (fseek(in, pos, SEEK_SET) == -1) {
 					fclose(out);
