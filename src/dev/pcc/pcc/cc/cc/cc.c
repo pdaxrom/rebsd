@@ -2118,13 +2118,73 @@ mips_is_jump_delay_gpr_alu(const char *line)
 }
 
 static int
+mips_parse_base_offset_operand(const char **sp)
+{
+	char imm[64];
+	const char *s, *start, *end;
+	size_t len;
+	int reg;
+
+	s = mips_skip_space(*sp);
+	start = s;
+	while (*s != '\0' && *s != '\n' && *s != '#' && *s != '(')
+		++s;
+	if (*s != '(')
+		return 0;
+	end = s;
+	while (end > start && (end[-1] == ' ' || end[-1] == '\t'))
+		--end;
+	len = (size_t)(end - start);
+	if (len == 0 || len >= sizeof(imm))
+		return 0;
+	memcpy(imm, start, len);
+	imm[len] = '\0';
+	if (!mips_parse_signed_imm16(imm, &reg))
+		return 0;
+	++s;
+	reg = mips_parse_gpr(s, &s);
+	if (reg < 0 || *s != ')')
+		return 0;
+	*sp = s + 1;
+	return 1;
+}
+
+static int
+mips_is_jump_delay_store(const char *line)
+{
+	char op[16];
+	char tok[16];
+	const char *s;
+	int isfp, reg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	isfp = strcmp(op, "s.s") == 0 || strcmp(op, "s.d") == 0 ||
+	    strcmp(op, "swc1") == 0 || strcmp(op, "sdc1") == 0;
+	if (!isfp && strcmp(op, "sb") != 0 && strcmp(op, "sh") != 0 &&
+	    strcmp(op, "sw") != 0 && strcmp(op, "sd") != 0)
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (isfp) {
+		reg = mips_parse_fpr(s, &s);
+		if (reg < 0)
+			return 0;
+	} else if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg))
+		return 0;
+	return mips_skip_comma(&s) && mips_parse_base_offset_operand(&s) &&
+	    mips_line_ends_after_operands(s);
+}
+
+static int
 mips_can_move_to_plain_jump_delay(const char *line)
 {
 	char dst[16], src[16];
 	int dstreg, srcreg;
 
 	return mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
-	    &dstreg, &srcreg) || mips_is_jump_delay_gpr_alu(line);
+	    &dstreg, &srcreg) || mips_is_jump_delay_gpr_alu(line) ||
+	    (mips_cpu == MIPS_CPU_VR4300 && mips_is_jump_delay_store(line));
 }
 
 static int

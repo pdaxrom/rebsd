@@ -49,6 +49,29 @@ not active items for the current C/static-a.out PCC milestone.
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+- [x] VR4300 plain jump delay slots can use strict simple stores.
+  - The MIPS backend now allows the plain `j`/`jal` delay-slot postpass to move
+    only simple numeric `imm16(base)` stores on `-march=vr4300`: `sb`, `sh`,
+    `sw`, `sd`, `s.s`, `s.d`, `swc1`, and `sdc1`.
+  - Symbolic, macro-like, and otherwise non-plain store operands are rejected by
+    the parser; the earlier broad store-delay rule was discarded after it
+    exposed a Malta64 hard-float boot failure ending in `panic: no procs`.
+  - MIPS32R2 store-delay filling is intentionally still disabled. A native
+    Malta `as` run rejected a PCC smoke `types-cc.s` store in a jump delay slot
+    at line 634 while the host cross assembler accepted the same file, so this
+    needs a separate assembler-policy investigation before enabling it there.
+  - Current VR4300 Linpack assembly baseline:
+    GCC `1138` instructions / `42` nops, PCC `2895` instructions / `567` nops,
+    PCC/GCC instruction ratio `2.544`, nop ratio `13.500`, branch/jump delay
+    nops `135`.
+  - Current MIPS32R2 control baseline after the VR4300 guard:
+    GCC `1082` instructions / `5` nops, PCC `2746` instructions / `165` nops,
+    PCC/GCC instruction ratio `2.538`, nop ratio `33.000`, branch/jump delay
+    nops `136`.
+  - Full PCC-kernel/PCC-rootfs QEMU gates passed again on Malta64, Malta, and
+    Malta little-endian, both hard-float rootfs and `MIPS_ROOTFS_FLOAT=soft`.
+    PCC kernel builds included the existing `-fomit-frame-pointer` path and the
+    kernel COP1 guard.
 - [x] ReBSD `ld` accepts `-L` and `-l` library search options.
   - `ld` now collects all `-L` search directories before resolving any `-l`
     library, so `cc file.c -lm` works even when the compiler driver appends
@@ -94,6 +117,16 @@ not active items for the current C/static-a.out PCC milestone.
   - After the C helper set stays stable, add MIPS assembly implementations for
     selected hot 64-bit arithmetic, shift, and conversion helpers and keep the
     C versions as the reference oracle/fallback.
+- [ ] Validate MIPS32R2 store-in-jump-delay-slot policy.
+  - Before enabling simple store delay-slot filling outside VR4300, reproduce
+    the native Malta `as` rejection from the PCC smoke `types` case, decide
+    whether it is a native assembler parser bug or an unsupported syntax/policy
+    case, and add a direct assembler smoke before changing backend scheduling.
+- [ ] Verify VR4300/o32 `ld`/`sd` instruction policy.
+  - Confirm where PCC emits or accepts `ld`/`sd` for o32 VR4300/N64, whether
+    each case is a real MIPS III 64-bit load/store or an assembler macro, and
+    keep the delay-slot parser and assembler compatibility rules aligned with
+    that decision.
 
 ## Phase 1: Host PCC Configuration
 
