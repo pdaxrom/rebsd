@@ -1012,6 +1012,25 @@ udivpow2con(NODE *p)
 }
 
 static void
+urempow2con(NODE *p)
+{
+	int shift = mips_con_log2(getlval(p->n_right));
+	CONSZ mask = getlval(p->n_right) - 1;
+
+	if (shift <= 16) {
+		expand(p, 0, "\tandi A1,AL,");
+		printf(CONFMT "\t# unsigned modulo by power-of-two constant\n",
+		    mask);
+	} else {
+		expand(p, 0, "\tsll A1,AL,");
+		printf("%d\t# unsigned modulo by power-of-two constant\n",
+		    32 - shift);
+		expand(p, 0, "\tsrl A1,A1,");
+		printf("%d\n", 32 - shift);
+	}
+}
+
+static void
 sdivtwocon(NODE *p)
 {
 	printf("\tsrl %s,", rnames[AT]);
@@ -1019,6 +1038,29 @@ sdivtwocon(NODE *p)
 	printf(",31\t# signed division by 2 bias\n");
 	expand(p, 0, "\taddu A1,AL,$at\n");
 	expand(p, 0, "\tsra A1,A1,1\n");
+}
+
+static void
+srempow2con(NODE *p)
+{
+	int shift = mips_con_log2(getlval(p->n_right));
+	CONSZ mask = getlval(p->n_right) - 1;
+
+	printf("\tsra %s,", rnames[AT]);
+	expand(p, 0, "AL");
+	printf(",31\t# signed modulo by power-of-two bias\n");
+	printf("\tsrl %s,%s,%d\n", rnames[AT], rnames[AT], 32 - shift);
+	expand(p, 0, "\taddu A1,AL,$at\n");
+	if (shift <= 16) {
+		expand(p, 0, "\tandi A1,A1,");
+		printf(CONFMT "\n", mask);
+	} else {
+		expand(p, 0, "\tsll A1,A1,");
+		printf("%d\n", 32 - shift);
+		expand(p, 0, "\tsrl A1,A1,");
+		printf("%d\n", 32 - shift);
+	}
+	expand(p, 0, "\tsubu A1,A1,$at\n");
 }
 
 void
@@ -1120,6 +1162,14 @@ zzzcode(NODE * p, int c)
 
 	case 'U':		/* unsigned division by power-of-two constant */
 		udivpow2con(p);
+		break;
+
+	case 'V':		/* unsigned modulo by power-of-two constant */
+		urempow2con(p);
+		break;
+
+	case 'W':		/* signed modulo by power-of-two constant */
+		srempow2con(p);
 		break;
 
 	default:

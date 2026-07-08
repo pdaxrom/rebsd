@@ -1859,6 +1859,40 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - Power-of-two modulo strength reduction landed on 2026-07-08: the MIPS
+    table now matches unsigned and signed `% pow2` constants.  Unsigned
+    modulo lowers to a mask; signed modulo lowers to the C-correct
+    trunc-toward-zero bias/mask/subtract sequence, so negative dividends still
+    produce negative remainders.  This removes `div`/`mfhi` latency without a
+    general magic-number division pass and applies to VR4300 and MIPS32R2.
+  - Post-power-of-two-modulo-strength-reduction `pcc-perf-baseline` assembly
+    counters:
+    - Malta64/VR4300 PCC Linpack kept the previous 2994 instructions but
+      changed from 658 `nop` to 654 `nop`; multiply/divide count fell from 63
+      to 61.  Total improvement from the original baseline is -693
+      instructions and -579 `nop`.  PCC/GCC instruction ratio stayed 2.631,
+      and `nop` ratio improved to 15.571.
+    - Malta/mips32r2 big-endian PCC Linpack kept the previous 3306
+      instructions but changed from 658 `nop` to 654 `nop`;
+      multiply/divide count fell from 63 to 61.  Total improvement from the
+      original baseline is -1013 instructions and -899 `nop`.  PCC/GCC
+      instruction ratio stayed 3.055, and `nop` ratio improved to 130.800.
+    - MaltaEL/mips32r2 little-endian PCC Linpack kept the previous 3219
+      instructions but changed from 571 `nop` to 567 `nop`;
+      multiply/divide count fell from 63 to 61.  Total improvement from the
+      original baseline is -1100 instructions and -986 `nop`.  PCC/GCC
+      instruction ratio stayed 2.975, and `nop` ratio improved to 113.400.
+      Counter artifacts:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`,
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`,
+      and
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-power-of-two-modulo-strength-reduction QEMU correctness gates passed
+    with `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian,
+    and MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
   - A broader independent integer-load gap fill was tested but not landed: it
     saved about 20 Linpack instructions/`nop` on the counters, but failed the
     Malta native `libc-abi` assembler smoke with
@@ -1895,9 +1929,9 @@ Target-independent or shared optimizer work:
 
 - [ ] Implement integer strength reduction outside the MIPS backend where
   practical.
-  - A narrow backend-only power-of-two cleanup for MIPS multiply and divide is
-    already in place; this item remains open for the general middle-end
-    transform and non-power-of-two constant division/modulo.
+  - A narrow backend-only power-of-two cleanup for MIPS multiply, divide, and
+    modulo is already in place; this item remains open for the general
+    middle-end transform and non-power-of-two constant division/modulo.
   - Optimize multiply, divide, and modulo by constants using shifts/adds or
     magic-number sequences when this is valid for signedness and overflow
     rules.
@@ -1936,8 +1970,9 @@ Milestone order:
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
-  - The backend-only MIPS power-of-two special case is complete and green, but
-    the broader target-independent transform remains open.
+  - The backend-only MIPS power-of-two multiply/divide/modulo special cases
+    are complete and green, but the broader target-independent transform
+    remains open.
 - [ ] Milestone F: small static inlining/specialization outside the backend.
 - [ ] Milestone G: repeat Malta, Malta64/R4000, and real N64 benchmark gates;
   decide whether further work belongs in PCC or in source-level hot paths.
