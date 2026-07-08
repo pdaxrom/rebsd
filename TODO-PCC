@@ -2349,6 +2349,53 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - Signed-imm16 `li` before integer-load delay fill landed on 2026-07-08
+    for VR4300: the same narrow postprocess now rewrites an exact
+    `li dst,imm16`; `lw`; `nop`; immediate load-use window into `lw`;
+    real `addiu dst,$zero,imm`; load-use.  This keeps the backend small by
+    reusing the existing final assembly cleanup instead of adding a general
+    scheduler.  The rule only accepts the already supported signed-imm16
+    `li` fold, rejects `$sp`, rejects control-transfer load users, rejects
+    loads that touch the `li` registers, and rejects cases where the folded
+    `addiu` touches the loaded GPR.  It stays VR4300-only because the
+    containing pass only runs for selected CPU `VR4300`.
+  - A broader `li` load-delay variant was tested but not landed: allowing
+    control-transfer consumers reduced the static Malta64/VR4300 Linpack
+    counter to 2886 instructions and 558 `nop`, but the Malta64 hard-float
+    PCC-kernel/PCC-rootfs gate failed while building/running the native target
+    `types` test with `as: types-cc.s, 3750: bad instruction arguments`.
+    The landed rule keeps control transfers outside this local movement until
+    the exact assembler/codegen interaction is understood.
+  - Post-signed-imm16-`li`-load-delay-fill `pcc-perf-baseline` assembly
+    counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 2895 instructions
+      and 567 `nop` to 2888 instructions and 560 `nop`; PCC/GCC instruction
+      ratio is 2.538, `nop` ratio is 13.333, branch/jump/call delay `nop`
+      count is 135, multiply/divide count is 61, and load-followed-by-`nop`
+      is 281.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 and MaltaEL/mips32r2 code generation are intentionally
+      unchanged by this pass because the containing load-delay fill remains
+      VR4300-only.  Their correctness coverage is the full hard/soft QEMU
+      matrix below.
+  - Post-signed-imm16-`li`-load-delay-fill full PCC-kernel/PCC-rootfs QEMU
+    correctness matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08:
+    Malta64/VR4300 hard-float and soft-float, Malta/mips32r2 big-endian
+    hard-float and soft-float, and MaltaEL/mips32r2 little-endian hard-float
+    and soft-float.  The kernel C compile path still uses
+    `-msoft-float -fomit-frame-pointer`; rootfs float mode is varied
+    independently by the hard/soft gates.  Linpack smoke rates observed in
+    QEMU: Malta64 hard about 12669-12841 KFLOPS, Malta64 soft about 775-785
+    KFLOPS, Malta hard about 7159 KFLOPS, Malta soft about 890-891 KFLOPS,
+    MaltaEL hard about 8086-8656 KFLOPS, and MaltaEL soft about 909-919
+    KFLOPS.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -2417,8 +2464,9 @@ Milestone order:
     call-delay-slot, callee-saved restore, helper-call delay-slot, and
     stack-argument memory `FUNARG`, narrow unsigned conversion, long-long
     compare delay-slot, conservative integer load-delay, VR4300-only
-    shift-before-load delay fill, and final move/GPR-ALU/signed-imm16-`li`
-    control-delay plus non-RA GPR call-delay patches are complete and green;
+    shift-before-load delay fill, final move/GPR-ALU/signed-imm16-`li`
+    load-delay/control-delay, and non-RA GPR call-delay patches are complete
+    and green;
     MIPS32R2 one-instruction integer multiply and MIPS32R2 interlocked
     dependent-load `nop` cleanup are also complete and green.  Remaining FP
     load/compute and broader load scheduling, including the MIPS32R2 version

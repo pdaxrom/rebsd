@@ -2060,6 +2060,30 @@ mips_can_fill_move_load_delay(const char *move, const char *load,
 }
 
 static int
+mips_can_fill_li_load_delay(const char *li, const char *load,
+    const char *next, char *delay, size_t delaysz)
+{
+	struct mips_load_dest dest;
+	unsigned long long li_regs;
+
+	if (!mips_fold_li_addiu_line(li, delay, delaysz) ||
+	    !mips_parse_gpr_alu_regs(delay, &li_regs) ||
+	    !mips_is_lw_load(load, &dest))
+		return 0;
+	if ((li_regs & (1ULL << 29)) != 0)
+		return 0;
+	if (mips_is_control_transfer(next))
+		return 0;
+	if (!mips_is_load_gap_insn(next, &dest) ||
+	    !mips_line_touches_load(next, &dest))
+		return 0;
+	if (mips_line_touches_gpr(load, li_regs) ||
+	    mips_line_touches_load(delay, &dest))
+		return 0;
+	return 1;
+}
+
+static int
 mips_can_fill_gpr_alu_fpu_load_delay(const char *alu, const char *load,
     const char *next)
 {
@@ -2425,8 +2449,10 @@ static int
 mips_fill_shift_load_delay_nops(char *path)
 {
 	char line[4096], load[4096], nop[4096], next[4096];
+	char delay[4096];
 	FILE *in, *out;
 	char *tmp;
+	const char *fill;
 	long pos;
 	int can_fill;
 	int prev_delay_slot;
@@ -2459,6 +2485,7 @@ mips_fill_shift_load_delay_nops(char *path)
 				if (fgets(nop, sizeof(nop), in) != NULL &&
 				    fgets(next, sizeof(next), in) != NULL &&
 				    mips_is_nop(nop)) {
+					fill = line;
 					can_fill =
 					    mips_can_fill_shift_load_delay(line,
 					    load, next) ||
@@ -2466,9 +2493,15 @@ mips_fill_shift_load_delay_nops(char *path)
 					    load, next) ||
 					    mips_can_fill_gpr_alu_fpu_load_delay(
 					    line, load, next);
+					if (!can_fill &&
+					    mips_can_fill_li_load_delay(line,
+					    load, next, delay, sizeof(delay))) {
+						fill = delay;
+						can_fill = 1;
+					}
 					if (can_fill) {
 						fputs(load, out);
-						fputs(line, out);
+						fputs(fill, out);
 						fputs(next, out);
 						prev_delay_slot =
 						    mips_has_delay_slot(next);
