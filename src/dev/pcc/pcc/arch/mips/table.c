@@ -58,6 +58,13 @@
 	"	sw UL,($sp)\n" \
 	"	sw AL,4($sp)\n" \
 	"	#nop\n"
+#define MIPS_LL_PUSH_MEM_ARG \
+	"	lw U1,AL	# load stack arg\n" \
+	"	lw A1,UL\n" \
+	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
+	"	sw U1,($sp)\n" \
+	"	sw A1,4($sp)\n" \
+	"	#nop\n"
 #else
 #define MIPS_LL_STORE_MEM \
 	"	sw UR,UL		# store (u)longlong\n" \
@@ -70,6 +77,13 @@
 	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
 	"	sw UL,4($sp)\n" \
 	"	sw AL,($sp)\n" \
+	"	#nop\n"
+#define MIPS_LL_PUSH_MEM_ARG \
+	"	lw U1,UL	# load stack arg\n" \
+	"	lw A1,AL\n" \
+	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
+	"	sw U1,4($sp)\n" \
+	"	sw A1,($sp)\n" \
 	"	#nop\n"
 #endif
 
@@ -1695,6 +1709,15 @@ struct optab table[] = {
  *  Function arguments
  */
 
+{ FUNARG,	FOREFF,
+	SOREG|SNAME,	TWORD|TPOINT,
+	SANY,	TWORD|TPOINT,
+		NAREG,	0,
+		"	lw A1,AL	# load stack arg\n"
+		"	subu $sp,$sp,4		# save function arg to stack\n"
+		"	sw A1,($sp)\n"
+		"	#nop\n", },
+
 /* intentionally write out the register for (u)short/(u)char */
 { FUNARG,	FOREFF,
 	SAREG,	TWORD|TPOINT|TUSHORT|TSHORT|TUCHAR|TCHAR,
@@ -1703,6 +1726,12 @@ struct optab table[] = {
 		"	subu $sp,$sp,4		# save function arg to stack\n"
 		"	sw AL,($sp)\n"
 		"	#nop\n", },
+
+{ FUNARG,	FOREFF,
+	SOREG|SNAME,	TLONGLONG|TULONGLONG,
+	SANY,	TLONGLONG|TULONGLONG,
+		NBREG,	0,
+		MIPS_LL_PUSH_MEM_ARG, },
 
 { FUNARG,	FOREFF,
 	SBREG,	TLONGLONG|TULONGLONG,
@@ -1717,6 +1746,12 @@ struct optab table[] = {
 		"	subu $sp,$sp,4		# save soft-float arg to stack\n"
 		"	sw AL,($sp)\n"
 		"	#nop\n", },
+
+{ FUNARG,	FOREFF|FEATURE_SOFTFLOAT,
+	SOREG|SNAME,	TDOUBLE|TLDOUBLE,
+	SANY,	TDOUBLE|TLDOUBLE,
+		NBREG,	0,
+		MIPS_LL_PUSH_MEM_ARG, },
 
 { FUNARG,	FOREFF|FEATURE_SOFTFLOAT,
 	SBREG,	TDOUBLE|TLDOUBLE,

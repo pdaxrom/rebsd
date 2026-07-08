@@ -1442,6 +1442,39 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - Stack-argument memory `FUNARG` cleanup landed on 2026-07-08: direct
+    word/pointer, `long long`, and soft-float double argument templates now
+    load stack-source operands into scratch registers before adjusting `$sp`,
+    then use the stack adjustment itself as the load-use spacer before the
+    final argument stores.  This preserves the existing o32 argument layout
+    and avoids a broader call-argument scheduler in the backend.
+  - Post-stack-argument-cleanup `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 3388 instructions
+      and 934 `nop` to 3380 instructions and 926 `nop`; total improvement
+      from the original baseline is -307 instructions and -307 `nop`.
+      PCC/GCC instruction ratio improved from the original 3.240 to 2.970,
+      and `nop` ratio from 29.357 to 22.048.  The branch/jump delay-slot
+      `nop` counter remains 184.
+    - Malta/mips32r2 big-endian PCC Linpack changed from the previous 3700
+      instructions and 934 `nop` to 3692 instructions and 926 `nop`; total
+      improvement from the original baseline is -627 instructions and -627
+      `nop`.  PCC/GCC instruction ratio improved from the original 3.992 to
+      3.412, and `nop` ratio from 310.600 to 185.200.  The branch/jump
+      delay-slot `nop` counter remains 184.
+    - MaltaEL/mips32r2 little-endian matched the big-endian mips32r2 result.
+  - Post-stack-argument-cleanup QEMU correctness gates passed with
+    `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian, and
+    MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - A broader direct call-argument load experiment was rejected: marking
+    `movearg_32bit()` loads as call-argument producers improved Linpack by
+    another 18 instructions and 18 `nop` on mips32r2, but full
+    Malta64/VR4300 `pcc-smoke-all-runtime` failed in the self-hosted `types`
+    smoke with a native assembler error.  Keep that shape for the future
+    compact late scheduler, where final instruction order can be validated
+    with explicit dependency checks instead of ad hoc node markers.
   - Audit integer loads and hard-float load templates that append `nop` after
     memory operations.
   - Land this in small patches, each followed by PCC regressions plus Linpack
@@ -1503,9 +1536,10 @@ Milestone order:
 - [ ] Milestone B: remove provably redundant `nop` sequences from jump and
   memory templates.
   - Control-transfer, store-side, paired-load, omit-frame epilogue,
-    call-delay-slot, callee-saved restore, and helper-call delay-slot patches
-    are complete and green; remaining load-use and FP load/compute scheduling
-    needs the compact late scheduler.
+    call-delay-slot, callee-saved restore, helper-call delay-slot, and
+    stack-argument memory `FUNARG` patches are complete and green; remaining
+    general load-use and FP load/compute scheduling needs the compact late
+    scheduler.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
