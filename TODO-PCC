@@ -61,13 +61,13 @@ not active items for the current C/static-a.out PCC milestone.
     at line 634 while the host cross assembler accepted the same file, so this
     needs a separate assembler-policy investigation before enabling it there.
   - Current VR4300 Linpack assembly baseline:
-    GCC `1138` instructions / `42` nops, PCC `2895` instructions / `567` nops,
-    PCC/GCC instruction ratio `2.544`, nop ratio `13.500`, branch/jump delay
-    nops `135`.
+    GCC `1138` instructions / `42` nops, PCC `2638` instructions / `310` nops,
+    PCC/GCC instruction ratio `2.318`, nop ratio `7.381`, branch/jump delay
+    nops `130`, and load-followed-by-nop `120`.
   - Current MIPS32R2 control baseline after the VR4300 guard:
-    GCC `1082` instructions / `5` nops, PCC `2746` instructions / `165` nops,
-    PCC/GCC instruction ratio `2.538`, nop ratio `33.000`, branch/jump delay
-    nops `136`.
+    GCC `1082` instructions / `5` nops, PCC `2730` instructions / `149` nops,
+    PCC/GCC instruction ratio `2.523`, nop ratio `29.800`, branch/jump delay
+    nops `136`, and load-followed-by-nop `3`.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again on Malta64, Malta, and
     Malta little-endian, both hard-float rootfs and `MIPS_ROOTFS_FLOAT=soft`.
     PCC kernel builds included the existing `-fomit-frame-pointer` path and the
@@ -2705,6 +2705,53 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - VR4300 integer load-use interlock cleanup landed on 2026-07-08: the final
+    load-delay trim now removes `load`; `nop`; immediate dependent GPR-use
+    padding for selected CPU `VR4300`, matching the VR4300 manual's hardware
+    interlock behavior for integer loads.  This is intentionally only a
+    deletion of compiler-inserted `nop`s; it does not move instructions, does
+    not put FP multiplies in delay slots, and does not weaken the
+    `-mfix4300` multiply-erratum repair.  Immediate FPU load-use stays
+    conservative until a separate FPU scheduler can prove and measure each
+    pattern.
+  - The same patch canonicalizes backend stack-push zero-offset operands from
+    `($sp)` to `0($sp)` in MIPS FUNARG/prologue emission.  The VR4300 integer
+    load cleanup exposed a real native guest assembler rejection in the
+    soft-float `types` smoke (`sw $v1,($sp)`), while host cross assemblers had
+    accepted it.  Emitting the canonical immediate-offset form is backend
+    support, not a test workaround.
+  - Post-integer-load-use-trim `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 2792 instructions
+      and 464 `nop` to 2638 instructions and 310 `nop`; non-`nop`
+      instructions stayed 2328, loads stayed 652, stores stayed 251,
+      branch/jump/call delay `nop` stayed 130, multiply/divide stayed 61,
+      load-followed-by-nop fell to 120, and bytes changed to 80831.  PCC/GCC
+      instruction ratio is 2.318 and `nop` ratio is 7.381.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 big-endian hard-float stayed unchanged at 2730 PCC
+      instructions and 149 `nop`; this trim only newly changes VR4300 GPR
+      load-use because the MIPS32R2 dependent-load cleanup was already
+      interlock-based and green.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-integer-load-use-trim full PCC-kernel/PCC-rootfs QEMU correctness
+    matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08: Malta64/VR4300
+    hard-float and soft-float, Malta/mips32r2 big-endian hard-float and
+    soft-float, and MaltaEL/mips32r2 little-endian hard-float and soft-float.
+    The kernel C compile path still uses `-msoft-float -fomit-frame-pointer`;
+    rootfs float mode is varied independently by the hard/soft gates.  Linpack
+    smoke rates observed in QEMU: Malta64 hard 12935.016-13131.437 KFLOPS,
+    Malta64 soft 784.753-885.351 KFLOPS, Malta hard 7443.138-7577.500 KFLOPS,
+    Malta soft 881.624-887.288 KFLOPS, MaltaEL hard 7638.942-7641.148 KFLOPS,
+    and MaltaEL soft 908.037-911.634 KFLOPS.  Malta64 `runtime-quick` still
+    reports the known QEMU memory-fault diagnostic but exits with
+    `PCC_SMOKE_RC runtime-quick 0`.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -2775,8 +2822,9 @@ Milestone order:
     compare delay-slot, conservative integer load-delay, VR4300-only
     shift-before-load delay fill, final move/GPR-ALU/signed-imm16-`li`
     load-delay/control-delay, non-RA GPR call-delay, and HI/LO independent
-    `lw` delay-fill patches and VR4300 post-delay-slot load-delay trim are
-    complete and green;
+    `lw` delay-fill patches, VR4300 post-delay-slot load-delay trim,
+    VR4300 integer load-use interlock cleanup, and canonical zero-offset
+    stack-argument emission are complete and green;
     MIPS32R2 one-instruction integer multiply and MIPS32R2 interlocked
     dependent-load `nop` cleanup are also complete and green.  MIPS32R2
     FPU compare-to-branch spacer cleanup is complete and green.  Remaining FP

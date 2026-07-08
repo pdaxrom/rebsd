@@ -176,7 +176,7 @@ prologue(struct interpass_prolog * ipp)
 
 	printf("\tsw %s,4(%s)\n", rnames[RA], rnames[SP]);
 	if (!mips_omit_fp) {
-		printf("\tsw %s,(%s)\n", rnames[FP], rnames[SP]);
+		printf("\tsw %s,0(%s)\n", rnames[FP], rnames[SP]);
 		printf("\tmove %s,%s\n", rnames[FP], rnames[SP]);
 	}
 
