@@ -899,6 +899,48 @@ ucmpbr(NODE *p)
 }
 
 static void
+zero_left_cmpbr(NODE *p)
+{
+	const char *br;
+
+	switch (p->n_op) {
+	case EQ:
+	case UGE:
+		br = "beqz";
+		break;
+	case NE:
+	case ULT:
+		br = "bnez";
+		break;
+	case LT:
+		br = "bgtz";
+		break;
+	case LE:
+		br = "bgez";
+		break;
+	case GT:
+		br = "bltz";
+		break;
+	case GE:
+		br = "blez";
+		break;
+	case ULE:
+		printf("\tbeq %s,%s," LABFMT "\n",
+		    rnames[ZERO], rnames[ZERO], p->n_label);
+		printf("\tnop\n");
+		return;
+	case UGT:
+		return;
+	default:
+		comperr("zero_left_cmpbr bad op %d", p->n_op);
+	}
+	printf("\t%s ", br);
+	expand(p, 0, "AR");
+	printf("," LABFMT "\n", p->n_label);
+	printf("\tnop\n");
+}
+
+static void
 fpcmpops(NODE *p)
 {
 	NODE *l = p->n_left;
@@ -1187,6 +1229,10 @@ zzzcode(NODE * p, int c)
 
 	case 'W':		/* signed modulo by power-of-two constant */
 		srempow2con(p);
+		break;
+
+	case 'X':		/* branch for zero-left comparison */
+		zero_left_cmpbr(p);
 		break;
 
 	default:

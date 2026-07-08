@@ -2226,6 +2226,50 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - Zero-left compare branch support landed on 2026-07-08: the MIPS backend now
+    has a real table/codegen rule for `0 OP reg` in conditional context instead
+    of materializing zero into a temporary and subtracting before branching.
+    Signed cases use the direct inverted zero-branch forms (`bgtz`, `bgez`,
+    `bltz`, `blez`), equality uses `beqz`/`bnez`, and unsigned constant-zero
+    cases fold to either the equivalent zero test or an unconditional/no branch
+    result.  This is instruction selection, not a post-assembly rewrite.
+  - Post-zero-left-compare-branch `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 2902 instructions
+      and 562 `nop` to 2896 instructions and 568 `nop`.  The direct branch
+      removes the old temp/subtract sequence but exposes some load-use slots
+      that had previously been hidden by the materialized zero move:
+      load-followed-by-`nop` is now 288, branch/jump/call delay `nop` count is
+      still 136, and multiply/divide count is still 61.  PCC/GCC instruction
+      ratio is 2.545 and `nop` ratio is 13.524.
+      Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 big-endian PCC Linpack changed from the previous 3098
+      instructions and 505 `nop` to 3086 instructions and 505 `nop`;
+      PCC/GCC instruction ratio is 2.852 and `nop` ratio is 101.000.
+      Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`.
+    - MaltaEL/mips32r2 little-endian PCC Linpack changed from the previous 3011
+      instructions and 418 `nop` to 2999 instructions and 418 `nop`;
+      PCC/GCC instruction ratio is 2.772 and `nop` ratio is 83.600.
+      Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-zero-left-compare-branch full PCC-kernel/PCC-rootfs QEMU correctness
+    matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08: Malta64/VR4300
+    hard-float and soft-float, Malta/mips32r2 big-endian hard-float and
+    soft-float, and MaltaEL/mips32r2 little-endian hard-float and soft-float.
+    The kernel C compile path still uses `-msoft-float -fomit-frame-pointer`;
+    rootfs float mode is varied independently by the hard/soft gates.  Linpack
+    smoke rates observed in QEMU: Malta64 hard about 12922-13132 KFLOPS,
+    Malta64 soft about 884-887 KFLOPS, Malta hard about 8399-8475 KFLOPS,
+    Malta soft about 854-861 KFLOPS, MaltaEL hard about 12544-13060 KFLOPS,
+    and MaltaEL soft about 878-881 KFLOPS.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
