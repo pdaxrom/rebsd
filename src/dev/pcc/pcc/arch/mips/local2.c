@@ -981,6 +981,46 @@ addsubcon(NODE *p, int sub, int unsig)
 	printf("%s\n", rnames[AT]);
 }
 
+static int
+mips_con_log2(CONSZ val)
+{
+	int shift = 0;
+
+	while (val > 1) {
+		val >>= 1;
+		shift++;
+	}
+	return shift;
+}
+
+static void
+mulpow2con(NODE *p)
+{
+	int shift = mips_con_log2(getlval(p->n_right));
+
+	expand(p, 0, "\tsll A1,AL,");
+	printf("%d\t# multiply by power-of-two constant\n", shift);
+}
+
+static void
+udivpow2con(NODE *p)
+{
+	int shift = mips_con_log2(getlval(p->n_right));
+
+	expand(p, 0, "\tsrl A1,AL,");
+	printf("%d\t# unsigned division by power-of-two constant\n", shift);
+}
+
+static void
+sdivtwocon(NODE *p)
+{
+	printf("\tsrl %s,", rnames[AT]);
+	expand(p, 0, "AL");
+	printf(",31\t# signed division by 2 bias\n");
+	expand(p, 0, "\taddu A1,AL,$at\n");
+	expand(p, 0, "\tsra A1,A1,1\n");
+}
+
 void
 zzzcode(NODE * p, int c)
 {
@@ -1054,8 +1094,12 @@ zzzcode(NODE * p, int c)
 		addsubcon(p, 1, 1);
 		break;
 
-        case 'O': /* 64-bit left and right shift operators */
+	case 'O': /* 64-bit left and right shift operators */
 		shiftop(p);
+		break;
+
+	case 'P':	/* multiply by positive power-of-two constant */
+		mulpow2con(p);
 		break;
 
 	case 'Q':		/* emit struct assign */
@@ -1068,6 +1112,14 @@ zzzcode(NODE * p, int c)
 
 	case 'S':		/* hard-float double store */
 		mips_hardfp64_store(p);
+		break;
+
+	case 'T':		/* signed division by exactly two */
+		sdivtwocon(p);
+		break;
+
+	case 'U':		/* unsigned division by power-of-two constant */
+		udivpow2con(p);
 		break;
 
 	default:
@@ -1867,13 +1919,24 @@ int
 special(NODE *p, int shape)
 {
 	int o = p->n_op;
+	CONSZ val;
 
 	if (o != ICON || p->n_name[0] != 0)
 		return SRNOPE;
 
+	val = getlval(p);
 	switch(shape) {
 	case SPCON:
-		if ((getlval(p) & ~0xffff) == 0)
+		if ((val & ~0xffff) == 0)
+			return SRDIR;
+		break;
+	case SPOW2CON:
+		if (val > 1 && val <= 0x7fffffff &&
+		    (val & (val - 1)) == 0)
+			return SRDIR;
+		break;
+	case STWOCON:
+		if (val == 2)
 			return SRDIR;
 		break;
 	}

@@ -378,6 +378,8 @@ extern int nargregs;
 #define FEATURE_SOFTFLOAT	0x00020000
 
 #define SPCON           (MAXSPECIAL+1)  /* positive constant */
+#define SPOW2CON        (MAXSPECIAL+2)  /* positive power-of-two constant */
+#define STWOCON         (MAXSPECIAL+3)  /* exactly two */
 
 #define TARGET_STDARGS
 #define TARGET_BUILTINS							\
