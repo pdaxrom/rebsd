@@ -2103,11 +2103,11 @@ mips_can_fill_gpr_alu_fpu_load_delay(const char *alu, const char *load,
 }
 
 static int
-mips_parse_int_mult_hilo(const char *line)
+mips_parse_int_mult_hilo(const char *line, unsigned long long *regsp)
 {
 	char op[16], tok[16];
 	const char *s;
-	int reg;
+	int reg1, reg2;
 
 	if (!mips_parse_opcode(line, op, sizeof(op)) ||
 	    (strcmp(op, "mult") != 0 && strcmp(op, "multu") != 0 &&
@@ -2115,10 +2115,14 @@ mips_parse_int_mult_hilo(const char *line)
 		return 0;
 	s = mips_skip_space(line);
 	s += strlen(op);
-	return mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) &&
-	    mips_skip_comma(&s) &&
-	    mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) &&
-	    mips_line_ends_after_operands(s);
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg1) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg2) ||
+	    !mips_line_ends_after_operands(s))
+		return 0;
+	if (regsp != NULL)
+		*regsp = (1ULL << reg1) | (1ULL << reg2);
+	return 1;
 }
 
 static int
@@ -2227,7 +2231,7 @@ mips_can_fill_hilo_mtc1_delay(const char *hilo, const char *mf,
 {
 	int mfreg, mtc1_gpr, mtc1_fpr, cvt_dst, cvt_src;
 
-	if (!mips_parse_int_mult_hilo(hilo) ||
+	if (!mips_parse_int_mult_hilo(hilo, NULL) ||
 	    !mips_parse_mfhilo_dest(mf, &mfreg) ||
 	    !mips_parse_mtc1_regs(mtc1, &mtc1_gpr, &mtc1_fpr) ||
 	    !mips_parse_cvt_w_regs(cvt, &cvt_dst, &cvt_src, NULL))
@@ -2235,6 +2239,33 @@ mips_can_fill_hilo_mtc1_delay(const char *hilo, const char *mf,
 	if (mtc1_gpr == mfreg)
 		return 0;
 	return cvt_dst == mtc1_fpr && cvt_src == mtc1_fpr;
+}
+
+static int
+mips_can_fill_hilo_lw_delay(const char *hilo, const char *mf,
+    const char *use, const char *load)
+{
+	struct mips_load_dest load_dest;
+	unsigned long long hilo_regs, use_regs;
+	int mfreg;
+
+	if (!mips_parse_int_mult_hilo(hilo, &hilo_regs) ||
+	    !mips_parse_mfhilo_dest(mf, &mfreg) ||
+	    !mips_is_lw_load(load, &load_dest))
+		return 0;
+	if (!mips_parse_gpr_alu_regs(use, &use_regs) &&
+	    !mips_parse_shift_imm_gprs(use, &use_regs) &&
+	    !mips_parse_move_gprs_regs(use, &use_regs))
+		return 0;
+	if ((use_regs & (1ULL << mfreg)) == 0)
+		return 0;
+	if (mips_line_touches_load(use, &load_dest))
+		return 0;
+	if (mips_line_touches_gpr(load, use_regs))
+		return 0;
+	if (mips_line_touches_gpr(load, hilo_regs | (1ULL << mfreg)))
+		return 0;
+	return 1;
 }
 
 static int
@@ -2781,6 +2812,38 @@ mips_fold_late_peepholes(char *path)
 						fputs(cvt, out);
 						prev_control =
 						    mips_is_control_transfer(cvt);
+						changed = 1;
+						continue;
+					}
+				}
+				if (ferror(in) ||
+				    fseek(in, pos2 != -1 ? pos2 : pos,
+				    SEEK_SET) == -1) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
+				pos2 = ftell(in);
+				if (pos2 != -1 &&
+				    fgets(after, sizeof(after), in) != NULL &&
+				    fgets(mf, sizeof(mf), in) != NULL &&
+				    fgets(mtc1, sizeof(mtc1), in) != NULL &&
+				    fgets(mtc1nop, sizeof(mtc1nop), in) != NULL) {
+					if (mips_is_nop(next) &&
+					    mips_is_nop(after) &&
+					    mips_can_fill_hilo_lw_delay(line,
+					    mf, mtc1, mtc1nop)) {
+						fputs(line, out);
+						fputs(mtc1nop, out);
+						fputs(after, out);
+						fputs(mf, out);
+						fputs(mtc1, out);
+						prev_control =
+						    mips_is_control_transfer(
+						    mtc1);
 						changed = 1;
 						continue;
 					}
