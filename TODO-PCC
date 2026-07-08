@@ -1530,10 +1530,46 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
     The in-QEMU Linpack smoke remained green at roughly 13.5-13.7 MFLOPS
     across the three boards.
-  - Audit integer loads and hard-float load templates that append `nop` after
-    memory operations.
-  - Land this in small patches, each followed by PCC regressions plus Linpack
-    smoke on Malta/Malta64 and, when relevant, N64 hardware validation.
+  - Conservative integer load-delay postpass landed on 2026-07-08: the PCC
+    driver now trims selected final-assembly `nop`s after integer loads without
+    adding a general scheduler to the MIPS backend.  The pass runs only after
+    `ccom` has produced temporary assembly, so user-provided `.s` inputs are
+    not rewritten.  It handles only `lw`, `lh`, `lhu`, `lb`, `lbu`, `lwl`, and
+    `lwr`; FPU loads stay untouched.  A load-delay `nop` is removed only when
+    the following instruction is not another `nop` or integer load, and both
+    the following instruction and one more physical instruction do not mention
+    the loaded GPR.  The pass never reorders instructions.
+  - A broader load-gap trim was rejected: it removed more `nop`s, but full
+    target-native smoke exposed unsafe assembler/runtime shapes in `types` and
+    `libc-abi`.  Keep load-to-load and FPU-dependent cleanup for the future
+    compact late scheduler with explicit dependency modelling.
+  - Post-integer-load-postpass `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 3376 instructions
+      and 922 `nop` to 3241 instructions and 787 `nop`; total improvement from
+      the original baseline is -446 instructions and -446 `nop`.
+      PCC/GCC instruction ratio improved from the original 3.240 to 2.848,
+      and `nop` ratio from 29.357 to 18.738.  Multiply/divide count stayed 63.
+    - Malta/mips32r2 big-endian PCC Linpack changed from the previous 3688
+      instructions and 922 `nop` to 3553 instructions and 787 `nop`; total
+      improvement from the original baseline is -766 instructions and -766
+      `nop`.  PCC/GCC instruction ratio improved from the original 3.992 to
+      3.284, and `nop` ratio from 310.600 to 157.400.  Multiply/divide count
+      stayed 63.
+    - MaltaEL/mips32r2 little-endian matched the big-endian mips32r2 result.
+      Counter artifacts:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`,
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`,
+      and
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-integer-load-postpass QEMU correctness gates passed with
+    `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian, and
+    MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - Continue landing remaining memory/FPU scheduling work in small patches,
+    each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
+    when relevant, N64 hardware validation.
 - [ ] Add a compact late MIPS peephole/scheduling pass.
   - Use a short instruction window, initially 3-5 instructions, after final
     instruction selection.
@@ -1595,9 +1631,10 @@ Milestone order:
   memory templates.
   - Control-transfer, store-side, paired-load, omit-frame epilogue,
     call-delay-slot, callee-saved restore, helper-call delay-slot, and
-    stack-argument memory `FUNARG`, narrow unsigned conversion, and long-long
-    compare delay-slot patches are complete and green; remaining general
-    load-use and FP load/compute scheduling needs the compact late scheduler.
+    stack-argument memory `FUNARG`, narrow unsigned conversion, long-long
+    compare delay-slot, and conservative integer load-delay patches are
+    complete and green; remaining FP load/compute and broader load scheduling
+    needs the compact late scheduler.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.

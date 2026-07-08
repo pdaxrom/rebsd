@@ -270,6 +270,9 @@ static int assemble_input(char *input, char *output);
 static int run_linker(void);
 static int strlist_exec(struct strlist *l);
 static char *select_linker(char *);
+#if defined(mach_mips) || defined(mach_mips64)
+static int mips_trim_load_delay_nops(char *);
+#endif
 
 char *cat(const char *, const char *);
 static char *cat_sysroot(const char *, const char *);
@@ -1148,6 +1151,10 @@ main(int argc, char *argv[])
 				strlist_append(&temp_outputs, ofile = gettmp());
 			if (compile_input(ifile, ofile))
 				exandrm(ofile);
+#if defined(mach_mips) || defined(mach_mips64)
+			if (mips_trim_load_delay_nops(ofile))
+				exandrm(ofile);
+#endif
 			if (Sflag)
 				continue;
 			ifile = ofile;
@@ -1356,6 +1363,317 @@ compile_input(char *input, char *output)
 		strlist_free(&args);
 	}
 	return retval;
+}
+#endif
+
+#if defined(mach_mips) || defined(mach_mips64)
+static const char *
+mips_skip_space(const char *s)
+{
+	while (*s == ' ' || *s == '\t')
+		++s;
+	return s;
+}
+
+static int
+mips_parse_opcode(const char *line, char *op, size_t opsz)
+{
+	const char *s;
+	size_t len;
+
+	s = mips_skip_space(line);
+	if (*s == '\0' || *s == '\n' || *s == '#' || *s == '.')
+		return 0;
+	len = 0;
+	while (s[len] != '\0' && s[len] != '\n' && s[len] != ' ' &&
+	    s[len] != '\t' && s[len] != ',') {
+		if (s[len] == ':')
+			return 0;
+		if (len + 1 < opsz)
+			op[len] = s[len];
+		++len;
+	}
+	if (len == 0 || len >= opsz)
+		return 0;
+	op[len] = '\0';
+	return 1;
+}
+
+static int
+mips_is_int_load(const char *op)
+{
+	return strcmp(op, "lw") == 0 || strcmp(op, "lh") == 0 ||
+	    strcmp(op, "lhu") == 0 || strcmp(op, "lb") == 0 ||
+	    strcmp(op, "lbu") == 0 || strcmp(op, "lwl") == 0 ||
+	    strcmp(op, "lwr") == 0;
+}
+
+static int
+mips_alias_gpr(const char *name, size_t len)
+{
+	static const struct {
+		const char *name;
+		int reg;
+	} aliases[] = {
+		{ "zero", 0 }, { "at", 1 },
+		{ "v0", 2 }, { "v1", 3 },
+		{ "a0", 4 }, { "a1", 5 }, { "a2", 6 }, { "a3", 7 },
+		{ "a4", 8 }, { "a5", 9 }, { "a6", 10 }, { "a7", 11 },
+		{ "t0", 8 }, { "t1", 9 }, { "t2", 10 }, { "t3", 11 },
+		{ "t4", 12 }, { "t5", 13 }, { "t6", 14 }, { "t7", 15 },
+		{ "s0", 16 }, { "s1", 17 }, { "s2", 18 }, { "s3", 19 },
+		{ "s4", 20 }, { "s5", 21 }, { "s6", 22 }, { "s7", 23 },
+		{ "t8", 24 }, { "t9", 25 },
+		{ "k0", 26 }, { "k1", 27 },
+		{ "gp", 28 }, { "sp", 29 }, { "fp", 30 },
+		{ "s8", 30 }, { "ra", 31 },
+	};
+	size_t i;
+
+	for (i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++)
+		if (strlen(aliases[i].name) == len &&
+		    strncmp(aliases[i].name, name, len) == 0)
+			return aliases[i].reg;
+	return -1;
+}
+
+static int
+mips_parse_gpr(const char *s, const char **endp)
+{
+	unsigned int reg;
+	const char *name;
+	size_t len;
+
+	if (*s != '$')
+		return -1;
+	++s;
+	if (*s == 'f') {
+		++s;
+		while (*s >= '0' && *s <= '9')
+			++s;
+		if (endp != NULL)
+			*endp = s;
+		return -1;
+	}
+	if (*s >= '0' && *s <= '9') {
+		reg = 0;
+		while (*s >= '0' && *s <= '9') {
+			reg = reg * 10 + (unsigned int)(*s - '0');
+			++s;
+		}
+		if (endp != NULL)
+			*endp = s;
+		return reg <= 31 ? (int)reg : -1;
+	}
+	name = s;
+	while ((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z') ||
+	    (*s >= '0' && *s <= '9') || *s == '_')
+		++s;
+	len = (size_t)(s - name);
+	if (endp != NULL)
+		*endp = s;
+	if (len == 0)
+		return -1;
+	return mips_alias_gpr(name, len);
+}
+
+static int
+mips_load_dest_gpr(const char *line)
+{
+	char op[16];
+	const char *s;
+	int reg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) || !mips_is_int_load(op))
+		return -1;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	s = mips_skip_space(s);
+	reg = mips_parse_gpr(s, NULL);
+	return reg;
+}
+
+static int
+mips_is_instruction(const char *line)
+{
+	char op[16];
+
+	return mips_parse_opcode(line, op, sizeof(op));
+}
+
+static int
+mips_is_nop(const char *line)
+{
+	char op[16];
+
+	return mips_parse_opcode(line, op, sizeof(op)) && strcmp(op, "nop") == 0;
+}
+
+static int
+mips_is_load_gap_insn(const char *line)
+{
+	char op[16];
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	if (strcmp(op, "nop") == 0 || mips_is_int_load(op))
+		return 0;
+	return 1;
+}
+
+static int
+mips_line_touches_gpr(const char *line, int reg)
+{
+	char op[16];
+	const char *s;
+	int r;
+
+	if (mips_parse_opcode(line, op, sizeof(op)) &&
+	    (strcmp(op, "jal") == 0 || strcmp(op, "jalr") == 0) && reg == 31)
+		return 1;
+	for (s = line; *s != '\0' && *s != '\n' && *s != '#'; ++s) {
+		if (*s != '$')
+			continue;
+		r = mips_parse_gpr(s, &s);
+		if (r == reg)
+			return 1;
+		if (*s == '\0' || *s == '\n' || *s == '#')
+			break;
+		--s;
+	}
+	return 0;
+}
+
+static int
+mips_can_trim_load_nop(FILE *in, const char *next, int reg)
+{
+	char look[4096];
+	long pos;
+	int i;
+
+	if (!mips_is_load_gap_insn(next) || mips_line_touches_gpr(next, reg))
+		return 0;
+	pos = ftell(in);
+	if (pos == -1)
+		return 0;
+	for (i = 1; i < 2; i++) {
+		if (fgets(look, sizeof(look), in) == NULL) {
+			if (ferror(in))
+				return 0;
+			clearerr(in);
+			if (fseek(in, pos, SEEK_SET) == -1)
+				return 0;
+			return 0;
+		}
+		if (!mips_is_instruction(look) || mips_line_touches_gpr(look, reg)) {
+			if (fseek(in, pos, SEEK_SET) == -1)
+				return 0;
+			return 0;
+		}
+	}
+	if (fseek(in, pos, SEEK_SET) == -1)
+		return 0;
+	return 1;
+}
+
+static char *
+mips_asm_temp_name(const char *path)
+{
+#ifdef _WIN32
+	(void)path;
+	return NULL;
+#else
+	const char *slash;
+	char *tmp;
+	size_t dirlen;
+	int fd;
+
+	slash = strrchr(path, '/');
+	dirlen = slash != NULL ? (size_t)(slash - path + 1) : 0;
+	tmp = xmalloc(dirlen + sizeof(".mipsasm.XXXXXX"));
+	if (dirlen != 0)
+		memcpy(tmp, path, dirlen);
+	memcpy(tmp + dirlen, ".mipsasm.XXXXXX", sizeof(".mipsasm.XXXXXX"));
+	fd = mkstemp(tmp);
+	if (fd == -1) {
+		free(tmp);
+		return NULL;
+	}
+	close(fd);
+	return tmp;
+#endif
+}
+
+static int
+mips_trim_load_delay_nops(char *path)
+{
+	char line[4096], next[4096];
+	FILE *in, *out;
+	char *tmp;
+	int pending_load;
+	int changed;
+	int failed;
+
+	tmp = mips_asm_temp_name(path);
+	if (tmp == NULL)
+		return 1;
+	in = fopen(path, "r");
+	if (in == NULL) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	out = fopen(tmp, "w");
+	if (out == NULL) {
+		fclose(in);
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+
+	pending_load = -1;
+	changed = 0;
+	while (fgets(line, sizeof(line), in) != NULL) {
+		if (pending_load >= 0 && mips_is_nop(line)) {
+			if (fgets(next, sizeof(next), in) == NULL) {
+				fputs(line, out);
+				pending_load = -1;
+				break;
+			}
+			if (!mips_can_trim_load_nop(in, next, pending_load)) {
+				fputs(line, out);
+			} else {
+				changed = 1;
+			}
+			fputs(next, out);
+			pending_load = mips_load_dest_gpr(next);
+			continue;
+		}
+		fputs(line, out);
+		pending_load = mips_load_dest_gpr(line);
+	}
+
+	failed = ferror(in) || ferror(out);
+	if (fclose(out) == EOF)
+		failed = 1;
+	if (fclose(in) == EOF)
+		failed = 1;
+	if (failed) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	if (changed) {
+		if (rename(tmp, path) == -1) {
+			unlink(tmp);
+			free(tmp);
+			return 1;
+		}
+	} else {
+		unlink(tmp);
+	}
+	free(tmp);
+	return 0;
 }
 #endif
 
