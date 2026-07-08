@@ -780,6 +780,19 @@ mypragma(char *str)
 void
 fixdef(struct symtab *sp)
 {
+#ifdef GCC_COMPAT
+#ifdef sap
+#undef sap
+#define MIPS_RESTORE_SAP
+#endif
+	if (sp->sclass == EXTERN && sp->slevel == 0 &&
+	    attr_find(sp->sap, GCC_ATYP_WEAK))
+		printf("\t.weak %s\n", getexname(sp));
+#ifdef MIPS_RESTORE_SAP
+#define sap sss
+#undef MIPS_RESTORE_SAP
+#endif
+#endif
 	if ((constructor || destructor) && (sp->sclass != PARAM)) {
 		printf("\t.section .%ctors,\"aw\",@progbits\n",
 		    constructor ? 'c' : 'd');

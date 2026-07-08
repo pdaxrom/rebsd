@@ -27,6 +27,28 @@ not active items for the current C/static-a.out PCC milestone.
 - [x] GCC-based N64 build completed.
 - [x] N64 image confirmed on hardware.
 - [x] PCC userland selector is supported as an opt-in mode.
+- [x] PCC-built MIPS kernel control gates completed.
+  - The MIPS backend now emits `.weak` for external
+    `__attribute__((weak))` declarations, so optional board hooks such as
+    `mips_board_intr` and `mips_board_microtime` stay weak undefined symbols
+    instead of becoming hard link dependencies.
+  - The shift-before-load delay-fill postpass is now VR4300-only. It is still
+    used for `-march=vr4300`, where real load-delay slots matter, but is not
+    applied to MIPS32R2 until a safe MIPS32R2 scheduling rule is validated.
+  - Full PCC-kernel/PCC-rootfs QEMU gates passed with `PCC_SMOKE_ALL_RC:0`:
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+  - Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
 - [x] ReBSD `ld` accepts `-L` and `-l` library search options.
   - `ld` now collects all `-L` search directories before resolving any `-l`
     library, so `cc file.c -lm` works even when the compiler driver appends

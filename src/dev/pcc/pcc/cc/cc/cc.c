@@ -2479,7 +2479,7 @@ mips_fold_late_peepholes(char *path)
 static int
 mips_postprocess_asm(char *path)
 {
-	if (mips_fill_shift_load_delay_nops(path))
+	if (mips_cpu == MIPS_CPU_VR4300 && mips_fill_shift_load_delay_nops(path))
 		return 1;
 	if (mips_trim_load_delay_nops(path))
 		return 1;

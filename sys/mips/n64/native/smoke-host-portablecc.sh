@@ -160,6 +160,18 @@ EOF
 test -s "$tmp.o"
 
 cat > "$tmp.c" <<'EOF'
+extern int weak_data __attribute__((weak));
+void weak_func(void) __attribute__((weak));
+int weak_probe(void) { return (&weak_data != 0) || (weak_func != 0); }
+EOF
+
+"$pcc" -S -o "$tmp.s" "$tmp.c"
+grep '[.]weak.*weak_data' "$tmp.s" >/dev/null
+grep '[.]weak.*weak_func' "$tmp.s" >/dev/null
+"$pcc" -c -o "$tmp.o" "$tmp.c"
+test -s "$tmp.o"
+
+cat > "$tmp.c" <<'EOF'
 struct sd {
 	char c;
 	double d;
