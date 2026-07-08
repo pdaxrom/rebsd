@@ -60,6 +60,10 @@
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \
+	if (match(argp, "-mfix4300") || match(argp, "-mno-fix4300")) { \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
 	if (match(argp, "-mbig-endian")) { \
 		PCC_REBSD_CHECK_BIG_ENDIAN(); \
 		bigendian = 1; \

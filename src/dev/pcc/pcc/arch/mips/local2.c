@@ -50,6 +50,12 @@ int mips_cpu = MIPS_CPU_DEFAULT;
 #else
 int mips_cpu = 0;
 #endif
+#ifdef MIPS_FIX4300_DEFAULT
+int mips_fix4300 = MIPS_FIX4300_DEFAULT;
+#else
+int mips_fix4300 = 0;
+#endif
+static int mips_fix4300_explicit;
 int mips_soft_float = MIPS_SOFT_FLOAT_DEFAULT;
 int nargregs = MIPS_O32_NARGREGS;
 
@@ -1031,13 +1037,24 @@ urempow2con(NODE *p)
 }
 
 static void
-sdivtwocon(NODE *p)
+sdivpow2con(NODE *p)
 {
-	printf("\tsrl %s,", rnames[AT]);
-	expand(p, 0, "AL");
-	printf(",31\t# signed division by 2 bias\n");
+	int shift = mips_con_log2(getlval(p->n_right));
+
+	if (shift == 1) {
+		printf("\tsrl %s,", rnames[AT]);
+		expand(p, 0, "AL");
+		printf(",31\t# signed division by 2 bias\n");
+	} else {
+		printf("\tsra %s,", rnames[AT]);
+		expand(p, 0, "AL");
+		printf(",31\t# signed division by power-of-two bias\n");
+		printf("\tsrl %s,%s,%d\n", rnames[AT], rnames[AT],
+		    32 - shift);
+	}
 	expand(p, 0, "\taddu A1,AL,$at\n");
-	expand(p, 0, "\tsra A1,A1,1\n");
+	expand(p, 0, "\tsra A1,A1,");
+	printf("%d\n", shift);
 }
 
 static void
@@ -1156,8 +1173,8 @@ zzzcode(NODE * p, int c)
 		mips_hardfp64_store(p);
 		break;
 
-	case 'T':		/* signed division by exactly two */
-		sdivtwocon(p);
+	case 'T':		/* signed division by power-of-two constant */
+		sdivpow2con(p);
 		break;
 
 	case 'U':		/* unsigned division by power-of-two constant */
@@ -1985,10 +2002,6 @@ special(NODE *p, int shape)
 		    (val & (val - 1)) == 0)
 			return SRDIR;
 		break;
-	case STWOCON:
-		if (val == 2)
-			return SRDIR;
-		break;
 	}
 
 	return SRNOPE;
@@ -2017,10 +2030,20 @@ mflags(char *str)
 	} else if (strcasecmp(str, "arch=vr4300") == 0 ||
 	    strcasecmp(str, "ips3") == 0) {
 		mips_cpu = MIPS_CPU_VR4300;
+		if (!mips_fix4300_explicit)
+			mips_fix4300 = 1;
 	} else if (strcasecmp(str, "arch=mips32r2") == 0 ||
 	    strcasecmp(str, "ips32r2") == 0 ||
 	    strcasecmp(str, "arch=mips32") == 0) {
 		mips_cpu = MIPS_CPU_MIPS32R2;
+		if (!mips_fix4300_explicit)
+			mips_fix4300 = 0;
+	} else if (strcasecmp(str, "fix4300") == 0) {
+		mips_fix4300 = 1;
+		mips_fix4300_explicit = 1;
+	} else if (strcasecmp(str, "no-fix4300") == 0) {
+		mips_fix4300 = 0;
+		mips_fix4300_explicit = 1;
 #endif
 	} else if (strcasecmp(str, "hard-float") == 0) {
 		mips_soft_float = 0;
@@ -2059,8 +2082,12 @@ features(int mask)
 		return 0;
 	if ((mask & FEATURE_MIPS32R2) && mips_cpu != MIPS_CPU_MIPS32R2)
 		return 0;
+	if ((mask & FEATURE_FIX4300) && !MIPS_FIX4300_ACTIVE)
+		return 0;
+	if ((mask & FEATURE_NOFIX4300) && MIPS_FIX4300_ACTIVE)
+		return 0;
 	return (mask & ~(FEATURE_HARDFLOAT|FEATURE_SOFTFLOAT|
-	    FEATURE_MIPS32R2)) == 0;
+	    FEATURE_MIPS32R2|FEATURE_FIX4300|FEATURE_NOFIX4300)) == 0;
 }
 /*
  * Do something target-dependent for xasm arguments.

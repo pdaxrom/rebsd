@@ -715,7 +715,7 @@ struct optab table[] = {
 
 { DIV,	INAREG,
 	SAREG,	TSWORD|TSHORT|TCHAR,
-	STWOCON,	TANY,
+	SPOW2CON,	TANY,
 		XSL(A),	RESC1,
 		"ZT", },
 

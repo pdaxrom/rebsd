@@ -51,7 +51,14 @@
 #ifndef MIPS_SOFT_FLOAT_DEFAULT
 #define MIPS_SOFT_FLOAT_DEFAULT	0
 #endif
+#ifndef MIPS_FIX4300_DEFAULT
+#define MIPS_FIX4300_DEFAULT	(MIPS_CPU_DEFAULT == MIPS_CPU_VR4300)
+#endif
 #define MIPS_ALIGN64		(mips_cpu == MIPS_CPU_MIPS32R2 ? 32 : 64)
+#define MIPS_FIX4300_ACTIVE	(mips_cpu == MIPS_CPU_VR4300 && mips_fix4300)
+#endif
+#ifndef MIPS_FIX4300_ACTIVE
+#define MIPS_FIX4300_ACTIVE	0
 #endif
 
 /*
@@ -371,16 +378,18 @@ int features(int f);
 
 extern int bigendian;
 extern int mips_cpu;
+extern int mips_fix4300;
 extern int mips_soft_float;
 extern int nargregs;
 
 #define FEATURE_HARDFLOAT	0x00010000
 #define FEATURE_SOFTFLOAT	0x00020000
 #define FEATURE_MIPS32R2	0x00040000
+#define FEATURE_FIX4300		0x00080000
+#define FEATURE_NOFIX4300	0x00100000
 
 #define SPCON           (MAXSPECIAL+1)  /* positive constant */
 #define SPOW2CON        (MAXSPECIAL+2)  /* positive power-of-two constant */
-#define STWOCON         (MAXSPECIAL+3)  /* exactly two */
 
 #define TARGET_STDARGS
 #define TARGET_BUILTINS							\
