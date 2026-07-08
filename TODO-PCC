@@ -2183,6 +2183,49 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - GPR-ALU-before-FPU-load delay fill landed on 2026-07-08 for VR4300:
+    the existing late postprocess now also rewrites a conservative
+    `addiu`/`addu`/`subu`; FPU load; `nop`; immediate FPU-load-use pattern
+    into FPU load; GPR ALU; FPU-load-use.  The ALU instruction must not touch
+    the FPU load address register or loaded FPR, and the FPU load must be one
+    of the already tracked CP1 loads (`l.s`, `l.d`, `lwc1`, `ldc1`).  This is
+    still a narrow VR4300-only load-delay repair, not a general scheduler, and
+    it does not place FP multiplies into delay slots; the separate
+    `-mfix4300`/`-mno-fix4300` multiply-erratum repair remains responsible for
+    the VR4300/R4300i multiply pipeline hazard.
+  - Post-GPR-ALU-FPU-load-delay-fill `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 2910 instructions
+      and 570 `nop` to 2902 instructions and 562 `nop`; total improvement
+      from the original baseline is -785 instructions and -671 `nop`.
+      PCC/GCC instruction ratio improved to 2.550, `nop` ratio improved to
+      13.381, branch/jump/call delay `nop` count stayed 136, and
+      multiply/divide count stayed 61.  The generic load-followed-by-`nop`
+      count dropped from 290 to 282.
+      Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 and MaltaEL/mips32r2 code generation are intentionally
+      unchanged by this pass because the pass only runs for selected CPU
+      `VR4300`.  Their correctness coverage is the full hard/soft QEMU matrix
+      below; keep any mips32r2 scheduling improvement separate unless the
+      latency rule is valid for that ISA profile too.
+  - Post-GPR-ALU-FPU-load-delay-fill full PCC-kernel/PCC-rootfs QEMU
+    correctness matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08:
+    Malta64/VR4300 hard-float and soft-float, Malta/mips32r2 big-endian
+    hard-float and soft-float, and MaltaEL/mips32r2 little-endian hard-float
+    and soft-float.  The kernel C compile path still uses
+    `-msoft-float -fomit-frame-pointer`; rootfs float mode is varied
+    independently by the hard/soft gates.  Linpack smoke rates observed in
+    QEMU: Malta64 hard about 9537-9572 KFLOPS, Malta64 soft about 593-603
+    KFLOPS, Malta hard about 5446-5588 KFLOPS, Malta soft about 549-560
+    KFLOPS, MaltaEL hard about 8901-8932 KFLOPS, and MaltaEL soft about
+    580-586 KFLOPS.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.

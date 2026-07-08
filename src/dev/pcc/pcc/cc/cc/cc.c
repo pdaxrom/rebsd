@@ -1960,6 +1960,41 @@ mips_parse_move_gprs_regs(const char *line, unsigned long long *regsp)
 }
 
 static int
+mips_parse_gpr_alu_regs(const char *line, unsigned long long *regsp)
+{
+	char op[16], tok[16];
+	const char *s, *comment;
+	int dstreg, src1reg, src2reg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (strcmp(op, "addiu") == 0) {
+		if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &src1reg) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_tail_operand(s, tok, sizeof(tok), &comment))
+			return 0;
+		*regsp = (1ULL << dstreg) | (1ULL << src1reg);
+		return 1;
+	}
+	if (strcmp(op, "addu") != 0 && strcmp(op, "subu") != 0)
+		return 0;
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &src1reg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &src2reg) ||
+	    !mips_line_ends_after_operands(s))
+		return 0;
+	*regsp = (1ULL << dstreg) | (1ULL << src1reg) |
+	    (1ULL << src2reg);
+	return 1;
+}
+
+static int
 mips_is_lw_load(const char *line, struct mips_load_dest *destp)
 {
 	char op[16];
@@ -1969,6 +2004,18 @@ mips_is_lw_load(const char *line, struct mips_load_dest *destp)
 		return 0;
 	dest = mips_load_dest(line);
 	if (dest.kind != MIPS_LOAD_GPR)
+		return 0;
+	*destp = dest;
+	return 1;
+}
+
+static int
+mips_is_fpu_load_line(const char *line, struct mips_load_dest *destp)
+{
+	struct mips_load_dest dest;
+
+	dest = mips_load_dest(line);
+	if (dest.kind != MIPS_LOAD_FPR)
 		return 0;
 	*destp = dest;
 	return 1;
@@ -2008,6 +2055,25 @@ mips_can_fill_move_load_delay(const char *move, const char *load,
 		return 0;
 	if (mips_line_touches_gpr(load, move_regs) ||
 	    mips_line_touches_load(move, &dest))
+		return 0;
+	return 1;
+}
+
+static int
+mips_can_fill_gpr_alu_fpu_load_delay(const char *alu, const char *load,
+    const char *next)
+{
+	struct mips_load_dest dest;
+	unsigned long long alu_regs;
+
+	if (!mips_parse_gpr_alu_regs(alu, &alu_regs) ||
+	    !mips_is_fpu_load_line(load, &dest))
+		return 0;
+	if (!mips_is_load_gap_insn(next, &dest) ||
+	    !mips_line_touches_load(next, &dest))
+		return 0;
+	if (mips_line_touches_gpr(load, alu_regs) ||
+	    mips_line_touches_load(alu, &dest))
 		return 0;
 	return 1;
 }
@@ -2334,7 +2400,9 @@ mips_fill_shift_load_delay_nops(char *path)
 					    mips_can_fill_shift_load_delay(line,
 					    load, next) ||
 					    mips_can_fill_move_load_delay(line,
-					    load, next);
+					    load, next) ||
+					    mips_can_fill_gpr_alu_fpu_load_delay(
+					    line, load, next);
 					if (can_fill) {
 						fputs(load, out);
 						fputs(line, out);
