@@ -2563,6 +2563,48 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - Two-use HI/LO-to-independent-`lw` delay fill landed on 2026-07-08: the
+    same final MIPS postprocess now also recognizes the exact sequence
+    `mult`/`multu`/`dmult`/`dmultu`; `nop`; `nop`; `mflo`/`mfhi`; simple GPR
+    use; simple GPR use; independent `lw`, and rewrites it as multiply,
+    independent `lw`, one required spacer, `mflo`/`mfhi`, then both GPR uses.
+    Safety rules keep two executed instructions before `mflo`/`mfhi`, require
+    both simple GPR uses to touch the `mflo`/`mfhi` result register, reject
+    loads that touch either use, the multiply operands, or the `mflo`/`mfhi`
+    result, and reject either use when it touches the load destination/base.
+    This remains a narrow final-assembly fold, not a scheduler; it does not
+    move FP multiplies, put FP multiplies into delay slots, or weaken the
+    `-mfix4300` multiply-erratum repair.
+  - Post-two-use-HI/LO-`lw`-delay-fill `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 2847 instructions
+      and 519 `nop` to 2837 instructions and 509 `nop`; non-`nop`
+      instructions stayed 2328, loads stayed 652, stores stayed 251,
+      branch/jump/call delay `nop` stayed 130, multiply/divide stayed 61, and
+      bytes changed to 81826.  PCC/GCC instruction ratio is 2.493 and `nop`
+      ratio is 12.119.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - MIPS32R2 correctness remains covered by the full QEMU matrix below.  No
+      MIPS32R2-specific transform was added in this patch; the measured
+      hard-float Linpack path usually selects the real `mul` instruction
+      rather than the VR4300-style `mult`/`mflo` sequence.
+  - Post-two-use-HI/LO-`lw`-delay-fill full PCC-kernel/PCC-rootfs QEMU
+    correctness matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08:
+    Malta64/VR4300 hard-float and soft-float, Malta/mips32r2 big-endian
+    hard-float and soft-float, and MaltaEL/mips32r2 little-endian hard-float
+    and soft-float.  The kernel C compile path still uses
+    `-msoft-float -fomit-frame-pointer`; rootfs float mode is varied
+    independently by the hard/soft gates.  Linpack smoke rates observed in
+    QEMU: Malta64 hard 13770.143-13857.808 KFLOPS, Malta64 soft
+    831.415-832.141 KFLOPS, Malta hard 7422.324-7488.546 KFLOPS, Malta soft
+    924.347-926.147 KFLOPS, MaltaEL hard 9076.971-9128.844 KFLOPS, and
+    MaltaEL soft 939.979-944.133 KFLOPS.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -2632,8 +2674,8 @@ Milestone order:
     stack-argument memory `FUNARG`, narrow unsigned conversion, long-long
     compare delay-slot, conservative integer load-delay, VR4300-only
     shift-before-load delay fill, final move/GPR-ALU/signed-imm16-`li`
-    load-delay/control-delay, and non-RA GPR call-delay patches are complete
-    and green;
+    load-delay/control-delay, non-RA GPR call-delay, and HI/LO independent
+    `lw` delay-fill patches are complete and green;
     MIPS32R2 one-instruction integer multiply and MIPS32R2 interlocked
     dependent-load `nop` cleanup are also complete and green.  Remaining FP
     load/compute and broader load scheduling, including the MIPS32R2 version
