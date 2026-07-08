@@ -1743,12 +1743,34 @@ mips_parse_move_gprs(const char *line, char *dsttok, size_t dstsz,
 }
 
 static int
+mips_parse_tail_operand(const char *s, char *tok, size_t toksz,
+    const char **commentp)
+{
+	const char *start, *end, *comment;
+	size_t len;
+
+	start = mips_skip_space(s);
+	end = start;
+	while (*end != '\0' && *end != '\n' && *end != '#')
+		++end;
+	comment = *end == '#' ? end : NULL;
+	while (end > start && (end[-1] == ' ' || end[-1] == '\t'))
+		--end;
+	len = (size_t)(end - start);
+	if (len == 0 || len >= toksz)
+		return 0;
+	memcpy(tok, start, len);
+	tok[len] = '\0';
+	*commentp = comment;
+	return 1;
+}
+
+static int
 mips_fold_move_shift_line(const char *move, const char *shift, char *out,
     size_t outsz)
 {
 	char op[16], mdst[16], msrc[16], sdst[16], ssrc[16], imm[64];
-	const char *s, *imm_start, *imm_end, *comment;
-	size_t imm_len;
+	const char *s, *comment;
 	int mdstreg, msrcreg, sdstreg, ssrcreg;
 	int n;
 
@@ -1768,25 +1790,49 @@ mips_fold_move_shift_line(const char *move, const char *shift, char *out,
 		return 0;
 	if (sdstreg != mdstreg || ssrcreg != mdstreg)
 		return 0;
-	imm_start = mips_skip_space(s);
-	imm_end = imm_start;
-	while (*imm_end != '\0' && *imm_end != '\n' && *imm_end != '#')
-		++imm_end;
-	comment = *imm_end == '#' ? imm_end : NULL;
-	while (imm_end > imm_start &&
-	    (imm_end[-1] == ' ' || imm_end[-1] == '\t'))
-		--imm_end;
-	imm_len = (size_t)(imm_end - imm_start);
-	if (imm_len == 0 || imm_len >= sizeof(imm))
+	if (!mips_parse_tail_operand(s, imm, sizeof(imm), &comment))
 		return 0;
-	memcpy(imm, imm_start, imm_len);
-	imm[imm_len] = '\0';
 	if (comment != NULL)
 		n = snprintf(out, outsz, "\t%s %s,%s,%s\t%s",
 		    op, sdst, msrc, imm, comment);
 	else
 		n = snprintf(out, outsz, "\t%s %s,%s,%s\n",
 		    op, sdst, msrc, imm);
+	return n > 0 && (size_t)n < outsz;
+}
+
+static int
+mips_fold_move_addiu_line(const char *move, const char *add, char *out,
+    size_t outsz)
+{
+	char mdst[16], msrc[16], adst[16], asrc[16], imm[64];
+	const char *s, *comment;
+	int mdstreg, msrcreg, adstreg, asrcreg;
+	int n;
+
+	if (!mips_parse_move_gprs(move, mdst, sizeof(mdst), msrc, sizeof(msrc),
+	    &mdstreg, &msrcreg))
+		return 0;
+	if (!mips_parse_opcode(add, imm, sizeof(imm)) ||
+	    strcmp(imm, "addiu") != 0)
+		return 0;
+	s = mips_skip_space(add);
+	s += strlen(imm);
+	if (!mips_parse_gpr_operand(&s, adst, sizeof(adst), &adstreg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, asrc, sizeof(asrc), &asrcreg) ||
+	    !mips_skip_comma(&s))
+		return 0;
+	if (adstreg != mdstreg || asrcreg != mdstreg)
+		return 0;
+	if (!mips_parse_tail_operand(s, imm, sizeof(imm), &comment))
+		return 0;
+	if (comment != NULL)
+		n = snprintf(out, outsz, "\taddiu %s,%s,%s\t%s",
+		    adst, msrc, imm, comment);
+	else
+		n = snprintf(out, outsz, "\taddiu %s,%s,%s\n",
+		    adst, msrc, imm);
 	return n > 0 && (size_t)n < outsz;
 }
 
@@ -1926,7 +1972,7 @@ mips_trim_load_delay_nops(char *path)
 }
 
 static int
-mips_fold_move_shift(char *path)
+mips_fold_move_peepholes(char *path)
 {
 	char line[4096], next[4096], folded[4096];
 	FILE *in, *out;
@@ -1960,6 +2006,8 @@ mips_fold_move_shift(char *path)
 			pos = ftell(in);
 			if (pos != -1 && fgets(next, sizeof(next), in) != NULL) {
 				if (mips_fold_move_shift_line(line, next,
+				    folded, sizeof(folded)) ||
+				    mips_fold_move_addiu_line(line, next,
 				    folded, sizeof(folded))) {
 					fputs(folded, out);
 					prev_control = mips_is_control_transfer(folded);
@@ -2017,7 +2065,7 @@ mips_postprocess_asm(char *path)
 {
 	if (mips_trim_load_delay_nops(path))
 		return 1;
-	return mips_fold_move_shift(path);
+	return mips_fold_move_peepholes(path);
 }
 #endif
 
