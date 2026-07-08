@@ -1619,6 +1619,23 @@ mips_is_multiply(const char *line)
 }
 
 static int
+mips_is_hilo_write(const char *line)
+{
+	char op[16];
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	return strcmp(op, "mult") == 0 || strcmp(op, "multu") == 0 ||
+	    strcmp(op, "dmult") == 0 || strcmp(op, "dmultu") == 0 ||
+	    strcmp(op, "div") == 0 || strcmp(op, "divu") == 0 ||
+	    strcmp(op, "ddiv") == 0 || strcmp(op, "ddivu") == 0 ||
+	    strcmp(op, "mthi") == 0 || strcmp(op, "mtlo") == 0 ||
+	    strcmp(op, "mul") == 0 || strcmp(op, "madd") == 0 ||
+	    strcmp(op, "maddu") == 0 || strcmp(op, "msub") == 0 ||
+	    strcmp(op, "msubu") == 0;
+}
+
+static int
 mips_is_fpu_compare(const char *line)
 {
 	char op[16];
@@ -2167,6 +2184,21 @@ mips_parse_mfhilo_dest(const char *line, int *regp)
 	s += strlen(op);
 	return mips_parse_gpr_operand(&s, tok, sizeof(tok), regp) &&
 	    mips_line_ends_after_operands(s);
+}
+
+static int
+mips_can_trim_mfhilo_post_nops(const char *mf, const char *next1,
+    const char *next2)
+{
+	int reg;
+
+	if (mips_cpu != MIPS_CPU_VR4300 && mips_cpu != MIPS_CPU_MIPS32R2)
+		return 0;
+	if (!mips_parse_mfhilo_dest(mf, &reg) ||
+	    !mips_is_instruction(next1) ||
+	    !mips_is_instruction(next2))
+		return 0;
+	return !mips_is_hilo_write(next1) && !mips_is_hilo_write(next2);
 }
 
 static int
@@ -2906,6 +2938,35 @@ mips_fold_late_peepholes(char *path)
 					changed = 1;
 					continue;
 				}
+				pos2 = ftell(in);
+				if (pos2 != -1 &&
+				    fgets(after, sizeof(after), in) != NULL &&
+				    fgets(mf, sizeof(mf), in) != NULL &&
+				    fgets(mtc1, sizeof(mtc1), in) != NULL) {
+					if (mips_is_nop(next) &&
+					    mips_is_nop(after) &&
+					    mips_can_trim_mfhilo_post_nops(line,
+					    mf, mtc1)) {
+						fputs(line, out);
+						fputs(mf, out);
+						fputs(mtc1, out);
+						prev_control =
+						    mips_is_control_transfer(
+						    mtc1);
+						changed = 1;
+						continue;
+					}
+				}
+				if (ferror(in) ||
+				    fseek(in, pos2 != -1 ? pos2 : pos,
+				    SEEK_SET) == -1) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
 				pos2 = ftell(in);
 				if (pos2 != -1 &&
 				    fgets(after, sizeof(after), in) != NULL &&
