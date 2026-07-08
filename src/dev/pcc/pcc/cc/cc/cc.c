@@ -1947,6 +1947,19 @@ mips_parse_shift_imm_gprs(const char *line, unsigned long long *regsp)
 }
 
 static int
+mips_parse_move_gprs_regs(const char *line, unsigned long long *regsp)
+{
+	char dst[16], src[16];
+	int dstreg, srcreg;
+
+	if (!mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
+	    &dstreg, &srcreg))
+		return 0;
+	*regsp = (1ULL << dstreg) | (1ULL << srcreg);
+	return 1;
+}
+
+static int
 mips_is_lw_load(const char *line, struct mips_load_dest *destp)
 {
 	char op[16];
@@ -1976,6 +1989,25 @@ mips_can_fill_shift_load_delay(const char *shift, const char *load,
 		return 0;
 	if (mips_line_touches_gpr(load, shift_regs) ||
 	    mips_line_touches_load(shift, &dest))
+		return 0;
+	return 1;
+}
+
+static int
+mips_can_fill_move_load_delay(const char *move, const char *load,
+    const char *next)
+{
+	struct mips_load_dest dest;
+	unsigned long long move_regs;
+
+	if (!mips_parse_move_gprs_regs(move, &move_regs) ||
+	    !mips_is_lw_load(load, &dest))
+		return 0;
+	if (!mips_is_load_gap_insn(next, &dest) ||
+	    !mips_line_touches_load(next, &dest))
+		return 0;
+	if (mips_line_touches_gpr(load, move_regs) ||
+	    mips_line_touches_load(move, &dest))
 		return 0;
 	return 1;
 }
@@ -2267,6 +2299,7 @@ mips_fill_shift_load_delay_nops(char *path)
 	FILE *in, *out;
 	char *tmp;
 	long pos;
+	int can_fill;
 	int prev_delay_slot;
 	int changed;
 	int failed;
@@ -2296,15 +2329,21 @@ mips_fill_shift_load_delay_nops(char *path)
 			if (pos != -1 && fgets(load, sizeof(load), in) != NULL) {
 				if (fgets(nop, sizeof(nop), in) != NULL &&
 				    fgets(next, sizeof(next), in) != NULL &&
-				    mips_is_nop(nop) &&
-				    mips_can_fill_shift_load_delay(line, load,
-				    next)) {
-					fputs(load, out);
-					fputs(line, out);
-					fputs(next, out);
-					prev_delay_slot = mips_has_delay_slot(next);
-					changed = 1;
-					continue;
+				    mips_is_nop(nop)) {
+					can_fill =
+					    mips_can_fill_shift_load_delay(line,
+					    load, next) ||
+					    mips_can_fill_move_load_delay(line,
+					    load, next);
+					if (can_fill) {
+						fputs(load, out);
+						fputs(line, out);
+						fputs(next, out);
+						prev_delay_slot =
+						    mips_has_delay_slot(next);
+						changed = 1;
+						continue;
+					}
 				}
 				if (ferror(in) ||
 				    fseek(in, pos, SEEK_SET) == -1) {

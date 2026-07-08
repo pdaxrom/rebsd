@@ -2104,6 +2104,48 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - Move-before-load delay fill landed on 2026-07-08 for VR4300: the same
+    final postprocess now also rewrites only the conservative `move`; `lw`;
+    `nop`; immediate load-use pattern into `lw`; `move`; load-use.  The
+    `move` must not already be in a branch delay slot, must not affect the
+    load address or destination, and the rule remains limited to ordinary GPR
+    `lw`.  PCC kernel builds do pass `-fomit-frame-pointer`, but `$fp`/`$s8`
+    is still a real allocatable GPR in non-trivial frames, so the postpass
+    treats it like any other GPR and rejects transforms that touch the load
+    address or loaded value.
+  - Post-move-load-delay-fill `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 2919 instructions
+      and 579 `nop` to 2910 instructions and 570 `nop`; total improvement
+      from the original baseline is -777 instructions and -663 `nop`.
+      PCC/GCC instruction ratio improved to 2.557, `nop` ratio improved to
+      13.571, branch/jump/call delay `nop` count stayed 136, and
+      multiply/divide count stayed 61.
+    - Malta/mips32r2 big-endian is unchanged because this fill is VR4300-only:
+      PCC Linpack remains at 3098 instructions and 505 `nop`.  PCC/GCC
+      instruction ratio remains 2.863, `nop` ratio remains 101.000, and
+      multiply/divide count stays 2.
+    - MaltaEL/mips32r2 little-endian is unchanged for the same reason:
+      PCC Linpack remains at 3011 instructions and 418 `nop`.  PCC/GCC
+      instruction ratio remains 2.783, `nop` ratio remains 83.600, and
+      multiply/divide count stays 2.
+      Counter artifacts:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`,
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`,
+      and
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-move-load-delay-fill full PCC-kernel/PCC-rootfs QEMU correctness
+    matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08: Malta64/VR4300
+    hard-float and soft-float, Malta/mips32r2 big-endian hard-float and
+    soft-float, and MaltaEL/mips32r2 little-endian hard-float and soft-float.
+    The kernel C compile path still uses `-msoft-float -fomit-frame-pointer`;
+    rootfs float mode is varied independently by the hard/soft gates.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - A broader independent integer-load gap fill was tested but not landed: it
     saved about 20 Linpack instructions/`nop` on the counters, but failed the
     Malta native `libc-abi` assembler smoke with
@@ -2112,10 +2154,11 @@ Backend work, kept small:
   - A VR4300-only `l.d; nop; s.d` double-copy fold was tested but not landed:
     current Linpack has about 40 same-FPR FPU copy patterns, but rewriting them
     to integer `ld`/`sd` makes the current ReBSD target assembler fail with
-    `bad instruction`.  Revisit only after explicit MIPS3/VR4300 `ld`/`sd`
-    support is added to the assembler and validated in o32 userland, interrupt
-    handling, Malta64 smoke, and real N64 hardware.  Keep it VR4300/MIPS3-only;
-    it must not be enabled for MIPS32R2.
+    `bad instruction`.  Revisit only after auditing `ld`/`sd` as MIPS3/VR4300
+    64-bit integer load/store instructions in the current o32 ABI, adding
+    explicit assembler support if needed, and validating o32 userland,
+    interrupt handling, Malta64 smoke, and real N64 hardware.  Keep it
+    VR4300/MIPS3-only; it must not be enabled for MIPS32R2.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
