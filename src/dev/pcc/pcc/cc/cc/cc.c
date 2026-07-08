@@ -2191,6 +2191,7 @@ mips_is_jump_delay_store(const char *line)
 	s = mips_skip_space(line);
 	s += strlen(op);
 	if (isfp) {
+		s = mips_skip_space(s);
 		reg = mips_parse_fpr(s, &s);
 		if (reg < 0)
 			return 0;
