@@ -2169,7 +2169,7 @@ mips_parse_mtc1_regs(const char *line, int *gprp, int *fprp)
 }
 
 static int
-mips_parse_cvt_w_regs(const char *line, int *dstp, int *srcp)
+mips_parse_cvt_w_regs(const char *line, int *dstp, int *srcp, int *doublep)
 {
 	char op[16];
 	const char *s;
@@ -2179,10 +2179,46 @@ mips_parse_cvt_w_regs(const char *line, int *dstp, int *srcp)
 		return 0;
 	s = mips_skip_space(line);
 	s += strlen(op);
-	return mips_parse_fpr_operand(&s, dstp) &&
-	    mips_skip_comma(&s) &&
-	    mips_parse_fpr_operand(&s, srcp) &&
-	    mips_line_ends_after_operands(s);
+	if (!mips_parse_fpr_operand(&s, dstp) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_fpr_operand(&s, srcp) ||
+	    !mips_line_ends_after_operands(s))
+		return 0;
+	if (doublep != NULL)
+		*doublep = strcmp(op, "cvt.d.w") == 0;
+	return 1;
+}
+
+static int
+mips_parse_fpu_binary_src_regs(const char *line, unsigned long long *srcp)
+{
+	char op[16];
+	const char *s;
+	int dst, src1, src2, pair;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	pair = 0;
+	if (strcmp(op, "add.s") == 0 || strcmp(op, "sub.s") == 0 ||
+	    strcmp(op, "mul.s") == 0 || strcmp(op, "div.s") == 0)
+		pair = 0;
+	else if (strcmp(op, "add.d") == 0 || strcmp(op, "sub.d") == 0 ||
+	    strcmp(op, "mul.d") == 0 || strcmp(op, "div.d") == 0)
+		pair = 1;
+	else
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (!mips_parse_fpr_operand(&s, &dst) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_fpr_operand(&s, &src1) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_fpr_operand(&s, &src2) ||
+	    !mips_line_ends_after_operands(s))
+		return 0;
+	*srcp = mips_load_dest_for_reg(MIPS_LOAD_FPR, src1, pair).regs |
+	    mips_load_dest_for_reg(MIPS_LOAD_FPR, src2, pair).regs;
+	return 1;
 }
 
 static int
@@ -2194,11 +2230,34 @@ mips_can_fill_hilo_mtc1_delay(const char *hilo, const char *mf,
 	if (!mips_parse_int_mult_hilo(hilo) ||
 	    !mips_parse_mfhilo_dest(mf, &mfreg) ||
 	    !mips_parse_mtc1_regs(mtc1, &mtc1_gpr, &mtc1_fpr) ||
-	    !mips_parse_cvt_w_regs(cvt, &cvt_dst, &cvt_src))
+	    !mips_parse_cvt_w_regs(cvt, &cvt_dst, &cvt_src, NULL))
 		return 0;
 	if (mtc1_gpr == mfreg)
 		return 0;
 	return cvt_dst == mtc1_fpr && cvt_src == mtc1_fpr;
+}
+
+static int
+mips_can_fill_mtc1_cvt_fpu_load_delay(const char *mtc1, const char *cvt,
+    const char *load, const char *fp)
+{
+	struct mips_load_dest load_dest;
+	unsigned long long cvt_regs, fp_src;
+	int mtc1_gpr, mtc1_fpr, cvt_dst, cvt_src, cvt_double;
+
+	if (!mips_parse_mtc1_regs(mtc1, &mtc1_gpr, &mtc1_fpr) ||
+	    !mips_parse_cvt_w_regs(cvt, &cvt_dst, &cvt_src, &cvt_double) ||
+	    !mips_is_fpu_load_line(load, &load_dest) ||
+	    !mips_parse_fpu_binary_src_regs(fp, &fp_src))
+		return 0;
+	(void)mtc1_gpr;
+	if (cvt_dst != mtc1_fpr || cvt_src != mtc1_fpr)
+		return 0;
+	cvt_regs = mips_load_dest_for_reg(MIPS_LOAD_FPR, cvt_dst,
+	    cvt_double).regs | (1ULL << cvt_src);
+	if ((load_dest.regs & cvt_regs) != 0)
+		return 0;
+	return (fp_src & load_dest.regs) != 0;
 }
 
 static int
@@ -2722,6 +2781,37 @@ mips_fold_late_peepholes(char *path)
 						fputs(cvt, out);
 						prev_control =
 						    mips_is_control_transfer(cvt);
+						changed = 1;
+						continue;
+					}
+				}
+				if (ferror(in) ||
+				    fseek(in, pos2 != -1 ? pos2 : pos,
+				    SEEK_SET) == -1) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
+				pos2 = ftell(in);
+				if (pos2 != -1 &&
+				    fgets(after, sizeof(after), in) != NULL &&
+				    fgets(mf, sizeof(mf), in) != NULL &&
+				    fgets(mtc1, sizeof(mtc1), in) != NULL &&
+				    fgets(mtc1nop, sizeof(mtc1nop), in) != NULL) {
+					if (mips_is_nop(next) &&
+					    mips_is_nop(mtc1) &&
+					    mips_can_fill_mtc1_cvt_fpu_load_delay(
+					    line, after, mf, mtc1nop)) {
+						fputs(line, out);
+						fputs(mf, out);
+						fputs(after, out);
+						fputs(mtc1nop, out);
+						prev_control =
+						    mips_is_control_transfer(
+						    mtc1nop);
 						changed = 1;
 						continue;
 					}
