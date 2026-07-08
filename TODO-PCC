@@ -64,10 +64,10 @@ not active items for the current C/static-a.out PCC milestone.
     GCC `1138` instructions / `42` nops, PCC `2508` instructions / `180` nops,
     PCC/GCC instruction ratio `2.204`, nop ratio `4.286`, branch/jump delay
     nops `130`, load-followed-by-nop `0`, and bytes `80242`.
-  - Current MIPS32R2 control baseline after the VR4300 guard:
-    GCC `1082` instructions / `5` nops, PCC `2717` instructions / `136` nops,
-    PCC/GCC instruction ratio `2.511`, nop ratio `27.200`, branch/jump delay
-    nops `136`, load-followed-by-nop `0`, and bytes `81742`.
+  - Current MIPS32R2 control baseline after the return-delay fill:
+    GCC `1082` instructions / `5` nops, PCC `2704` instructions / `123` nops,
+    PCC/GCC instruction ratio `2.499`, nop ratio `24.600`, branch/jump delay
+    nops `123`, load-followed-by-nop `0`, and bytes `81677`.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again on Malta64, Malta, and
     Malta little-endian, both hard-float rootfs and `MIPS_ROOTFS_FLOAT=soft`.
     PCC kernel builds included the existing `-fomit-frame-pointer` path and the
@@ -2968,6 +2968,50 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - MIPS32R2 `jr $ra` frame-load delay fill landed on 2026-07-08: the final
+    control-delay peephole now special-cases exact `jr $ra` returns and can
+    move an exact preceding `lw $fp,imm16($sp)` frame-pointer restore into the
+    already-present return delay-slot `nop`.  The rule is MIPS32R2-only because
+    that profile has load interlocks; VR4300 is intentionally excluded because
+    the frame-pointer restore currently separates `lw $ra` from `jr $ra` for
+    load-delay safety.  The rule does not schedule FP multiplies, does not
+    affect the VR4300 `-mfix4300` multiply-erratum repair, and does not enable
+    the still-open MIPS32R2 store-in-delay-slot policy.
+  - Post-MIPS32R2-`jr $ra`-frame-load-delay-fill `pcc-perf-baseline` assembly
+    counters:
+    - Malta64/VR4300 PCC Linpack stayed at 2508 instructions and 180 `nop`;
+      non-`nop` instructions stayed 2328, loads stayed 652, stores stayed 251,
+      branch/jump/call delay `nop` stayed 130, multiply/divide stayed 61,
+      load-followed-by-nop stayed 0, and bytes stayed 80242.  PCC/GCC
+      instruction ratio is 2.204 and `nop` ratio is 4.286.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 big-endian hard-float changed from 2717 instructions and
+      136 `nop` to 2704 instructions and 123 `nop`; non-`nop` instructions
+      stayed 2581, loads stayed 863, stores stayed 352, branch/jump/call
+      delay `nop` fell from 136 to 123, multiply/divide stayed 2,
+      load-followed-by-nop stayed 0, and bytes changed to 81677.  PCC/GCC
+      instruction ratio is 2.499 and `nop` ratio is 24.600.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-MIPS32R2-`jr $ra`-frame-load-delay-fill full PCC-kernel/PCC-rootfs
+    QEMU correctness matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08:
+    Malta64/VR4300 hard-float and soft-float, Malta/mips32r2 big-endian
+    hard-float and soft-float, and MaltaEL/mips32r2 little-endian hard-float
+    and soft-float.  The kernel C compile path still uses
+    `-msoft-float -fomit-frame-pointer`; rootfs float mode is varied
+    independently by the hard/soft gates.  Linpack smoke rates observed in
+    QEMU: Malta64 hard 13742.076-13897.396 KFLOPS, Malta64 soft
+    804.240-812.731 KFLOPS, Malta hard 13290.916-13446.358 KFLOPS, Malta soft
+    944.339-952.109 KFLOPS, MaltaEL hard 13493.201-13597.383 KFLOPS, and
+    MaltaEL soft 974.199-945.726 KFLOPS.  Malta64 `runtime-quick` still
+    reports the known QEMU memory-fault diagnostic but exits with
+    `PCC_SMOKE_RC runtime-quick 0`.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -3045,7 +3089,8 @@ Milestone order:
     MIPS32R2 one-instruction integer multiply and MIPS32R2 interlocked
     dependent-load `nop` cleanup are also complete and green.  MIPS32R2
     FPU compare-to-branch spacer cleanup, MIPS32R2 `mtc1`-to-convert spacer
-    trim, and load-gap label-only skip trim are complete and green.
+    trim, load-gap label-only skip trim, and MIPS32R2 `jr $ra` frame-load
+    return-delay fill are complete and green.
     Remaining FP load/compute and
     broader load scheduling, including the MIPS32R2 version of shift/load
     movement, needs the compact late scheduler.

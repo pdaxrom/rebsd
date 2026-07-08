@@ -2481,12 +2481,12 @@ mips_is_jump_delay_gpr_alu(const char *line)
 }
 
 static int
-mips_parse_base_offset_operand(const char **sp)
+mips_parse_base_offset_operand_reg(const char **sp, int *basep)
 {
 	char imm[64];
 	const char *s, *start, *end;
 	size_t len;
-	int reg;
+	int immval, reg;
 
 	s = mips_skip_space(*sp);
 	start = s;
@@ -2502,14 +2502,22 @@ mips_parse_base_offset_operand(const char **sp)
 		return 0;
 	memcpy(imm, start, len);
 	imm[len] = '\0';
-	if (!mips_parse_signed_imm16(imm, &reg))
+	if (!mips_parse_signed_imm16(imm, &immval))
 		return 0;
 	++s;
 	reg = mips_parse_gpr(s, &s);
 	if (reg < 0 || *s != ')')
 		return 0;
 	*sp = s + 1;
+	if (basep != NULL)
+		*basep = reg;
 	return 1;
+}
+
+static int
+mips_parse_base_offset_operand(const char **sp)
+{
+	return mips_parse_base_offset_operand_reg(sp, NULL);
 }
 
 static int
@@ -2541,6 +2549,42 @@ mips_is_jump_delay_store(const char *line)
 }
 
 static int
+mips_is_jr_ra(const char *line)
+{
+	char op[16], tok[16];
+	const char *s;
+	int reg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) || strcmp(op, "jr") != 0)
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	return mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) &&
+	    reg == 31 && mips_line_ends_after_operands(s);
+}
+
+static int
+mips_is_frame_load_for_jr_delay(const char *line)
+{
+	char op[16], tok[16];
+	const char *s;
+	int dstreg, basereg;
+
+	if (mips_cpu != MIPS_CPU_MIPS32R2)
+		return 0;
+	if (!mips_parse_opcode(line, op, sizeof(op)) || strcmp(op, "lw") != 0)
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	return mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) &&
+	    dstreg == 30 &&
+	    mips_skip_comma(&s) &&
+	    mips_parse_base_offset_operand_reg(&s, &basereg) &&
+	    basereg == 29 &&
+	    mips_line_ends_after_operands(s);
+}
+
+static int
 mips_can_move_to_plain_jump_delay(const char *line)
 {
 	char dst[16], src[16];
@@ -2556,6 +2600,8 @@ mips_can_move_to_plain_control_delay(const char *line, const char *control)
 {
 	if (MIPS_FIX4300_ACTIVE && mips_is_vr4300_fp_mul(line))
 		return 0;
+	if (mips_is_jr_ra(control))
+		return mips_is_frame_load_for_jr_delay(line);
 	if (!mips_can_move_to_plain_jump_delay(line))
 		return 0;
 	if (mips_is_plain_jump(control))
