@@ -1845,6 +1845,14 @@ mips_is_plain_jump(const char *line)
 }
 
 static int
+mips_is_plain_call(const char *line)
+{
+	char op[16];
+
+	return mips_parse_opcode(line, op, sizeof(op)) && strcmp(op, "jal") == 0;
+}
+
+static int
 mips_is_jump_delay_gpr_alu(const char *line)
 {
 	char op[16], tok[16];
@@ -1875,6 +1883,18 @@ mips_can_move_to_plain_jump_delay(const char *line)
 
 	return mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
 	    &dstreg, &srcreg) || mips_is_jump_delay_gpr_alu(line);
+}
+
+static int
+mips_can_move_to_plain_control_delay(const char *line, const char *control)
+{
+	if (!mips_can_move_to_plain_jump_delay(line))
+		return 0;
+	if (mips_is_plain_jump(control))
+		return 1;
+	if (mips_is_plain_call(control))
+		return !mips_line_touches_gpr(line, 1ULL << 31);
+	return 0;
 }
 
 static int
@@ -2056,8 +2076,8 @@ mips_fold_late_peepholes(char *path)
 					changed = 1;
 					continue;
 				}
-				if (mips_can_move_to_plain_jump_delay(line) &&
-				    mips_is_plain_jump(next)) {
+				if (mips_can_move_to_plain_control_delay(line,
+				    next)) {
 					pos2 = ftell(in);
 					if (pos2 != -1 &&
 					    fgets(after, sizeof(after), in) != NULL) {

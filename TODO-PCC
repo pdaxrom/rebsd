@@ -1780,6 +1780,44 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - Non-RA-GPR-into-call-delay fold landed on 2026-07-08: the final
+    postpass now uses the same real `move`/`addiu`/`addu` whitelist before a
+    plain `jal` with a `nop` delay slot, but refuses any candidate touching
+    `$ra` because `jal` writes register 31.  This still does not rewrite
+    `jalr`, conditional branches, loads, stores, FPU operations, pseudo
+    instructions, or user-supplied `.s`.
+  - Post-non-ra-gpr-call-delay-fold `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 3003 instructions
+      and 667 `nop` to 2997 instructions and 661 `nop`; branch/jump/call
+      delay `nop` count fell from 145 to 139.  Total improvement from the
+      original baseline is -690 instructions and -572 `nop`.  PCC/GCC
+      instruction ratio improved from the original 3.240 to 2.634, and `nop`
+      ratio improved to 15.738.  Multiply/divide count stayed 63.
+    - Malta/mips32r2 big-endian PCC Linpack changed from the previous 3315
+      instructions and 667 `nop` to 3309 instructions and 661 `nop`;
+      branch/jump/call delay `nop` count fell from 145 to 139.  Total
+      improvement from the original baseline is -1010 instructions and -892
+      `nop`.  PCC/GCC instruction ratio improved from the original 3.992 to
+      3.058, and `nop` ratio improved to 132.200.  Multiply/divide count
+      stayed 63.
+    - MaltaEL/mips32r2 little-endian PCC Linpack changed from the previous
+      3228 instructions and 580 `nop` to 3222 instructions and 574 `nop`;
+      branch/jump/call delay `nop` count fell from 145 to 139.  Total
+      improvement from the original baseline is -1097 instructions and -979
+      `nop`.  PCC/GCC instruction ratio improved from the original 3.992 to
+      2.978, and `nop` ratio improved to 114.800.  Multiply/divide count
+      stayed 63.
+      Counter artifacts:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`,
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`,
+      and
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-non-ra-gpr-call-delay-fold QEMU correctness gates passed with
+    `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian, and
+    MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
   - A broader independent integer-load gap fill was tested but not landed: it
     saved about 20 Linpack instructions/`nop` on the counters, but failed the
     Malta native `libc-abi` assembler smoke with
@@ -1851,8 +1889,9 @@ Milestone order:
     call-delay-slot, callee-saved restore, helper-call delay-slot, and
     stack-argument memory `FUNARG`, narrow unsigned conversion, long-long
     compare delay-slot, conservative integer load-delay, and final
-    move/GPR-ALU-into-jump-delay patches are complete and green; remaining FP
-    load/compute and broader load scheduling needs the compact late scheduler.
+    move/GPR-ALU-into-jump-delay plus non-RA GPR call-delay patches are
+    complete and green; remaining FP load/compute and broader load scheduling
+    needs the compact late scheduler.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
