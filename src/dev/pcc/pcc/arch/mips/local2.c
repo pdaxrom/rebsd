@@ -774,6 +774,16 @@ twollbrtmp(NODE *p, const char *op, int lab)
 }
 
 static void
+twollbrtmp_slt(NODE *p, const char *op, int lab, int unsig,
+    const char *l, const char *r)
+{
+	printf("\t%s ", op);
+	expand(p, 0, "A1");
+	printf("," LABFMT "\n", lab);
+	twollslt(p, unsig, l, r);
+}
+
+static void
 twolljump(int lab)
 {
 	printf("\tj " LABFMT "\n", lab);
@@ -800,38 +810,30 @@ twollcomp(NODE *p)
 	case LT:
 	case ULT:
 		twollslt(p, unsig, "UL", "UR");
-		twollbrtmp(p, "bnez", e);
-		twollslt(p, unsig, "UR", "UL");
-		twollbrtmp(p, "bnez", s);
-		twollslt(p, 1, "AL", "AR");
+		twollbrtmp_slt(p, "bnez", e, unsig, "UR", "UL");
+		twollbrtmp_slt(p, "bnez", s, 1, "AL", "AR");
 		twollbrtmp(p, "bnez", e);
 		break;
 	case LE:
 	case ULE:
 		twollslt(p, unsig, "UL", "UR");
-		twollbrtmp(p, "bnez", e);
-		twollslt(p, unsig, "UR", "UL");
-		twollbrtmp(p, "bnez", s);
-		twollslt(p, 1, "AR", "AL");
+		twollbrtmp_slt(p, "bnez", e, unsig, "UR", "UL");
+		twollbrtmp_slt(p, "bnez", s, 1, "AR", "AL");
 		twollbrtmp(p, "bnez", s);
 		twolljump(e);
 		break;
 	case GT:
 	case UGT:
 		twollslt(p, unsig, "UR", "UL");
-		twollbrtmp(p, "bnez", e);
-		twollslt(p, unsig, "UL", "UR");
-		twollbrtmp(p, "bnez", s);
-		twollslt(p, 1, "AR", "AL");
+		twollbrtmp_slt(p, "bnez", e, unsig, "UL", "UR");
+		twollbrtmp_slt(p, "bnez", s, 1, "AR", "AL");
 		twollbrtmp(p, "bnez", e);
 		break;
 	case GE:
 	case UGE:
 		twollslt(p, unsig, "UL", "UR");
-		twollbrtmp(p, "bnez", s);
-		twollslt(p, unsig, "UR", "UL");
-		twollbrtmp(p, "bnez", e);
-		twollslt(p, 1, "AL", "AR");
+		twollbrtmp_slt(p, "bnez", s, unsig, "UR", "UL");
+		twollbrtmp_slt(p, "bnez", e, 1, "AL", "AR");
 		twollbrtmp(p, "bnez", s);
 		twolljump(e);
 		break;
