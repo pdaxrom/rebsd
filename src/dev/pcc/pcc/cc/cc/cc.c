@@ -271,7 +271,7 @@ static int run_linker(void);
 static int strlist_exec(struct strlist *l);
 static char *select_linker(char *);
 #if defined(mach_mips) || defined(mach_mips64)
-static int mips_trim_load_delay_nops(char *);
+static int mips_postprocess_asm(char *);
 #endif
 
 char *cat(const char *, const char *);
@@ -1152,7 +1152,7 @@ main(int argc, char *argv[])
 			if (compile_input(ifile, ofile))
 				exandrm(ofile);
 #if defined(mach_mips) || defined(mach_mips64)
-			if (mips_trim_load_delay_nops(ofile))
+			if (mips_postprocess_asm(ofile))
 				exandrm(ofile);
 #endif
 			if (Sflag)
@@ -1660,6 +1660,137 @@ mips_line_touches_load(const char *line, const struct mips_load_dest *dest)
 }
 
 static int
+mips_is_control_transfer(const char *line)
+{
+	char op[16];
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	return op[0] == 'b' || strcmp(op, "j") == 0 ||
+	    strcmp(op, "jr") == 0 || strcmp(op, "jal") == 0 ||
+	    strcmp(op, "jalr") == 0;
+}
+
+static int
+mips_reg_token_char(int c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+	    (c >= '0' && c <= '9') || c == '_';
+}
+
+static int
+mips_parse_gpr_operand(const char **sp, char *tok, size_t toksz, int *regp)
+{
+	const char *s, *end, *rend;
+	size_t len;
+	int reg;
+
+	s = mips_skip_space(*sp);
+	if (*s != '$')
+		return 0;
+	end = s + 1;
+	while (mips_reg_token_char((unsigned char)*end))
+		++end;
+	len = (size_t)(end - s);
+	if (len <= 1 || len >= toksz)
+		return 0;
+	reg = mips_parse_gpr(s, &rend);
+	if (reg < 0 || rend != end)
+		return 0;
+	memcpy(tok, s, len);
+	tok[len] = '\0';
+	*sp = end;
+	*regp = reg;
+	return 1;
+}
+
+static int
+mips_skip_comma(const char **sp)
+{
+	const char *s;
+
+	s = mips_skip_space(*sp);
+	if (*s != ',')
+		return 0;
+	*sp = s + 1;
+	return 1;
+}
+
+static int
+mips_line_ends_after_operands(const char *s)
+{
+	s = mips_skip_space(s);
+	return *s == '\0' || *s == '\n' || *s == '#';
+}
+
+static int
+mips_parse_move_gprs(const char *line, char *dsttok, size_t dstsz,
+    char *srctok, size_t srcsz, int *dstp, int *srcp)
+{
+	char op[16];
+	const char *s;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) || strcmp(op, "move") != 0)
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (!mips_parse_gpr_operand(&s, dsttok, dstsz, dstp) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, srctok, srcsz, srcp) ||
+	    !mips_line_ends_after_operands(s))
+		return 0;
+	return 1;
+}
+
+static int
+mips_fold_move_shift_line(const char *move, const char *shift, char *out,
+    size_t outsz)
+{
+	char op[16], mdst[16], msrc[16], sdst[16], ssrc[16], imm[64];
+	const char *s, *imm_start, *imm_end, *comment;
+	size_t imm_len;
+	int mdstreg, msrcreg, sdstreg, ssrcreg;
+	int n;
+
+	if (!mips_parse_move_gprs(move, mdst, sizeof(mdst), msrc, sizeof(msrc),
+	    &mdstreg, &msrcreg))
+		return 0;
+	if (!mips_parse_opcode(shift, op, sizeof(op)) ||
+	    (strcmp(op, "sll") != 0 && strcmp(op, "srl") != 0 &&
+	    strcmp(op, "sra") != 0))
+		return 0;
+	s = mips_skip_space(shift);
+	s += strlen(op);
+	if (!mips_parse_gpr_operand(&s, sdst, sizeof(sdst), &sdstreg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, ssrc, sizeof(ssrc), &ssrcreg) ||
+	    !mips_skip_comma(&s))
+		return 0;
+	if (sdstreg != mdstreg || ssrcreg != mdstreg)
+		return 0;
+	imm_start = mips_skip_space(s);
+	imm_end = imm_start;
+	while (*imm_end != '\0' && *imm_end != '\n' && *imm_end != '#')
+		++imm_end;
+	comment = *imm_end == '#' ? imm_end : NULL;
+	while (imm_end > imm_start &&
+	    (imm_end[-1] == ' ' || imm_end[-1] == '\t'))
+		--imm_end;
+	imm_len = (size_t)(imm_end - imm_start);
+	if (imm_len == 0 || imm_len >= sizeof(imm))
+		return 0;
+	memcpy(imm, imm_start, imm_len);
+	imm[imm_len] = '\0';
+	if (comment != NULL)
+		n = snprintf(out, outsz, "\t%s %s,%s,%s\t%s",
+		    op, sdst, msrc, imm, comment);
+	else
+		n = snprintf(out, outsz, "\t%s %s,%s,%s\n",
+		    op, sdst, msrc, imm);
+	return n > 0 && (size_t)n < outsz;
+}
+
+static int
 mips_can_trim_load_nop(FILE *in, const char *next,
     const struct mips_load_dest *dest)
 {
@@ -1792,6 +1923,101 @@ mips_trim_load_delay_nops(char *path)
 	}
 	free(tmp);
 	return 0;
+}
+
+static int
+mips_fold_move_shift(char *path)
+{
+	char line[4096], next[4096], folded[4096];
+	FILE *in, *out;
+	char *tmp;
+	long pos;
+	int prev_control;
+	int changed;
+	int failed;
+
+	tmp = mips_asm_temp_name(path);
+	if (tmp == NULL)
+		return 1;
+	in = fopen(path, "r");
+	if (in == NULL) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	out = fopen(tmp, "w");
+	if (out == NULL) {
+		fclose(in);
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+
+	prev_control = 0;
+	changed = 0;
+	while (fgets(line, sizeof(line), in) != NULL) {
+		if (!prev_control) {
+			pos = ftell(in);
+			if (pos != -1 && fgets(next, sizeof(next), in) != NULL) {
+				if (mips_fold_move_shift_line(line, next,
+				    folded, sizeof(folded))) {
+					fputs(folded, out);
+					prev_control = mips_is_control_transfer(folded);
+					changed = 1;
+					continue;
+				}
+				if (fseek(in, pos, SEEK_SET) == -1) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+			} else if (pos != -1) {
+				if (ferror(in)) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
+			}
+		}
+		fputs(line, out);
+		if (mips_is_instruction(line))
+			prev_control = mips_is_control_transfer(line);
+	}
+
+	failed = ferror(in) || ferror(out);
+	if (fclose(out) == EOF)
+		failed = 1;
+	if (fclose(in) == EOF)
+		failed = 1;
+	if (failed) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	if (changed) {
+		if (rename(tmp, path) == -1) {
+			unlink(tmp);
+			free(tmp);
+			return 1;
+		}
+	} else {
+		unlink(tmp);
+	}
+	free(tmp);
+	return 0;
+}
+
+static int
+mips_postprocess_asm(char *path)
+{
+	if (mips_trim_load_delay_nops(path))
+		return 1;
+	return mips_fold_move_shift(path);
 }
 #endif
 
