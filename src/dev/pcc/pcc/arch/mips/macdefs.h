@@ -387,9 +387,11 @@ extern int nargregs;
 #define FEATURE_MIPS32R2	0x00040000
 #define FEATURE_FIX4300		0x00080000
 #define FEATURE_NOFIX4300	0x00100000
+#define FEATURE_VR4300		0x00200000
 
 #define SPCON           (MAXSPECIAL+1)  /* positive constant */
 #define SPOW2CON        (MAXSPECIAL+2)  /* positive power-of-two constant */
+#define SSHADDCON       (MAXSPECIAL+3)  /* cheap shift-add multiply constant */
 
 #define TARGET_STDARGS
 #define TARGET_BUILTINS							\

@@ -1050,6 +1050,76 @@ mulpow2con(NODE *p)
 	printf("%d\t# multiply by power-of-two constant\n", shift);
 }
 
+static int
+mips_is_pow2u(unsigned int val)
+{
+	return val != 0 && (val & (val - 1)) == 0;
+}
+
+static void
+mips_shiftadd_mul_plan(CONSZ val, int *shift, int *postshift, int *add)
+{
+	unsigned int odd;
+
+	*postshift = 0;
+	odd = (unsigned int)val;
+	while ((odd & 1) == 0) {
+		odd >>= 1;
+		(*postshift)++;
+	}
+
+	if (mips_is_pow2u(odd - 1)) {
+		*shift = mips_con_log2((CONSZ)(odd - 1));
+		*add = 1;
+		return;
+	}
+	if (mips_is_pow2u(odd + 1)) {
+		*shift = mips_con_log2((CONSZ)(odd + 1));
+		*add = 0;
+		return;
+	}
+
+	comperr("mips_shiftadd_mul_plan");
+}
+
+static int
+mips_shiftadd_mul_ok(CONSZ val)
+{
+	unsigned int odd;
+
+	if (val <= 2 || val > 0x7fffffff)
+		return 0;
+	odd = (unsigned int)val;
+	if (mips_is_pow2u(odd))
+		return 0;
+
+	while ((odd & 1) == 0)
+		odd >>= 1;
+	return mips_is_pow2u(odd - 1) || mips_is_pow2u(odd + 1);
+}
+
+static void
+mulshiftaddcon(NODE *p)
+{
+	int add, postshift, shift;
+
+	mips_shiftadd_mul_plan(getlval(p->n_right), &shift, &postshift, &add);
+	printf("\tmove %s,", rnames[AT]);
+	expand(p, 0, "AL\t# preserve shift-add multiplicand\n");
+	printf("\tsll ");
+	expand(p, 0, "A1,");
+	printf("%s,%d\n", rnames[AT], shift);
+	if (add)
+		expand(p, 0, "\taddu A1,A1,");
+	else
+		expand(p, 0, "\tsubu A1,A1,");
+	printf("%s\t# multiply by shift-add constant\n", rnames[AT]);
+	if (postshift != 0) {
+		expand(p, 0, "\tsll A1,A1,");
+		printf("%d\t# multiply by shift-add constant\n", postshift);
+	}
+}
+
 static void
 udivpow2con(NODE *p)
 {
@@ -1233,6 +1303,10 @@ zzzcode(NODE * p, int c)
 
 	case 'X':		/* branch for zero-left comparison */
 		zero_left_cmpbr(p);
+		break;
+
+	case 'Y':		/* multiply by shift-add constant */
+		mulshiftaddcon(p);
 		break;
 
 	default:
@@ -2048,6 +2122,10 @@ special(NODE *p, int shape)
 		    (val & (val - 1)) == 0)
 			return SRDIR;
 		break;
+	case SSHADDCON:
+		if (mips_shiftadd_mul_ok(val))
+			return SRDIR;
+		break;
 	}
 
 	return SRNOPE;
@@ -2128,12 +2206,15 @@ features(int mask)
 		return 0;
 	if ((mask & FEATURE_MIPS32R2) && mips_cpu != MIPS_CPU_MIPS32R2)
 		return 0;
+	if ((mask & FEATURE_VR4300) && mips_cpu != MIPS_CPU_VR4300)
+		return 0;
 	if ((mask & FEATURE_FIX4300) && !MIPS_FIX4300_ACTIVE)
 		return 0;
 	if ((mask & FEATURE_NOFIX4300) && MIPS_FIX4300_ACTIVE)
 		return 0;
 	return (mask & ~(FEATURE_HARDFLOAT|FEATURE_SOFTFLOAT|
-	    FEATURE_MIPS32R2|FEATURE_FIX4300|FEATURE_NOFIX4300)) == 0;
+	    FEATURE_MIPS32R2|FEATURE_FIX4300|FEATURE_NOFIX4300|
+	    FEATURE_VR4300)) == 0;
 }
 /*
  * Do something target-dependent for xasm arguments.
