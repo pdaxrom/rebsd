@@ -2057,7 +2057,10 @@ features(int mask)
 		return 0;
 	if ((mask & FEATURE_SOFTFLOAT) && !mips_soft_float)
 		return 0;
-	return (mask & ~(FEATURE_HARDFLOAT|FEATURE_SOFTFLOAT)) == 0;
+	if ((mask & FEATURE_MIPS32R2) && mips_cpu != MIPS_CPU_MIPS32R2)
+		return 0;
+	return (mask & ~(FEATURE_HARDFLOAT|FEATURE_SOFTFLOAT|
+	    FEATURE_MIPS32R2)) == 0;
 }
 /*
  * Do something target-dependent for xasm arguments.

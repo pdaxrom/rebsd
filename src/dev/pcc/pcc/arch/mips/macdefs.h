@@ -376,6 +376,7 @@ extern int nargregs;
 
 #define FEATURE_HARDFLOAT	0x00010000
 #define FEATURE_SOFTFLOAT	0x00020000
+#define FEATURE_MIPS32R2	0x00040000
 
 #define SPCON           (MAXSPECIAL+1)  /* positive constant */
 #define SPOW2CON        (MAXSPECIAL+2)  /* positive power-of-two constant */

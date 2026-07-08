@@ -633,6 +633,19 @@ struct optab table[] = {
 		XSL(A),	RESC1,
 		"ZP", },
 
+{ MUL,	INAREG|FEATURE_MIPS32R2,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
+		NARL,	RESC1,
+		"	mul A1,AL,AR	# unsigned multiply mips32r2\n", },
+
+/* this previous will match on unsigned/unsigned multiplication first */
+{ MUL,	INAREG|FEATURE_MIPS32R2,
+	SAREG,	TWORD|TUSHORT|TSHORT|TUCHAR|TCHAR,
+	SAREG,	TWORD|TUSHORT|TSHORT|TUCHAR|TCHAR,
+		NARL,	RESC1,
+		"	mul A1,AL,AR	# signed multiply mips32r2\n", },
+
 { MUL,	INAREG,
 	SAREG,	TUWORD|TUSHORT|TUCHAR,
 	SAREG,	TUWORD|TUSHORT|TUCHAR,
