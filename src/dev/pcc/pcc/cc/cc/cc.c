@@ -1463,7 +1463,7 @@ mips_parse_gpr(const char *s, const char **endp)
 	if (*s != '$')
 		return -1;
 	++s;
-	if (*s == 'f') {
+	if (*s == 'f' && s[1] >= '0' && s[1] <= '9') {
 		++s;
 		while (*s >= '0' && *s <= '9')
 			++s;

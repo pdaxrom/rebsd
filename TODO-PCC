@@ -1675,6 +1675,39 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - `$fp` GPR parser fix landed on 2026-07-08: the MIPS assembly postpass
+    parser now treats only `$f` followed by a digit as an FPU register, so
+    `$fp` is visible as the normal GPR alias for register 30.  This is not a
+    new backend template or scheduler; it lets the existing conservative
+    postpasses see `$fp` operands they were previously refusing.
+  - Post-fp-parser-fix `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 3046 instructions
+      and 706 `nop` to 3042 instructions and 706 `nop`; total improvement
+      from the original baseline is -645 instructions and -527 `nop`.
+      PCC/GCC instruction ratio improved from the original 3.240 to 2.673,
+      and `nop` ratio stayed 16.810.  Multiply/divide count stayed 63.
+    - Malta/mips32r2 big-endian PCC Linpack changed from the previous 3358
+      instructions and 706 `nop` to 3354 instructions and 706 `nop`; total
+      improvement from the original baseline is -965 instructions and -847
+      `nop`.  PCC/GCC instruction ratio improved from the original 3.992 to
+      3.100, and `nop` ratio stayed 141.200.  Multiply/divide count stayed 63.
+    - MaltaEL/mips32r2 little-endian PCC Linpack changed from the previous
+      3271 instructions and 619 `nop` to 3267 instructions and 619 `nop`;
+      total improvement from the original baseline is -1052 instructions and
+      -934 `nop`.  PCC/GCC instruction ratio improved from the original 3.992
+      to 3.019, and `nop` ratio stayed 123.800.  Multiply/divide count stayed
+      63.
+      Counter artifacts:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`,
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`,
+      and
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-fp-parser-fix QEMU correctness gates passed with
+    `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian, and
+    MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
