@@ -245,6 +245,7 @@ struct optable {
 #define FFT2 (1 << 28)    /* .., ft, ... */
 #define FFT3 (1 << 29)    /* .., .., ft */
 #define FCACHEOP (1 << 30) /* 5-bit cache operation code */
+#define FVR4300_ONLY (1U << 31) /* requires VR4300/MIPS3 mode */
 
 /*
  * Implement pseudo-instructions.
@@ -355,6 +356,7 @@ const struct optable optable[] = {
     { 0x90000000, "lbu", FRT1 | FOFF16 | FRSB | FMOD },
     { 0xd4000000, "l.d", FFT1 | FOFF16 | FRSB },
     { 0xc4000000, "l.s", FFT1 | FOFF16 | FRSB },
+    { 0xdc000000, "ld", FRT1 | FOFF16 | FRSB | FMOD | FVR4300_ONLY },
     { 0xd4000000, "ldc1", FFT1 | FOFF16 | FRSB },
     { 0x4c000001, "ldxc1", FNO_VR4300, emit_fpidxmem },
     { 0x84000000, "lh", FRT1 | FOFF16 | FRSB | FMOD },
@@ -407,6 +409,7 @@ const struct optable optable[] = {
     { 0xe0000000, "sc", FRT1 | FOFF16 | FRSB },
     { 0xf4000000, "s.d", FFT1 | FOFF16 | FRSB },
     { 0xe4000000, "s.s", FFT1 | FOFF16 | FRSB },
+    { 0xfc000000, "sd", FRT1 | FOFF16 | FRSB | FVR4300_ONLY },
     { 0xf4000000, "sdc1", FFT1 | FOFF16 | FRSB },
     { 0x4c000009, "sdxc1", FNO_VR4300, emit_fpidxmem },
     { 0x7000003f, "sdbbp", FCODE | FNO_VR4300 },
@@ -2330,13 +2333,14 @@ emit_fpidxmem(unsigned opcode, struct reloc *relinfo)
 /*
  * Build and emit a machine instruction code.
  */
-void makecmd(unsigned opcode, int type, void (*emitfunc)(unsigned, struct reloc *))
+void makecmd(unsigned opcode, unsigned type,
+             void (*emitfunc)(unsigned, struct reloc *))
 {
     unsigned offset, orig_opcode = 0;
     struct reloc relinfo;
     int clex, cval, segment, clobber_reg, negate_literal, mem_offset_fits;
 
-    type &= ~FNO_VR4300;
+    type &= ~(FNO_VR4300 | FVR4300_ONLY);
     offset = 0;
     relinfo.flags = RABS;
     negate_literal = 0;
@@ -3233,6 +3237,8 @@ void pass1()
             }
             if (mode_vr4300 && (optable[cval].type & FNO_VR4300))
                 uerror("%s is not supported by VR4300", optable[cval].name);
+            if (!mode_vr4300 && (optable[cval].type & FVR4300_ONLY))
+                uerror("%s requires MIPS3/VR4300", optable[cval].name);
             ungetlex(clex, tval);
             align(2);
             makecmd(optable[cval].opcode, optable[cval].type, optable[cval].func);

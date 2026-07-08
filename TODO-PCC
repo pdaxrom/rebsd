@@ -2151,14 +2151,38 @@ Backend work, kept small:
     Malta native `libc-abi` assembler smoke with
     `as: libc-abi-cc.s, 712: bad instruction arguments`.  Keep this as a
     scheduler TODO until the exact assembler/codegen interaction is understood.
-  - A VR4300-only `l.d; nop; s.d` double-copy fold was tested but not landed:
-    current Linpack has about 40 same-FPR FPU copy patterns, but rewriting them
-    to integer `ld`/`sd` makes the current ReBSD target assembler fail with
-    `bad instruction`.  Revisit only after auditing `ld`/`sd` as MIPS3/VR4300
-    64-bit integer load/store instructions in the current o32 ABI, adding
-    explicit assembler support if needed, and validating o32 userland,
-    interrupt handling, Malta64 smoke, and real N64 hardware.  Keep it
-    VR4300/MIPS3-only; it must not be enabled for MIPS32R2.
+  - VR4300/MIPS3 assembler support for integer `ld` and `sd` landed on
+    2026-07-08.  The in-tree assembler now accepts them only in
+    VR4300/MIPS3 mode and rejects them under `-mips32r2 -march=mips32r2`
+    with `requires MIPS3/VR4300`; `smoke-as-vr4300` and
+    `matrix-as-vr4300` cover the accept/reject matrix.
+  - A VR4300-only `l.d; nop; s.d` double-copy compiler fold was tested after
+    assembler support but not landed.  It rewrote about 40 same-FPR FPU copy
+    patterns and reduced the static Malta64/VR4300 Linpack counter from
+    2910 instructions and 570 `nop` to 2870 instructions and 530 `nop`, but
+    the full Malta64 hard-float PCC-kernel/PCC-rootfs QEMU gate caught an
+    illegal-instruction failure in current o32 userland when target PCC emitted
+    integer `ld`/`sd` sequences such as `ld $at,L487; sd $at,-80($fp)`.
+    The compiler fold was removed; the post-revert Malta64 baseline is back
+    to 2910 instructions and 570 `nop`.
+  - Future check before any compiler use of integer `ld`/`sd`: verify whether
+    the real N64/VR4300 ReBSD user mode enables 64-bit integer instructions
+    and addressing through CP0 status bits such as UX/SX/KX, or an equivalent
+    kernel policy.  If it is safe, add an explicit opt-in compiler switch and
+    validate o32 userland, interrupt handling, Malta64 smoke, and real N64
+    hardware.  Keep it VR4300/MIPS3-only; it must not be enabled for MIPS32R2.
+  - Post-assembler-`ld`/`sd` full PCC-kernel/PCC-rootfs QEMU correctness
+    matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08: Malta64/VR4300
+    hard-float and soft-float, Malta/mips32r2 big-endian hard-float and
+    soft-float, and MaltaEL/mips32r2 little-endian hard-float and soft-float.
+    Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.

@@ -27,8 +27,11 @@ half=$base.half.s
 half_o=$base.half.o
 bad=$base.bad.s
 bad_o=$base.bad.o
+mips32=$base.mips32.s
+mips32_o=$base.mips32.o
 
-rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
+rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+    $bad $bad_o $mips32 $mips32_o
 
 $as_bin --target-info || exit 1
 
@@ -57,10 +60,18 @@ echo '	neg $2,$2' >> $valid
 echo '	negu $3,$3' >> $valid
 echo '	lw $2,46928($4)' >> $valid
 echo '	sw $3,44876($4)' >> $valid
+echo '	ld $6,16($sp)' >> $valid
+echo '	sd $6,24($sp)' >> $valid
+echo '	ld $at,wide_data' >> $valid
+echo '	sd $at,32($sp)' >> $valid
 echo '	lh $5,-40000($4)' >> $valid
 echo '	sh $5,-40000($4)' >> $valid
 echo '	jr $ra' >> $valid
 echo '	nop' >> $valid
+echo ".data" >> $valid
+echo "wide_data:" >> $valid
+echo '	.word 0' >> $valid
+echo '	.word 0' >> $valid
 
 $as_bin -EB -mips3 -march=vr4300 -o $valid_o $valid || exit 1
 
@@ -90,10 +101,33 @@ case "$bytes" in
 *)
 	echo "smoke-as-vr4300: bad .half big-endian output" >&2
 	od -b $half_o
-	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+	    $bad $bad_o $mips32 $mips32_o
 	exit 1
 	;;
 esac
+
+echo ".text" > $mips32
+echo "start:" >> $mips32
+echo '	ld $2,0($3)' >> $mips32
+echo "smoke-as-vr4300: expect reject: mips32r2 ld"
+if $as_bin -EB -mips32r2 -march=mips32r2 -o $mips32_o $mips32; then
+	echo "smoke-as-vr4300: accepted MIPS3 ld in mips32r2 mode" >&2
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+	    $bad $bad_o $mips32 $mips32_o
+	exit 1
+fi
+
+echo ".text" > $mips32
+echo "start:" >> $mips32
+echo '	sd $2,0($3)' >> $mips32
+echo "smoke-as-vr4300: expect reject: mips32r2 sd"
+if $as_bin -EB -mips32r2 -march=mips32r2 -o $mips32_o $mips32; then
+	echo "smoke-as-vr4300: accepted MIPS3 sd in mips32r2 mode" >&2
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+	    $bad $bad_o $mips32 $mips32_o
+	exit 1
+fi
 
 echo ".text" > $bad
 echo "start:" >> $bad
@@ -101,7 +135,8 @@ echo '	movn $2,$3,$4' >> $bad
 echo "smoke-as-vr4300: expect reject: movn"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid instruction: movn" >&2
-	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+	    $bad $bad_o $mips32 $mips32_o
 	exit 1
 fi
 
@@ -111,7 +146,8 @@ echo '	movz $2,$3,$4' >> $bad
 echo "smoke-as-vr4300: expect reject: movz"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid instruction: movz" >&2
-	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+	    $bad $bad_o $mips32 $mips32_o
 	exit 1
 fi
 
@@ -121,7 +157,8 @@ echo '	clz $2,$3' >> $bad
 echo "smoke-as-vr4300: expect reject: clz"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid instruction: clz" >&2
-	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+	    $bad $bad_o $mips32 $mips32_o
 	exit 1
 fi
 
@@ -131,7 +168,8 @@ echo '	ext $2,$3,0,8' >> $bad
 echo "smoke-as-vr4300: expect reject: ext"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid instruction: ext" >&2
-	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+	    $bad $bad_o $mips32 $mips32_o
 	exit 1
 fi
 
@@ -141,9 +179,11 @@ echo '	cache 32,0($a0)' >> $bad
 echo "smoke-as-vr4300: expect reject: cache 32"
 if $as_bin -EB -mips3 -march=vr4300 -o $bad_o $bad; then
 	echo "smoke-as-vr4300: accepted invalid cache op" >&2
-	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
+	rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+	    $bad $bad_o $mips32 $mips32_o
 	exit 1
 fi
 
-rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o $bad $bad_o
+rm -f $valid $valid_o $expr $expr_o $utf8 $utf8_o $half $half_o \
+    $bad $bad_o $mips32 $mips32_o
 echo "n64 as vr4300 smoke ok"

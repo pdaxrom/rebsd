@@ -77,7 +77,7 @@ gnu_text=$base.gnu.text
 retro_log=$base.retro.log
 gnu_log=$base.gnu.log
 objcopy_log=$base.objcopy.log
-total=207
+total=209
 
 trap 'rm -f "$src" "$retro_o" "$gnu_o" "$retro_text" "$gnu_text" "$retro_log" "$gnu_log" "$objcopy_log"' 0 1 2 3 15
 
@@ -269,11 +269,13 @@ A lhu lhu $2,8($3)
 A lw lw $2,8($3)
 A lwl lwl $2,8($3)
 A lwr lwr $2,8($3)
+A ld ld $2,8($3)
 A sb sb $2,8($3)
 A sh sh $2,8($3)
 A sw sw $2,8($3)
 A swl swl $2,8($3)
 A swr swr $2,8($3)
+A sd sd $2,8($3)
 A ll ll $2,8($3)
 A sc sc $2,8($3)
 A syscall syscall 7
