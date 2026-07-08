@@ -1640,8 +1640,6 @@ mips_is_load_gap_insn(const char *line, const struct mips_load_dest *dest)
 		return 0;
 	if (strcmp(op, "nop") == 0)
 		return 0;
-	if (dest->kind == MIPS_LOAD_GPR && mips_is_int_load(op))
-		return 0;
 	return 1;
 }
 
@@ -1993,6 +1991,8 @@ mips_can_trim_load_nop(FILE *in, const char *next,
 	if (!mips_is_load_gap_insn(next, dest) ||
 	    mips_line_touches_load(next, dest))
 		return 0;
+	if (dest->kind == MIPS_LOAD_GPR)
+		return 1;
 	pos = ftell(in);
 	if (pos == -1)
 		return 0;
