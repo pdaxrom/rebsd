@@ -2103,6 +2103,105 @@ mips_can_fill_gpr_alu_fpu_load_delay(const char *alu, const char *load,
 }
 
 static int
+mips_parse_int_mult_hilo(const char *line)
+{
+	char op[16], tok[16];
+	const char *s;
+	int reg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    (strcmp(op, "mult") != 0 && strcmp(op, "multu") != 0 &&
+	    strcmp(op, "dmult") != 0 && strcmp(op, "dmultu") != 0))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	return mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) &&
+	    mips_skip_comma(&s) &&
+	    mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) &&
+	    mips_line_ends_after_operands(s);
+}
+
+static int
+mips_parse_mfhilo_dest(const char *line, int *regp)
+{
+	char op[16], tok[16];
+	const char *s;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    (strcmp(op, "mflo") != 0 && strcmp(op, "mfhi") != 0))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	return mips_parse_gpr_operand(&s, tok, sizeof(tok), regp) &&
+	    mips_line_ends_after_operands(s);
+}
+
+static int
+mips_parse_fpr_operand(const char **sp, int *regp)
+{
+	const char *s, *end;
+	int reg;
+
+	s = mips_skip_space(*sp);
+	reg = mips_parse_fpr(s, &end);
+	if (reg < 0)
+		return 0;
+	*sp = end;
+	*regp = reg;
+	return 1;
+}
+
+static int
+mips_parse_mtc1_regs(const char *line, int *gprp, int *fprp)
+{
+	char op[16], tok[16];
+	const char *s;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    strcmp(op, "mtc1") != 0)
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	return mips_parse_gpr_operand(&s, tok, sizeof(tok), gprp) &&
+	    mips_skip_comma(&s) &&
+	    mips_parse_fpr_operand(&s, fprp) &&
+	    mips_line_ends_after_operands(s);
+}
+
+static int
+mips_parse_cvt_w_regs(const char *line, int *dstp, int *srcp)
+{
+	char op[16];
+	const char *s;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    (strcmp(op, "cvt.s.w") != 0 && strcmp(op, "cvt.d.w") != 0))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	return mips_parse_fpr_operand(&s, dstp) &&
+	    mips_skip_comma(&s) &&
+	    mips_parse_fpr_operand(&s, srcp) &&
+	    mips_line_ends_after_operands(s);
+}
+
+static int
+mips_can_fill_hilo_mtc1_delay(const char *hilo, const char *mf,
+    const char *mtc1, const char *cvt)
+{
+	int mfreg, mtc1_gpr, mtc1_fpr, cvt_dst, cvt_src;
+
+	if (!mips_parse_int_mult_hilo(hilo) ||
+	    !mips_parse_mfhilo_dest(mf, &mfreg) ||
+	    !mips_parse_mtc1_regs(mtc1, &mtc1_gpr, &mtc1_fpr) ||
+	    !mips_parse_cvt_w_regs(cvt, &cvt_dst, &cvt_src))
+		return 0;
+	if (mtc1_gpr == mfreg)
+		return 0;
+	return cvt_dst == mtc1_fpr && cvt_src == mtc1_fpr;
+}
+
+static int
 mips_is_plain_jump(const char *line)
 {
 	char op[16];
@@ -2561,7 +2660,8 @@ mips_fill_shift_load_delay_nops(char *path)
 static int
 mips_fold_late_peepholes(char *path)
 {
-	char line[4096], next[4096], after[4096], folded[4096];
+	char line[4096], next[4096], after[4096], mf[4096], mtc1[4096];
+	char mtc1nop[4096], cvt[4096], folded[4096];
 	FILE *in, *out;
 	const char *delay;
 	char *tmp;
@@ -2603,6 +2703,39 @@ mips_fold_late_peepholes(char *path)
 					changed = 1;
 					continue;
 				}
+				pos2 = ftell(in);
+				if (pos2 != -1 &&
+				    fgets(after, sizeof(after), in) != NULL &&
+				    fgets(mf, sizeof(mf), in) != NULL &&
+				    fgets(mtc1, sizeof(mtc1), in) != NULL &&
+				    fgets(mtc1nop, sizeof(mtc1nop), in) != NULL &&
+				    fgets(cvt, sizeof(cvt), in) != NULL) {
+					if (mips_is_nop(next) &&
+					    mips_is_nop(after) &&
+					    mips_is_nop(mtc1nop) &&
+					    mips_can_fill_hilo_mtc1_delay(line,
+					    mf, mtc1, cvt)) {
+						fputs(line, out);
+						fputs(mtc1, out);
+						fputs(next, out);
+						fputs(mf, out);
+						fputs(cvt, out);
+						prev_control =
+						    mips_is_control_transfer(cvt);
+						changed = 1;
+						continue;
+					}
+				}
+				if (ferror(in) ||
+				    fseek(in, pos2 != -1 ? pos2 : pos,
+				    SEEK_SET) == -1) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
 				delay = NULL;
 				if (mips_can_move_to_plain_control_delay(line,
 				    next))
