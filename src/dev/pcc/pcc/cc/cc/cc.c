@@ -2483,7 +2483,7 @@ mips_can_trim_load_nop(FILE *in, const char *next,
 	if (mips_line_touches_load(next, dest)) {
 		if (mips_cpu == MIPS_CPU_MIPS32R2)
 			return 1;
-		if (mips_cpu == MIPS_CPU_VR4300 && dest->kind == MIPS_LOAD_GPR)
+		if (mips_cpu == MIPS_CPU_VR4300)
 			return 1;
 		return 0;
 	}
