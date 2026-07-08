@@ -2149,9 +2149,12 @@ mips_can_trim_load_nop(FILE *in, const char *next,
 	long pos;
 	int i;
 
-	if (!mips_is_load_gap_insn(next, dest) ||
-	    mips_line_touches_load(next, dest))
+	if (!mips_is_load_gap_insn(next, dest))
 		return 0;
+	if (mips_cpu != MIPS_CPU_MIPS32R2 && mips_line_touches_load(next, dest))
+		return 0;
+	if (mips_cpu == MIPS_CPU_MIPS32R2)
+		return 1;
 	if (dest->kind == MIPS_LOAD_GPR)
 		return 1;
 	pos = ftell(in);

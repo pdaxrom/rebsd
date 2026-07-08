@@ -2270,6 +2270,52 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - MIPS32R2 interlocked-load cleanup landed on 2026-07-08: the final MIPS
+    postprocess now removes the explicit `load; nop; use` gap for selected CPU
+    `MIPS32R2`, because that ISA profile has hardware load interlocks.  This
+    is deliberately not enabled for VR4300: VR4300 still keeps dependent GPR
+    and FPU load-use spacing unless a separate VR4300-specific scheduler moves
+    an independent instruction into the gap.  The rule is a small extension of
+    the existing load-delay trim, not a general instruction reorder pass.
+  - Post-MIPS32R2-interlocked-load-cleanup `pcc-perf-baseline` assembly
+    counters:
+    - Malta64/VR4300 PCC Linpack stayed at 2896 instructions and 568 `nop`;
+      PCC/GCC instruction ratio stayed 2.545, `nop` ratio stayed 13.524,
+      load-followed-by-`nop` stayed 288, branch/jump/call delay `nop` count
+      stayed 136, and multiply/divide count stayed 61.  This confirms the
+      MIPS32R2 gate leaves VR4300 code generation unchanged.
+      Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 big-endian PCC Linpack changed from the previous 3086
+      instructions and 505 `nop` to 2746 instructions and 165 `nop`;
+      PCC/GCC instruction ratio improved from 2.852 to 2.538, and `nop` ratio
+      improved from 101.000 to 33.000.
+      Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`.
+    - MaltaEL/mips32r2 little-endian PCC Linpack changed from the previous
+      2999 instructions and 418 `nop` to 2746 instructions and 165 `nop`;
+      PCC/GCC instruction ratio improved from 2.772 to 2.538, and `nop` ratio
+      improved from 83.600 to 33.000.
+      Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-MIPS32R2-interlocked-load-cleanup full PCC-kernel/PCC-rootfs QEMU
+    correctness matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08:
+    Malta64/VR4300 hard-float and soft-float, Malta/mips32r2 big-endian
+    hard-float and soft-float, and MaltaEL/mips32r2 little-endian hard-float
+    and soft-float.  The kernel C compile path still uses
+    `-msoft-float -fomit-frame-pointer`; rootfs float mode is varied
+    independently by the hard/soft gates.  Linpack smoke rates observed in
+    QEMU: Malta64 hard about 12884-13123 KFLOPS, Malta64 soft about 888-889
+    KFLOPS, Malta hard about 7178 KFLOPS, Malta soft about 902-907 KFLOPS,
+    MaltaEL hard about 8627-9160 KFLOPS, and MaltaEL soft about 917-924
+    KFLOPS.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -2340,9 +2386,10 @@ Milestone order:
     compare delay-slot, conservative integer load-delay, VR4300-only
     shift-before-load delay fill, and final move/GPR-ALU/signed-imm16-`li`
     control-delay plus non-RA GPR call-delay patches are complete and green;
-    MIPS32R2 one-instruction integer multiply is also complete and green.
-    Remaining FP load/compute and broader load scheduling, including the
-    MIPS32R2 version of shift/load movement, needs the compact late scheduler.
+    MIPS32R2 one-instruction integer multiply and MIPS32R2 interlocked
+    dependent-load `nop` cleanup are also complete and green.  Remaining FP
+    load/compute and broader load scheduling, including the MIPS32R2 version
+    of shift/load movement, needs the compact late scheduler.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
