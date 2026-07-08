@@ -2324,6 +2324,24 @@ mips_can_fill_hilo_lw_delay2(const char *hilo, const char *mf,
 }
 
 static int
+mips_can_fill_hilo_post_mflo_lw_delay(const char *hilo, const char *mf,
+    const char *load, const char *use)
+{
+	struct mips_load_dest load_dest;
+	unsigned long long hilo_regs, use_regs;
+	int mfreg;
+
+	if (!mips_parse_int_mult_hilo(hilo, &hilo_regs) ||
+	    !mips_parse_mfhilo_dest(mf, &mfreg) ||
+	    !mips_is_lw_load(load, &load_dest) ||
+	    !mips_parse_simple_gpr_regs(use, &use_regs))
+		return 0;
+	if (mips_line_touches_gpr(load, hilo_regs | (1ULL << mfreg)))
+		return 0;
+	return 1;
+}
+
+static int
 mips_can_fill_mtc1_cvt_fpu_load_delay(const char *mtc1, const char *cvt,
     const char *load, const char *fp)
 {
@@ -2973,6 +2991,21 @@ mips_fold_late_peepholes(char *path)
 						prev_control =
 						    mips_is_control_transfer(
 						    mtc1);
+						changed = 1;
+						continue;
+					}
+					if (mips_is_nop(next) &&
+					    mips_is_nop(after) &&
+					    mips_can_fill_hilo_post_mflo_lw_delay(
+					    line, mf, mtc1, mtc1nop)) {
+						fputs(line, out);
+						fputs(mtc1, out);
+						fputs(after, out);
+						fputs(mf, out);
+						fputs(mtc1nop, out);
+						prev_control =
+						    mips_is_control_transfer(
+						    mtc1nop);
 						changed = 1;
 						continue;
 					}
