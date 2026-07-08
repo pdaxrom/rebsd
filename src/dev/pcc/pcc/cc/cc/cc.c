@@ -1598,6 +1598,38 @@ mips_is_nop(const char *line)
 }
 
 static int
+mips_label_start_char(int c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+	    c == '_' || c == '$';
+}
+
+static int
+mips_label_char(int c)
+{
+	return mips_label_start_char(c) || (c >= '0' && c <= '9') ||
+	    c == '.';
+}
+
+static int
+mips_is_load_gap_skip_line(const char *line)
+{
+	const char *s;
+
+	s = mips_skip_space(line);
+	if (*s == '\0' || *s == '\n' || *s == '#')
+		return 1;
+	if (!mips_label_start_char((unsigned char)*s))
+		return 0;
+	while (mips_label_char((unsigned char)*s))
+		++s;
+	if (*s++ != ':')
+		return 0;
+	s = mips_skip_space(s);
+	return *s == '\0' || *s == '\n' || *s == '#';
+}
+
+static int
 mips_is_vr4300_fp_mul(const char *line)
 {
 	char op[16];
@@ -2615,10 +2647,14 @@ mips_asm_temp_name(const char *path)
 static int
 mips_trim_load_delay_nops(char *path)
 {
-	char line[4096], next[4096];
+	char line[4096], next[4096], skipped[4][4096];
 	FILE *in, *out;
 	char *tmp;
 	struct mips_load_dest pending_load;
+	int have_next;
+	int i;
+	int nskipped;
+	int overflow;
 	int changed;
 	int failed;
 
@@ -2643,16 +2679,45 @@ mips_trim_load_delay_nops(char *path)
 	changed = 0;
 	while (fgets(line, sizeof(line), in) != NULL) {
 		if (pending_load.kind != MIPS_LOAD_NONE && mips_is_nop(line)) {
+			nskipped = 0;
+			overflow = 0;
 			if (fgets(next, sizeof(next), in) == NULL) {
 				fputs(line, out);
 				pending_load = mips_no_load_dest();
 				break;
+			}
+			have_next = 1;
+			while (mips_is_load_gap_skip_line(next)) {
+				if (nskipped >=
+				    (int)(sizeof(skipped) / sizeof(skipped[0]))) {
+					overflow = 1;
+					break;
+				}
+				memcpy(skipped[nskipped++], next,
+				    sizeof(skipped[0]));
+				if (fgets(next, sizeof(next), in) == NULL) {
+					have_next = 0;
+					break;
+				}
+			}
+			if (!have_next || overflow) {
+				fputs(line, out);
+				for (i = 0; i < nskipped; i++)
+					fputs(skipped[i], out);
+				if (overflow)
+					fputs(next, out);
+				pending_load = mips_no_load_dest();
+				if (!have_next)
+					break;
+				continue;
 			}
 			if (!mips_can_trim_load_nop(in, next, &pending_load)) {
 				fputs(line, out);
 			} else {
 				changed = 1;
 			}
+			for (i = 0; i < nskipped; i++)
+				fputs(skipped[i], out);
 			fputs(next, out);
 			pending_load = mips_load_dest(next);
 			continue;
