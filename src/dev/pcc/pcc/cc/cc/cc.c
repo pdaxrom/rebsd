@@ -1619,6 +1619,27 @@ mips_is_multiply(const char *line)
 }
 
 static int
+mips_is_fpu_compare(const char *line)
+{
+	char op[16];
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	return strcmp(op, "c.eq.s") == 0 || strcmp(op, "c.eq.d") == 0 ||
+	    strcmp(op, "c.lt.s") == 0 || strcmp(op, "c.lt.d") == 0 ||
+	    strcmp(op, "c.le.s") == 0 || strcmp(op, "c.le.d") == 0;
+}
+
+static int
+mips_is_fpu_branch(const char *line)
+{
+	char op[16];
+
+	return mips_parse_opcode(line, op, sizeof(op)) &&
+	    (strcmp(op, "bc1t") == 0 || strcmp(op, "bc1f") == 0);
+}
+
+static int
 mips_has_delay_slot(const char *line)
 {
 	char op[16];
@@ -2818,6 +2839,35 @@ mips_fold_late_peepholes(char *path)
 		if (!prev_control) {
 			pos = ftell(in);
 			if (pos != -1 && fgets(next, sizeof(next), in) != NULL) {
+				if (mips_cpu == MIPS_CPU_MIPS32R2 &&
+				    mips_is_fpu_compare(line) &&
+				    mips_is_nop(next)) {
+					if (fgets(after, sizeof(after), in) != NULL) {
+						if (mips_is_fpu_branch(after)) {
+							fputs(line, out);
+							fputs(after, out);
+							prev_control = 1;
+							changed = 1;
+							continue;
+						}
+					} else {
+						if (ferror(in)) {
+							fclose(out);
+							fclose(in);
+							unlink(tmp);
+							free(tmp);
+							return 1;
+						}
+						clearerr(in);
+					}
+					if (fseek(in, pos, SEEK_SET) == -1) {
+						fclose(out);
+						fclose(in);
+						unlink(tmp);
+						free(tmp);
+						return 1;
+					}
+				}
 				if (mips_fold_move_shift_line(line, next,
 				    folded, sizeof(folded)) ||
 				    mips_fold_move_addiu_line(line, next,

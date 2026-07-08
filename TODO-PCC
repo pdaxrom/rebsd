@@ -104,6 +104,36 @@ not active items for the current C/static-a.out PCC milestone.
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+- [x] MIPS32R2 FPU compare branches no longer keep a redundant spacer `nop`.
+  - The late assembly peephole now removes `nop` from
+    `c.eq.s/d`/`c.lt.s/d`/`c.le.s/d`; `nop`; `bc1t`/`bc1f` only for
+    `MIPS_CPU_MIPS32R2`, matching the interlocked MIPS32R2 FPU condition path.
+  - VR4300 is deliberately excluded. The `-mfix4300`/`-mno-fix4300` multiply
+    erratum controls and FP multiply delay-slot rules are unchanged.
+  - The Malta MIPS32R2 Linpack baseline improved from PCC `2746` instructions /
+    `165` nops to `2730` instructions / `149` nops. GCC remained `1082`
+    instructions / `24` nops; the PCC/GCC instruction ratio moved from `2.538`
+    to `2.523`.
+  - The current omit-frame audit found that PCC already honors
+    `-fomit-frame-pointer` through the MIPS late frame-reference rewrite. Future
+    improvement should focus on reducing call/FUNARG cases that still force
+    a real `$fp`, not on adding another omit-frame path.
+  - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
+    `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
+    `-fomit-frame-pointer`:
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+  - Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
 - [x] ReBSD `ld` accepts `-L` and `-l` library search options.
   - `ld` now collects all `-L` search directories before resolving any `-l`
     library, so `cc file.c -lm` works even when the compiler driver appends
@@ -2709,7 +2739,8 @@ Milestone order:
     load-delay/control-delay, non-RA GPR call-delay, and HI/LO independent
     `lw` delay-fill patches are complete and green;
     MIPS32R2 one-instruction integer multiply and MIPS32R2 interlocked
-    dependent-load `nop` cleanup are also complete and green.  Remaining FP
+    dependent-load `nop` cleanup are also complete and green.  MIPS32R2
+    FPU compare-to-branch spacer cleanup is complete and green.  Remaining FP
     load/compute and broader load scheduling, including the MIPS32R2 version
     of shift/load movement, needs the compact late scheduler.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
