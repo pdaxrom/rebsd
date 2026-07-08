@@ -29,7 +29,9 @@
 }
 
 #define TARGET_GLOBALS \
-	int mips_cpu = MIPS_CPU_DEFAULT;
+	int mips_cpu = MIPS_CPU_DEFAULT; \
+	int mips_fix4300 = MIPS_FIX4300_DEFAULT; \
+	int mips_fix4300_explicit;
 
 #ifdef TARGET_BIG_ENDIAN
 #define PCC_REBSD_CHECK_BIG_ENDIAN() ((void)0)
@@ -51,16 +53,22 @@
 #define PCC_HANDLE_MFLAG { \
 	if (match(argp, "-march=vr4300") || match(argp, "-mips3")) { \
 		mips_cpu = MIPS_CPU_VR4300; \
+		if (!mips_fix4300_explicit) \
+			mips_fix4300 = 1; \
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \
 	if (match(argp, "-march=mips32r2") || match(argp, "-mips32r2") || \
 	    match(argp, "-march=mips32")) { \
 		mips_cpu = MIPS_CPU_MIPS32R2; \
+		if (!mips_fix4300_explicit) \
+			mips_fix4300 = 0; \
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \
 	if (match(argp, "-mfix4300") || match(argp, "-mno-fix4300")) { \
+		mips_fix4300 = match(argp, "-mfix4300"); \
+		mips_fix4300_explicit = 1; \
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \

@@ -272,6 +272,7 @@ static int strlist_exec(struct strlist *l);
 static char *select_linker(char *);
 #if defined(mach_mips) || defined(mach_mips64)
 static int mips_postprocess_asm(char *);
+static int mips_prepare_asm_input(char *, char **);
 #endif
 
 char *cat(const char *, const char *);
@@ -1173,6 +1174,10 @@ main(int argc, char *argv[])
 				strlist_append(&temp_outputs, ofile = gettmp());
 				/* strlist_append linker */
 			}
+#if defined(mach_mips) || defined(mach_mips64)
+			if (mips_prepare_asm_input(ifile, &ifile))
+				exandrm(0);
+#endif
 			if (assemble_input(ifile, ofile))
 				exandrm(ofile);
 			ifile = ofile;
@@ -1593,6 +1598,40 @@ mips_is_nop(const char *line)
 }
 
 static int
+mips_is_vr4300_fp_mul(const char *line)
+{
+	char op[16];
+
+	return mips_parse_opcode(line, op, sizeof(op)) &&
+	    (strcmp(op, "mul.s") == 0 || strcmp(op, "mul.d") == 0);
+}
+
+static int
+mips_is_multiply(const char *line)
+{
+	char op[16];
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	return strcmp(op, "mul.s") == 0 || strcmp(op, "mul.d") == 0 ||
+	    strcmp(op, "mult") == 0 || strcmp(op, "multu") == 0 ||
+	    strcmp(op, "dmult") == 0 || strcmp(op, "dmultu") == 0;
+}
+
+static int
+mips_has_delay_slot(const char *line)
+{
+	char op[16];
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	if (strcmp(op, "j") == 0 || strcmp(op, "jal") == 0 ||
+	    strcmp(op, "jr") == 0 || strcmp(op, "jalr") == 0)
+		return 1;
+	return op[0] == 'b' && strcmp(op, "break") != 0;
+}
+
+static int
 mips_is_load_gap_insn(const char *line, const struct mips_load_dest *dest)
 {
 	char op[16];
@@ -1932,6 +1971,8 @@ mips_can_move_to_plain_jump_delay(const char *line)
 static int
 mips_can_move_to_plain_control_delay(const char *line, const char *control)
 {
+	if (MIPS_FIX4300_ACTIVE && mips_is_vr4300_fp_mul(line))
+		return 0;
 	if (!mips_can_move_to_plain_jump_delay(line))
 		return 0;
 	if (mips_is_plain_jump(control))
@@ -2051,6 +2092,86 @@ mips_trim_load_delay_nops(char *path)
 		}
 		fputs(line, out);
 		pending_load = mips_load_dest(line);
+	}
+
+	failed = ferror(in) || ferror(out);
+	if (fclose(out) == EOF)
+		failed = 1;
+	if (fclose(in) == EOF)
+		failed = 1;
+	if (failed) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	if (changed) {
+		if (rename(tmp, path) == -1) {
+			unlink(tmp);
+			free(tmp);
+			return 1;
+		}
+	} else {
+		unlink(tmp);
+	}
+	free(tmp);
+	return 0;
+}
+
+static int
+mips_repair_vr4300_multiply_errata(char *path, int warn_delay_slot)
+{
+	char line[4096];
+	FILE *in, *out;
+	char *tmp;
+	int prev_delay_slot;
+	int pending_fp_mul;
+	int changed;
+	int failed;
+	int lineno;
+
+	if (!MIPS_FIX4300_ACTIVE)
+		return 0;
+
+	tmp = mips_asm_temp_name(path);
+	if (tmp == NULL)
+		return 1;
+	in = fopen(path, "r");
+	if (in == NULL) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	out = fopen(tmp, "w");
+	if (out == NULL) {
+		fclose(in);
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+
+	prev_delay_slot = 0;
+	pending_fp_mul = 0;
+	changed = 0;
+	lineno = 0;
+	while (fgets(line, sizeof(line), in) != NULL) {
+		++lineno;
+		if (!mips_is_instruction(line)) {
+			fputs(line, out);
+			continue;
+		}
+		if (prev_delay_slot && mips_is_vr4300_fp_mul(line) &&
+		    warn_delay_slot)
+			fprintf(stderr, "%s:%d: warning: VR4300 erratum: "
+			    "mul.s/mul.d in branch delay slot may need a "
+			    "separating instruction before a following "
+			    "multiply\n", path, lineno);
+		if (pending_fp_mul && mips_is_multiply(line)) {
+			fputs("\tnop\t# VR4300 fp multiply erratum\n", out);
+			changed = 1;
+		}
+		fputs(line, out);
+		pending_fp_mul = mips_is_vr4300_fp_mul(line);
+		prev_delay_slot = mips_has_delay_slot(line);
 	}
 
 	failed = ferror(in) || ferror(out);
@@ -2203,7 +2324,58 @@ mips_postprocess_asm(char *path)
 {
 	if (mips_trim_load_delay_nops(path))
 		return 1;
-	return mips_fold_late_peepholes(path);
+	if (mips_fold_late_peepholes(path))
+		return 1;
+	return mips_repair_vr4300_multiply_errata(path, 1);
+}
+
+static int
+mips_copy_file(char *input, char *output)
+{
+	char buf[8192];
+	FILE *in, *out;
+	size_t n;
+	int failed;
+
+	in = fopen(input, "r");
+	if (in == NULL)
+		return 1;
+	out = fopen(output, "w");
+	if (out == NULL) {
+		fclose(in);
+		return 1;
+	}
+
+	failed = 0;
+	while ((n = fread(buf, 1, sizeof(buf), in)) != 0)
+		if (fwrite(buf, 1, n, out) != n) {
+			failed = 1;
+			break;
+		}
+	if (ferror(in))
+		failed = 1;
+	if (fclose(out) == EOF)
+		failed = 1;
+	if (fclose(in) == EOF)
+		failed = 1;
+	return failed;
+}
+
+static int
+mips_prepare_asm_input(char *input, char **outputp)
+{
+	char *fixed;
+
+	if (!MIPS_FIX4300_ACTIVE)
+		return 0;
+	fixed = gettmp();
+	strlist_append(&temp_outputs, fixed);
+	if (mips_copy_file(input, fixed))
+		return 1;
+	if (mips_repair_vr4300_multiply_errata(fixed, 1))
+		return 1;
+	*outputp = fixed;
+	return 0;
 }
 #endif
 

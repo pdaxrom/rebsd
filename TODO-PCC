@@ -1967,6 +1967,46 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
+  - VR4300/R4300i multiply erratum workaround landed on 2026-07-08:
+    the final MIPS assembly postprocess inserts a real `nop` between
+    `mul.s`/`mul.d` and any immediately following `mul.s`/`mul.d`, `mult`,
+    `multu`, `dmult`, or `dmultu` when `MIPS_FIX4300_ACTIVE` is true.
+    `-march=vr4300` enables the workaround by default; `-mno-fix4300`
+    disables it; MIPS32R2 remains unaffected even if the option is forwarded
+    to `ccom`, because the repair itself is gated on selected CPU == VR4300.
+    The same driver path repairs simple adjacent handwritten
+    `.s` inputs on a temporary copy and warns when `mul.s`/`mul.d` appears in
+    a branch or jump delay slot.  Full CFG repair of handwritten assembly
+    stays out of scope for the compiler driver.
+  - VR4300 erratum documentation added in `docs/vr4300_errata.md`.  QEMU is
+    kept as an architecture/regression gate only; it is not treated as proof
+    that the revision-specific VR4300 pipeline bug is absent.
+  - Direct host assembly checks passed for the erratum workaround:
+    `-march=vr4300` default and explicit `-mfix4300` insert the separator
+    `nop` for adjacent `mul.s`/`mul.d` followed by FP or integer multiply;
+    `-mno-fix4300`, MIPS32R2, and non-FP-multiply pairs leave the input
+    unchanged; branch-delay-slot `mul.s`/`mul.d` emits the intended warning.
+  - Post-VR4300-erratum-workaround `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack stayed at 2994 instructions, 654 `nop`, and
+      61 multiply/divide instructions; PCC/GCC instruction ratio stayed
+      2.631, and `nop` ratio stayed 15.571.
+    - Malta/mips32r2 big-endian PCC Linpack stayed at 3129 instructions,
+      536 `nop`, and 2 multiply/divide instructions; PCC/GCC instruction
+      ratio stayed 2.892, and `nop` ratio stayed 107.200.
+    - MaltaEL/mips32r2 little-endian PCC Linpack stayed at 3042
+      instructions, 449 `nop`, and 2 multiply/divide instructions; PCC/GCC
+      instruction ratio stayed 2.811, and `nop` ratio stayed 89.800.
+      Counter artifacts:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`,
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`,
+      and
+      `/private/tmp/rebsd-pcc-perf-maltael-little.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-VR4300-erratum-workaround QEMU correctness gates passed with
+    `PCC_SMOKE_ALL_RC:0` on Malta64/VR4300, Malta/mips32r2 big-endian, and
+    MaltaEL/mips32r2 little-endian:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`, and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`.
   - A broader independent integer-load gap fill was tested but not landed: it
     saved about 20 Linpack instructions/`nop` on the counters, but failed the
     Malta native `libc-abi` assembler smoke with
