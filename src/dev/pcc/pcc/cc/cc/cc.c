@@ -2255,6 +2255,19 @@ mips_parse_cvt_w_regs(const char *line, int *dstp, int *srcp, int *doublep)
 }
 
 static int
+mips_can_trim_mtc1_cvt_nop(const char *mtc1, const char *cvt)
+{
+	int mtc1_gpr, mtc1_fpr, cvt_dst, cvt_src;
+
+	if (mips_cpu != MIPS_CPU_MIPS32R2)
+		return 0;
+	if (!mips_parse_mtc1_regs(mtc1, &mtc1_gpr, &mtc1_fpr) ||
+	    !mips_parse_cvt_w_regs(cvt, &cvt_dst, &cvt_src, NULL))
+		return 0;
+	return mtc1_fpr == cvt_src;
+}
+
+static int
 mips_parse_fpu_binary_src_regs(const char *line, unsigned long long *srcp)
 {
 	char op[16];
@@ -2938,6 +2951,31 @@ mips_fold_late_peepholes(char *path)
 					changed = 1;
 					continue;
 				}
+				pos2 = ftell(in);
+				if (pos2 != -1 &&
+				    fgets(after, sizeof(after), in) != NULL) {
+					if (mips_is_nop(next) &&
+					    mips_can_trim_mtc1_cvt_nop(line,
+					    after)) {
+						fputs(line, out);
+						fputs(after, out);
+						prev_control =
+						    mips_is_control_transfer(
+						    after);
+						changed = 1;
+						continue;
+					}
+				}
+				if (ferror(in) ||
+				    fseek(in, pos2 != -1 ? pos2 : pos,
+				    SEEK_SET) == -1) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
 				pos2 = ftell(in);
 				if (pos2 != -1 &&
 				    fgets(after, sizeof(after), in) != NULL &&
