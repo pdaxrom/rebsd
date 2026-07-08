@@ -1367,6 +1367,15 @@ compile_input(char *input, char *output)
 #endif
 
 #if defined(mach_mips) || defined(mach_mips64)
+#define MIPS_LOAD_NONE	0
+#define MIPS_LOAD_GPR	1
+#define MIPS_LOAD_FPR	2
+
+struct mips_load_dest {
+	int kind;
+	unsigned long long regs;
+};
+
 static const char *
 mips_skip_space(const char *s)
 {
@@ -1406,6 +1415,13 @@ mips_is_int_load(const char *op)
 	    strcmp(op, "lhu") == 0 || strcmp(op, "lb") == 0 ||
 	    strcmp(op, "lbu") == 0 || strcmp(op, "lwl") == 0 ||
 	    strcmp(op, "lwr") == 0;
+}
+
+static int
+mips_is_fpu_load(const char *op)
+{
+	return strcmp(op, "l.s") == 0 || strcmp(op, "l.d") == 0 ||
+	    strcmp(op, "lwc1") == 0 || strcmp(op, "ldc1") == 0;
 }
 
 static int
@@ -1478,19 +1494,86 @@ mips_parse_gpr(const char *s, const char **endp)
 }
 
 static int
-mips_load_dest_gpr(const char *line)
+mips_parse_fpr(const char *s, const char **endp)
+{
+	unsigned int reg;
+
+	if (*s != '$') {
+		if (endp != NULL)
+			*endp = s;
+		return -1;
+	}
+	++s;
+	if (*s != 'f') {
+		if (endp != NULL)
+			*endp = s;
+		return -1;
+	}
+	++s;
+	if (*s < '0' || *s > '9') {
+		if (endp != NULL)
+			*endp = s;
+		return -1;
+	}
+	reg = 0;
+	while (*s >= '0' && *s <= '9') {
+		reg = reg * 10 + (unsigned int)(*s - '0');
+		++s;
+	}
+	if (endp != NULL)
+		*endp = s;
+	return reg <= 31 ? (int)reg : -1;
+}
+
+static struct mips_load_dest
+mips_no_load_dest(void)
+{
+	struct mips_load_dest dest;
+
+	dest.kind = MIPS_LOAD_NONE;
+	dest.regs = 0;
+	return dest;
+}
+
+static struct mips_load_dest
+mips_load_dest_for_reg(int kind, int reg, int pair)
+{
+	struct mips_load_dest dest;
+	int other;
+
+	dest.kind = kind;
+	dest.regs = 1ULL << reg;
+	if (kind == MIPS_LOAD_FPR && pair) {
+		other = (reg & 1) ? reg - 1 : reg + 1;
+		if (other >= 0 && other <= 31)
+			dest.regs |= 1ULL << other;
+	}
+	return dest;
+}
+
+static struct mips_load_dest
+mips_load_dest(const char *line)
 {
 	char op[16];
 	const char *s;
 	int reg;
 
-	if (!mips_parse_opcode(line, op, sizeof(op)) || !mips_is_int_load(op))
-		return -1;
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return mips_no_load_dest();
 	s = mips_skip_space(line);
 	s += strlen(op);
 	s = mips_skip_space(s);
-	reg = mips_parse_gpr(s, NULL);
-	return reg;
+	if (mips_is_int_load(op)) {
+		reg = mips_parse_gpr(s, NULL);
+		if (reg >= 0)
+			return mips_load_dest_for_reg(MIPS_LOAD_GPR, reg, 0);
+	} else if (mips_is_fpu_load(op)) {
+		reg = mips_parse_fpr(s, NULL);
+		if (reg >= 0)
+			return mips_load_dest_for_reg(MIPS_LOAD_FPR, reg,
+			    strcmp(op, "l.d") == 0 || strcmp(op, "ldc1") == 0);
+	}
+	return mips_no_load_dest();
 }
 
 static int
@@ -1510,32 +1593,35 @@ mips_is_nop(const char *line)
 }
 
 static int
-mips_is_load_gap_insn(const char *line)
+mips_is_load_gap_insn(const char *line, const struct mips_load_dest *dest)
 {
 	char op[16];
 
 	if (!mips_parse_opcode(line, op, sizeof(op)))
 		return 0;
-	if (strcmp(op, "nop") == 0 || mips_is_int_load(op))
+	if (strcmp(op, "nop") == 0)
+		return 0;
+	if (dest->kind == MIPS_LOAD_GPR && mips_is_int_load(op))
 		return 0;
 	return 1;
 }
 
 static int
-mips_line_touches_gpr(const char *line, int reg)
+mips_line_touches_gpr(const char *line, unsigned long long regs)
 {
 	char op[16];
 	const char *s;
 	int r;
 
 	if (mips_parse_opcode(line, op, sizeof(op)) &&
-	    (strcmp(op, "jal") == 0 || strcmp(op, "jalr") == 0) && reg == 31)
+	    (strcmp(op, "jal") == 0 || strcmp(op, "jalr") == 0) &&
+	    (regs & (1ULL << 31)) != 0)
 		return 1;
 	for (s = line; *s != '\0' && *s != '\n' && *s != '#'; ++s) {
 		if (*s != '$')
 			continue;
 		r = mips_parse_gpr(s, &s);
-		if (r == reg)
+		if (r >= 0 && (regs & (1ULL << r)) != 0)
 			return 1;
 		if (*s == '\0' || *s == '\n' || *s == '#')
 			break;
@@ -1545,13 +1631,44 @@ mips_line_touches_gpr(const char *line, int reg)
 }
 
 static int
-mips_can_trim_load_nop(FILE *in, const char *next, int reg)
+mips_line_touches_fpr(const char *line, unsigned long long regs)
+{
+	const char *s;
+	int r;
+
+	for (s = line; *s != '\0' && *s != '\n' && *s != '#'; ++s) {
+		if (*s != '$')
+			continue;
+		r = mips_parse_fpr(s, &s);
+		if (r >= 0 && (regs & (1ULL << r)) != 0)
+			return 1;
+		if (*s == '\0' || *s == '\n' || *s == '#')
+			break;
+		--s;
+	}
+	return 0;
+}
+
+static int
+mips_line_touches_load(const char *line, const struct mips_load_dest *dest)
+{
+	if (dest->kind == MIPS_LOAD_GPR)
+		return mips_line_touches_gpr(line, dest->regs);
+	if (dest->kind == MIPS_LOAD_FPR)
+		return mips_line_touches_fpr(line, dest->regs);
+	return 1;
+}
+
+static int
+mips_can_trim_load_nop(FILE *in, const char *next,
+    const struct mips_load_dest *dest)
 {
 	char look[4096];
 	long pos;
 	int i;
 
-	if (!mips_is_load_gap_insn(next) || mips_line_touches_gpr(next, reg))
+	if (!mips_is_load_gap_insn(next, dest) ||
+	    mips_line_touches_load(next, dest))
 		return 0;
 	pos = ftell(in);
 	if (pos == -1)
@@ -1565,7 +1682,8 @@ mips_can_trim_load_nop(FILE *in, const char *next, int reg)
 				return 0;
 			return 0;
 		}
-		if (!mips_is_instruction(look) || mips_line_touches_gpr(look, reg)) {
+		if (!mips_is_instruction(look) ||
+		    mips_line_touches_load(look, dest)) {
 			if (fseek(in, pos, SEEK_SET) == -1)
 				return 0;
 			return 0;
@@ -1610,7 +1728,7 @@ mips_trim_load_delay_nops(char *path)
 	char line[4096], next[4096];
 	FILE *in, *out;
 	char *tmp;
-	int pending_load;
+	struct mips_load_dest pending_load;
 	int changed;
 	int failed;
 
@@ -1631,26 +1749,26 @@ mips_trim_load_delay_nops(char *path)
 		return 1;
 	}
 
-	pending_load = -1;
+	pending_load = mips_no_load_dest();
 	changed = 0;
 	while (fgets(line, sizeof(line), in) != NULL) {
-		if (pending_load >= 0 && mips_is_nop(line)) {
+		if (pending_load.kind != MIPS_LOAD_NONE && mips_is_nop(line)) {
 			if (fgets(next, sizeof(next), in) == NULL) {
 				fputs(line, out);
-				pending_load = -1;
+				pending_load = mips_no_load_dest();
 				break;
 			}
-			if (!mips_can_trim_load_nop(in, next, pending_load)) {
+			if (!mips_can_trim_load_nop(in, next, &pending_load)) {
 				fputs(line, out);
 			} else {
 				changed = 1;
 			}
 			fputs(next, out);
-			pending_load = mips_load_dest_gpr(next);
+			pending_load = mips_load_dest(next);
 			continue;
 		}
 		fputs(line, out);
-		pending_load = mips_load_dest_gpr(line);
+		pending_load = mips_load_dest(line);
 	}
 
 	failed = ferror(in) || ferror(out);
