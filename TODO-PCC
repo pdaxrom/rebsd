@@ -2667,6 +2667,44 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - VR4300 post-delay-slot load-delay trim landed on 2026-07-08: the final
+    MIPS postprocess now repeats the existing load-delay trim once after late
+    delay-slot peepholes, so `nop` padding left behind by moving a store into a
+    `j`/`jal`/branch delay slot can be removed.  For VR4300 FPU loads, the
+    lookahead permits a loaded-FPR use in that already-existing control-transfer
+    delay slot because the control transfer itself is the executed gap
+    instruction.  The pass deletes only redundant `nop`; it does not move FP
+    multiplies, does not put FP multiplies in delay slots, and does not weaken
+    the `-mfix4300` multiply-erratum repair.
+  - Post-delay-slot-load-trim `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 PCC Linpack changed from the previous 2837 instructions
+      and 509 `nop` to 2792 instructions and 464 `nop`; non-`nop`
+      instructions stayed 2328, loads stayed 652, stores stayed 251,
+      branch/jump/call delay `nop` stayed 130, multiply/divide stayed 61, and
+      bytes changed to 81601.  PCC/GCC instruction ratio is 2.453 and `nop`
+      ratio is 11.048.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 big-endian hard-float stayed unchanged at 2730 PCC
+      instructions and 149 `nop`; the second load-delay trim pass is gated to
+      VR4300.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-delay-slot-load-trim full PCC-kernel/PCC-rootfs QEMU correctness
+    matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-08: Malta64/VR4300
+    hard-float and soft-float, Malta/mips32r2 big-endian hard-float and
+    soft-float, and MaltaEL/mips32r2 little-endian hard-float and soft-float.
+    The kernel C compile path still uses `-msoft-float -fomit-frame-pointer`;
+    rootfs float mode is varied independently by the hard/soft gates.  Linpack
+    smoke rates observed in QEMU: Malta64 hard 11195.183-11468.473 KFLOPS,
+    Malta64 soft 824.786-836.386 KFLOPS, Malta hard 7440.568-7598.507 KFLOPS,
+    Malta soft 918.686-929.180 KFLOPS, MaltaEL hard 7599.199-7846.095 KFLOPS,
+    and MaltaEL soft 904.580-907.619 KFLOPS.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -2737,7 +2775,8 @@ Milestone order:
     compare delay-slot, conservative integer load-delay, VR4300-only
     shift-before-load delay fill, final move/GPR-ALU/signed-imm16-`li`
     load-delay/control-delay, non-RA GPR call-delay, and HI/LO independent
-    `lw` delay-fill patches are complete and green;
+    `lw` delay-fill patches and VR4300 post-delay-slot load-delay trim are
+    complete and green;
     MIPS32R2 one-instruction integer multiply and MIPS32R2 interlocked
     dependent-load `nop` cleanup are also complete and green.  MIPS32R2
     FPU compare-to-branch spacer cleanup is complete and green.  Remaining FP

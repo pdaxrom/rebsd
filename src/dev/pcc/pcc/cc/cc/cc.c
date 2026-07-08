@@ -2498,8 +2498,14 @@ mips_can_trim_load_nop(FILE *in, const char *next,
 				return 0;
 			return 0;
 		}
-		if (!mips_is_instruction(look) ||
-		    mips_line_touches_load(look, dest)) {
+		if (!mips_is_instruction(look)) {
+			if (fseek(in, pos, SEEK_SET) == -1)
+				return 0;
+			return 0;
+		}
+		if (mips_line_touches_load(look, dest) &&
+		    (mips_cpu != MIPS_CPU_VR4300 ||
+		    !mips_has_delay_slot(next))) {
 			if (fseek(in, pos, SEEK_SET) == -1)
 				return 0;
 			return 0;
@@ -3092,6 +3098,8 @@ mips_postprocess_asm(char *path)
 	if (mips_trim_load_delay_nops(path))
 		return 1;
 	if (mips_fold_late_peepholes(path))
+		return 1;
+	if (mips_cpu == MIPS_CPU_VR4300 && mips_trim_load_delay_nops(path))
 		return 1;
 	return mips_repair_vr4300_multiply_errata(path, 1);
 }
