@@ -1845,6 +1845,39 @@ mips_is_plain_jump(const char *line)
 }
 
 static int
+mips_is_jump_delay_gpr_alu(const char *line)
+{
+	char op[16], tok[16];
+	const char *s, *comment;
+	int reg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    (strcmp(op, "addiu") != 0 && strcmp(op, "addu") != 0))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) ||
+	    !mips_skip_comma(&s))
+		return 0;
+	if (strcmp(op, "addiu") == 0)
+		return mips_parse_tail_operand(s, tok, sizeof(tok), &comment);
+	return mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) &&
+	    mips_line_ends_after_operands(s);
+}
+
+static int
+mips_can_move_to_plain_jump_delay(const char *line)
+{
+	char dst[16], src[16];
+	int dstreg, srcreg;
+
+	return mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
+	    &dstreg, &srcreg) || mips_is_jump_delay_gpr_alu(line);
+}
+
+static int
 mips_can_trim_load_nop(FILE *in, const char *next,
     const struct mips_load_dest *dest)
 {
@@ -1980,15 +2013,13 @@ mips_trim_load_delay_nops(char *path)
 }
 
 static int
-mips_fold_move_peepholes(char *path)
+mips_fold_late_peepholes(char *path)
 {
 	char line[4096], next[4096], after[4096], folded[4096];
-	char mdst[16], msrc[16];
 	FILE *in, *out;
 	char *tmp;
 	long pos;
 	long pos2;
-	int mdstreg, msrcreg;
 	int prev_control;
 	int changed;
 	int failed;
@@ -2025,8 +2056,7 @@ mips_fold_move_peepholes(char *path)
 					changed = 1;
 					continue;
 				}
-				if (mips_parse_move_gprs(line, mdst, sizeof(mdst),
-				    msrc, sizeof(msrc), &mdstreg, &msrcreg) &&
+				if (mips_can_move_to_plain_jump_delay(line) &&
 				    mips_is_plain_jump(next)) {
 					pos2 = ftell(in);
 					if (pos2 != -1 &&
@@ -2100,7 +2130,7 @@ mips_postprocess_asm(char *path)
 {
 	if (mips_trim_load_delay_nops(path))
 		return 1;
-	return mips_fold_move_peepholes(path);
+	return mips_fold_late_peepholes(path);
 }
 #endif
 
