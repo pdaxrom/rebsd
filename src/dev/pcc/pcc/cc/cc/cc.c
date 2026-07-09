@@ -1612,6 +1612,22 @@ mips_label_char(int c)
 }
 
 static int
+mips_is_label_only(const char *line)
+{
+	const char *s;
+
+	s = mips_skip_space(line);
+	if (!mips_label_start_char((unsigned char)*s))
+		return 0;
+	while (mips_label_char((unsigned char)*s))
+		++s;
+	if (*s++ != ':')
+		return 0;
+	s = mips_skip_space(s);
+	return *s == '\0' || *s == '\n' || *s == '#';
+}
+
+static int
 mips_is_load_gap_skip_line(const char *line)
 {
 	const char *s;
@@ -2065,6 +2081,67 @@ mips_parse_gpr_alu_regs(const char *line, unsigned long long *regsp)
 }
 
 static int
+mips_parse_simple_gpr_rw(const char *line, unsigned long long *writep,
+    unsigned long long *readp)
+{
+	char op[16], tok[16], dst[16], src[16], imm[64];
+	const char *s, *comment;
+	char *end;
+	long val;
+	int dstreg, srcreg, src1reg, src2reg;
+
+	if (mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
+	    &dstreg, &srcreg)) {
+		*writep = 1ULL << dstreg;
+		*readp = 1ULL << srcreg;
+		return 1;
+	}
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (strcmp(op, "sll") == 0 || strcmp(op, "srl") == 0 ||
+	    strcmp(op, "sra") == 0) {
+		if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &srcreg) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_tail_operand(s, imm, sizeof(imm), &comment))
+			return 0;
+		errno = 0;
+		val = strtol(imm, &end, 0);
+		if (errno != 0 || *end != '\0' || val < 0 || val > 31)
+			return 0;
+		*writep = 1ULL << dstreg;
+		*readp = 1ULL << srcreg;
+		return 1;
+	}
+	if (strcmp(op, "addiu") == 0) {
+		if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &src1reg) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_tail_operand(s, tok, sizeof(tok), &comment))
+			return 0;
+		*writep = 1ULL << dstreg;
+		*readp = 1ULL << src1reg;
+		return 1;
+	}
+	if (strcmp(op, "addu") != 0 && strcmp(op, "subu") != 0)
+		return 0;
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &src1reg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &src2reg) ||
+	    !mips_line_ends_after_operands(s))
+		return 0;
+	*writep = 1ULL << dstreg;
+	*readp = (1ULL << src1reg) | (1ULL << src2reg);
+	return 1;
+}
+
+static int
 mips_parse_simple_gpr_regs(const char *line, unsigned long long *regsp)
 {
 	return mips_parse_gpr_alu_regs(line, regsp) ||
@@ -2458,6 +2535,40 @@ mips_is_plain_call(const char *line)
 }
 
 static int
+mips_parse_int_branch_reads(const char *line, unsigned long long *readp)
+{
+	char op[16], tok[16], label[256];
+	const char *s, *comment;
+	int reg1, reg2;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (strcmp(op, "beq") == 0 || strcmp(op, "bne") == 0) {
+		if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg1) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg2) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_tail_operand(s, label, sizeof(label),
+		    &comment))
+			return 0;
+		*readp = (1ULL << reg1) | (1ULL << reg2);
+		return 1;
+	}
+	if (strcmp(op, "beqz") != 0 && strcmp(op, "bnez") != 0 &&
+	    strcmp(op, "bgez") != 0 && strcmp(op, "bgtz") != 0 &&
+	    strcmp(op, "blez") != 0 && strcmp(op, "bltz") != 0)
+		return 0;
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg1) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_tail_operand(s, label, sizeof(label), &comment))
+		return 0;
+	*readp = 1ULL << reg1;
+	return 1;
+}
+
+static int
 mips_plain_call_target_gpr(const char *line)
 {
 	char tok[16];
@@ -2643,6 +2754,47 @@ mips_can_move_to_plain_jump_delay(const char *line)
 }
 
 static int
+mips_is_stack_adjust_addiu(const char *line)
+{
+	char op[16], tok[16];
+	const char *s, *comment;
+	int dstreg, srcreg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    strcmp(op, "addiu") != 0)
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	return mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) &&
+	    dstreg == 29 &&
+	    mips_skip_comma(&s) &&
+	    mips_parse_gpr_operand(&s, tok, sizeof(tok), &srcreg) &&
+	    srcreg == 29 &&
+	    mips_skip_comma(&s) &&
+	    mips_parse_tail_operand(s, tok, sizeof(tok), &comment);
+}
+
+static int
+mips_can_move_to_int_branch_delay(const char *line, const char *branch)
+{
+	unsigned long long writes, reads, branch_reads;
+	unsigned long long regs;
+
+	if (!mips_parse_int_branch_reads(branch, &branch_reads) ||
+	    !mips_parse_simple_gpr_rw(line, &writes, &reads))
+		return 0;
+	if ((writes & branch_reads) != 0)
+		return 0;
+	regs = writes | reads;
+	if ((regs & (1ULL << 31)) != 0)
+		return 0;
+	if ((regs & (1ULL << 29)) != 0 &&
+	    !mips_is_stack_adjust_addiu(line))
+		return 0;
+	return 1;
+}
+
+static int
 mips_can_move_to_plain_control_delay(const char *line, const char *control)
 {
 	unsigned long long call_regs;
@@ -2663,7 +2815,7 @@ mips_can_move_to_plain_control_delay(const char *line, const char *control)
 			call_regs |= 1ULL << call_target;
 		return !mips_line_touches_gpr(line, call_regs);
 	}
-	return 0;
+	return mips_can_move_to_int_branch_delay(line, control);
 }
 
 static int
@@ -3053,6 +3205,8 @@ mips_fold_late_peepholes(char *path)
 	long pos;
 	long pos2;
 	int prev_control;
+	int prev_label;
+	int line_after_label;
 	int changed;
 	int failed;
 
@@ -3074,8 +3228,14 @@ mips_fold_late_peepholes(char *path)
 	}
 
 	prev_control = 0;
+	prev_label = 0;
 	changed = 0;
 	while (fgets(line, sizeof(line), in) != NULL) {
+		line_after_label = prev_label && mips_is_instruction(line);
+		if (mips_is_label_only(line))
+			prev_label = 1;
+		else if (mips_is_instruction(line))
+			prev_label = 0;
 		if (!prev_control) {
 			pos = ftell(in);
 			if (pos != -1 && fgets(next, sizeof(next), in) != NULL) {
@@ -3317,10 +3477,12 @@ mips_fold_late_peepholes(char *path)
 				}
 				clearerr(in);
 				delay = NULL;
-				if (mips_can_move_to_plain_control_delay(line,
+				if (!line_after_label &&
+				    mips_can_move_to_plain_control_delay(line,
 				    next))
 					delay = line;
-				else if (mips_fold_li_addiu_line(line, folded,
+				else if (!line_after_label &&
+				    mips_fold_li_addiu_line(line, folded,
 				    sizeof(folded)) &&
 				    mips_can_move_to_plain_control_delay(folded,
 				    next))
