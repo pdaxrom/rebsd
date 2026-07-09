@@ -1891,6 +1891,114 @@ mycanon(NODE * p)
 	walkf(p, pconv2, 0);
 }
 
+static int
+mips_hardfp_reload_type(TWORD t)
+{
+	return !mips_soft_float && (t == FLOAT || t == DOUBLE || t == LDOUBLE);
+}
+
+static int
+mips_node_has_volatile_qual(NODE *p)
+{
+	TWORD q, t;
+
+	if (p == NIL)
+		return 0;
+
+	t = p->n_type;
+	q = p->n_qual;
+	for (;;) {
+		if (ISVOL(q) || ISVOL(q << TSHIFT))
+			return 1;
+		if (!ISPTR(t) && !ISFTN(t) && !ISARY(t))
+			return 0;
+		t = DECREF(t);
+		q = DECREF(q);
+	}
+}
+
+static int
+mips_tree_has_volatile(NODE *p)
+{
+	int opty;
+
+	if (p == NIL)
+		return 0;
+	if (mips_node_has_volatile_qual(p))
+		return 1;
+
+	opty = optype(p->n_op);
+	if (opty != LTYPE && mips_tree_has_volatile(p->n_left))
+		return 1;
+	if (opty == BITYPE && mips_tree_has_volatile(p->n_right))
+		return 1;
+	return 0;
+}
+
+static int
+mips_frame_mem_offset(NODE *p, CONSZ *offp)
+{
+	if (p == NIL)
+		return 0;
+	if (p->n_op == UMUL)
+		return mips_frame_ref_offset(p->n_left, offp);
+	if (p->n_op == OREG && p->n_rval == FPREG) {
+		*offp = getlval(p);
+		return 1;
+	}
+	return 0;
+}
+
+static int
+mips_fold_adjacent_hardfp_stack_reload(NODE *store, NODE *load)
+{
+	NODE *src, *dst;
+	CONSZ soff, loff;
+
+	if (store == NIL || load == NIL)
+		return 0;
+	if (store->n_op != ASSIGN || load->n_op != ASSIGN)
+		return 0;
+	if (!mips_hardfp_reload_type(store->n_type) ||
+	    !mips_hardfp_reload_type(load->n_type))
+		return 0;
+	if (mips_tree_has_volatile(store) || mips_tree_has_volatile(load))
+		return 0;
+	if (!mips_frame_mem_offset(store->n_left, &soff) ||
+	    !mips_frame_mem_offset(load->n_right, &loff) || soff != loff)
+		return 0;
+
+	src = store->n_right;
+	dst = load->n_left;
+	if (src == NIL || dst == NIL)
+		return 0;
+	if ((src->n_op != TEMP && src->n_op != REG) ||
+	    (dst->n_op != TEMP && dst->n_op != REG))
+		return 0;
+	if (!mips_hardfp_reload_type(src->n_type) ||
+	    !mips_hardfp_reload_type(dst->n_type))
+		return 0;
+
+	tfree(load->n_right);
+	load->n_right = tcopy(src);
+	return 1;
+}
+
+static void
+mips_fold_adjacent_hardfp_stack_reloads(struct interpass *ipole)
+{
+	struct interpass *ip, *next;
+
+	DLIST_FOREACH(ip, ipole, qelem) {
+		next = DLIST_NEXT(ip, qelem);
+		if (ip->type != IP_NODE || next == ipole ||
+		    next->type != IP_NODE)
+			continue;
+		(void)mips_fold_adjacent_hardfp_stack_reload(ip->ip_node,
+		    next->ip_node);
+	}
+}
+
 void
 myoptim(struct interpass * ipole)
 {
@@ -1909,6 +2017,7 @@ myoptim(struct interpass * ipole)
 		mips_omit_fp = 0;
 	}
 	if (!p2regalloc_done) {
+		mips_fold_adjacent_hardfp_stack_reloads(ipole);
 		mips_omit_fp = 0;
 		return;
 	}

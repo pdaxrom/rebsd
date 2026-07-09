@@ -3518,6 +3518,32 @@ Backend work, kept small:
     `/private/tmp/rebsd-revert-fp-store-load-malta-soft.log`,
     `/private/tmp/rebsd-revert-fp-store-load-maltael-hard.log`, and
     `/private/tmp/rebsd-revert-fp-store-load-maltael-soft.log`.
+  - An IR-aware hard-float stack reload fold is being reintroduced in pass2
+    instead of the final assembly postprocessor.  It rewrites only adjacent
+    non-volatile hard-float frame reloads before register allocation, keeps the
+    original store in place, and uses PCC qualifiers to reject volatile objects
+    before assembly has lost that information.  Probe result: non-volatile
+    `double x; x=y; return x;` changes the reload into `mov.d`, while
+    `volatile double x; x=y; return x;` still emits a real `l.d`; soft-float is
+    unaffected.  Current Linpack perf counters are unchanged: Malta64/VR4300
+    hard-float remains PCC `2478` instructions / `158` `nop`, `645/244`
+    loads/stores, bytes `80009`, PCC/GCC ratio `2.178`; Malta/mips32r2
+    hard-float remains PCC `2567` instructions / `113` `nop`, `793/289`
+    loads/stores, bytes `79539`, PCC/GCC ratio `2.372`.  A first Malta64 perf
+    attempt was invalidated by a parallel build race; the sequential retry
+    passed.
+  - Post-pass2 hard-float stack reload fold full PCC-kernel/PCC-rootfs QEMU
+    matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-09: Malta64/VR4300
+    hard-float and soft-float, Malta/mips32r2 big-endian hard-float and
+    soft-float, and MaltaEL/mips32r2 little-endian hard-float and soft-float.
+    The kernel C compile path still covers `-fomit-frame-pointer`, and the
+    soft gates cover `-msoft-float`.  Wrapper logs:
+    `/private/tmp/rebsd-pass2-fp-reload-malta64-hard.log`,
+    `/private/tmp/rebsd-pass2-fp-reload-malta64-soft.log`,
+    `/private/tmp/rebsd-pass2-fp-reload-malta-hard.log`,
+    `/private/tmp/rebsd-pass2-fp-reload-malta-soft.log`,
+    `/private/tmp/rebsd-pass2-fp-reload-maltael-hard.log`, and
+    `/private/tmp/rebsd-pass2-fp-reload-maltael-soft.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
