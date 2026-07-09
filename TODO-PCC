@@ -56,10 +56,11 @@ not active items for the current C/static-a.out PCC milestone.
   - Symbolic, macro-like, and otherwise non-plain store operands are rejected by
     the parser; the earlier broad store-delay rule was discarded after it
     exposed a Malta64 hard-float boot failure ending in `panic: no procs`.
-  - MIPS32R2 store-delay filling is intentionally still disabled. A native
-    Malta `as` run rejected a PCC smoke `types-cc.s` store in a jump delay slot
-    at line 634 while the host cross assembler accepted the same file, so this
-    needs a separate assembler-policy investigation before enabling it there.
+  - MIPS32R2 broad store-delay filling stayed disabled in this VR4300 change. A
+    native Malta `as` run rejected a PCC smoke `types-cc.s` store in a jump
+    delay slot at line 634 while the host cross assembler accepted the same
+    file, so the follow-up MIPS32R2 rule below deliberately uses a stricter
+    memory-operand parser.
   - Current VR4300 Linpack assembly baseline:
     GCC `1138` instructions / `42` nops, PCC `2508` instructions / `180` nops,
     PCC/GCC instruction ratio `2.204`, nop ratio `4.286`, branch/jump delay
@@ -72,6 +73,46 @@ not active items for the current C/static-a.out PCC milestone.
     Malta little-endian, both hard-float rootfs and `MIPS_ROOTFS_FLOAT=soft`.
     PCC kernel builds included the existing `-fomit-frame-pointer` path and the
     kernel COP1 guard.
+- [x] MIPS32R2 plain jump/call delay slots can use strict simple memory ops.
+  - The late MIPS assembly peephole now allows `-march=mips32r2` plain `j` and
+    `jal` delay slots to use simple stores and base-offset loads in addition to
+    the existing register moves and cheap GPR ALU operations.
+  - Symbol-only and macro-like memory operands are still rejected, matching the
+    native assembler policy seen during the Malta smoke debug pass. VR4300
+    remains on the earlier stores-only rule for this path.
+  - Plain calls still reject candidates touching `$ra`, and indirect
+    `jal $reg` calls now also reject candidates touching the call target
+    register. This avoids unsafe slots such as loading `$25`/`$t9` in the delay
+    slot of `jal $25`.
+  - MIPS32R2 Linpack assembly baseline improved from PCC `2704` instructions /
+    `123` nops to `2695` instructions / `114` nops. GCC remained `1082`
+    instructions / `5` nops; the PCC/GCC instruction ratio moved from `2.499`
+    to `2.491`, and branch/jump delay nops moved from `123` to `114`.
+  - Final static checks passed: `git diff --check`, no
+    `macro instruction expanded into multiple instructions in a branch delay
+    slot` diagnostics in the six QEMU smoke logs, and no generated
+    `jal $reg` delay-slot candidate touching `$25`/`$t9` in Malta/MaltaEL
+    kernel assembly.
+  - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
+    `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
+    `-fomit-frame-pointer`:
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+  - Linpack QEMU results for the final matrix were approximately:
+    Malta64 hard `13759/13549`, Malta64 soft `805/801`, Malta hard
+    `13263/13563`, Malta soft `1024/1041`, MaltaEL hard `13609/13509`, and
+    MaltaEL soft `1047/1041` KFLOPS.
+  - Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
 - [x] VR4300 cheap constant multiplies lower to shift/add/sub sequences.
   - The MIPS backend now has a `FEATURE_VR4300`-gated table rule for positive
     non-power-of-two constants whose odd factor is `2^n +/- 1`; this covers
@@ -179,11 +220,12 @@ not active items for the current C/static-a.out PCC milestone.
   - After the C helper set stays stable, add MIPS assembly implementations for
     selected hot 64-bit arithmetic, shift, and conversion helpers and keep the
     C versions as the reference oracle/fallback.
-- [ ] Validate MIPS32R2 store-in-jump-delay-slot policy.
-  - Before enabling simple store delay-slot filling outside VR4300, reproduce
-    the native Malta `as` rejection from the PCC smoke `types` case, decide
-    whether it is a native assembler parser bug or an unsupported syntax/policy
-    case, and add a direct assembler smoke before changing backend scheduling.
+- [ ] Broaden MIPS32R2 jump-delay filling only behind direct assembler smokes.
+  - The current safe MIPS32R2 rule covers register moves, cheap GPR ALU ops,
+    simple stores, and base-offset loads. Future work can investigate
+    symbol-address memory operands, macro-expanded forms, and conditional
+    branch delay slots, but each extension needs a direct native `as` smoke
+    before changing backend scheduling.
 - [ ] Verify VR4300/o32 `ld`/`sd` instruction policy.
   - Confirm where PCC emits or accepts `ld`/`sd` for o32 VR4300/N64, whether
     each case is a real MIPS III 64-bit load/store or an assembler macro, and

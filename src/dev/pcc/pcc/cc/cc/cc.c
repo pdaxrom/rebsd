@@ -2458,6 +2458,23 @@ mips_is_plain_call(const char *line)
 }
 
 static int
+mips_plain_call_target_gpr(const char *line)
+{
+	char tok[16];
+	const char *s;
+	int reg;
+
+	if (!mips_is_plain_call(line))
+		return -1;
+	s = mips_skip_space(line);
+	s += strlen("jal");
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg) ||
+	    !mips_line_ends_after_operands(s))
+		return -1;
+	return reg;
+}
+
+static int
 mips_is_jump_delay_gpr_alu(const char *line)
 {
 	char op[16], tok[16];
@@ -2549,6 +2566,30 @@ mips_is_jump_delay_store(const char *line)
 }
 
 static int
+mips_is_jump_delay_load(const char *line)
+{
+	char op[16], tok[16];
+	const char *s;
+	int reg;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (mips_is_int_load(op)) {
+		if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &reg))
+			return 0;
+	} else if (mips_is_fpu_load(op)) {
+		if (!mips_parse_fpr_operand(&s, &reg))
+			return 0;
+	} else
+		return 0;
+	return mips_skip_comma(&s) &&
+	    mips_parse_base_offset_operand(&s) &&
+	    mips_line_ends_after_operands(s);
+}
+
+static int
 mips_is_jr_ra(const char *line)
 {
 	char op[16], tok[16];
@@ -2590,14 +2631,23 @@ mips_can_move_to_plain_jump_delay(const char *line)
 	char dst[16], src[16];
 	int dstreg, srcreg;
 
-	return mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
-	    &dstreg, &srcreg) || mips_is_jump_delay_gpr_alu(line) ||
-	    (mips_cpu == MIPS_CPU_VR4300 && mips_is_jump_delay_store(line));
+	if (mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
+	    &dstreg, &srcreg) || mips_is_jump_delay_gpr_alu(line))
+		return 1;
+	if (mips_cpu == MIPS_CPU_VR4300)
+		return mips_is_jump_delay_store(line);
+	if (mips_cpu == MIPS_CPU_MIPS32R2)
+		return mips_is_jump_delay_store(line) ||
+		    mips_is_jump_delay_load(line);
+	return 0;
 }
 
 static int
 mips_can_move_to_plain_control_delay(const char *line, const char *control)
 {
+	unsigned long long call_regs;
+	int call_target;
+
 	if (MIPS_FIX4300_ACTIVE && mips_is_vr4300_fp_mul(line))
 		return 0;
 	if (mips_is_jr_ra(control))
@@ -2606,8 +2656,13 @@ mips_can_move_to_plain_control_delay(const char *line, const char *control)
 		return 0;
 	if (mips_is_plain_jump(control))
 		return 1;
-	if (mips_is_plain_call(control))
-		return !mips_line_touches_gpr(line, 1ULL << 31);
+	if (mips_is_plain_call(control)) {
+		call_regs = 1ULL << 31;
+		call_target = mips_plain_call_target_gpr(control);
+		if (call_target >= 0)
+			call_regs |= 1ULL << call_target;
+		return !mips_line_touches_gpr(line, call_regs);
+	}
 	return 0;
 }
 
