@@ -133,21 +133,15 @@ offcalc(struct interpass_prolog * ipp, int omitfp)
 	int i, j, addto;
 
 	(void)ipp;
+	(void)omitfp;
 	memset(regoff, 0, sizeof(regoff));
 	addto = p2maxautooff;
 	SETOFF(addto, SZINT / SZCHAR);
 
-	if (omitfp) {
-		for (j = S0; j <= S7; j++) {
+	for (i = p2env.p_regs[0], j = 0; i; i >>= 1, j++) {
+		if (i & 1) {
 			addto += SZINT / SZCHAR;
 			regoff[j] = addto;
-		}
-	} else {
-		for (i = p2env.p_regs[0], j = 0; i; i >>= 1, j++) {
-			if (i & 1) {
-				addto += SZINT / SZCHAR;
-				regoff[j] = addto;
-			}
 		}
 	}
 

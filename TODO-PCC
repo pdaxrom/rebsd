@@ -313,6 +313,36 @@ not active items for the current C/static-a.out PCC milestone.
     `/private/tmp/rebsd-omitfp-leaf-malta-soft.log`,
     `/private/tmp/rebsd-omitfp-leaf-maltael-hard.log`, and
     `/private/tmp/rebsd-omitfp-leaf-maltael-soft.log`.
+- [x] Omit-frame save slots are allocated only for used callee-saved registers.
+  - The MIPS frame-size calculation now uses pass2's `p2env.p_regs[0]` for
+    omit-frame functions too, instead of reserving 32 bytes for all
+    `$s0..$s7` registers whether they are used or not.
+  - The fixed 16-byte o32 argument home area is unchanged.  Register argument
+    spills in omit-frame leaf stubs now land at `16($sp)`, `20($sp)`, and so
+    on after the standard 16-byte prologue allocation, instead of being pushed
+    out to `48($sp)` by unused save slots.
+  - A Malta64 kernel assembly audit after the hard-float gate found 289
+    `$sp`-frame functions: 237 had no extra local/save allocation, 52 still
+    had a real allocation, and none kept the old artificial 32-byte `$s`
+    register reservation.  Simple stubs such as `nulldev` now consist of the
+    16-byte ABI allocation, body, and `jr $ra` with the ABI pop in the delay
+    slot.
+  - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
+    `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with
+    `-msoft-float -fomit-frame-pointer`:
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+  - Logs:
+    `/private/tmp/rebsd-used-sregs-malta64-hard.log`,
+    `/private/tmp/rebsd-used-sregs-malta64-soft.log`,
+    `/private/tmp/rebsd-used-sregs-malta-hard.log`,
+    `/private/tmp/rebsd-used-sregs-malta-soft.log`,
+    `/private/tmp/rebsd-used-sregs-maltael-hard.log`, and
+    `/private/tmp/rebsd-used-sregs-maltael-soft.log`.
 - [x] ReBSD `ld` accepts `-L` and `-l` library search options.
   - `ld` now collects all `-L` search directories before resolving any `-l`
     library, so `cc file.c -lm` works even when the compiler driver appends
@@ -3353,6 +3383,16 @@ Backend work, kept small:
     `/private/tmp/rebsd-omitfp-leaf-malta-soft.log`,
     `/private/tmp/rebsd-omitfp-leaf-maltael-hard.log`, and
     `/private/tmp/rebsd-omitfp-leaf-maltael-soft.log`.
+  - Omit-FP callee-save slot trimming landed on 2026-07-09.  Frame sizing now
+    uses pass2's `p2env.p_regs[0]` in omit-frame mode instead of reserving
+    slots for all `$s0..$s7`.  The full PCC-kernel/PCC-rootfs matrix passed
+    again with `PCC_SMOKE_ALL_RC:0`; wrapper logs:
+    `/private/tmp/rebsd-used-sregs-malta64-hard.log`,
+    `/private/tmp/rebsd-used-sregs-malta64-soft.log`,
+    `/private/tmp/rebsd-used-sregs-malta-hard.log`,
+    `/private/tmp/rebsd-used-sregs-malta-soft.log`,
+    `/private/tmp/rebsd-used-sregs-maltael-hard.log`, and
+    `/private/tmp/rebsd-used-sregs-maltael-soft.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -3445,8 +3485,9 @@ Milestone order:
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
   - MIPS call-argument liveness and leaf `$ra` omission, including the
-    omit-FP/kernel path, are complete and green.  Broader outgoing-argument
-    frame simplification remains open.
+    omit-FP/kernel path, are complete and green.  Omit-FP callee-save slot
+    trimming is also complete and green.  Broader outgoing-argument frame
+    simplification remains open.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,
