@@ -3210,6 +3210,56 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - MIPS32R2 aligned frame/stack hard-float double memory operations landed
+    on 2026-07-09: when the hard-float 64-bit memory ABI path is split because
+    `MIPS_ALIGN64 <= SZINT`, codegen now uses `ldc1`/`sdc1` only for OREG
+    operands that are proven backend-controlled stack or frame references.
+    The accepted form is intentionally narrow: after `mips_adjust_frame_ref()`
+    the base must be `$fp` or `$sp`, and the offset must be 8-byte aligned.
+    Unknown object and pointer-based addressing still uses the existing
+    endian-correct `lwc1`/`swc1` pair, preserving the o32 4-byte-aligned
+    double ABI case.  VR4300 is unchanged because its non-split path already
+    uses `l.d`/`s.d`; soft-float is unchanged; and the VR4300
+    `-mfix4300`/`-mno-fix4300` multiply-erratum repair is unaffected because
+    this is memory-operation selection, not FP multiply scheduling.
+  - Post-MIPS32R2-aligned-frame-double-memory `pcc-perf-baseline` assembly
+    counters:
+    - Malta64/VR4300 PCC Linpack stayed at 2490 instructions and 162 `nop`;
+      non-`nop` instructions stayed 2328, loads stayed 652, stores stayed 251,
+      branch/jump/call delay `nop` stayed 112, multiply/divide stayed 61,
+      load-followed-by-nop stayed 0, and bytes stayed 80152.  PCC/GCC
+      instruction ratio is 2.188 and `nop` ratio is 3.857.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 big-endian hard-float changed from 2692 instructions and
+      111 `nop` to 2575 instructions and 113 `nop`; non-`nop` instructions
+      fell from 2581 to 2462, loads fell from 863 to 800, stores fell from
+      352 to 296, branch/jump/call delay `nop` changed from 111 to 113,
+      multiply/divide stayed 2, load-followed-by-nop stayed 0, and bytes fell
+      from 81617 to 79662.  PCC/GCC instruction ratio is 2.380 and `nop`
+      ratio is 22.600.  The perf assembly contains 63 `ldc1` and 56 `sdc1`
+      uses, all through `$fp`, with no pointer/object-addressed
+      `ldc1`/`sdc1`.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-MIPS32R2-aligned-frame-double-memory full PCC-kernel/PCC-rootfs QEMU
+    correctness matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-09:
+    Malta64/VR4300 hard-float and soft-float, Malta/mips32r2 big-endian
+    hard-float and soft-float, and MaltaEL/mips32r2 little-endian hard-float
+    and soft-float.  The kernel C compile path still uses
+    `-msoft-float -fomit-frame-pointer`; rootfs float mode is varied
+    independently by the hard/soft gates.  Linpack smoke rates observed in
+    QEMU: Malta64 hard 9359.083-9388.515 KFLOPS, Malta64 soft
+    575.837-578.959 KFLOPS, Malta hard 9548.831-9111.277 KFLOPS, Malta soft
+    695.452-700.837 KFLOPS, MaltaEL hard 9468.185-9646.561 KFLOPS, and
+    MaltaEL soft 701.301-695.853 KFLOPS.  Malta64 `runtime-quick` still
+    reports the known QEMU memory-fault diagnostic but exits with
+    `PCC_SMOKE_RC runtime-quick 0`.  Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    and
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.

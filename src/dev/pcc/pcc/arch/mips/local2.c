@@ -1894,11 +1894,37 @@ mips_split_hardfp64_mem(void)
 #endif
 }
 
+static int
+mips_hardfp64_mem_aligned(NODE *p, int side)
+{
+	NODE *mem;
+	CONSZ off;
+	int base;
+
+	mem = getlr(p, side);
+	if (mem->n_op == FLD)
+		mem = mem->n_left;
+	if (mem->n_op != OREG)
+		return 0;
+
+	off = getlval(mem);
+	base = mem->n_rval;
+	mips_adjust_frame_ref(&off, &base);
+	if (base != FPREG && base != SP)
+		return 0;
+	return off % (SZDOUBLE / SZCHAR) == 0;
+}
+
 static void
 mips_hardfp64_load(NODE *p)
 {
 	if (!mips_split_hardfp64_mem()) {
 		expand(p, 0, "\tl.d A1,AL\t# load double floating-point reg\n"
+		    "\tnop\n");
+		return;
+	}
+	if (mips_hardfp64_mem_aligned(p, 'L')) {
+		expand(p, 0, "\tldc1 A1,AL\t# aligned double load\n"
 		    "\tnop\n");
 		return;
 	}
@@ -1919,6 +1945,11 @@ mips_hardfp64_store(NODE *p)
 	if (!mips_split_hardfp64_mem()) {
 		expand(p, 0,
 		    "\ts.d AR,AL\t\t# store double floating-point reg\n");
+		return;
+	}
+	if (mips_hardfp64_mem_aligned(p, 'L')) {
+		expand(p, 0,
+		    "\tsdc1 AR,AL\t\t# aligned double store\n");
 		return;
 	}
 #ifdef TARGET_BIG_ENDIAN
