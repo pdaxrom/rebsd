@@ -2738,7 +2738,7 @@ mips_is_frame_load_for_jr_delay(const char *line)
 	const char *s;
 	int dstreg, basereg;
 
-	if (mips_cpu != MIPS_CPU_MIPS32R2)
+	if (mips_cpu != MIPS_CPU_MIPS32R2 && mips_cpu != MIPS_CPU_VR4300)
 		return 0;
 	if (!mips_parse_opcode(line, op, sizeof(op)) || strcmp(op, "lw") != 0)
 		return 0;
