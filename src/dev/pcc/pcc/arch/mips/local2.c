@@ -1898,6 +1898,59 @@ mips_hardfp_reload_type(TWORD t)
 }
 
 static int
+mips_word_reload_type(TWORD t)
+{
+	return ISPTR(t) || DEUNSIGN(t) == INT || DEUNSIGN(t) == LONG;
+}
+
+static int
+mips_reload_types_match(NODE *store, NODE *load, NODE *src, NODE *dst)
+{
+	if (mips_hardfp_reload_type(store->n_type) &&
+	    mips_hardfp_reload_type(load->n_type) &&
+	    mips_hardfp_reload_type(src->n_type) &&
+	    mips_hardfp_reload_type(dst->n_type))
+		return 1;
+
+	if (!mips_word_reload_type(store->n_type) ||
+	    !mips_word_reload_type(load->n_type) ||
+	    !mips_word_reload_type(src->n_type) ||
+	    !mips_word_reload_type(dst->n_type))
+		return 0;
+
+	return store->n_type == load->n_type && src->n_type == dst->n_type;
+}
+
+static int
+mips_same_reg_or_temp(NODE *a, NODE *b)
+{
+	if (a == NIL || b == NIL || a->n_op != b->n_op)
+		return 0;
+	if (a->n_op != REG && a->n_op != TEMP)
+		return 0;
+	return regno(a) == regno(b) && a->n_type == b->n_type;
+}
+
+static void
+mips_remove_ip_node(struct interpass *ip)
+{
+	tfree(ip->ip_node);
+	DLIST_REMOVE(ip, qelem);
+}
+
+static void
+mips_replace_frame_mem_with_copy(NODE *p, NODE *src)
+{
+	NODE *q;
+
+	if (p->n_op == UMUL)
+		tfree(p->n_left);
+	q = tcopy(src);
+	*p = *q;
+	nfree(q);
+}
+
+static int
 mips_node_has_volatile_qual(NODE *p)
 {
 	TWORD q, t;
@@ -1950,17 +2003,67 @@ mips_frame_mem_offset(NODE *p, CONSZ *offp)
 }
 
 static int
-mips_fold_adjacent_hardfp_stack_reload(NODE *store, NODE *load)
+mips_frame_mem_word_matches(NODE *p, CONSZ off, TWORD t)
+{
+	CONSZ poff;
+
+	if (!mips_frame_mem_offset(p, &poff) || poff != off)
+		return 0;
+	return p->n_type == t && mips_word_reload_type(t);
+}
+
+static int
+mips_count_frame_mem_word(NODE *p, CONSZ off, TWORD t)
+{
+	int count, opty;
+
+	if (p == NIL)
+		return 0;
+	if (mips_frame_mem_word_matches(p, off, t))
+		return 1;
+
+	count = 0;
+	opty = optype(p->n_op);
+	if (opty != LTYPE)
+		count += mips_count_frame_mem_word(p->n_left, off, t);
+	if (opty == BITYPE)
+		count += mips_count_frame_mem_word(p->n_right, off, t);
+	return count;
+}
+
+static int
+mips_replace_frame_mem_word(NODE *p, CONSZ off, TWORD t, NODE *src)
+{
+	int opty;
+
+	if (p == NIL)
+		return 0;
+	if (mips_frame_mem_word_matches(p, off, t)) {
+		mips_replace_frame_mem_with_copy(p, src);
+		return 1;
+	}
+
+	opty = optype(p->n_op);
+	if (opty != LTYPE && mips_replace_frame_mem_word(p->n_left, off, t,
+	    src))
+		return 1;
+	if (opty == BITYPE && mips_replace_frame_mem_word(p->n_right, off, t,
+	    src))
+		return 1;
+	return 0;
+}
+
+static int
+mips_fold_adjacent_stack_reload(NODE *store, NODE *load, int *delete_loadp)
 {
 	NODE *src, *dst;
 	CONSZ soff, loff;
 
+	*delete_loadp = 0;
+
 	if (store == NIL || load == NIL)
 		return 0;
 	if (store->n_op != ASSIGN || load->n_op != ASSIGN)
-		return 0;
-	if (!mips_hardfp_reload_type(store->n_type) ||
-	    !mips_hardfp_reload_type(load->n_type))
 		return 0;
 	if (mips_tree_has_volatile(store) || mips_tree_has_volatile(load))
 		return 0;
@@ -1975,26 +2078,67 @@ mips_fold_adjacent_hardfp_stack_reload(NODE *store, NODE *load)
 	if ((src->n_op != TEMP && src->n_op != REG) ||
 	    (dst->n_op != TEMP && dst->n_op != REG))
 		return 0;
-	if (!mips_hardfp_reload_type(src->n_type) ||
-	    !mips_hardfp_reload_type(dst->n_type))
+	if (!mips_reload_types_match(store, load, src, dst))
 		return 0;
+	if (mips_same_reg_or_temp(src, dst)) {
+		*delete_loadp = 1;
+		return 1;
+	}
 
 	tfree(load->n_right);
 	load->n_right = tcopy(src);
 	return 1;
 }
 
-static void
-mips_fold_adjacent_hardfp_stack_reloads(struct interpass *ipole)
+static int
+mips_fold_stack_reload_branch(NODE *store, NODE *branch)
 {
-	struct interpass *ip, *next;
+	NODE *src, *cond;
+	CONSZ off;
+	TWORD t;
 
-	DLIST_FOREACH(ip, ipole, qelem) {
+	if (store == NIL || branch == NIL)
+		return 0;
+	if (store->n_op != ASSIGN || branch->n_op != CBRANCH)
+		return 0;
+	if (mips_tree_has_volatile(store) || mips_tree_has_volatile(branch))
+		return 0;
+	if (!mips_frame_mem_offset(store->n_left, &off))
+		return 0;
+
+	src = store->n_right;
+	if (src == NIL || (src->n_op != TEMP && src->n_op != REG))
+		return 0;
+
+	t = store->n_type;
+	if (src->n_type != t || !mips_word_reload_type(t))
+		return 0;
+
+	cond = branch->n_left;
+	if (cond == NIL || mips_count_frame_mem_word(cond, off, t) != 1)
+		return 0;
+	return mips_replace_frame_mem_word(cond, off, t, src);
+}
+
+static void
+mips_fold_adjacent_stack_reloads(struct interpass *ipole)
+{
+	struct interpass *ip, *next, *after;
+	int delete_load;
+
+	for (ip = DLIST_NEXT(ipole, qelem); ip != ipole; ip = next) {
 		next = DLIST_NEXT(ip, qelem);
 		if (ip->type != IP_NODE || next == ipole ||
 		    next->type != IP_NODE)
 			continue;
-		(void)mips_fold_adjacent_hardfp_stack_reload(ip->ip_node,
+		if (mips_fold_adjacent_stack_reload(ip->ip_node,
+		    next->ip_node, &delete_load) && delete_load) {
+			after = DLIST_NEXT(next, qelem);
+			mips_remove_ip_node(next);
+			next = after;
+			continue;
+		}
+		(void)mips_fold_stack_reload_branch(ip->ip_node,
 		    next->ip_node);
 	}
 }
@@ -2017,7 +2161,7 @@ myoptim(struct interpass * ipole)
 		mips_omit_fp = 0;
 	}
 	if (!p2regalloc_done) {
-		mips_fold_adjacent_hardfp_stack_reloads(ipole);
+		mips_fold_adjacent_stack_reloads(ipole);
 		mips_omit_fp = 0;
 		return;
 	}

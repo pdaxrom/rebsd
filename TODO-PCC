@@ -3544,6 +3544,32 @@ Backend work, kept small:
     `/private/tmp/rebsd-pass2-fp-reload-malta-soft.log`,
     `/private/tmp/rebsd-pass2-fp-reload-maltael-hard.log`, and
     `/private/tmp/rebsd-pass2-fp-reload-maltael-soft.log`.
+  - Extend the same pass2 fold to proven 32-bit word/pointer frame reloads.
+    Adjacent self-reloads can now be deleted, non-self adjacent reloads can be
+    rewritten to moves, and an immediate `CBRANCH` can branch on the stored
+    `TEMP`/`REG` instead of reloading the same frame slot.  The fold remains
+    intentionally narrow: no labels between the store and user, no
+    byte/short/long-long slots, no volatile trees, and no branch condition
+    with more than one matching frame reload.  Probe result: the common
+    `getenv()` pattern changes from `sw; lw; beqz` to `sw; beqz`, while
+    volatile integer and floating local reload probes still emit real loads.
+    Current Linpack perf counters: Malta64/VR4300 hard-float PCC `2476`
+    instructions / `158` `nop`, `643/244` loads/stores, bytes `79919`,
+    PCC/GCC ratio `2.176`; Malta/mips32r2 hard-float PCC `2565`
+    instructions / `113` `nop`, `791/289` loads/stores, bytes `79449`,
+    PCC/GCC ratio `2.371`.
+  - Post-pass2 word/pointer branch reload fold full PCC-kernel/PCC-rootfs QEMU
+    matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-09: Malta64/VR4300
+    hard-float and soft-float, Malta/mips32r2 big-endian hard-float and
+    soft-float, and MaltaEL/mips32r2 little-endian hard-float and soft-float.
+    The kernel C compile path still covers `-fomit-frame-pointer`, and the
+    soft gates cover `-msoft-float`.  Wrapper logs:
+    `/private/tmp/rebsd-branch-reload-malta64-hard.log`,
+    `/private/tmp/rebsd-branch-reload-malta64-soft.log`,
+    `/private/tmp/rebsd-branch-reload-malta-hard.log`,
+    `/private/tmp/rebsd-branch-reload-malta-soft.log`,
+    `/private/tmp/rebsd-branch-reload-maltael-hard.log`, and
+    `/private/tmp/rebsd-branch-reload-maltael-soft.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
