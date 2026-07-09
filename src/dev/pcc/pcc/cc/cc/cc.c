@@ -2149,6 +2149,70 @@ mips_parse_simple_gpr_regs(const char *line, unsigned long long *regsp)
 	    mips_parse_move_gprs_regs(line, regsp);
 }
 
+static int mips_parse_lw_load_regs(const char *, int *, int *);
+
+static int
+mips_line_writes_gpr_before_read(const char *line, int reg)
+{
+	char op[16], dst[16], src[16], tok[16];
+	const char *s, *comment;
+	unsigned long long write, read;
+	int dstreg, srcreg, basereg;
+
+	if (mips_parse_simple_gpr_rw(line, &write, &read))
+		return (write & (1ULL << reg)) != 0 &&
+		    (read & (1ULL << reg)) == 0;
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (strcmp(op, "lw") == 0) {
+		if (!mips_parse_lw_load_regs(line, &dstreg, &basereg))
+			return 0;
+		return dstreg == reg && basereg != reg;
+	}
+	if (strcmp(op, "li") == 0 || strcmp(op, "la") == 0) {
+		if (!mips_parse_gpr_operand(&s, dst, sizeof(dst), &dstreg) ||
+		    !mips_skip_comma(&s) ||
+		    !mips_parse_tail_operand(s, tok, sizeof(tok), &comment))
+			return 0;
+		return dstreg == reg;
+	}
+	if (strcmp(op, "mflo") == 0 || strcmp(op, "mfhi") == 0) {
+		if (!mips_parse_gpr_operand(&s, dst, sizeof(dst), &dstreg) ||
+		    !mips_line_ends_after_operands(s))
+			return 0;
+		return dstreg == reg;
+	}
+	if (mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
+	    &dstreg, &srcreg))
+		return dstreg == reg && srcreg != reg;
+	return 0;
+}
+
+static int
+mips_fold_zero_move_chain(const char *zero, const char *move, char *out,
+    size_t outsz, int *tmpregp)
+{
+	char zdst[16], zsrc[16], mdst[16], msrc[16];
+	int zdstreg, zsrcreg, mdstreg, msrcreg;
+	int n;
+
+	if (!mips_parse_move_gprs(zero, zdst, sizeof(zdst), zsrc,
+	    sizeof(zsrc), &zdstreg, &zsrcreg) ||
+	    !mips_parse_move_gprs(move, mdst, sizeof(mdst), msrc,
+	    sizeof(msrc), &mdstreg, &msrcreg))
+		return 0;
+	if (zsrcreg != 0 || msrcreg != zdstreg || mdstreg == zdstreg)
+		return 0;
+	n = snprintf(out, outsz, "\tmove %s,$zero\t# register move\n",
+	    mdst);
+	if (n <= 0 || (size_t)n >= outsz)
+		return 0;
+	*tmpregp = zdstreg;
+	return 1;
+}
+
 static int
 mips_is_lw_load(const char *line, struct mips_load_dest *destp)
 {
@@ -2476,8 +2540,6 @@ mips_can_fill_hilo_lw_delay2(const char *hilo, const char *mf,
 		return 0;
 	return 1;
 }
-
-static int mips_parse_lw_load_regs(const char *, int *, int *);
 
 static int
 mips_can_fill_hilo_post_mflo_lw_delay(const char *hilo, const char *mf,
@@ -3252,6 +3314,7 @@ mips_fold_late_peepholes(char *path)
 	int prev_control;
 	int prev_label;
 	int line_after_label;
+	int zero_tmpreg;
 	int changed;
 	int failed;
 
@@ -3312,6 +3375,45 @@ mips_fold_late_peepholes(char *path)
 						free(tmp);
 						return 1;
 					}
+				}
+				if (mips_fold_zero_move_chain(line, next,
+				    folded, sizeof(folded), &zero_tmpreg)) {
+					pos2 = ftell(in);
+					if (pos2 != -1 &&
+					    fgets(after, sizeof(after), in) != NULL) {
+						if (mips_line_writes_gpr_before_read(
+						    after, zero_tmpreg)) {
+							fputs(folded, out);
+							fputs(after, out);
+							prev_control =
+							    mips_is_control_transfer(
+							    after);
+							changed = 1;
+							continue;
+						}
+						if (mips_is_label_only(after) &&
+						    fgets(mf, sizeof(mf), in) != NULL &&
+						    mips_line_writes_gpr_before_read(
+						    mf, zero_tmpreg)) {
+							fputs(folded, out);
+							fputs(after, out);
+							fputs(mf, out);
+							prev_control =
+							    mips_is_control_transfer(
+							    mf);
+							changed = 1;
+							continue;
+						}
+					}
+					if (ferror(in) ||
+					    fseek(in, pos, SEEK_SET) == -1) {
+						fclose(out);
+						fclose(in);
+						unlink(tmp);
+						free(tmp);
+						return 1;
+					}
+					clearerr(in);
 				}
 				if (mips_fold_move_shift_line(line, next,
 				    folded, sizeof(folded)) ||
