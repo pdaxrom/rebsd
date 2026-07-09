@@ -13,13 +13,14 @@ Layout:
 - `malta64/` - QEMU Malta/R4000 compatibility board config.  It uses the same
   shared Malta support with the VR4300/MIPS-III ABI profile.
 - `maltael/` - little-endian QEMU Malta board config.  It reuses the Malta
-  board support code and builds the root filesystem with external `mipsel` GCC.
+  board support code and supports both external `mipsel` GCC and PCC rootfs
+  builds.
 
 Both Malta and N64 are built as boards under the shared `sys/mips` architecture.
 Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
 `make -C sys/mips BOARD=malta kernel` for the QEMU Malta kernel.
 Use `make -C sys/mips BOARD=maltael rootfs.img kernel` for the little-endian
-Malta GCC-only bring-up.
+Malta bring-up.  PIC32 is not part of the current supported MIPS gate matrix.
 
 ## Build Matrix
 
@@ -36,23 +37,42 @@ MIPS_ROOTFS_ENDIAN=big|little
 The normal big-endian boards are:
 
 ```sh
+make tools
 make -C sys/mips BOARD=malta rootfs.img kernel
 make -C sys/mips BOARD=malta64 rootfs.img kernel
-make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc unix.elf
-make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc malta64.elf
+make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
+make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
 ```
 
-The little-endian board is currently the GCC bring-up path:
+The little-endian board supports GCC and PCC:
 
 ```sh
 make -C sys/mips BOARD=maltael rootfs.img kernel
+make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
 ```
 
 `maltael` sets `MIPS_ROOTFS_ENDIAN=little`, uses
 `qemu-system-mipsel`, and defaults to
-`/Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-`.  It keeps
-`MIPS_ROOTFS_COMPILER=gcc` until the little-endian PCC rootfs gate is validated
-for the board.
+`/Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-` for the GCC path.
+
+The full PCC QEMU smoke gate is `pcc-smoke-all-runtime`.  It boots QEMU,
+runs `/root/pcc-smoke-all.sh`, and expects `PCC_SMOKE_ALL_RC:0`:
+
+```sh
+make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+```
+
+For N64 and CI20 PCC build-only gates:
+
+```sh
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 all
+make -C sys/mips BOARD=ci20 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc all
+```
 
 ## ELF Userland
 
@@ -103,16 +123,17 @@ qemu-system-mips -M malta -m 32M -nographic -serial mon:stdio \
     -no-reboot -kernel sys/mips/malta/unix.elf
 ```
 
-For little-endian Malta, build with the mipsel GCC toolchain:
+For little-endian Malta, build the default GCC image or select PCC explicitly:
 
 ```
 make -C sys/mips BOARD=maltael rootfs.img kernel
+make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
 ```
 
 The `maltael` config defaults to
 `/Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-`, sets
-`MIPS_ROOTFS_ENDIAN=little`, and disables target-side PCC staging until PCC is
-ready for little endian.  Run it with:
+`MIPS_ROOTFS_ENDIAN=little`, and uses `mipsel-rebsd-*` for PCC rootfs builds.
+Run it with:
 
 ```
 make -C sys/mips BOARD=maltael run

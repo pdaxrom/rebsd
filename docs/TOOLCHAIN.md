@@ -4,9 +4,10 @@ The kernel and userland build with the existing GCC-based toolchain by default.
 
 PortableCC/pcc is available as a supported opt-in compiler for the MIPS rootfs
 and N64 userland.  PCC kernel builds are also available as explicit gates for
-Malta, Malta64, and N64.  PCC has passed the Malta and Malta64/R4000 QEMU
-hard-float and soft-float rootfs gates, plus hard-float PCC kernel/rootfs QEMU
-gates for Malta and Malta64.  The updated N64 UART-only boot matrix passed on
+Malta, Malta64, MaltaEL, CI20, and N64.  PCC has passed the Malta,
+Malta64/R4000, and MaltaEL QEMU hard-float and soft-float rootfs gates, plus
+hard-float PCC kernel/rootfs QEMU gates for Malta and Malta64.  The updated
+N64 UART-only boot matrix passed on
 real hardware with PCC and GCC kernels, raw swap, and zswap.  The current N64
 hard-float PCC full zswap ROM boots on real hardware to root login and basic
 shell use (`ls`, `uptime`).  The full updated N64 hard/soft PCC rootfs smoke
@@ -23,8 +24,7 @@ Current policy:
 - Supported userland compiler selectors: `gcc` and `pcc`.
 - Supported rootfs endian selectors: `big` and `little`.  Big-endian PCC uses
   the `mips-rebsd` cross target; little-endian PCC uses `mipsel-rebsd`.
-  The current `maltael` board build is GCC-only until the little-endian PCC
-  rootfs gate is validated for that board.
+  `maltael` is the QEMU little-endian PCC gate.
 - PCC CPU selectors: `vr4300` and `mips32r2`, with CPU-specific instruction
   mode and C ABI alignment.
 - PCC float ABI selectors: `hard` and `soft`, with ABI-specific build stamps.
@@ -44,7 +44,8 @@ compiler.  There are two make variable names because the tree has two entry
 points into the same userland/rootfs choice:
 
 - `N64_USERLAND_COMPILER` is the direct N64 userland selector.
-- `MIPS_ROOTFS_COMPILER` is the Malta/Malta64 rootfs selector.
+- `MIPS_ROOTFS_COMPILER` is the Malta, Malta64, MaltaEL, and CI20 rootfs
+  selector.
 - `MIPS_ROOTFS_CPU` selects the rootfs CPU ABI.  Supported values are
   `vr4300` and `mips32r2`.
 - `N64_USERLAND_FLOAT` and `MIPS_ROOTFS_FLOAT` select the userland/rootfs float
@@ -96,12 +97,13 @@ mode.  A `mips-rebsd-ld` search uses the big-endian target directory, while a
 Common build forms:
 
 ```sh
+make tools
 make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-smoke-runtime
 make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
-make -C sys/mips BOARD=maltael rootfs.img kernel
+make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
 make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
 make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc malta64.elf
 make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc unix.elf
@@ -111,18 +113,46 @@ make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ZSWAP
 make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 N64_ZSWAP=1 kernel.z64 preflight.z64
 ```
 
-The QEMU PCC smoke matrix verified on 2026-07-05 is:
+Fresh checkouts should run `make tools` before direct board-directory builds.
+The shared wrapper form, `make -C sys/mips BOARD=... target`, forwards the
+PCC smoke targets to the selected board.  The full QEMU PCC gate is
+`pcc-smoke-all-runtime`; it boots QEMU, runs `/root/pcc-smoke-all.sh`, and
+requires `PCC_SMOKE_ALL_RC:0`.
+
+Full PCC QEMU gates:
+
+```sh
+make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+```
+
+The QEMU PCC smoke matrix verified on 2026-07-09 from a clean checkout is:
 
 ```text
 malta64 vr4300  hard  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
 malta64 vr4300  soft  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
 malta   mips32r2 hard  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
 malta   mips32r2 soft  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
+maltael mips32r2 hard  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
+maltael mips32r2 soft  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
 ```
 
 The same runs included `linpack-pcc`; representative results were about
-11.3 MFLOPS for VR4300 hard-float, 10.5-11.0 MFLOPS for mips32r2 hard-float,
-and 0.7-0.8 MFLOPS for soft-float.
+13 MFLOPS for VR4300 hard-float, 12.5-13 MFLOPS for mips32r2 hard-float,
+and 0.9 MFLOPS for soft-float.
+
+Build-only PCC board gates for targets without a QEMU smoke target:
+
+```sh
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 all
+make -C sys/mips BOARD=ci20 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc all
+```
+
+PIC32 is not part of the current supported gate matrix.
 
 The PCC hard-float kernel/rootfs gates were rerun on 2026-07-06 after the MIPS
 `-fomit-frame-pointer` pass-ordering fix:
