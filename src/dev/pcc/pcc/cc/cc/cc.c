@@ -2714,7 +2714,7 @@ mips_is_jump_delay_gpr_alu(const char *line)
 }
 
 static int
-mips_parse_base_offset_operand_reg_imm(const char **sp, int *basep, int *immp)
+mips_parse_base_offset_operand_reg(const char **sp, int *basep)
 {
 	char imm[64];
 	const char *s, *start, *end;
@@ -2744,15 +2744,7 @@ mips_parse_base_offset_operand_reg_imm(const char **sp, int *basep, int *immp)
 	*sp = s + 1;
 	if (basep != NULL)
 		*basep = reg;
-	if (immp != NULL)
-		*immp = immval;
 	return 1;
-}
-
-static int
-mips_parse_base_offset_operand_reg(const char **sp, int *basep)
-{
-	return mips_parse_base_offset_operand_reg_imm(sp, basep, NULL);
 }
 
 static int
@@ -2780,52 +2772,6 @@ mips_parse_lw_load_regs(const char *line, int *dstp, int *basep)
 	*dstp = dst;
 	*basep = base;
 	return 1;
-}
-
-static int
-mips_parse_fp_stack_double(const char *line, const char *wantop, int *fprp,
-    int *offp)
-{
-	char op[16];
-	const char *s;
-	int base, fpr, off;
-
-	if (!mips_parse_opcode(line, op, sizeof(op)) ||
-	    strcmp(op, wantop) != 0)
-		return 0;
-	s = mips_skip_space(line);
-	s += strlen(op);
-	if (!mips_parse_fpr_operand(&s, &fpr) ||
-	    !mips_skip_comma(&s) ||
-	    !mips_parse_base_offset_operand_reg_imm(&s, &base, &off) ||
-	    !mips_line_ends_after_operands(s) ||
-	    base != 30)
-		return 0;
-	*fprp = fpr;
-	*offp = off;
-	return 1;
-}
-
-static int
-mips_fold_adjacent_fp_store_load(const char *store, const char *load,
-    char *out, size_t outsz)
-{
-	int lfpr, loff, sfpr, soff;
-	int n, used;
-
-	if (!mips_parse_fp_stack_double(store, "s.d", &sfpr, &soff) ||
-	    !mips_parse_fp_stack_double(load, "l.d", &lfpr, &loff) ||
-	    soff != loff)
-		return 0;
-	n = snprintf(out, outsz, "%s", store);
-	if (n <= 0 || (size_t)n >= outsz)
-		return 0;
-	if (sfpr == lfpr)
-		return 1;
-	used = n;
-	n = snprintf(out + used, outsz - used,
-	    "\tmov.d $f%d,$f%d\t\t# register move\n", lfpr, sfpr);
-	return n > 0 && (size_t)n < outsz - used;
 }
 
 static int
@@ -3556,13 +3502,6 @@ mips_fold_late_peepholes(char *path)
 				    folded, sizeof(folded))) {
 					fputs(folded, out);
 					prev_control = mips_is_control_transfer(folded);
-					changed = 1;
-					continue;
-				}
-				if (mips_fold_adjacent_fp_store_load(line, next,
-				    folded, sizeof(folded))) {
-					fputs(folded, out);
-					prev_control = 0;
 					changed = 1;
 					continue;
 				}
