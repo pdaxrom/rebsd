@@ -1960,6 +1960,44 @@ mips_fold_move_addiu_line(const char *move, const char *add, char *out,
 }
 
 static int
+mips_fold_move_addiu_tmp_line(const char *move, const char *add, char *out,
+    size_t outsz, int *tmpregp)
+{
+	char mdst[16], msrc[16], adst[16], asrc[16], imm[64];
+	const char *s, *comment;
+	int mdstreg, msrcreg, adstreg, asrcreg;
+	int n;
+
+	if (!mips_parse_move_gprs(move, mdst, sizeof(mdst), msrc, sizeof(msrc),
+	    &mdstreg, &msrcreg))
+		return 0;
+	if (!mips_parse_opcode(add, imm, sizeof(imm)) ||
+	    strcmp(imm, "addiu") != 0)
+		return 0;
+	s = mips_skip_space(add);
+	s += strlen(imm);
+	if (!mips_parse_gpr_operand(&s, adst, sizeof(adst), &adstreg) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_gpr_operand(&s, asrc, sizeof(asrc), &asrcreg) ||
+	    !mips_skip_comma(&s))
+		return 0;
+	if (asrcreg != mdstreg || adstreg == mdstreg)
+		return 0;
+	if (!mips_parse_tail_operand(s, imm, sizeof(imm), &comment))
+		return 0;
+	if (comment != NULL)
+		n = snprintf(out, outsz, "\taddiu %s,%s,%s\t%s",
+		    adst, msrc, imm, comment);
+	else
+		n = snprintf(out, outsz, "\taddiu %s,%s,%s\n",
+		    adst, msrc, imm);
+	if (n <= 0 || (size_t)n >= outsz)
+		return 0;
+	*tmpregp = mdstreg;
+	return 1;
+}
+
+static int
 mips_parse_signed_imm16(const char *tok, int *imm)
 {
 	char *end;
@@ -3314,6 +3352,7 @@ mips_fold_late_peepholes(char *path)
 	int prev_control;
 	int prev_label;
 	int line_after_label;
+	int addiu_tmpreg;
 	int zero_tmpreg;
 	int changed;
 	int failed;
@@ -3395,6 +3434,48 @@ mips_fold_late_peepholes(char *path)
 						    fgets(mf, sizeof(mf), in) != NULL &&
 						    mips_line_writes_gpr_before_read(
 						    mf, zero_tmpreg)) {
+							fputs(folded, out);
+							fputs(after, out);
+							fputs(mf, out);
+							prev_control =
+							    mips_is_control_transfer(
+							    mf);
+							changed = 1;
+							continue;
+						}
+					}
+					if (ferror(in) ||
+					    fseek(in, pos, SEEK_SET) == -1) {
+						fclose(out);
+						fclose(in);
+						unlink(tmp);
+						free(tmp);
+						return 1;
+					}
+					clearerr(in);
+				}
+				if (mips_fold_move_addiu_tmp_line(line, next,
+				    folded, sizeof(folded), &addiu_tmpreg)) {
+					pos2 = ftell(in);
+					if (pos2 != -1 &&
+					    fgets(after, sizeof(after), in) != NULL) {
+						if (mips_line_writes_gpr_before_read(
+						    after, addiu_tmpreg)) {
+							fputs(folded, out);
+							fputs(after, out);
+							prev_control =
+							    mips_is_control_transfer(
+							    after);
+							changed = 1;
+							continue;
+						}
+						if (mips_is_instruction(after) &&
+						    !mips_is_control_transfer(after) &&
+						    !mips_line_touches_gpr(after,
+						    1ULL << addiu_tmpreg) &&
+						    fgets(mf, sizeof(mf), in) != NULL &&
+						    mips_line_writes_gpr_before_read(
+						    mf, addiu_tmpreg)) {
 							fputs(folded, out);
 							fputs(after, out);
 							fputs(mf, out);
