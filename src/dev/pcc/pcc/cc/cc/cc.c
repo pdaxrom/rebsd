@@ -2649,7 +2649,7 @@ mips_parse_base_offset_operand(const char **sp)
 }
 
 static int
-mips_is_jump_delay_store(const char *line)
+mips_is_jump_delay_store_type(const char *line, int *isfpp)
 {
 	char op[16];
 	char tok[16];
@@ -2663,6 +2663,8 @@ mips_is_jump_delay_store(const char *line)
 	if (!isfp && strcmp(op, "sb") != 0 && strcmp(op, "sh") != 0 &&
 	    strcmp(op, "sw") != 0 && strcmp(op, "sd") != 0)
 		return 0;
+	if (isfpp != NULL)
+		*isfpp = isfp;
 	s = mips_skip_space(line);
 	s += strlen(op);
 	if (isfp) {
@@ -2674,6 +2676,20 @@ mips_is_jump_delay_store(const char *line)
 		return 0;
 	return mips_skip_comma(&s) && mips_parse_base_offset_operand(&s) &&
 	    mips_line_ends_after_operands(s);
+}
+
+static int
+mips_is_jump_delay_store(const char *line)
+{
+	return mips_is_jump_delay_store_type(line, NULL);
+}
+
+static int
+mips_is_jump_delay_fp_store(const char *line)
+{
+	int isfp;
+
+	return mips_is_jump_delay_store_type(line, &isfp) && isfp;
 }
 
 static int
@@ -2780,8 +2796,11 @@ mips_can_move_to_int_branch_delay(const char *line, const char *branch)
 	unsigned long long writes, reads, branch_reads;
 	unsigned long long regs;
 
-	if (!mips_parse_int_branch_reads(branch, &branch_reads) ||
-	    !mips_parse_simple_gpr_rw(line, &writes, &reads))
+	if (!mips_parse_int_branch_reads(branch, &branch_reads))
+		return 0;
+	if (mips_is_jump_delay_fp_store(line))
+		return 1;
+	if (!mips_parse_simple_gpr_rw(line, &writes, &reads))
 		return 0;
 	if ((writes & branch_reads) != 0)
 		return 0;

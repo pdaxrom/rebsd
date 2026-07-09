@@ -113,6 +113,81 @@ not active items for the current C/static-a.out PCC milestone.
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+- [x] Safe integer conditional branch delay slots can use simple GPR work.
+  - The final MIPS assembly peephole now recognizes integer conditional
+    branches (`beq`, `bne`, `beqz`, `bnez`, `bgez`, `bgtz`, `blez`, and
+    `bltz`) and can move a preceding simple GPR operation into the delay slot
+    when it does not write a register read by the branch.
+  - The rule deliberately refuses `$ra`, refuses `$sp` except for exact
+    `addiu $sp,$sp,imm` stack adjustment, and refuses the first instruction
+    after a label so branch targets keep their original first instruction.
+  - The existing VR4300 FP multiply erratum path is unchanged: the final
+    `-mfix4300` / `-mno-fix4300` repair still prevents unsafe FP multiply
+    adjacency and the branch-delay rule does not schedule FP multiplies.
+  - Malta64/VR4300 Linpack assembly counters improved from PCC `2508`
+    instructions / `180` nops / `130` branch-jump-call delay nops to `2507`
+    instructions / `179` nops / `129` branch-jump-call delay nops.  MIPS32R2
+    userland size counters also moved downward on the same conservative rule.
+  - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
+    `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
+    `-fomit-frame-pointer`:
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+  - Linpack QEMU results for the final matrix were approximately:
+    Malta64 hard `13387/13760`, Malta64 soft `896/899`, Malta hard
+    `13118/13349`, Malta soft `1003/1001`, MaltaEL hard `13723/13574`, and
+    MaltaEL soft `1023/1013` KFLOPS.
+  - Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+- [x] Safe integer conditional branch delay slots can also use strict FP stores.
+  - The final MIPS assembly peephole now allows a preceding simple FP store in
+    an integer conditional branch delay slot when the store is accepted by the
+    existing jump-delay store parser.  This covers strict numeric
+    `imm16(base)` forms for `s.s`, `s.d`, `swc1`, and `sdc1`, including
+    common Linpack FP spill stores before loop branches.
+  - General integer stores and symbolic stores such as `sw $v0,mempool`
+    deliberately remain untouched for conditional branch delay slots.  A
+    broader integer-store rule exposed an unsafe `malta64` soft-float
+    `ccom-stress` path in native `cpp`, so the committed rule keeps the
+    measured hard-float FP win without taking that risk.
+  - The rule does not allow loads into VR4300 branch delay slots and does not
+    schedule FP multiply instructions, so the `-mfix4300` / `-mno-fix4300`
+    erratum workaround path remains unchanged.
+  - Malta64/VR4300 Linpack assembly counters improved from the previous PCC
+    `2507` instructions / `179` nops / `129` branch-jump-call delay nops to
+    `2503` instructions / `175` nops / `125` branch-jump-call delay nops.
+    Malta/MIPS32R2 improved from `2696` instructions / `115` nops / `115`
+    branch-jump-call delay nops to `2692` instructions / `111` nops / `111`
+    branch-jump-call delay nops.
+  - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
+    `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
+    `-fomit-frame-pointer`:
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+  - Linpack QEMU results for the final matrix were approximately:
+    Malta64 hard `13025/13214`, Malta64 soft `848/860`, Malta hard
+    `12517/12406`, Malta soft `978/970`, MaltaEL hard `12657/12683`, and
+    MaltaEL soft `991/975` KFLOPS.
+  - Logs:
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
+    `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
 - [x] VR4300 cheap constant multiplies lower to shift/add/sub sequences.
   - The MIPS backend now has a `FEATURE_VR4300`-gated table rule for positive
     non-power-of-two constants whose odd factor is `2^n +/- 1`; this covers
@@ -3132,7 +3207,9 @@ Milestone order:
     dependent-load `nop` cleanup are also complete and green.  MIPS32R2
     FPU compare-to-branch spacer cleanup, MIPS32R2 `mtc1`-to-convert spacer
     trim, load-gap label-only skip trim, and MIPS32R2 `jr $ra` frame-load
-    return-delay fill are complete and green.
+    return-delay fill are complete and green.  Safe integer conditional branch
+    delay-slot fill for simple GPR operations and strict FP stores is complete
+    and green.
     Remaining FP load/compute and
     broader load scheduling, including the MIPS32R2 version of shift/load
     movement, needs the compact late scheduler.
