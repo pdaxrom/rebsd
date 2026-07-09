@@ -2477,20 +2477,25 @@ mips_can_fill_hilo_lw_delay2(const char *hilo, const char *mf,
 	return 1;
 }
 
+static int mips_parse_lw_load_regs(const char *, int *, int *);
+
 static int
 mips_can_fill_hilo_post_mflo_lw_delay(const char *hilo, const char *mf,
     const char *load, const char *use)
 {
 	struct mips_load_dest load_dest;
 	unsigned long long hilo_regs, use_regs;
-	int mfreg;
+	int mfreg, loaddst, loadbase;
 
 	if (!mips_parse_int_mult_hilo(hilo, &hilo_regs) ||
 	    !mips_parse_mfhilo_dest(mf, &mfreg) ||
 	    !mips_is_lw_load(load, &load_dest) ||
+	    !mips_parse_lw_load_regs(load, &loaddst, &loadbase) ||
 	    !mips_parse_simple_gpr_regs(use, &use_regs))
 		return 0;
-	if (mips_line_touches_gpr(load, hilo_regs | (1ULL << mfreg)))
+	(void)hilo_regs;
+	(void)use_regs;
+	if (loaddst == mfreg || loadbase == mfreg)
 		return 0;
 	return 1;
 }
@@ -2646,6 +2651,27 @@ static int
 mips_parse_base_offset_operand(const char **sp)
 {
 	return mips_parse_base_offset_operand_reg(sp, NULL);
+}
+
+static int
+mips_parse_lw_load_regs(const char *line, int *dstp, int *basep)
+{
+	char op[16], tok[16];
+	const char *s;
+	int dst, base;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) || strcmp(op, "lw") != 0)
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &dst) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_base_offset_operand_reg(&s, &base) ||
+	    !mips_line_ends_after_operands(s))
+		return 0;
+	*dstp = dst;
+	*basep = base;
+	return 1;
 }
 
 static int

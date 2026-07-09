@@ -3393,6 +3393,41 @@ Backend work, kept small:
     `/private/tmp/rebsd-used-sregs-malta-soft.log`,
     `/private/tmp/rebsd-used-sregs-maltael-hard.log`, and
     `/private/tmp/rebsd-used-sregs-maltael-soft.log`.
+  - HI/LO post-`mflo` stack-load fill relaxation landed on 2026-07-09.  The
+    final MIPS peephole still handles only the exact
+    `mult`; `nop`; `nop`; `mflo`; `lw imm16(base)`; simple-use shape, but now
+    recognizes that the original `mult` source GPRs may be overwritten after
+    the multiply has issued.  It still rejects any moved `lw` whose destination
+    or base register is the `mflo`/`mfhi` result register, keeps one executed
+    spacer before the HI/LO read, does not move across labels or control
+    transfers, does not put FP multiplies into delay slots, and leaves the
+    `-mfix4300`/`-mno-fix4300` FP multiply erratum repair unchanged.
+  - Post-relaxed-HI/LO-post-`mflo`-load-fill `pcc-perf-baseline` counters:
+    - Malta64/VR4300 hard-float Linpack changed from the previous PCC `2490`
+      instructions / `162` `nop` to `2486` instructions / `158` `nop`; GCC
+      remains `1138` instructions / `42` `nop`, PCC loads/stores are `645/244`,
+      branch/jump/call delay `nop` stayed `112`, bytes are `80223`, and
+      PCC/GCC instruction ratio is `2.185`.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 big-endian hard-float Linpack stayed at PCC `2575`
+      instructions / `113` `nop` versus GCC `1082` instructions / `5` `nop`;
+      PCC loads/stores stayed `793/289`, branch/jump/call delay `nop` stayed
+      `113`, bytes stayed `79753`, and PCC/GCC instruction ratio stayed
+      `2.380`.  This change therefore only affects the VR4300-style
+      `mult`/`mflo` path measured here.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-relaxed-HI/LO-post-`mflo`-load-fill full PCC-kernel/PCC-rootfs QEMU
+    matrix passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-09: Malta64/VR4300
+    hard-float and soft-float, Malta/mips32r2 big-endian hard-float and
+    soft-float, and MaltaEL/mips32r2 little-endian hard-float and soft-float.
+    The kernel C compile path still covers `-fomit-frame-pointer`, and the
+    soft gates cover `-msoft-float`.  Wrapper logs:
+    `/private/tmp/rebsd-hilo-lw-malta64-hard.log`,
+    `/private/tmp/rebsd-hilo-lw-malta64-soft.log`,
+    `/private/tmp/rebsd-hilo-lw-malta-hard.log`,
+    `/private/tmp/rebsd-hilo-lw-malta-soft.log`,
+    `/private/tmp/rebsd-hilo-lw-maltael-hard.log`, and
+    `/private/tmp/rebsd-hilo-lw-maltael-soft.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
