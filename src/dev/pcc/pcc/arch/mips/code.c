@@ -84,21 +84,24 @@ mips_next_fp_argreg(int *fpregp)
 static NODE *mips_lvalue_word(NODE *, int);
 
 static int
-mips_64bit_arg_aligned(void)
+mips_64bit_arg_aligned(TWORD t)
 {
-#ifdef MIPS_ALIGN64
-	return MIPS_ALIGN64 > SZINT;
+#if defined(MIPS_INT64_ARG_ALIGN) && defined(MIPS_FP64_ARG_ALIGN)
+	if (t == DOUBLE || t == LDOUBLE)
+		return MIPS_FP64_ARG_ALIGN > SZINT;
+	return MIPS_INT64_ARG_ALIGN > SZINT;
 #else
+	(void)t;
 	return 1;
 #endif
 }
 
 static void
-mips_align_64bit_argreg(int *regp)
+mips_align_64bit_argreg(TWORD t, int *regp)
 {
 	int reg = *regp;
 
-	if (mips_64bit_arg_aligned()) {
+	if (mips_64bit_arg_aligned(t)) {
 		++reg;
 		reg &= ~1;
 	}
@@ -106,16 +109,16 @@ mips_align_64bit_argreg(int *regp)
 }
 
 static void
-mips_advance_64bit_arg_slots(int *regp)
+mips_advance_64bit_arg_slots(TWORD t, int *regp)
 {
-	mips_align_64bit_argreg(regp);
+	mips_align_64bit_argreg(t, regp);
 	*regp += 2;
 }
 
 static int
-mips_64bit_arg_splits(int reg)
+mips_64bit_arg_splits(TWORD t, int reg)
 {
-	mips_align_64bit_argreg(&reg);
+	mips_align_64bit_argreg(t, &reg);
 	return reg == A0 + nargregs - 1;
 }
 
@@ -124,7 +127,7 @@ static void
 mips_advance_arg_slots(TWORD t, int *regp)
 {
 	if (t == DOUBLE || t == LDOUBLE)
-		mips_advance_64bit_arg_slots(regp);
+		mips_advance_64bit_arg_slots(t, regp);
 	else
 		++*regp;
 }
@@ -283,11 +286,9 @@ param_retptr(void)
 }
 
 static void
-param_shift_stret_slots(struct symtab **sp, int cnt)
+mips_adjust_param_slots(struct symtab **sp, int cnt, int extra)
 {
-	int extra, i, off;
-
-	extra = SZINT;
+	int i, off;
 
 	for (i = 0; i < cnt; i++) {
 		if (sp[i] == NULL || sp[i]->sclass != PARAM ||
@@ -296,7 +297,7 @@ param_shift_stret_slots(struct symtab **sp, int cnt)
 		off = sp[i]->soffset + extra;
 		if ((DEUNSIGN(sp[i]->stype) == LONGLONG ||
 		    sp[i]->stype == DOUBLE || sp[i]->stype == LDOUBLE) &&
-		    mips_64bit_arg_aligned() &&
+		    mips_64bit_arg_aligned(sp[i]->stype) &&
 		    (off & (2 * SZINT - 1)) != 0) {
 			off += SZINT;
 			extra += SZINT;
@@ -387,7 +388,7 @@ param_64bit(struct symtab *sym, int *regp, int dotemps)
 	NODE *p, *q;
 	int navail;
 
-	mips_align_64bit_argreg(&reg);
+	mips_align_64bit_argreg(sym->stype, &reg);
 
 	navail = nargregs - (reg - A0);
 
@@ -482,7 +483,7 @@ param_double(struct symtab *sym, int *regp, int dotemps)
 	NODE *p, *q;
 	int navail;
 
-	mips_align_64bit_argreg(&reg);
+	mips_align_64bit_argreg(sym->stype, &reg);
 
 	navail = nargregs - (reg - A0);
 
@@ -541,7 +542,7 @@ bfcode(struct symtab **sp, int cnt)
 {
 	int lastreg = A0 + nargregs - 1;
 	int saveallargs = 0;
-	int i, reg;
+	int i, reg, struct_return;
 #ifdef MIPS_HARDFLOAT_O32_ABI
 	int fp_leading, fpreg;
 #endif
@@ -559,9 +560,12 @@ bfcode(struct symtab **sp, int cnt)
 	fpreg = F12;
 #endif
 
+	struct_return = cftnsp->stype == STRTY+FTN ||
+	    cftnsp->stype == UNIONTY+FTN;
+	mips_adjust_param_slots(sp, cnt, struct_return ? SZINT : 0);
+
 	/* assign hidden return structure to temporary */
-	if (cftnsp->stype == STRTY+FTN || cftnsp->stype == UNIONTY+FTN) {
-		param_shift_stret_slots(sp, cnt);
+	if (struct_return) {
 		param_retptr();
 		++reg;
 #ifdef MIPS_HARDFLOAT_O32_ABI
@@ -990,7 +994,7 @@ movearg_struct(NODE *p, NODE *prefix, int *regp)
 /* setup call stack with 64-bit argument */
 /* called from moveargs() */
 static NODE *
-movearg_64bit(NODE *p, int *regp, NODE **padp)
+movearg_64bit(NODE *p, TWORD argtype, int *regp, NODE **padp)
 {
 	int reg = *regp;
 	int oreg = reg;
@@ -999,7 +1003,7 @@ movearg_64bit(NODE *p, int *regp, NODE **padp)
 
 	*padp = NIL;
 
-	mips_align_64bit_argreg(&reg);
+	mips_align_64bit_argreg(argtype, &reg);
 
 	lastarg = A0 + nargregs - 1;
 	if (reg > lastarg) {
@@ -1128,14 +1132,14 @@ moveargs(NODE *p, int *regp
 	} else if (DEUNSIGN(r->n_type) == LONGLONG) {
 		NODE *arg, *pad;
 
-		if (mips_64bit_arg_splits(*regp)) {
+		if (mips_64bit_arg_splits(r->n_type, *regp)) {
 			struct symtab *sp = mips_stacktemp(r->n_type,
 			    r->n_df, r->n_ap);
 			NODE *store = buildtree(ASSIGN,
 			    mips_stackview(sp, r->n_type), r);
 			NODE *src = mips_stackview(sp, r->n_type);
 
-			arg = movearg_64bit(src, regp, &pad);
+			arg = movearg_64bit(src, r->n_type, regp, &pad);
 			if (p->n_op == CM) {
 				NODE *l = p->n_left;
 				if (pad != NIL)
@@ -1148,7 +1152,7 @@ moveargs(NODE *p, int *regp
 				store = block(CM, pad, store, INT, 0, 0);
 			return cmappend_tree(store, arg);
 		}
-		arg = movearg_64bit(r, regp, &pad);
+		arg = movearg_64bit(r, r->n_type, regp, &pad);
 		if (arg->n_op == CM) {
 			if (p->n_op == CM) {
 				NODE *l = p->n_left;
@@ -1178,7 +1182,7 @@ moveargs(NODE *p, int *regp
 		NODE *t1 = mips_stackview(sp, LONGLONG);
 		NODE *t2 = mips_stackview(sp, r->n_type);
 		NODE *pad;
-		t1 = movearg_64bit(t1, regp, &pad);
+		t1 = movearg_64bit(t1, r->n_type, regp, &pad);
 		r = block(ASSIGN, t2, r, r->n_type, r->n_df, r->n_ap);
 		if (p->n_op == CM) {
 			NODE *l = p->n_left;

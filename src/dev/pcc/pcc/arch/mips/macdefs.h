@@ -54,8 +54,20 @@
 #ifndef MIPS_FIX4300_DEFAULT
 #define MIPS_FIX4300_DEFAULT	(MIPS_CPU_DEFAULT == MIPS_CPU_VR4300)
 #endif
-#define MIPS_ALIGN64		(mips_cpu == MIPS_CPU_MIPS32R2 ? 32 : 64)
+#define MIPS_DATA_ALIGN64	(mips_cpu == MIPS_CPU_MIPS32R2 ? 32 : 64)
+/* ReBSD mips32r2 keeps integer pairs packed, but o32 FP64 uses even slots. */
+#define MIPS_INT64_ARG_ALIGN	MIPS_DATA_ALIGN64
+#define MIPS_FP64_ARG_ALIGN	64
 #define MIPS_FIX4300_ACTIVE	(mips_cpu == MIPS_CPU_VR4300 && mips_fix4300)
+#endif
+#ifndef MIPS_DATA_ALIGN64
+#define MIPS_DATA_ALIGN64	64
+#endif
+#ifndef MIPS_INT64_ARG_ALIGN
+#define MIPS_INT64_ARG_ALIGN	64
+#endif
+#ifndef MIPS_FP64_ARG_ALIGN
+#define MIPS_FP64_ARG_ALIGN	64
 #endif
 #ifndef MIPS_FIX4300_ACTIVE
 #define MIPS_FIX4300_ACTIVE	0
@@ -93,22 +105,22 @@
 #define ALINT		32
 #define ALFLOAT		32
 #if defined(os_rebsd)
-#define ALDOUBLE	MIPS_ALIGN64
-#define ALLDOUBLE	MIPS_ALIGN64
+#define ALDOUBLE	MIPS_DATA_ALIGN64
+#define ALLDOUBLE	MIPS_DATA_ALIGN64
 #else
 #define ALDOUBLE	64
 #define ALLDOUBLE	64
 #endif
 #define ALLONG		32
 #if defined(os_rebsd)
-#define ALLONGLONG	MIPS_ALIGN64
+#define ALLONGLONG	MIPS_DATA_ALIGN64
 #else
 #define ALLONGLONG	64
 #endif
 #define ALSHORT		16
 #define ALPOINT		32
 #if defined(os_rebsd)
-#define ALSTRUCT	MIPS_ALIGN64
+#define ALSTRUCT	MIPS_DATA_ALIGN64
 #else
 #define ALSTRUCT	64
 #endif
@@ -298,9 +310,9 @@ typedef long long OFFSZ;
 	SBREG|TEMPREG, SBREG|TEMPREG, SBREG|TEMPREG, SBREG|TEMPREG,	\
 	SBREG, SBREG, SBREG, SBREG,					\
 	SBREG, SBREG, SBREG, 						\
-	SCREG, SCREG, SCREG, SCREG,					\
-	SCREG, SCREG, SCREG, SCREG,					\
-	SCREG, SCREG, SCREG, 						\
+	SCREG|TEMPREG, SCREG|TEMPREG, SCREG|TEMPREG, SCREG|TEMPREG,	\
+	SCREG|TEMPREG, SCREG|TEMPREG, SCREG|TEMPREG, SCREG|TEMPREG,	\
+	SCREG|TEMPREG, SCREG|TEMPREG, 0,					\
 
 #define ROVERLAP \
 	{ -1 },				/* $zero */			\

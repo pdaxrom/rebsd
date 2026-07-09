@@ -85,9 +85,9 @@ The N64 entry point also accepts the alias variables
 the N64 and common `MIPS_ROOTFS_*` names are set, they must agree.
 
 `MIPS_ROOTFS_ENDIAN=little` selects the `mipsel-rebsd` cross target for PCC
-SDK/rootfs flows.  The checked-in `maltael` board build currently keeps
-`MIPS_ROOTFS_COMPILER=gcc` and uses the external mipsel GCC toolchain until the
-little-endian PCC rootfs gate is validated for that board.
+SDK/rootfs flows.  The checked-in `maltael` default remains
+`MIPS_ROOTFS_COMPILER=gcc`, while the opt-in PCC kernel/rootfs hard-float and
+soft-float gates are validated on QEMU.
 
 ## Active PCC Work Queue
 
@@ -102,6 +102,10 @@ Completed for this milestone:
   `-mips32r2`) and pass the selected CPU to both `ccom` and `as`.
 - The selected CPU is part of the C ABI layout.  `vr4300` keeps the current
   8-byte alignment policy; `mips32r2` uses the 4-byte Malta o32 layout.
+- MIPS32r2 data and integer-pair arguments retain that 4-byte layout.  FP64
+  arguments use even o32 slots independently, including varargs, and formal
+  parameter offsets apply the same rule.  This preserves the existing ReBSD
+  `long long` ABI while keeping PCC FP calls compatible with GCC-built libc.
 - Keep big-endian/little-endian selection as target identity for PCC.  Do not
   rely on a runtime `-EL`/`-EB` switch to mutate a compiler target into the
   opposite endian ABI.
@@ -371,7 +375,10 @@ indirect calls through `$25`, avoids clobbering 64-bit argument registers while
 precomputing complex call arguments, corrects the `$t6` register-pair map, keeps
 ReBSD `OFFSZ` at the target ABI width, prints unsigned 32-bit constants without
 sign-extension in assembler output, and keeps the shell allocator safety guard
-enabled for both `vr4300` and `mips32r2` userlands.
+enabled for both `vr4300` and `mips32r2` userlands.  Caller-clobbered FPRs are
+now represented as temporaries, variable 64-bit shifts are lowered inline,
+unsigned 32-bit FP conversions use the correct helpers, and common symbols
+carry their required assembler alignment.
 
 ## Validation Gates
 
@@ -402,6 +409,23 @@ malta64 vr4300  soft  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
 malta   mips32r2 hard  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
 malta   mips32r2 soft  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
 ```
+
+The clean 2026-07-10 matrix additionally covered MaltaEL and repeated every
+profile with both the kernel and rootfs selected as PCC:
+
+```text
+malta64 vr4300   hard  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+malta64 vr4300   soft  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+malta   mips32r2 hard  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+malta   mips32r2 soft  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+maltael mips32r2 hard  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+maltael mips32r2 soft  PCC_SMOKE_ALL_FAILURES 0  PCC_SMOKE_ALL_RC:0
+```
+
+The same source state passed `321` host compile checks with only the three
+documented expected failures, `281/281` cross runtime checks, and the native
+PCC gate with `291` successful compilations, `30` expected compile failures,
+and `281/281` runtime passes.
 
 The same runs included `linpack-pcc`:
 

@@ -554,15 +554,23 @@ extdec(struct symtab *q)
 void
 defzero(struct symtab *sp)
 {
-	int off;
+	int al, off;
 
 	off = tsize(sp->stype, sp->sdf, sp->sap);
 	off = (off+(SZCHAR-1))/SZCHAR;
-	printf("	.%scomm ", sp->sclass == STATIC ? "l" : "");
+	al = talign(sp->stype, sp->sap)/SZCHAR;
+	if (sp->sclass == STATIC) {
+		printf("	.local ");
+		if (sp->slevel == 0)
+			printf("%s\n", getexname(sp));
+		else
+			printf(LABFMT "\n", sp->soffset);
+	}
+	printf("	.comm ");
 	if (sp->slevel == 0)
-		printf("%s,0%o\n", getexname(sp), off);
+		printf("%s,0%o,%d\n", getexname(sp), off, al);
 	else
-		printf(LABFMT ",0%o\n", sp->soffset, off);
+		printf(LABFMT ",0%o,%d\n", sp->soffset, off, al);
 }
 
 
@@ -674,7 +682,7 @@ NODE *
 mips_builtin_va_arg(const struct bitable *bt, NODE *a)
 {
 	NODE *p, *q, *r;
-	int sz, tmpnr;
+	int align64, sz, tmpnr;
 
 	/* check num args and type */
 	if (a == NULL || a->n_op != CM || a->n_left->n_op == CM ||
@@ -694,7 +702,13 @@ mips_builtin_va_arg(const struct bitable *bt, NODE *a)
 
 	/* alignment */
 	p = tcopy(a->n_left);
-	if (MIPS_ALIGN64 > SZINT && sz > SZINT/SZCHAR &&
+	if (r->n_type == DOUBLE || r->n_type == LDOUBLE)
+		align64 = MIPS_FP64_ARG_ALIGN > SZINT;
+	else if (DEUNSIGN(r->n_type) == LONGLONG)
+		align64 = MIPS_INT64_ARG_ALIGN > SZINT;
+	else
+		align64 = 0;
+	if (align64 && sz > SZINT/SZCHAR &&
 	    r->n_type != UNIONTY && r->n_type != STRTY) {
 		p = buildtree(PLUS, p, bcon(7));
 		p = block(AND, p, bcon(-8), p->n_type, p->n_df, p->n_ap);

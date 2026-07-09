@@ -29,6 +29,7 @@ SECTIONS
     _ftext = .;
     *(.text .stub .text.* .gnu.linkonce.t.*)
     *(.rodata .rodata.* .gnu.linkonce.r.*)
+    *(.eh_frame .eh_frame.*)
     . = ALIGN(16);
   } :user
 

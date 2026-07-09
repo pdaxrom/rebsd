@@ -526,6 +526,7 @@ shiftop(NODE *p)
 {
 	NODE *r = p->n_right;
 	TWORD ty = p->n_type;
+	int large, done;
 
 	if (p->n_op == LS && r->n_op == ICON && getlval(r) < 32) {
 		expand(p, INBREG, "\tsrl A1,AL,");
@@ -561,8 +562,45 @@ shiftop(NODE *p)
 	} else if (p->n_op == LS && r->n_op == ICON) {
 		expand(p, INBREG, "\tli A1,0\t# 64-bit right-shift\n");
 		expand(p, INBREG, "\tli U1,0\n");
-	} else {
+	} else if (r->n_op == ICON) {
 		comperr("shiftop");
+	} else {
+		large = getlab2();
+		done = getlab2();
+		expand(p, INBREG,
+		    "\tmove U1,UL\t# 64-bit variable shift\n"
+		    "\tmove A1,AL\n"
+		    "\tbeqz AR,");
+		printf(LABFMT "\n\tnop\n", done);
+		expand(p, INBREG, "\tsltiu A2,AR,32\n\tbeqz A2,");
+		printf(LABFMT "\n\tnop\n", large);
+		expand(p, INBREG, "\tsubu A2,$zero,AR\n");
+		if (p->n_op == LS) {
+			expand(p, INBREG,
+			    "\tsrlv A2,AL,A2\n"
+			    "\tsllv U1,UL,AR\n"
+			    "\tor U1,U1,A2\n"
+			    "\tsllv A1,AL,AR\n");
+		} else {
+			expand(p, INBREG,
+			    "\tsllv A2,UL,A2\n"
+			    "\tsrlv A1,AL,AR\n"
+			    "\tor A1,A1,A2\n");
+			expand(p, INBREG, ty == LONGLONG ?
+			    "\tsrav U1,UL,AR\n" : "\tsrlv U1,UL,AR\n");
+		}
+		printf("\tj " LABFMT "\n\tnop\n", done);
+		deflab(large);
+		if (p->n_op == LS) {
+			expand(p, INBREG,
+			    "\tsllv U1,AL,AR\n"
+			    "\tmove A1,$zero\n");
+		} else {
+			expand(p, INBREG, ty == LONGLONG ?
+			    "\tsrav A1,UL,AR\n\tsra U1,UL,31\n" :
+			    "\tsrlv A1,UL,AR\n\tmove U1,$zero\n");
+		}
+		deflab(done);
 	}
 }
 
@@ -2197,8 +2235,8 @@ mips_is_soft_fp64(TWORD t)
 static int
 mips_split_hardfp64_mem(void)
 {
-#ifdef MIPS_ALIGN64
-	return !mips_soft_float && MIPS_ALIGN64 <= SZINT;
+#ifdef MIPS_DATA_ALIGN64
+	return !mips_soft_float && MIPS_DATA_ALIGN64 <= SZINT;
 #else
 	return 0;
 #endif

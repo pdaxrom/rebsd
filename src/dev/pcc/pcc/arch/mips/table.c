@@ -100,21 +100,26 @@
 #define NICALLB	NEEDS(NREG(B, 1), NLEFT(T9))
 #define NICALLC	NEEDS(NREG(C, 1), NLEFT(T9))
 #define XSLT9(c) NEEDS(NREG(c, 1), NSL(c), NLEFT(T9))
-#define NSCBC	NEEDS(NREG(C, 1), NLEFT(A0A1), NRES(F0))
-#ifdef os_rebsd
-#define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(V0V1))
-#else
-#define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(A0A1))
-#endif
-#define NABSL	NEEDS(NREG(A, 1), NREG(B, 1), NSL(A))
-#define NDIVB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1))
-#define NSHB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2), NRES(V0V1))
 #define MIPS_CALLER_SAVED_NEVER \
 	NEVER(V0), NEVER(V1), \
 	NEVER(A0), NEVER(A1), NEVER(A2), NEVER(A3), \
 	NEVER(T0), NEVER(T1), NEVER(T2), NEVER(T3), \
 	NEVER(T4), NEVER(T5), NEVER(T6), NEVER(T7), \
 	NEVER(T8), NEVER(T9)
+#define NSCAC	NEEDS(NREG(C, 1), NLEFT(A0), NRES(F0), \
+		    MIPS_CALLER_SAVED_NEVER)
+#define NSCBC	NEEDS(NREG(C, 1), NLEFT(A0A1), NRES(F0), \
+		    MIPS_CALLER_SAVED_NEVER)
+#ifdef os_rebsd
+#define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(V0V1), \
+		    MIPS_CALLER_SAVED_NEVER)
+#else
+#define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(A0A1), \
+		    MIPS_CALLER_SAVED_NEVER)
+#endif
+#define NABSL	NEEDS(NREG(A, 1), NREG(B, 1), NSL(A))
+#define NDIVB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1))
+#define NSHB	NEEDS(NREG(B, 1), NREG(A, 1))
 #define NSF_AA	NEEDS(NREG(A, 1), NLEFT(A0), NRES(V0), \
 		    MIPS_CALLER_SAVED_NEVER)
 #define NSF_AB	NEEDS(NREG(B, 1), NLEFT(A0), NRES(V0V1), \
@@ -521,6 +526,18 @@ struct optab table[] = {
 		NCREG,	RESC1,
 		"	cvt.d.s A1,AL	# convert float to (l)double\n", },
 
+{ SCONV,	INCREG,
+	SAREG,	TUWORD,
+	SCREG,	TFLOAT,
+		NSCAC,	RESC1,
+		"ZF", },
+
+{ SCONV,	INCREG,
+	SAREG,	TUWORD,
+	SCREG,	TDOUBLE|TLDOUBLE,
+		NSCAC,	RESC1,
+		"ZF", },
+
 #ifdef os_rebsd
 { SCONV,	INCREG,
 	SCREG,	TDOUBLE|TLDOUBLE,
@@ -541,7 +558,7 @@ struct optab table[] = {
 #endif
 
 { SCONV,	INCREG,
-	SAREG,	TWORD,
+	SAREG,	TSWORD,
 	SCREG,	TFLOAT,
 		NCREG,	RESC1,
 		"	mtc1 AL,A1	# convert (u)int to float\n"
@@ -549,7 +566,7 @@ struct optab table[] = {
 		"	cvt.s.w A1,A1\n", },
 
 { SCONV,	INCREG,
-	SOREG,	TWORD,
+	SOREG,	TSWORD,
 	SCREG,	TFLOAT,
 		NCREG,	RESC1,
 		"	l.s A1,AL	# convert (u)int to float\n"
@@ -557,7 +574,7 @@ struct optab table[] = {
 		"	cvt.s.w A1,A1\n", },
 
 { SCONV,	INCREG,
-	SAREG,	TWORD,
+	SAREG,	TSWORD,
 	SCREG,	TDOUBLE|TLDOUBLE,
 		NCREG,	RESC1,
 		"	mtc1 AL,A1	# convert (u)int to (l)double\n"
@@ -565,7 +582,7 @@ struct optab table[] = {
 		"	cvt.d.w A1,A1\n", },
 
 { SCONV,	INCREG,
-	SOREG,	TWORD,
+	SOREG,	TSWORD,
 	SCREG,	TDOUBLE|TLDOUBLE,
 		NCREG,	RESC1,
 		"	l.s A1,AL	# convert (u)int to (l)double\n"
@@ -1091,13 +1108,13 @@ struct optab table[] = {
 	SBREG,	TLONGLONG|TULONGLONG,
 	SAREG,	TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
 		NSHB,	RESC1,
-		"ZE", },
+		"ZO", },
 
 { LS,	INBREG,
 	SBREG,	TLONGLONG|TULONGLONG,
 	SAREG,	TWORD|TSHORT|TUSHORT|TCHAR|TUCHAR,
 		NSHB,	RESC1,
-		"ZE", },
+		"ZO", },
 
 /*
  * Rule for unary one's complement

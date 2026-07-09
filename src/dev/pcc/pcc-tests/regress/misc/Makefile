@@ -9,7 +9,7 @@ LDFLAGS=
 LOG=misc.log
 MAKE=make
 
-REGRESS_TARGETS = arith001 arith002 stasg001 ucmp001 char001 func001 str001 ucn001 array001 ucharload001
+REGRESS_TARGETS = arith001 arith002 stasg001 ucmp001 char001 func001 str001 ucn001 array001 ucharload001 nestedcall001 intfp001 llshift001
 OPTIM_TARGETS = optim001 optim002 optim003
 PIC_TARGETS = pic001
 

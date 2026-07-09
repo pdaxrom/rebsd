@@ -3280,7 +3280,7 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
   - MIPS32R2 aligned frame/stack hard-float double memory operations landed
     on 2026-07-09: when the hard-float 64-bit memory ABI path is split because
-    `MIPS_ALIGN64 <= SZINT`, codegen now uses `ldc1`/`sdc1` only for OREG
+    `MIPS_DATA_ALIGN64 <= SZINT`, codegen now uses `ldc1`/`sdc1` only for OREG
     operands that are proven backend-controlled stack or frame references.
     The accepted form is intentionally narrow: after `mips_adjust_frame_ref()`
     the base must be `$fp` or `$sp`, and the offset must be 8-byte aligned.
@@ -3570,6 +3570,40 @@ Backend work, kept small:
     `/private/tmp/rebsd-branch-reload-malta-soft.log`,
     `/private/tmp/rebsd-branch-reload-maltael-hard.log`, and
     `/private/tmp/rebsd-branch-reload-maltael-soft.log`.
+  - Clean Phase 0 follow-up correctness work completed on 2026-07-10 before
+    further optimization.  F0-F18 are now modeled as caller-clobbered
+    temporaries while F20 is unavailable to the allocator, so nested FP calls
+    cannot retain live values in an unsaved callee-saved register.  Hidden FP
+    conversion helper calls reserve caller-clobbered GPRs, unsigned 32-bit to
+    FP conversions use `__floatunsi*`, and variable 64-bit shifts are emitted
+    inline instead of exposing unmodeled helper calls to register allocation.
+  - The same correction set emits aligned `.comm` declarations, retains
+    `.eh_frame` in user links, and separates MIPS data, integer-pair argument,
+    and FP64 argument alignment.  MIPS32R2 keeps its existing 4-byte data and
+    `long long` slot layout, while `double`/`long double` use even o32 argument
+    slots and matching formal/vararg offsets.  VR4300 remains 8-byte aligned.
+  - Added `misc/nestedcall001`, `misc/intfp001`, and `misc/llshift001` for the
+    nested FP call, unsigned/64-bit FP conversion, and multiple variable-shift
+    cases.  Host compile regression passed `318/321` with only the three
+    documented expected failures; cross runtime passed `281/281`; native PCC
+    passed `291` compilations plus `30` expected compile failures and `281/281`
+    runtimes with `NATIVE_PCC_REGRESS_RC:0`.
+  - Clean sequential PCC-kernel/PCC-rootfs QEMU gates all reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`: Malta64/VR4300 hard
+    and soft, Malta/MIPS32R2 big-endian hard and soft, and MaltaEL/MIPS32R2
+    little-endian hard and soft.  The kernel path used `-msoft-float` and
+    `-fomit-frame-pointer` in every profile.  Logs are
+    `/private/tmp/pcc-phase0-postfix3-malta64-{hard,soft}-build.log`,
+    `/private/tmp/pcc-phase0-postfix3-malta-{hard,soft}-build.log`, and
+    `/private/tmp/pcc-phase0-postfix3-maltael-{hard,soft}-build.log`.
+  - QEMU Linpack PCC ranges from those runs were Malta64 hard
+    `13544-13651`, Malta64 soft `965-992`, Malta hard `13618-13729`, Malta
+    soft `1023-1024`, MaltaEL hard `13674-13701`, and MaltaEL soft
+    `1047-1061` KFLOPS.  QEMU does not reproduce the VR4300 multiply erratum;
+    real N64 validation of this source state remains required.
+  - A direct post-matrix assembly probe confirmed that VR4300 default/explicit
+    `-mfix4300` inserts the erratum `nop`, `-mno-fix4300` removes it, and an
+    explicit `-mfix4300` does not apply the repair to `-march=mips32r2`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
