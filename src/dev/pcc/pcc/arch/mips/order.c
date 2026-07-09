@@ -138,9 +138,39 @@ setorder(NODE * p)
 int *
 livecall(NODE *p)
 {
-	static int r[1] = { -1 }; /* Terminate with -1 */
+	static int r[MIPS_N32_NARGREGS + 1];
+	NODE *q;
+	int cr = 0;
 
-	return &r[0];
+#define	LIVEREG(x) do { if (cr < MIPS_N32_NARGREGS) r[cr++] = (x); } while (0)
+#define	LIVEARGREG(x) do {						\
+	int reg = (x);							\
+	switch (reg) {							\
+	case A0A1: LIVEREG(A0); LIVEREG(A1); break;			\
+	case A1A2: LIVEREG(A1); LIVEREG(A2); break;			\
+	case A2A3: LIVEREG(A2); LIVEREG(A3); break;			\
+	case A3T0: LIVEREG(A3); LIVEREG(T0); break;			\
+	default: LIVEREG(reg); break;					\
+	}								\
+} while (0)
+
+	if (optype(p->n_op) != BITYPE) {
+		r[0] = -1;
+		return r;
+	}
+
+	for (q = p->n_right; q->n_op == CM; q = q->n_left) {
+		if (q->n_right->n_op == ASSIGN &&
+		    q->n_right->n_left->n_op == REG)
+			LIVEARGREG(regno(q->n_right->n_left));
+	}
+	if (q->n_op == ASSIGN && q->n_left->n_op == REG)
+		LIVEARGREG(regno(q->n_left));
+	r[cr] = -1;
+
+	return r;
+#undef LIVEARGREG
+#undef LIVEREG
 }
 
 /*

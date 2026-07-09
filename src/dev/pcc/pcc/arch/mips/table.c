@@ -527,9 +527,11 @@ struct optab table[] = {
 	SCREG,	TFLOAT,
 		NEEDS(NREG(C, 1), NRES(F0), MIPS_CALLER_SAVED_NEVER),	RESC1,
 		"	mov.d $f12,AL	# convert (l)double to float via helper\n"
+		"Za"
 		"	jal __truncdfsf2\n"
 		"	subu $sp,$sp,16 # call __truncdfsf2\n"
-		"	addiu $sp,$sp,16\n", },
+		"	addiu $sp,$sp,16\n"
+		"Zb", },
 #else
 { SCONV,	INCREG,
 	SCREG,	TDOUBLE|TLDOUBLE,

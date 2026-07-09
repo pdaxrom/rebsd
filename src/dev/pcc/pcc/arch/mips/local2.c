@@ -78,11 +78,18 @@ static int regoff[32];
 static TWORD ftype;
 static int mips_frame_adjust;
 static int mips_omit_fp;
+static int mips_leaf_function;
 
 static int
 mips_can_omit_fp(struct interpass_prolog *ipp)
 {
 	return xomitframe && (ipp->ipp_flags & IF_NEEDFP) == 0;
+}
+
+static int
+mips_is_leaf(struct interpass_prolog *ipp)
+{
+	return (ipp->ipp_flags & IF_NOTLEAF) == 0;
 }
 
 static void
@@ -92,6 +99,29 @@ mips_adjust_frame_ref(CONSZ *off, int *base)
 		*off += mips_frame_adjust;
 		*base = SP;
 	}
+}
+
+static void
+mips_leaf_ra_slot(const char *op)
+{
+	CONSZ off;
+	int base;
+
+	if (!mips_leaf_function)
+		return;
+
+	base = mips_omit_fp ? SP : FP;
+	off = (mips_omit_fp ? mips_frame_adjust : 0) + 4;
+
+	if (off >= -32768 && off <= 32767) {
+		printf("\t%s %s," CONFMT "(%s)\n", op, rnames[RA], off,
+		    rnames[base]);
+		return;
+	}
+
+	printf("\tli %s," CONFMT "\n", rnames[AT], off);
+	printf("\taddu %s,%s,%s\n", rnames[AT], rnames[AT], rnames[base]);
+	printf("\t%s %s,0(%s)\n", op, rnames[RA], rnames[AT]);
 }
 
 /*
@@ -136,6 +166,7 @@ prologue(struct interpass_prolog * ipp)
 {
 	int addto;
 	int i, j;
+	int leaf;
 
 	ftype = ipp->ipp_type;
 	printf("\t.align 2\n");
@@ -145,6 +176,8 @@ prologue(struct interpass_prolog * ipp)
 	printf("%s:\n", ipp->ipp_name);
 
 	mips_omit_fp = mips_can_omit_fp(ipp);
+	leaf = mips_is_leaf(ipp) && !xomitframe;
+	mips_leaf_function = leaf;
 	addto = offcalc(ipp, mips_omit_fp);
 	mips_frame_adjust = addto;
 
@@ -174,7 +207,8 @@ prologue(struct interpass_prolog * ipp)
 		printf("\t.cprestore 8\t# pseudo-op to store GOT ptr at 8(sp)\n");
 #endif
 
-	printf("\tsw %s,4(%s)\n", rnames[RA], rnames[SP]);
+	if (!leaf)
+		printf("\tsw %s,4(%s)\n", rnames[RA], rnames[SP]);
 	if (!mips_omit_fp) {
 		printf("\tsw %s,0(%s)\n", rnames[FP], rnames[SP]);
 		printf("\tmove %s,%s\n", rnames[FP], rnames[SP]);
@@ -210,12 +244,15 @@ void
 eoftn(struct interpass_prolog * ipp)
 {
 	int i, j;
+	int leaf;
 
 	(void) offcalc(ipp, mips_omit_fp);
+	leaf = mips_leaf_function;
 
 	if (ipp->ipp_ip.ip_lbl == 0) {
 		mips_omit_fp = 0;
 		mips_frame_adjust = 0;
+		mips_leaf_function = 0;
 		return;		/* no code needs to be generated */
 	}
 
@@ -250,8 +287,9 @@ eoftn(struct interpass_prolog * ipp)
 	} else {
 		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[FP],
 		    ARGINIT/SZCHAR);
-		printf("\tlw %s,%d(%s)\n", rnames[RA], 4-ARGINIT/SZCHAR,
-		    rnames[SP]);
+		if (!leaf)
+			printf("\tlw %s,%d(%s)\n", rnames[RA],
+			    4-ARGINIT/SZCHAR, rnames[SP]);
 		printf("\tlw %s,%d(%s)\n", rnames[FP], 0-ARGINIT/SZCHAR,
 		    rnames[SP]);
 		printf("\tjr %s\n", rnames[RA]);
@@ -260,6 +298,7 @@ eoftn(struct interpass_prolog * ipp)
 
 	mips_omit_fp = 0;
 	mips_frame_adjust = 0;
+	mips_leaf_function = 0;
 
 #ifdef USE_GAS
 	printf("\t.end %s\n", ipp->ipp_name);
@@ -423,9 +462,11 @@ starg(NODE *p)
 	/* A0 = dest, A1 = src, A2 = len */
 	printf("\tmove %s,%s\n", rnames[A0], rnames[SP]);
 	printf("\tli %s,%d\t# structure size\n", rnames[A2], sz);
+	mips_leaf_ra_slot("sw");
 	printf("\tjal %s\t# structure copy\n", exname("memcpy"));
 	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
+	mips_leaf_ra_slot("lw");
 }
 
 static void
@@ -471,9 +512,11 @@ stasg(NODE *p)
 		adrput(stdout, p->n_left);
 		printf("\n");
 	}
+	mips_leaf_ra_slot("sw");
 	printf("\tjal %s\t# structure copy\n", exname("memcpy"));
 	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
+	mips_leaf_ra_slot("lw");
 }
 
 static void
@@ -660,9 +703,11 @@ fpemulop(NODE *p)
 #endif
 	}
 
+	mips_leaf_ra_slot("sw");
 	printf("\tjal __%s\t# softfloat operation\n", exname(ch));
 	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
+	mips_leaf_ra_slot("lw");
 
 	if (p->n_op >= EQ && p->n_op <= GT) {
 		switch (p->n_op) {
@@ -739,9 +784,11 @@ emulop(NODE *p)
 	else if (p->n_op == UMINUS && p->n_type == LONG) ch = "negsi2";
 
 	else ch = 0, comperr("ZE");
+	mips_leaf_ra_slot("sw");
 	printf("\tjal __%s\t# emulated operation\n", exname(ch));
 	printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 	printf("\taddiu %s,%s,16\n", rnames[SP], rnames[SP]);
+	mips_leaf_ra_slot("lw");
 }
 
 /*
@@ -1307,6 +1354,14 @@ zzzcode(NODE * p, int c)
 
 	case 'Y':		/* multiply by shift-add constant */
 		mulshiftaddcon(p);
+		break;
+
+	case 'a':		/* save $ra around a leaf-only helper call */
+		mips_leaf_ra_slot("sw");
+		break;
+
+	case 'b':		/* restore $ra after a leaf-only helper call */
+		mips_leaf_ra_slot("lw");
 		break;
 
 	default:

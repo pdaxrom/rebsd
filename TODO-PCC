@@ -336,10 +336,19 @@ not active items for the current C/static-a.out PCC milestone.
     branch delay slots, but each extension needs a direct native `as` smoke
     before changing backend scheduling.
 - [ ] Verify VR4300/o32 `ld`/`sd` instruction policy.
-  - Confirm where PCC emits or accepts `ld`/`sd` for o32 VR4300/N64, whether
-    each case is a real MIPS III 64-bit load/store or an assembler macro, and
-    keep the delay-slot parser and assembler compatibility rules aligned with
-    that decision.
+  - `ld` is a real MIPS III 64-bit integer load instruction on VR4300, not a
+    generic pseudo-op.  Confirm where PCC emits or accepts `ld`/`sd` for o32
+    VR4300/N64, whether each use is ABI-safe for 32-bit C objects and stack
+    slots, and keep the delay-slot parser and assembler compatibility rules
+    aligned with that decision.
+  - Also verify whether any ReBSD assembler context still treats `ld`/`sd` as
+    macro-like syntax; such cases must stay out of delay slots until proven
+    single-instruction.
+- [ ] Fix PCC backend-to-board object dependency tracking.
+  - Editing `src/dev/pcc/pcc/arch/mips/*` does not reliably invalidate already
+    built board kernel objects.  Until this is fixed, run
+    `make -C sys/mips/<board> clean` before claiming a post-backend-edit QEMU
+    smoke result for that board.
 
 ## Phase 1: Host PCC Configuration
 
@@ -3260,6 +3269,51 @@ Backend work, kept small:
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     and
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+  - MIPS call-argument liveness and conservative leaf `$ra` handling landed on
+    2026-07-09.  `livecall()` now reports the actual register arguments that
+    have already been lowered into the call tree, including paired MIPS
+    argument pseudos.  This fixed a real target-side `w/prtat()` failure where
+    a live `$a1` call argument was reused before `jal prttime`, corrupting the
+    string tail pointer.
+  - Leaf functions now omit the prologue/epilogue `$ra` save/restore only when
+    pass2 sees a leaf and the user did not request `-fomit-frame-pointer`.
+    The `-fomit-frame-pointer` kernel path remains conservative for now after
+    an earlier broad leaf-RA attempt produced a non-booting PCC kernel.  Future
+    work should re-audit omit-FP leaf epilogues separately before enabling this
+    in kernel-style builds.
+  - Hidden backend helper calls that can appear in functions pass2 still marks
+    as leaf are wrapped with a leaf-only `$ra` spill/reload: structure-copy
+    `memcpy`, soft-float helpers, integer emulation helpers, and the ReBSD
+    hard-float `double -> float` `__truncdfsf2` table template.  This fixed the
+    `types-smoke` `close_float()` crash caused by a hidden helper `jal`
+    clobbering an omitted `$ra`.
+  - No VR4300 FP multiply scheduling changed here.  The
+    `-mfix4300`/`-mno-fix4300` erratum workaround still owns FP multiply
+    adjacency and delay-slot policy.
+  - Post-livecall/leaf-RA `pcc-perf-baseline` assembly counters:
+    - Malta64/VR4300 hard-float Linpack is GCC `1138` instructions / `42`
+      `nop` versus PCC `2490` instructions / `162` `nop`; PCC loads/stores
+      are `645/244`, branch/jump/call delay `nop` is `112`, bytes are `80243`,
+      and PCC/GCC instruction ratio is `2.188`.  Counter artifact:
+      `/private/tmp/rebsd-pcc-perf-malta64-big.vr4300.hard.elf/linpack-asm-summary.json`.
+    - Malta/mips32r2 big-endian hard-float Linpack is GCC `1082`
+      instructions / `5` `nop` versus PCC `2575` instructions / `113` `nop`;
+      PCC loads/stores are `793/289`, branch/jump/call delay `nop` is `113`,
+      bytes are `79753`, and PCC/GCC instruction ratio is `2.380`.  Counter
+      artifact:
+      `/private/tmp/rebsd-pcc-perf-malta-big.mips32r2.hard.elf/linpack-asm-summary.json`.
+  - Post-livecall/leaf-RA full PCC-kernel/PCC-rootfs QEMU correctness matrix
+    passed with `PCC_SMOKE_ALL_RC:0` on 2026-07-09: Malta64/VR4300 hard-float
+    and soft-float, Malta/mips32r2 big-endian hard-float and soft-float, and
+    MaltaEL/mips32r2 little-endian hard-float and soft-float.  The kernel C
+    compile path still covers `-msoft-float -fomit-frame-pointer`; rootfs float
+    mode is varied independently by the hard/soft gates.  Wrapper logs:
+    `/private/tmp/rebsd-livecall-helperra-malta64-hard-clean.log`,
+    `/private/tmp/rebsd-livecall-helperra-malta64-soft.log`,
+    `/private/tmp/rebsd-livecall-helperra-malta-hard.log`,
+    `/private/tmp/rebsd-livecall-helperra-malta-soft.log`,
+    `/private/tmp/rebsd-livecall-helperra-maltael-hard.log`, and
+    `/private/tmp/rebsd-livecall-helperra-maltael-soft.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -3278,6 +3332,9 @@ Backend work, kept small:
     force `$fp` in ordinary non-variable-frame functions.
   - Preserve the existing o32 ABI fixes for struct returns, stack-passed
     64-bit arguments, varargs, and aggregate arguments.
+  - Leaf `$ra` omission is now landed only for non-`-fomit-frame-pointer`
+    compilations.  Re-enabling it for omit-FP/kernel builds needs a separate
+    epilogue, interrupt-safety, and hidden-call audit.
   - Measure spills and load/store counts before and after; do not mix this
     with scheduler patches.
 - [ ] Tune hard-float codegen for VR4300.
@@ -3347,6 +3404,9 @@ Milestone order:
     movement, needs the compact late scheduler.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
+  - MIPS call-argument liveness and conservative non-omit-FP leaf `$ra`
+    omission are complete and green.  Omit-FP/kernel leaf `$ra` omission and
+    broader outgoing-argument frame simplification remain open.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,
