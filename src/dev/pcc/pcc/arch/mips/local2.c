@@ -176,7 +176,7 @@ prologue(struct interpass_prolog * ipp)
 	printf("%s:\n", ipp->ipp_name);
 
 	mips_omit_fp = mips_can_omit_fp(ipp);
-	leaf = mips_is_leaf(ipp) && !xomitframe;
+	leaf = mips_is_leaf(ipp);
 	mips_leaf_function = leaf;
 	addto = offcalc(ipp, mips_omit_fp);
 	mips_frame_adjust = addto;
@@ -266,7 +266,15 @@ eoftn(struct interpass_prolog * ipp)
 	}
 
 	if (mips_omit_fp) {
-		if (mips_frame_adjust > 0 && mips_frame_adjust <= 32763) {
+		if (leaf) {
+			if (mips_frame_adjust)
+				printf("\taddiu %s,%s,%d\n",
+				    rnames[SP], rnames[SP],
+				    mips_frame_adjust);
+			printf("\tjr %s\n", rnames[RA]);
+			printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP],
+			    ARGINIT/SZCHAR);
+		} else if (mips_frame_adjust > 0 && mips_frame_adjust <= 32763) {
 			printf("\tlw %s,%d(%s)\n", rnames[RA],
 			    mips_frame_adjust + 4, rnames[SP]);
 			printf("\taddiu %s,%s,%d\n",

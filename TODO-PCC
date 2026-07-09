@@ -284,6 +284,35 @@ not active items for the current C/static-a.out PCC milestone.
     `/private/tmp/rebsd-pcc-smoke-all-malta-big.mips32r2.soft.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-maltael-little.mips32r2.soft.elf.log`.
+- [x] Omit-frame leaf functions skip redundant `$ra` saves.
+  - The MIPS prologue now trusts pass2 leaf status independently of
+    `-fomit-frame-pointer`.  The omit-frame epilogue skips the `$ra` reload
+    for true leaf functions and keeps the final 16-byte ABI stack pop in the
+    `jr $ra` delay slot.
+  - Hidden helper calls that can still appear in pass2 leaf functions keep the
+    existing leaf-only `$ra` spill/reload wrappers, so structure-copy,
+    soft-float, integer emulation, and hard-float conversion helper calls do
+    not clobber the caller return address.
+  - A Malta64 kernel assembly audit after the soft-float gate found 1056
+    generated kernel functions: 287 no-`jal` leaf-like functions had no
+    `sw/lw $ra`, while the remaining 769 call-path functions still saved and
+    restored `$ra`.
+  - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
+    `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with
+    `-msoft-float -fomit-frame-pointer`:
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+  - Logs:
+    `/private/tmp/rebsd-omitfp-leaf-malta64-hard.log`,
+    `/private/tmp/rebsd-omitfp-leaf-malta64-soft.log`,
+    `/private/tmp/rebsd-omitfp-leaf-malta-hard.log`,
+    `/private/tmp/rebsd-omitfp-leaf-malta-soft.log`,
+    `/private/tmp/rebsd-omitfp-leaf-maltael-hard.log`, and
+    `/private/tmp/rebsd-omitfp-leaf-maltael-soft.log`.
 - [x] ReBSD `ld` accepts `-L` and `-l` library search options.
   - `ld` now collects all `-L` search directories before resolving any `-l`
     library, so `cc file.c -lm` works even when the compiler driver appends
@@ -3275,12 +3304,10 @@ Backend work, kept small:
     argument pseudos.  This fixed a real target-side `w/prtat()` failure where
     a live `$a1` call argument was reused before `jal prttime`, corrupting the
     string tail pointer.
-  - Leaf functions now omit the prologue/epilogue `$ra` save/restore only when
-    pass2 sees a leaf and the user did not request `-fomit-frame-pointer`.
-    The `-fomit-frame-pointer` kernel path remains conservative for now after
-    an earlier broad leaf-RA attempt produced a non-booting PCC kernel.  Future
-    work should re-audit omit-FP leaf epilogues separately before enabling this
-    in kernel-style builds.
+  - Leaf functions now omit the prologue/epilogue `$ra` save/restore whenever
+    pass2 sees a leaf, including `-fomit-frame-pointer` kernel-style builds.
+    The omit-frame epilogue skips the `$ra` reload for those leaf functions and
+    keeps the final 16-byte ABI stack pop in the `jr $ra` delay slot.
   - Hidden backend helper calls that can appear in functions pass2 still marks
     as leaf are wrapped with a leaf-only `$ra` spill/reload: structure-copy
     `memcpy`, soft-float helpers, integer emulation helpers, and the ReBSD
@@ -3314,6 +3341,18 @@ Backend work, kept small:
     `/private/tmp/rebsd-livecall-helperra-malta-soft.log`,
     `/private/tmp/rebsd-livecall-helperra-maltael-hard.log`, and
     `/private/tmp/rebsd-livecall-helperra-maltael-soft.log`.
+  - Omit-FP leaf `$ra` enablement landed on 2026-07-09.  A Malta64 kernel
+    assembly audit after the soft-float gate found 1056 generated kernel
+    functions: 287 no-`jal` leaf-like functions had no `sw/lw $ra`, and the
+    remaining 769 call-path functions still saved and restored `$ra`.  The full
+    PCC-kernel/PCC-rootfs matrix passed again with `PCC_SMOKE_ALL_RC:0`;
+    wrapper logs:
+    `/private/tmp/rebsd-omitfp-leaf-malta64-hard.log`,
+    `/private/tmp/rebsd-omitfp-leaf-malta64-soft.log`,
+    `/private/tmp/rebsd-omitfp-leaf-malta-hard.log`,
+    `/private/tmp/rebsd-omitfp-leaf-malta-soft.log`,
+    `/private/tmp/rebsd-omitfp-leaf-maltael-hard.log`, and
+    `/private/tmp/rebsd-omitfp-leaf-maltael-soft.log`.
   - Continue landing remaining memory/FPU scheduling work in small patches,
     each followed by PCC regressions plus Linpack smoke on Malta/Malta64 and,
     when relevant, N64 hardware validation.
@@ -3332,9 +3371,10 @@ Backend work, kept small:
     force `$fp` in ordinary non-variable-frame functions.
   - Preserve the existing o32 ABI fixes for struct returns, stack-passed
     64-bit arguments, varargs, and aggregate arguments.
-  - Leaf `$ra` omission is now landed only for non-`-fomit-frame-pointer`
-    compilations.  Re-enabling it for omit-FP/kernel builds needs a separate
-    epilogue, interrupt-safety, and hidden-call audit.
+  - Leaf `$ra` omission is now landed for both normal and
+    `-fomit-frame-pointer` compilations.  Remaining work is broader
+    outgoing-argument frame simplification and reducing cases that still force
+    a real `$fp`.
   - Measure spills and load/store counts before and after; do not mix this
     with scheduler patches.
 - [ ] Tune hard-float codegen for VR4300.
@@ -3404,9 +3444,9 @@ Milestone order:
     movement, needs the compact late scheduler.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
-  - MIPS call-argument liveness and conservative non-omit-FP leaf `$ra`
-    omission are complete and green.  Omit-FP/kernel leaf `$ra` omission and
-    broader outgoing-argument frame simplification remain open.
+  - MIPS call-argument liveness and leaf `$ra` omission, including the
+    omit-FP/kernel path, are complete and green.  Broader outgoing-argument
+    frame simplification remains open.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,
