@@ -233,6 +233,8 @@ optimize(struct p2env *p2e)
 			deljumps(p2e); /* Delete redundant jumps and dead code */
 
 		cfg_rebuild(p2e, "post-ssa");
+		if (ssa_fold_constant_branches(p2e))
+			cfg_rebuild(p2e, "post-constant-branch-fold");
 
 #ifdef PCC_DEBUG
 		printflowdiagram(p2e, "no_phi");

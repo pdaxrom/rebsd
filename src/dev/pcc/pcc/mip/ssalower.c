@@ -683,3 +683,75 @@ ssa_lower_phi(struct p2env *p2e)
 			DLIST_REMOVE(ip, qelem);
 	}
 }
+
+static int
+constant_comparison(NODE *p, int *result)
+{
+	NODE *left, *right;
+	CONSZ l, r;
+	U_CONSZ ul, ur;
+
+	if (!logop(p->n_op))
+		return 0;
+	left = p->n_left;
+	right = p->n_right;
+	if (left->n_op != ICON || right->n_op != ICON ||
+	    left->n_name == NULL || right->n_name == NULL ||
+	    left->n_name[0] != '\0' || right->n_name[0] != '\0' ||
+	    !ISINTEGER(BTYPE(left->n_type)) ||
+	    !ISINTEGER(BTYPE(right->n_type)))
+		return 0;
+	l = getlval(left);
+	r = getlval(right);
+	ul = (U_CONSZ)l;
+	ur = (U_CONSZ)r;
+	switch (p->n_op) {
+	case EQ: *result = l == r; break;
+	case NE: *result = l != r; break;
+	case LE: *result = l <= r; break;
+	case LT: *result = l < r; break;
+	case GE: *result = l >= r; break;
+	case GT: *result = l > r; break;
+	case ULE: *result = ul <= ur; break;
+	case ULT: *result = ul < ur; break;
+	case UGE: *result = ul >= ur; break;
+	case UGT: *result = ul > ur; break;
+	default:
+		return 0;
+	}
+	return 1;
+}
+
+/*
+ * Fold only comparisons made constant by SSA propagation.  This runs after
+ * the normal post-SSA jump cleanup, leaving unreachable blocks for the next
+ * explicit optimization stage.
+ */
+int
+ssa_fold_constant_branches(struct p2env *p2e)
+{
+	struct interpass *ip, *next;
+	NODE *p;
+	int changed, label, result;
+
+	changed = 0;
+	for (ip = DLIST_NEXT(&p2e->ipole, qelem);
+	    ip != &p2e->ipole; ip = next) {
+		next = DLIST_NEXT(ip, qelem);
+		if (ip->type != IP_NODE || ip->ip_node->n_op != CBRANCH)
+			continue;
+		p = ip->ip_node;
+		if (!constant_comparison(p->n_left, &result))
+			continue;
+		label = (int)getlval(p->n_right);
+		tfree(p);
+		if (result) {
+			ip->ip_node = mkunode(GOTO,
+			    mklnode(ICON, label, 0, INT), 0, INT);
+		} else {
+			DLIST_REMOVE(ip, qelem);
+		}
+		changed = 1;
+	}
+	return changed;
+}
