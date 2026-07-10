@@ -177,6 +177,9 @@ optimize(struct p2env *p2e)
 		renamevar(p2e,DLIST_NEXT(&p2e->bblocks, bbelem));
 		cfg_verify_phi(p2e, 1);
 
+		BDEBUG(("Calling ssa_local_value_numbering\n"));
+		ssa_local_value_numbering(p2e);
+
 		BDEBUG(("Calling ssa_propagate_temp_copies\n"));
 		ssa_propagate_temp_copies(p2e);
 

@@ -28,7 +28,155 @@ struct ssa_constant {
 	int replaceable;
 };
 
+struct lvn_value {
+	NODE *expression;
+	TWORD type;
+	int temp;
+};
+
 static char propagated_copy_marker;
+
+static int
+lvn_operation(int op)
+{
+	switch (op) {
+	case PLUS:
+	case MINUS:
+	case MUL:
+	case AND:
+	case OR:
+	case ER:
+	case LS:
+	case RS:
+	case UMINUS:
+	case COMPL:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static int
+lvn_expression(NODE *p, int low, int high)
+{
+	int o;
+
+	if (p->n_qual != 0 || p->n_ap != NULL ||
+	    !ISINTEGER(BTYPE(p->n_type)) || ISPTR(p->n_type))
+		return 0;
+	if (p->n_op == TEMP)
+		return regno(p) >= low && regno(p) < high;
+	if (p->n_op == ICON)
+		return p->n_name != NULL && p->n_name[0] == '\0';
+	if (!lvn_operation(p->n_op))
+		return 0;
+	o = optype(p->n_op);
+	if (!lvn_expression(p->n_left, low, high))
+		return 0;
+	return o != BITYPE || lvn_expression(p->n_right, low, high);
+}
+
+static int
+lvn_same_expression(NODE *left, NODE *right)
+{
+	int o;
+
+	if (left->n_op != right->n_op || left->n_type != right->n_type ||
+	    left->n_qual != right->n_qual)
+		return 0;
+	if (left->n_op == TEMP)
+		return regno(left) == regno(right);
+	if (left->n_op == ICON)
+		return getlval(left) == getlval(right);
+	o = optype(left->n_op);
+	if (!lvn_same_expression(left->n_left, right->n_left))
+		return 0;
+	return o != BITYPE ||
+	    lvn_same_expression(left->n_right, right->n_right);
+}
+
+static int
+lvn_barrier(NODE *p)
+{
+	int o;
+
+	if (callop(p->n_op) || p->n_op == XASM || p->n_op == NAME ||
+	    p->n_op == OREG || p->n_op == UMUL || p->n_op == STASG ||
+	    p->n_op == STARG || p->n_op == STCLR)
+		return 1;
+	o = optype(p->n_op);
+	if (asgop(p->n_op) &&
+	    (p->n_op != ASSIGN || o != BITYPE ||
+	    p->n_left->n_op != TEMP))
+		return 1;
+	if (o != LTYPE && lvn_barrier(p->n_left))
+		return 1;
+	return o == BITYPE && lvn_barrier(p->n_right);
+}
+
+/*
+ * Number exact, side-effect-free integer expressions within one SSA block.
+ * Calls, asm, and memory references end the local value-numbering region.
+ */
+void
+ssa_local_value_numbering(struct p2env *p2e)
+{
+	struct basicblock *bb;
+	struct interpass *ip;
+	struct lvn_value *value;
+	NODE *p;
+	int high, i, low, nnode, nvalue, temp;
+
+	nnode = 0;
+	DLIST_FOREACH(ip, &p2e->ipole, qelem)
+		if (ip->type == IP_NODE)
+			nnode++;
+	if (nnode == 0)
+		return;
+	value = tmpalloc((size_t)nnode * sizeof(*value));
+	low = p2e->ipp->ip_tmpnum;
+	high = p2e->epp->ip_tmpnum;
+
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		nvalue = 0;
+		for (ip = bb->first;; ip = DLIST_NEXT(ip, qelem)) {
+			if (ip->type == IP_ASM) {
+				nvalue = 0;
+			} else if (ip->type == IP_NODE) {
+				p = ip->ip_node;
+				if (lvn_barrier(p))
+					nvalue = 0;
+				if (p->n_op != ASSIGN ||
+				    p->n_left->n_op != TEMP ||
+				    p->n_left->n_type != p->n_right->n_type ||
+				    !lvn_operation(p->n_right->n_op) ||
+				    !lvn_expression(p->n_right, low, high))
+					goto next;
+				temp = regno(p->n_left);
+				if (temp < low || temp >= high)
+					goto next;
+				for (i = 0; i < nvalue; i++)
+					if (value[i].type == p->n_left->n_type &&
+					    lvn_same_expression(value[i].expression,
+					    p->n_right))
+						break;
+				if (i != nvalue) {
+					tfree(p->n_right);
+					p->n_right = mktemp(value[i].temp,
+					    value[i].type);
+				} else {
+					value[nvalue].expression = p->n_right;
+					value[nvalue].type = p->n_left->n_type;
+					value[nvalue].temp = temp;
+					nvalue++;
+				}
+			}
+next:
+			if (ip == bb->last)
+				break;
+		}
+	}
+}
 
 static int
 edge_count(struct basicblock *bb, int children)
