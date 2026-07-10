@@ -183,6 +183,9 @@ optimize(struct p2env *p2e)
 		BDEBUG(("Calling ssa_simplify_trivial_phi\n"));
 		ssa_simplify_trivial_phi(p2e);
 
+		BDEBUG(("Calling ssa_propagate_integer_constants\n"));
+		ssa_propagate_integer_constants(p2e);
+
 		BDEBUG(("Calling ssa_lower_phi\n"));
 
 #ifdef PCC_DEBUG

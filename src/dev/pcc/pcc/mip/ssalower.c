@@ -21,6 +21,13 @@ struct copy_inserter {
 	struct interpass *cursor;
 };
 
+struct ssa_constant {
+	CONSZ value;
+	TWORD type;
+	int known;
+	int replaceable;
+};
+
 static char propagated_copy_marker;
 
 static int
@@ -331,6 +338,214 @@ ssa_simplify_trivial_phi(struct p2env *p2e)
 }
 
 static int
+constant_temp(struct ssa_constant *constant, int low, int high, int temp)
+{
+	return temp >= low && temp < high && constant[temp - low].known;
+}
+
+static void
+replace_integer_constant_uses(NODE *p, struct ssa_constant *constant,
+    int low, int high)
+{
+	struct ssa_constant *value;
+	int o, temp;
+
+	if (p->n_op == TEMP) {
+		temp = regno(p);
+		if (!constant_temp(constant, low, high, temp))
+			return;
+		value = &constant[temp - low];
+		if (!value->replaceable || p->n_type != value->type)
+			return;
+		p->n_op = ICON;
+		setlval(p, value->value);
+		p->n_name = "";
+		regno(p) = 0;
+		return;
+	}
+	o = optype(p->n_op);
+	if (asgop(p->n_op) && o == BITYPE && p->n_left->n_op == TEMP) {
+		replace_integer_constant_uses(p->n_right, constant, low, high);
+		return;
+	}
+	if (o != LTYPE)
+		replace_integer_constant_uses(p->n_left, constant, low, high);
+	if (o == BITYPE)
+		replace_integer_constant_uses(p->n_right, constant, low, high);
+}
+
+static void
+validate_integer_constant_uses(NODE *p, struct ssa_constant *constant,
+    int low, int high)
+{
+	int o, temp;
+
+	if (p->n_op == TEMP) {
+		temp = regno(p);
+		if (constant_temp(constant, low, high, temp) &&
+		    p->n_type != constant[temp - low].type)
+			constant[temp - low].replaceable = 0;
+		return;
+	}
+	o = optype(p->n_op);
+	if (o != LTYPE)
+		validate_integer_constant_uses(p->n_left, constant, low, high);
+	if (o == BITYPE)
+		validate_integer_constant_uses(p->n_right, constant, low, high);
+}
+
+static void
+invalidate_xasm_constants(NODE *p, struct ssa_constant *constant,
+    int low, int high)
+{
+	int o, temp;
+
+	if (p->n_op == TEMP) {
+		temp = regno(p);
+		if (constant_temp(constant, low, high, temp))
+			constant[temp - low].replaceable = 0;
+		return;
+	}
+	o = optype(p->n_op);
+	if (o != LTYPE)
+		invalidate_xasm_constants(p->n_left, constant, low, high);
+	if (o == BITYPE)
+		invalidate_xasm_constants(p->n_right, constant, low, high);
+}
+
+static int
+other_phi_uses(struct p2env *p2e, struct phiinfo *owner, int temp)
+{
+	struct basicblock *bb;
+	struct phiinfo *phi;
+	int i;
+
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		SLIST_FOREACH(phi, &bb->phi, phielem) {
+			if (phi == owner)
+				continue;
+			for (i = 0; i < phi->size; i++)
+				if (phi->intmpregno[i] == temp)
+					return 1;
+		}
+	}
+	return 0;
+}
+
+/*
+ * Propagate direct integer constants through SSA names and phis.  This is the
+ * non-conditional part of SCCP: a phi is constant only when every defined
+ * non-self input has the same known value.  Expression and branch folding are
+ * deliberately separate passes.
+ */
+void
+ssa_propagate_integer_constants(struct p2env *p2e)
+{
+	struct basicblock *bb;
+	struct interpass *ip;
+	struct phiinfo *phi;
+	struct ssa_constant *constant, *input, *output;
+	NODE *p;
+	int changed, have_value, high, i, low, temp;
+
+	low = p2e->ipp->ip_tmpnum;
+	high = p2e->epp->ip_tmpnum;
+	if (high <= low)
+		return;
+	constant = tmpcalloc((size_t)(high - low) * sizeof(*constant));
+
+	DLIST_FOREACH(ip, &p2e->ipole, qelem) {
+		if (ip->type != IP_NODE)
+			continue;
+		p = ip->ip_node;
+		if (p->n_op != ASSIGN || p->n_left->n_op != TEMP ||
+		    p->n_right->n_op != ICON ||
+		    p->n_left->n_type != p->n_right->n_type ||
+		    !ISINTEGER(BTYPE(p->n_left->n_type)) ||
+		    p->n_right->n_name == NULL ||
+		    p->n_right->n_name[0] != '\0')
+			continue;
+		temp = regno(p->n_left);
+		if (temp < low || temp >= high)
+			continue;
+		output = &constant[temp - low];
+		output->known = 1;
+		output->replaceable = 1;
+		output->value = getlval(p->n_right);
+		output->type = p->n_left->n_type;
+	}
+
+	do {
+		changed = 0;
+		DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+			SLIST_FOREACH(phi, &bb->phi, phielem) {
+				temp = phi->newtmpregno;
+				if (temp <= 0 || temp < low || temp >= high)
+					continue;
+				output = &constant[temp - low];
+				if (output->known ||
+				    !ISINTEGER(BTYPE(phi->n_type)))
+					continue;
+				have_value = 0;
+				for (i = 0; i < phi->size; i++) {
+					if (phi->intmpregno[i] <= 0) {
+						have_value = -1;
+						break;
+					}
+					if (phi->intmpregno[i] == temp)
+						continue;
+					if (!constant_temp(constant, low, high,
+					    phi->intmpregno[i])) {
+						have_value = -1;
+						break;
+					}
+					input = &constant[
+					    phi->intmpregno[i] - low];
+					if (input->type != phi->n_type ||
+					    (have_value &&
+					    input->value != output->value)) {
+						have_value = -1;
+						break;
+					}
+					if (!have_value) {
+						output->value = input->value;
+						output->type = input->type;
+						have_value = 1;
+					}
+				}
+				if (have_value == 1) {
+					output->known = 1;
+					output->replaceable = 1;
+					changed = 1;
+				}
+			}
+		}
+	} while (changed);
+
+	DLIST_FOREACH(ip, &p2e->ipole, qelem)
+		if (ip->type == IP_NODE) {
+			validate_integer_constant_uses(ip->ip_node,
+			    constant, low, high);
+			if (ip->ip_node->n_op == XASM)
+				invalidate_xasm_constants(ip->ip_node,
+				    constant, low, high);
+		}
+
+	DLIST_FOREACH(ip, &p2e->ipole, qelem)
+		if (ip->type == IP_NODE)
+			replace_integer_constant_uses(ip->ip_node,
+			    constant, low, high);
+
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem)
+		SLIST_FOREACH(phi, &bb->phi, phielem)
+			if (constant_temp(constant, low, high,
+			    phi->newtmpregno) &&
+			    constant[phi->newtmpregno - low].replaceable &&
+			    !other_phi_uses(p2e, phi, phi->newtmpregno))
+				phi->newtmpregno = 0;
+}
+
+static int
 destination_is_live_source(struct parallel_copy *copy, int count, int index)
 {
 	int i;
@@ -438,6 +653,8 @@ ssa_lower_phi(struct p2env *p2e)
 			parent = cn->bblock;
 			count = 0;
 			SLIST_FOREACH(phi, &bb->phi, phielem) {
+				if (phi->newtmpregno <= 0)
+					continue;
 				if (edge >= phi->size)
 					comperr("SSA phi input index outside arity");
 				if (phi->intmpregno[edge] <= 0 ||

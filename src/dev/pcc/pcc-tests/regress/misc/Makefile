@@ -12,7 +12,7 @@ MAKE=make
 REGRESS_TARGETS = arith001 arith002 stasg001 ucmp001 char001 func001 str001 ucn001 array001 ucharload001 nestedcall001 intfp001 llshift001
 OPTIM_TARGETS = optim001 optim002 optim003 spillcost001 spillfp001 spillabi001 \
 	spillremat001
-SSA_TARGETS = ssacopy001 ssaphi001
+SSA_TARGETS = ssaconst001 ssacopy001 ssaphi001
 PIC_TARGETS = pic001
 
 REGRESS_TARGETS_FAIL = 
