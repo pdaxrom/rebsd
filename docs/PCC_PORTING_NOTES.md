@@ -284,6 +284,30 @@ runtime gates pass 292/292, and all six PCC-kernel/PCC-rootfs profiles report
 of this new image remains pending.  Full details are in
 `docs/PCC_PHASE5_REPORT.md`.
 
+## Late MIPS Scheduling
+
+Milestone C begins with the existing four-instruction load-delay reorder in
+the compiler driver.  Commit `11f66467` enables it for MIPS32R2 as well as
+VR4300.  It recognizes a parsed independent shift, move, signed-imm16 `li`, or
+simple GPR ALU operation before a load and moves it between that load and the
+first dependent use.  Register conflicts, control transfers, memory
+candidates, unknown syntax, and instructions already occupying a delay slot
+are rejected.
+
+VR4300 uses this window to replace an explicit load-delay `nop`; MIPS32R2 uses
+the same dependency proof to hide interlocked load latency.  The later branch
+peephole can consume an exposed independent operation as a branch delay-slot
+instruction.  On Linpack this changes 47 MIPS32R2 regions and fills two branch
+delay slots, while VR4300 assembly remains byte-identical.  The host smoke
+contains a permanent MIPS32R2 ordering probe.
+
+This is only the first scheduler substep.  The pass still has no general
+memory alias model, longer instruction window, FP compute-latency model, or
+cross-block scheduling.  The VR4300 multiply repair remains the final pass,
+is active by default under `-mfix4300`, and is disabled only by
+`-mno-fix4300`.  Validation details and artifact hashes are in
+`docs/PCC_MIPS_SCHEDULER_REPORT.md`.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus

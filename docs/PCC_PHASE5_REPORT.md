@@ -677,10 +677,9 @@ VR4300 multiply erratum.
 
 ## Next Step
 
-The next milestone is a compact late MIPS scheduler.  Start with a 3-5
-instruction window and an explicit dependency model for GPR/FPR, HI/LO,
-memory ordering, calls, branches, labels, and inline assembly.  First targets
-are safe branch-delay filling and separating VR4300 load/FPU-use hazards when
-an independent instruction already exists.  Keep the VR4300 multiply erratum
-barrier mandatory under `-mfix4300` and removable only with
-`-mno-fix4300`.
+Phase 5 is complete.  Scheduler Milestone C1 starts in commit `11f66467` by
+enabling the existing dependency-checked load-use window for MIPS32R2; details
+are in `docs/PCC_MIPS_SCHEDULER_REPORT.md`.  The next scheduler substep is
+separating FPU loads from dependent FP compute when a parsed independent
+instruction is available.  The VR4300 multiply barrier remains mandatory
+under `-mfix4300` and removable only with `-mno-fix4300`.
