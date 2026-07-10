@@ -1384,6 +1384,12 @@ struct mips_load_dest {
 	unsigned long long regs;
 };
 
+struct mips_fpu_rw {
+	unsigned long long read;
+	unsigned long long write;
+	int vr4300_cycles;
+};
+
 static const char *
 mips_skip_space(const char *s)
 {
@@ -2483,23 +2489,35 @@ mips_can_trim_mtc1_cvt_nop(const char *mtc1, const char *cvt)
 }
 
 static int
-mips_parse_fpu_binary_src_regs(const char *line, unsigned long long *srcp)
+mips_parse_fpu_binary_rw(const char *line, struct mips_fpu_rw *rwp)
 {
 	char op[16];
 	const char *s;
-	int dst, src1, src2, pair;
+	int dst, src1, src2, pair, cycles;
 
 	if (!mips_parse_opcode(line, op, sizeof(op)))
 		return 0;
-	pair = 0;
-	if (strcmp(op, "add.s") == 0 || strcmp(op, "sub.s") == 0 ||
-	    strcmp(op, "mul.s") == 0 || strcmp(op, "div.s") == 0)
+	if (strcmp(op, "add.s") == 0 || strcmp(op, "sub.s") == 0) {
 		pair = 0;
-	else if (strcmp(op, "add.d") == 0 || strcmp(op, "sub.d") == 0 ||
-	    strcmp(op, "mul.d") == 0 || strcmp(op, "div.d") == 0)
+		cycles = 3;
+	} else if (strcmp(op, "add.d") == 0 || strcmp(op, "sub.d") == 0) {
 		pair = 1;
-	else
+		cycles = 3;
+	} else if (strcmp(op, "mul.s") == 0) {
+		pair = 0;
+		cycles = 5;
+	} else if (strcmp(op, "mul.d") == 0) {
+		pair = 1;
+		cycles = 8;
+	} else if (strcmp(op, "div.s") == 0) {
+		pair = 0;
+		cycles = 29;
+	} else if (strcmp(op, "div.d") == 0) {
+		pair = 1;
+		cycles = 58;
+	} else {
 		return 0;
+	}
 	s = mips_skip_space(line);
 	s += strlen(op);
 	if (!mips_parse_fpr_operand(&s, &dst) ||
@@ -2509,8 +2527,40 @@ mips_parse_fpu_binary_src_regs(const char *line, unsigned long long *srcp)
 	    !mips_parse_fpr_operand(&s, &src2) ||
 	    !mips_line_ends_after_operands(s))
 		return 0;
-	*srcp = mips_load_dest_for_reg(MIPS_LOAD_FPR, src1, pair).regs |
+	rwp->read = mips_load_dest_for_reg(MIPS_LOAD_FPR, src1, pair).regs |
 	    mips_load_dest_for_reg(MIPS_LOAD_FPR, src2, pair).regs;
+	rwp->write = mips_load_dest_for_reg(MIPS_LOAD_FPR, dst, pair).regs;
+	rwp->vr4300_cycles = cycles;
+	return 1;
+}
+
+static int
+mips_parse_fpu_binary_src_regs(const char *line, unsigned long long *srcp)
+{
+	struct mips_fpu_rw rw;
+
+	if (!mips_parse_fpu_binary_rw(line, &rw))
+		return 0;
+	*srcp = rw.read;
+	return 1;
+}
+
+static int
+mips_can_schedule_fpu_dep_lw(const char *producer, const char *consumer,
+    const char *load)
+{
+	struct mips_fpu_rw producer_rw, consumer_rw;
+	int loaddst, loadbase;
+
+	if (!mips_parse_fpu_binary_rw(producer, &producer_rw) ||
+	    !mips_parse_fpu_binary_rw(consumer, &consumer_rw) ||
+	    (producer_rw.write & consumer_rw.read) == 0 ||
+	    producer_rw.vr4300_cycles <= 0)
+		return 0;
+	if (!mips_parse_lw_load_regs(load, &loaddst, &loadbase) ||
+	    loaddst == 0 || loaddst == 29 || loaddst == 31)
+		return 0;
+	(void)loadbase;
 	return 1;
 }
 
@@ -3257,12 +3307,14 @@ mips_repair_vr4300_multiply_errata(char *path, int warn_delay_slot)
 /*
  * Move one independent register operation after a load.  On non-interlocked
  * targets this fills an explicit load-delay nop; on MIPS32r2 it hides the
- * interlocked load latency before the first dependent use.
+ * interlocked load latency before the first dependent use.  A following lw
+ * can also separate two dependent FPU operations while its old delay nop is
+ * removed; it never crosses another memory operation.
  */
 static int
 mips_schedule_load_delay_nops(char *path)
 {
-	char line[4096], load[4096], nop[4096], next[4096];
+	char line[4096], load[4096], nop[4096], next[4096], after[4096];
 	char delay[4096];
 	FILE *in, *out;
 	char *tmp;
@@ -3298,7 +3350,19 @@ mips_schedule_load_delay_nops(char *path)
 			if (pos != -1 && fgets(load, sizeof(load), in) != NULL) {
 				if (fgets(nop, sizeof(nop), in) != NULL &&
 				    fgets(next, sizeof(next), in) != NULL &&
-				    mips_is_nop(nop)) {
+				    mips_is_nop(next) &&
+				    mips_can_schedule_fpu_dep_lw(line, load, nop) &&
+				    fgets(after, sizeof(after), in) != NULL) {
+					fputs(line, out);
+					fputs(nop, out);
+					fputs(load, out);
+					fputs(after, out);
+					prev_delay_slot =
+					    mips_has_delay_slot(after);
+					changed = 1;
+					continue;
+				}
+				if (mips_is_nop(nop)) {
 					fill = line;
 					can_fill =
 					    mips_can_fill_shift_load_delay(line,

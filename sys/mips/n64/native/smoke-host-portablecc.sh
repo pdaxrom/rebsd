@@ -249,6 +249,52 @@ END { exit found ? 0 : 1 }
 	exit 1
 }
 
+cat > "$tmp.c" <<'EOF'
+void
+fpu_latency_schedule_probe(void)
+{
+	asm("mul.d $f4,$f2,$f0\n\t"
+	    "add.d $f6,$f6,$f4\n\t"
+	    "lw $a0,20($fp)\n\t"
+	    "nop\n\t"
+	    "addiu $v1,$v0,1");
+}
+EOF
+
+for schedule_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$schedule_cpu" -mhard-float -O2 -S -o "$tmp.s" \
+	    "$tmp.c"
+	awk '
+/^[[:space:]]*mul\.d[[:space:]]+\$f4,\$f2,\$f0/ { state = 1; next }
+state == 1 && /^[[:space:]]*lw[[:space:]]+\$a0,20\(\$fp\)/ {
+	state = 2
+	next
+}
+state == 2 && /^[[:space:]]*add\.d[[:space:]]+\$f6,\$f6,\$f4/ {
+	state = 3
+	next
+}
+state == 3 && /^[[:space:]]*addiu[[:space:]]+\$v1,\$v0,1/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$schedule_cpu did not separate dependent FPU operations" >&2
+		exit 1
+	}
+done
+
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 -S -o "$tmp.s" \
+    "$tmp.c"
+awk '
+/^[[:space:]]*mul\.d[[:space:]]+\$f4,\$f2,\$f0/ { state = 1; next }
+state == 1 && /^[[:space:]]*add\.d[[:space:]]+\$f6,\$f6,\$f4/ {
+	found = 1
+}
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 unexpectedly received VR4300 FPU scheduling" >&2
+	exit 1
+}
+
 if "$pcc" -march=mips32 -S -o "$tmp.s" "$tmp.c" >"$tmp.err" 2>&1; then
 	echo "unsupported MIPS32r1 profile was accepted" >&2
 	exit 1
