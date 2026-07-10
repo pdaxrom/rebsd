@@ -301,8 +301,17 @@ instruction.  On Linpack this changes 47 MIPS32R2 regions and fills two branch
 delay slots, while VR4300 assembly remains byte-identical.  The host smoke
 contains a permanent MIPS32R2 ordering probe.
 
-This is only the first scheduler substep.  The pass still has no general
-memory alias model, longer instruction window, FP compute-latency model, or
+Commit `668a7d88` adds the second short window.  A pure parsed GPR operation
+may move across one independent load into the delay slot of a following
+integer branch.  The branch still executes the candidate on both paths.
+Candidates touching the load, branch condition, `$sp`, or `$ra` are rejected,
+as are labels, unknown instructions, memory candidates, and CPU profiles
+other than VR4300 or MIPS32R2.  This fills two additional Linpack branch slots
+on each CPU without changing load/store counts.  A permanent VR4300 host probe
+checks the final `load; branch; addiu` order.
+
+These remain bounded scheduler substeps.  The pass still has no general memory
+alias model, longer instruction window, FP compute-latency model, or
 cross-block scheduling.  The VR4300 multiply repair remains the final pass,
 is active by default under `-mfix4300`, and is disabled only by
 `-mno-fix4300`.  Validation details and artifact hashes are in

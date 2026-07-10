@@ -133,6 +133,115 @@ Real N64 validation of this image and a distinct `-mno-fix4300` image remain
 pending; QEMU cannot reproduce the physical multiply erratum.  All earlier
 ROM hashes were rechecked and remain unchanged.
 
+## Milestone C2: Branch Delay Fill Across a Load
+
+Implementation commit `668a7d88` adds a second bounded reorder:
+
+```text
+pure GPR candidate
+load
+integer branch
+nop
+```
+
+becomes:
+
+```text
+load
+integer branch
+pure GPR candidate
+```
+
+The candidate still executes on both branch paths.  It must be a move,
+immediate shift, `addiu`, `addu`, or `subu` parsed by the existing simple-GPR
+model.  A signed-imm16 `li` is first canonicalized to one `addiu` from
+`$zero`.
+
+The rule requires a recognized GPR/FPR load and an integer branch with known
+condition registers.  It rejects any candidate/load RAW, WAR, or WAW overlap,
+candidate writes to branch inputs, `$sp`, `$ra`, labels, memory candidates,
+unknown syntax, and instructions already in another delay slot.  It is gated
+to VR4300 and MIPS32R2, so generic MIPS3/R4000 behavior is unchanged.  No
+memory operation moves relative to another memory operation, and FP multiply
+instructions cannot be candidates.
+
+### Permanent Probe
+
+The host smoke compiles a VR4300 branch with an independent initial result.
+It requires this final sequence:
+
+```text
+lw    $a0,0($v1)
+bltz  $a0,target
+addiu $v0,$zero,1
+```
+
+This checks the real delay-slot placement without inline assembly.  The C1
+MIPS32R2 indexed-load ordering probe remains active in the same smoke.
+
+### Static Results
+
+C2 finds exactly two Linpack windows on each CPU:
+
+```text
+VR4300 before: 2475 instructions, 157 nops, 111 branch/jump delay nops
+VR4300 after:  2473 instructions, 155 nops, 109 branch/jump delay nops
+VR4300 loads/stores: 643/244 -> 643/244
+VR4300 sha256: e763739687d31b0883a2d5e020d8999935780cc22357a1bcb98ac89f589b51f2
+
+MIPS32R2 before: 2547 instructions, 110 nops, 110 branch/jump delay nops
+MIPS32R2 after:  2545 instructions, 108 nops, 108 branch/jump delay nops
+MIPS32R2 loads/stores: 772/293 -> 772/293
+MIPS32R2 sha256: 496a1e6cec3f43e6001b3dd0f13729ccf25b1a6031eb83ffc00a684e00e82391
+```
+
+Assembly text grows by eight bytes on each target because `li` is emitted as
+the explicit one-instruction `addiu` form.  Unoptimized `optim003.c` remains
+byte-identical with SHA-256
+`bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+
+### Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the three documented
+expected failures and passed all 292 runtime candidates.  Native PCC compiled
+302 cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 10786 / 11141 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 955 / 959 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13258 / 12967 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1075 / 1092 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13301 / 12602 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1132 / 1107 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Every profile has
+exactly one `PCC_SMOKE_ALL_OK`, `PCC_SMOKE_ALL_FAILURES 0`, and
+`PCC_SMOKE_ALL_RC:0`.  Kernel builds cover `-fomit-frame-pointer`; soft
+profiles cover `-msoft-float`.  Logs are
+`/private/tmp/pcc-sched2-{malta64,malta,maltael}-{hard,soft}.log`.
+
+QEMU timing remains host-load sensitive.  C2 is attributed to the two proven
+delay-slot fills and lower static instruction count, not to one timing sample.
+
+### N64 Artifact
+
+```text
+sys/mips/n64/builds/20260710-milestone-c2-branch-load-schedule/pcc-debug.z64
+implementation commit: 668a7d88
+size: 6619136 bytes
+sha256: 3365498bc62c2b59e4731eb881995e447b7b92092d129806cfc73773ce586595
+cross pcc sha256: f1a542e9cc9872feb1597f5f2334b296fab3848a37f651ba33921f959933f9ce
+cross ccom sha256: df30861569d3b4e6f76e9db15361cb12c9c45b8f22b2158f936af5a424ae6b6d
+native ccom sha256: 7e5274ca79d64647d4edfeb9d03ef1b486f6b3217d127c45013bd82dbdc938ad
+```
+
+The hard-float a.out image uses the default `-mfix4300` path.  Real N64
+validation of C2 and a distinct `-mno-fix4300` image remain pending; QEMU
+cannot reproduce the physical multiply erratum.  All earlier ROM hashes were
+rechecked and remain unchanged.
+
 ## Next Step
 
 Keep Milestone C open.  The next scheduler substep should use the same small

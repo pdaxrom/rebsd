@@ -4051,6 +4051,16 @@ Backend work, kept small:
     PCC-rootfs QEMU profiles pass with one `PCC_SMOKE_ALL_OK`,
     `PCC_SMOKE_ALL_FAILURES 0`, and `PCC_SMOKE_ALL_RC:0` each.  Full details
     are in `docs/PCC_MIPS_SCHEDULER_REPORT.md`.
+  - [x] Second Milestone C window: move one parsed pure GPR operation across
+    one independent load into an integer branch delay slot (commit
+    `668a7d88`).  The rule rejects `$sp`/`$ra`, register conflicts, unknown
+    loads or branches, labels, non-GPR candidates, and every CPU profile other
+    than VR4300 or MIPS32R2.  It never reorders two memory operations.
+  - C2 fills two additional Linpack branch slots on each CPU.  VR4300 moves
+    from `2475/157` to `2473/155` instructions/nops; MIPS32R2 moves from the
+    C1 `2547/110` to `2545/108`.  Load/store counts remain `643/244` and
+    `772/293`, respectively.  Cross/native runtime stays `292/292`, and all
+    six PCC-kernel/PCC-rootfs QEMU profiles pass with zero failures.
 - [ ] Reduce avoidable frame-pointer and outgoing-argument stack traffic.
   - Rework MIPS call lowering so fixed outgoing argument area handling does not
     force `$fp` in ordinary non-variable-frame functions.
@@ -4124,11 +4134,11 @@ Milestone order:
     frame-load return-delay fill is complete and green.  Safe integer
     conditional branch delay-slot fill for simple GPR operations and strict FP
     stores is complete and green.
-    Remaining FP load/compute and
-    broader load scheduling, including the MIPS32R2 version of shift/load
-    movement, needs the compact late scheduler.
+    Remaining FP load/compute and broader load scheduling needs the compact
+    late scheduler; the MIPS32R2 shift/load window is complete in C1.
 - [ ] Milestone C: add conservative late delay-slot/load-use scheduling.
-  - The first MIPS32R2 load-use window is complete in `11f66467`; broader
+  - The first MIPS32R2 load-use window is complete in `11f66467`, and the
+    branch-delay-across-load window is complete in `668a7d88`; broader
     scheduling, FP compute latency, memory alias modelling, and longer windows
     remain open.
 - [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
