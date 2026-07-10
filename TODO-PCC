@@ -4061,6 +4061,10 @@ Backend work, kept small:
     C1 `2547/110` to `2545/108`.  Load/store counts remain `643/244` and
     `772/293`, respectively.  Cross/native runtime stays `292/292`, and all
     six PCC-kernel/PCC-rootfs QEMU profiles pass with zero failures.
+  - Real N64 hardware validation of the C2 hard-float a.out image passed on
+    2026-07-11 with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and
+    the final `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no
+    numeric value; a distinct `-mno-fix4300` hardware run remains pending.
 - [ ] Reduce avoidable frame-pointer and outgoing-argument stack traffic.
   - Rework MIPS call lowering so fixed outgoing argument area handling does not
     force `$fp` in ordinary non-variable-frame functions.

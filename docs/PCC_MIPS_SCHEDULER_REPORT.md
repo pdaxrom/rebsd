@@ -238,7 +238,16 @@ native ccom sha256: 7e5274ca79d64647d4edfeb9d03ef1b486f6b3217d127c45013bd82dbdc9
 ```
 
 The hard-float a.out image uses the default `-mfix4300` path.  Real N64
-validation of C2 and a distinct `-mno-fix4300` image remain pending; QEMU
+hardware validation of C2 passed on 2026-07-11 with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+The supplied final marker did not include a numeric value, so none is inferred
+here.  A distinct `-mno-fix4300` image remains untested on hardware; QEMU
 cannot reproduce the physical multiply erratum.  All earlier ROM hashes were
 rechecked and remain unchanged.
 
