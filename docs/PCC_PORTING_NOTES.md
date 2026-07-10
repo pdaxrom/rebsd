@@ -325,7 +325,9 @@ final pass, is active by default under `-mfix4300`, and is disabled only by
 `-mno-fix4300`.  C3 passed cross/native regressions and all six full
 PCC-kernel/PCC-rootfs QEMU profiles.  Its N64 hard-float image is
 `sys/mips/n64/builds/20260711-milestone-c3-fpu-latency-schedule/pcc-debug.z64`;
-real hardware validation is pending.  Full details and hashes are in
+real hardware validation passed on 2026-07-11 with
+`N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
+`N64_PCC_DEBUG_RC_END` marker.  Full details and hashes are in
 `docs/PCC_MIPS_SCHEDULER_REPORT.md`.
 
 ## Active PCC Work Queue

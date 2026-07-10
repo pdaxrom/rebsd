@@ -364,12 +364,21 @@ native ccom sha256: 7e5274ca79d64647d4edfeb9d03ef1b486f6b3217d127c45013bd82dbdc9
 ```
 
 The hard-float a.out image uses the default `-mfix4300` path.  Real N64
-validation is pending.  The C1, C2, and Phase 5D4 artifact hashes were
-rechecked and remain unchanged.
+hardware validation passed on 2026-07-11 with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+The supplied final marker did not include a numeric value, so none is inferred
+here.  The C1, C2, and Phase 5D4 artifact hashes were rechecked and remain
+unchanged.
 
 ## Next Step
 
-Keep Milestone C open.  After C3 passes real N64 hardware, C4 may generalize
-the dependency model to a bounded 3-5 instruction window and additional safe
-register candidates.  Memory-to-memory movement still requires an explicit
-alias model.  No C4 work should begin before the C3 hardware result.
+Keep Milestone C open.  C3 has passed real N64 hardware, so C4 may now
+generalize the dependency model to a bounded 3-5 instruction window and
+additional safe register candidates.  Memory-to-memory movement still
+requires an explicit alias model.
