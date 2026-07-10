@@ -545,11 +545,13 @@ not active items for the current C/static-a.out PCC milestone.
     invalidation.  It also computes an independent iterative dominator solution
     and checks DFS parents, immediate dominators, the dominator tree, phi arity,
     duplicate phi destinations, and pre/post-rename TEMP ranges.
-  - The normal `xtemps` path always runs the allocation-free CFG checks.  The
-    more expensive dominator/phi checks run only with the existing dormant
-    `-xssa` path.  No new IR or MIPS-specific code was added.  The verifier is
-    included in C, C++, F77, split-pass, host-cross, and native PCC builds;
-    host smoke exercises nested-loop SSA verification with `-Wc,-xssa`.
+  - The normal `xtemps` path always runs the allocation-free CFG checks.  PCC's
+    imported driver already passes `-xssa` for optimized compilation, so the
+    more expensive dominator/phi checks cover the normal `-O` path as well as
+    explicit `-Wc,-xssa` tests.  Phase 5A did not newly enable SSA, add an IR,
+    or add MIPS-specific code.  The verifier is included in C, C++, F77,
+    split-pass, host-cross, and native PCC builds; host smoke also exercises a
+    nested-loop SSA probe explicitly.
   - A compiler built from `ce61008c` and commit `3f6f628e` produced
     byte-identical MIPS32r2 hard-float assembly for `optim003`, the three Phase
     4 pressure/ABI cases, `extendsfdf2`, and Linpack.  VR4300 Linpack was also
@@ -576,6 +578,52 @@ not active items for the current C/static-a.out PCC milestone.
     distinct `-mno-fix4300` image were not tested.  Earlier N64 build
     directories were hash-checked and remain unchanged.  Logs are
     `/private/tmp/pcc-phase5a-*`.
+- [x] Split SSA critical edges and lower phi nodes as parallel copies (Phase
+  5B, implementation commit `e1f21c62`).
+  - New machine-independent `mip/ssalower.c` splits critical `CBRANCH` edges,
+    verifies that none remain, and emits each phi edge as one parallel-copy
+    set.  A destination is written only after its old value is no longer a
+    live source; true cycles use one typed TEMP.  This replaces the old
+    sequential `removephi()` implementation, which could overwrite a source
+    required by a later copy.
+  - Fallthrough pads stay immediately after their source.  Taken-edge pads are
+    placed immediately before their destination after making any physical
+    predecessor jump over them.  The PCC-kernel Malta64 gate caught an earlier
+    source-adjacent taken-pad layout that changed live-value placement in
+    `hardclock()`; the final layout restores byte-identical code for the
+    focused reproducer and boots the complete PCC kernel.
+  - A critical computed-goto edge cannot be retargeted in the current pass2
+    IR.  Such a function now disables SSA locally and continues through the
+    established non-SSA optimizer; later functions still use SSA.  Optimized
+    `gcccompat/extension004` permanently covers this fallback.  New
+    `misc/ssaphi001` covers cyclic integer and hard/soft-float copies.
+  - Cross regression passed `324/327`, with only the three documented expected
+    failures, and runtime `287/287`.  Native PCC passed `297` compilations plus
+    `30` expected compile failures and runtime `287/287`; both unexpected
+    counts were zero and `NATIVE_PCC_REGRESS_RC:0`.  The final `ssalower.o`
+    also builds in the C++, F77, split-pass, host-cross, and native build
+    layouts.  Unoptimized `optim003` assembly remains byte-identical to Phase
+    5A, SHA-256 `bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+  - All six PCC-kernel/PCC-rootfs QEMU profiles reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Linpack pairs were
+    Malta64 hard `11520/10754`, Malta64 soft `872/872`, Malta hard
+    `13149/13189`, Malta soft `999/1000`, MaltaEL hard `13004/12964`, and
+    MaltaEL soft `999/1004` KFLOPS.  These are post-stress QEMU samples, not
+    real N64 measurements.
+  - Safe parallel copies leave a small cleanup opportunity for Phase 5C.
+    VR4300 Linpack remains `2477` instructions, `158` nops, `643/244`
+    loads/stores; MIPS32r2 changes from `2533` to `2551` instructions and from
+    `765/286` to `772/293` loads/stores.  Stripped host `ccom` changes only
+    `542712 -> 542792` bytes, so Phase 5B replaces the unsafe lowering without
+    materially enlarging the compiler.  TEMP copy propagation and DCE must
+    recover avoidable copies before broader scalar optimization.
+  - `make -C sys/mips/n64 pcc-debug-image` produced the build-only hard-float
+    a.out ROM `builds/20260710-phase5b-ssa-lowering/pcc-debug.z64`, size
+    `6619136`, SHA-256
+    `c4368d550fece2b21a9ba0481e4d088e2d6bfa058d1e1b9bbf5db6a4446dd7c5`.
+    It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
+    `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+    multiply erratum.  The Phase 4 and Phase 5A ROM hashes remain unchanged.
 
 ## Phase 1: Host PCC Configuration
 

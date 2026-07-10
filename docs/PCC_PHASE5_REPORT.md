@@ -3,9 +3,10 @@
 ## Phase 5A: CFG And SSA Verification
 
 Phase 5A prepares the existing pass2 representation for incremental scalar
-optimization.  It does not enable SSA in normal compilation, add a new IR, or
-change target code generation.  The implementation is machine-independent and
-does not enlarge the MIPS backend.
+optimization.  It does not newly enable SSA, add a new IR, or change target
+code generation.  The imported PCC driver already passes `-xssa` for normal
+optimized compilation.  The implementation is machine-independent and does
+not enlarge the MIPS backend.
 
 The new `mip/cfgverify.c` checks:
 
@@ -20,13 +21,12 @@ The new `mip/cfgverify.c` checks:
 
 `optim2.c` now uses one build-and-verify helper at the initial and post-SSA CFG
 construction points.  Normal `xtemps` compilation runs the allocation-free CFG
-checks.  Independent dominator bitsets and phi checks are allocated only when
-the existing internal `-xssa` path is explicitly selected.
+checks.  Independent dominator bitsets and phi checks are allocated when the
+existing internal `-xssa` path is active, including the normal `-O` path.
 
 The common verifier object is included in C, C++, F77, split C pass, host-cross,
-and native PCC builds.  The permanent host smoke compiles a nested-loop and
-call probe with `-Wc,-xssa` so the dormant dominator/phi lifecycle remains
-exercised.
+and native PCC builds.  The permanent host smoke also compiles a nested-loop
+and call probe with explicit `-Wc,-xssa`.
 
 ## Assembly Identity
 
@@ -115,10 +115,133 @@ a.out path.  It does not cover a soft-float image or a distinct
 `-mno-fix4300` run, and QEMU still cannot reproduce the physical multiply
 erratum.
 
+## Phase 5B: Critical Edges And Parallel Copies
+
+Implementation commit `e1f21c62` replaces the old sequential `removephi()`
+code with machine-independent critical-edge splitting and parallel-copy
+lowering in `mip/ssalower.c`.
+
+The splitter uses two layouts:
+
+- a critical fallthrough edge gets a source-adjacent label and jump pad;
+- a critical taken edge gets a destination-adjacent pad, with an explicit jump
+  added only when the preceding physical block could otherwise enter the pad.
+
+The CFG is rebuilt after splitting and a dedicated verifier rejects every
+remaining edge whose source has multiple successors and destination has
+multiple predecessors.  Each phi predecessor is therefore a single-successor
+block and provides an unambiguous insertion point.
+
+All copies for one phi edge are lowered together.  A copy is emitted only when
+its destination is not a source of another pending copy.  If no such copy
+exists, one typed TEMP saves an old destination value and breaks the cycle.
+This fixes the correctness hole in sequential copy emission without adding
+target-specific templates.
+
+Computed-goto destinations cannot currently be retargeted in pass2 IR.  The
+splitter detects a critical computed-goto edge before mutating the function,
+then disables SSA for that function only.  Register allocation and matching
+consult the per-function `ssa_active` state, so following functions still use
+SSA.  Optimized `gcccompat/extension004` covers this fallback and debug output
+confirms `SSA fallback for critical computed-goto edge`.
+
+### Kernel Gate Finding
+
+The first implementation put both pad kinds after the source block.  Although
+small regression tests passed, the full PCC-built Malta64 kernel trapped in
+`hardclock()` with a bad store through address `0x14`.  The generated sequence
+kept `p1` in `$a0`, loaded `p1->p_stats->p_ru.ru_stime` through the same
+register, and then used the overwritten `$a0` as the store base.
+
+A focused `hardclock()` reproducer isolated the layout dependency.  Moving
+taken-edge pads next to the destination while preserving the source
+fallthrough restored byte-identical assembly for the reproducer.  The full
+six-profile kernel matrix below then passed.  This is why kernel compilation
+and boot remain mandatory gates for pass2 CFG changes.
+
+### Regression Coverage
+
+`misc/ssaphi001` exercises cyclic integer and double copy sets in an optimized
+loop.  It is run with explicit `-Wc,-xssa` in addition to the driver's normal
+optimized SSA selection.  `gcccompat/extension004` is compiled and run a
+second time at `-O2` to cover per-function computed-goto fallback.
+
+Cross regression compiled 324 of 327 tests.  The only failures were the
+documented x86 inline assembly, unsupported shared-library/PIC ABI, and
+unsupported TLS ABI cases.  All 287 runtime candidates passed.  Native PCC
+compiled 297 cases, observed the 30 expected compile failures, and passed all
+287 runtime cases.  Unexpected compile/runtime failures were zero and the
+native gate ended with `NATIVE_PCC_REGRESS_RC:0`.
+
+The final `ssalower.o` also compiles under the C++, F77, split-pass,
+host-cross, and target-native build layouts.  Full C++ and F77 frontend links
+remain blocked by their existing unrelated `zbits` type mismatch and
+`TYIREG` declaration errors, respectively.
+
+### Assembly And Compiler Size
+
+Unoptimized `optim003.c` is byte-identical before and after Phase 5B:
+
+```text
+sha256 bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef
+```
+
+Optimized output changes intentionally because `-O` already enables SSA and
+now uses safe parallel-copy semantics.  Linpack assembly counters are:
+
+| Target | Phase 5A instructions | Phase 5B instructions | Phase 5A loads/stores | Phase 5B loads/stores | Phase 5B nops |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| VR4300 hard | 2477 | 2477 | 643 / 244 | 643 / 244 | 158 |
+| MIPS32r2 hard | 2533 | 2551 | 765 / 286 | 772 / 293 | 113 |
+
+The MIPS32r2 increase is the cost of preserving cyclic/live copy sources and
+is the first cleanup target for Phase 5C copy propagation and DCE.  VR4300 code
+counts are unchanged.  The stripped host `ccom` grows only 80 bytes, from
+542712 to 542792, because the new lowering replaces the old implementation
+rather than adding a second path.
+
+### QEMU Matrix
+
+All kernels and root filesystems were built with PCC.  Kernel compilation
+continues to cover `-fomit-frame-pointer`; soft profiles cover
+`-msoft-float`.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11520 / 10754 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 872 / 872 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | hard | 13149 / 13189 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | soft | 999 / 1000 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | hard | 13004 / 12964 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | soft | 999 / 1004 | `PCC_SMOKE_ALL_RC:0` |
+
+Every profile also reported `PCC_SMOKE_ALL_FAILURES 0`.  Logs are
+`/private/tmp/pcc-phase5b-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### N64 Artifact
+
+The build-only hard-float a.out image is:
+
+```text
+sys/mips/n64/builds/20260710-phase5b-ssa-lowering/pcc-debug.z64
+implementation commit: e1f21c62
+size: 6619136 bytes
+sha256: c4368d550fece2b21a9ba0481e4d088e2d6bfa058d1e1b9bbf5db6a4446dd7c5
+cross pcc sha256: 57b2ccf70c8bf56bc9e4437bf7d38394378754e4b4469ca7b26431c9ca1d9f72
+cross ccom sha256: 7ff430d870dca24f35f7b0c3660d6f2eb694f6303956140fc1660b58cf6bdcf6
+native ccom sha256: 9b3aa47067760805e2cbad32db08c06f9c937c3a7ef974b2c8e87f108b30bf74
+```
+
+The Phase 4 and Phase 5A ROM hashes remain unchanged.  This image uses the
+default `-mfix4300` path.  It has not yet run on real N64 hardware, and a
+distinct `-mno-fix4300` image was not built.  QEMU cannot reproduce the
+physical VR4300 multiply erratum.
+
 ## Next Step
 
-Phase 5B must implement safe critical-edge splitting and parallel-copy phi
-lowering before any new SSA scalar transformation is enabled.  That work must
-remain a separate commit and retain the existing fallback path.  Copy
-propagation and dead-code elimination begin only after Phase 5B passes the same
-cross/native and six-profile gates.
+Phase 5C will add narrow TEMP copy propagation and dead-copy elimination on
+the verified SSA-lowered IR.  Its first measurable requirement is to recover
+the MIPS32r2 parallel-copy overhead above without changing volatile accesses,
+control flow, FP ABI behavior, or the `-mfix4300` post-pass repair.  SCCP-lite,
+branch folding, unreachable-block cleanup, and LVN remain separate Phase 5D
+work after the same cross/native and six-profile gates.

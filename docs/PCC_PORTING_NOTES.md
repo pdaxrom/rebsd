@@ -180,13 +180,29 @@ rebuild-and-verify path required by future branch folding.
 When the existing internal SSA path is selected, the verifier independently
 solves dominator sets and checks DFS parents, immediate dominators, dominator
 tree edges, phi predecessor counts, duplicate phi destinations, and TEMP ranges
-before and after rename.  Normal optimized compilation does not enable SSA;
-its basic CFG verifier uses no additional per-function bitsets.  The verifier
+before and after rename.  The imported driver already passes `-xssa` for
+normal optimized compilation; Phase 5A did not newly enable it.  The verifier
 is compiled into all pass2 frontends and the target-hosted native PCC.  Host
-smoke uses `-Wc,-xssa` on a nested-loop probe to keep the dormant checks built
-and exercised.  The Phase 5A hard-float a.out debug ROM also passed real N64
-hardware with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and
-`N64_PCC_DEBUG_RC_END`.  Full commands and results are in
+smoke also uses explicit `-Wc,-xssa` on a nested-loop probe.  The Phase 5A
+hard-float a.out debug ROM passed real N64 hardware with
+`N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and
+`N64_PCC_DEBUG_RC_END`.
+
+Phase 5B replaces sequential phi removal with machine-independent
+critical-edge splitting and typed parallel-copy lowering.  Fallthrough and
+taken-edge pads preserve physical fallthrough layout, and a CFG verifier
+rejects any remaining critical edge before phi placement.  Cycles use one
+temporary only when no destination can be written safely.  A critical
+computed-goto edge disables SSA for that function because pass2 cannot retarget
+its destination table; the next function starts with the driver's normal SSA
+setting.  Register allocation and matching use this per-function state.
+
+The Phase 5B cross and native regressions pass 287/287 runtime cases, and all
+six PCC-kernel/PCC-rootfs Malta64/Malta/MaltaEL hard/soft QEMU profiles report
+`PCC_SMOKE_ALL_RC:0`.  The build-only N64 image is
+`sys/mips/n64/builds/20260710-phase5b-ssa-lowering/pcc-debug.z64`; it uses the
+default `-mfix4300` path but has not yet been run on real hardware.  Full
+commands, measurements, hashes, and the kernel-gate finding are in
 `docs/PCC_PHASE5_REPORT.md`.
 
 ## Active PCC Work Queue
