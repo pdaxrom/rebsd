@@ -499,7 +499,9 @@ The current C gate is green in these environments:
   smoke for the `vr4300` ABI, using
   `qemu-system-mips64 -M malta -cpu R4000 -m 64M -nographic`.
 - Real N64 hardware normal hard-float PCC rootfs smoke from the earlier gate.
-  The updated hard/soft split still needs a fresh real-hardware pass.
+  The Phase 4 spill-cost hard-float a.out debug ROM also passed on real hardware
+  with `N64_PCC_DEBUG_RUNNER_RC 0` and `N64_PCC_DEBUG_RC_END`.  A fresh
+  soft-float hardware pass is still pending.
 - N64 UART-only boot isolation on real hardware passed on 2026-07-06 for
   PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap.  The minimal debug
   rootfs includes `/bin/login`; without it `getty` respawns after username

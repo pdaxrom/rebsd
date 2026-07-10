@@ -528,11 +528,14 @@ not active items for the current C/static-a.out PCC milestone.
     MaltaEL soft `929/949` KFLOPS.  The separate Malta aggregate reported GCC
     `31662/31777`, PCC `13807/13822`, and `LINPACK_RC:0`; Phase 4 therefore
     improves a spill-heavy case but does not close the broader GCC gap.
-  - `make -C sys/mips/n64 pcc-debug-image` produced the unbooted hardware ROM
+  - `make -C sys/mips/n64 pcc-debug-image` produced the hardware ROM
     `builds/20260710-phase4-spill-cost/pcc-debug.z64`, SHA-256
     `bbd782c7f581c1e8af05df886e92c36f497792c5b1105fc8c9efca9c076a6457`.
-    The tested allocator source is commit `c20bf9e6`.
-    Real N64 boot/smoke and physical `-mfix4300` validation remain required.
+    The tested allocator source is commit `c20bf9e6`.  Real N64 hardware ended
+    the debug runner with `N64_PCC_DEBUG_RUNNER_RC 0` followed by
+    `N64_PCC_DEBUG_RC_END`, validating this hard-float a.out image and its
+    default `-mfix4300` path.  A distinct `-mno-fix4300` hardware run was not
+    performed, and QEMU cannot reproduce the physical multiply erratum.
     The four earlier `builds/20260710-hard-float` sets were hash-checked and
     remain byte-for-byte unchanged.  Logs are `/private/tmp/pcc-phase4-*`.
 

@@ -111,8 +111,18 @@ native ccom sha256: 20234e3861e3d2df0328e86606af2b77f3869d73ada9a510a3788c47d9af
 ```
 
 The previously prepared `20260710-hard-float` images were not rebuilt or
-modified.  No real N64 boot log is available yet.  QEMU does not reproduce the
-VR4300 FP multiply erratum, so this report does not claim hardware readiness.
+modified.  The Phase 4 ROM ran on real N64 hardware and the reported log ended
+with:
+
+```text
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+This completes the hardware smoke for the hard-float a.out image and its
+default `-mfix4300` path.  It does not test a distinct `-mno-fix4300` image or
+force the physical multiply erratum, and QEMU still cannot reproduce that
+fault.
 
 ## Remaining Work
 
@@ -122,4 +132,5 @@ aggregate Malta result remains about 44 percent of GCC on QEMU Linpack, so the
 larger gap is not primarily a spill-choice problem.  The next phase should add
 CFG and dominator consistency checks, then evaluate compact scalar cleanup and
 late MIPS scheduling as separate measured changes.  Real N64 smoke is required
-before any VR4300 performance claim.
+after each future VR4300 code-generation change before making a new hardware
+performance claim.
