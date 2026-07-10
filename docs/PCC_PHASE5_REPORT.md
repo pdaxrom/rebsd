@@ -89,7 +89,7 @@ than a code-generation difference.
 
 ## N64 Artifact
 
-The unbooted hard-float a.out hardware image is:
+The hard-float a.out hardware image is:
 
 ```text
 sys/mips/n64/builds/20260710-phase5a-cfg-verifier/pcc-debug.z64
@@ -101,9 +101,19 @@ cross ccom sha256: 8363b14fbcece51d54fb02373a29e34b5b0134ecbe319fc8b769fd705bc2c
 native ccom sha256: d6d5e37a8bb880669931ea0f22e5bd582ceffcab0b10ede136a5ee2d24e61fbc
 ```
 
-The earlier N64 build directories remain byte-for-byte unchanged.  This image
-still requires real N64 hardware smoke; QEMU does not reproduce the VR4300
-multiply erratum.
+The earlier N64 build directories remain byte-for-byte unchanged.  Real N64
+hardware completed the image with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+This validates the Phase 5A native compiler and default `-mfix4300` hard-float
+a.out path.  It does not cover a soft-float image or a distinct
+`-mno-fix4300` run, and QEMU still cannot reproduce the physical multiply
+erratum.
 
 ## Next Step
 

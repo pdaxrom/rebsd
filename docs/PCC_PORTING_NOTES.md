@@ -184,7 +184,10 @@ before and after rename.  Normal optimized compilation does not enable SSA;
 its basic CFG verifier uses no additional per-function bitsets.  The verifier
 is compiled into all pass2 frontends and the target-hosted native PCC.  Host
 smoke uses `-Wc,-xssa` on a nested-loop probe to keep the dormant checks built
-and exercised.  Full commands and results are in `docs/PCC_PHASE5_REPORT.md`.
+and exercised.  The Phase 5A hard-float a.out debug ROM also passed real N64
+hardware with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and
+`N64_PCC_DEBUG_RC_END`.  Full commands and results are in
+`docs/PCC_PHASE5_REPORT.md`.
 
 ## Active PCC Work Queue
 

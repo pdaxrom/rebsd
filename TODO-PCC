@@ -570,7 +570,10 @@ not active items for the current C/static-a.out PCC milestone.
   - The build-only N64 hard-float a.out ROM is
     `builds/20260710-phase5a-cfg-verifier/pcc-debug.z64`, size `6619136`,
     SHA-256 `3ce8f732949fb0d885b6e1bc55c95663aafeff45cfd55f338dd240a4b17ce806`.
-    A real hardware run is still required for this image.  Earlier N64 build
+    Real N64 hardware reported `N64_PCC_DEBUG_END 0`,
+    `N64_PCC_DEBUG_RUNNER_RC 0`, and `N64_PCC_DEBUG_RC_END`, validating this
+    native-compiler image and its default `-mfix4300` path.  Soft-float and a
+    distinct `-mno-fix4300` image were not tested.  Earlier N64 build
     directories were hash-checked and remain unchanged.  Logs are
     `/private/tmp/pcc-phase5a-*`.
 
