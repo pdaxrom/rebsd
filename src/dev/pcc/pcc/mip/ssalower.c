@@ -21,6 +21,8 @@ struct copy_inserter {
 	struct interpass *cursor;
 };
 
+static char propagated_copy_marker;
+
 static int
 edge_count(struct basicblock *bb, int children)
 {
@@ -166,6 +168,168 @@ emit_copy(struct copy_inserter *where, int dst, int src, TWORD type)
 	}
 }
 
+static void
+replace_temp_uses(NODE *p, int oldtemp, int newtemp)
+{
+	int o;
+
+	if (p->n_op == TEMP) {
+		if (regno(p) == oldtemp)
+			regno(p) = newtemp;
+		return;
+	}
+	o = optype(p->n_op);
+	if (asgop(p->n_op) && o == BITYPE && p->n_left->n_op == TEMP) {
+		if (regno(p->n_left) == oldtemp)
+			comperr("trivial SSA phi TEMP %d has a tree definition",
+			    oldtemp);
+		replace_temp_uses(p->n_right, oldtemp, newtemp);
+		return;
+	}
+	if (o != LTYPE)
+		replace_temp_uses(p->n_left, oldtemp, newtemp);
+	if (o == BITYPE)
+		replace_temp_uses(p->n_right, oldtemp, newtemp);
+}
+
+static void
+replace_phi_inputs(struct p2env *p2e, int oldtemp, int newtemp)
+{
+	struct basicblock *bb;
+	struct phiinfo *phi;
+	int i;
+
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem)
+		SLIST_FOREACH(phi, &bb->phi, phielem)
+			for (i = 0; i < phi->size; i++)
+				if (phi->intmpregno[i] == oldtemp)
+					phi->intmpregno[i] = newtemp;
+}
+
+static void
+count_temp_definitions(NODE *p, int low, int high, int *definitions)
+{
+	int o, temp;
+
+	o = optype(p->n_op);
+	if (asgop(p->n_op) && o == BITYPE && p->n_left->n_op == TEMP) {
+		temp = regno(p->n_left);
+		if (temp >= low && temp < high)
+			definitions[temp - low]++;
+		count_temp_definitions(p->n_right, low, high, definitions);
+		return;
+	}
+	if (o != LTYPE)
+		count_temp_definitions(p->n_left, low, high, definitions);
+	if (o == BITYPE)
+		count_temp_definitions(p->n_right, low, high, definitions);
+}
+
+/*
+ * SSA TEMP copies are immutable aliases.  Replace their uses before phi
+ * lowering so the copies cannot inflate live ranges or create redundant phi
+ * inputs.  The unique-definition check keeps this pass valid if a frontend
+ * leaves an unexpected non-SSA TEMP in the stream.
+ */
+void
+ssa_propagate_temp_copies(struct p2env *p2e)
+{
+	struct interpass *copyip, *ip;
+	NODE *p;
+	int *definitions;
+	int changed, destination, high, low, source;
+
+	low = p2e->ipp->ip_tmpnum;
+	high = p2e->epp->ip_tmpnum;
+	if (high <= low)
+		return;
+	definitions = tmpcalloc((size_t)(high - low) * sizeof(*definitions));
+	do {
+		memset(definitions, 0,
+		    (size_t)(high - low) * sizeof(*definitions));
+		DLIST_FOREACH(ip, &p2e->ipole, qelem)
+			if (ip->type == IP_NODE)
+				count_temp_definitions(ip->ip_node, low, high,
+				    definitions);
+
+		changed = 0;
+		DLIST_FOREACH(copyip, &p2e->ipole, qelem) {
+			if (copyip->type != IP_NODE)
+				continue;
+			p = copyip->ip_node;
+			if (p->n_op != ASSIGN || p->n_left->n_op != TEMP ||
+			    p->n_right->n_op != TEMP ||
+			    p->n_left->n_type != p->n_right->n_type)
+				continue;
+			destination = regno(p->n_left);
+			source = regno(p->n_right);
+			if (destination == source || destination < low ||
+			    destination >= high ||
+			    definitions[destination - low] != 1)
+				continue;
+
+			DLIST_FOREACH(ip, &p2e->ipole, qelem)
+				if (ip != copyip && ip->type == IP_NODE)
+					replace_temp_uses(ip->ip_node,
+					    destination, source);
+			replace_phi_inputs(p2e, destination, source);
+			tfree(p);
+			copyip->type = IP_ASM;
+			copyip->ip_asm = &propagated_copy_marker;
+			changed = 1;
+		}
+	} while (changed);
+}
+
+/*
+ * A phi whose non-self inputs all name one TEMP is a copy, not a merge.
+ * Replace its SSA result before edge copies are materialized.  Repetition is
+ * needed because removing one trivial phi can make another one trivial.
+ */
+void
+ssa_simplify_trivial_phi(struct p2env *p2e)
+{
+	struct basicblock *bb;
+	struct interpass *ip;
+	struct phiinfo *phi;
+	int changed, i, oldtemp, source, trivial;
+
+	do {
+		changed = 0;
+		DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+			SLIST_FOREACH(phi, &bb->phi, phielem) {
+				oldtemp = phi->newtmpregno;
+				source = 0;
+				trivial = 1;
+				for (i = 0; i < phi->size; i++) {
+					if (phi->intmpregno[i] <= 0) {
+						trivial = 0;
+						break;
+					}
+					if (phi->intmpregno[i] == oldtemp)
+						continue;
+					if (source == 0) {
+						source = phi->intmpregno[i];
+					} else if (source != phi->intmpregno[i]) {
+						trivial = 0;
+						break;
+					}
+				}
+				if (!trivial || source <= 0 || source == oldtemp)
+					continue;
+
+				DLIST_FOREACH(ip, &p2e->ipole, qelem)
+					if (ip->type == IP_NODE)
+						replace_temp_uses(ip->ip_node,
+							    oldtemp, source);
+				replace_phi_inputs(p2e, oldtemp, source);
+				phi->newtmpregno = source;
+				changed = 1;
+			}
+		}
+	} while (changed);
+}
+
 static int
 destination_is_live_source(struct parallel_copy *copy, int count, int index)
 {
@@ -259,6 +423,7 @@ ssa_lower_phi(struct p2env *p2e)
 	struct copy_inserter where;
 	struct parallel_copy *copy;
 	struct phiinfo *phi;
+	struct interpass *ip, *next;
 	int count, edge, nphi;
 
 	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
@@ -290,5 +455,14 @@ ssa_lower_phi(struct p2env *p2e)
 			}
 			edge++;
 		}
+	}
+
+	/* Copy propagation leaves empty placeholders until CFG users are done. */
+	for (ip = DLIST_NEXT(&p2e->ipole, qelem);
+	    ip != &p2e->ipole; ip = next) {
+		next = DLIST_NEXT(ip, qelem);
+		if (ip->type == IP_ASM &&
+		    ip->ip_asm == &propagated_copy_marker)
+			DLIST_REMOVE(ip, qelem);
 	}
 }

@@ -520,6 +520,8 @@ void cfg_verify_no_critical_edges(struct p2env *);
 void cfg_verify_dominators(struct p2env *);
 void cfg_verify_phi(struct p2env *, int);
 int ssa_split_critical_edges(struct p2env *);
+void ssa_propagate_temp_copies(struct p2env *);
+void ssa_simplify_trivial_phi(struct p2env *);
 void ssa_lower_phi(struct p2env *);
 
 /* Disabled-by-default, machine-independent pass2 statistics. */
