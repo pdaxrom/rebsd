@@ -3232,8 +3232,13 @@ mips_repair_vr4300_multiply_errata(char *path, int warn_delay_slot)
 	return 0;
 }
 
+/*
+ * Move one independent register operation after a load.  On non-interlocked
+ * targets this fills an explicit load-delay nop; on MIPS32r2 it hides the
+ * interlocked load latency before the first dependent use.
+ */
 static int
-mips_fill_shift_load_delay_nops(char *path)
+mips_schedule_load_delay_nops(char *path)
 {
 	char line[4096], load[4096], nop[4096], next[4096];
 	char delay[4096];
@@ -3791,8 +3796,9 @@ mips_fold_late_peepholes(char *path)
 static int
 mips_postprocess_asm(char *path)
 {
-	if (mips_target.tune == MIPS_TUNE_VR4300 &&
-	    mips_fill_shift_load_delay_nops(path))
+	if ((mips_target.tune == MIPS_TUNE_VR4300 ||
+	    mips_target.isa == MIPS_ISA_MIPS32R2) &&
+	    mips_schedule_load_delay_nops(path))
 		return 1;
 	if (mips_trim_load_delay_nops(path))
 		return 1;

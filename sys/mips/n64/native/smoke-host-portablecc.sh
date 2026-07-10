@@ -205,6 +205,27 @@ grep '^[[:space:]]*mul[[:space:]]' "$tmp.s" >/dev/null
 "$pcc" -mips32r2 -S -o "$tmp.s" "$tmp.c"
 grep '^[[:space:]]*mul[[:space:]]' "$tmp.s" >/dev/null
 
+cat > "$tmp.c" <<'EOF'
+int
+load_schedule_probe(int *array, int stride, int row, int column)
+{
+	int index = stride * row + column;
+
+	return array[index] + index;
+}
+EOF
+
+"$pcc" -march=mips32r2 -O2 -S -o "$tmp.s" "$tmp.c"
+awk '
+/^[[:space:]]*lw \$a0,16\(\$fp\)/ { state = 1; next }
+state == 1 && /^[[:space:]]*sll \$v0,\$v1,2/ { state = 2; next }
+state == 2 && /^[[:space:]]*addu \$a0,\$a0,\$v0/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "MIPS32r2 did not schedule independent shift after load" >&2
+	exit 1
+}
+
 if "$pcc" -march=mips32 -S -o "$tmp.s" "$tmp.c" >"$tmp.err" 2>&1; then
 	echo "unsupported MIPS32r1 profile was accepted" >&2
 	exit 1
