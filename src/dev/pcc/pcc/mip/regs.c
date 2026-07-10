@@ -34,6 +34,7 @@
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
 #endif
+#include <limits.h>
 #include <stdlib.h>
 
 #define	MAXLOOP	20 /* Max number of allocation loops XXX 3 should be enough */
@@ -604,6 +605,188 @@ allocator_live_stats(void)
 	optstats_note_live(temps, gpr, fpr);
 }
 
+#define SPILL_SEEN		0x01U
+#define SPILL_LIVE_ACROSS_CALL	0x02U
+#define SPILL_REMATERIALIZABLE	0x04U
+
+struct spillinfo {
+	unsigned uses;
+	unsigned defs;
+	unsigned use_cost;
+	unsigned def_cost;
+	unsigned first_pos;
+	unsigned last_pos;
+	unsigned flags;
+	NODE *remat;
+};
+
+struct spill_cost_weights {
+	unsigned use;
+	unsigned def;
+	unsigned live_range;
+	unsigned call_crossing;
+	unsigned non_rematerializable;
+	unsigned move_related;
+	unsigned fpr;
+	unsigned rematerialize_divisor;
+};
+
+/* Target-independent weights keep policy separate from measured TEMP data. */
+static const struct spill_cost_weights spill_weights = {
+	4, 2, 1, 64, 16, 8, 24, 4
+};
+
+static struct spillinfo *sblock;
+
+static unsigned
+spill_add(unsigned value, unsigned add)
+{
+	return UINT_MAX - value < add ? UINT_MAX : value + add;
+}
+
+static unsigned
+spill_loop_weight(unsigned depth)
+{
+	if (depth == 0)
+		return 1;
+	if (depth == 1)
+		return 4;
+	if (depth == 2)
+		return 16;
+	return 64;
+}
+
+static int
+spill_safe_remat(NODE *p)
+{
+	if (p == NIL)
+		return 0;
+	if (p->n_op == ICON)
+		return 1;
+	if ((p->n_op == SCONV || p->n_op == PCONV) &&
+	    p->n_left->n_op == ICON)
+		return 1;
+	if ((p->n_op == PLUS || p->n_op == MINUS) &&
+	    p->n_left->n_op == REG && regno(p->n_left) == FPREG &&
+	    p->n_right->n_op == ICON)
+		return 1;
+	return 0;
+}
+
+static void
+spill_record(int temp, int use, int def, unsigned depth, unsigned pos,
+    NODE *remat)
+{
+	struct spillinfo *si;
+	unsigned weight;
+
+	if (temp < tempmin || temp >= tempmax)
+		return;
+	si = &sblock[temp];
+	weight = spill_loop_weight(depth);
+	if ((si->flags & SPILL_SEEN) == 0) {
+		si->first_pos = pos;
+		si->flags |= SPILL_SEEN;
+	}
+	si->last_pos = pos;
+	if (use) {
+		si->uses = spill_add(si->uses, 1);
+		si->use_cost = spill_add(si->use_cost, weight);
+	}
+	if (def) {
+		si->defs = spill_add(si->defs, 1);
+		si->def_cost = spill_add(si->def_cost, weight);
+		if (si->defs == 1 && spill_safe_remat(remat)) {
+			si->remat = remat;
+			si->flags |= SPILL_REMATERIALIZABLE;
+		} else {
+			si->remat = NIL;
+			si->flags &= ~SPILL_REMATERIALIZABLE;
+		}
+	}
+}
+
+static void
+spill_scan_tree(NODE *p, unsigned depth, unsigned pos, int root)
+{
+	int o;
+
+	if (p == NIL)
+		return;
+	if (p->n_op == TEMP) {
+		spill_record(regno(p), 1, 0, depth, pos, NIL);
+		return;
+	}
+	o = optype(p->n_op);
+	if (asgop(p->n_op) && o == BITYPE && p->n_left->n_op == TEMP) {
+		spill_record(regno(p->n_left), p->n_op != ASSIGN, 1, depth,
+		    pos, root && p->n_op == ASSIGN ? p->n_right : NIL);
+		spill_scan_tree(p->n_right, depth, pos, 0);
+		return;
+	}
+	if (o != LTYPE)
+		spill_scan_tree(p->n_left, depth, pos, 0);
+	if (o == BITYPE)
+		spill_scan_tree(p->n_right, depth, pos, 0);
+}
+
+static void
+spillcost_collect(struct p2env *p2e)
+{
+	struct basicblock *bb;
+	struct cfgnode *cn;
+	struct interpass *ip;
+	unsigned *depth;
+	unsigned i, low, high, pos;
+
+	if (tempmax <= tempmin)
+		return;
+	memset(sblock + tempmin, 0,
+	    (size_t)(tempmax - tempmin) * sizeof(*sblock));
+	pos = 0;
+	if (!xtemps || p2e->nbblocks <= 0) {
+		DLIST_FOREACH(ip, &p2e->ipole, qelem)
+			if (ip->type == IP_NODE)
+				spill_scan_tree(ip->ip_node, 0, ++pos, 1);
+		return;
+	}
+	depth = tmpalloc((size_t)p2e->nbblocks * sizeof(*depth));
+	memset(depth, 0, (size_t)p2e->nbblocks * sizeof(*depth));
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		SLIST_FOREACH(cn, &bb->child, chld) {
+			if (cn->bblock->bbnum > bb->bbnum)
+				continue;
+			low = (unsigned)cn->bblock->bbnum;
+			high = (unsigned)bb->bbnum;
+			for (i = low; i <= high; i++)
+				depth[i]++;
+		}
+	}
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		for (ip = bb->first; ; ip = DLIST_NEXT(ip, qelem)) {
+			if (ip->type == IP_NODE)
+				spill_scan_tree(ip->ip_node, depth[bb->bbnum],
+				    ++pos, 1);
+			if (ip == bb->last)
+				break;
+		}
+	}
+}
+
+static void
+spill_mark_call_crossing(void)
+{
+	int bit, temp;
+
+	for (bit = MAXREGS; bit < xbits; bit++) {
+		if (!TESTBIT(live, bit))
+			continue;
+		temp = bit + tempmin - MAXREGS;
+		if (temp >= tempmin && temp < tempmax)
+			sblock[temp].flags |= SPILL_LIVE_ACROSS_CALL;
+	}
+}
+
 #define	MOVELISTADD(t, p) movelistadd(t, p)
 #define WORKLISTMOVEADD(s,d) worklistmoveadd(s,d)
 
@@ -1087,6 +1270,7 @@ insnwalk(NODE *p)
 
 	/* special handling of CALL operators */
 	if (callop(o)) {
+		spill_mark_call_crossing();
 		if (rv)
 			moveadd(rv, &ablock[RETREG(p->n_type)]);
 		for (i = 0; tempregs[i] >= 0; i++)
@@ -2333,8 +2517,12 @@ Freeze(void)
 static void
 SelectSpill(void)
 {
-	REGW *w;
-	unsigned candidates;
+	REGW *w, *best;
+	struct spillinfo *si;
+	ADJL *adj;
+	unsigned degree, range, candidates;
+	unsigned long long raw, score, bestscore;
+	int mode, key, bestkey;
 
 	RDEBUG(("SelectSpill\n"));
 	if (p2stats) {
@@ -2349,41 +2537,79 @@ SelectSpill(void)
 			printf("SelectSpill: %d\n", ASGNUM(w));
 #endif
 
-	/* First check if we can spill register variables */
+	/* Saving a permanent register remains cheaper than spilling a value. */
 	DLIST_FOREACH(w, &spillWorklist, link) {
 		if (w >= &nblock[tempmin] && w < &nblock[basetemp])
 			break;
 	}
-
-	RRDEBUG(("SelectSpill: trying longrange\n"));
 	if (w == &spillWorklist) {
-		/* try to find another long-range variable */
-		DLIST_FOREACH(w, &spillWorklist, link) {
-			if (innotspill(w - nblock))
-				continue;
-			if (w >= &nblock[tempmin] && w < &nblock[tempmax])
-				break;
+		best = NULL;
+		bestscore = 0;
+		bestkey = 0;
+		/* Minimize weighted rewrite cost per interference edge. */
+		for (mode = 0; mode < 3 && best == NULL; mode++) {
+			DLIST_FOREACH(w, &spillWorklist, link) {
+				si = NULL;
+				if (w >= &nblock[tempmin] && w < &nblock[tempmax]) {
+					if (w < &nblock[basetemp] ||
+					    innotspill((int)(w - nblock)))
+						continue;
+					si = &sblock[w - nblock];
+				} else if (mode == 0)
+					continue;
+				if (mode == 1 && w->r_nclass[0] != 0)
+					continue;
+
+				degree = 0;
+				for (adj = ADJLIST(w); adj; adj = adj->r_next)
+					if (ONLIST(adj->a_temp) != &selectStack &&
+					    ONLIST(adj->a_temp) != &coalescedNodes)
+						degree++;
+				if (degree == 0)
+					degree = 1;
+				if (si != NULL) {
+					range = (si->flags & SPILL_SEEN) != 0 ?
+					    si->last_pos - si->first_pos + 1 : 1;
+					raw = (unsigned long long)si->use_cost *
+					    spill_weights.use;
+					raw += (unsigned long long)si->def_cost *
+					    spill_weights.def;
+					raw += (unsigned long long)range *
+					    spill_weights.live_range;
+					if (si->flags & SPILL_LIVE_ACROSS_CALL)
+						raw += spill_weights.call_crossing;
+					if ((si->flags & SPILL_REMATERIALIZABLE) == 0)
+						raw += spill_weights.non_rematerializable;
+					else
+						raw = raw /
+						    spill_weights.rematerialize_divisor + 1;
+					if (TARGET_OPTSTATS_FPR_CLASS(CLASS(w)))
+						raw += (unsigned long long)
+						    (si->uses + si->defs) *
+						    spill_weights.fpr;
+				} else {
+					raw = spill_weights.non_rematerializable + 1;
+				}
+				if (MoveRelated(w))
+					raw += spill_weights.move_related;
+				score = raw * 256 / degree;
+				key = si != NULL ? (int)(w - nblock) : ASGNUM(w);
+				if (best == NULL || score < bestscore ||
+				    (score == bestscore && key < bestkey)) {
+					best = w;
+					bestscore = score;
+					bestkey = key;
+				}
+			}
 		}
+		w = best;
 	}
 
-	if (w == &spillWorklist) {
-		RRDEBUG(("SelectSpill: trying not leaf\n"));
-		/* no heuristics, just fetch first element */
-		/* but not if leaf */
-		DLIST_FOREACH(w, &spillWorklist, link) {
-			if (w->r_nclass[0] == 0)
-				break;
-		}
-	}
-
-	if (w == &spillWorklist) {
-		/* Eh, only leaves :-/ Try anyway */
-		/* May not be useable */
+	if (w == NULL || w == &spillWorklist) {
 		w = DLIST_NEXT(&spillWorklist, link);
-		RRDEBUG(("SelectSpill: need leaf\n"));
 	}
- 
-        DLIST_REMOVE(w, link);
+
+	DLIST_REMOVE(w, link);
 
 	PUSHWLIST(w, simplifyWorklist);
 #ifdef PCC_DEBUG
@@ -2851,6 +3077,70 @@ count_spill_refs(NODE *p, REGW *rpole, int mode)
 		count_spill_refs(p->n_right, rpole, SPILL_READ);
 }
 
+static void
+remat_replace_uses(NODE **nodep, int temp, NODE *value)
+{
+	NODE *p;
+	int o;
+
+	p = *nodep;
+	if (p == NIL)
+		return;
+	if (p->n_op == TEMP) {
+		if (regno(p) == temp) {
+			tfree(p);
+			*nodep = tcopy(value);
+		}
+		return;
+	}
+	o = optype(p->n_op);
+	if (asgop(p->n_op) && o == BITYPE && p->n_left->n_op == TEMP &&
+	    regno(p->n_left) == temp) {
+		remat_replace_uses(&p->n_right, temp, value);
+		return;
+	}
+	if (o != LTYPE)
+		remat_replace_uses(&p->n_left, temp, value);
+	if (o == BITYPE)
+		remat_replace_uses(&p->n_right, temp, value);
+}
+
+static int
+rematerialize_temp(struct interpass *ipole, int temp, NODE *value)
+{
+	struct interpass *ip;
+	NODE *p, *saved;
+	int definitions;
+
+	definitions = 0;
+	DLIST_FOREACH(ip, ipole, qelem) {
+		if (ip->type != IP_NODE)
+			continue;
+		p = ip->ip_node;
+		if (p->n_op == ASSIGN && p->n_left->n_op == TEMP &&
+		    regno(p->n_left) == temp)
+			definitions++;
+	}
+	if (definitions != 1)
+		return 0;
+	saved = tcopy(value);
+	DLIST_FOREACH(ip, ipole, qelem) {
+		if (ip->type != IP_NODE)
+			continue;
+		p = ip->ip_node;
+		if (p->n_op == ASSIGN && p->n_left->n_op == TEMP &&
+		    regno(p->n_left) == temp) {
+			tfree(p);
+			ip->type = IP_ASM;
+			ip->ip_asm = "";
+			continue;
+		}
+		remat_replace_uses(&ip->ip_node, temp, saved);
+	}
+	tfree(saved);
+	return 1;
+}
+
 static void leafrewrite(struct interpass *ipole, REGW *rpole);
 /*
  * Change the TEMPs in the ipole list to stack variables.
@@ -2965,9 +3255,10 @@ temparg(struct interpass *ipole, REGW *w)
 static int
 RewriteProgram(struct interpass *ip)
 {
-	REGW shortregs, longregs, saveregs, *q;
+	REGW shortregs, longregs, saveregs, *next, *q;
 	REGW *w;
-	int rwtyp;
+	struct spillinfo *si;
+	int remat_done, rwtyp;
 
 	RDEBUG(("RewriteProgram\n"));
 	DLIST_INIT(&shortregs, link);
@@ -3005,6 +3296,17 @@ RewriteProgram(struct interpass *ip)
 	}
 #endif
 	rwtyp = 0;
+	remat_done = 0;
+	for (w = DLIST_NEXT(&longregs, link); w != &longregs; w = next) {
+		next = DLIST_NEXT(w, link);
+		si = &sblock[w - nblock];
+		if ((si->flags & SPILL_REMATERIALIZABLE) == 0 ||
+		    !rematerialize_temp(ip, (int)(w - nblock), si->remat))
+			continue;
+		DLIST_REMOVE(w, link);
+		remat_done = 1;
+		optstats_note_rematerialized();
+	}
 
 	if (!DLIST_ISEMPTY(&saveregs, link)) {
 		rwtyp = ONLYPERM;
@@ -3014,16 +3316,15 @@ RewriteProgram(struct interpass *ip)
 		}
 	}
 	if (!DLIST_ISEMPTY(&longregs, link)) {
-		rwtyp = LEAVES;
 		DLIST_FOREACH(w, &longregs, link) {
 			w->r_class = xtemps ? temparg(ip, w) : 0;
 		}
-	}
-
-	if (rwtyp == LEAVES) {
 		leafrewrite(ip, &longregs);
-		rwtyp = ONLYPERM;
+		if (!remat_done)
+			rwtyp = ONLYPERM;
 	}
+	if (remat_done)
+		rwtyp = SMALL;
 
 	if (rwtyp == 0 && !DLIST_ISEMPTY(&shortregs, link)) {
 		/* Must rewrite the trees */
@@ -3151,8 +3452,9 @@ ssagain:
 	xbits = tbits + MAXREGS;	/* total size of live array */
 	if (tbits) {
 		nblock = tmpalloc(tbits * sizeof(REGW));
-
 		nblock -= tempmin;
+		sblock = tmpalloc(tbits * sizeof(*sblock));
+		sblock -= tempmin;
 #ifdef HAVE_C99_FORMAT
 		RDEBUG(("nblock %p num %d size %zu\n",
 		    nblock, tbits, (size_t)(tbits * sizeof(REGW))));
@@ -3199,6 +3501,7 @@ onlyperm: /* XXX - should not have to redo all */
 		walkf(ip->ip_node, traclass, 0);
 	}
 	nodepole = NIL;
+	spillcost_collect(p2e);
 	RDEBUG(("nsucomp allocated %d temps (%d,%d)\n", 
 	    tempmax-tempmin, tempmin, tempmax));
 
