@@ -622,7 +622,8 @@ KERNEL_AS       = $(N64_CROSS_PCC_AS) --elf -EB -march=vr4300
 KERNEL_LD       = $(N64_CROSS_PCC_LD) --elf -EB
 KERNEL_CPP_AS   = $(KERNEL_CC)
 KERNEL_FPU_CPP_AS = $(KERNEL_CC)
-KERNEL_COMPILER_DEPS = $(N64_HOST_PCC) $(N64_CROSS_PCC_AS) $(N64_CROSS_PCC_LD)
+KERNEL_COMPILER_DEPS = $(MIPS_PCC_PROVIDER_DEPS) $(N64_CROSS_PCC_AS) \
+                       $(N64_CROSS_PCC_LD)
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
                   if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
                       echo "error: PCC kernel C emitted COP1/FPU instructions in .deps/$(@:.o=.s)" >&2; exit 1; \

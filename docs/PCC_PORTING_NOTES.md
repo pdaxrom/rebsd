@@ -224,6 +224,35 @@ make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc \
 compatible native compiler and target tools; a host PCC build is not mandatory
 in that case.
 
+## PCC Rebuild Dependencies
+
+Cross-provider builds use
+`$(MIPS_PCC_HOST_PREFIX)/.rebsd-pcc-toolchain.stamp` as the normal prerequisite
+for PCC-generated kernel, rootfs, runtime, benchmark, and regression outputs.
+The stamp depends on the imported PCC frontend, middle-end, and backend sources
+and records checksums for the installed PCC driver and `ccom`.  GCC-only kernel
+and rootfs configurations do not depend on this stamp.
+
+The dependency gate can be repeated without cleaning as follows:
+
+```sh
+make -C sys/mips/malta64 \
+    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_ROOTFS_FLOAT=soft \
+    pcc-regress-compile linpack-smoke-build unix.elf
+touch src/dev/pcc/pcc/arch/mips/local2.c
+make -C sys/mips/malta64 \
+    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_ROOTFS_FLOAT=soft \
+    pcc-regress-compile linpack-smoke-build unix.elf
+```
+
+Record timestamps before and after for the installed `ccom`, a PCC kernel
+object, a PCC rootfs object, Linpack, and a regression binary.  On Malta64,
+`malta64-stage0.o` is a useful GCC-generated control and must remain unchanged.
+When using `touch` only as a dependency probe, restore the backend source's
+original timestamp after the test.
+
 ## PCC Kernel Build Status
 
 Kernel PCC builds are explicit opt-in gates.  They are not the default build

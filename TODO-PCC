@@ -403,11 +403,30 @@ not active items for the current C/static-a.out PCC milestone.
   - Also verify whether any ReBSD assembler context still treats `ld`/`sd` as
     macro-like syntax; such cases must stay out of delay slots until proven
     single-instruction.
-- [ ] Fix PCC backend-to-board object dependency tracking.
-  - Editing `src/dev/pcc/pcc/arch/mips/*` does not reliably invalidate already
-    built board kernel objects.  Until this is fixed, run
-    `make -C sys/mips/<board> clean` before claiming a post-backend-edit QEMU
-    smoke result for that board.
+- [x] Fix PCC backend-to-board object dependency tracking.
+  - Cross PCC builds now produce
+    `$(MIPS_PCC_HOST_PREFIX)/.rebsd-pcc-toolchain.stamp`.  The stamp has normal
+    prerequisites on all imported PCC frontend, middle-end, and backend
+    sources, and records `cksum` results for the installed driver and `ccom`.
+  - PCC kernel objects, the PCC rootfs/userland stamp, native runtime/native
+    PCC, Linpack, and regression targets depend on this stamp.  GCC kernel and
+    rootfs paths do not.
+  - The 2026-07-10 no-clean regression touched `arch/mips/local2.c` after an
+    initial Malta64/VR4300 soft-float PCC build.  The installed `ccom`, stamp,
+    `subr_rmap.o`, libc `abs.o`, Linpack binary, and `misc__nestedcall001`
+    regression binary all received newer timestamps.  The GCC-generated
+    `malta64-stage0.o` timestamp and checksum did not change.  A second build
+    without source changes reported Linpack ready and `unix.elf` up to date.
+  - Logs and before/after records are
+    `/private/tmp/pcc-phase1-{initial-build,rebuild,noop}.log` and
+    `/private/tmp/pcc-phase1-{before,after}.txt`.
+  - The post-change clean QEMU matrix passed `PCC_SMOKE_ALL_FAILURES 0` and
+    `PCC_SMOKE_ALL_RC:0` for Malta64/VR4300 hard and soft, Malta/MIPS32R2
+    big-endian hard and soft, and MaltaEL/MIPS32R2 little-endian hard and soft.
+    Every PCC kernel command contained `-fomit-frame-pointer` and
+    `-msoft-float`.  Linpack ranges were about `13662-13780`, `994-995`,
+    `13545-13635`, `1008-1019`, `13649-13943`, and `1041-1046` KFLOPS,
+    respectively.  Logs are `/private/tmp/pcc-phase1-<board>-<float>-smoke.log`.
 
 ## Phase 1: Host PCC Configuration
 
