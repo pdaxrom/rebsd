@@ -295,6 +295,77 @@ END { exit found ? 0 : 1 }
 	exit 1
 }
 
+cat > "$tmp.c" <<'EOF'
+void
+hilo_gap_schedule_probe(void)
+{
+	asm("mult $v1,$v0\n\t"
+	    "nop\n\t"
+	    "nop\n\t"
+	    "mflo $v1\n\t"
+	    "move $v0,$zero");
+}
+
+void
+hilo_gap_dependency_probe(void)
+{
+	asm("mult $a0,$a1\n\t"
+	    "nop\n\t"
+	    "nop\n\t"
+	    "mflo $v0\n\t"
+	    "addiu $v1,$v0,1");
+}
+EOF
+
+for schedule_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$schedule_cpu" -O2 -S -o "$tmp.s" "$tmp.c"
+	awk '
+/^[[:space:]]*mult[[:space:]]+\$v1,\$v0/ { positive = 1; next }
+positive == 1 && /^[[:space:]]*move[[:space:]]+\$v0,\$zero/ {
+	positive = 2
+	next
+}
+positive == 2 && /^[[:space:]]*nop([[:space:]]|$)/ {
+	positive = 3
+	next
+}
+positive == 3 && /^[[:space:]]*mflo[[:space:]]+\$v1/ { positive_ok = 1 }
+/^[[:space:]]*mult[[:space:]]+\$a0,\$a1/ { negative = 1; next }
+negative == 1 && /^[[:space:]]*nop([[:space:]]|$)/ {
+	negative = 2
+	next
+}
+negative == 2 && /^[[:space:]]*nop([[:space:]]|$)/ {
+	negative = 3
+	next
+}
+negative == 3 && /^[[:space:]]*mflo[[:space:]]+\$v0/ {
+	negative = 4
+	next
+}
+negative == 4 && /^[[:space:]]*addiu[[:space:]]+\$v1,\$v0,1/ {
+	negative_ok = 1
+}
+END { exit positive_ok && negative_ok ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$schedule_cpu failed HI/LO gap dependency scheduling" >&2
+		exit 1
+	}
+done
+
+"$pcc" -march=mips3 -mtune=r4000 -O2 -S -o "$tmp.s" "$tmp.c"
+awk '
+/^[[:space:]]*mult[[:space:]]+\$v1,\$v0/ { state = 1; next }
+state == 1 && /^[[:space:]]*nop([[:space:]]|$)/ { state = 2; next }
+state == 2 && /^[[:space:]]*nop([[:space:]]|$)/ { state = 3; next }
+state == 3 && /^[[:space:]]*mflo[[:space:]]+\$v1/ { state = 4; next }
+state == 4 && /^[[:space:]]*move[[:space:]]+\$v0,\$zero/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 unexpectedly received HI/LO gap scheduling" >&2
+	exit 1
+}
+
 if "$pcc" -march=mips32 -S -o "$tmp.s" "$tmp.c" >"$tmp.err" 2>&1; then
 	echo "unsupported MIPS32r1 profile was accepted" >&2
 	exit 1

@@ -2423,6 +2423,25 @@ mips_can_trim_mfhilo_post_nops(const char *mf, const char *next1,
 }
 
 static int
+mips_can_fill_hilo_gap_from_after_mf(const char *hilo, const char *mf,
+    const char *candidate)
+{
+	unsigned long long writes, reads, forbidden;
+	int mfreg;
+
+	if (mips_target.tune != MIPS_TUNE_VR4300 &&
+	    mips_target.isa != MIPS_ISA_MIPS32R2)
+		return 0;
+	if (!mips_parse_int_mult_hilo(hilo, NULL) ||
+	    !mips_parse_mfhilo_dest(mf, &mfreg) ||
+	    !mips_parse_simple_gpr_rw(candidate, &writes, &reads))
+		return 0;
+	forbidden = (1ULL << mfreg) | (1ULL << 29) | (1ULL << 31);
+	return (writes & ((1ULL << 0) | forbidden)) == 0 &&
+	    ((writes | reads) & forbidden) == 0;
+}
+
+static int
 mips_parse_fpr_operand(const char **sp, int *regp)
 {
 	const char *s, *end;
@@ -3631,6 +3650,19 @@ mips_fold_late_peepholes(char *path)
 				    fgets(after, sizeof(after), in) != NULL &&
 				    fgets(mf, sizeof(mf), in) != NULL &&
 				    fgets(mtc1, sizeof(mtc1), in) != NULL) {
+					if (mips_is_nop(next) &&
+					    mips_is_nop(after) &&
+					    mips_can_fill_hilo_gap_from_after_mf(line,
+					    mf, mtc1)) {
+						fputs(line, out);
+						fputs(mtc1, out);
+						fputs(after, out);
+						fputs(mf, out);
+						prev_control =
+						    mips_is_control_transfer(mf);
+						changed = 1;
+						continue;
+					}
 					if (mips_is_nop(next) &&
 					    mips_is_nop(after) &&
 					    mips_can_trim_mfhilo_post_nops(line,
