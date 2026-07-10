@@ -42,7 +42,7 @@ MKEXT=mkext$(EXEEXT)
 OBJS=	cfgverify.o common.o compat.o data.o equiv.o error.o exec.o expr.o	\
 	external.o flocal.o gram.o init.o intr.o io.o lex.o	\
 	local2.o main.o match.o misc.o optim2.o order.o proc.o	\
-	put.o putscj.o reader.o regs.o table.o
+	put.o putscj.o reader.o regs.o ssalower.o table.o
 
 LOBJS=	common.lo mkext.lo table.lo
 
@@ -94,6 +94,9 @@ common.o: $(MIPDIR)/common.c
 
 cfgverify.o: $(MIPDIR)/cfgverify.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/cfgverify.c
+
+ssalower.o: $(MIPDIR)/ssalower.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/ssalower.c
 
 compat.o: $(COMDIR)/compat.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(COMDIR)/compat.c

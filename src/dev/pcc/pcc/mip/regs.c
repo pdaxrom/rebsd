@@ -2007,7 +2007,7 @@ livagain:
 		}
 	}
 
-	if (xssa && 0) {
+	if (p2e->ssa_active && 0) {
 		REGW *u, *v;
 		MOVL *m;
 		/*
@@ -3568,7 +3568,7 @@ onlyperm: /* XXX - should not have to redo all */
 			optimize(p2e);
 			if (beenhere++ == MAXLOOP)
 				comperr("cannot color graph - COLORMAP() bug?");
-			if (xssa)
+			if (p2e->ssa_active)
 				goto ssagain;
 			goto recalc;
 		}

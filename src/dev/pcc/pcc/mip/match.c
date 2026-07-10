@@ -680,7 +680,7 @@ findops(NODE *p, int cookie)
 
 		/* Help register assignment after SSA by preferring */
 		/* 2-op insns instead of 3-ops */
-		if (xssa && (q->rewrite & RLEFT) == 0 &&
+		if (p2env.ssa_active && (q->rewrite & RLEFT) == 0 &&
 		    (n2osh(q->lshape) & (INREGS)) && shl == SRDIR)
 			shl = SRREG;
 
@@ -1338,7 +1338,7 @@ treecmp(NODE *p1, NODE *p2)
 #ifdef notyet
 		/* SSA will put assignment in separate register */
 		/* Help out by accepting different regs here */
-		if (xssa)
+		if (p2env.ssa_active)
 			break;
 #endif
 	case REG:

@@ -74,7 +74,6 @@ void printDF(struct p2env *p2e);
 void findTemps(struct interpass *ip);
 void placePhiFunctions(struct p2env *);
 void renamevar(struct p2env *p2e,struct basicblock *bblock);
-void removephi(struct p2env *p2e);
 void simple_cp(struct p2env *p2e);
 void remunreach(struct p2env *);
 static void liveanal(struct p2env *p2e);
@@ -126,7 +125,7 @@ optimize(struct p2env *p2e)
 	if (xdeljumps)
 		deljumps(p2e); /* Delete redundant jumps and dead code */
 
-	if (xssa)
+	if (p2e->ssa_active)
 		add_labels(p2e) ;
 #ifdef ENABLE_NEW
 	do_cse(p2e);
@@ -138,14 +137,24 @@ optimize(struct p2env *p2e)
 		printip(ipole);
 	}
 #endif
-	if (xssa || xtemps || p2stats) {
+	if (p2e->ssa_active || xtemps || p2stats) {
 		cfg_rebuild(p2e, "initial");
 	
 #ifdef PCC_DEBUG
 		printflowdiagram(p2e, "first");
 #endif
 	}
-	if (xssa) {
+	if (p2e->ssa_active) {
+		BDEBUG(("Calling ssa_split_critical_edges\n"));
+		if (!ssa_split_critical_edges(p2e)) {
+			BDEBUG(("SSA fallback for critical computed-goto edge\n"));
+			p2e->ssa_active = 0;
+		}
+	}
+	if (p2e->ssa_active) {
+		cfg_rebuild(p2e, "post-critical-edge-split");
+		cfg_verify_no_critical_edges(p2e);
+
 		BDEBUG(("Calling liveanal\n"));
 		liveanal(p2e);
 		BDEBUG(("Calling dominators\n"));
@@ -168,13 +177,13 @@ optimize(struct p2env *p2e)
 		renamevar(p2e,DLIST_NEXT(&p2e->bblocks, bbelem));
 		cfg_verify_phi(p2e, 1);
 
-		BDEBUG(("Calling removephi\n"));
+		BDEBUG(("Calling ssa_lower_phi\n"));
 
 #ifdef PCC_DEBUG
 		printflowdiagram(p2e, "ssa");
 #endif
 
-		removephi(p2e);
+		ssa_lower_phi(p2e);
 
 		/* Simple constant propagation */
 		if (xscp)
@@ -1453,154 +1462,6 @@ simple_cp(struct p2env *p2e)
 	} while (replaced);
 }
 
-enum pred_type {
-    pred_unknown    = 0,
-    pred_goto       = 1,
-    pred_cond       = 2,
-    pred_falltrough = 3,
-} ;
-
-void
-removephi(struct p2env *p2e)
-{
-	struct basicblock *bb,*bbparent;
-	struct cfgnode *cfgn;
-	struct phiinfo *phi;
-	int i;
-	struct interpass *ip;
-	struct interpass *pip;
-	TWORD n_type;
-
-	enum pred_type complex = pred_unknown ;
-
-	int label=0;
-	int newlabel;
-
-	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {		
-		SLIST_FOREACH(phi,&bb->phi,phielem) {
-			/* Look at only one, notice break at end */
-			i=0;
-			
-			SLIST_FOREACH(cfgn, &bb->parents, cfgelem) { 
-
-				bbparent = cfgn->bblock;	/* cfg parent basic block */
-				pip = bbparent->last;		/* last stmt in parent bb (goto, ...) */
-				
-				complex = pred_unknown ;
-				BDEBUG(("removephi: %p in %d",pip,bb->dfnum));
-
-				if (pip->type == IP_NODE && pip->ip_node->n_op == GOTO) {
-					BDEBUG((" GOTO "));
-					label = (int)getlval(pip->ip_node->n_left);
-					complex = pred_goto ;
-				} else if (pip->type == IP_NODE && pip->ip_node->n_op == CBRANCH) {
-					BDEBUG((" CBRANCH "));
-					label = (int)getlval(pip->ip_node->n_right);
-
-					/* Check if parent got us here via branch */
-					if (bb == p2e->labinfo.arr[label - p2e->ipp->ip_lblnum])
-						complex = pred_cond ;
-					else
-						complex = pred_falltrough ;
-
-				} else if (DLIST_PREV(bb, bbelem) == bbparent) {
-					complex = pred_falltrough ;
-				} else {
-					    /* PANIC */
-					comperr("Assumption blown in rem-phi") ;
-				}
-       
-				BDEBUG((" Complex: %d ",complex)) ;
-
-				switch (complex) {
-				  case pred_goto:
-					/* gotos can only go to this place. No bounce tab needed */
-					SLIST_FOREACH(phi,&bb->phi,phielem) {
-						if (phi->intmpregno[i]>0) {
-							n_type=phi->n_type;
-							ip = ipnode(mkbinode(ASSIGN,
-							     mktemp(phi->newtmpregno, n_type),
-							     mktemp(phi->intmpregno[i],n_type),
-							     n_type));
-							BDEBUG(("(%p, %d -> %d) ", ip, phi->intmpregno[i], phi->newtmpregno));
-				
-							DLIST_INSERT_BEFORE((bbparent->last), ip, qelem);
-						}
-					}
-					break ;
-				  case pred_cond:
-					/* Here, we need a jump pad */
-					newlabel=getlab2();
-			
-					ip = tmpalloc(sizeof(struct interpass));
-					ip->type = IP_DEFLAB;
-					/* Line number?? ip->lineno; */
-					ip->ip_lbl = newlabel;
-					DLIST_INSERT_BEFORE((bb->first), ip, qelem);
-
-					SLIST_FOREACH(phi,&bb->phi,phielem) {
-						if (phi->intmpregno[i]>0) {
-							n_type=phi->n_type;
-							ip = ipnode(mkbinode(ASSIGN,
-							     mktemp(phi->newtmpregno, n_type),
-							     mktemp(phi->intmpregno[i],n_type),
-							     n_type));
-
-							BDEBUG(("(%p, %d -> %d) ", ip, phi->intmpregno[i], phi->newtmpregno));
-							DLIST_INSERT_BEFORE((bb->first), ip, qelem);
-						}
-					}
-					/* add a jump to us */
-					ip = ipnode(mkunode(GOTO, mklnode(ICON, label, 0, INT), 0, INT));
-					DLIST_INSERT_BEFORE((bb->first), ip, qelem);
-					setlval(pip->ip_node->n_right,newlabel);
-					if (!logop(pip->ip_node->n_left->n_op))
-						comperr("SSA not logop");
-					pip->ip_node->n_left->n_label=newlabel;
-					break ;
-				  case pred_falltrough:
-					if (bb->first->type == IP_DEFLAB) { 
-						label = bb->first->ip_lbl; 
-						BDEBUG(("falltrough label %d\n", label));
-					} else {
-						comperr("BBlock has no label?") ;
-					}
-
-					/* 
-					 * add a jump to us. We _will_ be, or already have, added code in between.
-					 * The code is created in the wrong order and switched at the insert, thus
-					 * comming out correctly
-					 */
-
-					ip = ipnode(mkunode(GOTO, mklnode(ICON, label, 0, INT), 0, INT));
-					DLIST_INSERT_AFTER((bbparent->last), ip, qelem);
-
-					/* Add the code to the end, add a jump to us. */
-					SLIST_FOREACH(phi,&bb->phi,phielem) {
-						if (phi->intmpregno[i]>0) {
-							n_type=phi->n_type;
-							ip = ipnode(mkbinode(ASSIGN,
-								mktemp(phi->newtmpregno, n_type),
-								mktemp(phi->intmpregno[i],n_type),
-								n_type));
-
-							BDEBUG(("(%p, %d -> %d) ", ip, phi->intmpregno[i], phi->newtmpregno));
-							DLIST_INSERT_AFTER((bbparent->last), ip, qelem);
-						}
-					}
-					break ;
-				default:
-					comperr("assumption blown, complex is %d\n", complex) ;
-				}
-				BDEBUG(("\n"));
-				i++;
-			}
-			break;
-		}
-	}
-}
-
-    
 /*
  * Remove unreachable nodes in the CFG.
  */ 

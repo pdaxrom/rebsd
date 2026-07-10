@@ -254,6 +254,22 @@ cfg_verify(struct p2env *p2e, const char *stage)
 	}
 }
 
+void
+cfg_verify_no_critical_edges(struct p2env *p2e)
+{
+	struct basicblock *bb;
+	struct cfgnode *cn;
+
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		if (children_total(bb) <= 1)
+			continue;
+		SLIST_FOREACH(cn, &bb->child, chld)
+			if (parents_total(cn->bblock) > 1)
+				comperr("SSA critical edge remains from block %d to block %d",
+				    bb->bbnum, cn->bblock->bbnum);
+	}
+}
+
 static int
 immediate_dominator(bittype **dom, int block, int nblocks)
 {

@@ -684,6 +684,7 @@ pass2_compile(struct interpass *ip)
 	if (ip->type == IP_PROLOG) {
 		memset(p2e, 0, sizeof(struct p2env));
 		p2e->ipp = (struct interpass_prolog *)ip;
+		p2e->ssa_active = xssa;
 		if (crslab2 < p2e->ipp->ip_lblnum)
 			crslab2 = p2e->ipp->ip_lblnum;
 		DLIST_INIT(&p2e->ipole, qelem);

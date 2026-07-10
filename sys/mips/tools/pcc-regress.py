@@ -136,6 +136,9 @@ def build_test_list(rootfs):
         add_runtime(tests, f"gcccompat__{target}", gcccompat, [f"{target}.c"])
     for target in v["OPT_REGRESS_TARGETS"]:
         add_runtime(tests, f"gcccompat__{target}", gcccompat, [f"{target}.c"], ["-O2"])
+    for target in v.get("OPT_FALLBACK_TARGETS", []):
+        add_runtime(tests, f"gcccompat__{target}_o2_fallback", gcccompat,
+                    [f"{target}.c"], ["-O2"])
     for target in v.get("REGRESS_TARGETS_FAIL", []):
         add_expect_fail(tests, f"gcccompat__{target}", gcccompat, [f"{target}.c"])
 
@@ -160,6 +163,9 @@ def build_test_list(rootfs):
         add_runtime(tests, f"misc__{target}", misc, [f"{target}.c"])
     for target in v["OPTIM_TARGETS"]:
         add_runtime(tests, f"misc__{target}", misc, [f"{target}.c"], ["-O"])
+    for target in v.get("SSA_TARGETS", []):
+        add_runtime(tests, f"misc__{target}", misc, [f"{target}.c"],
+                    ["-O", "-Wc,-xssa"])
     for target in v["PIC_TARGETS"]:
         add_runtime(tests, f"misc__{target}", misc, [f"{target}.c"])
         add_runtime(tests, f"misc__{target}_pic", misc, [f"{target}.c"], ["-fpic"])

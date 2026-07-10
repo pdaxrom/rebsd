@@ -12,6 +12,7 @@ MAKE=make
 REGRESS_TARGETS = arith001 arith002 stasg001 ucmp001 char001 func001 str001 ucn001 array001 ucharload001 nestedcall001 intfp001 llshift001
 OPTIM_TARGETS = optim001 optim002 optim003 spillcost001 spillfp001 spillabi001 \
 	spillremat001
+SSA_TARGETS = ssaphi001
 PIC_TARGETS = pic001
 
 REGRESS_TARGETS_FAIL = 
@@ -25,6 +26,13 @@ test:
 			./$$TARGET.out >/dev/null && \
 			echo "passed" || echo "failed" ;\
 	done 
+	@for TARGET in ${SSA_TARGETS} ;\
+	do \
+		printf  "   %-20s \t\t " "$$TARGET" ;\
+		${CC} -O -Wc,-xssa ${CFLAGS} -o $$TARGET.out $$TARGET.c 2>/dev/null && \
+			./$$TARGET.out >/dev/null && \
+			echo "passed" || echo "failed" ;\
+	done
 	@for TARGET in ${OPTIM_TARGETS} ;\
 	do \
 		printf  "   %-20s \t\t " "$$TARGET" ;\

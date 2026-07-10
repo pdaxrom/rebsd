@@ -507,6 +507,7 @@ struct p2env {
 	struct labelinfo labinfo;
 	struct basicblock bblocks;
 	int nbblocks;
+	int ssa_active;				/* SSA enabled for this function */
 #define NIPPREGS        BIT2BYTE(MAXREGS)/sizeof(bittype)
 	bittype p_regs[NIPPREGS];	/* Bitmask of registers to save */
 };
@@ -515,8 +516,11 @@ extern struct p2env p2env;
 
 struct basicblock *cfg_label_block(struct p2env *, int);
 void cfg_verify(struct p2env *, const char *);
+void cfg_verify_no_critical_edges(struct p2env *);
 void cfg_verify_dominators(struct p2env *);
 void cfg_verify_phi(struct p2env *, int);
+int ssa_split_critical_edges(struct p2env *);
+void ssa_lower_phi(struct p2env *);
 
 /* Disabled-by-default, machine-independent pass2 statistics. */
 extern int p2stats;

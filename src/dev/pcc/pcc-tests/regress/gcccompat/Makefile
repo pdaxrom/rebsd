@@ -13,6 +13,7 @@ REGRESS_TARGETS = attribute001 attribute002 \
 	extension006 extension007 extension008
 
 OPT_REGRESS_TARGETS = typeof001
+OPT_FALLBACK_TARGETS = extension004
 
 # These extensions are not currently supported.
 # Do not complain about them as failed.
@@ -29,6 +30,13 @@ test:
 			./$$TARGET.out >/dev/null && \
 			echo "passed" || echo "failed" ;\
 	done 
+	@for TARGET in ${OPT_FALLBACK_TARGETS} ;\
+	do \
+		printf  "   %-20s \t\t " "$$TARGET(O2 fallback)" ;\
+		${CC} ${CFLAGS} -O2 -o $$TARGET.opt.out $$TARGET.c 2>/dev/null 1>&2 && \
+			./$$TARGET.opt.out >/dev/null && \
+			echo "passed" || echo "failed" ;\
+	done
 	@for TARGET in ${OPT_REGRESS_TARGETS} ;\
 	do \
 		printf  "   %-20s \t\t " "$$TARGET" ;\
@@ -70,4 +78,3 @@ clean:
 	/bin/rm -rf *.out 
 	/bin/rm -rf *.core
 	/bin/rm -rf ${LOG}
-

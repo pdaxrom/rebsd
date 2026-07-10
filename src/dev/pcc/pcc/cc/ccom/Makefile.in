@@ -56,7 +56,7 @@ all: $(DEST)
 OBJS=	builtins.o cgram.o cfgverify.o code.o common.o compat.o complex.o dwarf.o	\
 	external.o gcc_compat.o init.o inline.o local.o local2.o main.o	\
 	match.o optim.o optim2.o optstats.o order.o params.o pftn.o reader.o	\
-	softfloat.o regs.o scan.o stabs.o symtabs.o table.o target.o trees.o	\
+	softfloat.o regs.o scan.o ssalower.o stabs.o symtabs.o table.o target.o trees.o	\
 	unicode.o
 
 OBJS0=  builtins.o cgram.o code.o common.o compat.o complex.o dwarf.o	\
@@ -67,7 +67,7 @@ OBJS0=  builtins.o cgram.o code.o common.o compat.o complex.o dwarf.o	\
 OBJS1=  cfgverify.o common2.o compat.o external.o           		\
 	local2.o main2.o                				\
 	match.o optim2.o optstats.o order.o reader.o      			\
-	regs.o table.o target.o
+	regs.o ssalower.o table.o target.o
 
 
 LOBJS=	mkext.lo common.lo table.lo
@@ -129,6 +129,9 @@ common2.o: $(MIPDIR)/common.c
 
 cfgverify.o: $(MIPDIR)/cfgverify.c
 	$(CC) $(CF1) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/cfgverify.c
+
+ssalower.o: $(MIPDIR)/ssalower.c
+	$(CC) $(CF1) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/ssalower.c
 
 compat.o: $(COMMONDIR)/compat.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(COMMONDIR)/compat.c

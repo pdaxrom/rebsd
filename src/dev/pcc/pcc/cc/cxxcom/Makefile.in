@@ -48,7 +48,7 @@ all: $(DEST)
 OBJS=	builtins.o cgram.o cfgverify.o code.o common.o compat.o external.o	\
 	gcc_compat.o init.o inline.o local.o local2.o main.o cxxcode.o	\
 	match.o optim.o optim2.o order.o pftn.o reader.o		\
-	regs.o scan.o stabs.o symtabs.o table.o trees.o
+	regs.o scan.o ssalower.o stabs.o symtabs.o table.o trees.o
 
 LOBJS=	mkext.lo common.lo table.lo
 
@@ -105,6 +105,9 @@ common.o: $(MIPDIR)/common.c
 
 cfgverify.o: $(MIPDIR)/cfgverify.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/cfgverify.c
+
+ssalower.o: $(MIPDIR)/ssalower.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/ssalower.c
 
 compat.o: $(COMMONDIR)/compat.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(COMMONDIR)/compat.c
