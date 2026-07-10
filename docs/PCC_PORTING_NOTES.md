@@ -149,6 +149,25 @@ byte-identical with statistics disabled and enabled.  `optstats.c` is also
 part of the native PCC bootstrap, so the same instrumentation is available to
 the compiler running under ReBSD.
 
+## Register Allocator Spill Costs
+
+The graph allocator uses measured, target-independent spill selection rather
+than choosing the first eligible long-lived TEMP.  The score includes
+loop-weighted uses and definitions, live-range length, interference degree,
+call crossing, move relation, rematerialization, and GPR/FPR class.  Calls
+already make live values interfere with caller-saved colors, so callee-saved
+colors remain available when profitable.  Named weights and deterministic TEMP
+number tie breaking keep this policy tunable and reproducible.
+
+Only integer and symbol constants, their simple conversions, and simple frame
+addresses can be rematerialized.  Memory loads, volatile accesses, calls,
+side effects, and potentially trapping expressions are excluded.  Spill
+metadata uses a temporary side array and does not enlarge the permanent graph
+node representation.  Focused regression coverage includes GPR/FPR pressure,
+nested loops, call-crossing and move-related values, struct copies, varargs,
+and both FP ABIs.  Full measurements and commands are in
+`docs/PCC_PHASE4_REPORT.md`.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus

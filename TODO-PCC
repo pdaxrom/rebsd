@@ -495,6 +495,46 @@ not active items for the current C/static-a.out PCC milestone.
     `/private/tmp/pcc-phase3-linpack-runtime.log`.  QEMU cannot validate the
     physical VR4300 erratum; no codegen changed in this statistics phase, and
     the existing N64 hardware images were left byte-for-byte untouched.
+- [x] Replace first-fit allocator spills with measured spill costs.
+  - `mip/regs.c` now records weighted uses and definitions, capped loop depth
+    weights `1/4/16/64`, live-range length, exact call crossing, interference
+    degree, move relation, GPR/FPR class, and safe rematerialization state.
+    Named target-independent weights select the lowest rewrite cost divided by
+    interference degree; calls already exclude caller-saved colors from live
+    values, leaving profitable callee-saved colors to the existing allocator.
+  - Safe rematerialization is restricted to integer/symbol constants and
+    simple `$fp` plus/minus constant addresses.  Volatile or arbitrary loads,
+    calls, trapping expressions, and side effects are never candidates.  The
+    extra metadata is a separate array allocated only during graph coloring,
+    so the permanent `REGW` representation did not grow.
+  - Added `spillcost001`, `spillfp001`, `spillabi001`, and `spillremat001` for
+    nested GPR/FPR pressure, call-crossing and move-related values, constants
+    and symbol addresses, struct copy/return, varargs, and hard/soft FP ABI.
+    Cross compile regression passed `322/325` with only the three documented
+    failures and cross runtime passed `285/285`.  Native PCC passed `295`
+    compilations plus `30` expected failures and `285/285` runtimes, with zero
+    unexpected failures and `NATIVE_PCC_REGRESS_RC:0`.
+  - On the deterministic MIPS32r2 hard-float GPR pressure case,
+    `scalar_pressure` retained `11` selected spills and `22` spill stores but
+    reloads fell from `54` to `33`.  Whole-file instructions fell `468 -> 448`,
+    loads `84 -> 63`, and assembly bytes `12565 -> 11985`; stores and nops
+    stayed `45` and `9`.  Focused FPR and ABI assembly remained byte-for-byte
+    unchanged.  `extendsfdf2` exercises actual rematerialization (`2` values)
+    and compiles without the previous spill rewrite.
+  - All six PCC-kernel/PCC-rootfs QEMU profiles reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Linpack pairs were
+    Malta64 hard `13614/13666`, Malta64 soft `975/975`, Malta hard
+    `13565/13580`, Malta soft `973/969`, MaltaEL hard `13631/13800`, and
+    MaltaEL soft `929/949` KFLOPS.  The separate Malta aggregate reported GCC
+    `31662/31777`, PCC `13807/13822`, and `LINPACK_RC:0`; Phase 4 therefore
+    improves a spill-heavy case but does not close the broader GCC gap.
+  - `make -C sys/mips/n64 pcc-debug-image` produced the unbooted hardware ROM
+    `builds/20260710-phase4-spill-cost/pcc-debug.z64`, SHA-256
+    `bbd782c7f581c1e8af05df886e92c36f497792c5b1105fc8c9efca9c076a6457`.
+    The tested allocator source is commit `c20bf9e6`.
+    Real N64 boot/smoke and physical `-mfix4300` validation remain required.
+    The four earlier `builds/20260710-hard-float` sets were hash-checked and
+    remain byte-for-byte unchanged.  Logs are `/private/tmp/pcc-phase4-*`.
 
 ## Phase 1: Host PCC Configuration
 
