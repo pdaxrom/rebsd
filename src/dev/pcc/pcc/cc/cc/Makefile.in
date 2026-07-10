@@ -50,7 +50,7 @@ DRIVERS=pcc pcpp p++
 
 all: $(DEST)
 
-OBJS=	cc.o compat.o strlist.o xalloc.o
+OBJS=	cc.o compat.o strlist.o target.o xalloc.o
 
 cc.o:	$(srcdir)/cc.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(srcdir)/cc.c
@@ -60,6 +60,9 @@ compat.o: $(COMMONDIR)/compat.c
 
 strlist.o: $(top_srcdir)/cc/driver/strlist.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(top_srcdir)/cc/driver/strlist.c
+
+target.o: $(MDIR)/target.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MDIR)/target.c
 
 xalloc.o: $(top_srcdir)/cc/driver/xalloc.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(top_srcdir)/cc/driver/xalloc.c

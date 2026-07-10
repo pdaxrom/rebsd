@@ -29,9 +29,9 @@
 }
 
 #define TARGET_GLOBALS \
-	int mips_cpu = MIPS_CPU_DEFAULT; \
-	int mips_fix4300 = MIPS_FIX4300_DEFAULT; \
-	int mips_fix4300_explicit;
+	struct mips_target mips_target = MIPS_TARGET_INITIALIZER; \
+	int mips_fix4300_explicit; \
+	int mips_tune_explicit;
 
 #ifdef TARGET_BIG_ENDIAN
 #define PCC_REBSD_CHECK_BIG_ENDIAN() ((void)0)
@@ -50,24 +50,81 @@
  */
 #define PCC_DISABLE_AUTO_XINLINE
 
+#define PCC_REBSD_DEFAULT_FIX4300() \
+	if (!mips_fix4300_explicit) \
+		mips_target.fix_vr4300 = (mips_target.capabilities & \
+		    MIPS_CAP_VR4300_FMUL_ERRATUM) != 0
+
+#define PCC_REBSD_SELECT_ISA(isa, tune) { \
+	mips_target_set_isa(&mips_target, (isa)); \
+	if (!mips_tune_explicit) \
+		mips_target_set_tune(&mips_target, (tune)); \
+	PCC_REBSD_DEFAULT_FIX4300(); \
+}
+
+#define PCC_REBSD_SELECT_TUNE(tune) { \
+	mips_target_set_tune(&mips_target, (tune)); \
+	mips_tune_explicit = 1; \
+	PCC_REBSD_DEFAULT_FIX4300(); \
+}
+
 #define PCC_HANDLE_MFLAG { \
 	if (match(argp, "-march=vr4300") || match(argp, "-mips3")) { \
-		mips_cpu = MIPS_CPU_VR4300; \
-		if (!mips_fix4300_explicit) \
-			mips_fix4300 = 1; \
+		PCC_REBSD_SELECT_ISA(MIPS_ISA_III, MIPS_TUNE_VR4300); \
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \
-	if (match(argp, "-march=mips32r2") || match(argp, "-mips32r2") || \
-	    match(argp, "-march=mips32")) { \
-		mips_cpu = MIPS_CPU_MIPS32R2; \
-		if (!mips_fix4300_explicit) \
-			mips_fix4300 = 0; \
+	if (match(argp, "-march=mips3")) { \
+		PCC_REBSD_SELECT_ISA(MIPS_ISA_III, MIPS_TUNE_GENERIC); \
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \
+	if (match(argp, "-march=mips32r2") || match(argp, "-mips32r2")) { \
+		PCC_REBSD_SELECT_ISA(MIPS_ISA_MIPS32R2, MIPS_TUNE_GENERIC); \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-march=mips32")) \
+		errorx(8, "-march=mips32 is unsupported; use -march=mips32r2"); \
+	if (match(argp, "-mtune=generic")) { \
+		PCC_REBSD_SELECT_TUNE(MIPS_TUNE_GENERIC); \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-mtune=vr4300")) { \
+		PCC_REBSD_SELECT_TUNE(MIPS_TUNE_VR4300); \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-mtune=r4000")) { \
+		PCC_REBSD_SELECT_TUNE(MIPS_TUNE_R4000); \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-mtune=24kc")) { \
+		PCC_REBSD_SELECT_TUNE(MIPS_TUNE_24KC); \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-mtune=34kc")) { \
+		PCC_REBSD_SELECT_TUNE(MIPS_TUNE_34KC); \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-mtune=74kc")) { \
+		PCC_REBSD_SELECT_TUNE(MIPS_TUNE_74KC); \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (match(argp, "-mtune=jz4780")) { \
+		PCC_REBSD_SELECT_TUNE(MIPS_TUNE_JZ4780); \
+		strlist_append(&compiler_flags, argp); \
+		break; \
+	} \
+	if (strncmp(argp, "-mtune=", 7) == 0) \
+		errorx(8, "unsupported MIPS tuning '%s'", argp + 7); \
 	if (match(argp, "-mfix4300") || match(argp, "-mno-fix4300")) { \
-		mips_fix4300 = match(argp, "-mfix4300"); \
+		mips_target.fix_vr4300 = match(argp, "-mfix4300"); \
 		mips_fix4300_explicit = 1; \
 		strlist_append(&compiler_flags, argp); \
 		break; \
@@ -75,19 +132,26 @@
 	if (match(argp, "-mbig-endian")) { \
 		PCC_REBSD_CHECK_BIG_ENDIAN(); \
 		bigendian = 1; \
+		mips_target.little_endian = 0; \
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \
 	if (match(argp, "-mlittle-endian")) { \
 		PCC_REBSD_CHECK_LITTLE_ENDIAN(); \
 		bigendian = 0; \
+		mips_target.little_endian = 1; \
 		strlist_append(&compiler_flags, argp); \
 		break; \
 	} \
 }
 
 #define PCC_SETUP_CPP_ARGS { \
-	if (mips_cpu == MIPS_CPU_MIPS32R2) { \
+	const char *mips_error = mips_target_error(&mips_target); \
+	if (mips_error != NULL) \
+		errorx(8, "%s", mips_error); \
+	mips_target.little_endian = !bigendian; \
+	mips_target.hard_float = !softfloat; \
+	if (mips_target.isa == MIPS_ISA_MIPS32R2) { \
 		strlist_prepend(&preprocessor_flags, "-D__mips=32"); \
 		strlist_prepend(&preprocessor_flags, "-D__mips_isa_rev=2"); \
 		strlist_prepend(&preprocessor_flags, "-D__mips32"); \
@@ -95,7 +159,8 @@
 	} else { \
 		strlist_prepend(&preprocessor_flags, "-D__mips=3"); \
 		strlist_prepend(&preprocessor_flags, "-D__mips3"); \
-		strlist_prepend(&preprocessor_flags, "-D__vr4300__"); \
+		if (mips_target.tune == MIPS_TUNE_VR4300) \
+			strlist_prepend(&preprocessor_flags, "-D__vr4300__"); \
 	} \
 	if (softfloat) { \
 		strlist_prepend(&preprocessor_flags, "-D__mips_soft_float"); \
@@ -134,7 +199,8 @@
 	strlist_append(&assembler_flags, PCC_REBSD_EXEC_FORMAT); \
 	strlist_append(&assembler_flags, bigendian ? "-EB" : "-EL"); \
 	strlist_append(&assembler_flags, \
-	    mips_cpu == MIPS_CPU_MIPS32R2 ? "-march=mips32r2" : "-march=vr4300"); \
+	    mips_target.isa == MIPS_ISA_MIPS32R2 ? \
+	    "-march=mips32r2" : "-march=vr4300"); \
 }
 
 #define PCC_SETUP_LD_ARGS { \

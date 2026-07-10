@@ -39,12 +39,85 @@
 #define USE_GAS
 #endif
 
+#define MIPS_CPU_VR4300		1
+#define MIPS_CPU_MIPS32R2	2
+
+enum mips_isa {
+	MIPS_ISA_I,
+	MIPS_ISA_II,
+	MIPS_ISA_III,
+	MIPS_ISA_MIPS32R1,
+	MIPS_ISA_MIPS32R2
+};
+
+enum mips_tune {
+	MIPS_TUNE_GENERIC,
+	MIPS_TUNE_VR4300,
+	MIPS_TUNE_R4000,
+	MIPS_TUNE_24KC,
+	MIPS_TUNE_34KC,
+	MIPS_TUNE_74KC,
+	MIPS_TUNE_JZ4780
+};
+
+#define MIPS_CAP_MUL3			0x00000001U
+#define MIPS_CAP_ROTR			0x00000002U
+#define MIPS_CAP_CLZ			0x00000004U
+#define MIPS_CAP_SEB_SEH		0x00000008U
+#define MIPS_CAP_WSBH			0x00000010U
+#define MIPS_CAP_EXT_INS		0x00000020U
+#define MIPS_CAP_MOVN_MOVZ		0x00000040U
+#define MIPS_CAP_64BIT_GPR		0x00000080U
+#define MIPS_CAP_HILO			0x00000100U
+#define MIPS_CAP_INT_LOAD_INTERLOCK	0x00000200U
+#define MIPS_CAP_FP_LOAD_INTERLOCK	0x00000400U
+#define MIPS_CAP_BRANCH_DELAY		0x00000800U
+#define MIPS_CAP_VR4300_FMUL_ERRATUM	0x00001000U
+
+#define MIPS_CAPS_BASE	(MIPS_CAP_HILO | MIPS_CAP_BRANCH_DELAY)
+#define MIPS_CAPS_MIPS3	(MIPS_CAPS_BASE | MIPS_CAP_64BIT_GPR)
+#define MIPS_CAPS_MIPS32R2	(MIPS_CAPS_BASE | MIPS_CAP_MUL3 | \
+	MIPS_CAP_ROTR | MIPS_CAP_CLZ | MIPS_CAP_SEB_SEH | MIPS_CAP_WSBH | \
+	MIPS_CAP_EXT_INS | MIPS_CAP_MOVN_MOVZ | \
+	MIPS_CAP_INT_LOAD_INTERLOCK | MIPS_CAP_FP_LOAD_INTERLOCK)
+
+struct mips_costs {
+	unsigned int_mult;
+	unsigned int_div;
+	unsigned int64_mult;
+	unsigned int64_div;
+	unsigned fp_add;
+	unsigned fp_mul_s;
+	unsigned fp_mul_d;
+	unsigned fp_div_s;
+	unsigned fp_div_d;
+	unsigned int_load_use;
+	unsigned fp_load_use;
+	unsigned branch_delay;
+};
+
+/* Generic entries are relative costs; VR4300 entries are documented cycles. */
+#define MIPS_COSTS_GENERIC_MIPS3 \
+	{ 10, 40, 20, 72, 4, 8, 12, 36, 68, 1, 1, 1 }
+#define MIPS_COSTS_VR4300 \
+	{ 5, 37, 8, 69, 3, 5, 8, 29, 58, 1, 1, 1 }
+#define MIPS_COSTS_GENERIC_MIPS32R2 \
+	{ 5, 35, 8, 70, 4, 5, 8, 20, 35, 1, 1, 1 }
+
+struct mips_target {
+	enum mips_isa isa;
+	enum mips_tune tune;
+	unsigned capabilities;
+	struct mips_costs costs;
+	int little_endian;
+	int hard_float;
+	int fix_vr4300;
+};
+
 #if defined(os_rebsd)
 #define MIPS_HARDFLOAT_O32_ABI 1
 #define TARGET_NO_ABICALLS
 #define TARGET_NO_REORDER
-#define MIPS_CPU_VR4300		1
-#define MIPS_CPU_MIPS32R2	2
 #ifndef MIPS_CPU_DEFAULT
 #define MIPS_CPU_DEFAULT	MIPS_CPU_VR4300
 #endif
@@ -54,11 +127,50 @@
 #ifndef MIPS_FIX4300_DEFAULT
 #define MIPS_FIX4300_DEFAULT	(MIPS_CPU_DEFAULT == MIPS_CPU_VR4300)
 #endif
-#define MIPS_DATA_ALIGN64	(mips_cpu == MIPS_CPU_MIPS32R2 ? 32 : 64)
+#endif
+#ifndef MIPS_SOFT_FLOAT_DEFAULT
+#define MIPS_SOFT_FLOAT_DEFAULT	0
+#endif
+#ifndef MIPS_FIX4300_DEFAULT
+#define MIPS_FIX4300_DEFAULT	0
+#endif
+
+#if defined(MIPS_CPU_DEFAULT) && MIPS_CPU_DEFAULT == MIPS_CPU_MIPS32R2
+#define MIPS_DEFAULT_ISA	MIPS_ISA_MIPS32R2
+#define MIPS_DEFAULT_TUNE	MIPS_TUNE_GENERIC
+#define MIPS_DEFAULT_CAPS	MIPS_CAPS_MIPS32R2
+#define MIPS_DEFAULT_COSTS	MIPS_COSTS_GENERIC_MIPS32R2
+#elif defined(MIPS_CPU_DEFAULT)
+#define MIPS_DEFAULT_ISA	MIPS_ISA_III
+#define MIPS_DEFAULT_TUNE	MIPS_TUNE_VR4300
+#define MIPS_DEFAULT_CAPS	(MIPS_CAPS_MIPS3 | \
+	MIPS_CAP_INT_LOAD_INTERLOCK | MIPS_CAP_FP_LOAD_INTERLOCK | \
+	MIPS_CAP_VR4300_FMUL_ERRATUM)
+#define MIPS_DEFAULT_COSTS	MIPS_COSTS_VR4300
+#else
+#define MIPS_DEFAULT_ISA	MIPS_ISA_I
+#define MIPS_DEFAULT_TUNE	MIPS_TUNE_GENERIC
+#define MIPS_DEFAULT_CAPS	MIPS_CAPS_BASE
+#define MIPS_DEFAULT_COSTS	MIPS_COSTS_GENERIC_MIPS3
+#endif
+
+#ifdef TARGET_BIG_ENDIAN
+#define MIPS_DEFAULT_LITTLE_ENDIAN	0
+#else
+#define MIPS_DEFAULT_LITTLE_ENDIAN	1
+#endif
+
+#define MIPS_TARGET_INITIALIZER { MIPS_DEFAULT_ISA, MIPS_DEFAULT_TUNE, \
+	MIPS_DEFAULT_CAPS, MIPS_DEFAULT_COSTS, MIPS_DEFAULT_LITTLE_ENDIAN, \
+	!MIPS_SOFT_FLOAT_DEFAULT, MIPS_FIX4300_DEFAULT }
+
+#if defined(os_rebsd)
+#define MIPS_DATA_ALIGN64	(mips_target.isa == MIPS_ISA_MIPS32R2 ? 32 : 64)
 /* ReBSD mips32r2 keeps integer pairs packed, but o32 FP64 uses even slots. */
 #define MIPS_INT64_ARG_ALIGN	MIPS_DATA_ALIGN64
 #define MIPS_FP64_ARG_ALIGN	64
-#define MIPS_FIX4300_ACTIVE	(mips_cpu == MIPS_CPU_VR4300 && mips_fix4300)
+#define MIPS_FIX4300_ACTIVE	((mips_target.capabilities & \
+	MIPS_CAP_VR4300_FMUL_ERRATUM) != 0 && mips_target.fix_vr4300)
 #endif
 #ifndef MIPS_DATA_ALIGN64
 #define MIPS_DATA_ALIGN64	64
@@ -389,10 +501,13 @@ int COLORMAP(int c, int *r);
 int features(int f);
 
 extern int bigendian;
-extern int mips_cpu;
-extern int mips_fix4300;
+extern struct mips_target mips_target;
 extern int mips_soft_float;
 extern int nargregs;
+
+void mips_target_set_isa(struct mips_target *, enum mips_isa);
+void mips_target_set_tune(struct mips_target *, enum mips_tune);
+const char *mips_target_error(const struct mips_target *);
 
 #define FEATURE_HARDFLOAT	0x00010000
 #define FEATURE_SOFTFLOAT	0x00020000

@@ -32,11 +32,7 @@
 #include "pass1.h"
 
 #ifdef PASS1
-#ifdef MIPS_CPU_DEFAULT
-int mips_cpu = MIPS_CPU_DEFAULT;
-#else
-int mips_cpu = 0;
-#endif
+struct mips_target mips_target = MIPS_TARGET_INITIALIZER;
 int mips_soft_float = MIPS_SOFT_FLOAT_DEFAULT;
 #endif
 

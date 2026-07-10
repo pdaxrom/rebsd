@@ -45,17 +45,9 @@ int bigendian = 1;
 int bigendian = 0;
 #endif
 
-#ifdef MIPS_CPU_DEFAULT
-int mips_cpu = MIPS_CPU_DEFAULT;
-#else
-int mips_cpu = 0;
-#endif
-#ifdef MIPS_FIX4300_DEFAULT
-int mips_fix4300 = MIPS_FIX4300_DEFAULT;
-#else
-int mips_fix4300 = 0;
-#endif
+struct mips_target mips_target = MIPS_TARGET_INITIALIZER;
 static int mips_fix4300_explicit;
+static int mips_tune_explicit;
 int mips_soft_float = MIPS_SOFT_FLOAT_DEFAULT;
 int nargregs = MIPS_O32_NARGREGS;
 
@@ -1858,6 +1850,14 @@ cbgen(int o, int lab)
 void
 myreader(struct interpass * ipole)
 {
+	const char *error;
+
+	(void)ipole;
+	error = mips_target_error(&mips_target);
+	if (error != NULL) {
+		fprintf(stderr, "%s\n", error);
+		exit(1);
+	}
 }
 
 void
@@ -2513,6 +2513,27 @@ special(NODE *p, int shape)
 /*
  * Target-dependent command-line options.
  */
+static void
+mips_select_isa(enum mips_isa isa, enum mips_tune default_tune)
+{
+	mips_target_set_isa(&mips_target, isa);
+	if (!mips_tune_explicit)
+		mips_target_set_tune(&mips_target, default_tune);
+	if (!mips_fix4300_explicit)
+		mips_target.fix_vr4300 = (mips_target.capabilities &
+		    MIPS_CAP_VR4300_FMUL_ERRATUM) != 0;
+}
+
+static void
+mips_select_tune(enum mips_tune tune)
+{
+	mips_target_set_tune(&mips_target, tune);
+	mips_tune_explicit = 1;
+	if (!mips_fix4300_explicit)
+		mips_target.fix_vr4300 = (mips_target.capabilities &
+		    MIPS_CAP_VR4300_FMUL_ERRATUM) != 0;
+}
+
 void
 mflags(char *str)
 {
@@ -2522,6 +2543,7 @@ mflags(char *str)
 		exit(1);
 #endif
 		bigendian = 1;
+		mips_target.little_endian = 0;
 	} else if (strcasecmp(str, "little-endian") == 0) {
 #if defined(os_rebsd) && defined(TARGET_BIG_ENDIAN)
 		fprintf(stderr,
@@ -2529,29 +2551,50 @@ mflags(char *str)
 		exit(1);
 #endif
 		bigendian = 0;
+		mips_target.little_endian = 1;
 #ifdef MIPS_CPU_DEFAULT
 	} else if (strcasecmp(str, "arch=vr4300") == 0 ||
 	    strcasecmp(str, "ips3") == 0) {
-		mips_cpu = MIPS_CPU_VR4300;
-		if (!mips_fix4300_explicit)
-			mips_fix4300 = 1;
+		mips_select_isa(MIPS_ISA_III, MIPS_TUNE_VR4300);
+	} else if (strcasecmp(str, "arch=mips3") == 0) {
+		mips_select_isa(MIPS_ISA_III, MIPS_TUNE_GENERIC);
 	} else if (strcasecmp(str, "arch=mips32r2") == 0 ||
-	    strcasecmp(str, "ips32r2") == 0 ||
-	    strcasecmp(str, "arch=mips32") == 0) {
-		mips_cpu = MIPS_CPU_MIPS32R2;
-		if (!mips_fix4300_explicit)
-			mips_fix4300 = 0;
+	    strcasecmp(str, "ips32r2") == 0) {
+		mips_select_isa(MIPS_ISA_MIPS32R2, MIPS_TUNE_GENERIC);
+	} else if (strcasecmp(str, "arch=mips32") == 0) {
+		fprintf(stderr,
+		    "-march=mips32 is unsupported; use -march=mips32r2\n");
+		exit(1);
+	} else if (strcasecmp(str, "tune=generic") == 0) {
+		mips_select_tune(MIPS_TUNE_GENERIC);
+	} else if (strcasecmp(str, "tune=vr4300") == 0) {
+		mips_select_tune(MIPS_TUNE_VR4300);
+	} else if (strcasecmp(str, "tune=r4000") == 0) {
+		mips_select_tune(MIPS_TUNE_R4000);
+	} else if (strcasecmp(str, "tune=24kc") == 0) {
+		mips_select_tune(MIPS_TUNE_24KC);
+	} else if (strcasecmp(str, "tune=34kc") == 0) {
+		mips_select_tune(MIPS_TUNE_34KC);
+	} else if (strcasecmp(str, "tune=74kc") == 0) {
+		mips_select_tune(MIPS_TUNE_74KC);
+	} else if (strcasecmp(str, "tune=jz4780") == 0) {
+		mips_select_tune(MIPS_TUNE_JZ4780);
+	} else if (strncasecmp(str, "tune=", 5) == 0) {
+		fprintf(stderr, "unsupported MIPS tuning '%s'\n", str + 5);
+		exit(1);
 	} else if (strcasecmp(str, "fix4300") == 0) {
-		mips_fix4300 = 1;
+		mips_target.fix_vr4300 = 1;
 		mips_fix4300_explicit = 1;
 	} else if (strcasecmp(str, "no-fix4300") == 0) {
-		mips_fix4300 = 0;
+		mips_target.fix_vr4300 = 0;
 		mips_fix4300_explicit = 1;
 #endif
 	} else if (strcasecmp(str, "hard-float") == 0) {
 		mips_soft_float = 0;
+		mips_target.hard_float = 1;
 	} else if (strcasecmp(str, "soft-float") == 0) {
 		mips_soft_float = 1;
+		mips_target.hard_float = 0;
 	} else {
 		fprintf(stderr, "unknown m option '%s'\n", str);
 		exit(1);
@@ -2583,9 +2626,10 @@ features(int mask)
 		return 0;
 	if ((mask & FEATURE_SOFTFLOAT) && !mips_soft_float)
 		return 0;
-	if ((mask & FEATURE_MIPS32R2) && mips_cpu != MIPS_CPU_MIPS32R2)
+	if ((mask & FEATURE_MIPS32R2) &&
+	    (mips_target.capabilities & MIPS_CAP_MUL3) == 0)
 		return 0;
-	if ((mask & FEATURE_VR4300) && mips_cpu != MIPS_CPU_VR4300)
+	if ((mask & FEATURE_VR4300) && mips_target.tune != MIPS_TUNE_VR4300)
 		return 0;
 	if ((mask & FEATURE_FIX4300) && !MIPS_FIX4300_ACTIVE)
 		return 0;

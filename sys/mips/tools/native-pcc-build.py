@@ -382,6 +382,7 @@ class Builder:
             ("cc", srcdir / "cc.c"),
             ("compat", self.src / "common/compat.c"),
             ("strlist", self.src / "cc/driver/strlist.c"),
+            ("target", self.src / "arch/mips/target.c"),
             ("xalloc", self.src / "cc/driver/xalloc.c"),
         ]
         objects = [
@@ -422,6 +423,7 @@ class Builder:
             ("stabs", srcdir / "stabs.c"),
             ("symtabs", srcdir / "symtabs.c"),
             ("table", self.src / "arch/mips/table.c"),
+            ("target", self.src / "arch/mips/target.c"),
             ("trees", srcdir / "trees.c"),
             ("unicode", self.src / "common/unicode.c"),
         ]
@@ -460,6 +462,7 @@ class Builder:
             ("stabs", srcdir / "stabs.c"),
             ("symtabs", srcdir / "symtabs.c"),
             ("table", self.src / "arch/mips/table.c"),
+            ("target", self.src / "arch/mips/target.c"),
             ("trees", srcdir / "trees.c"),
         ]
         objects = [

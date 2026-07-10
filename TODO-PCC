@@ -427,6 +427,39 @@ not active items for the current C/static-a.out PCC milestone.
     `-msoft-float`.  Linpack ranges were about `13662-13780`, `994-995`,
     `13545-13635`, `1008-1019`, `13649-13943`, and `1041-1046` KFLOPS,
     respectively.  Logs are `/private/tmp/pcc-phase1-<board>-<float>-smoke.log`.
+- [x] Separate MIPS instruction legality from CPU tuning and costs.
+  - `struct mips_target` now carries independent ISA, tuning, capability,
+    cost, endian, float-ABI, and VR4300-fix state.  ISA profiles cover MIPS I,
+    II, III, MIPS32r1, and MIPS32r2; tuning profiles cover generic, VR4300,
+    R4000, 24Kc, 34Kc, 74Kc, and JZ4780.
+  - Capability bits describe three-operand multiply, rotate, count-leading-zero,
+    byte/halfword operations, bitfield operations, conditional moves, 64-bit
+    GPRs, HI/LO, integer and FP load interlocks, branch delay slots, and the
+    VR4300 FP-multiply erratum.  Existing codegen decisions now use the
+    equivalent ISA/tune predicates, so this refactor does not intentionally
+    change assembly.
+  - `-march=vr4300` remains shorthand for MIPS III plus VR4300 tuning;
+    `-mips3`, `-march=mips32r2`, and `-mips32r2` remain compatible.
+    `-march=mips3` selects generic MIPS III tuning, and `-mtune=` accepts the
+    tuning profiles above.  Unsupported MIPS32r1 (`-march=mips32`) is rejected
+    instead of silently enabling r2 instructions.
+  - `-mfix4300` is effective only when the selected ISA/tuning combination has
+    the VR4300 erratum capability.  Compile-only host smokes verify r2 `mul`,
+    VR4300 `mult/mflo`, endian and float macros, compatibility aliases,
+    incompatible tuning diagnostics, and fix/no-fix assembly.
+  - The initial cost table has generic MIPS III, exact VR4300, and generic
+    MIPS32r2 entries.  VR4300 integer multiply/divide and FPU costs come from
+    `docs/VR4300-Users-Manual.pdf`, tables 3-12 and 7-14.  Costs are not yet
+    connected to instruction selection, preserving output in this phase.
+  - Pre/post-refactor Linpack assembly compared byte-identical for VR4300 and
+    MIPS32r2.  Cross compile regression passed `318/321` plus the three expected
+    failures and produced `281` runtime candidates with no unexpected compile
+    failures.
+  - The clean six-profile QEMU matrix passed `PCC_SMOKE_ALL_FAILURES 0` and
+    `PCC_SMOKE_ALL_RC:0`.  Linpack ranges were approximately `13589-13613`,
+    `992-1005`, `13411-13550`, `1044-1072`, `13639-13794`, and `1040-1049`
+    KFLOPS for Malta64 hard/soft, Malta hard/soft, and MaltaEL hard/soft.
+    Logs are `/private/tmp/pcc-phase2-<board>-<float>-smoke.log`.
 
 ## Phase 1: Host PCC Configuration
 

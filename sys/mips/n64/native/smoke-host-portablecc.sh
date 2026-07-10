@@ -134,7 +134,7 @@ ln -sf "$target-pcc" "$target_bindir/$target-cc"
 ln -sf "$target-pcpp" "$target_bindir/cpp"
 
 tmp=${TMPDIR:-/tmp}/rebsd-host-portablecc.$$
-trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros"' 0 1 2 3 15
+trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err"' 0 1 2 3 15
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>
@@ -181,12 +181,99 @@ EOF
 
 "$pcc" -march=vr4300 -DEXPECT_SIZE=16 -c -o "$tmp.o" "$tmp.c"
 "$pcc" -march=mips32r2 -DEXPECT_SIZE=12 -c -o "$tmp.o" "$tmp.c"
+
+cat > "$tmp.c" <<'EOF'
+int
+mul_probe(int a, int b)
+{
+	return a * b;
+}
+EOF
+
+"$pcc" -march=vr4300 -S -o "$tmp.s" "$tmp.c"
+if grep '^[[:space:]]*mul[[:space:]]' "$tmp.s" >/dev/null; then
+	echo "VR4300 emitted MIPS32r2 mul" >&2
+	exit 1
+fi
+grep '^[[:space:]]*mult[[:space:]]' "$tmp.s" >/dev/null
+"$pcc" -mips3 -S -o "$tmp.s" "$tmp.c"
+grep '^[[:space:]]*mult[[:space:]]' "$tmp.s" >/dev/null
+"$pcc" -march=mips32r2 -S -o "$tmp.s" "$tmp.c"
+grep '^[[:space:]]*mul[[:space:]]' "$tmp.s" >/dev/null
+"$pcc" -mips32r2 -S -o "$tmp.s" "$tmp.c"
+grep '^[[:space:]]*mul[[:space:]]' "$tmp.s" >/dev/null
+
+if "$pcc" -march=mips32 -S -o "$tmp.s" "$tmp.c" >"$tmp.err" 2>&1; then
+	echo "unsupported MIPS32r1 profile was accepted" >&2
+	exit 1
+fi
+grep 'march=mips32 is unsupported' "$tmp.err" >/dev/null
+if "$pcc" -march=mips32r2 -mtune=vr4300 -S -o "$tmp.s" "$tmp.c" \
+    >"$tmp.err" 2>&1; then
+	echo "incompatible MIPS32r2/VR4300 tuning was accepted" >&2
+	exit 1
+fi
+grep 'MIPS III tuning requires -march=mips3' "$tmp.err" >/dev/null
+
+for tune in generic r4000; do
+	"$pcc" -march=mips3 -mtune="$tune" -S -o "$tmp.s" "$tmp.c"
+done
+for tune in generic 24kc 34kc 74kc jz4780; do
+	"$pcc" -march=mips32r2 -mtune="$tune" -S -o "$tmp.s" "$tmp.c"
+done
+
+cat > "$tmp.c" <<'EOF'
+void
+erratum_probe(void)
+{
+	asm("mul.s $f0,$f2,$f4\n\tmult $t0,$t1");
+}
+EOF
+
+"$pcc" -march=mips3 -mtune=vr4300 -mfix4300 \
+    -S -o "$tmp.s" "$tmp.c"
+grep 'VR4300 fp multiply erratum' "$tmp.s" >/dev/null
+"$pcc" -march=mips3 -mtune=vr4300 -mno-fix4300 \
+    -S -o "$tmp.s" "$tmp.c"
+if grep 'VR4300 fp multiply erratum' "$tmp.s" >/dev/null; then
+	echo "-mno-fix4300 still inserted the erratum nop" >&2
+	exit 1
+fi
+"$pcc" -march=mips3 -mtune=r4000 -mfix4300 \
+    -S -o "$tmp.s" "$tmp.c"
+if grep 'VR4300 fp multiply erratum' "$tmp.s" >/dev/null; then
+	echo "R4000 tuning received the VR4300 erratum nop" >&2
+	exit 1
+fi
+"$pcc" -march=mips32r2 -mfix4300 -S -o "$tmp.s" "$tmp.c"
+if grep 'VR4300 fp multiply erratum' "$tmp.s" >/dev/null; then
+	echo "MIPS32r2 received the VR4300 erratum nop" >&2
+	exit 1
+fi
+
 "$pcc" -march=mips32r2 -E -dM "$tmp.c" > "$tmp.macros"
 grep '^#define __mips 32$' "$tmp.macros" >/dev/null
 grep '^#define __mips32r2' "$tmp.macros" >/dev/null
 "$pcc" -march=vr4300 -E -dM "$tmp.c" > "$tmp.macros"
 grep '^#define __mips 3$' "$tmp.macros" >/dev/null
 grep '^#define __vr4300__' "$tmp.macros" >/dev/null
+"$pcc" -march=mips3 -mtune=r4000 -E -dM "$tmp.c" > "$tmp.macros"
+if grep '^#define __vr4300__' "$tmp.macros" >/dev/null; then
+	echo "R4000 tuning defined __vr4300__" >&2
+	exit 1
+fi
+"$pcc" -mhard-float -E -dM "$tmp.c" > "$tmp.macros"
+grep '^#define __mips_hard_float' "$tmp.macros" >/dev/null
+if grep '^#define __mips_soft_float' "$tmp.macros" >/dev/null; then
+	echo "hard-float preprocessing defined soft-float" >&2
+	exit 1
+fi
+"$pcc" -msoft-float -E -dM "$tmp.c" > "$tmp.macros"
+grep '^#define __mips_soft_float' "$tmp.macros" >/dev/null
+if grep '^#define __mips_hard_float' "$tmp.macros" >/dev/null; then
+	echo "soft-float preprocessing defined hard-float" >&2
+	exit 1
+fi
 "$pcc" -E -dM "$tmp.c" > "$tmp.macros"
 if [ "$float_abi" = soft ]; then
 	grep '^#define __mips_soft_float' "$tmp.macros" >/dev/null
@@ -196,8 +283,12 @@ fi
 if [ "$endian" = big ]; then
 	grep '^#define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__$' "$tmp.macros" >/dev/null
 	grep '^#define __MIPSEB__' "$tmp.macros" >/dev/null
+	"$pcc" -mbig-endian -E -dM "$tmp.c" > "$tmp.macros"
+	grep '^#define __MIPSEB__' "$tmp.macros" >/dev/null
 else
 	grep '^#define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__$' "$tmp.macros" >/dev/null
+	grep '^#define __MIPSEL__' "$tmp.macros" >/dev/null
+	"$pcc" -mlittle-endian -E -dM "$tmp.c" > "$tmp.macros"
 	grep '^#define __MIPSEL__' "$tmp.macros" >/dev/null
 fi
 

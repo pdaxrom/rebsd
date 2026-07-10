@@ -89,6 +89,37 @@ SDK/rootfs flows.  The checked-in `maltael` default remains
 `MIPS_ROOTFS_COMPILER=gcc`, while the opt-in PCC kernel/rootfs hard-float and
 soft-float gates are validated on QEMU.
 
+## MIPS ISA And Tuning
+
+PCC models instruction legality separately from scheduling and cost choices.
+`-march` selects the ISA; `-mtune` selects the processor model.  The supported
+ReBSD combinations are:
+
+- `-march=vr4300`: compatibility shorthand for MIPS III plus VR4300 tuning.
+- `-mips3`: compatibility alias with the same VR4300 behavior.
+- `-march=mips3`: MIPS III legality with generic tuning unless `-mtune` is set.
+- `-march=mips32r2` or `-mips32r2`: MIPS32r2 legality with generic r2 tuning
+  unless `-mtune` is set.
+- `-mtune=generic|vr4300|r4000|24kc|34kc|74kc|jz4780`.
+
+PCC does not currently implement a MIPS32 Release 1 profile.  It rejects
+`-march=mips32` with a diagnostic instead of treating it as MIPS32r2.  VR4300
+and R4000 tuning require MIPS III; the 24Kc, 34Kc, 74Kc, and JZ4780 profiles
+require MIPS32r2.
+
+The target model records capability bits for legal instructions, 64-bit GPRs,
+HI/LO, load interlocks, branch delay slots, and the VR4300 FP-multiply erratum.
+Consequently, `-mfix4300` only inserts the workaround for MIPS III with VR4300
+tuning; `-mno-fix4300` disables it.  QEMU is not expected to reproduce the
+hardware fault, so the host smoke checks emitted assembly directly.
+
+The initial cost table contains generic MIPS III, VR4300, and generic MIPS32r2
+profiles.  VR4300 normal-path values use NEC manual U10504EJ7V0UM00 tables
+3-12 and 7-14: integer MULT/DIV/DMULT/DDIV costs `5/37/8/69`, FP multiply
+single/double `5/8`, and FP divide single/double `29/58`.  The generic entries
+are relative costs because actual implementations vary.  This table is not yet
+used to alter code generation.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus

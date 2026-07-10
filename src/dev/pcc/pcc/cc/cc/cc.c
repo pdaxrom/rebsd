@@ -2403,7 +2403,8 @@ mips_can_trim_mfhilo_post_nops(const char *mf, const char *next1,
 {
 	int reg;
 
-	if (mips_cpu != MIPS_CPU_VR4300 && mips_cpu != MIPS_CPU_MIPS32R2)
+	if (mips_target.tune != MIPS_TUNE_VR4300 &&
+	    mips_target.isa != MIPS_ISA_MIPS32R2)
 		return 0;
 	if (!mips_parse_mfhilo_dest(mf, &reg) ||
 	    !mips_is_instruction(next1) ||
@@ -2470,7 +2471,7 @@ mips_can_trim_mtc1_cvt_nop(const char *mtc1, const char *cvt)
 {
 	int mtc1_gpr, mtc1_fpr, cvt_dst, cvt_src;
 
-	if (mips_cpu != MIPS_CPU_MIPS32R2)
+	if (mips_target.isa != MIPS_ISA_MIPS32R2)
 		return 0;
 	if (!mips_parse_mtc1_regs(mtc1, &mtc1_gpr, &mtc1_fpr) ||
 	    !mips_parse_cvt_w_regs(cvt, &cvt_dst, &cvt_src, NULL))
@@ -2864,7 +2865,8 @@ mips_is_frame_load_for_jr_delay(const char *line)
 	const char *s;
 	int dstreg, basereg;
 
-	if (mips_cpu != MIPS_CPU_MIPS32R2 && mips_cpu != MIPS_CPU_VR4300)
+	if (mips_target.isa != MIPS_ISA_MIPS32R2 &&
+	    mips_target.tune != MIPS_TUNE_VR4300)
 		return 0;
 	if (!mips_parse_opcode(line, op, sizeof(op)) || strcmp(op, "lw") != 0)
 		return 0;
@@ -2887,9 +2889,9 @@ mips_can_move_to_plain_jump_delay(const char *line)
 	if (mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
 	    &dstreg, &srcreg) || mips_is_jump_delay_gpr_alu(line))
 		return 1;
-	if (mips_cpu == MIPS_CPU_VR4300)
+	if (mips_target.tune == MIPS_TUNE_VR4300)
 		return mips_is_jump_delay_store(line);
-	if (mips_cpu == MIPS_CPU_MIPS32R2)
+	if (mips_target.isa == MIPS_ISA_MIPS32R2)
 		return mips_is_jump_delay_store(line) ||
 		    mips_is_jump_delay_load(line);
 	return 0;
@@ -2974,13 +2976,13 @@ mips_can_trim_load_nop(FILE *in, const char *next,
 	if (!mips_is_load_gap_insn(next, dest))
 		return 0;
 	if (mips_line_touches_load(next, dest)) {
-		if (mips_cpu == MIPS_CPU_MIPS32R2)
+		if (mips_target.isa == MIPS_ISA_MIPS32R2)
 			return 1;
-		if (mips_cpu == MIPS_CPU_VR4300)
+		if (mips_target.tune == MIPS_TUNE_VR4300)
 			return 1;
 		return 0;
 	}
-	if (mips_cpu == MIPS_CPU_MIPS32R2)
+	if (mips_target.isa == MIPS_ISA_MIPS32R2)
 		return 1;
 	if (dest->kind == MIPS_LOAD_GPR)
 		return 1;
@@ -3002,7 +3004,7 @@ mips_can_trim_load_nop(FILE *in, const char *next,
 			return 0;
 		}
 		if (mips_line_touches_load(look, dest) &&
-		    (mips_cpu != MIPS_CPU_VR4300 ||
+		    (mips_target.tune != MIPS_TUNE_VR4300 ||
 		    !mips_has_delay_slot(next))) {
 			if (fseek(in, pos, SEEK_SET) == -1)
 				return 0;
@@ -3386,7 +3388,7 @@ mips_fold_late_peepholes(char *path)
 		if (!prev_control) {
 			pos = ftell(in);
 			if (pos != -1 && fgets(next, sizeof(next), in) != NULL) {
-				if (mips_cpu == MIPS_CPU_MIPS32R2 &&
+				if (mips_target.isa == MIPS_ISA_MIPS32R2 &&
 				    mips_is_fpu_compare(line) &&
 				    mips_is_nop(next)) {
 					if (fgets(after, sizeof(after), in) != NULL) {
@@ -3786,13 +3788,15 @@ mips_fold_late_peepholes(char *path)
 static int
 mips_postprocess_asm(char *path)
 {
-	if (mips_cpu == MIPS_CPU_VR4300 && mips_fill_shift_load_delay_nops(path))
+	if (mips_target.tune == MIPS_TUNE_VR4300 &&
+	    mips_fill_shift_load_delay_nops(path))
 		return 1;
 	if (mips_trim_load_delay_nops(path))
 		return 1;
 	if (mips_fold_late_peepholes(path))
 		return 1;
-	if (mips_cpu == MIPS_CPU_VR4300 && mips_trim_load_delay_nops(path))
+	if (mips_target.tune == MIPS_TUNE_VR4300 &&
+	    mips_trim_load_delay_nops(path))
 		return 1;
 	return mips_repair_vr4300_multiply_errata(path, 1);
 }
