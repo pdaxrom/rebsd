@@ -129,7 +129,7 @@ optimize(struct p2env *p2e)
 		printip(ipole);
 	}
 #endif
-	if (xssa || xtemps) {
+	if (xssa || xtemps || p2stats) {
 		bblocks_build(p2e);
 		BDEBUG(("Calling cfg_build\n"));
 		cfg_build(p2e);

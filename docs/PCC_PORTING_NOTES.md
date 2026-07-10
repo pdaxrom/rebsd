@@ -120,6 +120,35 @@ single/double `5/8`, and FP divide single/double `29/58`.  The generic entries
 are relative costs because actual implementations vary.  This table is not yet
 used to alter code generation.
 
+## Optimizer And Allocator Statistics
+
+PCC has an opt-in pass2 statistics stream for optimizer and allocator work:
+
+```sh
+pcc -O2 -fopt-stats -S -o output.s input.c 2>optstats.log
+```
+
+The internal PCC spelling is `-Zp`, available through the driver as
+`-Wc,-Zp`.  Statistics are disabled by default and are written only to
+standard error.  Each function produces one `PCC_OPTSTATS kind=function`
+key/value record, followed at compiler exit by a `kind=summary` record.  The
+field order and values are deterministic for the same compiler, source, and
+options, so reports can be compared directly or parsed without debug text.
+
+The report includes function and summary counts, basic blocks, CFG edges,
+natural-loop nesting, TEMP count and maximum live pressure, GPR/FPR pressure,
+interference edges, coalescing attempts/successes/rejections, spill candidates,
+actual selected TEMP spills, generated reloads/stores, rematerialized values,
+spill-area and complete target frame bytes, caller/callee-saved registers used,
+and call count.  Interference/coalescing counters include allocator retries.
+The spill counters exclude normal callee-save prologue/epilogue traffic.
+
+The host toolchain smoke verifies that normal mode emits no report, that all
+keys are present, that two reports are byte-identical, and that assembly is
+byte-identical with statistics disabled and enabled.  `optstats.c` is also
+part of the native PCC bootstrap, so the same instrumentation is available to
+the compiler running under ReBSD.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus

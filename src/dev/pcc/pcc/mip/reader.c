@@ -695,6 +695,7 @@ pass2_compile(struct interpass *ip)
 	afree();
 	p2e->epp = (struct interpass_prolog *)DLIST_PREV(&p2e->ipole, qelem);
 	p2maxautooff = p2autooff = p2e->epp->ipp_autos;
+	optstats_begin(p2e);
 
 #ifdef PCC_DEBUG
 	if (e2debug) {
@@ -766,6 +767,7 @@ pass2_compile(struct interpass *ip)
 	myoptim_pre(&p2e->ipole);
 	p2regalloc_done = 0;
 	optimize(p2e);
+	optstats_capture_cfg(p2e);
 	myoptim_pre(&p2e->ipole);
 	ngenregs(p2e);
 	p2regalloc_done = 1;
@@ -781,6 +783,7 @@ pass2_compile(struct interpass *ip)
 
 	DLIST_FOREACH(ip, &p2e->ipole, qelem)
 		emit(ip);
+	optstats_finish(p2e);
 }
 
 void

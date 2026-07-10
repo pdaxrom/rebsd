@@ -177,6 +177,10 @@ frame base, including non-leaf functions, functions using
 .Fn alloca ,
 raw frame-address users, and code that explicitly assigns the frame pointer
 register.
+.It Fl fopt-stats
+Write deterministic per-function and compilation-summary optimizer and
+register allocator statistics to standard error.  This option does not change
+generated code and is disabled by default.
 .It Fl funsigned-char
 Tell the compiler to treat
 .Sq char

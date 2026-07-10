@@ -460,6 +460,41 @@ not active items for the current C/static-a.out PCC milestone.
     `992-1005`, `13411-13550`, `1044-1072`, `13639-13794`, and `1040-1049`
     KFLOPS for Malta64 hard/soft, Malta hard/soft, and MaltaEL hard/soft.
     Logs are `/private/tmp/pcc-phase2-<board>-<float>-smoke.log`.
+- [x] Add disabled-by-default optimizer and register allocator statistics.
+  - `-fopt-stats` (or the internal PCC option `-Wc,-Zp`) writes one stable
+    `PCC_OPTSTATS` key/value line per function and one compilation summary to
+    standard error.  Normal builds do not print or collect a report.
+  - The machine-independent `mip/optstats.c` records CFG blocks/edges and
+    natural-loop depth, TEMP/live pressure, interference/coalescing work,
+    actual TEMP spills/reloads/stores/stack bytes, register-class pressure,
+    frame size, allocator caller/callee-saved use, and calls.  Interference and
+    coalescing totals include every allocator retry; callee-save prologue slots
+    are deliberately not reported as TEMP spills.
+  - Host smoke compiles a nested-loop FP pressure probe with statistics off and
+    on, verifies byte-identical assembly, checks every required key, and
+    compares two complete reports byte-for-byte.  Linpack also produced
+    byte-identical assembly.  Its MIPS32r2 hard-float summary was `13`
+    functions, `296` blocks, `392` CFG edges, `440` TEMPs, maximum live/GPR/FPR
+    pressure `14/14/2`, `36983` interference edges, and `1108` coalescing
+    attempts.  Logs are `/private/tmp/phase3-linpack-stats-{a,b}.log`.
+  - Cross compile regression passed `318/321` with only the three documented
+    expected failures and `281` runtime candidates.  Cross runtime passed
+    `281/281`.  Native PCC passed `291` compilations plus `30` expected
+    compile failures and `281/281` runtimes; both unexpected counts were zero
+    and `NATIVE_PCC_REGRESS_RC:0`.
+  - The six PCC-kernel/PCC-rootfs QEMU profiles all reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Linpack pairs were
+    Malta64 hard `13875/13582`, Malta64 soft `1007/1016`, Malta hard
+    `13390/13439`, Malta soft `1071/1064`, MaltaEL hard `13689/13683`, and
+    MaltaEL soft `1049/1030` KFLOPS.  Kernel commands retained
+    `-fomit-frame-pointer` and the kernel soft-float policy.  Logs are
+    `/private/tmp/pcc-phase3-<board>-<float>-smoke.log`.
+  - Explicit aggregate logs are
+    `/private/tmp/pcc-phase3-{regress-compile,regress-runtime}.log`,
+    `/private/tmp/pcc-phase3-native-regress-runtime.log`, and
+    `/private/tmp/pcc-phase3-linpack-runtime.log`.  QEMU cannot validate the
+    physical VR4300 erratum; no codegen changed in this statistics phase, and
+    the existing N64 hardware images were left byte-for-byte untouched.
 
 ## Phase 1: Host PCC Configuration
 

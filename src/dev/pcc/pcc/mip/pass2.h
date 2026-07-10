@@ -513,6 +513,23 @@ struct p2env {
 
 extern struct p2env p2env;
 
+/* Disabled-by-default, machine-independent pass2 statistics. */
+extern int p2stats;
+void optstats_begin(struct p2env *);
+void optstats_capture_cfg(struct p2env *);
+void optstats_finish(struct p2env *);
+void optstats_note_live(unsigned, unsigned, unsigned);
+void optstats_note_interference_edge(void);
+void optstats_note_coalesce(int);
+void optstats_note_spill_candidates(unsigned);
+void optstats_note_selected_spill(void);
+void optstats_note_reload(void);
+void optstats_note_spill_store(void);
+void optstats_note_spill_slot(unsigned);
+void optstats_note_rematerialized(void);
+void optstats_note_register_used(int);
+void optstats_set_frame(unsigned);
+
 /*
  * C compiler second pass extra defines.
  */

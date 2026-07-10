@@ -318,6 +318,7 @@ int	Mflag, needM, MDflag, MMDflag;	/* dependencies only */
 int	pgflag;
 int	pieflag;
 int	omit_frame_pointer;
+int	optstatsflag;
 int	Xflag;
 int	nostartfiles, Bstatic, shared;
 int	nostdinc, nostdlib;
@@ -642,6 +643,8 @@ main(int argc, char *argv[])
 				freestanding = j ? 0 : 1;
 			} else if (match(u, "omit-frame-pointer")) {
 				omit_frame_pointer = j ? 0 : 1;
+			} else if (match(u, "opt-stats")) {
+				optstatsflag = j ? 0 : 1;
 			} else if (match(u, "signed-char")) {
 				xuchar = j ? 1 : 0;
 			} else if (match(u, "unsigned-char")) {
@@ -4528,6 +4531,7 @@ struct flgcheck ccomflgcheck[] = {
 	{ &xgnu99, 1, "-xgnu99" },
 	{ &xuchar, 1, "-xuchar" },
 	{ &omit_frame_pointer, 1, "-fomit-frame-pointer" },
+	{ &optstatsflag, 1, "-Zp" },
 #if !defined(os_sunos) && !defined(mach_i386)
 	{ &vflag, 1, "-v" },
 #endif

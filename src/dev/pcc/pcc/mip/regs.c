@@ -379,6 +379,12 @@ nsucomp(NODE *p)
 
 static bittype *live;
 
+#ifndef TARGET_OPTSTATS_FPR_CLASS
+#define TARGET_OPTSTATS_FPR_CLASS(c) 0
+#endif
+
+static void allocator_live_stats(void);
+
 #define	PUSHWLIST(w, l)	DLIST_INSERT_AFTER(&l, w, link); w->r_onlist = &l
 #define	POPWLIST(l)	popwlist(&l);
 #define	DELWLIST(w)	DLIST_REMOVE(w, link)
@@ -481,6 +487,7 @@ LIVEADD(int x)
 		BITSET(live, x);
 	} else
 		BITSET(live, (x-tempmin+MAXREGS));
+	allocator_live_stats();
 }
 
 static void
@@ -494,12 +501,23 @@ LIVEDEL(int x)
 		BITCLEAR(live, x);
 	} else
 		BITCLEAR(live, (x-tempmin+MAXREGS));
+	allocator_live_stats();
 }
 #else
-#define LIVEADD(x) \
-	(x >= MAXREGS ? BITSET(live, (x-tempmin+MAXREGS)) : BITSET(live, x))
-#define LIVEDEL(x) \
-	(x >= MAXREGS ? BITCLEAR(live, (x-tempmin+MAXREGS)) : BITCLEAR(live, x))
+#define LIVEADD(x) do { \
+	if ((x) >= MAXREGS) \
+		BITSET(live, ((x)-tempmin+MAXREGS)); \
+	else \
+		BITSET(live, (x)); \
+	allocator_live_stats(); \
+} while (0)
+#define LIVEDEL(x) do { \
+	if ((x) >= MAXREGS) \
+		BITCLEAR(live, ((x)-tempmin+MAXREGS)); \
+	else \
+		BITCLEAR(live, (x)); \
+	allocator_live_stats(); \
+} while (0)
 #endif
 
 static struct lives {
@@ -529,6 +547,7 @@ LIVEADDR(REGW *x)
 
 	l->var = x;
 	DLIST_INSERT_AFTER(&lused, l, link);
+	allocator_live_stats();
 }
 
 static void
@@ -544,11 +563,45 @@ LIVEDELR(REGW *x)
 			continue;
 		DLIST_REMOVE(l, link);
 		DLIST_INSERT_AFTER(&lunused, l, link);
+		allocator_live_stats();
 		return;
 	}
 #if 0
 	comperr("LIVEDELR: %p not found", x);
 #endif
+}
+
+static void
+allocator_live_stats(void)
+{
+	struct lives *l;
+	REGW *w;
+	unsigned temps, gpr, fpr;
+	int i, class;
+
+	if (!p2stats)
+		return;
+	temps = gpr = fpr = 0;
+	for (i = MAXREGS; i < xbits; i++) {
+		if (!TESTBIT(live, i))
+			continue;
+		w = &nblock[i + tempmin - MAXREGS];
+		class = CLASS(w);
+		temps++;
+		if (TARGET_OPTSTATS_FPR_CLASS(class))
+			fpr++;
+		else if (class > 0)
+			gpr++;
+	}
+	DLIST_FOREACH(l, &lused, link) {
+		class = CLASS(l->var);
+		temps++;
+		if (TARGET_OPTSTATS_FPR_CLASS(class))
+			fpr++;
+		else if (class > 0)
+			gpr++;
+	}
+	optstats_note_live(temps, gpr, fpr);
 }
 
 #define	MOVELISTADD(t, p) movelistadd(t, p)
@@ -656,6 +709,7 @@ AddEdge(REGW *u, REGW *v)
 		return;
 	if (adjSetadd(u, v))
 		return;
+	optstats_note_interference_edge();
 
 #if 0
 	if (ONLIST(u) == &precolored || ONLIST(v) == &precolored)
@@ -1753,6 +1807,7 @@ livagain:
 		for (j = 0; j < xbits; j += NUMBITS)
 			live[j/NUMBITS] = 0;
 		SETCOPY(live, out[i], j, xbits);
+		allocator_live_stats();
 		for (ip = bb->last; ; ip = DLIST_PREV(ip, qelem)) {
 			if (ip->type == IP_NODE) {
 				if (ip->ip_node->n_op == XASM) {
@@ -2141,21 +2196,25 @@ Coalesce(void)
 
 	if (u == v) {
 		RDEBUG(("Coalesce: u == v\n"));
+		optstats_note_coalesce(1);
 		PUSHMLIST(m, coalescedMoves, COAL);
 		AddWorkList(u);
 	} else if (ONLIST(v) == &precolored || adjSet(u, v)) {
 		RDEBUG(("Coalesce: constrainedMoves\n"));
+		optstats_note_coalesce(0);
 		PUSHMLIST(m, constrainedMoves, CONSTR);
 		AddWorkList(u);
 		AddWorkList(v);
 	} else if ((ONLIST(u) == &precolored && adjok(v, u)) ||
 	    (ONLIST(u) != &precolored && Conservative(u, v))) {
 		RDEBUG(("Coalesce: Conservative\n"));
+		optstats_note_coalesce(1);
 		PUSHMLIST(m, coalescedMoves, COAL);
 		Combine(u, v);
 		AddWorkList(u);
 	} else {
 		RDEBUG(("Coalesce: activeMoves\n"));
+		optstats_note_coalesce(0);
 		PUSHMLIST(m, activeMoves, ACTIVE);
 	}
 }
@@ -2275,8 +2334,15 @@ static void
 SelectSpill(void)
 {
 	REGW *w;
+	unsigned candidates;
 
 	RDEBUG(("SelectSpill\n"));
+	if (p2stats) {
+		candidates = 0;
+		DLIST_FOREACH(w, &spillWorklist, link)
+			candidates++;
+		optstats_note_spill_candidates(candidates);
+	}
 #ifdef PCC_DEBUG
 	if (r2debug)
 		DLIST_FOREACH(w, &spillWorklist, link)
@@ -2512,6 +2578,7 @@ static void
 longtemp(NODE *p, void *arg)
 {
 	REGW *w;
+	int before;
 
 	if (p->n_op != TEMP)
 		return;
@@ -2532,7 +2599,9 @@ longtemp(NODE *p, void *arg)
 		if (w->r_class >= CLASSA && w->r_class <= CLASSG)
 			w->r_class = 0;
 		if (w->r_class == 0) {
+			before = p2maxautooff;
 			w->r_color = freetemp(szty(p->n_type));
+			optstats_note_spill_slot((unsigned)(p2maxautooff - before));
 			w->r_class = FPREG; /* XXX - assumption? */
 		}
 		storemod(p, w->r_color, w->r_class);
@@ -2570,10 +2639,14 @@ static NODE *
 shstore(NODE *p, struct interpass *ipp, REGW *w)
 {
 	struct interpass *ip;
-	int off;
+	int before, off;
 	NODE *l;
 
+	before = p2maxautooff;
 	off = freetemp(szty(p->n_type));
+	optstats_note_spill_slot((unsigned)(p2maxautooff - before));
+	optstats_note_spill_store();
+	optstats_note_reload();
 	l = storenode(p->n_type, off);
 
 	ip = ipnode(mkbinode(ASSIGN, storenode(p->n_type, off), p, p->n_type));
@@ -2602,7 +2675,7 @@ shorttemp(NODE *p, NODE *parent, REGW *w)
 	struct interpass *nip;
 	ADJL *ll;
 	NODE *l, *r;
-	int off, i, nc;
+	int before, off, i, nc;
 
 	if (p->n_regw == NULL)
 		goto down;
@@ -2666,7 +2739,11 @@ down:		switch (optype(p->n_op)) {
 	}
 
 dospill:
+	before = p2maxautooff;
 	off = freetemp(szty(p->n_type));
+	optstats_note_spill_slot((unsigned)(p2maxautooff - before));
+	optstats_note_spill_store();
+	optstats_note_reload();
 	l = storenode(p->n_type, off);
 	r = talloc();
 	*r = *p;
@@ -2727,6 +2804,53 @@ toptemp(NODE *p, REGW *rw)
 	return rv;
 }
 
+static int
+on_spill_list(REGW *rpole, int temp)
+{
+	REGW *w;
+
+	DLIST_FOREACH(w, rpole, link)
+		if (w == &nblock[temp])
+			return 1;
+	return 0;
+}
+
+#define SPILL_READ 1
+#define SPILL_WRITE 2
+
+static void
+count_spill_refs(NODE *p, REGW *rpole, int mode)
+{
+	int o;
+
+	if (!p2stats || p == NIL)
+		return;
+	if (p->n_op == TEMP) {
+		if (on_spill_list(rpole, regno(p))) {
+			if (mode & SPILL_READ)
+				optstats_note_reload();
+			if (mode & SPILL_WRITE)
+				optstats_note_spill_store();
+		}
+		return;
+	}
+	o = optype(p->n_op);
+	if (asgop(p->n_op) && o == BITYPE) {
+		if (p->n_left->n_op == TEMP)
+			count_spill_refs(p->n_left, rpole,
+			    p->n_op == ASSIGN ? SPILL_WRITE :
+			    SPILL_READ | SPILL_WRITE);
+		else
+			count_spill_refs(p->n_left, rpole, SPILL_READ);
+		count_spill_refs(p->n_right, rpole, SPILL_READ);
+		return;
+	}
+	if (o != LTYPE)
+		count_spill_refs(p->n_left, rpole, SPILL_READ);
+	if (o == BITYPE)
+		count_spill_refs(p->n_right, rpole, SPILL_READ);
+}
+
 static void leafrewrite(struct interpass *ipole, REGW *rpole);
 /*
  * Change the TEMPs in the ipole list to stack variables.
@@ -2780,6 +2904,7 @@ leafrewrite(struct interpass *ipole, REGW *rpole)
 			continue;
 		nodepole = ip->ip_node;
 		thisline = ip->lineno;
+		count_spill_refs(ip->ip_node, rpole, SPILL_READ);
 		walkf(ip->ip_node, longtemp, 0); /* convert temps to oregs */
 	}
 	nodepole = NIL;
@@ -2858,8 +2983,11 @@ RewriteProgram(struct interpass *ip)
 			q = &saveregs;
 		} else if (w >= &nblock[basetemp] && w < &nblock[tempmax]) {
 			q = &longregs;
-		} else
+			optstats_note_selected_spill();
+		} else {
 			q = &shortregs;
+			optstats_note_selected_spill();
+		}
 		DLIST_INSERT_AFTER(q, w, link);
 	}
 #ifdef PCC_DEBUG
@@ -2969,6 +3097,7 @@ ngenregs(struct p2env *p2e)
 	struct interpass *ipole = &p2e->ipole;
 	extern NODE *nodepole;
 	struct interpass *ip;
+	REGW *statw;
 	int i, j, tbits;
 	int uu[NPERMREG] = { -1 };
 	int xnsavregs[NPERMREG];
@@ -3191,5 +3320,11 @@ onlyperm: /* XXX - should not have to redo all */
 	}
 	if (ntsz)
 		stktemp = freetemp(ntsz);
+	if (p2stats) {
+		DLIST_FOREACH(statw, &coloredNodes, link)
+			optstats_note_register_used(COLOR(statw));
+		DLIST_FOREACH(statw, &coalescedNodes, link)
+			optstats_note_register_used(COLOR(statw));
+	}
 	/* Done! */
 }

@@ -166,6 +166,7 @@ prologue(struct interpass_prolog * ipp)
 	mips_leaf_function = leaf;
 	addto = offcalc(ipp, mips_omit_fp);
 	mips_frame_adjust = addto;
+	optstats_set_frame((unsigned)(ARGINIT/SZCHAR + addto));
 
 #ifndef TARGET_NO_ABICALLS
 	/* emit PIC only if -fpic or -fPIC set */

@@ -134,7 +134,9 @@ ln -sf "$target-pcc" "$target_bindir/$target-cc"
 ln -sf "$target-pcpp" "$target_bindir/cpp"
 
 tmp=${TMPDIR:-/tmp}/rebsd-host-portablecc.$$
-trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err"' 0 1 2 3 15
+trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
+    "$tmp.normal.s" "$tmp.stats.s" "$tmp.stats2.s" "$tmp.stats.off" \
+    "$tmp.stats.log" "$tmp.stats2.log"' 0 1 2 3 15
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>
@@ -291,5 +293,48 @@ else
 	"$pcc" -mlittle-endian -E -dM "$tmp.c" > "$tmp.macros"
 	grep '^#define __MIPSEL__' "$tmp.macros" >/dev/null
 fi
+
+cat > "$tmp.c" <<'EOF'
+extern double stats_call(double);
+
+double
+stats_probe(int n, double *a)
+{
+	double s0 = 1.0, s1 = 2.0, s2 = 3.0, s3 = 4.0;
+	int i, j;
+
+	for (i = 0; i < n; i++) {
+		for (j = 0; j < n; j++) {
+			s0 += a[i] * a[j];
+			s1 += a[i] + a[j];
+			s2 += s0 - s1;
+			s3 += s2 * a[j];
+		}
+	}
+	return stats_call(s0 + s1 + s2 + s3);
+}
+EOF
+
+"$pcc" -O2 -fomit-frame-pointer -S -o "$tmp.normal.s" "$tmp.c" \
+    2>"$tmp.stats.off"
+test ! -s "$tmp.stats.off"
+"$pcc" -O2 -fomit-frame-pointer -fopt-stats -S \
+    -o "$tmp.stats.s" "$tmp.c" 2>"$tmp.stats.log"
+cmp -s "$tmp.normal.s" "$tmp.stats.s"
+grep '^PCC_OPTSTATS kind=function function=stats_probe ' \
+    "$tmp.stats.log" >/dev/null
+grep '^PCC_OPTSTATS kind=summary function=[*] ' "$tmp.stats.log" >/dev/null
+for key in basic_blocks cfg_edges temps max_live_temps \
+    interference_edges coalesce_attempts coalesce_successes \
+    coalesce_rejected spill_candidates selected_spills reloads \
+    spill_stores rematerialized gpr_pressure fpr_pressure frame_bytes \
+    spill_area_bytes caller_saved_used callee_saved_used calls \
+    max_loop_depth functions; do
+	grep " $key=" "$tmp.stats.log" >/dev/null
+done
+"$pcc" -O2 -fomit-frame-pointer -fopt-stats -S \
+    -o "$tmp.stats2.s" "$tmp.c" 2>"$tmp.stats2.log"
+cmp -s "$tmp.stats.s" "$tmp.stats2.s"
+cmp -s "$tmp.stats.log" "$tmp.stats2.log"
 
 echo "smoke-host-portablecc: ok"
