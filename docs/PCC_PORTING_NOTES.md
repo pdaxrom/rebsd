@@ -330,6 +330,16 @@ real hardware validation passed on 2026-07-11 with
 `N64_PCC_DEBUG_RC_END` marker.  Full details and hashes are in
 `docs/PCC_MIPS_SCHEDULER_REPORT.md`.
 
+Commit `3c2092b7` closes the current conservative scheduler scope with a
+five-instruction HI/LO window.  One exactly parsed pure GPR operation after
+`mflo`/`mfhi` may move into a two-nop multiply gap when it does not touch the
+HI/LO result, `$sp`, or `$ra`.  VR4300 Linpack fills two such gaps and moves
+from `2473/155` to `2471/153` instructions/nops; MIPS32R2 is byte-identical
+because it already uses one-instruction `mul`.  Cross/native regressions and
+all six PCC-kernel/PCC-rootfs QEMU profiles pass.  The N64 hard-float image is
+`sys/mips/n64/builds/20260711-milestone-c4-hilo-gap-schedule/pcc-debug.z64`;
+real hardware validation is pending before Milestone D begins.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus

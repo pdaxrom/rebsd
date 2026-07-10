@@ -376,9 +376,123 @@ The supplied final marker did not include a numeric value, so none is inferred
 here.  The C1, C2, and Phase 5D4 artifact hashes were rechecked and remain
 unchanged.
 
+## Milestone C4: HI/LO Gap Scheduling
+
+Implementation commit `3c2092b7` reuses the existing five-instruction late
+lookahead and the shared simple-GPR read/write parser.  It recognizes:
+
+```text
+mult/multu/dmult/dmultu
+nop
+nop
+mflo/mfhi result
+pure GPR candidate
+```
+
+and emits:
+
+```text
+mult/multu/dmult/dmultu
+pure GPR candidate
+nop
+mflo/mfhi result
+```
+
+The candidate remains after the multiply has consumed its operands and fills
+one required HI/LO gap.  It must be an exactly parsed move, immediate shift,
+`addiu`, `addu`, or `subu`.  The rule rejects any candidate that reads or
+writes the `mflo`/`mfhi` destination, reads or writes `$sp` or `$ra`, or
+writes `$zero`.  Memory operations, control transfers, trapping arithmetic,
+unknown syntax, and code in a control delay slot cannot match.  The rule is
+enabled only for VR4300 and MIPS32R2; generic MIPS3/R4000 is unchanged.
+
+C4 adds 32 backend lines and no new pass.  The final default/explicit
+`-mfix4300` repair still runs last, and `-mno-fix4300` behavior is unchanged.
+
+### Permanent Probe
+
+The host smoke requires VR4300 and MIPS32R2 to transform an exact inline
+HI/LO sequence into:
+
+```text
+mult  $v1,$v0
+move  $v0,$zero
+nop
+mflo  $v1
+```
+
+A second sequence has an `addiu` candidate that reads the `mflo` result and
+must remain after `mflo`.  Generic MIPS3/R4000 must retain both original
+HI/LO nops in the positive sequence.
+
+### Static Results
+
+VR4300 Linpack contains two safe post-`mflo` candidates.  C4 fills one gap in
+each and removes two nops:
+
+```text
+VR4300 before: 2473 instructions, 155 nops, 643 loads, 244 stores
+VR4300 after:  2471 instructions, 153 nops, 643 loads, 244 stores
+VR4300 sha256: 168a5871b79216b204259821397ba7992039e544288d1de7b60a9b3a5b184d2e
+```
+
+MIPS32R2 already emits a one-instruction `mul` with equivalent independent
+work directly after it.  Its Linpack output remains byte-identical to C3:
+
+```text
+MIPS32R2: 2545 instructions, 108 nops, 772 loads, 293 stores
+MIPS32R2 sha256: b7741b749544cbe2a8601688b581564bc03e2e6dad5f37ecfe7217e120bc9a3f
+```
+
+Unoptimized `optim003.c` remains byte-identical with SHA-256
+`bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+
+### Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the three documented
+expected failures and passed 292/292 runtime candidates.  Native PCC compiled
+302 cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 12343 / 12325 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 941 / 981 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13698 / 13852 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1135 / 1124 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13819 / 13744 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1155 / 1152 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Every profile has
+exactly one `PCC_SMOKE_ALL_OK`, `PCC_SMOKE_ALL_FAILURES 0`, and
+`PCC_SMOKE_ALL_RC:0`.  Kernel builds cover `-fomit-frame-pointer` and
+`-msoft-float`; soft userland profiles cover `-msoft-float`.  Logs are
+`/private/tmp/pcc-c4-{malta64,malta,maltael}-{hard,soft}.log`.
+
+QEMU timing remains host-load sensitive.  The attributable C4 result is the
+two proven VR4300 gap fills and lower static instruction count.  MIPS32R2 is
+a correctness control for this substep.
+
+### N64 Artifact
+
+```text
+sys/mips/n64/builds/20260711-milestone-c4-hilo-gap-schedule/pcc-debug.z64
+implementation commit: 3c2092b7
+size: 6619136 bytes
+sha256: 19bad4af08a0b21f346294e7dd4418d421a58c09c7e8a8972a4f7abb5e6eb04f
+cross pcc sha256: e4b1ee08e24d67dcd6638713b854d49482575116c156a63d15287587536d7d2c
+cross ccom sha256: 5144eff0303c2b3eebb7919f5b49d5fcb6ac9eef54ba7dc3d552d321a23e4d0f
+native ccom sha256: 3243c4b7a602fbba56c79c606b5f8dde12a48131dfd86bf712489aac102b7a82
+```
+
+The hard-float a.out image uses the default `-mfix4300` path.  Real N64
+validation is pending.  The C1, C2, and C3 artifact hashes were rechecked and
+remain unchanged.
+
 ## Next Step
 
-Keep Milestone C open.  C3 has passed real N64 hardware, so C4 may now
-generalize the dependency model to a bounded 3-5 instruction window and
-additional safe register candidates.  Memory-to-memory movement still
-requires an explicit alias model.
+C4 closes the current conservative Milestone C scope.  A general memory
+scheduler remains deferred until an explicit alias model and measured target
+windows justify its cost.  After C4 passes real N64 hardware, proceed to
+Milestone D and reduce avoidable frame-pointer, outgoing-argument, spill, and
+stack traffic.  Do not begin D before the C4 hardware result.
