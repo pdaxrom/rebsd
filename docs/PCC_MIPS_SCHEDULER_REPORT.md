@@ -251,10 +251,125 @@ here.  A distinct `-mno-fix4300` image remains untested on hardware; QEMU
 cannot reproduce the physical multiply erratum.  All earlier ROM hashes were
 rechecked and remain unchanged.
 
+## Milestone C3: Dependent FPU Scheduling
+
+Implementation commit `0331d3cf` adds a compact FPU read/write and VR4300
+latency description for binary `add`, `sub`, `mul`, and `div` in single and
+double precision.  The encoded VR4300 execution times come from Table 7-14 of
+the local VR4300 manual: add/sub are 3 cycles, multiply is 5/8 cycles, and
+divide is 29/58 cycles for single/double precision.  The manual also specifies
+one additional interlock cycle when the next FPU instruction consumes the
+result because there is no EX-to-EX result bypass.
+
+C3 recognizes this exact pre-trim sequence:
+
+```text
+binary FPU producer
+dependent binary FPU consumer
+lw
+nop
+following instruction
+```
+
+and emits:
+
+```text
+binary FPU producer
+lw
+dependent binary FPU consumer
+following instruction
+```
+
+The `lw` now supplies the missing FPU separation, and the consumer supplies
+the load delay gap, so the old load `nop` is no longer needed.  Producer and
+consumer FPR read/write sets must parse exactly, including both halves of a
+double register pair.  The load destination must parse exactly and cannot be
+`$zero`, `$sp`, or `$ra`.  The rule is enabled only for VR4300 and MIPS32R2.
+It moves one load across one register-only FPU operation and never changes the
+order of two memory operations.  Generic MIPS3/R4000 remains unchanged.
+The implementation reuses the existing late file scan and adds a net 64 lines
+to the driver backend; it does not add another pass or a general scheduler.
+
+The final VR4300 multiply-erratum repair still runs after C3.  A moved `lw`
+is a valid separator after `mul.s`/`mul.d`; if no safe separator exists,
+default/explicit `-mfix4300` still inserts its `nop`.  `-mno-fix4300` still
+disables only the erratum repair.
+
+### Permanent Probe
+
+The host smoke feeds an exact multiply/add/load-delay sequence through the
+final assembly postprocessor.  Both VR4300 and MIPS32R2 must produce:
+
+```text
+mul.d  $f4,$f2,$f0
+lw     $a0,20($fp)
+add.d  $f6,$f6,$f4
+addiu  $v1,$v0,1
+```
+
+The same probe requires generic MIPS3/R4000 to keep the original adjacent
+multiply/add order.
+
+### Static Results
+
+C3 schedules 11 dependent Linpack windows on each selected CPU.  It changes
+ordering rather than machine instruction totals:
+
+```text
+VR4300: 2473 instructions, 155 nops, 643 loads, 244 stores
+VR4300 sha256: 8180454da87f3adf37ae1412027eea30a3b4dabdc09398677611a5bd1e184408
+
+MIPS32R2: 2545 instructions, 108 nops, 772 loads, 293 stores
+MIPS32R2 sha256: b7741b749544cbe2a8601688b581564bc03e2e6dad5f37ecfe7217e120bc9a3f
+```
+
+Unoptimized `optim003.c` remains byte-identical with SHA-256
+`bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+
+### Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the three documented
+expected failures and passed 292/292 runtime candidates.  Native PCC compiled
+302 cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11444 / 11849 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 908 / 912 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 12892 / 12903 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1084 / 1088 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13251 / 13145 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1146 / 1164 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Every profile has
+exactly one `PCC_SMOKE_ALL_OK`, `PCC_SMOKE_ALL_FAILURES 0`, and
+`PCC_SMOKE_ALL_RC:0`.  Kernel builds cover `-fomit-frame-pointer` and
+`-msoft-float`; soft userland profiles cover `-msoft-float`.  Logs are
+`/private/tmp/pcc-c3-{malta64,malta,maltael}-{hard,soft}.log`.
+
+QEMU timing remains host-load sensitive.  The attributable C3 result is the
+11 verified dependency separations; real VR4300 timing requires the N64 run.
+
+### N64 Artifact
+
+```text
+sys/mips/n64/builds/20260711-milestone-c3-fpu-latency-schedule/pcc-debug.z64
+implementation commit: 0331d3cf
+size: 6619136 bytes
+sha256: be769daa03cc49cab660dd76b69d40eb1e14983a7a32daaf18350a7b0a4cb8cf
+cross pcc sha256: bcd708815521840a32f4ad524ee196d80a68125564d138f047cf37dec755bfa1
+cross ccom sha256: 9395f148a29013dcbb893de3deff901732d105e0b8e4e33420eca292cc23c79f
+native ccom sha256: 7e5274ca79d64647d4edfeb9d03ef1b486f6b3217d127c45013bd82dbdc938ad
+```
+
+The hard-float a.out image uses the default `-mfix4300` path.  Real N64
+validation is pending.  The C1, C2, and Phase 5D4 artifact hashes were
+rechecked and remain unchanged.
+
 ## Next Step
 
-Keep Milestone C open.  The next scheduler substep should use the same small
-window to separate dependent FP compute operations from FPU loads when one
-parsed independent register instruction is available.  Do not add memory
-movement until aliasing is modelled explicitly, and do not move `mul.s` or
-`mul.d` into branch delay slots under `-mfix4300`.
+Keep Milestone C open.  After C3 passes real N64 hardware, C4 may generalize
+the dependency model to a bounded 3-5 instruction window and additional safe
+register candidates.  Memory-to-memory movement still requires an explicit
+alias model.  No C4 work should begin before the C3 hardware result.

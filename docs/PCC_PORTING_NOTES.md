@@ -310,11 +310,22 @@ other than VR4300 or MIPS32R2.  This fills two additional Linpack branch slots
 on each CPU without changing load/store counts.  A permanent VR4300 host probe
 checks the final `load; branch; addiu` order.
 
+Commit `0331d3cf` adds the third bounded window.  It parses exact binary FPU
+read/write sets and the VR4300 add/sub/multiply/divide cycle counts, then moves
+one following `lw` between an immediately dependent FPU producer/consumer
+pair.  The consumer replaces the load-delay `nop`; no two memory operations
+change order.  This separates 11 Linpack pairs on both VR4300 and MIPS32R2.
+Generic MIPS3/R4000 remains unchanged, and permanent host probes cover all
+three target cases.
+
 These remain bounded scheduler substeps.  The pass still has no general memory
-alias model, longer instruction window, FP compute-latency model, or
-cross-block scheduling.  The VR4300 multiply repair remains the final pass,
-is active by default under `-mfix4300`, and is disabled only by
-`-mno-fix4300`.  Validation details and artifact hashes are in
+alias model, general longer-window scheduler, unary/conversion FP latency
+model, or cross-block scheduling.  The VR4300 multiply repair remains the
+final pass, is active by default under `-mfix4300`, and is disabled only by
+`-mno-fix4300`.  C3 passed cross/native regressions and all six full
+PCC-kernel/PCC-rootfs QEMU profiles.  Its N64 hard-float image is
+`sys/mips/n64/builds/20260711-milestone-c3-fpu-latency-schedule/pcc-debug.z64`;
+real hardware validation is pending.  Full details and hashes are in
 `docs/PCC_MIPS_SCHEDULER_REPORT.md`.
 
 ## Active PCC Work Queue
