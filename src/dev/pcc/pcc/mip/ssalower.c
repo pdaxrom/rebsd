@@ -755,3 +755,87 @@ ssa_fold_constant_branches(struct p2env *p2e)
 	}
 	return changed;
 }
+
+static void
+reachability_root(struct basicblock *bb, unsigned char *reachable,
+    struct basicblock **worklist, int *tail, int count)
+{
+	if (bb->bbnum < 0 || bb->bbnum >= count)
+		comperr("SSA reachability block number %d outside 0-%d",
+		    bb->bbnum, count - 1);
+	if (reachable[bb->bbnum])
+		return;
+	reachable[bb->bbnum] = 1;
+	worklist[(*tail)++] = bb;
+}
+
+static int
+computed_goto_label(struct p2env *p2e, int label)
+{
+	int *lp;
+
+	for (lp = p2e->epp->ip_labels; *lp; lp++)
+		if (*lp == label)
+			return 1;
+	return 0;
+}
+
+/*
+ * Remove blocks disconnected by SSA branch folding.  Computed-goto labels
+ * remain alternate entry points even when the GOTO itself is unreachable;
+ * DEFNAM and the epilogue have similar structural significance to pass2.
+ */
+int
+ssa_remove_unreachable_blocks(struct p2env *p2e)
+{
+	struct basicblock *bb, *nextbb;
+	struct basicblock **worklist;
+	struct cfgnode *cn;
+	struct interpass *ip, *nextip;
+	unsigned char *reachable;
+	int changed, head, tail;
+
+	if (p2e->nbblocks == 0)
+		return 0;
+	reachable = tmpcalloc((size_t)p2e->nbblocks * sizeof(*reachable));
+	worklist = tmpalloc((size_t)p2e->nbblocks * sizeof(*worklist));
+	head = tail = 0;
+
+	bb = DLIST_NEXT(&p2e->bblocks, bbelem);
+	reachability_root(bb, reachable, worklist, &tail, p2e->nbblocks);
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		if (bb->first->type == IP_EPILOG ||
+		    bb->first->type == IP_DEFNAM ||
+		    (bb->first->type == IP_DEFLAB &&
+		    computed_goto_label(p2e, bb->first->ip_lbl)))
+			reachability_root(bb, reachable, worklist, &tail,
+			    p2e->nbblocks);
+	}
+	while (head < tail) {
+		bb = worklist[head++];
+		SLIST_FOREACH(cn, &bb->child, chld)
+			reachability_root(cn->bblock, reachable, worklist,
+			    &tail, p2e->nbblocks);
+	}
+
+	changed = 0;
+	for (bb = DLIST_NEXT(&p2e->bblocks, bbelem);
+	    bb != &p2e->bblocks; bb = nextbb) {
+		nextbb = DLIST_NEXT(bb, bbelem);
+		if (reachable[bb->bbnum])
+			continue;
+		ip = bb->first;
+		for (;;) {
+			nextip = DLIST_NEXT(ip, qelem);
+			if (ip->type == IP_NODE)
+				tfree(ip->ip_node);
+			DLIST_REMOVE(ip, qelem);
+			if (ip == bb->last)
+				break;
+			ip = nextip;
+		}
+		DLIST_REMOVE(bb, bbelem);
+		changed = 1;
+	}
+	return changed;
+}

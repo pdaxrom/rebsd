@@ -235,6 +235,8 @@ optimize(struct p2env *p2e)
 		cfg_rebuild(p2e, "post-ssa");
 		if (ssa_fold_constant_branches(p2e))
 			cfg_rebuild(p2e, "post-constant-branch-fold");
+		if (ssa_remove_unreachable_blocks(p2e))
+			cfg_rebuild(p2e, "post-unreachable-removal");
 
 #ifdef PCC_DEBUG
 		printflowdiagram(p2e, "no_phi");
