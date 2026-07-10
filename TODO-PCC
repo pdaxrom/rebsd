@@ -538,6 +538,41 @@ not active items for the current C/static-a.out PCC milestone.
     performed, and QEMU cannot reproduce the physical multiply erratum.
     The four earlier `builds/20260710-hard-float` sets were hash-checked and
     remain byte-for-byte unchanged.  Logs are `/private/tmp/pcc-phase4-*`.
+- [x] Add pass2 CFG, dominator, and phi consistency verification (Phase 5A).
+  - New machine-independent `mip/cfgverify.c` verifies contiguous basic-block
+    coverage, label maps, exact branch/fallthrough/computed-goto successors,
+    reciprocal predecessor/successor multiplicity, and rebuilds after CFG
+    invalidation.  It also computes an independent iterative dominator solution
+    and checks DFS parents, immediate dominators, the dominator tree, phi arity,
+    duplicate phi destinations, and pre/post-rename TEMP ranges.
+  - The normal `xtemps` path always runs the allocation-free CFG checks.  The
+    more expensive dominator/phi checks run only with the existing dormant
+    `-xssa` path.  No new IR or MIPS-specific code was added.  The verifier is
+    included in C, C++, F77, split-pass, host-cross, and native PCC builds;
+    host smoke exercises nested-loop SSA verification with `-Wc,-xssa`.
+  - A compiler built from `ce61008c` and commit `3f6f628e` produced
+    byte-identical MIPS32r2 hard-float assembly for `optim003`, the three Phase
+    4 pressure/ABI cases, `extendsfdf2`, and Linpack.  VR4300 Linpack was also
+    identical (`79974` bytes, SHA-256 `ab7f5876e2d2fb599cc1674d8a1298c44972afc2d61b37b6fb3f21935a869b86`).
+  - Cross regression passed `322/325` with only the three documented failures
+    and runtime `285/285`.  Native PCC passed `295` compilations plus `30`
+    expected failures and runtime `285/285`; both unexpected counts were zero
+    and `NATIVE_PCC_REGRESS_RC:0`.  Stripped host `ccom` grew from `526104` to
+    `542712` bytes (`16608`, about 3.2%); normal verification allocates no new
+    per-function bitsets.
+  - All six PCC-kernel/PCC-rootfs QEMU profiles reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Full-smoke Linpack
+    pairs were Malta64 hard `11571/11473`, Malta64 soft `924/908`, Malta hard
+    `13413/13568`, Malta soft `883/895`, MaltaEL hard `13378/13679`, and
+    MaltaEL soft `911/908` KFLOPS.  Three isolated reruns of the identical
+    Malta64 hard image ranged `12880-13230` KFLOPS, confirming that the lower
+    post-stress sample was QEMU/host load rather than codegen.
+  - The build-only N64 hard-float a.out ROM is
+    `builds/20260710-phase5a-cfg-verifier/pcc-debug.z64`, size `6619136`,
+    SHA-256 `3ce8f732949fb0d885b6e1bc55c95663aafeff45cfd55f338dd240a4b17ce806`.
+    A real hardware run is still required for this image.  Earlier N64 build
+    directories were hash-checked and remain unchanged.  Logs are
+    `/private/tmp/pcc-phase5a-*`.
 
 ## Phase 1: Host PCC Configuration
 

@@ -168,6 +168,24 @@ nested loops, call-crossing and move-related values, struct copies, varargs,
 and both FP ABIs.  Full measurements and commands are in
 `docs/PCC_PHASE4_REPORT.md`.
 
+## Pass2 CFG Verification
+
+Phase 5A adds machine-independent verification in `mip/cfgverify.c` without
+enabling a new optimization.  Every built CFG is checked for complete and
+non-overlapping basic-block coverage, a consistent label map, the exact
+successors implied by terminators and fallthrough, and reciprocal parent/child
+edges.  CFG rebuild sites call the verifier immediately, providing the common
+rebuild-and-verify path required by future branch folding.
+
+When the existing internal SSA path is selected, the verifier independently
+solves dominator sets and checks DFS parents, immediate dominators, dominator
+tree edges, phi predecessor counts, duplicate phi destinations, and TEMP ranges
+before and after rename.  Normal optimized compilation does not enable SSA;
+its basic CFG verifier uses no additional per-function bitsets.  The verifier
+is compiled into all pass2 frontends and the target-hosted native PCC.  Host
+smoke uses `-Wc,-xssa` on a nested-loop probe to keep the dormant checks built
+and exercised.  Full commands and results are in `docs/PCC_PHASE5_REPORT.md`.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus
