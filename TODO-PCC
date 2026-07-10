@@ -714,6 +714,45 @@ not active items for the current C/static-a.out PCC milestone.
     It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
     `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
     multiply erratum.  Earlier preserved ROM hashes remain unchanged.
+- [x] Fold integer branches made constant by the SSA lattice (Phase 5D2,
+  implementation commit `07a126ba`).
+  - The pass accepts only a `CBRANCH` whose comparison is one of
+    `EQ/NE/LT/LE/GT/GE` or the unsigned variants and whose two operands are
+    unnamed integral `ICON` nodes.  Signed and unsigned relations are
+    evaluated separately.  Constant true becomes a direct `GOTO`; constant
+    false removes only the branch node.
+  - Folding runs after the existing post-SSA `deljumps`, then immediately
+    rebuilds and verifies the CFG as `post-constant-branch-fold`.  It does not
+    run another dead-code pass, so unreachable-block cleanup remains a
+    separate Phase 5D3 change.  FP comparisons, symbolic constants, XASM,
+    delay-slot scheduling, and MIPS target code are untouched.
+  - New `misc/ssabranch001` covers true and false branches exposed by D1 while
+    retaining a nonconstant selector branch.  Cross regression passed
+    `327/330` with only the three documented failures and runtime `290/290`.
+    Native PCC passed `300` compilations plus `30` expected compile failures
+    and runtime `290/290`; unexpected counts were zero and
+    `NATIVE_PCC_REGRESS_RC:0`.  C++, F77, split-pass, host-cross, and native
+    pass2 objects build successfully.  Unoptimized assembly remains
+    byte-identical with SHA-256
+    `bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+  - All six PCC-kernel/PCC-rootfs QEMU profiles reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Linpack pairs were
+    Malta64 hard `11225/11063`, Malta64 soft `938/957`, Malta hard
+    `12649/12720`, Malta soft `1026/1009`, MaltaEL hard `12474/13084`, and
+    MaltaEL soft `1057/1034` KFLOPS.  Logs are
+    `/private/tmp/pcc-phase5d2-*.log`.
+  - Linpack is byte-identical to D1, SHA-256
+    `4ded49d82f017ccb2243652f808d36cd767a7248e111ccda142a9248b00c429d`;
+    counts stay VR4300 `2475/157` instructions/nops with `643/244`
+    loads/stores and MIPS32r2 `2549/112` with `772/293`.  Stripped host
+    `ccom` changes only `542920 -> 542952` bytes.
+  - The build-only N64 hard-float a.out ROM is
+    `builds/20260710-phase5d2-branch-fold/pcc-debug.z64`, size `6619136`,
+    SHA-256
+    `73487bfee4a26fc1dee5c8ad819c994915e469bd4d4478f783a0c90162c5837f`.
+    It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
+    `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+    multiply erratum.  Earlier preserved ROM hashes remain unchanged.
 
 ## Phase 1: Host PCC Configuration
 

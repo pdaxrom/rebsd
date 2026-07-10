@@ -437,9 +437,86 @@ the default `-mfix4300` path.  Real N64 hardware and a distinct
 `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
 VR4300 multiply erratum.
 
+## Phase 5D2: Constant Branch Folding
+
+Implementation commit `07a126ba` folds only `CBRANCH` comparisons whose two
+operands are unnamed integral `ICON` nodes after D1 substitution.  Supported
+operators are signed and unsigned equality and relational comparisons.  The
+pass evaluates signed and unsigned relations separately; it does not evaluate
+arithmetic expressions, FP comparisons, symbols, pointers, or XASM operands.
+
+A true condition replaces the complete branch tree with a direct `GOTO` to the
+existing label.  A false condition removes the `CBRANCH` node and preserves
+physical fallthrough.  The pass runs after the existing post-SSA `deljumps`,
+then immediately invokes `cfg_rebuild()` and the Phase 5A verifier with stage
+`post-constant-branch-fold`.  There is deliberately no second dead-code pass:
+unreachable-block removal is Phase 5D3.
+
+### Regression Coverage
+
+New `misc/ssabranch001` constructs equal constants on both sides of a selector
+branch, then consumes each phi through a constant-true or constant-false
+branch.  Generated code retains the selector branch but removes the second
+branch and returns the expected 17/43 values.
+
+Cross regression compiled 327 of 330 tests with only the three documented
+expected failures and passed all 290 runtime candidates.  Native PCC compiled
+300 cases, observed 30 expected compile failures, and passed 290/290 runtime
+cases.  Unexpected counts were zero and `NATIVE_PCC_REGRESS_RC:0`.  Final
+`ssalower.o` and `optim2.o` objects compile in C++, F77, split-pass,
+host-cross, and target-native layouts.
+
+Unoptimized `optim003.c` remains byte-identical:
+
+```text
+sha256 bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef
+```
+
+Linpack does not expose a foldable D1 branch and is byte-identical to D1:
+
+```text
+sha256 4ded49d82f017ccb2243652f808d36cd767a7248e111ccda142a9248b00c429d
+VR4300: 2475 instructions, 157 nops, 643 loads, 244 stores
+MIPS32r2: 2549 instructions, 112 nops, 772 loads, 293 stores
+```
+
+The stripped host `ccom` grows by 32 bytes, from 542920 to 542952.
+
+### QEMU Matrix
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11225 / 11063 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 938 / 957 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | hard | 12649 / 12720 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | soft | 1026 / 1009 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | hard | 12474 / 13084 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | soft | 1057 / 1034 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Every profile reported
+`PCC_SMOKE_ALL_FAILURES 0`; kernel compilation covers
+`-fomit-frame-pointer`, and soft profiles cover `-msoft-float`.  Logs are
+`/private/tmp/pcc-phase5d2-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### N64 Artifact
+
+```text
+sys/mips/n64/builds/20260710-phase5d2-branch-fold/pcc-debug.z64
+implementation commit: 07a126ba
+size: 6619136 bytes
+sha256: 73487bfee4a26fc1dee5c8ad819c994915e469bd4d4478f783a0c90162c5837f
+cross pcc sha256: 86cc9e7c768aa4f632447a9fc5fa2e1b1e811cc5ded0b7fd663893f94a691c2b
+cross ccom sha256: c69ade427fbe84d23d9a0423d89e6de0804487f57c2627da3fd4fa5f90a468da
+native ccom sha256: ab2efd0d4f685229d41e10c7785172521c5da3d3cdcc12d908e0683075d0b9b5
+```
+
+Earlier preserved ROM hashes remain unchanged.  This build-only image uses
+the default `-mfix4300` path.  Real N64 hardware and a distinct
+`-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+VR4300 multiply erratum.
+
 ## Next Step
 
-Phase 5D2 will fold only `CBRANCH` conditions that are already integer
-constants after D1 substitution.  It must preserve the architectural branch
-delay slot through normal code generation, rebuild and verify the CFG
-immediately, and keep branch folding separate from unreachable-block removal.
+Phase 5D3 will remove blocks unreachable after D2 and then rebuild/verify the
+CFG again.  It must preserve labels named by computed-goto tables and keep LVN
+as a later, separate Phase 5D4 change.

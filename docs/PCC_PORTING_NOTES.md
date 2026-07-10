@@ -238,6 +238,20 @@ PCC-rootfs profiles report `PCC_SMOKE_ALL_RC:0`.  The build-only default-
 `sys/mips/n64/builds/20260710-phase5d1-sccp-lite/pcc-debug.z64`; hardware
 validation remains pending.  Full details are in `docs/PCC_PHASE5_REPORT.md`.
 
+Phase 5D2 folds only integral `CBRANCH` comparisons whose operands are already
+unnamed `ICON` nodes.  Constant true becomes a normal direct `GOTO`; constant
+false removes the branch and retains fallthrough.  Folding runs after the
+existing post-SSA jump cleanup and immediately rebuilds/verifies the CFG.
+There is no expression evaluator, FP fold, XASM substitution, target-specific
+branch rewrite, or unreachable-block deletion in D2.
+
+The D2 cross/native gates pass 290/290 runtime cases and all six PCC-kernel/
+PCC-rootfs profiles report `PCC_SMOKE_ALL_RC:0`.  The build-only default-
+`-mfix4300` N64 image is
+`sys/mips/n64/builds/20260710-phase5d2-branch-fold/pcc-debug.z64`; hardware
+validation remains pending.  Full commands, counters, and hashes are in
+`docs/PCC_PHASE5_REPORT.md`.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus
