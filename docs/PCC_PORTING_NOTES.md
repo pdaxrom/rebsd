@@ -221,6 +221,23 @@ The build-only default-`-mfix4300` N64 image is
 validation is still pending.  Full counters, logs, and hashes are in
 `docs/PCC_PHASE5_REPORT.md`.
 
+Phase 5D1 adds a deliberately incomplete integer SCCP lattice.  It propagates
+only unnamed integral constants with exact TEMP types and equal-value phis.
+Any undefined phi input, mixed value/type, mismatched TEMP use, or XASM
+reference blocks substitution.  Constant phis are removed only when no other
+phi consumes their result.  Expression evaluation and branch folding are not
+part of D1.
+
+The type guard is required by libc IR where pass1 conversions reuse an SSA
+TEMP with a different `n_type`.  The XASM guard is required for CP0 and other
+register-constrained operands: substituting a literal into `mtc0 %0,$6`
+produced invalid assembly during the first Malta64 kernel gate.  Final
+cross/native regressions pass 289/289 runtime cases and all six PCC-kernel/
+PCC-rootfs profiles report `PCC_SMOKE_ALL_RC:0`.  The build-only default-
+`-mfix4300` N64 image is
+`sys/mips/n64/builds/20260710-phase5d1-sccp-lite/pcc-debug.z64`; hardware
+validation remains pending.  Full details are in `docs/PCC_PHASE5_REPORT.md`.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus

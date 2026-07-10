@@ -337,10 +337,109 @@ image uses the default `-mfix4300` path.  It has not yet run on real N64
 hardware, and a distinct `-mno-fix4300` image was not built.  QEMU cannot
 reproduce the physical VR4300 multiply erratum.
 
+## Phase 5D1: Integer SCCP Lattice
+
+Implementation commit `922085b9` adds the non-conditional first part of SCCP.
+The lattice recognizes only direct assignments of unnamed integral `ICON`
+nodes to an identically typed SSA TEMP.  It iterates through phis, accepting a
+phi only when every defined non-self input has the same known value and exact
+type.  Undefined inputs, mixed values, symbols/pointers, floating constants,
+expressions, and control-flow decisions remain overdefined.
+
+Known TEMP uses are replaced with typed `ICON` nodes.  A constant phi can skip
+edge copies only when no other phi consumes its result.  This terminal-only
+rule deliberately leaves some redundant copies: deleting a constant phi in a
+chain could remove the definition still needed by a downstream phi that was
+retained for another reason.
+
+### Guard Rails Found By Full Builds
+
+The first libc rebuild reached `stdio/flsbuf.c` and found an SSA TEMP whose use
+had a different `n_type` from its constant definition.  PCC pass1 conversions
+can create this representation.  Phase 5D1 now validates every use first; any
+type mismatch makes that TEMP non-replaceable everywhere, preserving the
+existing conversion path.
+
+The first Malta64 kernel build then found a more important extended-asm case.
+A constant TEMP used by `mtc0 %0,$6` was replaced by a literal, producing the
+invalid instruction `mtc0 0,$6`.  Any known TEMP appearing anywhere below an
+`XASM` node is now excluded from substitution regardless of its constraint or
+type.  A focused `machdep.o` rebuild restored register operands, and the full
+PCC kernel boot/smoke passed.  Native `pcclist/asm002` remains an additional
+permanent XASM regression.
+
+### Regression Coverage
+
+New `misc/ssaconst001` covers equal constants reaching a branch phi and a
+self-referential loop phi.  The emitted functions return typed immediates;
+branch folding is intentionally deferred to Phase 5D2.
+
+Cross regression compiled 326 of 329 tests with only the three documented
+expected failures and passed all 289 runtime candidates.  Native PCC compiled
+299 cases, observed 30 expected compile failures, and passed 289/289 runtime
+cases.  Unexpected counts were zero and the native gate ended with
+`NATIVE_PCC_REGRESS_RC:0`.  One initial QEMU retry timed out at the `login:`
+prompt before starting tests; the unchanged image reran successfully and only
+the complete 289/289 run is counted.
+
+Final `ssalower.o` and `optim2.o` objects compile in C++, F77, split-pass,
+host-cross, and target-native layouts.  Unoptimized `optim003.c` remains
+byte-identical:
+
+```text
+sha256 bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef
+```
+
+### Assembly And Compiler Size
+
+Linpack counters are unchanged from Phase 5C:
+
+| Target | Instructions/nops | Loads/stores | Assembly bytes |
+| --- | ---: | ---: | ---: |
+| VR4300 hard | 2475 / 157 | 643 / 244 | 79931 |
+| MIPS32r2 hard | 2549 / 112 | 772 / 293 | 79293 |
+
+The MIPS32r2 assembly hash changes because one `idamax` constant is loaded into
+`$v0` after a call instead of being kept live in callee-saved `$s0` across the
+call.  Counts remain identical.  The stripped host `ccom` grows by 48 bytes,
+from 542872 to 542920.
+
+### QEMU Matrix
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 10877 / 11403 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 941 / 952 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | hard | 12949 / 12291 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | soft | 1021 / 1021 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | hard | 13280 / 13360 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | soft | 1058 / 1047 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Every profile reported
+`PCC_SMOKE_ALL_FAILURES 0`; kernel compilation covers
+`-fomit-frame-pointer`, and soft profiles cover `-msoft-float`.  Logs are
+`/private/tmp/pcc-phase5d1-xasm-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### N64 Artifact
+
+```text
+sys/mips/n64/builds/20260710-phase5d1-sccp-lite/pcc-debug.z64
+implementation commit: 922085b9
+size: 6619136 bytes
+sha256: 9e3624f40ab31018465ce354d59221c102be71f13806d4fe6d65b038ae7d7f86
+cross pcc sha256: 60d918c5f73083771bbc5bb04696bc20d9f353c38286ce3537250de05861c794
+cross ccom sha256: 9390a7eb781a665869c95b42d12dfafb75b3b1ece86c38e73aecdcf05a30b2aa
+native ccom sha256: 4c0ed62d0f18301c78fce9514e46c61b95461585de1072b6b3f042b6894ac423
+```
+
+Earlier preserved ROM hashes remain unchanged.  This build-only image uses
+the default `-mfix4300` path.  Real N64 hardware and a distinct
+`-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+VR4300 multiply erratum.
+
 ## Next Step
 
-Phase 5D starts with SCCP-lite over the verified SSA form, then branch folding,
-unreachable-block removal, and local value numbering as separate changes.  A
-branch fold must rebuild and verify the CFG immediately.  Each substep retains
-the cross/native regressions, six PCC-kernel/PCC-rootfs profiles, assembly
-counters, and N64 build gate.
+Phase 5D2 will fold only `CBRANCH` conditions that are already integer
+constants after D1 substitution.  It must preserve the architectural branch
+delay slot through normal code generation, rebuild and verify the CFG
+immediately, and keep branch folding separate from unreachable-block removal.

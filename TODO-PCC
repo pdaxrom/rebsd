@@ -669,6 +669,51 @@ not active items for the current C/static-a.out PCC milestone.
     `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
     multiply erratum.  Phase 4, Phase 5A, and Phase 5B ROM hashes remain
     unchanged.
+- [x] Propagate direct integer constants through SSA and equal-value phis
+  (Phase 5D1, implementation commit `922085b9`).
+  - The lattice recognizes only unnamed integral `ICON` assignments with
+    identical source/destination types.  A phi becomes constant only when all
+    defined non-self inputs have the same known value and type.  Undefined
+    inputs, mixed values, pointers/symbols, FP constants, expressions, and
+    branches remain untouched for later Phase 5D substeps.
+  - Substitution is all-or-nothing for each TEMP.  A libc `flsbuf.c` rebuild
+    exposed PCC IR where one SSA TEMP appears with a different `n_type`; such
+    TEMPs are now retained rather than guessing conversion semantics.  Any
+    constant TEMP referenced anywhere inside `XASM` is also retained.  The
+    Malta64 kernel gate caught the missing XASM rule when `mtc0 %0,$6` was
+    incorrectly emitted as `mtc0 0,$6`; focused `machdep.o` and all final
+    kernel builds preserve register operands.
+  - Constant phi copies are skipped only for terminal phis with no use by
+    another phi.  This conservative rule preserves transitive definitions for
+    downstream phis that cannot themselves be removed.  New
+    `misc/ssaconst001` covers equal branch constants and a self-referential
+    loop constant; `pcclist/asm002` remains a permanent native XASM gate.
+  - Cross regression passed `326/329`, with only the three documented expected
+    failures, and runtime `289/289`.  Native PCC passed `299` compilations plus
+    `30` expected compile failures and runtime `289/289`; unexpected counts
+    were zero and `NATIVE_PCC_REGRESS_RC:0`.  C++, F77, split-pass,
+    host-cross, and native pass2 objects build successfully.  Unoptimized
+    assembly remains byte-identical, SHA-256
+    `bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+  - All six PCC-kernel/PCC-rootfs QEMU profiles reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Linpack pairs were
+    Malta64 hard `10877/11403`, Malta64 soft `941/952`, Malta hard
+    `12949/12291`, Malta soft `1021/1021`, MaltaEL hard `13280/13360`, and
+    MaltaEL soft `1058/1047` KFLOPS.  Logs are
+    `/private/tmp/pcc-phase5d1-xasm-*.log`.
+  - Linpack counts remain Phase 5C-identical: VR4300 `2475/157`
+    instructions/nops with `643/244` loads/stores; MIPS32r2 `2549/112` with
+    `772/293`.  One constant in `idamax` is rematerialized in `$v0` after a
+    call instead of remaining live in `$s0`, so assembly hash changes without
+    changing counts.  Stripped host `ccom` changes only `542872 -> 542920`
+    bytes.  Branch folding remains a separate Phase 5D2 change.
+  - The build-only N64 hard-float a.out ROM is
+    `builds/20260710-phase5d1-sccp-lite/pcc-debug.z64`, size `6619136`,
+    SHA-256
+    `9e3624f40ab31018465ce354d59221c102be71f13806d4fe6d65b038ae7d7f86`.
+    It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
+    `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+    multiply erratum.  Earlier preserved ROM hashes remain unchanged.
 
 ## Phase 1: Host PCC Configuration
 
