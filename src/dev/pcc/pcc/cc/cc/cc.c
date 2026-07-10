@@ -2945,6 +2945,28 @@ mips_can_move_to_int_branch_delay(const char *line, const char *branch)
 }
 
 static int
+mips_can_move_across_load_to_int_branch_delay(const char *line,
+    const char *load, const char *branch)
+{
+	struct mips_load_dest dest;
+	unsigned long long writes, reads, regs;
+
+	if (mips_target.tune != MIPS_TUNE_VR4300 &&
+	    mips_target.isa != MIPS_ISA_MIPS32R2)
+		return 0;
+	if (!mips_parse_simple_gpr_rw(line, &writes, &reads) ||
+	    !mips_can_move_to_int_branch_delay(line, branch))
+		return 0;
+	regs = writes | reads;
+	if ((regs & ((1ULL << 29) | (1ULL << 31))) != 0)
+		return 0;
+	dest = mips_load_dest(load);
+	if (dest.kind == MIPS_LOAD_NONE)
+		return 0;
+	return !mips_line_touches_gpr(load, regs);
+}
+
+static int
 mips_can_move_to_plain_control_delay(const char *line, const char *control)
 {
 	unsigned long long call_regs;
@@ -3700,6 +3722,40 @@ mips_fold_late_peepholes(char *path)
 						prev_control =
 						    mips_is_control_transfer(
 						    mtc1nop);
+						changed = 1;
+						continue;
+					}
+				}
+				if (ferror(in) ||
+				    fseek(in, pos2 != -1 ? pos2 : pos,
+				    SEEK_SET) == -1) {
+					fclose(out);
+					fclose(in);
+					unlink(tmp);
+					free(tmp);
+					return 1;
+				}
+				clearerr(in);
+				pos2 = ftell(in);
+				if (pos2 != -1 &&
+				    fgets(after, sizeof(after), in) != NULL &&
+				    fgets(mf, sizeof(mf), in) != NULL) {
+					delay = NULL;
+					if (!line_after_label &&
+					    mips_can_move_across_load_to_int_branch_delay(
+					    line, next, after))
+						delay = line;
+					else if (!line_after_label &&
+					    mips_fold_li_addiu_line(line, folded,
+					    sizeof(folded)) &&
+					    mips_can_move_across_load_to_int_branch_delay(
+					    folded, next, after))
+						delay = folded;
+					if (delay != NULL && mips_is_nop(mf)) {
+						fputs(next, out);
+						fputs(after, out);
+						fputs(delay, out);
+						prev_control = 0;
 						changed = 1;
 						continue;
 					}

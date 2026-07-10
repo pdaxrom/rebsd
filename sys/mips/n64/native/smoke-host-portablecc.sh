@@ -226,6 +226,29 @@ END { exit found ? 0 : 1 }
 	exit 1
 }
 
+cat > "$tmp.c" <<'EOF'
+int
+branch_schedule_probe(int *value)
+{
+	int result = 1;
+
+	if (*value >= 0)
+		result = *value + 2;
+	return result;
+}
+EOF
+
+"$pcc" -march=vr4300 -O2 -S -o "$tmp.s" "$tmp.c"
+awk '
+/^[[:space:]]*lw \$a0,0\(\$v1\)/ { state = 1; next }
+state == 1 && /^[[:space:]]*bltz \$a0,/ { state = 2; next }
+state == 2 && /^[[:space:]]*addiu \$v0,\$zero,1/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "VR4300 did not fill branch delay across independent load" >&2
+	exit 1
+}
+
 if "$pcc" -march=mips32 -S -o "$tmp.s" "$tmp.c" >"$tmp.err" 2>&1; then
 	echo "unsupported MIPS32r1 profile was accepted" >&2
 	exit 1
