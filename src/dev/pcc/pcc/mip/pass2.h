@@ -513,6 +513,11 @@ struct p2env {
 
 extern struct p2env p2env;
 
+struct basicblock *cfg_label_block(struct p2env *, int);
+void cfg_verify(struct p2env *, const char *);
+void cfg_verify_dominators(struct p2env *);
+void cfg_verify_phi(struct p2env *, int);
+
 /* Disabled-by-default, machine-independent pass2 statistics. */
 extern int p2stats;
 void optstats_begin(struct p2env *);

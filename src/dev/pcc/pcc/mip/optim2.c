@@ -80,6 +80,15 @@ void remunreach(struct p2env *);
 static void liveanal(struct p2env *p2e);
 static void printip2(struct interpass *);
 
+static void
+cfg_rebuild(struct p2env *p2e, const char *stage)
+{
+	bblocks_build(p2e);
+	BDEBUG(("Calling cfg_build\n"));
+	cfg_build(p2e);
+	cfg_verify(p2e, stage);
+}
+
 /* create "proper" basic blocks, add labels where needed (so bblocks have labels) */
 /* run before bb generate */
 static void add_labels(struct p2env*) ;
@@ -130,9 +139,7 @@ optimize(struct p2env *p2e)
 	}
 #endif
 	if (xssa || xtemps || p2stats) {
-		bblocks_build(p2e);
-		BDEBUG(("Calling cfg_build\n"));
-		cfg_build(p2e);
+		cfg_rebuild(p2e, "initial");
 	
 #ifdef PCC_DEBUG
 		printflowdiagram(p2e, "first");
@@ -143,6 +150,7 @@ optimize(struct p2env *p2e)
 		liveanal(p2e);
 		BDEBUG(("Calling dominators\n"));
 		dominators(p2e);
+		cfg_verify_dominators(p2e);
 		BDEBUG(("Calling computeDF\n"));
 		computeDF(p2e, DLIST_NEXT(&p2e->bblocks, bbelem));
 
@@ -153,10 +161,12 @@ optimize(struct p2env *p2e)
 		BDEBUG(("Calling placePhiFunctions\n"));
 
 		placePhiFunctions(p2e);
+		cfg_verify_phi(p2e, 0);
 
 		BDEBUG(("Calling renamevar\n"));
 
 		renamevar(p2e,DLIST_NEXT(&p2e->bblocks, bbelem));
+		cfg_verify_phi(p2e, 1);
 
 		BDEBUG(("Calling removephi\n"));
 
@@ -186,9 +196,7 @@ optimize(struct p2env *p2e)
 		 */
 
 #ifdef ENABLE_NEW
-		bblocks_build(p2e);
-		BDEBUG(("Calling cfg_build\n"));
-		cfg_build(p2e);
+		cfg_rebuild(p2e, "pre-trace-schedule");
 
 		TraceSchedule(p2e);
 #ifdef PCC_DEBUG
@@ -206,9 +214,7 @@ optimize(struct p2env *p2e)
 		if (xdeljumps)
 			deljumps(p2e); /* Delete redundant jumps and dead code */
 
-		bblocks_build(p2e);
-		BDEBUG(("Calling cfg_build\n"));
-		cfg_build(p2e);
+		cfg_rebuild(p2e, "post-ssa");
 
 #ifdef PCC_DEBUG
 		printflowdiagram(p2e, "no_phi");
@@ -866,17 +872,15 @@ cfg_build(struct p2env *p2e)
 		p = bb->last->ip_node;
 		if (bb->last->type == IP_NODE && p->n_op == GOTO) {
 			if (p->n_left->n_op == ICON) {
-				if (getlval(p->n_left) - p2e->labinfo.low > p2e->labinfo.size)
-					comperr("Label out of range: %d, base %d", 
-					    getlval(p->n_left), p2e->labinfo.low);
-				cnode->bblock = p2e->labinfo.arr[getlval(p->n_left) - p2e->labinfo.low];
+				cnode->bblock = cfg_label_block(p2e,
+				    (int)getlval(p->n_left));
 				SLIST_INSERT_LAST(&cnode->bblock->parents, pnode, cfgelem);
 				SLIST_INSERT_LAST(&bb->child, cnode, chld);
 			} else {
 				int *l;
 				/* XXX assume all labels are valid as dest */
 				for (l = p2e->epp->ip_labels; *l; l++) {
-					cnode->bblock = p2e->labinfo.arr[*l - p2e->labinfo.low];
+					cnode->bblock = cfg_label_block(p2e, *l);
 					SLIST_INSERT_LAST(&cnode->bblock->parents, pnode, cfgelem);
 					SLIST_INSERT_LAST(&bb->child, cnode, chld);
 					cnode = tmpalloc(sizeof(struct cfgnode));
@@ -887,10 +891,8 @@ cfg_build(struct p2env *p2e)
 			continue;
 		}
 		if ((bb->last->type == IP_NODE) && p->n_op == CBRANCH) {
-			if (getlval(p->n_right) - p2e->labinfo.low > p2e->labinfo.size) 
-				comperr("Label out of range: %d", getlval(p->n_left));
-
-			cnode->bblock = p2e->labinfo.arr[getlval(p->n_right) - p2e->labinfo.low];
+			cnode->bblock = cfg_label_block(p2e,
+			    (int)getlval(p->n_right));
 			SLIST_INSERT_LAST(&cnode->bblock->parents, pnode, cfgelem);
 			SLIST_INSERT_LAST(&bb->child, cnode, chld);
 			cnode = tmpalloc(sizeof(struct cfgnode));

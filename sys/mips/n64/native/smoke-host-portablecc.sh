@@ -336,5 +336,8 @@ done
     -o "$tmp.stats2.s" "$tmp.c" 2>"$tmp.stats2.log"
 cmp -s "$tmp.stats.s" "$tmp.stats2.s"
 cmp -s "$tmp.stats.log" "$tmp.stats2.log"
+"$pcc" -O2 -fomit-frame-pointer -Wc,-xssa -S \
+    -o "$tmp.ssa.s" "$tmp.c" 2>"$tmp.ssa.log"
+test ! -s "$tmp.ssa.log"
 
 echo "smoke-host-portablecc: ok"

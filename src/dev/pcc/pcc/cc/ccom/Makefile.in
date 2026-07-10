@@ -53,7 +53,7 @@ MKEXT=mkext$(EXEEXT)
 
 all: $(DEST)
 
-OBJS=	builtins.o cgram.o code.o common.o compat.o complex.o dwarf.o	\
+OBJS=	builtins.o cgram.o cfgverify.o code.o common.o compat.o complex.o dwarf.o	\
 	external.o gcc_compat.o init.o inline.o local.o local2.o main.o	\
 	match.o optim.o optim2.o optstats.o order.o params.o pftn.o reader.o	\
 	softfloat.o regs.o scan.o stabs.o symtabs.o table.o target.o trees.o	\
@@ -64,7 +64,7 @@ OBJS0=  builtins.o cgram.o code.o common.o compat.o complex.o dwarf.o	\
 	optim.o params.o pftn.o softfloat.o				\
 	scan.o stabs.o symtabs.o trees.o unicode.o
 
-OBJS1=  common2.o compat.o external.o           			\
+OBJS1=  cfgverify.o common2.o compat.o external.o           		\
 	local2.o main2.o                				\
 	match.o optim2.o optstats.o order.o reader.o      			\
 	regs.o table.o target.o
@@ -126,6 +126,9 @@ common.o: $(MIPDIR)/common.c
 
 common2.o: $(MIPDIR)/common.c
 	$(CC) $(CF1) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/common.c
+
+cfgverify.o: $(MIPDIR)/cfgverify.c
+	$(CC) $(CF1) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/cfgverify.c
 
 compat.o: $(COMMONDIR)/compat.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(COMMONDIR)/compat.c

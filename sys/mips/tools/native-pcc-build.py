@@ -398,6 +398,7 @@ class Builder:
         specs = [
             ("builtins", srcdir / "builtins.c"),
             ("cgram", builddir / "cgram.c"),
+            ("cfgverify", self.src / "mip/cfgverify.c"),
             ("code", self.src / "arch/mips/code.c"),
             ("common", self.src / "mip/common.c"),
             ("compat", self.src / "common/compat.c"),
@@ -441,6 +442,7 @@ class Builder:
         specs = [
             ("builtins", srcdir / "builtins.c"),
             ("cgram", builddir / "cgram.c"),
+            ("cfgverify", self.src / "mip/cfgverify.c"),
             ("code", self.src / "arch/mips/code.c"),
             ("common", self.src / "mip/common.c"),
             ("compat", self.src / "common/compat.c"),
