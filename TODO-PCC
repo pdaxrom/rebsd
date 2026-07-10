@@ -624,6 +624,51 @@ not active items for the current C/static-a.out PCC milestone.
     It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
     `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
     multiply erratum.  The Phase 4 and Phase 5A ROM hashes remain unchanged.
+- [x] Propagate SSA TEMP copies and eliminate trivial phi copies (Phase 5C,
+  implementation commit `1fd10752`).
+  - Before phi lowering, a pure `TEMP = TEMP` assignment is propagated only
+    when source/destination types match and the destination has exactly one
+    tree definition.  Uses in trees and phi inputs are renamed together, then
+    the dead copy is removed.  No memory expression, volatile access, call,
+    inline asm, or potentially trapping operation is substituted.
+  - Phi nodes are collapsed only when every defined non-self input names the
+    same TEMP.  A phi with an undefined (`0`) input is deliberately retained,
+    because the candidate source need not dominate that path.  Iteration lets
+    copy propagation expose additional trivial phis without adding a general
+    SCCP implementation.
+  - Removed copy nodes use a private sentinel until phi edge insertion is
+    complete.  Cleanup compares the sentinel address, so user `asm("")` and
+    `asm volatile("" ::: "memory")` barriers remain in the IR.  The permanent
+    `misc/ssacopy001` test covers integer/double branch copy chains; the
+    existing `ssaphi001` continues to cover cyclic parallel copies.
+  - Cross regression passed `325/328`, with only the three documented expected
+    failures, and runtime `288/288`.  Native PCC passed `298` compilations plus
+    `30` expected compile failures and runtime `288/288`; unexpected counts
+    were zero and `NATIVE_PCC_REGRESS_RC:0`.  Final C++, F77, split-pass,
+    host-cross, and native pass2 objects build successfully.  Unoptimized
+    `optim003` remains byte-identical to Phase 5A/5B, SHA-256
+    `bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+  - All six final PCC-kernel/PCC-rootfs QEMU profiles reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Linpack pairs were
+    Malta64 hard `11753/11175`, Malta64 soft `945/944`, Malta hard
+    `12766/12991`, Malta soft `1044/1034`, MaltaEL hard `13162/13035`, and
+    MaltaEL soft `1060/1064` KFLOPS.  Logs are
+    `/private/tmp/pcc-phase5c-sentinel-*.log`.
+  - Relative to Phase 5B, VR4300 Linpack changes from `2477/158` to
+    `2475/157` instructions/nops and `79967 -> 79931` assembly bytes;
+    MIPS32r2 changes from `2551/113` to `2549/112` and
+    `79329 -> 79293`.  Loads/stores remain `643/244` on VR4300 and `772/293`
+    on MIPS32r2.  Stripped host `ccom` changes only `542792 -> 542872` bytes.
+    Phase 5C removes proven aliases but intentionally leaves nontrivial phi
+    coalescing and the remaining Phase 5B overhead for later allocator work.
+  - The build-only N64 hard-float a.out ROM is
+    `builds/20260710-phase5c-ssa-copyprop/pcc-debug.z64`, size `6619136`,
+    SHA-256
+    `ceff865c1a04b08afea35384ae2fe41abfb59036959a8017d300170eb910e955`.
+    It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
+    `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+    multiply erratum.  Phase 4, Phase 5A, and Phase 5B ROM hashes remain
+    unchanged.
 
 ## Phase 1: Host PCC Configuration
 

@@ -205,6 +205,22 @@ default `-mfix4300` path but has not yet been run on real hardware.  Full
 commands, measurements, hashes, and the kernel-gate finding are in
 `docs/PCC_PHASE5_REPORT.md`.
 
+Phase 5C performs only SSA-name cleanup before parallel-copy lowering.  A
+type-identical `TEMP = TEMP` with one destination definition is propagated
+through tree and phi uses; then phis whose defined non-self inputs all agree
+are collapsed.  Undefined phi inputs prevent the transform.  Removed copy
+nodes carry a private sentinel until edge insertion has finished, so cleanup
+cannot consume user empty inline-asm or memory barriers.  The transform is
+machine-independent and never substitutes a memory access, volatile object,
+call, asm, or trapping expression.
+
+The Phase 5C cross/native gates pass 288/288 runtime cases, and all six final
+PCC-kernel/PCC-rootfs hard/soft QEMU profiles report `PCC_SMOKE_ALL_RC:0`.
+The build-only default-`-mfix4300` N64 image is
+`sys/mips/n64/builds/20260710-phase5c-ssa-copyprop/pcc-debug.z64`; real hardware
+validation is still pending.  Full counters, logs, and hashes are in
+`docs/PCC_PHASE5_REPORT.md`.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus

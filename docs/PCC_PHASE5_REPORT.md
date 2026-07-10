@@ -237,11 +237,110 @@ default `-mfix4300` path.  It has not yet run on real N64 hardware, and a
 distinct `-mno-fix4300` image was not built.  QEMU cannot reproduce the
 physical VR4300 multiply erratum.
 
+## Phase 5C: SSA Copy Propagation
+
+Implementation commit `1fd10752` adds a narrow machine-independent cleanup
+between SSA rename and parallel-copy lowering.
+
+For a tree assignment `TEMP destination = TEMP source`, the pass requires:
+
+- identical source and destination types;
+- a destination in the current function's TEMP range;
+- exactly one tree definition of that destination.
+
+It then renames uses in every tree and phi input before removing the dead copy.
+Because the operation aliases immutable SSA names, it does not inspect or
+rewrite memory, volatile objects, calls, inline asm, or potentially trapping
+expressions.
+
+After copy propagation, a phi is trivial when every non-self input names the
+same TEMP.  Its result uses are renamed to that TEMP and the now-empty edge
+copies are skipped.  Simplification repeats because one collapsed phi can make
+another trivial.  Any undefined (`0`) input blocks simplification: selecting a
+source from another edge could otherwise create a non-dominating use.
+
+Propagated copies remain as private sentinel placeholders until phi edge
+insertion is complete, because the current CFG still points at the old block
+extents.  Only nodes whose `ip_asm` pointer equals that private sentinel are
+removed.  This is intentionally stricter than deleting all empty assembly
+nodes; user `asm("")` and memory barriers must remain compiler barriers.
+
+### Regression Coverage
+
+New `misc/ssacopy001` covers integer and double copy chains through both sides
+of a branch.  `misc/ssaphi001` continues to cover cyclic integer/FP parallel
+copies, and optimized `gcccompat/extension004` continues to cover per-function
+computed-goto fallback.
+
+Cross regression compiled 325 of 328 tests with only the three documented
+expected failures and passed all 288 runtime candidates.  Native PCC compiled
+298 cases, observed 30 expected compile failures, and passed 288/288 runtime
+cases.  Unexpected counts were zero and the native gate ended with
+`NATIVE_PCC_REGRESS_RC:0`.
+
+Final `ssalower.o` and `optim2.o` objects also compile in C++, F77, split-pass,
+host-cross, and target-native layouts.  The existing unrelated full C++/F77
+frontend failures are unchanged.
+
+### Assembly And Compiler Size
+
+Unoptimized `optim003.c` remains byte-identical to Phase 5A and Phase 5B:
+
+```text
+sha256 bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef
+```
+
+| Target | Phase 5B instructions/nops | Phase 5C instructions/nops | Phase 5B bytes | Phase 5C bytes | Phase 5C loads/stores |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| VR4300 hard | 2477 / 158 | 2475 / 157 | 79967 | 79931 | 643 / 244 |
+| MIPS32r2 hard | 2551 / 113 | 2549 / 112 | 79329 | 79293 | 772 / 293 |
+
+MIPS32r2 big- and little-endian counters match.  The improvement is small but
+strictly reduces code on both targets.  The remaining difference from Phase
+5A comes from nontrivial parallel-copy sets and is not removed without an
+interference-aware coalescing decision.  The stripped host `ccom` grows by only
+80 bytes, from 542792 to 542872.
+
+### QEMU Matrix
+
+All kernels and root filesystems were built with PCC.  Kernel compilation
+covers `-fomit-frame-pointer`; soft profiles cover `-msoft-float`.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11753 / 11175 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 945 / 944 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | hard | 12766 / 12991 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | soft | 1044 / 1034 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | hard | 13162 / 13035 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | soft | 1060 / 1064 | `PCC_SMOKE_ALL_RC:0` |
+
+Every profile also reported `PCC_SMOKE_ALL_FAILURES 0`.  Final logs are
+`/private/tmp/pcc-phase5c-sentinel-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### N64 Artifact
+
+The build-only hard-float a.out image is:
+
+```text
+sys/mips/n64/builds/20260710-phase5c-ssa-copyprop/pcc-debug.z64
+implementation commit: 1fd10752
+size: 6619136 bytes
+sha256: ceff865c1a04b08afea35384ae2fe41abfb59036959a8017d300170eb910e955
+cross pcc sha256: f8df8a87d7633c17297f4891341d773147af7aac3bb177505e2eea1725a256df
+cross ccom sha256: 3b21bd3f85a90d9a77eb5561ad2a33a45e22cdc538853e7f41949b47bb523e45
+native ccom sha256: f572ac10799bc546cbb2fdfabc06e4611af1bfdea6f0343eb43225ea5091a716
+```
+
+Phase 4, Phase 5A, and Phase 5B ROM hashes remain unchanged.  The Phase 5C
+image uses the default `-mfix4300` path.  It has not yet run on real N64
+hardware, and a distinct `-mno-fix4300` image was not built.  QEMU cannot
+reproduce the physical VR4300 multiply erratum.
+
 ## Next Step
 
-Phase 5C will add narrow TEMP copy propagation and dead-copy elimination on
-the verified SSA-lowered IR.  Its first measurable requirement is to recover
-the MIPS32r2 parallel-copy overhead above without changing volatile accesses,
-control flow, FP ABI behavior, or the `-mfix4300` post-pass repair.  SCCP-lite,
-branch folding, unreachable-block cleanup, and LVN remain separate Phase 5D
-work after the same cross/native and six-profile gates.
+Phase 5D starts with SCCP-lite over the verified SSA form, then branch folding,
+unreachable-block removal, and local value numbering as separate changes.  A
+branch fold must rebuild and verify the CFG immediately.  Each substep retains
+the cross/native regressions, six PCC-kernel/PCC-rootfs profiles, assembly
+counters, and N64 build gate.
