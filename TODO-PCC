@@ -784,15 +784,47 @@ not active items for the current C/static-a.out PCC milestone.
     `builds/20260710-phase5d3-unreachable/pcc-debug.z64`, size `6619136`,
     SHA-256
     `0c831754963a61f611b2cd30eb2264174ace57e54fca905d43190912f2f6b2fd`.
-    It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
-    `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
-    multiply erratum.  Earlier preserved ROM hashes remain unchanged.
-- [ ] Add conservative local value numbering after SSA cleanup (Phase 5D4).
-  - Start with exact-type, side-effect-free integer expressions within one
-    basic block.  Kill value numbers at calls, volatile accesses, XASM, stores,
-    and any operation whose aliasing or trapping behavior is uncertain.
-  - Keep LVN machine-independent and separate from MIPS scheduling so its
-    code-size and load/store effects remain attributable.
+    It uses the default `-mfix4300` path.  A real N64 run reported
+    `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
+    `N64_PCC_DEBUG_RC_END` marker.  A distinct `-mno-fix4300` image has not
+    been run; QEMU cannot reproduce the physical multiply erratum.  Earlier
+    preserved ROM hashes remain unchanged.
+- [x] Add conservative local value numbering after SSA cleanup (Phase 5D4,
+  implementation commit `ed66b00a`).
+  - Exact-type, side-effect-free integer `PLUS`, `MINUS`, `MUL`, bitwise,
+    shift, unary-minus, and complement expressions are matched structurally
+    inside one SSA basic block.  Only SSA TEMPs and unnamed integer constants
+    are accepted; memory, pointers, FP, conversions, division, comparisons,
+    symbols, and commutative reordering remain outside the pass.
+  - Calls, volatile/memory operations, stores, XASM, structure operations, and
+    uncertain assignments end the current LVN region.  A duplicate RHS is
+    replaced with the first destination TEMP, then the existing Phase 5C copy
+    propagation removes the resulting alias.  The pass is machine-independent
+    and does not alter MIPS scheduling or the VR4300 erratum policy.
+  - New `misc/ssalvn001` reduces the repeated-expression helper from two XORs
+    to one while retaining both XORs across a volatile-memory barrier.  Cross
+    regression compiled `329/332` with only the three documented failures and
+    passed `292/292` runtime cases.  Native PCC passed `302` compilations plus
+    `30` expected failures and `292/292` runtimes; unexpected counts were zero.
+    C++, F77, split-pass, host-cross, and native pass2 builds are green.
+  - All six PCC-kernel/PCC-rootfs QEMU profiles reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Linpack pairs were
+    Malta64 hard `11560/11156`, Malta64 soft `940/960`, Malta hard
+    `12904/12964`, Malta soft `1018/1025`, MaltaEL hard `13248/13176`, and
+    MaltaEL soft `1060/1051` KFLOPS.  Logs are
+    `/private/tmp/pcc-phase5d4-{malta64,malta,maltael}-{hard,soft}.log`.
+  - Linpack has no matching duplicate expression, so counts remain VR4300
+    `2475/157` instructions/nops with `643/244` loads/stores and MIPS32r2
+    `2549/112` with `772/293`.  Unoptimized `optim003` remains byte-identical,
+    SHA-256
+    `bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+    Stripped host `ccom` changes from `543000` to `559568` bytes.
+  - The build-only N64 hard-float a.out ROM is
+    `builds/20260710-phase5d4-lvn/pcc-debug.z64`, size `6619136`, SHA-256
+    `795878b66c824beaf3c58bb8af52f3e68a331991b827e45006a92ec01ead2956`.
+    It uses the default `-mfix4300` path.  Real N64 validation of D4 and a
+    distinct `-mno-fix4300` image remain pending; all earlier ROM hashes are
+    unchanged.
 
 ## Phase 1: Host PCC Configuration
 

@@ -589,14 +589,98 @@ native ccom sha256: 146db5c4a0a9b6df5a11844667ac0f16f3216e2dc2a4cd2714ea0af8caf0
 ```
 
 Earlier preserved ROM hashes remain unchanged.  This build-only image uses
-the default `-mfix4300` path.  Real N64 hardware and a distinct
-`-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+the default `-mfix4300` path.  A real N64 run reported
+`N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
+`N64_PCC_DEBUG_RC_END` marker.  A distinct `-mno-fix4300` image has not been
+run; QEMU cannot reproduce the physical VR4300 multiply erratum.
+
+## Phase 5D4: Local Value Numbering
+
+Implementation commit `ed66b00a` adds exact local value numbering after SSA
+rename and before Phase 5C TEMP-copy propagation.  Candidate expressions are
+integer `PLUS`, `MINUS`, `MUL`, `AND`, `OR`, `ER`, `LS`, `RS`, `UMINUS`, and
+`COMPL` trees composed only of current SSA TEMPs and unnamed integer constants.
+Every node must preserve the exact PCC type and qualifiers.
+
+Expressions are compared structurally.  The pass does not canonicalize
+commutative operands and does not accept memory, pointers, floating point,
+conversions, divide/remainder, comparisons, named constants, or non-SSA
+registers.  Calls, XASM, memory references, stores, structure operations, and
+uncertain assignments clear the value table.  This makes the pass local,
+machine-independent, and independent of MIPS scheduling and VR4300 erratum
+handling.
+
+When a duplicate is found, its RHS becomes a copy from the first expression's
+destination TEMP.  The existing copy-propagation pass then removes the alias,
+so LVN does not need a second use-rewrite implementation.
+
+### Regression Coverage
+
+New `misc/ssalvn001` contains an exact repeated XOR and the same pattern across
+a volatile-memory update.  Optimized output reduces the first helper from two
+XOR instructions to one and retains both XORs in the barrier helper.
+
+Cross regression compiled 329 of 332 tests with only the three documented
+expected failures and passed all 292 runtime candidates.  Native PCC compiled
+302 cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero and `NATIVE_PCC_REGRESS_RC:0`.  Final
+`ssalower.o` and `optim2.o` objects compile in C++, F77, split-pass,
+host-cross, and target-native layouts.
+
+Unoptimized `optim003.c` remains byte-identical:
+
+```text
+sha256 bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef
+```
+
+Linpack has no expression matched by D4.  Static counts remain unchanged:
+
+```text
+VR4300: 2475 instructions, 157 nops, 643 loads, 244 stores
+MIPS32r2: 2549 instructions, 112 nops, 772 loads, 293 stores
+```
+
+The stripped host `ccom` grows from 543000 to 559568 bytes.
+
+### QEMU Matrix
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11560 / 11156 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 940 / 960 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | hard | 12904 / 12964 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | soft | 1018 / 1025 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | hard | 13248 / 13176 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | soft | 1060 / 1051 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Every profile reported
+`PCC_SMOKE_ALL_FAILURES 0`; kernel compilation covers
+`-fomit-frame-pointer`, and soft profiles cover `-msoft-float`.  Logs are
+`/private/tmp/pcc-phase5d4-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### N64 Artifact
+
+```text
+sys/mips/n64/builds/20260710-phase5d4-lvn/pcc-debug.z64
+implementation commit: ed66b00a
+size: 6619136 bytes
+sha256: 795878b66c824beaf3c58bb8af52f3e68a331991b827e45006a92ec01ead2956
+cross pcc sha256: 778e8157e657a5bf6d5ebc741849e986d7bd3b31d3a480b46851a7830d2a3c09
+cross ccom sha256: 8439c25288b37399f5a19cf8507d0eb3daf546b85bcd222261ed7719a4923081
+native ccom sha256: 7e5274ca79d64647d4edfeb9d03ef1b486f6b3217d127c45013bd82dbdc938ad
+```
+
+Earlier preserved ROM hashes remain unchanged.  This build-only image uses
+the default `-mfix4300` path.  Real N64 validation of D4 and a distinct
+`-mno-fix4300` image remain pending; QEMU cannot reproduce the physical
 VR4300 multiply erratum.
 
 ## Next Step
 
-Phase 5D4 will add conservative local value numbering for exact-type,
-side-effect-free integer expressions inside one basic block.  Calls, volatile
-accesses, stores, XASM, and uncertain aliasing or trapping cases must kill or
-block candidates.  LVN remains machine-independent and separate from the
-later compact MIPS scheduler.
+The next milestone is a compact late MIPS scheduler.  Start with a 3-5
+instruction window and an explicit dependency model for GPR/FPR, HI/LO,
+memory ordering, calls, branches, labels, and inline assembly.  First targets
+are safe branch-delay filling and separating VR4300 load/FPU-use hazards when
+an independent instruction already exists.  Keep the VR4300 multiply erratum
+barrier mandatory under `-mfix4300` and removable only with
+`-mno-fix4300`.

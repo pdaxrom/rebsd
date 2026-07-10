@@ -262,8 +262,26 @@ not reuse stale dominator DFS numbers and is not a general DCE or LVN pass.
 The D3 cross/native gates pass 291/291 runtime cases and all six PCC-kernel/
 PCC-rootfs profiles report `PCC_SMOKE_ALL_RC:0`.  The build-only default-
 `-mfix4300` N64 image is
-`sys/mips/n64/builds/20260710-phase5d3-unreachable/pcc-debug.z64`; hardware
-validation remains pending.  Full commands, counters, and hashes are in
+`sys/mips/n64/builds/20260710-phase5d3-unreachable/pcc-debug.z64`.  A real N64
+run reported `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
+`N64_PCC_DEBUG_RC_END` marker.  The physical multiply erratum still requires
+the default `-mfix4300` because QEMU cannot reproduce it.  Full commands,
+counters, and hashes are in `docs/PCC_PHASE5_REPORT.md`.
+
+Phase 5D4 performs local value numbering only within one SSA basic block.  It
+matches structurally identical, exact-type integer arithmetic, bitwise, and
+shift trees made only from SSA TEMPs and unnamed constants.  Calls, XASM,
+memory references, stores, structure operations, and uncertain assignments
+clear the local table.  FP, pointers, conversions, division, comparisons,
+symbols, and commutative canonicalization are deliberately excluded.
+
+A duplicate expression becomes a TEMP copy and the existing Phase 5C pass
+removes that alias.  `misc/ssalvn001` confirms that one repeated XOR is removed
+while a volatile-memory barrier keeps both evaluations.  Cross and native
+runtime gates pass 292/292, and all six PCC-kernel/PCC-rootfs profiles report
+`PCC_SMOKE_ALL_RC:0`.  The build-only default-`-mfix4300` D4 image is
+`sys/mips/n64/builds/20260710-phase5d4-lvn/pcc-debug.z64`; real N64 validation
+of this new image remains pending.  Full details are in
 `docs/PCC_PHASE5_REPORT.md`.
 
 ## Active PCC Work Queue
