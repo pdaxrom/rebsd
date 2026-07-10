@@ -515,8 +515,88 @@ the default `-mfix4300` path.  Real N64 hardware and a distinct
 `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
 VR4300 multiply erratum.
 
+## Phase 5D3: Unreachable Block Removal
+
+Implementation commit `c19a5ceb` removes basic blocks disconnected by D2
+branch folding.  It computes reachability from the current CFG rather than
+using dominator DFS numbers left by an earlier graph.  The function entry,
+epilogue, every `IP_DEFNAM` block, and every label listed in the function's
+computed-goto table are roots; all successors of those roots are retained.
+
+An unreachable block is removed as one complete interpass extent and every
+contained tree is released.  `optimize()` then immediately calls
+`cfg_rebuild()` and the Phase 5A verifier with stage
+`post-unreachable-removal`.  The pass does not remove individual live-block
+statements, fold expressions, perform LVN, alter delay slots, or contain MIPS
+target logic.
+
+### Regression Coverage
+
+New `misc/ssaunreach001` exposes constant-true and constant-false branches
+through equal-value phis.  Each dead side contains a volatile store.  Runtime
+checks verify both selector paths and the unchanged volatile object; generated
+assembly contains no dead store in either helper.
+
+Cross regression compiled 328 of 331 tests with only the three documented
+expected failures and passed all 291 runtime candidates.  Native PCC compiled
+301 cases, observed 30 expected compile failures, and passed 291/291 runtime
+cases.  Unexpected counts were zero and `NATIVE_PCC_REGRESS_RC:0`.  Final
+`ssalower.o` and `optim2.o` objects compile in C++, F77, split-pass,
+host-cross, and target-native layouts.
+
+Unoptimized `optim003.c` remains byte-identical:
+
+```text
+sha256 bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef
+```
+
+Linpack has no block made unreachable by D2.  Static counts remain unchanged:
+
+```text
+VR4300: 2475 instructions, 157 nops, 643 loads, 244 stores
+MIPS32r2: 2549 instructions, 112 nops, 772 loads, 293 stores
+MIPS32r2 sha256: 4ded49d82f017ccb2243652f808d36cd767a7248e111ccda142a9248b00c429d
+```
+
+The stripped host `ccom` grows by 48 bytes, from 542952 to 543000.
+
+### QEMU Matrix
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11670 / 11229 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 946 / 950 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | hard | 12897 / 12806 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32r2 | big | soft | 1018 / 1011 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | hard | 13075 / 13216 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32r2 | little | soft | 1033 / 1041 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Every profile reported
+`PCC_SMOKE_ALL_FAILURES 0`; kernel compilation covers
+`-fomit-frame-pointer`, and soft profiles cover `-msoft-float`.  Logs are
+`/private/tmp/pcc-phase5d3-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### N64 Artifact
+
+```text
+sys/mips/n64/builds/20260710-phase5d3-unreachable/pcc-debug.z64
+implementation commit: c19a5ceb
+size: 6619136 bytes
+sha256: 0c831754963a61f611b2cd30eb2264174ace57e54fca905d43190912f2f6b2fd
+cross pcc sha256: de6cede84c63a5ac2147b4c3399c993791945b0c095ee6ff7b4ab8cc966bf763
+cross ccom sha256: e7a41795e9d7e11e4f23e1f6ff63ba967290836b1838b99b876d3dcfae431d21
+native ccom sha256: 146db5c4a0a9b6df5a11844667ac0f16f3216e2dc2a4cd2714ea0af8caf07c78
+```
+
+Earlier preserved ROM hashes remain unchanged.  This build-only image uses
+the default `-mfix4300` path.  Real N64 hardware and a distinct
+`-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+VR4300 multiply erratum.
+
 ## Next Step
 
-Phase 5D3 will remove blocks unreachable after D2 and then rebuild/verify the
-CFG again.  It must preserve labels named by computed-goto tables and keep LVN
-as a later, separate Phase 5D4 change.
+Phase 5D4 will add conservative local value numbering for exact-type,
+side-effect-free integer expressions inside one basic block.  Calls, volatile
+accesses, stores, XASM, and uncertain aliasing or trapping cases must kill or
+block candidates.  LVN remains machine-independent and separate from the
+later compact MIPS scheduler.

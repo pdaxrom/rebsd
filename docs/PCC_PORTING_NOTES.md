@@ -252,6 +252,20 @@ PCC-rootfs profiles report `PCC_SMOKE_ALL_RC:0`.  The build-only default-
 validation remains pending.  Full commands, counters, and hashes are in
 `docs/PCC_PHASE5_REPORT.md`.
 
+Phase 5D3 computes a new reachability closure after D2.  The function entry,
+epilogue, `IP_DEFNAM` blocks, and labels listed as computed-goto destinations
+are roots.  This preserves alternate entries even when their computed `GOTO`
+is itself unreachable.  Other disconnected basic blocks are removed as whole
+interpass extents, then the CFG is rebuilt and verified immediately.  D3 does
+not reuse stale dominator DFS numbers and is not a general DCE or LVN pass.
+
+The D3 cross/native gates pass 291/291 runtime cases and all six PCC-kernel/
+PCC-rootfs profiles report `PCC_SMOKE_ALL_RC:0`.  The build-only default-
+`-mfix4300` N64 image is
+`sys/mips/n64/builds/20260710-phase5d3-unreachable/pcc-debug.z64`; hardware
+validation remains pending.  Full commands, counters, and hashes are in
+`docs/PCC_PHASE5_REPORT.md`.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus

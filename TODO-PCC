@@ -753,6 +753,46 @@ not active items for the current C/static-a.out PCC milestone.
     It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
     `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
     multiply erratum.  Earlier preserved ROM hashes remain unchanged.
+- [x] Remove CFG blocks made unreachable by SSA branch folding (Phase 5D3,
+  implementation commit `c19a5ceb`).
+  - Reachability is recomputed from the fresh post-D2 CFG instead of using the
+    old dominator DFS numbers.  The function entry, epilogue, `IP_DEFNAM`
+    blocks, and every label named by the computed-goto table are roots; their
+    complete successor closure is retained.
+  - Every remaining unreachable block is removed as one interpass extent,
+    tree nodes are released, and the CFG is immediately rebuilt and verified
+    as `post-unreachable-removal`.  The pass does not perform general DCE,
+    expression folding, LVN, scheduling, or target-specific rewriting.
+  - New `misc/ssaunreach001` covers constant-true and constant-false paths
+    whose dead sides contain volatile stores.  Optimized assembly contains no
+    dead store.  Cross regression passed `328/331` with only the three
+    documented failures and runtime `291/291`.  Native PCC passed `301`
+    compilations plus `30` expected failures and runtime `291/291`; unexpected
+    counts were zero and `NATIVE_PCC_REGRESS_RC:0`.
+  - All six PCC-kernel/PCC-rootfs QEMU profiles reported
+    `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Linpack pairs were
+    Malta64 hard `11670/11229`, Malta64 soft `946/950`, Malta hard
+    `12897/12806`, Malta soft `1018/1011`, MaltaEL hard `13075/13216`, and
+    MaltaEL soft `1033/1041` KFLOPS.  Logs are
+    `/private/tmp/pcc-phase5d3-{malta64,malta,maltael}-{hard,soft}.log`.
+  - Linpack counts remain unchanged: VR4300 `2475/157` instructions/nops with
+    `643/244` loads/stores and MIPS32r2 `2549/112` with `772/293`.
+    Unoptimized assembly remains byte-identical with SHA-256
+    `bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+    Stripped host `ccom` changes only `542952 -> 543000` bytes.
+  - The build-only N64 hard-float a.out ROM is
+    `builds/20260710-phase5d3-unreachable/pcc-debug.z64`, size `6619136`,
+    SHA-256
+    `0c831754963a61f611b2cd30eb2264174ace57e54fca905d43190912f2f6b2fd`.
+    It uses the default `-mfix4300` path.  Real N64 hardware and a distinct
+    `-mno-fix4300` image have not been run; QEMU cannot reproduce the physical
+    multiply erratum.  Earlier preserved ROM hashes remain unchanged.
+- [ ] Add conservative local value numbering after SSA cleanup (Phase 5D4).
+  - Start with exact-type, side-effect-free integer expressions within one
+    basic block.  Kill value numbers at calls, volatile accesses, XASM, stores,
+    and any operation whose aliasing or trapping behavior is uncertain.
+  - Keep LVN machine-independent and separate from MIPS scheduling so its
+    code-size and load/store effects remain attributable.
 
 ## Phase 1: Host PCC Configuration
 
