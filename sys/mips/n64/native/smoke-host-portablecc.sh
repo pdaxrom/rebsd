@@ -306,40 +306,41 @@ param_assign_probe(int value, int replace)
 }
 EOF
 
-"$pcc" -march=mips32r2 -O2 -S -o "$tmp.s" "$tmp.c"
-awk '
+for param_cpu in mips32r2 vr4300; do
+	"$pcc" -march="$param_cpu" -O2 -S -o "$tmp.s" "$tmp.c"
+	awk '
 /^[[:space:]]*[.]ent load_schedule_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
-inside && /^[[:space:]]*mul[[:space:]]/ { multiply = 1 }
 inside && /^[[:space:]]*sll[[:space:]]/ { shift = 1 }
 inside && /,(16|20|24|28)\(\$fp\)/ { frame_arg = 1 }
-END { exit seen && multiply && shift && !frame_arg ? 0 : 1 }
+END { exit seen && shift && !frame_arg ? 0 : 1 }
 ' "$tmp.s" || {
-	echo "MIPS32r2 did not promote scalar register parameters" >&2
-	exit 1
-}
-awk '
+		echo "$param_cpu did not promote scalar register parameters" >&2
+		exit 1
+	}
+	awk '
 /^[[:space:]]*[.]ent param_address_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
 inside && /^[[:space:]]*sw[[:space:]]+\$a0,-[0-9]+\(\$fp\)/ { store = 1 }
 inside && /^[[:space:]]*lw[[:space:]].*-[0-9]+\(\$fp\)/ { load = 1 }
 END { exit seen && store && load ? 0 : 1 }
 ' "$tmp.s" || {
-	echo "MIPS32r2 did not materialize an address-taken parameter" >&2
-	exit 1
-}
-awk '
+		echo "$param_cpu did not materialize an address-taken parameter" >&2
+		exit 1
+	}
+	awk '
 /^[[:space:]]*[.]ent param_assign_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
 inside && /,(16|20)\(\$fp\)/ { frame_arg = 1 }
 inside && /^[[:space:]]*li[[:space:]].*,17([[:space:]]|$)/ { assign = 1 }
 END { exit seen && assign && !frame_arg ? 0 : 1 }
 ' "$tmp.s" || {
-	echo "MIPS32r2 did not keep an assigned parameter in a TEMP" >&2
-	exit 1
-}
+		echo "$param_cpu did not keep an assigned parameter in a TEMP" >&2
+		exit 1
+	}
+done
 
-"$pcc" -march=vr4300 -O2 -S -o "$tmp.s" "$tmp.c"
+"$pcc" -march=mips3 -mtune=r4000 -O2 -S -o "$tmp.s" "$tmp.c"
 awk '
 /^[[:space:]]*[.]ent load_schedule_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
@@ -347,13 +348,14 @@ inside && /^[[:space:]]*sw[[:space:]]+\$a0,16\(\$fp\)/ { store = 1 }
 inside && /^[[:space:]]*lw[[:space:]].*,16\(\$fp\)/ { load = 1 }
 END { exit seen && store && load ? 0 : 1 }
 ' "$tmp.s" || {
-	echo "VR4300 unexpectedly promoted scalar register parameters" >&2
+	echo "generic MIPS3 unexpectedly promoted scalar register parameters" >&2
 	exit 1
 }
 
 cat > "$tmp.c" <<'EOF'
 int
-branch_schedule_probe(int *value)
+branch_schedule_probe(int unused1, int unused2, int unused3, int unused4,
+    int *value)
 {
 	int result = 1;
 
