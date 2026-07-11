@@ -118,7 +118,8 @@ MIPS_ROOTFS_CLEAN_ARTIFACTS = $(MIPS_ROOTFS_STAGE) \
                               mips-native-runtime* mips-native-tools \
                               mips-native-pcc-build* mips-native-pcc* \
                               n64-native-runtime* n64-native-tools \
-                              n64-native-pcc-build* n64-native-pcc*
+                              n64-native-pcc-build* n64-native-pcc* \
+                              n64-linpack-gcc-runtime*
 
 MIPS_ROOTFS_FILES = $(shell find $(MIPS_ROOTFS_COMMON_DIR) \
                    $(MIPS_ROOTFS_BOARD_DIR) -type f 2>/dev/null)
@@ -508,6 +509,15 @@ MIPS_LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-mips-linpack-smoke
 MIPS_LINPACK_SMOKE_MANIFEST ?= rootfs.linpack-smoke.manifest
 MIPS_LINPACK_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.linpack-smoke.$(MIPS_ROOTFS_ABI)
 MIPS_ROOTFS_LINPACK_GCC ?= $(if $(filter gcc,$(MIPS_ROOTFS_COMPILER)),1,0)
+MIPS_LINPACK_GCC_COMPILE ?= $(MIPS_ROOTFS_GCC_PREFIX)gcc \
+    $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) $(MIPS_ROOTFS_TOOLCHAIN_CPP)
+MIPS_LINPACK_GCC_LINK ?= $(MIPS_ROOTFS_GCC_PREFIX)ld \
+    -m $(MIPS_ROOTFS_LD_EMULATION) --nmagic \
+    -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
+    $(abspath $(TOPSRC)/src/crt0.o)
+MIPS_LINPACK_GCC_LIBDIR ?= $(abspath $(TOPSRC)/src)
+MIPS_LINPACK_GCC_LINK_FORMAT ?= elf
+MIPS_LINPACK_GCC_DEPS ?=
 MIPS_ROOTFS_EXTRA_STAMPS ?=
 ifeq ($(MIPS_ROOTFS_NATIVE_PCC),1)
 MIPS_ROOTFS_EXTRA_STAMPS += $(MIPS_LINPACK_ROOTFS_STAMP)
@@ -595,7 +605,7 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
 
 $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS) \
     $(MIPS_ROOTFS_EXEC_FORMAT_DEPS) $(MIPS_LINPACK_SMOKE_SCRIPT) \
-    $(MIPS_LINPACK_SMOKE_SRC)
+    $(MIPS_LINPACK_SMOKE_SRC) $(MIPS_LINPACK_GCC_DEPS)
 	python3 $(MIPS_LINPACK_SMOKE_SCRIPT) build \
 	    --source $(abspath $(MIPS_LINPACK_SMOKE_SRC)) \
 	    --out $(MIPS_LINPACK_SMOKE_OUT) \
@@ -605,24 +615,25 @@ $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS
 	    --float-abi $(MIPS_ROOTFS_FLOAT) \
 	    --endian $(MIPS_ROOTFS_ENDIAN)
 	if [ "$(MIPS_ROOTFS_LINPACK_GCC)" = "1" ]; then \
-	    $(MIPS_ROOTFS_GCC_PREFIX)gcc $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) \
-	        $(MIPS_ROOTFS_TOOLCHAIN_CPP) -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
+	    $(MIPS_LINPACK_GCC_COMPILE) \
+	        -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
 	        -O2 -c -o $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.o \
 	        $(MIPS_LINPACK_SMOKE_SRC); \
-	    $(MIPS_ROOTFS_GCC_PREFIX)ld -m $(MIPS_ROOTFS_LD_EMULATION) \
-	        --nmagic -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
-	        $(abspath $(TOPSRC)/src/crt0.o) \
+	    $(MIPS_LINPACK_GCC_LINK) \
 	        $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.o \
-	        -L$(abspath $(TOPSRC)/src) \
-	        -o $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.elf \
+	        -L$(MIPS_LINPACK_GCC_LIBDIR) \
+	        -o $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
 	        -lm -lc; \
-	    if [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "aout" ]; then \
-	        $(abspath $(MIPS_ROOTFS_ELF2AOUT)) \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.elf \
+	    if [ "$(MIPS_LINPACK_GCC_LINK_FORMAT)" = "aout" ]; then \
+	        mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
 	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc; \
-	        rm -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.elf; \
+	    elif [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "aout" ]; then \
+	        $(abspath $(MIPS_ROOTFS_ELF2AOUT)) \
+	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
+	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc; \
+	        rm -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked; \
 	    else \
-	        mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.elf \
+	        mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
 	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc; \
 	    fi; \
 	    cp -p $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc \

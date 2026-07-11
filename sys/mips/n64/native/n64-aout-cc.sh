@@ -54,6 +54,10 @@ while [ $# -gt 0 ]; do
         src=$1
         mode=asm
         ;;
+    -)
+        src=-
+        mode=asm
+        ;;
     *)
         args="$args '$1'"
         ;;

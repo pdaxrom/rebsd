@@ -791,6 +791,36 @@ run_group(const struct test_case *tests, int count)
 }
 
 static int
+run_linpack_comparison(void)
+{
+	int fails;
+	int rc;
+	char *gcc_argv[] = { "/root/linpack-gcc", NULL };
+	char *pcc_argv[] = { "/root/linpack-pcc", NULL };
+
+	fails = 0;
+	printf("N64_LINPACK_CONFIG array_size=120 min_seconds=1\n");
+	if (setenv("LINPACK_ARRAY_SIZE", "120", 1) < 0 ||
+	    setenv("LINPACK_MIN_SECONDS", "1", 1) < 0) {
+		printf("N64_LINPACK_ENV_FAIL %d\n", errno);
+		return 1;
+	}
+
+	printf("N64_LINPACK_BEGIN gcc\n");
+	rc = run_argv("linpack-gcc", NULL, gcc_argv);
+	printf("N64_LINPACK_RC gcc %d\n", rc);
+	printf("N64_LINPACK_END gcc\n");
+	fails += rc != 0;
+
+	printf("N64_LINPACK_BEGIN pcc\n");
+	rc = run_argv("linpack-pcc", NULL, pcc_argv);
+	printf("N64_LINPACK_RC pcc %d\n", rc);
+	printf("N64_LINPACK_END pcc\n");
+	fails += rc != 0;
+	return fails;
+}
+
+static int
 run_debug(int run_extended)
 {
 	int fails;
@@ -819,9 +849,11 @@ run_debug(int run_extended)
 
 	fails += run_group(primary_tests,
 	    sizeof(primary_tests) / sizeof(primary_tests[0]));
-	if (run_extended)
+	if (run_extended) {
 		fails += run_group(extended_tests,
 		    sizeof(extended_tests) / sizeof(extended_tests[0]));
+		fails += run_linpack_comparison();
+	}
 
 	printf("N64_PCC_DEBUG_END %d\n", fails);
 	return fails ? 1 : 0;

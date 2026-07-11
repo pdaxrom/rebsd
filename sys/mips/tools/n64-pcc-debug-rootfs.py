@@ -70,6 +70,8 @@ COPY_PATHS = [
     "/etc/termcap",
     "/libexec/getty",
     "/root/ccom-stress.sh",
+    "/root/linpack-gcc",
+    "/root/linpack-pcc",
     "/sbin/init",
     "/sbin/mkfs",
     "/sbin/mount",
