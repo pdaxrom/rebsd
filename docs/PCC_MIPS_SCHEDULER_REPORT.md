@@ -507,13 +507,97 @@ N64_PCC_DEBUG_RC_END
 The supplied final marker did not include a numeric value, so none is inferred
 here.  The C1, C2, and C3 artifact hashes were rechecked and remain unchanged.
 
-## Next Step
+## C4 Next Step
 
 C4 closes the current conservative Milestone C scope and has passed real N64
 hardware.  A general memory scheduler remains deferred until an explicit alias
 model and measured target windows justify its cost.  Proceed to Milestone D
 and reduce avoidable frame-pointer, outgoing-argument, spill, and stack
 traffic.
+
+## Milestone C5: VR4300 Multiply Interlock
+
+Implementation commit `af5be45d` adds two VR4300-only integer multiply table
+rules.  Signed and unsigned 32-bit multiplication now emits `mult`/`multu`
+followed directly by `mflo`; the generic MIPS3 rules retain their two software
+padding nops, and MIPS32R2 continues to use its real three-operand `mul`.
+
+This is an ISA-specific interlock correction rather than a broader scheduler
+pass.  VR4300 User's Manual Table 3-12 states that `MULT` and `MULTU` require
+five cycles and stall the entire pipeline.  Section 4.6.4 further states that
+the pipeline resumes during the multicycle instruction's last EX-stage clock.
+The two generic nops before `mflo` therefore execute after the hardware MCI
+wait and add no required separation on VR4300.
+
+C5 changes only compiler-generated 32-bit `MUL`.  It does not alter division,
+modulo, 64-bit multiply sequences, post-`mflo` HI/LO hazards, inline assembly,
+or floating-point multiplication.  The default `-mfix4300` workaround remains
+unchanged and still prevents a FP multiply from being immediately followed by
+any integer or FP multiply.
+
+Permanent host probes require immediate `mult; mflo` for VR4300, retain
+`mult; nop; nop; mflo` for explicit generic MIPS3/R4000 tuning, and retain the
+MIPS32R2 `mul` instruction.  The generic control now uses explicit
+`-march=mips3 -mtune=r4000`; legacy `-mips3` selects VR4300 tuning and was not
+a valid generic control.
+
+### C5 Static Results
+
+On the current E2+D3 hard-float Linpack baseline:
+
+```text
+VR4300 before: 2465 instructions, 2314 non-nops, 151 nops,
+                639 loads, 244 stores, 79719 bytes
+VR4300 C5:     2443 instructions, 2314 non-nops, 129 nops,
+                639 loads, 244 stores, 79609 bytes
+
+MIPS32R2:      2473 instructions, 2367 non-nops, 106 nops,
+                558 loads, 276 stores, 71207 bytes (unchanged)
+```
+
+C5 removes 22 remaining software nops.  The useful instruction count,
+load/store traffic, branch/jump counts, and multiply count do not change.
+
+### C5 Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the three documented
+expected failures and passed 292/292 runtime candidates.  Native PCC compiled
+302 cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 12899.308 / 12733.107 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1025.369 / 1036.017 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13177.368 / 13202.633 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1058.325 / 1059.353 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13374.520 / 13481.118 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1117.780 / 1117.633 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Kernel builds use
+`-msoft-float -fomit-frame-pointer`.  Every profile has exactly one
+`PCC_SMOKE_ALL_OK`, zero failures, `PCC_SMOKE_ALL_RC:0`, and no branch-delay
+macro expansion warning.  Logs are
+`/private/tmp/pcc-vr4300-interlock-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### C5 N64 Artifact
+
+The hardware gate uses a clean GCC kernel and PCC VR4300 hard-float a.out
+userland with the default `-mfix4300` policy:
+
+```text
+sys/mips/n64/builds/20260711-milestone-c5-vr4300-mult-interlock-gcc-kernel/pcc-debug.z64
+implementation commit: af5be45d
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 98af142f36c67afd52a936d91f662a07e21fd9a8300dd10497840e344e171563
+kernel ELF sha256: b5e0643de38c7169950dc6b17e8797f4d37eac2e8be1fdf74d5bfd10586de754
+cross pcc sha256: 751f9fb7d892522e0a8fb4a0a484fb643a3483ee7959ca8a1b3216d08b661ba2
+cross ccom sha256: f20f880cfe2bf05f528c4951c436ff56218fe604c6c18bb10fe119038bef42aa
+```
+
+Real N64 validation is required because QEMU does not establish the physical
+VR4300 MCI timing.  Hardware status is pending.
 
 ## Milestone E1: FPU Transfer/Conversion Gap Fill
 

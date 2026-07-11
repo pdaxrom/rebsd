@@ -4100,6 +4100,22 @@ Backend work, kept small:
     `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
     `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no numeric
     value, so none is inferred.
+  - [x] C5 uses the VR4300 hardware Multicycle Interlock for compiler-generated
+    32-bit `mult`/`multu` (commit `af5be45d`).  VR4300 User's Manual Table 3-12
+    and section 4.6.4 specify a five-cycle whole-pipeline stall, so the generic
+    two software nops before `mflo` execute after the hardware wait and are
+    redundant.  Generic MIPS3/R4000 retains both nops; MIPS32R2 retains `mul`.
+  - Current VR4300 Linpack changes from `2465/2314/151/639/244/79719` to
+    `2443/2314/129/639/244/79609`
+    instructions/non-nops/nops/loads/stores/assembly-bytes.  MIPS32R2 remains
+    `2473/2367/106/558/276/71207`.  Cross/native runtime pass 292/292 and all
+    six PCC-kernel/PCC-rootfs QEMU profiles pass.
+  - The clean C5 GCC-kernel/PCC-hard-float-a.out-userland N64 image is
+    `sys/mips/n64/builds/20260711-milestone-c5-vr4300-mult-interlock-gcc-kernel/pcc-debug.z64`,
+    SHA-256
+    `98af142f36c67afd52a936d91f662a07e21fd9a8300dd10497840e344e171563`.
+    It uses build stamp `.build-mode.gcc.1.0.0.1` and default `-mfix4300`;
+    physical VR4300 validation is pending.
   - Clean-build audit correction, 2026-07-11: the N64 build-mode stamp did not
     include the selected kernel compiler.  The archived C2 through D1 images
     could reuse GCC kernel objects while `vers.o` reported `with pcc`; the D1
@@ -4296,10 +4312,11 @@ Milestone order:
   - The first MIPS32R2 load-use window is complete in `11f66467`, and the
     branch-delay-across-load window is complete in `668a7d88`.  The first
     binary FPU dependency window is complete in `0331d3cf`; C4 adds the
-    bounded HI/LO window in `3c2092b7` and closes the current conservative
-    scheduler scope.  General memory scheduling, unary/conversion FP latency,
-    and alias modelling are deferred until a measured workload justifies
-    them.
+    bounded HI/LO window in `3c2092b7`.  C5 removes redundant VR4300 multiply
+    padding through hardware MCI rules in `af5be45d`; software/QEMU gates pass
+    and the physical N64 gate is pending.  General memory scheduling,
+    unary/conversion FP latency, and alias modelling are deferred until a
+    measured workload justifies them.
 - [x] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
   - MIPS call-argument liveness and leaf `$ra` omission, including the
     omit-FP/kernel path, are complete and green.  Omit-FP callee-save slot
