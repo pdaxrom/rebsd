@@ -2499,7 +2499,8 @@ mips_can_trim_mtc1_cvt_nop(const char *mtc1, const char *cvt)
 {
 	int mtc1_gpr, mtc1_fpr, cvt_dst, cvt_src;
 
-	if (mips_target.isa != MIPS_ISA_MIPS32R2)
+	if (mips_target.isa != MIPS_ISA_MIPS32R2 &&
+	    mips_target.tune != MIPS_TUNE_VR4300)
 		return 0;
 	if (!mips_parse_mtc1_regs(mtc1, &mtc1_gpr, &mtc1_fpr) ||
 	    !mips_parse_cvt_w_regs(cvt, &cvt_dst, &cvt_src, NULL))

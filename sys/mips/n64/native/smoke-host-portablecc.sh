@@ -436,6 +436,14 @@ fpu_conversion_schedule_probe(void)
 }
 
 void
+fpu_mtc1_interlock_probe(void)
+{
+	asm("mtc1 $v0,$f0\n\t"
+	    "nop\n\t"
+	    "cvt.d.w $f0,$f0");
+}
+
+void
 fpu_conversion_hilo_schedule_probe(void)
 {
 	asm("mult $a0,$a1\n\t"
@@ -454,6 +462,18 @@ EOF
 for schedule_cpu in vr4300 mips32r2; do
 	"$pcc" -march="$schedule_cpu" -mhard-float -O2 -S -o "$tmp.s" \
 	    "$tmp.c"
+	awk '
+/^[[:space:]]*[.]ent fpu_mtc1_interlock_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*mtc1[[:space:]]+\$v0,\$f0/ { state = 1; next }
+inside && state == 1 && /^[[:space:]]*cvt[.]d[.]w[[:space:]]+\$f0,\$f0/ {
+	found = 1
+}
+END { exit seen && found ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$schedule_cpu retained the interlocked mtc1 conversion nop" >&2
+		exit 1
+	}
 	awk '
 /^[[:space:]]*mtc1[[:space:]]+\$v0,\$f0/ { state = 1; next }
 state == 1 && /^[[:space:]]*l\.d[[:space:]]+\$f2,0\(\$a0\)/ {
@@ -500,6 +520,19 @@ done
 
 "$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 -S -o "$tmp.s" \
     "$tmp.c"
+awk '
+/^[[:space:]]*[.]ent fpu_mtc1_interlock_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*mtc1[[:space:]]+\$v0,\$f0/ { state = 1; next }
+inside && state == 1 && /^[[:space:]]*nop[[:space:]]*$/ { state = 2; next }
+inside && state == 2 && /^[[:space:]]*cvt[.]d[.]w[[:space:]]+\$f0,\$f0/ {
+	found = 1
+}
+END { exit seen && found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 lost the conservative mtc1 conversion nop" >&2
+	exit 1
+}
 awk '
 /^[[:space:]]*mtc1[[:space:]]+\$v0,\$f0/ { state = 1; next }
 state == 1 && /^[[:space:]]*l\.d[[:space:]]+\$f2,0\(\$a0\)/ {
