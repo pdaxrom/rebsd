@@ -514,3 +514,102 @@ hardware.  A general memory scheduler remains deferred until an explicit alias
 model and measured target windows justify its cost.  Proceed to Milestone D
 and reduce avoidable frame-pointer, outgoing-argument, spill, and stack
 traffic.
+
+## Milestone E1: FPU Transfer/Conversion Gap Fill
+
+Implementation commit `1e37ef12` makes the existing exact
+`mtc1`/conversion/FPU-load peephole run before the interlocked load-nop trim
+on VR4300 and MIPS32R2.  Before E1, the same transformation already worked
+for generic non-interlocked MIPS3, but the early VR4300/MIPS32R2 trim removed
+the FPU-load `nop` that the late peephole used to recognize.
+
+The accepted input is restricted to this fully parsed sequence:
+
+```text
+mtc1 GPR,FPR-A
+nop
+cvt.s.w/cvt.d.w FPR-A,FPR-A
+FPU-load FPR-B,address
+nop
+binary-FPU FPR-D,...,FPR-B
+```
+
+The load destination must not overlap the conversion registers, and the
+following binary operation must read the loaded register.  E1 emits:
+
+```text
+mtc1 GPR,FPR-A
+FPU-load FPR-B,address
+cvt.s.w/cvt.d.w FPR-A,FPR-A
+binary-FPU FPR-D,...,FPR-B
+```
+
+This fills both explicit transfer/load gaps with useful work.  The VR4300
+User's Manual, Table 7-14, specifies five execution cycles for integer-to-FP
+conversion and an additional interlock cycle for an immediately dependent
+consumer.  The load and conversion are independent, so the hardware retains
+correct dependency interlocks while executing two fewer explicit `nop`s.
+
+An `mtc1` immediately after `mfhi`/`mflo` is excluded from this early rule.
+That preserves the specialized HI/LO gap fill instead of exposing the two
+integer multiply nops again.  Permanent VR4300 and MIPS32R2 probes cover the
+positive conversion/load sequence and the combined HI/LO sequence.  A generic
+MIPS3 probe preserves its pre-E1 late-peephole behavior.
+
+The VR4300 multiplication erratum policy is unchanged.  E1 does not move a
+floating-point multiply, and default/explicit `-mfix4300` still repairs
+adjacent multiply sequences while `-mno-fix4300` disables only that repair.
+
+### Static Results
+
+VR4300 Linpack has two matching windows.  Loads, stores, non-nop instructions,
+branches, and multiply counts are unchanged:
+
+```text
+VR4300 before: 2471 instructions, 153 nops, 643 loads, 244 stores, 79929 bytes
+VR4300 after:  2469 instructions, 151 nops, 643 loads, 244 stores, 79919 bytes
+```
+
+MIPS32R2 Linpack remains at 2545 instructions, 108 nops, 772 loads, and 293
+stores.  Its current double constants use split `lwc1` loads and do not match
+the exact single-load window, but the permanent target probe exercises E1.
+
+### Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the three documented
+expected failures and passed 292/292 runtime candidates.  Native PCC compiled
+302 cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 12329 / 12690 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 979 / 968 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13053 / 12963 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1129 / 1124 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13128 / 13240 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1145 / 1114 | `PCC_SMOKE_ALL_RC:0` |
+
+All kernels and root filesystems were built with PCC.  Every profile has
+exactly one `PCC_SMOKE_ALL_OK`, zero failures, and `PCC_SMOKE_ALL_RC:0`.
+Kernel builds cover `-msoft-float -fomit-frame-pointer`; hard and soft userland
+profiles were both tested.  Logs are
+`/private/tmp/pcc-fpu-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### N64 Artifact
+
+```text
+sys/mips/n64/builds/20260711-milestone-e1-fpu-conversion-schedule/pcc-debug.z64
+implementation commit: 1e37ef12
+size: 6717440 bytes
+sha256: 879427a3c45df0683538240a9f323139313ca6a0a40966a4b93f062347f4085a
+kernel ELF sha256: 0436af61a37f585814cb65ccbe3410f65d264f4ff756955d676b3909654cf789
+cross pcc sha256: ca6336fd0a862d5f4322ced035605049040784735af08eca4c94629baf518ea8
+cross ccom sha256: 1082847ee81853dd957964b8891b8edba930a51d61be738d1baad4a5f2c40478
+native ccom sha256: e1b5143cb17a0f6ffee4af95ad71b26e960382158ae9d95da14674ffef9d6499
+```
+
+This is a clean PCC-kernel/PCC-userland hard-float a.out image with build stamp
+`.build-mode.pcc.1.0.0.1` and default `-mfix4300`.  Real N64 hardware
+validation is pending; do not begin the next risky scheduler substep until it
+passes.

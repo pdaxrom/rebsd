@@ -4175,6 +4175,37 @@ Backend work, kept small:
 - [ ] Tune hard-float codegen for VR4300.
   - Replace unconditional FPU memory-operation `nop` padding with dependency
     scheduling.
+  - [x] First FPU tuning substep (commit `1e37ef12`): run the existing exact
+    `mtc1`; `nop`; `cvt.s.w`/`cvt.d.w`; FPU-load; `nop`; dependent binary-FPU
+    peephole before the interlocked load-nop trim on VR4300 and MIPS32R2.  It
+    emits `mtc1`; FPU-load; conversion; binary-FPU after proving that the load
+    and conversion register sets do not overlap and that the binary operation
+    reads the loaded register.
+  - VR4300 User's Manual Table 7-14 gives integer-to-FP conversion five
+    execution cycles plus one interlock cycle for an immediately dependent
+    consumer.  The independent FPU load fills the `mtc1` transfer gap and one
+    conversion cycle while preserving hardware dependency interlocks.
+  - The rule excludes `mtc1` immediately after `mfhi`/`mflo`, preserving the
+    specialized HI/LO gap fill.  Permanent VR4300/MIPS32R2 probes cover both
+    forms, and generic MIPS3 retains its pre-existing late-peephole behavior.
+  - VR4300 Linpack improves from `2471` instructions / `153` `nop` to `2469`
+    instructions / `151` `nop`; non-`nop` instructions stay `2318`,
+    loads/stores stay `643/244`, and bytes fall from `79929` to `79919`.
+    MIPS32R2 Linpack stays `2545/108/772/293` because its current double
+    constants use split `lwc1` loads rather than the exact single-load window.
+  - Cross and native runtime regressions pass `292/292` with zero unexpected
+    failures.  All six PCC-kernel/PCC-rootfs QEMU profiles pass with exactly
+    one `PCC_SMOKE_ALL_OK`, zero failures, and `PCC_SMOKE_ALL_RC:0`, covering
+    VR4300/MIPS32R2, big/little endian, and hard/soft userland.  Kernels use
+    `-msoft-float -fomit-frame-pointer`.
+  - The clean PCC-kernel/PCC-userland hard-float default-`-mfix4300` N64 image
+    awaiting hardware validation is
+    `sys/mips/n64/builds/20260711-milestone-e1-fpu-conversion-schedule/pcc-debug.z64`,
+    SHA-256
+    `879427a3c45df0683538240a9f323139313ca6a0a40966a4b93f062347f4085a`.
+    Do not start the next risky scheduler substep before this gate passes.
+  - No FP multiply scheduling changed in E1; the `-mfix4300` /
+    `-mno-fix4300` erratum switch remains unchanged.
   - Keep helper calls only where they preserve required IEEE/NaN behavior; do
     not replace correctness-sensitive helper paths with raw FPU instructions
     unless the existing N64/Malta tests prove equivalence.
