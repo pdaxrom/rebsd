@@ -113,6 +113,11 @@ make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ZSWAP
 make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 N64_ZSWAP=1 kernel.z64 preflight.z64
 ```
 
+Use `N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc` for normal N64
+hardware and performance validation.  PCC-kernel N64 builds are currently
+substantially slower and should be treated as explicit compiler-correctness
+tests rather than the default hardware gate.
+
 Fresh checkouts should run `make tools` before direct board-directory builds.
 The shared wrapper form, `make -C sys/mips BOARD=... target`, forwards the
 PCC smoke targets to the selected board.  The full QEMU PCC gate is

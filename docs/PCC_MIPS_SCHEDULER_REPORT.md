@@ -598,18 +598,32 @@ profiles were both tested.  Logs are
 
 ### N64 Artifact
 
+The PCC-kernel/PCC-userland control image is retained as:
+
 ```text
 sys/mips/n64/builds/20260711-milestone-e1-fpu-conversion-schedule/pcc-debug.z64
 implementation commit: 1e37ef12
 size: 6717440 bytes
 sha256: 879427a3c45df0683538240a9f323139313ca6a0a40966a4b93f062347f4085a
 kernel ELF sha256: 0436af61a37f585814cb65ccbe3410f65d264f4ff756955d676b3909654cf789
-cross pcc sha256: ca6336fd0a862d5f4322ced035605049040784735af08eca4c94629baf518ea8
-cross ccom sha256: 1082847ee81853dd957964b8891b8edba930a51d61be738d1baad4a5f2c40478
-native ccom sha256: e1b5143cb17a0f6ffee4af95ad71b26e960382158ae9d95da14674ffef9d6499
 ```
 
-This is a clean PCC-kernel/PCC-userland hard-float a.out image with build stamp
-`.build-mode.pcc.1.0.0.1` and default `-mfix4300`.  Real N64 hardware
-validation is pending; do not begin the next risky scheduler substep until it
-passes.
+This image has build stamp `.build-mode.pcc.1.0.0.1`.  It is not the N64
+performance or hardware gate because a PCC kernel is currently too slow on
+real hardware.
+
+The N64 hardware gate uses a GCC kernel and PCC hard-float userland:
+
+```text
+sys/mips/n64/builds/20260711-milestone-e1-fpu-conversion-schedule-gcc-kernel/pcc-debug.z64
+implementation commit: 1e37ef12
+size: 6619136 bytes
+sha256: f452245340f0d0f4e4c5698f1103f306052449e756ce81c4c18299838d4b90f9
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+```
+
+This is a clean GCC-kernel/PCC-userland hard-float a.out image with build
+stamp `.build-mode.gcc.1.0.0.1` and default `-mfix4300`.  Use this compiler
+combination for future N64 hardware/performance gates unless explicitly
+testing PCC kernel correctness.  Real N64 hardware validation is pending; do
+not begin the next risky scheduler substep until it passes.
