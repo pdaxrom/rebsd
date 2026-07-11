@@ -353,6 +353,105 @@ END { exit found ? 0 : 1 }
 
 cat > "$tmp.c" <<'EOF'
 void
+fpu_conversion_schedule_probe(void)
+{
+	asm("mtc1 $v0,$f0\n\t"
+	    "nop\n\t"
+	    "cvt.d.w $f0,$f0\n\t"
+	    "l.d $f2,0($a0)\n\t"
+	    "nop\n\t"
+	    "add.d $f4,$f0,$f2\n\t"
+	    "addiu $v1,$v1,1");
+}
+
+void
+fpu_conversion_hilo_schedule_probe(void)
+{
+	asm("mult $a0,$a1\n\t"
+	    "nop\n\t"
+	    "nop\n\t"
+	    "mflo $v0\n\t"
+	    "mtc1 $a2,$f0\n\t"
+	    "nop\n\t"
+	    "cvt.d.w $f0,$f0\n\t"
+	    "l.d $f2,0($a3)\n\t"
+	    "nop\n\t"
+	    "add.d $f4,$f0,$f2");
+}
+EOF
+
+for schedule_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$schedule_cpu" -mhard-float -O2 -S -o "$tmp.s" \
+	    "$tmp.c"
+	awk '
+/^[[:space:]]*mtc1[[:space:]]+\$v0,\$f0/ { state = 1; next }
+state == 1 && /^[[:space:]]*l\.d[[:space:]]+\$f2,0\(\$a0\)/ {
+	state = 2
+	next
+}
+state == 2 && /^[[:space:]]*cvt\.d\.w[[:space:]]+\$f0,\$f0/ {
+	state = 3
+	next
+}
+state == 3 && /^[[:space:]]*add\.d[[:space:]]+\$f4,\$f0,\$f2/ {
+	state = 4
+	next
+}
+state == 4 && /^[[:space:]]*addiu[[:space:]]+\$v1,\$v1,1/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$schedule_cpu did not fill FPU transfer/conversion gaps" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*mult[[:space:]]+\$a0,\$a1/ { state = 1; next }
+state == 1 && /^[[:space:]]*mtc1[[:space:]]+\$a2,\$f0/ {
+	state = 2
+	next
+}
+state == 2 && /^[[:space:]]*nop[[:space:]]*$/ { state = 3; next }
+state == 3 && /^[[:space:]]*mflo[[:space:]]+\$v0/ { state = 4; next }
+state == 4 && /^[[:space:]]*cvt\.d\.w[[:space:]]+\$f0,\$f0/ {
+	state = 5
+	next
+}
+state == 5 && /^[[:space:]]*l\.d[[:space:]]+\$f2,0\(\$a3\)/ {
+	state = 6
+	next
+}
+state == 6 && /^[[:space:]]*add\.d[[:space:]]+\$f4,\$f0,\$f2/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$schedule_cpu regressed combined HI/LO and FPU gaps" >&2
+		exit 1
+	}
+done
+
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 -S -o "$tmp.s" \
+    "$tmp.c"
+awk '
+/^[[:space:]]*mtc1[[:space:]]+\$v0,\$f0/ { state = 1; next }
+state == 1 && /^[[:space:]]*l\.d[[:space:]]+\$f2,0\(\$a0\)/ {
+	state = 2
+	next
+}
+state == 2 && /^[[:space:]]*cvt\.d\.w[[:space:]]+\$f0,\$f0/ {
+	state = 3
+	next
+}
+state == 3 && /^[[:space:]]*add\.d[[:space:]]+\$f4,\$f0,\$f2/ {
+	state = 4
+	next
+}
+state == 4 && /^[[:space:]]*addiu[[:space:]]+\$v1,\$v1,1/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 lost FPU conversion scheduling" >&2
+	exit 1
+}
+
+cat > "$tmp.c" <<'EOF'
+void
 hilo_gap_schedule_probe(void)
 {
 	asm("mult $v1,$v0\n\t"

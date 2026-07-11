@@ -3334,12 +3334,13 @@ static int
 mips_schedule_load_delay_nops(char *path)
 {
 	char line[4096], load[4096], nop[4096], next[4096], after[4096];
-	char delay[4096];
+	char final[4096], delay[4096], previous[4096];
 	FILE *in, *out;
 	char *tmp;
 	const char *fill;
 	long pos;
 	int can_fill;
+	int mfreg;
 	int prev_delay_slot;
 	int changed;
 	int failed;
@@ -3362,6 +3363,7 @@ mips_schedule_load_delay_nops(char *path)
 	}
 
 	prev_delay_slot = 0;
+	previous[0] = '\0';
 	changed = 0;
 	while (fgets(line, sizeof(line), in) != NULL) {
 		if (!prev_delay_slot && mips_is_instruction(line)) {
@@ -3378,6 +3380,23 @@ mips_schedule_load_delay_nops(char *path)
 					fputs(after, out);
 					prev_delay_slot =
 					    mips_has_delay_slot(after);
+					strcpy(previous, after);
+					changed = 1;
+					continue;
+				}
+				if (!mips_parse_mfhilo_dest(previous, &mfreg) &&
+				    mips_is_nop(load) &&
+				    fgets(after, sizeof(after), in) != NULL &&
+				    fgets(final, sizeof(final), in) != NULL &&
+				    mips_is_nop(after) &&
+				    mips_can_fill_mtc1_cvt_fpu_load_delay(line, nop,
+				    next, final)) {
+					fputs(line, out);
+					fputs(next, out);
+					fputs(nop, out);
+					fputs(final, out);
+					prev_delay_slot = mips_has_delay_slot(final);
+					strcpy(previous, final);
 					changed = 1;
 					continue;
 				}
@@ -3402,6 +3421,7 @@ mips_schedule_load_delay_nops(char *path)
 						fputs(next, out);
 						prev_delay_slot =
 						    mips_has_delay_slot(next);
+						strcpy(previous, next);
 						changed = 1;
 						continue;
 					}
@@ -3427,8 +3447,10 @@ mips_schedule_load_delay_nops(char *path)
 			}
 		}
 		fputs(line, out);
-		if (mips_is_instruction(line))
+		if (mips_is_instruction(line)) {
 			prev_delay_slot = mips_has_delay_slot(line);
+			strcpy(previous, line);
+		}
 	}
 
 	failed = ferror(in) || ferror(out);
