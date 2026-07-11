@@ -4164,6 +4164,22 @@ Backend work, kept small:
     pass.  Real hardware validation of this corrected clean-PCC image passed
     on 2026-07-11 with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and
     the final `N64_PCC_DEBUG_RC_END` marker.
+  - [x] D3 enables the existing `param_32bit` compiler-`TEMP` path for
+    optimized, non-variadic MIPS32R2 functions.  Ordinary 32-bit integer and
+    pointer register parameters no longer require incoming frame stores and
+    repeated loads.  Address-taken parameters still materialize private local
+    slots; structures, 64-bit values, floating-point values, and varargs keep
+    their established paths.
+  - MIPS32R2 Linpack changes from `2541/2433/108/768/293/79194` to
+    `2473/2367/106/558/276/71207`
+    instructions/non-nops/nops/loads/stores/assembly-bytes.  Cross and native
+    runtime pass 292/292, and all six PCC-kernel/PCC-rootfs QEMU profiles pass.
+    Permanent probes cover promoted, assigned, and address-taken parameters.
+  - VR4300 remains byte-identical at `2465/2314/151/639/244/79719`.  Enabling
+    the same path experimentally raised nops from 151 to 239 despite fewer
+    loads, so it remains disabled until HI/LO scheduling or allocation can
+    absorb the extra dependencies.  No N64 artifact is required for this
+    MIPS32R2-only milestone; `-mfix4300` behavior is unchanged.
   - Preserve the existing o32 ABI fixes for struct returns, stack-passed
     64-bit arguments, varargs, and aggregate arguments.
   - Leaf `$ra` omission is now landed for both normal and
@@ -4292,6 +4308,10 @@ Milestone order:
     software-complete in `194d264e`/`5aa462ed`.  Clean N64 build and weak-link
     fixes are in `776e41af`; all six QEMU profiles and the corrected clean-PCC
     real-N64 hardware gate pass.
+  - D3 promotes ordinary MIPS32R2 scalar/pointer register parameters into
+    compiler `TEMP`s at `-O`, removing 210 Linpack loads and 17 stores.  It is
+    intentionally disabled on VR4300 after the measured trial added 88 nops;
+    all cross/native and six-profile QEMU gates pass.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,

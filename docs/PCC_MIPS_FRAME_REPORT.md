@@ -258,9 +258,89 @@ N64_PCC_DEBUG_RUNNER_RC 0
 N64_PCC_DEBUG_RC_END
 ```
 
-## Next Step
+## D2 Closure
 
 D2 and the current Milestone D frame work have passed the corrected clean-PCC
 real-N64 gate.  Profile VR4300 hard-float FPU padding before choosing the next
 compact scheduler change; keep `-mfix4300` enabled by default and preserve the
 existing hard/soft-float and big/little-endian gates.
+
+## Milestone D3: MIPS32R2 Scalar Parameter Promotion
+
+Implementation commit `8c912f88` enables an existing compact `param_32bit`
+path that copies an incoming o32 register parameter directly into a compiler
+`TEMP`; the MIPS backend previously always disabled it.  Optimized MIPS32R2
+compilations therefore no longer need an unconditional store to, and repeated
+loads from, incoming frame slots for ordinary 32-bit integer and pointer
+parameters.  Address-taken parameters are still materialized in a private
+local slot when their address is requested, and assigned parameters remain
+ordinary mutable `TEMP` values.
+
+The change is deliberately gated by `xtemps`, non-variadic function state,
+and `MIPS_ISA_MIPS32R2`.  Structures, 64-bit integers, `float`, `double`, and
+variadic argument-save rules retain their previous lowering.  VR4300 output
+is byte-identical to E2.  An experimental VR4300 enablement reduced Linpack
+loads from 639 to 429 and stores from 244 to 227, but increased nops from 151
+to 239 and total instructions from 2465 to 2489.  That variant was rejected;
+VR4300 parameter promotion must wait for better HI/LO scheduling or register
+allocation around the promoted values.
+
+### D3 Permanent Probes
+
+The host smoke requires MIPS32R2 optimized scalar register parameters to avoid
+their incoming `16..28($fp)` slots.  Separate probes verify that taking a
+parameter address creates a negative local frame slot and that assignment
+does not restore the incoming frame load.  The VR4300 probe requires its E2
+store/load sequence to remain, making the ISA gate permanent and explicit.
+
+### D3 Static Results
+
+Normal hard-float Linpack changes as follows:
+
+```text
+VR4300 E2/D3: 2465 instructions, 2314 non-nops, 151 nops,
+               639 loads, 244 stores, 79719 bytes (byte-identical)
+
+MIPS32R2 E2:  2541 instructions, 2433 non-nops, 108 nops,
+               768 loads, 293 stores, 79194 bytes
+MIPS32R2 D3:  2473 instructions, 2367 non-nops, 106 nops,
+               558 loads, 276 stores, 71207 bytes
+```
+
+MIPS32R2 therefore removes 68 instructions, including two nops, plus 210
+loads and 17 stores.  Generated assembly shrinks by 7987 bytes.  The VR4300
+assembly checksum remains `3984963140 79719` before and after D3.
+
+### D3 Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the same three expected
+failures and passed 292/292 runtime candidates.  Native PCC compiled 302
+cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected compile and runtime failure counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 12337.186 / 12487.204 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1005.809 / 1000.438 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 12906.425 / 13074.069 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1109.814 / 1105.535 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13516.050 / 13514.842 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1080.515 / 1078.507 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for the kernel and root filesystem.  Kernel builds
+used `-msoft-float -fomit-frame-pointer`; hard/soft userland and both endian
+modes were covered.  Every log has exactly one `PCC_SMOKE_ALL_OK`, zero
+failures, `PCC_SMOKE_ALL_RC:0`, and no branch-delay macro expansion warning.
+Logs are `/private/tmp/pcc-param-promotion-{malta64,malta,maltael}-{hard,soft}.log`.
+
+No N64 image or hardware gate is needed for D3: the VR4300 assembly is
+byte-identical, the default `-mfix4300` erratum path is unchanged, and this
+milestone affects only MIPS32R2.
+
+## Next Step
+
+Do not enable parameter promotion on VR4300 in its current form.  First reduce
+the extra HI/LO dependency padding exposed by promoted loop parameters, then
+repeat the static comparison before deciding whether the load/store reduction
+is a net win.  Keep MIPS32R2 double-constant load scheduling as a separate
+measured candidate.
