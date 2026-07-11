@@ -590,10 +590,13 @@ sys/mips/n64/builds/20260711-milestone-c5-vr4300-mult-interlock-gcc-kernel/pcc-d
 implementation commit: af5be45d
 build stamp: .build-mode.gcc.1.0.0.1
 size: 6619136 bytes
-sha256: 98af142f36c67afd52a936d91f662a07e21fd9a8300dd10497840e344e171563
-kernel ELF sha256: b5e0643de38c7169950dc6b17e8797f4d37eac2e8be1fdf74d5bfd10586de754
+sha256: ef2577312ea293f24aea77bcce2ea4f1c6d257cdc6076b64187f8d0ddc4b66fb
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
 cross pcc sha256: 751f9fb7d892522e0a8fb4a0a484fb643a3483ee7959ca8a1b3216d08b661ba2
 cross ccom sha256: f20f880cfe2bf05f528c4951c436ff56218fe604c6c18bb10fe119038bef42aa
+native pcc sha256: d2101d12a530cf67b7a19f885d2625029a8a5ffc0f01d8f8a7e338f9b4d52627
+native ccom sha256: 90bdb7ad9409593ba82ff8f799b24872d79a62b23111cff7a698dc8ec7b5b041
+debug runner sha256: b60ba962fb441f0af8cadc791598bea9b26ebc956d75cfc59587aa4ca5633020
 ```
 
 Real N64 validation is required because QEMU does not establish the physical

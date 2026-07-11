@@ -4113,7 +4113,7 @@ Backend work, kept small:
   - The clean C5 GCC-kernel/PCC-hard-float-a.out-userland N64 image is
     `sys/mips/n64/builds/20260711-milestone-c5-vr4300-mult-interlock-gcc-kernel/pcc-debug.z64`,
     SHA-256
-    `98af142f36c67afd52a936d91f662a07e21fd9a8300dd10497840e344e171563`.
+    `ef2577312ea293f24aea77bcce2ea4f1c6d257cdc6076b64187f8d0ddc4b66fb`.
     It uses build stamp `.build-mode.gcc.1.0.0.1` and default `-mfix4300`;
     physical VR4300 validation is pending.
   - Clean-build audit correction, 2026-07-11: the N64 build-mode stamp did not
