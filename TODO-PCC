@@ -4203,13 +4203,15 @@ Backend work, kept small:
     Keep PCC-kernel images only as separate correctness controls on Malta/QEMU
     unless PCC kernel testing is explicitly requested.
   - The clean GCC-kernel/PCC-userland hard-float default-`-mfix4300` N64 image
-    awaiting hardware validation is
+    used for hardware validation is
     `sys/mips/n64/builds/20260711-milestone-e1-fpu-conversion-schedule-gcc-kernel/pcc-debug.z64`,
     SHA-256
     `f452245340f0d0f4e4c5698f1103f306052449e756ce81c4c18299838d4b90f9`.
     Its build stamp is `.build-mode.gcc.1.0.0.1`.  The earlier PCC/PCC image
-    remains preserved as a control artifact.  Do not start the next risky
-    scheduler substep before the GCC-kernel image passes.
+    remains preserved as a control artifact.  Real N64 hardware validation
+    passed with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the
+    final `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no
+    numeric value, so none is inferred.  The E1 hardware gate is closed.
   - No FP multiply scheduling changed in E1; the `-mfix4300` /
     `-mno-fix4300` erratum switch remains unchanged.
   - Keep helper calls only where they preserve required IEEE/NaN behavior; do

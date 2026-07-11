@@ -625,5 +625,14 @@ kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2
 This is a clean GCC-kernel/PCC-userland hard-float a.out image with build
 stamp `.build-mode.gcc.1.0.0.1` and default `-mfix4300`.  Use this compiler
 combination for future N64 hardware/performance gates unless explicitly
-testing PCC kernel correctness.  Real N64 hardware validation is pending; do
-not begin the next risky scheduler substep until it passes.
+testing PCC kernel correctness.  Real N64 hardware validation passed with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+The final marker was supplied without a numeric value, so none is inferred.
+The E1 hardware gate is closed and the next isolated scheduler substep may
+proceed.
