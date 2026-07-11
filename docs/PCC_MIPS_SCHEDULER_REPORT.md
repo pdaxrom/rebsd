@@ -486,13 +486,21 @@ native ccom sha256: 3243c4b7a602fbba56c79c606b5f8dde12a48131dfd86bf712489aac102b
 ```
 
 The hard-float a.out image uses the default `-mfix4300` path.  Real N64
-validation is pending.  The C1, C2, and C3 artifact hashes were rechecked and
-remain unchanged.
+hardware validation passed on 2026-07-11 with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+The supplied final marker did not include a numeric value, so none is inferred
+here.  The C1, C2, and C3 artifact hashes were rechecked and remain unchanged.
 
 ## Next Step
 
-C4 closes the current conservative Milestone C scope.  A general memory
-scheduler remains deferred until an explicit alias model and measured target
-windows justify its cost.  After C4 passes real N64 hardware, proceed to
-Milestone D and reduce avoidable frame-pointer, outgoing-argument, spill, and
-stack traffic.  Do not begin D before the C4 hardware result.
+C4 closes the current conservative Milestone C scope and has passed real N64
+hardware.  A general memory scheduler remains deferred until an explicit alias
+model and measured target windows justify its cost.  Proceed to Milestone D
+and reduce avoidable frame-pointer, outgoing-argument, spill, and stack
+traffic.

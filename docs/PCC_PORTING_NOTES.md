@@ -338,7 +338,9 @@ from `2473/155` to `2471/153` instructions/nops; MIPS32R2 is byte-identical
 because it already uses one-instruction `mul`.  Cross/native regressions and
 all six PCC-kernel/PCC-rootfs QEMU profiles pass.  The N64 hard-float image is
 `sys/mips/n64/builds/20260711-milestone-c4-hilo-gap-schedule/pcc-debug.z64`;
-real hardware validation is pending before Milestone D begins.
+real hardware validation passed on 2026-07-11 with `N64_PCC_DEBUG_END 0`,
+`N64_PCC_DEBUG_RUNNER_RC 0`, and the final `N64_PCC_DEBUG_RC_END` marker.
+The supplied final marker had no numeric value, so none is inferred.
 
 ## Active PCC Work Queue
 
