@@ -419,5 +419,13 @@ native ccom sha256: 74b0b65545484d3f6e4cd3f2cbdf8e2784a3ec392a41459e169899bb9fc2
 debug runner sha256: 0fb2657b0c1468dba12d81646d6583525e4b950f7335257648bce41a35484cf6
 ```
 
-Real N64 validation is pending.  Do not start the next VR4300 optimization
-until this image produces the three expected zero-status markers.
+Real N64 validation passed on 2026-07-11 with all three expected zero-status
+markers:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+The D4 physical VR4300 gate is closed.

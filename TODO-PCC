@@ -4210,7 +4210,9 @@ Backend work, kept small:
     `sys/mips/n64/builds/20260711-milestone-d4-vr4300-param-promotion-gcc-kernel/pcc-debug.z64`,
     SHA-256
     `359f80f70fdf31bee92c8276e28e8c556da7a069a775b9157d8d06718f5ccabc`;
-    physical VR4300 validation is pending.
+    physical VR4300 validation passed on 2026-07-11 with
+    `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and
+    `N64_PCC_DEBUG_RC_END`.
   - Preserve the existing o32 ABI fixes for struct returns, stack-passed
     64-bit arguments, varargs, and aggregate arguments.
   - Leaf `$ra` omission is now landed for both normal and
@@ -4344,7 +4346,7 @@ Milestone order:
     compiler `TEMP`s at `-O`, removing 210 Linpack loads and 17 stores.  It is
     extended to VR4300 by D4 after C5 removed the artificial multiply padding;
     VR4300 also removes 210 loads and 17 stores.  All cross/native and
-    six-profile QEMU gates pass; the D4 physical N64 gate is pending.
+    six-profile QEMU gates pass; the D4 physical N64 gate passes.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,
