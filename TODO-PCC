@@ -4115,7 +4115,9 @@ Backend work, kept small:
     SHA-256
     `ef2577312ea293f24aea77bcce2ea4f1c6d257cdc6076b64187f8d0ddc4b66fb`.
     It uses build stamp `.build-mode.gcc.1.0.0.1` and default `-mfix4300`;
-    physical VR4300 validation is pending.
+    physical VR4300 validation passed on 2026-07-11 with
+    `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
+    `N64_PCC_DEBUG_RC_END` marker.
   - Clean-build audit correction, 2026-07-11: the N64 build-mode stamp did not
     include the selected kernel compiler.  The archived C2 through D1 images
     could reuse GCC kernel objects while `vers.o` reported `with pcc`; the D1
@@ -4313,8 +4315,8 @@ Milestone order:
     branch-delay-across-load window is complete in `668a7d88`.  The first
     binary FPU dependency window is complete in `0331d3cf`; C4 adds the
     bounded HI/LO window in `3c2092b7`.  C5 removes redundant VR4300 multiply
-    padding through hardware MCI rules in `af5be45d`; software/QEMU gates pass
-    and the physical N64 gate is pending.  General memory scheduling,
+    padding through hardware MCI rules in `af5be45d`; software/QEMU and
+    physical N64 gates pass.  General memory scheduling,
     unary/conversion FP latency, and alias modelling are deferred until a
     measured workload justifies them.
 - [x] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.

@@ -599,8 +599,16 @@ native ccom sha256: 90bdb7ad9409593ba82ff8f799b24872d79a62b23111cff7a698dc8ec7b5
 debug runner sha256: b60ba962fb441f0af8cadc791598bea9b26ebc956d75cfc59587aa4ca5633020
 ```
 
-Real N64 validation is required because QEMU does not establish the physical
-VR4300 MCI timing.  Hardware status is pending.
+QEMU does not establish the physical VR4300 MCI timing, so C5 required a real
+hardware gate.  Validation passed on 2026-07-11 with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+The C5 physical VR4300 gate is closed.
 
 ## Milestone E1: FPU Transfer/Conversion Gap Fill
 
