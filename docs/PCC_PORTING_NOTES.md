@@ -351,8 +351,10 @@ and raw frame addresses remain on the old path.  Normal Linpack is
 byte-identical; omit-FP Linpack removes 28 VR4300 and 34 MIPS32R2 instructions.
 Cross/native regressions and all six PCC-kernel/PCC-rootfs QEMU profiles pass.
 The N64 artifact and full invariants are documented in
-`docs/PCC_MIPS_FRAME_REPORT.md`; real hardware validation is pending before
-D2.
+`docs/PCC_MIPS_FRAME_REPORT.md`.  Real hardware validation passed on
+2026-07-11 with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the
+final `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no numeric
+value, so none is inferred.
 
 ## Active PCC Work Queue
 

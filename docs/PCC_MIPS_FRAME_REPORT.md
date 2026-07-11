@@ -101,12 +101,21 @@ native ccom sha256: eadf1d246cb52d918b4f748496c6ee8055cafb055e95f658e827e56f8f53
 
 The hard-float a.out image contains a PCC-built kernel and userland.  The
 kernel uses `-fomit-frame-pointer`; the userland uses hard float; the compiler
-uses default `-mfix4300`.  Real N64 validation is pending before D2.
+uses default `-mfix4300`.  Real N64 validation passed on 2026-07-11 with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+The supplied final marker did not include a numeric value, so none is inferred
+here.
 
 ## Next Step
 
-After D1 passes real N64 hardware, profile the remaining `$fp` functions.
-The next frame-lowering substep may model stack-passed `FUNARG` slots in a
-fixed outgoing area, but only with explicit maximum-call-size accounting and
-probes for 64-bit alignment, varargs, aggregate arguments, nested calls, and
+D1 has passed real N64 hardware.  Profile the remaining `$fp` functions.  The
+next frame-lowering substep may model stack-passed `FUNARG` slots in a fixed
+outgoing area, but only with explicit maximum-call-size accounting and probes
+for 64-bit alignment, varargs, aggregate arguments, nested calls, and
 address-taken locals.  Do not relax those cases through assembly text.

@@ -4117,7 +4117,10 @@ Backend work, kept small:
     pass `292/292`; all six PCC-kernel/PCC-rootfs QEMU profiles pass.
   - The D1 N64 hard-float default-`-mfix4300` image is
     `sys/mips/n64/builds/20260711-milestone-d1-fixed-call-area/pcc-debug.z64`;
-    real hardware validation is pending before D2.
+    real hardware validation passed on 2026-07-11 with
+    `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
+    `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no numeric
+    value, so none is inferred.
   - Rework MIPS call lowering so fixed outgoing argument area handling does not
     force `$fp` in ordinary non-variable-frame functions.
   - Preserve the existing o32 ABI fixes for struct returns, stack-passed
@@ -4206,8 +4209,7 @@ Milestone order:
     omit-FP/kernel path, are complete and green.  Omit-FP callee-save slot
     trimming is also complete and green.  D1 fixed register-only call areas
     are complete in `34c0b9d8`; fixed stack-argument offsets and broader
-    outgoing-argument frame simplification remain open after the D1 hardware
-    gate.
+    outgoing-argument frame simplification remain open for D2.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,
