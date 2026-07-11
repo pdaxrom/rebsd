@@ -138,7 +138,8 @@ ln -sf "$target-pcpp" "$target_bindir/cpp"
 tmp=${TMPDIR:-/tmp}/rebsd-host-portablecc.$$
 trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.normal.s" "$tmp.stats.s" "$tmp.stats2.s" "$tmp.stats.off" \
-    "$tmp.stats.log" "$tmp.stats2.log" \
+    "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
+    "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
     "$tmp.weak-first.s" "$tmp.weak-first.o" \
     "$tmp.weak-second.s" "$tmp.weak-second.o" \
     "$tmp.weak-start.s" "$tmp.weak-start.o" "$tmp.weak.elf"' 0 1 2 3 15
@@ -1030,5 +1031,25 @@ cmp -s "$tmp.stats.log" "$tmp.stats2.log"
 "$pcc" -O2 -fomit-frame-pointer -Wc,-xssa -S \
     -o "$tmp.ssa.s" "$tmp.c" 2>"$tmp.ssa.log"
 test ! -s "$tmp.ssa.log"
+
+"$pcc" -O2 -fomit-frame-pointer -Wc,-xssa -S \
+    -o "$tmp.ssalvn.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssalvn001.c" \
+    2>"$tmp.ssalvn.log"
+test ! -s "$tmp.ssalvn.log"
+repeated_scale_mults=$(awk '
+    /^repeated_scale:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssalvn.s")
+changed_scale_mults=$(awk '
+    /^changed_scale:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssalvn.s")
+test "$repeated_scale_mults" -eq 1
+test "$changed_scale_mults" -eq 2
 
 echo "smoke-host-portablecc: ok"

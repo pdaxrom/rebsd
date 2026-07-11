@@ -34,6 +34,13 @@ struct lvn_value {
 	int temp;
 };
 
+struct multiply_cse_value {
+	NODE *expression;
+	TWORD type;
+	int count;
+	int temp;
+};
+
 static char propagated_copy_marker;
 
 static int
@@ -114,6 +121,208 @@ lvn_barrier(NODE *p)
 	return o == BITYPE && lvn_barrier(p->n_right);
 }
 
+static int
+multiply_cse_barrier(NODE *p)
+{
+	int o;
+
+	if (callop(p->n_op) || p->n_op == XASM)
+		return 1;
+	o = optype(p->n_op);
+	if (o != LTYPE && multiply_cse_barrier(p->n_left))
+		return 1;
+	return o == BITYPE && multiply_cse_barrier(p->n_right);
+}
+
+static int
+tree_defines_temp(NODE *p, int temp)
+{
+	int o;
+
+	o = optype(p->n_op);
+	if (asgop(p->n_op) && o == BITYPE && p->n_left->n_op == TEMP &&
+	    regno(p->n_left) == temp)
+		return 1;
+	if (o != LTYPE && tree_defines_temp(p->n_left, temp))
+		return 1;
+	return o == BITYPE && tree_defines_temp(p->n_right, temp);
+}
+
+static int
+multiply_operand_defined_in_tree(NODE *p, NODE *tree)
+{
+	int o;
+
+	if (p->n_op == TEMP)
+		return tree_defines_temp(tree, regno(p));
+	o = optype(p->n_op);
+	if (o != LTYPE && multiply_operand_defined_in_tree(p->n_left, tree))
+		return 1;
+	return o == BITYPE &&
+	    multiply_operand_defined_in_tree(p->n_right, tree);
+}
+
+static int
+count_multiply_candidates(NODE *p, int low, int high)
+{
+	int count, o;
+
+	count = 0;
+	o = optype(p->n_op);
+	if (o != LTYPE)
+		count += count_multiply_candidates(p->n_left, low, high);
+	if (o == BITYPE)
+		count += count_multiply_candidates(p->n_right, low, high);
+	if (p->n_op == MUL && lvn_expression(p, low, high))
+		count++;
+	return count;
+}
+
+static void
+collect_multiply_candidates(NODE *p, NODE *tree,
+    struct multiply_cse_value *value, int *nvalue, int low, int high)
+{
+	int i, o;
+
+	o = optype(p->n_op);
+	if (o != LTYPE)
+		collect_multiply_candidates(p->n_left, tree, value, nvalue,
+		    low, high);
+	if (o == BITYPE)
+		collect_multiply_candidates(p->n_right, tree, value, nvalue,
+		    low, high);
+	if (p->n_op != MUL || !lvn_expression(p, low, high) ||
+	    multiply_operand_defined_in_tree(p, tree))
+		return;
+	for (i = 0; i < *nvalue; i++)
+		if (value[i].type == p->n_type &&
+		    lvn_same_expression(value[i].expression, p))
+			break;
+	if (i != *nvalue) {
+		value[i].count++;
+		return;
+	}
+	value[i].expression = tcopy(p);
+	value[i].type = p->n_type;
+	value[i].count = 1;
+	value[i].temp = -1;
+	(*nvalue)++;
+}
+
+static void
+replace_multiply_candidates(struct p2env *p2e, NODE **nodep,
+    struct multiply_cse_value *value, int nvalue, struct interpass *before,
+    struct basicblock *bb, int low, int high)
+{
+	struct interpass *ip;
+	NODE *p;
+	int i, o, temp;
+
+	p = *nodep;
+	o = optype(p->n_op);
+	if (o != LTYPE)
+		replace_multiply_candidates(p2e, &p->n_left, value, nvalue,
+		    before, bb, low, high);
+	if (o == BITYPE)
+		replace_multiply_candidates(p2e, &p->n_right, value, nvalue,
+		    before, bb, low, high);
+	p = *nodep;
+	if (p->n_op != MUL || !lvn_expression(p, low, high))
+		return;
+	for (i = 0; i < nvalue; i++)
+		if (value[i].count > 1 && value[i].type == p->n_type &&
+		    lvn_same_expression(value[i].expression, p))
+			break;
+	if (i == nvalue)
+		return;
+	if (value[i].temp < 0) {
+		temp = p2e->epp->ip_tmpnum++;
+		ip = ipnode(mkbinode(ASSIGN, mktemp(temp, p->n_type),
+		    tcopy(p), p->n_type));
+		DLIST_INSERT_BEFORE(before, ip, qelem);
+		if (bb->first == before)
+			bb->first = ip;
+		value[i].temp = temp;
+	}
+	tfree(p);
+	*nodep = mktemp(value[i].temp, value[i].type);
+}
+
+static void
+multiply_cse_region(struct p2env *p2e, struct basicblock *bb,
+    struct interpass *first, struct interpass *last,
+    struct multiply_cse_value *value, int low, int high)
+{
+	struct interpass *ip;
+	int i, nvalue;
+
+	nvalue = 0;
+	for (ip = first;; ip = DLIST_NEXT(ip, qelem)) {
+		if (ip->type == IP_NODE)
+			collect_multiply_candidates(ip->ip_node, ip->ip_node,
+			    value, &nvalue, low, high);
+		if (ip == last)
+			break;
+	}
+	for (ip = first;; ip = DLIST_NEXT(ip, qelem)) {
+		if (ip->type == IP_NODE)
+			replace_multiply_candidates(p2e, &ip->ip_node, value,
+			    nvalue, ip, bb, low, high);
+		if (ip == last)
+			break;
+	}
+	for (i = 0; i < nvalue; i++)
+		tfree(value[i].expression);
+}
+
+/*
+ * Materialize repeated pure integer multiplies used inside trees.  Memory
+ * accesses do not invalidate SSA names, but calls and asm delimit regions.
+ */
+static void
+ssa_local_multiply_cse(struct p2env *p2e)
+{
+	struct basicblock *bb;
+	struct interpass *first, *ip, *previous;
+	struct multiply_cse_value *value;
+	int high, low, maximum;
+
+	low = p2e->ipp->ip_tmpnum;
+	high = p2e->epp->ip_tmpnum;
+	maximum = 0;
+	DLIST_FOREACH(ip, &p2e->ipole, qelem)
+		if (ip->type == IP_NODE)
+			maximum += count_multiply_candidates(ip->ip_node,
+			    low, high);
+	if (maximum == 0)
+		return;
+	value = tmpalloc((size_t)maximum * sizeof(*value));
+
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		first = NULL;
+		previous = NULL;
+		for (ip = bb->first;; ip = DLIST_NEXT(ip, qelem)) {
+			if (ip->type == IP_ASM ||
+			    (ip->type == IP_NODE &&
+			    multiply_cse_barrier(ip->ip_node))) {
+				if (first != NULL)
+					multiply_cse_region(p2e, bb, first,
+					    previous, value, low, high);
+				first = NULL;
+			} else if (first == NULL) {
+				first = ip;
+			}
+			previous = ip;
+			if (ip == bb->last) {
+				if (first != NULL)
+					multiply_cse_region(p2e, bb, first, ip,
+					    value, low, high);
+				break;
+			}
+		}
+	}
+}
+
 /*
  * Number exact, side-effect-free integer expressions within one SSA block.
  * Calls, asm, and memory references end the local value-numbering region.
@@ -126,6 +335,8 @@ ssa_local_value_numbering(struct p2env *p2e)
 	struct lvn_value *value;
 	NODE *p;
 	int high, i, low, nnode, nvalue, temp;
+
+	ssa_local_multiply_cse(p2e);
 
 	nnode = 0;
 	DLIST_FOREACH(ip, &p2e->ipole, qelem)
