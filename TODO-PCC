@@ -4121,8 +4121,31 @@ Backend work, kept small:
     `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
     `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no numeric
     value, so none is inferred.
-  - Rework MIPS call lowering so fixed outgoing argument area handling does not
-    force `$fp` in ordinary non-variable-frame functions.
+  - [x] D2 extends the fixed outgoing area to ordinary scalar stack arguments
+    (commit `194d264e`).  Pass2 scans ABI-lowered `FUNARG` nodes, reserves the
+    maximum 16-byte o32 home area plus stack slots and alignment padding, and
+    records ABI offsets beginning at `16($sp)`.  Eligible calls store directly
+    into that area without per-call `$sp` decrement/restore pairs.
+  - `STARG`, raw frame addresses, `alloca`, explicit `$fp`, aggregate calls,
+    and variadic callees retain the old stable `$fp` and dynamic lowering.
+    Nested scalar calls and variadic callers use the fixed area.  Permanent
+    VR4300/MIPS32R2 probes cover register-only, scalar, 64-bit, variadic,
+    nested, aggregate, address-taken, and `alloca` cases.
+  - Normal Linpack remains byte-identical.  Omit-FP VR4300 changes from D1
+    `2425/2250/175/634/235` to `2367/2182/185/632/233`, and MIPS32R2 changes
+    from `2493/2369/124/763/284` to `2435/2301/134/761/282`
+    instructions/non-nops/nops/loads/stores.  Both remove 68 non-nops, two
+    loads, and two stores.  Only `linpack` and `second` still require `$fp`.
+  - Cross and native runtime pass 292/292 with no unexpected failures.  All
+    six final PCC-kernel/PCC-rootfs QEMU profiles pass with exactly one
+    `PCC_SMOKE_ALL_OK`, zero failures, and `PCC_SMOKE_ALL_RC:0`; kernels use
+    `-msoft-float -fomit-frame-pointer`, and hard/soft userland was tested.
+  - The D2 N64 PCC-kernel/PCC-userland hard-float default-`-mfix4300` image is
+    `sys/mips/n64/builds/20260711-milestone-d2-fixed-stack-args/pcc-debug.z64`
+    with SHA-256
+    `76aeb3251bf15e4b4ba7f5ad4d9d3f17a2b00c16e7d09dceba32ccf878198633`.
+    Real hardware validation is pending; do not begin another risky backend
+    substep before it passes.
   - Preserve the existing o32 ABI fixes for struct returns, stack-passed
     64-bit arguments, varargs, and aggregate arguments.
   - Leaf `$ra` omission is now landed for both normal and
@@ -4208,8 +4231,9 @@ Milestone order:
   - MIPS call-argument liveness and leaf `$ra` omission, including the
     omit-FP/kernel path, are complete and green.  Omit-FP callee-save slot
     trimming is also complete and green.  D1 fixed register-only call areas
-    are complete in `34c0b9d8`; fixed stack-argument offsets and broader
-    outgoing-argument frame simplification remain open for D2.
+    are complete in `34c0b9d8`; D2 fixed scalar stack-argument areas are
+    software-complete in `194d264e` and pass all six QEMU profiles.  Milestone
+    D remains open only for the D2 real-N64 hardware gate.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,
