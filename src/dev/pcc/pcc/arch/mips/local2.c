@@ -73,6 +73,7 @@ static int mips_omit_fp;
 static int mips_leaf_function;
 static int mips_fixed_call_area;
 static int mips_fixed_call_size;
+static int mips_fixed_arg_offset;
 
 static int
 mips_can_omit_fp(struct interpass_prolog *ipp)
@@ -246,6 +247,7 @@ eoftn(struct interpass_prolog * ipp)
 		mips_leaf_function = 0;
 		mips_fixed_call_area = 0;
 		mips_fixed_call_size = 0;
+		mips_fixed_arg_offset = 0;
 		return;		/* no code needs to be generated */
 	}
 
@@ -302,6 +304,7 @@ eoftn(struct interpass_prolog * ipp)
 	mips_leaf_function = 0;
 	mips_fixed_call_area = 0;
 	mips_fixed_call_size = 0;
+	mips_fixed_arg_offset = 0;
 
 #ifdef USE_GAS
 	printf("\t.end %s\n", ipp->ipp_name);
@@ -1296,8 +1299,12 @@ zzzcode(NODE * p, int c)
 		break;
 
 	case 'C':	/* remove arguments from stack after subroutine call */
-		if (mips_fixed_call_area)
+		if (mips_fixed_call_area) {
+			if (mips_fixed_arg_offset != ARGINIT / SZCHAR)
+				comperr("bad fixed call argument offset");
+			mips_fixed_arg_offset = 0;
 			break;
+		}
 		sz = p->n_qual > 16 ? p->n_qual : 16;
 		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP], sz);
 		break;
@@ -1310,9 +1317,13 @@ zzzcode(NODE * p, int c)
 		break;
 
 	case 'q':	/* allocate one dynamically pushed argument */
-		if (mips_fixed_call_area)
-			break;
 		sz = funargpushsiz(p);
+		if (mips_fixed_call_area) {
+			mips_fixed_arg_offset -= sz;
+			if (mips_fixed_arg_offset < ARGINIT / SZCHAR)
+				comperr("fixed call argument area underflow");
+			break;
+		}
 		if (sz == 4 && (p->n_type != FLOAT || mips_soft_float))
 			printf("\tsubu %s,%s,4\t\t# save %sarg to stack\n",
 			    rnames[SP], rnames[SP],
@@ -1323,11 +1334,11 @@ zzzcode(NODE * p, int c)
 		break;
 
 	case 'r':	/* first word of an outgoing stack argument */
-		printf("%d", mips_fixed_call_area ? p->n_qual : 0);
+		printf("%d", mips_fixed_call_area ? mips_fixed_arg_offset : 0);
 		break;
 
 	case 's':	/* second word of an outgoing stack argument */
-		printf("%d", mips_fixed_call_area ? p->n_qual + 4 : 4);
+		printf("%d", mips_fixed_call_area ? mips_fixed_arg_offset + 4 : 4);
 		break;
 
 	case 'D':	/* long long comparison */
@@ -1838,29 +1849,9 @@ mips_tree_has_call(NODE *p)
 }
 
 static void
-mips_mark_funargs(NODE *p, int *usedp)
-{
-	int sz;
-
-	if (p == NIL)
-		return;
-	if (p->n_op == CM) {
-		mips_mark_funargs(p->n_left, usedp);
-		mips_mark_funargs(p->n_right, usedp);
-		return;
-	}
-	if (p->n_op != FUNARG)
-		return;
-
-	sz = funargpushsiz(p);
-	p->n_qual = ARGINIT / SZCHAR + *usedp;
-	*usedp += sz;
-}
-
-static void
 mips_scan_call(NODE *p, struct mips_frame_scan *scan)
 {
-	int area, pad, pushsz, used;
+	int area, pad, pushsz;
 
 	scan->has_call = 1;
 	if (p->n_left != NIL && p->n_left->n_op == ICON &&
@@ -1880,8 +1871,6 @@ mips_scan_call(NODE *p, struct mips_frame_scan *scan)
 	area = ARGINIT / SZCHAR + pushsz + pad;
 	if (area > scan->max_call_size)
 		scan->max_call_size = area;
-	used = 0;
-	mips_mark_funargs(p->n_right, &used);
 }
 
 static void
@@ -2551,6 +2540,8 @@ lastcall(NODE *p)
 	pushsz = funargpushsiz(p->n_right);
 	pad = (pushsz & 7) != 0 ? 4 : 0;
 	sz = 4*nargregs + pushsz + pad;
+	mips_fixed_arg_offset = mips_fixed_call_area ?
+	    ARGINIT / SZCHAR + pushsz : 0;
 	if (pad && !mips_fixed_call_area)
 		printf("\tsubu %s,%s,%d\t# align stack\n",
 		    rnames[SP], rnames[SP], pad);
