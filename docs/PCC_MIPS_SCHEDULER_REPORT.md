@@ -725,6 +725,14 @@ kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2
 ```
 
 The clean build has stamp `.build-mode.gcc.1.0.0.1`, identifies its kernel as
-GCC 14.2.0, and uses the default `-mfix4300` policy.  Real N64 hardware must
-produce all three zero status markers before E2 is closed and the next
-optimization starts.
+GCC 14.2.0, and uses the default `-mfix4300` policy.  Real N64 hardware
+validation passed with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
+
+The E2 hardware gate is closed and the next isolated optimization may
+proceed.
