@@ -47,11 +47,13 @@ case "$endian" in
 big)
 	target=mips-rebsd
 	endian_cflags="-DTARGET_BIG_ENDIAN=1"
+	elf_endian=-EB
 	ldscript_name=elf32-bigmips.ld
 	;;
 little)
 	target=mipsel-rebsd
 	endian_cflags="-DTARGET_LITTLE_ENDIAN=1"
+	elf_endian=-EL
 	ldscript_name=elf32-littlemips.ld
 	;;
 *)
@@ -136,7 +138,10 @@ ln -sf "$target-pcpp" "$target_bindir/cpp"
 tmp=${TMPDIR:-/tmp}/rebsd-host-portablecc.$$
 trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.normal.s" "$tmp.stats.s" "$tmp.stats2.s" "$tmp.stats.off" \
-    "$tmp.stats.log" "$tmp.stats2.log"' 0 1 2 3 15
+    "$tmp.stats.log" "$tmp.stats2.log" \
+    "$tmp.weak-first.s" "$tmp.weak-first.o" \
+    "$tmp.weak-second.s" "$tmp.weak-second.o" \
+    "$tmp.weak-start.s" "$tmp.weak-start.o" "$tmp.weak.elf"' 0 1 2 3 15
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>
@@ -172,6 +177,57 @@ grep '[.]weak.*weak_data' "$tmp.s" >/dev/null
 grep '[.]weak.*weak_func' "$tmp.s" >/dev/null
 "$pcc" -c -o "$tmp.o" "$tmp.c"
 test -s "$tmp.o"
+
+if [ -n "$ldscript" ] && [ -x "$tool_src_dir/nm" ]; then
+	cat > "$tmp.weak-first.s" <<'EOF'
+	.text
+	.weak weak_choice
+	.globl weak_choice
+	.globl weak_first_marker
+	.ent weak_choice
+weak_choice:
+weak_first_marker:
+	jr $ra
+	li $v0,1
+EOF
+	cat > "$tmp.weak-second.s" <<'EOF'
+	.text
+	.weak weak_choice
+	.globl weak_choice
+	.globl weak_second_marker
+	.ent weak_choice
+weak_choice:
+weak_second_marker:
+	jr $ra
+	li $v0,2
+EOF
+	cat > "$tmp.weak-start.s" <<'EOF'
+	.text
+	.globl _start
+	.ent _start
+_start:
+	jal weak_choice
+	nop
+EOF
+	"$as" --elf "$elf_endian" -march="$cpu" "$tmp.weak-first.s" \
+	    -o "$tmp.weak-first.o"
+	"$as" --elf "$elf_endian" -march="$cpu" "$tmp.weak-second.s" \
+	    -o "$tmp.weak-second.o"
+	"$as" --elf "$elf_endian" -march="$cpu" "$tmp.weak-start.s" \
+	    -o "$tmp.weak-start.o"
+	"$ld" --elf "$elf_endian" -T "$ldscript" -e _start \
+	    -o "$tmp.weak.elf" "$tmp.weak-first.o" "$tmp.weak-second.o" \
+	    "$tmp.weak-start.o"
+	weak_choice_addr=$("$tool_src_dir/nm" "$tmp.weak.elf" |
+	    awk '$3 == "weak_choice" { print $1 }')
+	weak_first_addr=$("$tool_src_dir/nm" "$tmp.weak.elf" |
+	    awk '$3 == "weak_first_marker" { print $1 }')
+	if [ -z "$weak_choice_addr" ] ||
+	    [ "$weak_choice_addr" != "$weak_first_addr" ]; then
+		echo "ELF linker did not preserve the first weak definition" >&2
+		exit 1
+	fi
+fi
 
 cat > "$tmp.c" <<'EOF'
 struct sd {

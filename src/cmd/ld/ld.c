@@ -3614,7 +3614,8 @@ elf_collect_symbols_from(int first)
                 continue;
             if (elsym[idx].defined && !elsym[idx].weak && bind != STB_WEAK)
                 error(1, "%s: multiple definition", name);
-            if (!elsym[idx].defined || elsym[idx].weak || bind != STB_WEAK) {
+            if (!elsym[idx].defined ||
+                (elsym[idx].weak && bind != STB_WEAK)) {
                 elsym[idx].defined = 1;
                 elsym[idx].weak = bind == STB_WEAK;
                 elsym[idx].common = 0;
