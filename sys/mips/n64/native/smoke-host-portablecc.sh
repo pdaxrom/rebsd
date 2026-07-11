@@ -254,8 +254,26 @@ if grep '^[[:space:]]*mul[[:space:]]' "$tmp.s" >/dev/null; then
 	exit 1
 fi
 grep '^[[:space:]]*mult[[:space:]]' "$tmp.s" >/dev/null
-"$pcc" -mips3 -S -o "$tmp.s" "$tmp.c"
+awk '
+/^[[:space:]]*mult[[:space:]]/ { state = 1; next }
+state == 1 && /^[[:space:]]*mflo[[:space:]]/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "VR4300 retained software padding before interlocked mflo" >&2
+	exit 1
+}
+"$pcc" -march=mips3 -mtune=r4000 -S -o "$tmp.s" "$tmp.c"
 grep '^[[:space:]]*mult[[:space:]]' "$tmp.s" >/dev/null
+awk '
+/^[[:space:]]*mult[[:space:]]/ { state = 1; next }
+state == 1 && /^[[:space:]]*nop([[:space:]]|$)/ { state = 2; next }
+state == 2 && /^[[:space:]]*nop([[:space:]]|$)/ { state = 3; next }
+state == 3 && /^[[:space:]]*mflo[[:space:]]/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 lost conservative multiply padding" >&2
+	exit 1
+}
 "$pcc" -march=mips32r2 -S -o "$tmp.s" "$tmp.c"
 grep '^[[:space:]]*mul[[:space:]]' "$tmp.s" >/dev/null
 "$pcc" -mips32r2 -S -o "$tmp.s" "$tmp.c"

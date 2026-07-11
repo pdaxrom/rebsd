@@ -658,6 +658,22 @@ struct optab table[] = {
 		XSL(A),	RESC1,
 		"ZY", },
 
+/* The VR4300 MCI stalls the pipeline until MULT/MULTU is complete. */
+{ MUL,	INAREG|FEATURE_VR4300,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
+		NARL,	RESC1,
+		"\tmultu AL,AR\t# unsigned multiply\n"
+		"\tmflo A1\n" },
+
+/* this previous will match unsigned/unsigned multiplication first */
+{ MUL,	INAREG|FEATURE_VR4300,
+	SAREG,	TWORD|TUSHORT|TSHORT|TUCHAR|TCHAR,
+	SAREG,	TWORD|TUSHORT|TSHORT|TUCHAR|TCHAR,
+		NARL,	RESC1,
+		"\tmult AL,AR\t# signed multiply\n"
+		"\tmflo A1\n", },
+
 { MUL,	INAREG|FEATURE_MIPS32R2,
 	SAREG,	TUWORD|TUSHORT|TUCHAR,
 	SAREG,	TUWORD|TUSHORT|TUCHAR,
