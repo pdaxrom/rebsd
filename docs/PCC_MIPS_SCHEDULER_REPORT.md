@@ -908,8 +908,20 @@ debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c88
 ```
 
 The final clean build passed `fsutil --check`; both Linpack executables have
-zero undefined symbols.  Real N64 validation is pending.  In addition to the
-benchmark output, the required zero-status markers are:
+zero undefined symbols.  Real N64 validation passed on 2026-07-11.  The two
+timed rows were:
+
+```text
+reps 8:  GCC 4455.842 KFLOPS, PCC 3079.196 KFLOPS (69.10% of GCC)
+reps 16: GCC 4412.130 KFLOPS, PCC 3100.650 KFLOPS (70.28% of GCC)
+```
+
+Both binaries reported the same 15-digit machine precision and 120 by 120
+array.  GCC used 85.83% of its stable run in DGEFA, 4.31% in DGESL, and 9.86%
+in overhead.  PCC used 81.70% in DGEFA, 3.98% in DGESL, and 14.32% in
+overhead.  This closes the E3 correctness and hardware gate, but the stable
+PCC/GCC ratio remains below the 90% performance objective.  All required
+status markers were zero:
 
 ```text
 N64_LINPACK_RC gcc 0
