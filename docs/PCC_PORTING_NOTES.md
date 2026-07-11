@@ -342,6 +342,18 @@ real hardware validation passed on 2026-07-11 with `N64_PCC_DEBUG_END 0`,
 `N64_PCC_DEBUG_RUNNER_RC 0`, and the final `N64_PCC_DEBUG_RC_END` marker.
 The supplied final marker had no numeric value, so none is inferred.
 
+Commit `34c0b9d8` begins Milestone D.  Under explicit
+`-fomit-frame-pointer`, a non-leaf function with register-only calls may use a
+fixed 16-byte o32 home area below all private frame slots.  This removes the
+per-call `$sp` restoration and permits the existing omit-FP rewrite in cases
+that previously forced `$fp`.  Stack arguments, aggregates, `alloca`, varargs,
+and raw frame addresses remain on the old path.  Normal Linpack is
+byte-identical; omit-FP Linpack removes 28 VR4300 and 34 MIPS32R2 instructions.
+Cross/native regressions and all six PCC-kernel/PCC-rootfs QEMU profiles pass.
+The N64 artifact and full invariants are documented in
+`docs/PCC_MIPS_FRAME_REPORT.md`; real hardware validation is pending before
+D2.
+
 ## Active PCC Work Queue
 
 The current PCC milestone is a selectable MIPS CPU userland compiler plus
