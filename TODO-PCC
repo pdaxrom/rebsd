@@ -4193,11 +4193,24 @@ Backend work, kept small:
     instructions/non-nops/nops/loads/stores/assembly-bytes.  Cross and native
     runtime pass 292/292, and all six PCC-kernel/PCC-rootfs QEMU profiles pass.
     Permanent probes cover promoted, assigned, and address-taken parameters.
-  - VR4300 remains byte-identical at `2465/2314/151/639/244/79719`.  Enabling
-    the same path experimentally raised nops from 151 to 239 despite fewer
-    loads, so it remains disabled until HI/LO scheduling or allocation can
-    absorb the extra dependencies.  No N64 artifact is required for this
-    MIPS32R2-only milestone; `-mfix4300` behavior is unchanged.
+  - At D3, VR4300 remained byte-identical at
+    `2465/2314/151/639/244/79719`.  Enabling the same path experimentally
+    raised nops from 151 to 239 despite fewer loads, so it remained disabled
+    until C5 removed the generic software padding before interlocked `mflo`.
+  - [x] D4 enables the existing scalar/pointer TEMP path for optimized,
+    non-variadic VR4300 functions (commit `711a9669`).  Explicit generic
+    MIPS3/R4000 retains frame slots; address-taken, assigned, stack-passed,
+    aggregate, 64-bit, floating-point, and variadic cases keep their proven
+    behavior.
+  - VR4300 C5 changes from `2443/2314/129/639/244/79609` to D4
+    `2375/2248/127/429/227/71622`
+    instructions/non-nops/nops/loads/stores/assembly-bytes.  Cross/native
+    runtime pass 292/292, and all six PCC-kernel/PCC-rootfs QEMU profiles pass.
+    The clean GCC-kernel/PCC-hard-float-a.out-userland N64 image is
+    `sys/mips/n64/builds/20260711-milestone-d4-vr4300-param-promotion-gcc-kernel/pcc-debug.z64`,
+    SHA-256
+    `359f80f70fdf31bee92c8276e28e8c556da7a069a775b9157d8d06718f5ccabc`;
+    physical VR4300 validation is pending.
   - Preserve the existing o32 ABI fixes for struct returns, stack-passed
     64-bit arguments, varargs, and aggregate arguments.
   - Leaf `$ra` omission is now landed for both normal and
@@ -4329,8 +4342,9 @@ Milestone order:
     real-N64 hardware gate pass.
   - D3 promotes ordinary MIPS32R2 scalar/pointer register parameters into
     compiler `TEMP`s at `-O`, removing 210 Linpack loads and 17 stores.  It is
-    intentionally disabled on VR4300 after the measured trial added 88 nops;
-    all cross/native and six-profile QEMU gates pass.
+    extended to VR4300 by D4 after C5 removed the artificial multiply padding;
+    VR4300 also removes 210 loads and 17 stores.  All cross/native and
+    six-profile QEMU gates pass; the D4 physical N64 gate is pending.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,

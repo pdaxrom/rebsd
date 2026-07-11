@@ -287,11 +287,11 @@ allocation around the promoted values.
 
 ### D3 Permanent Probes
 
-The host smoke requires MIPS32R2 optimized scalar register parameters to avoid
-their incoming `16..28($fp)` slots.  Separate probes verify that taking a
-parameter address creates a negative local frame slot and that assignment
-does not restore the incoming frame load.  The VR4300 probe requires its E2
-store/load sequence to remain, making the ISA gate permanent and explicit.
+The D3 host smoke required MIPS32R2 optimized scalar register parameters to
+avoid their incoming `16..28($fp)` slots.  Separate probes verified that
+taking a parameter address creates a negative local frame slot and that
+assignment does not restore the incoming frame load.  VR4300 remained on its
+E2 store/load sequence until D4.
 
 ### D3 Static Results
 
@@ -337,10 +337,87 @@ No N64 image or hardware gate is needed for D3: the VR4300 assembly is
 byte-identical, the default `-mfix4300` erratum path is unchanged, and this
 milestone affects only MIPS32R2.
 
-## Next Step
+## Milestone D4: VR4300 Scalar Parameter Promotion
 
-Do not enable parameter promotion on VR4300 in its current form.  First reduce
-the extra HI/LO dependency padding exposed by promoted loop parameters, then
-repeat the static comparison before deciding whether the load/store reduction
-is a net win.  Keep MIPS32R2 double-constant load scheduling as a separate
-measured candidate.
+Implementation commit `711a9669` extends the D3 `param_32bit` TEMP path to
+VR4300 tuning.  C5 removed the generic two-nop software padding before
+interlocked `mflo`, which had made the original VR4300 experiment a net
+instruction regression.  Repeating the same experiment after C5 now produces
+the intended load/store reduction without increasing total instructions or
+nops.
+
+The gate remains compact: promotion requires `xtemps`, excludes variadic
+callees, and selects either MIPS32R2 ISA or VR4300 tuning.  Explicit generic
+`-march=mips3 -mtune=r4000` retains incoming frame slots.  Structures, 64-bit
+integers, floating-point parameters, stack-passed parameters, and varargs keep
+their established lowering.  Address-taken parameters still materialize a
+private negative frame slot, while assigned parameters remain mutable TEMPs.
+
+The permanent host probe uses one shared loop for VR4300 and MIPS32R2 and
+checks promoted, assigned, and address-taken parameters.  A separate R4000
+control requires the old incoming frame store/load.  The existing VR4300
+branch-delay probe now places its pointer in the fifth o32 argument, preserving
+its exact stack-load scheduling window independently of register-parameter
+promotion.
+
+### D4 Static Results
+
+Current hard-float Linpack changes as follows:
+
+```text
+VR4300 C5: 2443 instructions, 2314 non-nops, 129 nops,
+             639 loads, 244 stores, 79609 bytes
+VR4300 D4: 2375 instructions, 2248 non-nops, 127 nops,
+             429 loads, 227 stores, 71622 bytes
+
+MIPS32R2 D3/D4: 2473 instructions, 2367 non-nops, 106 nops,
+                  558 loads, 276 stores, 71207 bytes (unchanged)
+```
+
+D4 removes 68 instructions, 66 non-nops, two nops, 210 loads, 17 stores, and
+7987 assembly bytes on VR4300.  It gives both primary CPUs the same compact
+incoming scalar-parameter policy without adding a new lowering pass.
+
+### D4 Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the same three expected
+failures and passed 292/292 runtime candidates.  Native PCC compiled 302
+cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 13036.133 / 13172.602 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1043.270 / 1041.610 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13468.154 / 13623.016 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1061.355 / 1057.556 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13295.592 / 13346.206 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1127.213 / 1072.833 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for the kernel and root filesystem.  Kernel builds
+used `-msoft-float -fomit-frame-pointer`.  Every profile has exactly one
+`PCC_SMOKE_ALL_OK`, zero failures, `PCC_SMOKE_ALL_RC:0`, and no branch-delay
+macro expansion warning.  Logs are
+`/private/tmp/pcc-vr4300-param-c6-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### D4 N64 Artifact
+
+The hardware gate uses a clean GCC kernel and PCC VR4300 hard-float a.out
+userland with default `-mfix4300`:
+
+```text
+sys/mips/n64/builds/20260711-milestone-d4-vr4300-param-promotion-gcc-kernel/pcc-debug.z64
+implementation commit: 711a9669
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 359f80f70fdf31bee92c8276e28e8c556da7a069a775b9157d8d06718f5ccabc
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+cross pcc sha256: c7968bdfb1ac65b2e1624e72a6849821f553e9004d5d1bfeaee9c0642b2db17d
+cross ccom sha256: f96414ecb5dbb17919ac3f44afb7cb3139b5737e0985522bc4f0b796159f4df8
+native pcc sha256: 76fe5fcca7fcbeb33abf85ed048bc8df1839c72aa0d32d254b8b1eb3ee2361f7
+native ccom sha256: 74b0b65545484d3f6e4cd3f2cbdf8e2784a3ec392a41459e169899bb9fc21bc4
+debug runner sha256: 0fb2657b0c1468dba12d81646d6583525e4b950f7335257648bce41a35484cf6
+```
+
+Real N64 validation is pending.  Do not start the next VR4300 optimization
+until this image produces the three expected zero-status markers.
