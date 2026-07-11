@@ -803,6 +803,29 @@ shell/login-sensitive paths, repeated `ccom`, libc/math/wide-character policy
 smoke tests, DHCP receive support, real small utility rebuilds, and Linpack
 binaries built with both GCC and PCC.
 
+The 2026-07-11 SSA multiply-reuse pass extends local value numbering only for
+exact integer `MUL` subtrees composed of SSA TEMPs and unnamed constants.
+Repeated address-scale expressions may be reused across memory accesses because
+the scalar SSA operands are immutable.  Calls and asm split the region, and a
+candidate is rejected when one of its operands is defined in the containing
+tree.  The first occurrence is materialized only after a duplicate has been
+proved, so unique multiplies gain no temporary or instruction.
+
+On Linpack this removes 11 integer multiplies.  VR4300 falls from 2371 to 2349
+instructions and from 61 to 50 HI/LO multiply/divide sequences; MIPS32R2 falls
+from 2473 to 2462 instructions and from 59 to 48 direct `mul` instructions.
+Loads, stores, branches, jumps, and nops are unchanged.  The positive assembly
+gate requires one multiply for two identical scaled addresses, while a changed
+SSA index must retain two.
+
+Cross regression compiled 329 of 332 cases with only the three established
+expected failures.  Native PCC compiled 302 cases, observed 30 expected
+compile failures, and passed 292/292 runtime cases.  All six PCC-kernel and
+PCC-rootfs Malta64/Malta/MaltaEL hard/soft profiles reported
+`PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  Kernel coverage includes
+`-msoft-float -fomit-frame-pointer`; the pass is independent of the VR4300
+`-mfix4300` erratum repair.
+
 The current hard-float PCC full zswap ROM has reached root login on real N64
 hardware and can run basic shell commands.  It is slow on hardware, and the
 `uname -a` panic suggests an unresolved timing/race or interrupt-path issue

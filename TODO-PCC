@@ -4352,6 +4352,15 @@ Milestone order:
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,
     are complete and green, but the broader target-independent transform
     remains open.
+  - The first machine-independent SSA substep is complete in `a0803d4b`.
+    Exact repeated integer `MUL` subtrees over immutable SSA names are
+    materialized once within a basic block.  Calls and asm delimit regions;
+    memory accesses do not invalidate scalar SSA values.  Linpack drops 11
+    static multiply sites in both VR4300 and MIPS32R2 assembly.  Cross/native
+    regression and all six PCC-kernel/PCC-rootfs QEMU profiles pass.
+  - This local CSE is not loop induction-variable strength reduction.  The
+    remaining work is to derive loop-carried address increments from the SSA
+    CFG without moving operations across uncertain control flow or calls.
 - [ ] Milestone F: small static inlining/specialization outside the backend.
 - [ ] Milestone G: repeat Malta, Malta64/R4000, and real N64 benchmark gates;
   decide whether further work belongs in PCC or in source-level hot paths.

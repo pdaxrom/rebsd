@@ -930,3 +930,84 @@ N64_PCC_DEBUG_END 0
 N64_PCC_DEBUG_RUNNER_RC 0
 N64_PCC_DEBUG_RC_END
 ```
+
+## Milestone E4: SSA Integer Multiply Reuse
+
+Implementation commit `a0803d4b` extends machine-independent SSA local value
+numbering to repeated integer `MUL` subtrees nested inside larger expressions.
+This targets Linpack's repeated `lda * row` address calculations without adding
+a MIPS-only optimizer or a general CSE framework.
+
+Candidates must have exact matching type and structure and contain only current
+SSA TEMPs and unnamed integer constants.  Calls and asm delimit a region.  A
+memory access does not invalidate the table because it cannot change scalar SSA
+names.  A candidate is rejected if an operand is defined in the same containing
+tree, preventing the materialized expression from moving before its definition.
+Only expressions seen at least twice are materialized, so unique multiplies are
+unchanged.
+
+The permanent `ssalvn001` regression now covers an identical scale used by two
+array accesses and a changed-index negative case.  The host smoke requires one
+multiply in the first helper and two in the second for VR4300, MIPS32R2, hard
+and soft float, and both endian modes.
+
+### E4 Static Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  multiplies  bytes
+VR4300 E3 baseline             2371       2248   123    429     227          61  71602
+VR4300 E4                      2349       2226   123    429     227          50  71140
+MIPS32R2 E3 baseline           2473       2367   106    558     276          59  71207
+MIPS32R2 E4                    2462       2356   106    558     276          48  70723
+```
+
+The VR4300 count names HI/LO multiply/divide sequences; the MIPS32R2 count is
+the direct `mul` instruction.  `dgefa` alone drops from 52 to 42 integer
+multiplies and from 1708 to 1688 instructions.  Whole-file branch and jump
+counts remain 109 and 120.  Unoptimized `optim003.c` remains byte-identical at
+SHA-256 `bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+
+### E4 Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the three established
+expected failures.  Native PCC compiled 302 cases, observed 30 expected
+compile failures, and passed 292/292 runtime candidates.  Unexpected compile
+and runtime failures were zero, with `NATIVE_PCC_REGRESS_RC:0`.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 12838.715 / 12820.140 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1040.715 / 1049.102 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13805.069 / 13567.242 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1172.589 / 1195.857 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13737.327 / 13751.758 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1170.292 / 1156.240 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for the kernel and root filesystem.  Every profile
+reported `PCC_SMOKE_ALL_FAILURES 0`; kernel commands retained
+`-msoft-float -fomit-frame-pointer`.  The transformation does not schedule FP
+or integer multiplies, and the final default `-mfix4300` erratum repair remains
+unchanged.
+
+### E4 N64 Comparison Artifact
+
+The clean hardware image uses the required GCC kernel and PCC VR4300 hard-float
+a.out userland.  It retains the separate GCC-runtime and PCC-runtime Linpack
+binaries from E3.
+
+```text
+sys/mips/n64/builds/20260711-milestone-e4-ssa-multiply-cse-gcc-kernel/pcc-debug.z64
+implementation commit: a0803d4b
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: c6a8fb36252b426c40eaae15a856607b09aec8f418e3bf68be3855fd777a9380
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 41600 section bytes, sha256 4a5257610ac533d1cd0eba26c5a761002282dd6f0f457fe21e2eb287cefdf414
+debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c882f9d9
+```
+
+The build passed `fsutil --check`; both Linpack executables have zero undefined
+symbols.  Real N64 timing and the final debug markers remain the hardware gate
+before starting loop induction-variable strength reduction.  QEMU cannot
+reproduce the physical VR4300 multiply erratum.
