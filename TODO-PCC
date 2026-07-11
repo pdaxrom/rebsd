@@ -4100,7 +4100,14 @@ Backend work, kept small:
     `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
     `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no numeric
     value, so none is inferred.
-- [ ] Reduce avoidable frame-pointer and outgoing-argument stack traffic.
+  - Clean-build audit correction, 2026-07-11: the N64 build-mode stamp did not
+    include the selected kernel compiler.  The archived C2 through D1 images
+    could reuse GCC kernel objects while `vers.o` reported `with pcc`; the D1
+    `main` prologue exactly matches a fresh GCC `-O2` compile.  Their hardware
+    results validate PCC userland/debug execution, not a PCC-built kernel.
+    Commit `776e41af` adds `N64_KERNEL_COMPILER` to the stamp.  Future N64 PCC
+    kernel gates must be clean builds or carry a `.build-mode.pcc.*` stamp.
+- [x] Reduce avoidable frame-pointer and outgoing-argument stack traffic.
   - [x] First Milestone D substep: reserve a fixed 16-byte o32 home area for
     `-fomit-frame-pointer` non-leaf functions whose calls use register
     arguments only (commit `34c0b9d8`).  The area is placed below every
@@ -4117,15 +4124,18 @@ Backend work, kept small:
     pass `292/292`; all six PCC-kernel/PCC-rootfs QEMU profiles pass.
   - The D1 N64 hard-float default-`-mfix4300` image is
     `sys/mips/n64/builds/20260711-milestone-d1-fixed-call-area/pcc-debug.z64`;
-    real hardware validation passed on 2026-07-11 with
+    its userland/debug hardware validation passed on 2026-07-11 with
     `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the final
     `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no numeric
-    value, so none is inferred.
+    value, so none is inferred.  The clean-build audit found stale GCC kernel
+    objects, so this is not PCC-kernel validation.
   - [x] D2 extends the fixed outgoing area to ordinary scalar stack arguments
-    (commit `194d264e`).  Pass2 scans ABI-lowered `FUNARG` nodes, reserves the
-    maximum 16-byte o32 home area plus stack slots and alignment padding, and
-    records ABI offsets beginning at `16($sp)`.  Eligible calls store directly
-    into that area without per-call `$sp` decrement/restore pairs.
+    (commits `194d264e` and `5aa462ed`).  Pass2 scans ABI-lowered `FUNARG`
+    nodes and reserves the maximum 16-byte o32 home area plus stack slots and
+    alignment padding.  `lastcall` and the existing argument emitters compute
+    ABI offsets beginning at `16($sp)` without writing target data into the C
+    qualifier field `NODE.n_qual`.  Eligible calls store directly into that
+    area without per-call `$sp` decrement/restore pairs.
   - `STARG`, raw frame addresses, `alloca`, explicit `$fp`, aggregate calls,
     and variadic callees retain the old stable `$fp` and dynamic lowering.
     Nested scalar calls and variadic callers use the fixed area.  Permanent
@@ -4140,12 +4150,20 @@ Backend work, kept small:
     six final PCC-kernel/PCC-rootfs QEMU profiles pass with exactly one
     `PCC_SMOKE_ALL_OK`, zero failures, and `PCC_SMOKE_ALL_RC:0`; kernels use
     `-msoft-float -fomit-frame-pointer`, and hard/soft userland was tested.
-  - The D2 N64 PCC-kernel/PCC-userland hard-float default-`-mfix4300` image is
-    `sys/mips/n64/builds/20260711-milestone-d2-fixed-stack-args/pcc-debug.z64`
+  - The first clean D2 PCC-kernel image reached the stage0 jump on N64 but
+    emitted no kernel banner.  ReBSD ELF `ld` selected the later weak
+    `console_null` definition instead of N64cart UART.  Commit `776e41af`
+    preserves the first weak definition, adds a big/little-endian permanent
+    link probe, and includes the kernel compiler in the N64 build stamp.
+  - The corrected clean PCC-kernel/PCC-userland hard-float default-`-mfix4300`
+    image is
+    `sys/mips/n64/builds/20260711-milestone-d2-clean-pcc-fix/pcc-debug.z64`
     with SHA-256
-    `76aeb3251bf15e4b4ba7f5ad4d9d3f17a2b00c16e7d09dceba32ccf878198633`.
-    Real hardware validation is pending; do not begin another risky backend
-    substep before it passes.
+    `97939aea1d4c3048472974b001fefa11fb3872b3538264db545c2d4d743f17a9`.
+    Cross/native runtime pass 292/292, and all six repeated full QEMU profiles
+    pass.  Real hardware validation of this corrected clean-PCC image passed
+    on 2026-07-11 with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and
+    the final `N64_PCC_DEBUG_RC_END` marker.
   - Preserve the existing o32 ABI fixes for struct returns, stack-passed
     64-bit arguments, varargs, and aggregate arguments.
   - Leaf `$ra` omission is now landed for both normal and
@@ -4227,13 +4245,14 @@ Milestone order:
     scheduler scope.  General memory scheduling, unary/conversion FP latency,
     and alias modelling are deferred until a measured workload justifies
     them.
-- [ ] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
+- [x] Milestone D: reduce `$fp` and stack traffic in MIPS call/frame lowering.
   - MIPS call-argument liveness and leaf `$ra` omission, including the
     omit-FP/kernel path, are complete and green.  Omit-FP callee-save slot
     trimming is also complete and green.  D1 fixed register-only call areas
     are complete in `34c0b9d8`; D2 fixed scalar stack-argument areas are
-    software-complete in `194d264e` and pass all six QEMU profiles.  Milestone
-    D remains open only for the D2 real-N64 hardware gate.
+    software-complete in `194d264e`/`5aa462ed`.  Clean N64 build and weak-link
+    fixes are in `776e41af`; all six QEMU profiles and the corrected clean-PCC
+    real-N64 hardware gate pass.
 - [ ] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,

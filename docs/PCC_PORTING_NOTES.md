@@ -330,6 +330,14 @@ real hardware validation passed on 2026-07-11 with
 `N64_PCC_DEBUG_RC_END` marker.  Full details and hashes are in
 `docs/PCC_MIPS_SCHEDULER_REPORT.md`.
 
+The 2026-07-11 clean-build audit later invalidated the C2 through D1 hardware
+runs as PCC-kernel evidence.  `N64_KERNEL_COMPILER` was absent from the N64
+build-mode stamp, allowing stale GCC kernel objects to survive a compiler
+switch while `vers.o` reported `with pcc`.  The images still validate PCC
+userland/debug execution.  Commit `776e41af` adds the compiler to the stamp;
+subsequent PCC-kernel hardware claims require a clean build or a
+`.build-mode.pcc.*` stamp.
+
 Commit `3c2092b7` closes the current conservative scheduler scope with a
 five-instruction HI/LO window.  One exactly parsed pure GPR operation after
 `mflo`/`mfhi` may move into a two-nop multiply gap when it does not touch the
@@ -351,10 +359,12 @@ and raw frame addresses remain on the old path.  Normal Linpack is
 byte-identical; omit-FP Linpack removes 28 VR4300 and 34 MIPS32R2 instructions.
 Cross/native regressions and all six PCC-kernel/PCC-rootfs QEMU profiles pass.
 The N64 artifact and full invariants are documented in
-`docs/PCC_MIPS_FRAME_REPORT.md`.  Real hardware validation passed on
-2026-07-11 with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`, and the
-final `N64_PCC_DEBUG_RC_END` marker.  The supplied final marker had no numeric
-value, so none is inferred.
+`docs/PCC_MIPS_FRAME_REPORT.md`.  Its PCC userland/debug hardware validation
+passed on 2026-07-11, but the clean-build audit found stale GCC kernel objects,
+so that run is not PCC-kernel validation.  A corrected clean D2 image is the
+next real-hardware gate.  That corrected clean-PCC D2 image subsequently
+passed on real N64 with `N64_PCC_DEBUG_END 0`, `N64_PCC_DEBUG_RUNNER_RC 0`,
+and the final `N64_PCC_DEBUG_RC_END` marker.
 
 ## Active PCC Work Queue
 

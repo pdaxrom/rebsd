@@ -1,5 +1,15 @@
 # PCC MIPS Scheduler Report
 
+## N64 Clean-Build Audit
+
+The 2026-07-11 C2, C3, and C4 N64 hardware artifacts booted and passed their
+PCC userland/debug runners, but they are not valid PCC-kernel evidence.  The
+N64 build-mode stamp omitted `N64_KERNEL_COMPILER`, so stale GCC kernel objects
+could be reused after selecting PCC while the rebuilt version string reported
+`with pcc`.  Commit `776e41af` fixes the stamp.  The QEMU PCC-kernel results and
+all assembly measurements in this report remain valid; only the affected N64
+kernel-compiler attribution is corrected.
+
 ## Milestone C1: MIPS32R2 Load-Use Scheduling
 
 Implementation commit `11f66467` extends the existing late four-instruction

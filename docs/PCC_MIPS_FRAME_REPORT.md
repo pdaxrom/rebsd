@@ -1,5 +1,21 @@
 # PCC MIPS Frame Lowering Report
 
+## 2026-07-11 Clean-Build Audit
+
+The original C2 through D1 N64 hardware artifacts are not valid evidence of a
+PCC-built kernel.  The generated N64 build-mode stamp did not include
+`N64_KERNEL_COMPILER`, so switching from GCC to PCC could reuse GCC kernel
+objects while rebuilding `vers.o` with a `with pcc` version string.  The D1
+`main` prologue extracted from the archived ROM matches a fresh GCC `-O2`
+compile, including its 64-byte frame, ten saved registers, and call delay slot.
+Those hardware runs still validate their PCC userland and debug runner, but
+not the kernel compiler.
+
+Commit `776e41af` adds the kernel compiler to the build stamp.  Every N64 PCC
+kernel claim after this audit requires a preceding clean build or a
+`.build-mode.pcc.*` stamp plus static inspection of PCC-generated kernel
+assembly.
+
 ## Milestone D1: Fixed Register-Call Home Area
 
 Implementation commit `34c0b9d8` removes the blanket frame-pointer fallback
@@ -99,9 +115,8 @@ cross ccom sha256: 1b92c5af7cc12a22b15327c67066c8bd49f93462567cab74b14689053d994
 native ccom sha256: eadf1d246cb52d918b4f748496c6ee8055cafb055e95f658e827e56f8f53d405
 ```
 
-The hard-float a.out image contains a PCC-built kernel and userland.  The
-kernel uses `-fomit-frame-pointer`; the userland uses hard float; the compiler
-uses default `-mfix4300`.  Real N64 validation passed on 2026-07-11 with:
+The image booted and its PCC hard-float a.out userland passed on real N64 on
+2026-07-11 with:
 
 ```text
 N64_PCC_DEBUG_END 0
@@ -110,14 +125,17 @@ N64_PCC_DEBUG_RC_END
 ```
 
 The supplied final marker did not include a numeric value, so none is inferred
-here.
+here.  The later clean-build audit found stale GCC kernel objects in this
+artifact; this result must not be cited as PCC-kernel hardware validation.
 
 ## Milestone D2: Fixed Stack-Argument Area
 
-Implementation commit `194d264e` extends the D1 fixed outgoing area to
+Implementation commit `194d264e`, corrected by `5aa462ed`, extends the D1
+fixed outgoing area to
 ordinary calls with stack-passed scalar arguments.  Pass2 scans the already
 ABI-lowered `FUNARG` nodes, records the largest call area needed by the
-function, and assigns o32 stack slots in ABI order.  The fixed frame reserves
+function, while `lastcall` initializes an emitter offset that follows the
+existing dynamic-push order.  The fixed frame reserves
 the 16-byte register home area plus stack-argument bytes and any call-alignment
 padding.  Argument five starts at `16($sp)`; following slots advance from that
 offset independently of pre-call padding.
@@ -131,9 +149,10 @@ on that path because pass1 materializes a frame temporary.  Nested scalar calls
 are eligible because pass1 computes their values before pass2 emits the outer
 argument list.
 
-The implementation adds 84 net lines to the MIPS backend: one bounded pass2
-scan and three small emitters shared by the call table.  It does not add a
-second call-lowering pipeline or inspect generated assembly text.
+No ABI offset is stored in `NODE.n_qual`: that field carries C type qualifiers
+and must remain semantic input.  The compact implementation uses one bounded
+pass2 size scan and three small emitters shared by the call table.  It does not
+add a second call-lowering pipeline or inspect generated assembly text.
 
 ## D2 Permanent Probes
 
@@ -187,38 +206,61 @@ counts were zero.  Non-omit-FP output remains byte-identical.
 
 | Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
 | --- | --- | --- | --- | --- | --- |
-| Malta64 | VR4300 | big | hard | 13079.567 / 12857.509 | `PCC_SMOKE_ALL_RC:0` |
-| Malta64 | VR4300 | big | soft | 975.160 / 978.446 | `PCC_SMOKE_ALL_RC:0` |
-| Malta | MIPS32R2 | big | hard | 13168.642 / 13136.922 | `PCC_SMOKE_ALL_RC:0` |
-| Malta | MIPS32R2 | big | soft | 1149.115 / 1129.113 | `PCC_SMOKE_ALL_RC:0` |
-| MaltaEL | MIPS32R2 | little | hard | 12542.934 / 12767.421 | `PCC_SMOKE_ALL_RC:0` |
-| MaltaEL | MIPS32R2 | little | soft | 1156.488 / 1157.711 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | hard | 13029.463 / 13462.220 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 934.180 / 933.308 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13002.969 / 13008.236 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1132.767 / 1127.656 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13217.939 / 13062.511 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1145.007 / 1148.982 | `PCC_SMOKE_ALL_RC:0` |
 
 Every final post-fix PCC-kernel/PCC-rootfs profile has exactly one
 `PCC_SMOKE_ALL_OK`, `PCC_SMOKE_ALL_FAILURES 0`, and `PCC_SMOKE_ALL_RC:0`.
 Kernels use `-msoft-float -fomit-frame-pointer`; userland float mode is varied.
-Logs are `/private/tmp/pcc-d2-{malta64,malta,maltael}-{hard,soft}.log`.
+Logs are `/private/tmp/pcc-d2fix-{malta64,malta,maltael}-{hard,soft}.log`.
 
 ## D2 N64 Artifact
 
+The original D2 artifact
+`sys/mips/n64/builds/20260711-milestone-d2-fixed-stack-args/pcc-debug.z64`
+failed on real N64 after stage0 printed `jump kernel entry=0x80001000`; no kernel
+banner followed.  Unlike D1, it was a clean PCC kernel.  Static inspection
+showed that the ELF linker selected the later weak `console_null` definition
+of `n64_console_putc` instead of the earlier N64cart UART definition.
+
+ELF symbol collection replaced an existing weak definition with every later
+weak definition.  Commit `776e41af` preserves the first weak definition and
+adds a permanent two-definition link probe for both endian modes.  The fixed
+kernel's `n64_console_putc` calls `n64cart_uart_putc` and accesses the expected
+`0xbfd01000` N64cart register window.
+
 ```text
-sys/mips/n64/builds/20260711-milestone-d2-fixed-stack-args/pcc-debug.z64
-implementation commit: 194d264e
+sys/mips/n64/builds/20260711-milestone-d2-clean-pcc-fix/pcc-debug.z64
+implementation commits: 194d264e, 5aa462ed, 776e41af
 size: 6717440 bytes
-sha256: 76aeb3251bf15e4b4ba7f5ad4d9d3f17a2b00c16e7d09dceba32ccf878198633
-cross pcc sha256: be0639b2e406dff1c9d02b310c720401bf6f6aee035748820abb0d79f99bd115
-cross ccom sha256: 98023a77416531ccbd1056fc3b9c6484d3e0fa5b36a5b14713dd3f1d0211befa
-native ccom sha256: 6e873b9fcb786e78752da7b71d16a84ec0df0c6c236c62c89b5bb591f50747cc
+sha256: 97939aea1d4c3048472974b001fefa11fb3872b3538264db545c2d4d743f17a9
+kernel ELF sha256: 0436af61a37f585814cb65ccbe3410f65d264f4ff756955d676b3909654cf789
+cross pcc sha256: 319710e219a4100eed644f0f545c58e7a9bc3f755d4a40cd5963e264ba983751
+cross ccom sha256: a99c9f907511be8c3302af538a5151cc41be2544cd1f644706f3a928fe0c4f5b
+native ccom sha256: e1b5143cb17a0f6ffee4af95ad71b26e960382158ae9d95da14674ffef9d6499
 ```
 
-The image contains a PCC-built `-msoft-float -fomit-frame-pointer` kernel and
-PCC-built hard-float a.out userland.  VR4300 multiplication erratum handling
-uses the default `-mfix4300`.  Real N64 validation is pending.
+This image was produced after `make clean` and removal of the N64 PCC temporary
+build/install directories.  It contains a PCC-built
+`-msoft-float -fomit-frame-pointer` kernel and PCC-built hard-float a.out
+userland.  VR4300 multiplication erratum handling uses the default
+`-mfix4300`.  Cross and native regressions pass 292/292, and all six full QEMU
+profiles pass.  Real N64 validation of this corrected clean-PCC image passed
+on 2026-07-11 with:
+
+```text
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```
 
 ## Next Step
 
-Run the D2 artifact on real N64 and require `N64_PCC_DEBUG_END 0`,
-`N64_PCC_DEBUG_RUNNER_RC 0`, and `N64_PCC_DEBUG_RC_END`.  Do not begin the next
-risky backend substep until that gate passes.  Afterward, close the current
-Milestone D frame work and profile VR4300 hard-float FPU padding before choosing
-the next compact scheduler change.
+D2 and the current Milestone D frame work have passed the corrected clean-PCC
+real-N64 gate.  Profile VR4300 hard-float FPU padding before choosing the next
+compact scheduler change; keep `-mfix4300` enabled by default and preserve the
+existing hard/soft-float and big/little-endian gates.
