@@ -451,6 +451,91 @@ END { exit found ? 0 : 1 }
 }
 
 cat > "$tmp.c" <<'EOF'
+extern void fpu_reload_consume(int, double *, double);
+extern void fpu_reload_mutate(double *);
+
+void
+fpu_expr_call_probe(double *values, int index)
+{
+	double value = -values[index];
+
+	fpu_reload_consume(index, values, value);
+}
+
+double
+fpu_expr_return_probe(double value)
+{
+	double result = -value;
+
+	return result;
+}
+
+double
+fpu_expr_volatile_probe(double value)
+{
+	volatile double result = -value;
+
+	return result;
+}
+
+void
+fpu_expr_nested_call_probe(double *values)
+{
+	double value = -values[0];
+
+	fpu_reload_mutate(&value);
+	fpu_reload_consume(0, values, value);
+}
+EOF
+
+for reload_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$reload_cpu" -mhard-float -O2 -S -o "$tmp.s" \
+	    "$tmp.c"
+	for folded in fpu_expr_call_probe fpu_expr_return_probe; do
+		awk -v fn="$folded" '
+$0 ~ "^[[:space:]]*[.]ent " fn "$" { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*neg[.]d[[:space:]]/ { neg = 1 }
+inside && /^[[:space:]]*(l[.]d|ldc1)[[:space:]].*\(\$fp\)/ {
+	frame_load = 1
+}
+END { exit seen && neg && !frame_load ? 0 : 1 }
+' "$tmp.s" || {
+			echo "$reload_cpu did not fold $folded stack reload" >&2
+			exit 1
+		}
+	done
+	awk '
+/^[[:space:]]*[.]ent fpu_expr_volatile_probe$/ {
+	inside = 1; seen = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(s[.]d|sdc1)[[:space:]].*\(\$fp\)/ { store = 1 }
+inside && /^[[:space:]]*(l[.]d|ldc1)[[:space:]].*\(\$fp\)/ { load = 1 }
+END { exit seen && store && load ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$reload_cpu folded a volatile FPU stack reload" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent fpu_expr_nested_call_probe$/ {
+	inside = 1; seen = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*jal[[:space:]]+fpu_reload_mutate/ {
+	mutate = 1; next
+}
+inside && mutate && /^[[:space:]]*(l[.]d|ldc1)[[:space:]].*\(\$fp\)/ {
+	reload = 1
+}
+END { exit seen && mutate && reload ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$reload_cpu moved an FPU reload across a nested call" >&2
+		exit 1
+	}
+done
+
+cat > "$tmp.c" <<'EOF'
 void
 hilo_gap_schedule_probe(void)
 {

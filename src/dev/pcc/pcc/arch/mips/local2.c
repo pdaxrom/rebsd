@@ -2085,6 +2085,21 @@ mips_replace_frame_mem_with_copy(NODE *p, NODE *src)
 	nfree(q);
 }
 
+static NODE *
+mips_materialize_hardfp_store(NODE *store)
+{
+	NODE *src, *temp, *materialize;
+	int tempnum;
+
+	src = store->n_right;
+	tempnum = p2env.epp->ip_tmpnum++;
+	temp = mklnode(TEMP, 0, tempnum, src->n_type);
+	temp->n_qual = src->n_qual;
+	materialize = mkbinode(ASSIGN, temp, src, src->n_type);
+	store->n_right = tcopy(temp);
+	return materialize;
+}
+
 static int
 mips_node_has_volatile_qual(NODE *p)
 {
@@ -2189,11 +2204,13 @@ mips_replace_frame_mem_word(NODE *p, CONSZ off, TWORD t, NODE *src)
 }
 
 static int
-mips_fold_adjacent_stack_reload(NODE *store, NODE *load, int *delete_loadp)
+mips_fold_adjacent_stack_reload(NODE *store, NODE *load,
+    NODE **materializep, int *delete_loadp)
 {
 	NODE *src, *dst;
 	CONSZ soff, loff;
 
+	*materializep = NIL;
 	*delete_loadp = 0;
 
 	if (store == NIL || load == NIL)
@@ -2210,10 +2227,19 @@ mips_fold_adjacent_stack_reload(NODE *store, NODE *load, int *delete_loadp)
 	dst = load->n_left;
 	if (src == NIL || dst == NIL)
 		return 0;
-	if ((src->n_op != TEMP && src->n_op != REG) ||
-	    (dst->n_op != TEMP && dst->n_op != REG))
-		return 0;
 	if (!mips_reload_types_match(store, load, src, dst))
+		return 0;
+	if (src->n_op != TEMP && src->n_op != REG) {
+		if (!mips_hardfp_reload_type(src->n_type) ||
+		    store->n_type != src->n_type || load->n_type != src->n_type ||
+		    dst->n_type != src->n_type)
+			return 0;
+		*materializep = mips_materialize_hardfp_store(store);
+		tfree(load->n_right);
+		load->n_right = tcopy((*materializep)->n_left);
+		return 1;
+	}
+	if (dst->n_op != TEMP && dst->n_op != REG)
 		return 0;
 	if (mips_same_reg_or_temp(src, dst)) {
 		*delete_loadp = 1;
@@ -2222,6 +2248,110 @@ mips_fold_adjacent_stack_reload(NODE *store, NODE *load, int *delete_loadp)
 
 	tfree(load->n_right);
 	load->n_right = tcopy(src);
+	return 1;
+}
+
+static int
+mips_count_frame_mem_read(NODE *p, CONSZ off, TWORD t)
+{
+	CONSZ poff;
+	int count, opty;
+
+	if (p == NIL)
+		return 0;
+	if (mips_frame_mem_offset(p, &poff) && poff == off && p->n_type == t)
+		return 1;
+
+	count = 0;
+	opty = optype(p->n_op);
+	if (opty != LTYPE && p->n_op != ASSIGN)
+		count += mips_count_frame_mem_read(p->n_left, off, t);
+	if (opty == BITYPE)
+		count += mips_count_frame_mem_read(p->n_right, off, t);
+	return count;
+}
+
+static int
+mips_replace_frame_mem_read(NODE *p, CONSZ off, TWORD t, NODE *src)
+{
+	CONSZ poff;
+	int opty;
+
+	if (p == NIL)
+		return 0;
+	if (mips_frame_mem_offset(p, &poff) && poff == off && p->n_type == t) {
+		mips_replace_frame_mem_with_copy(p, src);
+		return 1;
+	}
+
+	opty = optype(p->n_op);
+	if (opty != LTYPE && p->n_op != ASSIGN &&
+	    mips_replace_frame_mem_read(p->n_left, off, t, src))
+		return 1;
+	return opty == BITYPE &&
+	    mips_replace_frame_mem_read(p->n_right, off, t, src);
+}
+
+static int
+mips_hardfp_call_args_safe(NODE *p, CONSZ source_off)
+{
+	CONSZ off;
+	int opty;
+
+	if (p == NIL)
+		return 1;
+	if (callop(p->n_op) || p->n_op == XASM || p->n_op == STASG ||
+	    p->n_op == STARG || p->n_op == STCLR)
+		return 0;
+
+	/* Permit only the register/frame moves used to stage call arguments. */
+	opty = optype(p->n_op);
+	if (asgop(p->n_op)) {
+		if (p->n_op != ASSIGN || opty != BITYPE)
+			return 0;
+		if (p->n_left->n_op != TEMP && p->n_left->n_op != REG &&
+		    (!mips_frame_mem_offset(p->n_left, &off) ||
+		    off == source_off))
+			return 0;
+		return mips_hardfp_call_args_safe(p->n_right, source_off);
+	}
+	if (opty != LTYPE &&
+	    !mips_hardfp_call_args_safe(p->n_left, source_off))
+		return 0;
+	return opty != BITYPE ||
+	    mips_hardfp_call_args_safe(p->n_right, source_off);
+}
+
+static int
+mips_fold_stack_reload_call(NODE *store, NODE *call, NODE **materializep)
+{
+	NODE *args, *src;
+	CONSZ off;
+	TWORD t;
+
+	*materializep = NIL;
+	if (store == NIL || call == NIL || store->n_op != ASSIGN ||
+	    !callop(call->n_op) || optype(call->n_op) != BITYPE)
+		return 0;
+	if (mips_tree_has_volatile(store) || mips_tree_has_volatile(call) ||
+	    !mips_frame_mem_offset(store->n_left, &off))
+		return 0;
+
+	src = store->n_right;
+	t = store->n_type;
+	if (src == NIL || src->n_op == TEMP || src->n_op == REG ||
+	    !mips_hardfp_reload_type(t) || src->n_type != t)
+		return 0;
+
+	args = call->n_right;
+	if (!mips_hardfp_call_args_safe(args, off) ||
+	    mips_count_frame_mem_read(args, off, t) != 1)
+		return 0;
+
+	*materializep = mips_materialize_hardfp_store(store);
+	if (!mips_replace_frame_mem_read(args, off, t,
+	    (*materializep)->n_left))
+		cerror("lost hard-float call reload");
 	return 1;
 }
 
@@ -2258,7 +2388,8 @@ mips_fold_stack_reload_branch(NODE *store, NODE *branch)
 static void
 mips_fold_adjacent_stack_reloads(struct interpass *ipole)
 {
-	struct interpass *ip, *next, *after;
+	struct interpass *ip, *next, *after, *materialize_ip;
+	NODE *materialize;
 	int delete_load;
 
 	for (ip = DLIST_NEXT(ipole, qelem); ip != ipole; ip = next) {
@@ -2266,15 +2397,27 @@ mips_fold_adjacent_stack_reloads(struct interpass *ipole)
 		if (ip->type != IP_NODE || next == ipole ||
 		    next->type != IP_NODE)
 			continue;
-		if (mips_fold_adjacent_stack_reload(ip->ip_node,
-		    next->ip_node, &delete_load) && delete_load) {
+		if (!mips_fold_adjacent_stack_reload(ip->ip_node,
+		    next->ip_node, &materialize, &delete_load)) {
+			if (mips_fold_stack_reload_call(ip->ip_node,
+			    next->ip_node, &materialize)) {
+				materialize_ip = ipnode(materialize);
+				DLIST_INSERT_BEFORE(ip, materialize_ip, qelem);
+				continue;
+			}
+			(void)mips_fold_stack_reload_branch(ip->ip_node,
+			    next->ip_node);
+			continue;
+		}
+		if (materialize != NIL) {
+			materialize_ip = ipnode(materialize);
+			DLIST_INSERT_BEFORE(ip, materialize_ip, qelem);
+		}
+		if (delete_load) {
 			after = DLIST_NEXT(next, qelem);
 			mips_remove_ip_node(next);
 			next = after;
-			continue;
 		}
-		(void)mips_fold_stack_reload_branch(ip->ip_node,
-		    next->ip_node);
 	}
 }
 
