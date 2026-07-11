@@ -366,6 +366,106 @@ END { exit found ? 0 : 1 }
 	exit 1
 }
 
+cat > "$tmp.c" <<'EOF'
+#include <stdarg.h>
+
+extern int frame_reg_callee(int, int);
+extern int frame_stack_callee(int, int, int, int, int, int);
+extern int frame_address_callee(int *);
+extern void *alloca(unsigned);
+
+int
+frame_reg_probe(int *value, int addend)
+{
+	int saved = *value;
+
+	return frame_reg_callee(saved, addend) + saved;
+}
+
+int
+frame_stack_probe(int value)
+{
+	return frame_stack_callee(value, 2, 3, 4, 5, 6);
+}
+
+int
+frame_address_probe(int value)
+{
+	frame_address_callee(&value);
+	return value;
+}
+
+int
+frame_alloca_probe(unsigned size)
+{
+	char *value = alloca(size);
+
+	value[0] = (char)size;
+	return value[0];
+}
+
+int
+frame_varargs_probe(int count, ...)
+{
+	va_list ap;
+	int value;
+
+	va_start(ap, count);
+	value = va_arg(ap, int);
+	va_end(ap);
+	return count + value;
+}
+EOF
+
+for frame_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$frame_cpu" -O2 -fomit-frame-pointer -S \
+	    -o "$tmp.s" "$tmp.c"
+	"$pcc" -march="$frame_cpu" -O2 -fomit-frame-pointer -c \
+	    -o "$tmp.o" "$tmp.c"
+
+	awk '
+/^[[:space:]]*[.]ent frame_reg_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /\$fp/ { fp = 1 }
+inside && /^[[:space:]]*jal frame_reg_callee/ { call = 1; next }
+call && /^[[:space:]]*subu \$sp,\$sp,16/ { dynamic = 1 }
+call { call = 0 }
+inside && /^[[:space:]]*sw \$s[0-7],(0|[1-9]|1[0-5])\(\$sp\)/ {
+	low_save = 1
+}
+END { exit seen && !fp && !dynamic && !low_save ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$frame_cpu did not use a disjoint fixed call area" >&2
+		exit 1
+	}
+
+	awk '
+/^[[:space:]]*[.]ent frame_stack_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /\$fp/ { fp = 1 }
+inside && /^[[:space:]]*jal frame_stack_callee/ { call = 1; next }
+call && /^[[:space:]]*subu \$sp,\$sp,16/ { dynamic = 1 }
+call { call = 0 }
+END { exit seen && fp && dynamic ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$frame_cpu changed stack-argument frame lowering" >&2
+		exit 1
+	}
+
+	for protected in frame_address_probe frame_alloca_probe \
+	    frame_varargs_probe; do
+		awk -v fn="$protected" '
+$0 ~ "^[[:space:]]*[.]ent " fn "$" { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /\$fp/ { fp = 1 }
+END { exit seen && fp ? 0 : 1 }
+' "$tmp.s" || {
+			echo "$frame_cpu omitted required frame in $protected" >&2
+			exit 1
+		}
+	done
+done
+
 if "$pcc" -march=mips32 -S -o "$tmp.s" "$tmp.c" >"$tmp.err" 2>&1; then
 	echo "unsupported MIPS32r1 profile was accepted" >&2
 	exit 1

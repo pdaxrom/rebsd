@@ -71,6 +71,7 @@ static TWORD ftype;
 static int mips_frame_adjust;
 static int mips_omit_fp;
 static int mips_leaf_function;
+static int mips_fixed_call_area;
 
 static int
 mips_can_omit_fp(struct interpass_prolog *ipp)
@@ -140,6 +141,8 @@ offcalc(struct interpass_prolog * ipp, int omitfp)
         /* round to 8-byte boundary */
         addto += 7;
         addto &= ~7;
+	if (omitfp && mips_fixed_call_area)
+		addto += ARGINIT / SZCHAR;
 
 	return addto;
 }
@@ -240,6 +243,7 @@ eoftn(struct interpass_prolog * ipp)
 		mips_omit_fp = 0;
 		mips_frame_adjust = 0;
 		mips_leaf_function = 0;
+		mips_fixed_call_area = 0;
 		return;		/* no code needs to be generated */
 	}
 
@@ -294,6 +298,7 @@ eoftn(struct interpass_prolog * ipp)
 	mips_omit_fp = 0;
 	mips_frame_adjust = 0;
 	mips_leaf_function = 0;
+	mips_fixed_call_area = 0;
 
 #ifdef USE_GAS
 	printf("\t.end %s\n", ipp->ipp_name);
@@ -1288,8 +1293,20 @@ zzzcode(NODE * p, int c)
 		break;
 
 	case 'C':	/* remove arguments from stack after subroutine call */
+		if (mips_fixed_call_area) {
+			if (p->n_qual > ARGINIT / SZCHAR)
+				comperr("fixed call area with stack arguments");
+			break;
+		}
 		sz = p->n_qual > 16 ? p->n_qual : 16;
 		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP], sz);
+		break;
+
+	case 'c':	/* allocate the o32 argument home area */
+		if (mips_fixed_call_area)
+			printf("\tnop\n");
+		else
+			printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
 		break;
 
 	case 'D':	/* long long comparison */
@@ -1778,28 +1795,33 @@ mips_rewrite_frame_ref(NODE *p)
 		mips_rewrite_frame_ref(p->n_right);
 }
 
+struct mips_frame_scan {
+	int needfp;
+	int has_call;
+};
+
 static void
-mips_find_need_fp(NODE *p, void *arg)
+mips_scan_frame(NODE *p, void *arg)
 {
-	int *needfp = arg;
+	struct mips_frame_scan *scan = arg;
 	CONSZ off;
 
-	if (*needfp)
+	if (scan->needfp)
 		return;
 
 	if (p->n_op == ASSIGN && p->n_left->n_op == REG &&
 	    regno(p->n_left) == FPREG) {
-		*needfp = 1;
+		scan->needfp = 1;
 		return;
 	}
 
 	/*
-	 * FUNARG nodes decrement $sp while outgoing stack arguments are
-	 * prepared.  PCC's MIPS call templates may still reference locals
-	 * during that window, so such functions need a stable $fp base.
+	 * FUNARG and STARG nodes decrement $sp while outgoing stack arguments
+	 * are prepared.  Keep the old dynamic call lowering for those
+	 * functions until stack arguments have fixed frame offsets.
 	 */
-	if (p->n_op == FUNARG) {
-		*needfp = 1;
+	if (p->n_op == FUNARG || p->n_op == STARG) {
+		scan->needfp = 1;
 		return;
 	}
 
@@ -1811,18 +1833,15 @@ mips_find_need_fp(NODE *p, void *arg)
 	 * "move $reg,off($sp)".
 	 */
 	if (mips_frame_ref_offset(p, &off)) {
-		*needfp = 1;
+		scan->needfp = 1;
 		return;
 	}
 
-	/*
-	 * The current MIPS call templates temporarily decrement $sp while
-	 * preparing each call.  Keep a stable $fp in non-leaf functions until
-	 * outgoing call space is modeled as part of the fixed frame.
-	 */
 	if (callop(p->n_op)) {
-		*needfp = 1;
-		return;
+		scan->has_call = 1;
+		if (p->n_left != NIL && p->n_left->n_op == ICON &&
+		    strcmp(p->n_left->n_name, "alloca") == 0)
+			scan->needfp = 1;
 	}
 }
 
@@ -1830,16 +1849,20 @@ static int
 mips_ipole_needs_fp(struct interpass *ipole)
 {
 	struct interpass *ip;
-	int needfp = 0;
+	struct mips_frame_scan scan;
+
+	memset(&scan, 0, sizeof(scan));
 
 	DLIST_FOREACH(ip, ipole, qelem) {
 		if (ip->type != IP_NODE)
 			continue;
-		walkf(ip->ip_node, mips_find_need_fp, &needfp);
-		if (needfp)
+		walkf(ip->ip_node, mips_scan_frame, &scan);
+		if (scan.needfp)
 			break;
 	}
-	return needfp;
+
+	mips_fixed_call_area = xomitframe && !scan.needfp && scan.has_call;
+	return scan.needfp || (scan.has_call && !mips_fixed_call_area);
 }
 
 /* printf conditional and unconditional branches */
