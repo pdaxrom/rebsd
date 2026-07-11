@@ -54,16 +54,16 @@
 	"	lw A1,UL\n" \
 	"	nop\n"
 #define MIPS_LL_PUSH_ARG \
-	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
-	"	sw UL,0($sp)\n" \
-	"	sw AL,4($sp)\n" \
+	"Zq" \
+	"	sw UL,Zr($sp)\n" \
+	"	sw AL,Zs($sp)\n" \
 	"	#nop\n"
 #define MIPS_LL_PUSH_MEM_ARG \
 	"	lw U1,AL	# load stack arg\n" \
 	"	lw A1,UL\n" \
-	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
-	"	sw U1,0($sp)\n" \
-	"	sw A1,4($sp)\n" \
+	"Zq" \
+	"	sw U1,Zr($sp)\n" \
+	"	sw A1,Zs($sp)\n" \
 	"	#nop\n"
 #else
 #define MIPS_LL_STORE_MEM \
@@ -74,16 +74,16 @@
 	"	lw A1,AL\n" \
 	"	nop\n"
 #define MIPS_LL_PUSH_ARG \
-	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
-	"	sw UL,4($sp)\n" \
-	"	sw AL,0($sp)\n" \
+	"Zq" \
+	"	sw UL,Zs($sp)\n" \
+	"	sw AL,Zr($sp)\n" \
 	"	#nop\n"
 #define MIPS_LL_PUSH_MEM_ARG \
 	"	lw U1,UL	# load stack arg\n" \
 	"	lw A1,AL\n" \
-	"	addiu $sp,$sp,-8	# save function arg to stack\n" \
-	"	sw U1,4($sp)\n" \
-	"	sw A1,0($sp)\n" \
+	"Zq" \
+	"	sw U1,Zs($sp)\n" \
+	"	sw A1,Zr($sp)\n" \
 	"	#nop\n"
 #endif
 
@@ -1787,8 +1787,8 @@ struct optab table[] = {
 	SANY,	TWORD|TPOINT,
 		NAREG,	0,
 		"	lw A1,AL	# load stack arg\n"
-		"	subu $sp,$sp,4		# save function arg to stack\n"
-		"	sw A1,0($sp)\n"
+		"Zq"
+		"	sw A1,Zr($sp)\n"
 		"	#nop\n", },
 
 /* intentionally write out the register for (u)short/(u)char */
@@ -1796,8 +1796,8 @@ struct optab table[] = {
 	SAREG,	TWORD|TPOINT|TUSHORT|TSHORT|TUCHAR|TCHAR,
 	SANY,	TWORD|TPOINT|TUSHORT|TSHORT|TUCHAR|TCHAR,
 		0,	0,
-		"	subu $sp,$sp,4		# save function arg to stack\n"
-		"	sw AL,0($sp)\n"
+		"Zq"
+		"	sw AL,Zr($sp)\n"
 		"	#nop\n", },
 
 { FUNARG,	FOREFF,
@@ -1816,8 +1816,8 @@ struct optab table[] = {
 	SAREG,	TFLOAT,
 	SANY,	TFLOAT,
 		0,	0,
-		"	subu $sp,$sp,4		# save soft-float arg to stack\n"
-		"	sw AL,0($sp)\n"
+		"Zq"
+		"	sw AL,Zr($sp)\n"
 		"	#nop\n", },
 
 { FUNARG,	FOREFF|FEATURE_SOFTFLOAT,
@@ -1836,16 +1836,16 @@ struct optab table[] = {
 	SCREG,	TFLOAT,
 	SANY,	TFLOAT,
 		0,	0,
-		"	addiu $sp,$sp,-4	# save function arg to stack\n"
-		"	s.s AL,0($sp)\n"
+		"Zq"
+		"	s.s AL,Zr($sp)\n"
 		"	#nop\n", },
 
 { FUNARG,	FOREFF,
 	SCREG,	TDOUBLE|TLDOUBLE,
 	SANY,	TDOUBLE|TLDOUBLE,
 		0,	0,
-		"	addiu $sp,$sp,-8	# save function arg to stack\n"
-		"	s.d AL,0($sp)\n"
+		"Zq"
+		"	s.d AL,Zr($sp)\n"
 		"	#nop\n", },
 
 { STARG,	FOREFF,

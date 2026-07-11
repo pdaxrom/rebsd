@@ -370,9 +370,18 @@ cat > "$tmp.c" <<'EOF'
 #include <stdarg.h>
 
 extern int frame_reg_callee(int, int);
+extern int frame_pad_callee(int, int, int, int, int);
 extern int frame_stack_callee(int, int, int, int, int, int);
+extern int frame_wide_callee(int, int, int, int, long long, int);
+extern int frame_variadic_callee(int, ...);
 extern int frame_address_callee(int *);
 extern void *alloca(unsigned);
+
+struct frame_words {
+	int a, b, c;
+};
+
+extern int frame_struct_callee(int, int, int, int, struct frame_words);
 
 int
 frame_reg_probe(int *value, int addend)
@@ -386,6 +395,39 @@ int
 frame_stack_probe(int value)
 {
 	return frame_stack_callee(value, 2, 3, 4, 5, 6);
+}
+
+int
+frame_pad_probe(int value)
+{
+	return frame_pad_callee(value, 2, 3, 4, 5);
+}
+
+int
+frame_wide_probe(int value)
+{
+	return frame_wide_callee(value, 2, 3, 4, 0x1122334455667788LL, 6);
+}
+
+int
+frame_variadic_call_probe(int value)
+{
+	return frame_variadic_callee(value, 2, 3, 4, 5, 6);
+}
+
+int
+frame_struct_probe(int value)
+{
+	struct frame_words words = { value, 2, 3 };
+
+	return frame_struct_callee(value, 2, 3, 4, words);
+}
+
+int
+frame_nested_probe(int value)
+{
+	return frame_stack_callee(value, 2, 3, 4,
+	    frame_stack_callee(value, 6, 7, 8, 9, 10), 11);
 }
 
 int
@@ -440,19 +482,63 @@ END { exit seen && !fp && !dynamic && !low_save ? 0 : 1 }
 	}
 
 	awk '
-/^[[:space:]]*[.]ent frame_stack_probe$/ { inside = 1; seen = 1; next }
+/^[[:space:]]*[.]ent frame_pad_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
 inside && /\$fp/ { fp = 1 }
-inside && /^[[:space:]]*jal frame_stack_callee/ { call = 1; next }
-call && /^[[:space:]]*subu \$sp,\$sp,16/ { dynamic = 1 }
-call { call = 0 }
-END { exit seen && fp && dynamic ? 0 : 1 }
+inside && /^[[:space:]]*sw .*,16\(\$sp\)/ { arg16 = 1 }
+inside && /^[[:space:]]*sw .*,20\(\$sp\)/ { arg20 = 1 }
+END { exit seen && !fp && arg16 && !arg20 ? 0 : 1 }
 ' "$tmp.s" || {
-		echo "$frame_cpu changed stack-argument frame lowering" >&2
+		echo "$frame_cpu misplaced a padded stack argument" >&2
 		exit 1
 	}
 
-	for protected in frame_address_probe frame_alloca_probe \
+	awk '
+/^[[:space:]]*[.]ent frame_wide_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*sw .*,16\(\$sp\)/ { arg16 = 1 }
+inside && /^[[:space:]]*sw .*,20\(\$sp\)/ { arg20 = 1 }
+inside && /^[[:space:]]*sw .*,24\(\$sp\)/ { arg24 = 1 }
+END { exit seen && arg16 && arg20 && arg24 ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$frame_cpu broke aligned 64-bit stack slots" >&2
+		exit 1
+	}
+
+	awk '
+/^[[:space:]]*[.]ent frame_stack_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /\$fp/ { fp = 1 }
+inside && /^[[:space:]]*(addiu|subu) \$sp,\$sp,-4/ { push = 1 }
+inside && /^[[:space:]]*li \$v0,6([[:space:]]|$)/ { value6 = 1; next }
+inside && value6 && /^[[:space:]]*sw \$v0,20\(\$sp\)/ {
+	arg6 = 1; value6 = 0; next
+}
+inside && /^[[:space:]]*li \$v0,5([[:space:]]|$)/ { value5 = 1; next }
+inside && value5 && /^[[:space:]]*sw \$v0,16\(\$sp\)/ {
+	arg5 = 1; value5 = 0; next
+}
+END { exit seen && !fp && !push && arg5 && arg6 ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$frame_cpu did not fix ordinary stack arguments" >&2
+		exit 1
+	}
+
+	for fixed_stack in frame_wide_probe frame_variadic_call_probe \
+	    frame_nested_probe; do
+		awk -v fn="$fixed_stack" '
+$0 ~ "^[[:space:]]*[.]ent " fn "$" { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /\$fp/ { fp = 1 }
+inside && /^[[:space:]]*(addiu|subu) \$sp,\$sp,-(4|8)/ { push = 1 }
+END { exit seen && !fp && !push ? 0 : 1 }
+' "$tmp.s" || {
+			echo "$frame_cpu did not fix stack arguments in $fixed_stack" >&2
+			exit 1
+		}
+	done
+
+	for protected in frame_struct_probe frame_address_probe frame_alloca_probe \
 	    frame_varargs_probe; do
 		awk -v fn="$protected" '
 $0 ~ "^[[:space:]]*[.]ent " fn "$" { inside = 1; seen = 1; next }

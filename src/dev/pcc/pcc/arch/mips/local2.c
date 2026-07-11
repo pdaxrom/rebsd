@@ -72,6 +72,7 @@ static int mips_frame_adjust;
 static int mips_omit_fp;
 static int mips_leaf_function;
 static int mips_fixed_call_area;
+static int mips_fixed_call_size;
 
 static int
 mips_can_omit_fp(struct interpass_prolog *ipp)
@@ -142,7 +143,7 @@ offcalc(struct interpass_prolog * ipp, int omitfp)
         addto += 7;
         addto &= ~7;
 	if (omitfp && mips_fixed_call_area)
-		addto += ARGINIT / SZCHAR;
+		addto += mips_fixed_call_size;
 
 	return addto;
 }
@@ -244,6 +245,7 @@ eoftn(struct interpass_prolog * ipp)
 		mips_frame_adjust = 0;
 		mips_leaf_function = 0;
 		mips_fixed_call_area = 0;
+		mips_fixed_call_size = 0;
 		return;		/* no code needs to be generated */
 	}
 
@@ -299,6 +301,7 @@ eoftn(struct interpass_prolog * ipp)
 	mips_frame_adjust = 0;
 	mips_leaf_function = 0;
 	mips_fixed_call_area = 0;
+	mips_fixed_call_size = 0;
 
 #ifdef USE_GAS
 	printf("\t.end %s\n", ipp->ipp_name);
@@ -1293,11 +1296,8 @@ zzzcode(NODE * p, int c)
 		break;
 
 	case 'C':	/* remove arguments from stack after subroutine call */
-		if (mips_fixed_call_area) {
-			if (p->n_qual > ARGINIT / SZCHAR)
-				comperr("fixed call area with stack arguments");
+		if (mips_fixed_call_area)
 			break;
-		}
 		sz = p->n_qual > 16 ? p->n_qual : 16;
 		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP], sz);
 		break;
@@ -1307,6 +1307,27 @@ zzzcode(NODE * p, int c)
 			printf("\tnop\n");
 		else
 			printf("\tsubu %s,%s,16\n", rnames[SP], rnames[SP]);
+		break;
+
+	case 'q':	/* allocate one dynamically pushed argument */
+		if (mips_fixed_call_area)
+			break;
+		sz = funargpushsiz(p);
+		if (sz == 4 && (p->n_type != FLOAT || mips_soft_float))
+			printf("\tsubu %s,%s,4\t\t# save %sarg to stack\n",
+			    rnames[SP], rnames[SP],
+			    p->n_type == FLOAT ? "soft-float " : "function ");
+		else
+			printf("\taddiu %s,%s,-%d\t# save function arg to stack\n",
+			    rnames[SP], rnames[SP], sz);
+		break;
+
+	case 'r':	/* first word of an outgoing stack argument */
+		printf("%d", mips_fixed_call_area ? p->n_qual : 0);
+		break;
+
+	case 's':	/* second word of an outgoing stack argument */
+		printf("%d", mips_fixed_call_area ? p->n_qual + 4 : 4);
 		break;
 
 	case 'D':	/* long long comparison */
@@ -1798,7 +1819,70 @@ mips_rewrite_frame_ref(NODE *p)
 struct mips_frame_scan {
 	int needfp;
 	int has_call;
+	int max_call_size;
 };
+
+static int
+mips_tree_has_call(NODE *p)
+{
+	int opty;
+
+	if (p == NIL)
+		return 0;
+	if (callop(p->n_op))
+		return 1;
+	opty = optype(p->n_op);
+	if (opty != LTYPE && mips_tree_has_call(p->n_left))
+		return 1;
+	return opty == BITYPE && mips_tree_has_call(p->n_right);
+}
+
+static void
+mips_mark_funargs(NODE *p, int *usedp)
+{
+	int sz;
+
+	if (p == NIL)
+		return;
+	if (p->n_op == CM) {
+		mips_mark_funargs(p->n_left, usedp);
+		mips_mark_funargs(p->n_right, usedp);
+		return;
+	}
+	if (p->n_op != FUNARG)
+		return;
+
+	sz = funargpushsiz(p);
+	p->n_qual = ARGINIT / SZCHAR + *usedp;
+	*usedp += sz;
+}
+
+static void
+mips_scan_call(NODE *p, struct mips_frame_scan *scan)
+{
+	int area, pad, pushsz, used;
+
+	scan->has_call = 1;
+	if (p->n_left != NIL && p->n_left->n_op == ICON &&
+	    strcmp(p->n_left->n_name, "alloca") == 0) {
+		scan->needfp = 1;
+		return;
+	}
+	if (p->n_op != CALL && p->n_op != FORTCALL && p->n_op != STCALL)
+		return;
+	if (mips_tree_has_call(p->n_right)) {
+		scan->needfp = 1;
+		return;
+	}
+
+	pushsz = funargpushsiz(p->n_right);
+	pad = (pushsz & 7) != 0 ? 4 : 0;
+	area = ARGINIT / SZCHAR + pushsz + pad;
+	if (area > scan->max_call_size)
+		scan->max_call_size = area;
+	used = 0;
+	mips_mark_funargs(p->n_right, &used);
+}
 
 static void
 mips_scan_frame(NODE *p, void *arg)
@@ -1816,11 +1900,10 @@ mips_scan_frame(NODE *p, void *arg)
 	}
 
 	/*
-	 * FUNARG and STARG nodes decrement $sp while outgoing stack arguments
-	 * are prepared.  Keep the old dynamic call lowering for those
-	 * functions until stack arguments have fixed frame offsets.
+	 * STARG still performs a dynamic structure copy.  Ordinary aggregate
+	 * tails have already been split into FUNARG words by pass1.
 	 */
-	if (p->n_op == FUNARG || p->n_op == STARG) {
+	if (p->n_op == STARG) {
 		scan->needfp = 1;
 		return;
 	}
@@ -1838,10 +1921,7 @@ mips_scan_frame(NODE *p, void *arg)
 	}
 
 	if (callop(p->n_op)) {
-		scan->has_call = 1;
-		if (p->n_left != NIL && p->n_left->n_op == ICON &&
-		    strcmp(p->n_left->n_name, "alloca") == 0)
-			scan->needfp = 1;
+		mips_scan_call(p, scan);
 	}
 }
 
@@ -1852,6 +1932,7 @@ mips_ipole_needs_fp(struct interpass *ipole)
 	struct mips_frame_scan scan;
 
 	memset(&scan, 0, sizeof(scan));
+	mips_fixed_call_size = 0;
 
 	DLIST_FOREACH(ip, ipole, qelem) {
 		if (ip->type != IP_NODE)
@@ -1862,6 +1943,9 @@ mips_ipole_needs_fp(struct interpass *ipole)
 	}
 
 	mips_fixed_call_area = xomitframe && !scan.needfp && scan.has_call;
+	if (mips_fixed_call_area)
+		mips_fixed_call_size = scan.max_call_size > ARGINIT / SZCHAR ?
+		    scan.max_call_size : ARGINIT / SZCHAR;
 	return scan.needfp || (scan.has_call && !mips_fixed_call_area);
 }
 
@@ -2467,7 +2551,7 @@ lastcall(NODE *p)
 	pushsz = funargpushsiz(p->n_right);
 	pad = (pushsz & 7) != 0 ? 4 : 0;
 	sz = 4*nargregs + pushsz + pad;
-	if (pad)
+	if (pad && !mips_fixed_call_area)
 		printf("\tsubu %s,%s,%d\t# align stack\n",
 		    rnames[SP], rnames[SP], pad);
 
