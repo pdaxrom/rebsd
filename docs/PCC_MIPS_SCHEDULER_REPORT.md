@@ -636,3 +636,95 @@ N64_PCC_DEBUG_RC_END
 The final marker was supplied without a numeric value, so none is inferred.
 The E1 hardware gate is closed and the next isolated scheduler substep may
 proceed.
+
+## Milestone E2: Hard-Float Expression Reload Materialization
+
+Implementation commit `ba6074a1` extends the existing pass2 stack-reload
+folding to nonvolatile hard-float expressions.  Pass2 now materializes the
+expression once in a compiler `TEMP`, keeps the original frame store, and
+uses that `TEMP` for an immediately adjacent reload.  This removes sequences
+such as:
+
+```text
+div.d/neg.d FPR-D,...
+s.d FPR-D,frame-slot
+l.d FPR-R,frame-slot
+```
+
+without re-evaluating the expression or deleting the frame store.  The same
+rule handles the MIPS32R2 `sdc1`/`ldc1` form.
+
+The call-argument case is deliberately narrow.  The frame store must be
+followed immediately by one call tree containing exactly one matching read.
+The argument tree may contain only compiler-generated register or frame-slot
+moves.  Nested calls, inline assembly, structure operations, compound
+assignments, unknown-memory writes, writes to the source slot, and volatile
+trees reject the transformation.  Integer and soft-float paths retain their
+previous behavior.
+
+Permanent VR4300 and MIPS32R2 host probes cover expression return and call
+argument folds.  Negative probes require a volatile reload to remain and
+require a reload after a nested mutating call.  The VR4300 multiplication
+erratum policy is unchanged: E2 does not schedule multiply operations, and
+`-mfix4300`/`-mno-fix4300` behavior remains covered by the existing probes.
+
+### Static Results
+
+Linpack contains four accepted windows on each hard-float target.  E2 removes
+four loads and four instructions without changing stores, nops, branches,
+jumps, or multiply/divide counts:
+
+```text
+VR4300 E1: 2469 instructions, 151 nops, 643 loads, 244 stores, 79919 bytes
+VR4300 E2: 2465 instructions, 151 nops, 639 loads, 244 stores, 79719 bytes
+
+MIPS32R2 E1: 2545 instructions, 108 nops, 772 loads, 293 stores, 79354 bytes
+MIPS32R2 E2: 2541 instructions, 108 nops, 768 loads, 293 stores, 79194 bytes
+```
+
+### Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the same three expected
+failures and passed 292/292 runtime candidates.  Native PCC compiled 302
+cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 13403 / 13256 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 991 / 1000 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 12395 / 12878 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1093 / 1027 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13242 / 12914 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1086 / 1130 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for the kernel and root filesystem.  Kernel builds
+used `-msoft-float -fomit-frame-pointer`.  Every log has exactly one
+`PCC_SMOKE_ALL_OK`, zero failures, and `PCC_SMOKE_ALL_RC:0`:
+
+```text
+/private/tmp/pcc-fpu-e2-malta64-hard.log
+/private/tmp/pcc-fpu-e2-malta64-soft.log
+/private/tmp/pcc-fpu-e2-malta-hard.log
+/private/tmp/pcc-fpu-e2-malta-soft.log
+/private/tmp/pcc-fpu-e2-maltael-hard.log
+/private/tmp/pcc-fpu-e2-maltael-soft.log
+```
+
+### N64 Artifact
+
+The N64 hardware gate uses a GCC kernel and PCC VR4300 hard-float a.out
+userland:
+
+```text
+sys/mips/n64/builds/20260711-milestone-e2-hardfp-expression-reload-gcc-kernel/pcc-debug.z64
+implementation commit: ba6074a1
+size: 6619136 bytes
+sha256: eb4225ba55fc04e4f3dbcc33263ffc8cd55a42812bbd792f82bc2c0c0758971e
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+```
+
+The clean build has stamp `.build-mode.gcc.1.0.0.1`, identifies its kernel as
+GCC 14.2.0, and uses the default `-mfix4300` policy.  Real N64 hardware must
+produce all three zero status markers before E2 is closed and the next
+optimization starts.
