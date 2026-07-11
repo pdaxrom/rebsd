@@ -269,16 +269,67 @@ load_schedule_probe(int *array, int stride, int row, int column)
 
 	return array[index] + index;
 }
+
+int
+param_address_probe(int value)
+{
+	int *pointer = &value;
+
+	*pointer += 3;
+	return value;
+}
+
+int
+param_assign_probe(int value, int replace)
+{
+	if (replace)
+		value = 17;
+	return value;
+}
 EOF
 
 "$pcc" -march=mips32r2 -O2 -S -o "$tmp.s" "$tmp.c"
 awk '
-/^[[:space:]]*lw \$a0,16\(\$fp\)/ { state = 1; next }
-state == 1 && /^[[:space:]]*sll \$v0,\$v1,2/ { state = 2; next }
-state == 2 && /^[[:space:]]*addu \$a0,\$a0,\$v0/ { found = 1 }
-END { exit found ? 0 : 1 }
+/^[[:space:]]*[.]ent load_schedule_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*mul[[:space:]]/ { multiply = 1 }
+inside && /^[[:space:]]*sll[[:space:]]/ { shift = 1 }
+inside && /,(16|20|24|28)\(\$fp\)/ { frame_arg = 1 }
+END { exit seen && multiply && shift && !frame_arg ? 0 : 1 }
 ' "$tmp.s" || {
-	echo "MIPS32r2 did not schedule independent shift after load" >&2
+	echo "MIPS32r2 did not promote scalar register parameters" >&2
+	exit 1
+}
+awk '
+/^[[:space:]]*[.]ent param_address_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*sw[[:space:]]+\$a0,-[0-9]+\(\$fp\)/ { store = 1 }
+inside && /^[[:space:]]*lw[[:space:]].*-[0-9]+\(\$fp\)/ { load = 1 }
+END { exit seen && store && load ? 0 : 1 }
+' "$tmp.s" || {
+	echo "MIPS32r2 did not materialize an address-taken parameter" >&2
+	exit 1
+}
+awk '
+/^[[:space:]]*[.]ent param_assign_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /,(16|20)\(\$fp\)/ { frame_arg = 1 }
+inside && /^[[:space:]]*li[[:space:]].*,17([[:space:]]|$)/ { assign = 1 }
+END { exit seen && assign && !frame_arg ? 0 : 1 }
+' "$tmp.s" || {
+	echo "MIPS32r2 did not keep an assigned parameter in a TEMP" >&2
+	exit 1
+}
+
+"$pcc" -march=vr4300 -O2 -S -o "$tmp.s" "$tmp.c"
+awk '
+/^[[:space:]]*[.]ent load_schedule_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*sw[[:space:]]+\$a0,16\(\$fp\)/ { store = 1 }
+inside && /^[[:space:]]*lw[[:space:]].*,16\(\$fp\)/ { load = 1 }
+END { exit seen && store && load ? 0 : 1 }
+' "$tmp.s" || {
+	echo "VR4300 unexpectedly promoted scalar register parameters" >&2
 	exit 1
 }
 

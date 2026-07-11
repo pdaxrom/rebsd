@@ -600,7 +600,8 @@ bfcode(struct symtab **sp, int cnt)
 		else if (sp[i]->stype == FLOAT)
 			param_float(sp[i], &reg, 0);
 		else
-			param_32bit(sp[i], &reg, 0);
+			param_32bit(sp[i], &reg, xtemps && !saveallargs &&
+			    mips_target.isa == MIPS_ISA_MIPS32R2);
 	}
 
 	/* if saveallargs, save the rest of the args onto the stack */
