@@ -831,3 +831,90 @@ N64_PCC_DEBUG_RC_END
 
 The E2 hardware gate is closed and the next isolated optimization may
 proceed.
+
+## Milestone E3: VR4300 MTC1 Conversion Interlock
+
+Implementation commit `f17acad2` lets VR4300 use its documented hardware
+interlock for an exact `mtc1` followed by `cvt.s.w` or `cvt.d.w` of the same
+FPR.  MIPS32R2 already used this rule.  Generic MIPS3/R4000 remains
+conservative and keeps the explicit `nop`.
+
+The VR4300 User's Manual, section 7.5.1, specifies that an instruction
+immediately following a load or `MTC1` may use the loaded register and that
+hardware interlocks maintain correctness.  E3 therefore removes only the
+software spacer; it does not move either instruction or alter dependencies.
+Permanent probes require the adjacent pair on VR4300 and MIPS32R2 and require
+the spacer for explicit R4000 tuning.
+
+The VR4300 multiplication erratum policy is unchanged.  PCC hard-float N64
+userland still defaults to `-mfix4300`, and `-mno-fix4300` remains the explicit
+opt-out.  The GCC reference Linpack assembly was also scanned: its 23 FP
+multiplies and four integer multiplies contain no dangerous adjacent pair.
+
+### E3 Static Results
+
+E3 removes four Linpack spacers and 20 assembly bytes while preserving every
+non-nop instruction, load, store, branch, jump, and multiply/divide:
+
+```text
+VR4300 before: 2375 instructions, 2248 non-nops, 127 nops, 71622 bytes
+VR4300 after:  2371 instructions, 2248 non-nops, 123 nops, 71602 bytes
+MIPS32R2:      2473 instructions, 2367 non-nops, 106 nops, 71207 bytes
+```
+
+The MIPS32R2 output is byte-identical before and after E3.
+
+### E3 Regression Gates
+
+Cross regression compiled 329 of 332 tests with only the three established
+expected failures and passed 292/292 runtime candidates.  Native PCC compiled
+302 cases, observed 30 expected compile failures, and passed 292/292 runtime
+cases.  Unexpected counts were zero.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 13098.799 / 12962.330 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1026.511 / 1036.603 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 12307.250 / 12434.327 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1107.073 / 1106.436 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13209.714 / 13401.526 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1112.348 / 1117.162 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for the kernel and root filesystem.  Kernel builds
+used `-msoft-float -fomit-frame-pointer`; hard/soft userland and both endian
+modes were covered.  Every log has one `PCC_SMOKE_ALL_OK`, zero failures,
+`PCC_SMOKE_ALL_RC:0`, and no branch-delay macro warning.  Logs are
+`/private/tmp/pcc-fpu-e3-{malta64,malta,maltael}-{hard,soft}.log`.
+
+### E3 N64 Comparison Artifact
+
+Harness commit `cc1bfc4c` adds both GCC and PCC Linpack to the extended N64
+debug run.  GCC uses a separately built GCC a.out `crt0.o`, `libc.a`, and
+`libm.a`; PCC uses the PCC runtime.  Both binaries use the same source, `-O2`,
+hard-float VR4300 ABI, array size 120, and one-second minimum timing window.
+
+```text
+sys/mips/n64/builds/20260711-milestone-e3-vr4300-mtc1-interlock-dual-linpack-gcc-kernel/pcc-debug.z64
+implementation commit: f17acad2
+harness commit: cc1bfc4c
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 275e34890728711d6722863915331e2934065e3a63baa834298dfd920676952c
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 41696 section bytes, sha256 b6b5b8c5f3a42721cec279e1e9ac9896ff3a1ea08732974474f3214ce2e998b4
+GCC libc.a sha256: aeaf1ba199f4dd5f559d69561669ba47aa72d75e974a841c9f0e67045d615b86
+debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c882f9d9
+```
+
+The final clean build passed `fsutil --check`; both Linpack executables have
+zero undefined symbols.  Real N64 validation is pending.  In addition to the
+benchmark output, the required zero-status markers are:
+
+```text
+N64_LINPACK_RC gcc 0
+N64_LINPACK_RC pcc 0
+N64_PCC_DEBUG_END 0
+N64_PCC_DEBUG_RUNNER_RC 0
+N64_PCC_DEBUG_RC_END
+```

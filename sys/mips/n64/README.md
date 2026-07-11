@@ -557,6 +557,39 @@ The 2026-07-07 run completed both variants, built `linpack-pcc`, passed
 `fsutil --check`, and produced big-endian MIPS-III ELF kernels.  That was a
 build-only gate; real-hardware smoke is tracked separately.
 
+The PCC optimization hardware image uses a GCC kernel and PCC VR4300
+hard-float a.out userland.  Build it from a regenerated, clean board tree:
+
+```
+make -C sys/mips/n64 reconfig
+make -C sys/mips/n64 clean
+make -C sys/mips/n64 N64_KERNEL_COMPILER=gcc \
+    N64_USERLAND_COMPILER=pcc N64_USERLAND_CPU=vr4300 \
+    N64_USERLAND_FLOAT=hard N64_USERLAND_EXEC_FORMAT=aout \
+    N64_DEBUG_UART_ONLY=1 N64_PCC_DEBUG_ROOTFS_KBYTES=6144 \
+    pcc-debug.z64
+```
+
+This image includes `/root/linpack-gcc` and `/root/linpack-pcc`, built from
+the same source with `-O2`, array size 120, and a one-second minimum timing
+window.  The GCC binary uses a separate GCC-built a.out `crt0.o`, `libc.a`,
+and `libm.a`; the PCC binary uses the PCC-built runtime.  The extended debug
+runner executes GCC first and PCC second and reports:
+
+```
+N64_LINPACK_CONFIG array_size=120 min_seconds=1
+N64_LINPACK_BEGIN gcc
+N64_LINPACK_RC gcc 0
+N64_LINPACK_END gcc
+N64_LINPACK_BEGIN pcc
+N64_LINPACK_RC pcc 0
+N64_LINPACK_END pcc
+```
+
+Either nonzero Linpack status makes `N64_PCC_DEBUG_END` nonzero.  The GCC
+runtime is isolated under `n64-linpack-gcc-runtime.<abi>` and normal
+`make clean` removes it.
+
 The N64 JPEG framebuffer viewer uses the local n64cart copy of `stb_image.h`.
 Override this path if the n64cart tree is in a different location:
 
