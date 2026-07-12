@@ -856,6 +856,14 @@ host profiles and all six full PCC-kernel/PCC-rootfs QEMU profiles pass.
 Native VR4300 regression passes 293/293 runtime tests, including canonical
 ascending/descending loops and a variable-step negative case.
 
+Real N64 validation passed with every final marker at zero.  The stable 16-rep
+row measured GCC at 4412.343 KFLOPS and PCC at 3163.024 KFLOPS, or 71.69% of
+GCC.  GCC changed by only 0.009% from E4 while PCC improved by 2.22%, making
+the induction transform the first post-E3 optimization with a measurable N64
+Linpack gain.  It still leaves the compiler below the 75-85% medium-term goal,
+so the next work must target call/inlining overhead rather than generalizing
+the loop pass without evidence.
+
 The current hard-float PCC full zswap ROM has reached root login on real N64
 hardware and can run basic shell commands.  It is slow on hardware, and the
 `uname -a` panic suggests an unresolved timing/race or interrupt-path issue

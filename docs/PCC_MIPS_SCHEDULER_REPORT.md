@@ -1099,5 +1099,16 @@ debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c88
 ```
 
 The build passed `fsutil --check`; both Linpack binaries have zero undefined
-symbols.  Real N64 timing and final debug markers remain the hardware gate
-before closing Milestone E or proceeding to static inlining/specialization.
+symbols.  Real N64 validation passed on 2026-07-12.  The timed rows were:
+
+```text
+reps 8:  GCC 4457.883 KFLOPS, PCC 3118.717 KFLOPS (69.96% of GCC)
+reps 16: GCC 4412.343 KFLOPS, PCC 3163.024 KFLOPS (71.69% of GCC)
+```
+
+Both binaries reported 15-digit machine precision.  `N64_LINPACK_RC` for GCC
+and PCC and all three final debug status markers were zero.  GCC changed by
+only 0.009% from E4, while PCC improved by 2.22% from 3094.330 KFLOPS.  This
+confirms a real, if modest, hardware gain and closes the scoped Milestone E.
+The remaining gap is now assigned to measured call/inlining specialization,
+not to broadening the loop transform without a workload-backed case.

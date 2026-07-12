@@ -4347,11 +4347,12 @@ Milestone order:
     extended to VR4300 by D4 after C5 removed the artificial multiply padding;
     VR4300 also removes 210 loads and 17 stores.  All cross/native and
     six-profile QEMU gates pass; the D4 physical N64 gate passes.
-- [ ] Milestone E: target-independent strength reduction with MIPS costs.
+- [x] Milestone E: target-independent strength reduction with MIPS costs.
   - The backend-only MIPS power-of-two multiply/divide/modulo special cases
     including signed power-of-two divide, plus MIPS32R2 ISA-gated multiply,
-    are complete and green, but the broader target-independent transform
-    remains open.
+    are complete and green.  More general loop forms remain deliberately
+    deferred; E5 supplies the measured canonical SSA transform needed for the
+    scoped milestone without adding a general loop optimizer.
   - The first machine-independent SSA substep is complete in `a0803d4b`.
     Exact repeated integer `MUL` subtrees over immutable SSA names are
     materialized once within a basic block.  Calls and asm delimit regions;
@@ -4375,8 +4376,9 @@ Milestone order:
     regression from applying the transform there.
   - VR4300 Linpack drops from 48 to 23 integer multiply instructions.  All six
     host and full PCC-kernel/PCC-rootfs QEMU profiles pass, as do 293/293
-    native VR4300 runtime regressions.  The real N64 performance gate for E5
-    is still pending.
+    native VR4300 runtime regressions.  Real N64 validation passes at 3163.024
+    KFLOPS versus GCC at 4412.343 KFLOPS (71.69%), a measured 2.22% PCC gain
+    over E4.  This closes the scoped Milestone E hardware gate.
 - [ ] Milestone F: small static inlining/specialization outside the backend.
 - [ ] Milestone G: repeat Malta, Malta64/R4000, and real N64 benchmark gates;
   decide whether further work belongs in PCC or in source-level hot paths.
