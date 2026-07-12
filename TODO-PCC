@@ -4501,8 +4501,12 @@ Milestone order:
     hard-float stack parameters and omits their dead call-side values while
     preserving o32 slots.  Strict A/B improves 3.44%; cross/native regression
     and all six full QEMU profiles pass.
-  - [ ] Build and run the clean G3 GCC-kernel/PCC-hard-float-a.out-userland
-    comparison image on physical N64 before closing G3.
+  - [x] The clean G3 GCC-kernel/PCC-hard-float-a.out-userland comparison image
+    is
+    `sys/mips/n64/builds/20260712-milestone-g3-stack-specialization-gcc-kernel/pcc-debug.z64`,
+    SHA-256
+    `87ca5dce22afd995da205704126bf573d389224503f29f9b1e5a439c3c4fe748`.
+  - [ ] Run that image on physical N64 before closing G3.
 
 Success criteria:
 

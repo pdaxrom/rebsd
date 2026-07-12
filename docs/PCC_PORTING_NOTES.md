@@ -955,7 +955,12 @@ Malta64 A/B runs improve by 3.44%.  Cross regression produces 294 runtime
 candidates, native VR4300 passes 294/294, and all six PCC-kernel/PCC-rootfs
 full QEMU profiles pass with `-msoft-float -fomit-frame-pointer` kernels.  The
 default `-mfix4300` repair remains unchanged.  G3 still requires the physical
-N64 gate.
+N64 gate.  Its clean GCC-kernel/PCC-hard-float-a.out-userland image is
+`sys/mips/n64/builds/20260712-milestone-g3-stack-specialization-gcc-kernel/pcc-debug.z64`,
+SHA-256
+`87ca5dce22afd995da205704126bf573d389224503f29f9b1e5a439c3c4fe748`.
+The PCC Linpack is 40224 section bytes, 1136 fewer than G2; GCC Linpack remains
+24600 section bytes and uses its separate GCC-built runtime.
 
 ## Out Of Scope For The C Gate
 

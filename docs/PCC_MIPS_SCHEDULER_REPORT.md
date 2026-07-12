@@ -1384,3 +1384,25 @@ full-smoke sample produced a timer outlier.  All six full profiles reported
 `-msoft-float -fomit-frame-pointer`, and no assembler macro expanded into a
 multi-instruction branch delay slot.  The default `-mfix4300` behavior is
 unchanged.  G3 remains open until the clean image passes on physical N64.
+
+### G3 N64 Comparison Artifact
+
+The clean image uses a GCC kernel and PCC VR4300 hard-float a.out userland.
+The GCC Linpack uses its separate GCC-built crt0, libc, and libm; the GCC and
+PCC libc archives have different checksums.  The artifact was built after
+implementation commit `87134c70`.
+
+```text
+sys/mips/n64/builds/20260712-milestone-g3-stack-specialization-gcc-kernel/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 87ca5dce22afd995da205704126bf573d389224503f29f9b1e5a439c3c4fe748
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 40224 section bytes, sha256 7b4fee33a80f43016a1731df89ca1c0c9a1a5dccc4eb7b896aa2fb1700946074
+debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c882f9d9
+```
+
+The image passed `fsutil --check`; both Linpack binaries have zero undefined
+symbols.  G3 reduces the linked PCC Linpack by 1136 section bytes relative to
+G2.  Physical N64 correctness and performance remain the deciding gate.
