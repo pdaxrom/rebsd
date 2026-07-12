@@ -909,6 +909,23 @@ hardware and can run basic shell commands.  It is slow on hardware, and the
 `uname -a` panic suggests an unresolved timing/race or interrupt-path issue
 rather than a rootfs packaging failure.
 
+The 2026-07-12 G2 hard-float step keeps o32 `double` and `long double`
+parameters received through GPR pairs in compiler temporaries for optimized,
+non-variadic VR4300 and MIPS32R2 functions.  ABI materialization still occurs
+before promotion.  Generic MIPS3/R4000, soft-float, varargs, and leading
+F12/F14 arguments retain their previous behavior.
+
+The same step adds one exact late-scheduler rule for an independent
+`mov.s`/`mov.d` in an FPU load-use gap.  It proves disjoint register sets and
+both consumer dependencies, does not move memory operations across each
+other, and runs in two bounded passes to compose with the existing binary-FPU
+window.  VR4300 Linpack removes 15 repeated loads with no nop or store growth;
+alternating Malta64 A/B runs improve by 0.96%.  Cross and native regression
+pass 294/294 runtime candidates, and all six PCC-kernel/PCC-rootfs full QEMU
+profiles pass.  Soft-float Linpack assembly remains byte-identical to F1 for
+both endian modes.  The default `-mfix4300` repair remains unchanged, and the
+real N64 gate is still required before G2 is considered complete.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

@@ -511,8 +511,9 @@ param_double(struct symtab *sym, int *regp, int dotemps)
 	p = mips_symview(sym, LONGLONG);
 	p = buildtree(ASSIGN, p, q);
 	ecomp(p);
+	if (dotemps)
+		putintemp(sym);
 	*regp = reg + 2;
-	(void)dotemps;
 }
 
 /*
@@ -596,7 +597,10 @@ bfcode(struct symtab **sp, int cnt)
 		else if (DEUNSIGN(sp[i]->stype) == LONGLONG)
 			param_64bit(sp[i], &reg, 0);
 		else if (sp[i]->stype == DOUBLE || sp[i]->stype == LDOUBLE)
-			param_double(sp[i], &reg, 0);
+			param_double(sp[i], &reg, xtemps && !saveallargs &&
+			    !mips_soft_float &&
+			    (mips_target.isa == MIPS_ISA_MIPS32R2 ||
+			    mips_target.tune == MIPS_TUNE_VR4300));
 		else if (sp[i]->stype == FLOAT)
 			param_float(sp[i], &reg, 0);
 		else

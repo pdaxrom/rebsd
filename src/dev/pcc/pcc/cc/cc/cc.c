@@ -2569,6 +2569,52 @@ mips_parse_fpu_binary_src_regs(const char *line, unsigned long long *srcp)
 }
 
 static int
+mips_parse_fpu_move_rw(const char *line, struct mips_fpu_rw *rwp)
+{
+	char op[16];
+	const char *s;
+	int dst, src, pair;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	if (strcmp(op, "mov.s") == 0)
+		pair = 0;
+	else if (strcmp(op, "mov.d") == 0)
+		pair = 1;
+	else
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	if (!mips_parse_fpr_operand(&s, &dst) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_fpr_operand(&s, &src) ||
+	    !mips_line_ends_after_operands(s))
+		return 0;
+	rwp->read = mips_load_dest_for_reg(MIPS_LOAD_FPR, src, pair).regs;
+	rwp->write = mips_load_dest_for_reg(MIPS_LOAD_FPR, dst, pair).regs;
+	rwp->vr4300_cycles = 0;
+	return 1;
+}
+
+/* Fill an FP load-use gap with an independent register-only FP move. */
+static int
+mips_can_fill_fpu_load_move_delay(const char *load, const char *move,
+    const char *consumer)
+{
+	struct mips_load_dest load_dest;
+	struct mips_fpu_rw move_rw, consumer_rw;
+
+	if (!mips_is_fpu_load_line(load, &load_dest) ||
+	    !mips_parse_fpu_move_rw(move, &move_rw) ||
+	    !mips_parse_fpu_binary_rw(consumer, &consumer_rw))
+		return 0;
+	if ((load_dest.regs & (move_rw.read | move_rw.write)) != 0)
+		return 0;
+	return (consumer_rw.read & load_dest.regs) != 0 &&
+	    (consumer_rw.read & move_rw.write) != 0;
+}
+
+static int
 mips_can_schedule_fpu_dep_lw(const char *producer, const char *consumer,
     const char *load)
 {
@@ -3375,7 +3421,19 @@ mips_schedule_load_delay_nops(char *path)
 			if (pos != -1 && fgets(load, sizeof(load), in) != NULL) {
 				if (fgets(nop, sizeof(nop), in) != NULL &&
 				    fgets(next, sizeof(next), in) != NULL &&
-				    mips_is_nop(next) &&
+				    mips_is_nop(load) &&
+				    mips_can_fill_fpu_load_move_delay(line, nop,
+				    next)) {
+					fputs(nop, out);
+					fputs(line, out);
+					fputs(next, out);
+					prev_delay_slot =
+					    mips_has_delay_slot(next);
+					strcpy(previous, next);
+					changed = 1;
+					continue;
+				}
+				if (mips_is_nop(next) &&
 				    mips_can_schedule_fpu_dep_lw(line, load, nop) &&
 				    fgets(after, sizeof(after), in) != NULL) {
 					fputs(line, out);
@@ -3974,10 +4032,13 @@ mips_fold_late_peepholes(char *path)
 static int
 mips_postprocess_asm(char *path)
 {
-	if ((mips_target.tune == MIPS_TUNE_VR4300 ||
-	    mips_target.isa == MIPS_ISA_MIPS32R2) &&
-	    mips_schedule_load_delay_nops(path))
-		return 1;
+	int i;
+
+	if (mips_target.tune == MIPS_TUNE_VR4300 ||
+	    mips_target.isa == MIPS_ISA_MIPS32R2)
+		for (i = 0; i < 2; i++)
+			if (mips_schedule_load_delay_nops(path))
+				return 1;
 	if (mips_trim_load_delay_nops(path))
 		return 1;
 	if (mips_fold_late_peepholes(path))

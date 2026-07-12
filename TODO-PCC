@@ -4263,6 +4263,31 @@ Backend work, kept small:
     numeric value, so none is inferred.  The E1 hardware gate is closed.
   - No FP multiply scheduling changed in E1; the `-mfix4300` /
     `-mno-fix4300` erratum switch remains unchanged.
+  - [x] G2 keeps optimized non-variadic hard-float `double`/`long double`
+    parameters passed through GPR pairs in compiler `TEMP`s on VR4300 and
+    MIPS32R2.  The ABI register-pair store still happens first; generic
+    MIPS3/R4000, soft-float, variadic functions, and leading F12/F14
+    hard-float arguments retain their previous paths.
+  - [x] G2 also recognizes the exact independent `mov.s`/`mov.d` between an
+    FPU load and a binary FPU consumer.  It moves that register-only operation
+    before the load, filling the load-use gap without reordering memory.  Two
+    bounded late-scheduler passes let this compose with the existing C3 FPU
+    window; the final VR4300 erratum repair still runs afterwards.
+  - VR4300 Linpack changes from F1
+    `2289/2172/117/431/226/70371` to G2
+    `2291/2174/117/416/226/70437`
+    instructions/non-nops/nops/loads/stores/assembly-bytes.  MIPS32R2
+    hard-float is `2414/2311/103/534/272/70039`; soft-float remains
+    byte-identical to F1 at `3695/3601/94/1016/554/99839` for each endian.
+  - Alternating clean Malta64 GCC-kernel/PCC-userland A/B runs average
+    12819.139 KFLOPS for F1 and 12942.396 for G2, a 0.96% G2 gain.  Cross
+    regression and native VR4300 regression pass 294/294 runtime cases.  All
+    six PCC-kernel/PCC-rootfs QEMU profiles pass the full
+    `/root/pcc-smoke-all.sh`; kernels retain
+    `-msoft-float -fomit-frame-pointer`.
+  - G2 does not alter `-mfix4300` policy.  The workaround remains enabled by
+    default and selectable with `-mfix4300` / `-mno-fix4300`.  Real VR4300
+    hardware validation is still required before closing this substep.
   - Keep helper calls only where they preserve required IEEE/NaN behavior; do
     not replace correctness-sensitive helper paths with raw FPU instructions
     unless the existing N64/Malta tests prove equivalence.
@@ -4431,6 +4456,12 @@ Milestone order:
     over E5 while GCC changes 0.10%, closing the scoped milestone.
 - [ ] Milestone G: repeat Malta, Malta64/R4000, and real N64 benchmark gates;
   decide whether further work belongs in PCC or in source-level hot paths.
+  - [x] G2 software gate: hard-float GPR-passed FP parameter promotion plus
+    the exact FPU load/move gap fill pass host, cross, native, strict A/B, and
+    all six full QEMU profiles.
+  - [ ] Build and run the clean G2 GCC-kernel/PCC-hard-float-a.out-userland
+    comparison image on physical N64.  Do not close G2 or Milestone G from
+    QEMU timing alone.
 
 Success criteria:
 

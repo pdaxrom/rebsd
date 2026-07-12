@@ -1200,3 +1200,76 @@ GCC changes by 0.10% and PCC improves by 0.48%.  The static specialization
 therefore produces a small measured hardware gain and closes the scoped
 Milestone F at 71.96% of GCC.  The remaining gap is still dominated by work
 inside the hot BLAS loops rather than by the removed static-helper branches.
+
+## Milestone G2: Hard-Float Parameter TEMP and Load/Move Scheduling
+
+G2 promotes optimized, non-variadic hard-float `double` and `long double`
+parameters that arrive in o32 GPR pairs into compiler `TEMP`s on VR4300 and
+MIPS32R2.  PCC first performs the existing ABI-correct register-pair store,
+then loads the value once into the temporary.  This removes repeated frame
+loads from hot helpers such as Linpack `daxpy`, including the common
+`int, double, pointer` signature where the double arrives in `$a2/$a3`.
+
+The optimization deliberately excludes soft-float, variadic functions,
+generic MIPS3/R4000, and leading hard-float arguments already passed in
+F12/F14.  It therefore does not change their established ABI paths.
+
+The late scheduler also recognizes exactly this register-safe window:
+
+```text
+l.d/ldc1 loaded,...
+nop
+mov.s/mov.d temporary,persistent
+binary-fpu consumer(loaded,temporary)
+```
+
+After proving disjoint load and move register sets and both consumer
+dependencies, it emits the move before the load.  No memory operation crosses
+another memory operation.  The VR4300/MIPS32R2 scheduler runs a fixed two
+passes so this rule can compose with the existing C3 binary-FPU window without
+adding an unbounded fixed-point optimizer.  Final VR4300 erratum repair remains
+after scheduling.
+
+### G2 Static And Timing Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  bytes
+VR4300 F1 baseline             2289       2172   117    431     226  70371
+VR4300 G2                      2291       2174   117    416     226  70437
+MIPS32R2 F1 hard              2412       2309   103    549     272  69823
+MIPS32R2 G2 hard              2414       2311   103    534     272  70039
+MIPS32R2 F1/G2 soft           3695       3601    94   1016     554  99839
+```
+
+Big- and little-endian MIPS32R2 have identical counters.  Each soft-float
+assembly file is byte-identical to its F1 counterpart.  G2 adds two entry
+instructions and removes 15 repeated loads in both hard-float targets, with no
+nop, store, branch, or jump growth.
+
+Alternating clean Malta64 GCC-kernel/PCC-userland runs measured F1 at
+12920.265 and 12718.013 KFLOPS, and G2 at 13009.892 and 12874.900 KFLOPS.
+The averages are 12819.139 and 12942.396 respectively, a 0.96% G2 gain; both
+alternating pairs favor G2.
+
+### G2 Regression Gates
+
+Cross regression compiled 331 of 334 tests with only the three established
+expected failures and produced 294 runtime candidates.  Native VR4300 PCC
+compiled 304 cases, observed 30 expected compile failures, and passed 294/294
+runtime cases with zero unexpected failures.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 12692.158 / 12714.165 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1075.845 / 1069.456 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 12903.245 / 13042.786 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1147.689 / 1139.517 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13606.701 / 13563.433 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1197.093 / 1164.263 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for both kernel and root filesystem, retained
+`-msoft-float -fomit-frame-pointer` for kernels, and reported
+`PCC_SMOKE_ALL_FAILURES 0`.  The default `-mfix4300` behavior and explicit
+`-mfix4300` / `-mno-fix4300` selection are unchanged.  QEMU does not model the
+physical multiply erratum; G2 remains open until the clean comparison image
+passes on real N64 hardware.

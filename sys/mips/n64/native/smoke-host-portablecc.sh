@@ -445,6 +445,99 @@ END { exit found ? 0 : 1 }
 }
 
 cat > "$tmp.c" <<'EOF'
+double
+fpu_param_probe(int count, double scale, double *values)
+{
+	double total = 0.0;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		total += scale * values[i];
+		values[i] = scale * values[i];
+	}
+	return total;
+}
+
+void
+fpu_load_move_schedule_probe(void)
+{
+	asm("l.d $f4,0($a0)\n\t"
+	    "nop\n\t"
+	    "mov.d $f2,$f0\n\t"
+	    "mul.d $f6,$f2,$f4");
+}
+EOF
+
+for schedule_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$schedule_cpu" -mhard-float -O2 -S -o "$tmp.s" \
+	    "$tmp.c"
+	awk '
+/^[[:space:]]*[.]ent fpu_param_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(l[.]d|ldc1)[[:space:]].*24\(\$fp\)/ { loads++ }
+inside && /^[[:space:]]*mov[.]d[[:space:]]/ { moves++ }
+END { exit seen && loads == 1 && moves >= 2 ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$schedule_cpu did not keep a GPR-passed double in a TEMP" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent fpu_load_move_schedule_probe$/ {
+	inside = 1; seen = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	state = 1; next
+}
+inside && state == 1 && /^[[:space:]]*l[.]d[[:space:]]+\$f4,0\(\$a0\)/ {
+	state = 2; next
+}
+inside && state == 2 && /^[[:space:]]*mul[.]d[[:space:]]+\$f6,\$f2,\$f4/ {
+	found = 1
+}
+END { exit seen && found ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$schedule_cpu did not fill the FPU load gap with mov.d" >&2
+		exit 1
+	}
+done
+
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 -S -o "$tmp.s" \
+    "$tmp.c"
+awk '
+/^[[:space:]]*[.]ent fpu_param_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(l[.]d|ldc1)[[:space:]].*24\(\$fp\)/ { loads++ }
+inside && /^[[:space:]]*mov[.]d[[:space:]]/ { moves++ }
+END { exit seen && loads == 2 && moves == 0 ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 unexpectedly promoted a GPR-passed double" >&2
+	exit 1
+}
+awk '
+/^[[:space:]]*[.]ent fpu_load_move_schedule_probe$/ {
+	inside = 1; seen = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*l[.]d[[:space:]]+\$f4,0\(\$a0\)/ {
+	state = 1; next
+}
+inside && state == 1 && /^[[:space:]]*nop([[:space:]]|$)/ {
+	state = 2; next
+}
+inside && state == 2 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	state = 3; next
+}
+inside && state == 3 && /^[[:space:]]*mul[.]d[[:space:]]+\$f6,\$f2,\$f4/ {
+	found = 1
+}
+END { exit seen && found ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 unexpectedly filled the FPU load/move gap" >&2
+	exit 1
+}
+
+cat > "$tmp.c" <<'EOF'
 void
 fpu_conversion_schedule_probe(void)
 {
