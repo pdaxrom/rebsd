@@ -175,6 +175,8 @@
 extern int gflag, kflag, pflag;
 extern int sspflag;
 extern int xscp, xssa, xtailcall, xtemps, xdeljumps, xdce;
+extern int xstatic_spec;
+extern int freestanding;
 extern int xuchar;
 extern int xomitframe;
 

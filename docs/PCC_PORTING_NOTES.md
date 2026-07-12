@@ -849,6 +849,37 @@ MIPS32R2 remains byte-identical to the previous milestone because its direct
 3.8% through added live ranges and spills.  The target-specific policy remains
 a two-line cost hook instead of being duplicated in the MIPS optimizer.
 
+The 2026-07-12 F1 frontend step adds bounded constant-argument specialization
+without enabling ReBSD's disabled general automatic `-xinline` path.  The
+driver enables it only for hosted `-O2` and above; `-O`, `-Os`, and
+`-ffreestanding` retain their previous code path.  This keeps the PCC kernel,
+which is compiled with `-msoft-float -fomit-frame-pointer -O2
+-ffreestanding`, outside the transform.
+
+A direct call to a not-yet-defined file-local function may select one clone.
+The call must have no more than six arguments and useful integer constants in
+the range `-1..1`; calls with five or six arguments require at least two such
+constants.  The frontend saves the later function body with PCC's existing
+inline representation, substitutes constants into the copied formal TEMP
+initializers, and lets normal SSA folding remove dead paths.  Calls after a
+definition are not cloned.  A generic call or function-address use causes the
+original body to be emitted as well, while an all-specialized function emits
+only the clone.
+
+Linpack specializes `idamax`, both `dscal` variants, both `daxpy` variants, and
+both `ddot` variants.  It does not clone `dgefa` or `dgesl`.  VR4300 assembly
+falls from E5's 2375 instructions, 127 nops, and 71622 bytes to 2289
+instructions, 117 nops, and 70371 bytes.  MIPS32R2 hard-float assembly is 2412
+instructions, 103 nops, and 69823 bytes, identical for big and little endian.
+
+The permanent `ssaspecialize001` regression covers a specialized direct call,
+a variable generic call, and a function pointer.  Cross regression passes
+331/334 compilations with the three established expected failures.  Native
+VR4300 regression passes 294/294 runtime cases with zero unexpected failures.
+All six PCC-kernel/PCC-rootfs Malta profiles pass full `pcc-smoke-all.sh`,
+including hard/soft float and both MIPS32R2 endian modes.  Physical N64
+validation is still required before closing Milestone F.
+
 VR4300 Linpack falls from 48 to 23 integer multiplies and from 2349 to 2337
 instructions.  It adds eight loads and three stores from register pressure,
 so the hardware benchmark remains the deciding performance gate.  All six

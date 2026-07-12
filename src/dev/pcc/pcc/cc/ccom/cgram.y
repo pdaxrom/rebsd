@@ -1844,6 +1844,7 @@ fundef(P1ND *tp, P1ND *p)
 		typ->n_sp = (struct symtab *)((char *)typ->n_sp + 10);
 #endif
 	s = typ->n_sp = lookup((char *)typ->n_sp, 0); /* XXX */
+	inline_note_definition(s);
 
 	oclass = s->sclass;
 	if (class == STATIC && oclass == EXTERN)
@@ -1858,6 +1859,8 @@ fundef(P1ND *tp, P1ND *p)
 		inline_start(s, class);
 		if (class == EXTERN)
 			class = EXTDEF;
+	} else if (inline_autosave(s)) {
+		inline_start(s, class);
 	} else if (class == EXTERN)
 		class = SNULL; /* same result */
 

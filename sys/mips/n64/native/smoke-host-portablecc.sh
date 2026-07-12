@@ -141,6 +141,7 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
     "$tmp.ssastrength.s" "$tmp.ssastrength.log" \
+    "$tmp.staticspec.s" "$tmp.staticspec.os.s" "$tmp.staticspec.free.s" \
     "$tmp.weak-first.s" "$tmp.weak-first.o" \
     "$tmp.weak-second.s" "$tmp.weak-second.o" \
     "$tmp.weak-start.s" "$tmp.weak-start.o" "$tmp.weak.elf"' 0 1 2 3 15
@@ -167,6 +168,25 @@ EOF
 "$pcc" -S -o "$tmp.s" "$tmp.c"
 "$pcc" -c -o "$tmp.o" "$tmp.c"
 test -s "$tmp.o"
+
+"$pcc" -O2 -S -o "$tmp.staticspec.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssaspecialize001.c"
+test "$(grep -c '^__pcc_spec_.*:$' "$tmp.staticspec.s")" -eq 1
+grep 'jal[[:space:]]*__pcc_spec_1_sum_stride' "$tmp.staticspec.s" >/dev/null
+grep 'jal[[:space:]]*sum_stride' "$tmp.staticspec.s" >/dev/null
+grep 'sum_stride_pointer' "$tmp.staticspec.s" >/dev/null
+"$pcc" -Os -S -o "$tmp.staticspec.os.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssaspecialize001.c"
+if grep '__pcc_spec_' "$tmp.staticspec.os.s" >/dev/null; then
+	echo "-Os unexpectedly enabled static specialization" >&2
+	exit 1
+fi
+"$pcc" -O2 -ffreestanding -S -o "$tmp.staticspec.free.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssaspecialize001.c"
+if grep '__pcc_spec_' "$tmp.staticspec.free.s" >/dev/null; then
+	echo "freestanding compilation unexpectedly enabled static specialization" >&2
+	exit 1
+fi
 
 cat > "$tmp.c" <<'EOF'
 extern int weak_data __attribute__((weak));

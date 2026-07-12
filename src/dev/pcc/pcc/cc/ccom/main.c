@@ -47,7 +47,8 @@ int gflag, kflag;
 int pflag, sflag;
 int sspflag;
 int xomitframe;
-int xscp, xssa, xtailcall, xtemps, xdeljumps, xdce, xinline, xccp, xgnu89, xgnu99;
+int xscp, xssa, xtailcall, xtemps, xdeljumps, xdce, xinline, xstatic_spec;
+int xccp, xgnu89, xgnu99;
 int xuchar;
 int freestanding;
 char *prgname, *ftitle;
@@ -88,6 +89,8 @@ xopt(char *str)
 		xdce++;
 	else if (strcmp(str, "inline") == 0)
 		xinline++;
+	else if (strcmp(str, "static-spec") == 0)
+		xstatic_spec++;
 	else if (strcmp(str, "ccp") == 0)
 		xccp++;
 	else if (strcmp(str, "scp") == 0)

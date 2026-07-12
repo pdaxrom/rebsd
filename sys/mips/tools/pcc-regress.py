@@ -164,8 +164,8 @@ def build_test_list(rootfs):
     for target in v["OPTIM_TARGETS"]:
         add_runtime(tests, f"misc__{target}", misc, [f"{target}.c"], ["-O"])
     for target in v.get("SSA_TARGETS", []):
-        add_runtime(tests, f"misc__{target}", misc, [f"{target}.c"],
-                    ["-O", "-Wc,-xssa"])
+        flags = ["-O2"] if target == "ssaspecialize001" else ["-O", "-Wc,-xssa"]
+        add_runtime(tests, f"misc__{target}", misc, [f"{target}.c"], flags)
     for target in v["PIC_TARGETS"]:
         add_runtime(tests, f"misc__{target}", misc, [f"{target}.c"])
         add_runtime(tests, f"misc__{target}_pic", misc, [f"{target}.c"], ["-fpic"])

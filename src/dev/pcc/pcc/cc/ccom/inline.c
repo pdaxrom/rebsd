@@ -29,6 +29,8 @@
 
 #include <stdarg.h>
 
+extern NODE *talloc(void);
+
 /*
  * Simple description of how the inlining works:
  * A function found with the keyword "inline" is always saved.
@@ -57,14 +59,25 @@ static struct istat {
 #define	CANINL	1	/* function is possible to inline */
 #define	WRITTEN	2	/* function is written out */
 #define	REFD	4	/* Referenced but not yet written out */
+#define	AUTOSPEC 8	/* saved for a constant-argument clone */
+#define	DEFINED 16	/* definition has already been encountered */
+#define	GENREF 32	/* non-specialized use of a static function */
 	struct ntds *nt;/* Array of arg temp type data */
 	int nargs;	/* number of args in array */
 	int retval;	/* number of return temporary, if any */
+	struct {
+		struct symtab *sp;
+		unsigned int mask;
+		CONSZ value[6];
+		int nargs;
+		int written;
+	} spec;
 	struct interpass shead;
 } *cifun;
 
 static SLIST_HEAD(, istat) ipole = { NULL, &ipole.q_forw };
 static int nlabs, svclass;
+static int specnum;
 
 #define	IP_REF	(MAXIP+1)
 #ifdef PCC_DEBUG
@@ -104,6 +117,142 @@ findfun(struct symtab *sp)
 		if (is->sp == sp)
 			return is;
 	return NULL;
+}
+
+int
+inline_autosave(struct symtab *sp)
+{
+	struct istat *is = findfun(sp);
+
+	return is != NULL && (is->flags & AUTOSPEC) != 0;
+}
+
+void
+inline_note_definition(struct symtab *sp)
+{
+	struct istat *is = findfun(sp);
+
+	if (!xstatic_spec)
+		return;
+	if (is == NULL) {
+		is = ialloc();
+		is->sp = sp;
+		SLIST_INSERT_FIRST(&ipole, is, link);
+		DLIST_INIT(&is->shead, qelem);
+	}
+	is->flags |= DEFINED;
+}
+
+void
+inline_static_ref(struct symtab *sp)
+{
+	struct istat *is;
+
+	if (!xstatic_spec || !ISFTN(sp->stype) ||
+	    (sp->sclass != STATIC && sp->sclass != USTATIC))
+		return;
+	if ((is = findfun(sp)) == NULL) {
+		is = ialloc();
+		is->sp = sp;
+		SLIST_INSERT_FIRST(&ipole, is, link);
+		DLIST_INIT(&is->shead, qelem);
+	}
+	is->flags |= GENREF;
+	if ((is->flags & AUTOSPEC) != 0)
+		is->flags |= REFD;
+}
+
+static int
+specargs(P1ND *p, P1ND **args, int *nargs)
+{
+	if (p == NULL)
+		return 1;
+	if (p->n_op == CM) {
+		if (!specargs(p->n_left, args, nargs))
+			return 0;
+		return specargs(p->n_right, args, nargs);
+	}
+	if (*nargs == 6)
+		return 0;
+	args[(*nargs)++] = p;
+	return 1;
+}
+
+/*
+ * Create at most one clone for a file-local function.  Small -1/0/1
+ * constants target loop-control parameters without cloning large call sites
+ * merely because they contain an incidental size or mode argument.
+ */
+struct symtab *
+inline_specialize(struct symtab *sp, P1ND *ap)
+{
+	P1ND *args[6];
+	struct istat *is;
+	struct symtab *nsp;
+	unsigned int mask = 0;
+	CONSZ value[6];
+	char name[256];
+	int constants = 0, i, nargs = 0;
+
+	if (!xstatic_spec || freestanding || !xtemps || !xssa || ap == NULL ||
+	    !ISFTN(sp->stype) ||
+	    (sp->sclass != STATIC && sp->sclass != USTATIC) ||
+	    sp->sdf == NULL || sp->sdf->dlst == 0 ||
+	    pr_hasell(sp->sdf->dlst) || !specargs(ap, args, &nargs))
+		return NULL;
+
+	for (i = 0; i < nargs; i++) {
+		if (args[i]->n_op != ICON || args[i]->n_sp != NULL ||
+		    !ISINTEGER(BTYPE(args[i]->ptype)) || glval(args[i]) < -1 ||
+		    glval(args[i]) > 1)
+			continue;
+		mask |= 1U << i;
+		value[i] = glval(args[i]);
+		constants++;
+	}
+	if ((nargs <= 4 && constants == 0) ||
+	    (nargs > 4 && constants < 2))
+		return NULL;
+
+	is = findfun(sp);
+	if (is != NULL && (is->flags & DEFINED) != 0)
+		return NULL;
+	if (is != NULL && (is->flags & AUTOSPEC) != 0) {
+		if (is->spec.nargs != nargs || is->spec.mask != mask)
+			return NULL;
+		for (i = 0; i < nargs; i++)
+			if ((mask & (1U << i)) != 0 &&
+			    is->spec.value[i] != value[i])
+				return NULL;
+		return is->spec.sp;
+	}
+
+	if (is == NULL) {
+		is = ialloc();
+		is->sp = sp;
+		SLIST_INSERT_FIRST(&ipole, is, link);
+		DLIST_INIT(&is->shead, qelem);
+	}
+	is->flags |= AUTOSPEC;
+	if ((is->flags & GENREF) != 0)
+		is->flags |= REFD;
+	is->spec.nargs = nargs;
+	is->spec.mask = mask;
+	for (i = 0; i < nargs; i++)
+		is->spec.value[i] = value[i];
+
+	nsp = permalloc(sizeof(*nsp));
+	*nsp = *sp;
+	snprintf(name, sizeof(name), "__pcc_spec_%d_%s", ++specnum,
+	    sp->sname);
+	nsp->snext = NULL;
+	nsp->soffset = 0;
+	nsp->sclass = STATIC;
+	nsp->slevel = 0;
+	nsp->sflags = 0;
+	nsp->sname = xstrdup(name);
+	is->spec.sp = nsp;
+	return nsp;
 }
 
 static void
@@ -305,11 +454,44 @@ inline_ref(struct symtab *sp)
 }
 
 static void
-puto(struct istat *w)
+specparam(NODE *p, struct istat *w, unsigned int *done)
+{
+	NODE *q;
+	int i, o;
+
+	if (p == NULL)
+		return;
+	if (p->n_op == ASSIGN && p->n_left->n_op == TEMP) {
+		for (i = 0; i < w->nargs && i < w->spec.nargs; i++) {
+			if ((w->spec.mask & (1U << i)) == 0 ||
+			    (*done & (1U << i)) != 0 ||
+			    regno(p->n_left) != w->nt[i].temp)
+				continue;
+			tfree(p->n_right);
+			q = memset(talloc(), 0, sizeof(*q));
+			q->n_op = ICON;
+			q->n_type = p->n_left->n_type;
+			q->n_name = "";
+			setlval(q, w->spec.value[i]);
+			p->n_right = q;
+			*done |= 1U << i;
+			return;
+		}
+	}
+	o = coptype(p->n_op);
+	if (o != LTYPE)
+		specparam(p->n_left, w, done);
+	if (o == BITYPE)
+		specparam(p->n_right, w, done);
+}
+
+static void
+puto(struct istat *w, int specialize)
 {
 	struct interpass_prolog *ipp, *epp, *pp;
 	struct interpass *ip, *nip;
 	extern int crslab;
+	unsigned int specdone = 0;
 	int lbloff = 0;
 
 	/* Copy the saved function and print it out */
@@ -329,6 +511,8 @@ puto(struct istat *w)
 			pp = xmalloc(sizeof(struct interpass_prolog));
 			memcpy(pp, ip, sizeof(struct interpass_prolog));
 			pp->ip_lblnum += lbloff;
+			if (specialize)
+				pp->ipp_name = getexname(w->spec.sp);
 #ifdef PCC_DEBUG
 			if (ip->type == IP_EPILOG && crslab != pp->ip_lblnum)
 				cerror("puto: %d != %d", crslab, pp->ip_lblnum);
@@ -347,6 +531,8 @@ puto(struct istat *w)
 				NODE *p;
 
 				p = nip->ip_node = tcopy(nip->ip_node);
+				if (specialize && w->nt != NULL)
+					specparam(p, w, &specdone);
 				if (p->n_op == GOTO)
 					slval(p->n_left,
 					    glval(p->n_left) + lbloff);
@@ -359,7 +545,10 @@ puto(struct istat *w)
 			break;
 		}
 	}
-	w->flags |= WRITTEN;
+	if (specialize)
+		w->spec.written = 1;
+	else
+		w->flags |= WRITTEN;
 }
 
 /*
@@ -372,11 +561,18 @@ inline_prtout(void)
 	int gotone = 0;
 
 	SLIST_FOREACH(w, &ipole, link) {
+		if ((w->flags & AUTOSPEC) != 0 && !w->spec.written &&
+		    !DLIST_ISEMPTY(&w->shead, qelem)) {
+			locctr(PROG, w->spec.sp);
+			defloc(w->spec.sp);
+			puto(w, 1);
+			gotone++;
+		}
 		if ((w->flags & (REFD|WRITTEN)) == REFD &&
 		    !DLIST_ISEMPTY(&w->shead, qelem)) {
 			locctr(PROG, w->sp);
 			defloc(w->sp);
-			puto(w);
+			puto(w, 0);
 			w->flags |= WRITTEN;
 			gotone++;
 		}

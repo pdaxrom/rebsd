@@ -4291,6 +4291,40 @@ Target-independent or shared optimizer work:
     and constant arguments, with strict size limits.
   - Keep this as a separate phase from MIPS scheduling so performance gains are
     attributable.
+  - [x] The first bounded static-specialization step is software-complete on
+    2026-07-12.  Hosted `-O2`/`-O3` direct calls to a file-local function may
+    select one clone when up to six arguments contain useful `-1`, `0`, or `1`
+    constants.  Four-argument calls need one constant; five/six-argument calls
+    need two.  Calls after the definition, variadic functions, `-O`, `-Os`,
+    and freestanding/kernel compilations stay on the old path.
+  - The frontend reuses the existing saved-inline body representation but does
+    not enable the known-problematic general `-xinline` path.  Constant formal
+    TEMP initializers are replaced in the copied body, then normal SSA folding
+    removes dead increment branches.  At most one signature is cloned per
+    function.  A generic direct call or address use keeps the original body;
+    otherwise the clone replaces it, avoiding text growth for the Linpack
+    case.
+  - Linpack selects exactly seven helpers: `idamax`, `dscal_r`, `dscal_ur`,
+    `daxpy_r`, `daxpy_ur`, `ddot_r`, and `ddot_ur`.  `dgefa` and `dgesl` remain
+    generic.  VR4300 changes from E5
+    `2375/2248/127/429/227/71622` to
+    `2289/2172/117/431/226/70371`
+    instructions/non-nops/nops/loads/stores/assembly-bytes.  MIPS32R2 hard
+    float is `2412/2309/103/549/272/69823`; big- and little-endian output is
+    identical.  Soft-float assembly also specializes the same seven integer
+    increment parameters.
+  - Permanent `ssaspecialize001` coverage checks the specialized direct call,
+    a variable-argument generic fallback, and a function-pointer address use.
+    Host probes additionally require one clone at `-O2` and no clone at `-Os`
+    or `-ffreestanding` in all six CPU/endian/float profiles.
+  - Cross regression compiles 331/334 cases with only the three established
+    expected failures.  Native VR4300 regression passes 294/294 runtime cases,
+    including `ssaspecialize001`, with zero unexpected compile/runtime
+    failures.  All six PCC-kernel/PCC-rootfs QEMU profiles pass
+    `/root/pcc-smoke-all.sh` with `PCC_SMOKE_ALL_FAILURES 0` and
+    `PCC_SMOKE_ALL_RC:0`; kernels retain
+    `-msoft-float -fomit-frame-pointer` and do not contain specialization
+    clones.
 - [ ] Add benchmark-oriented regression tests.
   - Keep normal PCC correctness gates mandatory after every optimization.
   - Add microbenchmarks for load-use scheduling, branch delay filling,
@@ -4380,6 +4414,13 @@ Milestone order:
     KFLOPS versus GCC at 4412.343 KFLOPS (71.69%), a measured 2.22% PCC gain
     over E4.  This closes the scoped Milestone E hardware gate.
 - [ ] Milestone F: small static inlining/specialization outside the backend.
+  - [x] F1 bounded constant-argument static cloning is software-complete.  It
+    is a frontend/SSA feature, not MIPS backend IPA, and is limited to hosted
+    `-O2+`, one clone per pre-definition static callee, and small control
+    constants.  Cross/native regression and all six QEMU smoke profiles pass.
+  - [ ] Build the normal GCC-kernel/PCC-hard-float-a.out N64 comparison image
+    and close the milestone only after physical VR4300 smoke and Linpack
+    results confirm the software/QEMU gain.
 - [ ] Milestone G: repeat Malta, Malta64/R4000, and real N64 benchmark gates;
   decide whether further work belongs in PCC or in source-level hot paths.
 

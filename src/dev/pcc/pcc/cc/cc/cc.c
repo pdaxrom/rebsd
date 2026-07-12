@@ -310,7 +310,7 @@ int	vflag;
 int	noexec;	/* -### */
 int	tflag;
 int	Eflag;
-int	Oflag;
+int	Oflag, O2flag;
 int	kflag;	/* generate PIC/pic code */
 #define F_PIC	1
 #define F_pic	2
@@ -872,15 +872,18 @@ main(int argc, char *argv[])
 			break;
 
 		case 'O':
-			if (argp[2] == '\0')
+			if (argp[2] == '\0') {
 				/* gcc does -O1, clang does -O2 */
 				Oflag = 1;	/* do what gcc does */
-			else if (argp[3] == '\0' &&
-			    isdigit((unsigned char)argp[2]))
+				O2flag = 0;
+			} else if (argp[3] == '\0' &&
+			    isdigit((unsigned char)argp[2])) {
 				Oflag = argp[2] - '0';
-			else if (argp[3] == '\0' && argp[2] == 's')
+				O2flag = Oflag >= 2;
+			} else if (argp[3] == '\0' && argp[2] == 's') {
 				Oflag = 1;	/* optimize for space only */
-			else
+				O2flag = 0;
+			} else
 				oerror(argp);
 			break;
 
@@ -4705,6 +4708,7 @@ struct flgcheck ccomflgcheck[] = {
 #endif
 	{ &Oflag, 1, "-xdce" },
 	{ &Oflag, 1, "-xssa" },
+	{ &O2flag, 1, "-xstatic-spec" },
 	{ &freestanding, 1, "-ffreestanding" },
 	{ &pgflag, 1, "-p" },
 	{ &gflag, 1, "-g" },

@@ -685,11 +685,11 @@ done:	autooff = AUTOINIT;
 #ifdef NEWPARAMS
 	fun_enter(cftnsp, argptr, nparams);
 #endif
-	if (fun_inline && (xinline
+	if (inline_autosave(cftnsp) || (fun_inline && (xinline
 #ifdef GCC_COMPAT
  || attr_find(cftnsp->sap, GCC_ATYP_ALW_INL)
 #endif
-		))
+		)))
 		inline_args(argptr, nparams);
 	plabel(getlab()); /* used when spilling */
 	if (parlink)
@@ -2022,6 +2022,8 @@ NODE *
 doacall(struct symtab *sp, NODE *f, NODE *a)
 {
 	NODE *w;
+	struct symtab *ssp;
+	int specialized = 0;
 
 #ifdef PCC_DEBUG
 	if (ddebug) {
@@ -2033,6 +2035,13 @@ doacall(struct symtab *sp, NODE *f, NODE *a)
 #endif
 	if (ISARY(f->n_type))
 		goto build; /* something bad happened */
+
+	/* Select a bounded constant-argument clone before ABI lowering. */
+	if (sp != NULL && f->n_op == NAME && f->n_sp == sp &&
+	    (ssp = inline_specialize(sp, a)) != NULL) {
+		f->n_sp = ssp;
+		specialized = 1;
+	}
 
 	/* First let MD code do something */
 	calldec(f, a);
@@ -2057,7 +2066,8 @@ doacall(struct symtab *sp, NODE *f, NODE *a)
 	/* Do prototype checking for function call */
 	pr_callchk(sp, f, a);
 
-build:	if (sp != NULL && (sp->sflags & SINLINE) && (w = inlinetree(sp, f, a)))
+build:	if (!specialized && sp != NULL && (sp->sflags & SINLINE) &&
+	    (w = inlinetree(sp, f, a)))
 		return w;
 	return buildtree(a == NIL ? UCALL : CALL, f, a);
 }
@@ -2529,4 +2539,3 @@ blkfree(void)
 	}
 	cbkp = 0;
 }
-

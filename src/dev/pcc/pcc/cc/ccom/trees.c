@@ -2946,6 +2946,7 @@ p2tree(P1ND *p)
 	case NAME:
 	case ICON:
 		if ((q = p->n_sp) != NULL) {
+			inline_static_ref(q);
 			if ((q->sclass == STATIC && q->slevel > 0)
 #ifdef GCC_COMPAT
 			    || q->sflags == SLBLNAME

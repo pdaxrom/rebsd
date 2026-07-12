@@ -13,7 +13,7 @@ REGRESS_TARGETS = arith001 arith002 stasg001 ucmp001 char001 func001 str001 ucn0
 OPTIM_TARGETS = optim001 optim002 optim003 spillcost001 spillfp001 spillabi001 \
 	spillremat001
 SSA_TARGETS = ssabranch001 ssaconst001 ssacopy001 ssalvn001 ssaphi001 \
-	ssastrength001 ssaunreach001
+	ssaspecialize001 ssastrength001 ssaunreach001
 PIC_TARGETS = pic001
 
 REGRESS_TARGETS_FAIL = 
