@@ -1028,6 +1028,34 @@ row measured 4367.264 GCC and 3278.433 PCC KFLOPS, putting PCC at 75.07% of
 GCC.  Both Linpack statuses, `N64_PCC_DEBUG_END`, and
 `N64_PCC_DEBUG_RUNNER_RC` were zero, followed by `N64_PCC_DEBUG_RC_END`.
 
+G6 extends the existing bounded specialization policy without adding an
+inliner or a MIPS-only IPA pass.  When a non-varargs static function has
+already been selected for hard-float VR4300/MIPS32R2 specialization, its
+stack-passed scalar and pointer parameters are promoted to PCC TEMPs at entry.
+The o32 parameter slots and external calling convention do not change.  This
+turns repeated loop-body loads of unselected pointer parameters into one entry
+load, while selected constant parameters continue to use the G3 path.
+
+VR4300 and MIPS32R2 hard-float Linpack each remove 26 loads and 722 assembly
+bytes.  Three clean alternating Malta64 512-repetition A/B pairs improve from
+13550.962 to 13878.128 KFLOPS on average, or 2.41%.  Cross and native PCC
+regressions pass all 294 runtime cases, and all six PCC-kernel/PCC-rootfs QEMU
+profiles report `PCC_SMOKE_ALL_RC:0`.  Soft-float and generic MIPS3 are not
+eligible.  The VR4300 multiplication workaround and the
+`-mfix4300` / `-mno-fix4300` controls are unchanged.
+
+The clean G6 hardware image uses a GCC kernel and PCC hard-float a.out
+userland.  It is stored outside the source tree at
+`/Users/sash/Work/N64/retrobsd-build/n64-g6-specialized-stack-params-kgcc-upcc-hard-aout/pcc-debug.z64`,
+SHA-256
+`2792c760271601826bc55aceac5e3d21c9744e6cb00489acf12e9e1bced1c3f7`.
+It passes `fsutil --check`, has build stamp `.build-mode.gcc.1.0.0.1`, and
+contains independently linked GCC and PCC Linpack binaries.  Physical N64
+validation passes: the stable 16-repetition row measures 3404.961 PCC versus
+4367.120 GCC KFLOPS, or 77.97%.  PCC improves 3.86% over G5 while the GCC
+control changes by -0.003%.  Both Linpack statuses and the two numeric debug
+statuses are zero; the terminal `N64_PCC_DEBUG_RC_END` marker is present.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

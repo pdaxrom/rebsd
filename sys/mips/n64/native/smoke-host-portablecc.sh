@@ -253,6 +253,16 @@ END { exit found && slot16 == 1 && slot20 == 0 ? 0 : 1 }
 		echo "specialized stack constant was not elided safely" >&2
 		exit 1
 	}
+	awk '
+/^[[:space:]]*[.]ent __pcc_spec_.*_six_arg$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*lw[[:space:]].*,32\(\$sp\)/ { pointer_loads++ }
+inside && /,36\(\$sp\)/ { dead_tail_slot = 1 }
+END { exit seen && pointer_loads == 1 && !dead_tail_slot ? 0 : 1 }
+	' "$tmp.staticspec-stack.s" || {
+		echo "specialized stack pointer was repeatedly loaded" >&2
+		exit 1
+	}
 fi
 
 cat > "$tmp.c" <<'EOF'

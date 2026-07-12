@@ -542,6 +542,7 @@ void
 bfcode(struct symtab **sp, int cnt)
 {
 	int lastreg = A0 + nargregs - 1;
+	int promote_specialized_stack;
 	int saveallargs = 0;
 	int i, reg, specialized, struct_return;
 #ifdef MIPS_HARDFLOAT_O32_ABI
@@ -554,6 +555,10 @@ bfcode(struct symtab **sp, int cnt)
 	 */
 	if (cftnsp->sdf->dlst)
 		saveallargs = pr_hasell(cftnsp->sdf->dlst);
+	promote_specialized_stack = inline_autosave(cftnsp) && xtemps &&
+	    !saveallargs && !mips_soft_float &&
+	    (mips_target.isa == MIPS_ISA_MIPS32R2 ||
+	    mips_target.tune == MIPS_TUNE_VR4300);
 
 	reg = A0;
 #ifdef MIPS_HARDFLOAT_O32_ABI
@@ -595,7 +600,7 @@ bfcode(struct symtab **sp, int cnt)
 		}
 #endif
 		if (reg > lastreg) {
-			if (specialized &&
+			if ((specialized || promote_specialized_stack) &&
 			    (DEUNSIGN(sp[i]->stype) <= LONG ||
 			    ISPTR(sp[i]->stype)))
 				putintemp(sp[i]);

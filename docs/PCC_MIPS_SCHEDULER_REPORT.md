@@ -1630,3 +1630,100 @@ The measured rows were:
 Both Linpack return codes, `N64_PCC_DEBUG_END`, and
 `N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal
 `N64_PCC_DEBUG_RC_END` marker was present.  This closes the G5 physical gate.
+
+## Milestone G6: Specialized Stack-Parameter Promotion
+
+G3 promoted a selected stack-passed constant into a compiler TEMP, but the
+other stack parameters of the same bounded clone retained ordinary o32 memory
+homes.  The specialized Linpack BLAS clones consequently reloaded loop-invariant
+pointer arguments on every iteration.  G6 extends parameter promotion to all
+scalar and pointer stack parameters once a function has already passed the F1
+bounded-specialization policy.
+
+The transform is deliberately narrow.  It requires compiler TEMPs, a
+non-varargs function, hard-float, and either VR4300 tuning or MIPS32R2 ISA.
+Every o32 slot is still allocated and the call convention is unchanged.
+Soft-float, generic MIPS3/R4000, and functions not selected for specialization
+retain the old lowering.  No scheduler rule, branch delay slot, or FP multiply
+sequence changes, so the VR4300 erratum default and
+`-mfix4300` / `-mno-fix4300` remain unchanged.
+
+The permanent six-argument host probe verifies that the specialized clone
+loads its fifth stack pointer exactly once and does not read the dead sixth
+constant slot.  The existing runtime specialization regression continues to
+cover the generated clone and generic fallback.
+
+### G6 Static And A/B Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  branches  jumps  bytes
+VR4300 G5                      1866       1748   118    352     192        82    108  58057
+VR4300 G6                      1872       1754   118    326     192        82    108  57335
+MIPS32R2 G5 hard              1983       1876   107    459     233        82    108  57342
+MIPS32R2 G6 hard              1989       1882   107    433     233        82    108  56620
+```
+
+Both hard-float targets trade six one-time entry instructions for 26 fewer
+loads, with no added stores, nops, or control flow.  MIPS32R2 BE and LE match.
+
+Three clean sequential alternating Malta64 512-repetition pairs measured:
+
+```text
+G5: 13550.866, 13582.148, 13519.872; average 13550.962
+G6: 13879.807, 13919.777, 13834.799; average 13878.128
+```
+
+Every pair favors G6; the average improves by 2.41%.
+
+### G6 Regression Gates
+
+Cross VR4300 regression passed 294/294 runtime cases.  Native VR4300 PCC
+compiled 304 cases, observed 30 expected failures, and passed 294/294 runtime
+cases with no unexpected compile or runtime failure.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11426.844 / 11683.786 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 947.181 / 939.330 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13640.618 / 13679.007 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1068.773 / 1062.261 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 9238.793 / 9325.104 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1132.767 / 1125.718 | `PCC_SMOKE_ALL_RC:0` |
+
+All six full PCC-kernel/PCC-rootfs profiles reported zero failures.  These
+concurrent smoke timings are correctness evidence only; the isolated A/B pairs
+above are the performance comparison.  Physical N64 validation passed as
+described below.
+
+### G6 N64 Comparison Artifact
+
+The clean hardware image uses a GCC kernel and PCC VR4300 hard-float a.out
+userland.  GCC Linpack is linked with its separate GCC-built runtime.
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-g6-specialized-stack-params-kgcc-upcc-hard-aout/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 2792c760271601826bc55aceac5e3d21c9744e6cb00489acf12e9e1bced1c3f7
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 39648 section bytes, sha256 0ea4d2162ef7c7488d903280320fb58cbd8d28dd5171eb921877b2cdd64f1a9c
+debug runner sha256: 069cd338accd3206b291606f6b186747ed5be11efd8219f0c6ed67a2e8058cd1
+```
+
+The image passes all five `fsutil --check` phases.  The GCC binary and kernel
+ELF are byte-identical to G5.  PCC Linpack grows by 16 section bytes, matching
+the one-time entry loads.
+
+The physical N64 run measured:
+
+```text
+       Reps       GCC KFLOPS       PCC KFLOPS       PCC/GCC
+          8          4457.402          3378.316        75.79%
+         16          4367.120          3404.961        77.97%
+```
+
+The stable 16-repetition PCC row improves 3.86% over G5 while the GCC control
+changes by -0.003%.  Both Linpack return codes, `N64_PCC_DEBUG_END`, and
+`N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal `N64_PCC_DEBUG_RC_END`
+marker was present.  This closes the G6 physical and commit gates.

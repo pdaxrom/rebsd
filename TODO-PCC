@@ -4546,7 +4546,23 @@ Milestone order:
     `sys/mips/n64/builds/20260712-milestone-g5-o2-frame-omit-gcc-kernel/pcc-debug.z64`,
     SHA-256
     `a71270c6bea582df7cfe3c104fd1f29e17dadfdda17eb3eaa4d92ef2ec0b4f19`.
-  - [ ] Physically validate the G5 image before selecting the next transform.
+  - [x] Physical G5 validation passes.  The stable 16-rep row is 3278.433 PCC
+    versus 4367.264 GCC KFLOPS, or 75.07%; both benchmark return codes and
+    numeric debug markers are zero.
+  - [x] G6 software gate: load every scalar/pointer stack parameter of an
+    already selected bounded hard-float specialization into a compiler TEMP
+    once.  This removes 26 repeated Linpack loads on both VR4300 and MIPS32R2
+    while preserving every o32 argument slot.  Varargs, soft-float, and generic
+    MIPS3 remain outside the transform.  Three clean Malta64 A/B pairs improve
+    2.41%; cross/native regression and all six full QEMU profiles pass.
+  - [x] Build the clean G6 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-g6-specialized-stack-params-kgcc-upcc-hard-aout/pcc-debug.z64`,
+    SHA-256
+    `2792c760271601826bc55aceac5e3d21c9744e6cb00489acf12e9e1bced1c3f7`.
+  - [x] Physical G6 validation passes.  The stable 16-rep row is 3404.961 PCC
+    versus 4367.120 GCC KFLOPS, or 77.97%.  PCC improves 3.86% over G5 while
+    the GCC control changes by -0.003%; both benchmark return codes and numeric
+    debug markers are zero.
 
 Success criteria:
 
