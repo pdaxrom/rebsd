@@ -4313,7 +4313,11 @@ Backend work, kept small:
     `-msoft-float -fomit-frame-pointer`.
   - The six-argument specialization regression covers the stack path that G3
     changes.  The default `-mfix4300` policy and final erratum repair remain
-    unchanged.  Physical N64 validation is still required before closing G3.
+    unchanged.  Physical N64 validation passes at 3186.275 PCC versus
+    4411.809 GCC KFLOPS in the stable 16-rep row, or 72.22% of GCC.  PCC is
+    0.06% below G2 while the GCC control changes -0.001%, so the 3.44% QEMU
+    gain does not reproduce on hardware.  G3 is retained for the corrected
+    specialization semantics and smaller code, not as a performance gain.
   - Keep helper calls only where they preserve required IEEE/NaN behavior; do
     not replace correctness-sensitive helper paths with raw FPU instructions
     unless the existing N64/Malta tests prove equivalence.
@@ -4506,7 +4510,14 @@ Milestone order:
     `sys/mips/n64/builds/20260712-milestone-g3-stack-specialization-gcc-kernel/pcc-debug.z64`,
     SHA-256
     `87ca5dce22afd995da205704126bf573d389224503f29f9b1e5a439c3c4fe748`.
-  - [ ] Run that image on physical N64 before closing G3.
+  - [x] Physical N64 validation passes.  Both Linpack binaries return zero and
+    report 15-digit precision; `N64_PCC_DEBUG_END` and
+    `N64_PCC_DEBUG_RUNNER_RC` are zero.  The terminal
+    `N64_PCC_DEBUG_RC_END` marker is present without a numeric value.  The
+    stable 16-rep result is 3186.275 PCC versus 4411.809 GCC KFLOPS, or
+    72.22%.  This is statistically neutral against G2 and closes the scoped
+    G3 correctness/code-size gate, while Milestone G performance work remains
+    open.
 
 Success criteria:
 

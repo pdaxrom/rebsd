@@ -954,13 +954,21 @@ VR4300 hard-float Linpack drops from 2291 to 2005 instructions, from 416 to
 Malta64 A/B runs improve by 3.44%.  Cross regression produces 294 runtime
 candidates, native VR4300 passes 294/294, and all six PCC-kernel/PCC-rootfs
 full QEMU profiles pass with `-msoft-float -fomit-frame-pointer` kernels.  The
-default `-mfix4300` repair remains unchanged.  G3 still requires the physical
-N64 gate.  Its clean GCC-kernel/PCC-hard-float-a.out-userland image is
+default `-mfix4300` repair remains unchanged.  Its clean
+GCC-kernel/PCC-hard-float-a.out-userland image is
 `sys/mips/n64/builds/20260712-milestone-g3-stack-specialization-gcc-kernel/pcc-debug.z64`,
 SHA-256
 `87ca5dce22afd995da205704126bf573d389224503f29f9b1e5a439c3c4fe748`.
 The PCC Linpack is 40224 section bytes, 1136 fewer than G2; GCC Linpack remains
 24600 section bytes and uses its separate GCC-built runtime.
+
+Physical N64 validation passes with zero GCC/PCC Linpack status and 15-digit
+precision.  The stable 16-rep row is 3186.275 PCC versus 4411.809 GCC KFLOPS,
+or 72.22%.  PCC is 0.06% below G2 while the GCC control changes -0.001%, so
+the Malta64 QEMU gain does not transfer to hardware.  The two numeric debug
+markers are zero; `N64_PCC_DEBUG_RC_END` is present without a numeric value.
+G3 remains as a specialization correctness and code-size improvement, not as
+a measured VR4300 performance gain.
 
 ## Out Of Scope For The C Gate
 

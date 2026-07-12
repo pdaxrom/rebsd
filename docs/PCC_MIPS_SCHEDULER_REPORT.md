@@ -1383,7 +1383,7 @@ full-smoke sample produced a timer outlier.  All six full profiles reported
 `PCC_SMOKE_ALL_FAILURES 0`; every PCC kernel retained
 `-msoft-float -fomit-frame-pointer`, and no assembler macro expanded into a
 multi-instruction branch delay slot.  The default `-mfix4300` behavior is
-unchanged.  G3 remains open until the clean image passes on physical N64.
+unchanged.  The clean image is also tested on physical N64.
 
 ### G3 N64 Comparison Artifact
 
@@ -1405,4 +1405,22 @@ debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c88
 
 The image passed `fsutil --check`; both Linpack binaries have zero undefined
 symbols.  G3 reduces the linked PCC Linpack by 1136 section bytes relative to
-G2.  Physical N64 correctness and performance remain the deciding gate.
+G2.
+
+Physical N64 validation passed on 2026-07-12.  The timed rows were:
+
+```text
+reps 8:  GCC 4369.178 KFLOPS, PCC 3168.444 KFLOPS (72.52% of GCC)
+reps 16: GCC 4411.809 KFLOPS, PCC 3186.275 KFLOPS (72.22% of GCC)
+```
+
+Both binaries reported 15-digit machine precision and both
+`N64_LINPACK_RC` values were zero.  `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal `N64_PCC_DEBUG_RC_END`
+marker was present without a numeric value.  Against G2's stable 16-rep row,
+PCC changes by -0.06% while the GCC control changes by -0.001%.  The 3.44%
+Malta64 QEMU gain therefore does not reproduce on physical VR4300 hardware.
+G3 is retained because it corrects partial specialization and materially
+reduces code size without a measured regression, but it does not advance the
+hardware performance ratio.  The scoped G3 gate is closed at 72.22%; broader
+Milestone G work remains open.
