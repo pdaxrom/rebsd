@@ -923,12 +923,17 @@ window.  VR4300 Linpack removes 15 repeated loads with no nop or store growth;
 alternating Malta64 A/B runs improve by 0.96%.  Cross and native regression
 pass 294/294 runtime candidates, and all six PCC-kernel/PCC-rootfs full QEMU
 profiles pass.  Soft-float Linpack assembly remains byte-identical to F1 for
-both endian modes.  The default `-mfix4300` repair remains unchanged, and the
-real N64 gate is still required before G2 is considered complete.  Its clean
+both endian modes.  The default `-mfix4300` repair remains unchanged.  Its clean
 GCC-kernel/PCC-hard-float-a.out-userland image is
 `sys/mips/n64/builds/20260712-milestone-g2-fpu-param-temp-gcc-kernel/pcc-debug.z64`,
 SHA-256
 `9106cbd1b3cac395d35d4c243815a42426186199c19f73a58bc89d417abeb854`.
+Physical N64 validation passes with zero GCC/PCC Linpack status and 15-digit
+precision.  The stable 16-rep row is 3188.274 PCC versus 4411.854 GCC KFLOPS,
+or 72.27%; PCC improves 0.32% over F1 while the GCC control changes -0.11%.
+The two numeric debug status markers are zero, and the terminal
+`N64_PCC_DEBUG_RC_END` marker is present without a numeric value.  This closes
+G2 while leaving the broader Milestone G performance work open.
 
 ## Out Of Scope For The C Gate
 

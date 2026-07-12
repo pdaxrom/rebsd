@@ -1271,8 +1271,8 @@ All six profiles used PCC for both kernel and root filesystem, retained
 `-msoft-float -fomit-frame-pointer` for kernels, and reported
 `PCC_SMOKE_ALL_FAILURES 0`.  The default `-mfix4300` behavior and explicit
 `-mfix4300` / `-mno-fix4300` selection are unchanged.  QEMU does not model the
-physical multiply erratum; G2 remains open until the clean comparison image
-passes on real N64 hardware.
+physical multiply erratum, so the clean comparison image is also tested on
+real N64 hardware.
 
 ### G2 N64 Comparison Artifact
 
@@ -1292,5 +1292,19 @@ debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c88
 ```
 
 The build passed `fsutil --check`; both Linpack binaries have zero undefined
-symbols.  The physical N64 correctness and performance result remains the
-deciding G2 gate.
+symbols.
+
+Physical N64 validation passed on 2026-07-12.  The timed rows were:
+
+```text
+reps 8:  GCC 4376.078 KFLOPS, PCC 3188.039 KFLOPS (72.85% of GCC)
+reps 16: GCC 4411.854 KFLOPS, PCC 3188.274 KFLOPS (72.27% of GCC)
+```
+
+Both binaries reported 15-digit machine precision and both
+`N64_LINPACK_RC` values were zero.  `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal `N64_PCC_DEBUG_RC_END`
+marker was present without a numeric value.  Against F1's stable 16-rep row,
+PCC improves by 0.32% while the GCC control changes by -0.11%.  This closes
+G2 at 72.27% of GCC.  Milestone G remains open because the 75-85% medium-term
+target has not yet been reached.

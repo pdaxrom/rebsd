@@ -4287,7 +4287,9 @@ Backend work, kept small:
     `-msoft-float -fomit-frame-pointer`.
   - G2 does not alter `-mfix4300` policy.  The workaround remains enabled by
     default and selectable with `-mfix4300` / `-mno-fix4300`.  Real VR4300
-    hardware validation is still required before closing this substep.
+    hardware validation passes at 3188.274 PCC versus 4411.854 GCC KFLOPS in
+    the stable 16-rep row, or 72.27% of GCC.  PCC improves 0.32% over F1 while
+    the GCC control changes -0.11%, closing the G2 substep.
   - Keep helper calls only where they preserve required IEEE/NaN behavior; do
     not replace correctness-sensitive helper paths with raw FPU instructions
     unless the existing N64/Malta tests prove equivalence.
@@ -4464,8 +4466,13 @@ Milestone order:
     `sys/mips/n64/builds/20260712-milestone-g2-fpu-param-temp-gcc-kernel/pcc-debug.z64`,
     SHA-256
     `9106cbd1b3cac395d35d4c243815a42426186199c19f73a58bc89d417abeb854`.
-  - [ ] Run that image on physical N64.  Do not close G2 or Milestone G from
-    QEMU timing alone.
+  - [x] Physical N64 validation passes.  Both Linpack binaries return zero and
+    report 15-digit precision; `N64_PCC_DEBUG_END` and
+    `N64_PCC_DEBUG_RUNNER_RC` are zero.  The terminal
+    `N64_PCC_DEBUG_RC_END` marker is present without a numeric value.  The
+    stable 16-rep result is 3188.274 PCC versus 4411.854 GCC KFLOPS, or
+    72.27%.  This closes G2; Milestone G remains open because the medium-term
+    75-85% target has not yet been reached.
 
 Success criteria:
 
