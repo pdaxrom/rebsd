@@ -140,6 +140,7 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.normal.s" "$tmp.stats.s" "$tmp.stats2.s" "$tmp.stats.off" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
+    "$tmp.ssastrength.s" "$tmp.ssastrength.log" \
     "$tmp.weak-first.s" "$tmp.weak-first.o" \
     "$tmp.weak-second.s" "$tmp.weak-second.o" \
     "$tmp.weak-start.s" "$tmp.weak-start.o" "$tmp.weak.elf"' 0 1 2 3 15
@@ -1051,5 +1052,37 @@ changed_scale_mults=$(awk '
 ' "$tmp.ssalvn.s")
 test "$repeated_scale_mults" -eq 1
 test "$changed_scale_mults" -eq 2
+
+"$pcc" -O2 -fomit-frame-pointer -Wc,-xssa -S \
+    -o "$tmp.ssastrength.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssastrength001.c" \
+    2>"$tmp.ssastrength.log"
+test ! -s "$tmp.ssastrength.log"
+unit_step_mults=$(awk '
+    /^unit_step:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+descending_mults=$(awk '
+    /^descending:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+variable_step_mults=$(awk '
+    /^variable_step:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+if [ "$cpu" = vr4300 ]; then
+	test "$unit_step_mults" -eq 0
+	test "$descending_mults" -eq 1
+else
+	test "$unit_step_mults" -eq 2
+	test "$descending_mults" -eq 2
+fi
+test "$variable_step_mults" -eq 2
 
 echo "smoke-host-portablecc: ok"

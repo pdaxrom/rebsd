@@ -9,6 +9,10 @@
 
 #define	mktemp(n, t)	mklnode(TEMP, 0, n, t)
 
+#ifndef TARGET_SSA_STRENGTH_REDUCE_MUL
+#define TARGET_SSA_STRENGTH_REDUCE_MUL()	0
+#endif
+
 struct parallel_copy {
 	int dst;
 	int src;
@@ -42,6 +46,377 @@ struct multiply_cse_value {
 };
 
 static char propagated_copy_marker;
+
+static int
+block_dominates(struct p2env *p2e, struct basicblock *dominator,
+    struct basicblock *bb)
+{
+	while (bb != NULL) {
+		if (bb == dominator)
+			return 1;
+		if (bb->idom == 0 || bb->idom >= (unsigned)p2e->bbinfo.size)
+			break;
+		bb = p2e->bbinfo.arr[bb->idom];
+	}
+	return 0;
+}
+
+static int
+single_successor(struct basicblock *bb, struct basicblock *successor)
+{
+	struct cfgnode *cn;
+	int count;
+
+	count = 0;
+	SLIST_FOREACH(cn, &bb->child, chld) {
+		if (cn->bblock != successor)
+			return 0;
+		count++;
+	}
+	return count == 1;
+}
+
+static struct basicblock *
+temp_definition_block(struct p2env *p2e, int temp)
+{
+	struct basicblock *bb, *definition;
+	struct interpass *ip;
+	struct phiinfo *phi;
+	NODE *p;
+
+	definition = NULL;
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		SLIST_FOREACH(phi, &bb->phi, phielem)
+			if (phi->newtmpregno == temp) {
+				if (definition != NULL)
+					return NULL;
+				definition = bb;
+			}
+		for (ip = bb->first;; ip = DLIST_NEXT(ip, qelem)) {
+			if (ip->type == IP_NODE) {
+				p = ip->ip_node;
+				if (p->n_op == ASSIGN &&
+				    p->n_left->n_op == TEMP &&
+				    regno(p->n_left) == temp) {
+					if (definition != NULL)
+						return NULL;
+					definition = bb;
+				}
+			}
+			if (ip == bb->last)
+				break;
+		}
+	}
+	return definition;
+}
+
+static int
+temp_integer_constant(struct p2env *p2e, int temp, TWORD type, CONSZ *value)
+{
+	struct interpass *ip;
+	NODE *p;
+	int found;
+
+	found = 0;
+	DLIST_FOREACH(ip, &p2e->ipole, qelem) {
+		if (ip->type != IP_NODE)
+			continue;
+		p = ip->ip_node;
+		if (p->n_op != ASSIGN || p->n_left->n_op != TEMP ||
+		    regno(p->n_left) != temp)
+			continue;
+		if (found || p->n_left->n_type != type ||
+		    p->n_right->n_op != ICON || p->n_right->n_type != type ||
+		    p->n_right->n_name == NULL ||
+		    p->n_right->n_name[0] != '\0')
+			return 0;
+		*value = getlval(p->n_right);
+		found = 1;
+	}
+	return found;
+}
+
+static int
+phi_parent_index(struct basicblock *header, struct basicblock *parent)
+{
+	struct cfgnode *cn;
+	int edge;
+
+	edge = 0;
+	SLIST_FOREACH(cn, &header->parents, cfgelem) {
+		if (cn->bblock == parent)
+			return edge;
+		edge++;
+	}
+	return -1;
+}
+
+static int
+induction_delta(struct basicblock *latch, struct phiinfo *phi,
+    int back_input)
+{
+	struct interpass *ip;
+	NODE *left, *p, *right;
+	CONSZ value;
+
+	for (ip = latch->first;; ip = DLIST_NEXT(ip, qelem)) {
+		if (ip->type != IP_NODE)
+			goto next;
+		p = ip->ip_node;
+		if (p->n_op != ASSIGN || p->n_left->n_op != TEMP ||
+		    regno(p->n_left) != back_input ||
+		    p->n_left->n_type != phi->n_type)
+			goto next;
+		right = p->n_right;
+		if (right->n_type != phi->n_type ||
+		    (right->n_op != PLUS && right->n_op != MINUS))
+			return 0;
+		left = right->n_left;
+		if (left->n_op != TEMP ||
+		    regno(left) != phi->newtmpregno ||
+		    left->n_type != phi->n_type ||
+		    right->n_right->n_op != ICON ||
+		    right->n_right->n_type != phi->n_type ||
+		    right->n_right->n_name == NULL ||
+		    right->n_right->n_name[0] != '\0')
+			return 0;
+		value = getlval(right->n_right);
+		if (right->n_op == MINUS)
+			value = -value;
+		if (value == 1)
+			return 1;
+		if (value == -1)
+			return -1;
+		return 0;
+next:
+		if (ip == latch->last)
+			break;
+	}
+	return 0;
+}
+
+static int
+find_induction_candidate(struct p2env *p2e, NODE *p, struct phiinfo *phi,
+    struct basicblock *preheader, TWORD *type)
+{
+	struct basicblock *definition;
+	NODE *invariant;
+	int candidate, o;
+
+	o = optype(p->n_op);
+	if (o != LTYPE) {
+		candidate = find_induction_candidate(p2e, p->n_left, phi,
+		    preheader, type);
+		if (candidate >= 0)
+			return candidate;
+	}
+	if (o == BITYPE) {
+		candidate = find_induction_candidate(p2e, p->n_right, phi,
+		    preheader, type);
+		if (candidate >= 0)
+			return candidate;
+	}
+	if (p->n_op != MUL || p->n_type != phi->n_type ||
+	    !ISINTEGER(BTYPE(p->n_type)) || ISPTR(p->n_type))
+		return -1;
+	if (p->n_left->n_op == TEMP &&
+	    regno(p->n_left) == phi->newtmpregno)
+		invariant = p->n_right;
+	else if (p->n_right->n_op == TEMP &&
+	    regno(p->n_right) == phi->newtmpregno)
+		invariant = p->n_left;
+	else
+		return -1;
+	if (invariant->n_op != TEMP || invariant->n_type != p->n_type ||
+	    regno(invariant) == phi->newtmpregno)
+		return -1;
+	definition = temp_definition_block(p2e, regno(invariant));
+	if (definition == NULL ||
+	    !block_dominates(p2e, definition, preheader))
+		return -1;
+	*type = p->n_type;
+	return regno(invariant);
+}
+
+static void
+replace_induction_multiply(NODE **nodep, int induction, int invariant,
+    int replacement, TWORD type)
+{
+	NODE *p;
+	int o;
+
+	p = *nodep;
+	o = optype(p->n_op);
+	if (o != LTYPE)
+		replace_induction_multiply(&p->n_left, induction, invariant,
+		    replacement, type);
+	if (o == BITYPE)
+		replace_induction_multiply(&p->n_right, induction, invariant,
+		    replacement, type);
+	p = *nodep;
+	if (p->n_op != MUL || p->n_type != type)
+		return;
+	if (!((p->n_left->n_op == TEMP &&
+	    regno(p->n_left) == induction &&
+	    p->n_right->n_op == TEMP &&
+	    regno(p->n_right) == invariant) ||
+	    (p->n_right->n_op == TEMP &&
+	    regno(p->n_right) == induction &&
+	    p->n_left->n_op == TEMP &&
+	    regno(p->n_left) == invariant)))
+		return;
+	tfree(p);
+	*nodep = mktemp(replacement, type);
+}
+
+static void
+insert_edge_value(struct basicblock *bb, struct interpass *ip)
+{
+	if (bb->last->type == IP_NODE &&
+	    bb->last->ip_node->n_op == GOTO) {
+		DLIST_INSERT_BEFORE(bb->last, ip, qelem);
+		if (bb->first == bb->last)
+			bb->first = ip;
+	} else {
+		DLIST_INSERT_AFTER(bb->last, ip, qelem);
+		bb->last = ip;
+	}
+}
+
+static void
+reduce_induction_candidate(struct p2env *p2e, struct basicblock *header,
+    struct basicblock *preheader, struct basicblock *latch,
+    struct phiinfo *induction, int preedge, int backedge, int delta,
+    int invariant, TWORD type)
+{
+	struct basicblock *bb;
+	struct interpass *ip;
+	struct phiinfo *scaled_phi;
+	NODE *initial_expression, *next_expression;
+	CONSZ initial_value;
+	int initial, scaled, scaled_initial, scaled_next;
+
+	initial = induction->intmpregno[preedge];
+	scaled_initial = p2e->epp->ip_tmpnum++;
+	scaled = p2e->epp->ip_tmpnum++;
+	scaled_next = p2e->epp->ip_tmpnum++;
+
+	if (temp_integer_constant(p2e, initial, type, &initial_value) &&
+	    initial_value == 0)
+		initial_expression = mklnode(ICON, 0, 0, type);
+	else
+		initial_expression = mkbinode(MUL, mktemp(initial, type),
+		    mktemp(invariant, type), type);
+	ip = ipnode(mkbinode(ASSIGN, mktemp(scaled_initial, type),
+	    initial_expression, type));
+	insert_edge_value(preheader, ip);
+
+	next_expression = mkbinode(delta > 0 ? PLUS : MINUS,
+	    mktemp(scaled, type), mktemp(invariant, type), type);
+	ip = ipnode(mkbinode(ASSIGN, mktemp(scaled_next, type),
+	    next_expression, type));
+	insert_edge_value(latch, ip);
+
+	scaled_phi = tmpcalloc(sizeof(*scaled_phi));
+	scaled_phi->tmpregno = scaled;
+	scaled_phi->newtmpregno = scaled;
+	scaled_phi->n_type = type;
+	scaled_phi->size = induction->size;
+	scaled_phi->intmpregno = tmpcalloc((size_t)scaled_phi->size *
+	    sizeof(*scaled_phi->intmpregno));
+	scaled_phi->intmpregno[preedge] = scaled_initial;
+	scaled_phi->intmpregno[backedge] = scaled_next;
+	SLIST_INSERT_LAST(&header->phi, scaled_phi, phielem);
+
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		if (!block_dominates(p2e, header, bb))
+			continue;
+		for (ip = bb->first;; ip = DLIST_NEXT(ip, qelem)) {
+			if (ip->type == IP_NODE)
+				replace_induction_multiply(&ip->ip_node,
+				    induction->newtmpregno, invariant, scaled,
+				    type);
+			if (ip == bb->last)
+				break;
+		}
+	}
+}
+
+/*
+ * Replace i * stride in a canonical natural loop with a scaled induction
+ * value.  Keep the first version deliberately narrow: one entry, one latch,
+ * an exact +/-1 update, and an SSA stride available before the loop.
+ */
+static void
+ssa_strength_reduce_induction(struct p2env *p2e)
+{
+	struct basicblock *bb, *definition, *latch, *preheader;
+	struct cfgnode *cn;
+	struct interpass *ip;
+	struct phiinfo *nextphi, *phi;
+	TWORD type;
+	int backedge, delta, invariant, preedge;
+
+	if (!TARGET_SSA_STRENGTH_REDUCE_MUL())
+		return;
+
+	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
+		preheader = NULL;
+		latch = NULL;
+		SLIST_FOREACH(cn, &bb->parents, cfgelem) {
+			if (block_dominates(p2e, bb, cn->bblock)) {
+				if (latch != NULL)
+					latch = bb;
+				else
+					latch = cn->bblock;
+			} else {
+				if (preheader != NULL)
+					preheader = bb;
+				else
+					preheader = cn->bblock;
+			}
+		}
+		if (preheader == NULL || latch == NULL || preheader == bb ||
+		    latch == bb || !single_successor(preheader, bb) ||
+		    !single_successor(latch, bb))
+			continue;
+		preedge = phi_parent_index(bb, preheader);
+		backedge = phi_parent_index(bb, latch);
+		if (preedge < 0 || backedge < 0)
+			continue;
+
+		for (phi = SLIST_FIRST(&bb->phi); phi != NULL; phi = nextphi) {
+			nextphi = phi->phielem.q_forw;
+			if (phi->size != 2 || preedge >= phi->size ||
+			    backedge >= phi->size ||
+			    !ISINTEGER(BTYPE(phi->n_type)) || ISPTR(phi->n_type))
+				continue;
+			delta = induction_delta(latch, phi,
+			    phi->intmpregno[backedge]);
+			if (delta == 0)
+				continue;
+			invariant = -1;
+			DLIST_FOREACH(definition, &p2e->bblocks, bbelem) {
+				if (invariant >= 0 ||
+				    !block_dominates(p2e, bb, definition))
+					continue;
+				for (ip = definition->first;;
+				    ip = DLIST_NEXT(ip, qelem)) {
+					if (ip->type == IP_NODE && invariant < 0)
+						invariant = find_induction_candidate(
+						    p2e, ip->ip_node, phi,
+						    preheader, &type);
+					if (ip == definition->last)
+						break;
+				}
+			}
+			if (invariant >= 0)
+				reduce_induction_candidate(p2e, bb, preheader,
+				    latch, phi, preedge, backedge, delta,
+				    invariant, type);
+		}
+	}
+}
 
 static int
 lvn_operation(int op)
@@ -336,6 +711,7 @@ ssa_local_value_numbering(struct p2env *p2e)
 	NODE *p;
 	int high, i, low, nnode, nvalue, temp;
 
+	ssa_strength_reduce_induction(p2e);
 	ssa_local_multiply_cse(p2e);
 
 	nnode = 0;

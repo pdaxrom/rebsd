@@ -493,6 +493,8 @@ typedef long long OFFSZ;
 
 #define GCLASS(x)	(x < 32 ? CLASSA : (x < 52 ? CLASSB : CLASSC))
 #define TARGET_OPTSTATS_FPR_CLASS(c)	((c) == CLASSC)
+#define TARGET_SSA_STRENGTH_REDUCE_MUL()	\
+	((mips_target.capabilities & MIPS_CAP_MUL3) == 0)
 #define PCLASS(p)	(1 << gclass((p)->n_type))
 #define DECRA(x,y)	(((x) >> (y*6)) & 63)   /* decode encoded regs */
 #define ENCRA(x,y)	((x) << (6+y*6))        /* encode regs in int */
