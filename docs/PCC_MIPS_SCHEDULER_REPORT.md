@@ -1511,3 +1511,18 @@ The image passes `fsutil --check`; both Linpack binaries have zero undefined
 symbols.  GCC and PCC libc archives have different checksums.  G4 reduces the
 linked PCC Linpack by 256 section bytes relative to G3.  Physical N64
 correctness and performance remain the deciding gate.
+
+Physical N64 validation passed on 2026-07-12.  The timed rows were:
+
+```text
+reps 8:  GCC 4455.849 KFLOPS, PCC 3294.645 KFLOPS (73.94% of GCC)
+reps 16: GCC 4411.821 KFLOPS, PCC 3316.659 KFLOPS (75.18% of GCC)
+```
+
+Both binaries reported 15-digit machine precision and both `N64_LINPACK_RC`
+values were zero.  `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC` were
+zero; the terminal `N64_PCC_DEBUG_RC_END` marker was present without a numeric
+value.  Against G3's stable row, PCC improves 4.09% while the GCC control
+changes 0.0003%.  Unlike G3, the G4 static scale reuse produces a clear
+physical VR4300 gain.  It reaches 75.18% of GCC and closes the medium-term
+75-85% gate; Milestone G remains open toward the 90-100% stretch target.

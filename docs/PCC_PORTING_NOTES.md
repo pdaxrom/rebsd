@@ -992,6 +992,14 @@ SHA-256
 Its PCC Linpack is 39968 section bytes, 256 fewer than G3; GCC Linpack remains
 24600 section bytes and uses its separate GCC-built runtime.
 
+Physical G4 validation passes with zero GCC/PCC Linpack status and 15-digit
+precision.  The stable 16-rep row is 3316.659 PCC versus 4411.821 GCC KFLOPS,
+or 75.18%.  PCC improves 4.09% over G3 while the GCC control changes only
+0.0003%, confirming that repeated constant-shift CSE transfers to real
+VR4300 hardware.  Both numeric debug markers are zero; the final
+`N64_PCC_DEBUG_RC_END` marker is present without a numeric value.  This closes
+the medium-term 75-85% gate while leaving the 90-100% stretch target open.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

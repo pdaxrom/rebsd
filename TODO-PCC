@@ -4528,8 +4528,12 @@ Milestone order:
     `sys/mips/n64/builds/20260712-milestone-g4-constant-shift-cse-gcc-kernel/pcc-debug.z64`,
     SHA-256
     `23a82ec406f916b4f040cb3c14281368901afe21784cfa74fca8af542123fcba`.
-  - [ ] Physically validate the G4 image before crediting the small QEMU result
-    as a VR4300 performance gain.
+  - [x] Physical G4 validation passes.  Both Linpack binaries return zero and
+    report 15-digit precision; `N64_PCC_DEBUG_END` and
+    `N64_PCC_DEBUG_RUNNER_RC` are zero, and `N64_PCC_DEBUG_RC_END` is present.
+    The stable 16-rep result is 3316.659 PCC versus 4411.821 GCC KFLOPS, or
+    75.18%.  PCC improves 4.09% over G3 while the GCC control changes 0.0003%,
+    so G4 is the first Milestone G step with a clear hardware gain.
   - [ ] After the G4 hardware result, inspect remaining Linpack address and
     loop overhead before selecting another narrowly scoped transform.
 
@@ -4537,7 +4541,7 @@ Success criteria:
 
 - [x] Short term: reduce PCC Linpack `nop` count and text size materially while
   keeping all PCC correctness gates green.
-- [ ] Medium term: reach roughly 75-85% of GCC performance on real N64 with
+- [x] Medium term: reach roughly 75-85% of GCC performance on real N64 with
   backend-only and ABI/scheduler work.
 - [ ] Stretch target: reach 90-100% of GCC on representative workloads after
   adding small target-independent inlining/specialization and strength

@@ -220,8 +220,9 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] G4: reuse local SSA scale CSE for repeated constant shifts on hard-float
   VR4300 and MIPS32R2. Cross/native regressions and all six PCC-kernel/PCC-
   rootfs QEMU profiles pass; soft-float output remains byte-identical to G3.
-- [ ] Hardware-benchmark the G4 GCC-kernel/PCC-hard-float-userland image on
-  N64 before crediting its 0.51% Malta64 result as a VR4300 performance gain.
+- [x] Hardware-benchmark the G4 GCC-kernel/PCC-hard-float-userland image on
+  N64.  The stable row is 3316.659 PCC versus 4411.821 GCC KFLOPS, or 75.18%;
+  PCC improves 4.09% over G3 with an unchanged GCC control.
 - [ ] After the G4 hardware gate, profile the remaining Linpack address and
   loop overhead before selecting the next narrowly scoped backend transform.
 - [x] Boot-isolate the updated N64 kernel/rootfs path on real hardware with
