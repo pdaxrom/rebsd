@@ -43,19 +43,18 @@ frameworks are not source candidates for the generic ReBSD stack.
 
 ## Primary File Map
 
-No NetBSD source file has been imported at Phase 0.  The following is the
-planned comparison map; the status and rewrite notes will be updated phase by
-phase.
+No NetBSD source file was imported at Phase 0.  The following comparison map
+is updated as each later phase imports or materially adapts a source.
 
 | NetBSD 3.1 source | ReBSD destination | Intended use | Status |
 | --- | --- | --- | --- |
-| `sys/dev/usb/usb.h` | `sys/dev/usb/usb.h` | USB protocol constants and descriptors | reference only |
+| `sys/dev/usb/usb.h` | `sys/dev/usb/usb.h` | USB protocol constants and descriptors | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/usbdi.h` | `sys/dev/usb/usbdi.h` | driver-facing transfer API | reference only |
 | `sys/dev/usb/usbdivar.h` | `sys/dev/usb/usbvar.h` | core object relationships | reference only |
 | `sys/dev/usb/usb_mem.h` | `sys/dev/usb/usb_mem.h` | USB DMA allocation contract | reference only |
 | `sys/dev/usb/usb_quirks.h` | `sys/dev/usb/usb_quirks.h` | compact quirk flags if required | reference only |
 | `sys/dev/usb/usb.c` | `sys/dev/usb/usb.c` | bus lifecycle and task flow | reference only |
-| `sys/dev/usb/usb_subr.c` | `sys/dev/usb/usb_subr.c` | enumeration and descriptor handling | reference only |
+| `sys/dev/usb/usb_subr.c` | `sys/dev/usb/usb_subr.c` | enumeration and descriptor handling | descriptor traversal substantially rewritten around fixed bounds; original notice and RCS id retained |
 | `sys/dev/usb/usbdi.c` | `sys/dev/usb/usbdi.c` | pipe and transfer operations | reference only |
 | `sys/dev/usb/usb_mem.c` | `sys/dev/usb/usb_mem.c` | USB use of the ReBSD DMA API | reference only |
 | `sys/dev/usb/uhub.c` | `sys/dev/usb/uhub.c` | root and external hubs | reference only |
@@ -86,10 +85,15 @@ copied or materially derived from the NetBSD USB sources:
 | `sys/kernel/subr_dma.c` | Bounded contiguous-pool allocator and ownership validation |
 | `sys/mips/ci20/dma.c` | Ci20 uncached KSEG1 pool backend and ordering barriers |
 | `sys/tests/dma/` | Host-side allocator, validation, exhaustion, and synchronization tests |
+| `sys/dev/usb/usb_desc.h` | Bounded parser result structures, limits, and status API |
+| `sys/tests/usb/` | Host compile gate and valid/malformed descriptor tests |
 
-The Ci20 linker reservation and configuration entries are likewise native
-integration code.  JZ4780 PDMA code was neither imported nor referenced: OHCI
-and EHCI are bus masters and do not require the SoC PDMA engine.
+The DMA linker reservation and configuration entries are likewise native
+integration code.  `usb_desc.h` and the parser tests are native code; the
+parser implementation retains the `usb_subr.c` notice because its purpose,
+descriptor model, and historical comparison point come from that file.
+JZ4780 PDMA code was neither imported nor referenced: OHCI and EHCI are bus
+masters and do not require the SoC PDMA engine.
 
 ## Primary Source Revisions and Sizes
 

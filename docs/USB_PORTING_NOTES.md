@@ -168,6 +168,46 @@ Pool limits will be visible in one USB limits header and may be overridden by
 board configuration.  Exhaustion returns an explicit no-memory error; it does
 not panic or silently discard an active object.
 
+## Protocol Definitions and Descriptor Parser
+
+The compact `sys/dev/usb/usb.h` keeps the NetBSD 3.1 descriptor layout,
+request constants, hub status bits, initial class codes, and unaligned
+little-endian byte-array accessors.  Userland ioctl structures, event support,
+and the generated vendor/product database were not imported.  Numeric vendor,
+product, class, subclass, and protocol values are sufficient for initial
+diagnostics.
+
+`sys/dev/usb/usb_subr.c` provides allocation-free parsing.  It copies accepted
+device, configuration, interface-zero-alternate, and endpoint descriptors into
+bounded result structures while preserving raw-buffer offsets.  Other
+alternate settings are validated and counted but are not retained as active
+interfaces.  The parser never follows a descriptor-provided pointer and never
+advances beyond the validated `wTotalLength`.
+
+Initial compile-time limits are:
+
+- configuration descriptor bytes: 1024;
+- active interfaces: 8;
+- endpoints per interface alternate: 8;
+- interface alternate descriptors: 16;
+- descriptors traversed in one buffer: 64.
+
+The host compile and test gates are:
+
+```sh
+make -C sys/tests/usb compile
+make -C sys/tests/usb test
+```
+
+Tests cover exact packed sizes and little-endian access, a HID boot-keyboard
+configuration, alternate settings, every truncation of the valid
+configuration, zero and undersized lengths, oversized `wTotalLength`, missing
+and excess interfaces/endpoints, duplicate or invalid endpoints, descriptor
+count exhaustion, and malformed string lengths.  The same test also passes
+with AddressSanitizer and UndefinedBehaviorSanitizer.  The parser source has
+compile-only coverage with both target MIPS GCC and PCC and includes no Ci20
+header or register definition.
+
 ## Physical Mapping and DMA
 
 Ci20 currently uses the first 256 MiB of RAM.  `layout.h` provides direct
