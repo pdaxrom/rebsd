@@ -32,7 +32,7 @@ install:        all
 		install find ${DESTDIR}/bin/find
 		install bigram ${DESTDIR}/libexec/bigram
 		install code ${DESTDIR}/libexec/code
-		install updatedb.sh ${DESTDIR}/sbin/updatedb
+		install $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/updatedb.sh,updatedb.sh) ${DESTDIR}/sbin/updatedb
 
 depend:
 		chmod u+w Makefile

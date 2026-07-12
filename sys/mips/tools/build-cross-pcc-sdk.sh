@@ -7,7 +7,7 @@ topsrc=$(CDPATH= cd -- "$script_dir/../../.." && pwd)
 cpu=vr4300
 float=hard
 endian=big
-prefix=$topsrc/cross-pcc
+prefix=
 build=
 target=cross-pcc-sdk
 
@@ -20,8 +20,8 @@ Options:
   --cpu vr4300|mips32r2       Target CPU profile (default: vr4300)
   --float hard|soft           Runtime float ABI (default: hard)
   --endian big|little         Target endian selector (default: big)
-  --prefix DIR                SDK install prefix (default: TOPSRC/cross-pcc)
-  --build DIR                 Build directory (default: /private/tmp/...)
+  --prefix DIR                SDK install prefix (default: TMPDIR/...)
+  --build DIR                 Build directory (default: TMPDIR/...)
   --tools-only                Build compiler and binutils, not runtime
   --clean                     Remove the selected build directory
   -h, --help                  Show this help
@@ -74,7 +74,10 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-make_args="MIPS_SDK_CPU=$cpu MIPS_SDK_FLOAT=$float MIPS_SDK_ENDIAN=$endian MIPS_SDK_PREFIX=$prefix"
+make_args="MIPS_SDK_CPU=$cpu MIPS_SDK_FLOAT=$float MIPS_SDK_ENDIAN=$endian"
+if [ -n "$prefix" ]; then
+	make_args="$make_args MIPS_SDK_PREFIX=$prefix"
+fi
 if [ -n "$build" ]; then
 	make_args="$make_args MIPS_SDK_BUILD=$build"
 fi

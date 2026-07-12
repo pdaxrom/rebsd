@@ -20,7 +20,7 @@ printf:         ${OBJS}
 		${ELF2AOUT} printf.elf $@ && rm printf.elf
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} printf *.elf *.dis tags *~

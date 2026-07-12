@@ -9,6 +9,7 @@ CFLAGS		+= -Werror -Wall -Os
 LDFLAGS         +=
 
 AOUTOBJS        = aout.o mips-dis.o aoutio.o
+CMD_PARENT_SRC  = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/..,..)
 
 all:            aout
 
@@ -18,8 +19,8 @@ aout:           $(AOUTOBJS)
 		${SIZE} aout.elf
 		${ELF2AOUT} aout.elf $@ && rm aout.elf
 
-aoutio.o:       ../aoutio.c ../aoutio.h
-		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
+aoutio.o:       $(CMD_PARENT_SRC)/aoutio.c $(CMD_PARENT_SRC)/aoutio.h
+		${CC} ${CFLAGS} -c -o $@ $<
 
 clean:
 		rm -f *.o *.0 *.elf aout tags *~ *.dis

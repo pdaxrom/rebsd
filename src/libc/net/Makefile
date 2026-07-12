@@ -25,6 +25,7 @@ OBJS=	getnbyaddr.o getnbyname.o getnent.o getpent.o getpname.o	\
 	res_comp.o res_debug.o res_init.o res_mkquery.o		\
 	res_query.o res_send.o rexec.o ruserpass.o
 HOSTOBJS= named/gethnamadr.o named/sethostent.o
+NET_SRCDIR= $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
 
 CFLAGS+= ${DEFS} -Os \
 	-Wno-comment -Wno-endif-labels \
@@ -41,11 +42,16 @@ net.a: ${OBJS} ${HOSTOBJS}
 	@echo "building net.a"
 	@${AR} cru net.a ${OBJS} ${HOSTOBJS}
 
-named/gethnamadr.o: named/gethnamadr.c
-	${CC} ${CFLAGS} -c named/gethnamadr.c -o $@
+$(HOSTOBJS): | named
 
-named/sethostent.o: named/sethostent.c
-	${CC} ${CFLAGS} -c named/sethostent.c -o $@
+named:
+	mkdir -p $@
+
+named/gethnamadr.o: $(NET_SRCDIR)/named/gethnamadr.c
+	${CC} ${CFLAGS} -c $< -o $@
+
+named/sethostent.o: $(NET_SRCDIR)/named/sethostent.c
+	${CC} ${CFLAGS} -c $< -o $@
 
 netlib netlib_p: ${OBJS}
 	@echo "building profiled netlib"

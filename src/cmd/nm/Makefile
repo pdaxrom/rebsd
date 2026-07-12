@@ -1,8 +1,9 @@
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+CMD_PARENT_SRC  = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/..,..)
 #include $(TOPSRC)/cross.mk
 
-CFLAGS		+= -Werror -Wall -I../ar
+CFLAGS		+= -Werror -Wall -I$(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/../ar,../ar)
 
 SRCS		= nm.c ../aoutio.c
 OBJS		= nm.o aoutio.o
@@ -17,10 +18,10 @@ nm:          	${OBJS}
 		${SIZE} nm.elf
 		${ELF2AOUT} nm.elf $@ && rm nm.elf
 
-aoutio.o:       ../aoutio.c ../aoutio.h
-		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
+aoutio.o:       $(CMD_PARENT_SRC)/aoutio.c $(CMD_PARENT_SRC)/aoutio.h
+		${CC} ${CFLAGS} -c -o $@ $<
 
-nm.o:           ../elf32_mips.h
+nm.o:           $(CMD_PARENT_SRC)/elf32_mips.h
 
 $(MAN):         $(MANSRC)
 		${MANROFF} $< > $@
@@ -33,4 +34,4 @@ install:        all
 		cp ${MAN} ${DESTDIR}/share/man/cat1/
 
 lint:
-		lint -havx -I../ar ${SRCS}
+		lint -havx -I$(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/../ar,../ar) ${SRCS}

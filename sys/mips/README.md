@@ -22,6 +22,12 @@ Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
 Use `make -C sys/mips BOARD=maltael rootfs.img kernel` for the little-endian
 Malta bring-up.  PIC32 is not part of the current supported MIPS gate matrix.
 
+All generated files are placed in an object root.  Pass `O=/path/to/build`, or
+omit it to use the automatic sibling `../retrobsd-build/<profile>` directory.
+Board Makefiles and kconfig C sources are generated there, so do not run make
+directly in `sys/mips/<board>`.  See [out-of-tree builds](../../docs/OUT_OF_TREE_BUILDS.md)
+for the directory layout, parallel-build rules, and make compatibility.
+
 ## Build Matrix
 
 The shared MIPS rootfs rules support these compiler and ABI selectors:
@@ -107,20 +113,20 @@ Big-endian SDKs install `mips-rebsd-*` tools and
 Build the Malta root filesystem and kernel from the repository root:
 
 ```
-make -C sys/mips/malta rootfs.img kernel
+make -C sys/mips BOARD=malta O=/work/rebsd-malta rootfs.img kernel
 ```
 
 Run QEMU through the board makefile:
 
 ```
-make -C sys/mips/malta run
+make -C sys/mips BOARD=malta O=/work/rebsd-malta run
 ```
 
 Or run the generated kernel directly:
 
 ```
 qemu-system-mips -M malta -m 32M -nographic -serial mon:stdio \
-    -no-reboot -kernel sys/mips/malta/unix.elf
+    -no-reboot -kernel /work/rebsd-malta/obj/sys/mips/malta/unix.elf
 ```
 
 For little-endian Malta, build the default GCC image or select PCC explicitly:

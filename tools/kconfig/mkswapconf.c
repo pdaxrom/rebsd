@@ -127,14 +127,10 @@ void initdevtable()
     FILE *fp;
 
     (void)strcpy(fname, "devices.kconf");
-    fp = fopen(fname, "r");
+    fp = config_open(fname);
     if (fp == NULL) {
-        (void)strcpy(fname, "../devices.kconf");
-        fp = fopen(fname, "r");
-        if (fp == NULL) {
-            fprintf(stderr, "config: can't open %s\n", fname);
-            exit(1);
-        }
+        fprintf(stderr, "config: can't open %s\n", fname);
+        exit(1);
     }
     while (fgets(buf, sizeof(buf), fp)) {
         for (p = buf; *p; p++)

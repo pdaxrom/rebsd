@@ -3,6 +3,7 @@
 #
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+CMD_PARENT_SRC  = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/..,..)
 #include $(TOPSRC)/cross.mk
 
 CFLAGS		+= -Werror -Wall -Os
@@ -20,8 +21,8 @@ as:             ${OBJS}
 		${SIZE} as.elf
 		${ELF2AOUT} as.elf $@ && rm as.elf
 
-aoutio.o:       ../aoutio.c ../aoutio.h
-		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
+aoutio.o:       $(CMD_PARENT_SRC)/aoutio.c $(CMD_PARENT_SRC)/aoutio.h
+		${CC} ${CFLAGS} -c -o $@ $<
 
 $(MAN):         $(MANSRC)
 		${MANROFF} $< > $@

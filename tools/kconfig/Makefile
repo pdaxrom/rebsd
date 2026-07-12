@@ -1,5 +1,5 @@
 CC		= gcc -g
-CFLAGS		= -O -Wall -Werror
+CFLAGS		= -O -Wall -Werror -I. $(if $(REBSD_SRCDIR),-I$(REBSD_SRCDIR),)
 YACC            = byacc -d
 DESTDIR		= /usr/local
 OBJS            = config.o main.o lang.o mkioconf.o mkmakefile.o mkswapconf.o
@@ -20,7 +20,7 @@ $(PROG):	$(OBJS)
 		$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
 config.c: config.y
-	${YACC} config.y
+	${YACC} $<
 	mv -f y.tab.c config.c
 
 y.tab.h: config.c

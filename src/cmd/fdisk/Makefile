@@ -4,7 +4,7 @@
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
 
-CFLAGS		+= -Werror -I../../../sys/include
+CFLAGS		+= -Werror -I$(TOPSRC)/sys/include
 
 BIN		= fdisk
 SRCS            = $(BIN).c
@@ -22,7 +22,7 @@ $(BIN):    ${OBJS}
 .SUFFIXES:      .0 .1
 
 .1.0:
-		${MANROFF} $*.1 > $@
+		${MANROFF} $< > $@
 
 clean:
 		rm -f *.o *.elf ${MAN} *.elf *.dis tags *~ $(BIN)

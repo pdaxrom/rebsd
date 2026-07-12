@@ -17,7 +17,7 @@ reboot:         ${OBJS}
 		ln -f $@ poweroff
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *~ *.elf *.dis ${MAN} reboot halt poweroff tags

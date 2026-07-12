@@ -178,6 +178,8 @@ extern int debugging;
 
 extern int maxusers;
 
+FILE *config_open(const char *name);
+
 #define eq(a, b) (!strcmp(a, b))
 
 char *get_word(FILE *);

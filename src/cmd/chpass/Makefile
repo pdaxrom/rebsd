@@ -33,7 +33,7 @@ chpass:         ${OBJS}
 		${ELF2AOUT} chpass.elf $@ && rm chpass.elf
 
 chpass.0:       ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} chpass *.elf *.dis tags *~

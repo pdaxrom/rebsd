@@ -5,6 +5,7 @@
 #
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+MORE_SRCDIR	= $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
 
 CFLAGS		+= -Werror
 
@@ -22,7 +23,7 @@ more:        	${OBJS}
 clean:
 		rm -f *.o *.elf ${MAN} more *.elf *.dis tags *~
 
-install:        all more.help
+install:        all $(MORE_SRCDIR)/more.help
 		install more ${DESTDIR}/bin/more
 		@-rm -f ${DESTDIR}/share/misc/more.help
-		cp more.help ${DESTDIR}/share/misc/more.help
+		cp $(MORE_SRCDIR)/more.help ${DESTDIR}/share/misc/more.help

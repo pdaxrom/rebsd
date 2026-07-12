@@ -21,7 +21,7 @@ mkfs:		${OBJS}
 		${ELF2AOUT} mkfs.elf $@ && rm mkfs.elf
 
 mkfs.0:		${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf *.dis *~ ${MAN} mkfs tags

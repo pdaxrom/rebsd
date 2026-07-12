@@ -111,7 +111,7 @@ REMO5 = sigaddset.0 sigdelset.0 sigemptyset.0 sigfillset.0 sigismember.0
 .SUFFIXES: .3 .0
 
 .3.0:
-	${MANROFF} $*.3 > $*.0
+	${MANROFF} $< > $@
 
 all: _make_01 _make_02
 

@@ -1,8 +1,9 @@
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+CMD_PARENT_SRC  = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/..,..)
 #include $(TOPSRC)/cross.mk
 
-CFLAGS		+= -Werror -Wall -g -I. -I../ar
+CFLAGS		+= -Werror -Wall -g -I. -I$(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/../ar,../ar)
 LDFLAGS		+= -g
 
 SRCS            = ../ar/archive.c ranlib.c ../aoutio.c
@@ -18,11 +19,11 @@ ranlib:         ${OBJS}
 		${SIZE} ranlib.elf
 		${ELF2AOUT} ranlib.elf $@
 
-archive.o:      ../ar/archive.c
+archive.o:      $(CMD_PARENT_SRC)/ar/archive.c
 		${CC} ${CFLAGS} -c -o $@ $<
 
-aoutio.o:       ../aoutio.c ../aoutio.h
-		${CC} ${CFLAGS} -c -o $@ ../aoutio.c
+aoutio.o:       $(CMD_PARENT_SRC)/aoutio.c $(CMD_PARENT_SRC)/aoutio.h
+		${CC} ${CFLAGS} -c -o $@ $<
 
 ranlib.0:       ranlib.1
 		${MANROFF} $< > $@

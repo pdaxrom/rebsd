@@ -20,7 +20,7 @@ stty:		${OBJS}
 		${ELF2AOUT} stty.elf $@ && rm stty.elf
 
 ${MAN}:		${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} stty *.elf *.dis tags *~

@@ -1,10 +1,11 @@
 #
 # Makefile template for RetroBSD on Nintendo 64.
 #
-include ../../../target-n64.mk
+TOPSRC          ?= ../../..
+include $(TOPSRC)/target-n64.mk
 
-TOPSRC          = ../../..
-S               = ../..
+S               = $(TOPSRC)/sys
+N64_BOARD_SRC   = $(TOPSRC)/sys/mips/n64
 
 N64_KERNEL_ARCH = -EB -march=vr4300 -mtune=vr4300 -mips3 -mabi=32
 N64_KERNEL_BASE = -G0 -mno-abicalls -fno-pic -ffreestanding -fno-builtin \
@@ -127,7 +128,8 @@ N64_HOST_PORTABLECC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc
 N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
 N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
-N64_NATIVE_PCC_BUILD_SCRIPT = $(TOPSRC)/sys/mips/tools/native-pcc-build.py
+N64_NATIVE_PCC_MAKEFILE = $(TOPSRC)/sys/mips/tools/Makefile.native-pcc
+N64_NATIVE_PCC_CONFIG = $(TOPSRC)/sys/mips/tools/native-pcc-config.h
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
 N64_COMMON_MACHINE_HEADERS = cpu elf_machdep float fpu io limits
 N64_NATIVE_AR = $(N64_PREFIX)ar
@@ -153,15 +155,15 @@ N64_PCC_DEBUG_RUNNER_OBJ = n64-pcc-debug-runner.o
 N64_PCC_DEBUG_RUNNER = n64-pcc-debug-runner
 N64_LINPACK_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/tools/linpack-smoke.py
 N64_LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
-N64_LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-n64-linpack-smoke
+N64_LINPACK_SMOKE_OUT ?= $(TOPOBJ)/tests/n64-linpack-smoke
 N64_LINPACK_SMOKE_MANIFEST = rootfs.linpack-smoke.manifest
 N64_LINPACK_ROOTFS_STAMP = $(N64_ROOTFS_STAGE)/.linpack-smoke
 N64_ROOTFS_EXTRA_STAMPS =
 ifeq ($(N64_USERLAND_COMPILER),pcc)
 N64_ROOTFS_EXTRA_STAMPS += $(N64_LINPACK_ROOTFS_STAMP)
 endif
-N64_PCC_HOST_BUILD ?= /private/tmp/rebsd-n64-pcc-build-$(N64_USERLAND_ABI)
-N64_PCC_HOST_PREFIX ?= /private/tmp/rebsd-n64-pcc-install-$(N64_USERLAND_ABI)
+N64_PCC_HOST_BUILD ?= $(TOPOBJ)/toolchain/n64-pcc-build.$(N64_USERLAND_ABI)
+N64_PCC_HOST_PREFIX ?= $(TOPOBJ)/toolchain/n64-pcc-install.$(N64_USERLAND_ABI)
 N64_CROSS_PCC_TARGET = $(N64_PCC_HOST_PREFIX)/mips-rebsd
 N64_CROSS_PCC_LIB = $(N64_CROSS_PCC_TARGET)/lib
 N64_CROSS_PCC_SOFTFLOAT_LIB = $(N64_CROSS_PCC_LIB)/softfloat
@@ -223,7 +225,7 @@ N64_LIBCURSES_SRCS = $(shell find $(TOPSRC)/src/libcurses -type f \( -name '*.[c
 N64_LIBVMF_SRCS = $(shell find $(TOPSRC)/src/libvmf -type f \( -name '*.[chS]' -o -name Makefile -o -name '*.3' \) 2>/dev/null)
 N64_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 N64_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
-N64_DEV_PCC_SRCS = $(N64_NATIVE_PCC_BUILD_SCRIPT) \
+N64_DEV_PCC_SRCS = $(N64_NATIVE_PCC_MAKEFILE) $(N64_NATIVE_PCC_CONFIG) \
                    $(shell find $(TOPSRC)/src/dev/pcc/pcc -type f \
                    \( -name '*.[chly]' -o -name '*.h' -o -name Makefile.in \) \
                    2>/dev/null)
@@ -401,8 +403,8 @@ N64_MINIMAL_USERLAND_EXTRA_DEPS_elf =
 N64_MINIMAL_USERLAND_EXTRA_DEPS = $(N64_MINIMAL_USERLAND_EXTRA_DEPS_$(N64_USERLAND_EXEC_FORMAT))
 N64_MINIMAL_USERLAND_LDFLAGS = --nmagic \
                                -T$(abspath $(N64_USER_LDSCRIPT)) \
-                               $(abspath $(TOPSRC)/src/crt0.o) \
-                               -L$(abspath $(TOPSRC)/src)
+                               $(abspath $(OBJTOP)/src/crt0.o) \
+                               -L$(abspath $(OBJTOP)/src)
 N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src \
                TARGET_PLATFORM=n64 \
                N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
@@ -430,7 +432,7 @@ N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src \
                CMD_EXTRA_SUBDIR="" \
                CMD_BUILD_STRIP=""
 
-FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
+FSUTIL          = $(OBJTOP)/tools/fsutil/fsutil
 
 N64_USERLAND_COMPILER := $(N64_USERLAND_COMPILER)
 N64_USERLAND_CPU := $(N64_USERLAND_CPU)
@@ -485,9 +487,9 @@ MIPS_NATIVE_DIR = n64-native-runtime.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_TOOLS = n64-native-tools
 MIPS_NATIVE_PCC_BUILD = n64-native-pcc-build.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_PCC_DIR = n64-native-pcc.$(MIPS_ROOTFS_ABI)
-MIPS_PCC_HOST_BUILD ?= /private/tmp/rebsd-n64-pcc-build-$(MIPS_ROOTFS_ABI)
-MIPS_PCC_HOST_PREFIX ?= /private/tmp/rebsd-n64-pcc-install-$(MIPS_ROOTFS_ABI)
-MIPS_LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-n64-linpack-smoke
+MIPS_PCC_HOST_BUILD ?= $(TOPOBJ)/toolchain/n64-pcc-build.$(MIPS_ROOTFS_ABI)
+MIPS_PCC_HOST_PREFIX ?= $(TOPOBJ)/toolchain/n64-pcc-install.$(MIPS_ROOTFS_ABI)
+MIPS_LINPACK_SMOKE_OUT ?= $(TOPOBJ)/tests/n64-linpack-smoke
 MIPS_LINPACK_SMOKE_MANIFEST ?= rootfs.linpack-smoke.manifest
 ifeq ($(N64_MINIMAL_ROOTFS),1)
 MIPS_PCC_HOST_INCLUDE = n64-pcc-host-include
@@ -499,7 +501,7 @@ MIPS_ROOTFS_IMAGE_KBYTES = $(N64_MINIMAL_ROOTFS_KBYTES)
 endif
 
 .DEFAULT_GOAL := all
-include ../rootfs.mk
+include $(TOPSRC)/sys/mips/rootfs.mk
 
 N64_ROOTFS_MANIFEST = $(MIPS_ROOTFS_MANIFEST)
 N64_ROOTFS_BUILD_MANIFEST = $(MIPS_ROOTFS_BUILD_MANIFEST)
@@ -573,6 +575,24 @@ N64_LINPACK_SMOKE_MANIFEST = $(MIPS_LINPACK_SMOKE_MANIFEST)
 N64_LINPACK_ROOTFS_STAMP = $(MIPS_LINPACK_ROOTFS_STAMP)
 
 ifeq ($(N64_USERLAND_COMPILER).$(N64_USERLAND_EXEC_FORMAT),pcc.aout)
+N64_LINPACK_GCC_LIBC_MAKE = $(MAKE) -C $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libc \
+	TARGET_PLATFORM=n64 MIPS_ROOTFS_CPU=$(N64_USERLAND_CPU) \
+	MIPS_ROOTFS_ENDIAN=$(N64_USERLAND_ENDIAN) \
+	N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
+	CC="$(N64_LINPACK_GCC_RUNTIME_CC)" \
+	AS="$(N64_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c" \
+	AR="$(abspath $(MIPS_NATIVE_AOUT_AR))" \
+	RANLIB="$(abspath $(MIPS_NATIVE_AOUT_RANLIB))" \
+	LIBC_COMPILER_RUNTIME=libc
+N64_LINPACK_GCC_LIBM_MAKE = $(MAKE) -C $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libm \
+	TARGET_PLATFORM=n64 MIPS_ROOTFS_CPU=$(N64_USERLAND_CPU) \
+	MIPS_ROOTFS_ENDIAN=$(N64_USERLAND_ENDIAN) \
+	N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
+	CC="$(N64_LINPACK_GCC_RUNTIME_CC)" \
+	AS="$(N64_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c" \
+	AR="$(abspath $(MIPS_NATIVE_AOUT_AR))" \
+	RANLIB="$(abspath $(MIPS_NATIVE_AOUT_RANLIB))"
+
 $(N64_LINPACK_GCC_RUNTIME_STAMP): $(MIPS_NATIVE_CRT0_SRC) \
     $(MIPS_LIBC_SRCS) $(MIPS_LIBM_SRCS) $(MIPS_INCLUDE_SRCS) \
     $(MIPS_NATIVE_CC_SCRIPT) $(MIPS_NATIVE_AS) $(MIPS_NATIVE_LD) \
@@ -595,24 +615,11 @@ $(N64_LINPACK_GCC_RUNTIME_STAMP): $(MIPS_NATIVE_CRT0_SRC) \
 	    $(TOPSRC)/target-n64.mk $(N64_LINPACK_GCC_RUNTIME_TREE)/
 	$(N64_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c \
 	    -o $(N64_LINPACK_GCC_RUNTIME_DIR)/crt0.o $(MIPS_NATIVE_CRT0_SRC)
-	$(MAKE) -C $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libc \
-	    TARGET_PLATFORM=n64 MIPS_ROOTFS_CPU=$(N64_USERLAND_CPU) \
-	    MIPS_ROOTFS_ENDIAN=$(N64_USERLAND_ENDIAN) \
-	    N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
-	    CC="$(N64_LINPACK_GCC_RUNTIME_CC)" \
-	    AS="$(N64_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c" \
-	    AR="$(abspath $(MIPS_NATIVE_AOUT_AR))" \
-	    RANLIB="$(abspath $(MIPS_NATIVE_AOUT_RANLIB))" \
-	    LIBC_COMPILER_RUNTIME=libc clean all
+	$(N64_LINPACK_GCC_LIBC_MAKE) clean
+	$(N64_LINPACK_GCC_LIBC_MAKE) all
 	$(MIPS_NATIVE_AOUT_RANLIB) $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libc.a
-	$(MAKE) -C $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libm \
-	    TARGET_PLATFORM=n64 MIPS_ROOTFS_CPU=$(N64_USERLAND_CPU) \
-	    MIPS_ROOTFS_ENDIAN=$(N64_USERLAND_ENDIAN) \
-	    N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
-	    CC="$(N64_LINPACK_GCC_RUNTIME_CC)" \
-	    AS="$(N64_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c" \
-	    AR="$(abspath $(MIPS_NATIVE_AOUT_AR))" \
-	    RANLIB="$(abspath $(MIPS_NATIVE_AOUT_RANLIB))" clean all
+	$(N64_LINPACK_GCC_LIBM_MAKE) clean
+	$(N64_LINPACK_GCC_LIBM_MAKE) all
 	cp -p $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libc.a \
 	    $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libm.a \
 	    $(N64_LINPACK_GCC_RUNTIME_DIR)/
@@ -635,8 +642,8 @@ SIZE            = $(N64_PREFIX)size
 STRIP           = $(N64_PREFIX)strip
 NM              = $(N64_PREFIX)nm
 N64_TOOL        = $(N64_TOOLCHAIN)/bin/n64tool
-FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
-ELF2AOUT        = $(TOPSRC)/tools/elf2aout/elf2aout
+FSUTIL          = $(OBJTOP)/tools/fsutil/fsutil
+ELF2AOUT        = $(OBJTOP)/tools/elf2aout/elf2aout
 
 DEPFLAGS        = -MT $@ -MP -MD -MF .deps/$*.dep
 CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DN64 -DMIPS \
@@ -801,7 +808,7 @@ all: unix kernel.z64 preflight.z64
 preflight: $(N64_PREFLIGHT_OBJS)
 	$(SIZE) $(N64_PREFLIGHT_OBJS)
 
-$(N64_KERNEL_LDSCRIPT): n64.ld.S layout.h
+$(N64_KERNEL_LDSCRIPT): $(N64_BOARD_SRC)/n64.ld.S $(N64_BOARD_SRC)/layout.h
 	$(N64_PREFIX)gcc -E -P -undef -x c $< -o $@
 
 preflight.elf: $(N64_PREFLIGHT_OBJS) $(N64_KERNEL_LDSCRIPT)
@@ -809,29 +816,29 @@ preflight.elf: $(N64_PREFLIGHT_OBJS) $(N64_KERNEL_LDSCRIPT)
 	$(SIZE) $@
 	$(OBJDUMP) -d -S $@ > preflight.dis
 
-stage0.o: stage0.S | .deps
+stage0.o: $(N64_BOARD_SRC)/stage0.S | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) $< -o $@
 
-stage0_loader.o: stage0_loader.c | .deps
+stage0_loader.o: $(N64_BOARD_SRC)/stage0_loader.c | .deps
 	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
 
-stage0_console_null.o: stage0_console_null.c stage0_console.h | .deps
+stage0_console_null.o: $(N64_BOARD_SRC)/stage0_console_null.c $(N64_BOARD_SRC)/stage0_console.h | .deps
 	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
 
-stage0_n64cart_uart.o: stage0_n64cart_uart.c stage0_console.h n64cart_uart.h | .deps
+stage0_n64cart_uart.o: $(N64_BOARD_SRC)/stage0_n64cart_uart.c $(N64_BOARD_SRC)/stage0_console.h $(N64_BOARD_SRC)/n64cart_uart.h | .deps
 	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
 
-stage0_kernel_blob.o: stage0_kernel_blob.S preflight.elf | .deps
+stage0_kernel_blob.o: $(N64_BOARD_SRC)/stage0_kernel_blob.S preflight.elf | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath preflight.elf)\" $< -o $@
 
-kernel_stage0_kernel_blob.o: stage0_kernel_blob.S unix.elf | .deps
+kernel_stage0_kernel_blob.o: $(N64_BOARD_SRC)/stage0_kernel_blob.S unix.elf | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath unix.elf)\" $< -o $@
 
-stage0.elf: $(N64_STAGE0_OBJS) stage0_kernel_blob.o stage0_linker.ld
-	$(LD) -T stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) stage0_kernel_blob.o
+stage0.elf: $(N64_STAGE0_OBJS) stage0_kernel_blob.o $(N64_BOARD_SRC)/stage0_linker.ld
+	$(LD) -T $(N64_BOARD_SRC)/stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) stage0_kernel_blob.o
 
-kernel_stage0.elf: $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o stage0_linker.ld
-	$(LD) -T stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o
+kernel_stage0.elf: $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o $(N64_BOARD_SRC)/stage0_linker.ld
+	$(LD) -T $(N64_BOARD_SRC)/stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o
 
 stage0.stripped.elf: stage0.elf
 	$(STRIP) -s -o $@ $<
@@ -1049,10 +1056,10 @@ preflight.z64: stage0.stripped.elf $(N64_ROM_ROOTFS_IMG)
 kernel.z64: kernel_stage0.stripped.elf $(N64_ROM_ROOTFS_IMG)
 	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 kernel_stage0.stripped.elf --align 1024 $(N64_ROM_ROOTFS_IMG)
 
-preflight.o: preflight.c ${SYSTEM_DEP}
+preflight.o: $(N64_BOARD_SRC)/preflight.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
-preflight_n64cart_uart.o: preflight_n64cart_uart.c n64cart_uart.h ${SYSTEM_DEP}
+preflight_n64cart_uart.o: $(N64_BOARD_SRC)/preflight_n64cart_uart.c $(N64_BOARD_SRC)/n64cart_uart.h ${SYSTEM_DEP}
 	${COMPILE_C}
 
 startup.o: $S/mips/common/startup.S ${SYSTEM_DEP}
@@ -1079,14 +1086,15 @@ clean: mips-rootfs-clean
 clean-all: clean
 	rm -f Makefile ioconf.c swap*.c vers.c
 
-reconfig ioconf.c swapunix.c: Config ../../../tools/kconfig/kconfig | machine sys
-	../../../tools/kconfig/kconfig Config
+reconfig ioconf.c swapunix.c: $(N64_BOARD_SRC)/Config $(OBJTOP)/tools/kconfig/kconfig | machine sys
+	$(OBJTOP)/tools/kconfig/kconfig $<
 
+.PHONY: machine sys
 machine:
-	ln -s . $@
+	ln -sfn $(N64_BOARD_SRC) $@
 
 sys:
-	ln -s ../../include $@
+	ln -sfn $(TOPSRC)/sys/include $@
 
 .deps:
 	mkdir .deps

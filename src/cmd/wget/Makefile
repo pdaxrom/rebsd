@@ -25,7 +25,7 @@ $(BIN): $(OBJS)
 	$(ELF2AOUT) $(BIN).elf $@ && rm $(BIN).elf
 
 $(MAN): $(MANSRC)
-	nroff -man $(MANSRC) > $(MAN)
+	nroff -man $< > $(MAN)
 
 install: all
 	cp $(MAN) $(DESTDIR)/share/man/cat1/

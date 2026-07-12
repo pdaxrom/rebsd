@@ -1,0 +1,290 @@
+# Build PCC binaries that run natively on ReBSD/MIPS.
+
+TOPSRC ?= ../../..
+PCC_SRC = $(TOPSRC)/src/dev/pcc/pcc
+CONFIG_BASE = $(TOPSRC)/sys/mips/tools/native-pcc-config.h
+THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
+
+BUILD ?= native-pcc-build
+OUT ?= native-pcc
+TARGET_CC ?= pcc
+TARGET_AS ?= as
+TARGET_LD ?= ld
+LDSCRIPT ?= mips-user.ld
+CRT0 ?= crt0.o
+LIBDIR ?= .
+PCC_CPU ?= vr4300
+PCC_FLOAT ?= hard
+PCC_ENDIAN ?= big
+PCC_EXEC_FORMAT ?= elf
+HOSTCC ?= cc
+BISON ?= bison
+FLEX ?= flex
+
+PCC_VERSION = 1.2.0.DEVEL
+HOST_CONFIG = $(BUILD)/host-config/config.h
+TARGET_CONFIG = $(BUILD)/target-config/config.h
+
+HOST_POINTER_SIZE ?= $(shell printf '' | $(HOSTCC) -dM -E - 2>/dev/null | awk '$$2 == "__SIZEOF_POINTER__" { print $$3; exit }')
+HOST_BYTE_ORDER ?= $(shell printf '' | $(HOSTCC) -dM -E - 2>/dev/null | awk '$$2 == "__BYTE_ORDER__" { if ($$3 == "__ORDER_BIG_ENDIAN__") print "big"; else print "little"; exit }')
+
+ifeq ($(PCC_CPU),vr4300)
+CPU_DEFINE = -DMIPS_CPU_DEFAULT=MIPS_CPU_VR4300
+else ifeq ($(PCC_CPU),mips32r2)
+CPU_DEFINE = -DMIPS_CPU_DEFAULT=MIPS_CPU_MIPS32R2
+else
+$(error Unsupported PCC_CPU=$(PCC_CPU))
+endif
+
+ifeq ($(PCC_FLOAT),hard)
+FLOAT_DEFINE = -DMIPS_SOFT_FLOAT_DEFAULT=0
+FLOAT_FLAG = -mhard-float
+SOFT_LIBDIR =
+else ifeq ($(PCC_FLOAT),soft)
+FLOAT_DEFINE = -DSOFTFLOAT -DMIPS_SOFT_FLOAT_DEFAULT=1
+FLOAT_FLAG = -msoft-float
+SOFT_LIBDIR = -L$(LIBDIR)/softfloat
+else
+$(error Unsupported PCC_FLOAT=$(PCC_FLOAT))
+endif
+
+ifeq ($(PCC_ENDIAN),big)
+TARGET_TRIPLE = mips-unknown-rebsd
+ENDIAN_DEFINE = -DTARGET_BIG_ENDIAN=1
+ENDIAN_CONFIG = \#define TARGET_BIG_ENDIAN 1
+ENDIAN_FLAG = -mbig-endian
+LD_ENDIAN_FLAG = -EB
+TARGET_HOST_ENDIAN = big
+else ifeq ($(PCC_ENDIAN),little)
+TARGET_TRIPLE = mipsel-unknown-rebsd
+ENDIAN_DEFINE = -DTARGET_LITTLE_ENDIAN=1
+ENDIAN_CONFIG = \#define TARGET_LITTLE_ENDIAN 1
+ENDIAN_FLAG = -mlittle-endian
+LD_ENDIAN_FLAG = -EL
+TARGET_HOST_ENDIAN = little
+else
+$(error Unsupported PCC_ENDIAN=$(PCC_ENDIAN))
+endif
+
+ifeq ($(PCC_EXEC_FORMAT),elf)
+EXEC_DEFINE = -DREBSD_TOOLCHAIN_ELF_DEFAULT
+LD_EXEC_FLAG = --elf
+else ifeq ($(PCC_EXEC_FORMAT),aout)
+EXEC_DEFINE =
+LD_EXEC_FLAG = --aout
+else
+$(error Unsupported PCC_EXEC_FORMAT=$(PCC_EXEC_FORMAT))
+endif
+
+ifeq ($(HOST_BYTE_ORDER),big)
+HOST_ENDIAN_CONFIG = \#define HOST_BIG_ENDIAN 1
+HOST_WORDS_CONFIG = \#define WORDS_BIGENDIAN 1
+else
+HOST_ENDIAN_CONFIG = \#define HOST_LITTLE_ENDIAN 1
+HOST_WORDS_CONFIG =
+endif
+
+ifeq ($(TARGET_HOST_ENDIAN),big)
+TARGET_ENDIAN_CONFIG = \#define HOST_BIG_ENDIAN 1
+TARGET_WORDS_CONFIG = \#define WORDS_BIGENDIAN 1
+else
+TARGET_ENDIAN_CONFIG = \#define HOST_LITTLE_ENDIAN 1
+TARGET_WORDS_CONFIG =
+endif
+
+COMMON_DEFS = -DGCC_COMPAT -DPCC_DEBUG -D_ISOC99_SOURCE -Dos_rebsd \
+              -Dmach_mips -DTARGOSVER=0 $(ENDIAN_DEFINE)
+COMMON_INCLUDES = -I$(PCC_SRC)/mip -I$(PCC_SRC)/arch/mips \
+                  -I$(PCC_SRC)/os/rebsd -I$(PCC_SRC)/common
+TARGET_ARCH = -march=$(PCC_CPU) $(FLOAT_FLAG) $(ENDIAN_FLAG)
+TARGET_CFLAGS = $(TARGET_ARCH) -Os -fno-builtin -fno-stack-protector \
+                -fcommon $(COMMON_DEFS) $(EXEC_DEFINE) $(CPU_DEFINE) \
+                $(FLOAT_DEFINE) -I$(dir $(TARGET_CONFIG)) $(COMMON_INCLUDES)
+HOST_CFLAGS = -O2 $(COMMON_DEFS) -DPCC_DEBUGFP_NATIVE_STRTOLD \
+              -I$(dir $(HOST_CONFIG)) $(COMMON_INCLUDES)
+TARGET_LDFLAGS = $(LD_EXEC_FLAG) $(LD_ENDIAN_FLAG) -T $(LDSCRIPT) \
+                 -X -d -e _start
+TARGET_LIBS = $(SOFT_LIBDIR) -L$(LIBDIR) -lm -lc -lpcc
+
+CPP_SRC = $(PCC_SRC)/cc/cpp
+CPP_BUILD = $(BUILD)/cpp
+CPP_OBJDIR = $(BUILD)/obj/cpp
+CPP_LOCAL_NAMES = cpp cpc token
+CPP_OBJS = $(CPP_OBJDIR)/compat.o $(CPP_OBJDIR)/cpp.o \
+           $(CPP_OBJDIR)/cpc.o $(CPP_OBJDIR)/token.o
+
+CC_SRC = $(PCC_SRC)/cc/cc
+CC_BUILD = $(BUILD)/cc
+CC_OBJDIR = $(BUILD)/obj/cc
+CC_OBJS = $(CC_OBJDIR)/cc.o $(CC_OBJDIR)/compat.o \
+          $(CC_OBJDIR)/strlist.o $(CC_OBJDIR)/target.o \
+          $(CC_OBJDIR)/xalloc.o
+
+CCOM_SRC = $(PCC_SRC)/cc/ccom
+CCOM_BUILD = $(BUILD)/ccom
+CCOM_OBJDIR = $(BUILD)/obj/ccom
+CCOM_LOCAL_NAMES = builtins complex dwarf gcc_compat init inline main optim \
+                   params pftn stabs symtabs trees
+CCOM_MIP_NAMES = cfgverify common match optim2 optstats reader regs ssalower
+CCOM_ARCH_NAMES = code local local2 order table target
+CCOM_COMMON_NAMES = compat softfloat unicode
+CCOM_GENERATED_NAMES = cgram external scan
+CCOM_NAMES = builtins cgram cfgverify code common compat complex dwarf \
+             external gcc_compat init inline local local2 main match optim \
+             optim2 optstats order params pftn reader regs scan softfloat \
+             ssalower stabs symtabs table target trees unicode
+CCOM_OBJS = $(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_NAMES)))
+
+.PHONY: all clean check
+.DEFAULT_GOAL := all
+
+all: check $(OUT)/cc $(OUT)/cpp $(OUT)/ccom
+
+check:
+	@test -d $(PCC_SRC)
+	@test -f $(LDSCRIPT)
+	@test -f $(CRT0)
+	@test -d $(LIBDIR)
+	@test -n "$(HOST_POINTER_SIZE)"
+
+$(HOST_CONFIG): $(CONFIG_BASE) $(THIS_MAKEFILE)
+	@mkdir -p $(dir $@)
+	cp $< $@.tmp
+	@printf '%s\n' '#define SIZEOF_INT_P $(HOST_POINTER_SIZE)' \
+	    '$(ENDIAN_CONFIG)' \
+	    '#define TARGSTR "$(TARGET_TRIPLE)"' \
+	    '#define VERSSTR "Portable C Compiler $(PCC_VERSION) 20231021 for $(TARGET_TRIPLE)"' \
+	    '#define HAVE_STRLCAT 1' '#define HAVE_STRLCPY 1' \
+	    '$(HOST_ENDIAN_CONFIG)' '$(HOST_WORDS_CONFIG)' >> $@.tmp
+	mv -f $@.tmp $@
+
+$(TARGET_CONFIG): $(CONFIG_BASE) $(THIS_MAKEFILE)
+	@mkdir -p $(dir $@)
+	cp $< $@.tmp
+	@printf '%s\n' '#define SIZEOF_INT_P 4' \
+	    '$(ENDIAN_CONFIG)' \
+	    '#define TARGSTR "$(TARGET_TRIPLE)"' \
+	    '#define VERSSTR "Portable C Compiler $(PCC_VERSION) 20231021 for $(TARGET_TRIPLE)"' \
+	    '$(TARGET_ENDIAN_CONFIG)' '$(TARGET_WORDS_CONFIG)' >> $@.tmp
+	mv -f $@.tmp $@
+
+$(CPP_OBJDIR)/compat.o: $(PCC_SRC)/common/compat.c $(TARGET_CONFIG)
+	@mkdir -p $(dir $@) $(CPP_BUILD)
+	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CPP_BUILD) -I$(CPP_SRC) \
+	    -DNVMPGS=4 -c -o $@ $<
+
+$(addprefix $(CPP_OBJDIR)/,$(addsuffix .o,$(CPP_LOCAL_NAMES))): \
+    $(CPP_OBJDIR)/%.o: $(CPP_SRC)/%.c $(TARGET_CONFIG)
+	@mkdir -p $(dir $@) $(CPP_BUILD)
+	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CPP_BUILD) -I$(CPP_SRC) \
+	    -DNVMPGS=4 -c -o $@ $<
+
+$(OUT)/cpp: $(CPP_OBJS) $(CRT0)
+	@mkdir -p $(dir $@)
+	$(TARGET_LD) $(TARGET_LDFLAGS) -o $@ $(CRT0) $(CPP_OBJS) $(TARGET_LIBS)
+	chmod 775 $@
+
+define COMPILE_DRIVER
+	@mkdir -p $(dir $@) $(CC_BUILD)
+	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CC_BUILD) -I$(CC_SRC) \
+	    -I$(PCC_SRC)/cc/driver \
+	    -DLIBEXECDIR='"/usr/libexec/pcc/"' \
+	    -DINCLUDEDIR='"/usr/include/"' \
+	    -DPCCINCDIR='"/usr/lib/pcc/$(TARGET_TRIPLE)/$(PCC_VERSION)/include/"' \
+	    -DPCCLIBDIR='"/usr/lib/pcc/$(TARGET_TRIPLE)/$(PCC_VERSION)/lib/"' \
+	    -DCXXPROGNAME='"p++"' -DCPPROGNAME='"cpp"' \
+	    -DCC0='"cc0"' -DCC1='"cc1"' \
+	    -DASSEMBLER='"/usr/bin/as"' -DLINKER='"/usr/bin/ld"' \
+	    -c -o $@ $<
+endef
+
+$(CC_OBJDIR)/cc.o: $(CC_SRC)/cc.c $(TARGET_CONFIG)
+	$(COMPILE_DRIVER)
+
+$(CC_OBJDIR)/compat.o: $(PCC_SRC)/common/compat.c $(TARGET_CONFIG)
+	$(COMPILE_DRIVER)
+
+$(CC_OBJDIR)/strlist.o $(CC_OBJDIR)/xalloc.o: \
+    $(CC_OBJDIR)/%.o: $(PCC_SRC)/cc/driver/%.c $(TARGET_CONFIG)
+	$(COMPILE_DRIVER)
+
+$(CC_OBJDIR)/target.o: $(PCC_SRC)/arch/mips/target.c $(TARGET_CONFIG)
+	$(COMPILE_DRIVER)
+
+$(OUT)/cc: $(CC_OBJS) $(CRT0)
+	@mkdir -p $(dir $@)
+	$(TARGET_LD) $(TARGET_LDFLAGS) -o $@ $(CRT0) $(CC_OBJS) $(TARGET_LIBS)
+	chmod 775 $@
+
+$(CCOM_BUILD)/mkext: $(PCC_SRC)/mip/mkext.c \
+    $(PCC_SRC)/mip/common.c $(PCC_SRC)/arch/mips/table.c $(HOST_CONFIG)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HOST_CFLAGS) -I$(CCOM_SRC) -DMKEXT -o $@ \
+	    $(PCC_SRC)/mip/mkext.c $(PCC_SRC)/mip/common.c \
+	    $(PCC_SRC)/arch/mips/table.c
+
+$(CCOM_BUILD)/.external: $(CCOM_BUILD)/mkext
+	cd $(CCOM_BUILD) && ./mkext
+	@test -s $(CCOM_BUILD)/external.c
+	@test -s $(CCOM_BUILD)/external.h
+	@touch $@
+
+$(CCOM_BUILD)/external.c $(CCOM_BUILD)/external.h: $(CCOM_BUILD)/.external
+	@test -s $@
+
+$(CCOM_BUILD)/.cgram: $(CCOM_SRC)/cgram.y
+	@mkdir -p $(CCOM_BUILD)
+	cd $(CCOM_BUILD) && $(BISON) -y -d $(CCOM_SRC)/cgram.y
+	mv -f $(CCOM_BUILD)/y.tab.c $(CCOM_BUILD)/cgram.c
+	mv -f $(CCOM_BUILD)/y.tab.h $(CCOM_BUILD)/cgram.h
+	@touch $@
+
+$(CCOM_BUILD)/cgram.c $(CCOM_BUILD)/cgram.h: $(CCOM_BUILD)/.cgram
+	@test -s $@
+
+$(CCOM_BUILD)/scan.c: $(CCOM_SRC)/scan.l
+	@mkdir -p $(dir $@)
+	$(FLEX) -o $@ $<
+
+$(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_LOCAL_NAMES))): \
+	$(CCOM_OBJDIR)/%.o: $(CCOM_SRC)/%.c $(TARGET_CONFIG) \
+	$(CCOM_BUILD)/cgram.h $(CCOM_BUILD)/external.h
+	@mkdir -p $(dir $@)
+	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CCOM_BUILD) -I$(CCOM_SRC) \
+	    -c -o $@ $<
+
+$(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_MIP_NAMES))): \
+	$(CCOM_OBJDIR)/%.o: $(PCC_SRC)/mip/%.c $(TARGET_CONFIG) \
+	$(CCOM_BUILD)/cgram.h $(CCOM_BUILD)/external.h
+	@mkdir -p $(dir $@)
+	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CCOM_BUILD) -I$(CCOM_SRC) \
+	    -c -o $@ $<
+
+$(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_ARCH_NAMES))): \
+	$(CCOM_OBJDIR)/%.o: $(PCC_SRC)/arch/mips/%.c $(TARGET_CONFIG) \
+	$(CCOM_BUILD)/cgram.h $(CCOM_BUILD)/external.h
+	@mkdir -p $(dir $@)
+	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CCOM_BUILD) -I$(CCOM_SRC) \
+	    -c -o $@ $<
+
+$(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_COMMON_NAMES))): \
+	$(CCOM_OBJDIR)/%.o: $(PCC_SRC)/common/%.c $(TARGET_CONFIG) \
+	$(CCOM_BUILD)/cgram.h $(CCOM_BUILD)/external.h
+	@mkdir -p $(dir $@)
+	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CCOM_BUILD) -I$(CCOM_SRC) \
+	    -c -o $@ $<
+
+$(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_GENERATED_NAMES))): \
+	$(CCOM_OBJDIR)/%.o: $(CCOM_BUILD)/%.c $(TARGET_CONFIG) \
+	$(CCOM_BUILD)/cgram.h $(CCOM_BUILD)/external.h
+	@mkdir -p $(dir $@)
+	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CCOM_BUILD) -I$(CCOM_SRC) \
+	    -c -o $@ $<
+
+$(OUT)/ccom: $(CCOM_OBJS) $(CRT0)
+	@mkdir -p $(dir $@)
+	$(TARGET_LD) $(TARGET_LDFLAGS) -o $@ $(CRT0) $(CCOM_OBJS) $(TARGET_LIBS)
+	chmod 775 $@
+
+clean:
+	rm -rf $(BUILD) $(OUT)

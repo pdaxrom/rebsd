@@ -54,7 +54,7 @@ OBJS=	XNSrouted.0 adduser.0 autoconfig.0 \
 .SUFFIXES: .8 .0
 
 .8.0:
-	${MANROFF} $*.8 > $*.0
+	${MANROFF} $< > $@
 
 all: _make_01
 

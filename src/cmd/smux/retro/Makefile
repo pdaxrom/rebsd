@@ -4,7 +4,7 @@
 TOPSRC		= $(shell cd ../../../..; pwd)
 include $(TOPSRC)/target.mk
 
-CFLAGS		+= -Wall -Werror -I../../../../sys/include
+CFLAGS		+= -Wall -Werror -I$(TOPSRC)/sys/include
 
 BIN		= smux
 SRCS            = smux.c

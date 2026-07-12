@@ -1,5 +1,6 @@
 TOPSRC          = $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+PICOC_SRCDIR    = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
 
 #CC=gcc
 CFLAGS          += -g -DUNIX_HOST -DVER='"1.0"' -DFILENAME_MAX=64 \
@@ -46,14 +47,23 @@ clibrary.o: clibrary.c picoc.h interpreter.h platform.h
 platform.o: platform.c picoc.h interpreter.h platform.h
 include.o: include.c picoc.h interpreter.h platform.h
 debug.o: debug.c interpreter.h platform.h
-platform/platform_unix.o: platform/platform_unix.c picoc.h interpreter.h platform.h
-platform/library_unix.o: platform/library_unix.c interpreter.h platform.h
-cstdlib/stdio.o: cstdlib/stdio.c interpreter.h platform.h
-cstdlib/math.o: cstdlib/math.c interpreter.h platform.h
-cstdlib/string.o: cstdlib/string.c interpreter.h platform.h
-cstdlib/stdlib.o: cstdlib/stdlib.c interpreter.h platform.h
-cstdlib/time.o: cstdlib/time.c interpreter.h platform.h
-cstdlib/errno.o: cstdlib/errno.c interpreter.h platform.h
-cstdlib/ctype.o: cstdlib/ctype.c interpreter.h platform.h
-cstdlib/stdbool.o: cstdlib/stdbool.c interpreter.h platform.h
-cstdlib/unistd.o: cstdlib/unistd.c interpreter.h platform.h
+platform/platform_unix.o: picoc.h interpreter.h platform.h
+platform/library_unix.o: interpreter.h platform.h
+cstdlib/stdio.o: interpreter.h platform.h
+cstdlib/math.o: interpreter.h platform.h
+cstdlib/string.o: interpreter.h platform.h
+cstdlib/stdlib.o: interpreter.h platform.h
+cstdlib/time.o: interpreter.h platform.h
+cstdlib/errno.o: interpreter.h platform.h
+cstdlib/ctype.o: interpreter.h platform.h
+cstdlib/stdbool.o: interpreter.h platform.h
+cstdlib/unistd.o: interpreter.h platform.h
+
+platform/%.o: $(PICOC_SRCDIR)/platform/%.c | platform
+		$(CC) $(CFLAGS) -c $< -o $@
+
+cstdlib/%.o: $(PICOC_SRCDIR)/cstdlib/%.c | cstdlib
+		$(CC) $(CFLAGS) -c $< -o $@
+
+platform cstdlib:
+		mkdir -p $@

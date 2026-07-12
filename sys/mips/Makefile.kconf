@@ -21,11 +21,12 @@ MALTA_VR4300_CPU ?= R4000
 include ../../../target-mips.mk
 
 TOPSRC          = ../../..
-S               = ../..
-BOARD_SRC       ?= ../malta
+S               = $(TOPSRC)/sys
+BOARD_SRC       ?= $(TOPSRC)/sys/mips/malta
 MALTA_HW_MODEL ?= $(if $(MALTA_PORT64),MIPS Malta R4000,MIPS Malta 24Kf)
 MALTA_VERSION_NAME ?= $(if $(MALTA_PORT64),Malta64,Malta)
-MALTA_KERNEL_LD_SCRIPT ?= ../malta/malta.ld
+MALTA_KERNEL_LD_SCRIPT ?= $(TOPSRC)/sys/mips/malta/malta.ld
+MALTA64_SRC ?= $(TOPSRC)/sys/mips/malta64
 MALTA_RUNTIME_KERNEL ?= $(if $(MALTA_PORT64),malta64.elf,unix.elf)
 MALTA_EARLY_TARGET ?= $(if $(CI20_PORT),,$(if $(MALTA_PORT64),malta64-early.elf,malta-early.elf))
 MALTA64_STAGE_ARCH ?= -EB -mips3 -mabi=64 -mtune=r4000
@@ -107,10 +108,10 @@ MIPS_ROOTFS_OVERLAY_FILES =
 MIPS_COMMON_MACHINE_HEADERS ?= console cpu devmajors elf_machdep float fpu io \
                               layout limits machparam ramswap romdisk
 MIPS_TRACE       ?= 0
-FSUTIL          = $(TOPSRC)/tools/fsutil/fsutil
+FSUTIL          = $(OBJTOP)/tools/fsutil/fsutil
 PCC_HOST_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
-PCC_HOST_BUILD ?= /private/tmp/rebsd-pcc-build-$(MIPS_ROOTFS_ABI)
-PCC_HOST_PREFIX ?= /private/tmp/rebsd-pcc-install-$(MIPS_ROOTFS_ABI)
+PCC_HOST_BUILD ?= $(TOPOBJ)/toolchain/pcc-build.$(MIPS_ROOTFS_ABI)
+PCC_HOST_PREFIX ?= $(TOPOBJ)/toolchain/pcc-install.$(MIPS_ROOTFS_ABI)
 PCC_HOST_TARGET = $(PCC_HOST_PREFIX)/mips-rebsd
 PCC_HOST_LIB = $(PCC_HOST_TARGET)/lib
 PCC_HOST_SOFTFLOAT_LIB = $(PCC_HOST_LIB)/softfloat
@@ -124,30 +125,30 @@ PCC_HOST_SRCS   = $(PCC_HOST_SMOKE_SCRIPT) \
                   -o -name configure -o -name config.sub \
                   -o -name config.guess \) 2>/dev/null)
 PCC_REGRESS_SCRIPT = $(TOPSRC)/sys/mips/tools/pcc-regress.py
-PCC_REGRESS_OUT ?= /private/tmp/rebsd-pcc-tests
-PCC_REGRESS_MANIFEST ?= /private/tmp/rebsd-pcc-tests.manifest
-PCC_REGRESS_LOG ?= /private/tmp/rebsd-pcc-runtime.log
-NATIVE_PCC_REGRESS_MANIFEST ?= /private/tmp/rebsd-native-pcc-tests.manifest
-NATIVE_PCC_REGRESS_LOG ?= /private/tmp/rebsd-native-pcc-tests.log
+PCC_REGRESS_OUT ?= $(TOPOBJ)/tests/pcc-regress
+PCC_REGRESS_MANIFEST ?= $(TOPOBJ)/tests/pcc-regress.manifest
+PCC_REGRESS_LOG ?= $(TOPOBJ)/tests/pcc-runtime.log
+NATIVE_PCC_REGRESS_MANIFEST ?= $(TOPOBJ)/tests/native-pcc-regress.manifest
+NATIVE_PCC_REGRESS_LOG ?= $(TOPOBJ)/tests/native-pcc-regress.log
 NATIVE_PCC_REGRESS_TIMEOUT ?= 1200
 NATIVE_PCC_REGRESS_SILENCE_TIMEOUT ?= 300
 LINPACK_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/tools/linpack-smoke.py
 LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
-LINPACK_SMOKE_OUT ?= /private/tmp/rebsd-linpack-smoke
-LINPACK_SMOKE_MANIFEST ?= /private/tmp/rebsd-linpack-smoke.manifest
-LINPACK_SMOKE_LOG ?= /private/tmp/rebsd-linpack-smoke.log
+LINPACK_SMOKE_OUT ?= $(TOPOBJ)/tests/linpack-smoke
+LINPACK_SMOKE_MANIFEST ?= $(TOPOBJ)/tests/linpack-smoke.manifest
+LINPACK_SMOKE_LOG ?= $(TOPOBJ)/tests/linpack-smoke.log
 LINPACK_SMOKE_ARRAY_SIZE ?= 120
 LINPACK_SMOKE_MIN_SECONDS ?= 1
 PCC_ASM_COUNTER_SCRIPT = $(TOPSRC)/sys/mips/tools/mips-asm-counters.py
-PCC_PERF_OUT ?= /private/tmp/rebsd-pcc-perf-$(notdir $(abspath .))-$(MIPS_ROOTFS_ABI)
+PCC_PERF_OUT ?= $(TOPOBJ)/tests/pcc-perf.$(MIPS_ROOTFS_ABI)
 PCC_PERF_SOURCE ?= $(LINPACK_SMOKE_SRC)
 PCC_PERF_NAME ?= linpack
-PCC_SMOKE_ALL_LOG ?= /private/tmp/rebsd-pcc-smoke-all-$(notdir $(abspath .))-$(MIPS_ROOTFS_ABI).log
+PCC_SMOKE_ALL_LOG ?= $(TOPOBJ)/tests/pcc-smoke-all.$(MIPS_ROOTFS_ABI).log
 PCC_SMOKE_ALL_TIMEOUT ?= 1800
 PCC_SMOKE_ALL_SILENCE_TIMEOUT ?= 300
 PCC_SMOKE_ALL_CCOM_STRESS_COUNT ?= 100
 MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
-NATIVE_PCC_SMOKE_LOG ?= /private/tmp/rebsd-native-pcc-smoke.log
+NATIVE_PCC_SMOKE_LOG ?= $(TOPOBJ)/tests/native-pcc-smoke.log
 MIPS_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_TARGET_PLATFORM ?= mips
@@ -263,41 +264,41 @@ $(CI20_UIMAGE): $(CI20_BINARY)
 	    -n "ReBSD Ci20" -d $(CI20_BINARY) $@
 endif
 
-malta-early.o: ../malta/early_uart.S | .deps
+malta-early.o: $(TOPSRC)/sys/mips/malta/early_uart.S | .deps
 	$(CC) $(ASFLAGS) $< -o $@
 
-malta-early.elf: malta-early.o ../malta/malta.ld
-	$(LD) -nostdlib -T ../malta/malta.ld malta-early.o -o $@
+malta-early.elf: malta-early.o $(TOPSRC)/sys/mips/malta/malta.ld
+	$(LD) -nostdlib -T $(TOPSRC)/sys/mips/malta/malta.ld malta-early.o -o $@
 	$(SIZE) $@
 	$(OBJDUMP) -d -S $@ > malta-early.dis
 
 unix.bin: unix.elf
 	$(OBJCOPY) -O binary --remove-section=.romdisk unix.elf unix.bin
 
-malta64-stage0.o: ../malta64/stage0.S | .deps
+malta64-stage0.o: $(MALTA64_SRC)/stage0.S | .deps
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
 
-malta64-stage0-kernel.o: ../malta64/stage0_kernel_blob.S unix.bin | .deps
+malta64-stage0-kernel.o: $(MALTA64_SRC)/stage0_kernel_blob.S unix.bin | .deps
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
 
-malta64-stage0-rootfs.o: ../malta64/stage0_rootfs_blob.S rootfs.img | .deps
+malta64-stage0-rootfs.o: $(MALTA64_SRC)/stage0_rootfs_blob.S rootfs.img | .deps
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
 
 malta64.elf: malta64-stage0.o malta64-stage0-kernel.o \
-              malta64-stage0-rootfs.o ../malta64/stage0_linker.ld
+              malta64-stage0-rootfs.o $(MALTA64_SRC)/stage0_linker.ld
 	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \
-	    -T ../malta64/stage0_linker.ld \
+	    -T $(MALTA64_SRC)/stage0_linker.ld \
 	    malta64-stage0.o malta64-stage0-kernel.o \
 	    malta64-stage0-rootfs.o -o $@
 	$(MALTA64_STAGE_SIZE) $@
 	$(MALTA64_STAGE_OBJDUMP) -d -S $@ > malta64.dis
 
-malta64-early.o: ../malta64/early_uart64.S | .deps
+malta64-early.o: $(MALTA64_SRC)/early_uart64.S | .deps
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
 
-malta64-early.elf: malta64-early.o ../malta64/stage0_linker.ld
+malta64-early.elf: malta64-early.o $(MALTA64_SRC)/stage0_linker.ld
 	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \
-	    -T ../malta64/stage0_linker.ld malta64-early.o -o $@
+	    -T $(MALTA64_SRC)/stage0_linker.ld malta64-early.o -o $@
 	$(MALTA64_STAGE_SIZE) $@
 	$(MALTA64_STAGE_OBJDUMP) -d -S $@ > malta64-early.dis
 
@@ -361,7 +362,7 @@ pcc-regress-runtime-vr4300:
 	$(MAKE) pcc-regress-runtime \
 	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
 	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
-	    PCC_REGRESS_LOG=/private/tmp/rebsd-pcc-runtime-vr4300.log
+	    PCC_REGRESS_LOG=$(TOPOBJ)/tests/pcc-runtime-vr4300.log
 
 pcc-regress-summary: $(PCC_REGRESS_SCRIPT)
 	python3 $(PCC_REGRESS_SCRIPT) summarize \
@@ -395,7 +396,7 @@ linpack-smoke-runtime-vr4300:
 	$(MAKE) linpack-smoke-runtime \
 	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
 	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
-	    LINPACK_SMOKE_LOG=/private/tmp/rebsd-linpack-smoke-vr4300.log
+	    LINPACK_SMOKE_LOG=$(TOPOBJ)/tests/linpack-smoke-vr4300.log
 
 pcc-perf-baseline: $(MIPS_ROOTFS_USER_STAMP) smoke-host-portablecc \
     $(PCC_ASM_COUNTER_SCRIPT)
@@ -437,7 +438,7 @@ pcc-smoke-all-runtime-vr4300:
 	$(MAKE) pcc-smoke-all-runtime \
 	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
 	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
-	    PCC_SMOKE_ALL_LOG=/private/tmp/rebsd-pcc-smoke-all-vr4300.log
+	    PCC_SMOKE_ALL_LOG=$(TOPOBJ)/tests/pcc-smoke-all-vr4300.log
 
 native-pcc-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	$(MAKE) $(MALTA_RUNTIME_KERNEL)
@@ -454,7 +455,7 @@ native-pcc-smoke-runtime-vr4300:
 	$(MAKE) native-pcc-smoke-runtime \
 	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
 	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
-	    NATIVE_PCC_SMOKE_LOG=/private/tmp/rebsd-native-pcc-smoke-vr4300.log
+	    NATIVE_PCC_SMOKE_LOG=$(TOPOBJ)/tests/native-pcc-smoke-vr4300.log
 
 native-pcc-regress-stage: $(MIPS_ROOTFS_BUILD_MANIFEST) $(PCC_REGRESS_SCRIPT)
 	python3 $(PCC_REGRESS_SCRIPT) native-stage \
@@ -481,11 +482,11 @@ native-pcc-regress-runtime-vr4300:
 	$(MAKE) native-pcc-regress-runtime \
 	    MALTA_QEMU=$(MALTA_VR4300_QEMU) \
 	    MALTA_QEMU_CPU=$(MALTA_VR4300_CPU) \
-	    NATIVE_PCC_REGRESS_LOG=/private/tmp/rebsd-native-pcc-tests-vr4300.log
+	    NATIVE_PCC_REGRESS_LOG=$(TOPOBJ)/tests/native-pcc-regress-vr4300.log
 
 FORCE:
 
-MIPS_ROOTFS_PATCH_DIR ?= /private/tmp/rebsd-rootfs-patch
+MIPS_ROOTFS_PATCH_DIR ?= $(TOPOBJ)/tests/rootfs-patch
 MIPS_ROOTFS_PATCH_FILES ?=
 MIPS_ROOTFS_PATCH_MANIFEST ?= rootfs.patch.manifest
 MIPS_ROOTFS_PATCH_SCRIPT = $(TOPSRC)/sys/mips/tools/rootfs-patch.py
@@ -528,9 +529,9 @@ rootfs-repack-kernel:
 ifneq ($(MALTA_PORT64),)
 	$(OBJCOPY) -O binary unix.elf unix.bin
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) \
-	    ../malta64/stage0_kernel_blob.S -o malta64-stage0-kernel.o
+	    $(MALTA64_SRC)/stage0_kernel_blob.S -o malta64-stage0-kernel.o
 	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \
-	    -T ../malta64/stage0_linker.ld \
+	    -T $(MALTA64_SRC)/stage0_linker.ld \
 	    malta64-stage0.o malta64-stage0-kernel.o -o malta64.elf
 	$(MALTA64_STAGE_SIZE) malta64.elf
 	$(MALTA64_STAGE_OBJDUMP) -d -S malta64.elf > malta64.dis
@@ -547,16 +548,20 @@ ${SYSTEM_OBJ} swapunix.o: | machine sys .deps
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
 
-reconfig ioconf.c swapunix.c: Config ../../../tools/kconfig/kconfig | machine sys
-	../../../tools/kconfig/kconfig Config
+$(OBJTOP)/tools/kconfig/kconfig:
+	$(MAKE) -C $(TOPSRC)/tools/kconfig
 
-MIPS_MACHINE_LINK_TARGET ?= ..
+reconfig ioconf.c swapunix.c: $(TOPSRC)/sys/mips/$(notdir $(CURDIR))/Config $(OBJTOP)/tools/kconfig/kconfig | machine sys
+	$(OBJTOP)/tools/kconfig/kconfig $<
 
+MIPS_MACHINE_LINK_TARGET ?= $(TOPSRC)/sys/mips
+
+.PHONY: machine sys
 machine:
-	ln -s $(MIPS_MACHINE_LINK_TARGET) $@
+	ln -sfn $(MIPS_MACHINE_LINK_TARGET) $@
 
 sys:
-	ln -s ../../include $@
+	ln -sfn $(TOPSRC)/sys/include $@
 
 clean clean-all: mips-rootfs-clean
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm a.out .deps machine sys \

@@ -4,7 +4,7 @@
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
 
-CFLAGS		+= -Werror -I../../../sys/include
+CFLAGS		+= -Werror -I$(TOPSRC)/sys/include
 
 SRCS            = glcdtest.c
 OBJS            = glcdtest.o

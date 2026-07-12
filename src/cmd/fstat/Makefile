@@ -20,7 +20,7 @@ fstat:          ${OBJS}
 		${ELF2AOUT} fstat.elf $@ && rm fstat.elf
 
 fstat.0:        ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} fstat *.elf *.dis tags *~

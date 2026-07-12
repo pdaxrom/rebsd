@@ -2,6 +2,7 @@ TOPSRC		= $(shell cd ../../../..; pwd)
 include $(TOPSRC)/target.mk
 
 ASFLAGS		+= ${DEFS}
+ASFLAGS         += $(if $(REBSD_SRCDIR),-I$(REBSD_SRCDIR),)
 CFLAGS          += -Os
 
 # modules which can not use SYSCALL and must be assembled from sources.  The

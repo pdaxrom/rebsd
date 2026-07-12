@@ -1,7 +1,8 @@
 MACHINE     = mips
 DESTDIR     ?= $(TOPSRC)
+OBJTOP      ?= $(TOPSRC)
 RELEASE     = 0.0
-BUILD       = $(shell git rev-list HEAD --count)
+BUILD       = $(shell git -C $(TOPSRC) rev-list HEAD --count)
 VERSION     = $(RELEASE)-$(BUILD)
 
 MIPS_TOOLCHAIN ?= /Users/sash/Library/n64-toolchain-opengl

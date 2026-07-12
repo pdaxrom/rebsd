@@ -19,7 +19,7 @@ update:		${OBJS}
 		${ELF2AOUT} update.elf $@ && rm update.elf
 
 ${MAN}:		${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *~ ${MAN} update update.elf update.dis tags

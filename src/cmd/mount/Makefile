@@ -20,7 +20,7 @@ mount:       	${OBJS}
 		${ELF2AOUT} mount.elf $@ && rm mount.elf
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} mount *.elf *.dis tags *~

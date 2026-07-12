@@ -21,7 +21,7 @@ shutdown:       ${OBJS}
 		${ELF2AOUT} shutdown.elf $@ && rm shutdown.elf
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} shutdown *.elf *.dis tags *~

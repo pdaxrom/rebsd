@@ -9,10 +9,15 @@ CFLAGS		+= -Werror
 SRCS		= id.c
 OBJS		= id.o
 MAN		= id.0 groups.0 whoami.0
+ID_SRCDIR       = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
 
-all:            id ${MAN}
-		install -c groups.sh groups
-		install -c whoami.sh whoami
+all:            id ${MAN} groups whoami
+
+groups:         $(ID_SRCDIR)/groups.sh
+		install -c $< $@
+
+whoami:         $(ID_SRCDIR)/whoami.sh
+		install -c $< $@
 
 id:             ${OBJS}
 		${LD} ${LDFLAGS} -o id.elf ${OBJS} ${LIBS}
@@ -23,7 +28,7 @@ id:             ${OBJS}
 .SUFFIXES:      .0 .1
 
 .1.0:
-		${MANROFF} $*.1 > $@
+		${MANROFF} $< > $@
 
 clean:
 		rm -f *.o *.elf ${MAN} id groups whoami *.elf *.dis tags *~
@@ -34,8 +39,8 @@ depend:         ${SRCS}
 install:        all
 		cp ${MAN} ${DESTDIR}/share/man/cat1/
 		install id ${DESTDIR}/bin/id
-		install groups.sh ${DESTDIR}/bin/groups
-		install whoami.sh ${DESTDIR}/bin/whoami
+		install groups ${DESTDIR}/bin/groups
+		install whoami ${DESTDIR}/bin/whoami
 
 lint:           ${SRCS}
 		lint -hax ${SRCS}

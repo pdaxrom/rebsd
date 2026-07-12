@@ -11,14 +11,14 @@ SUBDIR		= misc zoneinfo
 all:		${SUBDIR}
 
 ${SUBDIR}: 	FRC
-		cd $@; ${MAKE} ${MFLAGS}
+		${MAKE} -C $@ ${MFLAGS}
 
 FRC:
 
 install: 	FRC
 		-for i in ${SUBDIR}; do \
-			(cd $$i; ${MAKE} ${MFLAGS} DESTDIR=${DESTDIR} install); done
+			${MAKE} -C $$i ${MFLAGS} DESTDIR=${DESTDIR} install; done
 
 clean:
 		rm -f *~
-		for i in ${SUBDIR}; do (cd $$i; ${MAKE} ${MFLAGS} clean); done
+		for i in ${SUBDIR}; do ${MAKE} -C $$i ${MFLAGS} clean; done

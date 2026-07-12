@@ -26,7 +26,7 @@ OBJS=
 .SUFFIXES: .6 .0
 
 .6.0:
-	${MANROFF} $*.6 > $*.0
+	${MANROFF} $< > $@
 
 all: _make_01
 

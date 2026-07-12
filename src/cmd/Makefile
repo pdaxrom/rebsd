@@ -119,10 +119,10 @@ size strip: %: %.o aoutio.o
 size.o strip.o: elf32_mips.h
 
 aoutio.o:	aoutio.c aoutio.h
-		$(CC) $(CFLAGS) -c aoutio.c
+		$(CC) $(CFLAGS) -c $<
 
-$(SCRIPT):
-		install -c $@.sh $@
+$(SCRIPT): %: %.sh
+		install -c $< $@
 
 install:	$(BINS)
 		@if [ -n "$(strip $(CMD_BIN_PROGS))" ]; then \
@@ -130,7 +130,7 @@ install:	$(BINS)
 		fi
 		-for i in $(SUBDIR); do \
 			$(MAKE) -C $$i $(MFLAGS) DESTDIR=$(DESTDIR) install; done
-		-for i in $(SCRIPT); do install $$i.sh $(DESTDIR)/bin/$$i; done
+		-for i in $(SCRIPT); do install $$i $(DESTDIR)/bin/$$i; done
 		-for i in $(SETUID); do \
 			install -m 4751 $$i $(DESTDIR)/bin/$$i; done
 		-for i in $(OPERATOR); do \
@@ -142,7 +142,7 @@ install:	$(BINS)
 
 clean:
 		/bin/rm -f $(BINS) bc.c egrep.c expr.c a.out core *.s *.o *.dis *.elf *~ y.tab.c errs
-		for i in $(SUBDIR); do (cd $$i; $(MAKE) $(MFLAGS) clean); done
+		for i in $(SUBDIR); do $(MAKE) -C $$i $(MFLAGS) clean; done
 
 depend:		expr.c
 		for i in $(BINS); do \

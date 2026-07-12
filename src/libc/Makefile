@@ -40,7 +40,7 @@ all:            ../libc.a
 		rm -rf tmp
 
 ${ALL}:		FRC
-		cd $@; ${MAKE} ${MFLAGS} DEFS="${DEFS}"
+		${MAKE} -C $@ ${MFLAGS} DEFS="${DEFS}"
 
 FRC:
 
@@ -51,9 +51,9 @@ install:	../libc.a
 
 clean:
 		for i in ${ALL}; \
-			do (cd $$i; ${MAKE} ${MFLAGS} clean); done
+			do ${MAKE} -C $$i ${MFLAGS} clean; done
 		rm -rf tmp *.a *~
 
 depend:
 		for i in ${ALL}; \
-			do (cd $$i; ${MAKE} ${MFLAGS} DEFS="${DEFS}" depend); done
+			do ${MAKE} -C $$i ${MFLAGS} DEFS="${DEFS}" depend; done

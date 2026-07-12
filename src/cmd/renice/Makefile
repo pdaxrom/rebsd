@@ -20,7 +20,7 @@ renice:         ${OBJS}
 		${ELF2AOUT} renice.elf $@ && rm renice.elf
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} renice *.elf *.dis tags *~

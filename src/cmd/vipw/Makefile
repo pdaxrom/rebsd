@@ -33,7 +33,7 @@ vipw:        	${OBJS}
 		${ELF2AOUT} vipw.elf $@ && rm vipw.elf
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} vipw *.elf *.dis tags *~

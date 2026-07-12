@@ -21,7 +21,7 @@ hostname:       ${OBJS}
 .SUFFIXES:      .0 .1
 
 .1.0:
-		${MANROFF} $*.1 > $@
+		${MANROFF} $< > $@
 
 clean:
 		rm -f *.o *.elf ${MAN} hostname *.elf *.dis tags *~

@@ -20,7 +20,7 @@ pstat:          ${OBJS}
 		${ELF2AOUT} pstat.elf $@ && rm pstat.elf
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} pstat *.elf *.dis tags *~

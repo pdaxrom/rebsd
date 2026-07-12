@@ -1,7 +1,8 @@
 MACHINE     = mips
 DESTDIR     ?= $(TOPSRC)
+OBJTOP      ?= $(TOPSRC)
 RELEASE     = 0.0
-BUILD       = $(shell git rev-list HEAD --count)
+BUILD       = $(shell git -C $(TOPSRC) rev-list HEAD --count)
 VERSION     = $(RELEASE)-$(BUILD)
 
 N64_TOOLCHAIN ?= /Users/sash/Library/n64-toolchain-opengl
@@ -36,5 +37,5 @@ N64_USER_LDSCRIPT ?= $(error N64_USER_LDSCRIPT must point to a generated N64 use
 
 CFLAGS        = -Os -nostdinc -DTARGET_BIG_ENDIAN -DTARGET_VR4300 -DTARGET_NO_ABICALLS
 
-LDFLAGS       = --nmagic -T$(N64_USER_LDSCRIPT) $(TOPSRC)/src/crt0.o -L$(TOPSRC)/src
+LDFLAGS       = --nmagic -T$(N64_USER_LDSCRIPT) $(OBJTOP)/src/crt0.o -L$(OBJTOP)/src
 LIBS          = -lc

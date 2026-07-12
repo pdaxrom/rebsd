@@ -1,5 +1,6 @@
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+CALENDAR_SRCDIR = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
 
 CFLAGS          = -O
 SRCS            = calendar.c
@@ -28,7 +29,7 @@ install:        all
 		install calendar ${DESTDIR}/bin/calendar
 		cp ${MAN} ${DESTDIR}/share/man/cat1/
 		@mkdir -p ${DESTDIR}/share/calendar
-		install calendars/calendar.* ${DESTDIR}/share/calendar/
+		install $(CALENDAR_SRCDIR)/calendars/calendar.* ${DESTDIR}/share/calendar/
 
 lint:           ${SRCS}
 		lint -hax ${SRCS}

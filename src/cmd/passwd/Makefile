@@ -33,7 +33,7 @@ passwd:     	${OBJS}
 		${ELF2AOUT} passwd.elf $@ && rm passwd.elf
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} passwd *.elf *.dis tags *~

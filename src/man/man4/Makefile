@@ -36,7 +36,7 @@ OBJS=	acc.0 arp.0 bk.0 br.0 cons.0 css.0 de.0 dh.0 dhu.0 dhv.0 \
 .SUFFIXES: .4 .0
 
 .4.0:
-	${MANROFF} $*.4 > $*.0
+	${MANROFF} $< > $@
 
 all: ${OBJS}
 

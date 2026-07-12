@@ -62,7 +62,7 @@ OBJS=	accept.0 access.0 acct.0 adjtime.0 bind.0 brk.0 chdir.0 chmod.0 \
 .SUFFIXES: .2 .0
 
 .2.0:
-	${MANROFF} $*.2 > $*.0
+	${MANROFF} $< > $@
 
 all: _make_01
 

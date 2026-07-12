@@ -1,7 +1,7 @@
 CC		= gcc -g
 CFLAGS		= -O -Wall
 DESTDIR		= /usr/local
-OBJS		= fsutil.o superblock.o block.c inode.o create.o check.o \
+OBJS		= fsutil.o superblock.o block.o inode.o create.o check.o \
                   file.o mount.o manifest.o
 PROG		= fsutil
 

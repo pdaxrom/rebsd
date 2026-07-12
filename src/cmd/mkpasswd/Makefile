@@ -33,7 +33,7 @@ mkpasswd:    	${OBJS}
 		${ELF2AOUT} mkpasswd.elf $@ && rm mkpasswd.elf
 
 ${MAN}:         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} mkpasswd *.elf *.dis tags *~

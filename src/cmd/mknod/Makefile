@@ -20,7 +20,7 @@ mknod:       	${OBJS}
 		${ELF2AOUT} mknod.elf $@ && rm mknod.elf
 
 mknod.0:        ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} mknod *.elf *.dis tags *~

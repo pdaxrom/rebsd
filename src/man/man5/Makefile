@@ -40,7 +40,7 @@ OBJS=	L-devices.0 L-dialcodes.0 L.aliases.0 L.cmds.0 L.sys.0 \
 .SUFFIXES: .5 .0
 
 .5.0:
-	${MANROFF} $*.5 > $*.0
+	${MANROFF} $< > $@
 
 all: _make_01
 

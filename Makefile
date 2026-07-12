@@ -8,6 +8,11 @@
 # The `make' will compile everything, including a kernel, utilities
 # and a root filesystem image.
 
+ifeq ($(REBSD_OBJ_BUILD),)
+REBSD_TOPSRC_REL = .
+include mk/obj-dispatch.mk
+else
+
 # Filesystem and swap sizes.
 FS_MBYTES       = 100
 U_MBYTES        = 100
@@ -25,7 +30,7 @@ SWAP_MBYTES     = 2
 #
 DEFS		=
 
-FSUTIL		= tools/fsutil/fsutil
+FSUTIL		= $(OBJTOP)/tools/fsutil/fsutil
 
 -include Makefile.user
 
@@ -69,7 +74,7 @@ sdcard.img:	$(FSUTIL) rootfs.manifest userfs.manifest
 #		$(FSUTIL) --new --partition=3 --manifest=userfs.manifest $@ u
 
 $(FSUTIL):
-		cd tools/fsutil; $(MAKE)
+		$(MAKE) -C tools/fsutil
 
 $(CONFIG):
 		$(MAKE) -C tools/kconfig
@@ -108,3 +113,5 @@ installflash:
 # TODO: make it relative to Target
 installboot:
 		sudo pic32prog sys/pic32/fubarino/bootloader.hex
+
+endif

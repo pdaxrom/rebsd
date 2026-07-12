@@ -80,7 +80,7 @@ OBJS2=	nroff.0 nslookup.0 od.0 pagesize.0 pdx.0 pi.0 pix.0 \
 .SUFFIXES: .1 .0
 
 .1.0:
-	${MANROFF} $*.1 > $*.0
+	${MANROFF} $< > $@
 
 all: _make_01 _make_02
 

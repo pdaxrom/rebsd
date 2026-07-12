@@ -3,6 +3,7 @@
 #
 TOPSRC = $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+CMD_PARENT_SRC  = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/..,..)
 
 CFLAGS += -Wall -Werror -fno-builtin \
     -Wno-implicit-function-declaration -Wno-implicit-int \
@@ -10,7 +11,7 @@ CFLAGS += -Wall -Werror -fno-builtin \
     -Wno-unused-variable -Wno-parentheses \
     -Wno-deprecated-non-prototype \
     -Wno-comment -Wno-endif-labels \
-    -I../telnetlib \
+    -I$(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/../telnetlib,../telnetlib) \
     -I$(TOPSRC)/sys -I$(TOPSRC)/sys/include
 
 BIN=telnet
@@ -25,11 +26,11 @@ $(BIN): $(OBJS)
 	$(SIZE) $(BIN).elf
 	$(ELF2AOUT) $(BIN).elf $@ && rm $(BIN).elf
 
-telcrypto.o: ../telnetlib/telcrypto.c ../telnetlib/telcrypto.h
-	$(CC) $(CFLAGS) -c -o $@ ../telnetlib/telcrypto.c
+telcrypto.o: $(CMD_PARENT_SRC)/telnetlib/telcrypto.c $(CMD_PARENT_SRC)/telnetlib/telcrypto.h
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(MAN): $(MANSRC)
-	nroff -man $(MANSRC) > $(MAN)
+	nroff -man $< > $(MAN)
 
 install: all
 	cp $(MAN) $(DESTDIR)/share/man/cat1/

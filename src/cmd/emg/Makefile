@@ -3,6 +3,7 @@
 
 TOPSRC =	$(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+EMG_SRCDIR =	$(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
 
 # Some basic CFLAGS.
 CFLAGS =	-Os -Wall -Werror
@@ -33,12 +34,12 @@ emg:	${OBJS}
 	${ELF2AOUT} emg.elf $@ && rm emg.elf
 
 ${MAN}:	${MANSRC}
-	${MANROFF} ${MANSRC} > ${MAN}
+	${MANROFF} $< > ${MAN}
 
 install: all
 	install emg ${DESTDIR}/bin/emg
 	cp ${MAN} ${DESTDIR}/share/man/cat1/
-	cp -p emg.keys ${DESTDIR}/share/emg.keys
+	cp -p $(EMG_SRCDIR)/emg.keys ${DESTDIR}/share/emg.keys
 
 clean:
 	rm -f *.o *~ *.core *.bak *.dis emg ${MAN}

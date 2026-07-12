@@ -10,12 +10,19 @@
 # to move them to the front of termcap
 #
 DESTDIR = ../../..
+TERMCAP_SRCDIR = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
+TERMCAP_REORDER = $(TERMCAP_SRCDIR)/reorder
+TERMCAP_SOURCE = $(TERMCAP_SRCDIR)/termcap.src
+TERMCAP_LOCAL = $(TERMCAP_SRCDIR)/termcap.local
+TERMCAP_SMALL = $(TERMCAP_SRCDIR)/termcap.small
 
-termcap.full: reorder termcap.src
-	ex - termcap.src < reorder
+termcap.full: $(TERMCAP_REORDER) $(TERMCAP_SOURCE) $(TERMCAP_LOCAL)
+	sed -e 's|termcap\.local|$(TERMCAP_LOCAL)|' \
+	    -e 's|termcap\.full|$(abspath $@)|' $(TERMCAP_REORDER) > reorder.obj
+	ex - $(TERMCAP_SOURCE) < reorder.obj
 
 install: termcap.small termcap.full
-	install -c -m 444 termcap.small ${DESTDIR}/etc/termcap
+	install -c -m 444 $(TERMCAP_SMALL) ${DESTDIR}/etc/termcap
 	install -c -m 444 termcap.full ${DESTDIR}/etc/termcap.full
 
 tabset: FRC
@@ -25,6 +32,6 @@ tabset: FRC
 	install -c -m 444 tabset/* ${DESTDIR}/usr/share/tabset
 
 clean:
-	rm -f termcap.full
+	rm -f termcap.full reorder.obj
 
 FRC:

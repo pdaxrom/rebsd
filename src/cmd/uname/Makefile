@@ -20,7 +20,7 @@ uname:          ${OBJS}
 		${ELF2AOUT} uname.elf $@ && rm uname.elf
 
 uname.0:        ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} uname *.elf *.dis tags *~

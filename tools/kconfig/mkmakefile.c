@@ -150,14 +150,10 @@ void read_files()
 
     ftab = 0;
     (void)strcpy(fname, "files.kconf");
-    fp = fopen(fname, "r");
+    fp = config_open(fname);
     if (fp == 0) {
-        (void)strcpy(fname, "../files.kconf");
-        fp = fopen(fname, "r");
-        if (fp == 0) {
-            perror(fname);
-            exit(1);
-        }
+        perror(fname);
+        exit(1);
     }
 next:
     /*
@@ -170,7 +166,7 @@ next:
         if (first == 1) {
             (void)sprintf(fname, "files.%s", raise(board));
             first++;
-            fp = fopen(fname, "r");
+            fp = config_open(fname);
             if (fp != 0)
                 goto next;
         }
@@ -465,14 +461,10 @@ void makefile()
     read_files();
     strcpy(line, "Makefile.kconf");
     // strcat(line, archname);
-    ifp = fopen(line, "r");
+    ifp = config_open(line);
     if (ifp == 0) {
-        strcpy(line, "../Makefile.kconf");
-        ifp = fopen(line, "r");
-        if (ifp == 0) {
-            perror(line);
-            exit(1);
-        }
+        perror(line);
+        exit(1);
     }
     ofp = fopen("Makefile", "w");
     if (ofp == 0) {

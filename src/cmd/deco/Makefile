@@ -3,6 +3,7 @@
 #
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+DECO_SRCDIR	= $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
 
 CFLAGS		+= -DHAVE_SYS_WAIT_H=1 -DHAVE_FCNTL_H=1 \
 		   -DHAVE_SYS_IOCTL_H=1 -DHAVE_UNISTD_H=1 \
@@ -36,7 +37,7 @@ $(BIN):		$(OBJS)
 .SUFFIXES:	.0 .1
 
 .1.0:
-		$(MANROFF) $*.1 > $@
+		$(MANROFF) $< > $@
 
 .S.o:
 		$(CC) $(CFLAGS) -x assembler-with-cpp -c $< -o $@
@@ -50,8 +51,8 @@ install:	all
 		mkdir -p $(DESTDIR)/usr/lib/deco/help
 		install -m 755 $(BIN) $(DESTDIR)/usr/bin
 		cp $(MAN) $(DESTDIR)/usr/share/man/cat1/
-		cp menu profile $(DESTDIR)/usr/lib/deco/
-		cp $(HELP) $(DESTDIR)/usr/lib/deco/help/
+		cp $(addprefix $(DECO_SRCDIR)/,menu profile) $(DESTDIR)/usr/lib/deco/
+		cp $(addprefix $(DECO_SRCDIR)/,$(HELP)) $(DESTDIR)/usr/lib/deco/help/
 
 lint:		$(SRCS)
 		lint -hax $(SRCS)

@@ -26,5 +26,5 @@ install:        all
 		install pdc $(DESTDIR)/bin/
 
 pdc.o:          pdc.y
-		$(YACC) -d $(YFLAGS) pdc.y
+		$(YACC) -d $(YFLAGS) $<
 		$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o pdc.o y.tab.c

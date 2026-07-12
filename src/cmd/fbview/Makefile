@@ -27,12 +27,12 @@ $(BIN):		$(OBJS)
 		$(ELF2AOUT) $@.elf $@ && rm $@.elf
 
 fbview_stb.o:	fbview_stb.c fbview_stb.h $(STB_HDRS)
-		$(CC) $(STB_CFLAGS) -c fbview_stb.c
+		$(CC) $(STB_CFLAGS) -c $<
 
 .SUFFIXES:	.0 .1
 
 .1.0:
-		$(MANROFF) $*.1 > $@
+		$(MANROFF) $< > $@
 
 clean:
 		rm -f *.o *.elf $(MAN) *.dis tags *~ $(BIN)

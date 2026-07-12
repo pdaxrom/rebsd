@@ -22,7 +22,7 @@ md5:             ${OBJS}
 		${ELF2AOUT} md5.elf $@ && rm md5.elf
 
 $(MAN):         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		-rm -f md5 ${OBJS} ${MAN} md5.elf md5.dis

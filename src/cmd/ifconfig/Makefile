@@ -28,7 +28,7 @@ $(BIN):		$(OBJS)
 .SUFFIXES:	.0 .8
 
 .8.0:
-		$(MANROFF) $*.8 > $@
+		$(MANROFF) $< > $@
 
 clean:
 		rm -f *.o *.elf $(MAN) *.dis tags *~ $(BIN)

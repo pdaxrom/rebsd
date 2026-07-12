@@ -20,7 +20,7 @@ umount:         ${OBJS}
 		${ELF2AOUT} umount.elf $@ && rm umount.elf
 
 umount.0:       ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} umount *.elf *.dis tags *~

@@ -20,7 +20,7 @@ chflags:        ${OBJS}
 		${ELF2AOUT} chflags.elf $@ && rm chflags.elf
 
 chflags.0:      ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} chflags *.elf *.dis tags *~

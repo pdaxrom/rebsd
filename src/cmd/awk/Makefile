@@ -1,7 +1,8 @@
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
+AWK_SRCDIR      = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR),.)
 
-CFLAGS		+= -Werror -Os
+CFLAGS		+= -Werror -Os -I. -I$(AWK_SRCDIR)
 
 YACC            = bison -y
 YFLAGS          = -d
@@ -24,9 +25,13 @@ awk.h:          y.tab.h
 $(FILES):	awk.h awk.def.h
 
 awk.lx.o:	CFLAGS += -Wno-error
+awk.lx.o:	awk.lx.c
+awk.g.o:	awk.g.c
+
+.SECONDARY:	awk.lx.c awk.g.c
 
 token.h:	awk.h tokenscript
-		ex - < tokenscript
+		ex - < $(AWK_SRCDIR)/tokenscript
 
 install:        awk
 		install awk ${DESTDIR}/bin/
@@ -39,7 +44,7 @@ lint:
 			egrep -v '^(error|free|malloc)'
 
 proctab.c:	proc.c token.h awk.h
-		cc -std=gnu89 -Wall -Werror -o proc proc.c
+		cc -std=gnu89 -Wall -Werror -o proc $<
 		./proc > proctab.c
 
 clean:

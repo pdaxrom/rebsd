@@ -28,7 +28,7 @@ OBJS=	ascii.0 environ.0 eqnchar.0 hier.0 hostname.0 intro.0 mailaddr.0 \
 .SUFFIXES: .7 .0
 
 .7.0:
-	${MANROFF} $*.7 > $*.0
+	${MANROFF} $< > $@
 
 all: _make_01
 

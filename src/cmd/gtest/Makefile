@@ -4,7 +4,7 @@
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
 
-CFLAGS		+= -Werror -I../../../sys/include
+CFLAGS		+= -Werror -I$(TOPSRC)/sys/include
 
 SRCS            = globread.c globwrite.c
 OBJS            = globread.o globwrite.o

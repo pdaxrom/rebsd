@@ -20,7 +20,7 @@ xargs:          ${OBJS}
 		${ELF2AOUT} xargs.elf $@ && rm xargs.elf
 
 ${MAN}:        	${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} xargs *.elf *.dis tags *~

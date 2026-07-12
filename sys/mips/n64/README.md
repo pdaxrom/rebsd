@@ -558,17 +558,18 @@ The 2026-07-07 run completed both variants, built `linpack-pcc`, passed
 build-only gate; real-hardware smoke is tracked separately.
 
 The PCC optimization hardware image uses a GCC kernel and PCC VR4300
-hard-float a.out userland.  Build it from a regenerated, clean board tree:
+hard-float a.out userland.  The architecture entry point creates a clean
+out-of-tree profile automatically:
 
 ```
-make -C sys/mips/n64 reconfig
-make -C sys/mips/n64 clean
-make -C sys/mips/n64 N64_KERNEL_COMPILER=gcc \
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc \
     N64_USERLAND_COMPILER=pcc N64_USERLAND_CPU=vr4300 \
     N64_USERLAND_FLOAT=hard N64_USERLAND_EXEC_FORMAT=aout \
-    N64_DEBUG_UART_ONLY=1 N64_PCC_DEBUG_ROOTFS_KBYTES=6144 \
-    pcc-debug.z64
+    N64_PCC_DEBUG_ROOTFS_KBYTES=6144 pcc-debug-image
 ```
+
+The resulting ROM is under
+`../retrobsd-build/n64-kgcc-upcc-vr4300-hard-big-aout/obj/sys/mips/n64/`.
 
 This image includes `/root/linpack-gcc` and `/root/linpack-pcc`, built from
 the same source with `-O2`, array size 120, and a one-second minimum timing

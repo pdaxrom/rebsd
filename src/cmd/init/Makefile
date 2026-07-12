@@ -17,7 +17,7 @@ init:		${OBJS}
 		${ELF2AOUT} init.elf $@ && rm init.elf
 
 init.0:		${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *~ *.elf *.dis ${MAN} init tags

@@ -43,6 +43,7 @@ def write_command(master, command, line_delay, chunk_size, chunk_delay):
 def command_run(args):
     malta = Path(args.malta_dir)
     log = Path(args.log)
+    log.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         args.qemu,
         "-M",

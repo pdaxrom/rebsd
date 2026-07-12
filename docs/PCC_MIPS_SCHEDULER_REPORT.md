@@ -1590,8 +1590,8 @@ All six PCC-kernel/PCC-rootfs profiles reported
 `PCC_SMOKE_ALL_FAILURES 0`.  Kernels retain their explicit
 `-msoft-float -fomit-frame-pointer`; no assembler macro expanded into a
 multi-instruction branch delay slot.  The VR4300 multiply erratum default and
-`-mfix4300` / `-mno-fix4300` controls are unchanged.  A clean physical N64
-comparison image is the remaining G5 gate.
+`-mfix4300` / `-mno-fix4300` controls are unchanged.  Physical N64 validation
+passed after the clean out-of-tree rebuild described below.
 
 ### G5 N64 Comparison Artifact
 
@@ -1613,4 +1613,20 @@ debug runner sha256: 069cd338accd3206b291606f6b186747ed5be11efd8219f0c6ed67a2e80
 The image passes `fsutil --check`; both Linpack binaries have zero undefined
 symbols and their libc archives are independently built.  The GCC binary and
 kernel ELF match G4.  G5 reduces linked PCC Linpack by another 336 section
-bytes.  Physical N64 correctness and performance remain the deciding gate.
+bytes.
+
+The 2026-07-12 hardware run used a fresh out-of-tree image with SHA-256
+`6624001a706a305045b2d4c0e25e577249eed0e645fe151f7bf435c1e430a305`.
+Its kernel ELF SHA-256 remains
+`a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1`.
+The measured rows were:
+
+```text
+       Reps       GCC KFLOPS       PCC KFLOPS       PCC/GCC
+          8          4457.907          3257.149        73.06%
+         16          4367.264          3278.433        75.07%
+```
+
+Both Linpack return codes, `N64_PCC_DEBUG_END`, and
+`N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal
+`N64_PCC_DEBUG_RC_END` marker was present.  This closes the G5 physical gate.

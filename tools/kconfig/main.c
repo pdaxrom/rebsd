@@ -31,6 +31,7 @@
  * SUCH DAMAGE.
  */
 #include <ctype.h>
+#include <limits.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -41,6 +42,23 @@
 
 struct file_list *conf_list;
 int debugging;
+static char config_source_dir[PATH_MAX];
+
+FILE *
+config_open(const char *name)
+{
+    FILE *fp;
+    char path[PATH_MAX];
+
+    if (snprintf(path, sizeof(path), "%s/%s", config_source_dir, name) < (int)sizeof(path)) {
+        fp = fopen(path, "r");
+        if (fp != NULL)
+            return fp;
+    }
+    if (snprintf(path, sizeof(path), "%s/../%s", config_source_dir, name) < (int)sizeof(path))
+        return fopen(path, "r");
+    return NULL;
+}
 
 /*
  * Config builds a set of files for building a UNIX
@@ -49,6 +67,7 @@ int debugging;
 int main(int argc, char **argv)
 {
     int ch;
+    char *slash;
 
     while ((ch = getopt(argc, argv, "g")) != EOF)
         switch (ch) {
@@ -67,6 +86,19 @@ int main(int argc, char **argv)
         fputs("usage: kconfig [-gp] sysname\n", stderr);
         exit(1);
     }
+
+    if (strlen(*argv) >= sizeof(config_source_dir)) {
+        fprintf(stderr, "config: source path is too long: %s\n", *argv);
+        exit(2);
+    }
+    strcpy(config_source_dir, *argv);
+    slash = strrchr(config_source_dir, '/');
+    if (slash == NULL)
+        strcpy(config_source_dir, ".");
+    else if (slash == config_source_dir)
+        slash[1] = '\0';
+    else
+        *slash = '\0';
 
     if (!freopen(*argv, "r", stdin)) {
         perror(*argv);

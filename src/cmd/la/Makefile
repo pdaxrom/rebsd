@@ -20,7 +20,7 @@ la:          	${OBJS}
 		${ELF2AOUT} la.elf $@ && rm la.elf
 
 $(MAN):         ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f *.o *.elf ${MAN} la *.elf *.dis tags *~

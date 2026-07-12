@@ -31,7 +31,7 @@ chroot:         ${OBJS}
 		${ELF2AOUT} chroot.elf $@ && rm chroot.elf
 
 chroot.0:       ${MANSRC}
-		${MANROFF} ${MANSRC} > ${MAN}
+		${MANROFF} $< > ${MAN}
 
 clean:
 		rm -f ${OBJS} ${MAN} core chroot chroot.elf chroot.dis *~

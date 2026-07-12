@@ -27,6 +27,19 @@ See `docs/ORIGIN.md` for attribution and compatibility policy.
 
 ## Build
 
+Current MIPS boards use out-of-tree builds.  For example:
+
+```shell
+make -C sys/mips BOARD=malta64 O=/work/rebsd-malta64 all
+make -C sys/mips BOARD=n64 O=/work/rebsd-n64 \
+    N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc all
+```
+
+When `O` is omitted, a configuration-specific directory is created under the
+sibling `../retrobsd-build` directory.  See
+[docs/OUT_OF_TREE_BUILDS.md](docs/OUT_OF_TREE_BUILDS.md) for artifact paths,
+parallel builds, cleanup, and GNU make compatibility.
+
 To compile everything from sources, you'll need some packages installed, namely:
 Clang compiler, LLVM linker, Berkeley YACC, GNU bison, flex, groff and ELF library.
 Under Ubuntu, for example, you can do it by command:

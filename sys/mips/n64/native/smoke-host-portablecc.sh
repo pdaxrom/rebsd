@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
+# RetroBSD recursive builds use an object-directory dispatcher as MAKE.  PCC's
+# own generated Makefiles live outside that tree and must use the underlying
+# make executable instead.
+MAKE=${REBSD_REAL_MAKE:-${MAKE:-make}}
+export MAKE
+
 if [ $# -lt 6 ] || [ $# -gt 11 ]; then
 	echo "usage: $0 topsrc builddir prefix include-dir rebsd-as rebsd-ld [cpu] [float-abi] [endian] [ldscript] [exec-format]" >&2
 	exit 2
@@ -121,12 +127,12 @@ CFLAGS="${CFLAGS:-} $endian_cflags -DMIPS_CPU_DEFAULT=$cpu_default $float_cflags
 	--with-assembler="$target_as" \
 	--with-linker="$target_ld"
 
-${MAKE:-make} -B -C cc/cc all
-${MAKE:-make} -B -C cc/cpp all
-${MAKE:-make} -B -C cc/ccom all
-${MAKE:-make} -C cc/cc install
-${MAKE:-make} -C cc/cpp install
-${MAKE:-make} -C cc/ccom install
+"$MAKE" -B -C cc/cc all
+"$MAKE" -B -C cc/cpp all
+"$MAKE" -B -C cc/ccom all
+"$MAKE" -C cc/cc install
+"$MAKE" -C cc/cpp install
+"$MAKE" -C cc/ccom install
 
 pcc=$target_bindir/$target-pcc
 test -x "$pcc"

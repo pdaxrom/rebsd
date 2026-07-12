@@ -4,7 +4,7 @@ TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
 #include $(TOPSRC)/cross.mk
 
-CFLAGS		+= -Werror -Wall -I../ar -g
+CFLAGS		+= -Werror -Wall -I$(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/../ar,../ar) -g
 LDFLAGS         += -g
 
 OBJS            = main.o doname.o misc.o files.o dosys.o y.tab.o
@@ -24,4 +24,4 @@ install:        all
 		install xmake $(DESTDIR)/bin/make
 
 y.tab.c:        gram.y
-		$(YACC) gram.y
+		$(YACC) $<
