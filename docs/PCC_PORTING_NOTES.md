@@ -878,7 +878,13 @@ a variable generic call, and a function pointer.  Cross regression passes
 VR4300 regression passes 294/294 runtime cases with zero unexpected failures.
 All six PCC-kernel/PCC-rootfs Malta profiles pass full `pcc-smoke-all.sh`,
 including hard/soft float and both MIPS32R2 endian modes.  Physical N64
-validation is still required before closing Milestone F.
+validation is still required before closing Milestone F.  The clean hardware
+candidate is
+`sys/mips/n64/builds/20260712-milestone-f1-static-specialization-gcc-kernel/pcc-debug.z64`,
+SHA-256
+`30be99a022c0c10e3e2eb64b914071ba09ee252b49f095e00fdfc06eefcfb685`.
+It uses a GCC kernel, PCC VR4300 hard-float a.out userland, default
+`-mfix4300`, and isolated GCC/PCC Linpack runtimes.
 
 VR4300 Linpack falls from 48 to 23 integer multiplies and from 2349 to 2337
 instructions.  It adds eight loads and three stores from register pressure,

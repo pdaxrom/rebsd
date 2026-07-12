@@ -4418,9 +4418,14 @@ Milestone order:
     is a frontend/SSA feature, not MIPS backend IPA, and is limited to hosted
     `-O2+`, one clone per pre-definition static callee, and small control
     constants.  Cross/native regression and all six QEMU smoke profiles pass.
-  - [ ] Build the normal GCC-kernel/PCC-hard-float-a.out N64 comparison image
-    and close the milestone only after physical VR4300 smoke and Linpack
-    results confirm the software/QEMU gain.
+  - [x] The clean GCC-kernel/PCC-hard-float-a.out N64 comparison image is
+    `sys/mips/n64/builds/20260712-milestone-f1-static-specialization-gcc-kernel/pcc-debug.z64`,
+    SHA-256
+    `30be99a022c0c10e3e2eb64b914071ba09ee252b49f095e00fdfc06eefcfb685`.
+    It carries `.build-mode.gcc.1.0.0.1`, default `-mfix4300`, and separate
+    GCC- and PCC-built Linpack runtimes.
+  - [ ] Close the milestone only after physical VR4300 smoke and Linpack
+    results confirm the software/QEMU result.
 - [ ] Milestone G: repeat Malta, Malta64/R4000, and real N64 benchmark gates;
   decide whether further work belongs in PCC or in source-level hot paths.
 

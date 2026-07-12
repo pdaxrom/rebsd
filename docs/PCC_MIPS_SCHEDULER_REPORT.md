@@ -1112,3 +1112,77 @@ only 0.009% from E4, while PCC improved by 2.22% from 3094.330 KFLOPS.  This
 confirms a real, if modest, hardware gain and closes the scoped Milestone E.
 The remaining gap is now assigned to measured call/inlining specialization,
 not to broadening the loop transform without a workload-backed case.
+
+## Milestone F1: Bounded Static Constant Specialization
+
+Implementation commit `298c4565` adds a target-independent frontend/SSA
+specialization path without enabling PCC's general automatic `-xinline` path.
+Hosted `-O2` and `-O3` direct calls to a not-yet-defined file-local function
+may select one clone when a bounded argument list contains useful `-1`, `0`,
+or `1` integer constants.  The transform rejects calls after the definition,
+variadic and indirect calls, `-O`, `-Os`, and `-ffreestanding` compilations.
+The PCC kernel therefore remains outside the transform.
+
+Linpack selects exactly seven helpers: `idamax`, the rolled and unrolled
+`dscal`, `daxpy`, and `ddot` variants.  `dgefa` and `dgesl` remain generic.
+When every use has the selected signature, only the clone is emitted; a
+generic call or address use also retains the original body.
+
+### F1 Static Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  bytes
+VR4300 E5 baseline             2375       2248   127    429     227  71622
+VR4300 F1                      2289       2172   117    431     226  70371
+MIPS32R2 F1 hard               2412       2309   103    549     272  69823
+MIPS32R2 F1 soft               3695       3601    94   1016     554  99839
+```
+
+MIPS32R2 big- and little-endian assembly counters are identical for each
+float mode.  The linked N64 PCC Linpack decreases from 41552 E5 section bytes
+to 41360 F1 section bytes.  The permanent `ssaspecialize001` regression covers
+the specialized call, a variable generic fallback, and a function pointer.
+
+### F1 Regression Gates
+
+Cross regression compiled 331 of 334 tests with only the three established
+expected failures and produced 294 runtime candidates.  Native VR4300 PCC
+compiled 304 cases, observed 30 expected compile failures, and passed 294/294
+runtime cases with `NATIVE_PCC_REGRESS_RC:0`.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 12970.014 / 13140.267 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1071.303 / 1076.476 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13080.427 / 13053.180 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1078.573 / 1152.621 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13192.531 / 13190.312 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1181.722 / 1106.247 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for both kernel and root filesystem and reported
+`PCC_SMOKE_ALL_FAILURES 0`.  Kernels retained
+`-msoft-float -fomit-frame-pointer` and contain no specialization clone.  The
+default `-mfix4300` erratum repair is unchanged.
+
+### F1 N64 Comparison Artifact
+
+The clean image uses a GCC kernel and PCC VR4300 hard-float a.out userland.
+The GCC Linpack uses its separate GCC-built crt0, libc, and libm; archive
+comparison confirms the GCC and PCC libc files differ.
+
+```text
+sys/mips/n64/builds/20260712-milestone-f1-static-specialization-gcc-kernel/pcc-debug.z64
+implementation commit: 298c4565
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 30be99a022c0c10e3e2eb64b914071ba09ee252b49f095e00fdfc06eefcfb685
+kernel ELF sha256: a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 41360 section bytes, sha256 4a20f3957e8e16917ff567ff57d389afc5585aac58b4f329f7db717a9b6e126f
+debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c882f9d9
+```
+
+The build passed `fsutil --check`; both Linpack binaries have zero undefined
+symbols.  The PCC executable contains exactly the seven expected
+`__pcc_spec_*` local symbols.  Physical N64 smoke and comparative Linpack
+results are the remaining F1 gate.
