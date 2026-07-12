@@ -4459,8 +4459,12 @@ Milestone order:
   - [x] G2 software gate: hard-float GPR-passed FP parameter promotion plus
     the exact FPU load/move gap fill pass host, cross, native, strict A/B, and
     all six full QEMU profiles.
-  - [ ] Build and run the clean G2 GCC-kernel/PCC-hard-float-a.out-userland
-    comparison image on physical N64.  Do not close G2 or Milestone G from
+  - [x] The clean G2 GCC-kernel/PCC-hard-float-a.out-userland comparison image
+    is
+    `sys/mips/n64/builds/20260712-milestone-g2-fpu-param-temp-gcc-kernel/pcc-debug.z64`,
+    SHA-256
+    `9106cbd1b3cac395d35d4c243815a42426186199c19f73a58bc89d417abeb854`.
+  - [ ] Run that image on physical N64.  Do not close G2 or Milestone G from
     QEMU timing alone.
 
 Success criteria:

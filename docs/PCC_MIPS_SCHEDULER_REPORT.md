@@ -1273,3 +1273,24 @@ All six profiles used PCC for both kernel and root filesystem, retained
 `-mfix4300` / `-mno-fix4300` selection are unchanged.  QEMU does not model the
 physical multiply erratum; G2 remains open until the clean comparison image
 passes on real N64 hardware.
+
+### G2 N64 Comparison Artifact
+
+The clean image uses a GCC kernel and PCC VR4300 hard-float a.out userland.
+The GCC Linpack uses a separate GCC-built crt0, libc, and libm.  The artifact
+was built after implementation commit `cf086503`.
+
+```text
+sys/mips/n64/builds/20260712-milestone-g2-fpu-param-temp-gcc-kernel/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 9106cbd1b3cac395d35d4c243815a42426186199c19f73a58bc89d417abeb854
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 41360 section bytes, sha256 ffe99b95c00723c8e9bdafdca5cb3c316850087f7b44ea5f51df21bff14e6f25
+debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c882f9d9
+```
+
+The build passed `fsutil --check`; both Linpack binaries have zero undefined
+symbols.  The physical N64 correctness and performance result remains the
+deciding G2 gate.
