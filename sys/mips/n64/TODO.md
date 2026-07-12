@@ -229,7 +229,9 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] G5: default optimized VR4300/MIPS32R2 PCC userland to the existing frame
   omission path, with explicit opt-out and unchanged generic MIPS3 behavior.
   Cross/native regressions and all six full QEMU profiles pass.
-- [ ] Hardware-benchmark the clean G5 GCC-kernel/PCC-hard-float a.out image.
+- [x] Build the clean G5 GCC-kernel/PCC-hard-float a.out image; its PCC
+  Linpack is 39632 section bytes, 336 fewer than G4.
+- [ ] Hardware-benchmark the clean G5 image before continuing backend work.
 - [x] Boot-isolate the updated N64 kernel/rootfs path on real hardware with
   UART-only minimal ROMs: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap
   all reached login on 2026-07-06.  The minimal rootfs now includes

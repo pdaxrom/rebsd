@@ -1013,7 +1013,13 @@ instructions; BE/LE counters match.  Soft-float also passes in both endian
 modes.  Five alternating Malta64 pairs improve by 1.49%.  Cross/native
 regression passes 294 runtime candidates and all six PCC-kernel/PCC-rootfs
 QEMU profiles report zero failures.  Erratum option behavior is unchanged;
-physical N64 validation remains open.
+physical N64 validation remains open.  The clean GCC-kernel/PCC-hard-float
+a.out image is
+`sys/mips/n64/builds/20260712-milestone-g5-o2-frame-omit-gcc-kernel/pcc-debug.z64`,
+SHA-256
+`a71270c6bea582df7cfe3c104fd1f29e17dadfdda17eb3eaa4d92ef2ec0b4f19`.
+Its PCC Linpack is 39632 section bytes, 336 fewer than G4; GCC Linpack remains
+24600 section bytes and is byte-identical to G4.
 
 ## Out Of Scope For The C Gate
 

@@ -1592,3 +1592,25 @@ All six PCC-kernel/PCC-rootfs profiles reported
 multi-instruction branch delay slot.  The VR4300 multiply erratum default and
 `-mfix4300` / `-mno-fix4300` controls are unchanged.  A clean physical N64
 comparison image is the remaining G5 gate.
+
+### G5 N64 Comparison Artifact
+
+The clean image uses a GCC kernel and PCC VR4300 hard-float a.out userland.
+The GCC Linpack has its separate GCC-built runtime.  The artifact was built
+after implementation commit `0b7c35ee`.
+
+```text
+sys/mips/n64/builds/20260712-milestone-g5-o2-frame-omit-gcc-kernel/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: a71270c6bea582df7cfe3c104fd1f29e17dadfdda17eb3eaa4d92ef2ec0b4f19
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 39632 section bytes, sha256 9a3f7ac8f168b67586781cd4f7b0da749d8fa67219510a379a833d4c8d3e0c11
+debug runner sha256: 069cd338accd3206b291606f6b186747ed5be11efd8219f0c6ed67a2e8058cd1
+```
+
+The image passes `fsutil --check`; both Linpack binaries have zero undefined
+symbols and their libc archives are independently built.  The GCC binary and
+kernel ELF match G4.  G5 reduces linked PCC Linpack by another 336 section
+bytes.  Physical N64 correctness and performance remain the deciding gate.
