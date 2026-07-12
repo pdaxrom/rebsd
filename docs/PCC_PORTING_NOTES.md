@@ -984,7 +984,13 @@ runtime candidates, native VR4300 passes 294/294, and all six
 PCC-kernel/PCC-rootfs full QEMU profiles report zero failures.  Kernels retain
 `-msoft-float -fomit-frame-pointer`; VR4300 erratum option behavior is
 unchanged.  The small QEMU gain is not treated as a hardware result; physical
-N64 comparison remains open.
+N64 comparison remains open.  The clean GCC-kernel/PCC-hard-float-a.out image
+is
+`sys/mips/n64/builds/20260712-milestone-g4-constant-shift-cse-gcc-kernel/pcc-debug.z64`,
+SHA-256
+`23a82ec406f916b4f040cb3c14281368901afe21784cfa74fca8af542123fcba`.
+Its PCC Linpack is 39968 section bytes, 256 fewer than G3; GCC Linpack remains
+24600 section bytes and uses its separate GCC-built runtime.
 
 ## Out Of Scope For The C Gate
 

@@ -1488,4 +1488,26 @@ All six profiles used PCC for kernel and root filesystem, retained
 `PCC_SMOKE_ALL_FAILURES 0`.  No assembler macro expanded into a
 multi-instruction branch delay slot.  Default `-mfix4300` and explicit
 `-mfix4300` / `-mno-fix4300` behavior are unchanged.  Physical N64 validation
-is pending a clean GCC-kernel/PCC-hard-float-userland comparison image.
+is pending.
+
+### G4 N64 Comparison Artifact
+
+The clean image uses a GCC kernel and PCC VR4300 hard-float a.out userland.
+Its GCC Linpack again uses a separate GCC-built crt0, libc, and libm.  The
+artifact was built after implementation commit `63fac336`.
+
+```text
+sys/mips/n64/builds/20260712-milestone-g4-constant-shift-cse-gcc-kernel/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 23a82ec406f916b4f040cb3c14281368901afe21784cfa74fca8af542123fcba
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 39968 section bytes, sha256 7ae61b21313b60cf99afbb4586d0ccc70fbe4fe659453327ff94d1b077444f73
+debug runner sha256: 069cd338accd3206b291606f6b186747ed5be11efd8219f0c6ed67a2e8058cd1
+```
+
+The image passes `fsutil --check`; both Linpack binaries have zero undefined
+symbols.  GCC and PCC libc archives have different checksums.  G4 reduces the
+linked PCC Linpack by 256 section bytes relative to G3.  Physical N64
+correctness and performance remain the deciding gate.
