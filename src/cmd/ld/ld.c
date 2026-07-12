@@ -61,11 +61,7 @@
 #define DATA_ALIGN W
 #define BSS_ALIGN W
 #endif
-#if defined(TARGET_VR4300) || defined(TARGET_MIPS32R2)
 #define BADDR 0x00400000 /* ReBSD/MIPS user text base */
-#else
-#define BADDR 0x7f008000 /* PIC32 user text base */
-#endif
 #define SYMDEF "__.SYMDEF"
 #define IS_LOCSYM(s) ((s)->n_name[0] == 'L' || (s)->n_name[0] == '.')
 #define REBSD_CTORS_SIZE_SYM ".__rebsd_ctors_size"

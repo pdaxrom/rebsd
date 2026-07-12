@@ -165,10 +165,7 @@ Spec:
 Config_spec:
     ARCHITECTURE Save_id
         = {
-            if (strcmp($2, "pic32") == 0) {
-                arch = ARCH_PIC32;
-                archname = "pic32";
-            } else if (strcmp($2, "mips") == 0) {
+            if (strcmp($2, "mips") == 0) {
                 arch = ARCH_MIPS;
                 archname = "mips";
             } else
@@ -790,7 +787,6 @@ void check_nexus(struct device *dev, int num)
 {
     switch (arch) {
 
-    case ARCH_PIC32:
     case ARCH_MIPS:
         break;
     }

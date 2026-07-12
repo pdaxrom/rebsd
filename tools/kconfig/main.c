@@ -111,19 +111,11 @@ int main(int argc, char **argv)
     if (yyparse())
         exit(3);
 
-    switch (arch) {
-    case ARCH_PIC32:
-        pic32_ioconf();
-        break;
-
-    case ARCH_MIPS:
-        pic32_ioconf();
-        break;
-
-    default:
-        printf("Specify architecture, e.g. ``architecture pic32'' or ``architecture mips''\n");
+    if (arch != ARCH_MIPS) {
+        printf("Specify architecture, e.g. ``architecture mips''\n");
         exit(1);
     }
+    ioconf();
     makefile(); /* build Makefile */
     swapconf(); /* swap config files */
     exit(0);

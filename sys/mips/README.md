@@ -20,7 +20,7 @@ Both Malta and N64 are built as boards under the shared `sys/mips` architecture.
 Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
 `make -C sys/mips BOARD=malta kernel` for the QEMU Malta kernel.
 Use `make -C sys/mips BOARD=maltael rootfs.img kernel` for the little-endian
-Malta bring-up.  PIC32 is not part of the current supported MIPS gate matrix.
+Malta bring-up. The obsolete PIC32 port has been removed from ReBSD.
 
 All generated files are placed in an object root.  In `O=/path/to/build`, `O`
 is the uppercase Latin letter O (for object/output), not the digit zero `0`.

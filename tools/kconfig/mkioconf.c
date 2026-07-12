@@ -61,8 +61,7 @@ static char *wnum(int num)
     return (errbuf);
 }
 
-#if ARCH_PIC32
-void pic32_ioconf()
+void ioconf()
 {
     register struct device *dp, *mp;
     FILE *fp;
@@ -136,4 +135,3 @@ void pic32_ioconf()
     service_ioconf(fp);
     fclose(fp);
 }
-#endif

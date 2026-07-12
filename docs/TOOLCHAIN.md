@@ -135,7 +135,8 @@ make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc
 make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
 ```
 
-The QEMU PCC smoke matrix verified on 2026-07-09 from a clean checkout is:
+The QEMU PCC smoke matrix verified on 2026-07-12 from clean, independent
+out-of-tree builds after removing the obsolete PIC32 port is:
 
 ```text
 malta64 vr4300  hard  /root/pcc-smoke-all.sh  PCC_SMOKE_ALL_RC:0
@@ -157,7 +158,8 @@ make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64
 make -C sys/mips BOARD=ci20 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc all
 ```
 
-PIC32 is not part of the current supported gate matrix.
+The obsolete PIC32 port is not part of ReBSD; the supported targets are the
+MIPS boards listed above.
 
 The PCC hard-float kernel/rootfs gates were rerun on 2026-07-06 after the MIPS
 `-fomit-frame-pointer` pass-ordering fix:

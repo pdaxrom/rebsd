@@ -579,7 +579,7 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
 	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
 	    printf '\nfile %s\n' "$$rel" >> $@; \
 	done
-	find $(MIPS_ROOTFS_USR_INCLUDE) -maxdepth 1 -type l ! -name pic32 | \
+	find $(MIPS_ROOTFS_USR_INCLUDE) -maxdepth 1 -type l | \
 	    sort | while read path; do \
 	    rel=$${path#$(MIPS_ROOTFS_STAGE)}; \
 	    target=$$(readlink "$$path"); \
@@ -692,8 +692,8 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 	    cp -p $(TOPSRC)/sys/mips/$$header.h \
 	        $(MIPS_ROOTFS_USR_INCLUDE)/machine/$$header.h; \
 	done
-	cp -p $(TOPSRC)/sys/mips/include/machine/types.h \
-	    $(MIPS_ROOTFS_USR_INCLUDE)/machine/types.h
+	cp -p $(TOPSRC)/sys/mips/include/machine/*.h \
+	    $(MIPS_ROOTFS_USR_INCLUDE)/machine/
 	mkdir -p $(MIPS_ROOTFS_STAGE)/lib
 	mkdir -p $(MIPS_ROOTFS_STAGE)/sbin
 	mkdir -p $(MIPS_ROOTFS_STAGE)/bin

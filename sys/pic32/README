@@ -1,9 +1,0 @@
-Build directories:
-
-    attic/          - Unsupported boards
-
-    explorer16/     - Microchip Explorer 16 board,
-                      with PIC32MX plug-in module
-                      and SD & MMC pictail
-
-    olimex/         - Olimex PIC32-Retrobsd board

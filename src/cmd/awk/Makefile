@@ -44,7 +44,7 @@ lint:
 			egrep -v '^(error|free|malloc)'
 
 proctab.c:	proc.c token.h awk.h
-		cc -std=gnu89 -Wall -Werror -o proc $<
+		cc -std=gnu89 -Wall -Werror -I. -I$(AWK_SRCDIR) -o proc $<
 		./proc > proctab.c
 
 clean:

@@ -52,7 +52,7 @@
 #include <sys/conf.h>
 
 #ifndef HW_MACHINE_NAME
-#define HW_MACHINE_NAME "pic32"
+#define HW_MACHINE_NAME "mips"
 #endif
 #ifndef HW_MODEL_NAME
 #define HW_MODEL_NAME "mips"

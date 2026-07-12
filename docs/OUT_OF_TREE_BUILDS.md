@@ -4,6 +4,12 @@ MIPS builds keep generated files outside the source tree.  Invoke a board
 through the shared architecture entry point and select an object root with
 `O`:
 
+The source tree deliberately does not ignore compiler outputs in source and
+board directories. If a build writes there, `git status` exposes the problem.
+Narrow `.gitignore` files remain only for filesystem skeleton directories such
+as `bin`, `sbin`, `libexec`, and preformatted manual directories; those files
+also keep required empty directories in Git.
+
 `O` is the uppercase Latin letter O (for object/output), not the digit zero
 `0`.  The assignment syntax is `O=/path/to/build`.
 
