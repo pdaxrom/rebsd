@@ -833,6 +833,29 @@ shows that removing the static duplicates reduces code size but does not
 address Linpack's dominant dynamic cost; loop-carried address strength
 reduction remains necessary.
 
+The 2026-07-12 induction-strength pass implements that next step for expensive
+integer multiplication.  It recognizes only a canonical SSA loop with one
+external predecessor, one dominated latch, a `+1` or `-1` phi update, and an
+invariant integer stride defined before the preheader.  It creates one scaled
+phi, computes the initial scale on the entry edge, advances it with an add or
+subtract on the back edge, and replaces exact `index * stride` uses dominated
+by the loop header.  A zero initial index does not emit a preheader multiply.
+Only one stride is reduced per induction phi to bound register pressure.
+
+The pass is disabled unless the target opts in.  MIPS enables it when
+`MIPS_CAP_MUL3` is absent, covering VR4300/MIPS III HI/LO multiplication.
+MIPS32R2 remains byte-identical to the previous milestone because its direct
+`mul` is cheap and an unrestricted prototype reduced QEMU Linpack by about
+3.8% through added live ranges and spills.  The target-specific policy remains
+a two-line cost hook instead of being duplicated in the MIPS optimizer.
+
+VR4300 Linpack falls from 48 to 23 integer multiplies and from 2349 to 2337
+instructions.  It adds eight loads and three stores from register pressure,
+so the hardware benchmark remains the deciding performance gate.  All six
+host profiles and all six full PCC-kernel/PCC-rootfs QEMU profiles pass.
+Native VR4300 regression passes 293/293 runtime tests, including canonical
+ascending/descending loops and a variable-step negative case.
+
 The current hard-float PCC full zswap ROM has reached root login on real N64
 hardware and can run basic shell commands.  It is slow on hardware, and the
 `uname -a` panic suggests an unresolved timing/race or interrupt-path issue

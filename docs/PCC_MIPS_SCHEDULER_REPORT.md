@@ -1021,3 +1021,83 @@ lower than E3 and therefore within measurement noise.  E4 reduces static code
 but does not improve the hardware performance ratio.  This closes the E4 gate
 and makes loop induction-variable strength reduction the next measured target.
 QEMU cannot reproduce the physical VR4300 multiply erratum.
+
+## Milestone E5: VR4300 Loop Induction Strength Reduction
+
+Implementation commit `ba59488e` adds a narrow machine-independent SSA
+strength-reduction pass with a target cost hook.  It accepts only a loop header
+with one preheader and one dominated latch, an integer phi updated by exactly
+`+1` or `-1` in the latch, and an invariant SSA stride whose definition
+dominates the preheader.  The pass creates a scaled phi and advances it with
+one add or subtract on the back edge.  A zero initial index is materialized as
+zero instead of multiplying in the preheader.
+
+Only one stride is reduced per induction phi.  This deliberately bounds new
+live ranges and avoids turning the pass into a general loop optimizer.  MIPS
+opts in only without `MIPS_CAP_MUL3`; VR4300/MIPS III uses the transform while
+MIPS32R2 retains its direct `mul` code.  An unrestricted prototype made
+MIPS32R2 hard-float QEMU Linpack about 3.8% slower due to spills, so the cost
+gate is based on measurement rather than ISA generality.
+
+The permanent `ssastrength001` regression covers ascending and descending
+unit-step loops plus a variable-step negative case.  VR4300 assembly must have
+zero, one, and two multiplies respectively.  MIPS32R2 must retain two in all
+three helpers.
+
+### E5 Static Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  branches  jumps  mul/div  bytes
+VR4300 E4 baseline             2349       2226   123    429     227       109    120       50  71140
+VR4300 E5                      2337       2216   121    437     230       109    120       25  71288
+MIPS32R2 E4/E5                 2462       2356   106    558     276       109    120        2  70723
+```
+
+The VR4300 integer multiply count itself drops from 48 to 23; the remaining
+two `mul/div` entries are integer divides.  MIPS32R2 assembly is byte-identical
+to E4 and retains 48 direct `mul` instructions; the table's `mul/div` counter
+tracks HI/LO sequences.  Unoptimized `optim003.c` remains byte-identical at
+SHA-256 `bff0d1f27f8ab0b61e07de14db8313979e788d03be521282055fb327f6fb08ef`.
+
+### E5 Regression Gates
+
+Cross regression compiled 330 of 333 tests with only the three established
+expected failures and produced 293 runtime candidates.  Native VR4300 PCC
+compiled 303 cases, observed 30 expected compile failures, and passed 293/293
+runtime cases with `NATIVE_PCC_REGRESS_RC:0`.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 13433.180 / 13209.286 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1033.647 / 1044.695 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13576.847 / 13726.165 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1187.897 / 1187.294 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13936.018 / 13933.461 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1155.081 / 1157.613 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for the kernel and root filesystem, retained
+`-msoft-float -fomit-frame-pointer` for kernels, and reported
+`PCC_SMOKE_ALL_FAILURES 0`.  VR4300 hard-float's stable QEMU result is 3.0%
+above E4; MIPS32R2 code is unchanged and its timing variation is environmental.
+The default `-mfix4300` erratum repair is unchanged.
+
+### E5 N64 Comparison Artifact
+
+The clean image uses a GCC kernel and PCC VR4300 hard-float a.out userland.
+The GCC Linpack still uses its separate GCC-built crt0, libc, and libm.
+
+```text
+sys/mips/n64/builds/20260712-milestone-e5-vr4300-induction-strength-gcc-kernel/pcc-debug.z64
+implementation commit: ba59488e
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 1d41e8cbd6525995ee28e6888b515a657b3b11596e0cc7a177107fab715490c3
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 41552 section bytes, sha256 72c15bc8cb517b76a3287cfd0fab4353b4fac260db29bd9088a67fff2d31ea21
+debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c882f9d9
+```
+
+The build passed `fsutil --check`; both Linpack binaries have zero undefined
+symbols.  Real N64 timing and final debug markers remain the hardware gate
+before closing Milestone E or proceeding to static inlining/specialization.

@@ -4362,9 +4362,21 @@ Milestone order:
     KFLOPS versus GCC at 4411.954 KFLOPS (70.14%).  The -0.20% change from E3
     is measurement noise, so local multiply CSE improves code size but does
     not move the hardware performance ratio.
-  - This local CSE is not loop induction-variable strength reduction.  The
-    remaining work is to derive loop-carried address increments from the SSA
-    CFG without moving operations across uncertain control flow or calls.
+  - This local CSE is not loop induction-variable strength reduction.  The E5
+    substep below separately derives a loop-carried scale from a canonical SSA
+    CFG while rejecting ambiguous control flow and variable induction steps.
+  - The first loop induction-variable strength reduction is software-complete
+    in `ba59488e`.  A canonical SSA loop with one entry, one latch, a `+1` or
+    `-1` induction step, and a dominating invariant stride replaces
+    `index * stride` with a scaled phi and one add/subtract per iteration.
+    Only one scale is introduced per induction phi to limit live-range growth.
+    A target cost hook enables it for MIPS III/VR4300 HI/LO multiplication and
+    leaves MIPS32R2 `mul` unchanged after QEMU measured a register-pressure
+    regression from applying the transform there.
+  - VR4300 Linpack drops from 48 to 23 integer multiply instructions.  All six
+    host and full PCC-kernel/PCC-rootfs QEMU profiles pass, as do 293/293
+    native VR4300 runtime regressions.  The real N64 performance gate for E5
+    is still pending.
 - [ ] Milestone F: small static inlining/specialization outside the backend.
 - [ ] Milestone G: repeat Malta, Malta64/R4000, and real N64 benchmark gates;
   decide whether further work belongs in PCC or in source-level hot paths.
