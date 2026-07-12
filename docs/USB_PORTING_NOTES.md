@@ -264,6 +264,31 @@ The JZ4780 PDMA controller is not a dependency of USB OHCI/EHCI.  OHCI and EHCI
 are bus-master controllers and consume their own DMA descriptor schedules.
 System PDMA support remains a separate future driver.
 
+## USB Core and Mock HCD Verification
+
+The first core implementation preserves the classic bus, device, interface,
+endpoint, pipe, transfer, and interface-driver relationships, but allocates
+all objects from the fixed pools in `usb_limits.h`.  Enumeration is a single
+transaction: any descriptor, transfer, address, configuration, or driver
+attach error returns every partial object and address to its pool.
+
+`usb_hcd.h` is the only controller boundary used by the core.  Its start,
+stop, pipe, transfer, root-control, and poll methods are sufficient for both
+the initial polling OHCI milestone and later interrupt completion.  The core
+contains no Ci20 include, register value, DMA schedule, or controller type
+test.
+
+`make -C sys/tests/usb test` uses `usb_mock_hcd.c` to verify a HID boot
+keyboard enumeration, address allocation and first-fit reuse, match/attach and
+reverse detach, synchronous control success and STALL, asynchronous transfer
+completion, explicit cancellation, one-winner completion, timeout/abort,
+disconnect/reconnect, and malformed-configuration cleanup with no leaked pool
+objects.  The suite passes ASan/UBSan.  `usb_subr.c`, `usb_core.c`, and the mock
+HCD also compile independently with target MIPS GCC and PCC.
+
+Detailed ownership and terminal-state rules are in
+`docs/USB_ARCHITECTURE.md`.
+
 ### DMA Phase Verification
 
 The host-side test is run with:
