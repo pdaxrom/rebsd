@@ -131,3 +131,9 @@ keyboard interface.  It can hold transfers, inject one control error, and
 simulate disconnect.  Its tests are the gate for address reuse, driver
 matching, cancellation, timeout, malformed configuration cleanup, and
 disconnect/reconnect before hardware code is introduced.
+
+The initial OHCI implementation uses the same HCD contract and completion
+path, but intentionally serializes control transfers through one DMA schedule.
+This is sufficient for address-zero enumeration and a direct-device hardware
+gate.  Expanding the schedule for bulk and periodic traffic must not change
+the core transfer state machine.

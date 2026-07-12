@@ -58,9 +58,9 @@ is updated as each later phase imports or materially adapts a source.
 | `sys/dev/usb/usbdi.c` | `sys/dev/usb/usb_core.c` | pipe and transfer operations | terminal-state and pipe model substantially adapted; original notice and RCS id retained |
 | `sys/dev/usb/usb_mem.c` | `sys/dev/usb/usb_mem.c` | USB use of the ReBSD DMA API | reference only |
 | `sys/dev/usb/uhub.c` | `sys/dev/usb/uhub.c` | root and external hubs | reference only |
-| `sys/dev/usb/ohci.c` | `sys/dev/usb/ohci.c` | generic OHCI HCD | reference only |
-| `sys/dev/usb/ohcireg.h` | `sys/dev/usb/ohcireg.h` | OHCI registers and descriptors | reference only |
-| `sys/dev/usb/ohcivar.h` | `sys/dev/usb/ohcivar.h` | OHCI private state | reference only |
+| `sys/dev/usb/ohci.c` | `sys/dev/usb/ohci.c` | generic OHCI HCD | polling control schedule substantially adapted; original notice and RCS id retained |
+| `sys/dev/usb/ohcireg.h` | `sys/dev/usb/ohcireg.h` | OHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ohcivar.h` | `sys/dev/usb/ohcivar.h` | OHCI private state | compact bounded-state adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ehci.c` | `sys/dev/usb/ehci.c` | generic EHCI HCD | reference only |
 | `sys/dev/usb/ehcireg.h` | `sys/dev/usb/ehcireg.h` | EHCI registers and descriptors | reference only |
 | `sys/dev/usb/ehcivar.h` | `sys/dev/usb/ehcivar.h` | EHCI private state | reference only |

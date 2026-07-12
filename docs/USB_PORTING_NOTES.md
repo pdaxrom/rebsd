@@ -289,6 +289,35 @@ HCD also compile independently with target MIPS GCC and PCC.
 Detailed ownership and terminal-state rules are in
 `docs/USB_ARCHITECTURE.md`.
 
+## OHCI Polling Control Milestone
+
+The first generic OHCI slice is deliberately restricted to one active control
+transfer.  It allocates one 4096-byte DMA slab containing an exact 256-byte
+HCCA, aligned ED/TD records, the setup packet, and a bounded control payload.
+All hardware records use explicit little-endian conversion and retain the
+classic OHCI register and condition-code definitions.
+
+Controller start performs revision validation, host-controller reset, HCCA
+installation, frame timing setup, interrupt masking, and transition to the
+operational state.  Control submission builds setup, optional data, status,
+and dummy-tail TDs.  The polling completion path observes the ED head/tail,
+maps OHCI condition codes, calculates short IN lengths, copies from the DMA
+payload, and terminates through the common USB completion function.  Abort
+sets ED skip and removes the control head before the core publishes timeout or
+cancellation.
+
+Root-port helpers provide status translation, per-port power, and reset.  Hub
+emulation, bulk, interrupt, and interrupt-driven completion remain later
+OHCI slices; unsupported transfer types return an explicit error.
+
+`sys/tests/usb/ohci_test.c` supplies fake OHCI MMIO and a fake full-speed USB
+device.  It executes the real HCCA/ED/TD schedule through the generic DMA and
+USB core, including the six control requests needed to enumerate and
+configure a HID boot interface.  It also covers port reset, address cleanup,
+STALL, timeout, abort, and DMA reuse.  The test passes ASan/UBSan and Clang
+static analysis; `ohci.c` compiles with target MIPS GCC and PCC without Ci20
+headers.
+
 ### DMA Phase Verification
 
 The host-side test is run with:
