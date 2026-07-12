@@ -1424,3 +1424,68 @@ G3 is retained because it corrects partial specialization and materially
 reduces code size without a measured regression, but it does not advance the
 hardware performance ratio.  The scoped G3 gate is closed at 72.22%; broader
 Milestone G work remains open.
+
+## Milestone G4: Repeated Constant-Shift CSE
+
+G4 extends the existing local SSA scale materialization pass to exact integer
+`TEMP << constant` expressions.  It reuses the same basic-block regions,
+call/asm barriers, SSA operand checks, and temporary allocation as repeated
+integer multiplication CSE; no new optimizer pass or backend tree shape is
+added.  Shift counts are restricted to `1..31`.
+
+A MIPS cost hook enables the extension only for optimized hard-float VR4300
+and MIPS32R2.  Soft-float and generic MIPS3/R4000 retain the G3 behavior.  A
+host assembly regression uses two independent array bases with one index: the
+enabled targets emit one `sll`, while soft-float and generic MIPS3 emit two.
+Changing the index between accesses always emits two.
+
+### G4 Static And A/B Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  branches  jumps  bytes
+VR4300 G3                      2005       1910    95    362     202        82    108  62458
+VR4300 G4                      1947       1852    95    362     202        82    108  60328
+MIPS32R2 G3 hard              2124       2043    81    470     244        82    108  62030
+MIPS32R2 G4 hard              2087       2006    81    470     244        82    108  60404
+MIPS32R2 G3/G4 soft           3695       3601    94   1016     554       106    230  99839
+```
+
+Big- and little-endian MIPS32R2 counters are identical.  Both soft-float
+assembly files are byte-identical to G3; VR4300 soft-float is also
+byte-identical to its final G3 baseline.  G4 removes 58 VR4300 and 37
+MIPS32R2 instructions without changing loads, stores, nops, branches, or
+jumps.
+
+Six alternating Malta64 GCC-kernel/PCC-hard-float-userland runs used the
+stable 256-repetition row:
+
+```text
+G3: 13552.100, 13170.878, 13455.070 KFLOPS; average 13392.683
+G4: 13315.796, 13510.866, 13557.836 KFLOPS; average 13461.499
+```
+
+The G4 average is 0.51% higher.  This is a small QEMU result near run-to-run
+noise, so the code-size reduction is the firm result and physical N64 remains
+the performance gate.
+
+### G4 Regression Gates
+
+Cross regression compiled 331 of 334 tests with the same three expected
+failures and produced 294 runtime candidates.  Native VR4300 PCC compiled 304
+cases, observed 30 expected failures, and passed 294/294 runtime cases.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11666.021 / 11639.007 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 985.588 / 996.068 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13150.100 / 13088.184 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1072.445 / 1074.174 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 9019.556 / 8927.989 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1172.363 / 1160.734 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles used PCC for kernel and root filesystem, retained
+`-msoft-float -fomit-frame-pointer` for kernels, and reported
+`PCC_SMOKE_ALL_FAILURES 0`.  No assembler macro expanded into a
+multi-instruction branch delay slot.  Default `-mfix4300` and explicit
+`-mfix4300` / `-mno-fix4300` behavior are unchanged.  Physical N64 validation
+is pending a clean GCC-kernel/PCC-hard-float-userland comparison image.

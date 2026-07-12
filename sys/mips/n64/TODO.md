@@ -217,6 +217,13 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   2026-07-05 for `malta64/vr4300 hard`, `malta64/vr4300 soft`,
   `malta/mips32r2 hard`, and `malta/mips32r2 soft` with
   `/root/pcc-smoke-all.sh` and `linpack-pcc`.
+- [x] G4: reuse local SSA scale CSE for repeated constant shifts on hard-float
+  VR4300 and MIPS32R2. Cross/native regressions and all six PCC-kernel/PCC-
+  rootfs QEMU profiles pass; soft-float output remains byte-identical to G3.
+- [ ] Hardware-benchmark the G4 GCC-kernel/PCC-hard-float-userland image on
+  N64 before crediting its 0.51% Malta64 result as a VR4300 performance gain.
+- [ ] After the G4 hardware gate, profile the remaining Linpack address and
+  loop overhead before selecting the next narrowly scoped backend transform.
 - [x] Boot-isolate the updated N64 kernel/rootfs path on real hardware with
   UART-only minimal ROMs: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap
   all reached login on 2026-07-06.  The minimal rootfs now includes

@@ -46,6 +46,27 @@ changed_scale(int *values, int scale, int index)
 	return first + second;
 }
 
+static int
+repeated_shift(int *left, int *right, int index)
+{
+	int first, second;
+
+	first = left[index];
+	second = right[index];
+	return first + second;
+}
+
+static int
+changed_shift(int *left, int *right, int index)
+{
+	int first, second;
+
+	first = left[index];
+	index++;
+	second = right[index];
+	return first + second;
+}
+
 int
 main(void)
 {
@@ -62,5 +83,9 @@ main(void)
 		return 3;
 	if (changed_scale(values, 3, 2) != 45)
 		return 4;
+	if (repeated_shift(values, values + 1, 3) != 21)
+		return 5;
+	if (changed_shift(values, values + 1, 3) != 24)
+		return 6;
 	return barrier != 1;
 }

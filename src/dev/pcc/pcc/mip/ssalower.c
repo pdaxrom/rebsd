@@ -12,6 +12,9 @@
 #ifndef TARGET_SSA_STRENGTH_REDUCE_MUL
 #define TARGET_SSA_STRENGTH_REDUCE_MUL()	0
 #endif
+#ifndef TARGET_SSA_CSE_CONST_SHIFT
+#define TARGET_SSA_CSE_CONST_SHIFT()	0
+#endif
 
 struct parallel_copy {
 	int dst;
@@ -538,6 +541,18 @@ multiply_operand_defined_in_tree(NODE *p, NODE *tree)
 }
 
 static int
+multiply_cse_candidate(NODE *p, int low, int high)
+{
+	if (!lvn_expression(p, low, high))
+		return 0;
+	if (p->n_op == MUL)
+		return 1;
+	return TARGET_SSA_CSE_CONST_SHIFT() && p->n_op == LS &&
+	    p->n_right->n_op == ICON && getlval(p->n_right) > 0 &&
+	    getlval(p->n_right) < SZINT;
+}
+
+static int
 count_multiply_candidates(NODE *p, int low, int high)
 {
 	int count, o;
@@ -548,7 +563,7 @@ count_multiply_candidates(NODE *p, int low, int high)
 		count += count_multiply_candidates(p->n_left, low, high);
 	if (o == BITYPE)
 		count += count_multiply_candidates(p->n_right, low, high);
-	if (p->n_op == MUL && lvn_expression(p, low, high))
+	if (multiply_cse_candidate(p, low, high))
 		count++;
 	return count;
 }
@@ -566,7 +581,7 @@ collect_multiply_candidates(NODE *p, NODE *tree,
 	if (o == BITYPE)
 		collect_multiply_candidates(p->n_right, tree, value, nvalue,
 		    low, high);
-	if (p->n_op != MUL || !lvn_expression(p, low, high) ||
+	if (!multiply_cse_candidate(p, low, high) ||
 	    multiply_operand_defined_in_tree(p, tree))
 		return;
 	for (i = 0; i < *nvalue; i++)
@@ -602,7 +617,7 @@ replace_multiply_candidates(struct p2env *p2e, NODE **nodep,
 		replace_multiply_candidates(p2e, &p->n_right, value, nvalue,
 		    before, bb, low, high);
 	p = *nodep;
-	if (p->n_op != MUL || !lvn_expression(p, low, high))
+	if (!multiply_cse_candidate(p, low, high))
 		return;
 	for (i = 0; i < nvalue; i++)
 		if (value[i].count > 1 && value[i].type == p->n_type &&
@@ -651,8 +666,9 @@ multiply_cse_region(struct p2env *p2e, struct basicblock *bb,
 }
 
 /*
- * Materialize repeated pure integer multiplies used inside trees.  Memory
- * accesses do not invalidate SSA names, but calls and asm delimit regions.
+ * Materialize selected repeated pure integer scales used inside trees.
+ * Memory accesses do not invalidate SSA names, but calls and asm delimit
+ * regions.
  */
 static void
 ssa_local_multiply_cse(struct p2env *p2e)

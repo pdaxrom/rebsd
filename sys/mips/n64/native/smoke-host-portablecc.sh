@@ -1226,6 +1226,36 @@ changed_scale_mults=$(awk '
 ' "$tmp.ssalvn.s")
 test "$repeated_scale_mults" -eq 1
 test "$changed_scale_mults" -eq 2
+repeated_shift_slls=$(awk '
+    /^repeated_shift:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssalvn.s")
+changed_shift_slls=$(awk '
+    /^changed_shift:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssalvn.s")
+if [ "$float_abi" = hard ]; then
+	test "$repeated_shift_slls" -eq 1
+else
+	test "$repeated_shift_slls" -eq 2
+fi
+test "$changed_shift_slls" -eq 2
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 \
+    -fomit-frame-pointer -Wc,-xssa -S -o "$tmp.ssalvn.mips3.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssalvn001.c" \
+    2>"$tmp.ssalvn.mips3.log"
+test ! -s "$tmp.ssalvn.mips3.log"
+generic_shift_slls=$(awk '
+    /^repeated_shift:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssalvn.mips3.s")
+test "$generic_shift_slls" -eq 2
 
 "$pcc" -O2 -fomit-frame-pointer -Wc,-xssa -S \
     -o "$tmp.ssastrength.s" \

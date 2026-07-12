@@ -970,6 +970,22 @@ markers are zero; `N64_PCC_DEBUG_RC_END` is present without a numeric value.
 G3 remains as a specialization correctness and code-size improvement, not as
 a measured VR4300 performance gain.
 
+The G4 step reuses the existing local SSA scale CSE to materialize repeated
+exact `TEMP << constant` expressions once per safe basic-block region.  A
+target hook limits this to hard-float VR4300 and MIPS32R2; generic MIPS3 and
+soft-float retain G3 generation.  VR4300 Linpack falls from 2005 to 1947
+instructions and MIPS32R2 hard-float from 2124 to 2087, with no load, store,
+nop, branch, or jump growth.  MIPS32R2 BE/LE hard counters match, and both
+soft-float outputs are byte-identical to G3.
+
+Three alternating Malta64 pairs improve the 256-repetition average from
+13392.683 to 13461.499 KFLOPS, or 0.51%.  Cross regression produces 294
+runtime candidates, native VR4300 passes 294/294, and all six
+PCC-kernel/PCC-rootfs full QEMU profiles report zero failures.  Kernels retain
+`-msoft-float -fomit-frame-pointer`; VR4300 erratum option behavior is
+unchanged.  The small QEMU gain is not treated as a hardware result; physical
+N64 comparison remains open.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and
