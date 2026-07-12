@@ -223,8 +223,13 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
 - [x] Hardware-benchmark the G4 GCC-kernel/PCC-hard-float-userland image on
   N64.  The stable row is 3316.659 PCC versus 4411.821 GCC KFLOPS, or 75.18%;
   PCC improves 4.09% over G3 with an unchanged GCC control.
-- [ ] After the G4 hardware gate, profile the remaining Linpack address and
-  loop overhead before selecting the next narrowly scoped backend transform.
+- [x] After G4, profile GCC/PCC with and without IPA.  The largest local gap is
+  frame and stack traffic in `dgefa`/`dgesl`; avoid a large deferred inliner
+  until smaller target policies are exhausted.
+- [x] G5: default optimized VR4300/MIPS32R2 PCC userland to the existing frame
+  omission path, with explicit opt-out and unchanged generic MIPS3 behavior.
+  Cross/native regressions and all six full QEMU profiles pass.
+- [ ] Hardware-benchmark the clean G5 GCC-kernel/PCC-hard-float a.out image.
 - [x] Boot-isolate the updated N64 kernel/rootfs path on real hardware with
   UART-only minimal ROMs: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap
   all reached login on 2026-07-06.  The minimal rootfs now includes

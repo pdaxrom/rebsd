@@ -1526,3 +1526,69 @@ value.  Against G3's stable row, PCC improves 4.09% while the GCC control
 changes 0.0003%.  Unlike G3, the G4 static scale reuse produces a clear
 physical VR4300 gain.  It reaches 75.18% of GCC and closes the medium-term
 75-85% gate; Milestone G remains open toward the 90-100% stretch target.
+
+## Milestone G5: Targeted O2 Frame Omission
+
+The ReBSD GCC MIPS target flags and N64 a.out wrapper already use
+`-fomit-frame-pointer`, while a direct optimized PCC invocation did not.
+G5 makes the existing PCC option the `-O2+` target default for VR4300 and
+MIPS32R2.  This is selected in the driver after all `-march` and `-mtune`
+options have been parsed.  Explicit `-fno-omit-frame-pointer` takes precedence
+and reproduces G4 assembly byte for byte.  `-O0`, `-O1`, `-Os`, and generic
+MIPS3/R4000 retain their previous policy.
+
+Host assembly probes compare implicit and explicit omission and verify the
+opt-out.  Probes for unrelated frame-relative optimizer behavior request
+`-fno-omit-frame-pointer` explicitly.  The stack-specialization probe now
+checks the o32 slots directly: the live fifth argument is stored at
+`16($sp)`, while the omitted sixth constant is not stored at `20($sp)`.
+
+### G5 Static And A/B Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  branches  jumps  bytes
+VR4300 G4                      1947       1852    95    362     202        82    108  60328
+VR4300 G5                      1866       1748   118    352     192        82    108  58057
+MIPS32R2 G4 hard              2087       2006    81    470     244        82    108  60404
+MIPS32R2 G5 hard              1983       1876   107    459     233        82    108  57342
+MIPS32R2 G4 soft              3695       3601    94   1016     554       106    230  99839
+MIPS32R2 G5 soft              3667       3557   110   1014     552       106    230  99127
+VR4300 G4 soft                3686       3589    97    976     556       106    230  98446
+VR4300 G5 soft                3658       3545   113    974     554       106    230  97734
+```
+
+MIPS32R2 BE and LE counters are identical.  The additional scheduling nops
+are outweighed by removing frame setup, saves/restores, and stack traffic.
+Generic MIPS3/R4000 Linpack remains byte-identical to G4.
+
+Five alternating Malta64 GCC-kernel/PCC-hard-float-userland pairs measured
+the stable 256-repetition rows:
+
+```text
+G4: 12777.396, 12857.279, 13597.253, 13599.033, 13476.837; average 13261.560
+G5: 13121.097, 13472.005, 13511.679, 13637.194, 13554.360; average 13459.267
+```
+
+Four of five pairs favor G5; the averages improve by 1.49%.
+
+### G5 Regression Gates
+
+Cross regression compiled 331 of 334 tests with the same three expected
+failures and produced 294 runtime candidates.  Native VR4300 PCC compiled 304
+cases, observed 30 expected failures, and passed 294/294 runtime cases.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 11908.699 / 11401.774 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 983.953 / 982.233 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13259.004 / 13094.049 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1087.530 / 1090.075 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 8777.986 / 9052.190 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1184.258 / 1184.055 | `PCC_SMOKE_ALL_RC:0` |
+
+All six PCC-kernel/PCC-rootfs profiles reported
+`PCC_SMOKE_ALL_FAILURES 0`.  Kernels retain their explicit
+`-msoft-float -fomit-frame-pointer`; no assembler macro expanded into a
+multi-instruction branch delay slot.  The VR4300 multiply erratum default and
+`-mfix4300` / `-mno-fix4300` controls are unchanged.  A clean physical N64
+comparison image is the remaining G5 gate.

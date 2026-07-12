@@ -1000,6 +1000,21 @@ VR4300 hardware.  Both numeric debug markers are zero; the final
 `N64_PCC_DEBUG_RC_END` marker is present without a numeric value.  This closes
 the medium-term 75-85% gate while leaving the 90-100% stretch target open.
 
+G5 aligns optimized PCC userland with the existing ReBSD MIPS GCC target
+policy: `-O2+` defaults to frame-pointer omission on VR4300 and MIPS32R2 after
+the driver has resolved `-march`/`-mtune`.  Explicit
+`-fno-omit-frame-pointer` restores the prior output; `-O0`, `-O1`, `-Os`, and
+generic MIPS3/R4000 remain unchanged.  This uses PCC's existing pass2 support
+and does not add a Linpack-specific flag.
+
+VR4300 hard-float Linpack drops from 1947 to 1866 instructions and removes ten
+loads and ten stores.  MIPS32R2 hard-float drops from 2087 to 1983
+instructions; BE/LE counters match.  Soft-float also passes in both endian
+modes.  Five alternating Malta64 pairs improve by 1.49%.  Cross/native
+regression passes 294 runtime candidates and all six PCC-kernel/PCC-rootfs
+QEMU profiles report zero failures.  Erratum option behavior is unchanged;
+physical N64 validation remains open.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

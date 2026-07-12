@@ -4534,8 +4534,16 @@ Milestone order:
     The stable 16-rep result is 3316.659 PCC versus 4411.821 GCC KFLOPS, or
     75.18%.  PCC improves 4.09% over G3 while the GCC control changes 0.0003%,
     so G4 is the first Milestone G step with a clear hardware gain.
-  - [ ] After the G4 hardware result, inspect remaining Linpack address and
-    loop overhead before selecting another narrowly scoped transform.
+  - [x] After G4, compare GCC/PCC with and without IPA.  The largest local gap
+    is frame and stack traffic in `dgefa`/`dgesl`; full deferred unit-wide
+    inlining would be substantially larger than the bounded G5 policy below.
+  - [x] G5 software gate: make the existing `-fomit-frame-pointer` option the
+    ReBSD/MIPS `-O2+` default for VR4300 and MIPS32R2 after target selection.
+    Explicit `-fno-omit-frame-pointer`, generic MIPS3/R4000, `-O0`, `-O1`, and
+    `-Os` retain their prior behavior.  Five Malta64 A/B pairs improve 1.49%;
+    cross/native regression and all six full QEMU profiles pass.
+  - [ ] Build and physically validate the clean G5 GCC-kernel/PCC-hard-float-
+    a.out-userland image before selecting the next transform.
 
 Success criteria:
 

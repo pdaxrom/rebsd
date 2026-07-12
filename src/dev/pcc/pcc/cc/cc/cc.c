@@ -119,6 +119,10 @@
 #include "ccconfig.h"
 /* C command */
 
+#ifndef TARGET_OMIT_FRAME_POINTER_AT_O2
+#define TARGET_OMIT_FRAME_POINTER_AT_O2() 0
+#endif
+
 #define CC_DRIVER
 #include "softfloat.h"	/* for CPP floating point macros */
 
@@ -318,6 +322,7 @@ int	Mflag, needM, MDflag, MMDflag;	/* dependencies only */
 int	pgflag;
 int	pieflag;
 int	omit_frame_pointer;
+static int omit_frame_pointer_explicit;
 int	optstatsflag;
 int	Xflag;
 int	nostartfiles, Bstatic, shared;
@@ -643,6 +648,7 @@ main(int argc, char *argv[])
 				freestanding = j ? 0 : 1;
 			} else if (match(u, "omit-frame-pointer")) {
 				omit_frame_pointer = j ? 0 : 1;
+				omit_frame_pointer_explicit = 1;
 			} else if (match(u, "opt-stats")) {
 				optstatsflag = j ? 0 : 1;
 			} else if (match(u, "signed-char")) {
@@ -4796,6 +4802,9 @@ struct flgcheck ccomflgcheck[] = {
 void
 setup_ccom_flags(void)
 {
+	if (O2flag && !omit_frame_pointer_explicit &&
+	    TARGET_OMIT_FRAME_POINTER_AT_O2())
+		omit_frame_pointer = 1;
 
 	cksetflags(ccomflgcheck, &compiler_flags, 'a');
 }

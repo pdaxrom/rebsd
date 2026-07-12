@@ -118,6 +118,9 @@ struct mips_target {
 #define MIPS_HARDFLOAT_O32_ABI 1
 #define TARGET_NO_ABICALLS
 #define TARGET_NO_REORDER
+#define TARGET_OMIT_FRAME_POINTER_AT_O2() \
+	(mips_target.isa == MIPS_ISA_MIPS32R2 || \
+	 mips_target.tune == MIPS_TUNE_VR4300)
 #ifndef MIPS_CPU_DEFAULT
 #define MIPS_CPU_DEFAULT	MIPS_CPU_VR4300
 #endif

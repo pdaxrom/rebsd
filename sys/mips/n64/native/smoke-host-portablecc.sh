@@ -137,6 +137,7 @@ ln -sf "$target-pcpp" "$target_bindir/cpp"
 
 tmp=${TMPDIR:-/tmp}/rebsd-host-portablecc.$$
 trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
+    "$tmp.default.s" "$tmp.noomit.s" \
     "$tmp.normal.s" "$tmp.stats.s" "$tmp.stats2.s" "$tmp.stats.off" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
@@ -238,11 +239,10 @@ if [ "$float_abi" = hard ]; then
 	awk '
 /^[[:space:]]*[.]ent static_stack_arg_probe$/ { inside = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
-inside && /^[[:space:]]*L[0-9]+:/ { body = 1 }
-inside && body && /#[[:space:]]*save function arg to stack/ { slots++ }
-inside && body && /^[[:space:]]*sw[[:space:]].*\(\$sp\)/ { stores++ }
+inside && /^[[:space:]]*sw[[:space:]].*,16\(\$sp\)/ { slot16++ }
+inside && /^[[:space:]]*sw[[:space:]].*,20\(\$sp\)/ { slot20++ }
 inside && /jal[[:space:]]*__pcc_spec_.*_six_arg/ { found = 1; exit }
-END { exit found && slots == 2 && stores == 1 ? 0 : 1 }
+END { exit found && slot16 == 1 && slot20 == 0 ? 0 : 1 }
 	' "$tmp.staticspec-stack.s" || {
 		echo "specialized stack constant was not elided safely" >&2
 		exit 1
@@ -390,7 +390,8 @@ param_assign_probe(int value, int replace)
 EOF
 
 for param_cpu in mips32r2 vr4300; do
-	"$pcc" -march="$param_cpu" -O2 -S -o "$tmp.s" "$tmp.c"
+	"$pcc" -march="$param_cpu" -O2 -fno-omit-frame-pointer -S \
+	    -o "$tmp.s" "$tmp.c"
 	awk '
 /^[[:space:]]*[.]ent load_schedule_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
@@ -472,8 +473,8 @@ fpu_latency_schedule_probe(void)
 EOF
 
 for schedule_cpu in vr4300 mips32r2; do
-	"$pcc" -march="$schedule_cpu" -mhard-float -O2 -S -o "$tmp.s" \
-	    "$tmp.c"
+	"$pcc" -march="$schedule_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
 	awk '
 /^[[:space:]]*mul\.d[[:space:]]+\$f4,\$f2,\$f0/ { state = 1; next }
 state == 1 && /^[[:space:]]*lw[[:space:]]+\$a0,20\(\$fp\)/ {
@@ -492,8 +493,8 @@ END { exit found ? 0 : 1 }
 	}
 done
 
-"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 -S -o "$tmp.s" \
-    "$tmp.c"
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 \
+    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
 awk '
 /^[[:space:]]*mul\.d[[:space:]]+\$f4,\$f2,\$f0/ { state = 1; next }
 state == 1 && /^[[:space:]]*add\.d[[:space:]]+\$f6,\$f6,\$f4/ {
@@ -530,8 +531,8 @@ fpu_load_move_schedule_probe(void)
 EOF
 
 for schedule_cpu in vr4300 mips32r2; do
-	"$pcc" -march="$schedule_cpu" -mhard-float -O2 -S -o "$tmp.s" \
-	    "$tmp.c"
+	"$pcc" -march="$schedule_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
 	awk '
 /^[[:space:]]*[.]ent fpu_param_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
@@ -563,8 +564,8 @@ END { exit seen && found ? 0 : 1 }
 	}
 done
 
-"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 -S -o "$tmp.s" \
-    "$tmp.c"
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 \
+    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
 awk '
 /^[[:space:]]*[.]ent fpu_param_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
@@ -769,8 +770,8 @@ fpu_expr_nested_call_probe(double *values)
 EOF
 
 for reload_cpu in vr4300 mips32r2; do
-	"$pcc" -march="$reload_cpu" -mhard-float -O2 -S -o "$tmp.s" \
-	    "$tmp.c"
+	"$pcc" -march="$reload_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
 	for folded in fpu_expr_call_probe fpu_expr_return_probe; do
 		awk -v fn="$folded" '
 $0 ~ "^[[:space:]]*[.]ent " fn "$" { inside = 1; seen = 1; next }
@@ -984,6 +985,19 @@ for frame_cpu in vr4300 mips32r2; do
 	    -o "$tmp.s" "$tmp.c"
 	"$pcc" -march="$frame_cpu" -O2 -fomit-frame-pointer -c \
 	    -o "$tmp.o" "$tmp.c"
+	"$pcc" -march="$frame_cpu" -O2 -S -o "$tmp.default.s" "$tmp.c"
+	cmp -s "$tmp.s" "$tmp.default.s"
+	"$pcc" -march="$frame_cpu" -O2 -fno-omit-frame-pointer -S \
+	    -o "$tmp.noomit.s" "$tmp.c"
+	awk '
+/^[[:space:]]*[.]ent frame_reg_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /[.]frame \$fp/ { fp = 1 }
+END { exit seen && fp ? 0 : 1 }
+' "$tmp.noomit.s" || {
+		echo "$frame_cpu ignored -fno-omit-frame-pointer" >&2
+		exit 1
+	}
 
 	awk '
 /^[[:space:]]*[.]ent frame_reg_probe$/ { inside = 1; seen = 1; next }
