@@ -4358,6 +4358,10 @@ Milestone order:
     memory accesses do not invalidate scalar SSA values.  Linpack drops 11
     static multiply sites in both VR4300 and MIPS32R2 assembly.  Cross/native
     regression and all six PCC-kernel/PCC-rootfs QEMU profiles pass.
+    Real N64 validation also passes, but the stable PCC result is 3094.330
+    KFLOPS versus GCC at 4411.954 KFLOPS (70.14%).  The -0.20% change from E3
+    is measurement noise, so local multiply CSE improves code size but does
+    not move the hardware performance ratio.
   - This local CSE is not loop induction-variable strength reduction.  The
     remaining work is to derive loop-carried address increments from the SSA
     CFG without moving operations across uncertain control flow or calls.

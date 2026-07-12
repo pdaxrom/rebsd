@@ -1008,6 +1008,16 @@ debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c88
 ```
 
 The build passed `fsutil --check`; both Linpack executables have zero undefined
-symbols.  Real N64 timing and the final debug markers remain the hardware gate
-before starting loop induction-variable strength reduction.  QEMU cannot
-reproduce the physical VR4300 multiply erratum.
+symbols.  Real N64 validation passed on 2026-07-12.  The timed rows were:
+
+```text
+reps 8:  GCC 4367.463 KFLOPS, PCC 3093.962 KFLOPS (70.84% of GCC)
+reps 16: GCC 4411.954 KFLOPS, PCC 3094.330 KFLOPS (70.14% of GCC)
+```
+
+Both binaries reported 15-digit machine precision and all final status markers
+were zero.  The stable GCC result is unchanged from E3, while PCC is 0.20%
+lower than E3 and therefore within measurement noise.  E4 reduces static code
+but does not improve the hardware performance ratio.  This closes the E4 gate
+and makes loop induction-variable strength reduction the next measured target.
+QEMU cannot reproduce the physical VR4300 multiply erratum.

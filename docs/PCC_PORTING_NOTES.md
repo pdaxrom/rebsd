@@ -826,6 +826,13 @@ PCC-rootfs Malta64/Malta/MaltaEL hard/soft profiles reported
 `-msoft-float -fomit-frame-pointer`; the pass is independent of the VR4300
 `-mfix4300` erratum repair.
 
+Real N64 validation passed with all final markers at zero.  The stable 16-rep
+row measured GCC at 4411.954 KFLOPS and PCC at 3094.330 KFLOPS, or 70.14% of
+GCC.  PCC was 0.20% below its E3 result, within run-to-run timing noise.  This
+shows that removing the static duplicates reduces code size but does not
+address Linpack's dominant dynamic cost; loop-carried address strength
+reduction remains necessary.
+
 The current hard-float PCC full zswap ROM has reached root login on real N64
 hardware and can run basic shell commands.  It is slow on hardware, and the
 `uname -a` panic suggests an unresolved timing/race or interrupt-path issue
