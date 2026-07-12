@@ -4413,7 +4413,7 @@ Milestone order:
     native VR4300 runtime regressions.  Real N64 validation passes at 3163.024
     KFLOPS versus GCC at 4412.343 KFLOPS (71.69%), a measured 2.22% PCC gain
     over E4.  This closes the scoped Milestone E hardware gate.
-- [ ] Milestone F: small static inlining/specialization outside the backend.
+- [x] Milestone F: small static inlining/specialization outside the backend.
   - [x] F1 bounded constant-argument static cloning is software-complete.  It
     is a frontend/SSA feature, not MIPS backend IPA, and is limited to hosted
     `-O2+`, one clone per pre-definition static callee, and small control
@@ -4424,14 +4424,17 @@ Milestone order:
     `30be99a022c0c10e3e2eb64b914071ba09ee252b49f095e00fdfc06eefcfb685`.
     It carries `.build-mode.gcc.1.0.0.1`, default `-mfix4300`, and separate
     GCC- and PCC-built Linpack runtimes.
-  - [ ] Close the milestone only after physical VR4300 smoke and Linpack
-    results confirm the software/QEMU result.
+  - [x] Physical VR4300 validation passes.  GCC/PCC Linpack report zero status;
+    `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC` are zero, and the final
+    `N64_PCC_DEBUG_RC_END` marker is present.  The stable 16-rep result is
+    3178.200 PCC versus 4416.677 GCC KFLOPS, or 71.96%.  PCC improves 0.48%
+    over E5 while GCC changes 0.10%, closing the scoped milestone.
 - [ ] Milestone G: repeat Malta, Malta64/R4000, and real N64 benchmark gates;
   decide whether further work belongs in PCC or in source-level hot paths.
 
 Success criteria:
 
-- [ ] Short term: reduce PCC Linpack `nop` count and text size materially while
+- [x] Short term: reduce PCC Linpack `nop` count and text size materially while
   keeping all PCC correctness gates green.
 - [ ] Medium term: reach roughly 75-85% of GCC performance on real N64 with
   backend-only and ABI/scheduler work.

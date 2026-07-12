@@ -1184,5 +1184,19 @@ debug runner sha256: 930498a9c010eee3c604fe217eaf85527b29d07e2aa40f6b5e0ba278c88
 
 The build passed `fsutil --check`; both Linpack binaries have zero undefined
 symbols.  The PCC executable contains exactly the seven expected
-`__pcc_spec_*` local symbols.  Physical N64 smoke and comparative Linpack
-results are the remaining F1 gate.
+`__pcc_spec_*` local symbols.  Physical N64 validation passed on 2026-07-12.
+The timed rows were:
+
+```text
+reps 8:  GCC 4369.091 KFLOPS, PCC 3178.149 KFLOPS (72.74% of GCC)
+reps 16: GCC 4416.677 KFLOPS, PCC 3178.200 KFLOPS (71.96% of GCC)
+```
+
+Both binaries reported 15-digit machine precision and both
+`N64_LINPACK_RC` values were zero.  `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal `N64_PCC_DEBUG_RC_END`
+marker was present without a numeric value.  Against E5's stable 16-rep row,
+GCC changes by 0.10% and PCC improves by 0.48%.  The static specialization
+therefore produces a small measured hardware gain and closes the scoped
+Milestone F at 71.96% of GCC.  The remaining gap is still dominated by work
+inside the hot BLAS loops rather than by the removed static-helper branches.
