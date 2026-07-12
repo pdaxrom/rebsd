@@ -519,9 +519,15 @@ const char *mips_target_error(const struct mips_target *);
 #define FEATURE_NOFIX4300	0x00100000
 #define FEATURE_VR4300		0x00200000
 
+#define TARGET_PARTIAL_STATIC_SPECIALIZATION() \
+	(!mips_soft_float && (mips_target.isa == MIPS_ISA_MIPS32R2 || \
+	 mips_target.tune == MIPS_TUNE_VR4300))
+
 #define SPCON           (MAXSPECIAL+1)  /* positive constant */
 #define SPOW2CON        (MAXSPECIAL+2)  /* positive power-of-two constant */
 #define SSHADDCON       (MAXSPECIAL+3)  /* cheap shift-add multiply constant */
+#define SPUNUSEDSPECARG (MAXSPECIAL+4)  /* specialized literal call argument */
+#define SPARGREG        (MAXSPECIAL+5)  /* o32 integer argument register */
 
 #define TARGET_STDARGS
 #define TARGET_BUILTINS							\

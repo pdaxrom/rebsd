@@ -1153,6 +1153,19 @@ struct optab table[] = {
  * The next rules takes care of assignments. "=".
  */
 
+/* The selected clone has replaced this literal parameter in its body. */
+{ ASSIGN,	FOREFF|FEATURE_VR4300,
+	SPARGREG,	TWORD|TPOINT,
+	SPUNUSEDSPECARG, TWORD|TPOINT,
+		0,	0,
+		"", },
+
+{ ASSIGN,	FOREFF|FEATURE_MIPS32R2,
+	SPARGREG,	TWORD|TPOINT,
+	SPUNUSEDSPECARG, TWORD|TPOINT,
+		0,	0,
+		"", },
+
 { ASSIGN,	FOREFF|INAREG,
 	SOREG|SNAME,	TWORD|TPOINT,
 	SAREG,		TWORD|TPOINT,
@@ -1797,6 +1810,19 @@ struct optab table[] = {
 /*
  *  Function arguments
  */
+
+/* Preserve an omitted specialized stack argument's ABI slot without a store. */
+{ FUNARG,	FOREFF|FEATURE_VR4300,
+	SPUNUSEDSPECARG, TWORD|TPOINT,
+	SANY,	TWORD|TPOINT,
+		0,	0,
+		"Zq", },
+
+{ FUNARG,	FOREFF|FEATURE_MIPS32R2,
+	SPUNUSEDSPECARG, TWORD|TPOINT,
+	SANY,	TWORD|TPOINT,
+		0,	0,
+		"Zq", },
 
 { FUNARG,	FOREFF,
 	SOREG|SNAME,	TWORD|TPOINT,

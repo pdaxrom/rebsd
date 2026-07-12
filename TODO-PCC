@@ -4290,6 +4290,30 @@ Backend work, kept small:
     hardware validation passes at 3188.274 PCC versus 4411.854 GCC KFLOPS in
     the stable 16-rep row, or 72.27% of GCC.  PCC improves 0.32% over F1 while
     the GCC control changes -0.11%, closing the G2 substep.
+  - [x] G3 makes F1 constant specialization effective when selected scalar
+    parameters are stack-passed.  Only the selected hard-float VR4300 or
+    MIPS32R2 parameters are promoted to compiler `TEMP`s; the cloned body can
+    then replace their initializers with the selected constants.  Other
+    parameters keep their existing storage.
+  - [x] Calls to that clone carry a machine-independent marker after prototype
+    conversion.  MIPS omits marked o32 argument-register assignments and
+    stack stores while retaining every ABI slot.  Generic MIPS3/R4000,
+    soft-float, varargs, `-Os`, and `-ffreestanding` retain the G2 path.
+  - VR4300 hard-float Linpack changes from G2
+    `2291/2174/117/416/226/106/116/70437` to G3
+    `2005/1910/95/362/202/82/108/62458`
+    instructions/non-nops/nops/loads/stores/branches/jumps/bytes.  MIPS32R2
+    hard-float is `2124/2043/81/470/244/82/108/62030`.  MIPS32R2 soft-float
+    BE/LE and VR4300 soft-float are byte-identical to G2.
+  - Alternating Malta64 GCC-kernel/PCC-userland A/B runs average 12923.604
+    KFLOPS for G2 and 13368.590 for G3, a 3.44% gain; both alternating pairs
+    favor G3.  Cross regression produces 294 runtime candidates and native
+    VR4300 passes 294/294.  All six PCC-kernel/PCC-rootfs QEMU profiles pass
+    the full smoke suite with kernels retaining
+    `-msoft-float -fomit-frame-pointer`.
+  - The six-argument specialization regression covers the stack path that G3
+    changes.  The default `-mfix4300` policy and final erratum repair remain
+    unchanged.  Physical N64 validation is still required before closing G3.
   - Keep helper calls only where they preserve required IEEE/NaN behavior; do
     not replace correctness-sensitive helper paths with raw FPU instructions
     unless the existing N64/Malta tests prove equivalence.
@@ -4473,6 +4497,12 @@ Milestone order:
     stable 16-rep result is 3188.274 PCC versus 4411.854 GCC KFLOPS, or
     72.27%.  This closes G2; Milestone G remains open because the medium-term
     75-85% target has not yet been reached.
+  - [x] G3 software gate: partial static specialization now handles selected
+    hard-float stack parameters and omits their dead call-side values while
+    preserving o32 slots.  Strict A/B improves 3.44%; cross/native regression
+    and all six full QEMU profiles pass.
+  - [ ] Build and run the clean G3 GCC-kernel/PCC-hard-float-a.out-userland
+    comparison image on physical N64 before closing G3.
 
 Success criteria:
 

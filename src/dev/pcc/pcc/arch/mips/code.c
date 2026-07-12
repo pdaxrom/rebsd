@@ -543,7 +543,7 @@ bfcode(struct symtab **sp, int cnt)
 {
 	int lastreg = A0 + nargregs - 1;
 	int saveallargs = 0;
-	int i, reg, struct_return;
+	int i, reg, specialized, struct_return;
 #ifdef MIPS_HARDFLOAT_O32_ABI
 	int fp_leading, fpreg;
 #endif
@@ -577,6 +577,10 @@ bfcode(struct symtab **sp, int cnt)
 
         /* recalculate the arg offset and create TEMP moves */
         for (i = 0; i < cnt; i++) {
+		specialized = inline_specialized_param(cftnsp, i) && xtemps &&
+		    !saveallargs && !mips_soft_float &&
+		    (mips_target.isa == MIPS_ISA_MIPS32R2 ||
+		    mips_target.tune == MIPS_TUNE_VR4300);
 
 #ifdef MIPS_HARDFLOAT_O32_ABI
 		if (fp_leading && mips_fp_arg_type(sp[i]->stype)) {
@@ -590,9 +594,13 @@ bfcode(struct symtab **sp, int cnt)
 			fp_leading = 0;
 		}
 #endif
-		if (reg > lastreg)
-			break;
-		else if (sp[i]->stype == STRTY || sp[i]->stype == UNIONTY)
+		if (reg > lastreg) {
+			if (specialized &&
+			    (DEUNSIGN(sp[i]->stype) <= LONG ||
+			    ISPTR(sp[i]->stype)))
+				putintemp(sp[i]);
+			continue;
+		} else if (sp[i]->stype == STRTY || sp[i]->stype == UNIONTY)
 			param_struct(sp[i], &reg);
 		else if (DEUNSIGN(sp[i]->stype) == LONGLONG)
 			param_64bit(sp[i], &reg, 0);
@@ -1044,13 +1052,23 @@ static NODE *
 movearg_32bit(NODE *p, int *regp)
 {
 	int reg = *regp;
-	NODE *q;
+	NODE *q, *t;
 	int lastarg;
 
 	lastarg = A0 + nargregs - 1;
 	if (reg > lastarg) {
 		*regp = reg + 1;
 		return block(FUNARG, p, NIL, p->n_type, p->n_df, p->n_ap);
+	}
+	for (t = p; t->n_op == SCONV || t->n_op == PCONV; t = t->n_left)
+		;
+	if (!mips_soft_float &&
+	    (mips_target.isa == MIPS_ISA_MIPS32R2 ||
+	    mips_target.tune == MIPS_TUNE_VR4300) &&
+	    attr_find(t->n_ap, ATTR_STATIC_SPEC_CONST) != NULL) {
+		*regp = reg + 1;
+		tfree(p);
+		return bcon(0);
 	}
 	q = block(REG, NIL, NIL, p->n_type, p->n_df, p->n_ap);
 	q->n_rval = reg++;

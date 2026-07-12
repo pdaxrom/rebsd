@@ -31,6 +31,10 @@
 
 extern NODE *talloc(void);
 
+#ifndef TARGET_PARTIAL_STATIC_SPECIALIZATION
+#define TARGET_PARTIAL_STATIC_SPECIALIZATION() 0
+#endif
+
 /*
  * Simple description of how the inlining works:
  * A function found with the keyword "inline" is always saved.
@@ -178,6 +182,20 @@ specargs(P1ND *p, P1ND **args, int *nargs)
 	return 1;
 }
 
+static void
+specmarkargs(P1ND **args, int nargs, unsigned int mask)
+{
+	int i;
+
+	for (i = 0; i < nargs; i++) {
+		if ((mask & (1U << i)) == 0 ||
+		    attr_find(args[i]->n_ap, ATTR_STATIC_SPEC_CONST) != NULL)
+			continue;
+		args[i]->n_ap = attr_add(args[i]->n_ap,
+		    attr_new(ATTR_STATIC_SPEC_CONST, 0));
+	}
+}
+
 /*
  * Create at most one clone for a file-local function.  Small -1/0/1
  * constants target loop-control parameters without cloning large call sites
@@ -253,6 +271,33 @@ inline_specialize(struct symtab *sp, P1ND *ap)
 	nsp->sname = xstrdup(name);
 	is->spec.sp = nsp;
 	return nsp;
+}
+
+void
+inline_specialize_args(struct symtab *sp, P1ND *ap)
+{
+	P1ND *args[6];
+	struct istat *is;
+	int nargs = 0;
+
+	if (sp == NULL || ap == NULL || !specargs(ap, args, &nargs))
+		return;
+	SLIST_FOREACH(is, &ipole, link) {
+		if ((is->flags & AUTOSPEC) == 0 || is->spec.sp != sp ||
+		    is->spec.nargs != nargs)
+			continue;
+		specmarkargs(args, nargs, is->spec.mask);
+		return;
+	}
+}
+
+int
+inline_specialized_param(struct symtab *sp, int argno)
+{
+	struct istat *is = findfun(sp);
+
+	return is != NULL && (is->flags & AUTOSPEC) != 0 && argno >= 0 &&
+	    argno < is->spec.nargs && (is->spec.mask & (1U << argno)) != 0;
 }
 
 static void
@@ -464,6 +509,7 @@ specparam(NODE *p, struct istat *w, unsigned int *done)
 	if (p->n_op == ASSIGN && p->n_left->n_op == TEMP) {
 		for (i = 0; i < w->nargs && i < w->spec.nargs; i++) {
 			if ((w->spec.mask & (1U << i)) == 0 ||
+			    w->nt[i].temp < 0 ||
 			    (*done & (1U << i)) != 0 ||
 			    regno(p->n_left) != w->nt[i].temp)
 				continue;
@@ -822,7 +868,7 @@ void
 inline_args(struct symtab **sp, int nargs)
 {
 	struct istat *cf;
-	int i;
+	int alltemps = 1, i;
 
 	SDEBUG(("inline_args\n"));
 	cf = cifun;
@@ -839,15 +885,20 @@ inline_args(struct symtab **sp, int nargs)
 	if (nargs) {
 		for (i = 0; i < nargs; i++)
 			if ((sp[i]->sflags & STNODE) == 0)
-				return; /* not temporary */
+				alltemps = 0;
+		if (!alltemps && ((cf->flags & AUTOSPEC) == 0 ||
+		    !TARGET_PARTIAL_STATIC_SPECIALIZATION()))
+			return;
 		cf->nt = permalloc(sizeof(struct ntds)*nargs);
 		for (i = 0; i < nargs; i++) {
-			cf->nt[i].temp = sp[i]->soffset;
+			cf->nt[i].temp = (sp[i]->sflags & STNODE) != 0 ?
+			    sp[i]->soffset : -1;
 			cf->nt[i].type = sp[i]->stype;
 			cf->nt[i].df = sp[i]->sdf;
 			cf->nt[i].ss = sp[i]->sss;
 		}
 	}
 	cf->nargs = nargs;
-	cf->flags |= CANINL;
+	if (alltemps)
+		cf->flags |= CANINL;
 }

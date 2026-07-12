@@ -142,6 +142,8 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
     "$tmp.ssastrength.s" "$tmp.ssastrength.log" \
     "$tmp.staticspec.s" "$tmp.staticspec.os.s" "$tmp.staticspec.free.s" \
+    "$tmp.staticspec.generic.s" \
+    "$tmp.staticspec-stack.s" \
     "$tmp.weak-first.s" "$tmp.weak-first.o" \
     "$tmp.weak-second.s" "$tmp.weak-second.o" \
     "$tmp.weak-start.s" "$tmp.weak-start.o" "$tmp.weak.elf"' 0 1 2 3 15
@@ -171,10 +173,21 @@ test -s "$tmp.o"
 
 "$pcc" -O2 -S -o "$tmp.staticspec.s" \
     "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssaspecialize001.c"
-test "$(grep -c '^__pcc_spec_.*:$' "$tmp.staticspec.s")" -eq 1
+test "$(grep -c '^__pcc_spec_.*:$' "$tmp.staticspec.s")" -eq 2
 grep 'jal[[:space:]]*__pcc_spec_1_sum_stride' "$tmp.staticspec.s" >/dev/null
 grep 'jal[[:space:]]*sum_stride' "$tmp.staticspec.s" >/dev/null
 grep 'sum_stride_pointer' "$tmp.staticspec.s" >/dev/null
+if [ "$float_abi" = hard ]; then
+	awk '
+/^[[:space:]]*[.]ent main$/ { inside = 1; next }
+inside && /jal[[:space:]]*__pcc_spec_1_sum_stride/ { found = 1; exit }
+inside && /^[[:space:]]*(li|move|addiu)[[:space:]]+\$a[23],/ { bad = 1 }
+END { exit found && !bad ? 0 : 1 }
+	' "$tmp.staticspec.s" || {
+		echo "specialized register constants were still materialized" >&2
+		exit 1
+	}
+fi
 "$pcc" -Os -S -o "$tmp.staticspec.os.s" \
     "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssaspecialize001.c"
 if grep '__pcc_spec_' "$tmp.staticspec.os.s" >/dev/null; then
@@ -186,6 +199,54 @@ fi
 if grep '__pcc_spec_' "$tmp.staticspec.free.s" >/dev/null; then
 	echo "freestanding compilation unexpectedly enabled static specialization" >&2
 	exit 1
+fi
+
+"$pcc" -march=mips3 -mtune=r4000 -O2 -S \
+    -o "$tmp.staticspec.generic.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssaspecialize001.c"
+awk '
+/^[[:space:]]*[.]ent main$/ { inside = 1; next }
+inside && /^[[:space:]]*(li|move|addiu)[[:space:]]+\$a2,/ { a2 = 1 }
+inside && /^[[:space:]]*(li|move|addiu)[[:space:]]+\$a3,/ { a3 = 1 }
+inside && /jal[[:space:]]*__pcc_spec_1_sum_stride/ { found = 1; exit }
+END { exit found && a2 && a3 ? 0 : 1 }
+' "$tmp.staticspec.generic.s" || {
+	echo "generic MIPS3 unexpectedly elided specialized arguments" >&2
+	exit 1
+}
+
+cat > "$tmp.c" <<'EOF'
+static int six_arg(int, int, int, int, int *, int);
+
+int
+static_stack_arg_probe(int *out)
+{
+	return six_arg(2, 3, 0, 1, out, 1);
+}
+
+static int
+six_arg(int a, int b, int zero, int one, int *out, int tail)
+{
+	*out = a + b + zero + one + tail;
+	return *out;
+}
+EOF
+"$pcc" -O2 -S -o "$tmp.staticspec-stack.s" "$tmp.c"
+grep 'jal[[:space:]]*__pcc_spec_.*_six_arg' \
+    "$tmp.staticspec-stack.s" >/dev/null
+if [ "$float_abi" = hard ]; then
+	awk '
+/^[[:space:]]*[.]ent static_stack_arg_probe$/ { inside = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*L[0-9]+:/ { body = 1 }
+inside && body && /#[[:space:]]*save function arg to stack/ { slots++ }
+inside && body && /^[[:space:]]*sw[[:space:]].*\(\$sp\)/ { stores++ }
+inside && /jal[[:space:]]*__pcc_spec_.*_six_arg/ { found = 1; exit }
+END { exit found && slots == 2 && stores == 1 ? 0 : 1 }
+	' "$tmp.staticspec-stack.s" || {
+		echo "specialized stack constant was not elided safely" >&2
+		exit 1
+	}
 fi
 
 cat > "$tmp.c" <<'EOF'

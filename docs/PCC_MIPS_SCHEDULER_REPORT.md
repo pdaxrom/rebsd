@@ -1308,3 +1308,79 @@ marker was present without a numeric value.  Against F1's stable 16-rep row,
 PCC improves by 0.32% while the GCC control changes by -0.11%.  This closes
 G2 at 72.27% of GCC.  Milestone G remains open because the 75-85% medium-term
 target has not yet been reached.
+
+## Milestone G3: Effective Stack-Parameter Specialization
+
+F1 could select constant-argument clones with five or six parameters, but its
+saved-inline descriptor was all-or-nothing: one stack-resident parameter made
+`inline_args()` discard every parameter mapping.  The clone was emitted under
+its specialized name, while stack-passed increment parameters could remain
+generic inside the body.
+
+G3 permits a partial descriptor only through a target cost hook.  On optimized
+hard-float VR4300 and MIPS32R2, a selected scalar stack parameter is promoted
+to a compiler `TEMP`; unselected parameters retain their existing storage.
+Clone replay replaces the selected TEMP initializer with its `-1`, `0`, or
+`1` constant, allowing normal SSA folding to remove the generic increment
+branches and address arithmetic.
+
+After prototype conversion, selected literal call arguments receive a common
+interpass marker.  MIPS omits the corresponding o32 argument-register move or
+stack store.  A stack `FUNARG` still advances the fixed or dynamic call area,
+so every later argument keeps its ABI slot.  This avoids a private calling
+convention and keeps the backend addition to two exact table shapes.
+
+Partial specialization and argument elision are disabled for soft-float and
+generic MIPS3/R4000.  Variadic, `-Os`, and freestanding compilations already
+remain outside F1 specialization.  A permanent six-argument runtime case and
+host assembly probes cover register omission, stack-slot preservation, the
+generic fallback, and the generic MIPS3 negative case.
+
+### G3 Static And A/B Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  branches  jumps  bytes
+VR4300 G2                      2291       2174   117    416     226       106    116  70437
+VR4300 G3                      2005       1910    95    362     202        82    108  62458
+MIPS32R2 G2 hard              2414       2311   103    534     272       106    116  70039
+MIPS32R2 G3 hard              2124       2043    81    470     244        82    108  62030
+MIPS32R2 G2/G3 soft           3695       3601    94   1016     554       106    230  99839
+```
+
+MIPS32R2 BE and LE counters are identical.  Their soft-float assembly is
+byte-identical to G2; a compiler rebuilt directly from the G2 commit also
+confirms byte-identical VR4300 soft-float assembly.
+
+Four alternating Malta64 GCC-kernel/PCC-hard-float-userland runs measured the
+stable 256-repetition rows as follows:
+
+```text
+G2: 12984.398, 12862.809 KFLOPS; average 12923.604
+G3: 13473.443, 13263.736 KFLOPS; average 13368.590
+```
+
+G3 improves the average by 3.44%.  The two paired gains are 3.77% and 3.12%,
+so both alternating comparisons favor G3.
+
+### G3 Regression Gates
+
+Cross regression compiled 331 of 334 tests with only the three established
+expected failures and produced 294 runtime candidates.  Native VR4300 PCC
+compiled 304 cases, observed 30 expected compile failures, and passed 294/294
+runtime cases, including the new six-argument specialization case.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 13105.422 / 13115.304 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | byte-identical to G2 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13419.638 / 13380.137 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1090.437 / 1087.958 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13440.236 / 13254.291 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1100.336 / 1092.646 | `PCC_SMOKE_ALL_RC:0` |
+
+The MaltaEL hard-float table uses a five-second repeat after the one-second
+full-smoke sample produced a timer outlier.  All six full profiles reported
+`PCC_SMOKE_ALL_FAILURES 0`; every PCC kernel retained
+`-msoft-float -fomit-frame-pointer`, and no assembler macro expanded into a
+multi-instruction branch delay slot.  The default `-mfix4300` behavior is
+unchanged.  G3 remains open until the clean image passes on physical N64.

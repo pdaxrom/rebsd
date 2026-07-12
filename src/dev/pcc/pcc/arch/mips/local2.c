@@ -2729,6 +2729,11 @@ special(NODE *p, int shape)
 	int o = p->n_op;
 	CONSZ val;
 
+	if (shape == SPARGREG)
+		return !mips_soft_float && o == REG && regno(p) >= A0 &&
+		    regno(p) < A0 + nargregs ? SRDIR : SRNOPE;
+	if (shape == SPUNUSEDSPECARG && mips_soft_float)
+		return SRNOPE;
 	if (o != ICON || p->n_name[0] != 0)
 		return SRNOPE;
 
@@ -2741,6 +2746,10 @@ special(NODE *p, int shape)
 	case SPOW2CON:
 		if (val > 1 && val <= 0x7fffffff &&
 		    (val & (val - 1)) == 0)
+			return SRDIR;
+		break;
+	case SPUNUSEDSPECARG:
+		if (attr_find(p->n_ap, ATTR_STATIC_SPEC_CONST) != NULL)
 			return SRDIR;
 		break;
 	case SSHADDCON:

@@ -2065,6 +2065,8 @@ doacall(struct symtab *sp, NODE *f, NODE *a)
 
 	/* Do prototype checking for function call */
 	pr_callchk(sp, f, a);
+	if (specialized)
+		inline_specialize_args(ssp, a);
 
 build:	if (!specialized && sp != NULL && (sp->sflags & SINLINE) &&
 	    (w = inlinetree(sp, f, a)))

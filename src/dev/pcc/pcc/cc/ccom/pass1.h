@@ -373,6 +373,8 @@ int inline_autosave(struct symtab *);
 void inline_note_definition(struct symtab *);
 void inline_static_ref(struct symtab *);
 struct symtab *inline_specialize(struct symtab *, P1ND *);
+void inline_specialize_args(struct symtab *, P1ND *);
+int inline_specialized_param(struct symtab *, int);
 P1ND *inlinetree(struct symtab *, P1ND *, P1ND *);
 void argsave(P1ND *p);
 struct rstack *bstruct(char *, int, P1ND *);

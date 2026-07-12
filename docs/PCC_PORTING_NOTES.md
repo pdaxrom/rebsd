@@ -935,6 +935,28 @@ The two numeric debug status markers are zero, and the terminal
 `N64_PCC_DEBUG_RC_END` marker is present without a numeric value.  This closes
 G2 while leaving the broader Milestone G performance work open.
 
+The G3 specialization step fixes the partial-parameter case left by F1.  A
+five- or six-argument clone can have selected hard-float scalar stack
+parameters promoted to compiler temporaries on VR4300 and MIPS32R2 while
+unselected parameters keep their original storage.  Clone replay then replaces
+those TEMP initializers with the selected constants, allowing SSA folding to
+remove generic increment paths that previously remained in the clone.
+
+Selected literal arguments are marked after prototype conversion.  MIPS omits
+their argument-register assignments and stack stores but still advances every
+o32 stack slot, so no private calling convention is introduced.  Soft-float,
+generic MIPS3/R4000, varargs, `-Os`, and freestanding compilations retain the
+G2 behavior.  MIPS32R2 BE/LE and VR4300 soft-float Linpack assembly are
+byte-identical to G2.
+
+VR4300 hard-float Linpack drops from 2291 to 2005 instructions, from 416 to
+362 loads, from 226 to 202 stores, and from 117 to 95 nops.  Alternating
+Malta64 A/B runs improve by 3.44%.  Cross regression produces 294 runtime
+candidates, native VR4300 passes 294/294, and all six PCC-kernel/PCC-rootfs
+full QEMU profiles pass with `-msoft-float -fomit-frame-pointer` kernels.  The
+default `-mfix4300` repair remains unchanged.  G3 still requires the physical
+N64 gate.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and
