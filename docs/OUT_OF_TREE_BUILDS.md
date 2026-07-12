@@ -4,6 +4,9 @@ MIPS builds keep generated files outside the source tree.  Invoke a board
 through the shared architecture entry point and select an object root with
 `O`:
 
+`O` is the uppercase Latin letter O (for object/output), not the digit zero
+`0`.  The assignment syntax is `O=/path/to/build`.
+
 ```sh
 make -C sys/mips BOARD=malta64 O=/work/rebsd-malta64 all
 make -C sys/mips BOARD=maltael O=/work/rebsd-maltael all
@@ -45,6 +48,10 @@ gmake -j4 -C sys/mips BOARD=maltael O=/work/rebsd-maltael all
 The recursive runtime and generator rules keep `clean`, generation, build,
 and install phases ordered while allowing independent objects and directories
 to use the make jobserver.
+
+One `make -jN` process owns one object root.  Do not run two independent make
+processes against the same `O`; give each process a different `O` path.  This
+restriction does not prevent parallel jobs within a single `make -jN` build.
 
 Use object paths without whitespace.  The dispatcher preserves argv without
 `eval`, but legacy compiler, linker, and kconfig recipes do not yet quote every

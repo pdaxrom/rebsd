@@ -35,8 +35,9 @@ make -C sys/mips BOARD=n64 O=/work/rebsd-n64 \
     N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc all
 ```
 
-When `O` is omitted, a configuration-specific directory is created under the
-sibling `../retrobsd-build` directory.  See
+`O` is the uppercase Latin letter O (for object/output), not the digit zero
+`0`.  When `O` is omitted, a configuration-specific directory is created
+under the sibling `../retrobsd-build` directory.  See
 [docs/OUT_OF_TREE_BUILDS.md](docs/OUT_OF_TREE_BUILDS.md) for artifact paths,
 parallel builds, cleanup, and GNU make compatibility.
 

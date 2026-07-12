@@ -22,11 +22,13 @@ Use `make -C sys/mips BOARD=n64 kernel.z64` for the N64 cartridge image and
 Use `make -C sys/mips BOARD=maltael rootfs.img kernel` for the little-endian
 Malta bring-up.  PIC32 is not part of the current supported MIPS gate matrix.
 
-All generated files are placed in an object root.  Pass `O=/path/to/build`, or
-omit it to use the automatic sibling `../retrobsd-build/<profile>` directory.
+All generated files are placed in an object root.  In `O=/path/to/build`, `O`
+is the uppercase Latin letter O (for object/output), not the digit zero `0`.
+Omit it to use the automatic sibling `../retrobsd-build/<profile>` directory.
 Board Makefiles and kconfig C sources are generated there, so do not run make
-directly in `sys/mips/<board>`.  See [out-of-tree builds](../../docs/OUT_OF_TREE_BUILDS.md)
-for the directory layout, parallel-build rules, and make compatibility.
+directly in `sys/mips/<board>`.  See
+[out-of-tree builds](../../docs/OUT_OF_TREE_BUILDS.md) for the directory
+layout, parallel-build rules, and make compatibility.
 
 ## Build Matrix
 
