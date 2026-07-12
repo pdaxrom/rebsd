@@ -26,6 +26,7 @@ kernel/kern_synch.c             standard
 kernel/kern_sysctl.c            standard
 kernel/kern_time.c              standard
 kernel/subr_prf.c               standard
+kernel/subr_dma.c               optional dma
 kernel/subr_rmap.c              standard
 kernel/sys_generic.c            standard
 kernel/sys_inode.c              standard

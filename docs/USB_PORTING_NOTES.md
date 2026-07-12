@@ -181,13 +181,29 @@ No reusable `bus_dma` or DMA mapping API exists.  The only historical generic
 DMA-related code is an old network contiguous-area helper in `uipc_mbuf.c`,
 which is not suitable as the USB API.
 
-The first Ci20 DMA implementation will reserve a linker-defined, aligned,
-physically contiguous region below the 32-bit DMA limit and access it only
-through its uncached KSEG1 alias after initialization.  It will not declare
-ordinary cached kernel buffers coherent.  Class drivers copy between DMA
-payload buffers and normal kernel buffers.  This is deliberately simple and
-safe; future architectures may provide a cached backend with real range cache
-maintenance.
+The first Ci20 DMA implementation reserves a 64 KiB linker-defined region,
+aligned to 4096 bytes, physically contiguous, and below the 32-bit DMA limit.
+`dmaattach()` converts its linked KSEG0 address to a physical address and
+registers only the uncached KSEG1 alias with the generic allocator.  It does
+not declare ordinary cached kernel buffers coherent.  Class drivers copy
+between DMA payload buffers and normal kernel buffers.  This is deliberately
+simple and safe; future architectures may provide a cached backend with real
+range cache maintenance.
+
+The implemented interface in `sys/include/dma.h` uses `struct dma_mem` to keep
+the virtual address, 32-bit physical address, allocation size, alignment,
+capabilities, and an opaque ownership cookie together.  It provides:
+
+- `dma_pool_init`, `dma_pool_ready`, `dma_pool_size`, and
+  `dma_pool_available`;
+- `dma_alloc` and checked `dma_free`;
+- `dma_sync_for_device` and `dma_sync_for_cpu` with explicit direction;
+- a two-callback machine backend for architectures that need cache work.
+
+`sys/kernel/subr_dma.c` uses first-fit allocation over at most 33 free ranges
+and records at most 32 live allocations.  Both limits are compile-time
+bounded.  Pool operations use short `splhigh` critical sections in the kernel;
+the same source is compiled by the host test with no target dependencies.
 
 The generic API must validate:
 
@@ -207,6 +223,26 @@ contract.
 The JZ4780 PDMA controller is not a dependency of USB OHCI/EHCI.  OHCI and EHCI
 are bus-master controllers and consume their own DMA descriptor schedules.
 System PDMA support remains a separate future driver.
+
+### DMA Phase Verification
+
+The host-side test is run with:
+
+```sh
+make -C sys/tests/dma test
+```
+
+It covers initialization validation, physical/virtual alignment, contiguous
+address translation, zero filling, unsupported capabilities, sync callback
+arguments and range checks, reinitialization with a live allocation, reuse,
+double free, allocation-record exhaustion, pool exhaustion, and full-range
+coalescing after free.
+
+Both Ci20 compiler profiles linked `ci20.uImage` with the DMA service enabled.
+The final images place `.dma` at a 4096-byte-aligned address with an exact
+64 KiB size.  The generated service order is `creatorattach()` followed by
+`dmaattach()`.  These results validate the build and link layout only; they do
+not claim a Ci20 hardware run.
 
 ## MMIO and Platform Boundary
 

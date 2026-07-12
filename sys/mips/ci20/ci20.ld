@@ -49,6 +49,14 @@ SECTIONS
     . = ALIGN(16);
   } > kernel
   __bss_end = .;
+
+  .dma ALIGN(4096) (NOLOAD) : {
+    __ci20_dma_start = .;
+    KEEP(*(.dma))
+    KEEP(*(.dma.*))
+    . = ALIGN(4096);
+    __ci20_dma_end = .;
+  } > kernel
   _end = .;
 
   .romdisk : {

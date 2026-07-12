@@ -25,6 +25,7 @@ options         "CONS_MAJOR=0", "CONS_MINOR=0"
 device          "ci20_uart"
 
 service         creator
+service         dma
 service         ether   1
 service         "ci20_dm9000"
 service         inet

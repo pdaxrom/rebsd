@@ -75,6 +75,22 @@ The generated NetBSD `usbdevs.h` and `usbdevs_data.h` product-name database is
 not planned for import.  The first ReBSD implementation prints numeric vendor
 and product IDs together with class, subclass, and protocol.
 
+## Native ReBSD Infrastructure
+
+The following Phase 1 files are original ReBSD infrastructure and are not
+copied or materially derived from the NetBSD USB sources:
+
+| ReBSD file | Purpose |
+| --- | --- |
+| `sys/include/dma.h` | Small machine-independent DMA allocation and synchronization contract |
+| `sys/kernel/subr_dma.c` | Bounded contiguous-pool allocator and ownership validation |
+| `sys/mips/ci20/dma.c` | Ci20 uncached KSEG1 pool backend and ordering barriers |
+| `sys/tests/dma/` | Host-side allocator, validation, exhaustion, and synchronization tests |
+
+The Ci20 linker reservation and configuration entries are likewise native
+integration code.  JZ4780 PDMA code was neither imported nor referenced: OHCI
+and EHCI are bus masters and do not require the SoC PDMA engine.
+
 ## Primary Source Revisions and Sizes
 
 These values identify the exact files in the verified NetBSD 3.1 archive.
