@@ -98,6 +98,10 @@ qtd_complete(struct ehci_qtd *qtd, unsigned remaining, unsigned status)
 {
     qtd->qtd_status &= ~(FAKE_TOKEN_BYTES_MASK | EHCI_QTD_ACTIVE |
         EHCI_QTD_HALTED | EHCI_QTD_STATERRS);
+    if ((status & (EHCI_QTD_HALTED | EHCI_QTD_XACTERR)) ==
+        (EHCI_QTD_HALTED | EHCI_QTD_XACTERR) &&
+        (status & EHCI_QTD_MISSEDMICRO) == 0)
+        qtd->qtd_status &= ~EHCI_QTD_CERR_MASK;
     qtd->qtd_status |= EHCI_QTD_SET_BYTES(remaining) | status;
 }
 
@@ -251,13 +255,14 @@ fake_run_async(struct fake_ehci *fake)
 }
 
 static void
-fake_run_periodic(struct fake_ehci *fake)
+fake_run_periodic(struct fake_ehci *fake, unsigned frame)
 {
     unsigned int *frame_list;
     struct ehci_qh *qh;
     struct ehci_qtd *qtd;
     unsigned char *buffer;
     unsigned int link;
+    unsigned int qtd_phys;
     unsigned completion_status;
     unsigned requested;
     unsigned visited;
@@ -265,14 +270,19 @@ fake_run_periodic(struct fake_ehci *fake)
     frame_list = phys_to_ptr(fake->regs[FAKE_OP(EHCI_PERIODICLISTBASE)]);
     if (frame_list == 0)
         return;
-    link = frame_list[0];
+    link = frame_list[frame & (EHCI_FRAME_LIST_COUNT - 1u)];
     for (visited = 0; visited < EHCI_INTR_SLOTS &&
         (link & EHCI_LINK_TERMINATE) == 0; ++visited) {
         qh = phys_to_ptr(EHCI_LINK_ADDR(link));
         if (qh == 0)
             return;
         link = qh->qh_link;
-        qtd = phys_to_ptr(EHCI_LINK_ADDR(qh->qh_qtd.qtd_next));
+        if ((qh->qh_qtd.qtd_status & EHCI_QTD_ACTIVE) != 0 &&
+            qh->qh_curqtd != 0)
+            qtd_phys = EHCI_LINK_ADDR(qh->qh_curqtd);
+        else
+            qtd_phys = EHCI_LINK_ADDR(qh->qh_qtd.qtd_next);
+        qtd = phys_to_ptr(qtd_phys);
         if (qtd == 0 || (qtd->qtd_status & EHCI_QTD_ACTIVE) == 0)
             continue;
         requested = qtd_bytes(qtd);
@@ -284,7 +294,9 @@ fake_run_periodic(struct fake_ehci *fake)
         completion_status = fake->periodic_status;
         qtd_complete(qtd, 0, completion_status);
         fake->periodic_status = 0;
+        qh->qh_curqtd = qtd_phys;
         qh->qh_qtd.qtd_next = EHCI_LINK_TERMINATE;
+        qh->qh_qtd.qtd_status = qtd->qtd_status;
         ++fake->periodic_lists;
         fake->regs[FAKE_OP(EHCI_USBSTS)] |= completion_status != 0 ?
             EHCI_STS_ERRINT : EHCI_STS_INT;
@@ -718,6 +730,8 @@ test_periodic_split_interrupts(void)
     struct usb_xfer *parent_xfer;
     struct usb_xfer *child_xfer;
     struct ehci_pipe *epipe;
+    struct ehci_pipe *parent_epipe;
+    struct ehci_pipe *child_epipe;
     unsigned char parent_report[8];
     unsigned char child_report[8];
     unsigned int endp;
@@ -763,14 +777,31 @@ test_periodic_split_interrupts(void)
         USB_STATUS_NORMAL_COMPLETION);
     CHECK(usb_open_pipe(child_interface, 0x82, &child_pipe) ==
         USB_STATUS_NORMAL_COMPLETION);
-    epipe = test_find_pipe(&ehci, child_pipe);
-    CHECK(epipe != 0);
-    endp = epipe->ep_qh->qh_endp;
-    endphub = epipe->ep_qh->qh_endphub;
+    parent_epipe = test_find_pipe(&ehci, parent_pipe);
+    child_epipe = test_find_pipe(&ehci, child_pipe);
+    epipe = child_epipe;
+    CHECK(parent_epipe != 0 && child_epipe != 0);
+    CHECK(parent_epipe->ep_intr_period == 64 &&
+        parent_epipe->ep_intr_phase == 0 &&
+        parent_epipe->ep_intr_uframe == 0 &&
+        child_epipe->ep_intr_period == 8 &&
+        child_epipe->ep_intr_phase == 1 &&
+        child_epipe->ep_intr_uframe == 0);
+    CHECK((parent_epipe->ep_qh->qh_endp & 0xf0000000u) == 0);
+    CHECK(phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[0])) ==
+        parent_epipe->ep_qh &&
+        phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[1])) ==
+        child_epipe->ep_qh &&
+        (ehci.eh_frame_list[8] & EHCI_LINK_TERMINATE) != 0 &&
+        phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[9])) ==
+        child_epipe->ep_qh);
+    endp = child_epipe->ep_qh->qh_endp;
+    endphub = child_epipe->ep_qh->qh_endphub;
     CHECK(((endp >> 12) & 3u) == EHCI_QH_SPEED_FULL &&
-        (endp & EHCI_QH_CTL) == 0);
-    CHECK((endphub & 0xffu) == 0x02 &&
-        ((endphub >> 8) & 0xffu) == 0x38 &&
+        (endp & EHCI_QH_CTL) == 0 &&
+        (endp & 0xf0000000u) == 0);
+    CHECK((endphub & 0xffu) == 0x01 &&
+        ((endphub >> 8) & 0xffu) == 0x1c &&
         ((endphub >> 16) & 0x7fu) == parent->ud_address &&
         ((endphub >> 23) & 0x7fu) == 3);
     CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) != 0);
@@ -788,34 +819,108 @@ test_periodic_split_interrupts(void)
     CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
     CHECK(ehci.eh_intr_slots[0].eis_xfer != 0 &&
         ehci.eh_intr_slots[1].eis_xfer != 0);
-    fake_run_periodic(&fake);
+    fake_run_periodic(&fake, 0);
+    CHECK(fake.periodic_lists == 1);
+    CHECK(ehci_intr(&ehci) == 1);
+    CHECK(parent_events.callbacks == 1 && child_events.callbacks == 0 &&
+        parent_events.status == USB_STATUS_NORMAL_COMPLETION);
+    fake_run_periodic(&fake, 1);
     CHECK(fake.periodic_lists == 2);
     CHECK(ehci_intr(&ehci) == 1);
-    CHECK(parent_events.callbacks == 1 && child_events.callbacks == 1 &&
-        parent_events.status == USB_STATUS_NORMAL_COMPLETION &&
+    CHECK(child_events.callbacks == 1 &&
         child_events.status == USB_STATUS_NORMAL_COMPLETION);
     CHECK(child_events.submit_status == USB_STATUS_IN_PROGRESS &&
         child_xfer->ux_active);
     CHECK(parent_report[0] != 0 && child_report[0] != 0);
-    fake_run_periodic(&fake);
+    fake_run_periodic(&fake, 9);
     CHECK(fake.periodic_lists == 3);
     CHECK(ehci_intr(&ehci) == 1);
     CHECK(child_events.callbacks == 2 && !child_xfer->ux_active &&
         child_events.status == USB_STATUS_NORMAL_COMPLETION);
 
+    /* Exhausted hardware XACTERR gets a bounded software retry. */
+    memset(&child_events, 0, sizeof(child_events));
+    child_events.limit = 1;
+    fake.periodic_status = EHCI_QTD_HALTED | EHCI_QTD_XACTERR;
+    CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
+    fake_run_periodic(&fake, 17);
+    CHECK(ehci_intr(&ehci) == 1);
+    epipe = test_find_pipe(&ehci, child_pipe);
+    CHECK(epipe != 0 && epipe->ep_xacterrs == 1 &&
+        child_events.callbacks == 0 && child_xfer->ux_active &&
+        (ehci.eh_intr_slots[1].eis_qtd->qtd_status &
+        (EHCI_QTD_ACTIVE | EHCI_QTD_CERR_MASK)) ==
+        (EHCI_QTD_ACTIVE | EHCI_QTD_SET_CERR(3)));
+    fake_run_periodic(&fake, 25);
+    CHECK(ehci_intr(&ehci) == 1);
+    CHECK(child_events.callbacks == 1 && !child_xfer->ux_active &&
+        child_events.status == USB_STATUS_NORMAL_COMPLETION &&
+        epipe->ep_xacterrs == 0);
+
+    /* MISSEDMICRO with CERR intact is terminal, not an XACTERR retry. */
+    memset(&child_events, 0, sizeof(child_events));
+    child_events.limit = 1;
+    fake.periodic_status = EHCI_QTD_HALTED | EHCI_QTD_XACTERR |
+        EHCI_QTD_MISSEDMICRO;
+    CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
+    fake_run_periodic(&fake, 41);
+    CHECK(ehci_intr(&ehci) == 1);
+    CHECK(child_events.callbacks == 1 && !child_xfer->ux_active &&
+        child_events.status == USB_STATUS_IO_ERROR &&
+        epipe->ep_xacterrs == 0);
+
     /* XACTERR is sticky and non-fatal when hardware did not halt the qTD. */
     memset(&parent_events, 0, sizeof(parent_events));
     fake.periodic_status = EHCI_QTD_XACTERR;
     CHECK(usb_submit_xfer(parent_xfer) == USB_STATUS_IN_PROGRESS);
-    fake_run_periodic(&fake);
-    CHECK(fake.periodic_lists == 4);
+    fake_run_periodic(&fake, 64);
+    CHECK(fake.periodic_lists == 7);
     CHECK(ehci_intr(&ehci) == 1);
     CHECK(parent_events.callbacks == 1 && !parent_xfer->ux_active &&
         parent_events.status == USB_STATUS_NORMAL_COMPLETION);
 
     CHECK(usb_free_xfer(child_xfer) == USB_STATUS_NORMAL_COMPLETION);
     CHECK(usb_free_xfer(parent_xfer) == USB_STATUS_NORMAL_COMPLETION);
+
+    /* Reuse a split periodic slot while the high-speed hub slot remains. */
     usb_close_pipe(child_pipe);
+    CHECK(ehci.eh_intr_slots[0].eis_pipe != 0 &&
+        ehci.eh_intr_slots[1].eis_pipe == 0 &&
+        (fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) != 0);
+    CHECK(usb_open_pipe(child_interface, 0x82, &child_pipe) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    child_xfer = usb_alloc_xfer(child);
+    CHECK(child_xfer != 0);
+    memset(&child_events, 0, sizeof(child_events));
+    child_events.limit = 1;
+    usb_setup_xfer(child_xfer, child_pipe, &child_events,
+        child_report, sizeof(child_report), USB_XFER_SHORT_OK, 0,
+        repeat_done);
+    CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
+    fake_run_periodic(&fake, 33);
+    CHECK(ehci_intr(&ehci) == 1);
+    CHECK(child_events.callbacks == 1 && !child_xfer->ux_active &&
+        child_events.status == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_free_xfer(child_xfer) == USB_STATUS_NORMAL_COMPLETION);
+    usb_close_pipe(child_pipe);
+
+    /* Empty and rebuild the periodic schedule, then reuse its first slot. */
+    usb_close_pipe(parent_pipe);
+    CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) == 0);
+    CHECK(usb_open_pipe(parent_interface, 0x82, &parent_pipe) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    parent_xfer = usb_alloc_xfer(parent);
+    CHECK(parent_xfer != 0);
+    memset(&parent_events, 0, sizeof(parent_events));
+    usb_setup_xfer(parent_xfer, parent_pipe, &parent_events,
+        parent_report, sizeof(parent_report), USB_XFER_SHORT_OK, 0,
+        xfer_done);
+    CHECK(usb_submit_xfer(parent_xfer) == USB_STATUS_IN_PROGRESS);
+    fake_run_periodic(&fake, 128);
+    CHECK(ehci_intr(&ehci) == 1);
+    CHECK(parent_events.callbacks == 1 && !parent_xfer->ux_active &&
+        parent_events.status == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_free_xfer(parent_xfer) == USB_STATUS_NORMAL_COMPLETION);
     usb_close_pipe(parent_pipe);
     CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) == 0);
     usb_device_disconnect(child);

@@ -445,6 +445,69 @@ ehci_find_pipe(struct ehci_softc *sc, struct usb_pipe *pipe)
     return 0;
 }
 
+static unsigned
+ehci_interrupt_period(const struct usb_device *device, unsigned interval)
+{
+    unsigned period;
+
+    if (device->ud_speed == USB_SPEED_HIGH) {
+        /* High-speed bInterval is an exponent in 125-us microframes. */
+        if (interval <= 4u)
+            return 1u;
+        if (interval - 4u >= 10u)
+            return EHCI_FRAME_LIST_COUNT;
+        return 1u << (interval - 4u);
+    }
+
+    /* Full/low-speed bInterval is in frames; EHCI uses power-of-two slots. */
+    period = 1u;
+    while (period < EHCI_FRAME_LIST_COUNT &&
+        period <= interval / 2u)
+        period <<= 1;
+    return period;
+}
+
+static int
+ehci_interrupt_frames_overlap(const struct ehci_pipe *a,
+    const struct ehci_pipe *b)
+{
+    unsigned period;
+
+    period = a->ep_intr_period < b->ep_intr_period ?
+        a->ep_intr_period : b->ep_intr_period;
+    return (a->ep_intr_phase & (period - 1u)) ==
+        (b->ep_intr_phase & (period - 1u));
+}
+
+static unsigned
+ehci_interrupt_uframe(struct ehci_softc *sc, struct ehci_pipe *epipe)
+{
+    struct ehci_pipe *other;
+    unsigned limit;
+    unsigned type;
+    unsigned used;
+    unsigned i;
+    unsigned uframe;
+
+    limit = epipe->ep_pipe->up_device->ud_speed == USB_SPEED_HIGH ?
+        8u : 4u;
+    used = 0;
+    for (i = 0; i < USB_MAX_PIPES; ++i) {
+        other = &sc->eh_pipes[i];
+        if (other == epipe || !other->ep_used || other->ep_pipe == 0)
+            continue;
+        type = UE_GET_XFERTYPE(other->ep_pipe->up_endpoint->
+            ue_desc.bmAttributes);
+        if (type == UE_INTERRUPT &&
+            ehci_interrupt_frames_overlap(epipe, other))
+            used |= 1u << other->ep_intr_uframe;
+    }
+    for (uframe = 0; uframe < limit; ++uframe)
+        if ((used & (1u << uframe)) == 0)
+            return uframe;
+    return epipe->ep_intr_slot & (limit - 1u);
+}
+
 static void
 ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
     unsigned int first_qtd, int async)
@@ -457,6 +520,8 @@ ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
     unsigned int speed;
     unsigned type;
     unsigned max_packet;
+    unsigned naks;
+    unsigned start_uframe;
 
     device = epipe->ep_pipe->up_device;
     endpoint = epipe->ep_pipe->up_endpoint;
@@ -466,6 +531,9 @@ ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
     speed = device->ud_speed == USB_SPEED_HIGH ? EHCI_QH_SPEED_HIGH :
         (device->ud_speed == USB_SPEED_LOW ? EHCI_QH_SPEED_LOW :
         EHCI_QH_SPEED_FULL);
+    /* Periodic QHs must not use NAK throttling (Linux/modern NetBSD). */
+    naks = type == UE_INTERRUPT ? 0u :
+        (speed == EHCI_QH_SPEED_HIGH ? 4u : 0u);
 
     ehci_zero(qh, sizeof(*qh));
     if (async)
@@ -476,7 +544,7 @@ ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
     endp = EHCI_QH_SET_ADDR(device->ud_address) |
         EHCI_QH_SET_ENDPT(UE_GET_ADDR(endpoint->ue_desc.bEndpointAddress)) |
         EHCI_QH_SET_EPS(speed) | EHCI_QH_DTC |
-        EHCI_QH_SET_MPL(max_packet) | EHCI_QH_SET_NRL(8);
+        EHCI_QH_SET_MPL(max_packet) | EHCI_QH_SET_NRL(naks);
     if (speed != EHCI_QH_SPEED_HIGH && type == UE_CONTROL)
         endp |= EHCI_QH_CTL;
     qh->qh_endp = ehci_to_le32(endp);
@@ -487,16 +555,18 @@ ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
             EHCI_QH_SET_PORT(device->ud_tt_port);
         if (type == UE_INTERRUPT) {
             /*
-             * Start-split in Y1 and permit complete-split retries in
-             * Y3, Y4, and Y5.  One completion slot, as used by the old
-             * NetBSD 3.1 driver, loses periodic IN endpoints when a TT
-             * answers NYET or the first completion opportunity is missed.
+             * Spread start-splits over Y0..Y3 and permit three consecutive
+             * complete-split opportunities two microframes later.  This is
+             * the same S-mask/C-mask shape selected by Linux's
+             * check_intr_schedule().
              */
-            endphub |= EHCI_QH_SET_SMASK(0x02) |
-                EHCI_QH_SET_CMASK(0x38);
+            start_uframe = epipe->ep_intr_uframe;
+            endphub |= EHCI_QH_SET_SMASK(1u << start_uframe) |
+                EHCI_QH_SET_CMASK(7u << (start_uframe + 2u));
         }
     } else if (type == UE_INTERRUPT) {
-        endphub |= EHCI_QH_SET_SMASK(0x01);
+        start_uframe = epipe->ep_intr_uframe;
+        endphub |= EHCI_QH_SET_SMASK(1u << start_uframe);
     }
     qh->qh_endphub = ehci_to_le32(endphub);
     qh->qh_curqtd = 0;
@@ -509,18 +579,24 @@ ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
 static usb_error_t
 ehci_rebuild_periodic(struct ehci_softc *sc)
 {
-    struct ehci_qh *first;
-    struct ehci_qh *previous;
+    struct ehci_pipe *scheduled[EHCI_INTR_SLOTS];
     struct ehci_pipe *epipe;
+    struct ehci_pipe *next;
     unsigned type;
+    unsigned count;
+    unsigned frame;
     unsigned i;
+    unsigned j;
+    unsigned k;
+    unsigned was_running;
+    int sync_error;
 
+    was_running = (ehci_op_read(sc, EHCI_USBCMD) & EHCI_CMD_PSE) != 0;
     if (ehci_periodic_pause(sc) != 0)
         return USB_STATUS_TIMEOUT;
     for (i = 0; i < EHCI_FRAME_LIST_COUNT; ++i)
         sc->eh_frame_list[i] = ehci_to_le32(EHCI_LINK_TERMINATE);
-    first = 0;
-    previous = 0;
+    count = 0;
     for (i = 0; i < USB_MAX_PIPES; ++i) {
         epipe = &sc->eh_pipes[i];
         if (!epipe->ep_used || epipe->ep_pipe == 0)
@@ -529,25 +605,50 @@ ehci_rebuild_periodic(struct ehci_softc *sc)
             ue_desc.bmAttributes);
         if (type != UE_INTERRUPT)
             continue;
-        epipe->ep_qh->qh_link = ehci_to_le32(EHCI_LINK_TERMINATE);
-        if (previous != 0)
-            previous->qh_link = ehci_to_le32(
-                ehci_phys(sc, epipe->ep_qh) | EHCI_LINK_QH);
-        else
-            first = epipe->ep_qh;
-        previous = epipe->ep_qh;
+        /* Linux orders each periodic branch from slow to fast. */
+        for (j = count; j != 0 &&
+            scheduled[j - 1u]->ep_intr_period < epipe->ep_intr_period;
+            --j)
+            scheduled[j] = scheduled[j - 1u];
+        scheduled[j] = epipe;
+        ++count;
     }
-    if (first != 0)
-        for (i = 0; i < EHCI_FRAME_LIST_COUNT;
-            i += EHCI_PERIODIC_FRAMES)
-            sc->eh_frame_list[i] = ehci_to_le32(
-                ehci_phys(sc, first) | EHCI_LINK_QH);
-    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
-        return USB_STATUS_IO_ERROR;
-    if (first != 0)
+
+    /*
+     * Power-of-two periods make phases either disjoint or nested.  A QH's
+     * horizontal link can therefore point at the first faster QH whose
+     * phase is present in every frame occupied by this QH.
+     */
+    for (i = 0; i < count; ++i) {
+        next = 0;
+        for (j = i + 1u; j < count; ++j)
+            if ((scheduled[i]->ep_intr_phase &
+                (scheduled[j]->ep_intr_period - 1u)) ==
+                scheduled[j]->ep_intr_phase) {
+                next = scheduled[j];
+                break;
+            }
+        scheduled[i]->ep_qh->qh_link = ehci_to_le32(next == 0 ?
+            EHCI_LINK_TERMINATE :
+            (ehci_phys(sc, next->ep_qh) | EHCI_LINK_QH));
+    }
+    for (frame = 0; frame < EHCI_FRAME_LIST_COUNT; ++frame)
+        for (k = 0; k < count; ++k)
+            if ((frame & (scheduled[k]->ep_intr_period - 1u)) ==
+                scheduled[k]->ep_intr_phase) {
+                sc->eh_frame_list[frame] = ehci_to_le32(
+                    ehci_phys(sc, scheduled[k]->ep_qh) | EHCI_LINK_QH);
+                break;
+            }
+    sync_error = dma_sync_for_device(&sc->eh_schedule_dma, 0,
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
+    /* Linux waits nine microframes before reusing an unlinked intr QH. */
+    if (was_running)
+        ehci_delay(sc, 2);
+    if (count != 0)
         ehci_periodic_resume(sc);
-    return USB_STATUS_NORMAL_COMPLETION;
+    return sync_error == 0 ? USB_STATUS_NORMAL_COMPLETION :
+        USB_STATUS_IO_ERROR;
 }
 
 static usb_error_t
@@ -559,6 +660,10 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
     unsigned i;
     unsigned slot;
     usb_error_t status;
+#ifdef KERNEL
+    unsigned int endp;
+    unsigned int endphub;
+#endif
 
     sc = (struct ehci_softc *)pipe->up_device->ud_bus->ub_hcd->uh_softc;
     if (!sc->eh_started || ehci_find_pipe(sc, pipe) != 0)
@@ -591,6 +696,15 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
             sc->eh_pipes[i].ep_pipe = pipe;
             sc->eh_pipes[i].ep_qh = &sc->eh_pipe_qhs[i];
             sc->eh_pipes[i].ep_intr_slot = slot;
+            if (type == UE_INTERRUPT) {
+                sc->eh_pipes[i].ep_intr_period =
+                    ehci_interrupt_period(pipe->up_device,
+                    pipe->up_endpoint->ue_desc.bInterval);
+                sc->eh_pipes[i].ep_intr_phase = slot &
+                    (sc->eh_pipes[i].ep_intr_period - 1u);
+                sc->eh_pipes[i].ep_intr_uframe =
+                    ehci_interrupt_uframe(sc, &sc->eh_pipes[i]);
+            }
             ehci_qh_configure(sc, &sc->eh_pipes[i],
                 EHCI_LINK_TERMINATE, type != UE_INTERRUPT);
             if (type == UE_INTERRUPT) {
@@ -604,6 +718,22 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
                         sizeof(sc->eh_pipes[i]));
                     return status;
                 }
+#ifdef KERNEL
+                endp = ehci_from_le32(sc->eh_pipes[i].ep_qh->qh_endp);
+                endphub = ehci_from_le32(sc->eh_pipes[i].ep_qh->
+                    qh_endphub);
+                printf("ehci: periodic addr=%u endpoint=%x "
+                    "bInterval=%u frames=%u phase=%u uframe=%u "
+                    "nrl=%u smask=%x cmask=%x\n",
+                    pipe->up_device->ud_address,
+                    pipe->up_endpoint->ue_desc.bEndpointAddress,
+                    pipe->up_endpoint->ue_desc.bInterval,
+                    sc->eh_pipes[i].ep_intr_period,
+                    sc->eh_pipes[i].ep_intr_phase,
+                    sc->eh_pipes[i].ep_intr_uframe,
+                    (endp >> 28) & 0x0fu,
+                    endphub & 0xffu, (endphub >> 8) & 0xffu);
+#endif
             }
             return USB_STATUS_NORMAL_COMPLETION;
         }
@@ -690,6 +820,41 @@ ehci_qtd_init(struct ehci_softc *sc, struct ehci_qtd *qtd,
     ehci_qtd_buffer(sc, qtd, buffer, length);
 }
 
+static usb_error_t
+ehci_qh_set_interrupt_qtd(struct ehci_softc *sc, struct ehci_qh *qh,
+    unsigned int qtd_phys)
+{
+    unsigned i;
+
+    /*
+     * This QH remains linked in the periodic schedule.  Freeze its overlay
+     * and publish that state before changing the current/next qTD fields;
+     * otherwise the controller can fetch a half-updated overlay.  This is
+     * the ordering used by NetBSD's ehci_set_qh_qtd().
+     */
+    qh->qh_qtd.qtd_status = ehci_to_le32(EHCI_QTD_HALTED);
+    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+        return USB_STATUS_IO_ERROR;
+    qh->qh_curqtd = 0;
+    qh->qh_qtd.qtd_next = ehci_to_le32(qtd_phys);
+    qh->qh_qtd.qtd_altnext = ehci_to_le32(EHCI_LINK_TERMINATE);
+    for (i = 0; i < EHCI_QTD_NBUFFERS; ++i) {
+        qh->qh_qtd.qtd_buffer[i] = 0;
+        qh->qh_qtd.qtd_buffer_hi[i] = 0;
+    }
+    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+        return USB_STATUS_IO_ERROR;
+    qh->qh_qtd.qtd_status = 0;
+    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0) {
+        qh->qh_qtd.qtd_status = ehci_to_le32(EHCI_QTD_HALTED);
+        return USB_STATUS_IO_ERROR;
+    }
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
 static void
 ehci_qh_init(struct ehci_softc *sc, struct ehci_pipe *epipe,
     struct usb_xfer *xfer, unsigned int first_qtd)
@@ -706,6 +871,7 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
     struct ehci_qh *qh;
     unsigned slot_index;
     unsigned int qtd_phys;
+    usb_error_t status;
 
     slot_index = epipe->ep_intr_slot;
     if (slot_index >= EHCI_INTR_SLOTS || xfer->ux_is_control ||
@@ -722,20 +888,16 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
         EHCI_LINK_TERMINATE, EHCI_LINK_TERMINATE, 1);
 
     qh = epipe->ep_qh;
-    qh->qh_qtd.qtd_status = ehci_to_le32(EHCI_QTD_HALTED);
-    qh->qh_curqtd = 0;
-    qh->qh_qtd.qtd_next = ehci_to_le32(qtd_phys);
-    qh->qh_qtd.qtd_altnext = ehci_to_le32(EHCI_LINK_TERMINATE);
-    qh->qh_qtd.qtd_status = 0;
     slot->eis_xfer = xfer;
     slot->eis_length = (unsigned)xfer->ux_length;
+    epipe->ep_xacterrs = 0;
     ehci_op_write(sc, EHCI_USBSTS, EHCI_STS_INT | EHCI_STS_ERRINT);
-    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0) {
+    status = ehci_qh_set_interrupt_qtd(sc, qh, qtd_phys);
+    if (status != USB_STATUS_NORMAL_COMPLETION) {
         ehci_qh_idle(qh);
         slot->eis_xfer = 0;
         slot->eis_length = 0;
-        return USB_STATUS_IO_ERROR;
+        return status;
     }
     return USB_STATUS_IN_PROGRESS;
 }
@@ -857,6 +1019,7 @@ ehci_hcd_submit_xfer(struct usb_xfer *xfer)
     }
     sc->eh_active_xfer = xfer;
     sc->eh_active_pipe = epipe;
+    epipe->ep_xacterrs = 0;
     sc->eh_active_length = (unsigned)xfer->ux_length;
     sc->eh_last_qh_phys = ehci_phys(sc, epipe->ep_qh);
     sc->eh_last_qtd_phys = ehci_phys(sc, &sc->eh_qtds[0]);
@@ -896,6 +1059,33 @@ ehci_qtd_result(unsigned int token)
         return USB_STATUS_STALLED;
     }
     return USB_STATUS_NORMAL_COMPLETION;
+}
+
+static int
+ehci_retry_xacterr(struct ehci_softc *sc, struct ehci_pipe *epipe,
+    struct ehci_qtd *qtd, unsigned int token)
+{
+    if ((token & (EHCI_QTD_HALTED | EHCI_QTD_XACTERR)) !=
+        (EHCI_QTD_HALTED | EHCI_QTD_XACTERR) ||
+        EHCI_QTD_GET_CERR(token) != 0 ||
+        ++epipe->ep_xacterrs >= EHCI_XACTERR_RETRY_MAX)
+        return 0;
+
+    /*
+     * EHCI hardware has exhausted its three transaction attempts.  Linux
+     * qh_completions() retries this condition in software because split
+     * transactions can transiently exhaust CERR without losing the device.
+     * Preserve the transfer state (including SPLITXSTATE and data toggle),
+     * clear HALTED, and give both the qTD and QH overlay three new attempts.
+     */
+    token &= ~(EHCI_QTD_HALTED | EHCI_QTD_CERR_MASK);
+    token |= EHCI_QTD_ACTIVE | EHCI_QTD_SET_CERR(3);
+    qtd->qtd_status = ehci_to_le32(token);
+    epipe->ep_qh->qh_qtd.qtd_status = ehci_to_le32(token);
+    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+        return 0;
+    return 1;
 }
 
 static void
@@ -974,6 +1164,7 @@ ehci_hcd_abort_xfer(struct usb_xfer *xfer)
     struct ehci_pipe *epipe;
     struct ehci_intr_slot *slot;
     unsigned type;
+    unsigned was_running;
 
     sc = (struct ehci_softc *)xfer->ux_device->ud_bus->ub_hcd->uh_softc;
     epipe = ehci_find_pipe(sc, xfer->ux_pipe);
@@ -987,11 +1178,17 @@ ehci_hcd_abort_xfer(struct usb_xfer *xfer)
         slot = &sc->eh_intr_slots[epipe->ep_intr_slot];
         if (slot->eis_xfer != xfer)
             return USB_STATUS_INVALID;
+        was_running = (ehci_op_read(sc, EHCI_USBCMD) &
+            EHCI_CMD_PSE) != 0;
+        if (was_running && ehci_periodic_pause(sc) == 0)
+            ehci_delay(sc, 2);
         ehci_qh_idle(epipe->ep_qh);
         slot->eis_xfer = 0;
         slot->eis_length = 0;
         (void)dma_sync_for_device(&sc->eh_schedule_dma, 0,
             EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
+        if (was_running)
+            ehci_periodic_resume(sc);
         return USB_STATUS_NORMAL_COMPLETION;
     }
     if (sc->eh_active_xfer != xfer)
@@ -1027,7 +1224,10 @@ ehci_poll_active(struct ehci_softc *sc)
     epipe = sc->eh_active_pipe;
     if (xfer == 0 || epipe == 0)
         return;
-    result = ehci_qtd_result(ehci_from_le32(sc->eh_qtds[0].qtd_status));
+    token = ehci_from_le32(sc->eh_qtds[0].qtd_status);
+    if (ehci_retry_xacterr(sc, epipe, &sc->eh_qtds[0], token))
+        return;
+    result = ehci_qtd_result(token);
     if (result == USB_STATUS_IN_PROGRESS)
         return;
     actlen = 0;
@@ -1035,6 +1235,8 @@ ehci_poll_active(struct ehci_softc *sc)
         if (result == USB_STATUS_NORMAL_COMPLETION &&
             sc->eh_active_length != 0) {
             token = ehci_from_le32(sc->eh_qtds[1].qtd_status);
+            if (ehci_retry_xacterr(sc, epipe, &sc->eh_qtds[1], token))
+                return;
             result = ehci_qtd_result(token);
             if (result == USB_STATUS_IN_PROGRESS)
                 return;
@@ -1046,6 +1248,8 @@ ehci_poll_active(struct ehci_softc *sc)
         }
         if (result == USB_STATUS_NORMAL_COMPLETION) {
             token = ehci_from_le32(sc->eh_qtds[2].qtd_status);
+            if (ehci_retry_xacterr(sc, epipe, &sc->eh_qtds[2], token))
+                return;
             result = ehci_qtd_result(token);
             if (result == USB_STATUS_IN_PROGRESS)
                 return;
@@ -1067,6 +1271,7 @@ ehci_poll_active(struct ehci_softc *sc)
     }
     if (sc->eh_active_data_in && actlen != 0)
         ehci_copy(xfer->ux_buffer, sc->eh_data_buffer, actlen);
+    epipe->ep_xacterrs = 0;
     ehci_complete_active(sc, result, actlen);
 }
 
@@ -1091,6 +1296,8 @@ ehci_poll_interrupts(struct ehci_softc *sc)
         if (xfer == 0 || epipe == 0 || slot->eis_qtd == 0)
             continue;
         token = ehci_from_le32(slot->eis_qtd->qtd_status);
+        if (ehci_retry_xacterr(sc, epipe, slot->eis_qtd, token))
+            continue;
         result = ehci_qtd_result(token);
         if (result == USB_STATUS_IN_PROGRESS)
             continue;
@@ -1113,13 +1320,15 @@ ehci_poll_interrupts(struct ehci_softc *sc)
 #ifdef KERNEL
         if (result != USB_STATUS_NORMAL_COMPLETION)
             printf("ehci: periodic addr=%u endpoint=%x failed "
-                "token=%x qh-status=%x endp=%x hub=%x\n",
+                "token=%x qh-status=%x endp=%x hub=%x retries=%u\n",
                 xfer->ux_device->ud_address,
                 xfer->ux_pipe->up_endpoint->ue_desc.bEndpointAddress,
                 token, ehci_from_le32(epipe->ep_qh->qh_qtd.qtd_status),
                 ehci_from_le32(epipe->ep_qh->qh_endp),
-                ehci_from_le32(epipe->ep_qh->qh_endphub));
+                ehci_from_le32(epipe->ep_qh->qh_endphub),
+                epipe->ep_xacterrs);
 #endif
+        epipe->ep_xacterrs = 0;
         ehci_qh_idle(epipe->ep_qh);
         slot->eis_xfer = 0;
         slot->eis_length = 0;

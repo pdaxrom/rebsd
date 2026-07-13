@@ -212,23 +212,39 @@ test_external_hub(void)
     usb_mock_hcd_hub_port_connect(&mock, 0, USB_SPEED_FULL);
     CHECK(usb_mock_hcd_hub_interrupt(&mock) ==
         USB_STATUS_NORMAL_COMPLETION);
+    CHECK(mock.um_pending_xfer == 0);
     CHECK(usb_task_any_pending());
     usb_task_run_pending();
     CHECK(usb_external_hub_device(hub_device, 1) == 0);
-    CHECK(external_detach_count == 1);
+    CHECK(external_detach_count == 1 && mock.um_pending_xfer != 0);
 
     usb_mock_hcd_hub_port_connect(&mock, 1, USB_SPEED_FULL);
     CHECK(usb_mock_hcd_hub_interrupt(&mock) ==
         USB_STATUS_NORMAL_COMPLETION);
+    CHECK(mock.um_pending_xfer == 0);
     usb_task_run_pending();
     child = usb_external_hub_device(hub_device, 1);
     CHECK(child != 0 && child->ud_address == 2);
-    CHECK(external_attach_count == 2);
+    CHECK(external_attach_count == 2 && mock.um_pending_xfer != 0);
 
-    usb_mock_hcd_set_connected(&mock, 0);
+    /* Detach and enumerate the complete hub again with its child present. */
     usb_device_disconnect(hub_device);
     CHECK(usb_external_hub_count() == 0);
     CHECK(external_detach_count == 2 && mock.um_pending_xfer == 0);
+    hub_device = 0;
+    CHECK(usb_device_enumerate(&bus, 1, USB_SPEED_HIGH, &hub_device) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(hub_device != 0 && hub_device->ud_address == 1 &&
+        usb_external_hub_count() == 1 && mock.um_pending_xfer != 0);
+    usb_task_run_pending();
+    child = usb_external_hub_device(hub_device, 1);
+    CHECK(child != 0 && child->ud_address == 2);
+    CHECK(external_attach_count == 3 && external_detach_count == 2 &&
+        mock.um_pending_xfer != 0);
+
+    usb_device_disconnect(hub_device);
+    CHECK(usb_external_hub_count() == 0);
+    CHECK(external_detach_count == 3 && mock.um_pending_xfer == 0);
     usb_bus_stop(&bus);
     return 0;
 }

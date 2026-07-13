@@ -135,6 +135,8 @@ struct ehci_qtd {
 #define EHCI_QTD_PID_OUT            0u
 #define EHCI_QTD_PID_IN             1u
 #define EHCI_QTD_PID_SETUP          2u
+#define EHCI_QTD_CERR_MASK          0x00000c00u
+#define EHCI_QTD_GET_CERR(v)        (((v) >> 10) & 3u)
 #define EHCI_QTD_SET_CERR(v)        ((v) << 10)
 #define EHCI_QTD_IOC                0x00008000u
 #define EHCI_QTD_GET_BYTES(v)       (((v) >> 16) & 0x7fffu)

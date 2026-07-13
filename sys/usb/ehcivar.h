@@ -58,7 +58,7 @@
 #define EHCI_DATA_OFFSET            8192u
 #define EHCI_DATA_MAX               (EHCI_SCHEDULE_BYTES - EHCI_DATA_OFFSET)
 #define EHCI_INTR_SLOT_NONE         EHCI_INTR_SLOTS
-#define EHCI_PERIODIC_FRAMES        8u
+#define EHCI_XACTERR_RETRY_MAX      32u
 
 typedef unsigned int (*ehci_read_4_t)(void *, unsigned);
 typedef void (*ehci_write_4_t)(void *, unsigned, unsigned int);
@@ -71,6 +71,10 @@ struct ehci_pipe {
     unsigned ep_used;
     unsigned ep_toggle;
     unsigned ep_intr_slot;
+    unsigned ep_intr_period;
+    unsigned ep_intr_phase;
+    unsigned ep_intr_uframe;
+    unsigned ep_xacterrs;
 };
 
 struct ehci_intr_slot {

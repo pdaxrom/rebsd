@@ -411,6 +411,24 @@ uhub_speed_name(unsigned speed)
     return "full";
 }
 
+static usb_error_t
+uhub_arm_interrupt(struct usb_external_hub *hub)
+{
+    usb_error_t status;
+
+    if (hub == 0 || !hub->ueh_used || hub->ueh_dying ||
+        hub->ueh_device == 0 || !hub->ueh_device->ud_connected ||
+        hub->ueh_intr_xfer == 0)
+        return USB_STATUS_DISCONNECTED;
+    if (hub->ueh_intr_xfer->ux_active)
+        return USB_STATUS_NORMAL_COMPLETION;
+    status = usb_submit_xfer(hub->ueh_intr_xfer);
+    if (status == USB_STATUS_IN_PROGRESS ||
+        status == USB_STATUS_NORMAL_COMPLETION)
+        return USB_STATUS_NORMAL_COMPLETION;
+    return status;
+}
+
 static void
 uhub_explore_port(struct usb_external_hub *hub, unsigned port)
 {
@@ -490,6 +508,7 @@ static void
 uhub_explore(void *arg)
 {
     struct usb_external_hub *hub;
+    usb_error_t status;
     unsigned port;
 
     hub = (struct usb_external_hub *)arg;
@@ -497,39 +516,55 @@ uhub_explore(void *arg)
         return;
     if (hub->ueh_clear_stall) {
         hub->ueh_clear_stall = 0;
-        (void)usb_clear_endpoint_halt(hub->ueh_intr_pipe);
+        status = usb_clear_endpoint_halt(hub->ueh_intr_pipe);
+        if (status != USB_STATUS_NORMAL_COMPLETION)
+            printf("uhub%u: interrupt stall clear failed: %s\n",
+                hub->ueh_unit, usb_status_string(status));
     }
     for (port = 1; port <= hub->ueh_port_count; ++port)
         uhub_explore_port(hub, port);
+    /*
+     * Hub change bits remain asserted until exploration clears them.  Keep
+     * the interrupt transfer one-shot so a level change cannot repeatedly
+     * complete in IRQ context and starve the deferred explorer.  Any change
+     * that arrives while the transfer is disarmed remains latched in the hub
+     * and completes this newly armed transfer.
+     */
+    status = uhub_arm_interrupt(hub);
+    if (status != USB_STATUS_NORMAL_COMPLETION &&
+        status != USB_STATUS_DISCONNECTED)
+        printf("uhub%u: interrupt rearm failed: %s\n",
+            hub->ueh_unit, usb_status_string(status));
 }
 
 static void
 uhub_intr(struct usb_xfer *xfer, void *private, usb_error_t status)
 {
     struct usb_external_hub *hub;
-    usb_error_t submit_status;
+    usb_error_t rearm_status;
 
     hub = (struct usb_external_hub *)private;
     if (hub == 0 || !hub->ueh_used || hub->ueh_dying ||
         hub->ueh_intr_xfer != xfer)
         return;
-    if (status == USB_STATUS_NORMAL_COMPLETION)
-        (void)usb_task_schedule(&hub->ueh_task);
-    else if (status == USB_STATUS_STALLED) {
+    if (status == USB_STATUS_STALLED) {
         hub->ueh_clear_stall = 1;
-        (void)usb_task_schedule(&hub->ueh_task);
     } else if (status == USB_STATUS_CANCELLED ||
         status == USB_STATUS_DISCONNECTED) {
         return;
-    } else {
+    } else if (status != USB_STATUS_NORMAL_COMPLETION) {
         printf("uhub%u: interrupt transfer failed: %s\n",
             hub->ueh_unit, usb_status_string(status));
     }
-    submit_status = usb_submit_xfer(xfer);
-    if (submit_status != USB_STATUS_IN_PROGRESS &&
-        submit_status != USB_STATUS_NORMAL_COMPLETION)
-        printf("uhub%u: interrupt rearm failed: %s\n",
-            hub->ueh_unit, usb_status_string(submit_status));
+    if (usb_task_schedule(&hub->ueh_task) != 0) {
+        printf("uhub%u: cannot schedule port exploration\n",
+            hub->ueh_unit);
+        rearm_status = uhub_arm_interrupt(hub);
+        if (rearm_status != USB_STATUS_NORMAL_COMPLETION &&
+            rearm_status != USB_STATUS_DISCONNECTED)
+            printf("uhub%u: interrupt rearm failed: %s\n",
+                hub->ueh_unit, usb_status_string(rearm_status));
+    }
 }
 
 static struct usb_endpoint *
@@ -677,9 +712,8 @@ uhub_attach_interface(struct usb_interface *interface)
     usb_setup_xfer(hub->ueh_intr_xfer, hub->ueh_intr_pipe, hub,
         hub->ueh_status, hub->ueh_status_length, USB_XFER_SHORT_OK, 0,
         uhub_intr);
-    status = usb_submit_xfer(hub->ueh_intr_xfer);
-    if (status != USB_STATUS_IN_PROGRESS &&
-        status != USB_STATUS_NORMAL_COMPLETION)
+    status = uhub_arm_interrupt(hub);
+    if (status != USB_STATUS_NORMAL_COMPLETION)
         goto fail;
     if (usb_task_schedule(&hub->ueh_task) != 0) {
         status = USB_STATUS_NO_MEMORY;
