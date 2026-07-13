@@ -164,6 +164,8 @@ struct ehci_qh {
 #define EHCI_QH_SET_MPL(v)          (((v) & 0x07ffu) << 16)
 #define EHCI_QH_CTL                 0x08000000u
 #define EHCI_QH_SET_NRL(v)          (((v) & 0x0fu) << 28)
+#define EHCI_QH_SET_SMASK(v)        ((v) & 0xffu)
+#define EHCI_QH_SET_CMASK(v)        (((v) & 0xffu) << 8)
 #define EHCI_QH_SET_HUBA(v)         (((v) & 0x7fu) << 16)
 #define EHCI_QH_SET_PORT(v)         (((v) & 0x7fu) << 23)
 #define EHCI_QH_SET_MULT(v)         (((v) & 0x03u) << 30)

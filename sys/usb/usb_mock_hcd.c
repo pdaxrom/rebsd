@@ -21,6 +21,23 @@ static const uByte mock_keyboard_config[] = {
     7, UDESC_ENDPOINT, 0x81, UE_INTERRUPT, 8, 0, 10
 };
 
+static const uByte mock_hub_device_descriptor[USB_DEVICE_DESCRIPTOR_SIZE] = {
+    18, UDESC_DEVICE, 0x00, 0x02, UDCLASS_HUB, 0, UIPROTO_HSHUBMTT, 64,
+    0x21, 0x04, 0x16, 0x25, 0x00, 0x01, 1, 2, 3, 1
+};
+
+static const uByte mock_hub_config[] = {
+    9, UDESC_CONFIG, 25, 0, 1, 1, 0, UC_SELF_POWERED, 0,
+    9, UDESC_INTERFACE, 0, 0, 1,
+        UICLASS_HUB, UISUBCLASS_HUB, UIPROTO_HSHUBMTT, 0,
+    7, UDESC_ENDPOINT, 0x81, UE_INTERRUPT, 1, 0, 12
+};
+
+static const uByte mock_hub_descriptor[USB_HUB_DESCRIPTOR_SIZE] = {
+    USB_HUB_DESCRIPTOR_SIZE, UDESC_HUB, 1,
+    UHD_PWR_INDIVIDUAL, 0, 10, 0, 0, 0xff
+};
+
 static void
 mock_zero(void *vptr, size_t length)
 {
@@ -100,6 +117,12 @@ mock_control(struct usb_mock_hcd *mock, struct usb_xfer *xfer)
     size_t length;
     unsigned value;
     unsigned descriptor_type;
+    unsigned child;
+    unsigned index;
+    unsigned flags;
+    unsigned change;
+
+    child = xfer->ux_device->ud_parent_hub != 0;
 
     request = &xfer->ux_request;
     value = UGETW(request->wValue);
@@ -109,11 +132,18 @@ mock_control(struct usb_mock_hcd *mock, struct usb_xfer *xfer)
         source = 0;
         source_length = 0;
         if (descriptor_type == UDESC_DEVICE) {
-            source = mock->um_device_desc;
-            source_length = sizeof(mock->um_device_desc);
+            source = child ? mock->um_child_device_desc :
+                mock->um_device_desc;
+            source_length = USB_DEVICE_DESCRIPTOR_SIZE;
         } else if (descriptor_type == UDESC_CONFIG) {
-            source = mock->um_config_desc;
-            source_length = mock->um_config_length;
+            source = child ? mock->um_child_config_desc :
+                mock->um_config_desc;
+            source_length = child ? mock->um_child_config_length :
+                mock->um_config_length;
+        } else if (descriptor_type == UDESC_HUB && mock->um_hub_mode &&
+            !child && request->bmRequestType == UT_READ_CLASS_DEVICE) {
+            source = mock->um_hub_desc;
+            source_length = sizeof(mock->um_hub_desc);
         }
         if (source == 0) {
             usb_xfer_complete(xfer, USB_STATUS_STALLED, 0);
@@ -126,13 +156,77 @@ mock_control(struct usb_mock_hcd *mock, struct usb_xfer *xfer)
     }
     if (request->bRequest == UR_SET_ADDRESS &&
         request->bmRequestType == UT_WRITE_DEVICE) {
-        mock->um_address = value;
+        if (child)
+            mock->um_child_address = value;
+        else
+            mock->um_address = value;
         usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION, 0);
         return USB_STATUS_NORMAL_COMPLETION;
     }
     if (request->bRequest == UR_SET_CONFIG &&
         request->bmRequestType == UT_WRITE_DEVICE) {
         mock->um_configuration = value;
+        usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION, 0);
+        return USB_STATUS_NORMAL_COMPLETION;
+    }
+    index = UGETW(request->wIndex);
+    if (mock->um_hub_mode && !child && index == 1 &&
+        request->bRequest == UR_GET_STATUS &&
+        request->bmRequestType == UT_READ_CLASS_OTHER &&
+        xfer->ux_length == sizeof(usb_port_status_t)) {
+        usb_port_status_t port_status;
+
+        flags = 0;
+        if (mock->um_hub_port_connected)
+            flags |= UPS_CURRENT_CONNECT_STATUS;
+        if (mock->um_hub_port_enabled)
+            flags |= UPS_PORT_ENABLED;
+        if (mock->um_hub_port_power)
+            flags |= UPS_PORT_POWER;
+        if (mock->um_hub_child_speed == USB_SPEED_LOW)
+            flags |= UPS_LOW_SPEED;
+        else if (mock->um_hub_child_speed == USB_SPEED_HIGH)
+            flags |= UPS_HIGH_SPEED;
+        USETW(port_status.wPortStatus, flags);
+        USETW(port_status.wPortChange, mock->um_hub_port_change);
+        mock_copy(xfer->ux_buffer, &port_status, sizeof(port_status));
+        usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION,
+            sizeof(port_status));
+        return USB_STATUS_NORMAL_COMPLETION;
+    }
+    if (mock->um_hub_mode && !child && index == 1 &&
+        request->bmRequestType == UT_WRITE_CLASS_OTHER &&
+        request->bRequest == UR_SET_FEATURE) {
+        if (value == UHF_PORT_POWER)
+            mock->um_hub_port_power = 1;
+        else if (value == UHF_PORT_RESET) {
+            if (!mock->um_hub_port_connected) {
+                usb_xfer_complete(xfer, USB_STATUS_DISCONNECTED, 0);
+                return USB_STATUS_NORMAL_COMPLETION;
+            }
+            mock->um_hub_port_enabled = 1;
+            mock->um_hub_port_change |= UPS_C_PORT_RESET;
+        }
+        usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION, 0);
+        return USB_STATUS_NORMAL_COMPLETION;
+    }
+    if (mock->um_hub_mode && !child && index == 1 &&
+        request->bmRequestType == UT_WRITE_CLASS_OTHER &&
+        request->bRequest == UR_CLEAR_FEATURE) {
+        change = 0;
+        if (value == UHF_C_PORT_CONNECTION)
+            change = UPS_C_CONNECT_STATUS;
+        else if (value == UHF_C_PORT_ENABLE)
+            change = UPS_C_PORT_ENABLED;
+        else if (value == UHF_C_PORT_SUSPEND)
+            change = UPS_C_SUSPEND;
+        else if (value == UHF_C_PORT_OVER_CURRENT)
+            change = UPS_C_OVERCURRENT_INDICATOR;
+        else if (value == UHF_C_PORT_RESET)
+            change = UPS_C_PORT_RESET;
+        else if (value == UHF_PORT_ENABLE)
+            mock->um_hub_port_enabled = 0;
+        mock->um_hub_port_change &= ~change;
         usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION, 0);
         return USB_STATUS_NORMAL_COMPLETION;
     }
@@ -163,7 +257,9 @@ mock_submit_xfer(struct usb_xfer *xfer)
         usb_xfer_complete(xfer, failure, 0);
         return USB_STATUS_NORMAL_COMPLETION;
     }
-    if (!mock->um_connected) {
+    if ((!xfer->ux_device->ud_parent_hub && !mock->um_connected) ||
+        (mock->um_hub_mode && xfer->ux_device->ud_parent_hub &&
+        !mock->um_hub_port_connected)) {
         usb_xfer_complete(xfer, USB_STATUS_DISCONNECTED, 0);
         return USB_STATUS_NORMAL_COMPLETION;
     }
@@ -175,6 +271,12 @@ mock_submit_xfer(struct usb_xfer *xfer)
     }
     if (xfer->ux_is_control)
         return mock_control(mock, xfer);
+    if (mock->um_hub_mode && xfer->ux_device->ud_parent_hub == 0) {
+        if (mock->um_pending_xfer != 0)
+            return USB_STATUS_NO_MEMORY;
+        mock->um_pending_xfer = xfer;
+        return USB_STATUS_IN_PROGRESS;
+    }
     usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION, xfer->ux_length);
     return USB_STATUS_NORMAL_COMPLETION;
 }
@@ -331,6 +433,13 @@ usb_mock_hcd_init(struct usb_mock_hcd *mock)
     mock_copy(mock->um_config_desc, mock_keyboard_config,
         sizeof(mock_keyboard_config));
     mock->um_config_length = sizeof(mock_keyboard_config);
+    mock_copy(mock->um_child_device_desc, mock_device_descriptor,
+        sizeof(mock_device_descriptor));
+    mock_copy(mock->um_child_config_desc, mock_keyboard_config,
+        sizeof(mock_keyboard_config));
+    mock->um_child_config_length = sizeof(mock_keyboard_config);
+    mock_copy(mock->um_hub_desc, mock_hub_descriptor,
+        sizeof(mock_hub_descriptor));
     mock->um_fail_next = USB_STATUS_NORMAL_COMPLETION;
 }
 
@@ -374,5 +483,54 @@ usb_mock_hcd_set_config(struct usb_mock_hcd *mock, const void *data,
         return USB_STATUS_NO_MEMORY;
     mock_copy(mock->um_config_desc, data, length);
     mock->um_config_length = length;
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+void
+usb_mock_hcd_enable_hub(struct usb_mock_hcd *mock)
+{
+    if (mock == 0)
+        return;
+    mock->um_hub_mode = 1;
+    mock_copy(mock->um_device_desc, mock_hub_device_descriptor,
+        sizeof(mock_hub_device_descriptor));
+    mock_copy(mock->um_config_desc, mock_hub_config,
+        sizeof(mock_hub_config));
+    mock->um_config_length = sizeof(mock_hub_config);
+    mock->um_hub_child_speed = USB_SPEED_FULL;
+}
+
+void
+usb_mock_hcd_hub_port_connect(struct usb_mock_hcd *mock, int connected,
+    unsigned speed)
+{
+    unsigned new_state;
+
+    if (mock == 0 || !mock->um_hub_mode)
+        return;
+    new_state = connected != 0;
+    if (mock->um_hub_port_connected != new_state)
+        mock->um_hub_port_change |= UPS_C_CONNECT_STATUS;
+    mock->um_hub_port_connected = new_state;
+    if (!new_state)
+        mock->um_hub_port_enabled = 0;
+    if (speed == USB_SPEED_LOW || speed == USB_SPEED_FULL ||
+        speed == USB_SPEED_HIGH)
+        mock->um_hub_child_speed = speed;
+}
+
+usb_error_t
+usb_mock_hcd_hub_interrupt(struct usb_mock_hcd *mock)
+{
+    struct usb_xfer *xfer;
+
+    if (mock == 0 || !mock->um_hub_mode || mock->um_pending_xfer == 0)
+        return USB_STATUS_INVALID;
+    xfer = mock->um_pending_xfer;
+    mock->um_pending_xfer = 0;
+    if (xfer->ux_length != 0)
+        ((uByte *)xfer->ux_buffer)[0] = 0x02;
+    usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION,
+        xfer->ux_length != 0 ? 1 : 0);
     return USB_STATUS_NORMAL_COMPLETION;
 }

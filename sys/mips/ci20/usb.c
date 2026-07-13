@@ -377,7 +377,8 @@ ehciattach(int unit)
     value = ci20_ehci_read(0, CI20_EHCI_UTMI_BUS);
     printf("ehci0: JZ4780 UTMI bus=%x width=16-bit\n", value);
     printf("ehci0: EHCI version=%x ports=%u companions=%u/%u "
-        "async-control/bulk\n", ci20_ehci.eh_revision,
+        "async-control/bulk periodic-interrupt-IN split-transactions\n",
+        ci20_ehci.eh_revision,
         ci20_ehci.eh_nports, ci20_ehci.eh_ncomp, ci20_ehci.eh_npcomp);
     status = usb_root_hub_start(&ci20_ehci_root_hub, &ci20_ehci_bus,
         ci20_usb_hub_event, &ci20_ehci_hub_context);
@@ -387,7 +388,7 @@ ehciattach(int unit)
         return;
     }
     ci20_intc_unmask_irq(CI20_EHCI_IRQ);
-    printf("ehci0: irq %u enabled for async/root-hub changes\n",
+    printf("ehci0: irq %u enabled for async/periodic/root-hub changes\n",
         CI20_EHCI_IRQ);
     if (usb_root_hub_device(&ci20_ehci_root_hub, 1) == 0 &&
         (ci20_ehci_read(0, ci20_ehci.eh_op_offset + EHCI_PORTSC(1)) &

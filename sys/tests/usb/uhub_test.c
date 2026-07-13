@@ -22,6 +22,37 @@ struct event_state {
     unsigned last_port;
 };
 
+static unsigned external_attach_count;
+static unsigned external_detach_count;
+
+static int
+external_child_match(struct usb_interface *interface)
+{
+    return interface->ui_desc.bInterfaceClass == UICLASS_HID ? 100 : 0;
+}
+
+static usb_error_t
+external_child_attach(struct usb_interface *interface)
+{
+    ++external_attach_count;
+    interface->ui_private = &external_attach_count;
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+static void
+external_child_detach(struct usb_interface *interface)
+{
+    ++external_detach_count;
+    interface->ui_private = 0;
+}
+
+static const struct usb_driver external_child_driver = {
+    "hub-test-child",
+    external_child_match,
+    external_child_attach,
+    external_child_detach
+};
+
 static void
 hub_event(void *arg, unsigned port, enum usb_root_hub_event event,
     struct usb_device *device, usb_error_t status)
@@ -139,11 +170,75 @@ test_late_connect(void)
     return 0;
 }
 
+static int
+test_external_hub(void)
+{
+    struct usb_mock_hcd mock;
+    struct usb_core core;
+    struct usb_bus bus;
+    struct usb_device *hub_device;
+    struct usb_device *child;
+    unsigned delay_total;
+
+    memset(&bus, 0, sizeof(bus));
+    delay_total = 0;
+    external_attach_count = 0;
+    external_detach_count = 0;
+    usb_task_system_init();
+    usb_core_init(&core);
+    usb_mock_hcd_init(&mock);
+    usb_mock_hcd_enable_hub(&mock);
+    usb_mock_hcd_set_connected(&mock, 1);
+    usb_mock_hcd_hub_port_connect(&mock, 1, USB_SPEED_FULL);
+    CHECK(uhub_register(&core) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_driver_register(&core, &external_child_driver) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_bus_start(&core, &bus, &mock.um_hcd,
+        hub_delay, &delay_total) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_device_enumerate(&bus, 1, USB_SPEED_HIGH, &hub_device) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(hub_device->ud_address == 1 && usb_external_hub_count() == 1);
+    CHECK(mock.um_hub_port_power && mock.um_pending_xfer != 0);
+    CHECK(usb_external_hub_device(hub_device, 1) == 0);
+
+    usb_task_run_pending();
+    child = usb_external_hub_device(hub_device, 1);
+    CHECK(child != 0 && child->ud_address == 2);
+    CHECK(child->ud_parent_hub == hub_device && child->ud_port == 1);
+    CHECK(child->ud_tt_hub_address == hub_device->ud_address &&
+        child->ud_tt_port == 1);
+    CHECK(mock.um_hub_port_enabled && external_attach_count == 1);
+
+    usb_mock_hcd_hub_port_connect(&mock, 0, USB_SPEED_FULL);
+    CHECK(usb_mock_hcd_hub_interrupt(&mock) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_task_any_pending());
+    usb_task_run_pending();
+    CHECK(usb_external_hub_device(hub_device, 1) == 0);
+    CHECK(external_detach_count == 1);
+
+    usb_mock_hcd_hub_port_connect(&mock, 1, USB_SPEED_FULL);
+    CHECK(usb_mock_hcd_hub_interrupt(&mock) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    usb_task_run_pending();
+    child = usb_external_hub_device(hub_device, 1);
+    CHECK(child != 0 && child->ud_address == 2);
+    CHECK(external_attach_count == 2);
+
+    usb_mock_hcd_set_connected(&mock, 0);
+    usb_device_disconnect(hub_device);
+    CHECK(usb_external_hub_count() == 0);
+    CHECK(external_detach_count == 2 && mock.um_pending_xfer == 0);
+    usb_bus_stop(&bus);
+    return 0;
+}
+
 int
 main(void)
 {
     CHECK(test_initial_and_reconnect() == 0);
     CHECK(test_late_connect() == 0);
+    CHECK(test_external_hub() == 0);
     puts("uhub_test: all tests passed");
     return 0;
 }

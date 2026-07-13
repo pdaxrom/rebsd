@@ -33,5 +33,11 @@
 #ifndef USB_MAX_ROOT_PORTS
 #define USB_MAX_ROOT_PORTS          8
 #endif
+#ifndef USB_MAX_HUBS
+#define USB_MAX_HUBS                4
+#endif
+#ifndef USB_MAX_HUB_PORTS
+#define USB_MAX_HUB_PORTS           8
+#endif
 
 #endif /* _USB_USB_LIMITS_H_ */

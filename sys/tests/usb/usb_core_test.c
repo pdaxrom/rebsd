@@ -244,6 +244,45 @@ test_address_reuse(void)
 }
 
 static int
+test_hub_topology(void)
+{
+    struct usb_device *hub;
+    struct usb_device *child;
+    struct usb_device *grandchild;
+    struct usb_device *high_child;
+    unsigned delay_total;
+
+    delay_total = 0;
+    CHECK(start_fixture(&delay_total) == 0);
+    usb_mock_hcd_set_connected(&mock, 1);
+    CHECK(usb_device_enumerate(&bus, 1, USB_SPEED_HIGH, &hub) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(hub->ud_parent_hub == 0 && hub->ud_depth == 0);
+    CHECK(usb_device_enumerate_at(&bus, hub, 3, USB_SPEED_FULL, &child) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(child->ud_parent_hub == hub && child->ud_port == 3 &&
+        child->ud_depth == 1);
+    CHECK(child->ud_tt_hub_address == hub->ud_address &&
+        child->ud_tt_port == 3);
+    CHECK(usb_device_enumerate_at(&bus, child, 2, USB_SPEED_LOW,
+        &grandchild) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(grandchild->ud_depth == 2 &&
+        grandchild->ud_tt_hub_address == hub->ud_address &&
+        grandchild->ud_tt_port == 3);
+    CHECK(usb_device_enumerate_at(&bus, hub, 4, USB_SPEED_HIGH,
+        &high_child) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(high_child->ud_tt_hub_address == 0 && high_child->ud_tt_port == 0);
+
+    usb_device_disconnect(high_child);
+    usb_device_disconnect(grandchild);
+    usb_device_disconnect(child);
+    usb_device_disconnect(hub);
+    usb_bus_stop(&bus);
+    CHECK(core_has_no_objects(&core));
+    return 0;
+}
+
+static int
 test_control_failure_cleanup(void)
 {
     struct usb_device *device;
@@ -315,6 +354,7 @@ main(void)
 {
     CHECK(test_enumerate_and_disconnect() == 0);
     CHECK(test_address_reuse() == 0);
+    CHECK(test_hub_topology() == 0);
     CHECK(test_control_failure_cleanup() == 0);
     CHECK(test_timeout_cleanup() == 0);
     CHECK(test_malformed_config_cleanup() == 0);

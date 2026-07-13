@@ -46,6 +46,11 @@
 
 #include <usb/ehcivar.h>
 
+#ifdef KERNEL
+#include <sys/types.h>
+#include <sys/systm.h>
+#endif
+
 #if defined(TARGET_LITTLE_ENDIAN) || defined(__MIPSEL__) || \
     (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define EHCI_NATIVE_LITTLE_ENDIAN 1
@@ -237,6 +242,28 @@ ehci_async_resume(struct ehci_softc *sc)
         command | EHCI_CMD_ASE | EHCI_CMD_RS);
 }
 
+static int
+ehci_periodic_pause(struct ehci_softc *sc)
+{
+    unsigned int command;
+
+    command = ehci_op_read(sc, EHCI_USBCMD);
+    if ((command & EHCI_CMD_PSE) == 0)
+        return 0;
+    ehci_op_write(sc, EHCI_USBCMD, command & ~EHCI_CMD_PSE);
+    return ehci_wait_status(sc, EHCI_STS_PSS, 0, 100);
+}
+
+static void
+ehci_periodic_resume(struct ehci_softc *sc)
+{
+    unsigned int command;
+
+    command = ehci_op_read(sc, EHCI_USBCMD);
+    ehci_op_write(sc, EHCI_USBCMD,
+        command | EHCI_CMD_PSE | EHCI_CMD_RS);
+}
+
 static void
 ehci_qh_idle(struct ehci_qh *qh)
 {
@@ -262,7 +289,15 @@ ehci_hcd_start(struct usb_hcd *hcd)
     if (sc == 0 || sc->eh_read_4 == 0 || sc->eh_write_4 == 0 ||
         sizeof(struct ehci_qtd) != 64u || sizeof(struct ehci_qh) != 96u ||
         EHCI_PIPE_QH_OFFSET + USB_MAX_PIPES * sizeof(struct ehci_qh) >
-        EHCI_QTD_OFFSET)
+        EHCI_QTD_OFFSET ||
+        EHCI_QTD_OFFSET + EHCI_QTD_COUNT * sizeof(struct ehci_qtd) >
+        EHCI_INTR_QTD_OFFSET ||
+        EHCI_INTR_QTD_OFFSET + EHCI_INTR_SLOTS * sizeof(struct ehci_qtd) >
+        EHCI_INTR_BUFFER_OFFSET ||
+        EHCI_INTR_BUFFER_OFFSET + EHCI_INTR_SLOTS * EHCI_INTR_DATA_MAX >
+        EHCI_SETUP_OFFSET ||
+        EHCI_SETUP_OFFSET + sizeof(usb_device_request_t) >
+        EHCI_DATA_OFFSET)
         return USB_STATUS_INVALID;
 
     capability = ehci_read(sc, EHCI_CAPLENGTH);
@@ -293,10 +328,23 @@ ehci_hcd_start(struct usb_hcd *hcd)
         sc->eh_schedule_dma.dm_vaddr + EHCI_PIPE_QH_OFFSET);
     sc->eh_qtds = (struct ehci_qtd *)((uByte *)
         sc->eh_schedule_dma.dm_vaddr + EHCI_QTD_OFFSET);
+    sc->eh_intr_qtds = (struct ehci_qtd *)((uByte *)
+        sc->eh_schedule_dma.dm_vaddr + EHCI_INTR_QTD_OFFSET);
+    sc->eh_intr_buffers = (uByte *)sc->eh_schedule_dma.dm_vaddr +
+        EHCI_INTR_BUFFER_OFFSET;
     sc->eh_setup_buffer = (uByte *)sc->eh_schedule_dma.dm_vaddr +
         EHCI_SETUP_OFFSET;
     sc->eh_data_buffer = (uByte *)sc->eh_schedule_dma.dm_vaddr +
         EHCI_DATA_OFFSET;
+
+    for (i = 0; i < EHCI_INTR_SLOTS; ++i) {
+        sc->eh_intr_slots[i].eis_xfer = 0;
+        sc->eh_intr_slots[i].eis_pipe = 0;
+        sc->eh_intr_slots[i].eis_qtd = &sc->eh_intr_qtds[i];
+        sc->eh_intr_slots[i].eis_buffer = sc->eh_intr_buffers +
+            i * EHCI_INTR_DATA_MAX;
+        sc->eh_intr_slots[i].eis_length = 0;
+    }
 
     for (i = 0; i < EHCI_FRAME_LIST_COUNT; ++i)
         sc->eh_frame_list[i] = ehci_to_le32(EHCI_LINK_TERMINATE);
@@ -350,6 +398,8 @@ bad:
     sc->eh_async_head = 0;
     sc->eh_pipe_qhs = 0;
     sc->eh_qtds = 0;
+    sc->eh_intr_qtds = 0;
+    sc->eh_intr_buffers = 0;
     sc->eh_setup_buffer = 0;
     sc->eh_data_buffer = 0;
     return (usb_error_t)error;
@@ -359,6 +409,7 @@ static void
 ehci_hcd_stop(struct usb_hcd *hcd)
 {
     struct ehci_softc *sc;
+    unsigned i;
 
     sc = (struct ehci_softc *)hcd->uh_softc;
     if (sc == 0 || !sc->eh_started)
@@ -373,8 +424,14 @@ ehci_hcd_stop(struct usb_hcd *hcd)
     sc->eh_async_head = 0;
     sc->eh_pipe_qhs = 0;
     sc->eh_qtds = 0;
+    sc->eh_intr_qtds = 0;
+    sc->eh_intr_buffers = 0;
     sc->eh_setup_buffer = 0;
     sc->eh_data_buffer = 0;
+    for (i = 0; i < EHCI_INTR_SLOTS; ++i)
+        ehci_zero(&sc->eh_intr_slots[i], sizeof(sc->eh_intr_slots[i]));
+    for (i = 0; i < USB_MAX_PIPES; ++i)
+        ehci_zero(&sc->eh_pipes[i], sizeof(sc->eh_pipes[i]));
 }
 
 static struct ehci_pipe *
@@ -388,6 +445,111 @@ ehci_find_pipe(struct ehci_softc *sc, struct usb_pipe *pipe)
     return 0;
 }
 
+static void
+ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
+    unsigned int first_qtd, int async)
+{
+    struct usb_device *device;
+    struct usb_endpoint *endpoint;
+    struct ehci_qh *qh;
+    unsigned int endp;
+    unsigned int endphub;
+    unsigned int speed;
+    unsigned type;
+    unsigned max_packet;
+
+    device = epipe->ep_pipe->up_device;
+    endpoint = epipe->ep_pipe->up_endpoint;
+    qh = epipe->ep_qh;
+    type = UE_GET_XFERTYPE(endpoint->ue_desc.bmAttributes);
+    max_packet = UGETW(endpoint->ue_desc.wMaxPacketSize) & 0x07ffu;
+    speed = device->ud_speed == USB_SPEED_HIGH ? EHCI_QH_SPEED_HIGH :
+        (device->ud_speed == USB_SPEED_LOW ? EHCI_QH_SPEED_LOW :
+        EHCI_QH_SPEED_FULL);
+
+    ehci_zero(qh, sizeof(*qh));
+    if (async)
+        qh->qh_link = ehci_to_le32(ehci_phys(sc, sc->eh_async_head) |
+            EHCI_LINK_QH);
+    else
+        qh->qh_link = ehci_to_le32(EHCI_LINK_TERMINATE);
+    endp = EHCI_QH_SET_ADDR(device->ud_address) |
+        EHCI_QH_SET_ENDPT(UE_GET_ADDR(endpoint->ue_desc.bEndpointAddress)) |
+        EHCI_QH_SET_EPS(speed) | EHCI_QH_DTC |
+        EHCI_QH_SET_MPL(max_packet) | EHCI_QH_SET_NRL(8);
+    if (speed != EHCI_QH_SPEED_HIGH && type == UE_CONTROL)
+        endp |= EHCI_QH_CTL;
+    qh->qh_endp = ehci_to_le32(endp);
+
+    endphub = EHCI_QH_SET_MULT(1);
+    if (speed != EHCI_QH_SPEED_HIGH) {
+        endphub |= EHCI_QH_SET_HUBA(device->ud_tt_hub_address) |
+            EHCI_QH_SET_PORT(device->ud_tt_port);
+        if (type == UE_INTERRUPT) {
+            /*
+             * Start-split in Y1 and permit complete-split retries in
+             * Y3, Y4, and Y5.  One completion slot, as used by the old
+             * NetBSD 3.1 driver, loses periodic IN endpoints when a TT
+             * answers NYET or the first completion opportunity is missed.
+             */
+            endphub |= EHCI_QH_SET_SMASK(0x02) |
+                EHCI_QH_SET_CMASK(0x38);
+        }
+    } else if (type == UE_INTERRUPT) {
+        endphub |= EHCI_QH_SET_SMASK(0x01);
+    }
+    qh->qh_endphub = ehci_to_le32(endphub);
+    qh->qh_curqtd = 0;
+    qh->qh_qtd.qtd_next = ehci_to_le32(first_qtd);
+    qh->qh_qtd.qtd_altnext = ehci_to_le32(EHCI_LINK_TERMINATE);
+    qh->qh_qtd.qtd_status = first_qtd == EHCI_LINK_TERMINATE ?
+        ehci_to_le32(EHCI_QTD_HALTED) : 0;
+}
+
+static usb_error_t
+ehci_rebuild_periodic(struct ehci_softc *sc)
+{
+    struct ehci_qh *first;
+    struct ehci_qh *previous;
+    struct ehci_pipe *epipe;
+    unsigned type;
+    unsigned i;
+
+    if (ehci_periodic_pause(sc) != 0)
+        return USB_STATUS_TIMEOUT;
+    for (i = 0; i < EHCI_FRAME_LIST_COUNT; ++i)
+        sc->eh_frame_list[i] = ehci_to_le32(EHCI_LINK_TERMINATE);
+    first = 0;
+    previous = 0;
+    for (i = 0; i < USB_MAX_PIPES; ++i) {
+        epipe = &sc->eh_pipes[i];
+        if (!epipe->ep_used || epipe->ep_pipe == 0)
+            continue;
+        type = UE_GET_XFERTYPE(epipe->ep_pipe->up_endpoint->
+            ue_desc.bmAttributes);
+        if (type != UE_INTERRUPT)
+            continue;
+        epipe->ep_qh->qh_link = ehci_to_le32(EHCI_LINK_TERMINATE);
+        if (previous != 0)
+            previous->qh_link = ehci_to_le32(
+                ehci_phys(sc, epipe->ep_qh) | EHCI_LINK_QH);
+        else
+            first = epipe->ep_qh;
+        previous = epipe->ep_qh;
+    }
+    if (first != 0)
+        for (i = 0; i < EHCI_FRAME_LIST_COUNT;
+            i += EHCI_PERIODIC_FRAMES)
+            sc->eh_frame_list[i] = ehci_to_le32(
+                ehci_phys(sc, first) | EHCI_LINK_QH);
+    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+        return USB_STATUS_IO_ERROR;
+    if (first != 0)
+        ehci_periodic_resume(sc);
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
 static usb_error_t
 ehci_hcd_open_pipe(struct usb_pipe *pipe)
 {
@@ -395,23 +557,54 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
     unsigned type;
     unsigned max_packet;
     unsigned i;
+    unsigned slot;
+    usb_error_t status;
 
     sc = (struct ehci_softc *)pipe->up_device->ud_bus->ub_hcd->uh_softc;
-    if (!sc->eh_started || pipe->up_device->ud_speed != USB_SPEED_HIGH ||
-        ehci_find_pipe(sc, pipe) != 0)
+    if (!sc->eh_started || ehci_find_pipe(sc, pipe) != 0)
         return USB_STATUS_INVALID;
+    if (pipe->up_device->ud_speed != USB_SPEED_HIGH &&
+        (pipe->up_device->ud_tt_hub_address == 0 ||
+        pipe->up_device->ud_tt_port == 0))
+        return USB_STATUS_UNSUPPORTED;
     type = UE_GET_XFERTYPE(pipe->up_endpoint->ue_desc.bmAttributes);
-    if (type != UE_CONTROL && type != UE_BULK)
+    if (type != UE_CONTROL && type != UE_BULK && type != UE_INTERRUPT)
         return USB_STATUS_UNSUPPORTED;
     max_packet = UGETW(pipe->up_endpoint->ue_desc.wMaxPacketSize) &
         0x07ffu;
     if (max_packet == 0)
         return USB_STATUS_INVALID;
+    slot = EHCI_INTR_SLOT_NONE;
+    if (type == UE_INTERRUPT) {
+        if (UE_GET_DIR(pipe->up_endpoint->ue_desc.bEndpointAddress) !=
+            UE_DIR_IN || max_packet > EHCI_INTR_DATA_MAX)
+            return USB_STATUS_UNSUPPORTED;
+        for (slot = 0; slot < EHCI_INTR_SLOTS; ++slot)
+            if (sc->eh_intr_slots[slot].eis_pipe == 0)
+                break;
+        if (slot == EHCI_INTR_SLOTS)
+            return USB_STATUS_NO_MEMORY;
+    }
     for (i = 0; i < USB_MAX_PIPES; ++i)
         if (!sc->eh_pipes[i].ep_used) {
             sc->eh_pipes[i].ep_used = 1;
             sc->eh_pipes[i].ep_pipe = pipe;
             sc->eh_pipes[i].ep_qh = &sc->eh_pipe_qhs[i];
+            sc->eh_pipes[i].ep_intr_slot = slot;
+            ehci_qh_configure(sc, &sc->eh_pipes[i],
+                EHCI_LINK_TERMINATE, type != UE_INTERRUPT);
+            if (type == UE_INTERRUPT) {
+                sc->eh_intr_slots[slot].eis_pipe = &sc->eh_pipes[i];
+                status = ehci_rebuild_periodic(sc);
+                if (status != USB_STATUS_NORMAL_COMPLETION) {
+                    sc->eh_intr_slots[slot].eis_pipe = 0;
+                    ehci_zero(sc->eh_pipes[i].ep_qh,
+                        sizeof(*sc->eh_pipes[i].ep_qh));
+                    ehci_zero(&sc->eh_pipes[i],
+                        sizeof(sc->eh_pipes[i]));
+                    return status;
+                }
+            }
             return USB_STATUS_NORMAL_COMPLETION;
         }
     return USB_STATUS_NO_MEMORY;
@@ -422,10 +615,23 @@ ehci_hcd_close_pipe(struct usb_pipe *pipe)
 {
     struct ehci_softc *sc;
     struct ehci_pipe *epipe;
+    unsigned type;
+    unsigned slot;
 
     sc = (struct ehci_softc *)pipe->up_device->ud_bus->ub_hcd->uh_softc;
     epipe = ehci_find_pipe(sc, pipe);
     if (epipe != 0) {
+        type = UE_GET_XFERTYPE(pipe->up_endpoint->ue_desc.bmAttributes);
+        if (type == UE_INTERRUPT) {
+            slot = epipe->ep_intr_slot;
+            if (slot < EHCI_INTR_SLOTS) {
+                sc->eh_intr_slots[slot].eis_xfer = 0;
+                sc->eh_intr_slots[slot].eis_pipe = 0;
+                sc->eh_intr_slots[slot].eis_length = 0;
+            }
+            epipe->ep_used = 0;
+            (void)ehci_rebuild_periodic(sc);
+        }
         if (epipe->ep_qh != 0)
             ehci_zero(epipe->ep_qh, sizeof(*epipe->ep_qh));
         ehci_zero(epipe, sizeof(*epipe));
@@ -488,28 +694,50 @@ static void
 ehci_qh_init(struct ehci_softc *sc, struct ehci_pipe *epipe,
     struct usb_xfer *xfer, unsigned int first_qtd)
 {
-    struct usb_endpoint *endpoint;
-    struct ehci_qh *qh;
-    unsigned int endp;
-    unsigned int head_phys;
-    unsigned max_packet;
+    (void)xfer;
+    ehci_qh_configure(sc, epipe, first_qtd, 1);
+}
 
-    endpoint = xfer->ux_pipe->up_endpoint;
+static usb_error_t
+ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
+    struct usb_xfer *xfer)
+{
+    struct ehci_intr_slot *slot;
+    struct ehci_qh *qh;
+    unsigned slot_index;
+    unsigned int qtd_phys;
+
+    slot_index = epipe->ep_intr_slot;
+    if (slot_index >= EHCI_INTR_SLOTS || xfer->ux_is_control ||
+        xfer->ux_length > EHCI_INTR_DATA_MAX ||
+        (xfer->ux_length != 0 && xfer->ux_buffer == 0))
+        return USB_STATUS_INVALID;
+    slot = &sc->eh_intr_slots[slot_index];
+    if (slot->eis_pipe != epipe || slot->eis_xfer != 0 ||
+        slot->eis_qtd == 0 || slot->eis_buffer == 0)
+        return USB_STATUS_NO_MEMORY;
+    qtd_phys = ehci_phys(sc, slot->eis_qtd);
+    ehci_qtd_init(sc, slot->eis_qtd, EHCI_QTD_PID_IN,
+        epipe->ep_toggle, slot->eis_buffer, (unsigned)xfer->ux_length,
+        EHCI_LINK_TERMINATE, EHCI_LINK_TERMINATE, 1);
+
     qh = epipe->ep_qh;
-    max_packet = UGETW(endpoint->ue_desc.wMaxPacketSize) & 0x07ffu;
-    head_phys = ehci_phys(sc, sc->eh_async_head);
-    ehci_zero(qh, sizeof(*qh));
-    qh->qh_link = ehci_to_le32(head_phys | EHCI_LINK_QH);
-    endp = EHCI_QH_SET_ADDR(xfer->ux_device->ud_address) |
-        EHCI_QH_SET_ENDPT(UE_GET_ADDR(endpoint->ue_desc.bEndpointAddress)) |
-        EHCI_QH_SET_EPS(EHCI_QH_SPEED_HIGH) | EHCI_QH_DTC |
-        EHCI_QH_SET_MPL(max_packet) | EHCI_QH_SET_NRL(8);
-    qh->qh_endp = ehci_to_le32(endp);
-    qh->qh_endphub = ehci_to_le32(EHCI_QH_SET_MULT(1));
+    qh->qh_qtd.qtd_status = ehci_to_le32(EHCI_QTD_HALTED);
     qh->qh_curqtd = 0;
-    qh->qh_qtd.qtd_next = ehci_to_le32(first_qtd);
+    qh->qh_qtd.qtd_next = ehci_to_le32(qtd_phys);
     qh->qh_qtd.qtd_altnext = ehci_to_le32(EHCI_LINK_TERMINATE);
     qh->qh_qtd.qtd_status = 0;
+    slot->eis_xfer = xfer;
+    slot->eis_length = (unsigned)xfer->ux_length;
+    ehci_op_write(sc, EHCI_USBSTS, EHCI_STS_INT | EHCI_STS_ERRINT);
+    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0) {
+        ehci_qh_idle(qh);
+        slot->eis_xfer = 0;
+        slot->eis_length = 0;
+        return USB_STATUS_IO_ERROR;
+    }
+    return USB_STATUS_IN_PROGRESS;
 }
 
 static usb_error_t
@@ -607,15 +835,16 @@ ehci_hcd_submit_xfer(struct usb_xfer *xfer)
 
     sc = (struct ehci_softc *)xfer->ux_device->ud_bus->ub_hcd->uh_softc;
     epipe = ehci_find_pipe(sc, xfer->ux_pipe);
-    if (!sc->eh_started || epipe == 0 ||
-        xfer->ux_device->ud_speed != USB_SPEED_HIGH)
+    if (!sc->eh_started || epipe == 0)
         return USB_STATUS_INVALID;
-    if (sc->eh_active_xfer != 0)
-        return USB_STATUS_NO_MEMORY;
     type = UE_GET_XFERTYPE(xfer->ux_pipe->up_endpoint->
         ue_desc.bmAttributes);
+    if (type == UE_INTERRUPT)
+        return ehci_submit_interrupt(sc, epipe, xfer);
     if (type != UE_CONTROL && type != UE_BULK)
         return USB_STATUS_UNSUPPORTED;
+    if (sc->eh_active_xfer != 0)
+        return USB_STATUS_NO_MEMORY;
     if (ehci_async_pause(sc) != 0)
         return USB_STATUS_TIMEOUT;
     if (type == UE_CONTROL)
@@ -654,15 +883,18 @@ ehci_hcd_submit_xfer(struct usb_xfer *xfer)
 static usb_error_t
 ehci_qtd_result(unsigned int token)
 {
-    unsigned int status;
-
-    status = token & 0xffu;
-    if (status & EHCI_QTD_ACTIVE)
+    if (token & EHCI_QTD_ACTIVE)
         return USB_STATUS_IN_PROGRESS;
-    if ((status & EHCI_QTD_STATERRS) != 0)
-        return USB_STATUS_IO_ERROR;
-    if (status & EHCI_QTD_HALTED)
+    /*
+     * Transaction error bits are sticky across hardware retries.  They are
+     * fatal only when the controller also halts the qTD; a completed qTD may
+     * legitimately retain XACTERR after a later retry succeeds.
+     */
+    if (token & EHCI_QTD_HALTED) {
+        if ((token & EHCI_QTD_STATERRS) != 0)
+            return USB_STATUS_IO_ERROR;
         return USB_STATUS_STALLED;
+    }
     return USB_STATUS_NORMAL_COMPLETION;
 }
 
@@ -739,8 +971,29 @@ static usb_error_t
 ehci_hcd_abort_xfer(struct usb_xfer *xfer)
 {
     struct ehci_softc *sc;
+    struct ehci_pipe *epipe;
+    struct ehci_intr_slot *slot;
+    unsigned type;
 
     sc = (struct ehci_softc *)xfer->ux_device->ud_bus->ub_hcd->uh_softc;
+    epipe = ehci_find_pipe(sc, xfer->ux_pipe);
+    if (epipe == 0)
+        return USB_STATUS_INVALID;
+    type = UE_GET_XFERTYPE(xfer->ux_pipe->up_endpoint->
+        ue_desc.bmAttributes);
+    if (type == UE_INTERRUPT) {
+        if (epipe->ep_intr_slot >= EHCI_INTR_SLOTS)
+            return USB_STATUS_INVALID;
+        slot = &sc->eh_intr_slots[epipe->ep_intr_slot];
+        if (slot->eis_xfer != xfer)
+            return USB_STATUS_INVALID;
+        ehci_qh_idle(epipe->ep_qh);
+        slot->eis_xfer = 0;
+        slot->eis_length = 0;
+        (void)dma_sync_for_device(&sc->eh_schedule_dma, 0,
+            EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
+        return USB_STATUS_NORMAL_COMPLETION;
+    }
     if (sc->eh_active_xfer != xfer)
         return USB_STATUS_INVALID;
     ehci_unlink_active(sc);
@@ -818,16 +1071,76 @@ ehci_poll_active(struct ehci_softc *sc)
 }
 
 static void
+ehci_poll_interrupts(struct ehci_softc *sc)
+{
+    struct ehci_intr_slot *slot;
+    struct ehci_pipe *epipe;
+    struct usb_xfer *xfer;
+    unsigned int token;
+    unsigned max_packet;
+    unsigned packets;
+    unsigned remaining;
+    unsigned i;
+    size_t actlen;
+    usb_error_t result;
+
+    for (i = 0; i < EHCI_INTR_SLOTS; ++i) {
+        slot = &sc->eh_intr_slots[i];
+        xfer = slot->eis_xfer;
+        epipe = slot->eis_pipe;
+        if (xfer == 0 || epipe == 0 || slot->eis_qtd == 0)
+            continue;
+        token = ehci_from_le32(slot->eis_qtd->qtd_status);
+        result = ehci_qtd_result(token);
+        if (result == USB_STATUS_IN_PROGRESS)
+            continue;
+        remaining = EHCI_QTD_GET_BYTES(token);
+        if (remaining > slot->eis_length) {
+            result = USB_STATUS_IO_ERROR;
+            actlen = 0;
+        } else {
+            actlen = slot->eis_length - remaining;
+        }
+        if (result == USB_STATUS_NORMAL_COMPLETION) {
+            max_packet = UGETW(xfer->ux_pipe->up_endpoint->
+                ue_desc.wMaxPacketSize) & 0x07ffu;
+            packets = actlen == 0 ? 1u :
+                ((unsigned)actlen + max_packet - 1u) / max_packet;
+            epipe->ep_toggle ^= packets & 1u;
+            if (actlen != 0)
+                ehci_copy(xfer->ux_buffer, slot->eis_buffer, actlen);
+        }
+#ifdef KERNEL
+        if (result != USB_STATUS_NORMAL_COMPLETION)
+            printf("ehci: periodic addr=%u endpoint=%x failed "
+                "token=%x qh-status=%x endp=%x hub=%x\n",
+                xfer->ux_device->ud_address,
+                xfer->ux_pipe->up_endpoint->ue_desc.bEndpointAddress,
+                token, ehci_from_le32(epipe->ep_qh->qh_qtd.qtd_status),
+                ehci_from_le32(epipe->ep_qh->qh_endp),
+                ehci_from_le32(epipe->ep_qh->qh_endphub));
+#endif
+        ehci_qh_idle(epipe->ep_qh);
+        slot->eis_xfer = 0;
+        slot->eis_length = 0;
+        (void)dma_sync_for_device(&sc->eh_schedule_dma, 0,
+            EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
+        usb_xfer_complete(xfer, result, actlen);
+    }
+}
+
+static void
 ehci_hcd_poll(struct usb_hcd *hcd)
 {
     struct ehci_softc *sc;
 
     sc = (struct ehci_softc *)hcd->uh_softc;
-    if (sc == 0 || !sc->eh_started || sc->eh_active_xfer == 0)
+    if (sc == 0 || !sc->eh_started)
         return;
     if (dma_sync_for_cpu(&sc->eh_schedule_dma, 0,
         EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
         return;
+    ehci_poll_interrupts(sc);
     ehci_poll_active(sc);
 }
 

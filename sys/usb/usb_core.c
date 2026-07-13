@@ -603,8 +603,8 @@ usb_attach_interfaces(struct usb_device *device)
 }
 
 usb_error_t
-usb_device_enumerate(struct usb_bus *bus, unsigned port, unsigned speed,
-    struct usb_device **devicep)
+usb_device_enumerate_at(struct usb_bus *bus, struct usb_device *parent_hub,
+    unsigned port, unsigned speed, struct usb_device **devicep)
 {
     struct usb_core *core;
     struct usb_device *device;
@@ -626,6 +626,10 @@ usb_device_enumerate(struct usb_bus *bus, unsigned port, unsigned speed,
         (speed != USB_SPEED_LOW && speed != USB_SPEED_FULL &&
         speed != USB_SPEED_HIGH))
         return USB_STATUS_INVALID;
+    if (parent_hub != 0 && (!parent_hub->ud_used ||
+        !parent_hub->ud_connected || parent_hub->ud_bus != bus ||
+        parent_hub->ud_depth >= USB_HUB_MAX_DEPTH))
+        return USB_STATUS_INVALID;
     core = bus->ub_core;
     if (core->uc_enumerating)
         return USB_STATUS_IN_PROGRESS;
@@ -637,6 +641,17 @@ usb_device_enumerate(struct usb_bus *bus, unsigned port, unsigned speed,
     }
     device->ud_port = (uByte)port;
     device->ud_speed = (uByte)speed;
+    device->ud_parent_hub = parent_hub;
+    device->ud_depth = parent_hub != 0 ? parent_hub->ud_depth + 1u : 0;
+    if (parent_hub != 0 && speed != USB_SPEED_HIGH) {
+        if (parent_hub->ud_speed == USB_SPEED_HIGH) {
+            device->ud_tt_hub_address = parent_hub->ud_address;
+            device->ud_tt_port = (uByte)port;
+        } else {
+            device->ud_tt_hub_address = parent_hub->ud_tt_hub_address;
+            device->ud_tt_port = parent_hub->ud_tt_port;
+        }
+    }
     usb_zero(initial, sizeof(initial));
     usb_zero(device_raw, sizeof(device_raw));
     usb_zero(config_header, sizeof(config_header));
@@ -762,6 +777,13 @@ fail:
     usb_device_disconnect(device);
     core->uc_enumerating = 0;
     return status;
+}
+
+usb_error_t
+usb_device_enumerate(struct usb_bus *bus, unsigned port, unsigned speed,
+    struct usb_device **devicep)
+{
+    return usb_device_enumerate_at(bus, 0, port, speed, devicep);
 }
 
 void

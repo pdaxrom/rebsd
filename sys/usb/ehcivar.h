@@ -50,9 +50,15 @@
 #define EHCI_PIPE_QH_OFFSET         4192u
 #define EHCI_QTD_OFFSET             6144u
 #define EHCI_QTD_COUNT              4u
-#define EHCI_SETUP_OFFSET           6400u
+#define EHCI_INTR_QTD_OFFSET        6400u
+#define EHCI_INTR_SLOTS             4u
+#define EHCI_INTR_DATA_MAX          64u
+#define EHCI_INTR_BUFFER_OFFSET     6656u
+#define EHCI_SETUP_OFFSET           6912u
 #define EHCI_DATA_OFFSET            8192u
 #define EHCI_DATA_MAX               (EHCI_SCHEDULE_BYTES - EHCI_DATA_OFFSET)
+#define EHCI_INTR_SLOT_NONE         EHCI_INTR_SLOTS
+#define EHCI_PERIODIC_FRAMES        8u
 
 typedef unsigned int (*ehci_read_4_t)(void *, unsigned);
 typedef void (*ehci_write_4_t)(void *, unsigned, unsigned int);
@@ -64,6 +70,15 @@ struct ehci_pipe {
     struct ehci_qh *ep_qh;
     unsigned ep_used;
     unsigned ep_toggle;
+    unsigned ep_intr_slot;
+};
+
+struct ehci_intr_slot {
+    struct usb_xfer *eis_xfer;
+    struct ehci_pipe *eis_pipe;
+    struct ehci_qtd *eis_qtd;
+    uByte *eis_buffer;
+    unsigned eis_length;
 };
 
 struct ehci_softc {
@@ -79,9 +94,12 @@ struct ehci_softc {
     struct ehci_qh *eh_async_head;
     struct ehci_qh *eh_pipe_qhs;
     struct ehci_qtd *eh_qtds;
+    struct ehci_qtd *eh_intr_qtds;
+    uByte *eh_intr_buffers;
     uByte *eh_setup_buffer;
     uByte *eh_data_buffer;
     struct ehci_pipe eh_pipes[USB_MAX_PIPES];
+    struct ehci_intr_slot eh_intr_slots[EHCI_INTR_SLOTS];
     struct usb_xfer *eh_active_xfer;
     struct ehci_pipe *eh_active_pipe;
     unsigned eh_active_qtds;

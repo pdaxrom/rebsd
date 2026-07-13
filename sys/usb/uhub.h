@@ -39,9 +39,34 @@ struct usb_root_hub {
     unsigned urh_started;
 };
 
+struct usb_external_hub_port {
+    struct usb_device *uep_device;
+};
+
+struct usb_external_hub {
+    unsigned ueh_used;
+    unsigned ueh_unit;
+    unsigned ueh_dying;
+    struct usb_interface *ueh_interface;
+    struct usb_device *ueh_device;
+    struct usb_pipe *ueh_intr_pipe;
+    struct usb_xfer *ueh_intr_xfer;
+    struct usb_task ueh_task;
+    usb_hub_descriptor_t ueh_desc;
+    struct usb_external_hub_port ueh_ports[USB_MAX_HUB_PORTS];
+    uByte ueh_status[(USB_MAX_HUB_PORTS + 8u) / 8u];
+    unsigned ueh_port_count;
+    unsigned ueh_status_length;
+    unsigned ueh_clear_stall;
+};
+
 usb_error_t usb_root_hub_start(struct usb_root_hub *, struct usb_bus *,
     usb_root_hub_event_t, void *);
 void usb_root_hub_stop(struct usb_root_hub *);
 struct usb_device *usb_root_hub_device(struct usb_root_hub *, unsigned);
+
+usb_error_t uhub_register(struct usb_core *);
+unsigned usb_external_hub_count(void);
+struct usb_device *usb_external_hub_device(struct usb_device *, unsigned);
 
 #endif /* _USB_UHUB_H_ */

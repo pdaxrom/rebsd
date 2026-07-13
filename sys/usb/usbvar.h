@@ -101,9 +101,13 @@ struct usb_device {
     unsigned ud_used;
     unsigned ud_connected;
     struct usb_bus *ud_bus;
+    struct usb_device *ud_parent_hub;
     uByte ud_address;
     uByte ud_port;
     uByte ud_speed;
+    uByte ud_depth;
+    uByte ud_tt_hub_address;
+    uByte ud_tt_port;
     uByte ud_config;
     usb_device_descriptor_t ud_desc;
     usb_endpoint_descriptor_t ud_default_desc;
@@ -148,6 +152,8 @@ void usb_bus_stop(struct usb_bus *);
 
 usb_error_t usb_device_enumerate(struct usb_bus *, unsigned, unsigned,
     struct usb_device **);
+usb_error_t usb_device_enumerate_at(struct usb_bus *, struct usb_device *,
+    unsigned, unsigned, struct usb_device **);
 void usb_device_disconnect(struct usb_device *);
 
 struct usb_interface *usb_device_interface(struct usb_device *, unsigned);
