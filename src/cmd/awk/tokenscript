@@ -1,4 +1,4 @@
-e y.tab.h
+e awk.h
 1,$g!/#define /d
 1,$g/YYSTYPE/d
 1,$g!/[0-9][0-9]*$/d

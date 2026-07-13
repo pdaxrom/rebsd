@@ -17,10 +17,14 @@ awk:            $(FILES) awk.g.o
 		${SIZE} awk.elf
 		${ELF2AOUT} awk.elf $@ && rm awk.elf
 
-y.tab.h:	awk.g.o
+awk.g.c:        $(AWK_SRCDIR)/awk.g.y
+		$(YACC) -d -o $@ $<
 
-awk.h:          y.tab.h
-		-cmp -s y.tab.h awk.h || cp y.tab.h awk.h
+awk.g.h:        awk.g.c
+		@test -f $@
+
+awk.h:          awk.g.h
+		-cmp -s awk.g.h awk.h || cp awk.g.h awk.h
 
 $(FILES):	awk.h awk.def.h
 
@@ -48,4 +52,5 @@ proctab.c:	proc.c token.h awk.h
 		./proc > proctab.c
 
 clean:
-		-rm -f *.o *.tmp awk.lx.c *.out *.elf *.dis y.tab.* awk.h proc proctab.c token.h awk
+		-rm -f *.o *.tmp awk.g.c awk.g.h awk.lx.c *.out *.elf *.dis \
+		    y.tab.* awk.h proc proctab.c token.h awk
