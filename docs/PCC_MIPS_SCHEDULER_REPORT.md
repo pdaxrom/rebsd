@@ -1854,3 +1854,88 @@ the same-image GCC control.  Both Linpack return codes, `N64_PCC_DEBUG_END`,
 and `N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal
 `N64_PCC_DEBUG_RC_END` marker was present.  This closes the G7 physical and
 commit gates.
+
+## Milestone H2: Hard-Float Local Register Promotion
+
+The H1 physical profile identified rolled `ddot` as the worst remaining
+floating-point kernel at 52.35% of GCC.  Its loop-carried `double` accumulator
+was stored to and loaded from the frame on every iteration even though an FPR
+was available.  H2 makes the existing MIPS `cisreg()` policy accept automatic
+`float`, `double`, and o32 `long double` values in hard-float mode.  Escaped
+locals still remain in memory, and soft-float is unchanged.
+
+This is a three-line target hook rather than a loop transform.  Rolled `ddot`
+drops from 74 to 64 instructions and from seven to zero FP stack accesses.
+Across the complete Linpack kernel benchmark, static instructions fall from
+3238 to 3175 and FP stack accesses from 189 to 110.
+
+Longer-lived FP locals also exposed conversion templates that emit `jal`
+without a CALL tree node.  Their explicit MIPS register requirements now
+clobber all o32 caller-saved GPRs and FPRs.  FP-returning templates preserve
+`F0` as the result and clobber `F2` through `F18`; otherwise a local could
+incorrectly survive `__floatunsdidf` in `F2`.  The new `fpaccum001` regression
+checks a register accumulator, an address-taken local, and a live FP value
+across that helper.
+
+### H2 Regression Gates
+
+The focused host smoke passes for VR4300 and MIPS32R2 hard-float and verifies
+that VR4300 soft-float emits no hardware FP accumulator operations.  Native
+hard-float regression passes 296/296 runtime tests on each of Malta64, Malta,
+and Maltael.  The complete PCC-kernel/PCC-rootfs matrix is:
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 14221.925 / 14152.471 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 967.163 / 971.398 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 9288.280 / 9694.114 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1044.128 / 1035.347 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 9486.788 / 9494.160 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1085.256 / 1063.983 | `PCC_SMOKE_ALL_RC:0` |
+
+Every full smoke reports `PCC_SMOKE_ALL_FAILURES 0`.  These QEMU values prove
+correctness only.  The optimization does not change multiply scheduling, so
+the default VR4300 `-mfix4300` workaround and `-mno-fix4300` opt-out are
+unchanged.
+
+### H2 N64 Comparison Artifact
+
+The physical image uses a GCC kernel and PCC VR4300 hard-float a.out
+userland with separate GCC/PCC runtimes and ordinary/per-kernel Linpack pairs:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h2-fp-local-temp-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: b8111a4e59d135e57e01869a11d691bde26d2e1282f8d04343e7ca1084e01165
+```
+
+The image passes all `fsutil --check` phases and contains `linpack-gcc`,
+`linpack-pcc`, `linpack-kernels-gcc`, and `linpack-kernels-pcc`.
+
+The physical N64 ordinary Linpack run measured:
+
+| Reps | GCC KFLOPS | PCC KFLOPS | PCC/GCC |
+| ---: | ---: | ---: | ---: |
+| 8 | 4371.099 | 3681.212 | 84.22% |
+| 16 | 4413.155 | 3706.069 | 83.98% |
+
+The stable PCC row improves 0.89% over H1 and the PCC/GCC ratio gains 0.79
+percentage points.  The per-kernel physical profile is:
+
+| Kernel | GCC Melem/s | PCC Melem/s | PCC/GCC |
+| --- | ---: | ---: | ---: |
+| `daxpy_r` | 5.151 | 3.333 | 64.71% |
+| `daxpy_ur` | 5.087 | 4.314 | 84.80% |
+| `ddot_r` | 5.988 | 3.521 | 58.80% |
+| `ddot_ur` | 6.767 | 5.444 | 80.45% |
+| `dscal_r` | 7.217 | 4.878 | 67.59% |
+| `dscal_ur` | 8.376 | 6.294 | 75.14% |
+| `idamax` | 6.555 | 5.333 | 81.36% |
+
+`ddot_r` improves 11.39% over H1 PCC and its GCC ratio rises from 52.35% to
+58.80%; `ddot_ur` improves 3.71%.  Register promotion also keeps the
+loop-carried `idamax` maximum in an FPR, improving it 10.76% and raising its
+ratio from 73.44% to 81.36%.  Both self-tests and every numeric status marker
+are zero, and terminal `N64_PCC_DEBUG_RC_END` is present.  This closes the H2
+physical and commit gates while leaving the 90% overall target open.

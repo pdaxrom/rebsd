@@ -386,6 +386,9 @@ andable(NODE *p)
 int
 cisreg(TWORD t)
 {
+	if (!mips_soft_float &&
+	    (t == FLOAT || t == DOUBLE || t == LDOUBLE))
+		return 1;
 	if (t == INT || t == UNSIGNED || t == LONG || t == ULONG)
 		return(1);
 	return 0; /* XXX - fix reg assignment in pftn.c */

@@ -1169,6 +1169,53 @@ kernel ratios remain 64.63% `daxpy_r`, 84.78% `daxpy_ur`, 52.35% `ddot_r`,
 milestone therefore remains generic rolled-loop FP accumulator, reload, and
 induction code generation rather than another `idamax` special case.
 
+H2 addresses the loop-carried accumulator without adding a loop-specific
+transform.  In hard-float mode, the MIPS `cisreg()` hook now permits
+`float`, `double`, and the o32 `long double` alias to become optimizer TEMPs.
+The normal address-taken analysis still keeps escaped locals in memory, and
+soft-float returns through the old integer/stack path.  For rolled Linpack
+`ddot`, the local accumulator remains in an FPR across the loop: static code
+falls from 74 to 64 instructions and all seven FP accesses through the stack
+disappear.  Across the complete per-kernel benchmark, instruction count falls
+from 3238 to 3175 and FP stack accesses from 189 to 110.
+
+The longer FPR lifetimes exposed a pre-existing correctness gap in MIPS table
+patterns that emit runtime helper calls from conversion templates.  They are
+not CALL nodes, so the generic call-clobber path does not see them.  Their
+`NEEDS` sets now name every o32 caller-saved GPR and FPR; patterns returning an
+FP result use a separate set that reserves `F0` as the result while clobbering
+`F2` through `F18`.  This forces a live local to be saved and restored around
+helpers such as `__floatunsdidf`, while leaf accumulators remain register-only.
+A focused regression covers the register accumulator, an address-taken local,
+and a local live across the helper.  The host assembly smoke checks VR4300 and
+MIPS32R2 hard-float output plus the unchanged VR4300 soft-float path.
+
+The three hard-float native profiles pass 296/296 runtime cases on Malta64,
+Malta, and Maltael.  Full `pcc-smoke-all.sh` passes with PCC kernels and PCC
+root filesystems for VR4300 big-endian hard/soft, MIPS32R2 big-endian hard/soft,
+and MIPS32R2 little-endian hard/soft; every run reports
+`PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  QEMU timing remains
+correctness evidence only.  H2 does not alter multiply scheduling or the
+default `-mfix4300` policy; `-mno-fix4300` remains the explicit opt-out.
+
+The H2 hardware image uses a GCC debug-UART kernel and PCC VR4300
+hard-float a.out userland, with independent GCC/PCC ordinary and per-kernel
+Linpack binaries.  It is stored at
+`/Users/sash/Work/N64/retrobsd-build/n64-h2-fp-local-temp-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+has size 6619136 bytes and SHA-256
+`b8111a4e59d135e57e01869a11d691bde26d2e1282f8d04343e7ca1084e01165`.
+The image passes `fsutil --check` and has build stamp
+`.build-mode.gcc.1.0.0.1`.  Physical validation passes both kernel self-tests,
+all numeric Linpack and debug return codes are zero, and terminal
+`N64_PCC_DEBUG_RC_END` is present.  Stable ordinary Linpack is 3706.069 PCC
+versus 4413.155 GCC KFLOPS, or 83.98%; this is 0.89% faster than H1 PCC and
+improves the PCC/GCC ratio by 0.79 percentage points.  PCC `ddot_r` improves
+from 3.161 to 3.521 Melem/s and reaches 58.80% of GCC instead of 52.35%;
+`ddot_ur` reaches 80.45%.  Register promotion also keeps the `idamax` maximum
+in an FPR, improving that kernel from 4.815 to 5.333 Melem/s and from 73.44%
+to 81.36% of GCC.  This closes the H2 physical and commit gates; the 90%
+overall stretch target remains open.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

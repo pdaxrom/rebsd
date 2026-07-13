@@ -4655,13 +4655,42 @@ Milestone order:
     Linpack row is 3673.524 PCC versus 4415.818 GCC KFLOPS, or 83.19%; PCC is
     0.85% faster than H0, while the GCC control is 1.10% faster, so the overall
     ratio is effectively unchanged.
-  - [ ] H2 optimize the remaining rolled kernels without disturbing H1.
+  - [x] H2 optimize the remaining rolled kernels without disturbing H1.
     Physical PCC/GCC ratios are still 64.63% for `daxpy_r`, 52.35% for
     `ddot_r`, and 67.65% for `dscal_r`, versus 73.44-84.78% for `idamax` and
     the corresponding unrolled paths.  Compare loop-carried FP accumulator
     placement, reloads/spills, induction updates, branch shape, and delay-slot
     use, then implement and measure one smallest shared backend change before
-    proceeding further.
+    proceeding further.  The candidate change now lets hard-float
+    `float`/`double`/o32 `long double` automatic variables use optimizer TEMPs,
+    while soft-float and address-taken locals retain their existing stack
+    representation.  Rolled `ddot` falls from 74 to 64 instructions and from
+    seven to zero FP stack accesses; the complete kernel benchmark falls from
+    3238 to 3175 instructions and from 189 to 110 FP stack accesses.  Enabling
+    these longer FPR lifetimes exposed compiler-emitted conversion helper calls
+    that were not represented as CALL nodes.  Their table requirements now
+    clobber all o32 caller-saved GPRs and FPRs, except `F0` when it is the
+    result, preventing live locals from surviving incorrectly across helpers
+    such as `__floatunsdidf`.
+    The focused host smoke passes for VR4300 and MIPS32R2 hard-float and proves
+    that soft-float is unchanged.  Native hard-float regression passes 296/296
+    runtime cases on Malta64, Malta, and Maltael, including the new accumulator,
+    address-taken, and helper-clobber test.  All six PCC-kernel/PCC-rootfs
+    hard/soft `pcc-smoke-all.sh` profiles pass with zero failures and final RC
+    zero.  The physical artifact is the GCC-kernel/PCC-hard-float a.out
+    image
+    `/Users/sash/Work/N64/retrobsd-build/n64-h2-fp-local-temp-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136, SHA-256
+    `b8111a4e59d135e57e01869a11d691bde26d2e1282f8d04343e7ca1084e01165`.
+    Real N64 validation passes both self-tests and every numeric status marker;
+    terminal `N64_PCC_DEBUG_RC_END` is present.  Stable ordinary Linpack is
+    3706.069 PCC versus 4413.155 GCC KFLOPS, or 83.98%; PCC improves 0.89%
+    over H1 and the ratio gains 0.79 percentage points.  `ddot_r` improves
+    from 3.161 to 3.521 Melem/s, reaches 58.80% of GCC instead of 52.35%, and
+    `ddot_ur` reaches 80.45%.  Keeping the `idamax` maximum in an FPR also
+    improves it from 4.815 to 5.333 Melem/s, or 81.36% of GCC.  This passes the
+    H2 physical and commit gates, but the 90% overall stretch target remains
+    open.
 
 Success criteria:
 

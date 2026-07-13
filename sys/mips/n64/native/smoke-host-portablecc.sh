@@ -147,7 +147,7 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.normal.s" "$tmp.stats.s" "$tmp.stats2.s" "$tmp.stats.off" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
-    "$tmp.ssastrength.s" "$tmp.ssastrength.log" \
+    "$tmp.ssastrength.s" "$tmp.ssastrength.log" "$tmp.fpaccum.s" \
     "$tmp.staticspec.s" "$tmp.staticspec.os.s" "$tmp.staticspec.free.s" \
     "$tmp.staticspec.generic.s" \
     "$tmp.staticspec-stack.s" \
@@ -464,6 +464,53 @@ END { exit seen && assign && !frame_arg ? 0 : 1 }
 		exit 1
 	}
 done
+
+for fpaccum_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$fpaccum_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.fpaccum.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/fpaccum001.c"
+	awk '
+/^[[:space:]]*[.]ent fp_accumulator$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*mul[.]d[[:space:]]/ { multiply = 1 }
+inside && /^[[:space:]]*add[.]d[[:space:]]/ { add = 1 }
+inside && /^[[:space:]]*(l[.]d|s[.]d|ldc1|sdc1)[[:space:]].*\(\$(fp|sp)\)/ {
+	stack_fp = 1
+}
+END { exit seen && multiply && add && !stack_fp ? 0 : 1 }
+' "$tmp.fpaccum.s" || {
+		echo "$fpaccum_cpu spilled the local FP accumulator" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent fp_helper_call$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && !call && /^[[:space:]]*(s[.]d|sdc1|swc1)[[:space:]].*\(\$(fp|sp)\)/ {
+	saved = 1
+}
+inside && /^[[:space:]]*jal[[:space:]]+__floatunsdidf/ { call = 1 }
+inside && call && /^[[:space:]]*(l[.]d|ldc1|lwc1)[[:space:]].*\(\$(fp|sp)\)/ {
+	restored = 1
+}
+END { exit seen && saved && call && restored ? 0 : 1 }
+' "$tmp.fpaccum.s" || {
+		echo "$fpaccum_cpu kept an FP value in a caller-saved register" >&2
+		exit 1
+	}
+done
+
+"$pcc" -march=vr4300 -msoft-float -O2 -fno-omit-frame-pointer -S \
+    -o "$tmp.fpaccum.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/fpaccum001.c"
+if awk '
+/^[[:space:]]*[.]ent fp_accumulator$/ { inside = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(mul|add)[.]d[[:space:]]/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.fpaccum.s"; then
+	echo "soft-float FP accumulator used hardware FPU operations" >&2
+	exit 1
+fi
 
 "$pcc" -march=mips3 -mtune=r4000 -O2 -S -o "$tmp.s" "$tmp.c"
 awk '
