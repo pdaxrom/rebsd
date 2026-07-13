@@ -38,7 +38,7 @@
 .SH SYNOPSIS
 .B mount
 [ \fB\-adfruvw\fP ]
-[ \fB\-t\fP \fIufs\fP | \fIexternal_type\fP ]
+[ \fB\-t\fP \fIufs\fP | \fIfat\fP | \fIromfs\fP | \fIexternal_type\fP ]
 .br
 .B mount
 [ \fB\-dfruvw\fP ]
@@ -47,7 +47,7 @@
 .B mount
 [ \fB\-dfruvw\fP ]
 [ \fB\-o\fP \fIoptions\fP ]
-[ \fB\-t\fP \fIufs\fP | \fIexternal_type\fP ]
+[ \fB\-t\fP \fIufs\fP | \fIfat\fP | \fIromfs\fP | \fIexternal_type\fP ]
 .I special node
 .SH DESCRIPTION
 The
@@ -181,15 +181,18 @@ argument to the
 \fB\-o\fP
 option.
 .TP 10
-\fB\-t\fP "\fIufs\fP | \fIexternal type\fP"
+\fB\-t\fP "\fIufs\fP | \fIfat\fP | \fIromfs\fP | \fIexternal type\fP"
 The argument following the
 \fB\-t\fP
 is used to indicate the file system type.
 The type
 .I ufs
-is the default.  \fIUfs\fP is also the only value supported by 2.11BSD other 
-than \fIswap\fP.  Thus
-the \fB\-t\fP will rarely be used.
+is the default.
+ReBSD also handles
+.I fat
+(FAT16 and FAT32, currently read-only) and
+.I romfs
+internally.
 The \fB\-t\fP option can be used
 to indicate that the actions should only be taken on
 filesystems of the specified type.

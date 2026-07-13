@@ -8,19 +8,31 @@
 
 /* Common block-disk layer for USB, SD/MMC, IDE and SATA backends. */
 
+#ifdef DISK_HOST_TEST
+#include <sys/types.h>
+#else
 #include <sys/param.h>
+#endif
 #include <sys/buf.h>
 #include <sys/disk.h>
 #include <sys/errno.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
+#ifdef DISK_HOST_TEST
+void biodone(struct buf *);
+int printf(const char *, ...);
+#else
 #include <sys/systm.h>
+#endif
 #include <disk/disk.h>
 
 #define DISK_MAX_UNITS                  4u
 
 struct disk_softc {
     unsigned ds_used;
+    unsigned ds_attached;
+    /* Reserve a detached unit until every vnode/raw open is closed. */
+    unsigned ds_opens;
     unsigned ds_unit;
     const struct disk_backend_ops *ds_ops;
     void *ds_arg;
@@ -44,7 +56,8 @@ disk_zero(void *vptr, size_t length)
 static int
 disk_present(const struct disk_softc *sc)
 {
-    return sc->ds_used && (sc->ds_ops->dbo_present == 0 ||
+    return sc->ds_used && sc->ds_attached &&
+        (sc->ds_ops->dbo_present == 0 ||
         sc->ds_ops->dbo_present(sc->ds_arg));
 }
 
@@ -110,6 +123,7 @@ disk_attach(const struct disk_attach_args *args, unsigned *unitp)
     sc = &disk_softc[i];
     disk_zero(sc, sizeof(*sc));
     sc->ds_used = 1;
+    sc->ds_attached = 1;
     sc->ds_unit = i;
     sc->ds_ops = args->da_ops;
     sc->ds_arg = args->da_arg;
@@ -147,8 +161,10 @@ disk_detach(unsigned unit, void *arg)
     sc = &disk_softc[unit];
     if (!sc->ds_used || sc->ds_arg != arg)
         return;
-    disk_zero(sc, sizeof(*sc));
+    sc->ds_attached = 0;
     printf("sd%u: detached\n", unit);
+    if (sc->ds_opens == 0)
+        disk_zero(sc, sizeof(*sc));
 }
 
 void
@@ -175,15 +191,29 @@ disk_bdev_open(dev_t dev, int flag, int mode)
         ((sc->ds_flags & DISK_FLAG_READ_ONLY) != 0 ||
         sc->ds_ops->dbo_write == 0))
         return EROFS;
+    if (sc->ds_opens == 0xffffffffu)
+        return EMFILE;
+    ++sc->ds_opens;
     return 0;
 }
 
 int
 disk_bdev_close(dev_t dev, int flag, int mode)
 {
-    (void)dev;
+    struct disk_softc *sc;
+    unsigned unit;
+
     (void)flag;
     (void)mode;
+    unit = DISK_MINOR_UNIT(minor(dev));
+    if (unit >= DISK_MAX_UNITS)
+        return ENXIO;
+    sc = &disk_softc[unit];
+    if (!sc->ds_used || sc->ds_opens == 0)
+        return ENXIO;
+    --sc->ds_opens;
+    if (sc->ds_opens == 0 && !sc->ds_attached)
+        disk_zero(sc, sizeof(*sc));
     return 0;
 }
 
@@ -294,6 +324,9 @@ disk_bdev_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
     switch (cmd) {
     case DIOCGETMEDIASIZE:
         *(int *)addr = (int)(sectors >> 1);
+        return 0;
+    case DIOCGETSECTORS:
+        *(unsigned *)addr = sectors;
         return 0;
     case DIOCREINIT:
         error = disk_revalidate(sc);

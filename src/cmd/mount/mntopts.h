@@ -80,4 +80,5 @@ struct mntopt {
 
 int mount_ufs(int argc, char *argv[]);
 int mount_romfs(int argc, char *argv[]);
+int mount_fat(int argc, char *argv[]);
 void getmntopts(char *options, struct mntopt *m0, int *flagp);

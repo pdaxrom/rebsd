@@ -13,6 +13,7 @@ dir /dev
 dir /etc
 dir /lib
 dir /libexec
+dir /mnt
 dir /root
 dir /sbin
 dir /usr

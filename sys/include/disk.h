@@ -52,5 +52,6 @@ struct diskpart {                   /* the partition table */
 #define DIOCGETMEDIASIZE _IOR('d', 1, int)              /* get size in kbytes */
 #define DIOCREINIT       _IO ('d', 2)                   /* re-initialize device */
 #define DIOCGETPART      _IOR('d', 3, struct diskpart)  /* get partition */
+#define DIOCGETSECTORS   _IOR('d', 4, unsigned)         /* exact 512-byte count */
 
 #endif /* _SYS_DISK_H_ */

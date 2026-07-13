@@ -646,11 +646,12 @@ FSUTIL          = $(OBJTOP)/tools/fsutil/fsutil
 ELF2AOUT        = $(OBJTOP)/tools/elf2aout/elf2aout
 
 DEPFLAGS        = -MT $@ -MP -MD -MF .deps/$*.dep
-CPPFLAGS        = -I. -I$(TOPSRC)/include ${PARAM} -DKERNEL -DN64 -DMIPS \
+CPPFLAGS        = -I. -I$(TOPSRC)/include -I$(TOPSRC)/sys \
+                  ${PARAM} -DKERNEL -DN64 -DMIPS \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"NEC VR4300"'
 ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
-CPPFLAGS        += -I$(TOPSRC)/include/sys -I$(TOPSRC)/sys \
+CPPFLAGS        += -I$(TOPSRC)/include/sys \
                   -I$(TOPSRC)/sys/net \
                   -I$(TOPSRC)/sys/netinet -DINET -DSUPERVISOR
 INET_CWARN      = -Wno-comment -Wno-endif-labels -Wno-implicit-int \

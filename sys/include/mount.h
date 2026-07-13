@@ -53,7 +53,15 @@ struct vfsops {
     int     (*vfs_truncate)(struct inode *ip, u_long length, int ioflags);
     int     (*vfs_statfs)(struct mount *mp, struct statfs *sbp);
     int     (*vfs_sync)(struct mount *mp);
+    int     (*vfs_namematch)(struct mount *mp, const char *name,
+                unsigned namelen, const char *entry, unsigned entrylen);
+    u_int   vfs_flags;
 };
+
+#define VFSOPS_BLOCK_DEVICE     0x0001  /* source is a block device */
+#define VFSOPS_CHAR_DEVICE      0x0002  /* source is a character device */
+#define VFSOPS_READ_ONLY        0x0004  /* implementation cannot write */
+#define VFSOPS_DEVICE_MASK      (VFSOPS_BLOCK_DEVICE | VFSOPS_CHAR_DEVICE)
 
 /*
  * File system types.  Since only UFS is supported the others are not
@@ -62,12 +70,14 @@ struct vfsops {
 #define MOUNT_NONE      0
 #define MOUNT_UFS       1   /* Fast Filesystem */
 #define MOUNT_ROMFS     2   /* N64 cartridge ROMFS */
-#define MOUNT_MAXTYPE   2
+#define MOUNT_FAT       3   /* FAT16/FAT32 */
+#define MOUNT_MAXTYPE   3
 
 #define INITMOUNTNAMES { \
     "none",     /* 0 MOUNT_NONE */ \
     "ufs",      /* 1 MOUNT_UFS */ \
     "romfs",    /* 2 MOUNT_ROMFS */ \
+    "fat",      /* 3 MOUNT_FAT */ \
     0, \
 }
 

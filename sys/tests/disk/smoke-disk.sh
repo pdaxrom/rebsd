@@ -14,6 +14,11 @@ mkdir -p "$tmp"
     "$top/sys/disk/disk_subr.c" \
     disk_test.c -o "$tmp/disk_test"
 
+"$cc" -std=c99 -Wall -Wextra -Werror -pedantic -DKERNEL -D__mips__ \
+    -DDISK_HOST_TEST -I "$top/include" -I "$top/sys" \
+    "$top/sys/disk/disk_subr.c" "$top/sys/disk/disk.c" \
+    disk_lifecycle_test.c -o "$tmp/disk_lifecycle_test"
+
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
     -I "$top/src/cmd/fdisk" \
     "$top/src/cmd/fdisk/fdisk_mbr.c" \
@@ -21,6 +26,7 @@ mkdir -p "$tmp"
 
 if [ "$mode" = test ]; then
     "$tmp/disk_test"
+    "$tmp/disk_lifecycle_test"
     "$tmp/fdisk_mbr_test"
 elif [ "$mode" != compile ]; then
     echo "usage: $0 [compile|test]" >&2

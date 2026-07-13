@@ -789,4 +789,6 @@ struct vfsops mipsromfs_vfsops = {
     mipsromfs_truncate,
     mipsromfs_statfs,
     mipsromfs_sync,
+    0,
+    VFSOPS_CHAR_DEVICE,
 };

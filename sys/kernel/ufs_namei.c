@@ -110,6 +110,24 @@ dirbadentry (struct direct *ep, int entryoffsetinblock)
     return (ep->d_name[i]);
 }
 
+static int
+dirnamematch(struct inode *dp, struct direct *wanted, struct direct *entry)
+{
+    struct mount *mp;
+
+    if (wanted->d_namlen != entry->d_namlen)
+        return 0;
+    if (dp->i_fs != 0) {
+        mp = (struct mount *)((int)dp->i_fs -
+            offsetof(struct mount, m_filsys));
+        if (mp->m_ops != 0 && mp->m_ops->vfs_namematch != 0)
+            return (*mp->m_ops->vfs_namematch)(mp, wanted->d_name,
+                wanted->d_namlen, entry->d_name, entry->d_namlen);
+    }
+    return !bcmp(wanted->d_name, entry->d_name,
+        (unsigned)entry->d_namlen);
+}
+
 /*
  * Convert a pathname into a pointer to a locked inode.
  * This is a very central and rather complicated routine.
@@ -525,9 +543,7 @@ searchloop:
          * Check for a name match.
          */
         if (ep->d_ino) {
-            if (ep->d_namlen == ndp->ni_dent.d_namlen &&
-                !bcmp(ndp->ni_dent.d_name, ep->d_name,
-                (unsigned)ep->d_namlen))
+            if (dirnamematch(dp, &ndp->ni_dent, ep))
                 goto found;
         }
         prevoff = ndp->ni_offset;

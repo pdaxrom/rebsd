@@ -163,7 +163,8 @@ MIPS_LINPACK_SMOKE_MANIFEST ?= $(LINPACK_SMOKE_MANIFEST)
 .DEFAULT_GOAL := all
 include ../rootfs.mk
 
-CPPFLAGS        = -I. -I$(TOPSRC)/include -I$(TOPSRC)/sys/mips/include \
+CPPFLAGS        = -I. -I$(TOPSRC)/include -I$(TOPSRC)/sys \
+                  -I$(TOPSRC)/sys/mips/include \
                   ${PARAM} -DKERNEL -DMIPS \
                   $(MIPS_TARGET_ENDIAN_CFLAGS_$(MIPS_TARGET_ENDIAN)) \
                   -DROMFS_ENABLED \
@@ -175,7 +176,7 @@ CPPFLAGS        = -I. -I$(TOPSRC)/include -I$(TOPSRC)/sys/mips/include \
                   -DHW_MACHINE_NAME=\"mips\" \
                   -DHW_MODEL_NAME='"$(MALTA_HW_MODEL)"'
 ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
-CPPFLAGS        += -I$(TOPSRC)/include/sys -I$(TOPSRC)/sys \
+CPPFLAGS        += -I$(TOPSRC)/include/sys \
                   -I$(TOPSRC)/sys/net \
                   -I$(TOPSRC)/sys/netinet -DINET -DSUPERVISOR
 INET_CWARN      = -Wno-comment -Wno-endif-labels -Wno-implicit-int \

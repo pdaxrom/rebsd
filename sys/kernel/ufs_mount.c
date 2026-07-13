@@ -125,10 +125,14 @@ smount()
         u.u_error = ENOSYS;
         return;
     }
-    if (fstype == MOUNT_UFS)
+    if ((ops->vfs_flags & VFSOPS_READ_ONLY) != 0)
+        flags |= MNT_RDONLY;
+    if ((ops->vfs_flags & VFSOPS_DEVICE_MASK) == VFSOPS_BLOCK_DEVICE)
         u.u_error = getmdev (&dev, uap->fspec);
-    else
+    else if ((ops->vfs_flags & VFSOPS_DEVICE_MASK) == VFSOPS_CHAR_DEVICE)
         u.u_error = getcdev (&dev, uap->fspec);
+    else
+        u.u_error = EINVAL;
     if (u.u_error)
         return;
 
@@ -221,15 +225,28 @@ vfs_mountfs(int fstype, dev_t dev, int flags, struct inode *ip)
     register struct fs *fs;
     register struct vfsops *ops;
     register int error;
+    int needclose = 0;
+    int openflags;
 
     ops = vfs_getops(fstype);
     if (ops == 0 || ops->vfs_mount == 0) {
         error = ENOSYS;
         goto out;
     }
+    if ((ops->vfs_flags & VFSOPS_DEVICE_MASK) == VFSOPS_BLOCK_DEVICE) {
+        openflags = FREAD;
+        if ((ops->vfs_flags & VFSOPS_READ_ONLY) == 0 &&
+            (flags & MNT_RDONLY) == 0)
+            openflags |= FWRITE;
+        error = (*bdevsw[major(dev)].d_open)(dev, openflags, S_IFBLK);
+        if (error)
+            goto out;
+        needclose = 1;
+    }
     for (mp = &mount[0]; mp < &mount[NMOUNT]; mp++)
-        if (mp->m_inodp != 0 && dev == mp->m_dev &&
-            mp->m_type == fstype) {
+        if (mp->m_inodp != 0 && dev == mp->m_dev && mp->m_ops != 0 &&
+            (mp->m_ops->vfs_flags & VFSOPS_DEVICE_MASK) ==
+            (ops->vfs_flags & VFSOPS_DEVICE_MASK)) {
             mp = 0;
             error = EBUSY;
             goto out;
@@ -270,6 +287,10 @@ out:
         mp->m_type = MOUNT_NONE;
         mp->m_ops = 0;
         mp->m_data = 0;
+    }
+    if (needclose) {
+        (*bdevsw[major(dev)].d_close)(dev, openflags, S_IFBLK);
+        binval(dev);
     }
     u.u_error = error;
     return 0;
@@ -401,7 +422,9 @@ found:
     ip = mp->m_inodp;
     ip->i_flag &= ~IMOUNT;
     irele(ip);
-    if (mp->m_type == MOUNT_UFS) {
+    if (mp->m_ops != 0 &&
+        (mp->m_ops->vfs_flags & VFSOPS_DEVICE_MASK) ==
+        VFSOPS_BLOCK_DEVICE) {
         (*bdevsw[major(dev)].d_close)(dev, 0, S_IFBLK);
         binval(dev);
     }

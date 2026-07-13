@@ -56,6 +56,9 @@ kernel/vm_swp.c                 standard
 disk/disk_subr.c               optional disk
 disk/disk.c                    optional disk
 
+fs/fat/fat_subr.c              optional fat
+fs/fat/fat_vfs.c               optional fat
+
 usb/usb_subr.c                 optional usb
 usb/usb_core.c                 optional usb
 usb/usb_service.c              optional usb

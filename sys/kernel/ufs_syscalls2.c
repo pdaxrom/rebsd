@@ -17,6 +17,9 @@
 #ifdef ROMFS_ENABLED
 extern struct vfsops mipsromfs_vfsops;
 #endif
+#ifdef FAT_ENABLED
+extern struct vfsops fat_vfsops;
+#endif
 
 static int
 ufs_statfs (struct mount *mp, struct statfs *sbp)
@@ -50,6 +53,10 @@ vfs_getops(int fstype)
 #ifdef ROMFS_ENABLED
     case MOUNT_ROMFS:
         return &mipsromfs_vfsops;
+#endif
+#ifdef FAT_ENABLED
+    case MOUNT_FAT:
+        return &fat_vfsops;
 #endif
     default:
         return 0;
@@ -215,6 +222,8 @@ struct vfsops ufs_vfsops = {
     0,
     ufs_statfs,
     ufs_sync,
+    0,
+    VFSOPS_BLOCK_DEVICE,
 };
 
 int

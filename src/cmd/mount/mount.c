@@ -292,6 +292,8 @@ mountfs(
 			_exit(mount_ufs(argc, (char **) argv));
 		if (strcmp(vfstype, "romfs") == 0)
 			_exit(mount_romfs(argc, (char **) argv));
+		if (strcmp(vfstype, "fat") == 0)
+			_exit(mount_fat(argc, (char **) argv));
 
 		/* Go find an executable. */
 		edir = edirs;
