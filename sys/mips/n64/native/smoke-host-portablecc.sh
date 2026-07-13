@@ -328,6 +328,31 @@ EOF
 	fi
 fi
 
+if [ "$exec_format" = aout ] && [ -x "$tool_src_dir/nm" ]; then
+	cat > "$tmp.aout-align.s" <<'EOF'
+	.data
+	.word 0
+	.section .rodata.cst8,"aM",@progbits,8
+	.align 3
+	.globl aout_rodata_double
+aout_rodata_double:
+	.word 0x3ff00000
+	.word 0
+EOF
+	"$as" --aout "$elf_endian" -march="$cpu" \
+	    "$tmp.aout-align.s" -o "$tmp.aout-align.o"
+	aout_double_addr=$("$tool_src_dir/nm" "$tmp.aout-align.o" |
+	    awk '$3 == "aout_rodata_double" { print $1 }')
+	case "$aout_double_addr" in
+	*0|*8)
+		;;
+	*)
+		echo "a.out assembler lost 8-byte .rodata alignment: $aout_double_addr" >&2
+		exit 1
+		;;
+	esac
+fi
+
 cat > "$tmp.c" <<'EOF'
 struct sd {
 	char c;
@@ -451,6 +476,54 @@ END { exit seen && store && load ? 0 : 1 }
 	echo "generic MIPS3 unexpectedly promoted scalar register parameters" >&2
 	exit 1
 }
+
+cat > "$tmp.c" <<'EOF'
+double oldstyle_prototyped(double);
+
+double
+oldstyle_prototyped(value)
+	double value;
+{
+	return value + 1.0;
+}
+
+double
+oldstyle_unprototyped(value)
+	double value;
+{
+	return value + 1.0;
+}
+EOF
+
+for fpabi_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$fpabi_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
+	awk '
+/^[[:space:]]*[.]ent oldstyle_prototyped$/ {
+	inside = 1; seen = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /\$f12/ { fp = 1 }
+inside && /^[[:space:]]*sw[[:space:]]+\$a[01],/ { gpr = 1 }
+END { exit seen && fp && !gpr ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$fpabi_cpu mismatched a prototyped K&R hard-float definition" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent oldstyle_unprototyped$/ {
+	inside = 1; seen = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*sw[[:space:]]+\$a0,/ { a0 = 1 }
+inside && /^[[:space:]]*sw[[:space:]]+\$a1,/ { a1 = 1 }
+inside && /\$f12/ { fp = 1 }
+END { exit seen && a0 && a1 && !fp ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$fpabi_cpu changed the unprototyped K&R hard-float ABI" >&2
+		exit 1
+	}
+done
 
 cat > "$tmp.c" <<'EOF'
 int
@@ -1129,6 +1202,8 @@ erratum_probe(void)
 }
 EOF
 
+"$pcc" -march=vr4300 -S -o "$tmp.s" "$tmp.c"
+grep 'VR4300 fp multiply erratum' "$tmp.s" >/dev/null
 "$pcc" -march=mips3 -mtune=vr4300 -mfix4300 \
     -S -o "$tmp.s" "$tmp.c"
 grep 'VR4300 fp multiply erratum' "$tmp.s" >/dev/null

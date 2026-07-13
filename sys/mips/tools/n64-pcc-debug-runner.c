@@ -821,6 +821,36 @@ run_linpack_comparison(void)
 }
 
 static int
+run_linpack_kernel_comparison(void)
+{
+	int fails;
+	int rc;
+	char *gcc_argv[] = { "/root/linpack-kernels-gcc", NULL };
+	char *pcc_argv[] = { "/root/linpack-kernels-pcc", NULL };
+
+	fails = 0;
+	printf("N64_LINPACK_KERNEL_CONFIG array_size=120 min_seconds=1\n");
+	if (setenv("LINPACK_KERNEL_ARRAY_SIZE", "120", 1) < 0 ||
+	    setenv("LINPACK_KERNEL_MIN_SECONDS", "1", 1) < 0) {
+		printf("N64_LINPACK_KERNEL_ENV_FAIL %d\n", errno);
+		return 1;
+	}
+
+	printf("N64_LINPACK_KERNEL_BEGIN gcc\n");
+	rc = run_argv("linpack-kernels-gcc", NULL, gcc_argv);
+	printf("N64_LINPACK_KERNEL_RC gcc %d\n", rc);
+	printf("N64_LINPACK_KERNEL_END gcc\n");
+	fails += rc != 0;
+
+	printf("N64_LINPACK_KERNEL_BEGIN pcc\n");
+	rc = run_argv("linpack-kernels-pcc", NULL, pcc_argv);
+	printf("N64_LINPACK_KERNEL_RC pcc %d\n", rc);
+	printf("N64_LINPACK_KERNEL_END pcc\n");
+	fails += rc != 0;
+	return fails;
+}
+
+static int
 run_debug(int run_extended)
 {
 	int fails;
@@ -853,6 +883,7 @@ run_debug(int run_extended)
 		fails += run_group(extended_tests,
 		    sizeof(extended_tests) / sizeof(extended_tests[0]));
 		fails += run_linpack_comparison();
+		fails += run_linpack_kernel_comparison();
 	}
 
 	printf("N64_PCC_DEBUG_END %d\n", fails);

@@ -562,7 +562,15 @@ bfcode(struct symtab **sp, int cnt)
 
 	reg = A0;
 #ifdef MIPS_HARDFLOAT_O32_ABI
-	fp_leading = !mips_soft_float && !oldstyle && !saveallargs;
+	/*
+	 * A K&R definition may still have a visible compatible prototype.
+	 * Calls through that prototype use the hard-float o32 FP registers, so
+	 * the definition must use the same convention.  A genuinely
+	 * unprototyped old-style function continues to receive FP values in the
+	 * integer argument slots.
+	 */
+	fp_leading = !mips_soft_float && !saveallargs &&
+	    (!oldstyle || (cftnsp->sdf != NULL && cftnsp->sdf->dlst != 0));
 	fpreg = F12;
 #endif
 

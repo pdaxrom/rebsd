@@ -71,6 +71,8 @@ COPY_PATHS = [
     "/libexec/getty",
     "/root/ccom-stress.sh",
     "/root/linpack-gcc",
+    "/root/linpack-kernels-gcc",
+    "/root/linpack-kernels-pcc",
     "/root/linpack-pcc",
     "/sbin/init",
     "/sbin/mkfs",

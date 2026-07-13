@@ -3144,6 +3144,7 @@ void pass1()
     register int clex;
     int cval, tval, csegm, nbytes, symidx;
     register unsigned addr;
+    unsigned a, bits;
 
     segm = STEXT;
     prev_segm = STEXT;
@@ -3170,8 +3171,16 @@ void pass1()
             } else {
                 segm = STEXT;
                 align(text_align_bits);
+                /*
+                 * a.out stores writable data and read-only data in one data
+                 * segment.  Preserve the alignment requested by .rodata at
+                 * that otherwise invisible boundary.
+                 */
                 segm = SDATA;
-                align(2);
+                a = sections[SSTRNG].align;
+                for (bits = 0; (1U << bits) < a; bits++)
+                    ;
+                align(bits);
                 segm = SSTRNG;
                 align(2);
                 segm = SCTORS;

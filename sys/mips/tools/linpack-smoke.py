@@ -82,10 +82,15 @@ def command_stage(args):
     manifest_out = Path(args.manifest_out)
 
     entries = []
-    for name in ("linpack-gcc", "linpack-pcc"):
+    for name in (
+        "linpack-gcc",
+        "linpack-pcc",
+        "linpack-kernels-gcc",
+        "linpack-kernels-pcc",
+    ):
         src = out / name
         if not src.is_file():
-            if name == "linpack-gcc":
+            if name in ("linpack-gcc", "linpack-kernels-gcc"):
                 continue
             raise FileNotFoundError(src)
         dst = rootfs / "root" / name
@@ -113,6 +118,7 @@ def command_run(args):
     command = (
         f"LINPACK_ARRAY_SIZE={args.array_size} "
         f"LINPACK_MIN_SECONDS={args.min_seconds} "
+        f"LINPACK_KERNEL_BENCH={args.kernel_bench} "
         "/root/linpack-smoke.sh; echo LINPACK_RC:$?"
     )
     cmd = [
@@ -239,6 +245,7 @@ def main():
     p.add_argument("--ram", default="32M")
     p.add_argument("--array-size", default="120")
     p.add_argument("--min-seconds", default="1")
+    p.add_argument("--kernel-bench", choices=["0", "1"], default="0")
     p.add_argument("--timeout", type=int, default=240)
     p.add_argument("--silence-timeout", type=int, default=45)
     p.set_defaults(func=command_run)

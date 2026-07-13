@@ -59,6 +59,11 @@ and
 instruction scheduling modes required by compiler output.
 The selected CPU mode controls instruction acceptance and the text alignment
 policy used for compiler-generated code.
+For legacy
+.B a.out
+objects, the assembler also preserves the alignment requested by read-only
+data sections when writable data and read-only data are packed into the single
+output data segment.  This is required by 8-byte MIPS floating-point loads.
 .SH OPTIONS
 .TP
 .BI \-o " outfile"

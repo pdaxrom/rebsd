@@ -571,11 +571,17 @@ make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc \
 The resulting ROM is under
 `../retrobsd-build/n64-kgcc-upcc-vr4300-hard-big-aout/obj/sys/mips/n64/`.
 
-This image includes `/root/linpack-gcc` and `/root/linpack-pcc`, built from
-the same source with `-O2`, array size 120, and a one-second minimum timing
-window.  The GCC binary uses a separate GCC-built a.out `crt0.o`, `libc.a`,
-and `libm.a`; the PCC binary uses the PCC-built runtime.  The extended debug
-runner executes GCC first and PCC second and reports:
+This image includes `/root/linpack-gcc`, `/root/linpack-pcc`,
+`/root/linpack-kernels-gcc`, and `/root/linpack-kernels-pcc`, built from the
+same source with `-O2`, array size 120, and a one-second minimum timing window.
+The GCC binaries use a separate GCC-built a.out `crt0.o`, `libc.a`, and
+`libm.a`; the PCC binaries use the PCC-built runtime.  The kernel benchmark
+self-tests and times rolled/unrolled `daxpy`, `ddot`, and `dscal`, plus
+`idamax`, through typed volatile function pointers so each compiler emits an
+out-of-line generic kernel.  Malta/QEMU `linpack-smoke-runtime` runs this extra
+set only when `LINPACK_KERNEL_BENCH=1` is selected.
+
+The extended N64 debug runner executes GCC first and PCC second and reports:
 
 ```
 N64_LINPACK_CONFIG array_size=120 min_seconds=1
@@ -585,6 +591,13 @@ N64_LINPACK_END gcc
 N64_LINPACK_BEGIN pcc
 N64_LINPACK_RC pcc 0
 N64_LINPACK_END pcc
+N64_LINPACK_KERNEL_CONFIG array_size=120 min_seconds=1
+N64_LINPACK_KERNEL_BEGIN gcc
+N64_LINPACK_KERNEL_RC gcc 0
+N64_LINPACK_KERNEL_END gcc
+N64_LINPACK_KERNEL_BEGIN pcc
+N64_LINPACK_KERNEL_RC pcc 0
+N64_LINPACK_KERNEL_END pcc
 ```
 
 Either nonzero Linpack status makes `N64_PCC_DEBUG_END` nonzero.  The GCC

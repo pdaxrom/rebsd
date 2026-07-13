@@ -1078,6 +1078,48 @@ linked GCC and PCC Linpack binaries.  Physical validation passes: the stable
 PCC improves 6.64% over G6; both Linpack statuses and both numeric debug
 statuses are zero, and the terminal `N64_PCC_DEBUG_RC_END` marker is present.
 
+H0 adds a per-kernel Linpack profiler before the next optimization is chosen.
+It builds independent GCC/PCC binaries for rolled and unrolled `daxpy`,
+`ddot`, and `dscal`, plus `idamax`; value self-tests run before every timed
+set.  Typed volatile calls prevent GCC from inlining the benchmark bodies
+while PCC leaves them out of line.  A same-image Malta64/R4000 QEMU run puts
+the PCC generic kernels between 96.8% and 101.4% of GCC.  QEMU does not model
+the physical VR4300 timing gap closely enough to select the next scheduler
+change, so the H0 N64 image is the decision gate.  Before that hardware gate,
+the complete `pcc-smoke-all-runtime` suite passes with PCC kernels and PCC
+root filesystems on Malta64, Malta, and Maltael, each in hard-float and
+soft-float mode.  All six runs report `PCC_SMOKE_ALL_FAILURES 0` and
+`PCC_SMOKE_ALL_RC:0`.
+
+The corrected physical H0 run completes with all self-tests, Linpack statuses,
+and final N64 debug markers zero.  The 16-repetition ordinary Linpack result is
+3642.421 PCC versus 4367.881 GCC KFLOPS, or 83.39%.  The PCC/GCC per-kernel
+ratios are 64.59% for `daxpy_r`, 85.35% for `daxpy_ur`, 52.35% for `ddot_r`,
+77.63% for `ddot_ur`, 67.65% for `dscal_r`, 75.79% for `dscal_ur`, and 44.20%
+for `idamax`.  Unlike QEMU, real VR4300 hardware therefore shows a substantial
+gap in the generic loops themselves.  The next milestone starts with shared
+loop code generation and scheduling visible in `idamax` and the rolled
+kernels, not with a Linpack-specific `dgefa` or `dgesl` transformation.
+
+Two correctness defects were found while bringing up H0.  A K&R-style
+hard-float definition with a visible compatible prototype was receiving its
+leading `double` through `$a0/$a1`, while callers correctly used `$f12`; PCC
+now distinguishes that case from a genuinely unprototyped old-style
+definition.  This fixes the ReBSD `fabs` definition and has direct ABI probes
+for VR4300 and MIPS32R2.  Also, the Malta64 `rootfs-repack-kernel` path now
+relinks `malta64-stage0-rootfs.o`; without it, the generated stage0 image
+contained the kernel but omitted the rebuilt root filesystem.
+
+The first H0 hardware image exposed a third correctness defect before the GCC
+kernel self-test: GCC emitted `ldc1` for an 8-byte constant, but the final
+a.out address was `0x00405ec4`.  The assembler honored `.align 3` within its
+internal `.rodata` segment, then lost that alignment when it packed `.data`
+and `.rodata` into the single a.out data segment.  The a.out assembler now
+pads that boundary to the alignment requested by `.rodata`; a direct host
+probe covers the case.  In the rebuilt GCC profiler the same constant is at
+`0x00405ec8`.  The complete a.out assembler/linker/archive smoke and corrected
+H0 hardware rerun both pass.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

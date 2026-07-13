@@ -4387,6 +4387,13 @@ Target-independent or shared optimizer work:
     call-heavy small static helpers.
   - Reject changes that improve Linpack by relying on undefined behavior or by
     regressing existing PCC tests.
+  - [x] H0 adds separately linked GCC/PCC kernel benchmarks for rolled and
+    unrolled `daxpy`, `ddot`, and `dscal`, plus `idamax`.  Typed volatile
+    dispatch keeps GCC and PCC from inlining different benchmark bodies; each
+    binary runs value self-tests before timing.  On Malta64/R4000 QEMU the PCC
+    generic kernels measure 96.8-101.4% of GCC, so the remaining real-N64
+    Linpack gap is not explained by the generic BLAS loops alone.  Physical
+    VR4300 timing remains the H0 performance gate.
 
 Milestone order:
 
@@ -4593,6 +4600,34 @@ Milestone order:
     3631.062 PCC versus 4453.809 GCC KFLOPS, or 81.53%.  PCC improves 6.64%
     over G6; both Linpack return codes and both numeric debug markers are zero,
     and the terminal `N64_PCC_DEBUG_RC_END` marker is present.
+  - [x] H0 profile the seven selected Linpack BLAS kernels independently on
+    real VR4300 hardware before choosing the next code-generation change.  The
+    image must retain a GCC kernel, PCC hard-float a.out userland, default
+    `-mfix4300`, and separate GCC/PCC runtimes.  Use the per-kernel ratios to
+    decide between specialized-loop scheduling and `dgefa`/`dgesl` driver
+    optimization; QEMU timing is correctness evidence only.  The H0 tree and
+    image pass `pcc-smoke-all-runtime` on Malta64, Malta, and Maltael in both
+    hard-float and soft-float configurations (`PCC_SMOKE_ALL_FAILURES 0` and
+    `PCC_SMOKE_ALL_RC:0` in all six runs).  The first hardware attempt ran the
+    ordinary Linpack successfully (16-repetition PCC/GCC ratio 83.42%) but the
+    GCC kernel profiler trapped on an unaligned `ldc1` constant at
+    `0x00405ec4`.  The a.out assembler now preserves 8-byte `.rodata`
+    alignment across its packed `.data`/`.rodata` boundary; the rebuilt
+    profiler places the constant at `0x00405ec8`, and the a.out toolchain smoke
+    passes.  The corrected physical run with image SHA-256
+    `5791fca91cdbda9f1b12607e2944c81a3b8046984979e6695aedf6f1423c7b04`
+    completes with every self-test and final debug marker zero.  The stable
+    ordinary Linpack PCC/GCC ratio is 83.39%.  Per-kernel ratios are 64.59%
+    `daxpy_r`, 85.35% `daxpy_ur`, 52.35% `ddot_r`, 77.63% `ddot_ur`, 67.65%
+    `dscal_r`, 75.79% `dscal_ur`, and 44.20% `idamax`.  This rejects the QEMU
+    near-parity result and selects generic loop code generation, rather than
+    `dgefa`/`dgesl` driver specialization, as the next target.
+  - [ ] H1 compare PCC and GCC assembly for `idamax`, rolled `ddot`, and rolled
+    `daxpy`; count loop instructions, loads, branches, delay-slot use, spills,
+    and avoidable address arithmetic.  Implement the smallest shared backend
+    improvement supported by those comparisons, verify that unrolled kernels
+    do not regress, then repeat all software gates and the physical kernel
+    profile before changing another optimization.
 
 Success criteria:
 
