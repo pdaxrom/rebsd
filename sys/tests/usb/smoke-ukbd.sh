@@ -11,7 +11,7 @@ mkdir -p "$tmp"
 
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
     -idirafter "$top/sys" \
-    "$top/sys/dev/usb/ukbdmap.c" ukbd_test.c \
+    "$top/sys/usb/ukbdmap.c" ukbd_test.c \
     -o "$tmp/ukbd_test"
 
 if [ "$mode" = test ]; then

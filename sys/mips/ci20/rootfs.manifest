@@ -15,6 +15,26 @@ bdev /dev/ram0
 major 1
 minor 1
 
+bdev /dev/sd0
+major 2
+minor 0
+
+bdev /dev/sd0a
+major 2
+minor 1
+
+bdev /dev/sd0b
+major 2
+minor 2
+
+bdev /dev/sd0c
+major 2
+minor 3
+
+bdev /dev/sd0d
+major 2
+minor 4
+
 cdev /dev/console
 major 0
 minor 0

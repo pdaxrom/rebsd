@@ -48,28 +48,28 @@ is updated as each later phase imports or materially adapts a source.
 
 | NetBSD 3.1 source | ReBSD destination | Intended use | Status |
 | --- | --- | --- | --- |
-| `sys/dev/usb/usb.h` | `sys/dev/usb/usb.h` | USB protocol constants and descriptors | compact adaptation; original notice and RCS id retained |
-| `sys/dev/usb/usbdi.h` | `sys/dev/usb/usbdi.h` | driver-facing transfer API | compact adaptation; original notice and RCS id retained |
-| `sys/dev/usb/usbdivar.h` | `sys/dev/usb/usbvar.h` | core object relationships | bounded-pool adaptation; original notice and RCS id retained |
-| `sys/dev/usb/usb_mem.h` | `sys/dev/usb/usb_mem.h` | USB DMA allocation contract | reference only |
-| `sys/dev/usb/usb_quirks.h` | `sys/dev/usb/usb_quirks.h` | compact quirk flags if required | reference only |
-| `sys/dev/usb/usb.c` | `sys/dev/usb/usb_core.c`, `sys/dev/usb/usb_task.c` | bus lifecycle and deferred task flow | lifecycle concepts combined into compact core; fixed task queue drained by ReBSD proc0 retains original notice and RCS id |
-| `sys/dev/usb/usb_subr.c` | `sys/dev/usb/usb_subr.c` | enumeration and descriptor handling | descriptor traversal substantially rewritten around fixed bounds; original notice and RCS id retained |
-| `sys/dev/usb/usbdi.c` | `sys/dev/usb/usb_core.c` | pipe and transfer operations | terminal-state and pipe model substantially adapted; original notice and RCS id retained |
-| `sys/dev/usb/usb_mem.c` | `sys/dev/usb/usb_mem.c` | USB use of the ReBSD DMA API | reference only |
-| `sys/dev/usb/uhub.c` | `sys/dev/usb/uhub.c` | root and external hubs | compact root-hub exploration/attach/detach adaptation; original notice and RCS id retained; external-hub path not yet imported |
-| `sys/dev/usb/ohci.c` | `sys/dev/usb/ohci.c` | generic OHCI HCD | polling control, periodic interrupt-IN, and root-port/RHSC paths substantially adapted; original notice and RCS id retained |
-| `sys/dev/usb/ohcireg.h` | `sys/dev/usb/ohcireg.h` | OHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
-| `sys/dev/usb/ohcivar.h` | `sys/dev/usb/ohcivar.h` | OHCI private state | compact bounded-state adaptation; original notice and RCS id retained |
-| `sys/dev/usb/ehci.c` | `sys/dev/usb/ehci.c` | generic EHCI HCD | compact control/bulk, root-port, completion, abort, and companion-handoff adaptation; original notice and RCS id retained |
-| `sys/dev/usb/ehcireg.h` | `sys/dev/usb/ehcireg.h` | EHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
-| `sys/dev/usb/ehcivar.h` | `sys/dev/usb/ehcivar.h` | EHCI private state | fixed-schedule bounded-state adaptation; original notice and RCS id retained |
-| `sys/dev/usb/usbhid.h` | `sys/dev/usb/usbhid.h` | HID class requests needed by boot keyboards | compact adaptation; original notice and RCS id retained |
-| `sys/dev/usb/uhidev.h` | `sys/dev/usb/uhidev.h` or compact equivalent | HID definitions needed by boot keyboards | reference only |
-| `sys/dev/usb/ukbd.c` | `sys/dev/usb/ukbd.c` | HID boot keyboard only | compact boot-protocol adaptation; original notice and RCS id retained |
-| `sys/dev/usb/ukbdmap.c` | `sys/dev/usb/ukbdmap.c` | basic US key map | compact ASCII/terminal adaptation; original notice and RCS id retained |
-| `sys/dev/usb/umass.c` | `sys/dev/usb/umass.c` | single-LUN read-only BOT | reference only |
-| `sys/dev/usb/umassvar.h` | `sys/dev/usb/umassvar.h` | compact umass state | reference only |
+| `sys/dev/usb/usb.h` | `sys/usb/usb.h` | USB protocol constants and descriptors | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/usbdi.h` | `sys/usb/usbdi.h` | driver-facing transfer API | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/usbdivar.h` | `sys/usb/usbvar.h` | core object relationships | bounded-pool adaptation; original notice and RCS id retained |
+| `sys/dev/usb/usb_mem.h` | `sys/usb/usb_mem.h` | USB DMA allocation contract | reference only |
+| `sys/dev/usb/usb_quirks.h` | `sys/usb/usb_quirks.h` | compact quirk flags if required | reference only |
+| `sys/dev/usb/usb.c` | `sys/usb/usb_core.c`, `sys/usb/usb_task.c` | bus lifecycle and deferred task flow | lifecycle concepts combined into compact core; fixed task queue drained by ReBSD proc0 retains original notice and RCS id |
+| `sys/dev/usb/usb_subr.c` | `sys/usb/usb_subr.c` | enumeration and descriptor handling | descriptor traversal substantially rewritten around fixed bounds; original notice and RCS id retained |
+| `sys/dev/usb/usbdi.c` | `sys/usb/usb_core.c` | pipe and transfer operations | terminal-state and pipe model substantially adapted; original notice and RCS id retained |
+| `sys/dev/usb/usb_mem.c` | `sys/usb/usb_mem.c` | USB use of the ReBSD DMA API | reference only |
+| `sys/dev/usb/uhub.c` | `sys/usb/uhub.c` | root and external hubs | compact root-hub exploration/attach/detach adaptation; original notice and RCS id retained; external-hub path not yet imported |
+| `sys/dev/usb/ohci.c` | `sys/usb/ohci.c` | generic OHCI HCD | polling control, periodic interrupt-IN, and root-port/RHSC paths substantially adapted; original notice and RCS id retained |
+| `sys/dev/usb/ohcireg.h` | `sys/usb/ohcireg.h` | OHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ohcivar.h` | `sys/usb/ohcivar.h` | OHCI private state | compact bounded-state adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ehci.c` | `sys/usb/ehci.c` | generic EHCI HCD | compact control/bulk, root-port, completion, abort, and companion-handoff adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ehcireg.h` | `sys/usb/ehcireg.h` | EHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ehcivar.h` | `sys/usb/ehcivar.h` | EHCI private state | fixed-schedule bounded-state adaptation; original notice and RCS id retained |
+| `sys/dev/usb/usbhid.h` | `sys/usb/usbhid.h` | HID class requests needed by boot keyboards | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/uhidev.h` | `sys/usb/uhidev.h` or compact equivalent | HID definitions needed by boot keyboards | reference only |
+| `sys/dev/usb/ukbd.c` | `sys/usb/ukbd.c` | HID boot keyboard only | compact boot-protocol adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ukbdmap.c` | `sys/usb/ukbdmap.c` | basic US key map | compact ASCII/terminal adaptation; original notice and RCS id retained |
+| `sys/dev/usb/umass.c` | `sys/usb/umass.c`, `sys/usb/umass_bbb.c` | single-LUN read-only BOT and compact SCSI command set | compact synchronous adaptation; original notices and RCS id retained |
+| `sys/dev/usb/umassvar.h` | `sys/usb/umassvar.h` | compact umass BOT state | compact adaptation; original notice and RCS id retained |
 
 The generated NetBSD `usbdevs.h` and `usbdevs_data.h` product-name database is
 not planned for import.  The first ReBSD implementation prints numeric vendor
@@ -87,15 +87,19 @@ NetBSD USB sources:
 | `sys/kernel/subr_dma.c` | Bounded contiguous-pool allocator and ownership validation |
 | `sys/mips/ci20/dma.c` | Ci20 uncached KSEG1 pool backend and ordering barriers |
 | `sys/tests/dma/` | Host-side allocator, validation, exhaustion, and synchronization tests |
-| `sys/dev/usb/usb_desc.h` | Bounded parser result structures, limits, and status API |
+| `sys/usb/usb_desc.h` | Bounded parser result structures, limits, and status API |
 | `sys/tests/usb/` | Host compile gate and valid/malformed descriptor tests |
-| `sys/dev/usb/usb_limits.h` | Compile-time core pool limits |
-| `sys/dev/usb/usb_hcd.h` | Minimal native HCD operations contract |
-| `sys/dev/usb/usb_mock_hcd.[ch]` | Deterministic hardware-independent test controller |
-| `sys/dev/usb/usb_service.c` | Generic bounded-core service instance used by platform HCD attachments |
-| `sys/dev/usb/usb_task.h` | Fixed task record adapted from the classic `usbdi.h` concept; original notice and RCS id retained |
-| `sys/dev/usb/uhub.h` | Native bounded root-hub state and event interface |
-| `sys/dev/usb/ukbd.h` | Bounded boot-report decoder and driver-registration interface |
+| `sys/usb/usb_limits.h` | Compile-time core pool limits |
+| `sys/usb/usb_hcd.h` | Minimal native HCD operations contract |
+| `sys/usb/usb_mock_hcd.[ch]` | Deterministic hardware-independent test controller |
+| `sys/usb/usb_service.c` | Generic bounded-core service instance used by platform HCD attachments |
+| `sys/usb/usb_task.h` | Fixed task record adapted from the classic `usbdi.h` concept; original notice and RCS id retained |
+| `sys/usb/uhub.h` | Native bounded root-hub state and event interface |
+| `sys/usb/ukbd.h` | Bounded boot-report decoder and driver-registration interface |
+| `sys/usb/umass.h` | Native single-LUN SCSI command and read-only media interface; no partition or filesystem policy |
+| `sys/disk/disk.[ch]` | Native transport-independent disk registry, `bdevsw` entry points, units/minors, and backend contract |
+| `sys/disk/disk_subr.c` | Native bounded classic-MBR parser shared by every disk transport |
+| `sys/tests/disk/` | Host tests for the common MBR/minor contract and the byte-exact `fdisk` MBR ABI |
 | `sys/mips/ci20/usb_hw.[ch]` | Testable JZ4780 clock, PHY, reset, and VBUS sequence |
 | `sys/mips/ci20/usb.c` | Ci20 MMIO callbacks, EHCI/OHCI attachment, IRQ routing, companion ownership, and enumeration diagnostics |
 

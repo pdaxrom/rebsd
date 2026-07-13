@@ -9,6 +9,7 @@ compile:
 	sh ./smoke-ohci.sh compile
 	sh ./smoke-ehci.sh compile
 	sh ./smoke-ci20-usb-hw.sh compile
+	sh ./smoke-umass.sh compile
 
 test:
 	sh ./smoke-usb-desc.sh test
@@ -19,5 +20,6 @@ test:
 	sh ./smoke-ohci.sh test
 	sh ./smoke-ehci.sh test
 	sh ./smoke-ci20-usb-hw.sh test
+	sh ./smoke-umass.sh test
 
 .PHONY: all compile test

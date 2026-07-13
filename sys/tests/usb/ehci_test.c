@@ -4,9 +4,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <dev/usb/ehcivar.h>
-#include <dev/usb/uhub.h>
-#include <dev/usb/usb_task.h>
+#include <usb/ehcivar.h>
+#include <usb/uhub.h>
+#include <usb/usb_task.h>
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \

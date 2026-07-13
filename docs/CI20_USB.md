@@ -254,9 +254,9 @@ make -C sys/mips BOARD=ci20 \
 
 The object profile places the result at
 `../rebsd-usb-support-build/ci20-kgcc-ugcc-mips32r2-hard-little-elf/obj/sys/mips/ci20/ci20.uImage`.
-The exact verified implementation identified above has been linked against the
-existing 32 MiB rootfs. A forced userland rebuild may still stop in the known,
-unrelated legacy awk header-generation race; that is not a USB pass.
+The current read-only mass-storage candidate is a clean full GCC build with a
+32 MiB rootfs. Its `ci20.uImage` SHA-256 is
+`a9984d94a274a541c6768b40e300399a7bbce05b0fe37aaad143e096058517c0`.
 
 Boot the image with the existing Ci20/U-Boot procedure while capturing UART4.
 Use only the right-hand J23 type-A host port. J24/J8 is the separate OTG block
@@ -266,9 +266,11 @@ With J23 empty, success first reaches lines equivalent to:
 
 ```text
 dma: Ci20 uncached pool phys=... size=65536 align=4096
+disk: block layer ready, MBR partitions
 usb0: initializing core
 usb0: core ready
 ukbd0: HID boot-keyboard driver ready
+umass0: read-only SCSI/Bulk-Only driver ready
 ehci0: attach, EHCI phys=13490000
 usb-host: init: enable VBUS
 usb-host: init: settle VBUS
@@ -293,29 +295,39 @@ usb0: deferred task runner uses proc0
 
 Run the routing cases separately and retain the complete UART capture:
 
-1. Connect a known USB 2.0 high-speed flash drive directly to J23. It may
-   remain unclaimed because mass storage is Phase 10, but enumeration must
-   print `ehci0: port1 device attached speed=high`, numeric descriptors, and
-   a class-8 interface. There must be no handoff line and no
-   `ohci0: port1 device attached` line for this device.
-2. Unplug and reconnect the flash drive several times. Each cycle must print
-   the EHCI disconnect and a new EHCI high-speed attach without an IRQ storm,
-   stall, or panic.
-3. Unplug the flash drive and connect the verified low-speed boot keyboard.
+1. Connect a known USB 2.0 high-speed flash drive directly to J23. It must
+   remain on EHCI and print `umass0` inquiry text followed by `sd0` capacity.
+   A valid classic MBR additionally prints any bounded `sd0a` through `sd0d`
+   entries. There must be no OHCI handoff for this device.
+2. Run `fdisk -p /dev/sd0`, then
+   `dd if=/dev/sd0 of=/dev/null bs=1024 count=16`. If the MBR reports a first
+   partition, also run
+   `dd if=/dev/sd0a of=/dev/null bs=1024 count=16`.
+3. Unplug the idle flash drive. The log must report `sd0: detached`,
+   `umass0: detached`, and the EHCI port disconnect without a panic. Reconnect
+   it and repeat the `fdisk` and whole-disk `dd` commands.
+4. Unplug the flash drive and connect the verified low-speed boot keyboard.
    EHCI must print `port1 handoff to ohci0 speed=low`; OHCI must then enumerate
    it and `ukbd0` must attach. A full-speed direct device, if available, must
    take the same route with `speed=full`.
-4. Use the USB keyboard rather than UART input to enter `echo usb-ok`, and
+5. Use the USB keyboard rather than UART input to enter `echo usb-ok`, and
    check Shift, Backspace, and Ctrl-C.
-5. Confirm there was no `Something is hung` warning, the proc0 runner line
+6. Confirm there was no `Something is hung` warning, the proc0 runner line
    appeared, and `ps axl` shows init as PID 1 with no `usbtask` process.
-6. Unplug the keyboard and wait for `ukbd0: detached`,
+7. Unplug the keyboard and wait for `ukbd0: detached`,
    `ohci0: port1 device disconnected`, and
    `ehci0: port1 reclaimed from ohci0`.
-7. Reconnect the keyboard and wait for a fresh EHCI-to-OHCI handoff, `ukbd0`
+8. Reconnect the keyboard and wait for a fresh EHCI-to-OHCI handoff, `ukbd0`
    attach, and numeric descriptors. Type `echo usb-reconnected` through it.
-8. Repeat keyboard unplug/reconnect and typing at least five times, including
+9. Repeat keyboard unplug/reconnect and typing at least five times, including
    one quick unplug/replug, and confirm both UART and USB remain responsive.
+
+The read-only storage procedure above passed on 2026-07-13 with direct
+high-speed device `1005:b113`. The board reported 30,299,520 sectors and MBR
+partition type `0x0c`; 16 KiB reads from both `/dev/sd0` and `/dev/sd0a`
+succeeded before and after idle detach/reconnect. The raw UART capture is
+`usb-logs/ci20-umass-readonly-verified-20260713.txt`. This does not yet claim
+a filesystem mount.
 
 A low-speed keyboard already present at boot must produce the ownership and
 attach sequence below before the login prompt:
@@ -358,16 +370,17 @@ delay did not complete, so USB and DM9000 now share the bounded TCU3 backend.
 `make -C sys/tests/usb test` executes descriptor, core/mock-HCD, deferred-task,
 root-hub, boot-report decoder, full fake-OHCI control/periodic/RHSC scheduling,
 compact fake-EHCI asynchronous scheduling/routing, and fake-JZ4780 register
-sequence tests. The fake OHCI test covers IRQ acknowledgement, data-toggle
-carry, rearm, simultaneous control traffic, masked-RHSC delivery, and deferred
-disconnect/reconnect. The fake EHCI test covers controller startup, schedule
+sequence and BOT/SCSI tests. `make -C sys/tests/disk test` covers the common
+disk/MBR layer and the byte-exact `fdisk` ABI. The fake OHCI test covers IRQ
+acknowledgement, data-toggle carry, rearm, simultaneous control traffic,
+masked-RHSC delivery, and deferred disconnect/reconnect. The fake EHCI test covers controller startup, schedule
 alignment, high-speed enumeration, bulk IN/OUT, short transfers, toggle,
 stall, automatic timeout, abort, busy submission, single completion,
 companion handoff/change draining/reclaim, and a later high-speed attach.
 The Ci20 sequence test verifies VBUS-first ordering, `UHCCDR_BUSY` timeout,
-final gate/suspend state, PHY POR, and UHC reset deassertion. A full GCC kernel
-links and produces the hardware-test image. The modified translation units
-also pass the configured MIPS PCC compiler gate. The real-board tests verified
+final gate/suspend state, PHY POR, and UHC reset deassertion. Full GCC and PCC
+kernel/rootfs builds link and produce images containing the common disk nodes
+and `fdisk`. The real-board tests verified
 OHCI periodic interrupt-IN, console input, proc0 deferred exploration, boot
 with an empty port, late attach, detach, address reuse, repeated reconnect,
 EHCI high-speed enumeration/reconnect, and EHCI-to-OHCI ownership handoff.

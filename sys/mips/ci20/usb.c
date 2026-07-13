@@ -16,10 +16,10 @@
 
 #include <sys/types.h>
 #include <sys/systm.h>
-#include <dev/usb/ehcivar.h>
-#include <dev/usb/ohcivar.h>
-#include <dev/usb/uhub.h>
-#include <dev/usb/usbvar.h>
+#include <usb/ehcivar.h>
+#include <usb/ohcivar.h>
+#include <usb/uhub.h>
+#include <usb/usbvar.h>
 #include "usb_hw.h"
 
 #define CI20_CPM_BASE               0xb0000000u

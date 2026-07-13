@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <dev/usb/usb_mock_hcd.h>
+#include <usb/usb_mock_hcd.h>
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \
@@ -155,6 +155,11 @@ test_enumerate_and_disconnect(void)
     CHECK(usb_open_pipe(interface, 0x81, &pipe) ==
         USB_STATUS_NORMAL_COMPLETION);
     CHECK(mock.um_open_count == 2);
+    CHECK(usb_clear_endpoint_halt(pipe) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(mock.um_clear_halt_count == 1);
+    CHECK(mock.um_clear_toggle_count == 1);
+    CHECK(mock.um_last_clear_endpoint == 0x81);
 
     memset(report, 0, sizeof(report));
     marker = 0x12345678u;

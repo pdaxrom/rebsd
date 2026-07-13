@@ -1,54 +1,86 @@
-.\" Copyright 2012 Matt Jenkins (matt@majenko.co.uk
-.TH FDISK 8 "03 Oct 2012" "RetroBSD" "RetroBSD User's Manual"
+.\" Copyright (c) 2026 ReBSD contributors
+.TH FDISK 8 "13 July 2026" "ReBSD" "ReBSD System Manager's Manual"
 .SH NAME
-fdisk \- partition editor for RetroBSD
+fdisk \- inspect and edit an MBR partition table
 .SH SYNOPSIS
-.B fdisk 
-.RB -p 
-.RB /dev/rdX
-.sp
-.B fdisk 
-.RB \-d 
-.RB /dev/rdX 
-.RB num
-.sp
-.B fdisk 
-.RB [ \-w ] 
-.RB [ \-n ] 
-.RB /dev/rdX 
-.RB [ size ]
-.sp
-.B fdisk 
-.RB -a 
-.RB /dev/rdX 
-.RB num
-
+.B fdisk -p
+.I device
+.br
+.B fdisk -d
+.I device partition
+.br
+.B fdisk
+.RB [ -w ]
+.RB [ -t
+.IR type ]
+.B -n
+.I device
+.RI [ size-kbytes ]
+.br
+.B fdisk -a
+.I device partition
+.br
+.B fdisk -T -t
+.I type device partition
 .SH DESCRIPTION
-
-fdisk allows the inspection, deletion, creation and activation of partitions within a RetroDisk device.  All operations are performed on the block device for a RetroDisk device, /dev/rdX.  An operation of -p, -d, -n or -a and a device name must be provided:
-
--p Display the current partition table.
-
--d Delete the partition specified as a number between 1 and 4
-
--n Create a new partition.  The partition is placed after the last partition already on the device (space permitting) and is either the size specified as a number of kilobytes, or it will fill the entire rest of the free space on the disk.  The optional flag -w can be specified to wipe the current partition table to create a new one.
-
--a Toggle the active flag on a partition.  The active flag is used at boot time to decide which partition should be booted from, and which should be used as swap.
-
+.B fdisk
+operates on the four primary entries in a classic 512-byte MBR.  It uses
+explicit little-endian on-disk fields and validates the MBR signature,
+partition bounds, integer overflow and overlapping partitions before writing.
+.PP
+The
+.B -p
+operation opens the device read-only.  Mutating operations write exactly one
+512-byte MBR sector and then request that the kernel reload the partition
+table.
+.PP
+The options are:
+.TP
+.B -p
+Print the device size and all used partition entries.
+.TP
+.B -d
+Delete the partition numbered 1 through 4.
+.TP
+.B -n
+Create a partition after the highest existing partition.  If
+.I size-kbytes
+is omitted, use the remainder of the device.
+.TP
+.B -w
+Initialize the MBR partition table before creating a new partition.  This
+option is valid only with
+.BR -n .
+.TP
+.B -a
+Toggle the active flag on the selected partition.
+.TP
+.B -T
+Change the selected partition type.  This operation requires
+.BR -t .
+.TP
+.BI -t " type"
+Set an MBR type byte, written in decimal or with a C-style base prefix such as
+0x0c.  The default for a new partition is 0xb7, the ReBSD native filesystem
+type.
 .SH DEVICES
-
-The devices are always the block devices for the RetroDisk system (/dev/rdX).  Other devices will appear to work, but fdisk will just write a master boot record regardless and will corrupt the existing filesystem on the device.
-
-.SH BUGS
-
-There is no protection on the system.  An MBR will attempt to be written to whatever device you specify regardless of the device type.
-
-There are no warnings or confirmations.  Things just happen.
-
+The common disk layer exposes a whole disk as
+.B /dev/sd0
+and its four primary MBR partitions as
+.BR /dev/sd0a ,
+.BR /dev/sd0b ,
+.BR /dev/sd0c
+and
+.BR /dev/sd0d .
+The same naming and ioctl interface is used regardless of whether the backing
+transport is USB Mass Storage, SD/MMC, IDE or SATA.
+.SH LIMITATIONS
+Only classic MBR is supported.  GPT, extended/logical partitions and disks
+requiring LBAs wider than 32 bits are not supported.
+.PP
+Writing requires a writable disk backend.  A read-only backend, including the
+initial USB Mass Storage implementation, can be inspected but cannot be
+partitioned.
 .SH SEE ALSO
-
-.BR rdprof
-
-.SH AVAILABILITY
-
-fdisk is available in the partition branch of the RetroBSD SVN tree.
+.BR mkfs (8),
+.BR mount (8)

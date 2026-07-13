@@ -4,8 +4,8 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <dev/usb/uhub.h>
-#include <dev/usb/usb_mock_hcd.h>
+#include <usb/uhub.h>
+#include <usb/usb_mock_hcd.h>
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \

@@ -11,9 +11,9 @@ mkdir -p "$tmp"
 
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
     -idirafter "$top/sys" \
-    "$top/sys/dev/usb/usb_subr.c" \
-    "$top/sys/dev/usb/usb_core.c" \
-    "$top/sys/dev/usb/usb_mock_hcd.c" \
+    "$top/sys/usb/usb_subr.c" \
+    "$top/sys/usb/usb_core.c" \
+    "$top/sys/usb/usb_mock_hcd.c" \
     usb_core_test.c -o "$tmp/usb_core_test"
 
 if [ "$mode" = test ]; then

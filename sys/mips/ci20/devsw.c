@@ -5,6 +5,7 @@
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <sys/uio.h>
+#include <disk/disk.h>
 #include <machine/devmajors.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
@@ -158,6 +159,13 @@ const struct bdevsw bdevsw[] = {
     {
         mipsramswap_open, mipsramswap_close, mipsramswap_strategy,
         mipsramswap_size, mipsramswap_ioctl, 0,
+    },
+    {
+#if MIPS_DISK_MAJOR != 2
+#   error Wrong MIPS_DISK_MAJOR value!
+#endif
+        disk_bdev_open, disk_bdev_close, disk_bdev_strategy,
+        disk_bdev_size, disk_bdev_ioctl, 0,
     },
     { 0 },
 };

@@ -15,8 +15,10 @@ The first target milestone is OHCI root-hub enumeration plus a HID boot
 keyboard feeding the ReBSD console. Preconnected input, boot with an empty
 port, late attach, repeated post-boot disconnect/reconnect, EHCI high-speed
 enumeration/reconnect, and low-speed companion handoff are hardware verified
-on 2026-07-13. Read-only mass storage remains the next milestone. The separate J24/J8 DWC2
-OTG connection is outside this first host-port scope.
+on 2026-07-13. The read-only Bulk-Only/SCSI backend and common disk layer are
+also hardware-verified for capacity, MBR, whole/partition reads, and idle
+detach/reconnect. A filesystem mount remains the next Phase 10 milestone. The
+separate J24/J8 DWC2 OTG connection is outside this first host-port scope.
 
 ## Baseline
 
@@ -69,7 +71,7 @@ results, not Creator Ci20 hardware results.
 | soft interrupt/task queue | A USB-local fixed queue holds at most eight coalescing tasks. IRQ code schedules work and wakes proc0; the proc0 scheduler loop performs root-hub exploration, enumeration, attach, and detach. |
 | `splusb` | Use the existing global interrupt masking primitive through a small USB critical-section wrapper. |
 | root-hub child attach | USB core creates a `usb_device`; the HCD exposes root-hub control and port status through the common HCD operations. |
-| disk attach | Add a static `bdevsw` entry and a ReBSD `strategy(struct buf *)` adapter. |
+| disk attach | `sys/disk` owns the static `bdevsw` entry, units/minors, MBR regions and `strategy(struct buf *)`; USB, SD/MMC, IDE and SATA attach through one backend contract. |
 | `scsipi` | No equivalent is present.  Implement only BOT plus the required single-LUN read-only SCSI commands. |
 | wscons keyboard | No equivalent.  Add a small keyboard-input registration/submission API above `ttyinput`. |
 
@@ -189,14 +191,14 @@ not panic or silently discard an active object.
 
 ## Protocol Definitions and Descriptor Parser
 
-The compact `sys/dev/usb/usb.h` keeps the NetBSD 3.1 descriptor layout,
+The compact `sys/usb/usb.h` keeps the NetBSD 3.1 descriptor layout,
 request constants, hub status bits, initial class codes, and unaligned
 little-endian byte-array accessors.  Userland ioctl structures, event support,
 and the generated vendor/product database were not imported.  Numeric vendor,
 product, class, subclass, and protocol values are sufficient for initial
 diagnostics.
 
-`sys/dev/usb/usb_subr.c` provides allocation-free parsing.  It copies accepted
+`sys/usb/usb_subr.c` provides allocation-free parsing.  It copies accepted
 device, configuration, interface-zero-alternate, and endpoint descriptors into
 bounded result structures while preserving raw-buffer offsets.  Other
 alternate settings are validated and counted but are not retained as active
@@ -392,11 +394,24 @@ ReBSD block drivers expose `open`, `close`, `strategy`, `psize`, and `ioctl`
 through `bdevsw`.  A strategy request receives `struct buf`; completion uses
 `biodone`, and errors set `b_error` plus `B_ERROR`.
 
-`DEV_BSIZE` is 1024 bytes, while the first USB storage target uses 512-byte
-logical sectors.  The umass adapter must translate a ReBSD block number to two
-512-byte SCSI logical blocks and correctly handle `b_bcount`, residuals, end of
-media, and read-only errors.  It must not silently reinterpret ReBSD block
-numbers as 512-byte sectors.
+`DEV_BSIZE` is 1024 bytes, while the first storage backends use 512-byte
+logical sectors. `sys/disk` translates a ReBSD block number to two backend
+sectors and handles `b_bcount`, residuals, partition bounds, end of media, and
+read-only errors. It must not silently reinterpret ReBSD block numbers as
+512-byte sectors.
+
+The disk layer is not part of USB. `sys/disk` owns the common `sdN` namespace,
+five minors per unit (whole disk plus four primary MBR entries), media ioctls,
+MBR revalidation, and the `read`/`write`/`flush`/`present` backend contract.
+The USB Mass Storage driver implements only one read-only backend using BOT
+and SCSI. Future SD/MMC, IDE/ATA, and SATA/AHCI drivers will implement the same
+backend contract and will not depend on USB.
+
+Filesystems sit above block devices and are configured independently of every
+transport. New FAT, exFAT, and ext-family implementations belong under
+`sys/fs`, not under `sys/usb` or a board directory; disabling USB must not
+remove a filesystem, and disabling a filesystem must not remove a disk
+transport.
 
 There is no SCSI or SCSIPI subsystem in the current tree.  The first umass
 implementation therefore contains only BOT framing and `INQUIRY`,

@@ -7,8 +7,8 @@ include $(TOPSRC)/target.mk
 CFLAGS		+= -Werror -I$(TOPSRC)/sys/include
 
 BIN		= fdisk
-SRCS            = $(BIN).c
-OBJS            = $(BIN).o
+SRCS            = fdisk.c fdisk_mbr.c
+OBJS            = fdisk.o fdisk_mbr.o
 MAN             = $(BIN).0
 
 all:            $(BIN) ${MAN}

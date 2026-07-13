@@ -4,10 +4,10 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <dev/usb/ohcivar.h>
-#include <dev/usb/uhub.h>
-#include <dev/usb/ukbd.h>
-#include <dev/usb/usbhid.h>
+#include <usb/ohcivar.h>
+#include <usb/uhub.h>
+#include <usb/ukbd.h>
+#include <usb/usbhid.h>
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \

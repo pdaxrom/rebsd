@@ -907,6 +907,8 @@ file /usr/share/man/cat8/chroot.0
 
 file /usr/share/man/cat8/fastboot.0
 
+file /usr/share/man/cat8/fdisk.0
+
 file /usr/share/man/cat8/fsck.0
 
 file /usr/share/man/cat8/getty.0
@@ -954,6 +956,9 @@ mode 04751
 
 file /sbin/fastboot
 mode 0775
+
+file /sbin/fdisk
+mode 0755
 
 file /sbin/fsck
 mode 0775

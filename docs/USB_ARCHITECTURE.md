@@ -14,13 +14,20 @@ Ci20 platform attachment
         -> generic OHCI or EHCI HCD
         -> USB core and transfer API
         -> hub and interface matching
-        -> HID or mass-storage class driver
+        -> class drivers
+             |-> HID boot keyboard
+             `-> mass-storage BOT/SCSI -> common disk backend
 ```
 
 The HCD sees USB pipes and transfers.  It does not select class drivers.  The
 USB core sees only `struct usb_hcd_ops`; it does not include Ci20 headers or
 access controller registers.  Class drivers see interfaces, endpoints, pipes,
 and transfers; they do not distinguish OHCI from EHCI.
+
+The common block layer is a consumer of mass storage, not part of USB.
+`sys/disk` exposes the same backend interface to USB BOT/SCSI, SD/MMC,
+IDE/ATA, and SATA/AHCI transports. Filesystems consume block devices and have
+no dependency on USB or on a particular board.
 
 ## Bounded Ownership
 
@@ -163,6 +170,26 @@ Disconnect is idempotent and proceeds in this order:
 
 Driver detach callbacks run while descriptors and interface objects are still
 valid, but after active I/O has reached a terminal state.
+
+## Mass Storage and Block Ownership
+
+`umass` owns USB interface state, bulk pipes, BOT tags, and the compact
+single-LUN SCSI command set. After `INQUIRY`, `TEST UNIT READY`, and
+`READ CAPACITY(10)` succeed, it registers a read-only 512-byte-sector backend
+with `sys/disk`. It does not parse MBR entries, allocate minors, implement
+`bdevsw`, or know about filesystems.
+
+`sys/disk` owns four bounded disk slots, the common `sdN` namespace, five
+minors per slot, the 1024-byte ReBSD block to 512-byte sector conversion,
+classic-MBR regions, `strategy`, media ioctls, residuals, bounds, and
+read-only enforcement. A backend owns command splitting, DMA/cache handling,
+timeouts, and physical media presence. Detach first makes the backend report
+absent and unregisters the disk slot, then closes the USB pipes and releases
+the USB interface state.
+
+No filesystem code is called by `umass` or `sys/disk`. Current UFS and future
+FAT, exFAT, and ext-family modules are separate VFS consumers and can be
+enabled or disabled independently of every transport.
 
 ## HCD Contract
 

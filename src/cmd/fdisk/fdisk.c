@@ -1,7 +1,9 @@
 /*
- * Simple fdisk program for RetroBSD
- * (c) 2012 Majenko Technologies
+ * Simple MBR partition editor for ReBSD.
  *
+ * The original RetroBSD utility dates from 2012.  This version keeps its
+ * deliberately small scope, but uses an ABI-independent MBR layout, validates
+ * all input and partition ranges, and opens print-only operations read-only.
  */
 
 #include <stdio.h>
@@ -10,330 +12,390 @@
 #include <fcntl.h>
 #include <sys/disk.h>
 #include <ioctl.h>
-#include <sys/stat.h>
-#include <string.h>
 
 #include "fdisk.h"
 
-struct mbr mbr;
-int blocks;
+enum fdisk_action {
+    FDISK_ACTION_NONE = 0,
+    FDISK_ACTION_PRINT,
+    FDISK_ACTION_DELETE,
+    FDISK_ACTION_NEW,
+    FDISK_ACTION_ACTIVE,
+    FDISK_ACTION_TYPE
+};
 
-int strtonum(char *s)
+static struct fdisk_mbr disk_mbr;
+static unsigned disk_kbytes;
+static unsigned disk_sectors;
+
+static void
+usage(void)
 {
-	if(!s)
-		return 0;
-	if(s[0]==0)
-		return 0;
-
-	if(s[0]=='0' && s[1]=='x')
-	{
-		return strtol(s+2,NULL,16);
-	}
-	return atoi(s);
+    fprintf(stderr,
+        "usage: fdisk -p device\n"
+        "       fdisk -d device partition\n"
+        "       fdisk [-w] [-t type] -n device [size-kbytes]\n"
+        "       fdisk -a device partition\n"
+        "       fdisk -T -t type device partition\n"
+        "\n"
+        "       -p  print the MBR without opening the device for writing\n"
+        "       -d  delete one partition\n"
+        "       -n  append one partition, using the remaining space by default\n"
+        "       -a  toggle the active flag\n"
+        "       -T  change one partition type\n"
+        "       -t  partition type (default 0xb7 for -n)\n"
+        "       -w  initialize the partition table before -n\n");
 }
 
-void usage()
+static int
+select_action(enum fdisk_action *action, enum fdisk_action requested)
 {
-	printf("Usage: fdisk -p /dev/rdX\n");
-	printf("          Print partition table\n\n");
-	printf("       fdisk -d /dev/rdX <num>\n");
-	printf("          Delete partition <num>\n\n");
-	printf("       fdisk [-w] -n /dev/rdX [<KB>]\n");
-	printf("          Add a new partition at the end of the\n");
-	printf("          partition table.  If size is specified\n");
-	printf("          creates it of that size, otherwise fills\n");
-	printf("          space to end of disk.  If you specify -w\n");
-	printf("          then the MBR is wiped before partition\n");
-	printf("          creation.\n");
-	printf("       fdisk -a /dev/rdX <num>\n");
-	printf("          Toggle active flag on partition\n");
-	printf("       fdisk -T -t <type> /dev/rdX <num>\n");
-	printf("          Set the type of a partition.\n");
+    if (*action != FDISK_ACTION_NONE) {
+        fprintf(stderr, "fdisk: specify exactly one operation\n");
+        return -1;
+    }
+    *action = requested;
+    return 0;
 }
 
-int read_mbr(int fd)
+static int
+parse_unsigned(const char *text, unsigned limit, unsigned *value)
 {
-	lseek(fd,0,SEEK_SET);
-        if(read(fd,&mbr,sizeof(struct mbr)) != sizeof(struct mbr))
-        {
-                printf("Error reading MBR\n");
-                return -1;
+    char *end;
+    unsigned long parsed;
+
+    if (text == 0 || text[0] == '\0' || text[0] == '-')
+        return -1;
+    end = 0;
+    parsed = strtoul(text, &end, 0);
+    if (end == text || *end != '\0' || parsed > limit)
+        return -1;
+    *value = (unsigned)parsed;
+    return 0;
+}
+
+static int
+read_mbr(int fd)
+{
+    if (lseek(fd, 0, SEEK_SET) < 0 ||
+        read(fd, &disk_mbr, sizeof(disk_mbr)) != sizeof(disk_mbr)) {
+        fprintf(stderr, "fdisk: cannot read the 512-byte MBR\n");
+        return -1;
+    }
+    return 0;
+}
+
+static int
+get_media_size(int fd)
+{
+    off_t current;
+    off_t end;
+    int kbytes;
+
+    kbytes = 0;
+    if (ioctl(fd, DIOCGETMEDIASIZE, &kbytes) == 0 && kbytes > 0) {
+        disk_kbytes = (unsigned)kbytes;
+        disk_sectors = disk_kbytes << 1;
+        return disk_sectors != 0 ? 0 : -1;
+    }
+
+    /* This fallback also makes disk-image files useful for inspection. */
+    current = lseek(fd, 0, SEEK_CUR);
+    end = lseek(fd, 0, SEEK_END);
+    if (current >= 0)
+        (void)lseek(fd, current, SEEK_SET);
+    if (end < (off_t)FDISK_MBR_BYTES)
+        return -1;
+    disk_sectors = (unsigned)(end / 512);
+    disk_kbytes = disk_sectors >> 1;
+    return disk_sectors != 0 ? 0 : -1;
+}
+
+static int
+write_mbr(int fd)
+{
+    if (lseek(fd, 0, SEEK_SET) < 0 ||
+        write(fd, &disk_mbr, sizeof(disk_mbr)) != sizeof(disk_mbr)) {
+        fprintf(stderr, "fdisk: cannot write the 512-byte MBR\n");
+        return -1;
+    }
+    sync();
+    (void)ioctl(fd, DIOCREINIT);
+    return 0;
+}
+
+static int
+partition_used(const struct fdisk_partition *partition)
+{
+    return partition->fp_type != 0 &&
+        fdisk_partition_sectors(partition) != 0;
+}
+
+static void
+print_table(const char *device)
+{
+    const struct fdisk_partition *partition;
+    unsigned start;
+    unsigned sectors;
+    unsigned i;
+
+    printf("%s: %u kbytes, %u sectors of 512 bytes\n",
+        device, disk_kbytes, disk_sectors);
+    printf("Part       Start     Sectors      Kbytes Type Boot\n");
+    for (i = 0; i < FDISK_MBR_PARTITIONS; ++i) {
+        partition = &disk_mbr.fm_partitions[i];
+        if (!partition_used(partition))
+            continue;
+        start = fdisk_partition_start(partition);
+        sectors = fdisk_partition_sectors(partition);
+        printf("%4u %11u %11u %11u   %02x   %c\n", i + 1,
+            start, sectors, sectors >> 1, partition->fp_type,
+            partition->fp_status & FDISK_PARTITION_ACTIVE ? '*' : '-');
+    }
+}
+
+static int
+delete_partition(unsigned number)
+{
+    struct fdisk_partition *partition;
+
+    partition = &disk_mbr.fm_partitions[number - 1];
+    if (!partition_used(partition)) {
+        fprintf(stderr, "fdisk: partition %u does not exist\n", number);
+        return -1;
+    }
+    fdisk_partition_clear(partition);
+    return 0;
+}
+
+static int
+set_partition_type(unsigned number, unsigned type)
+{
+    struct fdisk_partition *partition;
+
+    partition = &disk_mbr.fm_partitions[number - 1];
+    if (!partition_used(partition)) {
+        fprintf(stderr, "fdisk: partition %u does not exist\n", number);
+        return -1;
+    }
+    partition->fp_type = (unsigned char)type;
+    return 0;
+}
+
+static int
+toggle_active(unsigned number)
+{
+    struct fdisk_partition *partition;
+
+    partition = &disk_mbr.fm_partitions[number - 1];
+    if (!partition_used(partition)) {
+        fprintf(stderr, "fdisk: partition %u does not exist\n", number);
+        return -1;
+    }
+    partition->fp_status ^= FDISK_PARTITION_ACTIVE;
+    return 0;
+}
+
+static int
+new_partition(unsigned size_kbytes, unsigned type)
+{
+    struct fdisk_partition *partition;
+    unsigned empty;
+    unsigned start;
+    unsigned end;
+    unsigned sectors;
+    unsigned i;
+
+    empty = FDISK_MBR_PARTITIONS;
+    start = 2;                 /* Keep the first 1 KiB for the MBR. */
+    for (i = 0; i < FDISK_MBR_PARTITIONS; ++i) {
+        partition = &disk_mbr.fm_partitions[i];
+        if (!partition_used(partition)) {
+            if (empty == FDISK_MBR_PARTITIONS)
+                empty = i;
+            continue;
         }
-	return 0;
+        end = fdisk_partition_start(partition) +
+            fdisk_partition_sectors(partition);
+        if (end > start)
+            start = end;
+    }
+    if (empty == FDISK_MBR_PARTITIONS) {
+        fprintf(stderr, "fdisk: partition table is full\n");
+        return -1;
+    }
+    if (start >= disk_sectors) {
+        fprintf(stderr, "fdisk: no free space after the last partition\n");
+        return -1;
+    }
+    if (size_kbytes == 0) {
+        sectors = disk_sectors - start;
+    } else {
+        if (size_kbytes > (~0u >> 1)) {
+            fprintf(stderr, "fdisk: partition size is too large\n");
+            return -1;
+        }
+        sectors = size_kbytes << 1;
+        if (sectors == 0 || sectors > disk_sectors - start) {
+            fprintf(stderr, "fdisk: partition does not fit on the device\n");
+            return -1;
+        }
+    }
+    fdisk_partition_set(&disk_mbr.fm_partitions[empty], 0,
+        (unsigned char)type, start, sectors);
+    printf("fdisk: created partition %u at sector %u, %u sectors\n",
+        empty + 1, start, sectors);
+    return 0;
 }
 
-int write_mbr(int fd)
+int
+main(int argc, char **argv)
 {
-	lseek(fd,0,SEEK_SET);
-	if(write(fd,&mbr,sizeof(struct mbr)) != sizeof(struct mbr))
-	{
-		printf("Error writing MBR\n");
-		return -1;
-	}
-	sync();
-	printf("Calling ioctl to reread the partition table\n");
-	sleep(1);
-	ioctl(fd, DIOCREINIT);
-	close(fd);
-	return 0;
-}
+    enum fdisk_action action;
+    const char *device;
+    unsigned number;
+    unsigned size_kbytes;
+    unsigned type;
+    int type_seen;
+    int initialize;
+    int open_flags;
+    int remaining;
+    int fd;
+    int opt;
+    int result;
 
-void set_type(int pnum, int type)
-{
-	if(pnum<1 || pnum>4)
-	{
-		printf("Invalid partition number\n");
-		exit(10);
-	}
-	if(mbr.partitions[pnum-1].lbalength>0)
-		mbr.partitions[pnum-1].type=type;
-}
+    action = FDISK_ACTION_NONE;
+    type = PTYPE_BSDFFS;
+    type_seen = 0;
+    initialize = 0;
+    while ((opt = getopt(argc, argv, "Twpdnt:a")) != -1) {
+        switch (opt) {
+        case 'p':
+            if (select_action(&action, FDISK_ACTION_PRINT) != 0)
+                return 2;
+            break;
+        case 'd':
+            if (select_action(&action, FDISK_ACTION_DELETE) != 0)
+                return 2;
+            break;
+        case 'n':
+            if (select_action(&action, FDISK_ACTION_NEW) != 0)
+                return 2;
+            break;
+        case 'a':
+            if (select_action(&action, FDISK_ACTION_ACTIVE) != 0)
+                return 2;
+            break;
+        case 'T':
+            if (select_action(&action, FDISK_ACTION_TYPE) != 0)
+                return 2;
+            break;
+        case 't':
+            if (parse_unsigned(optarg, 0xffu, &type) != 0 || type == 0) {
+                fprintf(stderr, "fdisk: invalid partition type: %s\n",
+                    optarg);
+                return 2;
+            }
+            type_seen = 1;
+            break;
+        case 'w':
+            initialize = 1;
+            break;
+        default:
+            usage();
+            return 2;
+        }
+    }
 
-void print_ptable()
-{
-	int i;
-	printf("Nr    Start   Length Type\n");
+    remaining = argc - optind;
+    if (action == FDISK_ACTION_NONE || remaining < 1 ||
+        (action == FDISK_ACTION_PRINT && remaining != 1) ||
+        (action == FDISK_ACTION_NEW && (remaining < 1 || remaining > 2)) ||
+        (action != FDISK_ACTION_PRINT && action != FDISK_ACTION_NEW &&
+        remaining != 2) ||
+        (initialize && action != FDISK_ACTION_NEW) ||
+        (type_seen && action != FDISK_ACTION_NEW &&
+        action != FDISK_ACTION_TYPE) ||
+        (action == FDISK_ACTION_TYPE && !type_seen)) {
+        usage();
+        return 2;
+    }
 
-	for(i=0; i<4; i++)
-	{
-		if(mbr.partitions[i].type!=0)
-		{
-			printf("%2d %8ld %8ld %02X %c\n",
-				i+1,
-				mbr.partitions[i].lbastart>>1,
-				mbr.partitions[i].lbalength>>1,
-				mbr.partitions[i].type,
-				mbr.partitions[i].status & P_ACTIVE ? '*' : ' '
-			);
-		}
-	}
-}
+    device = argv[optind++];
+    number = 0;
+    size_kbytes = 0;
+    if (action == FDISK_ACTION_NEW && optind < argc) {
+        if (parse_unsigned(argv[optind], ~0u, &size_kbytes) != 0) {
+            fprintf(stderr, "fdisk: invalid size: %s\n", argv[optind]);
+            return 2;
+        }
+    } else if (action != FDISK_ACTION_PRINT &&
+        parse_unsigned(argv[optind], FDISK_MBR_PARTITIONS, &number) != 0) {
+        fprintf(stderr, "fdisk: invalid partition number: %s\n",
+            argv[optind]);
+        return 2;
+    }
+    if (number == 0 && action != FDISK_ACTION_PRINT &&
+        action != FDISK_ACTION_NEW) {
+        fprintf(stderr, "fdisk: partition number must be 1..4\n");
+        return 2;
+    }
 
-void delete_part(int num)
-{
-	if(num < 1 || num > 4)
-	{
-		printf("Error: invalid partition number\n");
-		return;
-	}
+    open_flags = action == FDISK_ACTION_PRINT ? O_RDONLY : O_RDWR;
+    fd = open(device, open_flags);
+    if (fd < 0) {
+        perror(device);
+        return 1;
+    }
+    result = 1;
+    if (read_mbr(fd) != 0 || get_media_size(fd) != 0) {
+        if (disk_sectors == 0)
+            fprintf(stderr, "fdisk: cannot determine device size\n");
+        goto done;
+    }
 
-	if(mbr.partitions[num-1].type==0)
-	{
-		printf("Error: partition does not exist\n");
-		return;
-	}
+    if (initialize) {
+        fdisk_mbr_initialize(&disk_mbr);
+    } else if (fdisk_mbr_validate(&disk_mbr, disk_sectors) != 0) {
+        fprintf(stderr,
+            "fdisk: invalid MBR signature, partition range, or overlap\n");
+        goto done;
+    }
 
-	mbr.partitions[num-1].type = 0;
-	mbr.partitions[num-1].lbastart = 0;
-	mbr.partitions[num-1].lbalength = 0;
-	mbr.partitions[num-1].start.head = 0;
-	mbr.partitions[num-1].start.sector = 0;
-	mbr.partitions[num-1].start.cyllow = 0;
-	mbr.partitions[num-1].start.cylhigh = 0;
-	mbr.partitions[num-1].end.head = 0;
-	mbr.partitions[num-1].end.sector = 0;
-	mbr.partitions[num-1].end.cyllow = 0;
-	mbr.partitions[num-1].end.cylhigh = 0;
-}
+    switch (action) {
+    case FDISK_ACTION_PRINT:
+        print_table(device);
+        result = 0;
+        break;
+    case FDISK_ACTION_DELETE:
+        result = delete_partition(number);
+        break;
+    case FDISK_ACTION_NEW:
+        result = new_partition(size_kbytes, type);
+        break;
+    case FDISK_ACTION_ACTIVE:
+        result = toggle_active(number);
+        break;
+    case FDISK_ACTION_TYPE:
+        result = set_partition_type(number, type);
+        break;
+    default:
+        result = -1;
+        break;
+    }
+    if (result == 0 && action != FDISK_ACTION_PRINT) {
+        if (fdisk_mbr_validate(&disk_mbr, disk_sectors) != 0) {
+            fprintf(stderr, "fdisk: resulting partition table is invalid\n");
+            result = -1;
+        } else if (write_mbr(fd) != 0) {
+            result = -1;
+        } else {
+            print_table(device);
+        }
+    }
+    result = result == 0 ? 0 : 1;
 
-void new_part(unsigned int size, int type)
-{
-	int num = 0;
-	int i;
-	int start;
-
-	if(type<=0 || type >255)
-	{
-		printf("Invalid partition type\n");
-		return;
-	}
-
-	for(i=4; i>0; i--)
-	{
-		if(mbr.partitions[i-1].type==0)
-		{
-			num = i;
-		} else {
-			break;
-		}
-	}
-
-	if(num==0)
-	{
-		printf("Partition table full\n");
-		return;
-	}
-	printf("Partition number %d\n",num);
-	if(num==1)
-	{
-		start = 1;
-	} else {
-		start = (mbr.partitions[num-2].lbastart>>1) + (mbr.partitions[num-2].lbalength>>1);
-	}
-
-	// We must never start a partition at the beginning, or we'll wipe the
-	// MBR...
-	if(start==0)
-		start=1;
-	printf("Start: %u\n", start);
-
-	if(start+size > blocks)
-	{
-		printf("Partition too  big\n");
-		return;
-	}
-
-	if(size==0)
-	{
-		size = blocks - start;
-	}
-
-	mbr.partitions[num-1].lbastart = start<<1;
-	mbr.partitions[num-1].lbalength = size<<1;
-	mbr.partitions[num-1].type = type;
-}
-
-void wipe_mbr()
-{
-	int i;
-	for(i=0; i<4; i++)
-	{
-		mbr.partitions[i].type = 0;
-		mbr.partitions[i].lbastart = 0;
-		mbr.partitions[i].lbalength = 0;
-		mbr.partitions[i].start.head = 0;
-		mbr.partitions[i].start.sector = 0;
-		mbr.partitions[i].start.cyllow = 0;
-		mbr.partitions[i].start.cylhigh = 0;
-		mbr.partitions[i].end.head = 0;
-		mbr.partitions[i].end.sector = 0;
-		mbr.partitions[i].end.cyllow = 0;
-		mbr.partitions[i].end.cylhigh = 0;
-	}
-	mbr.biosdrive=0x80;
-	mbr.sig = 'R'<<24 | 'T'<<16 | 'E'<<8 | 'R';
-	mbr.bootsig = 0xAA55;
-}
-
-void toggle_active(int p)
-{
-	if(p<1 || p>4)
-		return;
-
-	if(mbr.partitions[p-1].status & P_ACTIVE)
-	{
-		mbr.partitions[p-1].status &= (~P_ACTIVE);
-	} else {
-		mbr.partitions[p-1].status |= (P_ACTIVE);
-	}
-}
-
-int main(int argc, char *argv[])
-{
-	int opt;
-	int action = A_NONE;
-	int fd;
-	char *device;
-	int type = 0xB7;
-	unsigned char wipe=0;
-
-	while((opt = getopt(argc, argv, "Twpdnt:a")) != -1)
-	{
-		switch(opt)
-		{
-			case 'p':
-				action = A_PRINT;
-				break;
-			case 'd':
-				action = A_DELETE;
-				break;
-			case 'a':
-				action = A_ACTIVE;
-				break;
-			case 'n':
-				action = A_NEW;
-				break;
-			case 't':
-				type = strtonum(optarg);
-				break;
-			case 'T':
-				action = A_TYPE;
-				break;
-			case 'w':
-				wipe = 1;
-				break;
-		}
-	}
-
-	if(action == A_NONE)
-	{
-		usage();
-		return 10;
-	}
-
-	device = argv[optind++];
-	if(!device)
-	{
-		usage();
-		return 10;
-	}
-
-	fd = open(device,O_RDWR);
-	if(!fd)
-	{
-		printf("Cannot open %s\n", device);
-		return 10;
-	}
-
-	if(read_mbr(fd)==-1)
-	{
-		printf("Error reading MBR\n");
-		return 10;
-	}
-	if(mbr.bootsig != 0xAA55)
-	{
-		printf("Partition table not valid.\n");
-		wipe = 1;
-	}
-
-	ioctl(fd, DIOCGETMEDIASIZE, &blocks);
-
-	printf("%s: %d blocks of 1KB\n",device,blocks);
-
-	switch(action)
-	{
-		case A_PRINT:
-			print_ptable();
-			break;
-		case A_DELETE:
-			delete_part(strtonum(argv[optind]));
-			print_ptable();
-			write_mbr(fd);
-			break;
-		case A_NEW:
-
-			if(wipe==1)
-				wipe_mbr();
-			if(optind<argc)
-				new_part(strtonum(argv[optind]),type);
-			else
-				new_part(0,type);
-			print_ptable();
-			write_mbr(fd);
-			break;
-		case A_ACTIVE:
-			toggle_active(strtonum(argv[optind]));
-			print_ptable();
-			write_mbr(fd);
-			break;
-		case A_TYPE:
-			set_type(strtonum(argv[optind]),type);
-			print_ptable();
-			write_mbr(fd);
-			break;
-	}
-
-	if(fd)
-		close(fd);
-	return 0;
+done:
+    close(fd);
+    return result;
 }

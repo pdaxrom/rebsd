@@ -11,7 +11,7 @@
 #include <sys/systm.h>
 #include <machine/debug.h>
 #ifdef USB_ENABLED
-#include <dev/usb/usb_task.h>
+#include <usb/usb_task.h>
 #endif
 
 #define MINFINITY   -32767      /* minus infinity */

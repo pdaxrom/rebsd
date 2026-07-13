@@ -53,15 +53,20 @@ kernel/vm_sched.c               standard
 kernel/vm_swap.c                standard
 kernel/vm_swp.c                 standard
 
-dev/usb/usb_subr.c              optional usb
-dev/usb/usb_core.c              optional usb
-dev/usb/usb_service.c           optional usb
-dev/usb/usb_task.c              optional usb
-dev/usb/uhub.c                  optional uhub
-dev/usb/ehci.c                  optional ehci
-dev/usb/ohci.c                  optional ohci
-dev/usb/ukbd.c                  optional ukbd
-dev/usb/ukbdmap.c               optional ukbd
+disk/disk_subr.c               optional disk
+disk/disk.c                    optional disk
+
+usb/usb_subr.c                 optional usb
+usb/usb_core.c                 optional usb
+usb/usb_service.c              optional usb
+usb/usb_task.c                 optional usb
+usb/uhub.c                     optional uhub
+usb/ehci.c                     optional ehci
+usb/ohci.c                     optional ohci
+usb/ukbd.c                     optional ukbd
+usb/ukbdmap.c                  optional ukbd
+usb/umass_bbb.c                optional umass
+usb/umass.c                    optional umass
 
 kernel/sys_socket.c             optional inet
 kernel/uipc_domain.c            optional inet

@@ -11,11 +11,11 @@ mkdir -p "$tmp"
 
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
     -idirafter "$top/include" -idirafter "$top/sys" \
-    "$top/sys/dev/usb/usb_task.c" \
-    "$top/sys/dev/usb/usb_subr.c" \
-    "$top/sys/dev/usb/usb_core.c" \
-    "$top/sys/dev/usb/usb_mock_hcd.c" \
-    "$top/sys/dev/usb/uhub.c" \
+    "$top/sys/usb/usb_task.c" \
+    "$top/sys/usb/usb_subr.c" \
+    "$top/sys/usb/usb_core.c" \
+    "$top/sys/usb/usb_mock_hcd.c" \
+    "$top/sys/usb/uhub.c" \
     uhub_test.c -o "$tmp/uhub_test"
 
 if [ "$mode" = test ]; then

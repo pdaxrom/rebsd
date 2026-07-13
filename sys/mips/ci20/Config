@@ -26,8 +26,10 @@ device          "ci20_uart"
 
 service         creator
 service         dma
+service         disk
 service         usb
 service         ukbd
+service         umass
 service         uhub
 service         ehci
 service         ohci

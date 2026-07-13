@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <dev/usb/ukbd.h>
+#include <usb/ukbd.h>
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \

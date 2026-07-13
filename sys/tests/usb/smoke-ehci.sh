@@ -12,11 +12,11 @@ mkdir -p "$tmp"
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
     -DREBSD_DMA_HOST_TEST -idirafter "$top/include" -idirafter "$top/sys" \
     "$top/sys/kernel/subr_dma.c" \
-    "$top/sys/dev/usb/usb_subr.c" \
-    "$top/sys/dev/usb/usb_core.c" \
-    "$top/sys/dev/usb/usb_task.c" \
-    "$top/sys/dev/usb/uhub.c" \
-    "$top/sys/dev/usb/ehci.c" \
+    "$top/sys/usb/usb_subr.c" \
+    "$top/sys/usb/usb_core.c" \
+    "$top/sys/usb/usb_task.c" \
+    "$top/sys/usb/uhub.c" \
+    "$top/sys/usb/ehci.c" \
     ehci_test.c -o "$tmp/ehci_test"
 
 if [ "$mode" = test ]; then

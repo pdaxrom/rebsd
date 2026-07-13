@@ -3,7 +3,7 @@
  */
 
 #include <stdio.h>
-#include <dev/usb/usb_task.h>
+#include <usb/usb_task.h>
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \

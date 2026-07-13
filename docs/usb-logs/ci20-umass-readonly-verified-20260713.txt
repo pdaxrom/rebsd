@@ -1,0 +1,97 @@
+Creator Ci20 read-only USB Mass Storage verification
+Date: 2026-07-13
+Topology: direct connection to right-hand J23 USB host port
+Device: 1005:b113, "USB FLASH DRIVE PMAP"
+Image SHA-256: a9984d94a274a541c6768b40e300399a7bbce05b0fe37aaad143e096058517c0
+Scope: BOT/SCSI probe, capacity, MBR, whole-disk and partition reads,
+       idle detach/reconnect, address and disk-unit reuse
+
+Starting kernel ...
+
+ReBSD Ci20 kernel entry
+ram size=0x10000000
+
+ReBSD for Ci20: built on sash@sashz-mbp with gcc mipsel-elf-gcc (GCC) 14.2.0, cpu=mips32r2, float=hard, endian=little
+ci20 uart: irq 34 enabled
+ci20 clock: tcu0 irq 25 rate 750000 hz period 7500, delay tcu3 period 65535
+dma: Ci20 uncached pool phys=17d000 size=65536 align=4096
+disk: block layer ready, MBR partitions
+usb0: initializing core
+usb0: core ready
+ukbd0: HID boot-keyboard driver ready
+umass0: read-only SCSI/Bulk-Only driver ready
+ehci0: attach, EHCI phys=13490000
+usb-host: init: enable VBUS
+usb-host: init: settle VBUS
+usb-host: init: configure UHC clock
+usb-host: init: ungate UHC clock
+usb-host: init: configure host PHY
+usb-host: init: configure EHCI UTMI width
+usb-host: init: pulse PHY reset
+usb-host: init: pulse UHC reset
+usb-host: init: hardware ready
+usb-host: Ci20 VBUS on, cpm clkgr0=3e5c7fe0 opcr=1566 usbpcr=408919b8 usbpcr1=8ace3370 uhccdr=60000018 srbc=2
+ehci0: JZ4780 UTMI bus=7e0 width=16-bit
+ehci0: EHCI version=100 ports=1 companions=1/1 async-control/bulk
+ehci0: irq 20 enabled for async/root-hub changes
+ehci0: port1 powered, no high-speed device; hotplug ready
+ohci0: attach, OHCI phys=134a0000
+ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
+ohci0: irq 5 enabled for periodic/root-hub changes
+ohci0: port1 powered, no device; hotplug ready
+dm0: dm9000 deferred probe at 0xb6000000 address 02:20:00:00:00:20
+phys mem  = 262144 kbytes
+user mem  = 4096 kbytes
+root dev  = (0,0)
+swap dev  = (1,0)
+root size = 32768 kbytes
+swap size = 32768 kbytes
+usb0: deferred task runner uses proc0
+July 13 14:10:35 init: kernel security level changed from 0 to 1
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: root
+ReBSD/Creator Ci20
+# umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=1005 product=b113 config=1 interfaces=1
+ehci0: if0 class=8 subclass=6 protocol=80 endpoints=2
+
+# ls /dev
+console  mem      ram0     sd0      sd0b     sd0d     tty      zero
+kmem     null     romdisk  sd0a     sd0c     swap     ttyS0
+# fdisk -p /dev/sd0
+/dev/sd0: 15149760 kbytes, 30299520 sectors of 512 bytes
+Part       Start     Sectors      Kbytes Type Boot
+   1          63    30298527    15149263   0c   -
+# dd if=/dev/sd0 of=/dev/null bs=1024 count=16
+16+0 records in
+16+0 records out
+# dd if=/dev/sd0a of=/dev/null bs=1024 count=16
+16+0 records in
+16+0 records out
+# sd0: detached
+umass0: detached
+ehci0: port1 device disconnected
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=1005 product=b113 config=1 interfaces=1
+ehci0: if0 class=8 subclass=6 protocol=80 endpoints=2
+
+# fdisk -p /dev/sd0
+/dev/sd0: 15149760 kbytes, 30299520 sectors of 512 bytes
+Part       Start     Sectors      Kbytes Type Boot
+   1          63    30298527    15149263   0c   -
+# dd if=/dev/sd0 of=/dev/null bs=1024 count=16
+16+0 records in
+16+0 records out
+# dd if=/dev/sd0a of=/dev/null bs=1024 count=16
+16+0 records in
+16+0 records out
+#
