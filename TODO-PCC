@@ -4834,6 +4834,61 @@ Milestone order:
     within 0.64% of H6.  PCC's two-row ordinary Linpack average changes from
     3785.421 to 3788.831 KFLOPS, or +0.09%, and the isolated kernels show no
     regression.  This closes the H7 physical and commit gates.
+  - [x] H8 keep eligible local `long long` and `unsigned long long` values in
+    the existing MIPS register-pair class.  This extends the target's
+    `cisreg()` policy without adding a new pass, register class, or ABI rule.
+    The final `$s6/$s7` pair is also classified as `CLASSB`; the old `< 52`
+    boundary incorrectly treated pair 52 as an FPU register.  Only existing
+    caller-saved temporary pairs are used, so callee-save and prologue policy
+    are unchanged.
+  - [x] Add an H8 assembly gate around the existing `misc__llpack001` test for
+    both VR4300 and MIPS32R2.  `mix_words` must retain carry and shift
+    operations while emitting no local `lw`/`sw` through `$fp`.  Compared
+    with H7, the function falls from 179 to 156 lines on VR4300 and from 177
+    to 154 on MIPS32R2; its 32 frame accesses fall to zero.  The general
+    `bench_u64` body falls from 96 to 72 instructions and from 22 loads plus
+    12 stores to two loads and no stores.  Complete PCC benchmark assembly
+    shrinks from 1723 to 1699 lines and the linked executable from 45744 to
+    45584 section bytes; GCC controls remain byte-identical.
+  - [x] Diagnose the first H8 physical-run failure.  It was not an OOM: the
+    log reports 8192 KiB physical memory, 4096 KiB user memory, and 4096 KiB
+    swap, and all benchmark suites completed.  The run instead failed when
+    native `ccom` compiled `jira/PCC-85.c`: live state was kept in `$t1`
+    across hidden `__udivdi3`/`__umoddi3` calls emitted for unsigned 64-bit
+    division and remainder.  Those helpers were not CALL nodes, and the
+    `NDIVB` need set did not declare their full caller-saved clobber set.
+  - [x] Make the hidden divide/mod helper ABI explicit by adding the existing
+    `MIPS_CALLER_SAVED_NEVER` set to `NDIVB`.  Add `misc__llcall001`, which
+    keeps a result pointer and quotient live across consecutive unsigned
+    64-bit helper calls, to the BSD regression list and the physical N64
+    compile-and-run gate.  This is a general MIPS backend correction rather
+    than a special case for `PCC-85`; the required saves add 80 section bytes
+    to the H8 general benchmark, whose final 45664 bytes remain 80 below H7.
+  - [x] Pass the H8 software gates.  All six PCC-kernel/PCC-rootfs full smoke
+    profiles pass on Malta64 VR4300, Malta MIPS32R2, and MaltaEL MIPS32R2 in
+    hard- and soft-float mode with general self-test zero, no smoke failures,
+    and final RC zero.  Final hard-float runtime regression passes 301/301 on
+    Malta64, Malta, and MaltaEL, including `jira__PCC-85`, `misc__llpack001`,
+    and `misc__llcall001`.  Native Malta64 compilation reports 311 passes and
+    30 expected failures, then passes all 301 runnable tests.
+  - [x] Build the H8 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h8-callclobber-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136, SHA-256
+    `6dbbffb1b32a0ca1b8fbe49b9d237082a6b351aba8115f9bc8963da7fc2f1b92`.
+    It passes all five `fsutil --check` phases, has build stamp
+    `.build-mode.gcc.1.0.0.1`, contains independent GCC/PCC ordinary Linpack,
+    kernel Linpack, and general benchmark binaries, and all six benchmark
+    executables have zero undefined symbols.  The debug rootfs contains both
+    `PCC-85.c` and `llcall001.c` as native compile-and-run tests.
+  - [x] Run the corrected H8 image on physical N64.  The complete runner,
+    including native `PCC-85` and `llcall001`, finishes with zero-valued
+    `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC` plus terminal
+    `N64_PCC_DEBUG_RC_END`.  Both general self-tests, both Linpack kernel
+    self-tests, and every benchmark return code are zero.  PCC `u64` reaches
+    1.653 versus 2.868 GCC Mwork/s: 57.64% of GCC, a 43.37% PCC gain over H7,
+    and a 17.71 percentage-point PCC/GCC-ratio gain.  PCC ordinary Linpack
+    averages 3772.706 KFLOPS, 85.12% of the current GCC result and only 0.43%
+    below H7.  This closes the corrected H8 physical and commit gates.
 
 Success criteria:
 

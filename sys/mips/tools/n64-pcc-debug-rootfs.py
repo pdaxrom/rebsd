@@ -17,6 +17,7 @@ PRIMARY_TESTS = [
 N64_LOG_TESTS = PRIMARY_TESTS + [
     ("jira__PCC-84", "jira", ["PCC-84.c"], []),
     ("jira__PCC-85", "jira", ["PCC-85.c"], []),
+    ("misc__llcall001", "misc", ["llcall001.c"], []),
     ("jira__PCC-97", "jira", ["PCC-97.c"], []),
     ("jira__PCC-101", "jira", ["PCC-101.c"], []),
     ("jira__PCC-123", "jira", ["PCC-123.c"], []),

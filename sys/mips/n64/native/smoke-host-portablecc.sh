@@ -148,6 +148,7 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
     "$tmp.ssastrength.s" "$tmp.ssastrength.log" "$tmp.fpaccum.s" \
+    "$tmp.llpack.s" \
     "$tmp.staticspec.s" "$tmp.staticspec.os.s" "$tmp.staticspec.free.s" \
     "$tmp.staticspec.generic.s" \
     "$tmp.staticspec-stack.s" \
@@ -510,6 +511,23 @@ inside && /^[[:space:]]*cvt[.](s|d)[.]w[[:space:]]/ { direct++ }
 END { exit seen && unsigned_calls == 0 && direct >= 5 ? 0 : 1 }
 ' "$tmp.s" || {
 		echo "$ufprange_cpu did not lower bounded unsigned FP conversions" >&2
+		exit 1
+	}
+done
+
+for llpack_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$llpack_cpu" -O2 -fno-omit-frame-pointer -S \
+	    -o "$tmp.llpack.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/llpack001.c"
+	awk '
+/^[[:space:]]*[.]ent mix_words$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(lw|sw)[[:space:]].*\(\$fp\)/ { frame_accesses++ }
+inside && /^[[:space:]]*sltu[[:space:]]/ { carry = 1 }
+inside && /^[[:space:]]*(sll|srl)[[:space:]]/ { shift = 1 }
+END { exit seen && carry && shift && frame_accesses == 0 ? 0 : 1 }
+' "$tmp.llpack.s" || {
+		echo "$llpack_cpu spilled promoted 64-bit locals" >&2
 		exit 1
 	}
 done

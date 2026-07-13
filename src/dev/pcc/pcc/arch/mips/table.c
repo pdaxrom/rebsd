@@ -129,7 +129,9 @@
 		    MIPS_CALLER_SAVED_NEVER)
 #endif
 #define NABSL	NEEDS(NREG(A, 1), NREG(B, 1), NSL(A))
-#define NDIVB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1))
+/* ZE emits libpcc calls without CALL nodes, so declare ABI clobbers here. */
+#define NDIVB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1), \
+		    MIPS_CALLER_SAVED_NEVER)
 #define NSHB	NEEDS(NREG(B, 1), NREG(A, 1))
 #define NSF_AA	NEEDS(NREG(A, 1), NLEFT(A0), NRES(V0), \
 		    MIPS_CALLER_SAVED_NEVER)

@@ -2438,3 +2438,101 @@ of 2.11% in `ddot_ur` and 2.29% in `dscal_ur`.  This provides no evidence of
 an unrelated regression.  H7 therefore passes its physical and commit gates;
 constant division remains below the 90% stretch target but is no longer the
 26% outlier found by H5.
+
+## Milestone H8: Promote Local 64-Bit Integer Pairs
+
+H8 addresses the `u64` kernel selected by the physical H7 general benchmark.
+The MIPS target now lets eligible local `long long` and `unsigned long long`
+values become existing `TEMP` register pairs.  No optimizer pass, new register
+class, or calling-convention rule is added.  The allocator continues to use
+the established caller-saved pairs for these leaf-loop temporaries, so the
+callee-save and prologue implementation is unchanged.
+
+The same audit found an off-by-one boundary in `GCLASS`: pair 52, `$s6/$s7`,
+was classified as `CLASSC` because the integer-pair range ended at `< 52`.
+Extending it to `< 53` makes the last declared GPR pair consistently
+`CLASSB`.  H8 deliberately does not mark saved-register pairs permanent;
+doing that would require coordinated overlapping-register save accounting and
+would unnecessarily enlarge this milestone.
+
+The existing optimized `misc__llpack001` regression is also the focused host
+assembly gate.  For both VR4300 and MIPS32R2, `mix_words` must contain its
+carry and shift operations and no `lw` or `sw` through `$fp`.  The static
+change is:
+
+| Metric | H7 VR4300 | H8 VR4300 | H7 MIPS32R2 | H8 MIPS32R2 |
+| --- | ---: | ---: | ---: | ---: |
+| `mix_words` lines | 179 | 156 | 177 | 154 |
+| local frame accesses | 32 | 0 | 32 | 0 |
+
+In the general corpus, `bench_u64` falls from 96 to 72 instructions.  Its
+memory traffic falls from 22 loads and 12 stores to the two array loads and no
+stores; the three existing `nop` instructions are unchanged.  Complete PCC
+assembly falls from 1723 to 1699 lines, and the linked PCC benchmark shrinks
+from 45744 to 45584 section bytes.  All GCC controls are byte-identical to H7.
+
+### H8 Software Gates And N64 Artifact
+
+All six PCC-kernel/PCC-rootfs full-smoke profiles pass for Malta64 VR4300,
+Malta MIPS32R2, and MaltaEL MIPS32R2 in hard- and soft-float mode.  Every
+profile reports `MIPS_COMPILER_BENCH_SELFTEST 0`,
+`PCC_SMOKE_ALL_FAILURES 0`, and `PCC_SMOKE_ALL_RC:0`.  Final hard-float
+runtime regression passes 301/301 on all three boards, including
+`jira__PCC-85`, `misc__llpack001`, and `misc__llcall001`.  Native Malta64
+regression reports 311 compile passes, 30 expected compile failures, and
+301/301 runtime passes.
+
+The first physical H8 candidate did not pass the correctness gate.  It
+completed every benchmark with zero self-test and benchmark return codes and
+improved PCC `u64` from H7's 1.153 to 1.652 Mwork/s, a 43.28% gain and 57.18%
+of the 2.889 Mwork/s GCC control.  Native `ccom` nevertheless faulted while
+compiling `jira/PCC-85.c`, leaving final debug and runner status one.  The log
+shows 8192 KiB physical memory, 4096 KiB user memory, and 4096 KiB swap, so
+the completed suite and repeatable instruction address rule out OOM.
+
+The root cause was the backend contract for hidden 64-bit division helpers.
+`zzzcode` emits `__udivdi3` and `__umoddi3` calls, but the containing nodes are
+not CALL nodes.  The allocator therefore relied entirely on `NDIVB`, which
+previously omitted caller-saved GPR and FPR clobbers.  H8 register promotion
+left a live pointer in `$t1`; the helper overwrote it before the following
+store.  `NDIVB` now includes `MIPS_CALLER_SAVED_NEVER`, the same complete
+clobber set used by other hidden helpers.  `misc__llcall001` covers a live
+pointer and quotient across consecutive divide/remainder calls and is staged
+in the physical N64 debug rootfs.  The required saves add 80 section bytes to
+the general benchmark; the corrected 45664-byte executable remains 80 bytes
+smaller than H7.
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h8-callclobber-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 6dbbffb1b32a0ca1b8fbe49b9d237082a6b351aba8115f9bc8963da7fc2f1b92
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+mips-compiler-bench-gcc: 31720 section bytes, sha256 d16f213e58b12437ff48d699d592bfcb5258499f7aedaec0885e78253e5b8bbe
+mips-compiler-bench-pcc: 45664 section bytes, sha256 13289fc6b4eed071f9b8816bf619d75d6079ad56fd78161440e105e445ee0720
+debug runner sha256: e0f5230285ae763ead65616e0bd295928239a66cc71e18c9d5b459557839ec73
+```
+
+The 6 MiB rootfs passes all five `fsutil --check` phases and all six benchmark
+executables have zero undefined symbols.  It contains native compile-and-run
+entries for both `PCC-85.c` and `llcall001.c`.
+
+Physical N64 validation of the corrected image passes the complete runner,
+both general and both Linpack kernel self-tests, every benchmark return code,
+zero-valued `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC`, and terminal
+`N64_PCC_DEBUG_RC_END`.  The targeted result is:
+
+| Kernel | H7 GCC | H8 GCC | H7 PCC | H8 PCC | H8 PCC/GCC | PCC gain |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `u64` | 2.888 | 2.868 | 1.153 | 1.653 | 57.64% | +43.37% |
+
+The PCC/GCC ratio gains 17.71 percentage points from H7's 39.92%, while the
+GCC control changes by only -0.69%.  The corrected result is effectively
+identical to the rejected candidate's 1.652 Mwork/s, confirming that the
+caller-clobber correction preserves the intended H8 optimization.
+
+The ordinary PCC Linpack rows are 3756.395 and 3789.017 KFLOPS.  Their mean is
+3772.706, only 0.43% below H7 and 85.12% of the current 4432.440 KFLOPS GCC
+mean.  Every isolated kernel also passes its checksum and return-code gates.
+H8 therefore passes its physical and commit gates; QEMU timing was not used
+to judge the optimization.

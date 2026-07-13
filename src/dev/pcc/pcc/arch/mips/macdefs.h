@@ -494,7 +494,7 @@ typedef long long OFFSZ;
 	{ -1 }, { -1 }, { -1 }, { -1 },					\
 	{ -1 }, { -1 }, { -1 }, 					\
 
-#define GCLASS(x)	(x < 32 ? CLASSA : (x < 52 ? CLASSB : CLASSC))
+#define GCLASS(x)	(x < 32 ? CLASSA : (x < 53 ? CLASSB : CLASSC))
 #define TARGET_OPTSTATS_FPR_CLASS(c)	((c) == CLASSC)
 #define TARGET_SSA_STRENGTH_REDUCE_MUL()	\
 	((mips_target.capabilities & MIPS_CAP_MUL3) == 0)
