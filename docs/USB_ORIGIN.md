@@ -61,9 +61,9 @@ is updated as each later phase imports or materially adapts a source.
 | `sys/dev/usb/ohci.c` | `sys/dev/usb/ohci.c` | generic OHCI HCD | polling control, periodic interrupt-IN, and root-port/RHSC paths substantially adapted; original notice and RCS id retained |
 | `sys/dev/usb/ohcireg.h` | `sys/dev/usb/ohcireg.h` | OHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ohcivar.h` | `sys/dev/usb/ohcivar.h` | OHCI private state | compact bounded-state adaptation; original notice and RCS id retained |
-| `sys/dev/usb/ehci.c` | `sys/dev/usb/ehci.c` | generic EHCI HCD | reference only |
-| `sys/dev/usb/ehcireg.h` | `sys/dev/usb/ehcireg.h` | EHCI registers and descriptors | reference only |
-| `sys/dev/usb/ehcivar.h` | `sys/dev/usb/ehcivar.h` | EHCI private state | reference only |
+| `sys/dev/usb/ehci.c` | `sys/dev/usb/ehci.c` | generic EHCI HCD | compact control/bulk, root-port, completion, abort, and companion-handoff adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ehcireg.h` | `sys/dev/usb/ehcireg.h` | EHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ehcivar.h` | `sys/dev/usb/ehcivar.h` | EHCI private state | fixed-schedule bounded-state adaptation; original notice and RCS id retained |
 | `sys/dev/usb/usbhid.h` | `sys/dev/usb/usbhid.h` | HID class requests needed by boot keyboards | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/uhidev.h` | `sys/dev/usb/uhidev.h` or compact equivalent | HID definitions needed by boot keyboards | reference only |
 | `sys/dev/usb/ukbd.c` | `sys/dev/usb/ukbd.c` | HID boot keyboard only | compact boot-protocol adaptation; original notice and RCS id retained |
@@ -97,7 +97,7 @@ NetBSD USB sources:
 | `sys/dev/usb/uhub.h` | Native bounded root-hub state and event interface |
 | `sys/dev/usb/ukbd.h` | Bounded boot-report decoder and driver-registration interface |
 | `sys/mips/ci20/usb_hw.[ch]` | Testable JZ4780 clock, PHY, reset, and VBUS sequence |
-| `sys/mips/ci20/usb.c` | Ci20 MMIO callbacks, OHCI attachment, and boot-time enumeration diagnostics |
+| `sys/mips/ci20/usb.c` | Ci20 MMIO callbacks, EHCI/OHCI attachment, IRQ routing, companion ownership, and enumeration diagnostics |
 
 The DMA linker reservation and configuration entries are likewise native
 integration code.  `usb_desc.h` and the parser tests are native code; the

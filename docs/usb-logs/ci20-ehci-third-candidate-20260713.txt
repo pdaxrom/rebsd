@@ -1,0 +1,50 @@
+Starting kernel ...
+
+ReBSD Ci20 kernel entry
+ram size=0x10000000
+
+ReBSD for Ci20: built on sash@sashz-mbp with gcc mipsel-elf-gcc (GCC) 14.2.0, cpu=mips32r2, float=hard, endian=little
+ci20 uart: irq 34 enabled
+ci20 clock: tcu0 irq 25 rate 750000 hz period 7500, delay tcu3 period 65535
+dma: Ci20 uncached pool phys=17b000 size=65536 align=4096
+usb0: initializing core
+usb0: core ready
+ukbd0: HID boot-keyboard driver ready
+ehci0: attach, EHCI phys=13490000
+usb-host: init: enable VBUS
+usb-host: init: settle VBUS
+usb-host: init: configure UHC clock
+usb-host: init: ungate UHC clock
+usb-host: init: configure host PHY
+usb-host: init: configure EHCI UTMI width
+usb-host: init: pulse PHY reset
+usb-host: init: pulse UHC reset
+usb-host: init: hardware ready
+usb-host: Ci20 VBUS on, cpm clkgr0=3e5c7fe0 opcr=1566 usbpcr=408919b8 usbpcr1=8ac63370 uhccdr=e0000000 srbc=2
+ehci0: JZ4780 UTMI bus=7e0 width=16-bit
+ehci0: EHCI version=100 ports=1 companions=1/1 async-control/bulk
+ehci0: irq 20 enabled for async/root-hub changes
+ehci0: port1 powered, no high-speed device; hotplug ready
+ohci0: attach, OHCI phys=134a0000
+ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
+ohci0: irq 5 enabled for periodic/root-hub changes
+ohci0: port1 powered, no device; hotplug ready
+dm0: dm9000 deferred probe at 0xb6000000 address 02:20:00:00:00:20
+phys mem  = 262144 kbytes
+user mem  = 4096 kbytes
+root dev  = (0,0)
+swap dev  = (1,0)
+root size = 32768 kbytes
+swap size = 32768 kbytes
+usb0: deferred task runner uses proc0
+July 13 05:54:32 init: kernel security level changed from 0 to 1
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: ehci0: port1 enumeration failed: I/O error
+ehci0: diagnostic status=8008 port1=1005 qh=80248 qtd=80248/80080d80/80008c80
+ehci0: request addr=0 type=80 code=6 value=100 index=0 length=8
+ehci0: port1 enumeration failed: I/O error
+ehci0: diagnostic status=8008 port1=1005 qh=80248 qtd=80248/80080d80/80008c80
+ehci0: request addr=0 type=80 code=6 value=100 index=0 length=8

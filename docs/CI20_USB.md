@@ -1,8 +1,8 @@
 # Creator Ci20 USB Host Bring-up
 
 This document records every JZ4780/Ci20-specific fact used by the first ReBSD
-USB host attachment. The generic USB core and OHCI HCD do not include these
-register definitions; they enter through the HCD and DMA interfaces.
+USB host attachment. The generic USB core and OHCI/EHCI HCDs do not include
+these register definitions; they enter through the HCD and DMA interfaces.
 
 ## Verified Polling Hardware Gate
 
@@ -48,7 +48,7 @@ itself verify the deferred root-hub path described below.
 
 ## Verified Root-Hub Hotplug Gate
 
-The uncommitted candidate replaces the Ci20 boot-only port policy with
+The verified implementation replaces the Ci20 boot-only port policy with
 a machine-independent root-hub layer adapted from NetBSD 3.1 `uhub.c`:
 
 1. generic OHCI translates root-port state and change bits through HCD ops;
@@ -118,8 +118,9 @@ to `ci20.uImage` SHA-256
 Creator Ci20 does not wire its two USB-A sockets as two ports of the OHCI root
 hub. The current controller reports one root port, matching the board wiring:
 
-- right-hand USB-A J23 is connected to the UHC/EHCI host block; OHCI is its
-  USB 1.x companion and is the controller currently supported by ReBSD;
+- right-hand USB-A J23 is connected to the UHC/EHCI host block; EHCI is
+  hardware-verified for USB 2.0 high speed and OHCI is its hardware-verified
+  USB 1.x companion;
 - left-hand USB-A J24 is paralleled with mini-OTG J8 and is a separate OTG
   connection; J24 and J8 must not be used at the same time;
 - JP2 selects VBUS behavior for the OTG connection.
@@ -128,6 +129,75 @@ Consequently, adding generic EHCI at `0x13490000`, IRQ 20 will add USB 2.0
 high-speed service to J23 but will not activate J24. Supporting J24 as a host
 is a separate DWC2 host-mode task at `0x13500000`, IRQ 21, including OTG PHY,
 role, and VBUS/JP2 policy. DWC2 is outside the first OHCI/EHCI host-port scope.
+
+## Verified EHCI Host Gate
+
+The verified Phase 9 implementation attaches generic EHCI before its OHCI
+companion. The two buses share one machine-independent USB core, but keep
+separate HCD schedules, root hubs, address maps, and IRQs. Ci20 platform code
+performs the shared VBUS/clock/PHY/reset sequence once, selects the
+controller-side 16-bit UTMI interface, then starts EHCI at physical
+`0x13490000` and OHCI at `0x134a0000`.
+
+The JZ4780-specific EHCI additions are:
+
+| Item | Value and reason | Source |
+| --- | --- | --- |
+| controller MMIO | physical `0x13490000`, uncached KSEG1 `0xb3490000` | Ci20 Linux DTS and NetBSD Ingenic register map |
+| interrupt | INTC IRQ 20, unmasked only after the root hub is ready | Ci20 Linux DTS and NetBSD `apbus.c` |
+| controller UTMI width | EHCI-local offset `0xb0`, physical `0x134900b0`, set bit 6 before generic start and repeat it after `HCRESET` for 16-bit UTMI | Ci20 Linux sets it in the CGU start path and repeats it after `usb_add_hcd`; exact files and revision below |
+| companion policy | EHCI Port Owner clear for high speed; set for direct low/full speed; clear again after OHCI detach | EHCI specification behavior as adapted from NetBSD 3.1 `ehci.c`; no JZ register write |
+
+The generic driver owns controller reset, periodic and asynchronous schedule
+addresses, high-speed port reset, control/bulk completion, and Port Owner.
+The Ci20 layer owns only MMIO callbacks, the three hardware facts above, shared
+PHY/VBUS setup, IRQ dispatch, and diagnostics. IRQ 20 has the same per-tick
+32-delivery quarantine used for IRQ 5; any `ehci0: irq storm quarantined` line
+is a failed gate, with the printed status/enable/command/port values retained.
+
+The first candidate, SHA-256 `7f6df5c7...`, booted on Creator Ci20 and
+verified EHCI capabilities, IRQ 20, empty-port hotplug, and low-speed Port
+Owner handoff to the working OHCI keyboard path. EHCI control enumeration
+still returned `I/O error`, so that image did not pass the high-speed gate.
+
+The second candidate fixed the high-speed default control endpoint maximum
+packet size and reserved Current-qTD bits. Its hardware diagnostic decoded as
+an enabled high-speed port (`PORTSC=0x1005`) followed by the very first SETUP
+qTD exhausting all three transactions with eight bytes still outstanding
+(`0x00080248`). The data and status qTDs remained active and untouched. This
+proved that the controller reads the asynchronous schedule, but the device
+was not yet responding after reset.
+
+The third candidate waited the existing `USB_PORT_RESET_RECOVERY`
+interval between high-speed reset and the first SETUP, and observes
+`USB_SET_ADDRESS_SETTLE` before the first request at the new address. The fake
+EHCI test asserts both temporal relationships. Failure output now also names
+the last USB request and device address. Its `ci20.uImage` SHA-256 was
+`f21e339d70fb100f9e4215cbaf9603692b42965fe66cb2ea8637c0dbd7901945`.
+Hardware produced the same transaction error on the first address-zero
+`GET_DESCRIPTOR` SETUP, so reset recovery timing was not the cause.
+
+Cross-checking current NetBSD, OpenBSD, FreeBSD, and Linux found no remaining
+descriptor-format difference that explained the first-SETUP transaction
+error. Later candidates mirrored the active Linux UHC clock path and added
+complete QH/qTD diagnostics. They still failed the first SETUP and therefore
+ruled out clock selection, reset recovery, descriptor layout, and DMA
+schedule visibility.
+
+Comparing the final register sequence with both FreeBSD and NetBSD exposed
+the missing `USBPCR1.WORD_IF0`: JZ4780 requires both `WORD_IF0` and
+`WORD_IF1` together with the controller-local UTMI-width bit. The verified
+image reached final `UHCCDR=0x60000018` and `USBPCR1=0x8ace3370`.
+
+On Creator Ci20, a direct `1005:b113` flash drive attached at high speed as a
+class-8/subclass-6/protocol-80 device with two endpoints, detached, and
+reattached at address 1. Replacing it with the `1c4f:0002` low-speed keyboard
+verified EHCI-to-OHCI ownership handoff, console input, detach, and reconnect.
+The image SHA-256 is
+`05adb071ddd9b12f584192e80542173b7ad91cb885f99d6a3f25c98b284025fa`.
+The retained captures are
+`docs/usb-logs/ci20-ehci-high-speed-verified-20260713.txt` and
+`docs/usb-logs/ci20-ehci-companion-verified-20260713.txt`.
 
 ## Programming Manual Cross-check
 
@@ -138,12 +208,13 @@ this part of the document.
 
 | Register | Address and fields used | Manual location |
 | --- | --- | --- |
-| `UHCCDR` | `0x1000006c`; source `OTG_PHY` in 31:30, `CE_UHC` 29, `UHC_BUSY` 28, `UHC_STOP` 27, divider 7:0; OTG PHY requires divider zero | PDF 453-454, printed 419-420, section 18.1.2.11 |
+| `UHCCDR` | `0x1000006c`; source in 31:30, `CE_UHC` 29, `UHC_BUSY` 28, `UHC_STOP` 27, divider 7:0; the hardware candidate uses MPLL / 25 for 48 MHz as Ci20 Linux does | PDF 453-454, printed 419-420, section 18.1.2.11 |
 | `CLKGR0` | `0x10000020`; bit 24 set stops UHC, clear supplies its clock | PDF 484-485, printed 450-451, section 18.2.2.9 |
 | `OPCR` | `0x10000024`; bit 6 `SPENDN1`, set means port 1 is not forced into suspend | PDF 489-490, printed 455-456, section 18.2.2.16 |
 | `USBPCR` | `0x1000003c`; bit 22 PHY `POR`, bit 21 `SIDDQ`, bit 20 `OTG_DISABLE` | PDF 462-463, printed 428-429, section 18.1.2.22 |
-| `USBPCR1` | `0x10000048`; reference source 27:26, reference frequency 25:24, port-1 D-/D+ pulldowns 23/22, port-1 reset 20, port-1 UTMI width 18 | PDF 465-466, printed 431-432, section 18.1.2.25 |
+| `USBPCR1` | `0x10000048`; reference source 27:26, reference frequency 25:24, port-1 D-/D+ pulldowns 23/22, port-1 reset 20, shared PHY UTMI widths `WORD_IF0`/`WORD_IF1` 19/18 | PDF 465-466, printed 431-432, section 18.1.2.25 |
 | `SRBC` | `0x100000c4`; bit 14 `UHC_SR` | PDF 486-487, printed 452-453, section 18.2.2.11 |
+| EHCI local UTMI register | `0x134900b0`; bit 6 selects the controller's 16-bit UTMI interface | not documented in the programming manual; exact Ci20 Linux files recorded below |
 
 The manual overview identifies the integrated host as OHCI/USB 1.1 compatible
 with an embedded USB 2.0 PHY. The manual does not define the Ci20 board's VBUS
@@ -161,7 +232,10 @@ only SoC addresses, bit meanings, board wiring, or ordering cross-checks.
 | NetBSD `ingenic_ohci.c` | commit `c7fb772b85b2b5d4cfb282f868f454b4701534fd`, RCS 1.7; OHCI base and 0x1000 register window: <https://github.com/NetBSD/src/blob/c7fb772b85b2b5d4cfb282f868f454b4701534fd/sys/arch/mips/ingenic/ingenic_ohci.c> |
 | CI20 Linux `ci20.dts` | MIPS/CI20_linux commit `7dff33297116643485ca37141d804eddd793e834`; OHCI and EHCI use GPF15 for VBUS: <https://github.com/MIPS/CI20_linux/blob/7dff33297116643485ca37141d804eddd793e834/arch/mips/boot/dts/ci20.dts> |
 | CI20 Linux `jz4780.dtsi` | same commit; OHCI base/IRQ `0x134a0000`/5, EHCI base/IRQ `0x13490000`/20, and DWC2 OTG base/IRQ `0x13500000`/21: <https://github.com/MIPS/CI20_linux/blob/7dff33297116643485ca37141d804eddd793e834/arch/mips/boot/dts/jz4780.dtsi> |
-| CI20 Linux CGU source/header | same commit; 48 MHz PHY reference, `SPENDN1`, port-1 pulldowns/16-bit UTMI, one-millisecond PHY POR, and 300-microsecond UHC reset pulse: <https://github.com/MIPS/CI20_linux/blob/7dff33297116643485ca37141d804eddd793e834/drivers/clk/jz47xx/jz4780-cgu.c>, <https://github.com/MIPS/CI20_linux/blob/7dff33297116643485ca37141d804eddd793e834/arch/mips/include/asm/mach-jz4740/jz4780-cgu.h> |
+| CI20 Linux `ehci-jz4780.c` | same commit; writes bit 6 of `EHCI_REG_UTMI_BUS` after adding the HCD to select the 16-bit controller interface: <https://github.com/MIPS/CI20_linux/blob/7dff33297116643485ca37141d804eddd793e834/drivers/usb/host/ehci-jz4780.c> |
+| CI20 Linux CGU source/header | same commit; selects MPLL as the UHC parent, requests 48 MHz, configures the PHY reference, `SPENDN1`, port-1 pulldowns/16-bit UTMI, one-millisecond PHY POR, and 300-microsecond UHC reset pulse: <https://github.com/MIPS/CI20_linux/blob/7dff33297116643485ca37141d804eddd793e834/drivers/clk/jz47xx/jz4780-cgu.c>, <https://github.com/MIPS/CI20_linux/blob/7dff33297116643485ca37141d804eddd793e834/arch/mips/include/asm/mach-jz4740/jz4780-cgu.h> |
+| NetBSD Ci20 EHCI initialization | commit `1ae1c2335b4b975da841c91c1a3210d617daf618`; adds the JZ4780 host-PHY sequence, including both `WORD_IF0` and `WORD_IF1`: <https://github.com/NetBSD/src/commit/1ae1c2335b4b975da841c91c1a3210d617daf618> |
+| FreeBSD JZ4780 EHCI/CGU | stable/13 before MIPS removal; selects the 48 MHz PHY reference, enables both UTMI interface-width bits, pulses PHY POR, and pulses the shared UHC reset using the same short timing as Ci20 Linux: <https://github.com/freebsd/freebsd-src/blob/stable/13/sys/mips/ingenic/jz4780_clock.c>, <https://github.com/freebsd/freebsd-src/blob/stable/13/sys/mips/ingenic/jz4780_ehci.c> |
 | CI20 U-Boot `pll.c` | MIPS/CI20_u-boot commit `ef995a1611f0446a0b670ded9ec2609cb6dc51b7`; selects `OTG_PHY` for `UHCCDR`: <https://github.com/MIPS/CI20_u-boot/blob/ef995a1611f0446a0b670ded9ec2609cb6dc51b7/arch/mips/cpu/xburst/jz4780/pll.c> |
 | CI20 U-Boot `ci20.c` | same commit; drives GPF15 high as `SYS_POWER_IND` / VBUS on: <https://github.com/MIPS/CI20_u-boot/blob/ef995a1611f0446a0b670ded9ec2609cb6dc51b7/board/imgtec/ci20/ci20.c> |
 | Creator Ci20 quick start guide | January 2016 connector table: J23 is the right-hand host connector; J24 is the left-hand connector paralleled with mini-OTG J8; JP2 controls OTG VBUS: <https://docs.rs-online.com/e2ba/0900766b815516a3.pdf> |
@@ -169,7 +243,7 @@ only SoC addresses, bit meanings, board wiring, or ordering cross-checks.
 ReBSD explicitly reprograms all required state and does not depend on U-Boot
 having left the clock, suspend, or GPIO registers configured.
 
-## HID Keyboard and Hotplug Hardware Test
+## EHCI/OHCI Routing and Keyboard Hardware Test
 
 Build the GCC Ci20 image with the normal project command:
 
@@ -180,71 +254,97 @@ make -C sys/mips BOARD=ci20 \
 
 The object profile places the result at
 `../rebsd-usb-support-build/ci20-kgcc-ugcc-mips32r2-hard-little-elf/obj/sys/mips/ci20/ci20.uImage`.
-Boot it with the existing Ci20/U-Boot procedure while capturing UART4. Connect
-a USB boot-protocol keyboard to the right-hand J23 type-A host port before boot
-and leave it connected. A mouse or flash drive cannot exercise this path.
+The exact verified implementation identified above has been linked against the
+existing 32 MiB rootfs. A forced userland rebuild may still stop in the known,
+unrelated legacy awk header-generation race; that is not a USB pass.
 
-Success reaches lines equivalent to:
+Boot the image with the existing Ci20/U-Boot procedure while capturing UART4.
+Use only the right-hand J23 type-A host port. J24/J8 is the separate OTG block
+and must remain empty during this test.
+
+With J23 empty, success first reaches lines equivalent to:
 
 ```text
 dma: Ci20 uncached pool phys=... size=65536 align=4096
 usb0: initializing core
 usb0: core ready
 ukbd0: HID boot-keyboard driver ready
+ehci0: attach, EHCI phys=13490000
+usb-host: init: enable VBUS
+usb-host: init: settle VBUS
+usb-host: init: configure UHC clock
+usb-host: init: ungate UHC clock
+usb-host: init: configure host PHY
+usb-host: init: configure EHCI UTMI width
+usb-host: init: pulse PHY reset
+usb-host: init: pulse UHC reset
+usb-host: init: hardware ready
+usb-host: Ci20 VBUS on, cpm clkgr0=... opcr=... usbpcr=... usbpcr1=... uhccdr=... srbc=...
+ehci0: JZ4780 UTMI bus=... width=16-bit
+ehci0: EHCI version=100 ports=1 companions=.../... async-control/bulk
+ehci0: irq 20 enabled for async/root-hub changes
+ehci0: port1 powered, no high-speed device; hotplug ready
 ohci0: attach, OHCI phys=134a0000
-ohci0: init: enable VBUS
-ohci0: init: settle VBUS
-ohci0: init: configure UHC clock
-ohci0: init: ungate UHC clock
-ohci0: init: configure host PHY
-ohci0: init: pulse PHY reset
-ohci0: init: pulse UHC reset
-ohci0: init: hardware ready
-ohci0: Ci20 VBUS on, cpm clkgr0=... opcr=... usbpcr=... usbpcr1=... uhccdr=... srbc=...
 ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
-ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
-ohci0: port1 device attached speed=low
-ohci0: usb addr=1 vendor=... product=... config=1 interfaces=...
-ohci0: if0 class=... subclass=... protocol=... endpoints=...
 ohci0: irq 5 enabled for periodic/root-hub changes
+ohci0: port1 powered, no device; hotplug ready
 usb0: deferred task runner uses proc0
 ```
 
-After the login prompt appears:
+Run the routing cases separately and retain the complete UART capture:
 
-1. use the USB keyboard rather than UART input to enter `echo usb-ok`, and
-   check Shift, Backspace, and Ctrl-C;
-2. confirm there was no `Something is hung` warning, the proc0 runner line
-   appeared, and `ps axl` shows init as PID 1 with no `usbtask` process;
-3. unplug the keyboard and wait for `ukbd0: detached` followed by
-   `ohci0: port1 device disconnected`;
-4. reconnect the same keyboard and wait for a fresh `ukbd0` attach,
-   `ohci0: port1 device attached speed=low`, and numeric descriptors;
-5. type `echo usb-reconnected` on the reconnected keyboard;
-6. repeat unplug/reconnect and typing at least five times, including one quick
-   unplug/replug, and confirm the kernel remains responsive.
+1. Connect a known USB 2.0 high-speed flash drive directly to J23. It may
+   remain unclaimed because mass storage is Phase 10, but enumeration must
+   print `ehci0: port1 device attached speed=high`, numeric descriptors, and
+   a class-8 interface. There must be no handoff line and no
+   `ohci0: port1 device attached` line for this device.
+2. Unplug and reconnect the flash drive several times. Each cycle must print
+   the EHCI disconnect and a new EHCI high-speed attach without an IRQ storm,
+   stall, or panic.
+3. Unplug the flash drive and connect the verified low-speed boot keyboard.
+   EHCI must print `port1 handoff to ohci0 speed=low`; OHCI must then enumerate
+   it and `ukbd0` must attach. A full-speed direct device, if available, must
+   take the same route with `speed=full`.
+4. Use the USB keyboard rather than UART input to enter `echo usb-ok`, and
+   check Shift, Backspace, and Ctrl-C.
+5. Confirm there was no `Something is hung` warning, the proc0 runner line
+   appeared, and `ps axl` shows init as PID 1 with no `usbtask` process.
+6. Unplug the keyboard and wait for `ukbd0: detached`,
+   `ohci0: port1 device disconnected`, and
+   `ehci0: port1 reclaimed from ohci0`.
+7. Reconnect the keyboard and wait for a fresh EHCI-to-OHCI handoff, `ukbd0`
+   attach, and numeric descriptors. Type `echo usb-reconnected` through it.
+8. Repeat keyboard unplug/reconnect and typing at least five times, including
+   one quick unplug/replug, and confirm both UART and USB remain responsive.
 
-Any `ohci0: irq storm quarantined ...` line is a failed USB gate. Record its
-four register values; IRQ5 will be disabled deliberately, but UART input must
-remain usable for diagnostics.
-
-Also boot once with no USB device connected. The non-fatal endpoint is:
+A low-speed keyboard already present at boot must produce the ownership and
+attach sequence below before the login prompt:
 
 ```text
+ehci0: port1 handoff to ohci0 speed=low
+ohci0: attach, OHCI phys=134a0000
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+ohci0: port1 device attached speed=low
+ohci0: usb addr=1 vendor=... product=... config=1 interfaces=...
 ohci0: irq 5 enabled for periodic/root-hub changes
-ohci0: port1 powered, no device; hotplug ready
 ```
 
-Connecting the keyboard after the login prompt must then produce the normal
-attach lines and working input. External hubs are not part of this candidate.
+Also boot once with J23 empty and connect the keyboard only after the login
+prompt. It must take the same handoff path and provide working input.
+
+Any `ehci0: irq storm quarantined ...` or
+`ohci0: irq storm quarantined ...` line is a failed USB gate. Record the four
+register values. The affected USB IRQ is disabled deliberately, but UART
+input must remain usable for diagnostics. External hubs are not part of this
+candidate.
 
 The early `init` markers are printed before each potentially faulting MMIO
 group, so the last marker identifies the operation to inspect if the board
-stops before the full register dump. `controller start failed` narrows the
-fault to OHCI MMIO/reset/revision; `root hub start failed` narrows it to the
-root-port HCD contract or port power; `port1 reset failed` narrows it to
-VBUS/PHY/line state; `port1 enumeration failed` means endpoint-zero traffic
-started and its printed USB status is the next diagnostic.
+stops before the full register dump. An EHCI `controller start failed` line
+also prints the capability and structural registers. `root hub start failed`
+narrows a fault to the root-port HCD contract or port power; an enumeration
+error means endpoint-zero traffic started and its printed USB status is the
+next diagnostic.
 
 Ci20 microsecond delays use dedicated TCU1 channel 3 at 750 kHz. Channel 0
 remains the 100 Hz system clock. The JZ4780 manual documents the independent
@@ -257,14 +357,19 @@ delay did not complete, so USB and DM9000 now share the bounded TCU3 backend.
 
 `make -C sys/tests/usb test` executes descriptor, core/mock-HCD, deferred-task,
 root-hub, boot-report decoder, full fake-OHCI control/periodic/RHSC scheduling,
-and fake-JZ4780 register sequence tests. The fake OHCI test covers IRQ
-acknowledgement, data-toggle carry, rearm, simultaneous control traffic,
-masked-RHSC delivery, and deferred disconnect/reconnect.
+compact fake-EHCI asynchronous scheduling/routing, and fake-JZ4780 register
+sequence tests. The fake OHCI test covers IRQ acknowledgement, data-toggle
+carry, rearm, simultaneous control traffic, masked-RHSC delivery, and deferred
+disconnect/reconnect. The fake EHCI test covers controller startup, schedule
+alignment, high-speed enumeration, bulk IN/OUT, short transfers, toggle,
+stall, automatic timeout, abort, busy submission, single completion,
+companion handoff/change draining/reclaim, and a later high-speed attach.
 The Ci20 sequence test verifies VBUS-first ordering, `UHCCDR_BUSY` timeout,
 final gate/suspend state, PHY POR, and UHC reset deassertion. A full GCC kernel
 links and produces the hardware-test image. The modified translation units
-also pass the configured MIPS PCC compiler gate. The real-board tests above
-verified periodic interrupt-IN, console input, proc0 deferred exploration,
-boot with an empty port, late attach, detach, address reuse, and repeated
-reconnect. The earlier failed candidate captures remain in `docs/usb-logs/`
-as regression evidence.
+also pass the configured MIPS PCC compiler gate. The real-board tests verified
+OHCI periodic interrupt-IN, console input, proc0 deferred exploration, boot
+with an empty port, late attach, detach, address reuse, repeated reconnect,
+EHCI high-speed enumeration/reconnect, and EHCI-to-OHCI ownership handoff.
+Earlier failed candidate captures remain in `docs/usb-logs/` as regression
+evidence.

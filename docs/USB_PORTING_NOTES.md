@@ -13,10 +13,10 @@ audio, video, and power management are outside the first port.
 
 The first target milestone is OHCI root-hub enumeration plus a HID boot
 keyboard feeding the ReBSD console. Preconnected input, boot with an empty
-port, late attach, and repeated post-boot disconnect/reconnect are hardware
-verified on 2026-07-13. EHCI and read-only mass storage remain later
-milestones; the separate J24/J8 DWC2 OTG connection is outside this first
-host-port scope.
+port, late attach, repeated post-boot disconnect/reconnect, EHCI high-speed
+enumeration/reconnect, and low-speed companion handoff are hardware verified
+on 2026-07-13. Read-only mass storage remains the next milestone. The separate J24/J8 DWC2
+OTG connection is outside this first host-port scope.
 
 ## Baseline
 
@@ -475,3 +475,53 @@ Post-boot detach/reconnect, the proc0 deferred runner, and the RHSC path were
 verified on Creator Ci20 on 2026-07-13 with both a preconnected keyboard and a
 keyboard first attached after boot. The successful raw captures and exact
 image digest are recorded in `docs/USB_TESTING.md`.
+
+## Ci20 EHCI Attachment
+
+The machine-independent EHCI driver uses one fixed 16 KiB coherent DMA slab
+for its 1024-entry periodic frame list, asynchronous head, bounded queue heads
+and qTDs, setup packet, and an 8 KiB transfer bounce buffer. It implements
+high-speed root-hub enumeration and one active control or bulk transfer, with
+polling and interrupt completion, short packets, toggle tracking, STALL,
+timeout, abort, and deterministic schedule reclamation. Split transactions,
+isochronous transfers, and periodic endpoint scheduling are not implemented.
+
+The Ci20 layer attaches EHCI at `0x13490000` on IRQ 20 before OHCI. It owns the
+shared JZ4780 VBUS, clock, PHY, and UHC reset sequence and programs the
+EHCI-local UTMI width bit both before the shared reset and again after the
+generic EHCI controller reset, matching the JZ4780 Linux sequence. A direct
+high-speed device remains on EHCI; a direct low- or full-speed device is
+handed to the OHCI companion with the EHCI Port Owner bit and reclaimed after
+OHCI detach.
+
+Host tests exercise the real generic schedule against fake EHCI MMIO and a
+fake high-speed device, including bulk IN/OUT, short packets, STALL, timeout,
+abort, busy submission, low-speed companion handoff, change-bit draining,
+reclaim, and a later high-speed attach. Fake Ci20 hardware tests also cover
+both UTMI-width writes and readback failure. These tests and the Ci20 GCC/PCC
+compile and link gates pass. Creator Ci20 testing additionally verifies a
+direct high-speed mass-storage-class device, detach/reconnect, and low-speed
+keyboard handoff to OHCI.
+
+The first Creator Ci20 run verified controller startup, EHCI capabilities,
+IRQ 20, empty-port hotplug, and low-speed companion handoff, but EHCI control
+enumeration returned `I/O error`. Review found two fake-MMIO blind spots: the
+core had used an 8-byte default-control maximum packet at high speed instead
+of the required 64, and QH Current qTD carried a terminate bit in a reserved
+field. The second candidate fixes both, asserts them in the EHCI host test,
+and records bounded QH/qTD diagnostics for the next hardware run.
+
+The second run showed `PORTSC=0x1005` and qTD token `0x00080248`: high-speed
+reset and schedule fetch succeeded, but the first SETUP exhausted all retries
+without transferring its eight bytes. The third candidate therefore applies
+the existing reset-recovery delay before enumeration and the address-settle
+delay before traffic at a newly assigned address. The fake HCD records reset
+release, first control execution, SET_ADDRESS, and the following request, and
+asserts both minimum intervals.
+
+Later diagnostics proved the controller fetched the QH, all qTDs, and the
+correct SETUP bytes, but received a transaction error on the wire. FreeBSD and
+NetBSD JZ4780 platform code both enable `USBPCR1.WORD_IF0` together with
+`WORD_IF1`; adding the missing shared-PHY width bit produced
+`USBPCR1=0x8ace3370` and passed the real high-speed gate. The verified image
+SHA-256 and raw captures are recorded in `docs/USB_TESTING.md`.

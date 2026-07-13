@@ -1,0 +1,27 @@
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+ohci0: port1 device attached speed=low
+ohci0: usb addr=1 vendor=1c4f product=2 config=1 interfaces=2
+ohci0: if0 class=3 subclass=1 protocol=1 endpoints=1
+ohci0: if1 class=3 subclass=0 protocol=0 endpoints=1
+
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: root
+ReBSD/Creator Ci20
+# ukbd0: detached
+ohci0: port1 device disconnected
+
+#
+# ehci0: port1 handoff to ohci0 speed=low
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+ohci0: port1 device attached speed=low
+ohci0: usb addr=1 vendor=1c4f product=2 config=1 interfaces=2
+ohci0: if0 class=3 subclass=1 protocol=1 endpoints=1
+ohci0: if1 class=3 subclass=0 protocol=0 endpoints=1
+
+#
+#
+# ukbd0: detached
+ohci0: port1 device disconnected

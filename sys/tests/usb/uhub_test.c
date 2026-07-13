@@ -75,7 +75,8 @@ test_initial_and_reconnect(void)
     first = usb_root_hub_device(&hub, 1);
     CHECK(first != 0 && first->ud_address == 1);
     CHECK(events.attach_count == 1 && events.detach_count == 0);
-    CHECK(mock.um_root_intr_enabled && delay_total == 100);
+    CHECK(mock.um_root_intr_enabled &&
+        delay_total == 100 + USB_SET_ADDRESS_SETTLE);
 
     usb_mock_hcd_set_connected(&mock, 0);
     CHECK(usb_task_pending(&hub.urh_task));
@@ -89,7 +90,8 @@ test_initial_and_reconnect(void)
     usb_task_run_pending();
     CHECK(usb_root_hub_device(&hub, 1) != 0);
     CHECK(usb_root_hub_device(&hub, 1)->ud_address == 1);
-    CHECK(events.attach_count == 2 && delay_total == 200);
+    CHECK(events.attach_count == 2 &&
+        delay_total == 2 * (100 + USB_SET_ADDRESS_SETTLE));
 
     usb_mock_hcd_set_connected(&mock, 0);
     usb_mock_hcd_set_connected(&mock, 1);

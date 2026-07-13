@@ -42,6 +42,7 @@
 #define CI20_GPIOE_IRQ  13
 #define CI20_UART4_IRQ  34
 #define CI20_OHCI_IRQ   5
+#define CI20_EHCI_IRQ   20
 
 struct tty ci20_uart_ttys[1];
 static void ci20_uart_start(struct tty *tp);
@@ -56,6 +57,11 @@ extern int ci20_dm9000_intr(void);
 extern int ci20_ohci_intr(void);
 extern void ci20_ohci_irq_storm(void);
 static unsigned ci20_ohci_irqs_since_tick;
+#endif
+#ifdef EHCI_ENABLED
+extern int ci20_ehci_intr(void);
+extern void ci20_ehci_irq_storm(void);
+static unsigned ci20_ehci_irqs_since_tick;
 #endif
 #ifdef INET
 extern int netisr;
@@ -420,7 +426,19 @@ mips_board_intr(int *frame, unsigned status)
 #ifdef OHCI_ENABLED
         ci20_ohci_irqs_since_tick = 0;
 #endif
+#ifdef EHCI_ENABLED
+        ci20_ehci_irqs_since_tick = 0;
+#endif
     }
+#ifdef EHCI_ENABLED
+    if (intc_pending(CI20_EHCI_IRQ)) {
+        if (++ci20_ehci_irqs_since_tick > 32) {
+            intc_mask(CI20_EHCI_IRQ);
+            ci20_ehci_irq_storm();
+        } else
+            (void)ci20_ehci_intr();
+    }
+#endif
 #ifdef OHCI_ENABLED
     if (intc_pending(CI20_OHCI_IRQ)) {
         if (++ci20_ohci_irqs_since_tick > 32) {

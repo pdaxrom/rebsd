@@ -89,5 +89,7 @@ void usb_xfer_complete(struct usb_xfer *, usb_error_t, size_t);
 
 usb_error_t usb_control_request(struct usb_device *,
     const usb_device_request_t *, void *, size_t, unsigned, size_t *);
+usb_error_t usb_bulk_transfer(struct usb_pipe *, void *, size_t, unsigned,
+    unsigned, size_t *);
 
 #endif /* _DEV_USB_USBDI_H_ */

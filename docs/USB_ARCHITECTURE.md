@@ -1,7 +1,7 @@
 # ReBSD USB Host Architecture
 
 This document defines the ownership and state rules for the compact USB host
-core and its first OHCI attachment. The historical object model follows
+core and its OHCI/EHCI attachments. The historical object model follows
 NetBSD 3.1, while allocation, attachment, and synchronization use native ReBSD
 rules.
 
@@ -145,9 +145,9 @@ status again, resets and enables the port, detects low/full/high speed, and
 calls the common enumeration transaction. Port status, reset, and enumeration
 errors are reported through a platform callback and never hidden as success.
 
-The current compact hub code implements OHCI root-port attach/detach. External
-hub interrupt endpoints and downstream-port control are a later phase; class
-drivers and the USB core do not depend on that later policy.
+The current compact hub code implements OHCI and EHCI root-port attach/detach.
+External hub interrupt endpoints and downstream-port control are a later
+phase; class drivers and the USB core do not depend on that later policy.
 
 ## Disconnect Order
 
@@ -186,11 +186,30 @@ ED/TD/buffer regions, so one persistent keyboard transfer can coexist with a
 synchronous control request. One interrupt pipe is supported at a time; bulk
 and general multi-pipe periodic scheduling remain later work.
 
+The compact EHCI implementation also uses the common contract. It allocates
+one contiguous, coherent 16 KiB DMA slab containing a terminated 1024-entry
+periodic frame list, a circular asynchronous head, fixed aligned pipe QHs and
+qTDs, setup storage, and an 8 KiB data bounce area. The initial bounded policy
+allows one active high-speed control or bulk transfer at a time. Completion
+may come from polling or IRQ 20, and `usb_bulk_transfer()` applies the common
+poll/timeout/abort lifecycle. Isochronous, split-transaction, and periodic
+endpoint scheduling are deliberately absent.
+
+Ci20 J23 is one physical port shared by the two controller views. EHCI claims
+high-speed devices. A low-speed line indication, or a reset that does not
+enable the port at high speed, sets EHCI Port Owner and hands the direct
+low/full-speed device to OHCI. EHCI hides a companion-owned connection from
+its own root hub while still exposing and clearing raw change bits, preventing
+a stuck port-change interrupt. After OHCI reports detach, the platform layer
+clears Port Owner; a connected high-speed replacement is then explored by
+EHCI. This ownership callback is platform policy and contains no JZ4780
+register access in the generic EHCI driver.
+
 ## Context and Future SMP Rules
 
 - hardware interrupt context acknowledges controller status and performs only
   the currently bounded keyboard completion or queues root-hub work;
-- the USB task process owns hub exploration, enumeration, and detach work;
+- the proc0 USB task runner owns hub exploration, enumeration, and detach work;
 - calling processes own synchronous control requests and may poll or sleep;
 - `splhigh` protects only queue publication/removal and other short terminal
   state transitions; descriptor I/O and delays run with interrupts enabled;

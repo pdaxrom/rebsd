@@ -12,7 +12,7 @@ Run the complete machine-independent suite with:
 make -C sys/tests/usb test
 ```
 
-The 2026-07-13 hotplug candidate passes all seven gates:
+The 2026-07-13 EHCI candidate passes all eight gates:
 
 | Gate | Coverage | Result |
 | --- | --- | --- |
@@ -22,6 +22,7 @@ The 2026-07-13 hotplug candidate passes all seven gates:
 | `uhub_test` | initial/late attach, deferred detach/reconnect, rapid replug, address reuse | pass |
 | `ukbd_test` | boot reports, modifiers, repeats, release tracking | pass |
 | `ohci_test` | control/periodic ED/TDs, IRQ, RHSC masking, reconnect and keyboard input | pass |
+| `ehci_test` | reset, async control/bulk, short/stall/timeout/abort, IRQ, high-speed root port, companion handoff/reclaim | pass |
 | `ci20 usb hw tests` | VBUS, clock, PHY and reset ordering with fake JZ4780 registers | pass |
 
 The OHCI RHSC test explicitly injects another root-hub status event while RHSC
@@ -31,9 +32,9 @@ the regression gate for an unplug/replug race during deferred exploration.
 ## Target Compiler and Image Gates
 
 The changed kernel translation units compile with the configured MIPS GCC.
-`usb_task.c`, `uhub.c`, `ohci.c`, `usb_service.c`, `sys/mips/ci20/usb.c`,
-`init_main.c`, `vm_sched.c`, and generated `ioconf.c` also pass the MIPS PCC compile gate;
-the PCC kernel check found no COP1/FPU instructions.
+`ehci.c`, `usb_core.c`, `sys/mips/ci20/usb.c`, `sys/mips/ci20/uart.c`,
+and generated `ioconf.c` also pass the MIPS PCC compile gate; the PCC kernel
+check found no COP1/FPU instructions.
 
 The GCC kernel linked against the previously verified 32 MiB Ci20 rootfs and
 was packaged as:
@@ -123,6 +124,57 @@ The raw captures are
 `usb-logs/ci20-ohci-hotplug-proc0-preconnected-20260713.txt` and
 `usb-logs/ci20-ohci-hotplug-proc0-boot-empty-20260713.txt`.
 
+The fourth EHCI hardware-test candidate had these SHA-256 values:
+
+```text
+67507395d4c2ee72ba43ec6790e4c8317514abc86214046e9543d8b8ff092b1e  unix.elf
+e2d77c5cdeb2174f8af556410ed76642010879f7fdc0c65ad9dd0d02aae4a1df  ci20.bin
+5d27dc46cead8056fb671677c299bfbd65ac705c8445740b995d649d482ffa07  ci20.uImage
+```
+
+The first candidate `7f6df5c7...` reached login with J23 empty and verified
+real EHCI capabilities, IRQ 20, hotplug readiness, and a low-speed keyboard
+handoff to OHCI. EHCI enumeration attempts returned `I/O error`, so the image
+did not pass the high-speed gate. The retained raw capture is
+`usb-logs/ci20-ehci-first-candidate-20260713.txt`.
+
+The second image `eb9a8976...` produced the same enumeration failure with a
+diagnostic. `PORTSC=0x1005` proved a connected, enabled high-speed port, while
+qTD token `0x00080248` proved that the first eight-byte SETUP exhausted its
+three transaction attempts; the data and status qTDs were still active. Its
+raw capture is `usb-logs/ci20-ehci-second-candidate-20260713.txt`.
+
+The third image `f21e339d...` added `USB_PORT_RESET_RECOVERY` before the first
+SETUP and `USB_SET_ADDRESS_SETTLE` before traffic at the new address. It still
+failed the first address-zero `GET_DESCRIPTOR` with the same transaction
+error. The retained raw capture is
+`usb-logs/ci20-ehci-third-candidate-20260713.txt`.
+
+The fourth image was not committed and was not the verified image. It retained
+the timing and descriptor fixes but changed only the board UHC clock path to
+match Ci20 Linux: MPLL 1.2 GHz divided by 25 to 48 MHz, with expected final
+`UHCCDR=0x60000018`. Host fake-MMIO tests assert that exact clock value and
+still cover high-speed enumeration, bulk IN/OUT, short transfer, stall,
+timeout, abort, companion handoff, reclaim, and later high-speed attach. They
+did not prove the corrected path on JZ4780 hardware.
+
+The final EHCI image has these SHA-256 values:
+
+```text
+8f50baaddc188dc1c47a82c85cb63e7cf88f288edbc0ccff50ab577f157e8f82  unix.elf
+abcd22af3f43ce5c83a63f9f75b0db05a51da7f4a439c0d353661b3e7991a2ca  ci20.bin
+05adb071ddd9b12f584192e80542173b7ad91cb885f99d6a3f25c98b284025fa  ci20.uImage
+```
+
+This image sets both shared-PHY interface-width bits and produced
+`USBPCR1=0x8ace3370`. A direct high-speed `1005:b113` flash drive enumerated
+as class 8, subclass 6, protocol 80 with two endpoints, then detached and
+reattached at address 1. A direct low-speed `1c4f:0002` keyboard was handed
+from EHCI to OHCI, supplied console input, detached, and reattached without a
+panic. The raw captures are
+`usb-logs/ci20-ehci-high-speed-verified-20260713.txt` and
+`usb-logs/ci20-ehci-companion-verified-20260713.txt`.
+
 A forced full userland rebuild currently stops in the legacy awk build because
 `awk.lx.c` includes `awk.h` before the make rules generate that header. This
 failure is outside the USB sources; all changed kernel units compile and the
@@ -139,9 +191,11 @@ candidate kernel links. It must not be reported as a clean full-tree build.
 | boot empty, attach after login | direct low-speed keyboard on J23 | verified 2026-07-13 on `5d2b32…` | boot-empty successful capture |
 | five reconnect cycles | direct low-speed keyboard on J23 | verified 2026-07-13 on `5d2b32…` | boot-empty successful capture |
 | specifically timed rapid unplug/replug | direct low-speed keyboard on J23 | not separately tested | retain as later stress gate |
-| full-speed device | direct | not tested | later hardware gate |
+| EHCI start, capabilities, IRQ 20, empty-port hotplug | right-hand J23 empty | verified 2026-07-13 on `7f6df5…` | first EHCI capture |
+| EHCI to OHCI low-speed handoff | direct `1c4f:0002` keyboard on J23 | verified 2026-07-13 on `05adb0…` | final companion capture |
+| full-speed device | right-hand J23, direct companion OHCI | implementation candidate, not tested | EHCI/OHCI routing hardware gate |
 | external hub | downstream keyboard | not implemented | later hub phase |
-| high-speed flash drive | right-hand J23, direct EHCI | not implemented | EHCI phase |
+| high-speed flash drive | right-hand J23, direct EHCI | verified attach, detach, and reconnect 2026-07-13 on `05adb0…` | final high-speed capture |
 | OTG port in host mode | left-hand J24/J8 | not implemented | separate DWC2 phase |
 
 The exact current hardware procedure and expected log lines are in

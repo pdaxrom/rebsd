@@ -11,6 +11,7 @@
 #define CI20_CPM_USBPCR1            0x48u
 #define CI20_CPM_UHCCDR             0x6cu
 #define CI20_CPM_SRBC               0xc4u
+#define CI20_EHCI_UTMI_BUS          0xb0u
 
 #define CI20_CLKGR0_UHC             (1u << 24)
 
@@ -27,29 +28,41 @@
 #define CI20_USBPCR1_DMPD1          (1u << 23)
 #define CI20_USBPCR1_DPPD1          (1u << 22)
 #define CI20_USBPCR1_PORT1_RST      (1u << 20)
+#define CI20_USBPCR1_WORD_IF0       (1u << 19)
 #define CI20_USBPCR1_WORD_IF1       (1u << 18)
 
 #define CI20_UHCCDR_SOURCE_MASK     (3u << 30)
-#define CI20_UHCCDR_OTG_PHY         (3u << 30)
+#define CI20_UHCCDR_MPLL            (1u << 30)
 #define CI20_UHCCDR_CHANGE_ENABLE   (1u << 29)
 #define CI20_UHCCDR_BUSY            (1u << 28)
 #define CI20_UHCCDR_STOP            (1u << 27)
 #define CI20_UHCCDR_DIV_MASK        0xffu
+#define CI20_UHCCDR_MPLL_48_DIV     24u
 
 #define CI20_SRBC_UHC_RESET         (1u << 14)
+#define CI20_EHCI_UTMI_BUS_WIDTH    (1u << 6)
+
+/* FreeBSD and Ci20 Linux use these JZ4780 PHY/UHC pulse widths. */
+#define CI20_PHY_RESET_ASSERT_US    1u
+#define CI20_UHC_RESET_ASSERT_US    300u
+#define CI20_UHC_RESET_RECOVERY_US  300u
 
 #define CI20_USB_HW_OK              0
 #define CI20_USB_HW_INVALID         (-1)
 #define CI20_USB_HW_CLOCK_TIMEOUT   (-2)
+#define CI20_USB_HW_UTMI_ERROR      (-3)
 
 struct ci20_usb_hw_ops {
     unsigned (*cuo_read_cpm)(void *, unsigned);
     void (*cuo_write_cpm)(void *, unsigned, unsigned);
+    unsigned (*cuo_read_ehci)(void *, unsigned);
+    void (*cuo_write_ehci)(void *, unsigned, unsigned);
     void (*cuo_set_vbus)(void *, int);
     void (*cuo_delay_us)(void *, unsigned);
     void (*cuo_trace)(void *, const char *);
 };
 
 int ci20_usb_hw_start(const struct ci20_usb_hw_ops *, void *);
+int ci20_usb_hw_ehci_utmi_width(const struct ci20_usb_hw_ops *, void *);
 
 #endif /* _MIPS_CI20_USB_HW_H_ */

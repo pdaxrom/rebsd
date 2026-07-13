@@ -29,6 +29,7 @@ service         dma
 service         usb
 service         ukbd
 service         uhub
+service         ehci
 service         ohci
 service         ether   1
 service         "ci20_dm9000"

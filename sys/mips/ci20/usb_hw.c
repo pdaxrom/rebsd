@@ -40,12 +40,30 @@ ci20_usb_trace(const struct ci20_usb_hw_ops *ops, void *arg,
 }
 
 int
+ci20_usb_hw_ehci_utmi_width(const struct ci20_usb_hw_ops *ops, void *arg)
+{
+    unsigned value;
+
+    if (ops == 0 || ops->cuo_read_ehci == 0 ||
+        ops->cuo_write_ehci == 0)
+        return CI20_USB_HW_INVALID;
+    value = ops->cuo_read_ehci(arg, CI20_EHCI_UTMI_BUS);
+    ops->cuo_write_ehci(arg, CI20_EHCI_UTMI_BUS,
+        value | CI20_EHCI_UTMI_BUS_WIDTH);
+    value = ops->cuo_read_ehci(arg, CI20_EHCI_UTMI_BUS);
+    if ((value & CI20_EHCI_UTMI_BUS_WIDTH) == 0)
+        return CI20_USB_HW_UTMI_ERROR;
+    return CI20_USB_HW_OK;
+}
+
+int
 ci20_usb_hw_start(const struct ci20_usb_hw_ops *ops, void *arg)
 {
     unsigned value;
     unsigned elapsed;
 
     if (ops == 0 || ops->cuo_read_cpm == 0 || ops->cuo_write_cpm == 0 ||
+        ops->cuo_read_ehci == 0 || ops->cuo_write_ehci == 0 ||
         ops->cuo_set_vbus == 0 || ops->cuo_delay_us == 0)
         return CI20_USB_HW_INVALID;
 
@@ -56,11 +74,12 @@ ci20_usb_hw_start(const struct ci20_usb_hw_ops *ops, void *arg)
     ops->cuo_delay_us(arg, 1000);
 
     ci20_usb_trace(ops, arg, "configure UHC clock");
-    /* U-Boot selects the shared OTG PHY as the 48 MHz UHC source. */
+    /* Ci20 Linux drives UHC from the 1.2 GHz MPLL divided to 48 MHz. */
     value = ci20_usb_read(ops, arg, CI20_CPM_UHCCDR);
     value &= ~(CI20_UHCCDR_SOURCE_MASK | CI20_UHCCDR_CHANGE_ENABLE |
         CI20_UHCCDR_BUSY | CI20_UHCCDR_STOP | CI20_UHCCDR_DIV_MASK);
-    value |= CI20_UHCCDR_OTG_PHY | CI20_UHCCDR_CHANGE_ENABLE;
+    value |= CI20_UHCCDR_MPLL | CI20_UHCCDR_CHANGE_ENABLE |
+        CI20_UHCCDR_MPLL_48_DIV;
     ci20_usb_write(ops, arg, CI20_CPM_UHCCDR, value);
     for (elapsed = 0; elapsed < CI20_USB_CLOCK_WAIT_US; ++elapsed) {
         if ((ci20_usb_read(ops, arg, CI20_CPM_UHCCDR) &
@@ -76,6 +95,11 @@ ci20_usb_hw_start(const struct ci20_usb_hw_ops *ops, void *arg)
     ci20_usb_write(ops, arg, CI20_CPM_CLKGR0,
         value & ~CI20_CLKGR0_UHC);
 
+    /* Match Ci20 Linux: take port 1 out of suspend before PHY setup. */
+    value = ci20_usb_read(ops, arg, CI20_CPM_OPCR);
+    ci20_usb_write(ops, arg, CI20_CPM_OPCR,
+        value | CI20_OPCR_SPENDN1);
+
     ci20_usb_trace(ops, arg, "configure host PHY");
     value = ci20_usb_read(ops, arg, CI20_CPM_USBPCR);
     value &= ~(CI20_USBPCR_SIDDQ | CI20_USBPCR_OTG_DISABLE);
@@ -86,18 +110,19 @@ ci20_usb_hw_start(const struct ci20_usb_hw_ops *ops, void *arg)
         CI20_USBPCR1_REFCLKDIV_MASK | CI20_USBPCR1_PORT1_RST);
     value |= CI20_USBPCR1_REFCLKSEL_CORE |
         CI20_USBPCR1_REFCLKDIV_48 | CI20_USBPCR1_DMPD1 |
-        CI20_USBPCR1_DPPD1 | CI20_USBPCR1_WORD_IF1;
+        CI20_USBPCR1_DPPD1 | CI20_USBPCR1_WORD_IF0 |
+        CI20_USBPCR1_WORD_IF1;
     ci20_usb_write(ops, arg, CI20_CPM_USBPCR1, value);
 
-    value = ci20_usb_read(ops, arg, CI20_CPM_OPCR);
-    ci20_usb_write(ops, arg, CI20_CPM_OPCR,
-        value | CI20_OPCR_SPENDN1);
+    ci20_usb_trace(ops, arg, "configure EHCI UTMI width");
+    if (ci20_usb_hw_ehci_utmi_width(ops, arg) != CI20_USB_HW_OK)
+        return CI20_USB_HW_UTMI_ERROR;
 
     ci20_usb_trace(ops, arg, "pulse PHY reset");
     value = ci20_usb_read(ops, arg, CI20_CPM_USBPCR);
     ci20_usb_write(ops, arg, CI20_CPM_USBPCR,
         value | CI20_USBPCR_POR);
-    ops->cuo_delay_us(arg, 1000);
+    ops->cuo_delay_us(arg, CI20_PHY_RESET_ASSERT_US);
     value = ci20_usb_read(ops, arg, CI20_CPM_USBPCR);
     ci20_usb_write(ops, arg, CI20_CPM_USBPCR,
         value & ~CI20_USBPCR_POR);
@@ -106,11 +131,11 @@ ci20_usb_hw_start(const struct ci20_usb_hw_ops *ops, void *arg)
     value = ci20_usb_read(ops, arg, CI20_CPM_SRBC);
     ci20_usb_write(ops, arg, CI20_CPM_SRBC,
         value | CI20_SRBC_UHC_RESET);
-    ops->cuo_delay_us(arg, 300);
+    ops->cuo_delay_us(arg, CI20_UHC_RESET_ASSERT_US);
     value = ci20_usb_read(ops, arg, CI20_CPM_SRBC);
     ci20_usb_write(ops, arg, CI20_CPM_SRBC,
         value & ~CI20_SRBC_UHC_RESET);
-    ops->cuo_delay_us(arg, 300);
+    ops->cuo_delay_us(arg, CI20_UHC_RESET_RECOVERY_US);
     ci20_usb_trace(ops, arg, "hardware ready");
     return CI20_USB_HW_OK;
 }

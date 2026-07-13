@@ -456,6 +456,36 @@ usb_control_request(struct usb_device *device,
     return status;
 }
 
+usb_error_t
+usb_bulk_transfer(struct usb_pipe *pipe, void *buffer, size_t length,
+    unsigned flags, unsigned timeout_ms, size_t *actlenp)
+{
+    struct usb_xfer *xfer;
+    usb_error_t status;
+
+    if (actlenp != 0)
+        *actlenp = 0;
+    if (pipe == 0 || !pipe->up_used || !pipe->up_running ||
+        pipe->up_endpoint == 0 || pipe->up_device == 0 ||
+        !pipe->up_device->ud_connected ||
+        UE_GET_XFERTYPE(pipe->up_endpoint->ue_desc.bmAttributes) !=
+        UE_BULK || (length != 0 && buffer == 0) ||
+        (flags & ~USB_XFER_SHORT_OK) != 0)
+        return USB_STATUS_INVALID;
+    xfer = usb_alloc_xfer(pipe->up_device);
+    if (xfer == 0)
+        return USB_STATUS_NO_MEMORY;
+    usb_setup_xfer(xfer, pipe, 0, buffer, length,
+        flags | USB_XFER_SYNCHRONOUS, timeout_ms, 0);
+    status = usb_submit_xfer(xfer);
+    if (status == USB_STATUS_IN_PROGRESS)
+        status = usb_wait_xfer(xfer);
+    if (actlenp != 0)
+        *actlenp = xfer->ux_actlen;
+    (void)usb_free_xfer(xfer);
+    return status;
+}
+
 static void
 usb_make_request(usb_device_request_t *request, uByte type, uByte code,
     unsigned value, unsigned index, unsigned length)
@@ -590,7 +620,9 @@ usb_device_enumerate(struct usb_bus *bus, unsigned port, unsigned speed,
     device->ud_default_endpoint.ue_desc.bDescriptorType = UDESC_ENDPOINT;
     device->ud_default_endpoint.ue_desc.bEndpointAddress = 0;
     device->ud_default_endpoint.ue_desc.bmAttributes = UE_CONTROL;
+    /* USB 2.0 requires a 64-byte default control endpoint at high speed. */
     USETW(device->ud_default_endpoint.ue_desc.wMaxPacketSize,
+        speed == USB_SPEED_HIGH ? USB_2_MAX_CTRL_PACKET :
         USB_MAX_IPACKET);
     status = usb_setup_pipe(device, 0, &device->ud_default_endpoint,
         &device->ud_default_pipe);
@@ -609,8 +641,10 @@ usb_device_enumerate(struct usb_bus *bus, unsigned port, unsigned speed,
         goto fail;
     }
     packet_size = initial[7];
-    if (packet_size != 8 && packet_size != 16 && packet_size != 32 &&
-        packet_size != 64) {
+    if ((speed == USB_SPEED_HIGH &&
+        packet_size != USB_2_MAX_CTRL_PACKET) ||
+        (speed != USB_SPEED_HIGH && packet_size != 8 &&
+        packet_size != 16 && packet_size != 32 && packet_size != 64)) {
         status = USB_STATUS_INVALID_DESCRIPTOR;
         goto fail;
     }
@@ -630,6 +664,8 @@ usb_device_enumerate(struct usb_bus *bus, unsigned port, unsigned speed,
         goto fail;
     }
     device->ud_address = (uByte)address;
+    if (bus->ub_delay_ms != 0)
+        bus->ub_delay_ms(bus->ub_delay_arg, USB_SET_ADDRESS_SETTLE);
 
     usb_make_request(&request, UT_READ_DEVICE, UR_GET_DESCRIPTOR,
         UDESC_DEVICE << 8, 0, sizeof(device_raw));
