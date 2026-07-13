@@ -1727,3 +1727,130 @@ The stable 16-repetition PCC row improves 3.86% over G5 while the GCC control
 changes by -0.003%.  Both Linpack return codes, `N64_PCC_DEBUG_END`, and
 `N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal `N64_PCC_DEBUG_RC_END`
 marker was present.  This closes the G6 physical and commit gates.
+
+## Rejected G7 Prototypes
+
+Three follow-up prototypes reduced static code but failed the strict Malta64
+runtime gate and were removed.  They remain useful boundaries for subsequent
+work:
+
+- Two bounded constant-specialization signatures reduced VR4300 Linpack from
+  1872 to 1711 instructions, but measured 13904.908 KFLOPS against 13930.863
+  for G6.  Removing one-time dispatch and dead branches did not change the hot
+  loops.
+- CSE of complete `base + scaled-index` addresses reduced Linpack to 1830
+  instructions, but measured 13853.742 KFLOPS.  The longer pointer lifetimes
+  outweighed the saved address additions.
+- Affine scale canonicalization reduced Linpack to 1861 instructions with no
+  load, store, nop, or spill growth.  Three alternating direct-PCC runs averaged
+  14330.861 KFLOPS against 14347.187 for G6, a 0.114% regression.  Sharing the
+  scaled index without converting the loop to pointer induction is neutral.
+
+The next address optimization must therefore use loop-carried pointers and
+short constant load/store offsets.  Repeating local CSE or extending the life
+of complete addresses is not justified by these measurements.
+
+## Milestone G7: VR4300 Pointer Induction
+
+G7 adds a narrow target-independent SSA lowering hook for repeated affine
+addresses in a natural induction loop.  For each eligible expression family
+`base + ((i+c) << scale)`, the pass requires at least two uses, a loop-invariant
+base TEMP, a signed 16-bit byte offset and latch increment, and an integer
+induction phi.  It creates one pointer phi, initializes it on the preheader,
+uses short constant offsets in the loop, and advances the pointer once on the
+latch.  Known nonzero initial induction values are folded into the preheader
+address; dynamic initial values retain one preheader shift.
+
+The MIPS hook enables this only for hard-float VR4300.  Soft-float, generic
+MIPS3/R4000, and final MIPS32R2 output are byte-identical to G6.  The transform
+does not change FP instruction scheduling or delay-slot selection, so the
+VR4300 multiply erratum default and the `-mfix4300` / `-mno-fix4300` controls
+remain unchanged.
+
+### G7 Static And A/B Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  branches  jumps  bytes
+VR4300 G6                      1872       1754   118    326     192        82    108  57335
+VR4300 G7                      1775       1657   118    326     192        82    108  55583
+```
+
+The hot unrolled loops now use constant load/store offsets and two pointer
+increments per four elements instead of rebuilding every scaled address.
+`daxpy_ur` reaches 16 live GPRs but has no spill load or store growth.
+
+Three strict sequential Malta64 pairs, using an identical G6 kernel, rootfs,
+and runtime and replacing only the PCC Linpack binary, measured:
+
+```text
+G6: 14375.177, 14343.729, 14377.344; average 14365.417
+G7: 14426.506, 14414.313, 14406.145; average 14415.655
+```
+
+Every pair favors G7; the average improves by 0.35%.  A measured MIPS32R2
+prototype reduced its static count from 1989 to 1890 instructions but averaged
+14238.985 KFLOPS against 14282.328 for G6, a 0.303% regression.  The MIPS32R2
+hook was therefore removed rather than accepting an unproven static-only win.
+
+### G7 Regression Gates
+
+Cross VR4300 regression compiled 331 of 334 tests with the same three expected
+failures and passed 294/294 runtime cases.  Native VR4300 PCC compiled 304
+cases, observed 30 expected failures, and passed 294/294 runtime cases.  The
+new ascending, nonzero-initial, and dynamic descending pointer-induction cases
+all pass in both suites.
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 13452.178 / 13177.379 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1015.812 / 1015.623 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 14379.732 / 14128.447 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1066.252 / 1063.640 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 9761.552 / 9811.942 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1160.635 / 1167.508 | `PCC_SMOKE_ALL_RC:0` |
+
+All six profiles were clean out-of-tree `-j4` builds with PCC kernels and PCC
+root filesystems.  Each kernel booted and every full `pcc-smoke-all.sh` run
+reported `PCC_SMOKE_ALL_FAILURES 0`.  These concurrent timings are correctness
+evidence only; the isolated A/B pairs above are the performance gate.
+
+The clean builds also exposed and fixed three build-graph defects.  The MIPS
+architecture Makefile now forwards all rootfs patch/repack targets, Malta64
+repacking excludes `.romdisk` from `unix.bin`, and the userland awk grammar has
+one stamp target that atomically owns generation of `awk.g.c` and `y.tab.h`.
+
+### G7 N64 Comparison Artifact
+
+The hardware image uses a GCC kernel and PCC VR4300 hard-float a.out
+userland.  GCC Linpack is linked against its separate GCC-built `crt0.o`,
+`libc.a`, and `libm.a`; PCC Linpack uses the PCC-built runtime.
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-g7-pointer-induction-kgcc-upcc-hard-aout/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 9ad25d3a132a85257ffcdb4408c464b4eadb3d17379923e983f96b75052f653e
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 39200 section bytes, sha256 4249f1c7015d4dab4f10ee87dbd9874b36b7fdd28807f70d00f6903be5958ac7
+debug runner sha256: 87a75c56ef5a60d70b6ba853312a6d732efcffc1ef116988f4324e2a084d12a8
+```
+
+The image passes all five `fsutil --check` phases.  Both Linpack binaries have
+zero undefined symbols, and the GCC and PCC libc archives are distinct.  The
+GCC kernel and GCC Linpack remain byte-identical to G6; G7 reduces linked PCC
+Linpack by 448 section bytes.
+
+The physical N64 run measured:
+
+```text
+       Reps       GCC KFLOPS       PCC KFLOPS       PCC/GCC
+          8          4449.710          3637.251        81.74%
+         16          4453.809          3631.062        81.53%
+```
+
+The stable 16-repetition PCC row improves 6.64% over G6 and reaches 81.53% of
+the same-image GCC control.  Both Linpack return codes, `N64_PCC_DEBUG_END`,
+and `N64_PCC_DEBUG_RUNNER_RC` were zero; the terminal
+`N64_PCC_DEBUG_RC_END` marker was present.  This closes the G7 physical and
+commit gates.

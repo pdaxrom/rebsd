@@ -1056,6 +1056,28 @@ validation passes: the stable 16-repetition row measures 3404.961 PCC versus
 control changes by -0.003%.  Both Linpack statuses and the two numeric debug
 statuses are zero; the terminal `N64_PCC_DEBUG_RC_END` marker is present.
 
+G7 adds loop-carried pointer induction for repeated VR4300 hard-float affine
+addresses.  The SSA pass converts `base + ((i+c) << scale)` families into a
+pointer phi with short constant offsets and one latch increment, but only when
+the base dominates the preheader and every byte offset fits a signed 16-bit
+immediate.  VR4300 Linpack removes 97 instructions and three isolated Malta64
+pairs improve 0.35%.  A measured MIPS32R2 version regressed 0.303%, so it is
+disabled; soft-float, MIPS32R2, and generic MIPS3 output remain byte-identical
+to G6.  The VR4300 erratum repair and `-mfix4300` / `-mno-fix4300` options are
+unchanged.
+
+Cross and native regression pass 294/294 runtime cases, and all six clean
+PCC-kernel/PCC-rootfs QEMU profiles pass `pcc-smoke-all.sh`.  The G7 hardware
+image is
+`/Users/sash/Work/N64/retrobsd-build/n64-g7-pointer-induction-kgcc-upcc-hard-aout/pcc-debug.z64`,
+SHA-256
+`9ad25d3a132a85257ffcdb4408c464b4eadb3d17379923e983f96b75052f653e`.
+It uses a GCC kernel and PCC hard-float a.out userland and contains separately
+linked GCC and PCC Linpack binaries.  Physical validation passes: the stable
+16-repetition row measures 3631.062 PCC versus 4453.809 GCC KFLOPS, or 81.53%.
+PCC improves 6.64% over G6; both Linpack statuses and both numeric debug
+statuses are zero, and the terminal `N64_PCC_DEBUG_RC_END` marker is present.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

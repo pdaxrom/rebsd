@@ -43,6 +43,28 @@ variable_step(const int *values, int count, int stride, int step)
 	return sum;
 }
 
+static int
+pointer_step_four(const int *values, int count)
+{
+	int i, sum;
+
+	sum = 0;
+	for (i = 1; i + 3 < count; i += 4)
+		sum += values[i] + values[i + 1] + values[i + 2] + values[i + 3];
+	return sum;
+}
+
+static int
+pointer_descending_four(const int *values, int count)
+{
+	int i, sum;
+
+	sum = 0;
+	for (i = count - 4; i >= 0; i -= 4)
+		sum += values[i] + values[i + 1] + values[i + 2] + values[i + 3];
+	return sum;
+}
+
 int
 main(void)
 {
@@ -57,5 +79,9 @@ main(void)
 		return 2;
 	if (variable_step(values, 8, 3, 2) != -76)
 		return 3;
+	if (pointer_step_four(values, 16) != 168)
+		return 4;
+	if (pointer_descending_four(values, 16) != 256)
+		return 5;
 	return 0;
 }

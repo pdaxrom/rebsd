@@ -528,7 +528,7 @@ rootfs-repack-kernel:
 	${OBJDUMP} -d -S unix.elf > unix.dis
 	${NM} -n unix.elf > unix.nm
 ifneq ($(MALTA_PORT64),)
-	$(OBJCOPY) -O binary unix.elf unix.bin
+	$(OBJCOPY) -O binary --remove-section=.romdisk unix.elf unix.bin
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) \
 	    $(MALTA64_SRC)/stage0_kernel_blob.S -o malta64-stage0-kernel.o
 	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \

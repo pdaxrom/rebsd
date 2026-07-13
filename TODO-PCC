@@ -4563,6 +4563,36 @@ Milestone order:
     versus 4367.120 GCC KFLOPS, or 77.97%.  PCC improves 3.86% over G5 while
     the GCC control changes by -0.003%; both benchmark return codes and numeric
     debug markers are zero.
+  - [x] Reject three G7 static-only wins after strict Malta64 A/B testing:
+    dual bounded specialization (1711 instructions, 13904.908 versus
+    13930.863 G6 KFLOPS), complete pointer-address CSE (1830 instructions,
+    13853.742 KFLOPS), and affine scaled-index CSE (1861 instructions, three-run
+    average 14330.861 versus 14347.187 G6 KFLOPS).  All prototypes were removed.
+  - [x] Implement and measure loop-carried pointer induction for unrolled
+    VR4300 indexed FP loops.  The narrow SSA transform replaces repeated
+    `base + ((i+c) << scale)` expressions with a pointer phi, short constant
+    offsets, and one pointer increment on the latch.  VR4300 Linpack drops 97
+    instructions with unchanged load/store/nop counts; three strict Malta64
+    pairs improve 0.35%.  MIPS32R2 regressed 0.303%, so the final target hook
+    remains VR4300 hard-float only and other profiles are byte-identical.
+  - [x] Fix two Malta64 probe rebuild defects found during G7 measurement:
+    forward `rootfs-patch`, `rootfs-repack-kernel`, and `rootfs-patch-kernel`
+    through `sys/mips/Makefile`, and make `rootfs-repack-kernel` remove
+    `.romdisk` when regenerating `unix.bin`, as the normal Malta64 rule does.
+  - [x] Fix and recheck the isolated userland `awk.h` generation dependency.
+    A single `awk.g.stamp` now owns the yacc invocation and publishes both
+    `awk.g.c` and `y.tab.h`; all six clean `O=` builds passed under `-j4`.
+  - [x] Pass the G7 software gates: cross and native VR4300 regressions pass
+    294/294 runtime cases, and all six clean PCC-kernel/PCC-rootfs hard/soft
+    QEMU profiles report `PCC_SMOKE_ALL_FAILURES 0`.
+  - [x] Build the clean G7 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-g7-pointer-induction-kgcc-upcc-hard-aout/pcc-debug.z64`,
+    SHA-256
+    `9ad25d3a132a85257ffcdb4408c464b4eadb3d17379923e983f96b75052f653e`.
+  - [x] Hardware-benchmark the G7 image.  The stable 16-repetition row is
+    3631.062 PCC versus 4453.809 GCC KFLOPS, or 81.53%.  PCC improves 6.64%
+    over G6; both Linpack return codes and both numeric debug markers are zero,
+    and the terminal `N64_PCC_DEBUG_RC_END` marker is present.
 
 Success criteria:
 
