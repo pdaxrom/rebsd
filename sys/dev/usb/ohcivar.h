@@ -46,13 +46,19 @@
 
 #define OHCI_SCHEDULE_BYTES         4096u
 #define OHCI_HCCA_OFFSET            0u
-#define OHCI_ED_OFFSET              256u
-#define OHCI_TD_OFFSET              512u
+#define OHCI_CONTROL_ED_OFFSET      256u
+#define OHCI_INTR_ED_OFFSET         272u
+#define OHCI_CONTROL_TD_OFFSET      512u
+#define OHCI_INTR_TD_OFFSET         576u
 #define OHCI_SETUP_OFFSET           1024u
-#define OHCI_DATA_OFFSET            1280u
+#define OHCI_CONTROL_DATA_OFFSET    1280u
+#define OHCI_INTR_DATA_OFFSET       4032u
 #define OHCI_CONTROL_DATA_MAX       \
-    (OHCI_SCHEDULE_BYTES - OHCI_DATA_OFFSET)
-#define OHCI_TD_COUNT               4u
+    (OHCI_INTR_DATA_OFFSET - OHCI_CONTROL_DATA_OFFSET)
+#define OHCI_INTR_DATA_MAX          \
+    (OHCI_SCHEDULE_BYTES - OHCI_INTR_DATA_OFFSET)
+#define OHCI_CONTROL_TD_COUNT       4u
+#define OHCI_INTR_TD_COUNT          2u
 
 typedef unsigned int (*ohci_read_4_t)(void *, unsigned);
 typedef void (*ohci_write_4_t)(void *, unsigned, unsigned int);
@@ -61,6 +67,7 @@ typedef void (*ohci_delay_ms_t)(void *, unsigned);
 struct ohci_pipe {
     struct usb_pipe *op_pipe;
     unsigned op_used;
+    unsigned op_toggle;
 };
 
 struct ohci_softc {
@@ -72,13 +79,20 @@ struct ohci_softc {
     struct dma_mem oh_schedule_dma;
     struct ohci_hcca *oh_hcca;
     struct ohci_ed *oh_control_ed;
-    struct ohci_td *oh_tds;
+    struct ohci_ed *oh_intr_ed;
+    struct ohci_td *oh_control_tds;
+    struct ohci_td *oh_intr_tds;
     uByte *oh_setup_buffer;
-    uByte *oh_data_buffer;
+    uByte *oh_control_buffer;
+    uByte *oh_intr_buffer;
     struct ohci_pipe oh_pipes[USB_MAX_PIPES];
-    struct usb_xfer *oh_active_xfer;
-    unsigned oh_active_data_length;
-    unsigned oh_active_data_in;
+    struct usb_xfer *oh_control_xfer;
+    unsigned oh_control_length;
+    unsigned oh_control_data_in;
+    struct usb_xfer *oh_intr_xfer;
+    struct ohci_pipe *oh_intr_pipe;
+    unsigned oh_intr_length;
+    unsigned oh_intr_interval;
     unsigned oh_nports;
     unsigned oh_revision;
     unsigned oh_started;
@@ -90,5 +104,6 @@ usb_error_t ohci_root_port_status(struct ohci_softc *, unsigned,
     usb_port_status_t *);
 usb_error_t ohci_root_port_power(struct ohci_softc *, unsigned, int);
 usb_error_t ohci_root_port_reset(struct ohci_softc *, unsigned);
+int ohci_intr(struct ohci_softc *);
 
 #endif /* _DEV_USB_OHCIVAR_H_ */

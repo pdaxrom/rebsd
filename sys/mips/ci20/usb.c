@@ -23,6 +23,7 @@
 #define CI20_CPM_BASE               0xb0000000u
 #define CI20_GPIO_BASE              0xb0010000u
 #define CI20_OHCI_BASE              0xb34a0000u
+#define CI20_OHCI_IRQ               5u
 
 #define CI20_GPIO_VBUS_PORT         5u
 #define CI20_GPIO_VBUS_PIN          15u
@@ -39,6 +40,7 @@ static struct ohci_softc ci20_ohci;
 static struct usb_bus ci20_usb_bus;
 
 extern void udelay(unsigned);
+extern void ci20_intc_unmask_irq(unsigned);
 
 static volatile unsigned *
 ci20_usb_reg(unsigned base, unsigned offset)
@@ -80,21 +82,15 @@ ci20_usb_vbus(void *arg, int on)
 
     (void)arg;
     bit = 1u << CI20_GPIO_VBUS_PIN;
-    printf("ohci0: init: VBUS PF15 clear interrupt mode @b0010518\n");
     ci20_usb_mmio_write(CI20_GPIO_BASE,
         CI20_GPIO_PXINTC(CI20_GPIO_VBUS_PORT), bit);
-    printf("ohci0: init: VBUS PF15 select GPIO @b0010524\n");
     ci20_usb_mmio_write(CI20_GPIO_BASE,
         CI20_GPIO_PXMASKS(CI20_GPIO_VBUS_PORT), bit);
-    printf("ohci0: init: VBUS PF15 select output @b0010538\n");
     ci20_usb_mmio_write(CI20_GPIO_BASE,
         CI20_GPIO_PXPAT1C(CI20_GPIO_VBUS_PORT), bit);
-    printf("ohci0: init: VBUS PF15 drive %s @b00105%x\n",
-        on ? "high" : "low", on ? 0x44u : 0x48u);
     ci20_usb_mmio_write(CI20_GPIO_BASE,
         on ? CI20_GPIO_PXPAT0S(CI20_GPIO_VBUS_PORT) :
         CI20_GPIO_PXPAT0C(CI20_GPIO_VBUS_PORT), bit);
-    printf("ohci0: init: VBUS PF15 GPIO writes complete\n");
 }
 
 static void
@@ -218,7 +214,8 @@ ohciattach(int unit)
             usb_status_string(status), ci20_ohci_read(0, OHCI_REVISION));
         return;
     }
-    printf("ohci0: OHCI revision=%x ports=%u polling-control\n",
+    printf("ohci0: OHCI revision=%x ports=%u control-polling "
+        "periodic-interrupt-IN\n",
         ci20_ohci.oh_revision, ci20_ohci.oh_nports);
 
     status = ohci_root_port_power(&ci20_ohci, 1, 1);
@@ -263,4 +260,15 @@ ohciattach(int unit)
         return;
     }
     ci20_usb_print_device(device);
+    if (ci20_ohci.oh_intr_xfer != 0) {
+        ci20_intc_unmask_irq(CI20_OHCI_IRQ);
+        printf("ohci0: irq %u enabled for periodic transfers\n",
+            CI20_OHCI_IRQ);
+    }
+}
+
+int
+ci20_ohci_intr(void)
+{
+    return ohci_intr(&ci20_ohci);
 }

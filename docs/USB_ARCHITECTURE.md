@@ -1,7 +1,7 @@
 # ReBSD USB Host Architecture
 
 This document defines the ownership and state rules for the compact USB host
-core before a hardware HCD is attached.  The historical object model follows
+core and its first OHCI attachment. The historical object model follows
 NetBSD 3.1, while allocation, attachment, and synchronization use native ReBSD
 rules.
 
@@ -99,9 +99,12 @@ platform-provided one-millisecond delay callback.  On expiration the core asks
 the HCD to remove the transfer, then publishes `USB_STATUS_TIMEOUT`.  The HCD
 must not call a second completion from its abort method.
 
-The interrupt-driven phase will put the terminal-state competition under a
-short USB critical section and wake a sleeping process or queue one callback.
-It will preserve this state machine and the HCD contract.
+The first periodic slice completes one HID interrupt-IN transfer directly
+from the Ci20 OHCI interrupt. Its callback is bounded to an eight-byte boot
+report, console character submission, and TD rearm, matching the existing
+UART-to-`ttyinput()` interrupt model. Descriptor work and driver attachment
+remain in boot process context. A later general USB completion queue is still
+required before bulk I/O, hub exploration, or callbacks that may sleep.
 
 ## Disconnect Order
 
@@ -125,15 +128,15 @@ submit/abort, root-hub control, and poll operations.  Polling and interrupt
 completion both end by calling `usb_xfer_complete()`; the generic core has no
 separate polling-only completion path.
 
-The mock HCD implements the same contract as OHCI/EHCI will.  It supplies a
+The mock HCD implements the same contract as OHCI. It supplies a
 root-port device descriptor and a configuration containing one HID boot
 keyboard interface.  It can hold transfers, inject one control error, and
 simulate disconnect.  Its tests are the gate for address reuse, driver
 matching, cancellation, timeout, malformed configuration cleanup, and
-disconnect/reconnect before hardware code is introduced.
+disconnect/reconnect independently of hardware.
 
-The initial OHCI implementation uses the same HCD contract and completion
-path, but intentionally serializes control transfers through one DMA schedule.
-This is sufficient for address-zero enumeration and a direct-device hardware
-gate.  Expanding the schedule for bulk and periodic traffic must not change
-the core transfer state machine.
+The OHCI implementation uses the same HCD contract and completion path. Its
+bounded 4096-byte slab contains independent control and periodic interrupt-IN
+ED/TD/buffer regions, so one persistent keyboard transfer can coexist with a
+synchronous control request. One interrupt pipe is supported at a time; bulk
+and general multi-pipe periodic scheduling remain later work.

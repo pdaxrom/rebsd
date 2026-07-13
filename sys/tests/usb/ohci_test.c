@@ -1,10 +1,12 @@
 /*
- * Fake-MMIO tests for the polling OHCI control schedule.
+ * Fake-MMIO tests for OHCI control and periodic interrupt schedules.
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <dev/usb/ohcivar.h>
+#include <dev/usb/ukbd.h>
+#include <dev/usb/usbhid.h>
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \
@@ -20,6 +22,15 @@
 
 static unsigned char dma_pool[FAKE_POOL_SIZE]
     __attribute__((aligned(4096)));
+static unsigned char console_input[64];
+static size_t console_input_length;
+
+void
+cninput(int character)
+{
+    if (console_input_length < sizeof(console_input))
+        console_input[console_input_length++] = (unsigned char)character;
+}
 
 static const unsigned char fake_device_desc[] = {
     18, UDESC_DEVICE, 0x10, 0x01, 0, 0, 0, 8,
@@ -39,6 +50,10 @@ struct fake_ohci {
     unsigned control_lists;
     unsigned address;
     unsigned configuration;
+    unsigned hid_controls;
+    unsigned protocol;
+    unsigned idle;
+    unsigned periodic_lists;
     unsigned next_cc;
     unsigned hold;
     unsigned reset_reads;
@@ -141,8 +156,17 @@ fake_run_control(struct fake_ohci *fake)
         }
     } else if (request->bRequest == UR_SET_ADDRESS) {
         fake->address = value;
-    } else if (request->bRequest == UR_SET_CONFIG) {
+    } else if (request->bRequest == UR_SET_CONFIG &&
+        request->bmRequestType == UT_WRITE_DEVICE) {
         fake->configuration = value;
+    } else if (request->bRequest == UR_SET_PROTOCOL &&
+        request->bmRequestType == UT_WRITE_CLASS_INTERFACE) {
+        fake->protocol = value;
+        ++fake->hid_controls;
+    } else if (request->bRequest == UR_SET_IDLE &&
+        request->bmRequestType == UT_WRITE_CLASS_INTERFACE) {
+        fake->idle = value;
+        ++fake->hid_controls;
     } else {
         set_cc(setup_td, OHCI_CC_STALL);
         ed->ed_headp = ed->ed_tailp;
@@ -151,6 +175,63 @@ fake_run_control(struct fake_ohci *fake)
     set_cc(setup_td, OHCI_CC_NO_ERROR);
     set_cc(status_td, OHCI_CC_NO_ERROR);
     ed->ed_headp = ed->ed_tailp;
+}
+
+static int
+fake_run_periodic(struct fake_ohci *fake, const unsigned char *report,
+    size_t report_length)
+{
+    struct ohci_hcca *hcca;
+    struct ohci_ed *ed;
+    struct ohci_td *data_td;
+    unsigned char *data;
+    unsigned int ed_phys;
+    unsigned int head;
+    size_t copied;
+    size_t requested;
+    unsigned i;
+
+    if ((fake->regs[OHCI_CONTROL / 4] & OHCI_PLE) == 0 ||
+        (fake->regs[OHCI_INTERRUPT_ENABLE / 4] &
+        (OHCI_WDH | OHCI_MIE)) != (OHCI_WDH | OHCI_MIE))
+        return 0;
+    hcca = phys_to_ptr(fake->regs[OHCI_HCCA / 4]);
+    if (hcca == 0)
+        return 0;
+    ed_phys = 0;
+    for (i = 0; i < OHCI_NO_INTRS; ++i)
+        if (hcca->hcca_interrupt_table[i] != 0) {
+            ed_phys = hcca->hcca_interrupt_table[i];
+            break;
+        }
+    ed = phys_to_ptr(ed_phys);
+    if (ed == 0)
+        return 0;
+    head = ed->ed_headp;
+    data_td = phys_to_ptr(head & OHCI_ED_HEADMASK);
+    if (data_td == 0 || data_td->td_cbp == 0 ||
+        data_td->td_be < data_td->td_cbp)
+        return 0;
+    data = phys_to_ptr(data_td->td_cbp);
+    if (data == 0)
+        return 0;
+    requested = data_td->td_be - data_td->td_cbp + 1u;
+    copied = minimum(requested, report_length);
+    memcpy(data, report, copied);
+    if (copied == requested) {
+        data_td->td_cbp = 0;
+        set_cc(data_td, OHCI_CC_NO_ERROR);
+    } else {
+        data_td->td_cbp += (unsigned int)copied;
+        set_cc(data_td, OHCI_CC_DATA_UNDERRUN);
+    }
+    data_td->td_nexttd = hcca->hcca_done_head & OHCI_ED_HEADMASK;
+    hcca->hcca_done_head = head & OHCI_ED_HEADMASK;
+    ed->ed_headp = ed->ed_tailp |
+        ((head ^ OHCI_ED_TOGGLE_CARRY) & OHCI_ED_TOGGLE_CARRY);
+    fake->regs[OHCI_INTERRUPT_STATUS / 4] |= OHCI_WDH;
+    ++fake->periodic_lists;
+    return 1;
 }
 
 static unsigned int
@@ -192,6 +273,14 @@ fake_write(void *arg, unsigned reg, unsigned int value)
     }
     if (reg == OHCI_INTERRUPT_STATUS) {
         *slot &= ~value;
+        return;
+    }
+    if (reg == OHCI_INTERRUPT_ENABLE) {
+        *slot |= value;
+        return;
+    }
+    if (reg == OHCI_INTERRUPT_DISABLE) {
+        fake->regs[OHCI_INTERRUPT_ENABLE / 4] &= ~value;
         return;
     }
     if (reg == OHCI_RH_PORT_STATUS(1)) {
@@ -269,6 +358,97 @@ test_ohci_enumeration(void)
 }
 
 static int
+test_ohci_keyboard(void)
+{
+    struct fake_ohci fake;
+    struct ohci_softc ohci;
+    struct usb_core core;
+    struct usb_bus bus;
+    struct usb_device *device;
+    usb_device_request_t request;
+    unsigned char descriptor[USB_MAX_IPACKET];
+    unsigned char report[UKBD_BOOT_REPORT_SIZE];
+    size_t actlen;
+    unsigned periodic_slots;
+    unsigned i;
+
+    memset(&fake, 0, sizeof(fake));
+    memset(&bus, 0, sizeof(bus));
+    usb_core_init(&core);
+    console_input_length = 0;
+    fake.regs[OHCI_REVISION / 4] = 0x10;
+    fake.regs[OHCI_FM_INTERVAL / 4] = OHCI_DEFAULT_FI;
+    fake.regs[OHCI_RH_DESCRIPTOR_A / 4] = 1;
+    fake.regs[OHCI_RH_PORT_STATUS(1) / 4] =
+        OHCI_RHPS_CCS | OHCI_RHPS_PES | OHCI_RHPS_PPS;
+    CHECK(ukbd_register(&core) == USB_STATUS_NORMAL_COMPLETION);
+    ohci_softc_init(&ohci, fake_read, fake_write, fake_delay, &fake);
+    CHECK(usb_bus_start(&core, &bus, &ohci.oh_hcd, fake_delay, &fake) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_device_enumerate(&bus, 1, USB_SPEED_FULL, &device) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(device != 0 && ohci.oh_intr_xfer != 0);
+    CHECK(fake.control_lists == 8 && fake.hid_controls == 2);
+    CHECK(fake.protocol == USB_HID_PROTOCOL_BOOT && fake.idle == 0);
+    CHECK((fake.regs[OHCI_CONTROL / 4] & OHCI_PLE) != 0);
+    CHECK((fake.regs[OHCI_INTERRUPT_ENABLE / 4] &
+        (OHCI_WDH | OHCI_MIE)) == (OHCI_WDH | OHCI_MIE));
+    periodic_slots = 0;
+    for (i = 0; i < OHCI_NO_INTRS; ++i)
+        if (ohci.oh_hcca->hcca_interrupt_table[i] != 0)
+            ++periodic_slots;
+    CHECK(ohci.oh_intr_interval == 8 && periodic_slots == 4);
+
+    memset(&request, 0, sizeof(request));
+    request.bmRequestType = UT_READ_DEVICE;
+    request.bRequest = UR_GET_DESCRIPTOR;
+    USETW(request.wValue, UDESC_DEVICE << 8);
+    USETW(request.wLength, sizeof(descriptor));
+    CHECK(usb_control_request(device, &request, descriptor,
+        sizeof(descriptor), USB_ENUM_TIMEOUT_MS, &actlen) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(actlen == sizeof(descriptor) && fake.control_lists == 9);
+    CHECK(ohci.oh_intr_xfer != 0);
+
+    memset(report, 0, sizeof(report));
+    report[2] = 4;
+    CHECK(fake_run_periodic(&fake, report, sizeof(report)));
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(console_input_length == 1 && console_input[0] == 'a');
+    CHECK(ohci.oh_intr_xfer != 0);
+
+    memset(report, 0, sizeof(report));
+    CHECK(fake_run_periodic(&fake, report, sizeof(report)));
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(console_input_length == 1);
+
+    report[0] = 0x02;
+    report[2] = 5;
+    CHECK(fake_run_periodic(&fake, report, sizeof(report)));
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(console_input_length == 2 && console_input[1] == 'B');
+    CHECK(fake.periodic_lists == 3);
+
+    usb_device_disconnect(device);
+    CHECK(ohci.oh_intr_xfer == 0);
+    CHECK((fake.regs[OHCI_CONTROL / 4] & OHCI_PLE) == 0);
+    CHECK((fake.regs[OHCI_INTERRUPT_ENABLE / 4] &
+        (OHCI_WDH | OHCI_MIE)) == 0);
+    CHECK(usb_device_enumerate(&bus, 1, USB_SPEED_FULL, &device) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(device != 0 && device->ud_address == 1);
+    memset(report, 0, sizeof(report));
+    report[2] = 6;
+    CHECK(fake_run_periodic(&fake, report, sizeof(report)));
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(console_input_length == 3 && console_input[2] == 'c');
+    usb_device_disconnect(device);
+    usb_bus_stop(&bus);
+    CHECK(dma_pool_available() == dma_pool_size());
+    return 0;
+}
+
+static int
 test_ohci_errors(void)
 {
     struct fake_ohci fake;
@@ -294,7 +474,7 @@ test_ohci_errors(void)
     fake.hold = 1;
     CHECK(usb_device_enumerate(&bus, 1, USB_SPEED_FULL, &device) ==
         USB_STATUS_TIMEOUT);
-    CHECK(device == 0 && ohci.oh_active_xfer == 0);
+    CHECK(device == 0 && ohci.oh_control_xfer == 0);
     fake.hold = 0;
     CHECK(usb_device_enumerate(&bus, 1, USB_SPEED_FULL, &device) ==
         USB_STATUS_NORMAL_COMPLETION);
@@ -312,6 +492,7 @@ main(void)
     CHECK(dma_pool_init(dma_pool, FAKE_POOL_PHYS, sizeof(dma_pool),
         DMA_32BIT | DMA_COHERENT | DMA_CONTIGUOUS, 0) == 0);
     CHECK(test_ohci_enumeration() == 0);
+    CHECK(test_ohci_keyboard() == 0);
     CHECK(test_ohci_errors() == 0);
     puts("ohci_test: all tests passed");
     return 0;

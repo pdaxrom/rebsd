@@ -14,7 +14,10 @@ mkdir -p "$tmp"
     "$top/sys/kernel/subr_dma.c" \
     "$top/sys/dev/usb/usb_subr.c" \
     "$top/sys/dev/usb/usb_core.c" \
+    "$top/sys/dev/usb/usb_service.c" \
     "$top/sys/dev/usb/ohci.c" \
+    "$top/sys/dev/usb/ukbd.c" \
+    "$top/sys/dev/usb/ukbdmap.c" \
     ohci_test.c -o "$tmp/ohci_test"
 
 if [ "$mode" = test ]; then

@@ -11,10 +11,11 @@ Ingenic JZ4780, using OHCI for USB 1.x and EHCI for USB 2.0 high speed.  DWC2
 OTG host mode, isochronous transfers, generic HID, USB networking, USB serial,
 audio, video, and power management are outside the first port.
 
-The first completed hardware milestone is OHCI root-hub enumeration plus a HID
-boot keyboard feeding the ReBSD console, including reliable disconnect and
-reconnect.  EHCI and read-only mass storage are later milestones and are not
-part of the OHCI-keyboard definition of done.
+The first target milestone is OHCI root-hub enumeration plus a HID boot
+keyboard feeding the ReBSD console. Reliable post-boot disconnect/reconnect
+remains part of the wider keyboard milestone, but follows the first
+preconnected-keyboard interrupt test. EHCI and read-only mass storage are
+later milestones.
 
 ## Baseline
 
@@ -62,9 +63,9 @@ results, not Creator Ci20 hardware results.
 | `malloc/free` | No general ReBSD kernel byte heap exists.  USB uses fixed configurable pools and the DMA pool. |
 | `tsleep/wakeup` | Existing ReBSD `tsleep`/`wakeup` in process context. |
 | NetBSD callout | Existing fixed-table `timeout`/`untimeout`; no callout framework import. |
-| kernel threads | No current ReBSD kernel-thread API.  The polling milestone runs from process context; interrupt completion requires one bounded native deferred-work mechanism, not a NetBSD kthread import or one thread per device. |
+| kernel threads | No current ReBSD kernel-thread API. Synchronous enumeration runs from process context; the first bounded boot-keyboard callback can finish directly in interrupt context because it neither sleeps nor attaches devices. |
 | mutex/condvar | UP ownership plus short `splhigh`/`splx` critical sections; never sleep with interrupts masked. |
-| soft interrupt/task queue | No general equivalent.  Add only the minimum bounded USB completion/task queue needed before interrupt-driven OHCI. |
+| soft interrupt/task queue | No general equivalent. The single boot-keyboard callback is deliberately bounded; add a USB task queue before hub exploration, bulk I/O, or any callback that may sleep. |
 | `splusb` | Use the existing global interrupt masking primitive through a small USB critical-section wrapper. |
 | root-hub child attach | USB core creates a `usb_device`; the HCD exposes root-hub control and port status through the common HCD operations. |
 | disk attach | Add a static `bdevsw` entry and a ReBSD `strategy(struct buf *)` adapter. |
@@ -110,7 +111,7 @@ UART driver.  This is platform infrastructure, not part of the generic USB or
 generic HCD layers.  The change must preserve the existing TCU, UART4, and
 DM9000 behavior.
 
-The ownership contract is:
+The eventual general ownership contract is:
 
 - hardware interrupt context acknowledges controller status, detaches a done
   list from hardware, and queues bounded completion work;
@@ -121,11 +122,14 @@ The ownership contract is:
   a hardware interrupt handler;
 - no DMA object is freed until the HCD has stopped referencing it.
 
-ReBSD has no general deferred-work worker.  Initial OHCI enumeration therefore
-starts in polling mode from process context.  Before interrupt-driven OHCI, a
-single bounded USB task queue and a safe execution mechanism must be added and
-tested.  A clock callout alone must not be treated as process context, and a
-NetBSD kernel-thread framework will not be imported.
+ReBSD has no general deferred-work worker. Initial OHCI enumeration therefore
+runs in polling mode from process context. The first interrupt-driven slice is
+limited to completing and immediately rearming one eight-byte boot-keyboard
+transfer; decoding and console submission are bounded and do not sleep. A
+single bounded USB task queue and a safe execution mechanism are still
+required before hub exploration, bulk I/O, or general class callbacks. A clock
+callout alone must not be treated as process context, and a NetBSD
+kernel-thread framework will not be imported.
 
 ## Sleep, Wakeup, and Timeouts
 
@@ -289,13 +293,13 @@ HCD also compile independently with target MIPS GCC and PCC.
 Detailed ownership and terminal-state rules are in
 `docs/USB_ARCHITECTURE.md`.
 
-## OHCI Polling Control Milestone
+## OHCI Control and First Periodic Milestone
 
-The first generic OHCI slice is deliberately restricted to one active control
-transfer.  It allocates one 4096-byte DMA slab containing an exact 256-byte
-HCCA, aligned ED/TD records, the setup packet, and a bounded control payload.
-All hardware records use explicit little-endian conversion and retain the
-classic OHCI register and condition-code definitions.
+The generic OHCI slice allocates one 4096-byte DMA slab containing an exact
+256-byte HCCA, separate control and interrupt ED/TD records, the setup packet,
+and bounded control and interrupt payloads. All hardware records use explicit
+little-endian conversion and retain the classic OHCI register and
+condition-code definitions.
 
 Controller start performs revision validation, host-controller reset, HCCA
 installation, frame timing setup, interrupt masking, and transition to the
@@ -306,17 +310,21 @@ payload, and terminates through the common USB completion function.  Abort
 sets ED skip and removes the control head before the core publishes timeout or
 cancellation.
 
-Root-port helpers provide status translation, per-port power, and reset.  Hub
-emulation, bulk, interrupt, and interrupt-driven completion remain later
-OHCI slices; unsupported transfer types return an explicit error.
+Root-port helpers provide status translation, per-port power, and reset. The
+first periodic slice supports one interrupt-IN pipe, programs the HCCA table
+at a normalized 1/2/4/8/16/32-frame interval, preserves the ED data-toggle
+carry, and rearms an eight-byte HID transfer from the callback. Hub emulation,
+bulk, multiple periodic pipes, and a general deferred completion queue remain
+later slices; unsupported transfer types return an explicit error.
 
 `sys/tests/usb/ohci_test.c` supplies fake OHCI MMIO and a fake full-speed USB
 device.  It executes the real HCCA/ED/TD schedule through the generic DMA and
 USB core, including the six control requests needed to enumerate and
-configure a HID boot interface.  It also covers port reset, address cleanup,
-STALL, timeout, abort, and DMA reuse.  The test passes ASan/UBSan and Clang
-static analysis; `ohci.c` compiles with target MIPS GCC and PCC without Ci20
-headers.
+configure a HID boot interface. It also drives real periodic ED/TD completion,
+IRQ acknowledgement, boot-key decoding, control traffic while the periodic
+pipe is active, disconnect/reconnect, port reset, STALL, timeout, abort, and
+DMA reuse. `ohci.c`, `ukbd.c`, and `ukbdmap.c` compile with target MIPS GCC
+and PCC without Ci20 headers.
 
 ### DMA Phase Verification
 
@@ -379,11 +387,9 @@ LUN.  Write support is a later commit.
 ## Console Input
 
 The common MIPS console owns `cnttys[0]` and feeds received characters through
-a private `cninput()` wrapper to `ttyinput()`.  There is no keyboard source
-registration API.  The HID phase will add a small machine-independent input
-submission interface so UART and USB keyboard sources can feed the console
-without the USB driver knowing about the console implementation and without
-hard-wiring USB checks into `cnread()`.
+`cninput()` to `ttyinput()`. The boot-keyboard driver uses this same bounded
+machine-independent submission point, so it does not know about the console
+implementation and no USB check is hard-wired into `cnread()`.
 
 The first HID driver supports only boot-protocol keyboards, 8-byte reports,
 modifier state, press/release tracking, and a basic US map.  A generic HID
@@ -404,7 +410,7 @@ goal of the first Ci20 port.
 
 ## Test Strategy Established in Phase 0
 
-Machine-independent tests will run without USB hardware and cover descriptor
+Machine-independent tests run without USB hardware and cover descriptor
 parsing, malformed descriptors, address allocation, driver matching, mock-HCD
 enumeration, HID boot reports, disconnect/reconnect, timeout arbitration,
 cancellation, and DMA allocator rules.
@@ -414,10 +420,10 @@ Ci20 build gates will use both GCC and PCC.  QEMU may validate a generic
 emulated OHCI/EHCI controller only when the exact machine and controller are
 recorded; QEMU Malta is not evidence of JZ4780 hardware operation.
 
-Creator Ci20 hardware success requires a committed UART log naming the board,
-device, connection topology, detected speed, selected HCD, and test result.
-No hardware milestone is reported from compilation or register-level
-inspection alone.
+Creator Ci20 hardware success requires a captured UART log naming the board,
+device, connection topology, detected speed, selected HCD, and test result. No
+hardware milestone is reported from compilation or register-level inspection
+alone.
 
 ## Ci20 Polling Attachment
 
@@ -434,8 +440,9 @@ forced suspend, toggles PHY POR, and pulses UHC reset. It then starts OHCI at
 full-/low-speed device. Every register and board-wiring source is recorded in
 `docs/CI20_USB.md`.
 
-Host tests cover successful sequencing and a stuck `UHCCDR_BUSY` path. The
-complete GCC kernel links with USB enabled, and all new core/OHCI/Ci20 objects
-compile with PCC. The remaining gate is the first UART trace from real Ci20
-hardware; interrupts, post-boot hotplug, periodic traffic, and class drivers
-remain disabled until that polling path is confirmed.
+Host tests cover successful sequencing and a stuck `UHCCDR_BUSY` path. Real
+Ci20 hardware has verified VBUS, clocks/PHY/reset, low-speed root-port reset,
+OHCI control enumeration, descriptor parsing, TCU3 delays, and coexistence
+with DM9000 networking. A real-board test on 2026-07-13 also verified OHCI IRQ
+5, one periodic interrupt-IN pipe, the boot-keyboard class driver, and keyboard
+input at the live ReBSD console using the low-speed `1c4f:0002` device.

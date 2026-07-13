@@ -8,7 +8,7 @@
 
 struct tty cnttys[1];
 static void cnstart(struct tty *tp);
-static void cninput(int c);
+void cninput(int c);
 void cnintr(void);
 void cnputc(char c);
 
@@ -58,9 +58,11 @@ cnwrite(dev_t dev, struct uio *uio, int flag)
     return ttwrite(&cnttys[0], uio, flag);
 }
 
-static void
+void
 cninput(int c)
 {
+    if ((cnttys[0].t_state & TS_ISOPEN) == 0)
+        return;
     if (c == '\b' || c == '\177')
         c = '\177';
     ttyinput(c, &cnttys[0]);

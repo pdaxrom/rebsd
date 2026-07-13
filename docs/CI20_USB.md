@@ -4,9 +4,9 @@ This document records every JZ4780/Ci20-specific fact used by the first ReBSD
 USB host attachment. The generic USB core and OHCI HCD do not include these
 register definitions; they enter through the HCD and DMA interfaces.
 
-## Implemented Hardware Gate
+## Verified Polling Hardware Gate
 
-The first gate is polling-only and control-only:
+The first hardware gate was polling-only and control-only:
 
 1. enable Ci20 host VBUS through GPF15;
 2. select the shared OTG PHY as the 48 MHz UHC clock, wait for the divider
@@ -18,10 +18,34 @@ The first gate is polling-only and control-only:
 6. enumerate one full- or low-speed device that is present at boot;
 7. print its numeric vendor/product IDs and every interface's class tuple.
 
-This proves VBUS, clocks, PHY, controller MMIO, the DMA schedule, endpoint-zero
-control traffic, address assignment, descriptor parsing, and configuration.
-It does not yet provide hotplug after the one-second boot window or HID/bulk
-class I/O.
+This gate was verified on a real Ci20 with a low-speed `1c4f:0002` composite
+HID device. It proved VBUS, clocks, PHY, controller MMIO, the DMA schedule,
+endpoint-zero control traffic, address assignment, descriptor parsing, and
+configuration. DM9000 DHCP and Internet traffic continued to work after USB
+enumeration.
+
+## Verified HID Keyboard Gate
+
+The first periodic slice adds keyboard input without putting JZ4780 details
+into the USB core or class driver:
+
+1. the generic HID boot-keyboard driver sends `SET_PROTOCOL` and `SET_IDLE`,
+   then keeps one eight-byte interrupt-IN transfer armed;
+2. generic OHCI owns one independent periodic ED/TD region, programs the HCCA
+   interrupt table, preserves data toggle, and acknowledges writeback-done;
+3. the Ci20 attachment unmasks JZ4780 IRQ 5 only after a periodic transfer has
+   been installed and forwards it to the generic OHCI handler;
+4. the keyboard decoder submits a bounded basic-US character sequence through
+   the common console input function.
+
+This implementation still explores only a device already connected during boot.
+Post-boot root-port hotplug, external hubs, bulk transfers, and general HID
+report parsing remain later work.
+
+The gate was verified on a real Ci20 on 2026-07-13 with the low-speed
+`1c4f:0002` composite device. Interface 0 attached as an eight-byte boot
+keyboard at a 10 ms interval, JZ4780 IRQ 5 was enabled, and keyboard input was
+used at the live ReBSD console to log in as root and run `ls`.
 
 ## Programming Manual Cross-check
 
@@ -62,7 +86,7 @@ only SoC addresses, bit meanings, board wiring, or ordering cross-checks.
 ReBSD explicitly reprograms all required state and does not depend on U-Boot
 having left the clock, suspend, or GPIO registers configured.
 
-## First Board Test
+## HID Keyboard Hardware Test
 
 Build the GCC Ci20 image with the normal project command:
 
@@ -73,10 +97,9 @@ make -C sys/mips BOARD=ci20 \
 
 The object profile places the result at
 `../rebsd-usb-support-build/ci20-kgcc-ugcc-mips32r2-hard-little-elf/obj/sys/mips/ci20/ci20.uImage`.
-Boot it with the existing Ci20/U-Boot procedure while capturing UART4. Insert
-a simple full- or low-speed device in the type-A host port before boot. A USB
-1.1 keyboard or mouse is the least ambiguous first device; a USB 2 flash drive
-may fall back to full speed but mass-storage I/O is not implemented yet.
+Boot it with the existing Ci20/U-Boot procedure while capturing UART4. Connect
+a USB boot-protocol keyboard to the type-A host port before boot and leave it
+connected. A mouse or flash drive cannot exercise this path.
 
 Success reaches lines equivalent to:
 
@@ -84,13 +107,9 @@ Success reaches lines equivalent to:
 dma: Ci20 uncached pool phys=... size=65536 align=4096
 usb0: initializing core
 usb0: core ready
+ukbd0: HID boot-keyboard driver ready
 ohci0: attach, OHCI phys=134a0000
 ohci0: init: enable VBUS
-ohci0: init: VBUS PF15 clear interrupt mode @b0010518
-ohci0: init: VBUS PF15 select GPIO @b0010524
-ohci0: init: VBUS PF15 select output @b0010538
-ohci0: init: VBUS PF15 drive high @b0010544
-ohci0: init: VBUS PF15 GPIO writes complete
 ohci0: init: settle VBUS
 ohci0: init: configure UHC clock
 ohci0: init: ungate UHC clock
@@ -99,12 +118,19 @@ ohci0: init: pulse PHY reset
 ohci0: init: pulse UHC reset
 ohci0: init: hardware ready
 ohci0: Ci20 VBUS on, cpm clkgr0=... opcr=... usbpcr=... usbpcr1=... uhccdr=... srbc=...
-ohci0: OHCI revision=10 ports=1 polling-control
+ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
 ohci0: port1 status=... change=..., resetting
-ohci0: port1 enabled status=... speed=full
+ohci0: port1 enabled status=... speed=low
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
 ohci0: usb addr=1 vendor=... product=... config=1 interfaces=...
 ohci0: if0 class=... subclass=... protocol=... endpoints=...
+ohci0: irq 5 enabled for periodic transfers
 ```
+
+After the login prompt appears, use the USB keyboard rather than UART input to
+enter `echo usb-ok`, including Return. Also check Shift, Backspace, and Ctrl-C.
+The first test deliberately does not include unplug/replug because post-boot
+root-port exploration is not implemented yet.
 
 The early `init` markers are printed before each potentially faulting MMIO
 group, so the last marker identifies the operation to inspect if the board
@@ -123,10 +149,12 @@ delay did not complete, so USB and DM9000 now share the bounded TCU3 backend.
 
 ## Verification Without Hardware
 
-`make -C sys/tests/usb test` executes descriptor, core/mock-HCD, full fake-OHCI
-enumeration, and fake-JZ4780 register-sequence tests. The Ci20 sequence test
-also verifies VBUS-first ordering, `UHCCDR_BUSY` timeout, final gate/suspend
-state, PHY POR, and UHC reset deassertion. The real Ci20 files compile with
-both configured MIPS GCC and PCC kernel toolchains. A full GCC kernel was
-linked and a bootable uImage generated; this remains a build result until the
-UART trace above is obtained on the board.
+`make -C sys/tests/usb test` executes descriptor, core/mock-HCD, boot-report
+decoder, full fake-OHCI control/periodic scheduling, and fake-JZ4780 register
+sequence tests. The fake OHCI test covers IRQ acknowledgement, data-toggle
+carry, rearm, simultaneous control traffic, and software disconnect/reconnect.
+The Ci20 sequence test verifies VBUS-first ordering, `UHCCDR_BUSY` timeout,
+final gate/suspend state, PHY POR, and UHC reset deassertion. A full GCC kernel
+links and produces the hardware-test image. The modified translation units
+also pass the configured MIPS PCC compiler gate. The real-board test above
+verified the periodic interrupt-IN and console-input path.

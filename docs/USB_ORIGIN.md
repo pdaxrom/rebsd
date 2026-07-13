@@ -64,9 +64,10 @@ is updated as each later phase imports or materially adapts a source.
 | `sys/dev/usb/ehci.c` | `sys/dev/usb/ehci.c` | generic EHCI HCD | reference only |
 | `sys/dev/usb/ehcireg.h` | `sys/dev/usb/ehcireg.h` | EHCI registers and descriptors | reference only |
 | `sys/dev/usb/ehcivar.h` | `sys/dev/usb/ehcivar.h` | EHCI private state | reference only |
+| `sys/dev/usb/usbhid.h` | `sys/dev/usb/usbhid.h` | HID class requests needed by boot keyboards | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/uhidev.h` | `sys/dev/usb/uhidev.h` or compact equivalent | HID definitions needed by boot keyboards | reference only |
-| `sys/dev/usb/ukbd.c` | `sys/dev/usb/ukbd.c` | HID boot keyboard only | reference only |
-| `sys/dev/usb/ukbdmap.c` | `sys/dev/usb/ukbdmap.c` or compact equivalent | basic US key map | reference only |
+| `sys/dev/usb/ukbd.c` | `sys/dev/usb/ukbd.c` | HID boot keyboard only | compact boot-protocol adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ukbdmap.c` | `sys/dev/usb/ukbdmap.c` | basic US key map | compact ASCII/terminal adaptation; original notice and RCS id retained |
 | `sys/dev/usb/umass.c` | `sys/dev/usb/umass.c` | single-LUN read-only BOT | reference only |
 | `sys/dev/usb/umassvar.h` | `sys/dev/usb/umassvar.h` | compact umass state | reference only |
 
@@ -91,6 +92,7 @@ copied or materially derived from the NetBSD USB sources:
 | `sys/dev/usb/usb_hcd.h` | Minimal native HCD operations contract |
 | `sys/dev/usb/usb_mock_hcd.[ch]` | Deterministic hardware-independent test controller |
 | `sys/dev/usb/usb_service.c` | Generic bounded-core service instance used by platform HCD attachments |
+| `sys/dev/usb/ukbd.h` | Bounded boot-report decoder and driver-registration interface |
 | `sys/mips/ci20/usb_hw.[ch]` | Testable JZ4780 clock, PHY, reset, and VBUS sequence |
 | `sys/mips/ci20/usb.c` | Ci20 MMIO callbacks, OHCI attachment, and boot-time enumeration diagnostics |
 

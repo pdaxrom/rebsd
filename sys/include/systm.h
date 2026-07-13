@@ -111,6 +111,7 @@ void cninit (void);
 void cnidentify (void);
 void cnputc (char c);
 int cngetc (void);
+void cninput (int c);
 int baduaddr (caddr_t addr);        /* detect bad user address */
 int badkaddr (caddr_t addr);        /* detect bad kernel address */
 

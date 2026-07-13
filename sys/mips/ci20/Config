@@ -27,6 +27,7 @@ device          "ci20_uart"
 service         creator
 service         dma
 service         usb
+service         ukbd
 service         ohci
 service         ether   1
 service         "ci20_dm9000"

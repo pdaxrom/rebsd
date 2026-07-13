@@ -203,13 +203,19 @@ ohci_hcd_start(struct usb_hcd *hcd)
     sc->oh_hcca = (struct ohci_hcca *)((uByte *)
         sc->oh_schedule_dma.dm_vaddr + OHCI_HCCA_OFFSET);
     sc->oh_control_ed = (struct ohci_ed *)((uByte *)
-        sc->oh_schedule_dma.dm_vaddr + OHCI_ED_OFFSET);
-    sc->oh_tds = (struct ohci_td *)((uByte *)
-        sc->oh_schedule_dma.dm_vaddr + OHCI_TD_OFFSET);
+        sc->oh_schedule_dma.dm_vaddr + OHCI_CONTROL_ED_OFFSET);
+    sc->oh_intr_ed = (struct ohci_ed *)((uByte *)
+        sc->oh_schedule_dma.dm_vaddr + OHCI_INTR_ED_OFFSET);
+    sc->oh_control_tds = (struct ohci_td *)((uByte *)
+        sc->oh_schedule_dma.dm_vaddr + OHCI_CONTROL_TD_OFFSET);
+    sc->oh_intr_tds = (struct ohci_td *)((uByte *)
+        sc->oh_schedule_dma.dm_vaddr + OHCI_INTR_TD_OFFSET);
     sc->oh_setup_buffer = (uByte *)sc->oh_schedule_dma.dm_vaddr +
         OHCI_SETUP_OFFSET;
-    sc->oh_data_buffer = (uByte *)sc->oh_schedule_dma.dm_vaddr +
-        OHCI_DATA_OFFSET;
+    sc->oh_control_buffer = (uByte *)sc->oh_schedule_dma.dm_vaddr +
+        OHCI_CONTROL_DATA_OFFSET;
+    sc->oh_intr_buffer = (uByte *)sc->oh_schedule_dma.dm_vaddr +
+        OHCI_INTR_DATA_OFFSET;
 
     control = ohci_read(sc, OHCI_CONTROL);
     if (control & OHCI_IR)
@@ -267,11 +273,18 @@ ohci_hcd_stop(struct usb_hcd *hcd)
         return;
     ohci_write(sc, OHCI_INTERRUPT_DISABLE, OHCI_MIE | OHCI_ALL_INTRS);
     ohci_write(sc, OHCI_CONTROL, OHCI_HCFS_RESET);
-    sc->oh_active_xfer = 0;
+    sc->oh_control_xfer = 0;
+    sc->oh_intr_xfer = 0;
+    sc->oh_intr_pipe = 0;
     (void)dma_free(&sc->oh_schedule_dma);
     sc->oh_hcca = 0;
     sc->oh_control_ed = 0;
-    sc->oh_tds = 0;
+    sc->oh_intr_ed = 0;
+    sc->oh_control_tds = 0;
+    sc->oh_intr_tds = 0;
+    sc->oh_setup_buffer = 0;
+    sc->oh_control_buffer = 0;
+    sc->oh_intr_buffer = 0;
     sc->oh_started = 0;
 }
 
@@ -317,7 +330,7 @@ ohci_hcd_close_pipe(struct usb_pipe *pipe)
 }
 
 static usb_error_t
-ohci_hcd_submit_xfer(struct usb_xfer *xfer)
+ohci_submit_control(struct usb_xfer *xfer)
 {
     struct ohci_softc *sc;
     struct ohci_ed *ed;
@@ -337,7 +350,7 @@ ohci_hcd_submit_xfer(struct usb_xfer *xfer)
     sc = (struct ohci_softc *)xfer->ux_device->ud_bus->ub_hcd->uh_softc;
     if (!sc->oh_started || ohci_find_pipe(sc, xfer->ux_pipe) == 0)
         return USB_STATUS_INVALID;
-    if (sc->oh_active_xfer != 0)
+    if (sc->oh_control_xfer != 0)
         return USB_STATUS_IN_PROGRESS;
     if (!xfer->ux_is_control)
         return USB_STATUS_UNSUPPORTED;
@@ -345,17 +358,18 @@ ohci_hcd_submit_xfer(struct usb_xfer *xfer)
         return USB_STATUS_NO_MEMORY;
 
     ed = sc->oh_control_ed;
-    setup = &sc->oh_tds[0];
-    data = &sc->oh_tds[1];
-    status = &sc->oh_tds[2];
-    tail = &sc->oh_tds[3];
+    setup = &sc->oh_control_tds[0];
+    data = &sc->oh_control_tds[1];
+    status = &sc->oh_control_tds[2];
+    tail = &sc->oh_control_tds[3];
     ohci_zero(ed, sizeof(*ed));
-    ohci_zero(sc->oh_tds, sizeof(struct ohci_td) * OHCI_TD_COUNT);
+    ohci_zero(sc->oh_control_tds,
+        sizeof(struct ohci_td) * OHCI_CONTROL_TD_COUNT);
     ohci_copy(sc->oh_setup_buffer, &xfer->ux_request,
         sizeof(xfer->ux_request));
     data_in = (xfer->ux_request.bmRequestType & UT_READ) != 0;
     if (xfer->ux_length != 0 && !data_in)
-        ohci_copy(sc->oh_data_buffer, xfer->ux_buffer, xfer->ux_length);
+        ohci_copy(sc->oh_control_buffer, xfer->ux_buffer, xfer->ux_length);
 
     setup_phys = ohci_phys(sc, setup);
     data_phys = ohci_phys(sc, data);
@@ -372,9 +386,11 @@ ohci_hcd_submit_xfer(struct usb_xfer *xfer)
         data->td_flags = ohci_to_le32(OHCI_TD_NOCC | OHCI_TD_R |
             (data_in ? OHCI_TD_IN : OHCI_TD_OUT) |
             OHCI_TD_TOGGLE_1 | OHCI_TD_NOINTR);
-        data->td_cbp = ohci_to_le32(ohci_phys(sc, sc->oh_data_buffer));
+        data->td_cbp = ohci_to_le32(ohci_phys(sc,
+            sc->oh_control_buffer));
         data->td_nexttd = ohci_to_le32(status_phys);
-        data->td_be = ohci_to_le32(ohci_phys(sc, sc->oh_data_buffer) +
+        data->td_be = ohci_to_le32(ohci_phys(sc,
+            sc->oh_control_buffer) +
             (unsigned)xfer->ux_length - 1);
     }
     status->td_flags = ohci_to_le32(OHCI_TD_NOCC |
@@ -394,12 +410,12 @@ ohci_hcd_submit_xfer(struct usb_xfer *xfer)
     ed->ed_headp = ohci_to_le32(setup_phys);
     ed->ed_nexted = 0;
 
-    sc->oh_active_xfer = xfer;
-    sc->oh_active_data_length = (unsigned)xfer->ux_length;
-    sc->oh_active_data_in = data_in;
+    sc->oh_control_xfer = xfer;
+    sc->oh_control_length = (unsigned)xfer->ux_length;
+    sc->oh_control_data_in = data_in;
     if (dma_sync_for_device(&sc->oh_schedule_dma, 0,
         OHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0) {
-        sc->oh_active_xfer = 0;
+        sc->oh_control_xfer = 0;
         return USB_STATUS_IO_ERROR;
     }
     ohci_write(sc, OHCI_INTERRUPT_STATUS, OHCI_WDH);
@@ -411,22 +427,165 @@ ohci_hcd_submit_xfer(struct usb_xfer *xfer)
     return USB_STATUS_IN_PROGRESS;
 }
 
+static unsigned
+ohci_normalize_interval(unsigned requested)
+{
+    unsigned interval;
+
+    interval = 1;
+    while (interval < OHCI_NO_INTRS &&
+        (interval << 1) <= requested)
+        interval <<= 1;
+    return interval;
+}
+
+static void
+ohci_program_intr_table(struct ohci_softc *sc, unsigned ed_phys,
+    unsigned interval)
+{
+    unsigned i;
+
+    for (i = 0; i < OHCI_NO_INTRS; ++i)
+        sc->oh_hcca->hcca_interrupt_table[i] =
+            ohci_to_le32((i & (interval - 1)) == 0 ? ed_phys : 0);
+}
+
+static usb_error_t
+ohci_submit_interrupt(struct usb_xfer *xfer)
+{
+    struct ohci_softc *sc;
+    struct ohci_pipe *opipe;
+    struct usb_endpoint *endpoint;
+    struct ohci_ed *ed;
+    struct ohci_td *data;
+    struct ohci_td *tail;
+    unsigned int control;
+    unsigned int data_phys;
+    unsigned int ed_flags;
+    unsigned int ed_phys;
+    unsigned int interval;
+    unsigned int max_packet;
+    unsigned int tail_phys;
+
+    sc = (struct ohci_softc *)xfer->ux_device->ud_bus->ub_hcd->uh_softc;
+    opipe = ohci_find_pipe(sc, xfer->ux_pipe);
+    if (!sc->oh_started || opipe == 0)
+        return USB_STATUS_INVALID;
+    if (sc->oh_intr_xfer != 0)
+        return USB_STATUS_IN_PROGRESS;
+    endpoint = xfer->ux_pipe->up_endpoint;
+    max_packet = UGETW(endpoint->ue_desc.wMaxPacketSize) & 0x07ffu;
+    if (UE_GET_XFERTYPE(endpoint->ue_desc.bmAttributes) != UE_INTERRUPT ||
+        UE_GET_DIR(endpoint->ue_desc.bEndpointAddress) != UE_DIR_IN)
+        return USB_STATUS_UNSUPPORTED;
+    if (xfer->ux_length == 0 || xfer->ux_length > max_packet ||
+        xfer->ux_length > OHCI_INTR_DATA_MAX)
+        return USB_STATUS_NO_MEMORY;
+
+    ed = sc->oh_intr_ed;
+    data = &sc->oh_intr_tds[0];
+    tail = &sc->oh_intr_tds[1];
+    data_phys = ohci_phys(sc, data);
+    tail_phys = ohci_phys(sc, tail);
+    ed_phys = ohci_phys(sc, ed);
+    interval = ohci_normalize_interval(endpoint->ue_desc.bInterval);
+    ohci_zero(sc->oh_intr_buffer, OHCI_INTR_DATA_MAX);
+    ohci_zero(sc->oh_intr_tds,
+        sizeof(struct ohci_td) * OHCI_INTR_TD_COUNT);
+    data->td_flags = ohci_to_le32(OHCI_TD_NOCC | OHCI_TD_R |
+        OHCI_TD_IN | OHCI_TD_TOGGLE_CARRY);
+    data->td_cbp = ohci_to_le32(ohci_phys(sc, sc->oh_intr_buffer));
+    data->td_nexttd = ohci_to_le32(tail_phys);
+    data->td_be = ohci_to_le32(ohci_phys(sc, sc->oh_intr_buffer) +
+        (unsigned)xfer->ux_length - 1);
+
+    ed_flags = OHCI_ED_SET_FA(xfer->ux_device->ud_address) |
+        OHCI_ED_SET_EN(UE_GET_ADDR(endpoint->ue_desc.bEndpointAddress)) |
+        OHCI_ED_DIR_IN | OHCI_ED_FORMAT_GEN | OHCI_ED_SET_MAXP(max_packet);
+    if (xfer->ux_device->ud_speed == USB_SPEED_LOW)
+        ed_flags |= OHCI_ED_SPEED;
+    ed->ed_flags = ohci_to_le32(ed_flags);
+    ed->ed_tailp = ohci_to_le32(tail_phys);
+    ed->ed_headp = ohci_to_le32(data_phys |
+        (opipe->op_toggle & OHCI_ED_TOGGLE_CARRY));
+    ed->ed_nexted = 0;
+    ohci_program_intr_table(sc, ed_phys, interval);
+    sc->oh_hcca->hcca_done_head = 0;
+
+    sc->oh_intr_xfer = xfer;
+    sc->oh_intr_pipe = opipe;
+    sc->oh_intr_length = (unsigned)xfer->ux_length;
+    sc->oh_intr_interval = interval;
+    if (dma_sync_for_device(&sc->oh_schedule_dma, 0,
+        OHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0) {
+        sc->oh_intr_xfer = 0;
+        sc->oh_intr_pipe = 0;
+        return USB_STATUS_IO_ERROR;
+    }
+    ohci_write(sc, OHCI_INTERRUPT_STATUS, OHCI_WDH);
+    control = ohci_read(sc, OHCI_CONTROL);
+    ohci_write(sc, OHCI_CONTROL, control | OHCI_PLE |
+        OHCI_HCFS_OPERATIONAL);
+    ohci_write(sc, OHCI_INTERRUPT_ENABLE, OHCI_WDH | OHCI_MIE);
+    return USB_STATUS_IN_PROGRESS;
+}
+
+static usb_error_t
+ohci_hcd_submit_xfer(struct usb_xfer *xfer)
+{
+    unsigned type;
+
+    if (xfer->ux_is_control)
+        return ohci_submit_control(xfer);
+    type = UE_GET_XFERTYPE(xfer->ux_pipe->up_endpoint->
+        ue_desc.bmAttributes);
+    if (type == UE_INTERRUPT)
+        return ohci_submit_interrupt(xfer);
+    return USB_STATUS_UNSUPPORTED;
+}
+
 static usb_error_t
 ohci_hcd_abort_xfer(struct usb_xfer *xfer)
 {
     struct ohci_softc *sc;
+    unsigned int control;
     unsigned int flags;
+    unsigned int head;
 
     sc = (struct ohci_softc *)xfer->ux_device->ud_bus->ub_hcd->uh_softc;
-    if (sc->oh_active_xfer != xfer)
-        return USB_STATUS_INVALID;
-    flags = ohci_from_le32(sc->oh_control_ed->ed_flags);
-    sc->oh_control_ed->ed_flags = ohci_to_le32(flags | OHCI_ED_SKIP);
-    (void)dma_sync_for_device(&sc->oh_schedule_dma, OHCI_ED_OFFSET,
-        sizeof(*sc->oh_control_ed), DMA_TO_DEVICE);
-    ohci_write(sc, OHCI_CONTROL_HEAD_ED, 0);
-    sc->oh_active_xfer = 0;
-    return USB_STATUS_NORMAL_COMPLETION;
+    if (sc->oh_control_xfer == xfer) {
+        flags = ohci_from_le32(sc->oh_control_ed->ed_flags);
+        sc->oh_control_ed->ed_flags =
+            ohci_to_le32(flags | OHCI_ED_SKIP);
+        (void)dma_sync_for_device(&sc->oh_schedule_dma,
+            OHCI_CONTROL_ED_OFFSET, sizeof(*sc->oh_control_ed),
+            DMA_TO_DEVICE);
+        ohci_write(sc, OHCI_CONTROL_HEAD_ED, 0);
+        sc->oh_control_xfer = 0;
+        sc->oh_control_length = 0;
+        return USB_STATUS_NORMAL_COMPLETION;
+    }
+    if (sc->oh_intr_xfer == xfer) {
+        flags = ohci_from_le32(sc->oh_intr_ed->ed_flags);
+        sc->oh_intr_ed->ed_flags = ohci_to_le32(flags | OHCI_ED_SKIP);
+        head = ohci_from_le32(sc->oh_intr_ed->ed_headp);
+        if (sc->oh_intr_pipe != 0)
+            sc->oh_intr_pipe->op_toggle =
+                head & OHCI_ED_TOGGLE_CARRY;
+        ohci_program_intr_table(sc, 0, 1);
+        sc->oh_hcca->hcca_done_head = 0;
+        (void)dma_sync_for_device(&sc->oh_schedule_dma, 0,
+            OHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
+        ohci_write(sc, OHCI_INTERRUPT_DISABLE, OHCI_WDH | OHCI_MIE);
+        control = ohci_read(sc, OHCI_CONTROL);
+        ohci_write(sc, OHCI_CONTROL, control & ~OHCI_PLE);
+        sc->oh_intr_xfer = 0;
+        sc->oh_intr_pipe = 0;
+        sc->oh_intr_length = 0;
+        sc->oh_intr_interval = 0;
+        return USB_STATUS_NORMAL_COMPLETION;
+    }
+    return USB_STATUS_INVALID;
 }
 
 static usb_error_t
@@ -441,9 +600,8 @@ ohci_hcd_root_ctrl(struct usb_hcd *hcd,
 }
 
 static void
-ohci_hcd_poll(struct usb_hcd *hcd)
+ohci_poll_control(struct ohci_softc *sc)
 {
-    struct ohci_softc *sc;
     struct usb_xfer *xfer;
     unsigned int head;
     unsigned int tail;
@@ -453,12 +611,8 @@ ohci_hcd_poll(struct usb_hcd *hcd)
     size_t actlen;
     usb_error_t result;
 
-    sc = (struct ohci_softc *)hcd->uh_softc;
-    xfer = sc->oh_active_xfer;
+    xfer = sc->oh_control_xfer;
     if (xfer == 0)
-        return;
-    if (dma_sync_for_cpu(&sc->oh_schedule_dma, 0,
-        OHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
         return;
     head = ohci_from_le32(sc->oh_control_ed->ed_headp) &
         OHCI_ED_HEADMASK;
@@ -467,34 +621,128 @@ ohci_hcd_poll(struct usb_hcd *hcd)
         return;
 
     result = USB_STATUS_NORMAL_COMPLETION;
-    cc = OHCI_TD_GET_CC(ohci_from_le32(sc->oh_tds[0].td_flags));
+    cc = OHCI_TD_GET_CC(ohci_from_le32(
+        sc->oh_control_tds[0].td_flags));
     if (cc != OHCI_CC_NO_ERROR)
         result = ohci_cc_status(cc);
     if (result == USB_STATUS_NORMAL_COMPLETION &&
-        sc->oh_active_data_length != 0) {
-        cc = OHCI_TD_GET_CC(ohci_from_le32(sc->oh_tds[1].td_flags));
+        sc->oh_control_length != 0) {
+        cc = OHCI_TD_GET_CC(ohci_from_le32(
+            sc->oh_control_tds[1].td_flags));
         if (cc != OHCI_CC_NO_ERROR && cc != OHCI_CC_DATA_UNDERRUN)
             result = ohci_cc_status(cc);
     }
     if (result == USB_STATUS_NORMAL_COMPLETION) {
-        cc = OHCI_TD_GET_CC(ohci_from_le32(sc->oh_tds[2].td_flags));
+        cc = OHCI_TD_GET_CC(ohci_from_le32(
+            sc->oh_control_tds[2].td_flags));
         if (cc != OHCI_CC_NO_ERROR)
             result = ohci_cc_status(cc);
     }
 
-    actlen = sc->oh_active_data_length;
-    if (sc->oh_active_data_length != 0) {
-        cbp = ohci_from_le32(sc->oh_tds[1].td_cbp);
-        data_start = ohci_phys(sc, sc->oh_data_buffer);
+    actlen = sc->oh_control_length;
+    if (sc->oh_control_length != 0) {
+        cbp = ohci_from_le32(sc->oh_control_tds[1].td_cbp);
+        data_start = ohci_phys(sc, sc->oh_control_buffer);
         if (cbp >= data_start &&
-            cbp <= data_start + sc->oh_active_data_length)
+            cbp <= data_start + sc->oh_control_length)
             actlen = cbp - data_start;
-        if (sc->oh_active_data_in && actlen != 0)
-            ohci_copy(xfer->ux_buffer, sc->oh_data_buffer, actlen);
+        if (sc->oh_control_data_in && actlen != 0)
+            ohci_copy(xfer->ux_buffer, sc->oh_control_buffer, actlen);
     }
-    sc->oh_active_xfer = 0;
+    sc->oh_control_xfer = 0;
+    sc->oh_control_length = 0;
     ohci_write(sc, OHCI_CONTROL_HEAD_ED, 0);
     usb_xfer_complete(xfer, result, actlen);
+}
+
+static void
+ohci_poll_interrupt(struct ohci_softc *sc)
+{
+    struct ohci_pipe *opipe;
+    struct usb_xfer *xfer;
+    unsigned int cbp;
+    unsigned int control;
+    unsigned int data_start;
+    unsigned int head;
+    unsigned int tail;
+    unsigned cc;
+    size_t actlen;
+    usb_error_t result;
+
+    xfer = sc->oh_intr_xfer;
+    if (xfer == 0)
+        return;
+    head = ohci_from_le32(sc->oh_intr_ed->ed_headp);
+    tail = ohci_from_le32(sc->oh_intr_ed->ed_tailp);
+    if ((head & OHCI_ED_HEADMASK) != tail)
+        return;
+    opipe = sc->oh_intr_pipe;
+    if (opipe != 0)
+        opipe->op_toggle = head & OHCI_ED_TOGGLE_CARRY;
+
+    result = USB_STATUS_NORMAL_COMPLETION;
+    cc = OHCI_TD_GET_CC(ohci_from_le32(
+        sc->oh_intr_tds[0].td_flags));
+    if (cc != OHCI_CC_NO_ERROR && cc != OHCI_CC_DATA_UNDERRUN)
+        result = ohci_cc_status(cc);
+    actlen = sc->oh_intr_length;
+    cbp = ohci_from_le32(sc->oh_intr_tds[0].td_cbp);
+    data_start = ohci_phys(sc, sc->oh_intr_buffer);
+    if (cbp >= data_start && cbp <= data_start + sc->oh_intr_length)
+        actlen = cbp - data_start;
+    if (actlen != 0)
+        ohci_copy(xfer->ux_buffer, sc->oh_intr_buffer, actlen);
+
+    sc->oh_intr_xfer = 0;
+    sc->oh_intr_pipe = 0;
+    sc->oh_intr_length = 0;
+    if (result != USB_STATUS_NORMAL_COMPLETION) {
+        ohci_program_intr_table(sc, 0, 1);
+        ohci_write(sc, OHCI_INTERRUPT_DISABLE, OHCI_WDH | OHCI_MIE);
+        control = ohci_read(sc, OHCI_CONTROL);
+        ohci_write(sc, OHCI_CONTROL, control & ~OHCI_PLE);
+        sc->oh_intr_interval = 0;
+    }
+    usb_xfer_complete(xfer, result, actlen);
+}
+
+static void
+ohci_hcd_poll(struct usb_hcd *hcd)
+{
+    struct ohci_softc *sc;
+
+    sc = (struct ohci_softc *)hcd->uh_softc;
+    if (sc->oh_control_xfer == 0 && sc->oh_intr_xfer == 0)
+        return;
+    if (dma_sync_for_cpu(&sc->oh_schedule_dma, 0,
+        OHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+        return;
+    sc->oh_hcca->hcca_done_head = 0;
+    ohci_poll_control(sc);
+    ohci_poll_interrupt(sc);
+    (void)dma_sync_for_device(&sc->oh_schedule_dma, 0,
+        OHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
+}
+
+int
+ohci_intr(struct ohci_softc *sc)
+{
+    unsigned int enabled;
+    unsigned int status;
+
+    if (sc == 0 || !sc->oh_started)
+        return 0;
+    enabled = ohci_read(sc, OHCI_INTERRUPT_ENABLE);
+    if ((enabled & OHCI_MIE) == 0)
+        return 0;
+    status = ohci_read(sc, OHCI_INTERRUPT_STATUS) &
+        enabled & OHCI_ALL_INTRS;
+    if (status == 0)
+        return 0;
+    ohci_write(sc, OHCI_INTERRUPT_STATUS, status);
+    if (status & OHCI_WDH)
+        ohci_hcd_poll(&sc->oh_hcd);
+    return 1;
 }
 
 usb_error_t

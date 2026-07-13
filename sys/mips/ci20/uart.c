@@ -41,6 +41,7 @@
 #define CI20_TCU_IRQ    25
 #define CI20_GPIOE_IRQ  13
 #define CI20_UART4_IRQ  34
+#define CI20_OHCI_IRQ   5
 
 struct tty ci20_uart_ttys[1];
 static void ci20_uart_start(struct tty *tp);
@@ -50,6 +51,9 @@ void ci20_uart_intr(void);
 extern int ci20_clock_intr(int *frame, unsigned status);
 #ifdef CI20_DM9000_ENABLED
 extern int ci20_dm9000_intr(void);
+#endif
+#ifdef OHCI_ENABLED
+extern int ci20_ohci_intr(void);
 #endif
 #ifdef INET
 extern int netisr;
@@ -405,6 +409,10 @@ mips_board_intr(int *frame, unsigned status)
 {
     if (intc_pending(CI20_TCU_IRQ))
         ci20_clock_intr(frame, status);
+#ifdef OHCI_ENABLED
+    if (intc_pending(CI20_OHCI_IRQ))
+        (void)ci20_ohci_intr();
+#endif
 #ifdef CI20_DM9000_ENABLED
     if (intc_pending(CI20_GPIOE_IRQ) && ci20_dm9000_intr()) {
 #ifdef INET
