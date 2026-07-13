@@ -4622,12 +4622,46 @@ Milestone order:
     `dscal_r`, 75.79% `dscal_ur`, and 44.20% `idamax`.  This rejects the QEMU
     near-parity result and selects generic loop code generation, rather than
     `dgefa`/`dgesl` driver specialization, as the next target.
-  - [ ] H1 compare PCC and GCC assembly for `idamax`, rolled `ddot`, and rolled
+  - [x] H1 compare PCC and GCC assembly for `idamax`, rolled `ddot`, and rolled
     `daxpy`; count loop instructions, loads, branches, delay-slot use, spills,
-    and avoidable address arithmetic.  Implement the smallest shared backend
-    improvement supported by those comparisons, verify that unrolled kernels
-    do not regress, then repeat all software gates and the physical kernel
-    profile before changing another optimization.
+    and avoidable address arithmetic.  The first comparison found the largest
+    isolated loss in `idamax`: PCC called libc `fabs` on every iteration and
+    again on the max-update path, while GCC cleared the sign bit inline.  The
+    first H1 backend change now lowers plain `fabs` plus
+    `__builtin_fabsf`/`fabs`/`fabsl` inline for MIPS hard-float.  It uses
+    `mfc1`/integer shifts/`mtc1`, with `mov.d` preserving the low word of a
+    paired double register; it deliberately does not use `abs.s` or `abs.d`,
+    because the VR4300 manual defines ABS as an arithmetic operation that can
+    raise Invalid Operation for sNaN.  Soft-float retains the libc calls.
+    This removes all six static `jal fabs` sites from the benchmark `idamax`,
+    makes it a leaf, reduces its frame from 64 to 24 bytes, and reduces text
+    from 412 to 380 bytes.  A strict bit-pattern regression covers negative
+    zero, finite values, infinity, and sNaN without quieting or changing the
+    payload.  All six clean PCC-kernel/PCC-rootfs hard/soft QEMU profiles pass
+    `pcc-smoke-all.sh`; VR4300, big-endian MIPS32R2, and little-endian
+    MIPS32R2 hard-float regressions pass 295/295, including
+    `misc__fabs001`.  The direct `pcc-debug.z64` goal now selects debug UART
+    mode before Makefile conditionals are evaluated; its target-specific value
+    had previously been too late to change `PARAM` and `N64_IOCONF`.  The H1
+    GCC-kernel/PCC-hard-float a.out profiler is stored at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h1-inline-fabs-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    SHA-256
+    `3b1a2ea00c9c09c3f7f26439fad4b18672379989e7435ef1b268e97f4dc165f3`.
+    It passes `fsutil --check`, has build stamp `.build-mode.gcc.1.0.0.1`, and
+    contains all four GCC/PCC ordinary/per-kernel Linpack binaries.  Physical
+    N64 validation passes with every self-test and final debug marker zero.
+    PCC `idamax` improves from 2.898 to 4.815 Melem/s, or 66.15%, and reaches
+    73.44% of the 6.556 GCC result instead of H0's 44.20%.  The stable ordinary
+    Linpack row is 3673.524 PCC versus 4415.818 GCC KFLOPS, or 83.19%; PCC is
+    0.85% faster than H0, while the GCC control is 1.10% faster, so the overall
+    ratio is effectively unchanged.
+  - [ ] H2 optimize the remaining rolled kernels without disturbing H1.
+    Physical PCC/GCC ratios are still 64.63% for `daxpy_r`, 52.35% for
+    `ddot_r`, and 67.65% for `dscal_r`, versus 73.44-84.78% for `idamax` and
+    the corresponding unrolled paths.  Compare loop-carried FP accumulator
+    placement, reloads/spills, induction updates, branch shape, and delay-slot
+    use, then implement and measure one smallest shared backend change before
+    proceeding further.
 
 Success criteria:
 

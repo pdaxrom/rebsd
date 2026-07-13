@@ -525,14 +525,14 @@ builtin_va_copy(const struct bitable *bt, P1ND *a)
  * For unimplemented "builtin" functions, try to invoke the
  * non-builtin name
  */
-static P1ND *
-binhelp(P1ND *a, TWORD rt, char *n)
+P1ND *
+builtin_call(P1ND *a, TWORD rt, const char *n)
 {
 	P1ND *f = block(NAME, NULL, NULL, INT, 0, 0);
 	int oblvl = blevel;
 
 	blevel = 0;
-	f->n_sp = lookup(addname(n), SNORMAL);
+	f->n_sp = lookup(addname((char *)n), SNORMAL);
 	blevel = oblvl;
 	if (f->n_sp->sclass == SNULL) {
 		f->n_sp->sclass = EXTERN;
@@ -554,14 +554,14 @@ binhelp(P1ND *a, TWORD rt, char *n)
 static P1ND *
 builtin_unimp(const struct bitable *bt, P1ND *a)
 {
-	return binhelp(a, bt->rt, &bt->name[10]);
+	return builtin_call(a, bt->rt, &bt->name[10]);
 }
 
 #if 0
 static P1ND *
 builtin_unimp_f(P1ND *f, P1ND *a, TWORD rt)
 {
-	return binhelp(f, a, rt, f->n_sp->sname);
+	return builtin_call(a, rt, f->n_sp->sname);
 }
 #endif
 
@@ -574,7 +574,7 @@ builtin_isinf_sign(const struct bitable *bt, P1ND *a)
 	}
 	if (a->n_type != DOUBLE)
 		a = cast(a, DOUBLE, 0);
-	return binhelp(a, INT, "__isinf_sign");
+	return builtin_call(a, INT, "__isinf_sign");
 }
 
 #ifndef TARGET_PREFETCH
@@ -685,7 +685,7 @@ static P1ND *
 mtisnan(P1ND *p)
 {
 
-	return binhelp(cast(ccopy(p), DOUBLE, 0), INT, "isnan");
+	return builtin_call(cast(ccopy(p), DOUBLE, 0), INT, "isnan");
 }
 
 static TWORD
@@ -783,22 +783,22 @@ builtin_signbit(const struct bitable *bt, P1ND *a)
 
 	t = BTYPE(a->n_type);
 	if (t == FLOAT)
-		return binhelp(a, INT, "__signbitf");
+		return builtin_call(a, INT, "__signbitf");
 	if (t == LDOUBLE)
-		return binhelp(a, INT, "__signbitl");
+		return builtin_call(a, INT, "__signbitl");
 	if (t != DOUBLE)
 		a = cast(a, DOUBLE, 0);
-	return binhelp(a, INT, "__signbitd");
+	return builtin_call(a, INT, "__signbitd");
 }
 static P1ND *
 builtin_signbitf(const struct bitable *bt, P1ND *a)
 {
-	return binhelp(a, INT, "__signbitf");
+	return builtin_call(a, INT, "__signbitf");
 }
 static P1ND *
 builtin_signbitl(const struct bitable *bt, P1ND *a)
 {
-	return binhelp(a, INT, "__signbitl");
+	return builtin_call(a, INT, "__signbitl");
 }
 #endif
 
@@ -828,7 +828,7 @@ builtin_nanx(const struct bitable *bt, P1ND *a)
 		a->n_scon = sfallo();
 		soft_nan(a->n_scon, NULL);
 	} else
-		a = binhelp(eve(a), bt->rt, &bt->name[10]);
+		a = builtin_call(eve(a), bt->rt, &bt->name[10]);
 	return a;
 }
 
@@ -863,6 +863,9 @@ builtin_cir(const struct bitable *bt, P1ND *a)
 #endif
 #ifndef TARGET_MEMSET
 #define	builtin_memset builtin_unimp
+#endif
+#ifndef TARGET_FABS
+#define	TARGET_FABS builtin_unimp
 #endif
 
 /* Reasonable type of size_t */
@@ -965,9 +968,9 @@ static const struct bitable bitable[] = {
 	{ "__builtin_memcpy", builtin_memcpy, 0, 3, memcpyt, VOID|PTR },
 	{ "__builtin_mempcpy", builtin_mempcpy, 0, 3, memcpyt, VOID|PTR },
 	{ "__builtin_memset", builtin_memset, 0, 3, memsett, VOID|PTR },
-	{ "__builtin_fabsf", builtin_unimp, 0, 1, fmaxft, FLOAT },
-	{ "__builtin_fabs", builtin_unimp, 0, 1, fmaxt, DOUBLE },
-	{ "__builtin_fabsl", builtin_unimp, 0, 1, fmaxlt, LDOUBLE },
+	{ "__builtin_fabsf", TARGET_FABS, 0, 1, fmaxft, FLOAT },
+	{ "__builtin_fabs", TARGET_FABS, 0, 1, fmaxt, DOUBLE },
+	{ "__builtin_fabsl", TARGET_FABS, 0, 1, fmaxlt, LDOUBLE },
 	{ "__builtin_fmaxf", builtin_unimp, 0, 2, fmaxft, FLOAT },
 	{ "__builtin_fmax", builtin_unimp, 0, 2, fmaxt, DOUBLE },
 	{ "__builtin_fmaxl", builtin_unimp, 0, 2, fmaxlt, LDOUBLE },

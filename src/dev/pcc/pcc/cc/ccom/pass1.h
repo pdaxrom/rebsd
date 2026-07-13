@@ -665,6 +665,7 @@ struct bitable {
 };
 
 P1ND *builtin_check(struct symtab *, P1ND *a);
+P1ND *builtin_call(P1ND *a, TWORD rt, const char *name);
 void builtin_init(void);
 
 /* Some builtins targets need to implement */

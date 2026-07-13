@@ -1120,6 +1120,55 @@ probe covers the case.  In the rebuilt GCC profiler the same constant is at
 `0x00405ec8`.  The complete a.out assembler/linker/archive smoke and corrected
 H0 hardware rerun both pass.
 
+H1 starts from the physical per-kernel profile rather than QEMU timing.  The
+initial PCC/GCC assembly comparison found that `idamax`, the worst measured
+kernel at 44.20% of GCC, called libc `fabs` for each candidate and called it a
+second time when updating the maximum.  PCC now uses a small MIPS target
+builtin for plain `fabs` and the three `__builtin_fabs*` variants in hard-float
+code.  Float clears the sign bit after `mfc1`; double and the o32 long-double
+alias copy the pair with `mov.d`, clear the high-word sign bit, and write that
+word back with `mtc1`.  Soft-float continues to call the corresponding libc
+function, so its ABI and helper policy do not change.
+
+The lowering intentionally avoids `abs.s` and `abs.d`.  The VR4300 manual
+classifies ABS as an arithmetic operation and documents Invalid Operation for
+signalling NaNs, while the data-transfer sequence preserves the NaN payload
+and only clears its sign.  A MIPS extended-asm `%Hn` formatter names the odd
+register containing the high word of an o32 FPR pair for both endian modes.
+The regression checks exact bit patterns for negative zero, a finite value,
+infinity, and sNaN.  In the Linpack profiler this removes six static `jal fabs`
+sites from `idamax`, changes it into a leaf, reduces the stack frame from 64 to
+24 bytes, and reduces its text from 412 to 380 bytes.
+
+Before the H1 hardware gate, PCC kernels and PCC root filesystems pass the full
+`pcc-smoke-all.sh` suite on Malta64, Malta, and Maltael in both hard-float and
+soft-float mode.  The three hard-float runtime regression profiles pass
+295/295 cases, including `misc__fabs001` on VR4300 and big- and little-endian
+MIPS32R2.
+
+The H1 hardware image uses a GCC debug-UART kernel and PCC VR4300 hard-float
+a.out userland.  It is stored at
+`/Users/sash/Work/N64/retrobsd-build/n64-h1-inline-fabs-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+SHA-256
+`3b1a2ea00c9c09c3f7f26439fad4b18672379989e7435ef1b268e97f4dc165f3`.
+The image passes `fsutil --check`, has build stamp
+`.build-mode.gcc.1.0.0.1`, and contains independent GCC/PCC ordinary and
+per-kernel Linpack binaries.  The direct `pcc-debug.z64` Make goal now enables
+debug UART mode before its parse-time parameter and ioconf conditionals are
+evaluated; the former target-specific assignment was too late to affect those
+conditionals.
+
+Physical H1 validation passes with every Linpack status, kernel self-test, and
+final debug marker zero.  PCC `idamax` improves from 2.898 to 4.815 Melem/s,
+or 66.15%, and reaches 73.44% of GCC instead of H0's 44.20%.  The stable
+ordinary Linpack row is 3673.524 PCC versus 4415.818 GCC KFLOPS, or 83.19%.
+PCC is 0.85% faster than H0, but the GCC control in this run is also 1.10%
+faster, so this does not establish an overall ratio improvement.  The other
+kernel ratios remain 64.63% `daxpy_r`, 84.78% `daxpy_ur`, 52.35% `ddot_r`,
+77.58% `ddot_ur`, 67.65% `dscal_r`, and 75.85% `dscal_ur`.  The next isolated
+milestone therefore remains generic rolled-loop FP accumulator, reload, and
+induction code generation rather than another `idamax` special case.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

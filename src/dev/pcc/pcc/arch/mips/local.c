@@ -758,6 +758,41 @@ bad:
 	return bcon(0);
 }
 
+#ifndef LANG_CXX
+NODE *
+mips_builtin_fabs(const struct bitable *bt, NODE *a)
+{
+	const char *name;
+	NODE *in, *out, *scratch, *xasm, *result;
+
+	if (mips_soft_float) {
+		name = strncmp(bt->name, "__builtin_", 10) == 0 ?
+		    bt->name + 10 : bt->name;
+		return builtin_call(a, bt->rt, name);
+	}
+
+	result = tempnode(0, bt->rt, 0, 0);
+	out = block(XARG, ccopy(result), NIL, INT, 0, 0);
+	out->n_name = "=r";
+	in = block(XARG, a, NIL, INT, 0, 0);
+	in->n_name = "r";
+	scratch = block(XARG, tempnode(0, UNSIGNED, 0, 0), NIL,
+	    INT, 0, 0);
+	scratch->n_name = "=&r";
+	xasm = block(CM, block(CM, out, in, INT, 0, 0), scratch,
+	    INT, 0, 0);
+	xasm = block(XASM, xasm, block(ICON, 0, 0, STRTY, 0, 0),
+	    INT, 0, 0);
+	if (bt->rt == FLOAT)
+		xasm->n_name = "mfc1 %2,%1;sll %2,%2,1;srl %2,%2,1;mtc1 %2,%0";
+	else
+		xasm->n_name = "mfc1 %2,%H1;mov.d %0,%1;sll %2,%2,1;"
+		    "srl %2,%2,1;mtc1 %2,%H0";
+
+	return block(COMOP, xasm, result, bt->rt, 0, 0);
+}
+#endif
+
 static int constructor;
 static int destructor;
 

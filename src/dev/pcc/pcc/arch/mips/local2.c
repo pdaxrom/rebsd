@@ -2921,3 +2921,25 @@ myxasm(struct interpass *ip, NODE *p)
 	}
 	return 0;
 }
+
+void
+mips_xasm_targarg(char *w, void *arg, int n)
+{
+	NODE **ary = arg;
+	NODE *p;
+	int idx;
+
+	if (w[1] < '0' || w[1] > n + '0') {
+		uerror("bad xasm arg number %c", w[1]);
+		return;
+	}
+	idx = w[1] - '0';
+	if (idx == n)
+		idx--;
+	p = ary[idx]->n_left;
+	if (p->n_op != REG || GCLASS(p->n_rval) != CLASSC) {
+		uerror("paired FPU register required");
+		return;
+	}
+	print_reg64name(stdout, p->n_rval, 1);
+}

@@ -538,6 +538,13 @@ const char *mips_target_error(const struct mips_target *);
 #define SPARGREG        (MAXSPECIAL+5)  /* o32 integer argument register */
 
 #define TARGET_STDARGS
+#ifndef LANG_CXX
+#define TARGET_FABS mips_builtin_fabs
+#define MIPS_FABS_BUILTINS						\
+	{ "fabs", mips_builtin_fabs, 0, 1, fmaxt, DOUBLE },
+#else
+#define MIPS_FABS_BUILTINS
+#endif
 #define TARGET_BUILTINS							\
 	{ "__builtin_stdarg_start", mips_builtin_stdarg_start,	       \
 						0, 2, 0, VOID },	\
@@ -546,7 +553,8 @@ const char *mips_target_error(const struct mips_target *);
 	{ "__builtin_va_arg", mips_builtin_va_arg, BTNORVAL|BTNOPROTO, \
 							2, 0, 0 },	\
 	{ "__builtin_va_end", mips_builtin_va_end, 0, 1, 0, VOID },    \
-	{ "__builtin_va_copy", mips_builtin_va_copy, 0, 2, 0, VOID },
+	{ "__builtin_va_copy", mips_builtin_va_copy, 0, 2, 0, VOID }, \
+	MIPS_FABS_BUILTINS
 
 #ifdef LANG_CXX
 #define P1ND struct node
@@ -559,7 +567,14 @@ P1ND *mips_builtin_stdarg_start(const struct bitable *, P1ND *a);
 P1ND *mips_builtin_va_arg(const struct bitable *, P1ND *a);
 P1ND *mips_builtin_va_end(const struct bitable *, P1ND *a);
 P1ND *mips_builtin_va_copy(const struct bitable *, P1ND *a);
+#ifndef LANG_CXX
+P1ND *mips_builtin_fabs(const struct bitable *, P1ND *a);
+#endif
 #undef P1ND
+
+void mips_xasm_targarg(char *, void *, int);
+#define XASM_TARGARG(w, ary) \
+	(w[1] == 'H' ? w++, mips_xasm_targarg(w, ary, n), 1 : 0)
 
 /* floating point definitions */
 #define USE_IEEEFP_32

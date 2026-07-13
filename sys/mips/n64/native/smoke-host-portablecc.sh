@@ -906,6 +906,55 @@ END { exit seen && mutate && reload ? 0 : 1 }
 done
 
 cat > "$tmp.c" <<'EOF'
+extern double fabs(double);
+
+float
+fabs_builtin_float(float value)
+{
+	return __builtin_fabsf(value);
+}
+
+double
+fabs_plain_double(double value)
+{
+	return fabs(value);
+}
+
+double
+fabs_builtin_double(double value)
+{
+	return __builtin_fabs(value);
+}
+
+long double
+fabs_builtin_long_double(long double value)
+{
+	return __builtin_fabsl(value);
+}
+EOF
+
+for fabs_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$fabs_cpu" -mhard-float -O2 -S -o "$tmp.s" \
+	    "$tmp.c"
+	if grep '^[[:space:]]*jal[[:space:]]*fabs' "$tmp.s" >/dev/null ||
+	    grep '^[[:space:]]*abs[.][sd][[:space:]]' "$tmp.s" >/dev/null; then
+		echo "$fabs_cpu did not lower hard-float fabs safely" >&2
+		exit 1
+	fi
+	grep '^[[:space:]]*mfc1[[:space:]].*,\$f1[23]' "$tmp.s" >/dev/null
+	grep 'mtc1[[:space:]].*,\$f[01]' "$tmp.s" >/dev/null
+	"$pcc" -march="$fabs_cpu" -mhard-float -O2 -c -o "$tmp.o" \
+	    "$tmp.c"
+	test -s "$tmp.o"
+
+	"$pcc" -march="$fabs_cpu" -msoft-float -O2 -S -o "$tmp.s" \
+	    "$tmp.c"
+	grep '^[[:space:]]*jal[[:space:]]*fabsf' "$tmp.s" >/dev/null
+	grep '^[[:space:]]*jal[[:space:]]*fabs' "$tmp.s" >/dev/null
+	grep '^[[:space:]]*jal[[:space:]]*fabsl' "$tmp.s" >/dev/null
+done
+
+cat > "$tmp.c" <<'EOF'
 void
 hilo_gap_schedule_probe(void)
 {
