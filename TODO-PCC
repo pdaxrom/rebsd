@@ -4691,6 +4691,44 @@ Milestone order:
     improves it from 4.815 to 5.333 Melem/s, or 81.36% of GCC.  This passes the
     H2 physical and commit gates, but the 90% overall stretch target remains
     open.
+  - [x] H3 strength-reduce single-use indexed FP addresses on VR4300
+    hard-float.  H2 still measures rolled `daxpy` at 64.71% of GCC, and its
+    PCC loop rebuilds `dx + (i << 3)` on every iteration even though the
+    existing G7 pointer-induction pass already carries the two-use `dy`
+    address.  A small target hook now permits the same pass for a one-use
+    `float`, `double`, or o32 `long double` pointer while retaining the
+    two-use default for every other target and type.
+  - [x] Reject the unrestricted single-use prototype.  It shortened Linpack
+    but increased integer pressure in `dgefa`, adding four loads and four
+    stores.  Restricting the hook to FP pointees removes that spill regression:
+    complete VR4300 Linpack falls from 3136 to 3117 instructions and by 394
+    assembly bytes with unchanged load, store, `nop`, branch, and jump counts.
+  - [x] Keep H3 VR4300 hard-float only.  VR4300 soft-float, generic MIPS3, and
+    MIPS32R2 retain the old threshold.  The earlier measured MIPS32R2 G7
+    pointer-induction prototype regressed 0.303%, so a static reduction alone
+    is not enough to enable the transform there.
+  - [x] Pass the H3 software gates.  All six PCC-kernel/PCC-rootfs hard/soft
+    `pcc-smoke-all.sh` profiles report zero failures and final RC zero.
+    Native hard-float regression passes 296/296 runtime cases on Malta64,
+    Malta, and Maltael, including `misc__ssastrength001`; the host assembly
+    smoke proves that only the VR4300 hard-float single-use FP case loses its
+    scaled-index shift.
+  - [x] Build the H3 GCC-kernel/PCC-hard-float a.out N64 image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h3-fp-single-pointer-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136, SHA-256
+    `07162ebf10802a6a7d41c9ec3fe7853fb96d01e6d32562d53aca2b63d8a5684f`.
+    It passes `fsutil --check`, has stamp `.build-mode.gcc.1.0.0.1`, and
+    contains all four independent GCC/PCC ordinary/per-kernel Linpack
+    binaries.
+  - [x] Physically benchmark the H3 image.  Both self-tests, every Linpack and
+    numeric debug status, and the terminal `N64_PCC_DEBUG_RC_END` marker pass.
+    The stable ordinary row is 3693.268 PCC versus 4410.514 GCC KFLOPS, or
+    83.74%; PCC is 0.35% below H2, so H3 does not establish an overall Linpack
+    gain.  It does accelerate the intended rolled loops: `daxpy_r` rises from
+    3.333 to 3.583 Melem/s, or 7.50%, and reaches 69.06% of GCC; `ddot_r`
+    rises from 3.521 to 4.149 Melem/s, or 17.84%, and reaches 69.29% of GCC.
+    This closes the narrow H3 physical and commit gates while leaving the 90%
+    overall target open.
 
 Success criteria:
 

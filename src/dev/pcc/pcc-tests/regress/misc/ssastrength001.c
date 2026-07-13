@@ -65,6 +65,29 @@ pointer_descending_four(const int *values, int count)
 	return sum;
 }
 
+static double
+pointer_single_fp(const double *values, int count)
+{
+	double sum;
+	int i;
+
+	sum = 0.0;
+	for (i = 0; i < count; i++)
+		sum += values[i];
+	return sum;
+}
+
+static int
+pointer_single_int(const int *values, int count)
+{
+	int i, sum;
+
+	sum = 0;
+	for (i = 0; i < count; i++)
+		sum += values[i];
+	return sum;
+}
+
 int
 main(void)
 {
@@ -83,5 +106,9 @@ main(void)
 		return 4;
 	if (pointer_descending_four(values, 16) != 256)
 		return 5;
+	if (pointer_single_fp((const double[]){ 1.0, 2.0, 3.0, 4.0 }, 4) != 10.0)
+		return 6;
+	if (pointer_single_int(values, 8) != 64)
+		return 7;
 	return 0;
 }

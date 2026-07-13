@@ -18,6 +18,9 @@
 #ifndef TARGET_SSA_STRENGTH_REDUCE_ADDRESS
 #define TARGET_SSA_STRENGTH_REDUCE_ADDRESS()	0
 #endif
+#ifndef TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS
+#define TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS(t)	0
+#endif
 
 #define MAX_ADDRESS_INDUCTION_CANDIDATES	8
 
@@ -516,7 +519,9 @@ ssa_strength_reduce_addresses(struct p2env *p2e, struct basicblock *header,
 		}
 	}
 	for (i = 0; i < ncandidate; i++) {
-		if (candidate[i].count < 2)
+		if (candidate[i].count < 2 &&
+		    !TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS(
+		        candidate[i].pointer_type))
 			continue;
 		definition = temp_definition_block(p2e, candidate[i].base);
 		if (definition == NULL ||

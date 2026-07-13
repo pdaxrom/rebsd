@@ -1939,3 +1939,104 @@ loop-carried `idamax` maximum in an FPR, improving it 10.76% and raising its
 ratio from 73.44% to 81.36%.  Both self-tests and every numeric status marker
 are zero, and terminal `N64_PCC_DEBUG_RC_END` is present.  This closes the H2
 physical and commit gates while leaving the 90% overall target open.
+
+## Milestone H3: Single-Use VR4300 FP Pointer Induction
+
+H2 leaves rolled `daxpy` at 64.71% of GCC on physical VR4300.  Its PCC loop
+already carries the read/write `dy` pointer through G7, but still computes the
+single-use `dx + (i << 3)` address on every iteration.  H3 extends the existing
+target-independent G7 pass with one target policy hook: a target may accept an
+otherwise valid affine address with one use instead of the default two.
+
+The MIPS policy permits this only for pointers to `float`, `double`, or the o32
+`long double` alias, and only while the outer G7 gate selects VR4300 hard-float.
+The resulting rolled `daxpy` loop carries and increments both pointers.
+Soft-float, generic MIPS3, integer pointers, and MIPS32R2 retain the old
+two-use threshold.  The earlier G7 MIPS32R2 A/B prototype regressed 0.303%, so
+H3 does not turn a static-only reduction into a broader policy change.
+
+An unrestricted one-use prototype was also rejected.  It shortened the whole
+benchmark but extended integer-pointer lifetimes in `dgefa`, adding four loads
+and four stores.  Restricting one-use induction to FP pointees removes that
+register-pressure regression.
+
+### H3 Static Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  branches  jumps  bytes
+VR4300 H2                      3136       2916   220    542     292       165    206  96753
+VR4300 H3                      3117       2897   220    542     292       165    206  96359
+```
+
+H3 removes 19 instructions and 394 assembly bytes without increasing spills,
+memory operations, control transfers, or delay-slot nops.  The host assembly
+smoke requires zero scaled-index shifts in the single-use FP loop only for
+VR4300 hard-float, while the equivalent integer loop and every other profile
+retain one shift.
+
+### H3 Regression Gates
+
+Native hard-float PCC regression passes 296/296 runtime cases on Malta64,
+Malta, and Maltael.  The complete PCC-kernel/PCC-rootfs matrix is:
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 14034.307 / 13764.868 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 986.886 / 987.346 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 9421.538 / 9502.427 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1013.900 / 1003.679 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 9459.689 / 9633.487 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1046.693 / 1055.555 | `PCC_SMOKE_ALL_RC:0` |
+
+Every full smoke reports `PCC_SMOKE_ALL_FAILURES 0`.  Concurrent QEMU timing
+is correctness evidence only; the physical N64 result below is the performance
+and commit gate.  H3 does not change multiply scheduling, the default VR4300
+`-mfix4300` workaround, or the explicit `-mno-fix4300` opt-out.
+
+### H3 N64 Comparison Artifact
+
+The physical image uses a GCC debug-UART kernel and PCC VR4300 hard-float a.out
+userland.  GCC and PCC ordinary/per-kernel Linpack binaries use their
+separately built runtimes:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h3-fp-single-pointer-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 07162ebf10802a6a7d41c9ec3fe7853fb96d01e6d32562d53aca2b63d8a5684f
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 38944 section bytes, sha256 7b615c08758fc241a5416030bcd6649169a0b72c93e46cf6081b4f0da0e2537a
+linpack-kernels-gcc: 25584 section bytes, sha256 b4a7de6d6a36b9fa2998f35d52d9d7672e18b4f92ff127463de99f645499d309
+linpack-kernels-pcc: 45400 section bytes, sha256 2fbcb2fdc0fd79e1e4a96777a18ee3f511b72a5f911f2d23196fbf7da56d6a42
+```
+
+The image passes all five `fsutil --check` phases.  Physical ordinary Linpack
+measured:
+
+| Reps | GCC KFLOPS | PCC KFLOPS | PCC/GCC |
+| ---: | ---: | ---: | ---: |
+| 8 | 4370.516 | 3747.746 | 85.75% |
+| 16 | 4410.514 | 3693.268 | 83.74% |
+
+The stable PCC row is 0.35% below H2 PCC, while the GCC control changes by
+-0.06%; the ratio is 0.24 percentage points lower.  H3 therefore does not
+establish an overall ordinary Linpack improvement.  Its per-kernel result
+shows the intended rolled-loop effect:
+
+| Kernel | GCC Melem/s | PCC Melem/s | PCC/GCC | PCC vs H2 |
+| --- | ---: | ---: | ---: | ---: |
+| `daxpy_r` | 5.188 | 3.583 | 69.06% | +7.50% |
+| `daxpy_ur` | 5.124 | 4.313 | 84.17% | -0.02% |
+| `ddot_r` | 5.988 | 4.149 | 69.29% | +17.84% |
+| `ddot_ur` | 6.767 | 5.438 | 80.36% | -0.11% |
+| `dscal_r` | 7.217 | 4.846 | 67.15% | -0.66% |
+| `dscal_ur` | 8.376 | 6.350 | 75.81% | +0.89% |
+| `idamax` | 6.555 | 5.372 | 81.95% | +0.73% |
+
+`daxpy_r` gains 7.50% and improves its GCC ratio by 4.35 percentage points.
+The two single-use input addresses in rolled `ddot` also become loop-carried,
+raising `ddot_r` by 17.84% and its GCC ratio by 10.49 percentage points.  Both
+self-tests, all benchmark return codes, `N64_PCC_DEBUG_END`, and
+`N64_PCC_DEBUG_RUNNER_RC` are zero; terminal `N64_PCC_DEBUG_RC_END` is
+present.  This closes the narrow H3 physical and commit gates while leaving
+the 90% overall target open.

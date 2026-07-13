@@ -1216,6 +1216,46 @@ in an FPR, improving that kernel from 4.815 to 5.333 Melem/s and from 73.44%
 to 81.36% of GCC.  This closes the H2 physical and commit gates; the 90%
 overall stretch target remains open.
 
+H3 extends the existing target-independent G7 pointer-induction pass for the
+remaining single-use indexed FP address in rolled loops.  The normal pass
+still requires two uses of an affine address.  A small target policy hook lets
+VR4300 hard-float accept one use when the base points to `float`, `double`, or
+the o32 `long double` alias.  In rolled `daxpy`, PCC now carries both `dx` and
+`dy` pointers instead of rebuilding `dx + (i << 3)` on every iteration.
+
+The restriction is deliberate.  An unrestricted one-use prototype added four
+loads and four stores by extending integer-pointer lifetimes in `dgefa`.
+The FP-only form reduces complete VR4300 Linpack from 3136 to 3117 static
+instructions and by 394 assembly bytes with unchanged load, store, `nop`,
+branch, and jump counts.  VR4300 soft-float, generic MIPS3, integer pointers,
+and MIPS32R2 keep the old two-use threshold.  The measured G7 MIPS32R2 form
+regressed 0.303%, so it remains disabled pending positive runtime evidence.
+
+All six PCC-kernel/PCC-rootfs hard/soft profiles pass the complete
+`pcc-smoke-all.sh` suite with zero failures and final RC zero.  Native
+hard-float regression passes 296/296 runtime cases on Malta64, Malta, and
+Maltael, including the new single-use FP and integer controls.  QEMU timing is
+correctness evidence only; the physical N64 commit-gate result is recorded
+below.  The change does not affect multiply scheduling, default `-mfix4300`,
+or the `-mno-fix4300` opt-out.
+
+The H3 physical artifact uses a GCC debug-UART kernel and PCC VR4300
+hard-float a.out userland with independent GCC/PCC ordinary and per-kernel
+Linpack binaries.  It is stored at
+`/Users/sash/Work/N64/retrobsd-build/n64-h3-fp-single-pointer-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+has size 6619136 bytes and SHA-256
+`07162ebf10802a6a7d41c9ec3fe7853fb96d01e6d32562d53aca2b63d8a5684f`.
+The image passes `fsutil --check` and has build stamp
+`.build-mode.gcc.1.0.0.1`.  Physical validation passes both self-tests, all
+benchmark and numeric debug statuses are zero, and terminal
+`N64_PCC_DEBUG_RC_END` is present.  The stable ordinary row is 3693.268 PCC
+versus 4410.514 GCC KFLOPS, or 83.74%; PCC is 0.35% below H2, so H3 does not
+establish an overall Linpack gain.  The targeted rolled paths do improve:
+`daxpy_r` rises 7.50%, from 3.333 to 3.583 Melem/s, and reaches 69.06% of GCC;
+`ddot_r` rises 17.84%, from 3.521 to 4.149 Melem/s, and reaches 69.29% of GCC.
+This closes H3's narrow physical and commit gates while the 90% overall target
+remains open.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and
