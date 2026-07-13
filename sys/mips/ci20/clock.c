@@ -27,10 +27,13 @@
 
 #define CI20_TCU_IRQ        25
 #define CI20_TCU_CHANNEL    0
+#define CI20_DELAY_CHANNEL  3
 #define CI20_EXTCLK_HZ      48000000u
 #define CI20_TCU_DIVISOR    64u
 #define CI20_TCU_RATE       (CI20_EXTCLK_HZ / CI20_TCU_DIVISOR)
 #define CI20_TCU_PERIOD     ((CI20_TCU_RATE + HZ / 2) / HZ)
+#define CI20_DELAY_PERIOD   0xffffu
+#define CI20_DELAY_CHUNK_US 80000u
 #define CI20_COUNT_PERIOD   ((MIPS_COUNT_KHZ * 1000u + HZ - 1) / HZ)
 
 #if CI20_TCU_PERIOD > 0xffffu
@@ -42,6 +45,7 @@ extern void mips_timer_record(unsigned long late_us, unsigned long clock_us);
 
 static unsigned ci20_clock_last_count;
 static int ci20_clock_last_count_valid;
+static int ci20_delay_ready;
 
 static volatile unsigned *
 tcu_reg(unsigned offset)
@@ -84,26 +88,62 @@ void
 clkstart(void)
 {
     unsigned bit = 1u << CI20_TCU_CHANNEL;
+    unsigned delay_bit = 1u << CI20_DELAY_CHANNEL;
     unsigned flags = TCU_FFLAG(CI20_TCU_CHANNEL) |
         TCU_HFLAG(CI20_TCU_CHANNEL);
+    unsigned delay_flags = TCU_FFLAG(CI20_DELAY_CHANNEL) |
+        TCU_HFLAG(CI20_DELAY_CHANNEL);
 
-    tcu_write(TCU_TSCR, bit);
-    tcu_write(TCU_TECR, bit);
+    tcu_write(TCU_TSCR, bit | delay_bit);
+    tcu_write(TCU_TECR, bit | delay_bit);
     tcu_write(TCU_TMSR, 0xffffffffu);
     tcu_write(TCU_TCSR(CI20_TCU_CHANNEL),
         TCU_TCSR_EXT_EN | TCU_TCSR_PRESCALE64);
     tcu_write(TCU_TDFR(CI20_TCU_CHANNEL), CI20_TCU_PERIOD);
     tcu_write(TCU_TDHR(CI20_TCU_CHANNEL), 0xffff);
     tcu_write(TCU_TCNT(CI20_TCU_CHANNEL), 0);
-    tcu_write(TCU_TFCR, flags);
+    tcu_write(TCU_TCSR(CI20_DELAY_CHANNEL),
+        TCU_TCSR_EXT_EN | TCU_TCSR_PRESCALE64);
+    tcu_write(TCU_TDFR(CI20_DELAY_CHANNEL), CI20_DELAY_PERIOD);
+    tcu_write(TCU_TDHR(CI20_DELAY_CHANNEL), CI20_DELAY_PERIOD);
+    tcu_write(TCU_TCNT(CI20_DELAY_CHANNEL), 0);
+    tcu_write(TCU_TFCR, flags | delay_flags);
     tcu_write(TCU_TMSR, TCU_HFLAG(CI20_TCU_CHANNEL));
     tcu_write(TCU_TMCR, TCU_FFLAG(CI20_TCU_CHANNEL));
-    tcu_write(TCU_TESR, bit);
+    tcu_write(TCU_TESR, bit | delay_bit);
+    ci20_delay_ready = 1;
 
     intc_unmask(CI20_TCU_IRQ);
 
-    printf("ci20 clock: tcu%u irq %u rate %u hz period %u\n",
-        CI20_TCU_CHANNEL, CI20_TCU_IRQ, CI20_TCU_RATE, CI20_TCU_PERIOD);
+    printf("ci20 clock: tcu%u irq %u rate %u hz period %u, "
+        "delay tcu%u period %u\n", CI20_TCU_CHANNEL, CI20_TCU_IRQ,
+        CI20_TCU_RATE, CI20_TCU_PERIOD, CI20_DELAY_CHANNEL,
+        CI20_DELAY_PERIOD);
+}
+
+void
+udelay(unsigned usec)
+{
+    unsigned chunk;
+    unsigned elapsed;
+    unsigned now;
+    unsigned start;
+    unsigned ticks;
+
+    if (!ci20_delay_ready)
+        return;
+    while (usec != 0) {
+        chunk = usec > CI20_DELAY_CHUNK_US ?
+            CI20_DELAY_CHUNK_US : usec;
+        ticks = ((CI20_TCU_RATE / 1000u) * chunk + 999u) / 1000u;
+        start = tcu_read(TCU_TCNT(CI20_DELAY_CHANNEL)) & 0xffffu;
+        do {
+            now = tcu_read(TCU_TCNT(CI20_DELAY_CHANNEL)) & 0xffffu;
+            elapsed = now >= start ? now - start :
+                CI20_DELAY_PERIOD - start + now;
+        } while (elapsed < ticks);
+        usec -= chunk;
+    }
 }
 
 int

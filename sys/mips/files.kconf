@@ -55,6 +55,7 @@ kernel/vm_swp.c                 standard
 
 dev/usb/usb_subr.c              optional usb
 dev/usb/usb_core.c              optional usb
+dev/usb/usb_service.c           optional usb
 dev/usb/ohci.c                  optional ohci
 
 kernel/sys_socket.c             optional inet

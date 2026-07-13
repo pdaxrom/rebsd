@@ -139,6 +139,7 @@ struct usb_core {
 };
 
 void usb_core_init(struct usb_core *);
+struct usb_core *usb_core_default(void);
 usb_error_t usb_driver_register(struct usb_core *,
     const struct usb_driver *);
 usb_error_t usb_bus_start(struct usb_core *, struct usb_bus *,

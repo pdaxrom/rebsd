@@ -90,6 +90,9 @@ copied or materially derived from the NetBSD USB sources:
 | `sys/dev/usb/usb_limits.h` | Compile-time core pool limits |
 | `sys/dev/usb/usb_hcd.h` | Minimal native HCD operations contract |
 | `sys/dev/usb/usb_mock_hcd.[ch]` | Deterministic hardware-independent test controller |
+| `sys/dev/usb/usb_service.c` | Generic bounded-core service instance used by platform HCD attachments |
+| `sys/mips/ci20/usb_hw.[ch]` | Testable JZ4780 clock, PHY, reset, and VBUS sequence |
+| `sys/mips/ci20/usb.c` | Ci20 MMIO callbacks, OHCI attachment, and boot-time enumeration diagnostics |
 
 The DMA linker reservation and configuration entries are likewise native
 integration code.  `usb_desc.h` and the parser tests are native code; the
@@ -136,16 +139,13 @@ are used only by the JZ4780/Ci20 attachment layer.
 
 | Reference | Intended use | Current status |
 | --- | --- | --- |
-| `docs/JZ4780_pm.pdf` | JZ4780 register addresses, clocks, reset, PHY, IRQs | available in tree; no USB code written |
-| NetBSD `sys/arch/mips/ingenic/ingenic_ehci.c` | historical Ci20 EHCI attachment and quirks | reference only |
-| NetBSD `sys/arch/mips/ingenic/ingenic_ohci.c` | historical Ci20 OHCI attachment | reference only |
-| NetBSD `sys/arch/mips/ingenic/ingenic_regs.h` | cross-check JZ4780 register definitions | reference only |
-| Linux JZ4780 USB drivers and bindings | cross-check clocks, PHY, reset, and routing | exact revision not selected; no code imported |
-| U-Boot JZ4780 initialization | cross-check boot-time clock and PHY state | exact revision not selected; no code imported |
+| `docs/JZ4780_pm.pdf` | JZ4780 register addresses, clocks, reset, and PHY | used by native Ci20 attachment; exact pages and digest in `docs/CI20_USB.md` |
+| NetBSD `sys/arch/mips/ingenic/ingenic_ohci.c`, `ingenic_regs.h`, `apbus.c` | OHCI mapping, IRQ, clock gate, and suspend cross-check | exact commits recorded in `docs/CI20_USB.md`; no code imported |
+| MIPS/CI20_linux JZ4780 USB, CGU, and DTS files | board VBUS, controller mapping, PHY/reset sequence cross-check | commit `7dff33297116643485ca37141d804eddd793e834`; hardware facts only |
+| MIPS/CI20_u-boot `pll.c` and `ci20.c` | UHC source and board VBUS cross-check | commit `ef995a1611f0446a0b670ded9ec2609cb6dc51b7`; hardware facts only |
 
-Before a secondary hardware source contributes a register value or sequence,
-`docs/CI20_USB.md` will record its exact URL or repository revision, register,
-bit meaning, and reason for use.
+`docs/CI20_USB.md` records each secondary source's exact URL or repository
+revision, contributed hardware fact, register meaning, and reason for use.
 
 ## License Tracking
 

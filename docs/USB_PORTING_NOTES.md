@@ -418,3 +418,24 @@ Creator Ci20 hardware success requires a committed UART log naming the board,
 device, connection topology, detected speed, selected HCD, and test result.
 No hardware milestone is reported from compilation or register-level
 inspection alone.
+
+## Ci20 Polling Attachment
+
+The machine-independent service in `usb_service.c` owns the default bounded
+USB core. The generic OHCI source still knows only register callbacks, DMA,
+and the HCD contract. Ci20-specific code is split into a fake-register
+testable `usb_hw.c` sequence and `usb.c`, which supplies KSEG1 MMIO, GPF15
+VBUS, delays, and the boot-time root-port policy.
+
+The board sequence selects the shared OTG PHY as the 48 MHz UHC source,
+ungates UHC, configures port-1 reference clock/pulldowns/UTMI width, releases
+forced suspend, toggles PHY POR, and pulses UHC reset. It then starts OHCI at
+`0x134a0000`, powers and resets port 1, and enumerates one preconnected
+full-/low-speed device. Every register and board-wiring source is recorded in
+`docs/CI20_USB.md`.
+
+Host tests cover successful sequencing and a stuck `UHCCDR_BUSY` path. The
+complete GCC kernel links with USB enabled, and all new core/OHCI/Ci20 objects
+compile with PCC. The remaining gate is the first UART trace from real Ci20
+hardware; interrupts, post-boot hotplug, periodic traffic, and class drivers
+remain disabled until that polling path is confirmed.

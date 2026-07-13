@@ -3,6 +3,8 @@ mips/ci20/if_dm9000.c          optional ci20_dm9000
 mips/ci20/devsw.c              standard
 mips/ci20/clock.c              standard
 mips/ci20/dma.c                optional dma
+mips/ci20/usb_hw.c             optional usb ohci
+mips/ci20/usb.c                optional usb ohci
 mips/ci20/machdep.c            standard
 mips/ci20/romdisk.c            standard
 mips/ci20/romfs_backend.c      standard
