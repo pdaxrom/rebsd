@@ -104,6 +104,9 @@ usb_error_t ohci_root_port_status(struct ohci_softc *, unsigned,
     usb_port_status_t *);
 usb_error_t ohci_root_port_power(struct ohci_softc *, unsigned, int);
 usb_error_t ohci_root_port_reset(struct ohci_softc *, unsigned);
+usb_error_t ohci_root_port_clear_change(struct ohci_softc *, unsigned,
+    unsigned);
+void ohci_root_intr_enable(struct ohci_softc *, int);
 int ohci_intr(struct ohci_softc *);
 
 #endif /* _DEV_USB_OHCIVAR_H_ */

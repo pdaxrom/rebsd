@@ -1,0 +1,61 @@
+Creator Ci20 OHCI hotplug failure, 2026-07-13
+Device: direct low-speed 1c4f:0002 composite HID boot keyboard
+Image SHA-256: 40e15f420336d89088439ac0f2e7831eaa94908f40b70be7624f6bdfe7b9b887
+Result: FAIL -- init wait warning, then panic: wakeup on keyboard disconnect
+
+Starting kernel ...
+
+ReBSD Ci20 kernel entry
+ram size=0x10000000
+
+ReBSD for Ci20: built on sash@sashz-mbp with gcc mipsel-elf-gcc (GCC) 14.2.0, cpu=mips32r2, float=hard, endian=little
+ci20 uart: irq 34 enabled
+ci20 clock: tcu0 irq 25 rate 750000 hz period 7500, delay tcu3 period 65535
+dma: Ci20 uncached pool phys=178000 size=65536 align=4096
+usb0: initializing core
+usb0: core ready
+ukbd0: HID boot-keyboard driver ready
+ohci0: attach, OHCI phys=134a0000
+ohci0: init: enable VBUS
+ohci0: init: settle VBUS
+ohci0: init: configure UHC clock
+ohci0: init: ungate UHC clock
+ohci0: init: configure host PHY
+ohci0: init: pulse PHY reset
+ohci0: init: pulse UHC reset
+ohci0: init: hardware ready
+ohci0: Ci20 VBUS on, cpm clkgr0=3e5c7fe0 opcr=1566 usbpcr=408919b8 usbpcr1=8ac63370 uhccdr=e0000000 srbc=2
+ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+ohci0: port1 device attached speed=low
+ohci0: usb addr=1 vendor=1c4f product=2 config=1 interfaces=2
+ohci0: if0 class=3 subclass=1 protocol=1 endpoints=1
+ohci0: if1 class=3 subclass=0 protocol=0 endpoints=1
+ohci0: irq 5 enabled for periodic/root-hub changes
+dm0: dm9000 deferred probe at 0xb6000000 address 02:20:00:00:00:20
+phys mem  = 262144 kbytes
+user mem  = 4096 kbytes
+root dev  = (0,0)
+swap dev  = (1,0)
+root size = 32768 kbytes
+swap size = 32768 kbytes
+WARNING: Something is hung (wont die); ps axl advised
+July 13 05:55:02 init: kernel security level changed from 0 to 1
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: root
+ReBSD/Creator Ci20
+# ps ax
+   PID TTY  TIME COMMAND
+     1 ?    0:00 init -
+    13 ?    0:00 -sh
+# ps axl
+  F S   UID   PID  PPID CPU PRI NICE  ADDR  SZ WCHAN    TTY  TIME COMMAND
+200 S     0     1     0   0  30   0   0x66  48 proc     ?    0:00 init -
+200 S     0    13     1   0  30   0   0xb0  64 proc     ?    0:00 -sh
+# ukbd0: interrupt transfer failed: I/O error
+panic: wakeup
+syncing disks... done
+halted

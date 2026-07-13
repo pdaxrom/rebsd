@@ -148,6 +148,14 @@ static usb_error_t ohci_hcd_abort_xfer(struct usb_xfer *);
 static usb_error_t ohci_hcd_root_ctrl(struct usb_hcd *,
     const usb_device_request_t *, void *, size_t *);
 static void ohci_hcd_poll(struct usb_hcd *);
+static unsigned ohci_hcd_root_port_count(struct usb_hcd *);
+static usb_error_t ohci_hcd_root_port_status(struct usb_hcd *, unsigned,
+    usb_port_status_t *);
+static usb_error_t ohci_hcd_root_port_power(struct usb_hcd *, unsigned, int);
+static usb_error_t ohci_hcd_root_port_reset(struct usb_hcd *, unsigned);
+static usb_error_t ohci_hcd_root_port_clear_change(struct usb_hcd *,
+    unsigned, unsigned);
+static void ohci_hcd_root_intr_enable(struct usb_hcd *, int);
 
 static const struct usb_hcd_ops ohci_hcd_ops = {
     ohci_hcd_start,
@@ -157,7 +165,13 @@ static const struct usb_hcd_ops ohci_hcd_ops = {
     ohci_hcd_submit_xfer,
     ohci_hcd_abort_xfer,
     ohci_hcd_root_ctrl,
-    ohci_hcd_poll
+    ohci_hcd_poll,
+    ohci_hcd_root_port_count,
+    ohci_hcd_root_port_status,
+    ohci_hcd_root_port_power,
+    ohci_hcd_root_port_reset,
+    ohci_hcd_root_port_clear_change,
+    ohci_hcd_root_intr_enable
 };
 
 void
@@ -668,6 +682,7 @@ ohci_poll_interrupt(struct ohci_softc *sc)
     unsigned cc;
     size_t actlen;
     usb_error_t result;
+    int root_probe;
 
     xfer = sc->oh_intr_xfer;
     if (xfer == 0)
@@ -681,6 +696,7 @@ ohci_poll_interrupt(struct ohci_softc *sc)
         opipe->op_toggle = head & OHCI_ED_TOGGLE_CARRY;
 
     result = USB_STATUS_NORMAL_COMPLETION;
+    root_probe = 0;
     cc = OHCI_TD_GET_CC(ohci_from_le32(
         sc->oh_intr_tds[0].td_flags));
     if (cc != OHCI_CC_NO_ERROR && cc != OHCI_CC_DATA_UNDERRUN)
@@ -698,12 +714,26 @@ ohci_poll_interrupt(struct ohci_softc *sc)
     sc->oh_intr_length = 0;
     if (result != USB_STATUS_NORMAL_COMPLETION) {
         ohci_program_intr_table(sc, 0, 1);
-        ohci_write(sc, OHCI_INTERRUPT_DISABLE, OHCI_WDH | OHCI_MIE);
+        /*
+         * WDH can precede the root-port status change on real hardware.
+         * Quiesce both sources and queue a process-context port probe
+         * immediately.  If RHSC arrives later it remains pending until
+         * the probe reenables the root source.
+         */
+        ohci_write(sc, OHCI_INTERRUPT_DISABLE,
+            OHCI_WDH | OHCI_RHSC | OHCI_MIE);
         control = ohci_read(sc, OHCI_CONTROL);
         ohci_write(sc, OHCI_CONTROL, control & ~OHCI_PLE);
         sc->oh_intr_interval = 0;
+        root_probe = 1;
     }
     usb_xfer_complete(xfer, result, actlen);
+    if (root_probe) {
+        if (sc->oh_hcd.uh_root_change == 0 ||
+            sc->oh_hcd.uh_root_change(
+            sc->oh_hcd.uh_root_change_arg) != 0)
+            ohci_root_intr_enable(sc, 1);
+    }
 }
 
 static void
@@ -742,6 +772,13 @@ ohci_intr(struct ohci_softc *sc)
     ohci_write(sc, OHCI_INTERRUPT_STATUS, status);
     if (status & OHCI_WDH)
         ohci_hcd_poll(&sc->oh_hcd);
+    if (status & OHCI_RHSC) {
+        ohci_root_intr_enable(sc, 0);
+        if (sc->oh_hcd.uh_root_change == 0 ||
+            sc->oh_hcd.uh_root_change(
+            sc->oh_hcd.uh_root_change_arg) != 0)
+            ohci_root_intr_enable(sc, 1);
+    }
     return 1;
 }
 
@@ -828,4 +865,89 @@ ohci_root_port_reset(struct ohci_softc *sc, unsigned port)
         }
     }
     return USB_STATUS_TIMEOUT;
+}
+
+usb_error_t
+ohci_root_port_clear_change(struct ohci_softc *sc, unsigned port,
+    unsigned change)
+{
+    unsigned int value;
+
+    if (sc == 0 || !sc->oh_started || port == 0 || port > sc->oh_nports)
+        return USB_STATUS_INVALID;
+    value = 0;
+    if (change & UPS_C_CONNECT_STATUS)
+        value |= OHCI_RHPS_CSC;
+    if (change & UPS_C_PORT_ENABLED)
+        value |= OHCI_RHPS_PESC;
+    if (change & UPS_C_SUSPEND)
+        value |= OHCI_RHPS_PSSC;
+    if (change & UPS_C_OVERCURRENT_INDICATOR)
+        value |= OHCI_RHPS_OCIC;
+    if (change & UPS_C_PORT_RESET)
+        value |= OHCI_RHPS_PRSC;
+    if (value != 0)
+        ohci_write(sc, OHCI_RH_PORT_STATUS(port), value);
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+void
+ohci_root_intr_enable(struct ohci_softc *sc, int on)
+{
+    unsigned int enabled;
+
+    if (sc == 0 || !sc->oh_started)
+        return;
+    if (on) {
+        ohci_write(sc, OHCI_INTERRUPT_ENABLE, OHCI_RHSC | OHCI_MIE);
+        return;
+    }
+    ohci_write(sc, OHCI_INTERRUPT_DISABLE, OHCI_RHSC);
+    enabled = ohci_read(sc, OHCI_INTERRUPT_ENABLE);
+    if ((enabled & (OHCI_ALL_INTRS & ~OHCI_MIE)) == 0)
+        ohci_write(sc, OHCI_INTERRUPT_DISABLE, OHCI_MIE);
+}
+
+static unsigned
+ohci_hcd_root_port_count(struct usb_hcd *hcd)
+{
+    struct ohci_softc *sc;
+
+    sc = (struct ohci_softc *)hcd->uh_softc;
+    return sc != 0 && sc->oh_started ? sc->oh_nports : 0;
+}
+
+static usb_error_t
+ohci_hcd_root_port_status(struct usb_hcd *hcd, unsigned port,
+    usb_port_status_t *status)
+{
+    return ohci_root_port_status((struct ohci_softc *)hcd->uh_softc,
+        port, status);
+}
+
+static usb_error_t
+ohci_hcd_root_port_power(struct usb_hcd *hcd, unsigned port, int on)
+{
+    return ohci_root_port_power((struct ohci_softc *)hcd->uh_softc,
+        port, on);
+}
+
+static usb_error_t
+ohci_hcd_root_port_reset(struct usb_hcd *hcd, unsigned port)
+{
+    return ohci_root_port_reset((struct ohci_softc *)hcd->uh_softc, port);
+}
+
+static usb_error_t
+ohci_hcd_root_port_clear_change(struct usb_hcd *hcd, unsigned port,
+    unsigned change)
+{
+    return ohci_root_port_clear_change(
+        (struct ohci_softc *)hcd->uh_softc, port, change);
+}
+
+static void
+ohci_hcd_root_intr_enable(struct usb_hcd *hcd, int on)
+{
+    ohci_root_intr_enable((struct ohci_softc *)hcd->uh_softc, on);
 }

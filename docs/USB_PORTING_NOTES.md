@@ -12,10 +12,11 @@ OTG host mode, isochronous transfers, generic HID, USB networking, USB serial,
 audio, video, and power management are outside the first port.
 
 The first target milestone is OHCI root-hub enumeration plus a HID boot
-keyboard feeding the ReBSD console. Reliable post-boot disconnect/reconnect
-remains part of the wider keyboard milestone, but follows the first
-preconnected-keyboard interrupt test. EHCI and read-only mass storage are
-later milestones.
+keyboard feeding the ReBSD console. Preconnected input, boot with an empty
+port, late attach, and repeated post-boot disconnect/reconnect are hardware
+verified on 2026-07-13. EHCI and read-only mass storage remain later
+milestones; the separate J24/J8 DWC2 OTG connection is outside this first
+host-port scope.
 
 ## Baseline
 
@@ -63,9 +64,9 @@ results, not Creator Ci20 hardware results.
 | `malloc/free` | No general ReBSD kernel byte heap exists.  USB uses fixed configurable pools and the DMA pool. |
 | `tsleep/wakeup` | Existing ReBSD `tsleep`/`wakeup` in process context. |
 | NetBSD callout | Existing fixed-table `timeout`/`untimeout`; no callout framework import. |
-| kernel threads | No current ReBSD kernel-thread API. Synchronous enumeration runs from process context; the first bounded boot-keyboard callback can finish directly in interrupt context because it neither sleeps nor attaches devices. |
+| kernel threads | No general ReBSD kernel-thread API is imported. `newproc()` is a user-process constructor and proved unsafe for a permanent SSYS child. The existing proc0 scheduler loop drains the one bounded USB task queue. |
 | mutex/condvar | UP ownership plus short `splhigh`/`splx` critical sections; never sleep with interrupts masked. |
-| soft interrupt/task queue | No general equivalent. The single boot-keyboard callback is deliberately bounded; add a USB task queue before hub exploration, bulk I/O, or any callback that may sleep. |
+| soft interrupt/task queue | A USB-local fixed queue holds at most eight coalescing tasks. IRQ code schedules work and wakes proc0; the proc0 scheduler loop performs root-hub exploration, enumeration, attach, and detach. |
 | `splusb` | Use the existing global interrupt masking primitive through a small USB critical-section wrapper. |
 | root-hub child attach | USB core creates a `usb_device`; the HCD exposes root-hub control and port status through the common HCD operations. |
 | disk attach | Add a static `bdevsw` entry and a ReBSD `strategy(struct buf *)` adapter. |
@@ -122,14 +123,28 @@ The eventual general ownership contract is:
   a hardware interrupt handler;
 - no DMA object is freed until the HCD has stopped referencing it.
 
-ReBSD has no general deferred-work worker. Initial OHCI enumeration therefore
-runs in polling mode from process context. The first interrupt-driven slice is
-limited to completing and immediately rearming one eight-byte boot-keyboard
-transfer; decoding and console submission are bounded and do not sleep. A
-single bounded USB task queue and a safe execution mechanism are still
-required before hub exploration, bulk I/O, or general class callbacks. A clock
-callout alone must not be treated as process context, and a NetBSD
-kernel-thread framework will not be imported.
+ReBSD has no general deferred-work framework, so USB now supplies one bounded
+queue drained by the existing proc0 scheduler loop. The OHCI hard interrupt handles
+the bounded eight-byte boot-keyboard completion directly, but root-hub RHSC
+only acknowledges/masks the source and schedules a coalescing task. Proc0
+performs debounce delays, control transfers, enumeration, attach, and detach,
+then reenables RHSC without clearing an event that may have arrived while it
+was masked. A clock callout is not treated as process context, and no NetBSD
+kernel-thread framework is imported.
+
+Creator Ci20 hardware showed that WDH/NOT_RESPONDING can precede the
+disconnect RHSC. A failed periodic transfer therefore masks WDH, RHSC, and
+MIE and directly queues a deferred root-port probe. Process context reads and
+clears the port state before reenabling RHSC/MIE; an RHSC that arrives in the
+meantime remains pending. Simply leaving MIE enabled caused interrupt
+starvation on a later hardware candidate and is not used.
+
+No USB process is forked. An initial attempt to use `newproc()` first made the
+worker an init child, blocking init's startup wait. Parenting it to proc0
+removed that wait but still left a stale process in the hashed sleep queue,
+causing `panic: wakeup` after disconnect. The final design wakes proc0 on
+`runin` and `runout`; scheduler-side pending checks before both sleeps
+prevent a task from being stranded by a lost wakeup.
 
 ## Sleep, Wakeup, and Timeouts
 
@@ -313,18 +328,22 @@ cancellation.
 Root-port helpers provide status translation, per-port power, and reset. The
 first periodic slice supports one interrupt-IN pipe, programs the HCCA table
 at a normalized 1/2/4/8/16/32-frame interval, preserves the ED data-toggle
-carry, and rearms an eight-byte HID transfer from the callback. Hub emulation,
-bulk, multiple periodic pipes, and a general deferred completion queue remain
-later slices; unsupported transfer types return an explicit error.
+carry, and rearms an eight-byte HID transfer from the callback. The compact
+root-hub layer translates RHSC into deferred port exploration and supports
+direct-device attach, detach, debounce, reset, and address reuse. External
+hubs, bulk, multiple periodic pipes, and a general deferred transfer
+completion queue remain later slices; unsupported transfer types return an
+explicit error.
 
 `sys/tests/usb/ohci_test.c` supplies fake OHCI MMIO and a fake full-speed USB
 device.  It executes the real HCCA/ED/TD schedule through the generic DMA and
 USB core, including the six control requests needed to enumerate and
 configure a HID boot interface. It also drives real periodic ED/TD completion,
-IRQ acknowledgement, boot-key decoding, control traffic while the periodic
-pipe is active, disconnect/reconnect, port reset, STALL, timeout, abort, and
-DMA reuse. `ohci.c`, `ukbd.c`, and `ukbdmap.c` compile with target MIPS GCC
-and PCC without Ci20 headers.
+IRQ acknowledgement, deferred RHSC, an RHSC event arriving while masked,
+boot-key decoding, control traffic while the periodic pipe is active,
+disconnect/reconnect, port reset, STALL, timeout, abort, and DMA reuse.
+`usb_task.c`, `uhub.c`, `ohci.c`, `usb_service.c`, the Ci20 attachment, and
+the init integration compile with target MIPS GCC and PCC.
 
 ### DMA Phase Verification
 
@@ -397,11 +416,15 @@ report parser and wscons-style framework are not imported.
 
 ## Locking Model
 
-The current MIPS kernel is effectively uniprocessor.  `splbio`, `spltty`,
-`splclock`, `splnet`, and `splhigh` all disable interrupts globally.  USB will
-use this only for short queue and state transitions.  It will not hold an
-interrupt-disabled critical section across `tsleep`, a control transfer,
-descriptor parsing, driver attach/detach, or block I/O completion.
+The current MIPS kernel is effectively uniprocessor. `splbio`, `spltty`,
+`splclock`, `splnet`, and `splhigh` all disable interrupts globally. USB uses
+this only for short queue and state transitions. Proc0 drains tasks after
+`spl0()`; the scheduler checks queue state under interrupt masking before it
+sleeps on either native channel. Control transfers, descriptor parsing,
+driver attach/detach, and debounce delays run with interrupts enabled. Current
+deferred tasks use bounded polling/delay operations and must not sleep;
+supporting arbitrary sleeping USB jobs would require a real kernel-thread
+facility.
 
 Object ownership and terminal transfer transitions will be written explicitly
 in `docs/USB_ARCHITECTURE.md` before the mock HCD/core commit.  The design will
@@ -425,19 +448,21 @@ device, connection topology, detected speed, selected HCD, and test result. No
 hardware milestone is reported from compilation or register-level inspection
 alone.
 
-## Ci20 Polling Attachment
+## Ci20 OHCI Attachment
 
 The machine-independent service in `usb_service.c` owns the default bounded
 USB core. The generic OHCI source still knows only register callbacks, DMA,
 and the HCD contract. Ci20-specific code is split into a fake-register
 testable `usb_hw.c` sequence and `usb.c`, which supplies KSEG1 MMIO, GPF15
-VBUS, delays, and the boot-time root-port policy.
+VBUS, delays, IRQ 5 dispatch, and board diagnostics. Root-port policy is now
+owned by the machine-independent `uhub.c` layer.
 
 The board sequence selects the shared OTG PHY as the 48 MHz UHC source,
 ungates UHC, configures port-1 reference clock/pulldowns/UTMI width, releases
 forced suspend, toggles PHY POR, and pulses UHC reset. It then starts OHCI at
-`0x134a0000`, powers and resets port 1, and enumerates one preconnected
-full-/low-speed device. Every register and board-wiring source is recorded in
+`0x134a0000`. The generic root-hub layer powers port 1, enumerates an initial
+full-/low-speed device when present, and leaves RHSC armed for a later attach
+or detach. Every register and board-wiring source is recorded in
 `docs/CI20_USB.md`.
 
 Host tests cover successful sequencing and a stuck `UHCCDR_BUSY` path. Real
@@ -446,3 +471,7 @@ OHCI control enumeration, descriptor parsing, TCU3 delays, and coexistence
 with DM9000 networking. A real-board test on 2026-07-13 also verified OHCI IRQ
 5, one periodic interrupt-IN pipe, the boot-keyboard class driver, and keyboard
 input at the live ReBSD console using the low-speed `1c4f:0002` device.
+Post-boot detach/reconnect, the proc0 deferred runner, and the RHSC path were
+verified on Creator Ci20 on 2026-07-13 with both a preconnected keyboard and a
+keyboard first attached after boot. The successful raw captures and exact
+image digest are recorded in `docs/USB_TESTING.md`.

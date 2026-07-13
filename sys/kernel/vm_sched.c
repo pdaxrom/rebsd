@@ -10,6 +10,9 @@
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <machine/debug.h>
+#ifdef USB_ENABLED
+#include <dev/usb/usb_task.h>
+#endif
 
 #define MINFINITY   -32767      /* minus infinity */
 
@@ -56,6 +59,9 @@ sched()
         }
 #endif
         spl0();
+#ifdef USB_ENABLED
+        usb_task_run_pending();
+#endif
         if (in_core) {
 #ifdef N64_TRACE
             if (n64_sched_trace < 24) {
@@ -70,6 +76,11 @@ sched()
                 in_core = 0;
                 swapped_out = 0;
                 ++runin;
+                splhigh();
+#ifdef USB_ENABLED
+                if (usb_task_any_pending())
+                    continue;
+#endif
                 sleep ((caddr_t)&runin, PSWP);
                 continue;
             }
@@ -116,6 +127,10 @@ sched()
                 printf ("n64sched: sleep runout\n");
                 n64_sched_trace++;
             }
+#endif
+#ifdef USB_ENABLED
+            if (usb_task_any_pending())
+                continue;
 #endif
             sleep ((caddr_t) &runout, PSWP);
             continue;
@@ -167,6 +182,10 @@ sched()
             in_core = 0;
             swapped_out = 0;
             ++runin;
+#ifdef USB_ENABLED
+            if (usb_task_any_pending())
+                continue;
+#endif
             sleep ((caddr_t) &runin, PSWP);
         }
     }

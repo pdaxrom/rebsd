@@ -54,6 +54,8 @@ extern int ci20_dm9000_intr(void);
 #endif
 #ifdef OHCI_ENABLED
 extern int ci20_ohci_intr(void);
+extern void ci20_ohci_irq_storm(void);
+static unsigned ci20_ohci_irqs_since_tick;
 #endif
 #ifdef INET
 extern int netisr;
@@ -101,6 +103,12 @@ static void
 intc_unmask(unsigned irq)
 {
     *intc_reg(irq, INTC_CLEAR_MASK) = intc_bit(irq);
+}
+
+static void
+intc_mask(unsigned irq)
+{
+    *intc_reg(irq, INTC_SET_MASK) = intc_bit(irq);
 }
 
 void
@@ -407,11 +415,20 @@ mips_board_timer_intr(void)
 void
 mips_board_intr(int *frame, unsigned status)
 {
-    if (intc_pending(CI20_TCU_IRQ))
+    if (intc_pending(CI20_TCU_IRQ)) {
         ci20_clock_intr(frame, status);
 #ifdef OHCI_ENABLED
-    if (intc_pending(CI20_OHCI_IRQ))
-        (void)ci20_ohci_intr();
+        ci20_ohci_irqs_since_tick = 0;
+#endif
+    }
+#ifdef OHCI_ENABLED
+    if (intc_pending(CI20_OHCI_IRQ)) {
+        if (++ci20_ohci_irqs_since_tick > 32) {
+            intc_mask(CI20_OHCI_IRQ);
+            ci20_ohci_irq_storm();
+        } else
+            (void)ci20_ohci_intr();
+    }
 #endif
 #ifdef CI20_DM9000_ENABLED
     if (intc_pending(CI20_GPIOE_IRQ) && ci20_dm9000_intr()) {

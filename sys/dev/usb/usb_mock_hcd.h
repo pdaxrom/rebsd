@@ -19,6 +19,10 @@ struct usb_mock_hcd {
     struct usb_xfer *um_pending_xfer;
     usb_error_t um_fail_next;
     unsigned um_connected;
+    unsigned um_port_power;
+    unsigned um_port_enabled;
+    unsigned um_port_change;
+    unsigned um_root_intr_enabled;
     unsigned um_hold_xfers;
     unsigned um_address;
     unsigned um_configuration;

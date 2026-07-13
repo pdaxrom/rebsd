@@ -61,6 +61,7 @@ mock_stop(struct usb_hcd *hcd)
     mock = (struct usb_mock_hcd *)hcd->uh_softc;
     ++mock->um_stop_count;
     mock->um_pending_xfer = 0;
+    mock->um_root_intr_enabled = 0;
 }
 
 static usb_error_t
@@ -203,6 +204,86 @@ mock_poll(struct usb_hcd *hcd)
     ++mock->um_poll_count;
 }
 
+static unsigned
+mock_root_port_count(struct usb_hcd *hcd)
+{
+    (void)hcd;
+    return 1;
+}
+
+static usb_error_t
+mock_root_port_status(struct usb_hcd *hcd, unsigned port,
+    usb_port_status_t *status)
+{
+    struct usb_mock_hcd *mock;
+    unsigned flags;
+
+    if (port != 1 || status == 0)
+        return USB_STATUS_INVALID;
+    mock = (struct usb_mock_hcd *)hcd->uh_softc;
+    flags = 0;
+    if (mock->um_connected)
+        flags |= UPS_CURRENT_CONNECT_STATUS;
+    if (mock->um_port_enabled)
+        flags |= UPS_PORT_ENABLED;
+    if (mock->um_port_power)
+        flags |= UPS_PORT_POWER;
+    USETW(status->wPortStatus, flags);
+    USETW(status->wPortChange, mock->um_port_change);
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+static usb_error_t
+mock_root_port_power(struct usb_hcd *hcd, unsigned port, int on)
+{
+    struct usb_mock_hcd *mock;
+
+    if (port != 1)
+        return USB_STATUS_INVALID;
+    mock = (struct usb_mock_hcd *)hcd->uh_softc;
+    mock->um_port_power = on != 0;
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+static usb_error_t
+mock_root_port_reset(struct usb_hcd *hcd, unsigned port)
+{
+    struct usb_mock_hcd *mock;
+
+    if (port != 1)
+        return USB_STATUS_INVALID;
+    mock = (struct usb_mock_hcd *)hcd->uh_softc;
+    if (!mock->um_connected)
+        return USB_STATUS_DISCONNECTED;
+    mock->um_port_enabled = 1;
+    mock->um_port_change |= UPS_C_PORT_RESET;
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+static usb_error_t
+mock_root_port_clear_change(struct usb_hcd *hcd, unsigned port,
+    unsigned change)
+{
+    struct usb_mock_hcd *mock;
+
+    if (port != 1)
+        return USB_STATUS_INVALID;
+    mock = (struct usb_mock_hcd *)hcd->uh_softc;
+    mock->um_port_change &= ~change;
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+static void
+mock_root_intr_enable(struct usb_hcd *hcd, int on)
+{
+    struct usb_mock_hcd *mock;
+
+    mock = (struct usb_mock_hcd *)hcd->uh_softc;
+    mock->um_root_intr_enabled = on != 0;
+    if (on && mock->um_port_change != 0 && hcd->uh_root_change != 0)
+        (void)hcd->uh_root_change(hcd->uh_root_change_arg);
+}
+
 static const struct usb_hcd_ops mock_ops = {
     mock_start,
     mock_stop,
@@ -211,7 +292,13 @@ static const struct usb_hcd_ops mock_ops = {
     mock_submit_xfer,
     mock_abort_xfer,
     mock_root_ctrl,
-    mock_poll
+    mock_poll,
+    mock_root_port_count,
+    mock_root_port_status,
+    mock_root_port_power,
+    mock_root_port_reset,
+    mock_root_port_clear_change,
+    mock_root_intr_enable
 };
 
 void
@@ -231,7 +318,19 @@ usb_mock_hcd_init(struct usb_mock_hcd *mock)
 void
 usb_mock_hcd_set_connected(struct usb_mock_hcd *mock, int connected)
 {
-    mock->um_connected = connected != 0;
+    unsigned new_state;
+
+    new_state = connected != 0;
+    if (mock->um_connected == new_state)
+        return;
+    mock->um_connected = new_state;
+    mock->um_port_change |= UPS_C_CONNECT_STATUS;
+    if (!new_state)
+        mock->um_port_enabled = 0;
+    if (mock->um_root_intr_enabled &&
+        mock->um_hcd.uh_root_change != 0)
+        (void)mock->um_hcd.uh_root_change(
+            mock->um_hcd.uh_root_change_arg);
 }
 
 void

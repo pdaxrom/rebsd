@@ -27,5 +27,11 @@
 #ifndef USB_MAX_DRIVERS
 #define USB_MAX_DRIVERS             8
 #endif
+#ifndef USB_MAX_TASKS
+#define USB_MAX_TASKS               8
+#endif
+#ifndef USB_MAX_ROOT_PORTS
+#define USB_MAX_ROOT_PORTS          8
+#endif
 
 #endif /* _DEV_USB_USB_LIMITS_H_ */

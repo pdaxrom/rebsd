@@ -56,6 +56,8 @@ kernel/vm_swp.c                 standard
 dev/usb/usb_subr.c              optional usb
 dev/usb/usb_core.c              optional usb
 dev/usb/usb_service.c           optional usb
+dev/usb/usb_task.c              optional usb
+dev/usb/uhub.c                  optional uhub
 dev/usb/ohci.c                  optional ohci
 dev/usb/ukbd.c                  optional ukbd
 dev/usb/ukbdmap.c               optional ukbd

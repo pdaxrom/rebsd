@@ -16,6 +16,7 @@
 
 #include <sys/types.h>
 #include <sys/systm.h>
+#include <dev/usb/usb_task.h>
 #include <dev/usb/usbvar.h>
 
 static struct usb_core usb_default_core;
@@ -31,6 +32,7 @@ usbattach(int unit)
 {
     (void)unit;
     printf("usb0: initializing core\n");
+    usb_task_system_init();
     usb_core_init(&usb_default_core);
     printf("usb0: core ready\n");
 }

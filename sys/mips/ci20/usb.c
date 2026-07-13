@@ -17,6 +17,7 @@
 #include <sys/types.h>
 #include <sys/systm.h>
 #include <dev/usb/ohcivar.h>
+#include <dev/usb/uhub.h>
 #include <dev/usb/usbvar.h>
 #include "usb_hw.h"
 
@@ -33,11 +34,9 @@
 #define CI20_GPIO_PXPAT0S(n)        (0x44u + (n) * 0x100u)
 #define CI20_GPIO_PXPAT0C(n)        (0x48u + (n) * 0x100u)
 
-#define CI20_USB_CONNECT_WAIT_MS    1000u
-#define CI20_USB_CONNECT_POLL_MS    10u
-
 static struct ohci_softc ci20_ohci;
 static struct usb_bus ci20_usb_bus;
+static struct usb_root_hub ci20_usb_root_hub;
 
 extern void udelay(unsigned);
 extern void ci20_intc_unmask_irq(unsigned);
@@ -158,33 +157,49 @@ ci20_usb_print_device(const struct usb_device *device)
     }
 }
 
-static usb_error_t
-ci20_usb_wait_connected(usb_port_status_t *status)
+static const char *
+ci20_usb_hub_operation(enum usb_root_hub_event event)
 {
-    usb_error_t error;
-    unsigned elapsed;
-
-    for (elapsed = 0; elapsed <= CI20_USB_CONNECT_WAIT_MS;
-        elapsed += CI20_USB_CONNECT_POLL_MS) {
-        error = ohci_root_port_status(&ci20_ohci, 1, status);
-        if (error != USB_STATUS_NORMAL_COMPLETION)
-            return error;
-        if (UGETW(status->wPortStatus) & UPS_CURRENT_CONNECT_STATUS)
-            return USB_STATUS_NORMAL_COMPLETION;
-        if (elapsed != CI20_USB_CONNECT_WAIT_MS)
-            ci20_ohci_delay_ms(0, CI20_USB_CONNECT_POLL_MS);
+    switch (event) {
+    case USB_ROOT_HUB_EVENT_STATUS_ERROR:
+        return "status";
+    case USB_ROOT_HUB_EVENT_POWER_ERROR:
+        return "power";
+    case USB_ROOT_HUB_EVENT_RESET_ERROR:
+        return "reset";
+    case USB_ROOT_HUB_EVENT_ENUM_ERROR:
+        return "enumeration";
+    default:
+        return "unknown";
     }
-    return USB_STATUS_DISCONNECTED;
+}
+
+static void
+ci20_usb_hub_event(void *arg, unsigned port,
+    enum usb_root_hub_event event, struct usb_device *device,
+    usb_error_t status)
+{
+    const char *speed;
+
+    (void)arg;
+    if (event == USB_ROOT_HUB_EVENT_ATTACH && device != 0) {
+        speed = device->ud_speed == USB_SPEED_LOW ? "low" :
+            device->ud_speed == USB_SPEED_HIGH ? "high" : "full";
+        printf("ohci0: port%u device attached speed=%s\n", port, speed);
+        ci20_usb_print_device(device);
+    } else if (event == USB_ROOT_HUB_EVENT_DETACH) {
+        printf("ohci0: port%u device disconnected\n", port);
+    } else {
+        printf("ohci0: port%u %s failed: %s\n", port,
+            ci20_usb_hub_operation(event), usb_status_string(status));
+    }
 }
 
 void
 ohciattach(int unit)
 {
     struct usb_core *core;
-    struct usb_device *device;
-    usb_port_status_t port_status;
     usb_error_t status;
-    unsigned speed;
     int error;
 
     (void)unit;
@@ -218,57 +233,40 @@ ohciattach(int unit)
         "periodic-interrupt-IN\n",
         ci20_ohci.oh_revision, ci20_ohci.oh_nports);
 
-    status = ohci_root_port_power(&ci20_ohci, 1, 1);
+    status = usb_root_hub_start(&ci20_usb_root_hub, &ci20_usb_bus,
+        ci20_usb_hub_event, 0);
     if (status != USB_STATUS_NORMAL_COMPLETION) {
-        printf("ohci0: port power failed: %s\n", usb_status_string(status));
-        return;
-    }
-    status = ci20_usb_wait_connected(&port_status);
-    if (status == USB_STATUS_DISCONNECTED) {
-        printf("ohci0: port1 powered, no device detected; connect a "
-            "full/low-speed device before boot\n");
-        return;
-    }
-    if (status != USB_STATUS_NORMAL_COMPLETION) {
-        printf("ohci0: port1 status failed: %s\n",
+        printf("ohci0: root hub start failed: %s\n",
             usb_status_string(status));
         return;
     }
-    printf("ohci0: port1 status=%x change=%x, resetting\n",
-        UGETW(port_status.wPortStatus), UGETW(port_status.wPortChange));
-    status = ohci_root_port_reset(&ci20_ohci, 1);
-    if (status != USB_STATUS_NORMAL_COMPLETION) {
-        printf("ohci0: port1 reset failed: %s\n",
-            usb_status_string(status));
-        return;
-    }
-    status = ohci_root_port_status(&ci20_ohci, 1, &port_status);
-    if (status != USB_STATUS_NORMAL_COMPLETION) {
-        printf("ohci0: post-reset status failed: %s\n",
-            usb_status_string(status));
-        return;
-    }
-    speed = (UGETW(port_status.wPortStatus) & UPS_LOW_SPEED) != 0 ?
-        USB_SPEED_LOW : USB_SPEED_FULL;
-    printf("ohci0: port1 enabled status=%x speed=%s\n",
-        UGETW(port_status.wPortStatus),
-        speed == USB_SPEED_LOW ? "low" : "full");
-    status = usb_device_enumerate(&ci20_usb_bus, 1, speed, &device);
-    if (status != USB_STATUS_NORMAL_COMPLETION) {
-        printf("ohci0: enumeration failed: %s\n",
-            usb_status_string(status));
-        return;
-    }
-    ci20_usb_print_device(device);
-    if (ci20_ohci.oh_intr_xfer != 0) {
-        ci20_intc_unmask_irq(CI20_OHCI_IRQ);
-        printf("ohci0: irq %u enabled for periodic transfers\n",
-            CI20_OHCI_IRQ);
-    }
+    ci20_intc_unmask_irq(CI20_OHCI_IRQ);
+    printf("ohci0: irq %u enabled for periodic/root-hub changes\n",
+        CI20_OHCI_IRQ);
+    if (usb_root_hub_device(&ci20_usb_root_hub, 1) == 0)
+        printf("ohci0: port1 powered, no device; hotplug ready\n");
 }
 
 int
 ci20_ohci_intr(void)
 {
     return ohci_intr(&ci20_ohci);
+}
+
+void
+ci20_ohci_irq_storm(void)
+{
+    unsigned status;
+    unsigned enabled;
+    unsigned control;
+    unsigned port;
+
+    status = ci20_ohci_read(0, OHCI_INTERRUPT_STATUS);
+    enabled = ci20_ohci_read(0, OHCI_INTERRUPT_ENABLE);
+    control = ci20_ohci_read(0, OHCI_CONTROL);
+    port = ci20_ohci_read(0, OHCI_RH_PORT_STATUS(1));
+    ci20_ohci_write(0, OHCI_INTERRUPT_DISABLE,
+        OHCI_MIE | OHCI_ALL_INTRS);
+    printf("ohci0: irq storm quarantined status=%x enable=%x "
+        "control=%x port1=%x\n", status, enabled, control, port);
 }

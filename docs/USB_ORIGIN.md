@@ -53,12 +53,12 @@ is updated as each later phase imports or materially adapts a source.
 | `sys/dev/usb/usbdivar.h` | `sys/dev/usb/usbvar.h` | core object relationships | bounded-pool adaptation; original notice and RCS id retained |
 | `sys/dev/usb/usb_mem.h` | `sys/dev/usb/usb_mem.h` | USB DMA allocation contract | reference only |
 | `sys/dev/usb/usb_quirks.h` | `sys/dev/usb/usb_quirks.h` | compact quirk flags if required | reference only |
-| `sys/dev/usb/usb.c` | `sys/dev/usb/usb_core.c` | bus lifecycle and task flow | lifecycle concepts combined into compact core; original applicable notices retained |
+| `sys/dev/usb/usb.c` | `sys/dev/usb/usb_core.c`, `sys/dev/usb/usb_task.c` | bus lifecycle and deferred task flow | lifecycle concepts combined into compact core; fixed task queue drained by ReBSD proc0 retains original notice and RCS id |
 | `sys/dev/usb/usb_subr.c` | `sys/dev/usb/usb_subr.c` | enumeration and descriptor handling | descriptor traversal substantially rewritten around fixed bounds; original notice and RCS id retained |
 | `sys/dev/usb/usbdi.c` | `sys/dev/usb/usb_core.c` | pipe and transfer operations | terminal-state and pipe model substantially adapted; original notice and RCS id retained |
 | `sys/dev/usb/usb_mem.c` | `sys/dev/usb/usb_mem.c` | USB use of the ReBSD DMA API | reference only |
-| `sys/dev/usb/uhub.c` | `sys/dev/usb/uhub.c` | root and external hubs | reference only |
-| `sys/dev/usb/ohci.c` | `sys/dev/usb/ohci.c` | generic OHCI HCD | polling control schedule substantially adapted; original notice and RCS id retained |
+| `sys/dev/usb/uhub.c` | `sys/dev/usb/uhub.c` | root and external hubs | compact root-hub exploration/attach/detach adaptation; original notice and RCS id retained; external-hub path not yet imported |
+| `sys/dev/usb/ohci.c` | `sys/dev/usb/ohci.c` | generic OHCI HCD | polling control, periodic interrupt-IN, and root-port/RHSC paths substantially adapted; original notice and RCS id retained |
 | `sys/dev/usb/ohcireg.h` | `sys/dev/usb/ohcireg.h` | OHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ohcivar.h` | `sys/dev/usb/ohcivar.h` | OHCI private state | compact bounded-state adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ehci.c` | `sys/dev/usb/ehci.c` | generic EHCI HCD | reference only |
@@ -77,8 +77,9 @@ and product IDs together with class, subclass, and protocol.
 
 ## Native ReBSD Infrastructure
 
-The following Phase 1 files are original ReBSD infrastructure and are not
-copied or materially derived from the NetBSD USB sources:
+The following files supply native ReBSD infrastructure. Unless a row notes a
+classic API adaptation, they are not copied or materially derived from the
+NetBSD USB sources:
 
 | ReBSD file | Purpose |
 | --- | --- |
@@ -92,6 +93,8 @@ copied or materially derived from the NetBSD USB sources:
 | `sys/dev/usb/usb_hcd.h` | Minimal native HCD operations contract |
 | `sys/dev/usb/usb_mock_hcd.[ch]` | Deterministic hardware-independent test controller |
 | `sys/dev/usb/usb_service.c` | Generic bounded-core service instance used by platform HCD attachments |
+| `sys/dev/usb/usb_task.h` | Fixed task record adapted from the classic `usbdi.h` concept; original notice and RCS id retained |
+| `sys/dev/usb/uhub.h` | Native bounded root-hub state and event interface |
 | `sys/dev/usb/ukbd.h` | Bounded boot-report decoder and driver-registration interface |
 | `sys/mips/ci20/usb_hw.[ch]` | Testable JZ4780 clock, PHY, reset, and VBUS sequence |
 | `sys/mips/ci20/usb.c` | Ci20 MMIO callbacks, OHCI attachment, and boot-time enumeration diagnostics |
@@ -145,6 +148,7 @@ are used only by the JZ4780/Ci20 attachment layer.
 | NetBSD `sys/arch/mips/ingenic/ingenic_ohci.c`, `ingenic_regs.h`, `apbus.c` | OHCI mapping, IRQ, clock gate, and suspend cross-check | exact commits recorded in `docs/CI20_USB.md`; no code imported |
 | MIPS/CI20_linux JZ4780 USB, CGU, and DTS files | board VBUS, controller mapping, PHY/reset sequence cross-check | commit `7dff33297116643485ca37141d804eddd793e834`; hardware facts only |
 | MIPS/CI20_u-boot `pll.c` and `ci20.c` | UHC source and board VBUS cross-check | commit `ef995a1611f0446a0b670ded9ec2609cb6dc51b7`; hardware facts only |
+| Creator Ci20 quick start guide | physical J23 host and J24/J8 OTG connector topology | January 2016 connector table; hardware facts only |
 
 `docs/CI20_USB.md` records each secondary source's exact URL or repository
 revision, contributed hardware fact, register meaning, and reason for use.

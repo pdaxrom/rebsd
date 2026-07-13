@@ -35,6 +35,8 @@ limits are:
 | pipes | 16 |
 | transfers | 16 |
 | registered interface drivers | 8 |
+| deferred USB tasks | 8 |
+| root-hub ports per HCD | 8 |
 
 Each object has one `used` bit and is returned to its pool only after all HCD
 references have ended.  Configuration bytes are stored in the device's fixed
@@ -102,9 +104,50 @@ must not call a second completion from its abort method.
 The first periodic slice completes one HID interrupt-IN transfer directly
 from the Ci20 OHCI interrupt. Its callback is bounded to an eight-byte boot
 report, console character submission, and TD rearm, matching the existing
-UART-to-`ttyinput()` interrupt model. Descriptor work and driver attachment
-remain in boot process context. A later general USB completion queue is still
-required before bulk I/O, hub exploration, or callbacks that may sleep.
+UART-to-`ttyinput()` interrupt model. Callbacks that may sleep remain
+unsupported until general transfer completion is moved to deferred context.
+
+Root-port changes follow a different path. The OHCI interrupt acknowledges
+RHSC, masks further RHSC delivery, and schedules one coalescing root-hub task.
+ReBSD proc0 drains the bounded task queue from the existing swapper scheduler
+loop, outside hardware interrupt context. It performs debounce delays, port
+reset, descriptor traffic, enumeration, driver attach, and driver detach,
+then reenables RHSC. A pending RHSC status is deliberately not cleared while
+reenabling, so a change that arrived during exploration schedules another
+pass instead of being lost.
+A periodic WDH error can precede the root-port status change on real hardware.
+The error path therefore masks WDH, RHSC, and the OHCI master interrupt, then
+queues the same deferred root-hub probe directly. The proc0 runner inspects the port
+and reenables RHSC/MIE. A later RHSC remains pending while masked and is
+delivered after the probe, so neither a timing window nor an IRQ spin is
+required.
+
+No USB process is created. ReBSD `newproc()` constructs a swappable user
+process image and is not a kernel-thread primitive; hardware tests showed
+that using it for a permanent SSYS child left a stale entry in the hashed
+sleep queue and caused `panic: wakeup`. Scheduling a task wakes proc0 on both
+of its native scheduler wait channels. Proc0 checks the USB queue at the top
+of its loop and atomically rechecks it before either scheduler sleep, closing
+the lost-wakeup window.
+
+## Root-Hub Exploration
+
+`struct usb_root_hub` is machine-independent and owns one fixed port record
+per reported HCD root port. Startup validates the root-port operations, powers
+all ports, performs one synchronous initial exploration, and enables root-hub
+change interrupts. Later exploration runs only through the proc0 task runner.
+
+For each port, exploration reads and clears bounded change bits. A connection
+or enable change first disconnects any existing child, even if the current
+line state already shows a replacement device. If a device is currently
+connected, exploration waits 100 ms for debounce/power stabilization, reads
+status again, resets and enables the port, detects low/full/high speed, and
+calls the common enumeration transaction. Port status, reset, and enumeration
+errors are reported through a platform callback and never hidden as success.
+
+The current compact hub code implements OHCI root-port attach/detach. External
+hub interrupt endpoints and downstream-port control are a later phase; class
+drivers and the USB core do not depend on that later policy.
 
 ## Disconnect Order
 
@@ -124,9 +167,11 @@ valid, but after active I/O has reached a terminal state.
 ## HCD Contract
 
 `struct usb_hcd_ops` contains start/stop, pipe open/close, transfer
-submit/abort, root-hub control, and poll operations.  Polling and interrupt
-completion both end by calling `usb_xfer_complete()`; the generic core has no
-separate polling-only completion path.
+submit/abort, root-hub control, poll, root-port count/status/power/reset/change
+acknowledgement, and root-change interrupt enable operations. Polling and
+interrupt completion both end by calling `usb_xfer_complete()`; the generic
+core has no separate polling-only completion path. The HCD reports a root
+change through a callback and never enumerates a device itself.
 
 The mock HCD implements the same contract as OHCI. It supplies a
 root-port device descriptor and a configuration containing one HID boot
@@ -140,3 +185,19 @@ bounded 4096-byte slab contains independent control and periodic interrupt-IN
 ED/TD/buffer regions, so one persistent keyboard transfer can coexist with a
 synchronous control request. One interrupt pipe is supported at a time; bulk
 and general multi-pipe periodic scheduling remain later work.
+
+## Context and Future SMP Rules
+
+- hardware interrupt context acknowledges controller status and performs only
+  the currently bounded keyboard completion or queues root-hub work;
+- the USB task process owns hub exploration, enumeration, and detach work;
+- calling processes own synchronous control requests and may poll or sleep;
+- `splhigh` protects only queue publication/removal and other short terminal
+  state transitions; descriptor I/O and delays run with interrupts enabled;
+- an HCD must abort and forget an active transfer before its DMA storage or
+  owning device can be released.
+
+The implementation is currently UP. Replacing the short `splhigh` regions
+with a queue lock and making object state atomic is the future SMP boundary;
+the HCD/core and platform/core interfaces do not require redesign for that
+change.

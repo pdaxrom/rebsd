@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <dev/usb/ohcivar.h>
+#include <dev/usb/uhub.h>
 #include <dev/usb/ukbd.h>
 #include <dev/usb/usbhid.h>
 
@@ -234,6 +235,26 @@ fake_run_periodic(struct fake_ohci *fake, const unsigned char *report,
     return 1;
 }
 
+static int
+fake_fail_periodic(struct fake_ohci *fake, unsigned cc)
+{
+    struct ohci_hcca *hcca;
+    struct ohci_td *data_td;
+    unsigned char report[UKBD_BOOT_REPORT_SIZE];
+
+    memset(report, 0, sizeof(report));
+    if (!fake_run_periodic(fake, report, sizeof(report)))
+        return 0;
+    hcca = phys_to_ptr(fake->regs[OHCI_HCCA / 4]);
+    if (hcca == 0)
+        return 0;
+    data_td = phys_to_ptr(hcca->hcca_done_head & OHCI_ED_HEADMASK);
+    if (data_td == 0)
+        return 0;
+    set_cc(data_td, cc);
+    return 1;
+}
+
 static unsigned int
 fake_read(void *arg, unsigned reg)
 {
@@ -292,6 +313,14 @@ fake_write(void *arg, unsigned reg, unsigned int value)
             *slot |= OHCI_RHPS_PRS;
             fake->reset_reads = 2;
         }
+        if (value & OHCI_RHPS_CSC)
+            *slot &= ~OHCI_RHPS_CSC;
+        if (value & OHCI_RHPS_PESC)
+            *slot &= ~OHCI_RHPS_PESC;
+        if (value & OHCI_RHPS_PSSC)
+            *slot &= ~OHCI_RHPS_PSSC;
+        if (value & OHCI_RHPS_OCIC)
+            *slot &= ~OHCI_RHPS_OCIC;
         if (value & OHCI_RHPS_PRSC)
             *slot &= ~OHCI_RHPS_PRSC;
         return;
@@ -448,6 +477,124 @@ test_ohci_keyboard(void)
     return 0;
 }
 
+struct hotplug_events {
+    unsigned attached;
+    unsigned detached;
+    unsigned errors;
+};
+
+static void
+hotplug_event(void *arg, unsigned port, enum usb_root_hub_event event,
+    struct usb_device *device, usb_error_t status)
+{
+    struct hotplug_events *events;
+
+    events = arg;
+    if (port != 1)
+        ++events->errors;
+    if (event == USB_ROOT_HUB_EVENT_ATTACH) {
+        ++events->attached;
+        if (device == 0 || status != USB_STATUS_NORMAL_COMPLETION)
+            ++events->errors;
+    } else if (event == USB_ROOT_HUB_EVENT_DETACH) {
+        ++events->detached;
+    } else {
+        ++events->errors;
+    }
+}
+
+static int
+test_ohci_hotplug(void)
+{
+    struct fake_ohci fake;
+    struct ohci_softc ohci;
+    struct usb_root_hub hub;
+    struct usb_core core;
+    struct usb_bus bus;
+    struct hotplug_events events;
+    struct usb_device *device;
+    unsigned char report[UKBD_BOOT_REPORT_SIZE];
+
+    memset(&fake, 0, sizeof(fake));
+    memset(&bus, 0, sizeof(bus));
+    memset(&events, 0, sizeof(events));
+    usb_task_system_init();
+    usb_core_init(&core);
+    console_input_length = 0;
+    fake.regs[OHCI_REVISION / 4] = 0x10;
+    fake.regs[OHCI_FM_INTERVAL / 4] = OHCI_DEFAULT_FI;
+    fake.regs[OHCI_RH_DESCRIPTOR_A / 4] = 1;
+    fake.regs[OHCI_RH_PORT_STATUS(1) / 4] =
+        OHCI_RHPS_CCS | OHCI_RHPS_LSDA;
+    CHECK(ukbd_register(&core) == USB_STATUS_NORMAL_COMPLETION);
+    ohci_softc_init(&ohci, fake_read, fake_write, fake_delay, &fake);
+    CHECK(usb_bus_start(&core, &bus, &ohci.oh_hcd, fake_delay, &fake) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_root_hub_start(&hub, &bus, hotplug_event, &events) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    device = usb_root_hub_device(&hub, 1);
+    CHECK(device != 0 && device->ud_speed == USB_SPEED_LOW);
+    CHECK(device->ud_address == 1 && ohci.oh_intr_xfer != 0);
+    CHECK(events.attached == 1 && events.detached == 0 &&
+        events.errors == 0);
+    CHECK((fake.regs[OHCI_INTERRUPT_ENABLE / 4] &
+        (OHCI_WDH | OHCI_RHSC | OHCI_MIE)) ==
+        (OHCI_WDH | OHCI_RHSC | OHCI_MIE));
+
+    /*
+     * Real hardware can report the periodic TD error before it asserts
+     * RHSC.  The error must queue a root probe and quiesce OHCI until
+     * process context can inspect the port.
+     */
+    CHECK(fake_fail_periodic(&fake, OHCI_CC_NOT_RESPONDING));
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(ohci.oh_intr_xfer == 0);
+    CHECK(usb_task_pending(&hub.urh_task));
+    CHECK((fake.regs[OHCI_INTERRUPT_ENABLE / 4] &
+        (OHCI_WDH | OHCI_RHSC | OHCI_MIE)) == 0);
+
+    fake.regs[OHCI_RH_PORT_STATUS(1) / 4] =
+        OHCI_RHPS_PPS | OHCI_RHPS_CSC;
+    fake.regs[OHCI_INTERRUPT_STATUS / 4] |= OHCI_RHSC;
+    CHECK(ohci_intr(&ohci) == 0);
+    CHECK(usb_root_hub_device(&hub, 1) == device);
+    CHECK((fake.regs[OHCI_INTERRUPT_ENABLE / 4] & OHCI_RHSC) == 0);
+    usb_task_run_pending();
+    CHECK(usb_root_hub_device(&hub, 1) == 0);
+    CHECK(ohci.oh_intr_xfer == 0 && events.detached == 1);
+    CHECK((fake.regs[OHCI_INTERRUPT_ENABLE / 4] &
+        (OHCI_RHSC | OHCI_MIE)) == (OHCI_RHSC | OHCI_MIE));
+    /* The late RHSC remains pending and schedules one harmless recheck. */
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(usb_task_pending(&hub.urh_task));
+    usb_task_run_pending();
+    CHECK(usb_root_hub_device(&hub, 1) == 0 && events.detached == 1);
+
+    fake.regs[OHCI_RH_PORT_STATUS(1) / 4] =
+        OHCI_RHPS_CCS | OHCI_RHPS_PPS | OHCI_RHPS_LSDA |
+        OHCI_RHPS_CSC;
+    fake.regs[OHCI_INTERRUPT_STATUS / 4] |= OHCI_RHSC;
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(usb_task_pending(&hub.urh_task));
+    usb_task_run_pending();
+    device = usb_root_hub_device(&hub, 1);
+    CHECK(device != 0 && device->ud_address == 1);
+    CHECK(device->ud_speed == USB_SPEED_LOW && ohci.oh_intr_xfer != 0);
+    CHECK(events.attached == 2 && events.errors == 0);
+
+    memset(report, 0, sizeof(report));
+    report[2] = 7;
+    CHECK(fake_run_periodic(&fake, report, sizeof(report)));
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(console_input_length == 1 && console_input[0] == 'd');
+
+    usb_root_hub_stop(&hub);
+    CHECK(events.detached == 2);
+    usb_bus_stop(&bus);
+    CHECK(dma_pool_available() == dma_pool_size());
+    return 0;
+}
+
 static int
 test_ohci_errors(void)
 {
@@ -493,6 +640,7 @@ main(void)
         DMA_32BIT | DMA_COHERENT | DMA_CONTIGUOUS, 0) == 0);
     CHECK(test_ohci_enumeration() == 0);
     CHECK(test_ohci_keyboard() == 0);
+    CHECK(test_ohci_hotplug() == 0);
     CHECK(test_ohci_errors() == 0);
     puts("ohci_test: all tests passed");
     return 0;

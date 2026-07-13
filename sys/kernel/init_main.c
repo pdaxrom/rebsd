@@ -213,8 +213,10 @@ main()
      * Make init process.
      */
     if (newproc (0) == 0) {
-        /* Parent process with pid 0: swapper.
-         * No return from sched. */
+        /* Parent process with pid 0: swapper. */
+#ifdef USB_ENABLED
+        printf("usb0: deferred task runner uses proc0\n");
+#endif
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
         printf ("n64boot: proc0 entering sched\n");
 #endif
