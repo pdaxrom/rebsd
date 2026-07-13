@@ -2145,3 +2145,104 @@ unrolled `dscal` improves by 1.40%.  Both kernel self-tests, every benchmark
 return code, `N64_PCC_DEBUG_END`, and `N64_PCC_DEBUG_RUNNER_RC` are zero;
 terminal `N64_PCC_DEBUG_RC_END` is present.  This closes the H4 physical and
 commit gates while leaving the 90% overall target open.
+
+## Milestone H5: General MIPS Compiler Corpus And Correctness
+
+H5 broadens measurement beyond Linpack before another optimization is chosen.
+The new deterministic corpus runs 11 kernels: integer mixing, constant
+division, branches, switches, indexed memory, libc memory operations, calls,
+64-bit integer pairs, `float`, `double`, and FP/integer conversions.  Each
+kernel verifies a fixed result before its adaptive timing loop.  The N64 image
+runs equivalent GCC and PCC binaries linked against independently GCC- and
+PCC-built runtimes, so libc or compiler-runtime code is not shared between the
+two measurements.
+
+The corpus immediately found two target correctness defects:
+
+- A 64-bit simple operation could allocate its result pair with one register
+  overlapping a source pair.  The low-word operation then destroyed the high
+  word needed by the next instruction.  The MIPS table now requires an
+  independent result pair for these operations, and the `$t6`/`$t7`
+  `ROVERLAP` entries now name their actual adjacent pairs.
+- Hard-float `float`/`double` to signed integer conversion used `cvt.w.s/d`,
+  whose result follows FCSR rounding mode instead of C truncation semantics.
+  Signed conversion now uses `trunc.w.s/d`.  Unsigned conversion is separate
+  and calls the existing full-range `__fixunssfsi`/`__fixunsdfsi` helpers.
+
+`misc__llpack001` reproduces the partial pair-overlap failure with an optimized
+64-bit checksum.  `misc__fpint001` covers positive and negative signed
+truncation plus an unsigned value above `INT_MAX`.  Malta64 hard-float native
+regression passes 298/298 runtime cases, including both additions.
+
+### H5 Regression Gates
+
+The full PCC kernel/PCC rootfs matrix reports the following markers:
+
+| Board | CPU | Endian | Float | General self-test | Full smoke |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+
+Every profile also reports `PCC_SMOKE_ALL_FAILURES 0`.  Hard-float assembly
+inspection confirms `trunc.w.s/d` for signed conversions and the unsigned
+helper call; soft-float continues through runtime helpers.  H5 does not change
+multiply scheduling.  Default VR4300 `-mfix4300` remains enabled and its final
+postpass still validates the emitted multiply stream; `-mno-fix4300` remains
+the explicit opt-out.
+
+### H5 N64 Comparison Artifact
+
+The hardware candidate uses a GCC debug-UART kernel and PCC VR4300 hard-float
+a.out userland:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h5-general-corpus-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 8716288 bytes
+sha256: 6370f6402bc86ed43495fd559a3166fa2f193345ac2827c03a16fc9c508386ae
+kernel ELF sha256: a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 38912 section bytes, sha256 f42d4d4f158001b7f9c6441721c5973403cf75d310229c02f37f4c5bfa56ff6c
+linpack-kernels-gcc: 25584 section bytes, sha256 b4a7de6d6a36b9fa2998f35d52d9d7672e18b4f92ff127463de99f645499d309
+linpack-kernels-pcc: 45320 section bytes, sha256 0820617044e323d2f216a17b4f851da72ae19b66b7ac56e352c7a64a799e5b1f
+mips-compiler-bench-gcc: 31720 section bytes, sha256 d16f213e58b12437ff48d699d592bfcb5258499f7aedaec0885e78253e5b8bbe
+mips-compiler-bench-pcc: 46464 section bytes, sha256 a120f0010186077628b15c21a6a34e45cf26505163d10ed640363fb6ace95f37
+debug runner sha256: f26e50cc18a80a6cae2b3238c1dca1599a3314a91035a177642266461a0e9923
+```
+
+The 8 MiB diagnostic filesystem passes all five `fsutil --check` phases and
+has 4211 free blocks.  All six benchmark executables have zero undefined
+symbols.
+
+Physical N64 validation passes both general-corpus self-tests, both Linpack
+kernel self-tests, every benchmark return code, `N64_PCC_DEBUG_END`, and
+`N64_PCC_DEBUG_RUNNER_RC`; terminal `N64_PCC_DEBUG_RC_END` is present.  The
+stable ordinary Linpack row is 3786.472 PCC versus 4412.654 GCC KFLOPS, or
+85.81%.  PCC changes by only +0.07% from H4 and the ratio changes by +0.06
+percentage points, so H5 preserves rather than improves the Linpack result.
+
+The physical general-corpus profile is:
+
+| Kernel | GCC Mwork/s | PCC Mwork/s | PCC/GCC |
+| --- | ---: | ---: | ---: |
+| `int_mix` | 6.556 | 3.427 | 52.27% |
+| `const_div` | 1.355 | 0.354 | 26.13% |
+| `branch` | 4.760 | 2.507 | 52.67% |
+| `switch` | 4.949 | 2.706 | 54.68% |
+| `memory` | 10.214 | 4.261 | 41.72% |
+| `libc_memory` | 51.768 | 22.265 | 43.01% |
+| `calls` | 4.854 | 2.898 | 59.70% |
+| `u64` | 2.889 | 1.154 | 39.94% |
+| `float` | 4.843 | 2.236 | 46.17% |
+| `double` | 2.654 | 1.784 | 67.22% |
+| `convert` | 2.552 | 0.403 | 15.79% |
+
+H5 therefore closes its physical and commit gates but shows that 85.81%
+Linpack is not representative of general PCC output.  H6 begins by comparing
+the conversion and constant-division assembly, then addresses the smallest
+shared backend or optimizer deficiency that also benefits ordinary code.  No
+future change is accepted only because it improves Linpack.

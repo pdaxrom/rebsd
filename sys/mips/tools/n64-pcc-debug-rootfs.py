@@ -74,6 +74,8 @@ COPY_PATHS = [
     "/root/linpack-kernels-gcc",
     "/root/linpack-kernels-pcc",
     "/root/linpack-pcc",
+    "/root/mips-compiler-bench-gcc",
+    "/root/mips-compiler-bench-pcc",
     "/sbin/init",
     "/sbin/mkfs",
     "/sbin/mount",

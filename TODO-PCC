@@ -4730,6 +4730,41 @@ Milestone order:
     This closes the narrow H3 physical and commit gates while leaving the 90%
     overall target open.
 
+  - [x] H5 add a general compiler benchmark before selecting another backend
+    optimization.  The deterministic corpus covers integer mixing, constant
+    division, branches, switches, memory and libc memory operations, calls,
+    64-bit integer pairs, single and double precision, and FP/integer
+    conversions.  It runs matching GCC/PCC binaries with independent runtimes
+    and validates every kernel result before reporting timing.  QEMU timing is
+    correctness evidence only; physical VR4300 ratios select later work.
+  - [x] Fix the two general MIPS correctness defects exposed by H5.  A
+    long-long simple-operation result may no longer partially overlap a source
+    pair, and the erroneous `$t6`/`$t7` pair-overlap map is corrected.  Signed
+    hard-float conversions now use truncation independent of FCSR rounding;
+    unsigned conversions use the existing full-range runtime helpers.
+    Focused optimized regressions cover both failures.
+  - [x] Pass the H5 software gates.  Malta64 hard-float regression passes
+    298/298 runtime cases, including `misc__llpack001` and
+    `misc__fpint001`.  Full `pcc-smoke-all.sh` passes on Malta64, Malta, and
+    MaltaEL in hard- and soft-float configurations; every profile reports
+    `MIPS_COMPILER_BENCH_SELFTEST 0`, `PCC_SMOKE_ALL_FAILURES 0`, and final
+    `PCC_SMOKE_ALL_RC:0`.
+  - [x] Build the H5 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h5-general-corpus-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 8716288, SHA-256
+    `6370f6402bc86ed43495fd559a3166fa2f193345ac2827c03a16fc9c508386ae`.
+    It passes `fsutil --check`, has build stamp `.build-mode.gcc.1.0.0.1`,
+    and contains independent GCC/PCC Linpack, Linpack-kernel, and general
+    compiler benchmark binaries.
+  - [x] Run the H5 image on physical N64.  Both general self-tests, all
+    Linpack self-tests, benchmark return codes, runner/debug statuses, and the
+    terminal marker pass.  Stable Linpack is 3786.472 PCC versus 4412.654 GCC
+    KFLOPS, or 85.81%, effectively unchanged from H4.  General PCC/GCC ratios
+    are 52.27% `int_mix`, 26.13% `const_div`, 52.67% `branch`, 54.68%
+    `switch`, 41.72% `memory`, 43.01% `libc_memory`, 59.70% `calls`, 39.94%
+    `u64`, 46.17% `float`, 67.22% `double`, and 15.79% `convert`.  These broad
+    gaps, rather than Linpack alone, select the H6 investigation.
+
 Success criteria:
 
 - [x] Short term: reduce PCC Linpack `nop` count and text size materially while

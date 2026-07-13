@@ -1293,6 +1293,44 @@ gains 2.01 percentage points.  `daxpy_r`, `daxpy_ur`, and `dscal_ur` improve
 4.07%, 4.73%, and 1.40%, respectively.  This closes the H4 physical and commit
 gates while the 90% overall target remains open.
 
+H5 adds a general MIPS compiler corpus to prevent later work from being
+selected only by Linpack.  Matching GCC/PCC executables cover integer
+arithmetic and constant division, branches and switches, direct and libc
+memory operations, calls, 64-bit pairs, single/double precision, and
+FP/integer conversion.  Every kernel checks a deterministic result before
+reporting adaptive timing.  The N64 debug runner executes both compiler
+variants with separately built GCC and PCC libc/compiler runtimes.
+
+The corpus exposed two backend correctness errors.  Long-long simple
+operations could partially overlap their result and source pairs; the table
+now requires a distinct result pair and fixes the `$t6`/`$t7` overlap map.
+Hard-float signed FP-to-integer conversion used rounding-mode-dependent
+`cvt.w.s/d`; it now emits `trunc.w.s/d`, while unsigned conversion uses the
+existing full-range helper calls.  Optimized regressions lock down both
+failures.
+
+Malta64 hard-float runtime regression passes 298/298.  Full
+`pcc-smoke-all.sh` passes for Malta64 VR4300, Malta MIPS32R2, and MaltaEL
+MIPS32R2 in hard- and soft-float mode; all six runs report general benchmark
+self-test zero, zero smoke failures, and final RC zero.  The H5 physical
+candidate is
+`/Users/sash/Work/N64/retrobsd-build/n64-h5-general-corpus-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 8716288 bytes, SHA-256
+`6370f6402bc86ed43495fd559a3166fa2f193345ac2827c03a16fc9c508386ae`.
+It uses a GCC kernel and PCC VR4300 hard-float a.out userland and contains
+independent GCC/PCC ordinary Linpack, kernel Linpack, and general compiler
+benchmark binaries.
+
+Physical N64 validation passes both general self-tests, both Linpack kernel
+self-tests, every benchmark return code, all final debug/runner statuses, and
+the terminal marker.  Stable ordinary Linpack is 3786.472 PCC versus 4412.654
+GCC KFLOPS, or 85.81%, effectively unchanged from H4.  The general corpus is
+substantially less favorable: PCC/GCC ranges from 15.79% for conversion and
+26.13% for constant division through 39.94-59.70% for the integer, memory,
+call, 64-bit, and single-precision cases; double precision reaches 67.22%.
+This closes H5 and directs H6 toward shared conversion, constant arithmetic,
+and integer code generation rather than another Linpack-specific transform.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

@@ -529,9 +529,13 @@ MIPS_LINPACK_GCC_DEPS ?=
 MIPS_LINPACK_PCC_LDSCRIPT_NAME = $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),elf32-littlemips.ld,elf32-bigmips.ld)
 MIPS_LINPACK_PCC_LDSCRIPT = $(MIPS_ROOTFS_USR_LIB)/ldscripts/$(MIPS_LINPACK_PCC_LDSCRIPT_NAME)
 MIPS_LINPACK_PCC_LINKER_SCRIPT = $(if $(wildcard $(MIPS_LINPACK_PCC_LDSCRIPT)),-T $(abspath $(MIPS_LINPACK_PCC_LDSCRIPT)),)
+MIPS_COMPILER_BENCH_SRC = $(TOPSRC)/sys/mips/rootfs/root/mips-compiler-bench.c
+MIPS_COMPILER_BENCH_OUT ?= $(MIPS_BUILD_TEST_DIR)/mips-compiler-bench
+MIPS_COMPILER_BENCH_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.mips-compiler-bench.$(MIPS_ROOTFS_ABI)
 MIPS_ROOTFS_EXTRA_STAMPS ?=
 ifeq ($(MIPS_ROOTFS_NATIVE_PCC),1)
 MIPS_ROOTFS_EXTRA_STAMPS += $(MIPS_LINPACK_ROOTFS_STAMP)
+MIPS_ROOTFS_EXTRA_STAMPS += $(MIPS_COMPILER_BENCH_ROOTFS_STAMP)
 endif
 
 MIPS_ROOTFS_BOARD_MANIFEST_0775 ?=
@@ -614,6 +618,10 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
 	    fi; \
 	    printf '\nfile /root/linpack-pcc\nmode 0775\n' >> $@; \
 	    printf '\nfile /root/linpack-kernels-pcc\nmode 0775\n' >> $@; \
+	    if [ "$(MIPS_ROOTFS_LINPACK_GCC)" = "1" ]; then \
+	        printf '\nfile /root/mips-compiler-bench-gcc\nmode 0775\n' >> $@; \
+	    fi; \
+	    printf '\nfile /root/mips-compiler-bench-pcc\nmode 0775\n' >> $@; \
 	fi
 
 $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS) \
@@ -691,6 +699,48 @@ $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS
 	cp -p $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-pcc \
 	    $(MIPS_ROOTFS_STAGE)/root/linpack-kernels-pcc
 	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-kernels-pcc
+	touch $@
+
+$(MIPS_COMPILER_BENCH_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
+    $(MIPS_PCC_PROVIDER_DEPS) $(MIPS_ROOTFS_EXEC_FORMAT_DEPS) \
+    $(MIPS_COMPILER_BENCH_SRC) $(MIPS_LINPACK_GCC_DEPS)
+	rm -rf $(MIPS_COMPILER_BENCH_OUT)
+	mkdir -p $(MIPS_COMPILER_BENCH_OUT)
+	$(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT_FLAG) \
+	    -O2 $(MIPS_LINPACK_PCC_LINKER_SCRIPT) \
+	    -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
+	    -L$(abspath $(MIPS_ROOTFS_USR_LIB)) \
+	    -o $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-pcc \
+	    $(MIPS_COMPILER_BENCH_SRC)
+	if [ "$(MIPS_ROOTFS_LINPACK_GCC)" = "1" ]; then \
+	    $(MIPS_LINPACK_GCC_COMPILE) \
+	        -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
+	        -O2 -c -o $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.o \
+	        $(MIPS_COMPILER_BENCH_SRC); \
+	    $(MIPS_LINPACK_GCC_LINK) \
+	        $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.o \
+	        -L$(MIPS_LINPACK_GCC_LIBDIR) \
+	        -o $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked \
+	        -lc; \
+	    if [ "$(MIPS_LINPACK_GCC_LINK_FORMAT)" = "aout" ]; then \
+	        mv -f $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked \
+	            $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc; \
+	    elif [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "aout" ]; then \
+	        $(abspath $(MIPS_ROOTFS_ELF2AOUT)) \
+	            $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked \
+	            $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc; \
+	        rm -f $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked; \
+	    else \
+	        mv -f $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked \
+	            $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc; \
+	    fi; \
+	    cp -p $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc \
+	        $(MIPS_ROOTFS_STAGE)/root/mips-compiler-bench-gcc; \
+	    chmod 0775 $(MIPS_ROOTFS_STAGE)/root/mips-compiler-bench-gcc; \
+	fi
+	cp -p $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-pcc \
+	    $(MIPS_ROOTFS_STAGE)/root/mips-compiler-bench-pcc
+	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/mips-compiler-bench-pcc
 	touch $@
 
 $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \

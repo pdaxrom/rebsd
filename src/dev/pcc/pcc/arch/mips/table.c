@@ -122,8 +122,12 @@
 #ifdef os_rebsd
 #define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(V0V1), \
 		    MIPS_CALLER_SAVED_NEVER)
+#define NSCCA	NEEDS(NREG(A, 1), NLEFT(F0), NRES(V0), \
+		    MIPS_CALLER_SAVED_NEVER)
 #else
 #define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(A0A1), \
+		    MIPS_CALLER_SAVED_NEVER)
+#define NSCCA	NEEDS(NREG(A, 1), NLEFT(F0), NRES(V0), \
 		    MIPS_CALLER_SAVED_NEVER)
 #endif
 #define NABSL	NEEDS(NREG(A, 1), NREG(B, 1), NSL(A))
@@ -601,24 +605,36 @@ struct optab table[] = {
 
 { SCONV,	INAREG,
 	SCREG,	TFLOAT,
-	SAREG,	TWORD,
+	SAREG,	TUWORD,
+		NSCCA,	RESC1,
+		"ZF", },
+
+{ SCONV,	INAREG,
+	SCREG,	TFLOAT,
+	SAREG,	TSWORD,
 		NCA,	RESC1,
-		"	cvt.w.s A2,AL	# convert float to (u)int\n"
+		"	trunc.w.s A2,AL	# convert float to int\n"
 		"	mfc1 A1,A2\n"
 		"	nop\n", },
 
 { SCONV,	FOREFF,
 	SCREG,	TFLOAT,
-	SOREG,	TWORD,
+	SOREG,	TSWORD,
 		NCREG,	RDEST,
-		"	cvt.w.s A1,AL	# convert float to (u)int\n"
+		"	trunc.w.s A1,AL	# convert float to int\n"
 		"	s.s A1,AR\n", },
 
 { SCONV,	INAREG,
 	SCREG,	TDOUBLE|TLDOUBLE,
-	SAREG,	TWORD,
+	SAREG,	TUWORD,
+		NSCCA,	RESC1,
+		"ZF", },
+
+{ SCONV,	INAREG,
+	SCREG,	TDOUBLE|TLDOUBLE,
+	SAREG,	TSWORD,
 		NCA,	RESC1,
-		"	cvt.w.d A2,AL	# convert (l)double to (u)int\n"
+		"	trunc.w.d A2,AL	# convert (l)double to int\n"
 		"	mfc1 A1,A2\n"
 		"	nop\n", },
 
@@ -1062,7 +1078,7 @@ struct optab table[] = {
 { OPSIMP,	INBREG,
 	SBREG,	TLONGLONG|TULONGLONG,
 	SBREG,	TLONGLONG|TULONGLONG,
-		NBRL,	RESC1,
+		NBREG,	RESC1,
 		"	O A1,AL,AR\n"
 		"	O U1,UL,UR\n", },
     
