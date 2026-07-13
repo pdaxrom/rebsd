@@ -4793,6 +4793,47 @@ Milestone order:
     3817.158 KFLOPS and reaches 86.56% of GCC; unrelated corpus rates remain
     stable.  This closes H6 and leaves constant division as the largest
     directly identified general code-generation gap.
+  - [x] H7 lower signed and unsigned 32-bit division and remainder by a
+    non-power-of-two constant to magic-number arithmetic in the MIPS backend.
+    Unsigned quotient uses multiply-high, an optional correction, and a
+    logical shift.  Signed quotient uses signed multiply-high, the required
+    dividend adjustment, an arithmetic shift, and truncation-toward-zero
+    correction.  Remainder rebuilds `n - q * d`, using shift/add for cheap
+    `2^k +/- 1` products and otherwise the low half of a second multiply.
+    Division by zero, `+/-1`, powers of two, and variable divisors retain
+    their existing paths.
+  - [x] Add `misc__divconst001`.  It compares 32 optimized quotient/remainder
+    functions with four volatile variable-divisor hardware references over
+    signed and unsigned boundary values plus 16,384 deterministic
+    pseudorandom inputs.  Host assembly gates for VR4300 and MIPS32R2 require
+    zero `div`/`divu` instructions in all constant functions and preserve one
+    hardware divide in each reference function.  In the general benchmark,
+    `bench_const_div` changes from 61 instructions and six divides to 86
+    instructions and six multiplies; complete assembly grows by only 24 lines
+    and the PCC executable by 176 section bytes.
+  - [x] Pass the H7 software gates.  All six PCC-kernel/PCC-rootfs full smoke
+    profiles pass on Malta64 VR4300, Malta MIPS32R2, and MaltaEL MIPS32R2 in
+    hard- and soft-float mode with general self-test zero, no smoke failures,
+    and final RC zero.  Final hard-float runtime regression passes 300/300 on
+    Malta64, Malta, and MaltaEL, including `misc__divconst001`.  New integer
+    multiplies remain under the final default `-mfix4300`
+    emitted-stream check, while `-mno-fix4300` remains the explicit opt-out.
+  - [x] Build the H7 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h7-divconst-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136, SHA-256
+    `2641efd945fd1510a09ae97ef18b033967e377a4437506b94f4449bf1864f4a2`.
+    It passes all five `fsutil --check` phases, has build stamp
+    `.build-mode.gcc.1.0.0.1`, contains independent GCC/PCC ordinary Linpack,
+    kernel Linpack, and general benchmark binaries, and all six benchmark
+    executables have zero undefined symbols.
+  - [x] Run H7 on physical N64.  Both general self-tests, both Linpack kernel
+    self-tests, every benchmark return code, `N64_PCC_DEBUG_END`, and
+    `N64_PCC_DEBUG_RUNNER_RC` are zero; terminal `N64_PCC_DEBUG_RC_END` is
+    present.  `const_div` improves from 0.354 to 0.926 Mwork/s, or 161.58%,
+    and from 26.13% to 67.84% of GCC.  The other ten general kernels remain
+    within 0.64% of H6.  PCC's two-row ordinary Linpack average changes from
+    3785.421 to 3788.831 KFLOPS, or +0.09%, and the isolated kernels show no
+    regression.  This closes the H7 physical and commit gates.
 
 Success criteria:
 

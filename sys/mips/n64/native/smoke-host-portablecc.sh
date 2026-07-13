@@ -514,6 +514,38 @@ END { exit seen && unsigned_calls == 0 && direct >= 5 ? 0 : 1 }
 	}
 done
 
+for divconst_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$divconst_cpu" -O2 -S -o "$tmp.divconst.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/divconst001.c"
+	awk '
+/^[[:space:]]*[.]ent (uquot|urem|squot|srem)_/ {
+	inside = 1
+	functions++
+	next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(div|divu)[[:space:]]/ { divides++ }
+inside && /^[[:space:]]*(mult|multu)[[:space:]]/ { multiplies++ }
+END { exit functions == 32 && divides == 0 && multiplies >= functions ? 0 : 1 }
+' "$tmp.divconst.s" || {
+		echo "$divconst_cpu did not lower constant division to magic multiply" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent reference_(uquot|urem|squot|srem)$/ {
+	inside = 1
+	functions++
+	next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(div|divu)[[:space:]]/ { divides++ }
+END { exit functions == 4 && divides == 4 ? 0 : 1 }
+' "$tmp.divconst.s" || {
+		echo "$divconst_cpu lost the variable-divisor reference path" >&2
+		exit 1
+	}
+done
+
 "$pcc" -march=vr4300 -msoft-float -O2 -fno-omit-frame-pointer -S \
     -o "$tmp.fpaccum.s" \
     "$topsrc/src/dev/pcc/pcc-tests/regress/misc/fpaccum001.c"

@@ -537,8 +537,10 @@ const char *mips_target_error(const struct mips_target *);
 #define SPCON           (MAXSPECIAL+1)  /* positive constant */
 #define SPOW2CON        (MAXSPECIAL+2)  /* positive power-of-two constant */
 #define SSHADDCON       (MAXSPECIAL+3)  /* cheap shift-add multiply constant */
-#define SPUNUSEDSPECARG (MAXSPECIAL+4)  /* specialized literal call argument */
-#define SPARGREG        (MAXSPECIAL+5)  /* o32 integer argument register */
+#define SPUDIVCON       (MAXSPECIAL+4)  /* unsigned magic division constant */
+#define SPSDIVCON       (MAXSPECIAL+5)  /* signed magic division constant */
+#define SPUNUSEDSPECARG (MAXSPECIAL+6)  /* specialized literal call argument */
+#define SPARGREG        (MAXSPECIAL+7)  /* o32 integer argument register */
 
 #define TARGET_STDARGS
 #ifndef LANG_CXX

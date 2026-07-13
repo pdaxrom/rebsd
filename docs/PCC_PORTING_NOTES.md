@@ -1355,6 +1355,45 @@ GCC.  Stable ordinary Linpack improves 0.81% to 3817.158 KFLOPS and reaches
 86.56% of GCC.  H6 therefore closes its physical gate; constant division is
 the next largest assembly-confirmed general target.
 
+H7 strength-reduces signed and unsigned 32-bit division and remainder by a
+non-power-of-two constant in the MIPS table/emitter.  Unsigned division uses
+multiply-high plus an optional correction and shift; signed division uses the
+corresponding signed magic sequence with truncation-toward-zero correction.
+Remainder emits `n - q * d`, using an existing shift/add product plan for
+cheap `2^k +/- 1` magnitudes and a low-half multiply otherwise.  Powers of
+two, zero, `+/-1`, and variable divisors keep their previous rules.
+
+`misc__divconst001` compares 32 optimized constant operations with four
+volatile hardware-divide references over boundary vectors and 16,384
+deterministic pseudorandom values.  VR4300 and MIPS32R2 assembly gates require
+no divide in the constant functions and preserve all four variable divides.
+The general `bench_const_div` body replaces six divides with six multiplies;
+the full PCC benchmark grows by only 176 section bytes.
+
+All six Malta64/Malta/MaltaEL hard/soft full-smoke profiles pass with zero
+general self-test, smoke-failure, and final RC markers.  Final hard-float
+runtime regression passes 300/300 on Malta64, Malta, and MaltaEL, including
+the expanded constant-division test.  The H7 physical image is
+`/Users/sash/Work/N64/retrobsd-build/n64-h7-divconst-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 6619136 bytes, SHA-256
+`2641efd945fd1510a09ae97ef18b033967e377a4437506b94f4449bf1864f4a2`.
+It uses a GCC kernel and PCC VR4300 hard-float a.out userland, passes
+`fsutil --check`, and contains independent GCC/PCC runtimes for all six
+benchmark binaries.  The physical result below is the final H7 commit gate.
+
+The new integer multiplies remain covered by the final emitted-stream
+workaround when default VR4300 `-mfix4300` is active.  Thus a dangerous
+floating-point multiply cannot become adjacent to an H7 integer multiply;
+`-mno-fix4300` continues to disable the workaround explicitly.
+
+Physical N64 validation passes every general and Linpack self-test, every
+benchmark return code, both final zero-valued debug statuses, and the terminal
+marker.  `const_div` improves from 0.354 to 0.926 Mwork/s, or 161.58%, and
+reaches 67.84% of GCC instead of 26.13%.  The other ten general PCC kernels
+remain within 0.64% of H6.  PCC's two-row ordinary Linpack mean is 3788.831
+KFLOPS versus 3785.421 for H6, a +0.09% change, and the isolated kernels show
+no regression.  This closes the H7 physical and commit gates.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

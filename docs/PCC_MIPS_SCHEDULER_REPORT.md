@@ -2337,3 +2337,104 @@ points, while isolated Linpack-kernel rates remain within run-to-run noise.
 Unrelated general-corpus PCC rates are likewise stable.  This closes H6's
 physical and commit gates.  Constant division at 26.13% of GCC is now the
 largest directly diagnosed general backend gap for H7.
+
+## Milestone H7: MIPS Constant Division Strength Reduction
+
+H7 addresses the largest H6 assembly-confirmed general gap without adding a
+target-independent optimizer pass or a large backend subsystem.  Four MIPS
+table entries recognize signed and unsigned 32-bit `/` and `%` whose right
+operand is a non-power-of-two constant.  The emitter computes the magic
+multiplier and shift while compiling, then emits one of two standard forms:
+
+- unsigned quotient uses the high half of `multu`, an optional branch-free
+  correction, and a logical right shift;
+- signed quotient uses the high half of `mult`, the magic-sign dividend
+  adjustment, an arithmetic shift, and sign correction for C truncation.
+
+Modulo reuses the quotient and emits `n - q * d`.  Divisors whose magnitude
+is `2^k +/- 1` rebuild `q * d` with shift/add; other constants use the low
+half of a second `multu`.  Existing specialized rules still handle powers of
+two, and the hardware `div`/`divu` rules still handle variable divisors.  Zero,
+`+1`, `-1`, and power-of-two constants are deliberately excluded from the new
+shapes.
+
+`misc__divconst001` covers six unsigned and ten signed divisors, including
+large unsigned constants and negative signed constants.  It compares 32
+constant quotient/remainder functions against four volatile variable-divisor
+references over boundary vectors and 1,024 deterministic pseudorandom values
+per divisor, for 16,384 random comparisons plus boundaries.  The host assembly
+gate compiles the test for both VR4300 and MIPS32R2: all 32 constant functions
+must contain multiply arithmetic and no `div`/`divu`, while the four reference
+functions must retain exactly four hardware divides.
+
+### H7 Static And Software Gates
+
+In the general corpus, `bench_const_div` changes from 61 instructions with
+six hardware divides to 86 instructions with six magic multiplies.  Complete
+PCC assembly changes from 1699 to 1723 lines.  The executable grows from 45568
+to 45744 section bytes, or 176 bytes (0.39%); the GCC control remains 31720
+section bytes and byte-identical.  This is an intentional code-size exchange
+for replacing the VR4300's long-latency divides.
+
+The complete PCC kernel/PCC rootfs matrix is green:
+
+| Board | CPU | Endian | Float | General self-test | Full smoke |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+
+Every profile reports `PCC_SMOKE_ALL_FAILURES 0`.  Final hard-float runtime
+regression passes 300/300 on Malta64, Malta, and MaltaEL, including the
+expanded `misc__divconst001`.  QEMU timing is not used to judge this change
+because TCG does not model the VR4300 divide/multiply latency ratio.
+
+The new integer multiplies are visible to the existing final emitted-stream
+repair.  Default VR4300 `-mfix4300` therefore still inserts separation if an
+integer multiply could immediately follow a dangerous floating-point
+multiply.  `-mno-fix4300` remains the explicit opt-out, and H7 does not weaken
+either mode.
+
+### H7 N64 Comparison Artifact
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h7-divconst-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 2641efd945fd1510a09ae97ef18b033967e377a4437506b94f4449bf1864f4a2
+kernel ELF sha256: a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d
+mips-compiler-bench-gcc: 31720 section bytes, sha256 d16f213e58b12437ff48d699d592bfcb5258499f7aedaec0885e78253e5b8bbe
+mips-compiler-bench-pcc: 45744 section bytes, sha256 02b245059bd76c8fbd09b234d82b1bc8b4c4dd45c52f5456e4afc3e8644784aa
+debug runner sha256: d10b91fd719386b1bd23c62938870ab0f7be5b133f091d828421ea7d6e593541
+```
+
+The 6 MiB rootfs passes all five `fsutil --check` phases and contains
+independently linked GCC/PCC ordinary Linpack, kernel Linpack, and general
+compiler benchmark binaries.  All six benchmark executables have zero
+undefined symbols.  The physical N64 validation below is the final H7 gate.
+
+Physical N64 validation passes both general-corpus self-tests, both Linpack
+kernel self-tests, every benchmark return code, `N64_PCC_DEBUG_END`, and
+`N64_PCC_DEBUG_RUNNER_RC`; terminal `N64_PCC_DEBUG_RC_END` is present.  The
+targeted result is:
+
+| Kernel | H6 GCC | H7 GCC | H6 PCC | H7 PCC | H7 PCC/GCC | PCC gain |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `const_div` | 1.355 | 1.365 | 0.354 | 0.926 | 67.84% | +161.58% |
+
+The PCC/GCC ratio gains 41.71 percentage points from H6's 26.13%.  The GCC
+control changes by only 0.74%, while PCC executes the same verified workload
+2.62 times as fast.  The other ten general-corpus PCC rates remain within
+0.64% of H6, including the H6 conversion results.
+
+The ordinary PCC Linpack rows are 3821.347 and 3756.314 KFLOPS.  Their mean is
+3788.831, versus 3785.421 for H6, a +0.09% change.  The 16-repetition row alone
+is 1.59% below H6, but the first row and the two-row mean are stable, and every
+isolated PCC kernel is within 0.09% or faster than H6 except for improvements
+of 2.11% in `ddot_ur` and 2.29% in `dscal_ur`.  This provides no evidence of
+an unrelated regression.  H7 therefore passes its physical and commit gates;
+constant division remains below the 90% stretch target but is no longer the
+26% outlier found by H5.
