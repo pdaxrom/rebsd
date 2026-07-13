@@ -1331,6 +1331,30 @@ call, 64-bit, and single-precision cases; double precision reaches 67.22%.
 This closes H5 and directs H6 toward shared conversion, constant arithmetic,
 and integer code generation rather than another Linpack-specific transform.
 
+H6 lowers hard-float 32-bit unsigned-to-FP conversion without a runtime call.
+An unsigned constant mask no greater than `INT_MAX`, or a logical right shift,
+uses the existing signed hardware conversion because its high bit is proven
+clear.  The general full-range path converts the signed bit pattern to double
+and conditionally adds exact `2^32`; float then rounds once with `cvt.s.d`.
+Soft-float keeps its helper ABI.  This avoids adding a general SSA range
+analysis while still handling unsigned values carried through local TEMPs.
+
+The new `misc__ufprange001` passes in 299/299 hard-float runtime regressions on
+Malta64, Malta, and MaltaEL.  All six hard/soft full smoke profiles pass with
+zero general self-test, smoke-failure, and final RC markers.  The general PCC
+benchmark loses five helper calls and shrinks by 896 section bytes.  The H6
+physical candidate is
+`/Users/sash/Work/N64/retrobsd-build/n64-h6-u32-fp-range-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 8716288 bytes, SHA-256
+`e59c80500ae0b8510b992f88130ffe5952638f408edf5de456ff074a7481e494`.
+Physical N64 validation passes every self-test, benchmark return code, final
+runner/debug status, and terminal marker.  `convert` improves from 0.403 to
+1.655 Mwork/s, or 310.67%, and reaches 64.85% of GCC instead of 15.79%.
+`float` and `double` improve 5.64% and 2.02%, reaching 48.77% and 68.58% of
+GCC.  Stable ordinary Linpack improves 0.81% to 3817.158 KFLOPS and reaches
+86.56% of GCC.  H6 therefore closes its physical gate; constant division is
+the next largest assembly-confirmed general target.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

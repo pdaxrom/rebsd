@@ -1240,6 +1240,27 @@ urempow2con(NODE *p)
 }
 
 static void
+mips_floatunsi(NODE *p)
+{
+	int done;
+
+	done = getlab2();
+	expand(p, 0, "\tmtc1 AL,A1\t# convert unsigned int to floating point\n");
+	printf("\tbgez ");
+	expand(p, 0, "AL,");
+	printf(LABFMT "\n", done);
+	expand(p, 0, "\tcvt.d.w A1,A1\n");
+	printf("\tli %s,0x41f00000\n", rnames[AT]);
+	expand(p, 0,
+	    "\tmtc1 $zero,A2\n"
+	    "\tmtc1 $at,U2\n"
+	    "\tadd.d A1,A1,A2\n");
+	deflab(done);
+	if (p->n_type == FLOAT)
+		expand(p, 0, "\tcvt.s.d A1,A1\n");
+}
+
+static void
 sdivpow2con(NODE *p)
 {
 	int shift = mips_con_log2(getlval(p->n_right));
@@ -1436,6 +1457,10 @@ zzzcode(NODE * p, int c)
 
 	case 'Y':		/* multiply by shift-add constant */
 		mulshiftaddcon(p);
+		break;
+
+	case 'd':		/* hard-float unsigned 32-bit conversion */
+		mips_floatunsi(p);
 		break;
 
 	case 'a':		/* save $ra around a leaf-only helper call */

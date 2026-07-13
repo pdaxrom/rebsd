@@ -499,6 +499,21 @@ END { exit seen && saved && call && restored ? 0 : 1 }
 	}
 done
 
+for ufprange_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$ufprange_cpu" -mhard-float -O2 -S -o "$tmp.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ufprange001.c"
+	awk '
+/^[[:space:]]*[.]ent main$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /jal[[:space:]]+__floatunsi(sf|df)/ { unsigned_calls++ }
+inside && /^[[:space:]]*cvt[.](s|d)[.]w[[:space:]]/ { direct++ }
+END { exit seen && unsigned_calls == 0 && direct >= 5 ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$ufprange_cpu did not lower bounded unsigned FP conversions" >&2
+		exit 1
+	}
+done
+
 "$pcc" -march=vr4300 -msoft-float -O2 -fno-omit-frame-pointer -S \
     -o "$tmp.fpaccum.s" \
     "$topsrc/src/dev/pcc/pcc-tests/regress/misc/fpaccum001.c"

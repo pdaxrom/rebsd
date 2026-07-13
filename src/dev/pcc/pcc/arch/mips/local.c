@@ -54,6 +54,36 @@ int mips_soft_float = MIPS_SOFT_FLOAT_DEFAULT;
 
 #define IALLOC(sz) (isinlining ? permalloc(sz) : tmpalloc(sz))
 
+/* True when an unsigned 32-bit expression cannot have its sign bit set. */
+static int
+mips_u32_fits_signed(NODE *p)
+{
+	NODE *q;
+	U_CONSZ val;
+
+	if (p->n_type != UNSIGNED && p->n_type != ULONG)
+		return 0;
+
+	if (p->n_op == AND) {
+		q = p->n_right;
+		if (q->n_op != ICON || q->n_sp != NULL) {
+			q = p->n_left;
+			if (q->n_op != ICON || q->n_sp != NULL)
+				return 0;
+		}
+		val = (U_CONSZ)glval(q) & 0xffffffffULL;
+		return val <= 0x7fffffffULL;
+	}
+
+	if (p->n_op == RS && p->n_right->n_op == ICON &&
+	    p->n_right->n_sp == NULL) {
+		val = (U_CONSZ)glval(p->n_right);
+		return val > 0 && val < 32;
+	}
+
+	return 0;
+}
+
 /* this is called to do local transformations on
  * an expression tree preparitory to its being
  * written out in intermediate code.
@@ -219,6 +249,11 @@ clocal(NODE *p)
 
 	case SCONV:
 		l = p->n_left;
+
+		/* Use signed FP conversion when range information proves it safe. */
+		if ((p->n_type == FLOAT || p->n_type == DOUBLE ||
+		    p->n_type == LDOUBLE) && mips_u32_fits_signed(l))
+			l->n_type = INT;
 
 		if (p->n_type == l->n_type) {
 			nfree(p);

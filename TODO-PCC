@@ -4764,6 +4764,35 @@ Milestone order:
     `switch`, 41.72% `memory`, 43.01% `libc_memory`, 59.70% `calls`, 39.94%
     `u64`, 46.17% `float`, 67.22% `double`, and 15.79% `convert`.  These broad
     gaps, rather than Linpack alone, select the H6 investigation.
+  - [x] H6 remove hard-float runtime calls for 32-bit unsigned-to-FP
+    conversion.  Expressions whose high bit is proven clear by a constant
+    mask or logical right shift use the short signed conversion.  Other
+    `uint32_t` values convert as signed double and conditionally add exact
+    `2^32`; float converts through double before final rounding.  Soft-float
+    retains helper-based lowering, including the full-range unsigned helper.
+  - [x] Add `misc__ufprange001` for masked, shifted, and full-range unsigned
+    conversions.  Host assembly gates cover VR4300 and MIPS32R2.  Hard-float
+    runtime regression passes 299/299 on Malta64, Malta, and MaltaEL, including
+    exact `double(0xffffffffU)` and rounded `float(0xffffffffU)` results.
+  - [x] Pass all six H6 full QEMU smoke profiles.  Malta64 VR4300, Malta
+    MIPS32R2, and MaltaEL MIPS32R2 pass in hard- and soft-float mode with
+    `MIPS_COMPILER_BENCH_SELFTEST 0`, zero smoke failures, and final RC zero.
+    The general PCC benchmark removes five helper calls, falls from 1750 to
+    1699 assembly lines, and shrinks by 896 section bytes.
+  - [x] Build the H6 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h6-u32-fp-range-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 8716288, SHA-256
+    `e59c80500ae0b8510b992f88130ffe5952638f408edf5de456ff074a7481e494`.
+    It passes `fsutil --check` and has build stamp
+    `.build-mode.gcc.1.0.0.1`.
+  - [x] Run H6 on physical N64.  Both general and Linpack self-tests, every
+    benchmark return code, final runner/debug statuses, and the terminal marker
+    pass.  `convert` improves from 0.403 to 1.655 Mwork/s, or 310.67%, and from
+    15.79% to 64.85% of GCC.  `float` improves 5.64% to 48.77% of GCC and
+    `double` improves 2.02% to 68.58%.  Stable Linpack improves 0.81% to
+    3817.158 KFLOPS and reaches 86.56% of GCC; unrelated corpus rates remain
+    stable.  This closes H6 and leaves constant division as the largest
+    directly identified general code-generation gap.
 
 Success criteria:
 

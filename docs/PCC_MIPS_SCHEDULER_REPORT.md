@@ -2246,3 +2246,94 @@ Linpack is not representative of general PCC output.  H6 begins by comparing
 the conversion and constant-division assembly, then addresses the smallest
 shared backend or optimizer deficiency that also benefits ordinary code.  No
 future change is accepted only because it improves Linpack.
+
+## Milestone H6: Inline Unsigned 32-Bit FP Conversion
+
+The H5 physical profile places `convert` at 15.79% of GCC, `float` at 46.17%,
+and `double` at 67.22%.  Assembly comparison shows PCC calling
+`__floatunsisf` or `__floatunsidf` inside each measured loop.  The call also
+forces live FP accumulators through the stack.  GCC instead uses hardware
+conversion because its range analysis proves the small masked values signed.
+
+H6 implements two compact MIPS paths:
+
+- A constant `AND` mask no greater than `INT_MAX`, or an unsigned logical
+  right shift by 1 through 31, proves that the high bit is clear.  The MIPS
+  pass1 hook changes only that expression result to signed and selects the
+  existing `cvt.s.w` or `cvt.d.w` rule.
+- Every other hard-float `uint32_t` first uses `mtc1` and `cvt.d.w`.  If its
+  sign bit was set, the generated leaf sequence adds exact double `2^32`.
+  A float result is rounded once from that corrected double with `cvt.s.d`,
+  matching GCC's full-range sequence.  No runtime call or call-clobber set is
+  needed.  Soft-float keeps the runtime-helper ABI.
+
+The bounded path is retained because it avoids the sign test and constant
+construction.  The full-range path handles values carried through a TEMP, so
+the optimization does not require a new SSA range lattice.  It is shared by
+VR4300 and MIPS32R2.  `misc__ufprange001` covers masked `unsigned int`, shifted
+`unsigned int`, masked `unsigned long`, exact `double(0xffffffffU)`, and the
+correctly rounded float result.
+
+### H6 Static And Software Gates
+
+Across the general compiler benchmark, H6 removes all five static
+`__floatunsi*` calls and reduces generated assembly from 1750 to 1699 lines.
+The PCC executable changes from 46464 to 45568 section bytes, a reduction of
+896 bytes or 1.93%.  GCC remains byte-identical.  Host assembly smoke proves
+the direct path for VR4300 and MIPS32R2 while retaining the full-range
+semantics test.
+
+Hard-float runtime regression passes 299/299 on Malta64, Malta, and MaltaEL,
+including `misc__ufprange001`.  The complete PCC kernel/PCC rootfs matrix is:
+
+| Board | CPU | Endian | Float | General self-test | Full smoke |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+
+Every profile reports `PCC_SMOKE_ALL_FAILURES 0`.  The new sequence contains
+no multiply, so it does not affect the default VR4300 `-mfix4300` repair or
+the explicit `-mno-fix4300` opt-out.
+
+### H6 N64 Comparison Artifact
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h6-u32-fp-range-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 8716288 bytes
+sha256: e59c80500ae0b8510b992f88130ffe5952638f408edf5de456ff074a7481e494
+kernel ELF sha256: a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d
+mips-compiler-bench-gcc: 31720 section bytes, sha256 d16f213e58b12437ff48d699d592bfcb5258499f7aedaec0885e78253e5b8bbe
+mips-compiler-bench-pcc: 45568 section bytes, sha256 a09523f0b856eeaf398c1bc7b4a91d1a9898d6a6501f1e932ce8b5e9e4192712
+debug runner sha256: f26e50cc18a80a6cae2b3238c1dca1599a3314a91035a177642266461a0e9923
+```
+
+The image passes all five `fsutil --check` phases, contains independent
+GCC/PCC runtimes, and both general benchmark binaries have zero undefined
+symbols.
+
+Physical N64 validation passes both general-corpus self-tests, both Linpack
+kernel self-tests, every benchmark return code, `N64_PCC_DEBUG_END`, and
+`N64_PCC_DEBUG_RUNNER_RC`; terminal `N64_PCC_DEBUG_RC_END` is present.  The
+three directly affected general kernels measure:
+
+| Kernel | GCC Mwork/s | H5 PCC | H6 PCC | H6 PCC/GCC | H6 vs H5 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `float` | 4.843 | 2.236 | 2.362 | 48.77% | +5.64% |
+| `double` | 2.654 | 1.784 | 1.820 | 68.58% | +2.02% |
+| `convert` | 2.552 | 0.403 | 1.655 | 64.85% | +310.67% |
+
+`convert` runs 4.11 times as fast and gains 49.06 percentage points against
+GCC.  None of the five H5 `__floatunsi*` calls remain in the generated H6
+benchmark executable.
+
+The stable ordinary Linpack row is 3817.158 PCC versus 4409.879 GCC KFLOPS,
+or 86.56%.  PCC improves 0.81% over H5 and the ratio gains 0.75 percentage
+points, while isolated Linpack-kernel rates remain within run-to-run noise.
+Unrelated general-corpus PCC rates are likewise stable.  This closes H6's
+physical and commit gates.  Constant division at 26.13% of GCC is now the
+largest directly diagnosed general backend gap for H7.
