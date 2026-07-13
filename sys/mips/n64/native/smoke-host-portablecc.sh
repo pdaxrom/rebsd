@@ -664,6 +664,53 @@ fpu_load_move_schedule_probe(void)
 	    "mov.d $f2,$f0\n\t"
 	    "mul.d $f6,$f2,$f4");
 }
+
+void
+fpu_move_forward_probe(void)
+{
+	asm("mov.d $f2,$f0\n\t"
+	    "l.d $f4,0($a0)\n\t"
+	    "mul.d $f6,$f2,$f4\n\t"
+	    "add.d $f2,$f8,$f6");
+}
+
+void
+fpu_move_forward_single_probe(void)
+{
+	asm("mov.s $f2,$f0\n\t"
+	    "l.s $f4,0($a0)\n\t"
+	    "mul.s $f6,$f2,$f4\n\t"
+	    "add.s $f2,$f8,$f6");
+}
+
+void
+fpu_move_forward_live_probe(void)
+{
+	asm("mov.d $f2,$f0\n\t"
+	    "l.d $f4,0($a0)\n\t"
+	    "mul.d $f6,$f2,$f4\n\t"
+	    "s.d $f2,0($a1)");
+}
+
+void
+fpu_move_forward_partial_probe(void)
+{
+	asm("mov.d $f2,$f0\n\t"
+	    "l.d $f4,0($a0)\n\t"
+	    "mul.d $f6,$f2,$f4\n\t"
+	    "l.s $f2,0($a1)\n\t"
+	    "s.s $f3,4($a1)");
+}
+
+void
+fpu_move_forward_delay_probe(void)
+{
+	asm("b 1f\n\t"
+	    "mov.d $f2,$f0\n\t"
+	    "mul.d $f6,$f2,$f4\n\t"
+	    "add.d $f2,$f8,$f6\n"
+	    "1:");
+}
 EOF
 
 for schedule_cpu in vr4300 mips32r2; do
@@ -674,9 +721,57 @@ for schedule_cpu in vr4300 mips32r2; do
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
 inside && /^[[:space:]]*(l[.]d|ldc1)[[:space:]].*24\(\$fp\)/ { loads++ }
 inside && /^[[:space:]]*mov[.]d[[:space:]]/ { moves++ }
-END { exit seen && loads == 1 && moves >= 2 ? 0 : 1 }
+END { exit seen && loads == 1 && moves == 1 ? 0 : 1 }
 ' "$tmp.s" || {
-		echo "$schedule_cpu did not keep a GPR-passed double in a TEMP" >&2
+		echo "$schedule_cpu did not forward a copied FP TEMP safely" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent fpu_move_forward_probe$/ {
+	inside = 1; seen_d = 1; next
+}
+/^[[:space:]]*[.]ent fpu_move_forward_single_probe$/ {
+	inside = 2; seen_s = 1; next
+}
+/^[[:space:]]*[.]ent fpu_move_forward_live_probe$/ {
+	inside = 3; seen_live = 1; next
+}
+/^[[:space:]]*[.]ent fpu_move_forward_partial_probe$/ {
+	inside = 5; seen_partial = 1; next
+}
+/^[[:space:]]*[.]ent fpu_move_forward_delay_probe$/ {
+	inside = 4; seen_delay = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside == 1 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ { bad_d = 1 }
+inside == 1 && /^[[:space:]]*mul[.]d[[:space:]]+\$f6,\$f0,\$f4/ {
+	forward_d = 1
+}
+inside == 2 && /^[[:space:]]*mov[.]s[[:space:]]+\$f2,\$f0/ { bad_s = 1 }
+inside == 2 && /^[[:space:]]*mul[.]s[[:space:]]+\$f6,\$f0,\$f4/ {
+	forward_s = 1
+}
+inside == 3 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	keep_live = 1
+}
+inside == 3 && /^[[:space:]]*mul[.]d[[:space:]]+\$f6,\$f2,\$f4/ {
+	use_live = 1
+}
+inside == 5 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	keep_partial = 1
+}
+inside == 4 && /^[[:space:]]*b[[:space:]]+1f/ { delay_branch = 1; next }
+inside == 4 && delay_branch &&
+    /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	keep_delay = 1
+}
+END {
+	exit seen_d && seen_s && seen_live && seen_partial && seen_delay &&
+	    forward_d && forward_s && keep_live && use_live &&
+	    keep_partial && keep_delay && !bad_d && !bad_s ? 0 : 1
+}
+' "$tmp.s" || {
+		echo "$schedule_cpu FP move forwarding crossed a live-range boundary" >&2
 		exit 1
 	}
 	awk '

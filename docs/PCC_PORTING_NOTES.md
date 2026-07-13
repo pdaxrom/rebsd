@@ -1256,6 +1256,43 @@ establish an overall Linpack gain.  The targeted rolled paths do improve:
 This closes H3's narrow physical and commit gates while the 90% overall target
 remains open.
 
+H4 removes redundant hard-float copies with a bounded assembly postpass rather
+than enlarging the MIPS table or adding global scheduler state.  A simple
+destructive `MUL` table prototype did not remove the copies, and an `RLEFT`
+prototype incorrectly recolored a result without a move, so both were
+discarded.  The accepted pass recognizes only `mov.s`/`mov.d` followed within
+12 straight-line instructions by a supported three-operand FP binary
+operation.  It forwards one use and removes the copy only when a later complete
+write proves the copied temporary dead.
+
+The proof is conservative around labels, directives, control transfers,
+unknown instructions, overlapping FPR masks, live uses, partial writes to a
+double register pair, and branch delay slots.  It is enabled for VR4300 and
+MIPS32R2; soft-float output has no matching instructions and is unchanged.
+VR4300 multiply-errata repair remains the final postpass, so default
+`-mfix4300` checks the transformed stream and `-mno-fix4300` still disables
+only that workaround.
+
+Across per-kernel Linpack, H4 removes 23 of 33 `mov.s`/`mov.d` instructions,
+reducing total static instructions from 3117 to 3094 and assembly size from
+96359 to 95255 bytes with unchanged nops, loads, stores, branches, and jumps.
+All six PCC-kernel/PCC-rootfs hard/soft smoke profiles pass on Malta64, Malta,
+and MaltaEL; a second clean MaltaEL hard build also passes.  Native hard-float
+regression passes 296/296 runtime cases on all three boards.
+
+The physical artifact is
+`/Users/sash/Work/N64/retrobsd-build/n64-h4-fpu-copy-forward-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 6619136 bytes, SHA-256
+`bc937face6146d435a1e063f9582d7f0e0cd209b145f7dcb9eddffdc2f5dc6ea`.
+It uses a GCC kernel and PCC VR4300 hard-float a.out userland, passes all
+`fsutil --check` phases, and contains independent GCC/PCC ordinary and
+per-kernel Linpack binaries.  Physical validation passes both kernel self-tests
+and all benchmark/debug return codes.  Stable ordinary Linpack is 3783.781 PCC
+versus 4412.843 GCC KFLOPS, or 85.74%; PCC improves 2.45% over H3 and the ratio
+gains 2.01 percentage points.  `daxpy_r`, `daxpy_ur`, and `dscal_ur` improve
+4.07%, 4.73%, and 1.40%, respectively.  This closes the H4 physical and commit
+gates while the 90% overall target remains open.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

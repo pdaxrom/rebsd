@@ -2040,3 +2040,108 @@ self-tests, all benchmark return codes, `N64_PCC_DEBUG_END`, and
 `N64_PCC_DEBUG_RUNNER_RC` are zero; terminal `N64_PCC_DEBUG_RC_END` is
 present.  This closes the narrow H3 physical and commit gates while leaving
 the 90% overall target open.
+
+## Milestone H4: Bounded Hard-Float Copy Forwarding
+
+H3 still emits repeated `mov.d $f2,$f0` copies before otherwise independent
+three-operand FP operations.  The backend cannot express the profitable form
+with a simple table change: making FP `MUL` destructive retained the copies,
+while an `RLEFT` no-copy prototype recolored the result without emitting the
+required move and generated wrong code.  Both table prototypes were rejected.
+
+H4 instead adds a narrow final-assembly copy-forwarding pass for VR4300 and
+MIPS32R2 hard-float code.  Starting at `mov.s` or `mov.d`, it scans at most 12
+straight-line instructions, forwards the copied source into one recognized
+three-operand `add`, `sub`, `mul`, or `div`, and removes the copy only after a
+subsequent write proves the temporary dead.  It stops at labels, directives,
+control transfers, unsupported instructions, or any conflicting FPR access.
+Source and destination masks must be disjoint, a double kill must overwrite
+both registers in the pair, and moves in branch delay slots are never changed.
+This is deliberately local; it adds no general dataflow graph or scheduler
+state to the backend.
+
+The pass runs before the final VR4300 errata repair.  Consequently the default
+`-mfix4300` pass still sees the final multiply stream and inserts separation
+where required, while `-mno-fix4300` remains the explicit opt-out.  Host
+assembly probes cover single and double forwarding, a live copied temporary,
+a partial double-pair overwrite, a branch-delay-slot move, load-gap scheduling,
+both CPU profiles, and both errata options.
+
+### H4 Static Results
+
+```text
+                       instructions  non-nops  nops  loads  stores  branches  jumps  mov.s/d  bytes
+VR4300 H3                      3117       2897   220    542     292       165    206       33  96359
+VR4300 H4                      3094       2874   220    542     292       165    206       10  95255
+```
+
+H4 removes 23 FP copies and 1104 assembly bytes without changing memory
+operations, control transfers, or delay-slot nops.  The final Linpack assembly
+contains no adjacent FP-multiply/any-multiply erratum pattern.
+
+### H4 Regression Gates
+
+Native hard-float PCC regression passes 296/296 runtime cases on Malta64,
+Malta, and Maltael.  The complete PCC-kernel/PCC-rootfs matrix is:
+
+| Board | CPU | Endian | Float | PCC Linpack KFLOPS | Result |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | 8173.039 / 9139.928 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 844.769 / 880.938 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 9880.550 / 9704.472 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1037.474 / 1033.275 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 7964.690 / 8508.434 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 906.967 / 890.824 | `PCC_SMOKE_ALL_RC:0` |
+
+Every full smoke reports `PCC_SMOKE_ALL_FAILURES 0`.  MaltaEL hard was also
+rebuilt from a second fresh object directory and passed the complete smoke.
+Concurrent QEMU timing is correctness evidence only; the physical VR4300
+result below is the performance and commit gate.
+
+### H4 N64 Comparison Artifact
+
+The physical hardware image uses a GCC debug-UART kernel and PCC VR4300
+hard-float a.out userland with independent GCC/PCC ordinary and per-kernel
+Linpack runtimes:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h4-fpu-copy-forward-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: bc937face6146d435a1e063f9582d7f0e0cd209b145f7dcb9eddffdc2f5dc6ea
+kernel ELF sha256: a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d
+linpack-gcc: 24600 section bytes, sha256 f4c17de2f62a9dfc8054281b3b8f584b405bce20cf99acb7dc63e06b2cad1d6c
+linpack-pcc: 38912 section bytes, sha256 5d8c6013441d27969da649f841e96661d82ddaeb22041a8dfcbaa66520460b12
+linpack-kernels-gcc: 25584 section bytes, sha256 b4a7de6d6a36b9fa2998f35d52d9d7672e18b4f92ff127463de99f645499d309
+linpack-kernels-pcc: 45320 section bytes, sha256 32be8ac76edbdeb86d020190287f773c236998b562365050a5043435a633c2fc
+debug runner sha256: bc50579bd112eac1af472f17d63ed1e5f2d79ea0ad5e95edf263465d620a9357
+```
+
+The image passes all five `fsutil --check` phases and all four benchmark
+binaries have zero undefined symbols.  GCC controls are byte-identical to H3;
+H4 reduces ordinary PCC Linpack by 32 section bytes and PCC kernel Linpack by
+80.  Physical ordinary Linpack measured:
+
+| Reps | GCC KFLOPS | PCC KFLOPS | PCC/GCC | PCC vs H3 |
+| ---: | ---: | ---: | ---: | ---: |
+| 8 | 4369.936 | 3758.258 | 86.00% | +0.28% |
+| 16 | 4412.843 | 3783.781 | 85.74% | +2.45% |
+
+The stable row improves the PCC/GCC ratio by 2.01 percentage points over H3.
+The physical per-kernel profile is:
+
+| Kernel | GCC Melem/s | PCC Melem/s | PCC/GCC | PCC vs H3 |
+| --- | ---: | ---: | ---: | ---: |
+| `daxpy_r` | 5.188 | 3.729 | 71.88% | +4.07% |
+| `daxpy_ur` | 5.124 | 4.517 | 88.15% | +4.73% |
+| `ddot_r` | 5.988 | 4.150 | 69.31% | +0.02% |
+| `ddot_ur` | 6.766 | 5.437 | 80.36% | -0.02% |
+| `dscal_r` | 7.216 | 4.847 | 67.17% | +0.02% |
+| `dscal_ur` | 8.376 | 6.439 | 76.87% | +1.40% |
+| `idamax` | 6.501 | 5.333 | 82.03% | -0.73% |
+
+The intended copy-heavy `daxpy` paths improve by 4.07% and 4.73%, and
+unrolled `dscal` improves by 1.40%.  Both kernel self-tests, every benchmark
+return code, `N64_PCC_DEBUG_END`, and `N64_PCC_DEBUG_RUNNER_RC` are zero;
+terminal `N64_PCC_DEBUG_RC_END` is present.  This closes the H4 physical and
+commit gates while leaving the 90% overall target open.
