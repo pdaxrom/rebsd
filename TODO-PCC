@@ -4889,6 +4889,53 @@ Milestone order:
     and a 17.71 percentage-point PCC/GCC-ratio gain.  PCC ordinary Linpack
     averages 3772.706 KFLOPS, 85.12% of the current GCC result and only 0.43%
     below H7.  This closes the corrected H8 physical and commit gates.
+  - [x] H9A extend the existing SSA address-induction transform to integer
+    memory loops on VR4300 and MIPS32R2.  Loop-invariant global `ICON` symbols
+    are now valid bases, and unsigned induction is accepted even when PCC's
+    pointer-scaling `LS` node has signed `int` type.  A single global access
+    is profitable; register bases still require two uses unless they are the
+    existing VR4300 hard-float FP case.
+  - [x] Reject the unrestricted single-integer-address prototype before QEMU.
+    It promoted `ipvt[k]` in Linpack `dgefa`, displaced `n-1` from `$s7`,
+    restored a frame pointer, and added stack traffic.  The final symbolic
+    single-use gate makes complete H8/H9A Linpack assembly byte-identical on
+    both VR4300 and MIPS32R2 while changing `bench_memory` from 59 to 56
+    instructions and reducing its address `addu` count from seven to four.
+  - [x] Extend `misc__ssastrength001` with signed and unsigned global-array
+    loops.  Host assembly gates pass on VR4300 and MIPS32R2: repeated integer
+    register bases and single global bases use pointer induction, a single
+    integer parameter base retains scaled indexing, and only VR4300
+    hard-float promotes the single FP parameter case.  The same regression is
+    staged in the H9A N64 debug image for a native compile-and-run gate.
+  - [x] Pass the H9A software gates.  Hard-float runtime regression passes
+    301/301 on Malta64, Malta, and MaltaEL, including the extended
+    `misc__ssastrength001`.  Native Malta64 compilation reports 311 passes
+    and 30 expected failures, then passes all 301 runnable tests.  All six
+    Malta64/Malta/MaltaEL hard/soft full `pcc-smoke-all.sh` profiles report
+    `MIPS_COMPILER_BENCH_SELFTEST 0`, `PCC_SMOKE_ALL_FAILURES 0`, and final
+    `PCC_SMOKE_ALL_RC:0`.
+  - [x] Build the H9A GCC-kernel/PCC-VR4300-hard-float a.out-userland N64
+    image and retain it for physical comparison with H8.  The clean image is
+    `/Users/sash/Work/N64/retrobsd-build/n64-h9a-address-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes, SHA-256
+    `a0c5b5c7cf15f1c471bd8a39dad9b25864a39e3b9ac52c60c6736f203a99b5ad`,
+    with stamp `.build-mode.gcc.1.0.0.1`.  Its kernel ELF and all three GCC
+    benchmark controls are byte-identical to H8.  All six benchmark binaries
+    have zero undefined symbols, and the rootfs passes all five `fsutil`
+    phases.  The boot-time C runner, rather than only the retained shell
+    script, now compiles and runs both `misc__llcall001` and
+    `misc__ssastrength001`.
+  - [x] Run H9A on physical N64.  Both general and Linpack-kernel self-tests,
+    every benchmark return code, `N64_PCC_DEBUG_END`, and
+    `N64_PCC_DEBUG_RUNNER_RC` are zero; the terminal
+    `N64_PCC_DEBUG_RC_END` marker is present.  PCC `memory` rises from H8's
+    4.262 to 5.352 Mwork/s, a 25.57% gain, and reaches 52.41% of the
+    byte-identical GCC control instead of 41.74%.  Every other general PCC
+    kernel also improves, from 0.56% for `libc_memory` through 23.03% for
+    `branch`; `double` gains 15.82% and `u64` gains 11.86%.  Isolated PCC
+    Linpack kernels remain within -1.02% to +0.93% of H8.  Ordinary PCC
+    Linpack averages 3792.478 KFLOPS, 0.52% above H8, and reaches 85.25% of
+    the current GCC mean.  This closes the H9A physical and commit gates.
 
 Success criteria:
 

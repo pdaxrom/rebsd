@@ -1452,6 +1452,31 @@ GCC control differs from H7 by only -0.69%.  PCC ordinary Linpack rows are
 GCC mean and only 0.43% below H7.  The correctness fix therefore preserves
 the provisional H8 performance while closing the physical and commit gates.
 
+H9A extends the existing SSA address-induction hook to integer memory loops on
+VR4300 and MIPS32R2.  Global symbol addresses may be initialized in a loop
+preheader, and unsigned induction accepts PCC's integer-typed pointer-scaling
+shift.  Single-use register bases remain disabled for integer data because an
+unrestricted prototype increased pressure and stack traffic in Linpack
+`dgefa`; a single-use global base is allowed, while the earlier hard-float
+VR4300 FP exception is unchanged.  Final H8 and H9A Linpack assembly is
+byte-identical on both target CPUs, but the general `bench_memory` hot loop
+uses loop-carried pointers instead of rebuilding three global addresses per
+iteration.  Hard-float runtime regression passes 301/301 on all three Malta
+variants, native Malta64 passes all 301 runnable cases, and all six hard/soft
+full-smoke profiles pass.  The retained clean GCC-kernel/PCC-hard-float a.out
+candidate is
+`/Users/sash/Work/N64/retrobsd-build/n64-h9a-address-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+SHA-256
+`a0c5b5c7cf15f1c471bd8a39dad9b25864a39e3b9ac52c60c6736f203a99b5ad`.
+Its boot-time C runner compiles and executes `misc__ssastrength001` as well as
+the previously staged `misc__llcall001`.  Physical N64 validation passes with
+both self-tests, all benchmark return codes, and both numeric debug markers
+at zero.  PCC `memory` improves from 4.262 to 5.352 Mwork/s (+25.57%), all ten
+other general PCC kernels improve, and isolated Linpack kernels remain within
+-1.02% to +0.93% of H8.  Ordinary PCC Linpack averages 3792.478 KFLOPS,
+0.52% above H8 and 85.25% of the current GCC mean.  This closes the H9A
+physical and commit gates.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

@@ -81,6 +81,9 @@ static const struct test_case primary_tests[] = {
 static const struct test_case extended_tests[] = {
 	{ "jira__PCC-84", "jira__PCC_84", "jira", "PCC-84.c", 0 },
 	{ "jira__PCC-85", "jira__PCC_85", "jira", "PCC-85.c", 0 },
+	{ "misc__llcall001", "misc__llcall001", "misc", "llcall001.c", 0 },
+	{ "misc__ssastrength001", "misc__ssastrength001", "misc",
+	    "ssastrength001.c", 0 },
 	{ "jira__PCC-97", "jira__PCC_97", "jira", "PCC-97.c", 0 },
 	{ "jira__PCC-101", "jira__PCC_101", "jira", "PCC-101.c", 0 },
 	{ "jira__PCC-123", "jira__PCC_123", "jira", "PCC-123.c", 0 },

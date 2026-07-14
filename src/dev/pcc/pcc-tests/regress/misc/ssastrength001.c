@@ -88,14 +88,42 @@ pointer_single_int(const int *values, int count)
 	return sum;
 }
 
+static int global_values[64];
+static unsigned int global_unsigned_values[64];
+
+static int
+pointer_single_global_int(int count)
+{
+	int i, sum;
+
+	sum = 0;
+	for (i = 0; i < count; i++)
+		sum += global_values[i];
+	return sum;
+}
+
+static unsigned int
+pointer_single_global_unsigned(unsigned int count)
+{
+	unsigned int i, sum;
+
+	sum = 0;
+	for (i = 0; i < count; i++)
+		sum += global_unsigned_values[i];
+	return sum;
+}
+
 int
 main(void)
 {
 	int values[64];
 	int i;
 
-	for (i = 0; i < 64; i++)
+	for (i = 0; i < 64; i++) {
 		values[i] = i * 2 + 1;
+		global_values[i] = i * 3 + 2;
+		global_unsigned_values[i] = (unsigned int)i * 5U + 3U;
+	}
 	if (unit_step(values, 8, 3) != 24)
 		return 1;
 	if (descending(values, 8, 3) != 24)
@@ -110,5 +138,9 @@ main(void)
 		return 6;
 	if (pointer_single_int(values, 8) != 64)
 		return 7;
+	if (pointer_single_global_int(8) != 100)
+		return 8;
+	if (pointer_single_global_unsigned(8) != 164U)
+		return 9;
 	return 0;
 }

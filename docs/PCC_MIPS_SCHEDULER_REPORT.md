@@ -2536,3 +2536,105 @@ The ordinary PCC Linpack rows are 3756.395 and 3789.017 KFLOPS.  Their mean is
 mean.  Every isolated kernel also passes its checksum and return-code gates.
 H8 therefore passes its physical and commit gates; QEMU timing was not used
 to judge the optimization.
+
+## Milestone H9A: Integer And Symbol Address Induction
+
+H9A broadens the existing target-independent SSA address-induction lowering
+instead of adding another MIPS-only loop pass.  The matcher now accepts a
+loop-invariant symbol `ICON` as the base of `base + (index << scale)`, carries
+that base into the preheader, and advances a pointer phi on the latch.  It
+also accepts PCC's mixed signedness representation of unsigned pointer
+scaling: the induction TEMP must still have the exact phi type, but the
+compiler-generated `LS` node and shift count may use another integer type.
+
+The MIPS cost hooks enable integer address induction on VR4300 and MIPS32R2 in
+both hard- and soft-float modes.  A register base still needs at least two
+matching addresses per iteration.  A single global-symbol address is allowed
+because its base load moves out of the loop; the previous single-use register
+exception remains limited to FP pointees on hard-float VR4300.
+
+An unrestricted prototype demonstrated why the distinction is necessary.
+It converted the one-use `ipvt[k]` store in Linpack `dgefa`, occupied `$s7`
+with the pointer, spilled the previous `$s7` value, restored a frame pointer,
+and grew the function.  With the final gate, complete Linpack assembly is
+byte-identical to H8 for both VR4300 and MIPS32R2.
+
+The first loop in the general `bench_memory` kernel now materializes
+`input_a`, `input_b`, and `output_a` once before the loop and uses three
+four-byte pointer increments.  Its function changes from 59 to 56
+instructions; `sll` changes from four to three and address `addu` from seven
+to four.  The nonlinear `(i * 17) & 255` loop is deliberately unchanged.
+
+`misc__ssastrength001` now includes signed and unsigned global arrays.  The
+VR4300 and MIPS32R2 host gates require zero scaled-index shifts for repeated
+integer register bases and one-use global bases.  A one-use integer parameter
+retains its shift, while the existing one-use FP reduction remains specific
+to hard-float VR4300.  Both host suites pass.
+
+Hard-float runtime regression passes 301/301 on Malta64, Malta, and MaltaEL,
+including the extended `misc__ssastrength001`.  The native Malta64 regression
+reports 311 compile passes, 30 expected compile failures, and 301/301 runtime
+passes.  The complete PCC-kernel/PCC-rootfs matrix is also green:
+
+| Board | CPU | Endian | Float | General self-test | Full smoke |
+| --- | --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | `0` | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | `0` | `PCC_SMOKE_ALL_RC:0` |
+
+Every full smoke reports `PCC_SMOKE_ALL_FAILURES 0`.
+
+The retained physical candidate is a clean GCC-kernel/PCC-VR4300-hard-float
+a.out-userland build at
+`/Users/sash/Work/N64/retrobsd-build/n64-h9a-address-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`.
+It is 6619136 bytes with SHA-256
+`a0c5b5c7cf15f1c471bd8a39dad9b25864a39e3b9ac52c60c6736f203a99b5ad`
+and stamp `.build-mode.gcc.1.0.0.1`.  The kernel `unix.elf` SHA-256 is
+`a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1`,
+identical to H8.  The GCC Linpack, kernel-Linpack, and general benchmark
+controls are also byte-identical to H8.
+
+The final staged benchmark section sizes are 24600/39024 bytes for GCC/PCC
+Linpack, 25584/45560 for GCC/PCC kernel Linpack, and 31720/45520 for the
+GCC/PCC general benchmark.  The PCC general benchmark is 144 bytes smaller
+than H8.  All six executables have zero undefined symbols.  The 6144 KiB
+debug UFS passes all five `fsutil --check` phases with 357 files, 3964 used
+blocks, and 2155 free blocks.  The boot-time C runner includes both
+`misc__llcall001` and `misc__ssastrength001`; this closes the gap where those
+sources were present in the retained shell script but absent from the runner
+actually invoked by `/etc/rc`.
+
+Physical N64 validation passes both general and Linpack-kernel self-tests,
+all benchmark return codes, zero-valued `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC`, and the terminal `N64_PCC_DEBUG_RC_END` marker.
+The general benchmark comparison against the corrected H8 hardware run is:
+
+| Kernel | H8 PCC | H9A PCC | PCC gain | H8 PCC/GCC | H9A PCC/GCC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `int_mix` | 3.426 | 3.846 | +12.26% | 52.25% | 58.16% |
+| `const_div` | 0.926 | 0.954 | +3.02% | 68.29% | 69.89% |
+| `branch` | 2.505 | 3.082 | +23.03% | 52.63% | 64.75% |
+| `switch` | 2.723 | 3.079 | +13.07% | 55.02% | 61.81% |
+| `memory` | 4.262 | 5.352 | +25.57% | 41.74% | 52.41% |
+| `libc_memory` | 22.127 | 22.252 | +0.56% | 42.45% | 42.99% |
+| `calls` | 2.876 | 3.087 | +7.34% | 59.24% | 63.18% |
+| `u64` | 1.653 | 1.849 | +11.86% | 57.64% | 63.98% |
+| `float` | 2.361 | 2.554 | +8.17% | 48.75% | 52.74% |
+| `double` | 1.820 | 2.108 | +15.82% | 68.09% | 79.43% |
+| `convert` | 1.641 | 1.780 | +8.47% | 64.30% | 69.75% |
+
+The GCC controls vary only with measurement noise and are byte-identical to
+H8.  PCC `memory` gains 25.57% and its PCC/GCC ratio gains 10.67 percentage
+points.  No other general PCC kernel regresses.  The seven isolated PCC
+Linpack kernels range from -1.02% to +0.93% versus H8, so none changes beyond
+the approximately one-percent timing noise of the run.  Ordinary PCC Linpack
+averages 3792.478 KFLOPS versus H8's 3772.706, a 0.52% gain.  The current GCC
+mean is 4448.748 KFLOPS, putting H9A at 85.25% of GCC versus H8's 85.12%.
+This closes the H9A physical and commit gates.
+
+H9A emits no multiply instruction and does not alter instruction scheduling,
+so the default `-mfix4300` final-stream workaround and explicit
+`-mno-fix4300` opt-out are unchanged.

@@ -1665,6 +1665,18 @@ pointer_single_int_slls=$(awk '
     inside && $1 == "sll" { count++ }
     END { print count + 0 }
 ' "$tmp.ssastrength.s")
+pointer_single_global_int_slls=$(awk '
+    /^pointer_single_global_int:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_single_global_unsigned_slls=$(awk '
+    /^pointer_single_global_unsigned:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
 if [ "$cpu" = vr4300 ]; then
 	test "$unit_step_mults" -eq 0
 	test "$descending_mults" -eq 1
@@ -1677,11 +1689,22 @@ if [ "$cpu" = vr4300 ] && [ "$float_abi" = hard ]; then
 	test "$pointer_step_slls" -eq 0
 	test "$pointer_descending_slls" -eq 1
 	test "$pointer_single_fp_slls" -eq 0
+elif [ "$cpu" = vr4300 ] || [ "$cpu" = mips32r2 ]; then
+	test "$pointer_step_slls" -eq 0
+	test "$pointer_descending_slls" -eq 1
+	test "$pointer_single_fp_slls" -eq 1
 else
 	test "$pointer_step_slls" -eq 4
 	test "$pointer_descending_slls" -eq 4
 	test "$pointer_single_fp_slls" -eq 1
 fi
 test "$pointer_single_int_slls" -eq 1
+if [ "$cpu" = vr4300 ] || [ "$cpu" = mips32r2 ]; then
+	test "$pointer_single_global_int_slls" -eq 0
+	test "$pointer_single_global_unsigned_slls" -eq 0
+else
+	test "$pointer_single_global_int_slls" -eq 1
+	test "$pointer_single_global_unsigned_slls" -eq 1
+fi
 
 echo "smoke-host-portablecc: ok"

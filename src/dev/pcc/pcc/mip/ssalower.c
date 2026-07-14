@@ -18,8 +18,15 @@
 #ifndef TARGET_SSA_STRENGTH_REDUCE_ADDRESS
 #define TARGET_SSA_STRENGTH_REDUCE_ADDRESS()	0
 #endif
+#ifndef TARGET_SSA_STRENGTH_REDUCE_ADDRESS_TYPE
+#define TARGET_SSA_STRENGTH_REDUCE_ADDRESS_TYPE(t)	1
+#endif
 #ifndef TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS
 #define TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS(t)	0
+#endif
+#ifndef TARGET_SSA_STRENGTH_REDUCE_SINGLE_SYMBOL_ADDRESS
+#define TARGET_SSA_STRENGTH_REDUCE_SINGLE_SYMBOL_ADDRESS(t)	\
+	TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS(t)
 #endif
 
 #define MAX_ADDRESS_INDUCTION_CANDIDATES	8
@@ -58,6 +65,8 @@ struct multiply_cse_value {
 
 struct address_induction_candidate {
 	int base;
+	char *base_name;
+	CONSZ base_offset;
 	int count;
 	int shift;
 	TWORD pointer_type;
@@ -303,18 +312,33 @@ insert_edge_value(struct basicblock *bb, struct interpass *ip)
 
 static int
 address_induction_expression(NODE *p, int induction, TWORD integer_type,
-    int *base, TWORD *pointer_type, int *shift, CONSZ *offset)
+    int *base, char **base_name, CONSZ *base_offset, TWORD *pointer_type,
+    int *shift, CONSZ *offset)
 {
 	NODE *index, *scale;
 	CONSZ factor, value;
 
 	if (p->n_op != PLUS || !ISPTR(p->n_type) ||
-	    p->n_left->n_op != TEMP || p->n_left->n_type != p->n_type)
+	    p->n_left->n_type != p->n_type)
 		return 0;
+	if (p->n_left->n_op == TEMP) {
+		*base = regno(p->n_left);
+		*base_name = NULL;
+		*base_offset = 0;
+	} else if (p->n_left->n_op == ICON &&
+	    p->n_left->n_name != NULL && p->n_left->n_name[0] != '\0') {
+		*base = -1;
+		*base_name = p->n_left->n_name;
+		*base_offset = getlval(p->n_left);
+	} else {
+		return 0;
+	}
 	scale = p->n_right;
-	if (scale->n_op != LS || scale->n_type != integer_type ||
+	if (scale->n_op != LS || !ISINTEGER(BTYPE(scale->n_type)) ||
+	    ISPTR(scale->n_type) ||
 	    scale->n_right->n_op != ICON ||
-	    scale->n_right->n_type != integer_type ||
+	    !ISINTEGER(BTYPE(scale->n_right->n_type)) ||
+	    ISPTR(scale->n_right->n_type) ||
 	    scale->n_right->n_name == NULL ||
 	    scale->n_right->n_name[0] != '\0')
 		return 0;
@@ -341,10 +365,33 @@ address_induction_expression(NODE *p, int induction, TWORD integer_type,
 	factor = (CONSZ)1 << *shift;
 	if (value < -32768 / factor || value > 32767 / factor)
 		return 0;
-	*base = regno(p->n_left);
 	*pointer_type = p->n_type;
 	*offset = value * factor;
 	return 1;
+}
+
+static int
+same_address_induction_base(struct address_induction_candidate *candidate,
+    int base, const char *base_name, CONSZ base_offset)
+{
+	if (candidate->base != base || candidate->base_offset != base_offset)
+		return 0;
+	if (candidate->base_name == NULL || base_name == NULL)
+		return candidate->base_name == base_name;
+	return strcmp(candidate->base_name, base_name) == 0;
+}
+
+static NODE *
+address_induction_base(struct address_induction_candidate *candidate)
+{
+	NODE *p;
+
+	if (candidate->base_name == NULL)
+		return mktemp(candidate->base, candidate->pointer_type);
+	p = mklnode(ICON, candidate->base_offset, 0,
+	    candidate->pointer_type);
+	p->n_name = candidate->base_name;
+	return p;
 }
 
 static void
@@ -353,7 +400,9 @@ collect_address_induction_candidates(NODE *p, int induction,
     int *ncandidate)
 {
 	CONSZ offset;
+	CONSZ base_offset;
 	TWORD pointer_type;
+	char *base_name;
 	int base, i, o, shift;
 
 	o = optype(p->n_op);
@@ -364,10 +413,11 @@ collect_address_induction_candidates(NODE *p, int induction,
 		collect_address_induction_candidates(p->n_right, induction,
 		    integer_type, candidate, ncandidate);
 	if (!address_induction_expression(p, induction, integer_type, &base,
-	    &pointer_type, &shift, &offset))
+	    &base_name, &base_offset, &pointer_type, &shift, &offset))
 		return;
 	for (i = 0; i < *ncandidate; i++)
-		if (candidate[i].base == base &&
+		if (same_address_induction_base(&candidate[i], base, base_name,
+		    base_offset) &&
 		    candidate[i].pointer_type == pointer_type &&
 		    candidate[i].shift == shift) {
 			candidate[i].count++;
@@ -376,6 +426,8 @@ collect_address_induction_candidates(NODE *p, int induction,
 	if (*ncandidate == MAX_ADDRESS_INDUCTION_CANDIDATES)
 		return;
 	candidate[*ncandidate].base = base;
+	candidate[*ncandidate].base_name = base_name;
+	candidate[*ncandidate].base_offset = base_offset;
 	candidate[*ncandidate].count = 1;
 	candidate[*ncandidate].shift = shift;
 	candidate[*ncandidate].pointer_type = pointer_type;
@@ -387,7 +439,9 @@ replace_address_induction(NODE **nodep, int induction, TWORD integer_type,
     struct address_induction_candidate *candidate, int replacement)
 {
 	CONSZ offset;
+	CONSZ base_offset;
 	TWORD pointer_type;
+	char *base_name;
 	NODE *p;
 	int base, o, shift;
 
@@ -401,7 +455,8 @@ replace_address_induction(NODE **nodep, int induction, TWORD integer_type,
 		    candidate, replacement);
 	p = *nodep;
 	if (!address_induction_expression(p, induction, integer_type, &base,
-	    &pointer_type, &shift, &offset) || base != candidate->base ||
+	    &base_name, &base_offset, &pointer_type, &shift, &offset) ||
+	    !same_address_induction_base(candidate, base, base_name, base_offset) ||
 	    pointer_type != candidate->pointer_type ||
 	    shift != candidate->shift)
 		return;
@@ -444,10 +499,10 @@ reduce_address_induction(struct p2env *p2e, struct basicblock *header,
 	    initial_value <= 32767 / factor) {
 		initial_value *= factor;
 		if (initial_value == 0)
-			initial_expression = mktemp(candidate->base, pointer_type);
+			initial_expression = address_induction_base(candidate);
 		else
 			initial_expression = mkbinode(PLUS,
-			    mktemp(candidate->base, pointer_type),
+			    address_induction_base(candidate),
 			    mklnode(ICON, initial_value, 0, integer_type),
 			    pointer_type);
 	} else {
@@ -455,7 +510,7 @@ reduce_address_induction(struct p2env *p2e, struct basicblock *header,
 		    mklnode(ICON, candidate->shift, 0, integer_type),
 		    integer_type);
 		initial_expression = mkbinode(PLUS,
-		    mktemp(candidate->base, pointer_type), scale, pointer_type);
+		    address_induction_base(candidate), scale, pointer_type);
 	}
 	ip = ipnode(mkbinode(ASSIGN, mktemp(pointer_initial, pointer_type),
 	    initial_expression, pointer_type));
@@ -519,14 +574,26 @@ ssa_strength_reduce_addresses(struct p2env *p2e, struct basicblock *header,
 		}
 	}
 	for (i = 0; i < ncandidate; i++) {
-		if (candidate[i].count < 2 &&
-		    !TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS(
-		        candidate[i].pointer_type))
+		if (!TARGET_SSA_STRENGTH_REDUCE_ADDRESS_TYPE(
+		    candidate[i].pointer_type))
 			continue;
-		definition = temp_definition_block(p2e, candidate[i].base);
-		if (definition == NULL ||
-		    !block_dominates(p2e, definition, preheader))
-			continue;
+		if (candidate[i].count < 2) {
+			if (candidate[i].base_name != NULL) {
+				if (!TARGET_SSA_STRENGTH_REDUCE_SINGLE_SYMBOL_ADDRESS(
+				    candidate[i].pointer_type))
+					continue;
+			} else if (!TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS(
+			    candidate[i].pointer_type)) {
+				continue;
+			}
+		}
+		if (candidate[i].base_name == NULL) {
+			definition = temp_definition_block(p2e,
+			    candidate[i].base);
+			if (definition == NULL ||
+			    !block_dominates(p2e, definition, preheader))
+				continue;
+		}
 		reduce_address_induction(p2e, header, preheader, latch,
 		    induction, preedge, backedge, delta, &candidate[i]);
 	}
