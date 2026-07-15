@@ -53,7 +53,7 @@ descend(
     }
     if ((dp->di_size & (DIRBLKSIZ - 1)) != 0) {
         pwarn("DIRECTORY %s: LENGTH %ld NOT MULTIPLE OF %d",
-            pathname, dp->di_size, DIRBLKSIZ);
+            pathname, (long)dp->di_size, DIRBLKSIZ);
         dp->di_size = roundup(dp->di_size, DIRBLKSIZ);
         if (preen)
             printf(" (ADJUSTED)\n");

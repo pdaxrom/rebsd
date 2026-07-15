@@ -165,5 +165,11 @@ const char *const syscallnames[] = {
     "ufetch",           /* 153 = ufetch */
     "ucall",            /* 154 = ucall */
     "#155",             /* 155 = unused */
+    "lseek64",          /* 156 = lseek64 */
+    "truncate64",       /* 157 = truncate64 */
+    "ftruncate64",      /* 158 = ftruncate64 */
+    "stat64",           /* 159 = stat64 */
+    "lstat64",          /* 160 = lstat64 */
+    "fstat64",          /* 161 = fstat64 */
 };
 #endif

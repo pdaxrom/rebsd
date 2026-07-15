@@ -109,6 +109,11 @@ mode 0775
 file /root/fat-rename-smoke.sh
 mode 0775
 
+file /root/off64-smoke.sh
+mode 0775
+
+file /root/off64-smoke.c
+
 file /root/libc-string-smoke.sh
 mode 0775
 
@@ -432,6 +437,9 @@ file /usr/bin/nohup
 mode 0775
 
 file /usr/bin/od
+mode 0775
+
+file /usr/bin/off64-smoke-gcc
 mode 0775
 
 file /usr/bin/pagesize

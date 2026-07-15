@@ -9,6 +9,7 @@
 #include <machine/devmajors.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
+#include <stdint.h>
 
 #ifdef PTY_ENABLED
 #include <sys/pty.h>
@@ -99,6 +100,8 @@ mips_mmrw(dev_t dev, struct uio *uio, int flag)
     register struct iovec *iov;
     int error;
     register u_int c;
+    uintptr_t memaddr;
+    uintptr_t memlast;
 
     error = 0;
     while (uio->uio_resid && error == 0) {
@@ -114,12 +117,18 @@ mips_mmrw(dev_t dev, struct uio *uio, int flag)
         switch (minor(dev)) {
         case 0:
         case 1:
-            if ((badkaddr((caddr_t)uio->uio_offset) &&
-                baduaddr((caddr_t)uio->uio_offset)) ||
-                (badkaddr((caddr_t)(uio->uio_offset + iov->iov_len - 1)) &&
-                baduaddr((caddr_t)(uio->uio_offset + iov->iov_len - 1))))
+            if (uio->uio_offset < 0 || uio->uio_offset > UINTPTR_MAX ||
+                (off_t)(iov->iov_len - 1) >
+                (off_t)UINTPTR_MAX - uio->uio_offset)
                 return EFAULT;
-            error = uiomove((caddr_t)uio->uio_offset, iov->iov_len, uio);
+            memaddr = (uintptr_t)uio->uio_offset;
+            memlast = memaddr + iov->iov_len - 1;
+            if ((badkaddr((caddr_t)memaddr) &&
+                baduaddr((caddr_t)memaddr)) ||
+                (badkaddr((caddr_t)memlast) &&
+                baduaddr((caddr_t)memlast)))
+                return EFAULT;
+            error = uiomove((caddr_t)memaddr, iov->iov_len, uio);
             break;
         case 2:
             if (uio->uio_rw == UIO_READ)

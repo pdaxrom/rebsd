@@ -19,6 +19,9 @@
 
 extern void sc_msec();
 
+#define LSEEK64_NARG        4
+#define TRUNCATE64_NARG     3
+
 /*
  * Reserved/unimplemented system calls in the range 0-150 inclusive
  * are reserved for use in future Berkeley releases.
@@ -206,6 +209,12 @@ const struct sysent sysent[] = {
     { 1, ufetch },              /* 153 = ufetch */
     { 4, ucall },               /* 154 = ucall */
     { 0, nosys },               /* 155 = fperr */
+    { LSEEK64_NARG, lseek64 },  /* 156 = lseek64 */
+    { TRUNCATE64_NARG, truncate64 }, /* 157 = truncate64 */
+    { TRUNCATE64_NARG, ftruncate64 }, /* 158 = ftruncate64 */
+    { 2, stat64 },              /* 159 = stat64 */
+    { 2, lstat64 },             /* 160 = lstat64 */
+    { 2, fstat64 },             /* 161 = fstat64 */
 };
 
 const int nsysent = sizeof (sysent) / sizeof (sysent[0]);

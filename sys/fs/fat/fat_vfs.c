@@ -674,7 +674,8 @@ fat_file_update(struct inode *ip)
         return EIO;
     if (fmp->fm_read_only)
         return EROFS;
-    if (ip->i_size < 0 || (unsigned long)ip->i_size > 0x7ffffffful)
+    if (ip->i_size < 0 ||
+        (unsigned long long)ip->i_size > 0xffffffffULL)
         return EFBIG;
     error = fat_file_location(ip->i_number, &sector, &slot);
     if (error)
@@ -1377,8 +1378,6 @@ fat_load_inode(struct mount *mp, struct inode *ip)
         return ENOENT;
     fat_dirent_parse(&dirent, entry);
     dirent.fd_cluster = fat_dirent_cluster(fmp, &dirent);
-    if (dirent.fd_size > 0x7fffffffu)
-        return EFBIG;
     if (dirent.fd_size != 0 &&
         !fat_cluster_valid(&fmp->fm_volume, dirent.fd_cluster))
         return EIO;
@@ -1546,8 +1545,9 @@ fat_write_file(struct inode *ip, struct uio *uio, int ioflag)
     if ((ioflag & IO_APPEND) != 0)
         uio->uio_offset = ip->i_size;
     if (uio->uio_offset < 0 ||
-        (unsigned long)uio->uio_offset > 0x7ffffffful ||
-        uio->uio_resid > 0x7fffffffu - (unsigned)uio->uio_offset)
+        (unsigned long long)uio->uio_offset > 0xffffffffULL ||
+        (unsigned long long)uio->uio_resid >
+        0xffffffffULL - (unsigned long long)uio->uio_offset)
         return EFBIG;
 
     if (uio->uio_resid != 0 && uio->uio_offset > ip->i_size) {
@@ -1638,7 +1638,7 @@ fat_zero_file_range(struct inode *ip, off_t start, off_t end)
 }
 
 static int
-fat_truncate(struct inode *ip, u_long length, int ioflags)
+fat_truncate(struct inode *ip, off_t length, int ioflags)
 {
     struct fat_mount *fmp;
     unsigned old_cluster;
@@ -1656,7 +1656,7 @@ fat_truncate(struct inode *ip, u_long length, int ioflags)
         return EROFS;
     if ((ip->i_mode & IFMT) != IFREG)
         return EISDIR;
-    if (length > 0x7ffffffful)
+    if (length < 0 || (unsigned long long)length > 0xffffffffULL)
         return EFBIG;
     if ((off_t)length == ip->i_size)
         return 0;

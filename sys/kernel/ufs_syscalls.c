@@ -442,7 +442,7 @@ done:
 }
 
 static void
-stat1 (int follow)
+stat1 (int follow, int wide)
 {
     register struct inode *ip;
     register struct a {
@@ -459,7 +459,17 @@ stat1 (int follow)
         return;
     (void) ino_stat(ip, &sb);
     iput(ip);
-    u.u_error = copyout((caddr_t)&sb, (caddr_t)uap->ub, sizeof (sb));
+    if (wide) {
+        u.u_error = copyout((caddr_t)&sb, (caddr_t)uap->ub,
+            sizeof (sb));
+    } else {
+        struct stat32 sb32;
+
+        u.u_error = stat_to_stat32(&sb, &sb32);
+        if (u.u_error == 0)
+            u.u_error = copyout((caddr_t)&sb32, (caddr_t)uap->ub,
+                sizeof (sb32));
+    }
 }
 
 /*
@@ -468,7 +478,13 @@ stat1 (int follow)
 void
 stat()
 {
-    stat1 (FOLLOW);
+    stat1 (FOLLOW, 0);
+}
+
+void
+stat64()
+{
+    stat1 (FOLLOW, 1);
 }
 
 /*
@@ -477,7 +493,13 @@ stat()
 void
 lstat()
 {
-    stat1 (NOFOLLOW);
+    stat1 (NOFOLLOW, 0);
+}
+
+void
+lstat64()
+{
+    stat1 (NOFOLLOW, 1);
 }
 
 /*
@@ -715,49 +737,50 @@ chown1 (struct inode *ip, int uid, int gid)
     return (0);
 }
 
-/*
- * Truncate a file given its path name.
- */
-void
-truncate()
+static void
+truncate1(char *fname, off_t length)
 {
-    register struct a {
-        char    *fname;
-        off_t   length;
-    } *uap = (struct a *)u.u_arg;
     register struct inode *ip;
     struct  nameidata nd;
     register struct nameidata *ndp = &nd;
     struct  vattr   vattr;
 
-    NDINIT (ndp, LOOKUP, FOLLOW, uap->fname);
+    NDINIT (ndp, LOOKUP, FOLLOW, fname);
     ip = namei(ndp);
     if (ip == NULL)
         return;
     if (access(ip, IWRITE))
         goto bad;
     VATTR_NULL(&vattr);
-    vattr.va_size = uap->length;
+    vattr.va_size = length;
     u.u_error = ufs_setattr(ip, &vattr);
 bad:
     iput(ip);
 }
 
 /*
- * Truncate a file given a file descriptor.
+ * Original 32-bit ABI retained for old binaries.
  */
 void
-ftruncate()
+truncate()
 {
-    register struct a {
-        int     fd;
-        off_t   length;
-    } *uap = (struct a *)u.u_arg;
+    truncate1((char *)u.u_arg[0], (int32_t)u.u_arg[1]);
+}
+
+void
+truncate64()
+{
+    truncate1((char *)u.u_arg[0], syscall_off64_arg(&u.u_arg[1]));
+}
+
+static void
+ftruncate1(int fd, off_t length)
+{
     register struct inode *ip;
     register struct file *fp;
     struct  vattr   vattr;
 
-    if ((fp = getf(uap->fd)) == NULL)
+    if ((fp = getf(fd)) == NULL)
         return;
     if (!(fp->f_flag&FWRITE) || (fp->f_type != DTYPE_INODE)) {
         u.u_error = EINVAL;
@@ -766,9 +789,21 @@ ftruncate()
     ip = (struct inode *)fp->f_data;
     ilock(ip);
     VATTR_NULL(&vattr);
-    vattr.va_size = uap->length;
+    vattr.va_size = length;
     u.u_error = ufs_setattr(ip, &vattr);
     iunlock(ip);
+}
+
+void
+ftruncate()
+{
+    ftruncate1(u.u_arg[0], (int32_t)u.u_arg[1]);
+}
+
+void
+ftruncate64()
+{
+    ftruncate1(u.u_arg[0], syscall_off64_arg(&u.u_arg[1]));
 }
 
 /*

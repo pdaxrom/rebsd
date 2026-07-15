@@ -13,6 +13,7 @@
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <stdint.h>
 
 #ifdef ROMFS_ENABLED
 extern struct vfsops mipsromfs_vfsops;
@@ -248,41 +249,72 @@ umask()
     u.u_cmask = uap->mask & 07777;
 }
 
-/*
- * Seek system call
- */
-void
-lseek()
+static int
+lseek_add(off_t base, off_t delta, off_t *result)
+{
+    if ((delta > 0 && base > INT64_MAX - delta) ||
+        (delta < 0 && base < INT64_MIN - delta))
+        return EOVERFLOW;
+    *result = base + delta;
+    return 0;
+}
+
+static void
+lseek1(int fd, off_t off, int sbase, int wide)
 {
     register struct file *fp;
-    register struct a {
-        int     fd;
-        off_t   off;
-        int     sbase;
-    } *uap = (struct a *)u.u_arg;
+    off_t result;
 
-    if ((fp = getf(uap->fd)) == NULL)
+    if ((fp = getf(fd)) == NULL)
         return;
     if (fp->f_type != DTYPE_INODE) {
         u.u_error = ESPIPE;
         return;
     }
-    switch (uap->sbase) {
+    switch (sbase) {
 
     case L_INCR:
-        fp->f_offset += uap->off;
+        u.u_error = lseek_add(fp->f_offset, off, &result);
         break;
     case L_XTND:
-        fp->f_offset = uap->off + ((struct inode *)fp->f_data)->i_size;
+        u.u_error = lseek_add(((struct inode *)fp->f_data)->i_size,
+            off, &result);
         break;
     case L_SET:
-        fp->f_offset = uap->off;
+        result = off;
         break;
     default:
         u.u_error = EINVAL;
         return;
     }
-    u.u_rval = fp->f_offset;
+    if (u.u_error)
+        return;
+    if (result < 0) {
+        u.u_error = EINVAL;
+        return;
+    }
+    if (!wide && result > INT32_MAX) {
+        u.u_error = EOVERFLOW;
+        return;
+    }
+    fp->f_offset = result;
+    if (wide)
+        syscall_off64_result(result);
+    else
+        u.u_rval = (int)result;
+}
+
+/* Original 32-bit ABI retained for old binaries. */
+void
+lseek()
+{
+    lseek1(u.u_arg[0], (int32_t)u.u_arg[1], u.u_arg[2], 0);
+}
+
+void
+lseek64()
+{
+    lseek1(u.u_arg[0], syscall_off64_arg(&u.u_arg[1]), u.u_arg[3], 1);
 }
 
 /*

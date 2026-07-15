@@ -1197,7 +1197,7 @@ int list(char *file, struct stat *stp)
     if (pmode[0] == 'b' || pmode[0] == 'c')
         sprintf(fsize, "%3d,%4d", major(stp->st_rdev), minor(stp->st_rdev));
     else {
-        sprintf(fsize, "%8ld", stp->st_size);
+        sprintf(fsize, "%8lld", (long long)stp->st_size);
 #ifdef S_IFLNK
         if (pmode[0] == 'l') {
             /*

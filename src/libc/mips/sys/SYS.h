@@ -15,3 +15,11 @@
 			sw      $t0, %lo(errno)($t1); \
 			.set	reorder; \
 			jr	$ra
+
+#define	SYS2(s,k)	ENTRY(s); \
+			.set	noreorder; \
+			syscall	SYS_##k; \
+			lui	$t1, %hi(errno); \
+			sw      $t0, %lo(errno)($t1); \
+			.set	reorder; \
+			jr	$ra

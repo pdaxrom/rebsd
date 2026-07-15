@@ -203,21 +203,21 @@ static socktrans(struct socket *sock)
     char dname[32];
 
     /* fill in socket */
-    (void)lseek(kmem, (off_t)sock, L_SET);
+    (void)lseek(kmem, (off_t)(u_long)sock, L_SET);
     if (read(kmem, (char *)&so, sizeof(struct socket)) != sizeof(struct socket)) {
         rerr2(errno, (int)sock, "socket");
         return;
     }
 
     /* fill in protosw entry */
-    (void)lseek(kmem, (off_t)so.so_proto, L_SET);
+    (void)lseek(kmem, (off_t)(u_long)so.so_proto, L_SET);
     if (read(kmem, (char *)&proto, sizeof(struct protosw)) != sizeof(struct protosw)) {
         rerr2(errno, (int)so.so_proto, "protosw");
         return;
     }
 
     /* fill in domain */
-    (void)lseek(kmem, (off_t)proto.pr_domain, L_SET);
+    (void)lseek(kmem, (off_t)(u_long)proto.pr_domain, L_SET);
     if (read(kmem, (char *)&dom, sizeof(struct domain)) != sizeof(struct domain)) {
         rerr2(errno, (int)proto.pr_domain, "domain");
         return;
@@ -230,7 +230,7 @@ static socktrans(struct socket *sock)
     if (dom.dom_family == AF_INET)
         (void)strcpy(dname, "inet");
     else {
-        (void)lseek(kmem, (off_t)dom.dom_name, L_SET);
+        (void)lseek(kmem, (off_t)(u_long)dom.dom_name, L_SET);
         if ((len = read(kmem, dname, sizeof(dname) - 1)) < 0) {
             rerr2(errno, (int)dom.dom_name, "char");
             dname[0] = '\0';
@@ -259,7 +259,7 @@ static socktrans(struct socket *sock)
         getinetproto(proto.pr_protocol);
         if (proto.pr_protocol == IPPROTO_TCP) {
             if (so.so_pcb) {
-                (void)lseek(kmem, (off_t)so.so_pcb, L_SET);
+                (void)lseek(kmem, (off_t)(u_long)so.so_pcb, L_SET);
                 if (read(kmem, (char *)&inpcb, sizeof(struct inpcb)) != sizeof(struct inpcb)) {
                     rerr2(errno, (int)so.so_pcb, "inpcb");
                     return;
@@ -273,7 +273,7 @@ static socktrans(struct socket *sock)
         /* print address of pcb and connected pcb */
         if (so.so_pcb) {
             printf(" %x", (int)so.so_pcb);
-            (void)lseek(kmem, (off_t)so.so_pcb, L_SET);
+            (void)lseek(kmem, (off_t)(u_long)so.so_pcb, L_SET);
             if (read(kmem, (char *)&unpcb, sizeof(struct unpcb)) != sizeof(struct unpcb)) {
                 rerr2(errno, (int)so.so_pcb, "unpcb");
                 return;
@@ -308,7 +308,7 @@ static void itrans(int ftype, struct inode *g, int fno)
     char *name = (char *)NULL; /* set by devmatch() on a match */
 
     if (g || fflg) {
-        (void)lseek(kmem, (off_t)g, L_SET);
+        (void)lseek(kmem, (off_t)(u_long)g, L_SET);
         if (read(kmem, (char *)&inode, sizeof(inode)) != sizeof(inode)) {
             rerr2(errno, (int)g, "inode");
             return;
@@ -365,7 +365,7 @@ static void readf()
     for (i = 0; i < NOFILE; i++) {
         if (user.u_ofile[i] == 0)
             continue;
-        (void)lseek(kmem, (off_t)user.u_ofile[i], L_SET);
+        (void)lseek(kmem, (off_t)(u_long)user.u_ofile[i], L_SET);
         if (read(kmem, (char *)&lfile, sizeof(lfile)) != sizeof(lfile)) {
             rerr1("file", N_KMEM);
             continue;

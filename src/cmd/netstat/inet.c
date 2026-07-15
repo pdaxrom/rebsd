@@ -81,13 +81,13 @@ protopr(off, name)
 	klseek(kmem, off, 0);
 	read(kmem, (char *)&cb, sizeof (struct inpcb));
 	inpcb = cb;
-	prev = (struct inpcb *)off;
-	if (inpcb.inp_next == (struct inpcb *)off)
+	prev = (struct inpcb *)(u_long)off;
+	if (inpcb.inp_next == (struct inpcb *)(u_long)off)
 		return;
-	while (inpcb.inp_next != (struct inpcb *)off) {
+	while (inpcb.inp_next != (struct inpcb *)(u_long)off) {
 
 		next = inpcb.inp_next;
-		klseek(kmem, (off_t)next, 0);
+		klseek(kmem, (off_t)(u_long)next, 0);
 		read(kmem, (char *)&inpcb, sizeof (inpcb));
 		if (inpcb.inp_prev != prev) {
 			printf("???\n");
@@ -98,10 +98,10 @@ protopr(off, name)
 			prev = next;
 			continue;
 		}
-		klseek(kmem, (off_t)inpcb.inp_socket, 0);
+		klseek(kmem, (off_t)(u_long)inpcb.inp_socket, 0);
 		read(kmem, (char *)&sockb, sizeof (sockb));
 		if (istcp) {
-			klseek(kmem, (off_t)inpcb.inp_ppcb, 0);
+			klseek(kmem, (off_t)(u_long)inpcb.inp_ppcb, 0);
 			read(kmem, (char *)&tcpcb, sizeof (tcpcb));
 		}
 		if (first) {

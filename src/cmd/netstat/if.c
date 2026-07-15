@@ -88,10 +88,10 @@ intpr(interval, ifnetaddr)
 		if (ifaddraddr == 0) {
 			klseek(kmem, ifnetaddr, 0);
 			read(kmem, (char *)&ifnet, sizeof ifnet);
-			klseek(kmem, (off_t)ifnet.if_name, 0);
+			klseek(kmem, (off_t)(u_long)ifnet.if_name, 0);
 			read(kmem, name, 16);
 			name[15] = '\0';
-			ifnetaddr = (off_t) ifnet.if_next;
+			ifnetaddr = (off_t)(u_long)ifnet.if_next;
 			if (interface != 0 &&
 			    (strcmp(name, interface) != 0 || unit != ifnet.if_unit))
 				continue;
@@ -100,7 +100,7 @@ intpr(interval, ifnetaddr)
 			if ((ifnet.if_flags&IFF_UP) == 0)
 				*cp++ = '*';
 			*cp = '\0';
-			ifaddraddr = (off_t)ifnet.if_addrlist;
+			ifaddraddr = (off_t)(u_long)ifnet.if_addrlist;
 		}
 		printf("%-5.5s %-5d ", name, ifnet.if_mtu);
 		if (ifaddraddr == 0) {
@@ -109,7 +109,7 @@ intpr(interval, ifnetaddr)
 		} else {
 			klseek(kmem, ifaddraddr, 0);
 			read(kmem, (char *)&ifaddr, sizeof ifaddr);
-			ifaddraddr = (off_t)ifaddr.ifa.ifa_next;
+			ifaddraddr = (off_t)(u_long)ifaddr.ifa.ifa_next;
 			switch (ifaddr.ifa.ifa_addr.sa_family) {
 			case AF_UNSPEC:
 				printf("%-11.11s ", "none");
@@ -209,7 +209,7 @@ sidewaysintpr(interval, off)
 
 		klseek(kmem, off, 0);
 		read(kmem, (char *)&ifnet, sizeof ifnet);
-		klseek(kmem, (off_t)ifnet.if_name, 0);
+		klseek(kmem, (off_t)(u_long)ifnet.if_name, 0);
 		ip->ift_name[0] = '(';
 		read(kmem, ip->ift_name + 1, 15);
 		if (interface && strcmp(ip->ift_name + 1, interface) == 0 &&
@@ -221,7 +221,7 @@ sidewaysintpr(interval, off)
 		ip++;
 		if (ip >= iftot + MAXIF - 2)
 			break;
-		off = (off_t) ifnet.if_next;
+		off = (off_t)(u_long)ifnet.if_next;
 	}
 	lastif = ip;
 
@@ -274,7 +274,7 @@ loop:
 		sum->ift_op += ip->ift_op;
 		sum->ift_oe += ip->ift_oe;
 		sum->ift_co += ip->ift_co;
-		off = (off_t) ifnet.if_next;
+		off = (off_t)(u_long)ifnet.if_next;
 	}
 	if (lastif - iftot > 0)
 		printf("%8ld %5ld %8ld %5ld %5ld ",

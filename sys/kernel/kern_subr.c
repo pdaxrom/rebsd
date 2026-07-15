@@ -9,6 +9,35 @@
 #include <sys/buf.h>
 #include <sys/uio.h>
 
+typedef char syscall_off_t_must_be_two_words[
+    sizeof(off_t) == 2 * sizeof(int) ? 1 : -1];
+
+off_t
+syscall_off64_arg(const int *words)
+{
+    union {
+        off_t value;
+        int word[2];
+    } arg;
+
+    arg.word[0] = words[0];
+    arg.word[1] = words[1];
+    return arg.value;
+}
+
+void
+syscall_off64_result(off_t value)
+{
+    union {
+        off_t value;
+        int word[2];
+    } result;
+
+    result.value = value;
+    u.u_rval = result.word[0];
+    u.u_rval2 = result.word[1];
+}
+
 /*
  * Move data to/from user space.
  */

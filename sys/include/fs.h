@@ -93,7 +93,7 @@ struct  fblk {
 #define blkoff(loc)             /* calculates (loc % fs->fs_bsize) */ \
                     ((loc) & DEV_BMASK)
 #define lblkno(loc)             /* calculates (loc / fs->fs_bsize) */ \
-                    ((unsigned) (loc) >> DEV_BSHIFT)
+                    ((daddr_t)((off_t)(loc) >> DEV_BSHIFT))
 
 /*
  * Determine the number of available blocks given a

@@ -153,7 +153,8 @@ wtfs (
 
 	offset = (off_t) bno*DEV_BSIZE;
 	if (lseek(fso, offset, 0) != offset) {
-		printf ("wtfs: lseek failed on block number %ld, offset=%ld\n", bno, offset);
+		printf ("wtfs: lseek failed on block number %ld, offset=%lld\n",
+		    bno, (long long)offset);
 		exit(1);
 	}
 	n = write(fso, bf, DEV_BSIZE);
@@ -183,9 +184,20 @@ iput (
 	dp += itoo(ip->i_number);
 
 	for (i=0; i<NADDR; i++)
-                dp->di_addr[i] = ip->i_addr[i];
-	dp->di_ic1 = ip->i_ic1;
-	dp->di_ic2 = ip->i_ic2;
+                dp->di_addr[i] = (int32_t)ip->i_addr[i];
+	if (ip->i_size < 0 || ip->i_size > (off_t)INT32_MAX) {
+		printf("inode size too large for legacy UFS\n");
+		exit(1);
+	}
+	dp->di_mode = ip->i_mode;
+	dp->di_nlink = ip->i_nlink;
+	dp->di_uid = ip->i_uid;
+	dp->di_gid = ip->i_gid;
+	dp->di_size = (int32_t)ip->i_size;
+	dp->di_flags = ip->i_flags;
+	dp->di_atime = (int32_t)ip->i_atime;
+	dp->di_mtime = (int32_t)ip->i_mtime;
+	dp->di_ctime = (int32_t)ip->i_ctime;
 	wtfs(d, (char *) buf);
 }
 

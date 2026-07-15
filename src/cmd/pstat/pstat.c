@@ -533,9 +533,10 @@ void dofile()
 		printf("  %3d", fp->f_msgcount);
 		printf("  %p", fp->f_data);
 		if (fp->f_offset < 0)
-			printf("  0x%lx\n", fp->f_offset);
+			printf("  0x%llx\n",
+			    (unsigned long long)fp->f_offset);
 		else
-			printf("  %ld\n", fp->f_offset);
+			printf("  %lld\n", (long long)fp->f_offset);
 	}
 	free(xfile);
 }
@@ -553,7 +554,7 @@ void doswap()
 	read(fc, &smap, sizeof (smap));
 	num = (smap.m_limit - smap.m_map);
 	swp = (struct mapent *)calloc(num, sizeof (*swp));
-	lseek(fc, (off_t)smap.m_map, 0);
+	lseek(fc, (off_t)(u_long)smap.m_map, 0);
 	read(fc, swp, num * sizeof (*swp));
 	for (used = 0, i = 0; swp[i].m_size; i++)
 		used += swp[i].m_size;

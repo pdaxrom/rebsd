@@ -35,7 +35,7 @@ pass1(void)
         dp = ginode(inumber);
         if (!ALLOC(dp)) {
             if (bcmp((char *)dp->di_addr, (char *)zino.di_addr,
-                NADDR * sizeof(daddr_t)) ||
+                sizeof(dp->di_addr)) ||
                 dp->di_mode || dp->di_size) {
                 pfatal("PARTIALLY ALLOCATED INODE I=%u\n",
                     inumber);
@@ -49,7 +49,7 @@ pass1(void)
         }
         lastino = inumber;
         if (dp->di_size < 0) {
-            printf("bad size %ld:", dp->di_size);
+            printf("bad size %ld:", (long)dp->di_size);
             goto unknown;
         }
         if (!preen && (dp->di_mode & IFMT) == IFMT &&
@@ -69,7 +69,7 @@ pass1(void)
  * in pass5.
  */
         else if (dp->di_size == 0 && bcmp(dp->di_addr,
-                zino.di_addr,NADDR* sizeof (daddr_t))) {
+                zino.di_addr, sizeof(dp->di_addr))) {
             pwarn("SIZE=0 FILE HAS ALLOCATED BLOCKS. I=%u",inumber);
             if (preen)
                 printf(" (CLEARED)\n");
@@ -87,7 +87,7 @@ pass1(void)
             if (dp->di_addr[j] != 0) {
                 if (debug)
                     printf("bad direct di_addr[%d]: %ld\n",
-                        j, dp->di_addr[j]);
+                        j, (long)dp->di_addr[j]);
                 goto unknown;
             }
         }
@@ -97,7 +97,7 @@ pass1(void)
             if (dp->di_addr[NDADDR + j] != 0) {
                 if (debug)
                     printf("bad indirect addr: %ld\n",
-                        dp->di_addr[NDADDR + j]);
+                        (long)dp->di_addr[NDADDR + j]);
                 goto unknown;
             }
         if (ftypeok(dp) == 0)

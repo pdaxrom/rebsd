@@ -20,8 +20,8 @@ names are deliberately deferred to later filesystem slices. Mounting with `-r`
 preserves strict read-only behavior, and a backend that cannot be opened for
 writing cannot be mounted read-write.
 
-Current structural limits are a 2 GiB minus one byte maximum file size (the
-kernel has signed 32-bit `off_t`) and a volume smaller than 120 GiB (the
-synthetic inode encoding reserves the upper inode range for directories).
-Free-space accounting is not scanned yet, so `df` does not yet report the
-available cluster count accurately.
+Current structural limits are a 4 GiB minus one byte maximum file size (the
+FAT directory entry stores an unsigned 32-bit size) and a volume smaller than
+120 GiB (the synthetic inode encoding reserves the upper inode range for
+directories). Free-space accounting is not scanned yet, so `df` does not yet
+report the available cluster count accurately.

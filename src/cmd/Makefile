@@ -36,7 +36,7 @@ SCRIPT_ALL	= false nohup true #lorder mkdep
 STD_ALL		= basename cal cat cb chgrp chmod cmp col comm cp dd \
                   diskspeed du echo ed fgrep file free grep head hostid join \
                   kill last ln mesg mkdir mv nice od pagesize pr printenv \
-                  pwd rev rm rmail rmdir size sleep sort split sum sync \
+                  off64-smoke-gcc pwd rev rm rmail rmdir size sleep sort split sum sync \
                   tail tar tee time top touch tr tsort tty uniq uptime w wc \
                   whereis who
 

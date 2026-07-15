@@ -78,7 +78,7 @@ ckinode(
     DINODE *dp,
     register struct inodesc *idesc)
 {
-    register daddr_t *ap;
+    register int32_t *ap;
     int ret, n;
     DINODE dino;
 
@@ -207,8 +207,12 @@ pinode(
     printf("MODE=%o\n", dp->di_mode);
     if (preen)
         printf("%s: ", devnam);
-    printf("SIZE=%ld ", dp->di_size);
-    p = ctime(&dp->di_mtime);
+    printf("SIZE=%ld ", (long)dp->di_size);
+    {
+        time_t mtime = (time_t)dp->di_mtime;
+
+        p = ctime(&mtime);
+    }
     printf("MTIME=%12.12s %4.4s ", p+4, p+20);
 }
 
@@ -279,7 +283,12 @@ allocino(
         return (0);
     }
     dp->di_mode = type;
-    time(&dp->di_atime);
+    {
+        time_t now;
+
+        time(&now);
+        dp->di_atime = (int32_t)now;
+    }
     dp->di_mtime = dp->di_ctime = dp->di_atime;
     dp->di_size = DEV_BSIZE;
     n_files++;

@@ -663,7 +663,7 @@ mipsromfs_rename(struct inode *from_pdir, struct inode *from_ip,
 }
 
 static int
-mipsromfs_truncate(struct inode *ip, u_long length, int ioflags)
+mipsromfs_truncate(struct inode *ip, off_t length, int ioflags)
 {
     struct mount *mp = (struct mount *)
         ((int)ip->i_fs - offsetof(struct mount, m_filsys));
@@ -674,12 +674,12 @@ mipsromfs_truncate(struct inode *ip, u_long length, int ioflags)
     error = mipsromfs_writable(mp);
     if (error)
         return error;
-    if (length > 0xffffffffu)
+    if (length < 0 || (unsigned long long)length > 0xffffffffULL)
         return EFBIG;
     error = mipsromfs_open_write_inode(ip, &file);
     if (error)
         return error;
-    error = mipsromfs_error(romfs_truncate_file(&file, length));
+    error = mipsromfs_error(romfs_truncate_file(&file, (uint32_t)length));
     if (error)
         return error;
     ip->i_size = file.entry.size;

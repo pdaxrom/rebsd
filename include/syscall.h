@@ -174,3 +174,9 @@
 #define SYS_ufetch      153
 #define SYS_ucall       154
                                 /* 155 is unused */
+#define SYS_lseek64     156
+#define SYS_truncate64  157
+#define SYS_ftruncate64 158
+#define SYS_stat64      159
+#define SYS_lstat64     160
+#define SYS_fstat64     161

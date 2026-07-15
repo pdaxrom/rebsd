@@ -171,6 +171,7 @@ static const char *errlist[] = {
     "Inappropriate file type or format",    /* 79 - EFTYPE */
     "Authentication error",                 /* 80 - EAUTH */
     "Need authenticator",                   /* 81 - ENEEDAUTH */
+    "Value too large to be stored",         /* 82 - EOVERFLOW */
 };
 
 /*

@@ -12,6 +12,8 @@
  * Data in icommon1 and icommon2 is read in from permanent inode on volume.
  */
 
+#include <stdint.h>
+
 /*
  * 28 of the di_addr address bytes are used; 7 addresses of 4
  * bytes each: 4 direct (4Kb directly accessible) and 3 indirect.
@@ -32,6 +34,25 @@ struct icommon2 {
     time_t  ic_atime;       /* time last accessed */
     time_t  ic_mtime;       /* time last modified */
     time_t  ic_ctime;       /* time created */
+};
+
+/*
+ * Legacy ReBSD UFS disk inodes retain their original fixed 32-bit layout.
+ * These structures must not use off_t, time_t, daddr_t, uid_t, or gid_t:
+ * those are native ABI types and may grow independently of the old format.
+ */
+struct dicommon1 {
+    uint16_t ic_mode;
+    uint16_t ic_nlink;
+    uint32_t ic_uid;
+    uint32_t ic_gid;
+    int32_t  ic_size;
+};
+
+struct dicommon2 {
+    int32_t  ic_atime;
+    int32_t  ic_mtime;
+    int32_t  ic_ctime;
 };
 
 struct inode {
@@ -86,12 +107,15 @@ struct inode {
  * a disk block.
  */
 struct dinode {
-    struct  icommon1 di_icom1;
-    daddr_t di_addr[NADDR];         /* 7 block addresses 4 bytes each */
-    u_int   di_reserved[1];         /* pad of 4 to make total size 64 */
-    u_int   di_flags;
-    struct  icommon2 di_icom2;
+    struct  dicommon1 di_icom1;
+    int32_t di_addr[NADDR];         /* 7 block addresses 4 bytes each */
+    uint32_t di_reserved[1];        /* pad of 4 to make total size 64 */
+    uint32_t di_flags;
+    struct  dicommon2 di_icom2;
 };
+
+typedef char ufs_dinode_size_must_remain_64[
+    sizeof(struct dinode) == 64 ? 1 : -1];
 
 #define i_mode      i_ic1.ic_mode
 #define i_nlink     i_ic1.ic_nlink
@@ -238,7 +262,7 @@ int ino_stat (struct inode *ip, struct stat *sb);
 /*
  * Truncate the inode ip to at most length size.
  */
-void itrunc (struct inode *oip, u_long length, int ioflags);
+void itrunc (struct inode *oip, off_t length, int ioflags);
 
 /*
  * Update the inode with the current time.

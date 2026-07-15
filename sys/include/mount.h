@@ -50,7 +50,7 @@ struct vfsops {
     int     (*vfs_rename)(struct inode *from_pdir, struct inode *from_ip,
                 struct nameidata *from_ndp, struct inode *to_pdir,
                 struct inode *to_ip, struct nameidata *to_ndp);
-    int     (*vfs_truncate)(struct inode *ip, u_long length, int ioflags);
+    int     (*vfs_truncate)(struct inode *ip, off_t length, int ioflags);
     int     (*vfs_statfs)(struct mount *mp, struct statfs *sbp);
     int     (*vfs_sync)(struct mount *mp);
     int     (*vfs_namematch)(struct mount *mp, const char *name,

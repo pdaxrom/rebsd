@@ -88,6 +88,9 @@ extern const struct sysent
 
 extern const char *syscallnames[];
 
+off_t syscall_off64_arg (const int *words);
+void syscall_off64_result (off_t value);
+
 extern int  noproc;                 /* no one is running just now */
 extern char *panicstr;
 extern int  boothowto;              /* reboot flags, from boot */
@@ -216,9 +219,11 @@ void    read (void), write (void), readv (void), writev (void), ioctl (void);
 void    chdir (void), fchdir (void), chroot (void);
 void    mkdir (void), rmdir (void), chflags (void), fchflags (void);
 void    open (void), mknod (void), unlink (void), stat (void), fstat (void), lstat (void);
+void    stat64 (void), fstat64 (void), lstat64 (void);
 void    chown (void), fchown (void), chmod (void), fchmod (void), utimes (void);
 void    link (void), symlink (void), readlink (void), rename (void);
 void    lseek (void), truncate (void), ftruncate (void), saccess (void), fsync (void);
+void    lseek64 (void), truncate64 (void), ftruncate64 (void);
 void    statfs (void), fstatfs (void), getfsstat (void);
 
 /* 2.3 communications */
@@ -228,6 +233,10 @@ void    sendmsg (void), recvmsg (void), shutdown (void), setsockopt (void), gets
 void    getsockname (void), getpeername (void), pipe (void);
 
 void    umask (void);           /* XXX */
+
+struct stat;
+struct stat32;
+int     stat_to_stat32 (const struct stat *, struct stat32 *);
 
 /* 2.4 processes */
 void    ptrace (void);

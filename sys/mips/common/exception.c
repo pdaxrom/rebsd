@@ -505,12 +505,14 @@ mips_syscall(int *frame)
     }
 
     u.u_rval = 0;
+    u.u_rval2 = 0;
     if (setjmp(&u.u_qsave) == 0)
         (*callp->sy_call)();
 
     switch (u.u_error) {
     case 0:
         frame[FRAME_R2] = u.u_rval;
+        frame[FRAME_R3] = u.u_rval2;
         if (code == 11 || code == 59)
             mips_sync_user_icache();
         break;
@@ -522,6 +524,7 @@ mips_syscall(int *frame)
     default:
         frame[FRAME_PC] = opc + NBPW;
         frame[FRAME_R2] = -1;
+        frame[FRAME_R3] = -1;
         frame[FRAME_R8] = u.u_error;
         break;
     }

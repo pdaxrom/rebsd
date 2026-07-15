@@ -93,6 +93,7 @@ iget(dev_t dev, struct fs *fs, ino_t ino)
     union ihead *ih;
     struct buf *bp;
     struct dinode *dp;
+    int i;
 loop:
     ih = &ihead[INOHASH(dev, ino)];
     for (ip = ih->ih_chain[0]; ip != (struct inode *)ih; ip = ip->i_forw)
@@ -218,10 +219,17 @@ loop:
     }
     dp = (struct dinode*) bp->b_addr;
     dp += itoo(ino);
-    ip->i_ic1 = dp->di_ic1;
+    ip->i_mode = dp->di_mode;
+    ip->i_nlink = dp->di_nlink;
+    ip->i_uid = dp->di_uid;
+    ip->i_gid = dp->di_gid;
+    ip->i_size = (off_t)dp->di_size;
     ip->i_flags = dp->di_flags;
-    ip->i_ic2 = dp->di_ic2;
-    bcopy(dp->di_addr, ip->i_addr, NADDR * sizeof (daddr_t));
+    ip->i_atime = (time_t)dp->di_atime;
+    ip->i_mtime = (time_t)dp->di_mtime;
+    ip->i_ctime = (time_t)dp->di_ctime;
+    for (i = 0; i != NADDR; ++i)
+        ip->i_addr[i] = (daddr_t)dp->di_addr[i];
     brelse(bp);
     return (ip);
 }
@@ -360,9 +368,14 @@ iupdat (struct inode *ip, struct timeval *ta, struct timeval *tm, int waitfor)
     register struct buf *bp;
     register struct dinode *dp;
     register struct inode *tip = ip;
+    int i;
 
     if ((tip->i_flag & (IUPD|IACC|ICHG|IMOD)) == 0)
         return;
+    if (tip->i_size < 0 || tip->i_size > (off_t)INT32_MAX) {
+        u.u_error = EFBIG;
+        return;
+    }
     if (tip->i_fs != 0) {
 	struct mount *mp = (struct mount *)
 	    ((int)tip->i_fs - offsetof(struct mount, m_filsys));
@@ -386,10 +399,17 @@ iupdat (struct inode *ip, struct timeval *ta, struct timeval *tm, int waitfor)
         tip->i_ctime = time.tv_sec;
     tip->i_flag &= ~(IUPD|IACC|ICHG|IMOD);
     dp = (struct dinode*) bp->b_addr + itoo (tip->i_number);
-    dp->di_ic1 = tip->i_ic1;
+    dp->di_mode = tip->i_mode;
+    dp->di_nlink = tip->i_nlink;
+    dp->di_uid = tip->i_uid;
+    dp->di_gid = tip->i_gid;
+    dp->di_size = (int32_t)tip->i_size;
     dp->di_flags = tip->i_flags;
-    dp->di_ic2 = tip->i_ic2;
-    bcopy(ip->i_addr, dp->di_addr, NADDR * sizeof (daddr_t));
+    dp->di_atime = (int32_t)tip->i_atime;
+    dp->di_mtime = (int32_t)tip->i_mtime;
+    dp->di_ctime = (int32_t)tip->i_ctime;
+    for (i = 0; i != NADDR; ++i)
+        dp->di_addr[i] = (int32_t)ip->i_addr[i];
     if (waitfor && ((ip->i_fs->fs_flags & MNT_ASYNC) == 0))
         bwrite(bp);
     else
@@ -525,7 +545,7 @@ indirtrunc (struct inode *ip, daddr_t bn, daddr_t lastbn, int level, int aflags)
  * NB: triple indirect blocks are untested.
  */
 void
-itrunc (struct inode *oip, u_long length, int ioflags)
+itrunc (struct inode *oip, off_t length, int ioflags)
 {
     daddr_t lastblock;
     register int i;
@@ -546,6 +566,11 @@ itrunc (struct inode *oip, u_long length, int ioflags)
 		u.u_error = EROFS;
 	    return;
 	}
+    }
+
+    if (length < 0 || length > (off_t)INT32_MAX) {
+        u.u_error = EFBIG;
+        return;
     }
 
     aflags = B_CLRBUF;

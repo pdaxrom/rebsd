@@ -60,9 +60,9 @@ unixpr(fileaddr, unixsw)
 		if (fp->f_count == 0 || fp->f_type != DTYPE_SOCKET)
 			continue;
 #ifdef pdp11
-		slseek(kmem, (off_t)fp->f_data, L_SET);
+		slseek(kmem, (off_t)(u_long)fp->f_data, L_SET);
 #else
-		klseek(kmem, (off_t)fp->f_data, L_SET);
+		klseek(kmem, (off_t)(u_long)fp->f_data, L_SET);
 #endif
 		if (read(kmem, (char *)so, sizeof (*so)) != sizeof (*so))
 			continue;
@@ -89,12 +89,12 @@ unixdomainpr(so, soaddr)
 #define klseek slseek
 #endif
 
-	klseek(kmem, (off_t)so->so_pcb, L_SET);
+	klseek(kmem, (off_t)(u_long)so->so_pcb, L_SET);
 	if (read(kmem, (char *)unp, sizeof (*unp)) != sizeof (*unp))
 		return;
 	if (unp->unp_addr) {
 		m = &mbuf;
-		klseek(kmem, (off_t)unp->unp_addr, L_SET);
+		klseek(kmem, (off_t)(u_long)unp->unp_addr, L_SET);
 		if (read(kmem, (char *)m, sizeof (*m)) != sizeof (*m))
 			m = (struct mbuf *)0;
 		sa = mtod(m, struct sockaddr_un *);

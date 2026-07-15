@@ -96,7 +96,7 @@ again:
 		while (m) {
 			struct sockaddr_in *sin;
 
-			klseek(kmem, (off_t)m, 0);
+			klseek(kmem, (off_t)(u_long)m, 0);
 			read(kmem, (char *)&mb, sizeof (mb));
 			rt = mtod(&mb, struct rtentry *);
 			if ((unsigned)rt < (unsigned)&mb ||
@@ -139,9 +139,9 @@ again:
 				m = mb.m_next;
 				continue;
 			}
-			klseek(kmem, (off_t)rt->rt_ifp, 0);
+			klseek(kmem, (off_t)(u_long)rt->rt_ifp, 0);
 			read(kmem, (char *)&ifnet, sizeof (ifnet));
-			klseek(kmem, (off_t)ifnet.if_name, 0);
+			klseek(kmem, (off_t)(u_long)ifnet.if_name, 0);
 			read(kmem, name, 16);
 			printf(" %.15s%d\n", name, ifnet.if_unit);
 			m = mb.m_next;

@@ -580,7 +580,7 @@ Tcl_FileCmd(void *dummy, Tcl_Interp *interp, int argc, unsigned char **argv)
 	if (stat(fileName, &statBuf) == -1) {
 	    goto badStat;
 	}
-	sprintf(interp->result, "%ld", statBuf.st_size);
+	sprintf(interp->result, "%lld", (long long)statBuf.st_size);
 	return TCL_OK;
     } else if ((c == 's') && (strncmp(argv[1], "stat", length) == 0)
 	    && (length >= 2)) {
@@ -698,7 +698,7 @@ StoreStatData(Tcl_Interp *interp, char *varName, struct stat *statPtr)
 	    == NULL) {
 	return TCL_ERROR;
     }
-    sprintf(string, "%ld", statPtr->st_size);
+    sprintf(string, "%lld", (long long)statPtr->st_size);
     if (Tcl_SetVar2(interp, varName, "size", string, TCL_LEAVE_ERR_MSG)
 	    == NULL) {
 	return TCL_ERROR;

@@ -788,7 +788,8 @@ wctxpn(char *name)
 #ifdef STAT
 #ifndef XX
 		if (fstat(fileno(in), &f)!= -1)
-			sprintf(p, "%lu %lo %o 0 %d %ld", f.st_size, f.st_mtime,
+			sprintf(p, "%llu %lo %o 0 %d %ld",
+			  (unsigned long long)f.st_size, f.st_mtime,
 			  f.st_mode, Filesleft, Totalleft);
 		Totalleft -= f.st_size;
 #endif
@@ -1993,7 +1994,7 @@ countem(int argc, char **argv)
 			}
 		}
 		if (Verbose>2)
-			fprintf(stderr, " %ld", f.st_size);
+			fprintf(stderr, " %lld", (long long)f.st_size);
 	}
 	if (Verbose>2)
 		fprintf(stderr, "\ncountem: Total %d %ld\n",

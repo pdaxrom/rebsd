@@ -59,7 +59,7 @@ typedef long    time_t;
 typedef int     dev_t;
 #ifndef _OFF_T
 #define _OFF_T
-typedef long    off_t;
+typedef long long off_t;
 #endif
 typedef u_int   uid_t;
 typedef u_int   gid_t;

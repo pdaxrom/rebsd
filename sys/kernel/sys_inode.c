@@ -164,8 +164,8 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
     int flags;
     struct mount *mp;
 
-    //if (uio->uio_offset < 0)
-        //return (EINVAL);
+    if (uio->uio_offset < 0)
+        return (EINVAL);
     type = ip->i_mode & IFMT;
     if (ip->i_fs != 0) {
         mp = (struct mount *)((int)ip->i_fs - offsetof(struct mount, m_filsys));
@@ -231,11 +231,22 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
     if (uio->uio_resid == 0)
         return (0);
     if (uio->uio_rw == UIO_WRITE && type == IFREG &&
-        uio->uio_offset + uio->uio_resid >
-          u.u_rlimit[RLIMIT_FSIZE].rlim_cur) {
+        u.u_rlimit[RLIMIT_FSIZE].rlim_cur != RLIM_INFINITY &&
+        (uio->uio_offset >
+        (off_t)u.u_rlimit[RLIMIT_FSIZE].rlim_cur ||
+        (off_t)uio->uio_resid >
+        (off_t)u.u_rlimit[RLIMIT_FSIZE].rlim_cur - uio->uio_offset)) {
         psignal(u.u_procp, SIGXFSZ);
         return (EFBIG);
     }
+    if (uio->uio_rw == UIO_WRITE && type == IFREG &&
+        (uio->uio_offset > (off_t)INT32_MAX ||
+        (off_t)uio->uio_resid >
+        (off_t)INT32_MAX - uio->uio_offset))
+        return (EFBIG);
+    if (type == IFBLK &&
+        uio->uio_offset > ((off_t)INT32_MAX << DEV_BSHIFT) + DEV_BMASK)
+        return (EFBIG);
     if (type != IFBLK)
         dev = ip->i_dev;
     resid = uio->uio_resid;
@@ -373,6 +384,7 @@ ino_stat(struct inode *ip, struct stat *sb)
     sb->st_uid = ip->i_uid;
     sb->st_gid = ip->i_gid;
     sb->st_rdev = (dev_t)ip->i_rdev;
+    sb->st_spare = 0;
     sb->st_size = ip->i_size;
     sb->st_atime = ic2->ic_atime;
     sb->st_mtime = ic2->ic_mtime;
@@ -384,6 +396,31 @@ ino_stat(struct inode *ip, struct stat *sb)
     sb->st_blocks = btod (ip->i_size);
     sb->st_flags = ip->i_flags;
     return (0);
+}
+
+int
+stat_to_stat32(const struct stat *src, struct stat32 *dst)
+{
+    if (src->st_size < INT32_MIN || src->st_size > INT32_MAX ||
+        src->st_blksize < INT32_MIN || src->st_blksize > INT32_MAX ||
+        src->st_blocks < INT32_MIN || src->st_blocks > INT32_MAX)
+        return EOVERFLOW;
+
+    dst->st_dev = src->st_dev;
+    dst->st_ino = src->st_ino;
+    dst->st_mode = src->st_mode;
+    dst->st_nlink = src->st_nlink;
+    dst->st_uid = src->st_uid;
+    dst->st_gid = src->st_gid;
+    dst->st_rdev = src->st_rdev;
+    dst->st_size = src->st_size;
+    dst->st_atime = src->st_atime;
+    dst->st_mtime = src->st_mtime;
+    dst->st_ctime = src->st_ctime;
+    dst->st_blksize = src->st_blksize;
+    dst->st_blocks = src->st_blocks;
+    dst->st_flags = src->st_flags;
+    return 0;
 }
 
 /*

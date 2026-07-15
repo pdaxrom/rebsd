@@ -833,7 +833,7 @@ void longt(struct stat *st)
 
     pmode(st);
     printf("%3d/%1d", st->st_uid, st->st_gid);
-    printf("%7ld", st->st_size);
+    printf("%7lld", (long long)st->st_size);
     cp = ctime(&st->st_mtime);
     printf(" %-12.12s %-4.4s ", cp + 4, cp + 20);
 }
@@ -934,7 +934,8 @@ void tomodes(struct stat *sp)
     sprintf(dblock.dbuf.mode, "%6o ", sp->st_mode & 07777);
     sprintf(dblock.dbuf.uid, "%6o ", sp->st_uid);
     sprintf(dblock.dbuf.gid, "%6o ", sp->st_gid);
-    sprintf(dblock.dbuf.size, "%11lo ", sp->st_size);
+    sprintf(dblock.dbuf.size, "%11llo ",
+        (unsigned long long)sp->st_size);
     sprintf(dblock.dbuf.mtime, "%11lo ", sp->st_mtime);
 }
 

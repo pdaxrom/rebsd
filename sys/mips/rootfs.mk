@@ -174,7 +174,7 @@ MIPS_CMD_SUBDIRS ?= basic calendar chown chroot compress date2 deco dhclient dif
 MIPS_CMD_SUBDIRS += $(MIPS_BOARD_CMD_SUBDIRS)
 MIPS_CMD_STDS ?= basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
                du echo ed fgrep file free grep head hostid join kill last ln \
-               mesg mkdir mv nice od pagesize pr printenv pwd rev rm rmail \
+               mesg mkdir mv nice od off64-smoke-gcc pagesize pr printenv pwd rev rm rmail \
                rmdir size sleep sort split sum sync tail tar tee time touch \
                top tr tsort tty uniq uptime w wc whereis who
 MIPS_CMD_NSTDS ?= egrep expr
@@ -188,7 +188,7 @@ MIPS_USR_BIN_FILES ?= aout apropos ar as awk basename basic cal calendar cb \
                     egrep emg env fgrep file find fold forth free grep groups head \
                     hostid id join last ld man matrix-as-vr4300 \
                     matrix-as-vr4300.sh make md5 med mesg more nice nm nohup \
-                    od pagesize pdc picoc pr printf printenv ps ptytest \
+                    od off64-smoke-gcc pagesize pdc picoc pr printf printenv ps ptytest \
                     ranlib renice renumber retroforth rev rmail \
                     setty size sl smux smoke-as-vr4300 smoke-as-vr4300.sh \
                     sort split strip sum sysctl tail tar tcl tee telnet time \

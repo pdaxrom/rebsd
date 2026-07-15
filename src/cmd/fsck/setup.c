@@ -117,7 +117,8 @@ setup(
         allocd = nscrblk;
         ioctl(sfile.wfdes, TFALLOC, &allocd);
         if (allocd != nscrblk) {
-            printf("Wanted %lu kbytes, got %lu\n", nscrblk, allocd);
+            printf("Wanted %lu kbytes, got %llu\n", nscrblk,
+                (unsigned long long)allocd);
             errexit("Unable to allocate temp space\n");
         }
         sfile.rfdes = open(scrfile, O_RDONLY);
