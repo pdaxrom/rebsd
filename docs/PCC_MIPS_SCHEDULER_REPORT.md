@@ -3393,3 +3393,118 @@ by 0.64% and 0.82%, respectively.  H15b closes its physical and commit gates.
 The table path does not schedule multiply instructions or alter final emitted
 multiply adjacency.  `-mfix4300` remains the VR4300 default and
 `-mno-fix4300` remains the explicit opt-out.
+
+## H16: Bounded Interlocked HI/LO Lookahead
+
+This section records a rejected experiment.  The implementation described
+below passed every correctness gate but produced no measurable physical
+VR4300 gain, so its compiler and host-test changes are not retained.
+
+H7 already lowers constant division to multiply-high sequences, but final
+VR4300 assembly commonly retained an adjacent `multu` and `mfhi` while
+independent work followed the dependent result.  H16 adds a compact final
+assembly lookahead rather than another pass2 optimization.  For VR4300 and
+MIPS32R2 only, it examines at most eight consecutive parsed register-only
+instructions after `mfhi`/`mflo` and moves at most two independent operations
+between the HI/LO writer and reader.
+
+The accepted subset is deliberately small: simple GPR moves, shifts,
+`addiu`, `addu`/`subu`, and numeric 32-bit `li`.  Candidates touching `$sp`,
+`$ra`, the HI/LO result register, or any crossed RAW, WAR, or WAW dependency
+are rejected.  Scanning stops at labels, memory, control transfers,
+directives, and unknown instructions.  A numeric `li` is useful here because
+an out-of-range immediate expands to two real instructions without touching
+HI/LO or memory.  Generic MIPS3 does not run the pass.
+
+The first Malta64 build exposed a native-toolchain portability mistake:
+ReBSD libc has `strtol` and `strtoul`, but not `strtoll` or `strtoull`.
+Keeping the parser to 32-bit `long`/`unsigned long` removes that accidental
+dependency while preserving identical host and target range checks.  The
+native compiler then links and self-hosts normally.
+
+Host gates cover a two-pass positive schedule, a crossed-register dependency
+negative, and an unchanged generic-MIPS3 sequence.  The general compiler
+corpus now places useful `li` and `move` operations in several multiply-high
+gaps; Linpack exposes two safe loop-address adjustments.  Static totals do not
+change:
+
+| Corpus | Version | Instructions | Non-NOP | NOP | Loads | Stores | Branches | Jumps | Mul/div | Source bytes |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| General | H15b | 1179 | 1111 | 68 | 124 | 69 | 57 | 79 | 8 | 35566 |
+| General | H16 | 1179 | 1111 | 68 | 124 | 69 | 57 | 79 | 8 | 35566 |
+| Linpack | H15b | 1721 | 1617 | 104 | 287 | 163 | 92 | 98 | 15 | 52651 |
+| Linpack | H16 | 1721 | 1617 | 104 | 287 | 163 | 92 | 98 | 15 | 52651 |
+
+The general linked `.text` is also unchanged at 5852 bytes, and generic
+MIPS3 assembly is byte-identical to H15b.  QEMU timing from separate host
+processes shifted most unrelated kernels together by roughly 3-5%, so it is
+used only as a correctness gate; it cannot measure the real VR4300 pipeline
+benefit.
+
+Cross regression reports 341/344 compile passes, the same three documented
+target limitations, and 304/304 runtime passes.  All six complete profiles
+pass with PCC kernels and PCC root filesystems:
+
+| Board | CPU | Endian | Float | Full smoke |
+| --- | --- | --- | --- | --- |
+| Malta64 | VR4300 | big | hard | pass |
+| Malta64 | VR4300 | big | soft | pass |
+| Malta | MIPS32R2 | big | hard | pass |
+| Malta | MIPS32R2 | big | soft | pass |
+| MaltaEL | MIPS32R2 | little | hard | pass |
+| MaltaEL | MIPS32R2 | little | soft | pass |
+
+Every profile reports compiler-benchmark self-test zero,
+`CCOM_STRESS_DONE:100`, `PCC_SMOKE_ALL_FAILURES 0`, and
+`PCC_SMOKE_ALL_RC:0`.  PCC kernels retain `-fomit-frame-pointer`.
+
+The physical candidate is:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h16-hilo-lookahead-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 15bebd6a21a772a861d49f645959ada5073e85e11fa0d5cb1c8b369b4e298bb1
+kernel ELF sha256: a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d
+debug runner sha256: 3fef11b3f854548389142cf779a82e233298431b7faf9241831e5a39bb4e064d
+```
+
+It uses the byte-identical H15b GCC kernel and PCC VR4300 hard-float a.out
+userland.  The rootfs passes all five `fsutil` phases with 360 files, 3870
+used blocks, and 2249 free blocks.  The runner contains
+`misc__switchtable001`; it and all six independent benchmark binaries have no
+undefined symbols.
+
+Physical N64 correctness passes completely: both benchmark self-tests and
+every GCC/PCC return code are zero, `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC` are zero, and the terminal
+`N64_PCC_DEBUG_RC_END` marker is present.  The H15b/H16 general PCC comparison
+is:
+
+| Kernel | H15b PCC | H16 PCC | Change |
+| --- | ---: | ---: | ---: |
+| `int_mix` | 4.388 | 4.389 | +0.02% |
+| `const_div` | 0.984 | 0.984 | +0.00% |
+| `branch` | 3.107 | 3.082 | -0.80% |
+| `switch` | 3.190 | 3.216 | +0.82% |
+| `memory` | 7.011 | 7.010 | -0.01% |
+| `libc_memory` | 37.974 | 37.967 | -0.02% |
+| `calls` | 3.395 | 3.425 | +0.88% |
+| `u64` | 1.965 | 1.966 | +0.05% |
+| `float` | 3.412 | 3.412 | +0.00% |
+| `double` | 2.670 | 2.670 | +0.00% |
+| `convert` | 1.780 | 1.764 | -0.90% |
+
+The target `const_div` kernel is unchanged, and every other result lies within
+the normal sub-1% physical variation.  Ordinary PCC Linpack rows are 3774.831
+and 3807.474 KFLOPS, averaging 3791.153.  That is 0.37% below H15b and 85.23%
+of the same-run GCC average of 4447.930 KFLOPS.  Isolated PCC Linpack kernels
+move by at most 0.70% relative to H15b.  The lookahead therefore does not hide
+useful VR4300 latency in these representative workloads.
+
+Adding 183 driver lines and a second full-file assembly rewrite is not
+justified by a zero target gain.  The scheduler and its host probes are
+removed; no H16 code is committed.  H15b remains the selected baseline.
+Because the rejected H16 code never altered floating-point multiply handling,
+the existing final VR4300 errata repair is unchanged: `-mfix4300` remains the
+default and `-mno-fix4300` remains the explicit opt-out.

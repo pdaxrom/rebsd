@@ -5187,6 +5187,46 @@ Milestone order:
     averages 3805.275 KFLOPS, within 0.05% of H14 and 86.37% of GCC.  All other
     general kernels remain within 0.89% of H14.  Keep `-mfix4300` enabled and
     close the H15b commit gate.
+  - [x] Experiment H16 with filling interlocked integer HI/LO latency without
+    adding a pass2 or backend-IR scheduler.  After the existing late
+    peepholes, scan at most eight consecutive parsed register-only
+    instructions after `mfhi`/`mflo` and pull up at most two independent,
+    non-trapping GPR operations.  Stop at
+    labels, memory, control transfers, and unknown instructions; reject
+    `$sp`, `$ra`, result-register, RAW, WAR, and WAW conflicts.  Enable this
+    only for VR4300 and MIPS32R2 and keep generic MIPS3 byte-identical.
+  - [x] Add positive, dependency-negative, and generic-MIPS3 host assembly
+    gates.  Numeric 32-bit `li` is accepted because it can provide both
+    required separation instructions when expanded by the assembler.  Use
+    only `strtol`/`strtoul`, which are present in the native ReBSD libc; the
+    first Malta64 build caught and rejected an accidental dependency on
+    unavailable `strtoll`/`strtoull`.
+  - [x] Verify H16 statically and dynamically.  General-corpus and Linpack
+    instruction, NOP, load/store, branch, multiply/divide, source-byte, and
+    linked `.text` counts are unchanged.  Host smoke passes; cross regression
+    reports 341/344 compile passes with the same three expected target
+    limitations and 304/304 runtime passes.  All six full PCC-kernel and
+    PCC-rootfs Malta64/Malta/MaltaEL hard/soft QEMU profiles pass
+    `pcc-smoke-all.sh` with zero failures and final RC zero.
+  - [x] Build and retain the H16 GCC-kernel/PCC-VR4300-hard-float a.out N64
+    candidate at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h16-hilo-lookahead-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `15bebd6a21a772a861d49f645959ada5073e85e11fa0d5cb1c8b369b4e298bb1`.
+    The GCC kernel is byte-identical to H15b, all seven runner/benchmark
+    executables have zero undefined symbols, and the 6144 KiB rootfs passes
+    all five `fsutil` phases with 360 files.
+  - [x] Run H16 on physical N64 and reject it.  Both benchmark self-tests,
+    every GCC/PCC return code, `N64_PCC_DEBUG_END 0`,
+    `N64_PCC_DEBUG_RUNNER_RC 0`, and the terminal `N64_PCC_DEBUG_RC_END` pass.
+    The target `const_div` result remains exactly 0.984 Mwork/s.  All other
+    general results are within -0.90% to +0.88% of H15b, and PCC Linpack
+    averages 3791.153 KFLOPS, 0.37% below H15b and 85.23% of the same-run GCC
+    mean.  Isolated kernels remain within 0.70%, confirming timing noise rather
+    than a pipeline gain.  Remove the 183-line driver scheduler and its host
+    probes instead of growing the compiler for no measured benefit.  Retain
+    this result as a negative experiment; H15b remains the selected baseline,
+    with its existing default `-mfix4300` behavior unchanged.
 
 Success criteria:
 
