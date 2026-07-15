@@ -33,6 +33,7 @@ struct disk_softc {
     unsigned ds_attached;
     /* Reserve a detached unit until every vnode/raw open is closed. */
     unsigned ds_opens;
+    unsigned ds_dirty;
     unsigned ds_unit;
     const struct disk_backend_ops *ds_ops;
     void *ds_arg;
@@ -59,6 +60,25 @@ disk_present(const struct disk_softc *sc)
     return sc->ds_used && sc->ds_attached &&
         (sc->ds_ops->dbo_present == 0 ||
         sc->ds_ops->dbo_present(sc->ds_arg));
+}
+
+static int
+disk_flush(struct disk_softc *sc)
+{
+    int error;
+
+    if (!sc->ds_dirty)
+        return 0;
+    if (!disk_present(sc))
+        return ENXIO;
+    if (sc->ds_ops->dbo_flush == 0) {
+        sc->ds_dirty = 0;
+        return 0;
+    }
+    error = sc->ds_ops->dbo_flush(sc->ds_arg);
+    if (error == 0)
+        sc->ds_dirty = 0;
+    return error;
 }
 
 static int
@@ -201,6 +221,7 @@ int
 disk_bdev_close(dev_t dev, int flag, int mode)
 {
     struct disk_softc *sc;
+    int error;
     unsigned unit;
 
     (void)flag;
@@ -211,10 +232,13 @@ disk_bdev_close(dev_t dev, int flag, int mode)
     sc = &disk_softc[unit];
     if (!sc->ds_used || sc->ds_opens == 0)
         return ENXIO;
+    error = 0;
+    if (sc->ds_opens == 1 && sc->ds_attached)
+        error = disk_flush(sc);
     --sc->ds_opens;
     if (sc->ds_opens == 0 && !sc->ds_attached)
         disk_zero(sc, sizeof(*sc));
-    return 0;
+    return error;
 }
 
 static void
@@ -282,9 +306,12 @@ disk_bdev_strategy(struct buf *bp)
     if ((bp->b_flags & B_READ) != 0)
         error = sc->ds_ops->dbo_read(sc->ds_arg, start + relative,
             requested, bp->b_addr);
-    else
+    else {
         error = sc->ds_ops->dbo_write(sc->ds_arg, start + relative,
             requested, bp->b_addr);
+        if (error == 0)
+            sc->ds_dirty = 1;
+    }
     if (error != 0) {
         disk_bdev_done_error(bp, error);
         return;
@@ -331,6 +358,8 @@ disk_bdev_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
     case DIOCREINIT:
         error = disk_revalidate(sc);
         return error;
+    case DIOCFLUSH:
+        return disk_flush(sc);
     case DIOCGETPART:
         if (part_number == DISK_MINOR_WHOLE ||
             part_number > DISK_MBR_PARTITIONS)

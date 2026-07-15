@@ -181,15 +181,21 @@ valid, but after active I/O has reached a terminal state.
 
 `umass` owns USB interface state, bulk pipes, BOT tags, and the compact
 single-LUN SCSI command set. After `INQUIRY`, `TEST UNIT READY`, and
-`READ CAPACITY(10)` succeed, it registers a read-only 512-byte-sector backend
-with `sys/disk`. It does not parse MBR entries, allocate minors, implement
-`bdevsw`, or know about filesystems.
+`READ CAPACITY(10)` succeed, it registers a 512-byte-sector read/write backend
+with `sys/disk`. Reads and writes are split into bounded `READ(10)` and
+`WRITE(10)` commands. Flush uses `SYNCHRONIZE CACHE(10)`; a device that rejects
+that optional command with `ILLEGAL REQUEST` is remembered and subsequently
+uses BOT command completion as its available durability boundary. `umass`
+does not parse MBR entries, allocate minors, implement `bdevsw`, or know about
+filesystems.
 
 `sys/disk` owns four bounded disk slots, the common `sdN` namespace, five
 minors per slot, the 1024-byte ReBSD block to 512-byte sector conversion,
 classic-MBR regions, `strategy`, media ioctls, residuals, bounds, and
-read-only enforcement. A backend owns command splitting, DMA/cache handling,
-timeouts, and physical media presence. Detach first makes the backend report
+optional read-only enforcement. It tracks dirty media, flushes on the last
+close, and exposes an explicit `DIOCFLUSH` ioctl. A backend owns command
+splitting, DMA/cache handling, timeouts, physical media presence, and its
+transport-specific flush operation. Detach first makes the backend report
 absent and unregisters the disk slot, then closes the USB pipes and releases
 the USB interface state.
 

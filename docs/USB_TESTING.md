@@ -25,8 +25,8 @@ The 2026-07-15 external-hub candidate passes all USB, disk, and FAT gates:
 | `ohci_test` | control/periodic ED/TDs, IRQ, RHSC masking, reconnect and keyboard input | pass |
 | `ehci_test` | async control/bulk, periodic interrupt-IN, split transactions, atomic QH link/unlink, hub removal/reconnect and companion routing | pass |
 | `ci20 usb hw tests` | VBUS, clock, PHY and reset ordering with fake JZ4780 registers | pass |
-| `umass_test` | BOT framing/recovery, SCSI probe/capacity, bounded `READ(10)`, errors | pass |
-| `disk_test` | transport-independent MBR parsing, invalid-entry rejection, regions and minor layout | pass |
+| `umass_test` | BOT framing/recovery, SCSI probe/capacity, bounded `READ(10)`/`WRITE(10)`, cache flush and command/wire errors | pass |
+| `disk_test` | transport-independent MBR parsing, regions/minors, partition-relative writes, dirty tracking and flush errors | pass |
 | `fdisk_mbr_test` | exact 512-byte ABI, little-endian fields, range/overflow/overlap validation | pass |
 | `fat_test` | FAT16/FAT32 BPB validation, bounded cluster chains, directories, long names and file reads | pass |
 
@@ -239,6 +239,29 @@ being removed are followed by detach and successful fresh enumeration. The
 retained capture is
 `usb-logs/ci20-ehci-hub-reconnect-verified-20260715.txt`.
 
+## Writable USB Block Gate
+
+The writable mass-storage candidate has these SHA-256 values:
+
+```text
+8162eeb0d73c04658bcf23c4074f3b96e7c69bde2c22dfffdc601f3d0a94ad21  unix.elf
+e0dacf6b0550d52afb9420422596b7acbd72071d1f1f9c0db529e6d817d95923  ci20.bin
+e2b14a2245d01a9b61069b31c92104ecad18c6dea6c4ccab4c0274febca9f9a8  ci20.uImage
+```
+
+On 2026-07-15 the `1005:b113` high-speed flash drive and `1c4f:0002`
+low-speed keyboard enumerated simultaneously behind the `214b:7000` hub. The
+test saved the unused whole-disk range at sectors 32 through 61, overwrote it
+with a 15 KiB pattern, called `sync`, read it back, and passed `cmp`. It then
+restored the saved bytes, called `sync`, read them back, and passed a second
+`cmp`. Finally `/dev/sd0a` mounted as read-only FAT32 and its directory listing
+succeeded, proving the partition remained intact. The retained UART capture
+is `usb-logs/ci20-umass-write-verified-20260715.txt`.
+
+This gate verifies raw block writes through BOT, the disk close/flush path,
+readback, and byte-exact restoration. It does not claim writable FAT support;
+the current FAT16/FAT32 filesystem remains deliberately read-only.
+
 ## Creator Ci20 Matrix
 
 | Test | Device/topology | Status | Evidence |
@@ -257,6 +280,7 @@ retained capture is
 | hub child reconnect | keyboard, flash, and five complete hub reconnects | verified 2026-07-15 on `861ae1…` | `ci20-ehci-hub-reconnect-verified-20260715.txt` |
 | high-speed flash drive | right-hand J23, direct EHCI | verified attach, detach, and reconnect 2026-07-13 on `05adb0…` | final high-speed capture |
 | read-only USB block device | direct high-speed `1005:b113` on right-hand J23 | verified 2026-07-13 on `a9984d…` | capacity, MBR, whole/partition reads, idle detach/reconnect and reuse capture |
+| writable USB block device | high-speed `1005:b113` behind `214b:7000` hub | verified 2026-07-15 on `e2b14a…` | 15 KiB write/read/compare, byte-exact restore/compare, then FAT32 integrity check in `ci20-umass-write-verified-20260715.txt` |
 | FAT32 filesystem | `/dev/sd0a`, MBR type `0x0c` | verified read-only 2026-07-13 | mount, directory traversal, long names and enforced read-only behavior in `ci20-fat32-readonly-verified-20260713.txt` |
 | OTG port in host mode | left-hand J24/J8 | not implemented | separate DWC2 phase |
 

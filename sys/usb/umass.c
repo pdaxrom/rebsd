@@ -67,8 +67,8 @@
 
 /*
  * ReBSD keeps only SCSI transparent command set commands needed by a
- * single-LUN, 512-byte-sector, read-only USB flash disk.  The transport is
- * in umass_bbb.c; no SCSIPI framework is imported.
+ * single-LUN, 512-byte-sector USB flash disk.  The transport is in
+ * umass_bbb.c; no SCSIPI framework is imported.
  */
 
 #include <usb/umass.h>
@@ -85,6 +85,10 @@
 #define SCSI_INQUIRY                0x12u
 #define SCSI_READ_CAPACITY_10       0x25u
 #define SCSI_READ_10                0x28u
+#define SCSI_WRITE_10               0x2au
+#define SCSI_SYNCHRONIZE_CACHE_10   0x35u
+#define SCSI_SENSE_KEY_MASK         0x0fu
+#define SCSI_SENSE_ILLEGAL_REQUEST  0x05u
 
 static void
 umass_memzero(void *vptr, size_t length)
@@ -237,6 +241,49 @@ umass_scsi_read_10(struct umass_bbb *bbb, unsigned lba,
     return UMASS_BBB_OK;
 }
 
+enum umass_bbb_result
+umass_scsi_write_10(struct umass_bbb *bbb, unsigned lba,
+    unsigned sector_count, const void *data)
+{
+    uByte cdb[10];
+    enum umass_bbb_result result;
+    size_t actlen;
+    size_t length;
+    unsigned residue;
+
+    if (bbb == 0 || data == 0 || sector_count == 0 ||
+        sector_count > UMASS_MAX_WRITE_SECTORS) {
+        if (bbb != 0)
+            bbb->ub_last_error = USB_STATUS_INVALID;
+        return UMASS_BBB_WIRE_FAILED;
+    }
+    length = (size_t)sector_count * UMASS_SECTOR_SIZE;
+    umass_memzero(cdb, sizeof(cdb));
+    cdb[0] = SCSI_WRITE_10;
+    umass_set_be32(cdb + 2, lba);
+    umass_set_be16(cdb + 7, sector_count);
+    result = umass_bbb_transfer(bbb, 0, cdb, sizeof(cdb), (void *)data,
+        length, UMASS_DIR_OUT, UMASS_WRITE_TIMEOUT_MS, &actlen, &residue);
+    if (result != UMASS_BBB_OK)
+        return result;
+    if (actlen != length || residue != 0) {
+        bbb->ub_last_error = USB_STATUS_SHORT_XFER;
+        return UMASS_BBB_WIRE_FAILED;
+    }
+    return UMASS_BBB_OK;
+}
+
+enum umass_bbb_result
+umass_scsi_synchronize_cache_10(struct umass_bbb *bbb)
+{
+    uByte cdb[10];
+
+    umass_memzero(cdb, sizeof(cdb));
+    cdb[0] = SCSI_SYNCHRONIZE_CACHE_10;
+    return umass_bbb_transfer(bbb, 0, cdb, sizeof(cdb), 0, 0,
+        UMASS_DIR_NONE, UMASS_FLUSH_TIMEOUT_MS, 0, 0);
+}
+
 void
 umass_media_init(struct umass_media *media, struct umass_bbb *bbb)
 {
@@ -321,6 +368,65 @@ umass_media_read(struct umass_media *media, unsigned lba,
         data += chunk * UMASS_SECTOR_SIZE;
     }
     return UMASS_BBB_OK;
+}
+
+enum umass_bbb_result
+umass_media_write(struct umass_media *media, unsigned lba,
+    unsigned sector_count, const void *vdata)
+{
+    const uByte *data;
+    enum umass_bbb_result result;
+    unsigned chunk;
+
+    if (media == 0 || media->um_bbb == 0 || vdata == 0 ||
+        sector_count == 0 || lba >= media->um_sector_count ||
+        sector_count > media->um_sector_count - lba) {
+        if (media != 0 && media->um_bbb != 0)
+            media->um_bbb->ub_last_error = USB_STATUS_INVALID;
+        return UMASS_BBB_WIRE_FAILED;
+    }
+    data = (const uByte *)vdata;
+    while (sector_count != 0) {
+        chunk = sector_count;
+        if (chunk > UMASS_MAX_WRITE_SECTORS)
+            chunk = UMASS_MAX_WRITE_SECTORS;
+        result = umass_scsi_write_10(media->um_bbb, lba, chunk, data);
+        if (result != UMASS_BBB_OK)
+            return result;
+        lba += chunk;
+        sector_count -= chunk;
+        data += chunk * UMASS_SECTOR_SIZE;
+    }
+    return UMASS_BBB_OK;
+}
+
+enum umass_bbb_result
+umass_media_flush(struct umass_media *media)
+{
+    enum umass_bbb_result result;
+    enum umass_bbb_result sense_result;
+    size_t actlen;
+
+    if (media == 0 || media->um_bbb == 0)
+        return UMASS_BBB_WIRE_FAILED;
+    if (media->um_no_sync_cache)
+        return UMASS_BBB_OK;
+    result = umass_scsi_synchronize_cache_10(media->um_bbb);
+    if (result != UMASS_BBB_COMMAND_FAILED)
+        return result;
+
+    umass_memzero(media->um_sense, sizeof(media->um_sense));
+    sense_result = umass_scsi_request_sense(media->um_bbb,
+        media->um_sense, sizeof(media->um_sense), &actlen);
+    if (sense_result != UMASS_BBB_OK)
+        return sense_result;
+    if (actlen >= 3u &&
+        (media->um_sense[2] & SCSI_SENSE_KEY_MASK) ==
+        SCSI_SENSE_ILLEGAL_REQUEST) {
+        media->um_no_sync_cache = 1;
+        return UMASS_BBB_OK;
+    }
+    return result;
 }
 
 #ifdef KERNEL
@@ -439,6 +545,34 @@ umass_disk_read(void *arg, unsigned lba, unsigned sector_count, void *data)
 }
 
 static int
+umass_disk_write(void *arg, unsigned lba, unsigned sector_count,
+    const void *data)
+{
+    struct umass_softc *sc;
+
+    sc = (struct umass_softc *)arg;
+    if (sc == 0 || sc->us_dying)
+        return ENXIO;
+    if (umass_media_write(&sc->us_media, lba, sector_count, data) !=
+        UMASS_BBB_OK)
+        return umass_disk_error(sc);
+    return 0;
+}
+
+static int
+umass_disk_flush(void *arg)
+{
+    struct umass_softc *sc;
+
+    sc = (struct umass_softc *)arg;
+    if (sc == 0 || sc->us_dying)
+        return ENXIO;
+    if (umass_media_flush(&sc->us_media) != UMASS_BBB_OK)
+        return umass_disk_error(sc);
+    return 0;
+}
+
+static int
 umass_disk_present(void *arg)
 {
     struct umass_softc *sc;
@@ -451,8 +585,8 @@ umass_disk_present(void *arg)
 
 static const struct disk_backend_ops umass_disk_ops = {
     umass_disk_read,
-    0,
-    0,
+    umass_disk_write,
+    umass_disk_flush,
     umass_disk_present
 };
 
@@ -601,7 +735,7 @@ umass_attach_interface(struct usb_interface *interface)
     disk_args.da_arg = sc;
     disk_args.da_sector_count = sc->us_media.um_sector_count;
     disk_args.da_sector_size = sc->us_media.um_sector_size;
-    disk_args.da_flags = DISK_FLAG_READ_ONLY | DISK_FLAG_REMOVABLE;
+    disk_args.da_flags = DISK_FLAG_REMOVABLE;
     if (disk_attach(&disk_args, &sc->us_disk_unit) != 0) {
         error = USB_STATUS_IO_ERROR;
         goto fail;
@@ -651,7 +785,7 @@ umassattach(int unit)
     (void)unit;
     error = umass_register(usb_core_default());
     if (error == USB_STATUS_NORMAL_COMPLETION)
-        printf("umass0: read-only SCSI/Bulk-Only driver ready\n");
+        printf("umass0: SCSI/Bulk-Only driver ready\n");
     else
         printf("umass0: driver registration failed: %s\n",
             usb_status_string(error));

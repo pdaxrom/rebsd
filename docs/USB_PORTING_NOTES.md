@@ -15,14 +15,16 @@ The first target milestone is OHCI root-hub enumeration plus a HID boot
 keyboard feeding the ReBSD console. Preconnected input, boot with an empty
 port, late attach, repeated post-boot disconnect/reconnect, EHCI high-speed
 enumeration/reconnect, and low-speed companion handoff are hardware verified
-on 2026-07-13. The read-only Bulk-Only/SCSI backend and common disk layer are
-also hardware-verified for capacity, MBR, whole/partition reads, and idle
-detach/reconnect. Read-only FAT32 mount, traversal, and file reads are also
-hardware verified. A high-speed external hub with simultaneous high-speed
-storage and low-speed keyboard, including child and complete-hub reconnect,
-was hardware-verified on 2026-07-15; the final candidate's full successful
-UART capture is retained in `docs/usb-logs/`. The separate J24/J8 DWC2 OTG
-connection is outside this first host-port scope.
+on 2026-07-13. The Bulk-Only/SCSI backend and common disk layer are
+hardware-verified for capacity, MBR, whole/partition reads, idle
+detach/reconnect, and raw writes. On 2026-07-15 a 15 KiB range was saved,
+overwritten, read back byte-for-byte, restored, and read back again through a
+high-speed hub. Read-only FAT32 mount, traversal, and file reads are also
+hardware verified after that restoration. A high-speed external hub with
+simultaneous high-speed storage and low-speed keyboard, including child and
+complete-hub reconnect, was hardware-verified on 2026-07-15; the final
+candidate's full successful UART capture is retained in `docs/usb-logs/`. The
+separate J24/J8 DWC2 OTG connection is outside this first host-port scope.
 
 ## Baseline
 
@@ -76,7 +78,7 @@ results, not Creator Ci20 hardware results.
 | `splusb` | Use the existing global interrupt masking primitive through a small USB critical-section wrapper. |
 | root-hub child attach | USB core creates a `usb_device`; the HCD exposes root-hub control and port status through the common HCD operations. |
 | disk attach | `sys/disk` owns the static `bdevsw` entry, units/minors, MBR regions and `strategy(struct buf *)`; USB, SD/MMC, IDE and SATA attach through one backend contract. |
-| `scsipi` | No equivalent is present.  Implement only BOT plus the required single-LUN read-only SCSI commands. |
+| `scsipi` | No equivalent is present. Implement the required compact single-LUN BOT/SCSI commands directly. |
 | wscons keyboard | No equivalent.  Add a small keyboard-input registration/submission API above `ttyinput`. |
 
 ## Existing Device Attachment Model
@@ -406,10 +408,11 @@ read-only errors. It must not silently reinterpret ReBSD block numbers as
 
 The disk layer is not part of USB. `sys/disk` owns the common `sdN` namespace,
 five minors per unit (whole disk plus four primary MBR entries), media ioctls,
-MBR revalidation, and the `read`/`write`/`flush`/`present` backend contract.
-The USB Mass Storage driver implements only one read-only backend using BOT
-and SCSI. Future SD/MMC, IDE/ATA, and SATA/AHCI drivers will implement the same
-backend contract and will not depend on USB.
+MBR revalidation, dirty tracking, last-close and explicit flush, and the
+`read`/`write`/`flush`/`present` backend contract. The USB Mass Storage driver
+implements one such backend using BOT and SCSI. Future SD/MMC, IDE/ATA, and
+SATA/AHCI drivers will implement the same backend contract and will not depend
+on USB.
 
 Filesystems sit above block devices and are configured independently of every
 transport. New FAT, exFAT, and ext-family implementations belong under
@@ -420,7 +423,18 @@ transport.
 There is no SCSI or SCSIPI subsystem in the current tree.  The first umass
 implementation therefore contains only BOT framing and `INQUIRY`,
 `TEST UNIT READY`, `REQUEST SENSE`, `READ CAPACITY(10)`, and `READ(10)` for one
-LUN.  Write support is a later commit.
+LUN, plus bounded `WRITE(10)` and `SYNCHRONIZE CACHE(10)`. Unsupported cache
+synchronization is detected through `REQUEST SENSE` and remembered without
+weakening other command-error handling.
+
+The writable block gate passed on Creator Ci20 hardware on 2026-07-15 using a
+high-speed `1005:b113` flash drive behind a `214b:7000` hub. The test saved
+sectors 32 through 61, wrote and compared a 15 KiB pattern, restored and
+compared the original bytes, then mounted and listed the FAT32 partition
+read-only. The full UART capture is
+`docs/usb-logs/ci20-umass-write-verified-20260715.txt`. This proves raw block
+write and flush behavior; the FAT filesystem itself remains deliberately
+read-only.
 
 ## Console Input
 

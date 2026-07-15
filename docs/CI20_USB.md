@@ -284,9 +284,9 @@ make -C sys/mips BOARD=ci20 \
 
 The object profile places the result at
 `../rebsd-usb-support-build/ci20-kgcc-ugcc-mips32r2-hard-little-elf/obj/sys/mips/ci20/ci20.uImage`.
-The current external-hub candidate is a clean full GCC build with a 32 MiB
-rootfs. Its `ci20.uImage` SHA-256 is
-`861ae15e0ba79af9a2a6364c66f593656fcbf8c6274626b49425f437002e66fa`.
+The current writable mass-storage candidate is a clean full GCC build with a
+32 MiB rootfs. Its `ci20.uImage` SHA-256 is
+`e2b14a2245d01a9b61069b31c92104ecad18c6dea6c4ccab4c0274febca9f9a8`.
 
 Boot the image with the existing Ci20/U-Boot procedure while capturing UART4.
 Use only the right-hand J23 type-A host port. J24/J8 is the separate OTG block
@@ -300,7 +300,7 @@ disk: block layer ready, MBR partitions
 usb0: initializing core
 usb0: core ready
 ukbd0: HID boot-keyboard driver ready
-umass0: read-only SCSI/Bulk-Only driver ready
+umass0: SCSI/Bulk-Only driver ready
 uhub0: external hub driver ready
 ehci0: attach, EHCI phys=13490000
 usb-host: init: enable VBUS
@@ -365,6 +365,35 @@ long names, traversed nested directories, and rejected `touch` with
 `usb-logs/ci20-fat32-readonly-verified-20260713.txt`. A separate 16 MiB file
 read completed in the same hardware session, but that short excerpt is not in
 the retained full capture.
+
+### Writable Mass-Storage Hardware Test
+
+Run destructive raw-device tests only in a sector range already proven to be
+unused, and save that exact range before writing it. For the verified
+`1005:b113` medium, MBR partition 1 starts at sector 63; the test therefore
+used whole-disk sectors 32 through 61 (15 ReBSD blocks):
+
+```sh
+dd if=/dev/sd0 of=/var/usb-gap.before bs=1024 skip=16 count=15
+dd if=/bin/sh of=/var/usb-gap.pattern bs=1024 count=15
+dd if=/var/usb-gap.pattern of=/dev/sd0 bs=1024 seek=16 count=15
+sync
+dd if=/dev/sd0 of=/var/usb-gap.after bs=1024 skip=16 count=15
+cmp /var/usb-gap.pattern /var/usb-gap.after
+dd if=/var/usb-gap.before of=/dev/sd0 bs=1024 seek=16 count=15
+sync
+dd if=/dev/sd0 of=/var/usb-gap.restored bs=1024 skip=16 count=15
+cmp /var/usb-gap.before /var/usb-gap.restored
+mount -t fat /dev/sd0a /mnt
+ls /mnt
+umount /mnt
+```
+
+This gate passed through the populated high-speed hub on 2026-07-15: both
+`cmp` commands succeeded, the original bytes were restored, and the FAT32
+partition mounted and listed normally afterward. The exact UART capture is
+`usb-logs/ci20-umass-write-verified-20260715.txt`. It verifies raw block write
+and flush behavior only; FAT remains read-only.
 
 For the external-hub gate, connect the high-speed hub with the flash drive and
 keyboard already attached. Expected lines include:

@@ -21,6 +21,7 @@ struct umass_media {
     struct umass_bbb *um_bbb;
     unsigned um_sector_count;
     unsigned um_sector_size;
+    unsigned um_no_sync_cache;
     uByte um_inquiry[UMASS_INQUIRY_LENGTH];
     uByte um_sense[UMASS_SENSE_LENGTH];
 };
@@ -34,11 +35,17 @@ enum umass_bbb_result umass_scsi_read_capacity(struct umass_bbb *,
     unsigned *, unsigned *);
 enum umass_bbb_result umass_scsi_read_10(struct umass_bbb *, unsigned,
     unsigned, void *);
+enum umass_bbb_result umass_scsi_write_10(struct umass_bbb *, unsigned,
+    unsigned, const void *);
+enum umass_bbb_result umass_scsi_synchronize_cache_10(struct umass_bbb *);
 
 void umass_media_init(struct umass_media *, struct umass_bbb *);
 enum umass_bbb_result umass_media_probe(struct umass_media *);
 enum umass_bbb_result umass_media_read(struct umass_media *, unsigned,
     unsigned, void *);
+enum umass_bbb_result umass_media_write(struct umass_media *, unsigned,
+    unsigned, const void *);
+enum umass_bbb_result umass_media_flush(struct umass_media *);
 
 #ifdef KERNEL
 usb_error_t umass_register(struct usb_core *);

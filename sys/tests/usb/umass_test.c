@@ -1,4 +1,4 @@
-/* Host-side tests for compact USB Mass Storage BOT and SCSI reads. */
+/* Host-side tests for compact USB Mass Storage BOT and SCSI block I/O. */
 
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +18,8 @@
 #define SCSI_INQUIRY                0x12u
 #define SCSI_READ_CAPACITY_10       0x25u
 #define SCSI_READ_10                0x28u
+#define SCSI_WRITE_10               0x2au
+#define SCSI_SYNCHRONIZE_CACHE_10   0x35u
 
 struct fake_disk {
     unsigned char storage[FAKE_SECTORS * UMASS_SECTOR_SIZE];
@@ -40,7 +42,14 @@ struct fake_disk {
     unsigned sense_count;
     unsigned capacity_count;
     unsigned read_count;
+    unsigned write_count;
+    unsigned sync_count;
     unsigned max_read_sectors;
+    unsigned max_write_sectors;
+    unsigned write_protected;
+    unsigned write_rejected;
+    unsigned sync_unsupported;
+    unsigned sense_key;
 };
 
 static unsigned
@@ -97,6 +106,7 @@ fake_control(void *arg, const usb_device_request_t *request, void *buffer,
     fake->have_cbw = 0;
     fake->data_attempted = 0;
     fake->data_done = 0;
+    fake->write_rejected = 0;
     return USB_STATUS_NORMAL_COMPLETION;
 }
 
@@ -156,9 +166,11 @@ fake_data_in(struct fake_disk *fake, void *data, size_t length,
         memset(data, 0, length);
         if (length >= UMASS_SENSE_LENGTH) {
             bytes[0] = 0x70;
-            bytes[2] = 0x06;
+            bytes[2] = (unsigned char)(fake->sense_key != 0 ?
+                fake->sense_key : 0x06u);
             bytes[7] = 10;
         }
+        fake->sense_key = 0;
         ++fake->sense_count;
         break;
     case SCSI_READ_CAPACITY_10:
@@ -189,6 +201,40 @@ fake_data_in(struct fake_disk *fake, void *data, size_t length,
 }
 
 static usb_error_t
+fake_data_out(struct fake_disk *fake, const void *data, size_t length,
+    size_t *actlenp)
+{
+    unsigned lba;
+    unsigned opcode;
+    unsigned sectors;
+
+    opcode = fake->cbw.CBWCDB[0];
+    fake->data_attempted = 1;
+    if (fake->data_stall_once != 0) {
+        fake->data_stall_once = 0;
+        return USB_STATUS_STALLED;
+    }
+    if (opcode != SCSI_WRITE_10)
+        return USB_STATUS_IO_ERROR;
+    lba = get_be32(fake->cbw.CBWCDB + 2);
+    sectors = get_be16(fake->cbw.CBWCDB + 7);
+    if (sectors == 0 || sectors > FAKE_SECTORS ||
+        lba > FAKE_SECTORS - sectors ||
+        length != sectors * UMASS_SECTOR_SIZE)
+        return USB_STATUS_IO_ERROR;
+    if (fake->write_protected)
+        fake->write_rejected = 1;
+    else
+        memcpy(fake->storage + lba * UMASS_SECTOR_SIZE, data, length);
+    ++fake->write_count;
+    if (sectors > fake->max_write_sectors)
+        fake->max_write_sectors = sectors;
+    fake->data_done = 1;
+    *actlenp = length;
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+static usb_error_t
 fake_csw(struct fake_disk *fake, void *buffer, size_t *actlenp)
 {
     struct umass_bbb_csw *csw;
@@ -210,6 +256,15 @@ fake_csw(struct fake_disk *fake, void *buffer, size_t *actlenp)
         if (fake->tur_failures != 0) {
             --fake->tur_failures;
             csw->bCSWStatus = UMASS_BBB_CSW_FAILED;
+        }
+    } else if (opcode == SCSI_WRITE_10 && fake->write_rejected) {
+        csw->bCSWStatus = UMASS_BBB_CSW_FAILED;
+        fake->write_rejected = 0;
+    } else if (opcode == SCSI_SYNCHRONIZE_CACHE_10) {
+        ++fake->sync_count;
+        if (fake->sync_unsupported) {
+            csw->bCSWStatus = UMASS_BBB_CSW_FAILED;
+            fake->sense_key = 0x05u;
         }
     }
     *actlenp = sizeof(*csw);
@@ -259,6 +314,9 @@ fake_bulk(void *arg, unsigned direction, void *buffer, size_t length,
     if (direction == UMASS_DIR_IN &&
         length == UGETDW(fake->cbw.dCBWDataTransferLength))
         return fake_data_in(fake, buffer, length, actlenp);
+    if (direction == UMASS_DIR_OUT &&
+        length == UGETDW(fake->cbw.dCBWDataTransferLength))
+        return fake_data_out(fake, buffer, length, actlenp);
     return USB_STATUS_IO_ERROR;
 }
 
@@ -269,12 +327,15 @@ static const struct umass_bbb_ops fake_ops = {
 };
 
 static int
-test_probe_and_chunked_read(void)
+test_probe_and_chunked_io(void)
 {
     struct fake_disk fake;
     struct umass_bbb bbb;
     struct umass_media media;
     unsigned char data[20 * UMASS_SECTOR_SIZE];
+    unsigned char write_data[20 * UMASS_SECTOR_SIZE];
+    unsigned cbw_count;
+    unsigned i;
 
     fake_init(&fake);
     fake.tur_failures = 1;
@@ -294,6 +355,67 @@ test_probe_and_chunked_read(void)
         sizeof(data)) == 0);
     CHECK(fake.read_count == 2);
     CHECK(fake.max_read_sectors == UMASS_MAX_READ_SECTORS);
+
+    for (i = 0; i < sizeof(write_data); ++i)
+        write_data[i] = (unsigned char)(0xa5u ^ i);
+    CHECK(umass_media_write(&media, 8, 20, write_data) == UMASS_BBB_OK);
+    CHECK(memcmp(fake.storage + 8 * UMASS_SECTOR_SIZE, write_data,
+        sizeof(write_data)) == 0);
+    CHECK(fake.write_count == 2);
+    CHECK(fake.max_write_sectors == UMASS_MAX_WRITE_SECTORS);
+    CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
+    CHECK(fake.sync_count == 1);
+
+    cbw_count = fake.cbw_count;
+    CHECK(umass_media_write(&media, FAKE_SECTORS - 1, 2, write_data) ==
+        UMASS_BBB_WIRE_FAILED);
+    CHECK(bbb.ub_last_error == USB_STATUS_INVALID);
+    CHECK(fake.cbw_count == cbw_count);
+    return 0;
+}
+
+static int
+test_write_failures_and_optional_flush(void)
+{
+    struct fake_disk fake;
+    struct umass_bbb bbb;
+    struct umass_media media;
+    unsigned char before[UMASS_SECTOR_SIZE];
+    unsigned char data[UMASS_SECTOR_SIZE];
+    unsigned resets;
+    unsigned sync_count;
+
+    fake_init(&fake);
+    memset(data, 0x5a, sizeof(data));
+    umass_bbb_init(&bbb, &fake_ops, &fake, 0);
+    umass_media_init(&media, &bbb);
+    CHECK(umass_media_probe(&media) == UMASS_BBB_OK);
+
+    memcpy(before, fake.storage + 3 * UMASS_SECTOR_SIZE, sizeof(before));
+    fake.write_protected = 1;
+    CHECK(umass_media_write(&media, 3, 1, data) ==
+        UMASS_BBB_COMMAND_FAILED);
+    CHECK(memcmp(fake.storage + 3 * UMASS_SECTOR_SIZE, before,
+        sizeof(before)) == 0);
+
+    fake.write_protected = 0;
+    resets = fake.reset_count;
+    fake.fail_next_bulk = USB_STATUS_DISCONNECTED;
+    CHECK(umass_media_write(&media, 3, 1, data) ==
+        UMASS_BBB_WIRE_FAILED);
+    CHECK(bbb.ub_last_error == USB_STATUS_DISCONNECTED);
+    CHECK(fake.reset_count == resets);
+    CHECK(memcmp(fake.storage + 3 * UMASS_SECTOR_SIZE, before,
+        sizeof(before)) == 0);
+
+    fake.sync_unsupported = 1;
+    CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
+    CHECK(media.um_no_sync_cache == 1);
+    CHECK(fake.sync_count == 1);
+    CHECK(fake.sense_count == 1);
+    sync_count = fake.sync_count;
+    CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
+    CHECK(fake.sync_count == sync_count);
     return 0;
 }
 
@@ -359,7 +481,8 @@ test_unsupported_sector_size(void)
 int
 main(void)
 {
-    CHECK(test_probe_and_chunked_read() == 0);
+    CHECK(test_probe_and_chunked_io() == 0);
+    CHECK(test_write_failures_and_optional_flush() == 0);
     CHECK(test_bot_error_paths() == 0);
     CHECK(test_unsupported_sector_size() == 0);
     puts("umass_test: all tests passed");

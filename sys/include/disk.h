@@ -53,5 +53,6 @@ struct diskpart {                   /* the partition table */
 #define DIOCREINIT       _IO ('d', 2)                   /* re-initialize device */
 #define DIOCGETPART      _IOR('d', 3, struct diskpart)  /* get partition */
 #define DIOCGETSECTORS   _IOR('d', 4, unsigned)         /* exact 512-byte count */
+#define DIOCFLUSH        _IO ('d', 5)                   /* flush media cache */
 
 #endif /* _SYS_DISK_H_ */

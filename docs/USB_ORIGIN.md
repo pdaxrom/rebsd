@@ -68,7 +68,7 @@ is updated as each later phase imports or materially adapts a source.
 | `sys/dev/usb/uhidev.h` | `sys/usb/uhidev.h` or compact equivalent | HID definitions needed by boot keyboards | reference only |
 | `sys/dev/usb/ukbd.c` | `sys/usb/ukbd.c` | HID boot keyboard only | compact boot-protocol adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ukbdmap.c` | `sys/usb/ukbdmap.c` | basic US key map | compact ASCII/terminal adaptation; original notice and RCS id retained |
-| `sys/dev/usb/umass.c` | `sys/usb/umass.c`, `sys/usb/umass_bbb.c` | single-LUN read-only BOT and compact SCSI command set | compact synchronous adaptation; original notices and RCS id retained |
+| `sys/dev/usb/umass.c` | `sys/usb/umass.c`, `sys/usb/umass_bbb.c` | single-LUN BOT and compact read/write SCSI command set | compact synchronous adaptation; original notices and RCS id retained |
 | `sys/dev/usb/umassvar.h` | `sys/usb/umassvar.h` | compact umass BOT state | compact adaptation; original notice and RCS id retained |
 
 The generated NetBSD `usbdevs.h` and `usbdevs_data.h` product-name database is
@@ -96,7 +96,7 @@ NetBSD USB sources:
 | `sys/usb/usb_task.h` | Fixed task record adapted from the classic `usbdi.h` concept; original notice and RCS id retained |
 | `sys/usb/uhub.h` | Native bounded root/external-hub state, child topology, and event interface |
 | `sys/usb/ukbd.h` | Bounded boot-report decoder and driver-registration interface |
-| `sys/usb/umass.h` | Native single-LUN SCSI command and read-only media interface; no partition or filesystem policy |
+| `sys/usb/umass.h` | Native single-LUN SCSI media interface with bounded read, write, and flush operations; no partition or filesystem policy |
 | `sys/disk/disk.[ch]` | Native transport-independent disk registry, `bdevsw` entry points, units/minors, and backend contract |
 | `sys/disk/disk_subr.c` | Native bounded classic-MBR parser shared by every disk transport |
 | `sys/tests/disk/` | Host tests for the common MBR/minor contract and the byte-exact `fdisk` MBR ABI |
