@@ -148,7 +148,7 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
     "$tmp.ssastrength.s" "$tmp.ssastrength.log" "$tmp.fpaccum.s" \
-    "$tmp.llpack.s" \
+    "$tmp.llpack.s" "$tmp.pointertemp.s" "$tmp.pointertemp.log" \
     "$tmp.staticspec.s" "$tmp.staticspec.os.s" "$tmp.staticspec.free.s" \
     "$tmp.staticspec.generic.s" \
     "$tmp.staticspec-stack.s" \
@@ -1706,5 +1706,45 @@ else
 	test "$pointer_single_global_int_slls" -eq 1
 	test "$pointer_single_global_unsigned_slls" -eq 1
 fi
+
+"$pcc" -Os -S -o "$tmp.pointertemp.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/pointertemp001.c" \
+    2>"$tmp.pointertemp.log"
+test ! -s "$tmp.pointertemp.log"
+for function in pointer_copy pointer_fill pointer_compare; do
+	stack_refs=$(awk -v symbol="$function" '
+	        $0 == (symbol ":") { inside = 1; next }
+        inside && $1 == ".ent" { inside = 0 }
+        inside && $0 ~ /\(\$fp\)/ &&
+            $1 ~ /^(lb|lbu|lh|lhu|lw|sb|sh|sw)$/ { count++ }
+        END { print count + 0 }
+    ' "$tmp.pointertemp.s")
+	test "$stack_refs" -eq 0
+done
+awk '
+/^pointer_address_taken:$/ { inside = 1; next }
+inside && $1 == ".ent" { inside = 0 }
+inside && /\(\$fp\)/ { stack = 1 }
+END { exit stack ? 0 : 1 }
+' "$tmp.pointertemp.s" || {
+	echo "address-taken pointer TEMP did not fall back to stack storage" >&2
+	exit 1
+}
+awk '
+/^pointer_symbol_select:$/ { inside = 1; next }
+inside && $1 == ".ent" { inside = 0 }
+inside && $1 == "la" && /\$at,pointer_symbol_entries/ { producer = NR }
+inside && producer && $1 == "addu" && /\$at/ && !consumer {
+	consumer = NR
+}
+inside && /pointer_symbol_gate/ { gate = NR }
+END {
+	exit producer && consumer && gate &&
+	    producer < consumer && consumer < gate ? 0 : 1
+}
+' "$tmp.pointertemp.s" || {
+	echo "symbol load clobbered a live assembler temporary" >&2
+	exit 1
+}
 
 echo "smoke-host-portablecc: ok"

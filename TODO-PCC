@@ -4936,6 +4936,49 @@ Milestone order:
     Linpack kernels remain within -1.02% to +0.93% of H8.  Ordinary PCC
     Linpack averages 3792.478 KFLOPS, 0.52% above H8, and reaches 85.25% of
     the current GCC mean.  This closes the H9A physical and commit gates.
+  - [x] H10 promotes ordinary non-volatile MIPS automatic pointer variables
+    through PCC's existing TEMP path.  `cisreg()` now accepts pointers; the
+    established front-end checks still reject volatile objects and pass2
+    still converts an address-taken TEMP back to stack storage.  No new pass,
+    register class, or MIPS-only allocator path is added.
+  - [x] Add `misc__pointertemp001` coverage for copy, fill, compare with early
+    return, address-taken fallback, and an indirect function pointer.  Host
+    assembly gates must show no frame-relative memory references in the three
+    pointer-walk loops while retaining stack storage for the address-taken
+    local.  The regression also covers a global table pointer followed by a
+    bare-symbol load, and is staged in the physical N64 compile-and-run gate.
+  - [x] Fix the assembly scheduler's hidden `$at` dependency for bare-symbol
+    integer and FPU loads/stores.  GAS expands those operands through `$at`;
+    moving another `$at` consumer across the pseudo-instruction corrupted the
+    self-hosted `ccom` keyword table.  The scheduler now treats the implicit
+    use as a real dependency, and the host regression verifies the order.
+  - [x] Pass H10 host, runtime, native, and six-profile full QEMU gates.  The
+    cross regression passes 302/302 runtime cases.  Native Malta64 reports
+    312 compile passes, 30 expected compile failures, and 302/302 runtime
+    passes.  All six Malta64/Malta/MaltaEL hard/soft full-smoke profiles report
+    `MIPS_COMPILER_BENCH_SELFTEST 0`, `PCC_SMOKE_ALL_FAILURES 0`, and final
+    `PCC_SMOKE_ALL_RC:0`; the focused optimizer probe reports zero selected
+    spills.  Complete general and Linpack results are recorded in the MIPS
+    scheduler report.
+  - [x] Build and retain a clean H10 GCC-kernel/PCC-VR4300-hard-float a.out
+    N64 image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h10-pointer-temp-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes, SHA-256
+    `7731ff096837bbb25f434ecbfa1d2808bfb5ad7a273b9a3b5ed7898fa23b582b`.
+    The stamp is `.build-mode.gcc.1.0.0.1`, all GCC controls and the kernel are
+    byte-identical to H9A, all benchmark binaries have zero undefined symbols,
+    and all five `fsutil --check` phases pass.
+  - [x] Run H10 on physical N64.  The new native `misc__pointertemp001` gate,
+    all general and Linpack self-tests, and every benchmark return code pass;
+    `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC` are zero and terminal
+    `N64_PCC_DEBUG_RC_END` is present.  PCC `libc_memory` rises from H9A's
+    22.252 to 38.912 Mwork/s, a 74.87% gain, and reaches 74.65% of GCC instead
+    of 42.99%.  Ordinary PCC Linpack averages 3774.106 KFLOPS, only 0.48%
+    below H9A and 84.79% of the current GCC mean.  Isolated PCC kernels range
+    from -0.78% to +5.08% versus H9A.  The raw `convert` timing is 4.72% lower,
+    but the H9A/H10 timed benchmark assembly is byte-identical; the only
+    source-assembly difference is in untimed `main`, so this is not an H10
+    generated-code regression.  This closes the H10 physical and commit gates.
 
 Success criteria:
 

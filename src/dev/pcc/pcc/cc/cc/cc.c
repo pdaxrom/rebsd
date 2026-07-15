@@ -1448,6 +1448,47 @@ mips_is_fpu_load(const char *op)
 }
 
 static int
+mips_is_int_store(const char *op)
+{
+	return strcmp(op, "sb") == 0 || strcmp(op, "sh") == 0 ||
+	    strcmp(op, "sw") == 0 || strcmp(op, "sd") == 0 ||
+	    strcmp(op, "swl") == 0 || strcmp(op, "swr") == 0;
+}
+
+static int
+mips_is_fpu_store(const char *op)
+{
+	return strcmp(op, "s.s") == 0 || strcmp(op, "s.d") == 0 ||
+	    strcmp(op, "swc1") == 0 || strcmp(op, "sdc1") == 0;
+}
+
+/*
+ * GAS expands a load or store of a bare symbol through $at.  Keep that
+ * hidden dependency visible to the assembly scheduler.
+ */
+static int
+mips_symbol_memory_uses_at(const char *line)
+{
+	char op[16];
+	const char *s;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    (!mips_is_int_load(op) && !mips_is_fpu_load(op) &&
+	    !mips_is_int_store(op) && !mips_is_fpu_store(op)))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	while (*s != '\0' && *s != '\n' && *s != '#' && *s != ',')
+		++s;
+	if (*s++ != ',')
+		return 0;
+	for (; *s != '\0' && *s != '\n' && *s != '#'; ++s)
+		if (*s == '(')
+			return 0;
+	return 1;
+}
+
+static int
 mips_alias_gpr(const char *name, size_t len)
 {
 	static const struct {
@@ -1754,6 +1795,8 @@ mips_line_touches_gpr(const char *line, unsigned long long regs)
 	const char *s;
 	int r;
 
+	if ((regs & (1ULL << 1)) != 0 && mips_symbol_memory_uses_at(line))
+		return 1;
 	if (mips_parse_opcode(line, op, sizeof(op)) &&
 	    (strcmp(op, "jal") == 0 || strcmp(op, "jalr") == 0) &&
 	    (regs & (1ULL << 31)) != 0)

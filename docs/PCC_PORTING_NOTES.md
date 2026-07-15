@@ -1477,6 +1477,42 @@ other general PCC kernels improve, and isolated Linpack kernels remain within
 0.52% above H8 and 85.25% of the current GCC mean.  This closes the H9A
 physical and commit gates.
 
+H10 enables PCC's existing automatic-variable `TEMP` path for non-volatile
+MIPS pointers.  Address-taken pointers still receive stack storage, so this is
+a target eligibility correction rather than a new optimizer or register
+allocator mechanism.  `misc__pointertemp001` covers copy, fill, early-return
+compare, address-taken fallback, an indirect function pointer, and a global
+table pointer.  Host assembly checks require no frame references in the three
+pointer walks and retain the address-taken stack slot.
+
+The first self-hosted build exposed a hidden dependency in the driver assembly
+scheduler: GAS expands a bare-symbol load or store through `$at`, but the
+scheduler did not model that implicit use and could move a live `$at` consumer
+past it.  The driver now treats bare-symbol integer and FPU memory operations
+as `$at` users.  A host ordering gate and the full native compiler regression
+cover the fix.
+
+Cross runtime regression passes 302/302 cases.  Native Malta64 reports 312
+compile passes, 30 expected compile failures, and 302/302 runtime passes.  All
+six Malta64/Malta/MaltaEL hard/soft full-smoke profiles pass with zero general
+self-test, smoke-failure, and final RC markers.  The retained physical
+candidate is
+`/Users/sash/Work/N64/retrobsd-build/n64-h10-pointer-temp-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 6619136 bytes, SHA-256
+`7731ff096837bbb25f434ecbfa1d2808bfb5ad7a273b9a3b5ed7898fa23b582b`.
+It uses a GCC kernel and PCC VR4300 hard-float a.out userland, passes all five
+rootfs checks, and has zero undefined symbols in all benchmark binaries.  The
+GCC controls are byte-identical to H9A, while PCC general, Linpack, and Linpack
+kernel section sizes fall by 1680, 1632, and 1632 bytes.  Physical N64
+validation passes every native, self-test, benchmark return-code, and final
+status gate.  PCC `libc_memory` improves from 22.252 to 38.912 Mwork/s, a
+74.87% gain, and reaches 74.65% of GCC instead of 42.99%.  PCC Linpack
+averages 3774.106 KFLOPS, 0.48% below H9A and 84.79% of GCC; isolated kernels
+range from -0.78% to +5.08%.  H9A and H10 timed general benchmark assembly is
+byte-identical outside the changed libc callees, so the raw `convert` timing
+outlier is not a code-generation regression.  This closes the H10 physical
+and commit gates.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

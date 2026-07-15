@@ -421,6 +421,8 @@ andable(NODE *p)
 int
 cisreg(TWORD t)
 {
+	if (ISPTR(t))
+		return 1;
 	if (!mips_soft_float &&
 	    (t == FLOAT || t == DOUBLE || t == LDOUBLE))
 		return 1;
