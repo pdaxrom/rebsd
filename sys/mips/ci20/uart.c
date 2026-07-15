@@ -62,6 +62,7 @@ static unsigned ci20_ohci_irqs_since_tick;
 extern int ci20_ehci_intr(void);
 extern void ci20_ehci_irq_storm(void);
 static unsigned ci20_ehci_irqs_since_tick;
+static unsigned ci20_ehci_irq_quarantined;
 #endif
 #ifdef INET
 extern int netisr;
@@ -428,12 +429,17 @@ mips_board_intr(int *frame, unsigned status)
 #endif
 #ifdef EHCI_ENABLED
         ci20_ehci_irqs_since_tick = 0;
+        if (ci20_ehci_irq_quarantined) {
+            ci20_ehci_irq_quarantined = 0;
+            intc_unmask(CI20_EHCI_IRQ);
+        }
 #endif
     }
 #ifdef EHCI_ENABLED
     if (intc_pending(CI20_EHCI_IRQ)) {
         if (++ci20_ehci_irqs_since_tick > 32) {
             intc_mask(CI20_EHCI_IRQ);
+            ci20_ehci_irq_quarantined = 1;
             ci20_ehci_irq_storm();
         } else
             (void)ci20_ehci_intr();

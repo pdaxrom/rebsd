@@ -146,6 +146,17 @@ ehci_phys(struct ehci_softc *sc, const void *vaddr)
     return sc->eh_schedule_dma.dm_paddr + (unsigned int)(ptr - base);
 }
 
+static size_t
+ehci_dma_offset(struct ehci_softc *sc, const void *vaddr)
+{
+    const uByte *base;
+    const uByte *ptr;
+
+    base = (const uByte *)sc->eh_schedule_dma.dm_vaddr;
+    ptr = (const uByte *)vaddr;
+    return (size_t)(ptr - base);
+}
+
 static usb_error_t ehci_hcd_start(struct usb_hcd *);
 static void ehci_hcd_stop(struct usb_hcd *);
 static usb_error_t ehci_hcd_open_pipe(struct usb_pipe *);
@@ -489,8 +500,14 @@ ehci_interrupt_uframe(struct ehci_softc *sc, struct ehci_pipe *epipe)
     unsigned i;
     unsigned uframe;
 
-    limit = epipe->ep_pipe->up_device->ud_speed == USB_SPEED_HIGH ?
-        8u : 4u;
+    if (epipe->ep_pipe->up_device->ud_speed == USB_SPEED_HIGH) {
+        uframe = 0;
+        limit = 8u;
+    } else {
+        /* NetBSD schedules split interrupt starts in Y1, never Y0. */
+        uframe = 1u;
+        limit = 4u;
+    }
     used = 0;
     for (i = 0; i < USB_MAX_PIPES; ++i) {
         other = &sc->eh_pipes[i];
@@ -502,10 +519,12 @@ ehci_interrupt_uframe(struct ehci_softc *sc, struct ehci_pipe *epipe)
             ehci_interrupt_frames_overlap(epipe, other))
             used |= 1u << other->ep_intr_uframe;
     }
-    for (uframe = 0; uframe < limit; ++uframe)
+    for (; uframe < limit; ++uframe)
         if ((used & (1u << uframe)) == 0)
             return uframe;
-    return epipe->ep_intr_slot & (limit - 1u);
+    return epipe->ep_pipe->up_device->ud_speed == USB_SPEED_HIGH ?
+        (epipe->ep_intr_slot & 7u) :
+        (1u + (epipe->ep_intr_slot % 3u));
 }
 
 static void
@@ -555,14 +574,15 @@ ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
             EHCI_QH_SET_PORT(device->ud_tt_port);
         if (type == UE_INTERRUPT) {
             /*
-             * Spread start-splits over Y0..Y3 and permit three consecutive
-             * complete-split opportunities two microframes later.  This is
-             * the same S-mask/C-mask shape selected by Linux's
-             * check_intr_schedule().
+             * Use the exact NetBSD 3.1 interrupt split: start in Y1 and a
+             * single complete-split opportunity in Y3.  Multiple C-mask
+             * bits let ReBSD's immediate completion callback rearm this QH
+             * between Y3 and Y5; JZ4780 then observes a fresh qTD without a
+             * matching start split and reports MISSEDMICRO with CERR intact.
              */
             start_uframe = epipe->ep_intr_uframe;
             endphub |= EHCI_QH_SET_SMASK(1u << start_uframe) |
-                EHCI_QH_SET_CMASK(7u << (start_uframe + 2u));
+                EHCI_QH_SET_CMASK(1u << (start_uframe + 2u));
         }
     } else if (type == UE_INTERRUPT) {
         start_uframe = epipe->ep_intr_uframe;
@@ -576,79 +596,193 @@ ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
         ehci_to_le32(EHCI_QTD_HALTED) : 0;
 }
 
-static usb_error_t
-ehci_rebuild_periodic(struct ehci_softc *sc)
+static struct ehci_pipe *
+ehci_periodic_pipe_from_link(struct ehci_softc *sc, unsigned int link)
 {
-    struct ehci_pipe *scheduled[EHCI_INTR_SLOTS];
-    struct ehci_pipe *epipe;
-    struct ehci_pipe *next;
-    unsigned type;
-    unsigned count;
-    unsigned frame;
+    unsigned int address;
     unsigned i;
-    unsigned j;
-    unsigned k;
-    unsigned was_running;
-    int sync_error;
 
-    was_running = (ehci_op_read(sc, EHCI_USBCMD) & EHCI_CMD_PSE) != 0;
-    if (ehci_periodic_pause(sc) != 0)
-        return USB_STATUS_TIMEOUT;
-    for (i = 0; i < EHCI_FRAME_LIST_COUNT; ++i)
-        sc->eh_frame_list[i] = ehci_to_le32(EHCI_LINK_TERMINATE);
-    count = 0;
+    if ((link & EHCI_LINK_TERMINATE) != 0 ||
+        (link & EHCI_LINK_TYPE_MASK) != EHCI_LINK_QH)
+        return 0;
+    address = EHCI_LINK_ADDR(link);
+    for (i = 0; i < USB_MAX_PIPES; ++i)
+        if (sc->eh_pipes[i].ep_used && sc->eh_pipes[i].ep_qh != 0 &&
+            ehci_phys(sc, sc->eh_pipes[i].ep_qh) == address)
+            return &sc->eh_pipes[i];
+    return 0;
+}
+
+static int
+ehci_periodic_any_linked(struct ehci_softc *sc)
+{
+    unsigned i;
+
+    for (i = 0; i < USB_MAX_PIPES; ++i)
+        if (sc->eh_pipes[i].ep_used &&
+            sc->eh_pipes[i].ep_periodic_linked)
+            return 1;
+    return 0;
+}
+
+static usb_error_t
+ehci_periodic_sync_links(struct ehci_softc *sc)
+{
+    struct ehci_pipe *epipe;
+    unsigned i;
+
+    if (dma_sync_for_device(&sc->eh_schedule_dma,
+        EHCI_FRAME_LIST_OFFSET,
+        EHCI_FRAME_LIST_COUNT * sizeof(sc->eh_frame_list[0]),
+        DMA_BIDIRECTIONAL) != 0)
+        return USB_STATUS_IO_ERROR;
     for (i = 0; i < USB_MAX_PIPES; ++i) {
         epipe = &sc->eh_pipes[i];
-        if (!epipe->ep_used || epipe->ep_pipe == 0)
+        if (!epipe->ep_used || epipe->ep_qh == 0)
             continue;
-        type = UE_GET_XFERTYPE(epipe->ep_pipe->up_endpoint->
-            ue_desc.bmAttributes);
-        if (type != UE_INTERRUPT)
-            continue;
-        /* Linux orders each periodic branch from slow to fast. */
-        for (j = count; j != 0 &&
-            scheduled[j - 1u]->ep_intr_period < epipe->ep_intr_period;
-            --j)
-            scheduled[j] = scheduled[j - 1u];
-        scheduled[j] = epipe;
-        ++count;
+        if (dma_sync_for_device(&sc->eh_schedule_dma,
+            ehci_dma_offset(sc, &epipe->ep_qh->qh_link),
+            sizeof(epipe->ep_qh->qh_link), DMA_BIDIRECTIONAL) != 0)
+            return USB_STATUS_IO_ERROR;
+    }
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+/*
+ * Link a periodic QH without stopping the periodic schedule.  Like Linux,
+ * publish the new QH's horizontal link before publishing any frame-list or
+ * predecessor link which makes the controller able to reach it.
+ */
+static usb_error_t
+ehci_periodic_link(struct ehci_softc *sc, struct ehci_pipe *epipe)
+{
+    struct ehci_pipe *current;
+    unsigned int *linkp;
+    unsigned int link;
+    unsigned int next;
+    unsigned int target;
+    unsigned frame;
+    int have_next;
+    usb_error_t status;
+
+    if (epipe->ep_periodic_linked)
+        return USB_STATUS_NORMAL_COMPLETION;
+    target = ehci_phys(sc, epipe->ep_qh) | EHCI_LINK_QH;
+    next = EHCI_LINK_TERMINATE;
+    have_next = 0;
+
+    /* Validate every branch and determine the one shared successor. */
+    for (frame = epipe->ep_intr_phase; frame < EHCI_FRAME_LIST_COUNT;
+        frame += epipe->ep_intr_period) {
+        linkp = &sc->eh_frame_list[frame];
+        for (;;) {
+            link = ehci_from_le32(*linkp);
+            if ((link & EHCI_LINK_TERMINATE) != 0)
+                break;
+            if (EHCI_LINK_ADDR(link) == EHCI_LINK_ADDR(target))
+                return USB_STATUS_INVALID;
+            current = ehci_periodic_pipe_from_link(sc, link);
+            if (current == 0)
+                return USB_STATUS_IO_ERROR;
+            if (epipe->ep_intr_period > current->ep_intr_period)
+                break;
+            linkp = &current->ep_qh->qh_link;
+        }
+        link = ehci_from_le32(*linkp);
+        if (!have_next) {
+            next = link;
+            have_next = 1;
+        } else if (next != link) {
+            return USB_STATUS_IO_ERROR;
+        }
     }
 
-    /*
-     * Power-of-two periods make phases either disjoint or nested.  A QH's
-     * horizontal link can therefore point at the first faster QH whose
-     * phase is present in every frame occupied by this QH.
-     */
-    for (i = 0; i < count; ++i) {
-        next = 0;
-        for (j = i + 1u; j < count; ++j)
-            if ((scheduled[i]->ep_intr_phase &
-                (scheduled[j]->ep_intr_period - 1u)) ==
-                scheduled[j]->ep_intr_phase) {
-                next = scheduled[j];
+    epipe->ep_qh->qh_link = ehci_to_le32(next);
+    if (dma_sync_for_device(&sc->eh_schedule_dma,
+        ehci_dma_offset(sc, &epipe->ep_qh->qh_link),
+        sizeof(epipe->ep_qh->qh_link), DMA_BIDIRECTIONAL) != 0)
+        return USB_STATUS_IO_ERROR;
+
+    /* Insert it in every matching frame branch, slow QHs before fast QHs. */
+    for (frame = epipe->ep_intr_phase; frame < EHCI_FRAME_LIST_COUNT;
+        frame += epipe->ep_intr_period) {
+        linkp = &sc->eh_frame_list[frame];
+        for (;;) {
+            link = ehci_from_le32(*linkp);
+            if ((link & EHCI_LINK_TERMINATE) != 0 ||
+                EHCI_LINK_ADDR(link) == EHCI_LINK_ADDR(target))
                 break;
-            }
-        scheduled[i]->ep_qh->qh_link = ehci_to_le32(next == 0 ?
-            EHCI_LINK_TERMINATE :
-            (ehci_phys(sc, next->ep_qh) | EHCI_LINK_QH));
+            current = ehci_periodic_pipe_from_link(sc, link);
+            if (current == 0)
+                return USB_STATUS_IO_ERROR;
+            if (epipe->ep_intr_period > current->ep_intr_period)
+                break;
+            linkp = &current->ep_qh->qh_link;
+        }
+        if ((link & EHCI_LINK_TERMINATE) != 0 ||
+            EHCI_LINK_ADDR(link) != EHCI_LINK_ADDR(target))
+            *linkp = ehci_to_le32(target);
     }
-    for (frame = 0; frame < EHCI_FRAME_LIST_COUNT; ++frame)
-        for (k = 0; k < count; ++k)
-            if ((frame & (scheduled[k]->ep_intr_period - 1u)) ==
-                scheduled[k]->ep_intr_phase) {
-                sc->eh_frame_list[frame] = ehci_to_le32(
-                    ehci_phys(sc, scheduled[k]->ep_qh) | EHCI_LINK_QH);
+    status = ehci_periodic_sync_links(sc);
+    if (status != USB_STATUS_NORMAL_COMPLETION)
+        return status;
+    epipe->ep_periodic_linked = 1;
+    if ((ehci_op_read(sc, EHCI_USBCMD) & EHCI_CMD_PSE) == 0)
+        ehci_periodic_resume(sc);
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+/*
+ * Unlink without globally stopping PSE.  After the links are no longer
+ * visible, wait longer than EHCI's nine-microframe reclamation interval
+ * before the caller is allowed to reuse the QH.
+ */
+static usb_error_t
+ehci_periodic_unlink(struct ehci_softc *sc, struct ehci_pipe *epipe)
+{
+    struct ehci_pipe *current;
+    unsigned int *linkp;
+    unsigned int link;
+    unsigned int next;
+    unsigned int target;
+    unsigned frame;
+    unsigned was_running;
+    usb_error_t status;
+
+    if (!epipe->ep_periodic_linked)
+        return USB_STATUS_NORMAL_COMPLETION;
+    target = ehci_phys(sc, epipe->ep_qh) | EHCI_LINK_QH;
+    next = ehci_from_le32(epipe->ep_qh->qh_link);
+    was_running = (ehci_op_read(sc, EHCI_USBCMD) & EHCI_CMD_PSE) != 0;
+
+    for (frame = epipe->ep_intr_phase; frame < EHCI_FRAME_LIST_COUNT;
+        frame += epipe->ep_intr_period) {
+        linkp = &sc->eh_frame_list[frame];
+        for (;;) {
+            link = ehci_from_le32(*linkp);
+            if ((link & EHCI_LINK_TERMINATE) != 0)
+                break;
+            if (EHCI_LINK_ADDR(link) == EHCI_LINK_ADDR(target)) {
+                *linkp = ehci_to_le32(next);
                 break;
             }
-    sync_error = dma_sync_for_device(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
-    /* Linux waits nine microframes before reusing an unlinked intr QH. */
+            current = ehci_periodic_pipe_from_link(sc, link);
+            if (current == 0)
+                return USB_STATUS_IO_ERROR;
+            linkp = &current->ep_qh->qh_link;
+        }
+    }
+    epipe->ep_periodic_linked = 0;
+    status = ehci_periodic_sync_links(sc);
+    if (status != USB_STATUS_NORMAL_COMPLETION)
+        return status;
     if (was_running)
         ehci_delay(sc, 2);
-    if (count != 0)
-        ehci_periodic_resume(sc);
-    return sync_error == 0 ? USB_STATUS_NORMAL_COMPLETION :
-        USB_STATUS_IO_ERROR;
+    if (!ehci_periodic_any_linked(sc) &&
+        ehci_periodic_pause(sc) != 0)
+        return USB_STATUS_TIMEOUT;
+    epipe->ep_qh->qh_link = ehci_to_le32(EHCI_LINK_TERMINATE);
+    return USB_STATUS_NORMAL_COMPLETION;
 }
 
 static usb_error_t
@@ -709,7 +843,7 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
                 EHCI_LINK_TERMINATE, type != UE_INTERRUPT);
             if (type == UE_INTERRUPT) {
                 sc->eh_intr_slots[slot].eis_pipe = &sc->eh_pipes[i];
-                status = ehci_rebuild_periodic(sc);
+                status = ehci_periodic_link(sc, &sc->eh_pipes[i]);
                 if (status != USB_STATUS_NORMAL_COMPLETION) {
                     sc->eh_intr_slots[slot].eis_pipe = 0;
                     ehci_zero(sc->eh_pipes[i].ep_qh,
@@ -753,14 +887,13 @@ ehci_hcd_close_pipe(struct usb_pipe *pipe)
     if (epipe != 0) {
         type = UE_GET_XFERTYPE(pipe->up_endpoint->ue_desc.bmAttributes);
         if (type == UE_INTERRUPT) {
+            (void)ehci_periodic_unlink(sc, epipe);
             slot = epipe->ep_intr_slot;
             if (slot < EHCI_INTR_SLOTS) {
                 sc->eh_intr_slots[slot].eis_xfer = 0;
                 sc->eh_intr_slots[slot].eis_pipe = 0;
                 sc->eh_intr_slots[slot].eis_length = 0;
             }
-            epipe->ep_used = 0;
-            (void)ehci_rebuild_periodic(sc);
         }
         if (epipe->ep_qh != 0)
             ehci_zero(epipe->ep_qh, sizeof(*epipe->ep_qh));
@@ -824,17 +957,29 @@ static usb_error_t
 ehci_qh_set_interrupt_qtd(struct ehci_softc *sc, struct ehci_qh *qh,
     unsigned int qtd_phys)
 {
+    size_t qh_offset;
+    size_t status_offset;
+    unsigned int status;
     unsigned i;
 
     /*
-     * This QH remains linked in the periodic schedule.  Freeze its overlay
-     * and publish that state before changing the current/next qTD fields;
-     * otherwise the controller can fetch a half-updated overlay.  This is
-     * the ordering used by NetBSD's ehci_set_qh_qtd().
+     * Follow NetBSD's ehci_set_qh_qtd() ordering: first observe and preserve
+     * the controller's toggle/ping state, publish HALTED, replace the
+     * inactive overlay, and only then clear HALTED.  Split interrupt QHs are
+     * unlinked before this routine is called; high-speed QHs may remain in
+     * the tree.  Stopping the complete periodic schedule here loses cached
+     * QHs on JZ4780 and stalls every interrupt endpoint.
      */
+    qh_offset = ehci_dma_offset(sc, qh);
+    status_offset = ehci_dma_offset(sc, &qh->qh_qtd.qtd_status);
+    if (dma_sync_for_cpu(&sc->eh_schedule_dma, qh_offset,
+        sizeof(*qh), DMA_BIDIRECTIONAL) != 0)
+        return USB_STATUS_IO_ERROR;
+    status = ehci_from_le32(qh->qh_qtd.qtd_status) &
+        (EHCI_QTD_SET_TOGGLE(1) | EHCI_QTD_PINGSTATE);
     qh->qh_qtd.qtd_status = ehci_to_le32(EHCI_QTD_HALTED);
-    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+    if (dma_sync_for_device(&sc->eh_schedule_dma, status_offset,
+        sizeof(qh->qh_qtd.qtd_status), DMA_BIDIRECTIONAL) != 0)
         return USB_STATUS_IO_ERROR;
     qh->qh_curqtd = 0;
     qh->qh_qtd.qtd_next = ehci_to_le32(qtd_phys);
@@ -843,12 +988,12 @@ ehci_qh_set_interrupt_qtd(struct ehci_softc *sc, struct ehci_qh *qh,
         qh->qh_qtd.qtd_buffer[i] = 0;
         qh->qh_qtd.qtd_buffer_hi[i] = 0;
     }
-    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+    if (dma_sync_for_device(&sc->eh_schedule_dma, qh_offset,
+        sizeof(*qh), DMA_BIDIRECTIONAL) != 0)
         return USB_STATUS_IO_ERROR;
-    qh->qh_qtd.qtd_status = 0;
-    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0) {
+    qh->qh_qtd.qtd_status = ehci_to_le32(status);
+    if (dma_sync_for_device(&sc->eh_schedule_dma, status_offset,
+        sizeof(qh->qh_qtd.qtd_status), DMA_BIDIRECTIONAL) != 0) {
         qh->qh_qtd.qtd_status = ehci_to_le32(EHCI_QTD_HALTED);
         return USB_STATUS_IO_ERROR;
     }
@@ -887,12 +1032,24 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
         epipe->ep_toggle, slot->eis_buffer, (unsigned)xfer->ux_length,
         EHCI_LINK_TERMINATE, EHCI_LINK_TERMINATE, 1);
 
+    if (dma_sync_for_device(&sc->eh_schedule_dma,
+        ehci_dma_offset(sc, slot->eis_qtd), sizeof(*slot->eis_qtd),
+        DMA_BIDIRECTIONAL) != 0)
+        return USB_STATUS_IO_ERROR;
+
     qh = epipe->ep_qh;
     slot->eis_xfer = xfer;
     slot->eis_length = (unsigned)xfer->ux_length;
     epipe->ep_xacterrs = 0;
     ehci_op_write(sc, EHCI_USBSTS, EHCI_STS_INT | EHCI_STS_ERRINT);
     status = ehci_qh_set_interrupt_qtd(sc, qh, qtd_phys);
+    if (status != USB_STATUS_NORMAL_COMPLETION) {
+        ehci_qh_idle(qh);
+        slot->eis_xfer = 0;
+        slot->eis_length = 0;
+        return status;
+    }
+    status = ehci_periodic_link(sc, epipe);
     if (status != USB_STATUS_NORMAL_COMPLETION) {
         ehci_qh_idle(qh);
         slot->eis_xfer = 0;
@@ -1062,30 +1219,54 @@ ehci_qtd_result(unsigned int token)
 }
 
 static int
+ehci_device_present(struct ehci_softc *sc, struct ehci_pipe *epipe)
+{
+    struct usb_device *device;
+    unsigned int port_status;
+    unsigned port;
+
+    if (sc->eh_root_change_pending)
+        return 0;
+    device = epipe->ep_pipe->up_device;
+    while (device->ud_parent_hub != 0)
+        device = device->ud_parent_hub;
+    port = device->ud_port;
+    if (port == 0 || port > sc->eh_nports)
+        return 0;
+    port_status = ehci_op_read(sc, EHCI_PORTSC(port));
+    return (port_status & (EHCI_PS_CS | EHCI_PS_PO)) == EHCI_PS_CS;
+}
+
+static int
 ehci_retry_xacterr(struct ehci_softc *sc, struct ehci_pipe *epipe,
     struct ehci_qtd *qtd, unsigned int token)
 {
     if ((token & (EHCI_QTD_HALTED | EHCI_QTD_XACTERR)) !=
         (EHCI_QTD_HALTED | EHCI_QTD_XACTERR) ||
         EHCI_QTD_GET_CERR(token) != 0 ||
-        ++epipe->ep_xacterrs >= EHCI_XACTERR_RETRY_MAX)
+        !ehci_device_present(sc, epipe))
+        return 0;
+    if (++epipe->ep_xacterrs >= EHCI_XACTERR_RETRY_MAX)
         return 0;
 
     /*
-     * EHCI hardware has exhausted its three transaction attempts.  Linux
-     * qh_completions() retries this condition in software because split
-     * transactions can transiently exhaust CERR without losing the device.
-     * Preserve the transfer state (including SPLITXSTATE and data toggle),
-     * clear HALTED, and give both the qTD and QH overlay three new attempts.
+     * Retry only after hardware consumed all three CERR attempts.  A token
+     * with MISSEDMICRO and CERR still nonzero describes a scheduling fault,
+     * not an exhausted transaction; replaying the same overlay cannot fix
+     * it.  Linux likewise publishes a software retry only for CERR == 0.
      */
     token &= ~(EHCI_QTD_HALTED | EHCI_QTD_CERR_MASK);
     token |= EHCI_QTD_ACTIVE | EHCI_QTD_SET_CERR(3);
     qtd->qtd_status = ehci_to_le32(token);
-    epipe->ep_qh->qh_qtd.qtd_status = ehci_to_le32(token);
-    if (dma_sync_for_device(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+    if (dma_sync_for_device(&sc->eh_schedule_dma,
+        ehci_dma_offset(sc, &qtd->qtd_status), sizeof(qtd->qtd_status),
+        DMA_BIDIRECTIONAL) != 0)
         return 0;
-    return 1;
+    epipe->ep_qh->qh_qtd.qtd_status = ehci_to_le32(token);
+    return dma_sync_for_device(&sc->eh_schedule_dma,
+        ehci_dma_offset(sc, &epipe->ep_qh->qh_qtd.qtd_status),
+        sizeof(epipe->ep_qh->qh_qtd.qtd_status),
+        DMA_BIDIRECTIONAL) == 0;
 }
 
 static void
@@ -1164,7 +1345,7 @@ ehci_hcd_abort_xfer(struct usb_xfer *xfer)
     struct ehci_pipe *epipe;
     struct ehci_intr_slot *slot;
     unsigned type;
-    unsigned was_running;
+    usb_error_t status;
 
     sc = (struct ehci_softc *)xfer->ux_device->ud_bus->ub_hcd->uh_softc;
     epipe = ehci_find_pipe(sc, xfer->ux_pipe);
@@ -1178,17 +1359,15 @@ ehci_hcd_abort_xfer(struct usb_xfer *xfer)
         slot = &sc->eh_intr_slots[epipe->ep_intr_slot];
         if (slot->eis_xfer != xfer)
             return USB_STATUS_INVALID;
-        was_running = (ehci_op_read(sc, EHCI_USBCMD) &
-            EHCI_CMD_PSE) != 0;
-        if (was_running && ehci_periodic_pause(sc) == 0)
-            ehci_delay(sc, 2);
+        status = ehci_periodic_unlink(sc, epipe);
+        if (status != USB_STATUS_NORMAL_COMPLETION)
+            return status;
         ehci_qh_idle(epipe->ep_qh);
         slot->eis_xfer = 0;
         slot->eis_length = 0;
-        (void)dma_sync_for_device(&sc->eh_schedule_dma, 0,
-            EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
-        if (was_running)
-            ehci_periodic_resume(sc);
+        (void)dma_sync_for_device(&sc->eh_schedule_dma,
+            ehci_dma_offset(sc, epipe->ep_qh), sizeof(*epipe->ep_qh),
+            DMA_BIDIRECTIONAL);
         return USB_STATUS_NORMAL_COMPLETION;
     }
     if (sc->eh_active_xfer != xfer)
@@ -1288,6 +1467,7 @@ ehci_poll_interrupts(struct ehci_softc *sc)
     unsigned i;
     size_t actlen;
     usb_error_t result;
+    usb_error_t unlink_status;
 
     for (i = 0; i < EHCI_INTR_SLOTS; ++i) {
         slot = &sc->eh_intr_slots[i];
@@ -1317,6 +1497,21 @@ ehci_poll_interrupts(struct ehci_softc *sc)
             if (actlen != 0)
                 ehci_copy(xfer->ux_buffer, slot->eis_buffer, actlen);
         }
+        /*
+         * Linux keeps an interrupt QH safe by appending through its dummy
+         * qTD.  ReBSD has one fixed qTD per interrupt slot, so it must not
+         * reload a split QH overlay while the controller can still visit it
+         * later in the current frame.  Unlink before the class callback;
+         * an immediate repeat submission will prepare the inactive QH and
+         * atomically link it back.  The high-speed hub QH remains linked, so
+         * this does not cycle the complete periodic schedule.
+         */
+        if (xfer->ux_device->ud_speed != USB_SPEED_HIGH) {
+            unlink_status = ehci_periodic_unlink(sc, epipe);
+            if (unlink_status != USB_STATUS_NORMAL_COMPLETION &&
+                result == USB_STATUS_NORMAL_COMPLETION)
+                result = unlink_status;
+        }
 #ifdef KERNEL
         if (result != USB_STATUS_NORMAL_COMPLETION)
             printf("ehci: periodic addr=%u endpoint=%x failed "
@@ -1332,8 +1527,9 @@ ehci_poll_interrupts(struct ehci_softc *sc)
         ehci_qh_idle(epipe->ep_qh);
         slot->eis_xfer = 0;
         slot->eis_length = 0;
-        (void)dma_sync_for_device(&sc->eh_schedule_dma, 0,
-            EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL);
+        (void)dma_sync_for_device(&sc->eh_schedule_dma,
+            ehci_dma_offset(sc, epipe->ep_qh), sizeof(*epipe->ep_qh),
+            DMA_BIDIRECTIONAL);
         usb_xfer_complete(xfer, result, actlen);
     }
 }
@@ -1538,6 +1734,8 @@ ehci_root_intr_enable(struct ehci_softc *sc, int on)
         return;
     enabled = ehci_op_read(sc, EHCI_USBINTR);
     if (on) {
+        /* Root-hub exploration has reconciled the complete old tree. */
+        sc->eh_root_change_pending = 0;
         enabled |= EHCI_INTR_PCIE;
         sc->eh_root_intr_enabled = 1;
     } else {
@@ -1551,16 +1749,30 @@ int
 ehci_intr(struct ehci_softc *sc)
 {
     unsigned int enabled;
+    unsigned int pending;
     unsigned int status;
 
     if (sc == 0 || !sc->eh_started)
         return 0;
     enabled = ehci_op_read(sc, EHCI_USBINTR);
-    status = ehci_op_read(sc, EHCI_USBSTS) & EHCI_STS_INTRS;
-    status &= enabled | EHCI_STS_HSE;
-    if (status == 0)
+    pending = ehci_op_read(sc, EHCI_USBSTS) & EHCI_STS_INTRS;
+    if (pending == 0)
         return 0;
-    ehci_op_write(sc, EHCI_USBSTS, status);
+    if (pending & EHCI_STS_PCD)
+        sc->eh_root_change_pending = 1;
+    /*
+     * Acknowledge every latched cause before applying USBINTR.  In
+     * particular, PCD is masked while the root-hub task is pending, but
+     * JZ4780 keeps its level IRQ asserted while the disabled status bit is
+     * still set.  Acknowledging only enabled causes therefore traps the CPU
+     * in the interrupt dispatcher and permanently quarantines EHCI before
+     * the detach task can run.  PORTSC change bits remain latched for that
+     * task, so draining USBSTS here cannot lose a connect transition.
+     */
+    ehci_op_write(sc, EHCI_USBSTS, pending);
+    status = pending & (enabled | EHCI_STS_HSE);
+    if (status == 0)
+        return 1;
     if ((status & EHCI_STS_HSE) != 0 && sc->eh_active_xfer != 0)
         ehci_complete_active(sc, USB_STATUS_IO_ERROR, 0);
     else if (status & (EHCI_STS_INT | EHCI_STS_ERRINT))

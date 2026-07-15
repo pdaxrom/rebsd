@@ -29,6 +29,7 @@ struct usb_mock_hcd {
     unsigned um_hub_port_enabled;
     unsigned um_hub_port_change;
     unsigned um_hub_child_speed;
+    unsigned um_hub_reconnect_on_clear;
     unsigned um_port_power;
     unsigned um_port_enabled;
     unsigned um_port_change;
@@ -57,6 +58,9 @@ usb_error_t usb_mock_hcd_set_config(struct usb_mock_hcd *,
     const void *, size_t);
 void usb_mock_hcd_enable_hub(struct usb_mock_hcd *);
 void usb_mock_hcd_hub_port_connect(struct usb_mock_hcd *, int, unsigned);
+void usb_mock_hcd_hub_reconnect_on_clear(struct usb_mock_hcd *, unsigned);
 usb_error_t usb_mock_hcd_hub_interrupt(struct usb_mock_hcd *);
+usb_error_t usb_mock_hcd_hub_interrupt_error(struct usb_mock_hcd *,
+    usb_error_t);
 
 #endif /* _USB_USB_MOCK_HCD_H_ */

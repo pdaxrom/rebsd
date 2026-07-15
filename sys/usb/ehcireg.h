@@ -110,6 +110,7 @@
 typedef unsigned int ehci_link_t;
 #define EHCI_LINK_TERMINATE         0x00000001u
 #define EHCI_LINK_QH                0x00000002u
+#define EHCI_LINK_TYPE_MASK         0x00000006u
 #define EHCI_LINK_ADDR(v)           ((v) & ~0x1fu)
 
 #define EHCI_QTD_NBUFFERS           5u
@@ -130,6 +131,8 @@ struct ehci_qtd {
 #define EHCI_QTD_BABBLE             0x00000010u
 #define EHCI_QTD_XACTERR            0x00000008u
 #define EHCI_QTD_MISSEDMICRO        0x00000004u
+#define EHCI_QTD_SPLITXSTATE        0x00000002u
+#define EHCI_QTD_PINGSTATE          0x00000001u
 #define EHCI_QTD_STATERRS           0x0000003cu
 #define EHCI_QTD_SET_PID(v)         ((v) << 8)
 #define EHCI_QTD_PID_OUT            0u

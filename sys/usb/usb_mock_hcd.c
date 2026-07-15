@@ -226,6 +226,13 @@ mock_control(struct usb_mock_hcd *mock, struct usb_xfer *xfer)
             change = UPS_C_PORT_RESET;
         else if (value == UHF_PORT_ENABLE)
             mock->um_hub_port_enabled = 0;
+        if (value == UHF_C_PORT_CONNECTION &&
+            mock->um_hub_reconnect_on_clear) {
+            mock->um_hub_reconnect_on_clear = 0;
+            mock->um_hub_port_connected = 1;
+            mock->um_hub_port_enabled = 0;
+            mock->um_hub_port_change |= UPS_C_CONNECT_STATUS;
+        }
         mock->um_hub_port_change &= ~change;
         usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION, 0);
         return USB_STATUS_NORMAL_COMPLETION;
@@ -519,6 +526,18 @@ usb_mock_hcd_hub_port_connect(struct usb_mock_hcd *mock, int connected,
         mock->um_hub_child_speed = speed;
 }
 
+void
+usb_mock_hcd_hub_reconnect_on_clear(struct usb_mock_hcd *mock,
+    unsigned speed)
+{
+    if (mock == 0 || !mock->um_hub_mode)
+        return;
+    mock->um_hub_reconnect_on_clear = 1;
+    if (speed == USB_SPEED_LOW || speed == USB_SPEED_FULL ||
+        speed == USB_SPEED_HIGH)
+        mock->um_hub_child_speed = speed;
+}
+
 usb_error_t
 usb_mock_hcd_hub_interrupt(struct usb_mock_hcd *mock)
 {
@@ -532,5 +551,20 @@ usb_mock_hcd_hub_interrupt(struct usb_mock_hcd *mock)
         ((uByte *)xfer->ux_buffer)[0] = 0x02;
     usb_xfer_complete(xfer, USB_STATUS_NORMAL_COMPLETION,
         xfer->ux_length != 0 ? 1 : 0);
+    return USB_STATUS_NORMAL_COMPLETION;
+}
+
+usb_error_t
+usb_mock_hcd_hub_interrupt_error(struct usb_mock_hcd *mock,
+    usb_error_t status)
+{
+    struct usb_xfer *xfer;
+
+    if (mock == 0 || !mock->um_hub_mode || mock->um_pending_xfer == 0 ||
+        status == USB_STATUS_NORMAL_COMPLETION)
+        return USB_STATUS_INVALID;
+    xfer = mock->um_pending_xfer;
+    mock->um_pending_xfer = 0;
+    usb_xfer_complete(xfer, status, 0);
     return USB_STATUS_NORMAL_COMPLETION;
 }

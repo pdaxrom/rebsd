@@ -796,6 +796,17 @@ usb_device_disconnect(struct usb_device *device)
     if (device == 0 || !device->ud_used)
         return;
     core = device->ud_bus->ub_core;
+
+    /*
+     * Tear down the topology from the leaves towards the root.  Hub class
+     * drivers also forget their port pointers during detach, but ownership
+     * of the device tree belongs to the USB core: a disappearing parent
+     * must never leave live children or host-controller pipes behind.
+     */
+    for (i = 0; i < USB_MAX_DEVICES; ++i)
+        if (core->uc_devices[i].ud_used &&
+            core->uc_devices[i].ud_parent_hub == device)
+            usb_device_disconnect(&core->uc_devices[i]);
     device->ud_connected = 0;
     for (i = 0; i < USB_MAX_XFERS; ++i)
         if (core->uc_xfers[i].ux_used && core->uc_xfers[i].ux_active &&

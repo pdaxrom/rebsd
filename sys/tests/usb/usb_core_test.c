@@ -273,10 +273,10 @@ test_hub_topology(void)
         &high_child) == USB_STATUS_NORMAL_COMPLETION);
     CHECK(high_child->ud_tt_hub_address == 0 && high_child->ud_tt_port == 0);
 
-    usb_device_disconnect(high_child);
-    usb_device_disconnect(grandchild);
-    usb_device_disconnect(child);
+    /* Disconnecting a hub owns the complete descendant teardown. */
     usb_device_disconnect(hub);
+    CHECK(!high_child->ud_used && !grandchild->ud_used &&
+        !child->ud_used && !hub->ud_used);
     usb_bus_stop(&bus);
     CHECK(core_has_no_objects(&core));
     return 0;

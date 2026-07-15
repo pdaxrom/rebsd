@@ -457,8 +457,7 @@ ci20_ehci_irq_storm(void)
     enabled = ci20_ehci_read(0, ci20_ehci.eh_op_offset + EHCI_USBINTR);
     command = ci20_ehci_read(0, ci20_ehci.eh_op_offset + EHCI_USBCMD);
     port = ci20_ehci_read(0, ci20_ehci.eh_op_offset + EHCI_PORTSC(1));
-    ci20_ehci_write(0, ci20_ehci.eh_op_offset + EHCI_USBINTR, 0);
-    printf("ehci0: irq storm quarantined status=%x enable=%x "
+    printf("ehci0: irq storm temporarily masked status=%x enable=%x "
         "command=%x port1=%x\n", status, enabled, command, port);
 }
 

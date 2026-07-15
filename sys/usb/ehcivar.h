@@ -74,6 +74,7 @@ struct ehci_pipe {
     unsigned ep_intr_period;
     unsigned ep_intr_phase;
     unsigned ep_intr_uframe;
+    unsigned ep_periodic_linked;
     unsigned ep_xacterrs;
 };
 
@@ -134,6 +135,7 @@ struct ehci_softc {
     unsigned eh_revision;
     unsigned eh_reset_change;
     unsigned eh_root_intr_enabled;
+    unsigned eh_root_change_pending;
     unsigned eh_started;
 };
 

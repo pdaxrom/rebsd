@@ -61,6 +61,8 @@ struct fake_ehci {
     unsigned bulk_toggle_count;
     unsigned periodic_lists;
     unsigned periodic_status;
+    unsigned periodic_starts;
+    unsigned periodic_stops;
     const unsigned char *bulk_reply;
     size_t bulk_reply_length;
     unsigned char bulk_out[64];
@@ -73,6 +75,13 @@ phys_to_ptr(unsigned int phys)
     if (phys < FAKE_POOL_PHYS || phys >= FAKE_POOL_PHYS + FAKE_POOL_SIZE)
         return 0;
     return dma_pool + (phys - FAKE_POOL_PHYS);
+}
+
+static unsigned int
+ptr_to_phys(const void *ptr)
+{
+    return FAKE_POOL_PHYS + (unsigned int)((const unsigned char *)ptr -
+        dma_pool);
 }
 
 static size_t
@@ -353,6 +362,12 @@ fake_write(void *arg, unsigned reg, unsigned int value)
     fake = arg;
     status = &fake->regs[FAKE_OP(EHCI_USBSTS)];
     if (reg == FAKE_CAP_LENGTH + EHCI_USBCMD) {
+        if ((fake->regs[reg / 4u] & EHCI_CMD_PSE) == 0 &&
+            (value & EHCI_CMD_PSE) != 0)
+            ++fake->periodic_starts;
+        else if ((fake->regs[reg / 4u] & EHCI_CMD_PSE) != 0 &&
+            (value & EHCI_CMD_PSE) == 0)
+            ++fake->periodic_stops;
         if (value & EHCI_CMD_HCRESET) {
             fake->regs[reg / 4u] = 0;
             *status |= EHCI_STS_HCH;
@@ -720,6 +735,8 @@ test_periodic_split_interrupts(void)
     struct usb_bus bus;
     struct hub_events hub_events;
     struct xfer_events parent_events;
+    struct xfer_events child_disconnect_events;
+    struct xfer_events bulk_disconnect_events;
     struct repeat_events child_events;
     struct usb_device *parent;
     struct usb_device *child;
@@ -727,20 +744,28 @@ test_periodic_split_interrupts(void)
     struct usb_interface *child_interface;
     struct usb_pipe *parent_pipe;
     struct usb_pipe *child_pipe;
+    struct usb_pipe *bulk_pipe;
     struct usb_xfer *parent_xfer;
     struct usb_xfer *child_xfer;
+    struct usb_xfer *bulk_xfer;
     struct ehci_pipe *epipe;
     struct ehci_pipe *parent_epipe;
     struct ehci_pipe *child_epipe;
     unsigned char parent_report[8];
     unsigned char child_report[8];
+    unsigned char bulk_data[8];
     unsigned int endp;
     unsigned int endphub;
+    unsigned periodic_starts;
+    unsigned periodic_stops;
 
     fake_init(&fake, USB_SPEED_HIGH);
     memset(&bus, 0, sizeof(bus));
     memset(&hub_events, 0, sizeof(hub_events));
     memset(&parent_events, 0, sizeof(parent_events));
+    memset(&child_disconnect_events, 0,
+        sizeof(child_disconnect_events));
+    memset(&bulk_disconnect_events, 0, sizeof(bulk_disconnect_events));
     memset(&child_events, 0, sizeof(child_events));
     child_events.limit = 2;
     memset(parent_report, 0, sizeof(parent_report));
@@ -775,8 +800,12 @@ test_periodic_split_interrupts(void)
     CHECK(parent_interface != 0 && child_interface != 0);
     CHECK(usb_open_pipe(parent_interface, 0x82, &parent_pipe) ==
         USB_STATUS_NORMAL_COMPLETION);
+    periodic_starts = fake.periodic_starts;
+    periodic_stops = fake.periodic_stops;
     CHECK(usb_open_pipe(child_interface, 0x82, &child_pipe) ==
         USB_STATUS_NORMAL_COMPLETION);
+    CHECK(fake.periodic_stops == periodic_stops &&
+        fake.periodic_starts == periodic_starts);
     parent_epipe = test_find_pipe(&ehci, parent_pipe);
     child_epipe = test_find_pipe(&ehci, child_pipe);
     epipe = child_epipe;
@@ -786,7 +815,9 @@ test_periodic_split_interrupts(void)
         parent_epipe->ep_intr_uframe == 0 &&
         child_epipe->ep_intr_period == 8 &&
         child_epipe->ep_intr_phase == 1 &&
-        child_epipe->ep_intr_uframe == 0);
+        child_epipe->ep_intr_uframe == 1 &&
+        parent_epipe->ep_periodic_linked &&
+        child_epipe->ep_periodic_linked);
     CHECK((parent_epipe->ep_qh->qh_endp & 0xf0000000u) == 0);
     CHECK(phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[0])) ==
         parent_epipe->ep_qh &&
@@ -800,8 +831,8 @@ test_periodic_split_interrupts(void)
     CHECK(((endp >> 12) & 3u) == EHCI_QH_SPEED_FULL &&
         (endp & EHCI_QH_CTL) == 0 &&
         (endp & 0xf0000000u) == 0);
-    CHECK((endphub & 0xffu) == 0x01 &&
-        ((endphub >> 8) & 0xffu) == 0x1c &&
+    CHECK((endphub & 0xffu) == 0x02 &&
+        ((endphub >> 8) & 0xffu) == 0x08 &&
         ((endphub >> 16) & 0x7fu) == parent->ud_address &&
         ((endphub >> 23) & 0x7fu) == 3);
     CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) != 0);
@@ -815,8 +846,13 @@ test_periodic_split_interrupts(void)
     usb_setup_xfer(child_xfer, child_pipe, &child_events,
         child_report, sizeof(child_report), USB_XFER_SHORT_OK, 0,
         repeat_done);
+    periodic_starts = fake.periodic_starts;
+    periodic_stops = fake.periodic_stops;
     CHECK(usb_submit_xfer(parent_xfer) == USB_STATUS_IN_PROGRESS);
     CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
+    CHECK(fake.periodic_stops == periodic_stops &&
+        fake.periodic_starts == periodic_starts &&
+        (fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) != 0);
     CHECK(ehci.eh_intr_slots[0].eis_xfer != 0 &&
         ehci.eh_intr_slots[1].eis_xfer != 0);
     fake_run_periodic(&fake, 0);
@@ -826,17 +862,27 @@ test_periodic_split_interrupts(void)
         parent_events.status == USB_STATUS_NORMAL_COMPLETION);
     fake_run_periodic(&fake, 1);
     CHECK(fake.periodic_lists == 2);
+    periodic_starts = fake.periodic_starts;
+    periodic_stops = fake.periodic_stops;
     CHECK(ehci_intr(&ehci) == 1);
     CHECK(child_events.callbacks == 1 &&
         child_events.status == USB_STATUS_NORMAL_COMPLETION);
     CHECK(child_events.submit_status == USB_STATUS_IN_PROGRESS &&
-        child_xfer->ux_active);
+        child_xfer->ux_active &&
+        fake.periodic_stops == periodic_stops &&
+        fake.periodic_starts == periodic_starts &&
+        child_epipe->ep_periodic_linked &&
+        child_epipe->ep_qh->qh_curqtd == 0 &&
+        EHCI_LINK_ADDR(child_epipe->ep_qh->qh_qtd.qtd_next) ==
+        ptr_to_phys(ehci.eh_intr_slots[1].eis_qtd));
     CHECK(parent_report[0] != 0 && child_report[0] != 0);
     fake_run_periodic(&fake, 9);
     CHECK(fake.periodic_lists == 3);
     CHECK(ehci_intr(&ehci) == 1);
     CHECK(child_events.callbacks == 2 && !child_xfer->ux_active &&
-        child_events.status == USB_STATUS_NORMAL_COMPLETION);
+        child_events.status == USB_STATUS_NORMAL_COMPLETION &&
+        !child_epipe->ep_periodic_linked &&
+        parent_epipe->ep_periodic_linked);
 
     /* Exhausted hardware XACTERR gets a bounded software retry. */
     memset(&child_events, 0, sizeof(child_events));
@@ -844,10 +890,14 @@ test_periodic_split_interrupts(void)
     fake.periodic_status = EHCI_QTD_HALTED | EHCI_QTD_XACTERR;
     CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
     fake_run_periodic(&fake, 17);
+    periodic_starts = fake.periodic_starts;
+    periodic_stops = fake.periodic_stops;
     CHECK(ehci_intr(&ehci) == 1);
     epipe = test_find_pipe(&ehci, child_pipe);
     CHECK(epipe != 0 && epipe->ep_xacterrs == 1 &&
         child_events.callbacks == 0 && child_xfer->ux_active &&
+        fake.periodic_stops == periodic_stops &&
+        fake.periodic_starts == periodic_starts &&
         (ehci.eh_intr_slots[1].eis_qtd->qtd_status &
         (EHCI_QTD_ACTIVE | EHCI_QTD_CERR_MASK)) ==
         (EHCI_QTD_ACTIVE | EHCI_QTD_SET_CERR(3)));
@@ -857,24 +907,27 @@ test_periodic_split_interrupts(void)
         child_events.status == USB_STATUS_NORMAL_COMPLETION &&
         epipe->ep_xacterrs == 0);
 
-    /* MISSEDMICRO with CERR intact is terminal, not an XACTERR retry. */
+    /* MISSEDMICRO with CERR intact is a terminal scheduling fault. */
     memset(&child_events, 0, sizeof(child_events));
     child_events.limit = 1;
     fake.periodic_status = EHCI_QTD_HALTED | EHCI_QTD_XACTERR |
         EHCI_QTD_MISSEDMICRO;
     CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
     fake_run_periodic(&fake, 41);
+    periodic_starts = fake.periodic_starts;
+    periodic_stops = fake.periodic_stops;
     CHECK(ehci_intr(&ehci) == 1);
     CHECK(child_events.callbacks == 1 && !child_xfer->ux_active &&
         child_events.status == USB_STATUS_IO_ERROR &&
-        epipe->ep_xacterrs == 0);
+        epipe->ep_xacterrs == 0 &&
+        fake.periodic_stops == periodic_stops &&
+        fake.periodic_starts == periodic_starts);
 
     /* XACTERR is sticky and non-fatal when hardware did not halt the qTD. */
     memset(&parent_events, 0, sizeof(parent_events));
     fake.periodic_status = EHCI_QTD_XACTERR;
     CHECK(usb_submit_xfer(parent_xfer) == USB_STATUS_IN_PROGRESS);
-    fake_run_periodic(&fake, 64);
-    CHECK(fake.periodic_lists == 7);
+    fake_run_periodic(&fake, 128);
     CHECK(ehci_intr(&ehci) == 1);
     CHECK(parent_events.callbacks == 1 && !parent_xfer->ux_active &&
         parent_events.status == USB_STATUS_NORMAL_COMPLETION);
@@ -883,9 +936,13 @@ test_periodic_split_interrupts(void)
     CHECK(usb_free_xfer(parent_xfer) == USB_STATUS_NORMAL_COMPLETION);
 
     /* Reuse a split periodic slot while the high-speed hub slot remains. */
+    periodic_starts = fake.periodic_starts;
+    periodic_stops = fake.periodic_stops;
     usb_close_pipe(child_pipe);
     CHECK(ehci.eh_intr_slots[0].eis_pipe != 0 &&
         ehci.eh_intr_slots[1].eis_pipe == 0 &&
+        fake.periodic_stops == periodic_stops &&
+        fake.periodic_starts == periodic_starts &&
         (fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) != 0);
     CHECK(usb_open_pipe(child_interface, 0x82, &child_pipe) ==
         USB_STATUS_NORMAL_COMPLETION);
@@ -923,7 +980,115 @@ test_periodic_split_interrupts(void)
     CHECK(usb_free_xfer(parent_xfer) == USB_STATUS_NORMAL_COMPLETION);
     usb_close_pipe(parent_pipe);
     CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) == 0);
-    usb_device_disconnect(child);
+
+    /*
+     * Reproduce removal of a complete high-speed hub while both its own
+     * interrupt QH and a split child QH are active.  JZ4780 reports PCD,
+     * transaction errors and frame rollover together; disabled status bits
+     * must be drained while the root-hub task owns PCD.
+     */
+    CHECK(usb_open_pipe(parent_interface, 0x82, &parent_pipe) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_open_pipe(child_interface, 0x82, &child_pipe) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_open_pipe(child_interface, 0x81, &bulk_pipe) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    parent_xfer = usb_alloc_xfer(parent);
+    child_xfer = usb_alloc_xfer(child);
+    bulk_xfer = usb_alloc_xfer(child);
+    CHECK(parent_xfer != 0 && child_xfer != 0 && bulk_xfer != 0);
+    memset(&parent_events, 0, sizeof(parent_events));
+    memset(&child_disconnect_events, 0,
+        sizeof(child_disconnect_events));
+    usb_setup_xfer(parent_xfer, parent_pipe, &parent_events,
+        parent_report, sizeof(parent_report), USB_XFER_SHORT_OK, 0,
+        xfer_done);
+    usb_setup_xfer(child_xfer, child_pipe, &child_disconnect_events,
+        child_report, sizeof(child_report), USB_XFER_SHORT_OK, 0,
+        xfer_done);
+    usb_setup_xfer(bulk_xfer, bulk_pipe, &bulk_disconnect_events,
+        bulk_data, sizeof(bulk_data), USB_XFER_SHORT_OK, 100, xfer_done);
+    CHECK(usb_submit_xfer(parent_xfer) == USB_STATUS_IN_PROGRESS);
+    CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
+    fake.hold = 1;
+    CHECK(usb_submit_xfer(bulk_xfer) == USB_STATUS_IN_PROGRESS);
+
+    fake.regs[FAKE_PORT] = EHCI_PS_PP | EHCI_PS_CSC | EHCI_PS_PEC;
+    fake.regs[FAKE_OP(EHCI_USBSTS)] |= EHCI_STS_PCD;
+    CHECK(ehci_intr(&ehci) == 1 && usb_task_any_pending());
+    CHECK((fake.regs[FAKE_OP(EHCI_USBINTR)] & EHCI_INTR_PCIE) == 0);
+    CHECK(ehci.eh_root_change_pending != 0);
+
+    /* The same plug is already back before deferred detach gets CPU time. */
+    fake.address = 0;
+    fake.configuration = 0;
+    fake.regs[FAKE_PORT] = EHCI_PS_PP | EHCI_PS_CS | EHCI_PS_CSC;
+    fake.periodic_status = EHCI_QTD_HALTED | EHCI_QTD_XACTERR;
+    fake_run_periodic(&fake, 0);
+    fake.periodic_status = EHCI_QTD_HALTED | EHCI_QTD_XACTERR;
+    fake_run_periodic(&fake, 1);
+    qtd_complete(&ehci.eh_qtds[0], sizeof(bulk_data),
+        EHCI_QTD_HALTED | EHCI_QTD_XACTERR);
+    fake.regs[FAKE_OP(EHCI_USBSTS)] |=
+        EHCI_STS_PCD | EHCI_STS_ERRINT | EHCI_STS_FLR;
+    CHECK(ehci_intr(&ehci) == 1);
+    CHECK((fake.regs[FAKE_OP(EHCI_USBSTS)] & EHCI_STS_INTRS) == 0);
+    CHECK(parent_events.callbacks == 1 &&
+        parent_events.status == USB_STATUS_IO_ERROR);
+    CHECK(child_disconnect_events.callbacks == 1 &&
+        child_disconnect_events.status == USB_STATUS_IO_ERROR);
+    CHECK(bulk_disconnect_events.callbacks == 1 &&
+        bulk_disconnect_events.status == USB_STATUS_IO_ERROR);
+    fake.hold = 0;
+    usb_task_run_pending();
+    parent = usb_root_hub_device(&hub, 1);
+    CHECK(parent != 0 && parent->ud_speed == USB_SPEED_HIGH &&
+        parent->ud_address == 1);
+    CHECK(hub_events.detached == 1 && hub_events.attached == 2 &&
+        hub_events.errors == 0 && ehci.eh_root_change_pending == 0);
+    CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) == 0);
+    CHECK(ehci.eh_intr_slots[0].eis_pipe == 0 &&
+        ehci.eh_intr_slots[1].eis_pipe == 0);
+    CHECK(usb_free_xfer(parent_xfer) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_free_xfer(child_xfer) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_free_xfer(bulk_xfer) == USB_STATUS_NORMAL_COMPLETION);
+
+    /* Prove both schedules are reusable after the rapid complete replug. */
+    CHECK(usb_device_enumerate_at(&bus, parent, 3, USB_SPEED_FULL,
+        &child) == USB_STATUS_NORMAL_COMPLETION);
+    parent_interface = usb_device_interface(parent, 0);
+    child_interface = usb_device_interface(child, 0);
+    CHECK(parent_interface != 0 && child_interface != 0);
+    CHECK(usb_open_pipe(parent_interface, 0x82, &parent_pipe) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_open_pipe(child_interface, 0x82, &child_pipe) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    parent_xfer = usb_alloc_xfer(parent);
+    child_xfer = usb_alloc_xfer(child);
+    CHECK(parent_xfer != 0 && child_xfer != 0);
+    memset(&parent_events, 0, sizeof(parent_events));
+    memset(&child_disconnect_events, 0,
+        sizeof(child_disconnect_events));
+    usb_setup_xfer(parent_xfer, parent_pipe, &parent_events,
+        parent_report, sizeof(parent_report), USB_XFER_SHORT_OK, 0,
+        xfer_done);
+    usb_setup_xfer(child_xfer, child_pipe, &child_disconnect_events,
+        child_report, sizeof(child_report), USB_XFER_SHORT_OK, 0,
+        xfer_done);
+    CHECK(usb_submit_xfer(parent_xfer) == USB_STATUS_IN_PROGRESS);
+    CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
+    fake_run_periodic(&fake, 0);
+    CHECK(ehci_intr(&ehci) == 1);
+    fake_run_periodic(&fake, 1);
+    CHECK(ehci_intr(&ehci) == 1);
+    CHECK(parent_events.callbacks == 1 &&
+        parent_events.status == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(child_disconnect_events.callbacks == 1 &&
+        child_disconnect_events.status == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_free_xfer(parent_xfer) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_free_xfer(child_xfer) == USB_STATUS_NORMAL_COMPLETION);
+    usb_close_pipe(child_pipe);
+    usb_close_pipe(parent_pipe);
     usb_root_hub_stop(&hub);
     usb_bus_stop(&bus);
     CHECK(dma_pool_available() == dma_pool_size());

@@ -171,6 +171,47 @@ test_late_connect(void)
 }
 
 static int
+test_forced_root_recovery(void)
+{
+    struct usb_mock_hcd mock;
+    struct usb_root_hub hub;
+    struct usb_core core;
+    struct usb_bus bus;
+    struct event_state events;
+    struct usb_device *device;
+    unsigned delay_total;
+
+    memset(&bus, 0, sizeof(bus));
+    memset(&events, 0, sizeof(events));
+    delay_total = 0;
+    usb_task_system_init();
+    usb_core_init(&core);
+    usb_mock_hcd_init(&mock);
+    usb_mock_hcd_set_connected(&mock, 1);
+    CHECK(usb_bus_start(&core, &bus, &mock.um_hcd,
+        hub_delay, &delay_total) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_root_hub_start(&hub, &bus, hub_event, &events) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    device = usb_root_hub_device(&hub, 1);
+    CHECK(device != 0 && events.attach_count == 1);
+
+    CHECK(usb_root_hub_recover_device(device) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_task_pending(&hub.urh_task) && !mock.um_root_intr_enabled);
+    usb_task_run_pending();
+    device = usb_root_hub_device(&hub, 1);
+    CHECK(device != 0 && device->ud_address == 1 &&
+        events.attach_count == 2 && events.detach_count == 1 &&
+        events.error_count == 0 && mock.um_root_intr_enabled &&
+        delay_total == 2 * (100 + USB_SET_ADDRESS_SETTLE));
+
+    usb_root_hub_stop(&hub);
+    CHECK(events.detach_count == 2);
+    usb_bus_stop(&bus);
+    return 0;
+}
+
+static int
 test_external_hub(void)
 {
     struct usb_mock_hcd mock;
@@ -227,10 +268,25 @@ test_external_hub(void)
     CHECK(child != 0 && child->ud_address == 2);
     CHECK(external_attach_count == 2 && mock.um_pending_xfer != 0);
 
+    /*
+     * Reconnect exactly while C_PORT_CONNECTION is being cleared.  The
+     * W1C write erases the new edge, so the driver must reconcile the
+     * current port level without waiting for an unrelated port event.
+     */
+    usb_mock_hcd_hub_port_connect(&mock, 0, USB_SPEED_FULL);
+    CHECK(usb_mock_hcd_hub_interrupt(&mock) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    usb_mock_hcd_hub_reconnect_on_clear(&mock, USB_SPEED_FULL);
+    usb_task_run_pending();
+    child = usb_external_hub_device(hub_device, 1);
+    CHECK(child != 0 && child->ud_address == 2);
+    CHECK(external_attach_count == 3 && external_detach_count == 2 &&
+        mock.um_pending_xfer != 0 && mock.um_hub_port_change == 0);
+
     /* Detach and enumerate the complete hub again with its child present. */
     usb_device_disconnect(hub_device);
     CHECK(usb_external_hub_count() == 0);
-    CHECK(external_detach_count == 2 && mock.um_pending_xfer == 0);
+    CHECK(external_detach_count == 3 && mock.um_pending_xfer == 0);
     hub_device = 0;
     CHECK(usb_device_enumerate(&bus, 1, USB_SPEED_HIGH, &hub_device) ==
         USB_STATUS_NORMAL_COMPLETION);
@@ -239,12 +295,78 @@ test_external_hub(void)
     usb_task_run_pending();
     child = usb_external_hub_device(hub_device, 1);
     CHECK(child != 0 && child->ud_address == 2);
-    CHECK(external_attach_count == 3 && external_detach_count == 2 &&
+    CHECK(external_attach_count == 4 && external_detach_count == 3 &&
         mock.um_pending_xfer != 0);
 
     usb_device_disconnect(hub_device);
     CHECK(usb_external_hub_count() == 0);
-    CHECK(external_detach_count == 3 && mock.um_pending_xfer == 0);
+    CHECK(external_detach_count == 4 && mock.um_pending_xfer == 0);
+    usb_bus_stop(&bus);
+    return 0;
+}
+
+static int
+test_external_hub_error_recovery(void)
+{
+    struct usb_mock_hcd mock;
+    struct usb_root_hub root_hub;
+    struct usb_core core;
+    struct usb_bus bus;
+    struct event_state events;
+    struct usb_device *hub_device;
+    struct usb_device *child;
+    unsigned delay_total;
+    unsigned i;
+
+    memset(&bus, 0, sizeof(bus));
+    memset(&events, 0, sizeof(events));
+    delay_total = 0;
+    external_attach_count = 0;
+    external_detach_count = 0;
+    usb_task_system_init();
+    usb_core_init(&core);
+    usb_mock_hcd_init(&mock);
+    usb_mock_hcd_enable_hub(&mock);
+    usb_mock_hcd_set_connected(&mock, 1);
+    usb_mock_hcd_hub_port_connect(&mock, 1, USB_SPEED_FULL);
+    CHECK(uhub_register(&core) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_driver_register(&core, &external_child_driver) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_bus_start(&core, &bus, &mock.um_hcd,
+        hub_delay, &delay_total) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_root_hub_start(&root_hub, &bus, hub_event, &events) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    usb_task_run_pending();
+    hub_device = usb_root_hub_device(&root_hub, 1);
+    CHECK(hub_device != 0 && usb_external_hub_count() == 1);
+    child = usb_external_hub_device(hub_device, 1);
+    CHECK(child != 0 && external_attach_count == 1 &&
+        mock.um_pending_xfer != 0);
+
+    /* Linux resubmits transient hub IRQ errors before resetting the hub. */
+    for (i = 1; i < 10; ++i) {
+        CHECK(usb_mock_hcd_hub_interrupt_error(&mock,
+            USB_STATUS_IO_ERROR) == USB_STATUS_NORMAL_COMPLETION);
+        CHECK(mock.um_pending_xfer != 0 && !usb_task_any_pending() &&
+            usb_root_hub_device(&root_hub, 1) == hub_device);
+    }
+    CHECK(usb_mock_hcd_hub_interrupt_error(&mock,
+        USB_STATUS_IO_ERROR) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(mock.um_pending_xfer == 0 && usb_task_any_pending());
+    usb_task_run_pending();
+
+    hub_device = usb_root_hub_device(&root_hub, 1);
+    CHECK(hub_device != 0 && hub_device->ud_address == 1 &&
+        events.attach_count == 2 && events.detach_count == 1 &&
+        usb_external_hub_count() == 1 && mock.um_root_intr_enabled &&
+        mock.um_pending_xfer != 0);
+    child = usb_external_hub_device(hub_device, 1);
+    CHECK(child != 0 && external_attach_count == 2 &&
+        external_detach_count == 1);
+
+    usb_root_hub_stop(&root_hub);
+    CHECK(events.detach_count == 2 && external_detach_count == 2 &&
+        usb_external_hub_count() == 0);
     usb_bus_stop(&bus);
     return 0;
 }
@@ -254,7 +376,9 @@ main(void)
 {
     CHECK(test_initial_and_reconnect() == 0);
     CHECK(test_late_connect() == 0);
+    CHECK(test_forced_root_recovery() == 0);
     CHECK(test_external_hub() == 0);
+    CHECK(test_external_hub_error_recovery() == 0);
     puts("uhub_test: all tests passed");
     return 0;
 }
