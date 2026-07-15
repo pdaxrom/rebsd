@@ -2984,3 +2984,119 @@ Ordinary PCC Linpack rows are 3742.439 and 3773.754 KFLOPS, averaging
 from H11.  H12 therefore closes its physical and commit gates with the
 intended general integer-loop gain and no material unrelated or Linpack
 regression.
+
+## Milestone H13: Canonical Counted-Loop Latches
+
+H13 removes the redundant header trip through a narrow SSA lowering for
+canonical single-block counted loops.  The original header remains as the
+zero-trip entry guard.  After phi copies have been placed in the latch, a
+direct latch `GOTO` is replaced with a comparison of the updated induction
+TEMP against the invariant limit and a conditional branch directly to the
+body.  A taken hot edge therefore no longer executes the header comparison,
+header branch, and body jump on every iteration.
+
+The transform accepts only a physically adjacent `header/body/exit` layout,
+one preheader, one backedge, a single body block, an integer non-pointer phi,
+an exact `+1` or `-1` update, and a matching signed or unsigned exit test.
+The limit must be a numeric constant or a TEMP defined before the loop.
+Step-two and multiblock loops are explicit negative controls.  The target
+hook enables the lowering for VR4300 and MIPS32R2; generic MIPS3 keeps the
+old top-tested loop.
+
+Variable-limit loops now end in `bne updated_i,limit,body`.  A constant limit
+uses the existing `subu` plus `bnez` form.  The focused general corpus changes
+ten hot loops: branches rise from 53 to 63 and jumps fall from 87 to 77.  It
+adds ten static non-NOP instructions because constant limits need a temporary
+comparison, but removes the header path dynamically.  Linpack also exchanges
+ten jumps for ten branches while keeping 1617 non-NOP instructions; its
+translation unit shrinks by 30 assembly bytes.  Optimization statistics show
+no new selected spills, reloads, or frame growth in either corpus.
+
+`misc__ssacounted001` covers signed and unsigned increment/decrement loops,
+constant and dynamic limits, zero-trip cases, and the two negative controls.
+Host assembly gates require four direct `bne` latches and one constant
+`bnez` for VR4300 and MIPS32R2, while generic MIPS3 must retain all five
+header jumps.  The same test is part of cross runtime, native Malta runtime,
+and the extended physical N64 debug runner.
+
+Host smoke passes.  Cross compilation reports 340 passes and three expected
+failures from 343 cases, followed by 303/303 runtime passes.  Native Malta64
+hard-float reports 313 compile passes, 30 expected compile failures, and
+303/303 runtime passes.  All six PCC-kernel/PCC-rootfs full-smoke profiles on
+Malta64, Malta, and MaltaEL in hard- and soft-float modes report compiler
+self-test zero, `CCOM_STRESS_DONE:100`, `PCC_SMOKE_ALL_FAILURES 0`, and final
+RC zero.
+
+An additional full native soft-float regression reports 302/303 because the
+pre-existing `c99__arith003` long-double NaN comparison exits with code 14.
+The saved H12 and H13 soft-float compilers produce byte-identical assembly
+and object files for that loop-free test, while `misc__ssacounted001` passes
+in the same run.  This is not an H13 regression; the six required soft-float
+full-smoke profiles remain clean.
+
+H13 does not change final multiply scheduling.  The VR4300 multiplication
+erratum repair remains enabled by default through `-mfix4300`, and
+`-mno-fix4300` remains the explicit opt-out.
+
+The retained physical candidate is:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h13-counted-loop-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 9bdcae43c38d6c2d06c3760b01740f67873ee8be246f97ace5cbd9d5fe7e1a78
+kernel ELF sha256: a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d
+debug runner sha256: 8833648fe8ff5bc6aced5c28224b59dc37d37a4a43d21a3753450c880dfcb81d
+```
+
+It uses the required GCC kernel and PCC VR4300 hard-float a.out userland.
+The kernel and all three GCC benchmark controls are byte-identical to H12.
+All six benchmark executables and the runner have zero undefined symbols.
+The 6144 KiB debug rootfs passes all five `fsutil` phases with 359 files,
+3878 used blocks, and 2241 free blocks.  It contains the new native
+`misc__ssacounted001` compile-and-run gate.  Physical N64 correctness and
+performance validation remain mandatory before commit.
+
+Physical N64 validation passes the complete extended runner, including the
+staged native `misc__ssacounted001`, both general self-tests, both
+Linpack-kernel self-tests, every benchmark return code, zero-valued
+`N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC`, and the terminal
+`N64_PCC_DEBUG_RC_END` marker.  The H12/H13 general PCC comparison is:
+
+| Kernel | H12 PCC | H13 PCC | Change | H13 PCC/GCC |
+| --- | ---: | ---: | ---: | ---: |
+| `int_mix` | 3.846 | 4.190 | +8.94% | 63.91% |
+| `const_div` | 0.954 | 0.974 | +2.10% | 71.88% |
+| `branch` | 3.081 | 3.080 | -0.03% | 64.71% |
+| `switch` | 3.101 | 3.076 | -0.81% | 62.15% |
+| `memory` | 5.720 | 6.515 | +13.90% | 63.79% |
+| `libc_memory` | 38.910 | 38.933 | +0.06% | 75.22% |
+| `calls` | 3.086 | 3.304 | +7.06% | 68.07% |
+| `u64` | 1.848 | 1.923 | +4.06% | 66.54% |
+| `float` | 2.978 | 3.266 | +9.67% | 67.44% |
+| `double` | 2.382 | 2.579 | +8.27% | 96.48% |
+| `convert` | 1.696 | 1.696 | +0.00% | 66.46% |
+
+The broad gains are consistent with removing a dynamic header trip from
+eligible counted loops rather than specializing Linpack.  `branch`, `switch`,
+`libc_memory`, and `convert` remain within 0.81% of H12.
+
+Ordinary GCC Linpack rows are 4472.150 and 4381.382 KFLOPS, averaging
+4426.766.  PCC rows are 3817.303 and 3754.953 KFLOPS, averaging 3786.128.
+PCC therefore improves 0.75% over H12's 3758.096 mean and reaches 85.53% of
+the current GCC result.  The isolated kernel comparison is:
+
+| Kernel | H12 PCC | H13 PCC | Change | H13 PCC/GCC |
+| --- | ---: | ---: | ---: | ---: |
+| `daxpy_r` | 3.726 | 3.726 | +0.00% | 71.81% |
+| `daxpy_ur` | 4.504 | 4.513 | +0.20% | 88.66% |
+| `ddot_r` | 4.280 | 4.967 | +16.05% | 82.26% |
+| `ddot_ur` | 5.706 | 5.709 | +0.05% | 84.38% |
+| `dscal_r` | 4.846 | 4.685 | -3.32% | 64.92% |
+| `dscal_ur` | 6.529 | 6.481 | -0.74% | 76.92% |
+| `idamax` | 5.371 | 5.340 | -0.58% | 81.45% |
+
+The intended rolled `ddot` path gains 16.05%.  `dscal_r` is the only
+isolated result outside a one-percent band and is recorded as a measured H13
+cost for later investigation.  H13 closes its physical and commit gates with
+correctness intact, a broad general-corpus gain, and an overall Linpack gain.

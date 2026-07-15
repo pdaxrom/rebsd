@@ -518,6 +518,9 @@ typedef long long OFFSZ;
 #define TARGET_SSA_CSE_CONST_SHIFT()	\
 	(!mips_soft_float && (mips_target.isa == MIPS_ISA_MIPS32R2 || \
 	 mips_target.tune == MIPS_TUNE_VR4300))
+#define TARGET_SSA_LOWER_COUNTED_LOOP()	\
+	(mips_target.isa == MIPS_ISA_MIPS32R2 || \
+	 mips_target.tune == MIPS_TUNE_VR4300)
 #define PCLASS(p)	(1 << gclass((p)->n_type))
 #define DECRA(x,y)	(((x) >> (y*6)) & 63)   /* decode encoded regs */
 #define ENCRA(x,y)	((x) << (6+y*6))        /* encode regs in int */

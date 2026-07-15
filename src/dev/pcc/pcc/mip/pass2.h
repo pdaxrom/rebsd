@@ -525,6 +525,7 @@ void ssa_propagate_temp_copies(struct p2env *);
 void ssa_simplify_trivial_phi(struct p2env *);
 void ssa_propagate_integer_constants(struct p2env *);
 void ssa_lower_phi(struct p2env *);
+void ssa_lower_counted_loops(struct p2env *);
 int ssa_fold_constant_branches(struct p2env *);
 int ssa_remove_unreachable_blocks(struct p2env *);
 

@@ -31,6 +31,9 @@
 #define TARGET_SSA_STRENGTH_REDUCE_SINGLE_SYMBOL_ADDRESS(t)	\
 	TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS(t)
 #endif
+#ifndef TARGET_SSA_LOWER_COUNTED_LOOP
+#define TARGET_SSA_LOWER_COUNTED_LOOP()	0
+#endif
 
 #define MAX_ADDRESS_INDUCTION_CANDIDATES	8
 
@@ -1891,6 +1894,8 @@ ssa_lower_phi(struct p2env *p2e)
 		}
 	}
 
+	ssa_lower_counted_loops(p2e);
+
 	/* Copy propagation leaves empty placeholders until CFG users are done. */
 	for (ip = DLIST_NEXT(&p2e->ipole, qelem);
 	    ip != &p2e->ipole; ip = next) {
@@ -1898,6 +1903,141 @@ ssa_lower_phi(struct p2env *p2e)
 		if (ip->type == IP_ASM &&
 		    ip->ip_asm == &propagated_copy_marker)
 			DLIST_REMOVE(ip, qelem);
+	}
+}
+
+static int
+counted_loop_limit(struct p2env *p2e, NODE *limit, TWORD type,
+    struct basicblock *preheader)
+{
+	struct basicblock *definition;
+
+	if (limit->n_type != type)
+		return 0;
+	if (limit->n_op == ICON)
+		return limit->n_name != NULL && limit->n_name[0] == '\0';
+	if (limit->n_op != TEMP)
+		return 0;
+	definition = temp_definition_block(p2e, regno(limit));
+	return definition != NULL &&
+	    block_dominates(p2e, definition, preheader);
+}
+
+static int
+counted_loop_condition(struct p2env *p2e, NODE *condition,
+    struct phiinfo *phi, int delta, struct basicblock *preheader,
+    NODE **limitp)
+{
+	NODE *induction, *limit;
+	int expected, swapped;
+
+	if (!logop(condition->n_op))
+		return 0;
+	if (condition->n_left->n_op == TEMP &&
+	    regno(condition->n_left) == phi->newtmpregno) {
+		induction = condition->n_left;
+		limit = condition->n_right;
+		swapped = 0;
+	} else if (condition->n_right->n_op == TEMP &&
+	    regno(condition->n_right) == phi->newtmpregno) {
+		induction = condition->n_right;
+		limit = condition->n_left;
+		swapped = 1;
+	} else {
+		return 0;
+	}
+	if (induction->n_type != phi->n_type)
+		return 0;
+	if ((delta == 1 && !swapped) || (delta == -1 && swapped))
+		expected = ISUNSIGNED(BTYPE(phi->n_type)) ? UGE : GE;
+	else if ((delta == -1 && !swapped) || (delta == 1 && swapped))
+		expected = ISUNSIGNED(BTYPE(phi->n_type)) ? ULE : LE;
+	else
+		return 0;
+	if (condition->n_op != expected ||
+	    !counted_loop_limit(p2e, limit, phi->n_type, preheader))
+		return 0;
+	*limitp = limit;
+	return 1;
+}
+
+/*
+ * Keep the entry guard of a canonical counted loop, but bypass its header on
+ * the hot edge.  Phi lowering has already placed all loop-carried copies in
+ * the latch, so comparing the updated induction value there preserves the
+ * original zero-trip and exit behavior.
+ */
+void
+ssa_lower_counted_loops(struct p2env *p2e)
+{
+	struct basicblock *body, *exit, *header, *preheader;
+	struct cfgnode *cn;
+	struct phiinfo *phi;
+	NODE *branch, *condition, *limit, *loop_limit;
+	int backedge, body_label, delta, preedge, saw_body;
+
+	if (!TARGET_SSA_LOWER_COUNTED_LOOP())
+		return;
+
+	DLIST_FOREACH(header, &p2e->bblocks, bbelem) {
+		if (header->last->type != IP_NODE ||
+		    header->last->ip_node->n_op != CBRANCH ||
+		    edge_count(header, 1) != 2 || edge_count(header, 0) != 2)
+			continue;
+		body = DLIST_NEXT(header, bbelem);
+		if (body == &p2e->bblocks || body->last->type != IP_NODE ||
+		    body->last->ip_node->n_op != GOTO ||
+		    body->last->ip_node->n_left->n_op != ICON)
+			continue;
+		branch = header->last->ip_node;
+		exit = cfg_label_block(p2e, (int)getlval(branch->n_right));
+		if (exit == body || exit == &p2e->bblocks ||
+		    DLIST_NEXT(body, bbelem) != exit ||
+		    !single_successor(body, header) ||
+		    !block_dominates(p2e, header, body))
+			continue;
+
+		preheader = NULL;
+		saw_body = 0;
+		SLIST_FOREACH(cn, &header->parents, cfgelem) {
+			if (cn->bblock == body)
+				saw_body++;
+			else if (preheader == NULL)
+				preheader = cn->bblock;
+			else
+				preheader = header;
+		}
+		if (saw_body != 1 || preheader == NULL || preheader == header ||
+		    !single_successor(preheader, header))
+			continue;
+		preedge = phi_parent_index(header, preheader);
+		backedge = phi_parent_index(header, body);
+		if (preedge < 0 || backedge < 0)
+			continue;
+
+		condition = branch->n_left;
+		SLIST_FOREACH(phi, &header->phi, phielem) {
+			if (phi->newtmpregno <= 0 || phi->size != 2 ||
+			    preedge >= phi->size || backedge >= phi->size ||
+			    !ISINTEGER(BTYPE(phi->n_type)) || ISPTR(phi->n_type))
+				continue;
+			delta = induction_delta(body, phi,
+			    phi->intmpregno[backedge], 1);
+			if (!counted_loop_condition(p2e, condition, phi, delta,
+			    preheader, &loop_limit))
+				continue;
+
+			body_label = block_label(body);
+			limit = tcopy(loop_limit);
+			condition = mkbinode(NE, mktemp(phi->newtmpregno,
+			    phi->n_type), limit, INT);
+			condition->n_label = body_label;
+			branch = mkbinode(CBRANCH, condition,
+			    mklnode(ICON, body_label, 0, INT), INT);
+			tfree(body->last->ip_node);
+			body->last->ip_node = branch;
+			break;
+		}
 	}
 }
 

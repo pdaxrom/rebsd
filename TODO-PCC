@@ -5045,6 +5045,38 @@ Milestone order:
     PCC Linpack averages 3758.096 KFLOPS, 0.40% below H11 and 84.89% of the
     current GCC mean; isolated Linpack kernels are unchanged within timing
     noise.  This closes the H12 physical and commit gates.
+  - [x] H13 lower narrow canonical `+1/-1` counted-loop latches directly to
+    the body after SSA phi copies are inserted.  Preserve the top entry guard
+    and require one preheader, one body, adjacent header/body/exit layout, and
+    a matching invariant limit.  Enable the target hook only for VR4300 and
+    MIPS32R2; keep generic MIPS3 unchanged.
+  - [x] Add `misc__ssacounted001` runtime and host assembly coverage for
+    signed/unsigned increment/decrement, constant/dynamic limits, zero-trip
+    behavior, and rejected step-two/multiblock forms.  Stage the same test in
+    the extended N64 physical debug runner.
+  - [x] Pass H13 host, cross, native hard-float, and all six full QEMU smoke
+    profiles.  Cross and native hard-float runtime pass 303/303.  Every
+    Malta64/Malta/MaltaEL hard/soft full-smoke profile reports self-test zero,
+    100 completed stress compilations, zero failures, and final RC zero.  The
+    extra native soft-float run has the pre-existing loop-free
+    `c99__arith003` NaN failure; H12/H13 assembly and objects are identical,
+    and the new H13 test passes.
+  - [x] Build and retain the H13 GCC-kernel/PCC-VR4300-hard-float a.out N64
+    image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h13-counted-loop-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `9bdcae43c38d6c2d06c3760b01740f67873ee8be246f97ace5cbd9d5fe7e1a78`.
+    The GCC kernel and controls match H12, all tested binaries have no
+    undefined symbols, and the rootfs passes all five `fsutil` phases.
+  - [x] Run H13 on physical N64.  The complete runner, including the staged
+    native `misc__ssacounted001`, both benchmark self-tests, every benchmark
+    return code, and both numeric debug markers pass; the terminal marker is
+    present.  PCC Linpack averages 3786.128 KFLOPS, 0.75% above H12 and 85.53%
+    of the current GCC mean.  The targeted `ddot_r` kernel gains 16.05%.
+    Across the general corpus, PCC `int_mix`, `memory`, `calls`, `u64`,
+    `float`, and `double` improve by 4.06% to 13.90%; `branch`, `switch`,
+    `libc_memory`, and `convert` remain within 0.81% of H12.  This closes the
+    H13 physical and commit gates.
 
 Success criteria:
 

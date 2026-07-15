@@ -15,7 +15,7 @@ OPTIM_TARGETS = optim001 optim002 optim003 spillcost001 spillfp001 spillabi001 \
 	pointertemp001 \
 	ufprange001 divconst001
 SSA_TARGETS = ssabranch001 ssaconst001 ssacopy001 ssalvn001 ssaphi001 \
-	ssaspecialize001 ssastrength001 ssaunreach001
+	ssacounted001 ssaspecialize001 ssastrength001 ssaunreach001
 PIC_TARGETS = pic001
 
 REGRESS_TARGETS_FAIL = 

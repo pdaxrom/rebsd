@@ -148,6 +148,8 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
     "$tmp.ssastrength.s" "$tmp.ssastrength.log" "$tmp.fpaccum.s" \
+    "$tmp.ssacounted.s" "$tmp.ssacounted.log" \
+    "$tmp.ssacounted.mips3.s" "$tmp.ssacounted.mips3.log" \
     "$tmp.llpack.s" "$tmp.pointertemp.s" "$tmp.pointertemp.log" \
     "$tmp.staticspec.s" "$tmp.staticspec.os.s" "$tmp.staticspec.free.s" \
     "$tmp.staticspec.generic.s" \
@@ -1786,6 +1788,60 @@ elif [ "$cpu" = mips32r2 ]; then
 	test "$unmasked_constant_mults" -eq 1
 	test "$unmasked_constant_slls" -eq 1
 fi
+
+"$pcc" -O2 -fomit-frame-pointer -Wc,-xssa -S \
+    -o "$tmp.ssacounted.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssacounted001.c" \
+    2>"$tmp.ssacounted.log"
+test ! -s "$tmp.ssacounted.log"
+counted_target_bne=$(awk '
+    /^(counted_up|counted_unsigned_up|counted_down|counted_unsigned_down):$/ {
+        inside = 1; next
+    }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "bne" { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.s")
+counted_constant_bnez=$(awk '
+    /^counted_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "bnez" { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.s")
+counted_step_two_jumps=$(awk '
+    /^counted_step_two:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "j" { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.s")
+test "$counted_target_bne" -eq 4
+test "$counted_constant_bnez" -eq 1
+test "$counted_step_two_jumps" -eq 1
+
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 \
+    -fomit-frame-pointer -Wc,-xssa -S \
+    -o "$tmp.ssacounted.mips3.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssacounted001.c" \
+    2>"$tmp.ssacounted.mips3.log"
+test ! -s "$tmp.ssacounted.mips3.log"
+counted_generic_bne=$(awk '
+    /^(counted_up|counted_unsigned_up|counted_down|counted_unsigned_down|counted_constant):$/ {
+        inside = 1; next
+    }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(bne|bnez)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.mips3.s")
+counted_generic_jumps=$(awk '
+    /^(counted_up|counted_unsigned_up|counted_down|counted_unsigned_down|counted_constant):$/ {
+        inside = 1; next
+    }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "j" { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.mips3.s")
+test "$counted_generic_bne" -eq 0
+test "$counted_generic_jumps" -eq 5
 
 "$pcc" -Os -S -o "$tmp.pointertemp.s" \
     "$topsrc/src/dev/pcc/pcc-tests/regress/misc/pointertemp001.c" \

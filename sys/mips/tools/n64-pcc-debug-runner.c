@@ -84,6 +84,8 @@ static const struct test_case extended_tests[] = {
 	{ "misc__llcall001", "misc__llcall001", "misc", "llcall001.c", 0 },
 	{ "misc__ssastrength001", "misc__ssastrength001", "misc",
 	    "ssastrength001.c", 0 },
+	{ "misc__ssacounted001", "misc__ssacounted001", "misc",
+	    "ssacounted001.c", 0 },
 	{ "misc__pointertemp001", "misc__pointertemp001", "misc",
 	    "pointertemp001.c", 0 },
 	{ "jira__PCC-97", "jira__PCC_97", "jira", "PCC-97.c", 0 },

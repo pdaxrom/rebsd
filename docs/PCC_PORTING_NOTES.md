@@ -1592,6 +1592,52 @@ averages 3758.096 KFLOPS, 0.40% below H11 and 84.89% of the current GCC mean;
 the isolated PCC kernels are unchanged within timing noise.  This closes the
 H12 physical and commit gates.
 
+## Canonical Counted-Loop Latches
+
+After SSA phi copies are inserted, a target may lower a narrow canonical
+counted loop so its latch branches directly to the body.  Keep the original
+header as the zero-trip entry guard.  The current implementation requires a
+single preheader and body, adjacent `header/body/exit` layout, an integer
+non-pointer induction phi updated by exactly one, and a matching signed or
+unsigned exit comparison against a numeric or pre-loop TEMP limit.  This
+restriction makes `updated_i != limit` equivalent to the original top test.
+
+The generic hook defaults off.  MIPS enables it for VR4300 and MIPS32R2;
+generic MIPS3, step-two loops, and multiblock loops retain their old control
+flow.  `misc__ssacounted001` provides runtime coverage and host assembly
+checks for both transformed and rejected forms.  It is also staged in the
+extended N64 physical debug runner.
+
+H13 passes host smoke, 303/303 cross runtime tests, 303/303 native Malta64
+hard-float tests, and all six Malta64/Malta/MaltaEL hard/soft full-smoke
+profiles.  The additional native soft-float run exposes the existing
+loop-free `c99__arith003` NaN comparison failure; H12 and H13 produce
+byte-identical assembly and objects for that test, and the new counted-loop
+test passes in the same run.
+
+The retained GCC-kernel/PCC-hard-float-a.out candidate is
+`/Users/sash/Work/N64/retrobsd-build/n64-h13-counted-loop-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 6619136 bytes, SHA-256
+`9bdcae43c38d6c2d06c3760b01740f67873ee8be246f97ace5cbd9d5fe7e1a78`.
+Its kernel and all GCC benchmark controls are byte-identical to H12, all
+benchmark binaries and the runner have zero undefined symbols, and the rootfs
+passes all five `fsutil` phases.  Physical validation is required before
+commit.  This lowering does not alter multiply scheduling: `-mfix4300`
+remains the default erratum repair and `-mno-fix4300` remains available.
+
+Physical N64 validation passes the complete extended runner, including the
+staged native `misc__ssacounted001`, both general and Linpack-kernel
+self-tests, every benchmark return code, zero-valued `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC`, and the terminal `N64_PCC_DEBUG_RC_END` marker.
+Ordinary PCC Linpack averages 3786.128 KFLOPS, 0.75% above H12 and 85.53% of
+the current 4426.766 KFLOPS GCC mean.  The targeted PCC `ddot_r` kernel rises
+from 4.280 to 4.967 Melem/s, a 16.05% gain, and reaches 82.26% of GCC.  In the
+general corpus, `int_mix`, `memory`, `calls`, `u64`, `float`, and `double`
+improve by 4.06% to 13.90%; `branch`, `switch`, `libc_memory`, and `convert`
+remain within 0.81% of H12.  `dscal_r` is 3.32% below H12 and the other
+isolated kernels remain within 0.74%.  This closes the H13 physical and commit
+gates while the 90% overall target remains open.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and
