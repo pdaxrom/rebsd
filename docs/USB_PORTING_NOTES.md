@@ -19,8 +19,12 @@ on 2026-07-13. The Bulk-Only/SCSI backend and common disk layer are
 hardware-verified for capacity, MBR, whole/partition reads, idle
 detach/reconnect, and raw writes. On 2026-07-15 a 15 KiB range was saved,
 overwritten, read back byte-for-byte, restored, and read back again through a
-high-speed hub. Read-only FAT32 mount, traversal, and file reads are also
-hardware verified after that restoration. A high-speed external hub with
+high-speed hub. FAT32 read/write file creation, overwrite, truncate, remove,
+nested directory mutation, same-directory rename, read-only mount enforcement,
+and remount persistence are hardware verified. The 64-bit `off_t` ABI was
+also exercised against the 15 GB USB disk with both target GCC and native PCC.
+`mkfs.fat` and non-mutating `fsck.fat` passed on the board; the checker also
+reported the existing FAT32 volume clean. A high-speed external hub with
 simultaneous high-speed storage and low-speed keyboard, including child and
 complete-hub reconnect, was hardware-verified on 2026-07-15; the final
 candidate's full successful UART capture is retained in `docs/usb-logs/`. The
@@ -77,7 +81,7 @@ results, not Creator Ci20 hardware results.
 | soft interrupt/task queue | A USB-local fixed queue holds at most eight coalescing tasks. IRQ code schedules work and wakes proc0; the proc0 scheduler loop performs root-hub exploration, enumeration, attach, and detach. |
 | `splusb` | Use the existing global interrupt masking primitive through a small USB critical-section wrapper. |
 | root-hub child attach | USB core creates a `usb_device`; the HCD exposes root-hub control and port status through the common HCD operations. |
-| disk attach | `sys/disk` owns the static `bdevsw` entry, units/minors, MBR regions and `strategy(struct buf *)`; USB, SD/MMC, IDE and SATA attach through one backend contract. |
+| disk attach | `sys/disk` owns the static `bdevsw` entry, units/minors, partition regions and `strategy(struct buf *)`; USB, SD/MMC, IDE and SATA attach through one backend contract. Classic MBR is implemented; 64-bit LBA/GPT is the next common-layer phase. |
 | `scsipi` | No equivalent is present. Implement the required compact single-LUN BOT/SCSI commands directly. |
 | wscons keyboard | No equivalent.  Add a small keyboard-input registration/submission API above `ttyinput`. |
 
@@ -407,15 +411,16 @@ read-only errors. It must not silently reinterpret ReBSD block numbers as
 512-byte sectors.
 
 The disk layer is not part of USB. `sys/disk` owns the common `sdN` namespace,
-five minors per unit (whole disk plus four primary MBR entries), media ioctls,
-MBR revalidation, dirty tracking, last-close and explicit flush, and the
-`read`/`write`/`flush`/`present` backend contract. The USB Mass Storage driver
+partition minors, media ioctls, partition-table revalidation, dirty tracking,
+last-close and explicit flush, and the `read`/`write`/`flush`/`present` backend
+contract. The initial table format is classic MBR with four primary entries;
+64-bit LBAs and GPT belong here rather than in `umass`. The USB Mass Storage driver
 implements one such backend using BOT and SCSI. Future SD/MMC, IDE/ATA, and
 SATA/AHCI drivers will implement the same backend contract and will not depend
 on USB.
 
 Filesystems sit above block devices and are configured independently of every
-transport. New FAT, exFAT, and ext-family implementations belong under
+transport. FAT, future exFAT, and future ext-family implementations belong under
 `sys/fs`, not under `sys/usb` or a board directory; disabling USB must not
 remove a filesystem, and disabling a filesystem must not remove a disk
 transport.
@@ -433,8 +438,10 @@ sectors 32 through 61, wrote and compared a 15 KiB pattern, restored and
 compared the original bytes, then mounted and listed the FAT32 partition
 read-only. The full UART capture is
 `docs/usb-logs/ci20-umass-write-verified-20260715.txt`. This proves raw block
-write and flush behavior; the FAT filesystem itself remains deliberately
-read-only.
+write and flush behavior. Later Ci20 gates verified FAT32 read/write file and
+directory mutation, rename, persistence, read-only mount enforcement,
+64-bit `off_t`, and the FAT maintenance tools. Their exact console transcript
+is retained in `docs/usb-logs/ci20-storage-filesystem-verified-20260715.txt`.
 
 ## Console Input
 

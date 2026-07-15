@@ -284,9 +284,9 @@ make -C sys/mips BOARD=ci20 \
 
 The object profile places the result at
 `../rebsd-usb-support-build/ci20-kgcc-ugcc-mips32r2-hard-little-elf/obj/sys/mips/ci20/ci20.uImage`.
-The current writable mass-storage candidate is a clean full GCC build with a
-32 MiB rootfs. Its `ci20.uImage` SHA-256 is
-`e2b14a2245d01a9b61069b31c92104ecad18c6dea6c4ccab4c0274febca9f9a8`.
+The final FAT maintenance-tools image is a clean full GCC build with a 32 MiB
+rootfs. Its `ci20.uImage` SHA-256 is
+`0b357a655e984a18161f7355b6b362e912fa83b7908e0778a3d8657b16555720`.
 
 Boot the image with the existing Ci20/U-Boot procedure while capturing UART4.
 Use only the right-hand J23 type-A host port. J24/J8 is the separate OTG block
@@ -389,11 +389,17 @@ ls /mnt
 umount /mnt
 ```
 
-This gate passed through the populated high-speed hub on 2026-07-15: both
+This raw-block gate passed through the populated high-speed hub on 2026-07-15: both
 `cmp` commands succeeded, the original bytes were restored, and the FAT32
 partition mounted and listed normally afterward. The exact UART capture is
 `usb-logs/ci20-umass-write-verified-20260715.txt`. It verifies raw block write
-and flush behavior only; FAT remains read-only.
+and flush behavior. Subsequent gates mounted FAT32 read-write and verified
+file create/overwrite/truncate/remove, nested directory create/remove,
+same-directory file and non-empty-directory rename, remount persistence, and
+strict `-r` behavior. The same storage stack passed the 64-bit seek smoke with
+both target compilers, and `mkfs.fat`/`fsck.fat` passed on both a scratch FAT16
+image and the existing FAT32 partition. The retained command transcript is
+`usb-logs/ci20-storage-filesystem-verified-20260715.txt`.
 
 For the external-hub gate, connect the high-speed hub with the flash drive and
 keyboard already attached. Expected lines include:
@@ -456,8 +462,11 @@ root/external-hub, boot-report decoder, full fake-OHCI control/periodic/RHSC
 scheduling, compact fake-EHCI asynchronous/periodic/split scheduling and
 routing, fake-JZ4780 register sequencing, and BOT/SCSI tests.
 `make -C sys/tests/disk test` covers the common disk/MBR layer and byte-exact
-`fdisk` ABI; `make -C sys/tests/fat test` covers the read-only FAT parser and
-file path. The fake OHCI test covers IRQ
+`fdisk` ABI; `make -C sys/tests/fat test` covers FAT parsing, reads, writes,
+allocation, truncation, removal, directory mutation, and rename. The
+`sys/tests/fsck_fat` and `sys/tests/mkfs_fat` suites cover clean/corrupt images,
+repair policy, FAT copies, cluster chains, FAT32 metadata, and format geometry.
+The fake OHCI test covers IRQ
 acknowledgement, data-toggle carry, rearm, simultaneous control traffic,
 masked-RHSC delivery, and deferred disconnect/reconnect. The fake EHCI test covers controller startup, schedule
 alignment, high-speed enumeration, bulk IN/OUT, short transfers, toggle,
@@ -472,8 +481,10 @@ and `fdisk`. The real-board tests verified
 OHCI periodic interrupt-IN, console input, proc0 deferred exploration, boot
 with an empty port, late attach, detach, address reuse, repeated reconnect,
 EHCI high-speed enumeration/reconnect, EHCI-to-OHCI ownership handoff, raw
-mass-storage and FAT32 reads, simultaneous keyboard/storage operation through
-a high-speed hub, child recovery, and five complete populated-hub reconnects.
+mass-storage reads and writes, FAT32 read/write mutation and persistence,
+64-bit file offsets, FAT maintenance tools, simultaneous keyboard/storage
+operation through a high-speed hub, child recovery, and five complete
+populated-hub reconnects.
 The final hub capture is retained in `docs/usb-logs/`.
 Earlier failed candidate captures remain in `docs/usb-logs/` as regression
 evidence.

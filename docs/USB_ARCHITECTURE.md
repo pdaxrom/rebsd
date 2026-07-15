@@ -189,20 +189,23 @@ uses BOT command completion as its available durability boundary. `umass`
 does not parse MBR entries, allocate minors, implement `bdevsw`, or know about
 filesystems.
 
-`sys/disk` owns four bounded disk slots, the common `sdN` namespace, five
-minors per slot, the 1024-byte ReBSD block to 512-byte sector conversion,
-classic-MBR regions, `strategy`, media ioctls, residuals, bounds, and
-optional read-only enforcement. It tracks dirty media, flushes on the last
-close, and exposes an explicit `DIOCFLUSH` ioctl. A backend owns command
-splitting, DMA/cache handling, timeouts, physical media presence, and its
-transport-specific flush operation. Detach first makes the backend report
+`sys/disk` owns four bounded disk slots, the common `sdN` namespace, the
+1024-byte ReBSD block to 512-byte sector conversion, partition regions,
+`strategy`, media ioctls, residuals, bounds, and optional read-only
+enforcement. It tracks dirty media, flushes on the last close, and exposes an
+explicit `DIOCFLUSH` ioctl. The initial implementation exposes a whole-disk
+minor plus four classic-MBR partitions per slot; the 64-bit-LBA/GPT extension
+is the next storage-layer phase and remains independent of USB. A backend owns
+command splitting, DMA/cache handling, timeouts, physical media presence, and
+its transport-specific flush operation. Detach first makes the backend report
 absent and unregisters the disk slot, then closes the USB pipes and releases
 the USB interface state.
 
-No filesystem code is called by `umass` or `sys/disk`. UFS and the current
-read-only FAT16/FAT32 module are separate VFS consumers. Future FAT write,
-exFAT, and ext-family modules remain independent of every transport and can be
-enabled or disabled separately.
+No filesystem code is called by `umass` or `sys/disk`. UFS and the FAT16/FAT32
+module are separate VFS consumers. FAT supports basic read/write operation,
+8.3 file and directory mutation, and same-directory rename; `fsck.fat` and
+`mkfs.fat` use the same block interface. exFAT and ext-family modules remain
+future, transport-independent work and can be enabled or disabled separately.
 
 ## HCD Contract
 

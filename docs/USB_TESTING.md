@@ -11,6 +11,9 @@ Run the complete machine-independent suite with:
 ```sh
 make -C sys/tests/usb test
 make -C sys/tests/disk test
+make -C sys/tests/fat test
+make -C sys/tests/fsck_fat test
+make -C sys/tests/mkfs_fat test
 ```
 
 The 2026-07-15 external-hub candidate passes all USB, disk, and FAT gates:
@@ -28,7 +31,9 @@ The 2026-07-15 external-hub candidate passes all USB, disk, and FAT gates:
 | `umass_test` | BOT framing/recovery, SCSI probe/capacity, bounded `READ(10)`/`WRITE(10)`, cache flush and command/wire errors | pass |
 | `disk_test` | transport-independent MBR parsing, regions/minors, partition-relative writes, dirty tracking and flush errors | pass |
 | `fdisk_mbr_test` | exact 512-byte ABI, little-endian fields, range/overflow/overlap validation | pass |
-| `fat_test` | FAT16/FAT32 BPB validation, bounded cluster chains, directories, long names and file reads | pass |
+| `fat_test` | FAT16/FAT32 validation, bounded chains, long-name reads, allocation, write/truncate/remove, directory mutation and rename | pass |
+| `fsck_fat` smoke | clean/corrupt FAT16/FAT32 images, FAT comparison, directory chains, lost clusters, FSInfo validation and repair policy | pass |
+| `mkfs_fat` smoke | FAT16/FAT32 geometry, primary/backup metadata, root initialization and no-write mode | pass |
 
 The OHCI RHSC test explicitly injects another root-hub status event while RHSC
 is masked. Reenabling the source must preserve and deliver that event. This is
@@ -259,8 +264,37 @@ succeeded, proving the partition remained intact. The retained UART capture
 is `usb-logs/ci20-umass-write-verified-20260715.txt`.
 
 This gate verifies raw block writes through BOT, the disk close/flush path,
-readback, and byte-exact restoration. It does not claim writable FAT support;
-the current FAT16/FAT32 filesystem remains deliberately read-only.
+readback, and byte-exact restoration. Later hardware gates verified the FAT
+write path itself.
+
+## Writable FAT, off64, and Maintenance-Tool Gates
+
+On 2026-07-15 `/dev/sd0a` mounted as FAT32 read-write behind the populated
+high-speed hub. The board created and compared regular files, truncated and
+rewrote them, removed them, created nested directories, rejected removal of a
+non-empty directory, removed empty directories, renamed regular files and a
+non-empty directory, synchronized, remounted, and verified persistent results.
+A separate `-r` mount rejected creation. The scripted rename gate ended with
+`fat rename smoke ok`.
+
+The 64-bit seek smoke passed against `/dev/sd0` using both the prebuilt target
+GCC program and a program compiled on the board by PCC. It seeks beyond 2 GiB
+without truncation and ended with `off64 smoke both compilers ok`. This is an
+ABI/file-offset result; the legacy UFS on-disk format remains 32-bit and is a
+separate future filesystem version.
+
+`fs-tools-smoke.sh` then created a sparse 4 MiB image, formatted it FAT16, and
+checked it clean. `mkfs.fat -N -v /dev/sd0a` reported the existing FAT32
+geometry without writing, and the corrected `fsck.fat -n /dev/sd0a` reported
+500 files, 47 directories, 1,869,971 free clusters, zero bad clusters, and no
+uncorrected errors. The verified image SHA-256 is:
+
+```text
+0b357a655e984a18161f7355b6b362e912fa83b7908e0778a3d8657b16555720  ci20.uImage
+```
+
+The exact supplied console transcript is retained in
+`usb-logs/ci20-storage-filesystem-verified-20260715.txt`.
 
 ## Creator Ci20 Matrix
 
@@ -281,7 +315,10 @@ the current FAT16/FAT32 filesystem remains deliberately read-only.
 | high-speed flash drive | right-hand J23, direct EHCI | verified attach, detach, and reconnect 2026-07-13 on `05adb0…` | final high-speed capture |
 | read-only USB block device | direct high-speed `1005:b113` on right-hand J23 | verified 2026-07-13 on `a9984d…` | capacity, MBR, whole/partition reads, idle detach/reconnect and reuse capture |
 | writable USB block device | high-speed `1005:b113` behind `214b:7000` hub | verified 2026-07-15 on `e2b14a…` | 15 KiB write/read/compare, byte-exact restore/compare, then FAT32 integrity check in `ci20-umass-write-verified-20260715.txt` |
-| FAT32 filesystem | `/dev/sd0a`, MBR type `0x0c` | verified read-only 2026-07-13 | mount, directory traversal, long names and enforced read-only behavior in `ci20-fat32-readonly-verified-20260713.txt` |
+| FAT32 read-only baseline | `/dev/sd0a`, MBR type `0x0c` | verified 2026-07-13 | mount, traversal, long names and enforced read-only behavior in `ci20-fat32-readonly-verified-20260713.txt` |
+| FAT32 read-write filesystem | `/dev/sd0a` behind `214b:7000` hub | verified 2026-07-15 | file/directory mutation, rename, sync/remount persistence, and `-r` enforcement |
+| 64-bit file offsets | `/dev/sd0`, target GCC and native PCC | verified 2026-07-15 | both compiler paths passed seeks beyond 2 GiB |
+| `mkfs.fat` and `fsck.fat` | scratch FAT16 image and existing `/dev/sd0a` FAT32 | verified 2026-07-15 on `0b357a…` | `fs-tools-smoke.sh`, no-write geometry probe, clean non-mutating check |
 | OTG port in host mode | left-hand J24/J8 | not implemented | separate DWC2 phase |
 
 The exact current hardware procedure and expected log lines are in

@@ -1,0 +1,129 @@
+Creator Ci20 storage/filesystem verification excerpts, 2026-07-15
+
+Topology: J23 host -> 214b:7000 high-speed hub -> 1005:b113 flash drive
+Final maintenance-tools ci20.uImage SHA-256:
+0b357a655e984a18161f7355b6b362e912fa83b7908e0778a3d8657b16555720
+
+The gates below were supplied as Ci20 console transcripts across successive
+images. Each later image retained the already verified storage changes.
+
+# mount -t fat /dev/sd0a /mnt
+fat0: FAT32, 30298527 sectors, 16 sectors/cluster, read-write
+# ls /mnt/RWTEST.BIN
+/mnt/RWTEST.BIN not found
+# dd if=/bin/sh of=/var/RWTEST.PAT bs=1024 count=15
+15+0 records in
+15+0 records out
+# dd if=/var/RWTEST.PAT of=/mnt/RWTEST.BIN bs=1024 count=15
+15+0 records in
+15+0 records out
+# sync
+# cmp /var/RWTEST.PAT /mnt/RWTEST.BIN
+# echo write-ok
+write-ok
+# : > /mnt/RWTEST.BIN
+# ls -l /mnt/RWTEST.BIN
+-rw-rw-rw-  1 root            0 Jan  1  1970 /mnt/RWTEST.BIN
+# dd if=/var/RWTEST.PAT of=/var/RWTEST.3K bs=1024 count=3
+3+0 records in
+3+0 records out
+# dd if=/var/RWTEST.3K of=/mnt/RWTEST.BIN bs=1024 count=3
+3+0 records in
+3+0 records out
+# sync
+# cmp /var/RWTEST.3K /mnt/RWTEST.BIN
+# echo truncate-rewrite-ok
+truncate-rewrite-ok
+# rm /mnt/RWTEST.BIN
+# sync
+# ls /mnt/RWTEST.BIN
+/mnt/RWTEST.BIN not found
+# umount /mnt
+# mount -t fat -r /dev/sd0a /mnt
+fat0: FAT32, 30298527 sectors, 16 sectors/cluster, read-only
+# echo fail > /mnt/ROFAIL.TXT
+/mnt/ROFAIL.TXT: cannot create
+# umount /mnt
+#
+
+# mount -t fat /dev/sd0a /mnt
+fat0: FAT32, 30298527 sectors, 16 sectors/cluster, read-write
+# mkdir /mnt/TSTDIR
+# mkdir /mnt/TSTDIR/SUBDIR
+# rmdir /mnt/TSTDIR
+rmdir: /mnt/TSTDIR: Directory not empty
+# dd if=/bin/sh of=/var/DIRTEST.PAT bs=1024 count=3
+3+0 records in
+3+0 records out
+# dd if=/var/DIRTEST.PAT of=/mnt/TSTDIR/SUBDIR/FILE.BIN bs=1024 count=3
+3+0 records in
+3+0 records out
+# sync
+# cmp /var/DIRTEST.PAT /mnt/TSTDIR/SUBDIR/FILE.BIN
+# rmdir /mnt/TSTDIR/SUBDIR
+rmdir: /mnt/TSTDIR/SUBDIR: Directory not empty
+# rm /mnt/TSTDIR/SUBDIR/FILE.BIN
+# rmdir /mnt/TSTDIR/SUBDIR
+# cd /mnt/TSTDIR
+# rmdir /mnt/TSTDIR
+rmdir: /mnt/TSTDIR: Device busy
+# cd /
+# rmdir /mnt/TSTDIR
+# sync
+# umount /mnt
+# mount -t fat /dev/sd0a /mnt
+fat0: FAT32, 30298527 sectors, 16 sectors/cluster, read-write
+# ls -la /mnt/TSTDIR
+/mnt/TSTDIR not found
+# umount /mnt
+#
+
+# ./off64-smoke.sh
+off64-smoke: prebuilt GCC against /dev/sd0
+off64 smoke ok
+off64-smoke: native PCC against /dev/sd0
+off64 smoke ok
+off64 smoke both compilers ok
+#
+
+# /root/fat-rename-smoke.sh
+fat-rename-smoke: mount /dev/sd0a on /mnt
+fat0: FAT32, 30298527 sectors, 16 sectors/cluster, read-write
+fat-rename-smoke: verify ls failure status
+fat-rename-smoke: rename regular file
+fat-rename-smoke: replace regular target
+fat-rename-smoke: protect open target
+/root/fat-rename-smoke.sh: 29 Terminated
+fat-rename-smoke: rename non-empty directory
+fat-rename-smoke: sync and remount
+fat0: FAT32, 30298527 sectors, 16 sectors/cluster, read-write
+fat rename smoke ok
+#
+
+# /root/fs-tools-smoke.sh
+fs-tools-smoke: verify UFS compatibility names
+fs-tools-smoke: create sparse 4 MiB image
+fs-tools-smoke: format FAT16 image
+/var/fs-tools-smoke.14.img: 8192 sectors, FAT16, 1 sectors/cluster, 8095 clusters
+/var/fs-tools-smoke.14.img: 1 reserved sectors, 32 sectors/FAT, 2 FATs
+/var/fs-tools-smoke.14.img: filesystem created
+fs-tools-smoke: check FAT16 image
+/var/fs-tools-smoke.14.img: FAT16, 8192 sectors, 1 sectors/cluster, 2 FATs
+** Phase 1 - Read and compare FATs
+** Phase 2 - Check directories and cluster chains
+** Phase 3 - Check for lost clusters
+** Phase 4 - Check FAT32 metadata
+/var/fs-tools-smoke.14.img: 0 files, 0 directories, 8095 free clusters, 0 bad clusters
+filesystem tools smoke ok
+# mkfs.fat -N -v /dev/sd0a
+/dev/sd0a: 30298527 sectors, FAT32, 16 sectors/cluster, 1891808 clusters
+/dev/sd0a: 32 reserved sectors, 14780 sectors/FAT, 2 FATs
+/dev/sd0a: data starts at sector 29592, hidden sectors 63, MBR type 0x0c
+# fsck.fat -n /dev/sd0a
+/dev/sd0a: FAT32, 30298527 sectors, 16 sectors/cluster, 2 FATs
+** Phase 1 - Read and compare FATs
+** Phase 2 - Check directories and cluster chains
+** Phase 3 - Check for lost clusters
+** Phase 4 - Check FAT32 metadata
+/dev/sd0a: 500 files, 47 directories, 1869971 free clusters, 0 bad clusters
+#
