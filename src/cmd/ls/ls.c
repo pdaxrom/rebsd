@@ -13,6 +13,7 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/dir.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sgtty.h>
@@ -53,6 +54,7 @@ char	*dotp = ".";
 
 struct	winsize win;
 int	twidth;
+int	rval;
 
 char	*flags_to_string (unsigned flags, char *def);
 unsigned string_to_flags (char **stringp, unsigned *setp, unsigned *clrp);
@@ -180,7 +182,7 @@ main(int argc, char *argv[])
 		qsort(fp0, fplast - fp0, sizeof (struct afile), fcmp);
 	if (dflg) {
 		formatf(fp0, fplast);
-		exit(0);
+		exit(rval);
 	}
 
 	if (fflg)
@@ -210,7 +212,7 @@ main(int argc, char *argv[])
 			putchar('\n');
 		}
 	}
-	exit(0);
+	exit(rval);
 }
 
 void
@@ -264,7 +266,8 @@ getdir(char *dir, struct afile **pfp0, struct afile **pfplast, int *isadir)
 	dirp = opendir(dir);
 	if (dirp == NULL) {
 		*pfp0 = *pfplast = NULL;
-		printf("%s unreadable\n", dir);		/* not stderr! */
+		fprintf(stderr, "ls: %s: %s\n", dir, strerror(errno));
+		rval = 1;
 		return (0);
 	}
 	fstat(dirfd(dirp), &st);
@@ -320,7 +323,9 @@ gstat(struct afile *fp, char *file, int statarg, long *pnb)
 
 		if ((*statf)(file, &stb) < 0) {
 			if (statf == lstat || lstat(file, &stb) < 0) {
-				fprintf(stderr, "%s not found\n", file);
+				fprintf(stderr, "ls: %s: %s\n", file,
+				    strerror(errno));
+				rval = 1;
 				return (0);
 			}
 		}

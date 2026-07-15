@@ -106,6 +106,9 @@ mode 0775
 file /root/lang-smoke.sh
 mode 0775
 
+file /root/fat-rename-smoke.sh
+mode 0775
+
 file /root/libc-string-smoke.sh
 mode 0775
 

@@ -15,6 +15,7 @@ int e1(void);
 int e2(void);
 int e3(void);
 int tio(char *a, int f);
+int fexist(char *f);
 int filtyp(char *f, int field);
 int ftype(char *f, int field);
 int fsizep(char *f);
@@ -110,6 +111,8 @@ int e3()
             return (tio(nxtarg(0), 2));
         if (eq(a, "-x"))
             return (tio(nxtarg(0), 1));
+        if (eq(a, "-e"))
+            return (fexist(nxtarg(0)));
         if (eq(a, "-d"))
             return (filtyp(nxtarg(0), S_IFDIR));
         if (eq(a, "-c"))
@@ -180,6 +183,13 @@ int tio(char *a, int f)
         return (1);
     else
         return (0);
+}
+
+int fexist(char *f)
+{
+    struct stat statb;
+
+    return (stat(f, &statb) == 0);
 }
 
 int ftype(char *f, int field)

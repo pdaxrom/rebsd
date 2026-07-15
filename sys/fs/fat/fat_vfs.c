@@ -982,6 +982,38 @@ fat_entry_delete(struct fat_mount *fmp, ino_t ino)
 }
 
 static int
+fat_entry_rename_at(struct fat_mount *fmp, unsigned sector, unsigned slot,
+    const unsigned char *old_name, const unsigned char *new_name,
+    int directory, unsigned cluster)
+{
+    struct buf *bp;
+    struct fat_dirent dirent;
+    unsigned char *data;
+    unsigned char *entry;
+    int error;
+
+    if (slot >= FAT_DIRENTS_PER_SECTOR)
+        return EINVAL;
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    entry = data + slot * FAT_DIRENT_SIZE;
+    if (!fat_dirent_is_visible(entry) ||
+        ((entry[11] & FAT_ATTR_DIRECTORY) != 0) != directory ||
+        bcmp(entry, old_name, 11u) != 0) {
+        brelse(bp);
+        return EOPNOTSUPP;
+    }
+    fat_dirent_parse(&dirent, entry);
+    if (fat_dirent_cluster(fmp, &dirent) != cluster) {
+        brelse(bp);
+        return EIO;
+    }
+    bcopy(new_name, entry, 11u);
+    return fat_buffer_write(fmp, bp);
+}
+
+static int
 fat_directory_initialize(struct fat_mount *fmp, unsigned cluster,
     unsigned parent_cluster)
 {
@@ -1811,6 +1843,8 @@ fat_remove(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
         return EROFS;
     if ((ip->i_mode & IFMT) != IFREG)
         return EISDIR;
+    if (ip->i_count > 1u)
+        return EBUSY;
     error = fat_short_name_encode(ndp->ni_dent.d_name,
         ndp->ni_dent.d_namlen, short_name);
     if (error != FAT_PARSE_OK)
@@ -1891,6 +1925,78 @@ fat_rmdir(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
         pdir->i_size = dir_size;
     cacheinval(pdir);
     return fat_chain_free(fmp, cluster);
+}
+
+static int
+fat_rename(struct inode *from_pdir, struct inode *from_ip,
+    struct nameidata *from_ndp, struct inode *to_pdir, struct inode *to_ip,
+    struct nameidata *to_ndp)
+{
+    struct fat_mount *fmp;
+    unsigned char from_name[11];
+    unsigned char to_name[11];
+    unsigned cluster;
+    unsigned sector;
+    unsigned slot;
+    int directory;
+    int error;
+
+    fmp = fat_mount_from_inode(from_ip);
+    if (fmp == 0 || fmp != fat_mount_from_inode(from_pdir) ||
+        fmp != fat_mount_from_inode(to_pdir) ||
+        (to_ip != 0 && fmp != fat_mount_from_inode(to_ip)))
+        return EXDEV;
+    if (fmp->fm_read_only)
+        return EROFS;
+    if (from_pdir->i_number != to_pdir->i_number)
+        return EOPNOTSUPP;
+    error = fat_short_name_encode(from_ndp->ni_dent.d_name,
+        from_ndp->ni_dent.d_namlen, from_name);
+    if (error != FAT_PARSE_OK)
+        return EOPNOTSUPP;
+    error = fat_short_name_encode(to_ndp->ni_dent.d_name,
+        to_ndp->ni_dent.d_namlen, to_name);
+    if (error != FAT_PARSE_OK)
+        return EOPNOTSUPP;
+    if (to_ip == from_ip)
+        return 0;
+
+    directory = (from_ip->i_mode & IFMT) == IFDIR;
+    if (!directory && (from_ip->i_mode & IFMT) != IFREG)
+        return EFTYPE;
+    if (to_ip != 0) {
+        if (directory && (to_ip->i_mode & IFMT) != IFDIR)
+            return ENOTDIR;
+        if (!directory && (to_ip->i_mode & IFMT) == IFDIR)
+            return EISDIR;
+    }
+    cluster = (unsigned)from_ip->i_addr[0];
+    if (directory) {
+        if (!fat_cluster_valid(&fmp->fm_volume, cluster))
+            return EIO;
+        error = fat_directory_entry_location(fmp, from_pdir->i_number,
+            from_name, cluster, &sector, &slot);
+    } else {
+        if (cluster != 0 && !fat_cluster_valid(&fmp->fm_volume, cluster))
+            return EIO;
+        error = fat_file_location(from_ip->i_number, &sector, &slot);
+    }
+    if (error)
+        return error;
+
+    if (to_ip != 0) {
+        error = directory ? fat_rmdir(to_pdir, to_ip, to_ndp) :
+            fat_remove(to_pdir, to_ip, to_ndp);
+        if (error)
+            return error;
+    }
+    error = fat_entry_rename_at(fmp, sector, slot, from_name, to_name,
+        directory, cluster);
+    if (error)
+        return error;
+    cacheinval(from_pdir);
+    cacheinval(from_ip);
+    return 0;
 }
 
 static int
@@ -2029,7 +2135,7 @@ struct vfsops fat_vfsops = {
     fat_remove,
     fat_mkdir,
     fat_rmdir,
-    0,
+    fat_rename,
     fat_truncate,
     fat_statfs,
     fat_sync,

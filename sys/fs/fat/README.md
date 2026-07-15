@@ -14,10 +14,11 @@ The writable implementation supports creating 8.3 regular files, extending
 and overwriting their cluster chains, truncating them, and removing them. It
 also supports creating and removing 8.3 directories, including nested
 directories and on-disk `.`/`..` linkage. Existing VFAT long names remain
-readable. Creating long names and renaming entries are deliberately deferred to
-the next filesystem slice. Mounting with `-r` preserves strict read-only
-behavior, and a backend that cannot be opened for writing cannot be mounted
-read-write.
+readable. Regular files and directories can be renamed within one directory
+while preserving their directory slot. Cross-directory moves and creating long
+names are deliberately deferred to later filesystem slices. Mounting with `-r`
+preserves strict read-only behavior, and a backend that cannot be opened for
+writing cannot be mounted read-write.
 
 Current structural limits are a 2 GiB minus one byte maximum file size (the
 kernel has signed 32-bit `off_t`) and a volume smaller than 120 GiB (the
