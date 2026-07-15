@@ -3100,3 +3100,111 @@ The intended rolled `ddot` path gains 16.05%.  `dscal_r` is the only
 isolated result outside a one-percent band and is recorded as a measured H13
 cost for later investigation.  H13 closes its physical and commit gates with
 correctness intact, a broad general-corpus gain, and an overall Linpack gain.
+
+## H14 Conservative Control-Delay Lookback
+
+H14 extends the existing driver-level MIPS late peephole instead of adding a
+new scheduler pass or backend IR.  For VR4300 and MIPS32R2 it can make these
+two conservative rewrites when the original delay slot is a `nop`:
+
+```text
+candidate; middle; control; nop  ->  middle; control; candidate
+label: candidate; control; nop   ->  label: control; candidate
+```
+
+The one-instruction lookback requires `middle` to be a parsed simple GPR
+move/ALU instruction that cannot itself fill the delay slot.  A GPR candidate
+must have no RAW, WAR, or WAW conflict with `middle` and must already satisfy
+the control-transfer safety check.  An FPU candidate is limited to
+`mov.s`/`mov.d`, whose register file is independent of the GPR middle
+instruction.  Existing direct store/load policies are unchanged; memory
+operations are not admitted by the new lookback rule.  Signed-16 immediate
+forms of the assembler `addu`/`subu` pseudos are parsed only when they lower to
+one `addiu` without an implicit `$at` temporary.  Generic MIPS3/R4000 retains
+the previous output.
+
+The focused VR4300 general benchmark keeps 1115 useful instructions and its
+memory/control operation counts unchanged while total instructions fall from
+1210 to 1188, branch/jump delay-slot `nop`s fall from 87 to 65, and assembly
+size falls by 110 bytes.  The Linpack-kernel translation unit keeps 2917 useful
+instructions and unchanged memory/control counts while total instructions
+fall from 3154 to 3140, branch/jump delay-slot `nop`s fall from 214 to 200,
+and assembly size falls by 70 bytes.  Manual assembly review confirms that the
+removed instructions are only delay-slot `nop`s.
+
+Host assembly probes cover the lookback and label-entry positive cases, an
+FPU move, a GPR dependency negative case, and generic MIPS3 negative controls.
+Host smoke passes.  Cross regression reports 340 compile passes and the same
+three expected failures from 343 cases, followed by 303/303 runtime passes.
+All six PCC-kernel/PCC-rootfs full-smoke profiles on Malta64, Malta, and
+MaltaEL in hard- and soft-float modes report compiler self-test zero,
+`CCOM_STRESS_DONE:100`, `PCC_SMOKE_ALL_FAILURES 0`, and final RC zero.
+
+The retained physical candidate is:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h14-control-delay-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 72d3497e0e0cd3fc97b70b21b9782fcaeeef3d9dd0bcca7fdcce0ddd0ccdbdae
+kernel ELF sha256: a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d
+debug runner sha256: 0376eafdf3e898785ef1d934e91c1db7064d3863b5191dfeb8fc8ca1a4dec0fe
+```
+
+It uses the required GCC kernel and PCC VR4300 hard-float a.out userland.  The
+kernel and all three GCC benchmark controls are byte-identical to H13, while
+all three PCC benchmark executables differ.  The runner and all six benchmark
+executables have zero undefined symbols.  The 6144 KiB rootfs passes all five
+`fsutil` phases with 359 files, 3852 used blocks, and 2267 free blocks.
+Physical N64 validation remains mandatory before commit.
+
+H14 does not weaken the VR4300 multiplication workaround.  The delay-slot
+candidate checks still reject `mul.s`/`mul.d` while `-mfix4300` is active, and
+the existing erratum repair runs after the late peephole.  `-mfix4300` remains
+the default for VR4300 and `-mno-fix4300` remains the explicit opt-out.
+
+Physical N64 validation passes the complete extended runner.  Both general
+and Linpack-kernel self-tests pass, every GCC/PCC benchmark return code is
+zero, `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC` are zero, and the
+terminal `N64_PCC_DEBUG_RC_END` marker is present.  The H13/H14 general PCC
+comparison is:
+
+| Kernel | H13 PCC | H14 PCC | Change | H14 PCC/GCC |
+| --- | ---: | ---: | ---: | ---: |
+| `int_mix` | 4.190 | 4.413 | +5.32% | 66.72% |
+| `const_div` | 0.974 | 0.984 | +1.03% | 72.09% |
+| `branch` | 3.080 | 3.107 | +0.88% | 65.29% |
+| `switch` | 3.076 | 3.113 | +1.20% | 62.50% |
+| `memory` | 6.515 | 7.012 | +7.63% | 68.65% |
+| `libc_memory` | 38.933 | 37.972 | -2.47% | 73.34% |
+| `calls` | 3.304 | 3.425 | +3.66% | 70.11% |
+| `u64` | 1.923 | 1.965 | +2.18% | 68.02% |
+| `float` | 3.266 | 3.382 | +3.55% | 69.83% |
+| `double` | 2.579 | 2.652 | +2.83% | 99.89% |
+| `convert` | 1.696 | 1.780 | +4.95% | 70.19% |
+
+Ten of eleven general kernels improve, which is consistent with eliminating
+delay-slot `nop`s across ordinary integer, call, memory, and floating-point
+code rather than specializing Linpack.  `libc_memory` is the only measured
+general regression and is recorded for later investigation.
+
+Ordinary GCC Linpack rows are 4475.169 and 4427.366 KFLOPS, averaging
+4451.267.  PCC rows are 3840.341 and 3774.191 KFLOPS, averaging 3807.266.
+PCC therefore improves 0.56% over H13's 3786.128 mean and reaches 85.53% of
+the current GCC result.  The isolated kernel comparison is:
+
+| Kernel | H13 PCC | H14 PCC | Change | H14 PCC/GCC |
+| --- | ---: | ---: | ---: | ---: |
+| `daxpy_r` | 3.726 | 3.728 | +0.05% | 71.84% |
+| `daxpy_ur` | 4.513 | 4.513 | +0.00% | 88.08% |
+| `ddot_r` | 4.967 | 4.967 | +0.00% | 82.25% |
+| `ddot_ur` | 5.709 | 5.708 | -0.02% | 84.35% |
+| `dscal_r` | 4.685 | 4.850 | +3.52% | 67.90% |
+| `dscal_ur` | 6.481 | 6.539 | +0.89% | 78.07% |
+| `idamax` | 5.340 | 5.379 | +0.73% | 82.11% |
+
+The unchanged `dscal_r` function returns to its H12 performance level in this
+run, confirming that the low H13 measurement was timing variation rather than
+a counted-loop code-generation cost.  H14 closes its physical and commit
+gates with broad general-code gains, a small overall Linpack gain, and the
+remaining 90% performance target still open.

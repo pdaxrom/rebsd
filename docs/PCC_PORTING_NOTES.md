@@ -1638,6 +1638,37 @@ remain within 0.81% of H12.  `dscal_r` is 3.32% below H12 and the other
 isolated kernels remain within 0.74%.  This closes the H13 physical and commit
 gates while the 90% overall target remains open.
 
+## Conservative Control-Delay Lookback
+
+H14 extends the existing MIPS late peephole for VR4300 and MIPS32R2.  A safe
+instruction may move from immediately after a label into a following control
+delay slot.  The peephole may also look back across one simple GPR move/ALU
+instruction when that middle instruction cannot fill the slot and all GPR
+RAW/WAR/WAW dependencies are disjoint.  Candidates remain limited to the
+existing non-trapping GPR move/ALU set plus `mov.s`/`mov.d`; the new lookback
+does not move memory operations.  Generic MIPS3 output is unchanged.
+
+The focused general corpus removes 22 branch/jump delay-slot `nop`s and the
+Linpack-kernel translation unit removes 14, with useful instruction and
+memory/control counts unchanged.  Host positive/negative assembly gates,
+303/303 VR4300 runtime tests, and all six Malta64/Malta/MaltaEL hard/soft full
+smoke profiles pass.  The retained GCC-kernel/PCC-hard-float-a.out N64 image is
+`/Users/sash/Work/N64/retrobsd-build/n64-h14-control-delay-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 6619136 bytes, SHA-256
+`72d3497e0e0cd3fc97b70b21b9782fcaeeef3d9dd0bcca7fdcce0ddd0ccdbdae`.
+Its rootfs passes `fsutil --check`; physical N64 validation is required before
+commit.  `-mfix4300` remains the VR4300 default, multiply candidates remain
+blocked by the scheduler, and the erratum repair still runs afterward.
+
+Physical N64 validation passes the complete runner, both benchmark self-tests,
+every GCC/PCC return code, both zero-valued numeric debug markers, and the
+terminal marker.  Ten of eleven general PCC kernels improve over H13 by 0.88%
+to 7.63%; `libc_memory` is the measured exception at -2.47%.  PCC Linpack
+averages 3807.266 KFLOPS, 0.56% above H13 and 85.53% of the current GCC mean.
+The isolated kernels remain stable apart from the earlier low `dscal_r`
+measurement returning to its H12 level.  This closes the H14 physical and
+commit gates while preserving the 90% overall target.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

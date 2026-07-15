@@ -665,6 +665,121 @@ END { exit found ? 0 : 1 }
 
 cat > "$tmp.c" <<'EOF'
 void
+delay_lookback_probe(void)
+{
+	asm("1:\n\t"
+	    "addiu $a0,$a0,4\n\t"
+	    "subu $v0,$v1,1\n\t"
+	    "bnez $v0,1b\n\t"
+	    "nop");
+}
+
+void
+delay_label_probe(void)
+{
+	asm("2:\n\t"
+	    "addiu $a0,$a0,1\n\t"
+	    "j 3f\n\t"
+	    "nop\n"
+	    "3:");
+}
+
+void
+delay_fpu_move_probe(void)
+{
+	asm("4:\n\t"
+	    "mov.d $f2,$f0\n\t"
+	    "subu $v0,$v1,1\n\t"
+	    "bnez $v0,4b\n\t"
+	    "nop");
+}
+
+void
+delay_dependency_probe(void)
+{
+	asm("5:\n\t"
+	    "addiu $a0,$a0,1\n\t"
+	    "subu $v0,$a0,1\n\t"
+	    "bnez $v0,5b\n\t"
+	    "nop");
+}
+EOF
+
+for schedule_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$schedule_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
+	awk '
+/^[[:space:]]*1:$/ { lookback = 1; next }
+lookback == 1 && /^[[:space:]]*subu[[:space:]]+\$v0,\$v1,1/ {
+	lookback = 2; next
+}
+lookback == 2 && /^[[:space:]]*bnez[[:space:]]+\$v0,1b/ {
+	lookback = 3; next
+}
+lookback == 3 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,4/ {
+	lookback_ok = 1; lookback = 0; next
+}
+/^[[:space:]]*2:$/ { label = 1; next }
+label == 1 && /^[[:space:]]*j[[:space:]]+3f/ { label = 2; next }
+label == 2 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,1/ {
+	label_ok = 1; label = 0; next
+}
+/^[[:space:]]*4:$/ { fpu = 1; next }
+fpu == 1 && /^[[:space:]]*subu[[:space:]]+\$v0,\$v1,1/ {
+	fpu = 2; next
+}
+fpu == 2 && /^[[:space:]]*bnez[[:space:]]+\$v0,4b/ { fpu = 3; next }
+fpu == 3 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	fpu_ok = 1; fpu = 0; next
+}
+/^[[:space:]]*5:$/ { dependency = 1; next }
+dependency == 1 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,1/ {
+	dependency = 2; next
+}
+dependency == 2 && /^[[:space:]]*subu[[:space:]]+\$v0,\$a0,1/ {
+	dependency = 3; next
+}
+dependency == 3 && /^[[:space:]]*bnez[[:space:]]+\$v0,5b/ {
+	dependency = 4; next
+}
+dependency == 4 && /^[[:space:]]*nop/ { dependency_ok = 1 }
+END {
+	exit lookback_ok && label_ok && fpu_ok && dependency_ok ? 0 : 1
+}
+' "$tmp.s" || {
+	echo "$schedule_cpu failed safe control-delay lookback" >&2
+	exit 1
+}
+done
+
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 \
+    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
+awk '
+/^[[:space:]]*1:$/ { lookback = 1; next }
+lookback == 1 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,4/ {
+	lookback = 2; next
+}
+lookback == 2 && /^[[:space:]]*subu[[:space:]]+\$v0,\$v1,1/ {
+	lookback = 3; next
+}
+lookback == 3 && /^[[:space:]]*bnez[[:space:]]+\$v0,1b/ {
+	lookback = 4; next
+}
+lookback == 4 && /^[[:space:]]*nop/ { lookback_ok = 1; lookback = 0 }
+/^[[:space:]]*2:$/ { label = 1; next }
+label == 1 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,1/ {
+	label = 2; next
+}
+label == 2 && /^[[:space:]]*j[[:space:]]+3f/ { label = 3; next }
+label == 3 && /^[[:space:]]*nop/ { label_ok = 1 }
+END { exit lookback_ok && label_ok ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 unexpectedly enabled control-delay lookback" >&2
+	exit 1
+}
+
+cat > "$tmp.c" <<'EOF'
+void
 fpu_latency_schedule_probe(void)
 {
 	asm("mul.d $f4,$f2,$f0\n\t"

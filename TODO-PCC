@@ -5077,6 +5077,36 @@ Milestone order:
     `float`, and `double` improve by 4.06% to 13.90%; `branch`, `switch`,
     `libc_memory`, and `convert` remain within 0.81% of H12.  This closes the
     H13 physical and commit gates.
+  - [x] H14 extend the existing late MIPS peephole to fill conservative
+    control-transfer delay slots on VR4300 and MIPS32R2.  Permit a safe
+    instruction immediately after a label and a one-instruction lookback
+    across an independent simple GPR operation.  Accept only the existing
+    non-trapping GPR move/ALU candidates plus `mov.s`/`mov.d`; keep generic
+    MIPS3 unchanged and reject dependency conflicts.
+  - [x] Add host assembly gates for label entry, one-instruction lookback,
+    hard-float moves, dependency rejection, and the generic-MIPS3 negative
+    control.  Extend signed-16 `addu`/`subu` pseudo parsing only where the
+    assembler can lower it without an implicit `$at` temporary.
+  - [x] Pass H14 host smoke, 340/343 cross compilation with the same three
+    expected failures, and 303/303 VR4300 runtime tests.  All six full
+    PCC-kernel/PCC-rootfs Malta64/Malta/MaltaEL hard/soft QEMU profiles report
+    compiler self-test zero, `CCOM_STRESS_DONE:100`, zero smoke failures, and
+    final RC zero.
+  - [x] Build and retain the H14 GCC-kernel/PCC-VR4300-hard-float a.out N64
+    image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h14-control-delay-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `72d3497e0e0cd3fc97b70b21b9782fcaeeef3d9dd0bcca7fdcce0ddd0ccdbdae`.
+    The GCC kernel and three GCC benchmark controls are byte-identical to H13,
+    all seven runner/benchmark executables have no undefined symbols, and the
+    6144 KiB rootfs passes all five `fsutil` phases with 359 files.
+  - [x] Run H14 on physical N64 and record the complete correctness and
+    performance output before committing.  Require both numeric debug markers
+    to be zero, the terminal marker, both benchmark self-tests, and every
+    benchmark return code.  The complete runner passes.  PCC Linpack averages
+    3807.266 KFLOPS, 0.56% above H13 and 85.53% of the current GCC mean.  Ten
+    of eleven general kernels improve by 0.88% to 7.63%; `libc_memory` is the
+    recorded exception at -2.47%.  Keep `-mfix4300` enabled for this image.
 
 Success criteria:
 
