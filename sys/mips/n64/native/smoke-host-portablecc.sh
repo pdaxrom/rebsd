@@ -150,6 +150,7 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.ssastrength.s" "$tmp.ssastrength.log" "$tmp.fpaccum.s" \
     "$tmp.ssacounted.s" "$tmp.ssacounted.log" \
     "$tmp.ssacounted.mips3.s" "$tmp.ssacounted.mips3.log" \
+    "$tmp.switchtable.s" "$tmp.switchtable.generic.s" \
     "$tmp.llpack.s" "$tmp.pointertemp.s" "$tmp.pointertemp.log" \
     "$tmp.staticspec.s" "$tmp.staticspec.os.s" "$tmp.staticspec.free.s" \
     "$tmp.staticspec.generic.s" \
@@ -1957,6 +1958,34 @@ counted_generic_jumps=$(awk '
 ' "$tmp.ssacounted.mips3.s")
 test "$counted_generic_bne" -eq 0
 test "$counted_generic_jumps" -eq 5
+
+for switch_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$switch_cpu" -O2 -S \
+	    -o "$tmp.switchtable.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/switchtable001.c"
+	switch_jumps=$(grep -c 'computed goto' "$tmp.switchtable.s")
+	switch_entries=$(grep -c '^[[:space:]]*\.word[[:space:]]\+L[0-9]' \
+	    "$tmp.switchtable.s")
+	switch_pointer_steps=$(awk '
+	    /[.]ent[[:space:]]+loop_switch/ { in_loop = 1; next }
+	    in_loop && /[.]ent[[:space:]]+/ { in_loop = 0 }
+	    in_loop && /^[[:space:]]*addiu[[:space:]].*,4/ { count++ }
+	    END { print count + 0 }
+	' "$tmp.switchtable.s")
+	test "$switch_jumps" -ge 4
+	test "$switch_entries" -ge 30
+	test "$switch_pointer_steps" -ge 1
+done
+
+"$pcc" -march=mips3 -mtune=r4000 -O2 -S \
+    -o "$tmp.switchtable.generic.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/switchtable001.c"
+if grep 'computed goto' "$tmp.switchtable.generic.s" >/dev/null ||
+    grep '^[[:space:]]*\.word[[:space:]]\+L[0-9]' \
+    "$tmp.switchtable.generic.s" >/dev/null; then
+	echo "generic MIPS3 unexpectedly received dense switch tables" >&2
+	exit 1
+fi
 
 "$pcc" -Os -S -o "$tmp.pointertemp.s" \
     "$topsrc/src/dev/pcc/pcc-tests/regress/misc/pointertemp001.c" \

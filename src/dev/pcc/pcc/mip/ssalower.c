@@ -1319,26 +1319,13 @@ isolate_branch_pad(struct basicblock *destination, int label)
  * must be installed first.  Branch pads go next to their destination, after
  * making any physical fallthrough predecessor jump over the pad.
  */
-int
+void
 ssa_split_critical_edges(struct p2env *p2e)
 {
 	struct basicblock *bb, *branch, *fall;
-	struct cfgnode *cn;
 	struct interpass *cursor, *ip, *term;
 	NODE *p;
 	int branch_label, fall_label, new_branch_label, new_fall_label;
-
-	/* Computed goto destinations cannot be retargeted in the pass2 IR. */
-	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
-		if (edge_count(bb, 1) <= 1 || bb->last->type != IP_NODE)
-			continue;
-		p = bb->last->ip_node;
-		if (p->n_op != GOTO || p->n_left->n_op == ICON)
-			continue;
-		SLIST_FOREACH(cn, &bb->child, chld)
-			if (edge_count(cn->bblock, 0) > 1)
-				return 0;
-	}
 
 	/* Split critical physical fallthrough edges without moving the target. */
 	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
@@ -1378,7 +1365,6 @@ ssa_split_critical_edges(struct p2env *p2e)
 		ip = new_goto(branch_label);
 		DLIST_INSERT_BEFORE(branch->first, ip, qelem);
 	}
-	return 1;
 }
 
 static void
@@ -1822,7 +1808,22 @@ edge_inserter(struct basicblock *parent, struct basicblock *bb,
     struct copy_inserter *where)
 {
 	struct cfgnode *cn;
+	NODE *p;
 	int children;
+
+	/*
+	 * A computed branch cannot be retargeted to an edge block.  Its SSA
+	 * outputs are distinct temporaries, so copies for every possible target
+	 * may execute before dispatch; copies for untaken targets are dead.
+	 */
+	if (parent->last->type == IP_NODE) {
+		p = parent->last->ip_node;
+		if (p->n_op == GOTO && p->n_left->n_op != ICON) {
+			where->before = parent->last;
+			where->cursor = NULL;
+			return;
+		}
+	}
 
 	children = 0;
 	SLIST_FOREACH(cn, &parent->child, chld) {

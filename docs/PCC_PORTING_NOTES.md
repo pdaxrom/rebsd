@@ -1669,6 +1669,121 @@ The isolated kernels remain stable apart from the earlier low `dscal_r`
 measurement returning to its H12 level.  This closes the H14 physical and
 commit gates while preserving the 90% overall target.
 
+## Dense Switch Tables
+
+H15 replaces the generic linear lowering only for profitable 32-bit dense
+switches on VR4300 and MIPS32R2.  A table requires at least five cases, a
+range of at most 256 entries, and at least 50% density.  Smaller, sparse,
+wide, generic MIPS3, and C++ switches retain the old lowering.  The switch
+value is normalized once and checked as unsigned, so signed negative ranges
+and unsigned ranges near `UINT_MAX` use the same 32-bit sequence.  Table
+entries are readonly `.word` case addresses loaded with `lw` and dispatched
+with `jr`; no MIPS64 instruction is introduced.
+
+The computed targets are registered through the frontend's existing
+address-taken-label list.  This gives pass2 conservative CFG edges to every
+case and prevents dead-block elimination from removing a case reached through
+the table.  It adds no new pass2 IR or scheduler state.  The focused
+`bench_switch` function falls from 91 to 83 instructions and from 13 to eight
+`nop`s.  More importantly, the hot dispatch no longer executes a chain of up
+to nine comparisons; it uses one range check, one table load, and one
+indirect jump.  GCC remains smaller at 67 instructions, leaving block layout
+and case-to-latch control flow as later general optimization work.
+
+`misc__switchtable001` covers holes/defaults, signed negative cases, unsigned
+wraparound, a switch without a default, and two tables in one function.  Host
+assembly gates require tables for VR4300 and MIPS32R2 and reject them for
+generic MIPS3.  Cross regression reports 341 compile passes plus the same
+three expected failures and 304/304 runtime passes.  All six PCC-kernel and
+PCC-rootfs Malta64/Malta/MaltaEL hard/soft full-smoke profiles pass with
+`CCOM_STRESS_DONE:100`, compiler self-test zero, and
+`PCC_SMOKE_ALL_FAILURES 0`.
+
+The `-j4` matrix exposed a pre-existing `awk` parser-generation race: a
+target without a recipe allowed GNU make's built-in `.y.c` rule to run a
+second `byacc` while `awk.h` was copied.  The side-effect targets now have an
+explicit portable recipe that verifies the files and blocks the implicit
+rule.  Clean parallel N64 and Malta builds confirm one parser generation.
+
+Before H15, saved H13 and H14 `libc_memory` assembly and the linked
+`memcmp`/`memcpy`/`memset` objects were compared and found byte-identical.
+H14's reported -2.47% `libc_memory` result is therefore physical timing
+variation, not a control-delay code-generation regression.
+
+The first H15 physical candidate was
+`/Users/sash/Work/N64/retrobsd-build/n64-h15-switch-table-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 6619136 bytes, SHA-256
+`22b608a0ee40a066b95e88e4f79808d1dc61d0c9ce1b3c3c6248ba75f0de4496`.
+It has build stamp `.build-mode.gcc.1.0.0.1`, a GCC kernel, and PCC VR4300
+hard-float a.out userland.  The kernel SHA-256 remains
+`a6a22e43ca2cbc5fc792eeaa4a8596070034f63c4749da6e9164af8496bb717d`.
+The rootfs passes all five `fsutil` phases with 360 files, 3853 used blocks,
+and 2266 free blocks.  The runner and all six GCC/PCC benchmark binaries have
+zero undefined symbols.  The rootfs stages `misc__switchtable001` and its
+fallback all-tests script executes it.  A later pre-release audit found that
+the primary C runner still omitted the new test, however.
+
+The first H15 image passes its physical N64 correctness gate.  The supplied
+excerpt starts at Linpack, but all visible self-tests and command return codes
+are zero, as are `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC`; the terminal
+marker is present.  GCC Linpack averages 4428.735 KFLOPS and PCC averages
+3822.356 KFLOPS, or 86.31% of GCC.  This is within physical timing noise of
+H14.  The general `switch` kernel regresses from 3.113 to 3.020 Miter/s,
+however, a 2.99% loss, so this version is rejected rather than committed.
+Because of the C-runner omission, this log does not close the new switch
+test's physical correctness gate.
+
+The regression exposed an interaction with pass2 SSA rather than a cost in
+the table dispatch itself.  PCC formerly abandoned SSA for an entire function
+when critical-edge splitting encountered a computed goto.  Adding the table
+therefore removed the existing `input_a` and `input_b` address inductions from
+the benchmark loop and recomputed both addresses on every iteration.
+
+H15b retains SSA in this case.  Ordinary critical edges are still split.  An
+unretargetable computed-goto edge instead emits destination phi copies before
+the dispatch; SSA result temporaries are distinct, so copies for untaken
+targets are dead.  `misc__switchtable001` now also has a dense switch in a loop
+with an accumulator phi and a symbol-address induction.  Its host assembly
+gate requires the four-byte pointer increment, preventing this regression
+from returning.
+
+H15b restores both benchmark pointer inductions and reduces the focused
+function to 82 instructions, 74 non-NOP instructions, eight NOPs, three
+branches, and 12 jumps.  Host hard-float a.out smoke passes.  Malta64 reports
+341/344 cross-compilation passes with the same three expected failures and
+304/304 runtime passes.  All six full Malta64/Malta/MaltaEL hard/soft profiles
+pass with PCC kernels and root filesystems.
+
+`misc__switchtable001` is now also an explicit primary C-runner entry.  The
+linked runner is audited for the literal test name so staging the source
+without executing it cannot satisfy the release gate.
+
+The corrected physical candidate is
+`/Users/sash/Work/N64/retrobsd-build/n64-h15b-switch-ssa-runner-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 6619136 bytes, SHA-256
+`bd7cc9e47e720b896748b3231a7617173a047190ee2e87162f7dc08aaad60db7`.
+Its GCC kernel is byte-identical to H14 and the first H15.  The rootfs passes
+all five `fsutil` phases with 360 files, 3855 used blocks, and 2264 free
+blocks.  The runner SHA-256 is
+`922b9b9b305a32664cd4e32849d5cb1e0bec4bfe9d26b993ce5e9a2e69a40c3c`;
+it contains the switch-test name.  The runner and all six benchmark binaries
+have zero undefined symbols.
+
+Physical N64 H15b validation passes.  The supplied excerpt begins at Linpack,
+but the audited C runner executes its extended test group, including
+`misc__switchtable001`, before the benchmarks and reports aggregate
+`N64_PCC_DEBUG_END 0`.  Both general and Linpack-kernel self-tests, every
+visible GCC/PCC benchmark return code, `N64_PCC_DEBUG_RUNNER_RC 0`, and the
+terminal marker also pass.  The target `switch` kernel reaches 3.190 Miter/s,
+2.47% above H14 and 5.63% above the rejected first H15, or 64.46% of GCC.
+Other general kernels remain within 0.89% of H14.  PCC Linpack averages
+3805.275 KFLOPS, 0.05% below H14 and 86.37% of the current GCC mean.  This
+closes the corrected H15b physical and commit gates.
+
+H15 does not change floating-point multiply scheduling or final-stream
+erratum repair.  `-mfix4300` remains enabled by default for VR4300 and
+`-mno-fix4300` remains the explicit opt-out.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

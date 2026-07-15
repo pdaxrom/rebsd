@@ -200,6 +200,7 @@ struct swents {			/* switch table */
 	CONSZ	sval;		/* case value */
 	int	slab;		/* associated label */
 };
+void p1addclab(int);
 int mygenswitch(int, TWORD, struct swents **, int);
 
 extern	int blevel;

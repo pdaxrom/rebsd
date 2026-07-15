@@ -721,12 +721,87 @@ fldty(struct symtab *p)
 }
 
 /*
- * XXX - fix genswitch.
+ * Use a direct table for compact 32-bit switches on the tuned targets.
+ * Small, sparse and generic-MIPS switches keep the common linear lowering.
  */
 int
 mygenswitch(int num, TWORD type, struct swents **p, int n)
 {
+#ifdef LANG_CXX
+	(void)num;
+	(void)type;
+	(void)p;
+	(void)n;
 	return 0;
+#else
+	NODE *base, *idx, *r;
+	struct symtab *tbl;
+	U_CONSZ range;
+	CONSZ minval;
+	int deflab, i, j, tbllab, tmp;
+
+	if (mips_target.isa != MIPS_ISA_MIPS32R2 &&
+	    mips_target.tune != MIPS_TUNE_VR4300)
+		return 0;
+	if (n < 5 || szty(type) != 1)
+		return 0;
+
+	minval = p[1]->sval;
+	range = (U_CONSZ)p[n]->sval - (U_CONSZ)minval + 1;
+	if (range > 256 || range > (U_CONSZ)n * 2)
+		return 0;
+
+	/* Normalize once so the same unsigned check handles signed minima. */
+	r = tempnode(num, type, 0, 0);
+	if (minval != 0)
+		r = buildtree(MINUS, r, xbcon(minval, NULL, type));
+	idx = tempnode(0, UNSIGNED, 0, 0);
+	tmp = regno(idx);
+	ecomp(buildtree(ASSIGN, idx, r));
+
+	deflab = p[0]->slab;
+	if (deflab == 0)
+		deflab = getlab();
+	p1addclab(deflab);
+	for (i = 1; i <= n; ++i)
+		p1addclab(p[i]->slab);
+	idx = tempnode(tmp, UNSIGNED, 0, 0);
+	r = buildtree(GT, idx, xbcon((CONSZ)(range - 1), NULL, UNSIGNED));
+	cbranch(r, bcon(deflab));
+
+	tbllab = getlab();
+	tbl = getsymtab("__mips_switch_table", SLBLNAME|STEMP);
+	tbl->soffset = tbllab;
+	tbl->sclass = STATIC;
+	tbl->stype = UNSIGNED;
+
+	base = block(NAME, NIL, NIL, UNSIGNED, 0, 0);
+	base->n_sp = tbl;
+	base = buildtree(ADDROF, base, NIL);
+	idx = tempnode(tmp, UNSIGNED, 0, 0);
+	r = buildtree(PLUS, base, idx);
+	r = buildtree(UMUL, r, NIL);
+	r = block(GOTO, r, NIL, INT, 0, 0);
+	ecomp(r);
+
+	locctr(RDATA, NULL);
+	defalign(ALINT);
+	printf(LABFMT ":\n", tbllab);
+	for (i = 0, j = 1; (U_CONSZ)i < range; ++i) {
+		int lab = deflab;
+
+		if (j <= n &&
+		    (U_CONSZ)p[j]->sval - (U_CONSZ)minval == (U_CONSZ)i) {
+			lab = p[j]->slab;
+			++j;
+		}
+		printf("\t.word " LABFMT "\n", lab);
+	}
+	locctr(PROG, NULL);
+	if (p[0]->slab == 0)
+		plabel(deflab);
+	return 1;
+#endif
 }
 
 

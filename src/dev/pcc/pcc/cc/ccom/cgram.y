@@ -219,7 +219,6 @@ static P1ND *dogen(struct genlist *g, P1ND *e);
 static struct genlist *newgen(P1ND *p, P1ND *q);
 static struct genlist *addgen(struct genlist *g, struct genlist *h);
 
-static void savlab(int);
 static void xcbranch(P1ND *, int);
 extern int *mkclabs(void);
 
@@ -1254,7 +1253,7 @@ term:		   term C_INCOP {  $$ = biop($2, $1, bcon(1)); }
 				s->soffset = -getlab();
 				s->sclass = STATIC;
 			}
-			savlab(s->soffset);
+			p1addclab(s->soffset);
 			$$ = biop(ADDROF, bdty(GOTO, $2), NULL);
 		}
 		| C_GENERIC '(' e ',' gen_ass_list ')' { $$ = dogen($5, $3); }
@@ -2533,8 +2532,8 @@ struct labs {
 	int lab;
 } *labp;
 
-static void
-savlab(int lab)
+void
+p1addclab(int lab)
 {
 	struct labs *l = tmpalloc(sizeof(struct labs)); /* uncommon */
 	l->lab = lab < 0 ? -lab : lab;

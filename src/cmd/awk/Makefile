@@ -23,6 +23,7 @@ awk.g.stamp:	$(AWK_SRCDIR)/awk.g.y
 		touch $@
 
 awk.g.c y.tab.h:	awk.g.stamp
+		@test -f $@
 
 awk.h:          y.tab.h
 		-cmp -s y.tab.h awk.h || cp y.tab.h awk.h
