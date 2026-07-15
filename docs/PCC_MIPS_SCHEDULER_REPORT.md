@@ -2774,3 +2774,111 @@ H9A.  Ordinary PCC Linpack rows are 3806.532 and 3741.679 KFLOPS, averaging
 4451.006 GCC mean, within the normal run-to-run range.  H10 therefore closes
 its physical and commit gates with a broad libc pointer-loop gain and no
 material Linpack regression.
+
+## Milestone H11: Constant Reverse Address Induction
+
+H11 extends the existing target-independent SSA address-induction transform
+from `i` and `i+C` to the affine reverse form `C-i`.  Candidates carry a
+direction of `+1` or `-1`; the preheader initializes the pointer at the
+directed induction value and the latch applies the signed byte step.  The
+constant `C` remains an address displacement.  This is an extension of the
+existing pass and target profitability hooks, not a MIPS-only pass or a new
+register class.
+
+`misc__ssastrength001` covers two reverse accesses sharing a register base, a
+dynamic initial index, and a single reverse global double access.  The dynamic
+case proves that only one preheader scale remains; no scaled-index operation is
+rebuilt in the loop.  Host assembly gates cover generic MIPS3, VR4300, and
+MIPS32R2 in hard- and soft-float modes.
+
+In the general benchmark, H11 changes only `bench_float` and `bench_double`.
+Their bodies fall from 54 to 51 and 52 to 49 instructions, respectively, and
+each loses its remaining scaled-index shift.  Loads, stores, nops, frame size,
+and selected spills are unchanged.  Peak GPR pressure rises from 13 to 14;
+FPR pressure remains four.  The linked PCC general benchmark shrinks from
+43840 to 43808 section bytes, while PCC Linpack and kernel-Linpack remain
+37392 and 43928 bytes.
+
+Three alternating Malta64/R4000 H10/H11 runs used one second per general
+kernel and one-second Linpack rows.  Mean PCC rates were:
+
+| Metric | H10 | H11 | Change |
+| --- | ---: | ---: | ---: |
+| `float` Mwork/s | 4.732333 | 4.666667 | -1.39% |
+| `double` Mwork/s | 4.428000 | 4.457333 | +0.66% |
+| Linpack KFLOPS | 14317.561 | 14325.736 | +0.06% |
+
+The small QEMU `float` movement conflicts with the strictly smaller loop and
+is retained as a physical-measurement risk, not treated as a material software
+regression.  Linpack is neutral and no new spill or stack traffic appears.
+
+Host gates pass.  Cross runtime passes 302/302.  Native Malta64 reports 312
+compile passes, 30 expected compile failures, and 302/302 runtime passes.  All
+six fresh full-smoke profiles pass:
+
+| Board | CPU | Endian | Float | Linpack KFLOPS | Result |
+| --- | --- | --- | --- | ---: | --- |
+| Malta64 | VR4300 | big | hard | 14379.284 / 14353.997 | `PCC_SMOKE_ALL_RC:0` |
+| Malta64 | VR4300 | big | soft | 1047.771 / 1072.815 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13832.838 / 13945.319 | `PCC_SMOKE_ALL_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1199.964 / 1182.511 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 13825.435 / 13857.820 | `PCC_SMOKE_ALL_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1224.618 / 1219.068 | `PCC_SMOKE_ALL_RC:0` |
+
+Every profile also reports `MIPS_COMPILER_BENCH_SELFTEST 0`,
+`CCOM_STRESS_DONE:100`, and `PCC_SMOKE_ALL_FAILURES 0`.
+
+The retained physical candidate is:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h11-reverse-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 0939b1961dfa2d678d0d1f79d6fab1778c010ea7cadc500203bf59b21d617909
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+debug runner sha256: 109535aa7cf1565bdaad16daf6da7f3fb3ce14d2bd37a5fbdfc193bdff32881f
+```
+
+It uses a GCC kernel and PCC VR4300 hard-float a.out userland.  The kernel,
+runner, and all three GCC controls are byte-identical to H10.  All six
+benchmark executables and the runner have zero undefined symbols.  The 6144
+KiB debug rootfs passes all five `fsutil` phases with 358 files, 3868 used
+blocks, and 2251 free blocks.  Physical N64 correctness and performance
+validation remain mandatory before commit.
+
+H11 does not emit multiply instructions or alter final scheduling.  The
+default `-mfix4300` final-stream erratum repair and explicit `-mno-fix4300`
+opt-out remain unchanged.
+
+Physical N64 validation passes the expanded native `misc__ssastrength001`
+compile-and-run gate, both general self-tests, both Linpack-kernel self-tests,
+every benchmark return code, zero-valued `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC`, and the terminal `N64_PCC_DEBUG_RC_END` marker.
+The H10/H11 general comparison is:
+
+| Kernel | H10 PCC | H11 PCC | PCC change | H11 PCC/GCC |
+| --- | ---: | ---: | ---: | ---: |
+| `int_mix` | 3.846 | 3.846 | +0.00% | 58.15% |
+| `const_div` | 0.945 | 0.954 | +0.95% | 69.89% |
+| `branch` | 3.105 | 3.081 | -0.77% | 64.73% |
+| `switch` | 3.101 | 3.101 | +0.00% | 62.26% |
+| `memory` | 5.387 | 5.349 | -0.71% | 52.38% |
+| `libc_memory` | 38.912 | 38.916 | +0.01% | 75.17% |
+| `calls` | 3.086 | 3.087 | +0.03% | 63.18% |
+| `u64` | 1.848 | 1.848 | +0.00% | 63.94% |
+| `float` | 2.553 | 2.956 | +15.79% | 61.05% |
+| `double` | 2.113 | 2.382 | +12.73% | 89.75% |
+| `convert` | 1.696 | 1.680 | -0.94% | 66.25% |
+
+The targeted reverse-address loops improve materially on VR4300: `float`
+gains 15.79% and `double` gains 12.73%, raising their current GCC ratios by
+8.33 and 10.70 percentage points relative to H10.  Untouched kernels remain
+within one percent of H10.
+
+Ordinary PCC Linpack rows are 3742.671 and 3803.952 KFLOPS, averaging
+3773.312.  This is 0.02% below H10's 3774.106 mean and 85.59% of the current
+4408.832 GCC mean.  The seven PCC kernel self-tests pass and report 3.726,
+4.503, 4.280, 5.703, 4.846, 6.529, and 5.371 Melem/s in `daxpy_r`,
+`daxpy_ur`, `ddot_r`, `ddot_ur`, `dscal_r`, `dscal_ur`, and `idamax` order.
+H11 therefore closes its physical and commit gates with the intended general
+FP-loop gain and no material Linpack or unrelated-code regression.

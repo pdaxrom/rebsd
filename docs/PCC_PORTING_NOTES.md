@@ -1513,6 +1513,30 @@ byte-identical outside the changed libc callees, so the raw `convert` timing
 outlier is not a code-generation regression.  This closes the H10 physical
 and commit gates.
 
+## Reverse Address Induction
+
+The SSA address-strength-reduction pass recognizes scaled array indexes of the
+forms `i`, `i+C`, and `C-i`.  A reverse candidate carries direction `-1`, so
+its pointer phi is initialized from `base - i*scale` and its latch step has the
+opposite sign.  The constant remains a normal immediate displacement.  Keep
+the form narrow: the base must be loop invariant, the scale must be a power of
+two represented by `LS`, and the index must be the canonical induction TEMP
+with an optional constant.
+
+Regression coverage includes constant and dynamic initial indexes, paired
+register-base accesses, and a single global FP access.  Generic MIPS3 retains
+the old code unless its target profitability hook enables the transform;
+VR4300 and MIPS32R2 use the established hooks.  The transform adds no ABI,
+scheduler, or register-class state.  It also does not affect VR4300 multiply
+errata handling: `-mfix4300` remains the default final-stream repair and
+`-mno-fix4300` remains the explicit opt-out.
+
+On physical VR4300, this transform raises the general PCC `float` kernel from
+2.553 to 2.956 Mwork/s (+15.79%) and `double` from 2.113 to 2.382 (+12.73%).
+Ordinary PCC Linpack remains neutral at 3773.312 KFLOPS, 0.02% below the prior
+milestone and 85.59% of the same-run GCC mean.  The complete native regression
+and all N64 debug markers pass.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

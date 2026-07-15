@@ -68,6 +68,7 @@ struct address_induction_candidate {
 	char *base_name;
 	CONSZ base_offset;
 	int count;
+	int direction;
 	int shift;
 	TWORD pointer_type;
 };
@@ -313,7 +314,7 @@ insert_edge_value(struct basicblock *bb, struct interpass *ip)
 static int
 address_induction_expression(NODE *p, int induction, TWORD integer_type,
     int *base, char **base_name, CONSZ *base_offset, TWORD *pointer_type,
-    int *shift, CONSZ *offset)
+    int *direction, int *shift, CONSZ *offset)
 {
 	NODE *index, *scale;
 	CONSZ factor, value;
@@ -347,6 +348,7 @@ address_induction_expression(NODE *p, int induction, TWORD integer_type,
 		return 0;
 	index = scale->n_left;
 	value = 0;
+	*direction = 1;
 	if (index->n_op == TEMP && index->n_type == integer_type &&
 	    regno(index) == induction) {
 		/* Exact induction value. */
@@ -359,6 +361,17 @@ address_induction_expression(NODE *p, int induction, TWORD integer_type,
 	    index->n_right->n_name != NULL &&
 	    index->n_right->n_name[0] == '\0') {
 		value = getlval(index->n_right);
+	} else if (index->n_op == MINUS &&
+	    index->n_type == integer_type &&
+	    index->n_left->n_op == ICON &&
+	    index->n_left->n_type == integer_type &&
+	    index->n_left->n_name != NULL &&
+	    index->n_left->n_name[0] == '\0' &&
+	    index->n_right->n_op == TEMP &&
+	    index->n_right->n_type == integer_type &&
+	    regno(index->n_right) == induction) {
+		value = getlval(index->n_left);
+		*direction = -1;
 	} else {
 		return 0;
 	}
@@ -403,7 +416,7 @@ collect_address_induction_candidates(NODE *p, int induction,
 	CONSZ base_offset;
 	TWORD pointer_type;
 	char *base_name;
-	int base, i, o, shift;
+	int base, direction, i, o, shift;
 
 	o = optype(p->n_op);
 	if (o != LTYPE)
@@ -413,12 +426,14 @@ collect_address_induction_candidates(NODE *p, int induction,
 		collect_address_induction_candidates(p->n_right, induction,
 		    integer_type, candidate, ncandidate);
 	if (!address_induction_expression(p, induction, integer_type, &base,
-	    &base_name, &base_offset, &pointer_type, &shift, &offset))
+	    &base_name, &base_offset, &pointer_type, &direction, &shift,
+	    &offset))
 		return;
 	for (i = 0; i < *ncandidate; i++)
 		if (same_address_induction_base(&candidate[i], base, base_name,
 		    base_offset) &&
 		    candidate[i].pointer_type == pointer_type &&
+		    candidate[i].direction == direction &&
 		    candidate[i].shift == shift) {
 			candidate[i].count++;
 			return;
@@ -429,6 +444,7 @@ collect_address_induction_candidates(NODE *p, int induction,
 	candidate[*ncandidate].base_name = base_name;
 	candidate[*ncandidate].base_offset = base_offset;
 	candidate[*ncandidate].count = 1;
+	candidate[*ncandidate].direction = direction;
 	candidate[*ncandidate].shift = shift;
 	candidate[*ncandidate].pointer_type = pointer_type;
 	(*ncandidate)++;
@@ -443,7 +459,7 @@ replace_address_induction(NODE **nodep, int induction, TWORD integer_type,
 	TWORD pointer_type;
 	char *base_name;
 	NODE *p;
-	int base, o, shift;
+	int base, direction, o, shift;
 
 	p = *nodep;
 	o = optype(p->n_op);
@@ -455,9 +471,11 @@ replace_address_induction(NODE **nodep, int induction, TWORD integer_type,
 		    candidate, replacement);
 	p = *nodep;
 	if (!address_induction_expression(p, induction, integer_type, &base,
-	    &base_name, &base_offset, &pointer_type, &shift, &offset) ||
+	    &base_name, &base_offset, &pointer_type, &direction, &shift,
+	    &offset) ||
 	    !same_address_induction_base(candidate, base, base_name, base_offset) ||
 	    pointer_type != candidate->pointer_type ||
+	    direction != candidate->direction ||
 	    shift != candidate->shift)
 		return;
 	tfree(p);
@@ -486,7 +504,7 @@ reduce_address_induction(struct p2env *p2e, struct basicblock *header,
 	integer_type = induction->n_type;
 	pointer_type = candidate->pointer_type;
 	factor = (CONSZ)1 << candidate->shift;
-	increment = delta * factor;
+	increment = candidate->direction * delta * factor;
 	if (increment < -32768 || increment > 32767)
 		return;
 	initial = induction->intmpregno[preedge];
@@ -495,9 +513,13 @@ reduce_address_induction(struct p2env *p2e, struct basicblock *header,
 	pointer_next = p2e->epp->ip_tmpnum++;
 
 	if (temp_integer_constant(p2e, initial, integer_type, &initial_value) &&
+	    ((candidate->direction > 0 &&
 	    initial_value >= -32768 / factor &&
-	    initial_value <= 32767 / factor) {
-		initial_value *= factor;
+	    initial_value <= 32767 / factor) ||
+	    (candidate->direction < 0 &&
+	    initial_value >= -32767 / factor &&
+	    initial_value <= 32768 / factor))) {
+		initial_value *= candidate->direction * factor;
 		if (initial_value == 0)
 			initial_expression = address_induction_base(candidate);
 		else
@@ -509,6 +531,10 @@ reduce_address_induction(struct p2env *p2e, struct basicblock *header,
 		scale = mkbinode(LS, mktemp(initial, integer_type),
 		    mklnode(ICON, candidate->shift, 0, integer_type),
 		    integer_type);
+		if (candidate->direction < 0)
+			scale = mkbinode(MINUS,
+			    mklnode(ICON, 0, 0, integer_type), scale,
+			    integer_type);
 		initial_expression = mkbinode(PLUS,
 		    address_induction_base(candidate), scale, pointer_type);
 	}

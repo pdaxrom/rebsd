@@ -65,6 +65,28 @@ pointer_descending_four(const int *values, int count)
 	return sum;
 }
 
+static int
+pointer_reverse_pair(const int *values, int count)
+{
+	int i, sum;
+
+	sum = 0;
+	for (i = 0; i < count; i++)
+		sum += values[31 - i] + values[30 - i];
+	return sum;
+}
+
+static int
+pointer_reverse_pair_dynamic(const int *values, int start, int count)
+{
+	int i, sum;
+
+	sum = 0;
+	for (i = start; i < count; i++)
+		sum += values[31 - i] + values[30 - i];
+	return sum;
+}
+
 static double
 pointer_single_fp(const double *values, int count)
 {
@@ -90,6 +112,7 @@ pointer_single_int(const int *values, int count)
 
 static int global_values[64];
 static unsigned int global_unsigned_values[64];
+static double global_double_values[64];
 
 static int
 pointer_single_global_int(int count)
@@ -113,6 +136,18 @@ pointer_single_global_unsigned(unsigned int count)
 	return sum;
 }
 
+static double
+pointer_single_reverse_global_fp(int count)
+{
+	double sum;
+	int i;
+
+	sum = 0.0;
+	for (i = 0; i < count; i++)
+		sum += global_double_values[63 - i];
+	return sum;
+}
+
 int
 main(void)
 {
@@ -123,6 +158,7 @@ main(void)
 		values[i] = i * 2 + 1;
 		global_values[i] = i * 3 + 2;
 		global_unsigned_values[i] = (unsigned int)i * 5U + 3U;
+		global_double_values[i] = (double)(i + 1) * 0.5;
 	}
 	if (unit_step(values, 8, 3) != 24)
 		return 1;
@@ -142,5 +178,11 @@ main(void)
 		return 8;
 	if (pointer_single_global_unsigned(8) != 164U)
 		return 9;
+	if (pointer_reverse_pair(values, 16) != 1504)
+		return 10;
+	if (pointer_single_reverse_global_fp(4) != 125.0)
+		return 11;
+	if (pointer_reverse_pair_dynamic(values, 4, 16) != 1032)
+		return 12;
 	return 0;
 }

@@ -4979,6 +4979,36 @@ Milestone order:
     but the H9A/H10 timed benchmark assembly is byte-identical; the only
     source-assembly difference is in untimed `main`, so this is not an H10
     generated-code regression.  This closes the H10 physical and commit gates.
+  - [x] H11 extend the existing target-independent SSA address-induction
+    lowering from `i` and `i+C` to constant reverse indexes `C-i`.  Represent
+    the affine coefficient as direction `+1/-1`, initialize the existing
+    pointer phi at the directed induction value, and use a signed latch step.
+    Do not add a MIPS-only pass or register class.
+  - [x] Extend `misc__ssastrength001` with two reverse accesses sharing a
+    register base and one reverse global FP access matching `bench_float`.
+    Require no scaled-index shifts on VR4300/MIPS32R2 where the established
+    profitability hooks enable the transform, while generic MIPS3 and
+    unsupported float modes remain unchanged.
+  - [x] Measure H11 with static assembly/pressure counters and strict Malta64
+    H10/H11 A/B runs.  Primary targets are general `float` and `double`; reject
+    new spills, stack traffic, or a material Linpack regression.
+  - [x] Pass host, cross, native, and all six full QEMU profiles, then build a
+    clean GCC-kernel/PCC-VR4300-hard-float a.out N64 image.  Cross and native
+    runtime pass 302/302; native compilation reports 312 passes and 30
+    expected failures.  Every full-smoke profile reports self-test zero,
+    `CCOM_STRESS_DONE:100`, zero failures, and final RC zero.  The retained
+    image is
+    `/Users/sash/Work/N64/retrobsd-build/n64-h11-reverse-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 and SHA-256
+    `0939b1961dfa2d678d0d1f79d6fab1778c010ea7cadc500203bf59b21d617909`.
+  - [x] Run H11 on physical N64.  The expanded native
+    `misc__ssastrength001` gate, all general and Linpack-kernel self-tests,
+    every benchmark return code, and both numeric debug markers pass; the
+    terminal marker is present.  PCC `float` improves from H10's 2.553 to
+    2.956 Mwork/s (+15.79%) and `double` from 2.113 to 2.382 (+12.73%).
+    Ordinary PCC Linpack averages 3773.312 KFLOPS, only 0.02% below H10, and
+    reaches 85.59% of the current GCC mean.  This closes the H11 physical and
+    commit gates.
 
 Success criteria:
 
