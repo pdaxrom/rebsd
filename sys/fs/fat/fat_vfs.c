@@ -6,7 +6,7 @@
  * copyright notice and this permission notice appear in all copies.
  */
 
-/* Read-only FAT16/FAT32 VFS glue.  The backing store is any block device. */
+/* FAT16/FAT32 VFS glue.  The backing store is any block device. */
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <sys/uio.h>
+#include <sys/namei.h>
 #include <sys/kernel.h>
 #include <sys/conf.h>
 #include <sys/disk.h>
@@ -33,12 +34,15 @@
 #define FAT_MAX_FILE_SECTORS        \
     ((FAT_DIR_INO_BASE - FAT_FILE_INO_BASE) / FAT_DIRENTS_PER_SECTOR)
 #define FAT_LFN_CHARS               MAXNAMLEN
+#define FAT_INSERT_END_LAST         (-1)
 
 struct fat_mount {
     int fm_used;
+    int fm_read_only;
     struct mount *fm_mount;
     dev_t fm_dev;
     unsigned fm_media_sectors;
+    unsigned fm_next_free;
     struct fat_volume fm_volume;
 };
 
@@ -76,7 +80,7 @@ fatattach(int unit)
 {
     (void)unit;
     fat_zero(fat_mounts, sizeof(fat_mounts));
-    printf("fat: read-only FAT16/FAT32 filesystem ready\n");
+    printf("fat: FAT16/FAT32 filesystem ready\n");
 }
 
 static struct fat_mount *
@@ -119,6 +123,163 @@ fat_sector_get(struct fat_mount *fmp, unsigned sector, struct buf **bpp,
     *bpp = bp;
     *datap = (unsigned char *)bp->b_addr + offset;
     return 0;
+}
+
+static int
+fat_buffer_write(struct fat_mount *fmp, struct buf *bp)
+{
+    int error;
+
+    if (bp == 0)
+        return EINVAL;
+    if (fmp == 0 || fmp->fm_read_only) {
+        brelse(bp);
+        return EROFS;
+    }
+    bwrite(bp);
+    error = geterror(bp);
+    return error;
+}
+
+static int
+fat_cluster_read(struct fat_mount *fmp, unsigned cluster, unsigned *valuep)
+{
+    struct buf *bp;
+    unsigned char *data;
+    unsigned sector;
+    unsigned offset;
+    int error;
+
+    if (valuep == 0 || fat_fat_position(&fmp->fm_volume, cluster,
+        &sector, &offset) != FAT_PARSE_OK)
+        return EIO;
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    *valuep = fat_fat_decode(&fmp->fm_volume, data + offset);
+    brelse(bp);
+    return 0;
+}
+
+static int
+fat_cluster_write_copy(struct fat_mount *fmp, unsigned fat_index,
+    unsigned cluster, unsigned value)
+{
+    struct buf *bp;
+    unsigned char *data;
+    unsigned byte_offset;
+    unsigned entry_size;
+    unsigned sector;
+    unsigned offset;
+    int error;
+
+    entry_size = fmp->fm_volume.fv_type == FAT_TYPE_16 ? 2u : 4u;
+    byte_offset = cluster * entry_size;
+    sector = fmp->fm_volume.fv_reserved_sectors +
+        fat_index * fmp->fm_volume.fv_fat_sectors +
+        byte_offset / FAT_SECTOR_SIZE;
+    offset = byte_offset & (FAT_SECTOR_SIZE - 1u);
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    fat_fat_encode(&fmp->fm_volume, data + offset, value);
+    return fat_buffer_write(fmp, bp);
+}
+
+static int
+fat_cluster_write(struct fat_mount *fmp, unsigned cluster, unsigned value)
+{
+    unsigned first;
+    unsigned count;
+    unsigned i;
+    int error;
+
+    if (fmp == 0 || fmp->fm_read_only ||
+        !fat_cluster_valid(&fmp->fm_volume, cluster))
+        return fmp != 0 && fmp->fm_read_only ? EROFS : EINVAL;
+    if (fmp->fm_volume.fv_fat_mirrored) {
+        first = 0;
+        count = fmp->fm_volume.fv_fat_count;
+    } else {
+        first = fmp->fm_volume.fv_active_fat;
+        count = 1;
+    }
+    for (i = 0; i < count; ++i) {
+        error = fat_cluster_write_copy(fmp, first + i, cluster, value);
+        if (error)
+            return error;
+    }
+    return 0;
+}
+
+static unsigned
+fat_eoc_value(const struct fat_volume *volume)
+{
+    return volume->fv_type == FAT_TYPE_16 ? 0xffffu : 0x0fffffffu;
+}
+
+static int
+fat_zero_cluster(struct fat_mount *fmp, unsigned cluster)
+{
+    struct buf *bp;
+    unsigned char *data;
+    unsigned sector;
+    unsigned i;
+    int error;
+
+    sector = fat_cluster_first_sector(&fmp->fm_volume, cluster);
+    if (sector == 0xffffffffu)
+        return EIO;
+    for (i = 0; i < fmp->fm_volume.fv_sectors_per_cluster; ++i) {
+        error = fat_sector_get(fmp, sector + i, &bp, &data);
+        if (error)
+            return error;
+        fat_zero(data, FAT_SECTOR_SIZE);
+        error = fat_buffer_write(fmp, bp);
+        if (error)
+            return error;
+    }
+    return 0;
+}
+
+static int
+fat_cluster_alloc(struct fat_mount *fmp, unsigned *clusterp)
+{
+    unsigned cluster;
+    unsigned value;
+    unsigned checked;
+    int error;
+
+    if (fmp == 0 || clusterp == 0)
+        return EINVAL;
+    if (fmp->fm_read_only)
+        return EROFS;
+    cluster = fat_cluster_valid(&fmp->fm_volume, fmp->fm_next_free) ?
+        fmp->fm_next_free : 2u;
+    for (checked = 0; checked < fmp->fm_volume.fv_cluster_count;
+        ++checked) {
+        error = fat_cluster_read(fmp, cluster, &value);
+        if (error)
+            return error;
+        if (value == FAT_CLUSTER_FREE) {
+            error = fat_cluster_write(fmp, cluster,
+                fat_eoc_value(&fmp->fm_volume));
+            if (error)
+                return error;
+            error = fat_zero_cluster(fmp, cluster);
+            if (error) {
+                (void)fat_cluster_write(fmp, cluster, FAT_CLUSTER_FREE);
+                return error;
+            }
+            fmp->fm_next_free = cluster == fmp->fm_volume.fv_max_cluster ?
+                2u : cluster + 1u;
+            *clusterp = cluster;
+            return 0;
+        }
+        cluster = cluster == fmp->fm_volume.fv_max_cluster ?
+            2u : cluster + 1u;
+    }
+    return ENOSPC;
 }
 
 static int
@@ -472,6 +633,329 @@ fat_file_ino(unsigned sector, unsigned slot, ino_t *inop)
 }
 
 static int
+fat_file_location(ino_t ino, unsigned *sectorp, unsigned *slotp)
+{
+    unsigned index;
+
+    if (ino < FAT_FILE_INO_BASE || ino >= FAT_DIR_INO_BASE ||
+        sectorp == 0 || slotp == 0)
+        return EINVAL;
+    index = (unsigned)ino - FAT_FILE_INO_BASE;
+    *sectorp = index / FAT_DIRENTS_PER_SECTOR;
+    *slotp = index % FAT_DIRENTS_PER_SECTOR;
+    return 0;
+}
+
+static int
+fat_file_update(struct inode *ip)
+{
+    struct fat_mount *fmp;
+    struct buf *bp;
+    unsigned char *data;
+    unsigned char *entry;
+    unsigned sector;
+    unsigned slot;
+    int error;
+
+    fmp = fat_mount_from_inode(ip);
+    if (fmp == 0)
+        return EIO;
+    if (fmp->fm_read_only)
+        return EROFS;
+    if (ip->i_size < 0 || (unsigned long)ip->i_size > 0x7ffffffful)
+        return EFBIG;
+    error = fat_file_location(ip->i_number, &sector, &slot);
+    if (error)
+        return error;
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    entry = data + slot * FAT_DIRENT_SIZE;
+    if (!fat_dirent_is_visible(entry) ||
+        (entry[11] & FAT_ATTR_DIRECTORY) != 0) {
+        brelse(bp);
+        return ENOENT;
+    }
+    fat_dirent_set_cluster_size(entry, (unsigned)ip->i_addr[0],
+        (unsigned)ip->i_size);
+    return fat_buffer_write(fmp, bp);
+}
+
+static int
+fat_file_cluster_at(struct inode *ip, unsigned index, int allocate,
+    unsigned *clusterp)
+{
+    struct fat_mount *fmp;
+    unsigned cluster;
+    unsigned next;
+    unsigned new_cluster;
+    unsigned i;
+    int error;
+
+    fmp = fat_mount_from_inode(ip);
+    if (fmp == 0 || clusterp == 0)
+        return EIO;
+    cluster = (unsigned)ip->i_addr[0];
+    if (!fat_cluster_valid(&fmp->fm_volume, cluster)) {
+        if (!allocate || cluster != 0)
+            return EIO;
+        error = fat_cluster_alloc(fmp, &cluster);
+        if (error)
+            return error;
+        ip->i_addr[0] = (daddr_t)cluster;
+        error = fat_file_update(ip);
+        if (error) {
+            ip->i_addr[0] = 0;
+            (void)fat_cluster_write(fmp, cluster, FAT_CLUSTER_FREE);
+            return error;
+        }
+    }
+    for (i = 0; i < index; ++i) {
+        error = fat_next_cluster(fmp, cluster, &next);
+        if (error)
+            return error;
+        if (next == 0) {
+            if (!allocate)
+                return EIO;
+            error = fat_cluster_alloc(fmp, &new_cluster);
+            if (error)
+                return error;
+            error = fat_cluster_write(fmp, cluster, new_cluster);
+            if (error) {
+                (void)fat_cluster_write(fmp, new_cluster,
+                    FAT_CLUSTER_FREE);
+                return error;
+            }
+            next = new_cluster;
+        }
+        cluster = next;
+    }
+    *clusterp = cluster;
+    return 0;
+}
+
+static int
+fat_chain_free(struct fat_mount *fmp, unsigned cluster)
+{
+    unsigned next;
+    unsigned visited;
+    int error;
+
+    visited = 0;
+    while (fat_cluster_valid(&fmp->fm_volume, cluster)) {
+        if (++visited > fmp->fm_volume.fv_cluster_count)
+            return EIO;
+        error = fat_next_cluster(fmp, cluster, &next);
+        if (error)
+            return error;
+        error = fat_cluster_write(fmp, cluster, FAT_CLUSTER_FREE);
+        if (error)
+            return error;
+        if (cluster < fmp->fm_next_free ||
+            !fat_cluster_valid(&fmp->fm_volume, fmp->fm_next_free))
+            fmp->fm_next_free = cluster;
+        cluster = next;
+    }
+    return cluster == 0 ? 0 : EIO;
+}
+
+static int
+fat_entry_insert_sector(struct fat_mount *fmp, unsigned sector,
+    const unsigned char *short_name, unsigned *slotp)
+{
+    struct buf *bp;
+    unsigned char *data;
+    unsigned char *entry;
+    unsigned slot;
+    int was_end;
+    int error;
+
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    for (slot = 0; slot < FAT_DIRENTS_PER_SECTOR; ++slot) {
+        entry = data + slot * FAT_DIRENT_SIZE;
+        if (entry[0] != FAT_DIRENT_END && entry[0] != FAT_DIRENT_DELETED)
+            continue;
+        if (entry[0] == FAT_DIRENT_END &&
+            slot + 1u == FAT_DIRENTS_PER_SECTOR) {
+            brelse(bp);
+            return FAT_INSERT_END_LAST;
+        }
+        was_end = entry[0] == FAT_DIRENT_END;
+        fat_dirent_encode(entry, short_name, FAT_ATTR_ARCHIVE, 0, 0);
+        if (was_end && slot + 1u < FAT_DIRENTS_PER_SECTOR)
+            fat_zero(entry + FAT_DIRENT_SIZE, FAT_DIRENT_SIZE);
+        error = fat_buffer_write(fmp, bp);
+        if (error)
+            return error;
+        *slotp = slot;
+        return 0;
+    }
+    brelse(bp);
+    return ENOSPC;
+}
+
+static int
+fat_entry_clear_first(struct fat_mount *fmp, unsigned sector)
+{
+    struct buf *bp;
+    unsigned char *data;
+    int error;
+
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    fat_zero(data, FAT_DIRENT_SIZE);
+    return fat_buffer_write(fmp, bp);
+}
+
+static int
+fat_entry_insert_last(struct fat_mount *fmp, unsigned sector,
+    const unsigned char *short_name, unsigned *slotp)
+{
+    struct buf *bp;
+    unsigned char *data;
+    unsigned char *entry;
+    int error;
+
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    entry = data + (FAT_DIRENTS_PER_SECTOR - 1u) * FAT_DIRENT_SIZE;
+    if (entry[0] != FAT_DIRENT_END) {
+        brelse(bp);
+        return EIO;
+    }
+    fat_dirent_encode(entry, short_name, FAT_ATTR_ARCHIVE, 0, 0);
+    error = fat_buffer_write(fmp, bp);
+    if (error)
+        return error;
+    *slotp = FAT_DIRENTS_PER_SECTOR - 1u;
+    return 0;
+}
+
+static int
+fat_entry_insert(struct fat_mount *fmp, ino_t dir_ino,
+    const unsigned char *short_name, unsigned *sectorp, unsigned *slotp)
+{
+    unsigned cluster;
+    unsigned next;
+    unsigned new_cluster;
+    unsigned sector;
+    unsigned visited;
+    unsigned i;
+    int error;
+
+    if (dir_ino == ROOTINO && fmp->fm_volume.fv_type == FAT_TYPE_16) {
+        for (i = 0; i < fmp->fm_volume.fv_root_dir_sectors; ++i) {
+            sector = fmp->fm_volume.fv_root_dir_start + i;
+            error = fat_entry_insert_sector(fmp, sector, short_name,
+                slotp);
+            if (error == FAT_INSERT_END_LAST) {
+                if (i + 1u < fmp->fm_volume.fv_root_dir_sectors) {
+                    error = fat_entry_clear_first(fmp, sector + 1u);
+                    if (error)
+                        return error;
+                }
+                error = fat_entry_insert_last(fmp, sector, short_name,
+                    slotp);
+            }
+            if (error == 0) {
+                *sectorp = sector;
+                return 0;
+            }
+            if (error != ENOSPC)
+                return error;
+        }
+        return ENOSPC;
+    }
+
+    cluster = dir_ino == ROOTINO ? fmp->fm_volume.fv_root_cluster :
+        ((unsigned)dir_ino & FAT_DIR_CLUSTER_MASK);
+    if (!fat_cluster_valid(&fmp->fm_volume, cluster))
+        return EIO;
+    visited = 0;
+    for (;;) {
+        if (++visited > fmp->fm_volume.fv_cluster_count)
+            return EIO;
+        sector = fat_cluster_first_sector(&fmp->fm_volume, cluster);
+        for (i = 0; i < fmp->fm_volume.fv_sectors_per_cluster; ++i) {
+            error = fat_entry_insert_sector(fmp, sector + i, short_name,
+                slotp);
+            if (error == FAT_INSERT_END_LAST) {
+                if (i + 1u < fmp->fm_volume.fv_sectors_per_cluster) {
+                    error = fat_entry_clear_first(fmp, sector + i + 1u);
+                    if (error)
+                        return error;
+                } else {
+                    error = fat_next_cluster(fmp, cluster, &next);
+                    if (error)
+                        return error;
+                    if (next != 0) {
+                        error = fat_entry_clear_first(fmp,
+                            fat_cluster_first_sector(&fmp->fm_volume,
+                            next));
+                        if (error)
+                            return error;
+                    }
+                }
+                error = fat_entry_insert_last(fmp, sector + i,
+                    short_name, slotp);
+            }
+            if (error == 0) {
+                *sectorp = sector + i;
+                return 0;
+            }
+            if (error != ENOSPC)
+                return error;
+        }
+        error = fat_next_cluster(fmp, cluster, &next);
+        if (error)
+            return error;
+        if (next != 0) {
+            cluster = next;
+            continue;
+        }
+        error = fat_cluster_alloc(fmp, &new_cluster);
+        if (error)
+            return error;
+        error = fat_cluster_write(fmp, cluster, new_cluster);
+        if (error) {
+            (void)fat_cluster_write(fmp, new_cluster, FAT_CLUSTER_FREE);
+            return error;
+        }
+        cluster = new_cluster;
+    }
+}
+
+static int
+fat_entry_delete(struct fat_mount *fmp, ino_t ino)
+{
+    struct buf *bp;
+    unsigned char *data;
+    unsigned char *entry;
+    unsigned sector;
+    unsigned slot;
+    int error;
+
+    error = fat_file_location(ino, &sector, &slot);
+    if (error)
+        return error;
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    entry = data + slot * FAT_DIRENT_SIZE;
+    if (!fat_dirent_is_visible(entry) ||
+        (entry[11] & FAT_ATTR_DIRECTORY) != 0) {
+        brelse(bp);
+        return ENOENT;
+    }
+    entry[0] = FAT_DIRENT_DELETED;
+    return fat_buffer_write(fmp, bp);
+}
+
+static int
 fat_parent_ino(struct fat_mount *fmp, ino_t ino, ino_t *parentp)
 {
     struct buf *bp;
@@ -678,7 +1162,7 @@ fat_load_inode(struct mount *mp, struct inode *ip)
         error = fat_dir_build(fmp, ip->i_number, 0, 0, &dir_size);
         if (error)
             return error;
-        ip->i_mode = IFDIR | 0555;
+        ip->i_mode = IFDIR | (fmp->fm_read_only ? 0555 : 0777);
         ip->i_nlink = 2;
         ip->i_size = dir_size;
         ip->i_addr[0] = cluster;
@@ -702,7 +1186,8 @@ fat_load_inode(struct mount *mp, struct inode *ip)
     if (dirent.fd_size != 0 &&
         !fat_cluster_valid(&fmp->fm_volume, dirent.fd_cluster))
         return EIO;
-    ip->i_mode = IFREG | 0444;
+    ip->i_mode = IFREG | ((fmp->fm_read_only ||
+        (dirent.fd_attr & FAT_ATTR_READ_ONLY) != 0) ? 0444 : 0666);
     ip->i_nlink = 1;
     ip->i_size = (off_t)dirent.fd_size;
     ip->i_addr[0] = (daddr_t)dirent.fd_cluster;
@@ -836,20 +1321,308 @@ fat_read_file(struct inode *ip, struct uio *uio)
     return 0;
 }
 
+static int fat_zero_file_range(struct inode *, off_t, off_t);
+
+static int
+fat_write_file(struct inode *ip, struct uio *uio, int ioflag)
+{
+    struct fat_mount *fmp;
+    struct buf *bp;
+    unsigned char *data;
+    unsigned cluster;
+    unsigned cluster_bytes;
+    unsigned cluster_index;
+    unsigned within;
+    unsigned sector;
+    unsigned offset;
+    unsigned n;
+    off_t new_size;
+    int error;
+    int update_error;
+
+    fmp = fat_mount_from_inode(ip);
+    if (fmp == 0)
+        return EIO;
+    if (fmp->fm_read_only)
+        return EROFS;
+    if ((ip->i_mode & 0222) == 0)
+        return EACCES;
+    if ((ioflag & IO_APPEND) != 0)
+        uio->uio_offset = ip->i_size;
+    if (uio->uio_offset < 0 ||
+        (unsigned long)uio->uio_offset > 0x7ffffffful ||
+        uio->uio_resid > 0x7fffffffu - (unsigned)uio->uio_offset)
+        return EFBIG;
+
+    if (uio->uio_resid != 0 && uio->uio_offset > ip->i_size) {
+        error = fat_zero_file_range(ip, ip->i_size, uio->uio_offset);
+        if (error)
+            return error;
+    }
+
+    cluster_bytes = fmp->fm_volume.fv_sectors_per_cluster *
+        FAT_SECTOR_SIZE;
+    new_size = ip->i_size;
+    error = 0;
+    while (uio->uio_resid != 0) {
+        cluster_index = (unsigned)uio->uio_offset / cluster_bytes;
+        within = (unsigned)uio->uio_offset % cluster_bytes;
+        error = fat_file_cluster_at(ip, cluster_index, 1, &cluster);
+        if (error)
+            break;
+        sector = fat_cluster_first_sector(&fmp->fm_volume, cluster) +
+            within / FAT_SECTOR_SIZE;
+        offset = within & (FAT_SECTOR_SIZE - 1u);
+        n = MIN((u_int)(FAT_SECTOR_SIZE - offset), uio->uio_resid);
+        error = fat_sector_get(fmp, sector, &bp, &data);
+        if (error)
+            break;
+        error = uiomove((caddr_t)data + offset, n, uio);
+        if (error) {
+            brelse(bp);
+            break;
+        }
+        error = fat_buffer_write(fmp, bp);
+        if (error)
+            break;
+        if (uio->uio_offset > new_size)
+            new_size = uio->uio_offset;
+    }
+    if (new_size != ip->i_size) {
+        ip->i_size = new_size;
+        update_error = fat_file_update(ip);
+        if (error == 0)
+            error = update_error;
+    }
+    return error;
+}
+
+static int
+fat_zero_file_range(struct inode *ip, off_t start, off_t end)
+{
+    struct fat_mount *fmp;
+    struct buf *bp;
+    unsigned char *data;
+    unsigned cluster;
+    unsigned cluster_bytes;
+    unsigned cluster_index;
+    unsigned within;
+    unsigned sector;
+    unsigned offset;
+    unsigned n;
+    int error;
+
+    fmp = fat_mount_from_inode(ip);
+    if (fmp == 0)
+        return EIO;
+    cluster_bytes = fmp->fm_volume.fv_sectors_per_cluster *
+        FAT_SECTOR_SIZE;
+    while (start < end) {
+        cluster_index = (unsigned)start / cluster_bytes;
+        within = (unsigned)start % cluster_bytes;
+        error = fat_file_cluster_at(ip, cluster_index, 1, &cluster);
+        if (error)
+            return error;
+        sector = fat_cluster_first_sector(&fmp->fm_volume, cluster) +
+            within / FAT_SECTOR_SIZE;
+        offset = within & (FAT_SECTOR_SIZE - 1u);
+        n = FAT_SECTOR_SIZE - offset;
+        if ((off_t)n > end - start)
+            n = (unsigned)(end - start);
+        error = fat_sector_get(fmp, sector, &bp, &data);
+        if (error)
+            return error;
+        fat_zero(data + offset, n);
+        error = fat_buffer_write(fmp, bp);
+        if (error)
+            return error;
+        start += n;
+    }
+    return 0;
+}
+
+static int
+fat_truncate(struct inode *ip, u_long length, int ioflags)
+{
+    struct fat_mount *fmp;
+    unsigned old_cluster;
+    unsigned keep_cluster;
+    unsigned tail;
+    unsigned cluster_bytes;
+    unsigned keep_index;
+    int error;
+
+    (void)ioflags;
+    fmp = fat_mount_from_inode(ip);
+    if (fmp == 0)
+        return EIO;
+    if (fmp->fm_read_only)
+        return EROFS;
+    if ((ip->i_mode & IFMT) != IFREG)
+        return EISDIR;
+    if (length > 0x7ffffffful)
+        return EFBIG;
+    if ((off_t)length == ip->i_size)
+        return 0;
+    if ((off_t)length > ip->i_size) {
+        error = fat_zero_file_range(ip, ip->i_size, (off_t)length);
+        if (error)
+            return error;
+        ip->i_size = (off_t)length;
+        return fat_file_update(ip);
+    }
+
+    old_cluster = (unsigned)ip->i_addr[0];
+    if (length == 0) {
+        ip->i_addr[0] = 0;
+        ip->i_size = 0;
+        error = fat_file_update(ip);
+        if (error) {
+            ip->i_addr[0] = (daddr_t)old_cluster;
+            return error;
+        }
+        if (fat_cluster_valid(&fmp->fm_volume, old_cluster))
+            return fat_chain_free(fmp, old_cluster);
+        return old_cluster == 0 ? 0 : EIO;
+    }
+
+    cluster_bytes = fmp->fm_volume.fv_sectors_per_cluster *
+        FAT_SECTOR_SIZE;
+    keep_index = ((unsigned)length - 1u) / cluster_bytes;
+    error = fat_file_cluster_at(ip, keep_index, 0, &keep_cluster);
+    if (error)
+        return error;
+    error = fat_next_cluster(fmp, keep_cluster, &tail);
+    if (error)
+        return error;
+    ip->i_size = (off_t)length;
+    error = fat_file_update(ip);
+    if (error)
+        return error;
+    if (tail == 0)
+        return 0;
+    error = fat_cluster_write(fmp, keep_cluster,
+        fat_eoc_value(&fmp->fm_volume));
+    if (error)
+        return error;
+    return fat_chain_free(fmp, tail);
+}
+
 static int
 fat_rwip(struct inode *ip, struct uio *uio, int ioflag)
 {
     int type;
 
     (void)ioflag;
-    if (uio->uio_rw != UIO_READ)
-        return EROFS;
     type = ip->i_mode & IFMT;
-    if (type == IFDIR)
+    if (type == IFDIR) {
+        if (uio->uio_rw != UIO_READ)
+            return EISDIR;
         return fat_read_directory(ip, uio);
-    if (type == IFREG)
-        return fat_read_file(ip, uio);
+    }
+    if (type == IFREG) {
+        if (uio->uio_rw == UIO_READ)
+            return fat_read_file(ip, uio);
+        return fat_write_file(ip, uio, ioflag);
+    }
     return EFTYPE;
+}
+
+static int
+fat_create(struct inode *pdir, struct nameidata *ndp, int mode,
+    struct inode **ipp)
+{
+    struct fat_mount *fmp;
+    struct inode *ip;
+    struct buf *bp;
+    unsigned char *data;
+    unsigned char short_name[11];
+    unsigned sector;
+    unsigned slot;
+    ino_t ino;
+    off_t dir_size;
+    int error;
+
+    fmp = fat_mount_from_inode(pdir);
+    if (fmp == 0)
+        return EIO;
+    if (fmp->fm_read_only)
+        return EROFS;
+    if ((mode & IFMT) != 0 && (mode & IFMT) != IFREG)
+        return EOPNOTSUPP;
+    error = fat_short_name_encode(ndp->ni_dent.d_name,
+        ndp->ni_dent.d_namlen, short_name);
+    if (error != FAT_PARSE_OK)
+        return error == FAT_PARSE_UNSUPPORTED ? EOPNOTSUPP : EINVAL;
+    error = fat_entry_insert(fmp, pdir->i_number, short_name, &sector,
+        &slot);
+    if (error)
+        return error;
+    error = fat_file_ino(sector, slot, &ino);
+    if (error) {
+        if (fat_sector_get(fmp, sector, &bp, &data) == 0) {
+            data[slot * FAT_DIRENT_SIZE] = FAT_DIRENT_DELETED;
+            (void)fat_buffer_write(fmp, bp);
+        }
+        return error;
+    }
+    ip = iget(pdir->i_dev, pdir->i_fs, ino);
+    if (ip == 0) {
+        (void)fat_entry_delete(fmp, ino);
+        return u.u_error ? u.u_error : EIO;
+    }
+    if (fat_dir_build(fmp, pdir->i_number, 0, 0, &dir_size) == 0)
+        pdir->i_size = dir_size;
+    cacheinval(pdir);
+    *ipp = ip;
+    return 0;
+}
+
+static int
+fat_remove(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
+{
+    struct fat_mount *fmp;
+    unsigned char entry[FAT_DIRENT_SIZE];
+    unsigned char short_name[11];
+    unsigned cluster;
+    unsigned sector;
+    unsigned slot;
+    off_t dir_size;
+    int error;
+
+    fmp = fat_mount_from_inode(ip);
+    if (fmp == 0 || fmp != fat_mount_from_inode(pdir))
+        return EXDEV;
+    if (fmp->fm_read_only)
+        return EROFS;
+    if ((ip->i_mode & IFMT) != IFREG)
+        return EISDIR;
+    error = fat_short_name_encode(ndp->ni_dent.d_name,
+        ndp->ni_dent.d_namlen, short_name);
+    if (error != FAT_PARSE_OK)
+        return EOPNOTSUPP;
+    error = fat_file_location(ip->i_number, &sector, &slot);
+    if (error)
+        return error;
+    error = fat_entry_read(fmp, sector, slot, entry);
+    if (error)
+        return error;
+    if (bcmp(entry, short_name, sizeof(short_name)) != 0)
+        return EOPNOTSUPP;
+    cluster = (unsigned)ip->i_addr[0];
+    error = fat_entry_delete(fmp, ip->i_number);
+    if (error)
+        return error;
+    ip->i_addr[0] = 0;
+    ip->i_size = 0;
+    ip->i_nlink = 0;
+    cacheinval(ip);
+    if (fat_dir_build(fmp, pdir->i_number, 0, 0, &dir_size) == 0)
+        pdir->i_size = dir_size;
+    cacheinval(pdir);
+    if (fat_cluster_valid(&fmp->fm_volume, cluster))
+        return fat_chain_free(fmp, cluster);
+    return cluster == 0 ? 0 : EIO;
 }
 
 static int
@@ -878,8 +1651,16 @@ fat_statfs(struct mount *mp, struct statfs *sbp)
 static int
 fat_sync(struct mount *mp)
 {
-    (void)mp;
-    return 0;
+    struct fat_mount *fmp;
+    int error;
+
+    fmp = (struct fat_mount *)mp->m_data;
+    if (fmp == 0 || fmp->fm_read_only)
+        return 0;
+    bflush(fmp->fm_dev);
+    error = (*bdevsw[major(fmp->fm_dev)].d_ioctl)(fmp->fm_dev,
+        DIOCFLUSH, (caddr_t)0, FWRITE);
+    return error == EINVAL || error == EOPNOTSUPP ? 0 : error;
 }
 
 static int
@@ -919,6 +1700,8 @@ fat_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
     fmp->fm_used = 1;
     fmp->fm_mount = mp;
     fmp->fm_dev = dev;
+    fmp->fm_read_only = (flags & MNT_RDONLY) != 0;
+    fmp->fm_next_free = 2u;
 
     media_sectors = 0;
     error = (*bdevsw[major(dev)].d_ioctl)(dev, DIOCGETSECTORS,
@@ -948,11 +1731,12 @@ fat_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
     }
 
     mp->m_data = (caddr_t)fmp;
-    mp->m_filsys.fs_ronly = 1;
-    mp->m_filsys.fs_flags = flags | MNT_RDONLY;
-    printf("fat%u: FAT%u, %u sectors, %u sectors/cluster, read-only\n",
+    mp->m_filsys.fs_ronly = fmp->fm_read_only;
+    mp->m_filsys.fs_flags = flags;
+    printf("fat%u: FAT%u, %u sectors, %u sectors/cluster%s\n",
         i, fmp->fm_volume.fv_type, fmp->fm_volume.fv_total_sectors,
-        fmp->fm_volume.fv_sectors_per_cluster);
+        fmp->fm_volume.fv_sectors_per_cluster,
+        fmp->fm_read_only ? ", read-only" : ", read-write");
     return 0;
 fail:
     fat_zero(fmp, sizeof(*fmp));
@@ -973,14 +1757,14 @@ struct vfsops fat_vfsops = {
     fat_load_inode,
     fat_blkatoff,
     fat_rwip,
+    fat_create,
+    fat_remove,
     0,
     0,
     0,
-    0,
-    0,
-    0,
+    fat_truncate,
     fat_statfs,
     fat_sync,
     fat_namematch,
-    VFSOPS_BLOCK_DEVICE | VFSOPS_READ_ONLY,
+    VFSOPS_BLOCK_DEVICE,
 };

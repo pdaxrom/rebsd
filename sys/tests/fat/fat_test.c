@@ -58,6 +58,9 @@ test_fat16(void)
     CHECK(volume.fv_type == FAT_TYPE_16);
     CHECK(volume.fv_data_start == 97);
     CHECK(volume.fv_cluster_count == 8167);
+    CHECK(volume.fv_reserved_sectors == 1);
+    CHECK(volume.fv_fat_count == 2 && volume.fv_active_fat == 0);
+    CHECK(volume.fv_fat_mirrored);
     CHECK(fat_cluster_first_sector(&volume, 2) == 97);
     CHECK(fat_fat_position(&volume, 7, &sector, &offset) == FAT_PARSE_OK);
     CHECK(sector == 1 && offset == 14);
@@ -84,6 +87,9 @@ test_fat32(void)
     CHECK(volume.fv_root_cluster == 2);
     CHECK(volume.fv_cluster_count == 3779919);
     CHECK(volume.fv_fat_start == 32);
+    CHECK(volume.fv_reserved_sectors == 32);
+    CHECK(volume.fv_fat_count == 2 && volume.fv_active_fat == 0);
+    CHECK(volume.fv_fat_mirrored);
     set_le32(fat_entry, 0xafffffff);
     CHECK(fat_cluster_is_eoc(&volume,
         fat_fat_decode(&volume, fat_entry)));
@@ -92,6 +98,8 @@ test_fat32(void)
     set_le16(boot + 40, 0x0081);
     CHECK(fat_volume_parse(&volume, boot, 30298527) == FAT_PARSE_OK);
     CHECK(volume.fv_fat_start == 32 + 29568);
+    CHECK(volume.fv_active_fat == 1);
+    CHECK(!volume.fv_fat_mirrored);
     CHECK(fat_fat_position(&volume, 2, &sector, &offset) == FAT_PARSE_OK);
     CHECK(sector == 32 + 29568 && offset == 8);
     return 0;
@@ -125,6 +133,7 @@ static int
 test_names(void)
 {
     unsigned char entry[FAT_DIRENT_SIZE];
+    unsigned char short_name[11];
     struct fat_dirent dirent;
     char name[16];
 
@@ -145,6 +154,49 @@ test_names(void)
     CHECK(fat_dirent_is_visible(entry));
     entry[11] = FAT_ATTR_LONG_NAME;
     CHECK(!fat_dirent_is_visible(entry));
+
+    CHECK(fat_short_name_encode("hello.txt", 9, short_name) ==
+        FAT_PARSE_OK);
+    CHECK(memcmp(short_name, "HELLO   TXT", 11) == 0);
+    fat_dirent_encode(entry, short_name, FAT_ATTR_ARCHIVE, 0x12345678u,
+        0x01020304u);
+    fat_dirent_parse(&dirent, entry);
+    CHECK(dirent.fd_attr == FAT_ATTR_ARCHIVE);
+    CHECK(dirent.fd_cluster == 0x12345678u);
+    CHECK(dirent.fd_size == 0x01020304u);
+    fat_dirent_set_cluster_size(entry, 0x07654321u, 0x10203040u);
+    fat_dirent_parse(&dirent, entry);
+    CHECK(dirent.fd_cluster == 0x07654321u);
+    CHECK(dirent.fd_size == 0x10203040u);
+    CHECK(fat_short_name_encode("too-long-name.txt", 17, short_name) ==
+        FAT_PARSE_UNSUPPORTED);
+    CHECK(fat_short_name_encode("two.dots.txt", 12, short_name) ==
+        FAT_PARSE_UNSUPPORTED);
+    CHECK(fat_short_name_encode("bad name", 8, short_name) ==
+        FAT_PARSE_UNSUPPORTED);
+    return 0;
+}
+
+static int
+test_fat_encoding(void)
+{
+    unsigned char entry[4];
+    struct fat_volume volume;
+
+    memset(&volume, 0, sizeof(volume));
+    volume.fv_type = FAT_TYPE_16;
+    memset(entry, 0xa5, sizeof(entry));
+    fat_fat_encode(&volume, entry, 0xfff8u);
+    CHECK(entry[0] == 0xf8 && entry[1] == 0xff);
+
+    volume.fv_type = FAT_TYPE_32;
+    entry[0] = 0x78;
+    entry[1] = 0x56;
+    entry[2] = 0x34;
+    entry[3] = 0xa2;
+    fat_fat_encode(&volume, entry, 0x01234567u);
+    CHECK(entry[0] == 0x67 && entry[1] == 0x45 && entry[2] == 0x23 &&
+        entry[3] == 0xa1);
     return 0;
 }
 
@@ -180,6 +232,7 @@ main(int argc, char **argv)
     CHECK(test_fat32() == 0);
     CHECK(test_rejects_bad_bpb() == 0);
     CHECK(test_names() == 0);
+    CHECK(test_fat_encoding() == 0);
     if (argc == 3)
         CHECK(test_image(argv[1], (unsigned)strtoul(argv[2], NULL, 0)) == 0);
     else if (argc != 1) {

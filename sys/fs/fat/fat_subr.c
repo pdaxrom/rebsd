@@ -30,6 +30,22 @@ fat_get_le32(const unsigned char *data)
 }
 
 static void
+fat_put_le16(unsigned char *data, unsigned value)
+{
+    data[0] = (unsigned char)value;
+    data[1] = (unsigned char)(value >> 8);
+}
+
+static void
+fat_put_le32(unsigned char *data, unsigned value)
+{
+    data[0] = (unsigned char)value;
+    data[1] = (unsigned char)(value >> 8);
+    data[2] = (unsigned char)(value >> 16);
+    data[3] = (unsigned char)(value >> 24);
+}
+
+static void
 fat_zero(void *vptr, size_t length)
 {
     unsigned char *ptr;
@@ -97,6 +113,7 @@ fat_volume_parse(struct fat_volume *volume, const unsigned char *boot,
     if (clusters < FAT12_CLUSTER_LIMIT)
         return FAT_PARSE_UNSUPPORTED;
 
+    ext_flags = 0;
     volume->fv_type = clusters < FAT16_CLUSTER_LIMIT ?
         FAT_TYPE_16 : FAT_TYPE_32;
     if (volume->fv_type == FAT_TYPE_16) {
@@ -125,6 +142,7 @@ fat_volume_parse(struct fat_volume *volume, const unsigned char *boot,
         return FAT_PARSE_INVALID;
 
     volume->fv_total_sectors = total_sectors;
+    volume->fv_reserved_sectors = reserved;
     volume->fv_fat_start = reserved + active_fat * fat_sectors;
     volume->fv_fat_sectors = fat_sectors;
     volume->fv_data_start = overhead;
@@ -135,6 +153,9 @@ fat_volume_parse(struct fat_volume *volume, const unsigned char *boot,
     volume->fv_max_cluster = clusters + 1u;
     volume->fv_sectors_per_cluster = sectors_per_cluster;
     volume->fv_fat_count = fats;
+    volume->fv_active_fat = active_fat;
+    volume->fv_fat_mirrored = volume->fv_type == FAT_TYPE_16 ||
+        (ext_flags & 0x80u) == 0;
     if (volume->fv_type == FAT_TYPE_32 &&
         !fat_cluster_valid(volume, root_cluster)) {
         fat_zero(volume, sizeof(*volume));
@@ -184,6 +205,23 @@ fat_fat_decode(const struct fat_volume *volume, const unsigned char *entry)
     if (volume->fv_type == FAT_TYPE_16)
         return fat_get_le16(entry);
     return fat_get_le32(entry) & FAT32_CLUSTER_MASK;
+}
+
+void
+fat_fat_encode(const struct fat_volume *volume, unsigned char *entry,
+    unsigned cluster)
+{
+    unsigned value;
+
+    if (volume == 0 || entry == 0)
+        return;
+    if (volume->fv_type == FAT_TYPE_16) {
+        fat_put_le16(entry, cluster);
+        return;
+    }
+    value = fat_get_le32(entry) & 0xf0000000u;
+    value |= cluster & FAT32_CLUSTER_MASK;
+    fat_put_le32(entry, value);
 }
 
 int
@@ -297,6 +335,111 @@ fat_short_name(const unsigned char *entry, char *name, unsigned name_size)
     }
     name[length] = '\0';
     return (int)length;
+}
+
+static int
+fat_short_char(unsigned char ch)
+{
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9'))
+        return 1;
+    switch (ch) {
+    case '$':
+    case '%':
+    case '\'':
+    case '-':
+    case '_':
+    case '@':
+    case '~':
+    case '`':
+    case '!':
+    case '(':
+    case ')':
+    case '{':
+    case '}':
+    case '^':
+    case '#':
+    case '&':
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+int
+fat_short_name_encode(const char *name, unsigned length,
+    unsigned char *short_name)
+{
+    unsigned base_length;
+    unsigned ext_length;
+    unsigned dot;
+    unsigned i;
+
+    if (name == 0 || short_name == 0 || length == 0)
+        return FAT_PARSE_INVALID;
+    dot = length;
+    for (i = 0; i < length; ++i) {
+        if (name[i] == '.') {
+            if (dot != length)
+                return FAT_PARSE_UNSUPPORTED;
+            dot = i;
+        }
+    }
+    base_length = dot;
+    ext_length = dot == length ? 0 : length - dot - 1u;
+    if (base_length == 0 || base_length > 8u || ext_length > 3u ||
+        (dot != length && ext_length == 0))
+        return FAT_PARSE_UNSUPPORTED;
+    for (i = 0; i < 11u; ++i)
+        short_name[i] = ' ';
+    for (i = 0; i < base_length; ++i) {
+        unsigned char ch;
+
+        ch = (unsigned char)name[i];
+        if (ch >= 'a' && ch <= 'z')
+            ch -= 'a' - 'A';
+        if (!fat_short_char(ch))
+            return FAT_PARSE_UNSUPPORTED;
+        short_name[i] = ch;
+    }
+    for (i = 0; i < ext_length; ++i) {
+        unsigned char ch;
+
+        ch = (unsigned char)name[dot + 1u + i];
+        if (ch >= 'a' && ch <= 'z')
+            ch -= 'a' - 'A';
+        if (!fat_short_char(ch))
+            return FAT_PARSE_UNSUPPORTED;
+        short_name[8u + i] = ch;
+    }
+    return FAT_PARSE_OK;
+}
+
+void
+fat_dirent_encode(unsigned char *entry, const unsigned char *short_name,
+    unsigned attr, unsigned cluster, unsigned size)
+{
+    unsigned i;
+
+    if (entry == 0 || short_name == 0)
+        return;
+    fat_zero(entry, FAT_DIRENT_SIZE);
+    for (i = 0; i < 11u; ++i)
+        entry[i] = short_name[i];
+    entry[11] = (unsigned char)attr;
+    fat_put_le16(entry + 20, cluster >> 16);
+    fat_put_le16(entry + 26, cluster);
+    fat_put_le32(entry + 28, size);
+}
+
+void
+fat_dirent_set_cluster_size(unsigned char *entry, unsigned cluster,
+    unsigned size)
+{
+    if (entry == 0)
+        return;
+    fat_put_le16(entry + 20, cluster >> 16);
+    fat_put_le16(entry + 26, cluster);
+    fat_put_le32(entry + 28, size);
 }
 
 static unsigned char

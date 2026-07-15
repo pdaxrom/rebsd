@@ -51,8 +51,7 @@ mount_fat(int argc, char *argv[])
 	if (argc != 2)
 		fat_usage();
 
-	/* The first FAT implementation deliberately never requests write I/O. */
-	mntflags |= MNT_RDONLY | MNT_SET_FSTYPE(MOUNT_FAT);
+	mntflags |= MNT_SET_FSTYPE(MOUNT_FAT);
 	if (mount(argv[0], argv[1], mntflags) < 0) {
 		(void)fprintf(stderr, "%s on %s: %s\n", argv[0], argv[1],
 		    strerror(errno));

@@ -28,6 +28,7 @@
 
 #define FAT_DIRENT_DELETED          0xe5u
 #define FAT_DIRENT_END              0x00u
+#define FAT_CLUSTER_FREE            0u
 
 #define FAT_PARSE_OK                0
 #define FAT_PARSE_INVALID           (-1)
@@ -36,6 +37,7 @@
 struct fat_volume {
     unsigned fv_type;
     unsigned fv_total_sectors;
+    unsigned fv_reserved_sectors;
     unsigned fv_fat_start;
     unsigned fv_fat_sectors;
     unsigned fv_data_start;
@@ -46,6 +48,8 @@ struct fat_volume {
     unsigned fv_max_cluster;
     unsigned fv_sectors_per_cluster;
     unsigned fv_fat_count;
+    unsigned fv_active_fat;
+    unsigned fv_fat_mirrored;
 };
 
 struct fat_dirent {
@@ -66,6 +70,7 @@ unsigned fat_cluster_first_sector(const struct fat_volume *, unsigned);
 int fat_fat_position(const struct fat_volume *, unsigned, unsigned *,
     unsigned *);
 unsigned fat_fat_decode(const struct fat_volume *, const unsigned char *);
+void fat_fat_encode(const struct fat_volume *, unsigned char *, unsigned);
 int fat_cluster_is_eoc(const struct fat_volume *, unsigned);
 int fat_cluster_is_bad(const struct fat_volume *, unsigned);
 
@@ -73,6 +78,10 @@ void fat_dirent_parse(struct fat_dirent *, const unsigned char *);
 int fat_dirent_is_visible(const unsigned char *);
 unsigned fat_lfn_checksum(const unsigned char *);
 int fat_short_name(const unsigned char *, char *, unsigned);
+int fat_short_name_encode(const char *, unsigned, unsigned char *);
+void fat_dirent_encode(unsigned char *, const unsigned char *, unsigned,
+    unsigned, unsigned);
+void fat_dirent_set_cluster_size(unsigned char *, unsigned, unsigned);
 int fat_ascii_name_equal(const char *, unsigned, const char *, unsigned);
 
 #ifdef KERNEL
