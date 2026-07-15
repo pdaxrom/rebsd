@@ -442,6 +442,21 @@ fat_dirent_set_cluster_size(unsigned char *entry, unsigned cluster,
     fat_put_le32(entry + 28, size);
 }
 
+void
+fat_directory_encode(unsigned char *sector, unsigned cluster,
+    unsigned parent_cluster)
+{
+    static const unsigned char dot_name[] = ".          ";
+    static const unsigned char dotdot_name[] = "..         ";
+
+    if (sector == 0)
+        return;
+    fat_zero(sector, FAT_SECTOR_SIZE);
+    fat_dirent_encode(sector, dot_name, FAT_ATTR_DIRECTORY, cluster, 0);
+    fat_dirent_encode(sector + FAT_DIRENT_SIZE, dotdot_name,
+        FAT_ATTR_DIRECTORY, parent_cluster, 0);
+}
+
 static unsigned char
 fat_ascii_fold(unsigned char ch)
 {

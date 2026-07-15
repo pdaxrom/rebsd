@@ -35,6 +35,10 @@
     ((FAT_DIR_INO_BASE - FAT_FILE_INO_BASE) / FAT_DIRENTS_PER_SECTOR)
 #define FAT_LFN_CHARS               MAXNAMLEN
 #define FAT_INSERT_END_LAST         (-1)
+#define FAT_SCAN_FOUND              (-2)
+
+static const unsigned char fat_dot_name[] = ".          ";
+static const unsigned char fat_dotdot_name[] = "..         ";
 
 struct fat_mount {
     int fm_used;
@@ -61,6 +65,14 @@ struct fat_dir_build {
     off_t fb_block_base;
     off_t fb_offset;
     off_t fb_last_offset;
+};
+
+struct fat_entry_find {
+    const unsigned char *ff_name;
+    unsigned ff_cluster;
+    unsigned ff_sector;
+    unsigned ff_slot;
+    int ff_found;
 };
 
 static struct fat_mount fat_mounts[NMOUNT];
@@ -761,7 +773,8 @@ fat_chain_free(struct fat_mount *fmp, unsigned cluster)
 
 static int
 fat_entry_insert_sector(struct fat_mount *fmp, unsigned sector,
-    const unsigned char *short_name, unsigned *slotp)
+    const unsigned char *short_name, unsigned attr, unsigned cluster,
+    unsigned *slotp)
 {
     struct buf *bp;
     unsigned char *data;
@@ -783,7 +796,7 @@ fat_entry_insert_sector(struct fat_mount *fmp, unsigned sector,
             return FAT_INSERT_END_LAST;
         }
         was_end = entry[0] == FAT_DIRENT_END;
-        fat_dirent_encode(entry, short_name, FAT_ATTR_ARCHIVE, 0, 0);
+        fat_dirent_encode(entry, short_name, attr, cluster, 0);
         if (was_end && slot + 1u < FAT_DIRENTS_PER_SECTOR)
             fat_zero(entry + FAT_DIRENT_SIZE, FAT_DIRENT_SIZE);
         error = fat_buffer_write(fmp, bp);
@@ -812,7 +825,8 @@ fat_entry_clear_first(struct fat_mount *fmp, unsigned sector)
 
 static int
 fat_entry_insert_last(struct fat_mount *fmp, unsigned sector,
-    const unsigned char *short_name, unsigned *slotp)
+    const unsigned char *short_name, unsigned attr, unsigned cluster,
+    unsigned *slotp)
 {
     struct buf *bp;
     unsigned char *data;
@@ -827,7 +841,7 @@ fat_entry_insert_last(struct fat_mount *fmp, unsigned sector,
         brelse(bp);
         return EIO;
     }
-    fat_dirent_encode(entry, short_name, FAT_ATTR_ARCHIVE, 0, 0);
+    fat_dirent_encode(entry, short_name, attr, cluster, 0);
     error = fat_buffer_write(fmp, bp);
     if (error)
         return error;
@@ -837,7 +851,8 @@ fat_entry_insert_last(struct fat_mount *fmp, unsigned sector,
 
 static int
 fat_entry_insert(struct fat_mount *fmp, ino_t dir_ino,
-    const unsigned char *short_name, unsigned *sectorp, unsigned *slotp)
+    const unsigned char *short_name, unsigned attr, unsigned start_cluster,
+    unsigned *sectorp, unsigned *slotp)
 {
     unsigned cluster;
     unsigned next;
@@ -850,16 +865,16 @@ fat_entry_insert(struct fat_mount *fmp, ino_t dir_ino,
     if (dir_ino == ROOTINO && fmp->fm_volume.fv_type == FAT_TYPE_16) {
         for (i = 0; i < fmp->fm_volume.fv_root_dir_sectors; ++i) {
             sector = fmp->fm_volume.fv_root_dir_start + i;
-            error = fat_entry_insert_sector(fmp, sector, short_name,
-                slotp);
+            error = fat_entry_insert_sector(fmp, sector, short_name, attr,
+                start_cluster, slotp);
             if (error == FAT_INSERT_END_LAST) {
                 if (i + 1u < fmp->fm_volume.fv_root_dir_sectors) {
                     error = fat_entry_clear_first(fmp, sector + 1u);
                     if (error)
                         return error;
                 }
-                error = fat_entry_insert_last(fmp, sector, short_name,
-                    slotp);
+                error = fat_entry_insert_last(fmp, sector, short_name, attr,
+                    start_cluster, slotp);
             }
             if (error == 0) {
                 *sectorp = sector;
@@ -882,7 +897,7 @@ fat_entry_insert(struct fat_mount *fmp, ino_t dir_ino,
         sector = fat_cluster_first_sector(&fmp->fm_volume, cluster);
         for (i = 0; i < fmp->fm_volume.fv_sectors_per_cluster; ++i) {
             error = fat_entry_insert_sector(fmp, sector + i, short_name,
-                slotp);
+                attr, start_cluster, slotp);
             if (error == FAT_INSERT_END_LAST) {
                 if (i + 1u < fmp->fm_volume.fv_sectors_per_cluster) {
                     error = fat_entry_clear_first(fmp, sector + i + 1u);
@@ -901,7 +916,7 @@ fat_entry_insert(struct fat_mount *fmp, ino_t dir_ino,
                     }
                 }
                 error = fat_entry_insert_last(fmp, sector + i,
-                    short_name, slotp);
+                    short_name, attr, start_cluster, slotp);
             }
             if (error == 0) {
                 *sectorp = sector + i;
@@ -930,11 +945,32 @@ fat_entry_insert(struct fat_mount *fmp, ino_t dir_ino,
 }
 
 static int
-fat_entry_delete(struct fat_mount *fmp, ino_t ino)
+fat_entry_delete_at(struct fat_mount *fmp, unsigned sector, unsigned slot,
+    int directory)
 {
     struct buf *bp;
     unsigned char *data;
     unsigned char *entry;
+    int error;
+
+    if (slot >= FAT_DIRENTS_PER_SECTOR)
+        return EINVAL;
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    entry = data + slot * FAT_DIRENT_SIZE;
+    if (!fat_dirent_is_visible(entry) ||
+        ((entry[11] & FAT_ATTR_DIRECTORY) != 0) != directory) {
+        brelse(bp);
+        return ENOENT;
+    }
+    entry[0] = FAT_DIRENT_DELETED;
+    return fat_buffer_write(fmp, bp);
+}
+
+static int
+fat_entry_delete(struct fat_mount *fmp, ino_t ino)
+{
     unsigned sector;
     unsigned slot;
     int error;
@@ -942,17 +978,145 @@ fat_entry_delete(struct fat_mount *fmp, ino_t ino)
     error = fat_file_location(ino, &sector, &slot);
     if (error)
         return error;
+    return fat_entry_delete_at(fmp, sector, slot, 0);
+}
+
+static int
+fat_directory_initialize(struct fat_mount *fmp, unsigned cluster,
+    unsigned parent_cluster)
+{
+    struct buf *bp;
+    unsigned char *data;
+    unsigned sector;
+    int error;
+
+    sector = fat_cluster_first_sector(&fmp->fm_volume, cluster);
+    if (sector == 0xffffffffu)
+        return EIO;
     error = fat_sector_get(fmp, sector, &bp, &data);
     if (error)
         return error;
-    entry = data + slot * FAT_DIRENT_SIZE;
-    if (!fat_dirent_is_visible(entry) ||
-        (entry[11] & FAT_ATTR_DIRECTORY) != 0) {
-        brelse(bp);
-        return ENOENT;
-    }
-    entry[0] = FAT_DIRENT_DELETED;
+    fat_directory_encode(data, cluster, parent_cluster);
     return fat_buffer_write(fmp, bp);
+}
+
+static int
+fat_directory_validate(struct fat_mount *fmp, unsigned cluster,
+    unsigned parent_cluster, int parent_is_root)
+{
+    struct buf *bp;
+    struct fat_dirent dot;
+    struct fat_dirent dotdot;
+    unsigned char *data;
+    unsigned sector;
+    unsigned actual_parent;
+    int error;
+
+    sector = fat_cluster_first_sector(&fmp->fm_volume, cluster);
+    if (sector == 0xffffffffu)
+        return EIO;
+    error = fat_sector_get(fmp, sector, &bp, &data);
+    if (error)
+        return error;
+    fat_dirent_parse(&dot, data);
+    fat_dirent_parse(&dotdot, data + FAT_DIRENT_SIZE);
+    actual_parent = fat_dirent_cluster(fmp, &dotdot);
+    if (bcmp(data, fat_dot_name, 11u) != 0 ||
+        bcmp(data + FAT_DIRENT_SIZE, fat_dotdot_name, 11u) != 0 ||
+        (dot.fd_attr & FAT_ATTR_DIRECTORY) == 0 ||
+        (dotdot.fd_attr & FAT_ATTR_DIRECTORY) == 0 ||
+        fat_dirent_cluster(fmp, &dot) != cluster ||
+        (!parent_is_root && actual_parent != parent_cluster) ||
+        (parent_is_root && actual_parent != 0 &&
+        actual_parent != parent_cluster)) {
+        brelse(bp);
+        return EIO;
+    }
+    brelse(bp);
+    return 0;
+}
+
+static int
+fat_directory_nonempty_entry(struct fat_mount *fmp,
+    const unsigned char *entry, unsigned sector, unsigned slot,
+    const char *name, unsigned namelen, void *arg)
+{
+    int *nonemptyp;
+
+    (void)fmp;
+    (void)entry;
+    (void)sector;
+    (void)slot;
+    if ((namelen == 1u && name[0] == '.') ||
+        (namelen == 2u && name[0] == '.' && name[1] == '.'))
+        return 0;
+    nonemptyp = (int *)arg;
+    *nonemptyp = 1;
+    return FAT_SCAN_FOUND;
+}
+
+static int
+fat_directory_is_empty(struct fat_mount *fmp, ino_t ino, unsigned cluster,
+    unsigned parent_cluster, int parent_is_root)
+{
+    int nonempty;
+    int error;
+
+    error = fat_directory_validate(fmp, cluster, parent_cluster,
+        parent_is_root);
+    if (error)
+        return error;
+    nonempty = 0;
+    error = fat_scan_directory(fmp, ino, fat_directory_nonempty_entry,
+        &nonempty);
+    if (error == FAT_SCAN_FOUND && nonempty)
+        return ENOTEMPTY;
+    return error;
+}
+
+static int
+fat_directory_find_entry(struct fat_mount *fmp,
+    const unsigned char *entry, unsigned sector, unsigned slot,
+    const char *name, unsigned namelen, void *arg)
+{
+    struct fat_entry_find *find;
+    struct fat_dirent dirent;
+
+    (void)name;
+    (void)namelen;
+    find = (struct fat_entry_find *)arg;
+    if ((entry[11] & FAT_ATTR_DIRECTORY) == 0 ||
+        bcmp(entry, find->ff_name, 11u) != 0)
+        return 0;
+    fat_dirent_parse(&dirent, entry);
+    if (fat_dirent_cluster(fmp, &dirent) != find->ff_cluster)
+        return 0;
+    find->ff_sector = sector;
+    find->ff_slot = slot;
+    find->ff_found = 1;
+    return FAT_SCAN_FOUND;
+}
+
+static int
+fat_directory_entry_location(struct fat_mount *fmp, ino_t parent_ino,
+    const unsigned char *short_name, unsigned cluster, unsigned *sectorp,
+    unsigned *slotp)
+{
+    struct fat_entry_find find;
+    int error;
+
+    fat_zero(&find, sizeof(find));
+    find.ff_name = short_name;
+    find.ff_cluster = cluster;
+    error = fat_scan_directory(fmp, parent_ino, fat_directory_find_entry,
+        &find);
+    if (error != 0 && error != FAT_SCAN_FOUND)
+        return error;
+    if (!find.ff_found)
+        return ENOENT;
+    *sectorp = find.ff_sector;
+    *slotp = find.ff_slot;
+    return 0;
 }
 
 static int
@@ -1554,8 +1718,8 @@ fat_create(struct inode *pdir, struct nameidata *ndp, int mode,
         ndp->ni_dent.d_namlen, short_name);
     if (error != FAT_PARSE_OK)
         return error == FAT_PARSE_UNSUPPORTED ? EOPNOTSUPP : EINVAL;
-    error = fat_entry_insert(fmp, pdir->i_number, short_name, &sector,
-        &slot);
+    error = fat_entry_insert(fmp, pdir->i_number, short_name,
+        FAT_ATTR_ARCHIVE, 0, &sector, &slot);
     if (error)
         return error;
     error = fat_file_ino(sector, slot, &ino);
@@ -1575,6 +1739,56 @@ fat_create(struct inode *pdir, struct nameidata *ndp, int mode,
         pdir->i_size = dir_size;
     cacheinval(pdir);
     *ipp = ip;
+    return 0;
+}
+
+static int
+fat_mkdir(struct inode *pdir, struct nameidata *ndp, int mode)
+{
+    struct fat_mount *fmp;
+    unsigned char short_name[11];
+    unsigned cluster;
+    unsigned parent_cluster;
+    unsigned dotdot_cluster;
+    unsigned sector;
+    unsigned slot;
+    off_t dir_size;
+    int error;
+
+    fmp = fat_mount_from_inode(pdir);
+    if (fmp == 0)
+        return EIO;
+    if (fmp->fm_read_only)
+        return EROFS;
+    if ((mode & IFMT) != IFDIR)
+        return EINVAL;
+    error = fat_short_name_encode(ndp->ni_dent.d_name,
+        ndp->ni_dent.d_namlen, short_name);
+    if (error != FAT_PARSE_OK)
+        return error == FAT_PARSE_UNSUPPORTED ? EOPNOTSUPP : EINVAL;
+    parent_cluster = (unsigned)pdir->i_addr[0];
+    if (pdir->i_number != ROOTINO &&
+        !fat_cluster_valid(&fmp->fm_volume, parent_cluster))
+        return EIO;
+    dotdot_cluster = pdir->i_number == ROOTINO ? 0 : parent_cluster;
+
+    error = fat_cluster_alloc(fmp, &cluster);
+    if (error)
+        return error;
+    error = fat_directory_initialize(fmp, cluster, dotdot_cluster);
+    if (error) {
+        (void)fat_chain_free(fmp, cluster);
+        return error;
+    }
+    error = fat_entry_insert(fmp, pdir->i_number, short_name,
+        FAT_ATTR_DIRECTORY, cluster, &sector, &slot);
+    if (error) {
+        (void)fat_chain_free(fmp, cluster);
+        return error;
+    }
+    if (fat_dir_build(fmp, pdir->i_number, 0, 0, &dir_size) == 0)
+        pdir->i_size = dir_size;
+    cacheinval(pdir);
     return 0;
 }
 
@@ -1623,6 +1837,60 @@ fat_remove(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
     if (fat_cluster_valid(&fmp->fm_volume, cluster))
         return fat_chain_free(fmp, cluster);
     return cluster == 0 ? 0 : EIO;
+}
+
+static int
+fat_rmdir(struct inode *pdir, struct inode *ip, struct nameidata *ndp)
+{
+    struct fat_mount *fmp;
+    unsigned char short_name[11];
+    unsigned cluster;
+    unsigned parent_cluster;
+    unsigned sector;
+    unsigned slot;
+    off_t dir_size;
+    int error;
+
+    fmp = fat_mount_from_inode(ip);
+    if (fmp == 0 || fmp != fat_mount_from_inode(pdir))
+        return EXDEV;
+    if (fmp->fm_read_only)
+        return EROFS;
+    if ((ip->i_mode & IFMT) != IFDIR)
+        return ENOTDIR;
+    if (ip->i_number == ROOTINO || ip->i_count > 1u)
+        return EBUSY;
+    error = fat_short_name_encode(ndp->ni_dent.d_name,
+        ndp->ni_dent.d_namlen, short_name);
+    if (error != FAT_PARSE_OK)
+        return EOPNOTSUPP;
+    cluster = (unsigned)ip->i_addr[0];
+    if (!fat_cluster_valid(&fmp->fm_volume, cluster))
+        return EIO;
+    parent_cluster = (unsigned)pdir->i_addr[0];
+    if (pdir->i_number != ROOTINO &&
+        !fat_cluster_valid(&fmp->fm_volume, parent_cluster))
+        return EIO;
+    error = fat_directory_is_empty(fmp, ip->i_number, cluster,
+        parent_cluster, pdir->i_number == ROOTINO);
+    if (error)
+        return error;
+    error = fat_directory_entry_location(fmp, pdir->i_number, short_name,
+        cluster, &sector, &slot);
+    if (error)
+        return error;
+    error = fat_entry_delete_at(fmp, sector, slot, 1);
+    if (error)
+        return error;
+
+    ip->i_addr[0] = 0;
+    ip->i_size = 0;
+    ip->i_nlink = 0;
+    cacheinval(ip);
+    if (fat_dir_build(fmp, pdir->i_number, 0, 0, &dir_size) == 0)
+        pdir->i_size = dir_size;
+    cacheinval(pdir);
+    return fat_chain_free(fmp, cluster);
 }
 
 static int
@@ -1759,8 +2027,8 @@ struct vfsops fat_vfsops = {
     fat_rwip,
     fat_create,
     fat_remove,
-    0,
-    0,
+    fat_mkdir,
+    fat_rmdir,
     0,
     fat_truncate,
     fat_statfs,

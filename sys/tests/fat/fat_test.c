@@ -201,6 +201,28 @@ test_fat_encoding(void)
 }
 
 static int
+test_directory_encoding(void)
+{
+    unsigned char sector[FAT_SECTOR_SIZE];
+    struct fat_dirent dirent;
+    unsigned i;
+
+    memset(sector, 0xa5, sizeof(sector));
+    fat_directory_encode(sector, 0x12345u, 0x6789u);
+    CHECK(memcmp(sector, ".          ", 11) == 0);
+    CHECK(memcmp(sector + FAT_DIRENT_SIZE, "..         ", 11) == 0);
+    fat_dirent_parse(&dirent, sector);
+    CHECK(dirent.fd_attr == FAT_ATTR_DIRECTORY);
+    CHECK(dirent.fd_cluster == 0x12345u && dirent.fd_size == 0);
+    fat_dirent_parse(&dirent, sector + FAT_DIRENT_SIZE);
+    CHECK(dirent.fd_attr == FAT_ATTR_DIRECTORY);
+    CHECK(dirent.fd_cluster == 0x6789u && dirent.fd_size == 0);
+    for (i = 2u * FAT_DIRENT_SIZE; i < FAT_SECTOR_SIZE; ++i)
+        CHECK(sector[i] == 0);
+    return 0;
+}
+
+static int
 test_image(const char *path, unsigned expected_type)
 {
     unsigned char boot[FAT_SECTOR_SIZE];
@@ -233,6 +255,7 @@ main(int argc, char **argv)
     CHECK(test_rejects_bad_bpb() == 0);
     CHECK(test_names() == 0);
     CHECK(test_fat_encoding() == 0);
+    CHECK(test_directory_encoding() == 0);
     if (argc == 3)
         CHECK(test_image(argv[1], (unsigned)strtoul(argv[2], NULL, 0)) == 0);
     else if (argc != 1) {

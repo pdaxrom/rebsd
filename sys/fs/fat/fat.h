@@ -82,6 +82,7 @@ int fat_short_name_encode(const char *, unsigned, unsigned char *);
 void fat_dirent_encode(unsigned char *, const unsigned char *, unsigned,
     unsigned, unsigned);
 void fat_dirent_set_cluster_size(unsigned char *, unsigned, unsigned);
+void fat_directory_encode(unsigned char *, unsigned, unsigned);
 int fat_ascii_name_equal(const char *, unsigned, const char *, unsigned);
 
 #ifdef KERNEL
