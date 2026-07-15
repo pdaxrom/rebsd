@@ -114,6 +114,51 @@ static int global_values[64];
 static unsigned int global_unsigned_values[64];
 static double global_double_values[64];
 
+static unsigned int
+masked_constant(const unsigned int *values, unsigned int count)
+{
+	unsigned int i, sum;
+
+	sum = 0;
+	for (i = 0; i < count; i++)
+		sum += values[(i * 17U) & 63U] ^ i;
+	return sum;
+}
+
+static unsigned int
+masked_constant_dynamic(const unsigned int *values, unsigned int start,
+    unsigned int count)
+{
+	unsigned int i, sum;
+
+	sum = 0;
+	for (i = start; i < count; i++)
+		sum += values[(i * 9U) & 63U] ^ i;
+	return sum;
+}
+
+static unsigned int
+masked_constant_partial(const unsigned int *values, unsigned int count)
+{
+	unsigned int i, sum;
+
+	sum = 0;
+	for (i = 0; i < count; i++)
+		sum += values[(i * 17U) & 60U] ^ i;
+	return sum;
+}
+
+static unsigned int
+unmasked_constant(const unsigned int *values, unsigned int count)
+{
+	unsigned int i, sum;
+
+	sum = 0;
+	for (i = 0; i < count; i++)
+		sum += values[i] + i * 17U;
+	return sum;
+}
+
 static int
 pointer_single_global_int(int count)
 {
@@ -184,5 +229,13 @@ main(void)
 		return 11;
 	if (pointer_reverse_pair_dynamic(values, 4, 16) != 1032)
 		return 12;
+	if (masked_constant(global_unsigned_values, 64) != 10176U)
+		return 13;
+	if (masked_constant_dynamic(global_unsigned_values, 5, 45) != 6720U)
+		return 14;
+	if (masked_constant_partial(global_unsigned_values, 64) != 9312U)
+		return 15;
+	if (unmasked_constant(global_unsigned_values, 16) != 2688U)
+		return 16;
 	return 0;
 }

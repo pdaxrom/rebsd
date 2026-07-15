@@ -5009,6 +5009,42 @@ Milestone order:
     Ordinary PCC Linpack averages 3773.312 KFLOPS, only 0.02% below H10, and
     reaches 85.59% of the current GCC mean.  This closes the H11 physical and
     commit gates.
+  - [x] H12 extend the target-independent SSA induction reducer for unsigned
+    masked constant products `(i*C) & (2^N-1)`.  Carry `i*C` in a second phi,
+    initialize a dynamic starting value once in the preheader, and advance it
+    by the immediate `C*delta` in the latch.  Keep the profitability hook
+    enabled only for VR4300 and MIPS32R2; do not add a MIPS-only pass.
+  - [x] Extend `misc__ssastrength001` with zero- and dynamic-start masked
+    products plus partial-mask and unmasked negative controls.  VR4300 and
+    MIPS32R2 host assembly must remove the hot-loop multiply for a full
+    low-bit mask, while generic MIPS3 and both negative controls retain their
+    previous lowering.  The focused VR4300 and MIPS32R2 hard-float host gates
+    pass.
+  - [x] Pass H12 host, cross, native, and all six full QEMU profiles without
+    new spills or correctness failures.  Cross compilation passes 339 cases
+    with three expected failures and runtime passes 302/302.  Native Malta64
+    reports 312 compile passes, 30 expected compile failures, and 302/302
+    runtime passes.  Every full-smoke profile reports self-test zero,
+    `CCOM_STRESS_DONE:100`, zero failures, and final RC zero.  Sequential
+    one-second Linpack repeats pass on every profile; the H11/H12 Linpack
+    translation-unit assembly is byte-identical.
+  - [x] Build and retain a clean H12 GCC-kernel/PCC-VR4300-hard-float a.out
+    N64 image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h12-masked-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `28bd9078d306add2494c7af852879013c73204999deef5b7e4fe78debfda873a`.
+    The stamp is `.build-mode.gcc.1.0.0.1`; kernel, runner, and all three GCC
+    controls are byte-identical to H11, all benchmark binaries have zero
+    undefined symbols, and all five `fsutil --check` phases pass.
+  - [x] Run H12 on physical N64.  The complete debug runner, expanded native
+    regression, both general self-tests, both Linpack-kernel self-tests, and
+    every benchmark return code pass; both numeric debug markers are zero and
+    the terminal marker is present.  PCC `memory` rises from H11's 5.349 to
+    5.720 Mwork/s (+6.94%) and reaches 55.64% of the same-run GCC result
+    instead of 52.38%.  Untouched general kernels remain within 0.96% of H11.
+    PCC Linpack averages 3758.096 KFLOPS, 0.40% below H11 and 84.89% of the
+    current GCC mean; isolated Linpack kernels are unchanged within timing
+    noise.  This closes the H12 physical and commit gates.
 
 Success criteria:
 

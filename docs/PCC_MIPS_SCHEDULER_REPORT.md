@@ -2882,3 +2882,105 @@ Ordinary PCC Linpack rows are 3742.671 and 3803.952 KFLOPS, averaging
 `daxpy_ur`, `ddot_r`, `ddot_ur`, `dscal_r`, `dscal_ur`, and `idamax` order.
 H11 therefore closes its physical and commit gates with the intended general
 FP-loop gain and no material Linpack or unrelated-code regression.
+
+## Milestone H12: Masked Constant Induction
+
+H12 extends the target-independent SSA induction reducer for unsigned
+expressions of the form `(i*C) & (2^N-1)`.  It initializes a loop-carried
+`i*C` value in the preheader and advances that value by the immediate
+`C*delta` in the latch.  A dynamic initial `i` therefore pays for one
+preheader multiply instead of rebuilding the product in every iteration.
+The existing target profitability model enables the form for VR4300 and
+MIPS32R2 while generic MIPS3 retains its old code.
+
+The candidate is deliberately restricted to matching unsigned types, a full
+positive low-bit mask, a factor from 2 through 32767, and a signed-16-bit
+latch increment.  Partial masks and unmasked constant products are negative
+controls.  `misc__ssastrength001` covers all four cases as well as a dynamic
+starting value.
+
+The H11 PCC `bench_memory` loop rebuilt `i*17` on every iteration with a copy,
+`sll`, and `addu`.  H12 carries the product and changes the latch to two
+immediate additions.  Its only remaining shift scales the masked array index
+for the load.  The same function keeps peak GPR pressure at 17 and reports
+zero selected spills and reloads.  Every other VR4300 general benchmark
+function is byte-identical to H11.  Generic MIPS3 keeps the multiply; focused
+VR4300 and MIPS32R2 hard-float host gates pass.
+
+H12 does not modify the scheduler or final multiply stream.  The default
+`-mfix4300` repair and explicit `-mno-fix4300` opt-out remain unchanged.
+
+Cross compilation passes 339 cases with three expected failures; cross
+runtime passes 302/302.  Native Malta64 reports 312 compile passes, 30
+expected compile failures, and 302/302 runtime passes.  All six fresh
+full-smoke profiles report `MIPS_COMPILER_BENCH_SELFTEST 0`,
+`CCOM_STRESS_DONE:100`, `PCC_SMOKE_ALL_FAILURES 0`, and final RC zero.
+
+The full-smoke jobs intentionally ran two QEMU machines at a time for the
+correctness matrix.  Since that host contention distorted timings, each
+one-second Linpack test was then repeated sequentially:
+
+| Board | CPU | Endian | Float | Linpack KFLOPS | Result |
+| --- | --- | --- | --- | ---: | --- |
+| Malta64 | VR4300 | big | hard | 14687.911 / 14597.872 | `LINPACK_RC:0` |
+| Malta64 | VR4300 | big | soft | 1171.255 / 1161.862 | `LINPACK_RC:0` |
+| Malta | MIPS32R2 | big | hard | 13938.095 / 14108.614 | `LINPACK_RC:0` |
+| Malta | MIPS32R2 | big | soft | 1226.108 / 1201.510 | `LINPACK_RC:0` |
+| MaltaEL | MIPS32R2 | little | hard | 14604.511 / 14566.027 | `LINPACK_RC:0` |
+| MaltaEL | MIPS32R2 | little | soft | 1211.758 / 1240.818 | `LINPACK_RC:0` |
+
+The H11 and H12 PCC Linpack translation-unit assembly is byte-identical.
+This confirms that the masked-induction candidate does not rewrite the
+Linpack hot kernels; the sequential rates show no material system-level
+regression.
+
+The retained physical candidate is:
+
+```text
+/Users/sash/Work/N64/retrobsd-build/n64-h12-masked-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64
+build stamp: .build-mode.gcc.1.0.0.1
+size: 6619136 bytes
+sha256: 28bd9078d306add2494c7af852879013c73204999deef5b7e4fe78debfda873a
+kernel ELF sha256: a1068b0e6aa93dbc8e14a94141b13b2b889ce641b87a4521d8f58e683d1c2cb1
+debug runner sha256: 109535aa7cf1565bdaad16daf6da7f3fb3ce14d2bd37a5fbdfc193bdff32881f
+```
+
+It uses a GCC kernel and PCC VR4300 hard-float a.out userland.  The kernel,
+runner, and all three GCC controls are byte-identical to H11.  All six
+benchmark executables and the runner have zero undefined symbols.  The 6144
+KiB debug rootfs passes all five `fsutil` phases with 358 files, 3872 used
+blocks, and 2247 free blocks.  Physical N64 correctness and performance
+validation remain mandatory before commit.
+
+Physical N64 validation passes the expanded native `misc__ssastrength001`
+compile-and-run gate, both general self-tests, both Linpack-kernel self-tests,
+every benchmark return code, zero-valued `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC`, and the terminal `N64_PCC_DEBUG_RC_END` marker.
+The H11/H12 general comparison is:
+
+| Kernel | H11 PCC | H12 PCC | Change |
+| --- | ---: | ---: | ---: |
+| `int_mix` | 3.846 | 3.846 | +0.00% |
+| `const_div` | 0.954 | 0.954 | +0.00% |
+| `branch` | 3.081 | 3.081 | +0.00% |
+| `switch` | 3.101 | 3.101 | +0.00% |
+| `memory` | 5.349 | 5.720 | +6.94% |
+| `libc_memory` | 38.916 | 38.910 | -0.02% |
+| `calls` | 3.087 | 3.086 | -0.03% |
+| `u64` | 1.848 | 1.848 | +0.00% |
+| `float` | 2.956 | 2.978 | +0.74% |
+| `double` | 2.382 | 2.382 | +0.00% |
+| `convert` | 1.680 | 1.696 | +0.95% |
+
+The targeted `memory` kernel gains 6.94% and reaches 55.64% of the same-run
+10.281 Mwork/s GCC control, up 3.26 percentage points from H11's 52.38%.
+Every unrelated PCC kernel remains within 0.96% of H11.
+
+Ordinary PCC Linpack rows are 3742.439 and 3773.754 KFLOPS, averaging
+3758.096.  This is 0.40% below H11's 3773.312 mean and 84.89% of the current
+4427.033 GCC mean.  The seven PCC kernel results are 3.726, 4.504, 4.280,
+5.706, 4.846, 6.529, and 5.371 Melem/s in `daxpy_r`, `daxpy_ur`, `ddot_r`,
+`ddot_ur`, `dscal_r`, `dscal_ur`, and `idamax` order, effectively unchanged
+from H11.  H12 therefore closes its physical and commit gates with the
+intended general integer-loop gain and no material unrelated or Linpack
+regression.

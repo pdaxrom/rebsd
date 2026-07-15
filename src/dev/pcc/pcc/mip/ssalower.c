@@ -12,6 +12,9 @@
 #ifndef TARGET_SSA_STRENGTH_REDUCE_MUL
 #define TARGET_SSA_STRENGTH_REDUCE_MUL()	0
 #endif
+#ifndef TARGET_SSA_STRENGTH_REDUCE_MASKED_CONST_MUL
+#define TARGET_SSA_STRENGTH_REDUCE_MASKED_CONST_MUL()	0
+#endif
 #ifndef TARGET_SSA_CSE_CONST_SHIFT
 #define TARGET_SSA_CSE_CONST_SHIFT()	0
 #endif
@@ -61,6 +64,12 @@ struct multiply_cse_value {
 	TWORD type;
 	int count;
 	int temp;
+};
+
+struct induction_multiply_candidate {
+	int temp;
+	CONSZ value;
+	TWORD type;
 };
 
 struct address_induction_candidate {
@@ -225,28 +234,27 @@ next:
 
 static int
 find_induction_candidate(struct p2env *p2e, NODE *p, struct phiinfo *phi,
-    struct basicblock *preheader, TWORD *type)
+    struct basicblock *preheader,
+    struct induction_multiply_candidate *candidate)
 {
 	struct basicblock *definition;
 	NODE *invariant;
-	int candidate, o;
+	int o;
 
 	o = optype(p->n_op);
 	if (o != LTYPE) {
-		candidate = find_induction_candidate(p2e, p->n_left, phi,
-		    preheader, type);
-		if (candidate >= 0)
-			return candidate;
+		if (find_induction_candidate(p2e, p->n_left, phi,
+		    preheader, candidate))
+			return 1;
 	}
 	if (o == BITYPE) {
-		candidate = find_induction_candidate(p2e, p->n_right, phi,
-		    preheader, type);
-		if (candidate >= 0)
-			return candidate;
+		if (find_induction_candidate(p2e, p->n_right, phi,
+		    preheader, candidate))
+			return 1;
 	}
 	if (p->n_op != MUL || p->n_type != phi->n_type ||
 	    !ISINTEGER(BTYPE(p->n_type)) || ISPTR(p->n_type))
-		return -1;
+		return 0;
 	if (p->n_left->n_op == TEMP &&
 	    regno(p->n_left) == phi->newtmpregno)
 		invariant = p->n_right;
@@ -254,21 +262,111 @@ find_induction_candidate(struct p2env *p2e, NODE *p, struct phiinfo *phi,
 	    regno(p->n_right) == phi->newtmpregno)
 		invariant = p->n_left;
 	else
-		return -1;
+		return 0;
 	if (invariant->n_op != TEMP || invariant->n_type != p->n_type ||
 	    regno(invariant) == phi->newtmpregno)
-		return -1;
+		return 0;
 	definition = temp_definition_block(p2e, regno(invariant));
 	if (definition == NULL ||
 	    !block_dominates(p2e, definition, preheader))
-		return -1;
-	*type = p->n_type;
-	return regno(invariant);
+		return 0;
+	candidate->temp = regno(invariant);
+	candidate->value = 0;
+	candidate->type = p->n_type;
+	return 1;
+}
+
+static int
+masked_constant_induction_candidate(NODE *p, struct phiinfo *phi,
+    struct induction_multiply_candidate *candidate)
+{
+	NODE *expression, *factor, *mask;
+	U_CONSZ mask_value;
+	CONSZ factor_value;
+
+	if (p->n_op != AND || p->n_type != phi->n_type ||
+	    !ISUNSIGNED(BTYPE(p->n_type)))
+		return 0;
+	if (p->n_right->n_op == ICON) {
+		expression = p->n_left;
+		mask = p->n_right;
+	} else if (p->n_left->n_op == ICON) {
+		expression = p->n_right;
+		mask = p->n_left;
+	} else {
+		return 0;
+	}
+	if (mask->n_type != phi->n_type || mask->n_name == NULL ||
+	    mask->n_name[0] != '\0' || getlval(mask) <= 0)
+		return 0;
+	mask_value = (U_CONSZ)getlval(mask);
+	if ((mask_value & (mask_value + 1)) != 0 ||
+	    expression->n_op != MUL || expression->n_type != phi->n_type)
+		return 0;
+	if (expression->n_left->n_op == TEMP &&
+	    regno(expression->n_left) == phi->newtmpregno)
+		factor = expression->n_right;
+	else if (expression->n_right->n_op == TEMP &&
+	    regno(expression->n_right) == phi->newtmpregno)
+		factor = expression->n_left;
+	else
+		return 0;
+	if (factor->n_op != ICON || factor->n_type != phi->n_type ||
+	    factor->n_name == NULL || factor->n_name[0] != '\0')
+		return 0;
+	factor_value = getlval(factor);
+	if (factor_value <= 1 || factor_value > 32767)
+		return 0;
+	candidate->temp = -1;
+	candidate->value = factor_value;
+	candidate->type = p->n_type;
+	return 1;
+}
+
+static int
+find_masked_constant_induction_candidate(NODE *p, struct phiinfo *phi,
+    struct induction_multiply_candidate *candidate)
+{
+	int o;
+
+	if (masked_constant_induction_candidate(p, phi, candidate))
+		return 1;
+	o = optype(p->n_op);
+	if (o != LTYPE &&
+	    find_masked_constant_induction_candidate(p->n_left, phi,
+	    candidate))
+		return 1;
+	return o == BITYPE &&
+	    find_masked_constant_induction_candidate(p->n_right, phi,
+	    candidate);
+}
+
+static int
+induction_multiply_matches(NODE *p, int induction,
+    struct induction_multiply_candidate *candidate)
+{
+	NODE *factor;
+
+	if (p->n_op != MUL || p->n_type != candidate->type)
+		return 0;
+	if (p->n_left->n_op == TEMP && regno(p->n_left) == induction)
+		factor = p->n_right;
+	else if (p->n_right->n_op == TEMP &&
+	    regno(p->n_right) == induction)
+		factor = p->n_left;
+	else
+		return 0;
+	if (candidate->temp >= 0)
+		return factor->n_op == TEMP &&
+		    regno(factor) == candidate->temp;
+	return factor->n_op == ICON && factor->n_type == candidate->type &&
+	    factor->n_name != NULL && factor->n_name[0] == '\0' &&
+	    getlval(factor) == candidate->value;
 }
 
 static void
-replace_induction_multiply(NODE **nodep, int induction, int invariant,
-    int replacement, TWORD type)
+replace_induction_multiply(NODE **nodep, int induction,
+    struct induction_multiply_candidate *candidate, int replacement)
 {
 	NODE *p;
 	int o;
@@ -276,25 +374,16 @@ replace_induction_multiply(NODE **nodep, int induction, int invariant,
 	p = *nodep;
 	o = optype(p->n_op);
 	if (o != LTYPE)
-		replace_induction_multiply(&p->n_left, induction, invariant,
-		    replacement, type);
+		replace_induction_multiply(&p->n_left, induction, candidate,
+		    replacement);
 	if (o == BITYPE)
-		replace_induction_multiply(&p->n_right, induction, invariant,
-		    replacement, type);
+		replace_induction_multiply(&p->n_right, induction, candidate,
+		    replacement);
 	p = *nodep;
-	if (p->n_op != MUL || p->n_type != type)
-		return;
-	if (!((p->n_left->n_op == TEMP &&
-	    regno(p->n_left) == induction &&
-	    p->n_right->n_op == TEMP &&
-	    regno(p->n_right) == invariant) ||
-	    (p->n_right->n_op == TEMP &&
-	    regno(p->n_right) == induction &&
-	    p->n_left->n_op == TEMP &&
-	    regno(p->n_left) == invariant)))
+	if (!induction_multiply_matches(p, induction, candidate))
 		return;
 	tfree(p);
-	*nodep = mktemp(replacement, type);
+	*nodep = mktemp(replacement, candidate->type);
 }
 
 static void
@@ -629,15 +718,22 @@ static void
 reduce_induction_candidate(struct p2env *p2e, struct basicblock *header,
     struct basicblock *preheader, struct basicblock *latch,
     struct phiinfo *induction, int preedge, int backedge, int delta,
-    int invariant, TWORD type)
+    struct induction_multiply_candidate *candidate)
 {
 	struct basicblock *bb;
 	struct interpass *ip;
 	struct phiinfo *scaled_phi;
-	NODE *initial_expression, *next_expression;
-	CONSZ initial_value;
+	NODE *factor, *initial_expression, *next_expression;
+	CONSZ increment, initial_value;
+	TWORD type;
 	int initial, scaled, scaled_initial, scaled_next;
 
+	type = candidate->type;
+	if (candidate->temp < 0) {
+		increment = candidate->value * delta;
+		if (increment < -32768 || increment > 32767)
+			return;
+	}
 	initial = induction->intmpregno[preedge];
 	scaled_initial = p2e->epp->ip_tmpnum++;
 	scaled = p2e->epp->ip_tmpnum++;
@@ -646,15 +742,23 @@ reduce_induction_candidate(struct p2env *p2e, struct basicblock *header,
 	if (temp_integer_constant(p2e, initial, type, &initial_value) &&
 	    initial_value == 0)
 		initial_expression = mklnode(ICON, 0, 0, type);
-	else
+	else {
+		factor = candidate->temp >= 0 ?
+		    mktemp(candidate->temp, type) :
+		    mklnode(ICON, candidate->value, 0, type);
 		initial_expression = mkbinode(MUL, mktemp(initial, type),
-		    mktemp(invariant, type), type);
+		    factor, type);
+	}
 	ip = ipnode(mkbinode(ASSIGN, mktemp(scaled_initial, type),
 	    initial_expression, type));
 	insert_edge_value(preheader, ip);
 
-	next_expression = mkbinode(delta > 0 ? PLUS : MINUS,
-	    mktemp(scaled, type), mktemp(invariant, type), type);
+	if (candidate->temp >= 0)
+		next_expression = mkbinode(delta > 0 ? PLUS : MINUS,
+		    mktemp(scaled, type), mktemp(candidate->temp, type), type);
+	else
+		next_expression = mkbinode(PLUS, mktemp(scaled, type),
+		    mklnode(ICON, increment, 0, type), type);
 	ip = ipnode(mkbinode(ASSIGN, mktemp(scaled_next, type),
 	    next_expression, type));
 	insert_edge_value(latch, ip);
@@ -676,8 +780,7 @@ reduce_induction_candidate(struct p2env *p2e, struct basicblock *header,
 		for (ip = bb->first;; ip = DLIST_NEXT(ip, qelem)) {
 			if (ip->type == IP_NODE)
 				replace_induction_multiply(&ip->ip_node,
-				    induction->newtmpregno, invariant, scaled,
-				    type);
+				    induction->newtmpregno, candidate, scaled);
 			if (ip == bb->last)
 				break;
 		}
@@ -695,12 +798,13 @@ ssa_strength_reduce_induction(struct p2env *p2e)
 	struct basicblock *bb, *definition, *latch, *preheader;
 	struct cfgnode *cn;
 	struct interpass *ip;
+	struct induction_multiply_candidate candidate;
 	struct phiinfo *nextphi, *phi;
-	TWORD type;
-	int backedge, delta, invariant, preedge;
+	int backedge, delta, found, preedge;
 
 	if (!TARGET_SSA_STRENGTH_REDUCE_MUL() &&
-	    !TARGET_SSA_STRENGTH_REDUCE_ADDRESS())
+	    !TARGET_SSA_STRENGTH_REDUCE_ADDRESS() &&
+	    !TARGET_SSA_STRENGTH_REDUCE_MASKED_CONST_MUL())
 		return;
 
 	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
@@ -738,28 +842,45 @@ ssa_strength_reduce_induction(struct p2env *p2e)
 			    phi->intmpregno[backedge], 0);
 			if (delta == 0)
 				continue;
+			found = 0;
 			if (TARGET_SSA_STRENGTH_REDUCE_MUL() &&
 			    (delta == 1 || delta == -1)) {
-				invariant = -1;
 				DLIST_FOREACH(definition, &p2e->bblocks, bbelem) {
-					if (invariant >= 0 ||
+					if (found ||
 					    !block_dominates(p2e, bb, definition))
 						continue;
 					for (ip = definition->first;;
 					    ip = DLIST_NEXT(ip, qelem)) {
-						if (ip->type == IP_NODE && invariant < 0)
-							invariant = find_induction_candidate(
+						if (ip->type == IP_NODE && !found)
+							found = find_induction_candidate(
 							    p2e, ip->ip_node, phi,
-							    preheader, &type);
+							    preheader, &candidate);
 						if (ip == definition->last)
 							break;
 					}
 				}
-				if (invariant >= 0)
-					reduce_induction_candidate(p2e, bb, preheader,
-					    latch, phi, preedge, backedge, delta,
-					    invariant, type);
 			}
+			if (!found &&
+			    TARGET_SSA_STRENGTH_REDUCE_MASKED_CONST_MUL()) {
+				DLIST_FOREACH(definition, &p2e->bblocks, bbelem) {
+					if (found ||
+					    !block_dominates(p2e, bb, definition))
+						continue;
+					for (ip = definition->first;;
+					    ip = DLIST_NEXT(ip, qelem)) {
+						if (ip->type == IP_NODE && !found)
+							found =
+							    find_masked_constant_induction_candidate(
+							    ip->ip_node, phi, &candidate);
+						if (ip == definition->last)
+							break;
+					}
+				}
+			}
+			if (found)
+				reduce_induction_candidate(p2e, bb, preheader,
+				    latch, phi, preedge, backedge, delta,
+				    &candidate);
 			ssa_strength_reduce_addresses(p2e, bb, preheader, latch,
 			    phi, preedge, backedge, delta);
 		}

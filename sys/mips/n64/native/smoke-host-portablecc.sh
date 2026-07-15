@@ -1695,6 +1695,42 @@ pointer_single_reverse_global_fp_slls=$(awk '
     inside && $1 == "sll" { count++ }
     END { print count + 0 }
 ' "$tmp.ssastrength.s")
+masked_constant_mults=$(awk '
+    /^masked_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+masked_constant_slls=$(awk '
+    /^masked_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+masked_constant_partial_mults=$(awk '
+    /^masked_constant_partial:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+masked_constant_partial_slls=$(awk '
+    /^masked_constant_partial:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+unmasked_constant_mults=$(awk '
+    /^unmasked_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+unmasked_constant_slls=$(awk '
+    /^unmasked_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
 if [ "$cpu" = vr4300 ]; then
 	test "$unit_step_mults" -eq 0
 	test "$descending_mults" -eq 1
@@ -1719,9 +1755,12 @@ fi
 if [ "$cpu" = vr4300 ] || [ "$cpu" = mips32r2 ]; then
 	test "$pointer_reverse_pair_slls" -eq 0
 	test "$pointer_reverse_pair_dynamic_slls" -eq 1
+	test "$masked_constant_mults" -eq 0
+	test "$masked_constant_slls" -eq 1
 else
 	test "$pointer_reverse_pair_slls" -eq 2
 	test "$pointer_reverse_pair_dynamic_slls" -eq 2
+	test "$masked_constant_mults" -eq 1
 fi
 test "$pointer_single_int_slls" -eq 1
 if [ "$cpu" = vr4300 ] || [ "$cpu" = mips32r2 ]; then
@@ -1735,6 +1774,17 @@ if [ "$cpu" = vr4300 ] && [ "$float_abi" = hard ]; then
 	test "$pointer_single_reverse_global_fp_slls" -eq 0
 else
 	test "$pointer_single_reverse_global_fp_slls" -eq 1
+fi
+if [ "$cpu" = vr4300 ]; then
+	test "$masked_constant_partial_mults" -eq 0
+	test "$masked_constant_partial_slls" -eq 2
+	test "$unmasked_constant_mults" -eq 0
+	test "$unmasked_constant_slls" -eq 2
+elif [ "$cpu" = mips32r2 ]; then
+	test "$masked_constant_partial_mults" -eq 1
+	test "$masked_constant_partial_slls" -eq 1
+	test "$unmasked_constant_mults" -eq 1
+	test "$unmasked_constant_slls" -eq 1
 fi
 
 "$pcc" -Os -S -o "$tmp.pointertemp.s" \

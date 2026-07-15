@@ -1537,6 +1537,61 @@ Ordinary PCC Linpack remains neutral at 3773.312 KFLOPS, 0.02% below the prior
 milestone and 85.59% of the same-run GCC mean.  The complete native regression
 and all N64 debug markers pass.
 
+## Masked Constant Induction
+
+The target-independent SSA induction reducer can carry an unsigned constant
+product through a loop when it appears under a complete low-bit mask:
+`(i*C) & (2^N-1)`.  The preheader computes `start*C` once when the initial
+induction value is dynamic, and the latch advances a second phi by the signed
+immediate `C*delta`.  This removes a multiply or shift/add sequence from each
+iteration without changing unsigned wraparound semantics.
+
+The form is intentionally narrow.  The induction value and multiplication
+must have the same unsigned integer type, the mask must be a positive
+`2^N-1` constant, `C` is limited to a positive signed-16-bit constant greater
+than one, and `C*delta` must fit a signed immediate.  Partial masks and
+unmasked constant products do not enable the transform.  A target hook limits
+the current profitability decision to VR4300 and MIPS32R2; generic MIPS3
+retains its old lowering.
+
+`misc__ssastrength001` covers zero and dynamic starting values, a partial-mask
+negative control, and an unmasked negative control.  Host assembly gates
+check VR4300, MIPS32R2, and generic MIPS3 behavior.  The transform does not
+alter final instruction scheduling or multiply errata handling:
+`-mfix4300` remains the default final-stream repair and `-mno-fix4300` remains
+the explicit opt-out.
+
+H12 host gates pass for VR4300 and MIPS32R2.  Cross compilation passes 339
+tests with three expected failures, followed by 302/302 runtime passes.
+Native Malta64 reports 312 compile passes, 30 expected compile failures, and
+302/302 runtime passes.  All six Malta64/Malta/MaltaEL hard/soft full-smoke
+profiles report compiler-benchmark self-test zero, `CCOM_STRESS_DONE:100`,
+`PCC_SMOKE_ALL_FAILURES 0`, and final RC zero.  Sequential one-second Linpack
+repeats also pass on every profile; the H11 and H12 PCC Linpack source
+assembly is byte-identical.
+
+The retained physical candidate is
+`/Users/sash/Work/N64/retrobsd-build/n64-h12-masked-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+size 6619136 bytes, SHA-256
+`28bd9078d306add2494c7af852879013c73204999deef5b7e4fe78debfda873a`.
+It uses a GCC kernel and PCC VR4300 hard-float a.out userland.  The kernel,
+debug runner, and all three GCC benchmark controls are byte-identical to H11;
+all six benchmark executables and the runner have zero undefined symbols.
+The 6144 KiB debug rootfs passes all five `fsutil` phases with 358 files, 3872
+used blocks, and 2247 free blocks.  Physical N64 validation remains mandatory
+before commit.
+
+Physical N64 validation passes the expanded native regression, both general
+self-tests, both Linpack-kernel self-tests, every benchmark return code, and
+the complete debug runner.  `N64_PCC_DEBUG_END` and
+`N64_PCC_DEBUG_RUNNER_RC` are zero and the terminal marker is present.  The
+targeted PCC `memory` kernel improves from H11's 5.349 to 5.720 Mwork/s, a
+6.94% gain, and reaches 55.64% of the same-run GCC result instead of 52.38%.
+All unrelated general kernels remain within 0.96% of H11.  PCC Linpack
+averages 3758.096 KFLOPS, 0.40% below H11 and 84.89% of the current GCC mean;
+the isolated PCC kernels are unchanged within timing noise.  This closes the
+H12 physical and commit gates.
+
 ## Out Of Scope For The C Gate
 
 C++ is explicitly deferred to future work.  `/usr/bin/p++` and

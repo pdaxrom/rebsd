@@ -498,6 +498,9 @@ typedef long long OFFSZ;
 #define TARGET_OPTSTATS_FPR_CLASS(c)	((c) == CLASSC)
 #define TARGET_SSA_STRENGTH_REDUCE_MUL()	\
 	((mips_target.capabilities & MIPS_CAP_MUL3) == 0)
+#define TARGET_SSA_STRENGTH_REDUCE_MASKED_CONST_MUL()	\
+	(mips_target.isa == MIPS_ISA_MIPS32R2 || \
+	 mips_target.tune == MIPS_TUNE_VR4300)
 #define TARGET_SSA_STRENGTH_REDUCE_ADDRESS()	\
 	(mips_target.isa == MIPS_ISA_MIPS32R2 || \
 	 mips_target.tune == MIPS_TUNE_VR4300)
