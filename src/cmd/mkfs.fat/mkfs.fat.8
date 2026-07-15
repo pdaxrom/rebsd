@@ -1,0 +1,60 @@
+.TH MKFS.FAT 8
+.SH NAME
+mkfs.fat \- construct a FAT16 or FAT32 filesystem
+.SH SYNOPSIS
+.B mkfs.fat
+[
+.B \-Nv
+] [
+.B \-F
+.I 16|32
+] [
+.B \-i
+.I volume-id
+] [
+.B \-n
+.I label
+] [
+.B \-s
+.I sectors-per-cluster
+]
+.I special
+.SH DESCRIPTION
+.B mkfs.fat
+creates an empty FAT16 or FAT32 filesystem on the block device or regular
+image file named by
+.IR special .
+The target must not be mounted.
+Its size is obtained from the disk driver or the regular file length.
+.PP
+The formatter uses 512-byte sectors, two FAT copies, and a compact streaming
+write path suitable for small ReBSD systems.
+FAT16 is selected automatically below 512 MiB and FAT32 at or above 512 MiB.
+FAT12 is not supported.
+.SH OPTIONS
+.TP
+.B \-F 16|32
+Select the FAT type explicitly.
+.TP
+.B \-i volume-id
+Set the 32-bit volume identifier.  The value may use decimal or C-style
+hexadecimal notation.
+.TP
+.B \-n label
+Set a volume label of at most 11 DOS-compatible characters.
+Lowercase ASCII letters are converted to uppercase.
+.TP
+.B \-s sectors-per-cluster
+Set the cluster size in sectors.  The value must be a power of two from 1
+through 128 and must produce a valid cluster count for the selected FAT type.
+.TP
+.B \-N
+Print the selected geometry without writing the filesystem.
+.TP
+.B \-v
+Print additional geometry information.
+.SH EXIT STATUS
+Zero means the filesystem was created successfully.
+One means the parameters or target were invalid, or an I/O error occurred.
+.SH SEE ALSO
+fdisk(8), fsck.fat(8), mkfs(8), mkfs.ufs(8), mount(8)

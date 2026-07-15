@@ -65,6 +65,7 @@ clean: FRC
 
 install: _make_01
 	cp ${OBJS} ${DESTDIR}${MDIR}
+	ln -f ${DESTDIR}${MDIR}/fsck.0 ${DESTDIR}${MDIR}/fsck.ufs.0
 	ln -f ${DESTDIR}${MDIR}/uucico.0 ${DESTDIR}${MDIR}/uucpd.0
 
 FRC:

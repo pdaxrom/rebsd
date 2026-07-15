@@ -43,6 +43,7 @@ ${PROG}:	${OBJS} ${HDRS}
 
 install:	all
 		install ${PROG} ${DESTDIR}/sbin/${PROG}
+		install ${PROG} ${DESTDIR}/sbin/fsck.ufs
 
 clean:
 		rm -f *.o *~ *.elf *.dis a.out core ${PROG}

@@ -31,7 +31,9 @@ depend:		${SRCS}
 
 install:	all
 		cp ${MAN} ${DESTDIR}/share/man/cat8/
+		cp ${MAN} ${DESTDIR}/share/man/cat8/mkfs.ufs.0
 		install mkfs ${DESTDIR}/sbin/mkfs
+		install mkfs ${DESTDIR}/sbin/mkfs.ufs
 
 lint:		${SRCS}
 		lint -hax ${SRCS}

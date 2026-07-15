@@ -165,8 +165,8 @@ MIPS_CMD_NONE = __mips_none__
 MIPS_BOARD_CMD_SUBDIRS ?=
 MIPS_BOARD_USR_BIN_FILES ?=
 MIPS_CMD_SUBDIRS ?= basic calendar chown chroot compress date2 deco dhclient diff emg env \
-                  fdisk find fold forth fsck getty hostname id ifconfig inetd init \
-                  aout ar as ld login ls make man md5 med mkfs mknod \
+                  fdisk find fold forth fsck fsck.fat getty hostname id ifconfig inetd init \
+                  aout ar as ld login ls make man md5 med mkfs mkfs.fat mknod \
                   mkpasswd mount more netstat nm pdc picoc ping printf pstat ptytest \
                   ranlib reboot renice retroforth route sed setty \
                   sh shutdown sl smux stty sysctl tcl telnet \
@@ -209,7 +209,7 @@ MIPS_ROOTFS_BOARD_CMD_CAT1_SOURCES ?=
 MIPS_ROOTFS_CAT1_ALIASES ?= egrep:grep fgrep:grep uncompress:compress \
                           zcat:compress nohup:nice cc:pcc cpp:pcc
 MIPS_ROOTFS_CAT8_PAGES ?= fsck getty sync
-MIPS_ROOTFS_CAT8_ALIASES ?= fastboot:reboot halt:reboot poweroff:reboot \
+MIPS_ROOTFS_CAT8_ALIASES ?= fsck.ufs:fsck mkfs.ufs:mkfs fastboot:reboot halt:reboot poweroff:reboot \
                           bootloader:reboot
 MIPS_USER_SRCS = $(TOPSRC)/target.mk $(TOPSRC)/target-mips.mk \
                 $(TOPSRC)/target-n64.mk \

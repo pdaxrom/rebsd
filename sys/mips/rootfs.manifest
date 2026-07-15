@@ -109,6 +109,9 @@ mode 0775
 file /root/fat-rename-smoke.sh
 mode 0775
 
+file /root/fs-tools-smoke.sh
+mode 0775
+
 file /root/off64-smoke.sh
 mode 0775
 
@@ -923,6 +926,10 @@ file /usr/share/man/cat8/fdisk.0
 
 file /usr/share/man/cat8/fsck.0
 
+file /usr/share/man/cat8/fsck.fat.0
+
+file /usr/share/man/cat8/fsck.ufs.0
+
 file /usr/share/man/cat8/getty.0
 
 file /usr/share/man/cat8/inetd.0
@@ -932,6 +939,10 @@ file /usr/share/man/cat8/halt.0
 file /usr/share/man/cat8/init.0
 
 file /usr/share/man/cat8/mkfs.0
+
+file /usr/share/man/cat8/mkfs.fat.0
+
+file /usr/share/man/cat8/mkfs.ufs.0
 
 file /usr/share/man/cat8/mknod.0
 
@@ -975,6 +986,12 @@ mode 0755
 file /sbin/fsck
 mode 0775
 
+file /sbin/fsck.fat
+mode 0775
+
+file /sbin/fsck.ufs
+mode 0775
+
 file /sbin/dhclient
 mode 0775
 
@@ -994,6 +1011,12 @@ file /sbin/init
 mode 0775
 
 file /sbin/mkfs
+mode 0775
+
+file /sbin/mkfs.fat
+mode 0775
+
+file /sbin/mkfs.ufs
 mode 0775
 
 file /sbin/mknod

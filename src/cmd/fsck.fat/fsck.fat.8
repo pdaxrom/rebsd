@@ -1,0 +1,44 @@
+.TH FSCK.FAT 8
+.SH NAME
+fsck.fat \- check and repair FAT16 and FAT32 filesystems
+.SH SYNOPSIS
+.B fsck.fat
+[
+.B \-fnpvy
+]
+.I filesystem
+[
+.I filesystem ...
+]
+.SH DESCRIPTION
+.B fsck.fat
+checks FAT copies, cluster chains, directories, lost clusters, and FAT32
+FSInfo metadata.
+The filesystem must not be mounted read-write while it is checked.
+.PP
+The checker uses a compact allocation bitmap and reads the FAT a sector at a
+time, so its memory use is suitable for small ReBSD systems.
+.SH OPTIONS
+.TP
+.B \-n
+Open the filesystem read-only and answer no to all repair questions.
+.TP
+.B \-y
+Answer yes to all repair questions.
+.TP
+.B \-p
+Preen mode.  Apply repairs marked safe and leave destructive choices
+unresolved.
+.TP
+.B \-f
+Force a full check.  A full check is currently always performed.
+.TP
+.B \-v
+Print additional volume information.
+.SH EXIT STATUS
+Zero means the filesystem was clean.
+One means errors were corrected.
+Four means errors remain uncorrected.
+Eight means an operational error prevented the check.
+.SH SEE ALSO
+fsck(8), fsck.ufs(8), mount(8)
