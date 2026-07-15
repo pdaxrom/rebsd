@@ -152,9 +152,15 @@ status again, resets and enables the port, detects low/full/high speed, and
 calls the common enumeration transaction. Port status, reset, and enumeration
 errors are reported through a platform callback and never hidden as success.
 
-The current compact hub code implements OHCI and EHCI root-port attach/detach.
-External hub interrupt endpoints and downstream-port control are a later
-phase; class drivers and the USB core do not depend on that later policy.
+The compact external-hub driver uses the same interface-driver boundary as
+other class drivers. It reads the hub descriptor, powers and resets bounded
+downstream ports, keeps one interrupt-IN status transfer armed, and schedules
+all enumeration and detach work through the shared USB task queue. Each child
+records its parent hub, downstream port, and high-speed transaction-translator
+address/port. A root disconnect recursively removes every child before the
+hub itself is released. Hub status changes are reconciled from both the
+interrupt bitmap and per-port change bits so a coalesced notification cannot
+lose a disconnect/reconnect transition.
 
 ## Disconnect Order
 
@@ -187,9 +193,10 @@ timeouts, and physical media presence. Detach first makes the backend report
 absent and unregisters the disk slot, then closes the USB pipes and releases
 the USB interface state.
 
-No filesystem code is called by `umass` or `sys/disk`. Current UFS and future
-FAT, exFAT, and ext-family modules are separate VFS consumers and can be
-enabled or disabled independently of every transport.
+No filesystem code is called by `umass` or `sys/disk`. UFS and the current
+read-only FAT16/FAT32 module are separate VFS consumers. Future FAT write,
+exFAT, and ext-family modules remain independent of every transport and can be
+enabled or disabled separately.
 
 ## HCD Contract
 
@@ -214,13 +221,17 @@ synchronous control request. One interrupt pipe is supported at a time; bulk
 and general multi-pipe periodic scheduling remain later work.
 
 The compact EHCI implementation also uses the common contract. It allocates
-one contiguous, coherent 16 KiB DMA slab containing a terminated 1024-entry
-periodic frame list, a circular asynchronous head, fixed aligned pipe QHs and
-qTDs, setup storage, and an 8 KiB data bounce area. The initial bounded policy
-allows one active high-speed control or bulk transfer at a time. Completion
-may come from polling or IRQ 20, and `usb_bulk_transfer()` applies the common
-poll/timeout/abort lifecycle. Isochronous, split-transaction, and periodic
-endpoint scheduling are deliberately absent.
+one contiguous, coherent 16 KiB DMA slab containing a 1024-entry periodic
+frame list, a circular asynchronous head, fixed aligned pipe QHs and qTDs,
+setup storage, interrupt buffers, and an 8 KiB data bounce area. One active
+asynchronous control or bulk transfer and four periodic interrupt-IN slots are
+bounded explicitly. Periodic QHs are linked and unlinked atomically without
+stopping PSE; low/full-speed hub children carry TT address/port and classic
+NetBSD start/complete split masks. Because each slot has one fixed qTD rather
+than Linux's dummy qTD queue, a completed split QH is unlinked before a repeat
+callback rearms its overlay and is linked back only after publication. This
+prevents the controller from observing half of two split transactions.
+Isochronous transfers remain unsupported.
 
 Ci20 J23 is one physical port shared by the two controller views. EHCI claims
 high-speed devices. A low-speed line indication, or a reset that does not

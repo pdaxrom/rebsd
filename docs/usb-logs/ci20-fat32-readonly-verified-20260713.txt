@@ -1,0 +1,187 @@
+Starting kernel ...
+
+ReBSD Ci20 kernel entry
+ram size=0x10000000
+
+ReBSD for Ci20: built on sash@sashz-mbp with gcc mipsel-elf-gcc (GCC) 14.2.0, cpu=mips32r2, float=hard, endian=little
+ci20 uart: irq 34 enabled
+ci20 clock: tcu0 irq 25 rate 750000 hz period 7500, delay tcu3 period 65535
+dma: Ci20 uncached pool phys=180000 size=65536 align=4096
+disk: block layer ready, MBR partitions
+fat: read-only FAT16/FAT32 filesystem ready
+usb0: initializing core
+usb0: core ready
+ukbd0: HID boot-keyboard driver ready
+umass0: read-only SCSI/Bulk-Only driver ready
+ehci0: attach, EHCI phys=13490000
+usb-host: init: enable VBUS
+usb-host: init: settle VBUS
+usb-host: init: configure UHC clock
+usb-host: init: ungate UHC clock
+usb-host: init: configure host PHY
+usb-host: init: configure EHCI UTMI width
+usb-host: init: pulse PHY reset
+usb-host: init: pulse UHC reset
+usb-host: init: hardware ready
+usb-host: Ci20 VBUS on, cpm clkgr0=3e5c7fe0 opcr=1566 usbpcr=408919b8 usbpcr1=8ace3370 uhccdr=60000018 srbc=2
+ehci0: JZ4780 UTMI bus=7e0 width=16-bit
+ehci0: EHCI version=100 ports=1 companions=1/1 async-control/bulk
+ehci0: irq 20 enabled for async/root-hub changes
+ehci0: port1 powered, no high-speed device; hotplug ready
+ohci0: attach, OHCI phys=134a0000
+ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
+ohci0: irq 5 enabled for periodic/root-hub changes
+ohci0: port1 powered, no device; hotplug ready
+dm0: dm9000 deferred probe at 0xb6000000 address 02:20:00:00:00:20
+phys mem  = 262144 kbytes
+user mem  = 4096 kbytes
+root dev  = (0,0)
+swap dev  = (1,0)
+root size = 32768 kbytes
+swap size = 32768 kbytes
+usb0: deferred task runner uses proc0
+July 13 15:16:38 init: kernel security level changed from 0 to 1
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: root
+ReBSD/Creator Ci20
+# umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=1005 product=b113 config=1 interfaces=1
+ehci0: if0 class=8 subclass=6 protocol=80 endpoints=2
+
+# mount -t fat /dev/sd0a /mnt
+fat0: FAT32, 30298527 sectors, 16 sectors/cluster, read-only
+# ls /mnt
+.Spotlight-V100
+._7z920.exe
+._ES1938.zip
+._FarManager170.exe
+._dlmanip
+._dlmanip.zip
+._ess-solo1-with-swt-9x-658c52353a513140163991.zip
+._far175.x86.msi
+._flash
+._frontend
+._memorex_traveldrive_win98_Driver.zip
+._nptunnel-macos.app
+._rtl8169-8139-657f111fd15e0642248722.zip
+._solo
+._solo1
+._solo1_drv_w9x_4.12.01.1165.zip
+._solo2
+._ssss
+._via-4in1-443v-63160adabfe43125550176.zip
+.fseventsd
+7z920.exe
+E7D42IMS.1M0
+ES1938.zip
+FarManager170.exe
+MeteoPlatformControlApp-2026-07-07.zip
+System Volume Information
+dlmanip
+dlmanip.zip
+ess-solo1-with-swt-9x-658c52353a513140163991.zip
+far175.x86.msi
+flash
+frontend
+memorex_traveldrive_win98_Driver.zip
+nptunnel-macos.app
+rtl8169-8139-657f111fd15e0642248722.zip
+solo
+solo1
+solo1_drv_w9x_4.12.01.1165.zip
+solo2
+ssss
+via-4in1-443v-63160adabfe43125550176.zip
+# ls -la /mnt
+total 140602
+dr-xr-xr-x  2 root         2048 Jan  1  1970 .
+drwxrwxrwx 14 root         1024 Jul 13 15:16 ..
+dr-xr-xr-x  2 root         1024 Jan  1  1970 .Spotlight-V100
+-r--r--r--  1 root         4096 May 18  2025 ._7z920.exe
+-r--r--r--  1 root         4096 May 18  2025 ._ES1938.zip
+-r--r--r--  1 root         4096 May 18  2025 ._FarManager170.exe
+-r--r--r--  1 root         4096 May 18  2025 ._dlmanip
+-r--r--r--  1 root         4096 May 18  2025 ._dlmanip.zip
+-r--r--r--  1 root         4096 May 18  2025 ._ess-solo1-with-swt-9x-658c52353a513140163991.zip
+-r--r--r--  1 root         4096 May 18  2025 ._far175.x86.msi
+-r--r--r--  1 root         4096 May 18  2025 ._flash
+-r--r--r--  1 root         4096 Jul  9 13:13 ._frontend
+-r--r--r--  1 root         4096 May 18  2025 ._memorex_traveldrive_win98_Driver.zip
+-r--r--r--  1 root         4096 Mar 13 20:07 ._nptunnel-macos.app
+-r--r--r--  1 root         4096 May 18  2025 ._rtl8169-8139-657f111fd15e0642248722.zip
+-r--r--r--  1 root         4096 May 18  2025 ._solo
+-r--r--r--  1 root         4096 May 18  2025 ._solo1
+-r--r--r--  1 root         4096 May 18  2025 ._solo1_drv_w9x_4.12.01.1165.zip
+-r--r--r--  1 root         4096 May 18  2025 ._solo2
+-r--r--r--  1 root         4096 Jul  8 14:20 ._ssss
+-r--r--r--  1 root         4096 May 18  2025 ._via-4in1-443v-63160adabfe43125550176.zip
+dr-xr-xr-x  2 root         1024 Jan  1  1970 .fseventsd
+-r--r--r--  1 root      1110476 Nov 18  2010 7z920.exe
+-r--r--r--  1 root     33554432 Apr 17  2025 E7D42IMS.1M0
+-r--r--r--  1 root      1745091 May 18  2025 ES1938.zip
+-r--r--r--  1 root      1205296 Mar 29  2006 FarManager170.exe
+-r--r--r--  1 root     95980929 Jul  7 09:47 MeteoPlatformControlApp-2026-07-07.zip
+dr-xr-xr-x  2 root         1024 Jan  1  1970 System Volume Information
+dr-xr-xr-x  2 root         1024 Jan  1  1970 dlmanip
+-r--r--r--  1 root        40751 Mar 17  2013 dlmanip.zip
+-r--r--r--  1 root      1065524 May 18  2025 ess-solo1-with-swt-9x-658c52353a513140163991.zip
+-r--r--r--  1 root      3491328 Feb  4  2011 far175.x86.msi
+dr-xr-xr-x  2 root         1024 Jan  1  1970 flash
+dr-xr-xr-x  2 root         1024 Jan  1  1970 frontend
+-r--r--r--  1 root      1329802 Dec 22  2019 memorex_traveldrive_win98_Driver.zip
+dr-xr-xr-x  2 root         1024 Jan  1  1970 nptunnel-macos.app
+-r--r--r--  1 root      2492222 Dec 17  2023 rtl8169-8139-657f111fd15e0642248722.zip
+dr-xr-xr-x  2 root         2048 Jan  1  1970 solo
+dr-xr-xr-x  2 root         1024 Jan  1  1970 solo1
+-r--r--r--  1 root       755802 Apr  9  2024 solo1_drv_w9x_4.12.01.1165.zip
+dr-xr-xr-x  2 root         1024 Jan  1  1970 solo2
+dr-xr-xr-x  2 root         1024 Jan  1  1970 ssss
+-r--r--r--  1 root      1109735 Sep  5  2022 via-4in1-443v-63160adabfe43125550176.zip
+# find /mnt -type f -print
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/psid.db
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/tmp.Lion
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/Lion.created
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/Glow.created
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/tmp.Glow
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/tmp.Cab
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/Cab.created
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/tmp.Star
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/indexState
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexHead
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexId
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexIds
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexBigDates
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexGroups
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexPostings
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexTermIds
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexPositions
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexPositionTable
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexDirectory
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexCompactDirectory
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.indexArrays
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.shadowIndexHead
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.directoryStoreFile
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/0.ivf-vector-indexes
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexHead
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexId
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexIds
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexBigDates
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexGroups
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexPostings
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexTermIds
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexPositions
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexPositionTable
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexDirectory
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexCompactDirectory
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.indexArrays
+/mnt/.Spotlight-V100/Store-V2/B913049A-0BA9-4376-8389-E5FE2E90E549/live.0.shadowIndexHead
+^C
+# touch /mnt/rebsd-write-test
+touch: /mnt/rebsd-write-test: Read-only file system
+#

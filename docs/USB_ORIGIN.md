@@ -57,11 +57,11 @@ is updated as each later phase imports or materially adapts a source.
 | `sys/dev/usb/usb_subr.c` | `sys/usb/usb_subr.c` | enumeration and descriptor handling | descriptor traversal substantially rewritten around fixed bounds; original notice and RCS id retained |
 | `sys/dev/usb/usbdi.c` | `sys/usb/usb_core.c` | pipe and transfer operations | terminal-state and pipe model substantially adapted; original notice and RCS id retained |
 | `sys/dev/usb/usb_mem.c` | `sys/usb/usb_mem.c` | USB use of the ReBSD DMA API | reference only |
-| `sys/dev/usb/uhub.c` | `sys/usb/uhub.c` | root and external hubs | compact root-hub exploration/attach/detach adaptation; original notice and RCS id retained; external-hub path not yet imported |
+| `sys/dev/usb/uhub.c` | `sys/usb/uhub.c` | root and external hubs | compact bounded root/external-hub exploration, interrupt-status, child attach/detach, and recursive teardown adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ohci.c` | `sys/usb/ohci.c` | generic OHCI HCD | polling control, periodic interrupt-IN, and root-port/RHSC paths substantially adapted; original notice and RCS id retained |
 | `sys/dev/usb/ohcireg.h` | `sys/usb/ohcireg.h` | OHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ohcivar.h` | `sys/usb/ohcivar.h` | OHCI private state | compact bounded-state adaptation; original notice and RCS id retained |
-| `sys/dev/usb/ehci.c` | `sys/usb/ehci.c` | generic EHCI HCD | compact control/bulk, root-port, completion, abort, and companion-handoff adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ehci.c` | `sys/usb/ehci.c` | generic EHCI HCD | compact control/bulk, periodic interrupt-IN, split-transaction, root-port, completion, abort, and companion-handoff adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ehcireg.h` | `sys/usb/ehcireg.h` | EHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ehcivar.h` | `sys/usb/ehcivar.h` | EHCI private state | fixed-schedule bounded-state adaptation; original notice and RCS id retained |
 | `sys/dev/usb/usbhid.h` | `sys/usb/usbhid.h` | HID class requests needed by boot keyboards | compact adaptation; original notice and RCS id retained |
@@ -94,7 +94,7 @@ NetBSD USB sources:
 | `sys/usb/usb_mock_hcd.[ch]` | Deterministic hardware-independent test controller |
 | `sys/usb/usb_service.c` | Generic bounded-core service instance used by platform HCD attachments |
 | `sys/usb/usb_task.h` | Fixed task record adapted from the classic `usbdi.h` concept; original notice and RCS id retained |
-| `sys/usb/uhub.h` | Native bounded root-hub state and event interface |
+| `sys/usb/uhub.h` | Native bounded root/external-hub state, child topology, and event interface |
 | `sys/usb/ukbd.h` | Bounded boot-report decoder and driver-registration interface |
 | `sys/usb/umass.h` | Native single-LUN SCSI command and read-only media interface; no partition or filesystem policy |
 | `sys/disk/disk.[ch]` | Native transport-independent disk registry, `bdevsw` entry points, units/minors, and backend contract |

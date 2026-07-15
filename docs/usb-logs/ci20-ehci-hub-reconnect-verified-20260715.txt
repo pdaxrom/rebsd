@@ -1,0 +1,283 @@
+Starting kernel ...
+
+ReBSD Ci20 kernel entry
+ram size=0x10000000
+
+ReBSD for Ci20: built on sash@sashz-mbp with gcc mipsel-elf-gcc (GCC) 14.2.0, cpu=mips32r2, float=hard, endian=little
+ci20 uart: irq 34 enabled
+ci20 clock: tcu0 irq 25 rate 750000 hz period 7500, delay tcu3 period 65535
+dma: Ci20 uncached pool phys=183000 size=65536 align=4096
+disk: block layer ready, MBR partitions
+fat: read-only FAT16/FAT32 filesystem ready
+usb0: initializing core
+usb0: core ready
+ukbd0: HID boot-keyboard driver ready
+umass0: read-only SCSI/Bulk-Only driver ready
+uhub0: external hub driver ready
+ehci0: attach, EHCI phys=13490000
+usb-host: init: enable VBUS
+usb-host: init: settle VBUS
+usb-host: init: configure UHC clock
+usb-host: init: ungate UHC clock
+usb-host: init: configure host PHY
+usb-host: init: configure EHCI UTMI width
+usb-host: init: pulse PHY reset
+usb-host: init: pulse UHC reset
+usb-host: init: hardware ready
+usb-host: Ci20 VBUS on, cpm clkgr0=3e5c7fe0 opcr=1566 usbpcr=408919b8 usbpcr1=8ace3370 uhccdr=60000018 srbc=2
+ehci0: JZ4780 UTMI bus=7e0 width=16-bit
+ehci0: EHCI version=100 ports=1 companions=1/1 async-control/bulk periodic-interrupt-IN split-transactions
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci0: irq 20 enabled for async/periodic/root-hub changes
+ohci0: attach, OHCI phys=134a0000
+ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
+ohci0: irq 5 enabled for periodic/root-hub changes
+ohci0: port1 powered, no device; hotplug ready
+dm0: dm9000 deferred probe at 0xb6000000 address 02:20:00:00:00:20
+phys mem  = 262144 kbytes
+user mem  = 4096 kbytes
+root dev  = (0,0)
+swap dev  = (1,0)
+root size = 32768 kbytes
+swap size = 32768 kbytes
+usb0: deferred task runner uses proc0
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port2 device attached speed=high addr=2 vendor=1005 product=b113
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=3 vendor=1c4f product=2
+July 13 15:16:41 init: kernel security level changed from 0 to 1
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: root
+ReBSD/Creator Ci20
+# uname -a
+2.11BSD  2.11BSD ReBSD for Ci20: built on sash@sashz-mbp with gcc mipsel-elf-gcc (GCC) 14.2.0, cpu=mips32r2, float=hard, endian=little  mips
+# ehci: periodic addr=3 endpoint=81 failed token=88d4c qh-status=88d4c endp=85103 hub=42010802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+uhub0: port4 device disconnected
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port1 device attached speed=low addr=3 vendor=1c4f product=2
+
+#
+#
+# uname
+2.11BSD
+# ehci: periodic addr=3 endpoint=81 failed token=88d4c qh-status=88d4c endp=85103 hub=40810802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+uhub0: port1 device disconnected
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=3 vendor=1c4f product=2
+ehci: periodic addr=3 endpoint=81 failed token=88d4c qh-status=88d4c endp=85103 hub=42010802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+uhub0: port4 device disconnected
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=3 vendor=1c4f product=2
+
+#
+# ehci: periodic addr=3 endpoint=81 failed token=88d4c qh-status=88d4c endp=85103 hub=42010802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+uhub0: port4 device disconnected
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=3 vendor=1c4f product=2
+sd0: detached
+umass0: detached
+uhub0: port2 device disconnected
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port1 device attached speed=high addr=2 vendor=1005 product=b113
+
+# sd0: detached
+umass0: detached
+uhub0: port1 device disconnected
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port2 device attached speed=high addr=2 vendor=1005 product=b113
+sd0: detached
+umass0: detached
+uhub0: port2 device disconnected
+uhub0: port2 enumeration failed: I/O error
+ukbd0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port2 device attached speed=high addr=2 vendor=1005 product=b113
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=3 vendor=1c4f product=2
+
+#
+# sd0: detached
+umass0: detached
+ukbd0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port2 device attached speed=high addr=2 vendor=1005 product=b113
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=3 vendor=1c4f product=2
+
+#
+#
+# sd0: detached
+umass0: detached
+ukbd0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port2 device attached speed=high addr=2 vendor=1005 product=b113
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=3 vendor=1c4f product=2
+
+#
+#
+# sd0: detached
+umass0: detached
+ukbd0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port1 device attached speed=low addr=2 vendor=1c4f product=2
+
+
+
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port2 device attached speed=high addr=3 vendor=1005 product=b113
+# # #
+#
+#
+#
+#
+#
+# ukbd0: detached
+sd0: detached
+umass0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=8
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port2 device attached speed=low addr=2 vendor=1c4f product=2
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), read-only, removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port4 device attached speed=high addr=3 vendor=1005 product=b113
+
+#
+#
+#
+#
+#
+#
+# mount -t fat /dev/sd0a /mnt
+fat0: FAT32, 30298527 sectors, 16 sectors/cluster, read-only
+# ls /mnt
+.Spotlight-V100
+._7z920.exe
+._ES1938.zip
+._FarManager170.exe
+._dlmanip
+._dlmanip.zip
+._ess-solo1-with-swt-9x-658c52353a513140163991.zip
+._far175.x86.msi
+._flash
+._frontend
+._memorex_traveldrive_win98_Driver.zip
+._nptunnel-macos.app
+._rtl8169-8139-657f111fd15e0642248722.zip
+._solo
+._solo1
+._solo1_drv_w9x_4.12.01.1165.zip
+._solo2
+._ssss
+._via-4in1-443v-63160adabfe43125550176.zip
+.fseventsd
+7z920.exe
+E7D42IMS.1M0
+ES1938.zip
+FarManager170.exe
+MeteoPlatformControlApp-2026-07-07.zip
+System Volume Information
+dlmanip
+dlmanip.zip
+ess-solo1-with-swt-9x-658c52353a513140163991.zip
+far175.x86.msi
+flash
+frontend
+memorex_traveldrive_win98_Driver.zip
+nptunnel-macos.app
+rtl8169-8139-657f111fd15e0642248722.zip
+solo
+solo1
+solo1_drv_w9x_4.12.01.1165.zip
+solo2
+ssss
+via-4in1-443v-63160adabfe43125550176.zip
+# mount
+root on / (read-only)
+/dev/ram0 on /var
+/dev/sd0a on /mnt (read-only)
+# df -h
+df: illegal option -- h
+usage: df [-iT] [file | file_system ...]
+# df
+Filesystem  1K-blocks     Used    Avail Capacity  Mounted on
+root            32639     9439    23200    28%    /
+/dev/ram0        1019        9     1010     0%    /var
+/dev/sd0a    15134467 15134467        0   100%    /mnt
+#
+#
+#

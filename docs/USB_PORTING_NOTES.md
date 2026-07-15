@@ -17,8 +17,12 @@ port, late attach, repeated post-boot disconnect/reconnect, EHCI high-speed
 enumeration/reconnect, and low-speed companion handoff are hardware verified
 on 2026-07-13. The read-only Bulk-Only/SCSI backend and common disk layer are
 also hardware-verified for capacity, MBR, whole/partition reads, and idle
-detach/reconnect. A filesystem mount remains the next Phase 10 milestone. The
-separate J24/J8 DWC2 OTG connection is outside this first host-port scope.
+detach/reconnect. Read-only FAT32 mount, traversal, and file reads are also
+hardware verified. A high-speed external hub with simultaneous high-speed
+storage and low-speed keyboard, including child and complete-hub reconnect,
+was hardware-verified on 2026-07-15; the final candidate's full successful
+UART capture is retained in `docs/usb-logs/`. The separate J24/J8 DWC2 OTG
+connection is outside this first host-port scope.
 
 ## Baseline
 
@@ -496,10 +500,12 @@ image digest are recorded in `docs/USB_TESTING.md`.
 The machine-independent EHCI driver uses one fixed 16 KiB coherent DMA slab
 for its 1024-entry periodic frame list, asynchronous head, bounded queue heads
 and qTDs, setup packet, and an 8 KiB transfer bounce buffer. It implements
-high-speed root-hub enumeration and one active control or bulk transfer, with
-polling and interrupt completion, short packets, toggle tracking, STALL,
-timeout, abort, and deterministic schedule reclamation. Split transactions,
-isochronous transfers, and periodic endpoint scheduling are not implemented.
+high-speed root-hub enumeration, one active control or bulk transfer, and four
+bounded periodic interrupt-IN slots, with polling and interrupt completion,
+short packets, toggle tracking, STALL, timeout, abort, and deterministic
+schedule reclamation. Low/full-speed external-hub children use classic
+start/complete split masks and parent transaction-translator metadata.
+Isochronous transfers are not implemented.
 
 The Ci20 layer attaches EHCI at `0x13490000` on IRQ 20 before OHCI. It owns the
 shared JZ4780 VBUS, clock, PHY, and UHC reset sequence and programs the
@@ -540,3 +546,26 @@ NetBSD JZ4780 platform code both enable `USBPCR1.WORD_IF0` together with
 `WORD_IF1`; adding the missing shared-PHY width bit produced
 `USBPCR1=0x8ace3370` and passed the real high-speed gate. The verified image
 SHA-256 and raw captures are recorded in `docs/USB_TESTING.md`.
+
+## External Hub and EHCI Split Transactions
+
+The compact machine-independent hub driver reads the hub descriptor, powers
+bounded downstream ports, arms one interrupt status endpoint, and defers port
+exploration through the shared proc0 USB task queue. Children record parent
+hub, downstream port, and transaction-translator identity. Detach is recursive
+so a complete-hub removal releases every child transfer, class driver, USB
+address, and disk registration before the root device is reused.
+
+Generic EHCI publishes periodic QHs without stopping the complete periodic
+schedule. A low/full-speed interrupt child behind a high-speed hub is unlinked
+before its single fixed qTD and overlay are rearmed, then relinked only after
+the new split transaction is fully visible. This ordering is required because
+the compact implementation does not use Linux's dummy-qTD queue; rearming the
+visible overlay caused repeatable JZ4780 `MISSEDMICRO` failures under combined
+hub, keyboard, and bulk traffic.
+
+The tested topology is a `214b:7000` four-port high-speed hub with a
+`1005:b113` high-speed flash drive and `1c4f:0002` low-speed boot keyboard.
+The final image passed repeated child and complete populated-hub reconnects on
+2026-07-15. The exact image digest and full UART capture are recorded in
+`docs/USB_TESTING.md` and `docs/CI20_USB.md`.

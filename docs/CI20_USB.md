@@ -199,6 +199,36 @@ The retained captures are
 `docs/usb-logs/ci20-ehci-high-speed-verified-20260713.txt` and
 `docs/usb-logs/ci20-ehci-companion-verified-20260713.txt`.
 
+## External High-Speed Hub Gate
+
+The machine-independent `uhub` driver supports a bounded high-speed external
+hub, powers and explores its downstream ports, and keeps one interrupt-IN
+status transfer armed. Low/full-speed children carry the parent hub address,
+downstream port, and transaction-translator metadata into generic EHCI; no
+Ci20 policy is present in the hub or split-transaction paths.
+
+The hardware topology used a `214b:7000` four-port high-speed hub with a
+high-speed `1005:b113` flash drive and low-speed `1c4f:0002` boot keyboard.
+The final candidate image has SHA-256
+`861ae15e0ba79af9a2a6364c66f593656fcbf8c6274626b49425f437002e66fa`.
+
+Earlier candidates rebuilt the complete periodic schedule around a QH update
+or rearmed a completed split QH while it was still visible to the controller.
+On JZ4780 this eventually produced `MISSEDMICRO`, dead keyboard input, and
+unreliable child or complete-hub reconnects. The final implementation links
+and unlinks periodic QHs atomically without cycling PSE. A split QH is
+unlinked before its single fixed qTD and overlay are rearmed, and linked back
+only after the new transaction is fully published. Root-device removal also
+tears down hub children recursively before releasing the hub address.
+
+The final image passed the hardware gate on 2026-07-15. Its full UART capture
+shows simultaneous keyboard and storage enumeration, repeated child recovery,
+five complete populated-hub disconnect/reconnect cycles, working console
+input, and a final read-only FAT32 mount. It is retained as
+`docs/usb-logs/ci20-ehci-hub-reconnect-verified-20260715.txt`. Earlier
+complete captures remain failure evidence and are not presented as proof of
+the final candidate.
+
 ## Programming Manual Cross-check
 
 The checked-in `docs/JZ4780_pm.pdf` is 16,628,911 bytes with SHA-256
@@ -254,9 +284,9 @@ make -C sys/mips BOARD=ci20 \
 
 The object profile places the result at
 `../rebsd-usb-support-build/ci20-kgcc-ugcc-mips32r2-hard-little-elf/obj/sys/mips/ci20/ci20.uImage`.
-The current read-only mass-storage candidate is a clean full GCC build with a
-32 MiB rootfs. Its `ci20.uImage` SHA-256 is
-`a9984d94a274a541c6768b40e300399a7bbce05b0fe37aaad143e096058517c0`.
+The current external-hub candidate is a clean full GCC build with a 32 MiB
+rootfs. Its `ci20.uImage` SHA-256 is
+`861ae15e0ba79af9a2a6364c66f593656fcbf8c6274626b49425f437002e66fa`.
 
 Boot the image with the existing Ci20/U-Boot procedure while capturing UART4.
 Use only the right-hand J23 type-A host port. J24/J8 is the separate OTG block
@@ -271,6 +301,7 @@ usb0: initializing core
 usb0: core ready
 ukbd0: HID boot-keyboard driver ready
 umass0: read-only SCSI/Bulk-Only driver ready
+uhub0: external hub driver ready
 ehci0: attach, EHCI phys=13490000
 usb-host: init: enable VBUS
 usb-host: init: settle VBUS
@@ -283,8 +314,8 @@ usb-host: init: pulse UHC reset
 usb-host: init: hardware ready
 usb-host: Ci20 VBUS on, cpm clkgr0=... opcr=... usbpcr=... usbpcr1=... uhccdr=... srbc=...
 ehci0: JZ4780 UTMI bus=... width=16-bit
-ehci0: EHCI version=100 ports=1 companions=.../... async-control/bulk
-ehci0: irq 20 enabled for async/root-hub changes
+ehci0: EHCI version=100 ports=1 companions=.../... async-control/bulk periodic-interrupt-IN split-transactions
+ehci0: irq 20 enabled for async/periodic/root-hub changes
 ehci0: port1 powered, no high-speed device; hotplug ready
 ohci0: attach, OHCI phys=134a0000
 ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
@@ -326,8 +357,33 @@ The read-only storage procedure above passed on 2026-07-13 with direct
 high-speed device `1005:b113`. The board reported 30,299,520 sectors and MBR
 partition type `0x0c`; 16 KiB reads from both `/dev/sd0` and `/dev/sd0a`
 succeeded before and after idle detach/reconnect. The raw UART capture is
-`usb-logs/ci20-umass-readonly-verified-20260713.txt`. This does not yet claim
-a filesystem mount.
+`usb-logs/ci20-umass-readonly-verified-20260713.txt`.
+
+The later FAT32 gate mounted `/dev/sd0a` read-only on `/mnt`, listed short and
+long names, traversed nested directories, and rejected `touch` with
+`Read-only file system`. Its retained capture is
+`usb-logs/ci20-fat32-readonly-verified-20260713.txt`. A separate 16 MiB file
+read completed in the same hardware session, but that short excerpt is not in
+the retained full capture.
+
+For the external-hub gate, connect the high-speed hub with the flash drive and
+keyboard already attached. Expected lines include:
+
+```text
+uhub0: 4 ports, high-speed hub addr=1, powered
+uhub0: port... device attached speed=high addr=... vendor=1005 product=b113
+ehci: periodic addr=... endpoint=81 ... smask=... cmask=...
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port... device attached speed=low addr=... vendor=1c4f product=2
+```
+
+Run a long raw-device or FAT file read while typing through the keyboard.
+Reconnect each child repeatedly, then reconnect the complete populated hub at
+least five times. Each disconnect must detach only the affected topology and
+each reconnect must produce a fresh attach and working I/O. A transfer error
+caused by physical removal is acceptable only when it is followed by detach
+and successful fresh enumeration. A spontaneous periodic failure, missing
+reconnect notification, stale `sdN`, panic, or loss of UART is a failed gate.
 
 A low-speed keyboard already present at boot must produce the ownership and
 attach sequence below before the login prompt:
@@ -347,8 +403,7 @@ prompt. It must take the same handoff path and provide working input.
 Any `ehci0: irq storm quarantined ...` or
 `ohci0: irq storm quarantined ...` line is a failed USB gate. Record the four
 register values. The affected USB IRQ is disabled deliberately, but UART
-input must remain usable for diagnostics. External hubs are not part of this
-candidate.
+input must remain usable for diagnostics.
 
 The early `init` markers are printed before each potentially faulting MMIO
 group, so the last marker identifies the operation to inspect if the board
@@ -368,21 +423,28 @@ delay did not complete, so USB and DM9000 now share the bounded TCU3 backend.
 ## Verification Without Hardware
 
 `make -C sys/tests/usb test` executes descriptor, core/mock-HCD, deferred-task,
-root-hub, boot-report decoder, full fake-OHCI control/periodic/RHSC scheduling,
-compact fake-EHCI asynchronous scheduling/routing, and fake-JZ4780 register
-sequence and BOT/SCSI tests. `make -C sys/tests/disk test` covers the common
-disk/MBR layer and the byte-exact `fdisk` ABI. The fake OHCI test covers IRQ
+root/external-hub, boot-report decoder, full fake-OHCI control/periodic/RHSC
+scheduling, compact fake-EHCI asynchronous/periodic/split scheduling and
+routing, fake-JZ4780 register sequencing, and BOT/SCSI tests.
+`make -C sys/tests/disk test` covers the common disk/MBR layer and byte-exact
+`fdisk` ABI; `make -C sys/tests/fat test` covers the read-only FAT parser and
+file path. The fake OHCI test covers IRQ
 acknowledgement, data-toggle carry, rearm, simultaneous control traffic,
 masked-RHSC delivery, and deferred disconnect/reconnect. The fake EHCI test covers controller startup, schedule
 alignment, high-speed enumeration, bulk IN/OUT, short transfers, toggle,
 stall, automatic timeout, abort, busy submission, single completion,
-companion handoff/change draining/reclaim, and a later high-speed attach.
+periodic interrupt-IN, transaction-translator split masks, atomic periodic QH
+link/unlink, external-hub removal/reconnect, companion handoff/change
+draining/reclaim, and a later high-speed attach.
 The Ci20 sequence test verifies VBUS-first ordering, `UHCCDR_BUSY` timeout,
 final gate/suspend state, PHY POR, and UHC reset deassertion. Full GCC and PCC
 kernel/rootfs builds link and produce images containing the common disk nodes
 and `fdisk`. The real-board tests verified
 OHCI periodic interrupt-IN, console input, proc0 deferred exploration, boot
 with an empty port, late attach, detach, address reuse, repeated reconnect,
-EHCI high-speed enumeration/reconnect, and EHCI-to-OHCI ownership handoff.
+EHCI high-speed enumeration/reconnect, EHCI-to-OHCI ownership handoff, raw
+mass-storage and FAT32 reads, simultaneous keyboard/storage operation through
+a high-speed hub, child recovery, and five complete populated-hub reconnects.
+The final hub capture is retained in `docs/usb-logs/`.
 Earlier failed candidate captures remain in `docs/usb-logs/` as regression
 evidence.
