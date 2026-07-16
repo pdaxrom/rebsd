@@ -8,6 +8,9 @@ gpt \- inspect and edit a GUID Partition Table
 .B gpt -c
 .I device
 .br
+.B gpt -r
+.I device
+.br
 .B gpt -m
 [
 .B -n
@@ -44,13 +47,19 @@ operates on a UEFI GUID Partition Table using 512-byte logical sectors and
 64-bit LBAs. It validates the protective MBR, header CRC32, complete 128-entry
 array CRC32, usable ranges, unique GUID presence, and partition overlap.
 .PP
-The print operation is read-only. If the primary GPT is invalid but the backup
-is valid, it prints the backup without modifying the disk. A later explicit
-add or delete rewrites both copies and reports that recovery will occur.
+The print operation is read-only. It validates both copies and reports an
+invalid primary, invalid backup, or two individually valid copies which do
+not agree. If the primary is invalid but the backup is valid, it prints the
+backup without modifying the disk. If both are valid but differ, the primary
+is selected as authoritative.
 .PP
 Mutating operations write the backup entry array and header before the primary
 entry array and header. The protective MBR is written last, and the kernel is
-asked to revalidate the device after a successful update.
+asked to revalidate the device after a successful update. Existing bootstrap
+code and disk-signature bytes in the first 446 bytes of the protective MBR are
+preserved. A mounted or otherwise open partition makes revalidation fail with
+.BR EBUSY ;
+the editor checks this before writing a block device.
 .PP
 The migrate operation converts supported primary MBR entries to GPT entries
 without changing their starting sectors, sizes, or payload sectors. It first
@@ -66,6 +75,12 @@ used.
 .TP
 .B -c
 Create an empty GPT. This destroys existing partition metadata.
+.TP
+.B -r
+Repair GPT redundancy without changing partition entries. A valid backup is
+used when the primary is invalid. Otherwise the valid primary is authoritative
+and replaces an invalid or disagreeing backup. If both copies are already
+consistent, no sectors are written.
 .TP
 .B -m
 Migrate a legacy MBR containing ordinary primary partitions to GPT. Extended

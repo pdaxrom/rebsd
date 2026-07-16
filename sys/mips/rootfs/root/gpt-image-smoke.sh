@@ -43,6 +43,18 @@ gpt -a -s 2048 -l REBSDTEST "$image" 1 || fail "gpt add"
 gpt -p "$image" >"$output" || fail "gpt print populated"
 grep "2048 REBSDTEST" "$output" >/dev/null || fail "partition not found"
 
+echo "gpt-image-smoke: repair primary GPT from backup"
+printf 'X' |
+	dd of="$image" bs=1 seek=512 conv=notrunc >/dev/null 2>&1 ||
+	fail "damage primary GPT signature"
+gpt -p "$image" >"$output" || fail "print backup GPT"
+grep "backup GPT" "$output" >/dev/null || fail "backup GPT not selected"
+gpt -r "$image" >"$output" || fail "repair GPT"
+grep "from backup copy" "$output" >/dev/null ||
+	fail "backup repair not reported"
+gpt -p "$image" >"$output" || fail "print repaired GPT"
+grep "primary GPT" "$output" >/dev/null || fail "primary GPT not repaired"
+
 echo "gpt-image-smoke: delete partition"
 gpt -d "$image" 1 || fail "gpt delete"
 gpt -p "$image" >"$output" || fail "gpt print deleted"

@@ -526,6 +526,19 @@ disk_bdev_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
         *(unsigned *)addr = sc->ds_table.dt_scheme;
         return 0;
     case DIOCREINIT:
+        /*
+         * Partition mappings must not change under an open vnode or mounted
+         * filesystem.  A partition editor holds exactly one whole-disk open;
+         * reject partition callers and any additional opens before reading
+         * new metadata.
+         */
+        if (part_number != DISK_MINOR_WHOLE)
+            return EINVAL;
+        if (sc->ds_opens != 1)
+            return EBUSY;
+        error = disk_flush(sc);
+        if (error != 0)
+            return error;
         error = disk_revalidate(sc);
         return error;
     case DIOCFLUSH:

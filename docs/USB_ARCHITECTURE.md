@@ -201,10 +201,14 @@ header and complete entry-array CRC32 values, and falls back to the backup GPT
 when the primary is invalid. A protective MBR with no valid GPT exposes only
 the whole disk.
 
-The separate `gpt(8)` utility validates all 128 standard entries. Explicit
-mutations write and flush the backup entry array and header before the primary
-copy and protective MBR, then request kernel revalidation. The kernel never
-repairs partition metadata implicitly. A backend owns command splitting,
+The separate `gpt(8)` utility validates all 128 standard entries and both GPT
+copies, reporting invalid or disagreeing redundancy. Explicit `gpt -r` repair
+uses a valid backup only when primary is invalid; otherwise primary is
+authoritative. Mutations preserve the protective-MBR bootstrap prefix, write
+and transport-flush the backup entry array and header before the primary copy
+and protective MBR, then request kernel revalidation. Revalidation is rejected
+while any partition is open. The kernel never repairs partition metadata
+implicitly. A backend owns command splitting,
 DMA/cache handling, timeouts, physical media presence, and its
 transport-specific flush operation. Detach first makes the backend report
 absent and unregisters the disk slot, then closes the USB pipes and releases

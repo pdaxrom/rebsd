@@ -417,7 +417,11 @@ contract. Classic MBR and GPT both live here rather than in `umass`. The
 common block path uses 64-bit LBAs and exposes sixteen partition minors per
 disk. GPT header and full entry-array CRCs are checked, the backup table is a
 read-only fallback, and invalid protective media exposes only the whole disk.
-The separate `gpt(8)` editor performs explicit backup-first updates. The USB
+The separate `gpt(8)` editor validates both copies, repairs redundancy only on
+explicit `-r`, preserves the protective-MBR bootstrap prefix, and performs
+transport-flushed backup-first updates. The common disk layer rejects table
+revalidation while a partition is open, so an editor cannot silently change a
+mounted filesystem's region. The USB
 Mass Storage driver implements one backend using BOT and SCSI. Future SD/MMC,
 IDE/ATA, and SATA/AHCI drivers will implement the same backend contract and
 will not depend on USB.

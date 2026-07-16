@@ -34,6 +34,7 @@ enum gpt_action {
     GPT_ACTION_NONE = 0,
     GPT_ACTION_PRINT,
     GPT_ACTION_CREATE,
+    GPT_ACTION_REPAIR,
     GPT_ACTION_MIGRATE,
     GPT_ACTION_ADD,
     GPT_ACTION_DELETE
@@ -56,9 +57,13 @@ struct gpt_table {
     unsigned char disk_guid[16];
     unsigned char entries[GPT_ENTRY_BYTES];
     int from_backup;
+    int primary_valid;
+    int backup_valid;
+    int copies_match;
 };
 
 static struct gpt_table table;
+static struct gpt_table other_table;
 
 static void
 usage(void)
@@ -66,6 +71,7 @@ usage(void)
     fprintf(stderr,
         "usage: gpt -p device\n"
         "       gpt -c device\n"
+        "       gpt -r device\n"
         "       gpt -m [-n] device\n"
         "       gpt -a [-b first-sector] [-s sectors] [-t type-guid]\n"
         "           [-l label] device [partition]\n"
@@ -73,6 +79,7 @@ usage(void)
         "\n"
         "       -p  print and validate GPT without writing\n"
         "       -c  create an empty GPT (destructive)\n"
+        "       -r  repair primary/backup GPT redundancy\n"
         "       -m  migrate primary MBR partitions without moving data\n"
         "       -n  validate and print the migration plan without writing\n"
         "       -a  add a partition; defaults to first free entry and gap\n"
@@ -497,23 +504,52 @@ load_at(int fd, gpt_lba_t header_lba, struct gpt_table *gpt)
 }
 
 static int
+tables_equal(const struct gpt_table *left, const struct gpt_table *right)
+{
+    return left->first_usable == right->first_usable &&
+        left->last_usable == right->last_usable &&
+        memcmp(left->disk_guid, right->disk_guid,
+        sizeof(left->disk_guid)) == 0 &&
+        memcmp(left->entries, right->entries, sizeof(left->entries)) == 0;
+}
+
+static int
 load_table(int fd, struct gpt_table *gpt)
 {
     unsigned char mbr[GPT_SECTOR_SIZE];
+    gpt_lba_t media_sectors;
+    int primary_valid;
+    int backup_valid;
 
-    if (get_media_sectors(fd, &gpt->media_sectors) != 0 ||
-        gpt->media_sectors < 2u * GPT_FIRST_USABLE ||
+    if (get_media_sectors(fd, &media_sectors) != 0 ||
+        media_sectors < 2u * GPT_FIRST_USABLE ||
         read_exact_at(fd, 0, mbr, sizeof(mbr)) != 0 ||
         !protective_mbr_valid(mbr))
         return -1;
-    gpt->from_backup = 0;
-    if (load_at(fd, 1, gpt) == 0)
-        return 0;
-    if (load_at(fd, gpt->media_sectors - 1u, gpt) == 0) {
-        gpt->from_backup = 1;
+
+    memset(gpt, 0, sizeof(*gpt));
+    memset(&other_table, 0, sizeof(other_table));
+    gpt->media_sectors = media_sectors;
+    other_table.media_sectors = media_sectors;
+    primary_valid = load_at(fd, 1, gpt) == 0;
+    if (primary_valid) {
+        backup_valid = load_at(fd, media_sectors - 1u,
+            &other_table) == 0;
+        gpt->primary_valid = 1;
+        gpt->backup_valid = backup_valid;
+        gpt->copies_match = backup_valid &&
+            tables_equal(gpt, &other_table);
         return 0;
     }
-    return -1;
+
+    memset(gpt, 0, sizeof(*gpt));
+    gpt->media_sectors = media_sectors;
+    backup_valid = load_at(fd, media_sectors - 1u, gpt) == 0;
+    if (!backup_valid)
+        return -1;
+    gpt->from_backup = 1;
+    gpt->backup_valid = 1;
+    return 0;
 }
 
 static void
@@ -564,18 +600,73 @@ build_pmbr(unsigned char sector[GPT_SECTOR_SIZE], gpt_lba_t media_sectors,
 }
 
 static int
+prepare_device_write(int fd)
+{
+#ifndef GPT_HOST
+    struct stat status;
+
+    if (fstat(fd, &status) != 0)
+        return -1;
+    if (S_ISBLK(status.st_mode) && ioctl(fd, DIOCREINIT) != 0)
+        return -1;
+#else
+    (void)fd;
+#endif
+    return 0;
+}
+
+static int
+sync_device(int fd)
+{
+    if (fsync(fd) != 0)
+        return -1;
+#ifndef GPT_HOST
+    {
+        struct stat status;
+
+        if (fstat(fd, &status) != 0)
+            return -1;
+        if (S_ISBLK(status.st_mode) && ioctl(fd, DIOCFLUSH) != 0)
+            return -1;
+    }
+#endif
+    return 0;
+}
+
+static int
+revalidate_device(int fd)
+{
+#ifndef GPT_HOST
+    struct stat status;
+
+    if (fstat(fd, &status) != 0)
+        return -1;
+    if (S_ISBLK(status.st_mode) && ioctl(fd, DIOCREINIT) != 0)
+        return -1;
+#else
+    (void)fd;
+#endif
+    return 0;
+}
+
+static int
 write_table(int fd, const struct gpt_table *gpt,
     const unsigned char *original_mbr)
 {
     unsigned char sector[GPT_SECTOR_SIZE];
+    unsigned char saved_mbr[GPT_SECTOR_SIZE];
+    const unsigned char *mbr_source;
     gpt_lba_t backup_entries;
     unsigned entries_crc;
-#ifndef GPT_HOST
-    struct stat status;
-#endif
 
-    if (validate_entries(gpt) != 0)
+    if (validate_entries(gpt) != 0 || prepare_device_write(fd) != 0)
         return -1;
+    mbr_source = original_mbr;
+    if (mbr_source == 0) {
+        if (read_exact_at(fd, 0, saved_mbr, sizeof(saved_mbr)) != 0)
+            return -1;
+        mbr_source = saved_mbr;
+    }
     entries_crc = crc32(gpt->entries, sizeof(gpt->entries));
     backup_entries = gpt->media_sectors - 1u - GPT_ENTRY_SECTORS;
 
@@ -586,26 +677,22 @@ write_table(int fd, const struct gpt_table *gpt,
     build_header(sector, gpt, gpt->media_sectors - 1u, backup_entries,
         entries_crc);
     if (write_exact_at(fd, gpt->media_sectors - 1u, sector,
-        sizeof(sector)) != 0 || fsync(fd) != 0)
+        sizeof(sector)) != 0 || sync_device(fd) != 0)
         return -1;
 
     if (write_exact_at(fd, 2u, gpt->entries, sizeof(gpt->entries)) != 0)
         return -1;
     build_header(sector, gpt, 1u, 2u, entries_crc);
     if (write_exact_at(fd, 1u, sector, sizeof(sector)) != 0 ||
-        fsync(fd) != 0)
+        sync_device(fd) != 0)
         return -1;
     /* Make the complete GPT durable before replacing a legacy MBR. */
-    build_pmbr(sector, gpt->media_sectors, original_mbr);
+    build_pmbr(sector, gpt->media_sectors, mbr_source);
     if (write_exact_at(fd, 0, sector, sizeof(sector)) != 0 ||
-        fsync(fd) != 0)
+        sync_device(fd) != 0)
         return -1;
-#ifndef GPT_HOST
-    if (fstat(fd, &status) != 0)
+    if (revalidate_device(fd) != 0)
         return -1;
-    if (S_ISBLK(status.st_mode) && ioctl(fd, DIOCREINIT) != 0)
-        return -1;
-#endif
     return 0;
 }
 
@@ -802,6 +889,13 @@ print_table(const char *device, const struct gpt_table *gpt)
     printf("%s: %llu sectors, usable %llu..%llu, %s GPT\n", device,
         gpt->media_sectors, gpt->first_usable, gpt->last_usable,
         gpt->from_backup ? "backup" : "primary");
+    if (!gpt->primary_valid)
+        printf("%s: primary GPT is invalid; repair recommended\n", device);
+    if (!gpt->backup_valid)
+        printf("%s: backup GPT is invalid; repair recommended\n", device);
+    else if (gpt->primary_valid && !gpt->copies_match)
+        printf("%s: GPT copies differ; primary selected, repair "
+            "recommended\n", device);
     printf("Part                Start                  End"
         "              Sectors Label\n");
     for (i = 0; i < GPT_ENTRY_COUNT; ++i) {
@@ -982,6 +1076,7 @@ main(int argc, char **argv)
     int fd;
     int opt;
     int remaining;
+    int repair_from_backup;
     int result;
     int dry_run;
 
@@ -991,7 +1086,8 @@ main(int argc, char **argv)
     requested_start = 0;
     requested_sectors = 0;
     dry_run = 0;
-    while ((opt = getopt(argc, argv, "pcmadnb:s:t:l:")) != -1) {
+    repair_from_backup = 0;
+    while ((opt = getopt(argc, argv, "pcrmadnb:s:t:l:")) != -1) {
         switch (opt) {
         case 'p':
             if (select_action(&action, GPT_ACTION_PRINT) != 0)
@@ -999,6 +1095,10 @@ main(int argc, char **argv)
             break;
         case 'c':
             if (select_action(&action, GPT_ACTION_CREATE) != 0)
+                return 2;
+            break;
+        case 'r':
+            if (select_action(&action, GPT_ACTION_REPAIR) != 0)
                 return 2;
             break;
         case 'm':
@@ -1044,7 +1144,8 @@ main(int argc, char **argv)
     remaining = argc - optind;
     if (action == GPT_ACTION_NONE || remaining < 1 ||
         ((action == GPT_ACTION_PRINT || action == GPT_ACTION_CREATE ||
-        action == GPT_ACTION_MIGRATE) && remaining != 1) ||
+        action == GPT_ACTION_REPAIR || action == GPT_ACTION_MIGRATE) &&
+        remaining != 1) ||
         (action == GPT_ACTION_DELETE && remaining != 2) ||
         (action == GPT_ACTION_ADD && remaining > 2) ||
         (dry_run && action != GPT_ACTION_MIGRATE) ||
@@ -1096,8 +1197,25 @@ main(int argc, char **argv)
         result = 0;
         goto done;
     }
-    if (table.from_backup)
-        fprintf(stderr, "gpt: warning: using backup GPT; write will repair both copies\n");
+    if (action == GPT_ACTION_REPAIR) {
+        if (table.primary_valid && table.backup_valid &&
+            table.copies_match) {
+            printf("gpt: primary and backup GPT are consistent; "
+                "no repair needed\n");
+            result = 0;
+            goto done;
+        }
+        repair_from_backup = table.from_backup;
+        printf("gpt: repairing GPT from %s copy\n",
+            repair_from_backup ? "backup" : "primary");
+    } else if (action == GPT_ACTION_ADD || action == GPT_ACTION_DELETE) {
+        if (table.from_backup)
+            fprintf(stderr, "gpt: warning: using backup GPT; write will repair both copies\n");
+        else if (!table.backup_valid)
+            fprintf(stderr, "gpt: warning: backup GPT is invalid; write will repair it\n");
+        else if (!table.copies_match)
+            fprintf(stderr, "gpt: warning: GPT copies differ; primary will replace backup\n");
+    }
     if (action == GPT_ACTION_ADD && add_partition(&table, number,
         requested_start, requested_sectors, type_guid, label) != 0)
         goto done;
@@ -1112,6 +1230,9 @@ main(int argc, char **argv)
     if (action == GPT_ACTION_MIGRATE)
         printf("gpt: legacy MBR converted; partition payload sectors "
             "were not moved\n");
+    else if (action == GPT_ACTION_REPAIR)
+        printf("gpt: repaired primary and backup GPT from %s copy\n",
+            repair_from_backup ? "backup" : "primary");
     result = 0;
 done:
     if (close(fd) != 0 && result == 0)

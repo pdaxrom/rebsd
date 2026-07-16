@@ -31,7 +31,7 @@ The 2026-07-15 external-hub candidate passes all USB, disk, and FAT gates:
 | `ci20 usb hw tests` | VBUS, clock, PHY and reset ordering with fake JZ4780 registers | pass |
 | `umass_test` | BOT framing/recovery, SCSI probe/capacity, bounded `READ(10)`/`WRITE(10)`, cache flush and command/wire errors | pass |
 | `disk_test` | transport-independent MBR/GPT parsing, 64-bit regions/minors and ioctls, primary/backup fallback, partition-relative I/O, dirty tracking and flush errors | pass |
-| `gpt` smoke | 3 TiB sparse image, protective MBR, primary/backup header and full entry-array CRCs, add/delete, fallback/repair and overlap rejection | pass |
+| `gpt` smoke | 3 TiB sparse image, protective MBR prefix preservation, both-copy validation, primary/backup/mismatch repair, add/delete, migration and overlap rejection | pass |
 | `fdisk_mbr_test` | exact 512-byte ABI, little-endian fields, range/overflow/overlap validation | pass |
 | `fat_test` | FAT16/FAT32 validation, bounded chains, long-name reads, allocation, write/truncate/remove, directory mutation and rename | pass |
 | `fsck_fat` smoke | clean/corrupt FAT16/FAT32 images, FAT comparison, directory chains, lost clusters, FSInfo validation and repair policy | pass |
@@ -355,7 +355,7 @@ The exact supplied console transcript is retained in
 | FAT32 read-write filesystem | `/dev/sd0a` behind `214b:7000` hub | verified 2026-07-15 | file/directory mutation, rename, sync/remount persistence, and `-r` enforcement |
 | 64-bit file offsets | `/dev/sd0`, target GCC and native PCC | verified 2026-07-15 | both compiler paths passed seeks beyond 2 GiB |
 | `mkfs.fat` and `fsck.fat` | scratch FAT16 image and existing `/dev/sd0a` FAT32 | verified 2026-07-15 on `0b357a…` | `fs-tools-smoke.sh`, no-write geometry probe, clean non-mutating check |
-| 64-bit disk API and GPT | host 3 TiB sparse image; Ci20 target utility smoke | utility verified 2026-07-16; kernel GPT media pending | host CRC/fallback/repair tests pass; Ci20 image smoke preserved payload and real-media preflight made no writes |
+| 64-bit disk API and GPT | host 3 TiB sparse image; Ci20 target utility smoke | redundancy repair candidate; kernel GPT media pending | host both-copy CRC/mismatch/repair and busy-revalidation tests pass; earlier Ci20 image smoke preserved payload and real-media preflight made no writes |
 | OTG port in host mode | left-hand J24/J8 | not implemented | separate DWC2 phase |
 
 The exact current hardware procedure and expected log lines are in

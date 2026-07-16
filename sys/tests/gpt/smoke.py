@@ -98,6 +98,25 @@ def metadata_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def make_backup_differ(path: Path, media_sectors: int = IMAGE_SECTORS) -> None:
+    header_offset = (media_sectors - 1) * SECTOR
+    header = bytearray(read_at(path, header_offset, SECTOR))
+    entries_lba = struct.unpack_from("<Q", header, 72)[0]
+    entries = bytearray(read_at(path, entries_lba * SECTOR, ENTRY_BYTES))
+    # Change only the backup label while keeping both backup CRCs valid.
+    entries[ENTRY_SIZE + 56] ^= 1
+    struct.pack_into("<I", header, 88, zlib.crc32(entries) & 0xFFFFFFFF)
+    struct.pack_into("<I", header, 16, 0)
+    struct.pack_into(
+        "<I", header, 16, zlib.crc32(header[:92]) & 0xFFFFFFFF
+    )
+    with path.open("r+b") as stream:
+        stream.seek(entries_lba * SECTOR)
+        stream.write(entries)
+        stream.seek(header_offset)
+        stream.write(header)
+
+
 def file_digest(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -156,10 +175,14 @@ def main() -> None:
         image = tmp / "disk.img"
         with image.open("wb") as stream:
             stream.truncate(IMAGE_BYTES)
+        original_prefix = bytes((index * 19 + 7) & 0xFF for index in range(446))
+        with image.open("r+b") as stream:
+            stream.write(original_prefix)
 
         run(str(tool), "-c", str(image))
         _, entries = validate(image)
         assert entries == bytes(ENTRY_BYTES)
+        assert read_at(image, 0, 446) == original_prefix
 
         run(str(tool), "-a", "-s", "100000", "-l", "DATA",
             str(image), "1")
@@ -173,8 +196,9 @@ def main() -> None:
         assert "6442450944 sectors" in printed
         assert "primary GPT" in printed
         assert "100000 DATA" in printed
+        assert "type=ebd0a0a2-b9e5-4433-87c0-68b6b72699c7" in printed
 
-        # Break only the primary header CRC and verify read-only fallback.
+        # Break only the primary header CRC, then repair it from backup.
         with image.open("r+b") as stream:
             stream.seek(SECTOR + 16)
             byte = stream.read(1)
@@ -182,16 +206,45 @@ def main() -> None:
             stream.write(bytes([byte[0] ^ 1]))
         printed = run(str(tool), "-p", str(image)).stdout
         assert "backup GPT" in printed
+        assert "primary GPT is invalid; repair recommended" in printed
+        repaired = run(str(tool), "-r", str(image)).stdout
+        assert "repaired primary and backup GPT from backup copy" in repaired
+        validate(image)
+
+        before = metadata_digest(image)
+        no_repair = run(str(tool), "-r", str(image)).stdout
+        assert "consistent; no repair needed" in no_repair
+        assert metadata_digest(image) == before
 
         repaired = run(str(tool), "-a", "-s", "4096", "-l", "SECOND",
             str(image), "2")
-        assert "using backup GPT" in repaired.stderr
         _, entries = validate(image)
         second_first, second_last = struct.unpack_from(
             "<QQ", entries, ENTRY_SIZE + 32
         )
         assert second_first > 0x10000
         assert second_last - second_first + 1 == 4096
+
+        # A bad backup must be visible and repairable from the primary.
+        with image.open("r+b") as stream:
+            stream.seek((IMAGE_SECTORS - 1) * SECTOR + 16)
+            byte = stream.read(1)
+            stream.seek((IMAGE_SECTORS - 1) * SECTOR + 16)
+            stream.write(bytes([byte[0] ^ 1]))
+        printed = run(str(tool), "-p", str(image)).stdout
+        assert "primary GPT" in printed
+        assert "backup GPT is invalid; repair recommended" in printed
+        repaired = run(str(tool), "-r", str(image)).stdout
+        assert "repaired primary and backup GPT from primary copy" in repaired
+        validate(image)
+
+        # Two individually valid but different copies select primary.
+        make_backup_differ(image)
+        printed = run(str(tool), "-p", str(image)).stdout
+        assert "GPT copies differ; primary selected" in printed
+        repaired = run(str(tool), "-r", str(image)).stdout
+        assert "repaired primary and backup GPT from primary copy" in repaired
+        validate(image)
 
         before = metadata_digest(image)
         failed = run(

@@ -474,9 +474,10 @@ delay did not complete, so USB and DM9000 now share the bounded TCU3 backend.
 root/external-hub, boot-report decoder, full fake-OHCI control/periodic/RHSC
 scheduling, compact fake-EHCI asynchronous/periodic/split scheduling and
 routing, fake-JZ4780 register sequencing, and BOT/SCSI tests.
-`make -C sys/tests/disk test` covers the common 64-bit disk/MBR/GPT layer and
-byte-exact `fdisk` ABI. `make -C sys/tests/gpt test` uses a 3 TiB sparse image
-to cover primary/backup CRCs, fallback, repair, and overlap rejection;
+`make -C sys/tests/disk test` covers the common 64-bit disk/MBR/GPT layer,
+busy revalidation and byte-exact `fdisk` ABI. `make -C sys/tests/gpt test`
+uses a 3 TiB sparse image to cover both-copy CRCs, fallback, explicit repair,
+valid-but-different copies, protective-prefix preservation and overlap rejection;
 `make -C sys/tests/fat test` covers FAT parsing, reads, writes,
 allocation, truncation, removal, directory mutation, and rename. The
 `sys/tests/fsck_fat` and `sys/tests/mkfs_fat` suites cover clean/corrupt images,
@@ -522,11 +523,16 @@ keyboard-stability changes. They were subsequently completed with periodic
 schedule accounting and verified in the separate 2026-07-16 USB image and
 capture documented above.
 
-The verified command was:
+The original verified command was:
 
 ```sh
 /root/gpt-image-smoke.sh
 ```
+
+The current candidate extends this smoke by corrupting the primary GPT
+signature, selecting the backup read-only, running `gpt -r`, and validating
+the rebuilt primary. It requires a new target run before that repair path is
+recorded as hardware verified.
 
 The smoke is non-destructive and touches only a sparse 4 MiB `/var` image. Its
 first hardware run exposed the legacy `dd(1)` output-truncation limitation;

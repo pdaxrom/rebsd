@@ -363,6 +363,7 @@ test_partition_write_and_flush(void)
     unsigned unit;
     unsigned i;
     dev_t dev;
+    dev_t whole;
 
     fake_init(&media, 7);
     test_zero(media.data, DISK_SECTOR_SIZE);
@@ -377,6 +378,7 @@ test_partition_write_and_flush(void)
     diskattach(0);
     CHECK(fake_writable_attach(&media, &unit) == 0 && unit == 0);
     dev = makedev(2, DISK_MINOR(0, DISK_MINOR_PARTITION(0)));
+    whole = makedev(2, DISK_MINOR(0, DISK_MINOR_WHOLE));
     CHECK(disk_bdev_open(dev, FREAD | FWRITE, 0) == 0);
 
     test_zero(&bp, sizeof(bp));
@@ -393,8 +395,13 @@ test_partition_write_and_flush(void)
 
     CHECK(disk_bdev_ioctl(dev, DIOCFLUSH, 0, FWRITE) == 0);
     CHECK(media.flush_count == 1);
+    CHECK(disk_bdev_ioctl(dev, DIOCREINIT, 0, FWRITE) == EINVAL);
+    CHECK(disk_bdev_open(whole, FREAD, 0) == 0);
+    CHECK(disk_bdev_ioctl(whole, DIOCREINIT, 0, FREAD) == EBUSY);
     CHECK(disk_bdev_close(dev, FREAD | FWRITE, 0) == 0);
     CHECK(media.flush_count == 1);
+    CHECK(disk_bdev_ioctl(whole, DIOCREINIT, 0, FREAD) == 0);
+    CHECK(disk_bdev_close(whole, FREAD, 0) == 0);
     disk_detach(unit, &media);
     return 0;
 }
@@ -434,8 +441,13 @@ test_write_and_flush_errors(void)
     disk_bdev_strategy(&bp);
     CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
     media.flush_error = EIO;
-    CHECK(disk_bdev_close(dev, FWRITE, 0) == EIO);
+    CHECK(disk_bdev_ioctl(dev, DIOCREINIT, 0, FWRITE) == EIO);
     CHECK(media.flush_count == 1);
+    media.flush_error = 0;
+    CHECK(disk_bdev_ioctl(dev, DIOCREINIT, 0, FWRITE) == 0);
+    CHECK(media.flush_count == 2);
+    CHECK(disk_bdev_close(dev, FWRITE, 0) == 0);
+    CHECK(media.flush_count == 2);
     disk_detach(unit, &media);
     return 0;
 }
