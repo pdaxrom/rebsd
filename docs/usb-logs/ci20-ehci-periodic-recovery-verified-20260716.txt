@@ -1,0 +1,919 @@
+Starting kernel ...
+
+ReBSD Ci20 kernel entry
+ram size=0x10000000
+
+ReBSD for Ci20: built on sash@sashz-mbp with gcc mipsel-elf-gcc (GCC) 14.2.0, cpu=mips32r2, float=hard, endian=little
+ci20 uart: irq 34 enabled
+ci20 clock: tcu0 irq 25 rate 750000 hz period 7500, delay tcu3 period 65535
+dma: Ci20 uncached pool phys=18a000 size=65536 align=4096
+disk: block layer ready, MBR/GPT partitions, 64-bit LBA
+fat: FAT16/FAT32 filesystem ready
+usb0: initializing core
+usb0: core ready
+ukbd0: HID boot-keyboard driver ready
+umass0: SCSI/Bulk-Only driver ready
+uhub0: external hub driver ready
+ehci0: attach, EHCI phys=13490000
+usb-host: init: enable VBUS
+usb-host: init: settle VBUS
+usb-host: init: configure UHC clock
+usb-host: init: ungate UHC clock
+usb-host: init: configure host PHY
+usb-host: init: configure EHCI UTMI width
+usb-host: init: pulse PHY reset
+usb-host: init: pulse UHC reset
+usb-host: init: hardware ready
+usb-host: Ci20 VBUS on, cpm clkgr0=3e5c7fe0 opcr=1566 usbpcr=408919b8 usbpcr1=8ace3370 uhccdr=60000018 srbc=2
+ehci0: JZ4780 UTMI bus=7e0 width=16-bit
+ehci0: EHCI version=100 ports=1 companions=1/1 async-control/bulk periodic-interrupt-IN split-transactions
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci0: irq 20 enabled for async/periodic/root-hub changes
+ohci0: attach, OHCI phys=134a0000
+ohci0: OHCI revision=10 ports=1 control-polling periodic-interrupt-IN
+ohci0: irq 5 enabled for periodic/root-hub changes
+ohci0: port1 powered, no device; hotplug ready
+dm0: dm9000 deferred probe at 0xb6000000 address 02:20:00:00:00:20
+phys mem  = 262144 kbytes
+user mem  = 4096 kbytes
+root dev  = (0,0)
+swap dev  = (1,0)
+root size = 32768 kbytes
+swap size = 32768 kbytes
+usb0: deferred task runner uses proc0
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=746 waited=2 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port2 device attached speed=low addr=2 vendor=1c4f product=2
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=c000 frame=169e
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port4 device attached speed=high addr=3 vendor=1005 product=b113
+July 16 07:10:55 init: kernel security level changed from 0 to 1
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=20031 status=e000 frame=1e9c
+ehci: periodic publish addr=2 phase=1 frame=627 waited=0 ms
+
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: ehci: periodic publish addr=2 phase=1 frame=755 waited=0 ms
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d82 qtd-token=88d80 cmd=20031 status=c008 frame=3509
+
+
+
+ReBSD/Ci20 (Amnesiac) (console)
+
+login: ehci: periodic publish addr=2 phase=1 frame=907 waited=0 ms
+rehci: periodic publish addr=2 phase=1 frame=1019 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=91 waited=0 ms
+oehci: periodic publish addr=2 phase=1 frame=155 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=227 waited=0 ms
+oehci: periodic publish addr=2 phase=1 frame=299 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=379 waited=0 ms
+tehci: periodic publish addr=2 phase=1 frame=387 waited=0 ms
+rehci: periodic publish addr=2 phase=1 frame=403 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=411 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=83 waited=0 ms
+
+Password:ehci: periodic publish addr=2 phase=1 frame=147 waited=0 ms
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=c008 frame=27f
+ehci: periodic publish addr=2 phase=1 frame=107 waited=0 ms
+
+Login incorrect
+login: ehci: periodic publish addr=2 phase=1 frame=211 waited=0 ms
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=c008 frame=251f
+rehci: periodic publish addr=2 phase=1 frame=891 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=979 waited=0 ms
+oehci: periodic publish addr=2 phase=1 frame=99 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=163 waited=0 ms
+oehci: periodic publish addr=2 phase=1 frame=243 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=315 waited=0 ms
+tehci: periodic publish addr=2 phase=1 frame=347 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=427 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=563 waited=0 ms
+ReBSD/Creator Ci20
+# ehci: periodic publish addr=2 phase=1 frame=651 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=443 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=579 waited=0 ms
+lehci: periodic publish addr=2 phase=1 frame=419 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=507 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=651 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=739 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=763 waited=0 ms
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.ehci: periodic publish addr=2 phase=1 frame=851 waited=0 ms
+sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=c008 frame=38e1
+ehci: periodic addr=2 endpoint=81 failed token=88d4c qh-status=88d4c endp=85102 hub=41013802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+sd0: detached
+umass0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=558 waited=0 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port2 device attached speed=low addr=2 vendor=1c4f product=2
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=c000 frame=30bb
+lehci: periodic publish addr=2 phase=1 frame=643 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=723 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=747 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=867 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=51 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=163 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=827 waited=0 ms
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port4 device attached speed=high addr=3 vendor=1005 product=b113
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tehci: periodic publish addr=2 phase=1 frame=955 waited=0 ms
+ools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# #
+ehci: periodic publish addr=2 phase=1 frame=115 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=155 waited=0 ms
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=20031 status=c000 frame=3910
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=c008 frame=290
+ehci: periodic addr=2 endpoint=81 failed token=88d4c qh-status=88d4c endp=85102 hub=41013802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+sd0: detached
+umass0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=437 waited=0 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port2 device attached speed=low addr=2 vendor=1c4f product=2
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=e000 frame=d17
+
+ehci: periodic publish addr=2 phase=1 frame=387 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=547 waited=0 ms
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port4 device attached speed=high addr=3 vendor=1005 product=b113
+#
+ehci: periodic publish addr=2 phase=1 frame=795 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=851 waited=0 ms
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=20031 status=c008 frame=1530
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=c008 frame=1870
+lehci: periodic publish addr=2 phase=1 frame=483 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=603 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=699 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=795 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=915 waited=0 ms
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.ehci: periodic publish addr=2 phase=1 frame=1019 waited=0 ms
+sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=c008 frame=1d77
+ehci: periodic addr=2 endpoint=81 failed token=88d4c qh-status=88d4c endp=85102 hub=41013802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+sd0: detached
+umass0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=814 waited=0 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port2 device attached speed=low addr=2 vendor=1c4f product=2
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=20031 status=e000 frame=38e9
+
+ehci: periodic publish addr=2 phase=1 frame=307 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=403 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=699 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=779 waited=0 ms
+ehci: recovered periodic schedule with 2 QHs
+lehci: periodic publish addr=2 phase=1 frame=348 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=427 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=468 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=563 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=739 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=843 waited=0 ms
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=e008 frame=16d9
+lehci: periodic publish addr=2 phase=1 frame=267 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=380 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=443 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=524 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=739 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=796 waited=0 ms
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=e008 frame=1575
+lehci: periodic publish addr=2 phase=1 frame=324 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=427 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=467 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=539 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=667 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=739 waited=0 ms
+uhub0: port4 enumeration failed: timeout
+# # .profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# .profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# .profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c008 frame=1410
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=31 status=c008 frame=23ca
+ehci: periodic addr=2 endpoint=81 failed token=8814a qh-status=8814a endp=85102 hub=41013802 retries=0
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci0: port1 reset failed: disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci: watchdog recovered a periodic completion
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=295 waited=0 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port2 device attached speed=low addr=2 vendor=1c4f product=2
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c008 frame=8b5
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port4 device attached speed=high addr=3 vendor=1005 product=b113
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=31 status=c009 frame=10b0
+
+ehci: periodic publish addr=2 phase=1 frame=835 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=11 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=212 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=314 waited=2 ms
+
+ehci: periodic publish addr=2 phase=1 frame=412 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=514 waited=2 ms
+lehci: periodic publish addr=2 phase=1 frame=188 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=290 waited=2 ms
+sehci: periodic publish addr=2 phase=1 frame=388 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=490 waited=2 ms
+
+ehci: periodic publish addr=2 phase=1 frame=690 waited=2 ms
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smokehci: periodic publish addr=2 phase=1 frame=788 waited=0 ms
+e.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c008 frame=37f1
+ehci: periodic addr=2 endpoint=81 failed token=8814a qh-status=8814a endp=85102 hub=41013802 retries=0
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+sd0: detached
+umass0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=722 waited=2 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port2 device attached speed=low addr=2 vendor=1c4f product=2
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=e008 frame=1601
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port4 device attached speed=high addr=3 vendor=1005 product=b113
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=31 status=c009 frame=1dfd
+
+ehci: periodic publish addr=2 phase=1 frame=314 waited=1 ms
+# ehci: periodic publish addr=2 phase=1 frame=514 waited=1 ms
+
+ehci: periodic publish addr=2 phase=1 frame=914 waited=1 ms
+# ehci: periodic publish addr=2 phase=1 frame=1013 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=290 waited=1 ms
+# ehci: periodic publish addr=2 phase=1 frame=490 waited=1 ms
+
+ehci: periodic publish addr=2 phase=1 frame=589 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=690 waited=1 ms
+lehci: periodic publish addr=2 phase=1 frame=165 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=266 waited=1 ms
+sehci: periodic publish addr=2 phase=1 frame=365 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=466 waited=1 ms
+
+ehci: periodic publish addr=2 phase=1 frame=565 waited=0 ms
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smehci: periodic publish addr=2 phase=1 frame=666 waited=0 ms
+oke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c008 frame=3420
+ehci: periodic addr=2 endpoint=81 failed token=8814a qh-status=8814a endp=85102 hub=41013802 retries=0
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+sd0: detached
+umass0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=159 waited=0 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port2 device attached speed=low addr=2 vendor=1c4f product=2
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=e008 frame=46a
+lehci: periodic publish addr=2 phase=1 frame=731 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=844 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=875 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=988 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=11 waited=0 ms
+ehci: periodic publish addr=2 phase=1 frame=99 waited=0 ms
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port4 device attached speed=high addr=3 vendor=1005 product=b113
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c009 frame=3fe5
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=31 status=c009 frame=c7e
+ehci: periodic addr=2 endpoint=81 failed token=88d4c qh-status=88d4c endp=85102 hub=41013802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+uhub0: port2 device disconnected
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=18d80 qtd-token=18d80 cmd=31 status=c008 frame=1bae
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=626 waited=2 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port1 device attached speed=low addr=2 vendor=1c4f product=2
+sd0: detached
+umass0: detached
+uhub0: port4 device disconnected
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d82 qtd-token=88d80 cmd=31 status=c009 frame=12c9
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port2 device attached speed=high addr=3 vendor=1005 product=b113
+
+ehci: periodic publish addr=2 phase=1 frame=230 waited=0 ms
+# ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=18d80 qtd-token=18d80 cmd=31 status=c009 frame=2a66
+ehci: periodic publish addr=2 phase=1 frame=346 waited=2 ms
+
+ehci: periodic publish addr=2 phase=1 frame=442 waited=2 ms
+# ehci: periodic publish addr=2 phase=1 frame=540 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=642 waited=2 ms
+# ehci: periodic publish addr=2 phase=1 frame=740 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=842 waited=2 ms
+# ehci: periodic publish addr=2 phase=1 frame=940 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=18 waited=2 ms
+# ehci: periodic publish addr=2 phase=1 frame=116 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=218 waited=2 ms
+# ehci: periodic publish addr=2 phase=1 frame=316 waited=0 ms
+lehci: periodic publish addr=2 phase=1 frame=618 waited=2 ms
+ehci: periodic publish addr=2 phase=1 frame=716 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=818 waited=2 ms
+ehci: periodic publish addr=2 phase=1 frame=916 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=1018 waited=2 ms
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoehci: periodic publish addr=2 phase=1 frame=92 waited=0 ms
+ke.sh
+libpcc-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c008 frame=236
+ehci: periodic addr=2 endpoint=81 failed token=88d4c qh-status=88d4c endp=85102 hub=40813802 retries=1
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+uhub0: port1 device disconnected
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=31 status=c008 frame=db1
+ehci: periodic addr=2 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=2 phase=1 frame=387 waited=0 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=2 vendor=1c4f product=2
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=18d80 qtd-token=18d80 cmd=31 status=c008 frame=b60
+ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c008 frame=be0
+
+ehci: periodic publish addr=2 phase=1 frame=157 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=258 waited=1 ms
+
+ehci: periodic publish addr=2 phase=1 frame=357 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=458 waited=1 ms
+
+ehci: periodic publish addr=2 phase=1 frame=557 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=658 waited=1 ms
+
+ehci: periodic publish addr=2 phase=1 frame=757 waited=0 ms
+# ehci: periodic publish addr=2 phase=1 frame=858 waited=1 ms
+lehci: periodic publish addr=2 phase=1 frame=234 waited=1 ms
+ehci: periodic publish addr=2 phase=1 frame=333 waited=0 ms
+sehci: periodic publish addr=2 phase=1 frame=434 waited=1 ms
+ehci: periodic publish addr=2 phase=1 frame=533 waited=0 ms
+
+ehci: periodic publish addr=2 phase=1 frame=634 waited=1 ms
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpccehci: periodic publish addr=2 phase=1 frame=733 waited=0 ms
+-helper-smoke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=2 endpoint=81 qh=18b180 qtd=18b940 frame[1]=18b182
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c008 frame=363c
+ehci: periodic addr=2 endpoint=81 failed token=8814a qh-status=8814a endp=85102 hub=42013802 retries=0
+ukbd0: interrupt transfer failed: I/O error
+ukbd0: detached
+sd0: detached
+umass0: detached
+uhub0: detached
+ehci0: port1 device disconnected
+ehci: periodic addr=1 endpoint=81 bInterval=12 frames=256 phase=0 uframe=0 nrl=0 smask=1 cmask=0
+uhub0: 4 ports, high-speed hub addr=1, powered
+ehci0: port1 device attached speed=high
+ehci0: usb addr=1 vendor=214b product=7000 config=1 interfaces=1
+ehci0: if0 class=9 subclass=0 protocol=0 endpoints=1
+umass0:  USB FLASH DRIVE PMAP, SCSI/Bulk-Only LUN 0
+sd0: 30299520 512-byte sectors (15149760 KB), removable
+sd0a: MBR type=c start=63 sectors=30298527
+uhub0: port3 device attached speed=high addr=2 vendor=1005 product=b113
+ehci: periodic addr=3 endpoint=81 bInterval=10 frames=8 phase=1 uframe=1 nrl=0 smask=2 cmask=38
+ehci: periodic publish addr=3 phase=1 frame=860 waited=0 ms
+ukbd0: boot keyboard, interrupt in 0x81, 8 bytes every 10 ms
+uhub0: port4 device attached speed=low addr=3 vendor=1c4f product=2
+ehci: periodic active addr=1 endpoint=81 qh=18b0c0 qtd=18b900 frame[0]=18b0c2
+ehci: periodic state cur=18b900 next=1 alt=1 qh-token=80018d80 qtd-token=80018d80 cmd=31 status=c009 frame=3a44
+ehci: periodic active addr=3 endpoint=81 qh=18b2a0 qtd=18b940 frame[1]=18b2a2
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d82 qtd-token=88d80 cmd=31 status=c009 frame=3ac9
+
+ehci: periodic publish addr=3 phase=1 frame=434 waited=0 ms
+# ehci: periodic publish addr=3 phase=1 frame=534 waited=0 ms
+
+ehci: periodic publish addr=3 phase=1 frame=834 waited=0 ms
+# ehci: periodic publish addr=3 phase=1 frame=934 waited=0 ms
+
+ehci: periodic publish addr=3 phase=1 frame=10 waited=0 ms
+# ehci: periodic publish addr=3 phase=1 frame=110 waited=0 ms
+
+ehci: periodic publish addr=3 phase=1 frame=210 waited=0 ms
+# ehci: periodic publish addr=3 phase=1 frame=310 waited=0 ms
+
+ehci: periodic publish addr=3 phase=1 frame=410 waited=0 ms
+# ehci: periodic publish addr=3 phase=1 frame=510 waited=0 ms
+lehci: periodic publish addr=3 phase=1 frame=810 waited=0 ms
+ehci: periodic publish addr=3 phase=1 frame=910 waited=0 ms
+sehci: periodic publish addr=3 phase=1 frame=1010 waited=0 ms
+ehci: periodic publish addr=3 phase=1 frame=86 waited=0 ms
+
+ehci: periodic publish addr=3 phase=1 frame=186 waited=0 ms
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-sehci: periodic publish addr=3 phase=1 frame=286 waited=0 ms
+moke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# lehci: periodic publish addr=3 phase=1 frame=163 waited=0 ms
+ehci: periodic publish addr=3 phase=1 frame=263 waited=0 ms
+sehci: periodic publish addr=3 phase=1 frame=363 waited=0 ms
+ehci: periodic publish addr=3 phase=1 frame=463 waited=0 ms
+
+ehci: periodic publish addr=3 phase=1 frame=563 waited=0 ms
+.profile                   math-class-smoke.c
+alias-stress-smoke.c       math-class-smoke.sh
+alias-stress-smoke.sh      native-pcc-smoke.sh
+build-workload-smoke.sh    ne2k-smoke.c
+cc-pcc-smoke.sh            ne2k-smoke.sh
+ccom-stress.sh             net-header-smoke.c
+cpp-calendar-smoke.sh      net-header-smoke.sh
+dhcp-dns-smoke.sh          net-smoke.c
+dhcp-recv-smoke.c          net-smoke.sh
+dhcp-recv-smoke.sh         off64-smoke.c
+dns-smoke.c                off64-smoke.sh
+fat-rename-smoke.sh        pcc-fpu-smoke.c
+fs-tools-smoke.sh          pcc-smoke-all.sh
+gpt-image-smoke.sh         pcc-smoke.c
+lang-smoke.sh              pcc-smoke.sh
+libc-abi-smoke.c           runtime-stress.sh
+libc-abi-smoke.sh          sh-comsubst-smoke.sh
+libc-string-smoke.c        sh-fail-smoke.sh
+libc-string-smoke.sh       telnet-smoke.sh
+libpcc-helper-smehci: periodic publish addr=3 phase=1 frame=663 waited=0 ms
+oke.c      types-smoke.c
+libpcc-helper-smoke.sh     types-smoke.sh
+linpack-gcc                usbn-dhcp-smoke.sh
+linpack-pcc                usbn-smoke.sh
+linpack-smoke.sh           usbn-tcp-smoke.c
+linpack.c                  usbn-tcp-smoke.sh
+ll-abi-smoke.c             utility-src
+ll-abi-smoke.s             utility-workload-smoke.sh
+ll-abi-smoke.sh            wget-smoke.sh
+ll-smoke.c                 wide-policy-smoke.c
+ll-smoke.sh                wide-policy-smoke.sh
+make-workload-smoke.sh
+# ehci: periodic active addr=3 endpoint=81 qh=18b2a0 qtd=18b940 frame[1]=18b2a2
+ehci: periodic state cur=18b940 next=1 alt=1 qh-token=88d80 qtd-token=88d80 cmd=31 status=c008 frame=1408

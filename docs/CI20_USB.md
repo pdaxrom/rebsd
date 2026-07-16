@@ -209,7 +209,7 @@ Ci20 policy is present in the hub or split-transaction paths.
 
 The hardware topology used a `214b:7000` four-port high-speed hub with a
 high-speed `1005:b113` flash drive and low-speed `1c4f:0002` boot keyboard.
-The final candidate image has SHA-256
+The 2026-07-15 reconnect candidate had SHA-256
 `861ae15e0ba79af9a2a6364c66f593656fcbf8c6274626b49425f437002e66fa`.
 
 Earlier candidates rebuilt the complete periodic schedule around a QH update
@@ -221,13 +221,26 @@ unlinked before its single fixed qTD and overlay are rearmed, and linked back
 only after the new transaction is fully published. Root-device removal also
 tears down hub children recursively before releasing the hub address.
 
-The final image passed the hardware gate on 2026-07-15. Its full UART capture
+That image passed its original hardware gate on 2026-07-15. Its full UART capture
 shows simultaneous keyboard and storage enumeration, repeated child recovery,
 five complete populated-hub disconnect/reconnect cycles, working console
 input, and a final read-only FAT32 mount. It is retained as
 `docs/usb-logs/ci20-ehci-hub-reconnect-verified-20260715.txt`. Earlier
 complete captures remain failure evidence and are not presented as proof of
-the final candidate.
+the current implementation. Later cold boots exposed intermittent dormant
+keyboard qTDs, and a second complete-hub reconnect exposed a race which left
+new periodic QHs published while PSE was disabled.
+
+The final 2026-07-16 image has SHA-256
+`5c88e85e1cf9b3fc02802a77054fc3682625f18c168ba8a0d0de8ac9e9c7be05`.
+It uses three Linux-style complete-split windows, publishes a split QH outside
+the JZ4780 prefetch window, rescans interrupt qTDs with a 100 ms watchdog, and
+tracks periodic-QH count/generation so a late unlink cannot leave a rebuilt
+schedule stopped. The retained cold-boot capture contains seven complete
+populated-hub reconnects. One reconnect reproduced the PSE race; the driver
+printed `ehci: recovered periodic schedule with 2 QHs`, restored `USBCMD` to
+`0x31`, and keyboard and storage operation continued. The capture is
+`docs/usb-logs/ci20-ehci-periodic-recovery-verified-20260716.txt`.
 
 ## Programming Manual Cross-check
 
@@ -485,9 +498,10 @@ with an empty port, late attach, detach, address reuse, repeated reconnect,
 EHCI high-speed enumeration/reconnect, EHCI-to-OHCI ownership handoff, raw
 mass-storage reads and writes, FAT32 read/write mutation and persistence,
 64-bit file offsets, FAT maintenance tools, simultaneous keyboard/storage
-operation through a high-speed hub, child recovery, and five complete
-populated-hub reconnects.
-The final hub capture is retained in `docs/usb-logs/`.
+operation through a high-speed hub, child recovery, and seven complete
+populated-hub reconnects with automatic periodic-schedule recovery.
+The final capture is retained as
+`docs/usb-logs/ci20-ehci-periodic-recovery-verified-20260716.txt`.
 Earlier failed candidate captures remain in `docs/usb-logs/` as regression
 evidence.
 
@@ -501,6 +515,12 @@ MBR-to-GPT image migration smoke passed on Creator Ci20 on 2026-07-16 with:
 ```text
 cfbdad4c9423d574c42103a88f8a77d24769e3eb50d6951197636bd3021af78b  ci20.uImage
 ```
+
+This GPT image also contained the then-pending EHCI three-window split schedule
+and dropped-IOC watchdog. Passing the GPT smoke did not validate those
+keyboard-stability changes. They were subsequently completed with periodic
+schedule accounting and verified in the separate 2026-07-16 USB image and
+capture documented above.
 
 The verified command was:
 

@@ -48,7 +48,12 @@
 
 #ifdef KERNEL
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/systm.h>
+
+/* Legacy callout declarations live in proc.h with unrelated process types. */
+void timeout(void (*)(caddr_t), caddr_t, int);
+void untimeout(void (*)(caddr_t), caddr_t);
 #endif
 
 #if defined(TARGET_LITTLE_ENDIAN) || defined(__MIPSEL__) || \
@@ -175,6 +180,10 @@ static usb_error_t ehci_hcd_root_port_clear_change(struct usb_hcd *,
     unsigned, unsigned);
 static void ehci_hcd_root_intr_enable(struct usb_hcd *, int);
 static void ehci_hcd_clear_toggle(struct usb_pipe *);
+static void ehci_poll_interrupts(struct ehci_softc *);
+#ifdef KERNEL
+static void ehci_watchdog(caddr_t);
+#endif
 
 static const struct usb_hcd_ops ehci_hcd_ops = {
     ehci_hcd_start,
@@ -216,6 +225,98 @@ ehci_set_owner_callback(struct ehci_softc *sc,
     sc->eh_owner_change = callback;
     sc->eh_owner_arg = arg;
 }
+
+#ifdef KERNEL
+#define EHCI_WATCHDOG_TICKS ((HZ + 9) / 10)
+
+static int
+ehci_interrupt_xfers_active(struct ehci_softc *sc)
+{
+    unsigned i;
+
+    for (i = 0; i < EHCI_INTR_SLOTS; ++i)
+        if (sc->eh_intr_slots[i].eis_xfer != 0)
+            return 1;
+    return 0;
+}
+
+static int
+ehci_interrupt_completion_pending(struct ehci_softc *sc)
+{
+    struct ehci_intr_slot *slot;
+    unsigned int token;
+    unsigned i;
+
+    for (i = 0; i < EHCI_INTR_SLOTS; ++i) {
+        slot = &sc->eh_intr_slots[i];
+        if (slot->eis_xfer == 0 || slot->eis_qtd == 0)
+            continue;
+        token = ehci_from_le32(slot->eis_qtd->qtd_status);
+        if ((token & EHCI_QTD_ACTIVE) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static void
+ehci_watchdog_arm(struct ehci_softc *sc)
+{
+    if (!sc->eh_watchdog_armed) {
+        sc->eh_watchdog_armed = 1;
+        timeout(ehci_watchdog, (caddr_t)sc, EHCI_WATCHDOG_TICKS);
+    }
+}
+
+static void
+ehci_watchdog_cancel(struct ehci_softc *sc)
+{
+    if (sc->eh_watchdog_armed) {
+        untimeout(ehci_watchdog, (caddr_t)sc);
+        sc->eh_watchdog_armed = 0;
+    }
+}
+
+static void
+ehci_watchdog_trace_active(struct ehci_softc *sc)
+{
+    struct ehci_intr_slot *slot;
+    struct ehci_pipe *epipe;
+    struct ehci_qh *qh;
+    unsigned int frame_link;
+    unsigned int qtd_token;
+    unsigned i;
+
+    for (i = 0; i < EHCI_INTR_SLOTS; ++i) {
+        slot = &sc->eh_intr_slots[i];
+        epipe = slot->eis_pipe;
+        if (slot->eis_xfer == 0 || slot->eis_qtd == 0 || epipe == 0 ||
+            epipe->ep_qh == 0)
+            continue;
+        if (++slot->eis_watchdog_scans != 10u)
+            continue;
+        qh = epipe->ep_qh;
+        qtd_token = ehci_from_le32(slot->eis_qtd->qtd_status);
+        if ((qtd_token & EHCI_QTD_ACTIVE) == 0)
+            continue;
+        frame_link = ehci_from_le32(
+            sc->eh_frame_list[epipe->ep_intr_phase]);
+        printf("ehci: periodic active addr=%u endpoint=%x "
+            "qh=%x qtd=%x frame[%u]=%x\n",
+            slot->eis_xfer->ux_device->ud_address,
+            slot->eis_xfer->ux_pipe->up_endpoint->ue_desc.bEndpointAddress,
+            ehci_phys(sc, qh), ehci_phys(sc, slot->eis_qtd),
+            epipe->ep_intr_phase, frame_link);
+        printf("ehci: periodic state cur=%x next=%x alt=%x "
+            "qh-token=%x qtd-token=%x cmd=%x status=%x frame=%x\n",
+            ehci_from_le32(qh->qh_curqtd),
+            ehci_from_le32(qh->qh_qtd.qtd_next),
+            ehci_from_le32(qh->qh_qtd.qtd_altnext),
+            ehci_from_le32(qh->qh_qtd.qtd_status), qtd_token,
+            ehci_op_read(sc, EHCI_USBCMD), ehci_op_read(sc, EHCI_USBSTS),
+            ehci_op_read(sc, EHCI_FRINDEX));
+    }
+}
+#endif
 
 static int
 ehci_wait_status(struct ehci_softc *sc, unsigned mask, unsigned expected,
@@ -347,6 +448,9 @@ ehci_hcd_start(struct usb_hcd *hcd)
         EHCI_SETUP_OFFSET;
     sc->eh_data_buffer = (uByte *)sc->eh_schedule_dma.dm_vaddr +
         EHCI_DATA_OFFSET;
+    sc->eh_periodic_count = 0;
+    sc->eh_periodic_generation = 0;
+    sc->eh_periodic_recoveries = 0;
 
     for (i = 0; i < EHCI_INTR_SLOTS; ++i) {
         sc->eh_intr_slots[i].eis_xfer = 0;
@@ -425,10 +529,15 @@ ehci_hcd_stop(struct usb_hcd *hcd)
     sc = (struct ehci_softc *)hcd->uh_softc;
     if (sc == 0 || !sc->eh_started)
         return;
+#ifdef KERNEL
+    ehci_watchdog_cancel(sc);
+#endif
     ehci_op_write(sc, EHCI_USBINTR, 0);
     ehci_op_write(sc, EHCI_USBCMD, 0);
     sc->eh_active_xfer = 0;
     sc->eh_active_pipe = 0;
+    sc->eh_periodic_count = 0;
+    sc->eh_periodic_generation = 0;
     sc->eh_started = 0;
     (void)dma_free(&sc->eh_schedule_dma);
     sc->eh_frame_list = 0;
@@ -574,15 +683,16 @@ ehci_qh_configure(struct ehci_softc *sc, struct ehci_pipe *epipe,
             EHCI_QH_SET_PORT(device->ud_tt_port);
         if (type == UE_INTERRUPT) {
             /*
-             * Use the exact NetBSD 3.1 interrupt split: start in Y1 and a
-             * single complete-split opportunity in Y3.  Multiple C-mask
-             * bits let ReBSD's immediate completion callback rearm this QH
-             * between Y3 and Y5; JZ4780 then observes a fresh qTD without a
-             * matching start split and reports MISSEDMICRO with CERR intact.
+             * Linux permits complete-split responses in each of the three
+             * microframes from start+2 through start+4.  A single C-mask
+             * bit, inherited from the old NetBSD 3.1 XXX setting, can leave
+             * a slow interrupt transaction pending forever after one NYET.
+             * ReBSD unlinks this QH before rearming its fixed qTD, so later
+             * C-mask slots cannot observe a new transfer prematurely.
              */
             start_uframe = epipe->ep_intr_uframe;
             endphub |= EHCI_QH_SET_SMASK(1u << start_uframe) |
-                EHCI_QH_SET_CMASK(1u << (start_uframe + 2u));
+                EHCI_QH_SET_CMASK(7u << (start_uframe + 2u));
         }
     } else if (type == UE_INTERRUPT) {
         start_uframe = epipe->ep_intr_uframe;
@@ -613,16 +723,24 @@ ehci_periodic_pipe_from_link(struct ehci_softc *sc, unsigned int link)
     return 0;
 }
 
-static int
-ehci_periodic_any_linked(struct ehci_softc *sc)
+/*
+ * Keep the controller running whenever at least one periodic QH is
+ * published.  This is deliberately idempotent: disconnect processing can
+ * unlink an old hub while a newly attached hub is already publishing its
+ * interrupt QH.  The late unlink must not leave the new schedule stopped.
+ */
+static void
+ehci_periodic_ensure_running(struct ehci_softc *sc)
 {
-    unsigned i;
-
-    for (i = 0; i < USB_MAX_PIPES; ++i)
-        if (sc->eh_pipes[i].ep_used &&
-            sc->eh_pipes[i].ep_periodic_linked)
-            return 1;
-    return 0;
+    if (!sc->eh_started || sc->eh_periodic_count == 0 ||
+        (ehci_op_read(sc, EHCI_USBCMD) & EHCI_CMD_PSE) != 0)
+        return;
+    ehci_periodic_resume(sc);
+    ++sc->eh_periodic_recoveries;
+#ifdef KERNEL
+    printf("ehci: recovered periodic schedule with %u QHs\n",
+        sc->eh_periodic_count);
+#endif
 }
 
 static usb_error_t
@@ -646,6 +764,42 @@ ehci_periodic_sync_links(struct ehci_softc *sc)
             return USB_STATUS_IO_ERROR;
     }
     return USB_STATUS_NORMAL_COMPLETION;
+}
+
+/*
+ * JZ4780 may already have prefetched the current or following periodic
+ * branch.  Publishing a newly active split QH into either branch can make
+ * the controller load its qTD after the start-split microframe has passed;
+ * that qTD then remains ACTIVE indefinitely.  Keep the fixed phase, but wait
+ * until its next occurrence is outside the two-frame prefetch window before
+ * making the QH reachable.  Linux avoids rewriting a live split QH by using
+ * a persistent queue/dummy qTD; ReBSD's fixed one-qTD slot needs this guard
+ * both for its first publication and after an unlink/rearm.
+ */
+static unsigned
+ehci_periodic_wait_safe_split(struct ehci_softc *sc,
+    struct ehci_pipe *epipe)
+{
+    struct usb_device *device;
+    unsigned current;
+    unsigned distance;
+    unsigned waited;
+
+    device = epipe->ep_pipe->up_device;
+    if (device->ud_speed == USB_SPEED_HIGH ||
+        epipe->ep_intr_period < 4u ||
+        (ehci_op_read(sc, EHCI_USBCMD) & EHCI_CMD_PSE) == 0)
+        return 0;
+    for (waited = 0; waited < 4u; ++waited) {
+        current = (ehci_op_read(sc, EHCI_FRINDEX) >> 3) &
+            (EHCI_FRAME_LIST_COUNT - 1u);
+        distance = (epipe->ep_intr_phase - current) &
+            (epipe->ep_intr_period - 1u);
+        if (distance >= 2u)
+            break;
+        ehci_delay(sc, 1);
+    }
+    return waited;
 }
 
 /*
@@ -727,6 +881,8 @@ ehci_periodic_link(struct ehci_softc *sc, struct ehci_pipe *epipe)
     if (status != USB_STATUS_NORMAL_COMPLETION)
         return status;
     epipe->ep_periodic_linked = 1;
+    ++sc->eh_periodic_count;
+    ++sc->eh_periodic_generation;
     if ((ehci_op_read(sc, EHCI_USBCMD) & EHCI_CMD_PSE) == 0)
         ehci_periodic_resume(sc);
     return USB_STATUS_NORMAL_COMPLETION;
@@ -746,6 +902,7 @@ ehci_periodic_unlink(struct ehci_softc *sc, struct ehci_pipe *epipe)
     unsigned int next;
     unsigned int target;
     unsigned frame;
+    unsigned generation;
     unsigned was_running;
     usb_error_t status;
 
@@ -773,14 +930,28 @@ ehci_periodic_unlink(struct ehci_softc *sc, struct ehci_pipe *epipe)
         }
     }
     epipe->ep_periodic_linked = 0;
+    if (sc->eh_periodic_count != 0)
+        --sc->eh_periodic_count;
+    ++sc->eh_periodic_generation;
     status = ehci_periodic_sync_links(sc);
     if (status != USB_STATUS_NORMAL_COMPLETION)
         return status;
     if (was_running)
         ehci_delay(sc, 2);
-    if (!ehci_periodic_any_linked(sc) &&
-        ehci_periodic_pause(sc) != 0)
-        return USB_STATUS_TIMEOUT;
+    if (sc->eh_periodic_count == 0) {
+        generation = sc->eh_periodic_generation;
+        if (ehci_periodic_pause(sc) != 0)
+            return USB_STATUS_TIMEOUT;
+        /*
+         * A new QH may have been linked while pause waited for PSS to
+         * clear.  Its link-side PSE check could have happened before this
+         * unlink cleared PSE, so recheck both count and generation after
+         * the stop has completed.
+         */
+        if (sc->eh_periodic_count != 0 ||
+            sc->eh_periodic_generation != generation)
+            ehci_periodic_ensure_running(sc);
+    }
     epipe->ep_qh->qh_link = ehci_to_le32(EHCI_LINK_TERMINATE);
     return USB_STATUS_NORMAL_COMPLETION;
 }
@@ -793,7 +964,6 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
     unsigned max_packet;
     unsigned i;
     unsigned slot;
-    usb_error_t status;
 #ifdef KERNEL
     unsigned int endp;
     unsigned int endphub;
@@ -842,16 +1012,13 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
             ehci_qh_configure(sc, &sc->eh_pipes[i],
                 EHCI_LINK_TERMINATE, type != UE_INTERRUPT);
             if (type == UE_INTERRUPT) {
+                /*
+                 * Keep the empty halted QH private.  JZ4780 can cache an
+                 * overlay reached before its first qTD is installed and
+                 * then never execute that first transfer.  The first
+                 * submit publishes the fully prepared QH.
+                 */
                 sc->eh_intr_slots[slot].eis_pipe = &sc->eh_pipes[i];
-                status = ehci_periodic_link(sc, &sc->eh_pipes[i]);
-                if (status != USB_STATUS_NORMAL_COMPLETION) {
-                    sc->eh_intr_slots[slot].eis_pipe = 0;
-                    ehci_zero(sc->eh_pipes[i].ep_qh,
-                        sizeof(*sc->eh_pipes[i].ep_qh));
-                    ehci_zero(&sc->eh_pipes[i],
-                        sizeof(sc->eh_pipes[i]));
-                    return status;
-                }
 #ifdef KERNEL
                 endp = ehci_from_le32(sc->eh_pipes[i].ep_qh->qh_endp);
                 endphub = ehci_from_le32(sc->eh_pipes[i].ep_qh->
@@ -965,10 +1132,11 @@ ehci_qh_set_interrupt_qtd(struct ehci_softc *sc, struct ehci_qh *qh,
     /*
      * Follow NetBSD's ehci_set_qh_qtd() ordering: first observe and preserve
      * the controller's toggle/ping state, publish HALTED, replace the
-     * inactive overlay, and only then clear HALTED.  Split interrupt QHs are
-     * unlinked before this routine is called; high-speed QHs may remain in
-     * the tree.  Stopping the complete periodic schedule here loses cached
-     * QHs on JZ4780 and stalls every interrupt endpoint.
+     * inactive overlay, and only then clear HALTED.  A new interrupt QH is
+     * not linked until this routine has installed its first qTD.  Split
+     * interrupt QHs are also unlinked before later rearms; high-speed QHs
+     * may remain in the tree.  Stopping the complete periodic schedule here
+     * loses cached QHs on JZ4780 and stalls every interrupt endpoint.
      */
     qh_offset = ehci_dma_offset(sc, qh);
     status_offset = ehci_dma_offset(sc, &qh->qh_qtd.qtd_status);
@@ -1016,6 +1184,7 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
     struct ehci_qh *qh;
     unsigned slot_index;
     unsigned int qtd_phys;
+    unsigned waited;
     usb_error_t status;
 
     slot_index = epipe->ep_intr_slot;
@@ -1040,6 +1209,9 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
     qh = epipe->ep_qh;
     slot->eis_xfer = xfer;
     slot->eis_length = (unsigned)xfer->ux_length;
+#ifdef KERNEL
+    slot->eis_watchdog_scans = 0;
+#endif
     epipe->ep_xacterrs = 0;
     ehci_op_write(sc, EHCI_USBSTS, EHCI_STS_INT | EHCI_STS_ERRINT);
     status = ehci_qh_set_interrupt_qtd(sc, qh, qtd_phys);
@@ -1049,6 +1221,17 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
         slot->eis_length = 0;
         return status;
     }
+    waited = ehci_periodic_wait_safe_split(sc, epipe);
+#ifdef KERNEL
+    if (xfer->ux_device->ud_speed != USB_SPEED_HIGH)
+        printf("ehci: periodic publish addr=%u phase=%u frame=%u "
+            "waited=%u ms\n", xfer->ux_device->ud_address,
+            epipe->ep_intr_phase,
+            (ehci_op_read(sc, EHCI_FRINDEX) >> 3) &
+            (EHCI_FRAME_LIST_COUNT - 1u), waited);
+#else
+    (void)waited;
+#endif
     status = ehci_periodic_link(sc, epipe);
     if (status != USB_STATUS_NORMAL_COMPLETION) {
         ehci_qh_idle(qh);
@@ -1056,6 +1239,9 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
         slot->eis_length = 0;
         return status;
     }
+#ifdef KERNEL
+    ehci_watchdog_arm(sc);
+#endif
     return USB_STATUS_IN_PROGRESS;
 }
 
@@ -1542,12 +1728,46 @@ ehci_hcd_poll(struct usb_hcd *hcd)
     sc = (struct ehci_softc *)hcd->uh_softc;
     if (sc == 0 || !sc->eh_started)
         return;
+    ehci_periodic_ensure_running(sc);
     if (dma_sync_for_cpu(&sc->eh_schedule_dma, 0,
         EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
         return;
     ehci_poll_interrupts(sc);
     ehci_poll_active(sc);
 }
+
+#ifdef KERNEL
+/*
+ * Both NetBSD's dropped-interrupt workaround and Linux's EHCI I/O watchdog
+ * rescan active transfers without relying on another controller interrupt.
+ * JZ4780 can otherwise leave a completed keyboard qTD dormant until unrelated
+ * USB traffic happens to enter the interrupt handler.
+ */
+static void
+ehci_watchdog(caddr_t arg)
+{
+    struct ehci_softc *sc;
+    int completed;
+
+    sc = (struct ehci_softc *)arg;
+    sc->eh_watchdog_armed = 0;
+    if (!sc->eh_started || !ehci_interrupt_xfers_active(sc))
+        return;
+    ehci_periodic_ensure_running(sc);
+    if (dma_sync_for_cpu(&sc->eh_schedule_dma, 0,
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) == 0) {
+        completed = ehci_interrupt_completion_pending(sc);
+        ehci_watchdog_trace_active(sc);
+        ehci_poll_interrupts(sc);
+        if (completed && !sc->eh_watchdog_reported) {
+            sc->eh_watchdog_reported = 1;
+            printf("ehci: watchdog recovered a periodic completion\n");
+        }
+    }
+    if (sc->eh_started && ehci_interrupt_xfers_active(sc))
+        ehci_watchdog_arm(sc);
+}
+#endif
 
 static unsigned int
 ehci_port_read(struct ehci_softc *sc, unsigned port)

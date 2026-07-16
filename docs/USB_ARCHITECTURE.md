@@ -246,11 +246,17 @@ frame list, a circular asynchronous head, fixed aligned pipe QHs and qTDs,
 setup storage, interrupt buffers, and an 8 KiB data bounce area. One active
 asynchronous control or bulk transfer and four periodic interrupt-IN slots are
 bounded explicitly. Periodic QHs are linked and unlinked atomically without
-stopping PSE; low/full-speed hub children carry TT address/port and classic
-NetBSD start/complete split masks. Because each slot has one fixed qTD rather
-than Linux's dummy qTD queue, a completed split QH is unlinked before a repeat
-callback rearms its overlay and is linked back only after publication. This
-prevents the controller from observing half of two split transactions.
+stopping PSE; low/full-speed hub children carry TT address/port and use three
+Linux-style complete-split opportunities after their start split. Because each
+slot has one fixed qTD rather than Linux's dummy qTD queue, a completed split
+QH is unlinked before a repeat callback rearms its overlay and is linked back
+only after publication. This prevents the controller from observing half of
+two split transactions. A periodic watchdog also rescans qTDs independently
+of EHCI interrupt delivery, covering the dropped-IOC case handled by both the
+classic NetBSD workaround and the Linux EHCI I/O watchdog. The controller
+tracks the number and generation of published periodic QHs; after the last-QH
+pause path it rechecks both values, and the watchdog/poll path restarts PSE if
+a late unlink raced with a newly published schedule.
 Isochronous transfers remain unsupported.
 
 Ci20 J23 is one physical port shared by the two controller views. EHCI claims

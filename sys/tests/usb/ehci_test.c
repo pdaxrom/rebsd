@@ -816,26 +816,24 @@ test_periodic_split_interrupts(void)
         child_epipe->ep_intr_period == 8 &&
         child_epipe->ep_intr_phase == 1 &&
         child_epipe->ep_intr_uframe == 1 &&
-        parent_epipe->ep_periodic_linked &&
-        child_epipe->ep_periodic_linked);
+        !parent_epipe->ep_periodic_linked &&
+        !child_epipe->ep_periodic_linked);
+    /* Opening a pipe must not publish its empty halted QH. */
     CHECK((parent_epipe->ep_qh->qh_endp & 0xf0000000u) == 0);
-    CHECK(phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[0])) ==
-        parent_epipe->ep_qh &&
-        phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[1])) ==
-        child_epipe->ep_qh &&
+    CHECK((ehci.eh_frame_list[0] & EHCI_LINK_TERMINATE) != 0 &&
+        (ehci.eh_frame_list[1] & EHCI_LINK_TERMINATE) != 0 &&
         (ehci.eh_frame_list[8] & EHCI_LINK_TERMINATE) != 0 &&
-        phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[9])) ==
-        child_epipe->ep_qh);
+        (ehci.eh_frame_list[9] & EHCI_LINK_TERMINATE) != 0);
     endp = child_epipe->ep_qh->qh_endp;
     endphub = child_epipe->ep_qh->qh_endphub;
     CHECK(((endp >> 12) & 3u) == EHCI_QH_SPEED_FULL &&
         (endp & EHCI_QH_CTL) == 0 &&
         (endp & 0xf0000000u) == 0);
     CHECK((endphub & 0xffu) == 0x02 &&
-        ((endphub >> 8) & 0xffu) == 0x08 &&
+        ((endphub >> 8) & 0xffu) == 0x38 &&
         ((endphub >> 16) & 0x7fu) == parent->ud_address &&
         ((endphub >> 23) & 0x7fu) == 3);
-    CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) != 0);
+    CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) == 0);
 
     parent_xfer = usb_alloc_xfer(parent);
     child_xfer = usb_alloc_xfer(child);
@@ -851,8 +849,18 @@ test_periodic_split_interrupts(void)
     CHECK(usb_submit_xfer(parent_xfer) == USB_STATUS_IN_PROGRESS);
     CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
     CHECK(fake.periodic_stops == periodic_stops &&
-        fake.periodic_starts == periodic_starts &&
+        fake.periodic_starts == periodic_starts + 1 &&
+        parent_epipe->ep_periodic_linked &&
+        child_epipe->ep_periodic_linked &&
+        ehci.eh_periodic_count == 2 &&
         (fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) != 0);
+    CHECK(phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[0])) ==
+        parent_epipe->ep_qh &&
+        phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[1])) ==
+        child_epipe->ep_qh &&
+        (ehci.eh_frame_list[8] & EHCI_LINK_TERMINATE) != 0 &&
+        phys_to_ptr(EHCI_LINK_ADDR(ehci.eh_frame_list[9])) ==
+        child_epipe->ep_qh);
     CHECK(ehci.eh_intr_slots[0].eis_xfer != 0 &&
         ehci.eh_intr_slots[1].eis_xfer != 0);
     fake_run_periodic(&fake, 0);
@@ -864,7 +872,9 @@ test_periodic_split_interrupts(void)
     CHECK(fake.periodic_lists == 2);
     periodic_starts = fake.periodic_starts;
     periodic_stops = fake.periodic_stops;
-    CHECK(ehci_intr(&ehci) == 1);
+    /* The watchdog must recover a completed qTD after a dropped IOC. */
+    fake.regs[FAKE_OP(EHCI_USBSTS)] &= ~EHCI_STS_INT;
+    ehci.eh_hcd.uh_ops->uho_poll(&ehci.eh_hcd);
     CHECK(child_events.callbacks == 1 &&
         child_events.status == USB_STATUS_NORMAL_COMPLETION);
     CHECK(child_events.submit_status == USB_STATUS_IN_PROGRESS &&
@@ -882,7 +892,17 @@ test_periodic_split_interrupts(void)
     CHECK(child_events.callbacks == 2 && !child_xfer->ux_active &&
         child_events.status == USB_STATUS_NORMAL_COMPLETION &&
         !child_epipe->ep_periodic_linked &&
-        parent_epipe->ep_periodic_linked);
+        parent_epipe->ep_periodic_linked &&
+        ehci.eh_periodic_count == 1);
+
+    /* A late disconnect unlink must not leave a rebuilt schedule stopped. */
+    fake.regs[FAKE_OP(EHCI_USBCMD)] &= ~EHCI_CMD_PSE;
+    periodic_starts = fake.periodic_starts;
+    ehci.eh_hcd.uh_ops->uho_poll(&ehci.eh_hcd);
+    CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) != 0 &&
+        fake.periodic_starts == periodic_starts + 1 &&
+        ehci.eh_periodic_count == 1 &&
+        ehci.eh_periodic_recoveries == 1);
 
     /* Exhausted hardware XACTERR gets a bounded software retry. */
     memset(&child_events, 0, sizeof(child_events));
@@ -963,7 +983,8 @@ test_periodic_split_interrupts(void)
 
     /* Empty and rebuild the periodic schedule, then reuse its first slot. */
     usb_close_pipe(parent_pipe);
-    CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) == 0);
+    CHECK((fake.regs[FAKE_OP(EHCI_USBCMD)] & EHCI_CMD_PSE) == 0 &&
+        ehci.eh_periodic_count == 0);
     CHECK(usb_open_pipe(parent_interface, 0x82, &parent_pipe) ==
         USB_STATUS_NORMAL_COMPLETION);
     parent_xfer = usb_alloc_xfer(parent);

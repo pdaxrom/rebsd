@@ -66,6 +66,19 @@ attachment and I/O through a GPT-formatted USB medium remain a separate
 hardware gate. The retained transcript is
 `usb-logs/ci20-gpt-image-smoke-verified-20260716.txt`.
 
+The final EHCI keyboard/hub image is:
+
+```text
+5c88e85e1cf9b3fc02802a77054fc3682625f18c168ba8a0d0de8ac9e9c7be05  GCC ci20.uImage
+```
+
+Its 2026-07-16 cold-boot capture verifies seven complete reconnects of a
+populated `214b:7000` hub with the `1c4f:0002` keyboard and `1005:b113` flash
+drive. One cycle exercised the periodic-schedule fallback: PSE was restored
+with two QHs active, `USBCMD` returned to `0x31`, and keyboard/storage use
+continued. The transcript is
+`usb-logs/ci20-ehci-periodic-recovery-verified-20260716.txt`.
+
 The hardware-verified GCC read-only mass-storage image has these SHA-256
 values:
 
@@ -241,20 +254,20 @@ The current implementation supports a high-speed external hub, high-speed
 bulk children, and low/full-speed interrupt children through the hub's
 transaction translator. The hardware topology used a `214b:7000` four-port
 high-speed hub with a `1005:b113` flash drive and a low-speed `1c4f:0002`
-boot keyboard attached simultaneously. The final image is:
+boot keyboard attached simultaneously. The original reconnect candidate was:
 
 ```text
 861ae15e0ba79af9a2a6364c66f593656fcbf8c6274626b49425f437002e66fa  ci20.uImage
 ```
 
-The stable fix atomically links and unlinks periodic QHs without cycling the
+That candidate atomically links and unlinks periodic QHs without cycling the
 complete EHCI periodic schedule. A split interrupt QH is removed before its
 single fixed qTD/overlay is rearmed, then linked back after the new transfer
 is fully published. This avoids JZ4780 `MISSEDMICRO` failures while bulk and
 hub traffic are active. Recursive topology teardown releases keyboard,
 storage, and hub state before the root device is reused.
 
-The final `861ae15e...` image passed the hardware gate on 2026-07-15. The raw
+The `861ae15e...` image passed its original hardware gate on 2026-07-15. The raw
 capture shows simultaneous keyboard and storage enumeration, four keyboard
 child detach/reattach recoveries, flash child reconnects, five complete
 populated-hub disconnect/reconnect cycles, working console input after the
@@ -263,6 +276,9 @@ enumeration errors printed while a child or the complete hub is physically
 being removed are followed by detach and successful fresh enumeration. The
 retained capture is
 `usb-logs/ci20-ehci-hub-reconnect-verified-20260715.txt`.
+Later runs exposed cold-start and late-unlink failures, so this capture is an
+intermediate regression baseline. The final `5c88e85e...` image and its
+seven-cycle capture are documented under Target Compiler and Image Gates.
 
 ## Writable USB Block Gate
 
@@ -330,8 +346,8 @@ The exact supplied console transcript is retained in
 | EHCI start, capabilities, IRQ 20, empty-port hotplug | right-hand J23 empty | verified 2026-07-13 on `7f6df5…` | first EHCI capture |
 | EHCI to OHCI low-speed handoff | direct `1c4f:0002` keyboard on J23 | verified 2026-07-13 on `05adb0…` | final companion capture |
 | full-speed device | right-hand J23, direct companion OHCI | implementation candidate, not tested | EHCI/OHCI routing hardware gate |
-| external high-speed hub | downstream low-speed keyboard plus high-speed flash | verified 2026-07-15 on `861ae1…` | full UART boot, attach, input, storage, FAT32, and reconnect capture |
-| hub child reconnect | keyboard, flash, and five complete hub reconnects | verified 2026-07-15 on `861ae1…` | `ci20-ehci-hub-reconnect-verified-20260715.txt` |
+| external high-speed hub | downstream low-speed keyboard plus high-speed flash | verified 2026-07-16 on `5c88e8…` | cold boot, input, storage, periodic recovery and reconnect capture |
+| hub child reconnect | keyboard, flash, and seven complete hub reconnects | verified 2026-07-16 on `5c88e8…` | `ci20-ehci-periodic-recovery-verified-20260716.txt` |
 | high-speed flash drive | right-hand J23, direct EHCI | verified attach, detach, and reconnect 2026-07-13 on `05adb0…` | final high-speed capture |
 | read-only USB block device | direct high-speed `1005:b113` on right-hand J23 | verified 2026-07-13 on `a9984d…` | capacity, MBR, whole/partition reads, idle detach/reconnect and reuse capture |
 | writable USB block device | high-speed `1005:b113` behind `214b:7000` hub | verified 2026-07-15 on `e2b14a…` | 15 KiB write/read/compare, byte-exact restore/compare, then FAT32 integrity check in `ci20-umass-write-verified-20260715.txt` |

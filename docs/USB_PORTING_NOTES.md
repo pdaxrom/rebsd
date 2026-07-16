@@ -591,8 +591,31 @@ the compact implementation does not use Linux's dummy-qTD queue; rearming the
 visible overlay caused repeatable JZ4780 `MISSEDMICRO` failures under combined
 hub, keyboard, and bulk traffic.
 
+The old NetBSD 3.1 scheduler selected only one complete-split microframe and
+marked that choice `XXX`. ReBSD now follows the Linux scheduler by allowing
+three complete-split responses after the start split. The safe unlink/rearm
+ordering above keeps those later windows from seeing a newly reused fixed qTD.
+EHCI also runs a 100 ms periodic watchdog which rescans completed qTDs without
+waiting for another controller interrupt. This restores the dropped-interrupt
+workaround present in NetBSD and the equivalent I/O watchdog used by Linux;
+it specifically addresses the observed case where unrelated flash activity
+made a dormant keyboard completion visible.
+
 The tested topology is a `214b:7000` four-port high-speed hub with a
 `1005:b113` high-speed flash drive and `1c4f:0002` low-speed boot keyboard.
-The final image passed repeated child and complete populated-hub reconnects on
-2026-07-15. The exact image digest and full UART capture are recorded in
-`docs/USB_TESTING.md` and `docs/CI20_USB.md`.
+The 2026-07-15 image passed repeated child and complete populated-hub
+reconnects, but later boots exposed intermittent keyboard stalls. The
+three-window split schedule, prefetch-safe publication and dropped-IOC
+watchdog fixed the cold-start stalls. A remaining disconnect race allowed the
+last unlink from the old topology to stop PSE after a new hub had already
+published its QHs. Periodic-QH count/generation accounting now rechecks that
+decision after PSS stops, while poll/watchdog provides an idempotent recovery
+path.
+
+The final 2026-07-16 image has SHA-256
+`5c88e85e1cf9b3fc02802a77054fc3682625f18c168ba8a0d0de8ac9e9c7be05`.
+Its cold-boot UART capture contains seven complete populated-hub reconnects.
+One cycle exercised the new fallback (`recovered periodic schedule with 2
+QHs`), after which `USBCMD=0x31` and both keyboard and storage remained usable.
+Exact evidence is recorded in `docs/USB_TESTING.md`, `docs/CI20_USB.md`, and
+`docs/usb-logs/ci20-ehci-periodic-recovery-verified-20260716.txt`.
