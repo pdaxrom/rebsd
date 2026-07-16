@@ -382,21 +382,34 @@ uhub_port_status(struct usb_external_hub *hub, unsigned port,
         port, status, sizeof(*status));
 }
 
-static void
+static usb_error_t
 uhub_clear_changes(struct usb_external_hub *hub, unsigned port,
     unsigned change)
 {
+    usb_error_t status;
+
     if (change & UPS_C_CONNECT_STATUS)
-        (void)uhub_port_feature(hub, port, UHF_C_PORT_CONNECTION, 0);
+        if ((status = uhub_port_feature(hub, port,
+            UHF_C_PORT_CONNECTION, 0)) != USB_STATUS_NORMAL_COMPLETION)
+            return status;
     if (change & UPS_C_PORT_ENABLED)
-        (void)uhub_port_feature(hub, port, UHF_C_PORT_ENABLE, 0);
+        if ((status = uhub_port_feature(hub, port,
+            UHF_C_PORT_ENABLE, 0)) != USB_STATUS_NORMAL_COMPLETION)
+            return status;
     if (change & UPS_C_SUSPEND)
-        (void)uhub_port_feature(hub, port, UHF_C_PORT_SUSPEND, 0);
+        if ((status = uhub_port_feature(hub, port,
+            UHF_C_PORT_SUSPEND, 0)) != USB_STATUS_NORMAL_COMPLETION)
+            return status;
     if (change & UPS_C_OVERCURRENT_INDICATOR)
-        (void)uhub_port_feature(hub, port,
-            UHF_C_PORT_OVER_CURRENT, 0);
+        if ((status = uhub_port_feature(hub, port,
+            UHF_C_PORT_OVER_CURRENT, 0)) !=
+            USB_STATUS_NORMAL_COMPLETION)
+            return status;
     if (change & UPS_C_PORT_RESET)
-        (void)uhub_port_feature(hub, port, UHF_C_PORT_RESET, 0);
+        if ((status = uhub_port_feature(hub, port,
+            UHF_C_PORT_RESET, 0)) != USB_STATUS_NORMAL_COMPLETION)
+            return status;
+    return USB_STATUS_NORMAL_COMPLETION;
 }
 
 static usb_error_t
@@ -466,7 +479,7 @@ uhub_arm_interrupt(struct usb_external_hub *hub)
     return status;
 }
 
-static void
+static usb_error_t
 uhub_explore_port(struct usb_external_hub *hub, unsigned port)
 {
     struct usb_external_hub_port *hub_port;
@@ -484,7 +497,7 @@ uhub_explore_port(struct usb_external_hub *hub, unsigned port)
         if (status != USB_STATUS_NORMAL_COMPLETION) {
             printf("uhub%u: port%u status failed: %s\n", hub->ueh_unit,
                 port, usb_status_string(status));
-            return;
+            return status;
         }
         flags = UGETW(port_status.wPortStatus);
         change = UGETW(port_status.wPortChange);
@@ -502,7 +515,9 @@ uhub_explore_port(struct usb_external_hub *hub, unsigned port)
             printf("uhub%u: port%u device disconnected\n",
                 hub->ueh_unit, port);
         }
-        uhub_clear_changes(hub, port, change);
+        status = uhub_clear_changes(hub, port, change);
+        if (status != USB_STATUS_NORMAL_COMPLETION)
+            return status;
         if ((change & UPS_C_CONNECT_STATUS) == 0)
             break;
 
@@ -520,31 +535,32 @@ uhub_explore_port(struct usb_external_hub *hub, unsigned port)
     if (retry > UHUB_CONNECT_RETRIES) {
         printf("uhub%u: port%u connection did not stabilize\n",
             hub->ueh_unit, port);
-        return;
+        return USB_STATUS_NORMAL_COMPLETION;
     }
     if ((flags & UPS_CURRENT_CONNECT_STATUS) == 0 ||
         hub_port->uep_device != 0)
-        return;
+        return USB_STATUS_NORMAL_COMPLETION;
 
     if (hub->ueh_device->ud_bus->ub_delay_ms != 0)
         hub->ueh_device->ud_bus->ub_delay_ms(
             hub->ueh_device->ud_bus->ub_delay_arg, UHUB_DEBOUNCE_MS);
     status = uhub_port_status(hub, port, &port_status);
     if (status != USB_STATUS_NORMAL_COMPLETION)
-        return;
+        return status;
     flags = UGETW(port_status.wPortStatus);
     if ((flags & UPS_CURRENT_CONNECT_STATUS) == 0)
-        return;
+        return USB_STATUS_NORMAL_COMPLETION;
     status = uhub_reset_port(hub, port, &port_status);
     if (status != USB_STATUS_NORMAL_COMPLETION) {
         printf("uhub%u: port%u reset failed: %s\n", hub->ueh_unit,
             port, usb_status_string(status));
-        return;
+        status = uhub_port_feature(hub, port, UHF_PORT_ENABLE, 0);
+        return status;
     }
     flags = UGETW(port_status.wPortStatus);
     if ((flags & UPS_CURRENT_CONNECT_STATUS) == 0 ||
         (flags & UPS_PORT_ENABLED) == 0)
-        return;
+        return USB_STATUS_NORMAL_COMPLETION;
     speed = (flags & UPS_HIGH_SPEED) != 0 ? USB_SPEED_HIGH :
         (flags & UPS_LOW_SPEED) != 0 ? USB_SPEED_LOW : USB_SPEED_FULL;
     device = 0;
@@ -553,14 +569,15 @@ uhub_explore_port(struct usb_external_hub *hub, unsigned port)
     if (status != USB_STATUS_NORMAL_COMPLETION) {
         printf("uhub%u: port%u enumeration failed: %s\n",
             hub->ueh_unit, port, usb_status_string(status));
-        (void)uhub_port_feature(hub, port, UHF_PORT_ENABLE, 0);
-        return;
+        status = uhub_port_feature(hub, port, UHF_PORT_ENABLE, 0);
+        return status;
     }
     hub_port->uep_device = device;
     printf("uhub%u: port%u device attached speed=%s addr=%u "
         "vendor=%x product=%x\n", hub->ueh_unit, port,
         uhub_speed_name(speed), device->ud_address,
         UGETW(device->ud_desc.idVendor), UGETW(device->ud_desc.idProduct));
+    return USB_STATUS_NORMAL_COMPLETION;
 }
 
 static void
@@ -591,8 +608,18 @@ uhub_explore(void *arg)
             printf("uhub%u: interrupt stall clear failed: %s\n",
                 hub->ueh_unit, usb_status_string(status));
     }
-    for (port = 1; port <= hub->ueh_port_count; ++port)
-        uhub_explore_port(hub, port);
+    for (port = 1; port <= hub->ueh_port_count; ++port) {
+        status = uhub_explore_port(hub, port);
+        if (status != USB_STATUS_NORMAL_COMPLETION) {
+            printf("uhub%u: control path failed: %s, resetting hub\n",
+                hub->ueh_unit, usb_status_string(status));
+            hub->ueh_recover = 1;
+            if (usb_task_schedule(&hub->ueh_task) != 0)
+                printf("uhub%u: cannot schedule hub recovery\n",
+                    hub->ueh_unit);
+            return;
+        }
+    }
     /*
      * Hub change bits remain asserted until exploration clears them.  Keep
      * the interrupt transfer one-shot so a level change cannot repeatedly

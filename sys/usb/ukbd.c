@@ -52,6 +52,8 @@ struct ukbd_softc {
     struct usb_interface *uk_interface;
     struct usb_pipe *uk_pipe;
     struct usb_xfer *uk_xfer;
+    unsigned uk_errors;
+    unsigned uk_rearming;
     struct ukbd_decoder uk_decoder;
     uByte uk_report[UKBD_BOOT_REPORT_SIZE];
 };
@@ -160,17 +162,33 @@ ukbd_intr(struct usb_xfer *xfer, void *private, usb_error_t status)
     sc = (struct ukbd_softc *)private;
     if (sc == 0 || !sc->uk_used || sc->uk_dying || sc->uk_xfer != xfer)
         return;
+    if (sc->uk_rearming)
+        return;
     if (status != USB_STATUS_NORMAL_COMPLETION) {
-        if (status != USB_STATUS_CANCELLED &&
-            status != USB_STATUS_DISCONNECTED)
+        if (status == USB_STATUS_CANCELLED ||
+            status == USB_STATUS_DISCONNECTED)
+            return;
+        if (++sc->uk_errors == 1)
             printf("ukbd%u: interrupt transfer failed: %s\n",
                 sc->uk_unit, usb_status_string(status));
-        return;
+    } else {
+        sc->uk_errors = 0;
+        if (xfer->ux_actlen == UKBD_BOOT_REPORT_SIZE)
+            ukbd_decode_boot_report(&sc->uk_decoder, sc->uk_report,
+                xfer->ux_actlen, ukbd_console_emit, 0);
     }
-    if (xfer->ux_actlen == UKBD_BOOT_REPORT_SIZE)
-        ukbd_decode_boot_report(&sc->uk_decoder, sc->uk_report,
-            xfer->ux_actlen, ukbd_console_emit, 0);
+
+    /*
+     * Interrupt transfers are one-shot.  A transient host scheduling or
+     * transaction error loses one input report, but must not permanently
+     * stop the keyboard.  Submit a fresh transaction; cancelled and
+     * disconnected transfers deliberately took the return path above.
+     * Guard the call because usb_submit_xfer() may complete an immediate
+     * submission failure synchronously through this callback.
+     */
+    sc->uk_rearming = 1;
     submit_status = usb_submit_xfer(xfer);
+    sc->uk_rearming = 0;
     if (submit_status != USB_STATUS_IN_PROGRESS &&
         submit_status != USB_STATUS_NORMAL_COMPLETION)
         printf("ukbd%u: interrupt rearm failed: %s\n", sc->uk_unit,

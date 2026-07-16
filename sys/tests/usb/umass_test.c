@@ -12,7 +12,8 @@
     }                                                                   \
 } while (0)
 
-#define FAKE_SECTORS                64u
+#define FAKE_SECTORS                1024u
+#define TEST_IO_SECTORS             600u
 #define SCSI_TEST_UNIT_READY        0x00u
 #define SCSI_REQUEST_SENSE          0x03u
 #define SCSI_INQUIRY                0x12u
@@ -332,8 +333,8 @@ test_probe_and_chunked_io(void)
     struct fake_disk fake;
     struct umass_bbb bbb;
     struct umass_media media;
-    unsigned char data[20 * UMASS_SECTOR_SIZE];
-    unsigned char write_data[20 * UMASS_SECTOR_SIZE];
+    unsigned char data[TEST_IO_SECTORS * UMASS_SECTOR_SIZE];
+    unsigned char write_data[TEST_IO_SECTORS * UMASS_SECTOR_SIZE];
     unsigned cbw_count;
     unsigned i;
 
@@ -350,18 +351,20 @@ test_probe_and_chunked_io(void)
     CHECK(fake.capacity_count == 1);
     CHECK(fake.read_count == 0);
 
-    CHECK(umass_media_read(&media, 4, 20, data) == UMASS_BBB_OK);
+    CHECK(umass_media_read(&media, 4, TEST_IO_SECTORS, data) ==
+        UMASS_BBB_OK);
     CHECK(memcmp(data, fake.storage + 4 * UMASS_SECTOR_SIZE,
         sizeof(data)) == 0);
-    CHECK(fake.read_count == 2);
+    CHECK(fake.read_count == 3);
     CHECK(fake.max_read_sectors == UMASS_MAX_READ_SECTORS);
 
     for (i = 0; i < sizeof(write_data); ++i)
         write_data[i] = (unsigned char)(0xa5u ^ i);
-    CHECK(umass_media_write(&media, 8, 20, write_data) == UMASS_BBB_OK);
+    CHECK(umass_media_write(&media, 8, TEST_IO_SECTORS, write_data) ==
+        UMASS_BBB_OK);
     CHECK(memcmp(fake.storage + 8 * UMASS_SECTOR_SIZE, write_data,
         sizeof(write_data)) == 0);
-    CHECK(fake.write_count == 2);
+    CHECK(fake.write_count == 3);
     CHECK(fake.max_write_sectors == UMASS_MAX_WRITE_SECTORS);
     CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
     CHECK(fake.sync_count == 1);

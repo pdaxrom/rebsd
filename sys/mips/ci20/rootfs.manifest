@@ -287,6 +287,278 @@ bdev /dev/sd3p
 major 2
 minor 67
 
+cdev /dev/rsd0
+major 10
+minor 0
+
+cdev /dev/rsd0a
+major 10
+minor 1
+
+cdev /dev/rsd0b
+major 10
+minor 2
+
+cdev /dev/rsd0c
+major 10
+minor 3
+
+cdev /dev/rsd0d
+major 10
+minor 4
+
+cdev /dev/rsd0e
+major 10
+minor 5
+
+cdev /dev/rsd0f
+major 10
+minor 6
+
+cdev /dev/rsd0g
+major 10
+minor 7
+
+cdev /dev/rsd0h
+major 10
+minor 8
+
+cdev /dev/rsd0i
+major 10
+minor 9
+
+cdev /dev/rsd0j
+major 10
+minor 10
+
+cdev /dev/rsd0k
+major 10
+minor 11
+
+cdev /dev/rsd0l
+major 10
+minor 12
+
+cdev /dev/rsd0m
+major 10
+minor 13
+
+cdev /dev/rsd0n
+major 10
+minor 14
+
+cdev /dev/rsd0o
+major 10
+minor 15
+
+cdev /dev/rsd0p
+major 10
+minor 16
+
+cdev /dev/rsd1
+major 10
+minor 17
+
+cdev /dev/rsd1a
+major 10
+minor 18
+
+cdev /dev/rsd1b
+major 10
+minor 19
+
+cdev /dev/rsd1c
+major 10
+minor 20
+
+cdev /dev/rsd1d
+major 10
+minor 21
+
+cdev /dev/rsd1e
+major 10
+minor 22
+
+cdev /dev/rsd1f
+major 10
+minor 23
+
+cdev /dev/rsd1g
+major 10
+minor 24
+
+cdev /dev/rsd1h
+major 10
+minor 25
+
+cdev /dev/rsd1i
+major 10
+minor 26
+
+cdev /dev/rsd1j
+major 10
+minor 27
+
+cdev /dev/rsd1k
+major 10
+minor 28
+
+cdev /dev/rsd1l
+major 10
+minor 29
+
+cdev /dev/rsd1m
+major 10
+minor 30
+
+cdev /dev/rsd1n
+major 10
+minor 31
+
+cdev /dev/rsd1o
+major 10
+minor 32
+
+cdev /dev/rsd1p
+major 10
+minor 33
+
+cdev /dev/rsd2
+major 10
+minor 34
+
+cdev /dev/rsd2a
+major 10
+minor 35
+
+cdev /dev/rsd2b
+major 10
+minor 36
+
+cdev /dev/rsd2c
+major 10
+minor 37
+
+cdev /dev/rsd2d
+major 10
+minor 38
+
+cdev /dev/rsd2e
+major 10
+minor 39
+
+cdev /dev/rsd2f
+major 10
+minor 40
+
+cdev /dev/rsd2g
+major 10
+minor 41
+
+cdev /dev/rsd2h
+major 10
+minor 42
+
+cdev /dev/rsd2i
+major 10
+minor 43
+
+cdev /dev/rsd2j
+major 10
+minor 44
+
+cdev /dev/rsd2k
+major 10
+minor 45
+
+cdev /dev/rsd2l
+major 10
+minor 46
+
+cdev /dev/rsd2m
+major 10
+minor 47
+
+cdev /dev/rsd2n
+major 10
+minor 48
+
+cdev /dev/rsd2o
+major 10
+minor 49
+
+cdev /dev/rsd2p
+major 10
+minor 50
+
+cdev /dev/rsd3
+major 10
+minor 51
+
+cdev /dev/rsd3a
+major 10
+minor 52
+
+cdev /dev/rsd3b
+major 10
+minor 53
+
+cdev /dev/rsd3c
+major 10
+minor 54
+
+cdev /dev/rsd3d
+major 10
+minor 55
+
+cdev /dev/rsd3e
+major 10
+minor 56
+
+cdev /dev/rsd3f
+major 10
+minor 57
+
+cdev /dev/rsd3g
+major 10
+minor 58
+
+cdev /dev/rsd3h
+major 10
+minor 59
+
+cdev /dev/rsd3i
+major 10
+minor 60
+
+cdev /dev/rsd3j
+major 10
+minor 61
+
+cdev /dev/rsd3k
+major 10
+minor 62
+
+cdev /dev/rsd3l
+major 10
+minor 63
+
+cdev /dev/rsd3m
+major 10
+minor 64
+
+cdev /dev/rsd3n
+major 10
+minor 65
+
+cdev /dev/rsd3o
+major 10
+minor 66
+
+cdev /dev/rsd3p
+major 10
+minor 67
+
 cdev /dev/console
 major 0
 minor 0

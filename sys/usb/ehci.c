@@ -297,6 +297,30 @@ ehci_async_resume(struct ehci_softc *sc)
 }
 
 static int
+ehci_async_advance(struct ehci_softc *sc)
+{
+    unsigned int command;
+
+    command = ehci_op_read(sc, EHCI_USBCMD);
+    if ((command & EHCI_CMD_ASE) == 0)
+        return -1;
+    /*
+     * The async-advance doorbell is EHCI's synchronization primitive for
+     * reclaiming an unlinked QH while the async schedule keeps running.
+     * Clear a stale indication first, ring the doorbell, then wait until
+     * the controller has observed the new horizontal link.
+     */
+    ehci_op_write(sc, EHCI_USBSTS, EHCI_STS_IAA);
+    ehci_op_write(sc, EHCI_USBCMD,
+        (command & ~EHCI_CMD_IAAD) | EHCI_CMD_IAAD |
+        EHCI_CMD_ASE | EHCI_CMD_RS);
+    if (ehci_wait_status(sc, EHCI_STS_IAA, EHCI_STS_IAA, 100) != 0)
+        return -1;
+    ehci_op_write(sc, EHCI_USBSTS, EHCI_STS_IAA);
+    return 0;
+}
+
+static int
 ehci_periodic_pause(struct ehci_softc *sc)
 {
     unsigned int command;
@@ -351,7 +375,11 @@ ehci_hcd_start(struct usb_hcd *hcd)
         EHCI_INTR_BUFFER_OFFSET + EHCI_INTR_SLOTS * EHCI_INTR_DATA_MAX >
         EHCI_SETUP_OFFSET ||
         EHCI_SETUP_OFFSET + sizeof(usb_device_request_t) >
-        EHCI_DATA_OFFSET)
+        EHCI_DATA_OFFSET ||
+        EHCI_CONTROL_DATA_MAX > EHCI_BULK_DATA_MAX ||
+        EHCI_BULK_QTD_BYTES > EHCI_PAGE_SIZE * EHCI_QTD_NBUFFERS ||
+        EHCI_BULK_DATA_MAX > EHCI_QTD_COUNT * EHCI_BULK_QTD_BYTES ||
+        EHCI_DATA_OFFSET + EHCI_BULK_DATA_MAX > EHCI_SCHEDULE_BYTES)
         return USB_STATUS_INVALID;
 
     capability = ehci_read(sc, EHCI_CAPLENGTH);
@@ -1162,7 +1190,8 @@ ehci_submit_control(struct ehci_softc *sc, struct ehci_pipe *epipe,
     unsigned int data_next;
     unsigned data_in;
 
-    if (!xfer->ux_is_control || xfer->ux_length > EHCI_DATA_MAX ||
+    if (!xfer->ux_is_control ||
+        xfer->ux_length > EHCI_CONTROL_DATA_MAX ||
         UGETW(xfer->ux_request.wLength) != xfer->ux_length ||
         (xfer->ux_length != 0 && xfer->ux_buffer == 0))
         return USB_STATUS_INVALID;
@@ -1200,6 +1229,10 @@ ehci_submit_control(struct ehci_softc *sc, struct ehci_pipe *epipe,
     ehci_zero(&sc->eh_qtds[3], sizeof(sc->eh_qtds[3]));
     ehci_qh_init(sc, epipe, xfer, setup_phys);
     sc->eh_active_qtds = 3;
+    sc->eh_active_qtd_length[0] = sizeof(xfer->ux_request);
+    sc->eh_active_qtd_length[1] = (unsigned)xfer->ux_length;
+    sc->eh_active_qtd_length[2] = 0;
+    sc->eh_active_qtd_length[3] = 0;
     sc->eh_active_control = 1;
     sc->eh_active_data_in = data_in;
     return USB_STATUS_NORMAL_COMPLETION;
@@ -1210,24 +1243,55 @@ ehci_submit_bulk(struct ehci_softc *sc, struct ehci_pipe *epipe,
     struct usb_xfer *xfer)
 {
     struct usb_endpoint *endpoint;
-    unsigned int qtd_phys;
+    unsigned int first_qtd_phys;
+    unsigned int next_qtd_phys;
+    unsigned int max_packet;
+    unsigned int packets;
+    unsigned int chunk;
+    unsigned int offset;
+    unsigned int qtd_count;
+    unsigned int toggle;
     unsigned data_in;
+    unsigned i;
 
     endpoint = xfer->ux_pipe->up_endpoint;
-    if (xfer->ux_is_control || xfer->ux_length > EHCI_DATA_MAX ||
+    if (xfer->ux_is_control || xfer->ux_length > EHCI_BULK_DATA_MAX ||
         (xfer->ux_length != 0 && xfer->ux_buffer == 0))
+        return USB_STATUS_INVALID;
+    max_packet = UGETW(endpoint->ue_desc.wMaxPacketSize) & 0x07ffu;
+    if (max_packet == 0)
         return USB_STATUS_INVALID;
     data_in = UE_GET_DIR(endpoint->ue_desc.bEndpointAddress) == UE_DIR_IN;
     if (xfer->ux_length != 0 && !data_in)
         ehci_copy(sc->eh_data_buffer, xfer->ux_buffer, xfer->ux_length);
-    qtd_phys = ehci_phys(sc, &sc->eh_qtds[0]);
-    ehci_qtd_init(sc, &sc->eh_qtds[0],
-        data_in ? EHCI_QTD_PID_IN : EHCI_QTD_PID_OUT,
-        epipe->ep_toggle, sc->eh_data_buffer, (unsigned)xfer->ux_length,
-        EHCI_LINK_TERMINATE, EHCI_LINK_TERMINATE, 1);
-    ehci_zero(&sc->eh_qtds[1], sizeof(sc->eh_qtds[1]) * 3u);
-    ehci_qh_init(sc, epipe, xfer, qtd_phys);
-    sc->eh_active_qtds = 1;
+    qtd_count = xfer->ux_length == 0 ? 1u :
+        ((unsigned)xfer->ux_length + EHCI_BULK_QTD_BYTES - 1u) /
+        EHCI_BULK_QTD_BYTES;
+    first_qtd_phys = ehci_phys(sc, &sc->eh_qtds[0]);
+    toggle = epipe->ep_toggle;
+    offset = 0;
+    for (i = 0; i < qtd_count; ++i) {
+        chunk = (unsigned)xfer->ux_length - offset;
+        if (chunk > EHCI_BULK_QTD_BYTES)
+            chunk = EHCI_BULK_QTD_BYTES;
+        next_qtd_phys = i + 1u < qtd_count ?
+            ehci_phys(sc, &sc->eh_qtds[i + 1u]) : EHCI_LINK_TERMINATE;
+        ehci_qtd_init(sc, &sc->eh_qtds[i],
+            data_in ? EHCI_QTD_PID_IN : EHCI_QTD_PID_OUT,
+            toggle, sc->eh_data_buffer + offset, chunk,
+            next_qtd_phys, EHCI_LINK_TERMINATE, i + 1u == qtd_count);
+        sc->eh_active_qtd_length[i] = chunk;
+        packets = chunk == 0 ? 1u :
+            (chunk + max_packet - 1u) / max_packet;
+        toggle ^= packets & 1u;
+        offset += chunk;
+    }
+    for (; i < EHCI_QTD_COUNT; ++i) {
+        ehci_zero(&sc->eh_qtds[i], sizeof(sc->eh_qtds[i]));
+        sc->eh_active_qtd_length[i] = 0;
+    }
+    ehci_qh_init(sc, epipe, xfer, first_qtd_phys);
+    sc->eh_active_qtds = qtd_count;
     sc->eh_active_control = 0;
     sc->eh_active_data_in = data_in;
     return USB_STATUS_NORMAL_COMPLETION;
@@ -1240,6 +1304,7 @@ ehci_hcd_submit_xfer(struct usb_xfer *xfer)
     struct ehci_pipe *epipe;
     unsigned int qh_phys;
     unsigned type;
+    unsigned i;
     usb_error_t status;
 
     sc = (struct ehci_softc *)xfer->ux_device->ud_bus->ub_hcd->uh_softc;
@@ -1254,16 +1319,12 @@ ehci_hcd_submit_xfer(struct usb_xfer *xfer)
         return USB_STATUS_UNSUPPORTED;
     if (sc->eh_active_xfer != 0)
         return USB_STATUS_NO_MEMORY;
-    if (ehci_async_pause(sc) != 0)
-        return USB_STATUS_TIMEOUT;
     if (type == UE_CONTROL)
         status = ehci_submit_control(sc, epipe, xfer);
     else
         status = ehci_submit_bulk(sc, epipe, xfer);
-    if (status != USB_STATUS_NORMAL_COMPLETION) {
-        ehci_async_resume(sc);
+    if (status != USB_STATUS_NORMAL_COMPLETION)
         return status;
-    }
     sc->eh_active_xfer = xfer;
     sc->eh_active_pipe = epipe;
     epipe->ep_xacterrs = 0;
@@ -1271,9 +1332,8 @@ ehci_hcd_submit_xfer(struct usb_xfer *xfer)
     sc->eh_last_qh_phys = ehci_phys(sc, epipe->ep_qh);
     sc->eh_last_qtd_phys = ehci_phys(sc, &sc->eh_qtds[0]);
     sc->eh_last_qh_status = 0;
-    sc->eh_last_qtd_status[0] = 0;
-    sc->eh_last_qtd_status[1] = 0;
-    sc->eh_last_qtd_status[2] = 0;
+    for (i = 0; i < EHCI_QTD_COUNT; ++i)
+        sc->eh_last_qtd_status[i] = 0;
     qh_phys = ehci_phys(sc, epipe->ep_qh);
     sc->eh_async_head->qh_link = ehci_to_le32(qh_phys | EHCI_LINK_QH);
     ehci_op_write(sc, EHCI_USBSTS, EHCI_STS_INT | EHCI_STS_ERRINT);
@@ -1283,7 +1343,6 @@ ehci_hcd_submit_xfer(struct usb_xfer *xfer)
             ehci_phys(sc, sc->eh_async_head) | EHCI_LINK_QH);
         sc->eh_active_xfer = 0;
         sc->eh_active_pipe = 0;
-        ehci_async_resume(sc);
         return USB_STATUS_IO_ERROR;
     }
     ehci_async_resume(sc);
@@ -1363,13 +1422,22 @@ static void
 ehci_unlink_active(struct ehci_softc *sc)
 {
     unsigned int head_phys;
+    int paused;
 
-    if (ehci_async_pause(sc) != 0) {
-        ehci_op_write(sc, EHCI_USBCMD, 0);
-        ehci_delay(sc, 1);
-    }
     head_phys = ehci_phys(sc, sc->eh_async_head);
     sc->eh_async_head->qh_link = ehci_to_le32(head_phys | EHCI_LINK_QH);
+    paused = 0;
+    if (dma_sync_for_device(&sc->eh_schedule_dma,
+        ehci_dma_offset(sc, &sc->eh_async_head->qh_link),
+        sizeof(sc->eh_async_head->qh_link), DMA_BIDIRECTIONAL) != 0 ||
+        ehci_async_advance(sc) != 0) {
+        /* Preserve the old stop-the-schedule path as a recovery fallback. */
+        if (ehci_async_pause(sc) != 0) {
+            ehci_op_write(sc, EHCI_USBCMD, 0);
+            ehci_delay(sc, 1);
+        }
+        paused = 1;
+    }
     if (sc->eh_active_pipe != 0 && sc->eh_active_pipe->ep_qh != 0)
         ehci_qh_idle(sc->eh_active_pipe->ep_qh);
     (void)dma_sync_for_device(&sc->eh_schedule_dma, 0,
@@ -1377,10 +1445,13 @@ ehci_unlink_active(struct ehci_softc *sc)
     sc->eh_active_xfer = 0;
     sc->eh_active_pipe = 0;
     sc->eh_active_qtds = 0;
+    ehci_zero(sc->eh_active_qtd_length,
+        sizeof(sc->eh_active_qtd_length));
     sc->eh_active_length = 0;
     sc->eh_active_data_in = 0;
     sc->eh_active_control = 0;
-    ehci_async_resume(sc);
+    if (paused)
+        ehci_async_resume(sc);
 }
 
 static void
@@ -1411,7 +1482,7 @@ ehci_complete_active(struct ehci_softc *sc, usb_error_t result,
             sc->eh_last_qh_status = ehci_from_le32(
                 sc->eh_active_pipe->ep_qh->qh_qtd.qtd_status);
         }
-        for (i = 0; i < 3; ++i) {
+        for (i = 0; i < EHCI_QTD_COUNT; ++i) {
             sc->eh_last_qtd_next[i] = ehci_from_le32(
                 sc->eh_qtds[i].qtd_next);
             sc->eh_last_qtd_altnext[i] = ehci_from_le32(
@@ -1485,7 +1556,9 @@ ehci_poll_active(struct ehci_softc *sc)
     unsigned int token;
     unsigned max_packet;
     unsigned packets;
+    unsigned planned;
     unsigned remaining;
+    unsigned i;
     size_t actlen;
     usb_error_t result;
 
@@ -1493,14 +1566,14 @@ ehci_poll_active(struct ehci_softc *sc)
     epipe = sc->eh_active_pipe;
     if (xfer == 0 || epipe == 0)
         return;
-    token = ehci_from_le32(sc->eh_qtds[0].qtd_status);
-    if (ehci_retry_xacterr(sc, epipe, &sc->eh_qtds[0], token))
-        return;
-    result = ehci_qtd_result(token);
-    if (result == USB_STATUS_IN_PROGRESS)
-        return;
     actlen = 0;
     if (sc->eh_active_control) {
+        token = ehci_from_le32(sc->eh_qtds[0].qtd_status);
+        if (ehci_retry_xacterr(sc, epipe, &sc->eh_qtds[0], token))
+            return;
+        result = ehci_qtd_result(token);
+        if (result == USB_STATUS_IN_PROGRESS)
+            return;
         if (result == USB_STATUS_NORMAL_COMPLETION &&
             sc->eh_active_length != 0) {
             token = ehci_from_le32(sc->eh_qtds[1].qtd_status);
@@ -1524,12 +1597,24 @@ ehci_poll_active(struct ehci_softc *sc)
                 return;
         }
     } else {
-        token = ehci_from_le32(sc->eh_qtds[0].qtd_status);
-        remaining = EHCI_QTD_GET_BYTES(token);
-        if (remaining > sc->eh_active_length)
-            result = USB_STATUS_IO_ERROR;
-        else
-            actlen = sc->eh_active_length - remaining;
+        result = USB_STATUS_NORMAL_COMPLETION;
+        for (i = 0; i < sc->eh_active_qtds; ++i) {
+            token = ehci_from_le32(sc->eh_qtds[i].qtd_status);
+            if (ehci_retry_xacterr(sc, epipe, &sc->eh_qtds[i], token))
+                return;
+            result = ehci_qtd_result(token);
+            if (result == USB_STATUS_IN_PROGRESS)
+                return;
+            planned = sc->eh_active_qtd_length[i];
+            remaining = EHCI_QTD_GET_BYTES(token);
+            if (remaining > planned) {
+                result = USB_STATUS_IO_ERROR;
+                break;
+            }
+            actlen += planned - remaining;
+            if (result != USB_STATUS_NORMAL_COMPLETION || remaining != 0)
+                break;
+        }
         if (result == USB_STATUS_NORMAL_COMPLETION) {
             max_packet = UGETW(xfer->ux_pipe->up_endpoint->
                 ue_desc.wMaxPacketSize) & 0x07ffu;

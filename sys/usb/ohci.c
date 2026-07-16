@@ -730,9 +730,12 @@ ohci_poll_interrupt(struct ohci_softc *sc)
         ohci_program_intr_table(sc, 0, 1);
         /*
          * WDH can precede the root-port status change on real hardware.
-         * Quiesce both sources and queue a process-context port probe
-         * immediately.  If RHSC arrives later it remains pending until
-         * the probe reenables the root source.
+         * Quiesce both sources before completing the transfer and queue a
+         * process-context port probe immediately.  A class driver may arm
+         * a fresh transfer from its completion callback; the deferred root
+         * probe will abort it if the port actually disconnected.  If RHSC
+         * arrives later it remains pending until the probe reenables the
+         * root source.
          */
         ohci_write(sc, OHCI_INTERRUPT_DISABLE,
             OHCI_WDH | OHCI_RHSC | OHCI_MIE);

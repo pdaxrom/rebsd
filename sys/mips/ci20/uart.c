@@ -61,8 +61,16 @@ static unsigned ci20_ohci_irqs_since_tick;
 #ifdef EHCI_ENABLED
 extern int ci20_ehci_intr(void);
 extern void ci20_ehci_irq_storm(void);
-static unsigned ci20_ehci_irqs_since_tick;
+/*
+ * Count consecutive dispatches which fail to lower the EHCI interrupt
+ * line.  This must not be reset by the clock interrupt: an expensive EHCI
+ * handler can span a clock tick and would then evade a per-tick budget
+ * forever, starving UART and all process execution.
+ */
+#define CI20_EHCI_STUCK_IRQ_LIMIT 32
+static unsigned ci20_ehci_stuck_irqs;
 static unsigned ci20_ehci_irq_quarantined;
+static unsigned ci20_ehci_irq_storm_reported;
 #endif
 #ifdef INET
 extern int netisr;
@@ -428,7 +436,6 @@ mips_board_intr(int *frame, unsigned status)
         ci20_ohci_irqs_since_tick = 0;
 #endif
 #ifdef EHCI_ENABLED
-        ci20_ehci_irqs_since_tick = 0;
         if (ci20_ehci_irq_quarantined) {
             ci20_ehci_irq_quarantined = 0;
             intc_unmask(CI20_EHCI_IRQ);
@@ -436,13 +443,35 @@ mips_board_intr(int *frame, unsigned status)
 #endif
     }
 #ifdef EHCI_ENABLED
+    /*
+     * Drain UART before the USB handlers: EHCI completion callbacks may do
+     * bounded waits, while UART has a small hardware FIFO and is also the
+     * only useful diagnostic path when a USB controller misbehaves.
+     */
+    if (intc_pending(CI20_UART4_IRQ))
+        ci20_uart_intr();
+#endif
+#ifdef EHCI_ENABLED
     if (intc_pending(CI20_EHCI_IRQ)) {
-        if (++ci20_ehci_irqs_since_tick > 32) {
+        (void)ci20_ehci_intr();
+        if (intc_pending(CI20_EHCI_IRQ)) {
+            if (ci20_ehci_stuck_irqs < CI20_EHCI_STUCK_IRQ_LIMIT)
+                ci20_ehci_stuck_irqs++;
+        } else {
+            ci20_ehci_stuck_irqs = 0;
+            ci20_ehci_irq_storm_reported = 0;
+        }
+        if (ci20_ehci_stuck_irqs >= CI20_EHCI_STUCK_IRQ_LIMIT) {
             intc_mask(CI20_EHCI_IRQ);
             ci20_ehci_irq_quarantined = 1;
-            ci20_ehci_irq_storm();
-        } else
-            (void)ci20_ehci_intr();
+            if (!ci20_ehci_irq_storm_reported) {
+                ci20_ehci_irq_storm_reported = 1;
+                ci20_ehci_irq_storm();
+            }
+        }
+    } else if (!ci20_ehci_irq_quarantined) {
+        ci20_ehci_stuck_irqs = 0;
+        ci20_ehci_irq_storm_reported = 0;
     }
 #endif
 #ifdef OHCI_ENABLED
@@ -462,8 +491,11 @@ mips_board_intr(int *frame, unsigned status)
 #endif
     }
 #endif
+    /* Without EHCI this is still the primary UART interrupt dispatch. */
+#ifndef EHCI_ENABLED
     if (intc_pending(CI20_UART4_IRQ))
         ci20_uart_intr();
+#endif
 }
 
 int

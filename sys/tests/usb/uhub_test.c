@@ -364,8 +364,23 @@ test_external_hub_error_recovery(void)
     CHECK(child != 0 && external_attach_count == 2 &&
         external_detach_count == 1);
 
+    /* A failed hub-class control request must reset the direct root hub. */
+    usb_mock_hcd_fail_next(&mock, USB_STATUS_TIMEOUT);
+    CHECK(usb_mock_hcd_hub_interrupt(&mock) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(usb_task_any_pending());
+    usb_task_run_pending();
+    hub_device = usb_root_hub_device(&root_hub, 1);
+    CHECK(hub_device != 0 && hub_device->ud_address == 1 &&
+        events.attach_count == 3 && events.detach_count == 2 &&
+        usb_external_hub_count() == 1 && mock.um_root_intr_enabled &&
+        mock.um_pending_xfer != 0);
+    child = usb_external_hub_device(hub_device, 1);
+    CHECK(child != 0 && external_attach_count == 3 &&
+        external_detach_count == 2);
+
     usb_root_hub_stop(&root_hub);
-    CHECK(events.detach_count == 2 && external_detach_count == 2 &&
+    CHECK(events.detach_count == 3 && external_detach_count == 3 &&
         usb_external_hub_count() == 0);
     usb_bus_stop(&bus);
     return 0;

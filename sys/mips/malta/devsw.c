@@ -5,6 +5,7 @@
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <sys/uio.h>
+#include <disk/disk.h>
 #include <machine/devmajors.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
@@ -171,6 +172,14 @@ const struct bdevsw bdevsw[] = {
         mipsramswap_open, mipsramswap_close, mipsramswap_strategy,
         mipsramswap_size, mipsramswap_ioctl, 0,
     },
+    {
+#ifdef DISK_ENABLED
+        disk_bdev_open, disk_bdev_close, disk_bdev_strategy,
+        disk_bdev_size, disk_bdev_ioctl, 0,
+#else
+        NOBDEV
+#endif
+    },
     { 0 },
 };
 
@@ -240,7 +249,18 @@ const struct cdevsw cdevsw[] = {
         NOCDEV
 #endif
     },
-    { NOCDEV },
+    {
+#if MIPS_RDISK_MAJOR != 10
+#   error Wrong MIPS_RDISK_MAJOR value!
+#endif
+#ifdef DISK_ENABLED
+        disk_cdev_open, disk_cdev_close, disk_cdev_read, disk_cdev_write,
+        disk_cdev_ioctl, mips_nullstop, 0, mips_seltrue,
+        disk_bdev_strategy, 0, 0,
+#else
+        NOCDEV
+#endif
+    },
     {
 #if MIPS_CARTFLASH_MAJOR != 11
 #   error Wrong MIPS_CARTFLASH_MAJOR value!
@@ -257,6 +277,8 @@ const int nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]) - 1;
 dev_t
 chrtoblk(dev_t dev)
 {
+    if (major(dev) == MIPS_RDISK_MAJOR)
+        return makedev(MIPS_DISK_MAJOR, minor(dev));
     return NODEV;
 }
 
@@ -269,9 +291,12 @@ iskmemdev(dev_t dev)
 int
 isdisk(dev_t dev, int type)
 {
+    if (type == IFCHR)
+        return major(dev) == MIPS_RDISK_MAJOR;
     if (type != IFBLK)
         return 0;
 
     return major(dev) == MIPS_ROMDISK_MAJOR ||
-        major(dev) == MIPS_RAMSWAP_MAJOR;
+        major(dev) == MIPS_RAMSWAP_MAJOR ||
+        major(dev) == MIPS_DISK_MAJOR;
 }

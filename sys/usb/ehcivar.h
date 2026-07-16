@@ -43,20 +43,22 @@
 #include <usb/ehcireg.h>
 #include <usb/usbvar.h>
 
-#define EHCI_SCHEDULE_BYTES         16384u
+#define EHCI_SCHEDULE_BYTES         (136u * 1024u)
 #define EHCI_FRAME_LIST_OFFSET      0u
 #define EHCI_FRAME_LIST_COUNT       1024u
 #define EHCI_ASYNC_HEAD_OFFSET      4096u
 #define EHCI_PIPE_QH_OFFSET         4192u
 #define EHCI_QTD_OFFSET             6144u
-#define EHCI_QTD_COUNT              4u
-#define EHCI_INTR_QTD_OFFSET        6400u
+#define EHCI_QTD_COUNT              8u
+#define EHCI_INTR_QTD_OFFSET        7168u
 #define EHCI_INTR_SLOTS             4u
 #define EHCI_INTR_DATA_MAX          64u
-#define EHCI_INTR_BUFFER_OFFSET     6656u
-#define EHCI_SETUP_OFFSET           6912u
+#define EHCI_INTR_BUFFER_OFFSET     7424u
+#define EHCI_SETUP_OFFSET           7680u
 #define EHCI_DATA_OFFSET            8192u
-#define EHCI_DATA_MAX               (EHCI_SCHEDULE_BYTES - EHCI_DATA_OFFSET)
+#define EHCI_CONTROL_DATA_MAX       8192u
+#define EHCI_BULK_QTD_BYTES         (16u * 1024u)
+#define EHCI_BULK_DATA_MAX          (EHCI_SCHEDULE_BYTES - EHCI_DATA_OFFSET)
 #define EHCI_INTR_SLOT_NONE         EHCI_INTR_SLOTS
 #define EHCI_XACTERR_RETRY_MAX      32u
 
@@ -108,6 +110,7 @@ struct ehci_softc {
     struct usb_xfer *eh_active_xfer;
     struct ehci_pipe *eh_active_pipe;
     unsigned eh_active_qtds;
+    unsigned eh_active_qtd_length[EHCI_QTD_COUNT];
     unsigned eh_active_length;
     unsigned eh_active_data_in;
     unsigned eh_active_control;
@@ -120,10 +123,10 @@ struct ehci_softc {
     unsigned eh_last_qh_next;
     unsigned eh_last_qh_altnext;
     unsigned eh_last_qh_status;
-    unsigned eh_last_qtd_next[3];
-    unsigned eh_last_qtd_altnext[3];
-    unsigned eh_last_qtd_status[3];
-    unsigned eh_last_qtd_buffer[3];
+    unsigned eh_last_qtd_next[EHCI_QTD_COUNT];
+    unsigned eh_last_qtd_altnext[EHCI_QTD_COUNT];
+    unsigned eh_last_qtd_status[EHCI_QTD_COUNT];
+    unsigned eh_last_qtd_buffer[EHCI_QTD_COUNT];
     uByte eh_last_setup[8];
     usb_device_request_t eh_last_request;
     unsigned eh_last_address;

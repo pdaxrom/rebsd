@@ -17,7 +17,7 @@
 } while (0)
 
 #define FAKE_REG_WORDS             128u
-#define FAKE_POOL_SIZE             (64u * 1024u)
+#define FAKE_POOL_SIZE             (256u * 1024u)
 #define FAKE_POOL_PHYS             0x02000000u
 #define FAKE_CAP_LENGTH            0x20u
 #define FAKE_OP(reg)               ((FAKE_CAP_LENGTH + (reg)) / 4u)
@@ -57,12 +57,15 @@ struct fake_ehci {
     unsigned configuration;
     unsigned hold;
     unsigned next_halt;
-    unsigned bulk_toggle[8];
+    unsigned bulk_toggle[32];
     unsigned bulk_toggle_count;
     unsigned periodic_lists;
     unsigned periodic_status;
     unsigned periodic_starts;
     unsigned periodic_stops;
+    unsigned async_starts;
+    unsigned async_stops;
+    unsigned async_advances;
     const unsigned char *bulk_reply;
     size_t bulk_reply_length;
     unsigned char bulk_out[64];
@@ -195,37 +198,57 @@ fake_run_bulk(struct fake_ehci *fake, struct ehci_qh *qh,
     struct ehci_qtd *qtd)
 {
     unsigned char *buffer;
+    unsigned int next;
     unsigned requested;
+    unsigned transferred;
     unsigned pid;
     size_t copied;
+    size_t reply_offset;
 
-    requested = qtd_bytes(qtd);
-    pid = qtd_pid(qtd);
-    if (fake->bulk_toggle_count <
-        sizeof(fake->bulk_toggle) / sizeof(fake->bulk_toggle[0]))
-        fake->bulk_toggle[fake->bulk_toggle_count++] =
-            EHCI_QTD_GET_TOGGLE(qtd->qtd_status);
     ++fake->bulk_lists;
-    if (fake->next_halt != 0) {
-        qtd_complete(qtd, requested, fake->next_halt);
-        fake->next_halt = 0;
-        fake->regs[FAKE_OP(EHCI_USBSTS)] |= EHCI_STS_ERRINT;
-        return;
-    }
-    buffer = requested == 0 ? 0 : phys_to_ptr(qtd->qtd_buffer[0]);
-    if (requested != 0 && buffer == 0)
-        return;
-    if (pid == EHCI_QTD_PID_IN) {
-        copied = minimum(requested, fake->bulk_reply_length);
-        if (copied != 0)
-            memcpy(buffer, fake->bulk_reply, copied);
-        qtd_complete(qtd, requested - (unsigned)copied, 0);
-    } else {
-        copied = minimum(requested, sizeof(fake->bulk_out));
-        if (copied != 0)
-            memcpy(fake->bulk_out, buffer, copied);
-        fake->bulk_out_length = copied;
-        qtd_complete(qtd, requested - (unsigned)copied, 0);
+    reply_offset = 0;
+    fake->bulk_out_length = 0;
+    for (;;) {
+        requested = qtd_bytes(qtd);
+        pid = qtd_pid(qtd);
+        if (fake->bulk_toggle_count <
+            sizeof(fake->bulk_toggle) / sizeof(fake->bulk_toggle[0]))
+            fake->bulk_toggle[fake->bulk_toggle_count++] =
+                EHCI_QTD_GET_TOGGLE(qtd->qtd_status);
+        if (fake->next_halt != 0) {
+            qtd_complete(qtd, requested, fake->next_halt);
+            fake->next_halt = 0;
+            fake->regs[FAKE_OP(EHCI_USBSTS)] |= EHCI_STS_ERRINT;
+            return;
+        }
+        buffer = requested == 0 ? 0 : phys_to_ptr(qtd->qtd_buffer[0]);
+        if (requested != 0 && buffer == 0)
+            return;
+        if (pid == EHCI_QTD_PID_IN) {
+            copied = reply_offset < fake->bulk_reply_length ?
+                minimum(requested,
+                fake->bulk_reply_length - reply_offset) : 0;
+            if (copied != 0)
+                memcpy(buffer, fake->bulk_reply + reply_offset, copied);
+            transferred = (unsigned)copied;
+            reply_offset += copied;
+        } else {
+            copied = minimum(requested,
+                sizeof(fake->bulk_out) - fake->bulk_out_length);
+            if (copied != 0)
+                memcpy(fake->bulk_out + fake->bulk_out_length, buffer,
+                    copied);
+            fake->bulk_out_length += copied;
+            transferred = requested;
+        }
+        next = qtd->qtd_next;
+        qtd_complete(qtd, requested - transferred, 0);
+        if (transferred != requested ||
+            (next & EHCI_LINK_TERMINATE) != 0)
+            break;
+        qtd = phys_to_ptr(EHCI_LINK_ADDR(next));
+        if (qtd == 0 || (qtd->qtd_status & EHCI_QTD_ACTIVE) == 0)
+            return;
     }
     qh->qh_qtd.qtd_next = EHCI_LINK_TERMINATE;
     fake->regs[FAKE_OP(EHCI_USBSTS)] |= EHCI_STS_INT;
@@ -318,6 +341,11 @@ fake_read(void *arg, unsigned reg)
     struct fake_ehci *fake;
 
     fake = arg;
+    if (reg == FAKE_CAP_LENGTH + EHCI_USBSTS &&
+        (fake->regs[FAKE_OP(EHCI_USBCMD)] &
+        (EHCI_CMD_RS | EHCI_CMD_ASE)) ==
+        (EHCI_CMD_RS | EHCI_CMD_ASE))
+        fake_run_async(fake);
     return fake->regs[reg / 4u];
 }
 
@@ -362,6 +390,12 @@ fake_write(void *arg, unsigned reg, unsigned int value)
     fake = arg;
     status = &fake->regs[FAKE_OP(EHCI_USBSTS)];
     if (reg == FAKE_CAP_LENGTH + EHCI_USBCMD) {
+        if ((fake->regs[reg / 4u] & EHCI_CMD_ASE) == 0 &&
+            (value & EHCI_CMD_ASE) != 0)
+            ++fake->async_starts;
+        else if ((fake->regs[reg / 4u] & EHCI_CMD_ASE) != 0 &&
+            (value & EHCI_CMD_ASE) == 0)
+            ++fake->async_stops;
         if ((fake->regs[reg / 4u] & EHCI_CMD_PSE) == 0 &&
             (value & EHCI_CMD_PSE) != 0)
             ++fake->periodic_starts;
@@ -372,6 +406,11 @@ fake_write(void *arg, unsigned reg, unsigned int value)
             fake->regs[reg / 4u] = 0;
             *status |= EHCI_STS_HCH;
             return;
+        }
+        if (value & EHCI_CMD_IAAD) {
+            ++fake->async_advances;
+            *status |= EHCI_STS_IAA;
+            value &= ~EHCI_CMD_IAAD;
         }
         fake->regs[reg / 4u] = value;
         if (value & EHCI_CMD_RS)
@@ -526,6 +565,8 @@ test_high_speed_enumeration_and_bulk(void)
 {
     static const unsigned char reply1[] = { 'h', 'e', 'l', 'l', 'o' };
     static const unsigned char reply2[] = { 'o', 'k' };
+    static unsigned char large_reply[EHCI_BULK_DATA_MAX];
+    static unsigned char large_buffer[EHCI_BULK_DATA_MAX];
     struct fake_ehci fake;
     struct ehci_softc ehci;
     struct usb_root_hub hub;
@@ -541,6 +582,7 @@ test_high_speed_enumeration_and_bulk(void)
     struct hub_events events;
     struct xfer_events busy_events;
     unsigned char buffer[5];
+    unsigned i;
     size_t actlen;
     usb_error_t start_status;
 
@@ -573,6 +615,8 @@ test_high_speed_enumeration_and_bulk(void)
         USB_PORT_RESET_RECOVERY);
     CHECK(fake.post_address_control_at - fake.set_address_at >=
         USB_SET_ADDRESS_SETTLE);
+    CHECK(fake.async_starts == 1 && fake.async_stops == 0 &&
+        fake.async_advances == fake.control_lists);
     CHECK(events.attached == 1 && events.errors == 0);
     CHECK((fake.regs[FAKE_PORT] & (EHCI_PS_PE | EHCI_PS_PO)) == EHCI_PS_PE);
 
@@ -611,6 +655,35 @@ test_high_speed_enumeration_and_bulk(void)
     CHECK(memcmp(buffer, reply2, sizeof(reply2)) == 0);
     CHECK(fake.bulk_toggle_count == 2 && fake.bulk_toggle[1] == 1 &&
         epipe->ep_toggle == 0);
+
+    for (i = 0; i < sizeof(large_reply); ++i)
+        large_reply[i] = (unsigned char)(i ^ (i >> 8));
+    memset(large_buffer, 0, sizeof(large_buffer));
+    fake.bulk_reply = large_reply;
+    fake.bulk_reply_length = sizeof(large_reply);
+    actlen = 0;
+    CHECK(usb_bulk_transfer(in_pipe, large_buffer, sizeof(large_buffer),
+        0, 100, &actlen) == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(actlen == sizeof(large_buffer));
+    CHECK(memcmp(large_buffer, large_reply, sizeof(large_buffer)) == 0);
+    CHECK(fake.bulk_toggle_count == 2u + EHCI_QTD_COUNT);
+    for (i = 2; i < 2u + EHCI_QTD_COUNT; ++i)
+        CHECK(fake.bulk_toggle[i] == 0);
+    CHECK(epipe->ep_toggle == 0);
+    CHECK(fake.async_stops == 0);
+
+    memset(large_buffer, 0, sizeof(large_buffer));
+    fake.bulk_reply_length = EHCI_BULK_QTD_BYTES + 7u;
+    actlen = 0;
+    CHECK(usb_bulk_transfer(in_pipe, large_buffer, sizeof(large_buffer),
+        USB_XFER_SHORT_OK, 100, &actlen) ==
+        USB_STATUS_NORMAL_COMPLETION);
+    CHECK(actlen == EHCI_BULK_QTD_BYTES + 7u);
+    CHECK(memcmp(large_buffer, large_reply, actlen) == 0);
+    CHECK(fake.bulk_toggle_count == 4u + EHCI_QTD_COUNT &&
+        fake.bulk_toggle[2u + EHCI_QTD_COUNT] == 0 &&
+        fake.bulk_toggle[3u + EHCI_QTD_COUNT] == 0 &&
+        epipe->ep_toggle == 1);
 
     fake.next_halt = EHCI_QTD_HALTED;
     usb_setup_xfer(xfer, in_pipe, 0, buffer, 1, 0, 100, 0);

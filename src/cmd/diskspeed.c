@@ -23,7 +23,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-#define MAX_BLOCK_SZ    64      /* kbytes */
+#define MAX_BLOCK_SZ    256     /* kbytes */
 #define MAX_DATA_SZ     1024    /* Mbytes */
 
 const char version[] = "1.0";
@@ -31,7 +31,8 @@ const char copyright[] = "Copyright (C) 2015 Serge Vakulenko";
 
 char *progname;
 int verbose;
-char block[MAX_BLOCK_SZ*1024];
+int readonly;
+char *block;
 
 /*
  * Get current time in microseconds.
@@ -61,9 +62,10 @@ void usage()
 {
     fprintf(stderr, "Disk speed test, Version %s, %s\n", version, copyright);
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "    %s [-v] [-b blocksz] [-m datasz] [filename]\n", progname);
+    fprintf(stderr, "    %s [-v] [-r] [-b blocksz] [-m datasz] [filename]\n", progname);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "    -v    verbose mode\n");
+    fprintf(stderr, "    -r    read-only benchmark; never create or write a file\n");
     fprintf(stderr, "    -b #  block size in kbytes, default 4\n");
     fprintf(stderr, "    -m #  data size in Mbytes, default 8\n");
     exit(-1);
@@ -79,11 +81,14 @@ int main(int argc, char **argv)
 
     progname = *argv;
     for (;;) {
-        switch (getopt(argc, argv, "vb:m:")) {
+        switch (getopt(argc, argv, "vrb:m:")) {
         case EOF:
             break;
         case 'v':
             ++verbose;
+            continue;
+        case 'r':
+            ++readonly;
             continue;
         case 'b':
             blocksize_kbytes = strtol(optarg, 0, 0);
@@ -104,6 +109,8 @@ int main(int argc, char **argv)
 
     if (argc == 1)
         filename = argv[0];
+    else if (readonly)
+        filename = "/dev/rsd0";
 
     /*
      * Verify parameters.
@@ -122,7 +129,7 @@ int main(int argc, char **argv)
         printf("File name: %s\n", filename);
     else
         filename = "diskspeed.data";
-    if (access(filename, 0) >= 0) {
+    if (!readonly && access(filename, 0) >= 0) {
         fprintf(stderr, "File '%s' already exists: cannot overwrite.\n",
             filename);
         fprintf(stderr, "Please, delete the file manually.\n");
@@ -130,52 +137,70 @@ int main(int argc, char **argv)
     }
     printf("Testing %d-kbyte block size.\n", blocksize_kbytes);
 
+    nbytes = blocksize_kbytes * 1024;
+    block = malloc((size_t)nbytes);
+    if (block == 0) {
+        fprintf(stderr, "Cannot allocate %d-kbyte I/O buffer.\n",
+            blocksize_kbytes);
+        exit(-1);
+    }
+
     /*
-     * Fill buffer with some data.
+     * Fill only the requested buffer, keeping the program's static data
+     * size independent of the largest supported benchmark block.
      */
-    for (n=0; n<sizeof(block); n++) {
+    for (n=0; n<nbytes; n++) {
         block[n] = ~n;
     }
 
     /*
      * Open the file.
      */
-    fd = open(filename, O_RDWR | O_CREAT, 0664);
+    if (readonly)
+        fd = open(filename, O_RDONLY);
+    else
+        fd = open(filename, O_RDWR | O_CREAT, 0664);
     if (fd < 0) {
-        fprintf(stderr, "Cannot create file '%s'.\n", filename);
+        fprintf(stderr, "Cannot open file '%s'.\n", filename);
         exit(-1);
     }
-    if (verbose)
+    if (verbose && !readonly)
         printf("Created file '%s'.\n", filename);
 
     /*
      * Write data to file.
      */
-    sync();
-    usleep(200000);
-    sync();
-    usleep(200000);
-    t0 = current_msec();
-    nbytes = blocksize_kbytes * 1024;
-    for (n=0; n<datasize_mbytes*1024/blocksize_kbytes; n++) {
-        if (write(fd, block, nbytes) != nbytes) {
-            fprintf(stderr, "Write error at block %d.\n", n);
-            exit(-1);
+    if (!readonly) {
+        sync();
+        usleep(200000);
+        sync();
+        usleep(200000);
+        t0 = current_msec();
+        for (n=0; n<datasize_mbytes*1024/blocksize_kbytes; n++) {
+            if (write(fd, block, nbytes) != nbytes) {
+                fprintf(stderr, "Write error at block %d.\n", n);
+                exit(-1);
+            }
         }
+        msec = elapsed_msec(t0);
+        printf ("Write speed: %u Mbytes in %u.%03u seconds = %u kbytes/sec\n",
+            datasize_mbytes, msec/1000, msec%1000,
+            datasize_mbytes*1024000U / msec);
     }
-    msec = elapsed_msec(t0);
-    printf ("Write speed: %u Mbytes in %u.%03u seconds = %u kbytes/sec\n",
-        datasize_mbytes, msec/1000, msec%1000,
-        datasize_mbytes*1024000U / msec);
 
     /*
      * Read data from file.
      */
-    sync();
-    usleep(200000);
-    sync();
-    usleep(200000);
-    lseek(fd, 0, SEEK_SET);
+    if (!readonly) {
+        sync();
+        usleep(200000);
+        sync();
+        usleep(200000);
+    }
+    if (lseek(fd, 0, SEEK_SET) != 0) {
+        fprintf(stderr, "Cannot seek file '%s'.\n", filename);
+        exit(-1);
+    }
     t0 = current_msec();
     for (n=0; n<datasize_mbytes*1024/blocksize_kbytes; n++) {
         if (read(fd, block, nbytes) != nbytes) {
@@ -189,8 +214,10 @@ int main(int argc, char **argv)
         datasize_mbytes*1024000U / msec);
 
     close(fd);
-    unlink(filename);
-    if (verbose)
+    free(block);
+    if (!readonly)
+        unlink(filename);
+    if (verbose && !readonly)
         printf("File '%s' deleted.\n", filename);
     return 0;
 }

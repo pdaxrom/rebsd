@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #else
 #include <sys/param.h>
+#include <sys/conf.h>
 #endif
 #include <sys/buf.h>
 #include <sys/disk.h>
@@ -583,3 +584,35 @@ disk_bdev_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
         return EINVAL;
     }
 }
+
+#ifndef DISK_HOST_TEST
+int
+disk_cdev_open(dev_t dev, int flag, int mode)
+{
+    return disk_bdev_open(dev, flag, mode);
+}
+
+int
+disk_cdev_close(dev_t dev, int flag, int mode)
+{
+    return disk_bdev_close(dev, flag, mode);
+}
+
+int
+disk_cdev_read(dev_t dev, struct uio *uio, int flag)
+{
+    return rawrw(dev, uio, flag);
+}
+
+int
+disk_cdev_write(dev_t dev, struct uio *uio, int flag)
+{
+    return rawrw(dev, uio, flag);
+}
+
+int
+disk_cdev_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
+{
+    return disk_bdev_ioctl(dev, cmd, addr, flag);
+}
+#endif

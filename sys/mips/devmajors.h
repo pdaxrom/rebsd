@@ -6,6 +6,7 @@
 #define MIPS_DISK_MAJOR         2
 #define MIPS_PTS_MAJOR          8
 #define MIPS_PTC_MAJOR          9
+#define MIPS_RDISK_MAJOR        10
 #define MIPS_CARTFLASH_MAJOR    11
 
 #endif

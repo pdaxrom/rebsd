@@ -439,6 +439,14 @@ test_ohci_keyboard(void)
     CHECK(actlen == sizeof(descriptor) && fake.control_lists == 9);
     CHECK(ohci.oh_intr_xfer != 0);
 
+    /*
+     * A lost periodic transaction must lose at most one report.  The HID
+     * driver has to submit a fresh interrupt transfer instead of leaving
+     * an otherwise connected keyboard permanently silent.
+     */
+    CHECK(fake_fail_periodic(&fake, OHCI_CC_CRC));
+    CHECK(ohci_intr(&ohci) == 1);
+    CHECK(ohci.oh_intr_xfer != 0 && ohci.oh_intr_xfer->ux_active);
     memset(report, 0, sizeof(report));
     report[2] = 4;
     CHECK(fake_run_periodic(&fake, report, sizeof(report)));
@@ -450,13 +458,14 @@ test_ohci_keyboard(void)
     CHECK(fake_run_periodic(&fake, report, sizeof(report)));
     CHECK(ohci_intr(&ohci) == 1);
     CHECK(console_input_length == 1);
+    CHECK(ohci.oh_intr_xfer != 0);
 
     report[0] = 0x02;
     report[2] = 5;
     CHECK(fake_run_periodic(&fake, report, sizeof(report)));
     CHECK(ohci_intr(&ohci) == 1);
     CHECK(console_input_length == 2 && console_input[1] == 'B');
-    CHECK(fake.periodic_lists == 3);
+    CHECK(fake.periodic_lists == 4);
 
     usb_device_disconnect(device);
     CHECK(ohci.oh_intr_xfer == 0);
@@ -543,15 +552,17 @@ test_ohci_hotplug(void)
 
     /*
      * Real hardware can report the periodic TD error before it asserts
-     * RHSC.  The error must queue a root probe and quiesce OHCI until
-     * process context can inspect the port.
+     * RHSC.  The error must queue a root probe.  The HID class may already
+     * have armed a fresh poll; the deferred probe still owns the final
+     * decision whether the device remains connected.
      */
     CHECK(fake_fail_periodic(&fake, OHCI_CC_NOT_RESPONDING));
     CHECK(ohci_intr(&ohci) == 1);
-    CHECK(ohci.oh_intr_xfer == 0);
+    CHECK(ohci.oh_intr_xfer != 0 && ohci.oh_intr_xfer->ux_active);
     CHECK(usb_task_pending(&hub.urh_task));
     CHECK((fake.regs[OHCI_INTERRUPT_ENABLE / 4] &
-        (OHCI_WDH | OHCI_RHSC | OHCI_MIE)) == 0);
+        (OHCI_WDH | OHCI_RHSC | OHCI_MIE)) ==
+        (OHCI_WDH | OHCI_MIE));
 
     fake.regs[OHCI_RH_PORT_STATUS(1) / 4] =
         OHCI_RHPS_PPS | OHCI_RHPS_CSC;

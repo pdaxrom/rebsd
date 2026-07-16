@@ -54,6 +54,7 @@
 /* Operational registers, relative to CAPLENGTH. */
 #define EHCI_USBCMD                 0x00
 #define EHCI_CMD_ITC_2              0x00020000u
+#define EHCI_CMD_IAAD               0x00000040u
 #define EHCI_CMD_ASE                0x00000020u
 #define EHCI_CMD_PSE                0x00000010u
 #define EHCI_CMD_FLS_M              0x0000000cu

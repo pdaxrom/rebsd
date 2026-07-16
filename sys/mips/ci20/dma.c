@@ -20,7 +20,7 @@
 #include <machine/layout.h>
 
 #ifndef CI20_DMA_POOL_BYTES
-#define CI20_DMA_POOL_BYTES     (64u * 1024u)
+#define CI20_DMA_POOL_BYTES     (256u * 1024u)
 #endif
 
 #define CI20_DMA_POOL_ALIGN     4096u

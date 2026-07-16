@@ -110,6 +110,7 @@ int disk_gpt_entry_parse(struct disk_partition *, const unsigned char *,
 
 #ifdef KERNEL
 struct buf;
+struct uio;
 
 int disk_attach(const struct disk_attach_args *, unsigned *);
 void disk_detach(unsigned, void *);
@@ -120,6 +121,11 @@ int disk_bdev_close(dev_t, int, int);
 void disk_bdev_strategy(struct buf *);
 daddr_t disk_bdev_size(dev_t);
 int disk_bdev_ioctl(dev_t, u_int, caddr_t, int);
+int disk_cdev_open(dev_t, int, int);
+int disk_cdev_close(dev_t, int, int);
+int disk_cdev_read(dev_t, struct uio *, int);
+int disk_cdev_write(dev_t, struct uio *, int);
+int disk_cdev_ioctl(dev_t, u_int, caddr_t, int);
 #endif
 
 #endif /* _DISK_DISK_H_ */

@@ -245,6 +245,14 @@ const struct cdevsw cdevsw[] = {
         NOCDEV
 #endif
     },
+    {
+#if MIPS_RDISK_MAJOR != 10
+#   error Wrong MIPS_RDISK_MAJOR value!
+#endif
+        disk_cdev_open, disk_cdev_close, disk_cdev_read, disk_cdev_write,
+        disk_cdev_ioctl, mips_nullstop, 0, mips_seltrue,
+        disk_bdev_strategy, 0, 0,
+    },
     { 0 },
 };
 
@@ -253,6 +261,8 @@ const int nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]) - 1;
 dev_t
 chrtoblk(dev_t dev)
 {
+    if (major(dev) == MIPS_RDISK_MAJOR)
+        return makedev(MIPS_DISK_MAJOR, minor(dev));
     return NODEV;
 }
 
@@ -265,9 +275,12 @@ iskmemdev(dev_t dev)
 int
 isdisk(dev_t dev, int type)
 {
+    if (type == IFCHR)
+        return major(dev) == MIPS_RDISK_MAJOR;
     if (type != IFBLK)
         return 0;
 
     return major(dev) == MIPS_ROMDISK_MAJOR ||
-        major(dev) == MIPS_RAMSWAP_MAJOR;
+        major(dev) == MIPS_RAMSWAP_MAJOR ||
+        major(dev) == MIPS_DISK_MAJOR;
 }
