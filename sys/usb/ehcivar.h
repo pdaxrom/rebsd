@@ -84,9 +84,6 @@ struct ehci_intr_slot {
     struct ehci_qtd *eis_qtd;
     uByte *eis_buffer;
     unsigned eis_length;
-#ifdef KERNEL
-    unsigned eis_watchdog_scans;
-#endif
 };
 
 struct ehci_softc {
@@ -145,7 +142,6 @@ struct ehci_softc {
     unsigned eh_started;
 #ifdef KERNEL
     unsigned eh_watchdog_armed;
-    unsigned eh_watchdog_reported;
 #endif
 };
 

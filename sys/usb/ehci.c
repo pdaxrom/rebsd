@@ -240,24 +240,6 @@ ehci_interrupt_xfers_active(struct ehci_softc *sc)
     return 0;
 }
 
-static int
-ehci_interrupt_completion_pending(struct ehci_softc *sc)
-{
-    struct ehci_intr_slot *slot;
-    unsigned int token;
-    unsigned i;
-
-    for (i = 0; i < EHCI_INTR_SLOTS; ++i) {
-        slot = &sc->eh_intr_slots[i];
-        if (slot->eis_xfer == 0 || slot->eis_qtd == 0)
-            continue;
-        token = ehci_from_le32(slot->eis_qtd->qtd_status);
-        if ((token & EHCI_QTD_ACTIVE) == 0)
-            return 1;
-    }
-    return 0;
-}
-
 static void
 ehci_watchdog_arm(struct ehci_softc *sc)
 {
@@ -276,46 +258,6 @@ ehci_watchdog_cancel(struct ehci_softc *sc)
     }
 }
 
-static void
-ehci_watchdog_trace_active(struct ehci_softc *sc)
-{
-    struct ehci_intr_slot *slot;
-    struct ehci_pipe *epipe;
-    struct ehci_qh *qh;
-    unsigned int frame_link;
-    unsigned int qtd_token;
-    unsigned i;
-
-    for (i = 0; i < EHCI_INTR_SLOTS; ++i) {
-        slot = &sc->eh_intr_slots[i];
-        epipe = slot->eis_pipe;
-        if (slot->eis_xfer == 0 || slot->eis_qtd == 0 || epipe == 0 ||
-            epipe->ep_qh == 0)
-            continue;
-        if (++slot->eis_watchdog_scans != 10u)
-            continue;
-        qh = epipe->ep_qh;
-        qtd_token = ehci_from_le32(slot->eis_qtd->qtd_status);
-        if ((qtd_token & EHCI_QTD_ACTIVE) == 0)
-            continue;
-        frame_link = ehci_from_le32(
-            sc->eh_frame_list[epipe->ep_intr_phase]);
-        printf("ehci: periodic active addr=%u endpoint=%x "
-            "qh=%x qtd=%x frame[%u]=%x\n",
-            slot->eis_xfer->ux_device->ud_address,
-            slot->eis_xfer->ux_pipe->up_endpoint->ue_desc.bEndpointAddress,
-            ehci_phys(sc, qh), ehci_phys(sc, slot->eis_qtd),
-            epipe->ep_intr_phase, frame_link);
-        printf("ehci: periodic state cur=%x next=%x alt=%x "
-            "qh-token=%x qtd-token=%x cmd=%x status=%x frame=%x\n",
-            ehci_from_le32(qh->qh_curqtd),
-            ehci_from_le32(qh->qh_qtd.qtd_next),
-            ehci_from_le32(qh->qh_qtd.qtd_altnext),
-            ehci_from_le32(qh->qh_qtd.qtd_status), qtd_token,
-            ehci_op_read(sc, EHCI_USBCMD), ehci_op_read(sc, EHCI_USBSTS),
-            ehci_op_read(sc, EHCI_FRINDEX));
-    }
-}
 #endif
 
 static int
@@ -737,10 +679,6 @@ ehci_periodic_ensure_running(struct ehci_softc *sc)
         return;
     ehci_periodic_resume(sc);
     ++sc->eh_periodic_recoveries;
-#ifdef KERNEL
-    printf("ehci: recovered periodic schedule with %u QHs\n",
-        sc->eh_periodic_count);
-#endif
 }
 
 static usb_error_t
@@ -964,10 +902,6 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
     unsigned max_packet;
     unsigned i;
     unsigned slot;
-#ifdef KERNEL
-    unsigned int endp;
-    unsigned int endphub;
-#endif
 
     sc = (struct ehci_softc *)pipe->up_device->ud_bus->ub_hcd->uh_softc;
     if (!sc->eh_started || ehci_find_pipe(sc, pipe) != 0)
@@ -1019,22 +953,6 @@ ehci_hcd_open_pipe(struct usb_pipe *pipe)
                  * submit publishes the fully prepared QH.
                  */
                 sc->eh_intr_slots[slot].eis_pipe = &sc->eh_pipes[i];
-#ifdef KERNEL
-                endp = ehci_from_le32(sc->eh_pipes[i].ep_qh->qh_endp);
-                endphub = ehci_from_le32(sc->eh_pipes[i].ep_qh->
-                    qh_endphub);
-                printf("ehci: periodic addr=%u endpoint=%x "
-                    "bInterval=%u frames=%u phase=%u uframe=%u "
-                    "nrl=%u smask=%x cmask=%x\n",
-                    pipe->up_device->ud_address,
-                    pipe->up_endpoint->ue_desc.bEndpointAddress,
-                    pipe->up_endpoint->ue_desc.bInterval,
-                    sc->eh_pipes[i].ep_intr_period,
-                    sc->eh_pipes[i].ep_intr_phase,
-                    sc->eh_pipes[i].ep_intr_uframe,
-                    (endp >> 28) & 0x0fu,
-                    endphub & 0xffu, (endphub >> 8) & 0xffu);
-#endif
             }
             return USB_STATUS_NORMAL_COMPLETION;
         }
@@ -1184,7 +1102,6 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
     struct ehci_qh *qh;
     unsigned slot_index;
     unsigned int qtd_phys;
-    unsigned waited;
     usb_error_t status;
 
     slot_index = epipe->ep_intr_slot;
@@ -1209,9 +1126,6 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
     qh = epipe->ep_qh;
     slot->eis_xfer = xfer;
     slot->eis_length = (unsigned)xfer->ux_length;
-#ifdef KERNEL
-    slot->eis_watchdog_scans = 0;
-#endif
     epipe->ep_xacterrs = 0;
     ehci_op_write(sc, EHCI_USBSTS, EHCI_STS_INT | EHCI_STS_ERRINT);
     status = ehci_qh_set_interrupt_qtd(sc, qh, qtd_phys);
@@ -1221,17 +1135,7 @@ ehci_submit_interrupt(struct ehci_softc *sc, struct ehci_pipe *epipe,
         slot->eis_length = 0;
         return status;
     }
-    waited = ehci_periodic_wait_safe_split(sc, epipe);
-#ifdef KERNEL
-    if (xfer->ux_device->ud_speed != USB_SPEED_HIGH)
-        printf("ehci: periodic publish addr=%u phase=%u frame=%u "
-            "waited=%u ms\n", xfer->ux_device->ud_address,
-            epipe->ep_intr_phase,
-            (ehci_op_read(sc, EHCI_FRINDEX) >> 3) &
-            (EHCI_FRAME_LIST_COUNT - 1u), waited);
-#else
-    (void)waited;
-#endif
+    (void)ehci_periodic_wait_safe_split(sc, epipe);
     status = ehci_periodic_link(sc, epipe);
     if (status != USB_STATUS_NORMAL_COMPLETION) {
         ehci_qh_idle(qh);
@@ -1747,7 +1651,6 @@ static void
 ehci_watchdog(caddr_t arg)
 {
     struct ehci_softc *sc;
-    int completed;
 
     sc = (struct ehci_softc *)arg;
     sc->eh_watchdog_armed = 0;
@@ -1756,13 +1659,7 @@ ehci_watchdog(caddr_t arg)
     ehci_periodic_ensure_running(sc);
     if (dma_sync_for_cpu(&sc->eh_schedule_dma, 0,
         EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) == 0) {
-        completed = ehci_interrupt_completion_pending(sc);
-        ehci_watchdog_trace_active(sc);
         ehci_poll_interrupts(sc);
-        if (completed && !sc->eh_watchdog_reported) {
-            sc->eh_watchdog_reported = 1;
-            printf("ehci: watchdog recovered a periodic completion\n");
-        }
     }
     if (sc->eh_started && ehci_interrupt_xfers_active(sc))
         ehci_watchdog_arm(sc);
