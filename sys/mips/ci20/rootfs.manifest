@@ -35,65 +35,257 @@ bdev /dev/sd0d
 major 2
 minor 4
 
-bdev /dev/sd1
+bdev /dev/sd0e
 major 2
 minor 5
 
-bdev /dev/sd1a
+bdev /dev/sd0f
 major 2
 minor 6
 
-bdev /dev/sd1b
+bdev /dev/sd0g
 major 2
 minor 7
 
-bdev /dev/sd1c
+bdev /dev/sd0h
 major 2
 minor 8
 
-bdev /dev/sd1d
+bdev /dev/sd0i
 major 2
 minor 9
 
-bdev /dev/sd2
+bdev /dev/sd0j
 major 2
 minor 10
 
-bdev /dev/sd2a
+bdev /dev/sd0k
 major 2
 minor 11
 
-bdev /dev/sd2b
+bdev /dev/sd0l
 major 2
 minor 12
 
-bdev /dev/sd2c
+bdev /dev/sd0m
 major 2
 minor 13
 
-bdev /dev/sd2d
+bdev /dev/sd0n
 major 2
 minor 14
 
-bdev /dev/sd3
+bdev /dev/sd0o
 major 2
 minor 15
 
-bdev /dev/sd3a
+bdev /dev/sd0p
 major 2
 minor 16
 
-bdev /dev/sd3b
+bdev /dev/sd1
 major 2
 minor 17
 
-bdev /dev/sd3c
+bdev /dev/sd1a
 major 2
 minor 18
 
-bdev /dev/sd3d
+bdev /dev/sd1b
 major 2
 minor 19
+
+bdev /dev/sd1c
+major 2
+minor 20
+
+bdev /dev/sd1d
+major 2
+minor 21
+
+bdev /dev/sd1e
+major 2
+minor 22
+
+bdev /dev/sd1f
+major 2
+minor 23
+
+bdev /dev/sd1g
+major 2
+minor 24
+
+bdev /dev/sd1h
+major 2
+minor 25
+
+bdev /dev/sd1i
+major 2
+minor 26
+
+bdev /dev/sd1j
+major 2
+minor 27
+
+bdev /dev/sd1k
+major 2
+minor 28
+
+bdev /dev/sd1l
+major 2
+minor 29
+
+bdev /dev/sd1m
+major 2
+minor 30
+
+bdev /dev/sd1n
+major 2
+minor 31
+
+bdev /dev/sd1o
+major 2
+minor 32
+
+bdev /dev/sd1p
+major 2
+minor 33
+
+bdev /dev/sd2
+major 2
+minor 34
+
+bdev /dev/sd2a
+major 2
+minor 35
+
+bdev /dev/sd2b
+major 2
+minor 36
+
+bdev /dev/sd2c
+major 2
+minor 37
+
+bdev /dev/sd2d
+major 2
+minor 38
+
+bdev /dev/sd2e
+major 2
+minor 39
+
+bdev /dev/sd2f
+major 2
+minor 40
+
+bdev /dev/sd2g
+major 2
+minor 41
+
+bdev /dev/sd2h
+major 2
+minor 42
+
+bdev /dev/sd2i
+major 2
+minor 43
+
+bdev /dev/sd2j
+major 2
+minor 44
+
+bdev /dev/sd2k
+major 2
+minor 45
+
+bdev /dev/sd2l
+major 2
+minor 46
+
+bdev /dev/sd2m
+major 2
+minor 47
+
+bdev /dev/sd2n
+major 2
+minor 48
+
+bdev /dev/sd2o
+major 2
+minor 49
+
+bdev /dev/sd2p
+major 2
+minor 50
+
+bdev /dev/sd3
+major 2
+minor 51
+
+bdev /dev/sd3a
+major 2
+minor 52
+
+bdev /dev/sd3b
+major 2
+minor 53
+
+bdev /dev/sd3c
+major 2
+minor 54
+
+bdev /dev/sd3d
+major 2
+minor 55
+
+bdev /dev/sd3e
+major 2
+minor 56
+
+bdev /dev/sd3f
+major 2
+minor 57
+
+bdev /dev/sd3g
+major 2
+minor 58
+
+bdev /dev/sd3h
+major 2
+minor 59
+
+bdev /dev/sd3i
+major 2
+minor 60
+
+bdev /dev/sd3j
+major 2
+minor 61
+
+bdev /dev/sd3k
+major 2
+minor 62
+
+bdev /dev/sd3l
+major 2
+minor 63
+
+bdev /dev/sd3m
+major 2
+minor 64
+
+bdev /dev/sd3n
+major 2
+minor 65
+
+bdev /dev/sd3o
+major 2
+minor 66
+
+bdev /dev/sd3p
+major 2
+minor 67
 
 cdev /dev/console
 major 0

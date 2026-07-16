@@ -461,8 +461,10 @@ delay did not complete, so USB and DM9000 now share the bounded TCU3 backend.
 root/external-hub, boot-report decoder, full fake-OHCI control/periodic/RHSC
 scheduling, compact fake-EHCI asynchronous/periodic/split scheduling and
 routing, fake-JZ4780 register sequencing, and BOT/SCSI tests.
-`make -C sys/tests/disk test` covers the common disk/MBR layer and byte-exact
-`fdisk` ABI; `make -C sys/tests/fat test` covers FAT parsing, reads, writes,
+`make -C sys/tests/disk test` covers the common 64-bit disk/MBR/GPT layer and
+byte-exact `fdisk` ABI. `make -C sys/tests/gpt test` uses a 3 TiB sparse image
+to cover primary/backup CRCs, fallback, repair, and overlap rejection;
+`make -C sys/tests/fat test` covers FAT parsing, reads, writes,
 allocation, truncation, removal, directory mutation, and rename. The
 `sys/tests/fsck_fat` and `sys/tests/mkfs_fat` suites cover clean/corrupt images,
 repair policy, FAT copies, cluster chains, FAT32 metadata, and format geometry.
@@ -476,8 +478,8 @@ link/unlink, external-hub removal/reconnect, companion handoff/change
 draining/reclaim, and a later high-speed attach.
 The Ci20 sequence test verifies VBUS-first ordering, `UHCCDR_BUSY` timeout,
 final gate/suspend state, PHY POR, and UHC reset deassertion. Full GCC and PCC
-kernel/rootfs builds link and produce images containing the common disk nodes
-and `fdisk`. The real-board tests verified
+kernel/rootfs builds link and produce images containing the common disk nodes,
+`fdisk`, and `gpt`. The real-board tests verified
 OHCI periodic interrupt-IN, console input, proc0 deferred exploration, boot
 with an empty port, late attach, detach, address reuse, repeated reconnect,
 EHCI high-speed enumeration/reconnect, EHCI-to-OHCI ownership handoff, raw
@@ -488,3 +490,49 @@ populated-hub reconnects.
 The final hub capture is retained in `docs/usb-logs/`.
 Earlier failed candidate captures remain in `docs/usb-logs/` as regression
 evidence.
+
+## 64-bit Disk and GPT Hardware Gate
+
+This milestone adds a transport-independent 64-bit block-number and LBA API,
+primary/backup GPT parsing, sixteen `sdNa` through `sdNp` partition minors,
+and `/sbin/gpt`. The target-side create/add/delete and payload-preserving
+MBR-to-GPT image migration smoke passed on Creator Ci20 on 2026-07-16 with:
+
+```text
+cfbdad4c9423d574c42103a88f8a77d24769e3eb50d6951197636bd3021af78b  ci20.uImage
+```
+
+The verified command was:
+
+```sh
+/root/gpt-image-smoke.sh
+```
+
+The smoke is non-destructive and touches only a sparse 4 MiB `/var` image. Its
+first hardware run exposed the legacy `dd(1)` output-truncation limitation;
+the passing image adds standard `conv=notrunc`, and the smoke uses it to patch
+only the nonzero MBR and payload bytes. The exact transcript is retained in
+`usb-logs/ci20-gpt-image-smoke-verified-20260716.txt`.
+
+Actual kernel GPT partition attachment must be tested only on a sacrificial
+USB medium: `gpt -c /dev/sdN` destroys its existing partition table. Until a
+GPT medium attaches as `sdNa`, survives data I/O and reconnect, and has a
+retained UART capture, kernel GPT media attachment remains an implementation
+candidate rather than a hardware claim.
+
+An existing legacy MBR can be checked for payload-preserving migration with:
+
+```sh
+gpt -m -n /dev/sd0
+```
+
+The `-n` preflight opens the disk read-only. It passed on the existing FAT32
+USB medium without changing it, reporting type `0x0c`, start LBA 63, and
+30,298,527 sectors. Migration is accepted only when
+all used entries are ordinary primary partitions with known GPT type mappings,
+do not overlap, start at or after LBA 34, and end before the backup GPT area.
+The observed FAT32 partition at LBA 63 satisfies these geometric constraints.
+After a backup and an explicit hardware decision, `gpt -m /dev/sd0` writes the
+backup GPT first, the primary GPT second, and the protective MBR last while
+preserving every partition start and size. Extended/logical MBR layouts are
+deliberately rejected.

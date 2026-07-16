@@ -791,9 +791,16 @@ CFILES := $(filter-out \
     $S/mips/common/romfs_vfs.c,$(CFILES))
 endif
 
-SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o
+PCC_KERNEL_RUNTIME_OBJS =
+PCC_KERNEL_RUNTIME_SRCS =
+ifeq ($(N64_KERNEL_COMPILER),pcc)
+include $(TOPSRC)/sys/mips/pcc-kernel-runtime.mk
+endif
+
+SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o \
+                  $(PCC_KERNEL_RUNTIME_OBJS)
 SYSTEM_DEP      = Makefile $(N64_IOCONF).c $(N64_KERNEL_LDSCRIPT) \
-                  $(KERNEL_COMPILER_DEPS)
+                  $(KERNEL_COMPILER_DEPS) $(PCC_KERNEL_RUNTIME_SRCS)
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for N64: $(SYSTEM_BUILD_INFO)\n";' > vers.c; \
                   ${COMPILE_VERS_C}; \
                   rm -f $@

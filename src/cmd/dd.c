@@ -10,6 +10,7 @@
 #define SWAB 04
 #define NERR 010
 #define SYNC 020
+#define NOTRUNC 040
 
 int cflag;
 int fflag;
@@ -442,6 +443,10 @@ int main(int argc, char **argv)
                 cflag |= SYNC;
                 goto cloop;
             }
+            if (match("notrunc")) {
+                cflag |= NOTRUNC;
+                goto cloop;
+            }
         }
         fprintf(stderr, "bad arg: %s\n", string);
         exit(1);
@@ -456,9 +461,14 @@ int main(int argc, char **argv)
         perror(ifile);
         exit(1);
     }
-    if (ofile)
-        obf = creat(ofile, 0666);
-    else
+    if (ofile) {
+        if (cflag & NOTRUNC) {
+            obf = open(ofile, O_WRONLY);
+            if (obf < 0)
+                obf = creat(ofile, 0666);
+        } else
+            obf = creat(ofile, 0666);
+    } else
         obf = dup(1);
     if (obf < 0) {
         fprintf(stderr, "cannot create: %s\n", ofile);

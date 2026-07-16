@@ -150,7 +150,7 @@ physio(void (*strat) (struct buf*), struct buf *bp, dev_t dev, int rw, struct ui
             bp->b_flags = B_BUSY | B_PHYS | B_INVAL | rw;
             bp->b_dev = dev;
             bp->b_addr = iov->iov_base;
-            bp->b_blkno = (unsigned) uio->uio_offset >> DEV_BSHIFT;
+            bp->b_blkno = (blkno_t)(uio->uio_offset >> DEV_BSHIFT);
             bp->b_bcount = iov->iov_len;
             c = bp->b_bcount;
             (*strat)(bp);

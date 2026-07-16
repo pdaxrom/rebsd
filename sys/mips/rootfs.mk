@@ -165,7 +165,7 @@ MIPS_CMD_NONE = __mips_none__
 MIPS_BOARD_CMD_SUBDIRS ?=
 MIPS_BOARD_USR_BIN_FILES ?=
 MIPS_CMD_SUBDIRS ?= basic calendar chown chroot compress date2 deco dhclient diff emg env \
-                  fdisk find fold forth fsck fsck.fat getty hostname id ifconfig inetd init \
+                  fdisk find fold forth fsck fsck.fat getty gpt hostname id ifconfig inetd init \
                   aout ar as ld login ls make man md5 med mkfs mkfs.fat mknod \
                   mkpasswd mount more netstat nm pdc picoc ping printf pstat ptytest \
                   ranlib reboot renice retroforth route sed setty \

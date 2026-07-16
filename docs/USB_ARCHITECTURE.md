@@ -193,13 +193,24 @@ filesystems.
 1024-byte ReBSD block to 512-byte sector conversion, partition regions,
 `strategy`, media ioctls, residuals, bounds, and optional read-only
 enforcement. It tracks dirty media, flushes on the last close, and exposes an
-explicit `DIOCFLUSH` ioctl. The initial implementation exposes a whole-disk
-minor plus four classic-MBR partitions per slot; the 64-bit-LBA/GPT extension
-is the next storage-layer phase and remains independent of USB. A backend owns
-command splitting, DMA/cache handling, timeouts, physical media presence, and
-its transport-specific flush operation. Detach first makes the backend report
+explicit `DIOCFLUSH` ioctl. Block numbers, transport LBAs, media sizes, and
+partition regions use separate 64-bit types without changing the current UFS
+on-disk `daddr_t`. Each slot has one whole-disk minor plus sixteen partition
+minors `a` through `p`. The parser accepts classic MBR or GPT, validates GPT
+header and complete entry-array CRC32 values, and falls back to the backup GPT
+when the primary is invalid. A protective MBR with no valid GPT exposes only
+the whole disk.
+
+The separate `gpt(8)` utility validates all 128 standard entries. Explicit
+mutations write and flush the backup entry array and header before the primary
+copy and protective MBR, then request kernel revalidation. The kernel never
+repairs partition metadata implicitly. A backend owns command splitting,
+DMA/cache handling, timeouts, physical media presence, and its
+transport-specific flush operation. Detach first makes the backend report
 absent and unregisters the disk slot, then closes the USB pipes and releases
-the USB interface state.
+the USB interface state. The current compact USB SCSI transport still uses
+`READ(10)` and `WRITE(10)`; media requiring 64-bit SCSI commands will need the
+transport-local `READ CAPACITY(16)` and `READ(16)`/`WRITE(16)` extension.
 
 No filesystem code is called by `umass` or `sys/disk`. UFS and the FAT16/FAT32
 module are separate VFS consumers. FAT supports basic read/write operation,

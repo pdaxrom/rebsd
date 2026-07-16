@@ -21,7 +21,7 @@
 #include <sys/systm.h>
 #include <sys/syslog.h>
 
-daddr_t rablock;        /* block to be read ahead */
+blkno_t rablock;        /* block to be read ahead */
 
 int
 ino_rw(struct file *fp, struct uio *uio)
@@ -158,7 +158,7 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
     dev_t dev = (dev_t)ip->i_rdev;
     register struct buf *bp;
     off_t osize;
-    daddr_t lbn, bn;
+    blkno_t lbn, bn;
     int n, on, type, resid;
     int error = 0;
     int flags;
@@ -244,9 +244,6 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
         (off_t)uio->uio_resid >
         (off_t)INT32_MAX - uio->uio_offset))
         return (EFBIG);
-    if (type == IFBLK &&
-        uio->uio_offset > ((off_t)INT32_MAX << DEV_BSHIFT) + DEV_BMASK)
-        return (EFBIG);
     if (type != IFBLK)
         dev = ip->i_dev;
     resid = uio->uio_resid;
@@ -255,7 +252,10 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
     flags = ioflag & IO_SYNC ? B_SYNC : 0;
 
     do {
-        lbn = lblkno(uio->uio_offset);
+        if (type == IFBLK)
+            lbn = (blkno_t)(uio->uio_offset >> DEV_BSHIFT);
+        else
+            lbn = (blkno_t)lblkno(uio->uio_offset);
         on = blkoff(uio->uio_offset);
         n = MIN((u_int)(DEV_BSIZE - on), uio->uio_resid);
         if (type != IFBLK) {
@@ -265,11 +265,11 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
                     return (0);
                 if (diff < n)
                     n = diff;
-                bn = bmap(ip, lbn, B_READ, flags);
+                bn = bmap(ip, (daddr_t)lbn, B_READ, flags);
             } else
-                bn = bmap(ip,lbn,B_WRITE,
+                bn = bmap(ip,(daddr_t)lbn,B_WRITE,
                        n == DEV_BSIZE ? flags : flags|B_CLRBUF);
-            if (u.u_error || (uio->uio_rw == UIO_WRITE && (long)bn < 0))
+            if (u.u_error || (uio->uio_rw == UIO_WRITE && bn < 0))
                 return (u.u_error);
             if (uio->uio_rw == UIO_WRITE && uio->uio_offset + n > ip->i_size &&
                (type == IFDIR || type == IFREG || type == IFLNK))
@@ -279,7 +279,7 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
             rablock = bn + 1;
         }
         if (uio->uio_rw == UIO_READ) {
-            if ((long)bn < 0) {
+            if (bn < 0) {
                 bp = geteblk();
                 bzero (bp->b_addr, MAXBSIZE);
             } else if (ip->i_lastr + 1 == lbn)

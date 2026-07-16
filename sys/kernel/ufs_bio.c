@@ -17,7 +17,7 @@
  * Read in (if necessary) the block and return a buffer pointer.
  */
 struct buf *
-bread (dev_t dev, daddr_t blkno)
+bread (dev_t dev, blkno_t blkno)
 {
     register struct buf *bp;
 
@@ -38,7 +38,7 @@ bread (dev_t dev, daddr_t blkno)
  * read-ahead block (which is not allocated to the caller)
  */
 struct buf *
-breada(dev_t dev, daddr_t blkno, daddr_t rablkno)
+breada(dev_t dev, blkno_t blkno, blkno_t rablkno)
 {
     register struct buf *bp, *rabp;
 
@@ -189,13 +189,12 @@ brelse (struct buf *bp)
  * (mainly to avoid getting hung up on a wait in breada)
  */
 int
-incore (dev_t dev, daddr_t blkno)
+incore (dev_t dev, blkno_t blkno)
 {
     register struct buf *bp;
     register struct buf *dp;
 
     dp = BUFHASH(dev, blkno);
-    blkno = fsbtodb(blkno);
     for (bp = dp->b_forw; bp != dp; bp = bp->b_forw)
         if (bp->b_blkno == blkno && bp->b_dev == dev &&
             (bp->b_flags & B_INVAL) == 0)
@@ -253,10 +252,10 @@ loop:
  * want to lower the ipl back to 0.
  */
 struct buf *
-getblk(dev_t dev, daddr_t blkno)
+getblk(dev_t dev, blkno_t blkno)
 {
     register struct buf *bp, *dp;
-    daddr_t dblkno;
+    blkno_t dblkno;
     int s;
 
 #ifdef DIAGNOSTIC
@@ -269,7 +268,7 @@ getblk(dev_t dev, daddr_t blkno)
      * the i/o has completed.
      */
     dp = BUFHASH(dev, blkno);
-    dblkno = fsbtodb(blkno);
+    dblkno = blkno;
 loop:
     for (bp = dp->b_forw; bp != dp; bp = bp->b_forw) {
         if (bp->b_blkno != dblkno || bp->b_dev != dev ||
@@ -355,14 +354,13 @@ biodone(struct buf *bp)
  * Insure that no part of a specified block is in an incore buffer.
  */
 void
-blkflush (dev_t dev, daddr_t blkno)
+blkflush (dev_t dev, blkno_t blkno)
 {
     register struct buf *ep;
     struct buf *dp;
     register int s;
 
     dp = BUFHASH(dev, blkno);
-    blkno = fsbtodb(blkno);
 loop:
     for (ep = dp->b_forw; ep != dp; ep = ep->b_forw) {
         if (ep->b_blkno != blkno || ep->b_dev != dev ||

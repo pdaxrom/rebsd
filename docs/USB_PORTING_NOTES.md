@@ -81,7 +81,7 @@ results, not Creator Ci20 hardware results.
 | soft interrupt/task queue | A USB-local fixed queue holds at most eight coalescing tasks. IRQ code schedules work and wakes proc0; the proc0 scheduler loop performs root-hub exploration, enumeration, attach, and detach. |
 | `splusb` | Use the existing global interrupt masking primitive through a small USB critical-section wrapper. |
 | root-hub child attach | USB core creates a `usb_device`; the HCD exposes root-hub control and port status through the common HCD operations. |
-| disk attach | `sys/disk` owns the static `bdevsw` entry, units/minors, partition regions and `strategy(struct buf *)`; USB, SD/MMC, IDE and SATA attach through one backend contract. Classic MBR is implemented; 64-bit LBA/GPT is the next common-layer phase. |
+| disk attach | `sys/disk` owns the static `bdevsw` entry, units/minors, 64-bit partition regions and `strategy(struct buf *)`; USB, SD/MMC, IDE and SATA attach through one backend contract. Classic MBR and CRC-validated primary/backup GPT are implemented. |
 | `scsipi` | No equivalent is present. Implement the required compact single-LUN BOT/SCSI commands directly. |
 | wscons keyboard | No equivalent.  Add a small keyboard-input registration/submission API above `ttyinput`. |
 
@@ -413,11 +413,14 @@ read-only errors. It must not silently reinterpret ReBSD block numbers as
 The disk layer is not part of USB. `sys/disk` owns the common `sdN` namespace,
 partition minors, media ioctls, partition-table revalidation, dirty tracking,
 last-close and explicit flush, and the `read`/`write`/`flush`/`present` backend
-contract. The initial table format is classic MBR with four primary entries;
-64-bit LBAs and GPT belong here rather than in `umass`. The USB Mass Storage driver
-implements one such backend using BOT and SCSI. Future SD/MMC, IDE/ATA, and
-SATA/AHCI drivers will implement the same backend contract and will not depend
-on USB.
+contract. Classic MBR and GPT both live here rather than in `umass`. The
+common block path uses 64-bit LBAs and exposes sixteen partition minors per
+disk. GPT header and full entry-array CRCs are checked, the backup table is a
+read-only fallback, and invalid protective media exposes only the whole disk.
+The separate `gpt(8)` editor performs explicit backup-first updates. The USB
+Mass Storage driver implements one backend using BOT and SCSI. Future SD/MMC,
+IDE/ATA, and SATA/AHCI drivers will implement the same backend contract and
+will not depend on USB.
 
 Filesystems sit above block devices and are configured independently of every
 transport. FAT, future exFAT, and future ext-family implementations belong under
@@ -428,7 +431,10 @@ transport.
 There is no SCSI or SCSIPI subsystem in the current tree.  The first umass
 implementation therefore contains only BOT framing and `INQUIRY`,
 `TEST UNIT READY`, `REQUEST SENSE`, `READ CAPACITY(10)`, and `READ(10)` for one
-LUN, plus bounded `WRITE(10)` and `SYNCHRONIZE CACHE(10)`. Unsupported cache
+LUN, plus bounded `WRITE(10)` and `SYNCHRONIZE CACHE(10)`. Thus the common
+disk API is 64-bit while this first USB transport is still bounded by SCSI
+10-byte command LBAs; `READ CAPACITY(16)` and `READ(16)`/`WRITE(16)` remain a
+transport-local extension. Unsupported cache
 synchronization is detected through `REQUEST SENSE` and remembered without
 weakening other command-error handling.
 

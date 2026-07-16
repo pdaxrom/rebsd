@@ -28,6 +28,8 @@ typedef unsigned short  ushort;     /* sys III compat */
 typedef u_int           memaddr;    /* core or swap address */
 typedef unsigned long   ubadr_t;    /* bus address */
 
+#include <sys/blkno.h>
+
 #ifdef pdp11
 typedef struct  label_t {
     int     val[7];                 /* regs 2-7 and super SP */

@@ -112,6 +112,9 @@ mode 0775
 file /root/fs-tools-smoke.sh
 mode 0775
 
+file /root/gpt-image-smoke.sh
+mode 0775
+
 file /root/off64-smoke.sh
 mode 0775
 
@@ -932,6 +935,8 @@ file /usr/share/man/cat8/fsck.ufs.0
 
 file /usr/share/man/cat8/getty.0
 
+file /usr/share/man/cat8/gpt.0
+
 file /usr/share/man/cat8/inetd.0
 
 file /usr/share/man/cat8/halt.0
@@ -991,6 +996,9 @@ mode 0775
 
 file /sbin/fsck.ufs
 mode 0775
+
+file /sbin/gpt
+mode 0755
 
 file /sbin/dhclient
 mode 0775

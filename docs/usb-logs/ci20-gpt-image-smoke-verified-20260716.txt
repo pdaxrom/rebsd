@@ -1,0 +1,13 @@
+ReBSD Creator Ci20 GPT image migration smoke
+Date: 2026-07-16
+GCC ci20.uImage SHA-256: cfbdad4c9423d574c42103a88f8a77d24769e3eb50d6951197636bd3021af78b
+
+# /root/gpt-image-smoke.sh
+gpt-image-smoke: create sparse 4 MiB image
+gpt-image-smoke: create and validate GPT
+gpt-image-smoke: add partition
+gpt: created partition 1 at sector 2048, 2048 sectors
+gpt-image-smoke: delete partition
+gpt-image-smoke: migrate legacy FAT MBR without moving payload
+gpt image smoke ok
+#

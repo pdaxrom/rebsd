@@ -14,6 +14,9 @@
 } while (0)
 
 #define TEST_SECTORS               64u
+#define TEST_GPT_ENTRY_BYTES       (128u * 128u)
+#define TEST_GPT_MEDIA_SECTORS     0x100000400ULL
+#define TEST_GPT_PARTITION_LBA     0x100000000ULL
 
 struct fake_media {
     unsigned char data[TEST_SECTORS * DISK_SECTOR_SIZE];
@@ -22,6 +25,16 @@ struct fake_media {
     int flush_error;
     unsigned write_count;
     unsigned flush_count;
+};
+
+struct fake_gpt_media {
+    unsigned char mbr[DISK_SECTOR_SIZE];
+    unsigned char primary[DISK_SECTOR_SIZE];
+    unsigned char backup[DISK_SECTOR_SIZE];
+    unsigned char entries[TEST_GPT_ENTRY_BYTES];
+    disk_sector_t sectors;
+    disk_sector_t last_read_lba;
+    int present;
 };
 
 int puts(const char *);
@@ -69,7 +82,7 @@ biodone(struct buf *bp)
 }
 
 static int
-fake_read(void *arg, unsigned sector, unsigned count, void *data)
+fake_read(void *arg, disk_sector_t sector, unsigned count, void *data)
 {
     struct fake_media *media;
 
@@ -77,13 +90,14 @@ fake_read(void *arg, unsigned sector, unsigned count, void *data)
     if (!media->present || count > TEST_SECTORS ||
         sector > TEST_SECTORS - count)
         return EIO;
-    test_copy(data, media->data + sector * DISK_SECTOR_SIZE,
+    test_copy(data, media->data + (unsigned)sector * DISK_SECTOR_SIZE,
         count * DISK_SECTOR_SIZE);
     return 0;
 }
 
 static int
-fake_write(void *arg, unsigned sector, unsigned count, const void *data)
+fake_write(void *arg, disk_sector_t sector, unsigned count,
+    const void *data)
 {
     struct fake_media *media;
 
@@ -93,7 +107,7 @@ fake_write(void *arg, unsigned sector, unsigned count, const void *data)
         return EIO;
     if (media->write_error != 0)
         return media->write_error;
-    test_copy(media->data + sector * DISK_SECTOR_SIZE, data,
+    test_copy(media->data + (unsigned)sector * DISK_SECTOR_SIZE, data,
         count * DISK_SECTOR_SIZE);
     ++media->write_count;
     return 0;
@@ -138,6 +152,120 @@ set_le32(unsigned char *data, unsigned value)
     data[1] = (unsigned char)(value >> 8);
     data[2] = (unsigned char)(value >> 16);
     data[3] = (unsigned char)(value >> 24);
+}
+
+static void
+set_le64(unsigned char *data, disk_sector_t value)
+{
+    set_le32(data, (unsigned)value);
+    set_le32(data + 4, (unsigned)(value >> 32));
+}
+
+static void
+make_gpt_header(unsigned char *sector, disk_sector_t media_sectors,
+    disk_sector_t header_lba, disk_sector_t entries_lba,
+    unsigned entries_crc)
+{
+    unsigned crc;
+
+    test_zero(sector, DISK_SECTOR_SIZE);
+    test_copy(sector, "EFI PART", 8u);
+    set_le32(sector + 8, 0x00010000u);
+    set_le32(sector + 12, 92u);
+    set_le64(sector + 24, header_lba);
+    set_le64(sector + 32, header_lba == 1 ? media_sectors - 1 : 1);
+    set_le64(sector + 40, 34u);
+    set_le64(sector + 48, media_sectors - 34u);
+    sector[56] = 0x42;
+    set_le64(sector + 72, entries_lba);
+    set_le32(sector + 80, 128u);
+    set_le32(sector + 84, 128u);
+    set_le32(sector + 88, entries_crc);
+    crc = disk_crc32(sector, 92u);
+    set_le32(sector + 16, crc);
+}
+
+static void
+fake_gpt_init(struct fake_gpt_media *media)
+{
+    unsigned entries_crc;
+
+    test_zero(media, sizeof(*media));
+    media->present = 1;
+    media->sectors = TEST_GPT_MEDIA_SECTORS;
+    media->mbr[446 + 4] = 0xee;
+    set_le32(media->mbr + 446 + 8, 1u);
+    set_le32(media->mbr + 446 + 12, 0xffffffffu);
+    media->mbr[510] = 0x55;
+    media->mbr[511] = 0xaa;
+    media->entries[0] = 0xa2;
+    media->entries[16] = 0x71;
+    set_le64(media->entries + 32, TEST_GPT_PARTITION_LBA);
+    set_le64(media->entries + 40, TEST_GPT_PARTITION_LBA + 99u);
+    entries_crc = disk_crc32(media->entries, sizeof(media->entries));
+    make_gpt_header(media->primary, media->sectors, 1, 2, entries_crc);
+    make_gpt_header(media->backup, media->sectors, media->sectors - 1u,
+        media->sectors - 33u, entries_crc);
+}
+
+static int
+fake_gpt_read(void *arg, disk_sector_t lba, unsigned count, void *data)
+{
+    struct fake_gpt_media *media;
+    disk_sector_t array_lba;
+
+    media = (struct fake_gpt_media *)arg;
+    if (!media->present || count != 1 || lba >= media->sectors)
+        return EIO;
+    media->last_read_lba = lba;
+    if (lba == 0)
+        test_copy(data, media->mbr, DISK_SECTOR_SIZE);
+    else if (lba == 1)
+        test_copy(data, media->primary, DISK_SECTOR_SIZE);
+    else if (lba == media->sectors - 1u)
+        test_copy(data, media->backup, DISK_SECTOR_SIZE);
+    else if (lba >= 2 && lba < 34u)
+        test_copy(data, media->entries + (unsigned)(lba - 2u) *
+            DISK_SECTOR_SIZE, DISK_SECTOR_SIZE);
+    else {
+        array_lba = media->sectors - 33u;
+        if (lba >= array_lba && lba < media->sectors - 1u)
+            test_copy(data, media->entries + (unsigned)(lba - array_lba) *
+                DISK_SECTOR_SIZE, DISK_SECTOR_SIZE);
+        else if (lba >= TEST_GPT_PARTITION_LBA &&
+            lba < TEST_GPT_PARTITION_LBA + 100u)
+            test_zero(data, DISK_SECTOR_SIZE);
+        else
+            return EIO;
+    }
+    return 0;
+}
+
+static int
+fake_gpt_present(void *arg)
+{
+    return ((struct fake_gpt_media *)arg)->present;
+}
+
+static const struct disk_backend_ops fake_gpt_ops = {
+    fake_gpt_read,
+    0,
+    0,
+    fake_gpt_present
+};
+
+static int
+fake_gpt_attach(struct fake_gpt_media *media, unsigned *unitp)
+{
+    struct disk_attach_args args;
+
+    test_zero(&args, sizeof(args));
+    args.da_ops = &fake_gpt_ops;
+    args.da_arg = media;
+    args.da_sector_count = media->sectors;
+    args.da_sector_size = DISK_SECTOR_SIZE;
+    args.da_flags = DISK_FLAG_READ_ONLY;
+    return disk_attach(&args, unitp);
 }
 
 static void
@@ -312,12 +440,86 @@ test_write_and_flush_errors(void)
     return 0;
 }
 
+static int
+test_gpt_64_bit_lifecycle(void)
+{
+    struct fake_gpt_media media;
+    struct diskpart64 part64;
+    struct diskpart legacy;
+    struct buf bp;
+    unsigned char data[DISK_SECTOR_SIZE];
+    disk_sector_t sectors;
+    unsigned scheme;
+    unsigned old_sectors;
+    unsigned unit;
+    dev_t whole;
+    dev_t part;
+
+    fake_gpt_init(&media);
+    diskattach(0);
+    CHECK(fake_gpt_attach(&media, &unit) == 0 && unit == 0);
+    whole = makedev(2, DISK_MINOR(0, DISK_MINOR_WHOLE));
+    part = makedev(2, DISK_MINOR(0, DISK_MINOR_PARTITION(0)));
+    CHECK(disk_bdev_open(whole, FREAD, 0) == 0);
+    CHECK(disk_bdev_ioctl(whole, DIOCGETSECTORS64, (caddr_t)&sectors,
+        FREAD) == 0 && sectors == TEST_GPT_MEDIA_SECTORS);
+    CHECK(disk_bdev_ioctl(whole, DIOCGETSECTORS, (caddr_t)&old_sectors,
+        FREAD) == EOVERFLOW);
+    CHECK(disk_bdev_ioctl(whole, DIOCGETSCHEME, (caddr_t)&scheme,
+        FREAD) == 0 && scheme == DISK_SCHEME_GPT);
+    CHECK(disk_bdev_open(part, FREAD, 0) == 0);
+    CHECK(disk_bdev_ioctl(part, DIOCGETPART64, (caddr_t)&part64,
+        FREAD) == 0);
+    CHECK(part64.dp_scheme == DISK_SCHEME_GPT);
+    CHECK(part64.dp_offset == TEST_GPT_PARTITION_LBA);
+    CHECK(part64.dp_nsectors == 100u);
+    CHECK(disk_bdev_ioctl(part, DIOCGETPART, (caddr_t)&legacy,
+        FREAD) == EOPNOTSUPP);
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = part;
+    bp.b_blkno = 0;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_READ;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(media.last_read_lba == TEST_GPT_PARTITION_LBA);
+    CHECK(disk_bdev_close(part, FREAD, 0) == 0);
+    CHECK(disk_bdev_close(whole, FREAD, 0) == 0);
+    disk_detach(unit, &media);
+
+    /* A bad primary header must fall back to the valid backup table. */
+    fake_gpt_init(&media);
+    media.primary[16] ^= 1u;
+    diskattach(0);
+    CHECK(fake_gpt_attach(&media, &unit) == 0 && unit == 0);
+    part = makedev(2, DISK_MINOR(0, DISK_MINOR_PARTITION(0)));
+    CHECK(disk_bdev_open(part, FREAD, 0) == 0);
+    CHECK(disk_bdev_close(part, FREAD, 0) == 0);
+    disk_detach(unit, &media);
+
+    /* If both entry arrays fail CRC, only the whole disk is exposed. */
+    fake_gpt_init(&media);
+    media.entries[127] ^= 1u;
+    diskattach(0);
+    CHECK(fake_gpt_attach(&media, &unit) == 0 && unit == 0);
+    whole = makedev(2, DISK_MINOR(0, DISK_MINOR_WHOLE));
+    part = makedev(2, DISK_MINOR(0, DISK_MINOR_PARTITION(0)));
+    CHECK(disk_bdev_open(whole, FREAD, 0) == 0);
+    CHECK(disk_bdev_open(part, FREAD, 0) == ENXIO);
+    CHECK(disk_bdev_close(whole, FREAD, 0) == 0);
+    disk_detach(unit, &media);
+    return 0;
+}
+
 int
 main(void)
 {
     CHECK(test_open_detach_reuse() == 0);
     CHECK(test_partition_write_and_flush() == 0);
     CHECK(test_write_and_flush_errors() == 0);
+    CHECK(test_gpt_64_bit_lifecycle() == 0);
     puts("disk_lifecycle_test: all tests passed");
     return 0;
 }

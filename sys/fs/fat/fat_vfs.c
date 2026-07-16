@@ -2056,6 +2056,7 @@ fat_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
     struct buf *bp;
     unsigned char *boot;
     daddr_t media_blocks;
+    disk_sector_t media_sectors64;
     unsigned media_sectors;
     unsigned i;
     int parsed;
@@ -2077,9 +2078,14 @@ fat_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
     fmp->fm_read_only = (flags & MNT_RDONLY) != 0;
     fmp->fm_next_free = 2u;
 
-    media_sectors = 0;
-    error = (*bdevsw[major(dev)].d_ioctl)(dev, DIOCGETSECTORS,
-        (caddr_t)&media_sectors, FREAD);
+    media_sectors64 = 0;
+    error = (*bdevsw[major(dev)].d_ioctl)(dev, DIOCGETSECTORS64,
+        (caddr_t)&media_sectors64, FREAD);
+    if (!error && media_sectors64 > 0xffffffffull) {
+        error = EFBIG;
+        goto fail;
+    }
+    media_sectors = (unsigned)media_sectors64;
     if (error || media_sectors == 0) {
         media_blocks = (*bdevsw[major(dev)].d_psize)(dev);
         if (media_blocks <= 0 || (unsigned long)media_blocks > 0x7ffffffful) {

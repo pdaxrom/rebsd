@@ -20,7 +20,7 @@ SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar chflags \
                   talloc uucp viless virus yacc
 
 # /sbin
-SUBDIR_ALL    += chown chroot dhclient disktool fsck fsck.fat getty ifconfig inetd init \
+SUBDIR_ALL    += chown chroot dhclient disktool fsck fsck.fat getty gpt ifconfig inetd init \
                   mkfs mkfs.fat mknod mkpasswd mount pstat \
                   reboot route shutdown umount update vipw
 

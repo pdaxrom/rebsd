@@ -11,6 +11,7 @@ Run the complete machine-independent suite with:
 ```sh
 make -C sys/tests/usb test
 make -C sys/tests/disk test
+make -C sys/tests/gpt test
 make -C sys/tests/fat test
 make -C sys/tests/fsck_fat test
 make -C sys/tests/mkfs_fat test
@@ -29,7 +30,8 @@ The 2026-07-15 external-hub candidate passes all USB, disk, and FAT gates:
 | `ehci_test` | async control/bulk, periodic interrupt-IN, split transactions, atomic QH link/unlink, hub removal/reconnect and companion routing | pass |
 | `ci20 usb hw tests` | VBUS, clock, PHY and reset ordering with fake JZ4780 registers | pass |
 | `umass_test` | BOT framing/recovery, SCSI probe/capacity, bounded `READ(10)`/`WRITE(10)`, cache flush and command/wire errors | pass |
-| `disk_test` | transport-independent MBR parsing, regions/minors, partition-relative writes, dirty tracking and flush errors | pass |
+| `disk_test` | transport-independent MBR/GPT parsing, 64-bit regions/minors and ioctls, primary/backup fallback, partition-relative I/O, dirty tracking and flush errors | pass |
+| `gpt` smoke | 3 TiB sparse image, protective MBR, primary/backup header and full entry-array CRCs, add/delete, fallback/repair and overlap rejection | pass |
 | `fdisk_mbr_test` | exact 512-byte ABI, little-endian fields, range/overflow/overlap validation | pass |
 | `fat_test` | FAT16/FAT32 validation, bounded chains, long-name reads, allocation, write/truncate/remove, directory mutation and rename | pass |
 | `fsck_fat` smoke | clean/corrupt FAT16/FAT32 images, FAT comparison, directory chains, lost clusters, FSInfo validation and repair policy | pass |
@@ -42,9 +44,27 @@ the regression gate for an unplug/replug race during deferred exploration.
 ## Target Compiler and Image Gates
 
 The complete Ci20 kernel and rootfs build with both configured MIPS GCC and
-PCC profiles. Both images contain `/dev/sd0`, `/dev/sd0a` through `sd0d`,
-`/sbin/fdisk`, and its non-empty manual page. The PCC kernel check found no
-COP1/FPU instructions.
+PCC profiles. The hardware-verified MBR milestone contained `/dev/sd0`,
+`/dev/sd0a` through `sd0d`, `/sbin/fdisk`, and its non-empty manual page. The
+current GPT candidate contains four whole-disk nodes, sixteen partition nodes
+`a` through `p` per disk, `/sbin/fdisk`, and `/sbin/gpt`. The PCC kernel check
+found no COP1/FPU instructions.
+
+The GPT target utility gate passed on Creator Ci20 on 2026-07-16. It created,
+validated and mutated a GPT on a sparse image, then migrated a synthetic FAT
+primary MBR without moving its payload. Read-only `gpt -m -n /dev/sd0`
+preflight also accepted the existing real FAT32 geometry without writing it.
+The combined hardware candidate image hashes are:
+
+```text
+cfbdad4c9423d574c42103a88f8a77d24769e3eb50d6951197636bd3021af78b  GCC ci20.uImage
+26755bb3d4dae164c486adedb4806e97bfbb0d17f30b79d73035f797c19c8e38  PCC ci20.uImage
+```
+
+This result proves the GPT utility and `dd conv=notrunc` paths only. Kernel
+attachment and I/O through a GPT-formatted USB medium remain a separate
+hardware gate. The retained transcript is
+`usb-logs/ci20-gpt-image-smoke-verified-20260716.txt`.
 
 The hardware-verified GCC read-only mass-storage image has these SHA-256
 values:
@@ -319,6 +339,7 @@ The exact supplied console transcript is retained in
 | FAT32 read-write filesystem | `/dev/sd0a` behind `214b:7000` hub | verified 2026-07-15 | file/directory mutation, rename, sync/remount persistence, and `-r` enforcement |
 | 64-bit file offsets | `/dev/sd0`, target GCC and native PCC | verified 2026-07-15 | both compiler paths passed seeks beyond 2 GiB |
 | `mkfs.fat` and `fsck.fat` | scratch FAT16 image and existing `/dev/sd0a` FAT32 | verified 2026-07-15 on `0b357a…` | `fs-tools-smoke.sh`, no-write geometry probe, clean non-mutating check |
+| 64-bit disk API and GPT | host 3 TiB sparse image; Ci20 target utility smoke | utility verified 2026-07-16; kernel GPT media pending | host CRC/fallback/repair tests pass; Ci20 image smoke preserved payload and real-media preflight made no writes |
 | OTG port in host mode | left-hand J24/J8 | not implemented | separate DWC2 phase |
 
 The exact current hardware procedure and expected log lines are in

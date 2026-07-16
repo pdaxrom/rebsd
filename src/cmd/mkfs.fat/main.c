@@ -295,11 +295,23 @@ media_sectors(int fd, unsigned *sectors, unsigned *hidden)
     *hidden = 0;
 #ifndef MKFS_FAT_HOST
     {
-        struct diskpart part;
+        struct diskpart64 part;
+        disk_sector_t media;
 
-        if (ioctl(fd, DIOCGETSECTORS, sectors) == 0 && *sectors != 0) {
-            if (ioctl(fd, DIOCGETPART, &part) == 0)
-                *hidden = part.dp_offset;
+        media = 0;
+        if (ioctl(fd, DIOCGETSECTORS64, &media) == 0 && media != 0) {
+            if (media > 0xffffffffull) {
+                errno = EFBIG;
+                return -1;
+            }
+            *sectors = (unsigned)media;
+            if (ioctl(fd, DIOCGETPART64, &part) == 0) {
+                if (part.dp_offset > 0xffffffffull) {
+                    errno = EFBIG;
+                    return -1;
+                }
+                *hidden = (unsigned)part.dp_offset;
+            }
             return 0;
         }
     }

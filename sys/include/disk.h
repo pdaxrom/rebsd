@@ -47,6 +47,31 @@ struct diskpart {                   /* the partition table */
 #define PTYPE_SWAP      0xb8        /* swap */
 
 /*
+ * Transport-independent partition information.  The legacy diskpart ABI is
+ * retained above for old MBR-only programs; new code must use diskpart64.
+ */
+#define DISK_SCHEME_NONE 0
+#define DISK_SCHEME_MBR  1
+#define DISK_SCHEME_GPT  2
+
+#ifndef _DISK_SECTOR_T_DEFINED
+#define _DISK_SECTOR_T_DEFINED
+typedef unsigned long long disk_sector_t;
+#endif
+
+struct diskpart64 {
+    u_int       dp_scheme;
+    u_char      dp_status;          /* MBR active flag, zero for GPT */
+    u_char      dp_type;            /* MBR type byte, zero for GPT */
+    u_char      dp_reserved[2];
+    disk_sector_t dp_offset;
+    disk_sector_t dp_nsectors;
+    disk_sector_t dp_attributes;    /* GPT attributes, zero for MBR */
+    u_char      dp_type_guid[16];
+    u_char      dp_unique_guid[16];
+};
+
+/*
  * Disk-specific ioctls.
  */
 #define DIOCGETMEDIASIZE _IOR('d', 1, int)              /* get size in kbytes */
@@ -54,5 +79,8 @@ struct diskpart {                   /* the partition table */
 #define DIOCGETPART      _IOR('d', 3, struct diskpart)  /* get partition */
 #define DIOCGETSECTORS   _IOR('d', 4, unsigned)         /* exact 512-byte count */
 #define DIOCFLUSH        _IO ('d', 5)                   /* flush media cache */
+#define DIOCGETSECTORS64 _IOR('d', 6, disk_sector_t)    /* 64-bit sector count */
+#define DIOCGETPART64    _IOR('d', 7, struct diskpart64)/* 64-bit partition */
+#define DIOCGETSCHEME    _IOR('d', 8, unsigned)         /* DISK_SCHEME_* */
 
 #endif /* _SYS_DISK_H_ */

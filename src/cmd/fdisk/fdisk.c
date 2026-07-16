@@ -27,6 +27,7 @@ enum fdisk_action {
 static struct fdisk_mbr disk_mbr;
 static unsigned disk_kbytes;
 static unsigned disk_sectors;
+static int disk_too_large;
 
 static void
 usage(void)
@@ -88,14 +89,18 @@ read_mbr(int fd)
 static int
 get_media_size(int fd)
 {
+    disk_sector_t sectors64;
     off_t current;
     off_t end;
-    int kbytes;
 
-    kbytes = 0;
-    if (ioctl(fd, DIOCGETMEDIASIZE, &kbytes) == 0 && kbytes > 0) {
-        disk_kbytes = (unsigned)kbytes;
-        disk_sectors = disk_kbytes << 1;
+    sectors64 = 0;
+    if (ioctl(fd, DIOCGETSECTORS64, &sectors64) == 0 && sectors64 != 0) {
+        if (sectors64 > 0xffffffffull) {
+            disk_too_large = 1;
+            return -1;
+        }
+        disk_sectors = (unsigned)sectors64;
+        disk_kbytes = disk_sectors >> 1;
         return disk_sectors != 0 ? 0 : -1;
     }
 
@@ -104,8 +109,12 @@ get_media_size(int fd)
     end = lseek(fd, 0, SEEK_END);
     if (current >= 0)
         (void)lseek(fd, current, SEEK_SET);
-    if (end < (off_t)FDISK_MBR_BYTES)
+    if (end < (off_t)FDISK_MBR_BYTES ||
+        end / 512 > (off_t)0xffffffffu) {
+        if (end >= (off_t)FDISK_MBR_BYTES)
+            disk_too_large = 1;
         return -1;
+    }
     disk_sectors = (unsigned)(end / 512);
     disk_kbytes = disk_sectors >> 1;
     return disk_sectors != 0 ? 0 : -1;
@@ -349,7 +358,10 @@ main(int argc, char **argv)
     }
     result = 1;
     if (read_mbr(fd) != 0 || get_media_size(fd) != 0) {
-        if (disk_sectors == 0)
+        if (disk_too_large)
+            fprintf(stderr,
+                "fdisk: device exceeds the MBR 32-bit LBA limit; use gpt\n");
+        else if (disk_sectors == 0)
             fprintf(stderr, "fdisk: cannot determine device size\n");
         goto done;
     }

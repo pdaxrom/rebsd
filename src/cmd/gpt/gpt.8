@@ -1,0 +1,122 @@
+.TH GPT 8
+.SH NAME
+gpt \- inspect and edit a GUID Partition Table
+.SH SYNOPSIS
+.B gpt -p
+.I device
+.br
+.B gpt -c
+.I device
+.br
+.B gpt -m
+[
+.B -n
+]
+.I device
+.br
+.B gpt -a
+[
+.B -b
+.I first-sector
+]
+[
+.B -s
+.I sectors
+]
+[
+.B -t
+.I type-guid
+]
+[
+.B -l
+.I label
+]
+.I device
+[
+.I partition
+]
+.br
+.B gpt -d
+.I device partition
+.SH DESCRIPTION
+.B gpt
+operates on a UEFI GUID Partition Table using 512-byte logical sectors and
+64-bit LBAs. It validates the protective MBR, header CRC32, complete 128-entry
+array CRC32, usable ranges, unique GUID presence, and partition overlap.
+.PP
+The print operation is read-only. If the primary GPT is invalid but the backup
+is valid, it prints the backup without modifying the disk. A later explicit
+add or delete rewrites both copies and reports that recovery will occur.
+.PP
+Mutating operations write the backup entry array and header before the primary
+entry array and header. The protective MBR is written last, and the kernel is
+asked to revalidate the device after a successful update.
+.PP
+The migrate operation converts supported primary MBR entries to GPT entries
+without changing their starting sectors, sizes, or payload sectors. It first
+checks that all partitions fit between the primary and backup GPT metadata.
+The old MBR bootstrap and disk signature are retained in the resulting
+protective MBR. This is a partition-metadata conversion, so an external backup
+is still recommended.
+.SH OPTIONS
+.TP
+.B -p
+Print all used GPT entries and identify whether the primary or backup copy was
+used.
+.TP
+.B -c
+Create an empty GPT. This destroys existing partition metadata.
+.TP
+.B -m
+Migrate a legacy MBR containing ordinary primary partitions to GPT. Extended
+and logical partitions, overlapping entries, unknown type mappings, and any
+partition occupying GPT metadata sectors are rejected before writing.
+.TP
+.B -n
+With
+.BR -m ,
+perform the complete migration preflight and print the proposed mappings, but
+open the device read-only and write nothing.
+.TP
+.B -a
+Add a partition. Without a partition number, the first unused GPT entry is
+selected. Without a start or size, the first 1 MiB-aligned free gap is used.
+The default type is the Microsoft Basic Data GUID, suitable for ordinary data
+volumes including FAT.
+.TP
+.B -d
+Delete one numbered GPT entry.
+.TP
+.BI -b " first-sector"
+Set the first 512-byte sector explicitly.
+.TP
+.BI -s " sectors"
+Set the partition length in 512-byte sectors.
+.TP
+.BI -t " type-guid"
+Set a canonical textual partition type GUID.
+.TP
+.BI -l " label"
+Set a printable ASCII label of at most 36 characters.
+.SH DEVICE NODES
+The GPT format contains 128 entries. The current ReBSD common disk layer
+exposes GPT entries 1 through 16 as
+.B sd0a
+through
+.BR sd0p ,
+while
+.B gpt -p
+still validates and displays all 128 entries.
+.SH COMPATIBILITY
+.B fdisk
+continues to handle legacy MBR partition tables. Filesystems and block
+transports are independent of either partition-table editor.
+.PP
+Migration recognizes common FAT/NTFS data types, Linux filesystem, swap, LVM
+and RAID, EFI System, FreeBSD data, and Apple HFS/HFS+ types. It deliberately
+refuses an MBR type for which no unambiguous GPT type is built in. Legacy BIOS
+bootability is not preserved by conversion to a protective MBR.
+.SH SEE ALSO
+.BR fdisk (8),
+.BR mkfs.fat (8),
+.BR fsck.fat (8)

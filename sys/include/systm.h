@@ -3,6 +3,7 @@
  * All rights reserved.  The Berkeley software License Agreement
  * specifies the terms and conditions for redistribution.
  */
+#include <sys/blkno.h>
 
 /*
  * The `securelevel' variable controls the security level of the system.
@@ -61,7 +62,7 @@ extern char curpri;                 /* more scheduling */
 
 extern u_int    swapstart, nswap;   /* start and size of swap space */
 extern int      updlock;            /* lock for sync */
-extern daddr_t  rablock;            /* block to be read ahead */
+extern blkno_t  rablock;            /* block to be read ahead */
 extern dev_t    rootdev;            /* device of the root */
 extern dev_t    dumpdev;            /* device to take dumps on */
 extern long     dumplo;             /* offset into dumpdev */

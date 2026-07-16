@@ -23,6 +23,8 @@
  * pointers to keep track of them in their i/o active queues.
  */
 
+#include <sys/blkno.h>
+
 /*
  * Bufhd structures used at the head of the hashed buffer queues.
  * We only need three words for these, so this abbreviated
@@ -46,7 +48,7 @@ struct buf
     int     b_error;                /* returned after I/O */
     dev_t   b_dev;                  /* major+minor device name */
     caddr_t b_addr;                 /* core address */
-    daddr_t b_blkno;                /* block # on device */
+    blkno_t b_blkno;                /* block # on device */
     u_int   b_resid;                /* words not transferred after error */
 #define b_cylin b_resid             /* disksort */
 #define b_errcnt b_resid            /* while i/o in progress: # retries */
@@ -85,7 +87,7 @@ extern struct   buf bfreelist[];    /* heads of available lists */
 /*
  * Assign a buffer for the given block.  If the appropriate
  */
-struct buf *getblk (dev_t dev, daddr_t blkno);
+struct buf *getblk (dev_t dev, blkno_t blkno);
 
 /*
  * Allocate a block in the file system.
@@ -100,13 +102,13 @@ struct buf *geteblk (void);
 /*
  * Read in (if necessary) the block and return a buffer pointer.
  */
-struct buf *bread (dev_t dev, daddr_t blkno);
+struct buf *bread (dev_t dev, blkno_t blkno);
 
 /*
  * Read in the block, like bread, but also start I/O on the
  * read-ahead block.
  */
-struct buf *breada (dev_t dev, daddr_t blkno, daddr_t rablkno);
+struct buf *breada (dev_t dev, blkno_t blkno, blkno_t rablkno);
 
 /*
  * Write the buffer, waiting for completion. Then release the buffer.
@@ -136,7 +138,7 @@ void biowait (struct buf *bp);
 /*
  * See if the block is associated with some buffer.
  */
-int incore (dev_t dev, daddr_t blkno);
+int incore (dev_t dev, blkno_t blkno);
 
 /*
  * Make sure all write-behind blocks on dev are flushed out.
@@ -146,7 +148,7 @@ void bflush (dev_t dev);
 /*
  * Insure that no part of a specified block is in an incore buffer.
  */
-void blkflush (dev_t dev, daddr_t blkno);
+void blkflush (dev_t dev, blkno_t blkno);
 
 /*
  * Invalidate in core blocks belonging to closed or umounted filesystem.

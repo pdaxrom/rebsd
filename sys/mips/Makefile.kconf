@@ -231,9 +231,15 @@ COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
 
 %CFILES
 
-SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o
+PCC_KERNEL_RUNTIME_OBJS =
+PCC_KERNEL_RUNTIME_SRCS =
+ifeq ($(MIPS_KERNEL_COMPILER),pcc)
+include $(TOPSRC)/sys/mips/pcc-kernel-runtime.mk
+endif
+
+SYSTEM_OBJ      = ${OBJS} ioconf.o rootfs.o $(PCC_KERNEL_RUNTIME_OBJS)
 SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
-                  $(KERNEL_COMPILER_DEPS)
+                  $(KERNEL_COMPILER_DEPS) $(PCC_KERNEL_RUNTIME_SRCS)
 SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for $(MALTA_VERSION_NAME): $(SYSTEM_BUILD_INFO)\n";' > vers.c; \
                   ${COMPILE_VERS_C}; \
                   rm -f $@

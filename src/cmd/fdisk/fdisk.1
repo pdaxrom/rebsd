@@ -75,12 +75,13 @@ and
 The same naming and ioctl interface is used regardless of whether the backing
 transport is USB Mass Storage, SD/MMC, IDE or SATA.
 .SH LIMITATIONS
-Only classic MBR is supported.  GPT, extended/logical partitions and disks
-requiring LBAs wider than 32 bits are not supported.
+Only classic MBR is supported.  Use
+.BR gpt (8)
+for GUID partition tables and 64-bit LBAs.  Extended/logical MBR partitions
+are not supported.
 .PP
-Writing requires a writable disk backend.  A read-only backend, including the
-initial USB Mass Storage implementation, can be inspected but cannot be
-partitioned.
+Writing requires a writable disk backend.
 .SH SEE ALSO
+.BR gpt (8),
 .BR mkfs (8),
 .BR mount (8)

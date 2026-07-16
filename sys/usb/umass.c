@@ -531,21 +531,25 @@ umass_disk_error(const struct umass_softc *sc)
 }
 
 static int
-umass_disk_read(void *arg, unsigned lba, unsigned sector_count, void *data)
+umass_disk_read(void *arg, disk_sector_t lba, unsigned sector_count,
+    void *data)
 {
     struct umass_softc *sc;
 
     sc = (struct umass_softc *)arg;
     if (sc == 0 || sc->us_dying)
         return ENXIO;
-    if (umass_media_read(&sc->us_media, lba, sector_count, data) !=
+    if (lba > 0xffffffffu || sector_count == 0 ||
+        (disk_sector_t)sector_count > 0x100000000ULL - lba)
+        return EOVERFLOW;
+    if (umass_media_read(&sc->us_media, (unsigned)lba, sector_count, data) !=
         UMASS_BBB_OK)
         return umass_disk_error(sc);
     return 0;
 }
 
 static int
-umass_disk_write(void *arg, unsigned lba, unsigned sector_count,
+umass_disk_write(void *arg, disk_sector_t lba, unsigned sector_count,
     const void *data)
 {
     struct umass_softc *sc;
@@ -553,7 +557,11 @@ umass_disk_write(void *arg, unsigned lba, unsigned sector_count,
     sc = (struct umass_softc *)arg;
     if (sc == 0 || sc->us_dying)
         return ENXIO;
-    if (umass_media_write(&sc->us_media, lba, sector_count, data) !=
+    if (lba > 0xffffffffu || sector_count == 0 ||
+        (disk_sector_t)sector_count > 0x100000000ULL - lba)
+        return EOVERFLOW;
+    if (umass_media_write(&sc->us_media, (unsigned)lba, sector_count,
+        data) !=
         UMASS_BBB_OK)
         return umass_disk_error(sc);
     return 0;
