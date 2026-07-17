@@ -49,6 +49,7 @@
 #include <sys/map.h>
 #include <sys/sysctl.h>
 #include <sys/rebsd_version.h>
+#include <vm/vm_page.h>
 #include <machine/cpu.h>
 #include <sys/conf.h>
 
@@ -391,6 +392,9 @@ int
 vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
     struct  loadavg averunnable;    /* loadavg in resource.h */
+    struct vm_page_stats page_stats;
+    long page_value;
+    int error;
 
     /* all sysctl names at this level are terminal */
     if (namelen != 1)
@@ -419,6 +423,44 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     case VM_SWAPTOTAL:
         return (sysctl_rdlong(oldp, oldlenp, newp,
             (long)nswap * DEV_BSIZE));
+    case VM_PHYSPAGES:
+    case VM_FREEPAGES:
+    case VM_RESERVEDPAGES:
+    case VM_PAGEALLOCS:
+    case VM_PAGEFREES:
+    case VM_PAGEFAILURES:
+    case VM_PAGEPOISONFAILURES:
+    case VM_BADPAGES:
+        error = vm_page_bootstrap_stats(&page_stats);
+        if (error != 0)
+            return error;
+        switch (name[0]) {
+        case VM_PHYSPAGES:
+            page_value = page_stats.vps_total;
+            break;
+        case VM_FREEPAGES:
+            page_value = page_stats.vps_free;
+            break;
+        case VM_RESERVEDPAGES:
+            page_value = page_stats.vps_reserved;
+            break;
+        case VM_PAGEALLOCS:
+            page_value = page_stats.vps_allocations;
+            break;
+        case VM_PAGEFREES:
+            page_value = page_stats.vps_frees;
+            break;
+        case VM_PAGEFAILURES:
+            page_value = page_stats.vps_allocation_failures;
+            break;
+        case VM_BADPAGES:
+            page_value = page_stats.vps_bad;
+            break;
+        default:
+            page_value = page_stats.vps_poison_failures;
+            break;
+        }
+        return (sysctl_rdlong(oldp, oldlenp, newp, page_value));
     default:
         return (EOPNOTSUPP);
     }

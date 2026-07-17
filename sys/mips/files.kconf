@@ -55,6 +55,7 @@ kernel/vm_swp.c                 standard
 
 vm/vm_param.c                  standard
 vm/vm_phys.c                   standard
+vm/vm_page.c                   standard
 
 disk/disk_subr.c               optional disk
 disk/disk.c                    optional disk
@@ -114,5 +115,6 @@ mips/common/net_glue.c          optional inet
 mips/common/netinit.c           optional inet
 mips/common/signal.c            standard
 mips/common/sysctl.c            standard
+mips/common/vm_page_machdep.c   standard
 mips/common/libkern.c           standard
 mips/common/stubs.c             standard

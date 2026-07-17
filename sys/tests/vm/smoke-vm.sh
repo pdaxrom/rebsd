@@ -2,7 +2,8 @@
 set -eu
 
 mode=${1:-test}
-top=$(cd ../../.. && pwd -P)
+script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+top=$(cd "$script_dir/../../.." && pwd -P)
 tmp=${TMPDIR:-/tmp}/rebsd-vm-test.$$
 cc=${CC:-cc}
 
@@ -17,16 +18,36 @@ compile()
         -DREBSD_VM_HOST_TEST -I "$top/sys" -idirafter "$top/include" \
         "$@" \
         "$top/sys/vm/vm_param.c" "$top/sys/vm/vm_phys.c" \
-        vm_test.c -o "$output"
+        "$script_dir/vm_test.c" -o "$output"
 }
 
 compile "$tmp/vm_test"
+
+compile_page()
+{
+    output=$1
+    shift
+    "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
+        -DREBSD_VM_HOST_TEST -I "$top/sys" -idirafter "$top/include" \
+        "$@" \
+        "$top/sys/vm/vm_param.c" "$top/sys/vm/vm_phys.c" \
+        "$top/sys/vm/vm_page.c" "$script_dir/vm_page_test.c" -o "$output"
+}
+
+compile_page "$tmp/vm_page_test"
 
 if compile "$tmp/vm_test_sanitize" -fsanitize=address,undefined \
     -fno-omit-frame-pointer >/dev/null 2>&1; then
     :
 else
     rm -f "$tmp/vm_test_sanitize"
+fi
+
+if compile_page "$tmp/vm_page_test_sanitize" -fsanitize=address,undefined \
+    -fno-omit-frame-pointer >/dev/null 2>&1; then
+    :
+else
+    rm -f "$tmp/vm_page_test_sanitize"
 fi
 
 compile_board()
@@ -44,7 +65,7 @@ compile_board()
         -DREBSD_VM_TEST_KERNEL_END="$kernel_end" \
         -I "$include_dir" -I "$top/sys" -idirafter "$top/include" \
         "$@" "$top/sys/vm/vm_param.c" "$top/sys/vm/vm_phys.c" \
-        "$board_source" board_map_test.c -o "$output"
+        "$board_source" "$script_dir/board_map_test.c" -o "$output"
 }
 
 compile_board "$tmp/malta_map_test" "$top/sys/mips" \
@@ -67,8 +88,12 @@ compile_board "$tmp/n64_highres_map_test" "$top/sys/mips/n64" \
 
 if [ "$mode" = test ]; then
     "$tmp/vm_test"
+    "$tmp/vm_page_test"
     if [ -x "$tmp/vm_test_sanitize" ]; then
         "$tmp/vm_test_sanitize"
+    fi
+    if [ -x "$tmp/vm_page_test_sanitize" ]; then
+        "$tmp/vm_page_test_sanitize"
     fi
     "$tmp/malta_map_test"
     "$tmp/ci20_map_test"

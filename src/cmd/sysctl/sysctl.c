@@ -150,7 +150,7 @@ main(
 	if (argc == 0)
 		usage();
 	while (argc-- > 0)
-		parse(*argv, 1);
+		parse(*argv++, 1);
 	exit(0);
 }
 
@@ -294,6 +294,8 @@ parse(
                                 loads[2] / 100, loads[2] % 100);
 			return;
 		}
+		if (mib[1] >= VM_PHYSPAGES && mib[1] <= VM_BADPAGES)
+			break;
 		if (flags == 0)
 			return;
 		fprintf(stderr,

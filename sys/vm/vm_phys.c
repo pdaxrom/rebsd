@@ -14,6 +14,7 @@
 #include <sys/systm.h>
 #endif
 #include <vm/vm_phys.h>
+#include <vm/vm_page.h>
 
 static int
 vm_phys_name_valid(const char *name)
@@ -363,9 +364,12 @@ struct vm_phys_map vm_phys_boot_map;
 int
 vm_phys_bootstrap(vm_size_t ram_size)
 {
+    vm_paddr_t metadata_start;
+    vm_size_t metadata_size;
     vm_size_t available;
     vm_size_t reserved;
     vm_size_t total;
+    vm_pfn_t metadata_entries;
     int error;
 
     if (ram_size == 0 || !vm_size_page_aligned(ram_size))
@@ -374,6 +378,10 @@ vm_phys_bootstrap(vm_size_t ram_size)
     error = vm_phys_board_register(&vm_phys_boot_map, ram_size);
     if (error != 0)
         return error;
+    error = vm_page_metadata_reserve(&vm_phys_boot_map, &metadata_start,
+        &metadata_size, &metadata_entries);
+    if (error != 0 || metadata_entries == 0)
+        return error != 0 ? error : EINVAL;
     error = vm_phys_map_finalize(&vm_phys_boot_map);
     if (error != 0)
         return error;
@@ -388,7 +396,10 @@ vm_phys_bootstrap(vm_size_t ram_size)
     error = vm_size_add(available, reserved, &total);
     if (error != 0)
         return error;
-    return total == ram_size ? 0 : EINVAL;
+    if (total != ram_size)
+        return EINVAL;
+    return vm_page_bootstrap_init(&vm_phys_boot_map, metadata_start,
+        metadata_size);
 }
 
 void

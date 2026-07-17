@@ -86,19 +86,19 @@ Exit criteria:
 
 ## Phase 2: Physical-page allocator
 
-- [ ] Add `vm_page` metadata with explicit states: free, wired, active,
+- [x] Add `vm_page` metadata with explicit states: free, wired, active,
   inactive, cached, busy, laundry, and bad/reserved.
-- [ ] Implement allocation/free for single pages and aligned contiguous runs.
-- [ ] Track wire, hold, reference, dirty, and busy counts without silently
+- [x] Implement allocation/free for single pages and aligned contiguous runs.
+- [x] Track wire, hold, reference, dirty, and busy counts without silently
   wrapping them.
-- [ ] Add allocation constraints needed by DMA and devices, including maximum
+- [x] Add allocation constraints needed by DMA and devices, including maximum
   physical address, alignment, boundary, and contiguous length.
-- [ ] Keep cacheability as a mapping attribute; do not create two independent
+- [x] Keep cacheability as a mapping attribute; do not create two independent
   owners for cached and uncached aliases of one physical page.
-- [ ] Add deterministic low-memory and fragmentation tests.
-- [ ] Add invariants and diagnostic poisoning for double-free, use-after-free,
+- [x] Add deterministic low-memory and fragmentation tests.
+- [x] Add invariants and diagnostic poisoning for double-free, use-after-free,
   overlapping allocation, and freeing reserved pages.
-- [ ] Export stable VM counters through BSD-style `sysctl` nodes.
+- [x] Export stable VM counters through BSD-style `sysctl` nodes.
 
 Exit criteria:
 
@@ -256,8 +256,8 @@ Host tests must run before any board image is produced.  Each completed phase
 must then pass the applicable matrix below.
 
 - [x] Host unit tests with the host compiler and sanitizers where possible.
-- [ ] Malta MIPS32r2 hard-float: kernel GCC + userland GCC.
-- [ ] Malta MIPS32r2 hard-float: kernel PCC + userland PCC.
+- [x] Malta MIPS32r2 hard-float: kernel GCC + userland GCC.
+- [x] Malta MIPS32r2 hard-float: kernel PCC + userland PCC.
 - [ ] Malta MIPS32r2 soft-float: kernel GCC + userland GCC.
 - [ ] Malta MIPS32r2 soft-float: kernel PCC + userland PCC.
 - [ ] Malta64/VR4300 hard-float: kernel GCC + userland GCC.
