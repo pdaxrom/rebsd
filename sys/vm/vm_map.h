@@ -18,6 +18,7 @@
 #define VM_MAP_EXECUTABLE       0x0004u
 #define VM_MAP_SHARED           0x0008u
 #define VM_MAP_COW              0x0010u
+#define VM_MAP_WIRED            0x0020u
 
 struct vm_object;
 
@@ -45,6 +46,8 @@ int vm_map_insert_object(struct vm_map *, vm_vaddr_t, vm_vaddr_t,
     vm_prot_t, vm_prot_t, unsigned, struct vm_object *, vm_ooffset_t);
 int vm_map_remove(struct vm_map *, vm_vaddr_t, vm_vaddr_t);
 int vm_map_protect(struct vm_map *, vm_vaddr_t, vm_vaddr_t, vm_prot_t);
+int vm_map_set_flags(struct vm_map *, vm_vaddr_t, vm_vaddr_t, unsigned,
+    unsigned);
 int vm_map_findspace(const struct vm_map *, vm_vaddr_t, vm_size_t,
     vm_vaddr_t *);
 const struct vm_map_entry *vm_map_lookup(const struct vm_map *, vm_vaddr_t);

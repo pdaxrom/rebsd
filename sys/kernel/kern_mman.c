@@ -9,7 +9,6 @@
 #include <sys/vm.h>
 #include <sys/mman.h>
 #include <sys/systm.h>
-#include <vm/pmap.h>
 #include <vm/vmspace.h>
 
 #define MMAP_DEFAULT_BASE       0x10000000u
@@ -259,11 +258,11 @@ mincore(void)
         unsigned char *vector;
     } *uap;
     struct vmspace *vmspace;
-    vm_paddr_t physical;
     vm_vaddr_t address;
     vm_vaddr_t start = 0;
     vm_size_t size = 0;
     unsigned char state;
+    int resident;
 
     uap = (struct a *)u.u_arg;
     if (uap->vector == 0) {
@@ -278,8 +277,10 @@ mincore(void)
         return;
     for (address = start; address < start + size;
         address += VM_PAGE_SIZE) {
-        state = pmap_extract(vmspace->vms_pmap, address, &physical) == 0 ?
-            MINCORE_INCORE : 0;
+        u.u_error = vmspace_mincore(vmspace, address, &resident);
+        if (u.u_error != 0)
+            return;
+        state = resident ? MINCORE_INCORE : 0;
         u.u_error = copyout((caddr_t)&state,
             (caddr_t)&uap->vector[(address - start) / VM_PAGE_SIZE], 1);
     }
@@ -288,11 +289,31 @@ mincore(void)
 void
 mlock(void)
 {
-    u.u_error = EOPNOTSUPP;
+    struct a {
+        unsigned address;
+        unsigned length;
+    } *uap;
+    vm_vaddr_t start = 0;
+    vm_size_t size = 0;
+
+    uap = (struct a *)u.u_arg;
+    u.u_error = mman_range(uap->address, uap->length, &start, &size);
+    if (u.u_error == 0)
+        u.u_error = vmspace_wire(vmspace_current(), start, size, 1);
 }
 
 void
 munlock(void)
 {
-    u.u_error = EOPNOTSUPP;
+    struct a {
+        unsigned address;
+        unsigned length;
+    } *uap;
+    vm_vaddr_t start = 0;
+    vm_size_t size = 0;
+
+    uap = (struct a *)u.u_arg;
+    u.u_error = mman_range(uap->address, uap->length, &start, &size);
+    if (u.u_error == 0)
+        u.u_error = vmspace_wire(vmspace_current(), start, size, 0);
 }

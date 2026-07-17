@@ -66,10 +66,10 @@ and sets
 .B MINCORE_INCORE
 when the page currently has a resident hardware mapping.
 .I Mlock
-and
+makes all pages in a mapped range resident and ineligible for pageout until
 .I munlock
-currently fail with
-.BR EOPNOTSUPP .
+is called or the range is unmapped.  Locks are not inherited across
+.IR fork (2).
 .SH RETURN VALUES
 .I Mmap
 returns the mapping address on success and

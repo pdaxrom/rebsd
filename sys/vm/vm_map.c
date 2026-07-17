@@ -243,6 +243,67 @@ vm_map_protect(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
 }
 
 int
+vm_map_set_flags(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
+    unsigned set, unsigned clear)
+{
+    struct vm_map replacement;
+    const struct vm_map_entry *old;
+    vm_vaddr_t middle_start;
+    vm_vaddr_t middle_end;
+    unsigned flags;
+    unsigned index;
+    int error;
+
+    if (map == 0 || !vm_vaddr_page_aligned(start) ||
+        !vm_vaddr_page_aligned(end) || start >= end || (set & clear) != 0 ||
+        vm_map_check(map, start, end - start, VM_PROT_NONE) != 0)
+        return EINVAL;
+    error = vm_map_init(&replacement, map->vmm_min, map->vmm_max);
+    if (error != 0)
+        return error;
+    for (index = 0; index < map->vmm_count; ++index) {
+        old = &map->vmm_entries[index];
+        if (old->vme_end <= start || old->vme_start >= end) {
+            error = vm_map_insert_object(&replacement, old->vme_start,
+                old->vme_end, old->vme_protection,
+                old->vme_max_protection, old->vme_flags,
+                old->vme_object, old->vme_offset);
+            if (error != 0)
+                return error;
+            continue;
+        }
+        if (old->vme_start < start) {
+            error = vm_map_insert_object(&replacement,
+                old->vme_start, start, old->vme_protection,
+                old->vme_max_protection, old->vme_flags,
+                old->vme_object, old->vme_offset);
+            if (error != 0)
+                return error;
+        }
+        middle_start = old->vme_start > start ? old->vme_start : start;
+        middle_end = old->vme_end < end ? old->vme_end : end;
+        flags = (old->vme_flags | set) & ~clear;
+        error = vm_map_insert_object(&replacement, middle_start,
+            middle_end, old->vme_protection, old->vme_max_protection,
+            flags, old->vme_object, old->vme_offset +
+            (middle_start - old->vme_start));
+        if (error != 0)
+            return error;
+        if (old->vme_end > end) {
+            error = vm_map_insert_object(&replacement, end,
+                old->vme_end, old->vme_protection,
+                old->vme_max_protection, old->vme_flags,
+                old->vme_object, old->vme_offset +
+                (end - old->vme_start));
+            if (error != 0)
+                return error;
+        }
+    }
+    *map = replacement;
+    return 0;
+}
+
+int
 vm_map_findspace(const struct vm_map *map, vm_vaddr_t hint,
     vm_size_t size, vm_vaddr_t *result)
 {

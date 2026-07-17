@@ -189,6 +189,9 @@ main(int argc, char **argv)
         mprotect(mapped + SMOKE_VM_PAGE_SIZE, SMOKE_VM_PAGE_SIZE,
         PROT_READ | PROT_WRITE) != 0)
         return smoke_fail("mprotect split");
+    if (mlock(mapped, 3 * SMOKE_VM_PAGE_SIZE) != 0 ||
+        mlock(mapped, 3 * SMOKE_VM_PAGE_SIZE) != 0)
+        return smoke_fail("mlock");
     memset(residency, 0, sizeof(residency));
     if (mincore(mapped, 3 * SMOKE_VM_PAGE_SIZE, residency) != 0 ||
         (residency[0] & MINCORE_INCORE) == 0 ||
@@ -203,6 +206,8 @@ main(int argc, char **argv)
     if (child == 0) {
         if ((unsigned char)mapped[0] != 0x12)
             _exit(1);
+        if (munlock(mapped, 3 * SMOKE_VM_PAGE_SIZE) != 0)
+            _exit(2);
         mapped[0] = 0x7a;
         _exit(SMOKE_FORK_STATUS);
     }
@@ -216,6 +221,9 @@ main(int argc, char **argv)
     if (replacement != mapped + SMOKE_VM_PAGE_SIZE)
         return smoke_fail("mmap hint reuse");
     replacement[0] = 0x45;
+    if (munlock(mapped, 3 * SMOKE_VM_PAGE_SIZE) != 0 ||
+        mlock(mapped, 3 * SMOKE_VM_PAGE_SIZE) != 0)
+        return smoke_fail("munlock split range");
     if (munmap(mapped, 3 * SMOKE_VM_PAGE_SIZE) != 0)
         return smoke_fail("munmap split range");
     errno = 0;

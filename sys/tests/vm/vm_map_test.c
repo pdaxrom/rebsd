@@ -48,6 +48,17 @@ main(void)
     CHECK(entry != 0 && entry->vme_protection == VM_PROT_READ);
     CHECK(vm_map_validate(&map) == 0);
 
+    CHECK(vm_map_set_flags(&map, 0x10000000u, 0x10002000u,
+        VM_MAP_WIRED, 0) == 0);
+    CHECK((vm_map_lookup(&map, 0x10000000u)->vme_flags &
+        VM_MAP_WIRED) != 0);
+    CHECK(vm_map_set_flags(&map, 0x10000000u, 0x10001000u,
+        0, VM_MAP_WIRED) == 0);
+    CHECK((vm_map_lookup(&map, 0x10000000u)->vme_flags &
+        VM_MAP_WIRED) == 0);
+    CHECK((vm_map_lookup(&map, 0x10001000u)->vme_flags &
+        VM_MAP_WIRED) != 0);
+
     CHECK(vm_map_remove(&map, 0x10000800u, 0x10001000u) == EINVAL);
     CHECK(vm_map_remove(&map, 0x10001000u, 0x10002000u) == 0);
     CHECK(vm_map_lookup(&map, 0x10001000u) == 0);

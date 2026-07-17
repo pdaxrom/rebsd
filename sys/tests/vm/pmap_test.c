@@ -230,6 +230,9 @@ test_vmspace(void)
     struct vmspace *source;
     struct vmspace *child;
     struct vm_object_stats object_stats;
+    const struct vm_map_entry *map_entry;
+    struct vm_page *wired_page;
+    struct vm_page *wired_after;
     unsigned char input[32];
     unsigned char output[32];
     vm_paddr_t source_paddr;
@@ -269,6 +272,15 @@ test_vmspace(void)
     CHECK(output[0] == 0);
     CHECK(vmspace_map_anon_fixed(source, TEST_VADDR + 1,
         VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, 0) == EINVAL);
+    CHECK(vmspace_wire(source, any_address, VM_PAGE_SIZE, 1) == 0);
+    map_entry = vm_map_lookup(&source->vms_map, any_address);
+    CHECK(map_entry != 0 && (map_entry->vme_flags & VM_MAP_WIRED) != 0);
+    wired_page = vm_object_resident_page(map_entry->vme_object,
+        map_entry->vme_offset);
+    CHECK(wired_page != 0 && wired_page->vmp_wire_count == 1);
+    CHECK(vmspace_unmap(source, any_address, VM_PAGE_SIZE) == 0);
+    CHECK(wired_page->vmp_state == VM_PAGE_FREE &&
+        wired_page->vmp_wire_count == 0);
     for (i = 0; i < sizeof(input); ++i)
         input[i] = (unsigned char)(0x80u + i);
     CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE - 16,
@@ -280,14 +292,36 @@ test_vmspace(void)
     CHECK(vmspace_validate(source) == 0);
     output[0] = 0x6du;
     CHECK(vmspace_write(source, TEST_SHARED, output, 1) == 0);
+    CHECK(vmspace_wire(source, TEST_VADDR, 2 * VM_PAGE_SIZE, 1) == 0);
+    CHECK(vmspace_wire(source, TEST_VADDR, 2 * VM_PAGE_SIZE, 1) == 0);
+    map_entry = vm_map_lookup(&source->vms_map, TEST_VADDR);
+    wired_page = vm_object_resident_page(map_entry->vme_object,
+        map_entry->vme_offset);
+    CHECK(wired_page != 0 && wired_page->vmp_wire_count == 1);
 
     CHECK(vmspace_clone(source, &child) == 0);
+    CHECK((vm_map_lookup(&child->vms_map, TEST_VADDR)->vme_flags &
+        VM_MAP_WIRED) == 0);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) == 0);
     CHECK(pmap_extract(child->vms_pmap, TEST_VADDR, &child_paddr) == 0);
     CHECK(source_paddr == child_paddr);
     CHECK(vmspace_read(child, TEST_VADDR + VM_PAGE_SIZE - 16,
         output, sizeof(output)) == 0);
     CHECK(memcmp(input, output, sizeof(input)) == 0);
+    map_entry = vm_map_lookup(&source->vms_map,
+        TEST_VADDR + VM_PAGE_SIZE);
+    wired_page = vm_object_resident_page(map_entry->vme_object,
+        map_entry->vme_offset);
+    output[0] = 0x29u;
+    CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE + 64,
+        output, 1) == 0);
+    map_entry = vm_map_lookup(&source->vms_map,
+        TEST_VADDR + VM_PAGE_SIZE);
+    wired_after = vm_object_resident_page(map_entry->vme_object,
+        map_entry->vme_offset);
+    CHECK(wired_after != 0 && wired_after != wired_page);
+    CHECK(wired_after->vmp_wire_count == 1 &&
+        wired_page->vmp_wire_count == 0);
     output[0] ^= 0xffu;
     CHECK(vmspace_write(child, TEST_VADDR + VM_PAGE_SIZE - 16,
         output, 1) == 0);
@@ -307,6 +341,8 @@ test_vmspace(void)
     CHECK(vmspace_write(child, TEST_VADDR + VM_PAGE_SIZE,
         input, 1) == EFAULT);
     CHECK(vmspace_destroy(child) == 0);
+    CHECK(vmspace_wire(source, TEST_VADDR, 2 * VM_PAGE_SIZE, 0) == 0);
+    CHECK(wired_after->vmp_wire_count == 0);
     CHECK(vmspace_destroy(source) == 0);
     CHECK(allocator.vpa_free_count == free_before);
     CHECK(vm_object_get_stats(&object_stats) == 0);

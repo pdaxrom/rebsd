@@ -110,6 +110,52 @@ vmspace_map_has_object(const struct vm_map *map, struct vm_object *object)
     return 0;
 }
 
+static int
+vmspace_unwire_removed(const struct vm_map *map, vm_vaddr_t start,
+    vm_vaddr_t end)
+{
+    const struct vm_map_entry *entry;
+    struct vm_page *page;
+    vm_ooffset_t offset;
+    vm_vaddr_t address;
+    vm_vaddr_t first;
+    vm_vaddr_t last;
+    unsigned index;
+    int error;
+
+    for (index = 0; index < map->vmm_count; ++index) {
+        entry = &map->vmm_entries[index];
+        if ((entry->vme_flags & VM_MAP_WIRED) == 0 ||
+            entry->vme_end <= start || entry->vme_start >= end)
+            continue;
+        first = entry->vme_start > start ? entry->vme_start : start;
+        last = entry->vme_end < end ? entry->vme_end : end;
+        for (address = first; address < last; address += VM_PAGE_SIZE) {
+            offset = entry->vme_offset + (address - entry->vme_start);
+            page = vm_object_resident_page(entry->vme_object, offset);
+            if (page == 0 || page->vmp_wire_count == 0)
+                return EFAULT;
+        }
+    }
+    for (index = 0; index < map->vmm_count; ++index) {
+        entry = &map->vmm_entries[index];
+        if ((entry->vme_flags & VM_MAP_WIRED) == 0 ||
+            entry->vme_end <= start || entry->vme_start >= end)
+            continue;
+        first = entry->vme_start > start ? entry->vme_start : start;
+        last = entry->vme_end < end ? entry->vme_end : end;
+        for (address = first; address < last; address += VM_PAGE_SIZE) {
+            offset = entry->vme_offset + (address - entry->vme_start);
+            page = vm_object_resident_page(entry->vme_object, offset);
+            error = vm_page_counter_dec(vmspace_allocator, page,
+                VM_PAGE_COUNTER_WIRE);
+            if (error != 0)
+                return error;
+        }
+    }
+    return 0;
+}
+
 int
 vmspace_unmap(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size)
 {
@@ -150,6 +196,9 @@ vmspace_unmap(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size)
         ++count;
     }
     error = pmap_remove(vmspace->vms_pmap, start, end);
+    if (error != 0)
+        return error;
+    error = vmspace_unwire_removed(&vmspace->vms_map, start, end);
     if (error != 0)
         return error;
     vmspace->vms_map = replacement;
@@ -305,6 +354,11 @@ vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
         (void)vm_object_release(object);
         return error;
     }
+    error = vmspace_unwire_removed(&vmspace->vms_map, start, end);
+    if (error != 0) {
+        (void)vm_object_release(object);
+        return error;
+    }
     vmspace->vms_map = replacement;
     for (index = 0; index < count; ++index) {
         if (!vmspace_map_has_object(&replacement,
@@ -364,6 +418,108 @@ vmspace_protect(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
     return 0;
 }
 
+static void
+vmspace_wire_rollback(const struct vm_map *map, vm_vaddr_t start,
+    vm_vaddr_t end)
+{
+    const struct vm_map_entry *entry;
+    struct vm_page *page;
+    vm_ooffset_t offset;
+    vm_vaddr_t address;
+
+    for (address = start; address < end; address += VM_PAGE_SIZE) {
+        entry = vm_map_lookup(map, address);
+        if (entry == 0 || (entry->vme_flags & VM_MAP_WIRED) != 0)
+            continue;
+        offset = entry->vme_offset + (address - entry->vme_start);
+        page = vm_object_resident_page(entry->vme_object, offset);
+        if (page != 0)
+            (void)vm_page_counter_dec(vmspace_allocator, page,
+                VM_PAGE_COUNTER_WIRE);
+    }
+}
+
+int
+vmspace_wire(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
+    int wire)
+{
+    struct vm_map replacement;
+    const struct vm_map_entry *entry;
+    struct vm_page *page;
+    vm_ooffset_t offset;
+    vm_vaddr_t address;
+    vm_vaddr_t end;
+    int error;
+
+    if (!vmspace_valid(vmspace) || size == 0 ||
+        !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
+        size - 1 > VM_VADDR_MAX - start || (wire != 0 && wire != 1))
+        return EINVAL;
+    end = start + size;
+    replacement = vmspace->vms_map;
+    error = vm_map_set_flags(&replacement, start, end,
+        wire ? VM_MAP_WIRED : 0, wire ? 0 : VM_MAP_WIRED);
+    if (error != 0)
+        return error;
+    if (wire) {
+        for (address = start; address < end; address += VM_PAGE_SIZE) {
+            entry = vm_map_lookup(&vmspace->vms_map, address);
+            if ((entry->vme_flags & VM_MAP_WIRED) != 0)
+                continue;
+            offset = entry->vme_offset + (address - entry->vme_start);
+            error = vm_object_fault(entry->vme_object, offset, 0, &page);
+            if (error == 0)
+                error = vm_page_counter_inc(vmspace_allocator, page,
+                    VM_PAGE_COUNTER_WIRE);
+            if (error != 0) {
+                vmspace_wire_rollback(&vmspace->vms_map, start, address);
+                return error;
+            }
+        }
+    } else {
+        for (address = start; address < end; address += VM_PAGE_SIZE) {
+            entry = vm_map_lookup(&vmspace->vms_map, address);
+            if ((entry->vme_flags & VM_MAP_WIRED) == 0)
+                continue;
+            offset = entry->vme_offset + (address - entry->vme_start);
+            page = vm_object_resident_page(entry->vme_object, offset);
+            if (page == 0 || page->vmp_wire_count == 0)
+                return EFAULT;
+        }
+        for (address = start; address < end; address += VM_PAGE_SIZE) {
+            entry = vm_map_lookup(&vmspace->vms_map, address);
+            if ((entry->vme_flags & VM_MAP_WIRED) == 0)
+                continue;
+            offset = entry->vme_offset + (address - entry->vme_start);
+            page = vm_object_resident_page(entry->vme_object, offset);
+            error = vm_page_counter_dec(vmspace_allocator, page,
+                VM_PAGE_COUNTER_WIRE);
+            if (error != 0)
+                return error;
+        }
+    }
+    vmspace->vms_map = replacement;
+    return 0;
+}
+
+int
+vmspace_mincore(const struct vmspace *vmspace, vm_vaddr_t address,
+    int *resident)
+{
+    const struct vm_map_entry *entry;
+    vm_ooffset_t offset;
+
+    if (!vmspace_valid(vmspace) || resident == 0)
+        return EINVAL;
+    entry = vm_map_lookup(&vmspace->vms_map, address);
+    if (entry == 0 || entry->vme_object == 0)
+        return EFAULT;
+    offset = entry->vme_offset +
+        (vm_vaddr_trunc_page(address) - entry->vme_start);
+    *resident = vm_object_resident_page(entry->vme_object, offset) != 0;
+    return 0;
+}
+
 int
 vmspace_check(const struct vmspace *vmspace, vm_vaddr_t start,
     vm_size_t size, vm_prot_t protection)
@@ -379,6 +535,7 @@ vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
 {
     const struct vm_map_entry *entry;
     struct vm_page *page;
+    struct vm_page *old_page;
     vm_ooffset_t offset;
     vm_paddr_t current;
     vm_prot_t effective;
@@ -397,9 +554,24 @@ vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
     offset = entry->vme_offset + (page_address - entry->vme_start);
     cow_write = access == VM_PROT_WRITE &&
         (entry->vme_flags & VM_MAP_COW) != 0;
+    old_page = cow_write && (entry->vme_flags & VM_MAP_WIRED) != 0 ?
+        vm_object_resident_page(entry->vme_object, offset) : 0;
     error = vm_object_fault(entry->vme_object, offset, cow_write, &page);
     if (error != 0)
         return error;
+    if (old_page != 0 && old_page != page) {
+        error = vm_page_counter_inc(vmspace_allocator, page,
+            VM_PAGE_COUNTER_WIRE);
+        if (error != 0)
+            return error;
+        error = vm_page_counter_dec(vmspace_allocator, old_page,
+            VM_PAGE_COUNTER_WIRE);
+        if (error != 0) {
+            (void)vm_page_counter_dec(vmspace_allocator, page,
+                VM_PAGE_COUNTER_WIRE);
+            return error;
+        }
+    }
     error = pmap_extract(vmspace->vms_pmap, page_address, &current);
     effective = entry->vme_protection;
     if ((entry->vme_flags & VM_MAP_COW) != 0 && !cow_write)
@@ -588,7 +760,7 @@ vmspace_clone(struct vmspace *source, struct vmspace **result)
                 goto fail;
             new_object = 1;
         }
-        flags = source_entry->vme_flags;
+        flags = source_entry->vme_flags & ~VM_MAP_WIRED;
         if ((flags & VM_MAP_SHARED) == 0 &&
             (source_entry->vme_max_protection & VM_PROT_WRITE) != 0)
             flags |= VM_MAP_COW;
