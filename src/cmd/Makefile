@@ -118,6 +118,8 @@ size strip: %: %.o aoutio.o
 
 size.o strip.o: elf32_mips.h
 
+off64-smoke-gcc: $(TOPSRC)/sys/mips/rootfs/root/off64-smoke.c
+
 aoutio.o:	aoutio.c aoutio.h
 		$(CC) $(CFLAGS) -c $<
 

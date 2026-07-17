@@ -607,7 +607,8 @@ prepare_device_write(int fd)
 
     if (fstat(fd, &status) != 0)
         return -1;
-    if (S_ISBLK(status.st_mode) && ioctl(fd, DIOCREINIT) != 0)
+    if ((S_ISBLK(status.st_mode) || S_ISCHR(status.st_mode)) &&
+        ioctl(fd, DIOCREINIT) != 0)
         return -1;
 #else
     (void)fd;
@@ -626,7 +627,8 @@ sync_device(int fd)
 
         if (fstat(fd, &status) != 0)
             return -1;
-        if (S_ISBLK(status.st_mode) && ioctl(fd, DIOCFLUSH) != 0)
+        if ((S_ISBLK(status.st_mode) || S_ISCHR(status.st_mode)) &&
+            ioctl(fd, DIOCFLUSH) != 0)
             return -1;
     }
 #endif
@@ -641,7 +643,8 @@ revalidate_device(int fd)
 
     if (fstat(fd, &status) != 0)
         return -1;
-    if (S_ISBLK(status.st_mode) && ioctl(fd, DIOCREINIT) != 0)
+    if ((S_ISBLK(status.st_mode) || S_ISCHR(status.st_mode)) &&
+        ioctl(fd, DIOCREINIT) != 0)
         return -1;
 #else
     (void)fd;
@@ -650,17 +653,33 @@ revalidate_device(int fd)
 }
 
 static int
+write_stage_failed(const char *stage)
+{
+    int saved_errno;
+
+    saved_errno = errno;
+    fprintf(stderr, "gpt: write stage failed: %s\n", stage);
+    errno = saved_errno;
+    return -1;
+}
+
+static int
 write_table(int fd, const struct gpt_table *gpt,
-    const unsigned char *original_mbr)
+    const unsigned char *original_mbr, enum gpt_action action)
 {
     unsigned char sector[GPT_SECTOR_SIZE];
     unsigned char saved_mbr[GPT_SECTOR_SIZE];
     const unsigned char *mbr_source;
     gpt_lba_t backup_entries;
     unsigned entries_crc;
+    int destructive_create;
 
-    if (validate_entries(gpt) != 0 || prepare_device_write(fd) != 0)
-        return -1;
+    if (validate_entries(gpt) != 0) {
+        errno = EINVAL;
+        return write_stage_failed("validate partition entries");
+    }
+    if (prepare_device_write(fd) != 0)
+        return write_stage_failed("prepare disk for writing");
     mbr_source = original_mbr;
     if (mbr_source == 0) {
         if (read_exact_at(fd, 0, saved_mbr, sizeof(saved_mbr)) != 0)
@@ -669,30 +688,39 @@ write_table(int fd, const struct gpt_table *gpt,
     }
     entries_crc = crc32(gpt->entries, sizeof(gpt->entries));
     backup_entries = gpt->media_sectors - 1u - GPT_ENTRY_SECTORS;
+    destructive_create = action == GPT_ACTION_CREATE;
 
     /* UEFI requires updating the backup table before the primary table. */
     if (write_exact_at(fd, backup_entries, gpt->entries,
         sizeof(gpt->entries)) != 0)
-        return -1;
+        return write_stage_failed("backup partition array");
     build_header(sector, gpt, gpt->media_sectors - 1u, backup_entries,
         entries_crc);
     if (write_exact_at(fd, gpt->media_sectors - 1u, sector,
-        sizeof(sector)) != 0 || sync_device(fd) != 0)
-        return -1;
+        sizeof(sector)) != 0)
+        return write_stage_failed("backup header");
+    if (!destructive_create && sync_device(fd) != 0)
+        return write_stage_failed("flush backup GPT");
 
     if (write_exact_at(fd, 2u, gpt->entries, sizeof(gpt->entries)) != 0)
-        return -1;
+        return write_stage_failed("primary partition array");
     build_header(sector, gpt, 1u, 2u, entries_crc);
-    if (write_exact_at(fd, 1u, sector, sizeof(sector)) != 0 ||
-        sync_device(fd) != 0)
-        return -1;
+    if (write_exact_at(fd, 1u, sector, sizeof(sector)) != 0)
+        return write_stage_failed("primary header");
+    if (!destructive_create && sync_device(fd) != 0)
+        return write_stage_failed("flush primary GPT");
     /* Make the complete GPT durable before replacing a legacy MBR. */
     build_pmbr(sector, gpt->media_sectors, mbr_source);
-    if (write_exact_at(fd, 0, sector, sizeof(sector)) != 0 ||
-        sync_device(fd) != 0)
-        return -1;
+    if (original_mbr == 0 && !destructive_create &&
+        memcmp(sector, saved_mbr, sizeof(sector)) == 0)
+        goto revalidate;
+    if (write_exact_at(fd, 0, sector, sizeof(sector)) != 0)
+        return write_stage_failed("protective MBR");
+    if (sync_device(fd) != 0)
+        return write_stage_failed("flush protective MBR");
+revalidate:
     if (revalidate_device(fd) != 0)
-        return -1;
+        return write_stage_failed("reload partition table");
     return 0;
 }
 
@@ -1223,7 +1251,7 @@ main(int argc, char **argv)
         delete_partition(&table, number) != 0)
         goto done;
     if (write_table(fd, &table,
-        action == GPT_ACTION_MIGRATE ? original_mbr : 0) != 0) {
+        action == GPT_ACTION_MIGRATE ? original_mbr : 0, action) != 0) {
         perror("gpt: write");
         goto done;
     }

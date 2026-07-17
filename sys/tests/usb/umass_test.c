@@ -17,6 +17,7 @@
 #define SCSI_TEST_UNIT_READY        0x00u
 #define SCSI_REQUEST_SENSE          0x03u
 #define SCSI_INQUIRY                0x12u
+#define SCSI_MODE_SENSE_6           0x1au
 #define SCSI_READ_CAPACITY_10       0x25u
 #define SCSI_READ_10                0x28u
 #define SCSI_WRITE_10               0x2au
@@ -42,6 +43,7 @@ struct fake_disk {
     unsigned tur_count;
     unsigned sense_count;
     unsigned capacity_count;
+    unsigned mode_sense_count;
     unsigned read_count;
     unsigned write_count;
     unsigned sync_count;
@@ -50,6 +52,8 @@ struct fake_disk {
     unsigned write_protected;
     unsigned write_rejected;
     unsigned sync_unsupported;
+    unsigned mode_sense_unsupported;
+    unsigned write_cache_enabled;
     unsigned sense_key;
 };
 
@@ -174,6 +178,19 @@ fake_data_in(struct fake_disk *fake, void *data, size_t length,
         fake->sense_key = 0;
         ++fake->sense_count;
         break;
+    case SCSI_MODE_SENSE_6:
+        if (length < 4u)
+            return USB_STATUS_IO_ERROR;
+        memset(data, 0, length);
+        bytes[0] = 23u;
+        if (length > 4u) {
+            bytes[4] = 0x08u;
+            bytes[5] = 18u;
+            if (fake->write_cache_enabled)
+                bytes[6] = 0x04u;
+        }
+        ++fake->mode_sense_count;
+        break;
     case SCSI_READ_CAPACITY_10:
         if (length != 8)
             return USB_STATUS_IO_ERROR;
@@ -267,6 +284,10 @@ fake_csw(struct fake_disk *fake, void *buffer, size_t *actlenp)
             csw->bCSWStatus = UMASS_BBB_CSW_FAILED;
             fake->sense_key = 0x05u;
         }
+    } else if (opcode == SCSI_MODE_SENSE_6 &&
+        fake->mode_sense_unsupported) {
+        csw->bCSWStatus = UMASS_BBB_CSW_FAILED;
+        fake->sense_key = 0x05u;
     }
     *actlenp = sizeof(*csw);
     fake->have_cbw = 0;
@@ -339,6 +360,7 @@ test_probe_and_chunked_io(void)
     unsigned i;
 
     fake_init(&fake);
+    fake.write_cache_enabled = 1;
     fake.tur_failures = 1;
     umass_bbb_init(&bbb, &fake_ops, &fake, 0);
     umass_media_init(&media, &bbb);
@@ -349,6 +371,9 @@ test_probe_and_chunked_io(void)
     CHECK(fake.tur_count == 2);
     CHECK(fake.sense_count == 1);
     CHECK(fake.capacity_count == 1);
+    CHECK(fake.mode_sense_count == 2);
+    CHECK(media.um_cache_mode_valid == 1);
+    CHECK(media.um_write_cache_enabled == 1);
     CHECK(fake.read_count == 0);
 
     CHECK(umass_media_read(&media, 4, TEST_IO_SECTORS, data) ==
@@ -389,6 +414,7 @@ test_write_failures_and_optional_flush(void)
     unsigned sync_count;
 
     fake_init(&fake);
+    fake.write_cache_enabled = 1;
     memset(data, 0x5a, sizeof(data));
     umass_bbb_init(&bbb, &fake_ops, &fake, 0);
     umass_media_init(&media, &bbb);
@@ -411,14 +437,59 @@ test_write_failures_and_optional_flush(void)
     CHECK(memcmp(fake.storage + 3 * UMASS_SECTOR_SIZE, before,
         sizeof(before)) == 0);
 
+    resets = fake.reset_count;
+    fake.fail_next_bulk = USB_STATUS_TIMEOUT;
+    CHECK(umass_media_write(&media, 3, 1, data) == UMASS_BBB_OK);
+    CHECK(fake.reset_count == resets + 1);
+    CHECK(memcmp(fake.storage + 3 * UMASS_SECTOR_SIZE, data,
+        sizeof(data)) == 0);
+
+    resets = fake.reset_count;
+    fake.fail_next_bulk = USB_STATUS_TIMEOUT;
+    CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
+    CHECK(fake.reset_count == resets + 1);
+    CHECK(fake.sync_count == 1);
+
     fake.sync_unsupported = 1;
     CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
     CHECK(media.um_no_sync_cache == 1);
-    CHECK(fake.sync_count == 1);
+    CHECK(fake.sync_count == 2);
     CHECK(fake.sense_count == 1);
     sync_count = fake.sync_count;
     CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
     CHECK(fake.sync_count == sync_count);
+    return 0;
+}
+
+static int
+test_write_through_cache_policy(void)
+{
+    struct fake_disk fake;
+    struct umass_bbb bbb;
+    struct umass_media media;
+    unsigned char data[UMASS_SECTOR_SIZE];
+
+    fake_init(&fake);
+    umass_bbb_init(&bbb, &fake_ops, &fake, 0);
+    umass_media_init(&media, &bbb);
+    CHECK(umass_media_probe(&media) == UMASS_BBB_OK);
+    CHECK(media.um_cache_mode_valid == 1);
+    CHECK(media.um_write_cache_enabled == 0);
+    memset(data, 0xa5, sizeof(data));
+    CHECK(umass_media_write(&media, 1, 1, data) == UMASS_BBB_OK);
+    CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
+    CHECK(fake.sync_count == 0);
+
+    fake_init(&fake);
+    fake.mode_sense_unsupported = 1;
+    umass_bbb_init(&bbb, &fake_ops, &fake, 0);
+    umass_media_init(&media, &bbb);
+    CHECK(umass_media_probe(&media) == UMASS_BBB_OK);
+    CHECK(media.um_cache_mode_valid == 0);
+    CHECK(media.um_write_cache_enabled == 0);
+    CHECK(fake.sense_count == 1);
+    CHECK(umass_media_flush(&media) == UMASS_BBB_OK);
+    CHECK(fake.sync_count == 0);
     return 0;
 }
 
@@ -486,6 +557,7 @@ main(void)
 {
     CHECK(test_probe_and_chunked_io() == 0);
     CHECK(test_write_failures_and_optional_flush() == 0);
+    CHECK(test_write_through_cache_policy() == 0);
     CHECK(test_bot_error_paths() == 0);
     CHECK(test_unsupported_sector_size() == 0);
     puts("umass_test: all tests passed");

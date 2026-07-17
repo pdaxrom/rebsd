@@ -21,6 +21,8 @@ struct umass_media {
     struct umass_bbb *um_bbb;
     unsigned um_sector_count;
     unsigned um_sector_size;
+    unsigned um_cache_mode_valid;
+    unsigned um_write_cache_enabled;
     unsigned um_no_sync_cache;
     uByte um_inquiry[UMASS_INQUIRY_LENGTH];
     uByte um_sense[UMASS_SENSE_LENGTH];

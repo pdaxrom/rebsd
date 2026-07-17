@@ -41,6 +41,9 @@
 #define FAT32_FSINFO_SECTOR     1u
 #define FAT32_BACKUP_SECTOR     6u
 #define MEDIA_FIXED             0xf8u
+#define FORMAT_IO_SECTORS       256u
+
+static unsigned char format_zero[FORMAT_IO_SECTORS * SECTOR_SIZE];
 
 struct geometry {
     unsigned type;
@@ -345,6 +348,33 @@ write_sector(int fd, unsigned sector, const unsigned char *data)
     return 0;
 }
 
+static int
+write_zero_sectors(int fd, unsigned sector, unsigned sectors)
+{
+    off_t offset;
+    size_t bytes;
+    ssize_t count;
+    unsigned chunk;
+
+    if (sectors == 0)
+        return 0;
+    offset = (off_t)sector * SECTOR_SIZE;
+    if (lseek(fd, offset, SEEK_SET) != offset)
+        return -1;
+    while (sectors != 0) {
+        chunk = sectors > FORMAT_IO_SECTORS ? FORMAT_IO_SECTORS : sectors;
+        bytes = (size_t)chunk * SECTOR_SIZE;
+        count = write(fd, format_zero, bytes);
+        if (count != (ssize_t)bytes) {
+            if (count >= 0)
+                errno = EIO;
+            return -1;
+        }
+        sectors -= chunk;
+    }
+    return 0;
+}
+
 static void
 make_boot_sector(unsigned char *boot, const struct geometry *geometry,
     const struct options *options, unsigned hidden)
@@ -442,13 +472,11 @@ format_volume(int fd, const struct geometry *geometry,
     unsigned char data[SECTOR_SIZE];
     unsigned char boot[SECTOR_SIZE];
     unsigned fat;
-    unsigned sector;
     unsigned start;
 
     memset(data, 0, sizeof(data));
-    for (sector = 0; sector < geometry->reserved_sectors; ++sector)
-        if (write_sector(fd, sector, data) < 0)
-            return -1;
+    if (write_zero_sectors(fd, 0, geometry->reserved_sectors) < 0)
+        return -1;
     make_boot_sector(boot, geometry, options, hidden);
     if (write_sector(fd, 0, boot) < 0)
         return -1;
@@ -465,25 +493,23 @@ format_volume(int fd, const struct geometry *geometry,
         make_first_fat_sector(data, geometry);
         if (write_sector(fd, start, data) < 0)
             return -1;
-        memset(data, 0, sizeof(data));
-        for (sector = 1; sector < geometry->fat_sectors; ++sector)
-            if (write_sector(fd, start + sector, data) < 0)
-                return -1;
+        if (write_zero_sectors(fd, start + 1,
+            geometry->fat_sectors - 1u) < 0)
+            return -1;
     }
     make_label_entry(data, options);
     start = geometry->type == 16u ? geometry->reserved_sectors +
         FAT_COUNT * geometry->fat_sectors : geometry->data_start;
     if (write_sector(fd, start, data) < 0)
         return -1;
-    memset(data, 0, sizeof(data));
     if (geometry->type == 16u) {
-        for (sector = 1; sector < geometry->root_sectors; ++sector)
-            if (write_sector(fd, start + sector, data) < 0)
-                return -1;
+        if (write_zero_sectors(fd, start + 1,
+            geometry->root_sectors - 1u) < 0)
+            return -1;
     } else {
-        for (sector = 1; sector < geometry->sectors_per_cluster; ++sector)
-            if (write_sector(fd, start + sector, data) < 0)
-                return -1;
+        if (write_zero_sectors(fd, start + 1,
+            geometry->sectors_per_cluster - 1u) < 0)
+            return -1;
     }
     if (fsync(fd) < 0)
         return -1;

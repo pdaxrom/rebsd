@@ -66,6 +66,18 @@ attachment and I/O through a GPT-formatted USB medium remain a separate
 hardware gate. The retained transcript is
 `usb-logs/ci20-gpt-image-smoke-verified-20260716.txt`.
 
+`/root/gpt-media-smoke.sh preflight` is the read-only gate for a real legacy
+FAT USB disk: it validates the MBR-to-GPT mapping, samples payload sectors,
+runs an 8 MiB read-only block benchmark, `fsck.fat -n`, mounts FAT read-only,
+and runs the 64-bit block-offset test with GCC and PCC. Its explicit `migrate`
+mode accepts exactly one primary
+FAT partition, saves the original MBR, performs the metadata conversion,
+checks both GPT copies and unchanged partition geometry/payload samples, then
+runs FAT read/write/rename/remount and a final non-mutating filesystem check.
+On an incomplete migration it retains the original MBR in `/var` for manual
+diagnosis instead of rewriting metadata while the kernel may hold a newly
+revalidated table.
+
 The final EHCI keyboard/hub image is:
 
 ```text

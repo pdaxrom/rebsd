@@ -66,6 +66,9 @@ struct fake_ehci {
     unsigned async_starts;
     unsigned async_stops;
     unsigned async_advances;
+    struct ehci_softc *reenter_ehci;
+    unsigned reenter_on_delay;
+    unsigned reentered;
     const unsigned char *bulk_reply;
     size_t bulk_reply_length;
     unsigned char bulk_out[64];
@@ -448,6 +451,12 @@ fake_delay(void *arg, unsigned milliseconds)
 
     fake = arg;
     fake->delay_total += milliseconds;
+    if (fake->reenter_on_delay && !fake->reentered &&
+        fake->reenter_ehci != 0) {
+        fake->reentered = 1;
+        fake->regs[FAKE_OP(EHCI_USBSTS)] |= EHCI_STS_INT;
+        (void)ehci_intr(fake->reenter_ehci);
+    }
 }
 
 static void
@@ -1042,15 +1051,25 @@ test_periodic_split_interrupts(void)
     child_xfer = usb_alloc_xfer(child);
     CHECK(child_xfer != 0);
     memset(&child_events, 0, sizeof(child_events));
-    child_events.limit = 1;
+    child_events.limit = 2;
     usb_setup_xfer(child_xfer, child_pipe, &child_events,
         child_report, sizeof(child_report), USB_XFER_SHORT_OK, 0,
         repeat_done);
     CHECK(usb_submit_xfer(child_xfer) == USB_STATUS_IN_PROGRESS);
     fake_run_periodic(&fake, 33);
+    /* An IRQ inside split-QH unlink must not poll the same qTD twice. */
+    fake.reenter_ehci = &ehci;
+    fake.reenter_on_delay = 1;
     CHECK(ehci_intr(&ehci) == 1);
-    CHECK(child_events.callbacks == 1 && !child_xfer->ux_active &&
-        child_events.status == USB_STATUS_NORMAL_COMPLETION);
+    CHECK(fake.reentered == 1 && child_events.callbacks == 1 &&
+        child_events.submit_status == USB_STATUS_IN_PROGRESS &&
+        child_xfer->ux_active && child_epipe->ep_periodic_linked);
+    fake.reenter_on_delay = 0;
+    fake_run_periodic(&fake, 41);
+    CHECK(ehci_intr(&ehci) == 1);
+    CHECK(child_events.callbacks == 2 && !child_xfer->ux_active &&
+        child_events.status == USB_STATUS_NORMAL_COMPLETION &&
+        !child_epipe->ep_periodic_linked);
     CHECK(usb_free_xfer(child_xfer) == USB_STATUS_NORMAL_COMPLETION);
     usb_close_pipe(child_pipe);
 

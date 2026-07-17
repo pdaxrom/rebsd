@@ -33,6 +33,7 @@ char *progname;
 int verbose;
 int readonly;
 char *block;
+int writepasses = 1;
 
 /*
  * Get current time in microseconds.
@@ -62,12 +63,14 @@ void usage()
 {
     fprintf(stderr, "Disk speed test, Version %s, %s\n", version, copyright);
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "    %s [-v] [-r] [-b blocksz] [-m datasz] [filename]\n", progname);
+    fprintf(stderr, "    %s [-v] [-r] [-b blocksz] [-m datasz] "
+        "[-p passes] [filename]\n", progname);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "    -v    verbose mode\n");
     fprintf(stderr, "    -r    read-only benchmark; never create or write a file\n");
     fprintf(stderr, "    -b #  block size in kbytes, default 4\n");
     fprintf(stderr, "    -m #  data size in Mbytes, default 8\n");
+    fprintf(stderr, "    -p #  write passes, default 1; later passes overwrite\n");
     exit(-1);
 }
 
@@ -75,13 +78,13 @@ int main(int argc, char **argv)
 {
     int blocksize_kbytes = 4;
     int datasize_mbytes = 8;
-    int nbytes, fd, n;
+    int nbytes, fd, n, pass;
     char *filename = 0;
     unsigned t0, msec;
 
     progname = *argv;
     for (;;) {
-        switch (getopt(argc, argv, "vrb:m:")) {
+        switch (getopt(argc, argv, "vrb:m:p:")) {
         case EOF:
             break;
         case 'v':
@@ -95,6 +98,9 @@ int main(int argc, char **argv)
             continue;
         case 'm':
             datasize_mbytes = strtol(optarg, 0, 0);
+            continue;
+        case 'p':
+            writepasses = strtol(optarg, 0, 0);
             continue;
         default:
             usage();
@@ -123,6 +129,12 @@ int main(int argc, char **argv)
     if (datasize_mbytes < 1 || datasize_mbytes > MAX_DATA_SZ) {
         fprintf(stderr, "Bad data size = %d Mbytes.\n", datasize_mbytes);
         fprintf(stderr, "Valid range is 1...%d Mbytes.\n", MAX_DATA_SZ);
+        exit(-1);
+    }
+    if (writepasses < 1 || writepasses > 16 ||
+        (readonly && writepasses != 1)) {
+        fprintf(stderr, "Bad write pass count = %d.\n", writepasses);
+        fprintf(stderr, "Valid range is 1...16 for a write benchmark.\n");
         exit(-1);
     }
     if (filename)
@@ -171,21 +183,36 @@ int main(int argc, char **argv)
      * Write data to file.
      */
     if (!readonly) {
-        sync();
-        usleep(200000);
-        sync();
-        usleep(200000);
-        t0 = current_msec();
-        for (n=0; n<datasize_mbytes*1024/blocksize_kbytes; n++) {
-            if (write(fd, block, nbytes) != nbytes) {
-                fprintf(stderr, "Write error at block %d.\n", n);
+        for (pass = 0; pass < writepasses; ++pass) {
+            if (lseek(fd, 0, SEEK_SET) != 0) {
+                fprintf(stderr, "Cannot seek file '%s'.\n", filename);
                 exit(-1);
             }
+            sync();
+            usleep(200000);
+            sync();
+            usleep(200000);
+            t0 = current_msec();
+            for (n=0; n<datasize_mbytes*1024/blocksize_kbytes; n++) {
+                if (write(fd, block, nbytes) != nbytes) {
+                    fprintf(stderr, "Write error at pass %d block %d.\n",
+                        pass + 1, n);
+                    exit(-1);
+                }
+            }
+            /* Include filesystem and device-cache drain in the result. */
+            sync();
+            msec = elapsed_msec(t0);
+            if (writepasses == 1)
+                printf("Write+sync speed: %u Mbytes in %u.%03u seconds "
+                    "= %u kbytes/sec\n", datasize_mbytes, msec/1000,
+                    msec%1000, datasize_mbytes*1024000U / msec);
+            else
+                printf("%s+sync pass %d: %u Mbytes in %u.%03u seconds "
+                    "= %u kbytes/sec\n", pass == 0 ? "Write" :
+                    "Overwrite", pass + 1, datasize_mbytes, msec/1000,
+                    msec%1000, datasize_mbytes*1024000U / msec);
         }
-        msec = elapsed_msec(t0);
-        printf ("Write speed: %u Mbytes in %u.%03u seconds = %u kbytes/sec\n",
-            datasize_mbytes, msec/1000, msec%1000,
-            datasize_mbytes*1024000U / msec);
     }
 
     /*

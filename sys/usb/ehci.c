@@ -1715,14 +1715,18 @@ ehci_hcd_poll(struct usb_hcd *hcd)
     struct ehci_softc *sc;
 
     sc = (struct ehci_softc *)hcd->uh_softc;
-    if (sc == 0 || !sc->eh_started)
+    if (sc == 0 || !sc->eh_started || sc->eh_polling)
         return;
+    sc->eh_polling = 1;
     ehci_periodic_ensure_running(sc);
     if (dma_sync_for_cpu(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0)
+        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) != 0) {
+        sc->eh_polling = 0;
         return;
+    }
     ehci_poll_interrupts(sc);
     ehci_poll_active(sc);
+    sc->eh_polling = 0;
 }
 
 #ifdef KERNEL
@@ -1741,11 +1745,7 @@ ehci_watchdog(caddr_t arg)
     sc->eh_watchdog_armed = 0;
     if (!sc->eh_started || !ehci_interrupt_xfers_active(sc))
         return;
-    ehci_periodic_ensure_running(sc);
-    if (dma_sync_for_cpu(&sc->eh_schedule_dma, 0,
-        EHCI_SCHEDULE_BYTES, DMA_BIDIRECTIONAL) == 0) {
-        ehci_poll_interrupts(sc);
-    }
+    ehci_hcd_poll(&sc->eh_hcd);
     if (sc->eh_started && ehci_interrupt_xfers_active(sc))
         ehci_watchdog_arm(sc);
 }

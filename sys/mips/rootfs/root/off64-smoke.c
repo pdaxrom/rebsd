@@ -78,11 +78,13 @@ check_device(const char *path)
 
     fd = open(path, O_RDONLY);
     if (fd < 0)
-        return bad("open block device");
+        return bad("open disk device");
     if (fstat(fd, &fst) < 0 || stat(path, &pst) < 0)
-        return bad("stat block device");
-    if (!S_ISBLK(fst.st_mode) || fst.st_rdev != pst.st_rdev)
-        return bad("block-device stat contents");
+        return bad("stat disk device");
+    if ((!S_ISBLK(fst.st_mode) && !S_ISCHR(fst.st_mode)) ||
+        (fst.st_mode & S_IFMT) != (pst.st_mode & S_IFMT) ||
+        fst.st_rdev != pst.st_rdev)
+        return bad("disk-device stat contents");
 
     want = (off_t)3 * 1024 * 1024 * 1024;
     pos = lseek(fd, want, SEEK_SET);
@@ -104,7 +106,7 @@ check_device(const char *path)
     if (lseek(fd, (off_t)-1, SEEK_SET) != (off_t)-1 || errno != EINVAL)
         return bad("negative seek rejection");
     if (close(fd) < 0)
-        return bad("close block device");
+        return bad("close disk device");
     return 0;
 }
 

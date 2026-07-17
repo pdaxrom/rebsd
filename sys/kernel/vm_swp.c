@@ -109,8 +109,9 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
  * raw read&write routines , systems had been running fine for several
  * months with it ifdef'd out.  9/91-sms
  */
-int
-physio(void (*strat) (struct buf*), struct buf *bp, dev_t dev, int rw, struct uio *uio)
+static int
+physio_shift(void (*strat) (struct buf*), struct buf *bp, dev_t dev, int rw,
+    struct uio *uio, unsigned block_shift)
 {
     int error = 0, s, c, allocbuf = 0;
     register struct iovec *iov;
@@ -150,7 +151,7 @@ physio(void (*strat) (struct buf*), struct buf *bp, dev_t dev, int rw, struct ui
             bp->b_flags = B_BUSY | B_PHYS | B_INVAL | rw;
             bp->b_dev = dev;
             bp->b_addr = iov->iov_base;
-            bp->b_blkno = (blkno_t)(uio->uio_offset >> DEV_BSHIFT);
+            bp->b_blkno = (blkno_t)(uio->uio_offset >> block_shift);
             bp->b_bcount = iov->iov_len;
             c = bp->b_bcount;
             (*strat)(bp);
@@ -182,8 +183,24 @@ physio(void (*strat) (struct buf*), struct buf *bp, dev_t dev, int rw, struct ui
 }
 
 int
+physio(void (*strat) (struct buf*), struct buf *bp, dev_t dev, int rw,
+    struct uio *uio)
+{
+    return physio_shift(strat, bp, dev, rw, uio, DEV_BSHIFT);
+}
+
+int
 rawrw (dev_t dev, struct uio *uio, int flag)
 {
     return (physio(cdevsw[major(dev)].d_strategy, (struct buf *)NULL, dev,
         uio->uio_rw == UIO_READ ? B_READ : B_WRITE, uio));
+}
+
+/* Raw 512-byte-sector disks cannot use the kernel's 1024-byte DEV_BSIZE. */
+int
+rawrw512 (dev_t dev, struct uio *uio, int flag)
+{
+    return (physio_shift(cdevsw[major(dev)].d_strategy,
+        (struct buf *)NULL, dev,
+        uio->uio_rw == UIO_READ ? B_READ : B_WRITE, uio, 9u));
 }

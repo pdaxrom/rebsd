@@ -142,6 +142,7 @@ struct ehci_softc {
     unsigned eh_periodic_count;
     unsigned eh_periodic_generation;
     unsigned eh_periodic_recoveries;
+    volatile unsigned eh_polling;
     unsigned eh_started;
 #ifdef KERNEL
     unsigned eh_watchdog_armed;

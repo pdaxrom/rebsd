@@ -115,6 +115,9 @@ mode 0775
 file /root/gpt-image-smoke.sh
 mode 0775
 
+file /root/gpt-media-smoke.sh
+mode 0775
+
 file /root/off64-smoke.sh
 mode 0775
 

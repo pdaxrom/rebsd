@@ -67,6 +67,7 @@ extern const struct bdevsw bdevsw[];
 extern const struct cdevsw cdevsw[];
 
 int rawrw (dev_t dev, struct uio *uio, int flag);
+int rawrw512 (dev_t dev, struct uio *uio, int flag);
 #endif
 
 #endif

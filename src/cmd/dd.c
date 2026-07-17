@@ -500,13 +500,27 @@ int main(int argc, char **argv)
 
     if (signal(SIGINT, SIG_IGN) != SIG_IGN)
         signal(SIGINT, term);
-    while (skip) {
-        read(ibf, ibuf, ibs);
-        skip--;
+    if (skip) {
+        off_t distance;
+
+        distance = (off_t)skip * (off_t)ibs;
+        if (lseek(ibf, distance, SEEK_CUR) == (off_t)-1) {
+            /* Pipes and tapes are not seekable; retain streaming semantics. */
+            while (skip) {
+                if (read(ibf, ibuf, ibs) <= 0)
+                    break;
+                skip--;
+            }
+        }
     }
-    while (seekn) {
-        lseek(obf, (long)obs, 1);
-        seekn--;
+    if (seekn) {
+        off_t distance;
+
+        distance = (off_t)seekn * (off_t)obs;
+        if (lseek(obf, distance, SEEK_CUR) == (off_t)-1) {
+            perror("seek");
+            term(1);
+        }
     }
 
 loop:

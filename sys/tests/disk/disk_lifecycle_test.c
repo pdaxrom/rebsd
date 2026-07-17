@@ -25,6 +25,11 @@ struct fake_media {
     int flush_error;
     unsigned write_count;
     unsigned flush_count;
+    unsigned read_count;
+    disk_sector_t last_write_sector;
+    unsigned last_write_count;
+    disk_sector_t last_read_sector;
+    unsigned last_read_count;
 };
 
 struct fake_gpt_media {
@@ -90,6 +95,9 @@ fake_read(void *arg, disk_sector_t sector, unsigned count, void *data)
     if (!media->present || count > TEST_SECTORS ||
         sector > TEST_SECTORS - count)
         return EIO;
+    ++media->read_count;
+    media->last_read_sector = sector;
+    media->last_read_count = count;
     test_copy(data, media->data + (unsigned)sector * DISK_SECTOR_SIZE,
         count * DISK_SECTOR_SIZE);
     return 0;
@@ -110,6 +118,8 @@ fake_write(void *arg, disk_sector_t sector, unsigned count,
     test_copy(media->data + (unsigned)sector * DISK_SECTOR_SIZE, data,
         count * DISK_SECTOR_SIZE);
     ++media->write_count;
+    media->last_write_sector = sector;
+    media->last_write_count = count;
     return 0;
 }
 
@@ -292,6 +302,7 @@ fake_attach(struct fake_media *media, unsigned *unitp)
     args.da_sector_count = TEST_SECTORS;
     args.da_sector_size = DISK_SECTOR_SIZE;
     args.da_flags = DISK_FLAG_READ_ONLY | DISK_FLAG_REMOVABLE;
+    args.da_read_ahead_sectors = 16u;
     return disk_attach(&args, unitp);
 }
 
@@ -306,6 +317,23 @@ fake_writable_attach(struct fake_media *media, unsigned *unitp)
     args.da_sector_count = TEST_SECTORS;
     args.da_sector_size = DISK_SECTOR_SIZE;
     args.da_flags = DISK_FLAG_REMOVABLE;
+    args.da_read_ahead_sectors = 16u;
+    return disk_attach(&args, unitp);
+}
+
+static int
+fake_write_back_attach(struct fake_media *media, unsigned *unitp)
+{
+    struct disk_attach_args args;
+
+    test_zero(&args, sizeof(args));
+    args.da_ops = &fake_writable_ops;
+    args.da_arg = media;
+    args.da_sector_count = TEST_SECTORS;
+    args.da_sector_size = DISK_SECTOR_SIZE;
+    args.da_flags = DISK_FLAG_REMOVABLE;
+    args.da_read_ahead_sectors = 16u;
+    args.da_write_back_sectors = 16u;
     return disk_attach(&args, unitp);
 }
 
@@ -402,6 +430,254 @@ test_partition_write_and_flush(void)
     CHECK(media.flush_count == 1);
     CHECK(disk_bdev_ioctl(whole, DIOCREINIT, 0, FREAD) == 0);
     CHECK(disk_bdev_close(whole, FREAD, 0) == 0);
+    disk_detach(unit, &media);
+    return 0;
+}
+
+static int
+test_raw_odd_sector_addressing(void)
+{
+    struct fake_media media;
+    struct buf bp;
+    unsigned char data[DISK_SECTOR_SIZE];
+    unsigned unit;
+    unsigned i;
+    dev_t whole;
+
+    fake_init(&media, 11);
+    for (i = 0; i < DISK_SECTOR_SIZE; ++i) {
+        media.data[DISK_SECTOR_SIZE + i] = 0xa5;
+        media.data[2 * DISK_SECTOR_SIZE + i] = 0x5a;
+    }
+    diskattach(0);
+    CHECK(fake_writable_attach(&media, &unit) == 0 && unit == 0);
+    whole = makedev(2, DISK_MINOR(0, DISK_MINOR_WHOLE));
+
+    test_zero(&bp, sizeof(bp));
+    test_zero(data, sizeof(data));
+    bp.b_dev = whole;
+    bp.b_blkno = 1;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_READ | B_PHYS;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(bp.b_resid == 0);
+    for (i = 0; i < sizeof(data); ++i)
+        CHECK(data[i] == 0xa5);
+
+    for (i = 0; i < sizeof(data); ++i)
+        data[i] = 0x3c;
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 3;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_PHYS;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(bp.b_resid == 0);
+    CHECK(test_equal(media.data + 3 * DISK_SECTOR_SIZE, data,
+        sizeof(data)));
+
+    for (i = 0; i < sizeof(data); ++i)
+        data[i] = 0x69;
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = TEST_SECTORS - 1u;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_PHYS;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(bp.b_resid == 0);
+    CHECK(test_equal(media.data + (TEST_SECTORS - 1u) * DISK_SECTOR_SIZE,
+        data, sizeof(data)));
+
+    disk_detach(unit, &media);
+    return 0;
+}
+
+static int
+test_buffered_read_ahead(void)
+{
+    struct fake_media media;
+    struct buf bp;
+    unsigned char first[2 * DISK_SECTOR_SIZE];
+    unsigned char second[2 * DISK_SECTOR_SIZE];
+    unsigned char update[DISK_SECTOR_SIZE];
+    unsigned unit;
+    unsigned i;
+    dev_t whole;
+
+    fake_init(&media, 19);
+    diskattach(0);
+    CHECK(fake_writable_attach(&media, &unit) == 0 && unit == 0);
+    whole = makedev(2, DISK_MINOR(0, DISK_MINOR_WHOLE));
+    media.read_count = 0;
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 0;
+    bp.b_bcount = sizeof(first);
+    bp.b_addr = (caddr_t)first;
+    bp.b_flags = B_READ;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(media.read_count == 1 && media.last_read_sector == 0);
+    CHECK(media.last_read_count == 16);
+    CHECK(test_equal(first, media.data, sizeof(first)));
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 1;
+    bp.b_bcount = sizeof(second);
+    bp.b_addr = (caddr_t)second;
+    bp.b_flags = B_READ;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(media.read_count == 1);
+    CHECK(test_equal(second, media.data + 2 * DISK_SECTOR_SIZE,
+        sizeof(second)));
+
+    for (i = 0; i < sizeof(update); ++i)
+        update[i] = 0xd6;
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 2;
+    bp.b_bcount = sizeof(update);
+    bp.b_addr = (caddr_t)update;
+    bp.b_flags = B_PHYS;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 1;
+    bp.b_bcount = sizeof(second);
+    bp.b_addr = (caddr_t)second;
+    bp.b_flags = B_READ;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(media.read_count == 2 && media.last_read_count == 16);
+    CHECK(test_equal(second, update, sizeof(update)));
+
+    disk_detach(unit, &media);
+    return 0;
+}
+
+static int
+test_buffered_write_combining(void)
+{
+    struct fake_media media;
+    struct buf bp;
+    unsigned char first[2 * DISK_SECTOR_SIZE];
+    unsigned char second[2 * DISK_SECTOR_SIZE];
+    unsigned char observed[4 * DISK_SECTOR_SIZE];
+    unsigned char window[16 * DISK_SECTOR_SIZE];
+    unsigned char expected[16 * DISK_SECTOR_SIZE];
+    unsigned char raw[DISK_SECTOR_SIZE];
+    unsigned unit;
+    unsigned i;
+    dev_t whole;
+
+    fake_init(&media, 23);
+    for (i = 0; i < sizeof(first); ++i) {
+        first[i] = (unsigned char)(0xa0u ^ i);
+        second[i] = (unsigned char)(0x5au ^ i);
+    }
+    for (i = 0; i < sizeof(raw); ++i)
+        raw[i] = 0x3cu;
+
+    diskattach(0);
+    CHECK(fake_write_back_attach(&media, &unit) == 0 && unit == 0);
+    whole = makedev(2, DISK_MINOR(0, DISK_MINOR_WHOLE));
+    CHECK(disk_bdev_open(whole, FREAD | FWRITE, 0) == 0);
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 1;
+    bp.b_bcount = sizeof(first);
+    bp.b_addr = (caddr_t)first;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 2;
+    bp.b_bcount = sizeof(second);
+    bp.b_addr = (caddr_t)second;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(media.write_count == 0);
+
+    /* A direct full read-ahead-sized read must overlay dirty sectors too. */
+    test_copy(expected, media.data, sizeof(expected));
+    test_copy(expected + 2 * DISK_SECTOR_SIZE, first, sizeof(first));
+    test_copy(expected + 4 * DISK_SECTOR_SIZE, second, sizeof(second));
+    test_zero(window, sizeof(window));
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 0;
+    bp.b_bcount = sizeof(window);
+    bp.b_addr = (caddr_t)window;
+    bp.b_flags = B_READ;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(test_equal(window, expected, sizeof(window)));
+
+    /* Reads must see accepted writes before the combined write is flushed. */
+    test_zero(observed, sizeof(observed));
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 2;
+    bp.b_bcount = sizeof(observed);
+    bp.b_addr = (caddr_t)observed;
+    bp.b_flags = B_READ | B_PHYS;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(test_equal(observed, first, sizeof(first)));
+    CHECK(test_equal(observed + sizeof(first), second, sizeof(second)));
+
+    /* A failed flush retains dirty data for a later retry. */
+    media.write_error = EIO;
+    CHECK(disk_bdev_ioctl(whole, DIOCFLUSH, 0, FWRITE) == EIO);
+    CHECK(media.write_count == 0 && media.flush_count == 0);
+    media.write_error = 0;
+    CHECK(disk_bdev_ioctl(whole, DIOCFLUSH, 0, FWRITE) == 0);
+    CHECK(media.write_count == 1 && media.flush_count == 1);
+    CHECK(media.last_write_sector == 2 && media.last_write_count == 4);
+    CHECK(test_equal(media.data + 2 * DISK_SECTOR_SIZE, first,
+        sizeof(first)));
+    CHECK(test_equal(media.data + 4 * DISK_SECTOR_SIZE, second,
+        sizeof(second)));
+
+    /* A raw write drains older buffered writes without an extra barrier. */
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 10;
+    bp.b_bcount = sizeof(first);
+    bp.b_addr = (caddr_t)first;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(media.write_count == 1);
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = whole;
+    bp.b_blkno = 30;
+    bp.b_bcount = sizeof(raw);
+    bp.b_addr = (caddr_t)raw;
+    bp.b_flags = B_PHYS;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(media.write_count == 3 && media.flush_count == 1);
+    CHECK(test_equal(media.data + 20 * DISK_SECTOR_SIZE, first,
+        sizeof(first)));
+    CHECK(test_equal(media.data + 30 * DISK_SECTOR_SIZE, raw,
+        sizeof(raw)));
+
+    CHECK(disk_bdev_close(whole, FREAD | FWRITE, 0) == 0);
+    CHECK(media.flush_count == 2);
     disk_detach(unit, &media);
     return 0;
 }
@@ -530,6 +806,9 @@ main(void)
 {
     CHECK(test_open_detach_reuse() == 0);
     CHECK(test_partition_write_and_flush() == 0);
+    CHECK(test_raw_odd_sector_addressing() == 0);
+    CHECK(test_buffered_read_ahead() == 0);
+    CHECK(test_buffered_write_combining() == 0);
     CHECK(test_write_and_flush_errors() == 0);
     CHECK(test_gpt_64_bit_lifecycle() == 0);
     puts("disk_lifecycle_test: all tests passed");

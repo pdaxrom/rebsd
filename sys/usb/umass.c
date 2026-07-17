@@ -83,12 +83,20 @@
 #define SCSI_TEST_UNIT_READY        0x00u
 #define SCSI_REQUEST_SENSE          0x03u
 #define SCSI_INQUIRY                0x12u
+#define SCSI_MODE_SENSE_6           0x1au
 #define SCSI_READ_CAPACITY_10       0x25u
 #define SCSI_READ_10                0x28u
 #define SCSI_WRITE_10               0x2au
 #define SCSI_SYNCHRONIZE_CACHE_10   0x35u
 #define SCSI_SENSE_KEY_MASK         0x0fu
 #define SCSI_SENSE_ILLEGAL_REQUEST  0x05u
+#define SCSI_MODE_PAGE_CACHING      0x08u
+#define SCSI_MODE_PAGE_CODE_MASK    0x3fu
+#define SCSI_MODE_PAGE_SPF          0x40u
+#define SCSI_MODE_CACHE_WCE         0x04u
+#define SCSI_MODE_HEADER_6_LENGTH   4u
+#define SCSI_MODE_CACHE_MAX_LENGTH  64u
+#define UMASS_IO_ATTEMPTS           3u
 
 static void
 umass_memzero(void *vptr, size_t length)
@@ -167,6 +175,27 @@ umass_scsi_request_sense(struct umass_bbb *bbb, void *data, size_t length,
     }
     umass_memzero(cdb, sizeof(cdb));
     cdb[0] = SCSI_REQUEST_SENSE;
+    cdb[4] = (uByte)length;
+    return umass_bbb_transfer(bbb, 0, cdb, sizeof(cdb), data, length,
+        UMASS_DIR_IN, UMASS_COMMAND_TIMEOUT_MS, actlenp, &residue);
+}
+
+static enum umass_bbb_result
+umass_scsi_mode_sense_6(struct umass_bbb *bbb, unsigned page, void *data,
+    size_t length, size_t *actlenp)
+{
+    uByte cdb[6];
+    unsigned residue;
+
+    if (bbb == 0 || data == 0 || length < SCSI_MODE_HEADER_6_LENGTH ||
+        length > 255u || page > SCSI_MODE_PAGE_CODE_MASK) {
+        if (bbb != 0)
+            bbb->ub_last_error = USB_STATUS_INVALID;
+        return UMASS_BBB_WIRE_FAILED;
+    }
+    umass_memzero(cdb, sizeof(cdb));
+    cdb[0] = SCSI_MODE_SENSE_6;
+    cdb[2] = (uByte)page;
     cdb[4] = (uByte)length;
     return umass_bbb_transfer(bbb, 0, cdb, sizeof(cdb), data, length,
         UMASS_DIR_IN, UMASS_COMMAND_TIMEOUT_MS, actlenp, &residue);
@@ -293,6 +322,95 @@ umass_media_init(struct umass_media *media, struct umass_bbb *bbb)
     media->um_bbb = bbb;
 }
 
+static void
+umass_media_read_cache_mode(struct umass_media *media)
+{
+    enum umass_bbb_result result;
+    uByte data[SCSI_MODE_CACHE_MAX_LENGTH];
+    size_t actlen;
+    size_t available;
+    size_t length;
+    size_t offset;
+    size_t page_length;
+
+    media->um_cache_mode_valid = 0;
+    media->um_write_cache_enabled = 0;
+
+    /*
+     * Follow the cautious SCSI disk probe used by Linux: first request only
+     * the MODE SENSE(6) header, then use the length reported by the device.
+     * Broken flash controllers are known to hang on an oversized first
+     * request.  Failure means write-through, not permission to issue a blind
+     * SYNCHRONIZE CACHE later.
+     */
+    umass_memzero(data, sizeof(data));
+    result = umass_scsi_mode_sense_6(media->um_bbb,
+        SCSI_MODE_PAGE_CACHING, data, SCSI_MODE_HEADER_6_LENGTH, &actlen);
+    if (result != UMASS_BBB_OK || actlen < SCSI_MODE_HEADER_6_LENGTH)
+        goto unavailable;
+    length = (size_t)data[0] + 1u;
+    if (length <= SCSI_MODE_HEADER_6_LENGTH)
+        goto unavailable;
+    if (length > sizeof(data))
+        length = sizeof(data);
+
+    umass_memzero(data, sizeof(data));
+    result = umass_scsi_mode_sense_6(media->um_bbb,
+        SCSI_MODE_PAGE_CACHING, data, length, &actlen);
+    if (result != UMASS_BBB_OK || actlen < SCSI_MODE_HEADER_6_LENGTH)
+        goto unavailable;
+    available = (size_t)data[0] + 1u;
+    if (available > actlen)
+        available = actlen;
+    offset = SCSI_MODE_HEADER_6_LENGTH + (size_t)data[3];
+    while (offset + 2u <= available) {
+        if ((data[offset] & SCSI_MODE_PAGE_SPF) != 0) {
+            if (offset + 4u > available)
+                break;
+            page_length = 4u + ((size_t)data[offset + 2] << 8) +
+                data[offset + 3];
+        } else {
+            page_length = 2u + data[offset + 1];
+        }
+        if (page_length < 2u || page_length > available - offset)
+            break;
+        if ((data[offset] & SCSI_MODE_PAGE_CODE_MASK) ==
+            SCSI_MODE_PAGE_CACHING) {
+            if (page_length < 3u)
+                break;
+            media->um_cache_mode_valid = 1;
+            media->um_write_cache_enabled =
+                (data[offset + 2] & SCSI_MODE_CACHE_WCE) != 0;
+            return;
+        }
+        offset += page_length;
+    }
+
+unavailable:
+    if (result == UMASS_BBB_COMMAND_FAILED) {
+        umass_memzero(media->um_sense, sizeof(media->um_sense));
+        (void)umass_scsi_request_sense(media->um_bbb, media->um_sense,
+            sizeof(media->um_sense), &actlen);
+    }
+    /* Match the SCSI disk default: unavailable cache data means write-through. */
+    media->um_bbb->ub_last_error = USB_STATUS_NORMAL_COMPLETION;
+}
+
+static int
+umass_media_retryable(const struct umass_media *media,
+    enum umass_bbb_result result)
+{
+    usb_error_t error;
+
+    if (result != UMASS_BBB_WIRE_FAILED || media == 0 ||
+        media->um_bbb == 0)
+        return 0;
+    error = media->um_bbb->ub_last_error;
+    return error != USB_STATUS_DISCONNECTED &&
+        error != USB_STATUS_CANCELLED && error != USB_STATUS_INVALID &&
+        error != USB_STATUS_UNSUPPORTED;
+}
+
 enum umass_bbb_result
 umass_media_probe(struct umass_media *media)
 {
@@ -337,6 +455,8 @@ umass_media_probe(struct umass_media *media)
         return UMASS_BBB_WIRE_FAILED;
     }
 
+    umass_media_read_cache_mode(media);
+
     return UMASS_BBB_OK;
 }
 
@@ -346,6 +466,7 @@ umass_media_read(struct umass_media *media, unsigned lba,
 {
     enum umass_bbb_result result;
     uByte *data;
+    unsigned attempt;
     unsigned chunk;
 
     if (media == 0 || media->um_bbb == 0 || vdata == 0 ||
@@ -360,7 +481,13 @@ umass_media_read(struct umass_media *media, unsigned lba,
         chunk = sector_count;
         if (chunk > UMASS_MAX_READ_SECTORS)
             chunk = UMASS_MAX_READ_SECTORS;
-        result = umass_scsi_read_10(media->um_bbb, lba, chunk, data);
+        for (attempt = 0; attempt < UMASS_IO_ATTEMPTS; ++attempt) {
+            result = umass_scsi_read_10(media->um_bbb, lba, chunk, data);
+            if (result == UMASS_BBB_OK)
+                break;
+            if (!umass_media_retryable(media, result))
+                return result;
+        }
         if (result != UMASS_BBB_OK)
             return result;
         lba += chunk;
@@ -376,6 +503,7 @@ umass_media_write(struct umass_media *media, unsigned lba,
 {
     const uByte *data;
     enum umass_bbb_result result;
+    unsigned attempt;
     unsigned chunk;
 
     if (media == 0 || media->um_bbb == 0 || vdata == 0 ||
@@ -390,7 +518,14 @@ umass_media_write(struct umass_media *media, unsigned lba,
         chunk = sector_count;
         if (chunk > UMASS_MAX_WRITE_SECTORS)
             chunk = UMASS_MAX_WRITE_SECTORS;
-        result = umass_scsi_write_10(media->um_bbb, lba, chunk, data);
+        for (attempt = 0; attempt < UMASS_IO_ATTEMPTS; ++attempt) {
+            result = umass_scsi_write_10(media->um_bbb, lba, chunk,
+                data);
+            if (result == UMASS_BBB_OK)
+                break;
+            if (!umass_media_retryable(media, result))
+                return result;
+        }
         if (result != UMASS_BBB_OK)
             return result;
         lba += chunk;
@@ -406,12 +541,18 @@ umass_media_flush(struct umass_media *media)
     enum umass_bbb_result result;
     enum umass_bbb_result sense_result;
     size_t actlen;
+    unsigned attempt;
 
     if (media == 0 || media->um_bbb == 0)
         return UMASS_BBB_WIRE_FAILED;
-    if (media->um_no_sync_cache)
+    if (!media->um_write_cache_enabled || media->um_no_sync_cache)
         return UMASS_BBB_OK;
-    result = umass_scsi_synchronize_cache_10(media->um_bbb);
+    for (attempt = 0; attempt < UMASS_IO_ATTEMPTS; ++attempt) {
+        result = umass_scsi_synchronize_cache_10(media->um_bbb);
+        if (result == UMASS_BBB_OK ||
+            !umass_media_retryable(media, result))
+            break;
+    }
     if (result != UMASS_BBB_COMMAND_FAILED)
         return result;
 
@@ -735,15 +876,20 @@ umass_attach_interface(struct usb_interface *interface)
     umass_text(vendor, sizeof(vendor), sc->us_media.um_inquiry + 8, 8);
     umass_text(product, sizeof(product), sc->us_media.um_inquiry + 16, 16);
     umass_text(revision, sizeof(revision), sc->us_media.um_inquiry + 32, 4);
-    printf("umass%u: %s %s %s, SCSI/Bulk-Only LUN 0%s\n",
+    printf("umass%u: %s %s %s, SCSI/Bulk-Only LUN 0%s, cache=%s%s\n",
         sc->us_unit, vendor, product, revision,
-        max_lun != 0 ? " (additional LUNs ignored)" : "");
+        max_lun != 0 ? " (additional LUNs ignored)" : "",
+        sc->us_media.um_write_cache_enabled ? "write-back" :
+        "write-through", sc->us_media.um_cache_mode_valid ? "" :
+        " (assumed)");
     umass_memzero(&disk_args, sizeof(disk_args));
     disk_args.da_ops = &umass_disk_ops;
     disk_args.da_arg = sc;
     disk_args.da_sector_count = sc->us_media.um_sector_count;
     disk_args.da_sector_size = sc->us_media.um_sector_size;
     disk_args.da_flags = DISK_FLAG_REMOVABLE;
+    disk_args.da_read_ahead_sectors = UMASS_MAX_READ_SECTORS;
+    disk_args.da_write_back_sectors = UMASS_MAX_WRITE_SECTORS;
     if (disk_attach(&disk_args, &sc->us_disk_unit) != 0) {
         error = USB_STATUS_IO_ERROR;
         goto fail;

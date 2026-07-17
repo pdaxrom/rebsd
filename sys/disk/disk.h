@@ -91,6 +91,10 @@ struct disk_attach_args {
     disk_sector_t da_sector_count;
     unsigned da_sector_size;
     unsigned da_flags;
+    /* Optional sequential-read window, in 512-byte sectors. */
+    unsigned da_read_ahead_sectors;
+    /* Optional buffered-write combining window, in 512-byte sectors. */
+    unsigned da_write_back_sectors;
 };
 
 void disk_mbr_parse(struct disk_mbr *, const unsigned char *, disk_sector_t);
