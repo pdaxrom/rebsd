@@ -182,8 +182,16 @@ idle(void)
     int s;
 
     noproc = 1;
+    /*
+     * Do not execute WAIT on JZ4780/XBurst1 here.  The scheduler enters
+     * idle with IE clear, and an interrupt which becomes pending around the
+     * spl0()/WAIT transition can leave the core asleep with Cause.IP2 set.
+     * Re-entering this short interrupt-enabled window from swtch() is less
+     * power-efficient, but cannot lose the TCU wakeup which drives all
+     * scheduling and deferred USB work.
+     */
     s = spl0();
-    asm volatile ("wait");
+    asm volatile ("nop" ::: "memory");
     splx(s);
 }
 
