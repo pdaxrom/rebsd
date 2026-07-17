@@ -294,7 +294,7 @@ parse(
                                 loads[2] / 100, loads[2] % 100);
 			return;
 		}
-		if (mib[1] >= VM_PHYSPAGES && mib[1] <= VM_BADPAGES)
+		if (mib[1] >= VM_PHYSPAGES && mib[1] <= VM_PMAPROLLOVERS)
 			break;
 		if (flags == 0)
 			return;

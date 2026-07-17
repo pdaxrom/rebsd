@@ -21,7 +21,15 @@
 #define VM_PAGEFAILURES 10  /* long: failed allocation requests */
 #define VM_PAGEPOISONFAILURES 11 /* long: free-page poison failures */
 #define VM_BADPAGES 12      /* long: unusable physical pages */
-#define VM_MAXID    13      /* number of valid vm ids */
+#define VM_PMAPMAPPINGS 13  /* long: current pmap mappings */
+#define VM_PMAPRESIDENT 14  /* long: current resident pmap pages */
+#define VM_PMAPREFILLS 15   /* long: TLB refills */
+#define VM_PMAPMODIFIED 16  /* long: first-write TLB updates */
+#define VM_PMAPFAULTS 17    /* long: pmap protection faults */
+#define VM_PMAPTARGETED 18  /* long: targeted TLB invalidations */
+#define VM_PMAPFLUSHES 19   /* long: full non-wired TLB flushes */
+#define VM_PMAPROLLOVERS 20 /* long: ASID generation rollovers */
+#define VM_MAXID    21      /* number of valid vm ids */
 
 #ifndef KERNEL
 #define CTL_VM_NAMES { \
@@ -38,6 +46,14 @@
     { "page_failures", CTLTYPE_LONG }, \
     { "page_poison_failures", CTLTYPE_LONG }, \
     { "page_bad", CTLTYPE_LONG }, \
+    { "pmap_mappings", CTLTYPE_LONG }, \
+    { "pmap_resident", CTLTYPE_LONG }, \
+    { "pmap_refills", CTLTYPE_LONG }, \
+    { "pmap_modified", CTLTYPE_LONG }, \
+    { "pmap_faults", CTLTYPE_LONG }, \
+    { "pmap_targeted", CTLTYPE_LONG }, \
+    { "pmap_flushes", CTLTYPE_LONG }, \
+    { "pmap_rollovers", CTLTYPE_LONG }, \
 }
 #endif
 

@@ -50,6 +50,7 @@
 #include <sys/sysctl.h>
 #include <sys/rebsd_version.h>
 #include <vm/vm_page.h>
+#include <vm/pmap.h>
 #include <machine/cpu.h>
 #include <sys/conf.h>
 
@@ -393,6 +394,7 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
 {
     struct  loadavg averunnable;    /* loadavg in resource.h */
     struct vm_page_stats page_stats;
+    struct pmap_stats pmap_stats;
     long page_value;
     int error;
 
@@ -458,6 +460,44 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
             break;
         default:
             page_value = page_stats.vps_poison_failures;
+            break;
+        }
+        return (sysctl_rdlong(oldp, oldlenp, newp, page_value));
+    case VM_PMAPMAPPINGS:
+    case VM_PMAPRESIDENT:
+    case VM_PMAPREFILLS:
+    case VM_PMAPMODIFIED:
+    case VM_PMAPFAULTS:
+    case VM_PMAPTARGETED:
+    case VM_PMAPFLUSHES:
+    case VM_PMAPROLLOVERS:
+        error = pmap_bootstrap_stats(&pmap_stats);
+        if (error != 0)
+            return error;
+        switch (name[0]) {
+        case VM_PMAPMAPPINGS:
+            page_value = pmap_stats.pms_mappings;
+            break;
+        case VM_PMAPRESIDENT:
+            page_value = pmap_stats.pms_resident_pages;
+            break;
+        case VM_PMAPREFILLS:
+            page_value = pmap_stats.pms_tlb_refills;
+            break;
+        case VM_PMAPMODIFIED:
+            page_value = pmap_stats.pms_tlb_modified;
+            break;
+        case VM_PMAPFAULTS:
+            page_value = pmap_stats.pms_protection_faults;
+            break;
+        case VM_PMAPTARGETED:
+            page_value = pmap_stats.pms_targeted_invalidations;
+            break;
+        case VM_PMAPFLUSHES:
+            page_value = pmap_stats.pms_full_flushes;
+            break;
+        default:
+            page_value = pmap_stats.pms_asid_rollovers;
             break;
         }
         return (sysctl_rdlong(oldp, oldlenp, newp, page_value));

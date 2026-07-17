@@ -24,6 +24,7 @@
 #include <sys/kconfig.h>
 #include <vm/vm_phys.h>
 #include <vm/vm_page.h>
+#include <vm/pmap.h>
 
 u_int   swapstart, nswap;   /* start and size of swap space */
 size_t  physmem;            /* total amount of physical memory */
@@ -120,6 +121,13 @@ main()
     if (error != 0)
         panic("vm page self-test failed");
     printf("vm page: self-test ok\n");
+    error = pmap_system_init(&vm_page_boot_allocator);
+    if (error != 0)
+        panic("pmap bootstrap failed");
+    error = pmap_bootstrap_selftest();
+    if (error != 0)
+        panic("pmap self-test failed");
+    printf("pmap: self-test ok\n");
 
     /*
      * Set up system process 0 (swapper).

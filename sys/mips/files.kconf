@@ -56,6 +56,8 @@ kernel/vm_swp.c                 standard
 vm/vm_param.c                  standard
 vm/vm_phys.c                   standard
 vm/vm_page.c                   standard
+mips/common/pmap.c             standard
+mips/common/pmap_machdep.c     standard
 
 disk/disk_subr.c               optional disk
 disk/disk.c                    optional disk

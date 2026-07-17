@@ -8,6 +8,7 @@
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/vm.h>
+#include <vm/pmap.h>
 #include <machine/io.h>
 #include <machine/fpu.h>
 #ifdef N64
@@ -650,6 +651,34 @@ exception(int *frame)
         mips_intr_enable();
         break;
 
+    case CA_Mod:
+    case CA_TLBS:
+        if (pmap_fault_active(badvaddr, VM_PROT_WRITE, 0) == 0)
+            goto ret;
+        dumpregs(frame);
+        panic("kernel pmap write fault");
+
+    case CA_TLBL:
+        if (pmap_fault_active(badvaddr, VM_PROT_READ, 0) == 0)
+            goto ret;
+        dumpregs(frame);
+        panic("kernel pmap read fault");
+
+    case CA_Mod + USER:
+    case CA_TLBS + USER:
+        if (pmap_fault_active(badvaddr, VM_PROT_WRITE, 1) == 0)
+            goto ret;
+        psig = SIGSEGV;
+        mips_intr_enable();
+        break;
+
+    case CA_TLBL + USER:
+        if (pmap_fault_active(badvaddr, VM_PROT_READ, 1) == 0)
+            goto ret;
+        psig = SIGSEGV;
+        mips_intr_enable();
+        break;
+
     default:
 #ifdef UCB_METER
         cnt.v_trap++;
@@ -658,9 +687,6 @@ exception(int *frame)
         default:
             dumpregs(frame);
             panic("unexpected exception");
-        case CA_Mod + USER:
-        case CA_TLBL + USER:
-        case CA_TLBS + USER:
         case CA_AdEL + USER:
         case CA_AdES + USER:
             printf("*** 0x%08x: %s: bad address 0x%08x\n",
@@ -668,7 +694,7 @@ exception(int *frame)
             printf("*** user exception: exc=%u cause=%08x sp=%08x ra=%08x\n",
                 rawcause >> 2 & 31, rawcause, frame[FRAME_SP],
                 frame[FRAME_RA]);
-            psig = SIGSEGV;
+            psig = SIGBUS;
             break;
         case CA_IBE + USER:
         case CA_DBE + USER:

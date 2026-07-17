@@ -108,23 +108,23 @@ Exit criteria:
 
 ## Phase 3: MIPS pmap, TLB, and ASIDs
 
-- [ ] Define a machine-independent `pmap` contract and a shared MIPS
+- [x] Define a machine-independent `pmap` contract and a shared MIPS
   implementation for map, remove, protect, extract, reference, and modify.
-- [ ] Implement MIPS page tables for 4 KiB pages without relying on the current
+- [x] Implement MIPS page tables for 4 KiB pages without relying on the current
   wired 1 MiB user mappings.
-- [ ] Implement TLB refill, invalid, modified, and address-error paths with
+- [x] Implement TLB refill, invalid, modified, and address-error paths with
   correct user/kernel fault separation.
-- [ ] Allocate and recycle ASIDs with generation tracking and required TLB
+- [x] Allocate and recycle ASIDs with generation tracking and required TLB
   invalidation on wrap.
-- [ ] Preserve required global/wired kernel mappings and define a documented
+- [x] Preserve required global/wired kernel mappings and define a documented
   wired-entry budget.
-- [ ] Implement targeted local invalidation before falling back to a full TLB
+- [x] Implement targeted local invalidation before falling back to a full TLB
   flush.
-- [ ] Handle MIPS cache coherency for executable pages, data writes, DMA, and
+- [x] Handle MIPS cache coherency for executable pages, data writes, DMA, and
   cached/uncached aliases.
-- [ ] Keep CPU-family differences behind shared MIPS operations: MIPS32r2 on
+- [x] Keep CPU-family differences behind shared MIPS operations: MIPS32r2 on
   Ci20/Malta and VR4300 behavior on Malta64/N64.
-- [ ] Add counters and optional diagnostics for refills, faults, ASID rollover,
+- [x] Add counters and optional diagnostics for refills, faults, ASID rollover,
   modified exceptions, and full/targeted shootdowns.
 - [ ] Use JTAG on Ci20 to capture PC, SP, RA, Cause, EPC, BadVAddr, EntryHi,
   EntryLo, Context, and Status for MMU hangs that do not reach the console.
