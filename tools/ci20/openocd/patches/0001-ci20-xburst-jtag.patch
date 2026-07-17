@@ -1,0 +1,204 @@
+diff --git a/src/jtag/drivers/ftdi.c b/src/jtag/drivers/ftdi.c
+index 00fe37f..a80324c 100644
+--- a/src/jtag/drivers/ftdi.c
++++ b/src/jtag/drivers/ftdi.c
+@@ -492,13 +492,35 @@ static void ftdi_execute_scan(struct jtag_command *cmd)
+ 					last_bit,
+ 					ftdi_jtag_mode);
+ 			tap_set_state(tap_state_transition(tap_get_state(), 1));
+-			mpsse_clock_tms_cs_out(mpsse_ctx,
+-					&tms_bits,
+-					1,
+-					1,
+-					last_bit,
+-					ftdi_jtag_mode);
+-			tap_set_state(tap_state_transition(tap_get_state(), 0));
++
++			/*
++			 * Ingenic XBurst treats Pause-DR as Capture-DR while ECR is
++			 * selected.  Going Shift -> Exit1 -> Pause would therefore
++			 * discard the value just shifted into ECR.  For scans ending
++			 * in Idle, take the direct and standard path through Update.
++			 * Preserve the old Pause path for callers that request it.
++			 */
++			if (tap_get_end_state() == TAP_IDLE) {
++				/* Exit1 -> Update -> Idle, TMS bits are shifted LSB first. */
++				uint8_t update_idle_tms = 0x01;
++				mpsse_clock_tms_cs_out(mpsse_ctx,
++						&update_idle_tms,
++						0,
++						2,
++						last_bit,
++						ftdi_jtag_mode);
++				tap_set_state(tap_state_transition(tap_get_state(), 1));
++				tap_set_state(tap_state_transition(tap_get_state(), 0));
++			} else {
++				uint8_t pause_tms = 0x00;
++				mpsse_clock_tms_cs_out(mpsse_ctx,
++						&pause_tms,
++						0,
++						1,
++						last_bit,
++						ftdi_jtag_mode);
++				tap_set_state(tap_state_transition(tap_get_state(), 0));
++			}
+ 		} else
+ 			mpsse_clock_data(mpsse_ctx,
+ 				field->out_value,
+diff --git a/src/target/mips32.c b/src/target/mips32.c
+index 9566ae8..bb92f77 100644
+--- a/src/target/mips32.c
++++ b/src/target/mips32.c
+@@ -264,13 +264,16 @@ int mips32_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
+ int mips32_save_context(struct target *target)
+ {
+ 	unsigned int i;
++	int retval;
+ 
+ 	/* get pointers to arch-specific information */
+ 	struct mips32_common *mips32 = target_to_mips32(target);
+ 	struct mips_ejtag *ejtag_info = &mips32->ejtag_info;
+ 
+ 	/* read core registers */
+-	mips32_pracc_read_regs(ejtag_info, mips32->core_regs);
++	retval = mips32_pracc_read_regs(ejtag_info, mips32->core_regs);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	for (i = 0; i < MIPS32_NUM_REGS; i++) {
+ 		if (!mips32->core_cache->reg_list[i].valid)
+@@ -282,7 +285,7 @@ int mips32_save_context(struct target *target)
+ 		uint32_t status;
+ 
+ 		/* Read Status register, save it and modify to enable CP0 */
+-		int retval = mips32_cp0_read(ejtag_info, &status, 12, 0);
++		retval = mips32_cp0_read(ejtag_info, &status, 12, 0);
+ 		if (retval != ERROR_OK) {
+ 			LOG_DEBUG("reading status register failed");
+ 			return retval;
+diff --git a/src/target/mips32.h b/src/target/mips32.h
+index d644add..93eac83 100644
+--- a/src/target/mips32.h
++++ b/src/target/mips32.h
+@@ -318,6 +318,7 @@ int mips32_detect_core_imp(struct target *target);
+ 
+ int mips32_restore_context(struct target *target);
+ int mips32_save_context(struct target *target);
++int mips32_pracc_disable_xburst1_btb(struct mips_ejtag *ejtag_info);
+ 
+ struct reg_cache *mips32_build_reg_cache(struct target *target);
+ 
+diff --git a/src/target/mips32_pracc.c b/src/target/mips32_pracc.c
+index 7cf614a..13bfd50 100644
+--- a/src/target/mips32_pracc.c
++++ b/src/target/mips32_pracc.c
+@@ -1109,6 +1109,34 @@ int mips32_pracc_read_regs(struct mips_ejtag *ejtag_info, uint32_t *regs)
+ 	return ctx.retval;
+ }
+ 
++/*
++ * XBurst1 may retain a branch target for the EJTAG debug segment between
++ * separate PrAcc programs.  Disable and invalidate its BTB before any of
++ * the normal context-access programs execute.  DeSave is the architectural
++ * EJTAG scratch register, so this sequence preserves the stopped CPU's GPRs.
++ */
++int mips32_pracc_disable_xburst1_btb(struct mips_ejtag *ejtag_info)
++{
++	struct pracc_queue_info ctx;
++	pracc_queue_init(&ctx);
++
++	pracc_add(&ctx, 0, MIPS32_MTC0(1, 31, 0));		/* save $1 in DeSave */
++	pracc_add(&ctx, 0, MIPS32_MFC0(1, 16, 7));		/* read Config7 */
++	pracc_add(&ctx, 0, MIPS32_ANDI(1, 1, 0xfffe));	/* clear BTBE */
++	pracc_add(&ctx, 0, MIPS32_ORI(1, 1, 0x0002));	/* set BTBV */
++	pracc_add(&ctx, 0, MIPS32_MTC0(1, 16, 7));		/* write Config7 */
++	pracc_add(&ctx, 0, MIPS32_NOP);
++	pracc_add(&ctx, 0, MIPS32_NOP);
++	pracc_add(&ctx, 0, MIPS32_NOP);
++	pracc_add(&ctx, 0, MIPS32_MFC0(1, 31, 0));		/* restore $1 */
++	pracc_add(&ctx, 0, MIPS32_B(NEG16(ctx.code_count + 1)));
++	pracc_add(&ctx, 0, MIPS32_NOP);
++
++	ctx.retval = mips32_pracc_queue_exec(ejtag_info, &ctx, NULL);
++	pracc_queue_free(&ctx);
++	return ctx.retval;
++}
++
+ int mips32_pracc_write_fpu_regs(struct mips_ejtag *ejtag_info, uint32_t *regs)
+ {
+ 	struct pracc_queue_info ctx;
+@@ -1471,4 +1499,3 @@ exit:
+ 
+ 	return retval;
+ }
+-
+diff --git a/src/target/mips_xburst.c b/src/target/mips_xburst.c
+index 7fbe54b..e154308 100644
+--- a/src/target/mips_xburst.c
++++ b/src/target/mips_xburst.c
+@@ -89,19 +89,34 @@ static int mips_xburst_debug_entry(struct target *target)
+ {
+ 	struct mips32_common *mips32 = target_to_mips32(target);
+ 	struct mips_ejtag *ejtag_info = &mips32->ejtag_info;
++	int retval;
+ 
+-	mips32_detect_core_imp(target);
++	retval = mips32_pracc_disable_xburst1_btb(ejtag_info);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+-	mips32_save_context(target);
++	retval = mips32_detect_core_imp(target);
++	if (retval != ERROR_OK)
++		return retval;
++
++	retval = mips32_save_context(target);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	/* make sure stepping disabled, SSt bit in CP0 debug register cleared */
+-	mips_ejtag_config_step(ejtag_info, 0);
++	retval = mips_ejtag_config_step(ejtag_info, 0);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	/* make sure break unit configured */
+-	mips32_configure_break_unit(target);
++	retval = mips32_configure_break_unit(target);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	/* attempt to find halt reason */
+-	mips_xburst_examine_debug_reason(target);
++	retval = mips_xburst_examine_debug_reason(target);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	/* default to mips32 isa, it will be changed below if required */
+ 	mips32->isa_mode = MIPS32_ISA_MIPS32;
+@@ -278,7 +293,9 @@ static int mips_xburst_halt(struct target *target)
+ 	}
+ 
+ 	/* break processor */
+-	mips_ejtag_enter_debug(ejtag_info);
++	int retval = mips_ejtag_enter_debug(ejtag_info);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	target->debug_reason = DBG_REASON_DBGRQ;
+ 
+@@ -1024,6 +1041,14 @@ static int mips_xburst_examine(struct target *target)
+ 	if (retval != ERROR_OK)
+ 		return retval;
+ 
++	/*
++	 * XBurst does not ignore a one written to ROCC.  Generic MIPS EJTAG
++	 * keeps ROCC in its cached control-word template for EJTAG 2.5+, which
++	 * would replay the reset indication with every later control write,
++	 * including the JTAGBRK request used by halt.
++	 */
++	ejtag_info->ejtag_ctrl &= ~EJTAG_CTRL_ROCC;
++
+ 	return mips32_examine(target);
+ }
+ 

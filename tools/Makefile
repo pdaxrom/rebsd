@@ -1,7 +1,7 @@
 SUBDIR		= elf2aout fsutil kconfig
 
 ifneq ($(shell pkg-config --exists libusb-1.0 2>/dev/null && echo yes),)
-SUBDIR		+= n64usbnet
+SUBDIR		+= n64usbnet ci20
 endif
 
 all install depend: ${SUBDIR}
