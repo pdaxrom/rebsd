@@ -17,6 +17,7 @@ static char sccsid[] = "@(#)mbuf.c	5.3.1 (2.11BSD GTE) 1/1/94";
 #include <stdio.h>
 #include <sys/param.h>
 #include <sys/mbuf.h>
+#include "netstat.h"
 #define	YES	1
 typedef int bool;
 
@@ -53,8 +54,8 @@ bool seen[NMBTYPES];		/* "have we seen this type yet?" */
 /*
  * Print mbuf statistics.
  */
-mbpr(mbaddr)
-	off_t mbaddr;
+void
+mbpr(kaddr_t mbaddr)
 {
 	register int totmbufs;
 	long totmem, totfree;
@@ -69,11 +70,9 @@ mbpr(mbaddr)
 		printf("mbstat: symbol not in namelist\n");
 		return;
 	}
-	klseek(kmem, mbaddr, 0);
-	if (read(kmem, (char *)&mbstat, sizeof (mbstat)) != sizeof (mbstat)) {
-		printf("mbstat: bad read\n");
+	if (!kread(mbaddr, (char *)&mbstat, sizeof(mbstat),
+	    "mbuf statistics"))
 		return;
-	}
 	printf("%u/%u mbufs in use:\n",
 		mbstat.m_mbufs - mbstat.m_mtypes[MT_FREE], mbstat.m_mbufs);
 	totmbufs = 0;
@@ -100,8 +99,11 @@ mbpr(mbaddr)
 	totmem = mbstat.m_mbufs * MSIZE + mbstat.m_clusters * MCLBYTES +
 	    mbstat.m_space * MCLBYTES;
 	totfree = mbstat.m_mtypes[MT_FREE]*MSIZE + mbstat.m_clfree * MCLBYTES;
-	printf("%lu Kbytes allocated to network (%ld%% in use)\n",
-		totmem / 1024, (totmem - totfree) * 100 / totmem);
+	if (totmem != 0)
+		printf("%lu Kbytes allocated to network (%ld%% in use)\n",
+			totmem / 1024, (totmem - totfree) * 100 / totmem);
+	else
+		printf("0 Kbytes allocated to network\n");
 	printf("%u requests for memory denied\n", mbstat.m_drops);
 	printf("%u requests for memory delayed\n", mbstat.m_wait);
 	printf("%u calls to protocol drain routines\n", mbstat.m_drain);

@@ -226,7 +226,7 @@ int getcmd(struct psout *a, off_t addr)
 #define ARGLIST (DEV_BSIZE * 2)
     char abuf [ARGLIST];
     char cmd[82], *bp;
-    off_t ap;
+    u_int ap;              /* user ABI pointer, always 32-bit on MIPS o32 */
     unsigned ssize, cp;
 
     /* in case of early return */
@@ -243,7 +243,7 @@ int getcmd(struct psout *a, off_t addr)
     if (mproc->p_flag & SLOAD) {
         addr += mproc->p_ssize; /* file offset to top of stack */
         lseek(file, addr - sizeof (char **), 0);
-        if (read(file, (char *) &ap, sizeof (char *)) != sizeof (char *))
+        if (read(file, (char *)&ap, sizeof(ap)) != sizeof(ap))
             return (1);
         if (ap == 0)
             return(1);
@@ -478,15 +478,19 @@ void addchan(char *name, unsigned caddr)
 
 char *getchan(caddr_t chan)
 {
-    int    i;
+    int    count;
     char   *prevsym;
+    WCHAN  *wp;
 
     prevsym = "";
     if (chan) {
-        for (i = 0; i < nchans; i++) {
-            if (wchand[i].caddr > (unsigned) chan)
+        wp = wchand;
+        count = nchans;
+        while (count-- > 0) {
+            if (wp->caddr > (unsigned)chan)
                 return (prevsym);
-            prevsym = wchand[i].cname;
+            prevsym = wp->cname;
+            wp++;
         }
     }
     return(prevsym);

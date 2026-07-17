@@ -44,6 +44,8 @@ static char sccsid[] = "@(#)inet.c	5.9.3 (2.11BSD GTE) 8/28/94";
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 
+#include "netstat.h"
+
 struct	inpcb inpcb;
 struct	tcpcb tcpcb;
 struct	socket sockb;
@@ -66,30 +68,35 @@ char	*inetname();
  * Listening processes (aflag) are suppressed unless the
  * -a (all) flag is specified.
  */
-protopr(off, name)
-	off_t off;
-	char *name;
+void
+protopr(kaddr_t off, char *name)
 {
 	struct inpcb cb;
-	register struct inpcb *prev, *next;
+	kaddr_t prev, next;
 	int istcp;
+	int remaining = 4096;
 	static int first = 1;
 
 	if (off == 0)
 		return;
 	istcp = strcmp(name, "tcp") == 0;
-	klseek(kmem, off, 0);
-	read(kmem, (char *)&cb, sizeof (struct inpcb));
-	inpcb = cb;
-	prev = (struct inpcb *)(u_long)off;
-	if (inpcb.inp_next == (struct inpcb *)(u_long)off)
+	if (!kread(off, (char *)&cb, sizeof(cb), "protocol control block"))
 		return;
-	while (inpcb.inp_next != (struct inpcb *)(u_long)off) {
+	inpcb = cb;
+	prev = off;
+	if (KADDR(inpcb.inp_next) == off)
+		return;
+	while (KADDR(inpcb.inp_next) != off) {
 
-		next = inpcb.inp_next;
-		klseek(kmem, (off_t)(u_long)next, 0);
-		read(kmem, (char *)&inpcb, sizeof (inpcb));
-		if (inpcb.inp_prev != prev) {
+		if (--remaining == 0) {
+			printf("netstat: protocol control block chain is cyclic\n");
+			break;
+		}
+		next = KADDR(inpcb.inp_next);
+		if (!kread(next, (char *)&inpcb, sizeof(inpcb),
+		    "protocol control block"))
+			break;
+		if (KADDR(inpcb.inp_prev) != prev) {
 			printf("???\n");
 			break;
 		}
@@ -98,11 +105,13 @@ protopr(off, name)
 			prev = next;
 			continue;
 		}
-		klseek(kmem, (off_t)(u_long)inpcb.inp_socket, 0);
-		read(kmem, (char *)&sockb, sizeof (sockb));
+		if (!kread(KADDR(inpcb.inp_socket), (char *)&sockb,
+		    sizeof(sockb), "socket"))
+			break;
 		if (istcp) {
-			klseek(kmem, (off_t)(u_long)inpcb.inp_ppcb, 0);
-			read(kmem, (char *)&tcpcb, sizeof (tcpcb));
+			if (!kread(KADDR(inpcb.inp_ppcb), (char *)&tcpcb,
+			    sizeof(tcpcb), "TCP control block"))
+				break;
 		}
 		if (first) {
 			printf("Active Internet connections");
@@ -141,17 +150,16 @@ protopr(off, name)
 /*
  * Dump TCP statistics structure.
  */
-tcp_stats(off, name)
-	off_t off;
-	char *name;
+void
+tcp_stats(kaddr_t off, char *name)
 {
 	struct tcpstat tcpstat;
 
 	if (off == 0)
 		return;
 	printf ("%s:\n", name);
-	klseek(kmem, off, 0);
-	read(kmem, (char *)&tcpstat, sizeof (tcpstat));
+	if (!kread(off, (char *)&tcpstat, sizeof(tcpstat), "TCP statistics"))
+		return;
 
 #define	p(f, m)		printf(m, tcpstat.f, plural(tcpstat.f))
 #define	p2(f1, f2, m)	printf(m, tcpstat.f1, plural(tcpstat.f1), tcpstat.f2, plural(tcpstat.f2))
@@ -208,16 +216,15 @@ tcp_stats(off, name)
 /*
  * Dump UDP statistics structure.
  */
-udp_stats(off, name)
-	off_t off;
-	char *name;
+void
+udp_stats(kaddr_t off, char *name)
 {
 	struct udpstat udpstat;
 
 	if (off == 0)
 		return;
-	klseek(kmem, off, 0);
-	read(kmem, (char *)&udpstat, sizeof (udpstat));
+	if (!kread(off, (char *)&udpstat, sizeof(udpstat), "UDP statistics"))
+		return;
 	printf("%s:\n", name);
 #define	p(f, m) printf(m, udpstat.f, plural(udpstat.f))
 	p(udps_ipackets, "\t%lu total input packet%s\n");
@@ -236,16 +243,15 @@ udp_stats(off, name)
 /*
  * Dump IP statistics structure.
  */
-ip_stats(off, name)
-	off_t off;
-	char *name;
+void
+ip_stats(kaddr_t off, char *name)
 {
 	struct ipstat ipstat;
 
 	if (off == 0)
 		return;
-	klseek(kmem, off, 0);
-	read(kmem, (char *)&ipstat, sizeof (ipstat));
+	if (!kread(off, (char *)&ipstat, sizeof(ipstat), "IP statistics"))
+		return;
 #if BSD>=43
 	printf("%s:\n\t%lu total packets received\n", name,
 		ipstat.ips_total);
@@ -297,17 +303,17 @@ static	char *icmpnames[] = {
 /*
  * Dump ICMP statistics.
  */
-icmp_stats(off, name)
-	off_t off;
-	char *name;
+void
+icmp_stats(kaddr_t off, char *name)
 {
 	struct icmpstat icmpstat;
 	register int i, first;
 
 	if (off == 0)
 		return;
-	klseek(kmem, off, 0);
-	read(kmem, (char *)&icmpstat, sizeof (icmpstat));
+	if (!kread(off, (char *)&icmpstat, sizeof(icmpstat),
+	    "ICMP statistics"))
+		return;
 	printf("%s:\n\t%lu call%s to icmp_error\n", name,
 		icmpstat.icps_error, plural(icmpstat.icps_error));
 	printf("\t%lu error%s not generated 'cuz old message was icmp\n",

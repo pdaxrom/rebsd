@@ -265,7 +265,9 @@ send:
 		if (mss > IP_MSS - sizeof(struct tcpiphdr)) {
 			opt = tcp_initopt;
 			optlen = sizeof (tcp_initopt);
-			*(u_short *)(opt + 2) = htons(mss);
+			/* tcp_initopt is a byte array and need not be aligned. */
+			opt[2] = (u_char)(mss >> 8);
+			opt[3] = (u_char)mss;
 		}
 	}
 	if (opt) {

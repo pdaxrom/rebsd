@@ -19,6 +19,10 @@ char copyright[] =
 #include <ctype.h>
 #include <nlist.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "netstat.h"
 
 struct nlist nl[] = {
 #define N_MBSTAT       0
@@ -54,16 +58,13 @@ struct nlist nl[] = {
     { 0 },
 };
 
-extern int protopr();
-extern int tcp_stats(), udp_stats(), ip_stats(), icmp_stats();
-
 #define NULLPROTOX ((struct protox *)0)
 struct protox {
     u_char  pr_index;
     u_char  pr_sindex;
     u_char  pr_wanted;
-    int     (*pr_cblocks)();
-    int     (*pr_stats)();
+    void    (*pr_cblocks)(kaddr_t, char *);
+    void    (*pr_stats)(kaddr_t, char *);
     char    *pr_name;
 } protox[] = {
     { N_TCB,       N_TCPSTAT,    1, protopr, tcp_stats,  "tcp"  },
@@ -90,8 +91,6 @@ int     unit;
 char    usage[] = "[ -Aaimnrstu ] [-f inet|unix] [-p proto] [-I interface] [ interval ]";
 
 int     af = AF_UNSPEC;
-
-extern off_t lseek();
 
 static struct protox *knownname();
 static void usage_exit();
@@ -202,27 +201,28 @@ main(argc, argv)
     }
 
     if (mflag) {
-        mbpr((off_t)nl[N_MBSTAT].n_value);
+        mbpr(nl[N_MBSTAT].n_value);
         exit(0);
     }
     if (pflag) {
         if (tp->pr_stats)
-            (*tp->pr_stats)(nl[tp->pr_sindex].n_value, tp->pr_name);
+            (*tp->pr_stats)((kaddr_t)nl[tp->pr_sindex].n_value,
+                tp->pr_name);
         else
             printf("%s: no stats routine\n", tp->pr_name);
         exit(0);
     }
     if (iflag) {
-        intpr(interval, nl[N_IFNET].n_value);
+        intpr(interval, (kaddr_t)nl[N_IFNET].n_value);
         exit(0);
     }
     if (rflag) {
         if (sflag)
-            rt_stats((off_t)nl[N_RTSTAT].n_value);
+            rt_stats((kaddr_t)nl[N_RTSTAT].n_value);
         else
-            routepr((off_t)nl[N_RTHOST].n_value,
-                (off_t)nl[N_RTNET].n_value,
-                (off_t)nl[N_RTHASHSIZE].n_value);
+            routepr((kaddr_t)nl[N_RTHOST].n_value,
+                (kaddr_t)nl[N_RTNET].n_value,
+                (kaddr_t)nl[N_RTHASHSIZE].n_value);
         exit(0);
     }
 
@@ -233,14 +233,14 @@ main(argc, argv)
                     (*tp->pr_stats)(nl[tp->pr_sindex].n_value,
                         tp->pr_name);
             } else if (tp->pr_cblocks) {
-                (*tp->pr_cblocks)(nl[tp->pr_index].n_value,
+                (*tp->pr_cblocks)((kaddr_t)nl[tp->pr_index].n_value,
                     tp->pr_name);
             }
         }
     }
     if ((af == AF_UNIX || af == AF_UNSPEC) && !sflag)
-        unixpr((off_t)nl[N_FILE].n_value,
-            (struct protosw *)nl[N_UNIXSW].n_value);
+        unixpr((kaddr_t)nl[N_FILE].n_value,
+            (kaddr_t)nl[N_UNIXSW].n_value);
     exit(0);
 }
 
@@ -257,11 +257,35 @@ usage_exit(name)
  * addresses directly.
  */
 off_t
-klseek(fd, base, off)
-    int fd, off;
-    off_t base;
+klseek(int fd, kaddr_t address, int whence)
 {
-    return lseek(fd, base, off);
+    return lseek(fd, (off_t)address, whence);
+}
+
+/*
+ * Read one live-kernel object without allowing a short or failed read to
+ * leave a partially initialized structure in the caller.
+ */
+int
+kread(kaddr_t address, void *buffer, size_t length, char *description)
+{
+    ssize_t count;
+
+    if (address == 0 || klseek(kmem, address, 0) == (off_t)-1) {
+        memset(buffer, 0, length);
+        fprintf(stderr, "netstat: cannot seek to %s at 0x%08x\n",
+            description, address);
+        return 0;
+    }
+    count = read(kmem, buffer, length);
+    if (count != (ssize_t)length) {
+        memset(buffer, 0, length);
+        fprintf(stderr,
+            "netstat: cannot read %s at 0x%08x (%d of %u bytes)\n",
+            description, address, (int)count, (unsigned)length);
+        return 0;
+    }
+    return 1;
 }
 
 char *

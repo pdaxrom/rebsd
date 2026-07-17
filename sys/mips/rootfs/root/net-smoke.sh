@@ -9,15 +9,29 @@ cd /tmp || exit 1
 /usr/bin/ping -c 1 127.0.0.1 || exit 1
 base=net-smoke.$$
 for opt in -i -r -s -m -u; do
-	/usr/bin/netstat $opt > $base.netstat || exit 1
-	if egrep 'read error|bad read|not in namelist|no kernel namelist|cannot open' $base.netstat >/dev/null; then
+	/usr/bin/netstat $opt > $base.netstat 2>&1 || exit 1
+	if egrep 'read error|bad read|not in namelist|no kernel namelist|cannot open|netstat: cannot' $base.netstat >/dev/null; then
 		cat $base.netstat
 		rm -f $base.netstat
 		exit 1
 	fi
+	if test "$opt" = -i; then
+		if ! egrep '^lo0[ *]' $base.netstat >/dev/null ||
+		    egrep '^0\*' $base.netstat >/dev/null; then
+			cat $base.netstat
+			rm -f $base.netstat
+			exit 1
+		fi
+	fi
 done
-/usr/bin/netstat -p tcp > $base.netstat || exit 1
-if egrep 'read error|bad read|not in namelist|no kernel namelist|cannot open' $base.netstat >/dev/null; then
+/usr/bin/netstat -n > $base.netstat 2>&1 || exit 1
+if egrep 'Memory fault|bad address|netstat: cannot' $base.netstat >/dev/null; then
+	cat $base.netstat
+	rm -f $base.netstat
+	exit 1
+fi
+/usr/bin/netstat -p tcp > $base.netstat 2>&1 || exit 1
+if egrep 'read error|bad read|not in namelist|no kernel namelist|cannot open|netstat: cannot' $base.netstat >/dev/null; then
 	cat $base.netstat
 	rm -f $base.netstat
 	exit 1

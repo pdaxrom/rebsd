@@ -23,6 +23,7 @@ int send();
 int sendto();
 int select();
 int shutdown();
+int socket();
 int socketpair();
 int setsockopt();
 int system();
@@ -30,16 +31,13 @@ int unlink();
 int wait();
 int write();
 int getpid();
+u_long htonl();
 void _exit();
-
-typedef struct smoke_fd_set {
-	long fds_bits[1];
-} smoke_fd_set;
 
 #define FIONREAD_SMOKE	0x40046661L
 #define FIONBIO_SMOKE	0x80046660L
 
-static smoke_fd_set *no_fds;
+static fd_set *no_fds;
 
 static int
 fail(name)
@@ -52,7 +50,7 @@ fail(name)
 static int
 fd_is_set(fd, set)
 	int fd;
-	smoke_fd_set *set;
+	fd_set *set;
 {
 	return ((set->fds_bits[0] & (1L << fd)) != 0);
 }
@@ -60,7 +58,7 @@ fd_is_set(fd, set)
 static void
 fd_set_one(fd, set)
 	int fd;
-	smoke_fd_set *set;
+	fd_set *set;
 {
 	set->fds_bits[0] = 1L << fd;
 }
@@ -167,7 +165,7 @@ static int
 select_ioctl_smoke(rd, wr)
 	int rd, wr;
 {
-	smoke_fd_set rfds, wfds;
+	fd_set rfds, wfds;
 	struct timeval tv;
 	long nread;
 	int n, on;
@@ -247,7 +245,7 @@ tcp_select_ioctl_smoke(fd, buf)
 	int fd;
 	char *buf;
 {
-	smoke_fd_set rfds, wfds;
+	fd_set rfds, wfds;
 	struct timeval tv;
 	long nread;
 	int n, on;

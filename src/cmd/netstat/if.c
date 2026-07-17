@@ -24,6 +24,8 @@ static char sccsid[] = "@(#)if.c	5.6.1 (2.11BSD GTE) 1/1/94";
 #include <stdio.h>
 #include <signal.h>
 
+#include "netstat.h"
+
 #define	YES	1
 #define	NO	0
 
@@ -40,17 +42,17 @@ extern	char *routename(), *netname(), *index();
 /*
  * Print a description of the network interfaces.
  */
-intpr(interval, ifnetaddr)
-	int interval;
-	off_t ifnetaddr;
+void
+intpr(int interval, kaddr_t ifnetaddr)
 {
 	struct ifnet ifnet;
 	union {
 		struct ifaddr ifa;
 		struct in_ifaddr in;
 	} ifaddr;
-	off_t ifaddraddr;
+	kaddr_t ifaddraddr;
 	char name[16];
+	int remaining = 4096;
 
 	if (ifnetaddr == 0) {
 		printf("ifnet: symbol not defined\n");
@@ -60,16 +62,9 @@ intpr(interval, ifnetaddr)
 		sidewaysintpr((unsigned)interval, ifnetaddr);
 		return;
 	}
-	klseek(kmem, ifnetaddr, 0);
-#ifdef pdp11
-	{
-	unsigned int x;
-	read(kmem, &x, sizeof x);
-	ifnetaddr = (long)x;
-	}
-#else
-	read(kmem, (char *)&ifnetaddr, sizeof ifnetaddr);
-#endif
+	if (!kread(ifnetaddr, (char *)&ifnetaddr, sizeof(ifnetaddr),
+	    "ifnet head"))
+		return;
 	printf("%-5.5s %-5.5s %-11.11s %-15.15s %8.8s %5.5s %8.8s %5.5s",
 		"Name", "Mtu", "Network", "Address", "Ipkts", "Ierrs",
 		"Opkts", "Oerrs");
@@ -85,13 +80,20 @@ intpr(interval, ifnetaddr)
 		char *index();
 		struct in_addr inet_makeaddr();
 
+		if (--remaining == 0) {
+			printf("netstat: network interface chain is cyclic\n");
+			return;
+		}
+
 		if (ifaddraddr == 0) {
-			klseek(kmem, ifnetaddr, 0);
-			read(kmem, (char *)&ifnet, sizeof ifnet);
-			klseek(kmem, (off_t)(u_long)ifnet.if_name, 0);
-			read(kmem, name, 16);
+			if (!kread(ifnetaddr, (char *)&ifnet, sizeof(ifnet),
+			    "network interface"))
+				return;
+			if (!kread(KADDR(ifnet.if_name), name, sizeof(name),
+			    "network interface name"))
+				return;
 			name[15] = '\0';
-			ifnetaddr = (off_t)(u_long)ifnet.if_next;
+			ifnetaddr = KADDR(ifnet.if_next);
 			if (interface != 0 &&
 			    (strcmp(name, interface) != 0 || unit != ifnet.if_unit))
 				continue;
@@ -100,16 +102,17 @@ intpr(interval, ifnetaddr)
 			if ((ifnet.if_flags&IFF_UP) == 0)
 				*cp++ = '*';
 			*cp = '\0';
-			ifaddraddr = (off_t)(u_long)ifnet.if_addrlist;
+			ifaddraddr = KADDR(ifnet.if_addrlist);
 		}
 		printf("%-5.5s %-5d ", name, ifnet.if_mtu);
 		if (ifaddraddr == 0) {
 			printf("%-11.11s ", "none");
 			printf("%-15.15s ", "none");
 		} else {
-			klseek(kmem, ifaddraddr, 0);
-			read(kmem, (char *)&ifaddr, sizeof ifaddr);
-			ifaddraddr = (off_t)(u_long)ifaddr.ifa.ifa_next;
+			if (!kread(ifaddraddr, (char *)&ifaddr, sizeof(ifaddr),
+			    "network interface address"))
+				return;
+			ifaddraddr = KADDR(ifaddr.ifa.ifa_next);
 			switch (ifaddr.ifa.ifa_addr.sa_family) {
 			case AF_UNSPEC:
 				printf("%-11.11s ", "none");
@@ -178,28 +181,20 @@ u_char	signalled;			/* set if alarm goes off "early" */
  * collected over that interval.  Assumes that interval is non-zero.
  * First line printed at top of screen is always cumulative.
  */
-sidewaysintpr(interval, off)
-	unsigned interval;
-	off_t off;
+void
+sidewaysintpr(unsigned interval, kaddr_t off)
 {
 	struct ifnet ifnet;
-	off_t firstifnet;
+	kaddr_t firstifnet;
 	register struct iftot *ip, *total;
 	register int line;
 	struct iftot *lastif, *sum, *interesting;
 	long oldmask;
 	void catchalarm();
 
-	klseek(kmem, off, 0);
-#ifdef pdp11
-	{
-	unsigned int x;
-	read(kmem, &x, sizeof (x));
-	firstifnet = (long)x;
-	}
-#else
-	read(kmem, (char *)&firstifnet, sizeof (off_t));
-#endif
+	if (!kread(off, (char *)&firstifnet, sizeof(firstifnet),
+	    "ifnet head"))
+		return;
 	lastif = iftot;
 	sum = iftot + MAXIF - 1;
 	total = sum - 1;
@@ -207,11 +202,13 @@ sidewaysintpr(interval, off)
 	for (off = firstifnet, ip = iftot; off;) {
 		char *cp;
 
-		klseek(kmem, off, 0);
-		read(kmem, (char *)&ifnet, sizeof ifnet);
-		klseek(kmem, (off_t)(u_long)ifnet.if_name, 0);
+		if (!kread(off, (char *)&ifnet, sizeof(ifnet),
+		    "network interface"))
+			return;
 		ip->ift_name[0] = '(';
-		read(kmem, ip->ift_name + 1, 15);
+		if (!kread(KADDR(ifnet.if_name), ip->ift_name + 1, 15,
+		    "network interface name"))
+			return;
 		if (interface && strcmp(ip->ift_name + 1, interface) == 0 &&
 		    unit == ifnet.if_unit)
 			interesting = ip;
@@ -221,7 +218,7 @@ sidewaysintpr(interval, off)
 		ip++;
 		if (ip >= iftot + MAXIF - 2)
 			break;
-		off = (off_t)(u_long)ifnet.if_next;
+		off = KADDR(ifnet.if_next);
 	}
 	lastif = ip;
 
@@ -255,8 +252,9 @@ loop:
 	sum->ift_oe = 0;
 	sum->ift_co = 0;
 	for (off = firstifnet, ip = iftot; off && ip < lastif; ip++) {
-		klseek(kmem, off, 0);
-		read(kmem, (char *)&ifnet, sizeof ifnet);
+		if (!kread(off, (char *)&ifnet, sizeof(ifnet),
+		    "network interface"))
+			return;
 		if (ip == interesting)
 			printf("%8ld %5ld %8ld %5ld %5ld ",
 				ifnet.if_ipackets - ip->ift_ip,
@@ -274,7 +272,7 @@ loop:
 		sum->ift_op += ip->ift_op;
 		sum->ift_oe += ip->ift_oe;
 		sum->ift_co += ip->ift_co;
-		off = (off_t)(u_long)ifnet.if_next;
+		off = KADDR(ifnet.if_next);
 	}
 	if (lastif - iftot > 0)
 		printf("%8ld %5ld %8ld %5ld %5ld ",

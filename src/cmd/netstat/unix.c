@@ -27,17 +27,21 @@ static char sccsid[] = "@(#)unix.c	5.5.1 (2.11BSD GTE) 1/1/94";
 #define	KERNEL
 #include <sys/file.h>
 
+#include "netstat.h"
+
 extern	int Aflag;
 extern	int kmem;
 extern	char *calloc();
 
-unixpr(fileaddr, unixsw)
-	off_t fileaddr;
-	struct protosw *unixsw;
+static void unixdomainpr(struct socket *so, kaddr_t soaddr);
+
+void
+unixpr(kaddr_t fileaddr, kaddr_t unixsw)
 {
 	register struct file *fp;
 	struct file *fil, *fileNFILE;
 	struct socket sock, *so = &sock;
+	kaddr_t proto;
 
 	if (fileaddr == 0) {
 		printf("file not in namelist.\n");
@@ -48,9 +52,8 @@ unixpr(fileaddr, unixsw)
 		printf("Out of memory (file table).\n");
 		return;
 	}
-	klseek(kmem, fileaddr, L_SET);
-	if (read(kmem, (char *)fil, NFILE * sizeof (struct file)) !=
-	    NFILE * sizeof (struct file)) {
+	if (!kread(fileaddr, (char *)fil, NFILE * sizeof(struct file),
+	    "file table")) {
 		printf("File table read error.\n");
 		free((char *)fil);
 		return;
@@ -59,17 +62,15 @@ unixpr(fileaddr, unixsw)
 	for (fp = fil; fp < fileNFILE; fp++) {
 		if (fp->f_count == 0 || fp->f_type != DTYPE_SOCKET)
 			continue;
-#ifdef pdp11
-		slseek(kmem, (off_t)(u_long)fp->f_data, L_SET);
-#else
-		klseek(kmem, (off_t)(u_long)fp->f_data, L_SET);
-#endif
-		if (read(kmem, (char *)so, sizeof (*so)) != sizeof (*so))
+		if (!kread(KADDR(fp->f_data), (char *)so, sizeof(*so),
+		    "socket"))
 			continue;
-		/* kludge */
-		if (so->so_proto >= unixsw && so->so_proto <= unixsw + 2)
+		proto = KADDR(so->so_proto);
+		if (unixsw != 0 &&
+		    (proto == unixsw || proto == unixsw + sizeof(struct protosw) ||
+		    proto == unixsw + 2 * sizeof(struct protosw)))
 			if (so->so_pcb)
-				unixdomainpr(so, fp->f_data);
+				unixdomainpr(so, KADDR(fp->f_data));
 	}
 	free((char *)fil);
 }
@@ -77,27 +78,35 @@ unixpr(fileaddr, unixsw)
 static	char *socktype[] =
     { "#0", "stream", "dgram", "raw", "rdm", "seqpacket" };
 
-unixdomainpr(so, soaddr)
-	register struct socket *so;
-	caddr_t soaddr;
+static void
+unixdomainpr(struct socket *so, kaddr_t soaddr)
 {
 	struct unpcb unpcb, *unp = &unpcb;
 	struct mbuf mbuf, *m;
-	struct sockaddr_un *sa;
+	struct sockaddr_un *sa = (struct sockaddr_un *)0;
+	int pathlen;
 	static int first = 1;
 #ifdef pdp11
 #define klseek slseek
 #endif
 
-	klseek(kmem, (off_t)(u_long)so->so_pcb, L_SET);
-	if (read(kmem, (char *)unp, sizeof (*unp)) != sizeof (*unp))
+	if (!kread(KADDR(so->so_pcb), (char *)unp, sizeof(*unp),
+	    "UNIX-domain control block"))
 		return;
 	if (unp->unp_addr) {
 		m = &mbuf;
-		klseek(kmem, (off_t)(u_long)unp->unp_addr, L_SET);
-		if (read(kmem, (char *)m, sizeof (*m)) != sizeof (*m))
+		if (!kread(KADDR(unp->unp_addr), (char *)m, sizeof(*m),
+		    "UNIX-domain address")) {
 			m = (struct mbuf *)0;
-		sa = mtod(m, struct sockaddr_un *);
+		} else {
+			sa = mtod(m, struct sockaddr_un *);
+			if ((char *)sa < (char *)&mbuf ||
+			    (char *)sa + sizeof(sa->sun_family) >
+			    (char *)(&mbuf + 1)) {
+				m = (struct mbuf *)0;
+				sa = (struct sockaddr_un *)0;
+			}
+		}
 	} else
 		m = (struct mbuf *)0;
 	if (first) {
@@ -109,11 +118,20 @@ unixdomainpr(so, soaddr)
 		first = 0;
 	}
 	printf("%8x %-6.6s %6d %6d %8x %8x %8x %8x",
-	    soaddr, socktype[so->so_type], so->so_rcv.sb_cc, so->so_snd.sb_cc,
+	    soaddr,
+	    so->so_type >= 0 && so->so_type < sizeof(socktype) / sizeof(socktype[0])
+	    ? socktype[so->so_type] : "unknown",
+	    so->so_rcv.sb_cc, so->so_snd.sb_cc,
 	    unp->unp_inode, unp->unp_conn,
 	    unp->unp_refs, unp->unp_nextref);
-	if (m)
-		printf(" %.*s", m->m_len - sizeof(sa->sun_family),
-		    sa->sun_path);
+	if (m && m->m_len > sizeof(sa->sun_family)) {
+		pathlen = m->m_len - sizeof(sa->sun_family);
+		if (pathlen > sizeof(sa->sun_path))
+			pathlen = sizeof(sa->sun_path);
+		if ((char *)sa->sun_path + pathlen > (char *)(&mbuf + 1))
+			pathlen = (char *)(&mbuf + 1) - (char *)sa->sun_path;
+		if (pathlen > 0)
+			printf(" %.*s", pathlen, sa->sun_path);
+	}
 	putchar('\n');
 }

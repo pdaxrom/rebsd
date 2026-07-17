@@ -25,6 +25,8 @@ static char sccsid[] = "@(#)route.c	5.13.1 (2.11BSD GTE) 1/1/94";
 #include <net/route.h>
 #include <netinet/in.h>
 
+#include "netstat.h"
+
 #ifdef pdp11
 #define klseek slseek
 #endif
@@ -35,6 +37,8 @@ extern	char *routename(), *netname(), *plural();
 extern	char *malloc();
 
 #define C(x)	(u_char)((x) & 0xff)
+#define MAX_ROUTE_HASH 4096
+#define MAX_ROUTE_CHAIN 4096
 
 /*
  * Definitions for showing gateway flags.
@@ -54,8 +58,8 @@ struct bits {
 /*
  * Print routing tables.
  */
-routepr(hostaddr, netaddr, hashsizeaddr)
-	off_t hostaddr, netaddr, hashsizeaddr;
+void
+routepr(kaddr_t hostaddr, kaddr_t netaddr, kaddr_t hashsizeaddr)
 {
 	struct mbuf mb;
 	register struct rtentry *rt;
@@ -66,6 +70,7 @@ routepr(hostaddr, netaddr, hashsizeaddr)
 	struct ifnet ifnet;
 	int hashsize;
 	int i, doinghost = 1;
+	int chain;
 
 	if (hostaddr == 0) {
 		printf("rthost: symbol not in namelist\n");
@@ -79,11 +84,23 @@ routepr(hostaddr, netaddr, hashsizeaddr)
 		printf("rthashsize: symbol not in namelist\n");
 		return;
 	}
-	klseek(kmem, hashsizeaddr, 0);
-	read(kmem, (char *)&hashsize, sizeof (hashsize));
+	if (!kread(hashsizeaddr, (char *)&hashsize, sizeof(hashsize),
+	    "route hash size"))
+		return;
+	if (hashsize <= 0 || hashsize > MAX_ROUTE_HASH) {
+		printf("netstat: invalid route hash size %d\n", hashsize);
+		return;
+	}
 	routehash = (struct mbuf **)malloc( hashsize*sizeof (struct mbuf *) );
-	klseek(kmem, hostaddr, 0);
-	read(kmem, (char *)routehash, hashsize*sizeof (struct mbuf *));
+	if (routehash == 0) {
+		printf("netstat: out of memory for route hash\n");
+		return;
+	}
+	if (!kread(hostaddr, (char *)routehash,
+	    hashsize * sizeof(struct mbuf *), "host route hash")) {
+		free((char *)routehash);
+		return;
+	}
 	printf("Routing tables\n");
 	printf("%-16.16s %-18.18s %-6.6s  %6.6s%8.8s  %s\n",
 		"Destination", "Gateway",
@@ -93,15 +110,22 @@ again:
 		if (routehash[i] == 0)
 			continue;
 		m = routehash[i];
+		chain = 0;
 		while (m) {
 			struct sockaddr_in *sin;
 
-			klseek(kmem, (off_t)(u_long)m, 0);
-			read(kmem, (char *)&mb, sizeof (mb));
+			if (++chain > MAX_ROUTE_CHAIN) {
+				printf("netstat: cyclic route chain at bucket %d\n", i);
+				break;
+			}
+			if (!kread(KADDR(m), (char *)&mb, sizeof(mb),
+			    "route mbuf"))
+				break;
 			rt = mtod(&mb, struct rtentry *);
-			if ((unsigned)rt < (unsigned)&mb ||
-			    (unsigned)rt >= (unsigned)(&mb + 1)) {
+			if ((char *)rt < (char *)&mb ||
+			    (char *)rt + sizeof(*rt) > (char *)(&mb + 1)) {
 				printf("???\n");
+				free((char *)routehash);
 				return;
 			}
 
@@ -139,17 +163,23 @@ again:
 				m = mb.m_next;
 				continue;
 			}
-			klseek(kmem, (off_t)(u_long)rt->rt_ifp, 0);
-			read(kmem, (char *)&ifnet, sizeof (ifnet));
-			klseek(kmem, (off_t)(u_long)ifnet.if_name, 0);
-			read(kmem, name, 16);
+			if (!kread(KADDR(rt->rt_ifp), (char *)&ifnet,
+			    sizeof(ifnet), "route interface"))
+				break;
+			if (!kread(KADDR(ifnet.if_name), name, sizeof(name),
+			    "route interface name"))
+				break;
+			name[15] = '\0';
 			printf(" %.15s%d\n", name, ifnet.if_unit);
 			m = mb.m_next;
 		}
 	}
 	if (doinghost) {
-		klseek(kmem, netaddr, 0);
-		read(kmem, (char *)routehash, hashsize*sizeof (struct mbuf *));
+		if (!kread(netaddr, (char *)routehash,
+		    hashsize * sizeof(struct mbuf *), "network route hash")) {
+			free((char *)routehash);
+			return;
+		}
 		doinghost = 0;
 		goto again;
 	}
@@ -196,8 +226,8 @@ netname(in, mask)
 /*
  * Print routing statistics
  */
-rt_stats(off)
-	off_t off;
+void
+rt_stats(kaddr_t off)
 {
 	struct rtstat rtstat;
 
@@ -205,8 +235,9 @@ rt_stats(off)
 		printf("rtstat: symbol not in namelist\n");
 		return;
 	}
-	klseek(kmem, off, 0);
-	read(kmem, (char *)&rtstat, sizeof (rtstat));
+	if (!kread(off, (char *)&rtstat, sizeof(rtstat),
+	    "routing statistics"))
+		return;
 	printf("routing:\n");
 	printf("\t%u bad routing redirect%s\n",
 		rtstat.rts_badredirect, plural((long)rtstat.rts_badredirect));
