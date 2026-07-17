@@ -37,7 +37,7 @@ struct user {
     label_t u_ssave;                /* label variable for swapping */
 
 /* syscall parameters and results */
-    int     u_arg[6];               /* arguments to current system call */
+    int     u_arg[8];               /* arguments to current system call */
     int     u_rval;                 /* return value */
     int     u_rval2;                /* second word of a wide return value */
     int     u_error;                /* return error code */

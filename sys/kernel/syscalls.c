@@ -171,5 +171,13 @@ const char *const syscallnames[] = {
     "stat64",           /* 159 = stat64 */
     "lstat64",          /* 160 = lstat64 */
     "fstat64",          /* 161 = fstat64 */
+    "mmap",             /* 162 = mmap */
+    "munmap",           /* 163 = munmap */
+    "mprotect",         /* 164 = mprotect */
+    "msync",            /* 165 = msync */
+    "madvise",          /* 166 = madvise */
+    "mincore",          /* 167 = mincore */
+    "mlock",            /* 168 = mlock */
+    "munlock",          /* 169 = munlock */
 };
 #endif

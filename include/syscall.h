@@ -180,3 +180,11 @@
 #define SYS_stat64      159
 #define SYS_lstat64     160
 #define SYS_fstat64     161
+#define SYS_mmap        162
+#define SYS_munmap      163
+#define SYS_mprotect    164
+#define SYS_msync       165
+#define SYS_madvise     166
+#define SYS_mincore     167
+#define SYS_mlock       168
+#define SYS_munlock     169

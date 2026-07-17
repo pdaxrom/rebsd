@@ -1,6 +1,7 @@
 /* Focused QEMU regression coverage for per-process MIPS address spaces. */
 
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <sys/wait.h>
 #include <errno.h>
 #include <signal.h>
@@ -67,6 +68,9 @@ main(int argc, char **argv)
     char *arena;
     char *cross_page;
     char *pressure;
+    unsigned char residency[3];
+    char *mapped;
+    char *replacement;
     char **bad_argv;
     char *exec_argv[3];
     void *old_break;
@@ -155,6 +159,55 @@ main(int argc, char **argv)
         if (smoke_wait(child, index) != 0 || arena[0] != 0x21)
             return smoke_fail("process reuse wait");
     }
+
+    errno = 0;
+    mapped = mmap(0, 3 * SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (mapped == MAP_FAILED)
+        return smoke_fail("anonymous mmap");
+    mapped[0] = 0x12;
+    mapped[SMOKE_VM_PAGE_SIZE] = 0x34;
+    mapped[2 * SMOKE_VM_PAGE_SIZE] = 0x56;
+    if (mprotect(mapped + SMOKE_VM_PAGE_SIZE, SMOKE_VM_PAGE_SIZE,
+        PROT_READ) != 0 ||
+        (unsigned char)mapped[SMOKE_VM_PAGE_SIZE] != 0x34 ||
+        mprotect(mapped + SMOKE_VM_PAGE_SIZE, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE) != 0)
+        return smoke_fail("mprotect split");
+    memset(residency, 0, sizeof(residency));
+    if (mincore(mapped, 3 * SMOKE_VM_PAGE_SIZE, residency) != 0 ||
+        (residency[0] & MINCORE_INCORE) == 0 ||
+        (residency[1] & MINCORE_INCORE) == 0 ||
+        (residency[2] & MINCORE_INCORE) == 0 ||
+        madvise(mapped, 3 * SMOKE_VM_PAGE_SIZE, MADV_NORMAL) != 0 ||
+        msync(mapped, 3 * SMOKE_VM_PAGE_SIZE, MS_SYNC) != 0)
+        return smoke_fail("mmap auxiliary calls");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("mmap fork create");
+    if (child == 0) {
+        if ((unsigned char)mapped[0] != 0x12)
+            _exit(1);
+        mapped[0] = 0x7a;
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0 ||
+        (unsigned char)mapped[0] != 0x12)
+        return smoke_fail("mmap fork isolation");
+    if (munmap(mapped + SMOKE_VM_PAGE_SIZE, SMOKE_VM_PAGE_SIZE) != 0)
+        return smoke_fail("partial munmap");
+    replacement = mmap(mapped + SMOKE_VM_PAGE_SIZE, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (replacement != mapped + SMOKE_VM_PAGE_SIZE)
+        return smoke_fail("mmap hint reuse");
+    replacement[0] = 0x45;
+    if (munmap(mapped, 3 * SMOKE_VM_PAGE_SIZE) != 0)
+        return smoke_fail("munmap split range");
+    errno = 0;
+    if (mmap(0, SMOKE_VM_PAGE_SIZE, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANON, -1, ((off_t)1 << 32)) != MAP_FAILED ||
+        errno != EINVAL)
+        return smoke_fail("mmap 64-bit offset ABI");
 
     pressure = sbrk(SMOKE_PRESSURE_PAGES * SMOKE_VM_PAGE_SIZE);
     if (pressure == (void *)-1)

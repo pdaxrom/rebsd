@@ -242,6 +242,36 @@ vm_map_protect(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
     return 0;
 }
 
+int
+vm_map_findspace(const struct vm_map *map, vm_vaddr_t hint,
+    vm_size_t size, vm_vaddr_t *result)
+{
+    const struct vm_map_entry *entry;
+    vm_vaddr_t address;
+    unsigned index;
+
+    if (map == 0 || result == 0 || size == 0 ||
+        !vm_vaddr_page_aligned(hint) || !vm_size_page_aligned(size))
+        return EINVAL;
+    address = hint < map->vmm_min ? map->vmm_min : hint;
+    for (index = 0; index < map->vmm_count; ++index) {
+        entry = &map->vmm_entries[index];
+        if (entry->vme_end <= address)
+            continue;
+        if (address <= entry->vme_start &&
+            size <= entry->vme_start - address) {
+            *result = address;
+            return 0;
+        }
+        address = entry->vme_end;
+    }
+    if (address <= map->vmm_max && size <= map->vmm_max - address) {
+        *result = address;
+        return 0;
+    }
+    return ENOMEM;
+}
+
 const struct vm_map_entry *
 vm_map_lookup(const struct vm_map *map, vm_vaddr_t address)
 {

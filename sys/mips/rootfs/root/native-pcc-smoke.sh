@@ -279,4 +279,30 @@ cc -o "$tmp.cdefs" "$tmp.cdefs.c" || exit 1
 "$tmp.cdefs" > "$tmp.out" || exit 1
 grep native-pcc-cdefs-ok:done "$tmp.out" >/dev/null || exit 1
 
+cat > "$tmp.mman.c" <<'EOF'
+#include <sys/mman.h>
+#include <stdio.h>
+
+int
+main(void)
+{
+    unsigned char *p;
+
+    p = mmap(0, 4096, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (p == MAP_FAILED)
+        return 2;
+    p[0] = 0x5a;
+    if (p[0] != 0x5a || munmap(p, 4096) != 0)
+        return 3;
+    printf("native-pcc-mman-ok\n");
+    return 0;
+}
+EOF
+
+echo "step 9: sys/mman native PCC link/run"
+cc -o "$tmp.mman" "$tmp.mman.c" || exit 1
+"$tmp.mman" > "$tmp.out" || exit 1
+grep native-pcc-mman-ok "$tmp.out" >/dev/null || exit 1
+
 echo "native pcc smoke ok"

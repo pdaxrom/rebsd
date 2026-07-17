@@ -231,6 +231,26 @@ vmspace_map_anon(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
 }
 
 int
+vmspace_map_anon_any(struct vmspace *vmspace, vm_vaddr_t hint,
+    vm_size_t size, vm_prot_t protection, unsigned flags,
+    vm_vaddr_t *result)
+{
+    vm_vaddr_t start;
+    int error;
+
+    if (!vmspace_valid(vmspace) || result == 0)
+        return EINVAL;
+    error = vm_map_findspace(&vmspace->vms_map, hint, size, &start);
+    if (error != 0)
+        return error;
+    error = vmspace_map_anon(vmspace, start, size, protection, flags);
+    if (error != 0)
+        return error;
+    *result = start;
+    return 0;
+}
+
+int
 vmspace_protect(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
     vm_prot_t protection)
 {

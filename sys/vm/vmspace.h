@@ -28,6 +28,8 @@ int vmspace_destroy(struct vmspace *);
 int vmspace_activate(struct vmspace *);
 int vmspace_map_anon(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t,
     unsigned);
+int vmspace_map_anon_any(struct vmspace *, vm_vaddr_t, vm_size_t,
+    vm_prot_t, unsigned, vm_vaddr_t *);
 int vmspace_unmap(struct vmspace *, vm_vaddr_t, vm_size_t);
 int vmspace_protect(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vmspace_check(const struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);

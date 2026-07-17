@@ -215,6 +215,14 @@ const struct sysent sysent[] = {
     { 2, stat64 },              /* 159 = stat64 */
     { 2, lstat64 },             /* 160 = lstat64 */
     { 2, fstat64 },             /* 161 = fstat64 */
+    { 8, mmap },                /* 162 = mmap */
+    { 2, munmap },              /* 163 = munmap */
+    { 3, mprotect },            /* 164 = mprotect */
+    { 3, msync },               /* 165 = msync */
+    { 3, madvise },             /* 166 = madvise */
+    { 3, mincore },             /* 167 = mincore */
+    { 2, mlock },               /* 168 = mlock */
+    { 2, munlock },             /* 169 = munlock */
 };
 
 const int nsysent = sizeof (sysent) / sizeof (sysent[0]);

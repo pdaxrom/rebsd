@@ -505,6 +505,7 @@ static void
 mips_syscall(int *frame)
 {
     const struct sysent *callp = &sysent[0];
+    unsigned arg;
     int opc = frame[FRAME_PC];
     int code;
     int arg_error = 0;
@@ -535,22 +536,25 @@ mips_syscall(int *frame)
     }
 #endif
 
-    if (callp->sy_narg) {
+    if (callp->sy_narg > (int)(sizeof(u.u_arg) / sizeof(u.u_arg[0])))
+        arg_error = EINVAL;
+    else if (callp->sy_narg) {
         u.u_arg[0] = frame[FRAME_R4];
-        u.u_arg[1] = frame[FRAME_R5];
-        u.u_arg[2] = frame[FRAME_R6];
-        u.u_arg[3] = frame[FRAME_R7];
-        if (callp->sy_narg > 4) {
-            unsigned addr = (frame[FRAME_SP] + 16) & ~3;
-            if (copyin((caddr_t)addr, (caddr_t)&u.u_arg[4],
-                sizeof(u.u_arg[4])) != 0)
+        if (callp->sy_narg > 1)
+            u.u_arg[1] = frame[FRAME_R5];
+        if (callp->sy_narg > 2)
+            u.u_arg[2] = frame[FRAME_R6];
+        if (callp->sy_narg > 3)
+            u.u_arg[3] = frame[FRAME_R7];
+        for (arg = 4; arg < (unsigned)callp->sy_narg; ++arg) {
+            unsigned addr = (frame[FRAME_SP] + 16 +
+                (arg - 4) * sizeof(int)) & ~3u;
+
+            if (copyin((caddr_t)addr, (caddr_t)&u.u_arg[arg],
+                sizeof(u.u_arg[arg])) != 0) {
                 arg_error = EFAULT;
-        }
-        if (callp->sy_narg > 5) {
-            unsigned addr = (frame[FRAME_SP] + 20) & ~3;
-            if (copyin((caddr_t)addr, (caddr_t)&u.u_arg[5],
-                sizeof(u.u_arg[5])) != 0)
-                arg_error = EFAULT;
+                break;
+            }
         }
     }
 

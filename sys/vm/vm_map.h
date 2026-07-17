@@ -45,6 +45,8 @@ int vm_map_insert_object(struct vm_map *, vm_vaddr_t, vm_vaddr_t,
     vm_prot_t, vm_prot_t, unsigned, struct vm_object *, vm_ooffset_t);
 int vm_map_remove(struct vm_map *, vm_vaddr_t, vm_vaddr_t);
 int vm_map_protect(struct vm_map *, vm_vaddr_t, vm_vaddr_t, vm_prot_t);
+int vm_map_findspace(const struct vm_map *, vm_vaddr_t, vm_size_t,
+    vm_vaddr_t *);
 const struct vm_map_entry *vm_map_lookup(const struct vm_map *, vm_vaddr_t);
 int vm_map_check(const struct vm_map *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vm_map_validate(const struct vm_map *);

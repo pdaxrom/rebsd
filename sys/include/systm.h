@@ -96,6 +96,15 @@ extern const char *syscallnames[];
 off_t syscall_off64_arg (const int *words);
 void syscall_off64_result (off_t value);
 
+void mmap (void);
+void munmap (void);
+void mprotect (void);
+void msync (void);
+void madvise (void);
+void mincore (void);
+void mlock (void);
+void munlock (void);
+
 extern int  noproc;                 /* no one is running just now */
 extern char *panicstr;
 extern int  boothowto;              /* reboot flags, from boot */

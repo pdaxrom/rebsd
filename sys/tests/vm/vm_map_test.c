@@ -17,6 +17,7 @@ main(void)
 {
     struct vm_map map;
     const struct vm_map_entry *entry;
+    vm_vaddr_t address;
 
     CHECK(vm_map_init(&map, 0x1000u, 0x80000000u) == 0);
     CHECK(vm_map_insert(&map, 0x10000000u, 0x10002000u,
@@ -26,6 +27,11 @@ main(void)
     CHECK(vm_map_insert(&map, 0x10002000u, 0x10004000u,
         VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, VM_MAP_ANON) == 0);
     CHECK(map.vmm_count == 2);
+    CHECK(vm_map_findspace(&map, 0x10000000u, VM_PAGE_SIZE,
+        &address) == 0);
+    CHECK(address == 0x10004000u);
+    CHECK(vm_map_findspace(&map, 0x7ffff000u, 2 * VM_PAGE_SIZE,
+        &address) == ENOMEM);
     CHECK(vm_map_lookup(&map, 0x10003fffu)->vme_start == 0x10000000u);
     CHECK(vm_map_insert(&map, 0x10001000u, 0x10003000u,
         VM_PROT_READ, VM_PROT_ALL, VM_MAP_ANON) == EEXIST);

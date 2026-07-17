@@ -187,15 +187,15 @@ Exit criteria:
 
 ## Phase 6: `mmap` and mapped files
 
-- [ ] Define BSD-compatible public constants and structures for `mmap`,
+- [x] Define BSD-compatible public constants and structures for `mmap`,
   `munmap`, `mprotect`, `msync`, `madvise`, `mincore`, and `mlock`/`munlock`.
-- [ ] Add syscall-table entries, libc wrappers, manual pages, and native PCC
+- [x] Add syscall-table entries, libc wrappers, manual pages, and native PCC
   header coverage.
-- [ ] Extend syscall argument handling where 64-bit offsets or more than the
+- [x] Extend syscall argument handling where 64-bit offsets or more than the
   current register argument set require stack arguments.
 - [ ] Validate address, length, alignment, offset, protection, descriptor, and
   overflow combinations before changing a map.
-- [ ] Support anonymous private mappings.
+- [x] Support anonymous private mappings.
 - [ ] Support file-backed `MAP_PRIVATE` with copy-on-write.
 - [ ] Support file-backed `MAP_SHARED` with coherent reads, writes, truncation,
   `fsync`, `msync`, unmount, and device-removal behavior.

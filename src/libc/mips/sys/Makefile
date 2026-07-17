@@ -9,7 +9,7 @@ CFLAGS          += -Os
 # rest of the system calls are generated with printf(1) and do not have
 # source files associated with them.
 
-COBJS		= sbrk.o execl.o execle.o execlp.o execv.o off64.o
+COBJS		= sbrk.o execl.o execle.o execlp.o execv.o mmap.o off64.o
 
 ASMOBJS		= _exit.o _brk.o getpgrp.o pipe.o ptrace.o sigaction.o
 
@@ -21,6 +21,7 @@ SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
 		  getpeername.o getpriority.o getrlimit.o getrusage.o getsockopt.o \
 		  gettimeofday.o ioctl.o kill.o killpg.o link.o listen.o mkdir.o \
 		  mknod.o mount.o open.o pselect.o quota.o read.o readlink.o readv.o \
+		  munmap.o mprotect.o msync.o madvise.o mincore.o mlock.o munlock.o \
 		  reboot.o \
 		  recv.o recvfrom.o recvmsg.o rename.o rmdir.o select.o send.o sendmsg.o \
 		  sendto.o setgroups.o setitimer.o setpgrp.o setpriority.o setquota.o \
@@ -36,7 +37,7 @@ SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
                   ufetch.o ustore.o ucall.o umask.o vfork.o vhangup.o \
 		  rdglob.o wrglob.o msec.o kmemdev.o
 
-WIDEOBJS	= stat.o lstat.o fstat.o lseek64w.o trunc64w.o ftrunc64w.o
+WIDEOBJS	= stat.o lstat.o fstat.o mmapraw.o lseek64w.o trunc64w.o ftrunc64w.o
 
 OBJS		= ${COBJS} ${ASMOBJS} ${SYSOBJS} ${WIDEOBJS}
 
@@ -49,6 +50,9 @@ sys.a:		${OBJS}
 ${SYSOBJS}:	SYS.h
 		@echo creating $*.o
 		@printf '#include "SYS.h"\nSYS($*)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
+
+mmapraw.o:	SYS.h
+		@printf '#include "SYS.h"\nSYS2(__mmap_words,mmap)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
 
 lseek64w.o:	SYS.h
 		@printf '#include "SYS.h"\nSYS2(__lseek64_words,lseek64)\n' | $(AS) ${ASFLAGS} - -c -o $*.o

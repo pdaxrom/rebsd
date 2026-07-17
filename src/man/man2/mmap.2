@@ -1,0 +1,90 @@
+.\" Copyright (c) 2026 ReBSD contributors
+.TH MMAP 2 "July 18, 2026"
+.SH NAME
+mmap, munmap, mprotect, msync, madvise, mincore, mlock, munlock \- mapped memory operations
+.SH SYNOPSIS
+.nf
+#include <sys/types.h>
+#include <sys/mman.h>
+.PP
+void *mmap(void *addr, size_t len, int prot, int flags,
+    int fd, off_t offset);
+int munmap(void *addr, size_t len);
+int mprotect(void *addr, size_t len, int prot);
+int msync(void *addr, size_t len, int flags);
+int madvise(void *addr, size_t len, int advice);
+int mincore(void *addr, size_t len, unsigned char *vec);
+int mlock(const void *addr, size_t len);
+int munlock(const void *addr, size_t len);
+.fi
+.SH DESCRIPTION
+.I Mmap
+creates a mapping in the calling process.
+The protection is a combination of
+.BR PROT_READ ,
+.BR PROT_WRITE ,
+and
+.BR PROT_EXEC ,
+or is
+.BR PROT_NONE .
+Exactly one of
+.B MAP_PRIVATE
+and
+.B MAP_SHARED
+must be supplied.
+.PP
+The current implementation supports demand-zero anonymous private mappings
+with
+.BR MAP_PRIVATE | MAP_ANON .
+For such mappings
+.I fd
+must be -1 and
+.I offset
+must be zero.
+The address is a hint unless
+.B MAP_FIXED
+is present.
+.B MAP_FIXED
+and file-backed mappings are not yet supported and fail without changing the
+address map.
+.PP
+.I Munmap
+removes all mappings in the page-aligned range.
+.I Mprotect
+changes protection after verifying that the complete range is mapped.
+Lengths are rounded up to the 4096-byte VM page size.
+.PP
+For anonymous mappings,
+.I msync
+validates the range and completes without I/O.
+.I Madvise
+validates its range and advice; advice is currently informational.
+.I Mincore
+stores one byte per VM page in
+.I vec
+and sets
+.B MINCORE_INCORE
+when the page currently has a resident hardware mapping.
+.I Mlock
+and
+.I munlock
+currently fail with
+.BR EOPNOTSUPP .
+.SH RETURN VALUES
+.I Mmap
+returns the mapping address on success and
+.B MAP_FAILED
+on failure.
+The other calls return zero on success and -1 on failure.
+.SH ERRORS
+These calls may fail with
+.BR EINVAL
+for invalid flags, protection, alignment, length, offset, or advice;
+.BR EFAULT
+for an invalid user vector or an unmapped range;
+.BR ENOMEM
+when no address range or VM resource is available; or
+.BR EOPNOTSUPP
+for an operation not implemented by the selected mapping type.
+.SH SEE ALSO
+brk(2), fork(2), getpagesize(2)

@@ -234,6 +234,7 @@ test_vmspace(void)
     unsigned char output[32];
     vm_paddr_t source_paddr;
     vm_paddr_t child_paddr;
+    vm_vaddr_t any_address;
     vm_pfn_t free_before;
     unsigned i;
 
@@ -254,6 +255,9 @@ test_vmspace(void)
         ENOENT);
     CHECK(vmspace_map_anon(source, TEST_SHARED, VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE, VM_MAP_SHARED) == 0);
+    CHECK(vmspace_map_anon_any(source, TEST_VADDR, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, 0, &any_address) == 0);
+    CHECK(any_address == TEST_VADDR2);
     for (i = 0; i < sizeof(input); ++i)
         input[i] = (unsigned char)(0x80u + i);
     CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE - 16,
