@@ -47,6 +47,10 @@ must be zero.
 Mapping
 .B /dev/zero
 at offset zero has the same demand-zero behavior and may be private or shared.
+Descriptors returned by
+.IR shm_open (2)
+map resizable kernel-resident shared objects without a filesystem backing
+file.
 .B MAP_PRIVATE
 file mappings isolate writes with copy-on-write.
 .B MAP_SHARED
@@ -116,4 +120,4 @@ when a file range is not representable; or
 .BR EOPNOTSUPP
 for an operation not implemented by the selected mapping type.
 .SH SEE ALSO
-brk(2), fork(2), getpagesize(2)
+brk(2), fork(2), getpagesize(2), shm_open(2)

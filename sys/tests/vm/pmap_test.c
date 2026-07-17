@@ -5,6 +5,7 @@
 #include <string.h>
 #include <vm/pmap.h>
 #include <vm/vm_object.h>
+#include <vm/vm_shm.h>
 #include <vm/vmspace.h>
 
 #define TEST_RAM_SIZE   (64u * VM_PAGE_SIZE)
@@ -752,6 +753,94 @@ test_pager(void)
     return 0;
 }
 
+static int
+test_shm(void)
+{
+    struct vm_page_allocator allocator;
+    struct vm_phys_map map;
+    struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
+    struct vm_object_stats object_stats;
+    struct vm_shm_stats shm_stats;
+    struct vm_shm_info info;
+    struct vm_object *object;
+    struct vm_shm *replacement;
+    struct vm_shm *shm;
+    struct vm_shm *found;
+    struct vmspace *space;
+    unsigned char value;
+
+    memset(test_ram, 0, sizeof(test_ram));
+    memset(&allocator, 0, sizeof(allocator));
+    vm_phys_map_init(&map);
+    CHECK(vm_phys_map_add_ram(&map, 0, TEST_RAM_SIZE, "test ram") == 0);
+    CHECK(vm_phys_map_finalize(&map) == 0);
+    CHECK(vm_page_allocator_init(&allocator, &map, metadata,
+        sizeof(metadata)) == 0);
+    CHECK(pmap_system_init(&allocator) == 0);
+    CHECK(vmspace_system_init(&allocator) == 0);
+    CHECK(vmspace_create(&space) == 0);
+
+    CHECK(vm_shm_create("/host-test", 12, 34, 0640, &shm) == 0);
+    CHECK(vm_shm_create("/host-test", 12, 34, 0640, &found) == EEXIST);
+    CHECK(vm_shm_lookup("/host-test", &found) == 0 && found == shm);
+    CHECK(vm_shm_get_info(shm, &info) == 0 && info.vsi_size == 0 &&
+        info.vsi_owner == 12 && info.vsi_group == 34 &&
+        info.vsi_mode == 0640 && info.vsi_open_count == 1 &&
+        info.vsi_linked);
+    CHECK(vm_shm_truncate(shm, 2 * VM_PAGE_SIZE + 17) == 0);
+    CHECK(vm_shm_object_reference(shm, &object) == 0);
+    CHECK(vmspace_map_object(space, TEST_VADDR, 3 * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+        VM_MAP_SHARED, object, 0) == 0);
+
+    value = 0x5a;
+    CHECK(vmspace_write(space, TEST_VADDR + 2 * VM_PAGE_SIZE + 100,
+        &value, 1) == 0);
+    CHECK(vm_shm_truncate(shm, 2 * VM_PAGE_SIZE + 200) == 0);
+    value = 0xff;
+    CHECK(vmspace_read(space, TEST_VADDR + 2 * VM_PAGE_SIZE + 100,
+        &value, 1) == 0 && value == 0);
+    value = 0x6b;
+    CHECK(vmspace_write(space, TEST_VADDR + 2 * VM_PAGE_SIZE + 5,
+        &value, 1) == 0);
+    CHECK(vm_shm_truncate(shm, VM_PAGE_SIZE + 5) == 0);
+    CHECK(vm_shm_truncate(shm, 3 * VM_PAGE_SIZE) == 0);
+    value = 0xff;
+    CHECK(vmspace_read(space, TEST_VADDR + 2 * VM_PAGE_SIZE + 5,
+        &value, 1) == 0 && value == 0);
+
+    CHECK(vm_shm_retain(shm) == 0);
+    CHECK(vm_shm_unlink(shm) == 0);
+    CHECK(vm_shm_lookup("/host-test", &found) == ENOENT);
+    CHECK(vm_shm_close(shm) == 0);
+    CHECK(vm_shm_close(shm) == 0);
+
+    CHECK(vm_shm_create("/host-test", 56, 78, 0600,
+        &replacement) == 0);
+    CHECK(vm_shm_truncate(replacement, VM_PAGE_SIZE) == 0);
+    CHECK(vm_shm_object_reference(replacement, &object) == 0);
+    CHECK(vmspace_map_object(space, TEST_SHARED, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+        VM_MAP_SHARED, object, 0) == 0);
+    value = 0xff;
+    CHECK(vmspace_read(space, TEST_SHARED, &value, 1) == 0 && value == 0);
+    value = 0x7c;
+    CHECK(vmspace_write(space, TEST_VADDR, &value, 1) == 0);
+    value = 0;
+    CHECK(vmspace_read(space, TEST_VADDR, &value, 1) == 0 && value == 0x7c);
+    CHECK(vm_shm_unlink(replacement) == 0);
+    CHECK(vm_shm_close(replacement) == 0);
+
+    CHECK(vm_shm_get_stats(&shm_stats) == 0 &&
+        shm_stats.vss_objects == 0 && shm_stats.vss_open_files == 0);
+    CHECK(vmspace_destroy(space) == 0);
+    CHECK(vm_object_get_stats(&object_stats) == 0 &&
+        object_stats.vos_objects == 0 && object_stats.vos_anon_pages == 0 &&
+        object_stats.vos_resident_pages == 0);
+    CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
+    return 0;
+}
+
 int
 main(void)
 {
@@ -760,6 +849,8 @@ main(void)
     if (test_vmspace() != 0)
         return 1;
     if (test_pager() != 0)
+        return 1;
+    if (test_shm() != 0)
         return 1;
     puts("MIPS pmap/vmspace tests: ok");
     return 0;

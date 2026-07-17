@@ -22,6 +22,7 @@ SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
 		  gettimeofday.o ioctl.o kill.o killpg.o link.o listen.o mkdir.o \
 		  mknod.o mount.o open.o pselect.o quota.o read.o readlink.o readv.o \
 		  munmap.o mprotect.o msync.o madvise.o mincore.o mlock.o munlock.o \
+		  shm_open.o shm_unlink.o \
 		  reboot.o \
 		  recv.o recvfrom.o recvmsg.o rename.o rmdir.o select.o send.o sendmsg.o \
 		  sendto.o setgroups.o setitimer.o setpgrp.o setpriority.o setquota.o \

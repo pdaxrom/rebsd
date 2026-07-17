@@ -782,6 +782,10 @@ ftruncate1(int fd, off_t length)
 
     if ((fp = getf(fd)) == NULL)
         return;
+    if (fp->f_type == DTYPE_SHM) {
+        u.u_error = shm_truncate_file(fp, length);
+        return;
+    }
     if (!(fp->f_flag&FWRITE) || (fp->f_type != DTYPE_INODE)) {
         u.u_error = EINVAL;
         return;

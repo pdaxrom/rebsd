@@ -25,6 +25,7 @@
 
 #include <vm/vmspace.h>
 #include <vm/vm_object.h>
+#include <vm/vm_shm.h>
 
 #define VMSPACE_USER_MIN        0x00001000u
 #define VMSPACE_USER_MAX        0x80000000u
@@ -50,6 +51,9 @@ vmspace_system_init(struct vm_page_allocator *allocator)
         return EINVAL;
     vmspace_zero_memory(vmspace_pool, sizeof(vmspace_pool));
     error = vm_object_system_init(allocator);
+    if (error != 0)
+        return error;
+    error = vm_shm_system_init();
     if (error != 0)
         return error;
     vmspace_allocator = allocator;

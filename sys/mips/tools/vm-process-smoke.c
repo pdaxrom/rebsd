@@ -2,6 +2,7 @@
 
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -91,6 +92,11 @@ main(int argc, char **argv)
     char *shared_alias;
     char *zero_private;
     char *zero_shared;
+    char *shm_mapping;
+    char *shm_alias;
+    char *shm_private;
+    char *shm_replacement;
+    struct stat shm_status;
     unsigned char residency[3];
     char *mapped;
     char *replacement;
@@ -102,6 +108,7 @@ main(int argc, char **argv)
     int page_size;
     int grow_size;
     int fd;
+    int shm_fd;
     unsigned char file_byte;
 
     if (argc == 2 && strcmp(argv[1], "--exec-child") == 0)
@@ -285,6 +292,85 @@ main(int argc, char **argv)
     if (munmap(zero_private, 2 * SMOKE_VM_PAGE_SIZE) != 0 ||
         munmap(zero_shared, SMOKE_VM_PAGE_SIZE) != 0)
         return smoke_fail("/dev/zero cleanup");
+
+    errno = 0;
+    if (shm_unlink("/vm-process-smoke") != 0 && errno != ENOENT)
+        return smoke_fail("POSIX shm stale unlink");
+    fd = shm_open("/vm-process-smoke", O_CREAT | O_EXCL | O_RDWR, 0600);
+    if (fd < 0 || ftruncate(fd, 2 * SMOKE_VM_PAGE_SIZE + 17) != 0 ||
+        fstat(fd, &shm_status) != 0 ||
+        shm_status.st_size != 2 * SMOKE_VM_PAGE_SIZE + 17)
+        return smoke_fail("POSIX shm create and size");
+    shm_mapping = mmap(0, 3 * SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (shm_mapping == MAP_FAILED)
+        return smoke_fail("POSIX shm shared mmap");
+    shm_mapping[0] = 0x31;
+    shm_mapping[SMOKE_VM_PAGE_SIZE] = 0x32;
+    shm_fd = shm_open("/vm-process-smoke", O_RDWR, 0);
+    if (shm_fd < 0)
+        return smoke_fail("POSIX shm reopen");
+    shm_alias = mmap(0, 3 * SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    shm_private = mmap(0, 2 * SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE, shm_fd, 0);
+    if (shm_alias == MAP_FAILED || shm_private == MAP_FAILED ||
+        shm_alias[0] != 0x31 || shm_private[SMOKE_VM_PAGE_SIZE] != 0x32)
+        return smoke_fail("POSIX shm alias and private snapshot");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("POSIX shm fork create");
+    if (child == 0) {
+        int child_fd = shm_open("/vm-process-smoke", O_RDWR, 0);
+
+        if (child_fd < 0 || shm_alias[0] != 0x31 ||
+            shm_private[SMOKE_VM_PAGE_SIZE] != 0x32)
+            _exit(1);
+        shm_alias[0] = 0x41;
+        shm_private[SMOKE_VM_PAGE_SIZE] = 0x52;
+        if (close(child_fd) != 0)
+            _exit(2);
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0 ||
+        shm_mapping[0] != 0x41 ||
+        shm_private[SMOKE_VM_PAGE_SIZE] != 0x32)
+        return smoke_fail("POSIX shm coherence and private COW");
+    if (ftruncate(fd, SMOKE_VM_PAGE_SIZE + 5) != 0)
+        return smoke_fail("POSIX shm shrink");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("POSIX shm EOF fork create");
+    if (child == 0) {
+        volatile unsigned char beyond_eof;
+
+        beyond_eof = (unsigned char)shm_alias[2 * SMOKE_VM_PAGE_SIZE];
+        _exit(beyond_eof == 0xff ? 1 : 2);
+    }
+    if (smoke_wait_signal(child, SIGBUS) != 0 ||
+        ftruncate(fd, 3 * SMOKE_VM_PAGE_SIZE) != 0 ||
+        shm_mapping[2 * SMOKE_VM_PAGE_SIZE] != 0)
+        return smoke_fail("POSIX shm resize fault and zero growth");
+    if (shm_unlink("/vm-process-smoke") != 0 || close(fd) != 0 ||
+        close(shm_fd) != 0)
+        return smoke_fail("POSIX shm unlink and close");
+    errno = 0;
+    if (shm_open("/vm-process-smoke", O_RDWR, 0) >= 0 || errno != ENOENT ||
+        shm_mapping[0] != 0x41)
+        return smoke_fail("POSIX shm unlinked mapping lifetime");
+    fd = shm_open("/vm-process-smoke", O_CREAT | O_EXCL | O_RDWR, 0600);
+    if (fd < 0 || ftruncate(fd, SMOKE_VM_PAGE_SIZE) != 0)
+        return smoke_fail("POSIX shm name reuse");
+    shm_replacement = mmap(0, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (shm_replacement == MAP_FAILED || shm_replacement[0] != 0 ||
+        shm_unlink("/vm-process-smoke") != 0 || close(fd) != 0)
+        return smoke_fail("POSIX shm replacement isolation");
+    if (munmap(shm_mapping, 3 * SMOKE_VM_PAGE_SIZE) != 0 ||
+        munmap(shm_alias, 3 * SMOKE_VM_PAGE_SIZE) != 0 ||
+        munmap(shm_private, 2 * SMOKE_VM_PAGE_SIZE) != 0 ||
+        munmap(shm_replacement, SMOKE_VM_PAGE_SIZE) != 0)
+        return smoke_fail("POSIX shm cleanup");
 
     for (index = 0; index < SMOKE_VM_PAGE_SIZE; ++index)
         smoke_file_page[index] = (unsigned char)(index * 13 + 5);

@@ -390,10 +390,10 @@ vm_object_create(vm_size_t size, struct vm_object **result)
     unsigned index;
     int error;
 
-    if (!vm_object_initialized || result == 0 || size == 0)
+    if (!vm_object_initialized || result == 0)
         return EINVAL;
     error = vm_size_to_pages(size, &pages);
-    if (error != 0 || pages == 0)
+    if (error != 0)
         return EINVAL;
     *result = 0;
     for (index = 0; index < VM_OBJECT_MAX; ++index) {
@@ -409,6 +409,28 @@ vm_object_create(vm_size_t size, struct vm_object **result)
         }
     }
     return ENOSPC;
+}
+
+int
+vm_object_resize(struct vm_object *object, vm_size_t size)
+{
+    vm_size_t old_size;
+    vm_pfn_t pages;
+    int error;
+
+    if (!vm_object_valid(object) || !vm_size_page_aligned(size))
+        return EINVAL;
+    error = vm_size_to_pages(size, &pages);
+    if (error != 0)
+        return error;
+    old_size = object->vo_size * VM_PAGE_SIZE;
+    if (size < old_size) {
+        error = vm_object_invalidate(object, size, old_size - size);
+        if (error != 0)
+            return error;
+    }
+    object->vo_size = pages;
+    return 0;
 }
 
 int
@@ -594,9 +616,10 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
     int need_pagein;
     int error;
 
-    if (!vm_object_valid(object) || result == 0 ||
-        offset >= (vm_ooffset_t)object->vo_size * VM_PAGE_SIZE)
+    if (!vm_object_valid(object) || result == 0)
         return EINVAL;
+    if (offset >= (vm_ooffset_t)object->vo_size * VM_PAGE_SIZE)
+        return ENXIO;
     index = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
     object_page = vm_object_page_find(object, index);
     new_page = object_page == 0;

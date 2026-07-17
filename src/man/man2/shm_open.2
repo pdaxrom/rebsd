@@ -1,0 +1,78 @@
+.TH SHM_OPEN 2
+.SH NAME
+shm_open, shm_unlink \- create, open, and remove POSIX shared memory objects
+.SH SYNOPSIS
+.nf
+.B #include <sys/mman.h>
+.B #include <fcntl.h>
+.PP
+.B int shm_open(const char *name, int oflag, mode_t mode);
+.B int shm_unlink(const char *name);
+.fi
+.SH DESCRIPTION
+.I Shm_open
+opens a kernel-resident shared memory object and returns a file descriptor.
+The object name begins with one slash, contains no other slash, and is at most
+31 characters long including the leading slash.
+No filesystem directory such as
+.B /dev/shm
+is required.
+.PP
+.I Oflag
+must select
+.B O_RDONLY
+or
+.BR O_RDWR .
+It may also contain
+.BR O_CREAT ,
+.BR O_EXCL ,
+and
+.BR O_TRUNC .
+New objects have length zero and permissions
+.I mode
+modified by the process umask.
+.B O_TRUNC
+requires
+.BR O_RDWR .
+.PP
+Use
+.IR ftruncate (2)
+to set the object length and
+.IR mmap (2)
+to create
+.B MAP_SHARED
+or
+.B MAP_PRIVATE
+mappings.
+Shared mappings refer to one VM object across processes; private mappings use
+copy-on-write.
+Shrinking an object invalidates complete pages past the new end, while growing
+it exposes zero-filled bytes.
+.PP
+.I Shm_unlink
+removes the name immediately.
+Open descriptors and existing mappings remain valid until their last
+reference is released, and the same name may be used for a new independent
+object meanwhile.
+.SH RETURN VALUES
+.I Shm_open
+returns a non-negative descriptor on success and -1 on error.
+.I Shm_unlink
+returns zero on success and -1 on error.
+.SH ERRORS
+Errors include
+.B EACCES
+for denied access,
+.B EEXIST
+for an exclusive create of an existing name,
+.B EINVAL
+for invalid flags or names,
+.B ENAMETOOLONG
+for an overlong name,
+.B ENOENT
+when an object is absent,
+.B ENOSPC
+when the shared-memory object table is full, and the usual descriptor and VM
+resource errors.
+.SH SEE ALSO
+fstat(2), ftruncate(2), mmap(2), umask(2)

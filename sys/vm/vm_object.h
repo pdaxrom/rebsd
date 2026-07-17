@@ -43,6 +43,7 @@ int vm_object_system_init(struct vm_page_allocator *);
 int vm_object_create(vm_size_t, struct vm_object **);
 int vm_object_create_paged(vm_size_t, const struct vm_object_pager_ops *,
     void *, vm_ooffset_t, struct vm_object **);
+int vm_object_resize(struct vm_object *, vm_size_t);
 int vm_object_clone(const struct vm_object *, struct vm_object **);
 int vm_object_reference(struct vm_object *);
 int vm_object_is_shared(const struct vm_object *);

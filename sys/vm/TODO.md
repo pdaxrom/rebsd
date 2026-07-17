@@ -218,9 +218,9 @@ Exit criteria:
 
 ## Phase 7: Shared memory
 
-- [ ] Implement POSIX shared-memory objects with BSD namespace/lifetime
+- [x] Implement POSIX shared-memory objects with BSD namespace/lifetime
   semantics and without requiring `/dev/shm`.
-- [ ] Add `shm_open` and `shm_unlink` libc interfaces plus `ftruncate` and
+- [x] Add `shm_open` and `shm_unlink` libc interfaces plus `ftruncate` and
   `mmap` integration.
 - [ ] Implement SysV shared memory: `shmget`, `shmat`, `shmdt`, and `shmctl`.
 - [ ] Define permissions, ownership, identifier reuse, deletion-after-last-

@@ -46,6 +46,8 @@ int madvise(void *, size_t, int);
 int mincore(void *, size_t, unsigned char *);
 int mlock(const void *, size_t);
 int munlock(const void *, size_t);
+int shm_open(const char *, int, mode_t);
+int shm_unlink(const char *);
 #endif
 
 #endif /* _SYS_MMAN_H_ */

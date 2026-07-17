@@ -270,6 +270,10 @@ fstat1(int wide)
             ub.st_size -= fp->f_offset;
         break;
 
+    case DTYPE_SHM:
+        u.u_error = shm_fstat(fp, &ub);
+        break;
+
 #ifdef INET
     case DTYPE_SOCKET:
         u.u_error = SOO_STAT(fp->f_socket, &ub);

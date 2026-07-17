@@ -73,6 +73,25 @@ object's inode reference also makes the existing `iflush` check return `EBUSY`
 for unmount or device removal while a mapping survives, instead of leaving a
 pager cookie pointing at detached filesystem state.
 
+## POSIX shared memory
+
+`shm_open` names kernel-resident anonymous VM objects directly; it does not
+depend on a mounted `/dev/shm` filesystem.  The initial fixed namespace holds
+32 objects, and a name is one leading slash plus up to 30 non-slash bytes.
+Descriptors carry normal owner, group, mode, and read/write access checks.
+`ftruncate` changes the exact logical length while the VM object tracks its
+page-rounded extent.  A fault on a complete page beyond the current extent is
+reported as `SIGBUS`, and bytes exposed by growth are zero-filled.
+
+Shared mappings reference the namespace object's VM object, so descriptor
+aliases, unrelated openers, and mappings inherited across `fork` see one
+coherent set of pages.  Private mappings clone its sparse page nodes and use
+the ordinary anonymous COW path.  `shm_unlink` removes only the name: open
+descriptors keep the namespace record alive, mappings keep independent object
+references, and immediate reuse of the name creates a distinct object.  The
+last descriptor and mapping return the ordinary VM pages and swap slots; POSIX
+SHM has no physical-memory allocator of its own.
+
 ## Page selection
 
 The anonymous descriptor pool is the pager's stable clock queue.  Resident

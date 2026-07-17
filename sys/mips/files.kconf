@@ -19,6 +19,7 @@ kernel/kern_proc.c              standard
 kernel/kern_prot.c              standard
 kernel/kern_prot2.c             standard
 kernel/kern_resource.c          standard
+kernel/kern_shm.c               standard
 kernel/kern_sig.c               standard
 kernel/kern_sig2.c              standard
 kernel/kern_subr.c              standard
@@ -57,6 +58,7 @@ vm/vm_phys.c                   standard
 vm/vm_page.c                   standard
 vm/vm_map.c                    standard
 vm/vm_object.c                 standard
+vm/vm_shm.c                    standard
 vm/vm_vnode.c                  standard
 vm/vmspace.c                   standard
 mips/common/pmap.c             standard

@@ -31,6 +31,7 @@ SRCS=	accept.2 access.2 acct.2 adjtime.2 bind.2 brk.2 chdir.2 chmod.2 \
 	getuid.2 setreuid.2 setuid.2 getgid.2 setregid.2 \
 	intro.2 ioctl.2 kill.2 killpg.2 link.2 listen.2 \
 	lock.2 lseek.2 mmap.2 mkdir.2 mknod.2 mount.2 nostk.2 open.2 phys.2 \
+	shm_open.2 \
 	pipe.2 profil.2 ptrace.2 quota.2 read.2 readlink.2 reboot.2 \
 	recv.2 rename.2 rmdir.2 select.2 send.2 setgroups.2 setpgrp.2 \
 	setquota.2 shutdown.2 sigblock.2 sigpause.2 \
@@ -50,6 +51,7 @@ OBJS=	accept.0 access.0 acct.0 adjtime.0 bind.0 brk.0 chdir.0 chmod.0 \
 	getuid.0 setreuid.0 setuid.0 getgid.0 setregid.0 \
 	intro.0 ioctl.0 kill.0 killpg.0 link.0 listen.0 \
 	lock.0 lseek.0 mmap.0 mkdir.0 mknod.0 mount.0 nostk.0 open.0 phys.0 \
+	shm_open.0 \
 	pipe.0 profil.0 ptrace.0 quota.0 read.0 readlink.0 reboot.0 \
 	recv.0 rename.0 rmdir.0 select.0 send.0 setgroups.0 setpgrp.0 \
 	setquota.0 shutdown.0 sigblock.0 sigpause.0 \

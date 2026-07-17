@@ -14,6 +14,7 @@
 #include <sys/systm.h>
 #include <vm/vmspace.h>
 #include <vm/vm_object.h>
+#include <vm/vm_shm.h>
 #include <vm/vm_vnode.h>
 
 #define MMAP_DEFAULT_BASE       0x10000000u
@@ -131,6 +132,7 @@ mmap(void)
 
     uap = (struct a *)u.u_arg;
     vmspace = vmspace_current();
+    inode = 0;
     device_mapping = 0;
     error = 0;
     if (vmspace == 0 || uap->length == 0 ||
@@ -151,6 +153,7 @@ mmap(void)
         u.u_error = EINVAL;
         return;
     }
+    vm_flags = (uap->flags & MAP_SHARED) != 0 ? VM_MAP_SHARED : 0;
     if ((uap->flags & MAP_ANON) != 0) {
         if (uap->fd != -1 || offset != 0) {
             u.u_error = EINVAL;
@@ -168,26 +171,57 @@ mmap(void)
         fp = getf(uap->fd);
         if (fp == 0)
             return;
-        if (fp->f_type != DTYPE_INODE) {
+        if (fp->f_type == DTYPE_SHM) {
+            if ((uap->protection & PROT_EXEC) != 0 ||
+                (uint64_t)offset > VM_SIZE_MAX) {
+                u.u_error = (uap->protection & PROT_EXEC) != 0 ?
+                    EACCES : EOVERFLOW;
+                return;
+            }
+            maximum = VM_PROT_READ;
+            if ((uap->flags & MAP_SHARED) != 0) {
+                if ((fp->f_flag & FWRITE) != 0)
+                    maximum |= VM_PROT_WRITE;
+                error = vm_shm_object_reference(
+                    (struct vm_shm *)fp->f_data, &object);
+                had_object = error == 0 &&
+                    vmspace_contains_object(vmspace, object);
+            } else {
+                maximum |= VM_PROT_WRITE;
+                error = vm_shm_object_clone(
+                    (struct vm_shm *)fp->f_data, &object);
+                had_object = 0;
+                vm_flags |= VM_MAP_COW;
+            }
+            object_offset = (vm_ooffset_t)offset;
+        } else if (fp->f_type != DTYPE_INODE) {
             u.u_error = ENODEV;
             return;
-        }
-        if ((fp->f_flag & FREAD) == 0) {
+        } else if ((fp->f_flag & FREAD) == 0) {
             u.u_error = EACCES;
             return;
-        }
-        if ((uap->flags & MAP_SHARED) != 0 &&
+        } else if ((uap->flags & MAP_SHARED) != 0 &&
             (uap->protection & PROT_WRITE) != 0 &&
             (fp->f_flag & FWRITE) == 0) {
             u.u_error = EACCES;
             return;
+        } else {
+            inode = (struct inode *)fp->f_data;
         }
-        inode = (struct inode *)fp->f_data;
-        if (inode == 0) {
-            u.u_error = ENODEV;
+        if (error != 0) {
+            u.u_error = error;
             return;
         }
-        if ((inode->i_mode & IFMT) == IFCHR) {
+        if (fp->f_type == DTYPE_SHM) {
+            if (((vm_prot_t)uap->protection & ~maximum) != 0) {
+                (void)vm_object_release(object);
+                u.u_error = EACCES;
+                return;
+            }
+        } else if (inode == 0) {
+            u.u_error = ENODEV;
+            return;
+        } else if ((inode->i_mode & IFMT) == IFCHR) {
             dev = inode->i_rdev;
             if (major(dev) == MEM_MAJOR && minor(dev) == ZERO_MINOR) {
                 if (offset != 0) {
@@ -254,7 +288,6 @@ mmap(void)
             return;
         }
     }
-    vm_flags = (uap->flags & MAP_SHARED) != 0 ? VM_MAP_SHARED : 0;
     if ((uap->flags & MAP_FIXED) != 0) {
         if (!vm_vaddr_page_aligned((vm_vaddr_t)uap->address)) {
             if (object != 0)

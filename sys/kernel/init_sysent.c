@@ -223,6 +223,8 @@ const struct sysent sysent[] = {
     { 3, mincore },             /* 167 = mincore */
     { 2, mlock },               /* 168 = mlock */
     { 2, munlock },             /* 169 = munlock */
+    { 3, shm_open },            /* 170 = shm_open */
+    { 1, shm_unlink },          /* 171 = shm_unlink */
 };
 
 const int nsysent = sizeof (sysent) / sizeof (sysent[0]);

@@ -26,6 +26,7 @@ struct  file {
 
 #ifdef KERNEL
 struct uio;
+struct stat;
 
 struct  fileops {
     int (*fo_rw) (struct file *fp, struct uio *uio);
@@ -41,6 +42,7 @@ extern struct file file[];
 extern const struct fileops *const Fops[];
 extern const struct fileops inodeops;
 extern const struct fileops pipeops;
+extern const struct fileops shmops;
 
 /*
  * Convert a user supplied file descriptor into a pointer to a file structure.
@@ -84,6 +86,8 @@ int ino_lock (struct file *fp, int cmd);
 void ino_unlock (struct file *fp, int kind);
 
 int ino_ioctl (struct file *fp, u_int com, caddr_t data);
+int shm_truncate_file(struct file *, off_t);
+int shm_fstat(struct file *, struct stat *);
 
 #else /* KERNEL */
 
@@ -116,5 +120,6 @@ int flock(int fd, int operation);
 #define DTYPE_INODE     1   /* file */
 #define DTYPE_SOCKET    2   /* communications endpoint */
 #define DTYPE_PIPE      3   /* I don't want to hear it, okay? */
+#define DTYPE_SHM       4   /* POSIX shared-memory object */
 #endif
 #endif  /* _SYS_FILE_H_ */

@@ -179,5 +179,7 @@ const char *const syscallnames[] = {
     "mincore",          /* 167 = mincore */
     "mlock",            /* 168 = mlock */
     "munlock",          /* 169 = munlock */
+    "shm_open",         /* 170 = shm_open */
+    "shm_unlink",       /* 171 = shm_unlink */
 };
 #endif

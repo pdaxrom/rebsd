@@ -188,3 +188,5 @@
 #define SYS_mincore     167
 #define SYS_mlock       168
 #define SYS_munlock     169
+#define SYS_shm_open    170
+#define SYS_shm_unlink  171
