@@ -68,6 +68,80 @@ The program deliberately claims only channel B and does not reset the FTDI,
 change its USB configuration, purge channel A, or detach another interface.
 OpenOCD can therefore use channel A concurrently.
 
+## Normal UART and JTAG workflow
+
+Keep the UART reader running in the first terminal for the entire test:
+
+```sh
+sudo tools/ci20/ci20-ftdi-uart
+```
+
+In a second terminal, start a persistent OpenOCD server. Binding the debug
+ports to loopback is important because OpenOCD does not authenticate clients:
+
+```sh
+OCD=tools/ci20/openocd/build/OpenOCD-XBurst/src/openocd
+CFG=tools/ci20/openocd/ci20-xburst.cfg
+
+sudo "$OCD" -d2 -s tools/ci20/openocd/build/OpenOCD-XBurst/tcl \
+  -f "$CFG" \
+  -c "bindto 127.0.0.1; init; irscan jz4780.cpu 0x14; jz4780.cpu arp_examine"
+```
+
+There is deliberately no `shutdown` command in this invocation. OpenOCD keeps
+FT2232D channel A and exposes its usual local services: GDB on port 3333,
+interactive telnet on port 4444, and Tcl RPC on port 6666. The recommended
+interactive diagnostic path is telnet:
+
+```sh
+telnet 127.0.0.1 4444
+```
+
+At the OpenOCD prompt, non-destructive status commands are:
+
+```text
+targets
+poll
+ci20_core_probe
+ci20_ecr_update_probe
+```
+
+Do not launch a second OpenOCD while this server owns channel A. Run one-shot
+procedures through port 4444 instead. Type `shutdown` at the OpenOCD prompt
+when the debug session is finished, or use the telnet escape to disconnect
+while leaving the server running.
+
+## Snapshot a hung ReBSD target
+
+Start the persistent server before the workload so it is already available if
+both UART and USB stop responding. Leave the UART reader open, reproduce the
+failure, connect to port 4444, and run:
+
+```text
+ci20_halt_snapshot
+```
+
+The procedure selects JZ4780 core 0, requests a halt, waits at most two
+seconds, prints PC (`pc`), stack pointer (`r29`) and return address (`r31`),
+and resumes the target even if a register read fails. A successful result ends
+with output equivalent to:
+
+```text
+ci20 halt snapshot: rc=0 result= final=running
+```
+
+Confirm in the UART terminal that ReBSD accepts input after the snapshot. Save
+the complete OpenOCD and UART output, the tested image SHA-256, and the workload
+which triggered the stop. If halt/resume alone restores UART, USB, and timer
+activity, treat that as evidence for the Ci20 idle/`WAIT` investigation in
+`docs/CI20_USB.md`; it is not proof of an EHCI failure.
+
+Prefer `ci20_halt_snapshot` to manual `halt`, `reg`, and `resume` commands. A
+manual sequence can leave the board halted if a later command or connection
+fails. If the snapshot reports a nonzero `rc` or does not end in `running`,
+power-cycle only after saving the OpenOCD output and checking JTAG wiring,
+target power, and the 100 kHz adapter setting.
+
 ## JTAG probes
 
 Set a short alias for the built binary and configuration:
@@ -107,6 +181,13 @@ sudo "$OCD" -d2 -s tools/ci20/openocd/build/OpenOCD-XBurst/tcl \
 
 Keep the UART terminal open and verify that U-Boot or ReBSD still responds
 after a halt snapshot.
+
+If an otherwise silent ReBSD system resumes UART and USB operation only after
+this halt/resume cycle, record the snapshot as evidence of an idle wakeup
+failure; do not treat JTAG as a production recovery mechanism. Ci20 currently
+avoids the JZ4780/XBurst1 `WAIT` instruction in the scheduler idle path for
+this reason. The workaround, its power tradeoff, and the gates required before
+restoring low-power `WAIT` are documented in `docs/CI20_USB.md`.
 
 ## Why the OpenOCD patch is required
 

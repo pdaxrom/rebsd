@@ -146,10 +146,7 @@ optimize(struct p2env *p2e)
 	}
 	if (p2e->ssa_active) {
 		BDEBUG(("Calling ssa_split_critical_edges\n"));
-		if (!ssa_split_critical_edges(p2e)) {
-			BDEBUG(("SSA fallback for critical computed-goto edge\n"));
-			p2e->ssa_active = 0;
-		}
+		ssa_split_critical_edges(p2e);
 	}
 	if (p2e->ssa_active) {
 		cfg_rebuild(p2e, "post-critical-edge-split");

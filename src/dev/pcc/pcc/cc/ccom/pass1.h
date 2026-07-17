@@ -200,6 +200,7 @@ struct swents {			/* switch table */
 	CONSZ	sval;		/* case value */
 	int	slab;		/* associated label */
 };
+void p1addclab(int);
 int mygenswitch(int, TWORD, struct swents **, int);
 
 extern	int blevel;
@@ -665,6 +666,7 @@ struct bitable {
 };
 
 P1ND *builtin_check(struct symtab *, P1ND *a);
+P1ND *builtin_call(P1ND *a, TWORD rt, const char *name);
 void builtin_init(void);
 
 /* Some builtins targets need to implement */

@@ -137,6 +137,7 @@ LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
 LINPACK_SMOKE_OUT ?= $(TOPOBJ)/tests/linpack-smoke
 LINPACK_SMOKE_MANIFEST ?= $(TOPOBJ)/tests/linpack-smoke.manifest
 LINPACK_SMOKE_LOG ?= $(TOPOBJ)/tests/linpack-smoke.log
+LINPACK_KERNEL_BENCH ?= 0
 LINPACK_SMOKE_ARRAY_SIZE ?= 120
 LINPACK_SMOKE_MIN_SECONDS ?= 1
 PCC_ASM_COUNTER_SCRIPT = $(TOPSRC)/sys/mips/tools/mips-asm-counters.py
@@ -398,7 +399,8 @@ linpack-smoke-runtime: linpack-smoke-stage
 	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
 	    --ram $(MALTA_QEMU_RAM) \
 	    --array-size $(LINPACK_SMOKE_ARRAY_SIZE) \
-	    --min-seconds $(LINPACK_SMOKE_MIN_SECONDS)
+	    --min-seconds $(LINPACK_SMOKE_MIN_SECONDS) \
+	    --kernel-bench $(LINPACK_KERNEL_BENCH)
 
 linpack-smoke-runtime-vr4300:
 	$(MAKE) linpack-smoke-runtime \
@@ -535,12 +537,15 @@ rootfs-repack-kernel:
 	${OBJDUMP} -d -S unix.elf > unix.dis
 	${NM} -n unix.elf > unix.nm
 ifneq ($(MALTA_PORT64),)
-	$(OBJCOPY) -O binary unix.elf unix.bin
+	$(OBJCOPY) -O binary --remove-section=.romdisk unix.elf unix.bin
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) \
 	    $(MALTA64_SRC)/stage0_kernel_blob.S -o malta64-stage0-kernel.o
+	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) \
+	    $(MALTA64_SRC)/stage0_rootfs_blob.S -o malta64-stage0-rootfs.o
 	$(MALTA64_STAGE_LD) $(MALTA64_STAGE_LDFLAGS) \
 	    -T $(MALTA64_SRC)/stage0_linker.ld \
-	    malta64-stage0.o malta64-stage0-kernel.o -o malta64.elf
+	    malta64-stage0.o malta64-stage0-kernel.o \
+	    malta64-stage0-rootfs.o -o malta64.elf
 	$(MALTA64_STAGE_SIZE) malta64.elf
 	$(MALTA64_STAGE_OBJDUMP) -d -S malta64.elf > malta64.dis
 endif

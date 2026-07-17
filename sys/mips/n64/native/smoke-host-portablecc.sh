@@ -147,7 +147,11 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.normal.s" "$tmp.stats.s" "$tmp.stats2.s" "$tmp.stats.off" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
     "$tmp.ssalvn.s" "$tmp.ssalvn.log" \
-    "$tmp.ssastrength.s" "$tmp.ssastrength.log" \
+    "$tmp.ssastrength.s" "$tmp.ssastrength.log" "$tmp.fpaccum.s" \
+    "$tmp.ssacounted.s" "$tmp.ssacounted.log" \
+    "$tmp.ssacounted.mips3.s" "$tmp.ssacounted.mips3.log" \
+    "$tmp.switchtable.s" "$tmp.switchtable.generic.s" \
+    "$tmp.llpack.s" "$tmp.pointertemp.s" "$tmp.pointertemp.log" \
     "$tmp.staticspec.s" "$tmp.staticspec.os.s" "$tmp.staticspec.free.s" \
     "$tmp.staticspec.generic.s" \
     "$tmp.staticspec-stack.s" \
@@ -253,6 +257,16 @@ END { exit found && slot16 == 1 && slot20 == 0 ? 0 : 1 }
 		echo "specialized stack constant was not elided safely" >&2
 		exit 1
 	}
+	awk '
+/^[[:space:]]*[.]ent __pcc_spec_.*_six_arg$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*lw[[:space:]].*,32\(\$sp\)/ { pointer_loads++ }
+inside && /,36\(\$sp\)/ { dead_tail_slot = 1 }
+END { exit seen && pointer_loads == 1 && !dead_tail_slot ? 0 : 1 }
+	' "$tmp.staticspec-stack.s" || {
+		echo "specialized stack pointer was repeatedly loaded" >&2
+		exit 1
+	}
 fi
 
 cat > "$tmp.c" <<'EOF'
@@ -316,6 +330,31 @@ EOF
 		echo "ELF linker did not preserve the first weak definition" >&2
 		exit 1
 	fi
+fi
+
+if [ "$exec_format" = aout ] && [ -x "$tool_src_dir/nm" ]; then
+	cat > "$tmp.aout-align.s" <<'EOF'
+	.data
+	.word 0
+	.section .rodata.cst8,"aM",@progbits,8
+	.align 3
+	.globl aout_rodata_double
+aout_rodata_double:
+	.word 0x3ff00000
+	.word 0
+EOF
+	"$as" --aout "$elf_endian" -march="$cpu" \
+	    "$tmp.aout-align.s" -o "$tmp.aout-align.o"
+	aout_double_addr=$("$tool_src_dir/nm" "$tmp.aout-align.o" |
+	    awk '$3 == "aout_rodata_double" { print $1 }')
+	case "$aout_double_addr" in
+	*0|*8)
+		;;
+	*)
+		echo "a.out assembler lost 8-byte .rodata alignment: $aout_double_addr" >&2
+		exit 1
+		;;
+	esac
 fi
 
 cat > "$tmp.c" <<'EOF'
@@ -430,6 +469,117 @@ END { exit seen && assign && !frame_arg ? 0 : 1 }
 	}
 done
 
+for fpaccum_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$fpaccum_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.fpaccum.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/fpaccum001.c"
+	awk '
+/^[[:space:]]*[.]ent fp_accumulator$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*mul[.]d[[:space:]]/ { multiply = 1 }
+inside && /^[[:space:]]*add[.]d[[:space:]]/ { add = 1 }
+inside && /^[[:space:]]*(l[.]d|s[.]d|ldc1|sdc1)[[:space:]].*\(\$(fp|sp)\)/ {
+	stack_fp = 1
+}
+END { exit seen && multiply && add && !stack_fp ? 0 : 1 }
+' "$tmp.fpaccum.s" || {
+		echo "$fpaccum_cpu spilled the local FP accumulator" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent fp_helper_call$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && !call && /^[[:space:]]*(s[.]d|sdc1|swc1)[[:space:]].*\(\$(fp|sp)\)/ {
+	saved = 1
+}
+inside && /^[[:space:]]*jal[[:space:]]+__floatunsdidf/ { call = 1 }
+inside && call && /^[[:space:]]*(l[.]d|ldc1|lwc1)[[:space:]].*\(\$(fp|sp)\)/ {
+	restored = 1
+}
+END { exit seen && saved && call && restored ? 0 : 1 }
+' "$tmp.fpaccum.s" || {
+		echo "$fpaccum_cpu kept an FP value in a caller-saved register" >&2
+		exit 1
+	}
+done
+
+for ufprange_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$ufprange_cpu" -mhard-float -O2 -S -o "$tmp.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ufprange001.c"
+	awk '
+/^[[:space:]]*[.]ent main$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /jal[[:space:]]+__floatunsi(sf|df)/ { unsigned_calls++ }
+inside && /^[[:space:]]*cvt[.](s|d)[.]w[[:space:]]/ { direct++ }
+END { exit seen && unsigned_calls == 0 && direct >= 5 ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$ufprange_cpu did not lower bounded unsigned FP conversions" >&2
+		exit 1
+	}
+done
+
+for llpack_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$llpack_cpu" -O2 -fno-omit-frame-pointer -S \
+	    -o "$tmp.llpack.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/llpack001.c"
+	awk '
+/^[[:space:]]*[.]ent mix_words$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(lw|sw)[[:space:]].*\(\$fp\)/ { frame_accesses++ }
+inside && /^[[:space:]]*sltu[[:space:]]/ { carry = 1 }
+inside && /^[[:space:]]*(sll|srl)[[:space:]]/ { shift = 1 }
+END { exit seen && carry && shift && frame_accesses == 0 ? 0 : 1 }
+' "$tmp.llpack.s" || {
+		echo "$llpack_cpu spilled promoted 64-bit locals" >&2
+		exit 1
+	}
+done
+
+for divconst_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$divconst_cpu" -O2 -S -o "$tmp.divconst.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/divconst001.c"
+	awk '
+/^[[:space:]]*[.]ent (uquot|urem|squot|srem)_/ {
+	inside = 1
+	functions++
+	next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(div|divu)[[:space:]]/ { divides++ }
+inside && /^[[:space:]]*(mult|multu)[[:space:]]/ { multiplies++ }
+END { exit functions == 32 && divides == 0 && multiplies >= functions ? 0 : 1 }
+' "$tmp.divconst.s" || {
+		echo "$divconst_cpu did not lower constant division to magic multiply" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent reference_(uquot|urem|squot|srem)$/ {
+	inside = 1
+	functions++
+	next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(div|divu)[[:space:]]/ { divides++ }
+END { exit functions == 4 && divides == 4 ? 0 : 1 }
+' "$tmp.divconst.s" || {
+		echo "$divconst_cpu lost the variable-divisor reference path" >&2
+		exit 1
+	}
+done
+
+"$pcc" -march=vr4300 -msoft-float -O2 -fno-omit-frame-pointer -S \
+    -o "$tmp.fpaccum.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/fpaccum001.c"
+if awk '
+/^[[:space:]]*[.]ent fp_accumulator$/ { inside = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*(mul|add)[.]d[[:space:]]/ { found = 1 }
+END { exit found ? 0 : 1 }
+' "$tmp.fpaccum.s"; then
+	echo "soft-float FP accumulator used hardware FPU operations" >&2
+	exit 1
+fi
+
 "$pcc" -march=mips3 -mtune=r4000 -O2 -S -o "$tmp.s" "$tmp.c"
 awk '
 /^[[:space:]]*[.]ent load_schedule_probe$/ { inside = 1; seen = 1; next }
@@ -441,6 +591,54 @@ END { exit seen && store && load ? 0 : 1 }
 	echo "generic MIPS3 unexpectedly promoted scalar register parameters" >&2
 	exit 1
 }
+
+cat > "$tmp.c" <<'EOF'
+double oldstyle_prototyped(double);
+
+double
+oldstyle_prototyped(value)
+	double value;
+{
+	return value + 1.0;
+}
+
+double
+oldstyle_unprototyped(value)
+	double value;
+{
+	return value + 1.0;
+}
+EOF
+
+for fpabi_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$fpabi_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
+	awk '
+/^[[:space:]]*[.]ent oldstyle_prototyped$/ {
+	inside = 1; seen = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /\$f12/ { fp = 1 }
+inside && /^[[:space:]]*sw[[:space:]]+\$a[01],/ { gpr = 1 }
+END { exit seen && fp && !gpr ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$fpabi_cpu mismatched a prototyped K&R hard-float definition" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent oldstyle_unprototyped$/ {
+	inside = 1; seen = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*sw[[:space:]]+\$a0,/ { a0 = 1 }
+inside && /^[[:space:]]*sw[[:space:]]+\$a1,/ { a1 = 1 }
+inside && /\$f12/ { fp = 1 }
+END { exit seen && a0 && a1 && !fp ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$fpabi_cpu changed the unprototyped K&R hard-float ABI" >&2
+		exit 1
+	}
+done
 
 cat > "$tmp.c" <<'EOF'
 int
@@ -463,6 +661,121 @@ state == 2 && /^[[:space:]]*addiu \$v0,\$zero,1/ { found = 1 }
 END { exit found ? 0 : 1 }
 ' "$tmp.s" || {
 	echo "VR4300 did not fill branch delay across independent load" >&2
+	exit 1
+}
+
+cat > "$tmp.c" <<'EOF'
+void
+delay_lookback_probe(void)
+{
+	asm("1:\n\t"
+	    "addiu $a0,$a0,4\n\t"
+	    "subu $v0,$v1,1\n\t"
+	    "bnez $v0,1b\n\t"
+	    "nop");
+}
+
+void
+delay_label_probe(void)
+{
+	asm("2:\n\t"
+	    "addiu $a0,$a0,1\n\t"
+	    "j 3f\n\t"
+	    "nop\n"
+	    "3:");
+}
+
+void
+delay_fpu_move_probe(void)
+{
+	asm("4:\n\t"
+	    "mov.d $f2,$f0\n\t"
+	    "subu $v0,$v1,1\n\t"
+	    "bnez $v0,4b\n\t"
+	    "nop");
+}
+
+void
+delay_dependency_probe(void)
+{
+	asm("5:\n\t"
+	    "addiu $a0,$a0,1\n\t"
+	    "subu $v0,$a0,1\n\t"
+	    "bnez $v0,5b\n\t"
+	    "nop");
+}
+EOF
+
+for schedule_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$schedule_cpu" -mhard-float -O2 \
+	    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
+	awk '
+/^[[:space:]]*1:$/ { lookback = 1; next }
+lookback == 1 && /^[[:space:]]*subu[[:space:]]+\$v0,\$v1,1/ {
+	lookback = 2; next
+}
+lookback == 2 && /^[[:space:]]*bnez[[:space:]]+\$v0,1b/ {
+	lookback = 3; next
+}
+lookback == 3 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,4/ {
+	lookback_ok = 1; lookback = 0; next
+}
+/^[[:space:]]*2:$/ { label = 1; next }
+label == 1 && /^[[:space:]]*j[[:space:]]+3f/ { label = 2; next }
+label == 2 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,1/ {
+	label_ok = 1; label = 0; next
+}
+/^[[:space:]]*4:$/ { fpu = 1; next }
+fpu == 1 && /^[[:space:]]*subu[[:space:]]+\$v0,\$v1,1/ {
+	fpu = 2; next
+}
+fpu == 2 && /^[[:space:]]*bnez[[:space:]]+\$v0,4b/ { fpu = 3; next }
+fpu == 3 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	fpu_ok = 1; fpu = 0; next
+}
+/^[[:space:]]*5:$/ { dependency = 1; next }
+dependency == 1 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,1/ {
+	dependency = 2; next
+}
+dependency == 2 && /^[[:space:]]*subu[[:space:]]+\$v0,\$a0,1/ {
+	dependency = 3; next
+}
+dependency == 3 && /^[[:space:]]*bnez[[:space:]]+\$v0,5b/ {
+	dependency = 4; next
+}
+dependency == 4 && /^[[:space:]]*nop/ { dependency_ok = 1 }
+END {
+	exit lookback_ok && label_ok && fpu_ok && dependency_ok ? 0 : 1
+}
+' "$tmp.s" || {
+	echo "$schedule_cpu failed safe control-delay lookback" >&2
+	exit 1
+}
+done
+
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 \
+    -fno-omit-frame-pointer -S -o "$tmp.s" "$tmp.c"
+awk '
+/^[[:space:]]*1:$/ { lookback = 1; next }
+lookback == 1 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,4/ {
+	lookback = 2; next
+}
+lookback == 2 && /^[[:space:]]*subu[[:space:]]+\$v0,\$v1,1/ {
+	lookback = 3; next
+}
+lookback == 3 && /^[[:space:]]*bnez[[:space:]]+\$v0,1b/ {
+	lookback = 4; next
+}
+lookback == 4 && /^[[:space:]]*nop/ { lookback_ok = 1; lookback = 0 }
+/^[[:space:]]*2:$/ { label = 1; next }
+label == 1 && /^[[:space:]]*addiu[[:space:]]+\$a0,\$a0,1/ {
+	label = 2; next
+}
+label == 2 && /^[[:space:]]*j[[:space:]]+3f/ { label = 3; next }
+label == 3 && /^[[:space:]]*nop/ { label_ok = 1 }
+END { exit lookback_ok && label_ok ? 0 : 1 }
+' "$tmp.s" || {
+	echo "generic MIPS3 unexpectedly enabled control-delay lookback" >&2
 	exit 1
 }
 
@@ -534,6 +847,53 @@ fpu_load_move_schedule_probe(void)
 	    "mov.d $f2,$f0\n\t"
 	    "mul.d $f6,$f2,$f4");
 }
+
+void
+fpu_move_forward_probe(void)
+{
+	asm("mov.d $f2,$f0\n\t"
+	    "l.d $f4,0($a0)\n\t"
+	    "mul.d $f6,$f2,$f4\n\t"
+	    "add.d $f2,$f8,$f6");
+}
+
+void
+fpu_move_forward_single_probe(void)
+{
+	asm("mov.s $f2,$f0\n\t"
+	    "l.s $f4,0($a0)\n\t"
+	    "mul.s $f6,$f2,$f4\n\t"
+	    "add.s $f2,$f8,$f6");
+}
+
+void
+fpu_move_forward_live_probe(void)
+{
+	asm("mov.d $f2,$f0\n\t"
+	    "l.d $f4,0($a0)\n\t"
+	    "mul.d $f6,$f2,$f4\n\t"
+	    "s.d $f2,0($a1)");
+}
+
+void
+fpu_move_forward_partial_probe(void)
+{
+	asm("mov.d $f2,$f0\n\t"
+	    "l.d $f4,0($a0)\n\t"
+	    "mul.d $f6,$f2,$f4\n\t"
+	    "l.s $f2,0($a1)\n\t"
+	    "s.s $f3,4($a1)");
+}
+
+void
+fpu_move_forward_delay_probe(void)
+{
+	asm("b 1f\n\t"
+	    "mov.d $f2,$f0\n\t"
+	    "mul.d $f6,$f2,$f4\n\t"
+	    "add.d $f2,$f8,$f6\n"
+	    "1:");
+}
 EOF
 
 for schedule_cpu in vr4300 mips32r2; do
@@ -544,9 +904,57 @@ for schedule_cpu in vr4300 mips32r2; do
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
 inside && /^[[:space:]]*(l[.]d|ldc1)[[:space:]].*24\(\$fp\)/ { loads++ }
 inside && /^[[:space:]]*mov[.]d[[:space:]]/ { moves++ }
-END { exit seen && loads == 1 && moves >= 2 ? 0 : 1 }
+END { exit seen && loads == 1 && moves == 1 ? 0 : 1 }
 ' "$tmp.s" || {
-		echo "$schedule_cpu did not keep a GPR-passed double in a TEMP" >&2
+		echo "$schedule_cpu did not forward a copied FP TEMP safely" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent fpu_move_forward_probe$/ {
+	inside = 1; seen_d = 1; next
+}
+/^[[:space:]]*[.]ent fpu_move_forward_single_probe$/ {
+	inside = 2; seen_s = 1; next
+}
+/^[[:space:]]*[.]ent fpu_move_forward_live_probe$/ {
+	inside = 3; seen_live = 1; next
+}
+/^[[:space:]]*[.]ent fpu_move_forward_partial_probe$/ {
+	inside = 5; seen_partial = 1; next
+}
+/^[[:space:]]*[.]ent fpu_move_forward_delay_probe$/ {
+	inside = 4; seen_delay = 1; next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside == 1 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ { bad_d = 1 }
+inside == 1 && /^[[:space:]]*mul[.]d[[:space:]]+\$f6,\$f0,\$f4/ {
+	forward_d = 1
+}
+inside == 2 && /^[[:space:]]*mov[.]s[[:space:]]+\$f2,\$f0/ { bad_s = 1 }
+inside == 2 && /^[[:space:]]*mul[.]s[[:space:]]+\$f6,\$f0,\$f4/ {
+	forward_s = 1
+}
+inside == 3 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	keep_live = 1
+}
+inside == 3 && /^[[:space:]]*mul[.]d[[:space:]]+\$f6,\$f2,\$f4/ {
+	use_live = 1
+}
+inside == 5 && /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	keep_partial = 1
+}
+inside == 4 && /^[[:space:]]*b[[:space:]]+1f/ { delay_branch = 1; next }
+inside == 4 && delay_branch &&
+    /^[[:space:]]*mov[.]d[[:space:]]+\$f2,\$f0/ {
+	keep_delay = 1
+}
+END {
+	exit seen_d && seen_s && seen_live && seen_partial && seen_delay &&
+	    forward_d && forward_s && keep_live && use_live &&
+	    keep_partial && keep_delay && !bad_d && !bad_s ? 0 : 1
+}
+' "$tmp.s" || {
+		echo "$schedule_cpu FP move forwarding crossed a live-range boundary" >&2
 		exit 1
 	}
 	awk '
@@ -820,6 +1228,55 @@ END { exit seen && mutate && reload ? 0 : 1 }
 		echo "$reload_cpu moved an FPU reload across a nested call" >&2
 		exit 1
 	}
+done
+
+cat > "$tmp.c" <<'EOF'
+extern double fabs(double);
+
+float
+fabs_builtin_float(float value)
+{
+	return __builtin_fabsf(value);
+}
+
+double
+fabs_plain_double(double value)
+{
+	return fabs(value);
+}
+
+double
+fabs_builtin_double(double value)
+{
+	return __builtin_fabs(value);
+}
+
+long double
+fabs_builtin_long_double(long double value)
+{
+	return __builtin_fabsl(value);
+}
+EOF
+
+for fabs_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$fabs_cpu" -mhard-float -O2 -S -o "$tmp.s" \
+	    "$tmp.c"
+	if grep '^[[:space:]]*jal[[:space:]]*fabs' "$tmp.s" >/dev/null ||
+	    grep '^[[:space:]]*abs[.][sd][[:space:]]' "$tmp.s" >/dev/null; then
+		echo "$fabs_cpu did not lower hard-float fabs safely" >&2
+		exit 1
+	fi
+	grep '^[[:space:]]*mfc1[[:space:]].*,\$f1[23]' "$tmp.s" >/dev/null
+	grep 'mtc1[[:space:]].*,\$f[01]' "$tmp.s" >/dev/null
+	"$pcc" -march="$fabs_cpu" -mhard-float -O2 -c -o "$tmp.o" \
+	    "$tmp.c"
+	test -s "$tmp.o"
+
+	"$pcc" -march="$fabs_cpu" -msoft-float -O2 -S -o "$tmp.s" \
+	    "$tmp.c"
+	grep '^[[:space:]]*jal[[:space:]]*fabsf' "$tmp.s" >/dev/null
+	grep '^[[:space:]]*jal[[:space:]]*fabs' "$tmp.s" >/dev/null
+	grep '^[[:space:]]*jal[[:space:]]*fabsl' "$tmp.s" >/dev/null
 done
 
 cat > "$tmp.c" <<'EOF'
@@ -1119,6 +1576,8 @@ erratum_probe(void)
 }
 EOF
 
+"$pcc" -march=vr4300 -S -o "$tmp.s" "$tmp.c"
+grep 'VR4300 fp multiply erratum' "$tmp.s" >/dev/null
 "$pcc" -march=mips3 -mtune=vr4300 -mfix4300 \
     -S -o "$tmp.s" "$tmp.c"
 grep 'VR4300 fp multiply erratum' "$tmp.s" >/dev/null
@@ -1300,6 +1759,96 @@ variable_step_mults=$(awk '
     inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
     END { print count + 0 }
 ' "$tmp.ssastrength.s")
+pointer_step_slls=$(awk '
+    /^pointer_step_four:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_descending_slls=$(awk '
+    /^pointer_descending_four:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_reverse_pair_slls=$(awk '
+    /^pointer_reverse_pair:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_reverse_pair_dynamic_slls=$(awk '
+    /^pointer_reverse_pair_dynamic:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_single_fp_slls=$(awk '
+    /^pointer_single_fp:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_single_int_slls=$(awk '
+    /^pointer_single_int:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_single_global_int_slls=$(awk '
+    /^pointer_single_global_int:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_single_global_unsigned_slls=$(awk '
+    /^pointer_single_global_unsigned:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+pointer_single_reverse_global_fp_slls=$(awk '
+    /^pointer_single_reverse_global_fp:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+masked_constant_mults=$(awk '
+    /^masked_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+masked_constant_slls=$(awk '
+    /^masked_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+masked_constant_partial_mults=$(awk '
+    /^masked_constant_partial:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+masked_constant_partial_slls=$(awk '
+    /^masked_constant_partial:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+unmasked_constant_mults=$(awk '
+    /^unmasked_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(mul|mult|multu|dmult|dmultu)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
+unmasked_constant_slls=$(awk '
+    /^unmasked_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "sll" { count++ }
+    END { print count + 0 }
+' "$tmp.ssastrength.s")
 if [ "$cpu" = vr4300 ]; then
 	test "$unit_step_mults" -eq 0
 	test "$descending_mults" -eq 1
@@ -1308,5 +1857,174 @@ else
 	test "$descending_mults" -eq 2
 fi
 test "$variable_step_mults" -eq 2
+if [ "$cpu" = vr4300 ] && [ "$float_abi" = hard ]; then
+	test "$pointer_step_slls" -eq 0
+	test "$pointer_descending_slls" -eq 1
+	test "$pointer_single_fp_slls" -eq 0
+elif [ "$cpu" = vr4300 ] || [ "$cpu" = mips32r2 ]; then
+	test "$pointer_step_slls" -eq 0
+	test "$pointer_descending_slls" -eq 1
+	test "$pointer_single_fp_slls" -eq 1
+else
+	test "$pointer_step_slls" -eq 4
+	test "$pointer_descending_slls" -eq 4
+	test "$pointer_single_fp_slls" -eq 1
+fi
+if [ "$cpu" = vr4300 ] || [ "$cpu" = mips32r2 ]; then
+	test "$pointer_reverse_pair_slls" -eq 0
+	test "$pointer_reverse_pair_dynamic_slls" -eq 1
+	test "$masked_constant_mults" -eq 0
+	test "$masked_constant_slls" -eq 1
+else
+	test "$pointer_reverse_pair_slls" -eq 2
+	test "$pointer_reverse_pair_dynamic_slls" -eq 2
+	test "$masked_constant_mults" -eq 1
+fi
+test "$pointer_single_int_slls" -eq 1
+if [ "$cpu" = vr4300 ] || [ "$cpu" = mips32r2 ]; then
+	test "$pointer_single_global_int_slls" -eq 0
+	test "$pointer_single_global_unsigned_slls" -eq 0
+else
+	test "$pointer_single_global_int_slls" -eq 1
+	test "$pointer_single_global_unsigned_slls" -eq 1
+fi
+if [ "$cpu" = vr4300 ] && [ "$float_abi" = hard ]; then
+	test "$pointer_single_reverse_global_fp_slls" -eq 0
+else
+	test "$pointer_single_reverse_global_fp_slls" -eq 1
+fi
+if [ "$cpu" = vr4300 ]; then
+	test "$masked_constant_partial_mults" -eq 0
+	test "$masked_constant_partial_slls" -eq 2
+	test "$unmasked_constant_mults" -eq 0
+	test "$unmasked_constant_slls" -eq 2
+elif [ "$cpu" = mips32r2 ]; then
+	test "$masked_constant_partial_mults" -eq 1
+	test "$masked_constant_partial_slls" -eq 1
+	test "$unmasked_constant_mults" -eq 1
+	test "$unmasked_constant_slls" -eq 1
+fi
+
+"$pcc" -O2 -fomit-frame-pointer -Wc,-xssa -S \
+    -o "$tmp.ssacounted.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssacounted001.c" \
+    2>"$tmp.ssacounted.log"
+test ! -s "$tmp.ssacounted.log"
+counted_target_bne=$(awk '
+    /^(counted_up|counted_unsigned_up|counted_down|counted_unsigned_down):$/ {
+        inside = 1; next
+    }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "bne" { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.s")
+counted_constant_bnez=$(awk '
+    /^counted_constant:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "bnez" { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.s")
+counted_step_two_jumps=$(awk '
+    /^counted_step_two:$/ { inside = 1; next }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "j" { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.s")
+test "$counted_target_bne" -eq 4
+test "$counted_constant_bnez" -eq 1
+test "$counted_step_two_jumps" -eq 1
+
+"$pcc" -march=mips3 -mtune=r4000 -mhard-float -O2 \
+    -fomit-frame-pointer -Wc,-xssa -S \
+    -o "$tmp.ssacounted.mips3.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/ssacounted001.c" \
+    2>"$tmp.ssacounted.mips3.log"
+test ! -s "$tmp.ssacounted.mips3.log"
+counted_generic_bne=$(awk '
+    /^(counted_up|counted_unsigned_up|counted_down|counted_unsigned_down|counted_constant):$/ {
+        inside = 1; next
+    }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 ~ /^(bne|bnez)$/ { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.mips3.s")
+counted_generic_jumps=$(awk '
+    /^(counted_up|counted_unsigned_up|counted_down|counted_unsigned_down|counted_constant):$/ {
+        inside = 1; next
+    }
+    inside && $1 == ".ent" { inside = 0 }
+    inside && $1 == "j" { count++ }
+    END { print count + 0 }
+' "$tmp.ssacounted.mips3.s")
+test "$counted_generic_bne" -eq 0
+test "$counted_generic_jumps" -eq 5
+
+for switch_cpu in vr4300 mips32r2; do
+	"$pcc" -march="$switch_cpu" -O2 -S \
+	    -o "$tmp.switchtable.s" \
+	    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/switchtable001.c"
+	switch_jumps=$(grep -c 'computed goto' "$tmp.switchtable.s")
+	switch_entries=$(grep -c '^[[:space:]]*\.word[[:space:]]\+L[0-9]' \
+	    "$tmp.switchtable.s")
+	switch_pointer_steps=$(awk '
+	    /[.]ent[[:space:]]+loop_switch/ { in_loop = 1; next }
+	    in_loop && /[.]ent[[:space:]]+/ { in_loop = 0 }
+	    in_loop && /^[[:space:]]*addiu[[:space:]].*,4/ { count++ }
+	    END { print count + 0 }
+	' "$tmp.switchtable.s")
+	test "$switch_jumps" -ge 4
+	test "$switch_entries" -ge 30
+	test "$switch_pointer_steps" -ge 1
+done
+
+"$pcc" -march=mips3 -mtune=r4000 -O2 -S \
+    -o "$tmp.switchtable.generic.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/switchtable001.c"
+if grep 'computed goto' "$tmp.switchtable.generic.s" >/dev/null ||
+    grep '^[[:space:]]*\.word[[:space:]]\+L[0-9]' \
+    "$tmp.switchtable.generic.s" >/dev/null; then
+	echo "generic MIPS3 unexpectedly received dense switch tables" >&2
+	exit 1
+fi
+
+"$pcc" -Os -S -o "$tmp.pointertemp.s" \
+    "$topsrc/src/dev/pcc/pcc-tests/regress/misc/pointertemp001.c" \
+    2>"$tmp.pointertemp.log"
+test ! -s "$tmp.pointertemp.log"
+for function in pointer_copy pointer_fill pointer_compare; do
+	stack_refs=$(awk -v symbol="$function" '
+	        $0 == (symbol ":") { inside = 1; next }
+        inside && $1 == ".ent" { inside = 0 }
+        inside && $0 ~ /\(\$fp\)/ &&
+            $1 ~ /^(lb|lbu|lh|lhu|lw|sb|sh|sw)$/ { count++ }
+        END { print count + 0 }
+    ' "$tmp.pointertemp.s")
+	test "$stack_refs" -eq 0
+done
+awk '
+/^pointer_address_taken:$/ { inside = 1; next }
+inside && $1 == ".ent" { inside = 0 }
+inside && /\(\$fp\)/ { stack = 1 }
+END { exit stack ? 0 : 1 }
+' "$tmp.pointertemp.s" || {
+	echo "address-taken pointer TEMP did not fall back to stack storage" >&2
+	exit 1
+}
+awk '
+/^pointer_symbol_select:$/ { inside = 1; next }
+inside && $1 == ".ent" { inside = 0 }
+inside && $1 == "la" && /\$at,pointer_symbol_entries/ { producer = NR }
+inside && producer && $1 == "addu" && /\$at/ && !consumer {
+	consumer = NR
+}
+inside && /pointer_symbol_gate/ { gate = NR }
+END {
+	exit producer && consumer && gate &&
+	    producer < consumer && consumer < gate ? 0 : 1
+}
+' "$tmp.pointertemp.s" || {
+	echo "symbol load clobbered a live assembler temporary" >&2
+	exit 1
+}
 
 echo "smoke-host-portablecc: ok"

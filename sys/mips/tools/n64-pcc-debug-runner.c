@@ -81,6 +81,15 @@ static const struct test_case primary_tests[] = {
 static const struct test_case extended_tests[] = {
 	{ "jira__PCC-84", "jira__PCC_84", "jira", "PCC-84.c", 0 },
 	{ "jira__PCC-85", "jira__PCC_85", "jira", "PCC-85.c", 0 },
+	{ "misc__llcall001", "misc__llcall001", "misc", "llcall001.c", 0 },
+	{ "misc__ssastrength001", "misc__ssastrength001", "misc",
+	    "ssastrength001.c", 0 },
+	{ "misc__ssacounted001", "misc__ssacounted001", "misc",
+	    "ssacounted001.c", 0 },
+	{ "misc__switchtable001", "misc__switchtable001", "misc",
+	    "switchtable001.c", 0 },
+	{ "misc__pointertemp001", "misc__pointertemp001", "misc",
+	    "pointertemp001.c", 0 },
 	{ "jira__PCC-97", "jira__PCC_97", "jira", "PCC-97.c", 0 },
 	{ "jira__PCC-101", "jira__PCC_101", "jira", "PCC-101.c", 0 },
 	{ "jira__PCC-123", "jira__PCC_123", "jira", "PCC-123.c", 0 },
@@ -821,6 +830,65 @@ run_linpack_comparison(void)
 }
 
 static int
+run_linpack_kernel_comparison(void)
+{
+	int fails;
+	int rc;
+	char *gcc_argv[] = { "/root/linpack-kernels-gcc", NULL };
+	char *pcc_argv[] = { "/root/linpack-kernels-pcc", NULL };
+
+	fails = 0;
+	printf("N64_LINPACK_KERNEL_CONFIG array_size=120 min_seconds=1\n");
+	if (setenv("LINPACK_KERNEL_ARRAY_SIZE", "120", 1) < 0 ||
+	    setenv("LINPACK_KERNEL_MIN_SECONDS", "1", 1) < 0) {
+		printf("N64_LINPACK_KERNEL_ENV_FAIL %d\n", errno);
+		return 1;
+	}
+
+	printf("N64_LINPACK_KERNEL_BEGIN gcc\n");
+	rc = run_argv("linpack-kernels-gcc", NULL, gcc_argv);
+	printf("N64_LINPACK_KERNEL_RC gcc %d\n", rc);
+	printf("N64_LINPACK_KERNEL_END gcc\n");
+	fails += rc != 0;
+
+	printf("N64_LINPACK_KERNEL_BEGIN pcc\n");
+	rc = run_argv("linpack-kernels-pcc", NULL, pcc_argv);
+	printf("N64_LINPACK_KERNEL_RC pcc %d\n", rc);
+	printf("N64_LINPACK_KERNEL_END pcc\n");
+	fails += rc != 0;
+	return fails;
+}
+
+static int
+run_compiler_bench_comparison(void)
+{
+	int fails;
+	int rc;
+	char *gcc_argv[] = { "/root/mips-compiler-bench-gcc", NULL };
+	char *pcc_argv[] = { "/root/mips-compiler-bench-pcc", NULL };
+
+	fails = 0;
+	printf("N64_COMPILER_BENCH_CONFIG min_seconds=1\n");
+	if (setenv("MIPS_COMPILER_BENCH_MIN_SECONDS", "1", 1) < 0) {
+		printf("N64_COMPILER_BENCH_ENV_FAIL %d\n", errno);
+		return 1;
+	}
+
+	printf("N64_COMPILER_BENCH_BEGIN gcc\n");
+	rc = run_argv("mips-compiler-bench-gcc", NULL, gcc_argv);
+	printf("N64_COMPILER_BENCH_RC gcc %d\n", rc);
+	printf("N64_COMPILER_BENCH_END gcc\n");
+	fails += rc != 0;
+
+	printf("N64_COMPILER_BENCH_BEGIN pcc\n");
+	rc = run_argv("mips-compiler-bench-pcc", NULL, pcc_argv);
+	printf("N64_COMPILER_BENCH_RC pcc %d\n", rc);
+	printf("N64_COMPILER_BENCH_END pcc\n");
+	fails += rc != 0;
+	return fails;
+}
+
+static int
 run_debug(int run_extended)
 {
 	int fails;
@@ -853,6 +921,8 @@ run_debug(int run_extended)
 		fails += run_group(extended_tests,
 		    sizeof(extended_tests) / sizeof(extended_tests[0]));
 		fails += run_linpack_comparison();
+		fails += run_linpack_kernel_comparison();
+		fails += run_compiler_bench_comparison();
 	}
 
 	printf("N64_PCC_DEBUG_END %d\n", fails);

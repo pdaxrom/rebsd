@@ -4387,6 +4387,13 @@ Target-independent or shared optimizer work:
     call-heavy small static helpers.
   - Reject changes that improve Linpack by relying on undefined behavior or by
     regressing existing PCC tests.
+  - [x] H0 adds separately linked GCC/PCC kernel benchmarks for rolled and
+    unrolled `daxpy`, `ddot`, and `dscal`, plus `idamax`.  Typed volatile
+    dispatch keeps GCC and PCC from inlining different benchmark bodies; each
+    binary runs value self-tests before timing.  On Malta64/R4000 QEMU the PCC
+    generic kernels measure 96.8-101.4% of GCC, so the remaining real-N64
+    Linpack gap is not explained by the generic BLAS loops alone.  Physical
+    VR4300 timing remains the H0 performance gate.
 
 Milestone order:
 
@@ -4546,7 +4553,680 @@ Milestone order:
     `sys/mips/n64/builds/20260712-milestone-g5-o2-frame-omit-gcc-kernel/pcc-debug.z64`,
     SHA-256
     `a71270c6bea582df7cfe3c104fd1f29e17dadfdda17eb3eaa4d92ef2ec0b4f19`.
-  - [ ] Physically validate the G5 image before selecting the next transform.
+  - [x] Physical G5 validation passes.  The stable 16-rep row is 3278.433 PCC
+    versus 4367.264 GCC KFLOPS, or 75.07%; both benchmark return codes and
+    numeric debug markers are zero.
+  - [x] G6 software gate: load every scalar/pointer stack parameter of an
+    already selected bounded hard-float specialization into a compiler TEMP
+    once.  This removes 26 repeated Linpack loads on both VR4300 and MIPS32R2
+    while preserving every o32 argument slot.  Varargs, soft-float, and generic
+    MIPS3 remain outside the transform.  Three clean Malta64 A/B pairs improve
+    2.41%; cross/native regression and all six full QEMU profiles pass.
+  - [x] Build the clean G6 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-g6-specialized-stack-params-kgcc-upcc-hard-aout/pcc-debug.z64`,
+    SHA-256
+    `2792c760271601826bc55aceac5e3d21c9744e6cb00489acf12e9e1bced1c3f7`.
+  - [x] Physical G6 validation passes.  The stable 16-rep row is 3404.961 PCC
+    versus 4367.120 GCC KFLOPS, or 77.97%.  PCC improves 3.86% over G5 while
+    the GCC control changes by -0.003%; both benchmark return codes and numeric
+    debug markers are zero.
+  - [x] Reject three G7 static-only wins after strict Malta64 A/B testing:
+    dual bounded specialization (1711 instructions, 13904.908 versus
+    13930.863 G6 KFLOPS), complete pointer-address CSE (1830 instructions,
+    13853.742 KFLOPS), and affine scaled-index CSE (1861 instructions, three-run
+    average 14330.861 versus 14347.187 G6 KFLOPS).  All prototypes were removed.
+  - [x] Implement and measure loop-carried pointer induction for unrolled
+    VR4300 indexed FP loops.  The narrow SSA transform replaces repeated
+    `base + ((i+c) << scale)` expressions with a pointer phi, short constant
+    offsets, and one pointer increment on the latch.  VR4300 Linpack drops 97
+    instructions with unchanged load/store/nop counts; three strict Malta64
+    pairs improve 0.35%.  MIPS32R2 regressed 0.303%, so the final target hook
+    remains VR4300 hard-float only and other profiles are byte-identical.
+  - [x] Fix two Malta64 probe rebuild defects found during G7 measurement:
+    forward `rootfs-patch`, `rootfs-repack-kernel`, and `rootfs-patch-kernel`
+    through `sys/mips/Makefile`, and make `rootfs-repack-kernel` remove
+    `.romdisk` when regenerating `unix.bin`, as the normal Malta64 rule does.
+  - [x] Fix and recheck the isolated userland `awk.h` generation dependency.
+    A single `awk.g.stamp` now owns the yacc invocation and publishes both
+    `awk.g.c` and `y.tab.h`; all six clean `O=` builds passed under `-j4`.
+  - [x] Pass the G7 software gates: cross and native VR4300 regressions pass
+    294/294 runtime cases, and all six clean PCC-kernel/PCC-rootfs hard/soft
+    QEMU profiles report `PCC_SMOKE_ALL_FAILURES 0`.
+  - [x] Build the clean G7 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-g7-pointer-induction-kgcc-upcc-hard-aout/pcc-debug.z64`,
+    SHA-256
+    `9ad25d3a132a85257ffcdb4408c464b4eadb3d17379923e983f96b75052f653e`.
+  - [x] Hardware-benchmark the G7 image.  The stable 16-repetition row is
+    3631.062 PCC versus 4453.809 GCC KFLOPS, or 81.53%.  PCC improves 6.64%
+    over G6; both Linpack return codes and both numeric debug markers are zero,
+    and the terminal `N64_PCC_DEBUG_RC_END` marker is present.
+  - [x] H0 profile the seven selected Linpack BLAS kernels independently on
+    real VR4300 hardware before choosing the next code-generation change.  The
+    image must retain a GCC kernel, PCC hard-float a.out userland, default
+    `-mfix4300`, and separate GCC/PCC runtimes.  Use the per-kernel ratios to
+    decide between specialized-loop scheduling and `dgefa`/`dgesl` driver
+    optimization; QEMU timing is correctness evidence only.  The H0 tree and
+    image pass `pcc-smoke-all-runtime` on Malta64, Malta, and Maltael in both
+    hard-float and soft-float configurations (`PCC_SMOKE_ALL_FAILURES 0` and
+    `PCC_SMOKE_ALL_RC:0` in all six runs).  The first hardware attempt ran the
+    ordinary Linpack successfully (16-repetition PCC/GCC ratio 83.42%) but the
+    GCC kernel profiler trapped on an unaligned `ldc1` constant at
+    `0x00405ec4`.  The a.out assembler now preserves 8-byte `.rodata`
+    alignment across its packed `.data`/`.rodata` boundary; the rebuilt
+    profiler places the constant at `0x00405ec8`, and the a.out toolchain smoke
+    passes.  The corrected physical run with image SHA-256
+    `5791fca91cdbda9f1b12607e2944c81a3b8046984979e6695aedf6f1423c7b04`
+    completes with every self-test and final debug marker zero.  The stable
+    ordinary Linpack PCC/GCC ratio is 83.39%.  Per-kernel ratios are 64.59%
+    `daxpy_r`, 85.35% `daxpy_ur`, 52.35% `ddot_r`, 77.63% `ddot_ur`, 67.65%
+    `dscal_r`, 75.79% `dscal_ur`, and 44.20% `idamax`.  This rejects the QEMU
+    near-parity result and selects generic loop code generation, rather than
+    `dgefa`/`dgesl` driver specialization, as the next target.
+  - [x] H1 compare PCC and GCC assembly for `idamax`, rolled `ddot`, and rolled
+    `daxpy`; count loop instructions, loads, branches, delay-slot use, spills,
+    and avoidable address arithmetic.  The first comparison found the largest
+    isolated loss in `idamax`: PCC called libc `fabs` on every iteration and
+    again on the max-update path, while GCC cleared the sign bit inline.  The
+    first H1 backend change now lowers plain `fabs` plus
+    `__builtin_fabsf`/`fabs`/`fabsl` inline for MIPS hard-float.  It uses
+    `mfc1`/integer shifts/`mtc1`, with `mov.d` preserving the low word of a
+    paired double register; it deliberately does not use `abs.s` or `abs.d`,
+    because the VR4300 manual defines ABS as an arithmetic operation that can
+    raise Invalid Operation for sNaN.  Soft-float retains the libc calls.
+    This removes all six static `jal fabs` sites from the benchmark `idamax`,
+    makes it a leaf, reduces its frame from 64 to 24 bytes, and reduces text
+    from 412 to 380 bytes.  A strict bit-pattern regression covers negative
+    zero, finite values, infinity, and sNaN without quieting or changing the
+    payload.  All six clean PCC-kernel/PCC-rootfs hard/soft QEMU profiles pass
+    `pcc-smoke-all.sh`; VR4300, big-endian MIPS32R2, and little-endian
+    MIPS32R2 hard-float regressions pass 295/295, including
+    `misc__fabs001`.  The direct `pcc-debug.z64` goal now selects debug UART
+    mode before Makefile conditionals are evaluated; its target-specific value
+    had previously been too late to change `PARAM` and `N64_IOCONF`.  The H1
+    GCC-kernel/PCC-hard-float a.out profiler is stored at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h1-inline-fabs-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    SHA-256
+    `3b1a2ea00c9c09c3f7f26439fad4b18672379989e7435ef1b268e97f4dc165f3`.
+    It passes `fsutil --check`, has build stamp `.build-mode.gcc.1.0.0.1`, and
+    contains all four GCC/PCC ordinary/per-kernel Linpack binaries.  Physical
+    N64 validation passes with every self-test and final debug marker zero.
+    PCC `idamax` improves from 2.898 to 4.815 Melem/s, or 66.15%, and reaches
+    73.44% of the 6.556 GCC result instead of H0's 44.20%.  The stable ordinary
+    Linpack row is 3673.524 PCC versus 4415.818 GCC KFLOPS, or 83.19%; PCC is
+    0.85% faster than H0, while the GCC control is 1.10% faster, so the overall
+    ratio is effectively unchanged.
+  - [x] H2 optimize the remaining rolled kernels without disturbing H1.
+    Physical PCC/GCC ratios are still 64.63% for `daxpy_r`, 52.35% for
+    `ddot_r`, and 67.65% for `dscal_r`, versus 73.44-84.78% for `idamax` and
+    the corresponding unrolled paths.  Compare loop-carried FP accumulator
+    placement, reloads/spills, induction updates, branch shape, and delay-slot
+    use, then implement and measure one smallest shared backend change before
+    proceeding further.  The candidate change now lets hard-float
+    `float`/`double`/o32 `long double` automatic variables use optimizer TEMPs,
+    while soft-float and address-taken locals retain their existing stack
+    representation.  Rolled `ddot` falls from 74 to 64 instructions and from
+    seven to zero FP stack accesses; the complete kernel benchmark falls from
+    3238 to 3175 instructions and from 189 to 110 FP stack accesses.  Enabling
+    these longer FPR lifetimes exposed compiler-emitted conversion helper calls
+    that were not represented as CALL nodes.  Their table requirements now
+    clobber all o32 caller-saved GPRs and FPRs, except `F0` when it is the
+    result, preventing live locals from surviving incorrectly across helpers
+    such as `__floatunsdidf`.
+    The focused host smoke passes for VR4300 and MIPS32R2 hard-float and proves
+    that soft-float is unchanged.  Native hard-float regression passes 296/296
+    runtime cases on Malta64, Malta, and Maltael, including the new accumulator,
+    address-taken, and helper-clobber test.  All six PCC-kernel/PCC-rootfs
+    hard/soft `pcc-smoke-all.sh` profiles pass with zero failures and final RC
+    zero.  The physical artifact is the GCC-kernel/PCC-hard-float a.out
+    image
+    `/Users/sash/Work/N64/retrobsd-build/n64-h2-fp-local-temp-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136, SHA-256
+    `b8111a4e59d135e57e01869a11d691bde26d2e1282f8d04343e7ca1084e01165`.
+    Real N64 validation passes both self-tests and every numeric status marker;
+    terminal `N64_PCC_DEBUG_RC_END` is present.  Stable ordinary Linpack is
+    3706.069 PCC versus 4413.155 GCC KFLOPS, or 83.98%; PCC improves 0.89%
+    over H1 and the ratio gains 0.79 percentage points.  `ddot_r` improves
+    from 3.161 to 3.521 Melem/s, reaches 58.80% of GCC instead of 52.35%, and
+    `ddot_ur` reaches 80.45%.  Keeping the `idamax` maximum in an FPR also
+    improves it from 4.815 to 5.333 Melem/s, or 81.36% of GCC.  This passes the
+    H2 physical and commit gates, but the 90% overall stretch target remains
+    open.
+  - [x] H3 strength-reduce single-use indexed FP addresses on VR4300
+    hard-float.  H2 still measures rolled `daxpy` at 64.71% of GCC, and its
+    PCC loop rebuilds `dx + (i << 3)` on every iteration even though the
+    existing G7 pointer-induction pass already carries the two-use `dy`
+    address.  A small target hook now permits the same pass for a one-use
+    `float`, `double`, or o32 `long double` pointer while retaining the
+    two-use default for every other target and type.
+  - [x] Reject the unrestricted single-use prototype.  It shortened Linpack
+    but increased integer pressure in `dgefa`, adding four loads and four
+    stores.  Restricting the hook to FP pointees removes that spill regression:
+    complete VR4300 Linpack falls from 3136 to 3117 instructions and by 394
+    assembly bytes with unchanged load, store, `nop`, branch, and jump counts.
+  - [x] Keep H3 VR4300 hard-float only.  VR4300 soft-float, generic MIPS3, and
+    MIPS32R2 retain the old threshold.  The earlier measured MIPS32R2 G7
+    pointer-induction prototype regressed 0.303%, so a static reduction alone
+    is not enough to enable the transform there.
+  - [x] Pass the H3 software gates.  All six PCC-kernel/PCC-rootfs hard/soft
+    `pcc-smoke-all.sh` profiles report zero failures and final RC zero.
+    Native hard-float regression passes 296/296 runtime cases on Malta64,
+    Malta, and Maltael, including `misc__ssastrength001`; the host assembly
+    smoke proves that only the VR4300 hard-float single-use FP case loses its
+    scaled-index shift.
+  - [x] Build the H3 GCC-kernel/PCC-hard-float a.out N64 image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h3-fp-single-pointer-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136, SHA-256
+    `07162ebf10802a6a7d41c9ec3fe7853fb96d01e6d32562d53aca2b63d8a5684f`.
+    It passes `fsutil --check`, has stamp `.build-mode.gcc.1.0.0.1`, and
+    contains all four independent GCC/PCC ordinary/per-kernel Linpack
+    binaries.
+  - [x] Physically benchmark the H3 image.  Both self-tests, every Linpack and
+    numeric debug status, and the terminal `N64_PCC_DEBUG_RC_END` marker pass.
+    The stable ordinary row is 3693.268 PCC versus 4410.514 GCC KFLOPS, or
+    83.74%; PCC is 0.35% below H2, so H3 does not establish an overall Linpack
+    gain.  It does accelerate the intended rolled loops: `daxpy_r` rises from
+    3.333 to 3.583 Melem/s, or 7.50%, and reaches 69.06% of GCC; `ddot_r`
+    rises from 3.521 to 4.149 Melem/s, or 17.84%, and reaches 69.29% of GCC.
+    This closes the narrow H3 physical and commit gates while leaving the 90%
+    overall target open.
+
+  - [x] H5 add a general compiler benchmark before selecting another backend
+    optimization.  The deterministic corpus covers integer mixing, constant
+    division, branches, switches, memory and libc memory operations, calls,
+    64-bit integer pairs, single and double precision, and FP/integer
+    conversions.  It runs matching GCC/PCC binaries with independent runtimes
+    and validates every kernel result before reporting timing.  QEMU timing is
+    correctness evidence only; physical VR4300 ratios select later work.
+  - [x] Fix the two general MIPS correctness defects exposed by H5.  A
+    long-long simple-operation result may no longer partially overlap a source
+    pair, and the erroneous `$t6`/`$t7` pair-overlap map is corrected.  Signed
+    hard-float conversions now use truncation independent of FCSR rounding;
+    unsigned conversions use the existing full-range runtime helpers.
+    Focused optimized regressions cover both failures.
+  - [x] Pass the H5 software gates.  Malta64 hard-float regression passes
+    298/298 runtime cases, including `misc__llpack001` and
+    `misc__fpint001`.  Full `pcc-smoke-all.sh` passes on Malta64, Malta, and
+    MaltaEL in hard- and soft-float configurations; every profile reports
+    `MIPS_COMPILER_BENCH_SELFTEST 0`, `PCC_SMOKE_ALL_FAILURES 0`, and final
+    `PCC_SMOKE_ALL_RC:0`.
+  - [x] Build the H5 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h5-general-corpus-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 8716288, SHA-256
+    `6370f6402bc86ed43495fd559a3166fa2f193345ac2827c03a16fc9c508386ae`.
+    It passes `fsutil --check`, has build stamp `.build-mode.gcc.1.0.0.1`,
+    and contains independent GCC/PCC Linpack, Linpack-kernel, and general
+    compiler benchmark binaries.
+  - [x] Run the H5 image on physical N64.  Both general self-tests, all
+    Linpack self-tests, benchmark return codes, runner/debug statuses, and the
+    terminal marker pass.  Stable Linpack is 3786.472 PCC versus 4412.654 GCC
+    KFLOPS, or 85.81%, effectively unchanged from H4.  General PCC/GCC ratios
+    are 52.27% `int_mix`, 26.13% `const_div`, 52.67% `branch`, 54.68%
+    `switch`, 41.72% `memory`, 43.01% `libc_memory`, 59.70% `calls`, 39.94%
+    `u64`, 46.17% `float`, 67.22% `double`, and 15.79% `convert`.  These broad
+    gaps, rather than Linpack alone, select the H6 investigation.
+  - [x] H6 remove hard-float runtime calls for 32-bit unsigned-to-FP
+    conversion.  Expressions whose high bit is proven clear by a constant
+    mask or logical right shift use the short signed conversion.  Other
+    `uint32_t` values convert as signed double and conditionally add exact
+    `2^32`; float converts through double before final rounding.  Soft-float
+    retains helper-based lowering, including the full-range unsigned helper.
+  - [x] Add `misc__ufprange001` for masked, shifted, and full-range unsigned
+    conversions.  Host assembly gates cover VR4300 and MIPS32R2.  Hard-float
+    runtime regression passes 299/299 on Malta64, Malta, and MaltaEL, including
+    exact `double(0xffffffffU)` and rounded `float(0xffffffffU)` results.
+  - [x] Pass all six H6 full QEMU smoke profiles.  Malta64 VR4300, Malta
+    MIPS32R2, and MaltaEL MIPS32R2 pass in hard- and soft-float mode with
+    `MIPS_COMPILER_BENCH_SELFTEST 0`, zero smoke failures, and final RC zero.
+    The general PCC benchmark removes five helper calls, falls from 1750 to
+    1699 assembly lines, and shrinks by 896 section bytes.
+  - [x] Build the H6 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h6-u32-fp-range-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 8716288, SHA-256
+    `e59c80500ae0b8510b992f88130ffe5952638f408edf5de456ff074a7481e494`.
+    It passes `fsutil --check` and has build stamp
+    `.build-mode.gcc.1.0.0.1`.
+  - [x] Run H6 on physical N64.  Both general and Linpack self-tests, every
+    benchmark return code, final runner/debug statuses, and the terminal marker
+    pass.  `convert` improves from 0.403 to 1.655 Mwork/s, or 310.67%, and from
+    15.79% to 64.85% of GCC.  `float` improves 5.64% to 48.77% of GCC and
+    `double` improves 2.02% to 68.58%.  Stable Linpack improves 0.81% to
+    3817.158 KFLOPS and reaches 86.56% of GCC; unrelated corpus rates remain
+    stable.  This closes H6 and leaves constant division as the largest
+    directly identified general code-generation gap.
+  - [x] H7 lower signed and unsigned 32-bit division and remainder by a
+    non-power-of-two constant to magic-number arithmetic in the MIPS backend.
+    Unsigned quotient uses multiply-high, an optional correction, and a
+    logical shift.  Signed quotient uses signed multiply-high, the required
+    dividend adjustment, an arithmetic shift, and truncation-toward-zero
+    correction.  Remainder rebuilds `n - q * d`, using shift/add for cheap
+    `2^k +/- 1` products and otherwise the low half of a second multiply.
+    Division by zero, `+/-1`, powers of two, and variable divisors retain
+    their existing paths.
+  - [x] Add `misc__divconst001`.  It compares 32 optimized quotient/remainder
+    functions with four volatile variable-divisor hardware references over
+    signed and unsigned boundary values plus 16,384 deterministic
+    pseudorandom inputs.  Host assembly gates for VR4300 and MIPS32R2 require
+    zero `div`/`divu` instructions in all constant functions and preserve one
+    hardware divide in each reference function.  In the general benchmark,
+    `bench_const_div` changes from 61 instructions and six divides to 86
+    instructions and six multiplies; complete assembly grows by only 24 lines
+    and the PCC executable by 176 section bytes.
+  - [x] Pass the H7 software gates.  All six PCC-kernel/PCC-rootfs full smoke
+    profiles pass on Malta64 VR4300, Malta MIPS32R2, and MaltaEL MIPS32R2 in
+    hard- and soft-float mode with general self-test zero, no smoke failures,
+    and final RC zero.  Final hard-float runtime regression passes 300/300 on
+    Malta64, Malta, and MaltaEL, including `misc__divconst001`.  New integer
+    multiplies remain under the final default `-mfix4300`
+    emitted-stream check, while `-mno-fix4300` remains the explicit opt-out.
+  - [x] Build the H7 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h7-divconst-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136, SHA-256
+    `2641efd945fd1510a09ae97ef18b033967e377a4437506b94f4449bf1864f4a2`.
+    It passes all five `fsutil --check` phases, has build stamp
+    `.build-mode.gcc.1.0.0.1`, contains independent GCC/PCC ordinary Linpack,
+    kernel Linpack, and general benchmark binaries, and all six benchmark
+    executables have zero undefined symbols.
+  - [x] Run H7 on physical N64.  Both general self-tests, both Linpack kernel
+    self-tests, every benchmark return code, `N64_PCC_DEBUG_END`, and
+    `N64_PCC_DEBUG_RUNNER_RC` are zero; terminal `N64_PCC_DEBUG_RC_END` is
+    present.  `const_div` improves from 0.354 to 0.926 Mwork/s, or 161.58%,
+    and from 26.13% to 67.84% of GCC.  The other ten general kernels remain
+    within 0.64% of H6.  PCC's two-row ordinary Linpack average changes from
+    3785.421 to 3788.831 KFLOPS, or +0.09%, and the isolated kernels show no
+    regression.  This closes the H7 physical and commit gates.
+  - [x] H8 keep eligible local `long long` and `unsigned long long` values in
+    the existing MIPS register-pair class.  This extends the target's
+    `cisreg()` policy without adding a new pass, register class, or ABI rule.
+    The final `$s6/$s7` pair is also classified as `CLASSB`; the old `< 52`
+    boundary incorrectly treated pair 52 as an FPU register.  Only existing
+    caller-saved temporary pairs are used, so callee-save and prologue policy
+    are unchanged.
+  - [x] Add an H8 assembly gate around the existing `misc__llpack001` test for
+    both VR4300 and MIPS32R2.  `mix_words` must retain carry and shift
+    operations while emitting no local `lw`/`sw` through `$fp`.  Compared
+    with H7, the function falls from 179 to 156 lines on VR4300 and from 177
+    to 154 on MIPS32R2; its 32 frame accesses fall to zero.  The general
+    `bench_u64` body falls from 96 to 72 instructions and from 22 loads plus
+    12 stores to two loads and no stores.  Complete PCC benchmark assembly
+    shrinks from 1723 to 1699 lines and the linked executable from 45744 to
+    45584 section bytes; GCC controls remain byte-identical.
+  - [x] Diagnose the first H8 physical-run failure.  It was not an OOM: the
+    log reports 8192 KiB physical memory, 4096 KiB user memory, and 4096 KiB
+    swap, and all benchmark suites completed.  The run instead failed when
+    native `ccom` compiled `jira/PCC-85.c`: live state was kept in `$t1`
+    across hidden `__udivdi3`/`__umoddi3` calls emitted for unsigned 64-bit
+    division and remainder.  Those helpers were not CALL nodes, and the
+    `NDIVB` need set did not declare their full caller-saved clobber set.
+  - [x] Make the hidden divide/mod helper ABI explicit by adding the existing
+    `MIPS_CALLER_SAVED_NEVER` set to `NDIVB`.  Add `misc__llcall001`, which
+    keeps a result pointer and quotient live across consecutive unsigned
+    64-bit helper calls, to the BSD regression list and the physical N64
+    compile-and-run gate.  This is a general MIPS backend correction rather
+    than a special case for `PCC-85`; the required saves add 80 section bytes
+    to the H8 general benchmark, whose final 45664 bytes remain 80 below H7.
+  - [x] Pass the H8 software gates.  All six PCC-kernel/PCC-rootfs full smoke
+    profiles pass on Malta64 VR4300, Malta MIPS32R2, and MaltaEL MIPS32R2 in
+    hard- and soft-float mode with general self-test zero, no smoke failures,
+    and final RC zero.  Final hard-float runtime regression passes 301/301 on
+    Malta64, Malta, and MaltaEL, including `jira__PCC-85`, `misc__llpack001`,
+    and `misc__llcall001`.  Native Malta64 compilation reports 311 passes and
+    30 expected failures, then passes all 301 runnable tests.
+  - [x] Build the H8 GCC-kernel/PCC-hard-float a.out-userland image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h8-callclobber-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136, SHA-256
+    `6dbbffb1b32a0ca1b8fbe49b9d237082a6b351aba8115f9bc8963da7fc2f1b92`.
+    It passes all five `fsutil --check` phases, has build stamp
+    `.build-mode.gcc.1.0.0.1`, contains independent GCC/PCC ordinary Linpack,
+    kernel Linpack, and general benchmark binaries, and all six benchmark
+    executables have zero undefined symbols.  The debug rootfs contains both
+    `PCC-85.c` and `llcall001.c` as native compile-and-run tests.
+  - [x] Run the corrected H8 image on physical N64.  The complete runner,
+    including native `PCC-85` and `llcall001`, finishes with zero-valued
+    `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC` plus terminal
+    `N64_PCC_DEBUG_RC_END`.  Both general self-tests, both Linpack kernel
+    self-tests, and every benchmark return code are zero.  PCC `u64` reaches
+    1.653 versus 2.868 GCC Mwork/s: 57.64% of GCC, a 43.37% PCC gain over H7,
+    and a 17.71 percentage-point PCC/GCC-ratio gain.  PCC ordinary Linpack
+    averages 3772.706 KFLOPS, 85.12% of the current GCC result and only 0.43%
+    below H7.  This closes the corrected H8 physical and commit gates.
+  - [x] H9A extend the existing SSA address-induction transform to integer
+    memory loops on VR4300 and MIPS32R2.  Loop-invariant global `ICON` symbols
+    are now valid bases, and unsigned induction is accepted even when PCC's
+    pointer-scaling `LS` node has signed `int` type.  A single global access
+    is profitable; register bases still require two uses unless they are the
+    existing VR4300 hard-float FP case.
+  - [x] Reject the unrestricted single-integer-address prototype before QEMU.
+    It promoted `ipvt[k]` in Linpack `dgefa`, displaced `n-1` from `$s7`,
+    restored a frame pointer, and added stack traffic.  The final symbolic
+    single-use gate makes complete H8/H9A Linpack assembly byte-identical on
+    both VR4300 and MIPS32R2 while changing `bench_memory` from 59 to 56
+    instructions and reducing its address `addu` count from seven to four.
+  - [x] Extend `misc__ssastrength001` with signed and unsigned global-array
+    loops.  Host assembly gates pass on VR4300 and MIPS32R2: repeated integer
+    register bases and single global bases use pointer induction, a single
+    integer parameter base retains scaled indexing, and only VR4300
+    hard-float promotes the single FP parameter case.  The same regression is
+    staged in the H9A N64 debug image for a native compile-and-run gate.
+  - [x] Pass the H9A software gates.  Hard-float runtime regression passes
+    301/301 on Malta64, Malta, and MaltaEL, including the extended
+    `misc__ssastrength001`.  Native Malta64 compilation reports 311 passes
+    and 30 expected failures, then passes all 301 runnable tests.  All six
+    Malta64/Malta/MaltaEL hard/soft full `pcc-smoke-all.sh` profiles report
+    `MIPS_COMPILER_BENCH_SELFTEST 0`, `PCC_SMOKE_ALL_FAILURES 0`, and final
+    `PCC_SMOKE_ALL_RC:0`.
+  - [x] Build the H9A GCC-kernel/PCC-VR4300-hard-float a.out-userland N64
+    image and retain it for physical comparison with H8.  The clean image is
+    `/Users/sash/Work/N64/retrobsd-build/n64-h9a-address-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes, SHA-256
+    `a0c5b5c7cf15f1c471bd8a39dad9b25864a39e3b9ac52c60c6736f203a99b5ad`,
+    with stamp `.build-mode.gcc.1.0.0.1`.  Its kernel ELF and all three GCC
+    benchmark controls are byte-identical to H8.  All six benchmark binaries
+    have zero undefined symbols, and the rootfs passes all five `fsutil`
+    phases.  The boot-time C runner, rather than only the retained shell
+    script, now compiles and runs both `misc__llcall001` and
+    `misc__ssastrength001`.
+  - [x] Run H9A on physical N64.  Both general and Linpack-kernel self-tests,
+    every benchmark return code, `N64_PCC_DEBUG_END`, and
+    `N64_PCC_DEBUG_RUNNER_RC` are zero; the terminal
+    `N64_PCC_DEBUG_RC_END` marker is present.  PCC `memory` rises from H8's
+    4.262 to 5.352 Mwork/s, a 25.57% gain, and reaches 52.41% of the
+    byte-identical GCC control instead of 41.74%.  Every other general PCC
+    kernel also improves, from 0.56% for `libc_memory` through 23.03% for
+    `branch`; `double` gains 15.82% and `u64` gains 11.86%.  Isolated PCC
+    Linpack kernels remain within -1.02% to +0.93% of H8.  Ordinary PCC
+    Linpack averages 3792.478 KFLOPS, 0.52% above H8, and reaches 85.25% of
+    the current GCC mean.  This closes the H9A physical and commit gates.
+  - [x] H10 promotes ordinary non-volatile MIPS automatic pointer variables
+    through PCC's existing TEMP path.  `cisreg()` now accepts pointers; the
+    established front-end checks still reject volatile objects and pass2
+    still converts an address-taken TEMP back to stack storage.  No new pass,
+    register class, or MIPS-only allocator path is added.
+  - [x] Add `misc__pointertemp001` coverage for copy, fill, compare with early
+    return, address-taken fallback, and an indirect function pointer.  Host
+    assembly gates must show no frame-relative memory references in the three
+    pointer-walk loops while retaining stack storage for the address-taken
+    local.  The regression also covers a global table pointer followed by a
+    bare-symbol load, and is staged in the physical N64 compile-and-run gate.
+  - [x] Fix the assembly scheduler's hidden `$at` dependency for bare-symbol
+    integer and FPU loads/stores.  GAS expands those operands through `$at`;
+    moving another `$at` consumer across the pseudo-instruction corrupted the
+    self-hosted `ccom` keyword table.  The scheduler now treats the implicit
+    use as a real dependency, and the host regression verifies the order.
+  - [x] Pass H10 host, runtime, native, and six-profile full QEMU gates.  The
+    cross regression passes 302/302 runtime cases.  Native Malta64 reports
+    312 compile passes, 30 expected compile failures, and 302/302 runtime
+    passes.  All six Malta64/Malta/MaltaEL hard/soft full-smoke profiles report
+    `MIPS_COMPILER_BENCH_SELFTEST 0`, `PCC_SMOKE_ALL_FAILURES 0`, and final
+    `PCC_SMOKE_ALL_RC:0`; the focused optimizer probe reports zero selected
+    spills.  Complete general and Linpack results are recorded in the MIPS
+    scheduler report.
+  - [x] Build and retain a clean H10 GCC-kernel/PCC-VR4300-hard-float a.out
+    N64 image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h10-pointer-temp-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes, SHA-256
+    `7731ff096837bbb25f434ecbfa1d2808bfb5ad7a273b9a3b5ed7898fa23b582b`.
+    The stamp is `.build-mode.gcc.1.0.0.1`, all GCC controls and the kernel are
+    byte-identical to H9A, all benchmark binaries have zero undefined symbols,
+    and all five `fsutil --check` phases pass.
+  - [x] Run H10 on physical N64.  The new native `misc__pointertemp001` gate,
+    all general and Linpack self-tests, and every benchmark return code pass;
+    `N64_PCC_DEBUG_END` and `N64_PCC_DEBUG_RUNNER_RC` are zero and terminal
+    `N64_PCC_DEBUG_RC_END` is present.  PCC `libc_memory` rises from H9A's
+    22.252 to 38.912 Mwork/s, a 74.87% gain, and reaches 74.65% of GCC instead
+    of 42.99%.  Ordinary PCC Linpack averages 3774.106 KFLOPS, only 0.48%
+    below H9A and 84.79% of the current GCC mean.  Isolated PCC kernels range
+    from -0.78% to +5.08% versus H9A.  The raw `convert` timing is 4.72% lower,
+    but the H9A/H10 timed benchmark assembly is byte-identical; the only
+    source-assembly difference is in untimed `main`, so this is not an H10
+    generated-code regression.  This closes the H10 physical and commit gates.
+  - [x] H11 extend the existing target-independent SSA address-induction
+    lowering from `i` and `i+C` to constant reverse indexes `C-i`.  Represent
+    the affine coefficient as direction `+1/-1`, initialize the existing
+    pointer phi at the directed induction value, and use a signed latch step.
+    Do not add a MIPS-only pass or register class.
+  - [x] Extend `misc__ssastrength001` with two reverse accesses sharing a
+    register base and one reverse global FP access matching `bench_float`.
+    Require no scaled-index shifts on VR4300/MIPS32R2 where the established
+    profitability hooks enable the transform, while generic MIPS3 and
+    unsupported float modes remain unchanged.
+  - [x] Measure H11 with static assembly/pressure counters and strict Malta64
+    H10/H11 A/B runs.  Primary targets are general `float` and `double`; reject
+    new spills, stack traffic, or a material Linpack regression.
+  - [x] Pass host, cross, native, and all six full QEMU profiles, then build a
+    clean GCC-kernel/PCC-VR4300-hard-float a.out N64 image.  Cross and native
+    runtime pass 302/302; native compilation reports 312 passes and 30
+    expected failures.  Every full-smoke profile reports self-test zero,
+    `CCOM_STRESS_DONE:100`, zero failures, and final RC zero.  The retained
+    image is
+    `/Users/sash/Work/N64/retrobsd-build/n64-h11-reverse-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 and SHA-256
+    `0939b1961dfa2d678d0d1f79d6fab1778c010ea7cadc500203bf59b21d617909`.
+  - [x] Run H11 on physical N64.  The expanded native
+    `misc__ssastrength001` gate, all general and Linpack-kernel self-tests,
+    every benchmark return code, and both numeric debug markers pass; the
+    terminal marker is present.  PCC `float` improves from H10's 2.553 to
+    2.956 Mwork/s (+15.79%) and `double` from 2.113 to 2.382 (+12.73%).
+    Ordinary PCC Linpack averages 3773.312 KFLOPS, only 0.02% below H10, and
+    reaches 85.59% of the current GCC mean.  This closes the H11 physical and
+    commit gates.
+  - [x] H12 extend the target-independent SSA induction reducer for unsigned
+    masked constant products `(i*C) & (2^N-1)`.  Carry `i*C` in a second phi,
+    initialize a dynamic starting value once in the preheader, and advance it
+    by the immediate `C*delta` in the latch.  Keep the profitability hook
+    enabled only for VR4300 and MIPS32R2; do not add a MIPS-only pass.
+  - [x] Extend `misc__ssastrength001` with zero- and dynamic-start masked
+    products plus partial-mask and unmasked negative controls.  VR4300 and
+    MIPS32R2 host assembly must remove the hot-loop multiply for a full
+    low-bit mask, while generic MIPS3 and both negative controls retain their
+    previous lowering.  The focused VR4300 and MIPS32R2 hard-float host gates
+    pass.
+  - [x] Pass H12 host, cross, native, and all six full QEMU profiles without
+    new spills or correctness failures.  Cross compilation passes 339 cases
+    with three expected failures and runtime passes 302/302.  Native Malta64
+    reports 312 compile passes, 30 expected compile failures, and 302/302
+    runtime passes.  Every full-smoke profile reports self-test zero,
+    `CCOM_STRESS_DONE:100`, zero failures, and final RC zero.  Sequential
+    one-second Linpack repeats pass on every profile; the H11/H12 Linpack
+    translation-unit assembly is byte-identical.
+  - [x] Build and retain a clean H12 GCC-kernel/PCC-VR4300-hard-float a.out
+    N64 image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h12-masked-induction-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `28bd9078d306add2494c7af852879013c73204999deef5b7e4fe78debfda873a`.
+    The stamp is `.build-mode.gcc.1.0.0.1`; kernel, runner, and all three GCC
+    controls are byte-identical to H11, all benchmark binaries have zero
+    undefined symbols, and all five `fsutil --check` phases pass.
+  - [x] Run H12 on physical N64.  The complete debug runner, expanded native
+    regression, both general self-tests, both Linpack-kernel self-tests, and
+    every benchmark return code pass; both numeric debug markers are zero and
+    the terminal marker is present.  PCC `memory` rises from H11's 5.349 to
+    5.720 Mwork/s (+6.94%) and reaches 55.64% of the same-run GCC result
+    instead of 52.38%.  Untouched general kernels remain within 0.96% of H11.
+    PCC Linpack averages 3758.096 KFLOPS, 0.40% below H11 and 84.89% of the
+    current GCC mean; isolated Linpack kernels are unchanged within timing
+    noise.  This closes the H12 physical and commit gates.
+  - [x] H13 lower narrow canonical `+1/-1` counted-loop latches directly to
+    the body after SSA phi copies are inserted.  Preserve the top entry guard
+    and require one preheader, one body, adjacent header/body/exit layout, and
+    a matching invariant limit.  Enable the target hook only for VR4300 and
+    MIPS32R2; keep generic MIPS3 unchanged.
+  - [x] Add `misc__ssacounted001` runtime and host assembly coverage for
+    signed/unsigned increment/decrement, constant/dynamic limits, zero-trip
+    behavior, and rejected step-two/multiblock forms.  Stage the same test in
+    the extended N64 physical debug runner.
+  - [x] Pass H13 host, cross, native hard-float, and all six full QEMU smoke
+    profiles.  Cross and native hard-float runtime pass 303/303.  Every
+    Malta64/Malta/MaltaEL hard/soft full-smoke profile reports self-test zero,
+    100 completed stress compilations, zero failures, and final RC zero.  The
+    extra native soft-float run has the pre-existing loop-free
+    `c99__arith003` NaN failure; H12/H13 assembly and objects are identical,
+    and the new H13 test passes.
+  - [x] Build and retain the H13 GCC-kernel/PCC-VR4300-hard-float a.out N64
+    image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h13-counted-loop-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `9bdcae43c38d6c2d06c3760b01740f67873ee8be246f97ace5cbd9d5fe7e1a78`.
+    The GCC kernel and controls match H12, all tested binaries have no
+    undefined symbols, and the rootfs passes all five `fsutil` phases.
+  - [x] Run H13 on physical N64.  The complete runner, including the staged
+    native `misc__ssacounted001`, both benchmark self-tests, every benchmark
+    return code, and both numeric debug markers pass; the terminal marker is
+    present.  PCC Linpack averages 3786.128 KFLOPS, 0.75% above H12 and 85.53%
+    of the current GCC mean.  The targeted `ddot_r` kernel gains 16.05%.
+    Across the general corpus, PCC `int_mix`, `memory`, `calls`, `u64`,
+    `float`, and `double` improve by 4.06% to 13.90%; `branch`, `switch`,
+    `libc_memory`, and `convert` remain within 0.81% of H12.  This closes the
+    H13 physical and commit gates.
+  - [x] H14 extend the existing late MIPS peephole to fill conservative
+    control-transfer delay slots on VR4300 and MIPS32R2.  Permit a safe
+    instruction immediately after a label and a one-instruction lookback
+    across an independent simple GPR operation.  Accept only the existing
+    non-trapping GPR move/ALU candidates plus `mov.s`/`mov.d`; keep generic
+    MIPS3 unchanged and reject dependency conflicts.
+  - [x] Add host assembly gates for label entry, one-instruction lookback,
+    hard-float moves, dependency rejection, and the generic-MIPS3 negative
+    control.  Extend signed-16 `addu`/`subu` pseudo parsing only where the
+    assembler can lower it without an implicit `$at` temporary.
+  - [x] Pass H14 host smoke, 340/343 cross compilation with the same three
+    expected failures, and 303/303 VR4300 runtime tests.  All six full
+    PCC-kernel/PCC-rootfs Malta64/Malta/MaltaEL hard/soft QEMU profiles report
+    compiler self-test zero, `CCOM_STRESS_DONE:100`, zero smoke failures, and
+    final RC zero.
+  - [x] Build and retain the H14 GCC-kernel/PCC-VR4300-hard-float a.out N64
+    image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h14-control-delay-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `72d3497e0e0cd3fc97b70b21b9782fcaeeef3d9dd0bcca7fdcce0ddd0ccdbdae`.
+    The GCC kernel and three GCC benchmark controls are byte-identical to H13,
+    all seven runner/benchmark executables have no undefined symbols, and the
+    6144 KiB rootfs passes all five `fsutil` phases with 359 files.
+  - [x] Run H14 on physical N64 and record the complete correctness and
+    performance output before committing.  Require both numeric debug markers
+    to be zero, the terminal marker, both benchmark self-tests, and every
+    benchmark return code.  The complete runner passes.  PCC Linpack averages
+    3807.266 KFLOPS, 0.56% above H13 and 85.53% of the current GCC mean.  Ten
+    of eleven general kernels improve by 0.88% to 7.63%; `libc_memory` is the
+    recorded exception at -2.47%.  Keep `-mfix4300` enabled for this image.
+  - [x] Verify the H14 `libc_memory` result before selecting H15.  Saved H13
+    and H14 benchmark assembly and linked `memcmp`/`memcpy`/`memset` objects
+    are byte-identical, so the measured -2.47% is physical timing variation,
+    not a late-peephole code-generation regression.
+  - [x] H15 add bounded direct switch tables for VR4300 and MIPS32R2.  Require
+    at least five one-word cases, at most 256 table entries, and at least 50%
+    density.  Normalize once, use an unsigned bounds check, readonly `.word`
+    targets, `lw`, and computed `jr`.  Keep generic MIPS3, C++, small, sparse,
+    and wide switches on the common linear lowering.
+  - [x] Reuse the existing computed-label CFG mechanism so pass2 retains every
+    case reached through a table.  Add `misc__switchtable001` for signed and
+    unsigned wraparound ranges, holes/defaults, a missing default, and two
+    tables in one function.  Host gates require tables on VR4300/MIPS32R2 and
+    reject them on generic MIPS3.  The focused PCC `bench_switch` falls from
+    91 to 83 instructions and replaces up to nine dynamic comparisons with a
+    range check, table load, and indirect jump.
+  - [x] Pass H15 host smoke, 341/344 cross compilation with the same three
+    expected failures, and 304/304 VR4300 runtime tests.  All six complete
+    PCC-kernel/PCC-rootfs Malta64/Malta/MaltaEL hard/soft QEMU profiles report
+    compiler self-test zero, `CCOM_STRESS_DONE:100`, zero smoke failures, and
+    final RC zero.  Preserve `-fomit-frame-pointer` for PCC kernels and verify
+    soft-float and little-endian profiles.
+  - [x] Fix the parallel `awk` parser-generation dependency exposed by the
+    H15 `-j4` matrix.  Explicit side-effect target recipes now suppress GNU
+    make's competing built-in `.y.c` rule.  Clean N64 and all rerun Malta
+    builds generate the parser once and complete in parallel.
+  - [x] Build and retain the H15 GCC-kernel/PCC-VR4300-hard-float a.out N64
+    image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h15-switch-table-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `22b608a0ee40a066b95e88e4f79808d1dc61d0c9ce1b3c3c6248ba75f0de4496`.
+    The GCC kernel is byte-identical to H14, all seven runner/benchmark
+    executables have no undefined symbols, and the 6144 KiB rootfs passes all
+    five `fsutil` phases with 360 files.  The source and fallback all-tests
+    script contain `misc__switchtable001`, but a later audit found that the
+    primary C runner did not yet include it.
+  - [x] Run the first H15 image on physical N64.  The supplied excerpt starts
+    at Linpack, but both benchmark self-tests, every visible GCC/PCC benchmark
+    RC, `N64_PCC_DEBUG_END`, and `N64_PCC_DEBUG_RUNNER_RC` are zero and the
+    terminal marker is present.  PCC Linpack averages 3822.356 KFLOPS, 86.31%
+    of GCC and within noise of H14.  The target `switch` kernel falls from
+    3.113 to 3.020 Miter/s (-2.99%), however, so do not commit this version.
+    This run does not close the new test's physical correctness gate because
+    the primary C runner omission above prevented it from executing.
+  - [x] Diagnose the H15 `switch` regression.  A computed-goto critical edge
+    made pass2 abandon SSA for the whole function.  That removed the existing
+    `input_a` and `input_b` pointer inductions from the benchmark loop and
+    recomputed both addresses on every iteration.
+  - [x] Implement H15b without a whole-function SSA fallback.  Keep ordinary
+    critical-edge splitting unchanged; for an unretargetable computed goto,
+    emit its destination phi copies before dispatch.  Extend
+    `misc__switchtable001` with a loop carrying an accumulator and a symbol
+    address induction, and require the pointer increment in host assembly.
+  - [x] Verify H15b statically and dynamically.  `bench_switch` now has 82
+    instructions, 74 non-NOP instructions, eight NOPs, three branches, and 12
+    jumps, while restoring both pointer inductions.  Host hard-float a.out,
+    341/344 cross compile with the same three expected failures, 304/304
+    runtime tests, and all six full PCC-kernel/PCC-rootfs QEMU profiles pass.
+  - [x] Add `misc__switchtable001` to the primary hardware C runner, not just
+    the rootfs source list and fallback all-tests script.  Audit the linked
+    runner for the literal test name before releasing the replacement image.
+  - [x] Build and retain the final H15b GCC-kernel/PCC-VR4300-hard-float a.out
+    N64 image at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h15b-switch-ssa-runner-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `bd7cc9e47e720b896748b3231a7617173a047190ee2e87162f7dc08aaad60db7`.
+    The runner SHA-256 is
+    `922b9b9b305a32664cd4e32849d5cb1e0bec4bfe9d26b993ce5e9a2e69a40c3c`
+    and contains the switch-test name.  The GCC kernel is byte-identical to
+    H14/H15, all seven runner/benchmark executables have no undefined symbols,
+    and the rootfs passes all five `fsutil` phases with 360 files.
+  - [x] Run H15b on physical N64.  The supplied excerpt begins at Linpack, but
+    the audited C runner executes `misc__switchtable001` before the benchmarks
+    and its aggregate `N64_PCC_DEBUG_END` is zero.  Both benchmark self-tests,
+    every GCC/PCC benchmark RC, `N64_PCC_DEBUG_RUNNER_RC`, and the terminal
+    marker also pass.  The target `switch` result is 3.190 Miter/s, 2.47% above
+    H14 and 5.63% above the rejected H15, reaching 64.46% of GCC.  PCC Linpack
+    averages 3805.275 KFLOPS, within 0.05% of H14 and 86.37% of GCC.  All other
+    general kernels remain within 0.89% of H14.  Keep `-mfix4300` enabled and
+    close the H15b commit gate.
+  - [x] Experiment H16 with filling interlocked integer HI/LO latency without
+    adding a pass2 or backend-IR scheduler.  After the existing late
+    peepholes, scan at most eight consecutive parsed register-only
+    instructions after `mfhi`/`mflo` and pull up at most two independent,
+    non-trapping GPR operations.  Stop at
+    labels, memory, control transfers, and unknown instructions; reject
+    `$sp`, `$ra`, result-register, RAW, WAR, and WAW conflicts.  Enable this
+    only for VR4300 and MIPS32R2 and keep generic MIPS3 byte-identical.
+  - [x] Add positive, dependency-negative, and generic-MIPS3 host assembly
+    gates.  Numeric 32-bit `li` is accepted because it can provide both
+    required separation instructions when expanded by the assembler.  Use
+    only `strtol`/`strtoul`, which are present in the native ReBSD libc; the
+    first Malta64 build caught and rejected an accidental dependency on
+    unavailable `strtoll`/`strtoull`.
+  - [x] Verify H16 statically and dynamically.  General-corpus and Linpack
+    instruction, NOP, load/store, branch, multiply/divide, source-byte, and
+    linked `.text` counts are unchanged.  Host smoke passes; cross regression
+    reports 341/344 compile passes with the same three expected target
+    limitations and 304/304 runtime passes.  All six full PCC-kernel and
+    PCC-rootfs Malta64/Malta/MaltaEL hard/soft QEMU profiles pass
+    `pcc-smoke-all.sh` with zero failures and final RC zero.
+  - [x] Build and retain the H16 GCC-kernel/PCC-VR4300-hard-float a.out N64
+    candidate at
+    `/Users/sash/Work/N64/retrobsd-build/n64-h16-hilo-lookahead-kgcc-upcc-hard-aout/obj/sys/mips/n64/pcc-debug.z64`,
+    size 6619136 bytes and SHA-256
+    `15bebd6a21a772a861d49f645959ada5073e85e11fa0d5cb1c8b369b4e298bb1`.
+    The GCC kernel is byte-identical to H15b, all seven runner/benchmark
+    executables have zero undefined symbols, and the 6144 KiB rootfs passes
+    all five `fsutil` phases with 360 files.
+  - [x] Run H16 on physical N64 and reject it.  Both benchmark self-tests,
+    every GCC/PCC return code, `N64_PCC_DEBUG_END 0`,
+    `N64_PCC_DEBUG_RUNNER_RC 0`, and the terminal `N64_PCC_DEBUG_RC_END` pass.
+    The target `const_div` result remains exactly 0.984 Mwork/s.  All other
+    general results are within -0.90% to +0.88% of H15b, and PCC Linpack
+    averages 3791.153 KFLOPS, 0.37% below H15b and 85.23% of the same-run GCC
+    mean.  Isolated kernels remain within 0.70%, confirming timing noise rather
+    than a pipeline gain.  Remove the 183-line driver scheduler and its host
+    probes instead of growing the compiler for no measured benefit.  Retain
+    this result as a negative experiment; H15b remains the selected baseline,
+    with its existing default `-mfix4300` behavior unchanged.
 
 Success criteria:
 

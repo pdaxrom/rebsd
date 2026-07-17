@@ -242,6 +242,44 @@ printed `ehci: recovered periodic schedule with 2 QHs`, restored `USBCMD` to
 `0x31`, and keyboard and storage operation continued. The capture is
 `docs/usb-logs/ci20-ehci-periodic-recovery-verified-20260716.txt`.
 
+## Known JZ4780 WAIT Workaround and Follow-up
+
+USB storage write stress exposed a board-level idle failure which initially
+looked like a dead EHCI or filesystem path. Both the USB keyboard and UART
+stopped accepting input, disconnecting or reconnecting USB devices produced
+no log output, and the machine printed no panic. An FT2232D/XBurst JTAG halt
+followed by resume restored both UART and USB operation. This distinguishes
+the failure from an EHCI-only stall and is consistent with the JZ4780 core
+remaining asleep across a lost interrupt wakeup. The FT2232D wiring, patched
+OpenOCD-XBurst build, one-shot probes, persistent debug-server workflow, and
+safe snapshot procedure are documented in `tools/ci20/README.md`.
+
+The Ci20 scheduler enters `idle()` with interrupts disabled. The old code
+called `spl0()` and then executed `WAIT`; an interrupt becoming pending around
+that transition can leave XBurst1 asleep with `Cause.IP2` pending. The current
+Ci20-specific workaround in `sys/mips/ci20/machdep.c` keeps the short
+interrupt-enabled idle window but executes `nop` instead of `WAIT`. The
+intentional `WAIT` in the final halt/reboot loop is not affected. This avoids
+lost TCU wakeups at the cost of higher idle CPU and board power consumption.
+
+The merged GCC image with SHA-256
+`f8efa97ac06a4dda0db46e9f17d0c18c4f74b6bc590f10857a7e15395d44535d`
+passed its Ci20 hardware gate on 2026-07-17 with this workaround present.
+
+Reenabling low-power `WAIT` remains explicit future work. Do not remove the
+workaround until all of these items are complete:
+
+1. capture CP0 Status/Cause and the JZ4780 INTC/TCU pending state immediately
+   before and after the idle transition, using the checked-in XBurst tools;
+2. implement a JZ4780-specific, race-free idle sequence with the required CP0
+   interrupt ordering and execution-hazard barriers, rather than changing the
+   generic USB, disk, or scheduler paths;
+3. pass repeated cold and warm boots with a populated high-speed hub, keyboard
+   input, FAT write/overwrite/sync traffic, UART input, and child plus complete
+   hub reconnects without using JTAG halt/resume as recovery;
+4. compare idle current and CPU utilization before and after restoring
+   `WAIT`, so the low-power benefit is measured rather than assumed.
+
 ## Programming Manual Cross-check
 
 The checked-in `docs/JZ4780_pm.pdf` is 16,628,911 bytes with SHA-256

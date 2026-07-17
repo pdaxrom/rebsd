@@ -27,6 +27,9 @@
 #include <math.h>
 #include <sys/time.h>
 #include <float.h>
+#ifdef LINPACK_KERNEL_BENCH
+#include <limits.h>
+#endif
 
 #define DP
 
@@ -60,10 +63,14 @@ static REAL ddot_ur  (int n,REAL *dx,int incx,REAL *dy,int incy);
 static void dscal_ur (int n,REAL da,REAL *dx,int incx);
 static int  idamax   (int n,REAL *dx,int incx);
 static REAL second   (void);
+#ifdef LINPACK_KERNEL_BENCH
+static int  kernel_bench_main(void);
+#endif
 
 static void *mempool;
 
 
+#ifndef LINPACK_KERNEL_BENCH
 int main(void)
 {
     char    *arsize_input, *min_seconds_input;
@@ -117,6 +124,12 @@ int main(void)
         printf("\n");
         return 0;
 }
+#else
+int main(void)
+{
+    return kernel_bench_main();
+}
+#endif
 
 
 static REAL linpack(long nreps,int arsize)
@@ -888,3 +901,256 @@ static REAL second(void)
         return ZERO;
     return ((REAL)tv.tv_sec + (REAL)tv.tv_usec / 1000000.0);
     }
+
+#ifdef LINPACK_KERNEL_BENCH
+
+typedef REAL (*kernel_bench_fn)(long);
+typedef void (*kernel_daxpy_fn)(int, REAL, REAL *, int, REAL *, int);
+typedef REAL (*kernel_ddot_fn)(int, REAL *, int, REAL *, int);
+typedef void (*kernel_dscal_fn)(int, REAL, REAL *, int);
+typedef int (*kernel_idamax_fn)(int, REAL *, int);
+
+static kernel_daxpy_fn volatile kernel_daxpy_r_fn = daxpy_r;
+static kernel_daxpy_fn volatile kernel_daxpy_ur_fn = daxpy_ur;
+static kernel_ddot_fn volatile kernel_ddot_r_fn = ddot_r;
+static kernel_ddot_fn volatile kernel_ddot_ur_fn = ddot_ur;
+static kernel_dscal_fn volatile kernel_dscal_r_fn = dscal_r;
+static kernel_dscal_fn volatile kernel_dscal_ur_fn = dscal_ur;
+static kernel_idamax_fn volatile kernel_idamax_ptr = idamax;
+
+static REAL *kernel_x;
+static REAL *kernel_y;
+static void *kernel_mempool;
+static int kernel_n;
+static REAL kernel_min_seconds;
+static volatile REAL kernel_sink;
+
+static int
+kernel_close(REAL actual, REAL expected)
+{
+    REAL limit;
+
+    limit = 1.0e-10 * (fabs((double)expected) + ONE);
+    return fabs((double)(actual - expected)) <= limit;
+}
+
+static void
+kernel_init_vectors(void)
+{
+    int i;
+
+    for (i = 0; i <= kernel_n; i++) {
+        kernel_x[i] = (REAL)((i % 17) - 8) / 17.0;
+        kernel_y[i] = (REAL)((i % 13) - 6) / 13.0;
+    }
+}
+
+static int
+kernel_selftest(void)
+{
+    REAL actual, expected, x[8], y[8];
+    int i, index;
+
+    for (i = 0; i < 8; i++) {
+        x[i] = (REAL)(i + 1);
+        y[i] = (REAL)(8 - i);
+    }
+    expected = ZERO;
+    for (i = 0; i < 8; i++)
+        expected += x[i] * y[i];
+    actual = ddot_r(8, x, 1, y, 1);
+    if (!kernel_close(actual, expected))
+        return 1;
+    actual = ddot_ur(8, x, 1, y, 1);
+    if (!kernel_close(actual, expected))
+        return 2;
+
+    daxpy_r(8, 0.5, x, 1, y, 1);
+    for (i = 0; i < 8; i++)
+        if (!kernel_close(y[i], (REAL)(8 - i) + 0.5 * x[i]))
+            return 3;
+    for (i = 0; i < 8; i++)
+        y[i] = (REAL)(8 - i);
+    daxpy_ur(8, 0.5, x, 1, y, 1);
+    for (i = 0; i < 8; i++)
+        if (!kernel_close(y[i], (REAL)(8 - i) + 0.5 * x[i]))
+            return 4;
+
+    dscal_r(8, 0.5, x, 1);
+    for (i = 0; i < 8; i++)
+        if (!kernel_close(x[i], 0.5 * (REAL)(i + 1)))
+            return 5;
+    for (i = 0; i < 8; i++)
+        x[i] = (REAL)(i + 1);
+    dscal_ur(8, 0.5, x, 1);
+    for (i = 0; i < 8; i++)
+        if (!kernel_close(x[i], 0.5 * (REAL)(i + 1)))
+            return 6;
+
+    for (i = 0; i < 8; i++)
+        x[i] = (REAL)i;
+    x[5] = -20.0;
+    index = idamax(8, x, 1);
+    if (index != 5) {
+        printf("LINPACK_KERNEL_SELFTEST_IDAMAX actual=%d x5=%.17g x7=%.17g\n",
+            index, x[5], x[7]);
+        return 7;
+    }
+    return 0;
+}
+
+static REAL
+kernel_daxpy_r(long reps)
+{
+    long i;
+
+    for (i = 0; i < reps; i++)
+        (*kernel_daxpy_r_fn)(kernel_n, 1.0e-6, kernel_x, 1, kernel_y, 1);
+    return kernel_y[0] + kernel_y[kernel_n - 1];
+}
+
+static REAL
+kernel_daxpy_ur(long reps)
+{
+    long i;
+
+    for (i = 0; i < reps; i++)
+        (*kernel_daxpy_ur_fn)(kernel_n, 1.0e-6, kernel_x, 1, kernel_y, 1);
+    return kernel_y[0] + kernel_y[kernel_n - 1];
+}
+
+static REAL
+kernel_ddot_r(long reps)
+{
+    REAL result;
+    long i;
+
+    result = ZERO;
+    for (i = 0; i < reps; i++)
+        result += (*kernel_ddot_r_fn)(kernel_n, &kernel_x[i & 1], 1,
+            &kernel_y[i & 1], 1);
+    return result;
+}
+
+static REAL
+kernel_ddot_ur(long reps)
+{
+    REAL result;
+    long i;
+
+    result = ZERO;
+    for (i = 0; i < reps; i++)
+        result += (*kernel_ddot_ur_fn)(kernel_n, &kernel_x[i & 1], 1,
+            &kernel_y[i & 1], 1);
+    return result;
+}
+
+static REAL
+kernel_dscal_r(long reps)
+{
+    long i;
+
+    for (i = 0; i < reps; i++)
+        (*kernel_dscal_r_fn)(kernel_n, 0.999999, kernel_x, 1);
+    return kernel_x[0] + kernel_x[kernel_n - 1];
+}
+
+static REAL
+kernel_dscal_ur(long reps)
+{
+    long i;
+
+    for (i = 0; i < reps; i++)
+        (*kernel_dscal_ur_fn)(kernel_n, 0.999999, kernel_x, 1);
+    return kernel_x[0] + kernel_x[kernel_n - 1];
+}
+
+static REAL
+kernel_idamax(long reps)
+{
+    long i;
+    int result;
+
+    result = 0;
+    for (i = 0; i < reps; i++)
+        result += (*kernel_idamax_ptr)(kernel_n, &kernel_x[i & 1], 1);
+    return (REAL)result;
+}
+
+static int
+kernel_run(const char *name, kernel_bench_fn fn)
+{
+    REAL elapsed, melem, result, start;
+    long reps;
+
+    reps = 1;
+    for (;;) {
+        kernel_init_vectors();
+        start = second();
+        result = fn(reps);
+        elapsed = second() - start;
+        if (elapsed >= kernel_min_seconds)
+            break;
+        if (reps > LONG_MAX / 2) {
+            printf("LINPACK_KERNEL_ERROR %s repetition-overflow\n", name);
+            return 1;
+        }
+        reps *= 2;
+    }
+    kernel_sink += result;
+    melem = (REAL)reps * (REAL)kernel_n / (elapsed * 1000000.0);
+    printf("LINPACK_KERNEL_RESULT %s reps=%ld seconds=%.6f "
+        "melem_s=%.3f checksum=%.9e\n",
+        name, reps, elapsed, melem, result);
+    return 0;
+}
+
+static int
+kernel_bench_main(void)
+{
+    char *input;
+    unsigned long aligned;
+    size_t bytes;
+    int fails, selftest;
+
+    input = getenv("LINPACK_KERNEL_ARRAY_SIZE");
+    kernel_n = input == NULL ? 120 : atoi(input);
+    input = getenv("LINPACK_KERNEL_MIN_SECONDS");
+    kernel_min_seconds = input == NULL ? ONE : (REAL)atof(input);
+    if (kernel_n < 10 || kernel_n > 4096 || kernel_min_seconds <= ZERO) {
+        printf("LINPACK_KERNEL_CONFIG_ERROR n=%d min_seconds=%.6f\n",
+            kernel_n, kernel_min_seconds);
+        return 1;
+    }
+    bytes = (size_t)(kernel_n + 1) * sizeof(*kernel_x);
+    kernel_mempool = malloc(bytes * 2 + sizeof(*kernel_x) - 1);
+    if (kernel_mempool == NULL) {
+        printf("LINPACK_KERNEL_ALLOC_ERROR n=%d\n", kernel_n);
+        return 2;
+    }
+    aligned = ((unsigned long)kernel_mempool + sizeof(*kernel_x) - 1) &
+        ~((unsigned long)sizeof(*kernel_x) - 1);
+    kernel_x = (REAL *)aligned;
+    kernel_y = kernel_x + kernel_n + 1;
+
+    printf("LINPACK_KERNEL_BEGIN n=%d min_seconds=%.3f\n",
+        kernel_n, kernel_min_seconds);
+    selftest = kernel_selftest();
+    printf("LINPACK_KERNEL_SELFTEST %d\n", selftest);
+    fails = selftest != 0;
+    if (!fails) {
+        fails += kernel_run("daxpy_r", kernel_daxpy_r);
+        fails += kernel_run("daxpy_ur", kernel_daxpy_ur);
+        fails += kernel_run("ddot_r", kernel_ddot_r);
+        fails += kernel_run("ddot_ur", kernel_ddot_ur);
+        fails += kernel_run("dscal_r", kernel_dscal_r);
+        fails += kernel_run("dscal_ur", kernel_dscal_ur);
+        fails += kernel_run("idamax", kernel_idamax);
+    }
+    printf("LINPACK_KERNEL_SINK %.9e\n", kernel_sink);
+    printf("LINPACK_KERNEL_END %d\n", fails);
+    free(kernel_mempool);
+    return fails ? 1 : 0;
+}
+
+#endif

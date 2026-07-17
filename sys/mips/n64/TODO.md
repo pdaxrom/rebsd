@@ -231,7 +231,26 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   Cross/native regressions and all six full QEMU profiles pass.
 - [x] Build the clean G5 GCC-kernel/PCC-hard-float a.out image; its PCC
   Linpack is 39632 section bytes, 336 fewer than G4.
-- [ ] Hardware-benchmark the clean G5 image before continuing backend work.
+- [x] Hardware-benchmark the clean G5 image before continuing backend work.
+- [x] G6: promote scalar/pointer stack parameters in already selected bounded
+  hard-float specializations.  VR4300 and MIPS32R2 Linpack each remove 26
+  repeated loads; strict Malta64 A/B improves 2.41%, and cross/native
+  regressions plus all six full QEMU profiles pass.
+- [x] Build the clean G6 GCC-kernel/PCC-hard-float a.out image; `fsutil --check`
+  passes and PCC Linpack is 39648 section bytes, 16 bytes above G5.
+- [x] Hardware-benchmark the clean G6 image.  The stable row is 3404.961 PCC
+  versus 4367.120 GCC KFLOPS, or 77.97%; PCC improves 3.86% over G5 with an
+  effectively unchanged GCC control.
+- [x] G7: lower repeated VR4300 hard-float affine indexed addresses to
+  loop-carried pointers.  Linpack removes 97 instructions and isolated
+  Malta64 A/B improves 0.35%; MIPS32R2 was measured, regressed 0.303%, and is
+  disabled.  Cross/native regressions and all six full QEMU profiles pass.
+- [x] Build the clean G7 GCC-kernel/PCC-hard-float a.out image at
+  `/Users/sash/Work/N64/retrobsd-build/n64-g7-pointer-induction-kgcc-upcc-hard-aout/pcc-debug.z64`;
+  `fsutil --check` passes and PCC Linpack is 39200 section bytes.
+- [x] Hardware-benchmark the clean G7 image.  The stable row is 3631.062 PCC
+  versus 4453.809 GCC KFLOPS, or 81.53%; PCC improves 6.64% over G6 and all
+  Linpack/debug status markers pass.
 - [x] Boot-isolate the updated N64 kernel/rootfs path on real hardware with
   UART-only minimal ROMs: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap
   all reached login on 2026-07-06.  The minimal rootfs now includes

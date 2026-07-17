@@ -17,10 +17,12 @@ awk:            $(FILES) awk.g.o
 		${SIZE} awk.elf
 		${ELF2AOUT} awk.elf $@ && rm awk.elf
 
-awk.g.c:        $(AWK_SRCDIR)/awk.g.y
-		$(YACC) -d -o $@ $<
+awk.g.stamp:	$(AWK_SRCDIR)/awk.g.y
+		$(YACC) -d -o awk.g.c $<
+		@test -f awk.g.h
+		touch $@
 
-awk.g.h:        awk.g.c
+awk.g.c awk.g.h:	awk.g.stamp
 		@test -f $@
 
 awk.h:          awk.g.h
@@ -30,9 +32,9 @@ $(FILES):	awk.h awk.def.h
 
 awk.lx.o:	CFLAGS += -Wno-error
 awk.lx.o:	awk.lx.c
-awk.g.o:	awk.g.c
+awk.g.o:	awk.g.c awk.g.h
 
-.SECONDARY:	awk.lx.c awk.g.c
+.SECONDARY:	awk.lx.c awk.g.c awk.g.h
 
 token.h:	awk.h tokenscript
 		ex - < $(AWK_SRCDIR)/tokenscript
@@ -53,4 +55,4 @@ proctab.c:	proc.c token.h awk.h
 
 clean:
 		-rm -f *.o *.tmp awk.g.c awk.g.h awk.lx.c *.out *.elf *.dis \
-		    y.tab.* awk.h proc proctab.c token.h awk
+		    awk.g.stamp y.tab.* awk.h proc proctab.c token.h awk

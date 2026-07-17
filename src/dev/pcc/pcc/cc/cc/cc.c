@@ -1448,6 +1448,47 @@ mips_is_fpu_load(const char *op)
 }
 
 static int
+mips_is_int_store(const char *op)
+{
+	return strcmp(op, "sb") == 0 || strcmp(op, "sh") == 0 ||
+	    strcmp(op, "sw") == 0 || strcmp(op, "sd") == 0 ||
+	    strcmp(op, "swl") == 0 || strcmp(op, "swr") == 0;
+}
+
+static int
+mips_is_fpu_store(const char *op)
+{
+	return strcmp(op, "s.s") == 0 || strcmp(op, "s.d") == 0 ||
+	    strcmp(op, "swc1") == 0 || strcmp(op, "sdc1") == 0;
+}
+
+/*
+ * GAS expands a load or store of a bare symbol through $at.  Keep that
+ * hidden dependency visible to the assembly scheduler.
+ */
+static int
+mips_symbol_memory_uses_at(const char *line)
+{
+	char op[16];
+	const char *s;
+
+	if (!mips_parse_opcode(line, op, sizeof(op)) ||
+	    (!mips_is_int_load(op) && !mips_is_fpu_load(op) &&
+	    !mips_is_int_store(op) && !mips_is_fpu_store(op)))
+		return 0;
+	s = mips_skip_space(line);
+	s += strlen(op);
+	while (*s != '\0' && *s != '\n' && *s != '#' && *s != ',')
+		++s;
+	if (*s++ != ',')
+		return 0;
+	for (; *s != '\0' && *s != '\n' && *s != '#'; ++s)
+		if (*s == '(')
+			return 0;
+	return 1;
+}
+
+static int
 mips_alias_gpr(const char *name, size_t len)
 {
 	static const struct {
@@ -1754,6 +1795,8 @@ mips_line_touches_gpr(const char *line, unsigned long long regs)
 	const char *s;
 	int r;
 
+	if ((regs & (1ULL << 1)) != 0 && mips_symbol_memory_uses_at(line))
+		return 1;
 	if (mips_parse_opcode(line, op, sizeof(op)) &&
 	    (strcmp(op, "jal") == 0 || strcmp(op, "jalr") == 0) &&
 	    (regs & (1ULL << 31)) != 0)
@@ -2188,9 +2231,24 @@ mips_parse_simple_gpr_rw(const char *line, unsigned long long *writep,
 	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &dstreg) ||
 	    !mips_skip_comma(&s) ||
 	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &src1reg) ||
-	    !mips_skip_comma(&s) ||
-	    !mips_parse_gpr_operand(&s, tok, sizeof(tok), &src2reg) ||
-	    !mips_line_ends_after_operands(s))
+	    !mips_skip_comma(&s))
+		return 0;
+	if (!mips_parse_gpr_operand(&s, tok, sizeof(tok), &src2reg)) {
+		if (!mips_parse_tail_operand(s, imm, sizeof(imm), &comment))
+			return 0;
+		errno = 0;
+		val = strtol(imm, &end, 0);
+		if (errno != 0 || *end != '\0' ||
+		    (strcmp(op, "addu") == 0 &&
+		    (val < -32768 || val > 32767)) ||
+		    (strcmp(op, "subu") == 0 &&
+		    (val < -32767 || val > 32768)))
+			return 0;
+		*writep = 1ULL << dstreg;
+		*readp = 1ULL << src1reg;
+		return 1;
+	}
+	if (!mips_line_ends_after_operands(s))
 		return 0;
 	*writep = 1ULL << dstreg;
 	*readp = (1ULL << src1reg) | (1ULL << src2reg);
@@ -2575,7 +2633,7 @@ mips_parse_fpu_binary_src_regs(const char *line, unsigned long long *srcp)
 }
 
 static int
-mips_parse_fpu_move_rw(const char *line, struct mips_fpu_rw *rwp)
+mips_parse_fpu_move_regs(const char *line, int *dstp, int *srcp, int *pairp)
 {
 	char op[16];
 	const char *s;
@@ -2596,10 +2654,80 @@ mips_parse_fpu_move_rw(const char *line, struct mips_fpu_rw *rwp)
 	    !mips_parse_fpr_operand(&s, &src) ||
 	    !mips_line_ends_after_operands(s))
 		return 0;
+	*dstp = dst;
+	*srcp = src;
+	*pairp = pair;
+	return 1;
+}
+
+static int
+mips_parse_fpu_move_rw(const char *line, struct mips_fpu_rw *rwp)
+{
+	int dst, src, pair;
+
+	if (!mips_parse_fpu_move_regs(line, &dst, &src, &pair))
+		return 0;
 	rwp->read = mips_load_dest_for_reg(MIPS_LOAD_FPR, src, pair).regs;
 	rwp->write = mips_load_dest_for_reg(MIPS_LOAD_FPR, dst, pair).regs;
 	rwp->vr4300_cycles = 0;
 	return 1;
+}
+
+/*
+ * Forward a copied FP value into one known three-operand instruction.
+ * The caller proves that the copy destination has no other live use.
+ */
+static int
+mips_forward_fpu_move_source(const char *line, int from, int to, int pair,
+    char *out, size_t outsz)
+{
+	char op[16];
+	const char *s;
+	struct mips_fpu_rw rw;
+	size_t oplen;
+	int dst, src1, src2, op_pair;
+	int n;
+
+	if (!mips_parse_fpu_binary_rw(line, &rw) ||
+	    !mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	oplen = strlen(op);
+	op_pair = oplen != 0 && op[oplen - 1] == 'd';
+	if (op_pair != pair)
+		return 0;
+	s = mips_skip_space(line);
+	s += oplen;
+	if (!mips_parse_fpr_operand(&s, &dst) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_fpr_operand(&s, &src1) ||
+	    !mips_skip_comma(&s) ||
+	    !mips_parse_fpr_operand(&s, &src2) ||
+	    !mips_line_ends_after_operands(s) ||
+	    (src1 != from && src2 != from))
+		return 0;
+	if (src1 == from)
+		src1 = to;
+	if (src2 == from)
+		src2 = to;
+	n = snprintf(out, outsz, "\t%s $f%d,$f%d,$f%d%s",
+	    op, dst, src1, src2, s);
+	return n >= 0 && (size_t)n < outsz;
+}
+
+static int
+mips_fpu_overwrites_without_read(const char *line,
+    unsigned long long regs)
+{
+	struct mips_load_dest dest;
+	struct mips_fpu_rw rw;
+
+	dest = mips_load_dest(line);
+	if (dest.kind == MIPS_LOAD_FPR && (dest.regs & regs) == regs)
+		return 1;
+	if (!mips_parse_fpu_binary_rw(line, &rw) &&
+	    !mips_parse_fpu_move_rw(line, &rw))
+		return 0;
+	return (rw.write & regs) == regs && (rw.read & regs) == 0;
 }
 
 /* Fill an FP load-use gap with an independent register-only FP move. */
@@ -3012,10 +3140,15 @@ static int
 mips_can_move_to_plain_jump_delay(const char *line)
 {
 	char dst[16], src[16];
+	struct mips_fpu_rw rw;
 	int dstreg, srcreg;
 
 	if (mips_parse_move_gprs(line, dst, sizeof(dst), src, sizeof(src),
 	    &dstreg, &srcreg) || mips_is_jump_delay_gpr_alu(line))
+		return 1;
+	if ((mips_target.tune == MIPS_TUNE_VR4300 ||
+	    mips_target.isa == MIPS_ISA_MIPS32R2) &&
+	    mips_parse_fpu_move_rw(line, &rw))
 		return 1;
 	if (mips_target.tune == MIPS_TUNE_VR4300)
 		return mips_is_jump_delay_store(line);
@@ -3049,12 +3182,14 @@ mips_is_stack_adjust_addiu(const char *line)
 static int
 mips_can_move_to_int_branch_delay(const char *line, const char *branch)
 {
+	struct mips_fpu_rw fpu_rw;
 	unsigned long long writes, reads, branch_reads;
 	unsigned long long regs;
 
 	if (!mips_parse_int_branch_reads(branch, &branch_reads))
 		return 0;
-	if (mips_is_jump_delay_fp_store(line))
+	if (mips_is_jump_delay_fp_store(line) ||
+	    mips_parse_fpu_move_rw(line, &fpu_rw))
 		return 1;
 	if (!mips_parse_simple_gpr_rw(line, &writes, &reads))
 		return 0;
@@ -3113,6 +3248,32 @@ mips_can_move_to_plain_control_delay(const char *line, const char *control)
 		return !mips_line_touches_gpr(line, call_regs);
 	}
 	return mips_can_move_to_int_branch_delay(line, control);
+}
+
+/* Move one independent register instruction across an ineligible GPR op. */
+static int
+mips_can_move_across_gpr_to_control_delay(const char *candidate,
+    const char *middle, const char *control)
+{
+	struct mips_fpu_rw fpu_rw;
+	unsigned long long candidate_writes, candidate_reads;
+	unsigned long long middle_writes, middle_reads;
+
+	if (mips_target.tune != MIPS_TUNE_VR4300 &&
+	    mips_target.isa != MIPS_ISA_MIPS32R2)
+		return 0;
+	if (!mips_parse_simple_gpr_rw(middle, &middle_writes,
+	    &middle_reads) ||
+	    mips_can_move_to_plain_control_delay(middle, control) ||
+	    !mips_can_move_to_plain_control_delay(candidate, control))
+		return 0;
+	if (mips_parse_fpu_move_rw(candidate, &fpu_rw))
+		return 1;
+	if (!mips_parse_simple_gpr_rw(candidate, &candidate_writes,
+	    &candidate_reads))
+		return 0;
+	return (candidate_writes & (middle_writes | middle_reads)) == 0 &&
+	    (middle_writes & candidate_reads) == 0;
 }
 
 static int
@@ -3927,15 +4088,23 @@ mips_fold_late_peepholes(char *path)
 				    fgets(after, sizeof(after), in) != NULL &&
 				    fgets(mf, sizeof(mf), in) != NULL) {
 					delay = NULL;
-					if (!line_after_label &&
-					    mips_can_move_across_load_to_int_branch_delay(
-					    line, next, after))
+					if ((!line_after_label ||
+					    mips_target.tune == MIPS_TUNE_VR4300 ||
+					    mips_target.isa == MIPS_ISA_MIPS32R2) &&
+					    (mips_can_move_across_load_to_int_branch_delay(
+					    line, next, after) ||
+					    mips_can_move_across_gpr_to_control_delay(
+					    line, next, after)))
 						delay = line;
-					else if (!line_after_label &&
+					else if ((!line_after_label ||
+					    mips_target.tune == MIPS_TUNE_VR4300 ||
+					    mips_target.isa == MIPS_ISA_MIPS32R2) &&
 					    mips_fold_li_addiu_line(line, folded,
 					    sizeof(folded)) &&
-					    mips_can_move_across_load_to_int_branch_delay(
-					    folded, next, after))
+					    (mips_can_move_across_load_to_int_branch_delay(
+					    folded, next, after) ||
+					    mips_can_move_across_gpr_to_control_delay(
+					    folded, next, after)))
 						delay = folded;
 					if (delay != NULL && mips_is_nop(mf)) {
 						fputs(next, out);
@@ -3957,11 +4126,15 @@ mips_fold_late_peepholes(char *path)
 				}
 				clearerr(in);
 				delay = NULL;
-				if (!line_after_label &&
+				if ((!line_after_label ||
+				    mips_target.tune == MIPS_TUNE_VR4300 ||
+				    mips_target.isa == MIPS_ISA_MIPS32R2) &&
 				    mips_can_move_to_plain_control_delay(line,
 				    next))
 					delay = line;
-				else if (!line_after_label &&
+				else if ((!line_after_label ||
+				    mips_target.tune == MIPS_TUNE_VR4300 ||
+				    mips_target.isa == MIPS_ISA_MIPS32R2) &&
 				    mips_fold_li_addiu_line(line, folded,
 				    sizeof(folded)) &&
 				    mips_can_move_to_plain_control_delay(folded,
@@ -4036,6 +4209,168 @@ mips_fold_late_peepholes(char *path)
 }
 
 static int
+mips_forward_fpu_move_copies(char *path)
+{
+#define MIPS_FPU_FORWARD_SCAN	12
+	char line[4096], scan[4096], replay[4096], rewritten[4096];
+	FILE *in, *out;
+	const char *s;
+	char *tmp;
+	struct mips_fpu_rw move_rw, candidate_rw;
+	long after_move, scanpos, candidate_pos, resume_pos, replay_pos;
+	int dst, src, pair;
+	int found_candidate;
+	int success;
+	int changed;
+	int failed;
+	int prev_control;
+	int i;
+
+	tmp = mips_asm_temp_name(path);
+	if (tmp == NULL)
+		return 1;
+	in = fopen(path, "r");
+	if (in == NULL) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	out = fopen(tmp, "w");
+	if (out == NULL) {
+		fclose(in);
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+
+	changed = 0;
+	failed = 0;
+	prev_control = 0;
+	while (fgets(line, sizeof(line), in) != NULL) {
+		after_move = ftell(in);
+		if (prev_control || after_move == -1 ||
+		    !mips_parse_fpu_move_regs(line, &dst, &src, &pair) ||
+		    dst == src ||
+		    !mips_parse_fpu_move_rw(line, &move_rw) ||
+		    (move_rw.read & move_rw.write) != 0) {
+			fputs(line, out);
+			if (mips_is_instruction(line))
+				prev_control = mips_is_control_transfer(line);
+			continue;
+		}
+
+		found_candidate = 0;
+		success = 0;
+		candidate_pos = -1;
+		resume_pos = -1;
+		for (i = 0; i < MIPS_FPU_FORWARD_SCAN; i++) {
+			scanpos = ftell(in);
+			if (scanpos == -1 ||
+			    fgets(scan, sizeof(scan), in) == NULL) {
+				if (ferror(in))
+					failed = 1;
+				break;
+			}
+			s = mips_skip_space(scan);
+			if (*s == '\0' || *s == '\n' || *s == '#')
+				continue;
+			if (!mips_is_instruction(scan) ||
+			    mips_is_control_transfer(scan))
+				break;
+
+			if (!found_candidate) {
+				if (mips_forward_fpu_move_source(scan, dst, src,
+				    pair, rewritten, sizeof(rewritten))) {
+					if (!mips_parse_fpu_binary_rw(scan,
+					    &candidate_rw)) {
+						failed = 1;
+						break;
+					}
+					found_candidate = 1;
+					candidate_pos = scanpos;
+					if ((candidate_rw.write &
+					    move_rw.write) != 0) {
+						resume_pos = ftell(in);
+						success = resume_pos != -1;
+						break;
+					}
+					continue;
+				}
+				if (mips_line_touches_fpr(scan,
+				    move_rw.read | move_rw.write))
+					break;
+				continue;
+			}
+
+			if (!mips_line_touches_fpr(scan, move_rw.write))
+				continue;
+			if (mips_fpu_overwrites_without_read(scan,
+			    move_rw.write)) {
+				resume_pos = scanpos;
+				success = 1;
+			}
+			break;
+		}
+		if (failed)
+			break;
+
+		if (!success) {
+			if (fseek(in, after_move, SEEK_SET) == -1) {
+				failed = 1;
+				break;
+			}
+			fputs(line, out);
+			prev_control = 0;
+			continue;
+		}
+
+		if (fseek(in, after_move, SEEK_SET) == -1) {
+			failed = 1;
+			break;
+		}
+		while ((replay_pos = ftell(in)) != -1 &&
+		    replay_pos < resume_pos) {
+			if (fgets(replay, sizeof(replay), in) == NULL) {
+				failed = 1;
+				break;
+			}
+			fputs(replay_pos == candidate_pos ? rewritten : replay,
+			    out);
+		}
+		if (failed || replay_pos == -1 ||
+		    fseek(in, resume_pos, SEEK_SET) == -1) {
+			failed = 1;
+			break;
+		}
+		changed = 1;
+		prev_control = 0;
+	}
+
+	failed |= ferror(in) || ferror(out);
+	if (fclose(out) == EOF)
+		failed = 1;
+	if (fclose(in) == EOF)
+		failed = 1;
+	if (failed) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	if (changed) {
+		if (rename(tmp, path) == -1) {
+			unlink(tmp);
+			free(tmp);
+			return 1;
+		}
+	} else {
+		unlink(tmp);
+	}
+	free(tmp);
+	return 0;
+#undef MIPS_FPU_FORWARD_SCAN
+}
+
+static int
 mips_postprocess_asm(char *path)
 {
 	int i;
@@ -4048,6 +4383,10 @@ mips_postprocess_asm(char *path)
 	if (mips_trim_load_delay_nops(path))
 		return 1;
 	if (mips_fold_late_peepholes(path))
+		return 1;
+	if ((mips_target.tune == MIPS_TUNE_VR4300 ||
+	    mips_target.isa == MIPS_ISA_MIPS32R2) &&
+	    mips_forward_fpu_move_copies(path))
 		return 1;
 	if (mips_target.tune == MIPS_TUNE_VR4300 &&
 	    mips_trim_load_delay_nops(path))

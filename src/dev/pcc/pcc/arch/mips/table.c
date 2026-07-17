@@ -100,25 +100,38 @@
 #define NICALLB	NEEDS(NREG(B, 1), NLEFT(T9))
 #define NICALLC	NEEDS(NREG(C, 1), NLEFT(T9))
 #define XSLT9(c) NEEDS(NREG(c, 1), NSL(c), NLEFT(T9))
-#define MIPS_CALLER_SAVED_NEVER \
+#define MIPS_CALLER_SAVED_GPR_NEVER \
 	NEVER(V0), NEVER(V1), \
 	NEVER(A0), NEVER(A1), NEVER(A2), NEVER(A3), \
 	NEVER(T0), NEVER(T1), NEVER(T2), NEVER(T3), \
 	NEVER(T4), NEVER(T5), NEVER(T6), NEVER(T7), \
 	NEVER(T8), NEVER(T9)
-#define NSCAC	NEEDS(NREG(C, 1), NLEFT(A0), NRES(F0), \
-		    MIPS_CALLER_SAVED_NEVER)
+#define MIPS_CALLER_SAVED_FPR_NEVER \
+	NEVER(F0), NEVER(F2), NEVER(F4), NEVER(F6), NEVER(F8), \
+	NEVER(F10), NEVER(F12), NEVER(F14), NEVER(F16), NEVER(F18)
+#define MIPS_CALLER_SAVED_F0_RESULT_NEVER \
+	MIPS_CALLER_SAVED_GPR_NEVER, \
+	NEVER(F2), NEVER(F4), NEVER(F6), NEVER(F8), NEVER(F10), \
+	NEVER(F12), NEVER(F14), NEVER(F16), NEVER(F18)
+#define MIPS_CALLER_SAVED_NEVER \
+	MIPS_CALLER_SAVED_GPR_NEVER, MIPS_CALLER_SAVED_FPR_NEVER
 #define NSCBC	NEEDS(NREG(C, 1), NLEFT(A0A1), NRES(F0), \
-		    MIPS_CALLER_SAVED_NEVER)
+		    MIPS_CALLER_SAVED_F0_RESULT_NEVER)
 #ifdef os_rebsd
 #define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(V0V1), \
+		    MIPS_CALLER_SAVED_NEVER)
+#define NSCCA	NEEDS(NREG(A, 1), NLEFT(F0), NRES(V0), \
 		    MIPS_CALLER_SAVED_NEVER)
 #else
 #define NSCCB	NEEDS(NREG(B, 1), NLEFT(F0), NRES(A0A1), \
 		    MIPS_CALLER_SAVED_NEVER)
+#define NSCCA	NEEDS(NREG(A, 1), NLEFT(F0), NRES(V0), \
+		    MIPS_CALLER_SAVED_NEVER)
 #endif
 #define NABSL	NEEDS(NREG(A, 1), NREG(B, 1), NSL(A))
-#define NDIVB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1))
+/* ZE emits libpcc calls without CALL nodes, so declare ABI clobbers here. */
+#define NDIVB	NEEDS(NREG(B, 1), NLEFT(A0A1), NRIGHT(A2A3), NRES(V0V1), \
+		    MIPS_CALLER_SAVED_NEVER)
 #define NSHB	NEEDS(NREG(B, 1), NREG(A, 1))
 #define NSF_AA	NEEDS(NREG(A, 1), NLEFT(A0), NRES(V0), \
 		    MIPS_CALLER_SAVED_NEVER)
@@ -529,20 +542,21 @@ struct optab table[] = {
 { SCONV,	INCREG,
 	SAREG,	TUWORD,
 	SCREG,	TFLOAT,
-		NSCAC,	RESC1,
-		"ZF", },
+		NEEDS(NREG(C, 2)),	RESC1,
+		"Zd", },
 
 { SCONV,	INCREG,
 	SAREG,	TUWORD,
 	SCREG,	TDOUBLE|TLDOUBLE,
-		NSCAC,	RESC1,
-		"ZF", },
+		NEEDS(NREG(C, 2)),	RESC1,
+		"Zd", },
 
 #ifdef os_rebsd
 { SCONV,	INCREG,
 	SCREG,	TDOUBLE|TLDOUBLE,
 	SCREG,	TFLOAT,
-		NEEDS(NREG(C, 1), NRES(F0), MIPS_CALLER_SAVED_NEVER),	RESC1,
+			NEEDS(NREG(C, 1), NRES(F0),
+			    MIPS_CALLER_SAVED_F0_RESULT_NEVER),	RESC1,
 		"	mov.d $f12,AL	# convert (l)double to float via helper\n"
 		"Za"
 		"	jal __truncdfsf2\n"
@@ -591,24 +605,36 @@ struct optab table[] = {
 
 { SCONV,	INAREG,
 	SCREG,	TFLOAT,
-	SAREG,	TWORD,
+	SAREG,	TUWORD,
+		NSCCA,	RESC1,
+		"ZF", },
+
+{ SCONV,	INAREG,
+	SCREG,	TFLOAT,
+	SAREG,	TSWORD,
 		NCA,	RESC1,
-		"	cvt.w.s A2,AL	# convert float to (u)int\n"
+		"	trunc.w.s A2,AL	# convert float to int\n"
 		"	mfc1 A1,A2\n"
 		"	nop\n", },
 
 { SCONV,	FOREFF,
 	SCREG,	TFLOAT,
-	SOREG,	TWORD,
+	SOREG,	TSWORD,
 		NCREG,	RDEST,
-		"	cvt.w.s A1,AL	# convert float to (u)int\n"
+		"	trunc.w.s A1,AL	# convert float to int\n"
 		"	s.s A1,AR\n", },
 
 { SCONV,	INAREG,
 	SCREG,	TDOUBLE|TLDOUBLE,
-	SAREG,	TWORD,
+	SAREG,	TUWORD,
+		NSCCA,	RESC1,
+		"ZF", },
+
+{ SCONV,	INAREG,
+	SCREG,	TDOUBLE|TLDOUBLE,
+	SAREG,	TSWORD,
 		NCA,	RESC1,
-		"	cvt.w.d A2,AL	# convert (l)double to (u)int\n"
+		"	trunc.w.d A2,AL	# convert (l)double to int\n"
 		"	mfc1 A1,A2\n"
 		"	nop\n", },
 
@@ -762,6 +788,18 @@ struct optab table[] = {
 
 { DIV,	INAREG,
 	SAREG,	TUWORD|TUSHORT|TUCHAR,
+	SPUDIVCON,	TANY,
+		NAREG,	RESC1,
+		"Ze", },
+
+{ DIV,	INAREG,
+	SAREG,	TSWORD|TSHORT|TCHAR,
+	SPSDIVCON,	TANY,
+		NAREG,	RESC1,
+		"Zf", },
+
+{ DIV,	INAREG,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
 	SAREG,	TUWORD|TUSHORT|TUCHAR,
 		NARL,	RESC1,
 		"	divu AL,AR	# unsigned division\n"
@@ -820,6 +858,18 @@ struct optab table[] = {
 	SPOW2CON,	TANY,
 		XSL(A),	RESC1,
 		"ZW", },
+
+{ MOD,	INAREG,
+	SAREG,	TUWORD|TUSHORT|TUCHAR,
+	SPUDIVCON,	TANY,
+		NAREG,	RESC1,
+		"Ze", },
+
+{ MOD,	INAREG,
+	SAREG,	TSWORD|TSHORT|TCHAR,
+	SPSDIVCON,	TANY,
+		NAREG,	RESC1,
+		"Zf", },
 
 { MOD,	INAREG,
 	SAREG,	TUWORD|TUSHORT|TUCHAR,
@@ -1052,7 +1102,7 @@ struct optab table[] = {
 { OPSIMP,	INBREG,
 	SBREG,	TLONGLONG|TULONGLONG,
 	SBREG,	TLONGLONG|TULONGLONG,
-		NBRL,	RESC1,
+		NBREG,	RESC1,
 		"	O A1,AL,AR\n"
 		"	O U1,UL,UR\n", },
     

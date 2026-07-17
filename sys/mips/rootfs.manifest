@@ -176,6 +176,11 @@ file /root/linpack.c
 file /root/linpack-smoke.sh
 mode 0775
 
+file /root/mips-compiler-bench.c
+
+file /root/mips-compiler-bench-smoke.sh
+mode 0775
+
 file /root/native-pcc-smoke.sh
 mode 0775
 

@@ -263,6 +263,11 @@ cfg_verify_no_critical_edges(struct p2env *p2e)
 	DLIST_FOREACH(bb, &p2e->bblocks, bbelem) {
 		if (children_total(bb) <= 1)
 			continue;
+		/* Computed-goto phi copies are lowered before the dispatch. */
+		if (bb->last->type == IP_NODE &&
+		    bb->last->ip_node->n_op == GOTO &&
+		    bb->last->ip_node->n_left->n_op != ICON)
+			continue;
 		SLIST_FOREACH(cn, &bb->child, chld)
 			if (parents_total(cn->bblock) > 1)
 				comperr("SSA critical edge remains from block %d to block %d",

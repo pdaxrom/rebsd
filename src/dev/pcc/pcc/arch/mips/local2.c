@@ -1240,6 +1240,27 @@ urempow2con(NODE *p)
 }
 
 static void
+mips_floatunsi(NODE *p)
+{
+	int done;
+
+	done = getlab2();
+	expand(p, 0, "\tmtc1 AL,A1\t# convert unsigned int to floating point\n");
+	printf("\tbgez ");
+	expand(p, 0, "AL,");
+	printf(LABFMT "\n", done);
+	expand(p, 0, "\tcvt.d.w A1,A1\n");
+	printf("\tli %s,0x41f00000\n", rnames[AT]);
+	expand(p, 0,
+	    "\tmtc1 $zero,A2\n"
+	    "\tmtc1 $at,U2\n"
+	    "\tadd.d A1,A1,A2\n");
+	deflab(done);
+	if (p->n_type == FLOAT)
+		expand(p, 0, "\tcvt.s.d A1,A1\n");
+}
+
+static void
 sdivpow2con(NODE *p)
 {
 	int shift = mips_con_log2(getlval(p->n_right));
@@ -1281,6 +1302,142 @@ srempow2con(NODE *p)
 		printf("%d\n", 32 - shift);
 	}
 	expand(p, 0, "\tsubu A1,A1,$at\n");
+}
+
+static void
+mips_udiv_magic(unsigned int divisor, unsigned int *magic, int *shift,
+    int *add)
+{
+	unsigned long long numerator, proposed, remainder;
+	unsigned int floor_log2;
+
+	floor_log2 = (unsigned int)mips_con_log2((CONSZ)divisor);
+	numerator = 1ULL << (32 + floor_log2);
+	proposed = numerator / divisor;
+	remainder = numerator % divisor;
+	*add = divisor - (unsigned int)remainder >= (1U << floor_log2);
+	if (*add) {
+		proposed *= 2;
+		if (remainder * 2 >= divisor)
+			proposed++;
+	}
+	*magic = (unsigned int)(proposed + 1);
+	*shift = (int)floor_log2;
+}
+
+static void
+mips_sdiv_magic(int divisor, unsigned int *magic, int *shift)
+{
+	unsigned long long q1, r1, q2, r2, delta;
+	unsigned int ad, anc, p, t;
+
+	ad = divisor < 0 ? 0U - (unsigned int)divisor :
+	    (unsigned int)divisor;
+	t = 0x80000000U + ((unsigned int)divisor >> 31);
+	anc = t - 1 - t % ad;
+	p = 31;
+	q1 = 0x80000000ULL / anc;
+	r1 = 0x80000000ULL % anc;
+	q2 = 0x80000000ULL / ad;
+	r2 = 0x80000000ULL % ad;
+	do {
+		p++;
+		q1 *= 2;
+		r1 *= 2;
+		if (r1 >= anc) {
+			q1++;
+			r1 -= anc;
+		}
+		q2 *= 2;
+		r2 *= 2;
+		if (r2 >= ad) {
+			q2++;
+			r2 -= ad;
+		}
+		delta = ad - r2;
+	} while (q1 < delta || (q1 == delta && r1 == 0));
+
+	*magic = (unsigned int)(q2 + 1);
+	if (divisor < 0)
+		*magic = 0U - *magic;
+	*shift = (int)p - 32;
+}
+
+static void
+mips_divcon_product(NODE *p, unsigned int divisor, int negative)
+{
+	int add, postshift, shift;
+
+	if (divisor <= 0x7fffffffU && mips_shiftadd_mul_ok(divisor)) {
+		mips_shiftadd_mul_plan(divisor, &shift, &postshift, &add);
+		printf("\tsll %s,", rnames[AT]);
+		expand(p, 0, "A1,");
+		printf("%d\n", shift);
+		printf("\t%s %s,%s,", add ? "addu" : "subu",
+		    rnames[AT], rnames[AT]);
+		expand(p, 0, "A1\t# rebuild constant-division product\n");
+		if (postshift != 0)
+			printf("\tsll %s,%s,%d\n", rnames[AT], rnames[AT],
+			    postshift);
+		if (negative)
+			printf("\tsubu %s,$zero,%s\n", rnames[AT], rnames[AT]);
+	} else {
+		printf("\tli %s,0x%08x\n", rnames[AT],
+		    negative ? 0U - divisor : divisor);
+		expand(p, 0, "\tmultu A1,$at\n");
+		printf("\tmflo %s\n", rnames[AT]);
+	}
+	expand(p, 0, "\tsubu A1,AL,$at\t# constant remainder\n");
+}
+
+static void
+mips_divcon(NODE *p, int unsig)
+{
+	unsigned int divisor, magic;
+	int add, negative, shift;
+
+	divisor = (unsigned int)getlval(p->n_right);
+	negative = 0;
+	if (unsig) {
+		mips_udiv_magic(divisor, &magic, &shift, &add);
+		printf("\tli %s,0x%08x\n", rnames[AT], magic);
+		expand(p, 0, "\tmultu AL,$at\t# unsigned constant division\n"
+		    "\tmfhi A1\n");
+		if (add) {
+			printf("\tsubu %s,", rnames[AT]);
+			expand(p, 0, "AL,A1\n");
+			printf("\tsrl %s,%s,1\n", rnames[AT], rnames[AT]);
+			expand(p, 0, "\taddu A1,A1,$at\n");
+		}
+		if (shift != 0) {
+			expand(p, 0, "\tsrl A1,A1,");
+			printf("%d\n", shift);
+		}
+	} else {
+		int signed_divisor = (int)divisor;
+		unsigned int magnitude;
+
+		negative = signed_divisor < 0;
+		magnitude = negative ? 0U - divisor : divisor;
+		mips_sdiv_magic(signed_divisor, &magic, &shift);
+		printf("\tli %s,0x%08x\n", rnames[AT], magic);
+		expand(p, 0, "\tmult AL,$at\t# signed constant division\n"
+		    "\tmfhi A1\n");
+		if (!negative && (magic & 0x80000000U) != 0)
+			expand(p, 0, "\taddu A1,A1,AL\n");
+		else if (negative && (magic & 0x80000000U) == 0)
+			expand(p, 0, "\tsubu A1,A1,AL\n");
+		if (shift != 0) {
+			expand(p, 0, "\tsra A1,A1,");
+			printf("%d\n", shift);
+		}
+		printf("\tsrl %s,", rnames[AT]);
+		expand(p, 0, "A1,31\n");
+		expand(p, 0, "\taddu A1,A1,$at\n");
+		divisor = magnitude;
+	}
+	if (p->n_op == MOD)
+		mips_divcon_product(p, divisor, negative);
 }
 
 void
@@ -1436,6 +1593,18 @@ zzzcode(NODE * p, int c)
 
 	case 'Y':		/* multiply by shift-add constant */
 		mulshiftaddcon(p);
+		break;
+
+	case 'd':		/* hard-float unsigned 32-bit conversion */
+		mips_floatunsi(p);
+		break;
+
+	case 'e':		/* unsigned division by a non-power-of-two constant */
+		mips_divcon(p, 1);
+		break;
+
+	case 'f':		/* signed division by a non-power-of-two constant */
+		mips_divcon(p, 0);
 		break;
 
 	case 'a':		/* save $ra around a leaf-only helper call */
@@ -2756,6 +2925,24 @@ special(NODE *p, int shape)
 		if (mips_shiftadd_mul_ok(val))
 			return SRDIR;
 		break;
+	case SPUDIVCON:
+		{
+		unsigned int divisor = (unsigned int)val;
+
+		if (divisor > 1 && !mips_is_pow2u(divisor))
+			return SRDIR;
+		}
+		break;
+	case SPSDIVCON:
+		{
+		int divisor = (int)(unsigned int)val;
+		unsigned int magnitude = divisor < 0 ?
+		    0U - (unsigned int)divisor : (unsigned int)divisor;
+
+		if (magnitude > 1 && !mips_is_pow2u(magnitude))
+			return SRDIR;
+		}
+		break;
 	}
 
 	return SRNOPE;
@@ -2920,4 +3107,26 @@ myxasm(struct interpass *ip, NODE *p)
 		return 0;
 	}
 	return 0;
+}
+
+void
+mips_xasm_targarg(char *w, void *arg, int n)
+{
+	NODE **ary = arg;
+	NODE *p;
+	int idx;
+
+	if (w[1] < '0' || w[1] > n + '0') {
+		uerror("bad xasm arg number %c", w[1]);
+		return;
+	}
+	idx = w[1] - '0';
+	if (idx == n)
+		idx--;
+	p = ary[idx]->n_left;
+	if (p->n_op != REG || GCLASS(p->n_rval) != CLASSC) {
+		uerror("paired FPU register required");
+		return;
+	}
+	print_reg64name(stdout, p->n_rval, 1);
 }

@@ -21,4 +21,18 @@ if test ! -x /root/linpack-pcc; then
 fi
 /root/linpack-pcc || exit 1
 
+if test "$LINPACK_KERNEL_BENCH" = 1; then
+    if test -x /root/linpack-kernels-gcc; then
+        echo "linpack kernel bench: gcc"
+        /root/linpack-kernels-gcc || exit 1
+    fi
+
+    echo "linpack kernel bench: pcc"
+    if test ! -x /root/linpack-kernels-pcc; then
+        echo "linpack kernel bench: missing /root/linpack-kernels-pcc"
+        exit 1
+    fi
+    /root/linpack-kernels-pcc || exit 1
+fi
+
 echo "linpack smoke ok"

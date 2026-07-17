@@ -444,8 +444,8 @@ typedef long long OFFSZ;
 	{ T2T3, T3T4, -1 },		/* $t3 */			\
 	{ T3T4, T4T5, -1 },		/* $t4 */			\
 	{ T4T5, T5T6, -1 },		/* $t5 */			\
-	{ T6T7, T7T8, -1 },		/* $t6 */			\
-	{ T7T8, T8T9, -1 },		/* $t7 */			\
+	{ T5T6, T6T7, -1 },		/* $t6 */			\
+	{ T6T7, T7T8, -1 },		/* $t7 */			\
 	\
 	{ S0S1, -1 },			/* $s0 */			\
 	{ S0S1, S1S2, -1 },		/* $s1 */			\
@@ -494,13 +494,33 @@ typedef long long OFFSZ;
 	{ -1 }, { -1 }, { -1 }, { -1 },					\
 	{ -1 }, { -1 }, { -1 }, 					\
 
-#define GCLASS(x)	(x < 32 ? CLASSA : (x < 52 ? CLASSB : CLASSC))
+#define GCLASS(x)	(x < 32 ? CLASSA : (x < 53 ? CLASSB : CLASSC))
 #define TARGET_OPTSTATS_FPR_CLASS(c)	((c) == CLASSC)
 #define TARGET_SSA_STRENGTH_REDUCE_MUL()	\
 	((mips_target.capabilities & MIPS_CAP_MUL3) == 0)
+#define TARGET_SSA_STRENGTH_REDUCE_MASKED_CONST_MUL()	\
+	(mips_target.isa == MIPS_ISA_MIPS32R2 || \
+	 mips_target.tune == MIPS_TUNE_VR4300)
+#define TARGET_SSA_STRENGTH_REDUCE_ADDRESS()	\
+	(mips_target.isa == MIPS_ISA_MIPS32R2 || \
+	 mips_target.tune == MIPS_TUNE_VR4300)
+#define TARGET_SSA_STRENGTH_REDUCE_ADDRESS_TYPE(t)	\
+	(ISPTR(t) && ((BTYPE(DECREF(t)) != FLOAT && \
+	 BTYPE(DECREF(t)) != DOUBLE && BTYPE(DECREF(t)) != LDOUBLE) || \
+	 (!mips_soft_float && mips_target.tune == MIPS_TUNE_VR4300)))
+#define TARGET_SSA_STRENGTH_REDUCE_SINGLE_ADDRESS(t)	\
+	(ISPTR(t) && !mips_soft_float && \
+	 mips_target.tune == MIPS_TUNE_VR4300 && \
+	 (BTYPE(DECREF(t)) == FLOAT || BTYPE(DECREF(t)) == DOUBLE || \
+	 BTYPE(DECREF(t)) == LDOUBLE))
+#define TARGET_SSA_STRENGTH_REDUCE_SINGLE_SYMBOL_ADDRESS(t)	\
+	TARGET_SSA_STRENGTH_REDUCE_ADDRESS_TYPE(t)
 #define TARGET_SSA_CSE_CONST_SHIFT()	\
 	(!mips_soft_float && (mips_target.isa == MIPS_ISA_MIPS32R2 || \
 	 mips_target.tune == MIPS_TUNE_VR4300))
+#define TARGET_SSA_LOWER_COUNTED_LOOP()	\
+	(mips_target.isa == MIPS_ISA_MIPS32R2 || \
+	 mips_target.tune == MIPS_TUNE_VR4300)
 #define PCLASS(p)	(1 << gclass((p)->n_type))
 #define DECRA(x,y)	(((x) >> (y*6)) & 63)   /* decode encoded regs */
 #define ENCRA(x,y)	((x) << (6+y*6))        /* encode regs in int */
@@ -532,10 +552,19 @@ const char *mips_target_error(const struct mips_target *);
 #define SPCON           (MAXSPECIAL+1)  /* positive constant */
 #define SPOW2CON        (MAXSPECIAL+2)  /* positive power-of-two constant */
 #define SSHADDCON       (MAXSPECIAL+3)  /* cheap shift-add multiply constant */
-#define SPUNUSEDSPECARG (MAXSPECIAL+4)  /* specialized literal call argument */
-#define SPARGREG        (MAXSPECIAL+5)  /* o32 integer argument register */
+#define SPUDIVCON       (MAXSPECIAL+4)  /* unsigned magic division constant */
+#define SPSDIVCON       (MAXSPECIAL+5)  /* signed magic division constant */
+#define SPUNUSEDSPECARG (MAXSPECIAL+6)  /* specialized literal call argument */
+#define SPARGREG        (MAXSPECIAL+7)  /* o32 integer argument register */
 
 #define TARGET_STDARGS
+#ifndef LANG_CXX
+#define TARGET_FABS mips_builtin_fabs
+#define MIPS_FABS_BUILTINS						\
+	{ "fabs", mips_builtin_fabs, 0, 1, fmaxt, DOUBLE },
+#else
+#define MIPS_FABS_BUILTINS
+#endif
 #define TARGET_BUILTINS							\
 	{ "__builtin_stdarg_start", mips_builtin_stdarg_start,	       \
 						0, 2, 0, VOID },	\
@@ -544,7 +573,8 @@ const char *mips_target_error(const struct mips_target *);
 	{ "__builtin_va_arg", mips_builtin_va_arg, BTNORVAL|BTNOPROTO, \
 							2, 0, 0 },	\
 	{ "__builtin_va_end", mips_builtin_va_end, 0, 1, 0, VOID },    \
-	{ "__builtin_va_copy", mips_builtin_va_copy, 0, 2, 0, VOID },
+	{ "__builtin_va_copy", mips_builtin_va_copy, 0, 2, 0, VOID }, \
+	MIPS_FABS_BUILTINS
 
 #ifdef LANG_CXX
 #define P1ND struct node
@@ -557,7 +587,14 @@ P1ND *mips_builtin_stdarg_start(const struct bitable *, P1ND *a);
 P1ND *mips_builtin_va_arg(const struct bitable *, P1ND *a);
 P1ND *mips_builtin_va_end(const struct bitable *, P1ND *a);
 P1ND *mips_builtin_va_copy(const struct bitable *, P1ND *a);
+#ifndef LANG_CXX
+P1ND *mips_builtin_fabs(const struct bitable *, P1ND *a);
+#endif
 #undef P1ND
+
+void mips_xasm_targarg(char *, void *, int);
+#define XASM_TARGARG(w, ary) \
+	(w[1] == 'H' ? w++, mips_xasm_targarg(w, ary, n), 1 : 0)
 
 /* floating point definitions */
 #define USE_IEEEFP_32
