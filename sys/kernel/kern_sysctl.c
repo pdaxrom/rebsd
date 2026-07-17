@@ -48,6 +48,7 @@
 #include <sys/vm.h>
 #include <sys/map.h>
 #include <sys/sysctl.h>
+#include <sys/rebsd_version.h>
 #include <machine/cpu.h>
 #include <sys/conf.h>
 
@@ -57,6 +58,19 @@
 #ifndef HW_MODEL_NAME
 #define HW_MODEL_NAME "mips"
 #endif
+
+extern const char rebsd_compiler[];
+extern const char rebsd_builduser[];
+extern const char rebsd_buildhost[];
+extern const int rebsd_build;
+extern const char rebsd_toolchain[];
+extern const char rebsd_toolchain_version[];
+extern const char rebsd_gitrev[];
+extern const char rebsd_branch[];
+extern const int rebsd_dirty;
+extern const char rebsd_buildinfo[];
+extern const char rebsd_cpu[];
+extern const char rebsd_fpu[];
 
 sysctlfn kern_sysctl;
 sysctlfn hw_sysctl;
@@ -190,19 +204,17 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, s
 {
     int error, level;
     u_long longhostid;
-    char bsd[10];
 
-    /* all sysctl names at this level are terminal */
-    if (namelen != 1 && !(name[0] == KERN_PROC || name[0] == KERN_PROF))
+    /* KERN_TOOLCHAIN is both a readable node and a parent for version. */
+    if (namelen != 1 && !(name[0] == KERN_PROC ||
+        name[0] == KERN_PROF || name[0] == KERN_TOOLCHAIN))
         return (ENOTDIR);       /* overloaded */
 
     switch (name[0]) {
     case KERN_OSTYPE:
+        return (sysctl_rdstring(oldp, oldlenp, newp, REBSD_OSTYPE));
     case KERN_OSRELEASE:
-        /* code is cheaper than D space */
-        bsd[0]='2';bsd[1]='.';bsd[2]='1';bsd[3]='1';bsd[4]='B';
-        bsd[5]='S';bsd[6]='D';bsd[7]='\0';
-        return (sysctl_rdstring(oldp, oldlenp, newp, bsd));
+        return (sysctl_rdstring(oldp, oldlenp, newp, REBSD_OSRELEASE));
     case KERN_OSREV:
         return (sysctl_rdlong(oldp, oldlenp, newp, (long)BSD));
     case KERN_VERSION:
@@ -258,6 +270,32 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, s
     case KERN_POSIX1:
     case KERN_SAVED_IDS:
         return (sysctl_rdint(oldp, oldlenp, newp, 0));
+    case KERN_CODENAME:
+        return (sysctl_rdstring(oldp, oldlenp, newp, REBSD_CODENAME));
+    case KERN_COMPILER:
+        return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_compiler));
+    case KERN_BUILDUSER:
+        return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_builduser));
+    case KERN_BUILDHOST:
+        return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_buildhost));
+    case KERN_BUILD:
+        return (sysctl_rdint(oldp, oldlenp, newp, rebsd_build));
+    case KERN_TOOLCHAIN:
+        if (namelen == 1)
+            return (sysctl_rdstring(oldp, oldlenp, newp,
+                rebsd_toolchain));
+        if (namelen == 2 && name[1] == KERN_TOOLCHAIN_VERSION)
+            return (sysctl_rdstring(oldp, oldlenp, newp,
+                rebsd_toolchain_version));
+        return (ENOTDIR);
+    case KERN_GITREV:
+        return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_gitrev));
+    case KERN_BRANCH:
+        return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_branch));
+    case KERN_DIRTY:
+        return (sysctl_rdint(oldp, oldlenp, newp, rebsd_dirty));
+    case KERN_BUILDINFO:
+        return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_buildinfo));
     default:
         return (EOPNOTSUPP);
     }
@@ -289,6 +327,10 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
         return (sysctl_rdlong(oldp, oldlenp, newp, MAXMEM));
     case HW_PAGESIZE:
         return (sysctl_rdint(oldp, oldlenp, newp, DEV_BSIZE));
+    case HW_CPU:
+        return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_cpu));
+    case HW_FPU:
+        return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_fpu));
     default:
         return (EOPNOTSUPP);
     }

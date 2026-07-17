@@ -114,6 +114,17 @@ privilege can change the value.
 	kern.osrelease	string	no
 	kern.osrevision	long	no
 	kern.version	string	no
+	kern.codename	string	no
+	kern.compiler	string	no
+	kern.builduser	string	no
+	kern.buildhost	string	no
+	kern.build	integer	no
+	kern.toolchain	string	no
+	kern.toolchain.version	string	no
+	kern.gitrev	string	no
+	kern.branch	string	no
+	kern.dirty	integer	no
+	kern.buildinfo	string	no
 	kern.maxinodes	integer	no
 	kern.maxproc	integer	no
 	kern.maxfiles	integer	no
@@ -154,6 +165,8 @@ privilege can change the value.
 	hw.physmem	long	no
 	hw.usermem	long	no
 	hw.pagesize	integer	no
+	hw.cpu	string	no
+	hw.fpu	string	no
 	user.cs_path	string	no
 	user.bc_base_max	integer	no
 	user.bc_dim_max	integer	no
@@ -195,6 +208,14 @@ Information about the system clock rate may be obtained with:
 .sp
 .in +1.0i
 sysctl kern.clockrate
+.br
+.in -1.0i
+.PP
+Detailed kernel build provenance, which is intentionally omitted from
+\fBuname(1)\fP, may be obtained with:
+.sp
+.in +1.0i
+sysctl kern.buildinfo
 .br
 .in -1.0i
 .PP

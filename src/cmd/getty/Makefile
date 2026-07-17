@@ -24,6 +24,6 @@ clean:
 install:        all
 		install getty ${DESTDIR}/libexec/getty
 
-main.o: gettytab.h
+main.o: gettytab.h $(TOPSRC)/sys/include/rebsd_version.h
 init.o: gettytab.h
 subr.o: gettytab.h

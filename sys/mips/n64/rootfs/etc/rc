@@ -2,6 +2,8 @@
 HOME=/; export HOME
 PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 
+/bin/hostname n64
+
 # The cartridge root remains read-only. Create one volatile UFS filesystem for
 # runtime state; /tmp is a rootfs symlink to /var/tmp.
 if mkfs -i 4096 /dev/ram0 >/dev/null; then

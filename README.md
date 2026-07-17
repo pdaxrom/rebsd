@@ -1,10 +1,34 @@
 # ReBSD
 
+Current release: **0.1-Resurgence**.
+
 ReBSD is a fork of RetroBSD with MMU support, ported to Nintendo 64 and
 vintage MMU-enabled MIPS hardware.
 
 The original RetroBSD project remains the historical base for this source tree.
 See `docs/ORIGIN.md` for attribution and compatibility policy.
+
+## Version reporting
+
+The uname -a command follows the compact BSD layout and reports the release,
+kernel configuration, build number and date, and machine class. Build
+provenance is available through read-only sysctl nodes instead:
+
+    kern.codename              hw.cpu
+    kern.compiler              hw.fpu
+    kern.builduser             hw.byteorder
+    kern.buildhost
+    kern.build
+    kern.toolchain
+    kern.toolchain.version
+    kern.gitrev
+    kern.branch
+    kern.dirty
+    kern.buildinfo
+
+The kern.buildinfo node is the convenient multi-line summary. The build
+number defaults to 1 and may be set with REBSD_BUILD_NUMBER; reproducible
+builds may supply REBSD_BUILD_DATE.
 
 ## Source Roadmap
 

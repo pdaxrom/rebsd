@@ -1,5 +1,5 @@
 default:\
-	:ap:im=\r\n\r\nReBSD/Malta (%h) (%t)\r\n\r\n:
+	:ap:im=\r\n\r\nReBSD/Malta %r (%t)\r\n\r\n:
 
 std.default|default-baud:\
 	:cb:ce:ck:

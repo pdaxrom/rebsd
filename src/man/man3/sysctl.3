@@ -210,6 +210,8 @@ privilege may change the value.
 	HW\_PHYSMEM	integer	no
 	HW\_USERMEM	integer	no
 	HW\_PAGESIZE	integer	no
+	HW\_CPU	string	no
+	HW\_FPU	string	no
 .\".It HW\_DISKNAMES	integer	no
 .\".It HW\_DISKSTATS	integer	no
 .fi
@@ -242,6 +244,14 @@ HW_USERMEM
 HW_PAGESIZE
 .br
 	The software page size.
+.sp
+HW_CPU
+.br
+	The CPU target selected when the kernel was built.
+.sp
+HW_FPU
+.br
+	The configured floating-point ABI, \fBhard\fP or \fBsoft\fP.
 .sp
 .\".It Fa HW_DISKNAMES
 .\".It Fa HW_DISKSTATS
@@ -290,6 +300,16 @@ information.
 	KERN\_TEXT	struct text	no
 .\"KERN\_VDISABLE	integer	no
 	KERN\_VERSION	string	no
+	KERN\_CODENAME	string	no
+	KERN\_COMPILER	string	no
+	KERN\_BUILDUSER	string	no
+	KERN\_BUILDHOST	string	no
+	KERN\_BUILD	integer	no
+	KERN\_TOOLCHAIN	node/string	no
+	KERN\_GITREV	string	no
+	KERN\_BRANCH	string	no
+	KERN\_DIRTY	integer	no
+	KERN\_BUILDINFO	string	no
 	KERN\_INODE	struct inode	no
 .fi
 .PP
@@ -447,7 +467,7 @@ The third and fourth level names are as follows:
 	KERN\_PROF	Return kernel profiling information.
 .fi
 .sp
-.in + .5i
+.in +.5i
 If the kernel is not compiled for profiling,
 attempts to retrieve any of the KERN_PROF values will
 fail with EOPNOTSUPP.
@@ -524,7 +544,52 @@ It may only be lowered by process 1.
 KERN_VERSION
 .br
 .in +.5i
-The system version string.
+The short BSD-style kernel version string used by \fBuname(1)\fP.
+.sp
+.in -.5i
+KERN_CODENAME
+.br
+.in +.5i
+The release codename.
+.sp
+.in -.5i
+KERN_COMPILER
+.br
+.in +.5i
+The compiler family used to build the kernel.
+.sp
+.in -.5i
+KERN_BUILDUSER, KERN_BUILDHOST
+.br
+.in +.5i
+The user and host that built the kernel.
+.sp
+.in -.5i
+KERN_BUILD
+.br
+.in +.5i
+The kernel build number.
+.sp
+.in -.5i
+KERN_TOOLCHAIN
+.br
+.in +.5i
+The compiler executable name.  The third-level
+\fBKERN_TOOLCHAIN_VERSION\fP string contains its version description.
+.sp
+.in -.5i
+KERN_GITREV, KERN_BRANCH, KERN_DIRTY
+.br
+.in +.5i
+The source commit, branch, and modified-working-tree flag recorded at build
+time.
+.sp
+.in -.5i
+KERN_BUILDINFO
+.br
+.in +.5i
+A multi-line summary of release, build, compiler, source, and target
+information.
 .sp
 .in -.5i
 KERN_INODE

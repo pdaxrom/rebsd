@@ -55,6 +55,7 @@
 
 struct ctlname topname[] = CTL_NAMES;
 struct ctlname kernname[] = CTL_KERN_NAMES;
+struct ctlname kerntoolchainname[] = CTL_KERN_TOOLCHAIN_NAMES;
 struct ctlname vmname[] = CTL_VM_NAMES;
 #ifdef CTL_NET_NAMES
 struct ctlname netname[] = CTL_NET_NAMES;
@@ -70,6 +71,9 @@ struct list {
 	int	size;
 };
 struct list toplist = { topname, CTL_MAXID };
+struct list kerntoolchainlist = {
+	kerntoolchainname, KERN_TOOLCHAIN_MAXID
+};
 struct list secondlevel[] = {
 	{ 0, 0 },			/* CTL_UNSPEC */
 	{ kernname, KERN_MAXID },	/* CTL_KERN */
@@ -171,6 +175,8 @@ listall(
 			continue;
 		strcpy(cp, lp->list[lvl2].ctl_name);
 		parse(name, Aflag);
+		if (strcmp(name, "kern.toolchain") == 0)
+			parse("kern.toolchain.version", Aflag);
 	}
 }
 
@@ -232,6 +238,19 @@ parse(
 
 	case CTL_KERN:
 		switch (mib[1]) {
+		case KERN_TOOLCHAIN:
+			/* The node itself is the tool name; .version is a child. */
+			if (bufp == NULL) {
+				type = CTLTYPE_STRING;
+				break;
+			}
+			if ((indx = findname(string, "third", &bufp,
+			    &kerntoolchainlist)) == -1)
+				return;
+			mib[2] = indx;
+			type = kerntoolchainlist.list[indx].ctl_type;
+			len = 3;
+			break;
 		case KERN_PROF:
 			fprintf(stderr,
 				"kern.prof =  not supported in 2.11BSD\n");

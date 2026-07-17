@@ -142,9 +142,11 @@ The initial message, and login message,
 .B im
 and
 .B lm
-may include the character sequence \fB%h\fP or \fB%t\fP to obtain
-the hostname or tty name respectively.
+may include the character sequence \fB%h\fP, \fB%r\fP, or \fB%t\fP to obtain
+the hostname, ReBSD release name, or tty name respectively.
 (\fB%%\fP obtains a single '%' character.)
+The release name contains the numeric release followed by its codename,
+for example \fB0.1-Resurgence\fP.
 The hostname is normally obtained from the system,
 but may be set by the
 .B hn

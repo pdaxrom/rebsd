@@ -106,7 +106,7 @@ main()
     int s __attribute__((unused));
 
     startup();
-    printf ("\n%s", version);
+    printf ("\n%s\n", version);
     kconfig();
 
     /*

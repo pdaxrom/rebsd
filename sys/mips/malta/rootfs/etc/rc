@@ -3,6 +3,8 @@ HOME=/; export HOME
 PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 PAGER=/bin/cat; export PAGER
 
+/bin/hostname malta
+
 if /sbin/mount /var >/dev/null 2>&1; then
         :
 else

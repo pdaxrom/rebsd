@@ -653,7 +653,7 @@ ELF2AOUT        = $(OBJTOP)/tools/elf2aout/elf2aout
 DEPFLAGS        = -MT $@ -MP -MD -MF .deps/$*.dep
 CPPFLAGS        = -I. -I$(TOPSRC)/include -I$(TOPSRC)/sys \
                   ${PARAM} -DKERNEL -DN64 -DMIPS \
-                  -DHW_MACHINE_NAME=\"mips\" \
+                  -DHW_MACHINE_NAME='"$(SYSTEM_TARGET)"' \
                   -DHW_MODEL_NAME='"NEC VR4300"'
 ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
 CPPFLAGS        += -I$(TOPSRC)/include/sys \
@@ -721,7 +721,34 @@ SYSTEM_BUILD_HOST ?= $(shell hostname 2>/dev/null || uname -n 2>/dev/null || ech
 SYSTEM_COMPILER_VERSION_gcc = $(shell $(firstword $(CC)) --version 2>/dev/null | sed -n '1p')
 SYSTEM_COMPILER_VERSION_pcc = $(shell $(firstword $(N64_HOST_PCC)) -v 2>&1 | sed -n '/Portable C Compiler/{p;q;}')
 SYSTEM_COMPILER_VERSION = $(or $(SYSTEM_COMPILER_VERSION_$(N64_KERNEL_COMPILER)),unknown)
-SYSTEM_BUILD_INFO = built on $(SYSTEM_BUILD_USER)@$(SYSTEM_BUILD_HOST) with $(N64_KERNEL_COMPILER) $(SYSTEM_COMPILER_VERSION), cpu=$(N64_USERLAND_CPU), float=$(N64_USERLAND_FLOAT), endian=$(N64_USERLAND_ENDIAN)
+SYSTEM_TOOLCHAIN_gcc = $(notdir $(firstword $(CC)))
+SYSTEM_TOOLCHAIN_pcc = $(notdir $(firstword $(N64_HOST_PCC)))
+SYSTEM_TOOLCHAIN = $(or $(SYSTEM_TOOLCHAIN_$(N64_KERNEL_COMPILER)),unknown)
+SYSTEM_BUILD_NUMBER ?= $(or $(REBSD_BUILD_NUMBER),1)
+SYSTEM_KERNEL_IDENT ?= GENERIC
+SYSTEM_BUILD_DATE := $(or $(REBSD_BUILD_DATE),$(shell LC_ALL=C date '+%a %b %e %H:%M:%S %Z %Y'))
+SYSTEM_GITREV := $(or $(shell git -C $(TOPSRC) rev-parse HEAD 2>/dev/null),unknown)
+SYSTEM_GIT_BRANCH := $(or $(shell git -C $(TOPSRC) symbolic-ref --short -q HEAD 2>/dev/null),detached)
+SYSTEM_GIT_DIRTY := $(shell test -n "$$(git -C $(TOPSRC) status --porcelain --untracked-files=normal 2>/dev/null)" && echo 1 || echo 0)
+SYSTEM_TARGET = $(if $(filter little,$(N64_USERLAND_ENDIAN)),mipsel,mips)
+VERSION_GENERATOR = $(TOPSRC)/sys/mips/tools/gen-vers.py
+GENERATE_VERS = python3 $(VERSION_GENERATOR) --output vers.c \
+                  --version-header "$(TOPSRC)/sys/include/rebsd_version.h" \
+                  --ident "$(SYSTEM_KERNEL_IDENT)" \
+                  --build-number "$(SYSTEM_BUILD_NUMBER)" \
+                  --build-date "$(SYSTEM_BUILD_DATE)" \
+                  --compiler "$(N64_KERNEL_COMPILER)" \
+                  --build-user "$(SYSTEM_BUILD_USER)" \
+                  --build-host "$(SYSTEM_BUILD_HOST)" \
+                  --toolchain "$(SYSTEM_TOOLCHAIN)" \
+                  --toolchain-version "$(SYSTEM_COMPILER_VERSION)" \
+                  --git-rev "$(SYSTEM_GITREV)" \
+                  --git-branch "$(SYSTEM_GIT_BRANCH)" \
+                  --dirty "$(SYSTEM_GIT_DIRTY)" \
+                  --target "$(SYSTEM_TARGET)" \
+                  --cpu "$(N64_USERLAND_CPU)" \
+                  --fpu "$(N64_USERLAND_FLOAT)" \
+                  --byteorder "$(N64_USERLAND_ENDIAN)"
 COMPILE_S       = ${KERNEL_CPP_AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${KERNEL_FPU_CPP_AS} ${FPU_ASFLAGS} $< -o $@
 ifeq ($(N64_KERNEL_COMPILER),pcc)
@@ -805,8 +832,10 @@ endif
 SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o \
                   $(PCC_KERNEL_RUNTIME_OBJS)
 SYSTEM_DEP      = Makefile $(N64_IOCONF).c $(N64_KERNEL_LDSCRIPT) \
+                  $(TOPSRC)/sys/include/rebsd_version.h \
+                  $(VERSION_GENERATOR) \
                   $(KERNEL_COMPILER_DEPS) $(PCC_KERNEL_RUNTIME_SRCS)
-SYSTEM_LD_HEAD  = printf '%s\n' 'const char version[] = "ReBSD for N64: $(SYSTEM_BUILD_INFO)\n";' > vers.c; \
+SYSTEM_LD_HEAD  = $(GENERATE_VERS); \
                   ${COMPILE_VERS_C}; \
                   rm -f $@
 SYSTEM_LD       = ${KERNEL_LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@

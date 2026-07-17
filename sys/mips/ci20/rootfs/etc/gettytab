@@ -1,5 +1,5 @@
 default:\
-	:ap:im=\r\n\r\nReBSD/Ci20 (%h) (%t)\r\n\r\n:
+	:ap:im=\r\n\r\nReBSD/Ci20 %r (%t)\r\n\r\n:
 
 std.default|default-baud:\
 	:cb:ce:ck:

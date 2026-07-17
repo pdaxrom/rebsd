@@ -135,7 +135,21 @@ struct ctlname {
 #define KERN_MAXTEXTS       22  /* int: # of text entries */
 #define KERN_TEXT           23  /* struct: text entries */
 #define KERN_ACCTTHRESH     24  /* int: accounting daemon threshold */
-#define KERN_MAXID          25  /* number of valid kern ids */
+#define KERN_CODENAME       25  /* string: release codename */
+#define KERN_COMPILER       26  /* string: kernel compiler family */
+#define KERN_BUILDUSER      27  /* string: kernel build user */
+#define KERN_BUILDHOST      28  /* string: kernel build host */
+#define KERN_BUILD          29  /* int: kernel build number */
+#define KERN_TOOLCHAIN      30  /* node/string: kernel toolchain */
+#define KERN_GITREV         31  /* string: source git revision */
+#define KERN_BRANCH         32  /* string: source git branch */
+#define KERN_DIRTY          33  /* int: source tree was modified */
+#define KERN_BUILDINFO      34  /* string: detailed build summary */
+#define KERN_MAXID          35  /* number of valid kern ids */
+
+/* KERN_TOOLCHAIN subtypes.  The node itself returns the tool name. */
+#define KERN_TOOLCHAIN_VERSION 1 /* string: toolchain version */
+#define KERN_TOOLCHAIN_MAXID   2
 
 #ifndef KERNEL
 #define CTL_KERN_NAMES { \
@@ -164,6 +178,21 @@ struct ctlname {
     { "maxtexts", CTLTYPE_INT }, \
     { "text", CTLTYPE_STRUCT }, \
     { "acctthresh", CTLTYPE_INT }, \
+    { "codename", CTLTYPE_STRING }, \
+    { "compiler", CTLTYPE_STRING }, \
+    { "builduser", CTLTYPE_STRING }, \
+    { "buildhost", CTLTYPE_STRING }, \
+    { "build", CTLTYPE_INT }, \
+    { "toolchain", CTLTYPE_NODE }, \
+    { "gitrev", CTLTYPE_STRING }, \
+    { "branch", CTLTYPE_STRING }, \
+    { "dirty", CTLTYPE_INT }, \
+    { "buildinfo", CTLTYPE_STRING }, \
+}
+
+#define CTL_KERN_TOOLCHAIN_NAMES { \
+    { 0, 0 }, \
+    { "version", CTLTYPE_STRING }, \
 }
 #endif
 
@@ -220,7 +249,9 @@ struct  kinfo_file {
 #define HW_PAGESIZE     7       /* int: software page size */
 #define HW_DISKNAMES    8       /* strings: disk drive names */
 #define HW_DISKSTATS    9       /* struct: diskstats[] */
-#define HW_MAXID        10      /* number of valid hw ids */
+#define HW_CPU          10      /* string: configured CPU target */
+#define HW_FPU          11      /* string: configured FPU ABI */
+#define HW_MAXID        12      /* number of valid hw ids */
 
 #ifndef KERNEL
 #define CTL_HW_NAMES { \
@@ -234,6 +265,8 @@ struct  kinfo_file {
     { "pagesize", CTLTYPE_INT }, \
     { "disknames", CTLTYPE_STRUCT }, \
     { "diskstats", CTLTYPE_STRUCT }, \
+    { "cpu", CTLTYPE_STRING }, \
+    { "fpu", CTLTYPE_STRING }, \
 }
 #endif
 
