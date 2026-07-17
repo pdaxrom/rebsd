@@ -178,7 +178,7 @@ const int nblkdev = sizeof(bdevsw) / sizeof(bdevsw[0]) - 1;
 
 #define NOCDEV \
     noopen, noopen, norw, norw, noioctl, n64_nullstop, 0, n64_seltrue, \
-    n64_nostrategy, 0, 0
+    n64_nostrategy, 0, 0, 0
 
 const struct cdevsw cdevsw[] = {
     {
@@ -235,7 +235,7 @@ const struct cdevsw cdevsw[] = {
 #ifdef VIDEO_ENABLED
         n64fb_open, n64fb_close, n64fb_read, n64fb_write,
         n64fb_ioctl, n64_nullstop, 0, n64_seltrue,
-        n64_nostrategy, 0, 0,
+        n64_nostrategy, 0, 0, n64fb_mmap,
 #else
         NOCDEV
 #endif

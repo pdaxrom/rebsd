@@ -44,6 +44,7 @@
 #define PMAP_PTE_REFERENCED     0x010u
 #define PMAP_PTE_MODIFIED       0x020u
 #define PMAP_PTE_UNCACHED       0x040u
+#define PMAP_PTE_DEVICE         0x080u
 #define PMAP_PTE_FLAGS          0xfffu
 #define PMAP_PTE_PADDR          0xfffff000u
 
@@ -285,6 +286,13 @@ pmap_remove_pte(struct pmap *pmap, vm_vaddr_t vaddr, uint32_t *pte)
     old = *pte;
     if ((old & PMAP_PTE_PRESENT) == 0)
         return 0;
+    if ((old & PMAP_PTE_DEVICE) != 0) {
+        *pte = 0;
+        --pmap_statistics.pms_mappings;
+        --pmap_statistics.pms_resident_pages;
+        pmap_invalidate(pmap, vaddr);
+        return 0;
+    }
     page = vm_page_lookup(pmap_allocator, old & PMAP_PTE_PADDR);
     if (page == 0)
         return EFAULT;
@@ -471,6 +479,43 @@ pmap_enter(struct pmap *pmap, vm_vaddr_t vaddr, struct vm_page *page,
 }
 
 int
+pmap_enter_device(struct pmap *pmap, vm_vaddr_t vaddr, vm_paddr_t paddr,
+    vm_prot_t protection, enum pmap_cache cache)
+{
+    struct vm_page *page;
+    uint32_t *pte;
+    uint32_t entry;
+    int error;
+
+    if (!pmap_valid(pmap) || !vm_vaddr_page_aligned(vaddr) ||
+        vaddr >= PMAP_USER_END || !vm_paddr_page_aligned(paddr) ||
+        paddr > PMAP_PTE_PADDR || !pmap_protection_valid(protection, 0) ||
+        (protection & VM_PROT_EXECUTE) != 0 ||
+        (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED))
+        return EINVAL;
+    page = vm_page_lookup(pmap_allocator, paddr);
+    if (page != 0 && page->vmp_state != VM_PAGE_RESERVED)
+        return EBUSY;
+    error = pmap_get_pte(pmap, vaddr, 1, &pte);
+    if (error != 0)
+        return error;
+    if ((*pte & PMAP_PTE_PRESENT) != 0) {
+        error = pmap_remove_pte(pmap, vaddr, pte);
+        if (error != 0)
+            return error;
+    }
+    entry = paddr | PMAP_PTE_PRESENT | PMAP_PTE_DEVICE |
+        pmap_protection_bits(protection);
+    if (cache == PMAP_CACHE_UNCACHED)
+        entry |= PMAP_PTE_UNCACHED;
+    *pte = entry;
+    pmap_stat_increment(&pmap_statistics.pms_mappings);
+    pmap_stat_increment(&pmap_statistics.pms_resident_pages);
+    pmap_invalidate(pmap, vaddr);
+    return 0;
+}
+
+int
 pmap_remove(struct pmap *pmap, vm_vaddr_t start, vm_vaddr_t end)
 {
     uint32_t *table;
@@ -531,16 +576,25 @@ pmap_protect(struct pmap *pmap, vm_vaddr_t start, vm_vaddr_t end,
         return EINVAL;
     if (protection == VM_PROT_NONE)
         return pmap_remove(pmap, start, end);
+    if ((protection & VM_PROT_EXECUTE) != 0) {
+        for (vaddr = start; vaddr < end; vaddr += VM_PAGE_SIZE) {
+            pte = pmap_lookup_pte(pmap, vaddr);
+            if (pte != 0 && (*pte & PMAP_PTE_PRESENT) != 0 &&
+                (*pte & PMAP_PTE_DEVICE) != 0)
+                return EACCES;
+        }
+    }
     for (vaddr = start; vaddr < end; vaddr += VM_PAGE_SIZE) {
         pte = pmap_lookup_pte(pmap, vaddr);
         if (pte == 0 || (*pte & PMAP_PTE_PRESENT) == 0)
             continue;
         preserve = *pte & (PMAP_PTE_PADDR | PMAP_PTE_PRESENT |
             PMAP_PTE_REFERENCED | PMAP_PTE_MODIFIED |
-            PMAP_PTE_UNCACHED);
+            PMAP_PTE_UNCACHED | PMAP_PTE_DEVICE);
         *pte = preserve | pmap_protection_bits(protection);
         pmap_invalidate(pmap, vaddr);
-        if ((protection & VM_PROT_EXECUTE) != 0) {
+        if ((protection & VM_PROT_EXECUTE) != 0 &&
+            (*pte & PMAP_PTE_DEVICE) == 0) {
             page = vm_page_lookup(pmap_allocator,
                 *pte & PMAP_PTE_PADDR);
             if (page == 0)
@@ -628,22 +682,29 @@ pmap_fault(struct pmap *pmap, vm_vaddr_t vaddr, vm_prot_t access,
         pmap_stat_increment(&pmap_statistics.pms_protection_faults);
         return EACCES;
     }
-    page = vm_page_lookup(pmap_allocator, entry & PMAP_PTE_PADDR);
-    if (page == 0)
-        return EFAULT;
+    page = 0;
+    if ((entry & PMAP_PTE_DEVICE) == 0) {
+        page = vm_page_lookup(pmap_allocator, entry & PMAP_PTE_PADDR);
+        if (page == 0)
+            return EFAULT;
+    }
     if ((entry & PMAP_PTE_REFERENCED) == 0) {
-        error = vm_page_counter_inc(pmap_allocator, page,
-            VM_PAGE_COUNTER_REFERENCE);
-        if (error != 0)
-            return error;
+        if (page != 0) {
+            error = vm_page_counter_inc(pmap_allocator, page,
+                VM_PAGE_COUNTER_REFERENCE);
+            if (error != 0)
+                return error;
+        }
         *pte |= PMAP_PTE_REFERENCED;
     }
     if (access == VM_PROT_WRITE &&
         (entry & PMAP_PTE_MODIFIED) == 0) {
-        error = vm_page_counter_inc(pmap_allocator, page,
-            VM_PAGE_COUNTER_DIRTY);
-        if (error != 0)
-            return error;
+        if (page != 0) {
+            error = vm_page_counter_inc(pmap_allocator, page,
+                VM_PAGE_COUNTER_DIRTY);
+            if (error != 0)
+                return error;
+        }
         *pte |= PMAP_PTE_MODIFIED;
         pmap_stat_increment(&pmap_statistics.pms_tlb_modified);
     }
@@ -697,6 +758,11 @@ pmap_clear_reference(struct pmap *pmap, vm_vaddr_t vaddr)
         return ENOENT;
     if ((*pte & PMAP_PTE_REFERENCED) == 0)
         return 0;
+    if ((*pte & PMAP_PTE_DEVICE) != 0) {
+        *pte &= ~PMAP_PTE_REFERENCED;
+        pmap_invalidate(pmap, vaddr);
+        return 0;
+    }
     page = vm_page_lookup(pmap_allocator, *pte & PMAP_PTE_PADDR);
     if (page == 0)
         return EFAULT;
@@ -729,6 +795,11 @@ pmap_clear_modify(struct pmap *pmap, vm_vaddr_t vaddr)
         return ENOENT;
     if ((*pte & PMAP_PTE_MODIFIED) == 0)
         return 0;
+    if ((*pte & PMAP_PTE_DEVICE) != 0) {
+        *pte &= ~PMAP_PTE_MODIFIED;
+        pmap_invalidate(pmap, vaddr);
+        return 0;
+    }
     page = vm_page_lookup(pmap_allocator, *pte & PMAP_PTE_PADDR);
     if (page == 0)
         return EFAULT;
@@ -767,7 +838,8 @@ pmap_remove_page(struct vm_page *page)
             for (table_index = 0; table_index < PMAP_TABLE_ENTRIES;
                 ++table_index) {
                 if ((table[table_index] &
-                    (PMAP_PTE_PRESENT | PMAP_PTE_PADDR)) !=
+                    (PMAP_PTE_PRESENT | PMAP_PTE_PADDR |
+                    PMAP_PTE_DEVICE)) !=
                     (PMAP_PTE_PRESENT | page->vmp_paddr))
                     continue;
                 vaddr = (directory_index << PMAP_DIRECTORY_SHIFT) |
@@ -808,7 +880,8 @@ pmap_clear_page_reference(struct vm_page *page)
             for (table_index = 0; table_index < PMAP_TABLE_ENTRIES;
                 ++table_index) {
                 if ((table[table_index] & (PMAP_PTE_PRESENT |
-                    PMAP_PTE_PADDR | PMAP_PTE_REFERENCED)) !=
+                    PMAP_PTE_PADDR | PMAP_PTE_REFERENCED |
+                    PMAP_PTE_DEVICE)) !=
                     (PMAP_PTE_PRESENT | page->vmp_paddr |
                     PMAP_PTE_REFERENCED))
                     continue;
@@ -853,7 +926,8 @@ pmap_clear_page_modify(struct vm_page *page)
             for (table_index = 0; table_index < PMAP_TABLE_ENTRIES;
                 ++table_index) {
                 if ((table[table_index] & (PMAP_PTE_PRESENT |
-                    PMAP_PTE_PADDR | PMAP_PTE_MODIFIED)) !=
+                    PMAP_PTE_PADDR | PMAP_PTE_MODIFIED |
+                    PMAP_PTE_DEVICE)) !=
                     (PMAP_PTE_PRESENT | page->vmp_paddr |
                     PMAP_PTE_MODIFIED))
                     continue;
@@ -882,6 +956,15 @@ pmap_page_direct_map(struct vm_page *page, enum pmap_cache cache)
         (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED))
         return 0;
     return pmap_md_direct_map(page->vmp_paddr, VM_PAGE_SIZE, cache);
+}
+
+void *
+pmap_device_direct_map(vm_paddr_t paddr, enum pmap_cache cache)
+{
+    if (!pmap_initialized || !vm_paddr_page_aligned(paddr) ||
+        (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED))
+        return 0;
+    return pmap_md_direct_map(paddr, VM_PAGE_SIZE, cache);
 }
 
 int
@@ -934,13 +1017,22 @@ pmap_validate(struct pmap *pmap)
             if ((pte & (PMAP_PTE_READ | PMAP_PTE_WRITE |
                 PMAP_PTE_EXECUTE)) == 0)
                 return EINVAL;
-            page = vm_page_lookup(pmap_allocator,
-                pte & PMAP_PTE_PADDR);
-            if (page == 0 || page->vmp_state == VM_PAGE_FREE ||
-                page->vmp_state == VM_PAGE_RESERVED ||
-                page->vmp_state == VM_PAGE_BAD ||
-                page->vmp_hold_count == 0)
-                return EFAULT;
+            if ((pte & PMAP_PTE_DEVICE) == 0) {
+                page = vm_page_lookup(pmap_allocator,
+                    pte & PMAP_PTE_PADDR);
+                if (page == 0 || page->vmp_state == VM_PAGE_FREE ||
+                    page->vmp_state == VM_PAGE_RESERVED ||
+                    page->vmp_state == VM_PAGE_BAD ||
+                    page->vmp_hold_count == 0)
+                    return EFAULT;
+            } else {
+                page = vm_page_lookup(pmap_allocator,
+                    pte & PMAP_PTE_PADDR);
+                if ((pte & PMAP_PTE_EXECUTE) != 0 ||
+                    (page != 0 &&
+                    page->vmp_state != VM_PAGE_RESERVED))
+                    return EFAULT;
+            }
         }
     }
     return 0;

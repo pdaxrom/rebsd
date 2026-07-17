@@ -19,6 +19,8 @@
 #define VM_MAP_SHARED           0x0008u
 #define VM_MAP_COW              0x0010u
 #define VM_MAP_WIRED            0x0020u
+#define VM_MAP_DEVICE           0x0040u
+#define VM_MAP_UNCACHED         0x0080u
 
 struct vm_object;
 

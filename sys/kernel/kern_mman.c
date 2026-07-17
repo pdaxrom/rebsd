@@ -8,6 +8,7 @@
 #include <sys/proc.h>
 #include <sys/file.h>
 #include <sys/inode.h>
+#include <sys/conf.h>
 #include <sys/vm.h>
 #include <sys/mman.h>
 #include <sys/systm.h>
@@ -119,13 +120,19 @@ mmap(void)
     vm_size_t size;
     vm_ooffset_t object_offset;
     vm_prot_t maximum;
+    dev_t dev;
     off_t offset;
+    unsigned device_paddr;
+    int device_cache;
+    int device_mapping;
     int error;
     int had_object;
     unsigned vm_flags;
 
     uap = (struct a *)u.u_arg;
     vmspace = vmspace_current();
+    device_mapping = 0;
+    error = 0;
     if (vmspace == 0 || uap->length == 0 ||
         (uap->protection & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0) {
         u.u_error = EINVAL;
@@ -176,11 +183,52 @@ mmap(void)
             return;
         }
         inode = (struct inode *)fp->f_data;
-        if (inode == 0 || (inode->i_mode & IFMT) != IFREG) {
+        if (inode == 0) {
             u.u_error = ENODEV;
             return;
         }
-        if ((uap->flags & MAP_SHARED) != 0) {
+        if ((inode->i_mode & IFMT) == IFCHR) {
+            dev = inode->i_rdev;
+            if (major(dev) == MEM_MAJOR && minor(dev) == ZERO_MINOR) {
+                if (offset != 0) {
+                    u.u_error = EINVAL;
+                    return;
+                }
+                object = 0;
+                object_offset = 0;
+                maximum = VM_PROT_ALL;
+                had_object = 0;
+            } else {
+                if ((uap->flags & MAP_SHARED) == 0 ||
+                    (uap->protection & PROT_EXEC) != 0 ||
+                    major(dev) >= nchrdev ||
+                    cdevsw[major(dev)].d_mmap == 0) {
+                    u.u_error = ENODEV;
+                    return;
+                }
+                maximum = VM_PROT_READ;
+                if ((fp->f_flag & FWRITE) != 0)
+                    maximum |= VM_PROT_WRITE;
+                if (((vm_prot_t)uap->protection & ~maximum) != 0) {
+                    u.u_error = EACCES;
+                    return;
+                }
+                error = (*cdevsw[major(dev)].d_mmap)(dev, offset,
+                    (u_int)size, uap->protection, &device_paddr,
+                    &device_cache);
+                if (error != 0) {
+                    u.u_error = error;
+                    return;
+                }
+                object = 0;
+                object_offset = 0;
+                had_object = 0;
+                device_mapping = 1;
+            }
+        } else if ((inode->i_mode & IFMT) != IFREG) {
+            u.u_error = ENODEV;
+            return;
+        } else if ((uap->flags & MAP_SHARED) != 0) {
             if ((vm_ooffset_t)offset > 0x80000000u ||
                 (vm_ooffset_t)size >
                 0x80000000u - (vm_ooffset_t)offset) {
@@ -215,7 +263,12 @@ mmap(void)
             return;
         }
         result = (vm_vaddr_t)uap->address;
-        if (object == 0)
+        if (device_mapping)
+            error = vmspace_map_device_fixed(vmspace, result, size,
+                (vm_prot_t)uap->protection, maximum,
+                (vm_paddr_t)device_paddr,
+                (enum pmap_cache)device_cache);
+        else if (object == 0)
             error = vmspace_map_anon_fixed(vmspace, result, size,
                 (vm_prot_t)uap->protection, vm_flags);
         else
@@ -225,7 +278,18 @@ mmap(void)
     } else {
         hint = uap->address == 0 ? MMAP_DEFAULT_BASE :
             vm_vaddr_trunc_page((vm_vaddr_t)uap->address);
-        if (object == 0) {
+        if (device_mapping) {
+            error = vmspace_map_device_any(vmspace, hint, size,
+                (vm_prot_t)uap->protection, maximum,
+                (vm_paddr_t)device_paddr,
+                (enum pmap_cache)device_cache, &result);
+            if (error == ENOMEM && hint != MMAP_DEFAULT_BASE)
+                error = vmspace_map_device_any(vmspace,
+                    MMAP_DEFAULT_BASE, size,
+                    (vm_prot_t)uap->protection, maximum,
+                    (vm_paddr_t)device_paddr,
+                    (enum pmap_cache)device_cache, &result);
+        } else if (object == 0) {
             error = vmspace_map_anon_any(vmspace, hint, size,
                 (vm_prot_t)uap->protection, vm_flags, &result);
             if (error == ENOMEM && hint != MMAP_DEFAULT_BASE)

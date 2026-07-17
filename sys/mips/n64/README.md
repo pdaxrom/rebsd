@@ -1126,8 +1126,8 @@ rdram size=0x00800000
 
 ## TLB and user address space
 
-The N64 kernel installs wired TLB entries for the normal user address window
-and the framebuffer mapping. Base 4 MiB systems get one 2 MiB user TLB pair:
+The N64 bootstrap temporarily installs wired TLB entries for the legacy user
+window. Base 4 MiB systems get one 2 MiB user TLB pair:
 
 ```
 virtual  0x00400000..0x005fffff
@@ -1143,22 +1143,23 @@ physical 0x00100000..0x004fffff
 
 Each entry uses two 1 MiB pages through `TLB_PAGEMASK_1M`.
 
-The following wired entries map `/dev/fb0` at `N64_FB_USER_VADDR_START`
-(`0x00800000`) with uncached 64 KiB pages. The usable byte count is reported
-by `N64FBIOC_GETMAP`; the physical reserve is rounded up to the TLB pair size
-so the user-visible mapping never overlaps RAM swap:
+The VM bootstrap invalidates those temporary entries, resets `C0_Wired`, and
+uses per-process 4 KiB pmap entries with ASIDs for normal execution. The
+framebuffer is no longer a global wired mapping. `/dev/fb0` authorizes an
+uncached `MAP_SHARED` device mapping in the calling process; its physical
+reserve remains rounded up so the mapping cannot overlap RAM swap:
 
 ```
-4 MiB: 0x00800000..0x0083ffff -> 0x00340000..0x0037ffff
-8 MiB: 0x00800000..0x0083ffff -> 0x00500000..0x0053ffff
-8 MiB high-res: 0x00800000..0x0089ffff -> 0x00500000..0x0059ffff
+4 MiB: physical 0x00340000..0x0037ffff
+8 MiB: physical 0x00500000..0x0053ffff
+8 MiB high-res: physical 0x00500000..0x0059ffff
 ```
 
-The kernel does not currently implement a full VM system for N64. The wired
-process window is the fixed first version of the user address space. `copyin`,
-`copyout`, and `baduaddr` accept normal process memory and the current usable
-framebuffer byte range, but the framebuffer is not part of process heap/stack
-or swap.
+`N64FBIOC_GETMAP` reports `0x00800000` as a preferred virtual-address hint.
+The actual address is the return value of `mmap(2)` and belongs only to that
+process. `copyin`, `copyout`, and `baduaddr` validate framebuffer access through
+the same `vmspace` checks as other user mappings; no fixed-address bypass
+remains.
 
 User `read(2)`, `write(2)`, `readv(2)`, and `writev(2)` validate every iovec
 against that user address policy before entering filesystem or character-device
@@ -1397,8 +1398,8 @@ rgbled 0 0 0       # off
 ```
 
 `/dev/fb0` is the N64 framebuffer character device. It exposes the current
-16-bit RGBA5551 framebuffer through read/write, mode ioctls, and a fixed
-uncached user mapping:
+16-bit RGBA5551 framebuffer through read/write, mode ioctls, and a controlled
+uncached `MAP_SHARED` mapping:
 
 ```
 N64FBIOC_GETINFO   struct n64fb_info
@@ -1406,10 +1407,11 @@ N64FBIOC_SETMODE   struct n64fb_mode
 N64FBIOC_GETMAP    struct n64fb_map
 ```
 
-`N64FBIOC_GETMAP` returns `vaddr`, `bytes`, and `reserved_bytes`. `bytes` is
-the current usable framebuffer length for the selected mode; `reserved_bytes`
-is the TLB-rounded reserve. Programs should write only the `bytes` range at
-`vaddr`.
+`N64FBIOC_GETMAP` returns `vaddr`, `bytes`, and `reserved_bytes`. `vaddr` is an
+optional address hint for `mmap(2)`, not an installed mapping. `bytes` is the
+current usable framebuffer length for the selected mode; `reserved_bytes` is
+the physically reserved range. Programs map `bytes` from offset zero and use
+the address returned by `mmap`, which may differ from the hint.
 
 The default framebuffer mode is 320x240x16 on all N64 memory configurations.
 The 640x480 interlaced mode is available only in an 8 MiB build made with
@@ -1420,11 +1422,12 @@ for swap pressure from the native compiler workload:
 fbset          # print current framebuffer mode
 fbset 320x240  # select progressive 320x240
 fbset 640x480  # select interlaced 640x480, high-res reserve only
-fbset fill 0x001f  # fill through the fixed user framebuffer mapping
+fbset fill 0x001f  # fill through an uncached MAP_SHARED mapping
 ```
 
-The fixed framebuffer mapping and `fbset fill` path were hardware
-smoke-tested on an 8 MiB N64 on 2026-06-12.
+The former fixed framebuffer mapping and `fbset fill` path were hardware
+smoke-tested on an 8 MiB N64 on 2026-06-12. The replacement process-local
+`mmap` path still requires a new hardware smoke test.
 
 `/bin/fbview` is a simple framebuffer JPEG viewer for graphics smoke tests:
 
@@ -1434,7 +1437,7 @@ fbview /cart/background.jpg
 fbview /cart/moon.jpg
 ```
 
-It opens `/dev/fb0`, reads the active mode and fixed framebuffer mapping,
+It opens `/dev/fb0`, reads the active mode and mapping hint, calls `mmap`,
 decodes JPEG data through the local n64cart `stb_image.h`, preserves the image
 aspect ratio, clears the screen to black, and writes centered RGBA5551 pixels
 into the mapped framebuffer. Resizing is intentionally a small integer

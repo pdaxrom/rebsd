@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -126,6 +127,7 @@ main(int argc, char **argv)
     struct n64fb_map map;
     struct n64fb_mode mode;
     struct n64fb_map *mapp = NULL;
+    void *mapping;
     int fd;
 
     if (argc != 1 && argc != 2 && argc != 3)
@@ -147,8 +149,21 @@ main(int argc, char **argv)
         return 1;
     }
 
-    if (ioctl(fd, N64FBIOC_GETMAP, &map) == 0)
-        mapp = &map;
+    if (ioctl(fd, N64FBIOC_GETMAP, &map) < 0) {
+        fprintf(stderr, "fbset: get map: %s\n", strerror(errno));
+        close(fd);
+        return 1;
+    }
+    mapping = mmap((void *)map.vaddr, map.bytes,
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapping == MAP_FAILED) {
+        fprintf(stderr, "fbset: mmap framebuffer: %s\n",
+            strerror(errno));
+        close(fd);
+        return 1;
+    }
+    map.vaddr = (unsigned)mapping;
+    mapp = &map;
     if (is_fill(argc, argv)) {
         if (mapp == NULL) {
             fprintf(stderr, "fbset: get map: %s\n", strerror(errno));
@@ -158,6 +173,7 @@ main(int argc, char **argv)
         fill_fb(mapp, parse_uint(argv[2]));
     }
     print_info(&info, mapp);
+    munmap(mapping, map.bytes);
     close(fd);
     return 0;
 }

@@ -185,6 +185,7 @@ pmap_md_legacy_user_disable(void)
             PMAP_MD_INVALID_BASE + index * PMAP_MD_TLB_PAIR_SIZE,
             0, 0);
     }
+    mips_write_c0_register(C0_WIRED, 0, 0);
     mips_write_c0_register(C0_PAGEMASK, 0, saved_pagemask);
     mips_write_c0_register(C0_ENTRYHI, 0, saved_entryhi);
     mips_intr_restore(status);

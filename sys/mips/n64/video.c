@@ -6,6 +6,8 @@
 #include <machine/n64.h>
 #include <machine/n64int.h>
 #include <machine/video.h>
+#include <vm/pmap.h>
+#include <vm/vm_param.h>
 
 #ifndef VIDEO_ENABLED
 int
@@ -42,12 +44,6 @@ n64_video_intr(void)
 }
 
 int
-n64_video_useraddr_valid(caddr_t addr)
-{
-    return 0;
-}
-
-int
 n64fb_open(dev_t dev, int flag, int mode)
 {
     return ENXIO;
@@ -73,6 +69,13 @@ n64fb_write(dev_t dev, struct uio *uio, int flag)
 
 int
 n64fb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
+{
+    return ENXIO;
+}
+
+int
+n64fb_mmap(dev_t dev, off_t offset, u_int size, int protection,
+    u_int *paddr, int *cache)
 {
     return ENXIO;
 }
@@ -404,17 +407,6 @@ n64_video_intr(void)
 }
 
 int
-n64_video_useraddr_valid(caddr_t addr)
-{
-    unsigned a = (unsigned)addr;
-
-    if (a < N64_FB_USER_VADDR_START)
-        return 0;
-    n64_video_init();
-    return a < N64_FB_USER_VADDR_START + n64_video_info.fb_bytes;
-}
-
-int
 n64fb_open(dev_t dev, int flag, int mode)
 {
     if (minor(dev) != 0)
@@ -512,5 +504,27 @@ n64fb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
     default:
         return EINVAL;
     }
+}
+
+int
+n64fb_mmap(dev_t dev, off_t offset, u_int size, int protection,
+    u_int *paddr, int *cache)
+{
+    vm_size_t mapped;
+
+    if (minor(dev) != 0 || offset < 0 ||
+        (off_t)(u_int)offset != offset ||
+        ((unsigned)offset & VM_PAGE_MASK) != 0 || size == 0 ||
+        !vm_size_page_aligned((vm_size_t)size) ||
+        (protection & VM_PROT_EXECUTE) != 0 || paddr == 0 || cache == 0)
+        return EINVAL;
+    n64_video_init();
+    if (vm_size_round_page((vm_size_t)n64_video_info.fb_bytes,
+        &mapped) != 0 || (unsigned)offset > mapped ||
+        (vm_size_t)size > mapped - (unsigned)offset)
+        return EINVAL;
+    *paddr = n64_video_info.fb_phys + (unsigned)offset;
+    *cache = PMAP_CACHE_UNCACHED;
+    return 0;
 }
 #endif

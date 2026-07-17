@@ -42,6 +42,8 @@ int pmap_create(struct pmap **);
 int pmap_destroy(struct pmap *);
 int pmap_enter(struct pmap *, vm_vaddr_t, struct vm_page *, vm_prot_t,
     enum pmap_cache);
+int pmap_enter_device(struct pmap *, vm_vaddr_t, vm_paddr_t, vm_prot_t,
+    enum pmap_cache);
 int pmap_remove(struct pmap *, vm_vaddr_t, vm_vaddr_t);
 int pmap_protect(struct pmap *, vm_vaddr_t, vm_vaddr_t, vm_prot_t);
 int pmap_extract(struct pmap *, vm_vaddr_t, vm_paddr_t *);
@@ -58,6 +60,7 @@ int pmap_clear_page_reference(struct vm_page *);
 int pmap_clear_page_modify(struct vm_page *);
 int pmap_page_sync(struct vm_page *, unsigned);
 void *pmap_page_direct_map(struct vm_page *, enum pmap_cache);
+void *pmap_device_direct_map(vm_paddr_t, enum pmap_cache);
 int pmap_get_stats(struct pmap_stats *);
 int pmap_validate(struct pmap *);
 

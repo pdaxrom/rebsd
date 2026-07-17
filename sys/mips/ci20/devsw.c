@@ -183,7 +183,7 @@ const int nblkdev = sizeof(bdevsw) / sizeof(bdevsw[0]) - 1;
 
 #define NOCDEV \
     noopen, noopen, norw, norw, noioctl, mips_nullstop, 0, mips_seltrue, \
-    mips_nostrategy, 0, 0
+    mips_nostrategy, 0, 0, 0
 
 const struct cdevsw cdevsw[] = {
     {

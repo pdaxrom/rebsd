@@ -13,6 +13,8 @@
 #define TEST_SHARED     0x10004000u
 #define TEST_FILE       0x10008000u
 #define TEST_SHARED_FILE 0x1000c000u
+#define TEST_DEVICE     0x10010000u
+#define TEST_DEVICE_PADDR (TEST_RAM_SIZE - VM_PAGE_SIZE)
 #define TEST_PRESSURE   0x20000000u
 #define TEST_PRESSURE_PAGES 70u
 
@@ -231,6 +233,7 @@ test_pmap(void)
     struct vm_page *page1;
     struct vm_page *page2;
     struct vm_page *page3;
+    struct vm_page *device_page;
     struct pmap *pmap1;
     struct pmap *pmap2;
     struct pmap *pmap3;
@@ -244,6 +247,8 @@ test_pmap(void)
     memset(&allocator, 0, sizeof(allocator));
     vm_phys_map_init(&map);
     CHECK(vm_phys_map_add_ram(&map, 0, TEST_RAM_SIZE, "test ram") == 0);
+    CHECK(vm_phys_map_reserve(&map, TEST_DEVICE_PADDR, VM_PAGE_SIZE,
+        "test device") == 0);
     CHECK(vm_phys_map_finalize(&map) == 0);
     CHECK(vm_page_allocator_init(&allocator, &map, metadata,
         sizeof(metadata)) == 0);
@@ -258,6 +263,9 @@ test_pmap(void)
     CHECK(test_page_alloc(&allocator, &page1) == 0);
     CHECK(test_page_alloc(&allocator, &page2) == 0);
     CHECK(test_page_alloc(&allocator, &page3) == 0);
+    device_page = vm_page_lookup(&allocator, TEST_DEVICE_PADDR);
+    CHECK(device_page != 0 &&
+        device_page->vmp_state == VM_PAGE_RESERVED);
 
     CHECK(pmap_enter(pmap1, TEST_VADDR, page1,
         VM_PROT_READ | VM_PROT_WRITE, PMAP_CACHE_CACHED) == 0);
@@ -310,6 +318,28 @@ test_pmap(void)
     CHECK(test_tlb_flushes == 2);
     CHECK(test_asid == 1);
 
+    CHECK(pmap_enter_device(pmap3, TEST_DEVICE, page1->vmp_paddr,
+        VM_PROT_READ, PMAP_CACHE_CACHED) == EBUSY);
+    CHECK(pmap_enter_device(pmap3, TEST_DEVICE,
+        device_page->vmp_paddr, VM_PROT_READ | VM_PROT_WRITE,
+        PMAP_CACHE_UNCACHED) == 0);
+    CHECK(pmap_validate(pmap3) == 0);
+    CHECK(pmap_fault(pmap3, TEST_DEVICE, VM_PROT_READ, 1) == 0);
+    CHECK(pmap_fault(pmap3, TEST_DEVICE, VM_PROT_WRITE, 1) == 0);
+    CHECK(device_page->vmp_hold_count == 0 &&
+        device_page->vmp_reference_count == 0 &&
+        device_page->vmp_dirty_count == 0);
+    CHECK(pmap_extract(pmap3, TEST_DEVICE + 19, &paddr) == 0 &&
+        paddr == device_page->vmp_paddr + 19);
+    CHECK(pmap_protect(pmap3, TEST_DEVICE,
+        TEST_DEVICE + VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_EXECUTE) == EACCES);
+    CHECK(pmap_validate(pmap3) == 0);
+    CHECK(pmap_clear_reference(pmap3, TEST_DEVICE) == 0);
+    CHECK(pmap_clear_modify(pmap3, TEST_DEVICE) == 0);
+    CHECK(pmap_remove(pmap3, TEST_DEVICE,
+        TEST_DEVICE + VM_PAGE_SIZE) == 0);
+
     CHECK(pmap_remove(pmap2, TEST_VADDR,
         TEST_VADDR + VM_PAGE_SIZE) == 0);
     CHECK(pmap_extract(pmap2, TEST_VADDR, &paddr) == ENOENT);
@@ -321,8 +351,8 @@ test_pmap(void)
     CHECK(pmap_get_stats(&stats) == 0);
     CHECK(stats.pms_mappings == 2);
     CHECK(stats.pms_resident_pages == 2);
-    CHECK(stats.pms_tlb_refills == 4);
-    CHECK(stats.pms_tlb_modified == 1);
+    CHECK(stats.pms_tlb_refills == 6);
+    CHECK(stats.pms_tlb_modified == 2);
     CHECK(stats.pms_protection_faults == 1);
     CHECK(stats.pms_full_flushes == 2);
     CHECK(stats.pms_asid_rollovers == 1);
@@ -354,6 +384,7 @@ test_vmspace(void)
     const struct vm_map_entry *map_entry;
     struct vm_page *wired_page;
     struct vm_page *wired_after;
+    struct vm_page *device_page;
     unsigned char input[32];
     unsigned char output[32];
     int resident;
@@ -367,6 +398,8 @@ test_vmspace(void)
     memset(&allocator, 0, sizeof(allocator));
     vm_phys_map_init(&map);
     CHECK(vm_phys_map_add_ram(&map, 0, TEST_RAM_SIZE, "test ram") == 0);
+    CHECK(vm_phys_map_reserve(&map, TEST_DEVICE_PADDR, VM_PAGE_SIZE,
+        "test device") == 0);
     CHECK(vm_phys_map_finalize(&map) == 0);
     CHECK(vm_page_allocator_init(&allocator, &map, metadata,
         sizeof(metadata)) == 0);
@@ -374,6 +407,9 @@ test_vmspace(void)
     CHECK(pmap_system_init(&allocator) == 0);
     CHECK(vmspace_system_init(&allocator) == 0);
     CHECK(vmspace_create(&source) == 0);
+    device_page = vm_page_lookup(&allocator, TEST_DEVICE_PADDR);
+    CHECK(device_page != 0 &&
+        device_page->vmp_state == VM_PAGE_RESERVED);
     memset(&file_pager, 0, sizeof(file_pager));
     CHECK(vm_object_create_paged(3 * VM_PAGE_SIZE,
         &test_object_pager_ops, &file_pager, 0x2000u,
@@ -398,6 +434,20 @@ test_vmspace(void)
     CHECK(vmspace_map_object(source, TEST_SHARED_FILE, VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, VM_MAP_SHARED,
         shared_file_object, VM_PAGE_SIZE) == 0);
+    CHECK(vmspace_map_device(source, TEST_DEVICE, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+        device_page->vmp_paddr, PMAP_CACHE_UNCACHED) == 0);
+    CHECK(vmspace_mincore(source, TEST_DEVICE, &resident) == 0 &&
+        resident == 1);
+    output[0] = 0x44;
+    CHECK(vmspace_write(source, TEST_DEVICE + 7, output, 1) == 0);
+    CHECK(test_ram[device_page->vmp_paddr + 7] == 0x44);
+    CHECK(device_page->vmp_hold_count == 0 &&
+        device_page->vmp_reference_count == 0 &&
+        device_page->vmp_dirty_count == 0);
+    CHECK(vmspace_wire(source, TEST_DEVICE, VM_PAGE_SIZE, 1) == 0);
+    CHECK(device_page->vmp_wire_count == 0);
+    CHECK(vmspace_wire(source, TEST_DEVICE, VM_PAGE_SIZE, 0) == 0);
     output[0] = 0;
     CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
         output[0] == 0x63 && shared_file_pager.pageins == 1);
@@ -453,6 +503,19 @@ test_vmspace(void)
     CHECK(shared_file_pager.references == 1);
     CHECK((vm_map_lookup(&child->vms_map, TEST_VADDR)->vme_flags &
         VM_MAP_WIRED) == 0);
+    CHECK(pmap_extract(child->vms_pmap, TEST_DEVICE, &child_paddr) ==
+        ENOENT);
+    output[0] = 0;
+    CHECK(vmspace_read(child, TEST_DEVICE + 7, output, 1) == 0 &&
+        output[0] == 0x44);
+    output[0] = 0x55;
+    CHECK(vmspace_write(child, TEST_DEVICE + 7, output, 1) == 0);
+    output[0] = 0;
+    CHECK(vmspace_read(source, TEST_DEVICE + 7, output, 1) == 0 &&
+        output[0] == 0x55);
+    CHECK(vmspace_protect(child, TEST_DEVICE, VM_PAGE_SIZE,
+        VM_PROT_READ) == 0);
+    CHECK(vmspace_write(child, TEST_DEVICE, input, 1) == EFAULT);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) == 0);
     CHECK(pmap_extract(child->vms_pmap, TEST_VADDR, &child_paddr) == 0);
     CHECK(source_paddr == child_paddr);

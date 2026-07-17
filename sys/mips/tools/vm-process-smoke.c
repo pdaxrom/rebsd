@@ -89,6 +89,8 @@ main(int argc, char **argv)
     char *file_mapping;
     char *shared_mapping;
     char *shared_alias;
+    char *zero_private;
+    char *zero_shared;
     unsigned char residency[3];
     char *mapped;
     char *replacement;
@@ -254,6 +256,35 @@ main(int argc, char **argv)
         MAP_PRIVATE | MAP_ANON, -1, ((off_t)1 << 32)) != MAP_FAILED ||
         errno != EINVAL)
         return smoke_fail("mmap 64-bit offset ABI");
+
+    fd = open("/dev/zero", O_RDWR);
+    if (fd < 0)
+        return smoke_fail("open /dev/zero");
+    zero_private = mmap(0, 2 * SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    zero_shared = mmap(0, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (zero_private == MAP_FAILED || zero_shared == MAP_FAILED ||
+        close(fd) != 0 || zero_private[0] != 0 ||
+        zero_private[SMOKE_VM_PAGE_SIZE] != 0 || zero_shared[0] != 0)
+        return smoke_fail("/dev/zero mmap");
+    zero_private[0] = 0x24;
+    child = fork();
+    if (child < 0)
+        return smoke_fail("/dev/zero private fork create");
+    if (child == 0) {
+        if (zero_private[0] != 0x24)
+            _exit(1);
+        zero_private[0] = 0x35;
+        zero_shared[0] = 0x46;
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0 ||
+        zero_private[0] != 0x24 || zero_shared[0] != 0x46)
+        return smoke_fail("/dev/zero fork semantics");
+    if (munmap(zero_private, 2 * SMOKE_VM_PAGE_SIZE) != 0 ||
+        munmap(zero_shared, SMOKE_VM_PAGE_SIZE) != 0)
+        return smoke_fail("/dev/zero cleanup");
 
     for (index = 0; index < SMOKE_VM_PAGE_SIZE; ++index)
         smoke_file_page[index] = (unsigned char)(index * 13 + 5);

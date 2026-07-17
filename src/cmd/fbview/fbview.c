@@ -1,6 +1,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -88,6 +89,7 @@ load_file(const char *path, unsigned *sizep)
 static int
 open_fb(struct n64fb_info *info, struct n64fb_map *map)
 {
+    void *mapping;
     int fd;
 
     fd = open(FB_DEV, O_RDWR);
@@ -110,6 +112,15 @@ open_fb(struct n64fb_info *info, struct n64fb_map *map)
         close(fd);
         exit(1);
     }
+    mapping = mmap((void *)map->vaddr, map->bytes,
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapping == MAP_FAILED) {
+        fprintf(stderr, "fbview: mmap framebuffer: %s\n",
+            strerror(errno));
+        close(fd);
+        exit(1);
+    }
+    map->vaddr = (unsigned)mapping;
     return fd;
 }
 
@@ -230,12 +241,14 @@ main(int argc, char **argv)
     if (image == 0) {
         fprintf(stderr, "fbview: %s: %s\n", argv[1],
             fbview_stbi_failure_reason());
+        munmap((void *)map.vaddr, map.bytes);
         close(fd);
         return 1;
     }
     if (iw <= 0 || ih <= 0) {
         fprintf(stderr, "fbview: %s: invalid image size\n", argv[1]);
         fbview_stbi_image_free(image);
+        munmap((void *)map.vaddr, map.bytes);
         close(fd);
         return 1;
     }
@@ -258,6 +271,7 @@ main(int argc, char **argv)
     if (scaled != image)
         free(scaled);
     fbview_stbi_image_free(image);
+    munmap((void *)map.vaddr, map.bytes);
     close(fd);
     printf("%s: %dx%d -> %ux%u at %ux%u\n", argv[1], iw, ih, out_w, out_h,
         info.width, info.height);

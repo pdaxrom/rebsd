@@ -207,7 +207,7 @@ Exit criteria:
   be tied to FAT, UFS, USB mass storage, or any block-device driver.
 - [x] Audit FAT and UFS locking and lifetime rules before enabling writable
   shared mappings.
-- [ ] Add `/dev/zero` anonymous mapping and a controlled character-device
+- [x] Add `/dev/zero` anonymous mapping and a controlled character-device
   mapping interface for framebuffer or device memory where appropriate.
 
 Exit criteria:

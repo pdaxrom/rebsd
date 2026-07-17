@@ -63,6 +63,8 @@ vm/vm_param.c                  standard
 vm/vm_phys.c                   standard
 vm/vm_page.c                   standard
 vm/vm_map.c                    standard
+vm/vm_object.c                 standard
+vm/vm_vnode.c                  standard
 vm/vmspace.c                   standard
 mips/common/pmap.c             standard
 mips/common/pmap_machdep.c     standard

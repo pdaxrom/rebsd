@@ -47,6 +47,7 @@ int n64fb_close(dev_t dev, int flag, int mode);
 int n64fb_read(dev_t dev, struct uio *uio, int flag);
 int n64fb_write(dev_t dev, struct uio *uio, int flag);
 int n64fb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag);
+int n64fb_mmap(dev_t, off_t, u_int, int, u_int *, int *);
 
 int n64_video_set_mode(unsigned mode);
 void n64_video_get_info(struct n64fb_info *info);
@@ -54,7 +55,6 @@ volatile unsigned short *n64_video_framebuffer(void);
 void n64_video_clear(unsigned color);
 void n64_video_intr(void);
 void n64_video_intr_enable(void);
-int n64_video_useraddr_valid(caddr_t addr);
 #endif
 
 #endif

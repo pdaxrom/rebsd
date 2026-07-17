@@ -83,7 +83,8 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
     }
     if (index != 0 && map->vmm_entries[index - 1].vme_end == start &&
         vm_map_entry_matches(&map->vmm_entries[index - 1], protection,
-        maximum, flags, object) && (object == 0 ||
+        maximum, flags, object) && ((object == 0 &&
+        (flags & VM_MAP_DEVICE) == 0) ||
         map->vmm_entries[index - 1].vme_offset +
         (map->vmm_entries[index - 1].vme_end -
         map->vmm_entries[index - 1].vme_start) == offset)) {
@@ -91,7 +92,8 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
         if (index < map->vmm_count &&
             map->vmm_entries[index].vme_start == end &&
             vm_map_entry_matches(&map->vmm_entries[index], protection,
-            maximum, flags, object) && (object == 0 ||
+            maximum, flags, object) && ((object == 0 &&
+            (flags & VM_MAP_DEVICE) == 0) ||
             offset + (end - start) ==
             map->vmm_entries[index].vme_offset)) {
             map->vmm_entries[index - 1].vme_end =
@@ -103,7 +105,8 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
     if (index < map->vmm_count &&
         map->vmm_entries[index].vme_start == end &&
         vm_map_entry_matches(&map->vmm_entries[index], protection,
-        maximum, flags, object) && (object == 0 ||
+        maximum, flags, object) && ((object == 0 &&
+        (flags & VM_MAP_DEVICE) == 0) ||
         offset + (end - start) ==
         map->vmm_entries[index].vme_offset)) {
         map->vmm_entries[index].vme_start = start;

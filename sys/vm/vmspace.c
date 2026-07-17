@@ -131,6 +131,8 @@ vmspace_preserve_dirty(const struct vm_map *map, struct pmap *pmap,
         if (!pmap_is_modified(pmap, address))
             continue;
         entry = vm_map_lookup(map, address);
+        if (entry != 0 && (entry->vme_flags & VM_MAP_DEVICE) != 0)
+            continue;
         if (entry == 0 || entry->vme_object == 0)
             return EFAULT;
         offset = entry->vme_offset + (address - entry->vme_start);
@@ -157,6 +159,7 @@ vmspace_unwire_removed(const struct vm_map *map, vm_vaddr_t start,
     for (index = 0; index < map->vmm_count; ++index) {
         entry = &map->vmm_entries[index];
         if ((entry->vme_flags & VM_MAP_WIRED) == 0 ||
+            (entry->vme_flags & VM_MAP_DEVICE) != 0 ||
             entry->vme_end <= start || entry->vme_start >= end)
             continue;
         first = entry->vme_start > start ? entry->vme_start : start;
@@ -171,6 +174,7 @@ vmspace_unwire_removed(const struct vm_map *map, vm_vaddr_t start,
     for (index = 0; index < map->vmm_count; ++index) {
         entry = &map->vmm_entries[index];
         if ((entry->vme_flags & VM_MAP_WIRED) == 0 ||
+            (entry->vme_flags & VM_MAP_DEVICE) != 0 ||
             entry->vme_end <= start || entry->vme_start >= end)
             continue;
         first = entry->vme_start > start ? entry->vme_start : start;
@@ -297,7 +301,9 @@ vmspace_map_object(struct vmspace *vmspace, vm_vaddr_t start,
 {
     vm_vaddr_t end;
 
-    if (!vmspace_valid(vmspace) || object == 0 || size == 0 ||
+    if (!vmspace_valid(vmspace) || size == 0 ||
+        (object == 0 && (flags & VM_MAP_DEVICE) == 0) ||
+        (object != 0 && (flags & VM_MAP_DEVICE) != 0) ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         (offset & VM_PAGE_MASK) != 0 ||
         size - 1 > VM_VADDR_MAX - start)
@@ -316,7 +322,9 @@ vmspace_map_object_any(struct vmspace *vmspace, vm_vaddr_t hint,
     vm_vaddr_t start;
     int error;
 
-    if (!vmspace_valid(vmspace) || object == 0 || result == 0)
+    if (!vmspace_valid(vmspace) || result == 0 ||
+        (object == 0 && (flags & VM_MAP_DEVICE) == 0) ||
+        (object != 0 && (flags & VM_MAP_DEVICE) != 0))
         return EINVAL;
     error = vm_map_findspace(&vmspace->vms_map, hint, size, &start);
     if (error != 0)
@@ -345,7 +353,9 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
     unsigned prior;
     int error;
 
-    if (!vmspace_valid(vmspace) || object == 0 || size == 0 ||
+    if (!vmspace_valid(vmspace) || size == 0 ||
+        (object == 0 && (flags & VM_MAP_DEVICE) == 0) ||
+        (object != 0 && (flags & VM_MAP_DEVICE) != 0) ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         (offset & VM_PAGE_MASK) != 0 ||
         size - 1 > VM_VADDR_MAX - start)
@@ -407,6 +417,88 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
             return error;
     }
     return 0;
+}
+
+static int
+vmspace_device_arguments(vm_size_t size, vm_prot_t protection,
+    vm_prot_t maximum, vm_paddr_t paddr, enum pmap_cache cache,
+    unsigned *flags)
+{
+    struct vm_page *page;
+    vm_paddr_t address;
+    vm_size_t remaining;
+
+    if (size == 0 || !vm_size_page_aligned(size) ||
+        !vm_paddr_page_aligned(paddr) ||
+        size - 1 > VM_PADDR_MAX - paddr ||
+        (protection & ~maximum) != 0 ||
+        (maximum & ~VM_PROT_ALL) != 0 ||
+        (maximum & VM_PROT_EXECUTE) != 0 ||
+        (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED) ||
+        flags == 0)
+        return EINVAL;
+    address = paddr;
+    remaining = size;
+    while (remaining != 0) {
+        page = vm_page_lookup(vmspace_allocator, address);
+        if (page != 0 && page->vmp_state != VM_PAGE_RESERVED)
+            return EBUSY;
+        remaining -= VM_PAGE_SIZE;
+        if (remaining != 0)
+            address += VM_PAGE_SIZE;
+    }
+    *flags = VM_MAP_SHARED | VM_MAP_DEVICE;
+    if (cache == PMAP_CACHE_UNCACHED)
+        *flags |= VM_MAP_UNCACHED;
+    return 0;
+}
+
+int
+vmspace_map_device(struct vmspace *vmspace, vm_vaddr_t start,
+    vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
+    vm_paddr_t paddr, enum pmap_cache cache)
+{
+    unsigned flags;
+    int error;
+
+    error = vmspace_device_arguments(size, protection, maximum, paddr,
+        cache, &flags);
+    if (error != 0)
+        return error;
+    return vmspace_map_object(vmspace, start, size, protection, maximum,
+        flags, 0, (vm_ooffset_t)paddr);
+}
+
+int
+vmspace_map_device_any(struct vmspace *vmspace, vm_vaddr_t hint,
+    vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
+    vm_paddr_t paddr, enum pmap_cache cache, vm_vaddr_t *result)
+{
+    unsigned flags;
+    int error;
+
+    error = vmspace_device_arguments(size, protection, maximum, paddr,
+        cache, &flags);
+    if (error != 0)
+        return error;
+    return vmspace_map_object_any(vmspace, hint, size, protection,
+        maximum, flags, 0, (vm_ooffset_t)paddr, result);
+}
+
+int
+vmspace_map_device_fixed(struct vmspace *vmspace, vm_vaddr_t start,
+    vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
+    vm_paddr_t paddr, enum pmap_cache cache)
+{
+    unsigned flags;
+    int error;
+
+    error = vmspace_device_arguments(size, protection, maximum, paddr,
+        cache, &flags);
+    if (error != 0)
+        return error;
+    return vmspace_map_object_fixed(vmspace, start, size, protection,
+        maximum, flags, 0, (vm_ooffset_t)paddr);
 }
 
 int
@@ -508,7 +600,8 @@ vmspace_wire_rollback(const struct vm_map *map, vm_vaddr_t start,
 
     for (address = start; address < end; address += VM_PAGE_SIZE) {
         entry = vm_map_lookup(map, address);
-        if (entry == 0 || (entry->vme_flags & VM_MAP_WIRED) != 0)
+        if (entry == 0 || (entry->vme_flags & VM_MAP_WIRED) != 0 ||
+            (entry->vme_flags & VM_MAP_DEVICE) != 0)
             continue;
         offset = entry->vme_offset + (address - entry->vme_start);
         page = vm_object_resident_page(entry->vme_object, offset);
@@ -545,6 +638,8 @@ vmspace_wire(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
             entry = vm_map_lookup(&vmspace->vms_map, address);
             if ((entry->vme_flags & VM_MAP_WIRED) != 0)
                 continue;
+            if ((entry->vme_flags & VM_MAP_DEVICE) != 0)
+                continue;
             offset = entry->vme_offset + (address - entry->vme_start);
             error = vm_object_fault(entry->vme_object, offset, 0, &page);
             if (error == 0)
@@ -560,6 +655,8 @@ vmspace_wire(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
             entry = vm_map_lookup(&vmspace->vms_map, address);
             if ((entry->vme_flags & VM_MAP_WIRED) == 0)
                 continue;
+            if ((entry->vme_flags & VM_MAP_DEVICE) != 0)
+                continue;
             offset = entry->vme_offset + (address - entry->vme_start);
             page = vm_object_resident_page(entry->vme_object, offset);
             if (page == 0 || page->vmp_wire_count == 0)
@@ -568,6 +665,8 @@ vmspace_wire(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
         for (address = start; address < end; address += VM_PAGE_SIZE) {
             entry = vm_map_lookup(&vmspace->vms_map, address);
             if ((entry->vme_flags & VM_MAP_WIRED) == 0)
+                continue;
+            if ((entry->vme_flags & VM_MAP_DEVICE) != 0)
                 continue;
             offset = entry->vme_offset + (address - entry->vme_start);
             page = vm_object_resident_page(entry->vme_object, offset);
@@ -591,7 +690,13 @@ vmspace_mincore(const struct vmspace *vmspace, vm_vaddr_t address,
     if (!vmspace_valid(vmspace) || resident == 0)
         return EINVAL;
     entry = vm_map_lookup(&vmspace->vms_map, address);
-    if (entry == 0 || entry->vme_object == 0)
+    if (entry == 0)
+        return EFAULT;
+    if ((entry->vme_flags & VM_MAP_DEVICE) != 0) {
+        *resident = 1;
+        return 0;
+    }
+    if (entry->vme_object == 0)
         return EFAULT;
     offset = entry->vme_offset +
         (vm_vaddr_trunc_page(address) - entry->vme_start);
@@ -623,6 +728,7 @@ vmspace_sync(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
     for (index = 0; index < vmspace->vms_map.vmm_count; ++index) {
         entry = &vmspace->vms_map.vmm_entries[index];
         if ((entry->vme_flags & VM_MAP_SHARED) == 0 ||
+            (entry->vme_flags & VM_MAP_DEVICE) != 0 ||
             entry->vme_end <= start || entry->vme_start >= end)
             continue;
         first = entry->vme_start > start ? entry->vme_start : start;
@@ -663,11 +769,28 @@ vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
         access != VM_PROT_WRITE && access != VM_PROT_EXECUTE))
         return EINVAL;
     entry = vm_map_lookup(&vmspace->vms_map, address);
-    if (entry == 0 || entry->vme_object == 0 ||
-        (entry->vme_protection & access) != access)
+    if (entry == 0 || (entry->vme_protection & access) != access)
         return EFAULT;
     page_address = vm_vaddr_trunc_page(address);
     offset = entry->vme_offset + (page_address - entry->vme_start);
+    if ((entry->vme_flags & VM_MAP_DEVICE) != 0) {
+        if (entry->vme_object != 0 || offset > VM_PADDR_MAX ||
+            access == VM_PROT_EXECUTE)
+            return EFAULT;
+        effective = entry->vme_protection & ~VM_PROT_EXECUTE;
+        error = pmap_extract(vmspace->vms_pmap, page_address, &current);
+        if (error == 0 && (current & ~VM_PAGE_MASK) ==
+            (vm_paddr_t)offset)
+            return 0;
+        if (error != 0 && error != ENOENT)
+            return error;
+        return pmap_enter_device(vmspace->vms_pmap, page_address,
+            (vm_paddr_t)offset, effective,
+            (entry->vme_flags & VM_MAP_UNCACHED) != 0 ?
+            PMAP_CACHE_UNCACHED : PMAP_CACHE_CACHED);
+    }
+    if (entry->vme_object == 0)
+        return EFAULT;
     cow_write = access == VM_PROT_WRITE &&
         (entry->vme_flags & VM_MAP_COW) != 0;
     old_page = cow_write && (entry->vme_flags & VM_MAP_WIRED) != 0 ?
@@ -732,12 +855,23 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
         error = pmap_extract(vmspace->vms_pmap, address, &paddr);
         if (error != 0)
             return error;
-        page = vm_page_lookup(vmspace_allocator,
-            paddr & ~VM_PAGE_MASK);
-        if (page == 0)
+        entry = vm_map_lookup(&vmspace->vms_map, address);
+        if (entry == 0)
             return EFAULT;
-        physical = (unsigned char *)pmap_page_direct_map(page,
-            PMAP_CACHE_CACHED);
+        if ((entry->vme_flags & VM_MAP_DEVICE) != 0) {
+            page = 0;
+            physical = (unsigned char *)pmap_device_direct_map(
+                paddr & ~VM_PAGE_MASK,
+                (entry->vme_flags & VM_MAP_UNCACHED) != 0 ?
+                PMAP_CACHE_UNCACHED : PMAP_CACHE_CACHED);
+        } else {
+            page = vm_page_lookup(vmspace_allocator,
+                paddr & ~VM_PAGE_MASK);
+            if (page == 0)
+                return EFAULT;
+            physical = (unsigned char *)pmap_page_direct_map(page,
+                PMAP_CACHE_CACHED);
+        }
         if (physical == 0)
             return EFAULT;
         physical += paddr & VM_PAGE_MASK;
@@ -748,17 +882,15 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
             vmspace_copy_memory(bytes, physical, chunk);
         else
             vmspace_copy_memory(physical, bytes, chunk);
-        entry = vm_map_lookup(&vmspace->vms_map, address);
-        if (write && entry != 0) {
+        if (write && (entry->vme_flags & VM_MAP_DEVICE) == 0) {
             offset = entry->vme_offset +
                 (vm_vaddr_trunc_page(address) - entry->vme_start);
             error = vm_object_mark_dirty(entry->vme_object, offset);
             if (error != 0)
                 return error;
         }
-        if (write &&
-            (vm_map_lookup(&vmspace->vms_map, address)->vme_protection &
-            VM_PROT_EXECUTE) != 0) {
+        if (write && page != 0 &&
+            (entry->vme_protection & VM_PROT_EXECUTE) != 0) {
             error = pmap_page_sync(page,
                 PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION);
             if (error != 0)
@@ -855,6 +987,17 @@ vmspace_clone(struct vmspace *source, struct vmspace **result)
     object_count = 0;
     for (index = 0; index < source->vms_map.vmm_count; ++index) {
         source_entry = &source->vms_map.vmm_entries[index];
+        if ((source_entry->vme_flags & VM_MAP_DEVICE) != 0) {
+            flags = source_entry->vme_flags & ~VM_MAP_WIRED;
+            error = vm_map_insert_object(&target->vms_map,
+                source_entry->vme_start, source_entry->vme_end,
+                source_entry->vme_protection,
+                source_entry->vme_max_protection, flags, 0,
+                source_entry->vme_offset);
+            if (error != 0)
+                goto fail;
+            continue;
+        }
         target_object = 0;
         new_object = 0;
         for (object_index = 0; object_index < object_count;
@@ -899,6 +1042,8 @@ vmspace_clone(struct vmspace *source, struct vmspace **result)
 
     for (index = 0; index < source->vms_map.vmm_count; ++index) {
         source_entry = &source->vms_map.vmm_entries[index];
+        if ((source_entry->vme_flags & VM_MAP_DEVICE) != 0)
+            continue;
         if ((source_entry->vme_flags & VM_MAP_SHARED) == 0 &&
             (source_entry->vme_max_protection & VM_PROT_WRITE) != 0) {
             source_entry->vme_flags |= VM_MAP_COW;

@@ -52,7 +52,11 @@ struct cdevsw
     void    (*d_strategy) (struct buf*);
     char    (*r_read) (dev_t);
     void    (*r_write) (dev_t, char);
+    int     (*d_mmap) (dev_t, off_t, u_int, int, u_int*, int*);
 };
+
+#define NULL_MINOR      2
+#define ZERO_MINOR      3
 
 #define UART_MAJOR      6
 #define UARTUSB_MAJOR   7

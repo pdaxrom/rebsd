@@ -33,20 +33,39 @@ and
 .B MAP_SHARED
 must be supplied.
 .PP
-The current implementation supports demand-zero anonymous private mappings
-with
-.BR MAP_PRIVATE | MAP_ANON .
-For such mappings
+The current implementation supports demand-zero anonymous mappings with
+.B MAP_ANON
+and regular-file mappings with either
+.B MAP_PRIVATE
+or
+.BR MAP_SHARED .
+For anonymous mappings
 .I fd
 must be -1 and
 .I offset
 must be zero.
+Mapping
+.B /dev/zero
+at offset zero has the same demand-zero behavior and may be private or shared.
+.B MAP_PRIVATE
+file mappings isolate writes with copy-on-write.
+.B MAP_SHARED
+file mappings share resident pages with other mappings and coherent buffered
+file I/O; dirty pages are written by
+.IR msync (2)
+or normal filesystem synchronization.
+.PP
+Character devices may support controlled
+.B MAP_SHARED
+mappings through their driver.
+Such mappings cannot be executable, require descriptor permissions matching
+the requested protections, and expose only the physical range and cache mode
+approved by the driver.
 The address is a hint unless
 .B MAP_FIXED
 is present.  A page-aligned fixed mapping atomically replaces mappings in its
 range after all arguments and required VM resources have been validated.
-File-backed mappings are not yet supported and fail without changing the
-address map.
+File and device offsets must be page aligned.
 .PP
 .I Munmap
 removes all mappings in the page-aligned range.
@@ -54,9 +73,12 @@ removes all mappings in the page-aligned range.
 changes protection after verifying that the complete range is mapped.
 Lengths are rounded up to the 4096-byte VM page size.
 .PP
-For anonymous mappings,
+For anonymous and device mappings,
 .I msync
 validates the range and completes without I/O.
+For shared regular-file mappings it writes dirty pages and, with
+.BR MS_INVALIDATE ,
+drops clean resident pages so a later access faults them in again.
 .I Madvise
 validates its range and advice; advice is currently informational.
 .I Mincore
@@ -64,7 +86,8 @@ stores one byte per VM page in
 .I vec
 and sets
 .B MINCORE_INCORE
-when the page currently has a resident hardware mapping.
+when an object page is resident; controlled device mappings are always
+resident.
 .I Mlock
 makes all pages in a mapped range resident and ineligible for pageout until
 .I munlock
@@ -83,7 +106,13 @@ for invalid flags, protection, alignment, length, offset, or advice;
 .BR EFAULT
 for an invalid user vector or an unmapped range;
 .BR ENOMEM
-when no address range or VM resource is available; or
+when no address range or VM resource is available;
+.BR EACCES
+when descriptor access does not permit the requested shared protection;
+.BR ENODEV
+when a file type or character-device mapping is unsupported;
+.BR EOVERFLOW
+when a file range is not representable; or
 .BR EOPNOTSUPP
 for an operation not implemented by the selected mapping type.
 .SH SEE ALSO

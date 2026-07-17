@@ -24,7 +24,6 @@ extern char _mips_exception_vector_end[];
 
 #define N64_TLB_ENTRIES         32
 #define N64_USER_TLB_INDEX      0
-#define N64_FB_TLB_INDEX        (N64_USER_TLB_INDEX + N64_USER_TLB_PAIRS)
 #define N64_VECTOR_TLB_REFILL   0x00000000u
 #define N64_VECTOR_XTLB_REFILL  0x00000080u
 #define N64_VECTOR_CACHE_ERROR  0x00000100u
@@ -160,34 +159,11 @@ n64_tlb_entrylo(unsigned phys)
     return n64_tlb_entrylo_cache(phys, TLB_CACHE_CNC);
 }
 
-static unsigned
-n64_fb_tlb_entries(unsigned rdram)
-{
-#ifndef VIDEO_ENABLED
-    (void)rdram;
-    return 0;
-#else
-    unsigned bytes = rdram >= N64_RDRAM_SIZE_8M ?
-        N64_EXPANSION_FB_RESERVED_BYTES : N64_BASE_FB_RESERVED_BYTES;
-
-    return bytes / N64_VIDEO_TLB_PAIR_SIZE;
-#endif
-}
-
-static unsigned
-n64_fb_tlb_phys(unsigned rdram)
-{
-    return rdram >= N64_RDRAM_SIZE_8M ?
-        N64_EXPANSION_FB_PHYS_START : N64_BASE_FB_PHYS_START;
-}
-
 static void
 n64_tlb_init(void)
 {
     unsigned rdram = n64_rdram_size();
     unsigned user_pairs = n64_user_tlb_pairs_for_rdram(rdram);
-    unsigned fb_phys = n64_fb_tlb_phys(rdram);
-    unsigned fb_entries = n64_fb_tlb_entries(rdram);
     unsigned i;
 
     mips_write_c0_register(C0_WIRED, 0, 0);
@@ -204,18 +180,8 @@ n64_tlb_init(void)
             vaddr, n64_tlb_entrylo(phys),
             n64_tlb_entrylo(phys + N64_USER_TLB_PAGE_SIZE));
     }
-    for (i = 0; i < fb_entries; ++i) {
-        unsigned vaddr = N64_FB_USER_VADDR_START +
-            i * N64_VIDEO_TLB_PAIR_SIZE;
-        unsigned phys = fb_phys + i * N64_VIDEO_TLB_PAIR_SIZE;
-
-        mips_tlb_write_indexed(N64_FB_TLB_INDEX + i,
-            TLB_PAGEMASK_64K, vaddr,
-            n64_tlb_entrylo_cache(phys, TLB_CACHE_UNCACHED),
-            n64_tlb_entrylo_cache(phys + N64_VIDEO_TLB_PAGE_SIZE,
-                TLB_CACHE_UNCACHED));
-    }
-    mips_write_c0_register(C0_WIRED, 0, N64_FB_TLB_INDEX + fb_entries);
+    mips_write_c0_register(C0_WIRED, 0,
+        N64_USER_TLB_INDEX + user_pairs);
 }
 
 unsigned
@@ -287,10 +253,6 @@ baduaddr(caddr_t addr)
     if (vmspace != 0 && vmspace_check(vmspace, a, 1,
         VM_PROT_NONE) == 0)
         return 0;
-#ifdef VIDEO_ENABLED
-    if (n64_video_useraddr_valid(addr))
-        return 0;
-#endif
     return 1;
 }
 
@@ -313,13 +275,6 @@ copyout(caddr_t from, caddr_t to, u_int nbytes)
         return 0;
     if (end < start)
         return EFAULT;
-#ifdef VIDEO_ENABLED
-    if (n64_video_useraddr_valid((caddr_t)start) &&
-        n64_video_useraddr_valid((caddr_t)end)) {
-        bcopy(from, to, nbytes);
-        return 0;
-    }
-#endif
     vmspace = vmspace_current();
     if (vmspace == 0)
         return EFAULT;
@@ -337,13 +292,6 @@ copyin(caddr_t from, caddr_t to, u_int nbytes)
         return 0;
     if (end < start)
         return EFAULT;
-#ifdef VIDEO_ENABLED
-    if (n64_video_useraddr_valid((caddr_t)start) &&
-        n64_video_useraddr_valid((caddr_t)end)) {
-        bcopy(from, to, nbytes);
-        return 0;
-    }
-#endif
     vmspace = vmspace_current();
     if (vmspace == 0)
         return EFAULT;

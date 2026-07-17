@@ -689,9 +689,11 @@ the board-specific generated/appended manifest.
   `fbview /cart/moon.jpg` after mounting cartridge ROMFS
 - [ ] Hardware smoke-test PAL and MPAL timing on matching hardware or a
   trusted hardware-accurate setup
-- [x] Add shared framebuffer access for `/dev/fb0`; current read/write path
-  still copies bytes, and real graphics can use the fixed N64 TLB-backed
-  mapping returned by `N64FBIOC_GETMAP`
+- [x] Add process-local shared framebuffer access for `/dev/fb0`; the
+  read/write path still copies bytes, while graphics uses the controlled
+  uncached `MAP_SHARED` interface and treats `N64FBIOC_GETMAP.vaddr` as a hint
+- [ ] Hardware smoke-test the process-local `/dev/fb0` mmap path with
+  `fbset fill` and `fbview` after removal of the global wired mapping
 - [x] Add a real N64 system-console input backend, so `/dev/console` can be
   used without the n64cart serial login path
 - [ ] Hardware smoke-test `/dev/console` login and shell input from a RandNET
