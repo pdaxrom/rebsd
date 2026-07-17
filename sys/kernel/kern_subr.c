@@ -58,10 +58,17 @@ uiomove (caddr_t cp, u_int n, struct uio *uio)
         }
         if (cnt > n)
             cnt = n;
-        if (uio->uio_rw == UIO_READ)
-            bcopy ((caddr_t) cp, iov->iov_base, cnt);
+        if ((unsigned)iov->iov_base < KERNEL_DATA_START) {
+            if (uio->uio_rw == UIO_READ)
+                error = copyout((caddr_t)cp, iov->iov_base, cnt);
+            else
+                error = copyin(iov->iov_base, (caddr_t)cp, cnt);
+            if (error != 0)
+                break;
+        } else if (uio->uio_rw == UIO_READ)
+            bcopy((caddr_t)cp, iov->iov_base, cnt);
         else
-            bcopy (iov->iov_base, (caddr_t) cp, cnt);
+            bcopy(iov->iov_base, (caddr_t)cp, cnt);
         iov->iov_base += cnt;
         iov->iov_len -= cnt;
         uio->uio_resid -= cnt;
@@ -79,6 +86,7 @@ int
 ureadc (int c, struct uio *uio)
 {
     register struct iovec *iov;
+    unsigned char byte;
 
 again:
     if (uio->uio_iovcnt == 0)
@@ -89,7 +97,12 @@ again:
         uio->uio_iov++;
         goto again;
     }
-    *iov->iov_base = c;
+    byte = (unsigned char)c;
+    if ((unsigned)iov->iov_base < KERNEL_DATA_START) {
+        if (copyout((caddr_t)&byte, iov->iov_base, 1) != 0)
+            return EFAULT;
+    } else
+        *iov->iov_base = (char)byte;
 
     iov->iov_base++;
     iov->iov_len--;
@@ -106,6 +119,7 @@ uwritec(struct uio *uio)
 {
     register struct iovec *iov;
     register int c;
+    unsigned char byte;
 
     if (uio->uio_resid == 0)
         return (-1);
@@ -119,7 +133,12 @@ again:
             return (-1);
         goto again;
     }
-    c = (u_char) *iov->iov_base;
+    if ((unsigned)iov->iov_base < KERNEL_DATA_START) {
+        if (copyin(iov->iov_base, (caddr_t)&byte, 1) != 0)
+            return (-1);
+        c = byte;
+    } else
+        c = (u_char)*iov->iov_base;
 
     iov->iov_base++;
     iov->iov_len--;
@@ -134,6 +153,11 @@ again:
 int
 uiofmove(caddr_t cp, int n, struct uio *uio, struct iovec *iov)
 {
+    if ((unsigned)iov->iov_base < KERNEL_DATA_START) {
+        if (uio->uio_rw == UIO_READ)
+            return copyout(cp, iov->iov_base, n);
+        return copyin(iov->iov_base, cp, n);
+    }
     if (uio->uio_rw == UIO_READ) {
         /* From kernel to user. */
         bcopy(cp, iov->iov_base, n);

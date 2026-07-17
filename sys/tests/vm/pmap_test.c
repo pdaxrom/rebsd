@@ -11,6 +11,7 @@
 #define TEST_VADDR      0x10000000u
 #define TEST_VADDR2     0x10002000u
 #define TEST_SHARED     0x10004000u
+#define TEST_FILE       0x10008000u
 #define TEST_PRESSURE   0x20000000u
 #define TEST_PRESSURE_PAGES 70u
 
@@ -31,6 +32,50 @@ static unsigned test_tlb_updates;
 static unsigned test_tlb_invalidations;
 static unsigned test_tlb_flushes;
 static unsigned test_syncs;
+
+struct test_object_pager {
+    unsigned references;
+    unsigned releases;
+    unsigned pageins;
+};
+
+static void
+test_object_pager_reference(void *cookie)
+{
+    struct test_object_pager *pager = cookie;
+
+    ++pager->references;
+}
+
+static void
+test_object_pager_release(void *cookie)
+{
+    struct test_object_pager *pager = cookie;
+
+    --pager->references;
+    ++pager->releases;
+}
+
+static int
+test_object_pager_pagein(void *cookie, vm_ooffset_t offset, void *buffer,
+    vm_size_t size)
+{
+    struct test_object_pager *pager = cookie;
+
+    ++pager->pageins;
+    if (offset == 0x4000u)
+        return ENXIO;
+    if (offset != 0x2000u && offset != 0x3000u)
+        return EINVAL;
+    memset(buffer, offset == 0x2000u ? 0xa1 : 0xb2, size);
+    return 0;
+}
+
+static const struct vm_object_pager_ops test_object_pager_ops = {
+    test_object_pager_reference,
+    test_object_pager_release,
+    test_object_pager_pagein
+};
 
 unsigned
 pmap_md_tlb_entries(void)
@@ -229,12 +274,15 @@ test_vmspace(void)
     struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
     struct vmspace *source;
     struct vmspace *child;
+    struct vm_object *file_object;
+    struct test_object_pager file_pager;
     struct vm_object_stats object_stats;
     const struct vm_map_entry *map_entry;
     struct vm_page *wired_page;
     struct vm_page *wired_after;
     unsigned char input[32];
     unsigned char output[32];
+    int resident;
     vm_paddr_t source_paddr;
     vm_paddr_t child_paddr;
     vm_vaddr_t any_address;
@@ -252,6 +300,21 @@ test_vmspace(void)
     CHECK(pmap_system_init(&allocator) == 0);
     CHECK(vmspace_system_init(&allocator) == 0);
     CHECK(vmspace_create(&source) == 0);
+    memset(&file_pager, 0, sizeof(file_pager));
+    CHECK(vm_object_create_paged(3 * VM_PAGE_SIZE,
+        &test_object_pager_ops, &file_pager, 0x2000u,
+        &file_object) == 0);
+    CHECK(file_pager.references == 1);
+    CHECK(vmspace_map_object(source, TEST_FILE, 3 * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0,
+        file_object) == 0);
+    output[0] = 0;
+    CHECK(vmspace_read(source, TEST_FILE + 7, output, 1) == 0);
+    CHECK(output[0] == 0xa1 && file_pager.pageins == 1);
+    CHECK(vmspace_read(source, TEST_FILE + 2 * VM_PAGE_SIZE,
+        output, 1) == ENXIO);
+    CHECK(vmspace_mincore(source, TEST_FILE + 2 * VM_PAGE_SIZE,
+        &resident) == 0 && resident == 0);
     CHECK(vmspace_map_anon(source, TEST_VADDR, 2 * VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE, 0) == 0);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) ==
@@ -300,6 +363,7 @@ test_vmspace(void)
     CHECK(wired_page != 0 && wired_page->vmp_wire_count == 1);
 
     CHECK(vmspace_clone(source, &child) == 0);
+    CHECK(file_pager.references == 2);
     CHECK((vm_map_lookup(&child->vms_map, TEST_VADDR)->vme_flags &
         VM_MAP_WIRED) == 0);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) == 0);
@@ -335,15 +399,25 @@ test_vmspace(void)
     output[0] = 0;
     CHECK(vmspace_read(source, TEST_SHARED, output, 1) == 0);
     CHECK(output[0] == 0x3cu);
+    output[0] = 0;
+    CHECK(vmspace_read(child, TEST_FILE + VM_PAGE_SIZE,
+        output, 1) == 0 && output[0] == 0xb2);
+    output[0] = 0x5cu;
+    CHECK(vmspace_write(child, TEST_FILE, output, 1) == 0);
+    output[0] = 0;
+    CHECK(vmspace_read(source, TEST_FILE, output, 1) == 0 &&
+        output[0] == 0xa1);
 
     CHECK(vmspace_protect(child, TEST_VADDR + VM_PAGE_SIZE,
         VM_PAGE_SIZE, VM_PROT_READ) == 0);
     CHECK(vmspace_write(child, TEST_VADDR + VM_PAGE_SIZE,
         input, 1) == EFAULT);
     CHECK(vmspace_destroy(child) == 0);
+    CHECK(file_pager.references == 1 && file_pager.releases == 1);
     CHECK(vmspace_wire(source, TEST_VADDR, 2 * VM_PAGE_SIZE, 0) == 0);
     CHECK(wired_after->vmp_wire_count == 0);
     CHECK(vmspace_destroy(source) == 0);
+    CHECK(file_pager.references == 0 && file_pager.releases == 2);
     CHECK(allocator.vpa_free_count == free_before);
     CHECK(vm_object_get_stats(&object_stats) == 0);
     CHECK(object_stats.vos_objects == 0);

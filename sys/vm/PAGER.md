@@ -22,6 +22,23 @@ are released independently.  Unmapping first removes every `pmap` reference;
 the final anonymous reference can then return both its resident page and its
 swap slot.  A failed `fork` or map insertion drops every reference it acquired.
 
+## Private mapped files
+
+A VM object may carry a filesystem-independent pager callback and cookie.
+The inode adapter in `vm_vnode.c` is the only layer that knows about inode
+locking, `rdwri`, and inode references.  Creating an object acquires its own
+inode reference, cloning it for a private `fork` acquires another one, and the
+last object release drops it.  A mapping therefore remains valid after its
+descriptor is closed.
+
+The first fault reads one page through the callback.  A short final page is
+zero-filled; a page beginning at or beyond the current EOF fails with `ENXIO`,
+which the MIPS user-fault path reports as `SIGBUS`.  Successful pages become
+ordinary anonymous descriptors, so private writes and `fork` use the same COW
+and swap paths as anonymous memory and never write the inode.  Writable
+`MAP_SHARED` remains disabled until buffered I/O and mappings share a coherent
+page cache.
+
 ## Page selection
 
 The anonymous descriptor pool is the pager's stable clock queue.  Resident

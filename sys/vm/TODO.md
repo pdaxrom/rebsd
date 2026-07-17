@@ -193,17 +193,17 @@ Exit criteria:
   header coverage.
 - [x] Extend syscall argument handling where 64-bit offsets or more than the
   current register argument set require stack arguments.
-- [ ] Validate address, length, alignment, offset, protection, descriptor, and
+- [x] Validate address, length, alignment, offset, protection, descriptor, and
   overflow combinations before changing a map.
 - [x] Support anonymous private mappings.
-- [ ] Support file-backed `MAP_PRIVATE` with copy-on-write.
+- [x] Support file-backed `MAP_PRIVATE` with copy-on-write.
 - [ ] Support file-backed `MAP_SHARED` with coherent reads, writes, truncation,
   `fsync`, `msync`, unmount, and device-removal behavior.
 - [ ] Define vnode/page-cache ownership so buffered I/O and mapped I/O do not
   maintain incoherent independent copies.
-- [ ] Implement partial unmap, map splitting/merging, protection changes, and
+- [x] Implement partial unmap, map splitting/merging, protection changes, and
   faults at EOF.
-- [ ] Keep filesystem-specific code behind vnode/pager operations; VM must not
+- [x] Keep filesystem-specific code behind vnode/pager operations; VM must not
   be tied to FAT, UFS, USB mass storage, or any block-device driver.
 - [ ] Audit FAT and UFS locking and lifetime rules before enabling writable
   shared mappings.

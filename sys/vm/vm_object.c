@@ -58,6 +58,9 @@ struct vm_object_page {
 
 struct vm_object {
     struct vm_object_page *vo_pages;
+    const struct vm_object_pager_ops *vo_pager;
+    void                  *vo_pager_cookie;
+    vm_ooffset_t           vo_pager_offset;
     vm_pfn_t               vo_size;
     uint16_t               vo_references;
     uint16_t               vo_in_use;
@@ -289,7 +292,7 @@ vm_object_page_allocate(struct vm_page **result)
 }
 
 static int
-vm_anon_make_resident(struct vm_anon *anon)
+vm_anon_make_resident(struct vm_anon *anon, int zero_fault)
 {
     struct vm_page *page;
     void *mapping;
@@ -311,7 +314,8 @@ vm_anon_make_resident(struct vm_anon *anon)
     }
     if (anon->va_swap_slot == 0) {
         vm_object_zero(mapping, VM_PAGE_SIZE);
-        vm_object_stat_increment(&vm_object_statistics.vos_zero_faults);
+        if (zero_fault)
+            vm_object_stat_increment(&vm_object_statistics.vos_zero_faults);
     } else {
         error = vm_pager_swap_io(anon->va_swap_slot, page, 1);
         if (error != 0) {
@@ -382,6 +386,30 @@ vm_object_create(vm_size_t size, struct vm_object **result)
 }
 
 int
+vm_object_create_paged(vm_size_t size,
+    const struct vm_object_pager_ops *pager, void *cookie,
+    vm_ooffset_t offset, struct vm_object **result)
+{
+    struct vm_object *object;
+    int error;
+
+    if (pager == 0 || pager->vpo_reference == 0 ||
+        pager->vpo_release == 0 || pager->vpo_pagein == 0 ||
+        cookie == 0 || (offset & VM_PAGE_MASK) != 0 ||
+        size == 0 || (vm_ooffset_t)size - 1 > UINT64_MAX - offset)
+        return EINVAL;
+    error = vm_object_create(size, &object);
+    if (error != 0)
+        return error;
+    pager->vpo_reference(cookie);
+    object->vo_pager = pager;
+    object->vo_pager_cookie = cookie;
+    object->vo_pager_offset = offset;
+    *result = object;
+    return 0;
+}
+
+int
 vm_object_reference(struct vm_object *object)
 {
     if (!vm_object_valid(object) || object->vo_references == UINT16_MAX)
@@ -406,7 +434,12 @@ vm_object_clone(const struct vm_object *source, struct vm_object **result)
 
     if (!vm_object_valid(source) || result == 0)
         return EINVAL;
-    error = vm_object_create(source->vo_size * VM_PAGE_SIZE, &target);
+    if (source->vo_pager != 0)
+        error = vm_object_create_paged(source->vo_size * VM_PAGE_SIZE,
+            source->vo_pager, source->vo_pager_cookie,
+            source->vo_pager_offset, &target);
+    else
+        error = vm_object_create(source->vo_size * VM_PAGE_SIZE, &target);
     if (error != 0)
         return error;
     for (source_page = source->vo_pages; source_page != 0;
@@ -449,6 +482,8 @@ vm_object_release(struct vm_object *object)
             return error;
         vm_object_page_free(page);
     }
+    if (object->vo_pager != 0)
+        object->vo_pager->vpo_release(object->vo_pager_cookie);
     object->vo_references = 0;
     vm_object_zero(object, sizeof(*object));
     vm_object_stat_decrement(&vm_object_statistics.vos_objects);
@@ -469,7 +504,7 @@ vm_object_private_copy(struct vm_object_page *object_page)
     if (source->va_references <= 1)
         return 0;
     source->va_flags |= VM_ANON_BUSY;
-    error = vm_anon_make_resident(source);
+    error = vm_anon_make_resident(source, 0);
     if (error != 0) {
         source->va_flags &= ~VM_ANON_BUSY;
         return error;
@@ -514,7 +549,9 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
 {
     struct vm_object_page *object_page;
     struct vm_anon *anon;
+    void *mapping;
     vm_pfn_t index;
+    int new_page;
     int error;
 
     if (!vm_object_valid(object) || result == 0 ||
@@ -522,6 +559,7 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
         return EINVAL;
     index = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
     object_page = vm_object_page_find(object, index);
+    new_page = object_page == 0;
     if (object_page == 0) {
         object_page = vm_object_page_alloc();
         anon = vm_anon_alloc();
@@ -534,12 +572,37 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
         }
         object_page->vop_index = index;
         object_page->vop_anon = anon;
+    }
+    error = vm_anon_make_resident(object_page->vop_anon,
+        object->vo_pager == 0);
+    if (error != 0) {
+        if (new_page) {
+            (void)vm_anon_release(object_page->vop_anon);
+            vm_object_page_free(object_page);
+        }
+        return error;
+    }
+    if (new_page && object->vo_pager != 0) {
+        mapping = pmap_page_direct_map(object_page->vop_anon->va_page,
+            PMAP_CACHE_CACHED);
+        if (mapping == 0)
+            error = EFAULT;
+        else
+            error = object->vo_pager->vpo_pagein(
+                object->vo_pager_cookie,
+                object->vo_pager_offset + offset, mapping,
+                VM_PAGE_SIZE);
+        if (error != 0) {
+            (void)vm_anon_release(object_page->vop_anon);
+            vm_object_page_free(object_page);
+            return error;
+        }
+        vm_object_stat_increment(&vm_object_statistics.vos_pageins);
+    }
+    if (new_page) {
         object_page->vop_next = object->vo_pages;
         object->vo_pages = object_page;
     }
-    error = vm_anon_make_resident(object_page->vop_anon);
-    if (error != 0)
-        return error;
     if (private_write) {
         error = vm_object_private_copy(object_page);
         if (error != 0)

@@ -255,44 +255,36 @@ vmspace_activate(struct vmspace *vmspace)
 }
 
 int
-vmspace_map_anon(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
-    vm_prot_t protection, unsigned flags)
+vmspace_map_object(struct vmspace *vmspace, vm_vaddr_t start,
+    vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
+    unsigned flags, struct vm_object *object)
 {
-    struct vm_object *object;
     vm_vaddr_t end;
-    int error;
 
-    if (!vmspace_valid(vmspace) || size == 0 ||
+    if (!vmspace_valid(vmspace) || object == 0 || size == 0 ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         size - 1 > VM_VADDR_MAX - start)
         return EINVAL;
     end = start + size;
-    error = vm_object_create(size, &object);
-    if (error != 0)
-        return error;
-    error = vm_map_insert_object(&vmspace->vms_map, start, end,
-        protection, VM_PROT_ALL, flags | VM_MAP_ANON, object, 0);
-    if (error != 0) {
-        (void)vm_object_release(object);
-        return error;
-    }
-    return 0;
+    return vm_map_insert_object(&vmspace->vms_map, start, end,
+        protection, maximum, flags, object, 0);
 }
 
 int
-vmspace_map_anon_any(struct vmspace *vmspace, vm_vaddr_t hint,
-    vm_size_t size, vm_prot_t protection, unsigned flags,
-    vm_vaddr_t *result)
+vmspace_map_object_any(struct vmspace *vmspace, vm_vaddr_t hint,
+    vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
+    unsigned flags, struct vm_object *object, vm_vaddr_t *result)
 {
     vm_vaddr_t start;
     int error;
 
-    if (!vmspace_valid(vmspace) || result == 0)
+    if (!vmspace_valid(vmspace) || object == 0 || result == 0)
         return EINVAL;
     error = vm_map_findspace(&vmspace->vms_map, hint, size, &start);
     if (error != 0)
         return error;
-    error = vmspace_map_anon(vmspace, start, size, protection, flags);
+    error = vmspace_map_object(vmspace, start, size, protection,
+        maximum, flags, object);
     if (error != 0)
         return error;
     *result = start;
@@ -300,11 +292,11 @@ vmspace_map_anon_any(struct vmspace *vmspace, vm_vaddr_t hint,
 }
 
 int
-vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
-    vm_size_t size, vm_prot_t protection, unsigned flags)
+vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
+    vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
+    unsigned flags, struct vm_object *object)
 {
     struct vmspace_unmap_object objects[VM_MAP_MAX_ENTRIES];
-    struct vm_object *object;
     struct vm_map replacement;
     const struct vm_map_entry *entry;
     vm_vaddr_t first;
@@ -315,7 +307,7 @@ vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
     unsigned prior;
     int error;
 
-    if (!vmspace_valid(vmspace) || size == 0 ||
+    if (!vmspace_valid(vmspace) || object == 0 || size == 0 ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         size - 1 > VM_VADDR_MAX - start)
         return EINVAL;
@@ -323,18 +315,13 @@ vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
     if (start < vmspace->vms_map.vmm_min ||
         end > vmspace->vms_map.vmm_max)
         return EINVAL;
-    error = vm_object_create(size, &object);
-    if (error != 0)
-        return error;
     replacement = vmspace->vms_map;
     error = vm_map_remove(&replacement, start, end);
     if (error == 0)
         error = vm_map_insert_object(&replacement, start, end,
-            protection, VM_PROT_ALL, flags | VM_MAP_ANON, object, 0);
-    if (error != 0) {
-        (void)vm_object_release(object);
+            protection, maximum, flags, object, 0);
+    if (error != 0)
         return error;
-    }
     count = 0;
     for (index = 0; index < vmspace->vms_map.vmm_count; ++index) {
         entry = &vmspace->vms_map.vmm_entries[index];
@@ -350,15 +337,11 @@ vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
         ++count;
     }
     error = pmap_remove(vmspace->vms_pmap, start, end);
-    if (error != 0) {
-        (void)vm_object_release(object);
+    if (error != 0)
         return error;
-    }
     error = vmspace_unwire_removed(&vmspace->vms_map, start, end);
-    if (error != 0) {
-        (void)vm_object_release(object);
+    if (error != 0)
         return error;
-    }
     vmspace->vms_map = replacement;
     for (index = 0; index < count; ++index) {
         if (!vmspace_map_has_object(&replacement,
@@ -380,6 +363,58 @@ vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
             return error;
     }
     return 0;
+}
+
+int
+vmspace_map_anon(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
+    vm_prot_t protection, unsigned flags)
+{
+    struct vm_object *object;
+    int error;
+
+    error = vm_object_create(size, &object);
+    if (error != 0)
+        return error;
+    error = vmspace_map_object(vmspace, start, size, protection,
+        VM_PROT_ALL, flags | VM_MAP_ANON, object);
+    if (error != 0)
+        (void)vm_object_release(object);
+    return error;
+}
+
+int
+vmspace_map_anon_any(struct vmspace *vmspace, vm_vaddr_t hint,
+    vm_size_t size, vm_prot_t protection, unsigned flags,
+    vm_vaddr_t *result)
+{
+    struct vm_object *object;
+    int error;
+
+    error = vm_object_create(size, &object);
+    if (error != 0)
+        return error;
+    error = vmspace_map_object_any(vmspace, hint, size, protection,
+        VM_PROT_ALL, flags | VM_MAP_ANON, object, result);
+    if (error != 0)
+        (void)vm_object_release(object);
+    return error;
+}
+
+int
+vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
+    vm_size_t size, vm_prot_t protection, unsigned flags)
+{
+    struct vm_object *object;
+    int error;
+
+    error = vm_object_create(size, &object);
+    if (error != 0)
+        return error;
+    error = vmspace_map_object_fixed(vmspace, start, size, protection,
+        VM_PROT_ALL, flags | VM_MAP_ANON, object);
+    if (error != 0)
+        (void)vm_object_release(object);
+    return error;
 }
 
 int

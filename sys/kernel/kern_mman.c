@@ -6,10 +6,14 @@
 #include <sys/param.h>
 #include <sys/user.h>
 #include <sys/proc.h>
+#include <sys/file.h>
+#include <sys/inode.h>
 #include <sys/vm.h>
 #include <sys/mman.h>
 #include <sys/systm.h>
 #include <vm/vmspace.h>
+#include <vm/vm_object.h>
+#include <vm/vm_vnode.h>
 
 #define MMAP_DEFAULT_BASE       0x10000000u
 
@@ -107,11 +111,15 @@ mmap(void)
         int offset[2];
     } *uap;
     struct vmspace *vmspace;
+    struct vm_object *object;
+    struct file *fp;
+    struct inode *inode;
     vm_vaddr_t hint;
     vm_vaddr_t result;
     vm_size_t size;
     off_t offset;
     int error;
+    unsigned vm_flags;
 
     uap = (struct a *)u.u_arg;
     vmspace = vmspace_current();
@@ -122,42 +130,94 @@ mmap(void)
     }
     if ((uap->flags & ~(MAP_PRIVATE | MAP_SHARED | MAP_FIXED |
         MAP_ANON)) != 0 ||
-        (uap->flags & (MAP_PRIVATE | MAP_SHARED)) != MAP_PRIVATE) {
+        ((uap->flags & (MAP_PRIVATE | MAP_SHARED)) != MAP_PRIVATE &&
+        (uap->flags & (MAP_PRIVATE | MAP_SHARED)) != MAP_SHARED)) {
         u.u_error = EINVAL;
         return;
     }
-    if ((uap->flags & MAP_ANON) == 0) {
+    if ((uap->flags & MAP_SHARED) != 0) {
         u.u_error = EOPNOTSUPP;
         return;
     }
     offset = syscall_off64_arg(&u.u_arg[6]);
-    if (uap->fd != -1 || offset != 0) {
-        u.u_error = EINVAL;
-        return;
-    }
     if (vm_size_round_page((vm_size_t)uap->length, &size) != 0 ||
         size == 0) {
         u.u_error = EINVAL;
         return;
     }
+    if ((uap->flags & MAP_ANON) != 0) {
+        if (uap->fd != -1 || offset != 0) {
+            u.u_error = EINVAL;
+            return;
+        }
+        object = 0;
+    } else {
+        if (offset < 0 || (offset & (off_t)VM_PAGE_MASK) != 0) {
+            u.u_error = EINVAL;
+            return;
+        }
+        fp = getf(uap->fd);
+        if (fp == 0)
+            return;
+        if (fp->f_type != DTYPE_INODE) {
+            u.u_error = ENODEV;
+            return;
+        }
+        if ((fp->f_flag & FREAD) == 0) {
+            u.u_error = EACCES;
+            return;
+        }
+        inode = (struct inode *)fp->f_data;
+        if (inode == 0 || (inode->i_mode & IFMT) != IFREG) {
+            u.u_error = ENODEV;
+            return;
+        }
+        error = vm_vnode_object_create(inode, (vm_ooffset_t)offset,
+            size, &object);
+        if (error != 0) {
+            u.u_error = error;
+            return;
+        }
+    }
+    vm_flags = 0;
     if ((uap->flags & MAP_FIXED) != 0) {
         if (!vm_vaddr_page_aligned((vm_vaddr_t)uap->address)) {
+            if (object != 0)
+                (void)vm_object_release(object);
             u.u_error = EINVAL;
             return;
         }
         result = (vm_vaddr_t)uap->address;
-        error = vmspace_map_anon_fixed(vmspace, result, size,
-            (vm_prot_t)uap->protection, 0);
+        if (object == 0)
+            error = vmspace_map_anon_fixed(vmspace, result, size,
+                (vm_prot_t)uap->protection, vm_flags);
+        else
+            error = vmspace_map_object_fixed(vmspace, result, size,
+                (vm_prot_t)uap->protection, VM_PROT_ALL, vm_flags,
+                object);
     } else {
         hint = uap->address == 0 ? MMAP_DEFAULT_BASE :
             vm_vaddr_trunc_page((vm_vaddr_t)uap->address);
-        error = vmspace_map_anon_any(vmspace, hint, size,
-            (vm_prot_t)uap->protection, 0, &result);
-        if (error == ENOMEM && hint != MMAP_DEFAULT_BASE)
-            error = vmspace_map_anon_any(vmspace, MMAP_DEFAULT_BASE, size,
-                (vm_prot_t)uap->protection, 0, &result);
+        if (object == 0) {
+            error = vmspace_map_anon_any(vmspace, hint, size,
+                (vm_prot_t)uap->protection, vm_flags, &result);
+            if (error == ENOMEM && hint != MMAP_DEFAULT_BASE)
+                error = vmspace_map_anon_any(vmspace, MMAP_DEFAULT_BASE,
+                    size, (vm_prot_t)uap->protection, vm_flags, &result);
+        } else {
+            error = vmspace_map_object_any(vmspace, hint, size,
+                (vm_prot_t)uap->protection, VM_PROT_ALL, vm_flags,
+                object, &result);
+            if (error == ENOMEM && hint != MMAP_DEFAULT_BASE)
+                error = vmspace_map_object_any(vmspace,
+                    MMAP_DEFAULT_BASE, size,
+                    (vm_prot_t)uap->protection, VM_PROT_ALL, vm_flags,
+                    object, &result);
+        }
     }
     if (error != 0) {
+        if (object != 0)
+            (void)vm_object_release(object);
         u.u_error = error;
         return;
     }

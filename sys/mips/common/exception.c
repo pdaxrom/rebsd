@@ -589,6 +589,7 @@ exception(int *frame)
     time_t syst;
     unsigned rawcause, cause, status, badvaddr;
     int psig = 0;
+    int vm_error;
 
     led_control(LED_KERNEL, 1);
     mips_uarea_guard_check(mips_curuser);
@@ -719,22 +720,24 @@ exception(int *frame)
 
     case CA_Mod + USER:
     case CA_TLBS + USER:
-        if (mips_user_vm_fault(badvaddr, VM_PROT_WRITE) == 0)
+        vm_error = mips_user_vm_fault(badvaddr, VM_PROT_WRITE);
+        if (vm_error == 0)
             goto ret;
         if (mips_grow_user_stack(badvaddr, 1) == 0 &&
             mips_user_vm_fault(badvaddr, VM_PROT_WRITE) == 0)
             goto ret;
-        psig = SIGSEGV;
+        psig = vm_error == ENXIO || vm_error == EIO ? SIGBUS : SIGSEGV;
         mips_intr_enable();
         break;
 
     case CA_TLBL + USER:
-        if (mips_user_vm_fault(badvaddr, VM_PROT_READ) == 0)
+        vm_error = mips_user_vm_fault(badvaddr, VM_PROT_READ);
+        if (vm_error == 0)
             goto ret;
         if (mips_grow_user_stack(badvaddr, 1) == 0 &&
             mips_user_vm_fault(badvaddr, VM_PROT_READ) == 0)
             goto ret;
-        psig = SIGSEGV;
+        psig = vm_error == ENXIO || vm_error == EIO ? SIGBUS : SIGSEGV;
         mips_intr_enable();
         break;
 
