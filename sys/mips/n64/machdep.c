@@ -5,6 +5,7 @@
 #include <sys/systm.h>
 #include <sys/user.h>
 #include <machine/io.h>
+#include <vm/vmspace.h>
 #include <machine/console.h>
 #include <machine/n64.h>
 #include <machine/n64int.h>
@@ -217,6 +218,12 @@ n64_tlb_init(void)
     mips_write_c0_register(C0_WIRED, 0, N64_FB_TLB_INDEX + fb_entries);
 }
 
+unsigned
+pmap_md_legacy_user_entries(void)
+{
+    return n64_user_tlb_pairs_for_rdram(n64_rdram_size());
+}
+
 void
 startup(void)
 {
@@ -273,9 +280,12 @@ led_control(int mask, int on)
 int
 baduaddr(caddr_t addr)
 {
+    struct vmspace *vmspace;
     unsigned a = (unsigned)addr;
 
-    if (a >= USER_DATA_START && a < USER_DATA_END)
+    vmspace = vmspace_current();
+    if (vmspace != 0 && vmspace_check(vmspace, a, 1,
+        VM_PROT_NONE) == 0)
         return 0;
 #ifdef VIDEO_ENABLED
     if (n64_video_useraddr_valid(addr))
@@ -295,29 +305,49 @@ badkaddr(caddr_t addr)
 int
 copyout(caddr_t from, caddr_t to, u_int nbytes)
 {
+    struct vmspace *vmspace;
     unsigned start = (unsigned)to;
     unsigned end = start + nbytes - 1;
 
     if (nbytes == 0)
         return 0;
-    if (end < start || baduaddr((caddr_t)start) || baduaddr((caddr_t)end))
+    if (end < start)
         return EFAULT;
-    bcopy(from, to, nbytes);
-    return 0;
+#ifdef VIDEO_ENABLED
+    if (n64_video_useraddr_valid((caddr_t)start) &&
+        n64_video_useraddr_valid((caddr_t)end)) {
+        bcopy(from, to, nbytes);
+        return 0;
+    }
+#endif
+    vmspace = vmspace_current();
+    if (vmspace == 0)
+        return EFAULT;
+    return vmspace_write(vmspace, start, from, nbytes);
 }
 
 int
 copyin(caddr_t from, caddr_t to, u_int nbytes)
 {
+    struct vmspace *vmspace;
     unsigned start = (unsigned)from;
     unsigned end = start + nbytes - 1;
 
     if (nbytes == 0)
         return 0;
-    if (end < start || baduaddr((caddr_t)start) || baduaddr((caddr_t)end))
+    if (end < start)
         return EFAULT;
-    bcopy(from, to, nbytes);
-    return 0;
+#ifdef VIDEO_ENABLED
+    if (n64_video_useraddr_valid((caddr_t)start) &&
+        n64_video_useraddr_valid((caddr_t)end)) {
+        bcopy(from, to, nbytes);
+        return 0;
+    }
+#endif
+    vmspace = vmspace_current();
+    if (vmspace == 0)
+        return EFAULT;
+    return vmspace_read(vmspace, start, to, nbytes);
 }
 
 void

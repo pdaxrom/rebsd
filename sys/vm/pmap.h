@@ -61,6 +61,7 @@ int pmap_validate(struct pmap *);
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
 int pmap_bootstrap_selftest(void);
 int pmap_bootstrap_stats(struct pmap_stats *);
+void pmap_md_legacy_user_disable(void);
 #endif
 
 #ifdef REBSD_VM_HOST_TEST

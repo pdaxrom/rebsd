@@ -22,8 +22,9 @@
  *
  *   0x00000000..0x000fffff  vectors/unused low RAM
  *   0x00100000..0x002fbfff  kernel ELF
- *   0x002fc000..0x002fffff  fixed u0/u areas
- *   0x00300000..0x006fffff  wired kuseg user window
+ *   0x002fc000..0x002fdfff  free after removal of historical u0
+ *   0x002fe000..0x002fffff  proc0 bootstrap u area/kernel stack
+ *   0x00300000..0x006fffff  legacy user-window reserve (unwired after proc1)
  *   0x00700000..0x007fffff  /var RAM disk
  *   0x00800000..             linked root filesystem
  *                             followed by optional RAM-backed swap
@@ -41,8 +42,7 @@
 #define CI20_KERNEL_DATA_START         MIPS_KSEG0_BASE
 #define CI20_KERNEL_DATA_END           (MIPS_KSEG0_BASE + 0x00300000)
 #define CI20_UAREA_SIZE                0x00002000
-#define CI20_U0AREA_VADDR              0x802fc000
-#define CI20_UAREA_VADDR               (CI20_U0AREA_VADDR + CI20_UAREA_SIZE)
+#define CI20_UAREA_VADDR               0x802fe000
 
 #define MIPS_USER_VADDR_START          0x00400000
 #define MIPS_USER_PHYS_START           0x00300000

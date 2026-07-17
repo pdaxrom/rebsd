@@ -225,7 +225,7 @@ static const struct {
     { "_tk_nin",        (int)&tk_nin        },  /* iostat */
     { "_tk_nout",       (int)&tk_nout       },  /* iostat */
     { "_total",         (int)&total         },  /* vmstat */
-    { "_u",             (int)&u             },  /* ps */
+    { "_u",             0                   },  /* current u area */
 #ifdef PTY_ENABLED
     { "_npty",          (int)&npty          },  /* pstat */
     { "_pt_tty",        (int)&pt_tty        },  /* pstat */
@@ -303,6 +303,8 @@ cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
         for (i = 0; nlist[i].name; i++) {
             if (strncmp(newp, nlist[i].name, newlen) == 0) {
                 value = nlist[i].addr;
+                if (value == 0 && strncmp(nlist[i].name, "_u", 3) == 0)
+                    value = (int)mips_curuser;
                 if (!oldp)
                     return 0;
                 if (*oldlenp < sizeof(value))

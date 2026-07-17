@@ -4,6 +4,12 @@ This audit is the migration checklist for the fixed-window implementation.
 It records units and ownership before any call site is converted to the new
 4 KiB VM page geometry.
 
+Phase 4 removed the fixed `u0`, whole-process swapping, and the shared wired
+user mapping from the running process model.  The tables below deliberately
+retain the pre-VM state as an audit record.  Board physical maps still reserve
+the legacy user-window ranges until the later pager and rollout phases can
+return them safely to the page allocator.
+
 ## Legacy size and page-like units
 
 `NBPG` is 1024 on all current MIPS ports.  It is a historical accounting
@@ -27,8 +33,8 @@ the 1 KiB click and the 4 KiB VM page.  The Phase 1 code therefore introduces
 
 ## Fixed-address dependencies
 
-The following paths depend on the single wired user window and must be moved
-together rather than converted independently:
+The following paths depended on the single wired user window and were moved
+together in Phase 4 rather than converted independently:
 
 | Area | Current dependency |
 | --- | --- |
@@ -42,9 +48,9 @@ together rather than converted independently:
 | core dumps | Core/resource accounting consumes the same byte-sized data and stack ranges and assumes they are immediately addressable while resident. |
 | reboot on N64 | Resident stage0 is at physical `0x00300000`; it aliases the 8 MiB user window and, on a 4 MiB system, part of the framebuffer reserve. |
 
-The legacy mode remains the only runtime mode during Phases 1 and 2.  A later
-switch must retain both ELF and a.out execution until a separately reviewed
-ABI decision says otherwise.
+The legacy mode was the only runtime mode during Phases 1 and 2.  Phase 4
+switched process execution to per-process pmaps while retaining both ELF and
+a.out execution.
 
 ## Repeatable searches
 

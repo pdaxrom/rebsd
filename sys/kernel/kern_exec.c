@@ -81,13 +81,11 @@ int exec_check(struct exec_params *epp)
      */
     error = ENOEXEC;
     DEBUG("Trying %d exec formats\n", nexecs);
-    for (i = 0; i < nexecs && error != 0; i++) {
+    for (i = 0; i < nexecs && error == ENOEXEC; i++) {
         DEBUG("Trying exec format %d : %s\n", i, execsw[i].es_name);
         if (execsw[i].es_check == NULL)
             continue;
         error = (*execsw[i].es_check)(epp);
-        if (error == 0)
-            break;
     }
     return error;
 }

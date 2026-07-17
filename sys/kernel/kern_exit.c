@@ -13,6 +13,7 @@
 #include <sys/file.h>
 #include <sys/wait.h>
 #include <sys/kernel.h>
+#include <vm/vmspace.h>
 
 /*
  * Notify parent that vfork child is finished with parent's data.  Called
@@ -81,6 +82,11 @@ exit (int rv)
 
     if (p->p_pid == 1)
         panic("init died");
+    if (p->p_vmspace != 0) {
+        if (vmspace_destroy(p->p_vmspace) != 0)
+            panic("exit vmspace");
+        p->p_vmspace = 0;
+    }
     if ((*p->p_prev = p->p_nxt) != NULL)        /* off allproc queue */
         p->p_nxt->p_prev = p->p_prev;
     p->p_nxt = zombproc;                            /* onto zombproc */
@@ -206,6 +212,8 @@ loop:
         p->p_stat = NULL;
         p->p_pid = 0;
         p->p_ppid = 0;
+        mips_uarea_free(p->p_uarea);
+        p->p_uarea = 0;
         if ((*p->p_prev = p->p_nxt) != NULL)    /* off zombproc */
             p->p_nxt->p_prev = p->p_prev;
         p->p_nxt = freeproc;                    /* onto freeproc */

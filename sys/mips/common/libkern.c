@@ -19,13 +19,35 @@ copystr(caddr_t src, caddr_t dest, u_int maxlength, u_int *lencopied)
 {
     caddr_t dest0 = dest;
     int error = ENOENT;
+    unsigned char byte;
+    int src_user;
+    int dest_user;
 
+    src_user = (unsigned)src < 0x80000000u;
+    dest_user = (unsigned)dest < 0x80000000u;
     if (maxlength != 0) {
-        while ((*dest++ = *src++) != '\0') {
+        for (;;) {
+            if (src_user) {
+                error = copyin(src, (caddr_t)&byte, 1);
+                if (error != 0)
+                    goto done;
+            } else
+                byte = *(unsigned char *)src;
+            if (dest_user) {
+                error = copyout((caddr_t)&byte, dest, 1);
+                if (error != 0)
+                    goto done;
+            } else
+                *(unsigned char *)dest = byte;
+            ++src;
+            ++dest;
+            if (byte == '\0') {
+                error = 0;
+                break;
+            }
             if (--maxlength == 0)
                 goto done;
         }
-        error = 0;
     }
 done:
     if (lencopied != 0)

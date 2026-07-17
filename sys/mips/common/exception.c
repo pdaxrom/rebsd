@@ -9,6 +9,7 @@
 #include <sys/proc.h>
 #include <sys/vm.h>
 #include <vm/pmap.h>
+#include <vm/vmspace.h>
 #include <machine/io.h>
 #include <machine/fpu.h>
 #ifdef N64
@@ -34,7 +35,6 @@
 #define MIPS_TIMER_COUNT_KHZ    MIPS_COUNT_KHZ
 #endif
 
-static int last_user_icache_pid = -1;
 static volatile unsigned mips_last_clock_count;
 static volatile int mips_last_clock_count_valid;
 static volatile unsigned long mips_timer_irq_count;
@@ -432,18 +432,36 @@ mips_clock_intr(int *frame, unsigned status)
 }
 
 static int
-mips_check_user_stack(int *frame)
+mips_grow_user_stack(vm_vaddr_t address, int from_fault)
 {
-    unsigned sp = frame[FRAME_SP];
+    struct proc *p = u.u_procp;
+    vm_vaddr_t guard_end;
+    vm_vaddr_t old_page;
 
-    if (sp < u.u_procp->p_daddr + u.u_dsize || sp > USER_DATA_END)
-        return SIGSEGV;
-    if (u.u_procp->p_ssize < USER_DATA_END - sp) {
-        u.u_procp->p_ssize = USER_DATA_END - sp;
-        u.u_procp->p_saddr = sp;
-        u.u_ssize = u.u_procp->p_ssize;
+    if (p == 0 || vm_vaddr_round_page(p->p_daddr + p->p_dsize,
+        &guard_end) != 0 || guard_end > VM_VADDR_MAX - VM_PAGE_SIZE)
+        return EFAULT;
+    guard_end += VM_PAGE_SIZE;
+    if (address < guard_end || address > USER_DATA_END)
+        return EFAULT;
+    old_page = vm_vaddr_trunc_page(p->p_saddr);
+    if (from_fault && vm_vaddr_trunc_page(address) >= old_page)
+        return EFAULT;
+    if (vmspace_grow_stack(p->p_vmspace, p->p_saddr, address,
+        guard_end) != 0)
+        return EFAULT;
+    if (p->p_ssize < USER_DATA_END - address) {
+        p->p_ssize = USER_DATA_END - address;
+        p->p_saddr = address;
+        u.u_ssize = p->p_ssize;
     }
     return 0;
+}
+
+static int
+mips_check_user_stack(int *frame)
+{
+    return mips_grow_user_stack(frame[FRAME_SP], 0) == 0 ? 0 : SIGSEGV;
 }
 
 static void
@@ -471,16 +489,27 @@ mips_syscall(int *frame)
     const struct sysent *callp = &sysent[0];
     int opc = frame[FRAME_PC];
     int code;
+    int arg_error = 0;
 
     frame[FRAME_PC] = opc + 3 * NBPW;
-    code = (*(u_int *)opc >> 6) & 0377;
+    {
+        u_int instruction;
+
+        if (copyin((caddr_t)opc, (caddr_t)&instruction,
+            sizeof(instruction)) != 0) {
+            psignal(u.u_procp, SIGSEGV);
+            return;
+        }
+        code = (instruction >> 6) & 0377;
+    }
     if (code < nsysent)
         callp += code;
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
     {
         static int syscall_trace_count;
-        if (syscall_trace_count < 12) {
-            printf("n64sys: code=%d pc=%x sp=%x a0=%x a1=%x\n",
+        if (syscall_trace_count < 100) {
+            printf("mipssys: pid=%d code=%d pc=%x sp=%x a0=%x a1=%x\n",
+                u.u_procp ? u.u_procp->p_pid : -1,
                 code, opc, frame[FRAME_SP], frame[FRAME_R4],
                 frame[FRAME_R5]);
             syscall_trace_count++;
@@ -495,27 +524,28 @@ mips_syscall(int *frame)
         u.u_arg[3] = frame[FRAME_R7];
         if (callp->sy_narg > 4) {
             unsigned addr = (frame[FRAME_SP] + 16) & ~3;
-            if (!baduaddr((caddr_t)addr))
-                u.u_arg[4] = *(unsigned *)addr;
+            if (copyin((caddr_t)addr, (caddr_t)&u.u_arg[4],
+                sizeof(u.u_arg[4])) != 0)
+                arg_error = EFAULT;
         }
         if (callp->sy_narg > 5) {
             unsigned addr = (frame[FRAME_SP] + 20) & ~3;
-            if (!baduaddr((caddr_t)addr))
-                u.u_arg[5] = *(unsigned *)addr;
+            if (copyin((caddr_t)addr, (caddr_t)&u.u_arg[5],
+                sizeof(u.u_arg[5])) != 0)
+                arg_error = EFAULT;
         }
     }
 
     u.u_rval = 0;
     u.u_rval2 = 0;
-    if (setjmp(&u.u_qsave) == 0)
+    u.u_error = arg_error;
+    if (arg_error == 0 && setjmp(&u.u_qsave) == 0)
         (*callp->sy_call)();
 
     switch (u.u_error) {
     case 0:
         frame[FRAME_R2] = u.u_rval;
         frame[FRAME_R3] = u.u_rval2;
-        if (code == 11 || code == 59)
-            mips_sync_user_icache();
         break;
     case ERESTART:
         frame[FRAME_PC] = opc;
@@ -539,6 +569,7 @@ exception(int *frame)
     int psig = 0;
 
     led_control(LED_KERNEL, 1);
+    mips_uarea_guard_check(mips_curuser);
     if ((unsigned)frame < (unsigned)&u + sizeof(u)) {
         dumpregs(frame);
         panic("stack overflow");
@@ -668,12 +699,18 @@ exception(int *frame)
     case CA_TLBS + USER:
         if (pmap_fault_active(badvaddr, VM_PROT_WRITE, 1) == 0)
             goto ret;
+        if (mips_grow_user_stack(badvaddr, 1) == 0 &&
+            pmap_fault_active(badvaddr, VM_PROT_WRITE, 1) == 0)
+            goto ret;
         psig = SIGSEGV;
         mips_intr_enable();
         break;
 
     case CA_TLBL + USER:
         if (pmap_fault_active(badvaddr, VM_PROT_READ, 1) == 0)
+            goto ret;
+        if (mips_grow_user_stack(badvaddr, 1) == 0 &&
+            pmap_fault_active(badvaddr, VM_PROT_READ, 1) == 0)
             goto ret;
         psig = SIGSEGV;
         mips_intr_enable();
@@ -751,10 +788,6 @@ out:
 ret:
     if (USERMODE(frame[FRAME_STATUS])) {
         frame[FRAME_STATUS] &= ~ST_FR;
-        if (last_user_icache_pid != u.u_procp->p_pid) {
-            mips_sync_user_icache();
-            last_user_icache_pid = u.u_procp->p_pid;
-        }
         mips_restore_user_fpu(frame[FRAME_STATUS]);
     }
     mips_intr_disable();

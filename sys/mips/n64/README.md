@@ -996,9 +996,10 @@ prompt.
 7. stage0 jumps to the kernel entry, currently `0x80001000`.
 8. The kernel runs `startup()`:
    - prints `ReBSD N64 kernel entry`
-   - clears the fixed `u0..u_end` user-area pages that live outside ELF `.bss`
+   - clears the single bootstrap `u..u_end` area used by process zero
    - installs exception vectors
-   - installs the wired user TLB entry
+   - initializes the shared MIPS pmap/TLB layer; process one disables the
+     bootstrap legacy user entry when its private pmap becomes active
    - initializes MI interrupt masks
    - enables CP0 interrupt masks for MI and timer interrupts
    - detects and prints RDRAM size
@@ -1038,7 +1039,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 4 MiB system:
 
 ```
-0x00000000..0x000fffff  kernel, vectors, u areas
+0x00000000..0x000fffff  kernel, vectors, bootstrap u area
 0x00100000..0x002fffff  wired kuseg user window
 0x00340000..0x0037ffff  320x240x16 framebuffer reserve
 0x00380000..0x003fffff  RAM swap fallback
@@ -1047,7 +1048,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 8 MiB system:
 
 ```
-0x00000000..0x000fffff  kernel, vectors, u areas
+0x00000000..0x000fffff  kernel, vectors, bootstrap u area
 0x00100000..0x004fffff  wired kuseg user window
 0x00500000..0x0053ffff  320x240x16 framebuffer reserve
 0x00540000..0x007fffff  Expansion Pak RAM block pool
@@ -1056,7 +1057,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 8 MiB high-resolution framebuffer build (`N64_HIGHRES_FB=1`):
 
 ```
-0x00000000..0x000fffff  kernel, vectors, u areas
+0x00000000..0x000fffff  kernel, vectors, bootstrap u area
 0x00100000..0x004fffff  wired kuseg user window
 0x00500000..0x0059ffff  max 640x480x16 framebuffer reserve
 0x005a0000..0x007fffff  Expansion Pak RAM block pool
@@ -1065,11 +1066,13 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 Important constants:
 
 - `N64_KERNEL_LOAD_VADDR`: kernel link/load address, `0x80001000`.
-- `N64_KERNEL_RESERVED`: first 1 MiB reserved for kernel/vectors/u areas.
-- `N64_UAREA_SIZE`: 8 KiB per fixed `u`/`u0` area. The live `struct user`
-  currently occupies about 1.1 KiB; the remaining space is the per-process
-  kernel stack, so the N64 port keeps more headroom than the original PIC32
-  3 KiB u-area for nested `exec`, `namei`, signal, and FPU paths.
+- `N64_KERNEL_RESERVED`: first 1 MiB reserved for the kernel, vectors, and
+  bootstrap user area.
+- `N64_UAREA_SIZE`: 8 KiB for the bootstrap area and each dynamically
+  allocated per-process user area. The live `struct user` currently occupies
+  about 1.1 KiB; the remaining space is the process's kernel stack, so the N64
+  port keeps more headroom than the original PIC32 3 KiB u-area for nested
+  `exec`, `namei`, signal, and FPU paths.
 - `N64_USER_VADDR_START`: user virtual base, `0x00400000`.
 - `N64_USER_MAXMEM_4M`: 2 MiB user address window for base systems.
 - `N64_USER_MAXMEM_8M`: 4 MiB user address window for Expansion Pak systems.

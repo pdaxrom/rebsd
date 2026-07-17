@@ -13,6 +13,7 @@
 #include <sys/vm.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
+#include <vm/vmspace.h>
 
 int mpid;                   /* generic for unique process id's */
 struct forkstat forkstat;
@@ -23,6 +24,15 @@ newproc_fail(struct proc *child)
     struct proc **pp;
     struct file *fp;
     int n;
+
+    if (child->p_vmspace != 0) {
+        (void)vmspace_destroy(child->p_vmspace);
+        child->p_vmspace = 0;
+    }
+    if (child->p_uarea != 0) {
+        mips_uarea_free(child->p_uarea);
+        child->p_uarea = 0;
+    }
 
     for (n = 0; n <= u.u_lastfile; n++) {
         fp = u.u_ofile[n];
@@ -47,6 +57,7 @@ newproc_fail(struct proc *child)
     child->p_ppid = 0;
     child->p_pgrp = 0;
     child->p_flag = 0;
+    child->p_addr = 0;
     child->p_wchan = 0;
     child->p_sig = 0;
     child->p_sigcatch = 0;
@@ -59,7 +70,9 @@ newproc_fail(struct proc *child)
 
 /*
  * Create a new process -- the internal version of system call fork.
- * It returns 1 in the new process, 0 in the old, -1 on failure.
+ * It returns 0 in the parent and -1 on failure.  The child starts from an
+ * architecture trampoline with a copied user trapframe; it never resumes a
+ * copied live C stack.
  */
 int
 newproc (int isvfork)
@@ -68,6 +81,7 @@ newproc (int isvfork)
     register int n;
     static int pidchecked = 0;
     struct file *fp;
+    int error;
 
     /*
      * First, just locate a slot for a process
@@ -120,6 +134,8 @@ again:
      */
     parent = u.u_procp;
     child->p_stat = SIDL;
+    child->p_uarea = 0;
+    child->p_vmspace = 0;
     child->p_realtimer.it_value = 0;
     child->p_flag = SLOAD;
     child->p_uid = parent->p_uid;
@@ -175,77 +191,38 @@ again:
     if (u.u_rdir)
         u.u_rdir->i_count++;
 
-    /*
-     * When the longjmp is executed for the new process,
-     * here's where it will resume.
-     */
-    if (setjmp (&u.u_ssave)) {
-#ifdef N64_TRACE
-        printf ("n64fork: child resumed pid=%d paddr=%x\n",
-            u.u_procp->p_pid, u.u_procp->p_addr);
-#endif
-        return(1);
-    }
-
-    child->p_dsize = parent->p_dsize;
-    child->p_ssize = parent->p_ssize;
-    child->p_daddr = parent->p_daddr;
-    child->p_saddr = parent->p_saddr;
-
-    /*
-     * Partially simulate the environment of the new process so that
-     * when it is actually created (by copying) it will look right.
-     */
-    u.u_procp = child;
-
-    /*
-     * Swap out the current process to generate the copy.
-     */
-    parent->p_stat = SIDL;
-    child->p_addr = parent->p_addr;
-    child->p_stat = SRUN;
-#ifdef N64_TRACE
-    printf ("n64fork: before swapout child pid=%d paddr=%x\n",
-        child->p_pid, child->p_addr);
-#endif
-    if (swapout (child, X_DONTFREE, X_OLDSIZE, X_OLDSIZE) != 0) {
-        parent->p_stat = SRUN;
-        u.u_procp = parent;
+    error = vmspace_clone(parent->p_vmspace, &child->p_vmspace);
+    if (error != 0) {
         newproc_fail(child);
         return -1;
     }
-    child->p_flag |= SSWAP;
-#ifdef N64_TRACE
-    printf ("n64fork: after swapout child pid=%d paddr=%x flag=%x\n",
-        child->p_pid, child->p_addr, child->p_flag);
-#endif
-    parent->p_stat = SRUN;
-    u.u_procp = parent;
 
-    if (isvfork) {
-        /*
-         * Wait for the child to finish with it.
-         * RetroBSD: to make this work, significant
-         * changes in scheduler are required.
-         */
-        parent->p_dsize = 0;
-        parent->p_ssize = 0;
-        child->p_flag |= SVFORK;
-        parent->p_flag |= SVFPRNT;
-        while (child->p_flag & SVFORK)
-            sleep ((caddr_t)child, PSWP+1);
-        if ((child->p_flag & SLOAD) == 0)
-            panic ("newproc vfork");
-        u.u_dsize = parent->p_dsize = child->p_dsize;
-        parent->p_daddr = child->p_daddr;
-        child->p_dsize = 0;
-        u.u_ssize = parent->p_ssize = child->p_ssize;
-        parent->p_saddr = child->p_saddr;
-        child->p_ssize = 0;
-        child->p_flag |= SVFDONE;
-        wakeup ((caddr_t) parent);
-        parent->p_flag &= ~SVFPRNT;
+    child->p_uarea = mips_uarea_fork(mips_curuser, parent == &proc[0]);
+    if (child->p_uarea == 0) {
+        newproc_fail(child);
+        return -1;
     }
+    child->p_uarea->u_procp = child;
+    child->p_addr = (size_t)child->p_uarea;
+    child->p_dsize = parent->p_dsize;
+    child->p_dmin = parent->p_dmin;
+    child->p_ssize = parent->p_ssize;
+    child->p_daddr = parent->p_daddr;
+    child->p_saddr = parent->p_saddr;
+    child->p_uarea->u_rval = 0;
+    child->p_uarea->u_rval2 = 0;
+    child->p_uarea->u_error = 0;
+    child->p_uarea->u_start = time.tv_sec;
+    bzero(&child->p_uarea->u_ru, sizeof(child->p_uarea->u_ru));
+    bzero(&child->p_uarea->u_cru, sizeof(child->p_uarea->u_cru));
+    child->p_stat = SRUN;
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+    printf ("mipsfork: child ready pid=%d paddr=%x\n",
+        child->p_pid, child->p_addr);
+#endif
+    child->p_flag |= SSWAP;
+    setrq(child);
+    (void)isvfork;       /* VM vfork is deliberately fork-compatible. */
     return(0);
 }
 
@@ -278,25 +255,12 @@ fork1 (int isvfork)
         u.u_error = EAGAIN;
         return;
     }
-    p1 = u.u_procp;
-    if (!swapout_possible(p1->p_dsize, p1->p_ssize)) {
-        u.u_error = ENOMEM;
-        return;
-    }
     a = newproc (isvfork);
     if (a < 0) {
         u.u_error = ENOMEM;
         return;
     }
-    if (a) {
-        /* Child */
-        u.u_rval = 0;
-        u.u_start = time.tv_sec;
-        bzero(&u.u_ru, sizeof(u.u_ru));
-        bzero(&u.u_cru, sizeof(u.u_cru));
-        return;
-    }
-    /* Parent */
+    /* The child returns through its trapframe; this is the parent path. */
     u.u_rval = p2->p_pid;
 }
 

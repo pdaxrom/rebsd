@@ -25,6 +25,7 @@
 #include <vm/vm_phys.h>
 #include <vm/vm_page.h>
 #include <vm/pmap.h>
+#include <vm/vmspace.h>
 
 u_int   swapstart, nswap;   /* start and size of swap space */
 size_t  physmem;            /* total amount of physical memory */
@@ -88,6 +89,62 @@ cinit()
 }
 
 /*
+ * Finish constructing process 1 on its fresh kernel stack, then enter the
+ * small user bootstrap which execs /sbin/init.  This is a separate entry
+ * point so process creation never has to copy main()'s live C stack.
+ */
+void
+mips_init_process(void)
+{
+    struct proc *p;
+    vm_vaddr_t data_start;
+    vm_vaddr_t data_end;
+    vm_vaddr_t stack_start;
+
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+    printf ("mipsboot: proc1 trampoline pid=%d\n", u.u_procp->p_pid);
+#endif
+    (void)splhigh();
+    p = u.u_procp;
+    p->p_dsize = icodeend - icode;
+    p->p_dmin = p->p_dsize;
+    p->p_daddr = USER_DATA_START;
+    p->p_ssize = 1024;
+    p->p_saddr = USER_DATA_END - p->p_ssize;
+
+    data_start = vm_vaddr_trunc_page(USER_DATA_START);
+    if (vm_vaddr_round_page(USER_DATA_START + p->p_dsize,
+        &data_end) != 0)
+        panic("init data range");
+    stack_start = vm_vaddr_trunc_page(p->p_saddr);
+    if (vmspace_map_anon(p->p_vmspace, data_start,
+        data_end - data_start, VM_PROT_ALL, VM_MAP_EXECUTABLE) != 0 ||
+        vmspace_map_anon(p->p_vmspace, stack_start,
+        USER_DATA_END - stack_start, VM_PROT_READ | VM_PROT_WRITE,
+        VM_MAP_STACK) != 0 ||
+        vmspace_write(p->p_vmspace, USER_DATA_START, icode,
+        icodeend - icode) != 0)
+        panic("init vmspace");
+
+    if (boothowto & RB_SINGLE) {
+        vm_vaddr_t flag_address = USER_DATA_START +
+            (initflags - icode) + 1;
+        char flag = 's';
+
+        if (vmspace_write(p->p_vmspace, flag_address, &flag, 1) != 0)
+            panic("init flags");
+    }
+    pmap_md_legacy_user_disable();
+    if (vmspace_activate(p->p_vmspace) != 0)
+        panic("init pmap");
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+    printf ("mipsboot: entering proc1 user bootstrap\n");
+#endif
+    mips_user_enter(USER_DATA_START, USER_DATA_END);
+    panic("init user return");
+}
+
+/*
  * Initialization code.
  * Called from cold start routine as
  * soon as a stack and segmentation
@@ -109,6 +166,7 @@ main()
     int error;
     int s __attribute__((unused));
 
+    mips_uarea_guard_init(mips_curuser);
     startup();
     printf ("\n%s\n", version);
     kconfig();
@@ -128,12 +186,19 @@ main()
     if (error != 0)
         panic("pmap self-test failed");
     printf("pmap: self-test ok\n");
+    error = vmspace_system_init(&vm_page_boot_allocator);
+    if (error != 0)
+        panic("vmspace bootstrap failed");
 
     /*
      * Set up system process 0 (swapper).
      */
     p = &proc[0];
-    p->p_addr = (size_t) &u;
+    p->p_uarea = mips_curuser;
+    p->p_addr = (size_t)p->p_uarea;
+    error = vmspace_create(&p->p_vmspace);
+    if (error != 0 || vmspace_activate(p->p_vmspace) != 0)
+        panic("proc0 vmspace");
     p->p_stat = SRUN;
     p->p_flag |= SLOAD | SSYS;
     p->p_nice = NZERO;
@@ -206,72 +271,41 @@ main()
 
     /* Kick off timeout driven events by calling first time. */
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("n64boot: before schedcpu\n");
+    printf ("mipsboot: before schedcpu\n");
 #endif
     schedcpu (0);
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("n64boot: after schedcpu\n");
+    printf ("mipsboot: after schedcpu\n");
 #endif
 
     /* Set up the root file system. */
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("n64boot: before rootdir iget\n");
+    printf ("mipsboot: before rootdir iget\n");
 #endif
     rootdir = iget (rootdev, &mount[0].m_filsys, (ino_t) ROOTINO);
     iunlock (rootdir);
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("n64boot: after rootdir iget\n");
+    printf ("mipsboot: after rootdir iget\n");
 #endif
     u.u_cdir = iget (rootdev, &mount[0].m_filsys, (ino_t) ROOTINO);
     iunlock (u.u_cdir);
     u.u_rdir = NULL;
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("n64boot: before newproc\n");
+    printf ("mipsboot: before newproc\n");
 #endif
 
     /*
      * Make init process.
      */
-    if (newproc (0) == 0) {
-        /* Parent process with pid 0: swapper. */
+    if (newproc (0) != 0)
+        panic("cannot create init");
+    /* Process 0 supplies the idle scheduler context. */
 #ifdef USB_ENABLED
-        printf("usb0: deferred task runner uses proc0\n");
+    printf("usb0: deferred task runner uses proc0\n");
 #endif
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
-        printf ("n64boot: proc0 entering sched\n");
+    printf ("mipsboot: proc0 entering sched\n");
 #endif
-        sched();
-    }
-
-    /* Child process with pid 1: init. */
-#if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("n64boot: proc1 child path pid=%d\n", u.u_procp->p_pid);
-#endif
-    s = splhigh();
-    p = u.u_procp;
-    p->p_dsize = icodeend - icode;
-    p->p_daddr = USER_DATA_START;
-    p->p_ssize = 1024;              /* one kbyte of stack */
-    p->p_saddr = USER_DATA_END - 1024;
-    bcopy ((caddr_t) icode, (caddr_t) USER_DATA_START, icodeend - icode);
-#if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("n64boot: copied icode size=%u\n", icodeend - icode);
-#endif
-
-    /* Start in single user more, if asked. */
-    if (boothowto & RB_SINGLE) {
-        char *iflags = (char*) USER_DATA_START + (initflags - icode);
-
-        /* Call /sbin/init with option '-s'. */
-        iflags[1] = 's';
-    }
-
-    /*
-     * return goes to location 0 of user init code
-     * just copied out.
-     */
-#if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("n64boot: returning to startup\n");
-#endif
-    return 0;
+    sched();
+    return 0;                       /* NOTREACHED */
 }

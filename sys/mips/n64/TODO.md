@@ -136,8 +136,9 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   `pcc`, resolve from `/usr/bin`, use the in-tree PCC path on N64, and can
   find target headers/start files/libs through the default `/` sysroot; keep
   one explicit `--sysroot /` check.
-- [x] Increase the N64 `u`/`u0` areas to 8 KiB so the kernel stack has enough
-  headroom for nested `exec`/`namei`/FPU paths during the compiler smoke.
+- [x] Keep 8 KiB user areas so each per-process kernel stack has enough
+  headroom for nested `exec`/`namei`/FPU paths during the compiler smoke;
+  Phase 4 removed the historical fixed `u0` area.
 - [x] Build a.out-format `/usr/lib/crt0.o` and `/usr/lib/libc.a` for the in-tree
   `pcc`/`ld` path. `/usr/lib/crt0.o` is assembled by the N64 native `as` from
   `lib/startup/crt0.s`; do not stage ELF objects from the external GCC

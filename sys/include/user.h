@@ -112,7 +112,19 @@ struct user {
 #include <sys/errno.h>
 
 #ifdef KERNEL
-extern  struct user u, u0;
+/*
+ * The linker still reserves the bootstrap u area used by _start, but all C
+ * code follows this pointer.  Normal processes receive separately allocated
+ * user areas and kernel stacks.
+ */
+extern struct user *mips_curuser;
+#define u (*mips_curuser)
+
+struct user *mips_uarea_alloc(void);
+struct user *mips_uarea_fork(const struct user *, int);
+void mips_uarea_guard_init(struct user *);
+void mips_uarea_guard_check(const struct user *);
+void mips_uarea_free(struct user *);
 
 /*
  * Increment user profiling counters.

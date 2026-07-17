@@ -10,7 +10,8 @@
         .set    noat
 
         .extern u_end
-        .extern u0
+        .extern mips_curuser
+        .extern mips_init_process
         .extern main
 
         .section .startup,"ax",@progbits
@@ -34,11 +35,11 @@ mips_kernel_entry:
         nop
 
         /*
-         * u/u0 live in fixed memory outside the ELF .bss segment. A software
-         * restart through stage0 reloads the kernel but does not clear these
-         * pages, so clear them before using u as the initial kernel stack.
+         * The bootstrap u area lives outside the ELF .bss segment. A software
+         * restart through stage0 reloads the kernel but does not clear this
+         * page, so clear it before using it as proc0's initial kernel stack.
          */
-        la      $t0, u0
+        la      $t0, u
         la      $t1, u_end
 1:
         sw      $zero, 0($t0)
@@ -47,19 +48,30 @@ mips_kernel_entry:
         nop
 
         la      $sp, u_end - 16
+        la      $t0, u
+        la      $t1, mips_curuser
+        sw      $t0, 0($t1)
         jal     main
         nop
-
-        jal     mips_sync_user_icache
+1:
+        b       1b
         nop
+        .end    _start
 
-#ifdef N64
-        jal     n64_user_data_end
+        .globl  mips_init_trampoline
+        .ent    mips_init_trampoline
+mips_init_trampoline:
+        jal     mips_init_process
         nop
-        move    $t2, $v0
-#endif
-        la      $k0, USER_DATA_START
-        mtc0    $k0, $14
+1:
+        b       1b
+        nop
+        .end    mips_init_trampoline
+
+        .globl  mips_user_enter
+        .ent    mips_user_enter
+mips_user_enter:
+        mtc0    $a0, $14
         mfc0    $k0, $12
         li      $k1, ~(ST_EXL | ST_ERL | ST_KSU | ST_IM | ST_FR)
         and     $k0, $k0, $k1
@@ -74,37 +86,13 @@ mips_kernel_entry:
         li      $k1, ST_CU1
         or      $k0, $k0, $k1
         mtc0    $k0, $12
-#ifdef N64
-        move    $sp, $t2
-#else
-        la      $sp, USER_DATA_END
-#endif
+        move    $sp, $a1
         nop
         nop
         nop
         eret
         nop
-
-1:
-        b       1b
-        nop
-        .end    _start
-
-        .weak   mips_sync_user_icache
-        .ent    mips_sync_user_icache
-mips_sync_user_icache:
-        jr      $ra
-        nop
-        .end    mips_sync_user_icache
-
-#ifdef N64
-        .weak   n64_user_data_end
-        .ent    n64_user_data_end
-n64_user_data_end:
-        jr      $ra
-        li      $v0, USER_DATA_END
-        .end    n64_user_data_end
-#endif
+        .end    mips_user_enter
 
         /*
          * Initial user code copied to process 1 by init_main().
@@ -171,41 +159,8 @@ longjmp:
         nop
         nop
 
-        la      $v0, u
-        beq     $v0, $a0, 2f
-        nop
-
-        la      $a3, u_end
-        la      $a0, u0
-
-        lw      $v1, 0($v0)
-        sw      $a0, 60($v1)
-
-        move    $v1, $v0
-1:
-        lw      $t1, 0($v1)
-        lw      $t0, 0($a0)
-        sw      $t0, 0($v1)
-        sw      $t1, 0($a0)
-        lw      $t1, 4($v1)
-        lw      $t0, 4($a0)
-        sw      $t0, 4($v1)
-        sw      $t1, 4($a0)
-        lw      $t1, 8($v1)
-        lw      $t0, 8($a0)
-        sw      $t0, 8($v1)
-        sw      $t1, 8($a0)
-        lw      $t1, 12($v1)
-        lw      $t0, 12($a0)
-        sw      $t0, 12($v1)
-        sw      $t1, 12($a0)
-        addiu   $v1, $v1, 16
-        bne     $a3, $v1, 1b
-        addiu   $a0, $a0, 16
-
-        lw      $v1, 0($v0)
-        sw      $v0, 60($v1)
-2:
+        la      $v0, mips_curuser
+        sw      $a0, 0($v0)
         lw      $s0, (0 * 4)($a1)
         lw      $s1, (1 * 4)($a1)
         lw      $s2, (2 * 4)($a1)

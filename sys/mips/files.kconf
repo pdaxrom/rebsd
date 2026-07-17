@@ -50,14 +50,16 @@ kernel/ufs_syscalls.c           standard
 kernel/ufs_syscalls2.c          standard
 kernel/vfs_vnops.c              standard
 kernel/vm_sched.c               standard
-kernel/vm_swap.c                standard
 kernel/vm_swp.c                 standard
 
 vm/vm_param.c                  standard
 vm/vm_phys.c                   standard
 vm/vm_page.c                   standard
+vm/vm_map.c                    standard
+vm/vmspace.c                   standard
 mips/common/pmap.c             standard
 mips/common/pmap_machdep.c     standard
+mips/common/vm_machdep.c       standard
 
 disk/disk_subr.c               optional disk
 disk/disk.c                    optional disk

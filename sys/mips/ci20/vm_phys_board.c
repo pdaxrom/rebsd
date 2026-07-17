@@ -45,7 +45,7 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
 #endif
     if (error != 0)
         return error;
-    uarea_start = MIPS_KSEG_TO_PHYS(CI20_U0AREA_VADDR);
+    uarea_start = MIPS_KSEG_TO_PHYS(CI20_UAREA_VADDR);
     if (kernel_end < kernel_start || kernel_end > uarea_start)
         return EINVAL;
     if (kernel_end != kernel_start) {
@@ -56,7 +56,7 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     }
 
     error = vm_phys_map_reserve(map, uarea_start,
-        2u * CI20_UAREA_SIZE, "u0/u areas");
+        CI20_UAREA_SIZE, "bootstrap u area");
     if (error != 0)
         return error;
     error = vm_phys_map_reserve(map, MIPS_USER_PHYS_START,

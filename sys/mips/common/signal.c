@@ -6,6 +6,7 @@
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <machine/io.h>
+#include <vm/vmspace.h>
 
 void
 sendsig(sig_t p, int sig, long mask)
@@ -15,29 +16,44 @@ sendsig(sig_t p, int sig, long mask)
         struct  sigcontext sf_sc;
     };
     int *regs = u.u_frame;
-    struct sigframe *sfp;
+    struct sigframe local_frame;
+    struct sigframe *sfp = &local_frame;
+    struct sigframe *user_sfp;
+    vm_vaddr_t guard_end;
     int oonstack;
+
+    bzero((caddr_t)&local_frame, sizeof(local_frame));
 
     oonstack = u.u_sigstk.ss_flags & SA_ONSTACK;
 
     if ((u.u_psflags & SAS_ALTSTACK) &&
         !(u.u_sigstk.ss_flags & SA_ONSTACK) &&
         (u.u_sigonstack & sigmask(sig))) {
-        sfp = (struct sigframe *)(u.u_sigstk.ss_base + u.u_sigstk.ss_size);
+        user_sfp = (struct sigframe *)(u.u_sigstk.ss_base +
+            u.u_sigstk.ss_size);
         u.u_sigstk.ss_flags |= SA_ONSTACK;
     } else {
-        sfp = (struct sigframe *)regs[FRAME_SP];
+        user_sfp = (struct sigframe *)regs[FRAME_SP];
     }
 
-    sfp--;
+    user_sfp--;
     if (!(u.u_sigstk.ss_flags & SA_ONSTACK)) {
-        if ((caddr_t)sfp < (caddr_t)u.u_procp->p_daddr + u.u_dsize) {
+        if (vm_vaddr_round_page(u.u_procp->p_daddr + u.u_dsize,
+            &guard_end) != 0 || guard_end > VM_VADDR_MAX - VM_PAGE_SIZE) {
             fatalsig(SIGILL);
             return;
         }
-        if (u.u_procp->p_ssize < USER_DATA_END - (unsigned)sfp) {
-            u.u_procp->p_ssize = USER_DATA_END - (unsigned)sfp;
-            u.u_procp->p_saddr = (unsigned)sfp;
+        guard_end += VM_PAGE_SIZE;
+        if ((vm_vaddr_t)user_sfp < guard_end ||
+            vmspace_grow_stack(u.u_procp->p_vmspace,
+            u.u_procp->p_saddr, (vm_vaddr_t)user_sfp,
+            guard_end) != 0) {
+            fatalsig(SIGILL);
+            return;
+        }
+        if (u.u_procp->p_ssize < USER_DATA_END - (unsigned)user_sfp) {
+            u.u_procp->p_ssize = USER_DATA_END - (unsigned)user_sfp;
+            u.u_procp->p_saddr = (unsigned)user_sfp;
             u.u_ssize = u.u_procp->p_ssize;
         }
     }
@@ -77,11 +93,17 @@ sendsig(sig_t p, int sig, long mask)
     sfp->sf_sc.sc_hi  = regs[FRAME_HI];
     sfp->sf_sc.sc_pc  = regs[FRAME_PC];
 
+    if (copyout((caddr_t)sfp, (caddr_t)user_sfp,
+        sizeof(*sfp)) != 0) {
+        fatalsig(SIGILL);
+        return;
+    }
+
     regs[FRAME_R4] = sig;
     regs[FRAME_R5] = u.u_code;
-    regs[FRAME_R6] = (int)&sfp->sf_sc;
+    regs[FRAME_R6] = (int)&user_sfp->sf_sc;
     regs[FRAME_RA] = (int)u.u_sigtramp;
-    regs[FRAME_SP] = (int)sfp;
+    regs[FRAME_SP] = (int)user_sfp;
     regs[FRAME_PC] = (int)p;
 }
 
@@ -89,11 +111,12 @@ void
 sigreturn(void)
 {
     int *regs = u.u_frame;
-    struct sigcontext *scp =
+    struct sigcontext context;
+    struct sigcontext *user_scp =
         (struct sigcontext *)(regs[FRAME_SP] + 16);
+    struct sigcontext *scp = &context;
 
-    if (baduaddr((caddr_t)scp) ||
-        baduaddr((caddr_t)scp + sizeof(*scp))) {
+    if (copyin((caddr_t)user_scp, (caddr_t)scp, sizeof(*scp)) != 0) {
         u.u_error = EFAULT;
         return;
     }

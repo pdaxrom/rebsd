@@ -1,4 +1,5 @@
 #include <machine/io.h>
+#include <machine/machparam.h>
 
         .set    noreorder
 #if defined(N64) || defined(MIPS3) || defined(MALTA64)
@@ -8,7 +9,7 @@
 #endif
         .set    noat
 
-        .extern u_end
+        .extern mips_curuser
         .extern exception
 
         .section .exception,"ax",@progbits
@@ -35,7 +36,9 @@ mips_exception_entry:
         bnez    $k1, 1f
         move    $k1, $sp
 
-        la      $sp, u_end
+        la      $sp, mips_curuser
+        lw      $sp, 0($sp)
+        addiu   $sp, $sp, USIZE
 1:
         addiu   $sp, $sp, -16-FRAME_WORDS*4
         sw      $k0, (16+FRAME_STATUS*4)($sp)
@@ -165,3 +168,11 @@ mips_exception_restore_start:
 mips_exception_restore_end:
 mips_exception_entry_end:
         .end    mips_exception_entry
+
+        .section .text,"ax",@progbits
+        .globl  mips_fork_trampoline
+        .ent    mips_fork_trampoline
+mips_fork_trampoline:
+        j       mips_exception_restore_start
+        nop
+        .end    mips_fork_trampoline

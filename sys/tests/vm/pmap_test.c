@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <vm/pmap.h>
+#include <vm/vmspace.h>
 
 #define TEST_RAM_SIZE   (64u * VM_PAGE_SIZE)
 #define TEST_VADDR      0x10000000u
@@ -216,11 +217,75 @@ test_pmap(void)
     return 0;
 }
 
+static int
+test_vmspace(void)
+{
+    struct vm_page_allocator allocator;
+    struct vm_phys_map map;
+    struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
+    struct vmspace *source;
+    struct vmspace *child;
+    unsigned char input[32];
+    unsigned char output[32];
+    vm_paddr_t source_paddr;
+    vm_paddr_t child_paddr;
+    vm_pfn_t free_before;
+    unsigned i;
+
+    memset(test_ram, 0, sizeof(test_ram));
+    memset(&allocator, 0, sizeof(allocator));
+    vm_phys_map_init(&map);
+    CHECK(vm_phys_map_add_ram(&map, 0, TEST_RAM_SIZE, "test ram") == 0);
+    CHECK(vm_phys_map_finalize(&map) == 0);
+    CHECK(vm_page_allocator_init(&allocator, &map, metadata,
+        sizeof(metadata)) == 0);
+    free_before = allocator.vpa_free_count;
+    CHECK(pmap_system_init(&allocator) == 0);
+    CHECK(vmspace_system_init(&allocator) == 0);
+    CHECK(vmspace_create(&source) == 0);
+    CHECK(vmspace_map_anon(source, TEST_VADDR, 2 * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE, 0) == 0);
+    for (i = 0; i < sizeof(input); ++i)
+        input[i] = (unsigned char)(0x80u + i);
+    CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE - 16,
+        input, sizeof(input)) == 0);
+    memset(output, 0, sizeof(output));
+    CHECK(vmspace_read(source, TEST_VADDR + VM_PAGE_SIZE - 16,
+        output, sizeof(output)) == 0);
+    CHECK(memcmp(input, output, sizeof(input)) == 0);
+    CHECK(vmspace_validate(source) == 0);
+
+    CHECK(vmspace_clone(source, &child) == 0);
+    CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) == 0);
+    CHECK(pmap_extract(child->vms_pmap, TEST_VADDR, &child_paddr) == 0);
+    CHECK(source_paddr != child_paddr);
+    CHECK(vmspace_read(child, TEST_VADDR + VM_PAGE_SIZE - 16,
+        output, sizeof(output)) == 0);
+    CHECK(memcmp(input, output, sizeof(input)) == 0);
+    output[0] ^= 0xffu;
+    CHECK(vmspace_write(child, TEST_VADDR + VM_PAGE_SIZE - 16,
+        output, 1) == 0);
+    CHECK(vmspace_read(source, TEST_VADDR + VM_PAGE_SIZE - 16,
+        output, 1) == 0);
+    CHECK(output[0] == input[0]);
+
+    CHECK(vmspace_protect(child, TEST_VADDR + VM_PAGE_SIZE,
+        VM_PAGE_SIZE, VM_PROT_READ) == 0);
+    CHECK(vmspace_write(child, TEST_VADDR + VM_PAGE_SIZE,
+        input, 1) == EFAULT);
+    CHECK(vmspace_destroy(child) == 0);
+    CHECK(vmspace_destroy(source) == 0);
+    CHECK(allocator.vpa_free_count == free_before);
+    return 0;
+}
+
 int
 main(void)
 {
     if (test_pmap() != 0)
         return 1;
-    puts("MIPS pmap tests: ok");
+    if (test_vmspace() != 0)
+        return 1;
+    puts("MIPS pmap/vmspace tests: ok");
     return 0;
 }

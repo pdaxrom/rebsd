@@ -33,8 +33,7 @@ nosys(void)
         unsigned inst = 0;
         unsigned code = ~0;
 
-        if (!baduaddr((caddr_t)pc)) {
-            inst = *(u_int *)pc;
+        if (copyin((caddr_t)pc, (caddr_t)&inst, sizeof(inst)) == 0) {
             code = (inst >> 6) & 0377;
         }
         uprintf("nosys: pid=%d comm=%s code=%u pc=%x sp=%x "
@@ -59,6 +58,7 @@ void
 addupc(caddr_t pc, struct uprof *prof, int ticks)
 {
     unsigned indx;
+    unsigned value;
 
     if (pc < (caddr_t)prof->pr_off)
         return;
@@ -68,5 +68,10 @@ addupc(caddr_t pc, struct uprof *prof, int ticks)
     if (indx >= prof->pr_size)
         return;
 
-    prof->pr_base[indx] += ticks;
+    if (copyin((caddr_t)&prof->pr_base[indx], (caddr_t)&value,
+        sizeof(value)) != 0)
+        return;
+    value += ticks;
+    (void)copyout((caddr_t)&value, (caddr_t)&prof->pr_base[indx],
+        sizeof(value));
 }

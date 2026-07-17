@@ -5,15 +5,15 @@
  * Fixed first-stage N64 memory layout.
  *
  * 4 MiB system:
- *   0x00000000..0x000fffff  kernel, vectors, u areas
- *   0x00100000..0x002fffff  wired kuseg user window
+ *   0x00000000..0x000fffff  kernel, vectors, bootstrap u area
+ *   0x00100000..0x002fffff  legacy user-window reserve
  *   0x00300000..0x0033ffff  resident stage0/restart image
  *   0x00340000..0x0037ffff  stage0/320x240x16 framebuffer alias
  *   0x00380000..0x003fffff  RAM swap fallback
  *
  * 8 MiB system:
- *   0x00000000..0x000fffff  kernel, vectors, u areas
- *   0x00100000..0x004fffff  wired kuseg user window, including the
+ *   0x00000000..0x000fffff  kernel, vectors, bootstrap u area
+ *   0x00100000..0x004fffff  legacy user-window reserve, including the
  *                            resident stage0 alias at 0x00300000..0x0037ffff
  *   0x00500000..0x0053ffff  320x240x16 framebuffer reserve
  *   0x00540000..0x0063ffff  /var RAM disk
@@ -50,8 +50,7 @@
 #define N64_KERNEL_DATA_START          N64_KERNEL_VADDR_BASE
 #define N64_KERNEL_DATA_END            (N64_KERNEL_DATA_START + N64_KERNEL_RESERVED)
 #define N64_UAREA_SIZE                 0x00002000
-#define N64_U0AREA_VADDR               0x800f0000
-#define N64_UAREA_VADDR                (N64_U0AREA_VADDR + N64_UAREA_SIZE)
+#define N64_UAREA_VADDR                0x800f2000
 
 #define N64_STAGE0_VADDR               0x80300000
 #define N64_STAGE0_PHYS_START          0x00300000

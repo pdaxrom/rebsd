@@ -74,6 +74,7 @@
 #include <sys/signalvar.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <vm/vmspace.h>
 
 extern char sigcode[], esigcode[];
 
@@ -167,7 +168,9 @@ exec_elf_check(struct exec_params *epp)
     /*
      * Save arglist
      */
-    exec_save_args(epp);
+    error = exec_save_args(epp);
+    if (error != 0)
+        return error;
 
     /*
      * Establish memory
@@ -193,11 +196,24 @@ exec_elf_check(struct exec_params *epp)
             || ph[i].p_filesz >= ph[i].p_memsz || ph[i].p_filesz <= 0) {
             return ENOEXEC;
         }
-        error = rdwri(UIO_READ, epp->ip, (caddr_t)ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_offset, IO_UNIT, 0);
+        error = vmspace_read_inode(epp->vmspace, epp->ip,
+            ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_offset);
+        if (error != 0)
+            return error;
     }
 
+    if ((epp->bss.len != 0 && vmspace_zero(epp->vmspace,
+        (vm_vaddr_t)epp->bss.vaddr, epp->bss.len) != 0) ||
+        vmspace_zero(epp->vmspace, (vm_vaddr_t)epp->stack.vaddr,
+        epp->stack.len) != 0)
+        return EFAULT;
+    error = exec_setupstack(epp->hdr.elf.e_entry, epp);
+    if (error != 0)
+        return error;
+    error = exec_commit(epp);
+    if (error != 0)
+        return error;
     exec_clear(epp);
-    exec_setupstack(epp->hdr.elf.e_entry, epp);
 
     return 0;
 }

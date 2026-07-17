@@ -9,7 +9,8 @@ Layout:
 - `n64/` - Nintendo 64 board support: RDRAM layout, video, SI/Joybus and
   n64cart hardware.
 - `malta/` - QEMU Malta board support: 16550 serial console, QEMU-loaded
-  read-only root filesystem, 4 MiB wired user window, and RAM-backed swap.
+  read-only root filesystem, per-process VM address spaces, and RAM-backed
+  swap.
 - `malta64/` - QEMU Malta/R4000 compatibility board config.  It uses the same
   shared Malta support with the VR4300/MIPS-III ABI profile.
 - `maltael/` - little-endian QEMU Malta board config.  It reuses the Malta

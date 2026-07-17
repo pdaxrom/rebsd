@@ -10,6 +10,7 @@
 #include <sys/proc.h>
 #include <sys/namei.h>
 #include <sys/signalvar.h>
+#include <vm/vmspace.h>
 
 /*
  * Can the current process send the signal `signum' to process `q'?
@@ -592,14 +593,14 @@ core()
     if (u.u_error)
         goto out;
 
-    u.u_error = rdwri (UIO_WRITE, ip, (caddr_t) USER_DATA_START,
-        u.u_dsize, (off_t) USIZE, IO_UNIT, (int*) 0);
+    u.u_error = vmspace_write_inode(u.u_procp->p_vmspace, ip,
+        u.u_procp->p_daddr, u.u_dsize, (off_t)USIZE);
     if (u.u_error)
         goto out;
 
-    u.u_error = rdwri (UIO_WRITE, ip, (caddr_t) USER_DATA_END - u.u_ssize,
-        u.u_ssize, (off_t) USIZE + u.u_dsize,
-        IO_UNIT, (int*) 0);
+    u.u_error = vmspace_write_inode(u.u_procp->p_vmspace, ip,
+        u.u_procp->p_saddr, u.u_ssize,
+        (off_t)USIZE + u.u_dsize);
 out:
     iput(ip);
     return (u.u_error == 0);

@@ -28,166 +28,25 @@ u_short avefree;                /* moving average of remaining free clicks */
 u_short avefree30;              /* 30 sec (avefree is 5 sec) moving average */
 
 /*
- * The main loop of the scheduling (swapping) process.
- * The basic idea is:
- *  see if anyone wants to be swapped in
- *  swap out processes until there is room
- *  swap him in
- *  repeat
- * The runout flag is set whenever someone is swapped out.  Sched sleeps on
- * it awaiting work.  Sched sleeps on runin whenever it cannot find enough
- * core (by swapping out or otherwise) to fit the selected swapped process.
- * It is awakened when the core situation changes and in any case once per
- * second.
+ * Process zero supplies the idle scheduler context and deferred USB work.
+ * VM-backed processes remain resident; the object pager will perform
+ * page-level reclamation instead of fixed-window whole-process swapping.
  */
 void
 sched()
 {
-    register struct proc *rp;
-    struct proc *swapped_out = 0, *in_core = 0;
-    register int out_time, rptime;
-#ifdef N64_TRACE
-    int n64_sched_trace = 0;
-#endif
-
     for (;;) {
-        /* Perform swap-out/swap-in action. */
-#ifdef N64_TRACE
-        if (n64_sched_trace < 24) {
-            printf ("n64sched: top in=%x out=%x\n", in_core, swapped_out);
-            n64_sched_trace++;
-        }
-#endif
         spl0();
 #ifdef USB_ENABLED
         usb_task_run_pending();
 #endif
-        if (in_core) {
-#ifdef N64_TRACE
-            if (n64_sched_trace < 24) {
-                printf ("n64sched: swapout pid=%d\n", in_core->p_pid);
-                n64_sched_trace++;
-            }
-#endif
-            if (swapout (in_core, X_FREECORE, X_OLDSIZE, X_OLDSIZE) != 0) {
-                in_core->p_flag |= SLOAD;
-                if (in_core->p_stat == SRUN)
-                    setrq (in_core);
-                in_core = 0;
-                swapped_out = 0;
-                ++runin;
-                splhigh();
-#ifdef USB_ENABLED
-                if (usb_task_any_pending())
-                    continue;
-#endif
-                sleep ((caddr_t)&runin, PSWP);
-                continue;
-            }
-        }
-        if (swapped_out) {
-#ifdef N64_TRACE
-            if (n64_sched_trace < 24) {
-                printf ("n64sched: swapin pid=%d\n", swapped_out->p_pid);
-                n64_sched_trace++;
-            }
-#endif
-            swapin (swapped_out);
-        }
         splhigh();
-        in_core = 0;
-        swapped_out = 0;
-
-        /* Find user to swap in; of users ready,
-         * select one out longest. */
-        out_time = -20000;
-        for (rp = allproc; rp; rp = rp->p_nxt) {
-            if (rp->p_stat != SRUN || (rp->p_flag & SLOAD))
-                continue;
-            rptime = rp->p_time - rp->p_nice * 8;
-
-            /*
-             * Always bring in parents ending a vfork,
-             * to avoid deadlock
-             */
-            if (rptime > out_time || (rp->p_flag & SVFPRNT)) {
-                swapped_out = rp;
-                out_time = rptime;
-                if (rp->p_flag & SVFPRNT)
-                    break;
-            }
-        }
-
-        /* If there is no one there, wait. */
-        if (! swapped_out) {
-            ++runout;
-            //SETVAL(0);
-#ifdef N64_TRACE
-            if (n64_sched_trace < 24) {
-                printf ("n64sched: sleep runout\n");
-                n64_sched_trace++;
-            }
-#endif
+        ++runout;
 #ifdef USB_ENABLED
-            if (usb_task_any_pending())
-                continue;
-#endif
-            sleep ((caddr_t) &runout, PSWP);
+        if (usb_task_any_pending())
             continue;
-        }
-
-        //SETVAL(swapped_out->p_pid);
-
-        /*
-         * Look around for somebody to swap out.
-         * There may be only one non-system loaded process.
-         */
-        for (rp = allproc; rp != NULL; rp = rp->p_nxt) {
-            if (rp->p_stat != SZOMB &&
-                (rp->p_flag & (SSYS | SLOAD)) == SLOAD) {
-                in_core = rp;
-                break;
-            }
-        }
-        if (! in_core) {
-            /* In-core memory is empty. */
-#ifdef N64_TRACE
-            if (n64_sched_trace < 24) {
-                printf ("n64sched: no in-core for pid=%d\n",
-                    swapped_out->p_pid);
-                n64_sched_trace++;
-            }
 #endif
-            continue;
-        }
-
-        /*
-         * Swap found user out if sleeping interruptibly, or if he has spent at
-         * least 1 second in core and the swapped-out process has spent at
-         * least 2 seconds out.  Otherwise wait a bit and try again.
-         */
-        if (! (in_core->p_flag & SLOCK) &&
-            (in_core->p_stat == SSTOP ||
-             (in_core->p_stat == SSLEEP && (in_core->p_flag & P_SINTR)) ||
-             ((in_core->p_stat == SRUN || in_core->p_stat == SSLEEP) &&
-              out_time >= 2 &&
-              in_core->p_time + in_core->p_nice >= 1)))
-        {
-            /* Swap out in-core process. */
-            in_core->p_flag &= ~SLOAD;
-            if (in_core->p_stat == SRUN)
-                remrq (in_core);
-        } else {
-            /* Nothing to swap in/out. */
-            in_core = 0;
-            swapped_out = 0;
-            ++runin;
-#ifdef USB_ENABLED
-            if (usb_task_any_pending())
-                continue;
-#endif
-            sleep ((caddr_t) &runin, PSWP);
-        }
+        sleep ((caddr_t)&runout, PSWP);
     }
 }
 

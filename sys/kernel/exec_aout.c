@@ -15,6 +15,7 @@
 #include <sys/dir.h>
 #include <sys/uio.h>
 #include <machine/debug.h>
+#include <vm/vmspace.h>
 
 int exec_aout_check(struct exec_params *epp)
 {
@@ -39,7 +40,9 @@ int exec_aout_check(struct exec_params *epp)
     /*
      * Save arglist
      */
-    exec_save_args(epp);
+    error = exec_save_args(epp);
+    if (error != 0)
+        return error;
 
     DEBUG("Exec file header:\n");
     DEBUG("a_midmag =  %#x\n", epp->hdr.aout.a_midmag);     /* magic number */
@@ -77,22 +80,27 @@ int exec_aout_check(struct exec_params *epp)
 
     /* read in text and data */
     DEBUG("reading a.out image\n");
-    error = rdwri (UIO_READ, epp->ip,
-               (caddr_t)epp->data.vaddr, epp->hdr.aout.a_data,
-               sizeof(struct exec) + epp->hdr.aout.a_text, IO_UNIT, 0);
+    error = vmspace_read_inode(epp->vmspace, epp->ip,
+        (vm_vaddr_t)epp->data.vaddr, epp->hdr.aout.a_data,
+        sizeof(struct exec) + epp->hdr.aout.a_text);
     if (error)
         DEBUG("read image returned error=%d\n", error);
     if (error) {
-        /*
-         * Error - all is lost, when the old image is possible corrupt
-         * and we could not load a new.
-         */
-        psignal (u.u_procp, SIGSEGV);
         return error;
     }
 
+    if ((epp->bss.len != 0 && vmspace_zero(epp->vmspace,
+        (vm_vaddr_t)epp->bss.vaddr, epp->bss.len) != 0) ||
+        vmspace_zero(epp->vmspace, (vm_vaddr_t)epp->stack.vaddr,
+        epp->stack.len) != 0)
+        return EFAULT;
+    error = exec_setupstack(epp->hdr.aout.a_entry, epp);
+    if (error != 0)
+        return error;
+    error = exec_commit(epp);
+    if (error != 0)
+        return error;
     exec_clear(epp);
-    exec_setupstack(epp->hdr.aout.a_entry, epp);
 
     return 0;
 }

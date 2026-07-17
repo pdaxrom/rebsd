@@ -54,14 +54,14 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
 #endif
     if (error != 0)
         return error;
-    uarea_start = N64_U0AREA_VADDR & N64_KSEG_PHYS_MASK;
+    uarea_start = N64_UAREA_VADDR & N64_KSEG_PHYS_MASK;
     if (kernel_end < kernel_start || kernel_end > uarea_start)
         return EINVAL;
     error = n64_vm_reserve(map, kernel_start, kernel_end, "kernel");
     if (error != 0)
         return error;
     error = vm_phys_map_reserve(map, uarea_start,
-        2u * N64_UAREA_SIZE, "u0/u areas");
+        N64_UAREA_SIZE, "bootstrap u area");
     if (error != 0)
         return error;
 

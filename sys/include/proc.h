@@ -6,6 +6,9 @@
 #ifndef _SYS_PROC_H_
 #define _SYS_PROC_H_
 
+struct user;
+struct vmspace;
+
 /*
  * One structure allocated per active
  * process. It contains all data needed
@@ -24,6 +27,8 @@ struct  proc {
     short   p_ppid;                 /* process id of parent */
     long    p_sig;                  /* signals pending to this process */
     int     p_stat;
+    struct  user *p_uarea;          /* resident user area/kernel stack */
+    struct  vmspace *p_vmspace;     /* process virtual address space */
 
     /*
      * Union to overwrite information no longer needed by ZOMBIED
@@ -50,6 +55,7 @@ struct  proc {
             size_t  P_daddr;        /* address of data area */
             size_t  P_saddr;        /* address of stack area */
             size_t  P_dsize;        /* size of data area (bytes) */
+            size_t  P_dmin;         /* lowest legal data break size */
             size_t  P_ssize;        /* size of stack segment (bytes) */
             caddr_t P_wchan;        /* event process is awaiting */
             struct  k_itimerval P_realtimer;
@@ -76,6 +82,7 @@ struct  proc {
 #define p_daddr         p_un.p_alive.P_daddr
 #define p_saddr         p_un.p_alive.P_saddr
 #define p_dsize         p_un.p_alive.P_dsize
+#define p_dmin          p_un.p_alive.P_dmin
 #define p_ssize         p_un.p_alive.P_ssize
 #define p_wchan         p_un.p_alive.P_wchan
 #define p_realtimer     p_un.p_alive.P_realtimer
@@ -86,11 +93,6 @@ struct  proc {
 
 #define PIDHSZ          16
 #define PIDHASH(pid)    ((pid) & (PIDHSZ - 1))
-
-/* arguments to swapout: */
-#define X_OLDSIZE       (-1)    /* the old size is the same as current */
-#define X_DONTFREE      0       /* save core image (for parent in newproc) */
-#define X_FREECORE      1       /* free core space after swap */
 
 #ifdef KERNEL
 extern struct proc *pidhash[];
@@ -229,21 +231,6 @@ void untimeout (void (*fun) (caddr_t), caddr_t arg);
  * Handler for hardware clock interrupt.
  */
 void hardclock (caddr_t pc, int ps);
-
-/*
- * Swap out a process.
- */
-int swapout (struct proc *p, int freecore, u_int odata, u_int ostack);
-
-/*
- * Test whether a process image can be placed in the current swap map.
- */
-int swapout_possible (u_int dsize, u_int ssize);
-
-/*
- * Swap a process in.
- */
-void swapin (struct proc *p);
 
 /*
  * Is p an inferior of the current process?

@@ -6,6 +6,7 @@
 #include <sys/user.h>
 #include <machine/console.h>
 #include <machine/io.h>
+#include <vm/vmspace.h>
 #include <machine/layout.h>
 
 dev_t pipedev;
@@ -155,6 +156,12 @@ mips_tlb_init(void)
     mips_write_c0_register(C0_WIRED, 0, MIPS_USER_TLB_PAIRS);
 }
 
+unsigned
+pmap_md_legacy_user_entries(void)
+{
+    return MIPS_USER_TLB_PAIRS;
+}
+
 void
 startup(void)
 {
@@ -207,9 +214,10 @@ led_control(int mask, int on)
 int
 baduaddr(caddr_t addr)
 {
-    unsigned a = (unsigned)addr;
+    struct vmspace *vmspace = vmspace_current();
 
-    return a < USER_DATA_START || a >= USER_DATA_END;
+    return vmspace == 0 || vmspace_check(vmspace, (vm_vaddr_t)addr, 1,
+        VM_PROT_NONE) != 0;
 }
 
 int
@@ -223,29 +231,27 @@ badkaddr(caddr_t addr)
 int
 copyout(caddr_t from, caddr_t to, u_int nbytes)
 {
-    unsigned start = (unsigned)to;
-    unsigned end = start + nbytes - 1;
+    struct vmspace *vmspace;
 
     if (nbytes == 0)
         return 0;
-    if (end < start || baduaddr((caddr_t)start) || baduaddr((caddr_t)end))
+    vmspace = vmspace_current();
+    if (vmspace == 0)
         return EFAULT;
-    bcopy(from, to, nbytes);
-    return 0;
+    return vmspace_write(vmspace, (vm_vaddr_t)to, from, nbytes);
 }
 
 int
 copyin(caddr_t from, caddr_t to, u_int nbytes)
 {
-    unsigned start = (unsigned)from;
-    unsigned end = start + nbytes - 1;
+    struct vmspace *vmspace;
 
     if (nbytes == 0)
         return 0;
-    if (end < start || baduaddr((caddr_t)start) || baduaddr((caddr_t)end))
+    vmspace = vmspace_current();
+    if (vmspace == 0)
         return EFAULT;
-    bcopy(from, to, nbytes);
-    return 0;
+    return vmspace_read(vmspace, (vm_vaddr_t)from, to, nbytes);
 }
 
 void

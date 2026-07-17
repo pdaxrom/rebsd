@@ -12,12 +12,10 @@ ENTRY(_start)
 MEMORY
 {
   kernel (rwx) : ORIGIN = 0xffffffff80100000, LENGTH = 2032K
-  u0area (rw!x): ORIGIN = 0xffffffff802fc000, LENGTH = 8K
   uarea  (rw!x): ORIGIN = 0xffffffff802fe000, LENGTH = 8K
   romdisk (rwx) : ORIGIN = 0xffffffff80800000, LENGTH = 34816K
 }
 
-u0      = ORIGIN(u0area);
 u       = ORIGIN(uarea);
 u_end   = ORIGIN(uarea) + LENGTH(uarea);
 

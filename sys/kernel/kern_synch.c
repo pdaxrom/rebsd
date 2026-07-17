@@ -12,6 +12,7 @@
 #include <sys/vm.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <vm/vmspace.h>
 
 #define SQSIZE  16              /* Must be power of 2 */
 
@@ -244,7 +245,7 @@ sleep (caddr_t chan, int pri)
      * EINTR - put into u_error for trap.c to find (interrupted syscall)
      * ERESTART - system call to be restared
      */
-    longjmp (u.u_procp->p_addr, &u.u_qsave);
+    longjmp ((size_t)u.u_procp->p_uarea, &u.u_procp->p_uarea->u_qsave);
     /*NOTREACHED*/
 }
 
@@ -402,6 +403,7 @@ swtch()
 #ifdef UCB_METER
     cnt.v_swtch++;
 #endif
+    mips_uarea_guard_check(mips_curuser);
     /* If not the idle process, resume the idle process. */
     if (u.u_procp != &proc[0]) {
         if (setjmp (&u.u_rsave)) {
@@ -409,7 +411,11 @@ swtch()
             return;
         }
         /* Switch from user process to swapper. */
-        longjmp (proc[0].p_addr, &u.u_qsave);
+        if (vmspace_activate(proc[0].p_vmspace) != 0)
+            panic("proc0 pmap");
+        mips_uarea_guard_check(proc[0].p_uarea);
+        longjmp ((size_t)proc[0].p_uarea,
+            &proc[0].p_uarea->u_qsave);
     }
     /*
      * The first save returns nonzero when proc 0 is resumed
@@ -461,7 +467,7 @@ loop:
     p = pp;
     if (p == NULL) {
 #ifdef N64_TRACE
-        printf ("n64swtch: idle\n");
+        printf ("mipsswtch: idle\n");
 #endif
         idle();
         goto loop;
@@ -479,10 +485,14 @@ loop:
     n = p->p_flag & SSWAP;
     p->p_flag &= ~SSWAP;
 #ifdef N64_TRACE
-    printf ("n64swtch: pick pid=%d paddr=%x sswap=%x pri=%d\n",
+    printf ("mipsswtch: pick pid=%d paddr=%x sswap=%x pri=%d\n",
         p->p_pid, p->p_addr, n, p->p_pri);
 #endif
-    longjmp (p->p_addr, n ? &u.u_ssave : &u.u_rsave);
+    if (vmspace_activate(p->p_vmspace) != 0)
+        panic("process pmap");
+    mips_uarea_guard_check(p->p_uarea);
+    longjmp ((size_t)p->p_uarea,
+        n ? &p->p_uarea->u_ssave : &p->p_uarea->u_rsave);
 }
 
 /*

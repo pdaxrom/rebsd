@@ -21,6 +21,8 @@
 #define PMAP_MD_INVALID_BASE    0x40000000u
 #define PMAP_MD_TLB_PAIR_SIZE   0x00002000u
 
+extern unsigned pmap_md_legacy_user_entries(void);
+
 #ifdef CI20
 #define PMAP_MD_DCACHE_LINE     32u
 #else
@@ -156,6 +158,29 @@ pmap_md_tlb_flush(void)
     entries = pmap_md_tlb_entries();
     wired = mips_read_c0_register(C0_WIRED, 0);
     for (index = wired; index < entries; ++index) {
+        mips_tlb_write_indexed(index, TLB_PAGEMASK_4K,
+            PMAP_MD_INVALID_BASE + index * PMAP_MD_TLB_PAIR_SIZE,
+            0, 0);
+    }
+    mips_write_c0_register(C0_PAGEMASK, 0, saved_pagemask);
+    mips_write_c0_register(C0_ENTRYHI, 0, saved_entryhi);
+    mips_intr_restore(status);
+}
+
+void
+pmap_md_legacy_user_disable(void)
+{
+    unsigned saved_entryhi;
+    unsigned saved_pagemask;
+    unsigned entries;
+    unsigned index;
+    int status;
+
+    status = mips_intr_disable();
+    saved_entryhi = mips_read_c0_register(C0_ENTRYHI, 0);
+    saved_pagemask = mips_read_c0_register(C0_PAGEMASK, 0);
+    entries = pmap_md_legacy_user_entries();
+    for (index = 0; index < entries; ++index) {
         mips_tlb_write_indexed(index, TLB_PAGEMASK_4K,
             PMAP_MD_INVALID_BASE + index * PMAP_MD_TLB_PAIR_SIZE,
             0, 0);

@@ -797,7 +797,6 @@ void
 fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp,
     char *comm, size_t commlen)
 {
-    register struct buf *bp;
     dev_t   ttyd;
     uid_t   ruid;
     struct  tty *ttyp;
@@ -815,8 +814,8 @@ fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp,
         }
         goto out;
     }
-    if (p->p_flag & SLOAD) {
-        up = (struct user *)p->p_addr;
+    up = p->p_uarea;
+    if (up != NULL) {
         ttyd = up->u_ttyd;
         ttyp = up->u_ttyp;
         ruid = up->u_ruid;
@@ -825,32 +824,9 @@ fill_from_u (struct proc *p, uid_t *rup, struct tty **ttp, dev_t *tdp,
             comm[commlen - 1] = '\0';
         }
     } else {
-        bp = geteblk();
-        bp->b_dev = swapdev;
-        bp->b_blkno = (daddr_t)p->p_addr;
-        bp->b_bcount = DEV_BSIZE;   /* XXX */
-        bp->b_flags = B_READ;
-
-        (*bdevsw[major(swapdev)].d_strategy)(bp);
-        biowait(bp);
-
-        if (u.u_error) {
-            ttyd = NODEV;
-            ttyp = NULL;
-            ruid = (uid_t)-2;
-        } else {
-            up = (struct user*) bp->b_addr;
-            ruid = up->u_ruid;  /* u_ruid = offset 164 */
-            ttyd = up->u_ttyd;  /* u_ttyd = offset 654 */
-            ttyp = up->u_ttyp;  /* u_ttyp = offset 652 */
-            if (comm && commlen) {
-                strncpy(comm, up->u_comm, commlen - 1);
-                comm[commlen - 1] = '\0';
-            }
-        }
-        bp->b_flags |= B_AGE;
-        brelse(bp);
-        u.u_error = 0;      /* XXX */
+        ttyd = NODEV;
+        ttyp = NULL;
+        ruid = (uid_t)-2;
     }
 out:
     if (rup)

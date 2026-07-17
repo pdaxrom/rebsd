@@ -78,9 +78,9 @@ procxmt()
 
     /* read user D */
     case PT_READ_D:
-        if (baduaddr ((caddr_t) ipc.ip_addr))
+        if (copyin((caddr_t)ipc.ip_addr, (caddr_t)&ipc.ip_data,
+            sizeof(ipc.ip_data)) != 0)
             goto error;
-        ipc.ip_data = *(int*) ipc.ip_addr;
         break;
 
     /* read u */
@@ -95,9 +95,9 @@ procxmt()
     case PT_WRITE_I:
     /* write user D */
     case PT_WRITE_D:
-        if (baduaddr ((caddr_t) ipc.ip_addr))
+        if (copyout((caddr_t)&ipc.ip_data, (caddr_t)ipc.ip_addr,
+            sizeof(ipc.ip_data)) != 0)
             goto error;
-        *(int*) ipc.ip_addr = ipc.ip_data;
         break;
 
     /* write u */

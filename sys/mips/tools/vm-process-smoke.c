@@ -1,0 +1,158 @@
+/* Focused QEMU regression coverage for per-process MIPS address spaces. */
+
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#define SMOKE_EXEC_STATUS   23
+#define SMOKE_FORK_STATUS   31
+#define SMOKE_REUSE_COUNT   8
+
+static volatile sig_atomic_t smoke_signal_seen;
+static volatile unsigned smoke_bad_address = 1;
+
+static void
+smoke_signal(int signo)
+{
+    if (signo == SIGUSR1)
+        smoke_signal_seen = 1;
+}
+
+static int
+smoke_fail(const char *name)
+{
+    printf("vm-process-smoke: FAIL: %s\n", name);
+    return 1;
+}
+
+static int
+smoke_wait(pid_t child, int expected)
+{
+    int status;
+    pid_t waited;
+
+    waited = wait(&status);
+    if (waited != child || !WIFEXITED(status) ||
+        WEXITSTATUS(status) != expected) {
+        printf("vm-process-smoke: wait pid=%d/%d status=%04x expected=%d\n",
+            waited, child, status, expected);
+        return -1;
+    }
+    return 0;
+}
+
+static int
+smoke_stack(int depth)
+{
+    volatile unsigned char page_fragment[1536];
+    int value;
+
+    page_fragment[0] = (unsigned char)depth;
+    page_fragment[sizeof(page_fragment) - 1] = (unsigned char)(depth + 1);
+    value = page_fragment[0] + page_fragment[sizeof(page_fragment) - 1];
+    if (depth != 0)
+        value += smoke_stack(depth - 1);
+    return value;
+}
+
+int
+main(int argc, char **argv)
+{
+    char *arena;
+    char *cross_page;
+    char **bad_argv;
+    char *exec_argv[3];
+    void *old_break;
+    pid_t child;
+    int index;
+    int page_size;
+    int grow_size;
+
+    if (argc == 2 && strcmp(argv[1], "--exec-child") == 0)
+        return SMOKE_EXEC_STATUS;
+
+    page_size = getpagesize();
+    if (page_size <= 0 || (page_size & (page_size - 1)) != 0)
+        return smoke_fail("page size");
+    grow_size = 4 * page_size;
+    old_break = sbrk(0);
+    arena = sbrk(grow_size);
+    if (arena == (void *)-1 || arena != old_break)
+        return smoke_fail("sbrk grow");
+    memset(arena, 0x5a, grow_size);
+
+    cross_page = (char *)(((unsigned)arena + page_size - 1) &
+        ~(unsigned)(page_size - 1));
+    cross_page += page_size - 3;
+    memcpy(cross_page, "cross\n", 6);
+    if (write(STDOUT_FILENO, cross_page, 6) != 6)
+        return smoke_fail("cross-page copyin");
+
+    if (signal(SIGUSR1, smoke_signal) == SIG_ERR ||
+        kill(getpid(), SIGUSR1) != 0 || !smoke_signal_seen)
+        return smoke_fail("signal delivery");
+    if (smoke_stack(4) != 25)
+        return smoke_fail("stack growth");
+
+    arena[0] = 0x21;
+    child = fork();
+    if (child < 0)
+        return smoke_fail("fork isolation create");
+    if (child == 0) {
+        if (arena[0] != 0x21)
+            _exit(1);
+        arena[0] = 0x43;
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0 || arena[0] != 0x21)
+        return smoke_fail("fork isolation");
+
+    bad_argv = (char **)(unsigned)smoke_bad_address;
+    child = fork();
+    if (child < 0)
+        return smoke_fail("failed exec create");
+    if (child == 0) {
+        errno = 0;
+        execv("/root/vm-process-smoke", bad_argv);
+        if (errno != EFAULT || arena[0] != 0x21) {
+            printf("vm-process-smoke: exec rollback errno=%d marker=%x\n",
+                errno, (unsigned char)arena[0]);
+            _exit(2);
+        }
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0)
+        return smoke_fail("failed exec rollback");
+
+    exec_argv[0] = "/root/vm-process-smoke";
+    exec_argv[1] = "--exec-child";
+    exec_argv[2] = 0;
+    child = fork();
+    if (child < 0)
+        return smoke_fail("exec create");
+    if (child == 0) {
+        execv(exec_argv[0], exec_argv);
+        _exit(3);
+    }
+    if (smoke_wait(child, SMOKE_EXEC_STATUS) != 0)
+        return smoke_fail("exec/wait");
+
+    for (index = 0; index < SMOKE_REUSE_COUNT; ++index) {
+        child = fork();
+        if (child < 0)
+            return smoke_fail("process reuse create");
+        if (child == 0)
+            _exit(index);
+        if (smoke_wait(child, index) != 0)
+            return smoke_fail("process reuse wait");
+    }
+
+    if (sbrk(-2 * page_size) == (void *)-1)
+        return smoke_fail("sbrk shrink");
+    puts("vm-process-smoke: ok");
+    return 0;
+}

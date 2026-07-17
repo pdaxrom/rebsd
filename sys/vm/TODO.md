@@ -137,20 +137,21 @@ Exit criteria:
 
 ## Phase 4: Per-process address spaces
 
-- [ ] Add `vmspace` and `vm_map` ownership to every process.
-- [ ] Replace fixed global `u`/`u0` process state with per-process user areas
+- [x] Add `vmspace` and `vm_map` ownership to every process.
+- [x] Replace fixed global `u`/`u0` process state with per-process user areas
   and kernel stacks.
-- [ ] Switch address spaces and kernel stacks in the scheduler without copying
+- [x] Switch address spaces and kernel stacks in the scheduler without copying
   an entire fixed user area.
-- [ ] Convert `exec` to construct a new address space and commit it atomically.
-- [ ] Convert `sbrk`/data growth and user-stack growth to VM map operations.
-- [ ] Add guarded kernel stacks and a user-stack guard region where hardware
+- [x] Convert `exec` to construct a new address space and commit it atomically.
+- [x] Convert `sbrk`/data growth and user-stack growth to VM map operations.
+- [x] Add guarded kernel stacks and a user-stack guard region where hardware
   and address space permit.
-- [ ] Make `copyin`, `copyout`, `fuword`, `suword`, signal delivery, ptrace,
+- [x] Make `copyin`, `copyout`, `fuword`, `suword`, signal delivery, ptrace,
   and core dumping safe across page boundaries and faultable mappings.
-- [ ] Tear down all mappings and references reliably on `exit` and failed
+- [x] Tear down all mappings and references reliably on `exit` and failed
   `exec`.
-- [ ] Define fork/exec/exit locking rules before enabling concurrent VM paths.
+- [x] Define fork/exec/exit locking rules before enabling concurrent VM paths;
+  see [LOCKING.md](LOCKING.md).
 
 Exit criteria:
 
@@ -270,7 +271,7 @@ must then pass the applicable matrix below.
 
 Required runtime coverage grows with the implementation but must include:
 
-- [ ] Boot, init, shell, signals, fork/exec/wait, and repeated process exit.
+- [x] Boot, init, shell, signals, fork/exec/wait, and repeated process exit.
 - [ ] Native PCC/GCC compiler and ABI smoke tests.
 - [ ] Filesystem, networking, USB, and block-I/O regressions.
 - [ ] Anonymous mapping and protection-fault tests.

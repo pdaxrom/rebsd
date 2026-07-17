@@ -14,6 +14,8 @@
 #include "exec_aout.h"
 #include "exec_elf.h"
 
+struct vmspace;
+
 #define NO_ADDR     ((caddr_t)(~0U)) /* Indicates addr. not yet filled in */
 
 struct memsect {
@@ -61,6 +63,11 @@ struct exec_params {
     u_long ep_taddr, ep_tsize, ep_daddr, ep_dsize;
     struct inode *ip;           /* executable file ip */
     struct memsect text, data, bss, heap, stack;
+    struct vmspace *vmspace;    /* uncommitted replacement address space */
+    unsigned entry;             /* staged initial register state */
+    unsigned stack_pointer;
+    unsigned arg_pointer;
+    unsigned env_pointer;
 };
 
 struct execsw {
@@ -73,12 +80,13 @@ extern int nexecs, exec_maxhdrsz;
 
 struct buf *exec_copy_args(char **argp, struct exec_params *epp, int isargv, int *argc, int *argbc);
 int exec_check(struct exec_params *epp);
-void exec_setupstack(unsigned entryaddr, struct exec_params *epp);
+int exec_setupstack(unsigned entryaddr, struct exec_params *epp);
 void exec_alloc_freeall(struct exec_params *epp);
 void *exec_alloc(int size, int ru, struct exec_params *epp);
 int exec_estab(struct exec_params *epp);
-void exec_save_args(struct exec_params *epp);
+int exec_save_args(struct exec_params *epp);
 void exec_clear(struct exec_params *epp);
+int exec_commit(struct exec_params *epp);
 
 #else /* KERNEL */
 #include <sys/exec_aout.h>

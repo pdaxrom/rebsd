@@ -15,6 +15,7 @@
 #include <sys/dir.h>
 #include <sys/uio.h>
 #include <machine/debug.h>
+#include <vm/vmspace.h>
 #ifdef N64
 #include <machine/fpu.h>
 #endif
@@ -91,10 +92,10 @@
  *    sp ->      []
  *
  */
-void exec_setupstack(unsigned entryaddr, struct exec_params *epp)
+int exec_setupstack(unsigned entryaddr, struct exec_params *epp)
 {
     int i;
-    u_int len;
+    u_int len, value, stack_pointer;
     char *ucp;
     char **argp, **envp, ***topp;
 
@@ -109,34 +110,46 @@ void exec_setupstack(unsigned entryaddr, struct exec_params *epp)
     ucp = (char *)((unsigned)topp - roundup(epp->envbc + epp->argbc,NBPW)); /* arg string space */
     envp = (char **)(ucp - (epp->envc+1)*NBPW); /* Make place for envp[...], +1 for the 0 */
     argp = (char **)((char *)envp - (epp->argc+1)*NBPW); /* Make place for argv[...] */
-    u.u_frame [FRAME_SP] = (int)(((unsigned)argp - STACK_ARG_SLOTS * NBPW) &
-        ~(STACK_ALIGN - 1));
-    u.u_frame [FRAME_R4] = epp->argc;           /* $a0 := argc */
-    u.u_frame [FRAME_R5] = (int)argp;           /* $a1 := argp */
-    u.u_frame [FRAME_R6] = (int)envp;           /* $a2 := env */
-    *topp = argp;                               /* for /bin/ps */
+    stack_pointer = ((unsigned)argp - STACK_ARG_SLOTS * NBPW) &
+        ~(STACK_ALIGN - 1);
+    value = (u_int)argp;
+    if (vmspace_write(epp->vmspace, (vm_vaddr_t)topp,
+        &value, sizeof(value)) != 0)
+        return EFAULT;
 
     /*
      * copy the arguments into the structure
      */
     //nc = 0;
     for (i = 0; i < epp->argc; i++) {
-        argp[i] = (caddr_t)ucp;
-        if (copystr((caddr_t)epp->argp[i], (caddr_t)ucp, (caddr_t)topp-ucp, &len) == 0) {
-            //nc += len;
-            ucp += len;
-        }
+        value = (u_int)ucp;
+        len = strlen(epp->argp[i]) + 1;
+        if (vmspace_write(epp->vmspace,
+            (vm_vaddr_t)&argp[i], &value, sizeof(value)) != 0 ||
+            vmspace_write(epp->vmspace, (vm_vaddr_t)ucp,
+            epp->argp[i], len) != 0)
+            return EFAULT;
+        ucp += len;
     }
-    argp[epp->argc] = NULL;
+    value = 0;
+    if (vmspace_write(epp->vmspace, (vm_vaddr_t)&argp[epp->argc],
+        &value, sizeof(value)) != 0)
+        return EFAULT;
 
     for (i = 0; i < epp->envc; i++) {
-        envp[i] = ucp;
-        if (copystr((caddr_t)epp->envp[i], (caddr_t)ucp, (caddr_t)topp-ucp, &len) == 0) {
-            //nc += len;
-            ucp += len;
-        }
+        value = (u_int)ucp;
+        len = strlen(epp->envp[i]) + 1;
+        if (vmspace_write(epp->vmspace,
+            (vm_vaddr_t)&envp[i], &value, sizeof(value)) != 0 ||
+            vmspace_write(epp->vmspace, (vm_vaddr_t)ucp,
+            epp->envp[i], len) != 0)
+            return EFAULT;
+        ucp += len;
     }
-    envp[epp->envc] = NULL;
+    value = 0;
+    if (vmspace_write(epp->vmspace, (vm_vaddr_t)&envp[epp->envc],
+        &value, sizeof(value)) != 0)
+        return EFAULT;
 
     ucp = (caddr_t)roundup((unsigned)ucp, NBPW);
     if ((caddr_t)ucp != (caddr_t)topp) {
@@ -144,13 +157,12 @@ void exec_setupstack(unsigned entryaddr, struct exec_params *epp)
         panic("exec check");
     }
 
-    u.u_frame [FRAME_PC] = entryaddr;
+    epp->entry = entryaddr;
+    epp->stack_pointer = stack_pointer;
+    epp->arg_pointer = (unsigned)argp;
+    epp->env_pointer = (unsigned)envp;
     DEBUG("Setting up new PC=%#x\n", entryaddr);
-
-    /*
-     * Remember file name for accounting.
-     */
-    (void) copystr(argp[0], u.u_comm, MAXCOMLEN, 0);
+    return 0;
 }
 
 /*
@@ -199,6 +211,10 @@ void exec_alloc_freeall(struct exec_params *epp)
             epp->alloc[i].fill = 0;
         }
     }
+    if (epp->vmspace != 0) {
+        (void)vmspace_destroy(epp->vmspace);
+        epp->vmspace = 0;
+    }
 }
 
 /*
@@ -208,6 +224,8 @@ void exec_alloc_freeall(struct exec_params *epp)
  */
 int exec_estab(struct exec_params *epp)
 {
+    vm_vaddr_t data_start, data_end, stack_start, stack_end;
+    int error;
     DEBUG("text =  %#x..%#x, len=%d\n", epp->text.vaddr, epp->text.vaddr+epp->text.len, epp->text.len);
     DEBUG("data =  %#x..%#x, len=%d\n", epp->data.vaddr, epp->data.vaddr+epp->data.len, epp->data.len);
     DEBUG("bss =   %#x..%#x, len=%d\n", epp->bss.vaddr, epp->bss.vaddr+epp->bss.len, epp->bss.len);
@@ -228,9 +246,6 @@ int exec_estab(struct exec_params *epp)
     if (epp->text.len + epp->data.len + epp->heap.len + epp->stack.len > MAXMEM)
         return ENOMEM;
 
-    if (!swapout_possible(epp->data.len + epp->bss.len, epp->stack.len))
-        return ENOMEM;
-
     /*
      * Check for bss and data addresses over limit
     */
@@ -243,20 +258,70 @@ int exec_estab(struct exec_params *epp)
         return ENOMEM;
     }
 
-    /*
-     * Allocate core at this point, committed to the new image.
-     */
-    u.u_prof.pr_scale = 0;
-    if (u.u_procp->p_flag & SVFORK)
-        endvfork();
-    u.u_procp->p_dsize = epp->data.len + epp->bss.len;
-    u.u_procp->p_daddr = (size_t)epp->data.vaddr;
-    u.u_procp->p_ssize = epp->stack.len;
-    u.u_procp->p_saddr = (size_t)epp->stack.vaddr;
+    data_start = vm_vaddr_trunc_page((vm_vaddr_t)epp->data.vaddr);
+    error = vm_vaddr_round_page((vm_vaddr_t)epp->bss.vaddr +
+        epp->bss.len, &data_end);
+    if (error != 0)
+        return error;
+    stack_start = vm_vaddr_trunc_page((vm_vaddr_t)epp->stack.vaddr);
+    error = vm_vaddr_round_page((vm_vaddr_t)epp->stack.vaddr +
+        epp->stack.len, &stack_end);
+    if (error != 0 || data_end > stack_start ||
+        stack_start - data_end < VM_PAGE_SIZE)
+        return ENOMEM;
+    error = vmspace_create(&epp->vmspace);
+    if (error != 0)
+        return error;
+    error = vmspace_map_anon(epp->vmspace, data_start,
+        data_end - data_start, VM_PROT_ALL, VM_MAP_EXECUTABLE);
+    if (error == 0)
+        error = vmspace_map_anon(epp->vmspace, stack_start,
+            stack_end - stack_start, VM_PROT_READ | VM_PROT_WRITE,
+            VM_MAP_STACK);
+    if (error != 0) {
+        (void)vmspace_destroy(epp->vmspace);
+        epp->vmspace = 0;
+    }
+    return error;
+}
 
-    DEBUG("core allocation: \n");
-    DEBUG("daddr =%#x..%#x\n", u.u_procp->p_daddr, u.u_procp->p_daddr + u.u_procp->p_dsize);
-    DEBUG("saddr =%#x..%#x\n", u.u_procp->p_saddr, u.u_procp->p_saddr + u.u_procp->p_ssize);
+int
+exec_commit(struct exec_params *epp)
+{
+    struct vmspace *old;
+    struct proc *p;
+    int error;
+    int s;
+
+    if (epp == 0 || epp->vmspace == 0)
+        return EINVAL;
+    p = u.u_procp;
+    if (p == 0)
+        return EINVAL;
+    s = splhigh();
+    old = p->p_vmspace;
+    p->p_vmspace = epp->vmspace;
+    error = vmspace_activate(epp->vmspace);
+    if (error != 0) {
+        p->p_vmspace = old;
+        if (old != 0)
+            (void)vmspace_activate(old);
+        splx(s);
+        return error;
+    }
+    epp->vmspace = 0;
+    p->p_dsize = epp->data.len + epp->bss.len;
+    p->p_dmin = p->p_dsize;
+    p->p_daddr = (size_t)epp->data.vaddr;
+    p->p_ssize = epp->stack.len;
+    p->p_saddr = (size_t)epp->stack.vaddr;
+    u.u_tsize = epp->text.len;
+    u.u_dsize = p->p_dsize;
+    u.u_ssize = p->p_ssize;
+    u.u_prof.pr_scale = 0;
+    splx(s);
+    if (old != 0 && vmspace_destroy(old) != 0)
+        panic("exec old vmspace");
     return 0;
 }
 
@@ -264,20 +329,50 @@ int exec_estab(struct exec_params *epp)
 /*
  * Save argv[] and envp[]
  */
-void exec_save_args(struct exec_params *epp)
+static int
+exec_arg_length(char *string, int *length)
+{
+    unsigned char byte;
+    int count;
+
+    if ((unsigned)string >= 0x80000000u) {
+        *length = strlen(string) + 1;
+        return *length <= MAXBSIZE ? 0 : E2BIG;
+    }
+    for (count = 1; count <= MAXBSIZE; ++count) {
+        if (copyin((caddr_t)string, (caddr_t)&byte, 1) != 0)
+            return EFAULT;
+        ++string;
+        if (byte == 0) {
+            *length = count;
+            return 0;
+        }
+    }
+    return E2BIG;
+}
+
+int exec_save_args(struct exec_params *epp)
 {
     unsigned len;
     caddr_t cp;
-    int argc, i, l;
+    int argc, error, i, l;
     char **argp, *ap;
 
     epp->argc = epp->envc = 0;
     epp->argbc = epp->envbc = 0;
 
     argc = 0;
-    if ((argp = epp->userargp) != NULL)
-        while (argp[argc])
-            argc++;
+    if ((argp = epp->userargp) != NULL) {
+        for (;;) {
+            if (copyin((caddr_t)&argp[argc], (caddr_t)&ap,
+                sizeof(ap)) != 0)
+                return EFAULT;
+            if (ap == 0)
+                break;
+            if (++argc > MAXBSIZE / sizeof(char *))
+                return E2BIG;
+        }
+    }
     if (epp->sh.interpreted) {
         argc++;
         if (epp->sh.interparg[0])
@@ -285,7 +380,7 @@ void exec_save_args(struct exec_params *epp)
     }
     if (argc != 0) {
         if ((epp->argp = (char **)exec_alloc(argc * sizeof(char *), NBPW, epp)) == NULL)
-            return;
+            return ENOMEM;
         for (;;) {
             /*
              * For a interpreter script, the arg list is changed to
@@ -295,9 +390,12 @@ void exec_save_args(struct exec_params *epp)
              * arg[2 or 1] - script name
              * arg[3 or 2...] - script arg[1...]
              */
-            if (argp)
-                ap = *argp++;
-            else
+            if (argp) {
+                if (copyin((caddr_t)argp, (caddr_t)&ap,
+                    sizeof(ap)) != 0)
+                    return EFAULT;
+                ++argp;
+            } else
                 ap = NULL;
 
             if (epp->sh.interpreted) {
@@ -313,36 +411,51 @@ void exec_save_args(struct exec_params *epp)
             }
             if (ap == 0)
                 break;
-            l = strlen(ap)+1;
+            error = exec_arg_length(ap, &l);
+            if (error != 0)
+                return error;
             if ((cp = exec_alloc(l, 1, epp)) == NULL)
-                return;
+                return ENOMEM;
             if (copystr(ap, cp, l, &len) != 0)
-                return;
+                return EFAULT;
             epp->argp[epp->argc++] = cp;
             epp->argbc += len;;
         }
     }
     argc = 0;
-    if ((argp = epp->userenvp) != NULL)
-        while (argp[argc])
-            argc++;
+    if ((argp = epp->userenvp) != NULL) {
+        for (;;) {
+            if (copyin((caddr_t)&argp[argc], (caddr_t)&ap,
+                sizeof(ap)) != 0)
+                return EFAULT;
+            if (ap == 0)
+                break;
+            if (++argc > MAXBSIZE / sizeof(char *))
+                return E2BIG;
+        }
+    }
     epp->envc = 0;
     epp->envbc = 0;
     if (argc != 0) {
         if ((epp->envp = (char **)exec_alloc(argc * sizeof(char *), NBPW, epp)) == NULL)
-            return;
+            return ENOMEM;
         for (;;) {
-            if (argp)
-                ap = *argp++;
-            else
+            if (argp) {
+                if (copyin((caddr_t)argp, (caddr_t)&ap,
+                    sizeof(ap)) != 0)
+                    return EFAULT;
+                ++argp;
+            } else
                 ap = NULL;
             if (ap == 0)
                 break;
-            l = strlen(ap)+1;
+            error = exec_arg_length(ap, &l);
+            if (error != 0)
+                return error;
             if ((cp = exec_alloc(l, 1, epp)) == NULL)
-                return;
+                return ENOMEM;
             if (copystr(ap, cp, l, &len) != 0)
-                return;
+                return EFAULT;
             epp->envp[epp->envc++] = cp;
             epp->envbc += len;
         }
@@ -353,20 +466,13 @@ void exec_save_args(struct exec_params *epp)
 
     for (i = 0; i < epp->envc; i++)
         DEBUG("env[%d] = \"%s\"\n", i, epp->envp[i]);
+    return 0;
 }
 
 void exec_clear(struct exec_params *epp)
 {
     char *cp;
     int cc;
-
-    /* clear BSS  */
-    if (epp->bss.len > 0)
-        bzero((void *)epp->bss.vaddr, epp->bss.len);
-    if (epp->heap.len > 0)
-        bzero((void *)epp->heap.vaddr, epp->heap.len);
-    /* Clear stack */
-    bzero((void *)epp->stack.vaddr, epp->stack.len);
 
     /*
      * set SUID/SGID protections, if no tracing
@@ -379,10 +485,6 @@ void exec_clear(struct exec_params *epp)
         psignal (u.u_procp, SIGTRAP);
     u.u_svuid = u.u_uid;
     u.u_svgid = u.u_groups[0];
-
-    u.u_tsize = epp->text.len;
-    u.u_dsize = epp->data.len + epp->bss.len;
-    u.u_ssize = epp->stack.len;
 
     /*
      * Clear registers.
@@ -414,9 +516,17 @@ void exec_clear(struct exec_params *epp)
     u.u_frame [FRAME_LO] = 0;
     u.u_frame [FRAME_HI] = 0;
     u.u_frame [FRAME_GP] = 0;
+    u.u_frame [FRAME_SP] = epp->stack_pointer;
+    u.u_frame [FRAME_R4] = epp->argc;
+    u.u_frame [FRAME_R5] = epp->arg_pointer;
+    u.u_frame [FRAME_R6] = epp->env_pointer;
+    u.u_frame [FRAME_PC] = epp->entry;
 #ifdef N64
     bzero (&u.u_fpu, sizeof u.u_fpu);
 #endif
+
+    if (epp->argc != 0)
+        (void)copystr(epp->argp[0], u.u_comm, MAXCOMLEN, 0);
 
     execsigs (u.u_procp);
 

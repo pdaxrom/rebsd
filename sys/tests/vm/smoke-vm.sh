@@ -36,6 +36,18 @@ compile_page()
 
 compile_page "$tmp/vm_page_test"
 
+compile_map()
+{
+    output=$1
+    shift
+    "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
+        -DREBSD_VM_HOST_TEST -I "$top/sys" -idirafter "$top/include" \
+        "$@" "$top/sys/vm/vm_param.c" "$top/sys/vm/vm_map.c" \
+        "$script_dir/vm_map_test.c" -o "$output"
+}
+
+compile_map "$tmp/vm_map_test"
+
 compile_pmap()
 {
     output=$1
@@ -44,7 +56,8 @@ compile_pmap()
         -DREBSD_VM_HOST_TEST -I "$top/sys" -idirafter "$top/include" \
         "$@" \
         "$top/sys/vm/vm_param.c" "$top/sys/vm/vm_phys.c" \
-        "$top/sys/vm/vm_page.c" "$top/sys/mips/common/pmap.c" \
+        "$top/sys/vm/vm_page.c" "$top/sys/vm/vm_map.c" \
+        "$top/sys/vm/vmspace.c" "$top/sys/mips/common/pmap.c" \
         "$script_dir/pmap_test.c" -o "$output"
 }
 
@@ -62,6 +75,13 @@ if compile_page "$tmp/vm_page_test_sanitize" -fsanitize=address,undefined \
     :
 else
     rm -f "$tmp/vm_page_test_sanitize"
+fi
+
+if compile_map "$tmp/vm_map_test_sanitize" -fsanitize=address,undefined \
+    -fno-omit-frame-pointer >/dev/null 2>&1; then
+    :
+else
+    rm -f "$tmp/vm_map_test_sanitize"
 fi
 
 if compile_pmap "$tmp/pmap_test_sanitize" -fsanitize=address,undefined \
@@ -110,12 +130,16 @@ compile_board "$tmp/n64_highres_map_test" "$top/sys/mips/n64" \
 if [ "$mode" = test ]; then
     "$tmp/vm_test"
     "$tmp/vm_page_test"
+    "$tmp/vm_map_test"
     "$tmp/pmap_test"
     if [ -x "$tmp/vm_test_sanitize" ]; then
         "$tmp/vm_test_sanitize"
     fi
     if [ -x "$tmp/vm_page_test_sanitize" ]; then
         "$tmp/vm_page_test_sanitize"
+    fi
+    if [ -x "$tmp/vm_map_test_sanitize" ]; then
+        "$tmp/vm_map_test_sanitize"
     fi
     if [ -x "$tmp/pmap_test_sanitize" ]; then
         "$tmp/pmap_test_sanitize"

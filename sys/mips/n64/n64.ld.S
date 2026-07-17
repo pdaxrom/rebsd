@@ -12,11 +12,9 @@ ENTRY(_start)
 MEMORY
 {
   kernel      (rwx) : ORIGIN = N64_KERNEL_LOAD_VADDR, LENGTH = N64_KERNEL_LINK_LENGTH
-  u0area      (rw!x): ORIGIN = N64_U0AREA_VADDR, LENGTH = N64_UAREA_SIZE
   uarea       (rw!x): ORIGIN = N64_UAREA_VADDR, LENGTH = N64_UAREA_SIZE
 }
 
-u0      = ORIGIN(u0area);
 u       = ORIGIN(uarea);
 u_end   = ORIGIN(uarea) + LENGTH(uarea);
 
