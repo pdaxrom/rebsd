@@ -258,6 +258,17 @@ test_vmspace(void)
     CHECK(vmspace_map_anon_any(source, TEST_VADDR, VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE, 0, &any_address) == 0);
     CHECK(any_address == TEST_VADDR2);
+    output[0] = 0x71u;
+    CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE,
+        output, 1) == 0);
+    CHECK(vmspace_map_anon_fixed(source, TEST_VADDR + VM_PAGE_SIZE,
+        VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    output[0] = 0xffu;
+    CHECK(vmspace_read(source, TEST_VADDR + VM_PAGE_SIZE,
+        output, 1) == 0);
+    CHECK(output[0] == 0);
+    CHECK(vmspace_map_anon_fixed(source, TEST_VADDR + 1,
+        VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, 0) == EINVAL);
     for (i = 0; i < sizeof(input); ++i)
         input[i] = (unsigned char)(0x80u + i);
     CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE - 16,

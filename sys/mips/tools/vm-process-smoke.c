@@ -168,6 +168,21 @@ main(int argc, char **argv)
     mapped[0] = 0x12;
     mapped[SMOKE_VM_PAGE_SIZE] = 0x34;
     mapped[2 * SMOKE_VM_PAGE_SIZE] = 0x56;
+    replacement = mmap(mapped + SMOKE_VM_PAGE_SIZE, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED,
+        -1, 0);
+    if (replacement != mapped + SMOKE_VM_PAGE_SIZE ||
+        (unsigned char)mapped[0] != 0x12 ||
+        (unsigned char)mapped[SMOKE_VM_PAGE_SIZE] != 0 ||
+        (unsigned char)mapped[2 * SMOKE_VM_PAGE_SIZE] != 0x56)
+        return smoke_fail("MAP_FIXED replace");
+    mapped[SMOKE_VM_PAGE_SIZE] = 0x34;
+    errno = 0;
+    if (mmap(mapped + 1, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED,
+        -1, 0) != MAP_FAILED || errno != EINVAL ||
+        (unsigned char)mapped[0] != 0x12)
+        return smoke_fail("MAP_FIXED validation");
     if (mprotect(mapped + SMOKE_VM_PAGE_SIZE, SMOKE_VM_PAGE_SIZE,
         PROT_READ) != 0 ||
         (unsigned char)mapped[SMOKE_VM_PAGE_SIZE] != 0x34 ||

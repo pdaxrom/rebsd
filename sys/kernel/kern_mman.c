@@ -127,10 +127,6 @@ mmap(void)
         u.u_error = EINVAL;
         return;
     }
-    if ((uap->flags & MAP_FIXED) != 0) {
-        u.u_error = EOPNOTSUPP;
-        return;
-    }
     if ((uap->flags & MAP_ANON) == 0) {
         u.u_error = EOPNOTSUPP;
         return;
@@ -145,13 +141,23 @@ mmap(void)
         u.u_error = EINVAL;
         return;
     }
-    hint = uap->address == 0 ? MMAP_DEFAULT_BASE :
-        vm_vaddr_trunc_page((vm_vaddr_t)uap->address);
-    error = vmspace_map_anon_any(vmspace, hint, size,
-        (vm_prot_t)uap->protection, 0, &result);
-    if (error == ENOMEM && hint != MMAP_DEFAULT_BASE)
-        error = vmspace_map_anon_any(vmspace, MMAP_DEFAULT_BASE, size,
+    if ((uap->flags & MAP_FIXED) != 0) {
+        if (!vm_vaddr_page_aligned((vm_vaddr_t)uap->address)) {
+            u.u_error = EINVAL;
+            return;
+        }
+        result = (vm_vaddr_t)uap->address;
+        error = vmspace_map_anon_fixed(vmspace, result, size,
+            (vm_prot_t)uap->protection, 0);
+    } else {
+        hint = uap->address == 0 ? MMAP_DEFAULT_BASE :
+            vm_vaddr_trunc_page((vm_vaddr_t)uap->address);
+        error = vmspace_map_anon_any(vmspace, hint, size,
             (vm_prot_t)uap->protection, 0, &result);
+        if (error == ENOMEM && hint != MMAP_DEFAULT_BASE)
+            error = vmspace_map_anon_any(vmspace, MMAP_DEFAULT_BASE, size,
+                (vm_prot_t)uap->protection, 0, &result);
+    }
     if (error != 0) {
         u.u_error = error;
         return;

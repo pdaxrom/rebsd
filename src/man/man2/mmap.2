@@ -43,9 +43,9 @@ must be -1 and
 must be zero.
 The address is a hint unless
 .B MAP_FIXED
-is present.
-.B MAP_FIXED
-and file-backed mappings are not yet supported and fail without changing the
+is present.  A page-aligned fixed mapping atomically replaces mappings in its
+range after all arguments and required VM resources have been validated.
+File-backed mappings are not yet supported and fail without changing the
 address map.
 .PP
 .I Munmap

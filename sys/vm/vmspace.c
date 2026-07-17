@@ -251,6 +251,84 @@ vmspace_map_anon_any(struct vmspace *vmspace, vm_vaddr_t hint,
 }
 
 int
+vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
+    vm_size_t size, vm_prot_t protection, unsigned flags)
+{
+    struct vmspace_unmap_object objects[VM_MAP_MAX_ENTRIES];
+    struct vm_object *object;
+    struct vm_map replacement;
+    const struct vm_map_entry *entry;
+    vm_vaddr_t first;
+    vm_vaddr_t last;
+    vm_vaddr_t end;
+    unsigned count;
+    unsigned index;
+    unsigned prior;
+    int error;
+
+    if (!vmspace_valid(vmspace) || size == 0 ||
+        !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
+        size - 1 > VM_VADDR_MAX - start)
+        return EINVAL;
+    end = start + size;
+    if (start < vmspace->vms_map.vmm_min ||
+        end > vmspace->vms_map.vmm_max)
+        return EINVAL;
+    error = vm_object_create(size, &object);
+    if (error != 0)
+        return error;
+    replacement = vmspace->vms_map;
+    error = vm_map_remove(&replacement, start, end);
+    if (error == 0)
+        error = vm_map_insert_object(&replacement, start, end,
+            protection, VM_PROT_ALL, flags | VM_MAP_ANON, object, 0);
+    if (error != 0) {
+        (void)vm_object_release(object);
+        return error;
+    }
+    count = 0;
+    for (index = 0; index < vmspace->vms_map.vmm_count; ++index) {
+        entry = &vmspace->vms_map.vmm_entries[index];
+        if (entry->vme_end <= start || entry->vme_start >= end ||
+            entry->vme_object == 0)
+            continue;
+        first = entry->vme_start > start ? entry->vme_start : start;
+        last = entry->vme_end < end ? entry->vme_end : end;
+        objects[count].vuo_object = entry->vme_object;
+        objects[count].vuo_offset = entry->vme_offset +
+            (first - entry->vme_start);
+        objects[count].vuo_size = last - first;
+        ++count;
+    }
+    error = pmap_remove(vmspace->vms_pmap, start, end);
+    if (error != 0) {
+        (void)vm_object_release(object);
+        return error;
+    }
+    vmspace->vms_map = replacement;
+    for (index = 0; index < count; ++index) {
+        if (!vmspace_map_has_object(&replacement,
+            objects[index].vuo_object)) {
+            for (prior = 0; prior < index; ++prior) {
+                if (objects[prior].vuo_object ==
+                    objects[index].vuo_object)
+                    break;
+            }
+            if (prior != index)
+                continue;
+            error = vm_object_release(objects[index].vuo_object);
+        } else if (!vm_object_is_shared(objects[index].vuo_object)) {
+            error = vm_object_remove(objects[index].vuo_object,
+                objects[index].vuo_offset, objects[index].vuo_size);
+        } else
+            error = 0;
+        if (error != 0)
+            return error;
+    }
+    return 0;
+}
+
+int
 vmspace_protect(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
     vm_prot_t protection)
 {
