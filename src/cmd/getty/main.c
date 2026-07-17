@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
 	openlog("getty", LOG_ODELAY|LOG_CONS, LOG_AUTH);
 	gethostname(hostname, sizeof(hostname));
 	if (hostname[0] == '\0')
-		strcpy(hostname, "Amnesiac");
+		strcpy(hostname, "Resurgence");
 	/*
 	 * The following is a work around for vhangup interactions
 	 * which cause great problems getting window systems started.

@@ -165,7 +165,7 @@ root size = 4096 kbytes
 swap size = 4096 kbytes
 June 12 09:28:46 init: kernel security level changed from 0 to 1
 
-ReBSD/N64 (Amnesiac) (console)
+ReBSD/N64 (Resurgence) (console)
 
 login: root
 ReBSD/N64 early rootfs
@@ -932,10 +932,10 @@ multi-user loop has no children to supervise; N64 avoids that by enabling secure
 Hardware smoke test on real n64cart hardware shows both login paths coming up:
 
 ```
-ReBSD/N64 (Amnesiac) (ttyS0)
+ReBSD/N64 (Resurgence) (ttyS0)
 login:
 
-ReBSD/N64 (Amnesiac) (console)
+ReBSD/N64 (Resurgence) (console)
 login:
 ```
 
