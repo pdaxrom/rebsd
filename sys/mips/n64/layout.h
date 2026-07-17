@@ -7,12 +7,14 @@
  * 4 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, u areas
  *   0x00100000..0x002fffff  wired kuseg user window
- *   0x00340000..0x0037ffff  320x240x16 framebuffer reserve
+ *   0x00300000..0x0033ffff  resident stage0/restart image
+ *   0x00340000..0x0037ffff  stage0/320x240x16 framebuffer alias
  *   0x00380000..0x003fffff  RAM swap fallback
  *
  * 8 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, u areas
- *   0x00100000..0x004fffff  wired kuseg user window
+ *   0x00100000..0x004fffff  wired kuseg user window, including the
+ *                            resident stage0 alias at 0x00300000..0x0037ffff
  *   0x00500000..0x0053ffff  320x240x16 framebuffer reserve
  *   0x00540000..0x0063ffff  /var RAM disk
  *   0x00640000..0x007fffff  Expansion Pak RAM swap store
@@ -52,6 +54,10 @@
 #define N64_UAREA_VADDR                (N64_U0AREA_VADDR + N64_UAREA_SIZE)
 
 #define N64_STAGE0_VADDR               0x80300000
+#define N64_STAGE0_PHYS_START          0x00300000
+#define N64_STAGE0_RESERVED_BYTES      N64_SIZE_512K
+#define N64_STAGE0_PHYS_END            (N64_STAGE0_PHYS_START + \
+                                         N64_STAGE0_RESERVED_BYTES)
 
 #define N64_USER_VADDR_START           0x00400000
 #define N64_USER_PHYS_START            (N64_KERNEL_PHYS_BASE + N64_KERNEL_RESERVED)
@@ -74,6 +80,8 @@
 
 #define N64_BASE_SWAP_BYTES            N64_SIZE_512K
 #define N64_BASE_SWAP_PHYS_START       (N64_BASE_RDRAM_SIZE - N64_BASE_SWAP_BYTES)
+#define N64_RAMDISK_4M_VAR_BYTES       0x00020000
+#define N64_RAMDISK_8M_VAR_BYTES       0x00100000
 
 #define N64_VIDEO_BPP_BYTES            2
 #define N64_VIDEO_320_WIDTH            320

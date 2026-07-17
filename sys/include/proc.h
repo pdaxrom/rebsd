@@ -49,8 +49,8 @@ struct  proc {
             size_t  P_addr;         /* address of u. area */
             size_t  P_daddr;        /* address of data area */
             size_t  P_saddr;        /* address of stack area */
-            size_t  P_dsize;        /* size of data area (clicks) */
-            size_t  P_ssize;        /* size of stack segment (clicks) */
+            size_t  P_dsize;        /* size of data area (bytes) */
+            size_t  P_ssize;        /* size of stack segment (bytes) */
             caddr_t P_wchan;        /* event process is awaiting */
             struct  k_itimerval P_realtimer;
         } p_alive;

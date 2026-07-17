@@ -12,3 +12,4 @@ mips/common/romfs_core.c       standard
 mips/common/romfs_vfs.c        standard
 mips/ci20/ramswap.c            standard
 mips/ci20/config.c             standard
+mips/ci20/vm_phys_board.c      standard

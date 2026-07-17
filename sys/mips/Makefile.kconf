@@ -278,6 +278,15 @@ SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
 
+.PHONY: vm-host-check
+vm-host-check:
+	$(MAKE) -C $(TOPSRC)/sys/tests/vm test
+
+# Do not produce a kernel or filesystem image from an untested VM geometry.
+# Order-only keeps an already valid image from being rebuilt just because the
+# check itself is intentionally phony.
+unix.elf rootfs.img: | vm-host-check
+
 all: unix $(MALTA_EARLY_TARGET) $(if $(MALTA_PORT64),malta64.elf,)
 
 kernel: unix $(if $(MALTA_PORT64),malta64.elf,)

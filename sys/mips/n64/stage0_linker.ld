@@ -47,6 +47,9 @@ SECTIONS
         __bss_end = .;
     } :main
 
+    /* Keep the resident restart image out of the /var and swap pool. */
+    ASSERT(. <= 0x80380000, "N64 stage0 exceeds its 512 KiB reserve")
+
     /DISCARD/ : {
         *(.comment)
         *(.gnu.attributes)

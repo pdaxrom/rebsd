@@ -60,6 +60,9 @@ kernel/vm_sched.c               standard
 kernel/vm_swap.c                standard
 kernel/vm_swp.c                 standard
 
+vm/vm_param.c                  standard
+vm/vm_phys.c                   standard
+
 #
 # Network stack.
 #
@@ -121,5 +124,6 @@ mips/n64/ramswap.c                   standard
 mips/common/signal.c            standard
 mips/common/sysctl.c                 standard
 mips/n64/config.c                    standard
+mips/n64/vm_phys_board.c             standard
 mips/common/libkern.c           standard
 mips/common/stubs.c             standard

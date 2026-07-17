@@ -22,6 +22,7 @@
 #include <sys/namei.h>
 #include <sys/stat.h>
 #include <sys/kconfig.h>
+#include <vm/vm_phys.h>
 
 u_int   swapstart, nswap;   /* start and size of swap space */
 size_t  physmem;            /* total amount of physical memory */
@@ -103,11 +104,16 @@ main()
     register struct proc *p;
     register int i;
     register struct fs *fs = NULL;
+    int error;
     int s __attribute__((unused));
 
     startup();
     printf ("\n%s\n", version);
     kconfig();
+    error = vm_phys_bootstrap((vm_size_t)physmem);
+    if (error != 0)
+        panic("invalid physical memory map");
+    vm_phys_bootstrap_summary();
 
     /*
      * Set up system process 0 (swapper).

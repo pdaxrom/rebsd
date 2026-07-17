@@ -11,3 +11,4 @@ mips/malta/config.c             standard
 mips/malta/if_ne.c              optional malta_ne
 mips/common/if_usbn.c           optional usbnet
 mips/malta/if_usbn_fake.c       optional usbnet
+mips/malta/vm_phys_board.c      standard

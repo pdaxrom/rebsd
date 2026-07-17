@@ -8,9 +8,6 @@
 #define N64_RAMDISK_VAR_MINOR   1
 #define N64_BASE_SWAP_KBYTES    (N64_BASE_SWAP_BYTES >> 10)
 
-#define N64_RAMDISK_4M_VAR_BYTES    0x00020000
-#define N64_RAMDISK_8M_VAR_BYTES    0x00100000
-
 struct buf;
 
 int n64ramswap_open(dev_t dev, int flag, int mode);

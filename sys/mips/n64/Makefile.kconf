@@ -843,6 +843,15 @@ SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
 
+.PHONY: vm-host-check
+vm-host-check:
+	$(MAKE) -C $(TOPSRC)/sys/tests/vm test
+
+# Do not produce a kernel, filesystem, or ROM image from untested VM geometry.
+# Order-only keeps an already valid image from being rebuilt just because the
+# check itself is intentionally phony.
+unix.elf rootfs.img preflight.z64 kernel.z64 pcc-debug.z64: | vm-host-check
+
 all: unix kernel.z64 preflight.z64
 
 %LOAD
