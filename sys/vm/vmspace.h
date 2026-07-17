@@ -27,11 +27,13 @@ int vmspace_clone(struct vmspace *, struct vmspace **);
 int vmspace_destroy(struct vmspace *);
 int vmspace_activate(struct vmspace *);
 int vmspace_map_object(struct vmspace *, vm_vaddr_t, vm_size_t,
-    vm_prot_t, vm_prot_t, unsigned, struct vm_object *);
+    vm_prot_t, vm_prot_t, unsigned, struct vm_object *, vm_ooffset_t);
 int vmspace_map_object_any(struct vmspace *, vm_vaddr_t, vm_size_t,
-    vm_prot_t, vm_prot_t, unsigned, struct vm_object *, vm_vaddr_t *);
+    vm_prot_t, vm_prot_t, unsigned, struct vm_object *, vm_ooffset_t,
+    vm_vaddr_t *);
 int vmspace_map_object_fixed(struct vmspace *, vm_vaddr_t, vm_size_t,
-    vm_prot_t, vm_prot_t, unsigned, struct vm_object *);
+    vm_prot_t, vm_prot_t, unsigned, struct vm_object *, vm_ooffset_t);
+int vmspace_contains_object(const struct vmspace *, struct vm_object *);
 int vmspace_map_anon(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t,
     unsigned);
 int vmspace_map_anon_any(struct vmspace *, vm_vaddr_t, vm_size_t,
@@ -42,6 +44,7 @@ int vmspace_unmap(struct vmspace *, vm_vaddr_t, vm_size_t);
 int vmspace_protect(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vmspace_wire(struct vmspace *, vm_vaddr_t, vm_size_t, int);
 int vmspace_mincore(const struct vmspace *, vm_vaddr_t, int *);
+int vmspace_sync(struct vmspace *, vm_vaddr_t, vm_size_t, unsigned);
 int vmspace_check(const struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vmspace_fault(struct vmspace *, vm_vaddr_t, vm_prot_t);
 int vmspace_read(const struct vmspace *, vm_vaddr_t, void *, vm_size_t);

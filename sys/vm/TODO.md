@@ -197,15 +197,15 @@ Exit criteria:
   overflow combinations before changing a map.
 - [x] Support anonymous private mappings.
 - [x] Support file-backed `MAP_PRIVATE` with copy-on-write.
-- [ ] Support file-backed `MAP_SHARED` with coherent reads, writes, truncation,
+- [x] Support file-backed `MAP_SHARED` with coherent reads, writes, truncation,
   `fsync`, `msync`, unmount, and device-removal behavior.
-- [ ] Define vnode/page-cache ownership so buffered I/O and mapped I/O do not
+- [x] Define vnode/page-cache ownership so buffered I/O and mapped I/O do not
   maintain incoherent independent copies.
 - [x] Implement partial unmap, map splitting/merging, protection changes, and
   faults at EOF.
 - [x] Keep filesystem-specific code behind vnode/pager operations; VM must not
   be tied to FAT, UFS, USB mass storage, or any block-device driver.
-- [ ] Audit FAT and UFS locking and lifetime rules before enabling writable
+- [x] Audit FAT and UFS locking and lifetime rules before enabling writable
   shared mappings.
 - [ ] Add `/dev/zero` anonymous mapping and a controlled character-device
   mapping interface for framebuffer or device memory where appropriate.
@@ -275,10 +275,10 @@ Required runtime coverage grows with the implementation but must include:
 - [x] Boot, init, shell, signals, fork/exec/wait, and repeated process exit.
 - [ ] Native PCC/GCC compiler and ABI smoke tests.
 - [ ] Filesystem, networking, USB, and block-I/O regressions.
-- [ ] Anonymous mapping and protection-fault tests.
+- [x] Anonymous mapping and protection-fault tests.
 - [ ] COW and shared-memory multi-process tests.
 - [ ] File mapping, truncate, sync, unmount, and removable-media error tests.
-- [ ] Low-memory, swap-pressure, resource-exhaustion, and fault-injection tests.
+- [x] Low-memory, swap-pressure, resource-exhaustion, and fault-injection tests.
 - [ ] Long-running fork/exec/mmap/shm stress with leak counters checked before
   and after the run.
 

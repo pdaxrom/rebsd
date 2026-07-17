@@ -12,6 +12,7 @@
 #define TEST_VADDR2     0x10002000u
 #define TEST_SHARED     0x10004000u
 #define TEST_FILE       0x10008000u
+#define TEST_SHARED_FILE 0x1000c000u
 #define TEST_PRESSURE   0x20000000u
 #define TEST_PRESSURE_PAGES 70u
 
@@ -74,7 +75,78 @@ test_object_pager_pagein(void *cookie, vm_ooffset_t offset, void *buffer,
 static const struct vm_object_pager_ops test_object_pager_ops = {
     test_object_pager_reference,
     test_object_pager_release,
-    test_object_pager_pagein
+    test_object_pager_pagein,
+    0,
+    0
+};
+
+struct test_shared_pager {
+    unsigned char data[3 * VM_PAGE_SIZE];
+    unsigned references;
+    unsigned releases;
+    unsigned pageins;
+    unsigned pageouts;
+    unsigned syncs;
+};
+
+static void
+test_shared_pager_reference(void *cookie)
+{
+    ++((struct test_shared_pager *)cookie)->references;
+}
+
+static void
+test_shared_pager_release(void *cookie)
+{
+    struct test_shared_pager *pager = cookie;
+
+    --pager->references;
+    ++pager->releases;
+}
+
+static int
+test_shared_pager_pagein(void *cookie, vm_ooffset_t offset, void *buffer,
+    vm_size_t size)
+{
+    struct test_shared_pager *pager = cookie;
+
+    if (offset > sizeof(pager->data) ||
+        size > sizeof(pager->data) - offset)
+        return ENXIO;
+    memcpy(buffer, &pager->data[(unsigned)offset], size);
+    ++pager->pageins;
+    return 0;
+}
+
+static int
+test_shared_pager_pageout(void *cookie, vm_ooffset_t offset,
+    const void *buffer, vm_size_t size, unsigned flags)
+{
+    struct test_shared_pager *pager = cookie;
+
+    (void)flags;
+    if (offset > sizeof(pager->data) ||
+        size > sizeof(pager->data) - offset)
+        return ENXIO;
+    memcpy(&pager->data[(unsigned)offset], buffer, size);
+    ++pager->pageouts;
+    return 0;
+}
+
+static int
+test_shared_pager_sync(void *cookie, unsigned flags)
+{
+    (void)flags;
+    ++((struct test_shared_pager *)cookie)->syncs;
+    return 0;
+}
+
+static const struct vm_object_pager_ops test_shared_pager_ops = {
+    test_shared_pager_reference,
+    test_shared_pager_release,
+    test_shared_pager_pagein,
+    test_shared_pager_pageout,
+    test_shared_pager_sync
 };
 
 unsigned
@@ -275,7 +347,9 @@ test_vmspace(void)
     struct vmspace *source;
     struct vmspace *child;
     struct vm_object *file_object;
+    struct vm_object *shared_file_object;
     struct test_object_pager file_pager;
+    struct test_shared_pager shared_file_pager;
     struct vm_object_stats object_stats;
     const struct vm_map_entry *map_entry;
     struct vm_page *wired_page;
@@ -307,7 +381,7 @@ test_vmspace(void)
     CHECK(file_pager.references == 1);
     CHECK(vmspace_map_object(source, TEST_FILE, 3 * VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0,
-        file_object) == 0);
+        file_object, 0) == 0);
     output[0] = 0;
     CHECK(vmspace_read(source, TEST_FILE + 7, output, 1) == 0);
     CHECK(output[0] == 0xa1 && file_pager.pageins == 1);
@@ -315,6 +389,18 @@ test_vmspace(void)
         output, 1) == ENXIO);
     CHECK(vmspace_mincore(source, TEST_FILE + 2 * VM_PAGE_SIZE,
         &resident) == 0 && resident == 0);
+    memset(&shared_file_pager, 0, sizeof(shared_file_pager));
+    memset(shared_file_pager.data, 0x63,
+        sizeof(shared_file_pager.data));
+    CHECK(vm_object_create_paged(3 * VM_PAGE_SIZE,
+        &test_shared_pager_ops, &shared_file_pager, 0,
+        &shared_file_object) == 0);
+    CHECK(vmspace_map_object(source, TEST_SHARED_FILE, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, VM_MAP_SHARED,
+        shared_file_object, VM_PAGE_SIZE) == 0);
+    output[0] = 0;
+    CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
+        output[0] == 0x63 && shared_file_pager.pageins == 1);
     CHECK(vmspace_map_anon(source, TEST_VADDR, 2 * VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE, 0) == 0);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) ==
@@ -364,6 +450,7 @@ test_vmspace(void)
 
     CHECK(vmspace_clone(source, &child) == 0);
     CHECK(file_pager.references == 2);
+    CHECK(shared_file_pager.references == 1);
     CHECK((vm_map_lookup(&child->vms_map, TEST_VADDR)->vme_flags &
         VM_MAP_WIRED) == 0);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) == 0);
@@ -407,6 +494,22 @@ test_vmspace(void)
     output[0] = 0;
     CHECK(vmspace_read(source, TEST_FILE, output, 1) == 0 &&
         output[0] == 0xa1);
+    output[0] = 0x79;
+    CHECK(vmspace_write(child, TEST_SHARED_FILE, output, 1) == 0);
+    output[0] = 0;
+    CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
+        output[0] == 0x79);
+    CHECK(vmspace_sync(child, TEST_SHARED_FILE, VM_PAGE_SIZE,
+        VM_PAGER_IO_SYNC) == 0);
+    CHECK(shared_file_pager.data[VM_PAGE_SIZE] == 0x79 &&
+        shared_file_pager.pageouts == 1 &&
+        shared_file_pager.syncs == 1);
+    output[0] = 0x2a;
+    CHECK(vm_object_update(shared_file_object, VM_PAGE_SIZE,
+        output, 1) == 0);
+    output[0] = 0;
+    CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
+        output[0] == 0x2a);
 
     CHECK(vmspace_protect(child, TEST_VADDR + VM_PAGE_SIZE,
         VM_PAGE_SIZE, VM_PROT_READ) == 0);
@@ -414,10 +517,14 @@ test_vmspace(void)
         input, 1) == EFAULT);
     CHECK(vmspace_destroy(child) == 0);
     CHECK(file_pager.references == 1 && file_pager.releases == 1);
+    CHECK(shared_file_pager.references == 1 &&
+        shared_file_pager.releases == 0);
     CHECK(vmspace_wire(source, TEST_VADDR, 2 * VM_PAGE_SIZE, 0) == 0);
     CHECK(wired_after->vmp_wire_count == 0);
     CHECK(vmspace_destroy(source) == 0);
     CHECK(file_pager.references == 0 && file_pager.releases == 2);
+    CHECK(shared_file_pager.references == 0 &&
+        shared_file_pager.releases == 1);
     CHECK(allocator.vpa_free_count == free_before);
     CHECK(vm_object_get_stats(&object_stats) == 0);
     CHECK(object_stats.vos_objects == 0);
@@ -451,6 +558,8 @@ test_pager(void)
     struct vm_page_allocator allocator;
     struct vm_phys_map map;
     struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
+    struct test_shared_pager shared_pager;
+    struct vm_object *shared_object;
     struct vm_object_stats stats;
     struct vmspace *space;
     vm_paddr_t paddr;
@@ -458,6 +567,43 @@ test_pager(void)
     unsigned char value;
     unsigned index;
     int error;
+
+    CHECK(test_pager_reset(&allocator, &map, metadata, 0) == 0);
+    CHECK(vmspace_create(&space) == 0);
+    memset(&shared_pager, 0, sizeof(shared_pager));
+    memset(shared_pager.data, 0x41, sizeof(shared_pager.data));
+    CHECK(vm_object_create_paged(VM_PAGE_SIZE, &test_shared_pager_ops,
+        &shared_pager, 0, &shared_object) == 0);
+    CHECK(vmspace_map_object(space, TEST_SHARED_FILE, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, VM_MAP_SHARED,
+        shared_object, 0) == 0);
+    value = 0;
+    CHECK(vmspace_read(space, TEST_SHARED_FILE, &value, 1) == 0 &&
+        value == 0x41);
+    value = 0x5e;
+    CHECK(vmspace_write(space, TEST_SHARED_FILE, &value, 1) == 0);
+    CHECK(vmspace_map_anon(space, TEST_PRESSURE,
+        TEST_PRESSURE_PAGES * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    error = 0;
+    for (index = 0; index < TEST_PRESSURE_PAGES; ++index) {
+        value = (unsigned char)(index * 17u + 3u);
+        error = vmspace_write(space,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1);
+        if (error != 0)
+            break;
+    }
+    CHECK(error == ENOMEM && index != 0);
+    CHECK(shared_pager.pageouts != 0 && shared_pager.data[0] == 0x5e);
+    CHECK(pmap_extract(space->vms_pmap, TEST_SHARED_FILE, &paddr) ==
+        ENOENT);
+    CHECK(vmspace_unmap(space, TEST_PRESSURE, VM_PAGE_SIZE) == 0);
+    value = 0;
+    CHECK(vmspace_read(space, TEST_SHARED_FILE, &value, 1) == 0 &&
+        value == 0x5e && shared_pager.pageins >= 2);
+    CHECK(vmspace_destroy(space) == 0);
+    CHECK(shared_pager.references == 0 && shared_pager.releases == 1);
+    CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
 
     CHECK(test_pager_reset(&allocator, &map, metadata, 16) == 0);
     CHECK(vmspace_create(&space) == 0);

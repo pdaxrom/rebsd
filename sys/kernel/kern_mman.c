@@ -117,8 +117,11 @@ mmap(void)
     vm_vaddr_t hint;
     vm_vaddr_t result;
     vm_size_t size;
+    vm_ooffset_t object_offset;
+    vm_prot_t maximum;
     off_t offset;
     int error;
+    int had_object;
     unsigned vm_flags;
 
     uap = (struct a *)u.u_arg;
@@ -135,10 +138,6 @@ mmap(void)
         u.u_error = EINVAL;
         return;
     }
-    if ((uap->flags & MAP_SHARED) != 0) {
-        u.u_error = EOPNOTSUPP;
-        return;
-    }
     offset = syscall_off64_arg(&u.u_arg[6]);
     if (vm_size_round_page((vm_size_t)uap->length, &size) != 0 ||
         size == 0) {
@@ -151,6 +150,9 @@ mmap(void)
             return;
         }
         object = 0;
+        object_offset = 0;
+        maximum = VM_PROT_ALL;
+        had_object = 0;
     } else {
         if (offset < 0 || (offset & (off_t)VM_PAGE_MASK) != 0) {
             u.u_error = EINVAL;
@@ -167,19 +169,44 @@ mmap(void)
             u.u_error = EACCES;
             return;
         }
+        if ((uap->flags & MAP_SHARED) != 0 &&
+            (uap->protection & PROT_WRITE) != 0 &&
+            (fp->f_flag & FWRITE) == 0) {
+            u.u_error = EACCES;
+            return;
+        }
         inode = (struct inode *)fp->f_data;
         if (inode == 0 || (inode->i_mode & IFMT) != IFREG) {
             u.u_error = ENODEV;
             return;
         }
-        error = vm_vnode_object_create(inode, (vm_ooffset_t)offset,
-            size, &object);
+        if ((uap->flags & MAP_SHARED) != 0) {
+            if ((vm_ooffset_t)offset > 0x80000000u ||
+                (vm_ooffset_t)size >
+                0x80000000u - (vm_ooffset_t)offset) {
+                u.u_error = EOVERFLOW;
+                return;
+            }
+            error = vm_vnode_shared_object(inode, &object);
+            object_offset = (vm_ooffset_t)offset;
+            maximum = VM_PROT_READ | VM_PROT_EXECUTE;
+            if ((fp->f_flag & FWRITE) != 0)
+                maximum |= VM_PROT_WRITE;
+            had_object = error == 0 &&
+                vmspace_contains_object(vmspace, object);
+        } else {
+            error = vm_vnode_object_create(inode,
+                (vm_ooffset_t)offset, size, &object);
+            object_offset = 0;
+            maximum = VM_PROT_ALL;
+            had_object = 0;
+        }
         if (error != 0) {
             u.u_error = error;
             return;
         }
     }
-    vm_flags = 0;
+    vm_flags = (uap->flags & MAP_SHARED) != 0 ? VM_MAP_SHARED : 0;
     if ((uap->flags & MAP_FIXED) != 0) {
         if (!vm_vaddr_page_aligned((vm_vaddr_t)uap->address)) {
             if (object != 0)
@@ -193,8 +220,8 @@ mmap(void)
                 (vm_prot_t)uap->protection, vm_flags);
         else
             error = vmspace_map_object_fixed(vmspace, result, size,
-                (vm_prot_t)uap->protection, VM_PROT_ALL, vm_flags,
-                object);
+                (vm_prot_t)uap->protection, maximum, vm_flags,
+                object, object_offset);
     } else {
         hint = uap->address == 0 ? MMAP_DEFAULT_BASE :
             vm_vaddr_trunc_page((vm_vaddr_t)uap->address);
@@ -206,13 +233,13 @@ mmap(void)
                     size, (vm_prot_t)uap->protection, vm_flags, &result);
         } else {
             error = vmspace_map_object_any(vmspace, hint, size,
-                (vm_prot_t)uap->protection, VM_PROT_ALL, vm_flags,
-                object, &result);
+                (vm_prot_t)uap->protection, maximum, vm_flags,
+                object, object_offset, &result);
             if (error == ENOMEM && hint != MMAP_DEFAULT_BASE)
                 error = vmspace_map_object_any(vmspace,
                     MMAP_DEFAULT_BASE, size,
-                    (vm_prot_t)uap->protection, VM_PROT_ALL, vm_flags,
-                    object, &result);
+                    (vm_prot_t)uap->protection, maximum, vm_flags,
+                    object, object_offset, &result);
         }
     }
     if (error != 0) {
@@ -221,6 +248,8 @@ mmap(void)
         u.u_error = error;
         return;
     }
+    if (object != 0 && had_object)
+        (void)vm_object_release(object);
     u.u_rval = (int)result;
 }
 
@@ -273,6 +302,7 @@ msync(void)
     vm_vaddr_t start = 0;
     vm_size_t size = 0;
     int mode;
+    unsigned pager_flags;
 
     uap = (struct a *)u.u_arg;
     mode = uap->flags & (MS_ASYNC | MS_SYNC);
@@ -282,9 +312,12 @@ msync(void)
         return;
     }
     u.u_error = mman_range(uap->address, uap->length, &start, &size);
+    pager_flags = mode == MS_SYNC ? VM_PAGER_IO_SYNC : 0;
+    if ((uap->flags & MS_INVALIDATE) != 0)
+        pager_flags |= VM_PAGER_IO_INVALIDATE;
     if (u.u_error == 0)
-        u.u_error = vmspace_check(vmspace_current(), start, size,
-            VM_PROT_NONE);
+        u.u_error = vmspace_sync(vmspace_current(), start, size,
+            pager_flags);
 }
 
 void

@@ -13,6 +13,7 @@
 #include <sys/buf.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
+#include <vm/vm_vnode.h>
 
 #define INOHSZ              16      /* must be power of two */
 #define INOHASH(dev,ino)    (((dev)+(ino))&(INOHSZ-1))
@@ -560,9 +561,12 @@ itrunc (struct inode *oip, off_t length, int ioflags)
 	struct mount *mp = (struct mount *)
 	    ((int)oip->i_fs - offsetof(struct mount, m_filsys));
 	if (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops) {
-	    if (mp->m_ops->vfs_truncate != 0)
+	    if (mp->m_ops->vfs_truncate != 0) {
 		u.u_error = (*mp->m_ops->vfs_truncate)(oip, length, ioflags);
-	    else
+		if (u.u_error == 0)
+		    u.u_error = vm_vnode_truncate_locked(oip,
+		        (vm_ooffset_t)length);
+	    } else
 		u.u_error = EROFS;
 	    return;
 	}
@@ -695,6 +699,11 @@ done:
 
 doquotaupd:
 updret:
+    i = vm_vnode_truncate_locked(oip, (vm_ooffset_t)length);
+    if (i != 0) {
+        u.u_error = i;
+        return;
+    }
     oip->i_flag |= ICHG|IUPD;
     iupdat(oip, &time, &time, 1);
 }

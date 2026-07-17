@@ -20,6 +20,7 @@
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
+#include <vm/vm_vnode.h>
 
 blkno_t rablock;        /* block to be read ahead */
 
@@ -163,15 +164,33 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
     int error = 0;
     int flags;
     struct mount *mp;
+    off_t transfer_offset;
+    int delegated;
 
     if (uio->uio_offset < 0)
         return (EINVAL);
     type = ip->i_mode & IFMT;
+    delegated = 0;
     if (ip->i_fs != 0) {
         mp = (struct mount *)((int)ip->i_fs - offsetof(struct mount, m_filsys));
         if (mp->m_ops != 0 && mp->m_ops != &ufs_vfsops &&
             mp->m_ops->vfs_rwip != 0)
-            return (*mp->m_ops->vfs_rwip)(ip, uio, ioflag);
+            delegated = 1;
+    }
+    if (delegated) {
+        transfer_offset = uio->uio_offset;
+        if (uio->uio_rw == UIO_WRITE && (ioflag & IO_APPEND) != 0)
+            transfer_offset = ip->i_size;
+        if (type == IFREG) {
+            error = vm_vnode_sync_locked(ip,
+                (vm_ooffset_t)transfer_offset, uio->uio_resid, 0);
+            if (error == 0 && uio->uio_rw == UIO_WRITE)
+                error = vm_vnode_invalidate_locked(ip,
+                    (vm_ooffset_t)transfer_offset, uio->uio_resid);
+            if (error != 0)
+                return error;
+        }
+        return (*mp->m_ops->vfs_rwip)(ip, uio, ioflag);
     }
     /*
      * The write case below checks that i/o is done synchronously to directories
@@ -249,6 +268,13 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
     resid = uio->uio_resid;
     osize = ip->i_size;
 
+    if (type == IFREG) {
+        error = vm_vnode_sync_locked(ip, (vm_ooffset_t)uio->uio_offset,
+            uio->uio_resid, 0);
+        if (error != 0)
+            return error;
+    }
+
     flags = ioflag & IO_SYNC ? B_SYNC : 0;
 
     do {
@@ -308,7 +334,12 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
             brelse(bp);
             break;
         }
+        transfer_offset = uio->uio_offset;
         u.u_error = uiomove (bp->b_addr + on, n, uio);
+        if (u.u_error == 0 && uio->uio_rw == UIO_WRITE &&
+            type == IFREG)
+            u.u_error = vm_vnode_update_locked(ip,
+                (vm_ooffset_t)transfer_offset, bp->b_addr + on, n);
         if (uio->uio_rw == UIO_READ) {
             if (n + on == DEV_BSIZE || uio->uio_offset == ip->i_size) {
                 bp->b_flags |= B_AGE;

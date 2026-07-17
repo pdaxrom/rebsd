@@ -110,6 +110,37 @@ vmspace_map_has_object(const struct vm_map *map, struct vm_object *object)
     return 0;
 }
 
+int
+vmspace_contains_object(const struct vmspace *vmspace,
+    struct vm_object *object)
+{
+    return vmspace_valid(vmspace) && object != 0 &&
+        vmspace_map_has_object(&vmspace->vms_map, object);
+}
+
+static int
+vmspace_preserve_dirty(const struct vm_map *map, struct pmap *pmap,
+    vm_vaddr_t start, vm_vaddr_t end)
+{
+    const struct vm_map_entry *entry;
+    vm_ooffset_t offset;
+    vm_vaddr_t address;
+    int error;
+
+    for (address = start; address < end; address += VM_PAGE_SIZE) {
+        if (!pmap_is_modified(pmap, address))
+            continue;
+        entry = vm_map_lookup(map, address);
+        if (entry == 0 || entry->vme_object == 0)
+            return EFAULT;
+        offset = entry->vme_offset + (address - entry->vme_start);
+        error = vm_object_mark_dirty(entry->vme_object, offset);
+        if (error != 0)
+            return error;
+    }
+    return 0;
+}
+
 static int
 vmspace_unwire_removed(const struct vm_map *map, vm_vaddr_t start,
     vm_vaddr_t end)
@@ -195,6 +226,10 @@ vmspace_unmap(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size)
         objects[count].vuo_size = last - first;
         ++count;
     }
+    error = vmspace_preserve_dirty(&vmspace->vms_map,
+        vmspace->vms_pmap, start, end);
+    if (error != 0)
+        return error;
     error = pmap_remove(vmspace->vms_pmap, start, end);
     if (error != 0)
         return error;
@@ -213,7 +248,8 @@ vmspace_unmap(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size)
             if (prior != index)
                 continue;
             error = vm_object_release(objects[index].vuo_object);
-        } else if (!vm_object_is_shared(objects[index].vuo_object)) {
+        } else if (!vm_object_is_shared(objects[index].vuo_object) &&
+            !vm_object_has_pageout(objects[index].vuo_object)) {
             error = vm_object_remove(objects[index].vuo_object,
                 objects[index].vuo_offset, objects[index].vuo_size);
         } else
@@ -257,23 +293,25 @@ vmspace_activate(struct vmspace *vmspace)
 int
 vmspace_map_object(struct vmspace *vmspace, vm_vaddr_t start,
     vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
-    unsigned flags, struct vm_object *object)
+    unsigned flags, struct vm_object *object, vm_ooffset_t offset)
 {
     vm_vaddr_t end;
 
     if (!vmspace_valid(vmspace) || object == 0 || size == 0 ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
+        (offset & VM_PAGE_MASK) != 0 ||
         size - 1 > VM_VADDR_MAX - start)
         return EINVAL;
     end = start + size;
     return vm_map_insert_object(&vmspace->vms_map, start, end,
-        protection, maximum, flags, object, 0);
+        protection, maximum, flags, object, offset);
 }
 
 int
 vmspace_map_object_any(struct vmspace *vmspace, vm_vaddr_t hint,
     vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
-    unsigned flags, struct vm_object *object, vm_vaddr_t *result)
+    unsigned flags, struct vm_object *object, vm_ooffset_t offset,
+    vm_vaddr_t *result)
 {
     vm_vaddr_t start;
     int error;
@@ -284,7 +322,7 @@ vmspace_map_object_any(struct vmspace *vmspace, vm_vaddr_t hint,
     if (error != 0)
         return error;
     error = vmspace_map_object(vmspace, start, size, protection,
-        maximum, flags, object);
+        maximum, flags, object, offset);
     if (error != 0)
         return error;
     *result = start;
@@ -294,7 +332,7 @@ vmspace_map_object_any(struct vmspace *vmspace, vm_vaddr_t hint,
 int
 vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
     vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
-    unsigned flags, struct vm_object *object)
+    unsigned flags, struct vm_object *object, vm_ooffset_t offset)
 {
     struct vmspace_unmap_object objects[VM_MAP_MAX_ENTRIES];
     struct vm_map replacement;
@@ -309,6 +347,7 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
 
     if (!vmspace_valid(vmspace) || object == 0 || size == 0 ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
+        (offset & VM_PAGE_MASK) != 0 ||
         size - 1 > VM_VADDR_MAX - start)
         return EINVAL;
     end = start + size;
@@ -319,7 +358,7 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
     error = vm_map_remove(&replacement, start, end);
     if (error == 0)
         error = vm_map_insert_object(&replacement, start, end,
-            protection, maximum, flags, object, 0);
+            protection, maximum, flags, object, offset);
     if (error != 0)
         return error;
     count = 0;
@@ -336,6 +375,10 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
         objects[count].vuo_size = last - first;
         ++count;
     }
+    error = vmspace_preserve_dirty(&vmspace->vms_map,
+        vmspace->vms_pmap, start, end);
+    if (error != 0)
+        return error;
     error = pmap_remove(vmspace->vms_pmap, start, end);
     if (error != 0)
         return error;
@@ -354,7 +397,8 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
             if (prior != index)
                 continue;
             error = vm_object_release(objects[index].vuo_object);
-        } else if (!vm_object_is_shared(objects[index].vuo_object)) {
+        } else if (!vm_object_is_shared(objects[index].vuo_object) &&
+            !vm_object_has_pageout(objects[index].vuo_object)) {
             error = vm_object_remove(objects[index].vuo_object,
                 objects[index].vuo_offset, objects[index].vuo_size);
         } else
@@ -376,7 +420,7 @@ vmspace_map_anon(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
     if (error != 0)
         return error;
     error = vmspace_map_object(vmspace, start, size, protection,
-        VM_PROT_ALL, flags | VM_MAP_ANON, object);
+        VM_PROT_ALL, flags | VM_MAP_ANON, object, 0);
     if (error != 0)
         (void)vm_object_release(object);
     return error;
@@ -394,7 +438,7 @@ vmspace_map_anon_any(struct vmspace *vmspace, vm_vaddr_t hint,
     if (error != 0)
         return error;
     error = vmspace_map_object_any(vmspace, hint, size, protection,
-        VM_PROT_ALL, flags | VM_MAP_ANON, object, result);
+        VM_PROT_ALL, flags | VM_MAP_ANON, object, 0, result);
     if (error != 0)
         (void)vm_object_release(object);
     return error;
@@ -411,7 +455,7 @@ vmspace_map_anon_fixed(struct vmspace *vmspace, vm_vaddr_t start,
     if (error != 0)
         return error;
     error = vmspace_map_object_fixed(vmspace, start, size, protection,
-        VM_PROT_ALL, flags | VM_MAP_ANON, object);
+        VM_PROT_ALL, flags | VM_MAP_ANON, object, 0);
     if (error != 0)
         (void)vm_object_release(object);
     return error;
@@ -552,6 +596,43 @@ vmspace_mincore(const struct vmspace *vmspace, vm_vaddr_t address,
     offset = entry->vme_offset +
         (vm_vaddr_trunc_page(address) - entry->vme_start);
     *resident = vm_object_resident_page(entry->vme_object, offset) != 0;
+    return 0;
+}
+
+int
+vmspace_sync(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
+    unsigned flags)
+{
+    const struct vm_map_entry *entry;
+    vm_ooffset_t offset;
+    vm_vaddr_t first;
+    vm_vaddr_t last;
+    vm_vaddr_t end;
+    unsigned index;
+    int error;
+
+    if (!vmspace_valid(vmspace) || size == 0 ||
+        !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
+        size - 1 > VM_VADDR_MAX - start ||
+        (flags & ~(VM_PAGER_IO_SYNC | VM_PAGER_IO_INVALIDATE)) != 0)
+        return EINVAL;
+    end = start + size;
+    error = vm_map_check(&vmspace->vms_map, start, size, VM_PROT_NONE);
+    if (error != 0)
+        return error;
+    for (index = 0; index < vmspace->vms_map.vmm_count; ++index) {
+        entry = &vmspace->vms_map.vmm_entries[index];
+        if ((entry->vme_flags & VM_MAP_SHARED) == 0 ||
+            entry->vme_end <= start || entry->vme_start >= end)
+            continue;
+        first = entry->vme_start > start ? entry->vme_start : start;
+        last = entry->vme_end < end ? entry->vme_end : end;
+        offset = entry->vme_offset + (first - entry->vme_start);
+        error = vm_object_sync(entry->vme_object, offset,
+            last - first, flags);
+        if (error != 0)
+            return error;
+    }
     return 0;
 }
 

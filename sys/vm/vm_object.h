@@ -18,7 +18,14 @@ struct vm_object_pager_ops {
     void (*vpo_reference)(void *);
     void (*vpo_release)(void *);
     int  (*vpo_pagein)(void *, vm_ooffset_t, void *, vm_size_t);
+    int  (*vpo_pageout)(void *, vm_ooffset_t, const void *, vm_size_t,
+        unsigned);
+    int  (*vpo_sync)(void *, unsigned);
 };
+
+#define VM_PAGER_IO_SYNC        0x01u
+#define VM_PAGER_IO_LOCKED      0x02u
+#define VM_PAGER_IO_INVALIDATE  0x04u
 
 struct vm_object_stats {
     vm_pfn_t vos_objects;
@@ -39,12 +46,18 @@ int vm_object_create_paged(vm_size_t, const struct vm_object_pager_ops *,
 int vm_object_clone(const struct vm_object *, struct vm_object **);
 int vm_object_reference(struct vm_object *);
 int vm_object_is_shared(const struct vm_object *);
+int vm_object_has_pageout(const struct vm_object *);
 int vm_object_release(struct vm_object *);
 int vm_object_fault(struct vm_object *, vm_ooffset_t, int,
     struct vm_page **);
 struct vm_page *vm_object_resident_page(struct vm_object *, vm_ooffset_t);
 int vm_object_mark_dirty(struct vm_object *, vm_ooffset_t);
 int vm_object_remove(struct vm_object *, vm_ooffset_t, vm_size_t);
+int vm_object_sync(struct vm_object *, vm_ooffset_t, vm_size_t, unsigned);
+int vm_object_update(struct vm_object *, vm_ooffset_t, const void *,
+    vm_size_t);
+int vm_object_zero_range(struct vm_object *, vm_ooffset_t, vm_size_t);
+int vm_object_invalidate(struct vm_object *, vm_ooffset_t, vm_size_t);
 int vm_object_get_stats(struct vm_object_stats *);
 int vm_pager_pageout_scan(void);
 

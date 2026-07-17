@@ -14,6 +14,7 @@
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <stdint.h>
+#include <vm/vm_vnode.h>
 
 #ifdef ROMFS_ENABLED
 extern struct vfsops mipsromfs_vfsops;
@@ -331,7 +332,7 @@ fsync()
     if ((ip = getinode(uap->fd)) == NULL)
         return;
     ilock(ip);
-    syncip(ip);
+    u.u_error = vm_vnode_fsync_locked(ip);
     iunlock(ip);
 }
 

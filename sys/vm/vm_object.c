@@ -43,6 +43,9 @@ extern int swap(size_t, size_t, int, int);
 
 struct vm_anon {
     struct vm_page *va_page;
+    const struct vm_object_pager_ops *va_pager;
+    void           *va_pager_cookie;
+    vm_ooffset_t    va_pager_offset;
     size_t          va_swap_slot;
     uint16_t        va_references;
     uint8_t         va_flags;
@@ -260,6 +263,29 @@ vm_anon_release(struct vm_anon *anon)
     return 0;
 }
 
+static int
+vm_anon_discard_resident(struct vm_anon *anon)
+{
+    struct vm_page *page;
+    int error;
+
+    if (anon == 0 || anon->va_in_use == 0)
+        return EINVAL;
+    page = anon->va_page;
+    if (page == 0)
+        return 0;
+    if (page->vmp_hold_count != 0 || page->vmp_wire_count != 0 ||
+        page->vmp_busy_count != 0 || page->vmp_reference_count != 0 ||
+        page->vmp_dirty_count != 0)
+        return EBUSY;
+    error = vm_page_free(vm_object_allocator, page, 1);
+    if (error != 0)
+        return error;
+    anon->va_page = 0;
+    vm_object_stat_decrement(&vm_object_statistics.vos_resident_pages);
+    return 0;
+}
+
 static struct vm_object_page *
 vm_object_page_find(const struct vm_object *object, vm_pfn_t index)
 {
@@ -425,6 +451,13 @@ vm_object_is_shared(const struct vm_object *object)
 }
 
 int
+vm_object_has_pageout(const struct vm_object *object)
+{
+    return vm_object_valid(object) && object->vo_pager != 0 &&
+        object->vo_pager->vpo_pageout != 0;
+}
+
+int
 vm_object_clone(const struct vm_object *source, struct vm_object **result)
 {
     struct vm_object_page *source_page;
@@ -474,6 +507,12 @@ vm_object_release(struct vm_object *object)
     if (object->vo_references != 1) {
         --object->vo_references;
         return 0;
+    }
+    if (object->vo_pager != 0 && object->vo_pager->vpo_pageout != 0) {
+        error = vm_object_sync(object, 0,
+            object->vo_size * VM_PAGE_SIZE, VM_PAGER_IO_SYNC);
+        if (error != 0)
+            return error;
     }
     for (page = object->vo_pages; page != 0; page = next) {
         next = page->vop_next;
@@ -552,6 +591,7 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
     void *mapping;
     vm_pfn_t index;
     int new_page;
+    int need_pagein;
     int error;
 
     if (!vm_object_valid(object) || result == 0 ||
@@ -572,7 +612,16 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
         }
         object_page->vop_index = index;
         object_page->vop_anon = anon;
+        if (object->vo_pager != 0 &&
+            object->vo_pager->vpo_pageout != 0) {
+            anon->va_pager = object->vo_pager;
+            anon->va_pager_cookie = object->vo_pager_cookie;
+            anon->va_pager_offset = object->vo_pager_offset + offset;
+        }
     }
+    need_pagein = object->vo_pager != 0 &&
+        object_page->vop_anon->va_page == 0 &&
+        object_page->vop_anon->va_swap_slot == 0;
     error = vm_anon_make_resident(object_page->vop_anon,
         object->vo_pager == 0);
     if (error != 0) {
@@ -582,7 +631,7 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
         }
         return error;
     }
-    if (new_page && object->vo_pager != 0) {
+    if (need_pagein) {
         mapping = pmap_page_direct_map(object_page->vop_anon->va_page,
             PMAP_CACHE_CACHED);
         if (mapping == 0)
@@ -593,8 +642,12 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
                 object->vo_pager_offset + offset, mapping,
                 VM_PAGE_SIZE);
         if (error != 0) {
-            (void)vm_anon_release(object_page->vop_anon);
-            vm_object_page_free(object_page);
+            if (new_page) {
+                (void)vm_anon_release(object_page->vop_anon);
+                vm_object_page_free(object_page);
+            } else
+                (void)vm_anon_discard_resident(
+                    object_page->vop_anon);
             return error;
         }
         vm_object_stat_increment(&vm_object_statistics.vos_pageins);
@@ -676,18 +729,192 @@ vm_object_remove(struct vm_object *object, vm_ooffset_t offset,
 }
 
 static int
+vm_object_range_valid(const struct vm_object *object, vm_ooffset_t offset,
+    vm_size_t size)
+{
+    vm_ooffset_t object_size;
+
+    if (!vm_object_valid(object) || size == 0 ||
+        offset > UINT64_MAX - size)
+        return 0;
+    object_size = (vm_ooffset_t)object->vo_size * VM_PAGE_SIZE;
+    return offset + size <= object_size;
+}
+
+int
+vm_object_sync(struct vm_object *object, vm_ooffset_t offset,
+    vm_size_t size, unsigned flags)
+{
+    struct vm_object_page *object_page;
+    struct vm_anon *anon;
+    struct vm_page *page;
+    void *mapping;
+    vm_pfn_t first;
+    vm_pfn_t last;
+    int error;
+
+    if (!vm_object_range_valid(object, offset, size) ||
+        (flags & ~(VM_PAGER_IO_SYNC | VM_PAGER_IO_LOCKED |
+        VM_PAGER_IO_INVALIDATE)) != 0)
+        return EINVAL;
+    if (object->vo_pager == 0 ||
+        object->vo_pager->vpo_pageout == 0)
+        return 0;
+    first = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
+    last = (vm_pfn_t)((offset + size + VM_PAGE_MASK) >> VM_PAGE_SHIFT);
+    for (object_page = object->vo_pages; object_page != 0;
+        object_page = object_page->vop_next) {
+        if (object_page->vop_index < first ||
+            object_page->vop_index >= last)
+            continue;
+        anon = object_page->vop_anon;
+        page = anon->va_page;
+        if (page == 0 || (page->vmp_dirty_count == 0 &&
+            (anon->va_flags & VM_ANON_DIRTY) == 0))
+            continue;
+        mapping = pmap_page_direct_map(page, PMAP_CACHE_CACHED);
+        if (mapping == 0)
+            return EFAULT;
+        error = object->vo_pager->vpo_pageout(
+            object->vo_pager_cookie,
+            object->vo_pager_offset +
+            ((vm_ooffset_t)object_page->vop_index << VM_PAGE_SHIFT),
+            mapping, VM_PAGE_SIZE, flags);
+        if (error != 0)
+            return error;
+        error = pmap_clear_page_modify(page);
+        if (error != 0)
+            return error;
+        anon->va_flags &= ~VM_ANON_DIRTY;
+    }
+    if ((flags & VM_PAGER_IO_SYNC) != 0 &&
+        object->vo_pager->vpo_sync != 0) {
+        error = object->vo_pager->vpo_sync(object->vo_pager_cookie,
+            flags);
+        if (error != 0)
+            return error;
+    }
+    if ((flags & VM_PAGER_IO_INVALIDATE) != 0)
+        return vm_object_invalidate(object, offset, size);
+    return 0;
+}
+
+int
+vm_object_update(struct vm_object *object, vm_ooffset_t offset,
+    const void *buffer, vm_size_t size)
+{
+    struct vm_object_page *object_page;
+    struct vm_anon *anon;
+    unsigned char *mapping;
+    const unsigned char *source;
+    vm_ooffset_t page_offset;
+    vm_size_t chunk;
+    int error;
+
+    if (!vm_object_range_valid(object, offset, size) || buffer == 0)
+        return EINVAL;
+    source = buffer;
+    while (size != 0) {
+        page_offset = offset & ~((vm_ooffset_t)VM_PAGE_MASK);
+        chunk = VM_PAGE_SIZE - (vm_size_t)(offset & VM_PAGE_MASK);
+        if (chunk > size)
+            chunk = size;
+        object_page = vm_object_page_find(object,
+            (vm_pfn_t)(page_offset >> VM_PAGE_SHIFT));
+        if (object_page != 0 && object_page->vop_anon->va_page != 0) {
+            anon = object_page->vop_anon;
+            mapping = pmap_page_direct_map(anon->va_page,
+                PMAP_CACHE_CACHED);
+            if (mapping == 0)
+                return EFAULT;
+            vm_object_copy(source,
+                mapping + (vm_size_t)(offset & VM_PAGE_MASK), chunk);
+            error = pmap_clear_page_modify(anon->va_page);
+            if (error != 0)
+                return error;
+            anon->va_flags &= ~VM_ANON_DIRTY;
+        }
+        offset += chunk;
+        source += chunk;
+        size -= chunk;
+    }
+    return 0;
+}
+
+int
+vm_object_zero_range(struct vm_object *object, vm_ooffset_t offset,
+    vm_size_t size)
+{
+    unsigned char zeros[64];
+    vm_size_t chunk;
+    int error;
+
+    if (!vm_object_range_valid(object, offset, size))
+        return EINVAL;
+    vm_object_zero(zeros, sizeof(zeros));
+    while (size != 0) {
+        chunk = size > sizeof(zeros) ? sizeof(zeros) : size;
+        error = vm_object_update(object, offset, zeros, chunk);
+        if (error != 0)
+            return error;
+        offset += chunk;
+        size -= chunk;
+    }
+    return 0;
+}
+
+int
+vm_object_invalidate(struct vm_object *object, vm_ooffset_t offset,
+    vm_size_t size)
+{
+    struct vm_object_page **link;
+    struct vm_object_page *page;
+    vm_pfn_t first;
+    vm_pfn_t last;
+    int error;
+
+    if (!vm_object_range_valid(object, offset, size))
+        return EINVAL;
+    first = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
+    last = (vm_pfn_t)((offset + size + VM_PAGE_MASK) >> VM_PAGE_SHIFT);
+    for (page = object->vo_pages; page != 0; page = page->vop_next) {
+        if (page->vop_index >= first && page->vop_index < last &&
+            page->vop_anon->va_page != 0 &&
+            page->vop_anon->va_page->vmp_wire_count != 0)
+            return EBUSY;
+    }
+    link = &object->vo_pages;
+    while ((page = *link) != 0) {
+        if (page->vop_index < first || page->vop_index >= last) {
+            link = &page->vop_next;
+            continue;
+        }
+        if (page->vop_anon->va_page != 0) {
+            error = pmap_remove_page(page->vop_anon->va_page);
+            if (error != 0)
+                return error;
+        }
+        error = vm_anon_release(page->vop_anon);
+        if (error != 0)
+            return error;
+        *link = page->vop_next;
+        vm_object_page_free(page);
+    }
+    return 0;
+}
+
+static int
 vm_pager_reclaim_one(struct vm_anon *exclude)
 {
     struct vm_anon *anon;
     struct vm_page *page;
     size_t slot;
+    void *mapping;
     unsigned scanned;
     int deferred_error;
     int error;
     int new_slot;
 
-    if (!vm_pager_swap_ready)
-        return ENXIO;
     deferred_error = 0;
     for (scanned = 0; scanned < VM_ANON_MAX; ++scanned) {
         anon = &vm_anon_pool[vm_pager_clock++ % VM_ANON_MAX];
@@ -707,6 +934,41 @@ vm_pager_reclaim_one(struct vm_anon *exclude)
             continue;
         }
         anon->va_flags |= VM_ANON_BUSY;
+        if (anon->va_pager != 0 &&
+            anon->va_pager->vpo_pageout != 0) {
+            if (page->vmp_dirty_count != 0 ||
+                (anon->va_flags & VM_ANON_DIRTY) != 0) {
+                mapping = pmap_page_direct_map(page,
+                    PMAP_CACHE_CACHED);
+                if (mapping == 0) {
+                    anon->va_flags &= ~VM_ANON_BUSY;
+                    return EFAULT;
+                }
+                error = anon->va_pager->vpo_pageout(
+                    anon->va_pager_cookie, anon->va_pager_offset,
+                    mapping, VM_PAGE_SIZE, 0);
+                if (error != 0) {
+                    anon->va_flags &= ~VM_ANON_BUSY;
+                    page->vmp_state = VM_PAGE_ACTIVE;
+                    deferred_error = error;
+                    continue;
+                }
+                error = pmap_clear_page_modify(page);
+                if (error != 0) {
+                    anon->va_flags &= ~VM_ANON_BUSY;
+                    return error;
+                }
+                anon->va_flags &= ~VM_ANON_DIRTY;
+            }
+            error = pmap_remove_page(page);
+            if (error == 0)
+                error = vm_anon_discard_resident(anon);
+            anon->va_flags &= ~VM_ANON_BUSY;
+            if (error != 0)
+                return error;
+            vm_object_stat_increment(&vm_object_statistics.vos_pageouts);
+            return 0;
+        }
         slot = anon->va_swap_slot;
         new_slot = slot == 0;
         if (new_slot)
@@ -808,8 +1070,7 @@ vm_pager_pageout_scan(void)
     int error;
     int aged;
 
-    if (!vm_pager_swap_ready ||
-        vm_object_allocator->vpa_free_count >= VM_PAGER_FREE_MIN)
+    if (vm_object_allocator->vpa_free_count >= VM_PAGER_FREE_MIN)
         return 0;
     aged = 0;
     while (vm_object_allocator->vpa_free_count < VM_PAGER_FREE_TARGET) {

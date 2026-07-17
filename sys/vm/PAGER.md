@@ -1,8 +1,8 @@
-# Anonymous objects and the swap pager
+# Anonymous and file objects, and the pager
 
-The first ReBSD VM pager keeps policy in `sys/vm` and uses the shared MIPS
-`pmap` only to install, age, and remove translations.  It does not restore the
-old fixed-window process swapper.
+The ReBSD VM pager keeps policy in `sys/vm` and uses the shared MIPS `pmap`
+only to install, age, dirty-track, and remove translations.  It does not
+restore the old fixed-window process swapper.
 
 ## Ownership and faults
 
@@ -35,9 +35,43 @@ The first fault reads one page through the callback.  A short final page is
 zero-filled; a page beginning at or beyond the current EOF fails with `ENXIO`,
 which the MIPS user-fault path reports as `SIGBUS`.  Successful pages become
 ordinary anonymous descriptors, so private writes and `fork` use the same COW
-and swap paths as anonymous memory and never write the inode.  Writable
-`MAP_SHARED` remains disabled until buffered I/O and mappings share a coherent
-page cache.
+and swap paths as anonymous memory and never write the inode.
+
+## Shared mapped files
+
+All `MAP_SHARED` mappings of one live inode reference one sparse VM object.
+Map entries carry their file offset into that object, so overlapping mappings,
+aliases, and inherited mappings after `fork` resolve to the same anonymous-page
+descriptor.  The object holds the inode reference; closing the descriptor does
+not invalidate a mapping.  A writable shared mapping requires both a writable
+descriptor and filesystem permission.  The initial 32-bit implementation
+accepts shared file ranges only below the 2 GiB user/kernel boundary.
+
+The shared object is the coherent in-memory owner while a page is resident.
+Mapped writes are detected through MIPS modified exceptions and the physical
+page's dirty count.  `msync`, `fsync`, final unmap, and memory-pressure reclaim
+write dirty pages through the inode pager before clearing their modified state.
+`MS_INVALIDATE` removes every alias after successful writeback, and a later
+fault reloads the page through the filesystem.  Clean shared pages are dropped
+and refaulted rather than consuming swap slots.  This file-backed reclaim path
+does not require a configured swap device.
+
+Ordinary UFS reads first write back dirty mapped pages in the requested range;
+ordinary UFS writes copy the buffer-cache result into every resident alias.
+Filesystems which delegate `rwip`, including FAT and ROMFS, use the same generic
+inode hooks: a read first writes back overlapping mapped pages, while a write
+first writes them back and invalidates them before the filesystem operation.
+The next mapped access therefore reloads the filesystem's result.  Synchronous
+writeback selects `syncip` for UFS and the mounted filesystem's `vfs_sync`
+operation for delegated filesystems; VM code contains no FAT, UFS, ROMFS, USB,
+or block-driver policy.
+
+Truncation writes pages which remain below the new EOF, zeroes the unused tail
+of a surviving partial page, and invalidates every page wholly beyond EOF.
+Access to an invalidated page beginning beyond EOF reports `SIGBUS`.  The VM
+object's inode reference also makes the existing `iflush` check return `EBUSY`
+for unmount or device removal while a mapping survives, instead of leaving a
+pager cookie pointing at detached filesystem state.
 
 ## Page selection
 
@@ -47,7 +81,7 @@ clears hardware/software reference bits on referenced pages, moves an
 unreferenced active page to inactive, and may evict an unreferenced inactive
 page.  Wired, busy, or pager-busy pages are skipped.
 
-The page daemon runs in process 0, where swap I/O may sleep.  It starts below
+The page daemon runs in process 0, where pager I/O may sleep.  It starts below
 8 free pages and aims for 16.  A fault that reaches physical exhaustion also
 runs a bounded synchronous clock scan so progress does not depend on process 0
 being scheduled first.  These deliberately small fixed targets suit the
@@ -62,15 +96,17 @@ exactly four contiguous swap-map units.  Slot zero is never allocated.  A slot
 remains attached to its anonymous page across page-ins and clean re-evictions.
 
 Writeback is synchronous and currently operates on one VM page at a time; no
-clustering is attempted.  A new slot is committed only after a successful
-write.  On write failure the resident page and its dirty state are retained,
-the new slot is returned, the clock advances, and another page may be tried.
-On read failure the temporary physical page is returned while the swap slot is
-kept for a later retry.  Permanent I/O errors therefore lose no known-good
-resident data, increment `vm.swap_failures`, and fail the requesting user
-fault instead of panicking the kernel.  Swap exhaustion likewise leaves the
-candidate resident and allows other processes to continue; an allocation that
-cannot reclaim any page fails normally.
+clustering is attempted.  A new swap slot is committed only after a successful
+anonymous-page write.  On swap or shared-file write failure the resident page
+and its dirty state are retained, the clock advances, and another page may be
+tried.  A newly allocated swap slot is returned after failure.  On read failure
+the temporary physical page is returned while a swap slot or file backing is
+kept for a later retry.  Permanent swap I/O errors therefore lose no known-good
+resident data, increment `vm.swap_failures`, and fail the requesting user fault
+instead of panicking the kernel.  Filesystem pager errors propagate without
+marking the page clean.  Swap exhaustion likewise leaves the candidate
+resident and allows other processes to continue; an allocation that cannot
+reclaim any page fails normally.
 
 The cumulative object, fault, and pager counters are exported as BSD sysctl
 nodes under `vm`: `objects`, `anon_pages`, `object_resident`,
@@ -83,5 +119,15 @@ The supported kernels are single-CPU and non-preemptive in kernel mode.
 Object/map mutation and swap-map allocation therefore run serialized by the
 existing kernel execution model; interrupt handlers do not enter the pager.
 Busy flags protect the page currently undergoing copy or I/O from a nested
-reclaim scan.  An SMP or preemptible kernel must add explicit object, clock,
-and swap-map locks before enabling concurrency.
+reclaim scan.  The inode adapter also suppresses its buffered-I/O coherence
+hooks while it is itself paging the same object, which prevents recursive
+writeback.  The order is VM range, object/page, inode, filesystem buffer I/O;
+no filesystem callback retains a VM busy flag after it returns.  An SMP or
+preemptible kernel must add explicit map, object, inode, clock, and swap-map
+locks before enabling concurrency.
+
+Host tests force a dirty shared page through pageout and refault under physical
+memory pressure.  The Malta QEMU smoke covers overlapping aliases, visibility
+across `fork`, buffered read/write coherence, `fsync`, `msync`,
+`MS_INVALIDATE`, truncate-to-`SIGBUS`, descriptor close, and shared-page access
+during swap pressure with both GCC- and PCC-built kernels and user programs.

@@ -87,6 +87,8 @@ main(int argc, char **argv)
     char *cross_page;
     char *pressure;
     char *file_mapping;
+    char *shared_mapping;
+    char *shared_alias;
     unsigned char residency[3];
     char *mapped;
     char *replacement;
@@ -98,6 +100,7 @@ main(int argc, char **argv)
     int page_size;
     int grow_size;
     int fd;
+    unsigned char file_byte;
 
     if (argc == 2 && strcmp(argv[1], "--exec-child") == 0)
         return SMOKE_EXEC_STATUS;
@@ -303,6 +306,67 @@ main(int argc, char **argv)
         unlink("/var/tmp/vm-mmap-smoke") != 0)
         return smoke_fail("private file cleanup");
 
+    for (index = 0; index < SMOKE_VM_PAGE_SIZE; ++index)
+        smoke_file_page[index] = (unsigned char)(index * 7 + 9);
+    unlink("/var/tmp/vm-mmap-shared");
+    fd = open("/var/tmp/vm-mmap-shared", O_CREAT | O_TRUNC | O_RDWR,
+        0600);
+    if (fd < 0 || write(fd, smoke_file_page, SMOKE_VM_PAGE_SIZE) !=
+        SMOKE_VM_PAGE_SIZE || write(fd, smoke_file_page,
+        SMOKE_VM_PAGE_SIZE) != SMOKE_VM_PAGE_SIZE)
+        return smoke_fail("shared file create");
+    shared_mapping = mmap(0, 2 * SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    shared_alias = mmap(0, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, SMOKE_VM_PAGE_SIZE);
+    if (shared_mapping == MAP_FAILED || shared_alias == MAP_FAILED ||
+        (unsigned char)shared_alias[0] != smoke_file_page[0])
+        return smoke_fail("shared file aliases");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("shared file fork create");
+    if (child == 0) {
+        shared_mapping[0] = 0x31;
+        shared_mapping[SMOKE_VM_PAGE_SIZE] = 0x42;
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0 ||
+        shared_mapping[0] != 0x31 || shared_alias[0] != 0x42)
+        return smoke_fail("shared file fork visibility");
+    if (msync(shared_mapping, 2 * SMOKE_VM_PAGE_SIZE, MS_SYNC) != 0 ||
+        lseek(fd, 0, 0) != 0 || read(fd, &file_byte, 1) != 1 ||
+        file_byte != 0x31)
+        return smoke_fail("shared file msync");
+    if (lseek(fd, SMOKE_VM_PAGE_SIZE, 0) != SMOKE_VM_PAGE_SIZE ||
+        write(fd, "Z", 1) != 1 || shared_alias[0] != 'Z' ||
+        shared_mapping[SMOKE_VM_PAGE_SIZE] != 'Z')
+        return smoke_fail("shared buffered write visibility");
+    if (fsync(fd) != 0 || ftruncate(fd, SMOKE_VM_PAGE_SIZE) != 0)
+        return smoke_fail("shared file sync truncate");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("shared EOF fork create");
+    if (child == 0) {
+        volatile unsigned char beyond_eof;
+
+        beyond_eof = (unsigned char)shared_alias[0];
+        _exit(beyond_eof == 0xff ? 1 : 2);
+    }
+    if (smoke_wait_signal(child, SIGBUS) != 0)
+        return smoke_fail("shared truncate SIGBUS");
+    shared_mapping[0] = 0x5c;
+    if (msync(shared_mapping, SMOKE_VM_PAGE_SIZE,
+        MS_SYNC | MS_INVALIDATE) != 0)
+        return smoke_fail("shared invalidate sync");
+    residency[0] = MINCORE_INCORE;
+    if (mincore(shared_mapping, SMOKE_VM_PAGE_SIZE, residency) != 0 ||
+        (residency[0] & MINCORE_INCORE) != 0 ||
+        (unsigned char)shared_mapping[0] != 0x5c)
+        return smoke_fail("shared invalidate refault");
+    shared_mapping[1] = 0x6d;
+    if (close(fd) != 0)
+        return smoke_fail("shared close before pressure");
+
     pressure = sbrk(SMOKE_PRESSURE_PAGES * SMOKE_VM_PAGE_SIZE);
     if (pressure == (void *)-1)
         return smoke_fail("memory pressure grow");
@@ -315,6 +379,19 @@ main(int argc, char **argv)
     }
     if (sbrk(-SMOKE_PRESSURE_PAGES * SMOKE_VM_PAGE_SIZE) == (void *)-1)
         return smoke_fail("memory pressure shrink");
+
+    if ((unsigned char)shared_mapping[0] != 0x5c ||
+        (unsigned char)shared_mapping[1] != 0x6d)
+        return smoke_fail("shared pressure refault");
+    fd = open("/var/tmp/vm-mmap-shared", O_RDONLY);
+    if (fd < 0 || read(fd, smoke_file_page, 2) != 2 ||
+        smoke_file_page[0] != 0x5c || smoke_file_page[1] != 0x6d ||
+        close(fd) != 0)
+        return smoke_fail("shared pressure writeback");
+    if (munmap(shared_alias, SMOKE_VM_PAGE_SIZE) != 0 ||
+        munmap(shared_mapping, 2 * SMOKE_VM_PAGE_SIZE) != 0 ||
+        unlink("/var/tmp/vm-mmap-shared") != 0)
+        return smoke_fail("shared file cleanup");
 
     if (sbrk(-2 * page_size) == (void *)-1)
         return smoke_fail("sbrk shrink");
