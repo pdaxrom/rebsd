@@ -741,6 +741,91 @@ pmap_clear_modify(struct pmap *pmap, vm_vaddr_t vaddr)
     return 0;
 }
 
+int
+pmap_remove_page(struct vm_page *page)
+{
+    struct pmap *pmap;
+    uint32_t *table;
+    vm_vaddr_t vaddr;
+    unsigned directory_index;
+    unsigned map_index;
+    unsigned table_index;
+    int error;
+
+    if (!pmap_initialized || page == 0 ||
+        vm_page_lookup(pmap_allocator, page->vmp_paddr) != page)
+        return EINVAL;
+    for (map_index = 0; map_index < PMAP_MAX_MAPS; ++map_index) {
+        pmap = &pmap_maps[map_index];
+        if (!pmap_valid(pmap))
+            continue;
+        for (directory_index = 0;
+            directory_index < PMAP_DIRECTORY_ENTRIES; ++directory_index) {
+            table = pmap_table(pmap, directory_index);
+            if (table == 0)
+                continue;
+            for (table_index = 0; table_index < PMAP_TABLE_ENTRIES;
+                ++table_index) {
+                if ((table[table_index] &
+                    (PMAP_PTE_PRESENT | PMAP_PTE_PADDR)) !=
+                    (PMAP_PTE_PRESENT | page->vmp_paddr))
+                    continue;
+                vaddr = (directory_index << PMAP_DIRECTORY_SHIFT) |
+                    (table_index << PMAP_TABLE_SHIFT);
+                error = pmap_remove_pte(pmap, vaddr,
+                    &table[table_index]);
+                if (error != 0)
+                    return error;
+            }
+        }
+    }
+    return 0;
+}
+
+int
+pmap_clear_page_reference(struct vm_page *page)
+{
+    struct pmap *pmap;
+    uint32_t *table;
+    vm_vaddr_t vaddr;
+    unsigned directory_index;
+    unsigned map_index;
+    unsigned table_index;
+    int error;
+
+    if (!pmap_initialized || page == 0 ||
+        vm_page_lookup(pmap_allocator, page->vmp_paddr) != page)
+        return EINVAL;
+    for (map_index = 0; map_index < PMAP_MAX_MAPS; ++map_index) {
+        pmap = &pmap_maps[map_index];
+        if (!pmap_valid(pmap))
+            continue;
+        for (directory_index = 0;
+            directory_index < PMAP_DIRECTORY_ENTRIES; ++directory_index) {
+            table = pmap_table(pmap, directory_index);
+            if (table == 0)
+                continue;
+            for (table_index = 0; table_index < PMAP_TABLE_ENTRIES;
+                ++table_index) {
+                if ((table[table_index] & (PMAP_PTE_PRESENT |
+                    PMAP_PTE_PADDR | PMAP_PTE_REFERENCED)) !=
+                    (PMAP_PTE_PRESENT | page->vmp_paddr |
+                    PMAP_PTE_REFERENCED))
+                    continue;
+                error = vm_page_counter_dec(pmap_allocator, page,
+                    VM_PAGE_COUNTER_REFERENCE);
+                if (error != 0)
+                    return error;
+                table[table_index] &= ~PMAP_PTE_REFERENCED;
+                vaddr = (directory_index << PMAP_DIRECTORY_SHIFT) |
+                    (table_index << PMAP_TABLE_SHIFT);
+                pmap_invalidate(pmap, vaddr);
+            }
+        }
+    }
+    return 0;
+}
+
 void *
 pmap_page_direct_map(struct vm_page *page, enum pmap_cache cache)
 {

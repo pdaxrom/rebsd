@@ -4,11 +4,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <vm/pmap.h>
+#include <vm/vm_object.h>
 #include <vm/vmspace.h>
 
 #define TEST_RAM_SIZE   (64u * VM_PAGE_SIZE)
 #define TEST_VADDR      0x10000000u
 #define TEST_VADDR2     0x10002000u
+#define TEST_SHARED     0x10004000u
+#define TEST_PRESSURE   0x20000000u
+#define TEST_PRESSURE_PAGES 70u
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \
@@ -225,6 +229,7 @@ test_vmspace(void)
     struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
     struct vmspace *source;
     struct vmspace *child;
+    struct vm_object_stats object_stats;
     unsigned char input[32];
     unsigned char output[32];
     vm_paddr_t source_paddr;
@@ -245,6 +250,10 @@ test_vmspace(void)
     CHECK(vmspace_create(&source) == 0);
     CHECK(vmspace_map_anon(source, TEST_VADDR, 2 * VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE, 0) == 0);
+    CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) ==
+        ENOENT);
+    CHECK(vmspace_map_anon(source, TEST_SHARED, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_MAP_SHARED) == 0);
     for (i = 0; i < sizeof(input); ++i)
         input[i] = (unsigned char)(0x80u + i);
     CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE - 16,
@@ -254,20 +263,29 @@ test_vmspace(void)
         output, sizeof(output)) == 0);
     CHECK(memcmp(input, output, sizeof(input)) == 0);
     CHECK(vmspace_validate(source) == 0);
+    output[0] = 0x6du;
+    CHECK(vmspace_write(source, TEST_SHARED, output, 1) == 0);
 
     CHECK(vmspace_clone(source, &child) == 0);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) == 0);
     CHECK(pmap_extract(child->vms_pmap, TEST_VADDR, &child_paddr) == 0);
-    CHECK(source_paddr != child_paddr);
+    CHECK(source_paddr == child_paddr);
     CHECK(vmspace_read(child, TEST_VADDR + VM_PAGE_SIZE - 16,
         output, sizeof(output)) == 0);
     CHECK(memcmp(input, output, sizeof(input)) == 0);
     output[0] ^= 0xffu;
     CHECK(vmspace_write(child, TEST_VADDR + VM_PAGE_SIZE - 16,
         output, 1) == 0);
+    CHECK(pmap_extract(child->vms_pmap, TEST_VADDR, &child_paddr) == 0);
+    CHECK(source_paddr != child_paddr);
     CHECK(vmspace_read(source, TEST_VADDR + VM_PAGE_SIZE - 16,
         output, 1) == 0);
     CHECK(output[0] == input[0]);
+    output[0] = 0x3cu;
+    CHECK(vmspace_write(child, TEST_SHARED, output, 1) == 0);
+    output[0] = 0;
+    CHECK(vmspace_read(source, TEST_SHARED, output, 1) == 0);
+    CHECK(output[0] == 0x3cu);
 
     CHECK(vmspace_protect(child, TEST_VADDR + VM_PAGE_SIZE,
         VM_PAGE_SIZE, VM_PROT_READ) == 0);
@@ -276,6 +294,127 @@ test_vmspace(void)
     CHECK(vmspace_destroy(child) == 0);
     CHECK(vmspace_destroy(source) == 0);
     CHECK(allocator.vpa_free_count == free_before);
+    CHECK(vm_object_get_stats(&object_stats) == 0);
+    CHECK(object_stats.vos_objects == 0);
+    CHECK(object_stats.vos_anon_pages == 0);
+    CHECK(object_stats.vos_resident_pages == 0);
+    return 0;
+}
+
+static int
+test_pager_reset(struct vm_page_allocator *allocator,
+    struct vm_phys_map *map, struct vm_page *metadata,
+    unsigned swap_pages)
+{
+    memset(test_ram, 0, sizeof(test_ram));
+    memset(allocator, 0, sizeof(*allocator));
+    vm_phys_map_init(map);
+    if (vm_phys_map_add_ram(map, 0, TEST_RAM_SIZE, "test ram") != 0 ||
+        vm_phys_map_finalize(map) != 0 ||
+        vm_page_allocator_init(allocator, map, metadata,
+        TEST_RAM_SIZE / VM_PAGE_SIZE * sizeof(*metadata)) != 0 ||
+        pmap_system_init(allocator) != 0 ||
+        vmspace_system_init(allocator) != 0 ||
+        vm_pager_debug_swap_configure(swap_pages) != 0)
+        return 1;
+    return 0;
+}
+
+static int
+test_pager(void)
+{
+    struct vm_page_allocator allocator;
+    struct vm_phys_map map;
+    struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
+    struct vm_object_stats stats;
+    struct vmspace *space;
+    vm_paddr_t paddr;
+    vm_vaddr_t evicted;
+    unsigned char value;
+    unsigned index;
+    int error;
+
+    CHECK(test_pager_reset(&allocator, &map, metadata, 16) == 0);
+    CHECK(vmspace_create(&space) == 0);
+    CHECK(vmspace_map_anon(space, TEST_PRESSURE,
+        TEST_PRESSURE_PAGES * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    for (index = 0; index < TEST_PRESSURE_PAGES; ++index) {
+        value = (unsigned char)(index * 29u + 7u);
+        CHECK(vmspace_write(space,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1) == 0);
+    }
+    CHECK(vm_object_get_stats(&stats) == 0);
+    CHECK(stats.vos_pageouts != 0);
+    evicted = 0;
+    for (index = 0; index < TEST_PRESSURE_PAGES; ++index) {
+        if (pmap_extract(space->vms_pmap,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &paddr) == ENOENT) {
+            evicted = TEST_PRESSURE + index * VM_PAGE_SIZE;
+            break;
+        }
+    }
+    CHECK(evicted != 0);
+    vm_pager_debug_fail_io(1, 0);
+    CHECK(vmspace_read(space, evicted, &value, 1) == EIO);
+    vm_pager_debug_fail_io(0, 0);
+    for (index = TEST_PRESSURE_PAGES; index-- != 0;) {
+        value = 0;
+        CHECK(vmspace_read(space,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1) == 0);
+        CHECK(value == (unsigned char)(index * 29u + 7u));
+    }
+    CHECK(vm_object_get_stats(&stats) == 0);
+    CHECK(stats.vos_pageins != 0);
+    CHECK(stats.vos_swap_failures != 0);
+    CHECK(vmspace_destroy(space) == 0);
+    CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
+    CHECK(vm_object_get_stats(&stats) == 0);
+    CHECK(stats.vos_objects == 0 && stats.vos_anon_pages == 0 &&
+        stats.vos_resident_pages == 0 && stats.vos_swapped_pages == 0);
+
+    CHECK(test_pager_reset(&allocator, &map, metadata, 16) == 0);
+    CHECK(vmspace_create(&space) == 0);
+    CHECK(vmspace_map_anon(space, TEST_PRESSURE,
+        TEST_PRESSURE_PAGES * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    vm_pager_debug_fail_io(0, 1);
+    error = 0;
+    for (index = 0; index < TEST_PRESSURE_PAGES; ++index) {
+        value = (unsigned char)index;
+        error = vmspace_write(space,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1);
+        if (error != 0)
+            break;
+    }
+    CHECK(error == ENOMEM);
+    CHECK(vm_object_get_stats(&stats) == 0);
+    CHECK(stats.vos_swap_failures != 0 && stats.vos_pageouts == 0);
+    vm_pager_debug_fail_io(0, 0);
+    CHECK(vmspace_destroy(space) == 0);
+    CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
+
+    CHECK(test_pager_reset(&allocator, &map, metadata, 2) == 0);
+    CHECK(vmspace_create(&space) == 0);
+    CHECK(vmspace_map_anon(space, TEST_PRESSURE,
+        TEST_PRESSURE_PAGES * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    error = 0;
+    for (index = 0; index < TEST_PRESSURE_PAGES; ++index) {
+        value = (unsigned char)index;
+        error = vmspace_write(space,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1);
+        if (error != 0)
+            break;
+    }
+    CHECK(error == ENOMEM);
+    CHECK(vm_object_get_stats(&stats) == 0);
+    CHECK(stats.vos_swapped_pages == 2);
+    CHECK(vmspace_destroy(space) == 0);
+    CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
+    CHECK(vm_object_get_stats(&stats) == 0);
+    CHECK(stats.vos_objects == 0 && stats.vos_anon_pages == 0 &&
+        stats.vos_resident_pages == 0 && stats.vos_swapped_pages == 0);
     return 0;
 }
 
@@ -285,6 +424,8 @@ main(void)
     if (test_pmap() != 0)
         return 1;
     if (test_vmspace() != 0)
+        return 1;
+    if (test_pager() != 0)
         return 1;
     puts("MIPS pmap/vmspace tests: ok");
     return 0;

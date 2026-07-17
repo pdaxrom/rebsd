@@ -25,6 +25,7 @@
 #include <vm/vm_phys.h>
 #include <vm/vm_page.h>
 #include <vm/pmap.h>
+#include <vm/vm_object.h>
 #include <vm/vmspace.h>
 
 u_int   swapstart, nswap;   /* start and size of swap space */
@@ -261,6 +262,9 @@ main()
     if (nswap <= 0)
         panic ("zero swap size");   /* don't want to panic, but what ? */
     mfree (swapmap, nswap, swapstart);
+    error = vm_pager_swap_init();
+    if (error != 0)
+        panic("swap pager init");
 
     printf ("phys mem  = %u kbytes\n", physmem / 1024);
     printf ("user mem  = %u kbytes\n", MAXMEM / 1024);

@@ -29,7 +29,16 @@
 #define VM_PMAPTARGETED 18  /* long: targeted TLB invalidations */
 #define VM_PMAPFLUSHES 19   /* long: full non-wired TLB flushes */
 #define VM_PMAPROLLOVERS 20 /* long: ASID generation rollovers */
-#define VM_MAXID    21      /* number of valid vm ids */
+#define VM_OBJECTS 21       /* long: current VM objects */
+#define VM_ANONPAGES 22     /* long: anonymous page descriptors */
+#define VM_OBJECTRESIDENT 23 /* long: resident object pages */
+#define VM_OBJECTSWAPPED 24 /* long: swapped object pages */
+#define VM_ZEROFAULTS 25    /* long: demand-zero faults */
+#define VM_COWFAULTS 26     /* long: copy-on-write faults */
+#define VM_PAGEINS 27       /* long: swap pager page-ins */
+#define VM_PAGEOUTS 28      /* long: swap pager page-outs */
+#define VM_SWAPFAILURES 29  /* long: swap pager I/O failures */
+#define VM_MAXID    30      /* number of valid vm ids */
 
 #ifndef KERNEL
 #define CTL_VM_NAMES { \
@@ -54,6 +63,15 @@
     { "pmap_targeted", CTLTYPE_LONG }, \
     { "pmap_flushes", CTLTYPE_LONG }, \
     { "pmap_rollovers", CTLTYPE_LONG }, \
+    { "objects", CTLTYPE_LONG }, \
+    { "anon_pages", CTLTYPE_LONG }, \
+    { "object_resident", CTLTYPE_LONG }, \
+    { "object_swapped", CTLTYPE_LONG }, \
+    { "zero_faults", CTLTYPE_LONG }, \
+    { "cow_faults", CTLTYPE_LONG }, \
+    { "pageins", CTLTYPE_LONG }, \
+    { "pageouts", CTLTYPE_LONG }, \
+    { "swap_failures", CTLTYPE_LONG }, \
 }
 #endif
 

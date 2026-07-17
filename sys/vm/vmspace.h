@@ -23,7 +23,7 @@ int vmspace_system_init(struct vm_page_allocator *);
 struct vmspace *vmspace_current(void);
 #endif
 int vmspace_create(struct vmspace **);
-int vmspace_clone(const struct vmspace *, struct vmspace **);
+int vmspace_clone(struct vmspace *, struct vmspace **);
 int vmspace_destroy(struct vmspace *);
 int vmspace_activate(struct vmspace *);
 int vmspace_map_anon(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t,
@@ -31,6 +31,7 @@ int vmspace_map_anon(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t,
 int vmspace_unmap(struct vmspace *, vm_vaddr_t, vm_size_t);
 int vmspace_protect(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vmspace_check(const struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
+int vmspace_fault(struct vmspace *, vm_vaddr_t, vm_prot_t);
 int vmspace_read(const struct vmspace *, vm_vaddr_t, void *, vm_size_t);
 int vmspace_write(struct vmspace *, vm_vaddr_t, const void *, vm_size_t);
 int vmspace_zero(struct vmspace *, vm_vaddr_t, vm_size_t);

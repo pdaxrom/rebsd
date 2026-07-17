@@ -53,6 +53,8 @@ int pmap_is_referenced(struct pmap *, vm_vaddr_t);
 int pmap_clear_reference(struct pmap *, vm_vaddr_t);
 int pmap_is_modified(struct pmap *, vm_vaddr_t);
 int pmap_clear_modify(struct pmap *, vm_vaddr_t);
+int pmap_remove_page(struct vm_page *);
+int pmap_clear_page_reference(struct vm_page *);
 int pmap_page_sync(struct vm_page *, unsigned);
 void *pmap_page_direct_map(struct vm_page *, enum pmap_cache);
 int pmap_get_stats(struct pmap_stats *);

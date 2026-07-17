@@ -10,6 +10,7 @@
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <machine/debug.h>
+#include <vm/vm_object.h>
 #ifdef USB_ENABLED
 #include <usb/usb_task.h>
 #endif
@@ -37,6 +38,7 @@ sched()
 {
     for (;;) {
         spl0();
+        (void)vm_pager_pageout_scan();
 #ifdef USB_ENABLED
         usb_task_run_pending();
 #endif

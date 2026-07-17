@@ -87,6 +87,24 @@ static struct mips_exception_snapshot last_exception;
 static int exception_panic_prepared;
 
 static int
+mips_user_vm_fault(unsigned address, vm_prot_t access)
+{
+    struct proc *p;
+    int error;
+
+    error = pmap_fault_active(address, access, 1);
+    if (error == 0)
+        return 0;
+    p = u.u_procp;
+    if (p == 0 || p->p_vmspace == 0)
+        return error;
+    error = vmspace_fault(p->p_vmspace, address, access);
+    if (error != 0)
+        return error;
+    return pmap_fault_active(address, access, 1);
+}
+
+static int
 mips_exception_entry_pc(unsigned pc)
 {
     return pc >= (unsigned)mips_exception_entry &&
@@ -697,20 +715,20 @@ exception(int *frame)
 
     case CA_Mod + USER:
     case CA_TLBS + USER:
-        if (pmap_fault_active(badvaddr, VM_PROT_WRITE, 1) == 0)
+        if (mips_user_vm_fault(badvaddr, VM_PROT_WRITE) == 0)
             goto ret;
         if (mips_grow_user_stack(badvaddr, 1) == 0 &&
-            pmap_fault_active(badvaddr, VM_PROT_WRITE, 1) == 0)
+            mips_user_vm_fault(badvaddr, VM_PROT_WRITE) == 0)
             goto ret;
         psig = SIGSEGV;
         mips_intr_enable();
         break;
 
     case CA_TLBL + USER:
-        if (pmap_fault_active(badvaddr, VM_PROT_READ, 1) == 0)
+        if (mips_user_vm_fault(badvaddr, VM_PROT_READ) == 0)
             goto ret;
         if (mips_grow_user_stack(badvaddr, 1) == 0 &&
-            pmap_fault_active(badvaddr, VM_PROT_READ, 1) == 0)
+            mips_user_vm_fault(badvaddr, VM_PROT_READ) == 0)
             goto ret;
         psig = SIGSEGV;
         mips_intr_enable();

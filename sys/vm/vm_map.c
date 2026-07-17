@@ -30,11 +30,12 @@ static void vm_map_delete_entry(struct vm_map *, unsigned);
 
 static int
 vm_map_entry_matches(const struct vm_map_entry *entry,
-    vm_prot_t protection, vm_prot_t maximum, unsigned flags)
+    vm_prot_t protection, vm_prot_t maximum, unsigned flags,
+    struct vm_object *object)
 {
     return entry->vme_protection == protection &&
         entry->vme_max_protection == maximum &&
-        entry->vme_flags == flags;
+        entry->vme_flags == flags && entry->vme_object == object;
 }
 
 int
@@ -52,6 +53,15 @@ vm_map_init(struct vm_map *map, vm_vaddr_t minimum, vm_vaddr_t maximum)
 int
 vm_map_insert(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
     vm_prot_t protection, vm_prot_t maximum, unsigned flags)
+{
+    return vm_map_insert_object(map, start, end, protection, maximum,
+        flags, 0, 0);
+}
+
+int
+vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
+    vm_vaddr_t end, vm_prot_t protection, vm_prot_t maximum,
+    unsigned flags, struct vm_object *object, vm_ooffset_t offset)
 {
     unsigned index;
     unsigned move;
@@ -73,12 +83,17 @@ vm_map_insert(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
     }
     if (index != 0 && map->vmm_entries[index - 1].vme_end == start &&
         vm_map_entry_matches(&map->vmm_entries[index - 1], protection,
-        maximum, flags)) {
+        maximum, flags, object) && (object == 0 ||
+        map->vmm_entries[index - 1].vme_offset +
+        (map->vmm_entries[index - 1].vme_end -
+        map->vmm_entries[index - 1].vme_start) == offset)) {
         map->vmm_entries[index - 1].vme_end = end;
         if (index < map->vmm_count &&
             map->vmm_entries[index].vme_start == end &&
             vm_map_entry_matches(&map->vmm_entries[index], protection,
-            maximum, flags)) {
+            maximum, flags, object) && (object == 0 ||
+            offset + (end - start) ==
+            map->vmm_entries[index].vme_offset)) {
             map->vmm_entries[index - 1].vme_end =
                 map->vmm_entries[index].vme_end;
             vm_map_delete_entry(map, index);
@@ -88,8 +103,11 @@ vm_map_insert(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
     if (index < map->vmm_count &&
         map->vmm_entries[index].vme_start == end &&
         vm_map_entry_matches(&map->vmm_entries[index], protection,
-        maximum, flags)) {
+        maximum, flags, object) && (object == 0 ||
+        offset + (end - start) ==
+        map->vmm_entries[index].vme_offset)) {
         map->vmm_entries[index].vme_start = start;
+        map->vmm_entries[index].vme_offset = offset;
         return 0;
     }
     for (move = map->vmm_count; move > index; --move)
@@ -99,6 +117,8 @@ vm_map_insert(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
     map->vmm_entries[index].vme_protection = protection;
     map->vmm_entries[index].vme_max_protection = maximum;
     map->vmm_entries[index].vme_flags = flags;
+    map->vmm_entries[index].vme_object = object;
+    map->vmm_entries[index].vme_offset = offset;
     ++map->vmm_count;
     return 0;
 }
@@ -138,6 +158,8 @@ vm_map_remove(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end)
         }
         if (start <= old.vme_start) {
             map->vmm_entries[index].vme_start = end;
+            map->vmm_entries[index].vme_offset = old.vme_offset +
+                (end - old.vme_start);
             break;
         }
         if (end >= old.vme_end) {
@@ -148,9 +170,10 @@ vm_map_remove(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end)
         if (map->vmm_count >= VM_MAP_MAX_ENTRIES)
             return ENOSPC;
         map->vmm_entries[index].vme_end = start;
-        if (vm_map_insert(map, end, old.vme_end,
+        if (vm_map_insert_object(map, end, old.vme_end,
             old.vme_protection, old.vme_max_protection,
-            old.vme_flags) != 0)
+            old.vme_flags, old.vme_object, old.vme_offset +
+            (end - old.vme_start)) != 0)
             return EFAULT;
         break;
     }
@@ -179,9 +202,10 @@ vm_map_protect(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
     for (index = 0; index < map->vmm_count; ++index) {
         old = &map->vmm_entries[index];
         if (old->vme_end <= start || old->vme_start >= end) {
-            error = vm_map_insert(&replacement, old->vme_start,
+            error = vm_map_insert_object(&replacement, old->vme_start,
                 old->vme_end, old->vme_protection,
-                old->vme_max_protection, old->vme_flags);
+                old->vme_max_protection, old->vme_flags,
+                old->vme_object, old->vme_offset);
             if (error != 0)
                 return error;
             continue;
@@ -189,22 +213,27 @@ vm_map_protect(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
         if ((protection & ~old->vme_max_protection) != 0)
             return EACCES;
         if (old->vme_start < start) {
-            error = vm_map_insert(&replacement, old->vme_start, start,
+            error = vm_map_insert_object(&replacement,
+                old->vme_start, start,
                 old->vme_protection, old->vme_max_protection,
-                old->vme_flags);
+                old->vme_flags, old->vme_object, old->vme_offset);
             if (error != 0)
                 return error;
         }
         middle_start = old->vme_start > start ? old->vme_start : start;
         middle_end = old->vme_end < end ? old->vme_end : end;
-        error = vm_map_insert(&replacement, middle_start, middle_end,
-            protection, old->vme_max_protection, old->vme_flags);
+        error = vm_map_insert_object(&replacement, middle_start,
+            middle_end, protection, old->vme_max_protection,
+            old->vme_flags, old->vme_object, old->vme_offset +
+            (middle_start - old->vme_start));
         if (error != 0)
             return error;
         if (old->vme_end > end) {
-            error = vm_map_insert(&replacement, end, old->vme_end,
+            error = vm_map_insert_object(&replacement, end,
+                old->vme_end,
                 old->vme_protection, old->vme_max_protection,
-                old->vme_flags);
+                old->vme_flags, old->vme_object, old->vme_offset +
+                (end - old->vme_start));
             if (error != 0)
                 return error;
         }

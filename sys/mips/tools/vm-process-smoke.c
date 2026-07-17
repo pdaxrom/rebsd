@@ -11,6 +11,8 @@
 #define SMOKE_EXEC_STATUS   23
 #define SMOKE_FORK_STATUS   31
 #define SMOKE_REUSE_COUNT   8
+#define SMOKE_PRESSURE_PAGES 384
+#define SMOKE_VM_PAGE_SIZE  4096
 
 static volatile sig_atomic_t smoke_signal_seen;
 static volatile unsigned smoke_bad_address = 1;
@@ -64,6 +66,7 @@ main(int argc, char **argv)
 {
     char *arena;
     char *cross_page;
+    char *pressure;
     char **bad_argv;
     char *exec_argv[3];
     void *old_break;
@@ -145,11 +148,26 @@ main(int argc, char **argv)
         child = fork();
         if (child < 0)
             return smoke_fail("process reuse create");
-        if (child == 0)
+        if (child == 0) {
+            arena[0] = (char)(index + 1);
             _exit(index);
-        if (smoke_wait(child, index) != 0)
+        }
+        if (smoke_wait(child, index) != 0 || arena[0] != 0x21)
             return smoke_fail("process reuse wait");
     }
+
+    pressure = sbrk(SMOKE_PRESSURE_PAGES * SMOKE_VM_PAGE_SIZE);
+    if (pressure == (void *)-1)
+        return smoke_fail("memory pressure grow");
+    for (index = 0; index < SMOKE_PRESSURE_PAGES; ++index)
+        pressure[index * SMOKE_VM_PAGE_SIZE] = (char)(index * 37 + 11);
+    for (index = SMOKE_PRESSURE_PAGES - 1; index >= 0; --index) {
+        if ((unsigned char)pressure[index * SMOKE_VM_PAGE_SIZE] !=
+            (unsigned char)(index * 37 + 11))
+            return smoke_fail("memory pressure data");
+    }
+    if (sbrk(-SMOKE_PRESSURE_PAGES * SMOKE_VM_PAGE_SIZE) == (void *)-1)
+        return smoke_fail("memory pressure shrink");
 
     if (sbrk(-2 * page_size) == (void *)-1)
         return smoke_fail("sbrk shrink");

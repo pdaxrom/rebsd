@@ -162,19 +162,20 @@ Exit criteria:
 
 ## Phase 5: Anonymous memory, copy-on-write, and paging
 
-- [ ] Add VM objects and anonymous-page descriptors independent of processes.
-- [ ] Implement demand-zero anonymous faults.
-- [ ] Implement `fork` using copy-on-write mappings and correct write-fault
+- [x] Add VM objects and anonymous-page descriptors independent of processes.
+- [x] Implement demand-zero anonymous faults.
+- [x] Implement `fork` using copy-on-write mappings and correct write-fault
   promotion.
-- [ ] Preserve sharing for mappings explicitly marked shared.
-- [ ] Add page queues and a page daemon with documented free-page targets.
-- [ ] Add a swap pager using the existing swap device interface while keeping
+- [x] Preserve sharing for mappings explicitly marked shared.
+- [x] Add page queues and a page daemon with documented free-page targets;
+  see [PAGER.md](PAGER.md).
+- [x] Add a swap pager using the existing swap device interface while keeping
   swap block units distinct from VM page units.
-- [ ] Allocate and free swap slots safely, including error rollback.
-- [ ] Define dirty-page writeback, clustering, retry, and permanent-I/O-error
+- [x] Allocate and free swap slots safely, including error rollback.
+- [x] Define dirty-page writeback, clustering, retry, and permanent-I/O-error
   behavior.
-- [ ] Ensure process termination cannot leak VM pages or swap slots.
-- [ ] Add memory-pressure, fork storm, COW isolation, swap exhaustion, and
+- [x] Ensure process termination cannot leak VM pages or swap slots.
+- [x] Add memory-pressure, fork storm, COW isolation, swap exhaustion, and
   forced-I/O-error tests.
 
 Exit criteria:

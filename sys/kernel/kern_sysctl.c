@@ -50,6 +50,7 @@
 #include <sys/sysctl.h>
 #include <sys/rebsd_version.h>
 #include <vm/vm_page.h>
+#include <vm/vm_object.h>
 #include <vm/pmap.h>
 #include <machine/cpu.h>
 #include <sys/conf.h>
@@ -395,6 +396,7 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     struct  loadavg averunnable;    /* loadavg in resource.h */
     struct vm_page_stats page_stats;
     struct pmap_stats pmap_stats;
+    struct vm_object_stats object_stats;
     long page_value;
     int error;
 
@@ -498,6 +500,48 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
             break;
         default:
             page_value = pmap_stats.pms_asid_rollovers;
+            break;
+        }
+        return (sysctl_rdlong(oldp, oldlenp, newp, page_value));
+    case VM_OBJECTS:
+    case VM_ANONPAGES:
+    case VM_OBJECTRESIDENT:
+    case VM_OBJECTSWAPPED:
+    case VM_ZEROFAULTS:
+    case VM_COWFAULTS:
+    case VM_PAGEINS:
+    case VM_PAGEOUTS:
+    case VM_SWAPFAILURES:
+        error = vm_object_get_stats(&object_stats);
+        if (error != 0)
+            return error;
+        switch (name[0]) {
+        case VM_OBJECTS:
+            page_value = object_stats.vos_objects;
+            break;
+        case VM_ANONPAGES:
+            page_value = object_stats.vos_anon_pages;
+            break;
+        case VM_OBJECTRESIDENT:
+            page_value = object_stats.vos_resident_pages;
+            break;
+        case VM_OBJECTSWAPPED:
+            page_value = object_stats.vos_swapped_pages;
+            break;
+        case VM_ZEROFAULTS:
+            page_value = object_stats.vos_zero_faults;
+            break;
+        case VM_COWFAULTS:
+            page_value = object_stats.vos_cow_faults;
+            break;
+        case VM_PAGEINS:
+            page_value = object_stats.vos_pageins;
+            break;
+        case VM_PAGEOUTS:
+            page_value = object_stats.vos_pageouts;
+            break;
+        default:
+            page_value = object_stats.vos_swap_failures;
             break;
         }
         return (sysctl_rdlong(oldp, oldlenp, newp, page_value));
