@@ -51,8 +51,10 @@ the n64cart serial line from reset and deploy the ROM with the cartridge's
 normal uploader; deployment tools are intentionally kept outside the kernel
 build.
 
-1. Boot `preflight.z64`.  Require the stage0 banner, detected RDRAM size, and
-   a clean preflight completion before trying the full image.
+1. Boot `preflight.z64`.  Require the stage0 and `ReBSD N64 preflight`
+   banners, detected RDRAM size, and the `rootfs.img` offset, size, and magic.
+   The preflight kernel deliberately loops forever after printing these lines;
+   power-cycle the console after retaining them, then try the full image.
 2. Boot `kernel.z64` on an 8 MiB system first.  Require stage0, the kernel
    entry banner, `rdram size=0x00800000`, init, and a `login:` prompt.  Log in
    as `root` with no password.
