@@ -296,6 +296,14 @@ pmap_remove_pte(struct pmap *pmap, vm_vaddr_t vaddr, uint32_t *pte)
     page = vm_page_lookup(pmap_allocator, old & PMAP_PTE_PADDR);
     if (page == 0)
         return EFAULT;
+    /*
+     * A user mapping may be the last cached alias of this page.  Write it
+     * back before dropping the hold so a later direct-map user cannot see
+     * stale data after the page is recycled.
+     */
+    error = pmap_md_page_sync(page->vmp_paddr, PMAP_SYNC_DATA);
+    if (error != 0)
+        return error;
     if ((old & PMAP_PTE_MODIFIED) != 0) {
         error = vm_page_counter_dec(pmap_allocator, page,
             VM_PAGE_COUNTER_DIRTY);
@@ -434,6 +442,7 @@ pmap_enter(struct pmap *pmap, vm_vaddr_t vaddr, struct vm_page *page,
 {
     uint32_t *pte;
     uint32_t entry;
+    unsigned sync_operations;
     int error;
 
     if (!pmap_valid(pmap) || page == 0 ||
@@ -467,13 +476,13 @@ pmap_enter(struct pmap *pmap, vm_vaddr_t vaddr, struct vm_page *page,
     pmap_stat_increment(&pmap_statistics.pms_mappings);
     pmap_stat_increment(&pmap_statistics.pms_resident_pages);
     pmap_invalidate(pmap, vaddr);
-    if ((protection & VM_PROT_EXECUTE) != 0) {
-        error = pmap_md_page_sync(page->vmp_paddr,
-            PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION);
-        if (error != 0) {
-            (void)pmap_remove_pte(pmap, vaddr, pte);
-            return error;
-        }
+    sync_operations = PMAP_SYNC_DATA;
+    if ((protection & VM_PROT_EXECUTE) != 0)
+        sync_operations |= PMAP_SYNC_INSTRUCTION;
+    error = pmap_md_page_sync(page->vmp_paddr, sync_operations);
+    if (error != 0) {
+        (void)pmap_remove_pte(pmap, vaddr, pte);
+        return error;
     }
     return 0;
 }

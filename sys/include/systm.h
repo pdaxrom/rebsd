@@ -175,6 +175,7 @@ int groupmember (gid_t gid);
  * Wake up all processes sleeping on chan.
  */
 void wakeup (caddr_t chan);
+int tsleep (caddr_t ident, int priority, u_int timo);
 
 /*
  * Allocate iostat disk monitoring slots for a driver.

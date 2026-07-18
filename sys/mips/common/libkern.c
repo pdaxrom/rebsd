@@ -1,5 +1,6 @@
 #include <sys/param.h>
 #include <sys/errno.h>
+#include <sys/systm.h>
 
 int
 ffs(u_long value)

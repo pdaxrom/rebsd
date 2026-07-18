@@ -434,6 +434,11 @@ vm_anon_make_resident(struct vm_anon *anon, int zero_fault)
         }
         vm_object_stat_increment(&vm_object_statistics.vos_pageins);
     }
+    error = pmap_page_sync(page, PMAP_SYNC_DATA);
+    if (error != 0) {
+        (void)vm_page_free(vm_object_allocator, page, 1);
+        return error;
+    }
     anon->va_page = page;
     vm_object_stat_increment(&vm_object_statistics.vos_resident_pages);
     return 0;
@@ -689,7 +694,23 @@ vm_object_private_copy(struct vm_object_page *object_page)
         vm_anon_busy_clear(source);
         return EFAULT;
     }
+    error = pmap_page_sync(source->va_page, PMAP_SYNC_DATA);
+    if (error != 0) {
+        (void)vm_page_free(vm_object_allocator, page, 1);
+        vm_anon_busy_clear(target);
+        (void)vm_anon_release(target);
+        vm_anon_busy_clear(source);
+        return error;
+    }
     vm_object_copy(source_mapping, target_mapping, VM_PAGE_SIZE);
+    error = pmap_page_sync(page, PMAP_SYNC_DATA);
+    if (error != 0) {
+        (void)vm_page_free(vm_object_allocator, page, 1);
+        vm_anon_busy_clear(target);
+        (void)vm_anon_release(target);
+        vm_anon_busy_clear(source);
+        return error;
+    }
     target->va_page = page;
     vm_anon_busy_clear(target);
     --source->va_references;

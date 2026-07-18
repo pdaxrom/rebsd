@@ -39,6 +39,7 @@ static unsigned test_tlb_updates;
 static unsigned test_tlb_invalidations;
 static unsigned test_tlb_flushes;
 static unsigned test_syncs;
+static unsigned test_last_sync_operations;
 
 struct test_object_pager {
     unsigned references;
@@ -216,6 +217,7 @@ pmap_md_page_sync(vm_paddr_t paddr, unsigned operations)
     if (!vm_paddr_page_aligned(paddr) || paddr >= TEST_RAM_SIZE ||
         operations == 0)
         return EINVAL;
+    test_last_sync_operations = operations;
     ++test_syncs;
     return 0;
 }
@@ -280,7 +282,9 @@ test_pmap(void)
         PMAP_CACHE_UNCACHED) == 0);
     CHECK(pmap_enter(pmap1, TEST_VADDR2, page3,
         VM_PROT_READ | VM_PROT_EXECUTE, PMAP_CACHE_CACHED) == 0);
-    CHECK(test_syncs == 1);
+    CHECK(test_syncs == 3);
+    CHECK(test_last_sync_operations ==
+        (PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION));
     CHECK(pmap_validate(pmap1) == 0);
     CHECK(pmap_validate(pmap2) == 0);
 
