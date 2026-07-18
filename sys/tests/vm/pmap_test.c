@@ -6,6 +6,7 @@
 #include <vm/pmap.h>
 #include <vm/vm_object.h>
 #include <vm/vm_shm.h>
+#include <vm/vm_sysv_shm.h>
 #include <vm/vmspace.h>
 
 #define TEST_RAM_SIZE   (64u * VM_PAGE_SIZE)
@@ -761,12 +762,20 @@ test_shm(void)
     struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
     struct vm_object_stats object_stats;
     struct vm_shm_stats shm_stats;
+    struct vm_sysv_shm_stats sysv_stats;
+    struct vm_sysv_shm_info sysv_info;
     struct vm_shm_info info;
     struct vm_object *object;
+    struct vm_sysv_shm *sysv_replacement;
+    struct vm_sysv_shm *sysv_segment;
+    struct vm_sysv_shm *sysv_segments[VM_SYSV_SHM_MAX_SEGMENTS];
+    struct vmspace *child;
+    struct vmspace *inherited;
     struct vm_shm *replacement;
     struct vm_shm *shm;
     struct vm_shm *found;
     struct vmspace *space;
+    unsigned index;
     unsigned char value;
 
     memset(test_ram, 0, sizeof(test_ram));
@@ -833,6 +842,69 @@ test_shm(void)
 
     CHECK(vm_shm_get_stats(&shm_stats) == 0 &&
         shm_stats.vss_objects == 0 && shm_stats.vss_open_files == 0);
+
+    CHECK(vm_sysv_shm_create(0x1234, 2 * VM_PAGE_SIZE + 17,
+        12, 34, 0640, 77, 100, &sysv_segment) == 0);
+    CHECK(vm_sysv_shm_get_info(sysv_segment, &sysv_info) == 0 &&
+        sysv_info.vssi_key == 0x1234 &&
+        sysv_info.vssi_size == 2 * VM_PAGE_SIZE + 17 &&
+        sysv_info.vssi_owner == 12 && sysv_info.vssi_group == 34 &&
+        sysv_info.vssi_mode == 0640 && sysv_info.vssi_creator_pid == 77 &&
+        sysv_info.vssi_attach_count == 0);
+    CHECK(vm_sysv_shm_lookup_id(sysv_info.vssi_id,
+        &sysv_replacement) == 0 && sysv_replacement == sysv_segment);
+    CHECK(vm_sysv_shm_object_reference(sysv_segment, &object) == 0);
+    CHECK(vmspace_map_object(space, 0x30000000u, 3 * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+        VM_MAP_SHARED | VM_MAP_SYSV_SHM, object, 0) == 0);
+    CHECK(vmspace_sysv_attach(space, sysv_segment, 0x30000000u,
+        3 * VM_PAGE_SIZE, 77, 101) == 0);
+    value = 0x4d;
+    CHECK(vmspace_write(space, 0x30000000u + VM_PAGE_SIZE,
+        &value, 1) == 0);
+    CHECK(vmspace_clone(space, &child) == 0);
+    CHECK(vm_sysv_shm_get_info(sysv_segment, &sysv_info) == 0 &&
+        sysv_info.vssi_attach_count == 2);
+    value = 0;
+    CHECK(vmspace_read(child, 0x30000000u + VM_PAGE_SIZE,
+        &value, 1) == 0 && value == 0x4d);
+    CHECK(vm_sysv_shm_mark_remove(sysv_segment, 77, 102) == 0);
+    CHECK(vm_sysv_shm_lookup_key(0x1234, &sysv_replacement) == ENOENT);
+    CHECK(vm_sysv_shm_lookup_id(sysv_info.vssi_id,
+        &sysv_replacement) == EINVAL);
+    CHECK(vmspace_clone(space, &inherited) == 0);
+    CHECK(vm_sysv_shm_get_info(sysv_segment, &sysv_info) == 0 &&
+        sysv_info.vssi_attach_count == 3);
+    CHECK(vmspace_destroy(inherited) == 0);
+    CHECK(vmspace_destroy(child) == 0);
+    CHECK(vm_sysv_shm_get_info(sysv_segment, &sysv_info) == 0 &&
+        sysv_info.vssi_removed && sysv_info.vssi_attach_count == 1);
+    CHECK(vmspace_sysv_detach(space, 0x30000000u, 77, 103) == 0);
+    CHECK(vm_sysv_shm_get_stats(&sysv_stats) == 0 &&
+        sysv_stats.vsss_segments == 0 && sysv_stats.vsss_attachments == 0);
+    CHECK(vm_sysv_shm_create(0x1234, VM_PAGE_SIZE, 56, 78, 0600,
+        88, 104, &sysv_replacement) == 0);
+    CHECK(vm_sysv_shm_get_info(sysv_replacement, &sysv_info) == 0 &&
+        vm_sysv_shm_mark_remove(sysv_replacement, 88, 105) == 0);
+    CHECK(vm_sysv_shm_lookup_id(sysv_info.vssi_id,
+        &sysv_segment) == EINVAL);
+    CHECK(vm_sysv_shm_get_stats(&sysv_stats) == 0 &&
+        sysv_stats.vsss_segments == 0);
+
+    for (index = 0; index < VM_SYSV_SHM_MAX_SEGMENTS; ++index) {
+        CHECK(vm_sysv_shm_create(0x2000 + (int)index, 1,
+            56, 78, 0600, 88, 106, &sysv_segments[index]) == 0);
+    }
+    CHECK(vm_sysv_shm_create(0x3000, 1, 56, 78, 0600, 88, 106,
+        &sysv_segment) == ENOSPC);
+    CHECK(vm_sysv_shm_get_stats(&sysv_stats) == 0 &&
+        sysv_stats.vsss_segments == VM_SYSV_SHM_MAX_SEGMENTS &&
+        sysv_stats.vsss_pages == VM_SYSV_SHM_MAX_SEGMENTS);
+    for (index = 0; index < VM_SYSV_SHM_MAX_SEGMENTS; ++index)
+        CHECK(vm_sysv_shm_mark_remove(sysv_segments[index], 88, 107) == 0);
+    CHECK(vm_sysv_shm_get_stats(&sysv_stats) == 0 &&
+        sysv_stats.vsss_segments == 0);
+
     CHECK(vmspace_destroy(space) == 0);
     CHECK(vm_object_get_stats(&object_stats) == 0 &&
         object_stats.vos_objects == 0 && object_stats.vos_anon_pages == 0 &&

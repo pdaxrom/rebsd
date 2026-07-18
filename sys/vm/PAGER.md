@@ -92,6 +92,22 @@ references, and immediate reuse of the name creates a distinct object.  The
 last descriptor and mapping return the ordinary VM pages and swap slots; POSIX
 SHM has no physical-memory allocator of its own.
 
+System V shared memory uses a separate key and identifier namespace over the
+same anonymous VM objects.  Identifiers combine a 32-slot table index with a
+sequence number, so destroying and reusing a slot cannot revive a stale ID.
+Each process tracks up to eight attachments in its `vmspace`; `fork` duplicates
+those records, while `shmdt`, `exec`, and exit remove them.  `IPC_RMID` hides
+the key and ID immediately but delays the base object release until the last
+attachment disappears.  A fork of an already removed attachment remains
+valid, while a new `shmat` cannot find the removed ID.
+
+Both APIs limit an individual object to 64 MiB.  Read-only `vm` sysctls expose
+the combined object and logical-page counts, the calling process's mapping
+count, configured limits, and System V segment and attachment totals as
+`shm_objects`, `shm_pages`, `shm_mappings`, `shm_max_objects`,
+`shm_max_pages`, `shm_max_mappings`, `sysv_segments`, and
+`sysv_attachments`.
+
 ## Page selection
 
 The anonymous descriptor pool is the pager's stable clock queue.  Resident

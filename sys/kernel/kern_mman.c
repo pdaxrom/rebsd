@@ -172,6 +172,7 @@ mmap(void)
         if (fp == 0)
             return;
         if (fp->f_type == DTYPE_SHM) {
+            vm_flags |= VM_MAP_POSIX_SHM;
             if ((uap->protection & PROT_EXEC) != 0 ||
                 (uint64_t)offset > VM_SIZE_MAX) {
                 u.u_error = (uap->protection & PROT_EXEC) != 0 ?

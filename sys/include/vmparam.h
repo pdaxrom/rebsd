@@ -38,7 +38,15 @@
 #define VM_PAGEINS 27       /* long: swap pager page-ins */
 #define VM_PAGEOUTS 28      /* long: swap pager page-outs */
 #define VM_SWAPFAILURES 29  /* long: swap pager I/O failures */
-#define VM_MAXID    30      /* number of valid vm ids */
+#define VM_SHMOBJECTS 30    /* long: current POSIX and SysV objects */
+#define VM_SHMPAGES 31      /* long: logical shared-memory pages */
+#define VM_SHMMAPPINGS 32   /* long: current process SHM mappings */
+#define VM_SHMMAXOBJECTS 33 /* long: namespace object limit */
+#define VM_SHMMAXPAGES 34   /* long: maximum pages per object */
+#define VM_SHMMAXMAPPINGS 35 /* long: per-process VM map limit */
+#define VM_SYSVSEGMENTS 36  /* long: current SysV segments */
+#define VM_SYSVATTACHMENTS 37 /* long: current SysV attachments */
+#define VM_MAXID    38      /* number of valid vm ids */
 
 #ifndef KERNEL
 #define CTL_VM_NAMES { \
@@ -72,6 +80,14 @@
     { "pageins", CTLTYPE_LONG }, \
     { "pageouts", CTLTYPE_LONG }, \
     { "swap_failures", CTLTYPE_LONG }, \
+    { "shm_objects", CTLTYPE_LONG }, \
+    { "shm_pages", CTLTYPE_LONG }, \
+    { "shm_mappings", CTLTYPE_LONG }, \
+    { "shm_max_objects", CTLTYPE_LONG }, \
+    { "shm_max_pages", CTLTYPE_LONG }, \
+    { "shm_max_mappings", CTLTYPE_LONG }, \
+    { "sysv_segments", CTLTYPE_LONG }, \
+    { "sysv_attachments", CTLTYPE_LONG }, \
 }
 #endif
 

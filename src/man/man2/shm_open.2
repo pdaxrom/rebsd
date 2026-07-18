@@ -44,6 +44,7 @@ to create
 or
 .B MAP_PRIVATE
 mappings.
+Objects are limited to 64 MiB.
 Shared mappings refer to one VM object across processes; private mappings use
 copy-on-write.
 Shrinking an object invalidates complete pages past the new end, while growing
@@ -67,6 +68,8 @@ for denied access,
 for an exclusive create of an existing name,
 .B EINVAL
 for invalid flags or names,
+.B EFBIG
+when a requested object length exceeds 64 MiB,
 .B ENAMETOOLONG
 for an overlong name,
 .B ENOENT

@@ -222,14 +222,14 @@ Exit criteria:
   semantics and without requiring `/dev/shm`.
 - [x] Add `shm_open` and `shm_unlink` libc interfaces plus `ftruncate` and
   `mmap` integration.
-- [ ] Implement SysV shared memory: `shmget`, `shmat`, `shmdt`, and `shmctl`.
-- [ ] Define permissions, ownership, identifier reuse, deletion-after-last-
+- [x] Implement SysV shared memory: `shmget`, `shmat`, `shmdt`, and `shmctl`.
+- [x] Define permissions, ownership, identifier reuse, deletion-after-last-
   detach, fork inheritance, and exec/exit detach behavior.
-- [ ] Reuse VM objects for anonymous shared mappings, POSIX SHM, and SysV SHM;
+- [x] Reuse VM objects for anonymous shared mappings, POSIX SHM, and SysV SHM;
   do not create separate physical-memory allocators.
-- [ ] Add limits and read-only `sysctl` accounting for objects, pages, and
+- [x] Add limits and read-only `sysctl` accounting for objects, pages, and
   per-process mappings.
-- [ ] Add multi-process coherence, permission, lifecycle, exhaustion, and
+- [x] Add multi-process coherence, permission, lifecycle, exhaustion, and
   crash-cleanup tests.
 
 Exit criteria:
@@ -276,7 +276,7 @@ Required runtime coverage grows with the implementation but must include:
 - [ ] Native PCC/GCC compiler and ABI smoke tests.
 - [ ] Filesystem, networking, USB, and block-I/O regressions.
 - [x] Anonymous mapping and protection-fault tests.
-- [ ] COW and shared-memory multi-process tests.
+- [x] COW and shared-memory multi-process tests.
 - [ ] File mapping, truncate, sync, unmount, and removable-media error tests.
 - [x] Low-memory, swap-pressure, resource-exhaustion, and fault-injection tests.
 - [ ] Long-running fork/exec/mmap/shm stress with leak counters checked before

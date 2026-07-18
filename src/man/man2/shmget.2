@@ -1,0 +1,102 @@
+.TH SHMGET 2
+.SH NAME
+shmget, shmat, shmdt, shmctl \- System V shared memory operations
+.SH SYNOPSIS
+.nf
+.B #include <sys/types.h>
+.B #include <sys/ipc.h>
+.B #include <sys/shm.h>
+.PP
+.B int shmget(key_t key, size_t size, int shmflg);
+.B void *shmat(int shmid, const void *addr, int shmflg);
+.B int shmdt(const void *addr);
+.B int shmctl(int shmid, int cmd, struct shmid_ds *buf);
+.fi
+.SH DESCRIPTION
+.I Shmget
+finds or creates a shared memory segment.
+.B IPC_PRIVATE
+always creates a new segment.
+For other keys,
+.B IPC_CREAT
+creates an absent segment and
+.B IPC_EXCL
+rejects an existing one.
+The low nine bits of
+.I shmflg
+set creation permissions.
+The initial implementation supports 32 live segments, each from one byte
+through 64 MiB.
+.PP
+.I Shmat
+maps the complete segment into the calling process.
+A null
+.I addr
+selects free VM space.
+A non-null address must be page aligned unless
+.B SHM_RND
+is specified.
+.B SHM_RDONLY
+creates a read-only attachment; other attachments require read and write
+permission.
+At most eight System V attachments and 32 total VM map entries are available
+per process.
+.PP
+Attachments are inherited across
+.IR fork (2).
+They are detached by
+.IR shmdt ,
+successful
+.IR execve (2),
+or process exit.
+The address passed to
+.I shmdt
+must be the value returned by
+.IR shmat .
+Partial
+.IR munmap (2)
+and replacement with
+.B MAP_FIXED
+are rejected for System V attachments so attachment accounting remains
+atomic.
+.PP
+.I Shmctl
+supports
+.BR IPC_STAT ,
+.BR IPC_SET ,
+and
+.BR IPC_RMID .
+.B IPC_RMID
+removes the key and identifier immediately, but existing attachments,
+including those inherited by a later fork, remain valid until the final
+detach.
+The key may meanwhile name a new independent segment.
+Sequence bits in identifiers prevent a stale identifier from selecting a
+reused table slot.
+.SH RETURN VALUES
+.I Shmget
+returns a non-negative identifier and
+.I shmat
+returns the mapping address on success.
+The other calls return zero on success.
+On failure the integer calls return -1 and
+.I shmat
+returns
+.BR (void *)-1 .
+.SH ERRORS
+Errors include
+.BR EACCES
+for denied access,
+.BR EEXIST
+for an exclusive create of an existing key,
+.BR EINVAL
+for invalid flags, sizes, addresses, commands, or stale identifiers,
+.BR ENOENT
+for an absent key without
+.BR IPC_CREAT ,
+.BR ENOMEM
+for unavailable address space, and
+.BR ENOSPC
+when a fixed table or VM resource is exhausted.
+.SH SEE ALSO
+execve(2), fork(2), mmap(2), shm_open(2), sysctl(8)

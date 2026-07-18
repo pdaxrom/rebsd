@@ -26,6 +26,7 @@
 #include <vm/vmspace.h>
 #include <vm/vm_object.h>
 #include <vm/vm_shm.h>
+#include <vm/vm_sysv_shm.h>
 
 #define VMSPACE_USER_MIN        0x00001000u
 #define VMSPACE_USER_MAX        0x80000000u
@@ -54,6 +55,9 @@ vmspace_system_init(struct vm_page_allocator *allocator)
     if (error != 0)
         return error;
     error = vm_shm_system_init();
+    if (error != 0)
+        return error;
+    error = vm_sysv_shm_system_init();
     if (error != 0)
         return error;
     vmspace_allocator = allocator;
@@ -120,6 +124,22 @@ vmspace_contains_object(const struct vmspace *vmspace,
 {
     return vmspace_valid(vmspace) && object != 0 &&
         vmspace_map_has_object(&vmspace->vms_map, object);
+}
+
+static int
+vmspace_sysv_overlap(const struct vmspace *vmspace, vm_vaddr_t start,
+    vm_vaddr_t end)
+{
+    const struct vmspace_sysv_attachment *attachment;
+    unsigned index;
+
+    for (index = 0; index < vmspace->vms_sysv_attachment_count; ++index) {
+        attachment = &vmspace->vms_sysv_attachments[index];
+        if (attachment->vsa_start < end &&
+            attachment->vsa_start + attachment->vsa_size > start)
+            return 1;
+    }
+    return 0;
 }
 
 static int
@@ -216,6 +236,8 @@ vmspace_unmap(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size)
     end = start + size;
     if (end > vmspace->vms_map.vmm_max)
         return EINVAL;
+    if (vmspace_sysv_overlap(vmspace, start, end))
+        return EBUSY;
     replacement = vmspace->vms_map;
     error = vm_map_remove(&replacement, start, end);
     if (error != 0)
@@ -269,6 +291,85 @@ vmspace_unmap(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size)
 }
 
 int
+vmspace_sysv_attach(struct vmspace *vmspace,
+    struct vm_sysv_shm *segment, vm_vaddr_t start, vm_size_t size,
+    int pid, long now)
+{
+    const struct vm_map_entry *entry;
+    struct vmspace_sysv_attachment *attachment;
+    vm_vaddr_t address;
+    vm_vaddr_t end;
+    unsigned index;
+    int error;
+
+    if (!vmspace_valid(vmspace) || segment == 0 || size == 0 ||
+        !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
+        start < vmspace->vms_map.vmm_min ||
+        start >= vmspace->vms_map.vmm_max ||
+        size > vmspace->vms_map.vmm_max - start)
+        return EINVAL;
+    if (vmspace->vms_sysv_attachment_count >=
+        sizeof(vmspace->vms_sysv_attachments) /
+        sizeof(vmspace->vms_sysv_attachments[0]))
+        return ENOSPC;
+    for (index = 0; index < vmspace->vms_sysv_attachment_count; ++index) {
+        attachment = &vmspace->vms_sysv_attachments[index];
+        if (attachment->vsa_start == start)
+            return EEXIST;
+    }
+    end = start + size;
+    for (address = start; address < end; address += VM_PAGE_SIZE) {
+        entry = vm_map_lookup(&vmspace->vms_map, address);
+        if (entry == 0 || (entry->vme_flags & VM_MAP_SYSV_SHM) == 0)
+            return EINVAL;
+    }
+    error = vm_sysv_shm_attach(segment, pid, now);
+    if (error != 0)
+        return error;
+    attachment = &vmspace->vms_sysv_attachments[
+        vmspace->vms_sysv_attachment_count++];
+    attachment->vsa_segment = segment;
+    attachment->vsa_start = start;
+    attachment->vsa_size = size;
+    return 0;
+}
+
+int
+vmspace_sysv_detach(struct vmspace *vmspace, vm_vaddr_t start,
+    int pid, long now)
+{
+    struct vmspace_sysv_attachment attachment;
+    unsigned count;
+    unsigned index;
+    int error;
+
+    if (!vmspace_valid(vmspace) || !vm_vaddr_page_aligned(start))
+        return EINVAL;
+    count = vmspace->vms_sysv_attachment_count;
+    for (index = 0; index < count; ++index) {
+        if (vmspace->vms_sysv_attachments[index].vsa_start == start)
+            break;
+    }
+    if (index == count)
+        return EINVAL;
+    attachment = vmspace->vms_sysv_attachments[index];
+    --vmspace->vms_sysv_attachment_count;
+    vmspace->vms_sysv_attachments[index] =
+        vmspace->vms_sysv_attachments[vmspace->vms_sysv_attachment_count];
+    vmspace_zero_memory(&vmspace->vms_sysv_attachments[
+        vmspace->vms_sysv_attachment_count],
+        sizeof(vmspace->vms_sysv_attachments[0]));
+    error = vmspace_unmap(vmspace, attachment.vsa_start,
+        attachment.vsa_size);
+    if (error != 0) {
+        vmspace->vms_sysv_attachments[
+            vmspace->vms_sysv_attachment_count++] = attachment;
+        return error;
+    }
+    return vm_sysv_shm_detach(attachment.vsa_segment, pid, now);
+}
+
+int
 vmspace_destroy(struct vmspace *vmspace)
 {
     struct vm_map_entry entry;
@@ -276,6 +377,12 @@ vmspace_destroy(struct vmspace *vmspace)
 
     if (!vmspace_valid(vmspace))
         return EINVAL;
+    while (vmspace->vms_sysv_attachment_count != 0) {
+        error = vmspace_sysv_detach(vmspace,
+            vmspace->vms_sysv_attachments[0].vsa_start, 0, 0);
+        if (error != 0)
+            return error;
+    }
     while (vmspace->vms_map.vmm_count != 0) {
         entry = vmspace->vms_map.vmm_entries[0];
         error = vmspace_unmap(vmspace, entry.vme_start,
@@ -368,6 +475,8 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
     if (start < vmspace->vms_map.vmm_min ||
         end > vmspace->vms_map.vmm_max)
         return EINVAL;
+    if (vmspace_sysv_overlap(vmspace, start, end))
+        return EBUSY;
     replacement = vmspace->vms_map;
     error = vm_map_remove(&replacement, start, end);
     if (error == 0)
@@ -755,6 +864,23 @@ vmspace_check(const struct vmspace *vmspace, vm_vaddr_t start,
     return vm_map_check(&vmspace->vms_map, start, size, protection);
 }
 
+unsigned
+vmspace_shared_mapping_count(const struct vmspace *vmspace)
+{
+    unsigned count;
+    unsigned index;
+
+    if (!vmspace_valid(vmspace))
+        return 0;
+    count = vmspace->vms_sysv_attachment_count;
+    for (index = 0; index < vmspace->vms_map.vmm_count; ++index) {
+        if ((vmspace->vms_map.vmm_entries[index].vme_flags &
+            VM_MAP_POSIX_SHM) != 0)
+            ++count;
+    }
+    return count;
+}
+
 int
 vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
     vm_prot_t access)
@@ -1042,6 +1168,15 @@ vmspace_clone(struct vmspace *source, struct vmspace **result)
             target_objects[object_count] = target_object;
             ++object_count;
         }
+    }
+
+    for (index = 0; index < source->vms_sysv_attachment_count; ++index) {
+        error = vmspace_sysv_attach(target,
+            source->vms_sysv_attachments[index].vsa_segment,
+            source->vms_sysv_attachments[index].vsa_start,
+            source->vms_sysv_attachments[index].vsa_size, 0, 0);
+        if (error != 0)
+            goto fail;
     }
 
     for (index = 0; index < source->vms_map.vmm_count; ++index) {

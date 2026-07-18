@@ -190,3 +190,7 @@
 #define SYS_munlock     169
 #define SYS_shm_open    170
 #define SYS_shm_unlink  171
+#define SYS_shmget      172
+#define SYS_shmat       173
+#define SYS_shmdt       174
+#define SYS_shmctl      175

@@ -239,6 +239,7 @@ void    link (void), symlink (void), readlink (void), rename (void);
 void    lseek (void), truncate (void), ftruncate (void), saccess (void), fsync (void);
 void    lseek64 (void), truncate64 (void), ftruncate64 (void);
 void    shm_open (void), shm_unlink (void);
+void    shmget (void), shmat (void), shmdt (void), shmctl (void);
 void    statfs (void), fstatfs (void), getfsstat (void);
 
 /* 2.3 communications */

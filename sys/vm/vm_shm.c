@@ -215,6 +215,8 @@ vm_shm_truncate(struct vm_shm *shm, vm_size_t size)
 
     if (!vm_shm_valid(shm))
         return EINVAL;
+    if (size > VM_SHM_MAX_BYTES)
+        return EFBIG;
     if (size == 0)
         rounded = 0;
     else {
@@ -280,6 +282,8 @@ vm_shm_get_stats(struct vm_shm_stats *stats)
         if (vm_shm_pool[index].vsh_linked != 0)
             ++stats->vss_named_objects;
         stats->vss_open_files += vm_shm_pool[index].vsh_open_count;
+        stats->vss_pages += (vm_shm_pool[index].vsh_size +
+            VM_PAGE_MASK) >> VM_PAGE_SHIFT;
         if (VM_SIZE_MAX - stats->vss_bytes <
             vm_shm_pool[index].vsh_size)
             stats->vss_bytes = VM_SIZE_MAX;

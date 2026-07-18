@@ -225,6 +225,10 @@ const struct sysent sysent[] = {
     { 2, munlock },             /* 169 = munlock */
     { 3, shm_open },            /* 170 = shm_open */
     { 1, shm_unlink },          /* 171 = shm_unlink */
+    { 3, shmget },              /* 172 = shmget */
+    { 3, shmat },               /* 173 = shmat */
+    { 1, shmdt },               /* 174 = shmdt */
+    { 3, shmctl },              /* 175 = shmctl */
 };
 
 const int nsysent = sizeof (sysent) / sizeof (sysent[0]);

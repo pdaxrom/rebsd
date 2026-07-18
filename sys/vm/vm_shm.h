@@ -13,6 +13,7 @@
 
 #define VM_SHM_NAME_MAX        31u
 #define VM_SHM_MAX_OBJECTS     32u
+#define VM_SHM_MAX_BYTES       (64u * 1024u * 1024u)
 
 struct vm_object;
 struct vm_shm;
@@ -30,6 +31,7 @@ struct vm_shm_stats {
     unsigned  vss_objects;
     unsigned  vss_named_objects;
     unsigned  vss_open_files;
+    vm_pfn_t  vss_pages;
     vm_size_t vss_bytes;
 };
 

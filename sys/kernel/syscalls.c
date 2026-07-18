@@ -181,5 +181,9 @@ const char *const syscallnames[] = {
     "munlock",          /* 169 = munlock */
     "shm_open",         /* 170 = shm_open */
     "shm_unlink",       /* 171 = shm_unlink */
+    "shmget",           /* 172 = shmget */
+    "shmat",            /* 173 = shmat */
+    "shmdt",            /* 174 = shmdt */
+    "shmctl",           /* 175 = shmctl */
 };
 #endif

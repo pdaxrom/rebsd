@@ -2,7 +2,10 @@
 
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/shm.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
+#include <sys/vmparam.h>
 #include <sys/wait.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -68,6 +71,25 @@ smoke_wait_signal(pid_t child, int expected)
 }
 
 static int
+smoke_vm_sysctl(int leaf, long *value)
+{
+    int mib[2];
+    int result;
+    size_t length;
+
+    mib[0] = CTL_VM;
+    mib[1] = leaf;
+    length = sizeof(*value);
+    result = __sysctl(mib, 2, value, &length, 0, 0);
+    if (result == -1 || length != sizeof(*value)) {
+        printf("vm-process-smoke: sysctl leaf=%d result=%d errno=%d "
+            "length=%u\n", leaf, result, errno, (unsigned)length);
+        return -1;
+    }
+    return 0;
+}
+
+static int
 smoke_stack(int depth)
 {
     volatile unsigned char page_fragment[1536];
@@ -96,7 +118,11 @@ main(int argc, char **argv)
     char *shm_alias;
     char *shm_private;
     char *shm_replacement;
+    char *sysv_mapping;
+    char *sysv_alias;
+    char *sysv_replacement;
     struct stat shm_status;
+    struct shmid_ds sysv_status;
     unsigned char residency[3];
     char *mapped;
     char *replacement;
@@ -109,6 +135,12 @@ main(int argc, char **argv)
     int grow_size;
     int fd;
     int shm_fd;
+    int sysv_id;
+    int sysv_replacement_id;
+    long sysv_counter;
+    long sysv_pages;
+    long sysv_mappings;
+    long sysv_attachments;
     unsigned char file_byte;
 
     if (argc == 2 && strcmp(argv[1], "--exec-child") == 0)
@@ -371,6 +403,126 @@ main(int argc, char **argv)
         munmap(shm_private, 2 * SMOKE_VM_PAGE_SIZE) != 0 ||
         munmap(shm_replacement, SMOKE_VM_PAGE_SIZE) != 0)
         return smoke_fail("POSIX shm cleanup");
+
+    sysv_id = shmget((key_t)0x52425344,
+        2 * SMOKE_VM_PAGE_SIZE + 7, IPC_CREAT | IPC_EXCL | 0600);
+    if (sysv_id < 0 || shmctl(sysv_id, IPC_STAT, &sysv_status) != 0 ||
+        sysv_status.shm_segsz != 2 * SMOKE_VM_PAGE_SIZE + 7 ||
+        sysv_status.shm_nattch != 0 ||
+        sysv_status.shm_cpid != getpid())
+        return smoke_fail("SysV shm create and stat");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("SysV shm permission fork create");
+    if (child == 0) {
+        if (setuid(1) != 0)
+            _exit(1);
+        errno = 0;
+        if (shmget((key_t)0x52425344, 0, 0400) >= 0 || errno != EACCES)
+            _exit(2);
+        errno = 0;
+        if (shmat(sysv_id, 0, SHM_RDONLY) != (void *)-1 ||
+            errno != EACCES)
+            _exit(3);
+        errno = 0;
+        if (shmctl(sysv_id, IPC_STAT, &sysv_status) == 0 ||
+            errno != EACCES)
+            _exit(4);
+        errno = 0;
+        if (shmctl(sysv_id, IPC_RMID, 0) == 0 || errno != EPERM)
+            _exit(5);
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0)
+        return smoke_fail("SysV shm permissions");
+    sysv_mapping = shmat(sysv_id, 0, 0);
+    sysv_alias = shmat(sysv_id, 0, 0);
+    if (sysv_mapping == (void *)-1 || sysv_alias == (void *)-1 ||
+        shmctl(sysv_id, IPC_STAT, &sysv_status) != 0 ||
+        sysv_status.shm_nattch != 2)
+        return smoke_fail("SysV shm attach");
+    if (smoke_vm_sysctl(VM_SHMOBJECTS, &sysv_counter) != 0 ||
+        smoke_vm_sysctl(VM_SHMPAGES, &sysv_pages) != 0 ||
+        smoke_vm_sysctl(VM_SHMMAPPINGS, &sysv_mappings) != 0 ||
+        smoke_vm_sysctl(VM_SYSVATTACHMENTS, &sysv_attachments) != 0 ||
+        sysv_counter != 1 || sysv_pages != 3 || sysv_mappings != 2 ||
+        sysv_attachments != 2) {
+        printf("vm-process-smoke: shm sysctl=%ld/%ld/%ld/%ld\n",
+            sysv_counter, sysv_pages, sysv_mappings, sysv_attachments);
+        return smoke_fail("shared memory sysctl accounting");
+    }
+    sysv_mapping[0] = 0x62;
+    if (sysv_alias[0] != 0x62)
+        return smoke_fail("SysV shm alias coherence");
+    errno = 0;
+    if (munmap(sysv_mapping, SMOKE_VM_PAGE_SIZE) == 0 || errno != EBUSY)
+        return smoke_fail("SysV shm detach guard");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("SysV shm fork create");
+    if (child == 0) {
+        if (sysv_alias[0] != 0x62)
+            _exit(1);
+        sysv_alias[0] = 0x73;
+        if (shmdt(sysv_alias) != 0)
+            _exit(2);
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0 ||
+        sysv_mapping[0] != 0x73 ||
+        shmctl(sysv_id, IPC_STAT, &sysv_status) != 0 ||
+        sysv_status.shm_nattch != 2)
+        return smoke_fail("SysV shm fork inheritance and exit detach");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("SysV shm exec create");
+    if (child == 0) {
+        execv(exec_argv[0], exec_argv);
+        _exit(3);
+    }
+    if (smoke_wait(child, SMOKE_EXEC_STATUS) != 0 ||
+        shmctl(sysv_id, IPC_STAT, &sysv_status) != 0 ||
+        sysv_status.shm_nattch != 2)
+        return smoke_fail("SysV shm exec detach");
+    if (shmctl(sysv_id, IPC_RMID, 0) != 0)
+        return smoke_fail("SysV shm remove");
+    errno = 0;
+    if (shmctl(sysv_id, IPC_STAT, &sysv_status) == 0 || errno != EINVAL ||
+        sysv_mapping[0] != 0x73)
+        return smoke_fail("SysV shm removed mapping lifetime");
+    child = fork();
+    if (child < 0)
+        return smoke_fail("SysV removed shm fork create");
+    if (child == 0) {
+        if (sysv_alias[0] != 0x73)
+            _exit(1);
+        sysv_alias[0] = 0x74;
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0 ||
+        sysv_mapping[0] != 0x74)
+        return smoke_fail("SysV removed shm fork inheritance");
+    sysv_replacement_id = shmget((key_t)0x52425344,
+        SMOKE_VM_PAGE_SIZE, IPC_CREAT | IPC_EXCL | 0600);
+    if (sysv_replacement_id < 0 || sysv_replacement_id == sysv_id)
+        return smoke_fail("SysV shm identifier reuse");
+    sysv_replacement = shmat(sysv_replacement_id, 0, 0);
+    if (sysv_replacement == (void *)-1 || sysv_replacement[0] != 0 ||
+        shmdt(sysv_replacement) != 0 ||
+        shmctl(sysv_replacement_id, IPC_RMID, 0) != 0)
+        return smoke_fail("SysV shm replacement isolation");
+    if (shmdt(sysv_alias) != 0 || shmdt(sysv_mapping) != 0)
+        return smoke_fail("SysV shm final detach");
+    errno = 0;
+    if (shmctl(sysv_id, IPC_STAT, &sysv_status) == 0 || errno != EINVAL)
+        return smoke_fail("SysV shm stale identifier");
+    if (smoke_vm_sysctl(VM_SHMOBJECTS, &sysv_counter) != 0 ||
+        sysv_counter != 0 ||
+        smoke_vm_sysctl(VM_SHMMAPPINGS, &sysv_counter) != 0 ||
+        sysv_counter != 0 ||
+        smoke_vm_sysctl(VM_SYSVATTACHMENTS, &sysv_counter) != 0 ||
+        sysv_counter != 0)
+        return smoke_fail("shared memory sysctl cleanup");
 
     for (index = 0; index < SMOKE_VM_PAGE_SIZE; ++index)
         smoke_file_page[index] = (unsigned char)(index * 13 + 5);

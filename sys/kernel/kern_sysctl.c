@@ -51,6 +51,9 @@
 #include <sys/rebsd_version.h>
 #include <vm/vm_page.h>
 #include <vm/vm_object.h>
+#include <vm/vm_shm.h>
+#include <vm/vm_sysv_shm.h>
+#include <vm/vmspace.h>
 #include <vm/pmap.h>
 #include <machine/cpu.h>
 #include <sys/conf.h>
@@ -397,6 +400,8 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     struct vm_page_stats page_stats;
     struct pmap_stats pmap_stats;
     struct vm_object_stats object_stats;
+    struct vm_shm_stats shm_stats;
+    struct vm_sysv_shm_stats sysv_shm_stats;
     long page_value;
     int error;
 
@@ -542,6 +547,49 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
             break;
         default:
             page_value = object_stats.vos_swap_failures;
+            break;
+        }
+        return (sysctl_rdlong(oldp, oldlenp, newp, page_value));
+    case VM_SHMOBJECTS:
+    case VM_SHMPAGES:
+    case VM_SHMMAPPINGS:
+    case VM_SHMMAXOBJECTS:
+    case VM_SHMMAXPAGES:
+    case VM_SHMMAXMAPPINGS:
+    case VM_SYSVSEGMENTS:
+    case VM_SYSVATTACHMENTS:
+        error = vm_shm_get_stats(&shm_stats);
+        if (error == 0)
+            error = vm_sysv_shm_get_stats(&sysv_shm_stats);
+        if (error != 0)
+            return error;
+        switch (name[0]) {
+        case VM_SHMOBJECTS:
+            page_value = shm_stats.vss_objects +
+                sysv_shm_stats.vsss_segments;
+            break;
+        case VM_SHMPAGES:
+            page_value = shm_stats.vss_pages +
+                sysv_shm_stats.vsss_pages;
+            break;
+        case VM_SHMMAPPINGS:
+            page_value = u.u_procp == 0 ? 0 :
+                vmspace_shared_mapping_count(u.u_procp->p_vmspace);
+            break;
+        case VM_SHMMAXOBJECTS:
+            page_value = VM_SHM_MAX_OBJECTS + VM_SYSV_SHM_MAX_SEGMENTS;
+            break;
+        case VM_SHMMAXPAGES:
+            page_value = VM_SHM_MAX_BYTES / VM_PAGE_SIZE;
+            break;
+        case VM_SHMMAXMAPPINGS:
+            page_value = VM_MAP_MAX_ENTRIES;
+            break;
+        case VM_SYSVSEGMENTS:
+            page_value = sysv_shm_stats.vsss_segments;
+            break;
+        default:
+            page_value = sysv_shm_stats.vsss_attachments;
             break;
         }
         return (sysctl_rdlong(oldp, oldlenp, newp, page_value));

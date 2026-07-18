@@ -21,6 +21,8 @@
 #define VM_MAP_WIRED            0x0020u
 #define VM_MAP_DEVICE           0x0040u
 #define VM_MAP_UNCACHED         0x0080u
+#define VM_MAP_SYSV_SHM         0x0100u
+#define VM_MAP_POSIX_SHM        0x0200u
 
 struct vm_object;
 

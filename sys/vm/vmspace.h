@@ -12,9 +12,17 @@
 #include <vm/vm_map.h>
 #include <vm/pmap.h>
 
+struct vm_sysv_shm;
+
 struct vmspace {
     struct vm_map vms_map;
     struct pmap  *vms_pmap;
+    struct vmspace_sysv_attachment {
+        struct vm_sysv_shm *vsa_segment;
+        vm_vaddr_t          vsa_start;
+        vm_size_t           vsa_size;
+    } vms_sysv_attachments[8];
+    unsigned      vms_sysv_attachment_count;
     unsigned      vms_in_use;
 };
 
@@ -47,11 +55,15 @@ int vmspace_map_anon_any(struct vmspace *, vm_vaddr_t, vm_size_t,
 int vmspace_map_anon_fixed(struct vmspace *, vm_vaddr_t, vm_size_t,
     vm_prot_t, unsigned);
 int vmspace_unmap(struct vmspace *, vm_vaddr_t, vm_size_t);
+int vmspace_sysv_attach(struct vmspace *, struct vm_sysv_shm *,
+    vm_vaddr_t, vm_size_t, int, long);
+int vmspace_sysv_detach(struct vmspace *, vm_vaddr_t, int, long);
 int vmspace_protect(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vmspace_wire(struct vmspace *, vm_vaddr_t, vm_size_t, int);
 int vmspace_mincore(const struct vmspace *, vm_vaddr_t, int *);
 int vmspace_sync(struct vmspace *, vm_vaddr_t, vm_size_t, unsigned);
 int vmspace_check(const struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
+unsigned vmspace_shared_mapping_count(const struct vmspace *);
 int vmspace_fault(struct vmspace *, vm_vaddr_t, vm_prot_t);
 int vmspace_read(const struct vmspace *, vm_vaddr_t, void *, vm_size_t);
 int vmspace_write(struct vmspace *, vm_vaddr_t, const void *, vm_size_t);
