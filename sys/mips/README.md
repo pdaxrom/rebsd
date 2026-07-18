@@ -76,12 +76,35 @@ make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc
 make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
 ```
 
-For N64 and CI20 PCC build-only gates:
+For the hardware-image build gates used by the VM matrix:
 
 ```sh
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 all
-make -C sys/mips BOARD=ci20 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc all
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 all
+make -C sys/mips BOARD=ci20 MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc all
 ```
+
+Focused VM gates build every required artifact in the selected object root,
+boot the resulting kernel in QEMU, and write their serial logs under
+`O/tests`.  They do not copy binaries from another build profile:
+
+```sh
+make -C sys/mips BOARD=malta O=/work/rebsd-malta vm-smoke-runtime
+make -C sys/mips BOARD=malta O=/work/rebsd-malta \
+    VM_STRESS_ITERATIONS=100 vm-stress-runtime
+make -C sys/mips BOARD=malta O=/work/rebsd-malta vm-io-smoke-runtime
+make -C sys/mips BOARD=malta O=/work/rebsd-malta vm-ne2k-smoke-runtime
+make -C sys/mips BOARD=malta O=/work/rebsd-malta native-pcc-smoke-runtime
+```
+
+`vm-smoke-runtime` covers the process/VM ABI, `vm-stress-runtime` repeats that
+coverage and requires all resource counters to return to their warmed-up
+baseline, `vm-io-smoke-runtime` covers loopback networking, the fake USB peer,
+and RAM-backed filesystem/block tools, and `vm-ne2k-smoke-runtime` exercises
+the QEMU ISA NE2000 and a TCP guest-forward.  The native compiler gate uses a
+small in-guest PCC compile/link workload plus compiler-qualified `net-smoke`
+and `libc-abi-smoke` binaries built by the rootfs dependency graph.  Set
+`NET_SMOKE_NATIVE_COMPILE=1` or `LIBC_ABI_NATIVE_COMPILE=1` only for an
+explicit in-guest rebuild on a profile with enough process memory.
 
 ## ELF Userland
 
@@ -128,7 +151,7 @@ make -C sys/mips BOARD=malta O=/work/rebsd-malta run
 Or run the generated kernel directly:
 
 ```
-qemu-system-mips -M malta -m 32M -nographic -serial mon:stdio \
+qemu-system-mips -M malta -m 64M -nographic -serial mon:stdio \
     -no-reboot -kernel /work/rebsd-malta/obj/sys/mips/malta/unix.elf
 ```
 
@@ -198,13 +221,13 @@ Malta mounts the fake flash automatically:
 The generated `run` target uses the current Malta layout:
 
 ```
-make -C sys/mips/malta run
+make -C sys/mips BOARD=malta run
 ```
 
 For Ethernet bring-up in QEMU, use the ISA NE2000 virtual adapter target:
 
 ```
-make -C sys/mips/malta run-net
+make -C sys/mips BOARD=malta run-net
 ```
 
 This starts QEMU with `ne2k_isa` at I/O base `0x300`, IRQ `9`, and MAC
@@ -227,12 +250,10 @@ path through the NE2K driver, not just loopback.
 
 Keep this as the real-device bring-up path until the Malta virtual NIC is
 stable.  The N64 hardware network backend is expected to be a later USB network
-adapter design, not a direct first step.
-
-This starts QEMU with `-m 32M`. The kernel keeps the normal 2 MiB user window,
-loads the root filesystem at physical `0x00600000`, reserves 16 MiB for that
-image, keeps `/var` on a 1 MiB RAM disk, and uses the remaining high RAM for
-swap.
+adapter design, not a direct first step.  `run-net` inherits `MALTA_QEMU_RAM`,
+`MALTA_RAM_KBYTES`, and `MIPS_ROOTFS_KBYTES` from the selected build profile;
+it uses the same per-process VM layout and root image as the normal `run`
+target.
 
 Malta and N64 use the same shared MIPS rootfs manifest,
 `sys/mips/rootfs.manifest`. The board build first stages the common userland

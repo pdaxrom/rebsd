@@ -52,6 +52,17 @@ The legacy mode was the only runtime mode during Phases 1 and 2.  Phase 4
 switched process execution to per-process pmaps while retaining both ELF and
 a.out execution.
 
+## Recovery decision
+
+Phase 4 intentionally removed the old whole-process swapper and shared wired
+user mapping instead of retaining a second, untested VM implementation behind
+a build option.  The last pre-switch recovery build is commit `539f679c`
+(`vm: add shared MIPS pmap and ASIDs`); commit `9c380485` is the per-process VM
+switch.  Keep known-good images from both sides of that boundary for N64 and
+Ci20 hardware bring-up.  Reclaiming the still-reserved legacy physical ranges
+remains hardware-gated, but restoring obsolete runtime code to the active
+kernel is not part of that cleanup.
+
 ## Repeatable searches
 
 Run these from the repository root after changes to keep the audit current:

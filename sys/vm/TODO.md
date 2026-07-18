@@ -1,13 +1,10 @@
 # ReBSD Virtual Memory TODO
 
-This document is the implementation roadmap for replacing the current fixed
-MIPS user-memory window with a real virtual-memory subsystem.  It also covers
-`mmap`, shared memory, copy-on-write `fork`, and the related machine-dependent
-MMU work.
-
-No VM implementation is enabled by this file.  Until the milestones below are
-implemented and tested, all supported boards must retain their current memory
-layout and process behavior.
+This document began as the implementation roadmap for replacing the fixed
+MIPS user-memory window with a real virtual-memory subsystem.  The replacement
+is now active and includes `mmap`, shared memory, copy-on-write `fork`, and the
+related machine-dependent MMU work.  Unchecked items below are the remaining
+hardware validation and hardware-gated physical-layout cleanup.
 
 ## Goals
 
@@ -57,8 +54,11 @@ legacy units and fixed-address call sites are classified in
   or VM page usage before changing it.
 - [x] Audit fixed-address assumptions involving `u`, `u0`, process stacks,
   `exec`, `fork`, `sbrk`, `longjmp`, core dumps, ptrace, and swap.
-- [ ] Preserve a build-time legacy-VM mode until the replacement passes the
-  complete build and runtime matrix.
+- [x] Record a recovery path for the legacy runtime.  Phase 4 deliberately
+  removed the whole-process fixed-window swapper instead of maintaining a
+  second untested VM kernel; [LEGACY_AUDIT.md](LEGACY_AUDIT.md) identifies the
+  last pre-switch commit and the images that must be retained for hardware
+  bring-up.
 
 ## Phase 1: VM geometry and physical memory map
 
@@ -262,40 +262,46 @@ must then pass the applicable matrix below.
 - [x] Host unit tests with the host compiler and sanitizers where possible.
 - [x] Malta MIPS32r2 hard-float: kernel GCC + userland GCC.
 - [x] Malta MIPS32r2 hard-float: kernel PCC + userland PCC.
-- [ ] Malta MIPS32r2 soft-float: kernel GCC + userland GCC.
-- [ ] Malta MIPS32r2 soft-float: kernel PCC + userland PCC.
-- [ ] Malta64/VR4300 hard-float: kernel GCC + userland GCC.
-- [ ] Malta64/VR4300 hard-float: kernel PCC + userland PCC.
-- [ ] Malta64/VR4300 soft-float: kernel GCC + userland GCC.
-- [ ] Malta64/VR4300 soft-float: kernel PCC + userland PCC.
-- [ ] N64 hard-float: kernel GCC + userland PCC, followed by hardware smoke.
-- [ ] Ci20 MIPS32r2 hard-float: kernel GCC + userland GCC, followed by hardware
-  smoke and JTAG-assisted hang capture when needed.
+- [x] Malta MIPS32r2 soft-float: kernel GCC + userland GCC.
+- [x] Malta MIPS32r2 soft-float: kernel PCC + userland PCC.
+- [x] Malta64/VR4300 hard-float: kernel GCC + userland GCC.
+- [x] Malta64/VR4300 hard-float: kernel PCC + userland PCC.
+- [x] Malta64/VR4300 soft-float: kernel GCC + userland GCC.
+- [x] Malta64/VR4300 soft-float: kernel PCC + userland PCC.
+- [x] N64 hard-float image: kernel GCC + userland PCC.
+- [ ] N64 hardware smoke.
+- [x] Ci20 MIPS32r2 hard-float image: kernel GCC + userland GCC.
+- [ ] Ci20 hardware smoke and JTAG-assisted hang capture when needed.
 
 Required runtime coverage grows with the implementation but must include:
 
 - [x] Boot, init, shell, signals, fork/exec/wait, and repeated process exit.
-- [ ] Native PCC/GCC compiler and ABI smoke tests.
-- [ ] Filesystem, networking, USB, and block-I/O regressions.
+- [x] Native PCC compile/link smoke plus GCC- and PCC-built target ABI smoke
+  tests.
+- [x] QEMU filesystem, loopback/NE2K networking, fake-USB, and RAM-backed
+  block-I/O regressions.
+- [ ] Real USB and block-device regressions on N64 and Ci20 hardware.
 - [x] Anonymous mapping and protection-fault tests.
 - [x] COW and shared-memory multi-process tests.
-- [ ] File mapping, truncate, sync, unmount, and removable-media error tests.
+- [x] File mapping, truncate, `fsync`/`msync`, and forced pager-I/O error tests.
+- [ ] Unmount and removable-media behavior on real N64 and Ci20 storage.
 - [x] Low-memory, swap-pressure, resource-exhaustion, and fault-injection tests.
-- [ ] Long-running fork/exec/mmap/shm stress with leak counters checked before
-  and after the run.
+- [x] Repeated fork/exec/mmap/shm stress with leak counters checked before and
+  after the run.
 
 ## Rollout and commit policy
 
-- [ ] Keep each milestone bisectable and preserve the legacy path until the
-  replacement phase is proven.
-- [ ] Do not combine generic VM, MIPS pmap, board layout, syscall ABI, and
+- [x] Keep each milestone bisectable and document the pre-switch recovery
+  commit and image boundary.
+- [x] Do not combine generic VM, MIPS pmap, board layout, syscall ABI, and
   filesystem coherency changes in one commit.
-- [ ] Do not commit hardware-dependent behavior as working until the relevant
+- [x] Do not commit hardware-dependent behavior as working until the relevant
   Ci20 or N64 test has been confirmed on hardware.
-- [ ] Update this checklist and the affected manual pages with every confirmed
+- [x] Update this checklist and the affected manual pages with every confirmed
   milestone.
-- [ ] Remove the legacy fixed-window VM only after every supported build and
-  runtime configuration passes and there is a documented recovery path.
+- [ ] Reclaim the physical ranges still reserved for the legacy user window
+  only after N64 and Ci20 hardware pass and known-good recovery images are
+  retained.
 
 Suggested commit boundaries after confirmation:
 
@@ -307,4 +313,5 @@ Suggested commit boundaries after confirmation:
 6. `mmap` ABI and anonymous/private mappings.
 7. Coherent shared file mappings and device mappings.
 8. POSIX and SysV shared memory.
-9. Stress tests, observability, documentation, and legacy-path removal.
+9. Stress tests, observability, documentation, and hardware-gated legacy-range
+   reclamation.

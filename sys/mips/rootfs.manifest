@@ -247,6 +247,9 @@ file /root/dns-smoke.c
 file /root/runtime-stress.sh
 mode 0775
 
+file /root/vm-stress-smoke.sh
+mode 0775
+
 file /usr/lib/crt0.o
 
 file /usr/lib/libc.a

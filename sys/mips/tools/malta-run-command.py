@@ -61,6 +61,7 @@ def command_run(args):
         "-kernel",
         args.kernel,
     ]
+    cmd += args.qemu_arg
 
     master, slave = pty.openpty()
     proc = subprocess.Popen(
@@ -157,6 +158,7 @@ def main():
     parser.add_argument("--command", required=True)
     parser.add_argument("--expect", required=True)
     parser.add_argument("--qemu", default="qemu-system-mips")
+    parser.add_argument("--qemu-arg", action="append", default=[])
     parser.add_argument("--cpu")
     parser.add_argument("--ram", default="32M")
     parser.add_argument("--timeout", type=int, default=300)

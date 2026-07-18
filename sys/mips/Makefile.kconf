@@ -151,6 +151,11 @@ PCC_SMOKE_ALL_SILENCE_TIMEOUT ?= 300
 PCC_SMOKE_ALL_CCOM_STRESS_COUNT ?= 100
 MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
 NATIVE_PCC_SMOKE_LOG ?= $(TOPOBJ)/tests/native-pcc-smoke.log
+VM_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-smoke.$(MIPS_ROOTFS_ABI).log
+VM_STRESS_LOG ?= $(TOPOBJ)/tests/vm-stress.$(MIPS_ROOTFS_ABI).log
+VM_IO_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-io-smoke.$(MIPS_ROOTFS_ABI).log
+VM_NE2K_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-ne2k-smoke.$(MIPS_ROOTFS_ABI).log
+VM_STRESS_ITERATIONS ?= 8
 MIPS_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
 MIPS_ROOTFS_TARGET_PLATFORM ?= mips
@@ -381,7 +386,60 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 \
         pcc-perf-baseline pcc-smoke-all-runtime \
         pcc-smoke-all-runtime-vr4300 \
+        vm-smoke-runtime vm-stress-runtime vm-io-smoke-runtime \
+        vm-ne2k-smoke-runtime \
         rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
+
+vm-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(VM_SMOKE_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --command '/root/vm-process-smoke; echo VM_SMOKE_RC:$$?' \
+	    --expect "VM_SMOKE_RC:0"
+
+vm-stress-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(VM_STRESS_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout 900 --silence-timeout 180 \
+	    --command 'VM_STRESS_ITERATIONS=$(VM_STRESS_ITERATIONS) /root/vm-stress-smoke.sh; echo VM_STRESS_RC:$$?' \
+	    --expect "VM_STRESS_RC:0"
+
+vm-io-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(VM_IO_SMOKE_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout 600 --silence-timeout 180 \
+	    --command '/root/net-smoke.sh && /root/usbn-smoke.sh && /root/fs-tools-smoke.sh; echo VM_IO_SMOKE_RC:$$?' \
+	    --expect "VM_IO_SMOKE_RC:0"
+
+vm-ne2k-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(VM_NE2K_SMOKE_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --qemu-arg=-netdev \
+	    --qemu-arg=user,id=net0,guestfwd=tcp:10.0.2.100:2323-cmd:/bin/cat \
+	    --qemu-arg=-device \
+	    --qemu-arg=ne2k_isa,netdev=net0,iobase=0x300,irq=9,mac=52:54:00:12:34:56 \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout 600 --silence-timeout 180 \
+	    --command '/root/ne2k-smoke.sh; echo VM_NE2K_SMOKE_RC:$$?' \
+	    --expect "VM_NE2K_SMOKE_RC:0"
 
 pcc-regress-compile: $(MIPS_ROOTFS_USER_STAMP) smoke-host-portablecc \
     $(PCC_REGRESS_SCRIPT)

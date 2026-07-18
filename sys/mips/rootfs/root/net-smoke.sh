@@ -38,11 +38,17 @@ if egrep 'read error|bad read|not in namelist|no kernel namelist|cannot open|net
 fi
 rm -f $base.netstat
 rm -f $base $base.s $base.o $base.ro
-cc -S -o $base.s /root/net-smoke.c || exit 1
-as -o $base.o $base.s || exit 1
-ld -r -o $base.ro $base.o || exit 1
-cc -o $base /root/net-smoke.c || exit 1
-./$base
+if test "${NET_SMOKE_NATIVE_COMPILE:-0}" = 1; then
+	cc -S -o $base.s /root/net-smoke.c || exit 1
+	as -o $base.o $base.s || exit 1
+	ld -r -o $base.ro $base.o || exit 1
+	cc -o $base /root/net-smoke.c || exit 1
+	binary=./$base
+else
+	binary=/root/net-smoke
+fi
+test -x "$binary" || exit 1
+"$binary"
 status=$?
 test $status -eq 0 || exit $status
 /usr/bin/netstat -a -f inet > $base.timewait || exit 1
