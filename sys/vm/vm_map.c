@@ -80,8 +80,6 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
         (protection & ~maximum) != 0 || (offset & VM_PAGE_MASK) != 0 ||
         vm_ooffset_add(offset, end - start, &offset_end) != 0)
         return EINVAL;
-    if (map->vmm_count >= VM_MAP_MAX_ENTRIES)
-        return ENOSPC;
     for (index = 0; index < map->vmm_count; ++index) {
         if (end <= map->vmm_entries[index].vme_start)
             break;
@@ -122,6 +120,8 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
         VM_MAP_ASSERT_VALID(map);
         return 0;
     }
+    if (map->vmm_count >= VM_MAP_MAX_ENTRIES)
+        return ENOSPC;
     for (move = map->vmm_count; move > index; --move)
         map->vmm_entries[move] = map->vmm_entries[move - 1];
     map->vmm_entries[index].vme_start = start;

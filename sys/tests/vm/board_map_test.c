@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <vm/vm_phys.h>
+#include <machine/layout.h>
 
 struct expected_region {
     vm_paddr_t start;
@@ -151,10 +152,24 @@ int
 main(void)
 {
 #if defined(TEST_MALTA)
+    if (MIPS_LEGACY_USER_BYTES != 0x00400000u ||
+        MIPS_USER_MAXMEM <= MIPS_LEGACY_USER_BYTES ||
+        MIPS_USER_VADDR_END != MIPS_USER_VADDR_START +
+        MIPS_USER_MAXMEM) {
+        fprintf(stderr, "Malta user geometry is not decoupled\n");
+        return 1;
+    }
     if (check_map(0x04000000u, malta_map,
         sizeof(malta_map) / sizeof(malta_map[0])) != 0)
         return 1;
 #elif defined(TEST_CI20)
+    if (MIPS_LEGACY_USER_BYTES != 0x00400000u ||
+        MIPS_USER_MAXMEM <= MIPS_LEGACY_USER_BYTES ||
+        MIPS_USER_VADDR_END != MIPS_USER_VADDR_START +
+        MIPS_USER_MAXMEM) {
+        fprintf(stderr, "Ci20 user geometry is not decoupled\n");
+        return 1;
+    }
     if (check_map(0x10000000u, ci20_map,
         sizeof(ci20_map) / sizeof(ci20_map[0])) != 0)
         return 1;

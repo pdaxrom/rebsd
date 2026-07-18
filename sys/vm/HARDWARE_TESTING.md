@@ -124,7 +124,9 @@ An existing TFTP setup may use the same non-overlapping load address with
 
 1. Require the kernel banner, DMA and disk initialization, EHCI and OHCI
    attachment, `usb0: deferred task runner uses proc0`, init, and `login:`.
-   Log in as `root` with no password.
+   The corrected per-process VM image must print `user mem = 65536 kbytes`;
+   the 4 MiB legacy TLB reserve is physical bootstrap state, not the Ci20
+   process limit.  Log in as `root` with no password.
 2. With J23 still empty, run the same base gate:
 
    ```sh
@@ -139,6 +141,14 @@ An existing TFTP setup may use the same non-overlapping load address with
    /root/build-workload-smoke.sh
    /root/net-smoke.sh
    ```
+
+   Then run the complete compiler regression:
+
+   ```sh
+   /root/pcc-smoke-all.sh
+   ```
+
+   Require `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_OK`.
 
 3. Connect a known USB 2.0 high-speed flash drive to the right-hand J23 port.
    J24/J8 belongs to the separate OTG block and stays empty.  Require `umass0`

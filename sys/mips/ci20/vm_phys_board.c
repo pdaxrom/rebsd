@@ -60,7 +60,7 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     if (error != 0)
         return error;
     error = vm_phys_map_reserve(map, MIPS_USER_PHYS_START,
-        MIPS_USER_MAXMEM, "legacy user window");
+        MIPS_LEGACY_USER_BYTES, "legacy user window");
     if (error != 0)
         return error;
     error = ci20_vm_reserve_present(map, ram_size,

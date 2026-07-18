@@ -505,6 +505,16 @@ vm_object_resize(struct vm_object *object, vm_size_t size)
 }
 
 int
+vm_object_get_size(const struct vm_object *object, vm_size_t *size)
+{
+    if (!vm_object_valid(object) || size == 0 ||
+        object->vo_size > VM_SIZE_MAX / VM_PAGE_SIZE)
+        return EINVAL;
+    *size = object->vo_size * VM_PAGE_SIZE;
+    return 0;
+}
+
+int
 vm_object_create_paged(vm_size_t size,
     const struct vm_object_pager_ops *pager, void *cookie,
     vm_ooffset_t offset, struct vm_object **result)

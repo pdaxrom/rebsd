@@ -18,6 +18,8 @@
 #define TEST_DEVICE     0x10010000u
 #define TEST_DEVICE_PADDR (TEST_RAM_SIZE - VM_PAGE_SIZE)
 #define TEST_PRESSURE   0x20000000u
+#define TEST_GROW       0x30000000u
+#define TEST_GROW_PAGES 65u
 #define TEST_PRESSURE_PAGES 70u
 
 #define CHECK(expr) do {                                                \
@@ -382,6 +384,7 @@ test_vmspace(void)
     struct vmspace *source;
     struct vmspace *child;
     struct vm_object *file_object;
+    struct vm_object *grow_object;
     struct vm_object *shared_file_object;
     struct test_object_pager file_pager;
     struct test_shared_pager shared_file_pager;
@@ -396,7 +399,9 @@ test_vmspace(void)
     vm_paddr_t source_paddr;
     vm_paddr_t child_paddr;
     vm_vaddr_t any_address;
+    vm_size_t grow_size;
     vm_pfn_t free_before;
+    unsigned map_count;
     unsigned i;
 
     memset(test_ram, 0, sizeof(test_ram));
@@ -412,6 +417,38 @@ test_vmspace(void)
     CHECK(pmap_system_init(&allocator) == 0);
     CHECK(vmspace_system_init(&allocator) == 0);
     CHECK(vmspace_create(&source) == 0);
+    map_count = source->vms_map.vmm_count;
+    CHECK(vmspace_map_anon(source, TEST_GROW, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    map_entry = vm_map_lookup(&source->vms_map, TEST_GROW);
+    CHECK(map_entry != 0);
+    grow_object = map_entry->vme_object;
+    for (i = 1; i < TEST_GROW_PAGES; ++i) {
+        CHECK(vmspace_grow_anon(source, TEST_GROW + i * VM_PAGE_SIZE,
+            VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    }
+    CHECK(source->vms_map.vmm_count == map_count + 1);
+    map_entry = vm_map_lookup(&source->vms_map,
+        TEST_GROW + (TEST_GROW_PAGES - 1) * VM_PAGE_SIZE);
+    CHECK(map_entry != 0 && map_entry->vme_object == grow_object &&
+        map_entry->vme_start == TEST_GROW &&
+        map_entry->vme_end == TEST_GROW + TEST_GROW_PAGES * VM_PAGE_SIZE);
+    CHECK(vm_object_get_size(grow_object, &grow_size) == 0 &&
+        grow_size == TEST_GROW_PAGES * VM_PAGE_SIZE);
+    CHECK(vmspace_unmap(source, TEST_GROW +
+        (TEST_GROW_PAGES - 8) * VM_PAGE_SIZE, 8 * VM_PAGE_SIZE) == 0);
+    for (i = TEST_GROW_PAGES - 8; i < TEST_GROW_PAGES; ++i) {
+        CHECK(vmspace_grow_anon(source, TEST_GROW + i * VM_PAGE_SIZE,
+            VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    }
+    CHECK(source->vms_map.vmm_count == map_count + 1);
+    map_entry = vm_map_lookup(&source->vms_map,
+        TEST_GROW + (TEST_GROW_PAGES - 1) * VM_PAGE_SIZE);
+    CHECK(map_entry != 0 && map_entry->vme_object == grow_object &&
+        map_entry->vme_start == TEST_GROW &&
+        map_entry->vme_end == TEST_GROW + TEST_GROW_PAGES * VM_PAGE_SIZE);
+    CHECK(vm_object_get_size(grow_object, &grow_size) == 0 &&
+        grow_size == TEST_GROW_PAGES * VM_PAGE_SIZE);
     device_page = vm_page_lookup(&allocator, TEST_DEVICE_PADDR);
     CHECK(device_page != 0 &&
         device_page->vmp_state == VM_PAGE_RESERVED);

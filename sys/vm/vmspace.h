@@ -57,6 +57,8 @@ int vmspace_map_device_fixed(struct vmspace *, vm_vaddr_t, vm_size_t,
 int vmspace_contains_object(const struct vmspace *, struct vm_object *);
 int vmspace_map_anon(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t,
     unsigned);
+int vmspace_grow_anon(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t,
+    unsigned);
 int vmspace_map_anon_any(struct vmspace *, vm_vaddr_t, vm_size_t,
     vm_prot_t, unsigned, vm_vaddr_t *);
 int vmspace_map_anon_fixed(struct vmspace *, vm_vaddr_t, vm_size_t,

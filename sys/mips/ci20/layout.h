@@ -8,6 +8,7 @@
 #define CI20_SIZE_8M                   0x00800000
 #define CI20_SIZE_16M                  0x01000000
 #define CI20_SIZE_32M                  0x02000000
+#define CI20_SIZE_64M                  0x04000000
 #define CI20_SIZE_256M                 0x10000000
 
 #define MIPS_KSEG0_BASE                0x80000000
@@ -49,8 +50,9 @@
 #define MIPS_USER_TLB_PAGE_SIZE        CI20_SIZE_1M
 #define MIPS_USER_TLB_PAIR_SIZE        (2 * MIPS_USER_TLB_PAGE_SIZE)
 #define MIPS_USER_TLB_PAIRS            2
-#define MIPS_USER_MAXMEM               (MIPS_USER_TLB_PAIRS * \
+#define MIPS_LEGACY_USER_BYTES         (MIPS_USER_TLB_PAIRS * \
                                          MIPS_USER_TLB_PAIR_SIZE)
+#define MIPS_USER_MAXMEM               CI20_SIZE_64M
 #define MIPS_USER_VADDR_END            (MIPS_USER_VADDR_START + MIPS_USER_MAXMEM)
 #define MIPS_USER_GP_OFFSET            0x00007ff0
 

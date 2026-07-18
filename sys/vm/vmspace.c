@@ -629,6 +629,55 @@ vmspace_map_anon(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
 }
 
 int
+vmspace_grow_anon(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
+    vm_prot_t protection, unsigned flags)
+{
+    const struct vm_map_entry *entry;
+    struct vm_object *object;
+    vm_ooffset_t object_end;
+    vm_size_t new_size;
+    vm_size_t old_size;
+    vm_vaddr_t end;
+    unsigned anon_flags;
+    int error;
+    int resized;
+
+    if (!vmspace_valid(vmspace) || size == 0 ||
+        !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
+        vm_vaddr_add(start, size, &end) != 0)
+        return EINVAL;
+    anon_flags = flags | VM_MAP_ANON;
+    entry = start == 0 ? 0 :
+        vm_map_lookup(&vmspace->vms_map, start - 1);
+    if (entry == 0 || entry->vme_end != start ||
+        entry->vme_protection != protection ||
+        entry->vme_max_protection != VM_PROT_ALL ||
+        entry->vme_flags != anon_flags || entry->vme_object == 0 ||
+        vm_object_is_shared(entry->vme_object) ||
+        vm_ooffset_add(entry->vme_offset,
+        entry->vme_end - entry->vme_start, &object_end) != 0 ||
+        object_end > VM_SIZE_MAX || size > VM_SIZE_MAX - object_end)
+        return vmspace_map_anon(vmspace, start, size, protection, flags);
+
+    object = entry->vme_object;
+    new_size = (vm_size_t)object_end + size;
+    error = vm_object_get_size(object, &old_size);
+    if (error != 0 || old_size < (vm_size_t)object_end)
+        return error != 0 ? error : EFAULT;
+    resized = new_size > old_size;
+    if (resized) {
+        error = vm_object_resize(object, new_size);
+        if (error != 0)
+            return error;
+    }
+    error = vmspace_map_object(vmspace, start, size, protection,
+        VM_PROT_ALL, anon_flags, object, object_end);
+    if (error != 0 && resized && vm_object_resize(object, old_size) != 0)
+        return EFAULT;
+    return error;
+}
+
+int
 vmspace_map_anon_any(struct vmspace *vmspace, vm_vaddr_t hint,
     vm_size_t size, vm_prot_t protection, unsigned flags,
     vm_vaddr_t *result)

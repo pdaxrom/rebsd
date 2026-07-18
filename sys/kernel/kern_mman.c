@@ -81,7 +81,7 @@ brk()
             u.u_error = ENOMEM;
             return;
         }
-        error = vmspace_map_anon(p->p_vmspace, old_end,
+        error = vmspace_grow_anon(p->p_vmspace, old_end,
             new_end - old_end, VM_PROT_READ | VM_PROT_WRITE, 0);
     }
     if (error == 0 && newsize > oldsize) {

@@ -15,9 +15,12 @@
 int
 main(void)
 {
+    struct vm_map full;
     struct vm_map map;
     const struct vm_map_entry *entry;
     vm_vaddr_t address;
+    vm_vaddr_t start;
+    unsigned index;
 
     CHECK(vm_map_init(&map, 0x1000u, 0x80000000u) == 0);
     CHECK(vm_map_insert(&map, 0x10000000u, 0x10002000u,
@@ -68,6 +71,25 @@ main(void)
     CHECK(vm_map_remove(&map, 0x10001000u, 0x10002000u) == 0);
     CHECK(vm_map_lookup(&map, 0x10001000u) == 0);
     CHECK(vm_map_validate(&map) == 0);
+
+    CHECK(vm_map_init(&full, 0x1000u, 0x80000000u) == 0);
+    for (index = 0; index < VM_MAP_MAX_ENTRIES; ++index) {
+        start = 0x01000000u + index * 2 * VM_PAGE_SIZE;
+        CHECK(vm_map_insert(&full, start, start + VM_PAGE_SIZE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL,
+            VM_MAP_ANON) == 0);
+    }
+    CHECK(full.vmm_count == VM_MAP_MAX_ENTRIES);
+    start = 0x01000000u +
+        (VM_MAP_MAX_ENTRIES - 1) * 2 * VM_PAGE_SIZE;
+    CHECK(vm_map_insert(&full, start + VM_PAGE_SIZE,
+        start + 2 * VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE,
+        VM_PROT_ALL, VM_MAP_ANON) == 0);
+    CHECK(full.vmm_count == VM_MAP_MAX_ENTRIES);
+    entry = vm_map_lookup(&full, start + VM_PAGE_SIZE);
+    CHECK(entry != 0 && entry->vme_start == start &&
+        entry->vme_end == start + 2 * VM_PAGE_SIZE);
+    CHECK(vm_map_validate(&full) == 0);
     puts("VM map tests: ok");
     return 0;
 }

@@ -19,6 +19,8 @@
 #define SMOKE_REUSE_COUNT   8
 #define SMOKE_PRESSURE_PAGES 384
 #define SMOKE_VM_PAGE_SIZE  4096
+#define SMOKE_LEGACY_USER_BYTES (4 * 1024 * 1024)
+#define SMOKE_LARGE_BRK_BYTES   (6 * 1024 * 1024)
 
 static volatile sig_atomic_t smoke_signal_seen;
 static volatile unsigned smoke_bad_address = 1;
@@ -90,6 +92,50 @@ smoke_vm_sysctl(int leaf, long *value)
 }
 
 static int
+smoke_hw_usermem(long *value)
+{
+    int mib[2];
+    int result;
+    size_t length;
+
+    mib[0] = CTL_HW;
+    mib[1] = HW_USERMEM;
+    length = sizeof(*value);
+    result = __sysctl(mib, 2, value, &length, 0, 0);
+    if (result == -1 || length != sizeof(*value)) {
+        printf("vm-process-smoke: hw.usermem result=%d errno=%d "
+            "length=%u\n", result, errno, (unsigned)length);
+        return -1;
+    }
+    return 0;
+}
+
+static int
+smoke_large_brk(int page_size)
+{
+    char *grown;
+    char *large;
+    int index;
+
+    large = sbrk(0);
+    if (large == (void *)-1)
+        return 1;
+    for (index = 0; index < SMOKE_LARGE_BRK_BYTES; index += page_size) {
+        grown = sbrk(page_size);
+        if (grown == (void *)-1 || grown != large + index)
+            return 2;
+        large[index] = (char)(index / page_size * 37 + 11);
+    }
+    for (index = SMOKE_LARGE_BRK_BYTES - page_size; index >= 0;
+        index -= page_size) {
+        if ((unsigned char)large[index] !=
+            (unsigned char)(index / page_size * 37 + 11))
+            return 3;
+    }
+    return 0;
+}
+
+static int
 smoke_stack(int depth)
 {
     volatile unsigned char page_fragment[1536];
@@ -146,6 +192,7 @@ main(int argc, char **argv)
     long vm_wouldblock;
     long vm_reclaim_attempts;
     long vm_reclaim_failures;
+    long usermem;
     unsigned char file_byte;
 
     if (argc == 2 && strcmp(argv[1], "--exec-child") == 0)
@@ -154,6 +201,24 @@ main(int argc, char **argv)
     page_size = getpagesize();
     if (page_size <= 0 || (page_size & (page_size - 1)) != 0)
         return smoke_fail("page size");
+    if (smoke_hw_usermem(&usermem) != 0)
+        return smoke_fail("hw.usermem");
+    if (usermem > SMOKE_LEGACY_USER_BYTES) {
+        child = fork();
+        if (child < 0)
+            return smoke_fail("large brk create");
+        if (child == 0) {
+            index = smoke_large_brk(page_size);
+            if (index != 0) {
+                printf("vm-process-smoke: large brk child error=%d\n",
+                    index);
+                _exit(index);
+            }
+            _exit(SMOKE_FORK_STATUS);
+        }
+        if (smoke_wait(child, SMOKE_FORK_STATUS) != 0)
+            return smoke_fail("large brk beyond legacy window");
+    }
     grow_size = 4 * page_size;
     old_break = sbrk(0);
     arena = sbrk(grow_size);
