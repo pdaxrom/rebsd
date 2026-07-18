@@ -275,6 +275,9 @@ must then pass the applicable matrix below.
 
 Required runtime coverage grows with the implementation but must include:
 
+The real-board procedure and required failure record are in
+[HARDWARE_TESTING.md](HARDWARE_TESTING.md).
+
 - [x] Boot, init, shell, signals, fork/exec/wait, and repeated process exit.
 - [x] Native PCC compile/link smoke plus GCC- and PCC-built target ABI smoke
   tests.

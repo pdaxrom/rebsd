@@ -98,19 +98,19 @@ Common build forms:
 
 ```sh
 make tools
-make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-smoke-runtime
-make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
-make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
-make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
-make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
+make -C sys/mips BOARD=malta MIPS_ROOTFS_COMPILER=pcc native-pcc-smoke-runtime
+make -C sys/mips BOARD=malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips BOARD=malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
+make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
 make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
-make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
-make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc malta64.elf
-make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc unix.elf
-make -C sys/mips/n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
-make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
-make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
-make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 N64_ZSWAP=1 kernel.z64 preflight.z64
+make -C sys/mips BOARD=n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
+make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
+make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 N64_ZSWAP=1 kernel.z64 preflight.z64
 ```
 
 Use `N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc` for normal N64
@@ -118,8 +118,8 @@ hardware and performance validation.  PCC-kernel N64 builds are currently
 substantially slower and should be treated as explicit compiler-correctness
 tests rather than the default hardware gate.
 
-Fresh checkouts should run `make tools` before direct board-directory builds.
-The shared wrapper form, `make -C sys/mips BOARD=... target`, forwards the
+Fresh checkouts should run `make tools` before MIPS builds.  Always use the
+shared wrapper form, `make -C sys/mips BOARD=... target`; it forwards the
 PCC smoke targets to the selected board.  The full QEMU PCC gate is
 `pcc-smoke-all-runtime`; it boots QEMU, runs `/root/pcc-smoke-all.sh`, and
 requires `PCC_SMOKE_ALL_RC:0`.
@@ -173,7 +173,7 @@ For N64-like Malta/Malta64 low-memory smoke, keep QEMU backing RAM large enough
 for the staged root image but cap kernel-visible RAM and swap explicitly:
 
 ```sh
-make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 \
+make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 \
     MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_KBYTES=16384 \
     MALTA_RAM_KBYTES=8192 MALTA_RAMSWAP_KBYTES=4608 MALTA_QEMU_RAM=64M kernel
 ```

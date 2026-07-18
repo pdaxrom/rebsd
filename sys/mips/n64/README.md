@@ -546,10 +546,10 @@ Full PCC userland builds need a larger root image than the historical default.
 The current build gate uses 32768 KiB and covers both kernel compiler choices:
 
 ```
-make -C sys/mips/n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc \
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc \
     N64_ROOTFS_KBYTES=32768 kernel.z64
 
-make -C sys/mips/n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
     N64_ROOTFS_KBYTES=32768 kernel.z64
 ```
 
@@ -1258,7 +1258,8 @@ make -C sys/mips BOARD=n64 N64_ROOTFS_KBYTES=24576 kernel.z64
 Full PCC userland currently requires 32768 KiB:
 
 ```
-make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
+make -C sys/mips BOARD=n64 N64_USERLAND_COMPILER=pcc \
+    N64_ROOTFS_KBYTES=32768 kernel.z64
 ```
 
 The romdisk block driver is read-only. Attempts to open it for write return
