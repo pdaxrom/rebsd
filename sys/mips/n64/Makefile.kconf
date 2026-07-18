@@ -37,9 +37,7 @@ N64_IOCONF      = ioconf
 ifeq ($(N64_HIGHRES_FB),1)
 PARAM += -DN64_HIGHRES_FB
 endif
-ifeq ($(N64_ZSWAP),1)
-PARAM += -DMIPS_ZSWAP_ENABLED
-else
+ifneq ($(N64_ZSWAP),1)
 PARAM := $(filter-out -DMIPS_ZSWAP_ENABLED,$(PARAM))
 endif
 ifeq ($(N64_DEBUG_UART_ONLY),1)

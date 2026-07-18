@@ -135,6 +135,7 @@ mips/n64/ramswap.c                   standard
 mips/common/signal.c            standard
 mips/common/sysctl.c                 standard
 mips/common/vm_page_machdep.c        standard
+mips/common/zswap.c                  optional mips_zswap_enabled
 mips/n64/config.c                    standard
 mips/n64/vm_phys_board.c             standard
 mips/common/libkern.c           standard
