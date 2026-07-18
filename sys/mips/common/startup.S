@@ -10,8 +10,10 @@
         .set    noat
 
         .extern u_end
+#ifndef N64_PREFLIGHT
         .extern mips_curuser
         .extern mips_init_process
+#endif
         .extern main
 
         .section .startup,"ax",@progbits
@@ -48,9 +50,11 @@ mips_kernel_entry:
         nop
 
         la      $sp, u_end - 16
+#ifndef N64_PREFLIGHT
         la      $t0, u
         la      $t1, mips_curuser
         sw      $t0, 0($t1)
+#endif
         jal     main
         nop
 1:
@@ -58,6 +62,7 @@ mips_kernel_entry:
         nop
         .end    _start
 
+#ifndef N64_PREFLIGHT
         .globl  mips_init_trampoline
         .ent    mips_init_trampoline
 mips_init_trampoline:
@@ -183,3 +188,4 @@ longjmp:
         jr      $ra
         li      $v0, 1
         .end    longjmp
+#endif

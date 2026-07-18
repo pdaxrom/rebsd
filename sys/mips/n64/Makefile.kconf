@@ -633,7 +633,7 @@ endif
 N64_STAGE0_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),stage0_n64cart_uart.o,stage0_console_null.o)
 N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)
 N64_PREFLIGHT_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),preflight_n64cart_uart.o,console_null.o)
-N64_PREFLIGHT_OBJS = startup.o $(N64_PREFLIGHT_CONSOLE_OBJS) \
+N64_PREFLIGHT_OBJS = preflight_startup.o $(N64_PREFLIGHT_CONSOLE_OBJS) \
                      rompak.o memory.o preflight.o
 N64_KERNEL_LDSCRIPT = n64.ld
 N64_USER_LDSCRIPT = n64-user.ld
@@ -1115,6 +1115,9 @@ preflight_n64cart_uart.o: $(N64_BOARD_SRC)/preflight_n64cart_uart.c $(N64_BOARD_
 
 startup.o: $S/mips/common/startup.S ${SYSTEM_DEP}
 	${COMPILE_S}
+
+preflight_startup.o: $S/mips/common/startup.S ${SYSTEM_DEP}
+	${CC} ${CFLAGS} ${CPPFLAGS} -DN64_PREFLIGHT ${DEPFLAGS} -c $< -o $@
 
 ioconf.o: ioconf.c ${SYSTEM_DEP}
 	${COMPILE_C}
