@@ -209,6 +209,15 @@ An existing TFTP setup may use the same non-overlapping load address with
    Repeat unplug/reconnect and typing at least five times.  UART must remain
    responsive throughout.
 
+### Confirmed Ci20 VM gate
+
+The process/VM-only part of this procedure passed on real Ci20 hardware on
+2026-07-18 with image SHA-256
+`f37aa1b10d49d1589c70d10eb3330b558414d2d377bab2311446dac4d9db2dfd`.
+Both `/root/vm-process-smoke` and the 100-cycle `vm-stress-smoke.sh` completed,
+and the final counter comparison reported no leak.  This result does not yet
+cover the compiler, USB, storage, or hot-unplug steps above.
+
 ## Failure record
 
 For every failure retain:

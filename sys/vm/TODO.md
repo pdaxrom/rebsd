@@ -277,7 +277,11 @@ must then pass the applicable matrix below.
 - [x] N64 hard-float image: kernel GCC + userland PCC.
 - [ ] N64 hardware smoke.
 - [x] Ci20 MIPS32r2 hard-float image: kernel GCC + userland GCC.
-- [ ] Ci20 hardware smoke and JTAG-assisted hang capture when needed.
+- [x] Ci20 hardware process/VM smoke, including the 100-cycle stress and leak
+  counter gate.  Confirmed on 2026-07-18 with image SHA-256
+  `f37aa1b10d49d1589c70d10eb3330b558414d2d377bab2311446dac4d9db2dfd`.
+- [ ] Ci20 full compiler, USB, storage, and hot-unplug hardware smoke; capture
+  JTAG state if an MMU hang occurs.
 
 Required runtime coverage grows with the implementation but must include:
 
