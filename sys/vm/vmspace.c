@@ -1106,11 +1106,13 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
         chunk = VM_PAGE_SIZE - (paddr & VM_PAGE_MASK);
         if (chunk > size)
             chunk = size;
-        if (page != 0) {
-            error = pmap_page_sync(page, PMAP_SYNC_DATA);
-            if (error != 0)
-                return error;
-        }
+        /*
+         * Cached user pages are allocated with the same cache colour as
+         * their virtual address.  The KSEG0 direct map therefore selects
+         * the same cache index, so ordinary copyin/copyout needs no
+         * page-wide flush.  Writable executable mappings still need the
+         * D-cache to I-cache handoff below.
+         */
         if (write)
             vmspace_copy_memory(bytes, physical, chunk);
         else
@@ -1122,12 +1124,10 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
             if (error != 0)
                 return error;
         }
-        if (write && page != 0) {
-            unsigned sync_operations = PMAP_SYNC_DATA;
-
-            if ((entry->vme_protection & VM_PROT_EXECUTE) != 0)
-                sync_operations |= PMAP_SYNC_INSTRUCTION;
-            error = pmap_page_sync(page, sync_operations);
+        if (write && page != 0 &&
+            (entry->vme_protection & VM_PROT_EXECUTE) != 0) {
+            error = pmap_page_sync(page,
+                PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION);
             if (error != 0)
                 return error;
         }
@@ -1386,9 +1386,6 @@ vmspace_read_inode(struct vmspace *vmspace, struct inode *inode,
             PMAP_CACHE_CACHED);
         if (physical == 0)
             return EFAULT;
-        error = pmap_page_sync(page, PMAP_SYNC_DATA);
-        if (error != 0)
-            return error;
         physical += paddr & VM_PAGE_MASK;
         chunk = VM_PAGE_SIZE - (paddr & VM_PAGE_MASK);
         if (chunk > size)
@@ -1405,12 +1402,9 @@ vmspace_read_inode(struct vmspace *vmspace, struct inode *inode,
         error = vm_object_mark_dirty(entry->vme_object, object_offset);
         if (error != 0)
             return error;
-        {
-            unsigned sync_operations = PMAP_SYNC_DATA;
-
-            if ((entry->vme_protection & VM_PROT_EXECUTE) != 0)
-                sync_operations |= PMAP_SYNC_INSTRUCTION;
-            error = pmap_page_sync(page, sync_operations);
+        if ((entry->vme_protection & VM_PROT_EXECUTE) != 0) {
+            error = pmap_page_sync(page,
+                PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION);
             if (error != 0)
                 return error;
         }

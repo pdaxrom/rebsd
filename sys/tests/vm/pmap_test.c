@@ -582,12 +582,17 @@ test_vmspace(void)
     sync_before = test_syncs;
     CHECK(vmspace_read(source, TEST_VADDR + VM_PAGE_SIZE,
         output, 1) == 0);
-    CHECK(test_syncs == sync_before + 1);
+    CHECK(test_syncs == sync_before);
     sync_before = test_syncs;
     CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE,
         output, 1) == 0);
-    CHECK(test_syncs == sync_before + 2);
-    CHECK(test_last_sync_operations == PMAP_SYNC_DATA);
+    CHECK(test_syncs == sync_before);
+    CHECK(vmspace_read(source, TEST_VADDR, output, 1) == 0);
+    sync_before = test_syncs;
+    CHECK(vmspace_write(source, TEST_VADDR, output, 1) == 0);
+    CHECK(test_syncs == sync_before + 1);
+    CHECK(test_last_sync_operations ==
+        (PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION));
     CHECK(vmspace_map_anon_fixed(source, TEST_VADDR + 1,
         VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, 0) == EINVAL);
     CHECK(vmspace_wire(source, any_address, VM_PAGE_SIZE, 1) == 0);
