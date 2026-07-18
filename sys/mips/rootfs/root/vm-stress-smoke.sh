@@ -35,10 +35,17 @@ case "$iterations" in
 	;;
 esac
 
-trap cleanup 0 1 2 3 15
+trap 'rc=$?; cleanup; exit $rc' 0 1 2 3 15
 
 echo "vm-stress-smoke: warmup"
+# Exercise the loop path before taking the baseline.  This old shell may
+# lazily allocate its first anonymous heap page while saving expr's output;
+# that page belongs to this long-lived test harness, not to the child process
+# under test.
+i=0
+i=`expr "$i" + 1` || exit 1
 /root/vm-process-smoke || exit 1
+sleep 1 || exit 1
 snapshot > "$before" || exit 1
 
 i=0
@@ -49,6 +56,10 @@ do
 	/root/vm-process-smoke || exit 1
 done
 
+# Process teardown can become visible to the accounting sysctls one scheduler
+# tick after wait(2) returns.  Use the same quiescence window as the baseline
+# so the comparison detects persistent leaks rather than transient cleanup.
+sleep 1 || exit 1
 snapshot > "$after" || exit 1
 if ! cmp -s "$before" "$after"; then
 	echo "vm-stress-smoke: VM counters leaked" >&2
