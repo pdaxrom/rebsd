@@ -320,33 +320,61 @@ vm_map_set_flags(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
 }
 
 int
-vm_map_findspace(const struct vm_map *map, vm_vaddr_t hint,
-    vm_size_t size, vm_vaddr_t *result)
+vm_map_findspace_color(const struct vm_map *map, vm_vaddr_t hint,
+    vm_size_t size, vm_vaddr_t color_mask, vm_vaddr_t color,
+    vm_vaddr_t *result)
 {
     const struct vm_map_entry *entry;
+    vm_vaddr_t alignment;
     vm_vaddr_t address;
+    vm_vaddr_t candidate;
     unsigned index;
 
     if (map == 0 || result == 0 || size == 0 ||
-        !vm_vaddr_page_aligned(hint) || !vm_size_page_aligned(size))
+        !vm_vaddr_page_aligned(hint) || !vm_size_page_aligned(size) ||
+        (color_mask & VM_PAGE_MASK) != 0 ||
+        (color & ~color_mask) != 0)
+        return EINVAL;
+    alignment = color_mask + VM_PAGE_SIZE;
+    if (alignment < VM_PAGE_SIZE ||
+        (alignment & (alignment - 1)) != 0)
         return EINVAL;
     address = hint < map->vmm_min ? map->vmm_min : hint;
     for (index = 0; index < map->vmm_count; ++index) {
         entry = &map->vmm_entries[index];
         if (entry->vme_end <= address)
             continue;
-        if (address <= entry->vme_start &&
-            size <= entry->vme_start - address) {
-            *result = address;
+        candidate = (address & ~color_mask) | color;
+        if (candidate < address) {
+            if (candidate > VM_VADDR_MAX - alignment)
+                return ENOMEM;
+            candidate += alignment;
+        }
+        if (candidate <= entry->vme_start &&
+            size <= entry->vme_start - candidate) {
+            *result = candidate;
             return 0;
         }
         address = entry->vme_end;
     }
-    if (address <= map->vmm_max && size <= map->vmm_max - address) {
-        *result = address;
+    candidate = (address & ~color_mask) | color;
+    if (candidate < address) {
+        if (candidate > VM_VADDR_MAX - alignment)
+            return ENOMEM;
+        candidate += alignment;
+    }
+    if (candidate <= map->vmm_max && size <= map->vmm_max - candidate) {
+        *result = candidate;
         return 0;
     }
     return ENOMEM;
+}
+
+int
+vm_map_findspace(const struct vm_map *map, vm_vaddr_t hint,
+    vm_size_t size, vm_vaddr_t *result)
+{
+    return vm_map_findspace_color(map, hint, size, 0, 0, result);
 }
 
 const struct vm_map_entry *

@@ -211,6 +211,12 @@ pmap_md_direct_map(vm_paddr_t paddr, vm_size_t size,
     return &test_ram[paddr];
 }
 
+vm_paddr_t
+pmap_md_cache_alias_mask(void)
+{
+    return 3u * VM_PAGE_SIZE;
+}
+
 int
 pmap_md_page_sync(vm_paddr_t paddr, unsigned operations)
 {
@@ -224,11 +230,13 @@ pmap_md_page_sync(vm_paddr_t paddr, unsigned operations)
 
 static int
 test_page_alloc(struct vm_page_allocator *allocator,
-    struct vm_page **result)
+    vm_vaddr_t vaddr, struct vm_page **result)
 {
     struct vm_page_request request;
 
     vm_page_request_init(&request);
+    request.vpr_color_mask = pmap_md_cache_alias_mask();
+    request.vpr_color = vaddr & request.vpr_color_mask;
     request.vpr_state = VM_PAGE_ACTIVE;
     return vm_page_alloc(allocator, &request, result);
 }
@@ -269,13 +277,15 @@ test_pmap(void)
     CHECK(pmap_create(&pmap1) == 0);
     CHECK(pmap_create(&pmap2) == 0);
     CHECK(pmap_create(&pmap3) == 0);
-    CHECK(test_page_alloc(&allocator, &page1) == 0);
-    CHECK(test_page_alloc(&allocator, &page2) == 0);
-    CHECK(test_page_alloc(&allocator, &page3) == 0);
+    CHECK(test_page_alloc(&allocator, TEST_VADDR, &page1) == 0);
+    CHECK(test_page_alloc(&allocator, TEST_VADDR, &page2) == 0);
+    CHECK(test_page_alloc(&allocator, TEST_VADDR2, &page3) == 0);
     device_page = vm_page_lookup(&allocator, TEST_DEVICE_PADDR);
     CHECK(device_page != 0 &&
         device_page->vmp_state == VM_PAGE_RESERVED);
 
+    CHECK(pmap_enter(pmap1, TEST_VADDR + VM_PAGE_SIZE, page1,
+        VM_PROT_READ, PMAP_CACHE_CACHED) == EINVAL);
     CHECK(pmap_enter(pmap1, TEST_VADDR, page1,
         VM_PROT_READ | VM_PROT_WRITE, PMAP_CACHE_CACHED) == 0);
     CHECK(pmap_enter(pmap2, TEST_VADDR, page2, VM_PROT_READ,
@@ -403,9 +413,11 @@ test_vmspace(void)
     vm_paddr_t source_paddr;
     vm_paddr_t child_paddr;
     vm_vaddr_t any_address;
+    vm_vaddr_t shared_address;
     vm_size_t grow_size;
     vm_pfn_t free_before;
     unsigned map_count;
+    unsigned sync_before;
     unsigned i;
 
     memset(test_ram, 0, sizeof(test_ram));
@@ -487,7 +499,11 @@ test_vmspace(void)
         &shared_file_object) == 0);
     CHECK(vmspace_map_object(source, TEST_SHARED_FILE, VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, VM_MAP_SHARED,
-        shared_file_object, VM_PAGE_SIZE) == 0);
+        shared_file_object, VM_PAGE_SIZE) == EINVAL);
+    CHECK(vmspace_map_object_any(source, TEST_SHARED_FILE, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, VM_MAP_SHARED,
+        shared_file_object, VM_PAGE_SIZE, &shared_address) == 0);
+    CHECK(shared_address == TEST_SHARED_FILE + VM_PAGE_SIZE);
     CHECK(vmspace_map_device(source, TEST_DEVICE, VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
         device_page->vmp_paddr, PMAP_CACHE_UNCACHED) == 0);
@@ -503,7 +519,7 @@ test_vmspace(void)
     CHECK(device_page->vmp_wire_count == 0);
     CHECK(vmspace_wire(source, TEST_DEVICE, VM_PAGE_SIZE, 0) == 0);
     output[0] = 0;
-    CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
+    CHECK(vmspace_read(source, shared_address, output, 1) == 0 &&
         output[0] == 0x63 && shared_file_pager.pageins == 1);
     CHECK(vmspace_map_anon(source, TEST_VADDR, 2 * VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE, 0) == 0);
@@ -527,6 +543,15 @@ test_vmspace(void)
     CHECK(vmspace_read(source, TEST_VADDR + VM_PAGE_SIZE,
         output, 1) == 0);
     CHECK(output[0] == 0);
+    sync_before = test_syncs;
+    CHECK(vmspace_read(source, TEST_VADDR + VM_PAGE_SIZE,
+        output, 1) == 0);
+    CHECK(test_syncs == sync_before + 1);
+    sync_before = test_syncs;
+    CHECK(vmspace_write(source, TEST_VADDR + VM_PAGE_SIZE,
+        output, 1) == 0);
+    CHECK(test_syncs == sync_before + 2);
+    CHECK(test_last_sync_operations == PMAP_SYNC_DATA);
     CHECK(vmspace_map_anon_fixed(source, TEST_VADDR + 1,
         VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, 0) == EINVAL);
     CHECK(vmspace_wire(source, any_address, VM_PAGE_SIZE, 1) == 0);
@@ -616,18 +641,18 @@ test_vmspace(void)
     CHECK(vmspace_read(source, TEST_FILE, output, 1) == 0 &&
         output[0] == 0xa1);
     output[0] = 0x79;
-    CHECK(vmspace_write(child, TEST_SHARED_FILE, output, 1) == 0);
+    CHECK(vmspace_write(child, shared_address, output, 1) == 0);
     output[0] = 0;
-    CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
+    CHECK(vmspace_read(source, shared_address, output, 1) == 0 &&
         output[0] == 0x79);
     shared_file_pager.fail_pageout = 1;
-    CHECK(vmspace_sync(child, TEST_SHARED_FILE, VM_PAGE_SIZE,
+    CHECK(vmspace_sync(child, shared_address, VM_PAGE_SIZE,
         VM_PAGER_IO_SYNC) == EIO);
     shared_file_pager.fail_pageout = 0;
     output[0] = 0;
-    CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
+    CHECK(vmspace_read(source, shared_address, output, 1) == 0 &&
         output[0] == 0x79);
-    CHECK(vmspace_sync(child, TEST_SHARED_FILE, VM_PAGE_SIZE,
+    CHECK(vmspace_sync(child, shared_address, VM_PAGE_SIZE,
         VM_PAGER_IO_SYNC) == 0);
     CHECK(shared_file_pager.data[VM_PAGE_SIZE] == 0x79 &&
         shared_file_pager.pageouts == 1 &&
@@ -636,7 +661,7 @@ test_vmspace(void)
     CHECK(vm_object_update(shared_file_object, VM_PAGE_SIZE,
         output, 1) == 0);
     output[0] = 0;
-    CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
+    CHECK(vmspace_read(source, shared_address, output, 1) == 0 &&
         output[0] == 0x2a);
 
     CHECK(vmspace_protect(child, TEST_VADDR + VM_PAGE_SIZE,

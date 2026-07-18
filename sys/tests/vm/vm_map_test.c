@@ -33,6 +33,13 @@ main(void)
     CHECK(vm_map_findspace(&map, 0x10000000u, VM_PAGE_SIZE,
         &address) == 0);
     CHECK(address == 0x10004000u);
+    CHECK(vm_map_findspace_color(&map, 0x10004000u, VM_PAGE_SIZE,
+        3u * VM_PAGE_SIZE, 2u * VM_PAGE_SIZE, &address) == 0);
+    CHECK(address == 0x10006000u);
+    CHECK(vm_map_findspace_color(&map, 0x10004000u, VM_PAGE_SIZE,
+        VM_PAGE_MASK, 0, &address) == EINVAL);
+    CHECK(vm_map_findspace_color(&map, 0x10004000u, VM_PAGE_SIZE,
+        2u * VM_PAGE_SIZE, VM_PAGE_SIZE, &address) == EINVAL);
     CHECK(vm_map_findspace(&map, 0x7ffff000u, 2 * VM_PAGE_SIZE,
         &address) == ENOMEM);
     CHECK(vm_map_lookup(&map, 0x10003fffu)->vme_start == 0x10000000u);

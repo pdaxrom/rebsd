@@ -75,6 +75,8 @@ struct vm_page_request {
     vm_size_t          vpr_alignment;
     vm_size_t          vpr_boundary;
     vm_paddr_t         vpr_max_address;
+    vm_paddr_t         vpr_color_mask;
+    vm_paddr_t         vpr_color;
     enum vm_page_state vpr_state;
 };
 

@@ -404,6 +404,19 @@ vmspace_activate(struct vmspace *vmspace)
     return pmap_activate(vmspace->vms_pmap);
 }
 
+static int
+vmspace_cache_alias_valid(vm_vaddr_t start, unsigned flags,
+    vm_ooffset_t offset)
+{
+    vm_paddr_t alias_mask;
+
+    if ((flags & (VM_MAP_SHARED | VM_MAP_DEVICE | VM_MAP_UNCACHED)) !=
+        VM_MAP_SHARED)
+        return 1;
+    alias_mask = pmap_cache_alias_mask();
+    return (((vm_ooffset_t)start ^ offset) & alias_mask) == 0;
+}
+
 int
 vmspace_map_object(struct vmspace *vmspace, vm_vaddr_t start,
     vm_size_t size, vm_prot_t protection, vm_prot_t maximum,
@@ -416,6 +429,7 @@ vmspace_map_object(struct vmspace *vmspace, vm_vaddr_t start,
         (object != 0 && (flags & VM_MAP_DEVICE) != 0) ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         (offset & VM_PAGE_MASK) != 0 ||
+        !vmspace_cache_alias_valid(start, flags, offset) ||
         vm_vaddr_add(start, size, &end) != 0)
         return EINVAL;
     return vm_map_insert_object(&vmspace->vms_map, start, end,
@@ -429,13 +443,20 @@ vmspace_map_object_any(struct vmspace *vmspace, vm_vaddr_t hint,
     vm_vaddr_t *result)
 {
     vm_vaddr_t start;
+    vm_vaddr_t alias_mask;
+    vm_vaddr_t color;
     int error;
 
     if (!vmspace_valid(vmspace) || result == 0 ||
         (object == 0 && (flags & VM_MAP_DEVICE) == 0) ||
         (object != 0 && (flags & VM_MAP_DEVICE) != 0))
         return EINVAL;
-    error = vm_map_findspace(&vmspace->vms_map, hint, size, &start);
+    alias_mask = (flags & (VM_MAP_SHARED | VM_MAP_DEVICE |
+        VM_MAP_UNCACHED)) == VM_MAP_SHARED ?
+        pmap_cache_alias_mask() : 0;
+    color = (vm_vaddr_t)offset & alias_mask;
+    error = vm_map_findspace_color(&vmspace->vms_map, hint, size,
+        alias_mask, color, &start);
     if (error != 0)
         return error;
     error = vmspace_map_object(vmspace, start, size, protection,
@@ -467,6 +488,7 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
         (object != 0 && (flags & VM_MAP_DEVICE) != 0) ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         (offset & VM_PAGE_MASK) != 0 ||
+        !vmspace_cache_alias_valid(start, flags, offset) ||
         vm_vaddr_add(start, size, &end) != 0)
         return EINVAL;
     if (start < vmspace->vms_map.vmm_min ||
@@ -777,6 +799,7 @@ vmspace_wire(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
     const struct vm_map_entry *entry;
     struct vm_page *page;
     vm_ooffset_t offset;
+    vm_paddr_t alias_mask;
     vm_vaddr_t address;
     vm_vaddr_t end;
     int error;
@@ -799,7 +822,10 @@ vmspace_wire(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
             if ((entry->vme_flags & VM_MAP_DEVICE) != 0)
                 continue;
             offset = entry->vme_offset + (address - entry->vme_start);
-            error = vm_object_fault(entry->vme_object, offset, 0, &page);
+            alias_mask = (entry->vme_flags & VM_MAP_UNCACHED) != 0 ?
+                0 : pmap_cache_alias_mask();
+            error = vm_object_fault_context(entry->vme_object, offset,
+                0, 0, alias_mask, address & alias_mask, &page);
             if (error == 0)
                 error = vm_page_counter_inc(vmspace_allocator, page,
                     VM_PAGE_COUNTER_WIRE);
@@ -945,6 +971,7 @@ vmspace_fault_context(struct vmspace *vmspace, vm_vaddr_t address,
     struct vm_page *old_page;
     vm_ooffset_t offset;
     vm_paddr_t current;
+    vm_paddr_t alias_mask;
     vm_prot_t effective;
     vm_vaddr_t page_address;
     int cow_write;
@@ -981,9 +1008,12 @@ vmspace_fault_context(struct vmspace *vmspace, vm_vaddr_t address,
         (entry->vme_flags & VM_MAP_COW) != 0;
     old_page = cow_write && (entry->vme_flags & VM_MAP_WIRED) != 0 ?
         vm_object_resident_page(entry->vme_object, offset) : 0;
+    alias_mask = (entry->vme_flags & VM_MAP_UNCACHED) != 0 ?
+        0 : pmap_cache_alias_mask();
     error = vm_object_fault_context(entry->vme_object, offset, cow_write,
         (context & VM_FAULT_CAN_SLEEP) != 0 ? 0 :
-        VM_OBJECT_FAULT_NOWAIT, &page);
+        VM_OBJECT_FAULT_NOWAIT, alias_mask,
+        page_address & alias_mask, &page);
     if (error != 0)
         return error;
     if (old_page != 0 && old_page != page) {
@@ -1076,7 +1106,7 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
         chunk = VM_PAGE_SIZE - (paddr & VM_PAGE_MASK);
         if (chunk > size)
             chunk = size;
-        if (!write && page != 0) {
+        if (page != 0) {
             error = pmap_page_sync(page, PMAP_SYNC_DATA);
             if (error != 0)
                 return error;
@@ -1356,6 +1386,9 @@ vmspace_read_inode(struct vmspace *vmspace, struct inode *inode,
             PMAP_CACHE_CACHED);
         if (physical == 0)
             return EFAULT;
+        error = pmap_page_sync(page, PMAP_SYNC_DATA);
+        if (error != 0)
+            return error;
         physical += paddr & VM_PAGE_MASK;
         chunk = VM_PAGE_SIZE - (paddr & VM_PAGE_MASK);
         if (chunk > size)

@@ -71,6 +71,7 @@ extern int pmap_md_tlb_invalidate(unsigned);
 extern void pmap_md_tlb_flush(void);
 extern void *pmap_md_direct_map(vm_paddr_t, vm_size_t, enum pmap_cache);
 extern int pmap_md_page_sync(vm_paddr_t, unsigned);
+extern vm_paddr_t pmap_md_cache_alias_mask(void);
 
 struct pmap {
     uint32_t       *pm_directory;
@@ -442,6 +443,7 @@ pmap_enter(struct pmap *pmap, vm_vaddr_t vaddr, struct vm_page *page,
 {
     uint32_t *pte;
     uint32_t entry;
+    vm_paddr_t alias_mask;
     unsigned sync_operations;
     int error;
 
@@ -451,6 +453,10 @@ pmap_enter(struct pmap *pmap, vm_vaddr_t vaddr, struct vm_page *page,
         (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED))
         return EINVAL;
     if (vm_page_lookup(pmap_allocator, page->vmp_paddr) != page)
+        return EINVAL;
+    alias_mask = pmap_md_cache_alias_mask();
+    if (cache == PMAP_CACHE_CACHED &&
+        ((vaddr ^ page->vmp_paddr) & alias_mask) != 0)
         return EINVAL;
     if (page->vmp_state == VM_PAGE_FREE ||
         page->vmp_state == VM_PAGE_RESERVED ||
@@ -976,6 +982,12 @@ pmap_device_direct_map(vm_paddr_t paddr, enum pmap_cache cache)
     return pmap_md_direct_map(paddr, VM_PAGE_SIZE, cache);
 }
 
+vm_paddr_t
+pmap_cache_alias_mask(void)
+{
+    return pmap_md_cache_alias_mask();
+}
+
 int
 pmap_page_sync(struct vm_page *page, unsigned operations)
 {
@@ -1001,12 +1013,15 @@ pmap_validate(struct pmap *pmap)
     const uint32_t *table;
     const struct vm_page *page;
     uint32_t pte;
+    vm_vaddr_t vaddr;
+    vm_paddr_t alias_mask;
     unsigned directory_index;
     unsigned table_index;
 
     if (!pmap_valid(pmap) || pmap->pm_directory == 0 ||
         !vm_paddr_page_aligned(pmap->pm_directory_paddr))
         return EINVAL;
+    alias_mask = pmap_md_cache_alias_mask();
     for (directory_index = 0;
         directory_index < PMAP_DIRECTORY_ENTRIES; ++directory_index) {
         if ((pmap->pm_directory[directory_index] &
@@ -1033,6 +1048,11 @@ pmap_validate(struct pmap *pmap)
                     page->vmp_state == VM_PAGE_RESERVED ||
                     page->vmp_state == VM_PAGE_BAD ||
                     page->vmp_hold_count == 0)
+                    return EFAULT;
+                vaddr = (directory_index << PMAP_DIRECTORY_SHIFT) |
+                    (table_index << PMAP_TABLE_SHIFT);
+                if ((pte & PMAP_PTE_UNCACHED) == 0 &&
+                    ((vaddr ^ page->vmp_paddr) & alias_mask) != 0)
                     return EFAULT;
             } else {
                 page = vm_page_lookup(pmap_allocator,
@@ -1066,11 +1086,13 @@ pmap_debug_force_asid_rollover(void)
 #define PMAP_SELFTEST_CODE_VA   0x10004000u
 
 static int
-pmap_selftest_alloc(struct vm_page **result)
+pmap_selftest_alloc(vm_vaddr_t vaddr, struct vm_page **result)
 {
     struct vm_page_request request;
 
     vm_page_request_init(&request);
+    request.vpr_color_mask = pmap_cache_alias_mask();
+    request.vpr_color = vaddr & request.vpr_color_mask;
     request.vpr_state = VM_PAGE_ACTIVE;
     return vm_page_alloc(pmap_allocator, &request, result);
 }
@@ -1125,13 +1147,13 @@ pmap_bootstrap_selftest(void)
     error = pmap_create(&second);
     if (error != 0)
         goto out;
-    error = pmap_selftest_alloc(&first_page);
+    error = pmap_selftest_alloc(PMAP_SELFTEST_DATA_VA, &first_page);
     if (error != 0)
         goto out;
-    error = pmap_selftest_alloc(&second_page);
+    error = pmap_selftest_alloc(PMAP_SELFTEST_DATA_VA, &second_page);
     if (error != 0)
         goto out;
-    error = pmap_selftest_alloc(&code_page);
+    error = pmap_selftest_alloc(PMAP_SELFTEST_CODE_VA, &code_page);
     if (error != 0)
         goto out;
     first_backing = pmap_page_direct_map(first_page,

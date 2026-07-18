@@ -208,6 +208,8 @@ vm_page_request_init(struct vm_page_request *request)
     request->vpr_alignment = VM_PAGE_SIZE;
     request->vpr_boundary = 0;
     request->vpr_max_address = VM_PADDR_MAX;
+    request->vpr_color_mask = 0;
+    request->vpr_color = 0;
     request->vpr_state = VM_PAGE_ACTIVE;
 }
 
@@ -218,6 +220,8 @@ vm_page_request_validate(const struct vm_page_request *request,
     if (request == 0 || run_size == 0 || request->vpr_npages == 0 ||
         request->vpr_npages > VM_SIZE_MAX / VM_PAGE_SIZE ||
         !vm_page_alloc_state_valid(request->vpr_state) ||
+        (request->vpr_color_mask & VM_PAGE_MASK) != 0 ||
+        (request->vpr_color & ~request->vpr_color_mask) != 0 ||
         request->vpr_alignment < VM_PAGE_SIZE ||
         !vm_size_page_aligned(request->vpr_alignment) ||
         !vm_page_power_of_two(request->vpr_alignment))
@@ -293,7 +297,8 @@ vm_page_alloc(struct vm_page_allocator *allocator,
         page = &allocator->vpa_pages[i];
         start = page->vmp_paddr;
         if (page->vmp_state != VM_PAGE_FREE ||
-            (start & (request->vpr_alignment - 1)) != 0)
+            (start & (request->vpr_alignment - 1)) != 0 ||
+            (start & request->vpr_color_mask) != request->vpr_color)
             continue;
         if (run_size - 1 > VM_PADDR_MAX - start)
             continue;

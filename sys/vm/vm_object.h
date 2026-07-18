@@ -60,7 +60,7 @@ int vm_object_release(struct vm_object *);
 int vm_object_fault(struct vm_object *, vm_ooffset_t, int,
     struct vm_page **);
 int vm_object_fault_context(struct vm_object *, vm_ooffset_t, int,
-    unsigned, struct vm_page **);
+    unsigned, vm_paddr_t, vm_paddr_t, struct vm_page **);
 struct vm_page *vm_object_resident_page(struct vm_object *, vm_ooffset_t);
 int vm_object_mark_dirty(struct vm_object *, vm_ooffset_t);
 int vm_object_remove(struct vm_object *, vm_ooffset_t, vm_size_t);

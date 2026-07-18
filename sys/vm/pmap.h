@@ -58,6 +58,7 @@ int pmap_clear_modify(struct pmap *, vm_vaddr_t);
 int pmap_remove_page(struct vm_page *);
 int pmap_clear_page_reference(struct vm_page *);
 int pmap_clear_page_modify(struct vm_page *);
+vm_paddr_t pmap_cache_alias_mask(void);
 int pmap_page_sync(struct vm_page *, unsigned);
 void *pmap_page_direct_map(struct vm_page *, enum pmap_cache);
 void *pmap_device_direct_map(vm_paddr_t, enum pmap_cache);

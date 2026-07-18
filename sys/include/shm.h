@@ -13,7 +13,12 @@
 
 #define SHM_RDONLY      010000
 #define SHM_RND         020000
+#if defined(N64) || defined(TARGET_VR4300) || defined(__vr4300__) || \
+    defined(MALTA_N64_8M_PROFILE)
+#define SHMLBA          16384u
+#else
 #define SHMLBA          4096u
+#endif
 
 typedef unsigned shmatt_t;
 

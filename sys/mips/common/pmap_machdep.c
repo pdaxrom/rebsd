@@ -29,10 +29,17 @@ extern unsigned pmap_md_legacy_user_entries(void);
 #define PMAP_MD_DCACHE_LINE     16u
 #endif
 #define PMAP_MD_ICACHE_LINE     32u
+
+vm_paddr_t
+pmap_md_cache_alias_mask(void)
+{
 #ifdef N64
-#define PMAP_MD_DCACHE_SIZE     (8u * 1024u)
-#define PMAP_MD_ICACHE_SIZE     (16u * 1024u)
+    /* Four 4 KiB colours cover the direct-mapped 16 KiB I-cache. */
+    return 3u * VM_PAGE_SIZE;
+#else
+    return 0;
 #endif
+}
 
 unsigned
 pmap_md_tlb_entries(void)
@@ -221,7 +228,6 @@ pmap_md_sync(void)
     asm volatile ("sync" ::: "memory");
 }
 
-#ifndef N64
 static void
 pmap_md_dcache_writeback_invalidate(unsigned address)
 {
@@ -233,19 +239,6 @@ pmap_md_icache_invalidate(unsigned address)
 {
     asm volatile ("cache 0x10, 0(%0)" :: "r" (address) : "memory");
 }
-#else
-static void
-pmap_md_dcache_index_writeback_invalidate(unsigned address)
-{
-    asm volatile ("cache 0x01, 0(%0)" :: "r" (address) : "memory");
-}
-
-static void
-pmap_md_icache_index_invalidate(unsigned address)
-{
-    asm volatile ("cache 0x00, 0(%0)" :: "r" (address) : "memory");
-}
-#endif
 
 int
 pmap_md_page_sync(vm_paddr_t paddr, unsigned operations)
@@ -261,41 +254,15 @@ pmap_md_page_sync(vm_paddr_t paddr, unsigned operations)
     end = address + VM_PAGE_SIZE;
     pmap_md_sync();
     if ((operations & PMAP_SYNC_DATA) != 0) {
-#ifdef N64
-        /*
-         * The VR4300 D-cache is an 8 KiB direct-mapped VIPT cache.  A
-         * 4 KiB page therefore has two possible virtual colours.  A hit
-         * operation through the KSEG0 alias only reaches one of them and
-         * can leave dirty user data behind.  Sweep every index so the tag
-         * supplies the correct write-back address for either colour.
-         */
-        address = PMAP_MD_KSEG0_BASE;
-        end = address + PMAP_MD_DCACHE_SIZE;
-        for (; address < end; address += PMAP_MD_DCACHE_LINE)
-            pmap_md_dcache_index_writeback_invalidate(address);
-#else
         for (; address < end; address += PMAP_MD_DCACHE_LINE)
             pmap_md_dcache_writeback_invalidate(address);
-#endif
         pmap_md_sync();
     }
     if ((operations & PMAP_SYNC_INSTRUCTION) != 0) {
-#ifdef N64
-        /*
-         * The 16 KiB direct-mapped VR4300 I-cache has four virtual
-         * colours per 4 KiB page.  Invalidating all indices is the only
-         * safe operation when this interface has only a physical page.
-         */
-        address = PMAP_MD_KSEG0_BASE;
-        end = address + PMAP_MD_ICACHE_SIZE;
-        for (; address < end; address += PMAP_MD_ICACHE_LINE)
-            pmap_md_icache_index_invalidate(address);
-#else
         address = PMAP_MD_KSEG0_BASE | paddr;
         end = address + VM_PAGE_SIZE;
         for (; address < end; address += PMAP_MD_ICACHE_LINE)
             pmap_md_icache_invalidate(address);
-#endif
         pmap_md_sync();
     }
     return 0;

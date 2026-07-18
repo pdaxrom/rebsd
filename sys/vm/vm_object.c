@@ -380,22 +380,26 @@ restart:
 static int vm_object_range_valid(const struct vm_object *, vm_ooffset_t,
     vm_size_t);
 
-static int vm_pager_reclaim_one(struct vm_anon *);
+static int vm_pager_reclaim_one(struct vm_anon *, vm_paddr_t,
+    vm_paddr_t);
 
 static int
-vm_object_page_allocate(struct vm_page **result)
+vm_object_page_allocate(vm_paddr_t color_mask, vm_paddr_t color,
+    struct vm_page **result)
 {
     struct vm_page_request request;
     int error;
     int pass;
 
     vm_page_request_init(&request);
+    request.vpr_color_mask = color_mask;
+    request.vpr_color = color;
     request.vpr_state = VM_PAGE_ACTIVE;
     error = vm_page_alloc(vm_object_allocator, &request, result);
     for (pass = 0; error == ENOMEM && pass < 3; ++pass) {
         vm_object_stat_increment(
             &vm_object_statistics.vos_reclaim_attempts);
-        if (vm_pager_reclaim_one(0) != 0)
+        if (vm_pager_reclaim_one(0, color_mask, color) != 0)
             vm_object_stat_increment(
                 &vm_object_statistics.vos_reclaim_failures);
         error = vm_page_alloc(vm_object_allocator, &request, result);
@@ -404,7 +408,8 @@ vm_object_page_allocate(struct vm_page **result)
 }
 
 static int
-vm_anon_make_resident(struct vm_anon *anon, int zero_fault)
+vm_anon_make_resident(struct vm_anon *anon, int zero_fault,
+    vm_paddr_t color_mask, vm_paddr_t color)
 {
     struct vm_page *page;
     void *mapping;
@@ -412,7 +417,7 @@ vm_anon_make_resident(struct vm_anon *anon, int zero_fault)
 
     if (anon->va_page != 0)
         return 0;
-    error = vm_object_page_allocate(&page);
+    error = vm_object_page_allocate(color_mask, color, &page);
     if (error != 0)
         return error;
     mapping = pmap_page_direct_map(page, PMAP_CACHE_CACHED);
@@ -653,7 +658,8 @@ vm_object_release(struct vm_object *object)
 }
 
 static int
-vm_object_private_copy(struct vm_object_page *object_page)
+vm_object_private_copy(struct vm_object_page *object_page,
+    vm_paddr_t color_mask, vm_paddr_t color)
 {
     struct vm_anon *source;
     struct vm_anon *target;
@@ -666,7 +672,7 @@ vm_object_private_copy(struct vm_object_page *object_page)
     if (source->va_references <= 1)
         return 0;
     source->va_flags |= VM_ANON_BUSY;
-    error = vm_anon_make_resident(source, 0);
+    error = vm_anon_make_resident(source, 0, color_mask, color);
     if (error != 0) {
         vm_anon_busy_clear(source);
         return error;
@@ -677,7 +683,7 @@ vm_object_private_copy(struct vm_object_page *object_page)
         return ENOSPC;
     }
     target->va_flags |= VM_ANON_BUSY;
-    error = vm_object_page_allocate(&page);
+    error = vm_object_page_allocate(color_mask, color, &page);
     if (error != 0) {
         vm_anon_busy_clear(target);
         (void)vm_anon_release(target);
@@ -723,7 +729,8 @@ vm_object_private_copy(struct vm_object_page *object_page)
 
 int
 vm_object_fault_context(struct vm_object *object, vm_ooffset_t offset,
-    int private_write, unsigned flags, struct vm_page **result)
+    int private_write, unsigned flags, vm_paddr_t color_mask,
+    vm_paddr_t color, struct vm_page **result)
 {
     struct vm_object_page *object_page;
     struct vm_anon *anon;
@@ -734,6 +741,8 @@ vm_object_fault_context(struct vm_object *object, vm_ooffset_t offset,
     int error;
 
     if (!vm_object_valid(object) || result == 0 ||
+        (color_mask & VM_PAGE_MASK) != 0 ||
+        (color & ~color_mask) != 0 ||
         (flags & ~VM_OBJECT_FAULT_NOWAIT) != 0)
         return EINVAL;
     index = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
@@ -790,7 +799,7 @@ retry:
         object_page->vop_anon->va_page == 0 &&
         object_page->vop_anon->va_swap_slot == 0;
     error = vm_anon_make_resident(object_page->vop_anon,
-        object->vo_pager == 0);
+        object->vo_pager == 0, color_mask, color);
     if (error != 0)
         goto fault_failed;
     if (need_pagein) {
@@ -811,7 +820,7 @@ retry:
     }
     vm_anon_busy_clear(object_page->vop_anon);
     if (private_write) {
-        error = vm_object_private_copy(object_page);
+        error = vm_object_private_copy(object_page, color_mask, color);
         if (error != 0)
             return error;
     }
@@ -836,7 +845,7 @@ vm_object_fault(struct vm_object *object, vm_ooffset_t offset,
     int private_write, struct vm_page **result)
 {
     return vm_object_fault_context(object, offset, private_write, 0,
-        result);
+        0, 0, result);
 }
 
 struct vm_page *
@@ -1152,7 +1161,8 @@ restart_check:
 }
 
 static int
-vm_pager_reclaim_one(struct vm_anon *exclude)
+vm_pager_reclaim_one(struct vm_anon *exclude, vm_paddr_t color_mask,
+    vm_paddr_t color)
 {
     struct vm_anon *anon;
     struct vm_page *page;
@@ -1171,6 +1181,8 @@ vm_pager_reclaim_one(struct vm_anon *exclude)
             anon->va_page == 0 || (anon->va_flags & VM_ANON_BUSY) != 0)
             continue;
         page = anon->va_page;
+        if ((page->vmp_paddr & color_mask) != color)
+            continue;
         if (page->vmp_wire_count != 0 || page->vmp_busy_count != 0)
             continue;
         if (page->vmp_reference_count != 0) {
@@ -1331,7 +1343,7 @@ vm_pager_pageout_scan(void)
         return 0;
     aged = 0;
     while (vm_object_allocator->vpa_free_count < VM_PAGER_FREE_TARGET) {
-        error = vm_pager_reclaim_one(0);
+        error = vm_pager_reclaim_one(0, 0, 0);
         if (error == ENOMEM && aged++ == 0)
             continue;
         if (error != 0)

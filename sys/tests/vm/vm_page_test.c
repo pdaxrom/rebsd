@@ -213,6 +213,15 @@ test_constraints_and_contiguous_runs(void)
     CHECK(vm_page_free(&allocator, second, 2) == 0);
 
     vm_page_request_init(&request);
+    request.vpr_color_mask = 3u * VM_PAGE_SIZE;
+    request.vpr_color = 2u * VM_PAGE_SIZE;
+    CHECK(vm_page_alloc(&allocator, &request, &first) == 0);
+    CHECK((first->vmp_paddr & request.vpr_color_mask) ==
+        request.vpr_color);
+    CHECK(first->vmp_paddr == TEST_RAM_BASE + 6u * VM_PAGE_SIZE);
+    CHECK(vm_page_free(&allocator, first, 1) == 0);
+
+    vm_page_request_init(&request);
     request.vpr_npages = 3;
     request.vpr_boundary = 2u * VM_PAGE_SIZE;
     CHECK(vm_page_alloc(&allocator, &request, &first) == EINVAL);
@@ -223,6 +232,13 @@ test_constraints_and_contiguous_runs(void)
     request.vpr_alignment = VM_PAGE_SIZE + 1;
     CHECK(vm_page_alloc(&allocator, &request, &first) == EINVAL);
     request.vpr_alignment = VM_PAGE_SIZE;
+    request.vpr_color_mask = VM_PAGE_MASK;
+    CHECK(vm_page_alloc(&allocator, &request, &first) == EINVAL);
+    request.vpr_color_mask = 2u * VM_PAGE_SIZE;
+    request.vpr_color = VM_PAGE_SIZE;
+    CHECK(vm_page_alloc(&allocator, &request, &first) == EINVAL);
+    request.vpr_color_mask = 0;
+    request.vpr_color = 0;
     request.vpr_npages = 0;
     CHECK(vm_page_alloc(&allocator, &request, &first) == EINVAL);
     CHECK(vm_page_allocator_validate(&allocator, &map) == 0);

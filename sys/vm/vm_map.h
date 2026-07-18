@@ -54,6 +54,8 @@ int vm_map_set_flags(struct vm_map *, vm_vaddr_t, vm_vaddr_t, unsigned,
     unsigned);
 int vm_map_findspace(const struct vm_map *, vm_vaddr_t, vm_size_t,
     vm_vaddr_t *);
+int vm_map_findspace_color(const struct vm_map *, vm_vaddr_t, vm_size_t,
+    vm_vaddr_t, vm_vaddr_t, vm_vaddr_t *);
 const struct vm_map_entry *vm_map_lookup(const struct vm_map *, vm_vaddr_t);
 int vm_map_check(const struct vm_map *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vm_map_validate(const struct vm_map *);
