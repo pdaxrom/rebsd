@@ -1311,12 +1311,33 @@ swapout fails with `ENOMEM` instead of panicking.  `N64_ZSWAP=0` restores the
 raw RAM swap sizing for comparison.  Other MIPS boards can select
 `MIPS_ZSWAP_ENABLED` in their board configuration and use the same backend.
 
-For boot isolation, `N64_MINIMAL_UART_ONLY=1` forces UART-only console/debug
-drivers and builds a small rootfs while still packaging it as `rootfs.img` in
-the ROM TOC.  This keeps the kernel/rootfs lookup path identical to normal
-ROMs.  The minimal rootfs intentionally carries `init`, `getty`, `login`, `sh`,
-`mount`, `mkfs`, and a few file utilities so a successful boot can reach a
-usable root shell.
+`N64_MINIMAL_ROOTFS=1` builds a dependency-tracked hardware-test rootfs while
+keeping the normal N64 console and device configuration.  It is still packaged
+as `rootfs.img` in the ROM TOC, so the kernel/rootfs lookup path is identical to
+normal ROMs.  Every minimal image contains `init`, login support,
+`vm-process-smoke`, and `vm-stress-smoke.sh`.  With a PCC userland,
+`N64_MINIMAL_PCC_SMOKE` defaults to `1` and adds the native compiler, the exact
+commands/scripts/sources used by `pcc-smoke-all.sh`, and no unrelated userland
+programs.  That profile defaults to a 6144 KiB rootfs; the VM-only profile
+defaults to 2048 KiB.
+
+The reproducible GCC-kernel/PCC-userland hardware-test build is:
+
+```sh
+make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-vm-pcc-min \
+    N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc \
+    N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
+    N64_USERLAND_ENDIAN=big N64_USERLAND_EXEC_FORMAT=aout \
+    N64_MINIMAL_ROOTFS=1 N64_MINIMAL_PCC_SMOKE=1 \
+    N64_MINIMAL_ROOTFS_KBYTES=6144 N64_ROOTFS_NATIVE_PCC=1 \
+    N64_ZSWAP=1 all
+```
+
+`N64_MINIMAL_UART_ONLY=1` selects the same minimal-rootfs machinery and also
+forces the UART-only console/debug drivers for boot isolation.  The minimal
+`/etc/rc` only formats and mounts the volatile `/var`; it deliberately does not
+mount `/cart`, because ROMFS and peripheral tests belong to a later full-rootfs
+image.
 
 The printed boot sizes therefore differ by installed RDRAM:
 

@@ -8,16 +8,20 @@ build, emulator run, or partial boot log.
 ## Reproducible images
 
 Build only through the shared `sys/mips` entry point and give each profile its
-own object root.  The N64 candidate uses a 32-bit VR4300/o32 hard-float PCC
-userland and a GCC kernel.  The Ci20 candidate uses a 32-bit MIPS32r2/o32
+own object root.  The N64 VM/compiler candidate uses a 32-bit VR4300/o32
+hard-float PCC userland and a GCC kernel.  It builds a dependency-tracked test
+rootfs containing the VM tests and everything invoked by `pcc-smoke-all.sh`,
+not the full userland.  The Ci20 candidate uses a 32-bit MIPS32r2/o32
 hard-float GCC kernel and userland.
 
 ```sh
-make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-gcc-pcc \
+make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-vm-pcc-min \
     N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
     N64_USERLAND_ENDIAN=big N64_USERLAND_EXEC_FORMAT=aout \
-    N64_ROOTFS_KBYTES=32768 N64_ZSWAP=1 all
+    N64_MINIMAL_ROOTFS=1 N64_MINIMAL_PCC_SMOKE=1 \
+    N64_MINIMAL_ROOTFS_KBYTES=6144 N64_ROOTFS_NATIVE_PCC=1 \
+    N64_ZSWAP=1 all
 
 make -C sys/mips BOARD=ci20 O=/work/rebsd-hw/ci20-gcc \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
@@ -29,8 +33,8 @@ make -C sys/mips BOARD=ci20 O=/work/rebsd-hw/ci20-gcc \
 The resulting hardware files are:
 
 ```text
-/work/rebsd-hw/n64-gcc-pcc/obj/sys/mips/n64/preflight.z64
-/work/rebsd-hw/n64-gcc-pcc/obj/sys/mips/n64/kernel.z64
+/work/rebsd-hw/n64-vm-pcc-min/obj/sys/mips/n64/preflight.z64
+/work/rebsd-hw/n64-vm-pcc-min/obj/sys/mips/n64/kernel.z64
 /work/rebsd-hw/ci20-gcc/obj/sys/mips/ci20/ci20.uImage
 ```
 
@@ -39,8 +43,8 @@ Record the source commit and image digests before deployment:
 ```sh
 git rev-parse HEAD
 shasum -a 256 \
-    /work/rebsd-hw/n64-gcc-pcc/obj/sys/mips/n64/preflight.z64 \
-    /work/rebsd-hw/n64-gcc-pcc/obj/sys/mips/n64/kernel.z64 \
+    /work/rebsd-hw/n64-vm-pcc-min/obj/sys/mips/n64/preflight.z64 \
+    /work/rebsd-hw/n64-vm-pcc-min/obj/sys/mips/n64/kernel.z64 \
     /work/rebsd-hw/ci20-gcc/obj/sys/mips/ci20/ci20.uImage
 ```
 
@@ -63,21 +67,24 @@ make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
 make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
     MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=64M \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=pcc \
-    MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_EXEC_FORMAT=aout \
-    MIPS_ROOTFS_KBYTES=32768 native-pcc-smoke-runtime
+    MIPS_ROOTFS_CPU=vr4300 MIPS_ROOTFS_FLOAT=hard \
+    MIPS_ROOTFS_ENDIAN=big MIPS_ROOTFS_EXEC_FORMAT=aout \
+    MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_KBYTES=32768 \
+    PCC_SMOKE_ALL_CCOM_STRESS_COUNT=100 pcc-smoke-all-runtime
 ```
 
 Require `ram size=0x00800000`, `user mem = 4096 kbytes`,
 `swap size = 3584 kbytes`, successful VM self-tests, 100 clean stress
-iterations, and the native PCC compile/link workload.  A QEMU pass authorizes
-hardware testing; it does not complete an N64 hardware checklist item.
+iterations, `PCC_SMOKE_ALL_FAILURES 0`, and `PCC_SMOKE_ALL_OK`.  A QEMU pass
+authorizes hardware testing; it does not complete an N64 hardware checklist
+item.
 
 ## N64
 
-The full image requires an N64cart-compatible cartridge interface.  Capture
-the n64cart serial line from reset and deploy the ROM with the cartridge's
-normal uploader; deployment tools are intentionally kept outside the kernel
-build.
+The minimal VM/compiler image requires an N64cart-compatible cartridge
+interface.  Capture the n64cart serial line from reset and deploy the ROM with
+the cartridge's normal uploader; deployment tools are intentionally kept
+outside the kernel build.
 
 1. Boot `preflight.z64`.  Require the stage0 and `ReBSD N64 preflight`
    banners, detected RDRAM size, and the `rootfs.img` offset, size, and magic.
@@ -89,24 +96,25 @@ build.
 3. Run the bounded, non-destructive VM and compiler gate:
 
    ```sh
-   uname -a
    mount
-   df -T
+   df
    vmstat
    /root/vm-process-smoke
    VM_STRESS_ITERATIONS=8 /root/vm-stress-smoke.sh
-   /root/libc-abi-smoke.sh
-   /root/native-pcc-smoke.sh
-   /root/build-workload-smoke.sh
-   /root/net-smoke.sh
+   /root/pcc-smoke-all.sh
    ```
 
-   Every script must return to the shell with status zero.  After this bounded
-   gate passes, run `VM_STRESS_ITERATIONS=100 /root/vm-stress-smoke.sh` on the
-   8 MiB system.  It must report that all iterations passed and that its VM
-   counter snapshot returned exactly to the warmed-up, quiescent baseline.
-4. The cartridge ROMFS gate writes only private test names and removes them.
-   Run it only after the VM gate and retain the entire flash log:
+   Every script must return to the shell with status zero;
+   `pcc-smoke-all.sh` must print `PCC_SMOKE_ALL_FAILURES 0` and
+   `PCC_SMOKE_ALL_OK`.  After this bounded gate passes, run
+   `VM_STRESS_ITERATIONS=100 /root/vm-stress-smoke.sh` on the 8 MiB system.  It
+   must report that all iterations passed and that its VM counter snapshot
+   returned exactly to the warmed-up, quiescent baseline.
+4. Stop after the VM/compiler gate when testing the minimal image.  The
+   cartridge ROMFS and USB-network gates require a separate full-rootfs image
+   built without `N64_MINIMAL_ROOTFS=1`; do not build it merely to repeat the
+   VM/compiler tests.  When that later image is needed, the cartridge ROMFS
+   gate writes only private test names and removes them:
 
    ```sh
    ls -l /dev/cartflash0

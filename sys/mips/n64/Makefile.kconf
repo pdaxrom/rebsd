@@ -24,7 +24,8 @@ N64_HIGHRES_FB ?= 0
 N64_ZSWAP ?= 1
 N64_ENABLE_ROMFS ?= 1
 N64_MINIMAL_ROOTFS ?= $(N64_MINIMAL_UART_ONLY)
-N64_MINIMAL_ROOTFS_KBYTES ?= 2048
+N64_MINIMAL_PCC_SMOKE ?= $(if $(filter pcc,$(N64_USERLAND_COMPILER)),1,0)
+N64_MINIMAL_ROOTFS_KBYTES ?= $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),6144,2048)
 N64_MINIMAL_ROOTFS_STAGE = rootfs.minimal.stage
 N64_MINIMAL_ROOTFS_MANIFEST = rootfs.minimal.manifest
 N64_MINIMAL_ROOTFS_IMG = rootfs.minimal.img
@@ -32,7 +33,7 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_MINIMAL_UART_ONLY).$(N64_HIGHRES_FB).$(N64_ZSWAP)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_HIGHRES_FB).$(N64_ZSWAP)
 N64_IOCONF      = ioconf
 ifeq ($(N64_HIGHRES_FB),1)
 PARAM += -DN64_HIGHRES_FB
@@ -104,7 +105,8 @@ N64_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
                          $(TOPSRC)/src/cmd/sum.c \
                          $(TOPSRC)/src/cmd/size.c \
                          $(TOPSRC)/src/cmd/aoutio.c \
-                         $(TOPSRC)/src/cmd/aoutio.h
+                         $(TOPSRC)/src/cmd/aoutio.h \
+                         $(TOPSRC)/src/cmd/elf32_mips.h
 N64_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
                    $(TOPSRC)/sys/mips/include $(TOPSRC)/sys/mips/n64/include \
                    -type f -name '*.h' \
@@ -378,61 +380,92 @@ N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).$(N64_USERLAND_ABI).s
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
 
-N64_MINIMAL_ROOTFS_CMD_SUBDIRS = getty init login ls mkfs mount sh
-N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod mkdir
+N64_MINIMAL_ROOTFS_CMD_SUBDIRS = getty init login ls mkfs mount sh stty \
+    sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
+    ld make nm pstat ranlib sed)
+N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod cmp mkdir rm sleep \
+    $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),cp grep od size \
+    tr w wc)
+N64_MINIMAL_ROOTFS_CMD_NSTDS = expr
+N64_MINIMAL_ROOTFS_CMD_SCRIPTS = \
+    $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),false true,$(N64_CMD_NONE))
+N64_MINIMAL_ROOTFS_CMD_OPERATORS = \
+    $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),df,$(N64_CMD_NONE))
+N64_MINIMAL_ROOTFS_CMD_KMEM = \
+    $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),ps vmstat,$(N64_CMD_NONE))
+N64_MINIMAL_ROOTFS_PCC_TEST_NAMES = \
+    alias-stress-smoke.c alias-stress-smoke.sh \
+    build-workload-smoke.sh cc-pcc-smoke.sh ccom-stress.sh \
+    libc-abi-smoke.c libc-abi-smoke.sh \
+    libc-string-smoke.c libc-string-smoke.sh \
+    libpcc-helper-smoke.c libpcc-helper-smoke.sh \
+    linpack-smoke.sh \
+    ll-abi-smoke.c ll-abi-smoke.s ll-abi-smoke.sh \
+    ll-smoke.c ll-smoke.sh make-workload-smoke.sh \
+    math-class-smoke.c math-class-smoke.sh \
+    mips-compiler-bench-smoke.sh native-pcc-smoke.sh \
+    pcc-fpu-smoke.c pcc-smoke-all.sh pcc-smoke.c pcc-smoke.sh \
+    runtime-stress.sh sh-comsubst-smoke.sh sh-fail-smoke.sh \
+    types-smoke.c types-smoke.sh utility-workload-smoke.sh \
+    wide-policy-smoke.c wide-policy-smoke.sh
+N64_MINIMAL_ROOTFS_PCC_TEST_FILES = \
+    $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),\
+    $(addprefix $(TOPSRC)/sys/mips/rootfs/root/,\
+    $(N64_MINIMAL_ROOTFS_PCC_TEST_NAMES)))
+N64_MINIMAL_VM_PROCESS_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke.c
+N64_MINIMAL_VM_STRESS_SCRIPT = $(TOPSRC)/sys/mips/rootfs/root/vm-stress-smoke.sh
+N64_MINIMAL_VM_PROCESS_OBJ = n64-minimal-vm-process-smoke.o
+N64_MINIMAL_VM_PROCESS_LINKED = n64-minimal-vm-process-smoke.linked
+N64_MINIMAL_VM_PROCESS_BIN = n64-minimal-vm-process-smoke
 N64_MINIMAL_ROOTFS_FILES = \
     $(TOPSRC)/sys/mips/rootfs/etc/group \
     $(TOPSRC)/sys/mips/rootfs/etc/passwd \
     $(TOPSRC)/sys/mips/rootfs/etc/profile \
     $(TOPSRC)/sys/mips/n64/rootfs/etc/gettytab \
     $(TOPSRC)/sys/mips/n64/rootfs/etc/motd \
-    $(TOPSRC)/sys/mips/n64/rootfs/etc/ttys
-N64_MINIMAL_USERLAND_CC = $(N64_PREFIX)gcc $(N64_USERLAND_ARCH) \
-                          $(N64_CODE) $(N64_USERLAND_INCLUDES) \
-                          -Werror -Wno-unused-value \
-                          -Wno-format-overflow -Wno-attribute-alias \
-                          -Wno-missing-attributes \
-                          -Wno-discarded-qualifiers
-N64_MINIMAL_USERLAND_AS = $(N64_MINIMAL_USERLAND_CC) \
-                          -x assembler-with-cpp -c
-N64_MINIMAL_USERLAND_LD = $(N64_PREFIX)ld -m elf32ebmip
-N64_MINIMAL_USERLAND_RANLIB = $(N64_PREFIX)ranlib
-N64_MINIMAL_USERLAND_NM = $(N64_PREFIX)nm
-N64_MINIMAL_USERLAND_SIZE = $(N64_PREFIX)size
-N64_MINIMAL_USERLAND_OBJDUMP = $(N64_PREFIX)objdump
-N64_MINIMAL_USERLAND_ELF2AOUT_aout = $(abspath $(ELF2AOUT))
-N64_MINIMAL_USERLAND_ELF2AOUT_elf = cp
-N64_MINIMAL_USERLAND_ELF2AOUT = $(N64_MINIMAL_USERLAND_ELF2AOUT_$(N64_USERLAND_EXEC_FORMAT))
-N64_MINIMAL_USERLAND_EXTRA_DEPS_aout = $(ELF2AOUT)
-N64_MINIMAL_USERLAND_EXTRA_DEPS_elf =
-N64_MINIMAL_USERLAND_EXTRA_DEPS = $(N64_MINIMAL_USERLAND_EXTRA_DEPS_$(N64_USERLAND_EXEC_FORMAT))
-N64_MINIMAL_USERLAND_LDFLAGS = --nmagic \
-                               -T$(abspath $(N64_USER_LDSCRIPT)) \
-                               $(abspath $(OBJTOP)/src/crt0.o) \
-                               -L$(abspath $(OBJTOP)/src)
+    $(TOPSRC)/sys/mips/n64/rootfs/etc/ttys \
+    $(N64_MINIMAL_VM_PROCESS_SRC) \
+    $(N64_MINIMAL_VM_STRESS_SCRIPT) \
+    $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES)
+N64_MINIMAL_USERLAND_CC = $(MIPS_USERLAND_CC)
+N64_MINIMAL_USERLAND_AS = $(MIPS_USERLAND_AS)
+N64_MINIMAL_USERLAND_LD = $(MIPS_USERLAND_LD)
+N64_MINIMAL_USERLAND_AR = $(MIPS_USERLAND_AR)
+N64_MINIMAL_USERLAND_RANLIB = $(MIPS_USERLAND_RANLIB)
+N64_MINIMAL_USERLAND_NM = $(MIPS_USERLAND_NM)
+N64_MINIMAL_USERLAND_SIZE = $(MIPS_USERLAND_SIZE)
+N64_MINIMAL_USERLAND_OBJDUMP = $(MIPS_USERLAND_OBJDUMP)
+N64_MINIMAL_USERLAND_ELF2AOUT = $(MIPS_USERLAND_ELF2AOUT)
+N64_MINIMAL_USERLAND_EXTRA_DEPS = $(MIPS_USERLAND_EXTRA_DEPS) \
+                                  $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),\
+                                  $(MIPS_ROOTFS_NATIVE_PCC_STAMPS))
+N64_MINIMAL_USERLAND_LDFLAGS = $(MIPS_USERLAND_LDFLAGS)
 N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src \
                TARGET_PLATFORM=n64 \
-               N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
+               MIPS_ROOTFS_CPU=$(MIPS_ROOTFS_CPU) \
+               MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN) \
+               N64_USER_LDSCRIPT=$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
                DESTDIR=$(abspath $(N64_MINIMAL_ROOTFS_STAGE)) \
                CC="$(N64_MINIMAL_USERLAND_CC)" \
                AS="$(N64_MINIMAL_USERLAND_AS)" \
                LD="$(N64_MINIMAL_USERLAND_LD)" \
-               AR="$(N64_NATIVE_AR)" \
+               AR="$(N64_MINIMAL_USERLAND_AR)" \
                RANLIB="$(N64_MINIMAL_USERLAND_RANLIB)" \
                NM="$(N64_MINIMAL_USERLAND_NM)" \
                SIZE="$(N64_MINIMAL_USERLAND_SIZE)" \
                OBJDUMP="$(N64_MINIMAL_USERLAND_OBJDUMP)" \
                ELF2AOUT="$(N64_MINIMAL_USERLAND_ELF2AOUT)" \
                LDFLAGS="$(N64_MINIMAL_USERLAND_LDFLAGS)" \
-               SRC_ONLY_LIBS="startup-mips libc libutil" \
+               LIBC_COMPILER_RUNTIME=$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),libpcc,libc) \
+               SRC_ONLY_LIBS="startup-mips libc libm libutil" \
                SRC_ONLY_SUBDIR="cmd" \
                CMD_ONLY_SUBDIR="$(N64_MINIMAL_ROOTFS_CMD_SUBDIRS)" \
                CMD_ONLY_STD="$(N64_MINIMAL_ROOTFS_CMD_STDS)" \
-               CMD_ONLY_SCRIPT="$(N64_CMD_NONE)" \
-               CMD_ONLY_NSTD="$(N64_CMD_NONE)" \
+               CMD_ONLY_SCRIPT="$(N64_MINIMAL_ROOTFS_CMD_SCRIPTS)" \
+               CMD_ONLY_NSTD="$(N64_MINIMAL_ROOTFS_CMD_NSTDS)" \
                CMD_ONLY_SETUID="$(N64_CMD_NONE)" \
-               CMD_ONLY_OPERATOR="$(N64_CMD_NONE)" \
-               CMD_ONLY_KMEM="$(N64_CMD_NONE)" \
+               CMD_ONLY_OPERATOR="$(N64_MINIMAL_ROOTFS_CMD_OPERATORS)" \
+               CMD_ONLY_KMEM="$(N64_MINIMAL_ROOTFS_CMD_KMEM)" \
                CMD_ONLY_TTY="$(N64_CMD_NONE)" \
                CMD_EXTRA_SUBDIR="" \
                CMD_BUILD_STRIP=""
@@ -507,6 +540,13 @@ endif
 
 .DEFAULT_GOAL := all
 include $(TOPSRC)/sys/mips/rootfs.mk
+
+ifeq ($(N64_MINIMAL_ROOTFS),1)
+# The filtered rootfs builds against a private, dependency-tracked header tree
+# instead of first constructing the full rootfs.stage hierarchy.
+MIPS_ROOTFS_INCLUDES = -I$(abspath $(MIPS_PCC_HOST_INCLUDE)/machine) \
+                       -I$(abspath $(MIPS_PCC_HOST_INCLUDE))
+endif
 
 N64_ROOTFS_MANIFEST = $(MIPS_ROOTFS_MANIFEST)
 N64_ROOTFS_BUILD_MANIFEST = $(MIPS_ROOTFS_BUILD_MANIFEST)
@@ -928,19 +968,30 @@ endif
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
 	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/n64/ramswap.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
 
-$(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(N64_USER_LDSCRIPT) \
+$(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(N64_MINIMAL_ROOTFS_FILES) $(N64_TERMCAP) \
-    $(N64_MINIMAL_USERLAND_EXTRA_DEPS) \
+    $(N64_UTILITY_SMOKE_SRCS) $(N64_LINPACK_SMOKE_SRC) \
+    $(MIPS_COMPILER_BENCH_SRC) $(MIPS_NATIVE_CRT0_SRC) \
+    $(MIPS_LIBC_SRCS) $(MIPS_LIBM_SRCS) $(MIPS_LIBUTIL_SRCS) \
+    $(MIPS_USER_SRCS) \
+    $(N64_MINIMAL_USERLAND_EXTRA_DEPS) $(N64_PCC_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile Makefile
 	$(N64_MINIMAL_SRC_MAKE) clean
 	rm -rf $(N64_MINIMAL_ROOTFS_STAGE)
 	mkdir -p $(N64_MINIMAL_ROOTFS_STAGE)/bin \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/dev \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/lib \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/libexec \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/sbin \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/share/man/cat1 \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/share/man/cat5 \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/share/man/cat8 \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/include \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/lib/ldscripts \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/libexec/pcc \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/var/db \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/var/lock \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/var/log \
@@ -975,11 +1026,14 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(N64_USER_LDSCRIPT) \
 	    printf '%s\n' '		chmod 664 /var/run/utmp /var/log/wtmp'; \
 	    printf '%s\n' '	else'; \
 	    printf '%s\n' '		echo N64_MINIMAL_VAR_MOUNT_FAIL'; \
+	    printf '%s\n' '		exit 1'; \
 	    printf '%s\n' '	fi'; \
 	    printf '%s\n' 'else'; \
 	    printf '%s\n' '	echo N64_MINIMAL_VAR_MKFS_FAIL'; \
+	    printf '%s\n' '	exit 1'; \
 	    printf '%s\n' 'fi'; \
 	    printf '%s\n' 'echo N64_MINIMAL_RC_END'; \
+	    printf '%s\n' 'exit 0'; \
 	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc
 	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc
 	{ \
@@ -988,6 +1042,74 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(N64_USER_LDSCRIPT) \
 	    printf '%s\n' '/dev/swap	none	swap	sw	0	0'; \
 	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/fstab
 	$(N64_MINIMAL_SRC_MAKE) all install
+	cp -p $(N64_MINIMAL_VM_STRESS_SCRIPT) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-stress-smoke.sh
+	$(N64_MINIMAL_USERLAND_CC) -O2 -c \
+	    -o $(N64_MINIMAL_VM_PROCESS_OBJ) $(N64_MINIMAL_VM_PROCESS_SRC)
+	$(N64_MINIMAL_USERLAND_LD) $(N64_MINIMAL_USERLAND_LDFLAGS) \
+	    -o $(N64_MINIMAL_VM_PROCESS_LINKED) \
+	    $(N64_MINIMAL_VM_PROCESS_OBJ) -lc
+	$(N64_MINIMAL_USERLAND_ELF2AOUT) $(N64_MINIMAL_VM_PROCESS_LINKED) \
+	    $(N64_MINIMAL_VM_PROCESS_BIN)
+	cp -p $(N64_MINIMAL_VM_PROCESS_BIN) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-process-smoke
+	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-process-smoke \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-stress-smoke.sh
+ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
+	cp -p $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/
+	mkdir -p $(N64_MINIMAL_ROOTFS_STAGE)/root/utility-src
+	cp -p $(N64_UTILITY_SMOKE_SRCS) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/utility-src/
+	cp -pR $(N64_PCC_HOST_INCLUDE)/. \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/include/
+	cp -p $(MIPS_NATIVE_PCC_DIR)/cc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/cc
+	cp -p $(MIPS_NATIVE_PCC_DIR)/cc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/pcc
+	cp -p $(MIPS_NATIVE_PCC_DIR)/cc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/cpp
+	cp -p $(MIPS_NATIVE_PCC_DIR)/cpp \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/libexec/pcc/cpp
+	cp -p $(MIPS_NATIVE_PCC_DIR)/ccom \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/libexec/pcc/ccom
+	for lib in $(MIPS_NATIVE_LIBS); do \
+	    cp -p $(MIPS_NATIVE_DIR)/$$lib \
+	        $(N64_MINIMAL_ROOTFS_STAGE)/usr/lib/$$lib; \
+	done
+	cp -p $(MIPS_ROOTFS_USER_LDSCRIPT) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/lib/$(MIPS_ROOTFS_INSTALLED_LDSCRIPT)
+	for lib in libc.a libm.a libpcc.a; do \
+	    $(MIPS_PCC_RANLIB) $(N64_MINIMAL_ROOTFS_STAGE)/usr/lib/$$lib; \
+	done
+	for bin in aout ar as cmp ld make nm ranlib size; do \
+	    if [ -e $(N64_MINIMAL_ROOTFS_STAGE)/bin/$$bin ]; then \
+	        mv -f $(N64_MINIMAL_ROOTFS_STAGE)/bin/$$bin \
+	            $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/$$bin; \
+	    fi; \
+	done
+	ln -s ../usr/bin/cpp $(N64_MINIMAL_ROOTFS_STAGE)/bin/cpp
+	ln -s usr/include $(N64_MINIMAL_ROOTFS_STAGE)/include
+	ln -s ../usr/lib/crt0.o $(N64_MINIMAL_ROOTFS_STAGE)/lib/crt0.o
+	ln -s ../usr/lib/libc.a $(N64_MINIMAL_ROOTFS_STAGE)/lib/libc.a
+	ln -s ../usr/lib/libm.a $(N64_MINIMAL_ROOTFS_STAGE)/lib/libm.a
+	ln -s ../usr/lib/libpcc.a $(N64_MINIMAL_ROOTFS_STAGE)/lib/libpcc.a
+	$(N64_MINIMAL_USERLAND_CC) -O2 $(N64_MINIMAL_USERLAND_LDFLAGS) \
+	    -o $(N64_MINIMAL_ROOTFS_STAGE)/root/libc-abi-smoke \
+	    $(TOPSRC)/sys/mips/rootfs/root/libc-abi-smoke.c
+	$(N64_MINIMAL_USERLAND_CC) -O2 $(N64_MINIMAL_USERLAND_LDFLAGS) \
+	    -o $(N64_MINIMAL_ROOTFS_STAGE)/root/linpack-pcc \
+	    $(N64_LINPACK_SMOKE_SRC) -lm
+	$(N64_MINIMAL_USERLAND_CC) -O2 $(N64_MINIMAL_USERLAND_LDFLAGS) \
+	    -o $(N64_MINIMAL_ROOTFS_STAGE)/root/mips-compiler-bench-pcc \
+	    $(MIPS_COMPILER_BENCH_SRC)
+	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/root/*.sh \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/libc-abi-smoke \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/linpack-pcc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/mips-compiler-bench-pcc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/* \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/libexec/pcc/*
+endif
 	rm -rf $(N64_MINIMAL_ROOTFS_STAGE)/share
 	touch $@
 
@@ -996,7 +1118,7 @@ $(N64_MINIMAL_ROOTFS_MANIFEST): $(N64_MINIMAL_ROOTFS_STAGE)/.stamp \
 	rm -f $@
 	{ \
 	    printf '%s\n' '#'; \
-	    printf '%s\n' '# Minimal N64 UART-only boot root filesystem.'; \
+	    printf '%s\n' '# Minimal N64 VM/PCC hardware-test root filesystem.'; \
 	    printf '%s\n\n' '#'; \
 	    printf '%s\n' 'default'; \
 	    printf '%s\n' 'owner 0'; \
@@ -1137,6 +1259,7 @@ clean: mips-rootfs-clean
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out n64-init \
 	    .deps machine sys $(N64_PCC_DEBUG_ROOTFS_STAGE) \
 	    $(N64_MINIMAL_ROOTFS_STAGE) $(N64_MINIMAL_ROOTFS_MANIFEST) \
+	    $(N64_MINIMAL_VM_PROCESS_LINKED) $(N64_MINIMAL_VM_PROCESS_BIN) \
 	    $(N64_PCC_HOST_INCLUDE) \
 	    $(N64_KERNEL_LDSCRIPT) .build-mode.* $(N64_PCC_DEBUG_RUNNER) \
 	    n64-native-runtime-seed.*
