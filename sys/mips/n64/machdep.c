@@ -268,6 +268,7 @@ int
 copyout(caddr_t from, caddr_t to, u_int nbytes)
 {
     struct vmspace *vmspace;
+    unsigned context;
     unsigned start = (unsigned)to;
     unsigned end = start + nbytes - 1;
 
@@ -278,13 +279,17 @@ copyout(caddr_t from, caddr_t to, u_int nbytes)
     vmspace = vmspace_current();
     if (vmspace == 0)
         return EFAULT;
-    return vmspace_write(vmspace, start, from, nbytes);
+    context = VM_FAULT_COPY;
+    if (!mips_in_interrupt() && mips_intr_enabled())
+        context |= VM_FAULT_CAN_SLEEP;
+    return vmspace_write_context(vmspace, start, from, nbytes, context);
 }
 
 int
 copyin(caddr_t from, caddr_t to, u_int nbytes)
 {
     struct vmspace *vmspace;
+    unsigned context;
     unsigned start = (unsigned)from;
     unsigned end = start + nbytes - 1;
 
@@ -295,7 +300,10 @@ copyin(caddr_t from, caddr_t to, u_int nbytes)
     vmspace = vmspace_current();
     if (vmspace == 0)
         return EFAULT;
-    return vmspace_read(vmspace, start, to, nbytes);
+    context = VM_FAULT_COPY;
+    if (!mips_in_interrupt() && mips_intr_enabled())
+        context |= VM_FAULT_CAN_SLEEP;
+    return vmspace_read_context(vmspace, start, to, nbytes, context);
 }
 
 void

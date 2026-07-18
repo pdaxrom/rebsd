@@ -185,6 +185,12 @@ mips_intr_enable(void)
     return status;
 }
 
+static inline int
+mips_intr_enabled(void)
+{
+    return (mips_read_c0_register(C0_STATUS, 0) & ST_IE) != 0;
+}
+
 static inline void
 mips_intr_restore(int x)
 {
@@ -237,6 +243,8 @@ mips_fpu_disable(void)
     mips_write_c0_register(C0_STATUS, 0, status & ~(ST_CU1 | ST_FR));
     mips_ehb();
 }
+
+int mips_in_interrupt(void);
 
 #endif /* __ASSEMBLER__ */
 #endif /* _MIPS_IO_H_ */

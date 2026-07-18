@@ -230,26 +230,36 @@ int
 copyout(caddr_t from, caddr_t to, u_int nbytes)
 {
     struct vmspace *vmspace;
+    unsigned context;
 
     if (nbytes == 0)
         return 0;
     vmspace = vmspace_current();
     if (vmspace == 0)
         return EFAULT;
-    return vmspace_write(vmspace, (vm_vaddr_t)to, from, nbytes);
+    context = VM_FAULT_COPY;
+    if (!mips_in_interrupt() && mips_intr_enabled())
+        context |= VM_FAULT_CAN_SLEEP;
+    return vmspace_write_context(vmspace, (vm_vaddr_t)to, from, nbytes,
+        context);
 }
 
 int
 copyin(caddr_t from, caddr_t to, u_int nbytes)
 {
     struct vmspace *vmspace;
+    unsigned context;
 
     if (nbytes == 0)
         return 0;
     vmspace = vmspace_current();
     if (vmspace == 0)
         return EFAULT;
-    return vmspace_read(vmspace, (vm_vaddr_t)from, to, nbytes);
+    context = VM_FAULT_COPY;
+    if (!mips_in_interrupt() && mips_intr_enabled())
+        context |= VM_FAULT_CAN_SLEEP;
+    return vmspace_read_context(vmspace, (vm_vaddr_t)from, to, nbytes,
+        context);
 }
 
 void

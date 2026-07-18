@@ -108,6 +108,7 @@ MIPS_ROOTFS_OVERLAY_FILES =
 MIPS_COMMON_MACHINE_HEADERS ?= console cpu devmajors elf_machdep float fpu io \
                               layout limits machparam ramswap romdisk
 MIPS_TRACE       ?= 0
+VM_DIAGNOSTIC    ?= 0
 FSUTIL          = $(OBJTOP)/tools/fsutil/fsutil
 PCC_HOST_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
 PCC_HOST_BUILD ?= $(TOPOBJ)/toolchain/pcc-build.$(MIPS_ROOTFS_ABI)
@@ -189,6 +190,9 @@ CPPFLAGS        += -DUNIXDOMAIN
 endif
 ifeq ($(MIPS_TRACE),1)
 CPPFLAGS        += -DMIPS_TRACE
+endif
+ifeq ($(VM_DIAGNOSTIC),1)
+CPPFLAGS        += -DVM_DIAGNOSTIC
 endif
 CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc \
                   $(CPPFLAGS) $(INET_CWARN) -MT $@ -MP -MD -MF .deps/$*.dep

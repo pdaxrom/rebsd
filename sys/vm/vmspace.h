@@ -14,6 +14,13 @@
 
 struct vm_sysv_shm;
 
+#define VM_FAULT_USER           0x01u
+#define VM_FAULT_COPY           0x02u
+#define VM_FAULT_KERNEL         0x03u
+#define VM_FAULT_INTERRUPT      0x04u
+#define VM_FAULT_CONTEXT_MASK   0x0fu
+#define VM_FAULT_CAN_SLEEP      0x10u
+
 struct vmspace {
     struct vm_map vms_map;
     struct pmap  *vms_pmap;
@@ -65,8 +72,14 @@ int vmspace_sync(struct vmspace *, vm_vaddr_t, vm_size_t, unsigned);
 int vmspace_check(const struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
 unsigned vmspace_shared_mapping_count(const struct vmspace *);
 int vmspace_fault(struct vmspace *, vm_vaddr_t, vm_prot_t);
+int vmspace_fault_context(struct vmspace *, vm_vaddr_t, vm_prot_t,
+    unsigned);
 int vmspace_read(const struct vmspace *, vm_vaddr_t, void *, vm_size_t);
 int vmspace_write(struct vmspace *, vm_vaddr_t, const void *, vm_size_t);
+int vmspace_read_context(const struct vmspace *, vm_vaddr_t, void *,
+    vm_size_t, unsigned);
+int vmspace_write_context(struct vmspace *, vm_vaddr_t, const void *,
+    vm_size_t, unsigned);
 int vmspace_zero(struct vmspace *, vm_vaddr_t, vm_size_t);
 int vmspace_grow_stack(struct vmspace *, vm_vaddr_t, vm_vaddr_t,
     vm_vaddr_t);

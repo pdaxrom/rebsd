@@ -1,40 +1,49 @@
-# VM locking and lifetime rules
+# VM serialization and lifetime rules
 
-The phase-4 VM runs on the existing uniprocessor kernel.  There are no
-sleeping VM locks yet: interrupt priority provides the short publication
-barrier, while ownership prevents concurrent mutation of maps and pmaps.
+The current kernels are uniprocessor.  They do not pretend to provide SMP
+mutexes: short metadata publication uses single-owner execution and, where
+needed, an interrupt-priority barrier.  No code may retain that barrier across
+allocation, pager, vnode, buffer-cache, swap, or device I/O.
 
-## Address spaces and process state
+## Ordering
 
-- A live process owns exactly one `vmspace`; a `vmspace` is not shared in
-  phase 4.  Only the current process may change its map.
-- `fork` clones the parent's map while the parent is current.  The child is
-  placed on the run queue only after its vmspace, user area, trap frame, and
-  process fields are complete.
-- `exec` constructs and loads a private replacement vmspace first.  At
-  `splhigh`, it switches `p_vmspace`, activates the replacement pmap, and
-  publishes the new register/accounting state.  Failure before publication
-  destroys only the replacement; activation failure restores the old pmap.
-- `exit` destroys the current process mappings before publishing the zombie.
-  `wait` reclaims the zombie's wired user area and kernel stack.
+Operations which touch more than one layer use this order:
+
+1. process publication or scheduler state;
+2. `vmspace` and `vm_map` ownership;
+3. VM object, object-page, and anonymous-page metadata;
+4. `pmap`, ASID, and TLB state;
+5. physical-page allocator state.
+
+Vnode and buffer-cache operations are outside that chain.  A pager first
+publishes `VM_ANON_BUSY` and, for pageout or cache replacement, removes the
+page's user translations.  It may then enter vnode -> buffer cache -> device
+or swap I/O without an interrupt barrier.  Completion updates page state,
+clears busy, and wakes waiters.  Code must not call back from a vnode, buffer,
+or device lock into map/object mutation.
+
+`VM_ANON_BUSY` serializes pagein, pageout, COW, invalidation, truncate, and
+teardown across processes which share an object.  A process-context operation
+waits on the anonymous-page address.  A nowait or interrupt-context fault
+returns `EWOULDBLOCK`.  A new object-page placeholder is linked before pager
+I/O, so two processes cannot instantiate the same object offset independently.
+
+## Address spaces and teardown
+
+- Only the current process mutates its `vmspace`.  `fork` completes the child
+  map, pmap, user area, and trap frame before placing the child on the run
+  queue.
+- `exec` builds a private replacement.  At `splhigh` it switches
+  `p_vmspace`, activates the new pmap, and publishes accounting; failure
+  restores the old pmap.
+- `exit` stops new user faults, waits for busy object pages, removes pmap
+  translations, releases object references, and only then publishes the
+  zombie.  `wait` reclaims the wired user area and kernel stack.
 - The scheduler activates the destination pmap before changing
-  `mips_curuser`.  No code may retain an address inside another process's
-  user area across a context switch.
-
-## Map, pmap, and page operations
-
-- `vm_map` mutations and the corresponding `pmap` changes are performed by
-  one owner and may not sleep.  A failed operation must leave the old map
-  intact or roll back pages inserted by that operation.
-- Physical-page allocation and pmap ASID/TLB updates use their existing
-  interrupt exclusion internally.  Callers do not hold an interrupt barrier
-  while performing filesystem I/O for `exec`.
-- The current order is process publication barrier, then vmspace/map, then
-  pmap, then physical pages.  Code must release that chain before inode,
-  buffer-cache, or device operations.  Object, vnode, and swap locks will be
-  added and fitted into this order with the phase-5 pagers.
+  `mips_curuser`.  No code retains an address in another process's user area
+  across a context switch.
 
 Every MIPS user area has a canary between `struct user` and the descending
-kernel stack.  Trap entry and context switching validate it.  Direct-mapped
-KSEG0 stacks cannot have an unmapped hardware guard page, so the canary and
-the trap-frame boundary check are the available guard on current hardware.
+kernel stack.  Trap entry and context switching validate it.  KSEG0 cannot
+provide an unmapped stack guard on the supported hardware, so this canary and
+the trap-frame boundary check are the current guard.

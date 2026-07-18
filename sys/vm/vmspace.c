@@ -876,9 +876,20 @@ vmspace_shared_mapping_count(const struct vmspace *vmspace)
     return count;
 }
 
+static int
+vmspace_fault_context_valid(unsigned context)
+{
+    unsigned kind;
+
+    if ((context & ~(VM_FAULT_CONTEXT_MASK | VM_FAULT_CAN_SLEEP)) != 0)
+        return 0;
+    kind = context & VM_FAULT_CONTEXT_MASK;
+    return kind >= VM_FAULT_USER && kind <= VM_FAULT_INTERRUPT;
+}
+
 int
-vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
-    vm_prot_t access)
+vmspace_fault_context(struct vmspace *vmspace, vm_vaddr_t address,
+    vm_prot_t access, unsigned context)
 {
     const struct vm_map_entry *entry;
     struct vm_page *page;
@@ -890,7 +901,8 @@ vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
     int cow_write;
     int error;
 
-    if (!vmspace_valid(vmspace) || (access != VM_PROT_READ &&
+    if (!vmspace_valid(vmspace) || !vmspace_fault_context_valid(context) ||
+        (access != VM_PROT_READ &&
         access != VM_PROT_WRITE && access != VM_PROT_EXECUTE))
         return EINVAL;
     entry = vm_map_lookup(&vmspace->vms_map, address);
@@ -920,7 +932,9 @@ vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
         (entry->vme_flags & VM_MAP_COW) != 0;
     old_page = cow_write && (entry->vme_flags & VM_MAP_WIRED) != 0 ?
         vm_object_resident_page(entry->vme_object, offset) : 0;
-    error = vm_object_fault(entry->vme_object, offset, cow_write, &page);
+    error = vm_object_fault_context(entry->vme_object, offset, cow_write,
+        (context & VM_FAULT_CAN_SLEEP) != 0 ? 0 :
+        VM_OBJECT_FAULT_NOWAIT, &page);
     if (error != 0)
         return error;
     if (old_page != 0 && old_page != page) {
@@ -952,9 +966,18 @@ vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
         PMAP_CACHE_CACHED);
 }
 
+int
+vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
+    vm_prot_t access)
+{
+    return vmspace_fault_context(vmspace, address, access,
+        VM_FAULT_USER | VM_FAULT_CAN_SLEEP);
+}
+
 static int
 vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
-    void *buffer, vm_size_t size, vm_prot_t protection, int write)
+    void *buffer, vm_size_t size, vm_prot_t protection, int write,
+    unsigned context)
 {
     struct vm_page *page;
     unsigned char *physical;
@@ -963,7 +986,8 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
     vm_size_t chunk;
     int error;
 
-    if (!vmspace_valid(vmspace) || buffer == 0 || size == 0)
+    if (!vmspace_valid(vmspace) || buffer == 0 || size == 0 ||
+        !vmspace_fault_context_valid(context))
         return EINVAL;
     error = vm_map_check(&vmspace->vms_map, address, size, protection);
     if (error != 0)
@@ -973,8 +997,8 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
         const struct vm_map_entry *entry;
         vm_ooffset_t offset;
 
-        error = vmspace_fault((struct vmspace *)vmspace, address,
-            protection);
+        error = vmspace_fault_context((struct vmspace *)vmspace, address,
+            protection, context);
         if (error != 0)
             return error;
         error = pmap_extract(vmspace->vms_pmap, address, &paddr);
@@ -1033,7 +1057,7 @@ vmspace_read(const struct vmspace *vmspace, vm_vaddr_t address,
     void *buffer, vm_size_t size)
 {
     return vmspace_transfer(vmspace, address, buffer, size,
-        VM_PROT_READ, 0);
+        VM_PROT_READ, 0, VM_FAULT_COPY | VM_FAULT_CAN_SLEEP);
 }
 
 int
@@ -1041,7 +1065,23 @@ vmspace_write(struct vmspace *vmspace, vm_vaddr_t address,
     const void *buffer, vm_size_t size)
 {
     return vmspace_transfer(vmspace, address, (void *)buffer, size,
-        VM_PROT_WRITE, 1);
+        VM_PROT_WRITE, 1, VM_FAULT_COPY | VM_FAULT_CAN_SLEEP);
+}
+
+int
+vmspace_read_context(const struct vmspace *vmspace, vm_vaddr_t address,
+    void *buffer, vm_size_t size, unsigned context)
+{
+    return vmspace_transfer(vmspace, address, buffer, size,
+        VM_PROT_READ, 0, context);
+}
+
+int
+vmspace_write_context(struct vmspace *vmspace, vm_vaddr_t address,
+    const void *buffer, vm_size_t size, unsigned context)
+{
+    return vmspace_transfer(vmspace, address, (void *)buffer, size,
+        VM_PROT_WRITE, 1, context);
 }
 
 int

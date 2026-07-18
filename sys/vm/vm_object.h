@@ -27,6 +27,8 @@ struct vm_object_pager_ops {
 #define VM_PAGER_IO_LOCKED      0x02u
 #define VM_PAGER_IO_INVALIDATE  0x04u
 
+#define VM_OBJECT_FAULT_NOWAIT  0x01u
+
 struct vm_object_stats {
     vm_pfn_t vos_objects;
     vm_pfn_t vos_anon_pages;
@@ -51,6 +53,8 @@ int vm_object_has_pageout(const struct vm_object *);
 int vm_object_release(struct vm_object *);
 int vm_object_fault(struct vm_object *, vm_ooffset_t, int,
     struct vm_page **);
+int vm_object_fault_context(struct vm_object *, vm_ooffset_t, int,
+    unsigned, struct vm_page **);
 struct vm_page *vm_object_resident_page(struct vm_object *, vm_ooffset_t);
 int vm_object_mark_dirty(struct vm_object *, vm_ooffset_t);
 int vm_object_remove(struct vm_object *, vm_ooffset_t, vm_size_t);

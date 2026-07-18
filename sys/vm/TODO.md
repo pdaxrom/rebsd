@@ -244,14 +244,15 @@ Exit criteria:
 - [x] Never map freed physical pages into another process before clearing
   user-visible contents.
 - [x] Harden all range arithmetic against wraparound and signed truncation.
-- [ ] Make faults from interrupt context, copy routines, and kernel mappings
+- [x] Make faults from interrupt context, copy routines, and kernel mappings
   explicit; never sleep where sleeping is illegal.
-- [ ] Define lock ordering for maps, objects, pages, vnodes, buffer cache, swap,
+- [x] Define lock ordering for maps, objects, pages, vnodes, buffer cache, swap,
   and process teardown.
 - [ ] Add useful `vmstat`/`pstat` output and BSD-style VM `sysctl` nodes.
 - [ ] Keep normal boot and fault logs concise; gate high-frequency diagnostics.
-- [ ] Add kernel assertions that can be enabled without changing the ABI.
-- [ ] Document OOM selection/termination policy rather than hanging forever.
+- [x] Add `VM_DIAGNOSTIC` kernel assertions that can be enabled without
+  changing the ABI.
+- [x] Document OOM selection/termination policy rather than hanging forever.
 
 ## Build and test matrix
 

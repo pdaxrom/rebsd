@@ -16,6 +16,10 @@ define contents only after the allocator has removed data from the page's
 previous owner.  The complete address-separation, W^X, and range rules are in
 [SECURITY.md](SECURITY.md).
 
+Fault sleepability and nowait behavior are specified in
+[FAULTS.md](FAULTS.md), serialization order in [LOCKING.md](LOCKING.md), and
+bounded allocation failure in [OOM.md](OOM.md).
+
 Private `fork` clones the object nodes but shares their anonymous-page
 descriptors.  Both mappings are made read-only while retaining their requested
 write protection in `vm_map`.  A write fault allocates and copies a page only

@@ -45,6 +45,7 @@ static volatile unsigned long mips_timer_late_last_tick;
 static volatile unsigned long mips_timer_late_max_tick;
 static volatile unsigned long mips_timer_clock_last_us;
 static volatile unsigned long mips_timer_clock_max_us;
+static volatile unsigned mips_interrupt_depth;
 volatile unsigned int ct_ticks = 0;
 
 extern char mips_exception_entry[];
@@ -86,10 +87,17 @@ struct mips_exception_snapshot {
 static struct mips_exception_snapshot last_exception;
 static int exception_panic_prepared;
 
+int
+mips_in_interrupt(void)
+{
+    return mips_interrupt_depth != 0;
+}
+
 static int
 mips_user_vm_fault(unsigned address, vm_prot_t access)
 {
     struct proc *p;
+    int status;
     int error;
 
     error = pmap_fault_active(address, access, 1);
@@ -98,7 +106,10 @@ mips_user_vm_fault(unsigned address, vm_prot_t access)
     p = u.u_procp;
     if (p == 0 || p->p_vmspace == 0)
         return error;
-    error = vmspace_fault(p->p_vmspace, address, access);
+    status = mips_intr_enable();
+    error = vmspace_fault_context(p->p_vmspace, address, access,
+        VM_FAULT_USER | VM_FAULT_CAN_SLEEP);
+    mips_intr_restore(status);
     if (error != 0)
         return error;
     return pmap_fault_active(address, access, 1);
@@ -646,6 +657,7 @@ exception(int *frame)
 #ifdef UCB_METER
         cnt.v_intr++;
 #endif
+        ++mips_interrupt_depth;
 #ifdef N64
         if (rawcause & MIPS_CAUSE_IP2)
             n64_interrupt_handle_mi();
@@ -671,6 +683,7 @@ exception(int *frame)
             mips_timer_record(late_us, mips_timer_count_to_usec(
                 mips_read_c0_register(C0_COUNT, 0) - clock_start));
         }
+        --mips_interrupt_depth;
         if ((cause & USER) && runrun) {
             u.u_frame = frame;
             u.u_code = frame[FRAME_PC];

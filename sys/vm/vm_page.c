@@ -14,6 +14,7 @@
 #include <sys/systm.h>
 #endif
 #include <vm/vm_page.h>
+#include <vm/vm_assert.h>
 
 static int
 vm_page_state_valid(enum vm_page_state state)
@@ -349,6 +350,8 @@ vm_page_alloc(struct vm_page_allocator *allocator,
         vm_page_stat_add(&allocator->vpa_allocations,
             request->vpr_npages);
         *result = &allocator->vpa_pages[i];
+        VM_ASSERT((*result)->vmp_state == request->vpr_state);
+        VM_ASSERT(allocator->vpa_free_count < allocator->vpa_page_count);
         return 0;
     }
     vm_page_stat_add(&allocator->vpa_allocation_failures, 1);

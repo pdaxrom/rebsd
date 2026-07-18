@@ -91,6 +91,7 @@ struct test_shared_pager {
     unsigned pageins;
     unsigned pageouts;
     unsigned syncs;
+    int fail_pageout;
 };
 
 static void
@@ -132,6 +133,8 @@ test_shared_pager_pageout(void *cookie, vm_ooffset_t offset,
     if (offset > sizeof(pager->data) ||
         size > sizeof(pager->data) - offset)
         return ENXIO;
+    if (pager->fail_pageout)
+        return EIO;
     memcpy(&pager->data[(unsigned)offset], buffer, size);
     ++pager->pageouts;
     return 0;
@@ -421,8 +424,16 @@ test_vmspace(void)
         VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0,
         file_object, 0) == 0);
     output[0] = 0;
+    CHECK(vmspace_read_context(source, TEST_FILE + 7, output, 1,
+        VM_FAULT_INTERRUPT) == EWOULDBLOCK);
+    CHECK(file_pager.pageins == 0);
     CHECK(vmspace_read(source, TEST_FILE + 7, output, 1) == 0);
     CHECK(output[0] == 0xa1 && file_pager.pageins == 1);
+    output[0] = 0;
+    CHECK(vmspace_read_context(source, TEST_FILE + 7, output, 1,
+        VM_FAULT_INTERRUPT) == 0 && output[0] == 0xa1);
+    CHECK(vmspace_read_context(source, TEST_FILE + 7, output, 1,
+        0) == EINVAL);
     CHECK(vmspace_read(source, TEST_FILE + 2 * VM_PAGE_SIZE,
         output, 1) == ENXIO);
     CHECK(vmspace_mincore(source, TEST_FILE + 2 * VM_PAGE_SIZE,
@@ -455,6 +466,10 @@ test_vmspace(void)
         output[0] == 0x63 && shared_file_pager.pageins == 1);
     CHECK(vmspace_map_anon(source, TEST_VADDR, 2 * VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE, 0) == 0);
+    CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) ==
+        ENOENT);
+    CHECK(vmspace_read_context(source, TEST_VADDR, output, 1,
+        VM_FAULT_COPY) == EWOULDBLOCK);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) ==
         ENOENT);
     CHECK(vmspace_map_anon(source, TEST_SHARED, VM_PAGE_SIZE,
@@ -564,6 +579,13 @@ test_vmspace(void)
     output[0] = 0;
     CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
         output[0] == 0x79);
+    shared_file_pager.fail_pageout = 1;
+    CHECK(vmspace_sync(child, TEST_SHARED_FILE, VM_PAGE_SIZE,
+        VM_PAGER_IO_SYNC) == EIO);
+    shared_file_pager.fail_pageout = 0;
+    output[0] = 0;
+    CHECK(vmspace_read(source, TEST_SHARED_FILE, output, 1) == 0 &&
+        output[0] == 0x79);
     CHECK(vmspace_sync(child, TEST_SHARED_FILE, VM_PAGE_SIZE,
         VM_PAGER_IO_SYNC) == 0);
     CHECK(shared_file_pager.data[VM_PAGE_SIZE] == 0x79 &&
@@ -629,6 +651,7 @@ test_pager(void)
     struct vmspace *space;
     vm_paddr_t paddr;
     vm_vaddr_t evicted;
+    unsigned written;
     unsigned char value;
     unsigned index;
     int error;
@@ -724,9 +747,16 @@ test_pager(void)
             break;
     }
     CHECK(error == ENOMEM);
+    written = index;
     CHECK(vm_object_get_stats(&stats) == 0);
     CHECK(stats.vos_swap_failures != 0 && stats.vos_pageouts == 0);
     vm_pager_debug_fail_io(0, 0);
+    for (index = 0; index < written; ++index) {
+        value = 0xff;
+        CHECK(vmspace_read(space,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1) == 0);
+        CHECK(value == (unsigned char)index);
+    }
     CHECK(vmspace_destroy(space) == 0);
     CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
 

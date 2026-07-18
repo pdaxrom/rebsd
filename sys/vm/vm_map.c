@@ -18,7 +18,11 @@
 #endif
 
 #include <vm/vm_map.h>
+#include <vm/vm_assert.h>
 #include <vm/vm_param.h>
+
+#define VM_MAP_ASSERT_VALID(map) \
+    VM_ASSERT(vm_map_validate((map)) == 0)
 
 static int
 vm_map_protection_valid(vm_prot_t protection)
@@ -47,6 +51,7 @@ vm_map_init(struct vm_map *map, vm_vaddr_t minimum, vm_vaddr_t maximum)
     vm_map_zero(map, sizeof(*map));
     map->vmm_min = minimum;
     map->vmm_max = maximum;
+    VM_MAP_ASSERT_VALID(map);
     return 0;
 }
 
@@ -102,6 +107,7 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
                 map->vmm_entries[index].vme_end;
             vm_map_delete_entry(map, index);
         }
+        VM_MAP_ASSERT_VALID(map);
         return 0;
     }
     if (index < map->vmm_count &&
@@ -113,6 +119,7 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
         map->vmm_entries[index].vme_offset)) {
         map->vmm_entries[index].vme_start = start;
         map->vmm_entries[index].vme_offset = offset;
+        VM_MAP_ASSERT_VALID(map);
         return 0;
     }
     for (move = map->vmm_count; move > index; --move)
@@ -125,6 +132,7 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
     map->vmm_entries[index].vme_object = object;
     map->vmm_entries[index].vme_offset = offset;
     ++map->vmm_count;
+    VM_MAP_ASSERT_VALID(map);
     return 0;
 }
 
@@ -182,6 +190,7 @@ vm_map_remove(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end)
             return EFAULT;
         break;
     }
+    VM_MAP_ASSERT_VALID(map);
     return 0;
 }
 
@@ -244,6 +253,7 @@ vm_map_protect(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
         }
     }
     *map = replacement;
+    VM_MAP_ASSERT_VALID(map);
     return 0;
 }
 
@@ -305,6 +315,7 @@ vm_map_set_flags(struct vm_map *map, vm_vaddr_t start, vm_vaddr_t end,
         }
     }
     *map = replacement;
+    VM_MAP_ASSERT_VALID(map);
     return 0;
 }
 
