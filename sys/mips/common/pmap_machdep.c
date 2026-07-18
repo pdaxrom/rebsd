@@ -33,7 +33,9 @@ extern unsigned pmap_md_legacy_user_entries(void);
 unsigned
 pmap_md_tlb_entries(void)
 {
-#if defined(N64) || defined(CI20)
+#if defined(MALTA64)
+    return 48;
+#elif defined(N64) || defined(CI20)
     return 32;
 #else
     return 16;

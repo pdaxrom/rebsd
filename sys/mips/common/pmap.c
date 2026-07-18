@@ -1198,6 +1198,22 @@ pmap_bootstrap_selftest(void)
         goto out;
     }
 
+    /* Verify that replacing a resident translation cannot reuse stale TLB. */
+    error = pmap_remove(first, PMAP_SELFTEST_DATA_VA,
+        PMAP_SELFTEST_DATA_VA + VM_PAGE_SIZE);
+    if (error != 0)
+        goto out;
+    error = pmap_enter(first, PMAP_SELFTEST_DATA_VA, second_page,
+        VM_PROT_READ, PMAP_CACHE_CACHED);
+    if (error != 0)
+        goto out;
+    error = pmap_fault(first, PMAP_SELFTEST_DATA_VA, VM_PROT_READ, 0);
+    if (error != 0 || *test_address != 0x55667788u) {
+        if (error == 0)
+            error = EFAULT;
+        goto out;
+    }
+
     /* jr ra; addiu v0, zero, 42 (the second word is the delay slot). */
     code_backing[0] = 0x03e00008u;
     code_backing[1] = 0x2402002au;

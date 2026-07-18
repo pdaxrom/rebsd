@@ -262,8 +262,16 @@ main(int argc, char **argv)
     if (replacement != mapped + SMOKE_VM_PAGE_SIZE ||
         (unsigned char)mapped[0] != 0x12 ||
         (unsigned char)mapped[SMOKE_VM_PAGE_SIZE] != 0 ||
-        (unsigned char)mapped[2 * SMOKE_VM_PAGE_SIZE] != 0x56)
-        return smoke_fail("MAP_FIXED replace");
+        (unsigned char)mapped[2 * SMOKE_VM_PAGE_SIZE] != 0x56) {
+        fprintf(stderr,
+            "vm-process-smoke: MAP_FIXED replace: got=%p want=%p "
+            "bytes=%u/%u/%u\n",
+            replacement, mapped + SMOKE_VM_PAGE_SIZE,
+            (unsigned)(unsigned char)mapped[0],
+            (unsigned)(unsigned char)mapped[SMOKE_VM_PAGE_SIZE],
+            (unsigned)(unsigned char)mapped[2 * SMOKE_VM_PAGE_SIZE]);
+        return 1;
+    }
     mapped[SMOKE_VM_PAGE_SIZE] = 0x34;
     errno = 0;
     if (mmap(mapped + 1, SMOKE_VM_PAGE_SIZE,
