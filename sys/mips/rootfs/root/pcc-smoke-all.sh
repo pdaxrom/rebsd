@@ -7,6 +7,14 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 export PATH
 
+# Trace every program spawned by the PCC driver.  This is deliberately
+# enabled for the whole one-shot suite so a hardware stall can be tied to
+# the exact driver phase instead of only to the enclosing smoke test.
+PCC_EXEC_TRACE=full
+PCC_CCOM_TRACE=1
+export PCC_EXEC_TRACE
+export PCC_CCOM_TRACE
+
 if test -z "$CCOM_STRESS_COUNT"; then
 	CCOM_STRESS_COUNT=100
 fi

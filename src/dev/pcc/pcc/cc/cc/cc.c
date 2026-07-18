@@ -4674,16 +4674,29 @@ strlist_exec(struct strlist *l)
 	sig_atomic_t exit_now = 0;
 	sig_atomic_t child;
 	char **argv;
+	const char *trace;
 	size_t argc;
 	ssize_t result;
 	int rv;
 	int status;
 
 	strlist_make_array(l, &argv, &argc);
+	trace = getenv("PCC_EXEC_TRACE");
 	if (vflag) {
 		printf("Calling ");
 		strlist_print(l, stdout, noexec, " ");
 		printf("\n");
+	}
+	if (trace != NULL && trace[0] != '\0') {
+		fprintf(stderr, "PCC_EXEC_START parent=%ld program=%s\n",
+		    (long)getpid(), argv[0]);
+		if (strcmp(trace, "full") == 0) {
+			fprintf(stderr, "PCC_EXEC_COMMAND parent=%ld ",
+			    (long)getpid());
+			strlist_print(l, stderr, noexec, " ");
+			fprintf(stderr, "\n");
+		}
+		fflush(stderr);
 	}
 	if (noexec)
 		return 0;
@@ -4699,10 +4712,22 @@ strlist_exec(struct strlist *l)
 	case -1:
 		errorx(1, "fork failed");
 	default:
+		if (trace != NULL && trace[0] != '\0') {
+			fprintf(stderr,
+			    "PCC_EXEC_FORK parent=%ld child=%ld program=%s\n",
+			    (long)getpid(), (long)child, argv[0]);
+			fflush(stderr);
+		}
 		while ((rv = waitpid(child, &status, 0)) == -1 && errno == EINTR)
 			/* nothing */(void)0;
 		if (rv == -1)
 			errorx(1, "waitpid failed");
+		if (trace != NULL && trace[0] != '\0') {
+			fprintf(stderr,
+			    "PCC_EXEC_DONE parent=%ld child=%ld program=%s status=%08x\n",
+			    (long)getpid(), (long)child, argv[0], status);
+			fflush(stderr);
+		}
 		if (WIFSIGNALED(status))
 			errorx(1, "%s terminated with signal %d",
 			    argv[0], WTERMSIG(status));

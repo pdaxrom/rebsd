@@ -210,6 +210,8 @@ extern	int lineno, nerrors, issyshdr;
 
 extern	char *ftitle;
 extern	struct symtab *cftnsp;
+extern	int pcc_ccom_trace_enabled;
+void pcc_ccom_trace(const char *);
 extern	int autooff, maxautooff, argoff;
 
 extern	OFFSZ inoff;

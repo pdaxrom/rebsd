@@ -67,6 +67,13 @@ int kwdecode(struct symtab *s);
 #define	CPP_LINE 	3
 #define	CPP_HASH	4
 
+static unsigned long pcc_ccom_trace_lex_actions;
+#define YY_USER_ACTION do { \
+	if (pcc_ccom_trace_enabled && \
+	    (++pcc_ccom_trace_lex_actions & 15ul) == 0) \
+		pcc_ccom_trace("lex-progress"); \
+} while (0);
+
 #ifdef STABS
 #define	STABS_LINE(x) if (gflag && cftnsp) stabs_line(x)
 #else

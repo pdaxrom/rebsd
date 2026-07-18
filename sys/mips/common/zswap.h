@@ -19,6 +19,16 @@ struct mips_zswap_entry {
     u_short flags;
 };
 
+struct mips_zswap_stats {
+    unsigned mzs_logical_blocks;
+    unsigned mzs_phys_units;
+    unsigned mzs_valid_blocks;
+    unsigned mzs_zero_blocks;
+    unsigned mzs_raw_blocks;
+    unsigned mzs_compressed_blocks;
+    unsigned mzs_used_units;
+};
+
 struct mips_zswap {
     struct mips_zswap_entry mz_entry[MIPS_ZSWAP_MAX_BLOCKS];
     u_char mz_units[(MIPS_ZSWAP_MAX_UNITS + 7) / 8];
@@ -42,5 +52,7 @@ int mips_zswap_read(struct mips_zswap *zswap, unsigned offset, void *data,
     unsigned bytes);
 int mips_zswap_write(struct mips_zswap *zswap, unsigned offset,
     const void *data, unsigned bytes);
+int mips_zswap_get_stats(const struct mips_zswap *zswap,
+    struct mips_zswap_stats *stats);
 
 #endif /* _MIPS_COMMON_ZSWAP_H_ */

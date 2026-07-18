@@ -9,12 +9,18 @@
 #include <sys/proc.h>
 #include <sys/vm.h>
 #include <vm/pmap.h>
+#include <vm/vm_object.h>
+#include <vm/vm_page.h>
 #include <vm/vmspace.h>
 #include <machine/io.h>
 #include <machine/fpu.h>
 #ifdef N64
 #include <machine/console.h>
 #include <machine/n64.h>
+#if defined(N64_PCC_HANG_TRACE) && defined(MIPS_ZSWAP_ENABLED)
+#include <machine/ramswap.h>
+#include <mips/common/zswap.h>
+#endif
 #ifdef INPUT_ENABLED
 #include <machine/joybus.h>
 #endif
@@ -47,6 +53,182 @@ static volatile unsigned long mips_timer_clock_last_us;
 static volatile unsigned long mips_timer_clock_max_us;
 static volatile unsigned mips_interrupt_depth;
 volatile unsigned int ct_ticks = 0;
+
+#ifdef N64_PCC_HANG_TRACE
+#define N64_PCC_HANG_TRACE_INTERVAL    HZ
+#define N64_PCC_HANG_TRACE_LIMIT       (60u * 60u)
+#define N64_PCC_PROC_TRACE_INTERVAL    5u
+
+static unsigned n64_pcc_hang_trace_next = N64_PCC_HANG_TRACE_INTERVAL;
+static unsigned n64_pcc_hang_trace_count;
+
+static int
+n64_pcc_user_frame_valid(const struct user *up, const int *frame)
+{
+    return up != 0 && frame != 0 &&
+        (unsigned)frame >= (unsigned)up &&
+        (unsigned)frame <= (unsigned)up + USIZE -
+        FRAME_WORDS * sizeof(int);
+}
+
+static void
+n64_pcc_proc_trace(void)
+{
+    const struct user *up;
+    struct proc *p;
+    const int *frame;
+    unsigned pc;
+    unsigned sp;
+    unsigned ra;
+    unsigned seen;
+
+    seen = 0;
+    for (p = allproc; p != 0 && seen < NPROC; p = p->p_nxt, ++seen) {
+        up = p->p_uarea;
+        frame = up != 0 ? up->u_frame : 0;
+        pc = 0;
+        sp = 0;
+        ra = 0;
+        if (n64_pcc_user_frame_valid(up, frame)) {
+            pc = frame[FRAME_PC];
+            sp = frame[FRAME_SP];
+            ra = frame[FRAME_RA];
+        }
+        printf("N64_PCC_PROC tick=%u pid=%d ppid=%d stat=%d pri=%d "
+            "cpu=%d time=%d sleep=%d flags=%04x sig=%08x "
+            "wchan=%08x dsize=%u ssize=%u pc=%08x sp=%08x ra=%08x "
+            "comm=%s\n",
+            ct_ticks, p->p_pid, p->p_ppid, p->p_stat, p->p_pri,
+            p->p_cpu, p->p_time, p->p_slptime, (unsigned)p->p_flag,
+            (unsigned)p->p_sig, (unsigned)p->p_wchan,
+            (unsigned)p->p_dsize, (unsigned)p->p_ssize, pc, sp, ra,
+            up != 0 ? up->u_comm : "-");
+    }
+}
+
+static void
+n64_pcc_hang_trace(int *frame, unsigned status, unsigned cause,
+    unsigned badvaddr)
+{
+    struct vm_object_stats objects;
+    struct vm_page_stats pages;
+    struct pmap_stats pmaps;
+    struct proc *p;
+    int *user_frame;
+    unsigned user_a0;
+    unsigned user_a1;
+    unsigned user_a2;
+    unsigned user_a3;
+    unsigned user_pc;
+    unsigned user_ra;
+    unsigned user_sp;
+    unsigned user_v0;
+    int objects_valid;
+    int pages_valid;
+    int pmaps_valid;
+#ifdef MIPS_ZSWAP_ENABLED
+    struct mips_zswap_stats zswap;
+    int zswap_valid;
+#endif
+
+    if (ct_ticks < n64_pcc_hang_trace_next ||
+        n64_pcc_hang_trace_count >= N64_PCC_HANG_TRACE_LIMIT)
+        return;
+    n64_pcc_hang_trace_next = ct_ticks + N64_PCC_HANG_TRACE_INTERVAL;
+    ++n64_pcc_hang_trace_count;
+#ifdef N64_MINIMAL_UART_ONLY
+    if (n64_pcc_hang_trace_count == 1)
+        printf("N64_PCC_DIAG version=3 output=uart-only interval_ticks=%u\n",
+            N64_PCC_HANG_TRACE_INTERVAL);
+#else
+    if (n64_pcc_hang_trace_count == 1)
+        printf("N64_PCC_DIAG version=3 output=kernel-console "
+            "interval_ticks=%u\n", N64_PCC_HANG_TRACE_INTERVAL);
+#endif
+    p = u.u_procp;
+    user_frame = USERMODE(status) ? frame : u.u_frame;
+    user_pc = 0;
+    user_sp = 0;
+    user_ra = 0;
+    user_v0 = 0;
+    user_a0 = 0;
+    user_a1 = 0;
+    user_a2 = 0;
+    user_a3 = 0;
+    if (p != 0 && n64_pcc_user_frame_valid(mips_curuser, user_frame)) {
+        user_pc = user_frame[FRAME_PC];
+        user_sp = user_frame[FRAME_SP];
+        user_ra = user_frame[FRAME_RA];
+        user_v0 = user_frame[FRAME_R2];
+        user_a0 = user_frame[FRAME_R4];
+        user_a1 = user_frame[FRAME_R5];
+        user_a2 = user_frame[FRAME_R6];
+        user_a3 = user_frame[FRAME_R7];
+    }
+    pages_valid = vm_page_bootstrap_stats(&pages) == 0;
+    objects_valid = vm_object_get_stats(&objects) == 0;
+    pmaps_valid = pmap_get_stats(&pmaps) == 0;
+    printf("N64_PCC_SAMPLE tick=%u mode=%s pid=%d stat=%d pri=%d "
+        "ppid=%d pc=%08x sp=%08x ra=%08x status=%08x cause=%08x "
+        "badv=%08x upc=%08x usp=%08x ura=%08x uv0=%08x "
+        "ua0=%08x ua1=%08x ua2=%08x ua3=%08x ucode=%08x "
+        "wchan=%08x count=%08x depth=%u comm=%s\n",
+        ct_ticks, USERMODE(status) ? "user" : "kernel",
+        p != 0 ? p->p_pid : -1, p != 0 ? p->p_stat : -1,
+        p != 0 ? p->p_pri : -1, p != 0 ? p->p_ppid : -1,
+        frame[FRAME_PC], frame[FRAME_SP], frame[FRAME_RA], status, cause,
+        badvaddr, user_pc, user_sp, user_ra, user_v0,
+        user_a0, user_a1, user_a2, user_a3,
+        p != 0 ? (unsigned)u.u_code : 0,
+        p != 0 ? (unsigned)p->p_wchan : 0,
+        mips_read_c0_register(C0_COUNT, 0), mips_interrupt_depth,
+        p != 0 ? u.u_comm : "-");
+    printf("N64_PCC_VM tick=%u free=%u alloc=%u frees=%u alloc_fail=%u "
+        "objects=%u resident=%u swapped=%u faults=%u pageins=%u "
+        "pageouts=%u reclaim=%u reclaim_fail=%u mappings=%u "
+        "pmap_resident=%u tlb_refill=%u tlb_mod=%u prot_fault=%u "
+        "inval=%u flush=%u asid_roll=%u\n",
+        ct_ticks, pages_valid ? (unsigned)pages.vps_free : 0,
+        pages_valid ? (unsigned)pages.vps_allocations : 0,
+        pages_valid ? (unsigned)pages.vps_frees : 0,
+        pages_valid ? (unsigned)pages.vps_allocation_failures : 0,
+        objects_valid ? (unsigned)objects.vos_objects : 0,
+        objects_valid ? (unsigned)objects.vos_resident_pages : 0,
+        objects_valid ? (unsigned)objects.vos_swapped_pages : 0,
+        objects_valid ? (unsigned)objects.vos_faults : 0,
+        objects_valid ? (unsigned)objects.vos_pageins : 0,
+        objects_valid ? (unsigned)objects.vos_pageouts : 0,
+        objects_valid ? (unsigned)objects.vos_reclaim_attempts : 0,
+        objects_valid ? (unsigned)objects.vos_reclaim_failures : 0,
+        pmaps_valid ? (unsigned)pmaps.pms_mappings : 0,
+        pmaps_valid ? (unsigned)pmaps.pms_resident_pages : 0,
+        pmaps_valid ? (unsigned)pmaps.pms_tlb_refills : 0,
+        pmaps_valid ? (unsigned)pmaps.pms_tlb_modified : 0,
+        pmaps_valid ? (unsigned)pmaps.pms_protection_faults : 0,
+        pmaps_valid ? (unsigned)pmaps.pms_targeted_invalidations : 0,
+        pmaps_valid ? (unsigned)pmaps.pms_full_flushes : 0,
+        pmaps_valid ? (unsigned)pmaps.pms_asid_rollovers : 0);
+#ifdef MIPS_ZSWAP_ENABLED
+    if (n64_pcc_hang_trace_count == 1 ||
+        n64_pcc_hang_trace_count % N64_PCC_PROC_TRACE_INTERVAL == 0) {
+        zswap_valid = n64ramswap_get_zswap_stats(&zswap) == 0;
+        printf("N64_PCC_ZSWAP tick=%u logical=%u phys_units=%u "
+            "valid=%u zero=%u raw=%u compressed=%u used_units=%u\n",
+            ct_ticks,
+            zswap_valid ? zswap.mzs_logical_blocks : 0,
+            zswap_valid ? zswap.mzs_phys_units : 0,
+            zswap_valid ? zswap.mzs_valid_blocks : 0,
+            zswap_valid ? zswap.mzs_zero_blocks : 0,
+            zswap_valid ? zswap.mzs_raw_blocks : 0,
+            zswap_valid ? zswap.mzs_compressed_blocks : 0,
+            zswap_valid ? zswap.mzs_used_units : 0);
+    }
+#endif
+    if (n64_pcc_hang_trace_count == 1 ||
+        n64_pcc_hang_trace_count % N64_PCC_PROC_TRACE_INTERVAL == 0)
+        n64_pcc_proc_trace();
+}
+#endif
 
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
 static unsigned mips_user_fault_trace_count;
@@ -695,6 +877,9 @@ exception(int *frame)
             clock_start = mips_read_c0_register(C0_COUNT, 0);
             mips_reprime_timer();
             mips_clock_intr(frame, status);
+#ifdef N64_PCC_HANG_TRACE
+            n64_pcc_hang_trace(frame, status, rawcause, badvaddr);
+#endif
             mips_timer_record(late_us, mips_timer_count_to_usec(
                 mips_read_c0_register(C0_COUNT, 0) - clock_start));
         }

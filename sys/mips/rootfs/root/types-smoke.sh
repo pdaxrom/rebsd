@@ -3,7 +3,7 @@ cd /var/tmp || exit 1
 rm -f types-cc types-cc.s types-cc.o types-cc.ro \
     types-pcc types-pcc.s types-pcc.o types-pcc.ro
 
-echo "types-smoke diag v1"
+echo "types-smoke diag v2"
 
 echo "step 1: cc types -S"
 cc -S -o types-cc.s /root/types-smoke.c || exit 1

@@ -527,3 +527,33 @@ mips_zswap_write(struct mips_zswap *zswap, unsigned offset,
     }
     return 0;
 }
+
+int
+mips_zswap_get_stats(const struct mips_zswap *zswap,
+    struct mips_zswap_stats *stats)
+{
+    const struct mips_zswap_entry *entry;
+    unsigned block;
+
+    if (zswap == 0 || stats == 0 || !zswap->mz_initialized)
+        return EINVAL;
+    mips_zswap_zero(stats, sizeof(*stats));
+    stats->mzs_logical_blocks = zswap->mz_blocks;
+    stats->mzs_phys_units = zswap->mz_phys_units;
+    for (block = 0; block < zswap->mz_blocks; ++block) {
+        entry = &zswap->mz_entry[block];
+        if ((entry->flags & MIPS_ZSWAP_F_VALID) == 0)
+            continue;
+        ++stats->mzs_valid_blocks;
+        if (entry->flags & MIPS_ZSWAP_F_ZERO) {
+            ++stats->mzs_zero_blocks;
+            continue;
+        }
+        stats->mzs_used_units += entry->units;
+        if (entry->flags & MIPS_ZSWAP_F_RAW)
+            ++stats->mzs_raw_blocks;
+        else
+            ++stats->mzs_compressed_blocks;
+    }
+    return 0;
+}

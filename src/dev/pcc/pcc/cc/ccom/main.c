@@ -55,6 +55,35 @@ char *prgname, *ftitle;
 
 static void prtstats(void);
 
+#ifndef PASS2
+int pcc_ccom_trace_enabled;
+static unsigned long pcc_ccom_trace_sequence;
+extern size_t permallocsize, tmpallocsize, lostmem;
+
+void
+pcc_ccom_trace(const char *phase)
+{
+	const char *function;
+	long pid;
+
+	if (!pcc_ccom_trace_enabled)
+		return;
+#ifdef HAVE_UNISTD_H
+	pid = (long)getpid();
+#else
+	pid = 0;
+#endif
+	function = cftnsp != NULL ? cftnsp->sname : "-";
+	fprintf(stderr, "PCC_CCOM_TRACE pid=%ld seq=%lu phase=%s line=%d "
+	    "input=%s function=%s perm=%lu tmp=%lu lost=%lu\n",
+	    pid, ++pcc_ccom_trace_sequence, phase, lineno,
+	    ftitle != NULL ? ftitle : "-", function,
+	    (unsigned long)permallocsize, (unsigned long)tmpallocsize,
+	    (unsigned long)lostmem);
+	fflush(stderr);
+}
+#endif
+
 static void
 usage(void)
 {
@@ -142,6 +171,7 @@ main(int argc, char *argv[])
 	int ch;
 #ifndef PASS2
 	int sdflag;
+	const char *ccom_trace;
 #endif
 
 //kflag = 1;
@@ -152,6 +182,11 @@ main(int argc, char *argv[])
 #endif
 
 	prgname = argv[0];
+#ifndef PASS2
+	ccom_trace = getenv("PCC_CCOM_TRACE");
+	pcc_ccom_trace_enabled = ccom_trace != NULL && ccom_trace[0] != '\0';
+	pcc_ccom_trace("start");
+#endif
 
 	while ((ch = getopt(argc, argv, "OT:VW:X:Z:f:gkm:psvwx:")) != -1) {
 		switch (ch) {
@@ -274,6 +309,10 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+#ifndef PASS2
+	pcc_ccom_trace("options-done");
+#endif
+
 	ftitle = xstrdup("<stdin>");
 	if (argc > 0 && strcmp(argv[0], "-") != 0) {
 		if (freopen(argv[0], "r", stdin) == NULL) {
@@ -283,6 +322,9 @@ main(int argc, char *argv[])
 			exit(1);
 		}
 	}
+#ifndef PASS2
+	pcc_ccom_trace("input-open");
+#endif
 	if (argc > 1 && strcmp(argv[1], "-") != 0) {
 		if (freopen(argv[1], "w", stdout) == NULL) {
 			fprintf(stderr, "open output file '%s':",
@@ -291,8 +333,14 @@ main(int argc, char *argv[])
 			exit(1);
 		}
 	}
+#ifndef PASS2
+	pcc_ccom_trace("output-open");
+#endif
 
 	mkdope();
+#ifndef PASS2
+	pcc_ccom_trace("mkdope-done");
+#endif
 	signal(SIGSEGV, segvcatch);
 #ifdef SIGBUS
 	signal(SIGBUS, segvcatch);
@@ -310,7 +358,9 @@ main(int argc, char *argv[])
 	/* starts past any of the above */
 	reached = 1;
 
+	pcc_ccom_trace("bjobcode-start");
 	bjobcode();
+	pcc_ccom_trace("bjobcode-done");
 #ifndef TARGET_VALIST
 	{
 		P1ND *p = block(NAME, NULL, NULL, PTR|CHAR, NULL, 0);
@@ -320,10 +370,16 @@ main(int argc, char *argv[])
 		p1nfree(p);
 	}
 #endif
+	pcc_ccom_trace("complinit-start");
 	complinit();
+	pcc_ccom_trace("complinit-done");
+	pcc_ccom_trace("kwinit-start");
 	kwinit();
+	pcc_ccom_trace("kwinit-done");
 #ifndef NO_BUILTIN
+	pcc_ccom_trace("builtin-init-start");
 	builtin_init();
+	pcc_ccom_trace("builtin-init-done");
 #endif
 	ddebug = sdflag;
 
@@ -350,14 +406,19 @@ main(int argc, char *argv[])
 #endif
 
 #ifndef PASS2
+	pcc_ccom_trace("parse-start");
 	(void) yyparse();
+	pcc_ccom_trace("parse-done");
 	yyaccpt();
+	pcc_ccom_trace("yyaccpt-done");
 
 	if (!nerrors) {
+		pcc_ccom_trace("emit-start");
 		lcommprint();
 #ifndef NO_STRING_SAVE
 		strprint();
 #endif
+		pcc_ccom_trace("emit-done");
 	}
 #endif
 
@@ -366,7 +427,9 @@ main(int argc, char *argv[])
 	if (gflag)
 		stabs_efile(argc ? argv[0] : "");
 #endif
+	pcc_ccom_trace("ejobcode-start");
 	ejobcode( nerrors ? 1 : 0 );
+	pcc_ccom_trace("ejobcode-done");
 #endif
 
 #ifdef TIMING
@@ -388,6 +451,9 @@ main(int argc, char *argv[])
 	if (sflag)
 		prtstats();
 
+#ifndef PASS2
+	pcc_ccom_trace("exit");
+#endif
 	return(nerrors?1:0);
 }
 

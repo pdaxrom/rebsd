@@ -204,6 +204,15 @@ n64ramswap_discard(size_t blkno, size_t nblocks)
 #endif
 }
 
+#ifdef MIPS_ZSWAP_ENABLED
+int
+n64ramswap_get_zswap_stats(struct mips_zswap_stats *stats)
+{
+    ramswap_configure();
+    return mips_zswap_get_stats(&ramswap_zswap, stats);
+}
+#endif
+
 int
 n64ramswap_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 {
