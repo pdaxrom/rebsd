@@ -239,10 +239,11 @@ Exit criteria:
 
 ## Phase 8: Reliability, security, and observability
 
-- [ ] Enforce user/kernel address separation and W^X where supported.
-- [ ] Never map freed physical pages into another process before clearing
+- [x] Enforce user/kernel address separation and W^X where supported; see
+  [SECURITY.md](SECURITY.md) for the MIPS NX and legacy executable exception.
+- [x] Never map freed physical pages into another process before clearing
   user-visible contents.
-- [ ] Harden all range arithmetic against wraparound and signed truncation.
+- [x] Harden all range arithmetic against wraparound and signed truncation.
 - [ ] Make faults from interrupt context, copy routines, and kernel mappings
   explicit; never sleep where sleeping is illegal.
 - [ ] Define lock ordering for maps, objects, pages, vnodes, buffer cache, swap,

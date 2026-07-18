@@ -63,6 +63,7 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
     vm_vaddr_t end, vm_prot_t protection, vm_prot_t maximum,
     unsigned flags, struct vm_object *object, vm_ooffset_t offset)
 {
+    vm_ooffset_t offset_end;
     unsigned index;
     unsigned move;
 
@@ -71,7 +72,8 @@ vm_map_insert_object(struct vm_map *map, vm_vaddr_t start,
         start < map->vmm_min || end > map->vmm_max ||
         !vm_map_protection_valid(protection) ||
         !vm_map_protection_valid(maximum) ||
-        (protection & ~maximum) != 0)
+        (protection & ~maximum) != 0 || (offset & VM_PAGE_MASK) != 0 ||
+        vm_ooffset_add(offset, end - start, &offset_end) != 0)
         return EINVAL;
     if (map->vmm_count >= VM_MAP_MAX_ENTRIES)
         return ENOSPC;
@@ -361,9 +363,8 @@ vm_map_check(const struct vm_map *map, vm_vaddr_t start, vm_size_t size,
     vm_vaddr_t end;
 
     if (map == 0 || size == 0 || !vm_map_protection_valid(protection) ||
-        start < map->vmm_min || size - 1 > VM_VADDR_MAX - start)
+        start < map->vmm_min || vm_vaddr_add(start, size, &end) != 0)
         return EINVAL;
-    end = start + size;
     if (end > map->vmm_max)
         return EFAULT;
     address = start;
@@ -396,6 +397,9 @@ vm_map_validate(const struct vm_map *map)
             !vm_vaddr_page_aligned(entry->vme_end) ||
             entry->vme_start < previous || entry->vme_start >= entry->vme_end ||
             entry->vme_end > map->vmm_max ||
+            (entry->vme_offset & VM_PAGE_MASK) != 0 ||
+            (vm_ooffset_t)(entry->vme_end - entry->vme_start) >
+            UINT64_MAX - entry->vme_offset ||
             !vm_map_protection_valid(entry->vme_protection) ||
             !vm_map_protection_valid(entry->vme_max_protection) ||
             (entry->vme_protection & ~entry->vme_max_protection) != 0)

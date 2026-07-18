@@ -134,22 +134,27 @@ test_single_page_and_poison(void)
 
     CHECK(build_allocator(&map, &allocator, &memory) == 0);
     CHECK(vm_page_allocator_stats(&allocator, &before) == 0);
+    memset(simulated_ram, 0xa5, VM_PAGE_SIZE);
     vm_page_request_init(&request);
     CHECK(vm_page_alloc(&allocator, &request, &page) == 0);
     CHECK(page->vmp_state == VM_PAGE_ACTIVE);
     paddr = page->vmp_paddr;
     CHECK(paddr == TEST_RAM_BASE);
+    offset = paddr - memory.base;
+    CHECK(memory.bytes[offset] == 0 &&
+        memory.bytes[offset + VM_PAGE_SIZE - 1] == 0);
     CHECK(vm_page_free(&allocator, page, 1) == 0);
     CHECK((page->vmp_flags & VM_PAGE_FLAG_POISONED) != 0);
     CHECK(vm_page_free(&allocator, page, 1) == EALREADY);
 
-    offset = paddr - memory.base;
     memory.bytes[offset + 7] ^= 1;
     request.vpr_max_address = paddr + VM_PAGE_MASK;
     CHECK(vm_page_alloc(&allocator, &request, &page) == EFAULT);
     memset(&memory.bytes[offset], VM_PAGE_FREE_POISON, VM_PAGE_SIZE);
     CHECK(vm_page_alloc(&allocator, &request, &page) == 0);
     CHECK(page->vmp_paddr == paddr);
+    CHECK(memory.bytes[offset] == 0 && memory.bytes[offset + 7] == 0 &&
+        memory.bytes[offset + VM_PAGE_SIZE - 1] == 0);
 
     CHECK(vm_page_counter_dec(&allocator, page,
         VM_PAGE_COUNTER_HOLD) == EINVAL);

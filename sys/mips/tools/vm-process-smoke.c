@@ -232,6 +232,25 @@ main(int argc, char **argv)
     mapped[0] = 0x12;
     mapped[SMOKE_VM_PAGE_SIZE] = 0x34;
     mapped[2 * SMOKE_VM_PAGE_SIZE] = 0x56;
+    errno = 0;
+    if (mmap(0, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE | PROT_EXEC,
+        MAP_PRIVATE | MAP_ANON, -1, 0) != MAP_FAILED || errno != EACCES)
+        return smoke_fail("mmap W^X policy");
+    errno = 0;
+    if (mprotect(mapped, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE | PROT_EXEC) == 0 || errno != EACCES)
+        return smoke_fail("mprotect W^X policy");
+    errno = 0;
+    if (mmap((void *)(unsigned)0x80000000u, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED,
+        -1, 0) != MAP_FAILED || errno != EINVAL)
+        return smoke_fail("mmap kernel boundary");
+    errno = 0;
+    if (mmap((void *)(unsigned)0xfffff000u, SMOKE_VM_PAGE_SIZE,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED,
+        -1, 0) != MAP_FAILED || errno != EINVAL)
+        return smoke_fail("mmap address wrap");
     replacement = mmap(mapped + SMOKE_VM_PAGE_SIZE, SMOKE_VM_PAGE_SIZE,
         PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED,
         -1, 0);

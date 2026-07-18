@@ -96,6 +96,14 @@ int exec_setupstack(unsigned entryaddr, struct exec_params *epp)
 {
     int i;
     u_int len, value, stack_pointer;
+    vm_size_t arg_pointer_bytes;
+    vm_size_t env_pointer_bytes;
+    vm_size_t string_bytes;
+    vm_vaddr_t argp_address;
+    vm_vaddr_t envp_address;
+    vm_vaddr_t stack_end;
+    vm_vaddr_t topp_address;
+    vm_vaddr_t ucp_address;
     char *ucp;
     char **argp, **envp, ***topp;
 
@@ -106,12 +114,39 @@ int exec_setupstack(unsigned entryaddr, struct exec_params *epp)
      * This depends on that kernel and user spaces
      * map to the same addresses.
      */
-    topp = (char ***)(epp->stack.vaddr + epp->stack.len - NBPW);            /* Last word of RAM */
-    ucp = (char *)((unsigned)topp - roundup(epp->envbc + epp->argbc,NBPW)); /* arg string space */
-    envp = (char **)(ucp - (epp->envc+1)*NBPW); /* Make place for envp[...], +1 for the 0 */
-    argp = (char **)((char *)envp - (epp->argc+1)*NBPW); /* Make place for argv[...] */
-    stack_pointer = ((unsigned)argp - STACK_ARG_SLOTS * NBPW) &
+    if (epp == 0 || epp->vmspace == 0 ||
+        vm_vaddr_add((vm_vaddr_t)epp->stack.vaddr,
+        (vm_size_t)epp->stack.len, &stack_end) != 0 ||
+        stack_end < NBPW ||
+        vm_size_add((vm_size_t)epp->argbc, (vm_size_t)epp->envbc,
+        &string_bytes) != 0 || string_bytes > VM_SIZE_MAX - (NBPW - 1))
+        return E2BIG;
+    string_bytes = (string_bytes + NBPW - 1) &
+        ~(vm_size_t)(NBPW - 1);
+    if ((vm_size_t)epp->envc + 1 > VM_SIZE_MAX / NBPW ||
+        (vm_size_t)epp->argc + 1 > VM_SIZE_MAX / NBPW)
+        return E2BIG;
+    env_pointer_bytes = ((vm_size_t)epp->envc + 1) * NBPW;
+    arg_pointer_bytes = ((vm_size_t)epp->argc + 1) * NBPW;
+    topp_address = stack_end - NBPW;
+    if (string_bytes > topp_address ||
+        env_pointer_bytes > topp_address - string_bytes)
+        return E2BIG;
+    ucp_address = topp_address - string_bytes;
+    envp_address = ucp_address - env_pointer_bytes;
+    if (arg_pointer_bytes > envp_address)
+        return E2BIG;
+    argp_address = envp_address - arg_pointer_bytes;
+    if (STACK_ARG_SLOTS * NBPW > argp_address)
+        return E2BIG;
+    stack_pointer = (argp_address - STACK_ARG_SLOTS * NBPW) &
         ~(STACK_ALIGN - 1);
+    if (stack_pointer < (vm_vaddr_t)epp->stack.vaddr)
+        return E2BIG;
+    topp = (char ***)(unsigned)topp_address;
+    ucp = (char *)(unsigned)ucp_address;
+    envp = (char **)(unsigned)envp_address;
+    argp = (char **)(unsigned)argp_address;
     value = (u_int)argp;
     if (vmspace_write(epp->vmspace, (vm_vaddr_t)topp,
         &value, sizeof(value)) != 0)
@@ -217,6 +252,32 @@ void exec_alloc_freeall(struct exec_params *epp)
     }
 }
 
+int
+exec_stack_size(struct exec_params *epp, unsigned *result)
+{
+    vm_size_t pointer_count;
+    vm_size_t pointers;
+    vm_size_t strings;
+    vm_size_t total;
+
+    if (epp == 0 || result == 0 ||
+        vm_size_add((vm_size_t)epp->argbc, (vm_size_t)epp->envbc,
+        &strings) != 0 || strings > VM_SIZE_MAX - (NBPW - 1))
+        return E2BIG;
+    strings = (strings + NBPW - 1) & ~(vm_size_t)(NBPW - 1);
+    if (vm_size_add((vm_size_t)epp->argc, (vm_size_t)epp->envc,
+        &pointer_count) != 0 ||
+        vm_size_add(pointer_count, 4, &pointer_count) != 0 ||
+        pointer_count > VM_SIZE_MAX / NBPW)
+        return E2BIG;
+    pointers = pointer_count * NBPW;
+    if (vm_size_add((vm_size_t)SSIZE, strings, &total) != 0 ||
+        vm_size_add(total, pointers, &total) != 0)
+        return E2BIG;
+    *result = (unsigned)total;
+    return 0;
+}
+
 /*
  * Establish memory for the image based on the
  * values picked up from the executable file and stored
@@ -224,6 +285,8 @@ void exec_alloc_freeall(struct exec_params *epp)
  */
 int exec_estab(struct exec_params *epp)
 {
+    vm_size_t image_size;
+    vm_vaddr_t bss_end, bss_start, data_file_end;
     vm_vaddr_t data_start, data_end, stack_start, stack_end;
     int error;
     DEBUG("text =  %#x..%#x, len=%d\n", epp->text.vaddr, epp->text.vaddr+epp->text.len, epp->text.len);
@@ -243,29 +306,45 @@ int exec_estab(struct exec_params *epp)
     /*
      * Try out for overflow
      */
-    if (epp->text.len + epp->data.len + epp->heap.len + epp->stack.len > MAXMEM)
+    if (vm_size_add((vm_size_t)epp->text.len,
+        (vm_size_t)epp->data.len, &image_size) != 0 ||
+        vm_size_add(image_size, (vm_size_t)epp->bss.len,
+        &image_size) != 0 ||
+        vm_size_add(image_size, (vm_size_t)epp->heap.len,
+        &image_size) != 0 ||
+        vm_size_add(image_size, (vm_size_t)epp->stack.len,
+        &image_size) != 0 || image_size > (vm_size_t)MAXMEM)
         return ENOMEM;
 
     /*
      * Check for bss and data addresses over limit
     */
-    if (epp->data.vaddr + epp->data.len > (caddr_t)USER_DATA_END
-        || epp->bss.vaddr+epp->bss.len > (caddr_t)USER_DATA_END)
+    if (vm_vaddr_add((vm_vaddr_t)epp->data.vaddr,
+        (vm_size_t)epp->data.len, &data_file_end) != 0 ||
+        vm_vaddr_add((vm_vaddr_t)epp->bss.vaddr,
+        (vm_size_t)epp->bss.len, &bss_end) != 0 ||
+        data_file_end > (vm_vaddr_t)USER_DATA_END ||
+        bss_end > (vm_vaddr_t)USER_DATA_END)
         return ENOMEM;
 
-    if (roundup((unsigned)epp->data.vaddr + epp->data.len, NBPW) != roundup((unsigned)epp->bss.vaddr, NBPW)) {
+    bss_start = (vm_vaddr_t)epp->bss.vaddr;
+    if (data_file_end > VM_VADDR_MAX - (NBPW - 1) ||
+        bss_start > VM_VADDR_MAX - (NBPW - 1) ||
+        ((data_file_end + NBPW - 1) & ~(vm_vaddr_t)(NBPW - 1)) !=
+        ((bss_start + NBPW - 1) & ~(vm_vaddr_t)(NBPW - 1))) {
         DEBUG(".bss do not follow .data\n");
         return ENOMEM;
     }
 
     data_start = vm_vaddr_trunc_page((vm_vaddr_t)epp->data.vaddr);
-    error = vm_vaddr_round_page((vm_vaddr_t)epp->bss.vaddr +
-        epp->bss.len, &data_end);
+    error = vm_vaddr_round_page(bss_end, &data_end);
     if (error != 0)
         return error;
     stack_start = vm_vaddr_trunc_page((vm_vaddr_t)epp->stack.vaddr);
-    error = vm_vaddr_round_page((vm_vaddr_t)epp->stack.vaddr +
-        epp->stack.len, &stack_end);
+    error = vm_vaddr_add((vm_vaddr_t)epp->stack.vaddr,
+        (vm_size_t)epp->stack.len, &stack_end);
+    if (error == 0)
+        error = vm_vaddr_round_page(stack_end, &stack_end);
     if (error != 0 || data_end > stack_start ||
         stack_start - data_end < VM_PAGE_SIZE)
         return ENOMEM;

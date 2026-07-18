@@ -40,6 +40,11 @@ main(void)
         VM_PROT_READ | VM_PROT_WRITE) == 0);
     CHECK(vm_map_check(&map, 0x10003ff0u, 32, VM_PROT_READ) == EFAULT);
     CHECK(vm_map_check(&map, 0x20000000u, 1, VM_PROT_WRITE) == EFAULT);
+    CHECK(vm_map_check(&map, 0xffffffffu, 1, VM_PROT_NONE) == EINVAL);
+    CHECK(vm_map_check(&map, 0xfffff000u, VM_PAGE_SIZE,
+        VM_PROT_NONE) == EINVAL);
+    CHECK(vm_map_insert(&map, 0x80000000u, 0x80001000u,
+        VM_PROT_READ, VM_PROT_READ, VM_MAP_ANON) == EINVAL);
 
     CHECK(vm_map_protect(&map, 0x10001000u, 0x10002000u,
         VM_PROT_READ) == 0);

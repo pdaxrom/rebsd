@@ -47,6 +47,17 @@ vm_size_add(vm_size_t left, vm_size_t right, vm_size_t *result)
 }
 
 int
+vm_ooffset_add(vm_ooffset_t base, vm_size_t size, vm_ooffset_t *result)
+{
+    if (result == 0)
+        return EINVAL;
+    if ((vm_ooffset_t)size > UINT64_MAX - base)
+        return EOVERFLOW;
+    *result = base + size;
+    return 0;
+}
+
+int
 vm_vaddr_round_page(vm_vaddr_t value, vm_vaddr_t *result)
 {
     if (result == 0)

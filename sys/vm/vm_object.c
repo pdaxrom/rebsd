@@ -298,6 +298,9 @@ vm_object_page_find(const struct vm_object *object, vm_pfn_t index)
     return 0;
 }
 
+static int vm_object_range_valid(const struct vm_object *, vm_ooffset_t,
+    vm_size_t);
+
 static int vm_pager_reclaim_one(struct vm_anon *);
 
 static int
@@ -730,9 +733,8 @@ vm_object_remove(struct vm_object *object, vm_ooffset_t offset,
     vm_pfn_t last;
     int error;
 
-    if (!vm_object_valid(object) || size == 0 ||
-        (offset & VM_PAGE_MASK) != 0 || !vm_size_page_aligned(size) ||
-        offset + size > (vm_ooffset_t)object->vo_size * VM_PAGE_SIZE)
+    if (!vm_object_range_valid(object, offset, size) ||
+        (offset & VM_PAGE_MASK) != 0 || !vm_size_page_aligned(size))
         return EINVAL;
     first = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
     last = first + (size >> VM_PAGE_SHIFT);
@@ -755,13 +757,14 @@ static int
 vm_object_range_valid(const struct vm_object *object, vm_ooffset_t offset,
     vm_size_t size)
 {
+    vm_ooffset_t end;
     vm_ooffset_t object_size;
 
     if (!vm_object_valid(object) || size == 0 ||
-        offset > UINT64_MAX - size)
+        vm_ooffset_add(offset, size, &end) != 0)
         return 0;
     object_size = (vm_ooffset_t)object->vo_size * VM_PAGE_SIZE;
-    return offset + size <= object_size;
+    return end <= object_size;
 }
 
 int
@@ -774,6 +777,7 @@ vm_object_sync(struct vm_object *object, vm_ooffset_t offset,
     void *mapping;
     vm_pfn_t first;
     vm_pfn_t last;
+    vm_ooffset_t end;
     int error;
 
     if (!vm_object_range_valid(object, offset, size) ||
@@ -784,7 +788,9 @@ vm_object_sync(struct vm_object *object, vm_ooffset_t offset,
         object->vo_pager->vpo_pageout == 0)
         return 0;
     first = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
-    last = (vm_pfn_t)((offset + size + VM_PAGE_MASK) >> VM_PAGE_SHIFT);
+    if (vm_ooffset_add(offset, size, &end) != 0)
+        return EINVAL;
+    last = (vm_pfn_t)(((end - 1) >> VM_PAGE_SHIFT) + 1);
     for (object_page = object->vo_pages; object_page != 0;
         object_page = object_page->vop_next) {
         if (object_page->vop_index < first ||
@@ -894,12 +900,15 @@ vm_object_invalidate(struct vm_object *object, vm_ooffset_t offset,
     struct vm_object_page *page;
     vm_pfn_t first;
     vm_pfn_t last;
+    vm_ooffset_t end;
     int error;
 
     if (!vm_object_range_valid(object, offset, size))
         return EINVAL;
     first = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
-    last = (vm_pfn_t)((offset + size + VM_PAGE_MASK) >> VM_PAGE_SHIFT);
+    if (vm_ooffset_add(offset, size, &end) != 0)
+        return EINVAL;
+    last = (vm_pfn_t)(((end - 1) >> VM_PAGE_SHIFT) + 1);
     for (page = object->vo_pages; page != 0; page = page->vop_next) {
         if (page->vop_index >= first && page->vop_index < last &&
             page->vop_anon->va_page != 0 &&

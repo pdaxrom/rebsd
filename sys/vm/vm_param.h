@@ -26,6 +26,7 @@
 int vm_vaddr_add(vm_vaddr_t, vm_size_t, vm_vaddr_t *);
 int vm_paddr_add(vm_paddr_t, vm_size_t, vm_paddr_t *);
 int vm_size_add(vm_size_t, vm_size_t, vm_size_t *);
+int vm_ooffset_add(vm_ooffset_t, vm_size_t, vm_ooffset_t *);
 
 int vm_vaddr_round_page(vm_vaddr_t, vm_vaddr_t *);
 int vm_paddr_round_page(vm_paddr_t, vm_paddr_t *);

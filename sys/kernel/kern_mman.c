@@ -23,9 +23,12 @@ static int
 mman_range(unsigned address, unsigned length, vm_vaddr_t *start,
     vm_size_t *size)
 {
+    vm_vaddr_t end;
+
     if (length == 0 || !vm_vaddr_page_aligned((vm_vaddr_t)address) ||
         vm_size_round_page((vm_size_t)length, size) != 0 ||
-        *size == 0 || *size - 1 > VM_VADDR_MAX - address)
+        *size == 0 || vm_vaddr_add((vm_vaddr_t)address, *size,
+        &end) != 0)
         return EINVAL;
     *start = (vm_vaddr_t)address;
     return 0;
@@ -38,6 +41,7 @@ brk()
         int naddr;
     };
     struct proc *p;
+    vm_vaddr_t old_address, new_address;
     vm_vaddr_t old_end, new_end;
     unsigned address, base, maxmem, newsize, oldsize;
     int error;
@@ -59,9 +63,12 @@ brk()
         return;
     }
 
-    if (vm_vaddr_round_page(base + oldsize,
-        &old_end) != 0 || vm_vaddr_round_page(u.u_procp->p_daddr + newsize,
-        &new_end) != 0) {
+    if (vm_vaddr_add((vm_vaddr_t)base, (vm_size_t)oldsize,
+        &old_address) != 0 ||
+        vm_vaddr_add((vm_vaddr_t)base, (vm_size_t)newsize,
+        &new_address) != 0 ||
+        vm_vaddr_round_page(old_address, &old_end) != 0 ||
+        vm_vaddr_round_page(new_address, &new_end) != 0) {
         u.u_error = ENOMEM;
         return;
     }
@@ -78,15 +85,15 @@ brk()
             new_end - old_end, VM_PROT_READ | VM_PROT_WRITE, 0);
     }
     if (error == 0 && newsize > oldsize) {
-        error = vmspace_zero(p->p_vmspace, base + oldsize,
+        error = vmspace_zero(p->p_vmspace, old_address,
             newsize - oldsize);
         if (error != 0 && new_end > old_end)
             (void)vmspace_unmap(p->p_vmspace, old_end,
                 new_end - old_end);
     } else if (error == 0 && newsize < oldsize) {
-        if (new_end > base + newsize)
-            error = vmspace_zero(p->p_vmspace, base + newsize,
-                new_end - (base + newsize));
+        if (new_end > new_address)
+            error = vmspace_zero(p->p_vmspace, new_address,
+                new_end - new_address);
         if (error == 0 && old_end > new_end)
             error = vmspace_unmap(p->p_vmspace, new_end,
                 old_end - new_end);
@@ -138,6 +145,11 @@ mmap(void)
     if (vmspace == 0 || uap->length == 0 ||
         (uap->protection & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0) {
         u.u_error = EINVAL;
+        return;
+    }
+    if ((uap->protection & (PROT_WRITE | PROT_EXEC)) ==
+        (PROT_WRITE | PROT_EXEC)) {
+        u.u_error = EACCES;
         return;
     }
     if ((uap->flags & ~(MAP_PRIVATE | MAP_SHARED | MAP_FIXED |
@@ -383,6 +395,11 @@ mprotect(void)
         u.u_error = EINVAL;
         return;
     }
+    if ((uap->protection & (PROT_WRITE | PROT_EXEC)) ==
+        (PROT_WRITE | PROT_EXEC)) {
+        u.u_error = EACCES;
+        return;
+    }
     u.u_error = mman_range(uap->address, uap->length, &start, &size);
     if (u.u_error == 0)
         u.u_error = vmspace_protect(vmspace_current(), start, size,
@@ -450,6 +467,7 @@ mincore(void)
     } *uap;
     struct vmspace *vmspace;
     vm_vaddr_t address;
+    vm_vaddr_t end;
     vm_vaddr_t start = 0;
     vm_size_t size = 0;
     unsigned char state;
@@ -466,8 +484,11 @@ mincore(void)
         u.u_error = vmspace_check(vmspace, start, size, VM_PROT_NONE);
     if (u.u_error != 0)
         return;
-    for (address = start; address < start + size;
-        address += VM_PAGE_SIZE) {
+    if (vm_vaddr_add(start, size, &end) != 0) {
+        u.u_error = EINVAL;
+        return;
+    }
+    for (address = start; address < end; address += VM_PAGE_SIZE) {
         u.u_error = vmspace_mincore(vmspace, address, &resident);
         if (u.u_error != 0)
             return;

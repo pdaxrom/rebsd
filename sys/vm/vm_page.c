@@ -249,6 +249,20 @@ vm_page_poison_check(struct vm_page_allocator *allocator,
     return error;
 }
 
+static int
+vm_page_scrub(struct vm_page_allocator *allocator, struct vm_page *page)
+{
+    int error;
+
+    if (allocator->vpa_poison == 0)
+        return 0;
+    error = (*allocator->vpa_poison)(allocator->vpa_poison_arg,
+        page->vmp_paddr, 0, 0);
+    if (error != 0)
+        vm_page_stat_add(&allocator->vpa_poison_failures, 1);
+    return error;
+}
+
 int
 vm_page_alloc(struct vm_page_allocator *allocator,
     const struct vm_page_request *request, struct vm_page **result)
@@ -305,6 +319,21 @@ vm_page_alloc(struct vm_page_allocator *allocator,
             if (error != 0) {
                 vm_page_stat_add(&allocator->vpa_allocation_failures, 1);
                 return EFAULT;
+            }
+        }
+        for (j = 0; j < request->vpr_npages; ++j) {
+            error = vm_page_scrub(allocator,
+                &allocator->vpa_pages[i + j]);
+            if (error != 0) {
+                vm_pfn_t rollback;
+
+                for (rollback = 0; rollback <= j; ++rollback)
+                    (void)(*allocator->vpa_poison)(
+                        allocator->vpa_poison_arg,
+                        allocator->vpa_pages[i + rollback].vmp_paddr,
+                        VM_PAGE_FREE_POISON, 0);
+                vm_page_stat_add(&allocator->vpa_allocation_failures, 1);
+                return error;
             }
         }
         for (j = 0; j < request->vpr_npages; ++j) {

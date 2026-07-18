@@ -85,6 +85,7 @@ void exec_alloc_freeall(struct exec_params *epp);
 void *exec_alloc(int size, int ru, struct exec_params *epp);
 int exec_estab(struct exec_params *epp);
 int exec_save_args(struct exec_params *epp);
+int exec_stack_size(struct exec_params *epp, unsigned *size);
 void exec_clear(struct exec_params *epp);
 int exec_commit(struct exec_params *epp);
 

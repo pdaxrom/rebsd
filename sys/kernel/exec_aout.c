@@ -19,6 +19,10 @@
 
 int exec_aout_check(struct exec_params *epp)
 {
+    vm_size_t image_size;
+    vm_vaddr_t bss_start;
+    vm_vaddr_t heap_start;
+    unsigned stack_size;
     int error;
 
     if (epp->hdr_len < sizeof(struct exec))
@@ -29,7 +33,10 @@ int exec_aout_check(struct exec_params *epp)
 
     switch (N_GETMAGIC(epp->hdr.aout)) {
     case OMAGIC:
-        epp->hdr.aout.a_data += epp->hdr.aout.a_text;
+        if (vm_size_add((vm_size_t)epp->hdr.aout.a_data,
+            (vm_size_t)epp->hdr.aout.a_text, &image_size) != 0)
+            return ENOEXEC;
+        epp->hdr.aout.a_data = image_size;
         epp->hdr.aout.a_text = 0;
         break;
     default:
@@ -41,6 +48,9 @@ int exec_aout_check(struct exec_params *epp)
      * Save arglist
      */
     error = exec_save_args(epp);
+    if (error != 0)
+        return error;
+    error = exec_stack_size(epp, &stack_size);
     if (error != 0)
         return error;
 
@@ -62,11 +72,16 @@ int exec_aout_check(struct exec_params *epp)
 
     epp->data.vaddr = (caddr_t)USER_DATA_START;
     epp->data.len = epp->hdr.aout.a_data;
-    epp->bss.vaddr = epp->data.vaddr + epp->data.len;
+    if (vm_vaddr_add((vm_vaddr_t)USER_DATA_START,
+        (vm_size_t)epp->data.len, &bss_start) != 0 ||
+        vm_vaddr_add(bss_start, (vm_size_t)epp->hdr.aout.a_bss,
+        &heap_start) != 0 || stack_size > (unsigned)USER_DATA_END)
+        return ENOEXEC;
+    epp->bss.vaddr = (caddr_t)bss_start;
     epp->bss.len = epp->hdr.aout.a_bss;
-    epp->heap.vaddr = epp->bss.vaddr + epp->bss.len;
+    epp->heap.vaddr = (caddr_t)heap_start;
     epp->heap.len = 0;
-    epp->stack.len = SSIZE + roundup(epp->argbc + epp->envbc, NBPW) + (epp->argc + epp->envc+4)*NBPW;
+    epp->stack.len = stack_size;
     epp->stack.vaddr = (caddr_t)USER_DATA_END - epp->stack.len;
 
     /*

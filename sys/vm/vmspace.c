@@ -231,9 +231,8 @@ vmspace_unmap(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size)
 
     if (!vmspace_valid(vmspace) || size == 0 ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
-        size - 1 > VM_VADDR_MAX - start)
+        vm_vaddr_add(start, size, &end) != 0)
         return EINVAL;
-    end = start + size;
     if (end > vmspace->vms_map.vmm_max)
         return EINVAL;
     if (vmspace_sysv_overlap(vmspace, start, end))
@@ -306,7 +305,8 @@ vmspace_sysv_attach(struct vmspace *vmspace,
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         start < vmspace->vms_map.vmm_min ||
         start >= vmspace->vms_map.vmm_max ||
-        size > vmspace->vms_map.vmm_max - start)
+        size > vmspace->vms_map.vmm_max - start ||
+        vm_vaddr_add(start, size, &end) != 0)
         return EINVAL;
     if (vmspace->vms_sysv_attachment_count >=
         sizeof(vmspace->vms_sysv_attachments) /
@@ -317,7 +317,6 @@ vmspace_sysv_attach(struct vmspace *vmspace,
         if (attachment->vsa_start == start)
             return EEXIST;
     }
-    end = start + size;
     for (address = start; address < end; address += VM_PAGE_SIZE) {
         entry = vm_map_lookup(&vmspace->vms_map, address);
         if (entry == 0 || (entry->vme_flags & VM_MAP_SYSV_SHM) == 0)
@@ -417,9 +416,8 @@ vmspace_map_object(struct vmspace *vmspace, vm_vaddr_t start,
         (object != 0 && (flags & VM_MAP_DEVICE) != 0) ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         (offset & VM_PAGE_MASK) != 0 ||
-        size - 1 > VM_VADDR_MAX - start)
+        vm_vaddr_add(start, size, &end) != 0)
         return EINVAL;
-    end = start + size;
     return vm_map_insert_object(&vmspace->vms_map, start, end,
         protection, maximum, flags, object, offset);
 }
@@ -469,9 +467,8 @@ vmspace_map_object_fixed(struct vmspace *vmspace, vm_vaddr_t start,
         (object != 0 && (flags & VM_MAP_DEVICE) != 0) ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
         (offset & VM_PAGE_MASK) != 0 ||
-        size - 1 > VM_VADDR_MAX - start)
+        vm_vaddr_add(start, size, &end) != 0)
         return EINVAL;
-    end = start + size;
     if (start < vmspace->vms_map.vmm_min ||
         end > vmspace->vms_map.vmm_max)
         return EINVAL;
@@ -674,19 +671,18 @@ vmspace_protect(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
     const struct vm_map_entry *entry;
     vm_prot_t effective;
     vm_vaddr_t address;
+    vm_vaddr_t end;
     int error;
 
     if (!vmspace_valid(vmspace) || size == 0 ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
-        size - 1 > VM_VADDR_MAX - start)
+        vm_vaddr_add(start, size, &end) != 0)
         return EINVAL;
     replacement = vmspace->vms_map;
-    error = vm_map_protect(&replacement, start, start + size,
-        protection);
+    error = vm_map_protect(&replacement, start, end, protection);
     if (error != 0)
         return error;
-    for (address = start; address < start + size;
-        address += VM_PAGE_SIZE) {
+    for (address = start; address < end; address += VM_PAGE_SIZE) {
         entry = vm_map_lookup(&replacement, address);
         if (entry == 0)
             return EFAULT;
@@ -738,9 +734,9 @@ vmspace_wire(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
 
     if (!vmspace_valid(vmspace) || size == 0 ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
-        size - 1 > VM_VADDR_MAX - start || (wire != 0 && wire != 1))
+        vm_vaddr_add(start, size, &end) != 0 ||
+        (wire != 0 && wire != 1))
         return EINVAL;
-    end = start + size;
     replacement = vmspace->vms_map;
     error = vm_map_set_flags(&replacement, start, end,
         wire ? VM_MAP_WIRED : 0, wire ? 0 : VM_MAP_WIRED);
@@ -831,10 +827,9 @@ vmspace_sync(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
 
     if (!vmspace_valid(vmspace) || size == 0 ||
         !vm_vaddr_page_aligned(start) || !vm_size_page_aligned(size) ||
-        size - 1 > VM_VADDR_MAX - start ||
+        vm_vaddr_add(start, size, &end) != 0 ||
         (flags & ~(VM_PAGER_IO_SYNC | VM_PAGER_IO_INVALIDATE)) != 0)
         return EINVAL;
-    end = start + size;
     error = vm_map_check(&vmspace->vms_map, start, size, VM_PROT_NONE);
     if (error != 0)
         return error;

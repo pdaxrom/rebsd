@@ -99,6 +99,10 @@ int
 exec_elf_check(struct exec_params *epp)
 {
     struct elf_phdr *ph;
+    vm_vaddr_t file_end;
+    vm_vaddr_t load_end;
+    vm_vaddr_t segment_end;
+    unsigned stack_size;
     int error, i, phsize;
 
     const char elfident[] = {ELFMAG0, ELFMAG1, ELFMAG2, ELFMAG3,
@@ -137,7 +141,13 @@ exec_elf_check(struct exec_params *epp)
     epp->text.len = epp->data.len = epp->bss.len = epp->stack.len = epp->heap.len = 0;
     epp->text.vaddr = epp->data.vaddr = epp->bss.vaddr = epp->stack.vaddr = epp->heap.vaddr = NO_ADDR;
 
-    if (epp->hdr.elf.e_phnum == 1 && ph[0].p_type == PT_LOAD && ph[0].p_flags == (PF_R|PF_W|PF_X)) {
+    if (epp->hdr.elf.e_phnum == 1 && ph[0].p_type == PT_LOAD &&
+        ph[0].p_flags == (PF_R|PF_W|PF_X) && ph[0].p_filesz != 0 &&
+        ph[0].p_filesz < ph[0].p_memsz &&
+        vm_vaddr_add((vm_vaddr_t)ph[0].p_vaddr,
+        (vm_size_t)ph[0].p_filesz, &file_end) == 0 &&
+        vm_vaddr_add((vm_vaddr_t)ph[0].p_vaddr,
+        (vm_size_t)ph[0].p_memsz, &segment_end) == 0) {
         /*
          * In the simple a.out type link, in elf format, there is only
          * one loadable segment that is RWE containing everything
@@ -145,18 +155,18 @@ exec_elf_check(struct exec_params *epp)
          */
         epp->data.vaddr = (caddr_t)ph[0].p_vaddr;
         epp->data.len = ph[0].p_memsz;
-        epp->heap.vaddr = (caddr_t)ph[0].p_vaddr + ph[0].p_memsz;
+        epp->heap.vaddr = (caddr_t)segment_end;
         epp->heap.len = 0;
-        epp->stack.len = SSIZE + epp->argbc + epp->envbc + (epp->argc+epp->envc+4)*NBPW;
-        epp->stack.vaddr = (caddr_t)USER_DATA_END - epp->stack.len;
+        epp->stack.len = 0;
+        epp->stack.vaddr = NO_ADDR;
 
         /*
          * We assume .bss is the different between the memory data
          * section size and the file size.
          */
-        epp->bss.vaddr = epp->data.vaddr + ph[0].p_filesz;
+        epp->bss.vaddr = (caddr_t)file_end;
         epp->bss.len = ph[0].p_memsz - ph[0].p_filesz;
-        epp->data.len = epp->bss.vaddr - epp->data.vaddr;
+        epp->data.len = ph[0].p_filesz;
     } else {
         /*
          * At the current moment we don't handle anything else
@@ -171,6 +181,13 @@ exec_elf_check(struct exec_params *epp)
     error = exec_save_args(epp);
     if (error != 0)
         return error;
+    error = exec_stack_size(epp, &stack_size);
+    if (error != 0)
+        return error;
+    if (stack_size > (unsigned)USER_DATA_END)
+        return ENOEXEC;
+    epp->stack.len = stack_size;
+    epp->stack.vaddr = (caddr_t)USER_DATA_END - stack_size;
 
     /*
      * Establish memory
@@ -187,13 +204,12 @@ exec_elf_check(struct exec_params *epp)
         /*
          * Sanity check that the load is to our intended address space.
          */
-        if (!((epp->text.vaddr != NO_ADDR
-               && ((caddr_t)ph[i].p_vaddr >= epp->text.vaddr
-               && (caddr_t)ph[i].p_vaddr + ph[i].p_filesz <= epp->text.vaddr + epp->text.len))
-              || (epp->data.vaddr != NO_ADDR
-              && (caddr_t)ph[i].p_vaddr >= epp->data.vaddr
-              && (caddr_t)ph[i].p_vaddr + ph[i].p_filesz <= epp->data.vaddr + epp->data.len))
-            || ph[i].p_filesz >= ph[i].p_memsz || ph[i].p_filesz <= 0) {
+        if (ph[i].p_filesz == 0 || ph[i].p_filesz >= ph[i].p_memsz ||
+            vm_vaddr_add((vm_vaddr_t)ph[i].p_vaddr,
+            (vm_size_t)ph[i].p_filesz, &load_end) != 0 ||
+            (vm_vaddr_t)ph[i].p_vaddr <
+            (vm_vaddr_t)epp->data.vaddr ||
+            load_end > (vm_vaddr_t)epp->bss.vaddr) {
             return ENOEXEC;
         }
         error = vmspace_read_inode(epp->vmspace, epp->ip,

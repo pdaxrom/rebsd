@@ -10,6 +10,12 @@ Each anonymous `vm_map` entry owns a reference to a VM object.  An object is a
 sparse set of page-index nodes; an untouched index has neither a `vm_page` nor
 a swap slot.  Its first fault allocates and zeroes one 4 KiB page.
 
+The physical allocator also scrubs every allocated page after verifying its
+free poison.  Object zeroing, swap input, file input, and COW copying therefore
+define contents only after the allocator has removed data from the page's
+previous owner.  The complete address-separation, W^X, and range rules are in
+[SECURITY.md](SECURITY.md).
+
 Private `fork` clones the object nodes but shares their anonymous-page
 descriptors.  Both mappings are made read-only while retaining their requested
 write protection in `vm_map`.  A write fault allocates and copies a page only
