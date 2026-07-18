@@ -517,6 +517,11 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     case VM_PAGEINS:
     case VM_PAGEOUTS:
     case VM_SWAPFAILURES:
+    case VM_OBJECTFAULTS:
+    case VM_OBJECTWAITS:
+    case VM_FAULTWOULDBLOCK:
+    case VM_RECLAIMATTEMPTS:
+    case VM_RECLAIMFAILURES:
         error = vm_object_get_stats(&object_stats);
         if (error != 0)
             return error;
@@ -545,8 +550,23 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
         case VM_PAGEOUTS:
             page_value = object_stats.vos_pageouts;
             break;
-        default:
+        case VM_SWAPFAILURES:
             page_value = object_stats.vos_swap_failures;
+            break;
+        case VM_OBJECTFAULTS:
+            page_value = object_stats.vos_faults;
+            break;
+        case VM_OBJECTWAITS:
+            page_value = object_stats.vos_busy_waits;
+            break;
+        case VM_FAULTWOULDBLOCK:
+            page_value = object_stats.vos_fault_wouldblocks;
+            break;
+        case VM_RECLAIMATTEMPTS:
+            page_value = object_stats.vos_reclaim_attempts;
+            break;
+        default:
+            page_value = object_stats.vos_reclaim_failures;
             break;
         }
         return (sysctl_rdlong(oldp, oldlenp, newp, page_value));

@@ -39,6 +39,11 @@ struct vm_object_stats {
     vm_pfn_t vos_pageins;
     vm_pfn_t vos_pageouts;
     vm_pfn_t vos_swap_failures;
+    vm_pfn_t vos_faults;
+    vm_pfn_t vos_busy_waits;
+    vm_pfn_t vos_fault_wouldblocks;
+    vm_pfn_t vos_reclaim_attempts;
+    vm_pfn_t vos_reclaim_failures;
 };
 
 int vm_object_system_init(struct vm_page_allocator *);

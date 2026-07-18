@@ -19,7 +19,7 @@ vmstat \- report virtual memory statistics
 .SH SYNOPSIS
 .B vmstat
 [
-.B \-fsi
+.B \-fsiptz
 ]
 [ drives ]
 [ interval [ count ] ]
@@ -41,7 +41,12 @@ argument, it instead prints the contents
 of the
 .I sum
 structure, giving the total number of several kinds of paging related
-events which have occurred since boot.
+events which have occurred since boot.  On ReBSD this summary also reads the
+BSD-style
+.B vm
+.IR sysctl (3)
+nodes and reports physical-page allocation, pmap/TLB activity, VM objects,
+faults, COW, pager I/O, bounded reclaim, and shared-memory use.
 If given a
 .B \-i
 argument, it instead reports on the number of

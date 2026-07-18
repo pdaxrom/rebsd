@@ -107,9 +107,13 @@ vm_anon_busy_wait(struct vm_anon *anon, int nowait)
     if (anon == 0 || anon->va_in_use == 0)
         return EINVAL;
     while ((anon->va_flags & VM_ANON_BUSY) != 0) {
-        if (nowait)
+        if (nowait) {
+            vm_object_stat_increment(
+                &vm_object_statistics.vos_fault_wouldblocks);
             return EWOULDBLOCK;
+        }
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+        vm_object_stat_increment(&vm_object_statistics.vos_busy_waits);
         int error = tsleep((caddr_t)anon, PSWP, 0);
 
         if (error != 0)
@@ -380,7 +384,11 @@ vm_object_page_allocate(struct vm_page **result)
     request.vpr_state = VM_PAGE_ACTIVE;
     error = vm_page_alloc(vm_object_allocator, &request, result);
     for (pass = 0; error == ENOMEM && pass < 3; ++pass) {
-        (void)vm_pager_reclaim_one(0);
+        vm_object_stat_increment(
+            &vm_object_statistics.vos_reclaim_attempts);
+        if (vm_pager_reclaim_one(0) != 0)
+            vm_object_stat_increment(
+                &vm_object_statistics.vos_reclaim_failures);
         error = vm_page_alloc(vm_object_allocator, &request, result);
     }
     return error;
@@ -689,6 +697,9 @@ vm_object_fault_context(struct vm_object *object, vm_ooffset_t offset,
         (flags & ~VM_OBJECT_FAULT_NOWAIT) != 0)
         return EINVAL;
     index = (vm_pfn_t)(offset >> VM_PAGE_SHIFT);
+    if (offset >= (vm_ooffset_t)object->vo_size * VM_PAGE_SIZE)
+        return ENXIO;
+    vm_object_stat_increment(&vm_object_statistics.vos_faults);
 retry:
     if (offset >= (vm_ooffset_t)object->vo_size * VM_PAGE_SIZE)
         return ENXIO;
@@ -696,8 +707,11 @@ retry:
     if ((flags & VM_OBJECT_FAULT_NOWAIT) != 0 &&
         (object_page == 0 || object_page->vop_anon->va_page == 0 ||
         (object_page->vop_anon->va_flags & VM_ANON_BUSY) != 0 ||
-        (private_write && object_page->vop_anon->va_references > 1)))
+        (private_write && object_page->vop_anon->va_references > 1))) {
+        vm_object_stat_increment(
+            &vm_object_statistics.vos_fault_wouldblocks);
         return EWOULDBLOCK;
+    }
     if (object_page != 0) {
         anon = object_page->vop_anon;
         error = vm_anon_busy_wait(anon,

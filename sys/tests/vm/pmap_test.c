@@ -617,6 +617,8 @@ test_vmspace(void)
     CHECK(object_stats.vos_objects == 0);
     CHECK(object_stats.vos_anon_pages == 0);
     CHECK(object_stats.vos_resident_pages == 0);
+    CHECK(object_stats.vos_faults != 0);
+    CHECK(object_stats.vos_fault_wouldblocks >= 2);
     return 0;
 }
 
@@ -704,7 +706,7 @@ test_pager(void)
             TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1) == 0);
     }
     CHECK(vm_object_get_stats(&stats) == 0);
-    CHECK(stats.vos_pageouts != 0);
+    CHECK(stats.vos_pageouts != 0 && stats.vos_reclaim_attempts != 0);
     evicted = 0;
     for (index = 0; index < TEST_PRESSURE_PAGES; ++index) {
         if (pmap_extract(space->vms_pmap,
@@ -749,7 +751,8 @@ test_pager(void)
     CHECK(error == ENOMEM);
     written = index;
     CHECK(vm_object_get_stats(&stats) == 0);
-    CHECK(stats.vos_swap_failures != 0 && stats.vos_pageouts == 0);
+    CHECK(stats.vos_swap_failures != 0 && stats.vos_pageouts == 0 &&
+        stats.vos_reclaim_failures != 0);
     vm_pager_debug_fail_io(0, 0);
     for (index = 0; index < written; ++index) {
         value = 0xff;

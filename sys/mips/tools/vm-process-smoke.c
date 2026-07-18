@@ -141,6 +141,11 @@ main(int argc, char **argv)
     long sysv_pages;
     long sysv_mappings;
     long sysv_attachments;
+    long vm_faults;
+    long vm_waits;
+    long vm_wouldblock;
+    long vm_reclaim_attempts;
+    long vm_reclaim_failures;
     unsigned char file_byte;
 
     if (argc == 2 && strcmp(argv[1], "--exec-child") == 0)
@@ -680,6 +685,20 @@ main(int argc, char **argv)
         munmap(shared_mapping, 2 * SMOKE_VM_PAGE_SIZE) != 0 ||
         unlink("/var/tmp/vm-mmap-shared") != 0)
         return smoke_fail("shared file cleanup");
+
+    vm_faults = vm_waits = vm_wouldblock = 0;
+    vm_reclaim_attempts = vm_reclaim_failures = 0;
+    if (smoke_vm_sysctl(VM_OBJECTFAULTS, &vm_faults) != 0 ||
+        smoke_vm_sysctl(VM_OBJECTWAITS, &vm_waits) != 0 ||
+        smoke_vm_sysctl(VM_FAULTWOULDBLOCK, &vm_wouldblock) != 0 ||
+        smoke_vm_sysctl(VM_RECLAIMATTEMPTS, &vm_reclaim_attempts) != 0 ||
+        smoke_vm_sysctl(VM_RECLAIMFAILURES, &vm_reclaim_failures) != 0 ||
+        vm_faults <= 0) {
+        printf("vm-process-smoke: reliability sysctl=%ld/%ld/%ld/%ld/%ld\n",
+            vm_faults, vm_waits, vm_wouldblock, vm_reclaim_attempts,
+            vm_reclaim_failures);
+        return smoke_fail("VM reliability sysctl accounting");
+    }
 
     if (sbrk(-2 * page_size) == (void *)-1)
         return smoke_fail("sbrk shrink");

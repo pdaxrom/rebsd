@@ -335,7 +335,11 @@ to text images.
 .B \-T
 prints the number of used and free slots in the several system tables
 and is useful for checking to see how full system tables have become if the
-system is under heavy load.
+system is under heavy load.  On ReBSD it also prints compact physical-page,
+VM-object, pmap, fault, reclaim, and shared-memory totals obtained through
+read-only
+.B vm
+sysctl nodes.
 .SH FILES
 .ta \w'/dev/kmem  'u
 /vmunix	namelist

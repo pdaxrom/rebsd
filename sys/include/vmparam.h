@@ -46,7 +46,12 @@
 #define VM_SHMMAXMAPPINGS 35 /* long: per-process VM map limit */
 #define VM_SYSVSEGMENTS 36  /* long: current SysV segments */
 #define VM_SYSVATTACHMENTS 37 /* long: current SysV attachments */
-#define VM_MAXID    38      /* number of valid vm ids */
+#define VM_OBJECTFAULTS 38  /* long: object fault resolutions */
+#define VM_OBJECTWAITS 39   /* long: waits for busy object pages */
+#define VM_FAULTWOULDBLOCK 40 /* long: non-sleeping faults rejected */
+#define VM_RECLAIMATTEMPTS 41 /* long: bounded reclaim passes */
+#define VM_RECLAIMFAILURES 42 /* long: reclaim passes without progress */
+#define VM_MAXID    43      /* number of valid vm ids */
 
 #ifndef KERNEL
 #define CTL_VM_NAMES { \
@@ -88,6 +93,11 @@
     { "shm_max_mappings", CTLTYPE_LONG }, \
     { "sysv_segments", CTLTYPE_LONG }, \
     { "sysv_attachments", CTLTYPE_LONG }, \
+    { "object_faults", CTLTYPE_LONG }, \
+    { "object_waits", CTLTYPE_LONG }, \
+    { "fault_wouldblock", CTLTYPE_LONG }, \
+    { "reclaim_attempts", CTLTYPE_LONG }, \
+    { "reclaim_failures", CTLTYPE_LONG }, \
 }
 #endif
 

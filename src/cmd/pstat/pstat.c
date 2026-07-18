@@ -17,11 +17,16 @@
 #include <sys/tty.h>
 #include <sys/conf.h>
 #include <sys/vm.h>
+#define KERNEL
+#include <sys/sysctl.h>
+#undef KERNEL
 #include <nlist.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+int sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
 char	*fcore	= "/dev/kmem";
 char	*fmem	= "/dev/mem";
@@ -63,6 +68,7 @@ static void doproc(void);
 static void dotty(void);
 static void dousr(void);
 static void doswap(void);
+static void dovm(void);
 static void putf(long v, char n);
 static void dottytype(char *name, int type);
 static void ttyprt(struct tty *atp, int line);
@@ -157,6 +163,63 @@ int main(int argc, char **argv)
 		dousr();
 	if (swpf||totflg)
 		doswap();
+	if (totflg)
+		dovm();
+}
+
+static int
+vmvalue(int leaf, long *value)
+{
+	int mib[2];
+	size_t size;
+
+	mib[0] = CTL_VM;
+	mib[1] = leaf;
+	size = sizeof(*value);
+	return sysctl(mib, 2, value, &size, NULL, 0) != -1 &&
+		size == sizeof(*value) ? 0 : -1;
+}
+
+static void
+dovm()
+{
+	long total_pages, free_pages, reserved_pages, bad_pages;
+	long objects, anon_pages, resident_pages, swapped_pages;
+	long mappings, pmap_resident, faults, waits, wouldblock;
+	long reclaim_attempts, reclaim_failures, shm_objects, shm_mappings;
+
+	if (vmvalue(VM_PHYSPAGES, &total_pages) != 0 ||
+	    vmvalue(VM_FREEPAGES, &free_pages) != 0 ||
+	    vmvalue(VM_RESERVEDPAGES, &reserved_pages) != 0 ||
+	    vmvalue(VM_BADPAGES, &bad_pages) != 0 ||
+	    vmvalue(VM_OBJECTS, &objects) != 0 ||
+	    vmvalue(VM_ANONPAGES, &anon_pages) != 0 ||
+	    vmvalue(VM_OBJECTRESIDENT, &resident_pages) != 0 ||
+	    vmvalue(VM_OBJECTSWAPPED, &swapped_pages) != 0 ||
+	    vmvalue(VM_PMAPMAPPINGS, &mappings) != 0 ||
+	    vmvalue(VM_PMAPRESIDENT, &pmap_resident) != 0 ||
+	    vmvalue(VM_OBJECTFAULTS, &faults) != 0 ||
+	    vmvalue(VM_OBJECTWAITS, &waits) != 0 ||
+	    vmvalue(VM_FAULTWOULDBLOCK, &wouldblock) != 0 ||
+	    vmvalue(VM_RECLAIMATTEMPTS, &reclaim_attempts) != 0 ||
+	    vmvalue(VM_RECLAIMFAILURES, &reclaim_failures) != 0 ||
+	    vmvalue(VM_SHMOBJECTS, &shm_objects) != 0 ||
+	    vmvalue(VM_SHMMAPPINGS, &shm_mappings) != 0) {
+		fprintf(stderr, "pstat: VM statistics are unavailable\n");
+		return;
+	}
+	printf("%ld/%ld physical pages free, %ld reserved, %ld bad\n",
+	    free_pages, total_pages, reserved_pages, bad_pages);
+	printf("%ld VM objects, %ld anon, %ld resident, %ld swapped\n",
+	    objects, anon_pages, resident_pages, swapped_pages);
+	printf("%ld pmap mappings, %ld resident mappings\n",
+	    mappings, pmap_resident);
+	printf("%ld object faults, %ld waits, %ld nowait rejects\n",
+	    faults, waits, wouldblock);
+	printf("%ld reclaim attempts, %ld failures\n",
+	    reclaim_attempts, reclaim_failures);
+	printf("%ld shared-memory objects, %ld current-process mappings\n",
+	    shm_objects, shm_mappings);
 }
 
 void usage()

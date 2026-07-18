@@ -248,8 +248,8 @@ Exit criteria:
   explicit; never sleep where sleeping is illegal.
 - [x] Define lock ordering for maps, objects, pages, vnodes, buffer cache, swap,
   and process teardown.
-- [ ] Add useful `vmstat`/`pstat` output and BSD-style VM `sysctl` nodes.
-- [ ] Keep normal boot and fault logs concise; gate high-frequency diagnostics.
+- [x] Add useful `vmstat`/`pstat` output and BSD-style VM `sysctl` nodes.
+- [x] Keep normal boot and fault logs concise; gate high-frequency diagnostics.
 - [x] Add `VM_DIAGNOSTIC` kernel assertions that can be enabled without
   changing the ABI.
 - [x] Document OOM selection/termination policy rather than hanging forever.

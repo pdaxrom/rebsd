@@ -48,6 +48,21 @@ static volatile unsigned long mips_timer_clock_max_us;
 static volatile unsigned mips_interrupt_depth;
 volatile unsigned int ct_ticks = 0;
 
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+static unsigned mips_user_fault_trace_count;
+
+static void
+mips_trace_user_fault(const char *kind, int *frame, unsigned badvaddr)
+{
+    if (mips_user_fault_trace_count >= 32)
+        return;
+    ++mips_user_fault_trace_count;
+    printf("user fault: %s pc=%08x address=%08x pid=%d comm=%s\n",
+        kind, frame[FRAME_PC], badvaddr,
+        u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
+}
+#endif
+
 extern char mips_exception_entry[];
 extern char mips_exception_entry_end[];
 extern char mips_exception_restore_start[];
@@ -764,17 +779,16 @@ exception(int *frame)
             panic("unexpected exception");
         case CA_AdEL + USER:
         case CA_AdES + USER:
-            printf("*** 0x%08x: %s: bad address 0x%08x\n",
-                frame[FRAME_PC], u.u_comm, badvaddr);
-            printf("*** user exception: exc=%u cause=%08x sp=%08x ra=%08x\n",
-                rawcause >> 2 & 31, rawcause, frame[FRAME_SP],
-                frame[FRAME_RA]);
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+            mips_trace_user_fault("address", frame, badvaddr);
+#endif
             psig = SIGBUS;
             break;
         case CA_IBE + USER:
         case CA_DBE + USER:
-            printf("*** 0x%08x: %s: bus error\n",
-                frame[FRAME_PC], u.u_comm);
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+            mips_trace_user_fault("bus", frame, badvaddr);
+#endif
             psig = SIGBUS;
             break;
         case CA_RI + USER:

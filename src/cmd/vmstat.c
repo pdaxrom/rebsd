@@ -16,6 +16,7 @@
 #include <sys/dk.h>
 #include <sys/file.h>
 #include <sys/namei.h>
+#include <sys/sysctl.h>
 #include <sys/vm.h>
 
 struct nlist nl[] = {
@@ -90,7 +91,51 @@ static void doforkst(void);
 static void dosum(void);
 static void read_names(void);
 static void dointr(long nintv);
+static void dovmstats(void);
 static void stats(int dn);
+
+struct vmstat_sysctl {
+    int leaf;
+    char *description;
+};
+
+static struct vmstat_sysctl vmstat_sysctls[] = {
+    { VM_PHYSPAGES, "physical pages" },
+    { VM_FREEPAGES, "free pages" },
+    { VM_RESERVEDPAGES, "reserved pages" },
+    { VM_BADPAGES, "bad pages" },
+    { VM_PAGEALLOCS, "page allocations" },
+    { VM_PAGEFREES, "page frees" },
+    { VM_PAGEFAILURES, "page allocation failures" },
+    { VM_PAGEPOISONFAILURES, "page poison failures" },
+    { VM_PMAPMAPPINGS, "pmap mappings" },
+    { VM_PMAPRESIDENT, "pmap resident pages" },
+    { VM_PMAPREFILLS, "TLB refills" },
+    { VM_PMAPMODIFIED, "first-write TLB updates" },
+    { VM_PMAPFAULTS, "pmap protection faults" },
+    { VM_PMAPTARGETED, "targeted TLB invalidations" },
+    { VM_PMAPFLUSHES, "full TLB flushes" },
+    { VM_PMAPROLLOVERS, "ASID rollovers" },
+    { VM_OBJECTS, "VM objects" },
+    { VM_ANONPAGES, "anonymous page descriptors" },
+    { VM_OBJECTRESIDENT, "resident object pages" },
+    { VM_OBJECTSWAPPED, "swapped object pages" },
+    { VM_OBJECTFAULTS, "object fault resolutions" },
+    { VM_OBJECTWAITS, "busy object page waits" },
+    { VM_FAULTWOULDBLOCK, "non-sleeping faults rejected" },
+    { VM_ZEROFAULTS, "demand-zero faults" },
+    { VM_COWFAULTS, "copy-on-write faults" },
+    { VM_PAGEINS, "pager page-ins" },
+    { VM_PAGEOUTS, "pager page-outs" },
+    { VM_SWAPFAILURES, "pager I/O failures" },
+    { VM_RECLAIMATTEMPTS, "reclaim attempts" },
+    { VM_RECLAIMFAILURES, "reclaim failures" },
+    { VM_SHMOBJECTS, "shared-memory objects" },
+    { VM_SHMPAGES, "shared-memory logical pages" },
+    { VM_SHMMAPPINGS, "current-process shared mappings" },
+    { VM_SYSVSEGMENTS, "System V shared segments" },
+    { VM_SYSVATTACHMENTS, "System V attachments" },
+};
 
 void printhdr(int sig)
 {
@@ -347,9 +392,6 @@ void dotimes()
 
 void dosum()
 {
-    struct nchstats nchstats;
-    long nchtotal;
-
     lseek(mf, (long)nl[X_SUM].n_value, L_SET);
     read(mf, &sum, sizeof sum);
     printf("%9ld swap ins\n", sum.v_swpin);
@@ -361,16 +403,30 @@ void dosum()
     printf("%9ld software interrupts\n", sum.v_soft);
     printf("%9ld traps\n", sum.v_trap);
     printf("%9ld system calls\n", sum.v_syscall);
-#define nz(x) ((x) ? (x) : 1)
-    lseek(mf, (long)nl[X_NCHSTATS].n_value, 0);
-    read(mf, &nchstats, sizeof nchstats);
-    nchtotal = nchstats.ncs_goodhits + nchstats.ncs_badhits + nchstats.ncs_falsehits +
-               nchstats.ncs_miss + nchstats.ncs_long;
-    printf("%9ld total name lookups", nchtotal);
-    printf(" (cache hits %ld%% system %ld%% per-process)\n",
-           nchstats.ncs_goodhits * 100 / nz(nchtotal), nchstats.ncs_pass2 * 100 / nz(nchtotal));
-    printf("%9s badhits %ld, falsehits %ld, toolong %ld\n", "", nchstats.ncs_badhits,
-           nchstats.ncs_falsehits, nchstats.ncs_long);
+    dovmstats();
+}
+
+static void
+dovmstats(void)
+{
+    int mib[2];
+    long value;
+    size_t size;
+    unsigned i;
+
+    mib[0] = CTL_VM;
+    for (i = 0; i < sizeof(vmstat_sysctls) / sizeof(vmstat_sysctls[0]);
+        ++i) {
+        mib[1] = vmstat_sysctls[i].leaf;
+        size = sizeof(value);
+        if (sysctl(mib, 2, &value, &size, NULL, 0) < 0 ||
+            size != sizeof(value)) {
+            fprintf(stderr, "vmstat: vm sysctl %d is unavailable\n",
+                mib[1]);
+            continue;
+        }
+        printf("%9ld %s\n", value, vmstat_sysctls[i].description);
+    }
 }
 
 void doforkst()

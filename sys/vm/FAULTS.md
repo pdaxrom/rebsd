@@ -23,3 +23,8 @@ use their `_context` forms without `VM_FAULT_CAN_SLEEP`.
 Diagnostic invariants are enabled reproducibly with `VM_DIAGNOSTIC=1` on the
 normal out-of-tree board build command.  They add panic-on-corruption checks
 without changing a VM structure or the user ABI.
+
+Normal demand faults and user protection failures do not print to the kernel
+console.  Fatal kernel mapping faults still dump their context before panic.
+`MIPS_TRACE=1` or `N64_TRACE=1` enables concise user-fault tracing, capped at
+32 messages per boot so a faulty process cannot monopolize the console.
