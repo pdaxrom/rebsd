@@ -16,6 +16,8 @@
 #define TEST_FILE       0x10008000u
 #define TEST_SHARED_FILE 0x1000c000u
 #define TEST_DEVICE     0x10010000u
+#define TEST_COW_SHARED_HINT 0x10014000u
+#define TEST_COW_ALIAS_HINT 0x10017000u
 #define TEST_DEVICE_PADDR (TEST_RAM_SIZE - VM_PAGE_SIZE)
 #define TEST_PRESSURE   0x20000000u
 #define TEST_GROW       0x30000000u
@@ -400,6 +402,8 @@ test_vmspace(void)
     struct vm_object *file_object;
     struct vm_object *grow_object;
     struct vm_object *shared_file_object;
+    struct vm_object *alias_object;
+    struct vm_object *private_alias_object;
     struct test_object_pager file_pager;
     struct test_shared_pager shared_file_pager;
     struct vm_object_stats object_stats;
@@ -413,6 +417,8 @@ test_vmspace(void)
     vm_paddr_t source_paddr;
     vm_paddr_t child_paddr;
     vm_vaddr_t any_address;
+    vm_vaddr_t alias_shared_address;
+    vm_vaddr_t private_address;
     vm_vaddr_t shared_address;
     vm_size_t grow_size;
     vm_pfn_t free_before;
@@ -521,6 +527,36 @@ test_vmspace(void)
     output[0] = 0;
     CHECK(vmspace_read(source, shared_address, output, 1) == 0 &&
         output[0] == 0x63 && shared_file_pager.pageins == 1);
+    CHECK(vm_object_create(2 * VM_PAGE_SIZE, &alias_object) == 0);
+    CHECK(vmspace_map_object_any(source, TEST_COW_SHARED_HINT,
+        2 * VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL,
+        VM_MAP_SHARED, alias_object, 0, &alias_shared_address) == 0);
+    CHECK(alias_shared_address == TEST_COW_SHARED_HINT);
+    output[0] = 0x63;
+    CHECK(vmspace_write(source, alias_shared_address + VM_PAGE_SIZE,
+        output, 1) == 0);
+    CHECK(vm_object_clone(alias_object, &private_alias_object) == 0);
+    CHECK(vmspace_map_object(source, TEST_COW_ALIAS_HINT,
+        2 * VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL,
+        VM_MAP_COW, private_alias_object, 0) == EINVAL);
+    CHECK(vmspace_map_object_any(source, TEST_COW_ALIAS_HINT,
+        2 * VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL,
+        VM_MAP_COW, private_alias_object, 0, &private_address) == 0);
+    CHECK(private_address == TEST_COW_ALIAS_HINT + VM_PAGE_SIZE);
+    output[0] = 0;
+    CHECK(vmspace_read(source, private_address + VM_PAGE_SIZE,
+        output, 1) == 0 && output[0] == 0x63);
+    output[0] = 0x37;
+    CHECK(vmspace_write(source, private_address + VM_PAGE_SIZE,
+        output, 1) == 0);
+    output[0] = 0;
+    CHECK(vmspace_read(source, alias_shared_address + VM_PAGE_SIZE,
+        output, 1) == 0 &&
+        output[0] == 0x63);
+    CHECK(vmspace_unmap(source, private_address,
+        2 * VM_PAGE_SIZE) == 0);
+    CHECK(vmspace_unmap(source, alias_shared_address,
+        2 * VM_PAGE_SIZE) == 0);
     CHECK(vmspace_map_anon(source, TEST_VADDR, 2 * VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE, 0) == 0);
     CHECK(pmap_extract(source->vms_pmap, TEST_VADDR, &source_paddr) ==

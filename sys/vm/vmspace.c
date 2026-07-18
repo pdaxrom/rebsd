@@ -410,8 +410,8 @@ vmspace_cache_alias_valid(vm_vaddr_t start, unsigned flags,
 {
     vm_paddr_t alias_mask;
 
-    if ((flags & (VM_MAP_SHARED | VM_MAP_DEVICE | VM_MAP_UNCACHED)) !=
-        VM_MAP_SHARED)
+    if ((flags & (VM_MAP_SHARED | VM_MAP_COW)) == 0 ||
+        (flags & (VM_MAP_DEVICE | VM_MAP_UNCACHED)) != 0)
         return 1;
     alias_mask = pmap_cache_alias_mask();
     return (((vm_ooffset_t)start ^ offset) & alias_mask) == 0;
@@ -451,8 +451,8 @@ vmspace_map_object_any(struct vmspace *vmspace, vm_vaddr_t hint,
         (object == 0 && (flags & VM_MAP_DEVICE) == 0) ||
         (object != 0 && (flags & VM_MAP_DEVICE) != 0))
         return EINVAL;
-    alias_mask = (flags & (VM_MAP_SHARED | VM_MAP_DEVICE |
-        VM_MAP_UNCACHED)) == VM_MAP_SHARED ?
+    alias_mask = (flags & (VM_MAP_SHARED | VM_MAP_COW)) != 0 &&
+        (flags & (VM_MAP_DEVICE | VM_MAP_UNCACHED)) == 0 ?
         pmap_cache_alias_mask() : 0;
     color = (vm_vaddr_t)offset & alias_mask;
     error = vm_map_findspace_color(&vmspace->vms_map, hint, size,

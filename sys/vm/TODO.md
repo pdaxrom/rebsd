@@ -275,7 +275,10 @@ must then pass the applicable matrix below.
 - [x] Malta64 N64-compatible 8 MiB physical layout and compressed-swap gate:
   kernel PCC + native PCC/a.out userland under QEMU.
 - [x] N64 hard-float image: kernel GCC + userland PCC.
-- [ ] N64 hardware smoke.
+- [x] N64 hardware process/VM smoke on an 8 MiB system: GCC kernel plus
+  native PCC/a.out hard-float userland, including the 100-cycle stress and
+  leak-counter gate.  Confirmed on 2026-07-18.
+- [ ] N64 hardware native compiler smoke with `/root/pcc-smoke-all.sh`.
 - [x] Ci20 MIPS32r2 hard-float image: kernel GCC + userland GCC.
 - [x] Ci20 hardware process/VM smoke, including the 100-cycle stress and leak
   counter gate.  Confirmed on 2026-07-18 with image SHA-256

@@ -259,9 +259,16 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   prompt after a username is entered.
 - [x] Boot the updated hard-float PCC full zswap N64 rootfs on real hardware:
   root login works, the ROM rootfs layout is visible, and `uptime` runs.
+- [x] Hardware-smoke the VM process path on an 8 MiB N64 with a GCC kernel,
+  PCC hard-float a.out userland, and zswap: `/root/vm-process-smoke` and the
+  100-iteration `/root/vm-stress-smoke.sh` gate passed on 2026-07-18 without
+  counter leaks.  The hardware-only failure was a cached colour mismatch
+  between a resident shared page and its private COW mapping; cached COW
+  mappings now preserve the object-offset colour.
 - [ ] Hardware-smoke the updated PCC hard-float N64 rootfs on real hardware
-  with `/root/pcc-smoke-all.sh`; `uname -a` currently panics with a kernel
-  `TLB load/fetch` after login, so full runtime validation is still open.
+  with `/root/pcc-smoke-all.sh`; the earlier full-rootfs run trapped in
+  `uname -a` before the COW cache-colour fix, so full compiler/runtime
+  validation still needs to be repeated with the corrected VM.
 - [ ] Hardware-smoke the updated PCC soft-float N64 rootfs on real hardware.
 
 ## N64 Command Filtering
