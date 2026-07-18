@@ -25,7 +25,6 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     vm_paddr_t kernel_start;
     vm_paddr_t kernel_end;
     vm_paddr_t uarea_start;
-    vm_paddr_t user_end;
     vm_paddr_t framebuffer_start;
     vm_paddr_t framebuffer_end;
     vm_paddr_t framebuffer_owned_start;
@@ -75,19 +74,9 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
         framebuffer_size = N64_EXPANSION_FB_RESERVED_BYTES;
 #endif
         var_size = N64_RAMDISK_8M_VAR_BYTES;
-        user_end = N64_USER_PHYS_END_8M;
-
-        error = n64_vm_reserve(map, N64_USER_PHYS_START,
-            N64_STAGE0_PHYS_START, "legacy user window");
-        if (error != 0)
-            return error;
         error = n64_vm_reserve(map, N64_STAGE0_PHYS_START,
             N64_STAGE0_PHYS_END,
-            "legacy user/stage0 alias");
-        if (error != 0)
-            return error;
-        error = n64_vm_reserve(map, N64_STAGE0_PHYS_END, user_end,
-            "legacy user window");
+            "stage0/restart");
         if (error != 0)
             return error;
         framebuffer_owned_start = framebuffer_start;
@@ -95,12 +84,6 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
         framebuffer_start = N64_BASE_FB_PHYS_START;
         framebuffer_size = N64_BASE_FB_RESERVED_BYTES;
         var_size = N64_RAMDISK_4M_VAR_BYTES;
-        user_end = N64_USER_PHYS_END_4M;
-
-        error = n64_vm_reserve(map, N64_USER_PHYS_START, user_end,
-            "legacy user window");
-        if (error != 0)
-            return error;
         error = n64_vm_reserve(map, N64_STAGE0_PHYS_START,
             framebuffer_start, "stage0/restart");
         if (error != 0)

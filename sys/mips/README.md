@@ -106,6 +106,51 @@ and `libc-abi-smoke` binaries built by the rootfs dependency graph.  Set
 `NET_SMOKE_NATIVE_COMPILE=1` or `LIBC_ABI_NATIVE_COMPILE=1` only for an
 explicit in-guest rebuild on a profile with enough process memory.
 
+### N64 8 MiB QEMU gate
+
+`BOARD=malta64 MALTA_MEMORY_PROFILE=n64-8m` uses the R4000 emulator with the
+same kernel load address, 4 MiB user limit, framebuffer, `/var`, and swap
+reservations as an 8 MiB N64.  The profile fixes the kernel-visible RAM at
+8192 KiB and enables the shared MIPS compressed RAM-swap backend: the 1792 KiB
+physical store exposes 3584 KiB of logical swap.  QEMU still needs 32 or 64
+MiB of backing RAM because the emulator-only rootfs blob starts at physical
+8 MiB; that backing is excluded from the kernel physical map.
+
+Use separate object roots for the GCC and PCC userland gates:
+
+```sh
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=32M \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 all
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=64M \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_EXEC_FORMAT=aout \
+    MIPS_ROOTFS_KBYTES=32768 all
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-pcc-pcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=64M \
+    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_EXEC_FORMAT=aout \
+    MIPS_ROOTFS_KBYTES=32768 all
+
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=32M \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
+    VM_STRESS_ITERATIONS=100 vm-stress-runtime
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=64M \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_EXEC_FORMAT=aout \
+    MIPS_ROOTFS_KBYTES=32768 native-pcc-smoke-runtime
+```
+
+All kernel, rootfs, compiler, and smoke-test inputs are built or staged by
+these dependency graphs; the gate does not copy artifacts between profiles.
+The PCC/PCC profile is additional compiler coverage for shared kernel code;
+the N64 hardware candidate remains the GCC-kernel/PCC-userland profile.
+
 ## ELF Userland
 
 MIPS userland is linked as static ELF32.  The kernel can execute both the new

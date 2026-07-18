@@ -15,8 +15,6 @@ int n64ramswap_close(dev_t dev, int flag, int mode);
 void n64ramswap_strategy(struct buf *bp);
 daddr_t n64ramswap_size(dev_t dev);
 int n64ramswap_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag);
-#ifdef N64_ZSWAP
-void n64zswap_free(size_t blkno, size_t nblocks);
-#endif
+void n64ramswap_discard(size_t blkno, size_t nblocks);
 
 #endif /* _N64_RAMSWAP_H_ */

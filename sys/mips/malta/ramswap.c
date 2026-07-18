@@ -5,6 +5,28 @@
 #include <sys/disk.h>
 #include <machine/layout.h>
 #include <machine/ramswap.h>
+#ifdef MIPS_ZSWAP_ENABLED
+#include <mips/common/zswap.h>
+#if DEV_BSIZE != MIPS_ZSWAP_BLOCK_BYTES || \
+    DEV_BSHIFT != MIPS_ZSWAP_BLOCK_SHIFT
+#error "MIPS zswap block geometry must match the kernel device block size"
+#endif
+
+static struct mips_zswap ramswap_zswap;
+static unsigned ramswap_logical_bytes;
+
+static void
+ramswap_configure(void)
+{
+    if (ramswap_logical_bytes != 0)
+        return;
+    ramswap_logical_bytes = mips_zswap_logical_bytes(MALTA_RAMSWAP_BYTES);
+    if (mips_zswap_init(&ramswap_zswap,
+        MIPS_PHYS_TO_KSEG1(MALTA_RAMSWAP_PHYS_START),
+        MALTA_RAMSWAP_BYTES) != 0)
+        ramswap_logical_bytes = 0;
+}
+#endif
 
 static int
 ramregion(dev_t dev, unsigned *base, unsigned *bytes)
@@ -12,7 +34,12 @@ ramregion(dev_t dev, unsigned *base, unsigned *bytes)
     switch (minor(dev)) {
     case MIPS_RAMSWAP_MINOR:
         *base = MALTA_RAMSWAP_PHYS_START;
+#ifdef MIPS_ZSWAP_ENABLED
+        ramswap_configure();
+        *bytes = ramswap_logical_bytes;
+#else
         *bytes = MALTA_RAMSWAP_BYTES;
+#endif
         return 0;
     case MIPS_RAMDISK_VAR_MINOR:
         *base = MALTA_RAMDISK_VAR_PHYS_START;
@@ -102,6 +129,23 @@ mipsramswap_strategy(struct buf *bp)
         bp->b_bcount = nbytes;
     }
 
+#ifdef MIPS_ZSWAP_ENABLED
+    if (minor(bp->b_dev) == MIPS_RAMSWAP_MINOR) {
+        if (bp->b_flags & B_READ)
+            error = mips_zswap_read(&ramswap_zswap, offset,
+                bp->b_addr, nbytes);
+        else
+            error = mips_zswap_write(&ramswap_zswap, offset,
+                bp->b_addr, nbytes);
+        if (error != 0) {
+            ramswap_done_error(bp, error);
+            return;
+        }
+        biodone(bp);
+        return;
+    }
+#endif
+
     store = MIPS_PHYS_TO_KSEG1(base + offset);
     data = bp->b_addr;
     if (bp->b_flags & B_READ) {
@@ -113,6 +157,18 @@ mipsramswap_strategy(struct buf *bp)
     }
 
     biodone(bp);
+}
+
+void
+mipsramswap_discard(size_t blkno, size_t nblocks)
+{
+#ifdef MIPS_ZSWAP_ENABLED
+    ramswap_configure();
+    mips_zswap_discard(&ramswap_zswap, blkno, nblocks);
+#else
+    (void)blkno;
+    (void)nblocks;
+#endif
 }
 
 int

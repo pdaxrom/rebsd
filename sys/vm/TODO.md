@@ -268,6 +268,12 @@ must then pass the applicable matrix below.
 - [x] Malta64/VR4300 hard-float: kernel PCC + userland PCC.
 - [x] Malta64/VR4300 soft-float: kernel GCC + userland GCC.
 - [x] Malta64/VR4300 soft-float: kernel PCC + userland PCC.
+- [x] Malta64 N64-compatible 8 MiB physical layout and compressed-swap gate:
+  kernel GCC + userland GCC, including 100-cycle VM stress under QEMU.
+- [x] Malta64 N64-compatible 8 MiB physical layout and compressed-swap gate:
+  kernel GCC + native PCC/a.out userland under QEMU.
+- [x] Malta64 N64-compatible 8 MiB physical layout and compressed-swap gate:
+  kernel PCC + native PCC/a.out userland under QEMU.
 - [x] N64 hard-float image: kernel GCC + userland PCC.
 - [ ] N64 hardware smoke.
 - [x] Ci20 MIPS32r2 hard-float image: kernel GCC + userland GCC.
@@ -290,7 +296,7 @@ The real-board procedure and required failure record are in
 - [ ] Unmount and removable-media behavior on real N64 and Ci20 storage.
 - [x] Low-memory, swap-pressure, resource-exhaustion, and fault-injection tests.
 - [x] Repeated fork/exec/mmap/shm stress with leak counters checked before and
-  after the run.
+  after equal scheduler-quiescence windows.
 
 ## Rollout and commit policy
 
@@ -305,6 +311,9 @@ The real-board procedure and required failure record are in
 - [ ] Reclaim the physical ranges still reserved for the legacy user window
   only after N64 and Ci20 hardware pass and known-good recovery images are
   retained.
+  The N64 map and its Malta64 `n64-8m` emulator profile now return the
+  non-stage0 part of that bootstrap window to the VM allocator; Ci20 and the
+  normal Malta profiles remain hardware-gated.
 
 Suggested commit boundaries after confirmation:
 

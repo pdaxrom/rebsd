@@ -6,15 +6,16 @@
  *
  * 4 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, bootstrap u area
- *   0x00100000..0x002fffff  legacy user-window reserve
+ *   0x00100000..0x002fffff  VM page pool after bootstrap
  *   0x00300000..0x0033ffff  resident stage0/restart image
  *   0x00340000..0x0037ffff  stage0/320x240x16 framebuffer alias
  *   0x00380000..0x003fffff  RAM swap fallback
  *
  * 8 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, bootstrap u area
- *   0x00100000..0x004fffff  legacy user-window reserve, including the
- *                            resident stage0 alias at 0x00300000..0x0037ffff
+ *   0x00100000..0x002fffff  VM page pool after bootstrap
+ *   0x00300000..0x0037ffff  resident stage0/restart image
+ *   0x00380000..0x004fffff  VM page pool after bootstrap
  *   0x00500000..0x0053ffff  320x240x16 framebuffer reserve
  *   0x00540000..0x0063ffff  /var RAM disk
  *   0x00640000..0x007fffff  Expansion Pak RAM swap store

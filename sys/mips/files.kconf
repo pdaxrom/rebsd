@@ -126,5 +126,6 @@ mips/common/netinit.c           optional inet
 mips/common/signal.c            standard
 mips/common/sysctl.c            standard
 mips/common/vm_page_machdep.c   standard
+mips/common/zswap.c             optional mips_zswap_enabled
 mips/common/libkern.c           standard
 mips/common/stubs.c             standard

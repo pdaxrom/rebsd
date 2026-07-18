@@ -668,7 +668,10 @@ the board-specific generated/appended manifest.
     for more RAM swap; `N64_HIGHRES_FB=1` restores the 640x480x16 reserve
 - [x] Add N64 compressed RAM swap (`N64_ZSWAP=1` by default) so native PCC
   smoke can use a larger logical swap map without stealing more physical RDRAM
-  from user memory or the framebuffer reserve
+  from the VM page pool or the framebuffer reserve
+- [x] Move the compressed store into shared MIPS code, connect VM swap-slot
+  discard to physical-unit reclamation, and exercise the N64 8 MiB layout on
+  Malta64 before the next hardware run
 - [x] Confirm the UART-only `N64_ZSWAP=1` and `N64_ZSWAP=0` debug ROMs boot on
   real N64 hardware with both PCC-built and GCC-built kernels.
 - [x] Add `/dev/fb0` as the framebuffer device with read/write access plus

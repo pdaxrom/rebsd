@@ -65,6 +65,21 @@ compile_pmap()
 
 compile_pmap "$tmp/pmap_test"
 
+compile_zswap()
+{
+    output=$1
+    include_dir="$tmp/include-${output##*/}"
+    mkdir -p "$include_dir"
+    ln -s "$top/sys/mips" "$include_dir/machine"
+    "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
+        -DREBSD_VM_HOST_TEST -I "$include_dir" -I "$top/sys" \
+        -idirafter "$top/include" \
+        "$top/sys/mips/common/zswap.c" "$script_dir/zswap_test.c" \
+        -o "$output"
+}
+
+compile_zswap "$tmp/zswap_test"
+
 if compile "$tmp/vm_test_sanitize" -fsanitize=address,undefined \
     -fno-omit-frame-pointer >/dev/null 2>&1; then
     :
@@ -115,6 +130,12 @@ compile_board "$tmp/malta_map_test" "$top/sys/mips" \
     "$top/sys/mips/malta/vm_phys_board.c" 0x00180000u \
     -DTEST_MALTA -DMALTA_RAM_SIZE_OVERRIDE=0x04000000u \
     -DMALTA_ROMDISK_BYTES_OVERRIDE=0x02000000u
+compile_board "$tmp/malta_n64_8m_map_test" "$top/sys/mips" \
+    "$top/sys/mips/malta/vm_phys_board.c" 0x00080000u \
+    -DTEST_MALTA_N64_8M -DMALTA_N64_8M_PROFILE \
+    -DMALTA_RAM_SIZE_OVERRIDE=0x00800000u \
+    -DMALTA_ROMDISK_BYTES_OVERRIDE=0x02000000u \
+    -DMALTA_RAMSWAP_BYTES_OVERRIDE=0x001c0000u
 compile_board "$tmp/ci20_map_test" "$top/sys/mips/ci20" \
     "$top/sys/mips/ci20/vm_phys_board.c" 0x00180000u \
     -DTEST_CI20 -DCI20_RAM_SIZE_OVERRIDE=0x10000000u \
@@ -134,6 +155,7 @@ if [ "$mode" = test ]; then
     "$tmp/vm_page_test"
     "$tmp/vm_map_test"
     "$tmp/pmap_test"
+    "$tmp/zswap_test"
     if [ -x "$tmp/vm_test_sanitize" ]; then
         "$tmp/vm_test_sanitize"
     fi
@@ -147,6 +169,7 @@ if [ "$mode" = test ]; then
         "$tmp/pmap_test_sanitize"
     fi
     "$tmp/malta_map_test"
+    "$tmp/malta_n64_8m_map_test"
     "$tmp/ci20_map_test"
     "$tmp/n64_map_test"
     "$tmp/n64_debug_map_test"

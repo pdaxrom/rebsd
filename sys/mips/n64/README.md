@@ -14,7 +14,8 @@ uses the N64 VI framebuffer.
 The current port boots a base RetroBSD system from a cartridge ROM image:
 
 - stage0 starts from the N64 ROM and loads an ELF32 big-endian kernel blob.
-- The kernel installs exception vectors and a wired TLB mapping for userland.
+- The kernel installs exception vectors and temporary bootstrap user TLB
+  entries, then switches process 1 to the shared per-process MIPS pmap.
 - RDRAM size is detected at startup and printed by the kernel.
 - Root is a read-only UFS romdisk stored in the ROM image.
 - Swap and volatile `/var` storage are RAM-backed block devices; `/tmp` is a
@@ -1040,7 +1041,8 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 
 ```
 0x00000000..0x000fffff  kernel, vectors, bootstrap u area
-0x00100000..0x002fffff  wired kuseg user window
+0x00100000..0x002fffff  VM page pool after bootstrap
+0x00300000..0x0033ffff  resident stage0/restart image
 0x00340000..0x0037ffff  320x240x16 framebuffer reserve
 0x00380000..0x003fffff  RAM swap fallback
 ```
@@ -1049,7 +1051,9 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 
 ```
 0x00000000..0x000fffff  kernel, vectors, bootstrap u area
-0x00100000..0x004fffff  wired kuseg user window
+0x00100000..0x002fffff  VM page pool after bootstrap
+0x00300000..0x0037ffff  resident stage0/restart image
+0x00380000..0x004fffff  VM page pool after bootstrap
 0x00500000..0x0053ffff  320x240x16 framebuffer reserve
 0x00540000..0x007fffff  Expansion Pak RAM block pool
 ```
@@ -1058,7 +1062,9 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 
 ```
 0x00000000..0x000fffff  kernel, vectors, bootstrap u area
-0x00100000..0x004fffff  wired kuseg user window
+0x00100000..0x002fffff  VM page pool after bootstrap
+0x00300000..0x0037ffff  resident stage0/restart image
+0x00380000..0x004fffff  VM page pool after bootstrap
 0x00500000..0x0059ffff  max 640x480x16 framebuffer reserve
 0x005a0000..0x007fffff  Expansion Pak RAM block pool
 ```
@@ -1076,7 +1082,9 @@ Important constants:
 - `N64_USER_VADDR_START`: user virtual base, `0x00400000`.
 - `N64_USER_MAXMEM_4M`: 2 MiB user address window for base systems.
 - `N64_USER_MAXMEM_8M`: 4 MiB user address window for Expansion Pak systems.
-- `N64_USER_PHYS_START`: physical backing for user memory, `0x00100000`.
+- `N64_USER_PHYS_START`: legacy bootstrap user-mapping base, `0x00100000`;
+  after the bootstrap TLB entries are removed, ordinary pages in this range
+  are allocated by VM.
 - `N64_BASE_SWAP_PHYS_START`: 4 MiB fallback swap base, `0x00380000`.
 - `N64_BASE_FB_PHYS_START`: 4 MiB framebuffer reserve base, `0x00340000`.
 - `N64_EXPANSION_FB_PHYS_START`: 8 MiB framebuffer reserve base,
@@ -1141,7 +1149,10 @@ virtual  0x00400000..0x007fffff
 physical 0x00100000..0x004fffff
 ```
 
-Each entry uses two 1 MiB pages through `TLB_PAGEMASK_1M`.
+Each entry uses two 1 MiB pages through `TLB_PAGEMASK_1M`.  These entries are
+bootstrap compatibility mappings only.  They are removed before process 1
+runs; the physical pages then belong to the normal VM allocator except for the
+resident stage0/restart range.
 
 The VM bootstrap invalidates those temporary entries, resets `C0_Wired`, and
 uses per-process 4 KiB pmap entries with ASIDs for normal execution. The
@@ -1285,17 +1296,20 @@ RAM block sizing:
 
 - 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB physical swap store.
 - 8 MiB default system: 1 MiB `/dev/ram0`, 1792 KiB physical swap store
-  after the 4 MiB user window and reserved 320x240x16 framebuffer.
+  after the resident stage0 image and reserved 320x240x16 framebuffer.
 - 8 MiB high-resolution framebuffer build (`N64_HIGHRES_FB=1`): 1 MiB
-  `/dev/ram0`, 1408 KiB physical swap store after the 4 MiB user window and
-  reserved 640x480x16 framebuffer.
+  `/dev/ram0`, 1408 KiB physical swap store after the resident stage0 image
+  and reserved 640x480x16 framebuffer.
 
-`N64_ZSWAP=1` is the default.  It keeps the same physical RAM store but exposes
-twice as many logical swap blocks to the old whole-process swapper.  Each
-logical 1 KiB swap block is stored as zero, raw, or compressed data in 256-byte
-physical units.  If a process image cannot be represented in the physical
-store, swapout fails with `ENOMEM` instead of panicking.  `N64_ZSWAP=0` restores
-the raw RAM swap sizing for comparison.
+`N64_ZSWAP=1` is the default.  It selects the shared MIPS zswap backend and
+keeps the same physical RAM store while exposing twice as many logical swap
+blocks to the VM swap pager.  Each logical 1 KiB swap block is stored as zero,
+raw, or compressed data in 256-byte physical units.  Releasing a VM swap slot
+also discards its compressed physical units, so repeated pageout/pagein cycles
+can reuse the store.  If a page cannot be represented in the physical store,
+swapout fails with `ENOMEM` instead of panicking.  `N64_ZSWAP=0` restores the
+raw RAM swap sizing for comparison.  Other MIPS boards can select
+`MIPS_ZSWAP_ENABLED` in their board configuration and use the same backend.
 
 For boot isolation, `N64_MINIMAL_UART_ONLY=1` forces UART-only console/debug
 drivers and builds a small rootfs while still packaging it as `rootfs.img` in
@@ -2012,8 +2026,8 @@ Build and generated data:
 ## Current limitations
 
 - Rootfs is intentionally read-only.
-- The process address space is one fixed 2 MiB wired TLB mapping, plus the
-  fixed uncached `/dev/fb0` mapping.
+- The kernel and user ABI remain 32-bit o32; a 64-bit kernel/userland ABI is
+  outside the current low-memory N64 target.
 - Swap is RAM-backed, not persistent storage.
 - Reboot is a software restart through the resident stage0 image, not a full
   hardware reset.

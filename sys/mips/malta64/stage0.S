@@ -1,9 +1,15 @@
         .set    noreorder
         .set    mips3
 
+#ifdef MALTA_N64_8M_PROFILE
+        .equ    MALTA64_KERNEL_KSEG0, 0xffffffff80001000
+        .equ    MALTA64_KERNEL_KSEG1, 0xffffffffa0001000
+        .equ    MALTA64_STAGE0_STACK, 0xffffffff8037f000
+#else
         .equ    MALTA64_KERNEL_KSEG0, 0xffffffff80100000
         .equ    MALTA64_KERNEL_KSEG1, 0xffffffffa0100000
         .equ    MALTA64_STAGE0_STACK, 0xffffffff8007f000
+#endif
 
         .extern __malta64_kernel_blob_start
         .extern __malta64_kernel_blob_end

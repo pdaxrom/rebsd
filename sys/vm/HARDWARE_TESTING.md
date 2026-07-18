@@ -44,6 +44,34 @@ shasum -a 256 \
     /work/rebsd-hw/ci20-gcc/obj/sys/mips/ci20/ci20.uImage
 ```
 
+## N64 emulator prerequisite
+
+Before producing the hardware image, run the host VM tests and the two
+Malta64 profiles below.  `n64-8m` deliberately exposes only the N64 memory map
+to the 32-bit kernel while QEMU provides backing for the emulator rootfs above
+that range.
+
+```sh
+make -C sys/tests/vm test
+
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=32M \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
+    VM_STRESS_ITERATIONS=100 vm-stress-runtime
+
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=64M \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=pcc \
+    MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_EXEC_FORMAT=aout \
+    MIPS_ROOTFS_KBYTES=32768 native-pcc-smoke-runtime
+```
+
+Require `ram size=0x00800000`, `user mem = 4096 kbytes`,
+`swap size = 3584 kbytes`, successful VM self-tests, 100 clean stress
+iterations, and the native PCC compile/link workload.  A QEMU pass authorizes
+hardware testing; it does not complete an N64 hardware checklist item.
+
 ## N64
 
 The full image requires an N64cart-compatible cartridge interface.  Capture
@@ -76,7 +104,7 @@ build.
    Every script must return to the shell with status zero.  After this bounded
    gate passes, run `VM_STRESS_ITERATIONS=100 /root/vm-stress-smoke.sh` on the
    8 MiB system.  It must report that all iterations passed and that its VM
-   counter snapshot returned exactly to the warmed-up baseline.
+   counter snapshot returned exactly to the warmed-up, quiescent baseline.
 4. The cartridge ROMFS gate writes only private test names and removes them.
    Run it only after the VM gate and retain the entire flash log:
 

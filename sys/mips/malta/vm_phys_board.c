@@ -33,8 +33,13 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     if (error != 0)
         return error;
 
+#ifdef MALTA_N64_8M_PROFILE
+    error = vm_phys_map_reserve(map, MALTA_PHYS_RAM_BASE, VM_PAGE_SIZE,
+        "vectors");
+#else
     error = vm_phys_map_reserve(map, MALTA_PHYS_RAM_BASE, MIPS_SIZE_1M,
         "firmware/vectors");
+#endif
     if (error != 0)
         return error;
 
@@ -60,10 +65,21 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
         MALTA_UAREA_SIZE, "bootstrap u area");
     if (error != 0)
         return error;
+#ifdef MALTA_N64_8M_PROFILE
+    error = vm_phys_map_reserve(map, MALTA_STAGE0_PHYS_START,
+        MALTA_STAGE0_BYTES, "stage0/restart");
+    if (error != 0)
+        return error;
+    error = vm_phys_map_reserve(map, MALTA_FRAMEBUFFER_PHYS_START,
+        MALTA_FRAMEBUFFER_BYTES, "framebuffer");
+    if (error != 0)
+        return error;
+#else
     error = vm_phys_map_reserve(map, MIPS_USER_PHYS_START,
         MIPS_LEGACY_USER_BYTES, "legacy user window");
     if (error != 0)
         return error;
+#endif
     error = malta_vm_reserve_present(map, ram_size,
         MALTA_RAMDISK_VAR_PHYS_START, MALTA_RAMDISK_VAR_BYTES,
         "/var ramdisk");

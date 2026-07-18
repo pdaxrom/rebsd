@@ -78,6 +78,19 @@ static const struct expected_region malta_map[] = {
     RESERVED(0x02800000u, 0x02a00000u, "cartflash"),
     RESERVED(0x02a00000u, 0x04000000u, "swap"),
 };
+#elif defined(TEST_MALTA_N64_8M)
+static const struct expected_region malta_n64_8m_map[] = {
+    RESERVED(0x00000000u, 0x00001000u, "vectors"),
+    RESERVED(0x00001000u, 0x00080000u, "kernel"),
+    AVAILABLE(0x00080000u, 0x000f2000u, "ram"),
+    RESERVED(0x000f2000u, 0x000f4000u, "bootstrap u area"),
+    AVAILABLE(0x000f4000u, 0x00300000u, "ram"),
+    RESERVED(0x00300000u, 0x00380000u, "stage0/restart"),
+    AVAILABLE(0x00380000u, 0x00500000u, "ram"),
+    RESERVED(0x00500000u, 0x00540000u, "framebuffer"),
+    RESERVED(0x00540000u, 0x00640000u, "/var ramdisk"),
+    RESERVED(0x00640000u, 0x00800000u, "swap"),
+};
 #elif defined(TEST_CI20)
 static const struct expected_region ci20_map[] = {
     RESERVED(0x00000000u, 0x00100000u, "vectors/low RAM"),
@@ -96,8 +109,7 @@ static const struct expected_region n64_4m_map[] = {
     RESERVED(0x00001000u, 0x00080000u, "kernel"),
     AVAILABLE(0x00080000u, 0x000f2000u, "rdram"),
     RESERVED(0x000f2000u, 0x000f4000u, "bootstrap u area"),
-    AVAILABLE(0x000f4000u, 0x00100000u, "rdram"),
-    RESERVED(0x00100000u, 0x00300000u, "legacy user window"),
+    AVAILABLE(0x000f4000u, 0x00300000u, "rdram"),
     RESERVED(0x00300000u, 0x00340000u, "stage0/restart"),
     RESERVED(0x00340000u, 0x00380000u, "stage0/framebuffer alias"),
     RESERVED(0x00380000u, 0x003a0000u, "/var ramdisk"),
@@ -110,10 +122,9 @@ static const struct expected_region n64_8m_map[] = {
     RESERVED(0x00001000u, 0x00080000u, "kernel"),
     AVAILABLE(0x00080000u, 0x000f2000u, "rdram"),
     RESERVED(0x000f2000u, 0x000f4000u, "bootstrap u area"),
-    AVAILABLE(0x000f4000u, 0x00100000u, "rdram"),
-    RESERVED(0x00100000u, 0x00300000u, "legacy user window"),
-    RESERVED(0x00300000u, 0x00380000u, "legacy user/stage0 alias"),
-    RESERVED(0x00380000u, 0x00500000u, "legacy user window"),
+    AVAILABLE(0x000f4000u, 0x00300000u, "rdram"),
+    RESERVED(0x00300000u, 0x00380000u, "stage0/restart"),
+    AVAILABLE(0x00380000u, 0x00500000u, "rdram"),
     RESERVED(0x00500000u, 0x00600000u, "/var ramdisk"),
     RESERVED(0x00600000u, 0x00800000u, "swap"),
 };
@@ -123,10 +134,9 @@ static const struct expected_region n64_8m_map[] = {
     RESERVED(0x00001000u, 0x00080000u, "kernel"),
     AVAILABLE(0x00080000u, 0x000f2000u, "rdram"),
     RESERVED(0x000f2000u, 0x000f4000u, "bootstrap u area"),
-    AVAILABLE(0x000f4000u, 0x00100000u, "rdram"),
-    RESERVED(0x00100000u, 0x00300000u, "legacy user window"),
-    RESERVED(0x00300000u, 0x00380000u, "legacy user/stage0 alias"),
-    RESERVED(0x00380000u, 0x00500000u, "legacy user window"),
+    AVAILABLE(0x000f4000u, 0x00300000u, "rdram"),
+    RESERVED(0x00300000u, 0x00380000u, "stage0/restart"),
+    AVAILABLE(0x00380000u, 0x00500000u, "rdram"),
     RESERVED(0x00500000u, 0x005a0000u, "framebuffer"),
     RESERVED(0x005a0000u, 0x006a0000u, "/var ramdisk"),
     RESERVED(0x006a0000u, 0x00800000u, "swap"),
@@ -137,10 +147,9 @@ static const struct expected_region n64_8m_map[] = {
     RESERVED(0x00001000u, 0x00080000u, "kernel"),
     AVAILABLE(0x00080000u, 0x000f2000u, "rdram"),
     RESERVED(0x000f2000u, 0x000f4000u, "bootstrap u area"),
-    AVAILABLE(0x000f4000u, 0x00100000u, "rdram"),
-    RESERVED(0x00100000u, 0x00300000u, "legacy user window"),
-    RESERVED(0x00300000u, 0x00380000u, "legacy user/stage0 alias"),
-    RESERVED(0x00380000u, 0x00500000u, "legacy user window"),
+    AVAILABLE(0x000f4000u, 0x00300000u, "rdram"),
+    RESERVED(0x00300000u, 0x00380000u, "stage0/restart"),
+    AVAILABLE(0x00380000u, 0x00500000u, "rdram"),
     RESERVED(0x00500000u, 0x00540000u, "framebuffer"),
     RESERVED(0x00540000u, 0x00640000u, "/var ramdisk"),
     RESERVED(0x00640000u, 0x00800000u, "swap"),
@@ -161,6 +170,16 @@ main(void)
     }
     if (check_map(0x04000000u, malta_map,
         sizeof(malta_map) / sizeof(malta_map[0])) != 0)
+        return 1;
+#elif defined(TEST_MALTA_N64_8M)
+    if (MIPS_LEGACY_USER_BYTES != 0x00400000u ||
+        MIPS_USER_MAXMEM != 0x00400000u ||
+        MIPS_USER_VADDR_END != 0x00800000u) {
+        fprintf(stderr, "Malta N64 user geometry does not match\n");
+        return 1;
+    }
+    if (check_map(0x00800000u, malta_n64_8m_map,
+        sizeof(malta_n64_8m_map) / sizeof(malta_n64_8m_map[0])) != 0)
         return 1;
 #elif defined(TEST_CI20)
     if (MIPS_LEGACY_USER_BYTES != 0x00400000u ||
