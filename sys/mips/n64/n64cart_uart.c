@@ -135,11 +135,22 @@ n64cart_uart_getc(void)
 void
 n64cart_uart_putc(int ch)
 {
+    int s;
+
+    /*
+     * A timer diagnostic can use the console while normal tty output is
+     * between the TX_FREE test and the RXTX write.  Keep that hardware
+     * transaction atomic: a nested writer could otherwise consume the free
+     * slot and leave the interrupted writer issuing a second, unchecked
+     * write to the busy cartridge UART.
+     */
+    s = splhigh();
     while ((n64cart_read(N64CART_UART_CTRL) & N64CART_UART_TX_FREE) == 0)
         ;
 
     n64cart_write(N64CART_UART_RXTX, ch & 0xff);
     (void)n64cart_read(N64CART_UART_CTRL);
+    splx(s);
 }
 
 void
