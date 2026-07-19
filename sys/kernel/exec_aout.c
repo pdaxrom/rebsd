@@ -20,8 +20,10 @@
 int exec_aout_check(struct exec_params *epp)
 {
     vm_size_t image_size;
+    vm_size_t text_size;
     vm_vaddr_t bss_start;
     vm_vaddr_t heap_start;
+    vm_vaddr_t text_end;
     unsigned stack_size;
     int error;
 
@@ -31,6 +33,7 @@ int exec_aout_check(struct exec_params *epp)
           N_GETFLAG(epp->hdr.aout) == 0))
         return ENOEXEC;
 
+    text_size = (vm_size_t)epp->hdr.aout.a_text;
     switch (N_GETMAGIC(epp->hdr.aout)) {
     case OMAGIC:
         if (vm_size_add((vm_size_t)epp->hdr.aout.a_data,
@@ -102,6 +105,27 @@ int exec_aout_check(struct exec_params *epp)
         DEBUG("read image returned error=%d\n", error);
     if (error) {
         return error;
+    }
+
+    /*
+     * OMAGIC folds text and data into one anonymous RWX object.  Its text
+     * therefore has no vnode backing and ordinary page replacement can
+     * evict the instruction currently driving a memory-heavy compiler.
+     * On small MIPS systems that degenerates into instruction-fault swap
+     * thrashing.  Keep only the original text pages resident; initialized
+     * data, bss, heap, and stack remain pageable.
+     */
+    if (text_size != 0) {
+        error = vm_vaddr_add((vm_vaddr_t)USER_DATA_START, text_size,
+            &text_end);
+        if (error == 0)
+            error = vm_vaddr_round_page(text_end, &text_end);
+        if (error == 0)
+            error = vmspace_wire(epp->vmspace,
+                (vm_vaddr_t)USER_DATA_START,
+                text_end - (vm_vaddr_t)USER_DATA_START, 1);
+        if (error != 0)
+            return error;
     }
 
     if ((epp->bss.len != 0 && vmspace_zero(epp->vmspace,

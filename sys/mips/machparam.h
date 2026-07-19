@@ -27,7 +27,7 @@
 #define NPROC           25
 #endif
 #ifndef NINODE
-#define NINODE          32
+#define NINODE          64
 #endif
 #ifndef NFILE
 #define NFILE           32
