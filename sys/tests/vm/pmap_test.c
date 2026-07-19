@@ -25,6 +25,7 @@
 #define TEST_GROW       0x30000000u
 #define TEST_GROW_PAGES 65u
 #define TEST_PRESSURE_PAGES 70u
+#define TEST_LOW_FREE_PAGES 55u
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \
@@ -261,6 +262,7 @@ test_pmap(void)
     struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
     vm_paddr_t paddr;
     vm_pfn_t free_before;
+    vm_pfn_t prepare_free;
     unsigned asid1;
     unsigned asid2;
 
@@ -281,6 +283,13 @@ test_pmap(void)
     CHECK(pmap_create(&pmap1) == 0);
     CHECK(pmap_create(&pmap2) == 0);
     CHECK(pmap_create(&pmap3) == 0);
+    prepare_free = allocator.vpa_free_count;
+    CHECK(pmap_prepare(pmap3, TEST_PRESSURE) == 0);
+    CHECK(allocator.vpa_free_count + 1 == prepare_free);
+    CHECK(pmap_prepare(pmap3, TEST_PRESSURE + VM_PAGE_SIZE) == 0);
+    CHECK(allocator.vpa_free_count + 1 == prepare_free);
+    CHECK(pmap_prepare(pmap3, TEST_PRESSURE + 1) == EINVAL);
+    CHECK(pmap_prepare(pmap3, 0x80000000u) == EINVAL);
     CHECK(test_page_alloc(&allocator, TEST_VADDR, &page1) == 0);
     CHECK(test_page_alloc(&allocator, TEST_VADDR, &page2) == 0);
     CHECK(test_page_alloc(&allocator, TEST_VADDR2, &page3) == 0);
@@ -802,6 +811,26 @@ test_pager(void)
         value == 0x5e && shared_pager.pageins >= 2);
     CHECK(vmspace_destroy(space) == 0);
     CHECK(shared_pager.references == 0 && shared_pager.releases == 1);
+    CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
+
+    /*
+     * Falling below the pager free-page target inside an existing PTE
+     * table must not synchronously reclaim on every ordinary fault.
+     */
+    CHECK(test_pager_reset(&allocator, &map, metadata, 16) == 0);
+    CHECK(vmspace_create(&space) == 0);
+    CHECK(vmspace_map_anon(space, TEST_PRESSURE,
+        TEST_LOW_FREE_PAGES * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    for (index = 0; index < TEST_LOW_FREE_PAGES; ++index) {
+        value = (unsigned char)index;
+        CHECK(vmspace_write(space,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1) == 0);
+    }
+    CHECK(allocator.vpa_free_count < 8);
+    CHECK(vm_object_get_stats(&stats) == 0);
+    CHECK(stats.vos_reclaim_attempts == 0 && stats.vos_pageouts == 0);
+    CHECK(vmspace_destroy(space) == 0);
     CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
 
     CHECK(test_pager_reset(&allocator, &map, metadata, 16) == 0);

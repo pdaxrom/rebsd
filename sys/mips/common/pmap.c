@@ -438,6 +438,17 @@ pmap_destroy(struct pmap *pmap)
 }
 
 int
+pmap_prepare(struct pmap *pmap, vm_vaddr_t vaddr)
+{
+    uint32_t *pte;
+
+    if (!pmap_valid(pmap) || !vm_vaddr_page_aligned(vaddr) ||
+        vaddr >= PMAP_USER_END)
+        return EINVAL;
+    return pmap_get_pte(pmap, vaddr, 1, &pte);
+}
+
+int
 pmap_enter(struct pmap *pmap, vm_vaddr_t vaddr, struct vm_page *page,
     vm_prot_t protection, enum pmap_cache cache)
 {

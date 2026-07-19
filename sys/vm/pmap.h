@@ -40,6 +40,7 @@ struct pmap_stats {
 int pmap_system_init(struct vm_page_allocator *);
 int pmap_create(struct pmap **);
 int pmap_destroy(struct pmap *);
+int pmap_prepare(struct pmap *, vm_vaddr_t);
 int pmap_enter(struct pmap *, vm_vaddr_t, struct vm_page *, vm_prot_t,
     enum pmap_cache);
 int pmap_enter_device(struct pmap *, vm_vaddr_t, vm_paddr_t, vm_prot_t,

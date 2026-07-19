@@ -1004,6 +1004,18 @@ vmspace_fault_context(struct vmspace *vmspace, vm_vaddr_t address,
     }
     if (entry->vme_object == 0)
         return EFAULT;
+    /*
+     * A new second-level PTE table consumes a wired page.  Allocate it
+     * before the object fault can consume the last free page.  Preparing
+     * only the directory slot used by this fault avoids synchronous pager
+     * reclaim on every ordinary user-page allocation.
+     */
+    error = pmap_prepare(vmspace->vms_pmap, page_address);
+    if (error == ENOMEM && (context & VM_FAULT_CAN_SLEEP) != 0 &&
+        vm_pager_reclaim_page() == 0)
+        error = pmap_prepare(vmspace->vms_pmap, page_address);
+    if (error != 0)
+        return error;
     cow_write = access == VM_PROT_WRITE &&
         (entry->vme_flags & VM_MAP_COW) != 0;
     old_page = cow_write && (entry->vme_flags & VM_MAP_WIRED) != 0 ?
