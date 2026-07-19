@@ -30,6 +30,50 @@ _mips_exception_vector_end:
 
         .ent    mips_exception_entry
 mips_exception_entry:
+#ifdef N64_USB_GDB
+        /*
+         * USB break-in and software breakpoints must not depend on the
+         * interrupted kernel/u-area stack.  Preserve only the old sp in k1,
+         * select the static debugger stack using k0, then save the complete
+         * architectural frame through the normal path below.
+         */
+        move    $k1, $sp
+        mfc0    $k0, $13
+        andi    $k0, $k0, CA_EXC_CODE
+        xori    $k0, $k0, CA_Bp
+        bnez    $k0, 6f
+        nop
+        la      $k0, n64_gdb_usb_active
+        lw      $k0, 0($k0)
+        bnez    $k0, 8f
+        nop
+        b       7f
+        nop
+6:
+        mfc0    $k0, $13
+        andi    $k0, $k0, CA_EXC_CODE
+        bnez    $k0, 7f
+        nop
+        mfc0    $k0, $13
+        andi    $k0, $k0, 0x0800
+        bnez    $k0, 8f
+        nop
+7:
+        mfc0    $k0, $12
+        andi    $k0, $k0, ST_KSU
+        xori    $k0, $k0, ST_KSU_USER
+        bnez    $k0, 9f
+        nop
+        la      $sp, mips_curuser
+        lw      $sp, 0($sp)
+        addiu   $sp, $sp, USIZE
+        b       9f
+        nop
+8:
+        la      $sp, n64_gdb_emergency_stack_top
+9:
+        mfc0    $k0, $12
+#else
         mfc0    $k0, $12
         andi    $k1, $k0, ST_KSU
         xori    $k1, $k1, ST_KSU_USER
@@ -40,6 +84,7 @@ mips_exception_entry:
         lw      $sp, 0($sp)
         addiu   $sp, $sp, USIZE
 1:
+#endif
         addiu   $sp, $sp, -16-FRAME_WORDS*4
         sw      $k0, (16+FRAME_STATUS*4)($sp)
         sw      $k1, (16+FRAME_SP*4)($sp)
@@ -176,3 +221,13 @@ mips_fork_trampoline:
         j       mips_exception_restore_start
         nop
         .end    mips_fork_trampoline
+
+#ifdef N64_USB_GDB
+        .section .bss,"aw",@nobits
+        .align  4
+        .globl  n64_gdb_emergency_stack
+n64_gdb_emergency_stack:
+        .space  8192
+        .globl  n64_gdb_emergency_stack_top
+n64_gdb_emergency_stack_top:
+#endif

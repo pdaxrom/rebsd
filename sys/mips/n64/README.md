@@ -246,6 +246,11 @@ Two N64 USB lower drivers are available for `usbn0`:
   `tools/n64usbnet/n64usbnet-bridge`; see `tools/n64usbnet/README.md` for
   TAP/utun setup.
 
+For kernel debugging, `N64_USB_GDB=1` replaces both USB-network lower halves
+with a CDC ACM GDB RSP endpoint while leaving the cartridge UART untouched.
+Build, connection, supported packets, and the VM-independent crash-safety
+boundary are documented in [GDB.md](GDB.md).
+
 Future USB network backends should keep the same separation.  CDC NCM is the
 preferred next standards-based candidate if ECM throughput becomes limiting;
 RNDIS should stay deferred unless Windows host support becomes a concrete

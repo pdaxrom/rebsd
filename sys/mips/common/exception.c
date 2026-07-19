@@ -17,6 +17,9 @@
 #ifdef N64
 #include <machine/console.h>
 #include <machine/n64.h>
+#ifdef N64_USB_GDB
+#include <machine/n64gdb.h>
+#endif
 #if defined(N64_PCC_HANG_TRACE) && defined(MIPS_ZSWAP_ENABLED)
 #include <machine/ramswap.h>
 #include <mips/common/zswap.h>
@@ -799,6 +802,13 @@ exception(int *frame)
     int psig = 0;
     int vm_error;
 
+#ifdef N64_USB_GDB
+    status = frame[FRAME_STATUS];
+    rawcause = mips_read_c0_register(C0_CAUSE, 0);
+    badvaddr = mips_read_c0_register(C0_BADVADDR, 0);
+    if (n64_gdb_exception(frame, rawcause, badvaddr))
+        return;
+#endif
     led_control(LED_KERNEL, 1);
     mips_uarea_guard_check(mips_curuser);
     if ((unsigned)frame < (unsigned)&u + sizeof(u)) {
@@ -806,9 +816,11 @@ exception(int *frame)
         panic("stack overflow");
     }
 
+#ifndef N64_USB_GDB
     status = frame[FRAME_STATUS];
     rawcause = mips_read_c0_register(C0_CAUSE, 0);
     badvaddr = mips_read_c0_register(C0_BADVADDR, 0);
+#endif
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
     {
         static int exception_trace_count;
@@ -922,12 +934,18 @@ exception(int *frame)
     case CA_TLBS:
         if (pmap_fault_active(badvaddr, VM_PROT_WRITE, 0) == 0)
             goto ret;
+#ifdef N64_USB_GDB
+        n64_gdb_panic(frame, rawcause, badvaddr);
+#endif
         dumpregs(frame);
         panic("kernel pmap write fault");
 
     case CA_TLBL:
         if (pmap_fault_active(badvaddr, VM_PROT_READ, 0) == 0)
             goto ret;
+#ifdef N64_USB_GDB
+        n64_gdb_panic(frame, rawcause, badvaddr);
+#endif
         dumpregs(frame);
         panic("kernel pmap read fault");
 
@@ -960,6 +978,9 @@ exception(int *frame)
 #endif
         switch (cause) {
         default:
+#ifdef N64_USB_GDB
+            n64_gdb_panic(frame, rawcause, badvaddr);
+#endif
             dumpregs(frame);
             panic("unexpected exception");
         case CA_AdEL + USER:

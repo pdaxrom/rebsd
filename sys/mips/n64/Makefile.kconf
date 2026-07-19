@@ -16,6 +16,7 @@ N64_TRACE       ?= 0
 VM_DIAGNOSTIC   ?= 0
 N64_PCC_HANG_TRACE ?= 0
 N64_DEBUG_UART_ONLY ?= 0
+N64_USB_GDB ?= 0
 # Parse debug conditionals in the mode implied by a direct ROM build.
 ifneq ($(filter pcc-debug.z64,$(MAKECMDGOALS)),)
 N64_DEBUG_UART_ONLY := 1
@@ -34,7 +35,7 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_PCC_HANG_TRACE)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_PCC_HANG_TRACE)
 N64_IOCONF      = ioconf
 ifeq ($(N64_HIGHRES_FB),1)
 PARAM += -DN64_HIGHRES_FB
@@ -49,6 +50,13 @@ ifeq ($(N64_DEBUG_UART_ONLY),1)
 PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
     -DUSBNET_ENABLED -DUSBNET_ECM -DUSBNET_VENDOR,$(PARAM))
 PARAM += -DN64_DEBUG_UART_ONLY -DN64_DEBUG_USERMEM_4M -DN64_PCC_FPE_TRACE
+N64_IOCONF = ioconf.debug-uart
+endif
+ifeq ($(N64_USB_GDB),1)
+PARAM := $(filter-out -DUSBNET_ENABLED -DUSBNET_ECM \
+    -DUSBNET_VENDOR,$(PARAM))
+PARAM += -DN64_USB_GDB
+# This service table retains tty/video/INET but deliberately omits usbnet.
 N64_IOCONF = ioconf.debug-uart
 endif
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
@@ -688,6 +696,7 @@ AS              = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE)
 ASFPU           = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_FPU_CODE)
 LD              = $(N64_PREFIX)ld -m elf32ebmip
 OBJDUMP         = $(N64_PREFIX)objdump
+OBJCOPY         = $(N64_PREFIX)objcopy
 SIZE            = $(N64_PREFIX)size
 STRIP           = $(N64_PREFIX)strip
 NM              = $(N64_PREFIX)nm
@@ -725,6 +734,14 @@ CFLAGS          = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(DEFS) $(INET_C
 VERS_CFLAGS     = -O2 -Wall -Werror -Wno-array-bounds -nostdinc $(CPPFLAGS)
 ASFLAGS         = -x assembler-with-cpp -c $(DEFS)
 FPU_ASFLAGS     = -x assembler-with-cpp -c $(DEFS)
+ifeq ($(N64_USB_GDB),1)
+# Keep source lines, types, and locals in the host-side unix.elf.  The ROM
+# embeds unix.runtime.elf below, so DWARF does not make the image larger.
+CFLAGS          += -g
+VERS_CFLAGS     += -g
+ASFLAGS         += -g
+FPU_ASFLAGS     += -g
+endif
 STAGE0_CFLAGS   = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
                   -ffreestanding -fno-builtin -fno-stack-protector \
                   -fno-pie -Wall -Wextra -Werror -O2 -MMD -MP $(PARAM)
@@ -807,6 +824,18 @@ endif
 %OBJS
 
 %CFILES
+
+ifeq ($(N64_USB_GDB),1)
+OBJS := $(filter-out if_usbn.o n64usbnet_proto.o n64cart_usbnet.o \
+    n64cart_usbecm.o,$(OBJS))
+CFILES := $(filter-out \
+    $S/mips/common/if_usbn.c \
+    $S/mips/common/n64usbnet_proto.c \
+    $S/mips/n64/n64cart_usbnet.c \
+    $S/mips/n64/n64cart_usbecm.c,$(CFILES))
+OBJS += n64gdb.o n64cart_usbgdb.o
+CFILES += $(N64_BOARD_SRC)/n64gdb.c $(N64_BOARD_SRC)/n64cart_usbgdb.c
+endif
 
 ifeq ($(N64_DEBUG_UART_ONLY),1)
 OBJS := $(filter-out video.o video_console.o si.o joybus.o \
@@ -891,9 +920,11 @@ SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
 
-.PHONY: vm-host-check
+.PHONY: vm-host-check kernel-objects
 vm-host-check:
 	$(MAKE) -C $(TOPSRC)/sys/tests/vm test
+
+kernel-objects: $(SYSTEM_OBJ) swapunix.o
 
 # Do not produce a kernel, filesystem, or ROM image from untested VM geometry.
 # Order-only keeps an already valid image from being rebuilt just because the
@@ -930,8 +961,11 @@ stage0_n64cart_uart.o: $(N64_BOARD_SRC)/stage0_n64cart_uart.c $(N64_BOARD_SRC)/s
 stage0_kernel_blob.o: $(N64_BOARD_SRC)/stage0_kernel_blob.S preflight.elf | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath preflight.elf)\" $< -o $@
 
-kernel_stage0_kernel_blob.o: $(N64_BOARD_SRC)/stage0_kernel_blob.S unix.elf | .deps
-	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath unix.elf)\" $< -o $@
+unix.runtime.elf: unix.elf
+	$(OBJCOPY) --strip-debug $< $@
+
+kernel_stage0_kernel_blob.o: $(N64_BOARD_SRC)/stage0_kernel_blob.S unix.runtime.elf | .deps
+	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath unix.runtime.elf)\" $< -o $@
 
 stage0.elf: $(N64_STAGE0_OBJS) stage0_kernel_blob.o $(N64_BOARD_SRC)/stage0_linker.ld
 	$(LD) -T $(N64_BOARD_SRC)/stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) stage0_kernel_blob.o
@@ -1253,6 +1287,13 @@ ioconf.o: ioconf.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 ioconf.debug-uart.o: ioconf.debug-uart.c ${SYSTEM_DEP}
+	${COMPILE_C}
+
+n64gdb.o: $(N64_BOARD_SRC)/n64gdb.c $(N64_BOARD_SRC)/n64gdb.h ${SYSTEM_DEP}
+	${COMPILE_C}
+
+n64cart_usbgdb.o: $(N64_BOARD_SRC)/n64cart_usbgdb.c \
+    $(N64_BOARD_SRC)/n64cart_usbnet.c $(N64_BOARD_SRC)/n64gdb.h ${SYSTEM_DEP}
 	${COMPILE_C}
 
 ${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
