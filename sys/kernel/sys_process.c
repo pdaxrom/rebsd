@@ -10,6 +10,7 @@
 #include <sys/inode.h>
 #include <sys/vm.h>
 #include <sys/ptrace.h>
+#include <machine/io.h>
 
 struct ipc ipc;
 
@@ -28,6 +29,17 @@ ptrace()
     } *uap;
 
     uap = (struct a *)u.u_arg;
+    if (uap->req == PT_SYSCALL_TRACE) {
+        if (uap->pid != 0 && uap->pid != u.u_procp->p_pid) {
+            u.u_error = EINVAL;
+            return;
+        }
+        if (uap->data)
+            u.u_procp->p_flag |= P_SYSTRACE;
+        else
+            u.u_procp->p_flag &= ~P_SYSTRACE;
+        return;
+    }
     if (uap->req <= 0) {
         u.u_procp->p_flag |= P_TRACED;
         return;
@@ -104,12 +116,17 @@ procxmt()
     case PT_WRITE_U:
         i = (int)ipc.ip_addr;
         p = (int*)&u + i/sizeof(int);
-        for (i=0; i<FRAME_WORDS; i++)
-            if (p == &u.u_frame[i])
+        for (i=0; i<FRAME_WORDS; i++) {
+            if (p == &u.u_frame[i] && mips_frame_is_writable_word(i)) {
+                if (mips_frame_is_gpr_word(i))
+                    mips_frame_set_gpr(u.u_frame, i, ipc.ip_data);
+                else
+                    *p = ipc.ip_data;
                 goto ok;
+            }
+        }
         goto error;
 ok:
-        *p = ipc.ip_data;
         break;
 
     /* set signal and continue */

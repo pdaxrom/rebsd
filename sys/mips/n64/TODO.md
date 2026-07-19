@@ -619,8 +619,13 @@ the board-specific generated/appended manifest.
 
 - [x] Replace the first N64 `sendsig()`/`sigreturn()` fatal stubs with the
   MIPS signal-frame path used by PIC32
+- [x] Keep the public o32 `sigcontext` layout and append a private MIPS III
+  shadow which preserves both halves of every GPR and HI/LO.  Malta64 QEMU
+  verifies a non-sign-extended value across direct signal delivery.
 - [x] Hardware smoke-test `sleep 10` followed by `Ctrl-C`; it must interrupt
   `sleep` and return to the shell prompt without respawning `getty`
+- [ ] Hardware-smoke the full-width VR4300 exception/signal regression in
+  `/root/vm-process-smoke` before committing the N64 fix as hardware-complete
 
 ## FPU And Userland ABI
 

@@ -12,6 +12,10 @@
 struct tty n64cart_uart_ttys[1];
 static void n64cart_uart_start(struct tty *tp);
 static int n64cart_uart_esc_state;
+static volatile u_int n64cart_uart_tx_chars;
+static volatile u_int n64cart_uart_wait_events;
+static volatile u_int n64cart_uart_recheck_misses;
+static volatile u_int n64cart_uart_waiting;
 
 static void
 n64cart_uart_default_winsize(struct tty *tp)
@@ -125,6 +129,37 @@ n64cart_uart_poll(void)
 }
 
 int
+n64cart_uart_tx_ready(void)
+{
+    return (n64cart_read(N64CART_UART_CTRL) & N64CART_UART_TX_FREE) != 0;
+}
+
+void
+n64cart_uart_get_stats(struct n64cart_uart_stats *stats)
+{
+    stats->nus_tx_chars = n64cart_uart_tx_chars;
+    stats->nus_wait_events = n64cart_uart_wait_events;
+    stats->nus_recheck_misses = n64cart_uart_recheck_misses;
+    stats->nus_waiting = n64cart_uart_waiting;
+    stats->nus_control = n64cart_read(N64CART_UART_CTRL);
+}
+
+void
+n64cart_uart_emergency_putc(int ch)
+{
+    /*
+     * The exception logger calls this with interrupts disabled.  Deliberately
+     * bypass tty state, printf, normal-writer statistics, and the console
+     * multiplexer so a corrupt higher-level console cannot suppress the
+     * crash record.
+     */
+    while (!n64cart_uart_tx_ready())
+        ;
+    n64cart_write(N64CART_UART_RXTX, ch & 0xff);
+    (void)n64cart_read(N64CART_UART_CTRL);
+}
+
+int
 n64cart_uart_getc(void)
 {
     while (!n64cart_uart_poll())
@@ -135,22 +170,39 @@ n64cart_uart_getc(void)
 void
 n64cart_uart_putc(int ch)
 {
+    u_int control;
+    int waited;
     int s;
 
     /*
-     * A timer diagnostic can use the console while normal tty output is
-     * between the TX_FREE test and the RXTX write.  Keep that hardware
-     * transaction atomic: a nested writer could otherwise consume the free
-     * slot and leave the interrupted writer issuing a second, unchecked
-     * write to the busy cartridge UART.
+     * Wait with interrupts enabled so the clock/watchdog can still sample a
+     * stalled transmitter.  Only the final TX_FREE recheck and RXTX write
+     * must be atomic: a timer diagnostic may consume the slot between the
+     * unlocked poll and this recheck.
      */
-    s = splhigh();
-    while ((n64cart_read(N64CART_UART_CTRL) & N64CART_UART_TX_FREE) == 0)
-        ;
+    waited = 0;
+    for (;;) {
+        while (!n64cart_uart_tx_ready()) {
+            n64cart_uart_waiting = 1;
+            if (!waited) {
+                ++n64cart_uart_wait_events;
+                waited = 1;
+            }
+        }
+        n64cart_uart_waiting = 0;
 
-    n64cart_write(N64CART_UART_RXTX, ch & 0xff);
-    (void)n64cart_read(N64CART_UART_CTRL);
-    splx(s);
+        s = splhigh();
+        control = n64cart_read(N64CART_UART_CTRL);
+        if (control & N64CART_UART_TX_FREE) {
+            n64cart_write(N64CART_UART_RXTX, ch & 0xff);
+            (void)n64cart_read(N64CART_UART_CTRL);
+            ++n64cart_uart_tx_chars;
+            splx(s);
+            return;
+        }
+        ++n64cart_uart_recheck_misses;
+        splx(s);
+    }
 }
 
 void

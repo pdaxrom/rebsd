@@ -383,6 +383,32 @@ static int vm_object_range_valid(const struct vm_object *, vm_ooffset_t,
 static int vm_pager_reclaim_one(struct vm_anon *, vm_paddr_t,
     vm_paddr_t);
 
+static void
+vm_pager_refill_reserve(void)
+{
+    unsigned consecutive_failures;
+    unsigned scans;
+    int error;
+
+    consecutive_failures = 0;
+    scans = 0;
+    while (vm_object_allocator->vpa_free_count <= VM_PAGER_FREE_MIN &&
+        scans < (VM_PAGER_FREE_MIN + 1u) * 3u) {
+        vm_object_stat_increment(
+            &vm_object_statistics.vos_reclaim_attempts);
+        error = vm_pager_reclaim_one(0, 0, 0);
+        ++scans;
+        if (error == 0) {
+            consecutive_failures = 0;
+            continue;
+        }
+        vm_object_stat_increment(
+            &vm_object_statistics.vos_reclaim_failures);
+        if (++consecutive_failures >= 3)
+            break;
+    }
+}
+
 static int
 vm_object_page_allocate(vm_paddr_t color_mask, vm_paddr_t color,
     struct vm_page **result)
@@ -395,6 +421,16 @@ vm_object_page_allocate(vm_paddr_t color_mask, vm_paddr_t color,
     request.vpr_color_mask = color_mask;
     request.vpr_color = color;
     request.vpr_state = VM_PAGE_ACTIVE;
+
+    /*
+     * Do not let ordinary user faults consume the final free pages.  pmap
+     * can need a wired page for a new PTE table after this allocation; if
+     * the free count has already reached zero, that otherwise turns a
+     * recoverable memory-pressure fault into SIGSEGV.  Reclaim without a
+     * color constraint here because the reserve is for kernel metadata.
+     * A color-specific miss is handled by the existing retry loop below.
+     */
+    vm_pager_refill_reserve();
     error = vm_page_alloc(vm_object_allocator, &request, result);
     for (pass = 0; error == ENOMEM && pass < 3; ++pass) {
         vm_object_stat_increment(

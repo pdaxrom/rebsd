@@ -20,10 +20,10 @@
 #include <sys/socketvar.h>
 #endif
 #include <sys/ptrace.h>
-#include <sys/sysctl.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <sys/vm.h>
+#include <sys/sysctl.h>
 #ifdef INET
 #include <net/if.h>
 #include <net/route.h>

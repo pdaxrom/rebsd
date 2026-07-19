@@ -21,10 +21,57 @@
 #define SMOKE_VM_PAGE_SIZE  4096
 #define SMOKE_LEGACY_USER_BYTES (4 * 1024 * 1024)
 #define SMOKE_LARGE_BRK_BYTES   (6 * 1024 * 1024)
+#define SMOKE_GPR64_SPIN_COUNT  8000000u
 
 static volatile sig_atomic_t smoke_signal_seen;
 static volatile unsigned smoke_bad_address = 1;
 static unsigned char smoke_file_page[SMOKE_VM_PAGE_SIZE];
+
+#if defined(__mips) && __mips >= 3
+static unsigned long long smoke_gpr64_source
+    __attribute__((aligned(8))) = 0x0123456789abcdefULL;
+extern void smoke_gpr64_exception_frame_asm(const unsigned long long *,
+    unsigned long long *, unsigned);
+extern void smoke_gpr64_signal_frame_asm(const unsigned long long *,
+    unsigned long long *, pid_t, int);
+
+/*
+ * Keep a non-sign-extended 64-bit value live in s0 long enough for several
+ * timer interrupts.  The o32 ABI is still 32-bit, but VR4300 code may use
+ * ld/sd internally; exception entry must preserve the complete GPR.
+ */
+static int
+smoke_gpr64_exception_frame(void)
+{
+    unsigned long long result __attribute__((aligned(8)));
+    unsigned count = SMOKE_GPR64_SPIN_COUNT;
+
+    result = 0;
+    smoke_gpr64_exception_frame_asm(&smoke_gpr64_source, &result, count);
+    return result != smoke_gpr64_source;
+}
+
+static int
+smoke_gpr64_signal_frame(void)
+{
+    unsigned long long result __attribute__((aligned(8)));
+    unsigned *expected_words = (unsigned *)&smoke_gpr64_source;
+    unsigned *actual_words = (unsigned *)&result;
+
+    result = 0;
+    smoke_signal_seen = 0;
+    smoke_gpr64_signal_frame_asm(&smoke_gpr64_source, &result, getpid(),
+        SIGUSR1);
+    if (!smoke_signal_seen || result != smoke_gpr64_source) {
+        printf("vm-process-smoke: gpr64 signal seen=%d "
+            "expected=%08x:%08x actual=%08x:%08x\n",
+            smoke_signal_seen, expected_words[0], expected_words[1],
+            actual_words[0], actual_words[1]);
+        return 1;
+    }
+    return 0;
+}
+#endif
 
 static void
 smoke_signal(int signo)
@@ -201,6 +248,10 @@ main(int argc, char **argv)
     page_size = getpagesize();
     if (page_size <= 0 || (page_size & (page_size - 1)) != 0)
         return smoke_fail("page size");
+#if defined(__mips) && __mips >= 3
+    if (smoke_gpr64_exception_frame() != 0)
+        return smoke_fail("MIPS III 64-bit GPR exception frame");
+#endif
     if (smoke_hw_usermem(&usermem) != 0)
         return smoke_fail("hw.usermem");
     if (usermem > SMOKE_LEGACY_USER_BYTES) {
@@ -236,6 +287,10 @@ main(int argc, char **argv)
     if (signal(SIGUSR1, smoke_signal) == SIG_ERR ||
         kill(getpid(), SIGUSR1) != 0 || !smoke_signal_seen)
         return smoke_fail("signal delivery");
+#if defined(__mips) && __mips >= 3
+    if (smoke_gpr64_signal_frame() != 0)
+        return smoke_fail("MIPS III 64-bit GPR signal frame");
+#endif
     if (smoke_stack(4) != 25)
         return smoke_fail("stack growth");
 

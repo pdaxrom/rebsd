@@ -10,27 +10,12 @@
 pstat \- print system facts
 .SH SYNOPSIS
 .B /usr/sbin/pstat
-.B \-aixptufT
-[
-.B suboptions
-] [
-.B system
-] [
-.B corefile
-]
+.B \-aiptfsT
 .SH DESCRIPTION
 .I Pstat
-interprets the contents of certain system tables.
-If
-.I corefile
-is given, the tables are sought there, otherwise
-in
-.I /dev/kmem.
-The required namelist is taken from
-.I /vmunix
-unless 
-.I system
-is specified.
+prints bounded snapshots of live system tables obtained through
+.BR sysctl (3).
+Crash dumps, kernel namelists, and raw kernel memory are not used.
 Options are
 .TP \w'WCHAN\ 'u
 .B \-a
@@ -340,11 +325,6 @@ VM-object, pmap, fault, reclaim, and shared-memory totals obtained through
 read-only
 .B vm
 sysctl nodes.
-.SH FILES
-.ta \w'/dev/kmem  'u
-/vmunix	namelist
-.br
-/dev/kmem	default source of tables
 .SH SEE ALSO
 iostat(1),
 ps(1),

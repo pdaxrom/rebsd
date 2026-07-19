@@ -33,7 +33,7 @@ extern unsigned pmap_md_legacy_user_entries(void);
 vm_paddr_t
 pmap_md_cache_alias_mask(void)
 {
-#ifdef N64
+#if defined(N64) || defined(MALTA_N64_8M_PROFILE)
     /* Four 4 KiB colours cover the direct-mapped 16 KiB I-cache. */
     return 3u * VM_PAGE_SIZE;
 #else

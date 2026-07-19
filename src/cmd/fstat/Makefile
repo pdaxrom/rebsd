@@ -30,7 +30,7 @@ depend:         ${SRCS}
 
 install:        all
 		cp ${MAN} ${DESTDIR}/share/man/cat8
-		install -m 2755 fstat ${DESTDIR}/bin/fstat
+		install -m 755 fstat ${DESTDIR}/bin/fstat
 
 lint:           ${SRCS}
 		lint -hax ${SRCS}

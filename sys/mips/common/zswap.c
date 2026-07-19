@@ -75,20 +75,17 @@ mips_zswap_set_unit(struct mips_zswap *zswap, unsigned unit, int used)
 }
 
 static int
-mips_zswap_alloc_units(struct mips_zswap *zswap, unsigned units,
-    unsigned *unitp)
+mips_zswap_scan_units(struct mips_zswap *zswap, unsigned units,
+    unsigned first, unsigned last, unsigned *unitp)
 {
     unsigned run;
     unsigned start;
     unsigned unit;
     unsigned i;
 
-    if (units == 0 || units > zswap->mz_phys_units || unitp == 0)
-        return ENOSPC;
-
     run = 0;
-    start = 0;
-    for (unit = 0; unit < zswap->mz_phys_units; ++unit) {
+    start = first;
+    for (unit = first; unit < last; ++unit) {
         if (mips_zswap_unit_used(zswap, unit)) {
             run = 0;
             continue;
@@ -99,9 +96,32 @@ mips_zswap_alloc_units(struct mips_zswap *zswap, unsigned units,
             for (i = 0; i < units; ++i)
                 mips_zswap_set_unit(zswap, start + i, 1);
             *unitp = start;
+            zswap->mz_alloc_hint = start + units;
+            if (zswap->mz_alloc_hint >= zswap->mz_phys_units)
+                zswap->mz_alloc_hint = 0;
             return 0;
         }
     }
+    return ENOSPC;
+}
+
+static int
+mips_zswap_alloc_units(struct mips_zswap *zswap, unsigned units,
+    unsigned *unitp)
+{
+    unsigned hint;
+
+    if (units == 0 || units > zswap->mz_phys_units || unitp == 0)
+        return ENOSPC;
+    hint = zswap->mz_alloc_hint;
+    if (hint >= zswap->mz_phys_units)
+        hint = 0;
+    if (mips_zswap_scan_units(zswap, units, hint,
+        zswap->mz_phys_units, unitp) == 0)
+        return 0;
+    if (hint != 0 &&
+        mips_zswap_scan_units(zswap, units, 0, hint, unitp) == 0)
+        return 0;
     return ENOSPC;
 }
 
@@ -113,6 +133,8 @@ mips_zswap_free_units(struct mips_zswap *zswap, unsigned unit,
 
     for (i = 0; i < units && unit + i < zswap->mz_phys_units; ++i)
         mips_zswap_set_unit(zswap, unit + i, 0);
+    if (unit < zswap->mz_alloc_hint)
+        zswap->mz_alloc_hint = unit;
 }
 
 static void

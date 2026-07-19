@@ -90,7 +90,12 @@ unsigned n64_user_data_end(void);
  * IPL field.  The N64 spl* implementation raises priority by clearing ST_IE,
  * so a saved status with ST_IE set is the closest equivalent of base priority.
  */
+#if defined(N64_USB_GDB) || defined(N64_RESET_DUMP)
+#define BASEPRI(ps)     (((ps) & (ST_IE | ST_IM2 | ST_IM7)) == \
+                         (ST_IE | ST_IM2 | ST_IM7))
+#else
 #define BASEPRI(ps)     (((ps) & ST_IE) != 0)
+#endif
 
 #define splbio()        mips_intr_disable()
 #define spltty()        mips_intr_disable()

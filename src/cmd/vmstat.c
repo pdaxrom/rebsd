@@ -4,12 +4,11 @@
  * specifies the terms and conditions for redistribution.
  */
 #include <ctype.h>
-#include <nlist.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <time.h>
 #include <signal.h>
 #include <sys/dir.h>
@@ -19,38 +18,6 @@
 #include <sys/sysctl.h>
 #include <sys/vm.h>
 
-struct nlist nl[] = {
-#define X_CPTIME 0
-    { "_cp_time" },
-#define X_RATE 1
-    { "_rate" },
-#define X_TOTAL 2
-    { "_total" },
-#define X_FORKSTAT 3
-    { "_forkstat" },
-#define X_SUM 4
-    { "_sum" },
-#define X_BOOTTIME 5
-    { "_boottime" },
-#define X_DKXFER 6
-    { "_dk_xfer" },
-#define X_HZ 7
-    { "_hz" },
-#define X_NCHSTATS 8
-    { "_nchstats" },
-#define X_DK_NDRIVE 9
-    { "_dk_ndrive" },
-#define X_DK_NAME 10
-    { "_dk_name" },
-#define X_DK_UNIT 11
-    { "_dk_unit" },
-#define X_FREEMEM 12
-    { "_freemem" },
-    { "" },
-};
-
-char **dk_name;
-int *dk_unit;
 size_t pfree;
 int pflag;
 char **dr_name;
@@ -73,23 +40,23 @@ struct {
     struct forkstat Forkstat;
     unsigned rectime;
     unsigned pgintime;
-} s, s1, z;
+} s, s1;
 
 #define rate s.Rate
 #define total s.Total
 #define sum s.Sum
 #define forkstat s.Forkstat
 
-struct vmsum osum;
 long etime;
-int mf;
 time_t now, boottime;
 int lines = 1;
+static struct kinfo_ucb_stats ucb;
 
 static void dotimes(void);
 static void doforkst(void);
 static void dosum(void);
-static void read_names(void);
+static int read_stats(void);
+static int reset_stats(void);
 static void dointr(long nintv);
 static void dovmstats(void);
 static void stats(int dn);
@@ -139,7 +106,7 @@ static struct vmstat_sysctl vmstat_sysctls[] = {
 
 void printhdr(int sig)
 {
-    int i, j;
+    int i;
 
     if (pflag)
         printf("-procs- -----memory----- -swap- ");
@@ -176,16 +143,6 @@ int main(int argc, char **argv)
     long nintv, t;
     char *arg, **cp, buf[BUFSIZ];
 
-    knlist(nl);
-    if (nl[0].n_value == 0) {
-        fprintf(stderr, "no /vmunix namelist\n");
-        exit(1);
-    }
-    mf = open("/dev/kmem", 0);
-    if (mf < 0) {
-        fprintf(stderr, "cannot open /dev/kmem\n");
-        exit(1);
-    }
     iter = 0;
     argc--, argv++;
     while (argc > 0 && argv[0][0] == '-') {
@@ -198,10 +155,11 @@ int main(int argc, char **argv)
                 exit(0);
 
             case 'z':
-                close(mf);
-                mf = open("/dev/kmem", 2);
-                lseek(mf, (long)nl[X_SUM].n_value, L_SET);
-                write(mf, &z.Sum, sizeof z.Sum);
+                if (reset_stats() < 0) {
+                    fprintf(stderr, "vmstat: reset: %s\n",
+                        strerror(errno));
+                    exit(1);
+                }
                 exit(0);
 
             case 'f':
@@ -225,38 +183,33 @@ int main(int argc, char **argv)
                 exit(1);
             }
     }
-    lseek(mf, (long)nl[X_BOOTTIME].n_value, L_SET);
-    read(mf, &boottime, sizeof boottime);
-    lseek(mf, (long)nl[X_HZ].n_value, L_SET);
-    read(mf, &hz, sizeof hz);
-    if (nl[X_DK_NDRIVE].n_value == 0) {
-        fprintf(stderr, "dk_ndrive undefined in system\n");
+    if (read_stats() < 0) {
+        fprintf(stderr, "vmstat: VM_UCBSTATS: %s\n", strerror(errno));
         exit(1);
     }
-    lseek(mf, (long)nl[X_DK_NDRIVE].n_value, L_SET);
-    read(mf, &dk_ndrive, sizeof(dk_ndrive));
+    boottime = ucb.kus_boottime;
+    hz = ucb.kus_hz;
+    dk_ndrive = ucb.kus_dk_ndrive;
     if (dk_ndrive <= 0) {
         fprintf(stderr, "dk_ndrive %d\n", dk_ndrive);
         exit(1);
     }
     dr_select = (int *)calloc(dk_ndrive, sizeof(int));
     dr_name = (char **)calloc(dk_ndrive, sizeof(char *));
-    dk_name = (char **)calloc(dk_ndrive, sizeof(char *));
-    dk_unit = (int *)calloc(dk_ndrive, sizeof(int));
 #define allocate(e, t)                            \
     s./**/ e = (t *)calloc(dk_ndrive, sizeof(t)); \
     s1./**/ e = (t *)calloc(dk_ndrive, sizeof(t));
     allocate(xfer, long);
     for (arg = buf, i = 0; i < dk_ndrive; i++) {
         dr_name[i] = arg;
-        sprintf(dr_name[i], "dk%d", i);
-        arg += strlen(dr_name[i]) + 1;
+        strncpy(dr_name[i], ucb.kus_dk_name[i], KINFO_DISKNAMELEN - 1);
+        dr_name[i][KINFO_DISKNAMELEN - 1] = '\0';
+        arg += KINFO_DISKNAMELEN;
     }
-    read_names();
     time(&now);
     nintv = now - boottime;
     if (nintv <= 0 || nintv > 60L * 60L * 24L * 365L * 10L) {
-        fprintf(stderr, "Time makes no sense... namelist must be wrong.\n");
+        fprintf(stderr, "vmstat: kernel boot time makes no sense\n");
         exit(1);
     }
     if (iflag) {
@@ -302,14 +255,16 @@ int main(int argc, char **argv)
 loop:
     if (--lines == 0)
         printhdr(0);
-    lseek(mf, (long)nl[X_CPTIME].n_value, L_SET);
-    read(mf, s.time, sizeof s.time);
-    lseek(mf, (long)nl[X_DKXFER].n_value, L_SET);
-    read(mf, s.xfer, dk_ndrive * sizeof(long));
+    if (read_stats() < 0) {
+        fprintf(stderr, "vmstat: VM_UCBSTATS: %s\n", strerror(errno));
+        exit(1);
+    }
+    memcpy(s.time, ucb.kus_cp_time, sizeof(s.time));
+    memcpy(s.xfer, ucb.kus_dk_xfer,
+        dk_ndrive * sizeof(s.xfer[0]));
 
     if (nintv != 1) {
-        lseek(mf, (long)nl[X_SUM].n_value, L_SET);
-        read(mf, &sum, sizeof(sum));
+        sum = ucb.kus_sum;
         rate.v_swtch = sum.v_swtch;
         rate.v_trap = sum.v_trap;
         rate.v_syscall = sum.v_syscall;
@@ -317,19 +272,11 @@ loop:
         rate.v_swpin = sum.v_swpin;
         rate.v_swpout = sum.v_swpout;
     } else {
-        lseek(mf, (long)nl[X_RATE].n_value, L_SET);
-        read(mf, &rate, sizeof rate);
-        lseek(mf, (long)nl[X_SUM].n_value, L_SET);
-        read(mf, &sum, sizeof sum);
+        rate = ucb.kus_rate;
+        sum = ucb.kus_sum;
     }
-    lseek(mf, (long)nl[X_FREEMEM].n_value, L_SET);
-    read(mf, &pfree, sizeof(pfree));
-
-    lseek(mf, (long)nl[X_TOTAL].n_value, L_SET);
-    read(mf, &total, sizeof total);
-    osum = sum;
-    lseek(mf, (long)nl[X_SUM].n_value, L_SET);
-    read(mf, &sum, sizeof sum);
+    pfree = ucb.kus_freemem;
+    total = ucb.kus_total;
     etime = 0;
     for (i = 0; i < dk_ndrive; i++) {
         t = s.xfer[i];
@@ -392,8 +339,11 @@ void dotimes()
 
 void dosum()
 {
-    lseek(mf, (long)nl[X_SUM].n_value, L_SET);
-    read(mf, &sum, sizeof sum);
+    if (read_stats() < 0) {
+        fprintf(stderr, "vmstat: VM_UCBSTATS: %s\n", strerror(errno));
+        exit(1);
+    }
+    sum = ucb.kus_sum;
     printf("%9ld swap ins\n", sum.v_swpin);
     printf("%9ld swap outs\n", sum.v_swpout);
     printf("%9ld kbytes swapped in\n", sum.v_kbin);
@@ -433,8 +383,11 @@ void doforkst()
 {
     long avg;
 
-    lseek(mf, (long)nl[X_FORKSTAT].n_value, L_SET);
-    read(mf, &forkstat, sizeof forkstat);
+    if (read_stats() < 0) {
+        fprintf(stderr, "vmstat: VM_UCBSTATS: %s\n", strerror(errno));
+        exit(1);
+    }
+    forkstat = ucb.kus_forkstat;
     if (forkstat.cntfork != 0) {
         avg = forkstat.sizfork * 100 / forkstat.cntfork;
         printf("%ld forks, %ld kbytes, average=%ld.%02ld\n",
@@ -477,26 +430,32 @@ void dointr(long nintv)
     printf("Device interrupt statistics are not applicable to 2.11BSD\n");
 }
 
-#define steal(where, var)    \
-    lseek(mf, where, L_SET); \
-    read(mf, &var, sizeof var);
-
-/*
- * Read the drive names out of kmem.
- */
-void read_names()
+static int
+read_stats(void)
 {
-    char two_char[2];
-    int i;
+    int mib[2];
+    size_t size;
 
-    lseek(mf, (long)nl[X_DK_NAME].n_value, L_SET);
-    read(mf, dk_name, dk_ndrive * sizeof(char *));
-    lseek(mf, (long)nl[X_DK_UNIT].n_value, L_SET);
-    read(mf, dk_unit, dk_ndrive * sizeof(int));
-
-    for (i = 0; dk_name[i]; i++) {
-        lseek(mf, (long)dk_name[i], L_SET);
-        read(mf, two_char, sizeof two_char);
-        sprintf(dr_name[i], "%c%c%d", two_char[0], two_char[1], dk_unit[i]);
+    mib[0] = CTL_VM;
+    mib[1] = VM_UCBSTATS;
+    size = sizeof(ucb);
+    if (sysctl(mib, 2, &ucb, &size, NULL, 0) < 0)
+        return (-1);
+    if (size != sizeof(ucb)) {
+        errno = EINVAL;
+        return (-1);
     }
+    return (0);
+}
+
+static int
+reset_stats(void)
+{
+    int mib[2];
+    int reset;
+
+    mib[0] = CTL_VM;
+    mib[1] = VM_UCBRESET;
+    reset = 1;
+    return sysctl(mib, 2, NULL, NULL, &reset, sizeof(reset));
 }

@@ -39,8 +39,9 @@ is not the the user's login name (capitalized or not),
 and if the process is not running as the superuser.
 The last condition is to allow the superuser to clear the state of the line.
 .PP
-Turning modem control on or off is handled by poking into /dev/kmem.
-It is currently implemented for dz, dh, and dmf lines.
+Turning modem control on or off uses the privileged
+.B TIOCSSOFTCAR
+tty ioctl.
 .PP
 Under 4.2 BSD the program will also refuse to disable a line if carrier is
 sensed on it.  This is to avoid the dead period where someone has just dialed
@@ -107,7 +108,7 @@ Worked over many times by W.Sebok
 .RI ( i . e .
 hacked to death)
 .SH FILES
-/dev/kmem, /vmunix, /etc/ttys, /var/run/utmp, /dev/tty*
+/etc/ttys, /var/run/utmp, /dev/tty*
 .SH BUGS
 .PP
 Sensing carrier requires the 4.2 BSD TIOCMGET ioctl call.  Unfortunately this

@@ -68,7 +68,7 @@ _start (int argc, char **argv, char **env)
 
 	environ = env;
 	if (argc > 0 && argv[0] != 0) {
-		const char *s;
+		char *s;
 
 		__progname = argv[0];
 		for (s = __progname; *s != '\0'; s++)

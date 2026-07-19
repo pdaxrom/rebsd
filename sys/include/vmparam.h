@@ -51,7 +51,9 @@
 #define VM_FAULTWOULDBLOCK 40 /* long: non-sleeping faults rejected */
 #define VM_RECLAIMATTEMPTS 41 /* long: bounded reclaim passes */
 #define VM_RECLAIMFAILURES 42 /* long: reclaim passes without progress */
-#define VM_MAXID    43      /* number of valid vm ids */
+#define VM_UCBSTATS 43      /* struct kinfo_ucb_stats: legacy counters */
+#define VM_UCBRESET 44      /* int: reset legacy cumulative counters */
+#define VM_MAXID    45      /* number of valid vm ids */
 
 #ifndef KERNEL
 #define CTL_VM_NAMES { \
@@ -98,6 +100,8 @@
     { "fault_wouldblock", CTLTYPE_LONG }, \
     { "reclaim_attempts", CTLTYPE_LONG }, \
     { "reclaim_failures", CTLTYPE_LONG }, \
+    { "ucb_stats", CTLTYPE_STRUCT }, \
+    { "ucb_reset", CTLTYPE_INT }, \
 }
 #endif
 

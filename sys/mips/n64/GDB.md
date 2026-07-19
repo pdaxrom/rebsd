@@ -43,6 +43,9 @@ Opening the RSP session stops the running CPU through CART/IP3. While
 connected, GDB Ctrl-C uses the same interrupt for asynchronous break-in.
 `continue`, `step`, software breakpoints, register access, and direct-mapped
 kernel memory access are implemented. The stub reports one CPU/thread.
+IP3 is restored on every user-mode entry and remains unmasked while ordinary
+kernel `splhigh()` sections mask the MI and timer sources, so break-in does not
+disappear after starting a process and can stop VM/exec critical sections.
 
 ## Crash-safety boundary
 
@@ -58,6 +61,52 @@ This means the debugger remains usable when page tables, the active
 exception vectors, the stub itself, and the cartridge PI/USB registers remain
 accessible. It cannot recover from destroyed exception vectors, corrupted
 stub code/static storage, a wedged PI bus, or lost RDRAM.
+
+## RESET crash dump
+
+`N64_RESET_DUMP` defaults to the value of `N64_USB_GDB`. The physical RESET
+button is an independent last-resort stop when USB/GDB cannot interrupt a
+wedged kernel. The button's pre-NMI interrupt saves the complete exception
+frame, the current process identity, selected kernel pointers, and 24 words
+from a direct-mapped stack into the N64 warm-reset retention area. It remains
+enabled through ordinary `splhigh()` critical sections.
+
+The console hardware still performs its unavoidable warm NMI about half a
+second after the first press. Early in that warm boot the kernel detects the
+retained record, switches to the 320x240 panic console, prints PC, RA, SP,
+Cause, Status, BadVAddr, PID, process name, and selected state, then stops.
+It does not continue into normal startup. Press RESET a second time to clear
+the record; the following warm boot then proceeds normally.
+
+Stage0 repeats the PIF boot-complete handshake on every cold or warm entry.
+This releases the previous NMI state and rearms the physical RESET button;
+omitting the warm-boot handshake makes the button work only once per power-on.
+The ROM uses libdragon's production IPL3, whose reset type is passed in SP
+DMEM rather than the legacy `0x8000030c` word. Stage0 copies that bootinfo
+field before SP DMEM is reused; reading the untouched legacy word directly
+would make dump detection depend on stale RDRAM contents.
+
+The retained record has three states. During normal execution, exception and
+timer entries keep a small `live` snapshot current without console tracing. A
+delivered pre-NMI replaces it with an exact frame. If pre-NMI is masked by
+EXL/ERL or IE, the warm boot displays the last live snapshot instead of
+silently rebooting. Displaying either kind marks the record as `displayed`.
+The next RESET clears that state and boots normally even when its own pre-NMI
+was missed, so successive presses alternate dump, boot, dump, boot.
+
+Keep the `unix.elf` from the exact same build. The hexadecimal `pc` and `ra`
+shown on the death screen can be resolved with GDB, for example:
+
+```text
+(gdb) info symbol 0x80012345
+(gdb) list *0x80012345
+```
+
+An exact capture can still fail if RESET arrives while the CPU has EXL/ERL
+set, or execution is stuck in a hardware transaction until the real NMI. The
+retained live snapshot covers those cases. A screen is impossible only if the
+exception vectors, the retained 64-byte NMI buffer, or RDRAM itself have been
+destroyed.
 
 For the same reason, `m`/`M` currently accept only RDRAM addresses in KSEG0 or
 KSEG1. TLB-mapped user addresses are rejected with `E14` instead of risking a

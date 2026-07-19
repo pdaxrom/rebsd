@@ -27,8 +27,10 @@ pid ] [
 .I Fstat
 identifies open files.
 A file is considered open if a process has it open,
-if it is the working directory for a process,
-or if it is an active pure text file.
+or if it is the working directory for a process.
+The information comes from the bounded
+.B KERN_PROCFILES
+sysctl snapshot; no raw kernel or swap device is read.
 If no options are specified,
 .I fstat
 reports on all open files.
@@ -61,8 +63,7 @@ The process id.
 .TP 6
 .B FD
 The file number in the per-process open file table.  The special
-names "text" and "wd" mean that the file is the pure text inode
-or the working directory for the process.  If the file number is
+name "wd" means the working directory for the process.  If the file number is
 followed by an asterick (*), then the file is not an inode, but
 either a socket, fifo, or has an error of some kind. In this case
 the rest of the entry is variable format, doesn't correspond

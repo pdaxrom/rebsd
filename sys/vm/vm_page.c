@@ -367,18 +367,23 @@ static int
 vm_page_index(struct vm_page_allocator *allocator, struct vm_page *page,
     vm_pfn_t *index)
 {
-    vm_pfn_t i;
+    uintptr_t base;
+    uintptr_t address;
+    uintptr_t offset;
 
     if (allocator == 0 || page == 0 || index == 0 ||
         !allocator->vpa_initialized)
         return EINVAL;
-    for (i = 0; i < allocator->vpa_page_count; ++i) {
-        if (&allocator->vpa_pages[i] == page) {
-            *index = i;
-            return 0;
-        }
-    }
-    return EINVAL;
+    base = (uintptr_t)allocator->vpa_pages;
+    address = (uintptr_t)page;
+    if (address < base)
+        return EINVAL;
+    offset = address - base;
+    if (offset % sizeof(*page) != 0 ||
+        offset / sizeof(*page) >= allocator->vpa_page_count)
+        return EINVAL;
+    *index = (vm_pfn_t)(offset / sizeof(*page));
+    return 0;
 }
 
 static int

@@ -841,6 +841,8 @@ pmap_remove_page(struct vm_page *page)
     if (!pmap_initialized || page == 0 ||
         vm_page_lookup(pmap_allocator, page->vmp_paddr) != page)
         return EINVAL;
+    if (page->vmp_hold_count == 0)
+        return 0;
     for (map_index = 0; map_index < PMAP_MAX_MAPS; ++map_index) {
         pmap = &pmap_maps[map_index];
         if (!pmap_valid(pmap))
@@ -863,6 +865,8 @@ pmap_remove_page(struct vm_page *page)
                     &table[table_index]);
                 if (error != 0)
                     return error;
+                if (page->vmp_hold_count == 0)
+                    return 0;
             }
         }
     }
@@ -883,6 +887,8 @@ pmap_clear_page_reference(struct vm_page *page)
     if (!pmap_initialized || page == 0 ||
         vm_page_lookup(pmap_allocator, page->vmp_paddr) != page)
         return EINVAL;
+    if (page->vmp_reference_count == 0)
+        return 0;
     for (map_index = 0; map_index < PMAP_MAX_MAPS; ++map_index) {
         pmap = &pmap_maps[map_index];
         if (!pmap_valid(pmap))
@@ -908,6 +914,8 @@ pmap_clear_page_reference(struct vm_page *page)
                 vaddr = (directory_index << PMAP_DIRECTORY_SHIFT) |
                     (table_index << PMAP_TABLE_SHIFT);
                 pmap_invalidate(pmap, vaddr);
+                if (page->vmp_reference_count == 0)
+                    return 0;
             }
         }
     }
@@ -928,6 +936,8 @@ pmap_clear_page_modify(struct vm_page *page)
     if (!pmap_initialized || page == 0 ||
         vm_page_lookup(pmap_allocator, page->vmp_paddr) != page)
         return EINVAL;
+    if (page->vmp_dirty_count == 0)
+        return 0;
     for (map_index = 0; map_index < PMAP_MAX_MAPS; ++map_index) {
         pmap = &pmap_maps[map_index];
         if (!pmap_valid(pmap))
@@ -954,6 +964,8 @@ pmap_clear_page_modify(struct vm_page *page)
                 vaddr = (directory_index << PMAP_DIRECTORY_SHIFT) |
                     (table_index << PMAP_TABLE_SHIFT);
                 pmap_invalidate(pmap, vaddr);
+                if (page->vmp_dirty_count == 0)
+                    return 0;
             }
         }
     }

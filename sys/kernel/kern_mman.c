@@ -42,7 +42,7 @@ brk()
     };
     struct proc *p;
     vm_vaddr_t old_address, new_address;
-    vm_vaddr_t old_end, new_end;
+    vm_vaddr_t old_end, new_end, zero_end;
     unsigned address, base, maxmem, newsize, oldsize;
     int error;
 
@@ -85,8 +85,17 @@ brk()
             new_end - old_end, VM_PROT_READ | VM_PROT_WRITE, 0);
     }
     if (error == 0 && newsize > oldsize) {
-        error = vmspace_zero(p->p_vmspace, old_address,
-            newsize - oldsize);
+        /*
+         * Newly mapped anonymous pages are already zero-filled by their
+         * first fault.  Touching the entire extension here defeats demand
+         * allocation and used to drive every malloc growth through repeated
+         * 64-byte vmspace writes.  Only bytes exposed in the previously
+         * mapped tail page can contain old data and need eager clearing.
+         */
+        zero_end = new_address < old_end ? new_address : old_end;
+        if (zero_end > old_address)
+            error = vmspace_zero(p->p_vmspace, old_address,
+                zero_end - old_address);
         if (error != 0 && new_end > old_end)
             (void)vmspace_unmap(p->p_vmspace, old_end,
                 new_end - old_end);

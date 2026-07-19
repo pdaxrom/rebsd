@@ -127,11 +127,9 @@ and
 for
 .BR AF_UNIX .
 .PP
-The arguments,
-.I system
-and
-.I core
-allow substitutes for the defaults ``/vmunix'' and ``/dev/kmem''.
+Live network state is obtained through the bounded
+.B KERN_NETINFO
+sysctl snapshot; kernel namelists and raw kernel memory are not used.
 .PP
 The default display, for active sockets, shows the local
 and remote addresses, send and receive queue sizes (in bytes), protocol,

@@ -1,511 +1,226 @@
 /*
- * fstat
+ * Display open files using the bounded KERN_PROCFILES snapshot.
  *
- * Copyright (c) 1987 Regents of the University of California.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and that due credit is given
- * to the University of California at Berkeley. The name of the University
- * may not be used to endorse or promote products derived from this
- * software without specific prior written permission. This software
- * is provided ``as is'' without express or implied warranty.
+ * The old implementation walked proc, user, file, inode and socket objects
+ * through /dev/kmem, /dev/mem and /dev/swap.  Apart from requiring an exact
+ * kernel namelist, that let a diagnostic utility dereference unchecked kernel
+ * addresses.  The kernel now flattens the useful fields into kinfo_procfile.
  */
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/inode.h>
 #include <sys/param.h>
-#include <sys/proc.h>
+#include <sys/sysctl.h>
 #include <sys/stat.h>
-#include <sys/user.h>
-#if HAVE_NETWORK
-#include <net/route.h>
-#include <netinet/in_pcb.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
-#include <sys/unpcb.h>
-#endif
-#include <sys/vmmac.h>
-#define KERNEL
-#include <sys/file.h>
-#undef KERNEL
-#include <ctype.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <nlist.h>
+#include <errno.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#define N_KMEM "/dev/kmem"
-#define N_MEM "/dev/mem"
-#define N_SWAP "/dev/swap"
-#define N_UNIX "/vmunix"
+#define DTYPE_INODE    1
+#define DTYPE_SOCKET   2
+#define DTYPE_PIPE     3
+#define DTYPE_SHM      4
 
-#define TEXT -2
-#define WD -1
-
-typedef struct devs {
-    struct devs *next;
+struct namefilter {
+    struct namefilter *next;
     dev_t dev;
-    int inum;
+    ino_t ino;
     char *name;
-} DEVS;
-DEVS *devs;
-
-static struct nlist nl[] = {
-#define X_PROC 0
-    { "_proc" },
-#define X_NPROC 1
-    { "_nproc" },
-    { "" },
 };
 
-struct proc *mproc;
+static struct namefilter *filters;
+static int verbose;
 
-struct user user;
-
-extern int errno;
-static int fflg, vflg;
-static int kmem, mem, nproc, swap;
-static char *uname;
-
-static int getu()
-{
-    if ((mproc->p_flag & SLOAD) == 0) {
-        if (swap < 0)
-            return (0);
-        (void)lseek(swap, (off_t)(mproc->p_addr) << 9, L_SET);
-        if (read(swap, (char *)&user, sizeof(struct user)) != sizeof(struct user)) {
-            fprintf(stderr, "fstat: can't read u for pid %d from %s\n", mproc->p_pid, N_SWAP);
-            return (0);
-        }
-        return (1);
-    }
-    (void)lseek(mem, mproc->p_addr, L_SET);
-    if (read(mem, &user, sizeof(user)) != sizeof(user)) {
-        printf("fstat: can't read page table for u of pid %d from %s\n", mproc->p_pid, N_MEM);
-        return (0);
-    }
-    return (1);
-}
-
-static char *itype(u_short mode)
-{
-    switch (mode & IFMT) {
-    case IFCHR:
-        return ("chr");
-    case IFDIR:
-        return ("dir");
-    case IFBLK:
-        return ("blk");
-    case IFREG:
-        return ("reg");
-    case IFLNK:
-        return ("lnk");
-    case IFSOCK:
-        return ("soc");
-    default:
-        return ("unk");
-    }
-    /*NOTREACHED*/
-}
-
-static int devmatch(dev_t idev, ino_t inum, char **name)
-{
-    register DEVS *d;
-
-    for (d = devs; d; d = d->next)
-        if (d->dev == idev && (d->inum == 0 || d->inum == inum)) {
-            *name = d->name;
-            return (1);
-        }
-    return (0);
-}
-
-static void rerr1(char *what, char *fromwhat)
-{
-    if (vflg)
-        printf("fstat: error reading %s from %s", what, fromwhat);
-}
-
-static void rerr2(int err, int address, char *what)
-{
-    if (vflg)
-        printf("error %d reading %s at %x from kmem\n", errno, what, address);
-}
-
-#if HAVE_NETWORK
-/*
- * getinetproto --
- *	print name of protocol number
- */
-static void getinetproto(int number)
-{
-    char *cp;
-
-    switch (number) {
-    case IPPROTO_IP:
-        cp = "ip";
-        break;
-    case IPPROTO_ICMP:
-        cp = "icmp";
-        break;
-    case IPPROTO_GGP:
-        cp = "ggp";
-        break;
-    case IPPROTO_TCP:
-        cp = "tcp";
-        break;
-    case IPPROTO_EGP:
-        cp = "egp";
-        break;
-    case IPPROTO_PUP:
-        cp = "pup";
-        break;
-    case IPPROTO_UDP:
-        cp = "udp";
-        break;
-    case IPPROTO_IDP:
-        cp = "idp";
-        break;
-    case IPPROTO_RAW:
-        cp = "raw";
-        break;
-    default:
-        printf(" %d", number);
-        return;
-    }
-    printf(" %s", cp);
-}
-
-static socktrans(struct socket *sock)
-{
-    static char *stypename[] = {
-        "unused", /* 0 */
-        "stream", /* 1 */
-        "dgram",  /* 2 */
-        "raw",    /* 3 */
-        "rdm",    /* 4 */
-        "seqpak"  /* 5 */
-    };
-#define STYPEMAX 5
-    struct socket so;
-    struct protosw proto;
-    struct domain dom;
-    struct inpcb inpcb;
-    struct unpcb unpcb;
-    int len;
-    char dname[32];
-
-    /* fill in socket */
-    (void)lseek(kmem, (off_t)(u_long)sock, L_SET);
-    if (read(kmem, (char *)&so, sizeof(struct socket)) != sizeof(struct socket)) {
-        rerr2(errno, (int)sock, "socket");
-        return;
-    }
-
-    /* fill in protosw entry */
-    (void)lseek(kmem, (off_t)(u_long)so.so_proto, L_SET);
-    if (read(kmem, (char *)&proto, sizeof(struct protosw)) != sizeof(struct protosw)) {
-        rerr2(errno, (int)so.so_proto, "protosw");
-        return;
-    }
-
-    /* fill in domain */
-    (void)lseek(kmem, (off_t)(u_long)proto.pr_domain, L_SET);
-    if (read(kmem, (char *)&dom, sizeof(struct domain)) != sizeof(struct domain)) {
-        rerr2(errno, (int)proto.pr_domain, "domain");
-        return;
-    }
-
-    /*
-     * grab domain name
-     * kludge "internet" --> "inet" for brevity
-     */
-    if (dom.dom_family == AF_INET)
-        (void)strcpy(dname, "inet");
-    else {
-        (void)lseek(kmem, (off_t)(u_long)dom.dom_name, L_SET);
-        if ((len = read(kmem, dname, sizeof(dname) - 1)) < 0) {
-            rerr2(errno, (int)dom.dom_name, "char");
-            dname[0] = '\0';
-        } else
-            dname[len] = '\0';
-    }
-
-    if ((u_short)so.so_type > STYPEMAX)
-        printf("* (%s unk%d %x", dname, so.so_type, so.so_state);
-    else
-        printf("* (%s %s %x", dname, stypename[so.so_type], so.so_state);
-
-    /*
-     * protocol specific formatting
-     *
-     * Try to find interesting things to print.  For tcp, the interesting
-     * thing is the address of the tcpcb, for udp and others, just the
-     * inpcb (socket pcb).  For unix domain, its the address of the socket
-     * pcb and the address of the connected pcb (if connected).  Otherwise
-     * just print the protocol number and address of the socket itself.
-     * The idea is not to duplicate netstat, but to make available enough
-     * information for further analysis.
-     */
-    switch (dom.dom_family) {
-    case AF_INET:
-        getinetproto(proto.pr_protocol);
-        if (proto.pr_protocol == IPPROTO_TCP) {
-            if (so.so_pcb) {
-                (void)lseek(kmem, (off_t)(u_long)so.so_pcb, L_SET);
-                if (read(kmem, (char *)&inpcb, sizeof(struct inpcb)) != sizeof(struct inpcb)) {
-                    rerr2(errno, (int)so.so_pcb, "inpcb");
-                    return;
-                }
-                printf(" %x", (int)inpcb.inp_ppcb);
-            }
-        } else if (so.so_pcb)
-            printf(" %x", (int)so.so_pcb);
-        break;
-    case AF_UNIX:
-        /* print address of pcb and connected pcb */
-        if (so.so_pcb) {
-            printf(" %x", (int)so.so_pcb);
-            (void)lseek(kmem, (off_t)(u_long)so.so_pcb, L_SET);
-            if (read(kmem, (char *)&unpcb, sizeof(struct unpcb)) != sizeof(struct unpcb)) {
-                rerr2(errno, (int)so.so_pcb, "unpcb");
-                return;
-            }
-            if (unpcb.unp_conn) {
-                char shoconn[4], *cp;
-
-                cp = shoconn;
-                if (!(so.so_state & SS_CANTRCVMORE))
-                    *cp++ = '<';
-                *cp++ = '-';
-                if (!(so.so_state & SS_CANTSENDMORE))
-                    *cp++ = '>';
-                *cp = '\0';
-                printf(" %s %x", shoconn, (int)unpcb.unp_conn);
-            }
-        }
-        break;
-    default:
-        /* print protocol number and socket address */
-        printf(" %d %x", proto.pr_protocol, (int)sock);
-    }
-    printf(")\n");
-}
-#endif
-
-static void itrans(int ftype, struct inode *g, int fno)
-{
-    struct inode inode;
-    dev_t idev;
-    char *comm;
-    char *name = (char *)NULL; /* set by devmatch() on a match */
-
-    if (g || fflg) {
-        (void)lseek(kmem, (off_t)(u_long)g, L_SET);
-        if (read(kmem, (char *)&inode, sizeof(inode)) != sizeof(inode)) {
-            rerr2(errno, (int)g, "inode");
-            return;
-        }
-        idev = inode.i_dev;
-        if (fflg && !devmatch(idev, inode.i_number, &name))
-            return;
-    }
-    if (mproc->p_pid == 0)
-        comm = "swapper";
-    else
-        comm = user.u_comm;
-    printf("%-8.8s %-10.10s %5d  ", uname, comm, mproc->p_pid);
-
-    switch (fno) {
-    case WD:
-        printf("  wd");
-        break;
-    case TEXT:
-        printf("text");
-        break;
-    default:
-        printf("%4d", fno);
-    }
-
-    if (g == 0) {
-        printf("* (deallocated)\n");
-        return;
-    }
-
-    switch (ftype) {
-    case DTYPE_INODE:
-    case DTYPE_PIPE:
-        printf("\t%2d, %2d\t%5lu\t%6ld\t%3s %s\n", major(inode.i_dev), minor(inode.i_dev),
-               (long)inode.i_number, inode.i_mode == IFSOCK ? 0L : inode.i_size,
-               ftype == DTYPE_PIPE ? "pip" : itype(inode.i_mode), name ? name : "");
-        break;
-#if HAVE_NETWORK
-    case DTYPE_SOCKET:
-        socktrans((struct socket *)g);
-        break;
-#endif
-    default:
-        printf("* (unknown file type)\n");
-    }
-}
-
-static void readf()
-{
-    struct file lfile;
-    int i;
-
-    itrans(DTYPE_INODE, user.u_cdir, WD);
-    for (i = 0; i < NOFILE; i++) {
-        if (user.u_ofile[i] == 0)
-            continue;
-        (void)lseek(kmem, (off_t)(u_long)user.u_ofile[i], L_SET);
-        if (read(kmem, (char *)&lfile, sizeof(lfile)) != sizeof(lfile)) {
-            rerr1("file", N_KMEM);
-            continue;
-        }
-        itrans(lfile.f_type, (struct inode *)lfile.f_data, i);
-    }
-}
-
-static int getfname(char *filename)
-{
-    struct stat statbuf;
-    DEVS *cur;
-
-    if (stat(filename, &statbuf)) {
-        perror(filename);
-        return (0);
-    }
-    if ((cur = (DEVS *)malloc(sizeof(DEVS))) == NULL) {
-        fprintf(stderr, "fstat: out of space.\n");
-        exit(1);
-    }
-    cur->next = devs;
-    devs = cur;
-
-    /* if file is block special, look for open files on it */
-    if ((statbuf.st_mode & S_IFMT) != S_IFBLK) {
-        cur->inum = statbuf.st_ino;
-        cur->dev = statbuf.st_dev;
-    } else {
-        cur->inum = 0;
-        cur->dev = statbuf.st_rdev;
-    }
-    cur->name = filename;
-    return (1);
-}
-
-static long lgetw(off_t loc)
-{
-    u_int word;
-
-    (void)lseek(kmem, (off_t)loc, L_SET);
-    if (read(kmem, (char *)&word, sizeof(word)) != sizeof(word))
-        rerr2(errno, (int)loc, "word");
-    return ((long)word);
-}
-
-static void usage()
+static void
+usage(void)
 {
     fputs("usage: fstat [-v] [-u user] [-p pid] [filename ...]\n", stderr);
     exit(1);
 }
 
-int main(int argc, char **argv)
+static struct kinfo_procfile *
+procfiles(size_t *countp)
 {
-    extern char *optarg;
-    extern int optind;
-    register struct passwd *passwd;
-    register int pflg = 0, pid = 0, uflg = 0, uid = 0;
-    int ch, size;
+    int mib[2] = { CTL_KERN, KERN_PROCFILES };
+    struct kinfo_procfile *data;
+    size_t size;
+    int tries;
 
-    while ((ch = getopt(argc, argv, "p:u:v")) != EOF)
-        switch ((char)ch) {
+    for (tries = 0; tries < 3; tries++) {
+        size = 0;
+        if (sysctl(mib, 2, NULL, &size, NULL, 0) < 0)
+            return NULL;
+        data = malloc(size != 0 ? size : 1);
+        if (data == NULL)
+            return NULL;
+        if (sysctl(mib, 2, data, &size, NULL, 0) == 0) {
+            *countp = size / sizeof(*data);
+            return data;
+        }
+        free(data);
+        if (errno != ENOMEM)
+            return NULL;
+    }
+    errno = ENOMEM;
+    return NULL;
+}
+
+static void
+addfilter(char *name)
+{
+    struct namefilter *filter;
+    struct stat sb;
+
+    if (stat(name, &sb) < 0) {
+        fprintf(stderr, "fstat: %s: %s\n", name, strerror(errno));
+        return;
+    }
+    filter = malloc(sizeof(*filter));
+    if (filter == NULL) {
+        fprintf(stderr, "fstat: out of memory\n");
+        exit(1);
+    }
+    filter->next = filters;
+    filter->name = name;
+    if (S_ISBLK(sb.st_mode)) {
+        filter->dev = sb.st_rdev;
+        filter->ino = 0;
+    } else {
+        filter->dev = sb.st_dev;
+        filter->ino = sb.st_ino;
+    }
+    filters = filter;
+}
+
+static char *
+matchname(const struct kinfo_procfile *kpf)
+{
+    struct namefilter *filter;
+
+    if (filters == NULL)
+        return "";
+    for (filter = filters; filter != NULL; filter = filter->next)
+        if (filter->dev == kpf->kpf_dev &&
+            (filter->ino == 0 || filter->ino == kpf->kpf_inode))
+            return filter->name;
+    return NULL;
+}
+
+static const char *
+typename(const struct kinfo_procfile *kpf)
+{
+    if (kpf->kpf_type == DTYPE_SOCKET)
+        return "soc";
+    if (kpf->kpf_type == DTYPE_PIPE)
+        return "pip";
+    if (kpf->kpf_type == DTYPE_SHM)
+        return "shm";
+    switch (kpf->kpf_mode & S_IFMT) {
+    case S_IFCHR: return "chr";
+    case S_IFDIR: return "dir";
+    case S_IFBLK: return "blk";
+    case S_IFREG: return "reg";
+    case S_IFLNK: return "lnk";
+    case S_IFSOCK: return "soc";
+    default: return "unk";
+    }
+}
+
+static void
+printone(const struct kinfo_procfile *kpf, const char *user, const char *name)
+{
+    printf("%-8.8s %-10.10s %5d  ", user, kpf->kpf_comm, kpf->kpf_pid);
+    if (kpf->kpf_fd == KINFO_FD_CWD)
+        printf("  wd");
+    else
+        printf("%4d", kpf->kpf_fd);
+
+    if (kpf->kpf_type == DTYPE_SOCKET || kpf->kpf_type == DTYPE_SHM) {
+        printf("\t*       %08lx                 %3s", kpf->kpf_datap,
+            typename(kpf));
+    } else {
+        printf("\t%2d, %2d\t%5lu\t%10lld\t%3s",
+            major(kpf->kpf_dev), minor(kpf->kpf_dev),
+            (unsigned long)kpf->kpf_inode, (long long)kpf->kpf_size,
+            typename(kpf));
+    }
+    if (*name != '\0')
+        printf(" %s", name);
+    if (verbose && kpf->kpf_fd != KINFO_FD_CWD)
+        printf(" [file=%08lx flags=%x offset=%lld]", kpf->kpf_filep,
+            kpf->kpf_flags, (long long)kpf->kpf_offset);
+    putchar('\n');
+}
+
+int
+main(int argc, char **argv)
+{
+    struct kinfo_procfile *data;
+    struct passwd *pw;
+    char *end, *name;
+    long pidarg;
+    uid_t uidarg;
+    size_t count, i;
+    int ch, havepid, haveuid, badfilter;
+
+    havepid = haveuid = badfilter = 0;
+    pidarg = 0;
+    uidarg = 0;
+    while ((ch = getopt(argc, argv, "p:u:v")) != EOF) {
+        switch (ch) {
         case 'p':
-            if (pflg++)
+            if (havepid)
                 usage();
-            if (!isdigit(*optarg)) {
-                fputs("fstat: -p option requires a process id.\n", stderr);
+            pidarg = strtol(optarg, &end, 10);
+            if (*optarg == '\0' || *end != '\0' || pidarg < 0)
                 usage();
-            }
-            pid = atoi(optarg);
+            havepid = 1;
             break;
         case 'u':
-            if (uflg++)
+            if (haveuid)
                 usage();
-            if (!(passwd = getpwnam(optarg))) {
-                fprintf(stderr, "%s: unknown uid\n", optarg);
-                exit(1);
+            pw = getpwnam(optarg);
+            if (pw == NULL) {
+                fprintf(stderr, "fstat: %s: unknown user\n", optarg);
+                return 1;
             }
-            uid = passwd->pw_uid;
-            uname = passwd->pw_name;
+            uidarg = pw->pw_uid;
+            haveuid = 1;
             break;
-        case 'v': /* undocumented: print read error messages */
-            vflg++;
+        case 'v':
+            verbose = 1;
             break;
-        case '?':
         default:
             usage();
         }
+    }
+    while (optind < argc) {
+        struct namefilter *before = filters;
+        addfilter(argv[optind++]);
+        if (before == filters)
+            badfilter = 1;
+    }
+    if (badfilter && filters == NULL)
+        return 1;
 
-    if (*(argv += optind)) {
-        for (; *argv; ++argv) {
-            if (getfname(*argv))
-                fflg = 1;
-        }
-        if (!fflg) /* file(s) specified, but none accessable */
-            exit(1);
+    data = procfiles(&count);
+    if (data == NULL) {
+        fprintf(stderr, "fstat: KERN_PROCFILES: %s\n", strerror(errno));
+        return 1;
     }
-
-    if ((kmem = open(N_KMEM, O_RDONLY, 0)) < 0) {
-        perror(N_KMEM);
-        exit(1);
-    }
-    if ((mem = open(N_MEM, O_RDONLY, 0)) < 0) {
-        perror(N_MEM);
-        exit(1);
-    }
-    if ((swap = open(N_SWAP, O_RDONLY, 0)) < 0) {
-        perror(N_SWAP);
-        exit(1);
-    }
-
-    if (knlist(nl) == -1 || !nl[0].n_value) {
-        fprintf(stderr, "%s: No namelist\n", N_UNIX);
-        exit(1);
-    }
-    nproc = (int)lgetw((off_t)nl[X_NPROC].n_value);
-
-    (void)lseek(kmem, (off_t)nl[X_PROC].n_value, L_SET);
-    size = nproc * sizeof(struct proc);
-    if ((mproc = (struct proc *)malloc((u_int)size)) == NULL) {
-        fprintf(stderr, "fstat: out of space.\n");
-        exit(1);
-    }
-    if (read(kmem, (char *)mproc, size) != size)
-        rerr1("proc table", N_KMEM);
-
-    printf("USER\t CMD\t      PID    FD\tDEVICE\tINODE\t  SIZE TYPE%s\n", fflg ? " NAME" : "");
-    for (; nproc--; ++mproc) {
-        if (mproc->p_stat == 0)
+    printf("USER\t CMD\t      PID    FD\tDEVICE\tINODE\t      SIZE TYPE%s\n",
+        filters != NULL ? " NAME" : "");
+    for (i = 0; i < count; i++) {
+        if (havepid && data[i].kpf_pid != pidarg)
             continue;
-        if (pflg && mproc->p_pid != pid)
+        if (haveuid && data[i].kpf_uid != uidarg)
             continue;
-        if (uflg) {
-            if (mproc->p_uid != uid)
-                continue;
-        } else
-            uname = (passwd = getpwuid(mproc->p_uid)) ? passwd->pw_name : "unknown";
-        if (mproc->p_stat != SZOMB && getu() == 0)
+        name = matchname(&data[i]);
+        if (name == NULL)
             continue;
-        readf();
+        pw = getpwuid(data[i].kpf_uid);
+        printone(&data[i], pw != NULL ? pw->pw_name : "unknown", name);
     }
-    exit(0);
+    free(data);
+    return 0;
 }

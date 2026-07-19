@@ -45,6 +45,7 @@
 #include <sys/inode.h>
 #include <sys/ioctl.h>
 #include <sys/tty.h>
+#include <sys/dk.h>
 #include <sys/vm.h>
 #include <sys/map.h>
 #include <sys/sysctl.h>
@@ -57,6 +58,30 @@
 #include <vm/pmap.h>
 #include <machine/cpu.h>
 #include <sys/conf.h>
+
+extern struct tty cnttys[];
+
+#ifdef INET
+#include <sys/socket.h>
+#include <sys/socketvar.h>
+#include <sys/mbuf.h>
+#include <net/if.h>
+#include <net/route.h>
+#include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/in_var.h>
+#include <netinet/in_pcb.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/ip_var.h>
+#include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
+#include <netinet/udp.h>
+#include <netinet/udp_var.h>
+#include <netinet/icmp_var.h>
+extern int rthashsize;
+#endif
 
 #ifndef HW_MACHINE_NAME
 #define HW_MACHINE_NAME "mips"
@@ -108,6 +133,29 @@ static int sysctl_clockrate (char *where, size_t *sizep);
 static int sysctl_inode (char *where, size_t *sizep);
 static int sysctl_file (char *where, size_t *sizep);
 static int sysctl_doproc (int *name, u_int namelen, char *where, size_t *sizep);
+static int sysctl_procfiles(char *where, size_t *sizep);
+#ifdef INET
+static int sysctl_netinfo(void *, size_t *, void *);
+#endif
+
+static void
+sysctl_diskname(char *dst, const char *name, int unit)
+{
+    char digits[10];
+    int pos, n;
+
+    pos = 0;
+    while (*name != '\0' && pos < KINFO_DISKNAMELEN - 1)
+        dst[pos++] = *name++;
+    n = 0;
+    do {
+        digits[n++] = '0' + unit % 10;
+        unit /= 10;
+    } while (unit != 0 && n < (int)sizeof(digits));
+    while (n != 0 && pos < KINFO_DISKNAMELEN - 1)
+        dst[pos++] = digits[--n];
+    dst[pos] = '\0';
+}
 
 void
 __sysctl()
@@ -302,6 +350,17 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, s
         return (sysctl_rdint(oldp, oldlenp, newp, rebsd_dirty));
     case KERN_BUILDINFO:
         return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_buildinfo));
+    case KERN_TTY:
+        return (sysctl_rdstruct(oldp, oldlenp, newp, &cnttys[0],
+            sizeof(cnttys[0])));
+    case KERN_NETINFO:
+#ifdef INET
+        return (sysctl_netinfo(oldp, oldlenp, newp));
+#else
+        return (EOPNOTSUPP);
+#endif
+    case KERN_PROCFILES:
+        return (sysctl_procfiles(oldp, oldlenp));
     default:
         return (EOPNOTSUPP);
     }
@@ -342,6 +401,170 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     }
     /* NOTREACHED */
 }
+
+#ifdef INET
+static struct kinfo_netinfo netinfo_snapshot;
+
+static void
+netinfo_name(char *dst, const char *src)
+{
+    int i;
+
+    for (i = 0; i < 7 && src != NULL && src[i] != '\0'; i++)
+        dst[i] = src[i];
+    dst[i] = '\0';
+}
+
+static void
+netinfo_pcbs(struct kinfo_netinfo *ni, struct inpcb *head, int protocol)
+{
+    struct kinfo_netconn *conn;
+    struct inpcb *inp;
+    struct socket *so;
+    struct tcpcb *tp;
+    int remaining;
+
+    remaining = NFILE + 1;
+    for (inp = head->inp_next; inp != head && inp != NULL;
+        inp = inp->inp_next) {
+        if (--remaining == 0 || ni->kni_nconn >= KINFO_NET_MAXCONN) {
+            ni->kni_conn_truncated = 1;
+            break;
+        }
+        so = inp->inp_socket;
+        if (so == NULL)
+            continue;
+        conn = &ni->kni_conn[ni->kni_nconn++];
+        conn->knc_pcb = protocol == IPPROTO_TCP ?
+            (u_long)inp->inp_ppcb : (u_long)inp;
+        conn->knc_family = AF_INET;
+        conn->knc_protocol = protocol;
+        conn->knc_type = so->so_type;
+        conn->knc_laddr = inp->inp_laddr.s_addr;
+        conn->knc_faddr = inp->inp_faddr.s_addr;
+        conn->knc_lport = inp->inp_lport;
+        conn->knc_fport = inp->inp_fport;
+        conn->knc_recvq = so->so_rcv.sb_cc;
+        conn->knc_sendq = so->so_snd.sb_cc;
+        if (protocol == IPPROTO_TCP) {
+            tp = (struct tcpcb *)inp->inp_ppcb;
+            conn->knc_state = tp != NULL ? tp->t_state : -1;
+        }
+    }
+}
+
+static void
+netinfo_interfaces(struct kinfo_netinfo *ni)
+{
+    struct kinfo_ifstats *dst;
+    struct ifaddr *ifa;
+    struct ifnet *ifp;
+    struct in_ifaddr *ia;
+    struct sockaddr_in *sin;
+
+    for (ifp = ifnet; ifp != NULL; ifp = ifp->if_next) {
+        if (ni->kni_nif >= KINFO_NET_MAXIF) {
+            ni->kni_if_truncated = 1;
+            break;
+        }
+        dst = &ni->kni_if[ni->kni_nif++];
+        netinfo_name(dst->kif_name, ifp->if_name);
+        dst->kif_unit = ifp->if_unit;
+        dst->kif_mtu = ifp->if_mtu;
+        dst->kif_flags = ifp->if_flags;
+        dst->kif_timer = ifp->if_timer;
+        dst->kif_metric = ifp->if_metric;
+        dst->kif_snd_len = ifp->if_snd.ifq_len;
+        dst->kif_snd_drops = ifp->if_snd.ifq_drops;
+        dst->kif_ipackets = ifp->if_ipackets;
+        dst->kif_ierrors = ifp->if_ierrors;
+        dst->kif_opackets = ifp->if_opackets;
+        dst->kif_oerrors = ifp->if_oerrors;
+        dst->kif_collisions = ifp->if_collisions;
+        for (ifa = ifp->if_addrlist; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr.sa_family != AF_INET)
+                continue;
+            ia = (struct in_ifaddr *)ifa;
+            sin = (struct sockaddr_in *)&ia->ia_addr;
+            dst->kif_addr = sin->sin_addr.s_addr;
+            dst->kif_subnet = ia->ia_subnet;
+            dst->kif_subnetmask = ia->ia_subnetmask;
+            break;
+        }
+    }
+}
+
+static void
+netinfo_routes(struct kinfo_netinfo *ni, struct mbuf **table)
+{
+    struct kinfo_route *dst;
+    struct sockaddr_in *sin;
+    struct rtentry *rt;
+    struct mbuf *m;
+    int bucket, remaining;
+
+    if (rthashsize <= 0 || rthashsize > 4096)
+        return;
+    for (bucket = 0; bucket < rthashsize; bucket++) {
+        remaining = NFILE + 1;
+        for (m = table[bucket]; m != NULL; m = m->m_next) {
+            if (--remaining == 0 ||
+                ni->kni_nroute >= KINFO_NET_MAXROUTE) {
+                ni->kni_route_truncated = 1;
+                return;
+            }
+            rt = mtod(m, struct rtentry *);
+            dst = &ni->kni_route[ni->kni_nroute++];
+            dst->knr_family = rt->rt_dst.sa_family;
+            if (dst->knr_family == AF_INET) {
+                sin = (struct sockaddr_in *)&rt->rt_dst;
+                dst->knr_destination = sin->sin_addr.s_addr;
+                sin = (struct sockaddr_in *)&rt->rt_gateway;
+                dst->knr_gateway = sin->sin_addr.s_addr;
+            }
+            dst->knr_flags = rt->rt_flags;
+            dst->knr_refcnt = rt->rt_refcnt;
+            dst->knr_use = rt->rt_use;
+            if (rt->rt_ifp != NULL) {
+                netinfo_name(dst->knr_ifname, rt->rt_ifp->if_name);
+                dst->knr_ifunit = rt->rt_ifp->if_unit;
+            }
+        }
+    }
+}
+
+static int
+sysctl_netinfo(void *oldp, size_t *oldlenp, void *newp)
+{
+    struct kinfo_netinfo *ni;
+    struct kinfo_netstats *stats;
+
+    ni = &netinfo_snapshot;
+    bzero(ni, sizeof(*ni));
+    netinfo_pcbs(ni, &tcb, IPPROTO_TCP);
+    netinfo_pcbs(ni, &udb, IPPROTO_UDP);
+    netinfo_interfaces(ni);
+    netinfo_routes(ni, rthost);
+    netinfo_routes(ni, rtnet);
+
+    stats = &ni->kni_stats;
+    stats->kns_mbufs = mbstat.m_mbufs;
+    stats->kns_clusters = mbstat.m_clusters;
+    stats->kns_space = mbstat.m_space;
+    stats->kns_clfree = mbstat.m_clfree;
+    stats->kns_drops = mbstat.m_drops;
+    stats->kns_wait = mbstat.m_wait;
+    stats->kns_drain = mbstat.m_drain;
+    bcopy(mbstat.m_mtypes, stats->kns_mtypes,
+        sizeof(stats->kns_mtypes));
+    bcopy(&ipstat, stats->kns_ip, sizeof(ipstat));
+    bcopy(&tcpstat, stats->kns_tcp, sizeof(tcpstat));
+    bcopy(&udpstat, stats->kns_udp, sizeof(udpstat));
+    bcopy(&icmpstat, stats->kns_icmp, sizeof(icmpstat));
+    bcopy(&rtstat, stats->kns_route, sizeof(rtstat));
+    return (sysctl_rdstruct(oldp, oldlenp, newp, ni, sizeof(*ni)));
+}
+#endif /* INET */
 
 #ifdef DEBUG
 /*
@@ -397,6 +620,7 @@ int
 vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
     struct  loadavg averunnable;    /* loadavg in resource.h */
+    struct kinfo_ucb_stats ucb;
     struct vm_page_stats page_stats;
     struct pmap_stats pmap_stats;
     struct vm_object_stats object_stats;
@@ -404,6 +628,8 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     struct vm_sysv_shm_stats sysv_shm_stats;
     long page_value;
     int error;
+    int reset;
+    int i;
 
     /* all sysctl names at this level are terminal */
     if (namelen != 1)
@@ -432,6 +658,44 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     case VM_SWAPTOTAL:
         return (sysctl_rdlong(oldp, oldlenp, newp,
             (long)nswap * DEV_BSIZE));
+    case VM_UCBSTATS:
+        bzero(&ucb, sizeof(ucb));
+#ifdef UCB_METER
+        ucb.kus_hz = hz;
+        ucb.kus_dk_ndrive = dk_ndrive;
+        if (ucb.kus_dk_ndrive > KINFO_MAXDISKS)
+            ucb.kus_dk_ndrive = KINFO_MAXDISKS;
+        ucb.kus_dk_busy = dk_busy;
+        for (i = 0; i < KINFO_CPUSTATES; i++)
+            ucb.kus_cp_time[i] = cp_time[i];
+        for (i = 0; i < ucb.kus_dk_ndrive; i++) {
+            ucb.kus_dk_xfer[i] = dk_xfer[i];
+            ucb.kus_dk_bytes[i] = dk_bytes[i];
+            if (dk_name[i] != NULL)
+                sysctl_diskname(ucb.kus_dk_name[i], dk_name[i],
+                    dk_unit[i]);
+        }
+        ucb.kus_tk_nin = tk_nin;
+        ucb.kus_tk_nout = tk_nout;
+        ucb.kus_rate = rate;
+        ucb.kus_sum = sum;
+        ucb.kus_forkstat = forkstat;
+        ucb.kus_freemem = freemem;
+#endif
+        vmtotal();
+        ucb.kus_total = total;
+        ucb.kus_boottime = boottime.tv_sec;
+        return (sysctl_rdstruct(oldp, oldlenp, newp, &ucb,
+            sizeof(ucb)));
+    case VM_UCBRESET:
+        reset = 0;
+        error = sysctl_int(oldp, oldlenp, newp, newlen, &reset);
+        if (error != 0 || newp == NULL || reset == 0)
+            return (error);
+#ifdef UCB_METER
+        bzero(&sum, sizeof(sum));
+#endif
+        return (0);
     case VM_PHYSPAGES:
     case VM_FREEPAGES:
     case VM_RESERVEDPAGES:
@@ -830,6 +1094,95 @@ sysctl_file(char *where, size_t *sizep)
     return (0);
 }
 
+static int
+sysctl_procfile_emit(struct proc *p, struct user *up, int fd,
+    struct file *fp, struct inode *ip, char *where)
+{
+    struct kinfo_procfile kpf;
+
+    bzero(&kpf, sizeof(kpf));
+    kpf.kpf_pid = p->p_pid;
+    kpf.kpf_uid = p->p_uid;
+    kpf.kpf_fd = fd;
+    strncpy(kpf.kpf_comm, up->u_comm, sizeof(kpf.kpf_comm) - 1);
+    if (fp != NULL) {
+        kpf.kpf_type = fp->f_type;
+        kpf.kpf_flags = fp->f_flag;
+        kpf.kpf_filep = (u_long)fp;
+        kpf.kpf_datap = (u_long)fp->f_data;
+        kpf.kpf_offset = fp->f_offset;
+    } else {
+        kpf.kpf_type = DTYPE_INODE;
+        kpf.kpf_datap = (u_long)ip;
+    }
+    if (ip != NULL) {
+        kpf.kpf_dev = ip->i_dev;
+        kpf.kpf_rdev = ip->i_rdev;
+        kpf.kpf_inode = ip->i_number;
+        kpf.kpf_mode = ip->i_mode;
+        kpf.kpf_size = ip->i_size;
+    }
+    return copyout((caddr_t)&kpf, where, sizeof(kpf));
+}
+
+/*
+ * Return flattened per-process descriptors.  No u-area, file, inode, socket,
+ * or PCB pointer is accepted from userland; every entry is validated while
+ * walking kernel-owned tables.
+ */
+static int
+sysctl_procfiles(char *where, size_t *sizep)
+{
+    struct inode *ip;
+    struct file *fp;
+    struct user *up;
+    struct proc *p;
+    char *start;
+    int buflen, error, fd, needed;
+
+    start = where;
+    buflen = where != NULL ? *sizep : 0;
+    needed = 0;
+    for (p = allproc; p != NULL; p = p->p_nxt) {
+        up = p->p_uarea;
+        if (up == NULL)
+            continue;
+        if (up->u_cdir != NULL) {
+            needed += sizeof(struct kinfo_procfile);
+            if (buflen >= sizeof(struct kinfo_procfile)) {
+                error = sysctl_procfile_emit(p, up, KINFO_FD_CWD,
+                    NULL, up->u_cdir, where);
+                if (error != 0)
+                    return error;
+                where += sizeof(struct kinfo_procfile);
+                buflen -= sizeof(struct kinfo_procfile);
+            }
+        }
+        for (fd = 0; fd <= up->u_lastfile && fd < NOFILE; fd++) {
+            fp = up->u_ofile[fd];
+            if (fp == NULL)
+                continue;
+            ip = NULL;
+            if (fp->f_type == DTYPE_INODE || fp->f_type == DTYPE_PIPE)
+                ip = (struct inode *)fp->f_data;
+            needed += sizeof(struct kinfo_procfile);
+            if (buflen >= sizeof(struct kinfo_procfile)) {
+                error = sysctl_procfile_emit(p, up, fd, fp, ip, where);
+                if (error != 0)
+                    return error;
+                where += sizeof(struct kinfo_procfile);
+                buflen -= sizeof(struct kinfo_procfile);
+            }
+        }
+    }
+    if (start == NULL) {
+        *sizep = needed + 8 * sizeof(struct kinfo_procfile);
+        return 0;
+    }
+    *sizep = where - start;
+    return needed > *sizep ? ENOMEM : 0;
+}
+
 /*
  * This one is in kern_clock.c in 4.4 but placed here for the reasons
  * given earlier (back around line 367).
@@ -979,11 +1332,11 @@ sysctl_doproc(int *name, u_int namelen, char *where, size_t *sizep)
 {
     register struct proc *p;
     register struct kinfo_proc *dp = (struct kinfo_proc *)where;
+    struct kinfo_proc kproc;
+    struct user *up;
     int needed = 0;
     int buflen = where != NULL ? *sizep : 0;
     int doingzomb;
-    struct eproc eproc;
-    char comm[MAXCOMLEN + 1];
     int error = 0;
     dev_t ttyd;
     uid_t ruid;
@@ -1041,17 +1394,26 @@ again:
             return(EINVAL);
         }
         if (buflen >= sizeof(struct kinfo_proc)) {
-            fill_eproc(p, &eproc, comm, sizeof(comm));
-            error = copyout ((caddr_t) p, (caddr_t) &dp->kp_proc,
-                sizeof(struct proc));
-            if (error)
-                return (error);
-            error = copyout ((caddr_t)&eproc, (caddr_t) &dp->kp_eproc,
-                sizeof(eproc));
-            if (error)
-                return (error);
-            error = copyout ((caddr_t)comm, (caddr_t)dp->ki_comm,
-                sizeof(comm));
+            bzero((caddr_t)&kproc, sizeof(kproc));
+            kproc.kp_proc = *p;
+            fill_eproc(p, &kproc.kp_eproc, kproc.ki_comm,
+                sizeof(kproc.ki_comm));
+            up = p->p_stat != SZOMB ? p->p_uarea : NULL;
+            if (up != NULL) {
+                kproc.ki_utime = up->u_ru.ru_utime;
+                kproc.ki_stime = up->u_ru.ru_stime;
+                kproc.ki_cutime = up->u_cru.ru_utime;
+                kproc.ki_cstime = up->u_cru.ru_stime;
+                kproc.ki_sigs =
+                    (up->u_signal[SIGINT] == SIG_IGN) +
+                    2 * ((unsigned)up->u_signal[SIGINT] >
+                        (unsigned)SIG_IGN) +
+                    3 * (up->u_signal[SIGQUIT] == SIG_IGN) +
+                    6 * ((unsigned)up->u_signal[SIGQUIT] >
+                        (unsigned)SIG_IGN);
+            }
+            error = copyout((caddr_t)&kproc, (caddr_t)dp,
+                sizeof(kproc));
             if (error)
                 return (error);
             dp++;

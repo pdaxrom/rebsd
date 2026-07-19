@@ -26,8 +26,19 @@ void n64cart_led_write(unsigned rgb);
 #ifdef KERNEL
 #include <sys/tty.h>
 
+struct n64cart_uart_stats {
+    u_int nus_tx_chars;
+    u_int nus_wait_events;
+    u_int nus_recheck_misses;
+    u_int nus_waiting;
+    u_int nus_control;
+};
+
 struct tty;
 extern struct tty n64cart_uart_ttys[1];
+int n64cart_uart_tx_ready(void);
+void n64cart_uart_get_stats(struct n64cart_uart_stats *stats);
+void n64cart_uart_emergency_putc(int ch);
 int n64cart_uart_open(dev_t dev, int flag, int mode);
 int n64cart_uart_close(dev_t dev, int flag, int mode);
 int n64cart_uart_read(dev_t dev, struct uio *uio, int flag);

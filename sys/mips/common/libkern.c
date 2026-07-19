@@ -1,6 +1,9 @@
 #include <sys/param.h>
 #include <sys/errno.h>
 #include <sys/systm.h>
+#include <vm/vm_param.h>
+
+#define COPYSTR_CHUNK 64u
 
 int
 ffs(u_long value)
@@ -19,35 +22,67 @@ int
 copystr(caddr_t src, caddr_t dest, u_int maxlength, u_int *lencopied)
 {
     caddr_t dest0 = dest;
+    unsigned char buffer[COPYSTR_CHUNK];
+    unsigned chunk;
+    unsigned copied;
+    unsigned page_left;
+    unsigned i;
     int error = ENOENT;
-    unsigned char byte;
+    int terminated;
     int src_user;
     int dest_user;
 
     src_user = (unsigned)src < 0x80000000u;
     dest_user = (unsigned)dest < 0x80000000u;
-    if (maxlength != 0) {
-        for (;;) {
-            if (src_user) {
-                error = copyin(src, (caddr_t)&byte, 1);
-                if (error != 0)
-                    goto done;
-            } else
-                byte = *(unsigned char *)src;
-            if (dest_user) {
-                error = copyout((caddr_t)&byte, dest, 1);
-                if (error != 0)
-                    goto done;
-            } else
-                *(unsigned char *)dest = byte;
-            ++src;
-            ++dest;
-            if (byte == '\0') {
-                error = 0;
+    while (maxlength != 0) {
+        chunk = maxlength < COPYSTR_CHUNK ? maxlength : COPYSTR_CHUNK;
+        if (dest_user) {
+            page_left = VM_PAGE_SIZE -
+                ((unsigned)dest & VM_PAGE_MASK);
+            if (chunk > page_left)
+                chunk = page_left;
+        }
+        if (src_user) {
+            /* Do not make a terminating NUL depend on the next user page. */
+            page_left = VM_PAGE_SIZE -
+                ((unsigned)src & VM_PAGE_MASK);
+            if (chunk > page_left)
+                chunk = page_left;
+            error = copyin(src, (caddr_t)buffer, chunk);
+            if (error != 0)
+                goto done;
+        } else {
+            for (i = 0; i < chunk; ++i) {
+                buffer[i] = ((unsigned char *)src)[i];
+                if (buffer[i] == '\0') {
+                    chunk = i + 1;
+                    break;
+                }
+            }
+        }
+        copied = chunk;
+        terminated = 0;
+        for (i = 0; i < chunk; ++i) {
+            if (buffer[i] == '\0') {
+                copied = i + 1;
+                terminated = 1;
                 break;
             }
-            if (--maxlength == 0)
-                goto done;
+        }
+        if (dest_user)
+            error = copyout((caddr_t)buffer, dest, copied);
+        else {
+            bcopy((caddr_t)buffer, dest, copied);
+            error = 0;
+        }
+        if (error != 0)
+            goto done;
+        src += copied;
+        dest += copied;
+        maxlength -= copied;
+        if (terminated) {
+            error = 0;
+            break;
         }
     }
 done:

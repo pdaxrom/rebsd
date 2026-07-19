@@ -20,6 +20,8 @@
 #define TEST_COW_ALIAS_HINT 0x10017000u
 #define TEST_DEVICE_PADDR (TEST_RAM_SIZE - VM_PAGE_SIZE)
 #define TEST_PRESSURE   0x20000000u
+/* Cross a 4 MiB pmap directory boundary after 62 resident faults. */
+#define TEST_BOUNDARY_PRESSURE 0x203c2000u
 #define TEST_GROW       0x30000000u
 #define TEST_GROW_PAGES 65u
 #define TEST_PRESSURE_PAGES 70u
@@ -804,21 +806,23 @@ test_pager(void)
 
     CHECK(test_pager_reset(&allocator, &map, metadata, 16) == 0);
     CHECK(vmspace_create(&space) == 0);
-    CHECK(vmspace_map_anon(space, TEST_PRESSURE,
+    CHECK(vmspace_map_anon(space, TEST_BOUNDARY_PRESSURE,
         TEST_PRESSURE_PAGES * VM_PAGE_SIZE,
         VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
     for (index = 0; index < TEST_PRESSURE_PAGES; ++index) {
         value = (unsigned char)(index * 29u + 7u);
         CHECK(vmspace_write(space,
-            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1) == 0);
+            TEST_BOUNDARY_PRESSURE + index * VM_PAGE_SIZE,
+            &value, 1) == 0);
     }
     CHECK(vm_object_get_stats(&stats) == 0);
     CHECK(stats.vos_pageouts != 0 && stats.vos_reclaim_attempts != 0);
     evicted = 0;
     for (index = 0; index < TEST_PRESSURE_PAGES; ++index) {
         if (pmap_extract(space->vms_pmap,
-            TEST_PRESSURE + index * VM_PAGE_SIZE, &paddr) == ENOENT) {
-            evicted = TEST_PRESSURE + index * VM_PAGE_SIZE;
+            TEST_BOUNDARY_PRESSURE + index * VM_PAGE_SIZE,
+            &paddr) == ENOENT) {
+            evicted = TEST_BOUNDARY_PRESSURE + index * VM_PAGE_SIZE;
             break;
         }
     }
@@ -829,7 +833,8 @@ test_pager(void)
     for (index = TEST_PRESSURE_PAGES; index-- != 0;) {
         value = 0;
         CHECK(vmspace_read(space,
-            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1) == 0);
+            TEST_BOUNDARY_PRESSURE + index * VM_PAGE_SIZE,
+            &value, 1) == 0);
         CHECK(value == (unsigned char)(index * 29u + 7u));
     }
     CHECK(vm_object_get_stats(&stats) == 0);

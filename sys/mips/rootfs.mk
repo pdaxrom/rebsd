@@ -167,7 +167,7 @@ MIPS_CMD_NONE = __mips_none__
 MIPS_BOARD_CMD_SUBDIRS ?=
 MIPS_BOARD_USR_BIN_FILES ?=
 MIPS_CMD_SUBDIRS ?= basic calendar chown chroot compress date2 deco dhclient diff emg env \
-                  fdisk find fold forth fsck fsck.fat getty gpt hostname id ifconfig inetd init \
+                  fdisk find fold forth fsck fsck.fat fstat getty gpt hostname id ifconfig inetd init \
                   aout ar as ld login ls make man md5 med mkfs mkfs.fat mknod \
                   mkpasswd mount more netstat nm pdc picoc ping printf pstat ptytest \
                   ranlib reboot renice retroforth route sed setty \
@@ -175,10 +175,10 @@ MIPS_CMD_SUBDIRS ?= basic calendar chown chroot compress date2 deco dhclient dif
                   telnetd test wget umount uname xargs
 MIPS_CMD_SUBDIRS += $(MIPS_BOARD_CMD_SUBDIRS)
 MIPS_CMD_STDS ?= basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
-               du echo ed fgrep file free grep head hostid join kill last ln \
-               mesg mkdir mv nice od off64-smoke-gcc pagesize pr printenv pwd rev rm rmail \
-               rmdir size sleep sort split sum sync tail tar tee time touch \
-               top tr tsort tty uniq uptime w wc whereis who
+               du echo ed fgrep file free grep head hostid iostat join kill last ln \
+               mesg mkdir mv nice od off64-smoke-gcc pagesize pr printenv ps pwd rev rm rmail \
+               rmdir size sleep sort split strace sum sync tail tar tee time touch vmstat \
+               top tr tsort tty uniq uptime vm-pressure-smoke w wc whereis who
 MIPS_CMD_NSTDS ?= egrep expr
 MIPS_CMD_OPERATORS ?= df
 MIPS_CMD_SCRIPTS ?= false nohup true
@@ -188,19 +188,19 @@ MIPS_STB_SRCS = $(wildcard $(MIPS_STB_DIR)/stb_image.h)
 MIPS_USR_BIN_FILES ?= aout apropos ar as awk basename basic cal calendar cb \
                     chgrp cmp col comm compress deco diff diskspeed du ed \
                     egrep emg env fgrep file find fold forth free grep groups head \
-                    hostid id join last ld man matrix-as-vr4300 \
+                    hostid id iostat join last ld man matrix-as-vr4300 \
                     matrix-as-vr4300.sh make md5 med mesg more nice nm nohup \
                     od off64-smoke-gcc pagesize pdc picoc pr printf printenv ps ptytest \
                     ranlib renice renumber retroforth rev rmail \
                     setty size sl smux smoke-as-vr4300 smoke-as-vr4300.sh \
-                    sort split strip sum sysctl tail tar tcl tee telnet time \
-                    top touch tsort tty uncompress uniq uptime vmstat w wc \
+                    sort split strace strip sum sysctl tail tar tcl tee telnet time \
+                    top touch tsort tty uncompress uniq uptime vm-pressure-smoke vmstat w wc \
                     wget whatis whereis who whoami xargs zcat \
                     $(MIPS_BOARD_USR_BIN_FILES)
 MIPS_USR_LIBEXEC_FILES ?= bigram code
 MIPS_ROOTFS_CAT1_PAGES ?= apropos awk basename cal cat cb chgrp chmod cmp col \
                         comm compress cp date dd df diff du echo ed expr \
-                        false file find fold free grep head hostid join kill last \
+                        false file find fold free grep head hostid iostat join kill last \
                         ln login ls make man mesg mkdir more mv nice od \
                         pagesize pr ps pcc printenv pwd rev rm rmail rmdir \
                         sed sh size sleep sort split strip sum tail tar tee \
@@ -210,7 +210,7 @@ MIPS_ROOTFS_CMD_CAT1_SOURCES ?= as:as emg:emg env:env nm:nm sl:sl wget:wget
 MIPS_ROOTFS_BOARD_CMD_CAT1_SOURCES ?=
 MIPS_ROOTFS_CAT1_ALIASES ?= egrep:grep fgrep:grep uncompress:compress \
                           zcat:compress nohup:nice cc:pcc cpp:pcc
-MIPS_ROOTFS_CAT8_PAGES ?= fsck getty sync
+MIPS_ROOTFS_CAT8_PAGES ?= fsck fstat getty sync
 MIPS_ROOTFS_CAT8_ALIASES ?= fsck.ufs:fsck mkfs.ufs:mkfs fastboot:reboot halt:reboot poweroff:reboot \
                           bootloader:reboot
 MIPS_USER_SRCS = $(TOPSRC)/target.mk $(TOPSRC)/target-mips.mk \
@@ -494,7 +494,7 @@ MIPS_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src \
                CMD_ONLY_NSTD="$(MIPS_CMD_NSTDS)" \
                CMD_ONLY_SETUID="$(MIPS_CMD_NONE)" \
                CMD_ONLY_OPERATOR="$(MIPS_CMD_OPERATORS)" \
-               CMD_ONLY_KMEM="ps vmstat" \
+               CMD_ONLY_KMEM="$(MIPS_CMD_NONE)" \
                CMD_ONLY_TTY="$(MIPS_CMD_NONE)" \
                CMD_EXTRA_SUBDIR="$(MIPS_CMD_EXTRA_SUBDIRS)" \
                SMUX_SUBDIRS=retro \
@@ -540,7 +540,11 @@ MIPS_COMPILER_BENCH_SRC = $(TOPSRC)/sys/mips/rootfs/root/mips-compiler-bench.c
 MIPS_COMPILER_BENCH_OUT ?= $(MIPS_BUILD_TEST_DIR)/mips-compiler-bench
 MIPS_COMPILER_BENCH_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.mips-compiler-bench.$(MIPS_ROOTFS_ABI)
 MIPS_VM_PROCESS_SMOKE_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke.c
+MIPS_VM_PROCESS_SMOKE_GPR64_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke-gpr64.S
 MIPS_VM_PROCESS_SMOKE_OUT ?= $(MIPS_BUILD_TEST_DIR)/vm-process-smoke.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_ABI)
+MIPS_VM_PROCESS_SMOKE_GPR64_OBJ = $(MIPS_VM_PROCESS_SMOKE_OUT).gpr64.o
+MIPS_VM_PROCESS_SMOKE_GPR64_SRCS = $(if $(filter vr4300,$(MIPS_ROOTFS_CPU)),$(MIPS_VM_PROCESS_SMOKE_GPR64_SRC),)
+MIPS_VM_PROCESS_SMOKE_GPR64_OBJS = $(if $(filter vr4300,$(MIPS_ROOTFS_CPU)),$(MIPS_VM_PROCESS_SMOKE_GPR64_OBJ),)
 MIPS_VM_PROCESS_SMOKE_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.vm-process-smoke.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_ABI)
 MIPS_NET_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/net-smoke.c
 MIPS_NET_SMOKE_OUT ?= $(MIPS_BUILD_TEST_DIR)/net-smoke.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_ABI)
@@ -766,17 +770,24 @@ $(MIPS_COMPILER_BENCH_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 	touch $@
 
 $(MIPS_VM_PROCESS_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
-    $(MIPS_VM_PROCESS_SMOKE_SRC) $(MIPS_USERLAND_EXTRA_DEPS) \
+    $(MIPS_VM_PROCESS_SMOKE_SRC) $(MIPS_VM_PROCESS_SMOKE_GPR64_SRCS) \
+    $(MIPS_USERLAND_EXTRA_DEPS) \
     $(MIPS_ROOTFS_MAKEFILE)
 	rm -f $(MIPS_VM_PROCESS_SMOKE_OUT) \
 	    $(MIPS_VM_PROCESS_SMOKE_OUT).o \
+	    $(MIPS_VM_PROCESS_SMOKE_GPR64_OBJ) \
 	    $(MIPS_VM_PROCESS_SMOKE_OUT).linked
 	mkdir -p $(dir $(MIPS_VM_PROCESS_SMOKE_OUT))
 	$(MIPS_USERLAND_CC) -O2 -c \
 	    -o $(MIPS_VM_PROCESS_SMOKE_OUT).o $(MIPS_VM_PROCESS_SMOKE_SRC)
+	if [ -n "$(MIPS_VM_PROCESS_SMOKE_GPR64_SRCS)" ]; then \
+	    $(MIPS_USERLAND_AS) -o $(MIPS_VM_PROCESS_SMOKE_GPR64_OBJ) \
+	        $(MIPS_VM_PROCESS_SMOKE_GPR64_SRC); \
+	fi
 	$(MIPS_USERLAND_LD) $(MIPS_USERLAND_LDFLAGS) \
 	    -o $(MIPS_VM_PROCESS_SMOKE_OUT).linked \
-	    $(MIPS_VM_PROCESS_SMOKE_OUT).o -lc
+	    $(MIPS_VM_PROCESS_SMOKE_OUT).o \
+	    $(MIPS_VM_PROCESS_SMOKE_GPR64_OBJS) -lc
 	$(MIPS_USERLAND_ELF2AOUT) $(MIPS_VM_PROCESS_SMOKE_OUT).linked \
 	    $(MIPS_VM_PROCESS_SMOKE_OUT)
 	rm -f $(MIPS_VM_PROCESS_SMOKE_OUT).linked

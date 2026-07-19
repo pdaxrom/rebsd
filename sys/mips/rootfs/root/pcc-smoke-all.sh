@@ -7,13 +7,31 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 export PATH
 
-# Trace every program spawned by the PCC driver.  This is deliberately
-# enabled for the whole one-shot suite so a hardware stall can be tied to
-# the exact driver phase instead of only to the enclosing smoke test.
-PCC_EXEC_TRACE=full
-PCC_CCOM_TRACE=1
-export PCC_EXEC_TRACE
-export PCC_CCOM_TRACE
+# Diagnostic images can trace every program spawned by the PCC driver.  An
+# N64 minimal image supplies the build-time default through this file; an
+# explicit environment setting takes precedence for one-off comparisons.
+if test -z "$PCC_SMOKE_TRACE" && test -r /etc/pcc-smoke.conf; then
+	. /etc/pcc-smoke.conf
+fi
+if test -z "$PCC_SMOKE_TRACE"; then
+	PCC_SMOKE_TRACE=0
+fi
+case "$PCC_SMOKE_TRACE" in
+1|yes|true)
+	if test -z "$PCC_EXEC_TRACE"; then
+		PCC_EXEC_TRACE=full
+	fi
+	if test -z "$PCC_CCOM_TRACE"; then
+		PCC_CCOM_TRACE=1
+	fi
+	export PCC_EXEC_TRACE
+	export PCC_CCOM_TRACE
+	;;
+*)
+	unset PCC_EXEC_TRACE
+	unset PCC_CCOM_TRACE
+	;;
+esac
 
 if test -z "$CCOM_STRESS_COUNT"; then
 	CCOM_STRESS_COUNT=100

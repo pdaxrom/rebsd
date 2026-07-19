@@ -10,7 +10,7 @@
 #define MIPS_ZSWAP_UNIT_BYTES        256
 #define MIPS_ZSWAP_MAX_BLOCKS        8192
 #define MIPS_ZSWAP_MAX_UNITS         16384
-#define MIPS_ZSWAP_HASH_SIZE         4096
+#define MIPS_ZSWAP_HASH_SIZE         1024
 
 struct mips_zswap_entry {
     u_short unit;
@@ -40,6 +40,7 @@ struct mips_zswap {
     unsigned mz_logical_bytes;
     unsigned mz_blocks;
     unsigned mz_phys_units;
+    unsigned mz_alloc_hint;
     int mz_initialized;
 };
 

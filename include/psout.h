@@ -25,7 +25,7 @@ struct psout {
     char    o_cpu;                  /* p_cpu */
     char    o_pri;                  /* p_pri */
     char    o_nice;                 /* p_nice */
-    short   o_addr0;                /* p_addr[0] */
+    unsigned o_addr0;               /* kernel address of the u area */
     short   o_size;                 /* p_size */
     caddr_t o_wchan;                /* p_wchan */
     time_t  o_utime;                /* u_utime */

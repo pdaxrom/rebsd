@@ -8,6 +8,16 @@ typedef unsigned int uintptr;
 #include "layout.h"
 
 #define N64_ICACHE_LINE_SIZE    32u
+#define N64_SP_DMEM_BOOTINFO_FLAGS_ADDR  0xa4000004u
+#define N64_BOOTINFO_RESET_SHIFT         8u
+#define N64_BOOTINFO_RESET_MASK          0xffu
+#define N64_RESET_TYPE_ADDR              0xa000030cu
+#define N64_RESET_TYPE_COLD              0u
+#define N64_RESET_TYPE_NMI               1u
+#define N64_SI_STATUS_ADDR       0xa4800018u
+#define N64_SI_STATUS_BUSY       0x00000003u
+#define N64_PIF_RAM_CONTROL_ADDR 0xbfc007fcu
+#define N64_PIF_BOOT_COMPLETE    0x00000008u
 
 #define EI_CLASS        4u
 #define EI_DATA         5u
@@ -49,6 +59,47 @@ void stage0_jump_kernel(u32 entry);
 
 extern const u8 __n64_kernel_elf_start[];
 extern const u8 __n64_kernel_elf_end[];
+
+static volatile u32 *const n64_si_status =
+    (volatile u32 *)N64_SI_STATUS_ADDR;
+static volatile u32 *const n64_pif_ram_control =
+    (volatile u32 *)N64_PIF_RAM_CONTROL_ADDR;
+
+/*
+ * The default n64tool header is libdragon's non-compatibility IPL3.  Unlike
+ * Nintendo/compatibility IPL3s, it passes reset type in bootinfo.flags in SP
+ * DMEM and deliberately does not populate the legacy word at 0x8000030c.
+ * Publish that value for the kernel before SP DMEM can be reused.  This ROM
+ * embeds that exact production IPL3, so do not apply compatibility-IPL3
+ * heuristics to the bootinfo words.
+ */
+static void
+publish_reset_type(void)
+{
+    volatile u32 *const boot_flags =
+        (volatile u32 *)N64_SP_DMEM_BOOTINFO_FLAGS_ADDR;
+    volatile u32 *const reset_type =
+        (volatile u32 *)N64_RESET_TYPE_ADDR;
+    *reset_type = (*boot_flags >> N64_BOOTINFO_RESET_SHIFT) &
+        N64_BOOTINFO_RESET_MASK;
+}
+
+/*
+ * Tell the PIF that IPL3 has handed control to the application.  The PIF ROM
+ * expects this handshake after both cold boot and reset-button NMI.  Without
+ * repeating it on a warm boot the PIF never rearms the next RESET sequence,
+ * so the physical button works only once after power-on.
+ */
+static void
+pif_boot_complete(void)
+{
+    u32 control;
+
+    while ((*n64_si_status & N64_SI_STATUS_BUSY) != 0u)
+        ;
+    control = *n64_pif_ram_control;
+    *n64_pif_ram_control = control | N64_PIF_BOOT_COMPLETE;
+}
 
 static u32
 align_down(u32 value, u32 align)
@@ -281,6 +332,9 @@ void
 stage0_main(void)
 {
     struct kernel_elf kernel;
+
+    publish_reset_type();
+    pif_boot_complete();
 
     kernel.entry = 0;
     kernel.phoff = 0;

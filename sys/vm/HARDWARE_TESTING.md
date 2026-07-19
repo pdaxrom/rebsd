@@ -62,6 +62,18 @@ make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
     MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=32M \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
+    vm-pressure-runtime
+
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=32M \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
+    VM_PRESSURE_ARGS=-rs vm-pressure-runtime
+
+make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
+    MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=32M \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
     VM_STRESS_ITERATIONS=100 vm-stress-runtime
 
 make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
@@ -73,11 +85,62 @@ make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
     PCC_SMOKE_ALL_CCOM_STRESS_COUNT=100 pcc-smoke-all-runtime
 ```
 
+`vm-pressure-runtime` requires observable pageout and reverse-order pagein and
+prints bounded progress with VM counters.  The second invocation uses
+incompressible page contents and therefore covers zswap's raw-block path as
+well as its compressed path.  When a valid rootfs already exists, use
+`vm-pressure-smoke-runtime` to dependency-build only that utility, inject it
+through `rootfs-patch-kernel`, and run the same test without rebuilding the
+rest of userland.  `vm-diagnostics-pcc-runtime` may be used with
+the same object root to build only PCC versions of `strace` and
+`vm-pressure-smoke`, inject those two files through the normal rootfs patch
+pipeline, and run them without switching the whole rootfs to PCC.  For an
+interactive trace of a specific command and all descendants, run
+`strace command [arguments ...]`; the kernel sends trace lines only to that
+process' controlling terminal.
+
 Require `ram size=0x00800000`, `user mem = 4096 kbytes`,
 `swap size = 3584 kbytes`, successful VM self-tests, 100 clean stress
 iterations, `PCC_SMOKE_ALL_FAILURES 0`, and `PCC_SMOKE_ALL_OK`.  A QEMU pass
 authorizes hardware testing; it does not complete an N64 hardware checklist
 item.
+
+## MIPS little-endian emulator prerequisite
+
+Run the same common VM implementation as a MIPS32r2 little-endian kernel and
+userland before testing Ci20 hardware.  The large reserved RAM-swap area below
+intentionally leaves about 5 MiB allocatable, allowing the bounded diagnostic
+to force pageout and pagein without changing the normal 256 MiB Ci20 layout.
+
+```sh
+make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
+    MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
+    MALTA_RAMSWAP_KBYTES=34816 \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
+    VM_PRESSURE_ARGS=-rs vm-pressure-smoke-runtime
+
+make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
+    MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
+    MALTA_RAMSWAP_KBYTES=34816 \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
+    VM_STRESS_ITERATIONS=100 vm-stress-runtime
+
+make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
+    MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
+    MALTA_RAMSWAP_KBYTES=34816 \
+    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
+    vm-diagnostics-pcc-runtime
+```
+
+Require `VM_PRESSURE_RC:0`, `VM_STRESS_RC:0`, and
+`VM_DIAGNOSTICS_PCC_RC:0`.  The pressure reports must contain nonzero pageout
+and pagein deltas, zero swap failures, and a nonzero free-page reserve while
+faulting across the 4 MiB pmap directory boundary.  The PCC target builds the
+compiler and its target runtime as declared dependencies; it does not use or
+copy an external historical compiler tree.
 
 ## N64
 
@@ -101,10 +164,23 @@ outside the kernel build.
    vmstat
    /root/vm-process-smoke
    VM_STRESS_ITERATIONS=8 /root/vm-stress-smoke.sh
+   /bin/vm-pressure-smoke -s
+   /bin/vm-pressure-smoke -rs
    /root/pcc-smoke-all.sh
    ```
 
    Every script must return to the shell with status zero;
+   both pressure runs must print `VM_PRESSURE_OK` with nonzero pageout and
+   pagein counts and zero swap failures.  The `-r` run covers incompressible
+   data and zswap's raw-block path.  If a later command stalls, rerun only
+   that command under `/bin/strace`; syscall tracing is inherited across
+   fork/exec and is written to the invoking UART terminal without enabling
+   global kernel tracing.  For example:
+
+   ```sh
+   /bin/strace /root/pcc-smoke-all.sh
+   ```
+
    `pcc-smoke-all.sh` must print `PCC_SMOKE_ALL_FAILURES 0` and
    `PCC_SMOKE_ALL_OK`.  After this bounded gate passes, run
    `VM_STRESS_ITERATIONS=100 /root/vm-stress-smoke.sh` on the 8 MiB system.  It

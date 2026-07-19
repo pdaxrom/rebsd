@@ -137,7 +137,7 @@ again:
     child->p_uarea = 0;
     child->p_vmspace = 0;
     child->p_realtimer.it_value = 0;
-    child->p_flag = SLOAD;
+    child->p_flag = SLOAD | (parent->p_flag & P_SYSTRACE);
     child->p_uid = parent->p_uid;
     child->p_pgrp = parent->p_pgrp;
     child->p_nice = parent->p_nice;

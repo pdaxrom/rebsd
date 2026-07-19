@@ -15,6 +15,7 @@
 #include <sys/dir.h>
 #include <sys/uio.h>
 #include <machine/debug.h>
+#include <machine/io.h>
 #include <vm/vmspace.h>
 #ifdef N64
 #include <machine/fpu.h>
@@ -600,6 +601,7 @@ void exec_clear(struct exec_params *epp)
     u.u_frame [FRAME_R5] = epp->arg_pointer;
     u.u_frame [FRAME_R6] = epp->env_pointer;
     u.u_frame [FRAME_PC] = epp->entry;
+    mips_frame_normalize_gprs(u.u_frame);
 #ifdef N64
     bzero (&u.u_fpu, sizeof u.u_fpu);
 #endif

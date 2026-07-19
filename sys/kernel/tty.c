@@ -401,6 +401,7 @@ ttioctl(struct tty *tp, u_int com, caddr_t data, int flag)
     case TIOCLSET:
     case TIOCSTI:
     case TIOCSWINSZ:
+    case TIOCSSOFTCAR:
         while (u.u_procp->p_pgrp != tp->t_pgrp && tp == u.u_ttyp &&
            (u.u_procp->p_flag & SVFORK) == 0 &&
            !(u.u_procp->p_sigignore & sigmask(SIGTTOU)) &&
@@ -624,6 +625,20 @@ ttioctl(struct tty *tp, u_int com, caddr_t data, int flag)
         *(struct winsize *)data = tp->t_winsize;
         break;
 
+    case TIOCGSOFTCAR:
+        *(int *)data = (tp->t_state & TS_SOFTCAR) != 0;
+        break;
+
+    case TIOCSSOFTCAR:
+        if (u.u_uid != 0)
+            return (EPERM);
+        if (*(int *)data) {
+            tp->t_state |= TS_SOFTCAR | TS_CARR_ON;
+            wakeup((caddr_t)&tp->t_rawq);
+        } else
+            tp->t_state &= ~TS_SOFTCAR;
+        break;
+
     default:
         return (-1);
     }
@@ -720,7 +735,9 @@ ttyclose(struct tty *tp)
 {
     ttyflush(tp, FREAD|FWRITE);
     tp->t_pgrp = 0;
-    tp->t_state = 0;
+    tp->t_state &= TS_SOFTCAR;
+    if (tp->t_state & TS_SOFTCAR)
+        tp->t_state |= TS_CARR_ON;
 }
 
 /*
@@ -731,6 +748,8 @@ ttyclose(struct tty *tp)
 int
 ttymodem(struct tty *tp, int flag)
 {
+    if (tp->t_state & TS_SOFTCAR)
+        flag = 1;
     if ((tp->t_state & TS_WOPEN) == 0 && (tp->t_flags & MDMBUF)) {
         /*
          * MDMBUF: do flow control according to carrier flag

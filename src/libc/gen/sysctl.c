@@ -39,8 +39,19 @@
 int
 sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
-	if (name[0] != CTL_USER)
-		return (__sysctl(name, namelen, oldp, oldlenp, newp, newlen));
+	int error;
+
+	if (name[0] != CTL_USER) {
+		/*
+		 * The kernel leaves the number of bytes copied in u.u_rval.
+		 * That is useful to direct __sysctl callers, but the public BSD
+		 * sysctl interface returns zero on success.  Leaking the byte count
+		 * made callers such as ps treat a successful KERN_PROC fetch as an
+		 * error while errno was still zero.
+		 */
+		error = __sysctl(name, namelen, oldp, oldlenp, newp, newlen);
+		return (error < 0 ? -1 : 0);
+	}
 
 	if (newp != NULL) {
 		errno = EPERM;

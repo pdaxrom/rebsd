@@ -1056,7 +1056,7 @@ vmspace_fault(struct vmspace *vmspace, vm_vaddr_t address,
 static int
 vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
     void *buffer, vm_size_t size, vm_prot_t protection, int write,
-    unsigned context)
+    int zero, unsigned context)
 {
     struct vm_page *page;
     unsigned char *physical;
@@ -1065,7 +1065,8 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
     vm_size_t chunk;
     int error;
 
-    if (!vmspace_valid(vmspace) || buffer == 0 || size == 0 ||
+    if (!vmspace_valid(vmspace) || (buffer == 0 && !zero) || size == 0 ||
+        (zero && !write) ||
         !vmspace_fault_context_valid(context))
         return EINVAL;
     error = vm_map_check(&vmspace->vms_map, address, size, protection);
@@ -1076,16 +1077,27 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
         const struct vm_map_entry *entry;
         vm_ooffset_t offset;
 
-        error = vmspace_fault_context((struct vmspace *)vmspace, address,
-            protection, context);
-        if (error != 0)
-            return error;
-        error = pmap_extract(vmspace->vms_pmap, address, &paddr);
-        if (error != 0)
-            return error;
         entry = vm_map_lookup(&vmspace->vms_map, address);
         if (entry == 0)
             return EFAULT;
+        error = pmap_extract(vmspace->vms_pmap, address, &paddr);
+        /*
+         * copyin/copyout is used for every system call instruction,
+         * pathname and argument.  A resident mapping needs no object fault;
+         * the map-wide protection check above has already authorised the
+         * transfer.  COW writes are the exception because their write fault
+         * must first create the private page and writable PTE.
+         */
+        if (error == ENOENT ||
+            (write && (entry->vme_flags & VM_MAP_COW) != 0)) {
+            error = vmspace_fault_context((struct vmspace *)vmspace,
+                address, protection, context);
+            if (error != 0)
+                return error;
+            error = pmap_extract(vmspace->vms_pmap, address, &paddr);
+        }
+        if (error != 0)
+            return error;
         if ((entry->vme_flags & VM_MAP_DEVICE) != 0) {
             page = 0;
             physical = (unsigned char *)pmap_device_direct_map(
@@ -1113,8 +1125,12 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
          * page-wide flush.  Writable executable mappings still need the
          * D-cache to I-cache handoff below.
          */
-        if (write)
-            vmspace_copy_memory(bytes, physical, chunk);
+        if (write) {
+            if (zero)
+                vmspace_zero_memory(physical, chunk);
+            else
+                vmspace_copy_memory(bytes, physical, chunk);
+        }
         else
             vmspace_copy_memory(physical, bytes, chunk);
         if (write && (entry->vme_flags & VM_MAP_DEVICE) == 0) {
@@ -1132,7 +1148,8 @@ vmspace_transfer(const struct vmspace *vmspace, vm_vaddr_t address,
                 return error;
         }
         address += chunk;
-        bytes += chunk;
+        if (!zero)
+            bytes += chunk;
         size -= chunk;
     }
     return 0;
@@ -1143,7 +1160,7 @@ vmspace_read(const struct vmspace *vmspace, vm_vaddr_t address,
     void *buffer, vm_size_t size)
 {
     return vmspace_transfer(vmspace, address, buffer, size,
-        VM_PROT_READ, 0, VM_FAULT_COPY | VM_FAULT_CAN_SLEEP);
+        VM_PROT_READ, 0, 0, VM_FAULT_COPY | VM_FAULT_CAN_SLEEP);
 }
 
 int
@@ -1151,7 +1168,7 @@ vmspace_write(struct vmspace *vmspace, vm_vaddr_t address,
     const void *buffer, vm_size_t size)
 {
     return vmspace_transfer(vmspace, address, (void *)buffer, size,
-        VM_PROT_WRITE, 1, VM_FAULT_COPY | VM_FAULT_CAN_SLEEP);
+        VM_PROT_WRITE, 1, 0, VM_FAULT_COPY | VM_FAULT_CAN_SLEEP);
 }
 
 int
@@ -1159,7 +1176,7 @@ vmspace_read_context(const struct vmspace *vmspace, vm_vaddr_t address,
     void *buffer, vm_size_t size, unsigned context)
 {
     return vmspace_transfer(vmspace, address, buffer, size,
-        VM_PROT_READ, 0, context);
+        VM_PROT_READ, 0, 0, context);
 }
 
 int
@@ -1167,28 +1184,16 @@ vmspace_write_context(struct vmspace *vmspace, vm_vaddr_t address,
     const void *buffer, vm_size_t size, unsigned context)
 {
     return vmspace_transfer(vmspace, address, (void *)buffer, size,
-        VM_PROT_WRITE, 1, context);
+        VM_PROT_WRITE, 1, 0, context);
 }
 
 int
 vmspace_zero(struct vmspace *vmspace, vm_vaddr_t address, vm_size_t size)
 {
-    unsigned char zeros[64];
-    vm_size_t chunk;
-    int error;
-
     if (size == 0)
         return 0;
-    vmspace_zero_memory(zeros, sizeof(zeros));
-    while (size != 0) {
-        chunk = size < sizeof(zeros) ? size : sizeof(zeros);
-        error = vmspace_write(vmspace, address, zeros, chunk);
-        if (error != 0)
-            return error;
-        address += chunk;
-        size -= chunk;
-    }
-    return 0;
+    return vmspace_transfer(vmspace, address, 0, size,
+        VM_PROT_WRITE, 1, 1, VM_FAULT_COPY | VM_FAULT_CAN_SLEEP);
 }
 
 int

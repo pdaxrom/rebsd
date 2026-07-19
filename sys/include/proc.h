@@ -288,7 +288,7 @@ void execsigs(register struct proc *p);
 #define SVFORK      0x0100  /* process resulted from vfork() */
 #define SVFPRNT     0x0200  /* parent in vfork, waiting for child */
 #define SVFDONE     0x0400  /* parent has released child in vfork */
-                 /* 0x0800     unused */
+#define P_SYSTRACE  0x0800  /* print system calls to this process' tty */
 #define P_TIMEOUT   0x1000  /* tsleep timeout expired */
 #define P_NOCLDSTOP 0x2000  /* no SIGCHLD signal to parent */
 #define P_SELECT    0x4000  /* selecting; wakeup/waiting danger */

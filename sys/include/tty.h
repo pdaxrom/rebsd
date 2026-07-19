@@ -233,6 +233,7 @@ void ttywflush (struct tty *tp);
 #define TS_RCOLL    0x000800L   /* collision in read select */
 #define TS_WCOLL    0x001000L   /* collision in write select */
 #define TS_ASYNC    0x004000L   /* tty in async i/o mode */
+#define TS_SOFTCAR  0x008000L   /* ignore hardware carrier transitions */
 /* state for intra-line fancy editing work */
 #define TS_ERASE    0x040000L   /* within a \.../ for PRTRUB */
 #define TS_LNCH     0x080000L   /* next character is literal */

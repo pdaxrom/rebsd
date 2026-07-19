@@ -212,6 +212,8 @@ struct ttysize {
 #define TIOCGWINSZ      _IOR('t', 104, struct winsize)  /* get window size */
 #define TIOCSWINSZ      _IOW('t', 103, struct winsize)  /* set window size */
 #define TIOCUCNTL       _IOW('t', 102, int) /* pty: set/clr usr cntl mode */
+#define TIOCGSOFTCAR    _IOR('t', 101, int) /* get software carrier mode */
+#define TIOCSSOFTCAR    _IOW('t', 100, int) /* set software carrier mode */
 #define UIOCCMD(n)      _IO ('u', n)        /* usr cntl op "n" */
 
 #define NTTYDISC        0                   /* new tty discipline */

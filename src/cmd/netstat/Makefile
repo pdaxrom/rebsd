@@ -12,7 +12,7 @@ CFLAGS += -Wall -Werror -fno-builtin \
 BIN=netstat
 MAN=netstat.0
 MANSRC=netstat.1
-OBJS=main.o inet.o if.o route.o mbuf.o unix.o
+OBJS=main.o
 
 all: $(BIN) $(MAN)
 

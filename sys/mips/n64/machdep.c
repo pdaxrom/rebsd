@@ -9,6 +9,9 @@
 #include <machine/console.h>
 #include <machine/n64.h>
 #include <machine/n64int.h>
+#ifdef N64_RESET_DUMP
+#include <machine/n64reset.h>
+#endif
 #if defined(N64CART_ENABLED) && !defined(N64_CART_UART_ONLY)
 #include <machine/n64cart_flash.h>
 #endif
@@ -199,6 +202,9 @@ startup(void)
     n64_install_exception_vectors();
     n64_tlb_init();
     n64_interrupt_init();
+#ifdef N64_RESET_DUMP
+    n64_reset_dump_show();
+#endif
 #ifdef VIDEO_ENABLED
     n64_video_intr_enable();
 #endif
@@ -206,6 +212,9 @@ startup(void)
     status = mips_read_c0_register(C0_STATUS, 0);
     status &= ~(ST_IE | ST_EXL | ST_ERL | ST_KSU | ST_BEV);
     status |= ST_IM2 | ST_IM7;
+#ifdef N64_RESET_DUMP
+    status |= ST_IM4;
+#endif
     mips_write_c0_register(C0_STATUS, 0, status);
 
     physmem = n64_rdram_size();
@@ -339,6 +348,10 @@ boot(dev_t dev, int howto)
     (void)splhigh();
 #if defined(N64CART_ENABLED) && !defined(N64_CART_UART_ONLY)
     n64cart_flash_shutdown();
+#endif
+#ifdef N64_RESET_DUMP
+    /* A requested stage0 restart is not a physical reset-button NMI. */
+    n64_reset_dump_reboot();
 #endif
     n64_interrupt_shutdown();
 

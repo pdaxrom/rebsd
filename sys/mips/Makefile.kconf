@@ -175,6 +175,34 @@ MALTA_RUN_COMMAND_SCRIPT = $(TOPSRC)/sys/mips/tools/malta-run-command.py
 NATIVE_PCC_SMOKE_LOG ?= $(TOPOBJ)/tests/native-pcc-smoke.log
 VM_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-smoke.$(MIPS_ROOTFS_ABI).log
 VM_STRESS_LOG ?= $(TOPOBJ)/tests/vm-stress.$(MIPS_ROOTFS_ABI).log
+VM_PRESSURE_LOG ?= $(TOPOBJ)/tests/vm-pressure.$(MIPS_ROOTFS_ABI).log
+VM_PRESSURE_ARGS ?= -s
+VM_PRESSURE_SMOKE_DIR ?= \
+    $(TOPOBJ)/tests/vm-pressure-smoke.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_ABI)
+VM_PRESSURE_SMOKE_OBJ = $(VM_PRESSURE_SMOKE_DIR)/vm-pressure-smoke.o
+VM_PRESSURE_SMOKE_LINKED = $(VM_PRESSURE_SMOKE_DIR)/vm-pressure-smoke.linked
+VM_PRESSURE_SMOKE_BIN = $(VM_PRESSURE_SMOKE_DIR)/usr/bin/vm-pressure-smoke
+VM_PRESSURE_SMOKE_PATCH_FILES = usr/bin/vm-pressure-smoke
+VM_DIAGNOSTICS_PCC_DIR ?= \
+    $(TOPOBJ)/tests/vm-diagnostics-pcc.$(MIPS_ROOTFS_ABI)
+VM_DIAGNOSTICS_PCC_STRACE = \
+    $(VM_DIAGNOSTICS_PCC_DIR)/usr/bin/strace-pcc
+VM_DIAGNOSTICS_PCC_PRESSURE = \
+    $(VM_DIAGNOSTICS_PCC_DIR)/usr/bin/vm-pressure-smoke-pcc
+VM_DIAGNOSTICS_PCC_FILES = \
+    usr/bin/strace-pcc usr/bin/vm-pressure-smoke-pcc
+VM_DIAGNOSTICS_PCC_LOG ?= \
+    $(TOPOBJ)/tests/vm-diagnostics-pcc.$(MIPS_ROOTFS_ABI).log
+VM_DIAGNOSTICS_PCC_RUNTIME_DEPS = $(MIPS_NATIVE_DIR)/crt0.o \
+    $(MIPS_NATIVE_DIR)/libc.a $(MIPS_NATIVE_DIR)/libpcc.a \
+    $(if $(filter soft,$(MIPS_ROOTFS_FLOAT)),\
+    $(MIPS_NATIVE_SOFTFLOAT_DIR)/libpcc.a,)
+VM_DIAGNOSTICS_PCC_LDFLAGS = -nostartfiles \
+    -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
+    $(abspath $(MIPS_NATIVE_DIR)/crt0.o) \
+    $(if $(filter soft,$(MIPS_ROOTFS_FLOAT)),\
+    -L$(abspath $(MIPS_NATIVE_SOFTFLOAT_DIR)),) \
+    -L$(abspath $(MIPS_NATIVE_DIR))
 VM_IO_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-io-smoke.$(MIPS_ROOTFS_ABI).log
 VM_NE2K_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-ne2k-smoke.$(MIPS_ROOTFS_ABI).log
 VM_STRESS_ITERATIONS ?= 8
@@ -300,6 +328,7 @@ include $(TOPSRC)/sys/mips/pcc-kernel-runtime.mk
 endif
 
 MALTA_PROFILE_OBJS = $(if $(MALTA_N64_8M_PROFILE),$(if $(filter zswap.o,$(OBJS)),,zswap.o),)
+MALTA_BUILD_MODE_STAMP = .build-mode.$(MIPS_KERNEL_COMPILER).$(MALTA_MEMORY_PROFILE).$(MALTA_RAM_KBYTES).$(MALTA_RAMSWAP_KBYTES).$(CI20_RAM_KBYTES).$(CI20_RAMSWAP_KBYTES).$(MIPS_ROOTFS_KBYTES).$(MIPS_TRACE).$(VM_DIAGNOSTIC)
 SYSTEM_OBJ      = ${OBJS} $(MALTA_PROFILE_OBJS) ioconf.o rootfs.o $(PCC_KERNEL_RUNTIME_OBJS)
 SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
                   $(TOPSRC)/sys/include/rebsd_version.h \
@@ -314,9 +343,11 @@ SYSTEM_LD_TAIL  = ${SIZE} $@; \
                   ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
 
-.PHONY: vm-host-check
+.PHONY: vm-host-check kernel-objects
 vm-host-check:
 	$(MAKE) -C $(TOPSRC)/sys/tests/vm test
+
+kernel-objects: $(filter-out rootfs.o,$(SYSTEM_OBJ)) swapunix.o
 
 # Do not produce a kernel or filesystem image from an untested VM geometry.
 # Order-only keeps an already valid image from being rebuilt just because the
@@ -413,7 +444,10 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 \
         pcc-perf-baseline pcc-smoke-all-runtime \
         pcc-smoke-all-runtime-vr4300 \
-        vm-smoke-runtime vm-stress-runtime vm-io-smoke-runtime \
+        vm-smoke-runtime vm-stress-runtime vm-pressure-runtime \
+        vm-pressure-smoke-build vm-pressure-smoke-stage \
+        vm-pressure-smoke-runtime \
+        vm-diagnostics-pcc-runtime vm-io-smoke-runtime \
         vm-ne2k-smoke-runtime \
         rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
 
@@ -439,6 +473,92 @@ vm-stress-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	    --timeout 900 --silence-timeout 180 \
 	    --command 'VM_STRESS_ITERATIONS=$(VM_STRESS_ITERATIONS) /root/vm-stress-smoke.sh; echo VM_STRESS_RC:$$?' \
 	    --expect "VM_STRESS_RC:0"
+
+vm-pressure-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(VM_PRESSURE_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout 900 --silence-timeout 180 \
+	    --command '/usr/bin/vm-pressure-smoke $(VM_PRESSURE_ARGS); echo VM_PRESSURE_RC:$$?' \
+	    --expect "VM_PRESSURE_RC:0"
+
+$(VM_PRESSURE_SMOKE_OBJ): $(TOPSRC)/src/cmd/vm-pressure-smoke.c \
+    $(MIPS_USERLAND_CRT0_DEPS) $(MIPS_BUILD_SRC_DIR)/libc.a \
+    $(MIPS_USERLAND_EXTRA_DEPS)
+	mkdir -p $(dir $@)
+	$(MIPS_USERLAND_CC) -O2 -c -o $@ $<
+
+$(VM_PRESSURE_SMOKE_LINKED): $(VM_PRESSURE_SMOKE_OBJ) \
+    $(MIPS_USERLAND_CRT0_DEPS) $(MIPS_BUILD_SRC_DIR)/libc.a
+	$(MIPS_USERLAND_LD) $(MIPS_USERLAND_LDFLAGS) \
+	    -o $@ $(VM_PRESSURE_SMOKE_OBJ) -lc
+
+$(VM_PRESSURE_SMOKE_BIN): $(VM_PRESSURE_SMOKE_LINKED) \
+    $(MIPS_ROOTFS_EXEC_FORMAT_DEPS)
+	mkdir -p $(dir $@)
+	$(MIPS_USERLAND_ELF2AOUT) $(VM_PRESSURE_SMOKE_LINKED) $@
+	chmod 0775 $@
+
+vm-pressure-smoke-build: $(VM_PRESSURE_SMOKE_BIN)
+
+vm-pressure-smoke-stage: vm-pressure-smoke-build
+	$(MAKE) rootfs-patch-kernel \
+	    MIPS_ROOTFS_PATCH_DIR=$(abspath $(VM_PRESSURE_SMOKE_DIR)) \
+	    MIPS_ROOTFS_PATCH_FILES="$(VM_PRESSURE_SMOKE_PATCH_FILES)"
+
+vm-pressure-smoke-runtime: vm-pressure-smoke-stage \
+    $(MALTA_RUN_COMMAND_SCRIPT)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(VM_PRESSURE_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout 900 --silence-timeout 180 \
+	    --command '/usr/bin/vm-pressure-smoke $(VM_PRESSURE_ARGS); echo VM_PRESSURE_RC:$$?' \
+	    --expect "VM_PRESSURE_RC:0"
+
+$(VM_DIAGNOSTICS_PCC_STRACE): $(TOPSRC)/src/cmd/strace.c \
+    $(MIPS_ROOTFS_STAMP) $(MIPS_PCC_PROVIDER_DEPS) \
+    $(VM_DIAGNOSTICS_PCC_RUNTIME_DEPS)
+	mkdir -p $(dir $@)
+	$(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) \
+	    $(MIPS_ROOTFS_FLOAT_FLAG) $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
+	    $(MIPS_ROOTFS_EXTRA_CPPFLAGS) \
+	    -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
+	    $(VM_DIAGNOSTICS_PCC_LDFLAGS) -o $@ $<
+
+$(VM_DIAGNOSTICS_PCC_PRESSURE): $(TOPSRC)/src/cmd/vm-pressure-smoke.c \
+    $(MIPS_ROOTFS_STAMP) $(MIPS_PCC_PROVIDER_DEPS) \
+    $(VM_DIAGNOSTICS_PCC_RUNTIME_DEPS)
+	mkdir -p $(dir $@)
+	$(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) \
+	    $(MIPS_ROOTFS_FLOAT_FLAG) $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
+	    $(MIPS_ROOTFS_EXTRA_CPPFLAGS) \
+	    -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
+	    $(VM_DIAGNOSTICS_PCC_LDFLAGS) -o $@ $<
+
+vm-diagnostics-pcc-stage: $(VM_DIAGNOSTICS_PCC_STRACE) \
+    $(VM_DIAGNOSTICS_PCC_PRESSURE)
+	$(MAKE) rootfs-patch-kernel \
+	    MIPS_ROOTFS_PATCH_DIR=$(abspath $(VM_DIAGNOSTICS_PCC_DIR)) \
+	    MIPS_ROOTFS_PATCH_FILES="$(VM_DIAGNOSTICS_PCC_FILES)"
+
+vm-diagnostics-pcc-runtime: vm-diagnostics-pcc-stage \
+    $(MALTA_RUN_COMMAND_SCRIPT)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(VM_DIAGNOSTICS_PCC_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout 900 --silence-timeout 180 \
+	    --command '/usr/bin/strace-pcc /bin/true && /usr/bin/vm-pressure-smoke-pcc $(VM_PRESSURE_ARGS); echo VM_DIAGNOSTICS_PCC_RC:$$?' \
+	    --expect "VM_DIAGNOSTICS_PCC_RC:0"
 
 vm-io-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	$(MAKE) $(MALTA_RUNTIME_KERNEL)
@@ -681,10 +801,15 @@ endif
 rootfs-patch-kernel: rootfs-patch
 	$(MAKE) rootfs-repack-kernel
 
+$(MALTA_BUILD_MODE_STAMP):
+	rm -f .build-mode.*
+	touch $@
+
 ioconf.o: ioconf.c ${SYSTEM_DEP} | machine sys .deps
 	${COMPILE_C}
 
 ${SYSTEM_OBJ} swapunix.o: | machine sys .deps
+$(filter-out rootfs.o,$(SYSTEM_OBJ)) swapunix.o: $(MALTA_BUILD_MODE_STAMP)
 
 ifneq ($(MALTA_N64_8M_PROFILE),)
 zswap.o: $(TOPSRC)/sys/mips/common/zswap.c \
@@ -712,7 +837,7 @@ sys:
 
 clean clean-all: mips-rootfs-clean
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm a.out .deps machine sys \
-	    vers.c
+	    vers.c .build-mode.*
 
 .deps:
 	mkdir -p .deps

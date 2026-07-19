@@ -17,6 +17,7 @@
 #define PT_CONTINUE     7   /* continue the child */
 #define PT_KILL         8   /* kill the child process */
 #define PT_STEP         9   /* single step the child */
+#define PT_SYSCALL_TRACE 10 /* enable/disable own syscall trace */
 
 /*
  * Tracing variables.

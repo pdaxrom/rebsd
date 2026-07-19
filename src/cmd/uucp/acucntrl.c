@@ -42,20 +42,8 @@
 /* #define SENSECARRIER */
 
 #include "uucp.h"
-#include <sys/buf.h>
 #include <signal.h>
-#include <sys/conf.h>
-#ifdef pdp11
-#include <pdpuba/ubavar.h>
-#else
-#ifdef BSD4_2
-//#include <vaxuba/ubavar.h>
-#else
-#include <sys/ubavar.h>
-#endif
-#endif
 #include <sys/stat.h>
-#include <nlist.h>
 #include <sgtty.h>
 #include <utmp.h>
 #include <pwd.h>
@@ -63,50 +51,6 @@
 #include <sys/file.h>
 #include <errno.h>
 #include <string.h>
-
-#define NDZLINE	8	/* lines/dz */
-#define NDHLINE	16	/* lines/dh */
-#define NDMFLINE 8	/* lines/dmf */
-
-#define DZ11	1
-#define DH11	2
-#define DMF	3
-
-#define NLVALUE(val)	(nl[val].n_value)
-
-struct nlist nl[] = {
-#define CDEVSW	0
-	{ "_cdevsw" },
-
-#define DZOPEN	1
-	{ "_dzopen" },
-#define DZINFO	2
-	{ "_dzinfo" },
-#define NDZ11	3
-	{ "_dz_cnt" },
-#define DZSCAR	4
-	{ "_dzsoftCAR" },
-
-#define DHOPEN	5
-	{ "_dhopen" },
-#define DHINFO	6
-	{ "_dhinfo" },
-#define NDH11	7
-	{ "_ndh11" },
-#define DHSCAR	8
-	{ "_dhsoftCAR" },
-
-#define DMFOPEN	9
-	{ "_dmfopen" },
-#define DMFINFO	10
-	{ "_dmfinfo" },
-#define NDMF	11
-	{ "_ndmf" },
-#define DMFSCAR	12
-	{ "_dmfsoftCAR" },
-
-	{ "\0" }
-};
 
 #define ENABLE	1
 #define DISABLE	0
@@ -170,9 +114,6 @@ int argc; char *argv[];
 	}
 
 	opnttys(device);
-
-	/* Get nlist info */
-	nlist("/vmunix", nl);
 
 	/* Chdir to /dev */
 	if(chdir(Devhome) < 0) {
@@ -620,31 +561,8 @@ int enable;
 setmodem(ttyline, enable)
 char *ttyline; int enable;
 {
-	dev_t dev;
-	int kmem;
-	int unit, line, nlines;
-	int addr;
-	int devtype=0;
-	char cflags;
-	unsigned short sflags;
-#ifdef BSD4_2
-	long flags, tflags;
-#else
-	short flags, tflags;
-#endif
-	struct uba_device *ubinfo;
+	int fd, softcar;
 	struct stat statb;
-	struct cdevsw cdevsw;
-
-	if(nl[CDEVSW].n_type == 0) {
-		fprintf(stderr, "No namelist.\n");
-		return(-1);
-	}
-
-	if((kmem = open("/dev/kmem", 2)) < 0) {
-		fprintf(stderr, "/dev/kmem open: %s\n", strerror(errno));
-		return(-1);
-	}
 
 	if(stat(ttyline, &statb) < 0) {
 		fprintf(stderr, "%s stat: %s\n", ttyline, strerror(errno));
@@ -656,104 +574,26 @@ char *ttyline; int enable;
 		return(-1);
 	}
 
-	dev = statb.st_rdev;
-	(void)lseek(kmem,
-		(off_t) &(((struct cdevsw *)NLVALUE(CDEVSW))[major(dev)]),0);
-	(void)read(kmem, (char *) &cdevsw, sizeof cdevsw);
-
-	if((int)(cdevsw.d_open) == NLVALUE(DZOPEN)) {
-		devtype = DZ11;
-		unit = minor(dev) / NDZLINE;
-		line = minor(dev) % NDZLINE;
-#ifdef pdp11
-		ubinfo = &(((struct uba_device *)NLVALUE(DZINFO))[unit]);
-#else
-		addr = (int) &(((int *)NLVALUE(DZINFO))[unit]);
-#endif
-		(void)lseek(kmem, (off_t) NLVALUE(NDZ11), 0);
-	} else if((int)(cdevsw.d_open) == NLVALUE(DHOPEN)) {
-		devtype = DH11;
-		unit = minor(dev) / NDHLINE;
-		line = minor(dev) % NDHLINE;
-#ifdef pdp11
-		ubinfo = &(((struct uba_device *)NLVALUE(DHINFO))[unit]);
-#else
-		addr = (int) &(((int *)NLVALUE(DHINFO))[unit]);
-#endif
-		(void)lseek(kmem, (off_t) NLVALUE(NDH11), 0);
-	} else if((int)(cdevsw.d_open) == NLVALUE(DMFOPEN)) {
-		devtype = DMF;
-		unit = minor(dev) / NDMFLINE;
-		line = minor(dev) % NDMFLINE;
-#ifdef pdp11
-		ubinfo = &(((struct uba_device *)NLVALUE(DMFINFO))[unit]);
-#else
-		addr = (int) &(((int *)NLVALUE(DMFINFO))[unit]);
-#endif
-		(void)lseek(kmem, (off_t) NLVALUE(NDMF), 0);
-	} else {
-		fprintf(stderr, "Device %s (%d/%d) unknown.\n", ttyline,
-		    major(dev), minor(dev));
+	fd = open(ttyline, O_RDWR | O_NDELAY);
+	if(fd < 0) {
+		fprintf(stderr, "%s open: %s\n", ttyline, strerror(errno));
 		return(-1);
 	}
-
-	(void)read(kmem, (char *) &nlines, sizeof nlines);
-	if(minor(dev) >= nlines) {
-		fprintf(stderr, "Sub-device %d does not exist (only %d).\n",
-		    minor(dev), nlines);
+	if(ioctl(fd, TIOCGSOFTCAR, &softcar) < 0) {
+		fprintf(stderr, "%s TIOCGSOFTCAR: %s\n", ttyline,
+		    strerror(errno));
+		close(fd);
 		return(-1);
 	}
-
-#ifndef pdp11
-	(void)lseek(kmem, (off_t)addr, 0);
-	(void)read(kmem, (char *) &ubinfo, sizeof ubinfo);
-#endif
-	(void)lseek(kmem, (off_t) &(ubinfo->ui_flags), 0);
-	(void)read(kmem, (char *) &flags, sizeof flags);
-
-#ifdef BSD4_2
-	tflags = 1L<<line;
-#else
-	tflags = 1<<line;
-#endif
-	resetmodem = ((flags&tflags) == 0);
-	flags = enable ? (flags & ~tflags) : (flags | tflags);
-	(void)lseek(kmem, (off_t) &(ubinfo->ui_flags), 0);
-	(void)write(kmem, (char *) &flags, sizeof flags);
-#ifndef pdp11
-	switch(devtype) {
-		case DZ11:
-			if((addr = NLVALUE(DZSCAR)) == 0) {
-				fprintf(stderr, "No dzsoftCAR.\n");
-				return(-1);
-			}
-			cflags = flags;
-			(void)lseek(kmem, (off_t) &(((char *)addr)[unit]), 0);
-			(void)write(kmem, (char *) &cflags, sizeof cflags);
-			break;
-		case DH11:
-			if((addr = NLVALUE(DHSCAR)) == 0) {
-				fprintf(stderr, "No dhsoftCAR.\n");
-				return(-1);
-			}
-			sflags = flags;
-			(void)lseek(kmem, (off_t) &(((short *)addr)[unit]), 0);
-			(void)write(kmem, (char *) &sflags, sizeof sflags);
-			break;
-		case DMF:
-			if((addr = NLVALUE(DMFSCAR)) == 0) {
-				fprintf(stderr, "No dmfsoftCAR.\n");
-				return(-1);
-			}
-			cflags = flags;
-			(void)lseek(kmem, (off_t) &(((char *)addr)[unit]), 0);
-			(void)write(kmem, (char *) &flags, sizeof cflags);
-			break;
-		default:
-			fprintf(stderr, "Unknown device type\n");
-			return(-1);
+	resetmodem = !softcar;
+	softcar = enable ? 0 : 1;
+	if(ioctl(fd, TIOCSSOFTCAR, &softcar) < 0) {
+		fprintf(stderr, "%s TIOCSSOFTCAR: %s\n", ttyline,
+		    strerror(errno));
+		close(fd);
+		return(-1);
 	}
-#endif
+	close(fd);
 	return(0);
 }
 

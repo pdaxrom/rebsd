@@ -124,6 +124,10 @@ Exit criteria:
   cached/uncached aliases.
 - [x] Keep CPU-family differences behind shared MIPS operations: MIPS32r2 on
   Ci20/Malta and VR4300 behavior on Malta64/N64.
+- [x] Preserve complete 64-bit VR4300 GPR/HI/LO contents across exceptions,
+  fork, ptrace updates, exec, and asynchronous signals while retaining the
+  32-bit kernel, VM types, and o32 user ABI.  Deterministic Malta64 tests keep
+  a non-sign-extended value live across timer interrupts and signal delivery.
 - [x] Add counters and optional diagnostics for refills, faults, ASID rollover,
   modified exceptions, and full/targeted shootdowns.
 - [ ] Use JTAG on Ci20 to capture PC, SP, RA, Cause, EPC, BadVAddr, EntryHi,
@@ -272,6 +276,9 @@ must then pass the applicable matrix below.
   kernel GCC + userland GCC, including 100-cycle VM stress under QEMU.
 - [x] Malta64 N64-compatible 8 MiB physical layout and compressed-swap gate:
   kernel GCC + native PCC/a.out userland under QEMU.
+- [x] Malta64 N64-compatible 8 MiB VR4300 exception/signal register gate:
+  full 64-bit GPR values survive timer interrupts and signal return; native
+  PCC/a.out `pcc-smoke-all.sh` completes 100 compiler-stress iterations.
 - [x] Malta64 N64-compatible 8 MiB physical layout and compressed-swap gate:
   kernel PCC + native PCC/a.out userland under QEMU.
 - [x] N64 hard-float image: kernel GCC + userland PCC.

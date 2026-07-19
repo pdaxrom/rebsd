@@ -1,626 +1,341 @@
 /*
- * Print system stuff
+ * Print live system tables through sysctl.
  *
- * Copyright (c) 1980 Regents of the University of California.
- * All rights reserved.  The Berkeley software License Agreement
- * specifies the terms and conditions for redistribution.
+ * The historical pstat read /dev/kmem and /dev/mem directly.  That made the
+ * output depend on a matching namelist and exposed arbitrary kernel memory.
+ * Live-system operation now uses bounded kernel snapshots instead.
  */
 #include <sys/param.h>
-#define	KERNEL
-#include <sys/file.h>
-#include <sys/user.h>
-#undef	KERNEL
-#include <sys/proc.h>
-#include <sys/inode.h>
-#include <sys/map.h>
-#include <sys/ioctl.h>
-#include <sys/tty.h>
-#include <sys/conf.h>
-#include <sys/vm.h>
-#define KERNEL
 #include <sys/sysctl.h>
-#undef KERNEL
-#include <nlist.h>
+#include <sys/tty.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <string.h>
 
-int sysctl(int *, u_int, void *, size_t *, void *, size_t);
+#define DTYPE_PIPE 3
 
-char	*fcore	= "/dev/kmem";
-char	*fmem	= "/dev/mem";
-int	fc, fm;
-
-struct nlist nl[] = {
-#define	SINODE	0
-	{ "_inode" },
-#define	SPROC	1
-	{ "_proc" },
-#define	SKL	2
-	{ "_cnttys" },
-#define	SFIL	3
-	{ "_file" },
-#define	SNSWAP	4
-	{ "_nswap" },
-#define	SWAPMAP	5
-	{ "_swapmap" },
-#define	SNPROC	6
-	{ "_nproc" },
-	{ "" }
-};
-
-int	inof;
-int	prcf;
-int	ttyf;
-int	usrf;
-long	ubase;
-int	filf;
-int	swpf;
-int	totflg;
-int	allflg;
-int	kflg;
+static int inof, prcf, ttyf, filf, swpf, totflg, allflg;
 
 static void usage(void);
 static void dofile(void);
 static void doinode(void);
 static void doproc(void);
 static void dotty(void);
-static void dousr(void);
 static void doswap(void);
 static void dovm(void);
-static void putf(long v, char n);
-static void dottytype(char *name, int type);
-static void ttyprt(struct tty *atp, int line);
+static void putf(long, char);
+static void ttyprt(struct tty *, int);
 
-int main(int argc, char **argv)
+static void *
+snapshot(int *mib, u_int namelen, size_t *sizep)
 {
-	register char *argp;
-	int allflags;
+    void *data;
+    size_t size;
 
-	argc--, argv++;
-	while (argc > 0 && **argv == '-') {
-		argp = *argv++;
-		argp++;
-		argc--;
-		while (*argp++)
-		switch (argp[-1]) {
+    size = 0;
+    if (sysctl(mib, namelen, NULL, &size, NULL, 0) < 0)
+        return NULL;
+    data = malloc(size != 0 ? size : 1);
+    if (data == NULL)
+        return NULL;
+    if (sysctl(mib, namelen, data, &size, NULL, 0) < 0) {
+        free(data);
+        return NULL;
+    }
+    *sizep = size;
+    return data;
+}
 
-		case 'T':
-			totflg++;
-			break;
+int
+main(int argc, char **argv)
+{
+    char *argp;
 
-		case 'a':
-			allflg++;
-			break;
+    argc--;
+    argv++;
+    while (argc > 0 && argv[0][0] == '-') {
+        argp = *argv++ + 1;
+        argc--;
+        while (*argp != '\0') {
+            switch (*argp++) {
+            case 'T': totflg = 1; break;
+            case 'a': allflg = 1; break;
+            case 'i': inof = 1; break;
+            case 'p': prcf = 1; break;
+            case 't': ttyf = 1; break;
+            case 'f': filf = 1; break;
+            case 's': swpf = 1; break;
+            case 'k':
+            case 'u':
+                fprintf(stderr,
+                    "pstat: crash dumps and raw u-area addresses are no "
+                    "longer supported\n");
+                return 1;
+            default:
+                usage();
+                return 1;
+            }
+        }
+    }
+    if (argc != 0) {
+        fprintf(stderr, "pstat: live sysctl mode does not accept a core file\n");
+        return 1;
+    }
+    if (!(filf || totflg || inof || prcf || ttyf || swpf))
+        filf = 1;
+    if (filf || totflg)
+        dofile();
+    if (inof || totflg)
+        doinode();
+    if (prcf || totflg)
+        doproc();
+    if (ttyf)
+        dotty();
+    if (swpf || totflg)
+        doswap();
+    if (totflg)
+        dovm();
+    return 0;
+}
 
-		case 'i':
-			inof++;
-			break;
+static void
+usage(void)
+{
+    fprintf(stderr, "usage: pstat [-aiptfsT]\n");
+}
 
-		case 'k':
-			kflg++;
-			fcore = fmem = "/core";
-			break;
+static void
+putf(long value, char name)
+{
+    putchar(value ? name : ' ');
+}
 
-		case 'p':
-			prcf++;
-			break;
+static void
+doinode(void)
+{
+    int mib[2] = { CTL_KERN, KERN_INODE };
+    struct kinfo_inode *ki;
+    struct inode *ip;
+    size_t size, count, i;
 
-		case 't':
-			ttyf++;
-			break;
+    ki = snapshot(mib, 2, &size);
+    if (ki == NULL) {
+        fprintf(stderr, "pstat: KERN_INODE: %s\n", strerror(errno));
+        return;
+    }
+    count = size / sizeof(*ki);
+    if (totflg) {
+        printf("%3u/%3d inodes\n", (unsigned)count, NINODE);
+        free(ki);
+        return;
+    }
+    printf("%u/%d active inodes\n", (unsigned)count, NINODE);
+    printf("   LOC       FLAGS      CNT  DEVICE  RDC WRC  INO   MODE  NLK  UID  SIZE/DEV FS\n");
+    for (i = 0; i < count; i++) {
+        ip = &ki[i].kp_inode;
+        printf("%08x ", (unsigned)ki[i].kp_inodep);
+        putf(ip->i_flag & ILOCKED, 'L'); putf(ip->i_flag & IUPD, 'U');
+        putf(ip->i_flag & IACC, 'A'); putf(ip->i_flag & IMOUNT, 'M');
+        putf(ip->i_flag & IWANT, 'W'); putf(ip->i_flag & ITEXT, 'T');
+        putf(ip->i_flag & ICHG, 'C'); putf(ip->i_flag & ISHLOCK, 'S');
+        putf(ip->i_flag & IEXLOCK, 'E'); putf(ip->i_flag & ILWAIT, 'Z');
+        putf(ip->i_flag & IPIPE, 'P'); putf(ip->i_flag & IMOD, 'm');
+        putf(ip->i_flag & IRENAME, 'r'); putf(ip->i_flag & IXMOD, 'x');
+        printf("%4u%4d,%3d%4u%4u%6lu %7.1o%4u%5u",
+            ip->i_count, major(ip->i_dev), minor(ip->i_dev),
+            ip->i_flag & IPIPE ? 0 : ip->i_shlockc,
+            ip->i_flag & IPIPE ? 0 : ip->i_exlockc,
+            (unsigned long)ip->i_number, ip->i_mode, ip->i_nlink,
+            ip->i_uid);
+        if ((ip->i_mode & IFMT) == IFBLK || (ip->i_mode & IFMT) == IFCHR)
+            printf("%6d,%3d", major(ip->i_rdev), minor(ip->i_rdev));
+        else
+            printf("%10ld", (long)ip->i_size);
+        printf(" %p\n", ip->i_fs);
+    }
+    free(ki);
+}
 
-		case 'u':
-			if (argc == 0)
-				break;
-			argc--;
-			usrf++;
-			sscanf( *argv++, "%lx", &ubase);
-			break;
+static void
+dofile(void)
+{
+    int mib[2] = { CTL_KERN, KERN_FILE };
+    struct kinfo_file *kf;
+    struct file *fp;
+    static const char *types[] = { "???", "inode", "socket", "pipe", "shm" };
+    size_t size, count, i;
 
-		case 'f':
-			filf++;
-			break;
-		case 's':
-			swpf++;
-			break;
-		default:
-			usage();
-			exit(1);
-		}
-	}
-	if (argc>0) {
-		fcore = fmem = argv[0];
-		kflg++;
-	}
-	if ((fc = open(fcore, 0)) < 0) {
-		printf("Can't find %s\n", fcore);
-		exit(1);
-	}
-	if ((fm = open(fmem, 0)) < 0) {
-		printf("Can't find %s\n", fmem);
-		exit(1);
-	}
-	knlist(nl);
+    kf = snapshot(mib, 2, &size);
+    if (kf == NULL) {
+        fprintf(stderr, "pstat: KERN_FILE: %s\n", strerror(errno));
+        return;
+    }
+    count = size / sizeof(*kf);
+    if (totflg) {
+        printf("%3u/%3d files\n", (unsigned)count, NFILE);
+        free(kf);
+        return;
+    }
+    printf("%u/%d open files\n", (unsigned)count, NFILE);
+    printf("   LOC   TYPE    FLG        CNT  MSG  DATA      OFFSET\n");
+    for (i = 0; i < count; i++) {
+        fp = &kf[i].kp_file;
+        printf("%08x %-8.8s", (unsigned)kf[i].kp_filep,
+            fp->f_type >= 0 && fp->f_type < 5 ? types[fp->f_type] : "unknown");
+        putf(fp->f_flag & FREAD, 'R'); putf(fp->f_flag & FWRITE, 'W');
+        putf(fp->f_flag & FAPPEND, 'A'); putf(fp->f_flag & FSHLOCK, 'S');
+        putf(fp->f_flag & FEXLOCK, 'X'); putf(fp->f_flag & FASYNC, 'I');
+        putf(fp->f_flag & FNONBLOCK, 'n');
+        printf("  %3u  %3d  %p  %lld\n", fp->f_count, fp->f_msgcount,
+            fp->f_un.f_Data, (long long)fp->f_offset);
+    }
+    free(kf);
+}
 
-	if (nl[0].n_value == 0) {
-		printf("no namelist, n_type: %d n_value: %x n_name: %s\n", nl[0].n_type, nl[0].n_value, nl[0].n_name);
-		exit(1);
-	}
-	if (! (filf | totflg | inof | prcf | ttyf | usrf | swpf))
-		filf++;
+static void
+doproc(void)
+{
+    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0 };
+    struct kinfo_proc *kp;
+    struct proc *pp;
+    size_t size, count, i;
 
-	if (filf||totflg)
-		dofile();
-	if (inof||totflg)
-		doinode();
-	if (prcf||totflg)
-		doproc();
-	if (ttyf)
-		dotty();
-	if (usrf)
-		dousr();
-	if (swpf||totflg)
-		doswap();
-	if (totflg)
-		dovm();
+    kp = snapshot(mib, 4, &size);
+    if (kp == NULL) {
+        fprintf(stderr, "pstat: KERN_PROC_ALL: %s\n", strerror(errno));
+        return;
+    }
+    count = size / sizeof(*kp);
+    if (totflg) {
+        printf("%3u/%3d processes\n", (unsigned)count, NPROC);
+        free(kp);
+        return;
+    }
+    printf("%u/%d active processes%s\n", (unsigned)count, NPROC,
+        allflg ? " (unused slots are not exported)" : "");
+    printf("   LOC    S       F PRI      SIG   UID SLP TIM  CPU  NI   PGRP    PID   PPID     ADDR    SADDR    DADDR     SIZE   WCHAN    LINK     SIGM COMMAND\n");
+    for (i = 0; i < count; i++) {
+        pp = &kp[i].kp_proc;
+        printf("%08x %2d %7.1x %3d %8.1lx %5u %3d %3d %4d %3d "
+            "%6d %6d %6d %8x %8x %8x %6x %p %p %8.1lx %s\n",
+            (unsigned)kp[i].kp_eproc.e_paddr, pp->p_stat, pp->p_flag,
+            pp->p_pri, pp->p_sig, pp->p_uid, pp->p_slptime, pp->p_time,
+            pp->p_cpu & 0377, pp->p_nice, pp->p_pgrp, pp->p_pid,
+            pp->p_ppid, (unsigned)pp->p_addr, (unsigned)pp->p_saddr,
+            (unsigned)pp->p_daddr, (unsigned)(pp->p_dsize + pp->p_ssize),
+            pp->p_wchan, pp->p_link, pp->p_sigmask, kp[i].ki_comm);
+    }
+    free(kp);
+}
+
+static void
+dotty(void)
+{
+    int mib[2] = { CTL_KERN, KERN_TTY };
+    struct tty tty;
+    size_t size;
+
+    size = sizeof(tty);
+    if (sysctl(mib, 2, &tty, &size, NULL, 0) < 0 || size != sizeof(tty)) {
+        fprintf(stderr, "pstat: KERN_TTY: %s\n", strerror(errno));
+        return;
+    }
+    printf("cn line\n");
+    printf(" # RAW CAN OUT         MODE     ADDR  DEL  COL     STATE       PGRP\n");
+    ttyprt(&tty, 0);
+}
+
+static void
+ttyprt(struct tty *tp, int line)
+{
+    printf("%2d%4d%4d%4d %12.1lo %p %4d %4d ", line,
+        tp->t_rawq.c_cc, tp->t_canq.c_cc, tp->t_outq.c_cc,
+        tp->t_flags, tp->t_addr, tp->t_delct, tp->t_col);
+    putf(tp->t_state & TS_TIMEOUT, 'T'); putf(tp->t_state & TS_WOPEN, 'W');
+    putf(tp->t_state & TS_ISOPEN, 'O'); putf(tp->t_state & TS_FLUSH, 'F');
+    putf(tp->t_state & TS_CARR_ON, 'C'); putf(tp->t_state & TS_BUSY, 'B');
+    putf(tp->t_state & TS_ASLEEP, 'A'); putf(tp->t_state & TS_XCLUDE, 'X');
+    putf(tp->t_state & TS_TTSTOP, 'S'); putf(tp->t_state & TS_HUPCLS, 'H');
+    putf(tp->t_state & TS_TBLOCK, 'b'); putf(tp->t_state & TS_RCOLL, 'r');
+    putf(tp->t_state & TS_WCOLL, 'w'); putf(tp->t_state & TS_ASYNC, 'a');
+    printf("%6d\n", tp->t_pgrp);
+}
+
+static void
+doswap(void)
+{
+    int mapmib[2] = { CTL_VM, VM_SWAPMAP };
+    int totalmib[2] = { CTL_VM, VM_SWAPTOTAL };
+    struct mapent *map;
+    long totalbytes;
+    unsigned long freeblocks;
+    size_t size, count, i, totalsize;
+
+    map = snapshot(mapmib, 2, &size);
+    if (map == NULL) {
+        fprintf(stderr, "pstat: VM_SWAPMAP: %s\n", strerror(errno));
+        return;
+    }
+    totalsize = sizeof(totalbytes);
+    if (sysctl(totalmib, 2, &totalbytes, &totalsize, NULL, 0) < 0) {
+        fprintf(stderr, "pstat: VM_SWAPTOTAL: %s\n", strerror(errno));
+        free(map);
+        return;
+    }
+    count = size / sizeof(*map);
+    freeblocks = 0;
+    for (i = 0; i < count && map[i].m_size != 0; i++)
+        freeblocks += map[i].m_size;
+    printf("%u/%u swapmap entries\n", (unsigned)i, (unsigned)count);
+    printf("%lu kbytes swap used, %lu kbytes free\n",
+        (unsigned long)(totalbytes / DEV_BSIZE) - freeblocks, freeblocks);
+    free(map);
 }
 
 static int
 vmvalue(int leaf, long *value)
 {
-	int mib[2];
-	size_t size;
+    int mib[2] = { CTL_VM, leaf };
+    size_t size = sizeof(*value);
 
-	mib[0] = CTL_VM;
-	mib[1] = leaf;
-	size = sizeof(*value);
-	return sysctl(mib, 2, value, &size, NULL, 0) != -1 &&
-		size == sizeof(*value) ? 0 : -1;
+    return sysctl(mib, 2, value, &size, NULL, 0) == 0 &&
+        size == sizeof(*value) ? 0 : -1;
 }
 
 static void
-dovm()
+dovm(void)
 {
-	long total_pages, free_pages, reserved_pages, bad_pages;
-	long objects, anon_pages, resident_pages, swapped_pages;
-	long mappings, pmap_resident, faults, waits, wouldblock;
-	long reclaim_attempts, reclaim_failures, shm_objects, shm_mappings;
+    long total, freep, reserved, bad, objects, anon, resident, swapped;
+    long mappings, pmapresident, faults, waits, wouldblock, attempts, failures;
+    long shmobjects, shmmappings;
 
-	if (vmvalue(VM_PHYSPAGES, &total_pages) != 0 ||
-	    vmvalue(VM_FREEPAGES, &free_pages) != 0 ||
-	    vmvalue(VM_RESERVEDPAGES, &reserved_pages) != 0 ||
-	    vmvalue(VM_BADPAGES, &bad_pages) != 0 ||
-	    vmvalue(VM_OBJECTS, &objects) != 0 ||
-	    vmvalue(VM_ANONPAGES, &anon_pages) != 0 ||
-	    vmvalue(VM_OBJECTRESIDENT, &resident_pages) != 0 ||
-	    vmvalue(VM_OBJECTSWAPPED, &swapped_pages) != 0 ||
-	    vmvalue(VM_PMAPMAPPINGS, &mappings) != 0 ||
-	    vmvalue(VM_PMAPRESIDENT, &pmap_resident) != 0 ||
-	    vmvalue(VM_OBJECTFAULTS, &faults) != 0 ||
-	    vmvalue(VM_OBJECTWAITS, &waits) != 0 ||
-	    vmvalue(VM_FAULTWOULDBLOCK, &wouldblock) != 0 ||
-	    vmvalue(VM_RECLAIMATTEMPTS, &reclaim_attempts) != 0 ||
-	    vmvalue(VM_RECLAIMFAILURES, &reclaim_failures) != 0 ||
-	    vmvalue(VM_SHMOBJECTS, &shm_objects) != 0 ||
-	    vmvalue(VM_SHMMAPPINGS, &shm_mappings) != 0) {
-		fprintf(stderr, "pstat: VM statistics are unavailable\n");
-		return;
-	}
-	printf("%ld/%ld physical pages free, %ld reserved, %ld bad\n",
-	    free_pages, total_pages, reserved_pages, bad_pages);
-	printf("%ld VM objects, %ld anon, %ld resident, %ld swapped\n",
-	    objects, anon_pages, resident_pages, swapped_pages);
-	printf("%ld pmap mappings, %ld resident mappings\n",
-	    mappings, pmap_resident);
-	printf("%ld object faults, %ld waits, %ld nowait rejects\n",
-	    faults, waits, wouldblock);
-	printf("%ld reclaim attempts, %ld failures\n",
-	    reclaim_attempts, reclaim_failures);
-	printf("%ld shared-memory objects, %ld current-process mappings\n",
-	    shm_objects, shm_mappings);
-}
-
-void usage()
-{
-	printf("usage: pstat -[aikptfsT] [-u [ubase]] [core]\n");
-}
-
-void doinode()
-{
-	register struct inode *ip;
-	struct inode *xinode;
-	register int nin;
-	u_int ainode;
-
-	nin = 0;
-	xinode = (struct inode *)calloc(NINODE, sizeof (struct inode));
-	ainode = nl[SINODE].n_value;
-	if (xinode == NULL) {
-		fprintf(stderr, "can't allocate memory for inode table\n");
-		return;
-	}
-	lseek(fc, (off_t)ainode, 0);
-	read(fc, xinode, NINODE * sizeof(struct inode));
-	for (ip = xinode; ip < &xinode[NINODE]; ip++)
-		if (ip->i_count)
-			nin++;
-	if (totflg) {
-		printf("%3d/%3d inodes\n", nin, NINODE);
-		return;
-	}
-	printf("%d/%d active inodes\n", nin, NINODE);
-        printf("   LOC       FLAGS      CNT  DEVICE  RDC WRC  INO   MODE  NLK  UID  SIZE/DEV FS\n");
-	for (ip = xinode; ip < &xinode[NINODE]; ip++) {
-		if (ip->i_count == 0)
-			continue;
-		printf("%08x ", ainode + (ip - xinode)*sizeof (*ip));
-		putf((long)ip->i_flag&ILOCKED, 'L');
-		putf((long)ip->i_flag&IUPD, 'U');
-		putf((long)ip->i_flag&IACC, 'A');
-		putf((long)ip->i_flag&IMOUNT, 'M');
-		putf((long)ip->i_flag&IWANT, 'W');
-		putf((long)ip->i_flag&ITEXT, 'T');
-		putf((long)ip->i_flag&ICHG, 'C');
-		putf((long)ip->i_flag&ISHLOCK, 'S');
-		putf((long)ip->i_flag&IEXLOCK, 'E');
-		putf((long)ip->i_flag&ILWAIT, 'Z');
-		putf((long)ip->i_flag&IPIPE, 'P');
-		putf((long)ip->i_flag&IMOD, 'm');
-		putf((long)ip->i_flag&IRENAME, 'r');
-		putf((long)ip->i_flag&IXMOD, 'x');
-		printf("%4d", ip->i_count);
-		printf("%4d,%3d", major(ip->i_dev), minor(ip->i_dev));
-		printf("%4d", ip->i_flag&IPIPE ? 0 : ip->i_shlockc);
-		printf("%4d", ip->i_flag&IPIPE ? 0 : ip->i_exlockc);
-		printf("%6u ", ip->i_number);
-		printf("%7.1o", ip->i_mode);
-		printf("%4d", ip->i_nlink);
-		printf("%5u", ip->i_uid);
-		if ((ip->i_mode&IFMT)==IFBLK || (ip->i_mode&IFMT)==IFCHR)
-			printf("%6d,%3d", major(ip->i_rdev), minor(ip->i_rdev));
-		else
-			printf("%10ld", ip->i_size);
-		printf(" %p", ip->i_fs);
-		printf("\n");
-	}
-	free(xinode);
-}
-
-u_int
-getuint(off_t loc)
-{
-	u_int word;
-
-	lseek(fc, loc, 0);
-	read(fc, &word, sizeof (word));
-
-	return (word);
-}
-
-void putf(long v, char n)
-{
-	if (v)
-		printf("%c", n);
-	else
-		printf(" ");
-}
-
-void doproc()
-{
-	struct proc *xproc;
-	u_int nproc, aproc;
-	register struct proc *pp;
-	register int loc, np;
-
-	nproc = getuint((off_t)nl[SNPROC].n_value);
-	xproc = (struct proc *)calloc(nproc, sizeof (struct proc));
-	aproc = nl[SPROC].n_value;
-	if (nproc < 0 || nproc > 10000) {
-		fprintf(stderr, "number of procs is preposterous (%d)\n",
-			nproc);
-		return;
-	}
-	if (xproc == NULL) {
-		fprintf(stderr, "can't allocate memory for proc table\n");
-		return;
-	}
-	lseek(fc, (off_t)aproc, 0);
-	read(fc, xproc, nproc * sizeof (struct proc));
-	np = 0;
-	for (pp=xproc; pp < &xproc[nproc]; pp++)
-		if (pp->p_stat)
-			np++;
-	if (totflg) {
-		printf("%3d/%3d processes\n", np, nproc);
-		return;
-	}
-	printf("%d/%d processes\n", np, nproc);
-        printf("   LOC    S       F PRI      SIG   UID SLP TIM  CPU  NI   PGRP    PID   PPID     ADDR    SADDR    DADDR     SIZE   WCHAN    LINK     SIGM\n");
-	for (pp=xproc; pp<&xproc[nproc]; pp++) {
-		if (pp->p_stat==0 && allflg==0)
-			continue;
-		printf("%08x", aproc + (pp - xproc)*sizeof (*pp));
-		printf(" %2d", pp->p_stat);
-		printf(" %7.1x", pp->p_flag);
-		printf(" %3d", pp->p_pri);
-		printf(" %8.1lx", pp->p_sig);
-		printf(" %5u", pp->p_uid);
-		printf(" %3d", pp->p_slptime);
-		printf(" %3d", pp->p_time);
-		printf(" %4d", pp->p_cpu&0377);
-		printf(" %3d", pp->p_nice);
-		printf(" %6d", pp->p_pgrp);
-		printf(" %6d", pp->p_pid);
-		printf(" %6d", pp->p_ppid);
-		printf(" %8x", pp->p_addr);
-		printf(" %8x", pp->p_saddr);
-		printf(" %8x", pp->p_daddr);
-		printf(" %6x", pp->p_dsize+pp->p_ssize);
-		printf(" %p", pp->p_wchan);
-		printf(" %p", pp->p_link);
-		printf(" %8.1lx", pp->p_sigmask);
-		printf("\n");
-	}
-	free(xproc);
-}
-
-static int ttyspace = 64;
-static struct tty *tty;
-
-void dotty()
-{
-	if ((tty = (struct tty *)malloc(ttyspace * sizeof(*tty))) == 0) {
-		printf("pstat: out of memory\n");
-		return;
-	}
-	dottytype("cn", SKL);
-}
-
-void dottytype(char *name, int type)
-{
-	register struct tty *tp;
-
-	printf("%s line\n", name);
-	lseek(fc, (long)nl[type].n_value, 0);
-	read(fc, tty, sizeof(struct tty));
-	printf(" # RAW CAN OUT         MODE     ADDR  DEL  COL     STATE       PGRP\n");
-	ttyprt(tty, 0);
-}
-
-void ttyprt(struct tty *atp, int line)
-{
-	register struct tty *tp;
-
-	printf("%2d", line);
-	tp = atp;
-
-	printf("%4d%4d", tp->t_rawq.c_cc, tp->t_canq.c_cc);
-	printf("%4d %12.1lo %p %4d %4d ", tp->t_outq.c_cc, tp->t_flags,
-		tp->t_addr, tp->t_delct, tp->t_col);
-	putf(tp->t_state&TS_TIMEOUT, 'T');
-	putf(tp->t_state&TS_WOPEN, 'W');
-	putf(tp->t_state&TS_ISOPEN, 'O');
-	putf(tp->t_state&TS_FLUSH, 'F');
-	putf(tp->t_state&TS_CARR_ON, 'C');
-	putf(tp->t_state&TS_BUSY, 'B');
-	putf(tp->t_state&TS_ASLEEP, 'A');
-	putf(tp->t_state&TS_XCLUDE, 'X');
-	putf(tp->t_state&TS_TTSTOP, 'S');
-	putf(tp->t_state&TS_HUPCLS, 'H');
-	putf(tp->t_state&TS_TBLOCK, 'b');
-	putf(tp->t_state&TS_RCOLL, 'r');
-	putf(tp->t_state&TS_WCOLL, 'w');
-	putf(tp->t_state&TS_ASYNC, 'a');
-	printf("%6d\n", tp->t_pgrp);
-}
-
-void dousr()
-{
-	struct user U;
-	long	*ip;
-	register int i, j;
-
-	lseek(fm, ubase, 0);
-	read(fm, &U, sizeof(U));
-	printf("procp\t%p\n", U.u_procp);
-	printf("frame\t%p\n", U.u_frame);
-	printf("comm\t%s\n", U.u_comm);
-	printf("arg\t%08x %08x %08x %08x %08x %08x\n", U.u_arg[0], U.u_arg[1],
-		U.u_arg[2], U.u_arg[3], U.u_arg[4], U.u_arg[5]);
-	printf("qsave\t");
-	for (i = 0; i < sizeof (label_t) / sizeof (int); i++)
-		printf("%08x ", U.u_qsave.val[i]);
-	printf("\n");
-	printf("rval\t%08x\n", U.u_rval);
-	printf("error\t%d\n", U.u_error);
-	printf("uids\t%d,%d,%d,%d,%d\n", U.u_uid, U.u_svuid, U.u_ruid,
-		U.u_svgid, U.u_rgid);
-	printf("groups");
-	for (i = 0; (i < NGROUPS) && (U.u_groups[i] != NOGROUP); i++) {
-		if (i%8 == 0) printf("\t");
-		printf("%u ", U.u_groups[i]);
-		if (i%8 == 7) printf("\n");
-	}
-	if (i%8) printf("\n");
-	printf("tsize\t%.1x\n", U.u_tsize);
-	printf("dsize\t%.1x\n", U.u_dsize);
-	printf("ssize\t%.1x\n", U.u_ssize);
-	printf("ssave\t");
-	for (i = 0; i < sizeof (label_t) / sizeof (int); i++)
-		printf("%.1x ", U.u_ssave.val[i]);
-	printf("\n");
-	printf("rsave\t");
-	for	(i = 0; i < sizeof (label_t) / sizeof (int); i++)
-		printf("%.1x ", U.u_rsave.val[i]);
-	printf("\n");
-	printf("signal");
-	for (i = 0; i < NSIG; i++) {
-		if (i%8 == 0) printf("\t");
-		printf("%p ", U.u_signal[i]);
-		if (i%8 == 7) printf("\n");
-	}
-	if (i%8) printf("\n");
-	printf("sigmask");
-	for (i = 0; i < NSIG; i++) {
-		if (i%8 == 0) printf("\t");
-		printf("%.1lx ", U.u_sigmask[i]);
-		if (i%8 == 7) printf("\n");
-	}
-	if (i%8) printf("\n");
-	printf("sigonstack\t%.1lx\n", U.u_sigonstack);
-	printf("sigintr\t%.1lx\n", U.u_sigintr);
-	printf("oldmask\t%.1lx\n", U.u_oldmask);
-	printf("code\t%08x\n", U.u_code);
-	printf("psflags\t%d\n", U.u_psflags);
-	printf("ss_base\t%p ss_size %.1x ss_flags %.1x\n",
-		U.u_sigstk.ss_base, U.u_sigstk.ss_size, U.u_sigstk.ss_flags);
-	printf("ofile");
-	for	(i = 0; i < NOFILE; i++)
-		{
-		if	(i%8 == 0) printf("\t");
-		printf("%p ", U.u_ofile[i]);
-		if	(i%8 == 7) printf("\n");
-		}
-	if	(i%8) printf("\n");
-	printf("pofile");
-	for	(i = 0; i < NOFILE; i++)
-		{
-		if	(i%8 == 0) printf("\t");
-		printf("%.1x ", U.u_pofile[i]);
-		if	(i%8 == 7) printf("\n");
-		}
-	if	(i%8) printf("\n");
-	printf("lastfile\t%d\n", U.u_lastfile);
-	printf("cdir\t%p\n", U.u_cdir);
-	printf("rdir\t%p\n", U.u_rdir);
-	printf("ttyp\t%p\n", U.u_ttyp);
-	printf("ttyd\t%d,%d\n", major(U.u_ttyd), minor(U.u_ttyd));
-	printf("cmask\t%.1x\n", U.u_cmask);
-	printf("ru\t");
-	ip = (long *)&U.u_ru;
-	for	(i = 0; i < sizeof (U.u_ru) / sizeof (long); i++)
-		printf("%ld ", ip[i]);
-	printf("\n");
-	printf("cru\t");
-	ip = (long *)&U.u_cru;
-	for	(i = 0; i < sizeof (U.u_cru) / sizeof (long); i++)
-		printf("%ld ", ip[i]);
-	printf("\n");
-	printf("timer\t%ld %ld %ld %ld\n", U.u_timer[0].it_interval,
-		U.u_timer[0].it_value, U.u_timer[1].it_interval,
-		U.u_timer[1].it_value);
-	printf("start\t%08lx\n", U.u_start);
-	printf("prof\t%p %u %u %u\n", U.u_prof.pr_base, U.u_prof.pr_size,
-		U.u_prof.pr_off, U.u_prof.pr_scale);
-	printf("rlimit cur\t");
-	for	(i = 0; i < RLIM_NLIMITS; i++)
-		{
-		if	(U.u_rlimit[i].rlim_cur == RLIM_INFINITY)
-			printf("infinite ");
-		else
-			printf("%ld ", U.u_rlimit[i].rlim_cur);
-		}
-	printf("\n");
-	printf("rlimit max\t");
-	for	(i = 0; i < RLIM_NLIMITS; i++)
-		{
-		if	(U.u_rlimit[i].rlim_max == RLIM_INFINITY)
-			printf("infinite ");
-		else
-			printf("%ld ", U.u_rlimit[i].rlim_max);
-		}
-	printf("\n");
-	printf("ncache\t%ld %u %d,%d\n", U.u_ncache.nc_prevoffset,
-		U.u_ncache.nc_inumber, major(U.u_ncache.nc_dev),
-		minor(U.u_ncache.nc_dev));
-}
-
-int oatoi(char *s)
-{
-	int v;
-
-	v = 0;
-	while (*s)
-		v = (v<<3) + *s++ - '0';
-	return(v);
-}
-
-void dofile()
-{
-	struct file *xfile;
-	register struct file *fp;
-	register int nf;
-	u_int loc, afile;
-	static char *dtypes[] = { "???", "inode", "socket", "pipe" };
-
-	nf = 0;
-	xfile = (struct file *)calloc(NFILE, sizeof (struct file));
-	if (xfile == NULL) {
-		fprintf(stderr, "can't allocate memory for file table\n");
-		return;
-	}
-	afile = nl[SFIL].n_value;
-	lseek(fc, (off_t)afile, 0);
-	read(fc, xfile, NFILE * sizeof (struct file));
-	for (fp=xfile; fp < &xfile[NFILE]; fp++)
-		if (fp->f_count)
-			nf++;
-	if (totflg) {
-		printf("%3d/%3d files\n", nf, NFILE);
-		return;
-	}
-	printf("%d/%d open files\n", nf, NFILE);
-	printf("   LOC   TYPE    FLG        CNT  MSG  DATA      OFFSET\n");
-	loc = afile;
-	for	(fp=xfile; fp < &xfile[NFILE]; fp++, loc += sizeof (*fp))
-		{
-		if (fp->f_count==0)
-			continue;
-		printf("%08x ", loc);
-		if (fp->f_type <= DTYPE_PIPE)
-			printf("%-8.8s", dtypes[fp->f_type]);
-		else
-			printf("%8d", fp->f_type);
-		putf((long)fp->f_flag&FREAD, 'R');
-		putf((long)fp->f_flag&FWRITE, 'W');
-		putf((long)fp->f_flag&FAPPEND, 'A');
-		putf((long)fp->f_flag&FSHLOCK, 'S');
-		putf((long)fp->f_flag&FEXLOCK, 'X');
-		putf((long)fp->f_flag&FASYNC, 'I');
-		putf((long)fp->f_flag&FNONBLOCK, 'n');
-		putf((long)fp->f_flag&FMARK, 'm');
-		putf((long)fp->f_flag&FDEFER, 'd');
-		printf("  %3d", fp->f_count);
-		printf("  %3d", fp->f_msgcount);
-		printf("  %p", fp->f_data);
-		if (fp->f_offset < 0)
-			printf("  0x%llx\n",
-			    (unsigned long long)fp->f_offset);
-		else
-			printf("  %lld\n", (long long)fp->f_offset);
-	}
-	free(xfile);
-}
-
-void doswap()
-{
-	u_int	nswap, used;
-	int	i, num;
-	struct	map	smap;
-	struct	mapent	*swp;
-
-	nswap = getuint((off_t)nl[SNSWAP].n_value);
-
-	lseek(fc, (off_t)nl[SWAPMAP].n_value, 0);
-	read(fc, &smap, sizeof (smap));
-	num = (smap.m_limit - smap.m_map);
-	swp = (struct mapent *)calloc(num, sizeof (*swp));
-	lseek(fc, (off_t)(u_long)smap.m_map, 0);
-	read(fc, swp, num * sizeof (*swp));
-	for (used = 0, i = 0; swp[i].m_size; i++)
-		used += swp[i].m_size;
-	printf("%d/%d swapmap entries\n", i, num);
-	printf("%u kbytes swap used, %u kbytes free\n", nswap - used, used);
+    if (vmvalue(VM_PHYSPAGES, &total) || vmvalue(VM_FREEPAGES, &freep) ||
+        vmvalue(VM_RESERVEDPAGES, &reserved) || vmvalue(VM_BADPAGES, &bad) ||
+        vmvalue(VM_OBJECTS, &objects) || vmvalue(VM_ANONPAGES, &anon) ||
+        vmvalue(VM_OBJECTRESIDENT, &resident) ||
+        vmvalue(VM_OBJECTSWAPPED, &swapped) ||
+        vmvalue(VM_PMAPMAPPINGS, &mappings) ||
+        vmvalue(VM_PMAPRESIDENT, &pmapresident) ||
+        vmvalue(VM_OBJECTFAULTS, &faults) || vmvalue(VM_OBJECTWAITS, &waits) ||
+        vmvalue(VM_FAULTWOULDBLOCK, &wouldblock) ||
+        vmvalue(VM_RECLAIMATTEMPTS, &attempts) ||
+        vmvalue(VM_RECLAIMFAILURES, &failures) ||
+        vmvalue(VM_SHMOBJECTS, &shmobjects) ||
+        vmvalue(VM_SHMMAPPINGS, &shmmappings)) {
+        fprintf(stderr, "pstat: VM statistics are unavailable\n");
+        return;
+    }
+    printf("%ld/%ld physical pages free, %ld reserved, %ld bad\n",
+        freep, total, reserved, bad);
+    printf("%ld VM objects, %ld anon, %ld resident, %ld swapped\n",
+        objects, anon, resident, swapped);
+    printf("%ld pmap mappings, %ld resident mappings\n", mappings,
+        pmapresident);
+    printf("%ld object faults, %ld waits, %ld nowait rejects\n", faults,
+        waits, wouldblock);
+    printf("%ld reclaim attempts, %ld failures\n", attempts, failures);
+    printf("%ld shared-memory objects, %ld current-process mappings\n",
+        shmobjects, shmmappings);
 }

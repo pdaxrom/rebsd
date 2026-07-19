@@ -15,8 +15,10 @@ N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
 VM_DIAGNOSTIC   ?= 0
 N64_PCC_HANG_TRACE ?= 0
+N64_MINIMAL_PCC_TRACE ?= $(N64_PCC_HANG_TRACE)
 N64_DEBUG_UART_ONLY ?= 0
 N64_USB_GDB ?= 0
+N64_RESET_DUMP ?= $(N64_USB_GDB)
 # Parse debug conditionals in the mode implied by a direct ROM build.
 ifneq ($(filter pcc-debug.z64,$(MAKECMDGOALS)),)
 N64_DEBUG_UART_ONLY := 1
@@ -35,7 +37,7 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_PCC_HANG_TRACE)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_PCC_HANG_TRACE).$(N64_MINIMAL_PCC_TRACE)
 N64_IOCONF      = ioconf
 ifeq ($(N64_HIGHRES_FB),1)
 PARAM += -DN64_HIGHRES_FB
@@ -58,6 +60,9 @@ PARAM := $(filter-out -DUSBNET_ENABLED -DUSBNET_ECM \
 PARAM += -DN64_USB_GDB
 # This service table retains tty/video/INET but deliberately omits usbnet.
 N64_IOCONF = ioconf.debug-uart
+endif
+ifeq ($(N64_RESET_DUMP),1)
+PARAM += -DN64_RESET_DUMP
 endif
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 PARAM := $(filter-out -DPTY_ENABLED -DPTY_NUNITS=% \
@@ -85,7 +90,7 @@ N64_ROOTFS_WHATIS = $(N64_ROOTFS_USR_SHARE)/man/whatis
 N64_USR_BIN_FILES = aout apropos ar as awk basename basic cal calendar cb chgrp \
                     cmp col comm compress deco diff diskspeed du ed egrep \
                     emg env fbset fbview fgrep file find fold forth free grep \
-                    groups head hostid id join last ld man matrix-as-vr4300 \
+                    groups head hostid id iostat join last ld man matrix-as-vr4300 \
                     matrix-as-vr4300.sh make md5 med mesg more \
                     n64input nice nm nohup od pagesize pdc picoc pr \
                     printf printenv ps ptytest ranlib renice renumber retroforth rev \
@@ -97,7 +102,7 @@ N64_USR_BIN_FILES = aout apropos ar as awk basename basic cal calendar cb chgrp 
 N64_USR_LIBEXEC_FILES = bigram code
 N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm \
                         compress cp date dd df diff du echo ed expr false \
-                        file find fold free grep head hostid join kill last ln \
+                        file find fold free grep head hostid iostat join kill last ln \
                         login ls make man mesg mkdir more mv nice od pagesize pr ps \
                         pcc printenv pwd rev rm rmail rmdir \
                         sed sh size sleep sort split strip sum tail tar tee \
@@ -106,7 +111,7 @@ N64_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col comm
 N64_ROOTFS_CMD_CAT1_SOURCES = as:as emg:emg env:env nm:nm sl:sl wget:wget
 N64_ROOTFS_CAT1_ALIASES = egrep:grep fgrep:grep uncompress:compress \
                           zcat:compress nohup:nice cc:pcc cpp:pcc
-N64_ROOTFS_CAT8_PAGES = fsck getty sync
+N64_ROOTFS_CAT8_PAGES = fsck fstat getty sync
 N64_ROOTFS_CAT8_ALIASES = fastboot:reboot halt:reboot poweroff:reboot \
                           bootloader:reboot
 N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_COMMON_DIR) \
@@ -292,16 +297,16 @@ N64_SRC_LIBS = libc libm libutil libtermlib libcurses libvmf libreadline libtcl
 N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = basic calendar chown chroot compress date2 deco dhclient diff emg env fbset \
-                  fbview find fold forth fsck getty hostname id ifconfig inetd init \
+                  fbview find fold forth fsck fstat getty hostname id ifconfig inetd init \
                   aout ar as ld login ls make man md5 med mkfs mknod \
                   mkpasswd mount more n64input netstat nm pdc picoc ping printf pstat ptytest \
                   ranlib reboot renice retroforth rgbled romfsctl route sed setty \
                   sh shutdown sl smux stty sysctl tcl telnet \
                   telnetd test wget umount uname xargs
 N64_CMD_STDS = basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
-               du echo ed fgrep file free grep head hostid join kill last ln \
+               du echo ed fgrep file free grep head hostid iostat join kill last ln \
                mesg mkdir mv nice od pagesize pr printenv pwd rev rm rmail \
-               rmdir size sleep sort split sum sync tail tar tee time touch \
+               rmdir size sleep sort split sum sync tail tar tee time touch vmstat \
                top tr tsort tty uniq uptime w wc whereis who
 N64_CMD_NSTDS = egrep expr
 N64_CMD_OPERATORS = df
@@ -392,19 +397,19 @@ N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).$(N64_USERLAND_ABI).s
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
 
-N64_MINIMAL_ROOTFS_CMD_SUBDIRS = getty init login ls mkfs mount sh stty \
+N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty init login ls mkfs mount netstat sh stty \
     sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
     ld make nm pstat ranlib sed)
-N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod cmp mkdir rm sleep \
+N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod cmp iostat mkdir ps rm sleep strace \
+    vm-pressure-smoke \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),cp grep od size \
-    tr w wc)
+    tr vmstat w wc)
 N64_MINIMAL_ROOTFS_CMD_NSTDS = expr
 N64_MINIMAL_ROOTFS_CMD_SCRIPTS = \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),false true,$(N64_CMD_NONE))
 N64_MINIMAL_ROOTFS_CMD_OPERATORS = \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),df,$(N64_CMD_NONE))
-N64_MINIMAL_ROOTFS_CMD_KMEM = \
-    $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),ps vmstat,$(N64_CMD_NONE))
+N64_MINIMAL_ROOTFS_CMD_KMEM = $(N64_CMD_NONE)
 N64_MINIMAL_ROOTFS_PCC_TEST_NAMES = \
     alias-stress-smoke.c alias-stress-smoke.sh \
     build-workload-smoke.sh cc-pcc-smoke.sh ccom-stress.sh \
@@ -425,10 +430,19 @@ N64_MINIMAL_ROOTFS_PCC_TEST_FILES = \
     $(addprefix $(TOPSRC)/sys/mips/rootfs/root/,\
     $(N64_MINIMAL_ROOTFS_PCC_TEST_NAMES)))
 N64_MINIMAL_VM_PROCESS_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke.c
+N64_MINIMAL_VM_PROCESS_GPR64_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke-gpr64.S
 N64_MINIMAL_VM_STRESS_SCRIPT = $(TOPSRC)/sys/mips/rootfs/root/vm-stress-smoke.sh
 N64_MINIMAL_VM_PROCESS_OBJ = n64-minimal-vm-process-smoke.o
+N64_MINIMAL_VM_PROCESS_GPR64_OBJ = n64-minimal-vm-process-smoke-gpr64.o
 N64_MINIMAL_VM_PROCESS_LINKED = n64-minimal-vm-process-smoke.linked
 N64_MINIMAL_VM_PROCESS_BIN = n64-minimal-vm-process-smoke
+N64_MINIMAL_LIBC_ABI_OBJ = n64-minimal-libc-abi-smoke.o
+N64_MINIMAL_LIBC_ABI_LINKED = n64-minimal-libc-abi-smoke.linked
+N64_MINIMAL_LINPACK_OBJ = n64-minimal-linpack-pcc.o
+N64_MINIMAL_LINPACK_LINKED = n64-minimal-linpack-pcc.linked
+N64_MINIMAL_COMPILER_BENCH_OBJ = n64-minimal-mips-compiler-bench-pcc.o
+N64_MINIMAL_COMPILER_BENCH_LINKED = \
+    n64-minimal-mips-compiler-bench-pcc.linked
 N64_MINIMAL_ROOTFS_FILES = \
     $(TOPSRC)/sys/mips/rootfs/etc/group \
     $(TOPSRC)/sys/mips/rootfs/etc/passwd \
@@ -437,6 +451,7 @@ N64_MINIMAL_ROOTFS_FILES = \
     $(TOPSRC)/sys/mips/n64/rootfs/etc/motd \
     $(TOPSRC)/sys/mips/n64/rootfs/etc/ttys \
     $(N64_MINIMAL_VM_PROCESS_SRC) \
+    $(N64_MINIMAL_VM_PROCESS_GPR64_SRC) \
     $(N64_MINIMAL_VM_STRESS_SCRIPT) \
     $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES)
 N64_MINIMAL_USERLAND_CC = $(MIPS_USERLAND_CC)
@@ -837,6 +852,11 @@ OBJS += n64gdb.o n64cart_usbgdb.o
 CFILES += $(N64_BOARD_SRC)/n64gdb.c $(N64_BOARD_SRC)/n64cart_usbgdb.c
 endif
 
+ifeq ($(N64_RESET_DUMP),1)
+OBJS += n64reset.o
+CFILES += $(N64_BOARD_SRC)/n64reset.c
+endif
+
 ifeq ($(N64_DEBUG_UART_ONLY),1)
 OBJS := $(filter-out video.o video_console.o si.o joybus.o \
     if_usbn.o n64usbnet_proto.o n64cart_usbnet.o n64cart_usbecm.o,$(OBJS))
@@ -1084,9 +1104,13 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-stress-smoke.sh
 	$(N64_MINIMAL_USERLAND_CC) -O2 -c \
 	    -o $(N64_MINIMAL_VM_PROCESS_OBJ) $(N64_MINIMAL_VM_PROCESS_SRC)
+	$(N64_MINIMAL_USERLAND_AS) \
+	    -o $(N64_MINIMAL_VM_PROCESS_GPR64_OBJ) \
+	    $(N64_MINIMAL_VM_PROCESS_GPR64_SRC)
 	$(N64_MINIMAL_USERLAND_LD) $(N64_MINIMAL_USERLAND_LDFLAGS) \
 	    -o $(N64_MINIMAL_VM_PROCESS_LINKED) \
-	    $(N64_MINIMAL_VM_PROCESS_OBJ) -lc
+	    $(N64_MINIMAL_VM_PROCESS_OBJ) \
+	    $(N64_MINIMAL_VM_PROCESS_GPR64_OBJ) -lc
 	$(N64_MINIMAL_USERLAND_ELF2AOUT) $(N64_MINIMAL_VM_PROCESS_LINKED) \
 	    $(N64_MINIMAL_VM_PROCESS_BIN)
 	cp -p $(N64_MINIMAL_VM_PROCESS_BIN) \
@@ -1096,6 +1120,8 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	cp -p $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/
+	printf '%s\n' 'PCC_SMOKE_TRACE=$(N64_MINIMAL_PCC_TRACE)' > \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/pcc-smoke.conf
 	mkdir -p $(N64_MINIMAL_ROOTFS_STAGE)/root/utility-src
 	cp -p $(N64_UTILITY_SMOKE_SRCS) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/utility-src/
@@ -1132,15 +1158,30 @@ ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	ln -s ../usr/lib/libc.a $(N64_MINIMAL_ROOTFS_STAGE)/lib/libc.a
 	ln -s ../usr/lib/libm.a $(N64_MINIMAL_ROOTFS_STAGE)/lib/libm.a
 	ln -s ../usr/lib/libpcc.a $(N64_MINIMAL_ROOTFS_STAGE)/lib/libpcc.a
-	$(N64_MINIMAL_USERLAND_CC) -O2 $(N64_MINIMAL_USERLAND_LDFLAGS) \
-	    -o $(N64_MINIMAL_ROOTFS_STAGE)/root/libc-abi-smoke \
+	$(N64_MINIMAL_USERLAND_CC) -O2 -c \
+	    -o $(N64_MINIMAL_LIBC_ABI_OBJ) \
 	    $(TOPSRC)/sys/mips/rootfs/root/libc-abi-smoke.c
-	$(N64_MINIMAL_USERLAND_CC) -O2 $(N64_MINIMAL_USERLAND_LDFLAGS) \
-	    -o $(N64_MINIMAL_ROOTFS_STAGE)/root/linpack-pcc \
-	    $(N64_LINPACK_SMOKE_SRC) -lm
-	$(N64_MINIMAL_USERLAND_CC) -O2 $(N64_MINIMAL_USERLAND_LDFLAGS) \
-	    -o $(N64_MINIMAL_ROOTFS_STAGE)/root/mips-compiler-bench-pcc \
+	$(N64_MINIMAL_USERLAND_LD) $(N64_MINIMAL_USERLAND_LDFLAGS) \
+	    -o $(N64_MINIMAL_LIBC_ABI_LINKED) \
+	    $(N64_MINIMAL_LIBC_ABI_OBJ) -lc
+	$(N64_MINIMAL_USERLAND_ELF2AOUT) $(N64_MINIMAL_LIBC_ABI_LINKED) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/libc-abi-smoke
+	$(N64_MINIMAL_USERLAND_CC) -O2 -c \
+	    -o $(N64_MINIMAL_LINPACK_OBJ) $(N64_LINPACK_SMOKE_SRC)
+	$(N64_MINIMAL_USERLAND_LD) $(N64_MINIMAL_USERLAND_LDFLAGS) \
+	    -o $(N64_MINIMAL_LINPACK_LINKED) \
+	    $(N64_MINIMAL_LINPACK_OBJ) -lm -lc
+	$(N64_MINIMAL_USERLAND_ELF2AOUT) $(N64_MINIMAL_LINPACK_LINKED) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/linpack-pcc
+	$(N64_MINIMAL_USERLAND_CC) -O2 -c \
+	    -o $(N64_MINIMAL_COMPILER_BENCH_OBJ) \
 	    $(MIPS_COMPILER_BENCH_SRC)
+	$(N64_MINIMAL_USERLAND_LD) $(N64_MINIMAL_USERLAND_LDFLAGS) \
+	    -o $(N64_MINIMAL_COMPILER_BENCH_LINKED) \
+	    $(N64_MINIMAL_COMPILER_BENCH_OBJ) -lc
+	$(N64_MINIMAL_USERLAND_ELF2AOUT) \
+	    $(N64_MINIMAL_COMPILER_BENCH_LINKED) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/mips-compiler-bench-pcc
 	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/root/*.sh \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/libc-abi-smoke \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/linpack-pcc \
@@ -1296,6 +1337,9 @@ n64cart_usbgdb.o: $(N64_BOARD_SRC)/n64cart_usbgdb.c \
     $(N64_BOARD_SRC)/n64cart_usbnet.c $(N64_BOARD_SRC)/n64gdb.h ${SYSTEM_DEP}
 	${COMPILE_C}
 
+n64reset.o: $(N64_BOARD_SRC)/n64reset.c $(N64_BOARD_SRC)/n64reset.h ${SYSTEM_DEP}
+	${COMPILE_C}
+
 ${SYSTEM_OBJ} swapunix.o preflight.o: | machine sys .deps
 ${SYSTEM_OBJ} swapunix.o preflight.o $(N64_STAGE0_OBJS) \
     $(N64_PREFLIGHT_OBJS): $(N64_BUILD_MODE_STAMP)
@@ -1304,6 +1348,7 @@ clean: mips-rootfs-clean
 	rm -rf *.o *.elf *.bin *.img *.dis *.nm *.z64 *.d a.out n64-init \
 	    .deps machine sys $(N64_PCC_DEBUG_ROOTFS_STAGE) \
 	    $(N64_MINIMAL_ROOTFS_STAGE) $(N64_MINIMAL_ROOTFS_MANIFEST) \
+	    $(N64_MINIMAL_VM_PROCESS_GPR64_OBJ) \
 	    $(N64_MINIMAL_VM_PROCESS_LINKED) $(N64_MINIMAL_VM_PROCESS_BIN) \
 	    $(N64_PCC_HOST_INCLUDE) \
 	    $(N64_KERNEL_LDSCRIPT) .build-mode.* $(N64_PCC_DEBUG_RUNNER) \

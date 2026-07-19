@@ -963,7 +963,10 @@ user stack frame with:
 - four argument words for the trampoline call area;
 - a `struct sigcontext` containing the interrupted user registers, stack,
   return address, HI/LO, program counter, signal mask, and alternate-stack
-  state.
+  state;
+- on MIPS III only, a private shadow after `sigcontext` containing the upper
+  and original lower halves of every GPR and HI/LO.  The public o32 structure
+  and handler arguments remain unchanged.
 
 The kernel then redirects the saved user frame to call the user handler with:
 
@@ -979,7 +982,15 @@ pc = handler
 The libc MIPS `sigtramp` executes syscall `SYS_sigreturn` when the handler
 returns. N64 `sigreturn()` validates the user `sigcontext`, restores the saved
 registers and signal mask, and returns with `EJUSTRETURN` so the syscall trap
-path does not overwrite the restored frame.
+path does not overwrite the restored frame.  If a handler deliberately edits
+a public 32-bit register value, `sigreturn()` sign-extends that new value;
+otherwise it restores the complete interrupted 64-bit MIPS III register.
+
+The kernel and user ABI are still 32-bit.  `Status.UX` only permits VR4300
+user code to execute MIPS III 64-bit GPR instructions used internally for
+`long long`; the exception frame saves those hardware values with `sd`/`ld`.
+This does not widen VM addresses, sizes, physical addresses, pointers, or the
+o32 calling convention.
 
 This matters for the login shell: the first N64 signal stub treated every
 caught signal as fatal. With that stub, `Ctrl-C` during `sleep 10` killed the
@@ -1343,6 +1354,28 @@ forces the UART-only console/debug drivers for boot isolation.  The minimal
 `/etc/rc` only formats and mounts the volatile `/var`; it deliberately does not
 mount `/cart`, because ROMFS and peripheral tests belong to a later full-rootfs
 image.
+
+For a diagnostic hardware ROM, add `N64_PCC_HANG_TRACE=1`.  In combination
+with `N64_MINIMAL_UART_ONLY=1`, all trace output goes to the cartridge UART.
+The kernel prints `N64_SYSCALL_ENTER`, `N64_SYSCALL_DISPATCH`, and
+`N64_SYSCALL_EXIT` records with the same sequence number, PID, syscall name,
+arguments, result, and saved register state.  An `ENTER`/`DISPATCH` pair without
+the matching `EXIT` identifies the syscall handler which did not return.  A
+fatal exception prints a direct-MMIO dump delimited by `N64_CRASH_BEGIN` and
+`N64_CRASH_END`, including CPU registers, process state, and UART/timer state.
+This mode does not emit periodic heartbeat/tick records.  It is intentionally
+verbose and is disabled by default because UART tracing changes timing.
+The minimal rootfs also records the same default in `/etc/pcc-smoke.conf`:
+`pcc-smoke-all.sh` enables its PCC driver/`ccom` trace for a diagnostic build
+and leaves it disabled for a clean build.  `PCC_SMOKE_TRACE=0` or `1` can
+override that choice for one invocation.
+
+The two comparable diagnostic ROMs use the command above with
+`N64_MINIMAL_UART_ONLY=1 N64_PCC_HANG_TRACE=1` and `kernel.z64` as the target.
+Set `N64_USERLAND_COMPILER=pcc` for the PCC-userland image or
+`N64_USERLAND_COMPILER=gcc` for the GCC-userland image; the kernel remains GCC
+in both cases.  Log in as `root` on `ttyS0` and run
+`/root/pcc-smoke-all.sh`.
 
 The printed boot sizes therefore differ by installed RDRAM:
 

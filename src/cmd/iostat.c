@@ -2,44 +2,17 @@
  * iostat
  */
 #include <ctype.h>
-#include <nlist.h>
 #include <signal.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <sys/dk.h>
-#include <sys/file.h>
-
-struct nlist nl[] = {
-    { "_dk_busy" },
-#define X_DK_BUSY 0
-    { "_dk_xfer" },
-#define X_DK_XFER 1
-    { "_dk_bytes" },
-#define X_DK_BYTES 2
-    { "_tk_nin" },
-#define X_TK_NIN 3
-    { "_tk_nout" },
-#define X_TK_NOUT 4
-    { "_cp_time" },
-#define X_CP_TIME 5
-    { "_hz" },
-#define X_HZ 6
-    { "_dk_ndrive" },
-#define X_DK_NDRIVE 7
-    { "_dk_name" },
-#define X_DK_NAME 8
-    { "_dk_unit" },
-#define X_DK_UNIT 9
-    { 0 },
-};
+#include <sys/sysctl.h>
 
 char **dr_name;
-char **dk_name;
 int *dr_select;
-int *dk_unit;
 int dk_ndrive;
 int ndrives = 0;
 
@@ -52,12 +25,12 @@ struct {
     long tk_nout;
 } s, s1;
 
-int mf;
 int hz;
 double etime;
 int tohdr = 1;
+static struct kinfo_ucb_stats ucb;
 
-static void read_names(void);
+static int read_stats(void);
 static void stats(int dn);
 static void stat1(int o);
 
@@ -83,37 +56,23 @@ int main(int argc, char *argv[])
 {
     int i;
     int iter;
-    double f1, f2;
     long t;
-    char *arg, **cp, name[6], buf[BUFSIZ];
+    char *arg, buf[BUFSIZ];
 
-    knlist(nl);
-    if (nl[X_DK_BUSY].n_value == 0) {
-        printf("dk_busy not found in /vmunix namelist\n");
-        exit(1);
-    }
-    mf = open("/dev/kmem", 0);
-    if (mf < 0) {
-        printf("cannot open /dev/kmem\n");
+    if (read_stats() < 0) {
+        fprintf(stderr, "iostat: VM_UCBSTATS: %s\n", strerror(errno));
         exit(1);
     }
     iter = 0;
     for (argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++)
         ;
-    if (nl[X_DK_NDRIVE].n_value == 0) {
-        printf("dk_ndrive undefined in system\n");
-        exit(1);
-    }
-    lseek(mf, (long)nl[X_DK_NDRIVE].n_value, L_SET);
-    read(mf, &dk_ndrive, sizeof(dk_ndrive));
+    dk_ndrive = ucb.kus_dk_ndrive;
     if (dk_ndrive <= 0) {
         printf("dk_ndrive %d\n", dk_ndrive);
         exit(1);
     }
     dr_select = (int *)calloc(dk_ndrive, sizeof(int));
     dr_name = (char **)calloc(dk_ndrive, sizeof(char *));
-    dk_name = (char **)calloc(dk_ndrive, sizeof(char *));
-    dk_unit = (int *)calloc(dk_ndrive, sizeof(int));
     s.dk_bytes = (long *)calloc(dk_ndrive, sizeof(long));
     s1.dk_bytes = (long *)calloc(dk_ndrive, sizeof(long));
     s.dk_xfer = (long *)calloc(dk_ndrive, sizeof(long));
@@ -121,11 +80,13 @@ int main(int argc, char *argv[])
     for (arg = buf, i = 0; i < dk_ndrive; i++) {
         dr_name[i] = arg;
         sprintf(dr_name[i], "dk%d", i);
-        arg += strlen(dr_name[i]) + 1;
+        arg += KINFO_DISKNAMELEN;
     }
-    read_names();
-    lseek(mf, (long)nl[X_HZ].n_value, L_SET);
-    read(mf, &hz, sizeof hz);
+    for (i = 0; i < dk_ndrive; i++) {
+        strncpy(dr_name[i], ucb.kus_dk_name[i], KINFO_DISKNAMELEN - 1);
+        dr_name[i][KINFO_DISKNAMELEN - 1] = '\0';
+    }
+    hz = ucb.kus_hz;
 
     /*
      * Choose drives to be displayed.  Priority
@@ -156,23 +117,18 @@ int main(int argc, char *argv[])
 loop:
     if (--tohdr == 0)
         printhdr(0);
-    lseek(mf, (long)nl[X_DK_BUSY].n_value, L_SET);
-    read(mf, &s.dk_busy, sizeof s.dk_busy);
-
-    lseek(mf, (long)nl[X_DK_XFER].n_value, L_SET);
-    read(mf, s.dk_xfer, dk_ndrive * sizeof(long));
-
-    lseek(mf, (long)nl[X_DK_BYTES].n_value, L_SET);
-    read(mf, s.dk_bytes, dk_ndrive * sizeof(long));
-
-    lseek(mf, (long)nl[X_TK_NIN].n_value, L_SET);
-    read(mf, &s.tk_nin, sizeof s.tk_nin);
-
-    lseek(mf, (long)nl[X_TK_NOUT].n_value, L_SET);
-    read(mf, &s.tk_nout, sizeof s.tk_nout);
-
-    lseek(mf, (long)nl[X_CP_TIME].n_value, L_SET);
-    read(mf, s.cp_time, sizeof s.cp_time);
+    if (read_stats() < 0) {
+        fprintf(stderr, "iostat: VM_UCBSTATS: %s\n", strerror(errno));
+        exit(1);
+    }
+    s.dk_busy = ucb.kus_dk_busy;
+    memcpy(s.dk_xfer, ucb.kus_dk_xfer,
+        dk_ndrive * sizeof(s.dk_xfer[0]));
+    memcpy(s.dk_bytes, ucb.kus_dk_bytes,
+        dk_ndrive * sizeof(s.dk_bytes[0]));
+    s.tk_nin = ucb.kus_tk_nin;
+    s.tk_nout = ucb.kus_tk_nout;
+    memcpy(s.cp_time, ucb.kus_cp_time, sizeof(s.cp_time));
 
     for (i = 0; i < dk_ndrive; i++) {
         if (!dr_select[i])
@@ -206,7 +162,6 @@ loop:
         stat1(i);
     printf("\n");
     fflush(stdout);
-contin:
     if (--iter && argc > 0) {
         sleep(atoi(argv[0]));
         goto loop;
@@ -235,19 +190,20 @@ void stat1(int o)
     printf(" %3.0f", 100.0 * s.cp_time[o] / time);
 }
 
-void read_names()
+static int
+read_stats(void)
 {
-    char name[2];
-    int i;
+    int mib[2];
+    size_t size;
 
-    lseek(mf, (long)nl[X_DK_NAME].n_value, L_SET);
-    read(mf, dk_name, dk_ndrive * sizeof(char *));
-    lseek(mf, (long)nl[X_DK_UNIT].n_value, L_SET);
-    read(mf, dk_unit, dk_ndrive * sizeof(int));
-
-    for (i = 0; dk_name[i]; i++) {
-        lseek(mf, (long)dk_name[i], L_SET);
-        read(mf, name, sizeof name);
-        sprintf(dr_name[i], "%c%c%d", name[0], name[1], dk_unit[i]);
+    mib[0] = CTL_VM;
+    mib[1] = VM_UCBSTATS;
+    size = sizeof(ucb);
+    if (sysctl(mib, 2, &ucb, &size, NULL, 0) < 0)
+        return (-1);
+    if (size != sizeof(ucb)) {
+        errno = EINVAL;
+        return (-1);
     }
+    return (0);
 }

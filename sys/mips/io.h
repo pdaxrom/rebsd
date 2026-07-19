@@ -29,6 +29,9 @@
 #define ST_ERL          0x00000004u
 #define ST_KSU          0x00000018u
 #define ST_KSU_USER     0x00000010u
+#define ST_UX           0x00000020u
+#define ST_SX           0x00000040u
+#define ST_KX           0x00000080u
 #define ST_IM0          0x00000100u
 #define ST_IM1          0x00000200u
 #define ST_IM2          0x00000400u
@@ -65,6 +68,58 @@
 #define CA_Tr           0x00000034u
 #define CA_FPE          0x0000003cu
 
+/*
+ * The kernel ABI is 32-bit on every current MIPS target.  VR4300 user code,
+ * however, is allowed to use MIPS III 64-bit GPR instructions while running
+ * under the o32 ABI.  A 32-bit exception frame would therefore corrupt a
+ * live 64-bit temporary whenever a timer or TLB exception lands between an
+ * ld and sd.
+ *
+ * On MIPS III targets each GPR/LO/HI occupies an aligned 64-bit slot.  The
+ * FRAME_* index names the ABI-visible low word in that slot, so the existing
+ * int * kernel interface remains 32-bit.  N64 and Malta64 are big-endian;
+ * the high word precedes the low word.  MIPS32 targets retain the compact
+ * historical frame.
+ */
+#if defined(N64) || defined(MIPS3) || defined(MALTA64)
+#define MIPS_FRAME_GPR64 1
+#define FRAME_R1        1
+#define FRAME_R2        3
+#define FRAME_R3        5
+#define FRAME_R4        7
+#define FRAME_R5        9
+#define FRAME_R6        11
+#define FRAME_R7        13
+#define FRAME_R8        15
+#define FRAME_R9        17
+#define FRAME_R10       19
+#define FRAME_R11       21
+#define FRAME_R12       23
+#define FRAME_R13       25
+#define FRAME_R14       27
+#define FRAME_R15       29
+#define FRAME_R16       31
+#define FRAME_R17       33
+#define FRAME_R18       35
+#define FRAME_R19       37
+#define FRAME_R20       39
+#define FRAME_R21       41
+#define FRAME_R22       43
+#define FRAME_R23       45
+#define FRAME_R24       47
+#define FRAME_R25       49
+#define FRAME_GP        51
+#define FRAME_SP        53
+#define FRAME_FP        55
+#define FRAME_RA        57
+#define FRAME_LO        59
+#define FRAME_HI        61
+#define FRAME_STATUS    62
+#define FRAME_PC        63
+#define FRAME_WORDS     64
+#define FRAME_GPR_STRIDE 2
+#else
+#define MIPS_FRAME_GPR64 0
 #define FRAME_R1        0
 #define FRAME_R2        1
 #define FRAME_R3        2
@@ -99,6 +154,10 @@
 #define FRAME_STATUS    31
 #define FRAME_PC        32
 #define FRAME_WORDS     33
+#define FRAME_GPR_STRIDE 1
+#endif
+
+#define FRAME_STACK_BYTES (16 + FRAME_WORDS * 4)
 
 #define TLB_ENTRYLO_G   0x00000001u
 #define TLB_ENTRYLO_V   0x00000002u
@@ -111,6 +170,42 @@
 #define TLB_PAGEMASK_1M 0x001fe000u
 
 #ifndef __ASSEMBLER__
+
+static inline int
+mips_frame_is_gpr_word(unsigned word)
+{
+    return word >= FRAME_R1 && word <= FRAME_HI &&
+        (word - FRAME_R1) % FRAME_GPR_STRIDE == 0;
+}
+
+static inline int
+mips_frame_is_writable_word(unsigned word)
+{
+    return mips_frame_is_gpr_word(word) || word == FRAME_STATUS ||
+        word == FRAME_PC;
+}
+
+static inline void
+mips_frame_set_gpr(int *frame, unsigned word, int value)
+{
+    frame[word] = value;
+#if MIPS_FRAME_GPR64
+    frame[word - 1] = value < 0 ? -1 : 0;
+#endif
+}
+
+static inline void
+mips_frame_normalize_gprs(int *frame)
+{
+#if MIPS_FRAME_GPR64
+    unsigned word;
+
+    for (word = FRAME_R1; word <= FRAME_HI; word += FRAME_GPR_STRIDE)
+        frame[word - 1] = frame[word] < 0 ? -1 : 0;
+#else
+    (void)frame;
+#endif
+}
 
 static inline void
 mips_set_stack_pointer(void *x)
@@ -172,7 +267,18 @@ mips_intr_disable(void)
 {
     unsigned status = mips_read_c0_register(C0_STATUS, 0);
 
+#if defined(N64) && (defined(N64_USB_GDB) || defined(N64_RESET_DUMP))
+    /*
+     * Leave the debugger IP3 and reset pre-NMI IP4 sources unmasked while
+     * masking the normal MI (IP2) and timer (IP7) sources in kernel critical
+     * sections.  Both emergency paths use private/static storage and never
+     * enter the scheduler, VM, tty, or network layers.
+     */
+    mips_write_c0_register(C0_STATUS, 0,
+        status & ~(ST_IM2 | ST_IM7));
+#else
     mips_write_c0_register(C0_STATUS, 0, status & ~ST_IE);
+#endif
     return status;
 }
 
@@ -181,14 +287,33 @@ mips_intr_enable(void)
 {
     unsigned status = mips_read_c0_register(C0_STATUS, 0);
 
+#if defined(N64) && (defined(N64_USB_GDB) || defined(N64_RESET_DUMP))
+    mips_write_c0_register(C0_STATUS, 0,
+        status | ST_IE | ST_IM2
+#ifdef N64_USB_GDB
+        | ST_IM3
+#endif
+#ifdef N64_RESET_DUMP
+        | ST_IM4
+#endif
+        | ST_IM7);
+#else
     mips_write_c0_register(C0_STATUS, 0, status | ST_IE);
+#endif
     return status;
 }
 
 static inline int
 mips_intr_enabled(void)
 {
+#if defined(N64) && (defined(N64_USB_GDB) || defined(N64_RESET_DUMP))
+    unsigned status = mips_read_c0_register(C0_STATUS, 0);
+
+    return (status & (ST_IE | ST_IM2 | ST_IM7)) ==
+        (ST_IE | ST_IM2 | ST_IM7);
+#else
     return (mips_read_c0_register(C0_STATUS, 0) & ST_IE) != 0;
+#endif
 }
 
 static inline void

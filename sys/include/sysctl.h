@@ -145,7 +145,10 @@ struct ctlname {
 #define KERN_BRANCH         32  /* string: source git branch */
 #define KERN_DIRTY          33  /* int: source tree was modified */
 #define KERN_BUILDINFO      34  /* string: detailed build summary */
-#define KERN_MAXID          35  /* number of valid kern ids */
+#define KERN_TTY            35  /* struct: console tty snapshot */
+#define KERN_NETINFO        36  /* struct: bounded network snapshot */
+#define KERN_PROCFILES      37  /* struct: process descriptor snapshots */
+#define KERN_MAXID          38  /* number of valid kern ids */
 
 /* KERN_TOOLCHAIN subtypes.  The node itself returns the tool name. */
 #define KERN_TOOLCHAIN_VERSION 1 /* string: toolchain version */
@@ -188,6 +191,9 @@ struct ctlname {
     { "branch", CTLTYPE_STRING }, \
     { "dirty", CTLTYPE_INT }, \
     { "buildinfo", CTLTYPE_STRING }, \
+    { "tty", CTLTYPE_STRUCT }, \
+    { "netinfo", CTLTYPE_STRUCT }, \
+    { "procfiles", CTLTYPE_STRUCT }, \
 }
 
 #define CTL_KERN_TOOLCHAIN_NAMES { \
@@ -219,6 +225,11 @@ struct kinfo_proc {
         uid_t   e_ruid;         /* real uid */
     } kp_eproc;
     char    ki_comm[MAXCOMLEN + 1]; /* BSD-style command name */
+    time_t  ki_utime;           /* user CPU ticks from the u area */
+    time_t  ki_stime;           /* system CPU ticks from the u area */
+    time_t  ki_cutime;          /* reaped-child user CPU ticks */
+    time_t  ki_cstime;          /* reaped-child system CPU ticks */
+    int     ki_sigs;            /* SIGINT/SIGQUIT disposition summary */
 };
 
 /*
@@ -235,6 +246,128 @@ struct  kinfo_inode {
 struct  kinfo_file {
     struct file *kp_filep;      /* address of file */
     struct file kp_file;        /* file structure */
+};
+
+/*
+ * VM_UCBSTATS returns one coherent snapshot for the traditional iostat and
+ * vmstat counters.  Unlike the old /dev/kmem interface it contains no
+ * pointers into kernel address space.
+ */
+#define KINFO_CPUSTATES    4
+#define KINFO_MAXDISKS     4
+#define KINFO_DISKNAMELEN  8
+struct kinfo_ucb_stats {
+    int     kus_hz;
+    int     kus_dk_ndrive;
+    int     kus_dk_busy;
+    long    kus_cp_time[KINFO_CPUSTATES];
+    long    kus_dk_xfer[KINFO_MAXDISKS];
+    long    kus_dk_bytes[KINFO_MAXDISKS];
+    char    kus_dk_name[KINFO_MAXDISKS][KINFO_DISKNAMELEN];
+    long    kus_tk_nin;
+    long    kus_tk_nout;
+    struct  vmrate kus_rate;
+    struct  vmtotal kus_total;
+    struct  vmsum kus_sum;
+    struct  forkstat kus_forkstat;
+    size_t  kus_freemem;
+    time_t  kus_boottime;
+};
+
+/* Bounded, pointer-free snapshot used by netstat. */
+#define KINFO_NET_MAXCONN   32
+#define KINFO_NET_MAXIF     8
+#define KINFO_NET_MAXROUTE  32
+#define KINFO_NET_NMBTYPES  16
+#define KINFO_NET_IPWORDS   12
+#define KINFO_NET_TCPWORDS  46
+#define KINFO_NET_UDPWORDS  9
+#define KINFO_NET_ICMPWORDS 46
+struct kinfo_netconn {
+    u_long  knc_pcb;
+    int     knc_family;
+    int     knc_protocol;
+    int     knc_type;
+    int     knc_state;
+    u_long  knc_laddr;
+    u_long  knc_faddr;
+    u_short knc_lport;
+    u_short knc_fport;
+    u_long  knc_recvq;
+    u_long  knc_sendq;
+};
+struct kinfo_ifstats {
+    char    kif_name[8];
+    int     kif_unit;
+    int     kif_mtu;
+    int     kif_flags;
+    int     kif_timer;
+    int     kif_metric;
+    int     kif_snd_len;
+    int     kif_snd_drops;
+    u_long  kif_ipackets;
+    u_long  kif_ierrors;
+    u_long  kif_opackets;
+    u_long  kif_oerrors;
+    u_long  kif_collisions;
+    u_long  kif_addr;
+    u_long  kif_subnet;
+    u_long  kif_subnetmask;
+};
+struct kinfo_route {
+    int     knr_family;
+    u_long  knr_destination;
+    u_long  knr_gateway;
+    int     knr_flags;
+    int     knr_refcnt;
+    u_long  knr_use;
+    char    knr_ifname[8];
+    int     knr_ifunit;
+};
+struct kinfo_netstats {
+    u_short kns_mbufs;
+    u_short kns_clusters;
+    u_short kns_space;
+    u_short kns_clfree;
+    u_short kns_drops;
+    u_short kns_wait;
+    u_short kns_drain;
+    u_short kns_mtypes[KINFO_NET_NMBTYPES];
+    u_long  kns_ip[KINFO_NET_IPWORDS];
+    u_long  kns_tcp[KINFO_NET_TCPWORDS];
+    u_long  kns_udp[KINFO_NET_UDPWORDS];
+    u_long  kns_icmp[KINFO_NET_ICMPWORDS];
+    short   kns_route[5];
+};
+struct kinfo_netinfo {
+    int kni_nconn;
+    int kni_nif;
+    int kni_nroute;
+    int kni_conn_truncated;
+    int kni_if_truncated;
+    int kni_route_truncated;
+    struct kinfo_netconn kni_conn[KINFO_NET_MAXCONN];
+    struct kinfo_ifstats kni_if[KINFO_NET_MAXIF];
+    struct kinfo_route kni_route[KINFO_NET_MAXROUTE];
+    struct kinfo_netstats kni_stats;
+};
+
+#define KINFO_FD_CWD (-1)
+struct kinfo_procfile {
+    pid_t   kpf_pid;
+    uid_t   kpf_uid;
+    int     kpf_fd;
+    int     kpf_type;
+    int     kpf_flags;
+    u_long  kpf_filep;
+    u_long  kpf_datap;
+    off_t   kpf_offset;
+    dev_t   kpf_dev;
+    dev_t   kpf_rdev;
+    ino_t   kpf_inode;
+    u_short kpf_mode;
+    off_t   kpf_size;
+    char    kpf_comm[MAXCOMLEN + 1];
 };
 
 /*

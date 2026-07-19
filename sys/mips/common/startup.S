@@ -87,7 +87,18 @@ mips_user_enter:
 #else
         ori     $k0, $k0, ST_EXL | ST_IE | ST_IM2 | ST_IM7
 #endif
+#ifdef N64_USB_GDB
+        /* Cartridge USB is the debugger's asynchronous break-in source. */
+        ori     $k0, $k0, ST_IM3
+#endif
+#ifdef N64_RESET_DUMP
+        /* The reset button's pre-NMI is the crash-dump break-in source. */
+        ori     $k0, $k0, ST_IM4
+#endif
         ori     $k0, $k0, ST_KSU_USER
+#if MIPS_FRAME_GPR64
+        ori     $k0, $k0, ST_UX
+#endif
         li      $k1, ST_CU1
         or      $k0, $k0, $k1
         mtc0    $k0, $12

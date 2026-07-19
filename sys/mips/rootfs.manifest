@@ -372,6 +372,9 @@ mode 0775
 file /usr/bin/free
 mode 0775
 
+file /bin/fstat
+mode 0775
+
 file /usr/bin/find
 mode 0775
 
@@ -391,6 +394,9 @@ file /usr/bin/head
 mode 0775
 
 file /usr/bin/hostid
+mode 0775
+
+file /usr/bin/iostat
 mode 0775
 
 file /bin/hostname
@@ -558,6 +564,9 @@ mode 0775
 file /usr/bin/split
 mode 0775
 
+file /usr/bin/strace
+mode 0775
+
 file /bin/stty
 mode 0775
 
@@ -624,8 +633,11 @@ mode 0775
 file /usr/bin/uptime
 mode 0775
 
+file /usr/bin/vm-pressure-smoke
+mode 0775
+
 file /usr/bin/vmstat
-mode 02751
+mode 0775
 
 file /usr/bin/w
 mode 0775
@@ -791,6 +803,8 @@ file /usr/share/man/cat1/head.0
 
 file /usr/share/man/cat1/hostid.0
 
+file /usr/share/man/cat1/iostat.0
+
 file /usr/share/man/cat1/hostname.0
 
 file /usr/share/man/cat1/id.0
@@ -942,6 +956,8 @@ file /usr/share/man/cat8/fastboot.0
 file /usr/share/man/cat8/fdisk.0
 
 file /usr/share/man/cat8/fsck.0
+
+file /usr/share/man/cat8/fstat.0
 
 file /usr/share/man/cat8/fsck.fat.0
 

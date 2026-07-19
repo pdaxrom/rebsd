@@ -11,94 +11,43 @@
  *  1/7/93 - Heavily revised when the symbol table format changed - sms
  *
  *  ps - process status
- *  Usage:  ps [ acgklnrtuwxU# ] [ corefile [ swapfile ] ]
+ *  Usage:  ps [ acglnrtuwxU# ]
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <pwd.h>
-#include <a.out.h>
 #include <ctype.h>
 #include <string.h>
-#include <strings.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 #include <sys/param.h>
-#include <sys/file.h>
+#include <sys/dir.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <sys/user.h>
+#include <sys/sysctl.h>
 #include <sys/proc.h>
 #include <utmp.h>
-#include <paths.h>
 #include <psout.h>
 
-#define within(x,y,z)   (((unsigned)(x) >= (y)) && ((unsigned)(x) < (z)))
-#define round(x,y) ((long) ((((long) (x) + (long) (y) - 1L) / (long) (y)) * (long) (y)))
-
-struct  nlist nl[] = {
-#define X_PROC      0
-    { "_proc" },
-#define X_NPROC     1
-    { "_nproc" },
-#define X_HZ        2
-    { "_hz" },
-    { "_ipc" },
-    { "_lbolt" },
-    { "_memlock" },
-    { "_runin" },
-    { "_runout" },
-    { "_selwait" },
-    { "_u" },
-    { "" },
-};
-
-/*
- * This is no longer the size of a symbol's name, symbols can be much
- * larger now.  This define says how many characters of a symbol's name
- * to save in the wait channel name.  A new define has been created to
- * limit the size of symbol string read from the string table.
-*/
 #define NNAMESIZ    8
-#define MAXSYMLEN   32
 
-struct proc *mproc, proc[8];
-struct user u;
 int hz;
 int chkpid = 0;
 char aflg;              /* -a: all processes, not just mine */
 char cflg;              /* -c: not complete listing of args, just comm. */
 char gflg;              /* -g: complete listing including group headers, etc */
-char kflg;              /* -k: read from core file instead of real memory */
 char lflg;              /* -l: long listing form */
-char nflg;              /* -n: numeric wchans */
 char rflg;              /* -r: raw output in style <psout.h> */
 char uflg;              /* -u: user name */
 char wflg;              /* -w[w]: wide terminal */
 char xflg;              /* -x: ALL processes, even those without ttys */
 char *tptr, *mytty;
-char *uname;
-int file;
 int nproc;
-int nchans;
 int nttys;
 int npr;                /* number of processes found so far */
 int twidth;             /* terminal width */
 int cmdstart;           /* start position for command field */
-char *memf;             /* name of kernel memory file */
-char *kmemf = "/dev/kmem"; /* name of physical memory file */
-char *swapf;            /* name of swap file to use */
-int kmem, mem, swap;
-
-/*
- *  Structure for the unix wchan table
- */
-typedef struct wchan {
-    char        cname[NNAMESIZ];
-    unsigned    caddr;
-} WCHAN;
-
-WCHAN *wchand;
 
 /*
  * 256 terminals was not only wasteful but unrealistic.  For one thing
@@ -118,13 +67,7 @@ struct ttys {
 
 } allttys[MAXTTYS];
 
-struct  map {
-    off_t b1, e1;   off_t f1;
-    off_t b2, e2;   off_t f2;
-};
-
 struct winsize ws;
-struct map datmap;
 struct psout *outargs;  /* info for first npr processes */
 
 /*
@@ -183,217 +126,63 @@ void getdev()
     closedir(df);
 }
 
-char *gettty()
+static char *
+getttydev(dev_t ttyd)
 {
     int tty_step;
     char *p;
 
-    if (u.u_ttyp) {
-        for (tty_step = 0; tty_step < nttys; ++tty_step) {
-            if (allttys[tty_step].ttyd == u.u_ttyd) {
-                p = allttys[tty_step].name;
-                if (strncmp(p, "tty", 3) == 0)
-                    p += 3;
-                return(p);
-            }
-        }
+    if (ttyd == NODEV)
+        return "?";
+    for (tty_step = 0; tty_step < nttys; ++tty_step) {
+        if (allttys[tty_step].ttyd != ttyd)
+            continue;
+        p = allttys[tty_step].name;
+        if (strncmp(p, "tty", 3) == 0)
+            p += 3;
+        return p;
     }
-    return("?");
+    return "?";
 }
 
-unsigned getptr(off_t adr)
+static int
+savkproc(const struct kinfo_proc *kp, int puid)
 {
-    unsigned ptr = 0;
+    const struct proc *procp = &kp->kp_proc;
+    struct psout *a;
+    char *tp;
 
-    if (lseek(file, adr, 0) == (off_t) -1 ||
-        read (file, &ptr, sizeof(ptr)) != sizeof(ptr))
-        return 0;
-    return ptr;
-}
-
-int getbyte(off_t adr)
-{
-    char    b;
-
-    if (lseek(file, adr, 0) == (off_t) -1 || read (file, &b, 1) < 1)
-        return(0);
-    return((unsigned) b);
-}
-
-int getcmd(struct psout *a, off_t addr)
-{
-    /* amount of top of stack to examine for args */
-#define ARGLIST (DEV_BSIZE * 2)
-    char abuf [ARGLIST];
-    char cmd[82], *bp;
-    u_int ap;              /* user ABI pointer, always 32-bit on MIPS o32 */
-    unsigned ssize, cp;
-
-    /* in case of early return */
-    bp = a->o_args;
-    strcat(bp, " (");
-    strcat(bp, u.u_comm);
-    strcat(bp, ")");
-    bp[63] = 0; /* max room in psout is 64 chars */
-
-    if (mproc->p_pid == 0)
-        return(1);
-
-    /* look for in-core process */
-    if (mproc->p_flag & SLOAD) {
-        addr += mproc->p_ssize; /* file offset to top of stack */
-        lseek(file, addr - sizeof (char **), 0);
-        if (read(file, (char *)&ap, sizeof(ap)) != sizeof(ap))
-            return (1);
-        if (ap == 0)
-            return(1);
-        bp = cmd;
-        while (bp < cmd + sizeof(a->o_args)) {
-            int c, nbad = 0;
-
-            cp = getptr(ap);
-            if (! cp)
-                break;
-            ap += sizeof(char*);
-            while ((c = getbyte(cp++)) && bp < cmd + sizeof (a->o_args)) {
-                if (c < ' ' || c > '~') {
-                    if (nbad++ > 3)
-                        break;
-                    continue;
-                }
-                *bp++ = c;
-            }
-            *bp++ = ' ';
-        }
-        *bp++ = 0;
-        strcpy(a->o_args, cmd);
-        return(1);
-    }
-
-    /* process is swapped out */
-    ssize = mproc->p_ssize;
-    if (ssize <= sizeof(abuf)) {
-        lseek(file, addr, 0);
-        if (read(file, abuf, ssize) != ssize)
-            return (1);
-    } else {
-        /* skip some blocks of stack */
-        ssize = (ssize % DEV_BSIZE) + DEV_BSIZE;
-        addr += mproc->p_ssize - ssize;
-        lseek(file, addr, 0);
-        if (read(file, abuf, sizeof(abuf)) != sizeof(abuf))
-            return (1);
-    }
-    ap = *(unsigned*) &abuf[ssize - sizeof(unsigned)];
-    if (ap == 0)
-        return(1);
-    bp = cmd;
-    while (bp < cmd + sizeof(a->o_args)) {
-        int i, c, nbad = 0;
-
-        i = ap + ssize - USER_DATA_END;
-        if ((i & 3) || i < 0 || i >= ssize)
-            break;
-        cp = *(unsigned*) &abuf[i];
-        if (! cp)
-            break;
-        ap += sizeof(char*);
-        while (bp < cmd + sizeof (a->o_args)) {
-            i = cp++ + ssize - USER_DATA_END;
-            if (i < 0 || i >= ssize)
-                break;
-            c = abuf[i];
-            if (! c)
-                break;
-            if (c < ' ' || c > '~') {
-                if (nbad++ > 3)
-                    break;
-                continue;
-            }
-            *bp++ = c;
-        }
-        *bp++ = ' ';
-    }
-    *bp++ = 0;
-    if (cmd[0] > ' ' && (cmd[0] != '-' || cmd[1] > ' '))
-        strcpy(a->o_args, cmd);
-    if (xflg || gflg || tptr || cmd[0] != '-')
-        return(1);
-    return(0);
-}
-
-/*
- * Save command data to outargs[].
- * Return 1 on success.
- */
-int savcom(int puid)
-{
-    char    *tp;
-    off_t   addr;
-    off_t   daddr, saddr;
-    struct psout   *a;
-    struct proc    *procp  = mproc;
-    struct user    *up = &u;
-    long    txtsiz, datsiz, stksiz;
-
-    if (procp->p_flag & SLOAD) {
-        addr = procp->p_addr;
-        daddr = procp->p_daddr;
-        saddr = procp->p_saddr;
-        file = mem;
-    } else {
-        addr = (off_t)procp->p_addr * DEV_BSIZE;
-        daddr = (off_t)procp->p_daddr * DEV_BSIZE;
-        saddr = (off_t)procp->p_saddr * DEV_BSIZE;
-        file = swap;
-    }
-    lseek(file, addr, 0);
-    if (read(file, (char *) up, sizeof (u)) != sizeof (u))
-        return(0);
-
-    txtsiz = up->u_tsize;       /* set up address maps for user pcs */
-    datsiz = up->u_dsize;
-    stksiz = up->u_ssize;
-    datmap.b1 = txtsiz;
-    datmap.e1 = datmap.b1 + datsiz;
-    datmap.f1 = daddr;
-    datmap.f2 = saddr;
-    datmap.b2 = stackbas(stksiz);
-    datmap.e2 = stacktop(stksiz);
-    tp = gettty();
+    tp = getttydev(kp->kp_eproc.e_tdev);
     if ((tptr && strncmp(tptr, tp, 2) != 0) ||
-        (! aflg && strncmp(mytty, tp, 2) != 0))
-        return(0);
-    a = &outargs[npr];      /* saving com starts here */
+        (!aflg && strncmp(mytty, tp, 2) != 0))
+        return 0;
+
+    a = &outargs[npr];
     a->o_uid = puid;
     a->o_pid = procp->p_pid;
     a->o_flag = procp->p_flag;
     a->o_ppid = procp->p_ppid;
-    a->o_cpu  = procp->p_cpu;
+    a->o_cpu = procp->p_cpu;
     a->o_pri = procp->p_pri;
     a->o_nice = procp->p_nice;
     a->o_addr0 = procp->p_addr;
     a->o_size = (procp->p_dsize + procp->p_ssize + USIZE) / DEV_BSIZE;
     a->o_wchan = procp->p_wchan;
     a->o_pgrp = procp->p_pgrp;
-    strncpy(a->o_tty, tp, sizeof (a->o_tty));
-    a->o_ttyd = tp[0] == '?' ?  -1 : up->u_ttyd;
+    strncpy(a->o_tty, tp, sizeof(a->o_tty));
+    a->o_ttyd = kp->kp_eproc.e_tdev;
     a->o_stat = procp->p_stat;
-    a->o_flag = procp->p_flag;
-
-    if (a->o_stat == SZOMB)
-        return(1);
-    a->o_utime = up->u_ru.ru_utime;
-    a->o_stime = up->u_ru.ru_stime;
-    a->o_cutime = up->u_cru.ru_utime;
-    a->o_cstime = up->u_cru.ru_stime;
-    a->o_sigs = (int)up->u_signal[SIGINT] + (int)up->u_signal[SIGQUIT];
+    a->o_utime = kp->ki_utime;
+    a->o_stime = kp->ki_stime;
+    a->o_cutime = kp->ki_cutime;
+    a->o_cstime = kp->ki_cstime;
+    a->o_sigs = kp->ki_sigs;
     a->o_uname[0] = 0;
-    strncpy(a->o_comm, up->u_comm, MAXCOMLEN);
-    if (cflg)
-        return (1);
-    else
-        return getcmd(a, saddr);
+    strncpy(a->o_comm, kp->ki_comm, MAXCOMLEN);
+    a->o_comm[MAXCOMLEN] = 0;
+    snprintf(a->o_args, sizeof(a->o_args), "(%s)",
+        a->o_comm[0] != 0 ? a->o_comm : "?");
+    return 1;
 }
 
 int pscomp(const void *a1, const void *a2)
@@ -436,127 +225,51 @@ void fixup(int np)
     qsort(outargs, np, sizeof (outargs[0]), pscomp);
 }
 
-int wchancomp(const void *a1, const void *a2)
+static struct kinfo_proc *
+getprocs(size_t *countp)
 {
-    const WCHAN *x1 = a1;
-    const WCHAN *x2 = a2;
+    struct kinfo_proc *procs;
+    int mib[4];
+    size_t size;
+    int attempt;
 
-    if (x1->caddr > x2->caddr)
-        return(1);
-    else if (x1->caddr == x2->caddr)
-        return(0);
-    else
-        return(-1);
-}
-
-void addchan(char *name, unsigned caddr)
-{
-    static  int left = 0;
-    WCHAN  *wp;
-
-    if (left == 0) {
-        if (wchand) {
-            left = 50;
-            wchand = (WCHAN *)realloc(wchand, (nchans + left) *
-                        sizeof (struct wchan));
-        } else {
-            left = 300;
-            wchand = (WCHAN *)malloc(left * sizeof (struct wchan));
-        }
-        if (! wchand) {
-            fprintf(stderr, "ps: out of wait channel memory\n");
-            nflg++;
-            return;
-        }
-    }
-    wp = &wchand[nchans++];
-    left--;
-    strncpy(wp->cname, name, NNAMESIZ - 1);
-    wp->cname[NNAMESIZ-1] = '\0';
-    wp->caddr = caddr;
-}
-
-char *getchan(caddr_t chan)
-{
-    int    count;
-    char   *prevsym;
-    WCHAN  *wp;
-
-    prevsym = "";
-    if (chan) {
-        wp = wchand;
-        count = nchans;
-        while (count-- > 0) {
-            if (wp->caddr > (unsigned)chan)
-                return (prevsym);
-            prevsym = wp->cname;
-            wp++;
-        }
-    }
-    return(prevsym);
-}
-
-void perrexit(char *msg)
-{
-    perror(msg);
-    exit(1);
-}
-
-void openfiles(int argc, char **argv)
-{
-    if (kflg)
-        kmemf = argc > 1 ?  argv[1] : _PATH_CORE;
-    kmem = open(kmemf, 0);
-    if (kmem < 0)
-        perrexit(kmemf);
-    if (!kflg)
-        memf = _PATH_MEM;
-    else
-        memf = kmemf;
-    mem = open(memf, 0);
-    if (mem < 0)
-        perrexit(memf);
-    swapf = argc > 2 ?  argv[2] : _PATH_SWAP;
-    swap = open(swapf, 0);
-    if (swap < 0)
-        perrexit(swapf);
-}
-
-void getkvars(int argc, char **argv)
-{
-    knlist(nl);
-    if (! nflg) {
-        int i;
-        for (i=0; i<sizeof(nl)/sizeof(*nl); i++) {
-            if (nl[i].n_value != 0)
-                addchan(nl[i].n_name + 1, nl[i].n_value);
-        }
-        qsort(wchand, nchans, sizeof(WCHAN), wchancomp);
-    }
-    getdev();
-
-    /* find number of procs */
-    if (nl[X_NPROC].n_value) {
-        int ret = lseek(kmem, (off_t)nl[X_NPROC].n_value, 0);
-
-        if (ret == -1 ||
-            read(kmem, (char *)&nproc, sizeof(nproc)) != sizeof(nproc)) {
-            perror(kmemf);
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC;
+    mib[2] = KERN_PROC_ALL;
+    mib[3] = 0;
+    for (attempt = 0; attempt < 3; ++attempt) {
+        size = 0;
+        if (sysctl(mib, 4, NULL, &size, NULL, 0) < 0) {
+            fprintf(stderr, "ps: kern.proc size: %s\n", strerror(errno));
             exit(1);
         }
-    } else {
-        fputs("nproc not in namelist\n", stderr);
-        exit(1);
+        if (size == 0 || size % sizeof(*procs) != 0) {
+            fprintf(stderr, "ps: invalid kern.proc size %u\n",
+                (unsigned)size);
+            exit(1);
+        }
+        procs = malloc(size);
+        if (procs == NULL) {
+            fputs("ps: not enough memory for process snapshot\n", stderr);
+            exit(1);
+        }
+        if (sysctl(mib, 4, procs, &size, NULL, 0) == 0) {
+            if (size % sizeof(*procs) != 0) {
+                free(procs);
+                fputs("ps: kern.proc record size mismatch\n", stderr);
+                exit(1);
+            }
+            *countp = size / sizeof(*procs);
+            return procs;
+        }
+        free(procs);
+        if (errno != ENOMEM) {
+            fprintf(stderr, "ps: kern.proc fetch: %s\n", strerror(errno));
+            exit(1);
+        }
     }
-    outargs = (struct psout *)calloc(nproc, sizeof(struct psout));
-    if (!outargs) {
-        fputs("ps: not enough memory for saving info\n", stderr);
-        exit(1);
-    }
-
-    /* find value of hz */
-    lseek(kmem, (off_t)nl[X_HZ].n_value, 0);
-    read(kmem, (char *)&hz, sizeof(hz));
+    fputs("ps: process table changed too quickly\n", stderr);
+    exit(1);
 }
 
 void ptime(struct psout *a)
@@ -573,7 +286,8 @@ char *uhdr = "USER       PID NICE SZ TTY  TIME";
 
 void upr(struct psout *a)
 {
-    printf("%-8.8s%6u%4d%4d %-3.3s",a->o_uname,a->o_pid,a->o_nice,a->o_size,a->o_tty);
+    printf("%-8.8s%6u%5d%3d %-3.3s", a->o_uname, a->o_pid,
+        a->o_nice, a->o_size, a->o_tty);
     ptime(a);
 }
 
@@ -585,30 +299,26 @@ void spr(struct psout *a)
     ptime(a);
 }
 
-char *lhdr = "  F S   UID   PID  PPID CPU PRI NICE  ADDR  SZ WCHAN    TTY  TIME";
-
 void lpr(struct psout *a)
 {
     static char clist[] = "0SWRIZT";
 
-    printf("%3o %c%6u%6u%6u%4d%4d%4d%#7x%4d",
+    printf("%3o %c %5u %5u %5u %3d %3d %4d %#10x %5d ",
         0377 & a->o_flag, clist[(unsigned char)a->o_stat],
         a->o_uid, a->o_pid, a->o_ppid, a->o_cpu & 0377,
         a->o_pri, a->o_nice, a->o_addr0, a->o_size);
-    if (nflg)
-        if (a->o_wchan)
-            printf("%*.*x", NNAMESIZ, NNAMESIZ, (unsigned) a->o_wchan);
-        else
-            fputs("       ", stdout);
+    if (a->o_wchan)
+        printf("%10x", (unsigned)a->o_wchan);
     else
-        printf(" %-*.*s",NNAMESIZ, NNAMESIZ, getchan(a->o_wchan));
-    printf(" %-3.3s",a->o_tty);
+        fputs("          ", stdout);
+    printf(" %-3.3s", a->o_tty);
     ptime(a);
 }
 
 void printhdr()
 {
     char *hdr, *cmdstr = " COMMAND";
+    char longhdr[96];
 
     if (rflg)
         return;
@@ -616,7 +326,15 @@ void printhdr()
         fputs("ps: specify only one of l and u.\n",stderr);
         exit(1);
     }
-    hdr = lflg ? lhdr : (uflg ? uhdr : shdr);
+    if (lflg) {
+        snprintf(longhdr, sizeof(longhdr),
+            "%3s %1s %5s %5s %5s %3s %3s %4s %10s %5s "
+            "%10s %-3s%6s",
+            "F", "S", "UID", "PID", "PPID", "CPU", "PRI", "NICE",
+            "ADDR", "SZ", "WCHAN", "TTY", "TIME");
+        hdr = longhdr;
+    } else
+        hdr = uflg ? uhdr : shdr;
     fputs(hdr,stdout);
     cmdstart = strlen(hdr);
     if (cmdstart + strlen(cmdstr) >= twidth)
@@ -627,10 +345,12 @@ void printhdr()
 
 int main(int argc, char **argv)
 {
-    int     uid, euid, puid, nread;
-    int     i, j;
+    int     uid, euid, puid;
+    int     i;
     char    *ap;
     struct proc    *procp;
+    struct kinfo_proc *kprocs;
+    size_t proc_count;
 
     if ((ioctl(fileno(stdout), TIOCGWINSZ, &ws) != -1 &&
          ioctl(fileno(stderr), TIOCGWINSZ, &ws) != -1 &&
@@ -661,16 +381,11 @@ int main(int argc, char **argv)
             gflg++;
             break;
 
-        case 'k':
-            kflg++;
-            break;
-
         case 'l':
             lflg    = 1;
             break;
 
         case 'n':
-            nflg++;
             lflg    = 1;
             break;
 
@@ -726,9 +441,15 @@ int main(int argc, char **argv)
         }
     }
 
-    openfiles(argc, argv);
-    getkvars(argc, argv);
-    lseek(kmem, (off_t)nl[X_PROC].n_value, 0);
+    getdev();
+    hz = HZ;
+    kprocs = getprocs(&proc_count);
+    nproc = proc_count;
+    outargs = (struct psout *)calloc(nproc, sizeof(struct psout));
+    if (!outargs) {
+        fputs("ps: not enough memory for saving info\n", stderr);
+        exit(1);
+    }
     uid = getuid();
     euid = geteuid();
     /* handle case where ps is in background and ttyname returns 0 */
@@ -736,38 +457,22 @@ int main(int argc, char **argv)
     if (!strncmp(mytty,"/dev/",5)) mytty += 5;
     if (!strncmp(mytty,"tty",3)) mytty += 3;
     printhdr();
-    for (i = 0; i < nproc; i += 8) {
-        j = nproc - i;
-        if (j > 8)
-            j = 8;
-        j *= sizeof (struct proc);
-        if ((nread = read(kmem, (char *) proc, j)) != j) {
-            fprintf(stderr, "ps: error reading proc table from %s\n", kmemf);
-            if (nread == -1)
-                break;
-        }
-        for (j = nread / sizeof (struct proc) - 1; j >= 0; j--) {
-            mproc   = &proc[j];
-            procp   = mproc;
-            /* skip processes that don't exist */
-            if (procp->p_stat == 0)
-                continue;
-            /* skip those without a tty unless -x */
-            if (procp->p_pgrp == 0 && xflg == 0)
-                continue;
-            /* skip group leaders on a tty unless -g, -x, or -t.. */
-            if (!tptr && !gflg && !xflg && procp->p_ppid == 1)
-                continue;
-            /* -g also skips those where **argv is "-" - see savcom */
-            puid = procp->p_uid;
-            /* skip other peoples processes unless -a or a specific pid */
-            if ((uid != puid && euid != puid && aflg == 0) ||
-                (chkpid != 0 && chkpid != procp->p_pid))
-                continue;
-            if (savcom(puid))
-                npr++;
-        }
+    for (i = 0; i < nproc; ++i) {
+        procp = &kprocs[i].kp_proc;
+        if (procp->p_stat == 0)
+            continue;
+        if (procp->p_pgrp == 0 && xflg == 0)
+            continue;
+        if (!tptr && !gflg && !xflg && procp->p_ppid == 1)
+            continue;
+        puid = procp->p_uid;
+        if ((uid != puid && euid != puid && aflg == 0) ||
+            (chkpid != 0 && chkpid != procp->p_pid))
+            continue;
+        if (savkproc(&kprocs[i], puid))
+            npr++;
     }
+    free(kprocs);
     fixup(npr);
     for (i = 0; i < npr; i++) {
         int    cmdwidth = twidth - cmdstart - 2;

@@ -35,10 +35,10 @@ SCRIPT_ALL	= false nohup true #lorder mkdep
 #
 STD_ALL		= basename cal cat cb chgrp chmod cmp col comm cp dd \
                   diskspeed du echo ed fgrep file free grep head hostid join \
-                  kill last ln mesg mkdir mv nice od pagesize pr printenv \
-                  off64-smoke-gcc pwd rev rm rmail rmdir size sleep sort split sum sync \
+                  kill last ln mesg mkdir mv nice od pagesize pr printenv ps \
+                  off64-smoke-gcc pwd rev rm rmail rmdir size sleep sort split strace sum sync \
                   tail tar tee time top touch tr tsort tty uniq uptime w wc \
-                  whereis who
+                  iostat vm-pressure-smoke vmstat whereis who
 
 # C programs that live in the current directory and need explicit make lines.
 #
@@ -54,7 +54,7 @@ OPERATOR_ALL	= df
 
 # Programs that must run set-group-id kmem.
 #
-KMEM_ALL	= ps iostat vmstat
+KMEM_ALL	=
 
 # Programs that must run set-group-id tty.
 #

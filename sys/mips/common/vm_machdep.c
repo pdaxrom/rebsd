@@ -123,12 +123,12 @@ mips_uarea_fork(const struct user *source, int bootstrap)
         mips_uarea_free(target);
         return 0;
     }
-    stack_pointer -= 16 + FRAME_WORDS * sizeof(int);
+    stack_pointer -= FRAME_STACK_BYTES;
     frame = (int *)(stack_pointer + 16);
     bcopy(source->u_frame, frame, FRAME_WORDS * sizeof(int));
-    frame[FRAME_R2] = 0;
-    frame[FRAME_R3] = 0;
-    frame[FRAME_R8] = 0;
+    mips_frame_set_gpr(frame, FRAME_R2, 0);
+    mips_frame_set_gpr(frame, FRAME_R3, 0);
+    mips_frame_set_gpr(frame, FRAME_R8, 0);
     target->u_frame = frame;
     target->u_ssave.val[MIPS_LABEL_RA] = (unsigned)mips_fork_trampoline;
     target->u_ssave.val[MIPS_LABEL_SP] = stack_pointer;
