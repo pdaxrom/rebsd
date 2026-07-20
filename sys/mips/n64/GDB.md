@@ -21,8 +21,8 @@ The useful outputs are under
 `/tmp/rebsd-n64-gdb/obj/sys/mips/n64/`: flash `kernel.z64` and retain
 `unix.elf` for symbols. Changing `N64_USB_GDB` changes the build-mode stamp,
 so a normal and a debug kernel should normally use different `O=` trees.
-The debug build keeps DWARF source/line information in `unix.elf`; the ROM
-embeds a separate `unix.runtime.elf` without DWARF so flashing stays quick.
+The debug build keeps DWARF source/line information and symbols in `unix.elf`;
+the ROM embeds a separate load-only `unix.runtime.elf` so flashing stays quick.
 
 The command above uses the existing 6 MiB PCC hardware-test rootfs. It includes
 the native compiler, its runtime and headers, and `/root/pcc-smoke-all.sh`, but

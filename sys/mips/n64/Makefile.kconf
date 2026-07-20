@@ -751,7 +751,8 @@ ASFLAGS         = -x assembler-with-cpp -c $(DEFS)
 FPU_ASFLAGS     = -x assembler-with-cpp -c $(DEFS)
 ifeq ($(N64_USB_GDB),1)
 # Keep source lines, types, and locals in the host-side unix.elf.  The ROM
-# embeds unix.runtime.elf below, so DWARF does not make the image larger.
+# embeds a load-only unix.runtime.elf below, so debugger metadata does not
+# make the image larger.
 CFLAGS          += -g
 VERS_CFLAGS     += -g
 ASFLAGS         += -g
@@ -982,7 +983,7 @@ stage0_kernel_blob.o: $(N64_BOARD_SRC)/stage0_kernel_blob.S preflight.elf | .dep
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath preflight.elf)\" $< -o $@
 
 unix.runtime.elf: unix.elf
-	$(OBJCOPY) --strip-debug $< $@
+	$(OBJCOPY) --strip-all $< $@
 
 kernel_stage0_kernel_blob.o: $(N64_BOARD_SRC)/stage0_kernel_blob.S unix.runtime.elf | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath unix.runtime.elf)\" $< -o $@
