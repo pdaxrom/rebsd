@@ -86,13 +86,16 @@ DMEM rather than the legacy `0x8000030c` word. Stage0 copies that bootinfo
 field before SP DMEM is reused; reading the untouched legacy word directly
 would make dump detection depend on stale RDRAM contents.
 
-The retained record has three states. During normal execution, exception and
-timer entries keep a small `live` snapshot current without console tracing. A
-delivered pre-NMI replaces it with an exact frame. If pre-NMI is masked by
-EXL/ERL or IE, the warm boot displays the last live snapshot instead of
-silently rebooting. Displaying either kind marks the record as `displayed`.
-The next RESET clears that state and boots normally even when its own pre-NMI
-was missed, so successive presses alternate dump, boot, dump, boot.
+The retained record has three states. During normal execution, the timer
+updates a small `live` snapshot at most once per second without console
+tracing. A delivered pre-NMI replaces it with an exact frame. Rate limiting
+the fallback is important because publishing the uncached retained record on
+every TLB exception would severely slow memory-intensive user processes. If
+pre-NMI is masked by EXL/ERL or IE, the warm boot displays the last sampled
+snapshot instead of silently rebooting. Displaying either kind marks the
+record as `displayed`. The next RESET clears that state and boots normally
+even when its own pre-NMI was missed, so successive presses alternate dump,
+boot, dump, boot.
 
 Keep the `unix.elf` from the exact same build. The hexadecimal `pc` and `ra`
 shown on the death screen can be resolved with GDB, for example:

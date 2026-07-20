@@ -35,6 +35,8 @@
 #define N64_RESET_DUMP_STACK_WORDS    64u
 #define N64_RESET_DUMP_BT_WORDS       5u
 #define N64_RESET_C0_RANDOM           1
+#define N64_RESET_CAUSE_IP7           0x00008000u
+#define N64_RESET_OBSERVE_TICKS       (N64_COUNT_KHZ * 1000u)
 
 struct n64_reset_dump_critical {
     unsigned magic;
@@ -106,6 +108,8 @@ static volatile struct n64_reset_dump_critical *const n64_reset_critical =
 static volatile struct n64_reset_dump_full *const n64_reset_full =
     (volatile struct n64_reset_dump_full *)(N64_KSEG1_BASE |
         N64_RESET_DUMP_FULL_PHYS);
+static unsigned n64_reset_observe_count;
+static unsigned n64_reset_observe_started;
 
 extern char _etext[];
 
@@ -478,17 +482,35 @@ n64_reset_capture(int *frame, unsigned rawcause, unsigned badvaddr)
 }
 
 /*
- * Keep one inexpensive retained snapshot current during normal exception and
- * timer traffic.  If RESET arrives while EXL/ERL or IE prevents delivery of
- * the maskable pre-NMI, the subsequent warm boot can still show this last
- * known context instead of silently starting over.
+ * Keep one retained fallback snapshot current in case RESET arrives while
+ * EXL/ERL or IE prevents delivery of the maskable pre-NMI.  Do this only from
+ * the timer interrupt and at most once per second.  This record lives in an
+ * uncached warm-reset area and publishing it requires two sync operations;
+ * doing that on every exception turns a TLB-heavy user process into hundreds
+ * of thousands of synchronous uncached writes.
+ *
+ * The ordinary RESET path does not depend on this sampling: IP4 still takes
+ * an exact full snapshot immediately.  The sampled record is only the warm-
+ * boot fallback when that pre-NMI path cannot run.
  */
 void
 n64_reset_dump_observe(int *frame, unsigned rawcause, unsigned badvaddr)
 {
     struct proc *p;
     const char *comm;
+    unsigned count;
     unsigned state;
+
+    if ((rawcause & CA_EXC_CODE) != CA_Int ||
+        (rawcause & N64_RESET_CAUSE_IP7) == 0)
+        return;
+    count = mips_read_c0_register(C0_COUNT, 0);
+    if (n64_reset_observe_started &&
+        (unsigned)(count - n64_reset_observe_count) <
+        N64_RESET_OBSERVE_TICKS)
+        return;
+    n64_reset_observe_count = count;
+    n64_reset_observe_started = 1;
 
     state = n64_reset_critical_valid() ? n64_reset_critical_state() : 0;
     if (state == N64_RESET_DUMP_STATE_CAPTURED ||
