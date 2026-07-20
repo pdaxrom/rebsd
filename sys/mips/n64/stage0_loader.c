@@ -7,6 +7,7 @@ typedef unsigned int uintptr;
 #include "stage0_console.h"
 #include "layout.h"
 
+#define N64_DCACHE_LINE_SIZE    16u
 #define N64_ICACHE_LINE_SIZE    32u
 #define N64_SP_DMEM_BOOTINFO_FLAGS_ADDR  0xa4000004u
 #define N64_BOOTINFO_RESET_SHIFT         8u
@@ -120,6 +121,32 @@ cache_hit_invalidate_i(uintptr addr)
 }
 
 static void
+cache_hit_invalidate_d(uintptr addr)
+{
+    /*
+     * The ELF image was written through uncached KSEG1.  Discard any KSEG0
+     * line left by the previous kernel without writing it back over the new
+     * image.
+     */
+    __asm__ volatile("cache 0x11, 0(%0)" :: "r"(addr) : "memory");
+}
+
+static void
+invalidate_data_cache_range(uintptr start, uintptr end)
+{
+    uintptr addr;
+
+    if (end <= start)
+        return;
+
+    addr = (uintptr)align_down((u32)start, N64_DCACHE_LINE_SIZE);
+    while (addr < end) {
+        cache_hit_invalidate_d(addr);
+        addr += N64_DCACHE_LINE_SIZE;
+    }
+}
+
+static void
 invalidate_instruction_cache_range(uintptr start, uintptr end)
 {
     uintptr addr;
@@ -135,8 +162,10 @@ invalidate_instruction_cache_range(uintptr start, uintptr end)
 }
 
 static void
-sync_instruction_range(uintptr start, uintptr end)
+sync_loaded_range(uintptr start, uintptr end)
 {
+    sync_memory();
+    invalidate_data_cache_range(start, end);
     sync_memory();
     invalidate_instruction_cache_range(start, end);
     sync_memory();
@@ -322,7 +351,7 @@ load_kernel_elf(const struct kernel_elf *kernel)
     }
 
     if (loaded_end > loaded_start)
-        sync_instruction_range((uintptr)N64_KSEG0_BASE + loaded_start,
+        sync_loaded_range((uintptr)N64_KSEG0_BASE + loaded_start,
             (uintptr)N64_KSEG0_BASE + loaded_end);
 
     return 0;
