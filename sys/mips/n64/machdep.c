@@ -24,6 +24,8 @@ extern int waittime;
 extern char _end[];
 extern char _mips_exception_vector[];
 extern char _mips_exception_vector_end[];
+extern char _mips_tlb_refill_vector[];
+extern char _mips_tlb_refill_vector_end[];
 
 #define N64_TLB_ENTRIES         32
 #define N64_USER_TLB_INDEX      0
@@ -124,11 +126,9 @@ n64_sync_instruction_range(unsigned start, unsigned end)
 }
 
 static void
-n64_install_vector(unsigned phys)
+n64_install_vector(unsigned phys, const unsigned *src, unsigned bytes)
 {
     volatile unsigned *dst = (volatile unsigned *)N64_PHYS_TO_KSEG1(phys);
-    const unsigned *src = (const unsigned *)_mips_exception_vector;
-    unsigned bytes = _mips_exception_vector_end - _mips_exception_vector;
     unsigned words = (bytes + sizeof(unsigned) - 1) / sizeof(unsigned);
     unsigned i;
 
@@ -141,11 +141,21 @@ n64_install_vector(unsigned phys)
 static void
 n64_install_exception_vectors(void)
 {
-    n64_install_vector(N64_VECTOR_TLB_REFILL);
-    n64_install_vector(N64_VECTOR_XTLB_REFILL);
-    n64_install_vector(N64_VECTOR_CACHE_ERROR);
-    n64_install_vector(N64_VECTOR_GENERAL);
-    n64_install_vector(N64_VECTOR_INTERRUPT);
+    n64_install_vector(N64_VECTOR_TLB_REFILL,
+        (const unsigned *)_mips_tlb_refill_vector,
+        _mips_tlb_refill_vector_end - _mips_tlb_refill_vector);
+    n64_install_vector(N64_VECTOR_XTLB_REFILL,
+        (const unsigned *)_mips_exception_vector,
+        _mips_exception_vector_end - _mips_exception_vector);
+    n64_install_vector(N64_VECTOR_CACHE_ERROR,
+        (const unsigned *)_mips_exception_vector,
+        _mips_exception_vector_end - _mips_exception_vector);
+    n64_install_vector(N64_VECTOR_GENERAL,
+        (const unsigned *)_mips_exception_vector,
+        _mips_exception_vector_end - _mips_exception_vector);
+    n64_install_vector(N64_VECTOR_INTERRUPT,
+        (const unsigned *)_mips_exception_vector,
+        _mips_exception_vector_end - _mips_exception_vector);
 }
 
 static unsigned

@@ -11,10 +11,16 @@
 
         .extern mips_curuser
         .extern exception
+        .extern mips_pmap_fast_directory
+        .extern mips_pmap_fast_refills
+        .extern mips_pmap_fast_scratch
 
         .section .exception,"ax",@progbits
         .globl  _mips_exception_vector
         .globl  _mips_exception_vector_end
+        .globl  _mips_tlb_refill_vector
+        .globl  _mips_tlb_refill_vector_end
+        .globl  mips_tlb_refill_entry
         .globl  mips_exception_entry
         .globl  mips_exception_entry_end
         .globl  mips_exception_restore_start
@@ -27,6 +33,189 @@ _mips_exception_vector:
         nop
 _mips_exception_vector_end:
         .end    _mips_exception_vector
+
+        /*
+         * Resident user pages normally miss only because Random replaced the
+         * hardware entry.  Refill those mappings directly from the active
+         * two-level pmap instead of saving a complete frame and entering the
+         * C trap handler.  A page which has not yet been referenced/modified,
+         * is absent, or fails software protection still takes the full path.
+         * Only k0/k1, one per-CPU scratch word, and CP0 EntryLo scratch state
+         * are touched, so the interrupted register file remains intact.
+         */
+        .ent    _mips_tlb_refill_vector
+_mips_tlb_refill_vector:
+        la      $k0, mips_tlb_refill_entry
+        jr      $k0
+        nop
+_mips_tlb_refill_vector_end:
+        .end    _mips_tlb_refill_vector
+
+        .ent    mips_tlb_refill_entry
+mips_tlb_refill_entry:
+        mfc0    $k0, $8                 /* BadVAddr */
+        bltz    $k0, mips_tlb_refill_slow
+        nop
+
+        srl     $k1, $k0, 22
+        sll     $k1, $k1, 2
+        la      $k0, mips_pmap_fast_directory
+        lw      $k0, 0($k0)
+        beqz    $k0, mips_tlb_refill_slow
+        nop
+        addu    $k0, $k0, $k1
+        lw      $k0, 0($k0)
+        andi    $k1, $k0, 0x0001       /* PMAP_PTE_PRESENT */
+        beqz    $k1, mips_tlb_refill_slow
+        nop
+        srl     $k0, $k0, 12
+        sll     $k0, $k0, 12
+        lui     $k1, 0x8000            /* cached direct map */
+        or      $k0, $k0, $k1
+
+        mfc0    $k1, $8
+        srl     $k1, $k1, 10
+        andi    $k1, $k1, 0x0ff8       /* even PTE byte offset */
+        addu    $k0, $k0, $k1
+        la      $k1, mips_pmap_fast_scratch
+        sw      $k0, 0($k1)            /* save pair PTE pointer */
+
+        mfc0    $k1, $8
+        andi    $k1, $k1, 0x1000
+        la      $k0, mips_pmap_fast_scratch
+        lw      $k0, 0($k0)
+        beqz    $k1, 1f
+        nop
+        addiu   $k0, $k0, 4
+1:
+        lw      $k1, 0($k0)            /* faulting software PTE */
+        mfc0    $k0, $13               /* Cause */
+        andi    $k0, $k0, CA_EXC_CODE
+        addiu   $k0, $k0, -CA_TLBS
+        beqz    $k0, 2f
+        nop
+        mfc0    $k0, $13
+        andi    $k0, $k0, CA_EXC_CODE
+        addiu   $k0, $k0, -CA_TLBL
+        bnez    $k0, mips_tlb_refill_slow
+        nop
+        andi    $k0, $k1, 0x0013       /* present, read, referenced */
+        xori    $k0, $k0, 0x0013
+        bnez    $k0, mips_tlb_refill_slow
+        nop
+        b       3f
+        nop
+2:
+        andi    $k0, $k1, 0x0035       /* present, write, ref, modified */
+        xori    $k0, $k0, 0x0035
+        bnez    $k0, mips_tlb_refill_slow
+        nop
+
+        /* Convert the even software PTE to EntryLo0. */
+3:
+        la      $k0, mips_pmap_fast_scratch
+        lw      $k0, 0($k0)
+        lw      $k1, 0($k0)
+        andi    $k0, $k1, 0x0011       /* present and referenced */
+        xori    $k0, $k0, 0x0011
+        bnez    $k0, 6f
+        nop
+        mtc0    $k1, $2                /* retain raw PTE temporarily */
+        srl     $k1, $k1, 12
+        sll     $k1, $k1, 6
+        mfc0    $k0, $2
+        andi    $k0, $k0, 0x0040       /* PMAP_PTE_UNCACHED */
+        beqz    $k0, 4f
+        nop
+        ori     $k1, $k1, 0x0012       /* uncached, valid */
+        b       5f
+        nop
+4:
+        ori     $k1, $k1, 0x001a       /* cached, valid */
+5:
+        mfc0    $k0, $2
+        andi    $k0, $k0, 0x0024       /* write and modified */
+        xori    $k0, $k0, 0x0024
+        bnez    $k0, 7f
+        nop
+        ori     $k1, $k1, 0x0004       /* dirty */
+        b       7f
+        nop
+6:
+        move    $k1, $zero
+7:
+        mtc0    $k1, $2
+
+        /* Convert the odd software PTE to EntryLo1. */
+        la      $k0, mips_pmap_fast_scratch
+        lw      $k0, 0($k0)
+        lw      $k1, 4($k0)
+        andi    $k0, $k1, 0x0011
+        xori    $k0, $k0, 0x0011
+        bnez    $k0, 10f
+        nop
+        mtc0    $k1, $3
+        srl     $k1, $k1, 12
+        sll     $k1, $k1, 6
+        mfc0    $k0, $3
+        andi    $k0, $k0, 0x0040
+        beqz    $k0, 8f
+        nop
+        ori     $k1, $k1, 0x0012
+        b       9f
+        nop
+8:
+        ori     $k1, $k1, 0x001a
+9:
+        mfc0    $k0, $3
+        andi    $k0, $k0, 0x0024
+        xori    $k0, $k0, 0x0024
+        bnez    $k0, 11f
+        nop
+        ori     $k1, $k1, 0x0004
+        b       11f
+        nop
+10:
+        move    $k1, $zero
+11:
+        mtc0    $k1, $3
+
+        mtc0    $zero, $5              /* 4 KiB PageMask */
+        nop
+        nop
+        nop
+        tlbp
+        nop
+        nop
+        nop
+        mfc0    $k0, $0
+        bltz    $k0, 12f
+        nop
+        tlbwi
+        b       13f
+        nop
+12:
+        tlbwr
+13:
+        nop
+        nop
+        nop
+        la      $k0, mips_pmap_fast_refills
+        lw      $k1, 0($k0)
+        addiu   $k1, $k1, 1
+        bnez    $k1, 14f
+        nop
+        addiu   $k1, $zero, -1         /* saturate on wrap */
+14:
+        sw      $k1, 0($k0)
+        eret
+        nop
+
+mips_tlb_refill_slow:
+        la      $k0, mips_exception_entry
+        jr      $k0
+        nop
+        .end    mips_tlb_refill_entry
 
         .ent    mips_exception_entry
 mips_exception_entry:

@@ -16,6 +16,8 @@ extern int waittime;
 extern char _end[];
 extern char _mips_exception_vector[];
 extern char _mips_exception_vector_end[];
+extern char _mips_tlb_refill_vector[];
+extern char _mips_tlb_refill_vector_end[];
 
 #define CI20_TLB_ENTRIES        32
 #define MIPS_USER_TLB_INDEX     0
@@ -95,11 +97,9 @@ mips_sync_instruction_range(unsigned start, unsigned end)
 }
 
 static void
-mips_install_vector(unsigned phys)
+mips_install_vector(unsigned phys, const unsigned *src, unsigned bytes)
 {
     volatile unsigned *dst = (volatile unsigned *)MIPS_PHYS_TO_KSEG1(phys);
-    const unsigned *src = (const unsigned *)_mips_exception_vector;
-    unsigned bytes = _mips_exception_vector_end - _mips_exception_vector;
     unsigned words = (bytes + sizeof(unsigned) - 1) / sizeof(unsigned);
     unsigned i;
 
@@ -112,11 +112,21 @@ mips_install_vector(unsigned phys)
 static void
 mips_install_exception_vectors(void)
 {
-    mips_install_vector(MIPS_VECTOR_TLB_REFILL);
-    mips_install_vector(MIPS_VECTOR_XTLB_REFILL);
-    mips_install_vector(MIPS_VECTOR_CACHE_ERROR);
-    mips_install_vector(MIPS_VECTOR_GENERAL);
-    mips_install_vector(MIPS_VECTOR_INTERRUPT);
+    mips_install_vector(MIPS_VECTOR_TLB_REFILL,
+        (const unsigned *)_mips_tlb_refill_vector,
+        _mips_tlb_refill_vector_end - _mips_tlb_refill_vector);
+    mips_install_vector(MIPS_VECTOR_XTLB_REFILL,
+        (const unsigned *)_mips_exception_vector,
+        _mips_exception_vector_end - _mips_exception_vector);
+    mips_install_vector(MIPS_VECTOR_CACHE_ERROR,
+        (const unsigned *)_mips_exception_vector,
+        _mips_exception_vector_end - _mips_exception_vector);
+    mips_install_vector(MIPS_VECTOR_GENERAL,
+        (const unsigned *)_mips_exception_vector,
+        _mips_exception_vector_end - _mips_exception_vector);
+    mips_install_vector(MIPS_VECTOR_INTERRUPT,
+        (const unsigned *)_mips_exception_vector,
+        _mips_exception_vector_end - _mips_exception_vector);
 }
 
 static unsigned

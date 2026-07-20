@@ -90,11 +90,29 @@ static uint32_t pmap_asid_generation;
 static unsigned pmap_next_asid;
 static unsigned pmap_initialized;
 
+/* Read directly by the low-level TLB refill vector. */
+uint32_t *mips_pmap_fast_directory;
+volatile unsigned mips_pmap_fast_refills;
+volatile unsigned mips_pmap_fast_scratch;
+
 static void
 pmap_stat_increment(vm_pfn_t *value)
 {
     if (*value != VM_PFN_MAX)
         ++*value;
+}
+
+static vm_pfn_t
+pmap_total_tlb_refills(void)
+{
+    vm_pfn_t slow;
+    unsigned fast;
+
+    slow = pmap_statistics.pms_tlb_refills;
+    fast = mips_pmap_fast_refills;
+    if (fast > VM_PFN_MAX - slow)
+        return VM_PFN_MAX;
+    return slow + fast;
 }
 
 static int
@@ -353,6 +371,9 @@ pmap_system_init(struct vm_page_allocator *allocator)
     pmap_zero(&pmap_tlb_diagnostics, sizeof(pmap_tlb_diagnostics));
     pmap_allocator = allocator;
     pmap_active = 0;
+    mips_pmap_fast_directory = 0;
+    mips_pmap_fast_refills = 0;
+    mips_pmap_fast_scratch = 0;
     pmap_asid_generation = 1;
     pmap_next_asid = PMAP_ASID_FIRST;
     pmap_initialized = 1;
@@ -669,6 +690,7 @@ pmap_activate(struct pmap *pmap)
         pmap->pm_asid = pmap_next_asid++;
         pmap->pm_generation = pmap_asid_generation;
     }
+    mips_pmap_fast_directory = pmap->pm_directory;
     pmap_md_activate(pmap->pm_asid);
     pmap_active = pmap;
     return 0;
@@ -678,6 +700,7 @@ void
 pmap_deactivate(struct pmap *pmap)
 {
     if (pmap_active == pmap) {
+        mips_pmap_fast_directory = 0;
         pmap_md_activate(0);
         pmap_active = 0;
     }
@@ -753,8 +776,7 @@ pmap_fault(struct pmap *pmap, vm_vaddr_t vaddr, vm_prot_t access,
     } else {
         pmap_tlb_diagnostics.ptd_repeat = 1;
     }
-    pmap_tlb_diagnostics.ptd_refills =
-        pmap_statistics.pms_tlb_refills;
+    pmap_tlb_diagnostics.ptd_refills = pmap_total_tlb_refills();
     pmap_tlb_diagnostics.ptd_last_pmap = (unsigned)(uintptr_t)pmap;
     pmap_tlb_diagnostics.ptd_last_vaddr = page_vaddr;
     pmap_tlb_diagnostics.ptd_last_access = access;
@@ -1049,6 +1071,7 @@ pmap_get_stats(struct pmap_stats *stats)
     if (!pmap_initialized || stats == 0)
         return EINVAL;
     *stats = pmap_statistics;
+    stats->pms_tlb_refills = pmap_total_tlb_refills();
     return 0;
 }
 
@@ -1065,6 +1088,7 @@ pmap_get_tlb_diagnostics(vm_vaddr_t vaddr,
         vaddr >= PMAP_USER_END)
         return EINVAL;
     *diagnostics = pmap_tlb_diagnostics;
+    diagnostics->ptd_refills = pmap_total_tlb_refills();
     diagnostics->ptd_active_pmap = (unsigned)(uintptr_t)pmap_active;
     diagnostics->ptd_active_asid =
         pmap_active != 0 ? pmap_active->pm_asid : 0;
