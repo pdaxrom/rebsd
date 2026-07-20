@@ -85,6 +85,7 @@ static struct pmap pmap_maps[PMAP_MAX_MAPS];
 static struct vm_page_allocator *pmap_allocator;
 static struct pmap *pmap_active;
 static struct pmap_stats pmap_statistics;
+static struct pmap_tlb_diagnostics pmap_tlb_diagnostics;
 static uint32_t pmap_asid_generation;
 static unsigned pmap_next_asid;
 static unsigned pmap_initialized;
@@ -349,6 +350,7 @@ pmap_system_init(struct vm_page_allocator *allocator)
         return ENOSPC;
     pmap_zero(pmap_maps, sizeof(pmap_maps));
     pmap_zero(&pmap_statistics, sizeof(pmap_statistics));
+    pmap_zero(&pmap_tlb_diagnostics, sizeof(pmap_tlb_diagnostics));
     pmap_allocator = allocator;
     pmap_active = 0;
     pmap_asid_generation = 1;
@@ -690,6 +692,7 @@ pmap_fault(struct pmap *pmap, vm_vaddr_t vaddr, vm_prot_t access,
     uint32_t *even_pte;
     uint32_t *odd_pte;
     uint32_t entry;
+    vm_vaddr_t page_vaddr;
     vm_vaddr_t pair;
     int error;
 
@@ -735,12 +738,31 @@ pmap_fault(struct pmap *pmap, vm_vaddr_t vaddr, vm_prot_t access,
         pmap_stat_increment(&pmap_statistics.pms_tlb_modified);
     }
     pair = vaddr & PMAP_TLB_PAIR_MASK;
+    page_vaddr = vaddr & ~VM_PAGE_MASK;
     even_pte = pmap_lookup_pte(pmap, pair);
     odd_pte = pmap_lookup_pte(pmap, pair + VM_PAGE_SIZE);
     pmap_md_tlb_update(pair | pmap->pm_asid,
         even_pte == 0 ? 0 : pmap_tlb_entrylo(*even_pte),
         odd_pte == 0 ? 0 : pmap_tlb_entrylo(*odd_pte));
     pmap_stat_increment(&pmap_statistics.pms_tlb_refills);
+    if (pmap_tlb_diagnostics.ptd_last_entryhi ==
+        (pair | pmap->pm_asid) &&
+        pmap_tlb_diagnostics.ptd_last_access == access) {
+        if (pmap_tlb_diagnostics.ptd_repeat != ~0u)
+            ++pmap_tlb_diagnostics.ptd_repeat;
+    } else {
+        pmap_tlb_diagnostics.ptd_repeat = 1;
+    }
+    pmap_tlb_diagnostics.ptd_refills =
+        pmap_statistics.pms_tlb_refills;
+    pmap_tlb_diagnostics.ptd_last_pmap = (unsigned)(uintptr_t)pmap;
+    pmap_tlb_diagnostics.ptd_last_vaddr = page_vaddr;
+    pmap_tlb_diagnostics.ptd_last_access = access;
+    pmap_tlb_diagnostics.ptd_last_entryhi = pair | pmap->pm_asid;
+    pmap_tlb_diagnostics.ptd_last_entrylo0 =
+        even_pte == 0 ? 0 : pmap_tlb_entrylo(*even_pte);
+    pmap_tlb_diagnostics.ptd_last_entrylo1 =
+        odd_pte == 0 ? 0 : pmap_tlb_entrylo(*odd_pte);
     return 0;
 }
 
@@ -1027,6 +1049,42 @@ pmap_get_stats(struct pmap_stats *stats)
     if (!pmap_initialized || stats == 0)
         return EINVAL;
     *stats = pmap_statistics;
+    return 0;
+}
+
+int
+pmap_get_tlb_diagnostics(vm_vaddr_t vaddr,
+    struct pmap_tlb_diagnostics *diagnostics)
+{
+    uint32_t *pte;
+    uint32_t *even_pte;
+    uint32_t *odd_pte;
+    vm_vaddr_t pair;
+
+    if (!pmap_initialized || diagnostics == 0 ||
+        vaddr >= PMAP_USER_END)
+        return EINVAL;
+    *diagnostics = pmap_tlb_diagnostics;
+    diagnostics->ptd_active_pmap = (unsigned)(uintptr_t)pmap_active;
+    diagnostics->ptd_active_asid =
+        pmap_active != 0 ? pmap_active->pm_asid : 0;
+    diagnostics->ptd_query_pte = 0;
+    diagnostics->ptd_query_entryhi = 0;
+    diagnostics->ptd_query_entrylo0 = 0;
+    diagnostics->ptd_query_entrylo1 = 0;
+    if (!pmap_valid(pmap_active))
+        return 0;
+
+    pair = vaddr & PMAP_TLB_PAIR_MASK;
+    pte = pmap_lookup_pte(pmap_active, vaddr);
+    even_pte = pmap_lookup_pte(pmap_active, pair);
+    odd_pte = pmap_lookup_pte(pmap_active, pair + VM_PAGE_SIZE);
+    diagnostics->ptd_query_pte = pte == 0 ? 0 : *pte;
+    diagnostics->ptd_query_entryhi = pair | pmap_active->pm_asid;
+    diagnostics->ptd_query_entrylo0 =
+        even_pte == 0 ? 0 : pmap_tlb_entrylo(*even_pte);
+    diagnostics->ptd_query_entrylo1 =
+        odd_pte == 0 ? 0 : pmap_tlb_entrylo(*odd_pte);
     return 0;
 }
 

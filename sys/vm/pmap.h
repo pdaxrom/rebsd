@@ -33,6 +33,28 @@ struct pmap_stats {
 };
 
 /*
+ * Last successful software-to-hardware TLB refill.  This is diagnostic
+ * state only: consumers use it to tell an ordinary miss from a refill loop
+ * without changing page residency or replacement policy.
+ */
+struct pmap_tlb_diagnostics {
+    vm_pfn_t   ptd_refills;
+    unsigned   ptd_last_pmap;
+    vm_vaddr_t ptd_last_vaddr;
+    vm_prot_t  ptd_last_access;
+    unsigned   ptd_repeat;
+    unsigned   ptd_last_entryhi;
+    unsigned   ptd_last_entrylo0;
+    unsigned   ptd_last_entrylo1;
+    unsigned   ptd_active_pmap;
+    unsigned   ptd_active_asid;
+    uint32_t   ptd_query_pte;
+    unsigned   ptd_query_entryhi;
+    unsigned   ptd_query_entrylo0;
+    unsigned   ptd_query_entrylo1;
+};
+
+/*
  * Machine-independent pmap contract, implemented by shared MIPS code.
  * The pmap consumes no wired TLB entries: the board bootstrap owns exactly
  * C0_Wired slots and pmap requires at least one remaining random slot.
@@ -64,6 +86,7 @@ int pmap_page_sync(struct vm_page *, unsigned);
 void *pmap_page_direct_map(struct vm_page *, enum pmap_cache);
 void *pmap_device_direct_map(vm_paddr_t, enum pmap_cache);
 int pmap_get_stats(struct pmap_stats *);
+int pmap_get_tlb_diagnostics(vm_vaddr_t, struct pmap_tlb_diagnostics *);
 int pmap_validate(struct pmap *);
 
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)

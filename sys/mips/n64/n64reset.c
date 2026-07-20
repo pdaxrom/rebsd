@@ -11,13 +11,15 @@
 #include <sys/resource.h>
 #include <sys/proc.h>
 #include <sys/user.h>
+#include <vm/pmap.h>
+#include <vm/vm_object.h>
 #include <machine/console.h>
 #include <machine/io.h>
 #include <machine/n64.h>
 #include <machine/n64reset.h>
 
 #define N64_RESET_DUMP_MAGIC          0x52445354u /* RDST */
-#define N64_RESET_DUMP_VERSION        2u
+#define N64_RESET_DUMP_VERSION        3u
 #define N64_RESET_DUMP_VERSION_MASK   0x0000ffffu
 #define N64_RESET_DUMP_STATE_MASK     0xffff0000u
 #define N64_RESET_DUMP_STATE_LIVE     0x00010000u
@@ -32,6 +34,7 @@
 #define N64_RESET_DUMP_FULL_PHYS      0x00000800u
 #define N64_RESET_DUMP_STACK_WORDS    64u
 #define N64_RESET_DUMP_BT_WORDS       5u
+#define N64_RESET_C0_RANDOM           1
 
 struct n64_reset_dump_critical {
     unsigned magic;
@@ -62,12 +65,40 @@ struct n64_reset_dump_full {
     unsigned wchan;
     unsigned stack_words;
     char comm[16];
+    unsigned tlb_valid;
+    unsigned tlb_refills;
+    unsigned tlb_repeat;
+    unsigned tlb_last_vaddr;
+    unsigned tlb_last_access;
+    unsigned tlb_last_entryhi;
+    unsigned tlb_last_entrylo0;
+    unsigned tlb_last_entrylo1;
+    unsigned pmap_active;
+    unsigned pmap_asid;
+    unsigned pte_query;
+    unsigned pte_entryhi;
+    unsigned pte_entrylo0;
+    unsigned pte_entrylo1;
+    unsigned c0_entryhi;
+    unsigned c0_wired;
+    unsigned c0_random;
+    unsigned vm_valid;
+    unsigned vm_swapped;
+    unsigned vm_pageins;
+    unsigned vm_pageouts;
+    unsigned vm_swap_failures;
+    unsigned vm_reclaim_attempts;
+    unsigned vm_reclaim_failures;
     unsigned frame[FRAME_WORDS];
     unsigned stack[N64_RESET_DUMP_STACK_WORDS];
 };
 
 typedef char n64_reset_dump_critical_size[
     sizeof(struct n64_reset_dump_critical) == 64 ? 1 : -1];
+typedef char n64_reset_dump_full_size[
+    sizeof(struct n64_reset_dump_full) <=
+        N64_KERNEL_LOAD_VADDR - N64_KSEG0_BASE -
+        N64_RESET_DUMP_FULL_PHYS ? 1 : -1];
 
 static volatile struct n64_reset_dump_critical *const n64_reset_critical =
     (volatile struct n64_reset_dump_critical *)(N64_KSEG1_BASE |
@@ -349,6 +380,48 @@ n64_reset_seed(unsigned state)
 }
 
 static void
+n64_reset_capture_diagnostics(unsigned badvaddr)
+{
+    struct pmap_tlb_diagnostics tlb;
+    struct vm_object_stats object;
+    unsigned valid;
+
+    valid = pmap_get_tlb_diagnostics(badvaddr, &tlb) == 0;
+    n64_reset_full->tlb_valid = valid;
+    n64_reset_full->tlb_refills = valid ? (unsigned)tlb.ptd_refills : 0;
+    n64_reset_full->tlb_repeat = valid ? tlb.ptd_repeat : 0;
+    n64_reset_full->tlb_last_vaddr = valid ? tlb.ptd_last_vaddr : 0;
+    n64_reset_full->tlb_last_access = valid ? tlb.ptd_last_access : 0;
+    n64_reset_full->tlb_last_entryhi =
+        valid ? tlb.ptd_last_entryhi : 0;
+    n64_reset_full->tlb_last_entrylo0 =
+        valid ? tlb.ptd_last_entrylo0 : 0;
+    n64_reset_full->tlb_last_entrylo1 =
+        valid ? tlb.ptd_last_entrylo1 : 0;
+    n64_reset_full->pmap_active = valid ? tlb.ptd_active_pmap : 0;
+    n64_reset_full->pmap_asid = valid ? tlb.ptd_active_asid : 0;
+    n64_reset_full->pte_query = valid ? tlb.ptd_query_pte : 0;
+    n64_reset_full->pte_entryhi = valid ? tlb.ptd_query_entryhi : 0;
+    n64_reset_full->pte_entrylo0 = valid ? tlb.ptd_query_entrylo0 : 0;
+    n64_reset_full->pte_entrylo1 = valid ? tlb.ptd_query_entrylo1 : 0;
+
+    valid = vm_object_get_stats(&object) == 0;
+    n64_reset_full->vm_valid = valid;
+    n64_reset_full->vm_swapped =
+        valid ? (unsigned)object.vos_swapped_pages : 0;
+    n64_reset_full->vm_pageins =
+        valid ? (unsigned)object.vos_pageins : 0;
+    n64_reset_full->vm_pageouts =
+        valid ? (unsigned)object.vos_pageouts : 0;
+    n64_reset_full->vm_swap_failures =
+        valid ? (unsigned)object.vos_swap_failures : 0;
+    n64_reset_full->vm_reclaim_attempts =
+        valid ? (unsigned)object.vos_reclaim_attempts : 0;
+    n64_reset_full->vm_reclaim_failures =
+        valid ? (unsigned)object.vos_reclaim_failures : 0;
+}
+
+static void
 n64_reset_capture(int *frame, unsigned rawcause, unsigned badvaddr)
 {
     struct proc *p;
@@ -369,8 +442,14 @@ n64_reset_capture(int *frame, unsigned rawcause, unsigned badvaddr)
     n64_reset_full->proc = (unsigned)p;
     n64_reset_full->vmspace = p != 0 ? (unsigned)p->p_vmspace : 0;
     n64_reset_full->wchan = p != 0 ? (unsigned)p->p_wchan : 0;
+    n64_reset_full->c0_entryhi =
+        mips_read_c0_register(C0_ENTRYHI, 0);
+    n64_reset_full->c0_wired = mips_read_c0_register(C0_WIRED, 0);
+    n64_reset_full->c0_random =
+        mips_read_c0_register(N64_RESET_C0_RANDOM, 0);
     n64_reset_copy_comm(n64_reset_full->comm,
         sizeof(n64_reset_full->comm), comm);
+    n64_reset_capture_diagnostics(badvaddr);
     for (i = 0; i < FRAME_WORDS; ++i)
         n64_reset_full->frame[i] = (unsigned)frame[i];
 
@@ -456,6 +535,17 @@ n64_reset_field(const char *name, unsigned value)
 {
     n64_reset_puts(name);
     n64_reset_hex(value);
+    n64_console_putc('\n');
+}
+
+static void
+n64_reset_pair(const char *first_name, unsigned first,
+    const char *second_name, unsigned second)
+{
+    n64_reset_puts(first_name);
+    n64_reset_hex(first);
+    n64_reset_puts(second_name);
+    n64_reset_hex(second);
     n64_console_putc('\n');
 }
 
@@ -555,6 +645,44 @@ n64_reset_draw(unsigned state)
         n64_reset_field("proc:    ", n64_reset_full->proc);
         n64_reset_field("vmspace: ", n64_reset_full->vmspace);
         n64_reset_field("wchan:   ", n64_reset_full->wchan);
+        if (n64_reset_full->tlb_valid) {
+            n64_reset_pair("tlb refills: ", n64_reset_full->tlb_refills,
+                " repeat: ", n64_reset_full->tlb_repeat);
+            n64_reset_pair("tlb lastva:  ",
+                n64_reset_full->tlb_last_vaddr, " access: ",
+                n64_reset_full->tlb_last_access);
+            n64_reset_field("tlb entryhi: ",
+                n64_reset_full->tlb_last_entryhi);
+            n64_reset_pair("tlb lo0:     ",
+                n64_reset_full->tlb_last_entrylo0, " lo1: ",
+                n64_reset_full->tlb_last_entrylo1);
+            n64_reset_pair("pmap active: ",
+                n64_reset_full->pmap_active, " asid: ",
+                n64_reset_full->pmap_asid);
+            n64_reset_field("pte query:   ",
+                n64_reset_full->pte_query);
+            n64_reset_field("pte entryhi: ",
+                n64_reset_full->pte_entryhi);
+            n64_reset_pair("pte lo0:     ",
+                n64_reset_full->pte_entrylo0, " lo1: ",
+                n64_reset_full->pte_entrylo1);
+            n64_reset_field("c0 entryhi:  ",
+                n64_reset_full->c0_entryhi);
+            n64_reset_pair("c0 wired:    ",
+                n64_reset_full->c0_wired, " random: ",
+                n64_reset_full->c0_random);
+        }
+        if (n64_reset_full->vm_valid) {
+            n64_reset_pair("vm pageins:  ",
+                n64_reset_full->vm_pageins, " outs: ",
+                n64_reset_full->vm_pageouts);
+            n64_reset_pair("vm swapped:  ",
+                n64_reset_full->vm_swapped, " failures: ",
+                n64_reset_full->vm_swap_failures);
+            n64_reset_pair("vm reclaim:  ",
+                n64_reset_full->vm_reclaim_attempts, " failures: ",
+                n64_reset_full->vm_reclaim_failures);
+        }
     }
     n64_reset_backtrace();
     n64_reset_puts("\nRelease RESET; press again to reboot\n");

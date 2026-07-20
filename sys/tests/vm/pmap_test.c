@@ -252,6 +252,7 @@ test_pmap(void)
     struct vm_page_allocator allocator;
     struct vm_phys_map map;
     struct pmap_stats stats;
+    struct pmap_tlb_diagnostics diagnostics;
     struct vm_page *page1;
     struct vm_page *page2;
     struct vm_page *page3;
@@ -360,6 +361,19 @@ test_pmap(void)
     CHECK(pmap_validate(pmap3) == 0);
     CHECK(pmap_fault(pmap3, TEST_DEVICE, VM_PROT_READ, 1) == 0);
     CHECK(pmap_fault(pmap3, TEST_DEVICE, VM_PROT_WRITE, 1) == 0);
+    CHECK(pmap_fault(pmap3, TEST_DEVICE, VM_PROT_WRITE, 1) == 0);
+    CHECK(pmap_get_tlb_diagnostics(TEST_DEVICE, &diagnostics) == 0);
+    CHECK(diagnostics.ptd_refills == 7);
+    CHECK(diagnostics.ptd_last_pmap == (unsigned)(uintptr_t)pmap3);
+    CHECK(diagnostics.ptd_last_vaddr == TEST_DEVICE);
+    CHECK(diagnostics.ptd_last_access == VM_PROT_WRITE);
+    CHECK(diagnostics.ptd_repeat == 2);
+    CHECK(diagnostics.ptd_active_pmap == (unsigned)(uintptr_t)pmap3);
+    CHECK(diagnostics.ptd_active_asid == test_asid);
+    CHECK((diagnostics.ptd_query_pte & 1u) != 0);
+    CHECK(diagnostics.ptd_query_entryhi == test_entryhi);
+    CHECK(diagnostics.ptd_query_entrylo0 == test_entrylo0);
+    CHECK(diagnostics.ptd_query_entrylo1 == test_entrylo1);
     CHECK(device_page->vmp_hold_count == 0 &&
         device_page->vmp_reference_count == 0 &&
         device_page->vmp_dirty_count == 0);
@@ -385,7 +399,7 @@ test_pmap(void)
     CHECK(pmap_get_stats(&stats) == 0);
     CHECK(stats.pms_mappings == 2);
     CHECK(stats.pms_resident_pages == 2);
-    CHECK(stats.pms_tlb_refills == 6);
+    CHECK(stats.pms_tlb_refills == 7);
     CHECK(stats.pms_tlb_modified == 2);
     CHECK(stats.pms_protection_faults == 1);
     CHECK(stats.pms_full_flushes == 2);
