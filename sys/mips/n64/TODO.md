@@ -91,6 +91,21 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   verifying that normal VR4300 instructions assemble while MIPS32r2-only
   mnemonics fail in `-march=vr4300` mode; this is now a permanent host-side
   target: `make -C sys/mips BOARD=n64 smoke-as-vr4300`.
+- [ ] Complete VR4300 silicon-errata coverage across every compiler and
+  assembler input path:
+  - handle the VR4300 `mulmul` erratum on the final instruction stream,
+    including adjacent `mul.s`/`mul.d` and multiply sequences, control-flow
+    boundaries, delay slots, and hand-written assembly
+  - do not assume `-march=vr4300` enables the GCC workaround: GCC 14.2 leaves
+    `-mfix4300` disabled unless it is requested explicitly
+  - keep the existing PCC `-mfix4300` repair, but verify it against the same
+    final-stream cases instead of treating compiler-local assembly repair as
+    complete coverage
+  - add an object/final-image validator and negative regression cases so an
+    unsafe sequence cannot silently enter the ROM
+  - audit the remaining documented VR4300 silicon errata separately from
+    normal MIPS III pipeline hazards; the existing `mfhi`/`mflo` padding is a
+    hazard rule, not proof that all CPU errata are covered
 - [x] Add the first COP1/FPU assembly support needed by hard-float N64
   userland and current GCC VR4300 smoke output:
   - `$f0`..`$f31` register parsing

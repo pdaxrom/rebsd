@@ -555,12 +555,15 @@ int mode_mips16;                /* .set mips16 option */
 int mode_micromips;             /* .set micromips option */
 int mode_at = 1;                /* .set at option */
 int mode_vr4300;                /* reject opcodes unsupported by NEC VR4300 */
+int optimize_level;             /* -O level; delay-slot filling needs -O2 */
 int text_align_bits = DEFAULT_TEXT_ALIGN_BITS;
 int reorder_full;               /* instruction buffered for reorder */
 unsigned reorder_word;          /* buffered instruction... */
 unsigned reorder_clobber;       /* ...modified this register */
 struct reloc reorder_rel;       /* buffered relocation */
 int reorder_segm;               /* section for buffered instruction */
+unsigned char hilo_read_pending[MAXSEGM];
+unsigned char hilo_read_gap[MAXSEGM];
 struct reloc relabs = { RABS }; /* absolute relocation */
 struct asm_section sections[MAXSEGM];
 int maxsegm = SABS + 1;
@@ -2068,11 +2071,211 @@ unsigned getexpr(int *s)
     /* NOTREACHED */
 }
 
+static int
+is_hilo_read(unsigned w)
+{
+    unsigned funct;
+
+    if ((w & 0xffff07ff) != 0x00000010 &&
+        (w & 0xffff07ff) != 0x00000012)
+        return 0;
+    funct = w & 0x3f;
+    return funct == 0x10 || funct == 0x12; /* mfhi, mflo */
+}
+
+static int
+is_hilo_write(unsigned w)
+{
+    unsigned funct;
+
+    if ((w & 0xfc00ffc0) != 0)
+        return 0;
+    funct = w & 0x3f;
+    return funct >= 0x18 && funct <= 0x1f; /* mult[u], div[u], d* */
+}
+
+/*
+ * Decode the deliberately small instruction class that this assembler may
+ * move into a delay slot.  Memory, coprocessor, HI/LO, control-transfer and
+ * trapping instructions are excluded rather than guessed about.  This is a
+ * local implementation of the safety rules used by mature MIPS assemblers,
+ * not a general instruction scheduler.
+ */
+static int
+delay_candidate_gpr(unsigned w, unsigned *read_mask, unsigned *write_mask)
+{
+    unsigned op, funct, rs, rt, rd;
+
+    op = w >> 26;
+    rs = (w >> 21) & 31;
+    rt = (w >> 16) & 31;
+    rd = (w >> 11) & 31;
+    *read_mask = 0;
+    *write_mask = 0;
+
+    if (op == 0) {
+        funct = w & 0x3f;
+        switch (funct) {
+        case 0x00: /* sll */
+        case 0x02: /* srl */
+        case 0x03: /* sra */
+        case 0x38: /* dsll */
+        case 0x3a: /* dsrl */
+        case 0x3b: /* dsra */
+        case 0x3c: /* dsll32 */
+        case 0x3e: /* dsrl32 */
+        case 0x3f: /* dsra32 */
+            if (w == 0)
+                return 0; /* Moving a NOP has no benefit. */
+            *read_mask = 1U << rt;
+            *write_mask = 1U << rd;
+            return 1;
+        case 0x04: /* sllv */
+        case 0x06: /* srlv */
+        case 0x07: /* srav */
+        case 0x14: /* dsllv */
+        case 0x16: /* dsrlv */
+        case 0x17: /* dsrav */
+            *read_mask = (1U << rs) | (1U << rt);
+            *write_mask = 1U << rd;
+            return 1;
+        case 0x21: /* addu */
+        case 0x23: /* subu */
+        case 0x24: /* and */
+        case 0x25: /* or */
+        case 0x26: /* xor */
+        case 0x27: /* nor */
+        case 0x2a: /* slt */
+        case 0x2b: /* sltu */
+        case 0x2d: /* daddu */
+        case 0x2f: /* dsubu */
+            *read_mask = (1U << rs) | (1U << rt);
+            *write_mask = 1U << rd;
+            return 1;
+        default:
+            return 0;
+        }
+    }
+
+    switch (op) {
+    case 0x09: /* addiu */
+    case 0x0a: /* slti */
+    case 0x0b: /* sltiu */
+    case 0x0c: /* andi */
+    case 0x0d: /* ori */
+    case 0x0e: /* xori */
+    case 0x19: /* daddiu */
+        *read_mask = 1U << rs;
+        *write_mask = 1U << rt;
+        return 1;
+    case 0x0f: /* lui */
+        *write_mask = 1U << rt;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/*
+ * Return the GPRs read before a non-linking, non-likely control transfer
+ * reaches its delay slot.  Calls and coprocessor branches stay conservative.
+ */
+static int
+delay_branch_gpr(unsigned w, unsigned *read_mask)
+{
+    unsigned op, rs, rt;
+
+    op = w >> 26;
+    rs = (w >> 21) & 31;
+    rt = (w >> 16) & 31;
+    *read_mask = 0;
+
+    switch (op) {
+    case 0x01: /* REGIMM */
+        if (rt != 0 && rt != 1) /* reject likely and link forms */
+            return 0;
+        *read_mask = 1U << rs;
+        return 1;
+    case 0x02: /* j, but not jal */
+        return 1;
+    case 0x04: /* beq */
+    case 0x05: /* bne */
+        *read_mask = (1U << rs) | (1U << rt);
+        return 1;
+    case 0x06: /* blez */
+    case 0x07: /* bgtz */
+        *read_mask = 1U << rs;
+        return 1;
+    case 0x00: /* jr, but not jalr */
+        if ((w & 0x3f) != 0x08)
+            return 0;
+        *read_mask = 1U << rs;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static int
+can_fill_delay_slot(unsigned branch)
+{
+    unsigned candidate_read, candidate_write, branch_read;
+
+    if (optimize_level < 2 || !reorder_full || reorder_segm != segm)
+        return 0;
+    if (reorder_rel.flags != RABS)
+        return 0;
+    if (!delay_candidate_gpr(reorder_word, &candidate_read, &candidate_write))
+        return 0;
+    if (!delay_branch_gpr(branch, &branch_read))
+        return 0;
+
+    /* The branch must observe the value produced before it in source order. */
+    if (branch_read & candidate_write)
+        return 0;
+    return 1;
+}
+
+static void
+write_instruction(unsigned w, struct reloc *r, int s)
+{
+    fputword(w, sfile[s]);
+    fputrel(r, rfile[s]);
+
+    if (!mode_vr4300 || !section_is_text(s))
+        return;
+    if (is_hilo_read(w)) {
+        hilo_read_pending[s] = 1;
+        hilo_read_gap[s] = 0;
+    } else if (hilo_read_pending[s]) {
+        if (hilo_read_gap[s] < 2)
+            hilo_read_gap[s]++;
+        if (hilo_read_gap[s] >= 2)
+            hilo_read_pending[s] = 0;
+    }
+}
+
+/*
+ * VR4300 requires two complete instructions between mfhi/mflo and a later
+ * instruction that overwrites HI/LO.  GNU as enforces this even inside
+ * .set noreorder blocks: noreorder controls instruction scheduling and delay
+ * slots, not architecturally required hazard padding.
+ */
+static void
+pad_hilo_write(unsigned w, int s)
+{
+    if (!mode_vr4300 || !section_is_text(s) || !is_hilo_write(w))
+        return;
+    while (hilo_read_pending[s] && hilo_read_gap[s] < 2) {
+        write_instruction(0, &relabs, s);
+        count[s] += WORDSZ;
+    }
+}
+
 void reorder_flush()
 {
     if (reorder_full) {
-        fputword(reorder_word, sfile[reorder_segm]);
-        fputrel(&reorder_rel, rfile[reorder_segm]);
+        write_instruction(reorder_word, &reorder_rel, reorder_segm);
         reorder_full = 0;
     }
 }
@@ -2084,14 +2287,15 @@ void emitword(unsigned w, struct reloc *r, int clobber_reg)
 {
     if (mode_reorder && section_is_text(segm)) {
         reorder_flush();
+        pad_hilo_write(w, segm);
         reorder_word = w;
         reorder_rel = *r;
         reorder_segm = segm;
         reorder_full = 1;
         reorder_clobber = clobber_reg & 31;
     } else {
-        fputword(w, sfile[segm]);
-        fputrel(r, rfile[segm]);
+        pad_hilo_write(w, segm);
+        write_instruction(w, r, segm);
     }
     count[segm] += WORDSZ;
 }
@@ -2750,17 +2954,28 @@ done3:
                 if (relinfo.flags != RABS)
                     uerror("cannot negate relocatable literal");
             }
-            switch (opcode & 0xfc000000) {
-            default: /* addi, addiu, slti, sltiu, lw, sw */
-                /* 16-bit signed value. */
-                valid_range = fits_signed16(offset);
-                break;
-            case 0x30000000: /* andi */
-            case 0x34000000: /* ori */
-            case 0x38000000: /* xori */
-                /* 16-bit unsigned value. */
-                valid_range = (offset <= 0xffff);
-                break;
+            if (expr_flags & EXPR_LO) {
+                /*
+                 * %lo deliberately selects bits 15:0 of the expression.
+                 * The complete symbol addend therefore need not fit the
+                 * instruction's signed immediate.  Preserve its low half in
+                 * the instruction; R_MIPS_LO16/RBYTE16 carries the relocation
+                 * that pairs it with the preceding %hi.
+                 */
+                valid_range = 1;
+            } else {
+                switch (opcode & 0xfc000000) {
+                default: /* addi, addiu, slti, sltiu, lw, sw */
+                    /* 16-bit signed value. */
+                    valid_range = fits_signed16(offset);
+                    break;
+                case 0x30000000: /* andi */
+                case 0x34000000: /* ori */
+                case 0x38000000: /* xori */
+                    /* 16-bit unsigned value. */
+                    valid_range = (offset <= 0xffff);
+                    break;
+                }
             }
             if (valid_range) {
                 opcode |= offset & 0xffff;
@@ -2872,36 +3087,28 @@ done:
     if (emitfunc) {
         emitfunc(opcode, &relinfo);
     } else if (mode_reorder && (type & FDSLOT) && section_is_text(segm)) {
-        /* Need a delay slot. */
-        if (reorder_full && reorder_clobber != 0) {
-            /* Analyse register dependency.
-             * Flush the instruction if needed. */
-            int rt = (opcode >> 16) & 31;
-            int rs = (opcode >> 21) & 31;
-            if (((type & (FRS1 | FRS2)) && rs == reorder_clobber) ||
-                ((type & FRT2) && rt == reorder_clobber))
-                reorder_flush();
-        }
-        if (reorder_full && (type & (FOFF18 | FAOFF18)) && relinfo.flags == RABS &&
-            (opcode & 0x8000)) {
-            /* Branch instruction with negative offset is being displaced
-             * by one word.  Need to update the offset field. */
-            offset = opcode + 1;
-            opcode &= ~0xffff;
-            opcode |= (offset & 0xffff);
-        }
-        fputword(opcode, sfile[segm]);
-        fputrel(&relinfo, rfile[segm]);
-        if (reorder_full) {
-            /* Delay slot: insert a previous instruction. */
+        /*
+         * Reorder mode owns the delay slot, but does not imply optimization.
+         * At -O0/-O1 preserve source order and insert a NOP.  At -O2 a very
+         * small, fully decoded GPR-only subset may use the buffered preceding
+         * instruction.  Explicitly scheduled compiler output uses
+         * .set noreorder and bypasses this path.
+         */
+        if (can_fill_delay_slot(opcode)) {
+            if ((type & (FOFF18 | FAOFF18)) && relinfo.flags == RABS) {
+                /* The branch moves one word earlier than its parsed PC. */
+                offset = (opcode & 0xffff) + 1;
+                opcode = (opcode & ~0xffff) | (offset & 0xffff);
+            }
+            write_instruction(opcode, &relinfo, segm);
             reorder_flush();
+            count[segm] += WORDSZ; /* candidate was counted when buffered */
         } else {
-            /* Insert NOP in delay slot. */
-            fputword(0, sfile[segm]);
-            fputrel(&relabs, rfile[segm]);
-            count[segm] += WORDSZ;
+            reorder_flush();
+            write_instruction(opcode, &relinfo, segm);
+            write_instruction(0, &relabs, segm);
+            count[segm] += 2 * WORDSZ;
         }
-        count[segm] += WORDSZ;
     } else {
         emitword(opcode, &relinfo, clobber_reg);
     }
@@ -4221,22 +4428,91 @@ elf_reloc_symbol(struct reloc *r, int *symndx)
 }
 
 void
-elf_write_relocs(int s, int *symndx)
+elf_write_reloc(unsigned off, struct reloc *relinfo, int *symndx)
 {
-    unsigned i;
-    struct reloc relinfo;
     Elf32_Rel rel;
 
+    rel.r_offset = off;
+    rel.r_info = ELF_R_INFO(elf_reloc_symbol(relinfo, symndx),
+        elf_reloc_type(relinfo));
+    elf_write_rel(&rel, stdout);
+}
+
+static int
+elf_reloc_same_source(const struct reloc *a, const struct reloc *b)
+{
+    if ((a->flags & (RSMASK | RGPREL)) !=
+        (b->flags & (RSMASK | RGPREL)))
+        return 0;
+    if ((a->flags & RSMASK) == REXT)
+        return a->index == b->index;
+    return 1;
+}
+
+void
+elf_write_relocs(int s, int *symndx)
+{
+    struct reloc *rv;
+    unsigned *word;
+    unsigned char *done;
+    unsigned i, h, nword, format;
+
+    nword = (count[s] + WORDSZ - 1) / WORDSZ;
+    rv = calloc(nword, sizeof(*rv));
+    word = calloc(nword, sizeof(*word));
+    done = calloc(nword, sizeof(*done));
+    if (!rv || !word || !done)
+        uerror("out of memory");
+
     rewind(rfile[s]);
-    for (i = 0; i < count[s]; i += WORDSZ) {
-        fgetrel(rfile[s], &relinfo);
-        if ((relinfo.flags & RSMASK) == RABS)
-            continue;
-        rel.r_offset = i;
-        rel.r_info = ELF_R_INFO(elf_reloc_symbol(&relinfo, symndx),
-            elf_reloc_type(&relinfo));
-        elf_write_rel(&rel, stdout);
+    rewind(sfile[s]);
+    for (i = 0; i < nword; i++) {
+        fgetrel(rfile[s], &rv[i]);
+        word[i] = fgetword(sfile[s]);
     }
+
+    /*
+     * ELF/MIPS REL does not carry an explicit addend.  A HI16 relocation
+     * obtains its low half from the following matching LO16 relocation.
+     * Instruction order is not sufficient: GCC can put a lui in a branch
+     * delay slot after the lw/addiu which consumes it, and several references
+     * to one section symbol can carry different addends.  The internal
+     * relocation retains the exact low half in reloc.offset, so emit every
+     * matching HI immediately before its LO, as GNU as does.
+     */
+    for (i = 0; i < nword; i++) {
+        if ((rv[i].flags & RSMASK) == RABS)
+            continue;
+        format = rv[i].flags & RFMASK;
+        if (format == RHIGH16 || format == RHIGH16S)
+            continue;
+        if (format == RBYTE16) {
+            for (h = 0; h < nword; h++) {
+                unsigned hformat = rv[h].flags & RFMASK;
+
+                if (done[h] || (rv[h].flags & RSMASK) == RABS ||
+                    (hformat != RHIGH16 && hformat != RHIGH16S))
+                    continue;
+                if (!elf_reloc_same_source(&rv[h], &rv[i]) ||
+                    (rv[h].offset & 0xffff) != (word[i] & 0xffff))
+                    continue;
+                elf_write_reloc(h * WORDSZ, &rv[h], symndx);
+                done[h] = 1;
+            }
+        }
+        elf_write_reloc(i * WORDSZ, &rv[i], symndx);
+        done[i] = 1;
+    }
+
+    /* Preserve unmatched relocations so the linker can diagnose them. */
+    for (i = 0; i < nword; i++) {
+        if (done[i] || (rv[i].flags & RSMASK) == RABS)
+            continue;
+        elf_write_reloc(i * WORDSZ, &rv[i], symndx);
+    }
+    free(done);
+    free(word);
+    free(rv);
 }
 
 void
@@ -4631,7 +4907,7 @@ void makesymtab()
 void usage()
 {
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  as [--elf|--aout] [-gkuvxX] [-EL|-EB] [-o outfile] [infile]\n");
+    fprintf(stderr, "  as [--elf|--aout] [-gkuvxX] [-O[level]] [-EL|-EB] [-o outfile] [infile]\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -o filename     Set output file name, default a.out\n");
     fprintf(stderr, "  -u              Treat undefined names as error\n");
@@ -4640,6 +4916,7 @@ void usage()
     fprintf(stderr, "  -EL, -EB        Select output byte order\n");
     fprintf(stderr, "  --elf           Write ELF32 MIPS relocatable object\n");
     fprintf(stderr, "  --aout          Write legacy ReBSD a.out relocatable object\n");
+    fprintf(stderr, "  -O2             Safely fill a restricted set of branch delay slots\n");
     fprintf(stderr, "  -mips3, -march=vr4300\n");
     fprintf(stderr, "                  Select VR4300 ISA checks and 8-byte text alignment\n");
     fprintf(stderr, "  -mips32r2, -march=mips32r2\n");
@@ -4713,6 +4990,20 @@ int main(int argc, char *argv[])
             set_cpu_vr4300(0);
             continue;
         }
+        if (argv[i][0] == '-' && argv[i][1] == 'O') {
+            optimize_level = 1;
+            cp = argv[i] + 2;
+            if (*cp) {
+                optimize_level = 0;
+                while (*cp >= '0' && *cp <= '9') {
+                    optimize_level = optimize_level * 10 + (*cp - '0');
+                    cp++;
+                }
+                if (*cp)
+                    uerror("bad optimization level %s", argv[i]);
+            }
+            continue;
+        }
         switch (argv[i][0]) {
         case '-':
             for (cp = argv[i] + 1; *cp; cp++) {
@@ -4756,12 +5047,6 @@ int main(int argc, char *argv[])
                             ;
                         --cp;
                     }
-                    break;
-                case 'O': /* optimization level */
-                    // TODO
-                    while (*++cp)
-                        ;
-                    --cp;
                     break;
                 case '-': /* long option - skip */
                     while (*++cp)
