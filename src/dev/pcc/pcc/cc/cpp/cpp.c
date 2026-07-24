@@ -277,13 +277,16 @@ main(int argc, char **argv)
 			    strncmp(optarg, "MQ,", 3) == 0) {
 				int l = (int)strlen(optarg+3) + 2;
 				char *cp, *up;
+				int first = Mxfile == NULL;
 
 				if (optarg[1] == 'Q')
 					for (cp = optarg+3; *cp; cp++)
 						if (*cp == '$')
 							l++;
 				Mxlen += l;
-				Mxfile = cp = realloc(Mxfile, Mxlen);
+				Mxfile = cp = xrealloc(Mxfile, Mxlen);
+				if (first)
+					*Mxfile = 0;
 				for (up = Mxfile; *up; up++)
 					;
 				if (up != Mxfile)
@@ -2467,8 +2470,9 @@ lookup(const usch *key, int enterf)
 	len = k - key;
 
 	for (sp = symhsh[hsh]; sp; sp = sp->next)
-		if (*sp->namep == *key && sp->namep[len] == 0 &&
-		    strncmp((char *)sp->namep, (char *)key, len) == 0)
+		if (*sp->namep == *key &&
+		    strncmp((char *)sp->namep, (char *)key, len) == 0 &&
+		    sp->namep[len] == 0)
 			break;
 
 	if (enterf == FIND) {

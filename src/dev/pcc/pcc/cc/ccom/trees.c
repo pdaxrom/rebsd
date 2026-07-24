@@ -69,6 +69,7 @@
 # include "pass1.h"
 # include "pass2.h"
 
+# include <limits.h>
 # include <stdarg.h>
 # include <string.h>
 # include <stdlib.h>
@@ -605,7 +606,8 @@ buildtree(int o, P1ND *l, P1ND *r)
 			if (!ISFTN(p->n_type))
 				uerror("illegal function");
 			p->n_type = DECREF(p->n_type);
-			p->n_df = l->n_df+1; /* add one for prototypes */
+			/* add one for prototypes when type metadata exists */
+			p->n_df = l->n_df != NULL ? l->n_df + 1 : NULL;
 			p->pss = l->pss;
 #ifdef NEWPARAMS
 			p = fun_call(p);
@@ -827,19 +829,22 @@ concast(P1ND *p, TWORD t)
 //printf("concast till %d\n", t);
 //p1fwalk(p, eprint, 0);
 
-#define	TYPMSK(y) ((((1LL << (y-1))-1) << 1) | 1)
 	if (p->n_op == ICON) {
+		U_CONSZ mask, uval;
+
 		val = glval(p);
 
 		if (t == BOOL) {
 			if (val)
 				slval(p, 1);
 		} else if (t <= ULONGLONG) {
-			slval(p, val & TYPMSK(sztable[t]));
-			if (!ISUNSIGNED(t)) {
-				if (val & (1LL << (sztable[t]-1)))
-					slval(p, glval(p) | ~TYPMSK(sztable[t]));
-			}
+			mask = ~(U_CONSZ)0 >>
+			    (sizeof(U_CONSZ) * CHAR_BIT - sztable[t]);
+			uval = (U_CONSZ)val & mask;
+			if (!ISUNSIGNED(t) &&
+			    (uval & ((U_CONSZ)1 << (sztable[t] - 1))))
+				uval |= ~mask;
+			slval(p, (CONSZ)uval);
 		} else if (t <= LDOUBLE) {
 			p->n_op = FCON;
 			p->n_scon = sfallo();

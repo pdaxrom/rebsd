@@ -1153,7 +1153,7 @@ movearg_32bit(NODE *p, int *regp)
 	if (!mips_soft_float &&
 	    (mips_target.isa == MIPS_ISA_MIPS32R2 ||
 	    mips_target.tune == MIPS_TUNE_VR4300) &&
-	    attr_find(t->n_ap, ATTR_STATIC_SPEC_CONST) != NULL) {
+	    attr_find((struct attr *)t->n_ap, ATTR_STATIC_SPEC_CONST) != NULL) {
 		*regp = reg + 1;
 		tfree(p);
 		return bcon(0);
