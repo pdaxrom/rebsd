@@ -10,6 +10,7 @@ OUT ?= native-pcc
 TARGET_CC ?= pcc
 TARGET_AS ?= as
 TARGET_LD ?= ld
+TARGET_ENDIAN_FLAG ?= $(ENDIAN_FLAG)
 LDSCRIPT ?= mips-user.ld
 CRT0 ?= crt0.o
 LIBDIR ?= .
@@ -96,7 +97,7 @@ COMMON_DEFS = -DGCC_COMPAT -DPCC_DEBUG -D_ISOC99_SOURCE -Dos_rebsd \
               -Dmach_mips -DTARGOSVER=0 $(ENDIAN_DEFINE)
 COMMON_INCLUDES = -I$(PCC_SRC)/mip -I$(PCC_SRC)/arch/mips \
                   -I$(PCC_SRC)/os/rebsd -I$(PCC_SRC)/common
-TARGET_ARCH = -march=$(PCC_CPU) $(FLOAT_FLAG) $(ENDIAN_FLAG)
+TARGET_ARCH = -march=$(PCC_CPU) $(FLOAT_FLAG) $(TARGET_ENDIAN_FLAG)
 TARGET_CFLAGS = $(TARGET_ARCH) -Os -fno-builtin -fno-stack-protector \
                 -fcommon $(COMMON_DEFS) $(EXEC_DEFINE) $(CPU_DEFINE) \
                 $(FLOAT_DEFINE) -I$(dir $(TARGET_CONFIG)) $(COMMON_INCLUDES)

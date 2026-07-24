@@ -1,6 +1,19 @@
 ifeq ($(REBSD_OBJ_BUILD),)
+# Each source-tree goal dispatches a separate recursive make into the same
+# board object directory.  Serialize those dispatches even when the caller
+# uses -j; parallelism remains enabled inside each isolated object build.
+.NOTPARALLEL:
+ifneq ($(filter rootfs-board-matrix,$(MAKECMDGOALS)),)
+.PHONY: rootfs-board-matrix
+rootfs-board-matrix:
+	python3 $(abspath ../..)/sys/mips/tools/rootfs-board-matrix.py \
+	    --top $(abspath ../..) \
+	    --out $(if $(ROOTFS_MATRIX_OUT),$(abspath $(ROOTFS_MATRIX_OUT)),/private/tmp/rebsd-rootfs-matrix) \
+	    --jobs $(if $(ROOTFS_MATRIX_JOBS),$(ROOTFS_MATRIX_JOBS),4)
+else
 REBSD_TOPSRC_REL = ../..
 include ../../mk/obj-dispatch.mk
+endif
 else
 
 TOPSRC          = ../..
@@ -38,10 +51,11 @@ endif
         pcc-smoke-all-runtime-vr4300 vm-smoke-runtime vm-stress-runtime \
         vm-pressure-runtime vm-pressure-smoke-build \
         vm-pressure-smoke-stage vm-pressure-smoke-runtime \
-        vm-diagnostics-pcc-runtime \
-        vm-io-smoke-runtime vm-ne2k-smoke-runtime \
-        rootfs-patch rootfs-repack-kernel \
-        rootfs-patch-kernel
+	    vm-diagnostics-pcc-runtime \
+	    vm-io-smoke-runtime vm-ne2k-smoke-runtime \
+	    rootfs-contract-check rootfs-boot-smoke-runtime rootfs-board-matrix \
+	    rootfs-patch rootfs-repack-kernel \
+	    rootfs-patch-kernel
 
 all: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) all
@@ -56,8 +70,14 @@ pcc-hw-test-stage pcc-hw-test-image: $(BOARD_DIR)/Makefile
 run run-early run-net run-vr4300: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
 
-smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain smoke-host-portablecc pcc-regress-compile pcc-regress-stage pcc-regress-runtime pcc-regress-runtime-vr4300 pcc-regress-summary linpack-smoke-build linpack-smoke-stage linpack-smoke-runtime linpack-smoke-runtime-vr4300 native-pcc-smoke-runtime native-pcc-smoke-runtime-vr4300 native-pcc-regress-stage native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 pcc-perf-baseline pcc-smoke-all-runtime pcc-smoke-all-runtime-vr4300 vm-smoke-runtime vm-stress-runtime vm-pressure-runtime vm-pressure-smoke-build vm-pressure-smoke-stage vm-pressure-smoke-runtime vm-diagnostics-pcc-runtime vm-io-smoke-runtime vm-ne2k-smoke-runtime rootfs-patch rootfs-repack-kernel rootfs-patch-kernel: $(BOARD_DIR)/Makefile
+smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain smoke-host-portablecc pcc-regress-compile pcc-regress-stage pcc-regress-runtime pcc-regress-runtime-vr4300 pcc-regress-summary linpack-smoke-build linpack-smoke-stage linpack-smoke-runtime linpack-smoke-runtime-vr4300 native-pcc-smoke-runtime native-pcc-smoke-runtime-vr4300 native-pcc-regress-stage native-pcc-regress-runtime native-pcc-regress-runtime-vr4300 pcc-perf-baseline pcc-smoke-all-runtime pcc-smoke-all-runtime-vr4300 vm-smoke-runtime vm-stress-runtime vm-pressure-runtime vm-pressure-smoke-build vm-pressure-smoke-stage vm-pressure-smoke-runtime vm-diagnostics-pcc-runtime vm-io-smoke-runtime vm-ne2k-smoke-runtime rootfs-contract-check rootfs-boot-smoke-runtime rootfs-patch rootfs-repack-kernel rootfs-patch-kernel: $(BOARD_DIR)/Makefile
 	$(MAKE) -C $(BOARD_DIR) $@
+
+rootfs-board-matrix:
+	python3 $(TOPSRC)/sys/mips/tools/rootfs-board-matrix.py \
+	    --top $(abspath $(TOPSRC)) \
+	    --out $(if $(ROOTFS_MATRIX_OUT),$(abspath $(ROOTFS_MATRIX_OUT)),/private/tmp/rebsd-rootfs-matrix) \
+	    --jobs $(if $(ROOTFS_MATRIX_JOBS),$(ROOTFS_MATRIX_JOBS),4)
 
 cross-pcc-sdk cross-pcc-sdk-tools clean-cross-pcc-sdk:
 	$(MAKE) -f sdk.mk $@

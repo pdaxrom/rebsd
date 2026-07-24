@@ -28,7 +28,11 @@ $(SUBDIR):	FRC | $(LIBS)
 
 FRC:
 
-install:
+# Installing from a parallel multi-goal invocation such as "make -j all
+# install" must not race the build.  Several legacy recursive install rules
+# intentionally ignore individual copy errors; without this dependency that
+# can produce a filesystem image with no init or shell.
+install: all
 		-for i in $(SUBDIR); do \
 			$(MAKE) -C $$i DESTDIR=$(DESTDIR) all install; done
 

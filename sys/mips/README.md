@@ -60,6 +60,52 @@ make -C sys/mips BOARD=maltael rootfs.img kernel
 make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
 ```
 
+## Minimal rootfs regression matrix
+
+Every filesystem image is checked for the boot-critical files (`init`, `sh`,
+`getty`, `mkfs`, `mount`, configuration files, and console/root/swap device
+entries) before `fsutil` is allowed to package it.  The shared minimal profile
+is 6 MiB and omits development files and the native compiler while retaining
+the libc ABI smoke binary.  The N64-specific minimal profile additionally
+retains its VR4300 VM and PCC diagnostics.
+
+Run the complete isolated matrix with:
+
+```sh
+make -C sys/mips rootfs-board-matrix
+```
+
+The matrix creates a timestamped directory below
+`/private/tmp/rebsd-rootfs-matrix` unless `ROOTFS_MATRIX_OUT` is supplied.  It
+boots and logs in on QEMU Malta, Malta64, and MaltaEL; build-checks the CI20
+image; builds the N64 `uartmin-gcc`, `uartmin-pcc-gcc`, and
+`uartmin-pcc-pcc` ROMs; and finally boots each exact 6 MiB filesystem under
+the Malta64/R4000 8 MiB memory profile.  Every board and N64 compiler
+combination uses a separate object tree.  A single board build can use the
+same gate directly:
+
+```sh
+make -C sys/mips BOARD=malta O=/private/tmp/rebsd-malta-min \
+    MIPS_ROOTFS_PROFILE=minimal MIPS_ROOTFS_NATIVE_PCC=0 \
+    rootfs-boot-smoke-runtime
+```
+
+CI20 has no matching QEMU machine in this tree, so its matrix entry is a
+kernel/rootfs build plus the same rootfs contract check.
+
+The N64 UART-only PCC configurations deliberately select the ReBSD assembler
+and linker rather than GNU binutils:
+
+```sh
+# PCC kernel, GCC userland.
+make -C sys/mips BOARD=n64 O=/private/tmp/rebsd-n64-pcc-gcc \
+    N64_BUILD_CONFIG=uartmin-pcc-gcc all
+
+# PCC kernel, PCC userland.
+make -C sys/mips BOARD=n64 O=/private/tmp/rebsd-n64-pcc-pcc \
+    N64_BUILD_CONFIG=uartmin-pcc-pcc all
+```
+
 `maltael` sets `MIPS_ROOTFS_ENDIAN=little`, uses
 `qemu-system-mipsel`, and defaults to
 `/Users/sash/Library/mipsel-toolchain/bin/mipsel-elf-` for the GCC path.

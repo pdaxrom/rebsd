@@ -25,10 +25,11 @@ do
 done
 
 tmp=/var/tmp/native-pcc-smoke.$$
-rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.s" "$tmp.o" "$tmp.pcc" \
+rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.ccom.s" "$tmp.s" "$tmp.o" "$tmp.pcc" \
     "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" \
     "$tmp.freopen.out" "$tmp.cdefs" "$tmp.cdefs.c" "$tmp.out"
-trap 'rc=$?; rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.s" "$tmp.o" "$tmp.pcc" "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" "$tmp.freopen.out" "$tmp.cdefs" "$tmp.cdefs.c" "$tmp.out"; exit $rc' 0 1 2 3 15
+rm -f "$tmp.mman" "$tmp.mman.c"
+trap 'rc=$?; rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.ccom.s" "$tmp.s" "$tmp.o" "$tmp.pcc" "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" "$tmp.freopen.out" "$tmp.cdefs" "$tmp.cdefs.c" "$tmp.mman" "$tmp.mman.c" "$tmp.out"; exit $rc' 0 1 2 3 15
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>
@@ -66,27 +67,36 @@ echo "step 1: cpp"
 test -s "$tmp.i" || exit 1
 grep native-pcc-main "$tmp.i" >/dev/null || exit 1
 
-echo "step 2: cc -S"
-cc -S -o "$tmp.s" "$tmp.c" || exit 1
+echo "step 2: direct ccom"
+/usr/libexec/pcc/ccom -v "$tmp.i" "$tmp.ccom.s" || exit 1
+test -s "$tmp.ccom.s" || exit 1
+
+echo "step 3: cc -v -S"
+cc -v -S -o "$tmp.s" "$tmp.c" || exit 1
 test -s "$tmp.s" || exit 1
 
-echo "step 3: cc -c"
+echo "step 4: cc -c"
 cc -c -o "$tmp.o" "$tmp.c" || exit 1
 test -s "$tmp.o" || exit 1
 
-echo "step 4: cc link/run"
+echo "step 5: cc link/run"
 cc -v -o "$tmp" "$tmp.c" || exit 1
 test -s "$tmp" || exit 1
 "$tmp" > "$tmp.out" || exit 1
 grep native-pcc-main:42 "$tmp.out" >/dev/null || exit 1
 grep native-pcc-dtor:41 "$tmp.out" >/dev/null || exit 1
 
-echo "step 5: pcc link/run"
-pcc -o "$tmp.pcc" "$tmp.c" || exit 1
+echo "step 6a: pcc compile/link begin"
+pcc -v -o "$tmp.pcc" "$tmp.c" || exit 1
+echo "step 6b: pcc compile/link end"
 test -s "$tmp.pcc" || exit 1
+echo "step 6c: pcc run begin"
 "$tmp.pcc" > "$tmp.out" || exit 1
+echo "step 6d: pcc run end"
+echo "step 6e: pcc output checks begin"
 grep native-pcc-main:42 "$tmp.out" >/dev/null || exit 1
 grep native-pcc-dtor:41 "$tmp.out" >/dev/null || exit 1
+echo "step 6f: pcc output checks end"
 
 cat > "$tmp.ctime.c" <<'EOF'
 #include <stdio.h>
@@ -125,7 +135,7 @@ main(void)
 }
 EOF
 
-echo "step 6: ctime/localtime link/run"
+echo "step 7: ctime/localtime link/run"
 cc -o "$tmp.ctime" "$tmp.ctime.c" || exit 1
 "$tmp.ctime" > "$tmp.out" || exit 1
 grep native-pcc-ctime-1 "$tmp.out" >/dev/null || exit 1
@@ -169,12 +179,18 @@ main(int argc, char **argv)
 }
 EOF
 
-echo "step 7: stdout freopen/malloc link/run"
+echo "step 8: stdout freopen/malloc link/run"
+echo "step 8a: compile/link begin"
 cc -o "$tmp.freopen" "$tmp.freopen.c" || exit 1
+echo "step 8b: compile/link end"
+echo "step 8c: run begin"
 "$tmp.freopen" "$tmp.freopen.out" > "$tmp.out" || exit 1
+echo "step 8d: run end"
+echo "step 8e: output checks begin"
 grep native-pcc-freopen-before "$tmp.out" >/dev/null || exit 1
 grep native-pcc-freopen-after "$tmp.freopen.out" >/dev/null || exit 1
 grep native-pcc-freopen-malloc-ok "$tmp.freopen.out" >/dev/null || exit 1
+echo "step 8f: output checks end"
 
 cat > "$tmp.cdefs.c" <<'EOF'
 #include <stdarg.h>
@@ -274,10 +290,16 @@ main(void)
 }
 EOF
 
-echo "step 8: sys/cdefs compatibility link/run"
-cc -o "$tmp.cdefs" "$tmp.cdefs.c" || exit 1
+echo "step 9: sys/cdefs compatibility link/run"
+echo "step 9a: compile/link begin"
+cc -v -o "$tmp.cdefs" "$tmp.cdefs.c" || exit 1
+echo "step 9b: compile/link end"
+echo "step 9c: run begin"
 "$tmp.cdefs" > "$tmp.out" || exit 1
+echo "step 9d: run end"
+echo "step 9e: output check begin"
 grep native-pcc-cdefs-ok:done "$tmp.out" >/dev/null || exit 1
+echo "step 9f: output check end"
 
 cat > "$tmp.mman.c" <<'EOF'
 #include <sys/mman.h>
@@ -300,9 +322,14 @@ main(void)
 }
 EOF
 
-echo "step 9: sys/mman native PCC link/run"
+echo "step 10a: sys/mman native PCC compile/link begin"
 cc -o "$tmp.mman" "$tmp.mman.c" || exit 1
+echo "step 10b: sys/mman native PCC compile/link end"
+echo "step 10c: sys/mman native PCC run begin"
 "$tmp.mman" > "$tmp.out" || exit 1
+echo "step 10d: sys/mman native PCC run end"
+echo "step 10e: sys/mman native PCC output check begin"
 grep native-pcc-mman-ok "$tmp.out" >/dev/null || exit 1
+echo "step 10f: sys/mman native PCC output check end"
 
 echo "native pcc smoke ok"

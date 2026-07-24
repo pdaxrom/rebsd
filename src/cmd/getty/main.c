@@ -229,6 +229,7 @@ int main(int argc, char *argv[])
 				env[i] = environ[i];
 			makeenv(&env[i]);
 			execle(LO, "login", "-p", name, (char *) 0, env);
+			syslog(LOG_ERR, "cannot exec %s: %m", LO);
 			exit(1);
 		}
 		alarm(0);

@@ -70,8 +70,9 @@ endif
 ifeq ($(filter $(MIPS_ROOTFS_COMPILER),$(MIPS_ROOTFS_COMPILERS)),)
 $(error Unsupported MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER); expected one of $(MIPS_ROOTFS_COMPILERS))
 endif
-MIPS_ROOTFS_NATIVE_PCC ?= 1
-MIPS_ROOTFS_KBYTES ?= $(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),32768,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),32768,16384))
+MIPS_ROOTFS_PROFILE ?= full
+MIPS_ROOTFS_NATIVE_PCC ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),0,1)
+MIPS_ROOTFS_KBYTES ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),6144,$(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),32768,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),32768,16384)))
 MIPS_ROOTFS_CPU ?= $(if $(N64_USERLAND_CPU),$(N64_USERLAND_CPU),$(if $(MALTA_PORT64),vr4300,mips32r2))
 MIPS_ROOTFS_CPUS = vr4300 mips32r2
 ifneq ($(N64_USERLAND_CPU),)
@@ -205,6 +206,8 @@ VM_DIAGNOSTICS_PCC_LDFLAGS = -nostartfiles \
     -L$(abspath $(MIPS_NATIVE_DIR))
 VM_IO_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-io-smoke.$(MIPS_ROOTFS_ABI).log
 VM_NE2K_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-ne2k-smoke.$(MIPS_ROOTFS_ABI).log
+ROOTFS_BOOT_SMOKE_LOG ?= \
+    $(TOPOBJ)/tests/rootfs-boot-smoke.$(MIPS_ROOTFS_PROFILE).$(MIPS_ROOTFS_ABI).log
 VM_STRESS_ITERATIONS ?= 8
 MIPS_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
@@ -449,7 +452,21 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         vm-pressure-smoke-runtime \
         vm-diagnostics-pcc-runtime vm-io-smoke-runtime \
         vm-ne2k-smoke-runtime \
+        rootfs-boot-smoke-runtime \
         rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
+
+rootfs-boot-smoke-runtime: rootfs-contract-check \
+    $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(ROOTFS_BOOT_SMOKE_LOG) \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout 300 --silence-timeout 60 \
+	    --command 'test -x /sbin/init && test -x /bin/sh && test -x /libexec/getty && test -x /sbin/mkfs && test -x /sbin/mount && test -r /etc/rc && /root/libc-abi-smoke >/dev/null && echo ROOTFS_BOOT_SMOKE_OK' \
+	    --expect "ROOTFS_BOOT_SMOKE_OK"
 
 vm-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	$(MAKE) $(MALTA_RUNTIME_KERNEL)

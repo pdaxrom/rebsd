@@ -44,7 +44,7 @@ static void
 dirbad (struct inode *ip, off_t offset, char *how)
 {
     printf ("%s: bad dir I=%u off %ld: %s\n",
-        ip->i_fs->fs_fsmnt, ip->i_number, offset, how);
+        ip->i_fs->fs_fsmnt, ip->i_number, (long)offset, how);
 }
 
 /*

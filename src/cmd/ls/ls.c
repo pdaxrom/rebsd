@@ -583,9 +583,9 @@ fmtlstuff(struct afile *p, int maxflags)
 		(void) sprintf(fsize, "%3d,%4d",
 		    major(p->fsize), minor(p->fsize));
 	else if (p->ftype == 's')
-		(void) sprintf(fsize, "%8ld", 0L);
+		(void) sprintf(fsize, "%8lld", 0LL);
 	else
-		(void) sprintf(fsize, "%8ld", p->fsize);
+		(void) sprintf(fsize, "%8lld", (long long)p->fsize);
 /* get ftime */
 	{ char *cp = ctime(&p->fmtime);
 	  if ((p->fmtime < sixmonthsago) || (p->fmtime > now))
