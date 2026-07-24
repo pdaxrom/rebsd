@@ -235,35 +235,63 @@ pmap_md_dcache_writeback_invalidate(unsigned address)
 }
 
 static void
+pmap_md_dcache_invalidate(unsigned address)
+{
+    asm volatile ("cache 0x11, 0(%0)" :: "r" (address) : "memory");
+}
+
+static void
 pmap_md_icache_invalidate(unsigned address)
 {
     asm volatile ("cache 0x10, 0(%0)" :: "r" (address) : "memory");
 }
 
 int
-pmap_md_page_sync(vm_paddr_t paddr, unsigned operations)
+pmap_md_range_sync(vm_paddr_t paddr, vm_size_t size, unsigned operations)
 {
     unsigned address;
     unsigned end;
 
-    if (!vm_paddr_page_aligned(paddr) || paddr > PMAP_MD_PHYS_MASK -
-        (VM_PAGE_SIZE - 1) || operations == 0 ||
-        (operations & ~(PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION)) != 0)
+    if (size == 0 || paddr > PMAP_MD_PHYS_MASK ||
+        size - 1 > PMAP_MD_PHYS_MASK - paddr || operations == 0 ||
+        (operations & ~(PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION |
+        PMAP_INVALIDATE_DATA)) != 0 ||
+        (operations & (PMAP_SYNC_DATA | PMAP_INVALIDATE_DATA)) ==
+        (PMAP_SYNC_DATA | PMAP_INVALIDATE_DATA))
         return EINVAL;
-    address = PMAP_MD_KSEG0_BASE | paddr;
-    end = address + VM_PAGE_SIZE;
     pmap_md_sync();
     if ((operations & PMAP_SYNC_DATA) != 0) {
+        address = paddr & ~(PMAP_MD_DCACHE_LINE - 1);
+        end = (paddr + size + PMAP_MD_DCACHE_LINE - 1) &
+            ~(PMAP_MD_DCACHE_LINE - 1);
         for (; address < end; address += PMAP_MD_DCACHE_LINE)
-            pmap_md_dcache_writeback_invalidate(address);
+            pmap_md_dcache_writeback_invalidate(
+                PMAP_MD_KSEG0_BASE | address);
+        pmap_md_sync();
+    }
+    if ((operations & PMAP_INVALIDATE_DATA) != 0) {
+        address = paddr & ~(PMAP_MD_DCACHE_LINE - 1);
+        end = (paddr + size + PMAP_MD_DCACHE_LINE - 1) &
+            ~(PMAP_MD_DCACHE_LINE - 1);
+        for (; address < end; address += PMAP_MD_DCACHE_LINE)
+            pmap_md_dcache_invalidate(PMAP_MD_KSEG0_BASE | address);
         pmap_md_sync();
     }
     if ((operations & PMAP_SYNC_INSTRUCTION) != 0) {
-        address = PMAP_MD_KSEG0_BASE | paddr;
-        end = address + VM_PAGE_SIZE;
+        address = paddr & ~(PMAP_MD_ICACHE_LINE - 1);
+        end = (paddr + size + PMAP_MD_ICACHE_LINE - 1) &
+            ~(PMAP_MD_ICACHE_LINE - 1);
         for (; address < end; address += PMAP_MD_ICACHE_LINE)
-            pmap_md_icache_invalidate(address);
+            pmap_md_icache_invalidate(PMAP_MD_KSEG0_BASE | address);
         pmap_md_sync();
     }
     return 0;
+}
+
+int
+pmap_md_page_sync(vm_paddr_t paddr, unsigned operations)
+{
+    if (!vm_paddr_page_aligned(paddr))
+        return EINVAL;
+    return pmap_md_range_sync(paddr, VM_PAGE_SIZE, operations);
 }

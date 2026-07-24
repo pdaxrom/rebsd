@@ -20,6 +20,7 @@ enum pmap_cache {
 
 #define PMAP_SYNC_DATA          0x01u
 #define PMAP_SYNC_INSTRUCTION   0x02u
+#define PMAP_INVALIDATE_DATA    0x04u
 
 struct pmap_stats {
     vm_pfn_t pms_mappings;
@@ -52,6 +53,11 @@ struct pmap_tlb_diagnostics {
     unsigned   ptd_query_entryhi;
     unsigned   ptd_query_entrylo0;
     unsigned   ptd_query_entrylo1;
+    unsigned   ptd_fast_last_epc;
+    unsigned   ptd_fast_last_vaddr;
+    unsigned   ptd_fast_repeat;
+    unsigned   ptd_active_directory;
+    unsigned   ptd_fast_directory;
 };
 
 /*
@@ -83,6 +89,7 @@ int pmap_clear_page_reference(struct vm_page *);
 int pmap_clear_page_modify(struct vm_page *);
 vm_paddr_t pmap_cache_alias_mask(void);
 int pmap_page_sync(struct vm_page *, unsigned);
+int pmap_sync_phys_range(vm_paddr_t, vm_size_t, unsigned);
 void *pmap_page_direct_map(struct vm_page *, enum pmap_cache);
 void *pmap_device_direct_map(vm_paddr_t, enum pmap_cache);
 int pmap_get_stats(struct pmap_stats *);

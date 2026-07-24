@@ -59,7 +59,11 @@ compile_pmap()
         "$top/sys/vm/vm_page.c" "$top/sys/vm/vm_map.c" \
         "$top/sys/vm/vm_object.c" "$top/sys/vm/vm_shm.c" \
         "$top/sys/vm/vm_sysv_shm.c" \
-        "$top/sys/vm/vmspace.c" "$top/sys/mips/common/pmap.c" \
+        "$top/sys/vm/vmspace.c" "$top/sys/vm/vmspace_access.c" \
+        "$top/sys/vm/vmspace_fault.c" \
+        "$top/sys/vm/vmspace_fault_api.c" \
+        "$top/sys/vm/vmspace_fault_validate.c" \
+        "$top/sys/mips/common/pmap.c" \
         "$script_dir/pmap_test.c" -o "$output"
 }
 

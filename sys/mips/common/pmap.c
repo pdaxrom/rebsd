@@ -71,6 +71,7 @@ extern int pmap_md_tlb_invalidate(unsigned);
 extern void pmap_md_tlb_flush(void);
 extern void *pmap_md_direct_map(vm_paddr_t, vm_size_t, enum pmap_cache);
 extern int pmap_md_page_sync(vm_paddr_t, unsigned);
+extern int pmap_md_range_sync(vm_paddr_t, vm_size_t, unsigned);
 extern vm_paddr_t pmap_md_cache_alias_mask(void);
 
 struct pmap {
@@ -94,6 +95,10 @@ static unsigned pmap_initialized;
 uint32_t *mips_pmap_fast_directory;
 volatile unsigned mips_pmap_fast_refills;
 volatile unsigned mips_pmap_fast_scratch;
+volatile unsigned mips_pmap_fast_last_hash;
+volatile unsigned mips_pmap_fast_last_epc;
+volatile unsigned mips_pmap_fast_last_vaddr;
+volatile unsigned mips_pmap_fast_repeat;
 
 static void
 pmap_stat_increment(vm_pfn_t *value)
@@ -374,6 +379,10 @@ pmap_system_init(struct vm_page_allocator *allocator)
     mips_pmap_fast_directory = 0;
     mips_pmap_fast_refills = 0;
     mips_pmap_fast_scratch = 0;
+    mips_pmap_fast_last_hash = 0;
+    mips_pmap_fast_last_epc = 0;
+    mips_pmap_fast_last_vaddr = 0;
+    mips_pmap_fast_repeat = 0;
     pmap_asid_generation = 1;
     pmap_next_asid = PMAP_ASID_FIRST;
     pmap_initialized = 1;
@@ -1059,10 +1068,27 @@ int
 pmap_page_sync(struct vm_page *page, unsigned operations)
 {
     if (!pmap_initialized || page == 0 || operations == 0 ||
-        (operations & ~(PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION)) != 0 ||
+        (operations & ~(PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION |
+        PMAP_INVALIDATE_DATA)) != 0 ||
+        (operations & (PMAP_SYNC_DATA | PMAP_INVALIDATE_DATA)) ==
+        (PMAP_SYNC_DATA | PMAP_INVALIDATE_DATA) ||
         vm_page_lookup(pmap_allocator, page->vmp_paddr) != page)
         return EINVAL;
     return pmap_md_page_sync(page->vmp_paddr, operations);
+}
+
+int
+pmap_sync_phys_range(vm_paddr_t paddr, vm_size_t size,
+    unsigned operations)
+{
+    if (!pmap_initialized || size == 0 || operations == 0 ||
+        (operations & ~(PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION |
+        PMAP_INVALIDATE_DATA)) != 0 ||
+        (operations & (PMAP_SYNC_DATA | PMAP_INVALIDATE_DATA)) ==
+        (PMAP_SYNC_DATA | PMAP_INVALIDATE_DATA) ||
+        paddr > VM_PADDR_MAX - (size - 1))
+        return EINVAL;
+    return pmap_md_range_sync(paddr, size, operations);
 }
 
 int
@@ -1096,6 +1122,13 @@ pmap_get_tlb_diagnostics(vm_vaddr_t vaddr,
     diagnostics->ptd_query_entryhi = 0;
     diagnostics->ptd_query_entrylo0 = 0;
     diagnostics->ptd_query_entrylo1 = 0;
+    diagnostics->ptd_fast_last_epc = mips_pmap_fast_last_epc;
+    diagnostics->ptd_fast_last_vaddr = mips_pmap_fast_last_vaddr;
+    diagnostics->ptd_fast_repeat = mips_pmap_fast_repeat;
+    diagnostics->ptd_active_directory = pmap_active == 0 ? 0 :
+        (unsigned)(uintptr_t)pmap_active->pm_directory;
+    diagnostics->ptd_fast_directory =
+        (unsigned)(uintptr_t)mips_pmap_fast_directory;
     if (!pmap_valid(pmap_active))
         return 0;
 

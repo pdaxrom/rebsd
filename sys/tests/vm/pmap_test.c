@@ -26,6 +26,8 @@
 #define TEST_GROW_PAGES 65u
 #define TEST_PRESSURE_PAGES 70u
 #define TEST_LOW_FREE_PAGES 55u
+#define TEST_CHURN_ITERATIONS 512u
+#define TEST_CHURN_PAGES 8u
 
 #define CHECK(expr) do {                                                \
     if (!(expr)) {                                                      \
@@ -233,6 +235,38 @@ pmap_md_page_sync(vm_paddr_t paddr, unsigned operations)
     return 0;
 }
 
+int
+pmap_md_range_sync(vm_paddr_t paddr, vm_size_t size, unsigned operations)
+{
+    if (size == 0 || paddr > TEST_RAM_SIZE ||
+        size > TEST_RAM_SIZE - paddr || operations == 0)
+        return EINVAL;
+    test_last_sync_operations = operations;
+    ++test_syncs;
+    return 0;
+}
+
+static int
+test_page_poison(void *arg, vm_paddr_t paddr, uint8_t pattern, int verify)
+{
+    unsigned char *memory;
+    vm_size_t index;
+
+    (void)arg;
+    if (!vm_paddr_page_aligned(paddr) || paddr > TEST_RAM_SIZE ||
+        VM_PAGE_SIZE > TEST_RAM_SIZE - paddr)
+        return EFAULT;
+    memory = &test_ram[paddr];
+    if (verify) {
+        for (index = 0; index < VM_PAGE_SIZE; ++index)
+            if (memory[index] != pattern)
+                return EFAULT;
+    } else {
+        memset(memory, pattern, VM_PAGE_SIZE);
+    }
+    return 0;
+}
+
 static int
 test_page_alloc(struct vm_page_allocator *allocator,
     vm_vaddr_t vaddr, struct vm_page **result)
@@ -393,6 +427,13 @@ test_pmap(void)
     CHECK(pmap_extract(pmap2, TEST_VADDR, &paddr) == ENOENT);
     CHECK(test_tlb_invalidations != 0);
     CHECK(pmap_page_sync(page1, PMAP_SYNC_DATA) == 0);
+    CHECK(pmap_page_sync(page1, PMAP_INVALIDATE_DATA) == 0);
+    CHECK(test_last_sync_operations == PMAP_INVALIDATE_DATA);
+    CHECK(pmap_sync_phys_range(page1->vmp_paddr + 17, 31,
+        PMAP_INVALIDATE_DATA) == 0);
+    CHECK(test_last_sync_operations == PMAP_INVALIDATE_DATA);
+    CHECK(pmap_page_sync(page1,
+        PMAP_SYNC_DATA | PMAP_INVALIDATE_DATA) == EINVAL);
     CHECK(pmap_page_direct_map(page1, PMAP_CACHE_CACHED) ==
         &test_ram[page1->vmp_paddr]);
 
@@ -1101,6 +1142,59 @@ test_shm(void)
     return 0;
 }
 
+static int
+test_vmspace_churn(void)
+{
+    struct vm_page_allocator allocator;
+    struct vm_phys_map map;
+    struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
+    struct vm_object_stats object_stats;
+    struct vmspace *child;
+    struct vmspace *source;
+    vm_pfn_t free_before;
+    unsigned char value;
+    unsigned iteration;
+    unsigned page;
+
+    memset(test_ram, 0, sizeof(test_ram));
+    memset(&allocator, 0, sizeof(allocator));
+    vm_phys_map_init(&map);
+    CHECK(vm_phys_map_add_ram(&map, 0, TEST_RAM_SIZE, "test ram") == 0);
+    CHECK(vm_phys_map_finalize(&map) == 0);
+    CHECK(vm_page_allocator_init(&allocator, &map, metadata,
+        sizeof(metadata)) == 0);
+    vm_page_allocator_set_poison(&allocator, test_page_poison, 0);
+    CHECK(pmap_system_init(&allocator) == 0);
+    CHECK(vmspace_system_init(&allocator) == 0);
+    free_before = allocator.vpa_free_count;
+
+    for (iteration = 0; iteration < TEST_CHURN_ITERATIONS; ++iteration) {
+        CHECK(vmspace_create(&source) == 0);
+        CHECK(vmspace_map_anon(source, TEST_VADDR,
+            TEST_CHURN_PAGES * VM_PAGE_SIZE,
+            VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+        for (page = 0; page < TEST_CHURN_PAGES; ++page) {
+            value = (unsigned char)(iteration + page);
+            CHECK(vmspace_write(source,
+                TEST_VADDR + page * VM_PAGE_SIZE, &value, 1) == 0);
+        }
+        CHECK(vmspace_clone(source, &child) == 0);
+        value = (unsigned char)iteration;
+        CHECK(vmspace_write(child, TEST_VADDR + VM_PAGE_SIZE,
+            &value, 1) == 0);
+        CHECK(vmspace_destroy(child) == 0);
+        CHECK(vmspace_destroy(source) == 0);
+        CHECK(allocator.vpa_free_count == free_before);
+        CHECK(vm_object_get_stats(&object_stats) == 0);
+        CHECK(object_stats.vos_objects == 0);
+        CHECK(object_stats.vos_anon_pages == 0);
+        CHECK(object_stats.vos_resident_pages == 0);
+        CHECK(object_stats.vos_swapped_pages == 0);
+    }
+    CHECK(vm_page_allocator_validate(&allocator, &map) == 0);
+    return 0;
+}
+
 int
 main(void)
 {
@@ -1111,6 +1205,8 @@ main(void)
     if (test_pager() != 0)
         return 1;
     if (test_shm() != 0)
+        return 1;
+    if (test_vmspace_churn() != 0)
         return 1;
     puts("MIPS pmap/vmspace tests: ok");
     return 0;

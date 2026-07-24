@@ -1,6 +1,5 @@
 #include <machine/io.h>
 #include <machine/machparam.h>
-
         /*
          * PCC's assembler preprocessor can remove a conditional block without
          * preserving a statement boundary.  Semicolons immediately before or
@@ -21,6 +20,10 @@
         .extern mips_pmap_fast_directory
         .extern mips_pmap_fast_refills
         .extern mips_pmap_fast_scratch
+        .extern mips_pmap_fast_last_hash
+        .extern mips_pmap_fast_last_epc
+        .extern mips_pmap_fast_last_vaddr
+        .extern mips_pmap_fast_repeat
 
         .section .exception,"ax",@progbits
         .globl  _mips_exception_vector
@@ -60,6 +63,42 @@ _mips_tlb_refill_vector_end:
 
         .ent    mips_tlb_refill_entry
 mips_tlb_refill_entry:
+        /*
+         * Record consecutive identical refill sites.  This uses only k0/k1
+         * and cached kernel globals, so the interrupted GPR file is intact
+         * and no console, lock, allocator, or VM policy is involved.
+         */
+        mfc0    $k0, $14                /* EPC */
+        mfc0    $k1, $8                 /* BadVAddr */
+        xor     $k0, $k0, $k1
+        la      $k1, mips_pmap_fast_last_hash
+        lw      $k1, 0($k1)
+        bne     $k0, $k1, mips_tlb_refill_new_site
+        nop
+        la      $k0, mips_pmap_fast_repeat
+        lw      $k1, 0($k0)
+        addiu   $k1, $k1, 1
+        bnez    $k1, mips_tlb_refill_repeat_ready
+        nop
+        addiu   $k1, $zero, -1         /* saturate on wrap */
+mips_tlb_refill_repeat_ready:
+        sw      $k1, 0($k0)
+        b       mips_tlb_refill_site_recorded
+        nop
+mips_tlb_refill_new_site:
+        la      $k1, mips_pmap_fast_last_hash
+        sw      $k0, 0($k1)
+        addiu   $k0, $zero, 1
+        la      $k1, mips_pmap_fast_repeat
+        sw      $k0, 0($k1)
+mips_tlb_refill_site_recorded:
+        mfc0    $k0, $14
+        la      $k1, mips_pmap_fast_last_epc
+        sw      $k0, 0($k1)
+        mfc0    $k0, $8
+        la      $k1, mips_pmap_fast_last_vaddr
+        sw      $k0, 0($k1)
+
         mfc0    $k0, $8                 /* BadVAddr */
         bltz    $k0, mips_tlb_refill_slow
         nop

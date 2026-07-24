@@ -23,7 +23,7 @@
 #ifdef N64_RESET_DUMP
 #include <machine/n64reset.h>
 #endif
-#ifdef N64_PCC_HANG_TRACE
+#ifdef N64CART_ENABLED
 #include <machine/n64cart_uart.h>
 #endif
 #ifdef INPUT_ENABLED
@@ -71,171 +71,6 @@ n64_emergency_frame(const int *frame)
     return (unsigned)frame >= (unsigned)n64_gdb_emergency_stack &&
         (unsigned)frame < (unsigned)n64_gdb_emergency_stack_top;
 }
-#endif
-
-#ifdef N64_PCC_HANG_TRACE
-static int n64_pcc_crash_dump_active;
-static unsigned long n64_syscall_trace_sequence;
-static int n64_syscall_trace_announced;
-
-static int
-n64_pcc_user_frame_valid(const struct user *up, const int *frame)
-{
-    return up != 0 && frame != 0 &&
-        (unsigned)frame >= (unsigned)up &&
-        (unsigned)frame <= (unsigned)up + USIZE -
-        FRAME_WORDS * sizeof(int);
-}
-
-static void
-n64_pcc_emergency_puts(const char *s)
-{
-    while (*s != '\0') {
-        if (*s == '\n')
-            n64cart_uart_emergency_putc('\r');
-        n64cart_uart_emergency_putc(*s++);
-    }
-}
-
-static void
-n64_pcc_emergency_hex(unsigned value)
-{
-    static const char digits[] = "0123456789abcdef";
-    int shift;
-
-    for (shift = 28; shift >= 0; shift -= 4)
-        n64cart_uart_emergency_putc(
-            digits[value >> (unsigned)shift & 0x0fu]);
-}
-
-static void
-n64_pcc_emergency_field(const char *name, unsigned value)
-{
-    n64cart_uart_emergency_putc(' ');
-    n64_pcc_emergency_puts(name);
-    n64cart_uart_emergency_putc('=');
-    n64_pcc_emergency_hex(value);
-}
-
-static void
-n64_pcc_emergency_frame(const char *tag, const int *frame)
-{
-    n64_pcc_emergency_puts("N64_CRASH_FRAME tag=");
-    n64_pcc_emergency_puts(tag);
-    n64_pcc_emergency_field("frame", (unsigned)frame);
-    n64_pcc_emergency_field("pc", frame[FRAME_PC]);
-    n64_pcc_emergency_field("sp", frame[FRAME_SP]);
-    n64_pcc_emergency_field("fp", frame[FRAME_FP]);
-    n64_pcc_emergency_field("ra", frame[FRAME_RA]);
-    n64_pcc_emergency_field("gp", frame[FRAME_GP]);
-    n64_pcc_emergency_field("lo", frame[FRAME_LO]);
-    n64_pcc_emergency_field("hi", frame[FRAME_HI]);
-    n64_pcc_emergency_field("status", frame[FRAME_STATUS]);
-    n64_pcc_emergency_puts("\n");
-
-    n64_pcc_emergency_puts("N64_CRASH_REGS tag=");
-    n64_pcc_emergency_puts(tag);
-    n64_pcc_emergency_field("r01", frame[FRAME_R1]);
-    n64_pcc_emergency_field("r02", frame[FRAME_R2]);
-    n64_pcc_emergency_field("r03", frame[FRAME_R3]);
-    n64_pcc_emergency_field("r04", frame[FRAME_R4]);
-    n64_pcc_emergency_field("r05", frame[FRAME_R5]);
-    n64_pcc_emergency_field("r06", frame[FRAME_R6]);
-    n64_pcc_emergency_field("r07", frame[FRAME_R7]);
-    n64_pcc_emergency_puts("\n");
-
-    n64_pcc_emergency_puts("N64_CRASH_REGS tag=");
-    n64_pcc_emergency_puts(tag);
-    n64_pcc_emergency_field("r08", frame[FRAME_R8]);
-    n64_pcc_emergency_field("r09", frame[FRAME_R9]);
-    n64_pcc_emergency_field("r10", frame[FRAME_R10]);
-    n64_pcc_emergency_field("r11", frame[FRAME_R11]);
-    n64_pcc_emergency_field("r12", frame[FRAME_R12]);
-    n64_pcc_emergency_field("r13", frame[FRAME_R13]);
-    n64_pcc_emergency_field("r14", frame[FRAME_R14]);
-    n64_pcc_emergency_field("r15", frame[FRAME_R15]);
-    n64_pcc_emergency_puts("\n");
-
-    n64_pcc_emergency_puts("N64_CRASH_REGS tag=");
-    n64_pcc_emergency_puts(tag);
-    n64_pcc_emergency_field("r16", frame[FRAME_R16]);
-    n64_pcc_emergency_field("r17", frame[FRAME_R17]);
-    n64_pcc_emergency_field("r18", frame[FRAME_R18]);
-    n64_pcc_emergency_field("r19", frame[FRAME_R19]);
-    n64_pcc_emergency_field("r20", frame[FRAME_R20]);
-    n64_pcc_emergency_field("r21", frame[FRAME_R21]);
-    n64_pcc_emergency_field("r22", frame[FRAME_R22]);
-    n64_pcc_emergency_field("r23", frame[FRAME_R23]);
-    n64_pcc_emergency_puts("\n");
-
-    n64_pcc_emergency_puts("N64_CRASH_REGS tag=");
-    n64_pcc_emergency_puts(tag);
-    n64_pcc_emergency_field("r24", frame[FRAME_R24]);
-    n64_pcc_emergency_field("r25", frame[FRAME_R25]);
-    n64_pcc_emergency_puts("\n");
-}
-
-static void
-n64_pcc_crash_dump(const char *kind, int *frame, unsigned status,
-    unsigned cause, unsigned badvaddr, int signal)
-{
-    struct n64cart_uart_stats uart;
-    struct proc *p;
-    int *user_frame;
-    int s;
-
-    s = mips_intr_disable();
-    if (n64_pcc_crash_dump_active) {
-        mips_intr_restore(s);
-        return;
-    }
-    n64_pcc_crash_dump_active = 1;
-    p = u.u_procp;
-    user_frame = u.u_frame;
-    n64cart_uart_get_stats(&uart);
-
-    n64_pcc_emergency_puts("\nN64_CRASH_BEGIN version=1 kind=");
-    n64_pcc_emergency_puts(kind);
-    n64_pcc_emergency_puts("\nN64_CRASH_CPU");
-    n64_pcc_emergency_field("status", status);
-    n64_pcc_emergency_field("cause", cause);
-    n64_pcc_emergency_field("badvaddr", badvaddr);
-    n64_pcc_emergency_field("signal", (unsigned)signal);
-    n64_pcc_emergency_field("count", mips_read_c0_register(C0_COUNT, 0));
-    n64_pcc_emergency_field("depth", mips_interrupt_depth);
-    n64_pcc_emergency_puts("\nN64_CRASH_PROC");
-    n64_pcc_emergency_field("pid", p != 0 ? (unsigned)p->p_pid : ~0u);
-    n64_pcc_emergency_field("ppid", p != 0 ? (unsigned)p->p_ppid : ~0u);
-    n64_pcc_emergency_puts(" comm=");
-    n64_pcc_emergency_puts(p != 0 ? u.u_comm : "-");
-    n64_pcc_emergency_puts("\n");
-    n64_pcc_emergency_frame("trap", frame);
-    if (user_frame != frame &&
-        n64_pcc_user_frame_valid(mips_curuser, user_frame))
-        n64_pcc_emergency_frame("saved-user", user_frame);
-    n64_pcc_emergency_puts("N64_CRASH_UART");
-    n64_pcc_emergency_field("chars", uart.nus_tx_chars);
-    n64_pcc_emergency_field("waits", uart.nus_wait_events);
-    n64_pcc_emergency_field("rechecks", uart.nus_recheck_misses);
-    n64_pcc_emergency_field("waiting", uart.nus_waiting);
-    n64_pcc_emergency_field("control", uart.nus_control);
-    n64_pcc_emergency_puts("\nN64_CRASH_TIMER");
-    n64_pcc_emergency_field("irq", (unsigned)mips_timer_irq_count);
-    n64_pcc_emergency_field("late", (unsigned)mips_timer_late_count);
-    n64_pcc_emergency_field("late_last_us",
-        (unsigned)mips_timer_late_last_us);
-    n64_pcc_emergency_field("late_max_us",
-        (unsigned)mips_timer_late_max_us);
-    n64_pcc_emergency_field("clock_last_us",
-        (unsigned)mips_timer_clock_last_us);
-    n64_pcc_emergency_field("clock_max_us",
-        (unsigned)mips_timer_clock_max_us);
-    n64_pcc_emergency_puts("\nN64_CRASH_END\n");
-
-    n64_pcc_crash_dump_active = 0;
-    mips_intr_restore(s);
-}
-
 #endif
 
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
@@ -434,6 +269,8 @@ dumpregs(int *frame)
     printf("*** frame=%08x saved_sp=%08x current pid=%d comm=%s\n",
         (unsigned)frame, frame[FRAME_SP],
         u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
+    printf("*** uarea=%08x-%08x\n", (unsigned)mips_curuser,
+        (unsigned)mips_curuser + USIZE);
     if (mips_exception_entry_pc(frame[FRAME_PC])) {
         printf("*** exception occurred inside mips_exception_entry\n");
         if (mips_exception_restore_pc(frame[FRAME_PC]))
@@ -731,10 +568,6 @@ mips_syscall(int *frame)
     int systrace;
     const char *name;
     unsigned long systrace_sequence;
-#ifdef N64_PCC_HANG_TRACE
-    unsigned long trace_sequence;
-#endif
-
     systrace = u.u_procp != 0 &&
         (u.u_procp->p_flag & P_SYSTRACE) != 0;
     systrace_sequence = 0;
@@ -744,11 +577,6 @@ mips_syscall(int *frame)
 
         if (copyin((caddr_t)opc, (caddr_t)&instruction,
             sizeof(instruction)) != 0) {
-#ifdef N64_PCC_HANG_TRACE
-            printf("N64_SYSCALL_FETCH_ERROR pid=%d pc=%08x sp=%08x "
-                "comm=%s\n", u.u_procp ? u.u_procp->p_pid : -1,
-                opc, frame[FRAME_SP], u.u_comm);
-#endif
             if (systrace)
                 uprintf("STRACE signal pid=%d sig=%d reason=fetch "
                     "pc=%08x sp=%08x\n", u.u_procp->p_pid, SIGSEGV,
@@ -769,21 +597,6 @@ mips_syscall(int *frame)
             frame[FRAME_R4], frame[FRAME_R5], frame[FRAME_R6],
             frame[FRAME_R7]);
     }
-#ifdef N64_PCC_HANG_TRACE
-    trace_sequence = ++n64_syscall_trace_sequence;
-    if (!n64_syscall_trace_announced) {
-        n64_syscall_trace_announced = 1;
-        printf("N64_SYSCALL_TRACE version=1 output=uart stages="
-            "enter,dispatch,exit\n");
-    }
-    printf("N64_SYSCALL_ENTER seq=%lu pid=%d code=%d name=%s narg=%d "
-        "pc=%08x sp=%08x ra=%08x a0=%08x a1=%08x a2=%08x a3=%08x "
-        "comm=%s\n", trace_sequence,
-        u.u_procp ? u.u_procp->p_pid : -1, code, name,
-        callp->sy_narg, opc, frame[FRAME_SP], frame[FRAME_RA],
-        frame[FRAME_R4], frame[FRAME_R5], frame[FRAME_R6],
-        frame[FRAME_R7], u.u_comm);
-#endif
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
     {
         static int syscall_trace_count;
@@ -819,21 +632,6 @@ mips_syscall(int *frame)
         }
     }
 
-#ifdef N64_PCC_HANG_TRACE
-    printf("N64_SYSCALL_DISPATCH seq=%lu pid=%d code=%d name=%s "
-        "arg_error=%d arg0=%08x arg1=%08x arg2=%08x arg3=%08x "
-        "arg4=%08x arg5=%08x arg6=%08x arg7=%08x\n",
-        trace_sequence, u.u_procp ? u.u_procp->p_pid : -1, code, name,
-        arg_error,
-        callp->sy_narg > 0 ? (unsigned)u.u_arg[0] : 0,
-        callp->sy_narg > 1 ? (unsigned)u.u_arg[1] : 0,
-        callp->sy_narg > 2 ? (unsigned)u.u_arg[2] : 0,
-        callp->sy_narg > 3 ? (unsigned)u.u_arg[3] : 0,
-        callp->sy_narg > 4 ? (unsigned)u.u_arg[4] : 0,
-        callp->sy_narg > 5 ? (unsigned)u.u_arg[5] : 0,
-        callp->sy_narg > 6 ? (unsigned)u.u_arg[6] : 0,
-        callp->sy_narg > 7 ? (unsigned)u.u_arg[7] : 0);
-#endif
     u.u_rval = 0;
     u.u_rval2 = 0;
     u.u_error = arg_error;
@@ -863,15 +661,6 @@ mips_syscall(int *frame)
             u.u_procp->p_pid, name, code, u.u_error,
             (unsigned)u.u_rval, (unsigned)u.u_rval2,
             frame[FRAME_PC]);
-#ifdef N64_PCC_HANG_TRACE
-    printf("N64_SYSCALL_EXIT seq=%lu pid=%d code=%d name=%s error=%d "
-        "rval=%08x rval2=%08x pc=%08x sp=%08x v0=%08x v1=%08x "
-        "t0=%08x comm=%s\n", trace_sequence,
-        u.u_procp ? u.u_procp->p_pid : -1, code, name, u.u_error,
-        (unsigned)u.u_rval, (unsigned)u.u_rval2, frame[FRAME_PC],
-        frame[FRAME_SP], frame[FRAME_R2], frame[FRAME_R3],
-        frame[FRAME_R8], u.u_comm);
-#endif
 }
 
 void
@@ -895,9 +684,6 @@ exception(int *frame)
     if (n64_gdb_exception(frame, rawcause, badvaddr))
         return;
 #endif
-#ifdef N64_RESET_DUMP
-    n64_reset_dump_observe(frame, rawcause, badvaddr);
-#endif
 #endif
     led_control(LED_KERNEL, 1);
     mips_uarea_guard_check(mips_curuser);
@@ -906,11 +692,6 @@ exception(int *frame)
         !n64_emergency_frame(frame) &&
 #endif
         (unsigned)frame < (unsigned)&u + sizeof(u)) {
-#ifdef N64_PCC_HANG_TRACE
-        n64_pcc_crash_dump("kernel-stack", frame, frame[FRAME_STATUS],
-            mips_read_c0_register(C0_CAUSE, 0),
-            mips_read_c0_register(C0_BADVADDR, 0), 0);
-#endif
         dumpregs(frame);
         panic("stack overflow");
     }
@@ -1033,10 +814,6 @@ exception(int *frame)
 #ifdef N64_USB_GDB
         n64_gdb_panic(frame, rawcause, badvaddr);
 #endif
-#ifdef N64_PCC_HANG_TRACE
-        n64_pcc_crash_dump("kernel-pmap-write", frame, status, rawcause,
-            badvaddr, 0);
-#endif
         dumpregs(frame);
         panic("kernel pmap write fault");
 
@@ -1045,10 +822,6 @@ exception(int *frame)
             goto ret;
 #ifdef N64_USB_GDB
         n64_gdb_panic(frame, rawcause, badvaddr);
-#endif
-#ifdef N64_PCC_HANG_TRACE
-        n64_pcc_crash_dump("kernel-pmap-read", frame, status, rawcause,
-            badvaddr, 0);
 #endif
         dumpregs(frame);
         panic("kernel pmap read fault");
@@ -1085,10 +858,6 @@ exception(int *frame)
 #ifdef N64_USB_GDB
             n64_gdb_panic(frame, rawcause, badvaddr);
 #endif
-#ifdef N64_PCC_HANG_TRACE
-            n64_pcc_crash_dump("kernel-unexpected", frame, status,
-                rawcause, badvaddr, 0);
-#endif
             dumpregs(frame);
             panic("unexpected exception");
         case CA_AdEL + USER:
@@ -1116,7 +885,7 @@ exception(int *frame)
             break;
         case CA_Ov + USER:
         case CA_FPE + USER:
-#if defined(N64_PCC_FPE_TRACE) || defined(MIPS_TRACE)
+#ifdef MIPS_TRACE
             printf("*** user arithmetic exception: pc=%08x status=%08x "
                 "cause=%08x", frame[FRAME_PC], status, rawcause);
             if ((cause & ~USER) == CA_FPE)
@@ -1132,11 +901,6 @@ exception(int *frame)
         break;
     }
 
-#ifdef N64_PCC_HANG_TRACE
-    if (psig != 0)
-        n64_pcc_crash_dump("user-signal", frame, status, rawcause,
-            badvaddr, psig);
-#endif
     if (psig != 0 && u.u_procp != 0 &&
         (u.u_procp->p_flag & P_SYSTRACE) != 0)
         uprintf("STRACE signal pid=%d sig=%d cause=%08x pc=%08x "

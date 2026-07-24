@@ -63,6 +63,10 @@ vm/vm_shm.c                    standard
 vm/vm_sysv_shm.c               standard
 vm/vm_vnode.c                  standard
 vm/vmspace.c                   standard
+vm/vmspace_access.c            standard
+vm/vmspace_fault.c             standard
+vm/vmspace_fault_api.c         standard
+vm/vmspace_fault_validate.c    standard
 mips/common/pmap.c             standard
 mips/common/pmap_machdep.c     standard
 mips/common/vm_machdep.c       standard
