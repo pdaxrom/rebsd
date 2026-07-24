@@ -1743,6 +1743,19 @@ mips_is_hilo_write(const char *line)
 }
 
 static int
+mips_is_vr4300_multdiv(const char *line)
+{
+	char op[16];
+
+	if (!mips_parse_opcode(line, op, sizeof(op)))
+		return 0;
+	return strcmp(op, "mult") == 0 || strcmp(op, "multu") == 0 ||
+	    strcmp(op, "dmult") == 0 || strcmp(op, "dmultu") == 0 ||
+	    strcmp(op, "div") == 0 || strcmp(op, "divu") == 0 ||
+	    strcmp(op, "ddiv") == 0 || strcmp(op, "ddivu") == 0;
+}
+
+static int
 mips_is_fpu_compare(const char *line)
 {
 	char op[16];
@@ -3541,6 +3554,93 @@ mips_repair_vr4300_multiply_errata(char *path, int warn_delay_slot)
 }
 
 /*
+ * The VR4300 makes the result of MFHI/MFLO undefined when either of the two
+ * immediately preceding instructions of a following integer multiply or
+ * divide is MFHI/MFLO.  This pass must run after every scheduling and nop
+ * trimming pass: those passes can make a sequence unsafe even when it was
+ * safe in the assembly emitted by ccom.
+ */
+static int
+mips_repair_vr4300_mfhilo_hazard(char *path)
+{
+	char line[4096];
+	FILE *in, *out;
+	char *tmp;
+	int instructions_after_mf;
+	int have_mf;
+	int changed;
+	int failed;
+	int reg;
+	int i;
+
+	if (mips_target.tune != MIPS_TUNE_VR4300)
+		return 0;
+
+	tmp = mips_asm_temp_name(path);
+	if (tmp == NULL)
+		return 1;
+	in = fopen(path, "r");
+	if (in == NULL) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	out = fopen(tmp, "w");
+	if (out == NULL) {
+		fclose(in);
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+
+	instructions_after_mf = 0;
+	have_mf = 0;
+	changed = 0;
+	while (fgets(line, sizeof(line), in) != NULL) {
+		if (!mips_is_instruction(line)) {
+			fputs(line, out);
+			continue;
+		}
+		if (have_mf && mips_is_vr4300_multdiv(line)) {
+			for (i = instructions_after_mf; i < 2; i++)
+				fputs("\tnop\t# VR4300 MFHI/MFLO hazard\n", out);
+			if (instructions_after_mf < 2)
+				changed = 1;
+			have_mf = 0;
+		}
+		fputs(line, out);
+		if (mips_parse_mfhilo_dest(line, &reg)) {
+			have_mf = 1;
+			instructions_after_mf = 0;
+		} else if (have_mf && ++instructions_after_mf >= 2) {
+			have_mf = 0;
+		}
+	}
+
+	failed = ferror(in) || ferror(out);
+	if (fclose(out) == EOF)
+		failed = 1;
+	if (fclose(in) == EOF)
+		failed = 1;
+	if (failed) {
+		unlink(tmp);
+		free(tmp);
+		return 1;
+	}
+	if (changed) {
+		if (rename(tmp, path) == -1) {
+			unlink(tmp);
+			free(tmp);
+			return 1;
+		}
+	} else {
+		unlink(tmp);
+	}
+	free(tmp);
+	return 0;
+}
+
+/*
  * Move one independent register operation after a load.  On non-interlocked
  * targets this fills an explicit load-delay nop; on MIPS32r2 it hides the
  * interlocked load latency before the first dependent use.  A following lw
@@ -4391,7 +4491,9 @@ mips_postprocess_asm(char *path)
 	if (mips_target.tune == MIPS_TUNE_VR4300 &&
 	    mips_trim_load_delay_nops(path))
 		return 1;
-	return mips_repair_vr4300_multiply_errata(path, 1);
+	if (mips_repair_vr4300_multiply_errata(path, 1))
+		return 1;
+	return mips_repair_vr4300_mfhilo_hazard(path);
 }
 
 static int
@@ -4438,6 +4540,8 @@ mips_prepare_asm_input(char *input, char **outputp)
 	if (mips_copy_file(input, fixed))
 		return 1;
 	if (mips_repair_vr4300_multiply_errata(fixed, 1))
+		return 1;
+	if (mips_repair_vr4300_mfhilo_hazard(fixed))
 		return 1;
 	*outputp = fixed;
 	return 0;

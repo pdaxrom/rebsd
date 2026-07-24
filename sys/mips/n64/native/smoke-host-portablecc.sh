@@ -1351,6 +1351,42 @@ END { exit found ? 0 : 1 }
 }
 
 cat > "$tmp.c" <<'EOF'
+void
+hilo_zero_gap_probe(void)
+{
+	asm("mflo $v0\n\t"
+	    "mult $a0,$a1");
+}
+
+void
+hilo_one_gap_probe(void)
+{
+	asm("mfhi $v1\n\t"
+	    "addu $v0,$a0,$a1\n\t"
+	    "divu $a2,$a3");
+}
+EOF
+
+"$pcc" -march=vr4300 -O2 -S -o "$tmp.s" "$tmp.c"
+awk '
+/^[[:space:]]*mflo[[:space:]]+\$v0/ { zero = 1; next }
+zero == 1 && /^[[:space:]]*nop([[:space:]]|$)/ { zero = 2; next }
+zero == 2 && /^[[:space:]]*nop([[:space:]]|$)/ { zero = 3; next }
+zero == 3 && /^[[:space:]]*mult[[:space:]]+\$a0,\$a1/ { zero_ok = 1 }
+/^[[:space:]]*mfhi[[:space:]]+\$v1/ { one = 1; next }
+one == 1 && /^[[:space:]]*addu[[:space:]]+\$v0,\$a0,\$a1/ {
+	one = 2
+	next
+}
+one == 2 && /^[[:space:]]*nop([[:space:]]|$)/ { one = 3; next }
+one == 3 && /^[[:space:]]*divu[[:space:]]+\$a2,\$a3/ { one_ok = 1 }
+END { exit zero_ok && one_ok ? 0 : 1 }
+' "$tmp.s" || {
+	echo "VR4300 did not repair the MFHI/MFLO to MULT/DIV hazard" >&2
+	exit 1
+}
+
+cat > "$tmp.c" <<'EOF'
 #include <stdarg.h>
 
 extern int frame_reg_callee(int, int);
