@@ -1355,6 +1355,18 @@ forces the UART-only console/debug drivers for boot isolation.  The minimal
 mount `/cart`, because ROMFS and peripheral tests belong to a later full-rootfs
 image.
 
+`N64_BUILD_CONFIG=usbnetmin-pcc-gcc` selects a 3072 KiB CDC ECM diagnostic
+rootfs with a PCC kernel and GCC userland.  It keeps the production polling
+UART transport and USB network stack while omitting video, controller input,
+ROMFS, native PCC, and the compiler stress suite.  The image contains
+`dhclient`, `ifconfig`, `route`, `ping`, `netstat`,
+`/root/usbn-smoke.sh`, and `/root/usbn-dhcp-smoke.sh`:
+
+```sh
+make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-usbnet-min \
+    N64_BUILD_CONFIG=usbnetmin-pcc-gcc all
+```
+
 The printed boot sizes therefore differ by installed RDRAM:
 
 ```
@@ -1675,6 +1687,19 @@ The stage0 backend is `sys/mips/n64/stage0_n64cart_uart.c`.
 ROM-disk DMA, polling UART, direct USB-controller accesses, and flash accesses
 all wait for exclusive ownership of the single PI bus. No cartridge UART
 interrupt protocol or firmware change is required.
+
+PI ownership masks interrupts with `splhigh()` and restores the saved CP0
+status when the owner leaves.  A PI client must therefore change persistent
+CPU interrupt-mask bits only after `n64pi_bus_leave()`.  In particular, the
+USB controller is programmed and its pull-up is enabled while PI is owned,
+then CART/IP3 is enabled after releasing PI; enabling IP3 inside the critical
+section would be undone by the saved-status restore.
+
+Both USB GDB and USB networking require CART/IP3 in every base-priority CP0
+status assembled by `mips_intr_enable()` and `mips_user_enter`.  Ordinary USB
+networking is masked by `splhigh()` and restored by `splx()`; only the
+emergency USB GDB path is allowed to remain live inside kernel critical
+sections.
 
 A comparable minimal polling-UART ROM can be built without changing firmware:
 

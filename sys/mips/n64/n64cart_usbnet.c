@@ -329,6 +329,10 @@ static int n64usb_should_set_addr;
 static unsigned char n64usb_dev_addr;
 static int n64usb_tx_usb_busy;
 static char n64usb_pi_owner;
+#ifdef N64_MINIMAL_USBNET_DEBUG
+static unsigned n64usb_debug_last_ints;
+static int n64usb_debug_poll_logged;
+#endif
 
 static void n64usb_hw_start(void);
 static void n64usb_poll_controller(void);
@@ -1110,6 +1114,9 @@ n64usb_poll_controller(void)
     unsigned status, handled;
 
     status = n64usb_reg_read(USB_INTS);
+#ifdef N64_MINIMAL_USBNET_DEBUG
+    n64usb_debug_last_ints = status;
+#endif
     if (status == 0) {
         (void)n64usb_read_phys(N64CART_USBCFG_PHYS);
         return;
@@ -1171,8 +1178,6 @@ n64usb_hw_start(void)
     for (i = 0; i < sizeof(n64usb_eps) / sizeof(n64usb_eps[0]); i++)
         n64usb_setup_endpoint(&n64usb_eps[i]);
 
-    n64usb_enable_cart_interrupt();
-
     n64usb_reg_write(USB_REG_SET + USB_SIE_CTRL,
         USB_SIE_CTRL_PULLUP_EN);
     n64usb_usb_mode(0);
@@ -1186,6 +1191,9 @@ usbn_hw_init(int unit, unsigned char *enaddr)
 
     if (unit != USB_NET_UNIT)
         return 0;
+#ifdef N64_MINIMAL_USBNET_DEBUG
+    printf("n64usb: controller init begin\n");
+#endif
     if (!n64usb_pi_enter(&saved_status))
         return 0;
     bcopy((caddr_t)n64usb_device_mac, (caddr_t)enaddr,
@@ -1198,6 +1206,18 @@ usbn_hw_init(int unit, unsigned char *enaddr)
         n64usb_initialized = 1;
     }
     n64usb_pi_leave(saved_status);
+
+    /*
+     * n64pi_bus_leave() restores the CP0 status saved by splhigh().
+     * Enabling CART/IP3 while the PI bus is owned would therefore be
+     * undone on leave, after the USB pull-up was already asserted.  The
+     * host would see a device but its control requests would never run.
+     */
+    n64usb_enable_cart_interrupt();
+#ifdef N64_MINIMAL_USBNET_DEBUG
+    printf("n64usb: controller init done status=%x\n",
+        mips_read_c0_register(C0_STATUS, 0));
+#endif
     return 1;
 }
 
@@ -1240,11 +1260,27 @@ void
 usbn_hw_poll(void)
 {
     int saved_status;
+#ifdef N64_MINIMAL_USBNET_DEBUG
+    int polled;
 
+    polled = 0;
+#endif
     if (n64usb_initialized && n64usb_pi_enter(&saved_status)) {
         n64usb_poll_controller();
         n64usb_pi_leave(saved_status);
+#ifdef N64_MINIMAL_USBNET_DEBUG
+        polled = 1;
+#endif
     }
+#ifdef N64_MINIMAL_USBNET_DEBUG
+    if (polled && !n64usb_debug_poll_logged) {
+        n64usb_debug_poll_logged = 1;
+        printf("n64usb: first poll ints=%x status=%x cause=%x\n",
+            n64usb_debug_last_ints,
+            mips_read_c0_register(C0_STATUS, 0),
+            mips_read_c0_register(C0_CAUSE, 0));
+    }
+#endif
 }
 #else
 void
@@ -1259,6 +1295,7 @@ n64_gdb_usb_init(void)
     n64usb_hw_start();
     n64usb_initialized = 1;
     n64usb_pi_leave(saved_status);
+    n64usb_enable_cart_interrupt();
 }
 
 int

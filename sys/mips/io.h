@@ -271,11 +271,17 @@ mips_intr_disable(void)
     /*
      * Leave the debugger IP3 and reset pre-NMI IP4 sources unmasked while
      * masking the normal MI (IP2) and timer (IP7) sources in kernel critical
-     * sections.  Both emergency paths use private/static storage and never
-     * enter the scheduler, VM, tty, or network layers.
+     * sections.  USB networking is not an emergency path, so its IP3 must be
+     * masked like the other ordinary device sources.  The GDB IP3 and reset
+     * IP4 paths use private/static storage and never enter the scheduler, VM,
+     * tty, or network layers.
      */
     mips_write_c0_register(C0_STATUS, 0,
-        status & ~(ST_IM2 | ST_IM7));
+        status & ~(ST_IM2 | ST_IM7
+#ifndef N64_USB_GDB
+        | ST_IM3
+#endif
+        ));
 #else
     mips_write_c0_register(C0_STATUS, 0, status & ~ST_IE);
 #endif
@@ -290,7 +296,7 @@ mips_intr_enable(void)
 #if defined(N64) && (defined(N64_USB_GDB) || defined(N64_RESET_DUMP))
     mips_write_c0_register(C0_STATUS, 0,
         status | ST_IE | ST_IM2
-#ifdef N64_USB_GDB
+#if defined(N64_USB_GDB) || defined(USBNET_ENABLED)
         | ST_IM3
 #endif
 #ifdef N64_RESET_DUMP
@@ -308,9 +314,12 @@ mips_intr_enabled(void)
 {
 #if defined(N64) && (defined(N64_USB_GDB) || defined(N64_RESET_DUMP))
     unsigned status = mips_read_c0_register(C0_STATUS, 0);
+    unsigned mask = ST_IE | ST_IM2 | ST_IM7;
 
-    return (status & (ST_IE | ST_IM2 | ST_IM7)) ==
-        (ST_IE | ST_IM2 | ST_IM7);
+#if defined(N64_USB_GDB) || defined(USBNET_ENABLED)
+    mask |= ST_IM3;
+#endif
+    return (status & mask) == mask;
 #else
     return (mips_read_c0_register(C0_STATUS, 0) & ST_IE) != 0;
 #endif

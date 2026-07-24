@@ -502,6 +502,9 @@ stage0_main(void)
     stage0_puts("ROM compilers: kernel=" N64_ROM_KERNEL_COMPILER
         " userland=" N64_ROM_USERLAND_COMPILER "\n");
     stage0_puts("UART transport: polling (default)\n");
+#ifdef N64_MINIMAL_USBNET_DEBUG
+    stage0_puts("USB network debug: minimal CDC ECM\n");
+#endif
     stage0_puts("boot reset type: ");
     stage0_put_hex32(reset_type);
     stage0_puts("\n");

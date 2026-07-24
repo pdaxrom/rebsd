@@ -4,6 +4,18 @@ This file tracks the next N64 porting steps. Keep the N64 application and
 rootfs build aligned with the existing RetroBSD/PIC32 build flow instead of
 adding a separate hand-copied application path.
 
+## Full ROM Hardware Validation
+
+Current full-profile matrix uses the 32 MiB rootfs with video, input,
+N64cart ROMFS, USB CDC ECM networking, and polling UART.
+
+- [x] GCC kernel + GCC userland: booted and verified on real N64 hardware on
+  2026-07-24.
+- [ ] GCC kernel + PCC userland: image builds and its rootfs passes
+  `fsutil --check`; full-profile hardware validation is still pending.
+- [ ] PCC kernel + PCC userland: image builds and its rootfs passes
+  `fsutil --check`; full-profile hardware validation is still pending.
+
 ## Application and Rootfs Build
 
 - [x] Reuse the existing top-level/PIC32 model for userland:

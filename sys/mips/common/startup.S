@@ -87,8 +87,8 @@ mips_user_enter:
 #else
         ori     $k0, $k0, ST_EXL | ST_IE | ST_IM2 | ST_IM7
 #endif
-#ifdef N64_USB_GDB
-        /* Cartridge USB is the debugger's asynchronous break-in source. */
+#if defined(N64_USB_GDB) || defined(USBNET_ENABLED)
+        /* Cartridge USB uses CART/IP3 for GDB and network traffic. */
         ori     $k0, $k0, ST_IM3
 #endif
 #ifdef N64_RESET_DUMP

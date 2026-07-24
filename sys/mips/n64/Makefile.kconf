@@ -37,7 +37,13 @@ N64_ZSWAP ?= 1
 N64_ENABLE_ROMFS ?= 1
 N64_MINIMAL_ROOTFS ?= $(N64_MINIMAL_UART_ONLY)
 N64_MINIMAL_PCC_SMOKE ?= $(if $(filter pcc,$(N64_USERLAND_COMPILER)),1,0)
-N64_MINIMAL_ROOTFS_KBYTES ?= $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),6144,2048)
+N64_MINIMAL_USBNET_DEBUG ?= 0
+ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
+N64_MINIMAL_ROOTFS = 1
+N64_MINIMAL_PCC_SMOKE = 0
+N64_ENABLE_ROMFS = 0
+endif
+N64_MINIMAL_ROOTFS_KBYTES ?= $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),3072,$(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),6144,2048))
 N64_MINIMAL_ROOTFS_STAGE = rootfs.minimal.stage
 N64_MINIMAL_ROOTFS_MANIFEST = rootfs.minimal.manifest
 N64_MINIMAL_ROOTFS_IMG = rootfs.minimal.img
@@ -45,7 +51,7 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES)
 PARAM += -DN64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES)
 N64_IOCONF      = ioconf
 ifeq ($(N64_HIGHRES_FB),1)
@@ -59,6 +65,10 @@ PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
     -DUSBNET_ENABLED -DUSBNET_ECM -DUSBNET_VENDOR,$(PARAM))
 PARAM += -DN64_DEBUG_UART_ONLY -DN64_DEBUG_USERMEM_4M
 N64_IOCONF = ioconf.debug-uart
+endif
+ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
+PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED,$(PARAM))
+PARAM += -DN64_MINIMAL_USBNET_DEBUG
 endif
 ifeq ($(N64_USB_GDB),1)
 PARAM := $(filter-out -DUSBNET_ENABLED -DUSBNET_ECM \
@@ -411,11 +421,13 @@ N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
 
 N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty init login ls mkfs mount netstat sh stty \
     sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
-    ld make nm pstat ranlib sed)
+    ld make nm pstat ranlib sed) \
+    $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),dhclient ifconfig ping route sed)
 N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod cmp iostat mkdir ps rm sleep strace \
     vm-pressure-smoke \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),cp grep od size \
-    tr vmstat w wc)
+    tr vmstat w wc) \
+    $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),grep)
 N64_MINIMAL_ROOTFS_CMD_NSTDS = expr
 N64_MINIMAL_ROOTFS_CMD_SCRIPTS = \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),false true,$(N64_CMD_NONE))
@@ -441,6 +453,11 @@ N64_MINIMAL_ROOTFS_PCC_TEST_FILES = \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),\
     $(addprefix $(TOPSRC)/sys/mips/rootfs/root/,\
     $(N64_MINIMAL_ROOTFS_PCC_TEST_NAMES)))
+N64_MINIMAL_USBNET_TEST_NAMES = usbn-smoke.sh usbn-dhcp-smoke.sh
+N64_MINIMAL_USBNET_TEST_FILES = \
+    $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),\
+    $(addprefix $(TOPSRC)/sys/mips/rootfs/root/,\
+    $(N64_MINIMAL_USBNET_TEST_NAMES)))
 N64_MINIMAL_VM_PROCESS_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke.c
 N64_MINIMAL_VM_PROCESS_GPR64_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke-gpr64.S
 N64_MINIMAL_VM_STRESS_SCRIPT = $(TOPSRC)/sys/mips/rootfs/root/vm-stress-smoke.sh
@@ -465,7 +482,8 @@ N64_MINIMAL_ROOTFS_FILES = \
     $(N64_MINIMAL_VM_PROCESS_SRC) \
     $(N64_MINIMAL_VM_PROCESS_GPR64_SRC) \
     $(N64_MINIMAL_VM_STRESS_SCRIPT) \
-    $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES)
+    $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES) \
+    $(N64_MINIMAL_USBNET_TEST_FILES)
 N64_MINIMAL_USERLAND_CC = $(MIPS_USERLAND_CC)
 N64_MINIMAL_USERLAND_AS = $(MIPS_USERLAND_AS)
 N64_MINIMAL_USERLAND_LD = $(MIPS_USERLAND_LD)
@@ -886,6 +904,14 @@ CFILES := $(filter-out \
     $S/mips/n64/n64cart_usbnet.c \
     $S/mips/n64/n64cart_usbecm.c,$(CFILES))
 endif
+ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
+OBJS := $(filter-out video.o video_console.o si.o joybus.o,$(OBJS))
+CFILES := $(filter-out \
+    $S/mips/n64/video.c \
+    $S/mips/n64/video_console.c \
+    $S/mips/n64/si.c \
+    $S/mips/n64/joybus.c,$(CFILES))
+endif
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 OBJS := $(filter-out tty_pty.o sys_socket.o uipc_domain.o uipc_mbuf.o \
     uipc_proto.o uipc_usrreq.o uipc_socket.o uipc_socket2.o \
@@ -1118,6 +1144,14 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/passwd
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/profile \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/profile
+ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/hosts \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/hosts
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/services \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/services
+	ln -s ../var/run/resolv.conf \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/resolv.conf
+endif
 	cp -p $(TOPSRC)/sys/mips/n64/rootfs/etc/gettytab \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/gettytab
 	cp -p $(TOPSRC)/sys/mips/n64/rootfs/etc/motd \
@@ -1191,6 +1225,12 @@ endif
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-process-smoke
 	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-process-smoke \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-stress-smoke.sh
+ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
+	cp -p $(N64_MINIMAL_USBNET_TEST_FILES) \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/
+	chmod 0775 $(addprefix $(N64_MINIMAL_ROOTFS_STAGE)/root/,\
+	    $(N64_MINIMAL_USBNET_TEST_NAMES))
+endif
 ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	cp -p $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/

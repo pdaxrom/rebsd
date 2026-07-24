@@ -91,8 +91,12 @@ unsigned n64_user_data_end(void);
  * so a saved status with ST_IE set is the closest equivalent of base priority.
  */
 #if defined(N64_USB_GDB) || defined(N64_RESET_DUMP)
-#define BASEPRI(ps)     (((ps) & (ST_IE | ST_IM2 | ST_IM7)) == \
-                         (ST_IE | ST_IM2 | ST_IM7))
+#if defined(N64_USB_GDB) || defined(USBNET_ENABLED)
+#define N64_BASEPRI_MASK (ST_IE | ST_IM2 | ST_IM3 | ST_IM7)
+#else
+#define N64_BASEPRI_MASK (ST_IE | ST_IM2 | ST_IM7)
+#endif
+#define BASEPRI(ps)     (((ps) & N64_BASEPRI_MASK) == N64_BASEPRI_MASK)
 #else
 #define BASEPRI(ps)     (((ps) & ST_IE) != 0)
 #endif
