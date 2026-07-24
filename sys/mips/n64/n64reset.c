@@ -16,10 +16,11 @@
 #include <machine/console.h>
 #include <machine/io.h>
 #include <machine/n64.h>
+#include <machine/n64cart_uart.h>
 #include <machine/n64reset.h>
 
 #define N64_RESET_DUMP_MAGIC          0x52445354u /* RDST */
-#define N64_RESET_DUMP_VERSION        3u
+#define N64_RESET_DUMP_VERSION        4u
 #define N64_RESET_DUMP_VERSION_MASK   0x0000ffffu
 #define N64_RESET_DUMP_STATE_MASK     0xffff0000u
 #define N64_RESET_DUMP_STATE_LIVE     0x00010000u
@@ -31,12 +32,11 @@
 #define N64_RESET_TYPE_PHYS           0x0000030cu
 #define N64_RESET_TYPE_NMI            1u
 #define N64_RESET_DUMP_CRITICAL_PHYS  0x0000031cu
+#define N64_RESET_DUMP_BACKUP_PHYS    0x0000035cu
 #define N64_RESET_DUMP_FULL_PHYS      0x00000800u
 #define N64_RESET_DUMP_STACK_WORDS    64u
 #define N64_RESET_DUMP_BT_WORDS       5u
 #define N64_RESET_C0_RANDOM           1
-#define N64_RESET_CAUSE_IP7           0x00008000u
-#define N64_RESET_OBSERVE_TICKS       (N64_COUNT_KHZ * 1000u)
 
 struct n64_reset_dump_critical {
     unsigned magic;
@@ -81,6 +81,11 @@ struct n64_reset_dump_full {
     unsigned pte_entryhi;
     unsigned pte_entrylo0;
     unsigned pte_entrylo1;
+    unsigned tlb_fast_epc;
+    unsigned tlb_fast_vaddr;
+    unsigned tlb_fast_repeat;
+    unsigned pmap_active_directory;
+    unsigned pmap_fast_directory;
     unsigned c0_entryhi;
     unsigned c0_wired;
     unsigned c0_random;
@@ -105,13 +110,17 @@ typedef char n64_reset_dump_full_size[
 static volatile struct n64_reset_dump_critical *const n64_reset_critical =
     (volatile struct n64_reset_dump_critical *)(N64_KSEG1_BASE |
         N64_RESET_DUMP_CRITICAL_PHYS);
+static volatile struct n64_reset_dump_critical *const
+    n64_reset_critical_backup =
+    (volatile struct n64_reset_dump_critical *)(N64_KSEG1_BASE |
+        N64_RESET_DUMP_BACKUP_PHYS);
 static volatile struct n64_reset_dump_full *const n64_reset_full =
     (volatile struct n64_reset_dump_full *)(N64_KSEG1_BASE |
         N64_RESET_DUMP_FULL_PHYS);
-static unsigned n64_reset_observe_count;
-static unsigned n64_reset_observe_started;
 
 extern char _etext[];
+
+static int n64_reset_full_valid(void);
 
 static void
 n64_reset_sync(void)
@@ -134,14 +143,15 @@ n64_reset_checksum(const volatile unsigned *words, unsigned count,
 }
 
 static int
-n64_reset_critical_valid(void)
+n64_reset_critical_record_valid(
+    const volatile struct n64_reset_dump_critical *record)
 {
     unsigned version;
     unsigned state;
 
-    version = n64_reset_critical->version;
+    version = record->version;
     state = version & N64_RESET_DUMP_STATE_MASK;
-    return n64_reset_critical->magic == N64_RESET_DUMP_MAGIC &&
+    return record->magic == N64_RESET_DUMP_MAGIC &&
         (version & N64_RESET_DUMP_VERSION_MASK) ==
             N64_RESET_DUMP_VERSION &&
         (state == 0 || state == N64_RESET_DUMP_STATE_LIVE ||
@@ -149,9 +159,36 @@ n64_reset_critical_valid(void)
             state == N64_RESET_DUMP_STATE_DISPLAYED ||
             state == N64_RESET_DUMP_STATE_MISSING ||
             state == N64_RESET_DUMP_STATE_REBOOT) &&
-        n64_reset_critical->checksum == n64_reset_checksum(
-            (const volatile unsigned *)n64_reset_critical,
-            sizeof(*n64_reset_critical) / sizeof(unsigned), 2);
+        record->checksum == n64_reset_checksum(
+            (const volatile unsigned *)record,
+            sizeof(*record) / sizeof(unsigned), 2);
+}
+
+static int
+n64_reset_critical_rdram_valid(void)
+{
+    unsigned i;
+
+    if (n64_reset_critical_record_valid(n64_reset_critical))
+        return 1;
+    if (!n64_reset_critical_record_valid(n64_reset_critical_backup))
+        return 0;
+
+    /* Recover an update interrupted between invalidation and commit. */
+    n64_reset_critical->magic = 0;
+    for (i = 1; i < sizeof(*n64_reset_critical) / sizeof(unsigned); ++i)
+        ((volatile unsigned *)n64_reset_critical)[i] =
+            ((const volatile unsigned *)n64_reset_critical_backup)[i];
+    n64_reset_sync();
+    n64_reset_critical->magic = N64_RESET_DUMP_MAGIC;
+    n64_reset_sync();
+    return 1;
+}
+
+static int
+n64_reset_critical_valid(void)
+{
+    return n64_reset_critical_rdram_valid();
 }
 
 static unsigned
@@ -298,6 +335,8 @@ n64_reset_current_proc(const char **comm)
 static void
 n64_reset_commit_critical(void)
 {
+    unsigned i;
+
     /* Publish magic last, so a reset can never accept a half-written record. */
     n64_reset_critical->magic = 0;
     n64_reset_critical->checksum = n64_reset_checksum(
@@ -306,6 +345,15 @@ n64_reset_commit_critical(void)
         N64_RESET_DUMP_MAGIC;
     n64_reset_sync();
     n64_reset_critical->magic = N64_RESET_DUMP_MAGIC;
+    n64_reset_sync();
+
+    /* Keep a checksum-valid warm-reset fallback. */
+    n64_reset_critical_backup->magic = 0;
+    for (i = 1; i < sizeof(*n64_reset_critical) / sizeof(unsigned); ++i)
+        ((volatile unsigned *)n64_reset_critical_backup)[i] =
+            ((const volatile unsigned *)n64_reset_critical)[i];
+    n64_reset_sync();
+    n64_reset_critical_backup->magic = N64_RESET_DUMP_MAGIC;
     n64_reset_sync();
 }
 
@@ -338,6 +386,7 @@ static void
 n64_reset_clear(void)
 {
     n64_reset_critical->magic = 0;
+    n64_reset_critical_backup->magic = 0;
     n64_reset_full->magic = 0;
     n64_reset_sync();
 }
@@ -408,6 +457,14 @@ n64_reset_capture_diagnostics(unsigned badvaddr)
     n64_reset_full->pte_entryhi = valid ? tlb.ptd_query_entryhi : 0;
     n64_reset_full->pte_entrylo0 = valid ? tlb.ptd_query_entrylo0 : 0;
     n64_reset_full->pte_entrylo1 = valid ? tlb.ptd_query_entrylo1 : 0;
+    n64_reset_full->tlb_fast_epc = valid ? tlb.ptd_fast_last_epc : 0;
+    n64_reset_full->tlb_fast_vaddr =
+        valid ? tlb.ptd_fast_last_vaddr : 0;
+    n64_reset_full->tlb_fast_repeat = valid ? tlb.ptd_fast_repeat : 0;
+    n64_reset_full->pmap_active_directory =
+        valid ? tlb.ptd_active_directory : 0;
+    n64_reset_full->pmap_fast_directory =
+        valid ? tlb.ptd_fast_directory : 0;
 
     valid = vm_object_get_stats(&object) == 0;
     n64_reset_full->vm_valid = valid;
@@ -436,7 +493,26 @@ n64_reset_capture(int *frame, unsigned rawcause, unsigned badvaddr)
 
     p = n64_reset_current_proc(&comm);
 
-    n64_reset_clear();
+    /*
+     * Publish the exact interrupted context before touching VM, pmap, the
+     * interrupted stack, or any of the larger retained record.  RESET's IP4
+     * lead-in is short and the kernel may already be damaged; if any of the
+     * optional diagnostics below faults or loops, IPL3 must still find this
+     * minimal record after the unavoidable warm NMI.
+     */
+    n64_reset_write_critical(frame, rawcause, badvaddr, p,
+        N64_RESET_DUMP_STATE_CAPTURED, 0);
+
+    /*
+     * Signal RESET only after the exact frame is committed to uncached
+     * RDRAM.  A cartridge-side PI failure can make this store wait forever;
+     * doing it in exception_entry.S used to lose the crash record as well.
+     */
+    n64cart_led_write(0x007f0000u);
+
+    /* Invalidate only the optional full record.  Keep the critical record. */
+    n64_reset_full->magic = 0;
+    n64_reset_sync();
     n64_reset_full->version = N64_RESET_DUMP_VERSION;
     n64_reset_full->frame_words = FRAME_WORDS;
     n64_reset_full->cause = rawcause;
@@ -477,52 +553,9 @@ n64_reset_capture(int *frame, unsigned rawcause, unsigned badvaddr)
         (const volatile unsigned *)n64_reset_full,
         sizeof(*n64_reset_full) / sizeof(unsigned), 2);
 
+    /* Upgrade the retained record with a stack scan only after full capture. */
     n64_reset_write_critical(frame, rawcause, badvaddr, p,
         N64_RESET_DUMP_STATE_CAPTURED, 1);
-}
-
-/*
- * Keep one retained fallback snapshot current in case RESET arrives while
- * EXL/ERL or IE prevents delivery of the maskable pre-NMI.  Do this only from
- * the timer interrupt and at most once per second.  This record lives in an
- * uncached warm-reset area and publishing it requires two sync operations;
- * doing that on every exception turns a TLB-heavy user process into hundreds
- * of thousands of synchronous uncached writes.
- *
- * The ordinary RESET path does not depend on this sampling: IP4 still takes
- * an exact full snapshot immediately.  The sampled record is only the warm-
- * boot fallback when that pre-NMI path cannot run.
- */
-void
-n64_reset_dump_observe(int *frame, unsigned rawcause, unsigned badvaddr)
-{
-    struct proc *p;
-    const char *comm;
-    unsigned count;
-    unsigned state;
-
-    if ((rawcause & CA_EXC_CODE) != CA_Int ||
-        (rawcause & N64_RESET_CAUSE_IP7) == 0)
-        return;
-    count = mips_read_c0_register(C0_COUNT, 0);
-    if (n64_reset_observe_started &&
-        (unsigned)(count - n64_reset_observe_count) <
-        N64_RESET_OBSERVE_TICKS)
-        return;
-    n64_reset_observe_count = count;
-    n64_reset_observe_started = 1;
-
-    state = n64_reset_critical_valid() ? n64_reset_critical_state() : 0;
-    if (state == N64_RESET_DUMP_STATE_CAPTURED ||
-        state == N64_RESET_DUMP_STATE_DISPLAYED ||
-        state == N64_RESET_DUMP_STATE_MISSING ||
-        state == N64_RESET_DUMP_STATE_REBOOT)
-        return;
-
-    p = n64_reset_current_proc(&comm);
-    n64_reset_full->magic = 0;
-    n64_reset_write_critical(frame, rawcause, badvaddr, p,
-        N64_RESET_DUMP_STATE_LIVE, 0);
 }
 
 static void
@@ -667,6 +700,23 @@ n64_reset_draw(unsigned state)
         n64_reset_field("proc:    ", n64_reset_full->proc);
         n64_reset_field("vmspace: ", n64_reset_full->vmspace);
         n64_reset_field("wchan:   ", n64_reset_full->wchan);
+        /*
+         * Keep the live expression state visible.  In particular, PCC's
+         * symbol-tree lookup keeps its current node in v0 and the pointer
+         * key used as the Patricia bit string in s2.  These are generic
+         * architectural registers, not compiler-specific kernel state.
+         */
+        n64_reset_pair("regs v0:  ",
+            n64_reset_full->frame[FRAME_R2], " v1: ",
+            n64_reset_full->frame[FRAME_R3]);
+        n64_reset_pair("regs a0:  ",
+            n64_reset_full->frame[FRAME_R4], " a1: ",
+            n64_reset_full->frame[FRAME_R5]);
+        n64_reset_pair("regs s0:  ",
+            n64_reset_full->frame[FRAME_R16], " s1: ",
+            n64_reset_full->frame[FRAME_R17]);
+        n64_reset_field("regs s2:  ",
+            n64_reset_full->frame[FRAME_R18]);
         if (n64_reset_full->tlb_valid) {
             n64_reset_pair("tlb refills: ", n64_reset_full->tlb_refills,
                 " repeat: ", n64_reset_full->tlb_repeat);
@@ -688,6 +738,14 @@ n64_reset_draw(unsigned state)
             n64_reset_pair("pte lo0:     ",
                 n64_reset_full->pte_entrylo0, " lo1: ",
                 n64_reset_full->pte_entrylo1);
+            n64_reset_pair("tlb fast pc: ",
+                n64_reset_full->tlb_fast_epc, " badva: ",
+                n64_reset_full->tlb_fast_vaddr);
+            n64_reset_field("tlb fast repeat: ",
+                n64_reset_full->tlb_fast_repeat);
+            n64_reset_pair("pmap dirs active: ",
+                n64_reset_full->pmap_active_directory, " fast: ",
+                n64_reset_full->pmap_fast_directory);
             n64_reset_field("c0 entryhi:  ",
                 n64_reset_full->c0_entryhi);
             n64_reset_pair("c0 wired:    ",
@@ -727,7 +785,8 @@ n64_reset_dump_interrupt(int *frame, unsigned rawcause, unsigned badvaddr)
 {
     unsigned state;
 
-    state = n64_reset_critical_valid() ? n64_reset_critical_state() : 0;
+    state = n64_reset_critical_rdram_valid() ?
+        n64_reset_critical_state() : 0;
     if (state == N64_RESET_DUMP_STATE_DISPLAYED ||
         state == N64_RESET_DUMP_STATE_REBOOT) {
         n64_reset_seed(N64_RESET_DUMP_STATE_REBOOT);

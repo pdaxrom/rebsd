@@ -14,6 +14,7 @@
 #include <machine/io.h>
 #include <machine/n64int.h>
 #include <machine/n64cart_uart.h>
+#include <machine/n64pi.h>
 #include <mips/common/if_usbn.h>
 #ifndef N64USB_CDC_ECM
 #define N64USB_CDC_ECM 0
@@ -327,9 +328,26 @@ static int n64usb_configured;
 static int n64usb_should_set_addr;
 static unsigned char n64usb_dev_addr;
 static int n64usb_tx_usb_busy;
+static char n64usb_pi_owner;
 
 static void n64usb_hw_start(void);
 static void n64usb_poll_controller(void);
+
+static int
+n64usb_pi_enter(int *saved_status)
+{
+    *saved_status = 0;
+    if (n64pi_bus_enter(&n64usb_pi_owner) != 0)
+        return 0;
+    return 1;
+}
+
+static void
+n64usb_pi_leave(int saved_status)
+{
+    (void)saved_status;
+    n64pi_bus_leave(&n64usb_pi_owner);
+}
 
 static void
 n64usb_pi_wait(void)
@@ -1164,7 +1182,11 @@ n64usb_hw_start(void)
 int
 usbn_hw_init(int unit, unsigned char *enaddr)
 {
+    int saved_status;
+
     if (unit != USB_NET_UNIT)
+        return 0;
+    if (!n64usb_pi_enter(&saved_status))
         return 0;
     bcopy((caddr_t)n64usb_device_mac, (caddr_t)enaddr,
         sizeof(n64usb_device_mac));
@@ -1175,46 +1197,68 @@ usbn_hw_init(int unit, unsigned char *enaddr)
         n64usb_hw_start();
         n64usb_initialized = 1;
     }
+    n64usb_pi_leave(saved_status);
     return 1;
 }
 
 int
 usbn_hw_send(int unit, const unsigned char *frame, unsigned len)
 {
+    int error;
+    int saved_status;
+
     if (unit != USB_NET_UNIT || !n64usb_initialized ||
         !n64usb_configured || n64usb_tx_usb_busy)
         return EBUSY;
-#if N64USB_CDC_ECM
-    if (!n64usb_data_alt || len > N64USB_FRAME_MAX)
+    if (!n64usb_pi_enter(&saved_status))
         return EBUSY;
+    error = 0;
+#if N64USB_CDC_ECM
+    if (!n64usb_data_alt || len > N64USB_FRAME_MAX) {
+        error = EBUSY;
+        goto out;
+    }
     n64usb_tx_frame = frame;
     n64usb_tx_len = len;
     n64usb_tx_pos = 0;
     n64usb_tx_zlp = (len & (USB_PACKET_SIZE - 1)) == 0;
 #else
     if (n64usbnet_tx_begin(&n64usb_tx, frame, len, ++n64usb_tx_seq) !=
-        N64USBNET_MORE)
-        return EINVAL;
+        N64USBNET_MORE) {
+        error = EINVAL;
+        goto out;
+    }
 #endif
     n64usb_tx_usb_busy = 1;
     n64usb_send_next_tx();
-    return 0;
+out:
+    n64usb_pi_leave(saved_status);
+    return error;
 }
 
 void
 usbn_hw_poll(void)
 {
-    if (n64usb_initialized)
+    int saved_status;
+
+    if (n64usb_initialized && n64usb_pi_enter(&saved_status)) {
         n64usb_poll_controller();
+        n64usb_pi_leave(saved_status);
+    }
 }
 #else
 void
 n64_gdb_usb_init(void)
 {
+    int saved_status;
+
     if (n64usb_initialized)
+        return;
+    if (!n64usb_pi_enter(&saved_status))
         return;
     n64usb_hw_start();
     n64usb_initialized = 1;
+    n64usb_pi_leave(saved_status);
 }
 
 int
@@ -1238,26 +1282,36 @@ n64_gdb_usb_detach(void)
 void
 n64_gdb_usb_poll(void)
 {
-    if (n64usb_initialized)
+    int saved_status;
+
+    if (n64usb_initialized && n64usb_pi_enter(&saved_status)) {
         n64usb_poll_controller();
+        n64usb_pi_leave(saved_status);
+    }
 }
 
 int
 n64_gdb_usb_interrupt(void)
 {
+    int saved_status;
+    int result;
+
     if (!n64usb_initialized)
         return 0;
-    n64usb_poll_controller();
-    if (!n64usb_gdb_break_pending)
-        goto check_attach;
-    n64usb_gdb_break_pending = 0;
-    n64usb_gdb_attach_pending = 0;
-    return 1;
-check_attach:
-    if (!n64usb_gdb_attach_pending)
+    if (!n64usb_pi_enter(&saved_status))
         return 0;
-    n64usb_gdb_attach_pending = 0;
-    return 2;
+    n64usb_poll_controller();
+    result = 0;
+    if (n64usb_gdb_break_pending) {
+        n64usb_gdb_break_pending = 0;
+        n64usb_gdb_attach_pending = 0;
+        result = 1;
+    } else if (n64usb_gdb_attach_pending) {
+        n64usb_gdb_attach_pending = 0;
+        result = 2;
+    }
+    n64usb_pi_leave(saved_status);
+    return result;
 }
 
 void
@@ -1271,15 +1325,21 @@ int
 n64_gdb_usb_getc(void)
 {
     int ch;
+    int saved_status;
 
     if (!n64usb_initialized)
         return -1;
-    n64usb_poll_controller();
-    if (n64usb_gdb_rx_get == n64usb_gdb_rx_put)
+    if (!n64usb_pi_enter(&saved_status))
         return -1;
+    n64usb_poll_controller();
+    if (n64usb_gdb_rx_get == n64usb_gdb_rx_put) {
+        n64usb_pi_leave(saved_status);
+        return -1;
+    }
     ch = n64usb_gdb_rx_ring[n64usb_gdb_rx_get];
     n64usb_gdb_rx_get =
         (n64usb_gdb_rx_get + 1) % N64USB_GDB_RX_RING_SIZE;
+    n64usb_pi_leave(saved_status);
     return ch;
 }
 
@@ -1287,14 +1347,21 @@ int
 n64_gdb_usb_write(const unsigned char *buf, unsigned len)
 {
     unsigned chunk;
+    int error;
+    int saved_status;
 
     if (!n64_gdb_usb_ready())
         return EIO;
+    if (!n64usb_pi_enter(&saved_status))
+        return EBUSY;
+    error = 0;
     while (len != 0) {
         while (n64usb_tx_usb_busy) {
             n64usb_poll_controller();
-            if (!n64usb_configured)
-                return EIO;
+            if (!n64usb_configured) {
+                error = EIO;
+                goto out;
+            }
         }
         chunk = len > USB_PACKET_SIZE ? USB_PACKET_SIZE : len;
         n64usb_tx_usb_busy = 1;
@@ -1304,9 +1371,13 @@ n64_gdb_usb_write(const unsigned char *buf, unsigned len)
     }
     while (n64usb_tx_usb_busy) {
         n64usb_poll_controller();
-        if (!n64usb_configured)
-            return EIO;
+        if (!n64usb_configured) {
+            error = EIO;
+            goto out;
+        }
     }
-    return 0;
+out:
+    n64usb_pi_leave(saved_status);
+    return error;
 }
 #endif

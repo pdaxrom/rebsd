@@ -24,6 +24,16 @@ put_hex32(unsigned value)
         n64_console_putc(digits[(value >> (unsigned)shift) & 0x0f]);
 }
 
+void
+panic(const char *message, ...)
+{
+    puts("preflight panic: ");
+    puts(message);
+    puts("\n");
+    for (;;)
+        ;
+}
+
 int
 main(void)
 {

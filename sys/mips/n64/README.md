@@ -1355,28 +1355,6 @@ forces the UART-only console/debug drivers for boot isolation.  The minimal
 mount `/cart`, because ROMFS and peripheral tests belong to a later full-rootfs
 image.
 
-For a diagnostic hardware ROM, add `N64_PCC_HANG_TRACE=1`.  In combination
-with `N64_MINIMAL_UART_ONLY=1`, all trace output goes to the cartridge UART.
-The kernel prints `N64_SYSCALL_ENTER`, `N64_SYSCALL_DISPATCH`, and
-`N64_SYSCALL_EXIT` records with the same sequence number, PID, syscall name,
-arguments, result, and saved register state.  An `ENTER`/`DISPATCH` pair without
-the matching `EXIT` identifies the syscall handler which did not return.  A
-fatal exception prints a direct-MMIO dump delimited by `N64_CRASH_BEGIN` and
-`N64_CRASH_END`, including CPU registers, process state, and UART/timer state.
-This mode does not emit periodic heartbeat/tick records.  It is intentionally
-verbose and is disabled by default because UART tracing changes timing.
-The minimal rootfs also records the same default in `/etc/pcc-smoke.conf`:
-`pcc-smoke-all.sh` enables its PCC driver/`ccom` trace for a diagnostic build
-and leaves it disabled for a clean build.  `PCC_SMOKE_TRACE=0` or `1` can
-override that choice for one invocation.
-
-The two comparable diagnostic ROMs use the command above with
-`N64_MINIMAL_UART_ONLY=1 N64_PCC_HANG_TRACE=1` and `kernel.z64` as the target.
-Set `N64_USERLAND_COMPILER=pcc` for the PCC-userland image or
-`N64_USERLAND_COMPILER=gcc` for the GCC-userland image; the kernel remains GCC
-in both cases.  Log in as `root` on `ttyS0` and run
-`/root/pcc-smoke-all.sh`.
-
 The printed boot sizes therefore differ by installed RDRAM:
 
 ```
@@ -1449,9 +1427,11 @@ falling back to zero-sized terminals after `login` clears the tty winsize.
 therefore resolves to the controlling tty for the shell.
 
 `/dev/ttyS0` is a normal tty line for the n64cart serial UART. It has its own
-`struct tty`, line discipline, cdev entry, and `/etc/ttys` login line. Because
-the n64cart UART does not currently raise CPU interrupts, the CP0 timer path
-polls it and feeds received bytes to `ttyinput()`.
+`struct tty`, line discipline, cdev entry, and `/etc/ttys` login line. The
+default build uses the original polling registers: the cartridge UART hardware
+interrupt is disabled and the CP0 timer path feeds received bytes to
+`ttyinput()`. This is the supported transport and keeps compatibility with the
+stable stock cartridge firmware.
 
 `/dev/rgbled0` is a n64cart-specific character device. It is not a tty and is
 not driven by `led_control()`. Userland controls it through:
@@ -1691,6 +1671,18 @@ The serial tty driver is `sys/mips/n64/n64cart_uart.c`.
 The RGB LED ioctl driver is `sys/mips/n64/n64cart_rgbled.c`.
 The stage0 backend is `sys/mips/n64/stage0_n64cart_uart.c`.
 
+`sys/mips/n64/n64pi.c` synchronously serializes PI clients after early boot.
+ROM-disk DMA, polling UART, direct USB-controller accesses, and flash accesses
+all wait for exclusive ownership of the single PI bus. No cartridge UART
+interrupt protocol or firmware change is required.
+
+A comparable minimal polling-UART ROM can be built without changing firmware:
+
+```sh
+make -C sys/mips BOARD=n64 O=/work/n64-uart-poll \
+    N64_BUILD_CONFIG=uartmin-gcc kernel.z64
+```
+
 If the board config does not include `n64cart_uart.o`, stage0 links
 `stage0_console_null.o` and the kernel can link the weak null console backend.
 This allows non-n64cart cartridge support to be added without pretending that
@@ -1718,9 +1710,9 @@ implicitly change LED state.
 Keep `/dev/ttyS0` enabled as a separate serial login for cartridge access and
 debugging.
 
-## Interrupts and timer-driven console input
+## Interrupts and serial input
 
-The current serial console input path is timer-polled:
+The default serial console input path is timer-polled:
 
 1. `clkstart()` programs CP0 Compare from CP0 Count.
 2. CP0 timer interrupts arrive on IP7.
@@ -1731,8 +1723,8 @@ The current serial console input path is timer-polled:
 6. The exception handler calls `cnintr()` for the system console backend.
 7. The exception handler calls `hardclock()`.
 
-This is enough for interactive shell input on `/dev/ttyS0` even though the
-n64cart UART does not currently provide a real interrupt line to the CPU.
+Polling is the sole supported cartridge UART path. It uses the stock firmware
+register block and shares PI through the synchronous `n64pi` owner lock.
 
 Timer-driven kernel callouts also depend on this path.  Functions such as
 `sleep(1)` use libc `sleep(3)`, which waits through `select(2)` with a timeout;
@@ -2092,7 +2084,8 @@ Build and generated data:
   hardware reset.
 - `/dev/mem`, `/dev/kmem`, `ucall`, `ufetch`, and `ustore` are intentionally
   disabled on N64.
-- Console input is timer-polled, not driven by a UART interrupt.
+- Console input and cartridge UART input are timer-polled; the stock cartridge
+  firmware remains unchanged.
 - The n64cart UART backend only works on cartridges with the matching
   register block.
 - Joybus keyboard, mouse, and joypad drivers are built and exposed through

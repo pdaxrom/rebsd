@@ -1,9 +1,12 @@
 #include <machine/rompak.h>
+#include <machine/n64pi.h>
 
 #define ROMPAK_TOC_MAGIC        0x544f4330u
 #define ROMPAK_TOC_HEADER_SIZE  16u
 #define ROMPAK_TOC_ENTRY_MIN    64u
 #define ROMPAK_TOC_MAX_ENTRIES  256u
+
+static char rompak_pi_owner;
 
 static unsigned char
 rom_read8(unsigned offset)
@@ -35,14 +38,23 @@ n64_rompak_copy(unsigned offset, void *dst, unsigned nbytes)
 {
     unsigned char *out = dst;
 
+    if (n64pi_bus_enter(&rompak_pi_owner) != 0)
+        return;
     while (nbytes-- != 0u)
         *out++ = rom_read8(offset++);
+    n64pi_bus_leave(&rompak_pi_owner);
 }
 
 unsigned
 n64_rompak_read32(unsigned offset)
 {
-    return rom_read32be(offset);
+    unsigned value;
+
+    if (n64pi_bus_enter(&rompak_pi_owner) != 0)
+        return 0;
+    value = rom_read32be(offset);
+    n64pi_bus_leave(&rompak_pi_owner);
+    return value;
 }
 
 static int
@@ -101,14 +113,19 @@ n64_rompak_find(const char *name, struct n64_rompak_entry *entry)
 {
     unsigned offset;
 
+    if (n64pi_bus_enter(&rompak_pi_owner) != 0)
+        return -1;
     for (offset = 0x1000u; offset < N64_ROM_TOC_SEARCH_SIZE; offset += 4u) {
         if (rom_read32be(offset) != ROMPAK_TOC_MAGIC)
             continue;
-        if (rompak_find_in_toc(offset, name, entry))
+        if (rompak_find_in_toc(offset, name, entry)) {
+            n64pi_bus_leave(&rompak_pi_owner);
             return 0;
+        }
     }
 
     entry->offset = 0u;
     entry->size = 0u;
+    n64pi_bus_leave(&rompak_pi_owner);
     return -1;
 }

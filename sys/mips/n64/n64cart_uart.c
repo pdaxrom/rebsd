@@ -8,8 +8,10 @@
 #include <sys/user.h>
 #include <machine/console.h>
 #include <machine/n64cart_uart.h>
+#include <machine/n64pi.h>
 
 struct tty n64cart_uart_ttys[1];
+static char n64cart_uart_pi_owner;
 static void n64cart_uart_start(struct tty *tp);
 static int n64cart_uart_esc_state;
 static volatile u_int n64cart_uart_tx_chars;
@@ -108,18 +110,46 @@ n64cart_read(u_int offset)
 {
     u_int value;
 
+    if (n64pi_bus_enter(&n64cart_uart_pi_owner) != 0)
+        panic("n64cart UART PI lock");
     asm volatile ("" ::: "memory");
     value = *n64cart_reg(offset);
     asm volatile ("" ::: "memory");
+    n64pi_bus_leave(&n64cart_uart_pi_owner);
     return value;
 }
 
 static void
 n64cart_write(u_int offset, u_int value)
 {
+    if (n64pi_bus_enter(&n64cart_uart_pi_owner) != 0)
+        panic("n64cart UART PI lock");
     asm volatile ("" ::: "memory");
     *n64cart_reg(offset) = value;
     asm volatile ("" ::: "memory");
+    n64pi_bus_leave(&n64cart_uart_pi_owner);
+}
+
+static int
+n64cart_uart_try_getc(int *ch)
+{
+    u_int control;
+    u_int value;
+
+    if (n64pi_bus_enter(&n64cart_uart_pi_owner) != 0)
+        panic("n64cart UART PI lock");
+    asm volatile ("" ::: "memory");
+    control = *n64cart_reg(N64CART_UART_CTRL);
+    if ((control & N64CART_UART_RX_AVAIL) == 0) {
+        asm volatile ("" ::: "memory");
+        n64pi_bus_leave(&n64cart_uart_pi_owner);
+        return 0;
+    }
+    value = *n64cart_reg(N64CART_UART_RXTX);
+    asm volatile ("" ::: "memory");
+    n64pi_bus_leave(&n64cart_uart_pi_owner);
+    *ch = value & 0xff;
+    return 1;
 }
 
 int
@@ -162,9 +192,11 @@ n64cart_uart_emergency_putc(int ch)
 int
 n64cart_uart_getc(void)
 {
-    while (!n64cart_uart_poll())
+    int ch;
+
+    while (!n64cart_uart_try_getc(&ch))
         ;
-    return n64cart_read(N64CART_UART_RXTX) & 0xff;
+    return ch;
 }
 
 void
@@ -319,10 +351,8 @@ n64cart_uart_intr(void)
     if ((tp->t_state & TS_ISOPEN) == 0)
         return;
 
-    while (n64cart_uart_poll()) {
-        c = n64cart_uart_getc();
+    while (n64cart_uart_try_getc(&c))
         n64cart_uart_input(tp, c);
-    }
 }
 
 static void

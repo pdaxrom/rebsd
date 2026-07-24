@@ -1,6 +1,7 @@
 #ifndef _N64_ROMPAK_H_
 #define _N64_ROMPAK_H_
 
+#define N64_ROM_PHYS_BASE       0x10000000u
 #define N64_ROM_KSEG1_BASE      0xb0000000u
 #define N64_ROM_TOC_SEARCH_SIZE 0x00100000u
 

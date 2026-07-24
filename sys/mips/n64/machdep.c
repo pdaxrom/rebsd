@@ -9,6 +9,7 @@
 #include <machine/console.h>
 #include <machine/n64.h>
 #include <machine/n64int.h>
+#include <machine/n64pi.h>
 #ifdef N64_RESET_DUMP
 #include <machine/n64reset.h>
 #endif
@@ -144,9 +145,17 @@ n64_install_exception_vectors(void)
     n64_install_vector(N64_VECTOR_TLB_REFILL,
         (const unsigned *)_mips_tlb_refill_vector,
         _mips_tlb_refill_vector_end - _mips_tlb_refill_vector);
+    /*
+     * VR4300 sends every user TLB miss to the XTLB vector while Status.UX
+     * is set, even when the o32 virtual address fits in 32 bits.  User mode
+     * keeps UX set so MIPS III 64-bit GPR operations remain available, so
+     * the XTLB vector must use the same pmap fast refill as the 32-bit TLB
+     * vector.  Unsupported addresses still branch to the full handler from
+     * mips_tlb_refill_entry.
+     */
     n64_install_vector(N64_VECTOR_XTLB_REFILL,
-        (const unsigned *)_mips_exception_vector,
-        _mips_exception_vector_end - _mips_exception_vector);
+        (const unsigned *)_mips_tlb_refill_vector,
+        _mips_tlb_refill_vector_end - _mips_tlb_refill_vector);
     n64_install_vector(N64_VECTOR_CACHE_ERROR,
         (const unsigned *)_mips_exception_vector,
         _mips_exception_vector_end - _mips_exception_vector);
@@ -212,6 +221,7 @@ startup(void)
     n64_install_exception_vectors();
     n64_tlb_init();
     n64_interrupt_init();
+    n64pi_init();
 #ifdef N64_RESET_DUMP
     n64_reset_dump_show();
 #endif
@@ -355,10 +365,10 @@ boot(dev_t dev, int howto)
         printf("done\n");
     }
 
-    (void)splhigh();
 #if defined(N64CART_ENABLED) && !defined(N64_CART_UART_ONLY)
     n64cart_flash_shutdown();
 #endif
+    (void)splhigh();
 #ifdef N64_RESET_DUMP
     /* A requested stage0 restart is not a physical reset-button NMI. */
     n64_reset_dump_reboot();

@@ -78,13 +78,12 @@ Cause, Status, BadVAddr, PID, process name, and selected state, then stops.
 It does not continue into normal startup. Press RESET a second time to clear
 the record; the following warm boot then proceeds normally.
 
-Stage0 repeats the PIF boot-complete handshake on every cold or warm entry.
-This releases the previous NMI state and rearms the physical RESET button;
-omitting the warm-boot handshake makes the button work only once per power-on.
-The ROM uses libdragon's production IPL3, whose reset type is passed in SP
-DMEM rather than the legacy `0x8000030c` word. Stage0 copies that bootinfo
-field before SP DMEM is reused; reading the untouched legacy word directly
-would make dump detection depend on stale RDRAM contents.
+The ROM uses libdragon's production IPL3. IPL3 owns the PIF boot-complete
+handshake on every cold and warm entry; stage0 must not repeat that PIF
+command after IPL3 has finished it. The reset type is passed in SP DMEM rather
+than the legacy `0x8000030c` word. Stage0 copies that bootinfo field before SP
+DMEM is reused; reading the untouched legacy word directly would make dump
+detection depend on stale RDRAM contents.
 
 The retained record has three states. During normal execution, the timer
 updates a small `live` snapshot at most once per second without console
@@ -96,6 +95,13 @@ snapshot instead of silently rebooting. Displaying either kind marks the
 record as `displayed`. The next RESET clears that state and boots normally
 even when its own pre-NMI was missed, so successive presses alternate dump,
 boot, dump, boot.
+
+The 64-byte critical record is mirrored at physical `0x31c` and `0x35c`, both
+inside IPL3's preserved first `0x400` bytes.  The primary is committed before
+the backup is replaced, so a real NMI during publication cannot invalidate
+both copies.  A checksum-valid `live` or exact record is accepted even when a
+flash cartridge incorrectly reports the following boot as cold; controlled
+software reboot is distinguished by the explicit `reboot` record state.
 
 Keep the `unix.elf` from the exact same build. The hexadecimal `pc` and `ra`
 shown on the death screen can be resolved with GDB, for example:
@@ -111,7 +117,13 @@ retained live snapshot covers those cases. A screen is impossible only if the
 exception vectors, the retained 64-byte NMI buffer, or RDRAM itself have been
 destroyed.
 
-For the same reason, `m`/`M` currently accept only RDRAM addresses in KSEG0 or
+The dump also reports `tlb fast pc`, `badva`, and `repeat`.  These are updated
+by the refill vector using cached words only.  A large repeat count matching
+the captured PC and BadVAddr identifies a hardware-refill livelock; a small
+count means RESET merely intercepted an otherwise progressing user process at
+an ordinary miss.  `pmap dirs active` and `fast` must always be identical.
+
+For crash safety, `m`/`M` currently accept only RDRAM addresses in KSEG0 or
 KSEG1. TLB-mapped user addresses are rejected with `E14` instead of risking a
 nested debugger fault. FPU registers are reported as zero because lazy FPU
 state is not copied onto the emergency frame. Hardware watchpoints and

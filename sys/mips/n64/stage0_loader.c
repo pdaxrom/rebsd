@@ -7,6 +7,16 @@ typedef unsigned int uintptr;
 #include "stage0_console.h"
 #include "layout.h"
 
+#ifndef N64_ROM_BUILD_DATE
+#define N64_ROM_BUILD_DATE "unknown"
+#endif
+#ifndef N64_ROM_KERNEL_COMPILER
+#define N64_ROM_KERNEL_COMPILER "unknown"
+#endif
+#ifndef N64_ROM_USERLAND_COMPILER
+#define N64_ROM_USERLAND_COMPILER "unknown"
+#endif
+
 #define N64_DCACHE_LINE_SIZE    16u
 #define N64_ICACHE_LINE_SIZE    32u
 #define N64_SP_DMEM_BOOTINFO_FLAGS_ADDR  0xa4000004u
@@ -15,10 +25,23 @@ typedef unsigned int uintptr;
 #define N64_RESET_TYPE_ADDR              0xa000030cu
 #define N64_RESET_TYPE_COLD              0u
 #define N64_RESET_TYPE_NMI               1u
-#define N64_SI_STATUS_ADDR       0xa4800018u
-#define N64_SI_STATUS_BUSY       0x00000003u
-#define N64_PIF_RAM_CONTROL_ADDR 0xbfc007fcu
-#define N64_PIF_BOOT_COMPLETE    0x00000008u
+#define N64_RESET_DUMP_ADDR               0xa000031cu
+#define N64_RESET_DUMP_BACKUP_ADDR        0xa000035cu
+#define N64_RESET_DUMP_MAGIC              0x52445354u
+#define N64_RESET_DUMP_VERSION            4u
+#define N64_RESET_DUMP_VERSION_MASK       0x0000ffffu
+#define N64_RESET_DUMP_STATE_MASK         0xffff0000u
+#define N64_RESET_DUMP_STATE_LIVE         0x00010000u
+#define N64_RESET_DUMP_STATE_CAPTURED     0x00020000u
+#define N64_RESET_DUMP_STATE_DISPLAYED    0x00030000u
+#define N64_RESET_DUMP_STATE_MISSING      0x00040000u
+#define N64_RESET_DUMP_STATE_REBOOT       0x00050000u
+#define N64_RESET_DUMP_XOR                0x4e363452u
+#define N64_RESET_DUMP_WORDS              16u
+
+#define N64CART_LED_CTRL_ADDR              0xbfd01008u
+#define N64CART_LED_OFF                     0x00000000u
+#define N64CART_LED_RESET                   0x007f0000u
 
 #define EI_CLASS        4u
 #define EI_DATA         5u
@@ -56,15 +79,28 @@ struct kernel_elf {
     u16 phnum;
 };
 
+struct reset_dump_critical {
+    u32 magic;
+    u32 version;
+    u32 checksum;
+    u32 pc;
+    u32 cause;
+    u32 status;
+    u32 badvaddr;
+    u32 sp;
+    u32 ra;
+    u32 pid;
+    u32 bt_count;
+    u32 bt[5];
+};
+
+typedef char reset_dump_critical_size[
+    sizeof(struct reset_dump_critical) == 64u ? 1 : -1];
+
 void stage0_jump_kernel(u32 entry);
 
 extern const u8 __n64_kernel_elf_start[];
 extern const u8 __n64_kernel_elf_end[];
-
-static volatile u32 *const n64_si_status =
-    (volatile u32 *)N64_SI_STATUS_ADDR;
-static volatile u32 *const n64_pif_ram_control =
-    (volatile u32 *)N64_PIF_RAM_CONTROL_ADDR;
 
 /*
  * The default n64tool header is libdragon's non-compatibility IPL3.  Unlike
@@ -74,32 +110,19 @@ static volatile u32 *const n64_pif_ram_control =
  * embeds that exact production IPL3, so do not apply compatibility-IPL3
  * heuristics to the bootinfo words.
  */
-static void
+static u32
 publish_reset_type(void)
 {
     volatile u32 *const boot_flags =
         (volatile u32 *)N64_SP_DMEM_BOOTINFO_FLAGS_ADDR;
     volatile u32 *const reset_type =
         (volatile u32 *)N64_RESET_TYPE_ADDR;
-    *reset_type = (*boot_flags >> N64_BOOTINFO_RESET_SHIFT) &
+    u32 value;
+
+    value = (*boot_flags >> N64_BOOTINFO_RESET_SHIFT) &
         N64_BOOTINFO_RESET_MASK;
-}
-
-/*
- * Tell the PIF that IPL3 has handed control to the application.  The PIF ROM
- * expects this handshake after both cold boot and reset-button NMI.  Without
- * repeating it on a warm boot the PIF never rearms the next RESET sequence,
- * so the physical button works only once after power-on.
- */
-static void
-pif_boot_complete(void)
-{
-    u32 control;
-
-    while ((*n64_si_status & N64_SI_STATUS_BUSY) != 0u)
-        ;
-    control = *n64_pif_ram_control;
-    *n64_pif_ram_control = control | N64_PIF_BOOT_COMPLETE;
+    *reset_type = value;
+    return value;
 }
 
 static u32
@@ -195,6 +218,103 @@ stage0_put_hex32(u32 value)
     stage0_puts("0x");
     for (shift = 28; shift >= 0; shift -= 4)
         stage0_putc(digits[(value >> (u32)shift) & 0x0fu]);
+}
+
+static u32
+stage0_reset_checksum(const volatile u32 *words)
+{
+    u32 value;
+    u32 i;
+
+    value = N64_RESET_DUMP_XOR;
+    for (i = 0; i < N64_RESET_DUMP_WORDS; ++i)
+        if (i != 2u)
+            value ^= words[i];
+    return value;
+}
+
+static int
+stage0_reset_state_valid(u32 state)
+{
+    return state == 0u || state == N64_RESET_DUMP_STATE_LIVE ||
+        state == N64_RESET_DUMP_STATE_CAPTURED ||
+        state == N64_RESET_DUMP_STATE_DISPLAYED ||
+        state == N64_RESET_DUMP_STATE_MISSING ||
+        state == N64_RESET_DUMP_STATE_REBOOT;
+}
+
+static const char *
+stage0_reset_state_name(u32 state)
+{
+    if (state == N64_RESET_DUMP_STATE_LIVE)
+        return "last fatal exception";
+    if (state == N64_RESET_DUMP_STATE_CAPTURED)
+        return "exact IP4 capture";
+    if (state == N64_RESET_DUMP_STATE_DISPLAYED)
+        return "displayed";
+    if (state == N64_RESET_DUMP_STATE_MISSING)
+        return "missing";
+    if (state == N64_RESET_DUMP_STATE_REBOOT)
+        return "reboot acknowledgement";
+    return "legacy";
+}
+
+static int
+stage0_reset_dump_valid(
+    const volatile struct reset_dump_critical *dump)
+{
+    u32 state;
+
+    state = dump->version & N64_RESET_DUMP_STATE_MASK;
+    return dump->magic == N64_RESET_DUMP_MAGIC &&
+        (dump->version & N64_RESET_DUMP_VERSION_MASK) ==
+            N64_RESET_DUMP_VERSION &&
+        stage0_reset_state_valid(state) &&
+        dump->checksum == stage0_reset_checksum(
+            (const volatile u32 *)dump);
+}
+
+/*
+ * Report retained context before loading or entering the kernel.  This path
+ * uses only KSEG1 and the stage0 UART, so it remains useful when the kernel
+ * was stuck with interrupts masked or its VM/RDRAM state was corrupt.
+ */
+static void
+stage0_reset_dump_summary(u32 reset_type)
+{
+    volatile struct reset_dump_critical *dump;
+    u32 state;
+
+    dump = (volatile struct reset_dump_critical *)N64_RESET_DUMP_ADDR;
+    if (!stage0_reset_dump_valid(dump))
+        dump = (volatile struct reset_dump_critical *)
+            N64_RESET_DUMP_BACKUP_ADDR;
+    if (!stage0_reset_dump_valid(dump)) {
+        if (reset_type == N64_RESET_TYPE_NMI)
+            stage0_puts("RESET retained: unavailable\n");
+        return;
+    }
+
+    state = dump->version & N64_RESET_DUMP_STATE_MASK;
+
+    stage0_puts("RESET retained: ");
+    stage0_puts(stage0_reset_state_name(state));
+    stage0_puts(" from RDRAM");
+    stage0_puts("\nreset pc=");
+    stage0_put_hex32(dump->pc);
+    stage0_puts(" ra=");
+    stage0_put_hex32(dump->ra);
+    stage0_puts(" sp=");
+    stage0_put_hex32(dump->sp);
+    stage0_puts("\nreset cause=");
+    stage0_put_hex32(dump->cause);
+    stage0_puts(" status=");
+    stage0_put_hex32(dump->status);
+    stage0_puts(" badva=");
+    stage0_put_hex32(dump->badvaddr);
+    stage0_puts(" pid=");
+    stage0_put_hex32(dump->pid);
+    stage0_puts("\n");
 }
 
 static u32
@@ -361,15 +481,34 @@ void
 stage0_main(void)
 {
     struct kernel_elf kernel;
+    u32 reset_type;
 
-    publish_reset_type();
-    pif_boot_complete();
+    reset_type = publish_reset_type();
+
+#ifdef N64_RESET_DUMP
+    /* Actual NMI also gets an N64-side PI breadcrumb before kernel load. */
+    *(volatile u32 *)N64CART_LED_CTRL_ADDR =
+        reset_type == N64_RESET_TYPE_NMI ?
+        N64CART_LED_RESET : N64CART_LED_OFF;
+    __asm__ volatile ("sync" ::: "memory");
+#endif
 
     kernel.entry = 0;
     kernel.phoff = 0;
     kernel.phnum = 0;
 
     stage0_puts("ReBSD N64 stage0\n");
+    stage0_puts("ROM build: " N64_ROM_BUILD_DATE "\n");
+    stage0_puts("ROM compilers: kernel=" N64_ROM_KERNEL_COMPILER
+        " userland=" N64_ROM_USERLAND_COMPILER "\n");
+    stage0_puts("UART transport: polling (default)\n");
+    stage0_puts("boot reset type: ");
+    stage0_put_hex32(reset_type);
+    stage0_puts("\n");
+#ifdef N64_RESET_DUMP
+    stage0_puts("RESET N64-side PI LED: enabled\n");
+#endif
+    stage0_reset_dump_summary(reset_type);
     stage0_puts("kernel blob size=");
     stage0_put_hex32(kernel_blob_size());
     stage0_puts("\n");

@@ -55,7 +55,9 @@
 
 #define N64_STAGE0_VADDR               0x80300000
 #define N64_STAGE0_PHYS_START          0x00300000
+#ifndef N64_STAGE0_RESERVED_BYTES
 #define N64_STAGE0_RESERVED_BYTES      N64_SIZE_512K
+#endif
 #define N64_STAGE0_PHYS_END            (N64_STAGE0_PHYS_START + \
                                          N64_STAGE0_RESERVED_BYTES)
 

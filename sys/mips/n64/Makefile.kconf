@@ -7,6 +7,15 @@ include $(TOPSRC)/target-n64.mk
 S               = $(TOPSRC)/sys
 N64_BOARD_SRC   = $(TOPSRC)/sys/mips/n64
 
+N64_BUILD_CONFIG ?=
+ifneq ($(strip $(N64_BUILD_CONFIG)),)
+N64_BUILD_CONFIG_FILE = $(N64_BOARD_SRC)/configs/$(N64_BUILD_CONFIG).mk
+ifeq ($(wildcard $(N64_BUILD_CONFIG_FILE)),)
+$(error unknown N64_BUILD_CONFIG '$(N64_BUILD_CONFIG)')
+endif
+include $(N64_BUILD_CONFIG_FILE)
+endif
+
 N64_KERNEL_ARCH = -EB -march=vr4300 -mtune=vr4300 -mips3 -mabi=32
 N64_KERNEL_BASE = -G0 -mno-abicalls -fno-pic -ffreestanding -fno-builtin \
                   -fomit-frame-pointer
@@ -14,8 +23,7 @@ N64_KERNEL_CODE = $(N64_KERNEL_BASE) -msoft-float
 N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
 VM_DIAGNOSTIC   ?= 0
-N64_PCC_HANG_TRACE ?= 0
-N64_MINIMAL_PCC_TRACE ?= $(N64_PCC_HANG_TRACE)
+N64_STAGE0_RESERVED_BYTES ?= 0x00080000
 N64_DEBUG_UART_ONLY ?= 0
 N64_USB_GDB ?= 0
 N64_RESET_DUMP ?= $(N64_USB_GDB)
@@ -37,7 +45,8 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_PCC_HANG_TRACE).$(N64_MINIMAL_PCC_TRACE)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES)
+PARAM += -DN64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES)
 N64_IOCONF      = ioconf
 ifeq ($(N64_HIGHRES_FB),1)
 PARAM += -DN64_HIGHRES_FB
@@ -45,13 +54,10 @@ endif
 ifneq ($(N64_ZSWAP),1)
 PARAM := $(filter-out -DMIPS_ZSWAP_ENABLED,$(PARAM))
 endif
-ifeq ($(N64_PCC_HANG_TRACE),1)
-PARAM += -DN64_PCC_HANG_TRACE
-endif
 ifeq ($(N64_DEBUG_UART_ONLY),1)
 PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
     -DUSBNET_ENABLED -DUSBNET_ECM -DUSBNET_VENDOR,$(PARAM))
-PARAM += -DN64_DEBUG_UART_ONLY -DN64_DEBUG_USERMEM_4M -DN64_PCC_FPE_TRACE
+PARAM += -DN64_DEBUG_UART_ONLY -DN64_DEBUG_USERMEM_4M
 N64_IOCONF = ioconf.debug-uart
 endif
 ifeq ($(N64_USB_GDB),1)
@@ -64,6 +70,8 @@ endif
 ifeq ($(N64_RESET_DUMP),1)
 PARAM += -DN64_RESET_DUMP
 endif
+N64_IOCONF_SRC = $(if $(filter ioconf.debug-uart,$(N64_IOCONF)),\
+                  $(N64_BOARD_SRC)/ioconf.debug-uart.c,$(N64_IOCONF).c)
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 PARAM := $(filter-out -DPTY_ENABLED -DPTY_NUNITS=% \
     -DETHER_ENABLED -DETHER_NUNITS=% -DINET_ENABLED \
@@ -152,6 +160,10 @@ N64_HOST_PORTABLECC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc
 N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
 N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
+N64_VR4300_HILO_CHECK = $(TOPSRC)/sys/mips/n64/native/check-vr4300-hilo.sh
+N64_ASYNC_EPILOGUE_CHECK = $(TOPSRC)/sys/mips/n64/native/check-mips-async-epilogue.sh
+N64_VR4300_ORDER_CHECK = python3 $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py
+N64_ELF_RELOC_CHECK = python3 $(TOPSRC)/sys/mips/n64/native/check-mips-elf-relocs.py
 N64_NATIVE_PCC_MAKEFILE = $(TOPSRC)/sys/mips/tools/Makefile.native-pcc
 N64_NATIVE_PCC_CONFIG = $(TOPSRC)/sys/mips/tools/native-pcc-config.h
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
@@ -467,7 +479,7 @@ N64_MINIMAL_USERLAND_EXTRA_DEPS = $(MIPS_USERLAND_EXTRA_DEPS) \
                                   $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),\
                                   $(MIPS_ROOTFS_NATIVE_PCC_STAMPS))
 N64_MINIMAL_USERLAND_LDFLAGS = $(MIPS_USERLAND_LDFLAGS)
-N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(TOPSRC)/src \
+N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(MIPS_BUILD_SRC_DIR) \
                TARGET_PLATFORM=n64 \
                MIPS_ROOTFS_CPU=$(MIPS_ROOTFS_CPU) \
                MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN) \
@@ -531,6 +543,8 @@ MIPS_LINPACK_GCC_LINK_FORMAT = aout
 MIPS_LINPACK_GCC_DEPS = $(N64_LINPACK_GCC_RUNTIME_STAMP)
 endif
 MIPS_ROOTFS_TARGET_PLATFORM = n64
+MIPS_ROOTFS_CONTRACT_LABEL = \
+    n64-$(if $(filter 1,$(N64_MINIMAL_ROOTFS)),minimal,full)
 MIPS_ROOTFS_USERLAND_STAMP_PREFIX = n64-userland
 MIPS_ROOTFS_BOARD_DIR = $(TOPSRC)/sys/mips/n64/rootfs
 MIPS_ROOTFS_BOARD_MANIFEST = $(N64_ROOTFS_DEVNODES)
@@ -702,7 +716,7 @@ N64_STAGE0_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),stage0_n64cart_u
 N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)
 N64_PREFLIGHT_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),preflight_n64cart_uart.o,console_null.o)
 N64_PREFLIGHT_OBJS = preflight_startup.o $(N64_PREFLIGHT_CONSOLE_OBJS) \
-                     rompak.o memory.o preflight.o
+                     n64pi.o rompak.o memory.o preflight.o
 N64_KERNEL_LDSCRIPT = n64.ld
 N64_USER_LDSCRIPT = n64-user.ld
 
@@ -767,6 +781,7 @@ STAGE0_ASFLAGS  = $(N64_KERNEL_ARCH) $(N64_KERNEL_BASE) -msoft-float \
 KERNEL_CC       = ${CC}
 KERNEL_AS       = $(N64_PREFIX)gcc $(N64_KERNEL_ARCH) $(N64_KERNEL_CODE) \
                   -x assembler -c
+KERNEL_FPU_AS   = $(KERNEL_AS)
 KERNEL_CPP_AS   = ${AS}
 KERNEL_FPU_CPP_AS = ${ASFPU}
 KERNEL_LD       = ${LD}
@@ -774,17 +789,17 @@ KERNEL_COMPILER_DEPS =
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
 COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
                   -MF .deps/vers.dep -c vers.c -o vers.o
-PCC_KERNEL_CPP_S = ${KERNEL_CC} -E -P -x assembler-with-cpp \
-                  $(CPPFLAGS) $(DEPFLAGS) -o .deps/$(@:.o=.s) $<
+REBSD_KERNEL_CPP_S = ${KERNEL_CC} -E -P -x assembler-with-cpp \
+                     $(CPPFLAGS) $(DEPFLAGS) -o .deps/$(@:.o=.s) $<
 ifeq ($(N64_KERNEL_COMPILER),pcc)
 KERNEL_CC       = $(N64_HOST_PCC) -march=vr4300 -msoft-float \
                   -fomit-frame-pointer
-KERNEL_AS       = $(N64_CROSS_PCC_AS) --elf -EB -march=vr4300
+KERNEL_AS       = $(N64_CROSS_PCC_AS) --elf -EB -march=vr4300 -O2
 KERNEL_LD       = $(N64_CROSS_PCC_LD) --elf -EB
-KERNEL_CPP_AS   = $(KERNEL_CC)
-KERNEL_FPU_CPP_AS = $(KERNEL_CC)
 KERNEL_COMPILER_DEPS = $(MIPS_PCC_PROVIDER_DEPS) $(N64_CROSS_PCC_AS) \
                        $(N64_CROSS_PCC_LD)
+KERNEL_CPP_AS   = $(KERNEL_CC)
+KERNEL_FPU_CPP_AS = $(KERNEL_CC)
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -S -o .deps/$(@:.o=.s) $< && \
                   if grep -nE '^[[:space:]]*((add|sub|mul|div|sqrt|abs|mov|neg|cvt|trunc|round|floor|ceil|c\.[[:alnum:]_]+)\.(s|d|w|l)|(l|s)\.(s|d)|(lwc1|ldc1|swc1|sdc1|mfc1|mtc1|dmfc1|dmtc1|cfc1|ctc1|bc1[[:alnum:]_]*))[[:space:]]' .deps/$(@:.o=.s); then \
                       echo "error: PCC kernel C emitted COP1/FPU instructions in .deps/$(@:.o=.s)" >&2; exit 1; \
@@ -833,8 +848,8 @@ GENERATE_VERS = python3 $(VERSION_GENERATOR) --output vers.c \
 COMPILE_S       = ${KERNEL_CPP_AS} ${ASFLAGS} $< -o $@
 COMPILE_FPU_S   = ${KERNEL_FPU_CPP_AS} ${FPU_ASFLAGS} $< -o $@
 ifeq ($(N64_KERNEL_COMPILER),pcc)
-COMPILE_S       = ${PCC_KERNEL_CPP_S} && ${KERNEL_AS} .deps/$(@:.o=.s) -o $@
-COMPILE_FPU_S   = ${PCC_KERNEL_CPP_S} && ${KERNEL_AS} .deps/$(@:.o=.s) -o $@
+COMPILE_S       = ${REBSD_KERNEL_CPP_S} && ${KERNEL_AS} .deps/$(@:.o=.s) -o $@
+COMPILE_FPU_S   = ${REBSD_KERNEL_CPP_S} && ${KERNEL_FPU_AS} .deps/$(@:.o=.s) -o $@
 endif
 
 %OBJS
@@ -929,17 +944,33 @@ endif
 
 SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o \
                   $(PCC_KERNEL_RUNTIME_OBJS)
-SYSTEM_DEP      = Makefile $(N64_IOCONF).c $(N64_KERNEL_LDSCRIPT) \
+SYSTEM_DEP      = Makefile $(N64_IOCONF_SRC) $(N64_KERNEL_LDSCRIPT) \
                   $(TOPSRC)/sys/include/rebsd_version.h \
                   $(VERSION_GENERATOR) \
                   $(KERNEL_COMPILER_DEPS) $(PCC_KERNEL_RUNTIME_SRCS)
+ifeq ($(N64_KERNEL_COMPILER),pcc)
+SYSTEM_DEP      += $(N64_VR4300_HILO_CHECK) $(N64_ASYNC_EPILOGUE_CHECK) \
+                  $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py \
+                  $(TOPSRC)/sys/mips/n64/native/check-mips-elf-relocs.py
+endif
 SYSTEM_LD_HEAD  = $(GENERATE_VERS); \
                   ${COMPILE_VERS_C}; \
                   rm -f $@
-SYSTEM_LD       = ${KERNEL_LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@
+N64_ELF_RELOC_CHECK_CMD =
+ifeq ($(N64_KERNEL_COMPILER),pcc)
+N64_ELF_RELOC_CHECK_CMD = $(N64_ELF_RELOC_CHECK) ${SYSTEM_OBJ} vers.o &&
+endif
+SYSTEM_LD       = $(N64_ELF_RELOC_CHECK_CMD) \
+                  ${KERNEL_LD} -nostdlib -T $(N64_KERNEL_LDSCRIPT) ${SYSTEM_OBJ} vers.o -o $@
 SYSTEM_LD_TAIL  = ${SIZE} $@; \
-                  ${OBJDUMP} -d -S $@ > $(basename $@).dis; \
+                  ${OBJDUMP} -z -d -S $@ > $(basename $@).dis; \
                   ${NM} -n $@ > $(basename $@).nm
+ifeq ($(N64_KERNEL_COMPILER),pcc)
+SYSTEM_LD_TAIL  += ; $(N64_VR4300_HILO_CHECK) $(basename $@).dis; \
+                  $(N64_ASYNC_EPILOGUE_CHECK) $(basename $@).dis; \
+                  ${OBJDUMP} -z -d ${SYSTEM_OBJ} vers.o > $(basename $@).objects.dis; \
+                  $(N64_VR4300_ORDER_CHECK) $(basename $@).objects.dis
+endif
 
 .PHONY: vm-host-check kernel-objects
 vm-host-check:
@@ -970,8 +1001,18 @@ preflight.elf: $(N64_PREFLIGHT_OBJS) $(N64_KERNEL_LDSCRIPT)
 stage0.o: $(N64_BOARD_SRC)/stage0.S | .deps
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) $< -o $@
 
-stage0_loader.o: $(N64_BOARD_SRC)/stage0_loader.c | .deps
-	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
+.PHONY: n64-stage0-build-date
+n64-stage0-build-date:
+	@:
+
+# Recompile the loader for every ROM build so its UART banner identifies the
+# exact image even when the object directory is reused.
+stage0_loader.o: $(N64_BOARD_SRC)/stage0_loader.c n64-stage0-build-date | .deps
+	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) \
+	    -DN64_ROM_BUILD_DATE='"$(SYSTEM_BUILD_DATE)"' \
+	    -DN64_ROM_KERNEL_COMPILER='"$(N64_KERNEL_COMPILER)"' \
+	    -DN64_ROM_USERLAND_COMPILER='"$(N64_USERLAND_COMPILER)"' \
+	    -c $< -o $@
 
 stage0_console_null.o: $(N64_BOARD_SRC)/stage0_console_null.c $(N64_BOARD_SRC)/stage0_console.h | .deps
 	$(N64_PREFIX)gcc $(STAGE0_CFLAGS) -c $< -o $@
@@ -989,10 +1030,14 @@ kernel_stage0_kernel_blob.o: $(N64_BOARD_SRC)/stage0_kernel_blob.S unix.runtime.
 	$(N64_PREFIX)gcc $(STAGE0_ASFLAGS) -DN64_KERNEL_ELF=\"$(abspath unix.runtime.elf)\" $< -o $@
 
 stage0.elf: $(N64_STAGE0_OBJS) stage0_kernel_blob.o $(N64_BOARD_SRC)/stage0_linker.ld
-	$(LD) -T $(N64_BOARD_SRC)/stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) stage0_kernel_blob.o
+	$(LD) --defsym=N64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES) \
+	    -T $(N64_BOARD_SRC)/stage0_linker.ld -nostdlib -o $@ \
+	    $(N64_STAGE0_OBJS) stage0_kernel_blob.o
 
 kernel_stage0.elf: $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o $(N64_BOARD_SRC)/stage0_linker.ld
-	$(LD) -T $(N64_BOARD_SRC)/stage0_linker.ld -nostdlib -o $@ $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o
+	$(LD) --defsym=N64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES) \
+	    -T $(N64_BOARD_SRC)/stage0_linker.ld -nostdlib -o $@ \
+	    $(N64_STAGE0_OBJS) kernel_stage0_kernel_blob.o
 
 stage0.stripped.elf: stage0.elf
 	$(STRIP) -s -o $@ $<
@@ -1035,6 +1080,17 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(MIPS_USER_SRCS) \
     $(N64_MINIMAL_USERLAND_EXTRA_DEPS) $(N64_PCC_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile Makefile
+	rm -rf $(MIPS_BUILD_ROOT)
+	mkdir -p $(MIPS_BUILD_SRC_DIR)
+	cp -pR $(TOPSRC)/src/. $(MIPS_BUILD_SRC_DIR)/
+	ln -s $(abspath $(TOPSRC))/.git $(MIPS_BUILD_ROOT)/.git
+	ln -s $(abspath $(TOPSRC))/include $(MIPS_BUILD_ROOT)/include
+	ln -s $(abspath $(TOPSRC))/lib $(MIPS_BUILD_ROOT)/lib
+	ln -s $(abspath $(TOPSRC))/sys $(MIPS_BUILD_ROOT)/sys
+	ln -s $(abspath $(TOPSRC))/tools $(MIPS_BUILD_ROOT)/tools
+	ln -s $(abspath $(TOPSRC))/target.mk $(MIPS_BUILD_ROOT)/target.mk
+	ln -s $(abspath $(TOPSRC))/target-mips.mk $(MIPS_BUILD_ROOT)/target-mips.mk
+	ln -s $(abspath $(TOPSRC))/target-n64.mk $(MIPS_BUILD_ROOT)/target-n64.mk
 	$(N64_MINIMAL_SRC_MAKE) clean
 	rm -rf $(N64_MINIMAL_ROOTFS_STAGE)
 	mkdir -p $(N64_MINIMAL_ROOTFS_STAGE)/bin \
@@ -1066,8 +1122,15 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/gettytab
 	cp -p $(TOPSRC)/sys/mips/n64/rootfs/etc/motd \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/motd
+ifeq ($(N64_DEBUG_UART_ONLY),1)
+	{ \
+	    printf '%s\n' '# name    getty                           type    status      comments'; \
+	    printf '%s\n' 'console   "/libexec/getty std.default"    vt100   on secure'; \
+	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/ttys
+else
 	cp -p $(TOPSRC)/sys/mips/n64/rootfs/etc/ttys \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/ttys
+endif
 	cp -p $(N64_TERMCAP) $(N64_MINIMAL_ROOTFS_STAGE)/etc/termcap
 	cp -p $(TOPSRC)/sys/mips/rootfs/root/.profile \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/.profile
@@ -1100,7 +1163,17 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	    printf '%s\n' '/dev/ram0	/var	ufs	rw	0	0'; \
 	    printf '%s\n' '/dev/swap	none	swap	sw	0	0'; \
 	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/fstab
-	$(N64_MINIMAL_SRC_MAKE) all install
+	# Keep build and installation as separate make invocations.  With a
+	# parallel parent make, passing both goals at once lets install race all;
+	# the legacy recursive install rules ignore missing-file errors, which can
+	# otherwise produce a valid-looking ROM with no /sbin/init.
+	$(N64_MINIMAL_SRC_MAKE) all
+	$(N64_MINIMAL_SRC_MAKE) install
+	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/init
+	test -x $(N64_MINIMAL_ROOTFS_STAGE)/bin/sh
+	test -x $(N64_MINIMAL_ROOTFS_STAGE)/libexec/getty
+	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/mkfs
+	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/mount
 	cp -p $(N64_MINIMAL_VM_STRESS_SCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-stress-smoke.sh
 	$(N64_MINIMAL_USERLAND_CC) -O2 -c \
@@ -1121,7 +1194,7 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	cp -p $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/
-	printf '%s\n' 'PCC_SMOKE_TRACE=$(N64_MINIMAL_PCC_TRACE)' > \
+	printf '%s\n' 'PCC_SMOKE_TRACE=0' > \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/pcc-smoke.conf
 	mkdir -p $(N64_MINIMAL_ROOTFS_STAGE)/root/utility-src
 	cp -p $(N64_UTILITY_SMOKE_SRCS) \
@@ -1222,7 +1295,12 @@ $(N64_MINIMAL_ROOTFS_MANIFEST): $(N64_MINIMAL_ROOTFS_STAGE)/.stamp \
 	    cat $(N64_ROOTFS_DEVNODES); \
 	} > $@
 
-$(N64_MINIMAL_ROOTFS_IMG): $(FSUTIL) $(N64_MINIMAL_ROOTFS_MANIFEST)
+$(N64_MINIMAL_ROOTFS_IMG): $(FSUTIL) $(MIPS_ROOTFS_CHECK_SCRIPT) \
+    $(N64_MINIMAL_ROOTFS_MANIFEST)
+	python3 $(MIPS_ROOTFS_CHECK_SCRIPT) \
+	    --stage $(N64_MINIMAL_ROOTFS_STAGE) \
+	    --manifest $(N64_MINIMAL_ROOTFS_MANIFEST) \
+	    --label n64-minimal
 	rm -f $@
 	$(FSUTIL) --new --endian=$(N64_USERLAND_ENDIAN) \
 	    --size=$(N64_MINIMAL_ROOTFS_KBYTES) \
@@ -1328,7 +1406,7 @@ preflight_startup.o: $S/mips/common/startup.S ${SYSTEM_DEP}
 ioconf.o: ioconf.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
-ioconf.debug-uart.o: ioconf.debug-uart.c ${SYSTEM_DEP}
+ioconf.debug-uart.o: $(N64_BOARD_SRC)/ioconf.debug-uart.c ${SYSTEM_DEP}
 	${COMPILE_C}
 
 n64gdb.o: $(N64_BOARD_SRC)/n64gdb.c $(N64_BOARD_SRC)/n64gdb.h ${SYSTEM_DEP}

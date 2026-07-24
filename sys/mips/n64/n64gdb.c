@@ -685,7 +685,7 @@ n64_gdb_step_addresses(int *frame, unsigned *next1, unsigned *next2)
         break;
     case 2:
     case 3:
-        *next1 = (pc + 4 & 0xf0000000u) |
+        *next1 = ((pc + 4) & 0xf0000000u) |
             ((instruction & 0x03ffffffu) << 2);
         break;
     case 4:

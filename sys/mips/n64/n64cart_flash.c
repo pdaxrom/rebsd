@@ -6,6 +6,7 @@
 #include <machine/n64int.h>
 #include <machine/n64cart_uart.h>
 #include <machine/n64cart_flash.h>
+#include <machine/n64pi.h>
 
 #define N64_PI_STATUS_DMA_BUSY         0x01u
 #define N64_PI_STATUS_IO_BUSY          0x02u
@@ -47,9 +48,9 @@ static unsigned n64cart_flash_read_cache_base;
 static unsigned n64cart_flash_read_cache_len;
 static int n64cart_flash_read_cache_valid;
 static int n64cart_flash_access_depth;
-static unsigned n64cart_flash_access_status;
 static struct n64cart_flash_info n64cart_flash_cached_info;
 static int n64cart_flash_info_cached;
+static char n64cart_flash_pi_owner;
 
 #ifndef N64CART_FLASH_WRITE_ENABLE
 #define N64CART_FLASH_WRITE_ENABLE 1
@@ -131,14 +132,15 @@ n64cart_flash_restore_quad_rom_mode(void)
 static void
 n64cart_flash_access_lock(void)
 {
-    if (n64cart_flash_access_depth++ == 0) {
-        n64cart_flash_access_status =
-            mips_read_c0_register(C0_STATUS, 0);
-        mips_write_c0_register(C0_STATUS, 0,
-            n64cart_flash_access_status & ~(ST_IE | ST_IM3));
-        n64cart_flash_cs_force(1);
-        n64cart_flash_enter_spi_command_mode();
+    if (n64cart_flash_access_depth != 0) {
+        ++n64cart_flash_access_depth;
+        return;
     }
+    if (n64pi_bus_enter(&n64cart_flash_pi_owner) != 0)
+        panic("n64cart flash PI lock");
+    n64cart_flash_access_depth = 1;
+    n64cart_flash_cs_force(1);
+    n64cart_flash_enter_spi_command_mode();
 }
 
 static void
@@ -151,21 +153,18 @@ n64cart_flash_access_unlock(void)
     if (--n64cart_flash_access_depth == 0) {
         n64cart_flash_cs_force(1);
         n64cart_flash_restore_quad_rom_mode();
-        mips_write_c0_register(C0_STATUS, 0,
-            n64cart_flash_access_status);
+        n64pi_bus_leave(&n64cart_flash_pi_owner);
     }
 }
 
 void
 n64cart_flash_shutdown(void)
 {
+    /*
+     * sync() holds the PI arbiter and restores quad-ROM mode before
+     * returning.
+     */
     n64cart_flash_sync();
-    n64cart_flash_access_status = mips_read_c0_register(C0_STATUS, 0);
-    mips_write_c0_register(C0_STATUS, 0,
-        n64cart_flash_access_status & ~(ST_IE | ST_IM3));
-    n64cart_flash_cs_force(1);
-    n64cart_flash_restore_quad_rom_mode();
-    mips_write_c0_register(C0_STATUS, 0, n64cart_flash_access_status);
 }
 
 static void
@@ -363,8 +362,8 @@ n64cart_flash_probe_info(struct n64cart_flash_info *info)
 
     n64cart_flash_access_lock();
     n64cart_flash_do_cmd(N64CART_FLASH_CMD_JEDEC, 0, jedec, sizeof(jedec));
-    n64cart_flash_access_unlock();
     info->fw_size = n64cart_flash_fw_size();
+    n64cart_flash_access_unlock();
 
     mf = jedec[0];
     id = ((unsigned)jedec[1] << 8) | jedec[2];
