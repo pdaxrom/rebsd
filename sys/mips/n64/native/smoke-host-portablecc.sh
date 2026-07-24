@@ -1461,7 +1461,39 @@ END { exit seen && fp ? 0 : 1 }
 		echo "$frame_cpu ignored -fno-omit-frame-pointer" >&2
 		exit 1
 	}
-
+	awk '
+/^[[:space:]]*[.]ent frame_reg_probe$/ {
+	inside = 1
+	seen = 1
+	next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*move \$sp,\$fp/ { base = ++sequence; next }
+inside && /^[[:space:]]*lw \$ra,4\(\$sp\)/ { ra = ++sequence; next }
+inside && /^[[:space:]]*lw \$fp,0\(\$sp\)/ { fp = ++sequence; next }
+inside && /^[[:space:]]*jr \$ra/ { ret = ++sequence; next }
+inside && ret && /^[[:space:]]*addiu \$sp,\$sp,16/ {
+	pop = ++sequence
+}
+END {
+	exit seen && base && base < ra && ra < fp && fp < ret &&
+	    ret < pop ? 0 : 1
+}
+' "$tmp.noomit.s" || {
+		echo "$frame_cpu emitted an interrupt-unsafe frame epilogue" >&2
+		exit 1
+	}
+	awk '
+/^[[:space:]]*[.]ent frame_reg_probe$/ { inside = 1; seen = 1; next }
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /^[[:space:]]*jal frame_reg_callee/ { call = 1; next }
+call && /^[[:space:]]*(addiu|subu) \$sp,\$sp,-16/ { dynamic = 1 }
+call { call = 0 }
+END { exit seen && !dynamic ? 0 : 1 }
+' "$tmp.noomit.s" || {
+		echo "$frame_cpu used a dynamic call area with a frame pointer" >&2
+		exit 1
+	}
 	awk '
 /^[[:space:]]*[.]ent frame_reg_probe$/ { inside = 1; seen = 1; next }
 inside && /^[[:space:]]*[.]ent / { inside = 0 }
@@ -1534,6 +1566,23 @@ END { exit seen && !fp && !push ? 0 : 1 }
 			exit 1
 		}
 	done
+
+	awk '
+/^[[:space:]]*[.]ent frame_address_probe$/ {
+	inside = 1
+	seen = 1
+	next
+}
+inside && /^[[:space:]]*[.]ent / { inside = 0 }
+inside && /[.]frame \$fp/ { fp = 1 }
+inside && /^[[:space:]]*jal frame_address_callee/ { call = 1; next }
+call && /^[[:space:]]*(addiu|subu) \$sp,\$sp,-16/ { dynamic = 1 }
+call { call = 0 }
+END { exit seen && fp && !dynamic ? 0 : 1 }
+' "$tmp.s" || {
+		echo "$frame_cpu did not use a fixed call area with an address-taken local" >&2
+		exit 1
+	}
 
 	for protected in frame_struct_probe frame_address_probe frame_alloca_probe \
 	    frame_varargs_probe; do

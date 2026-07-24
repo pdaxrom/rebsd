@@ -143,7 +143,7 @@ offcalc(struct interpass_prolog * ipp, int omitfp)
         /* round to 8-byte boundary */
         addto += 7;
         addto &= ~7;
-	if (omitfp && mips_fixed_call_area)
+	if (mips_fixed_call_area)
 		addto += mips_fixed_call_size;
 
 	return addto;
@@ -288,15 +288,19 @@ eoftn(struct interpass_prolog * ipp)
 			printf("\tnop\n");
 		}
 	} else {
-		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[FP],
-		    ARGINIT/SZCHAR);
+		/*
+		 * Keep the saved frame and return address above the live stack
+		 * pointer until both have been restored.  An asynchronous exception
+		 * uses the area below sp for its register frame; raising sp first
+		 * would let that frame overwrite these still-live save slots.
+		 */
+		printf("\tmove %s,%s\n", rnames[SP], rnames[FP]);
 		if (!leaf)
-			printf("\tlw %s,%d(%s)\n", rnames[RA],
-			    4-ARGINIT/SZCHAR, rnames[SP]);
-		printf("\tlw %s,%d(%s)\n", rnames[FP], 0-ARGINIT/SZCHAR,
-		    rnames[SP]);
+			printf("\tlw %s,4(%s)\n", rnames[RA], rnames[SP]);
+		printf("\tlw %s,0(%s)\n", rnames[FP], rnames[SP]);
 		printf("\tjr %s\n", rnames[RA]);
-		printf("\tnop\n");
+		printf("\taddiu %s,%s,%d\n", rnames[SP], rnames[SP],
+		    ARGINIT/SZCHAR);
 	}
 
 	mips_omit_fp = 0;
@@ -1999,6 +2003,7 @@ mips_rewrite_frame_ref(NODE *p)
 struct mips_frame_scan {
 	int needfp;
 	int has_call;
+	int fixed_call_unsafe;
 	int max_call_size;
 };
 
@@ -2026,12 +2031,14 @@ mips_scan_call(NODE *p, struct mips_frame_scan *scan)
 	if (p->n_left != NIL && p->n_left->n_op == ICON &&
 	    strcmp(p->n_left->n_name, "alloca") == 0) {
 		scan->needfp = 1;
+		scan->fixed_call_unsafe = 1;
 		return;
 	}
 	if (p->n_op != CALL && p->n_op != FORTCALL && p->n_op != STCALL)
 		return;
 	if (mips_tree_has_call(p->n_right)) {
 		scan->needfp = 1;
+		scan->fixed_call_unsafe = 1;
 		return;
 	}
 
@@ -2048,12 +2055,10 @@ mips_scan_frame(NODE *p, void *arg)
 	struct mips_frame_scan *scan = arg;
 	CONSZ off;
 
-	if (scan->needfp)
-		return;
-
 	if (p->n_op == ASSIGN && p->n_left->n_op == REG &&
 	    regno(p->n_left) == FPREG) {
 		scan->needfp = 1;
+		scan->fixed_call_unsafe = 1;
 		return;
 	}
 
@@ -2063,6 +2068,7 @@ mips_scan_frame(NODE *p, void *arg)
 	 */
 	if (p->n_op == STARG) {
 		scan->needfp = 1;
+		scan->fixed_call_unsafe = 1;
 		return;
 	}
 
@@ -2096,11 +2102,9 @@ mips_ipole_needs_fp(struct interpass *ipole)
 		if (ip->type != IP_NODE)
 			continue;
 		walkf(ip->ip_node, mips_scan_frame, &scan);
-		if (scan.needfp)
-			break;
 	}
 
-	mips_fixed_call_area = xomitframe && !scan.needfp && scan.has_call;
+	mips_fixed_call_area = scan.has_call && !scan.fixed_call_unsafe;
 	if (mips_fixed_call_area)
 		mips_fixed_call_size = scan.max_call_size > ARGINIT / SZCHAR ?
 		    scan.max_call_size : ARGINIT / SZCHAR;
@@ -2130,9 +2134,11 @@ void
 myoptim_pre(struct interpass *ipole)
 {
 	struct interpass_prolog *ipp;
+	int needfp;
 
 	ipp = p2env.ipp;
-	if (mips_can_omit_fp(ipp) && mips_ipole_needs_fp(ipole))
+	needfp = mips_ipole_needs_fp(ipole);
+	if (mips_can_omit_fp(ipp) && needfp)
 		ipp->ipp_flags |= IF_NEEDFP;
 }
 
