@@ -391,7 +391,7 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     case HW_USERMEM:
         return (sysctl_rdlong(oldp, oldlenp, newp, MAXMEM));
     case HW_PAGESIZE:
-        return (sysctl_rdint(oldp, oldlenp, newp, DEV_BSIZE));
+        return (sysctl_rdint(oldp, oldlenp, newp, VM_PAGE_SIZE));
     case HW_CPU:
         return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_cpu));
     case HW_FPU:

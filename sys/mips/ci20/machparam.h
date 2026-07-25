@@ -92,6 +92,7 @@
 #ifndef __ASSEMBLER__
 void idle(void);
 void udelay(unsigned usec);
+void ci20_delay_init(void);
 void clkstart(void);
 void mips_clock_intr(int *frame, unsigned status);
 void led_control(int mask, int on);

@@ -10,6 +10,7 @@
 #define CI20_SIZE_32M                  0x02000000
 #define CI20_SIZE_64M                  0x04000000
 #define CI20_SIZE_256M                 0x10000000
+#define CI20_SIZE_1G                   0x40000000
 
 #define MIPS_KSEG0_BASE                0x80000000
 #define MIPS_KSEG1_BASE                0xa0000000
@@ -19,7 +20,10 @@
 #define MIPS_KSEG_TO_PHYS(x)           ((unsigned)(x) & MIPS_KSEG_PHYS_MASK)
 
 /*
- * First Ci20 layout.  Only the first low-memory bank is used.
+ * Ci20 has two physical RAM banks separated by an address hole:
+ *
+ *   0x00000000..0x0fffffff  256 MiB low bank
+ *   0x30000000..0x5fffffff  768 MiB high bank
  *
  *   0x00000000..0x000fffff  vectors/unused low RAM
  *   0x00100000..0x002fbfff  kernel ELF
@@ -29,13 +33,21 @@
  *   0x00700000..0x007fffff  /var RAM disk
  *   0x00800000..             linked root filesystem
  *                             followed by optional RAM-backed swap
+ *   0x0f800000..0x0fffffff  HDMI framebuffer reserve
  */
 #define CI20_PHYS_RAM_BASE             0x00000000
+#define CI20_LOW_RAM_BYTES             CI20_SIZE_256M
+#define CI20_HIGH_RAM_PHYS_START       0x30000000
+#define CI20_HIGH_RAM_MAX_BYTES        0x30000000
+#define CI20_HIGH_RAM_VADDR_START      0xc0000000
+#define CI20_HIGH_RAM_VADDR_END        0xf0000000
 #ifdef CI20_RAM_SIZE_OVERRIDE
 #define CI20_RAM_SIZE                  CI20_RAM_SIZE_OVERRIDE
 #else
-#define CI20_RAM_SIZE                  CI20_SIZE_256M
+#define CI20_RAM_SIZE                  CI20_SIZE_1G
 #endif
+#define CI20_HIGH_RAM_BYTES            (CI20_RAM_SIZE > CI20_LOW_RAM_BYTES ? \
+                                         CI20_RAM_SIZE - CI20_LOW_RAM_BYTES : 0)
 #define CI20_CPU_KHZ                   1200000u
 #define MIPS_COUNT_KHZ                 600000u
 #define CI20_KERNEL_LOAD_VADDR         0x80100000
@@ -59,6 +71,8 @@
 #define CI20_RAMDISK_VAR_PHYS_START    0x00700000
 #define CI20_RAMDISK_VAR_BYTES         CI20_SIZE_1M
 #define CI20_ROMDISK_PHYS_START        0x00800000
+#define CI20_FRAMEBUFFER_PHYS_START    0x0f800000
+#define CI20_FRAMEBUFFER_BYTES         CI20_SIZE_8M
 #ifdef CI20_ROMDISK_BYTES_OVERRIDE
 #define CI20_ROMDISK_BYTES             CI20_ROMDISK_BYTES_OVERRIDE
 #else
@@ -66,8 +80,11 @@
 #endif
 #define CI20_RAMSWAP_PHYS_START        (CI20_ROMDISK_PHYS_START + \
                                          CI20_ROMDISK_BYTES)
-#define CI20_RAMSWAP_MAX_BYTES         (CI20_RAM_SIZE > CI20_RAMSWAP_PHYS_START ? \
-                                         CI20_RAM_SIZE - CI20_RAMSWAP_PHYS_START : 0)
+#define CI20_RAMSWAP_MAX_BYTES         \
+                                        (CI20_FRAMEBUFFER_PHYS_START > \
+                                         CI20_RAMSWAP_PHYS_START ? \
+                                         CI20_FRAMEBUFFER_PHYS_START - \
+                                         CI20_RAMSWAP_PHYS_START : 0)
 #ifdef CI20_RAMSWAP_BYTES_OVERRIDE
 #define CI20_RAMSWAP_BYTES             (CI20_RAMSWAP_BYTES_OVERRIDE < \
                                          CI20_RAMSWAP_MAX_BYTES ? \

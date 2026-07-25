@@ -15,14 +15,23 @@ data.
 The default output is in kilobytes.
 The
 .B Mem
-line reports the total live user process image, including processes currently
-swapped out.  On single user-memory-window ports this is more useful than the
-resident process size, which is often just the
-.I free
-process itself.
+line reports pages managed by the VM allocator.  Reserved and bad physical
+pages are excluded from
+.BR total ;
+.B used
+includes active, inactive, wired, device-owned, and other allocator-owned
+pages;
+.B free
+is the current allocatable page count; and
+.B act
+is the resident VM object subset.  Consequently, wired allocations such as a
+dynamic framebuffer reduce the reported free memory.
 The swap line reports the logical swap size visible to the kernel swap
 allocator.  On systems with compressed RAM swap, this can be larger than the
 raw backing store.
+The
+.B Phys
+line reports all detected physical memory, including reserved pages.
 .PP
 The
 .B \-h

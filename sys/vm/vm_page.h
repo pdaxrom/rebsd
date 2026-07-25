@@ -32,6 +32,7 @@ enum vm_page_counter {
 };
 
 #define VM_PAGE_FLAG_POISONED       0x01u
+#define VM_PAGE_FLAG_DEVICE         0x02u
 #define VM_PAGE_FREE_POISON         0xddu
 
 /*
@@ -110,6 +111,10 @@ int vm_page_counter_inc(struct vm_page_allocator *, struct vm_page *,
     enum vm_page_counter);
 int vm_page_counter_dec(struct vm_page_allocator *, struct vm_page *,
     enum vm_page_counter);
+int vm_page_device_claim(struct vm_page_allocator *, struct vm_page *,
+    vm_pfn_t);
+int vm_page_device_release(struct vm_page_allocator *, struct vm_page *,
+    vm_pfn_t);
 int vm_page_allocator_validate(const struct vm_page_allocator *,
     const struct vm_phys_map *);
 int vm_page_allocator_stats(const struct vm_page_allocator *,

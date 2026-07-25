@@ -9,43 +9,34 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <machine/video.h>
+#include <linux/fb.h>
+#include <sys/drm.h>
 
 #define FB_DEV "/dev/fb0"
 
 static void
 usage(void)
 {
-    fprintf(stderr, "usage: fbset [320x240|640x480]\n");
-    fprintf(stderr, "       fbset [width height]\n");
-    fprintf(stderr, "       fbset fill rgba5551\n");
+    fprintf(stderr, "usage: fbset [WIDTHxHEIGHT[xBPP]]\n");
+    fprintf(stderr, "       fbset [width height [bpp]]\n");
+    fprintf(stderr, "       fbset -l\n");
+    fprintf(stderr, "       fbset fill pixel-value\n");
     exit(1);
 }
 
 static const char *
-tv_name(unsigned tv_type)
+format_name(unsigned format)
 {
-    switch (tv_type) {
-    case N64FB_TV_PAL:
-        return "pal";
-    case N64FB_TV_NTSC:
-        return "ntsc";
-    case N64FB_TV_MPAL:
-        return "mpal";
+    switch (format) {
+    case DRM_FORMAT_XRGB8888:
+        return "xrgb8888";
+    case DRM_FORMAT_RGBA5551:
+        return "rgba5551";
+    case DRM_FORMAT_RGBA8888:
+        return "rgba8888";
     default:
         return "unknown";
     }
-}
-
-static unsigned
-mode_from_size(unsigned width, unsigned height)
-{
-    if (width == 320 && height == 240)
-        return N64FB_MODE_320X240;
-    if (width == 640 && height == 480)
-        return N64FB_MODE_640X480;
-    usage();
-    return N64FB_MODE_320X240;
 }
 
 static unsigned
@@ -61,20 +52,38 @@ parse_uint(const char *text)
     return (unsigned)value;
 }
 
-static unsigned
-parse_mode(int argc, char **argv)
+static void
+parse_mode(int argc, char **argv, unsigned *width, unsigned *height,
+    unsigned *bpp)
 {
+    char *end;
+    char *next;
+
     if (argc == 2) {
-        if (strcmp(argv[1], "320x240") == 0)
-            return N64FB_MODE_320X240;
-        if (strcmp(argv[1], "640x480") == 0)
-            return N64FB_MODE_640X480;
-        usage();
+        next = strchr(argv[1], 'x');
+        if (next == 0)
+            usage();
+        errno = 0;
+        *width = (unsigned)strtoul(argv[1], &end, 10);
+        if (errno || end != next)
+            usage();
+        *height = (unsigned)strtoul(next + 1, &end, 10);
+        if (errno || end == next + 1)
+            usage();
+        if (*end == '\0') {
+            *bpp = 0;
+            return;
+        }
+        if (*end != 'x')
+            usage();
+        *bpp = parse_uint(end + 1);
+        return;
     }
-    if (argc == 3)
-        return mode_from_size(parse_uint(argv[1]), parse_uint(argv[2]));
-    usage();
-    return N64FB_MODE_320X240;
+    if (argc != 3 && argc != 4)
+        usage();
+    *width = parse_uint(argv[1]);
+    *height = parse_uint(argv[2]);
+    *bpp = argc == 4 ? parse_uint(argv[3]) : 0;
 }
 
 static int
@@ -96,84 +105,208 @@ open_fb(void)
     return fd;
 }
 
-static void
-print_info(const struct n64fb_info *info, const struct n64fb_map *map)
+static unsigned
+find_mode(int fd, const struct drmfb_info *info, unsigned width,
+    unsigned height, unsigned bpp)
 {
-    printf("%ux%u %u bpp rgba5551 fb=0x%08x bytes=%u tv=%s rdram=0x%08x",
-        info->width, info->height, info->bpp, info->fb_phys,
-        info->fb_bytes, tv_name(info->tv_type), info->rdram_bytes);
-    if (map)
+    struct drmfb_mode mode;
+    unsigned fallback = (unsigned)-1;
+    unsigned index;
+
+    for (index = 0; index < info->mode_count; ++index) {
+        memset(&mode, 0, sizeof(mode));
+        mode.index = index;
+        if (ioctl(fd, DRMFBIOC_GETMODE, &mode) < 0) {
+            fprintf(stderr, "fbset: get mode %u: %s\n", index,
+                strerror(errno));
+            exit(1);
+        }
+        if (mode.width != width || mode.height != height)
+            continue;
+        if (bpp != 0 && mode.bpp == bpp)
+            return index;
+        if (bpp == 0 && mode.bpp == info->bpp)
+            return index;
+        if (fallback == (unsigned)-1 || mode.bpp == 16)
+            fallback = index;
+    }
+    if (bpp == 0 && fallback != (unsigned)-1)
+        return fallback;
+    if (bpp != 0)
+        fprintf(stderr, "fbset: mode %ux%ux%u is not available\n",
+            width, height, bpp);
+    else
+        fprintf(stderr, "fbset: mode %ux%u is not available\n",
+            width, height);
+    exit(1);
+    return 0;
+}
+
+static void
+get_linux_info(int fd, struct fb_fix_screeninfo *fix,
+    struct fb_var_screeninfo *var)
+{
+    memset(fix, 0, sizeof(*fix));
+    memset(var, 0, sizeof(*var));
+    if (ioctl(fd, FBIOGET_FSCREENINFO, fix) < 0) {
+        fprintf(stderr, "fbset: Linux FBIOGET_FSCREENINFO: %s\n",
+            strerror(errno));
+        exit(1);
+    }
+    if (ioctl(fd, FBIOGET_VSCREENINFO, var) < 0) {
+        fprintf(stderr, "fbset: Linux FBIOGET_VSCREENINFO: %s\n",
+            strerror(errno));
+        exit(1);
+    }
+}
+
+static void
+print_info(const struct drmfb_info *info, const struct drmfb_map *map,
+    const struct fb_fix_screeninfo *fix,
+    const struct fb_var_screeninfo *var)
+{
+    printf("%ux%u %u bpp %s stride=%u fb=0x%08x bytes=%u "
+        "mode=%u/%u clock=%uKHz",
+        info->width, info->height, info->bpp, format_name(info->format),
+        info->stride, info->fb_phys, info->fb_bytes, info->mode_index,
+        info->mode_count, info->pixel_clock_khz);
+    if (info->phy_status != 0)
+        printf(" phy=0x%x", info->phy_status);
+    if (map != 0)
         printf(" map=0x%08x mapbytes=%u reserved=%u",
             map->vaddr, map->bytes, map->reserved_bytes);
+    if (fix != 0 && var != 0)
+        printf(" linux-fbdev=%s/%ux%u", fix->id, var->xres, var->yres);
     printf("\n");
 }
 
 static void
-fill_fb(const struct n64fb_map *map, unsigned color)
+list_modes(int fd, const struct drmfb_info *info)
 {
-    volatile unsigned short *fb = (volatile unsigned short *)map->vaddr;
-    unsigned pixels = map->bytes / sizeof(*fb);
+    struct drmfb_mode mode;
+    unsigned index;
+
+    for (index = 0; index < info->mode_count; ++index) {
+        memset(&mode, 0, sizeof(mode));
+        mode.index = index;
+        if (ioctl(fd, DRMFBIOC_GETMODE, &mode) < 0) {
+            fprintf(stderr, "fbset: get mode %u: %s\n", index,
+                strerror(errno));
+            exit(1);
+        }
+        printf("%c %u: %ux%u %u bpp %s clock=%uKHz stride=%u bytes=%u\n",
+            index == info->mode_index ? '*' : ' ', index,
+            mode.width, mode.height, mode.bpp, format_name(mode.format),
+            mode.pixel_clock_khz, mode.stride, mode.stride * mode.height);
+    }
+}
+
+static void
+fill_fb(const struct drmfb_info *info, const struct drmfb_map *map,
+    unsigned color)
+{
     unsigned i;
 
-    color &= 0xffff;
-    for (i = 0; i < pixels; ++i)
-        fb[i] = color;
+    if (info->format == DRM_FORMAT_XRGB8888 && info->bpp == 32) {
+        volatile unsigned *fb = (volatile unsigned *)map->vaddr;
+
+        for (i = 0; i < info->fb_bytes / sizeof(*fb); ++i)
+            fb[i] = color & 0x00ffffffu;
+        return;
+    }
+    if (info->format == DRM_FORMAT_RGBA8888 && info->bpp == 32) {
+        volatile unsigned *fb = (volatile unsigned *)map->vaddr;
+
+        for (i = 0; i < info->fb_bytes / sizeof(*fb); ++i)
+            fb[i] = color;
+        return;
+    }
+    if (info->format == DRM_FORMAT_RGBA5551 && info->bpp == 16) {
+        volatile unsigned short *fb =
+            (volatile unsigned short *)map->vaddr;
+
+        for (i = 0; i < info->fb_bytes / sizeof(*fb); ++i)
+            fb[i] = color & 0xffffu;
+        return;
+    }
+    fprintf(stderr, "fbset: unsupported framebuffer format %u/%u bpp\n",
+        info->format, info->bpp);
+    exit(1);
 }
 
 int
 main(int argc, char **argv)
 {
-    struct n64fb_info info;
-    struct n64fb_map map;
-    struct n64fb_mode mode;
-    struct n64fb_map *mapp = NULL;
-    void *mapping;
+    struct drmfb_info info;
+    struct drmfb_map map;
+    struct drmfb_mode mode;
+    struct fb_fix_screeninfo fix;
+    struct fb_var_screeninfo var;
+    unsigned width;
+    unsigned height;
+    unsigned bpp;
+    void *mapping = MAP_FAILED;
     int fd;
 
-    if (argc != 1 && argc != 2 && argc != 3)
+    if (argc < 1 || argc > 4)
         usage();
 
     fd = open_fb();
-    if (argc != 1 && !is_fill(argc, argv)) {
-        mode.mode = parse_mode(argc, argv);
-        if (ioctl(fd, N64FBIOC_SETMODE, &mode) < 0) {
+    if (argc != 1 && !is_fill(argc, argv) &&
+        !(argc == 2 && strcmp(argv[1], "-l") == 0)) {
+        if (ioctl(fd, DRMFBIOC_GETINFO, &info) < 0) {
+            fprintf(stderr, "fbset: get info: %s\n", strerror(errno));
+            close(fd);
+            return 1;
+        }
+        parse_mode(argc, argv, &width, &height, &bpp);
+        memset(&mode, 0, sizeof(mode));
+        mode.index = find_mode(fd, &info, width, height, bpp);
+        if (ioctl(fd, DRMFBIOC_SETMODE, &mode) < 0) {
             fprintf(stderr, "fbset: set mode: %s\n", strerror(errno));
             close(fd);
             return 1;
         }
     }
 
-    if (ioctl(fd, N64FBIOC_GETINFO, &info) < 0) {
+    if (ioctl(fd, DRMFBIOC_GETINFO, &info) < 0) {
         fprintf(stderr, "fbset: get info: %s\n", strerror(errno));
         close(fd);
         return 1;
     }
 
-    if (ioctl(fd, N64FBIOC_GETMAP, &map) < 0) {
+    if (ioctl(fd, DRMFBIOC_GETMAP, &map) < 0) {
         fprintf(stderr, "fbset: get map: %s\n", strerror(errno));
         close(fd);
         return 1;
     }
-    mapping = mmap((void *)map.vaddr, map.bytes,
-        PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (mapping == MAP_FAILED) {
-        fprintf(stderr, "fbset: mmap framebuffer: %s\n",
-            strerror(errno));
+    get_linux_info(fd, &fix, &var);
+    if (fix.smem_start != info.fb_phys ||
+        fix.smem_len != info.fb_bytes ||
+        fix.line_length != info.stride ||
+        var.xres != info.width || var.yres != info.height ||
+        var.bits_per_pixel != info.bpp) {
+        fprintf(stderr, "fbset: native DRM and Linux fbdev views disagree\n");
         close(fd);
         return 1;
     }
-    map.vaddr = (unsigned)mapping;
-    mapp = &map;
     if (is_fill(argc, argv)) {
-        if (mapp == NULL) {
-            fprintf(stderr, "fbset: get map: %s\n", strerror(errno));
+        mapping = mmap((void *)map.vaddr, map.bytes,
+            PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (mapping == MAP_FAILED) {
+            fprintf(stderr, "fbset: mmap framebuffer: %s\n",
+                strerror(errno));
             close(fd);
             return 1;
         }
-        fill_fb(mapp, parse_uint(argv[2]));
+        map.vaddr = (unsigned)mapping;
+        fill_fb(&info, &map, parse_uint(argv[2]));
     }
-    print_info(&info, mapp);
-    munmap(mapping, map.bytes);
+    if (argc == 2 && strcmp(argv[1], "-l") == 0)
+        list_modes(fd, &info);
+    print_info(&info, &map, &fix, &var);
+    if (mapping != MAP_FAILED)
+        munmap(mapping, map.bytes);
     close(fd);
     return 0;
 }

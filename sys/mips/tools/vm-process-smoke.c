@@ -27,7 +27,7 @@ static volatile sig_atomic_t smoke_signal_seen;
 static volatile unsigned smoke_bad_address = 1;
 static unsigned char smoke_file_page[SMOKE_VM_PAGE_SIZE];
 
-#if defined(__mips) && __mips >= 3
+#ifdef MIPS_VM_PROCESS_SMOKE_GPR64
 static unsigned long long smoke_gpr64_source
     __attribute__((aligned(8))) = 0x0123456789abcdefULL;
 extern void smoke_gpr64_exception_frame_asm(const unsigned long long *,
@@ -248,7 +248,7 @@ main(int argc, char **argv)
     page_size = getpagesize();
     if (page_size <= 0 || (page_size & (page_size - 1)) != 0)
         return smoke_fail("page size");
-#if defined(__mips) && __mips >= 3
+#ifdef MIPS_VM_PROCESS_SMOKE_GPR64
     if (smoke_gpr64_exception_frame() != 0)
         return smoke_fail("MIPS III 64-bit GPR exception frame");
 #endif
@@ -287,7 +287,7 @@ main(int argc, char **argv)
     if (signal(SIGUSR1, smoke_signal) == SIG_ERR ||
         kill(getpid(), SIGUSR1) != 0 || !smoke_signal_seen)
         return smoke_fail("signal delivery");
-#if defined(__mips) && __mips >= 3
+#ifdef MIPS_VM_PROCESS_SMOKE_GPR64
     if (smoke_gpr64_signal_frame() != 0)
         return smoke_fail("MIPS III 64-bit GPR signal frame");
 #endif

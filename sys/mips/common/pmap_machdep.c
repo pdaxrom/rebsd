@@ -11,6 +11,9 @@
 #include <sys/param.h>
 #include <sys/errno.h>
 #include <machine/io.h>
+#ifdef CI20
+#include <machine/layout.h>
+#endif
 #include <vm/pmap.h>
 
 #define PMAP_MD_KSEG0_BASE      0x80000000u
@@ -20,6 +23,11 @@
 #define PMAP_MD_ENTRYHI_MASK    0xffffe0ffu
 #define PMAP_MD_INVALID_BASE    0x40000000u
 #define PMAP_MD_TLB_PAIR_SIZE   0x00002000u
+#ifdef CI20
+#define PMAP_MD_PERMANENT_WIRED 4u
+#else
+#define PMAP_MD_PERMANENT_WIRED 0u
+#endif
 
 extern unsigned pmap_md_legacy_user_entries(void);
 
@@ -198,7 +206,7 @@ pmap_md_legacy_user_disable(void)
             PMAP_MD_INVALID_BASE + index * PMAP_MD_TLB_PAIR_SIZE,
             0, 0);
     }
-    mips_write_c0_register(C0_WIRED, 0, 0);
+    mips_write_c0_register(C0_WIRED, 0, PMAP_MD_PERMANENT_WIRED);
     mips_write_c0_register(C0_PAGEMASK, 0, saved_pagemask);
     mips_write_c0_register(C0_ENTRYHI, 0, saved_entryhi);
     mips_intr_restore(status);
@@ -210,6 +218,14 @@ pmap_md_direct_map(vm_paddr_t paddr, vm_size_t size,
 {
     unsigned base;
 
+#ifdef CI20
+    if (size != 0 && cache == PMAP_CACHE_CACHED &&
+        paddr >= CI20_HIGH_RAM_PHYS_START &&
+        paddr < CI20_HIGH_RAM_PHYS_START + CI20_HIGH_RAM_BYTES &&
+        size - 1 < CI20_HIGH_RAM_PHYS_START + CI20_HIGH_RAM_BYTES - paddr)
+        return (void *)(CI20_HIGH_RAM_VADDR_START +
+            (paddr - CI20_HIGH_RAM_PHYS_START));
+#endif
     if (size == 0 || paddr > PMAP_MD_PHYS_MASK ||
         size - 1 > PMAP_MD_PHYS_MASK - paddr)
         return 0;
@@ -251,9 +267,10 @@ pmap_md_range_sync(vm_paddr_t paddr, vm_size_t size, unsigned operations)
 {
     unsigned address;
     unsigned end;
+    void *mapping;
 
-    if (size == 0 || paddr > PMAP_MD_PHYS_MASK ||
-        size - 1 > PMAP_MD_PHYS_MASK - paddr || operations == 0 ||
+    mapping = pmap_md_direct_map(paddr, size, PMAP_CACHE_CACHED);
+    if (mapping == 0 || operations == 0 ||
         (operations & ~(PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION |
         PMAP_INVALIDATE_DATA)) != 0 ||
         (operations & (PMAP_SYNC_DATA | PMAP_INVALIDATE_DATA)) ==
@@ -261,28 +278,27 @@ pmap_md_range_sync(vm_paddr_t paddr, vm_size_t size, unsigned operations)
         return EINVAL;
     pmap_md_sync();
     if ((operations & PMAP_SYNC_DATA) != 0) {
-        address = paddr & ~(PMAP_MD_DCACHE_LINE - 1);
-        end = (paddr + size + PMAP_MD_DCACHE_LINE - 1) &
+        address = (unsigned)mapping & ~(PMAP_MD_DCACHE_LINE - 1);
+        end = ((unsigned)mapping + size + PMAP_MD_DCACHE_LINE - 1) &
             ~(PMAP_MD_DCACHE_LINE - 1);
         for (; address < end; address += PMAP_MD_DCACHE_LINE)
-            pmap_md_dcache_writeback_invalidate(
-                PMAP_MD_KSEG0_BASE | address);
+            pmap_md_dcache_writeback_invalidate(address);
         pmap_md_sync();
     }
     if ((operations & PMAP_INVALIDATE_DATA) != 0) {
-        address = paddr & ~(PMAP_MD_DCACHE_LINE - 1);
-        end = (paddr + size + PMAP_MD_DCACHE_LINE - 1) &
+        address = (unsigned)mapping & ~(PMAP_MD_DCACHE_LINE - 1);
+        end = ((unsigned)mapping + size + PMAP_MD_DCACHE_LINE - 1) &
             ~(PMAP_MD_DCACHE_LINE - 1);
         for (; address < end; address += PMAP_MD_DCACHE_LINE)
-            pmap_md_dcache_invalidate(PMAP_MD_KSEG0_BASE | address);
+            pmap_md_dcache_invalidate(address);
         pmap_md_sync();
     }
     if ((operations & PMAP_SYNC_INSTRUCTION) != 0) {
-        address = paddr & ~(PMAP_MD_ICACHE_LINE - 1);
-        end = (paddr + size + PMAP_MD_ICACHE_LINE - 1) &
+        address = (unsigned)mapping & ~(PMAP_MD_ICACHE_LINE - 1);
+        end = ((unsigned)mapping + size + PMAP_MD_ICACHE_LINE - 1) &
             ~(PMAP_MD_ICACHE_LINE - 1);
         for (; address < end; address += PMAP_MD_ICACHE_LINE)
-            pmap_md_icache_invalidate(PMAP_MD_KSEG0_BASE | address);
+            pmap_md_icache_invalidate(address);
         pmap_md_sync();
     }
     return 0;

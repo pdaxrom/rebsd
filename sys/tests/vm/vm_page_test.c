@@ -285,6 +285,36 @@ test_low_memory_and_fragmentation(void)
 }
 
 static int
+test_device_owned_run(void)
+{
+    struct vm_page_allocator allocator;
+    struct vm_page_request request;
+    struct poison_memory memory;
+    struct vm_phys_map map;
+    struct vm_page *pages;
+
+    CHECK(build_allocator(&map, &allocator, &memory) == 0);
+    vm_page_request_init(&request);
+    request.vpr_npages = 2;
+    request.vpr_state = VM_PAGE_WIRED;
+    CHECK(vm_page_alloc(&allocator, &request, &pages) == 0);
+    CHECK(vm_page_device_claim(&allocator, pages, 2) == 0);
+    CHECK(vm_page_device_claim(&allocator, pages, 2) == EALREADY);
+    CHECK((pages[0].vmp_flags & VM_PAGE_FLAG_DEVICE) != 0);
+    CHECK((pages[1].vmp_flags & VM_PAGE_FLAG_DEVICE) != 0);
+    CHECK(vm_page_free(&allocator, pages, 2) == EBUSY);
+    CHECK(vm_page_device_release(&allocator, pages, 2) == 0);
+    CHECK(vm_page_device_release(&allocator, pages, 2) == EINVAL);
+    CHECK(vm_page_counter_dec(&allocator, pages,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_counter_dec(&allocator, pages + 1,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_free(&allocator, pages, 2) == 0);
+    CHECK(vm_page_allocator_validate(&allocator, &map) == 0);
+    return 0;
+}
+
+static int
 test_bad_page_quarantine(void)
 {
     struct vm_page_allocator allocator;
@@ -334,6 +364,8 @@ main(void)
     if (test_constraints_and_contiguous_runs() != 0)
         return 1;
     if (test_low_memory_and_fragmentation() != 0)
+        return 1;
+    if (test_device_owned_run() != 0)
         return 1;
     if (test_bad_page_quarantine() != 0)
         return 1;

@@ -9,6 +9,9 @@
 #include <machine/devmajors.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
+#ifdef VIDEO_ENABLED
+#include <sys/drm.h>
+#endif
 #include <stdint.h>
 
 #ifdef PTY_ENABLED
@@ -218,7 +221,18 @@ const struct cdevsw cdevsw[] = {
         mips_nostrategy, ci20_uart_raw_read, ci20_uart_raw_write,
     },
     { NOCDEV },
-    { NOCDEV },
+    {
+#if MIPS_FB_MAJOR != 5
+#   error Wrong MIPS_FB_MAJOR value!
+#endif
+#ifdef VIDEO_ENABLED
+        drmfb_open, drmfb_close, drmfb_read, drmfb_write,
+        drmfb_ioctl, mips_nullstop, 0, mips_seltrue,
+        mips_nostrategy, 0, 0, drmfb_mmap,
+#else
+        NOCDEV
+#endif
+    },
     { NOCDEV },
     { NOCDEV },
     {

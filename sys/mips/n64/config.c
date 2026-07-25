@@ -14,6 +14,7 @@
 #include <sys/map.h>
 #include <sys/systm.h>
 #include <machine/ramswap.h>
+#include <machine/video.h>
 #ifdef N64_USB_GDB
 #include <machine/n64gdb.h>
 #endif

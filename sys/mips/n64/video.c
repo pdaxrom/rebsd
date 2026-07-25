@@ -1,15 +1,18 @@
 #include <sys/param.h>
-#include <sys/conf.h>
 #include <sys/errno.h>
 #include <sys/systm.h>
-#include <sys/uio.h>
+#include <sys/drm.h>
 #include <machine/n64.h>
 #include <machine/n64int.h>
 #include <machine/video.h>
 #include <vm/pmap.h>
-#include <vm/vm_param.h>
 
 #ifndef VIDEO_ENABLED
+void
+n64_video_attach(void)
+{
+}
+
 int
 n64_video_set_mode(unsigned mode)
 {
@@ -17,12 +20,12 @@ n64_video_set_mode(unsigned mode)
 }
 
 void
-n64_video_get_info(struct n64fb_info *info)
+n64_video_get_info(struct n64_video_info *info)
 {
     bzero(info, sizeof(*info));
 }
 
-volatile unsigned short *
+volatile void *
 n64_video_framebuffer(void)
 {
     return 0;
@@ -41,43 +44,6 @@ n64_video_intr_enable(void)
 void
 n64_video_intr(void)
 {
-}
-
-int
-n64fb_open(dev_t dev, int flag, int mode)
-{
-    return ENXIO;
-}
-
-int
-n64fb_close(dev_t dev, int flag, int mode)
-{
-    return 0;
-}
-
-int
-n64fb_read(dev_t dev, struct uio *uio, int flag)
-{
-    return ENXIO;
-}
-
-int
-n64fb_write(dev_t dev, struct uio *uio, int flag)
-{
-    return ENXIO;
-}
-
-int
-n64fb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
-{
-    return ENXIO;
-}
-
-int
-n64fb_mmap(dev_t dev, off_t offset, u_int size, int protection,
-    u_int *paddr, int *cache)
-{
-    return ENXIO;
 }
 #else
 
@@ -98,6 +64,7 @@ n64fb_mmap(dev_t dev, off_t offset, u_int size, int protection,
 #define N64_VI_Y_SCALE         13
 
 #define N64_VI_CTRL_RGBA16     0x00000002u
+#define N64_VI_CTRL_RGBA32     0x00000003u
 #define N64_VI_CTRL_SERRATE    0x00000040u
 #define N64_VI_CTRL_RESAMPLE   0x00000200u
 #define N64_VI_CTRL_ADVANCE    0x00003000u
@@ -155,11 +122,31 @@ static const struct n64_vi_timing n64_vi_timings[3] = {
     },
 };
 
-static struct n64fb_info n64_video_info;
+static struct n64_video_info n64_video_info;
+static struct drm_device n64_drm_device;
+static struct drm_mode_config n64_drm_modes[4];
+static int n64_drm_registered;
 static int n64_video_initialized;
+static int n64_video_vm_ready;
 static int n64_video_interlaced;
 static unsigned n64_video_base_yscale;
 static unsigned n64_video_last_field = ~0u;
+
+static int n64_drm_enable(struct drm_device *,
+    const struct drm_display_mode *, struct drm_framebuffer *);
+static void n64_drm_disable(struct drm_device *);
+static int n64_drm_prepare_fb(struct drm_device *,
+    const struct drm_display_mode *, struct drm_framebuffer *);
+static void n64_drm_release_fb(struct drm_device *,
+    struct drm_framebuffer *);
+
+static const struct drm_driver n64_drm_driver = {
+    n64_drm_enable,
+    n64_drm_disable,
+    0,
+    n64_drm_prepare_fb,
+    n64_drm_release_fb,
+};
 
 static unsigned
 n64_io_read32(unsigned vaddr)
@@ -187,32 +174,33 @@ n64_video_tv_type(void)
     return tv_type;
 }
 
-static volatile unsigned short *
+static volatile void *
 n64_video_fb_ptr(void)
 {
-    return (volatile unsigned short *)
+    return (volatile void *)
         N64_PHYS_TO_KSEG1(n64_video_info.fb_phys);
-}
-
-static unsigned
-n64_video_reserved_bytes(void)
-{
-    return n64_rdram_size() >= N64_RDRAM_SIZE_8M ?
-        N64_EXPANSION_FB_RESERVED_BYTES : N64_BASE_FB_RESERVED_BYTES;
 }
 
 static void
 n64_video_clear_current(unsigned color)
 {
-    volatile unsigned short *fb;
+    volatile unsigned short *fb16;
+    volatile unsigned *fb32;
     unsigned pixels;
     unsigned i;
 
-    fb = n64_video_fb_ptr();
-    pixels = n64_video_info.fb_bytes / sizeof(*fb);
-    color &= 0xffffu;
-    for (i = 0; i < pixels; ++i)
-        fb[i] = color;
+    if (n64_video_info.bpp == 16) {
+        fb16 = (volatile unsigned short *)n64_video_fb_ptr();
+        pixels = n64_video_info.fb_bytes / sizeof(*fb16);
+        color &= 0xffffu;
+        for (i = 0; i < pixels; ++i)
+            fb16[i] = color;
+    } else {
+        fb32 = (volatile unsigned *)n64_video_fb_ptr();
+        pixels = n64_video_info.fb_bytes / sizeof(*fb32);
+        for (i = 0; i < pixels; ++i)
+            fb32[i] = color;
+    }
 }
 
 static void
@@ -231,11 +219,13 @@ n64_video_program_vi(void)
     output_height = 480;
     y_target = output_height / 2;
     n64_video_interlaced =
-        n64_video_info.mode == N64FB_MODE_640X480;
+        n64_video_info.height == N64_VIDEO_640_HEIGHT;
 
     ctrl = n64_io_read8(N64_IPL_IQUE) ?
         N64_VI_CTRL_IQUE_ADVANCE : N64_VI_CTRL_ADVANCE;
-    ctrl |= N64_VI_CTRL_RESAMPLE | N64_VI_CTRL_RGBA16;
+    ctrl |= N64_VI_CTRL_RESAMPLE;
+    ctrl |= n64_video_info.bpp == 32 ?
+        N64_VI_CTRL_RGBA32 : N64_VI_CTRL_RGBA16;
     if (n64_video_interlaced)
         ctrl |= N64_VI_CTRL_SERRATE;
 
@@ -264,94 +254,189 @@ n64_video_program_vi(void)
     n64_video_intr_enable();
 }
 
-static int
-n64_video_fill_info(unsigned mode, struct n64fb_info *info)
+static void
+n64_drm_mode_init(struct drm_mode_config *config, unsigned width,
+    unsigned height, unsigned bpp, unsigned clock_khz, unsigned flags)
 {
-    unsigned rdram = n64_rdram_size();
-    unsigned fb_phys;
+    struct drm_display_mode *mode;
+    struct drm_framebuffer *fb;
 
-    if (rdram >= N64_RDRAM_SIZE_8M)
-        fb_phys = N64_EXPANSION_FB_PHYS_START;
-    else
-        fb_phys = N64_BASE_FB_PHYS_START;
+    bzero(config, sizeof(*config));
+    mode = &config->mode;
+    fb = &config->framebuffer;
+    mode->clock_khz = clock_khz;
+    mode->hdisplay = width;
+    mode->hsync_start = width + width / 40u;
+    mode->hsync_end = mode->hsync_start + width * 3u / 20u;
+    mode->htotal = width + width / 4u;
+    mode->vdisplay = height;
+    mode->vsync_start = height + 5u;
+    mode->vsync_end = mode->vsync_start + 2u;
+    mode->vtotal = height + height / 10u;
+    mode->flags = flags;
 
-    switch (mode) {
-    case N64FB_MODE_320X240:
-        info->width = N64_VIDEO_320_WIDTH;
-        info->height = N64_VIDEO_320_HEIGHT;
-        info->fb_bytes = N64_VIDEO_320_BYTES;
-        break;
-    case N64FB_MODE_640X480:
-        if (rdram < N64_RDRAM_SIZE_8M ||
-            N64_EXPANSION_FB_RESERVED_BYTES < N64_VIDEO_640_BYTES)
-            return ENOMEM;
-        info->width = N64_VIDEO_640_WIDTH;
-        info->height = N64_VIDEO_640_HEIGHT;
-        info->fb_bytes = N64_VIDEO_640_BYTES;
-        break;
-    default:
-        return EINVAL;
+    fb->bytes = width * height * (bpp / 8u);
+    fb->map_hint = N64_FB_USER_VADDR_START;
+    fb->width = width;
+    fb->height = height;
+    fb->stride = width * (bpp / 8u);
+    fb->bpp = bpp;
+    fb->format = bpp == 32 ?
+        DRM_FORMAT_RGBA8888 : DRM_FORMAT_RGBA5551;
+    fb->cache_mode = PMAP_CACHE_UNCACHED;
+}
+
+static int
+n64_drm_register(void)
+{
+    unsigned rdram;
+
+    if (n64_drm_registered)
+        return 0;
+    rdram = n64_rdram_size();
+
+    n64_drm_mode_init(&n64_drm_modes[N64FB_MODE_320X240X16],
+        N64_VIDEO_320_WIDTH, N64_VIDEO_320_HEIGHT, 16, 12587u, 0);
+    n64_drm_mode_init(&n64_drm_modes[N64FB_MODE_320X240X32],
+        N64_VIDEO_320_WIDTH, N64_VIDEO_320_HEIGHT, 32, 12587u, 0);
+    n64_drm_device.mode_count = 2;
+    if (rdram >= N64_RDRAM_SIZE_8M) {
+        n64_drm_mode_init(&n64_drm_modes[N64FB_MODE_640X480X16],
+            N64_VIDEO_640_WIDTH, N64_VIDEO_640_HEIGHT, 16,
+            25175u, DRM_MODE_FLAG_INTERLACE);
+        n64_drm_mode_init(&n64_drm_modes[N64FB_MODE_640X480X32],
+            N64_VIDEO_640_WIDTH, N64_VIDEO_640_HEIGHT, 32,
+            25175u, DRM_MODE_FLAG_INTERLACE);
+        n64_drm_device.mode_count = 4;
     }
 
-    info->mode = mode;
-    info->stride = info->width * N64_VIDEO_BPP_BYTES;
-    info->bpp = N64_VIDEO_BPP_BYTES * 8;
-    info->format = N64FB_FORMAT_RGBA5551;
-    info->fb_phys = fb_phys;
-    info->rdram_bytes = rdram;
-    info->tv_type = n64_video_tv_type();
+    n64_drm_device.name = "n64-vi-drm";
+    n64_drm_device.driver = &n64_drm_driver;
+    n64_drm_device.driver_private = 0;
+    n64_drm_device.connector.name = "N64-AV-1";
+    n64_drm_device.modes = n64_drm_modes;
+    if (drm_device_register(&n64_drm_device) != 0)
+        return ENXIO;
+    n64_drm_registered = 1;
     return 0;
 }
 
-int
-n64_video_set_mode(unsigned mode)
+static int
+n64_drm_prepare_fb(struct drm_device *dev,
+    const struct drm_display_mode *mode, struct drm_framebuffer *fb)
 {
-    struct n64fb_info info;
-    int error;
+    (void)dev;
+    (void)mode;
+    if (!n64_video_vm_ready) {
+        if (fb->width != N64_VIDEO_320_WIDTH ||
+            fb->height != N64_VIDEO_320_HEIGHT || fb->bpp != 16)
+            return ENXIO;
+        fb->vaddr = (volatile unsigned char *)
+            N64_PHYS_TO_KSEG1(N64_BASE_FB_PHYS_START);
+        fb->paddr = N64_BASE_FB_PHYS_START;
+        fb->reserved_bytes = N64_BASE_FB_RESERVED_BYTES;
+        return 0;
+    }
+    return drm_framebuffer_alloc_contiguous(fb,
+        n64_rdram_size() - 1u, VM_PAGE_SIZE);
+}
 
-    error = n64_video_fill_info(mode, &info);
-    if (error)
-        return error;
+static void
+n64_drm_release_fb(struct drm_device *dev, struct drm_framebuffer *fb)
+{
+    (void)dev;
+    drm_framebuffer_free_contiguous(fb);
+}
 
-    n64_video_info = info;
+static int
+n64_drm_enable(struct drm_device *dev, const struct drm_display_mode *mode,
+    struct drm_framebuffer *fb)
+{
+    unsigned mode_index;
+    int clear;
+
+    (void)dev;
+    if (mode->hdisplay == N64_VIDEO_320_WIDTH &&
+        mode->vdisplay == N64_VIDEO_320_HEIGHT && fb->bpp == 16)
+        mode_index = N64FB_MODE_320X240X16;
+    else if (mode->hdisplay == N64_VIDEO_320_WIDTH &&
+        mode->vdisplay == N64_VIDEO_320_HEIGHT && fb->bpp == 32)
+        mode_index = N64FB_MODE_320X240X32;
+    else if (mode->hdisplay == N64_VIDEO_640_WIDTH &&
+        mode->vdisplay == N64_VIDEO_640_HEIGHT && fb->bpp == 16)
+        mode_index = N64FB_MODE_640X480X16;
+    else if (mode->hdisplay == N64_VIDEO_640_WIDTH &&
+        mode->vdisplay == N64_VIDEO_640_HEIGHT && fb->bpp == 32)
+        mode_index = N64FB_MODE_640X480X32;
+    else
+        return EINVAL;
+
+    clear = !n64_video_initialized ||
+        n64_video_info.width != fb->width ||
+        n64_video_info.height != fb->height ||
+        n64_video_info.fb_phys != fb->paddr;
+    n64_video_info.mode = mode_index;
+    n64_video_info.width = fb->width;
+    n64_video_info.height = fb->height;
+    n64_video_info.stride = fb->stride;
+    n64_video_info.bpp = fb->bpp;
+    n64_video_info.format = fb->format;
+    n64_video_info.fb_phys = fb->paddr;
+    n64_video_info.fb_bytes = fb->bytes;
+    n64_video_info.rdram_bytes = n64_rdram_size();
+    n64_video_info.tv_type = n64_video_tv_type();
     n64_video_initialized = 1;
-    n64_video_clear_current(0x0001);
+    if (clear)
+        n64_video_clear_current(fb->bpp == 32 ?
+            0x000000ffu : 0x0001u);
     n64_video_program_vi();
     return 0;
 }
 
 static void
+n64_drm_disable(struct drm_device *dev)
+{
+    (void)dev;
+    N64_VI_REGS[N64_VI_CTRL] = 0;
+}
+
+int
+n64_video_set_mode(unsigned mode)
+{
+    int error;
+
+    error = n64_drm_register();
+    if (error != 0)
+        return error;
+    return drm_mode_set_index(&n64_drm_device, mode);
+}
+
+static void
 n64_video_init(void)
 {
-    if (!n64_video_initialized) {
-#ifdef N64_HIGHRES_FB
-        unsigned mode = n64_rdram_size() >= N64_RDRAM_SIZE_8M ?
-            N64FB_MODE_640X480 : N64FB_MODE_320X240;
-#else
-        unsigned mode = N64FB_MODE_320X240;
-#endif
-
-        (void)n64_video_set_mode(mode);
-    }
+    if (n64_video_initialized)
+        return;
+    if (n64_drm_register() != 0)
+        return;
+    (void)drm_mode_set_index(&n64_drm_device,
+        N64FB_MODE_320X240X16);
 }
 
 void
-n64_video_get_info(struct n64fb_info *info)
+n64_video_attach(void)
+{
+    n64_video_vm_ready = 1;
+    n64_video_init();
+}
+
+void
+n64_video_get_info(struct n64_video_info *info)
 {
     n64_video_init();
     *info = n64_video_info;
 }
 
-static void
-n64_video_get_map(struct n64fb_map *map)
-{
-    n64_video_init();
-    map->vaddr = N64_FB_USER_VADDR_START;
-    map->bytes = n64_video_info.fb_bytes;
-    map->reserved_bytes = n64_video_reserved_bytes();
-}
-
-volatile unsigned short *
+volatile void *
 n64_video_framebuffer(void)
 {
     n64_video_init();
@@ -406,125 +491,4 @@ n64_video_intr(void)
     n64_video_last_field = field;
 }
 
-int
-n64fb_open(dev_t dev, int flag, int mode)
-{
-    if (minor(dev) != 0)
-        return ENXIO;
-    n64_video_init();
-    return 0;
-}
-
-int
-n64fb_close(dev_t dev, int flag, int mode)
-{
-    return 0;
-}
-
-static int
-n64fb_rw(dev_t dev, struct uio *uio, int flag)
-{
-    volatile unsigned char *fb;
-    struct iovec *iov;
-    unsigned offset;
-    unsigned count;
-    unsigned i;
-
-    if (minor(dev) != 0)
-        return ENXIO;
-    if (uio->uio_offset < 0)
-        return EINVAL;
-
-    n64_video_init();
-    fb = (volatile unsigned char *)n64_video_fb_ptr();
-    while (uio->uio_resid) {
-        iov = uio->uio_iov;
-        if (iov->iov_len == 0) {
-            uio->uio_iov++;
-            uio->uio_iovcnt--;
-            if (uio->uio_iovcnt < 0)
-                panic("n64fb_rw");
-            continue;
-        }
-
-        offset = (unsigned)uio->uio_offset;
-        if (offset >= n64_video_info.fb_bytes)
-            return 0;
-
-        count = iov->iov_len;
-        if (count > n64_video_info.fb_bytes - offset)
-            count = n64_video_info.fb_bytes - offset;
-
-        if (uio->uio_rw == UIO_READ) {
-            for (i = 0; i < count; ++i)
-                iov->iov_base[i] = fb[offset + i];
-        } else {
-            for (i = 0; i < count; ++i)
-                fb[offset + i] = iov->iov_base[i];
-        }
-
-        iov->iov_base += count;
-        iov->iov_len -= count;
-        uio->uio_offset += count;
-        uio->uio_resid -= count;
-    }
-    return 0;
-}
-
-int
-n64fb_read(dev_t dev, struct uio *uio, int flag)
-{
-    return n64fb_rw(dev, uio, flag);
-}
-
-int
-n64fb_write(dev_t dev, struct uio *uio, int flag)
-{
-    return n64fb_rw(dev, uio, flag);
-}
-
-int
-n64fb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
-{
-    struct n64fb_mode *mode;
-
-    if (minor(dev) != 0)
-        return ENXIO;
-
-    switch (cmd) {
-    case N64FBIOC_GETINFO:
-        n64_video_get_info((struct n64fb_info *)data);
-        return 0;
-    case N64FBIOC_SETMODE:
-        mode = (struct n64fb_mode *)data;
-        return n64_video_set_mode(mode->mode);
-    case N64FBIOC_GETMAP:
-        n64_video_get_map((struct n64fb_map *)data);
-        return 0;
-    default:
-        return EINVAL;
-    }
-}
-
-int
-n64fb_mmap(dev_t dev, off_t offset, u_int size, int protection,
-    u_int *paddr, int *cache)
-{
-    vm_size_t mapped;
-
-    if (minor(dev) != 0 || offset < 0 ||
-        (off_t)(u_int)offset != offset ||
-        ((unsigned)offset & VM_PAGE_MASK) != 0 || size == 0 ||
-        !vm_size_page_aligned((vm_size_t)size) ||
-        (protection & VM_PROT_EXECUTE) != 0 || paddr == 0 || cache == 0)
-        return EINVAL;
-    n64_video_init();
-    if (vm_size_round_page((vm_size_t)n64_video_info.fb_bytes,
-        &mapped) != 0 || (unsigned)offset > mapped ||
-        (vm_size_t)size > mapped - (unsigned)offset)
-        return EINVAL;
-    *paddr = n64_video_info.fb_phys + (unsigned)offset;
-    *cache = PMAP_CACHE_UNCACHED;
-    return 0;
-}
 #endif

@@ -27,6 +27,9 @@
 #include <vm/pmap.h>
 #include <vm/vm_object.h>
 #include <vm/vmspace.h>
+#ifdef N64
+#include <machine/video.h>
+#endif
 
 u_int   swapstart, nswap;   /* start and size of swap space */
 size_t  physmem;            /* total amount of physical memory */
@@ -190,6 +193,9 @@ main()
     error = vmspace_system_init(&vm_page_boot_allocator);
     if (error != 0)
         panic("vmspace bootstrap failed");
+#if defined(N64) && defined(VIDEO_ENABLED)
+    n64_video_attach();
+#endif
 
     /*
      * Set up system process 0 (swapper).

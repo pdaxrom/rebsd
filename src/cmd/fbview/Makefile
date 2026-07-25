@@ -1,22 +1,15 @@
 #
-# N64 framebuffer JPEG viewer.
+# ReBSD DRM framebuffer JPEG viewer.
 #
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk
 
-N64_STB_DIR	?= /Users/sash/Work/N64/N64cart/rom/src/stb
-
 CFLAGS		+= -Wall -Werror
-STB_CFLAGS	= $(CFLAGS) -I$(N64_STB_DIR) -Wno-error \
-		  -Wno-unused-function -Wno-unused-variable \
-		  -Wno-maybe-uninitialized -Wno-sign-compare \
-		  -Wno-missing-braces -Wno-misleading-indentation
 
 BIN		= fbview
-SRCS		= fbview.c fbview_stb.c
-OBJS		= fbview.o fbview_stb.o
+SRCS		= fbview.c tjpgd.c
+OBJS		= fbview.o tjpgd.o
 MAN		= $(BIN).0
-STB_HDRS	= $(N64_STB_DIR)/stb_image.h
 
 all:		$(BIN) $(MAN)
 
@@ -26,8 +19,8 @@ $(BIN):		$(OBJS)
 		$(SIZE) $@.elf
 		$(ELF2AOUT) $@.elf $@ && rm $@.elf
 
-fbview_stb.o:	fbview_stb.c fbview_stb.h $(STB_HDRS)
-		$(CC) $(STB_CFLAGS) -c $<
+tjpgd.o:	tjpgd.c tjpgd.h tjpgdcnf.h
+		$(CC) $(CFLAGS) -c $<
 
 .SUFFIXES:	.0 .1
 
