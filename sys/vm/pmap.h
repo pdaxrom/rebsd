@@ -61,9 +61,9 @@ struct pmap_tlb_diagnostics {
 };
 
 /*
- * Machine-independent pmap contract, implemented by shared MIPS code.
- * The pmap consumes no wired TLB entries: the board bootstrap owns exactly
- * C0_Wired slots and pmap requires at least one remaining random slot.
+ * Machine-independent pmap contract.  MIPS implements software TLB refill
+ * and ASIDs; i386 implements non-PAE hardware page-table walk and CR3
+ * activation behind the same interface.
  */
 int pmap_system_init(struct vm_page_allocator *);
 int pmap_create(struct pmap **);

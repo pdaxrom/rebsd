@@ -24,7 +24,8 @@ bootstrap, physical page allocation, bootstrap paging with `CR0.WP`, IDT
 entry/return, and ten PIT timer IRQs.
 The trap smoke deliberately raises divide error (`#DE`), general protection
 (`#GP`), and a write-protection page fault (`#PF`) and requires a diagnostic
-panic.  The matrix boots 32, 64, 128, and 256 MiB QEMU configurations.
+panic.  The matrix boots 32, 64, 128, 256, 768, and 1024 MiB QEMU
+configurations.
 Build artifacts are written under `O/obj/sys/i386/`; the source tree remains
 clean.
 
@@ -32,8 +33,12 @@ The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
 TLB invalidation through `invlpg`.  The normalized E820 ranges back the
 generic physical-page allocator; bootstrap and metadata pages stay reserved,
-and the generic allocation/free/poison self-test runs in QEMU.  The
-generic-kernel integration audit is in `docs/I386_MD_API.md`.
+and the generic allocation/free/poison self-test runs in QEMU.  A permanent
+kernel direct map covers the first 1 GiB of physical memory.  The public
+i386 pmap self-test creates two address spaces, switches CR3, validates
+isolation/protection/execution, and verifies that wired page-table pages are
+reclaimed.  The generic-kernel integration audit is in
+`docs/I386_MD_API.md`.
 
 The default cross toolchain is:
 
@@ -48,6 +53,7 @@ Current scope is deliberately small: real-mode setup, A20, BIOS E820, flat
 protected mode, COM1, VGA text output, a 256-entry IDT, CPU exception
 diagnostics, remapped dual 8259A PICs, PIT IRQ0 at 100 Hz, normalized
 physical RAM, non-PAE 4 KiB bootstrap paging, and reusable low-level page
-mapping primitives.  It links the machine-independent `vm_phys` and
-`vm_page` allocator but does not yet connect the rest of the generic kernel,
-per-process address spaces, storage, userland, or PCC.
+mapping primitives.  It links the machine-independent `vm_phys`/`vm_page`
+allocator and implements the public pmap contract with per-process address
+spaces.  It does not yet connect generic `vmspace`, the rest of the generic
+kernel, storage, userland, or PCC.

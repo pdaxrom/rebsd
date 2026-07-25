@@ -15,6 +15,8 @@ int i386_paging_enabled(void);
 int i386_paging_write_protect_enabled(void);
 int i386_paging_kernel_readonly(void);
 i386_u32 i386_paging_directory(void);
+int i386_paging_activate_directory(i386_u32 directory);
+void i386_paging_invalidate_page(i386_u32 vaddr);
 int i386_paging_map(i386_u32 vaddr, i386_u32 paddr, unsigned protection);
 int i386_paging_unmap(i386_u32 vaddr);
 int i386_paging_protect(i386_u32 vaddr, unsigned protection);

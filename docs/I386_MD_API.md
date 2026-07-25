@@ -1,7 +1,7 @@
 # i386 machine-dependent integration audit
 
-Статус: generic physical-page allocator подключён; следующий gate —
-публичный i386 pmap, 2026-07-25.
+Статус: generic physical-page allocator и публичный i386 pmap подключены;
+следующий gate — generic vmspace и page-fault integration, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -37,13 +37,14 @@ reload CR3. Поэтому первый i386 backend реализуется от
 
 ## Уже реализованный i386 hardware слой
 
-`sys/i386/pc/paging.c` предоставляет основу будущего pmap:
+`sys/i386/pc/paging.c` предоставляет hardware основу pmap:
 
 - non-PAE 1024-entry page directory и page tables;
 - supervisor/user и read/write PTE/PDE bits;
 - `map`, `unmap`, `protect`, `extract`, `query`;
 - targeted TLB invalidation через `invlpg`;
-- bootstrap identity map и `CR0.PG|CR0.WP`;
+- bootstrap identity map, постоянный direct map первого 1 ГиБ RAM по
+  `0xC0000000 + physical_address` и `CR0.PG|CR0.WP`;
 - QEMU self-test resident replacement, RO protection, USER bit и removal.
 
 Ранний allocator остаётся monotonic только до bootstrap generic VM. Затем
@@ -51,13 +52,26 @@ reload CR3. Поэтому первый i386 backend реализуется от
 `vm_page_allocator`: уже использованный prefix и allocator metadata
 помечаются reserved, остальные страницы доступны buddy allocator.
 `vm_page_bootstrap_selftest` проверяет обычное и constrained allocation,
-free и poison через identity direct map.
+free и poison через kernel direct map.
 
 Страницы существующего bootstrap page directory/page tables уже
-зарезервированы и не могут попасть в free lists. Новый публичный
-`pmap_create/destroy` должен выделять, wire и освобождать свои directory и
-table pages через `vm_page_allocator`, а не возвращаться к раннему
-monotonic allocator.
+зарезервированы и не могут попасть в free lists. Публичный
+`sys/i386/common/pmap.c` выделяет свои directory и table pages как
+`VM_PAGE_WIRED`, а `pmap_destroy` освобождает их обратно в allocator.
+Address spaces наследуют необходимые low bootstrap mappings и kernel
+direct map; user PDE получает private copy при первом `pmap_prepare`.
+
+QEMU self-test переключает реальные CR3 между двумя pmap, проверяет
+различные physical pages по одному VA, read-only protection, resident
+replacement, executable mapping, сохранность low-linked kernel mappings и
+полный reclaim allocator pages. Аппаратные Accessed/Dirty bits согласуются
+с generic reference/dirty counters; non-PAE i686 не может аппаратно
+различать read и execute и не предоставляет NX.
+
+Начальный direct map ограничивает используемую RAM первым 1 ГиБ. Это
+покрывает текущую QEMU-матрицу и первый IBM/VIA bring-up; PAE/highmem не
+входит в ранний порт. Ядро всё ещё исполняется по low-linked адресу 1 МиБ,
+поэтому pmap отклоняет user mapping, пересекающий загруженный kernel image.
 
 ## Generic kernel blockers
 
@@ -82,8 +96,10 @@ PCC не входит в этот список и остаётся нетрон�
 
 ## Следующий integration gate
 
-1. Перевести allocation page directory/page tables на `vm_page`.
-2. Реализовать публичный i386 `pmap_create/enter/remove/protect/extract`.
-3. Адаптировать существующий `sys/tests/vm/pmap_test.c` для i386 host/QEMU
-   backend без MIPS TLB assumptions.
-4. Только после этого подключать process bootstrap и syscall ABI.
+1. Подключить generic `vm_map`, `vm_object`, `vmspace` и их dependencies к
+   раннему i386 image.
+2. Добавить QEMU vmspace gate для anonymous fault, COW, protect/unmap и
+   address-space isolation без MIPS TLB assumptions.
+3. Связать i386 user page fault с `vmspace_fault` и оставить kernel-mode
+   recovery hook для будущих `copyin/copyout`.
+4. После этого подключать process bootstrap и syscall ABI.

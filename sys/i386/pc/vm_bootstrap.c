@@ -15,7 +15,7 @@ vm_page_md_direct_map(vm_paddr_t paddr, vm_size_t size)
     if (size == 0 || paddr >= I386_PHYS_LIMIT ||
         size > I386_PHYS_LIMIT - paddr)
         return (void *)0;
-    return (void *)paddr;
+    return (void *)(I386_KERNEL_BASE + paddr);
 }
 
 int

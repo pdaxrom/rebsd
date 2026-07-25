@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: пять QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: шесть QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -35,7 +35,7 @@
 
 Третий QEMU bring-up инкремент завершён:
 
-- E820 RAM нормализуется в page-aligned диапазоны ниже `0xC0000000`;
+- E820 RAM нормализуется в page-aligned диапазоны ниже `0x40000000`;
   вычитаются non-usable entries, low memory и загруженный kernel;
 - работает zeroing monotonic allocator физических страниц по 4 КиБ;
 - строятся обычные non-PAE page directory/page tables и identity mappings
@@ -74,8 +74,29 @@
 - normal/trap smoke, RAM matrix 32/64/128/256 МиБ и полный host VM/MIPS
   test suite проходят.
 
-Следующая веха: реализовать публичный i386 `pmap` contract с allocation и
-reclaim page-directory/page-table pages через generic `vm_page_allocator`.
+Шестой QEMU bring-up инкремент завершён:
+
+- добавлен постоянный kernel direct map
+  `0xC0000000 + physical_address` для первого 1 ГиБ RAM;
+- текущий non-PAE bootstrap сознательно использует только E820 RAM ниже
+  1 ГиБ; это покрывает QEMU и начальный IBM/VIA gate, а highmem остаётся
+  отдельной будущей задачей;
+- реализован i386 backend всего публичного `sys/vm/pmap.h`: lifecycle,
+  prepare/enter/device/remove/protect/extract, CR3 activation, fault access
+  accounting, referenced/modified state, reverse page operations, direct
+  map, statistics и validation;
+- page-directory/page-table pages выделяются как `VM_PAGE_WIRED` из
+  generic allocator и полностью возвращаются при destroy;
+- process page directories наследуют low bootstrap mappings и kernel
+  direct map; user PDE получает private copy при первом использовании;
+- QEMU self-test переключает реальные CR3 между двумя address spaces,
+  проверяет isolation, RO protection, mapping replacement, execution,
+  low-PDE inheritance и отсутствие утечки allocator pages;
+- normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ и полный host
+  VM/MIPS test suite проходят.
+
+Следующая веха: подключить generic `vm_map`/`vm_object`/`vmspace` к i386
+image и связать i386 page-fault path с `vmspace_fault`.
 LILO HDD gate выполняется после появления Linux-среды для установщика.
 
 ## 1. Цель и границы первого порта
@@ -305,13 +326,14 @@ divide-by-zero/page-fault дают диагностируемый panic, IRQ nes
 
 ### Этап 4. Physical memory и paging
 
-Bootstrap-часть этапа и generic physical-page allocator выполнены: E820
-normalization, ранний monotonic allocator, передача свободной памяти в
-`vm_phys_map`/`vm_page_allocator`, CR3 switch, 4-КиБ identity mappings,
-supervisor-only PTE и writable protection. Low-level mapper уже умеет
-`map/unmap/protect/extract`, USER mappings и `invlpg`. Ещё не выполнены
-per-process address spaces, полный публичный `pmap` API, reclaim
-page-table pages и fault recovery для `copyin/copyout`.
+Bootstrap-часть этапа, generic physical-page allocator и публичный i386
+`pmap` выполнены: E820 normalization, ранний monotonic allocator, передача
+свободной памяти в `vm_phys_map`/`vm_page_allocator`, CR3 switch,
+4-КиБ identity mappings, permanent kernel direct map, supervisor-only PTE
+и writable protection. Low-level mapper умеет `map/unmap/protect/extract`,
+USER mappings и `invlpg`; `pmap` создаёт отдельные process directories,
+активирует их через CR3 и освобождает page-table pages. Ещё не выполнены
+generic `vmspace` integration и fault recovery для `copyin/copyout`.
 
 1. Нормализовать BIOS/boot-protocol memory map, исключая low memory, ROM,
    kernel image, modules и MMIO holes.
@@ -391,7 +413,7 @@ root монтируется read/write, reboot/sync не повреждают ф
 Проверочная матрица:
 
 ```text
-QEMU pc-i440fx:  32/64/128/256 MiB, serial + VGA, IDE
+QEMU pc-i440fx:  32/64/128/256/768/1024 MiB, serial + VGA, IDE
 Pentium Pro/II:  если доступен
 Pentium III:     обязательный реальный baseline
 Pentium M:       дополнительный baseline
@@ -536,5 +558,15 @@ timer-ticks: ok
 HALT
 ```
 
-Следующий инкремент — полный i386 backend публичного `sys/vm/pmap.h`, а не
-userland или PCC.
+Definition of Done шестого инкремента:
+
+```text
+pmap-public: ok
+pic: ok
+pit: hz=100
+timer-ticks: ok
+HALT
+```
+
+Следующий инкремент — generic `vm_map`/`vm_object`/`vmspace` и подключение
+`vmspace_fault` к i386 page-fault path, а не userland или PCC.

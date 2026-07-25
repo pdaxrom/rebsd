@@ -7,6 +7,7 @@ TOPSRC          ?= ../..
 BOARD           ?= pc
 I386_SRC         = $(TOPSRC)/sys/i386
 I386_BOOT_SRC    = $(I386_SRC)/boot
+I386_COMMON_SRC  = $(I386_SRC)/common
 I386_PC_SRC      = $(I386_SRC)/pc
 I386_TOOLS_SRC   = $(I386_SRC)/tools
 I386_VM_SRC      = $(TOPSRC)/sys/vm
@@ -32,7 +33,7 @@ SETUP_BYTES      = 4608
 
 KERNEL_OBJS      = entry.o interrupt_entry.o early_console.o interrupt.o \
                    pic.o pit.o memory.o paging.o vm_param.o vm_phys.o \
-                   vm_page.o vm_bootstrap.o boot_main.o
+                   vm_page.o vm_bootstrap.o pmap.o boot_main.o
 
 .DEFAULT_GOAL := all
 
@@ -130,9 +131,17 @@ vm_bootstrap.o: $(I386_PC_SRC)/vm_bootstrap.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+pmap.o: $(I386_COMMON_SRC)/pmap.c \
+	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
+	    $(I386_VM_SRC)/pmap.h $(I386_VM_SRC)/vm_page.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
+	    $(I386_SRC)/include/pmap_bootstrap.h \
 	    $(I386_SRC)/include/vm_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
@@ -184,7 +193,7 @@ trap-smoke: rebsd-i686.bzimg
 exception-smoke: trap-smoke
 
 boot-smoke-matrix: rebsd-i686.bzimg
-	@for memory in 32M 64M 128M 256M; do \
+	@for memory in 32M 64M 128M 256M 768M 1024M; do \
 	    echo "boot-smoke-matrix: memory=$$memory"; \
 	    $(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	        --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \

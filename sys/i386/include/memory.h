@@ -5,7 +5,9 @@
 
 #define I386_PAGE_SIZE         4096u
 #define I386_PAGE_MASK         (I386_PAGE_SIZE - 1u)
-#define I386_PHYS_LIMIT        0xc0000000u
+#define I386_KERNEL_BASE       0xc0000000u
+#define I386_DIRECT_MAP_SIZE   0x40000000u
+#define I386_PHYS_LIMIT        I386_DIRECT_MAP_SIZE
 #define I386_PHYS_MAX_RANGES   256u
 
 struct i386_phys_range {
