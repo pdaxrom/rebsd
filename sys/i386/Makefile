@@ -36,7 +36,7 @@ VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
 KERNEL_OBJS      = entry.o interrupt_entry.o early_console.o interrupt.o \
                    pic.o pit.o memory.o paging.o libkern.o copyio.o \
-                   copyio_selftest.o vm_param.o \
+                   copyio_selftest.o vm_machdep.o uarea_selftest.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
                    $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
 
@@ -123,6 +123,25 @@ copyio_selftest.o: $(I386_PC_SRC)/copyio_selftest.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+vm_machdep.o: $(I386_COMMON_SRC)/vm_machdep.c \
+	    $(I386_SRC)/include/memory.h \
+	    $(I386_SRC)/include/machine/elf_machdep.h \
+	    $(I386_SRC)/include/machine/layout.h \
+	    $(I386_GEN_INCLUDE)/sys/user.h $(I386_VM_SRC)/pmap.h \
+	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+uarea_selftest.o: $(I386_PC_SRC)/uarea_selftest.c \
+	    $(I386_SRC)/include/process.h \
+	    $(I386_SRC)/include/machine/elf_machdep.h \
+	    $(I386_SRC)/include/machine/layout.h \
+	    $(I386_GEN_INCLUDE)/sys/user.h $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 $(I386_GEN_INCLUDE)/sys:
 	mkdir -p $(I386_GEN_INCLUDE)
 	ln -s $(abspath $(TOPSRC)/sys/include) $@
@@ -179,7 +198,7 @@ boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/copyio.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
-	    $(I386_SRC)/include/pmap_bootstrap.h \
+	    $(I386_SRC)/include/pmap_bootstrap.h $(I386_SRC)/include/process.h \
 	    $(I386_SRC)/include/vm_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \

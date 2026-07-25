@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: восемь QEMU bring-up инкрементов и первый process-MD refactor
+Статус: девять QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -142,6 +142,25 @@ scheduler и exit больше не ссылаются на `mips_curuser` ил�
 `mips_uarea_*`. Нейтральный `md_*` контракт подключён к существующей MIPS
 реализации; kernel-object сборка проходит для N64, CI20, Malta, MaltaEL и
 Malta64. Следующий кодовый инкремент реализует этот контракт для i386.
+
+Девятый QEMU bring-up инкремент завершён:
+
+- добавлен i386 `machine/elf_machdep.h` для ELF32 little-endian, `EM_386` и
+  базовых `R_386_*` relocations;
+- generic ELF loader больше не содержит жёсткую проверку `EM_MIPS` и
+  выбирает допустимую machine ID через `ELF_MACHDEP_ID_CASES`;
+- user layout закреплён как `0x00400000..0x80000000`, согласован с текущим
+  generic vmspace; `exec_elf.c` компилируется i686 GCC с `-Werror`;
+- реализованы i386 `md_curuser`, u-area guard и allocation/free четырёх
+  contiguous wired 4-КиБ страниц через generic allocator и direct map;
+- `md_uarea_fork` создаёт независимую копию `struct user`, очищает context
+  labels и не выдаёт её за schedulable до появления assembly context frame;
+- QEMU self-test проверяет alignment, guard, fork-copy isolation, current
+  binding и отсутствие утечки страниц; normal boot выдаёт
+  `uarea-selftest: ok`.
+
+Следующий инкремент: i386 `setjmp/longjmp`-совместимый context save/restore,
+переключение kernel stack и совместное обновление CR3/`md_curuser`.
 
 ## 1. Цель и границы первого порта
 

@@ -86,6 +86,17 @@ extern char sigcode[], esigcode[];
 #define ELF_ROUND(a, b)     (((a) + (b) - 1) & ~((b) - 1))
 #define ELF_TRUNC(a, b)     ((a) & ~((b) - 1))
 
+static int
+elf_machine_supported(unsigned machine)
+{
+    switch (machine) {
+    ELF_MACHDEP_ID_CASES
+    default:
+        return 0;
+    }
+    return 1;
+}
+
 /*
  * elf_check(): Prepare an Elf binary's exec package
  *
@@ -103,7 +114,8 @@ exec_elf_check(struct exec_params *epp)
     vm_vaddr_t load_end;
     vm_vaddr_t segment_end;
     unsigned stack_size;
-    int error, i, phsize;
+    int error, phsize;
+    unsigned i;
 
     const char elfident[] = {ELFMAG0, ELFMAG1, ELFMAG2, ELFMAG3,
                  ELFCLASS32, ELF_TARGET_DATA, EV_CURRENT, ELFOSABI_SYSV, 0};
@@ -112,14 +124,16 @@ exec_elf_check(struct exec_params *epp)
      * Check that this is an ELF file that we can handle,
      * and do some sanity checks on the header
      */
-    if (epp->hdr_len < sizeof(struct elf_ehdr))
+    if (epp->hdr_len < 0 ||
+        (unsigned)epp->hdr_len < sizeof(struct elf_ehdr))
         return ENOEXEC;
     for (i = 0; i < sizeof elfident; i++)
         if (epp->hdr.elf.e_ident[i] !=  elfident[i])
             return ENOEXEC;
     if (epp->hdr.elf.e_type != ET_EXEC)
         return ENOEXEC;
-    if (epp->hdr.elf.e_machine != EM_MIPS || epp->hdr.elf.e_version != EV_CURRENT)
+    if (!elf_machine_supported(epp->hdr.elf.e_machine) ||
+        epp->hdr.elf.e_version != EV_CURRENT)
         return ENOEXEC;
     if (epp->hdr.elf.e_phentsize != sizeof(struct elf_phdr) || epp->hdr.elf.e_phoff == 0 || epp->hdr.elf.e_phnum == 0)
         return ENOEXEC;

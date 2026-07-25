@@ -39,6 +39,14 @@
 #define btoc(x)         (((x) + NBPG - 1) / NBPG)
 #define ctob(x)         ((x) * NBPG)
 
+#include <machine/layout.h>
+
+#define USER_DATA_START I386_USER_VADDR_START
+#define USER_DATA_END   I386_USER_VADDR_END
+
+#define stacktop(siz)   (USER_DATA_END)
+#define stackbas(siz)   (USER_DATA_END - (siz))
+
 #define MAXMEM          (96 * 1024)
 #define USIZE           16384
 #define SSIZE           2048

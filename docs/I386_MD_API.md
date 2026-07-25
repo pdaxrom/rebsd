@@ -1,8 +1,8 @@
 # i386 machine-dependent integration audit
 
 Статус: generic allocator, публичный i386 pmap, vmspace fault path и
-`copyin/copyout` подключены; MIPS process symbols нейтрализованы, следующий
-gate — i386 u-area/kernel stack, 2026-07-25.
+`copyin/copyout` и i386 u-area allocator подключены; MIPS process symbols
+нейтрализованы, следующий gate — i386 context switch, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -78,14 +78,13 @@ replacement, executable mapping, сохранность low-linked kernel mappin
 
 До первого полноценного generic link остаются следующие MD blockers:
 
-1. `sys/kernel/exec_elf.c`:
-   заменить жёсткий `EM_MIPS` на machine-dependent ELF validation;
-   i686 принимает `EM_386`.
-2. Разделить исторический `copystr` на однозначные kernel-string и
+1. Разделить исторический `copystr` на однозначные kernel-string и
    user-string операции; low-linked i386 пока не может безопасно определять
    тип указателя по одному virtual address.
-3. Добавить machine headers (`types`, `machparam`, `vmparam`, `layout`,
-   `cpu`, `fpu`, `limits`) и i386 Kconfig/file lists.
+2. Добавить оставшиеся machine headers (`types`, `vmparam`, `cpu`, `fpu`,
+   `limits`) и i386 Kconfig/file lists. Минимальные `layout.h` и
+   `elf_machdep.h` уже задают ELF32, little-endian, `EM_386` и `R_386_*`;
+   generic ELF loader использует `ELF_MACHDEP_ID_CASES` вместо `EM_MIPS`.
 
 PCC не входит в этот список и остаётся нетронутым.
 
@@ -117,8 +116,16 @@ Generic process код теперь использует нейтральные 
 CI20, Malta big/little endian и Malta64, а object symbol audit подтверждает
 парные definition/reference для всех новых точек входа.
 
-1. Реализовать i386 u-area/kernel stack и current-process binding.
-2. Добавить i386 context save/restore и scheduler switch self-test.
+I386 реализация выделяет u-area размером `USIZE=16 КиБ` как четыре
+contiguous `VM_PAGE_WIRED` страницы и адресует их через kernel direct map.
+Реализованы guard, allocation/free, `md_curuser` и структурный fork-copy с
+очисткой context labels. QEMU проверяет alignment, copy isolation, current
+binding и точное восстановление free-page counter. Fork-copy ещё не является
+schedulable: `u_ssave` и trapframe будут подготовлены вместе с assembly
+context switch, а не фиктивными адресами.
+
+1. Добавить i386 context save/restore и scheduler switch self-test.
+2. Подготовить fork/init kernel frames и связать CR3 + `md_curuser` switch.
 3. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
 4. Затем подключить process bootstrap, `int 0x80` и exec ABI.

@@ -42,7 +42,9 @@ its self-test exercises anonymous faults, clone+COW and an actual recoverable
 i386 page fault.  The generic-kernel integration audit is in
 `docs/I386_MD_API.md`.  Public `copyin/copyout` transfer through the active
 vmspace and direct map; the QEMU self-test covers a cross-page demand fault,
-COW isolation, invalid user ranges, protection and page reclamation.
+COW isolation, invalid user ranges, protection and page reclamation.  The
+i386 process layer also allocates and reclaims guarded 16 KiB wired u-areas;
+context-switch frame construction is the next gate.
 
 The default cross toolchain is:
 
@@ -60,5 +62,7 @@ physical RAM, non-PAE 4 KiB bootstrap paging, and reusable low-level page
 mapping primitives.  It links the machine-independent `vm_phys`/`vm_page`
 allocator and implements the public pmap contract with per-process address
 spaces, generic vmspace, anonymous memory, COW and safe copy I/O.  Early swap
-is explicitly disabled.  It does not yet connect process context switching,
-the rest of the generic kernel, storage, userland, or PCC.
+is explicitly disabled.  The neutral process MD contract and structural
+i386 u-area operations exist, but context switching is not connected yet.
+The rest of the generic kernel, storage, userland, and PCC remain outside
+the current image.

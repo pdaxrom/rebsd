@@ -4,6 +4,7 @@
 #include "memory.h"
 #include "paging.h"
 #include "pmap_bootstrap.h"
+#include "process.h"
 #include "vm_bootstrap.h"
 #include "vmspace_bootstrap.h"
 
@@ -343,6 +344,13 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("copyio-selftest: ok\n");
+    if (i386_uarea_selftest() != 0) {
+        i386_early_puts("uarea-selftest: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("uarea-selftest: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 
