@@ -1,7 +1,8 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: сорок один bring-up инкремент выполнен, включая два
-IBM 6563-W4G hardware gate и QEMU-only FAT16/FAT32 root gates, 2026-07-25.
+Статус: сорок два bring-up инкремента выполнены, включая два
+IBM 6563-W4G hardware gate и QEMU-only FAT16/FAT32 storage-backed ELF
+gates, 2026-07-25.
 
 ## Выполнено
 
@@ -793,10 +794,37 @@ drive. Перед gate сохранена рекомендация иметь р
 - весь тест выполняется через legacy PIO `READ SECTORS`; ATA writes, DMA и
   IRQ mode не включались.
 
-Следующий инкремент остаётся QEMU-only: хранить настоящий ELF32 `/sbin/init`
-в FAT image, читать его через `fat_ro` и проверить тем же ELF loader вместо
-встроенного initfs probe. После этого можно определить безопасный opt-in
-hardware gate; сейчас повторный IBM запуск не требуется.
+Сорок второй QEMU bring-up инкремент завершён:
+
+- оба deterministic FAT image теперь получают отдельно связанный
+  `bootstrap-user.elf` как короткое имя `/SBIN/INIT`; 8656-байтный ELF
+  занимает длинную цепочку кластеров, а `mkide.py --file
+  /sbin/init=bootstrap-user.elf` остаётся byte-for-byte воспроизводимым;
+- ранний FAT adapter после root probe ищет `/sbin/init`, проверяет тип и
+  ненулевой размер, ограничивает ранний read-only буфер 64 КиБ и читает
+  весь файл через `fat_ro_read` → partition-relative
+  `disk_bdev_strategy` → PIO ATA `READ SECTORS`;
+- PCI/IDE/disk bootstrap выполняется после создания process 1, но до его
+  первого exec; найденный FAT image передаётся без отдельного упрощённого
+  parser в уже существующий ELF32 loader и действительно выполняется в
+  CPL3, включая production `getpid`, два `fork`, `exit` и `wait4`;
+- QEMU требует последовательность `fat-init-lookup: ok`,
+  `fat-init-read: ok`, `process-image: fat` и затем все прежние
+  `process-user`/fork/scheduler markers;
+- direct и native-BIOS no-disk gates требуют
+  `process-image: initfs`, подтверждая безопасный fallback на встроенный
+  `/sbin/init`;
+- системный `fsck_msdos -n` принимает обе извлечённые partitions с
+  `/BOOT/ROOT.TXT` и `/SBIN/INIT` без исправлений, orphan clusters или
+  directory warnings;
+- прошли host FAT/disk tests, direct и BIOS FAT16/FAT32 boots, no-disk
+  fallback, три exception gate, RAM matrix 32–1024 МиБ и старый
+  `pc-i440fx-5.1`.
+
+Следующий инкремент также остаётся QEMU-only: подключить read-only FAT root
+к обычному VFS/namei пути, чтобы `/sbin/init` открывался через системный
+filesystem interface, сохранив initfs fallback. Повторный IBM запуск пока
+не требуется; ATA writes, DMA и IRQ mode по-прежнему не включены.
 
 ## 1. Цель и границы первого порта
 

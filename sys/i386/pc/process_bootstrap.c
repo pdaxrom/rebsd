@@ -10,6 +10,7 @@
 #include "context.h"
 #include "boot.h"
 #include "elf_bootstrap.h"
+#include "fat_bootstrap.h"
 #include "initfs.h"
 #include "interrupt.h"
 #include "privilege.h"
@@ -625,6 +626,8 @@ i386_process_bootstrap_user_probe(void)
     };
     static const char *const bootstrap_envp[] = { "A=i686" };
     struct i386_initfs_file init_file;
+    const void *init_image;
+    unsigned init_size;
     int resumed;
     volatile int error;
 
@@ -644,9 +647,17 @@ i386_process_bootstrap_user_probe(void)
     error = i386_initfs_find_embedded("/sbin/init", &init_file);
     if (error != 0)
         return error;
-    error = i386_elf_load_image(i386_bootstrap_vmspace,
-        init_file.iif_data, init_file.iif_size,
-        &i386_bootstrap_user_image);
+    error = i386_fat_bootstrap_init_image(&init_image, &init_size);
+    if (error == 0)
+        i386_early_puts("process-image: fat\n");
+    else if (error == ENOENT) {
+        init_image = init_file.iif_data;
+        init_size = init_file.iif_size;
+        i386_early_puts("process-image: initfs\n");
+    } else
+        return error;
+    error = i386_elf_load_image(i386_bootstrap_vmspace, init_image,
+        init_size, &i386_bootstrap_user_image);
     if (error != 0)
         return error;
     error = vmspace_map_anon(i386_bootstrap_vmspace,

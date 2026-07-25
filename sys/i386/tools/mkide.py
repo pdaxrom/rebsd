@@ -32,6 +32,43 @@ FAT32_MAX_CLUSTERS = 0x0FFFFFF5
 ROOT_FILE_SIZE = 700
 
 
+def clusters_for_size(size: int, cluster_bytes: int) -> int:
+    return (size + cluster_bytes - 1) // cluster_bytes
+
+
+def data_cluster_offset(
+    partition_offset: int,
+    data_sector: int,
+    sectors_per_cluster: int,
+    cluster: int,
+) -> int:
+    return partition_offset + (
+        data_sector + (cluster - 2) * sectors_per_cluster
+    ) * SECTOR_SIZE
+
+
+def fat16_chain(
+    fat: bytearray, first_cluster: int, cluster_count: int
+) -> None:
+    for index in range(cluster_count):
+        cluster = first_cluster + index
+        next_cluster = (
+            0xFFFF if index + 1 == cluster_count else cluster + 1
+        )
+        struct.pack_into("<H", fat, cluster * 2, next_cluster)
+
+
+def fat32_chain(
+    fat: bytearray, first_cluster: int, cluster_count: int
+) -> None:
+    for index in range(cluster_count):
+        cluster = first_cluster + index
+        next_cluster = (
+            0x0FFFFFFF if index + 1 == cluster_count else cluster + 1
+        )
+        struct.pack_into("<I", fat, cluster * 4, next_cluster)
+
+
 def fat16_geometry(partition_sectors: int) -> tuple[int, int, int]:
     for sectors_per_cluster in (1, 2, 4, 8, 16, 32, 64, 128):
         fat_sectors = 1
@@ -98,11 +135,30 @@ def build_fat16(
     image: bytearray,
     partition_start: int,
     partition_sectors: int,
+    init_contents: bytes | None,
 ) -> None:
-    sectors_per_cluster, fat_sectors, _ = fat16_geometry(
+    sectors_per_cluster, fat_sectors, clusters = fat16_geometry(
         partition_sectors
     )
     partition_offset = partition_start * SECTOR_SIZE
+    cluster_bytes = sectors_per_cluster * SECTOR_SIZE
+    boot_cluster = 2
+    root_file_cluster = 3
+    root_file_clusters = clusters_for_size(ROOT_FILE_SIZE, cluster_bytes)
+    sbin_cluster = root_file_cluster + root_file_clusters
+    init_cluster = sbin_cluster + 1
+    init_clusters = (
+        clusters_for_size(len(init_contents), cluster_bytes)
+        if init_contents is not None
+        else 0
+    )
+    last_cluster = (
+        init_cluster + init_clusters - 1
+        if init_clusters != 0
+        else root_file_cluster + root_file_clusters - 1
+    )
+    if last_cluster > clusters + 1:
+        raise ValueError("FAT16 payload does not fit in the partition")
     boot = memoryview(image)[partition_offset : partition_offset + SECTOR_SIZE]
     boot[0:3] = b"\xeb\x3c\x90"
     boot[3:11] = b"REBSD   "
@@ -131,9 +187,12 @@ def build_fat16(
     fat = bytearray(fat_bytes)
     struct.pack_into("<H", fat, 0, 0xFFF8)
     struct.pack_into("<H", fat, 2, 0xFFFF)
-    struct.pack_into("<H", fat, 4, 0xFFFF)
-    struct.pack_into("<H", fat, 6, 4)
-    struct.pack_into("<H", fat, 8, 0xFFFF)
+    fat16_chain(fat, boot_cluster, 1)
+    fat16_chain(fat, root_file_cluster, root_file_clusters)
+    if init_contents is not None:
+        fat16_chain(fat, sbin_cluster, 1)
+        if init_clusters != 0:
+            fat16_chain(fat, init_cluster, init_clusters)
     for fat_index in range(FAT_COUNT):
         start = partition_offset + (
             FAT16_RESERVED_SECTORS + fat_index * fat_sectors
@@ -142,33 +201,106 @@ def build_fat16(
 
     root_sector = FAT16_RESERVED_SECTORS + FAT_COUNT * fat_sectors
     root_offset = partition_offset + root_sector * SECTOR_SIZE
-    put_dirent(image, root_offset, b"BOOT       ", 0x10, 2, 0)
+    put_dirent(
+        image, root_offset, b"BOOT       ", 0x10, boot_cluster, 0
+    )
+    if init_contents is not None:
+        put_dirent(
+            image, root_offset + 32, b"SBIN       ", 0x10, sbin_cluster, 0
+        )
 
     data_sector = root_sector + FAT16_ROOT_SECTORS
-    boot_dir_offset = partition_offset + data_sector * SECTOR_SIZE
-    put_dirent(image, boot_dir_offset, b".          ", 0x10, 2, 0)
+    boot_dir_offset = data_cluster_offset(
+        partition_offset, data_sector, sectors_per_cluster, boot_cluster
+    )
+    put_dirent(
+        image, boot_dir_offset, b".          ", 0x10, boot_cluster, 0
+    )
     put_dirent(image, boot_dir_offset + 32, b"..         ", 0x10, 0, 0)
     put_dirent(
-        image, boot_dir_offset + 64, b"ROOT    TXT", 0x21, 3, ROOT_FILE_SIZE
+        image,
+        boot_dir_offset + 64,
+        b"ROOT    TXT",
+        0x21,
+        root_file_cluster,
+        ROOT_FILE_SIZE,
     )
 
     contents = bytearray(b"." * ROOT_FILE_SIZE)
     contents[:15] = b"REBSD FAT ROOT\n"
     contents[512:537] = b"REBSD FAT SECOND CLUSTER\n"
-    file_sector = data_sector + sectors_per_cluster
-    file_offset = partition_offset + file_sector * SECTOR_SIZE
+    file_offset = data_cluster_offset(
+        partition_offset,
+        data_sector,
+        sectors_per_cluster,
+        root_file_cluster,
+    )
     image[file_offset : file_offset + len(contents)] = contents
+    if init_contents is not None:
+        sbin_dir_offset = data_cluster_offset(
+            partition_offset,
+            data_sector,
+            sectors_per_cluster,
+            sbin_cluster,
+        )
+        put_dirent(
+            image, sbin_dir_offset, b".          ", 0x10, sbin_cluster, 0
+        )
+        put_dirent(
+            image, sbin_dir_offset + 32, b"..         ", 0x10, 0, 0
+        )
+        put_dirent(
+            image,
+            sbin_dir_offset + 64,
+            b"INIT       ",
+            0x21,
+            init_cluster if init_clusters != 0 else 0,
+            len(init_contents),
+        )
+        if init_clusters != 0:
+            init_offset = data_cluster_offset(
+                partition_offset,
+                data_sector,
+                sectors_per_cluster,
+                init_cluster,
+            )
+            image[init_offset : init_offset + len(init_contents)] = (
+                init_contents
+            )
 
 
 def build_fat32(
     image: bytearray,
     partition_start: int,
     partition_sectors: int,
+    init_contents: bytes | None,
 ) -> None:
     sectors_per_cluster, fat_sectors, clusters = fat32_geometry(
         partition_sectors
     )
     partition_offset = partition_start * SECTOR_SIZE
+    cluster_bytes = sectors_per_cluster * SECTOR_SIZE
+    root_cluster = 2
+    boot_cluster = 3
+    root_file_cluster = 4
+    root_file_clusters = clusters_for_size(ROOT_FILE_SIZE, cluster_bytes)
+    sbin_cluster = root_file_cluster + root_file_clusters
+    init_cluster = sbin_cluster + 1
+    init_clusters = (
+        clusters_for_size(len(init_contents), cluster_bytes)
+        if init_contents is not None
+        else 0
+    )
+    last_cluster = (
+        init_cluster + init_clusters - 1
+        if init_clusters != 0
+        else root_file_cluster + root_file_clusters - 1
+    )
+    if last_cluster > clusters + 1:
+        raise ValueError("FAT32 payload does not fit in the partition")
+    used_clusters = 2 + root_file_clusters
+    if init_contents is not None:
+        used_clusters += 1 + init_clusters
     boot_bytes = bytearray(SECTOR_SIZE)
     boot_bytes[0:3] = b"\xeb\x58\x90"
     boot_bytes[3:11] = b"REBSD   "
@@ -182,7 +314,7 @@ def build_fat32(
     struct.pack_into("<I", boot_bytes, 28, partition_start)
     struct.pack_into("<I", boot_bytes, 32, partition_sectors)
     struct.pack_into("<I", boot_bytes, 36, fat_sectors)
-    struct.pack_into("<I", boot_bytes, 44, 2)
+    struct.pack_into("<I", boot_bytes, 44, root_cluster)
     struct.pack_into("<H", boot_bytes, 48, 1)
     struct.pack_into("<H", boot_bytes, 50, 6)
     boot_bytes[64] = 0x80
@@ -198,8 +330,8 @@ def build_fat32(
     fsinfo = bytearray(SECTOR_SIZE)
     struct.pack_into("<I", fsinfo, 0, 0x41615252)
     struct.pack_into("<I", fsinfo, 484, 0x61417272)
-    struct.pack_into("<I", fsinfo, 488, clusters - 4)
-    struct.pack_into("<I", fsinfo, 492, 6)
+    struct.pack_into("<I", fsinfo, 488, clusters - used_clusters)
+    struct.pack_into("<I", fsinfo, 492, last_cluster + 1)
     struct.pack_into("<I", fsinfo, 508, 0xAA550000)
     fsinfo_offset = partition_offset + SECTOR_SIZE
     image[fsinfo_offset : fsinfo_offset + SECTOR_SIZE] = fsinfo
@@ -212,10 +344,13 @@ def build_fat32(
     fat = bytearray(fat_bytes)
     struct.pack_into("<I", fat, 0, 0x0FFFFFF8)
     struct.pack_into("<I", fat, 4, 0xFFFFFFFF)
-    struct.pack_into("<I", fat, 8, 0x0FFFFFFF)
-    struct.pack_into("<I", fat, 12, 0x0FFFFFFF)
-    struct.pack_into("<I", fat, 16, 5)
-    struct.pack_into("<I", fat, 20, 0x0FFFFFFF)
+    fat32_chain(fat, root_cluster, 1)
+    fat32_chain(fat, boot_cluster, 1)
+    fat32_chain(fat, root_file_cluster, root_file_clusters)
+    if init_contents is not None:
+        fat32_chain(fat, sbin_cluster, 1)
+        if init_clusters != 0:
+            fat32_chain(fat, init_cluster, init_clusters)
     for fat_index in range(FAT_COUNT):
         start = partition_offset + (
             FAT32_RESERVED_SECTORS + fat_index * fat_sectors
@@ -223,26 +358,86 @@ def build_fat32(
         image[start : start + fat_bytes] = fat
 
     data_sector = FAT32_RESERVED_SECTORS + FAT_COUNT * fat_sectors
-    root_offset = partition_offset + data_sector * SECTOR_SIZE
-    put_dirent(image, root_offset, b"BOOT       ", 0x10, 3, 0)
+    root_offset = data_cluster_offset(
+        partition_offset, data_sector, sectors_per_cluster, root_cluster
+    )
+    put_dirent(
+        image, root_offset, b"BOOT       ", 0x10, boot_cluster, 0
+    )
+    if init_contents is not None:
+        put_dirent(
+            image, root_offset + 32, b"SBIN       ", 0x10, sbin_cluster, 0
+        )
 
-    boot_dir_sector = data_sector + sectors_per_cluster
-    boot_dir_offset = partition_offset + boot_dir_sector * SECTOR_SIZE
-    put_dirent(image, boot_dir_offset, b".          ", 0x10, 3, 0)
+    boot_dir_offset = data_cluster_offset(
+        partition_offset, data_sector, sectors_per_cluster, boot_cluster
+    )
+    put_dirent(
+        image, boot_dir_offset, b".          ", 0x10, boot_cluster, 0
+    )
     put_dirent(image, boot_dir_offset + 32, b"..         ", 0x10, 0, 0)
     put_dirent(
-        image, boot_dir_offset + 64, b"ROOT    TXT", 0x21, 4, ROOT_FILE_SIZE
+        image,
+        boot_dir_offset + 64,
+        b"ROOT    TXT",
+        0x21,
+        root_file_cluster,
+        ROOT_FILE_SIZE,
     )
 
     contents = bytearray(b"." * ROOT_FILE_SIZE)
     contents[:15] = b"REBSD FAT ROOT\n"
     contents[512:537] = b"REBSD FAT SECOND CLUSTER\n"
-    file_sector = data_sector + 2 * sectors_per_cluster
-    file_offset = partition_offset + file_sector * SECTOR_SIZE
+    file_offset = data_cluster_offset(
+        partition_offset,
+        data_sector,
+        sectors_per_cluster,
+        root_file_cluster,
+    )
     image[file_offset : file_offset + len(contents)] = contents
+    if init_contents is not None:
+        sbin_dir_offset = data_cluster_offset(
+            partition_offset,
+            data_sector,
+            sectors_per_cluster,
+            sbin_cluster,
+        )
+        put_dirent(
+            image, sbin_dir_offset, b".          ", 0x10, sbin_cluster, 0
+        )
+        put_dirent(
+            image,
+            sbin_dir_offset + 32,
+            b"..         ",
+            0x10,
+            0,
+            0,
+        )
+        put_dirent(
+            image,
+            sbin_dir_offset + 64,
+            b"INIT       ",
+            0x21,
+            init_cluster if init_clusters != 0 else 0,
+            len(init_contents),
+        )
+        if init_clusters != 0:
+            init_offset = data_cluster_offset(
+                partition_offset,
+                data_sector,
+                sectors_per_cluster,
+                init_cluster,
+            )
+            image[init_offset : init_offset + len(init_contents)] = (
+                init_contents
+            )
 
 
-def build_image(sectors: int, filesystem: str = "fat16") -> bytes:
+def build_image(
+    sectors: int,
+    filesystem: str = "fat16",
+    init_contents: bytes | None = None,
+) -> bytes:
     if filesystem == "fat16":
         partition_start = FAT16_PARTITION_START
         partition_type = FAT16_PARTITION_TYPE
@@ -267,9 +462,13 @@ def build_image(sectors: int, filesystem: str = "fat16") -> bytes:
     )
     image[510:512] = MBR_SIGNATURE
     if filesystem == "fat16":
-        build_fat16(image, partition_start, partition_sectors)
+        build_fat16(
+            image, partition_start, partition_sectors, init_contents
+        )
     else:
-        build_fat32(image, partition_start, partition_sectors)
+        build_fat32(
+            image, partition_start, partition_sectors, init_contents
+        )
     end_offset = (sectors - 1) * SECTOR_SIZE
     image[end_offset : end_offset + len(END_MARKER)] = END_MARKER
     return bytes(image)
@@ -300,6 +499,12 @@ def main() -> None:
         "--filesystem", choices=tuple(DEFAULT_SECTORS), default="fat16"
     )
     parser.add_argument("--sectors", type=int)
+    parser.add_argument(
+        "--file",
+        action="append",
+        default=[],
+        metavar="/sbin/init=HOST_PATH",
+    )
     args = parser.parse_args()
     sectors = (
         args.sectors
@@ -307,7 +512,17 @@ def main() -> None:
         else DEFAULT_SECTORS[args.filesystem]
     )
     try:
-        image = build_image(sectors, args.filesystem)
+        init_contents = None
+        for specification in args.file:
+            image_path, separator, host_path = specification.partition("=")
+            if separator == "" or image_path != "/sbin/init":
+                raise ValueError(
+                    "--file currently supports /sbin/init=HOST_PATH"
+                )
+            if init_contents is not None:
+                raise ValueError("duplicate /sbin/init")
+            init_contents = pathlib.Path(host_path).read_bytes()
+        image = build_image(sectors, args.filesystem, init_contents)
         write_atomic(args.output, image)
     except (OSError, ValueError) as error:
         raise SystemExit(f"mkide: {error}") from error

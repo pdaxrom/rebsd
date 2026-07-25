@@ -44,15 +44,20 @@ protected-mode trampoline copies it to 1 MiB.  QEMU requires
 `docs/I686_HARDWARE_GATE.md`.
 
 The IDE smoke image is now an 8192-sector MBR disk with a real read-only
-FAT16 partition and a two-cluster `/BOOT/ROOT.TXT`.  Early i386 code mounts
-it through the common transport-independent FAT reader, with every sector
-read going through the generic partition-relative `disk_bdev_strategy`.
-Normal QEMU smoke requires case-insensitive lookup, cross-cluster read, EOF,
-missing-name and directory-read checks while the existing open/write
-`EROFS` gates remain active.  Host tests exercise the same reader on FAT16
-and FAT32.  A separate 64 MiB FAT32 image uses MBR type `0x0c` and partition
-start LBA `0x800`, matching the IBM CF's observed scheme; direct-kernel and
-native-BIOS QEMU targets require the same root checks on that image.
+FAT16 partition, a two-cluster `/BOOT/ROOT.TXT`, and the separately linked
+ELF32 bootstrap as `/SBIN/INIT`.  Early i386 code mounts it through the
+common transport-independent FAT reader, with every sector read going
+through the generic partition-relative `disk_bdev_strategy`.  Normal QEMU
+smoke requires case-insensitive lookup, cross-cluster root read, EOF,
+missing-name and directory-read checks, then reads the complete multi-cluster
+ELF into a bounded 64 KiB bootstrap buffer.  The existing ELF loader maps and
+executes that disk image in CPL3 and reports `process-image: fat`; no-disk
+boots report `process-image: initfs` and execute the embedded fallback.
+The existing open/write `EROFS` gates remain active.  Host tests exercise
+the same reader on FAT16 and FAT32.  A separate 64 MiB FAT32 image uses MBR
+type `0x0c` and partition start LBA `0x800`, matching the IBM CF's observed
+scheme; direct-kernel and native-BIOS QEMU targets require the same root and
+storage-backed ELF checks on that image.
 
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
@@ -117,11 +122,12 @@ CPL3 with an RX text mapping and an RW stack without VM execute permission,
 requires production `getpid` to return 1, and requires `process-user: ok`
 before timer IRQs.  The target non-PAE Pentium III has no hardware NX bit.
 The user payload is a separately linked ELF32/i386 `ET_EXEC`, packaged as
-`/sbin/init` in a deterministic read-only initfs and loaded from two
-`PT_LOAD` segments.  The initfs lookup validates its complete directory
-before returning a file.  The ELF loader checks bounds, alignment, entry,
-user ranges, overlap and W+X, zero-fills BSS, applies final permissions,
-and requires `initfs: ok` plus `elf32-user: ok`.
+`/sbin/init` both in deterministic read-only initfs and in the FAT smoke
+images, and loaded from two `PT_LOAD` segments.  FAT is preferred when its
+file is present; initfs is the deterministic fallback and its lookup still
+validates the complete embedded directory.  The ELF loader checks bounds,
+alignment, entry, user ranges, overlap and W+X, zero-fills BSS, applies
+final permissions, and requires `elf32-user: ok`.
 An exec-compatible initial stack supplies `argc` in EBX, `argv` in ECX and
 `envp` in EDX, with pointer arrays, packed strings, alignment, reserved
 slots and the historical top `argv` word validated by the CPL3 image;
@@ -164,7 +170,8 @@ loader now maps RX text and RW data+BSS from named `/sbin/init` in the
 early initfs, and an exec-compatible `argc/argv/envp` stack is active.
 A read-only legacy primary-master ATA PIO backend now attaches through the
 generic disk layer, parses MBR partitions and exercises real block strategy
-reads.  The early FAT reader mounts the first partition and reads a
-deterministic storage-backed root probe; ATA writes and DMA are intentionally
-absent.  A full VFS root used by process 1, the full syscall table, complete
-userland, and PCC remain outside the current image.
+reads.  The early FAT reader mounts the first partition, reads a
+deterministic root probe and supplies `/sbin/init` to the process-1 ELF
+loader; ATA writes and DMA are intentionally absent.  A full VFS root used
+through ordinary namei/open, the full syscall table, complete userland, and
+PCC remain outside the current image.

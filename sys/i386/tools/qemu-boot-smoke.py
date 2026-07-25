@@ -46,6 +46,7 @@ BOOT_MARKERS = (
     "user-trap: ok",
     "process-bootstrap: ok",
     "process-table: ok",
+    "process-image: fat",
     "process-user: ok",
     "process-fork: ok",
     "syscall-fork: ok",
@@ -92,6 +93,8 @@ BOOT_MARKERS = (
     "fat-root-eof: ok",
     "fat-root-missing: enoent",
     "fat-root-directory: eisdir",
+    "fat-init-lookup: ok",
+    "fat-init-read: ok",
     "disk-close: ok",
     "pic: ok",
     "pit: hz=100",
@@ -140,12 +143,15 @@ IDE_DISK_MARKERS = (
     "fat-root-eof: ok",
     "fat-root-missing: enoent",
     "fat-root-directory: eisdir",
+    "fat-init-lookup: ok",
+    "fat-init-read: ok",
+    "process-image: fat",
     "disk-close: ok",
 )
 
 NO_DISK_BOOT_MARKERS = tuple(
     marker for marker in BOOT_MARKERS if marker not in IDE_DISK_MARKERS
-) + ("ide-primary-master: none",)
+) + ("process-image: initfs", "ide-primary-master: none")
 
 BIOS_NO_DISK_BOOT_MARKERS = tuple(
     "boot-loader: bios-int13"
@@ -197,6 +203,7 @@ EXCEPTION_MARKERS = {
         "user-trap: ok",
         "process-bootstrap: ok",
         "process-table: ok",
+        "process-image: fat",
         "process-user: ok",
         "process-fork: ok",
         "syscall-fork: ok",
@@ -243,6 +250,8 @@ EXCEPTION_MARKERS = {
         "fat-root-eof: ok",
         "fat-root-missing: enoent",
         "fat-root-directory: eisdir",
+        "fat-init-lookup: ok",
+        "fat-init-read: ok",
         "disk-close: ok",
         "exception: vector=0x0000000e error=0x00000003",
         " cr2=",

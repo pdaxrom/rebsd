@@ -8,12 +8,16 @@
 #include <fs/fat/fat.h>
 
 #define I386_FAT_SMOKE_SIZE     700u
+#define I386_FAT_INIT_MAX       (64u * 1024u)
 
 struct i386_fat_disk {
     dev_t fd_dev;
 };
 
 static unsigned char i386_fat_smoke_data[I386_FAT_SMOKE_SIZE];
+static unsigned char i386_fat_init_data[I386_FAT_INIT_MAX];
+static unsigned i386_fat_init_size;
+static int i386_fat_init_ready;
 
 static void
 i386_fat_zero(void *arg, unsigned length)
@@ -67,6 +71,8 @@ i386_fat_bootstrap(dev_t dev, unsigned media_sectors)
     unsigned count;
     int error;
 
+    i386_fat_init_ready = 0;
+    i386_fat_init_size = 0;
     disk.fd_dev = dev;
     error = fat_ro_mount(&reader, media_sectors, i386_fat_read_sector,
         &disk);
@@ -85,7 +91,7 @@ i386_fat_bootstrap(dev_t dev, unsigned media_sectors)
     error = fat_ro_lookup(&reader, "/boot/root.txt", &node);
     if (error == ENOENT) {
         i386_early_puts("fat-root-lookup: absent\n");
-        return 0;
+        goto init_lookup;
     }
     if (error != 0 || (node.fn_attr & FAT_ATTR_DIRECTORY) != 0 ||
         node.fn_size != I386_FAT_SMOKE_SIZE) {
@@ -136,5 +142,40 @@ i386_fat_bootstrap(dev_t dev, unsigned media_sectors)
         return error != 0 ? error : EIO;
     }
     i386_early_puts("fat-root-directory: eisdir\n");
+
+init_lookup:
+    error = fat_ro_lookup(&reader, "/sbin/init", &node);
+    if (error == ENOENT) {
+        i386_early_puts("fat-init-lookup: absent\n");
+        return 0;
+    }
+    if (error != 0 || (node.fn_attr & FAT_ATTR_DIRECTORY) != 0 ||
+        node.fn_size == 0 || node.fn_size > sizeof(i386_fat_init_data)) {
+        i386_early_puts("fat-init-lookup: unavailable\n");
+        return 0;
+    }
+    i386_early_puts("fat-init-lookup: ok\n");
+
+    error = fat_ro_read(&reader, &node, 0, i386_fat_init_data,
+        node.fn_size, &count);
+    if (error != 0 || count != node.fn_size) {
+        i386_early_puts("fat-init-read: failed\n");
+        return error != 0 ? error : EIO;
+    }
+    i386_fat_init_size = node.fn_size;
+    i386_fat_init_ready = 1;
+    i386_early_puts("fat-init-read: ok\n");
+    return 0;
+}
+
+int
+i386_fat_bootstrap_init_image(const void **data, unsigned *size)
+{
+    if (data == (const void **)0 || size == (unsigned *)0)
+        return EINVAL;
+    if (!i386_fat_init_ready)
+        return ENOENT;
+    *data = i386_fat_init_data;
+    *size = i386_fat_init_size;
     return 0;
 }

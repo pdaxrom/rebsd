@@ -6,10 +6,12 @@ VIA Apollo Pro 133, AGP VGA и IDE-CF. У машины нет floppy drive, по
 partition `(hd0,2)`.
 
 В двух проверенных на IBM images файловая система ещё не монтировалась.
-Следующий код уже проходит отдельные QEMU-only read-only FAT16 и FAT32
-reader gates; FAT32 использует тот же MBR type `0x0c` и start LBA `0x800`,
-что и IBM CF. На IBM его пока повторять не требуется. ATA-команд записи всё
-ещё нет: IDE
+Следующий код уже проходит отдельные QEMU-only read-only FAT16/FAT32
+reader и storage-backed ELF gates: FAT32 использует тот же MBR type `0x0c`
+и start LBA `0x800`, что и IBM CF, читает `/sbin/init` через generic disk
+и выполняет его в CPL3. No-disk вариант отдельно подтверждает fallback на
+встроенный initfs. На IBM это пока повторять не требуется. ATA-команд записи
+всё ещё нет: IDE
 backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
 регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
 `EROFS`.
@@ -22,10 +24,12 @@ make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 all
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
-    boot-smoke bios-image-smoke bios-boot-smoke bios-ide-absent-smoke
+    boot-smoke fat32-boot-smoke bios-image-smoke \
+    bios-boot-smoke bios-fat32-boot-smoke \
+    ide-absent-smoke bios-ide-absent-smoke
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
-    QEMU_MACHINE=pc-i440fx-5.1 bios-boot-smoke
+    QEMU_MACHINE=pc-i440fx-5.1 bios-fat32-boot-smoke
 ```
 
 GRUB-compatible artifact:

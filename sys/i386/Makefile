@@ -463,6 +463,7 @@ config.o: $(I386_PC_SRC)/config.c \
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/context.h \
 	    $(I386_SRC)/include/elf_bootstrap.h \
+	    $(I386_SRC)/include/fat_bootstrap.h \
 	    $(I386_SRC)/include/initfs.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h \
@@ -577,20 +578,24 @@ bios-image-smoke: rebsd-i686.bzimg rebsd-i686-bios-floppy.img
 	    rebsd-i686-bios-floppy.check.img
 	rm -f rebsd-i686-bios-floppy.check.img
 
-ide-smoke.img: $(I386_TOOLS_SRC)/mkide.py
-	$(PYTHON) $< --output $@
+ide-smoke.img: bootstrap-user.elf $(I386_TOOLS_SRC)/mkide.py
+	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --output $@ \
+	    --file /sbin/init=bootstrap-user.elf
 
-ide-smoke: ide-smoke.img
-	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --output ide-smoke.check.img
+ide-smoke: ide-smoke.img bootstrap-user.elf
+	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --output ide-smoke.check.img \
+	    --file /sbin/init=bootstrap-user.elf
 	cmp ide-smoke.img ide-smoke.check.img
 	rm -f ide-smoke.check.img
 
-ide-fat32-smoke.img: $(I386_TOOLS_SRC)/mkide.py
-	$(PYTHON) $< --filesystem fat32 --output $@
-
-ide-fat32-smoke: ide-fat32-smoke.img
+ide-fat32-smoke.img: bootstrap-user.elf $(I386_TOOLS_SRC)/mkide.py
 	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --filesystem fat32 \
-	    --output ide-fat32-smoke.check.img
+	    --output $@ --file /sbin/init=bootstrap-user.elf
+
+ide-fat32-smoke: ide-fat32-smoke.img bootstrap-user.elf
+	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --filesystem fat32 \
+	    --output ide-fat32-smoke.check.img \
+	    --file /sbin/init=bootstrap-user.elf
 	cmp ide-fat32-smoke.img ide-fat32-smoke.check.img
 	rm -f ide-fat32-smoke.check.img
 
