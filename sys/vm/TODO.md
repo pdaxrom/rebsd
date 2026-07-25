@@ -285,6 +285,26 @@ must then pass the applicable matrix below.
 - [x] N64 hardware process/VM smoke on an 8 MiB system: GCC kernel plus
   native PCC/a.out hard-float userland, including the 100-cycle stress and
   leak-counter gate.  Confirmed on 2026-07-18.
+- [x] N64 8 MiB UART-only GCC-kernel/GCC-userland pressure gate with a
+  2 MiB minimal rootfs and 4 MiB logical zswap, confirmed on 2026-07-25 with
+  ROM SHA-256
+  `7d2e8ec493097ad14ea4ff8c630a71925862fcc785be11fe2e13bce80da747b2`:
+  compressible pressure completed with 245 pageouts and 115 pageins; raw
+  pressure completed with 460 pageouts and 330 pageins; both returned zero
+  with zero swap failures.
+- [ ] Complete the final N64 MMU hardware gate on an 8 MiB system with the
+  supported GCC-kernel/GCC-userland full image:
+  - [x] `/root/vm-process-smoke`
+  - [x] 100 iterations of `/root/vm-stress-smoke.sh`
+  - [ ] compressible and incompressible `/usr/bin/vm-pressure-smoke`; the
+    UART-only minimal profile passed, while the full profile still needs a
+    zero-swap-failure raw run with its smaller 3584 KiB logical zswap
+  - [x] `/dev/fb0` `MAP_SHARED` through `fbset fill` and `fbview`
+- [ ] After the 8 MiB MMU gate is complete, repeat the reduced hardware gate
+  on a base 4 MiB N64: boot/login, `/root/vm-process-smoke`, and eight
+  iterations of `/root/vm-stress-smoke.sh`.  Native compiler availability is
+  not part of the 4 MiB MMU result; an expected compiler OOM must remain
+  distinguishable from a VM fault or hang.
 - [ ] N64 hardware native compiler smoke with `/root/pcc-smoke-all.sh`.
 - [x] Ci20 MIPS32r2 hard-float image: kernel GCC + userland GCC.
 - [x] Ci20 hardware process/VM smoke, including the 100-cycle stress and leak

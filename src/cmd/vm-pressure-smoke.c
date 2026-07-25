@@ -293,6 +293,11 @@ main(int argc, char **argv)
         if (require_swap)
             return 1;
     }
+    if (after_free.swap_failures != before.swap_failures) {
+        printf("VM_PRESSURE_SWAP_FAILURES failures=%ld\n",
+            after_free.swap_failures - before.swap_failures);
+        return 1;
+    }
     printf("VM_PRESSURE_OK pages=%u pageouts=%ld pageins=%ld "
         "swap_failures=%ld reclaim=%ld reclaim_failures=%ld "
         "swapped_after_free=%ld\n", pages,

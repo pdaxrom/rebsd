@@ -10,6 +10,9 @@ not active items for the current C/static-a.out PCC milestone.
 
 - Kernel builds stay on the existing GCC flow for now.
 - Userland builds default to GCC.
+- Further PCC kernel/userland work is deferred while the supported N64
+  baseline remains GCC kernel + GCC userland.  Do not change that baseline to
+  hide a PCC-only failure.
 - `MIPS_ROOTFS_COMPILER=pcc` and `N64_USERLAND_COMPILER=pcc` are supported
   opt-in C userland modes after the Malta, Malta64/R4000, and real N64 gates.
 - ReBSD must keep using its existing `as`, `ld`, `ar`, and `ranlib`; no GNU
@@ -18,6 +21,42 @@ not active items for the current C/static-a.out PCC milestone.
   hardware.
 - PCC may expose ReBSD macros, but it must keep RetroBSD compatibility macros
   while the tree and ports still expect them.
+
+## Deferred N64 Hardware Concerns
+
+- [ ] Explain and fix the transient `/var/tmp` exhaustion seen on an 8 MiB
+  physical N64 with the full PCC-kernel/PCC-userland image during
+  `/root/pcc-smoke-all.sh`.  The 2026-07-25 run reached
+  `CCOM_STRESS_BEGIN:100` and `CCOM_STRESS_FPU_RC:0`, then repeatedly reported
+  `/var: write failed, file system full`.  After interrupting the run,
+  `/dev/ram0` showed only 185 KiB used and 822 KiB free out of 1007 KiB, so no
+  named-file accumulation was left behind.
+  - `/tmp` resolves to `/var/tmp`.  Native PCC `cpp` opens two `tmpfile()`
+    streams, `ccom` opens another prototype stream, and libc `tmpfile()`
+    unlinks its backing file immediately.  Open unlinked files can therefore
+    consume UFS blocks without appearing in `ls`, then release them when the
+    process is interrupted.  This is a hypothesis, not yet the proven cause.
+  - Also exclude a PCC-userland descriptor/wait/stdio miscompile that leaves
+    compiler children or temporary streams alive.  Compare GCC- and PCC-built
+    userlands with the same GCC kernel and identical 1 MiB `/var`, and run
+    `ccom-stress.sh` alone after a clean boot.
+  - Instrument the peak while `cc -S` is still running: record `/var` block
+    and inode use, the owner and size of open unlinked files, and the live
+    `cc`/`cpp`/`ccom` process tree.  Do not treat the post-`Ctrl-C` `df` value
+    as the peak.
+  - Keep a distinct boot-time failure separate from capacity exhaustion.  One
+    full 32 MiB-rootfs run showed no `/dev/ram0` mount in `df`; consequently
+    `/tmp -> /var/tmp` resolved onto the read-only rootfs and both temporary
+    file creation and shell pipes failed immediately.  Capture the suppressed
+    `mkfs /dev/ram0` error and the `mount /var` status on that exact image
+    before attributing it to PCC or changing RAM-disk sizing.  The 2026-07-25
+    GCC/GCC minimal pressure ROM did show `/dev/ram0 on /var`, so these are
+    separate conditions.
+  - Do not work around the failure by redirecting PCC temporaries to cartridge
+    flash, reducing the stress count, or silently increasing `/var`.  Change
+    the RAM layout only if measurement proves that the compiler's legitimate
+    concurrent working set exceeds 1 MiB after leaks and miscompilation are
+    excluded.
 
 ## Completed Gate
 

@@ -164,21 +164,23 @@ outside the kernel build.
    vmstat
    /root/vm-process-smoke
    VM_STRESS_ITERATIONS=8 /root/vm-stress-smoke.sh
-   /bin/vm-pressure-smoke -s
-   /bin/vm-pressure-smoke -rs
+   /usr/bin/vm-pressure-smoke -s
+   /usr/bin/vm-pressure-smoke -rs
    /root/pcc-smoke-all.sh
    ```
 
    Every script must return to the shell with status zero;
    both pressure runs must print `VM_PRESSURE_OK` with nonzero pageout and
-   pagein counts and zero swap failures.  The `-r` run covers incompressible
-   data and zswap's raw-block path.  If a later command stalls, rerun only
-   that command under `/bin/strace`; syscall tracing is inherited across
-   fork/exec and is written to the invoking UART terminal without enabling
-   global kernel tracing.  For example:
+   pagein counts and zero swap failures.  `vm-pressure-smoke` rejects any
+   observed swap failure instead of printing a false success; `-s` additionally
+   requires actual pageout and pagein activity.  The `-r` run covers
+   incompressible data and zswap's raw-block path.  If a later command stalls,
+   rerun only that command under `/usr/bin/strace`; syscall tracing is inherited
+   across fork/exec and is written to the invoking UART terminal without
+   enabling global kernel tracing.  For example:
 
    ```sh
-   /bin/strace /root/pcc-smoke-all.sh
+   /usr/bin/strace /root/pcc-smoke-all.sh
    ```
 
    `pcc-smoke-all.sh` must print `PCC_SMOKE_ALL_FAILURES 0` and

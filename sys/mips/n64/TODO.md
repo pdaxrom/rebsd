@@ -14,7 +14,12 @@ N64cart ROMFS, USB CDC ECM networking, and polling UART.
 - [ ] GCC kernel + PCC userland: image builds and its rootfs passes
   `fsutil --check`; full-profile hardware validation is still pending.
 - [ ] PCC kernel + PCC userland: image builds and its rootfs passes
-  `fsutil --check`; full-profile hardware validation is still pending.
+  `fsutil --check`; full-profile hardware validation is still pending.  A
+  2026-07-25 hardware run reached `ccom-stress` but transiently exhausted the
+  1 MiB `/var` RAM disk.  The space returned after `Ctrl-C`, so distinguish
+  open-unlinked PCC temporary files from a descriptor/process leak or PCC
+  userland miscompile before changing the N64 memory layout; detailed
+  investigation notes are in `TODO-PCC`.
 
 ## Application and Rootfs Build
 
@@ -713,6 +718,11 @@ the board-specific generated/appended manifest.
   Malta64 before the next hardware run
 - [x] Confirm the UART-only `N64_ZSWAP=1` and `N64_ZSWAP=0` debug ROMs boot on
   real N64 hardware with both PCC-built and GCC-built kernels.
+- [x] Run compressible and raw `vm-pressure-smoke` on the 8 MiB UART-only
+  GCC-kernel/GCC-userland minimal profile with 4 MiB logical zswap.  The
+  2026-07-25 hardware run completed with 245/115 and 460/330
+  pageout/pagein counts respectively, no data corruption, zero swap failures,
+  and status zero.
 - [x] Add `/dev/fb0` as the framebuffer device with read/write access plus
   mode ioctls
 - [x] Add `/bin/fbset` through the shared `src/cmd` install flow and include
@@ -734,8 +744,10 @@ the board-specific generated/appended manifest.
 - [x] Add process-local shared framebuffer access for `/dev/fb0`; the
   read/write path still copies bytes, while graphics uses the controlled
   uncached `MAP_SHARED` interface and treats `N64FBIOC_GETMAP.vaddr` as a hint
-- [ ] Hardware smoke-test the process-local `/dev/fb0` mmap path with
-  `fbset fill` and `fbview` after removal of the global wired mapping
+- [x] Hardware smoke-test the process-local `/dev/fb0` mmap path with
+  `fbset fill` and `fbview` after removal of the global wired mapping;
+  confirmed on an 8 MiB NTSC N64 with the GCC-kernel/GCC-userland full image
+  on 2026-07-24
 - [x] Add a real N64 system-console input backend, so `/dev/console` can be
   used without the n64cart serial login path
 - [ ] Hardware smoke-test `/dev/console` login and shell input from a RandNET

@@ -434,6 +434,7 @@ N64_MINIMAL_ROOTFS_CMD_SCRIPTS = \
 N64_MINIMAL_ROOTFS_CMD_OPERATORS = \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),df,$(N64_CMD_NONE))
 N64_MINIMAL_ROOTFS_CMD_KMEM = $(N64_CMD_NONE)
+N64_MINIMAL_ROOTFS_USR_BIN_FILES = vm-pressure-smoke
 N64_MINIMAL_ROOTFS_PCC_TEST_NAMES = \
     alias-stress-smoke.c alias-stress-smoke.sh \
     build-workload-smoke.sh cc-pcc-smoke.sh ccom-stress.sh \
@@ -1203,11 +1204,17 @@ endif
 	# otherwise produce a valid-looking ROM with no /sbin/init.
 	$(N64_MINIMAL_SRC_MAKE) all
 	$(N64_MINIMAL_SRC_MAKE) install
+	for bin in $(N64_MINIMAL_ROOTFS_USR_BIN_FILES); do \
+	    test -x $(N64_MINIMAL_ROOTFS_STAGE)/bin/$$bin; \
+	    mv -f $(N64_MINIMAL_ROOTFS_STAGE)/bin/$$bin \
+	        $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/$$bin; \
+	done
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/init
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/bin/sh
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/libexec/getty
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/mkfs
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/mount
+	test -x $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/vm-pressure-smoke
 	cp -p $(N64_MINIMAL_VM_STRESS_SCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/vm-stress-smoke.sh
 	$(N64_MINIMAL_USERLAND_CC) -O2 -c \
