@@ -81,7 +81,11 @@ is inserted with `setrq`, proc0 selects it from `qs`, and `swtch` resumes
 its `u_rsave`.  The i386 `spl*` contract preserves IF and the idle hook uses
 the race-free `sti; hlt` sequence.  `process-bootstrap: ok`,
 `process-table: ok`, `proc0-context: ok` and `scheduler-switch: ok` validate
-that state.  Process 1 enters
+that state.  Generic `newproc` also clones process 1 into PID 2 with a
+separate vmspace and u-area.  Proc0 starts the copied CPL3 trapframe through
+`i386_fork_trampoline`; the child observes `eax=0`, traps back, and switches
+through proc0 to its parent.  `process-fork: ok` validates this complete
+round-trip.  Process 1 enters
 CPL3 with an RX text mapping and an RW stack without VM execute permission,
 requires production `getpid` to return 1, and requires `process-user: ok`
 before timer IRQs.  The target non-PAE Pentium III has no hardware NX bit.
@@ -123,12 +127,14 @@ handler.  A persistent process 1 in the generic process table now keeps a
 real u-area, vmspace, CR3 and TSS kernel stack active after self-tests.
 Proc0 has a separate u-area/vmspace and a reusable saved idle context;
 generic `setrq`/`swtch` and the `qs` run queue are connected and tested
-twice, while `newproc` is not connected yet.  The first persistent user mapping
+twice.  Generic `newproc` creates PID 2 and runs its cloned trapframe in
+CPL3; production syscall 2 and child exit/wait are not connected yet.
+The first persistent user mapping
 executes production syscall 20 from CPL3 and validates generic VM
 text/stack permissions.  A minimal in-memory ELF32
 loader now maps RX text and RW data+BSS from named `/sbin/init` in the
 early initfs, and an exec-compatible `argc/argv/envp` stack is active.
-Generic `newproc`, storage-backed root and the full syscall table remain
-gated on the rest of the generic kernel.
+Production `fork`/`exit`/`wait`, storage-backed root and the full syscall
+table remain gated on the rest of the generic kernel.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

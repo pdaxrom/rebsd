@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать восемь QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: двадцать девять QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -485,6 +485,31 @@ Generic run queue/`swtch` и `newproc` ещё не входят в early image.
 Следующий инкремент: подключить generic `newproc`, создать process 2 через
 существующие `vmspace_clone/md_uarea_fork` и выполнить parent/child scheduler
 round-trip перед расширением syscall table.
+
+Двадцать девятый QEMU bring-up инкремент завершён:
+
+- early image линкует общий `kern_fork.c` и вызывает настоящий `newproc(0)`
+  для process 1 после его первого trap из `/sbin/init`;
+- `newproc` выдаёт PID 2, вставляет child в `allproc`/PID hash, клонирует
+  vmspace и u-area и ставит новый process в generic `qs` с `SSWAP`;
+- proc0 выбирает child, `i386_fork_trampoline` возвращает скопированный
+  trapframe в CPL3 с `eax=0`, после чего child отправляет отдельный magic
+  trap;
+- child останавливается в сохранённом kernel continuation, ставит parent в
+  run queue, а proc0 возвращает управление process 1; проверяются отдельные
+  CR3/vmspace/u-area, user frame, TSS.esp0, parent links, PID lookup и
+  опустошение run queue;
+- marker `process-fork: ok` подтверждает полный маршрут
+  proc1→proc0→proc2(CPL3)→proc0→proc1;
+- clean strict build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
+  проходят.
+
+Production syscall 2, `exit`/`wait` и повторное пробуждение остановленного
+process 2 ещё не подключены.
+
+Следующий инкремент: включить generic `fork` в production syscall table и
+замкнуть минимальный child `exit`/parent `wait` lifecycle.
 
 ## 1. Цель и границы первого порта
 

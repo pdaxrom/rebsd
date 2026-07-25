@@ -53,6 +53,10 @@ _start:
     jne     .Lfailed
     movl    $I386_BOOTSTRAP_USER_RETURN_MAGIC, %ebx
     int     $0x30
+    testl   %eax, %eax
+    jne     .Lfailed
+    movl    $I386_BOOTSTRAP_FORK_CHILD_MAGIC, %ebx
+    int     $0x30
     ud2
 .Lfailed:
     xorl    %ebx, %ebx

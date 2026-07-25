@@ -1,10 +1,12 @@
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/time.h>
 
 #include "boot.h"
 
 int noproc __attribute__((weak));
 char *panicstr __attribute__((weak));
+struct timeval time __attribute__((weak));
 
 void
 idle(void)

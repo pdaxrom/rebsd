@@ -12,8 +12,10 @@ user-return signal/reschedule path и user trap-to-signal translation
 read-only initfs с production `getpid=1` и `argc/argv/envp` stack из
 собственного CPL3-контекста; proc0 владеет отдельными u-area/vmspace и
 повторно используемым idle context, проверенным двукратным
-proc1→proc0→proc1 switch через generic `setrq/swtch`; следующий gate —
-`newproc`/fork integration, 2026-07-25.
+proc1→proc0→proc1 switch через generic `setrq/swtch`; generic `newproc`
+создаёт PID 2 с отдельными vmspace/u-area и запускает его через fork
+trampoline в CPL3; следующий gate — production `fork`/`exit`/`wait`,
+2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -328,9 +330,15 @@ CR3/vmspace, `md_curuser`, `u_procp`, границы u-area stack, guards,
 `proc0-context: ok` и `scheduler-switch: ok` означают, что оба round-trip
 завершены и process 1 снова активен.
 
-`newproc` и fork нескольких живых процессов ещё не подключены.
+Generic `newproc` теперь клонирует process 1 в PID 2. Новый process входит
+через `i386_fork_trampoline` в скопированный CPL3 trapframe с `eax=0`,
+посылает отдельный child magic trap и через proc0 возвращает CPU parent.
+`process-fork: ok` проверяет маршрут
+proc1→proc0→proc2(CPL3)→proc0→proc1, отдельные vmspace/u-area/TSS stack,
+`allproc`/PID hash и сохранённый child kernel continuation. Child остаётся
+живым в `SSTOP`; syscall 2 и `exit`/`wait` ещё не подключены.
 
 1. Добавить оставшиеся machine headers/config lists.
-2. Подключить `newproc` и выполнить fork process 1→process 2 через scheduler.
+2. Подключить production syscall `fork`, затем минимальные `exit`/`wait`.
 3. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести generic `execve` до статического ELF32 init.
