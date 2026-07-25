@@ -117,10 +117,14 @@ vm_anon_busy_wait(struct vm_anon *anon, int nowait)
         }
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
         vm_object_stat_increment(&vm_object_statistics.vos_busy_waits);
+#if defined(VM_SINGLE_THREADED)
+        return EBUSY;
+#else
         int error = tsleep((caddr_t)anon, PSWP, 0);
 
         if (error != 0)
             return error;
+#endif
 #else
         return EBUSY;
 #endif
@@ -135,7 +139,9 @@ vm_anon_busy_clear(struct vm_anon *anon)
         return;
     anon->va_flags &= ~VM_ANON_BUSY;
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+#if !defined(VM_SINGLE_THREADED)
     wakeup((caddr_t)anon);
+#endif
 #endif
 }
 
@@ -187,7 +193,8 @@ vm_anon_alloc(void)
     return 0;
 }
 
-#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST) && \
+    !defined(VM_PAGER_NO_SWAP)
 static size_t
 vm_pager_swap_alloc(void)
 {
@@ -219,6 +226,27 @@ vm_pager_swap_io(size_t slot, struct vm_page *page, int read)
         return EFAULT;
     return swap(slot, (size_t)mapping, VM_PAGE_SIZE,
         read ? B_READ : 0);
+}
+#elif defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+static size_t
+vm_pager_swap_alloc(void)
+{
+    return 0;
+}
+
+static void
+vm_pager_swap_free(size_t slot)
+{
+    (void)slot;
+}
+
+static int
+vm_pager_swap_io(size_t slot, struct vm_page *page, int read)
+{
+    (void)slot;
+    (void)page;
+    (void)read;
+    return ENOSYS;
 }
 #else
 static size_t
@@ -1323,10 +1351,14 @@ vm_object_get_stats(struct vm_object_stats *stats)
 int
 vm_pager_swap_init(void)
 {
+#if defined(VM_PAGER_NO_SWAP)
+    return ENOSYS;
+#else
     if (!vm_object_initialized || nswap < VM_SWAP_BLOCKS + 1)
         return ENOSPC;
     vm_pager_swap_ready = 1;
     return 0;
+#endif
 }
 #else
 int

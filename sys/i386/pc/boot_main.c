@@ -4,6 +4,7 @@
 #include "paging.h"
 #include "pmap_bootstrap.h"
 #include "vm_bootstrap.h"
+#include "vmspace_bootstrap.h"
 
 static void
 i386_cpuid(i386_u32 leaf, i386_u32 *eax, i386_u32 *ebx,
@@ -324,6 +325,16 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("pmap-public: ok\n");
+
+    if (i386_vmspace_bootstrap_init() != 0 ||
+        i386_vmspace_bootstrap_selftest() != 0) {
+        i386_early_puts("vmspace-selftest: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("vmspace-selftest: ok\n");
+    i386_early_puts("vmspace-page-fault: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

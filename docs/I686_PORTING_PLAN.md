@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: шесть QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: семь QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -95,8 +95,29 @@
 - normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ и полный host
   VM/MIPS test suite проходят.
 
-Следующая веха: подключить generic `vm_map`/`vm_object`/`vmspace` к i386
-image и связать i386 page-fault path с `vmspace_fault`.
+Седьмой QEMU bring-up инкремент завершён:
+
+- ранний i386 image реально линкует generic `vm_map`, `vm_object`,
+  `vm_shm`, `vm_sysv_shm`, `vmspace` и split access/fault translation
+  units;
+- добавлены минимальные i386 `bzero`/`bcopy`, необходимые generic kernel
+  коду до подключения общего libkern;
+- для раннего однопоточного режима явно заданы `VM_SINGLE_THREADED` и
+  `VM_PAGER_NO_SWAP`; anonymous pages и COW работают, swap не имитируется;
+- MD activation регистрирует текущий vmspace, а i386 `#PF` сначала
+  проверяет существующий pmap и затем вызывает `vmspace_fault_context`;
+- QEMU self-test проверяет anonymous fault, kernel read/write access,
+  clone+COW с разными physical pages, CR3 activation, protection,
+  mincore/validation, полный reclaim и настоящий non-present page fault с
+  возвратом через `iret`;
+- deliberate kernel write-protection `#PF` по-прежнему не поглощается
+  vmspace и завершается ожидаемым diagnostic panic;
+- normal/trap smoke, расширенная RAM matrix и полный host VM/MIPS suite
+  проходят; `BOARD=maltael kernel-objects` также компилируется после
+  добавления ранних VM capability-флагов.
+
+Следующая веха: нейтрализовать оставшиеся MIPS process hooks, добавить i386
+u-area/context switch и безопасные `copyin/copyout`.
 LILO HDD gate выполняется после появления Linux-среды для установщика.
 
 ## 1. Цель и границы первого порта
@@ -326,14 +347,15 @@ divide-by-zero/page-fault дают диагностируемый panic, IRQ nes
 
 ### Этап 4. Physical memory и paging
 
-Bootstrap-часть этапа, generic physical-page allocator и публичный i386
+Bootstrap-часть этапа, generic physical-page allocator, публичный i386
 `pmap` выполнены: E820 normalization, ранний monotonic allocator, передача
 свободной памяти в `vm_phys_map`/`vm_page_allocator`, CR3 switch,
 4-КиБ identity mappings, permanent kernel direct map, supervisor-only PTE
 и writable protection. Low-level mapper умеет `map/unmap/protect/extract`,
 USER mappings и `invlpg`; `pmap` создаёт отдельные process directories,
-активирует их через CR3 и освобождает page-table pages. Ещё не выполнены
-generic `vmspace` integration и fault recovery для `copyin/copyout`.
+активирует их через CR3 и освобождает page-table pages. Generic `vmspace`,
+anonymous faults и COW подключены к i386 page-fault handler. Ещё не
+выполнены process context switch и fault recovery для `copyin/copyout`.
 
 1. Нормализовать BIOS/boot-protocol memory map, исключая low memory, ROM,
    kernel image, modules и MMIO holes.
@@ -568,5 +590,16 @@ timer-ticks: ok
 HALT
 ```
 
-Следующий инкремент — generic `vm_map`/`vm_object`/`vmspace` и подключение
-`vmspace_fault` к i386 page-fault path, а не userland или PCC.
+Definition of Done седьмого инкремента:
+
+```text
+vmspace-selftest: ok
+vmspace-page-fault: ok
+pic: ok
+pit: hz=100
+timer-ticks: ok
+HALT
+```
+
+Следующий инкремент — нейтральные process MD hooks, i386 u-area/context
+switch и `copyin/copyout`, а не storage, userland или PCC.

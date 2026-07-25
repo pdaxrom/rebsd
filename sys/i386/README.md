@@ -37,7 +37,9 @@ and the generic allocation/free/poison self-test runs in QEMU.  A permanent
 kernel direct map covers the first 1 GiB of physical memory.  The public
 i386 pmap self-test creates two address spaces, switches CR3, validates
 isolation/protection/execution, and verifies that wired page-table pages are
-reclaimed.  The generic-kernel integration audit is in
+reclaimed.  The image also links generic `vm_map`/`vm_object`/`vmspace`;
+its self-test exercises anonymous faults, clone+COW and an actual recoverable
+i386 page fault.  The generic-kernel integration audit is in
 `docs/I386_MD_API.md`.
 
 The default cross toolchain is:
@@ -55,5 +57,6 @@ diagnostics, remapped dual 8259A PICs, PIT IRQ0 at 100 Hz, normalized
 physical RAM, non-PAE 4 KiB bootstrap paging, and reusable low-level page
 mapping primitives.  It links the machine-independent `vm_phys`/`vm_page`
 allocator and implements the public pmap contract with per-process address
-spaces.  It does not yet connect generic `vmspace`, the rest of the generic
-kernel, storage, userland, or PCC.
+spaces, generic vmspace, anonymous memory and COW.  Early swap is explicitly
+disabled.  It does not yet connect process context switching, the rest of
+the generic kernel, storage, userland, or PCC.

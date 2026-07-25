@@ -31,9 +31,13 @@ PYTHON          ?= python3
 SETUP_SECTS      = 8
 SETUP_BYTES      = 4608
 
+VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
+                   vmspace.o vmspace_access.o vmspace_fault.o \
+                   vmspace_fault_api.o vmspace_fault_validate.o
 KERNEL_OBJS      = entry.o interrupt_entry.o early_console.o interrupt.o \
-                   pic.o pit.o memory.o paging.o vm_param.o vm_phys.o \
-                   vm_page.o vm_bootstrap.o pmap.o boot_main.o
+                   pic.o pit.o memory.o paging.o libkern.o vm_param.o \
+                   vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
+                   $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
 
 .DEFAULT_GOAL := all
 
@@ -74,7 +78,8 @@ early_console.o: $(I386_PC_SRC)/early_console.c \
 	    -c $< -o $@
 
 interrupt.o: $(I386_PC_SRC)/interrupt.c \
-	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/vmspace_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
@@ -96,6 +101,11 @@ memory.o: $(I386_PC_SRC)/memory.c $(I386_SRC)/include/boot.h \
 paging.o: $(I386_PC_SRC)/paging.c $(I386_SRC)/include/memory.h \
 	    $(I386_SRC)/include/paging.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+libkern.o: $(I386_COMMON_SRC)/libkern.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
 $(I386_GEN_INCLUDE)/sys:
@@ -138,11 +148,24 @@ pmap.o: $(I386_COMMON_SRC)/pmap.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+$(VM_CORE_OBJS): %.o: $(I386_VM_SRC)/%.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+vmspace_bootstrap.o: $(I386_PC_SRC)/vmspace_bootstrap.c \
+	    $(I386_SRC)/include/vmspace_bootstrap.h \
+	    $(I386_VM_SRC)/vmspace.h $(I386_VM_SRC)/vm_object.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
 	    $(I386_SRC)/include/pmap_bootstrap.h \
-	    $(I386_SRC)/include/vm_bootstrap.h
+	    $(I386_SRC)/include/vm_bootstrap.h \
+	    $(I386_SRC)/include/vmspace_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 

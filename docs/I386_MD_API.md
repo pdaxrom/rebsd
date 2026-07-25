@@ -1,7 +1,7 @@
 # i386 machine-dependent integration audit
 
-Статус: generic physical-page allocator и публичный i386 pmap подключены;
-следующий gate — generic vmspace и page-fault integration, 2026-07-25.
+Статус: generic physical-page allocator, публичный i386 pmap и vmspace
+fault path подключены; следующий gate — process MD hooks, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -96,10 +96,15 @@ PCC не входит в этот список и остаётся нетрон�
 
 ## Следующий integration gate
 
-1. Подключить generic `vm_map`, `vm_object`, `vmspace` и их dependencies к
-   раннему i386 image.
-2. Добавить QEMU vmspace gate для anonymous fault, COW, protect/unmap и
-   address-space isolation без MIPS TLB assumptions.
-3. Связать i386 user page fault с `vmspace_fault` и оставить kernel-mode
-   recovery hook для будущих `copyin/copyout`.
-4. После этого подключать process bootstrap и syscall ABI.
+Generic `vm_map`/`vm_object`/`vmspace` уже входят в ранний image. MD
+activation регистрирует active vmspace, а `#PF` использует
+`pmap_fault_active` и `vmspace_fault_context`; QEMU проверяет настоящий
+non-present fault, COW и address-space isolation. Capability-флаги раннего
+i386 режима не меняют обычную MIPS ветку: `BOARD=maltael kernel-objects`
+компилируется тем же GCC baseline.
+
+1. Ввести нейтральный process/u-area MD API и сохранить MIPS build green.
+2. Реализовать i386 kernel stack, context switch и current-vmspace binding.
+3. Добавить recovery table для `copyin/copyout/copyinstr` и negative fault
+   tests.
+4. Затем подключить process bootstrap, `int 0x80` и exec ABI.

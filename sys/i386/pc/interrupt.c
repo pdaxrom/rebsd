@@ -1,11 +1,14 @@
 #include "boot.h"
 #include "interrupt.h"
+#include "vmspace_bootstrap.h"
 
 #define I386_KERNEL_CODE_SELECTOR 0x0008u
 #define I386_IDT_INTERRUPT_GATE   0x8eu
 #define I386_IDT_USER_TRAP_GATE   0xefu
 #define I386_EXCEPTION_BREAKPOINT 3u
 #define I386_EXCEPTION_PAGE_FAULT 14u
+#define I386_PAGE_FAULT_WRITE     0x02u
+#define I386_PAGE_FAULT_USER      0x04u
 
 struct i386_idt_gate {
     i386_u16 offset_low;
@@ -92,11 +95,23 @@ i386_exception_halt(const struct i386_trapframe *frame)
 void
 i386_interrupt_dispatch(struct i386_trapframe *frame)
 {
+    i386_u32 cr2;
+    unsigned access;
     unsigned irq;
 
     if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
         ++i386_breakpoints;
         return;
+    }
+
+    if (frame->tf_vector == I386_EXCEPTION_PAGE_FAULT) {
+        __asm__ volatile ("movl %%cr2, %0" : "=r" (cr2));
+        access = (frame->tf_error & I386_PAGE_FAULT_WRITE) != 0 ?
+            0x02u : 0x01u;
+        if (i386_vmspace_fault_active(cr2, access,
+            (frame->tf_error & I386_PAGE_FAULT_USER) != 0 ||
+            (frame->tf_cs & 3u) == 3u) == 0)
+            return;
     }
 
     if (frame->tf_vector < I386_IRQ_BASE)
