@@ -1,9 +1,14 @@
-# Первый hardware gate: IBM 6563-W4G
+# Hardware gate: IBM 6563-W4G
 
-Этот gate проверяет только legacy BIOS boot, CPU, E820, VGA/COM1, PCI,
-8259A и PIT. Файловая система не монтируется. В текущем i686 image нет
-ATA-команд записи: IDE backend предоставляет только `IDENTIFY` и
-`READ SECTORS`, а generic disk регистрируется с `DISK_FLAG_READ_ONLY`.
+Первый gate успешно выполнен 2026-07-25 на реальном IBM 6563-W4G с
+VIA Apollo Pro 133, AGP VGA и IDE-CF. У машины нет floppy drive, поэтому
+существующий GRUB Legacy загрузил `rebsd-i686.bzimg` с Red Hat root
+partition `(hd0,2)`.
+
+Файловая система не монтируется. В текущем i686 image нет ATA-команд
+записи: IDE backend предоставляет только `IDENTIFY` и `READ SECTORS`,
+generic disk регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates
+возвращают `EROFS`.
 
 ## 1. Собрать и повторить QEMU gate
 
@@ -13,72 +18,91 @@ make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 all
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
-    bios-image-smoke bios-boot-smoke bios-ide-absent-smoke
+    boot-smoke bios-image-smoke bios-boot-smoke bios-ide-absent-smoke
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
     QEMU_MACHINE=pc-i440fx-5.1 bios-boot-smoke
 ```
 
-Носитель после успешного прогона:
+GRUB-compatible artifact:
 
 ```text
-/Users/sash/Work/N64/rebsd-i686-build/ibm6563/obj/sys/i386/rebsd-i686-bios-floppy.img
+/Users/sash/Work/N64/rebsd-i686-build/ibm6563/obj/sys/i386/rebsd-i686.bzimg
 ```
 
-Это raw 1.44 MB floppy image. `mkbios.py` печатает его SHA-256; после
-записи носителя надо повторно сверить checksum чтением с носителя.
+## 2. GRUB Legacy gate
 
-## 2. Подготовить первый безопасный запуск
+На Red Hat image устанавливается как обычный файл:
 
-1. Полностью выключить IBM и отсоединить питание.
-2. Для самого первого запуска отсоединить питание и data cable от всех
-   IDE HDD/CF/DOM. CD-ROM также можно оставить отсоединённым. Это исключает
-   влияние даже возможной ошибки раннего драйвера на ценный носитель.
-3. Оставить AGP VGA adapter, клавиатуру, RAM и floppy drive.
-4. Подключить COM1 через настоящий null-modem cable к машине, пишущей
-   полный log: `115200 8N1`, без hardware/software flow control.
-5. Записать raw image на заведомо выбранную 1.44 MB дискету. Команда записи
-   носителя разрушительна для выбранного device: имя `/dev/rdiskN` нельзя
-   подставлять до проверки через `diskutil list`.
-6. В BIOS выбрать boot с floppy первым. Не менять IDE geometry и не
-   разрешать BIOS flash/update utilities.
+```sh
+sudo install -m 0644 rebsd-i686.bzimg /boot/rebsd-i686.bzimg
+sudo sync
+```
 
-## 3. Ожидаемый результат без IDE
-
-VGA и COM1 должны показать последовательность, содержащую:
+`/boot/grub/grub.conf` получает запись в конце файла, чтобы существующий
+`default=2` продолжал выбирать Windows 98:
 
 ```text
-REBSD_I686_BOOT
-cpu: i686
-boot: linux-x86-2.02
-boot-loader: bios-int13
-memory-map: ok
-pci: mechanism=1
-pci-platform: via
-ide-primary-master: none
+title ReBSD i686 test
+	root (hd0,2)
+	kernel /boot/rebsd-i686.bzimg
+```
+
+GRUB переустанавливать не требуется; `initrd`, `root=`, `ro`, `rhgb` и
+`quiet` не используются. До замены image надо сохранить backup CF или
+как минимум исходного `grub.conf`.
+
+## 3. Фактический результат первого запуска
+
+VGA log завершился:
+
+```text
+ide-lba28: ok
+ide-backend-read: ok
+ide-lba0: ok
+ide-image: external
+ide-mbr: present
+ide-mbr-table: ok
+ide-part0-type: 0x0000000c
+ide-part0-start: 0x0000000000000800
+ide-part0-sectors: 0x0000000001dcc059
+ide-partition-read: external
+ide-last-lba: external
+ide-bounds: ok
+disk-attach: read-only
+disk-write-open: erofs
+disk-partition: external
+disk-strategy-read: external
+disk-strategy-eof: ok
+disk-strategy-write: erofs
+disk-close: ok
 pic: ok
 pit: hz=100
+timer-ticks: 0x0000000a
 timer-ticks: ok
 HALT
 ```
 
-Машина намеренно остановится на `HALT`; это успех, а не зависание. После
-этого питание выключается вручную. Сохранить весь COM1 log и фотографию
-последнего VGA screen.
+Это подтверждает BIOS/GRUB handoff, VGA console, primary IDE-CF LBA28
+reads, корректный MBR, bounded partition I/O, два независимых запрета
+записи, PIC и PIT на реальном chipset.
 
-Если нет banner, записать буквально последнее сообщение BIOS/boot sector.
-Если есть banner, но нет `HALT`, сохранить полный COM1 log и больше ничего
-к машине не подключать до разбора.
+## 4. Следующий hardware log
 
-## 4. Второй gate с IDE
+Первый длинный VGA log вытеснил начальные PCI строки. Обновлённый image
+повторяет перед `HALT`:
 
-Этот шаг выполняется только после успешного gate без IDE и разбора его
-лога. Сначала лучше подключить пустой тестовый IDE/CF носитель, а не диск
-с данными. Ожидаются VIA PCI IDs, `ide-primary-master: ata` и только
-read-only probe. Несовпадающая/отсутствующая ReBSD MBR partition допустима
-и должна печататься как `external` или `absent`; никаких записей быть не
-должно.
+```text
+hardware-summary: pci
+hardware-pci-host: ...
+hardware-pci-isa: ...
+hardware-pci-ide: ...
+hardware-pci-vga: ...
+hardware-pci-platform: via
+HALT
+```
 
-LILO для первого gate не нужен. Он остаётся будущим способом загрузки
-`rebsd-i686.bzimg` с HDD после проверки native BIOS floppy path и VIA
-hardware log.
+Для следующего gate достаточно заменить только `/boot/rebsd-i686.bzimg`,
+сверить размер/checksum, загрузить существующий пункт GRUB и
+сфотографировать последние строки. COM1 `115200 8N1` остаётся желательным,
+но для фиксации PCI IDs больше не обязателен.

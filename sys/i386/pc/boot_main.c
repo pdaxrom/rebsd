@@ -487,6 +487,7 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("timer-ticks: ok\n");
+    i386_pci_report_summary();
     i386_early_puts("HALT\n");
 
     for (;;) {

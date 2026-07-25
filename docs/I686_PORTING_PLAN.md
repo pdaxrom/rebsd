@@ -1,6 +1,7 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать семь QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: тридцать восемь bring-up инкрементов выполнены, включая первый
+IBM 6563-W4G hardware gate, 2026-07-25.
 
 ## Выполнено
 
@@ -715,9 +716,31 @@ BIOS-носителя IBM 6563-W4G включать не требуется.
   сначала floppy boot при физически отсоединённых IDE drives, COM1
   `115200 8N1`, полный serial log и ожидаемый `pci-platform: via`.
 
-Следующий внешний gate: один запуск `rebsd-i686-bios-floppy.img` на IBM
-6563-W4G без подключённых IDE-устройств. После получения полного COM1 log
-QEMU-разработка продолжится с учётом реальных VIA PCI IDs и BIOS quirks.
+Запланированный floppy gate был заменён загрузкой `rebsd-i686.bzimg` через
+уже установленный на IDE-CF GRUB Legacy: у конкретного IBM нет floppy
+drive. Перед gate сохранена рекомендация иметь резервную копию CF.
+
+Тридцать восьмой bring-up инкремент завершён на реальном IBM 6563-W4G:
+
+- существующий GRUB Legacy с CF загрузил `rebsd-i686.bzimg` через
+  Linux/x86 boot protocol без LILO и без floppy drive;
+- VGA text console стабильно показала полный поздний boot и штатный
+  `HALT`; PIC и PIT дали десять timer ticks при `HZ=100`;
+- primary IDE-CF прошёл `IDENTIFY`, LBA28 и bounded read-only backend
+  checks; MBR корректен, partition 0 имеет type `0x0c`, start LBA `0x800`
+  и `0x1dcc059` sectors;
+- данные на CF классифицированы как `external`; partition-relative read,
+  last-LBA и exact-EOF checks прошли;
+- generic disk attach подтвердил `read-only`, а open/write strategy
+  независимо вернули `EROFS`; аппаратный gate не выполнил ATA write;
+- поскольку начальные PCI/VIA строки ушли за верх VGA screen, следующий
+  image повторяет host/ISA/IDE/VGA IDs и platform непосредственно перед
+  `HALT` как компактный `hardware-summary`.
+
+Следующий внешний gate: загрузить обновлённый GRUB image и снять одной
+фотографией финальный `hardware-summary`, чтобы зафиксировать точные VIA
+694X/596B и AGP VGA IDs. После этого продолжить QEMU-first работу над
+read-only filesystem/root integration.
 
 ## 1. Цель и границы первого порта
 

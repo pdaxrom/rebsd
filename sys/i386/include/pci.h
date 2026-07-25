@@ -19,5 +19,6 @@ struct i386_pci_function {
 i386_u32 i386_pci_config_read32(i386_u8 bus, i386_u8 device,
     i386_u8 function, i386_u8 offset);
 int i386_pci_probe(void);
+void i386_pci_report_summary(void);
 
 #endif

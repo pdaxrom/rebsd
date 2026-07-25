@@ -89,6 +89,12 @@ BOOT_MARKERS = (
     "pic: ok",
     "pit: hz=100",
     "timer-ticks: ok",
+    "hardware-summary: pci",
+    "hardware-pci-host: 0x80861237",
+    "hardware-pci-isa: 0x80867000",
+    "hardware-pci-ide: 0x80867010",
+    "hardware-pci-vga: 0x12341111",
+    "hardware-pci-platform: intel",
     "HALT",
 )
 

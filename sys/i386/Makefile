@@ -512,6 +512,7 @@ boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/ide.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
+	    $(I386_SRC)/include/pci.h \
 	    $(I386_SRC)/include/pmap_bootstrap.h $(I386_SRC)/include/privilege.h \
 	    $(I386_SRC)/include/process.h \
 	    $(I386_SRC)/include/signal_machdep.h \

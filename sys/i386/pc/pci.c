@@ -31,6 +31,9 @@ struct i386_pci_inventory {
     int have_vga;
 };
 
+static struct i386_pci_inventory i386_pci_last_inventory;
+static int i386_pci_inventory_valid;
+
 i386_u32
 i386_pci_config_read32(i386_u8 bus, i386_u8 device,
     i386_u8 function, i386_u8 offset)
@@ -124,6 +127,38 @@ i386_pci_print_id(const char *label,
     i386_early_putc('\n');
 }
 
+static void
+i386_pci_print_platform(const char *label,
+    const struct i386_pci_inventory *inventory)
+{
+    i386_early_puts(label);
+    if (inventory->host.vendor == PCI_VENDOR_VIA ||
+        inventory->isa.vendor == PCI_VENDOR_VIA ||
+        inventory->ide.vendor == PCI_VENDOR_VIA)
+        i386_early_puts("via\n");
+    else if (inventory->host.vendor == PCI_VENDOR_INTEL)
+        i386_early_puts("intel\n");
+    else
+        i386_early_puts("generic\n");
+}
+
+void
+i386_pci_report_summary(void)
+{
+    const struct i386_pci_inventory *inventory;
+
+    if (!i386_pci_inventory_valid)
+        return;
+    inventory = &i386_pci_last_inventory;
+    i386_early_puts("hardware-summary: pci\n");
+    i386_pci_print_id("hardware-pci-host: ", &inventory->host);
+    i386_pci_print_id("hardware-pci-isa: ", &inventory->isa);
+    i386_pci_print_id("hardware-pci-ide: ", &inventory->ide);
+    if (inventory->have_vga)
+        i386_pci_print_id("hardware-pci-vga: ", &inventory->vga);
+    i386_pci_print_platform("hardware-pci-platform: ", inventory);
+}
+
 int
 i386_pci_probe(void)
 {
@@ -135,6 +170,7 @@ i386_pci_probe(void)
     unsigned function_count;
     unsigned function_index;
 
+    i386_pci_inventory_valid = 0;
     if (!i386_pci_mechanism_present())
         return 1;
     for (function_index = 0;
@@ -174,13 +210,8 @@ i386_pci_probe(void)
     i386_pci_print_id("pci-ide: ", &inventory.ide);
     if (inventory.have_vga)
         i386_pci_print_id("pci-vga: ", &inventory.vga);
-    if (inventory.host.vendor == PCI_VENDOR_VIA ||
-        inventory.isa.vendor == PCI_VENDOR_VIA ||
-        inventory.ide.vendor == PCI_VENDOR_VIA)
-        i386_early_puts("pci-platform: via\n");
-    else if (inventory.host.vendor == PCI_VENDOR_INTEL)
-        i386_early_puts("pci-platform: intel\n");
-    else
-        i386_early_puts("pci-platform: generic\n");
+    i386_pci_print_platform("pci-platform: ", &inventory);
+    i386_pci_last_inventory = inventory;
+    i386_pci_inventory_valid = 1;
     return 0;
 }
