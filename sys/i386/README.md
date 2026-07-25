@@ -58,11 +58,15 @@ and reports `process-image: fat-vfs`; no-disk boots report
 `process-image: initfs` and execute the embedded fallback.  A separate FAT32
 gate also mounts a valid disk without `/sbin/init` and requires the same
 fallback, matching an IBM CF whose existing FAT partition has no ReBSD init.
-The existing open/write `EROFS` gates remain active.  Host tests exercise
-the same reader on FAT16 and FAT32.  A separate 64 MiB FAT32 image uses MBR
-type `0x0c` and partition start LBA `0x800`, matching the IBM CF's observed
-scheme; direct-kernel and native-BIOS QEMU targets require the same root and
-storage-backed ELF checks on that image.
+Once in CPL3, the FAT-backed init opens its own `/sbin/init` through
+production `open(5)`, reads the ELF magic through `read(3)`, changes the
+file offset through `lseek(19)`, and releases the descriptor through
+`close(6)`.  The gate also requires `EBADF` after a repeated close and
+`EROFS` for a write open.  Host tests exercise the same reader on FAT16 and
+FAT32.  A separate 64 MiB FAT32 image uses MBR type `0x0c` and partition
+start LBA `0x800`, matching the IBM CF's observed scheme; direct-kernel and
+native-BIOS QEMU targets require the same root and storage-backed ELF/fd
+checks on that image.
 
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
@@ -178,5 +182,6 @@ generic disk layer, parses MBR partitions and exercises real block strategy
 reads.  The early FAT reader mounts the first partition, reads a
 deterministic root probe and supplies `/sbin/init` to the process-1 ELF
 loader; ATA writes and DMA are intentionally absent.  A full VFS root used
-through ordinary namei/open, the full syscall table, complete userland, and
-PCC remain outside the current image.
+through ordinary read-only namei/open/read/lseek/close is now present.
+Writable storage, the remaining syscall table, full descriptor teardown,
+complete userland, and PCC remain outside the current image.

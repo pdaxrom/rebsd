@@ -45,7 +45,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
                    libkern.o disk_subr.o disk.o devsw.o \
                    ufs_bio.o ufs_namei.o fat_subr.o fat_ro.o fat_vfs.o \
-                   fat_bootstrap.o vfs_bootstrap.o disk_bootstrap.o \
+                   fat_bootstrap.o vfs_bootstrap.o file_bootstrap.o \
+                   disk_bootstrap.o \
                    elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
                    sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
@@ -348,6 +349,17 @@ vfs_bootstrap.o: $(I386_PC_SRC)/vfs_bootstrap.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+file_bootstrap.o: $(I386_PC_SRC)/file_bootstrap.c \
+	    $(I386_SRC)/include/file_bootstrap.h \
+	    $(TOPSRC)/sys/include/dir.h $(TOPSRC)/sys/include/file.h \
+	    $(TOPSRC)/sys/include/inode.h \
+	    $(TOPSRC)/sys/include/mount.h $(TOPSRC)/sys/include/namei.h \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/resource.h \
+	    $(TOPSRC)/sys/include/time.h $(TOPSRC)/sys/include/uio.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 memory.o: $(I386_PC_SRC)/memory.c $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/memory.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
@@ -514,6 +526,7 @@ config.o: $(I386_PC_SRC)/config.c \
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/context.h \
 	    $(I386_SRC)/include/elf_bootstrap.h \
+	    $(I386_SRC)/include/file_bootstrap.h \
 	    $(I386_SRC)/include/initfs.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h \

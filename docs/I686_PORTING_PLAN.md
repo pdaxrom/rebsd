@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: сорок два bring-up инкремента выполнены, включая два
+Статус: сорок четыре bring-up инкремента выполнены, включая два
 IBM 6563-W4G hardware gate и QEMU-only FAT16/FAT32 storage-backed ELF
 gates, 2026-07-25.
 
@@ -852,6 +852,35 @@ filesystem interface, сохранив initfs fallback. Повторный IBM �
 чтения init к обычным file-descriptor syscalls, сохраняя read-only policy.
 Повторный IBM запуск пока не требуется; ATA writes, DMA и IRQ mode не
 включены.
+
+Сорок четвёртый QEMU bring-up инкремент завершён:
+
+- production syscall prefix теперь обслуживает стандартные номера
+  `read(3)`, `open(5)`, `close(6)` и `lseek(19)`; оставшиеся файловые
+  syscalls пока возвращают `ENOSYS`;
+- i686 получил минимальную совместимую `file[NFILE]`/descriptor
+  реализацию. Пользовательский pathname проходит через `copyinstr` и общий
+  `namei`, а чтение regular inode — через `fat_vfsops.vfs_rwip` и
+  `copyout` активного process vmspace;
+- read-only policy проверяется на syscall-границе: запись, создание и
+  truncation возвращают `EROFS`, directory read возвращает `EISDIR`, а
+  неверный или уже закрытый descriptor — `EBADF`;
+- выполняемый в CPL3 `/sbin/init` открывает собственный FAT-файл, читает
+  и проверяет `0x7fELF`, делает `lseek` на offset 1, повторно читает
+  `ELF`, закрывает descriptor и проверяет `EBADF`/`EROFS`;
+- после checkpoint kernel требует пустые process descriptor slots и
+  нулевые `file` reference counts, затем печатает `syscall-open: ok`,
+  `syscall-read: ok`, `syscall-lseek: ok`, `syscall-close: ok` и
+  `fd-fat-vfs: ok`;
+- direct/native-BIOS FAT16 и FAT32 gates прошли. No-IDE и смонтированный
+  FAT32 без `/sbin/init` корректно выполняют initfs fallback и пропускают
+  только storage-backed fd probe.
+
+Следующий QEMU-only инкремент: проверить разделяемый file offset/reference
+count через `fork`, закрывать унаследованные descriptors в раннем `exit` и
+после этого сближать bootstrap fd-код с общими
+`kern_descrip`/`sys_generic`/`sys_inode`. Повторный IBM запуск пока не
+требуется; ATA writes, DMA и IRQ mode не включены.
 
 ## 1. Цель и границы первого порта
 

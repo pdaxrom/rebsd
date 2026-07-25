@@ -170,7 +170,9 @@ int
 i386_syscall_install_production(void)
 {
     if (nsysent <= 20 || sysent[1].sy_call != rexit ||
-        sysent[2].sy_call != fork || sysent[7].sy_call != wait4 ||
+        sysent[2].sy_call != fork || sysent[3].sy_call != read ||
+        sysent[5].sy_call != open || sysent[6].sy_call != close ||
+        sysent[7].sy_call != wait4 || sysent[19].sy_call != lseek ||
         sysent[20].sy_call != getpid)
         return EINVAL;
     i386_syscall_set_table(sysent, (unsigned)nsysent);

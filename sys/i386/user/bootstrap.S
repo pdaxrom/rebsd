@@ -51,6 +51,73 @@ _start:
     int     $0x80
     cmpl    $1, %eax
     jne     .Lfailed
+    movl    $5, %eax
+    movl    $bootstrap_init_path, %ebx
+    xorl    %ecx, %ecx
+    xorl    %edx, %edx
+    int     $0x80
+    jnc     .Lvfs_fd_opened
+    cmpl    $I386_BOOTSTRAP_ENOENT, %eax
+    jne     .Lfailed
+    jmp     .Lvfs_fd_done
+.Lvfs_fd_opened:
+    testl   %eax, %eax
+    jne     .Lfailed
+    movl    %eax, %ebx
+    movl    $3, %eax
+    movl    $bootstrap_read_data, %ecx
+    movl    $4, %edx
+    int     $0x80
+    jc      .Lfailed
+    cmpl    $4, %eax
+    jne     .Lfailed
+    cmpl    $0x464c457f, bootstrap_read_data
+    jne     .Lfailed
+    movl    $19, %eax
+    xorl    %ebx, %ebx
+    movl    $1, %ecx
+    xorl    %edx, %edx
+    xorl    %esi, %esi
+    int     $0x80
+    jc      .Lfailed
+    cmpl    $1, %eax
+    jne     .Lfailed
+    movl    $3, %eax
+    xorl    %ebx, %ebx
+    movl    $bootstrap_read_data, %ecx
+    movl    $3, %edx
+    int     $0x80
+    jc      .Lfailed
+    cmpl    $3, %eax
+    jne     .Lfailed
+    cmpb    $0x45, bootstrap_read_data
+    jne     .Lfailed
+    cmpb    $0x4c, bootstrap_read_data + 1
+    jne     .Lfailed
+    cmpb    $0x46, bootstrap_read_data + 2
+    jne     .Lfailed
+    movl    $6, %eax
+    xorl    %ebx, %ebx
+    int     $0x80
+    jc      .Lfailed
+    movl    $6, %eax
+    xorl    %ebx, %ebx
+    int     $0x80
+    jnc     .Lfailed
+    cmpl    $I386_BOOTSTRAP_EBADF, %eax
+    jne     .Lfailed
+    movl    $5, %eax
+    movl    $bootstrap_init_path, %ebx
+    movl    $1, %ecx
+    xorl    %edx, %edx
+    int     $0x80
+    jnc     .Lfailed
+    cmpl    $I386_BOOTSTRAP_EROFS, %eax
+    jne     .Lfailed
+    xorl    %eax, %eax
+    movl    $I386_BOOTSTRAP_VFS_FD_MAGIC, %ebx
+    int     $0x30
+.Lvfs_fd_done:
     movl    $2, %eax
     int     $0x80
     jc      .Lfailed
@@ -136,10 +203,14 @@ _start:
     .p2align 2
 bootstrap_data:
     .long I386_BOOTSTRAP_USER_DATA_MAGIC
+bootstrap_init_path:
+    .asciz "/sbin/init"
 
     .section .bss, "aw", @nobits
     .p2align 2
 bootstrap_bss:
     .space 16
+bootstrap_read_data:
+    .space 4
 
     .section .note.GNU-stack, "", @progbits

@@ -2,6 +2,7 @@
 #include <sys/buf.h>
 #include <sys/callout.h>
 #include <sys/dir.h>
+#include <sys/file.h>
 #include <sys/inode.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -14,6 +15,7 @@ int nproc = NPROC;
 struct timezone tz = { 0, 0 };
 struct namecache namecache[NNAMECACHE];
 char bufdata[NBUF * MAXBSIZE];
+struct file file[NFILE];
 struct inode inode[NINODE];
 struct callout callout[NCALL];
 struct mount mount[NMOUNT];

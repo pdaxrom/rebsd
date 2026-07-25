@@ -10,6 +10,7 @@
 #include "context.h"
 #include "boot.h"
 #include "elf_bootstrap.h"
+#include "file_bootstrap.h"
 #include "initfs.h"
 #include "interrupt.h"
 #include "privilege.h"
@@ -50,6 +51,8 @@ static int i386_process_fork_parent_ready;
 static unsigned i386_process_fork_count;
 static int i386_process_zombie_before_wait;
 static int i386_process_fork_tested;
+static int i386_process_vfs_image;
+static int i386_process_vfs_fd_tested;
 static volatile unsigned i386_process_user_active;
 static volatile unsigned i386_process_user_result;
 
@@ -486,6 +489,30 @@ i386_process_handle_return(struct i386_trapframe *frame)
 
     expected_stack = (unsigned)(unsigned long)i386_bootstrap_uarea + USIZE;
     if (i386_process_fork_count == 0u &&
+        frame->tf_ebx == I386_BOOTSTRAP_VFS_FD_MAGIC) {
+        if (!i386_process_vfs_image || i386_process_vfs_fd_tested ||
+            md_curuser != i386_bootstrap_uarea ||
+            u.u_procp != i386_bootstrap_proc ||
+            frame->tf_vector != I386_USER_RETURN_VECTOR ||
+            frame->tf_cs != I386_USER_CODE_SELECTOR ||
+            frame->tf_ss != I386_USER_DATA_SELECTOR ||
+            frame->tf_ds != I386_USER_DATA_SELECTOR ||
+            frame->tf_useresp !=
+            i386_bootstrap_user_stack.ius_stack_pointer ||
+            (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 ||
+            frame->tf_eax != 0 ||
+            i386_file_bootstrap_validate_closed() != 0 ||
+            vmspace_current() != i386_bootstrap_vmspace ||
+            i386_tss_kernel_stack() != expected_stack) {
+            i386_process_user_result = EFAULT;
+            i386_privilege_return_to_kernel(frame,
+                (unsigned)(unsigned long)i386_process_user_kernel_return);
+            return 1;
+        }
+        i386_process_vfs_fd_tested = 1;
+        return 1;
+    }
+    if (i386_process_fork_count == 0u &&
         frame->tf_ebx == I386_BOOTSTRAP_FORK_PARENT_MAGIC) {
         if (md_curuser != i386_bootstrap_uarea ||
             u.u_procp != i386_bootstrap_proc ||
@@ -648,6 +675,8 @@ i386_process_bootstrap_user_probe(void)
     if (error != 0)
         return error;
     error = i386_vfs_bootstrap_init_image(&init_image, &init_size);
+    i386_process_vfs_image = error == 0;
+    i386_process_vfs_fd_tested = 0;
     if (error == 0)
         i386_early_puts("process-image: fat-vfs\n");
     else if (error == ENOENT) {
@@ -702,8 +731,18 @@ i386_process_bootstrap_user_probe(void)
             i386_bootstrap_user_stack.ius_envp);
     i386_process_user_active = 0;
     if (resumed != 1 ||
-        i386_process_user_result != I386_PROCESS_USER_MAGIC)
+        i386_process_user_result != I386_PROCESS_USER_MAGIC ||
+        (i386_process_vfs_image && !i386_process_vfs_fd_tested) ||
+        (!i386_process_vfs_image && i386_process_vfs_fd_tested) ||
+        i386_file_bootstrap_validate_closed() != 0)
         return EFAULT;
+    if (i386_process_vfs_fd_tested) {
+        i386_early_puts("syscall-open: ok\n");
+        i386_early_puts("syscall-read: ok\n");
+        i386_early_puts("syscall-lseek: ok\n");
+        i386_early_puts("syscall-close: ok\n");
+        i386_early_puts("fd-fat-vfs: ok\n");
+    }
     return i386_process_bootstrap_validate();
 
 failed:

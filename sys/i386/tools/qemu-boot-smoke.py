@@ -47,6 +47,11 @@ BOOT_MARKERS = (
     "process-bootstrap: ok",
     "process-table: ok",
     "process-image: fat-vfs",
+    "syscall-open: ok",
+    "syscall-read: ok",
+    "syscall-lseek: ok",
+    "syscall-close: ok",
+    "fd-fat-vfs: ok",
     "process-user: ok",
     "process-fork: ok",
     "syscall-fork: ok",
@@ -148,6 +153,11 @@ IDE_DISK_MARKERS = (
     "vfs-namei-init: ok",
     "vfs-read-init: ok",
     "process-image: fat-vfs",
+    "syscall-open: ok",
+    "syscall-read: ok",
+    "syscall-lseek: ok",
+    "syscall-close: ok",
+    "fd-fat-vfs: ok",
     "disk-close: ok",
 )
 
@@ -155,6 +165,11 @@ VFS_INIT_MARKERS = (
     "vfs-namei-init: ok",
     "vfs-read-init: ok",
     "process-image: fat-vfs",
+    "syscall-open: ok",
+    "syscall-read: ok",
+    "syscall-lseek: ok",
+    "syscall-close: ok",
+    "fd-fat-vfs: ok",
 )
 
 NO_DISK_BOOT_MARKERS = tuple(
@@ -212,6 +227,11 @@ EXCEPTION_MARKERS = {
         "process-bootstrap: ok",
         "process-table: ok",
         "process-image: fat-vfs",
+        "syscall-open: ok",
+        "syscall-read: ok",
+        "syscall-lseek: ok",
+        "syscall-close: ok",
+        "fd-fat-vfs: ok",
         "process-user: ok",
         "process-fork: ok",
         "syscall-fork: ok",
