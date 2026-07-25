@@ -1,0 +1,5 @@
+#
+# Placeholder kconfig template for the experimental i686 port.
+# The early boot milestone is built directly by sys/i386/Makefile; the
+# machine-independent kernel file list will be connected in the next phase.
+#

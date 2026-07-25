@@ -1,0 +1,114 @@
+ifeq ($(REBSD_OBJ_BUILD),)
+REBSD_TOPSRC_REL = ../..
+include ../../mk/obj-dispatch.mk
+else
+
+TOPSRC          ?= ../..
+BOARD           ?= pc
+I386_SRC         = $(TOPSRC)/sys/i386
+I386_BOOT_SRC    = $(I386_SRC)/boot
+I386_PC_SRC      = $(I386_SRC)/pc
+I386_TOOLS_SRC   = $(I386_SRC)/tools
+
+ifeq ($(BOARD),pc)
+else
+$(error Unsupported i386 BOARD=$(BOARD); expected pc)
+endif
+
+include $(TOPSRC)/target-i386.mk
+
+QEMU_I386       ?= qemu-system-i386
+QEMU_MACHINE    ?= pc-i440fx-9.2
+QEMU_CPU        ?= pentium3
+QEMU_MEMORY     ?= 64M
+PYTHON          ?= python3
+
+SETUP_SECTS      = 8
+SETUP_BYTES      = 4608
+
+KERNEL_OBJS      = entry.o early_console.o boot_main.o
+
+.DEFAULT_GOAL := all
+
+.PHONY: all kernel toolchain-check run run-serial debug boot-smoke \
+	boot-smoke-matrix clean
+
+all: toolchain-check kernel
+
+kernel: rebsd-i686.bzimg
+
+toolchain-check:
+	$(PYTHON) $(I386_TOOLS_SRC)/toolchain-check.py \
+	    --prefix $(I686_PREFIX) \
+	    --work-dir $(TOPOBJ)/tmp/i686-toolchain-check
+
+setup.o: $(I386_BOOT_SRC)/setup.S
+	$(CC) $(I686_ASFLAGS) -DSETUP_SECTS=$(SETUP_SECTS) -c $< -o $@
+
+setup.elf: setup.o $(I386_BOOT_SRC)/setup.ld
+	$(LD) $(I686_LDFLAGS) -T $(I386_BOOT_SRC)/setup.ld \
+	    -Map setup.map -o $@ setup.o
+
+setup.bin: setup.elf
+	$(OBJCOPY) -O binary $< $@
+	@test "$$(wc -c < $@ | tr -d ' ')" = "$(SETUP_BYTES)" || { \
+	    echo "setup.bin has unexpected size" >&2; exit 1; \
+	}
+
+entry.o: $(I386_BOOT_SRC)/entry.S
+	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
+
+early_console.o: $(I386_PC_SRC)/early_console.c \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+boot_main.o: $(I386_PC_SRC)/boot_main.c \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+rebsd-i686.elf: $(KERNEL_OBJS) $(I386_PC_SRC)/kernel.ld
+	$(LD) $(I686_LDFLAGS) -T $(I386_PC_SRC)/kernel.ld \
+	    -Map rebsd-i686.map -o $@ $(KERNEL_OBJS)
+	$(SIZE) $@
+
+rebsd-i686.bin: rebsd-i686.elf
+	$(OBJCOPY) -O binary $< $@
+
+rebsd-i686.bzimg: setup.bin rebsd-i686.bin \
+	    $(I386_TOOLS_SRC)/mkboot.py
+	$(PYTHON) $(I386_TOOLS_SRC)/mkboot.py \
+	    --setup setup.bin --kernel rebsd-i686.bin --output $@
+
+run run-serial: rebsd-i686.bzimg
+	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
+	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
+	    -serial stdio -display none -monitor none \
+	    -no-reboot -no-shutdown
+
+debug: rebsd-i686.bzimg
+	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
+	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
+	    -serial stdio -display none -monitor none \
+	    -no-reboot -no-shutdown -S -s
+
+boot-smoke: rebsd-i686.bzimg
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $<
+
+boot-smoke-matrix: rebsd-i686.bzimg
+	@for memory in 32M 64M 128M 256M; do \
+	    echo "boot-smoke-matrix: memory=$$memory"; \
+	    $(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	        --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	        --cpu $(QEMU_CPU) --memory $$memory --kernel $< || exit 1; \
+	done
+
+clean:
+	rm -f setup.o setup.elf setup.bin setup.map \
+	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
+	    rebsd-i686.bzimg rebsd-i686.map
+
+endif

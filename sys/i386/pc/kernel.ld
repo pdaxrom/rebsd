@@ -1,0 +1,51 @@
+OUTPUT_FORMAT("elf32-i386")
+OUTPUT_ARCH(i386)
+ENTRY(_start)
+
+PHDRS
+{
+    text PT_LOAD FLAGS(5);
+    data PT_LOAD FLAGS(6);
+}
+
+SECTIONS
+{
+    . = 0x00100000;
+    __kernel_start = .;
+
+    .text ALIGN(16) : {
+        KEEP(*(.text.boot))
+        *(.text .text.*)
+    } :text
+
+    .rodata ALIGN(16) : {
+        *(.rodata .rodata.*)
+    } :text
+
+    .data ALIGN(16) : {
+        *(.data .data.*)
+    } :data
+
+    __bss_start = ALIGN(16);
+    .bss __bss_start (NOLOAD) : {
+        *(.bss .bss.*)
+        *(COMMON)
+    } :data
+    __bss_end = ALIGN(16);
+
+    .bootstrap_stack __bss_end (NOLOAD) : {
+        . = . + 16384;
+    } :data
+    __bootstrap_stack_top = .;
+
+    __kernel_end = ALIGN(4096);
+
+    /DISCARD/ : {
+        *(.comment)
+        *(.note*)
+        *(.eh_frame*)
+    }
+
+    ASSERT(_start == 0x00100000,
+        "i686 protected-mode entry must be linked at 1 MiB")
+}
