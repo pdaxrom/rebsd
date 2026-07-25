@@ -590,3 +590,8 @@ minor 0
 cdev /dev/ttyS0
 major 3
 minor 0
+
+cdev /dev/fb0
+major 5
+minor 0
+mode 0666

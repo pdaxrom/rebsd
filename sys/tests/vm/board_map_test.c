@@ -91,18 +91,37 @@ static const struct expected_region malta_n64_8m_map[] = {
     RESERVED(0x00540000u, 0x00640000u, "/var ramdisk"),
     RESERVED(0x00640000u, 0x00800000u, "swap"),
 };
-#elif defined(TEST_CI20)
-static const struct expected_region ci20_map[] = {
+#elif defined(TEST_CI20) || defined(TEST_CI20_1G)
+#if defined(TEST_CI20)
+static const struct expected_region ci20_256m_map[] = {
     RESERVED(0x00000000u, 0x00100000u, "vectors/low RAM"),
     RESERVED(0x00100000u, 0x00180000u, "kernel"),
-    AVAILABLE(0x00180000u, 0x002fe000u, "ram"),
+    AVAILABLE(0x00180000u, 0x002fe000u, "low ram"),
     RESERVED(0x002fe000u, 0x00300000u, "bootstrap u area"),
     RESERVED(0x00300000u, 0x00700000u, "legacy user window"),
     RESERVED(0x00700000u, 0x00800000u, "/var ramdisk"),
     RESERVED(0x00800000u, 0x02800000u, "rootfs"),
     RESERVED(0x02800000u, 0x04800000u, "swap"),
-    AVAILABLE(0x04800000u, 0x10000000u, "ram"),
+    AVAILABLE(0x04800000u, 0x0f800000u, "low ram"),
+    RESERVED(0x0f800000u, 0x10000000u, "framebuffer"),
 };
+#endif
+
+#if defined(TEST_CI20_1G)
+static const struct expected_region ci20_1g_map[] = {
+    RESERVED(0x00000000u, 0x00100000u, "vectors/low RAM"),
+    RESERVED(0x00100000u, 0x00180000u, "kernel"),
+    AVAILABLE(0x00180000u, 0x002fe000u, "low ram"),
+    RESERVED(0x002fe000u, 0x00300000u, "bootstrap u area"),
+    RESERVED(0x00300000u, 0x00700000u, "legacy user window"),
+    RESERVED(0x00700000u, 0x00800000u, "/var ramdisk"),
+    RESERVED(0x00800000u, 0x02800000u, "rootfs"),
+    RESERVED(0x02800000u, 0x04800000u, "swap"),
+    AVAILABLE(0x04800000u, 0x0f800000u, "low ram"),
+    RESERVED(0x0f800000u, 0x10000000u, "framebuffer"),
+    AVAILABLE(0x30000000u, 0x60000000u, "high ram"),
+};
+#endif
 #elif defined(TEST_N64)
 static const struct expected_region n64_4m_map[] = {
     RESERVED(0x00000000u, 0x00001000u, "vectors"),
@@ -181,7 +200,7 @@ main(void)
     if (check_map(0x00800000u, malta_n64_8m_map,
         sizeof(malta_n64_8m_map) / sizeof(malta_n64_8m_map[0])) != 0)
         return 1;
-#elif defined(TEST_CI20)
+#elif defined(TEST_CI20) || defined(TEST_CI20_1G)
     if (MIPS_LEGACY_USER_BYTES != 0x00400000u ||
         MIPS_USER_MAXMEM <= MIPS_LEGACY_USER_BYTES ||
         MIPS_USER_VADDR_END != MIPS_USER_VADDR_START +
@@ -189,8 +208,15 @@ main(void)
         fprintf(stderr, "Ci20 user geometry is not decoupled\n");
         return 1;
     }
-    if (check_map(0x10000000u, ci20_map,
-        sizeof(ci20_map) / sizeof(ci20_map[0])) != 0)
+#if defined(TEST_CI20_1G)
+    if (CI20_HIGH_RAM_BYTES != 0x30000000u ||
+        check_map(0x40000000u, ci20_1g_map,
+        sizeof(ci20_1g_map) / sizeof(ci20_1g_map[0])) != 0)
+#else
+    if (CI20_HIGH_RAM_BYTES != 0 ||
+        check_map(0x10000000u, ci20_256m_map,
+        sizeof(ci20_256m_map) / sizeof(ci20_256m_map[0])) != 0)
+#endif
         return 1;
 #elif defined(TEST_N64)
     if (check_map(0x00400000u, n64_4m_map,

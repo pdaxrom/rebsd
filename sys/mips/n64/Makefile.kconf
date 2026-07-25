@@ -893,9 +893,11 @@ CFILES += $(N64_BOARD_SRC)/n64reset.c
 endif
 
 ifeq ($(N64_DEBUG_UART_ONLY),1)
-OBJS := $(filter-out video.o video_console.o si.o joybus.o \
+OBJS := $(filter-out drm.o drm_fb.o video.o video_console.o si.o joybus.o \
     if_usbn.o n64usbnet_proto.o n64cart_usbnet.o n64cart_usbecm.o,$(OBJS))
 CFILES := $(filter-out \
+    $S/drm/drm.c \
+    $S/drm/drm_fb.c \
     $S/mips/n64/video.c \
     $S/mips/n64/video_console.c \
     $S/mips/n64/si.c \
@@ -906,8 +908,10 @@ CFILES := $(filter-out \
     $S/mips/n64/n64cart_usbecm.c,$(CFILES))
 endif
 ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
-OBJS := $(filter-out video.o video_console.o si.o joybus.o,$(OBJS))
+OBJS := $(filter-out drm.o drm_fb.o video.o video_console.o si.o joybus.o,$(OBJS))
 CFILES := $(filter-out \
+    $S/drm/drm.c \
+    $S/drm/drm_fb.c \
     $S/mips/n64/video.c \
     $S/mips/n64/video_console.c \
     $S/mips/n64/si.c \

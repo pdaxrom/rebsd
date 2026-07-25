@@ -610,12 +610,8 @@ Either nonzero Linpack status makes `N64_PCC_DEBUG_END` nonzero.  The GCC
 runtime is isolated under `n64-linpack-gcc-runtime.<abi>` and normal
 `make clean` removes it.
 
-The N64 JPEG framebuffer viewer uses the local n64cart copy of `stb_image.h`.
-Override this path if the n64cart tree is in a different location:
-
-```
-make -C sys/mips BOARD=n64 kernel.z64 N64_STB_DIR=/path/to/N64cart/rom/src/stb
-```
+The N64 JPEG framebuffer viewer includes TJpgDec and has no external image
+decoder source dependency.
 
 The board build directory is `sys/mips/n64`.
 
@@ -1182,7 +1178,7 @@ reserve remains rounded up so the mapping cannot overlap RAM swap:
 8 MiB high-res: physical 0x00500000..0x0059ffff
 ```
 
-`N64FBIOC_GETMAP` reports `0x00800000` as a preferred virtual-address hint.
+`DRMFBIOC_GETMAP` reports `0x00800000` as a preferred virtual-address hint.
 The actual address is the return value of `mmap(2)` and belongs only to that
 process. `copyin`, `copyout`, and `baduaddr` validate framebuffer access through
 the same `vmspace` checks as other user mappings; no fixed-address bypass
@@ -1463,17 +1459,35 @@ rgbled 0 0 255     # blue
 rgbled 0 0 0       # off
 ```
 
-`/dev/fb0` is the N64 framebuffer character device. It exposes the current
-16-bit RGBA5551 framebuffer through read/write, mode ioctls, and a controlled
-uncached `MAP_SHARED` mapping:
+`/dev/fb0` is backed by the architecture-independent ReBSD DRM framebuffer
+core. It exposes the current 16-bit RGBA5551 framebuffer through read/write,
+Linux fbdev ioctls, common ReBSD mode ioctls, and a controlled uncached
+`MAP_SHARED` mapping. The Linux-compatible subset is:
 
 ```
-N64FBIOC_GETINFO   struct n64fb_info
-N64FBIOC_SETMODE   struct n64fb_mode
-N64FBIOC_GETMAP    struct n64fb_map
+FBIOGET_FSCREENINFO  struct fb_fix_screeninfo
+FBIOGET_VSCREENINFO  struct fb_var_screeninfo
+FBIOPUT_VSCREENINFO  struct fb_var_screeninfo
+FBIOPAN_DISPLAY      zero offsets only
+FBIOBLANK            unblank/blank/DPMS levels
 ```
 
-`N64FBIOC_GETMAP` returns `vaddr`, `bytes`, and `reserved_bytes`. `vaddr` is an
+RGBA5551 is described as truecolor with red, green, blue, and transparency
+bitfields at 11:5, 6:5, 1:5, and 0:1. ReBSD extensions provide explicit mode
+enumeration:
+
+```
+DRMFBIOC_GETINFO   struct drmfb_info
+DRMFBIOC_GETMAP    struct drmfb_map
+DRMFBIOC_GETMODE   struct drmfb_mode
+DRMFBIOC_SETMODE   struct drmfb_mode
+```
+
+The `DRMFBIOC_*` requests are ReBSD's common extension ABI. They are not Linux
+DRM/KMS or BSD `wsdisplay`; Linux compatibility is provided through the fbdev
+requests in `<linux/fb.h>`.
+
+`DRMFBIOC_GETMAP` returns `vaddr`, `bytes`, and `reserved_bytes`. `vaddr` is an
 optional address hint for `mmap(2)`, not an installed mapping. `bytes` is the
 current usable framebuffer length for the selected mode; `reserved_bytes` is
 the physically reserved range. Programs map `bytes` from offset zero and use
@@ -1503,12 +1517,13 @@ fbview /cart/background.jpg
 fbview /cart/moon.jpg
 ```
 
-It opens `/dev/fb0`, reads the active mode and mapping hint, calls `mmap`,
-decodes JPEG data through the local n64cart `stb_image.h`, preserves the image
-aspect ratio, clears the screen to black, and writes centered RGBA5551 pixels
-into the mapped framebuffer. Resizing is intentionally a small integer
-nearest-neighbor path in `fbview` itself, so the N64 userland does not pull in
-large 64-bit/double helper code from the STB resize implementation.
+It opens `/dev/fb0` through the common DRM ABI, reads the active mode and
+mapping hint, calls `mmap`, and streams baseline JPEG MCU blocks through
+TJpgDec directly into the mapped framebuffer. It preserves the image aspect
+ratio and uses 1/2, 1/4, or 1/8 JPEG downscaling before the final integer
+nearest-neighbor mapping. Memory use is therefore independent of the full
+decoded image size. The utility writes RGBA5551 on N64 and XRGB8888 on Ci20.
+Progressive and lossless JPEG files are rejected with a diagnostic.
 
 The VI setup reads the IPL TV type byte at `0xa4000009` and chooses PAL, NTSC,
 or MPAL timing. PAL uses the PAL timing registers with a centered 640x480

@@ -1,21 +1,28 @@
-.TH FBVIEW 1 "June 14, 2026"
+.TH FBVIEW 1 "July 25, 2026"
 .SH NAME
-fbview \- display a JPEG image on the N64 framebuffer
+fbview \- display a JPEG image on a ReBSD DRM framebuffer
 .SH SYNOPSIS
 .B fbview
 .I image.jpg
 .SH DESCRIPTION
 .B fbview
-loads a JPEG image, scales it to fit the current
+streams a baseline JPEG image, scales it to fit the current
 .IR /dev/fb0
 mode while preserving aspect ratio, clears the framebuffer, and draws the image
-as 16-bit RGBA5551 pixels.
+using the pixel format reported by the driver.  XRGB8888 and RGBA5551
+framebuffers are supported.
+.PP
+Large images are decoded in MCU blocks directly into the framebuffer.
+The decoder selects 1/2, 1/4, or 1/8 JPEG downscaling when appropriate, so
+memory consumption does not grow with the full decoded image size.
+.PP
+Progressive and lossless JPEG files are not supported.
 .PP
 The current framebuffer mode can be selected with
 .BR fbset (1).
 .SH FILES
 .TP
 .I /dev/fb0
-N64 framebuffer device.
+DRM framebuffer device.
 .SH SEE ALSO
 .BR fbset (1)

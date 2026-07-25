@@ -172,7 +172,7 @@ n64_console_glyph(int ch, unsigned char glyph[5])
 static void
 n64_console_geometry(void)
 {
-    struct n64fb_info info;
+    struct n64_video_info info;
 
     n64_video_get_info(&info);
     if (info.mode == console_mode)
@@ -957,7 +957,7 @@ n64_console_putc(int ch)
 void
 n64_console_panic_mode(void)
 {
-    struct n64fb_info info;
+    struct n64_video_info info;
 
     console_panic_mirror = 1;
     n64_video_get_info(&info);

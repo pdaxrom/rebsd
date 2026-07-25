@@ -743,7 +743,7 @@ the board-specific generated/appended manifest.
   trusted hardware-accurate setup
 - [x] Add process-local shared framebuffer access for `/dev/fb0`; the
   read/write path still copies bytes, while graphics uses the controlled
-  uncached `MAP_SHARED` interface and treats `N64FBIOC_GETMAP.vaddr` as a hint
+  uncached `MAP_SHARED` interface and treats `DRMFBIOC_GETMAP.vaddr` as a hint
 - [x] Hardware smoke-test the process-local `/dev/fb0` mmap path with
   `fbset fill` and `fbview` after removal of the global wired mapping;
   confirmed on an 8 MiB NTSC N64 with the GCC-kernel/GCC-userland full image

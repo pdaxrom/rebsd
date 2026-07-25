@@ -1,5 +1,5 @@
 #
-# N64 framebuffer mode utility.
+# ReBSD DRM framebuffer mode utility.
 #
 TOPSRC		= $(shell cd ../../..; pwd)
 include $(TOPSRC)/target.mk

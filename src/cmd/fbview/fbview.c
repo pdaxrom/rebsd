@@ -1,5 +1,4 @@
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
@@ -10,12 +9,30 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <machine/video.h>
+#include <sys/drm.h>
 
-#include "fbview_stb.h"
+#include "tjpgd.h"
 
-#define FB_DEV "/dev/fb0"
-#define RGB_CHANNELS 3
+#define FB_DEV                  "/dev/fb0"
+#define RGB_CHANNELS            3
+#define FBVIEW_JPEG_WORK_BYTES  8192
+
+struct fbview_session {
+    struct drmfb_info info;
+    struct drmfb_map map;
+    int image_fd;
+    int input_error;
+    int output_error;
+    unsigned decoded_width;
+    unsigned decoded_height;
+    unsigned output_width;
+    unsigned output_height;
+    unsigned output_x;
+    unsigned output_y;
+};
+
+static unsigned long jpeg_work[
+    FBVIEW_JPEG_WORK_BYTES / sizeof(unsigned long)];
 
 static void
 usage(void)
@@ -24,70 +41,21 @@ usage(void)
     exit(1);
 }
 
-static void *
-xmalloc(unsigned size, const char *what)
+static int
+open_image(const char *path)
 {
-    void *p;
-
-    p = malloc(size);
-    if (p == 0) {
-        fprintf(stderr, "fbview: %s: out of memory\n", what);
-        exit(1);
-    }
-    return p;
-}
-
-static unsigned char *
-load_file(const char *path, unsigned *sizep)
-{
-    struct stat st;
-    unsigned char *data;
-    unsigned size;
-    unsigned done;
     int fd;
-    int n;
 
     fd = open(path, O_RDONLY);
     if (fd < 0) {
         fprintf(stderr, "fbview: %s: %s\n", path, strerror(errno));
         exit(1);
     }
-    if (fstat(fd, &st) < 0) {
-        fprintf(stderr, "fbview: %s: %s\n", path, strerror(errno));
-        close(fd);
-        exit(1);
-    }
-    if (st.st_size <= 0 || st.st_size > 0x7fffffffL) {
-        fprintf(stderr, "fbview: %s: invalid file size\n", path);
-        close(fd);
-        exit(1);
-    }
-    size = (unsigned)st.st_size;
-    data = xmalloc(size, "jpeg buffer");
-    done = 0;
-    while (done < size) {
-        n = read(fd, data + done, size - done);
-        if (n < 0) {
-            fprintf(stderr, "fbview: %s: %s\n", path, strerror(errno));
-            free(data);
-            close(fd);
-            exit(1);
-        }
-        if (n == 0) {
-            fprintf(stderr, "fbview: %s: short read\n", path);
-            free(data);
-            close(fd);
-            exit(1);
-        }
-        done += (unsigned)n;
-    }
-    close(fd);
-    *sizep = size;
-    return data;
+    return fd;
 }
 
 static int
-open_fb(struct n64fb_info *info, struct n64fb_map *map)
+open_fb(struct drmfb_info *info, struct drmfb_map *map)
 {
     void *mapping;
     int fd;
@@ -97,18 +65,20 @@ open_fb(struct n64fb_info *info, struct n64fb_map *map)
         fprintf(stderr, "fbview: %s: %s\n", FB_DEV, strerror(errno));
         exit(1);
     }
-    if (ioctl(fd, N64FBIOC_GETINFO, info) < 0) {
+    if (ioctl(fd, DRMFBIOC_GETINFO, info) < 0) {
         fprintf(stderr, "fbview: get fb info: %s\n", strerror(errno));
         close(fd);
         exit(1);
     }
-    if (ioctl(fd, N64FBIOC_GETMAP, map) < 0) {
+    if (ioctl(fd, DRMFBIOC_GETMAP, map) < 0) {
         fprintf(stderr, "fbview: get fb map: %s\n", strerror(errno));
         close(fd);
         exit(1);
     }
-    if (map->bytes < info->height * info->stride) {
-        fprintf(stderr, "fbview: framebuffer map is too small\n");
+    if (info->width == 0 || info->height == 0 || info->stride == 0 ||
+        info->fb_bytes > map->bytes ||
+        info->height > info->fb_bytes / info->stride) {
+        fprintf(stderr, "fbview: invalid framebuffer geometry\n");
         close(fd);
         exit(1);
     }
@@ -134,54 +104,35 @@ rgb5551(const unsigned char *p)
     return (unsigned short)((r << 11) | (g << 6) | (b << 1) | 1);
 }
 
+static unsigned
+xrgb8888(const unsigned char *p)
+{
+    return ((unsigned)p[0] << 16) | ((unsigned)p[1] << 8) | p[2];
+}
+
+static int
+supported_fb(const struct drmfb_info *info)
+{
+    return (info->format == DRM_FORMAT_RGBA5551 && info->bpp == 16) ||
+        (info->format == DRM_FORMAT_XRGB8888 && info->bpp == 32);
+}
+
 static void
-clear_fb(volatile unsigned short *fb, unsigned pixels)
+clear_fb(const struct drmfb_info *info, const struct drmfb_map *map)
 {
     unsigned i;
 
-    for (i = 0; i < pixels; ++i)
-        fb[i] = 0;
-}
+    if (info->format == DRM_FORMAT_RGBA5551) {
+        volatile unsigned short *fb =
+            (volatile unsigned short *)map->vaddr;
 
-static void
-draw_rgb(volatile unsigned short *fb, unsigned fb_stride, unsigned x0,
-    unsigned y0, unsigned w, unsigned h, const unsigned char *rgb)
-{
-    unsigned x;
-    unsigned y;
-    volatile unsigned short *row;
-    const unsigned char *src;
+        for (i = 0; i < info->fb_bytes / sizeof(*fb); ++i)
+            fb[i] = 0;
+    } else {
+        volatile unsigned *fb = (volatile unsigned *)map->vaddr;
 
-    for (y = 0; y < h; ++y) {
-        row = fb + (y0 + y) * fb_stride + x0;
-        src = rgb + y * w * RGB_CHANNELS;
-        for (x = 0; x < w; ++x)
-            row[x] = rgb5551(src + x * RGB_CHANNELS);
-    }
-}
-
-static void
-resize_rgb_nearest(const unsigned char *input, unsigned iw, unsigned ih,
-    unsigned char *output, unsigned ow, unsigned oh)
-{
-    unsigned x;
-    unsigned y;
-    unsigned sx;
-    unsigned sy;
-    const unsigned char *src;
-    unsigned char *dst;
-
-    for (y = 0; y < oh; ++y) {
-        sy = ((unsigned long)y * ih) / oh;
-        dst = output + y * ow * RGB_CHANNELS;
-        for (x = 0; x < ow; ++x) {
-            sx = ((unsigned long)x * iw) / ow;
-            src = input + (sy * iw + sx) * RGB_CHANNELS;
-            dst[0] = src[0];
-            dst[1] = src[1];
-            dst[2] = src[2];
-            dst += RGB_CHANNELS;
-        }
+        for (i = 0; i < info->fb_bytes / sizeof(*fb); ++i)
+            fb[i] = 0;
     }
 }
 
@@ -211,69 +162,242 @@ fit_image(unsigned iw, unsigned ih, unsigned fw, unsigned fh,
     *ohp = oh;
 }
 
+static unsigned
+ceil_mul_div(unsigned value, unsigned multiplier, unsigned divisor)
+{
+    unsigned long product;
+
+    product = (unsigned long)value * multiplier;
+    return (unsigned)((product + divisor - 1) / divisor);
+}
+
+static size_t
+jpeg_input(JDEC *decoder, uint8_t *buffer, size_t bytes)
+{
+    struct fbview_session *session;
+    size_t done;
+    int count;
+
+    session = (struct fbview_session *)decoder->device;
+    if (buffer == 0) {
+        if (lseek(session->image_fd, (off_t)bytes, SEEK_CUR) ==
+            (off_t)-1) {
+            session->input_error = errno;
+            return 0;
+        }
+        return bytes;
+    }
+
+    done = 0;
+    while (done < bytes) {
+        count = read(session->image_fd, buffer + done, bytes - done);
+        if (count < 0) {
+            session->input_error = errno;
+            return 0;
+        }
+        if (count == 0)
+            break;
+        done += (size_t)count;
+    }
+    return done;
+}
+
+static int
+jpeg_output(JDEC *decoder, void *bitmap, JRECT *rect)
+{
+    struct fbview_session *session;
+    const unsigned char *pixels;
+    const unsigned char *src;
+    unsigned block_width;
+    unsigned dx_begin;
+    unsigned dx_end;
+    unsigned dy_begin;
+    unsigned dy_end;
+    unsigned dx;
+    unsigned dy;
+    unsigned sx;
+    unsigned sy;
+
+    session = (struct fbview_session *)decoder->device;
+    if (rect->right < rect->left || rect->bottom < rect->top ||
+        rect->right >= session->decoded_width ||
+        rect->bottom >= session->decoded_height) {
+        session->output_error = EINVAL;
+        return 0;
+    }
+
+    block_width = rect->right - rect->left + 1;
+    dx_begin = ceil_mul_div(rect->left, session->output_width,
+        session->decoded_width);
+    dx_end = ceil_mul_div((unsigned)rect->right + 1,
+        session->output_width, session->decoded_width);
+    dy_begin = ceil_mul_div(rect->top, session->output_height,
+        session->decoded_height);
+    dy_end = ceil_mul_div((unsigned)rect->bottom + 1,
+        session->output_height, session->decoded_height);
+    if (dx_end > session->output_width)
+        dx_end = session->output_width;
+    if (dy_end > session->output_height)
+        dy_end = session->output_height;
+
+    pixels = (const unsigned char *)bitmap;
+    for (dy = dy_begin; dy < dy_end; ++dy) {
+        sy = (unsigned)(((unsigned long)dy * session->decoded_height) /
+            session->output_height);
+        if (sy < rect->top || sy > rect->bottom)
+            continue;
+        if (session->info.format == DRM_FORMAT_RGBA5551) {
+            volatile unsigned short *row =
+                (volatile unsigned short *)((unsigned char *)
+                session->map.vaddr +
+                (session->output_y + dy) * session->info.stride) +
+                session->output_x;
+
+            for (dx = dx_begin; dx < dx_end; ++dx) {
+                sx = (unsigned)(((unsigned long)dx *
+                    session->decoded_width) / session->output_width);
+                if (sx < rect->left || sx > rect->right)
+                    continue;
+                src = pixels + ((sy - rect->top) * block_width +
+                    sx - rect->left) * RGB_CHANNELS;
+                row[dx] = rgb5551(src);
+            }
+        } else {
+            volatile unsigned *row =
+                (volatile unsigned *)((unsigned char *)
+                session->map.vaddr +
+                (session->output_y + dy) * session->info.stride) +
+                session->output_x;
+
+            for (dx = dx_begin; dx < dx_end; ++dx) {
+                sx = (unsigned)(((unsigned long)dx *
+                    session->decoded_width) / session->output_width);
+                if (sx < rect->left || sx > rect->right)
+                    continue;
+                src = pixels + ((sy - rect->top) * block_width +
+                    sx - rect->left) * RGB_CHANNELS;
+                row[dx] = xrgb8888(src);
+            }
+        }
+    }
+    return 1;
+}
+
+static const char *
+jpeg_error(JRESULT result)
+{
+    switch (result) {
+    case JDR_OK:
+        return "ok";
+    case JDR_INTR:
+        return "output interrupted";
+    case JDR_INP:
+        return "truncated image or input error";
+    case JDR_MEM1:
+        return "JPEG work area is too small";
+    case JDR_MEM2:
+        return "JPEG input buffer is too small";
+    case JDR_PAR:
+        return "invalid decoder parameter";
+    case JDR_FMT1:
+        return "invalid JPEG data";
+    case JDR_FMT2:
+        return "unsupported JPEG feature";
+    case JDR_FMT3:
+        return "unsupported progressive or lossless JPEG";
+    default:
+        return "unknown JPEG error";
+    }
+}
+
+static unsigned
+jpeg_scale(const JDEC *decoder, const struct drmfb_info *info)
+{
+    unsigned scale;
+
+    scale = 0;
+    while (scale < 3 &&
+        (((unsigned)decoder->width >> scale) > info->width ||
+        ((unsigned)decoder->height >> scale) > info->height))
+        ++scale;
+    return scale;
+}
+
 int
 main(int argc, char **argv)
 {
-    struct n64fb_info info;
-    struct n64fb_map map;
-    unsigned char *file_data;
-    unsigned char *image;
-    unsigned char *scaled;
-    volatile unsigned short *fb;
-    unsigned file_size;
-    unsigned out_w;
-    unsigned out_h;
-    unsigned x0;
-    unsigned y0;
-    int iw;
-    int ih;
-    int comp;
-    int fd;
+    struct fbview_session session;
+    JDEC decoder;
+    JRESULT result;
+    unsigned scale;
+    int fb_fd;
 
     if (argc != 2)
         usage();
 
-    fd = open_fb(&info, &map);
-    file_data = load_file(argv[1], &file_size);
-    image = fbview_stbi_load_rgb_from_memory(file_data, file_size, &iw, &ih,
-        &comp);
-    free(file_data);
-    if (image == 0) {
-        fprintf(stderr, "fbview: %s: %s\n", argv[1],
-            fbview_stbi_failure_reason());
-        munmap((void *)map.vaddr, map.bytes);
-        close(fd);
-        return 1;
-    }
-    if (iw <= 0 || ih <= 0) {
-        fprintf(stderr, "fbview: %s: invalid image size\n", argv[1]);
-        fbview_stbi_image_free(image);
-        munmap((void *)map.vaddr, map.bytes);
-        close(fd);
+    memset(&session, 0, sizeof(session));
+    session.image_fd = open_image(argv[1]);
+    result = jd_prepare(&decoder, jpeg_input, jpeg_work,
+        sizeof(jpeg_work), &session);
+    if (result != JDR_OK) {
+        fprintf(stderr, "fbview: %s: %s", argv[1], jpeg_error(result));
+        if (session.input_error != 0)
+            fprintf(stderr, ": %s", strerror(session.input_error));
+        fprintf(stderr, "\n");
+        close(session.image_fd);
         return 1;
     }
 
-    fit_image((unsigned)iw, (unsigned)ih, info.width, info.height,
-        &out_w, &out_h);
-    scaled = image;
-    if (out_w != (unsigned)iw || out_h != (unsigned)ih) {
-        scaled = xmalloc(out_w * out_h * RGB_CHANNELS, "resized image");
-        resize_rgb_nearest(image, (unsigned)iw, (unsigned)ih, scaled, out_w,
-            out_h);
+    fb_fd = open_fb(&session.info, &session.map);
+    if (!supported_fb(&session.info)) {
+        fprintf(stderr, "fbview: unsupported framebuffer format %u/%u bpp\n",
+            session.info.format, session.info.bpp);
+        munmap((void *)session.map.vaddr, session.map.bytes);
+        close(fb_fd);
+        close(session.image_fd);
+        return 1;
     }
 
-    fb = (volatile unsigned short *)map.vaddr;
-    clear_fb(fb, map.bytes / sizeof(*fb));
-    x0 = (info.width - out_w) / 2;
-    y0 = (info.height - out_h) / 2;
-    draw_rgb(fb, info.stride / sizeof(*fb), x0, y0, out_w, out_h, scaled);
+    scale = jpeg_scale(&decoder, &session.info);
+    session.decoded_width = (unsigned)decoder.width >> scale;
+    session.decoded_height = (unsigned)decoder.height >> scale;
+    if (session.decoded_width == 0 || session.decoded_height == 0) {
+        fprintf(stderr, "fbview: %s: invalid scaled image size\n", argv[1]);
+        munmap((void *)session.map.vaddr, session.map.bytes);
+        close(fb_fd);
+        close(session.image_fd);
+        return 1;
+    }
+    fit_image(session.decoded_width, session.decoded_height,
+        session.info.width, session.info.height,
+        &session.output_width, &session.output_height);
+    session.output_x =
+        (session.info.width - session.output_width) / 2;
+    session.output_y =
+        (session.info.height - session.output_height) / 2;
 
-    if (scaled != image)
-        free(scaled);
-    fbview_stbi_image_free(image);
-    munmap((void *)map.vaddr, map.bytes);
-    close(fd);
-    printf("%s: %dx%d -> %ux%u at %ux%u\n", argv[1], iw, ih, out_w, out_h,
-        info.width, info.height);
+    clear_fb(&session.info, &session.map);
+    result = jd_decomp(&decoder, jpeg_output, (uint8_t)scale);
+    if (result != JDR_OK) {
+        fprintf(stderr, "fbview: %s: %s", argv[1], jpeg_error(result));
+        if (session.input_error != 0)
+            fprintf(stderr, ": %s", strerror(session.input_error));
+        else if (session.output_error != 0)
+            fprintf(stderr, ": %s", strerror(session.output_error));
+        fprintf(stderr, "\n");
+        munmap((void *)session.map.vaddr, session.map.bytes);
+        close(fb_fd);
+        close(session.image_fd);
+        return 1;
+    }
+
+    asm volatile ("sync" ::: "memory");
+    munmap((void *)session.map.vaddr, session.map.bytes);
+    close(fb_fd);
+    close(session.image_fd);
+    printf("%s: %ux%u /%u -> %ux%u at %ux%u\n",
+        argv[1], decoder.width, decoder.height, 1u << scale,
+        session.output_width, session.output_height,
+        session.info.width, session.info.height);
     return 0;
 }

@@ -27,7 +27,10 @@ KCONFIG_SRCS    = $(KCONFIG_DIR)/Makefile $(KCONFIG_DIR)/config.h \
                   $(KCONFIG_DIR)/main.c $(KCONFIG_DIR)/mkioconf.c \
                   $(KCONFIG_DIR)/mkmakefile.c $(KCONFIG_DIR)/mkswapconf.c
 BOARD_KCONFIG_SRCS = $(wildcard $(BOARD_SOURCE_DIR)/Makefile.kconf \
-                     $(BOARD_SOURCE_DIR)/files.kconf $(BOARD_SOURCE_DIR)/devices.kconf)
+                     $(BOARD_SOURCE_DIR)/files.kconf \
+                     $(BOARD_SOURCE_DIR)/files.* \
+                     $(BOARD_SOURCE_DIR)/devices.kconf \
+                     $(BOARD_SOURCE_DIR)/devices.*)
 ifeq ($(BOARD_KCONFIG_SRCS),)
 BOARD_KCONFIG_SRCS = $(TOPSRC)/sys/mips/Makefile.kconf \
                      $(TOPSRC)/sys/mips/files.kconf \

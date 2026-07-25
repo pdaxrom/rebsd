@@ -1,13 +1,11 @@
-.TH FBSET 1 "June 12, 2026"
+.TH FBSET 1 "July 25, 2026"
 .UC 4
 .SH NAME
-fbset \- show or select the N64 framebuffer mode
+fbset \- inspect or change a ReBSD DRM framebuffer
 .SH SYNOPSIS
 .B fbset
 [
-.I 320x240
-|
-.I 640x480
+.I WIDTHxHEIGHT
 ]
 .PP
 .B fbset
@@ -17,30 +15,31 @@ fbset \- show or select the N64 framebuffer mode
 .PP
 .B fbset
 .B fill
-.I rgba5551
+.I pixel-value
 .SH DESCRIPTION
 .B fbset
-queries or changes the active N64 framebuffer mode through
+queries or changes the active DRM framebuffer mode through
 .IR /dev/fb0 .
-The framebuffer is always 16-bit RGBA5551.
+It uses the same interface on every supported platform.
+The utility also queries the Linux fbdev compatibility view and verifies that
+its geometry, stride, physical address, and framebuffer length agree with the
+native ReBSD DRM information.
 .PP
 With no arguments,
 .B fbset
-prints the current mode, framebuffer address, active TV type, and detected
-RDRAM size.
+prints the current geometry, pixel format, framebuffer address, mode index,
+pixel clock, and mapping information.
 .PP
 The
 .B fill
-form fills the current framebuffer with a 16-bit RGBA5551 value through the
-fixed user framebuffer mapping returned by
+form fills the current framebuffer with the supplied native pixel value
+through the shared mapping returned by
 .IR /dev/fb0 .
 This is a direct mapping smoke test, not a write(2) transfer.
 .PP
-The 320x240 mode is available on all supported N64 memory configurations.
-The 640x480 mode requires an Expansion Pak kernel built with
-.BR N64_HIGHRES_FB=1 .
-It returns an error on a 4 MiB system and on the default 8 MiB build, which
-keeps the extra memory available for swap.
+The Ci20 driver currently exposes 640x480 XRGB8888.  The N64 driver exposes
+320x240 RGBA5551 and, when framebuffer memory permits, 640x480 interlaced
+RGBA5551.
 .SH EXAMPLES
 Show the current framebuffer mode:
 .PP
@@ -50,7 +49,7 @@ fbset
 .fi
 .RE
 .PP
-Switch to 640x480 on an 8 MiB system:
+Select an advertised 640x480 mode:
 .PP
 .RS
 .nf
@@ -58,14 +57,15 @@ fbset 640x480
 .fi
 .RE
 .PP
-Fill the screen through the user framebuffer mapping:
+Fill an RGBA5551 framebuffer with blue, or an XRGB8888 framebuffer with red:
 .PP
 .RS
 .nf
 fbset fill 0x001f
+fbset fill 0x00ff0000
 .fi
 .RE
 .SH FILES
 .TP 12
 .I /dev/fb0
-N64 framebuffer device
+ReBSD DRM framebuffer device with Linux fbdev compatibility

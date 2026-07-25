@@ -172,6 +172,13 @@ pmap_alloc_table_page(vm_paddr_t *paddr, uint32_t **address)
 
     vm_page_request_init(&request);
     request.vpr_state = VM_PAGE_WIRED;
+#ifdef CI20
+    /*
+     * The refill vector accesses page-table pages through KSEG0, so these
+     * pages must remain in the directly mapped low physical window.
+     */
+    request.vpr_max_address = 0x1fffffffu;
+#endif
     error = vm_page_alloc(pmap_allocator, &request, &page);
     if (error != 0)
         return error;
