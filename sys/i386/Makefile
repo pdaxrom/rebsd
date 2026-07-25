@@ -9,6 +9,10 @@ I386_SRC         = $(TOPSRC)/sys/i386
 I386_BOOT_SRC    = $(I386_SRC)/boot
 I386_PC_SRC      = $(I386_SRC)/pc
 I386_TOOLS_SRC   = $(I386_SRC)/tools
+I386_VM_SRC      = $(TOPSRC)/sys/vm
+I386_GEN_INCLUDE = $(CURDIR)/include
+I386_VM_INCLUDES = -I$(I386_GEN_INCLUDE) -I$(TOPSRC)/sys \
+                   -I$(I386_SRC)/include
 
 ifeq ($(BOARD),pc)
 else
@@ -27,7 +31,8 @@ SETUP_SECTS      = 8
 SETUP_BYTES      = 4608
 
 KERNEL_OBJS      = entry.o interrupt_entry.o early_console.o interrupt.o \
-                   pic.o pit.o memory.o paging.o boot_main.o
+                   pic.o pit.o memory.o paging.o vm_param.o vm_phys.o \
+                   vm_page.o vm_bootstrap.o boot_main.o
 
 .DEFAULT_GOAL := all
 
@@ -92,14 +97,48 @@ paging.o: $(I386_PC_SRC)/paging.c $(I386_SRC)/include/memory.h \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
+$(I386_GEN_INCLUDE)/sys:
+	mkdir -p $(I386_GEN_INCLUDE)
+	ln -s $(abspath $(TOPSRC)/sys/include) $@
+
+$(I386_GEN_INCLUDE)/machine:
+	mkdir -p $(I386_GEN_INCLUDE)
+	ln -s $(abspath $(I386_SRC)/include/machine) $@
+
+vm_param.o: $(I386_VM_SRC)/vm_param.c \
+	    $(I386_VM_SRC)/vm_param.h $(I386_VM_SRC)/vm_types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+vm_phys.o: $(I386_VM_SRC)/vm_phys.c \
+	    $(I386_VM_SRC)/vm_phys.h $(I386_VM_SRC)/vm_page.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+vm_page.o: $(I386_VM_SRC)/vm_page.c \
+	    $(I386_VM_SRC)/vm_page.h $(I386_VM_SRC)/vm_phys.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+vm_bootstrap.o: $(I386_PC_SRC)/vm_bootstrap.c \
+	    $(I386_SRC)/include/memory.h \
+	    $(I386_SRC)/include/vm_bootstrap.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
-	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h
+	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
+	    $(I386_SRC)/include/vm_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
 rebsd-i686.elf: $(KERNEL_OBJS) $(I386_PC_SRC)/kernel.ld
-	$(LD) $(I686_LDFLAGS) -T $(I386_PC_SRC)/kernel.ld \
+	$(LD) $(I686_LDFLAGS) --gc-sections -T $(I386_PC_SRC)/kernel.ld \
 	    -Map rebsd-i686.map -o $@ $(KERNEL_OBJS)
 	$(SIZE) $@
 
@@ -156,5 +195,7 @@ clean:
 	rm -f setup.o setup.elf setup.bin setup.map \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
 	    rebsd-i686.bzimg rebsd-i686.map
+	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	rmdir $(I386_GEN_INCLUDE) 2>/dev/null || true
 
 endif

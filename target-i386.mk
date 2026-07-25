@@ -17,11 +17,13 @@ READELF         = $(I686_PREFIX)readelf
 I686_ARCH_FLAGS = -m32 -march=i686 -mtune=generic
 I686_CODE_FLAGS = -ffreestanding -fno-builtin -fno-stack-protector \
                   -fno-pic -fno-pie -fno-omit-frame-pointer \
+                  -ffunction-sections -fdata-sections \
                   -fno-asynchronous-unwind-tables -fno-unwind-tables \
                   -mno-sse -mno-sse2 -Wa,--noexecstack
 I686_WARN_FLAGS = -Wall -Wextra -Werror
 
-I686_CPPFLAGS   = -DKERNEL -DI386 -D__i386__
+I686_CPPFLAGS   = -DKERNEL -DI386 -D__i386__ \
+                  -DVM_PHYS_MAX_REGIONS=512
 I686_CFLAGS     = $(I686_ARCH_FLAGS) $(I686_CODE_FLAGS) $(I686_WARN_FLAGS) \
                   -std=gnu11 -Os
 I686_ASFLAGS    = $(I686_ARCH_FLAGS) $(I686_CODE_FLAGS) \

@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: четыре QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: пять QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -60,9 +60,22 @@
   USER mapping, removal и замену resident translation другой physical page;
 - normal/trap smoke и RAM matrix продолжают проходить.
 
-Следующая веха: поднять существующие `vm_phys_map`/`vm_page_allocator` над
-E820 и реализовать полный публичный i386 `pmap` contract с reclaim
-page-table pages.
+Пятый QEMU bring-up инкремент завершён:
+
+- generic `sys/vm/vm_param.c`, `vm_phys.c` и `vm_page.c` реально входят в
+  i686 kernel, без локальной копии allocator policy;
+- `vm_phys_boot_map` строится из нормализованных E820 RAM ranges;
+- страницы, уже занятые bootstrap allocator, и выделенная из RAM metadata
+  помечаются `VM_PAGE_RESERVED`, а остальные переходят в buddy allocator;
+- identity direct map используется для zero/poison/check освобождаемых
+  страниц;
+- существующий generic `vm_page_bootstrap_selftest` проверяет allocation,
+  constrained allocation, free и poison;
+- normal/trap smoke, RAM matrix 32/64/128/256 МиБ и полный host VM/MIPS
+  test suite проходят.
+
+Следующая веха: реализовать публичный i386 `pmap` contract с allocation и
+reclaim page-directory/page-table pages через generic `vm_page_allocator`.
 LILO HDD gate выполняется после появления Linux-среды для установщика.
 
 ## 1. Цель и границы первого порта
@@ -292,12 +305,13 @@ divide-by-zero/page-fault дают диагностируемый panic, IRQ nes
 
 ### Этап 4. Physical memory и paging
 
-Bootstrap-часть этапа выполнена: E820 normalization, monotonic physical
-allocator, CR3 switch, 4-КиБ identity mappings, supervisor-only PTE и
-writable protection. Low-level mapper уже умеет `map/unmap/protect/extract`,
-USER mappings и `invlpg`. Ещё не выполнены per-process address spaces,
-полный публичный `pmap` API, reclaim page-table pages и fault recovery для
-`copyin/copyout`.
+Bootstrap-часть этапа и generic physical-page allocator выполнены: E820
+normalization, ранний monotonic allocator, передача свободной памяти в
+`vm_phys_map`/`vm_page_allocator`, CR3 switch, 4-КиБ identity mappings,
+supervisor-only PTE и writable protection. Low-level mapper уже умеет
+`map/unmap/protect/extract`, USER mappings и `invlpg`. Ещё не выполнены
+per-process address spaces, полный публичный `pmap` API, reclaim
+page-table pages и fault recovery для `copyin/copyout`.
 
 1. Нормализовать BIOS/boot-protocol memory map, исключая low memory, ROM,
    kernel image, modules и MMIO holes.
@@ -511,5 +525,16 @@ timer-ticks: ok
 HALT
 ```
 
-Следующий инкремент — generic `vm_page_allocator` bootstrap и полный i386
-backend публичного `sys/vm/pmap.h`, а не userland или PCC.
+Definition of Done пятого инкремента:
+
+```text
+vm-bootstrap-reserved: ok
+vm-page-selftest: ok
+pic: ok
+pit: hz=100
+timer-ticks: ok
+HALT
+```
+
+Следующий инкремент — полный i386 backend публичного `sys/vm/pmap.h`, а не
+userland или PCC.

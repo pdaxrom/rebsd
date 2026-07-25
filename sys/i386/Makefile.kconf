@@ -1,5 +1,6 @@
 #
 # Placeholder kconfig template for the experimental i686 port.
-# The early boot milestone is built directly by sys/i386/Makefile; the
-# machine-independent kernel file list will be connected in the next phase.
+# The early boot milestone and generic VM allocator are built directly by
+# sys/i386/Makefile.  The complete machine-independent file list will be
+# connected after the public i386 pmap gate.
 #

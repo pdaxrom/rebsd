@@ -1,1 +1,4 @@
-# Machine-independent kernel files are connected after the early boot gate.
+# The early Makefile directly links vm_param, vm_phys and vm_page so the
+# allocator can be validated before the full kernel configuration is enabled.
+# Remaining machine-independent kernel files are connected after the pmap
+# and process MD gates.

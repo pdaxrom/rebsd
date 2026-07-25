@@ -19,8 +19,9 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc trap-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke-matrix
 ```
 
-The normal smoke validates E820 normalization, physical page allocation,
-bootstrap paging with `CR0.WP`, IDT entry/return, and ten PIT timer IRQs.
+The normal smoke validates E820 normalization, generic `vm_phys`/`vm_page`
+bootstrap, physical page allocation, bootstrap paging with `CR0.WP`, IDT
+entry/return, and ten PIT timer IRQs.
 The trap smoke deliberately raises divide error (`#DE`), general protection
 (`#GP`), and a write-protection page fault (`#PF`) and requires a diagnostic
 panic.  The matrix boots 32, 64, 128, and 256 MiB QEMU configurations.
@@ -29,8 +30,10 @@ clean.
 
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
-TLB invalidation through `invlpg`.  The generic-kernel integration audit is
-in `docs/I386_MD_API.md`.
+TLB invalidation through `invlpg`.  The normalized E820 ranges back the
+generic physical-page allocator; bootstrap and metadata pages stay reserved,
+and the generic allocation/free/poison self-test runs in QEMU.  The
+generic-kernel integration audit is in `docs/I386_MD_API.md`.
 
 The default cross toolchain is:
 
@@ -45,6 +48,6 @@ Current scope is deliberately small: real-mode setup, A20, BIOS E820, flat
 protected mode, COM1, VGA text output, a 256-entry IDT, CPU exception
 diagnostics, remapped dual 8259A PICs, PIT IRQ0 at 100 Hz, normalized
 physical RAM, non-PAE 4 KiB bootstrap paging, and reusable low-level page
-mapping primitives.  It does not yet connect the machine-independent
-kernel, the generic `vm_page` allocator, per-process address spaces,
-storage, userland, or PCC.
+mapping primitives.  It links the machine-independent `vm_phys` and
+`vm_page` allocator but does not yet connect the rest of the generic kernel,
+per-process address spaces, storage, userland, or PCC.

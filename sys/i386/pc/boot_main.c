@@ -2,6 +2,7 @@
 #include "interrupt.h"
 #include "memory.h"
 #include "paging.h"
+#include "vm_bootstrap.h"
 
 static void
 i386_cpuid(i386_u32 leaf, i386_u32 *eax, i386_u32 *ebx,
@@ -284,6 +285,30 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_puts("physical-free-pages: ");
     i386_early_put_hex32(i386_memory_free_pages());
     i386_early_putc('\n');
+
+    if (i386_vm_bootstrap_init() != 0) {
+        i386_early_puts("vm-page-bootstrap: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("vm-pages-total: ");
+    i386_early_put_hex32(i386_vm_total_pages());
+    i386_early_putc('\n');
+    i386_early_puts("vm-pages-free: ");
+    i386_early_put_hex32(i386_vm_free_pages());
+    i386_early_putc('\n');
+    i386_early_puts("vm-pages-reserved: ");
+    i386_early_put_hex32(i386_vm_reserved_pages());
+    i386_early_putc('\n');
+    i386_early_puts("vm-bootstrap-reserved: ok\n");
+    if (i386_vm_bootstrap_selftest() != 0) {
+        i386_early_puts("vm-page-selftest: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("vm-page-selftest: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

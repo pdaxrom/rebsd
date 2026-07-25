@@ -1,7 +1,7 @@
 # i386 machine-dependent integration audit
 
-Статус: первичный аудит перед подключением machine-independent kernel,
-2026-07-25.
+Статус: generic physical-page allocator подключён; следующий gate —
+публичный i386 pmap, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -46,9 +46,18 @@ reload CR3. Поэтому первый i386 backend реализуется от
 - bootstrap identity map и `CR0.PG|CR0.WP`;
 - QEMU self-test resident replacement, RO protection, USER bit и removal.
 
-Bootstrap allocator пока monotonic. Перед полным `pmap_create/destroy`
-page-table pages должны перейти под `vm_page_allocator`, чтобы их можно
-было корректно wire/free и учитывать в общей статистике.
+Ранний allocator остаётся monotonic только до bootstrap generic VM. Затем
+нормализованные E820 ranges передаются в `vm_phys_map` и
+`vm_page_allocator`: уже использованный prefix и allocator metadata
+помечаются reserved, остальные страницы доступны buddy allocator.
+`vm_page_bootstrap_selftest` проверяет обычное и constrained allocation,
+free и poison через identity direct map.
+
+Страницы существующего bootstrap page directory/page tables уже
+зарезервированы и не могут попасть в free lists. Новый публичный
+`pmap_create/destroy` должен выделять, wire и освобождать свои directory и
+table pages через `vm_page_allocator`, а не возвращаться к раннему
+monotonic allocator.
 
 ## Generic kernel blockers
 
@@ -73,9 +82,8 @@ PCC не входит в этот список и остаётся нетрон�
 
 ## Следующий integration gate
 
-1. Поднять `vm_phys_map`/`vm_page_allocator` из нормализованного E820.
-2. Перевести allocation page directory/page tables на `vm_page`.
-3. Реализовать публичный i386 `pmap_create/enter/remove/protect/extract`.
-4. Адаптировать существующий `sys/tests/vm/pmap_test.c` для i386 host/QEMU
+1. Перевести allocation page directory/page tables на `vm_page`.
+2. Реализовать публичный i386 `pmap_create/enter/remove/protect/extract`.
+3. Адаптировать существующий `sys/tests/vm/pmap_test.c` для i386 host/QEMU
    backend без MIPS TLB assumptions.
-5. Только после этого подключать process bootstrap и syscall ABI.
+4. Только после этого подключать process bootstrap и syscall ABI.

@@ -12,6 +12,7 @@ static unsigned i386_alloc_range;
 static i386_u32 i386_alloc_next;
 static i386_u32 i386_total_pages;
 static i386_u32 i386_free_pages;
+static unsigned i386_handed_off;
 
 static i386_u32
 i386_align_down(i386_u32 value)
@@ -167,6 +168,7 @@ i386_memory_init(i386_u32 boot_params_phys)
     i386_free_pages = 0;
     i386_alloc_range = 0;
     i386_alloc_next = 0;
+    i386_handed_off = 0;
     blocked_count = 0;
 
     count = *(const volatile i386_u8 *)(boot_params_phys +
@@ -242,12 +244,26 @@ i386_memory_free_pages(void)
 }
 
 i386_u32
+i386_memory_allocated_end(unsigned index)
+{
+    if (index >= i386_range_count)
+        return 0;
+    if (index < i386_alloc_range)
+        return i386_ranges[index].end;
+    if (index == i386_alloc_range)
+        return i386_alloc_next;
+    return i386_ranges[index].start;
+}
+
+i386_u32
 i386_phys_alloc_page(void)
 {
     volatile i386_u32 *words;
     i386_u32 address;
     unsigned index;
 
+    if (i386_handed_off)
+        return 0;
     while (i386_alloc_range < i386_range_count) {
         if (i386_alloc_next < i386_ranges[i386_alloc_range].end) {
             address = i386_alloc_next;
@@ -265,4 +281,10 @@ i386_phys_alloc_page(void)
             i386_alloc_next = i386_ranges[i386_alloc_range].start;
     }
     return 0;
+}
+
+void
+i386_memory_handoff(void)
+{
+    i386_handed_off = 1;
 }

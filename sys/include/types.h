@@ -40,6 +40,11 @@ typedef struct  label_t {
     unsigned val[12];               /* regs S0-S8, RA, GP and SP */
 } label_t;
 #endif
+#ifdef __i386__
+typedef struct  label_t {
+    unsigned val[7];                /* EBX, ESI, EDI, EBP, ESP, EIP, EFLAGS */
+} label_t;
+#endif
 typedef long    daddr_t;
 typedef char *  caddr_t;
 typedef u_int   ino_t;
