@@ -351,6 +351,13 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("uarea-selftest: ok\n");
+    if (i386_context_selftest() != 0) {
+        i386_early_puts("context-switch: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("context-switch: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

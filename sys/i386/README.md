@@ -44,7 +44,9 @@ i386 page fault.  The generic-kernel integration audit is in
 vmspace and direct map; the QEMU self-test covers a cross-page demand fault,
 COW isolation, invalid user ranges, protection and page reclamation.  The
 i386 process layer also allocates and reclaims guarded 16 KiB wired u-areas;
-context-switch frame construction is the next gate.
+its assembly context-switch self-test preserves callee-saved registers,
+EFLAGS and execution state while moving to a separate u-area kernel stack
+and back.  Schedulable fork/init frame construction is the next gate.
 
 The default cross toolchain is:
 
@@ -63,6 +65,8 @@ mapping primitives.  It links the machine-independent `vm_phys`/`vm_page`
 allocator and implements the public pmap contract with per-process address
 spaces, generic vmspace, anonymous memory, COW and safe copy I/O.  Early swap
 is explicitly disabled.  The neutral process MD contract and structural
-i386 u-area operations exist, but context switching is not connected yet.
+i386 u-area operations exist; the kernel can save and restore
+scheduler-compatible i386 contexts and switch u-area stacks.  Fork/init
+frames are not connected yet.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

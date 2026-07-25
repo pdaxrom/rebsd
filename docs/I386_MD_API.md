@@ -1,8 +1,9 @@
 # i386 machine-dependent integration audit
 
-Статус: generic allocator, публичный i386 pmap, vmspace fault path и
-`copyin/copyout` и i386 u-area allocator подключены; MIPS process symbols
-нейтрализованы, следующий gate — i386 context switch, 2026-07-25.
+Статус: generic allocator, публичный i386 pmap, vmspace fault path,
+`copyin/copyout`, i386 u-area allocator и kernel context switch подключены;
+MIPS process symbols нейтрализованы, следующий gate — fork/init frames и
+process bootstrap, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -120,12 +121,21 @@ I386 реализация выделяет u-area размером `USIZE=16 К�
 contiguous `VM_PAGE_WIRED` страницы и адресует их через kernel direct map.
 Реализованы guard, allocation/free, `md_curuser` и структурный fork-copy с
 очисткой context labels. QEMU проверяет alignment, copy isolation, current
-binding и точное восстановление free-page counter. Fork-copy ещё не является
-schedulable: `u_ssave` и trapframe будут подготовлены вместе с assembly
-context switch, а не фиктивными адресами.
+binding и точное восстановление free-page counter.
 
-1. Добавить i386 context save/restore и scheduler switch self-test.
-2. Подготовить fork/init kernel frames и связать CR3 + `md_curuser` switch.
-3. Добавить явный user-string primitive и перевести syscall pathname/exec
+Assembly `setjmp/longjmp` сохраняют и восстанавливают i386 callee-saved
+регистры, kernel ESP/EIP и EFLAGS по существующему generic scheduler ABI.
+`longjmp` атомарно с переходом меняет `md_curuser`; CR3 выбирается scheduler
+через уже существующий `vmspace_activate`. QEMU self-test сначала проверяет
+регистры, затем переходит на настоящий отдельный high direct-map u-area
+stack, выполняет C entry point и возвращается в исходный context. Оба guard
+и точный reclaim четырёхстраничных u-area после перехода также проверяются.
+
+Fork-copy ещё не schedulable: первый `u_ssave` и i386 trapframe должны быть
+построены MD кодом, а не тестом.
+
+1. Подготовить fork/init kernel frames и проверить связку CR3 +
+   `md_curuser` в scheduler-подобном переходе.
+2. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
-4. Затем подключить process bootstrap, `int 0x80` и exec ABI.
+3. Затем подключить process bootstrap, `int 0x80` и exec ABI.

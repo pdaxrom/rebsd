@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: девять QEMU bring-up инкрементов и первый process-MD refactor
+Статус: десять QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -159,8 +159,24 @@ Malta64. Следующий кодовый инкремент реализует
   binding и отсутствие утечки страниц; normal boot выдаёт
   `uarea-selftest: ok`.
 
-Следующий инкремент: i386 `setjmp/longjmp`-совместимый context save/restore,
-переключение kernel stack и совместное обновление CR3/`md_curuser`.
+Десятый QEMU bring-up инкремент завершён:
+
+- добавлены i386 `setjmp/longjmp`, совместимые с существующим scheduler ABI;
+- context label сохраняет EBX/ESI/EDI/EBP, kernel ESP/EIP и EFLAGS;
+- `longjmp` меняет `md_curuser` вместе с переходом, а выбор CR3 остаётся за
+  уже существующим `vmspace_activate` перед scheduler switch;
+- assembly self-test проверяет восстановление callee-saved регистров;
+- второй self-test переключается на настоящий отдельный 16-КиБ u-area
+  stack в kernel direct map, входит в C-функцию и возвращается в исходный
+  context;
+- проверяются stack bounds, current-uarea binding, оба guard и точный
+  reclaim wired pages;
+- normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, host VM suite и
+  `kernel-objects` для N64, CI20, Malta, MaltaEL и Malta64 проходят.
+
+Следующий инкремент: построить schedulable i386 fork/init frames, проверить
+переключение вместе с process vmspace/CR3 и затем подключить первый generic
+process bootstrap.
 
 ## 1. Цель и границы первого порта
 

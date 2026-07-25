@@ -34,9 +34,10 @@ SETUP_BYTES      = 4608
 VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
                    vmspace.o vmspace_access.o vmspace_fault.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
-KERNEL_OBJS      = entry.o interrupt_entry.o early_console.o interrupt.o \
+KERNEL_OBJS      = entry.o interrupt_entry.o context.o early_console.o interrupt.o \
                    pic.o pit.o memory.o paging.o libkern.o copyio.o \
-                   copyio_selftest.o vm_machdep.o uarea_selftest.o vm_param.o \
+                   copyio_selftest.o vm_machdep.o uarea_selftest.o \
+                   context_selftest.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
                    $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
 
@@ -71,6 +72,9 @@ entry.o: $(I386_BOOT_SRC)/entry.S
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
 
 interrupt_entry.o: $(I386_BOOT_SRC)/interrupt_entry.S
+	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
+
+context.o: $(I386_COMMON_SRC)/context.S
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
 
 early_console.o: $(I386_PC_SRC)/early_console.c \
@@ -134,6 +138,15 @@ vm_machdep.o: $(I386_COMMON_SRC)/vm_machdep.c \
 	    -c $< -o $@
 
 uarea_selftest.o: $(I386_PC_SRC)/uarea_selftest.c \
+	    $(I386_SRC)/include/process.h \
+	    $(I386_SRC)/include/machine/elf_machdep.h \
+	    $(I386_SRC)/include/machine/layout.h \
+	    $(I386_GEN_INCLUDE)/sys/user.h $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
 	    $(I386_SRC)/include/process.h \
 	    $(I386_SRC)/include/machine/elf_machdep.h \
 	    $(I386_SRC)/include/machine/layout.h \
