@@ -134,9 +134,11 @@ struct sysnod commands[] = {
     { "[", SYSTST },
 #endif
 
-    { "break", SYSBREAK },   { "cd", SYSCD },        { "continue", SYSCONT },
+    { "bg", SYSBG },         { "break", SYSBREAK },  { "cd", SYSCD },
+    { "continue", SYSCONT },
     { "echo", SYSECHO },     { "eval", SYSEVAL },    { "exec", SYSEXEC },
-    { "exit", SYSEXIT },     { "export", SYSXPORT }, { "hash", SYSHASH },
+    { "exit", SYSEXIT },     { "export", SYSXPORT }, { "fg", SYSFG },
+    { "hash", SYSHASH },     { "jobs", SYSJOBS },
 
 #ifdef RES
     { "login", SYSLOGIN },   { "newgrp", SYSLOGIN },
@@ -154,8 +156,4 @@ struct sysnod commands[] = {
     { "unset", SYSUNS },     { "wait", SYSWAIT }
 };
 
-#ifdef RES
-int no_commands = 26;
-#else
-int no_commands = 28;
-#endif
+int no_commands = sizeof(commands) / sizeof(commands[0]);

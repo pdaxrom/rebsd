@@ -69,6 +69,9 @@
 #define SYSUNS 26
 #define SYSMEM 27
 #define SYSTYPE 28
+#define SYSJOBS 30
+#define SYSFG 31
+#define SYSBG 32
 
 /* used for input and output of shell */
 #define INIO 19
@@ -458,3 +461,16 @@ void reset_dir(void);
 void hscan(void (*uscan)());
 char *nextpath(char *path);
 struct direct *getdir(int dirf);
+void sh_edit_init(void);
+void sh_edit_prompt(const char *prompt_string);
+int sh_edit_read(char *buffer, int size, int input_fd, int output_fd);
+void sh_edit_save_history(void);
+void job_init(int tty_fd);
+BOOL job_active(void);
+void job_child_start(void);
+void job_child_default_signals(void);
+int job_forked(int pid, BOOL background, struct trenod *tree);
+void job_notify(void);
+int job_list(void);
+int job_fg(char *spec);
+int job_bg(char *spec);

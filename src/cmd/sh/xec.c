@@ -291,6 +291,18 @@ int execute(struct trenod *argt, int exec_link, int errorflg, int *pf1, int *pf2
                         await(a1 ? stoi(a1) : -1, 1);
                         break;
 
+                    case SYSJOBS:
+                        exitval = job_list();
+                        break;
+
+                    case SYSFG:
+                        exitval = job_fg(a1);
+                        break;
+
+                    case SYSBG:
+                        exitval = job_bg(a1);
+                        break;
+
                     case SYSREAD:
                         rwait = 1;
                         exitval = readvar(&com[1]);
@@ -506,6 +518,9 @@ int execute(struct trenod *argt, int exec_link, int errorflg, int *pf1, int *pf2
 
         case TFORK:
             exitval = 0;
+            {
+                BOOL newjob = job_active() && (flags & forked) == 0;
+
             if (execflg && (treeflgs & (FAMP | FPOU)) == 0)
                 parent = 0;
             else {
@@ -545,13 +560,21 @@ int execute(struct trenod *argt, int exec_link, int errorflg, int *pf1, int *pf2
                  * This is the parent branch of fork;
                  * it may or may not wait for the child
                  */
-                if (treeflgs & FPRS && flags & ttyflg) {
+                if (!newjob && treeflgs & FPRS && flags & ttyflg) {
                     prn(parent);
                     newline();
                 }
                 if (treeflgs & FPCL)
                     closepipe(pf1);
-                if ((treeflgs & (FAMP | FPOU)) == 0)
+                if (newjob) {
+                    BOOL background = (treeflgs & (FAMP | FPOU)) != 0;
+
+                    exitval = job_forked(parent, background, t);
+                    if (background && (treeflgs & FAMP))
+                        assnum(&pcsadr, parent);
+                    if (!background && exitval && (flags & errflg))
+                        exitsh(exitval);
+                } else if ((treeflgs & (FAMP | FPOU)) == 0)
                     await(parent, 0);
                 else if ((treeflgs & FAMP) == 0)
                     post(parent);
@@ -563,6 +586,8 @@ int execute(struct trenod *argt, int exec_link, int errorflg, int *pf1, int *pf2
             {
                 flags |= forked;
                 fiotemp = NIL;
+                if (newjob)
+                    job_child_start();
 
                 if (linked == 1) {
                     swap_iodoc_nm(iotemp);
@@ -577,12 +602,16 @@ int execute(struct trenod *argt, int exec_link, int errorflg, int *pf1, int *pf2
                 postclr();
                 settmp();
                 /*
-                 * Turn off INTR and QUIT if `FINT'
-                 * Reset ramaining signals to parent
-                 * except for those `lost' by trap
+                 * Reset remaining signals to the parent defaults, except
+                 * for those `lost' by trap.  Without job control, async
+                 * commands ignore INTR and QUIT.  With job control they
+                 * already run outside the tty foreground process group and
+                 * must retain normal signal handling for a later `fg'.
                  */
                 oldsigs();
-                if (treeflgs & FINT) {
+                if (newjob)
+                    job_child_default_signals();
+                if ((treeflgs & FINT) && !job_active()) {
                     signal(SIGINT, SIG_IGN);
                     signal(SIGQUIT, SIG_IGN);
 
@@ -620,6 +649,7 @@ int execute(struct trenod *argt, int exec_link, int errorflg, int *pf1, int *pf2
                     execa(com, pos);
                 }
                 done();
+            }
             }
 
         case TPAR:

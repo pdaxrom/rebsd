@@ -1,9 +1,9 @@
 .\"	@(#)sh.1	6.3 (Berkeley) 5/5/86
 .\"
-.TH SH 1 "May 5, 1986"
+.TH SH 1 "July 26, 2026"
 .AT 3
 .SH NAME
-sh, for, case, if, while, \fB:\fP, \fB.\fP, break, continue, cd, eval, exec, exit, export, login, read, readonly, set, shift, times, trap, umask, wait \- command language
+sh, for, case, if, while, \fB:\fP, \fB.\fP, bg, break, continue, cd, eval, exec, exit, export, fg, jobs, login, read, readonly, set, shift, times, trap, umask, wait \- command language
 .SH SYNOPSIS
 .B sh
 [
@@ -431,6 +431,81 @@ to complete a command, the secondary prompt
 .RB ( \s-2$PS2\s0 )
 is issued.
 .PP
+.B Interactive line editing.
+.br
+When the shell is interactive and its input is a supported terminal,
+commands may be edited before they are executed.
+The left and right arrow keys move through the current line;
+the up and down arrow keys move through command history.
+Home and End move to the beginning and end of the line.
+Backspace and Delete remove characters.
+The following control characters are also recognized.
+.TP
+.B Ctrl-A
+Move to the beginning of the line.
+.PD 0
+.TP
+.B Ctrl-E
+Move to the end of the line.
+.TP
+.B Ctrl-B
+Move left one character.
+.TP
+.B Ctrl-F
+Move right one character.
+.TP
+.B Ctrl-P
+Select the previous history entry.
+.TP
+.B Ctrl-N
+Select the next history entry.
+.TP
+.B Ctrl-U
+Delete the whole line.
+.TP
+.B Ctrl-K
+Delete from the cursor to the end of the line.
+.TP
+.B Ctrl-W
+Delete the word before the cursor.
+.TP
+.B Ctrl-T
+Transpose adjacent characters.
+.TP
+.B Ctrl-L
+Clear and redraw the screen.
+.TP
+.B Ctrl-D
+Delete the character under the cursor, or signal end-of-file on an empty line.
+.TP
+.B Ctrl-C
+Discard the current input line.
+.PD
+.LP
+The
+.B Tab
+key completes reserved words, special commands, shell functions and
+executable commands found through
+.SM
+.B $PATH
+when the cursor is in command position.
+It completes file names elsewhere.
+Repeated
+.B Tab
+keystrokes cycle through matching candidates;
+.B Escape
+restores the original line.
+Directories are shown with a trailing slash and
+.B ~/
+is expanded using
+.BR $HOME .
+.LP
+The shell retains the most recent 100 non-empty input lines.
+History is read from
+.SM
+.B $HOME/.sh_history
+at startup and written there when the shell exits normally.
+.PP
 .B Input output.
 .br
 Before a command is executed its input and output
@@ -562,10 +637,52 @@ set \-k
 echo a=b c
 .fi
 .PP
+.B Job control.
+.br
+An interactive shell connected to a terminal places each external command
+or pipeline in a separate process group.
+A foreground job owns the terminal until it exits or stops.
+Typing the terminal suspend character, normally
+.BR Ctrl-Z ,
+stops the foreground job and returns control to the shell.
+Commands terminated by
+.B &
+run as background jobs without taking control of the terminal.
+The shell reports background jobs as
+.I Running,
+.I Stopped
+or
+.IR Done .
+.LP
+Jobs are identified by a job number printed in brackets.
+The commands
+.BR fg ,
+.B bg
+and
+.B jobs
+accept a job number in the form
+.I %number
+or
+.IR number ;
+a process ID may also be used.
+With no argument,
+.B fg
+selects the most recent job and
+.B bg
+selects the most recent stopped job.
+Job control is disabled when the shell has no controlling terminal.
+.PP
 .B Signals.
 .br
-The INTERRUPT and QUIT signals for an invoked
-command are ignored if the command is followed by
+With interactive job control, terminal signals are delivered to the
+foreground process group.
+Background jobs do not receive terminal-generated INTERRUPT, QUIT or
+SUSPEND signals while they remain in the background.
+When brought to the foreground with
+.BR fg ,
+they respond to those signals normally.
+Without job control, the INTERRUPT and QUIT signals for an invoked command
+are ignored if the command is followed by
 .BR & ;
 otherwise signals have the values inherited by the shell from its parent.
 (But see also
@@ -620,6 +737,12 @@ and return.  The search path
 .SM $PATH
 is used to find the directory containing
 .IR file .
+.TP
+\fBbg\fR \*(OK\fIjob\fR\*(CK
+Continue the specified stopped job in the background.
+If
+.I job
+is omitted, the most recent stopped job is selected.
 .TP
 \fBbreak\fR \*(OK\fIn\fR\*(CK
 Exit from the enclosing
@@ -676,6 +799,16 @@ The given names are marked for automatic export to the
 .I environment
 of subsequently-executed commands.
 If no arguments are given, a list of exportable names is printed.
+.TP
+\fBfg\fR \*(OK\fIjob\fR\*(CK
+Move the specified job to the foreground and wait for it.
+A stopped job is continued.
+If
+.I job
+is omitted, the most recent job is selected.
+.TP
+\fBjobs\fR
+List the active jobs and show whether each is running or stopped.
 .TP
 \fBlogin\fR \*(OK\fIarg\fR ...\*(CK
 Equivalent to 'exec login arg ...'.
@@ -842,6 +975,8 @@ The remaining flags and arguments are described under the
 command.
 .SH FILES
 .RB $HOME/ . \^profile
+.br
+.RB $HOME/ .sh_history
 .br
 /tmp/sh*
 .br

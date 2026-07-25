@@ -193,7 +193,11 @@ int readb()
             clearup();
         }
 
-        len = read(f->fdes, f->fbuf, (f->fsiz) & 0377);
+        if ((flags & prompt) && f->fstak == NIL)
+            len = sh_edit_read(f->fbuf, (f->fsiz) & 0377,
+                               f->fdes, output);
+        else
+            len = read(f->fdes, f->fbuf, (f->fsiz) & 0377);
 
         /* @@@ &0377 HACK, because of fsiz is unsigned char,
          * which is not supported on pdp11-unix.

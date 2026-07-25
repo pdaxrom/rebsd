@@ -42,7 +42,7 @@ N64_MINIMAL_ROOTFS = 1
 N64_MINIMAL_PCC_SMOKE = 0
 N64_ENABLE_ROMFS = 0
 endif
-N64_MINIMAL_ROOTFS_KBYTES ?= $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),3072,$(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),6144,2048))
+N64_MINIMAL_ROOTFS_KBYTES ?= $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),3072,$(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),7168,2048))
 N64_MINIMAL_ROOTFS_STAGE = rootfs.minimal.stage
 N64_MINIMAL_ROOTFS_MANIFEST = rootfs.minimal.manifest
 N64_MINIMAL_ROOTFS_IMG = rootfs.minimal.img
@@ -511,7 +511,7 @@ N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(MIPS_BUILD_SRC_DIR) \
                ELF2AOUT="$(N64_MINIMAL_USERLAND_ELF2AOUT)" \
                LDFLAGS="$(N64_MINIMAL_USERLAND_LDFLAGS)" \
                LIBC_COMPILER_RUNTIME=$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),libpcc,libc) \
-               SRC_ONLY_LIBS="startup-mips libc libm libutil" \
+               SRC_ONLY_LIBS="startup-mips libc libm libutil libreadline" \
                SRC_ONLY_SUBDIR="cmd" \
                CMD_ONLY_SUBDIR="$(N64_MINIMAL_ROOTFS_CMD_SUBDIRS)" \
                CMD_ONLY_STD="$(N64_MINIMAL_ROOTFS_CMD_STDS)" \
@@ -1106,6 +1106,7 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(N64_UTILITY_SMOKE_SRCS) $(N64_LINPACK_SMOKE_SRC) \
     $(MIPS_COMPILER_BENCH_SRC) $(MIPS_NATIVE_CRT0_SRC) \
     $(MIPS_LIBC_SRCS) $(MIPS_LIBM_SRCS) $(MIPS_LIBUTIL_SRCS) \
+    $(N64_LIBREADLINE_SRCS) \
     $(MIPS_USER_SRCS) \
     $(N64_MINIMAL_USERLAND_EXTRA_DEPS) $(N64_PCC_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile Makefile
