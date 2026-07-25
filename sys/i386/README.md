@@ -4,9 +4,10 @@ This directory contains the GCC-only bring-up port for legacy BIOS PCs.  The
 first hardware target is an IBM PC 300GL 6563-W4G with a Pentium III, VIA
 Apollo Pro 133 chipset, AGP video, and legacy IDE.
 
-The initial image implements Linux/x86 boot protocol 2.02.  The same
-`rebsd-i686.bzimg` is loaded directly by QEMU during bring-up and by LILO
-`image=` for the BIOS hard-disk gate.
+The initial image implements Linux/x86 boot protocol 2.02 and also contains
+a native legacy-BIOS boot sector.  `rebsd-i686.bzimg` is loaded directly by
+QEMU (and later by LILO), while `rebsd-i686-bios-floppy.img` boots the same
+payload through BIOS INT 13h without requiring LILO.
 
 ## Build and smoke test
 
@@ -15,6 +16,9 @@ Use a separate object root:
 ```sh
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc all
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-image-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-boot-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-ide-absent-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc trap-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke-matrix
 ```
@@ -28,6 +32,14 @@ panic.  The matrix boots 32, 64, 128, 256, 768, and 1024 MiB QEMU
 configurations.
 Build artifacts are written under `O/obj/sys/i386/`; the source tree remains
 clean.
+
+The deterministic 1.44 MB floppy image uses only legacy CHS reads: its boot
+sector loads the remaining setup sectors below 640 KiB, setup reads the
+protected-mode payload into a bounded low-memory staging area, and the
+protected-mode trampoline copies it to 1 MiB.  QEMU requires
+`boot-loader: bios-int13`; direct `-kernel` requires
+`boot-loader: linux-protocol`.  The first IBM 6563-W4G procedure is in
+`docs/I686_HARDWARE_GATE.md`.
 
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
@@ -130,13 +142,15 @@ real u-area, vmspace, CR3 and TSS kernel stack active after self-tests.
 Proc0 has a separate u-area/vmspace and a reusable saved idle context;
 generic `setrq`/`swtch` and the `qs` run queue are connected and tested
 twice.  Generic `newproc` creates PID 2 and runs its cloned trapframe in
-CPL3 through production syscall 2; child exit/wait are not connected yet.
+CPL3 through production syscall 2; production child `exit`/parent `wait4`
+and reap paths are connected and tested.
 The first persistent user mapping
 executes production syscall 20 from CPL3 and validates generic VM
 text/stack permissions.  A minimal in-memory ELF32
 loader now maps RX text and RW data+BSS from named `/sbin/init` in the
 early initfs, and an exec-compatible `argc/argv/envp` stack is active.
-Production `exit`/`wait`, storage-backed root and the full syscall
-table remain gated on the rest of the generic kernel.
-The rest of the generic kernel, storage, userland, and PCC remain outside
-the current image.
+A read-only legacy primary-master ATA PIO backend now attaches through the
+generic disk layer, parses MBR partitions and exercises real block strategy
+reads; ATA writes and DMA are intentionally absent.  A storage-backed root,
+the full syscall table, complete userland, and PCC remain outside the current
+image.

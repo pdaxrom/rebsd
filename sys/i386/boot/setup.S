@@ -13,13 +13,104 @@
 #define BOOT_PARAMS_SEG_DELTA   0x20
 #define BOOT_PARAMS_E820_COUNT  0x01e8
 #define BOOT_PARAMS_E820_TABLE  0x02d0
+#define BOOT_PARAMS_LOADER_TYPE 0x0210
+#define BOOT_PARAMS_EXT_LOADER_VER 0x0226
+#define BOOT_PARAMS_EXT_LOADER_TYPE 0x0227
+#define BIOS_LOADER_TYPE        0x00ff
+#define BIOS_LOADER_VERSION     0x0052
+#define BIOS_LOADER_EXTENSION   0x0042
 #define E820_ENTRY_BYTES        20
 #define E820_MAX_ENTRIES        128
 #define SMAP_MAGIC              0x534d4150
 #define KERNEL_LOAD_ADDRESS     0x00100000
+#define BIOS_SETUP_SEGMENT      0x9000
+#define BIOS_SETUP_ENTRY_SEGMENT 0x9020
+#define BIOS_KERNEL_SEGMENT     0x1000
+#define BIOS_KERNEL_MAX_PARAGRAPHS 0x7000
+#define BIOS_KERNEL_START_LBA   (SETUP_SECTS + 1)
 
     .section .setup, "ax", @progbits
     .code16
+
+    /*
+     * The first sector doubles as a legacy BIOS boot sector.  Linux/x86
+     * loaders ignore this code and enter setup_start at file offset 0x200.
+     * BIOS starts here at 0000:7c00; relocate the zero page to 0x90000,
+     * load the remaining setup sectors, and enter the same setup_start.
+     */
+    .org 0
+bios_boot_entry:
+    jmp     bios_boot_start
+    nop
+
+bios_boot_start:
+    cli
+    cld
+    xorw    %ax, %ax
+    movw    %ax, %ss
+    movw    $0x7c00, %sp
+    movw    %ax, %ds
+    movw    $0x7c00, %si
+    movw    $BIOS_SETUP_SEGMENT, %ax
+    movw    %ax, %es
+    xorw    %di, %di
+    movw    $256, %cx
+    rep movsw
+
+    movw    %ax, %ds
+    sti
+    movb    %dl, bios_boot_drive
+    movw    $3, bios_boot_retries
+
+bios_boot_read_setup:
+    movw    $BIOS_SETUP_ENTRY_SEGMENT, %ax
+    movw    %ax, %es
+    xorw    %bx, %bx
+    movb    $0x02, %ah
+    movb    $SETUP_SECTS, %al
+    xorw    %cx, %cx
+    movb    $2, %cl
+    xorw    %dx, %dx
+    movb    bios_boot_drive, %dl
+    int     $0x13
+    jnc     bios_boot_setup_ready
+
+    xorw    %ax, %ax
+    movb    bios_boot_drive, %dl
+    int     $0x13
+    decw    bios_boot_retries
+    jne     bios_boot_read_setup
+
+    movw    $bios_boot_error, %si
+    call    bios_puts
+bios_boot_halt:
+    cli
+    hlt
+    jmp     bios_boot_halt
+
+bios_boot_setup_ready:
+    movb    $BIOS_LOADER_TYPE, BOOT_PARAMS_LOADER_TYPE
+    movb    $BIOS_LOADER_VERSION, BOOT_PARAMS_EXT_LOADER_VER
+    movb    $BIOS_LOADER_EXTENSION, BOOT_PARAMS_EXT_LOADER_TYPE
+    ljmp    $BIOS_SETUP_ENTRY_SEGMENT, $0x0000
+
+bios_puts:
+    lodsb
+    testb   %al, %al
+    jz      bios_puts_done
+    movb    $0x0e, %ah
+    movw    $0x0007, %bx
+    int     $0x10
+    jmp     bios_puts
+bios_puts_done:
+    ret
+
+bios_boot_retries:
+    .word 0
+bios_boot_drive:
+    .byte 0
+bios_boot_error:
+    .asciz "ReBSD setup read error"
 
     /*
      * Fixed Linux setup header offsets.  mkboot.py fills syssize after the
@@ -63,6 +154,123 @@ setup_start:
 setup_trampoline:
     jmp setup_entry
 
+/*
+ * Read the protected-mode payload through legacy INT 13h, one sector at a
+ * time, into 0x10000..0x7ffff.  This deliberately uses CHS so the first
+ * hardware gate works with a plain 1.44 MB floppy and an old BIOS without
+ * Enhanced Disk Drive extensions.
+ */
+bios_load_kernel:
+    movl    0x01f4, %eax                /* syssize in 16-byte paragraphs */
+    testl   %eax, %eax
+    jz      bios_load_failed
+    cmpl    $BIOS_KERNEL_MAX_PARAGRAPHS, %eax
+    ja      bios_load_failed
+    addl    $31, %eax
+    shrl    $5, %eax                    /* sectors = ceil(syssize / 32) */
+    movw    %ax, bios_sector_count
+
+    movw    $18, bios_sectors_per_track
+    movw    $2, bios_head_count
+    movb    bios_boot_drive, %dl
+    movb    $0x08, %ah
+    int     $0x13
+    jc      bios_geometry_ready
+    movb    %cl, %al
+    andb    $0x3f, %al
+    jz      bios_load_failed
+    xorb    %ah, %ah
+    movw    %ax, bios_sectors_per_track
+    movb    %dh, %al
+    incb    %al
+    xorb    %ah, %ah
+    movw    %ax, bios_head_count
+
+bios_geometry_ready:
+    movw    bios_sectors_per_track, %ax
+    mulw    bios_head_count
+    testw   %dx, %dx
+    jnz     bios_load_failed
+    movw    %ax, bios_sectors_per_cylinder
+    movw    $BIOS_KERNEL_START_LBA, bios_current_lba
+    movw    $BIOS_KERNEL_SEGMENT, bios_load_segment
+
+bios_load_next:
+    cmpw    $0, bios_sector_count
+    je      bios_load_done
+
+    movw    bios_current_lba, %ax
+    xorw    %dx, %dx
+    divw    bios_sectors_per_cylinder
+    cmpw    $1023, %ax
+    ja      bios_load_failed
+    movw    %ax, bios_cylinder
+    movw    %dx, %ax
+    xorw    %dx, %dx
+    divw    bios_sectors_per_track
+    movb    %al, bios_head
+    incw    %dx
+    movb    %dl, bios_sector
+    movw    $3, bios_read_retries
+
+bios_read_sector:
+    movw    bios_load_segment, %ax
+    movw    %ax, %es
+    xorw    %bx, %bx
+    movw    bios_cylinder, %ax
+    movb    %al, %ch
+    movb    bios_sector, %cl
+    andb    $0x03, %ah
+    shlb    $6, %ah
+    orb     %ah, %cl
+    movb    bios_head, %dh
+    movb    bios_boot_drive, %dl
+    movb    $0x02, %ah
+    movb    $1, %al
+    int     $0x13
+    jnc     bios_sector_loaded
+
+    xorw    %ax, %ax
+    movb    bios_boot_drive, %dl
+    int     $0x13
+    decw    bios_read_retries
+    jne     bios_read_sector
+    jmp     bios_load_failed
+
+bios_sector_loaded:
+    incw    bios_current_lba
+    addw    $0x20, bios_load_segment
+    decw    bios_sector_count
+    jmp     bios_load_next
+
+bios_load_done:
+    clc
+    ret
+bios_load_failed:
+    stc
+    ret
+
+bios_sectors_per_track:
+    .word 0
+bios_head_count:
+    .word 0
+bios_sectors_per_cylinder:
+    .word 0
+bios_current_lba:
+    .word 0
+bios_sector_count:
+    .word 0
+bios_load_segment:
+    .word 0
+bios_cylinder:
+    .word 0
+bios_read_retries:
+    .word 0
+bios_head:
+    .byte 0
+bios_sector:
+    .byte 0
+
     .org 0x1000
 setup_entry:
     cli
@@ -79,6 +287,22 @@ setup_entry:
     movw    %ax, %ss
     movw    $0x8000, %sp
 
+    cmpb    $BIOS_LOADER_TYPE, BOOT_PARAMS_LOADER_TYPE
+    jne     setup_kernel_ready
+    cmpb    $BIOS_LOADER_VERSION, BOOT_PARAMS_EXT_LOADER_VER
+    jne     setup_kernel_ready
+    cmpb    $BIOS_LOADER_EXTENSION, BOOT_PARAMS_EXT_LOADER_TYPE
+    jne     setup_kernel_ready
+    sti
+    call    bios_load_kernel
+    cli
+    jnc     setup_kernel_ready
+    movw    $bios_kernel_error, %si
+    call    bios_puts
+    jmp     bios_boot_halt
+
+setup_kernel_ready:
+    movw    %ds, %ax
     movzwl  %ax, %esi
     shll    $4, %esi                    /* physical boot_params address */
 
@@ -160,13 +384,30 @@ protected_entry:
     movw    %ax, %ss
     leal    0x8000(%esi), %esp
 
+    cmpb    $BIOS_LOADER_TYPE, BOOT_PARAMS_LOADER_TYPE(%esi)
+    jne     protected_kernel_ready
+    cmpb    $BIOS_LOADER_VERSION, BOOT_PARAMS_EXT_LOADER_VER(%esi)
+    jne     protected_kernel_ready
+    cmpb    $BIOS_LOADER_EXTENSION, BOOT_PARAMS_EXT_LOADER_TYPE(%esi)
+    jne     protected_kernel_ready
+    pushl   %esi
+    movl    0x01f4(%esi), %ecx
+    shll    $2, %ecx                    /* paragraphs to 32-bit words */
+    movl    $0x00010000, %esi
+    movl    $KERNEL_LOAD_ADDRESS, %edi
+    rep movsl
+    popl    %esi
+
+protected_kernel_ready:
     movl    $KERNEL_LOAD_ADDRESS, %eax
     jmp     *%eax
 
     .code16
-    .org 0x1100
+    .org 0x1180
 kernel_version:
     .asciz "ReBSD i686 early"
+bios_kernel_error:
+    .asciz "ReBSD kernel read error"
 
     .org 0x11ff
     .byte 0

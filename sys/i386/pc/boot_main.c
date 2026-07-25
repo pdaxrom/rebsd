@@ -201,6 +201,15 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_puts("REBSD_I686_BOOT\n");
     i386_early_puts("cpu: i686\n");
     i386_early_puts("boot: linux-x86-2.02\n");
+    if (i386_boot_byte(boot_params_phys, I386_BOOT_PARAMS_LOADER_TYPE) ==
+        I386_BOOT_LOADER_BIOS &&
+        i386_boot_byte(boot_params_phys,
+        I386_BOOT_PARAMS_EXT_LOADER_VER) == I386_BOOT_LOADER_BIOS_VER &&
+        i386_boot_byte(boot_params_phys,
+        I386_BOOT_PARAMS_EXT_LOADER_TYPE) == I386_BOOT_LOADER_BIOS_EXT)
+        i386_early_puts("boot-loader: bios-int13\n");
+    else
+        i386_early_puts("boot-loader: linux-protocol\n");
     i386_early_puts("boot-params: ");
     i386_early_put_hex32(boot_params_phys);
     i386_early_putc('\n');

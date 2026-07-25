@@ -55,13 +55,16 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 
 .DEFAULT_GOAL := all
 
-.PHONY: all kernel toolchain-check initfs-smoke ide-smoke ide-absent-smoke \
-	run run-serial debug boot-smoke trap-smoke exception-smoke \
-	boot-smoke-matrix clean
+.PHONY: all kernel bios-image toolchain-check initfs-smoke ide-smoke \
+	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
+	run run-serial debug boot-smoke bios-boot-smoke trap-smoke \
+	exception-smoke boot-smoke-matrix clean
 
-all: toolchain-check kernel
+all: toolchain-check kernel bios-image
 
 kernel: rebsd-i686.bzimg
+
+bios-image: rebsd-i686-bios-floppy.img
 
 toolchain-check:
 	$(PYTHON) $(I386_TOOLS_SRC)/toolchain-check.py \
@@ -535,6 +538,19 @@ rebsd-i686.bzimg: setup.bin rebsd-i686.bin \
 	$(PYTHON) $(I386_TOOLS_SRC)/mkboot.py \
 	    --setup setup.bin --kernel rebsd-i686.bin --output $@
 
+rebsd-i686-bios-floppy.img: rebsd-i686.bzimg \
+	    $(I386_TOOLS_SRC)/mkbios.py
+	$(PYTHON) $(I386_TOOLS_SRC)/mkbios.py \
+	    --kernel $< --output $@
+
+bios-image-smoke: rebsd-i686.bzimg rebsd-i686-bios-floppy.img
+	$(PYTHON) $(I386_TOOLS_SRC)/mkbios.py \
+	    --kernel rebsd-i686.bzimg \
+	    --output rebsd-i686-bios-floppy.check.img
+	cmp rebsd-i686-bios-floppy.img \
+	    rebsd-i686-bios-floppy.check.img
+	rm -f rebsd-i686-bios-floppy.check.img
+
 ide-smoke.img: $(I386_TOOLS_SRC)/mkide.py
 	$(PYTHON) $< --output $@
 
@@ -562,6 +578,20 @@ boot-smoke: rebsd-i686.bzimg ide-smoke.img
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk ide-smoke.img
+
+bios-boot-smoke: rebsd-i686-bios-floppy.img ide-smoke.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --disk ide-smoke.img
+
+bios-ide-absent-smoke: rebsd-i686-bios-floppy.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --expect-no-disk
 
 ide-absent-smoke: rebsd-i686.bzimg
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -602,6 +632,8 @@ clean:
 	    bootstrap_user.o bootstrap-user.elf bootstrap_user_image.o \
 	    initfs.img initfs.check.img initfs_image.o \
 	    ide-smoke.img ide-smoke.check.img \
+	    rebsd-i686-bios-floppy.img \
+	    rebsd-i686-bios-floppy.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
 	    rebsd-i686.bzimg rebsd-i686.map
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine

@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать шесть QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: тридцать семь QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -695,6 +695,30 @@ ATA-команды записи всё ещё не добавляются. Ре�
 инструкцию безопасного первого hardware gate. До появления воспроизводимого
 BIOS-носителя IBM 6563-W4G включать не требуется.
 
+Тридцать седьмой QEMU bring-up инкремент завершён:
+
+- первый сектор `rebsd-i686.bzimg` теперь является настоящим legacy BIOS
+  boot sector, не нарушая Linux/x86 protocol entry в offset `0x200`;
+- BIOS path переносит boot params/setup в `0x90000`, через CHS `INT 13h`
+  дочитывает kernel в ограниченный staging range `0x10000..0x7ffff`,
+  затем в protected mode копирует payload на `0x00100000`;
+- LILO для первого hardware gate больше не нужен: детерминированный raw
+  `rebsd-i686-bios-floppy.img` имеет ровно 1.44 MB, проверяемые boot
+  signature/`HdrS`/size limits и SHA-256;
+- kernel различает `boot-loader: linux-protocol` и
+  `boot-loader: bios-int13`, поэтому smoke доказывает фактический путь
+  загрузки, а не только одинаковый поздний banner;
+- native BIOS boot прошёл на QEMU `pc-i440fx-9.2` и `pc-i440fx-5.1`, с
+  отдельным read-only IDE smoke disk и вообще без IDE-диска; оба варианта
+  доходят до `HALT`;
+- безопасный первый IBM gate описан в `docs/I686_HARDWARE_GATE.md`:
+  сначала floppy boot при физически отсоединённых IDE drives, COM1
+  `115200 8N1`, полный serial log и ожидаемый `pci-platform: via`.
+
+Следующий внешний gate: один запуск `rebsd-i686-bios-floppy.img` на IBM
+6563-W4G без подключённых IDE-устройств. После получения полного COM1 log
+QEMU-разработка продолжится с учётом реальных VIA PCI IDs и BIOS quirks.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых
@@ -740,9 +764,12 @@ framebuffer, динамическая линковка, PCC и поддержк�
 Compile smoke с указанными ниже freestanding-флагами уже выполнен:
 получен little-endian `ELF32` object с machine `Intel 80386`. В системе также
 есть `/opt/homebrew/bin/qemu-system-i386` версии 11.0.1 с моделями
-`pc-i440fx` и `pentium3`. Утилита `lilo` на macOS host сейчас не найдена:
-первый QEMU smoke использует прямой `-kernel`, а установка LILO в HDD image
-потребует Linux VM/container или запуска установщика на реальной машине.
+`pc-i440fx` и `pentium3`. Утилита `lilo` на macOS host сейчас не найдена.
+Она не блокирует первый hardware gate: один image поддерживает прямой QEMU
+`-kernel`, будущий LILO `image=` и native legacy-BIOS boot sector; для
+последнего собирается raw 1.44 MB floppy artifact. Установка LILO в HDD
+image позднее потребует Linux VM/container или запуска установщика на
+реальной машине.
 
 Базовые переменные сборки:
 
@@ -883,7 +910,10 @@ Stock QEMU не эмулирует точный VIA 694X/596B planar. Рефер
        -m 64M -kernel rebsd-i686.bzimg -serial stdio -display none
    ```
 
-5. BIOS/HDD gate устанавливает LILO и загружает тот же image через:
+5. Первый BIOS gate загружает тот же payload без LILO из
+   `rebsd-i686-bios-floppy.img`; boot sector и setup используют только CHS
+   `INT 13h` reads. Поздний BIOS/HDD gate устанавливает LILO и загружает
+   `rebsd-i686.bzimg` через:
 
    ```text
    image=/boot/rebsd-i686.bzimg
@@ -891,15 +921,17 @@ Stock QEMU не эмулирует точный VIA 694X/596B planar. Рефер
        read-only
    ```
 
-   LILO `other=` не является основным путём: он только chainloads boot
-   sector и потребовал бы собственного filesystem-aware stage2 уже сейчас.
+   LILO `other=` не является основным HDD-путём: он только chainloads boot
+   sector. Собственный boot sector предназначен для contiguous raw floppy,
+   а filesystem-aware HDD loading остаётся задачей LILO.
 6. Создать GDT с kernel/user code/data descriptors и TSS.
 7. Реализовать ранний COM1 polling и VGA text output.
 8. Добавить `run`, `run-serial`, `debug` и позднее `run-lilo-disk`.
 
 Критерий готовности: в QEMU стабильно печатаются banner, нормализованная
 BIOS E820 memory map и результат self-check GDT; panic также виден через
-COM1. После этого тот же `rebsd-i686.bzimg` проходит LILO boot с HDD image.
+COM1. Native BIOS floppy path уже проходит QEMU, LILO boot с HDD image
+остаётся отдельным поздним gate.
 
 ### Этап 3. Exceptions, IRQ и время
 

@@ -15,6 +15,7 @@ BOOT_MARKERS = (
     "REBSD_I686_BOOT",
     "cpu: i686",
     "boot: linux-x86-2.02",
+    "boot-loader: linux-protocol",
     "memory-map: ok",
     "gdt: ok",
     "tss: ok",
@@ -91,6 +92,13 @@ BOOT_MARKERS = (
     "HALT",
 )
 
+BIOS_BOOT_MARKERS = tuple(
+    "boot-loader: bios-int13"
+    if marker == "boot-loader: linux-protocol"
+    else marker
+    for marker in BOOT_MARKERS
+)
+
 IDE_DISK_MARKERS = (
     "ide-primary-master: ata",
     "ide-sectors: 0x00001000",
@@ -119,9 +127,17 @@ NO_DISK_BOOT_MARKERS = tuple(
     marker for marker in BOOT_MARKERS if marker not in IDE_DISK_MARKERS
 ) + ("ide-primary-master: none",)
 
+BIOS_NO_DISK_BOOT_MARKERS = tuple(
+    "boot-loader: bios-int13"
+    if marker == "boot-loader: linux-protocol"
+    else marker
+    for marker in NO_DISK_BOOT_MARKERS
+)
+
 EXCEPTION_MARKERS = {
     "divide": (
         "REBSD_I686_BOOT",
+        "boot-loader: linux-protocol",
         "idt: ok",
         "exception-int3: ok",
         "exception: vector=0x00000000 error=0x00000000",
@@ -129,6 +145,7 @@ EXCEPTION_MARKERS = {
     ),
     "gp": (
         "REBSD_I686_BOOT",
+        "boot-loader: linux-protocol",
         "idt: ok",
         "exception-int3: ok",
         "exception: vector=0x0000000d error=",
@@ -136,6 +153,7 @@ EXCEPTION_MARKERS = {
     ),
     "page": (
         "REBSD_I686_BOOT",
+        "boot-loader: linux-protocol",
         "memory-normalized: ok",
         "paging: on",
         "cr0.wp: on",
@@ -212,7 +230,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--machine", required=True)
     parser.add_argument("--cpu", required=True)
     parser.add_argument("--memory", default="64M")
-    parser.add_argument("--kernel", required=True, type=pathlib.Path)
+    image = parser.add_mutually_exclusive_group(required=True)
+    image.add_argument("--kernel", type=pathlib.Path)
+    image.add_argument("--bios-image", type=pathlib.Path)
     parser.add_argument("--disk", type=pathlib.Path)
     parser.add_argument("--timeout", type=float, default=8.0)
     parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
@@ -223,6 +243,8 @@ def parse_args() -> argparse.Namespace:
             parser.error("--expect-no-disk cannot be combined with disk/trap")
     elif args.disk is None:
         parser.error("--disk is required unless --expect-no-disk is used")
+    if args.bios_image is not None and args.expect_exception is not None:
+        parser.error("--bios-image cannot be combined with --expect-exception")
     return args
 
 
@@ -238,8 +260,6 @@ def main() -> None:
         "tcg",
         "-m",
         args.memory,
-        "-kernel",
-        str(args.kernel),
         "-serial",
         "stdio",
         "-display",
@@ -249,6 +269,20 @@ def main() -> None:
         "-no-reboot",
         "-no-shutdown",
     ]
+    if args.kernel is not None:
+        command.extend(["-kernel", str(args.kernel)])
+    else:
+        command.extend(
+            [
+                "-drive",
+                (
+                    f"file={args.bios_image},format=raw,if=floppy,index=0,"
+                    "readonly=on"
+                ),
+                "-boot",
+                "order=a",
+            ]
+        )
     if args.disk is not None:
         command.extend(
             [
@@ -265,7 +299,13 @@ def main() -> None:
     if args.expect_exception:
         markers = EXCEPTION_MARKERS[args.expect_exception]
     elif args.expect_no_disk:
-        markers = NO_DISK_BOOT_MARKERS
+        markers = (
+            BIOS_NO_DISK_BOOT_MARKERS
+            if args.bios_image is not None
+            else NO_DISK_BOOT_MARKERS
+        )
+    elif args.bios_image is not None:
+        markers = BIOS_BOOT_MARKERS
     else:
         markers = BOOT_MARKERS
     stop_marker = (
