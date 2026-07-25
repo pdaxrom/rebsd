@@ -3,8 +3,8 @@
 Статус: generic allocator, публичный i386 pmap, vmspace fault path,
 `copyin/copyout`, i386 u-area allocator, kernel context switch, fork/init
 frames, проверяемый ring-3 entry и `int 0x80` register ABI подключены; MIPS
-process symbols нейтрализованы, i386 `sysent` adapter проверен, следующий
-gate — i386 signal frame и post-syscall path, 2026-07-25.
+process symbols нейтрализованы, i386 `sysent` adapter и signal frame
+проверены; следующий gate — post-syscall signal/reschedule path, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -176,13 +176,24 @@ exec register setup, ptrace write, PC и single-step. MIPS реализация
 u-area self-test проверяет этот контракт, а MaltaEL и N64 `kernel-objects`
 подтверждают отсутствие MIPS-регрессии.
 
-Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
-тянут остальные подсистемы, а i386 signal delivery и post-syscall work ещё
-не реализованы. Публичный setter уже позволяет установить production
-`sysent` после завершения этих gates.
+I386 signal ABI использует обычный cdecl stack: return address
+`u_sigtramp`, signal number, code и указатель на встроенный `sigcontext`.
+`sendsig` сохраняет все user GPR, segment registers, `EIP/ESP/EFLAGS`,
+маску и состояние alternate stack, а затем переводит frame на обработчик.
+`sigreturn` принимает указатель первым аргументом `int 0x80`, проверяет
+user selectors, executable `EIP` и writable stack, исключает
+`SIGKILL/SIGSTOP` из восстановленной маски и не позволяет вернуть
+kernel selectors или опасные EFLAGS. QEMU self-test проверяет обычный и
+alternate signal stack, формат frame, восстановление контекста, rejection
+поддельного `CS` и точный reclaim VM/u-area.
 
-1. Реализовать i386 signal frame/sigreturn и подключить post-syscall
-   signal/reschedule path.
+Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
+тянут остальные подсистемы, а post-syscall signal/reschedule work ещё не
+подключён. Публичный setter уже позволяет установить production `sysent`
+после завершения этого gate.
+
+1. Подключить post-syscall signal/reschedule path к общему возврату в
+   user mode.
 2. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
 3. Затем включить production `init_sysent`, process bootstrap и exec ABI.

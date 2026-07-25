@@ -111,6 +111,28 @@ struct  sigstack {
  * to the handler to allow it to properly restore state if
  * a non-standard exit is performed.
  */
+#ifdef I386
+struct  sigcontext {
+    int     sc_onstack;         /* sigstack state to restore */
+    long    sc_mask;            /* signal mask to restore */
+    unsigned sc_gs;
+    unsigned sc_fs;
+    unsigned sc_es;
+    unsigned sc_ds;
+    unsigned sc_edi;
+    unsigned sc_esi;
+    unsigned sc_ebp;
+    unsigned sc_ebx;
+    unsigned sc_edx;
+    unsigned sc_ecx;
+    unsigned sc_eax;
+    unsigned sc_eip;
+    unsigned sc_cs;
+    unsigned sc_eflags;
+    unsigned sc_esp;
+    unsigned sc_ss;
+};
+#else
 struct  sigcontext {
     int     sc_onstack;         /* sigstack state to restore */
     long    sc_mask;            /* signal mask to restore */
@@ -147,6 +169,7 @@ struct  sigcontext {
     int     sc_hi;
     int     sc_pc;              /* pc to restore */
 };
+#endif
 
 /*
  * Macro for converting signal number to a mask suitable for

@@ -55,8 +55,11 @@ ABI, two return registers and BSD-style Carry/errno results.  The i386
 dispatcher now adapts an installed generic `struct sysent` table to
 `u_arg/u_rval/u_error`, including `u_qsave`, `ERESTART`, and `EJUSTRETURN`;
 the QEMU CPL3 stream exercises every return path.  Generic exec and ptrace now
-use an opaque saved-user-frame API with tested MIPS and i386 backends.  An
-i386 signal frame and post-syscall work are the next gate.
+use an opaque saved-user-frame API with tested MIPS and i386 backends.  The
+i386 signal ABI now builds cdecl handler frames on regular or alternate user
+stacks and validates complete `sigreturn` contexts; QEMU checks restoration,
+selector/EFLAGS hardening, and allocator reclamation.  Post-syscall signal
+and reschedule work is the next gate.
 
 The default cross toolchain is:
 
@@ -80,6 +83,7 @@ scheduler-compatible i386 contexts, switch u-area stacks and resume copied
 fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
 contract and generic `sysent` adapter exist, but the full production table
-and post-syscall signal path are not connected.
+is not connected and the common return path does not yet run pending signals
+or reschedule work.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

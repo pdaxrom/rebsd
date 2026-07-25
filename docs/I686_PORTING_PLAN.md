@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: пятнадцать QEMU bring-up инкрементов и первый process-MD refactor
+Статус: шестнадцать QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -255,8 +255,21 @@ Malta64. Следующий кодовый инкремент реализует
 - QEMU u-area self-test проверяет exec/ptrace frame contract;
 - i386 normal smoke, host VM suite, MaltaEL и N64 `kernel-objects` проходят.
 
-Следующий инкремент: реализовать i386 signal frame/sigreturn и подключить
-post-syscall signal/reschedule semantics. После этого production
+Шестнадцатый QEMU bring-up инкремент завершён:
+
+- зафиксирован 32-битный i386 `sigcontext` со всеми user GPR, segment
+  registers, `EIP/ESP/EFLAGS`, signal mask и alternate-stack state;
+- `sendsig` строит cdecl frame из return trampoline, signal number, code и
+  указателя на встроенный context, поддерживая обычный и alternate stack;
+- `sigreturn` принимает context pointer первым аргументом `int 0x80`,
+  проверяет user selectors и VM permissions, исключает `SIGKILL/SIGSTOP`
+  из маски и фильтрует опасные EFLAGS;
+- QEMU self-test проверяет layout frame, восстановление registers/mask,
+  rejection kernel `CS`, alternate stack и точный reclaim allocator pages;
+- обязательный marker `signal-frame: ok` входит в normal/page smoke.
+
+Следующий инкремент: подключить post-syscall signal/reschedule semantics к
+общему возврату в user mode. После этого production
 `kernel/init_sysent.c` можно безопасно включить в i386 kernel configuration.
 
 ## 1. Цель и границы первого порта
