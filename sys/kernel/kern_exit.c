@@ -212,7 +212,7 @@ loop:
         p->p_stat = NULL;
         p->p_pid = 0;
         p->p_ppid = 0;
-        mips_uarea_free(p->p_uarea);
+        md_uarea_free(p->p_uarea);
         p->p_uarea = 0;
         if ((*p->p_prev = p->p_nxt) != NULL)    /* off zombproc */
             p->p_nxt->p_prev = p->p_prev;

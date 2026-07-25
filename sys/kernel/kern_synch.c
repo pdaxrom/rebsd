@@ -403,7 +403,7 @@ swtch()
 #ifdef UCB_METER
     cnt.v_swtch++;
 #endif
-    mips_uarea_guard_check(mips_curuser);
+    md_uarea_guard_check(md_curuser);
     /* If not the idle process, resume the idle process. */
     if (u.u_procp != &proc[0]) {
         if (setjmp (&u.u_rsave)) {
@@ -413,7 +413,7 @@ swtch()
         /* Switch from user process to swapper. */
         if (vmspace_activate(proc[0].p_vmspace) != 0)
             panic("proc0 pmap");
-        mips_uarea_guard_check(proc[0].p_uarea);
+        md_uarea_guard_check(proc[0].p_uarea);
         longjmp ((size_t)proc[0].p_uarea,
             &proc[0].p_uarea->u_qsave);
     }
@@ -490,7 +490,7 @@ loop:
 #endif
     if (vmspace_activate(p->p_vmspace) != 0)
         panic("process pmap");
-    mips_uarea_guard_check(p->p_uarea);
+    md_uarea_guard_check(p->p_uarea);
     longjmp ((size_t)p->p_uarea,
         n ? &p->p_uarea->u_ssave : &p->p_uarea->u_rsave);
 }

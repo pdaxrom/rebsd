@@ -72,10 +72,8 @@ extern dev_t    pipedev;            /* pipe device */
 extern  const char icode[];         /* user init code */
 extern  const char icodeend[];      /* its end */
 extern  const char initflags[];     /* init flags string */
-#if defined(MIPS) || defined(N64)
-void mips_init_process(void);
-void mips_user_enter(unsigned, unsigned);
-#endif
+void md_init_process(void);
+void md_user_enter(unsigned, unsigned);
 
 struct inode;
 daddr_t bmap (struct inode *ip, daddr_t bn, int rwflg, int flags);

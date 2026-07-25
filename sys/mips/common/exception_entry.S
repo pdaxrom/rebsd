@@ -15,7 +15,7 @@
 #endif
         .set    noat
 
-        .extern mips_curuser
+        .extern md_curuser
         .extern exception
         .extern mips_pmap_fast_directory
         .extern mips_pmap_fast_refills
@@ -323,7 +323,7 @@ mips_exception_entry:
         xori    $k0, $k0, ST_KSU_USER
         bnez    $k0, 9f
         nop
-        la      $sp, mips_curuser
+        la      $sp, md_curuser
         lw      $sp, 0($sp)
         addiu   $sp, $sp, USIZE
         b       9f
@@ -339,7 +339,7 @@ mips_exception_entry:
         bnez    $k1, 1f
         move    $k1, $sp
 
-        la      $sp, mips_curuser
+        la      $sp, md_curuser
         lw      $sp, 0($sp)
         addiu   $sp, $sp, USIZE
 1:

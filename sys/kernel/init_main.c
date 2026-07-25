@@ -95,7 +95,7 @@ cinit()
  * point so process creation never has to copy main()'s live C stack.
  */
 void
-mips_init_process(void)
+md_init_process(void)
 {
     struct proc *p;
     vm_vaddr_t data_start;
@@ -141,7 +141,7 @@ mips_init_process(void)
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("mipsboot: entering proc1 user bootstrap\n");
 #endif
-    mips_user_enter(USER_DATA_START, USER_DATA_END);
+    md_user_enter(USER_DATA_START, USER_DATA_END);
     panic("init user return");
 }
 
@@ -167,7 +167,7 @@ main()
     int error;
     int s __attribute__((unused));
 
-    mips_uarea_guard_init(mips_curuser);
+    md_uarea_guard_init(md_curuser);
     startup();
     printf ("\n%s\n", version);
     kconfig();
@@ -195,7 +195,7 @@ main()
      * Set up system process 0 (swapper).
      */
     p = &proc[0];
-    p->p_uarea = mips_curuser;
+    p->p_uarea = md_curuser;
     p->p_addr = (size_t)p->p_uarea;
     error = vmspace_create(&p->p_vmspace);
     if (error != 0 || vmspace_activate(p->p_vmspace) != 0)

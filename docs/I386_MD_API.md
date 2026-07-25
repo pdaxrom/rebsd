@@ -1,7 +1,8 @@
 # i386 machine-dependent integration audit
 
 Статус: generic allocator, публичный i386 pmap, vmspace fault path и
-`copyin/copyout` подключены; следующий gate — process MD hooks, 2026-07-25.
+`copyin/copyout` подключены; MIPS process symbols нейтрализованы, следующий
+gate — i386 u-area/kernel stack, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -75,22 +76,15 @@ replacement, executable mapping, сохранность low-linked kernel mappin
 
 ## Generic kernel blockers
 
-До первого полноценного generic link нужны нейтральные MD hooks:
+До первого полноценного generic link остаются следующие MD blockers:
 
-1. `sys/include/user.h`:
-   заменить публичное имя `mips_curuser` на нейтральный current-uarea hook.
-2. `sys/include/systm.h` и `sys/kernel/init_main.c`:
-   обобщить `mips_init_process`, `mips_user_enter`,
-   `mips_uarea_guard_init`.
-3. `sys/kernel/kern_fork.c` и `sys/kernel/kern_synch.c`:
-   вынести MIPS u-area fork/guard operations в MD API.
-4. `sys/kernel/exec_elf.c`:
+1. `sys/kernel/exec_elf.c`:
    заменить жёсткий `EM_MIPS` на machine-dependent ELF validation;
    i686 принимает `EM_386`.
-5. Разделить исторический `copystr` на однозначные kernel-string и
+2. Разделить исторический `copystr` на однозначные kernel-string и
    user-string операции; low-linked i386 пока не может безопасно определять
    тип указателя по одному virtual address.
-6. Добавить machine headers (`types`, `machparam`, `vmparam`, `layout`,
+3. Добавить machine headers (`types`, `machparam`, `vmparam`, `layout`,
    `cpu`, `fpu`, `limits`) и i386 Kconfig/file lists.
 
 PCC не входит в этот список и остаётся нетронутым.
@@ -115,8 +109,16 @@ physical pages, read-only rejection и полный allocator reclaim. В ран
 однопоточном image copy path помечен `VM_FAULT_CAN_SLEEP`; IRQ-safe вариант
 будет выбран после появления trap/process context accounting.
 
-1. Ввести нейтральный process/u-area MD API и сохранить MIPS build green.
-2. Реализовать i386 kernel stack, context switch и current-vmspace binding.
+Generic process код теперь использует нейтральные `md_curuser`,
+`md_uarea_alloc/fork/free`, `md_uarea_guard_init/check`, `md_init_process` и
+`md_user_enter`. MIPS сохранил прежнюю реализацию и только предоставляет её
+через новый контракт; внутренних `mips_fork_trampoline` и
+`mips_init_trampoline` это не касается. `kernel-objects` проходят для N64,
+CI20, Malta big/little endian и Malta64, а object symbol audit подтверждает
+парные definition/reference для всех новых точек входа.
+
+1. Реализовать i386 u-area/kernel stack и current-process binding.
+2. Добавить i386 context save/restore и scheduler switch self-test.
 3. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
 4. Затем подключить process bootstrap, `int 0x80` и exec ABI.

@@ -117,14 +117,14 @@ struct user {
  * code follows this pointer.  Normal processes receive separately allocated
  * user areas and kernel stacks.
  */
-extern struct user *mips_curuser;
-#define u (*mips_curuser)
+extern struct user *md_curuser;
+#define u (*md_curuser)
 
-struct user *mips_uarea_alloc(void);
-struct user *mips_uarea_fork(const struct user *, int);
-void mips_uarea_guard_init(struct user *);
-void mips_uarea_guard_check(const struct user *);
-void mips_uarea_free(struct user *);
+struct user *md_uarea_alloc(void);
+struct user *md_uarea_fork(const struct user *, int);
+void md_uarea_guard_init(struct user *);
+void md_uarea_guard_check(const struct user *);
+void md_uarea_free(struct user *);
 
 /*
  * Increment user profiling counters.

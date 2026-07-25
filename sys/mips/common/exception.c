@@ -269,8 +269,8 @@ dumpregs(int *frame)
     printf("*** frame=%08x saved_sp=%08x current pid=%d comm=%s\n",
         (unsigned)frame, frame[FRAME_SP],
         u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
-    printf("*** uarea=%08x-%08x\n", (unsigned)mips_curuser,
-        (unsigned)mips_curuser + USIZE);
+    printf("*** uarea=%08x-%08x\n", (unsigned)md_curuser,
+        (unsigned)md_curuser + USIZE);
     if (mips_exception_entry_pc(frame[FRAME_PC])) {
         printf("*** exception occurred inside mips_exception_entry\n");
         if (mips_exception_restore_pc(frame[FRAME_PC]))
@@ -686,7 +686,7 @@ exception(int *frame)
 #endif
 #endif
     led_control(LED_KERNEL, 1);
-    mips_uarea_guard_check(mips_curuser);
+    md_uarea_guard_check(md_curuser);
     if (
 #if defined(N64_USB_GDB) || defined(N64_RESET_DUMP)
         !n64_emergency_frame(frame) &&

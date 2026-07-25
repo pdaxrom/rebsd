@@ -321,11 +321,11 @@ n64_reset_current_proc(const char **comm)
 
     p = 0;
     *comm = 0;
-    if (mips_curuser != 0 &&
-        n64_reset_direct_bytes((unsigned)mips_curuser,
-            sizeof(*mips_curuser))) {
-        p = mips_curuser->u_procp;
-        *comm = mips_curuser->u_comm;
+    if (md_curuser != 0 &&
+        n64_reset_direct_bytes((unsigned)md_curuser,
+            sizeof(*md_curuser))) {
+        p = md_curuser->u_procp;
+        *comm = md_curuser->u_comm;
     }
     if (p != 0 && !n64_reset_direct_bytes((unsigned)p, sizeof(*p)))
         p = 0;

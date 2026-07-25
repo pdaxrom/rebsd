@@ -30,10 +30,10 @@ typedef char mips_assert_uarea_page_multiple[
 typedef char mips_assert_user_fits_uarea[
     sizeof(struct user) < USIZE ? 1 : -1];
 
-struct user *mips_curuser;
+struct user *md_curuser;
 
 void
-mips_uarea_guard_init(struct user *up)
+md_uarea_guard_init(struct user *up)
 {
     if (up == 0)
         panic("null uarea guard");
@@ -41,7 +41,7 @@ mips_uarea_guard_init(struct user *up)
 }
 
 void
-mips_uarea_guard_check(const struct user *up)
+md_uarea_guard_check(const struct user *up)
 {
     if (up == 0 || up->u_stack[0] != MIPS_UAREA_GUARD)
         panic("kernel stack overflow");
@@ -50,13 +50,13 @@ mips_uarea_guard_check(const struct user *up)
 struct vmspace *
 vmspace_current(void)
 {
-    if (mips_curuser == 0 || u.u_procp == 0)
+    if (md_curuser == 0 || u.u_procp == 0)
         return 0;
     return u.u_procp->p_vmspace;
 }
 
 struct user *
-mips_uarea_alloc(void)
+md_uarea_alloc(void)
 {
     struct vm_page_request request;
     struct vm_page *page;
@@ -82,12 +82,12 @@ mips_uarea_alloc(void)
         return 0;
     }
     bzero((caddr_t)up, USIZE);
-    mips_uarea_guard_init(up);
+    md_uarea_guard_init(up);
     return up;
 }
 
 struct user *
-mips_uarea_fork(const struct user *source, int bootstrap)
+md_uarea_fork(const struct user *source, int bootstrap)
 {
     int *frame;
     struct user *target;
@@ -97,7 +97,7 @@ mips_uarea_fork(const struct user *source, int bootstrap)
 
     if (source == 0)
         return 0;
-    target = mips_uarea_alloc();
+    target = md_uarea_alloc();
     if (target == 0)
         return 0;
     bcopy(source, target, sizeof(*target));
@@ -106,7 +106,7 @@ mips_uarea_fork(const struct user *source, int bootstrap)
     bzero((caddr_t)&target->u_qsave, sizeof(target->u_qsave));
     bzero((caddr_t)&target->u_rsave, sizeof(target->u_rsave));
     bzero((caddr_t)&target->u_ssave, sizeof(target->u_ssave));
-    mips_uarea_guard_init(target);
+    md_uarea_guard_init(target);
     (void)setjmp(&target->u_ssave);
     stack_pointer = target_address + USIZE;
     if (bootstrap) {
@@ -120,7 +120,7 @@ mips_uarea_fork(const struct user *source, int bootstrap)
         (unsigned)source->u_frame < source_address ||
         (unsigned)source->u_frame > source_address + USIZE -
         FRAME_WORDS * sizeof(int)) {
-        mips_uarea_free(target);
+        md_uarea_free(target);
         return 0;
     }
     stack_pointer -= FRAME_STACK_BYTES;
@@ -136,15 +136,15 @@ mips_uarea_fork(const struct user *source, int bootstrap)
 }
 
 void
-mips_uarea_free(struct user *up)
+md_uarea_free(struct user *up)
 {
     struct vm_page *page;
     vm_paddr_t paddr;
     vm_pfn_t index;
 
-    if (up == 0 || up == mips_curuser)
+    if (up == 0 || up == md_curuser)
         return;
-    mips_uarea_guard_check(up);
+    md_uarea_guard_check(up);
     if (((unsigned)up & 0xe0000000u) != MIPS_UAREA_KSEG0)
         panic("bad uarea");
     paddr = (unsigned)up & MIPS_UAREA_PHYS_MASK;

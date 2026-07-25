@@ -1,6 +1,7 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: восемь QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: восемь QEMU bring-up инкрементов и первый process-MD refactor
+выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -130,11 +131,17 @@
 - normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, host VM suite и
   `BOARD=maltael kernel-objects` проходят.
 
-Следующая веха: нейтрализовать оставшиеся MIPS process hooks, добавить i386
-u-area/kernel stack и первый context switch. User-string copy выделяется в
+Следующая веха: добавить i386 u-area/kernel stack и первый context switch.
+User-string copy выделяется в
 явный API, потому что low-linked i386 не может использовать MIPS-эвристику
 по адресу указателя.
 LILO HDD gate выполняется после появления Linux-среды для установщика.
+
+Первый шаг process-MD gate также завершён: generic headers, init, fork,
+scheduler и exit больше не ссылаются на `mips_curuser` или
+`mips_uarea_*`. Нейтральный `md_*` контракт подключён к существующей MIPS
+реализации; kernel-object сборка проходит для N64, CI20, Malta, MaltaEL и
+Malta64. Следующий кодовый инкремент реализует этот контракт для i386.
 
 ## 1. Цель и границы первого порта
 

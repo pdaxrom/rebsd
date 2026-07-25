@@ -11,8 +11,8 @@
 
         .extern u_end
 #ifndef N64_PREFLIGHT
-        .extern mips_curuser
-        .extern mips_init_process
+        .extern md_curuser
+        .extern md_init_process
 #endif
         .extern main
 
@@ -52,7 +52,7 @@ mips_kernel_entry:
         la      $sp, u_end - 16
 #ifndef N64_PREFLIGHT
         la      $t0, u
-        la      $t1, mips_curuser
+        la      $t1, md_curuser
         sw      $t0, 0($t1)
 #endif
         jal     main
@@ -66,16 +66,16 @@ mips_kernel_entry:
         .globl  mips_init_trampoline
         .ent    mips_init_trampoline
 mips_init_trampoline:
-        jal     mips_init_process
+        jal     md_init_process
         nop
 1:
         b       1b
         nop
         .end    mips_init_trampoline
 
-        .globl  mips_user_enter
-        .ent    mips_user_enter
-mips_user_enter:
+        .globl  md_user_enter
+        .ent    md_user_enter
+md_user_enter:
         mtc0    $a0, $14
         mfc0    $k0, $12
         li      $k1, ~(ST_EXL | ST_ERL | ST_KSU | ST_IM | ST_FR)
@@ -108,7 +108,7 @@ mips_user_enter:
         nop
         eret
         nop
-        .end    mips_user_enter
+        .end    md_user_enter
 
         /*
          * Initial user code copied to process 1 by init_main().
@@ -175,7 +175,7 @@ longjmp:
         nop
         nop
 
-        la      $v0, mips_curuser
+        la      $v0, md_curuser
         sw      $a0, 0($v0)
         lw      $s0, (0 * 4)($a1)
         lw      $s1, (1 * 4)($a1)

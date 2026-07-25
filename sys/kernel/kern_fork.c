@@ -30,7 +30,7 @@ newproc_fail(struct proc *child)
         child->p_vmspace = 0;
     }
     if (child->p_uarea != 0) {
-        mips_uarea_free(child->p_uarea);
+        md_uarea_free(child->p_uarea);
         child->p_uarea = 0;
     }
 
@@ -197,7 +197,7 @@ again:
         return -1;
     }
 
-    child->p_uarea = mips_uarea_fork(mips_curuser, parent == &proc[0]);
+    child->p_uarea = md_uarea_fork(md_curuser, parent == &proc[0]);
     if (child->p_uarea == 0) {
         newproc_fail(child);
         return -1;

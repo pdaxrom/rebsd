@@ -304,7 +304,7 @@ cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
             if (strncmp(newp, nlist[i].name, newlen) == 0) {
                 value = nlist[i].addr;
                 if (value == 0 && strncmp(nlist[i].name, "_u", 3) == 0)
-                    value = (int)mips_curuser;
+                    value = (int)md_curuser;
                 if (!oldp)
                     return 0;
                 if (*oldlenp < sizeof(value))
