@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать два QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: тридцать три QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -591,6 +591,30 @@ exit/wait semantics либо подключить минимальный VFS/fil
 Следующий инкремент: добавить stop/continue semantics и resource accounting
 к wait lifecycle либо перейти к минимальному file/VFS слою, необходимому
 для production exec и дискового root.
+
+Тридцать третий QEMU bring-up инкремент завершён:
+
+- i386 port-I/O API дополнен 32-битными `inl/outl`, а раннее ядро проверяет
+  legacy PCI configuration mechanism #1 через `0xCF8/0xCFC`;
+- read-only enumerator сканирует все 256 buses, 32 devices и
+  multifunction functions, читает vendor/product, class/subclass и
+  programming interface без ACPI или BIOS services;
+- inventory находит host bridge, ISA bridge, IDE controller и VGA по
+  стандартным class codes, поэтому тот же код применим к QEMU PIIX и
+  VIA Apollo Pro 133/596B, не привязывая IDE path к одному product ID;
+- QEMU `pc-i440fx-9.2` обнаруживает Intel `8086:1237` host,
+  `8086:7000` ISA и `8086:7010` IDE, а также VGA `1234:1111`;
+- VIA vendor `0x1106` получает отдельную platform classification для
+  будущего serial hardware log IBM 6563-W4G; AGP/VGA devices на secondary
+  bus также попадают в полный bus scan;
+- markers `pci: mechanism=1`, `pci-host`, `pci-isa`, `pci-ide` и
+  `pci-platform: intel` обязательны для QEMU normal/page smoke;
+- clean strict build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ и deterministic initfs проходят.
+
+Следующий инкремент: построить поверх найденного IDE function безопасный
+legacy compatibility-mode PIO IDENTIFY/read-only probe, сначала в QEMU,
+затем проверить PCI IDs и register mode по serial log IBM/VIA.
 
 ## 1. Цель и границы первого порта
 

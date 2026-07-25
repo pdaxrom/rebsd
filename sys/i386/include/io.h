@@ -16,6 +16,21 @@ i386_outb(unsigned short port, unsigned char value)
     __asm__ volatile ("outb %0, %w1" : : "a" (value), "Nd" (port));
 }
 
+static inline unsigned int
+i386_inl(unsigned short port)
+{
+    unsigned int value;
+
+    __asm__ volatile ("inl %w1, %0" : "=a" (value) : "Nd" (port));
+    return value;
+}
+
+static inline void
+i386_outl(unsigned short port, unsigned int value)
+{
+    __asm__ volatile ("outl %0, %w1" : : "a" (value), "Nd" (port));
+}
+
 static inline void
 i386_io_wait(void)
 {

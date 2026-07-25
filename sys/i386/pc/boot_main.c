@@ -3,6 +3,7 @@
 #include "interrupt.h"
 #include "memory.h"
 #include "paging.h"
+#include "pci.h"
 #include "pmap_bootstrap.h"
 #include "privilege.h"
 #include "process.h"
@@ -446,6 +447,13 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_puts("initfs: ok\n");
     i386_early_puts("elf32-user: ok\n");
     i386_early_puts("user-stack: ok\n");
+
+    if (i386_pci_probe() != 0) {
+        i386_early_puts("pci: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
 
     i386_exception_smoke(boot_params_phys);
 

@@ -40,7 +40,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    syscall_selftest.o signal.o signal_selftest.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
-                   pic.o pit.o memory.o paging.o \
+                   pic.o pit.o pci.o memory.o paging.o \
                    libkern.o elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
                    sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
@@ -230,6 +230,11 @@ pic.o: $(I386_PC_SRC)/pic.c $(I386_SRC)/include/interrupt.h \
 
 pit.o: $(I386_PC_SRC)/pit.c $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/io.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+pci.o: $(I386_PC_SRC)/pci.c $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/io.h $(I386_SRC)/include/pci.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
