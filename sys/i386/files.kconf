@@ -4,6 +4,7 @@
 # switch, fork/init frames, ring-3/TSS, int 0x80 ABI, production-numbered
 # sysent bootstrap prefix, i386 signal frame, user-return work loop and
 # proc0-compatible bootstrap process and its persistent CPL3
-# production-syscall probe and embedded ELF32 loader are linked by the early
-# Makefile together with user trap-to-signal translation.  Remaining
-# machine-independent files are connected after the process MD gate.
+# production-syscall probe, embedded ELF32 loader and exec-compatible user
+# stack are linked by the early Makefile together with user trap-to-signal
+# translation.  Remaining machine-independent files are connected after the
+# process MD gate.

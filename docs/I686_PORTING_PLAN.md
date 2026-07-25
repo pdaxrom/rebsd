@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать три QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: двадцать четыре QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -383,9 +383,28 @@ Malta64. Следующий кодовый инкремент реализует
   32/64/128/256/768/1024 МиБ проходят с прежними
   `process-bootstrap: ok` и `process-user: ok`.
 
-Следующий инкремент: сформировать начальный i386 user stack с
-`argc/argv/envp`, затем подключить источник статического init из filesystem
-и заменить временный process bridge на generic process table/process 1.
+Двадцать четвёртый QEMU bring-up инкремент завершён:
+
+- ранний i386 stack builder повторяет layout generic `exec_setupstack`:
+  reserved argument slots, `argv[]`, `envp[]`, packed strings и верхнее
+  слово `argv` для `/bin/ps`, с 8-байтным stack alignment;
+- все размеры, pointer arrays и границы stack mapping проверяются до записи,
+  после чего страница обнуляется и заполняется только через generic
+  vmspace API;
+- новый `i386_user_enter_exec` передаёт `argc` в EBX, `argv` в ECX и
+  `envp` в EDX, как уже требует `md_user_frame_exec`, и входит с IF=1;
+- bootstrap ELF проверяет из CPL3 `argc=2`, строки `init`/`elf`,
+  environment `A=i686`, NULL terminators, alignment, reserved slot и
+  верхнее `argv`-слово до проверки data/BSS и production syscall;
+- persistent proc получает `p_saddr/p_ssize` и u-area `u_ssize`,
+  соответствующие реальному stack mapping; обязательный marker
+  `user-stack: ok` подтверждает весь ABI path;
+- clean build, обычный QEMU smoke, trap smoke для #DE/#GP/#PF, RAM matrix
+  32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
+  проходят.
+
+Следующий инкремент: подключить источник статического init из filesystem,
+затем заменить временный process bridge на generic process table/process 1.
 
 ## 1. Цель и границы первого порта
 

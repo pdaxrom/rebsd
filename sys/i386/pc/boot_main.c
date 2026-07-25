@@ -433,6 +433,7 @@ i386_boot_main(i386_u32 boot_params_phys)
     }
     i386_early_puts("process-user: ok\n");
     i386_early_puts("elf32-user: ok\n");
+    i386_early_puts("user-stack: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

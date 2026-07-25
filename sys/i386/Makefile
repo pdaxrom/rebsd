@@ -41,7 +41,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o memory.o paging.o \
-                   libkern.o elf_bootstrap.o bootstrap_user_image.o \
+                   libkern.o elf_bootstrap.o user_stack.o \
+                   bootstrap_user_image.o \
                    sysent_bootstrap.o kern_prot.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o process_bootstrap.o vm_param.o \
@@ -244,6 +245,13 @@ elf_bootstrap.o: $(I386_COMMON_SRC)/elf_bootstrap.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+user_stack.o: $(I386_COMMON_SRC)/user_stack.c \
+	    $(I386_SRC)/include/user_stack.h \
+	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 sysent_bootstrap.o: $(I386_COMMON_SRC)/sysent_bootstrap.c \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -314,6 +322,7 @@ process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/process.h $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/user_bootstrap.h \
+	    $(I386_SRC)/include/user_stack.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/layout.h \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/user.h \

@@ -5,6 +5,33 @@
     .globl _start
     .type _start, @function
 _start:
+    cmpl    $2, %ebx
+    jne     .Lfailed
+    testl   $7, %esp
+    jne     .Lfailed
+    cmpl    $0, (%esp)
+    jne     .Lfailed
+    cmpl    %ecx, I386_BOOTSTRAP_USER_TOP_WORD
+    jne     .Lfailed
+    cmpl    $0, 8(%ecx)
+    jne     .Lfailed
+    movl    (%ecx), %esi
+    cmpl    $0x74696e69, (%esi)
+    jne     .Lfailed
+    cmpb    $0, 4(%esi)
+    jne     .Lfailed
+    movl    4(%ecx), %esi
+    cmpl    $0x00666c65, (%esi)
+    jne     .Lfailed
+    cmpl    $0, 4(%edx)
+    jne     .Lfailed
+    movl    (%edx), %esi
+    cmpl    $0x36693d41, (%esi)
+    jne     .Lfailed
+    cmpw    $0x3638, 4(%esi)
+    jne     .Lfailed
+    cmpb    $0, 6(%esi)
+    jne     .Lfailed
     cmpl    $I386_BOOTSTRAP_USER_DATA_MAGIC, bootstrap_data
     jne     .Lfailed
     cmpl    $0, bootstrap_bss

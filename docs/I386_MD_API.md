@@ -9,8 +9,8 @@ user-return signal/reschedule path и user trap-to-signal translation
 проверены; production syscall prefix вызывает generic `getpid`, а
 постоянный proc0-совместимый bootstrap process удерживает активные
 u-area/vmspace/CR3/TSS и выполняет отдельно собранный ELF32/i386 image с
-production `getpid` из собственного CPL3-контекста; следующий gate —
-начальный `argc/argv/envp` user stack, 2026-07-25.
+production `getpid` и проверенным `argc/argv/envp` stack из собственного
+CPL3-контекста; следующий gate — filesystem-backed static init, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -276,9 +276,23 @@ rollback.
 syscall 20, поэтому `elf32-user: ok` покрывает не только parser, но и
 фактические mappings, загрузку данных, zero-fill, entry point и исполнение.
 
+Ранний stack builder повторяет существенный ABI generic
+`exec_setupstack`: четыре reserved argument slots, 8-byte aligned ESP,
+NULL-terminated `argv[]`/`envp[]`, packed strings и верхнее слово с
+указателем `argv` для `/bin/ps`. Размеры и адресная арифметика проверяются
+до изменения stack page; затем она обнуляется и заполняется через
+`vmspace_write`.
+
+Отдельный `i386_user_enter_exec` входит с IF=1 и тем же register contract,
+который уже задаёт `md_user_frame_exec`: EBX=`argc`, ECX=`argv`,
+EDX=`envp`. Bootstrap ELF из CPL3 проверяет `init`, `elf`, `A=i686`,
+NULL terminators, alignment, reserved slot и top-of-stack `argv` word.
+`user-stack: ok` также означает, что `p_saddr/p_ssize` и u-area
+`u_ssize` соответствуют постоянному stack mapping.
+
 1. Добавить оставшиеся machine headers/config lists.
-2. Сформировать начальный i386 `argc/argv/envp` stack и расширять
-   production prefix по требованиям первого init.
+2. Подключить filesystem-backed static init и расширять production prefix
+   по его требованиям.
 3. Заменить bootstrap bridge на generic process table/process 1.
 4. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести `exec` до статического ELF32 init.
