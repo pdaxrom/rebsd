@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: два QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: три QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -33,10 +33,23 @@
   получает десять IRQ0 через `sti; hlt`;
 - normal smoke снова прошёл на QEMU с 32/64/128/256 МиБ RAM.
 
-Следующая веха: нормализация E820, физический page allocator и bootstrap
-paging. После включения paging добавляется deliberate `#PF` smoke с
-проверкой CR2. LILO HDD gate выполняется после появления Linux-среды для
-установщика.
+Третий QEMU bring-up инкремент завершён:
+
+- E820 RAM нормализуется в page-aligned диапазоны ниже `0xC0000000`;
+  вычитаются non-usable entries, low memory и загруженный kernel;
+- работает zeroing monotonic allocator физических страниц по 4 КиБ;
+- строятся обычные non-PAE page directory/page tables и identity mappings
+  для bootstrap low memory, ядра и доступных RAM ranges;
+- linker разделяет RO и RW части ядра по границе 4 КиБ; после загрузки CR3
+  включены `CR0.PG` и `CR0.WP`;
+- deliberate write в RO probe даёт ожидаемый `#PF`: vector 14,
+  error code `0x03` и корректный CR2;
+- paging + timer normal smoke прошёл с 32/64/128/256 МиБ RAM, а
+  `trap-smoke` проходит для `#DE`, `#GP` и `#PF`.
+
+Следующая веха: превратить bootstrap mapper в i386 `pmap` primitives и
+начать подключать machine-independent kernel через нейтральные MD hooks.
+LILO HDD gate выполняется после появления Linux-среды для установщика.
 
 ## 1. Цель и границы первого порта
 
@@ -265,6 +278,11 @@ divide-by-zero/page-fault дают диагностируемый panic, IRQ nes
 
 ### Этап 4. Physical memory и paging
 
+Bootstrap-часть этапа выполнена: E820 normalization, monotonic physical
+allocator, CR3 switch, 4-КиБ identity mappings, supervisor-only PTE и
+writable protection. Ещё не выполнены per-process address spaces, `pmap`
+API, `invlpg`, user mappings и fault recovery для `copyin/copyout`.
+
 1. Нормализовать BIOS/boot-protocol memory map, исключая low memory, ROM,
    kernel image, modules и MMIO holes.
 2. Ввести 4 КиБ VM pages; не смешивать их с историческими `NBPG`/disk units.
@@ -449,7 +467,22 @@ HALT
 ```
 
 Дополнительный `trap-smoke` обязан получить диагностический panic для
-`#DE` (vector 0) и `#GP` (vector 13 с error code).
+`#DE` (vector 0), `#GP` (vector 13 с error code) и write-protection `#PF`
+(vector 14, error code 3, CR2).
 
-Следующий инкремент — E820 normalization, physical page allocator и
-bootstrap paging, а не userland или PCC.
+Definition of Done третьего инкремента:
+
+```text
+memory-normalized: ok
+physical-allocator: ok
+paging: on
+cr0.wp: on
+kernel-text-ro: ok
+pic: ok
+pit: hz=100
+timer-ticks: ok
+HALT
+```
+
+Следующий инкремент — reusable i386 `pmap` primitives и первый link с
+machine-independent kernel core, а не userland или PCC.

@@ -22,7 +22,10 @@ SECTIONS
         *(.rodata .rodata.*)
     } :text
 
-    .data ALIGN(16) : {
+    __kernel_ro_end = .;
+
+    .data ALIGN(4096) : {
+        __kernel_rw_start = .;
         *(.data .data.*)
     } :data
 

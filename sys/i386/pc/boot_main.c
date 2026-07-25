@@ -1,5 +1,7 @@
 #include "boot.h"
 #include "interrupt.h"
+#include "memory.h"
+#include "paging.h"
 
 static void
 i386_cpuid(i386_u32 leaf, i386_u32 *eax, i386_u32 *ebx,
@@ -125,6 +127,9 @@ i386_exception_smoke(i386_u32 boot_params_phys)
             :
             : "eax", "memory");
     }
+
+    if (i386_command_has(boot_params_phys, "rebsd.trap=page"))
+        i386_paging_page_fault_selftest();
 }
 
 static const struct i386_e820_entry *
@@ -171,7 +176,11 @@ i386_print_e820(i386_u32 boot_params_phys)
 void
 i386_boot_main(i386_u32 boot_params_phys)
 {
+    const struct i386_phys_range *range;
+    volatile i386_u32 *page;
     unsigned e820_count;
+    unsigned index;
+    i386_u32 page_phys;
     i386_u32 ticks;
 
     i386_early_console_init();
@@ -206,6 +215,67 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("exception-int3: ok\n");
+
+    if (!i386_memory_init(boot_params_phys)) {
+        i386_early_puts("memory-normalized: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("memory-ranges: ");
+    i386_early_put_hex32(i386_memory_range_count());
+    i386_early_putc('\n');
+    for (index = 0;
+        index < i386_memory_range_count() && index < 8u; ++index) {
+        range = i386_memory_range(index);
+        i386_early_puts("memory-range[");
+        i386_early_put_hex32(index);
+        i386_early_puts("] start=");
+        i386_early_put_hex32(range->start);
+        i386_early_puts(" end=");
+        i386_early_put_hex32(range->end);
+        i386_early_putc('\n');
+    }
+    i386_early_puts("physical-pages: ");
+    i386_early_put_hex32(i386_memory_total_pages());
+    i386_early_putc('\n');
+    i386_early_puts("memory-normalized: ok\n");
+
+    page_phys = i386_phys_alloc_page();
+    page = (volatile i386_u32 *)page_phys;
+    if (page_phys == 0) {
+        i386_early_puts("physical-allocator: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    for (index = 0; index < I386_PAGE_SIZE / sizeof(*page); ++index) {
+        if (page[index] != 0) {
+            i386_early_puts("physical-allocator: failed\n");
+            for (;;) {
+                __asm__ volatile ("cli; hlt");
+            }
+        }
+    }
+    page[0] = 0x52454253u;
+    i386_early_puts("physical-allocator: ok\n");
+
+    if (!i386_paging_init()) {
+        i386_early_puts("paging: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("page-directory: ");
+    i386_early_put_hex32(i386_paging_directory());
+    i386_early_putc('\n');
+    i386_early_puts("physical-free-pages: ");
+    i386_early_put_hex32(i386_memory_free_pages());
+    i386_early_putc('\n');
+    i386_early_puts("paging: on\n");
+    i386_early_puts("cr0.wp: on\n");
+    i386_early_puts("kernel-text-ro: ok\n");
+
     i386_exception_smoke(boot_params_phys);
 
     i386_pic_init();

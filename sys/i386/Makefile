@@ -27,7 +27,7 @@ SETUP_SECTS      = 8
 SETUP_BYTES      = 4608
 
 KERNEL_OBJS      = entry.o interrupt_entry.o early_console.o interrupt.o \
-                   pic.o pit.o boot_main.o
+                   pic.o pit.o memory.o paging.o boot_main.o
 
 .DEFAULT_GOAL := all
 
@@ -82,8 +82,19 @@ pit.o: $(I386_PC_SRC)/pit.c $(I386_SRC)/include/interrupt.h \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
+memory.o: $(I386_PC_SRC)/memory.c $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/memory.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+paging.o: $(I386_PC_SRC)/paging.c $(I386_SRC)/include/memory.h \
+	    $(I386_SRC)/include/paging.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
-	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
@@ -126,6 +137,10 @@ trap-smoke: rebsd-i686.bzimg
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --expect-exception gp
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --expect-exception page
 
 exception-smoke: trap-smoke
 
