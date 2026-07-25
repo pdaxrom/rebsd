@@ -1,4 +1,5 @@
 # The early Makefile directly links vm_param, vm_phys and vm_page so the
 # allocator can be validated before the full kernel configuration is enabled.
-# vm_map/vm_object/vmspace are also linked by the early Makefile.  Remaining
-# machine-independent kernel files are connected after the process MD gate.
+# vm_map/vm_object/vmspace and i386 copy I/O are also linked by the early
+# Makefile.  Remaining machine-independent kernel files are connected after
+# the process MD gate.

@@ -35,7 +35,8 @@ VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
                    vmspace.o vmspace_access.o vmspace_fault.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
 KERNEL_OBJS      = entry.o interrupt_entry.o early_console.o interrupt.o \
-                   pic.o pit.o memory.o paging.o libkern.o vm_param.o \
+                   pic.o pit.o memory.o paging.o libkern.o copyio.o \
+                   copyio_selftest.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
                    $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
 
@@ -108,6 +109,20 @@ libkern.o: $(I386_COMMON_SRC)/libkern.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+copyio.o: $(I386_COMMON_SRC)/copyio.c \
+	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+copyio_selftest.o: $(I386_PC_SRC)/copyio_selftest.c \
+	    $(I386_SRC)/include/copyio.h \
+	    $(I386_SRC)/include/vmspace_bootstrap.h \
+	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 $(I386_GEN_INCLUDE)/sys:
 	mkdir -p $(I386_GEN_INCLUDE)
 	ln -s $(abspath $(TOPSRC)/sys/include) $@
@@ -161,7 +176,8 @@ vmspace_bootstrap.o: $(I386_PC_SRC)/vmspace_bootstrap.c \
 	    -c $< -o $@
 
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
-	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/copyio.h \
+	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
 	    $(I386_SRC)/include/pmap_bootstrap.h \
 	    $(I386_SRC)/include/vm_bootstrap.h \

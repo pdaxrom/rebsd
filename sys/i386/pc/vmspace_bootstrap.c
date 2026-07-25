@@ -8,6 +8,12 @@
 
 static struct vmspace *i386_vmspace_active;
 
+struct vmspace *
+vmspace_current(void)
+{
+    return i386_vmspace_active;
+}
+
 int
 i386_vmspace_bootstrap_init(void)
 {

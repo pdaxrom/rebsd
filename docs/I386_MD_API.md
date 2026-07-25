@@ -1,7 +1,7 @@
 # i386 machine-dependent integration audit
 
-Статус: generic physical-page allocator, публичный i386 pmap и vmspace
-fault path подключены; следующий gate — process MD hooks, 2026-07-25.
+Статус: generic allocator, публичный i386 pmap, vmspace fault path и
+`copyin/copyout` подключены; следующий gate — process MD hooks, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -87,8 +87,9 @@ replacement, executable mapping, сохранность low-linked kernel mappin
 4. `sys/kernel/exec_elf.c`:
    заменить жёсткий `EM_MIPS` на machine-dependent ELF validation;
    i686 принимает `EM_386`.
-5. Реализовать i686 `copyin/copyout/copyinstr` с recovery из kernel-mode
-   page fault.
+5. Разделить исторический `copystr` на однозначные kernel-string и
+   user-string операции; low-linked i386 пока не может безопасно определять
+   тип указателя по одному virtual address.
 6. Добавить machine headers (`types`, `machparam`, `vmparam`, `layout`,
    `cpu`, `fpu`, `limits`) и i386 Kconfig/file lists.
 
@@ -103,8 +104,19 @@ non-present fault, COW и address-space isolation. Capability-флаги ран�
 i386 режима не меняют обычную MIPS ветку: `BOARD=maltael kernel-objects`
 компилируется тем же GCC baseline.
 
+Публичные i386 `copyin/copyout` используют текущий vmspace и
+`vmspace_read_context`/`vmspace_write_context`. User virtual address не
+разыменовывается из ring 0: данные копируются через physical-page direct
+map, поэтому bad user pointer возвращает `EFAULT`, а не требует recovery из
+kernel-mode `#PF`. Bounds берутся из текущего `vm_map`, включая overflow и
+переход через user limit. QEMU self-test переносит слово через границу двух
+страниц, demand-fault'ит обе страницы, проверяет COW isolation сразу на двух
+physical pages, read-only rejection и полный allocator reclaim. В раннем
+однопоточном image copy path помечен `VM_FAULT_CAN_SLEEP`; IRQ-safe вариант
+будет выбран после появления trap/process context accounting.
+
 1. Ввести нейтральный process/u-area MD API и сохранить MIPS build green.
 2. Реализовать i386 kernel stack, context switch и current-vmspace binding.
-3. Добавить recovery table для `copyin/copyout/copyinstr` и negative fault
-   tests.
+3. Добавить явный user-string primitive и перевести syscall pathname/exec
+   call sites без pointer-range эвристики.
 4. Затем подключить process bootstrap, `int 0x80` и exec ABI.

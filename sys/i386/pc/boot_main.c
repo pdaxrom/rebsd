@@ -1,4 +1,5 @@
 #include "boot.h"
+#include "copyio.h"
 #include "interrupt.h"
 #include "memory.h"
 #include "paging.h"
@@ -335,6 +336,13 @@ i386_boot_main(i386_u32 boot_params_phys)
     }
     i386_early_puts("vmspace-selftest: ok\n");
     i386_early_puts("vmspace-page-fault: ok\n");
+    if (i386_copyio_selftest() != 0) {
+        i386_early_puts("copyio-selftest: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("copyio-selftest: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: семь QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: восемь QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -116,8 +116,24 @@
   проходят; `BOARD=maltael kernel-objects` также компилируется после
   добавления ранних VM capability-флагов.
 
+Восьмой QEMU bring-up инкремент завершён:
+
+- добавлены публичные i386 `copyin/copyout` и neutral `vmspace_current`;
+- copy path проверяет границы текущего user `vm_map`, включая overflow и
+  пересечение верхней границы, и возвращает `EFAULT` без прямого
+  разыменования user virtual address из ring 0;
+- данные передаются через generic vmspace access и kernel direct map;
+  demand paging и COW используют общий `VM_FAULT_COPY` path;
+- отдельный QEMU self-test вызывает именно экспортируемые ABI symbols,
+  переносит значение через две страницы, проверяет invalid ranges,
+  read-only protection, двухстраничный COW и полный reclaim;
+- normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, host VM suite и
+  `BOARD=maltael kernel-objects` проходят.
+
 Следующая веха: нейтрализовать оставшиеся MIPS process hooks, добавить i386
-u-area/context switch и безопасные `copyin/copyout`.
+u-area/kernel stack и первый context switch. User-string copy выделяется в
+явный API, потому что low-linked i386 не может использовать MIPS-эвристику
+по адресу указателя.
 LILO HDD gate выполняется после появления Linux-среды для установщика.
 
 ## 1. Цель и границы первого порта
