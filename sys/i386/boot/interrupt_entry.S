@@ -75,6 +75,9 @@ i386_vector_\number:
     I386_VECTOR_NO_ERROR 47
     I386_VECTOR_NO_ERROR 48
 
+    .globl i386_vector_128
+    I386_VECTOR_NO_ERROR 128
+
     .p2align 4
 i386_unhandled_vector:
     pushl   $0

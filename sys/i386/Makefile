@@ -36,7 +36,8 @@ VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
 KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    early_console.o interrupt.o tss.o privilege_selftest.o \
-                   pic.o pit.o memory.o paging.o libkern.o copyio.o \
+                   syscall_selftest.o pic.o pit.o memory.o paging.o \
+                   libkern.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
@@ -91,6 +92,7 @@ early_console.o: $(I386_PC_SRC)/early_console.c \
 
 interrupt.o: $(I386_PC_SRC)/interrupt.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
@@ -103,6 +105,15 @@ tss.o: $(I386_PC_SRC)/tss.c $(I386_SRC)/include/boot.h \
 privilege_selftest.o: $(I386_PC_SRC)/privilege.c \
 	    $(I386_SRC)/include/context.h $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h $(I386_SRC)/include/tss.h \
+	    $(I386_SRC)/include/vmspace_bootstrap.h \
+	    $(TOPSRC)/sys/include/user.h $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+syscall_selftest.o: $(I386_PC_SRC)/syscall.c \
+	    $(I386_SRC)/include/interrupt.h $(I386_SRC)/include/privilege.h \
+	    $(I386_SRC)/include/syscall.h $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(TOPSRC)/sys/include/user.h $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -241,6 +252,7 @@ boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
 	    $(I386_SRC)/include/pmap_bootstrap.h $(I386_SRC)/include/privilege.h \
 	    $(I386_SRC)/include/process.h \
+	    $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/vm_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h

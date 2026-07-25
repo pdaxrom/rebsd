@@ -1,9 +1,11 @@
 #include "boot.h"
 #include "interrupt.h"
+#include "syscall.h"
 #include "vmspace_bootstrap.h"
 
 #define I386_IDT_INTERRUPT_GATE   0x8eu
 #define I386_IDT_USER_TRAP_GATE   0xefu
+#define I386_IDT_USER_INTERRUPT_GATE 0xeeu
 #define I386_EXCEPTION_BREAKPOINT 3u
 #define I386_EXCEPTION_PAGE_FAULT 14u
 #define I386_PAGE_FAULT_WRITE     0x02u
@@ -26,6 +28,7 @@ typedef void (*i386_vector_handler)(void);
 
 extern i386_vector_handler const i386_vector_table[I386_VECTOR_TABLE_COUNT];
 extern i386_vector_handler const i386_unhandled_vector_entry;
+extern void i386_vector_128(void);
 
 static struct i386_idt_gate i386_idt[I386_IDT_ENTRIES]
     __attribute__((aligned(16)));
@@ -63,6 +66,8 @@ i386_idt_init(void)
     i386_idt_set_gate(I386_USER_RETURN_VECTOR,
         i386_vector_table[I386_USER_RETURN_VECTOR],
         I386_IDT_USER_TRAP_GATE);
+    i386_idt_set_gate(I386_SYSCALL_VECTOR, i386_vector_128,
+        I386_IDT_USER_INTERRUPT_GATE);
 
     descriptor.limit = (i386_u16)(sizeof(i386_idt) - 1u);
     descriptor.base = (i386_u32)(unsigned long)i386_idt;
@@ -108,7 +113,14 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
     if (frame->tf_vector == I386_USER_RETURN_VECTOR) {
         if (i386_privilege_handle_return(frame))
             return;
+        if (i386_syscall_handle_return(frame))
+            return;
         i386_exception_halt(frame);
+    }
+
+    if (frame->tf_vector == I386_SYSCALL_VECTOR) {
+        i386_syscall_dispatch(frame);
+        return;
     }
 
     if (frame->tf_vector == I386_EXCEPTION_PAGE_FAULT) {

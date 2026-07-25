@@ -50,7 +50,9 @@ and back.  Fork/init now construct schedulable kernel frames and the QEMU
 self-test follows the fork trampoline through the common `iret` epilogue
 while switching between two process vmspaces.  Flat user descriptors and a
 32-bit TSS now support a tested ring-3 entry, user trap, u-area stack switch
-and return.  The first `int 0x80` syscall contract is the next gate.
+and return.  A DPL3 `int 0x80` gate now validates a six-register argument
+ABI, two return registers and BSD-style Carry/errno results.  Connecting the
+generic `sysent` table is the next gate.
 
 The default cross toolchain is:
 
@@ -72,6 +74,7 @@ is explicitly disabled.  The neutral process MD contract and structural
 i386 u-area operations exist; the kernel can save and restore
 scheduler-compatible i386 contexts, switch u-area stacks and resume copied
 fork frames through the common interrupt return path.  User selectors, TSS
-and ring-3 trap/return are connected and tested; syscall dispatch is not.
+and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
+contract exists, but production generic syscall dispatch is not connected.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

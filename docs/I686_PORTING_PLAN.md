@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двенадцать QEMU bring-up инкрементов и первый process-MD refactor
+Статус: тринадцать QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -208,9 +208,26 @@ Malta64. Следующий кодовый инкремент реализует
 - normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, параллельная
   чистая сборка, host VM suite и `BOARD=maltael kernel-objects` проходят.
 
-Следующий инкремент: заменить тестовый return gate первым `int 0x80`
-syscall contract, определить i386 register ABI и проверить безопасную
-передачу аргументов/результата между CPL3 и ядром.
+Тринадцатый QEMU bring-up инкремент завершён:
+
+- IDT vector `0x80` установлен как DPL3 32-bit interrupt gate и использует
+  общий полный i386 trapframe;
+- register ABI задаёт syscall number в `EAX`, шесть аргументов в
+  `EBX/ECX/EDX/ESI/EDI/EBP` и два результата в `EAX/EDX`;
+- BSD-style error convention возвращает положительный errno в `EAX` и
+  устанавливает Carry; успешный возврат очищает Carry;
+- CPL3 self-test сначала вызывает неизвестный номер и проверяет
+  `ENOSYS+CF`, продолжая выполнение в user mode;
+- затем тот же user stream передаёт шесть аргументов зарезервированному
+  self-test syscall, проверяет их сумму, второй result register, сохранность
+  остальных регистров и возврат через `iret`;
+- обязательный marker `syscall-int80: ok` входит в normal/page smoke;
+- normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, параллельная
+  чистая сборка, host VM suite и `BOARD=maltael kernel-objects` проходят.
+
+Следующий инкремент: адаптировать generic `sysent` dispatcher к i386
+trapframe, включая `u_arg`, `u_rval/u_rval2`, errno/Carry, restart и
+post-syscall signal semantics.
 
 ## 1. Цель и границы первого порта
 

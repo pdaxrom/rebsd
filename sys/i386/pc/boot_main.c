@@ -6,6 +6,7 @@
 #include "pmap_bootstrap.h"
 #include "privilege.h"
 #include "process.h"
+#include "syscall.h"
 #include "tss.h"
 #include "vm_bootstrap.h"
 #include "vmspace_bootstrap.h"
@@ -375,6 +376,13 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("ring3: ok\n");
+    if (i386_syscall_selftest() != 0) {
+        i386_early_puts("syscall-int80: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("syscall-int80: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

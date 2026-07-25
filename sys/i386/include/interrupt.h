@@ -14,7 +14,9 @@
 #define I386_USER_DATA_SELECTOR   0x0023u
 #define I386_TSS_SELECTOR         0x0028u
 #define I386_USER_RETURN_VECTOR   48u
+#define I386_SYSCALL_VECTOR       128u
 #define I386_VECTOR_TABLE_COUNT   49u
+#define I386_EFLAGS_CARRY         0x00000001u
 
 /*
  * Stack layout built by interrupt_entry.S.  The processor does not push
@@ -46,6 +48,7 @@ struct i386_trapframe {
 void i386_idt_init(void);
 void i386_interrupt_dispatch(struct i386_trapframe *frame);
 int i386_privilege_handle_return(struct i386_trapframe *frame);
+void i386_privilege_return_to_kernel(struct i386_trapframe *, unsigned);
 void i386_breakpoint_selftest(void);
 i386_u32 i386_breakpoint_count(void);
 

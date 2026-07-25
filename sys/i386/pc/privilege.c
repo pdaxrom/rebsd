@@ -72,16 +72,24 @@ i386_privilege_handle_return(struct i386_trapframe *frame)
     else
         i386_privilege_result = 0;
 
+    i386_privilege_return_to_kernel(frame,
+        (unsigned)(unsigned long)i386_privilege_kernel_return);
+    return 1;
+}
+
+void
+i386_privilege_return_to_kernel(struct i386_trapframe *frame,
+    unsigned entry)
+{
     frame->tf_gs = I386_KERNEL_DATA_SELECTOR;
     frame->tf_fs = I386_KERNEL_DATA_SELECTOR;
     frame->tf_es = I386_KERNEL_DATA_SELECTOR;
     frame->tf_ds = I386_KERNEL_DATA_SELECTOR;
-    frame->tf_eip = (unsigned)(unsigned long)i386_privilege_kernel_return;
+    frame->tf_eip = entry;
     frame->tf_cs = I386_KERNEL_CODE_SELECTOR;
     frame->tf_eflags = I386_EFLAGS_RESERVED;
     frame->tf_useresp = 0;
     frame->tf_ss = 0;
-    return 1;
 }
 
 int

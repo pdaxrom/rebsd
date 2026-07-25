@@ -2,8 +2,9 @@
 
 Статус: generic allocator, публичный i386 pmap, vmspace fault path,
 `copyin/copyout`, i386 u-area allocator, kernel context switch, fork/init
-frames и проверяемый ring-3 entry подключены; MIPS process symbols
-нейтрализованы, следующий gate — `int 0x80` syscall ABI, 2026-07-25.
+frames, проверяемый ring-3 entry и `int 0x80` register ABI подключены; MIPS
+process symbols нейтрализованы, следующий gate — generic `sysent` dispatch,
+2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -153,7 +154,17 @@ stack. Ring-3 self-test активирует собственный vmspace, в�
 privilege stack switch и полный user SS/ESP trapframe, затем возвращает
 исполнение в ring 0. Тестовый vector `0x30` не является syscall ABI.
 
-1. Добавить первый `int 0x80` syscall gate и neutral i386 trap dispatch.
+IDT vector `0x80` является DPL3 interrupt gate. Зафиксирован i386 ABI:
+`EAX` содержит syscall number, `EBX/ECX/EDX/ESI/EDI/EBP` — до шести
+32-битных аргументов, `EAX/EDX` — два результата. Успех очищает Carry;
+ошибка возвращает положительный errno в `EAX` и устанавливает Carry.
+QEMU user stream сначала получает настоящий `ENOSYS+CF`, затем вызывает
+зарезервированный self-test syscall со всеми шестью аргументами и проверяет
+оба результата, сохранённые аргумент-регистры и очищенный Carry. Пока
+активен только этот тестовый номер; production `sysent` не вызывается.
+
+1. Подключить generic `sysent`, `u_arg/u_rval/u_error`, restart semantics и
+   post-syscall signal path.
 2. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
 3. Затем подключить process bootstrap и exec ABI.
