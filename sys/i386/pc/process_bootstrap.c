@@ -21,11 +21,12 @@
 #define I386_PROCESS_USER_STACK_TOP  I386_USER_VADDR_END
 #define I386_PROCESS_USER_MAGIC      0x70726f63u
 
-static struct proc i386_bootstrap_proc;
+static struct proc *i386_bootstrap_proc;
 static struct user *i386_bootstrap_uarea;
 static struct vmspace *i386_bootstrap_vmspace;
 static struct i386_elf_image i386_bootstrap_user_image;
 static struct i386_user_stack i386_bootstrap_user_stack;
+static int i386_process_table_ready;
 static int i386_bootstrap_ready;
 static volatile unsigned i386_process_user_active;
 static volatile unsigned i386_process_user_result;
@@ -36,31 +37,106 @@ i386_process_bootstrap_validate(void)
     unsigned kernel_stack;
 
     if (!i386_bootstrap_ready ||
+        i386_bootstrap_proc != &proc[1] ||
         i386_bootstrap_uarea == (struct user *)0 ||
         i386_bootstrap_vmspace == (struct vmspace *)0)
         return EINVAL;
     kernel_stack = (unsigned)(unsigned long)i386_bootstrap_uarea + USIZE;
     md_uarea_guard_check(i386_bootstrap_uarea);
     if (md_curuser != i386_bootstrap_uarea ||
-        i386_bootstrap_uarea->u_procp != &i386_bootstrap_proc ||
-        i386_bootstrap_proc.p_uarea != i386_bootstrap_uarea ||
-        i386_bootstrap_proc.p_addr !=
+        i386_bootstrap_uarea->u_procp != i386_bootstrap_proc ||
+        i386_bootstrap_proc->p_uarea != i386_bootstrap_uarea ||
+        i386_bootstrap_proc->p_addr !=
         (size_t)(unsigned long)i386_bootstrap_uarea ||
-        i386_bootstrap_proc.p_vmspace != i386_bootstrap_vmspace ||
-        i386_bootstrap_proc.p_pid != 0 ||
-        i386_bootstrap_proc.p_ppid != 0 ||
-        i386_bootstrap_proc.p_stat != SRUN ||
-        (i386_bootstrap_proc.p_flag & (SLOAD | SSYS)) !=
-        (SLOAD | SSYS) ||
+        i386_bootstrap_proc->p_vmspace != i386_bootstrap_vmspace ||
+        i386_bootstrap_proc->p_pid != 1 ||
+        i386_bootstrap_proc->p_ppid != 0 ||
+        i386_bootstrap_proc->p_pptr != &proc[0] ||
+        i386_bootstrap_proc->p_stat != SRUN ||
+        (i386_bootstrap_proc->p_flag & SLOAD) == 0 ||
+        (i386_bootstrap_proc->p_flag & SSYS) != 0 ||
+        nproc != NPROC ||
+        allproc != i386_bootstrap_proc ||
+        i386_bootstrap_proc->p_prev != &allproc ||
+        i386_bootstrap_proc->p_nxt != &proc[0] ||
+        i386_bootstrap_proc->p_hash != (struct proc *)0 ||
+        proc[0].p_pid != 0 ||
+        proc[0].p_ppid != 0 ||
+        proc[0].p_pptr != &proc[0] ||
+        proc[0].p_stat != SRUN ||
+        (proc[0].p_flag & (SLOAD | SSYS)) != (SLOAD | SSYS) ||
+        proc[0].p_prev != &i386_bootstrap_proc->p_nxt ||
+        proc[0].p_nxt != (struct proc *)0 ||
+        freeproc != &proc[2] ||
+        zombproc != (struct proc *)0 ||
+        pfind(1) != i386_bootstrap_proc ||
+        pfind(2) != (struct proc *)0 ||
         vmspace_current() != i386_bootstrap_vmspace ||
         i386_tss_kernel_stack() != kernel_stack)
         return EFAULT;
     return 0;
 }
 
+static int
+i386_process_table_claim_init(struct proc **result)
+{
+    struct proc *process;
+
+    if (result == (struct proc **)0)
+        return EINVAL;
+    if (!i386_process_table_ready) {
+        pqinit();
+        proc[0].p_stat = SRUN;
+        proc[0].p_flag = SLOAD | SSYS;
+        proc[0].p_nice = NZERO;
+        proc[0].p_pptr = &proc[0];
+        i386_process_table_ready = 1;
+    }
+    if (allproc != &proc[0] || freeproc != &proc[1] ||
+        zombproc != (struct proc *)0 ||
+        pidhash[PIDHASH(1)] != (struct proc *)0)
+        return EBUSY;
+
+    process = freeproc;
+    freeproc = process->p_nxt;
+    bzero(process, sizeof(*process));
+    process->p_pid = 1;
+    process->p_ppid = 0;
+    process->p_pptr = &proc[0];
+    process->p_hash = pidhash[PIDHASH(process->p_pid)];
+    pidhash[PIDHASH(process->p_pid)] = process;
+    process->p_nxt = allproc;
+    process->p_nxt->p_prev = &process->p_nxt;
+    process->p_prev = &allproc;
+    allproc = process;
+    *result = process;
+    return 0;
+}
+
+static void
+i386_process_table_release_init(struct proc *process)
+{
+    struct proc **hash;
+
+    if (process == (struct proc *)0)
+        return;
+    hash = &pidhash[PIDHASH(process->p_pid)];
+    if (*hash == process)
+        *hash = process->p_hash;
+    if (process->p_prev != (struct proc **)0) {
+        *process->p_prev = process->p_nxt;
+        if (process->p_nxt != (struct proc *)0)
+            process->p_nxt->p_prev = process->p_prev;
+    }
+    bzero(process, sizeof(*process));
+    process->p_nxt = freeproc;
+    freeproc = process;
+}
+
 int
 i386_process_bootstrap(void)
 {
+    struct proc *process;
     struct user *up;
     struct vmspace *vmspace;
     int error;
@@ -76,19 +152,22 @@ i386_process_bootstrap(void)
     if (up == (struct user *)0)
         return ENOMEM;
     vmspace = (struct vmspace *)0;
+    process = (struct proc *)0;
     error = vmspace_create(&vmspace);
     if (error != 0)
         goto failed;
+    error = i386_process_table_claim_init(&process);
+    if (error != 0)
+        goto failed;
 
-    bzero(&i386_bootstrap_proc, sizeof(i386_bootstrap_proc));
-    i386_bootstrap_proc.p_uarea = up;
-    i386_bootstrap_proc.p_addr = (size_t)(unsigned long)up;
-    i386_bootstrap_proc.p_vmspace = vmspace;
-    i386_bootstrap_proc.p_stat = SRUN;
-    i386_bootstrap_proc.p_flag = SLOAD | SSYS;
-    i386_bootstrap_proc.p_nice = NZERO;
+    process->p_uarea = up;
+    process->p_addr = (size_t)(unsigned long)up;
+    process->p_vmspace = vmspace;
+    process->p_stat = SRUN;
+    process->p_flag = SLOAD;
+    process->p_nice = NZERO;
 
-    up->u_procp = &i386_bootstrap_proc;
+    up->u_procp = process;
     up->u_cmask = CMASK;
     up->u_lastfile = -1;
     for (index = 1; index < NGROUPS; ++index)
@@ -103,12 +182,14 @@ i386_process_bootstrap(void)
         goto failed;
     md_curuser = up;
     i386_tss_set_kernel_stack((unsigned)(unsigned long)up + USIZE);
+    i386_bootstrap_proc = process;
     i386_bootstrap_uarea = up;
     i386_bootstrap_vmspace = vmspace;
     i386_bootstrap_ready = 1;
     return i386_process_bootstrap_validate();
 
 failed:
+    i386_process_table_release_init(process);
     if (vmspace != (struct vmspace *)0)
         (void)vmspace_destroy(vmspace);
     md_uarea_free(up);
@@ -155,12 +236,12 @@ i386_process_handle_return(struct i386_trapframe *frame)
         frame->tf_ds != I386_USER_DATA_SELECTOR ||
         frame->tf_useresp !=
         i386_bootstrap_user_stack.ius_stack_pointer ||
-        frame->tf_eax != 0 ||
         frame->tf_edx != 0 ||
         frame->tf_ebx != I386_BOOTSTRAP_USER_RETURN_MAGIC ||
         (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 ||
-        i386_bootstrap_proc.p_saddr != I386_PROCESS_USER_STACK ||
-        i386_bootstrap_proc.p_ssize != VM_PAGE_SIZE ||
+        frame->tf_eax != 1 ||
+        i386_bootstrap_proc->p_saddr != I386_PROCESS_USER_STACK ||
+        i386_bootstrap_proc->p_ssize != VM_PAGE_SIZE ||
         i386_bootstrap_uarea->u_ssize != VM_PAGE_SIZE ||
         vmspace_check(i386_bootstrap_vmspace, frame->tf_eip, 1,
         VM_PROT_EXECUTE) != 0 ||
@@ -235,8 +316,8 @@ i386_process_bootstrap_user_probe(void)
         error = EFAULT;
         goto failed;
     }
-    i386_bootstrap_proc.p_saddr = I386_PROCESS_USER_STACK;
-    i386_bootstrap_proc.p_ssize = VM_PAGE_SIZE;
+    i386_bootstrap_proc->p_saddr = I386_PROCESS_USER_STACK;
+    i386_bootstrap_proc->p_ssize = VM_PAGE_SIZE;
     i386_bootstrap_uarea->u_ssize = VM_PAGE_SIZE;
 
     i386_process_user_result = EFAULT;

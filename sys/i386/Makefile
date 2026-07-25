@@ -43,9 +43,9 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    pic.o pit.o memory.o paging.o \
                    libkern.o elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
-                   sysent_bootstrap.o kern_prot.o copyio.o \
+                   sysent_bootstrap.o kern_prot.o kern_proc.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
-                   context_selftest.o process_bootstrap.o vm_param.o \
+                   context_selftest.o config.o process_bootstrap.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
                    $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
 
@@ -281,6 +281,14 @@ kern_prot.o: $(TOPSRC)/sys/kernel/kern_prot.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+kern_proc.o: $(TOPSRC)/sys/kernel/kern_proc.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
+	    $(TOPSRC)/sys/include/user.h $(TOPSRC)/sys/include/time.h \
+	    $(TOPSRC)/sys/include/resource.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 copyio.o: $(I386_COMMON_SRC)/copyio.c \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -327,6 +335,13 @@ context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
 	    $(I386_SRC)/include/machine/layout.h \
 	    $(I386_GEN_INCLUDE)/sys/proc.h $(I386_GEN_INCLUDE)/sys/user.h \
 	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+config.o: $(I386_PC_SRC)/config.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/time.h \
+	    $(TOPSRC)/sys/include/resource.h $(TOPSRC)/sys/include/kernel.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

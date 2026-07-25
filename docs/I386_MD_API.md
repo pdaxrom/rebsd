@@ -7,11 +7,11 @@ fork/init frames, проверяемый ring-3 entry и `int 0x80` register ABI
 process symbols нейтрализованы, i386 `sysent` adapter, signal frame и
 user-return signal/reschedule path и user trap-to-signal translation
 проверены; production syscall prefix вызывает generic `getpid`, а
-постоянный proc0-совместимый bootstrap process удерживает активные
-u-area/vmspace/CR3/TSS и выполняет `/sbin/init` из проверяемого read-only
-initfs с production `getpid` и `argc/argv/envp` stack из собственного
-CPL3-контекста; следующий gate — generic process table/process 1,
-2026-07-25.
+постоянный process 1 в generic `proc[]`/`allproc`/PID hash удерживает
+активные u-area/vmspace/CR3/TSS и выполняет `/sbin/init` из проверяемого
+read-only initfs с production `getpid=1` и `argc/argv/envp` stack из
+собственного CPL3-контекста; следующий gate — generic scheduler/fork
+integration, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -300,7 +300,20 @@ lookup `/sbin/init`, ELF load и исполнение с `argv[0]=/sbin/init`.
 `initfs: ok` покрывает эту цепочку, а `make initfs-smoke` проверяет
 byte-for-byte воспроизводимость упаковки.
 
+Board config теперь предоставляет штатные `proc[NPROC]` и `nproc`, а
+generic `kern_proc.c` — `pqinit`, `allproc/freeproc/zombproc`, PID hash и
+`pfind`. Ранний path резервирует proc0 metadata, снимает `proc[1]` с
+`freeproc`, ставит его во главе `allproc` и в hash bucket PID 1, назначает
+parent proc0 и только после этого связывает u-area/vmspace. User init не
+помечен `SSYS`; production `getpid` обязан вернуть 1 непосредственно в
+CPL3. `process-table: ok` проверяет обе очереди, обратные links, hash
+lookup, proc0 reservation и свободный `proc[2]`.
+
+Proc0 пока является только зарезервированным table slot без собственного
+u-area/idle context; run queue, `newproc`, scheduler и fork нескольких
+живых процессов ещё не подключены.
+
 1. Добавить оставшиеся machine headers/config lists.
-2. Заменить bootstrap bridge на generic process table/process 1.
+2. Подключить proc0 idle context, generic run queue/scheduler и `newproc`.
 3. Подключить полный `init_sysent`, когда его generic handlers войдут в
-   image, и довести `exec` до статического ELF32 init.
+   image, и довести generic `execve` до статического ELF32 init.

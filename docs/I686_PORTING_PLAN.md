@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать пять QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: двадцать шесть QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -421,8 +421,29 @@ Malta64. Следующий кодовый инкремент реализует
   32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
   проходят.
 
-Следующий инкремент: заменить временный process bridge на generic process
-table/process 1, затем подключить полный `execve` и storage-backed rootfs.
+Двадцать шестой QEMU bring-up инкремент завершён:
+
+- i386 board config предоставляет generic `proc[NPROC]` и `nproc`, а early
+  kernel впервые линкует общий `kern_proc.c`;
+- `pqinit` формирует штатные `allproc/freeproc/zombproc`; ранний init
+  занимает `proc[1]`, получает PID 1/parent proc0, входит в `allproc` и
+  `pidhash`, а следующим свободным остаётся `proc[2]`;
+- process 1 владеет активными u-area, vmspace, CR3 и TSS.esp0 и, в отличие
+  от зарезервированного proc0, не имеет флага `SSYS`;
+- CPL3 `/sbin/init` проверяет, что production syscall 20 действительно
+  вернул PID 1; kernel return path проверяет тот же EAX;
+- marker `process-table: ok` валидирует list order/back-links, free/zombie
+  queues, proc0 metadata, PID hash и `pfind(1)`;
+- clean build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
+  проходят.
+
+Proc0 на этом шаге остаётся зарезервированным table slot без отдельного
+u-area/idle context; generic run queue, scheduler и `newproc` ещё не
+подключены.
+
+Следующий инкремент: подключить proc0 idle context и generic scheduler/fork,
+затем расширять syscall table и переходить к полному `execve`.
 
 ## 1. Цель и границы первого порта
 

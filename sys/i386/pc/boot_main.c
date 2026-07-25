@@ -424,6 +424,7 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("process-bootstrap: ok\n");
+    i386_early_puts("process-table: ok\n");
     if (i386_process_bootstrap_user_probe() != 0 ||
         i386_process_bootstrap_validate() != 0) {
         i386_early_puts("process-user: failed\n");

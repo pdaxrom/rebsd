@@ -49,6 +49,8 @@ _start:
     jne     .Lfailed
     movl    $20, %eax
     int     $0x80
+    cmpl    $1, %eax
+    jne     .Lfailed
     movl    $I386_BOOTSTRAP_USER_RETURN_MAGIC, %ebx
     int     $0x30
     ud2

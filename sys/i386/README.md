@@ -68,13 +68,15 @@ from both a real `UD2` and a terminal unmapped page fault.  An explicit
 pointers across pathname and exec code.  The early production syscall table
 contains the exact 0-20 prefix; QEMU invokes generic `kern_prot.c:getpid`
 as syscall 20 from CPL3 and requires `syscall-production: ok`.  After the
-destructive self-tests, a persistent proc0-compatible bootstrap process owns
-a guarded u-area and vmspace, keeps its CR3 and `md_curuser` active, and
-provides the live kernel stack selected by `TSS.esp0`;
-`process-bootstrap: ok` validates that state.  The same process then enters
+destructive self-tests, a persistent process 1 owns a guarded u-area and
+vmspace, keeps its CR3 and `md_curuser` active, and
+provides the live kernel stack selected by `TSS.esp0`.  It now occupies
+generic `proc[1]`, `allproc` and the PID hash, with proc0 reserved as the
+future idle slot; `process-bootstrap: ok` and `process-table: ok` validate
+that state.  Process 1 then enters
 CPL3 with an RX text mapping and an RW stack without VM execute permission,
-invokes production `getpid`, and requires `process-user: ok` before timer
-IRQs.  The target non-PAE Pentium III has no hardware NX bit.
+requires production `getpid` to return 1, and requires `process-user: ok`
+before timer IRQs.  The target non-PAE Pentium III has no hardware NX bit.
 The user payload is a separately linked ELF32/i386 `ET_EXEC`, packaged as
 `/sbin/init` in a deterministic read-only initfs and loaded from two
 `PT_LOAD` segments.  The initfs lookup validates its complete directory
@@ -109,11 +111,12 @@ fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
 contract and generic `sysent` adapter now install a production-numbered
 bootstrap prefix through syscall 20, including the real generic `getpid`
-handler.  A persistent proc0-compatible bootstrap process now keeps a real
-u-area, vmspace, CR3 and TSS kernel stack active after self-tests.  It is an
-MD integration bridge, not yet the generic process table or process 1.  Its
-first persistent user mapping executes production syscall 20 from CPL3 and
-validates generic VM text/stack permissions.  A minimal in-memory ELF32
+handler.  A persistent process 1 in the generic process table now keeps a
+real u-area, vmspace, CR3 and TSS kernel stack active after self-tests.
+Proc0 is reserved but does not yet have an idle context, and generic
+run queues/fork are not connected.  The first persistent user mapping
+executes production syscall 20 from CPL3 and validates generic VM
+text/stack permissions.  A minimal in-memory ELF32
 loader now maps RX text and RW data+BSS from named `/sbin/init` in the
 early initfs, and an exec-compatible `argc/argv/envp` stack is active.
 The generic process table, storage-backed root and full syscall table
