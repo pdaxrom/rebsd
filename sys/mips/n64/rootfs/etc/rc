@@ -17,4 +17,6 @@ if mkfs -i 4096 /dev/ram0 >/dev/null; then
 fi
 
 # The n64cart cartridge flash is fixed hardware, not removable media.
-mount /cart
+# init deliberately runs rc with normal output detached. Keep a cartridge
+# mount failure fatal, but send mount_romfs's errno to the visible console.
+mount /cart >/dev/console 2>&1

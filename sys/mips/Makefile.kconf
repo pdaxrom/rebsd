@@ -465,6 +465,7 @@ rootfs-boot-smoke-runtime: rootfs-contract-check \
 	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
 	    --ram $(MALTA_QEMU_RAM) \
 	    --timeout 300 --silence-timeout 60 \
+	    --require-login \
 	    --command 'test -x /sbin/init && test -x /bin/sh && test -x /libexec/getty && test -x /sbin/mkfs && test -x /sbin/mount && test -r /etc/rc && /root/libc-abi-smoke >/dev/null && echo ROOTFS_BOOT_SMOKE_OK' \
 	    --expect "ROOTFS_BOOT_SMOKE_OK"
 
@@ -830,7 +831,7 @@ $(filter-out rootfs.o,$(SYSTEM_OBJ)) swapunix.o: $(MALTA_BUILD_MODE_STAMP)
 
 ifneq ($(MALTA_N64_8M_PROFILE),)
 zswap.o: $(TOPSRC)/sys/mips/common/zswap.c \
-         $(TOPSRC)/sys/mips/common/zswap.h | machine sys .deps
+         $(TOPSRC)/sys/mips/common/zswap.h ${SYSTEM_DEP} | machine sys .deps
 	${COMPILE_C}
 endif
 
