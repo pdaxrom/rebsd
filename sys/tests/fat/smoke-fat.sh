@@ -10,7 +10,8 @@ trap 'rm -f "$binary"' EXIT HUP INT TERM
 
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
     -idirafter "$root/sys" -idirafter "$root/include" \
-    "$root/sys/fs/fat/fat_subr.c" fat_test.c -o "$binary"
+    "$root/sys/fs/fat/fat_subr.c" \
+    "$root/sys/fs/fat/fat_ro.c" fat_test.c -o "$binary"
 
 if [ "$mode" = test ]; then
     "$binary"

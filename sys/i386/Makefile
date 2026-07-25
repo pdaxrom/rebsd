@@ -12,6 +12,7 @@ I386_PC_SRC      = $(I386_SRC)/pc
 I386_USER_SRC    = $(I386_SRC)/user
 I386_TOOLS_SRC   = $(I386_SRC)/tools
 I386_DISK_SRC    = $(TOPSRC)/sys/disk
+I386_FAT_SRC     = $(TOPSRC)/sys/fs/fat
 I386_VM_SRC      = $(TOPSRC)/sys/vm
 I386_GEN_INCLUDE = $(CURDIR)/include
 I386_VM_INCLUDES = -I$(I386_GEN_INCLUDE) -I$(TOPSRC)/sys \
@@ -42,7 +43,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
-                   libkern.o disk_subr.o disk.o disk_bootstrap.o \
+                   libkern.o disk_subr.o disk.o fat_subr.o fat_ro.o \
+                   fat_bootstrap.o disk_bootstrap.o \
                    elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
                    sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
@@ -269,9 +271,31 @@ disk.o: $(I386_DISK_SRC)/disk.c $(I386_DISK_SRC)/disk.h \
 	    -DDISK_WRITE_BACK_MAX_SECTORS=32u \
 	    -c $< -o $@
 
+fat_subr.o: $(I386_FAT_SRC)/fat_subr.c $(I386_FAT_SRC)/fat.h \
+	    $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+fat_ro.o: $(I386_FAT_SRC)/fat_ro.c $(I386_FAT_SRC)/fat.h \
+	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+fat_bootstrap.o: $(I386_PC_SRC)/fat_bootstrap.c \
+	    $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/fat_bootstrap.h $(I386_DISK_SRC)/disk.h \
+	    $(I386_FAT_SRC)/fat.h \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/errno.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/disk_bootstrap.h \
+	    $(I386_SRC)/include/fat_bootstrap.h \
 	    $(I386_SRC)/include/ide.h $(I386_DISK_SRC)/disk.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
 	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/fcntl.h \

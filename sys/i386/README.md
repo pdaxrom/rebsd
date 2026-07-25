@@ -41,6 +41,15 @@ protected-mode trampoline copies it to 1 MiB.  QEMU requires
 `boot-loader: linux-protocol`.  The first IBM 6563-W4G procedure is in
 `docs/I686_HARDWARE_GATE.md`.
 
+The IDE smoke image is now an 8192-sector MBR disk with a real read-only
+FAT16 partition and a two-cluster `/BOOT/ROOT.TXT`.  Early i386 code mounts
+it through the common transport-independent FAT reader, with every sector
+read going through the generic partition-relative `disk_bdev_strategy`.
+Normal QEMU smoke requires case-insensitive lookup, cross-cluster read, EOF,
+missing-name and directory-read checks while the existing open/write
+`EROFS` gates remain active.  Host tests exercise the same reader on FAT16
+and FAT32.
+
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
 TLB invalidation through `invlpg`.  The normalized E820 ranges back the
@@ -151,6 +160,7 @@ loader now maps RX text and RW data+BSS from named `/sbin/init` in the
 early initfs, and an exec-compatible `argc/argv/envp` stack is active.
 A read-only legacy primary-master ATA PIO backend now attaches through the
 generic disk layer, parses MBR partitions and exercises real block strategy
-reads; ATA writes and DMA are intentionally absent.  A storage-backed root,
-the full syscall table, complete userland, and PCC remain outside the current
-image.
+reads.  The early FAT reader mounts the first partition and reads a
+deterministic storage-backed root probe; ATA writes and DMA are intentionally
+absent.  A full VFS root used by process 1, the full syscall table, complete
+userland, and PCC remain outside the current image.

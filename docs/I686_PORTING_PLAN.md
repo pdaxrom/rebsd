@@ -1,7 +1,7 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать девять bring-up инкрементов выполнены, включая два
-IBM 6563-W4G hardware gate, 2026-07-25.
+Статус: сорок bring-up инкрементов выполнены, включая два
+IBM 6563-W4G hardware gate и следующий QEMU-only FAT root gate, 2026-07-25.
 
 ## Выполнено
 
@@ -750,6 +750,34 @@ drive. Перед gate сохранена рекомендация иметь р
 Точный IBM hardware baseline зафиксирован. Следующий инкремент возвращается
 в QEMU-first цикл: подключить read-only filesystem/root integration поверх
 уже проверенного generic disk strategy, не добавляя ATA writes.
+
+Сороковой QEMU bring-up инкремент завершён:
+
+- общий FAT-код получил небольшой транспорт-независимый read-only reader
+  `fat_ro_mount`/`fat_ro_lookup`/`fat_ro_read`; он использует существующие
+  FAT16/FAT32 geometry, dirent и cluster-chain validators и не дублирует
+  on-disk формат в i386-коде;
+- deterministic IDE image увеличен до 8192 секторов и теперь содержит
+  настоящий MBR partition type `0x06`: start LBA 64, length 8128, FAT16,
+  каталог `/BOOT` и 700-байтный `/BOOT/ROOT.TXT` через два кластера;
+- ранний i386 adapter читает FAT sectors только через
+  `disk_bdev_strategy` на уже открытом partition minor; mount, lookup без
+  учёта ASCII-регистра и file read проходят через generic disk region
+  bounds до legacy PIO ATA backend;
+- QEMU требует `fat-mount: fat16,read-only`, успешные lookup/read и
+  переход по FAT chain, а также точные EOF, `ENOENT` и `EISDIR` результаты;
+- host FAT tests отдельно проверяют тот же reader на FAT16 и на sparse
+  FAT32 geometry, близкой к обнаруженному на IBM type `0x0c` partition,
+  включая преждевременный конец cluster chain;
+- ATA write commands по-прежнему отсутствуют; `FWRITE` open и block write
+  strategy всё ещё независимо возвращают `EROFS`;
+- direct Linux-protocol boot, native BIOS boot и оба no-IDE варианта
+  проходят QEMU до `HALT`.
+
+Следующий инкремент остаётся QEMU-only: добавить отдельный deterministic
+FAT32/type-`0x0c` disk gate, затем определить выбор root partition и загрузку
+storage-backed ELF/init. Повторный IBM запуск до прохождения этих проверок
+не требуется.
 
 ## 1. Цель и границы первого порта
 

@@ -1,5 +1,6 @@
 #include "boot.h"
 #include "disk_bootstrap.h"
+#include "fat_bootstrap.h"
 #include "ide.h"
 
 #include <sys/buf.h>
@@ -46,11 +47,9 @@ i386_disk_zero(void *arg, unsigned length)
 }
 
 static int
-i386_disk_has(const unsigned char *data, const char *wanted)
+i386_disk_has_at(const unsigned char *data, unsigned offset,
+    const char *wanted)
 {
-    unsigned offset;
-
-    offset = 0;
     while (*wanted != '\0') {
         if (offset >= DISK_SECTOR_SIZE ||
             data[offset] != (unsigned char)*wanted)
@@ -126,10 +125,10 @@ i386_disk_bootstrap(void)
     }
     i386_early_puts("disk-partition: ");
     if (part.dp_scheme == DISK_SCHEME_MBR &&
-        part.dp_type == PTYPE_BSDFFS &&
-        part.dp_offset == 64u && part.dp_nsectors == 4032u &&
+        part.dp_type == 0x06u &&
+        part.dp_offset == 64u && part.dp_nsectors == 8128u &&
         sectors == part.dp_nsectors)
-        i386_early_puts("rebsd-smoke\n");
+        i386_early_puts("rebsd-fat16\n");
     else
         i386_early_puts("external\n");
 
@@ -139,10 +138,10 @@ i386_disk_bootstrap(void)
         i386_early_puts("disk-strategy-read: failed\n");
         return EIO;
     }
-    if (i386_disk_has(i386_disk_data, "REBSDPART") &&
-        sectors >= 2u && i386_disk_has(
-        i386_disk_data + DISK_SECTOR_SIZE, "REBSDNEXT"))
-        i386_early_puts("disk-strategy-read: rebsd-smoke\n");
+    if (i386_disk_has_at(i386_disk_data, 3, "REBSD   ") &&
+        i386_disk_data[510] == 0x55u &&
+        i386_disk_data[511] == 0xaau)
+        i386_early_puts("disk-strategy-read: rebsd-fat16\n");
     else
         i386_early_puts("disk-strategy-read: external\n");
 
@@ -169,6 +168,15 @@ i386_disk_bootstrap(void)
         i386_early_puts("disk-strategy-write: failed\n");
         return EIO;
     }
+
+    if (sectors <= 0xffffffffull) {
+        error = i386_fat_bootstrap(dev, (unsigned)sectors);
+        if (error != 0) {
+            (void)disk_bdev_close(dev, FREAD, 0);
+            return error;
+        }
+    } else
+        i386_early_puts("fat-root: media-too-large\n");
 
     if (disk_bdev_close(dev, FREAD, 0) != 0) {
         i386_early_puts("disk-close: failed\n");

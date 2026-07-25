@@ -5,10 +5,12 @@ VIA Apollo Pro 133, AGP VGA и IDE-CF. У машины нет floppy drive, по
 существующий GRUB Legacy загрузил `rebsd-i686.bzimg` с Red Hat root
 partition `(hd0,2)`.
 
-Файловая система не монтируется. В текущем i686 image нет ATA-команд
-записи: IDE backend предоставляет только `IDENTIFY` и `READ SECTORS`,
-generic disk регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates
-возвращают `EROFS`.
+В двух проверенных на IBM images файловая система ещё не монтировалась.
+Следующий код уже проходит QEMU-only read-only FAT16/FAT32 reader gate, но
+на IBM его пока повторять не требуется. ATA-команд записи всё ещё нет: IDE
+backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
+регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
+`EROFS`.
 
 ## 1. Собрать и повторить QEMU gate
 

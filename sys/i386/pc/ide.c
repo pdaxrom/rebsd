@@ -350,10 +350,10 @@ i386_ide_partition_probe(void)
         i386_early_puts("ide-partition-read: failed\n");
         return 0;
     }
-    if (i386_ide_data_has(i386_ide_sector_data, 0, "REBSDPART") &&
-        count >= 2u && i386_ide_data_has(
-        i386_ide_sector_data + DISK_SECTOR_SIZE, 0, "REBSDNEXT"))
-        i386_early_puts("ide-partition-read: rebsd-smoke\n");
+    if (i386_ide_data_has(i386_ide_sector_data, 3, "REBSD   ") &&
+        i386_ide_sector_data[510] == 0x55u &&
+        i386_ide_sector_data[511] == 0xaau)
+        i386_early_puts("ide-partition-read: rebsd-fat16\n");
     else
         i386_early_puts("ide-partition-read: external\n");
 
