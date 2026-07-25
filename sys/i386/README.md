@@ -75,6 +75,10 @@ provides the live kernel stack selected by `TSS.esp0`;
 CPL3 with an RX text mapping and an RW stack without VM execute permission,
 invokes production `getpid`, and requires `process-user: ok` before timer
 IRQs.  The target non-PAE Pentium III has no hardware NX bit.
+The user payload is a separately linked ELF32/i386 `ET_EXEC`, embedded
+read-only in the kernel and loaded from two `PT_LOAD` segments.  The loader
+checks bounds, alignment, entry, user ranges, overlap and W+X, zero-fills
+BSS, applies final ELF permissions, and requires `elf32-user: ok`.
 
 The default cross toolchain is:
 
@@ -103,7 +107,9 @@ handler.  A persistent proc0-compatible bootstrap process now keeps a real
 u-area, vmspace, CR3 and TSS kernel stack active after self-tests.  It is an
 MD integration bridge, not yet the generic process table or process 1.  Its
 first persistent user mapping executes production syscall 20 from CPL3 and
-validates generic VM text/stack permissions.  A minimal ELF32 loader and the
-full syscall table remain gated on the rest of the generic kernel.
+validates generic VM text/stack permissions.  A minimal in-memory ELF32
+loader now maps its RX text and RW data+BSS, while the initial user stack,
+filesystem-backed init and full syscall table remain gated on the rest of
+the generic kernel.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

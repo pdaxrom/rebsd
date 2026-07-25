@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать два QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: двадцать три QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -363,9 +363,29 @@ Malta64. Следующий кодовый инкремент реализует
   VM protection policy, CPL3 frame и сохранность bootstrap invariants;
 - normal/trap smoke и RAM matrix 32/64/128/256/768/1024 МиБ проходят.
 
-Следующий инкремент: выделить загрузку user image из test probe в
-минимальный ELF32 loader, затем подготовить статический init и замену
-временного process bridge на generic process table/process 1.
+Двадцать третий QEMU bring-up инкремент завершён:
+
+- минимальная user-программа теперь отдельно собирается GCC/binutils
+  toolchain в настоящий `ET_EXEC` ELF32/i386, а затем встраивается в
+  read-only секцию kernel image;
+- ранний in-memory loader валидирует ELF magic/class/data/ABI, `EM_386`,
+  header bounds, alignment, user ranges, entry point и до восьми
+  неперекрывающихся `PT_LOAD`;
+- loader отклоняет interpreter/неизвестные program headers и W+X segments,
+  загружает файлы через generic vmspace, явно обнуляет BSS, применяет
+  финальные `PF_R/PF_W/PF_X` permissions и откатывает mappings при ошибке;
+- встроенный ELF содержит отдельные RX text и RW data+BSS segments; CPL3
+  код проверяет initialized data, нулевой BSS и запись в него до production
+  `getpid`;
+- entry point берётся из ELF header, а не из kernel-константы; обязательный
+  marker `elf32-user: ok` подтверждает полный build/load/execute path;
+- clean build, QEMU normal/trap smoke и RAM matrix
+  32/64/128/256/768/1024 МиБ проходят с прежними
+  `process-bootstrap: ok` и `process-user: ok`.
+
+Следующий инкремент: сформировать начальный i386 user stack с
+`argc/argv/envp`, затем подключить источник статического init из filesystem
+и заменить временный process bridge на generic process table/process 1.
 
 ## 1. Цель и границы первого порта
 

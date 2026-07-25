@@ -8,9 +8,9 @@ process symbols нейтрализованы, i386 `sysent` adapter, signal fram
 user-return signal/reschedule path и user trap-to-signal translation
 проверены; production syscall prefix вызывает generic `getpid`, а
 постоянный proc0-совместимый bootstrap process удерживает активные
-u-area/vmspace/CR3/TSS и выполняет production `getpid` из собственного
-CPL3-контекста; следующий gate — минимальный ELF32 user image loader,
-2026-07-25.
+u-area/vmspace/CR3/TSS и выполняет отдельно собранный ELF32/i386 image с
+production `getpid` из собственного CPL3-контекста; следующий gate —
+начальный `argc/argv/envp` user stack, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -260,9 +260,25 @@ transition использует bootstrap `TSS.esp0`. Тестовый vector `0
 Marker `process-user: ok` подтверждает frame, syscall result, protections и
 повторную проверку всех proc/u-area/vmspace invariants.
 
+Сырой byte stream заменён настоящим `bootstrap-user.elf`, отдельно
+собранным тем же `i686-elf` GCC/binutils и встроенным в read-only kernel
+section. Ранний in-memory loader принимает только little-endian
+`ET_EXEC`/`EM_386`, проверяет границы header/program-header tables,
+alignment, user address range, неперекрытие page-rounded segments и entry
+в file-backed executable segment. Неизвестные program headers и W+X
+отклоняются. До восьми `PT_LOAD` сначала полностью валидируются, затем
+загружаются через generic vmspace, BSS явно обнуляется, и mappings получают
+финальные permissions из `PF_R/PF_W/PF_X`; partial failure выполняет
+rollback.
+
+Тестовый ELF имеет RX text и RW data+BSS. Его CPL3 entry проверяет
+инициализированное слово, нулевой BSS и запись в него перед production
+syscall 20, поэтому `elf32-user: ok` покрывает не только parser, но и
+фактические mappings, загрузку данных, zero-fill, entry point и исполнение.
+
 1. Добавить оставшиеся machine headers/config lists.
-2. Выделить минимальный ELF32 user image loader и расширять production
-   prefix по требованиям первого init.
+2. Сформировать начальный i386 `argc/argv/envp` stack и расширять
+   production prefix по требованиям первого init.
 3. Заменить bootstrap bridge на generic process table/process 1.
 4. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести `exec` до статического ELF32 init.

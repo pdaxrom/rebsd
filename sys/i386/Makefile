@@ -9,6 +9,7 @@ I386_SRC         = $(TOPSRC)/sys/i386
 I386_BOOT_SRC    = $(I386_SRC)/boot
 I386_COMMON_SRC  = $(I386_SRC)/common
 I386_PC_SRC      = $(I386_SRC)/pc
+I386_USER_SRC    = $(I386_SRC)/user
 I386_TOOLS_SRC   = $(I386_SRC)/tools
 I386_VM_SRC      = $(TOPSRC)/sys/vm
 I386_GEN_INCLUDE = $(CURDIR)/include
@@ -40,7 +41,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o memory.o paging.o \
-                   libkern.o sysent_bootstrap.o kern_prot.o copyio.o \
+                   libkern.o elf_bootstrap.o bootstrap_user_image.o \
+                   sysent_bootstrap.o kern_prot.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o process_bootstrap.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
@@ -87,6 +89,20 @@ context.o: $(I386_COMMON_SRC)/context.S $(I386_SRC)/include/context.h \
 privilege.o: $(I386_COMMON_SRC)/privilege.S $(I386_SRC)/include/context.h
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
+
+bootstrap_user.o: $(I386_USER_SRC)/bootstrap.S \
+	    $(I386_SRC)/include/user_bootstrap.h
+	$(CC) $(I686_ASFLAGS) -I$(I386_SRC)/include -c $< -o $@
+
+bootstrap-user.elf: bootstrap_user.o $(I386_USER_SRC)/bootstrap.ld
+	$(LD) $(I686_LDFLAGS) -T $(I386_USER_SRC)/bootstrap.ld \
+	    -o $@ bootstrap_user.o
+
+bootstrap_user_image.o: bootstrap-user.elf
+	$(OBJCOPY) -I binary -O elf32-i386 -B i386 \
+	    --rename-section \
+	    .data=.rodata.bootstrap_user,alloc,load,readonly,data,contents \
+	    $< $@
 
 early_console.o: $(I386_PC_SRC)/early_console.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h
@@ -219,6 +235,15 @@ libkern.o: $(I386_COMMON_SRC)/libkern.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+elf_bootstrap.o: $(I386_COMMON_SRC)/elf_bootstrap.c \
+	    $(I386_SRC)/include/elf_bootstrap.h \
+	    $(I386_SRC)/include/machine/layout.h \
+	    $(TOPSRC)/sys/include/exec_elf.h \
+	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 sysent_bootstrap.o: $(I386_COMMON_SRC)/sysent_bootstrap.c \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -283,10 +308,12 @@ context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
 	    -c $< -o $@
 
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
+	    $(I386_SRC)/include/elf_bootstrap.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h \
 	    $(I386_SRC)/include/process.h $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/tss.h \
+	    $(I386_SRC)/include/user_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/layout.h \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/user.h \
@@ -420,6 +447,7 @@ boot-smoke-matrix: rebsd-i686.bzimg
 
 clean:
 	rm -f setup.o setup.elf setup.bin setup.map \
+	    bootstrap_user.o bootstrap-user.elf \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
 	    rebsd-i686.bzimg rebsd-i686.map
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine

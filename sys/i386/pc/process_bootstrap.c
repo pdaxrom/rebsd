@@ -6,33 +6,23 @@
 #include <machine/layout.h>
 #include <vm/vmspace.h>
 
+#include "elf_bootstrap.h"
 #include "interrupt.h"
 #include "privilege.h"
 #include "process.h"
 #include "syscall.h"
 #include "tss.h"
+#include "user_bootstrap.h"
 #include "vmspace_bootstrap.h"
 
-#define I386_PROCESS_USER_CODE       I386_USER_VADDR_START
 #define I386_PROCESS_USER_STACK      (I386_USER_VADDR_END - VM_PAGE_SIZE)
 #define I386_PROCESS_USER_STACK_TOP  I386_USER_VADDR_END
-#define I386_PROCESS_USER_RETURN_EIP (I386_PROCESS_USER_CODE + 9u)
 #define I386_PROCESS_USER_MAGIC      0x70726f63u
-
-static const unsigned char i386_process_user_code[] = {
-    /* mov $20,%eax; int $0x80; int $0x30; ud2 */
-    0xb8, 0x14, 0x00, 0x00, 0x00,
-    0xcd, 0x80,
-    0xcd, 0x30,
-    0x0f, 0x0b
-};
-
-typedef char i386_assert_process_user_code_size[
-    sizeof(i386_process_user_code) == 11 ? 1 : -1];
 
 static struct proc i386_bootstrap_proc;
 static struct user *i386_bootstrap_uarea;
 static struct vmspace *i386_bootstrap_vmspace;
+static struct i386_elf_image i386_bootstrap_user_image;
 static int i386_bootstrap_ready;
 static volatile unsigned i386_process_user_active;
 static volatile unsigned i386_process_user_result;
@@ -160,11 +150,13 @@ i386_process_handle_return(struct i386_trapframe *frame)
         frame->tf_cs != I386_USER_CODE_SELECTOR ||
         frame->tf_ss != I386_USER_DATA_SELECTOR ||
         frame->tf_ds != I386_USER_DATA_SELECTOR ||
-        frame->tf_eip != I386_PROCESS_USER_RETURN_EIP ||
         frame->tf_useresp != I386_PROCESS_USER_STACK_TOP ||
         frame->tf_eax != 0 ||
         frame->tf_edx != 0 ||
+        frame->tf_ebx != I386_BOOTSTRAP_USER_RETURN_MAGIC ||
         (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 ||
+        vmspace_check(i386_bootstrap_vmspace, frame->tf_eip, 1,
+        VM_PROT_EXECUTE) != 0 ||
         i386_tss_kernel_stack() != expected_stack)
         i386_process_user_result = EFAULT;
     else
@@ -178,6 +170,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
 int
 i386_process_bootstrap_user_probe(void)
 {
+    static const unsigned char invalid_elf[] = { 0x7f, 'E', 'L', 'F' };
     int resumed;
     volatile int error;
 
@@ -187,10 +180,11 @@ i386_process_bootstrap_user_probe(void)
     error = i386_syscall_install_production();
     if (error != 0)
         return error;
-
-    error = vmspace_map_anon(i386_bootstrap_vmspace,
-        I386_PROCESS_USER_CODE, VM_PAGE_SIZE, VM_PROT_ALL,
-        VM_MAP_EXECUTABLE);
+    if (i386_elf_load_image(i386_bootstrap_vmspace, invalid_elf,
+        sizeof(invalid_elf), &i386_bootstrap_user_image) != ENOEXEC)
+        return EFAULT;
+    error = i386_elf_load_bootstrap_user(i386_bootstrap_vmspace,
+        &i386_bootstrap_user_image);
     if (error != 0)
         return error;
     error = vmspace_map_anon(i386_bootstrap_vmspace,
@@ -198,20 +192,12 @@ i386_process_bootstrap_user_probe(void)
         VM_PROT_READ | VM_PROT_WRITE, VM_MAP_STACK);
     if (error != 0)
         goto failed;
-    error = vmspace_write(i386_bootstrap_vmspace, I386_PROCESS_USER_CODE,
-        i386_process_user_code, sizeof(i386_process_user_code));
-    if (error != 0)
-        goto failed;
-    error = vmspace_protect(i386_bootstrap_vmspace,
-        I386_PROCESS_USER_CODE, VM_PAGE_SIZE,
-        VM_PROT_READ | VM_PROT_EXECUTE);
-    if (error != 0)
-        goto failed;
-    if (vmspace_check(i386_bootstrap_vmspace, I386_PROCESS_USER_CODE,
-            sizeof(i386_process_user_code),
-            VM_PROT_READ | VM_PROT_EXECUTE) != 0 ||
-        vmspace_check(i386_bootstrap_vmspace, I386_PROCESS_USER_CODE,
-            sizeof(i386_process_user_code), VM_PROT_WRITE) == 0 ||
+    if (vmspace_check(i386_bootstrap_vmspace,
+            i386_bootstrap_user_image.iei_entry, 1,
+            VM_PROT_EXECUTE) != 0 ||
+        vmspace_check(i386_bootstrap_vmspace,
+            i386_bootstrap_user_image.iei_entry, 1,
+            VM_PROT_WRITE) == 0 ||
         vmspace_check(i386_bootstrap_vmspace, I386_PROCESS_USER_STACK,
             VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE) != 0 ||
         vmspace_check(i386_bootstrap_vmspace, I386_PROCESS_USER_STACK,
@@ -224,7 +210,7 @@ i386_process_bootstrap_user_probe(void)
     i386_process_user_active = 1;
     resumed = setjmp(&i386_bootstrap_uarea->u_rsave);
     if (resumed == 0)
-        i386_user_enter(I386_PROCESS_USER_CODE,
+        i386_user_enter(i386_bootstrap_user_image.iei_entry,
             I386_PROCESS_USER_STACK_TOP);
     i386_process_user_active = 0;
     if (resumed != 1 ||
@@ -235,7 +221,7 @@ i386_process_bootstrap_user_probe(void)
 failed:
     (void)vmspace_unmap(i386_bootstrap_vmspace,
         I386_PROCESS_USER_STACK, VM_PAGE_SIZE);
-    (void)vmspace_unmap(i386_bootstrap_vmspace,
-        I386_PROCESS_USER_CODE, VM_PAGE_SIZE);
+    (void)i386_elf_unload_image(i386_bootstrap_vmspace,
+        &i386_bootstrap_user_image);
     return error;
 }
