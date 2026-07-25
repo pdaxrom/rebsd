@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: одиннадцать QEMU bring-up инкрементов и первый process-MD refactor
+Статус: двенадцать QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -191,8 +191,26 @@ Malta64. Следующий кодовый инкремент реализует
 - normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, host VM suite и
   `BOARD=maltael kernel-objects` проходят.
 
-Следующий инкремент: добавить user code/data GDT descriptors, TSS `esp0`,
-проверяемый ring-3 entry/return и затем первый `int 0x80` syscall gate.
+Двенадцатый QEMU bring-up инкремент завершён:
+
+- setup GDT получил flat DPL3 code/data descriptors и зарезервированный
+  32-bit TSS descriptor;
+- runtime TSS инициализирует `ss0`, отключённую I/O bitmap, аварийный kernel
+  stack, загружается через `ltr` и проверяется через `str`;
+- i386 `longjmp` теперь обновляет TSS `esp0` вместе с `md_curuser`, чтобы
+  следующий user trap вошёл на stack выбранного процесса;
+- ring-3 self-test создаёт отдельные executable и stack mappings, входит в
+  CPL3 через пятисловный `iret` frame и выполняет user `int3`;
+- CPU реально переключается через TSS на u-area stack, общий handler
+  сохраняет user SS/ESP, возвращается в user code, а тестовый `int 0x30`
+  переводит frame обратно в ring 0;
+- обязательные маркеры `tss: ok` и `ring3: ok` входят в normal/page smoke;
+- normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, параллельная
+  чистая сборка, host VM suite и `BOARD=maltael kernel-objects` проходят.
+
+Следующий инкремент: заменить тестовый return gate первым `int 0x80`
+syscall contract, определить i386 register ABI и проверить безопасную
+передачу аргументов/результата между CPL3 и ядром.
 
 ## 1. Цель и границы первого порта
 

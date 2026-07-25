@@ -1,9 +1,9 @@
 # i386 machine-dependent integration audit
 
 Статус: generic allocator, публичный i386 pmap, vmspace fault path,
-`copyin/copyout`, i386 u-area allocator, kernel context switch и fork/init
-frames подключены; MIPS process symbols нейтрализованы, следующий gate —
-ring-3 entry и syscall ABI, 2026-07-25.
+`copyin/copyout`, i386 u-area allocator, kernel context switch, fork/init
+frames и проверяемый ring-3 entry подключены; MIPS process symbols
+нейтрализованы, следующий gate — `int 0x80` syscall ABI, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -145,7 +145,15 @@ COW-значение по общему VA, `md_curuser`, `u_procp` и грани
 своё исходное значение, а уничтожение обоих vmspace и u-area точно
 восстанавливает allocator counter.
 
-1. Добавить user code/data selectors, TSS `esp0` и проверяемый ring-3 entry.
+GDT содержит flat DPL3 code/data descriptors и runtime-заполняемый 32-bit
+TSS descriptor. После `ltr` каждый i386 `longjmp` синхронно ставит `esp0`
+на вершину нового u-area; вне процесса TSS использует отдельный fail-safe
+stack. Ring-3 self-test активирует собственный vmspace, входит через `iret`,
+выполняет пользовательские `int3` и `int 0x30`, проверяет аппаратный
+privilege stack switch и полный user SS/ESP trapframe, затем возвращает
+исполнение в ring 0. Тестовый vector `0x30` не является syscall ABI.
+
+1. Добавить первый `int 0x80` syscall gate и neutral i386 trap dispatch.
 2. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
-3. Затем подключить process bootstrap, `int 0x80` и exec ABI.
+3. Затем подключить process bootstrap и exec ABI.

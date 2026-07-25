@@ -34,7 +34,8 @@ SETUP_BYTES      = 4608
 VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
                    vmspace.o vmspace_access.o vmspace_fault.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
-KERNEL_OBJS      = entry.o interrupt_entry.o context.o early_console.o interrupt.o \
+KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
+                   early_console.o interrupt.o tss.o privilege_selftest.o \
                    pic.o pit.o memory.o paging.o libkern.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o vm_param.o \
@@ -74,7 +75,12 @@ entry.o: $(I386_BOOT_SRC)/entry.S
 interrupt_entry.o: $(I386_BOOT_SRC)/interrupt_entry.S
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
 
-context.o: $(I386_COMMON_SRC)/context.S $(I386_SRC)/include/context.h
+context.o: $(I386_COMMON_SRC)/context.S $(I386_SRC)/include/context.h \
+	    $(I386_SRC)/include/tss.h
+	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+privilege.o: $(I386_COMMON_SRC)/privilege.S $(I386_SRC)/include/context.h
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
@@ -87,6 +93,20 @@ interrupt.o: $(I386_PC_SRC)/interrupt.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+tss.o: $(I386_PC_SRC)/tss.c $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/interrupt.h $(I386_SRC)/include/tss.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+privilege_selftest.o: $(I386_PC_SRC)/privilege.c \
+	    $(I386_SRC)/include/context.h $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/privilege.h $(I386_SRC)/include/tss.h \
+	    $(I386_SRC)/include/vmspace_bootstrap.h \
+	    $(TOPSRC)/sys/include/user.h $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
 pic.o: $(I386_PC_SRC)/pic.c $(I386_SRC)/include/interrupt.h \
@@ -153,6 +173,7 @@ context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
 	    $(I386_SRC)/include/context.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/process.h \
+	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/elf_machdep.h \
 	    $(I386_SRC)/include/machine/layout.h \
@@ -218,7 +239,9 @@ boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/copyio.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
-	    $(I386_SRC)/include/pmap_bootstrap.h $(I386_SRC)/include/process.h \
+	    $(I386_SRC)/include/pmap_bootstrap.h $(I386_SRC)/include/privilege.h \
+	    $(I386_SRC)/include/process.h \
+	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/vm_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \

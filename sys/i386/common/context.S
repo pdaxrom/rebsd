@@ -26,6 +26,11 @@ setjmp:
     .type longjmp, @function
 longjmp:
     cli
+    movl    4(%esp), %eax
+    addl    $I386_UAREA_SIZE, %eax
+    pushl   %eax
+    call    i386_tss_set_kernel_stack
+    addl    $4, %esp
     movl    4(%esp), %edx
     movl    %edx, md_curuser
     movl    8(%esp), %edx

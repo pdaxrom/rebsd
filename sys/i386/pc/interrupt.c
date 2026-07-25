@@ -24,8 +24,7 @@ struct i386_idt_descriptor {
 
 typedef void (*i386_vector_handler)(void);
 
-extern i386_vector_handler const i386_vector_table[I386_IRQ_BASE +
-    I386_IRQ_COUNT];
+extern i386_vector_handler const i386_vector_table[I386_VECTOR_TABLE_COUNT];
 extern i386_vector_handler const i386_unhandled_vector_entry;
 
 static struct i386_idt_gate i386_idt[I386_IDT_ENTRIES]
@@ -60,6 +59,9 @@ i386_idt_init(void)
             I386_IDT_INTERRUPT_GATE);
     i386_idt_set_gate(I386_EXCEPTION_BREAKPOINT,
         i386_vector_table[I386_EXCEPTION_BREAKPOINT],
+        I386_IDT_USER_TRAP_GATE);
+    i386_idt_set_gate(I386_USER_RETURN_VECTOR,
+        i386_vector_table[I386_USER_RETURN_VECTOR],
         I386_IDT_USER_TRAP_GATE);
 
     descriptor.limit = (i386_u16)(sizeof(i386_idt) - 1u);
@@ -101,6 +103,12 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
     if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
         ++i386_breakpoints;
         return;
+    }
+
+    if (frame->tf_vector == I386_USER_RETURN_VECTOR) {
+        if (i386_privilege_handle_return(frame))
+            return;
+        i386_exception_halt(frame);
     }
 
     if (frame->tf_vector == I386_EXCEPTION_PAGE_FAULT) {

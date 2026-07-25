@@ -7,6 +7,7 @@
 #include "context.h"
 #include "interrupt.h"
 #include "process.h"
+#include "tss.h"
 #include "vmspace_bootstrap.h"
 
 #define I386_CONTEXT_TEST_VADDR 0x52000000u
@@ -189,6 +190,7 @@ out:
         i386_vmspace_deactivate(i386_context_child_vmspace);
     if (i386_context_source_vmspace != (struct vmspace *)0)
         i386_vmspace_deactivate(i386_context_source_vmspace);
+    i386_tss_reset_kernel_stack();
     md_curuser = (struct user *)0;
     if (i386_context_child != (struct user *)0)
         md_uarea_free(i386_context_child);

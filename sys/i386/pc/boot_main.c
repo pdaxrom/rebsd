@@ -4,7 +4,9 @@
 #include "memory.h"
 #include "paging.h"
 #include "pmap_bootstrap.h"
+#include "privilege.h"
 #include "process.h"
+#include "tss.h"
 #include "vm_bootstrap.h"
 #include "vmspace_bootstrap.h"
 
@@ -207,6 +209,13 @@ i386_boot_main(i386_u32 boot_params_phys)
 
     i386_early_puts("memory-map: ok\n");
     i386_early_puts("gdt: ok\n");
+    if (i386_tss_init() != 0) {
+        i386_early_puts("tss: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("tss: ok\n");
     i386_early_puts("console: com1,vga\n");
 
     i386_idt_init();
@@ -359,6 +368,13 @@ i386_boot_main(i386_u32 boot_params_phys)
     }
     i386_early_puts("context-switch: ok\n");
     i386_early_puts("fork-frame: ok\n");
+    if (i386_privilege_selftest() != 0) {
+        i386_early_puts("ring3: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("ring3: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

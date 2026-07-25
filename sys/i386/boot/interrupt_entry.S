@@ -73,6 +73,7 @@ i386_vector_\number:
     I386_VECTOR_NO_ERROR 45
     I386_VECTOR_NO_ERROR 46
     I386_VECTOR_NO_ERROR 47
+    I386_VECTOR_NO_ERROR 48
 
     .p2align 4
 i386_unhandled_vector:
@@ -175,6 +176,7 @@ i386_vector_table:
     .long i386_vector_45
     .long i386_vector_46
     .long i386_vector_47
+    .long i386_vector_48
     .size i386_vector_table, . - i386_vector_table
 
     .globl i386_unhandled_vector_entry

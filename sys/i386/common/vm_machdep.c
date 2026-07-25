@@ -13,6 +13,8 @@
 
 typedef char i386_assert_uarea_page_multiple[
     (USIZE % VM_PAGE_SIZE) == 0 ? 1 : -1];
+typedef char i386_assert_context_uarea_size[
+    USIZE == I386_UAREA_SIZE ? 1 : -1];
 typedef char i386_assert_user_fits_uarea[
     sizeof(struct user) < USIZE ? 1 : -1];
 typedef char i386_assert_frame_fits_uarea[

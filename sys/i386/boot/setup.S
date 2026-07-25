@@ -137,6 +137,9 @@ gdt:
     .quad 0x0000000000000000
     .quad 0x00cf9a000000ffff           /* selector 0x08: flat code */
     .quad 0x00cf92000000ffff           /* selector 0x10: flat data */
+    .quad 0x00cffa000000ffff           /* selector 0x1b: user code */
+    .quad 0x00cff2000000ffff           /* selector 0x23: user data */
+    .quad 0x0000000000000000           /* selector 0x28: runtime TSS */
 gdt_end:
 
 gdt_descriptor:
