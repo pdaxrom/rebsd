@@ -28,11 +28,21 @@ int printf(const char *, ...);
 #endif
 #include <disk/disk.h>
 
+#ifndef DISK_MAX_UNITS
 #define DISK_MAX_UNITS                  4u
+#endif
+#ifndef DISK_READ_CACHE_SLOTS
 #define DISK_READ_CACHE_SLOTS           2u
+#endif
+#ifndef DISK_READ_AHEAD_MAX_SECTORS
 #define DISK_READ_AHEAD_MAX_SECTORS     256u
+#endif
+#ifndef DISK_WRITE_CACHE_SLOTS
 #define DISK_WRITE_CACHE_SLOTS          3u
+#endif
+#ifndef DISK_WRITE_BACK_MAX_SECTORS
 #define DISK_WRITE_BACK_MAX_SECTORS     256u
+#endif
 #define DISK_WRITE_DIRTY_WORD_BITS      32u
 #define DISK_WRITE_DIRTY_WORDS          \
     (DISK_WRITE_BACK_MAX_SECTORS / DISK_WRITE_DIRTY_WORD_BITS)

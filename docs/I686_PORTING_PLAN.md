@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать пять QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: тридцать шесть QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -669,6 +669,31 @@ bootstrap probe и подключить MBR parser/дисковый backend бе
 и провести запросы whole-disk/partition через block-layer region contract.
 ATA-команды записи всё ещё не добавляются. Реальный IBM hardware gate будет
 нужен после этого QEMU-этапа и подготовки serial-only test image.
+
+Тридцать шестой QEMU bring-up инкремент завершён:
+
+- полный generic `sys/disk/disk.c` теперь входит в i686 image; primary ATA
+  master регистрируется через `disk_attach` с `DISK_FLAG_READ_ONLY`;
+- ранние synchronous strategy completion и quiet logging adapters локальны
+  только для i686 bootstrap object через переименование symbols при сборке,
+  не выдавая их за готовые общесистемные `biodone`/`printf`;
+- `disk_bdev_open` на partition разрешает `FREAD`, но возвращает `EROFS`
+  для `FWRITE`; write `struct buf` также завершается `B_ERROR/EROFS` до
+  обращения к отсутствующему `dbo_write`;
+- настоящий `disk_bdev_strategy` переводит partition-relative `B_PHYS`
+  request в ATA LBA, читает два sector markers, корректно возвращает EOF
+  на точной границе partition и закрывает read-only device;
+- generic disk cache dimensions получили build-time overrides при
+  неизменных defaults; ранний i686 профиль использует один 16-sector read
+  slot и один 32-sector write slot, снизив kernel BSS с 855964 до
+  224988 байт; write-back для ATA device остаётся выключен;
+- обязательные QEMU markers фиксируют attach, partition metadata,
+  strategy read/EOF, оба `EROFS` guard и close; no-disk boot по-прежнему
+  пропускает attach и доходит до `HALT`.
+
+Следующий инкремент: подготовить serial-only BIOS boot test artifact и
+инструкцию безопасного первого hardware gate. До появления воспроизводимого
+BIOS-носителя IBM 6563-W4G включать не требуется.
 
 ## 1. Цель и границы первого порта
 

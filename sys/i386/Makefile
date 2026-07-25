@@ -42,7 +42,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
-                   libkern.o disk_subr.o elf_bootstrap.o initfs.o user_stack.o \
+                   libkern.o disk_subr.o disk.o disk_bootstrap.o \
+                   elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
                    sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
                    kern_proc_lifecycle.o kern_synch.o scheduler.o \
@@ -249,6 +250,29 @@ ide.o: $(I386_PC_SRC)/ide.c $(I386_SRC)/include/boot.h \
 
 disk_subr.o: $(I386_DISK_SRC)/disk_subr.c $(I386_DISK_SRC)/disk.h \
 	    $(TOPSRC)/sys/include/disk.h $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+disk.o: $(I386_DISK_SRC)/disk.c $(I386_DISK_SRC)/disk.h \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
+	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_disk_log -Dbiodone=i386_disk_biodone \
+	    -DDISK_READ_CACHE_SLOTS=1u \
+	    -DDISK_READ_AHEAD_MAX_SECTORS=16u \
+	    -DDISK_WRITE_CACHE_SLOTS=1u \
+	    -DDISK_WRITE_BACK_MAX_SECTORS=32u \
+	    -c $< -o $@
+
+disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
+	    $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/disk_bootstrap.h \
+	    $(I386_SRC)/include/ide.h $(I386_DISK_SRC)/disk.h \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
+	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/fcntl.h \
+	    $(TOPSRC)/sys/include/ioctl.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -481,6 +505,7 @@ vmspace_bootstrap.o: $(I386_PC_SRC)/vmspace_bootstrap.c \
 
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/copyio.h \
+	    $(I386_SRC)/include/disk_bootstrap.h \
 	    $(I386_SRC)/include/ide.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
