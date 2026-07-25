@@ -3,11 +3,13 @@
 
 #define I386_PAGE_PRESENT       0x001u
 #define I386_PAGE_WRITABLE      0x002u
+#define I386_PAGE_USER          0x004u
 #define I386_PAGE_FRAME         0xfffff000u
 #define I386_PAGE_ENTRIES       1024u
 #define I386_BOOT_IDENTITY_END  0x00400000u
 #define I386_CR0_WRITE_PROTECT  0x00010000u
 #define I386_CR0_PAGING         0x80000000u
+#define I386_PAGING_TEST_VADDR  0xff800000u
 
 extern char __kernel_start[];
 extern char __kernel_rw_start[];
@@ -18,18 +20,31 @@ const i386_u32 i386_readonly_probe
 
 static i386_u32 *i386_page_directory;
 static i386_u32 i386_page_directory_phys;
+static volatile i386_u32 i386_tlb_invalidations;
+
+static int
+i386_paging_protection_valid(unsigned protection)
+{
+    return (protection & ~I386_PAGE_PROT_ALL) == 0 &&
+        (protection & I386_PAGE_PROT_READ) != 0;
+}
 
 static i386_u32 *
-i386_paging_table(i386_u32 address, int create)
+i386_paging_table(i386_u32 address, int create, int user)
 {
     i386_u32 entry;
     i386_u32 table_phys;
     unsigned directory_index;
 
+    if (i386_page_directory == (i386_u32 *)0)
+        return (i386_u32 *)0;
     directory_index = address >> 22;
     entry = i386_page_directory[directory_index];
-    if ((entry & I386_PAGE_PRESENT) != 0)
+    if ((entry & I386_PAGE_PRESENT) != 0) {
+        if (user && (entry & I386_PAGE_USER) == 0)
+            i386_page_directory[directory_index] |= I386_PAGE_USER;
         return (i386_u32 *)(entry & I386_PAGE_FRAME);
+    }
     if (!create)
         return (i386_u32 *)0;
 
@@ -38,6 +53,8 @@ i386_paging_table(i386_u32 address, int create)
         return (i386_u32 *)0;
     i386_page_directory[directory_index] =
         table_phys | I386_PAGE_PRESENT | I386_PAGE_WRITABLE;
+    if (user)
+        i386_page_directory[directory_index] |= I386_PAGE_USER;
     return (i386_u32 *)table_phys;
 }
 
@@ -47,7 +64,7 @@ i386_paging_map_page(i386_u32 address)
     i386_u32 *table;
     unsigned table_index;
 
-    table = i386_paging_table(address, 1);
+    table = i386_paging_table(address, 1, 0);
     if (table == (i386_u32 *)0)
         return 0;
     table_index = (address >> 12) & 0x3ffu;
@@ -76,7 +93,7 @@ i386_paging_entry(i386_u32 address)
 {
     i386_u32 *table;
 
-    table = i386_paging_table(address, 0);
+    table = i386_paging_table(address, 0, 0);
     if (table == (i386_u32 *)0)
         return (i386_u32 *)0;
     return &table[(address >> 12) & 0x3ffu];
@@ -189,6 +206,182 @@ i386_u32
 i386_paging_directory(void)
 {
     return i386_page_directory_phys;
+}
+
+static void
+i386_paging_invalidate(i386_u32 vaddr)
+{
+    __asm__ volatile ("invlpg (%0)" : : "r" (vaddr) : "memory");
+    ++i386_tlb_invalidations;
+}
+
+int
+i386_paging_map(i386_u32 vaddr, i386_u32 paddr, unsigned protection)
+{
+    i386_u32 *table;
+    i386_u32 entry;
+    unsigned table_index;
+
+    if ((vaddr & I386_PAGE_MASK) != 0 ||
+        (paddr & I386_PAGE_MASK) != 0 ||
+        !i386_paging_protection_valid(protection))
+        return 0;
+
+    table = i386_paging_table(vaddr, 1,
+        (protection & I386_PAGE_PROT_USER) != 0);
+    if (table == (i386_u32 *)0)
+        return 0;
+    table_index = (vaddr >> 12) & 0x3ffu;
+    if ((table[table_index] & I386_PAGE_PRESENT) != 0)
+        return 0;
+
+    entry = (paddr & I386_PAGE_FRAME) | I386_PAGE_PRESENT;
+    if ((protection & I386_PAGE_PROT_WRITE) != 0)
+        entry |= I386_PAGE_WRITABLE;
+    if ((protection & I386_PAGE_PROT_USER) != 0)
+        entry |= I386_PAGE_USER;
+    table[table_index] = entry;
+    i386_paging_invalidate(vaddr);
+    return 1;
+}
+
+int
+i386_paging_unmap(i386_u32 vaddr)
+{
+    i386_u32 *entry;
+
+    if ((vaddr & I386_PAGE_MASK) != 0)
+        return 0;
+    entry = i386_paging_entry(vaddr);
+    if (entry == (i386_u32 *)0 ||
+        (*entry & I386_PAGE_PRESENT) == 0)
+        return 0;
+    *entry = 0;
+    i386_paging_invalidate(vaddr);
+    return 1;
+}
+
+int
+i386_paging_protect(i386_u32 vaddr, unsigned protection)
+{
+    i386_u32 *entry;
+
+    if ((vaddr & I386_PAGE_MASK) != 0 ||
+        !i386_paging_protection_valid(protection))
+        return 0;
+    entry = i386_paging_entry(vaddr);
+    if (entry == (i386_u32 *)0 ||
+        (*entry & I386_PAGE_PRESENT) == 0)
+        return 0;
+
+    *entry &= ~(I386_PAGE_WRITABLE | I386_PAGE_USER);
+    if ((protection & I386_PAGE_PROT_WRITE) != 0)
+        *entry |= I386_PAGE_WRITABLE;
+    if ((protection & I386_PAGE_PROT_USER) != 0) {
+        *entry |= I386_PAGE_USER;
+        i386_page_directory[vaddr >> 22] |= I386_PAGE_USER;
+    }
+    i386_paging_invalidate(vaddr);
+    return 1;
+}
+
+int
+i386_paging_query(i386_u32 vaddr, i386_u32 *paddr, unsigned *protection)
+{
+    i386_u32 *entry;
+    unsigned result;
+
+    entry = i386_paging_entry(vaddr);
+    if (entry == (i386_u32 *)0 ||
+        (*entry & I386_PAGE_PRESENT) == 0)
+        return 0;
+
+    if (paddr != (i386_u32 *)0)
+        *paddr = (*entry & I386_PAGE_FRAME) |
+            (vaddr & I386_PAGE_MASK);
+    if (protection != (unsigned *)0) {
+        result = I386_PAGE_PROT_READ;
+        if ((*entry & I386_PAGE_WRITABLE) != 0)
+            result |= I386_PAGE_PROT_WRITE;
+        if ((*entry & I386_PAGE_USER) != 0)
+            result |= I386_PAGE_PROT_USER;
+        *protection = result;
+    }
+    return 1;
+}
+
+int
+i386_paging_extract(i386_u32 vaddr, i386_u32 *paddr)
+{
+    if (paddr == (i386_u32 *)0)
+        return 0;
+    return i386_paging_query(vaddr, paddr, (unsigned *)0);
+}
+
+i386_u32
+i386_paging_invalidation_count(void)
+{
+    return i386_tlb_invalidations;
+}
+
+int
+i386_paging_primitives_selftest(void)
+{
+    volatile i386_u32 *mapped;
+    volatile i386_u32 *physical;
+    i386_u32 first;
+    i386_u32 second;
+    i386_u32 extracted;
+    i386_u32 invalidations;
+    unsigned protection;
+
+    first = i386_phys_alloc_page();
+    second = i386_phys_alloc_page();
+    if (first == 0 || second == 0)
+        return 0;
+    *(volatile i386_u32 *)first = 0x11223344u;
+    *(volatile i386_u32 *)second = 0x55667788u;
+    invalidations = i386_tlb_invalidations;
+
+    if (!i386_paging_map(I386_PAGING_TEST_VADDR, first,
+        I386_PAGE_PROT_READ | I386_PAGE_PROT_WRITE))
+        return 0;
+    mapped = (volatile i386_u32 *)I386_PAGING_TEST_VADDR;
+    if (*mapped != 0x11223344u ||
+        !i386_paging_extract(I386_PAGING_TEST_VADDR + 37u, &extracted) ||
+        extracted != first + 37u)
+        return 0;
+
+    if (!i386_paging_protect(I386_PAGING_TEST_VADDR,
+        I386_PAGE_PROT_READ) ||
+        !i386_paging_query(I386_PAGING_TEST_VADDR, &extracted,
+        &protection) ||
+        extracted != first || protection != I386_PAGE_PROT_READ)
+        return 0;
+    if (!i386_paging_unmap(I386_PAGING_TEST_VADDR) ||
+        i386_paging_extract(I386_PAGING_TEST_VADDR, &extracted))
+        return 0;
+
+    if (!i386_paging_map(I386_PAGING_TEST_VADDR, second,
+        I386_PAGE_PROT_READ | I386_PAGE_PROT_WRITE) ||
+        *mapped != 0x55667788u)
+        return 0;
+    *mapped = 0xa5a55a5au;
+    physical = (volatile i386_u32 *)second;
+    if (*physical != 0xa5a55a5au ||
+        !i386_paging_unmap(I386_PAGING_TEST_VADDR))
+        return 0;
+
+    if (!i386_paging_map(I386_PAGING_TEST_VADDR, second,
+        I386_PAGE_PROT_READ | I386_PAGE_PROT_USER) ||
+        !i386_paging_query(I386_PAGING_TEST_VADDR, &extracted,
+        &protection) ||
+        extracted != second ||
+        protection != (I386_PAGE_PROT_READ | I386_PAGE_PROT_USER) ||
+        !i386_paging_unmap(I386_PAGING_TEST_VADDR))
+        return 0;
+
+    return i386_tlb_invalidations >= invalidations + 7u;
 }
 
 void

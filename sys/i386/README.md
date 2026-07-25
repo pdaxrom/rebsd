@@ -27,6 +27,11 @@ panic.  The matrix boots 32, 64, 128, and 256 MiB QEMU configurations.
 Build artifacts are written under `O/obj/sys/i386/`; the source tree remains
 clean.
 
+The low-level paging backend also self-tests map/unmap/protect/extract,
+supervisor/user permissions, resident translation replacement, and targeted
+TLB invalidation through `invlpg`.  The generic-kernel integration audit is
+in `docs/I386_MD_API.md`.
+
 The default cross toolchain is:
 
 ```text
@@ -39,6 +44,7 @@ Override QEMU with `QEMU_I386=/path/qemu-system-i386`.
 Current scope is deliberately small: real-mode setup, A20, BIOS E820, flat
 protected mode, COM1, VGA text output, a 256-entry IDT, CPU exception
 diagnostics, remapped dual 8259A PICs, PIT IRQ0 at 100 Hz, normalized
-physical RAM, and non-PAE 4 KiB bootstrap paging.  It does not yet connect
-the machine-independent kernel, per-process address spaces, storage,
-userland, or PCC.
+physical RAM, non-PAE 4 KiB bootstrap paging, and reusable low-level page
+mapping primitives.  It does not yet connect the machine-independent
+kernel, the generic `vm_page` allocator, per-process address spaces,
+storage, userland, or PCC.

@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: три QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: четыре QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -47,8 +47,22 @@
 - paging + timer normal smoke прошёл с 32/64/128/256 МиБ RAM, а
   `trap-smoke` проходит для `#DE`, `#GP` и `#PF`.
 
-Следующая веха: превратить bootstrap mapper в i386 `pmap` primitives и
-начать подключать machine-independent kernel через нейтральные MD hooks.
+Четвёртый QEMU bring-up инкремент завершён:
+
+- проведён аудит публичного `sys/vm/pmap.h`, MIPS pmap implementation и
+  прямых MIPS-зависимостей generic kernel; результат записан в
+  `docs/I386_MD_API.md`;
+- paging backend получил reusable `map`, `unmap`, `protect`, `query` и
+  `extract` для произвольных virtual/physical pages;
+- поддерживаются supervisor/user и read/write PTE/PDE permissions;
+- targeted TLB invalidation выполняется через `invlpg`;
+- self-test проверяет mapping с offset extraction, RO protection,
+  USER mapping, removal и замену resident translation другой physical page;
+- normal/trap smoke и RAM matrix продолжают проходить.
+
+Следующая веха: поднять существующие `vm_phys_map`/`vm_page_allocator` над
+E820 и реализовать полный публичный i386 `pmap` contract с reclaim
+page-table pages.
 LILO HDD gate выполняется после появления Linux-среды для установщика.
 
 ## 1. Цель и границы первого порта
@@ -280,8 +294,10 @@ divide-by-zero/page-fault дают диагностируемый panic, IRQ nes
 
 Bootstrap-часть этапа выполнена: E820 normalization, monotonic physical
 allocator, CR3 switch, 4-КиБ identity mappings, supervisor-only PTE и
-writable protection. Ещё не выполнены per-process address spaces, `pmap`
-API, `invlpg`, user mappings и fault recovery для `copyin/copyout`.
+writable protection. Low-level mapper уже умеет `map/unmap/protect/extract`,
+USER mappings и `invlpg`. Ещё не выполнены per-process address spaces,
+полный публичный `pmap` API, reclaim page-table pages и fault recovery для
+`copyin/copyout`.
 
 1. Нормализовать BIOS/boot-protocol memory map, исключая low memory, ROM,
    kernel image, modules и MMIO holes.
@@ -484,5 +500,16 @@ timer-ticks: ok
 HALT
 ```
 
-Следующий инкремент — reusable i386 `pmap` primitives и первый link с
-machine-independent kernel core, а не userland или PCC.
+Definition of Done четвёртого инкремента:
+
+```text
+pmap-primitives: ok
+tlb-invlpg: ok
+pic: ok
+pit: hz=100
+timer-ticks: ok
+HALT
+```
+
+Следующий инкремент — generic `vm_page_allocator` bootstrap и полный i386
+backend публичного `sys/vm/pmap.h`, а не userland или PCC.

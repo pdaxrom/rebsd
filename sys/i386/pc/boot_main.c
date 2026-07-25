@@ -269,12 +269,21 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_puts("page-directory: ");
     i386_early_put_hex32(i386_paging_directory());
     i386_early_putc('\n');
-    i386_early_puts("physical-free-pages: ");
-    i386_early_put_hex32(i386_memory_free_pages());
-    i386_early_putc('\n');
     i386_early_puts("paging: on\n");
     i386_early_puts("cr0.wp: on\n");
     i386_early_puts("kernel-text-ro: ok\n");
+
+    if (!i386_paging_primitives_selftest()) {
+        i386_early_puts("pmap-primitives: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("pmap-primitives: ok\n");
+    i386_early_puts("tlb-invlpg: ok\n");
+    i386_early_puts("physical-free-pages: ");
+    i386_early_put_hex32(i386_memory_free_pages());
+    i386_early_putc('\n');
 
     i386_exception_smoke(boot_params_phys);
 
