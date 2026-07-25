@@ -2,6 +2,7 @@
 #include "disk_bootstrap.h"
 #include "fat_bootstrap.h"
 #include "ide.h"
+#include "vfs_bootstrap.h"
 
 #include <sys/buf.h>
 #include <sys/disk.h>
@@ -190,6 +191,12 @@ i386_disk_bootstrap(void)
         }
     } else
         i386_early_puts("fat-root: media-too-large\n");
+
+    error = i386_vfs_bootstrap_mount(dev);
+    if (error != 0) {
+        (void)disk_bdev_close(dev, FREAD, 0);
+        return error;
+    }
 
     if (disk_bdev_close(dev, FREAD, 0) != 0) {
         i386_early_puts("disk-close: failed\n");

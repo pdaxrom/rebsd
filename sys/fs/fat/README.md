@@ -15,7 +15,9 @@ transport-independent read-only subset for early architecture ports that do
 not yet have the complete buffer-cache/VFS stack.  It deliberately exposes
 only 8.3 lookup, but uses the same FAT16/FAT32 geometry and cluster validation
 as the full implementation.  The i386 bring-up uses this subset over the
-generic disk strategy; it is not a separate on-disk format.
+generic disk strategy only for an early diagnostic; its root and
+`/sbin/init` now use the full common buffer-cache/VFS implementation over the
+same block device.  It is not a separate on-disk format.
 
 The writable implementation supports creating 8.3 regular files, extending
 and overwriting their cluster chains, truncating them, and removing them. It

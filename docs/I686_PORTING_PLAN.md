@@ -826,6 +826,33 @@ drive. Перед gate сохранена рекомендация иметь р
 filesystem interface, сохранив initfs fallback. Повторный IBM запуск пока
 не требуется; ATA writes, DMA и IRQ mode по-прежнему не включены.
 
+Сорок третий QEMU bring-up инкремент завершён:
+
+- подтверждено, что Ci20 USB mass storage и i686 IDE уже сходятся в одном
+  интерфейсе: оба регистрируют generic disk как block major 2, а FAT не
+  зависит от нижнего транспорта;
+- i686 подключил общий buffer cache, inode/name cache, `fat_vfsops` и
+  `namei`; IDE backend остался прежним синхронным read-only PIO backend;
+- FAT partition монтируется как постоянный read-only root. Диагностический
+  open закрывается, а отдельная VFS-ссылка сохраняет block device открытым;
+- `/sbin/init` теперь открывается общим
+  `namei` и читается через `fat_vfsops.vfs_rwip`; ранний `fat_ro` больше не
+  читает ELF и остаётся только независимой geometry/cluster-chain проверкой;
+- read-only mount не сканирует всю FAT для free-space accounting, что
+  исключает ненужный полный проход по большой IBM IDE-CF перед exec;
+- QEMU требует `vfs-root: fat,read-only`, `vfs-namei-init: ok`,
+  `vfs-read-init: ok` и `process-image: fat-vfs`;
+- прошли direct Linux-protocol и native BIOS boots с FAT16/FAT32, а также
+  оба no-IDE fallback gate с `process-image: initfs`;
+- отдельные direct/BIOS FAT32 gates монтируют исправный раздел без ReBSD
+  `/sbin/init` и также требуют initfs fallback; это покрывает существующий
+  IBM CF без необходимости немедленного hardware retest.
+
+Следующий инкремент остаётся QEMU-only: расширить root path от bootstrap
+чтения init к обычным file-descriptor syscalls, сохраняя read-only policy.
+Повторный IBM запуск пока не требуется; ATA writes, DMA и IRQ mode не
+включены.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых

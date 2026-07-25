@@ -46,7 +46,7 @@ BOOT_MARKERS = (
     "user-trap: ok",
     "process-bootstrap: ok",
     "process-table: ok",
-    "process-image: fat",
+    "process-image: fat-vfs",
     "process-user: ok",
     "process-fork: ok",
     "syscall-fork: ok",
@@ -93,8 +93,9 @@ BOOT_MARKERS = (
     "fat-root-eof: ok",
     "fat-root-missing: enoent",
     "fat-root-directory: eisdir",
-    "fat-init-lookup: ok",
-    "fat-init-read: ok",
+    "vfs-root: fat,read-only",
+    "vfs-namei-init: ok",
+    "vfs-read-init: ok",
     "disk-close: ok",
     "pic: ok",
     "pit: hz=100",
@@ -143,10 +144,17 @@ IDE_DISK_MARKERS = (
     "fat-root-eof: ok",
     "fat-root-missing: enoent",
     "fat-root-directory: eisdir",
-    "fat-init-lookup: ok",
-    "fat-init-read: ok",
-    "process-image: fat",
+    "vfs-root: fat,read-only",
+    "vfs-namei-init: ok",
+    "vfs-read-init: ok",
+    "process-image: fat-vfs",
     "disk-close: ok",
+)
+
+VFS_INIT_MARKERS = (
+    "vfs-namei-init: ok",
+    "vfs-read-init: ok",
+    "process-image: fat-vfs",
 )
 
 NO_DISK_BOOT_MARKERS = tuple(
@@ -203,7 +211,7 @@ EXCEPTION_MARKERS = {
         "user-trap: ok",
         "process-bootstrap: ok",
         "process-table: ok",
-        "process-image: fat",
+        "process-image: fat-vfs",
         "process-user: ok",
         "process-fork: ok",
         "syscall-fork: ok",
@@ -250,8 +258,9 @@ EXCEPTION_MARKERS = {
         "fat-root-eof: ok",
         "fat-root-missing: enoent",
         "fat-root-directory: eisdir",
-        "fat-init-lookup: ok",
-        "fat-init-read: ok",
+        "vfs-root: fat,read-only",
+        "vfs-namei-init: ok",
+        "vfs-read-init: ok",
         "disk-close: ok",
         "exception: vector=0x0000000e error=0x00000003",
         " cr2=",
@@ -298,12 +307,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=8.0)
     parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
     parser.add_argument("--expect-no-disk", action="store_true")
+    parser.add_argument("--expect-no-init", action="store_true")
     args = parser.parse_args()
     if args.expect_no_disk:
-        if args.disk is not None or args.expect_exception is not None:
+        if (
+            args.disk is not None
+            or args.expect_exception is not None
+            or args.expect_no_init
+        ):
             parser.error("--expect-no-disk cannot be combined with disk/trap")
     elif args.disk is None:
         parser.error("--disk is required unless --expect-no-disk is used")
+    if args.expect_no_init and args.expect_exception is not None:
+        parser.error("--expect-no-init cannot be combined with a trap")
     if args.bios_image is not None and args.expect_exception is not None:
         parser.error("--bios-image cannot be combined with --expect-exception")
     return args
@@ -365,6 +381,16 @@ def main() -> None:
             if args.bios_image is not None
             else NO_DISK_BOOT_MARKERS
         )
+    elif args.expect_no_init:
+        markers = tuple(
+            marker
+            for marker in (
+                BIOS_BOOT_MARKERS
+                if args.bios_image is not None
+                else BOOT_MARKERS
+            )
+            if marker not in VFS_INIT_MARKERS
+        ) + ("process-image: initfs",)
     elif args.bios_image is not None:
         markers = BIOS_BOOT_MARKERS
     else:
@@ -414,6 +440,13 @@ def main() -> None:
         raise SystemExit(
             "qemu-boot-smoke: missing serial markers: " + ", ".join(missing)
         )
+    if args.expect_no_init:
+        unexpected = [marker for marker in VFS_INIT_MARKERS if marker in output]
+        if unexpected:
+            raise SystemExit(
+                "qemu-boot-smoke: unexpected serial markers: "
+                + ", ".join(unexpected)
+            )
     print("qemu-boot-smoke: ok")
 
 

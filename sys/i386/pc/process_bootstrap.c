@@ -10,7 +10,6 @@
 #include "context.h"
 #include "boot.h"
 #include "elf_bootstrap.h"
-#include "fat_bootstrap.h"
 #include "initfs.h"
 #include "interrupt.h"
 #include "privilege.h"
@@ -19,6 +18,7 @@
 #include "tss.h"
 #include "user_bootstrap.h"
 #include "user_stack.h"
+#include "vfs_bootstrap.h"
 #include "vmspace_bootstrap.h"
 
 #define I386_PROCESS_USER_STACK      (I386_USER_VADDR_END - VM_PAGE_SIZE)
@@ -647,9 +647,9 @@ i386_process_bootstrap_user_probe(void)
     error = i386_initfs_find_embedded("/sbin/init", &init_file);
     if (error != 0)
         return error;
-    error = i386_fat_bootstrap_init_image(&init_image, &init_size);
+    error = i386_vfs_bootstrap_init_image(&init_image, &init_size);
     if (error == 0)
-        i386_early_puts("process-image: fat\n");
+        i386_early_puts("process-image: fat-vfs\n");
     else if (error == ENOENT) {
         init_image = init_file.iif_data;
         init_size = init_file.iif_size;

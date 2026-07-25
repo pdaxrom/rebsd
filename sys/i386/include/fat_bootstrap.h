@@ -4,6 +4,5 @@
 #include <sys/types.h>
 
 int i386_fat_bootstrap(dev_t, unsigned);
-int i386_fat_bootstrap_init_image(const void **, unsigned *);
 
 #endif

@@ -1,8 +1,24 @@
 #include <sys/param.h>
+#include <sys/buf.h>
+#include <sys/callout.h>
+#include <sys/dir.h>
+#include <sys/inode.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/kernel.h>
+#include <sys/mount.h>
+#include <sys/namei.h>
 #include <sys/proc.h>
 
 int nproc = NPROC;
+struct timezone tz = { 0, 0 };
+struct namecache namecache[NNAMECACHE];
+char bufdata[NBUF * MAXBSIZE];
+struct inode inode[NINODE];
+struct callout callout[NCALL];
+struct mount mount[NMOUNT];
+struct buf buf[NBUF], bfreelist[BQUEUES];
+struct bufhd bufhash[BUFHSZ];
 struct proc proc[NPROC];
+char runin;
+char runout;

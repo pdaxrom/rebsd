@@ -43,12 +43,13 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
-                   libkern.o disk_subr.o disk.o fat_subr.o fat_ro.o \
-                   fat_bootstrap.o disk_bootstrap.o \
+                   libkern.o disk_subr.o disk.o devsw.o \
+                   ufs_bio.o ufs_namei.o fat_subr.o fat_ro.o fat_vfs.o \
+                   fat_bootstrap.o vfs_bootstrap.o disk_bootstrap.o \
                    elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
                    sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
-                   kern_proc_lifecycle.o kern_synch.o scheduler.o \
+                   kern_proc_lifecycle.o kern_synch.o kern_clock.o scheduler.o \
                    process_lifecycle.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o config.o process_bootstrap.o vm_param.o \
@@ -59,6 +60,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 
 .PHONY: all kernel bios-image toolchain-check initfs-smoke ide-smoke \
 	ide-fat32-smoke fat32-boot-smoke bios-fat32-boot-smoke \
+	vfs-fallback-smoke bios-vfs-fallback-smoke \
 	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
 	run run-serial debug boot-smoke bios-boot-smoke trap-smoke \
 	exception-smoke boot-smoke-matrix clean
@@ -272,6 +274,28 @@ disk.o: $(I386_DISK_SRC)/disk.c $(I386_DISK_SRC)/disk.h \
 	    -DDISK_WRITE_BACK_MAX_SECTORS=32u \
 	    -c $< -o $@
 
+devsw.o: $(I386_PC_SRC)/devsw.c $(I386_DISK_SRC)/disk.h \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/conf.h \
+	    $(TOPSRC)/sys/include/errno.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+ufs_bio.o: $(TOPSRC)/sys/kernel/ufs_bio.c \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/conf.h \
+	    $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+ufs_namei.o: $(TOPSRC)/sys/kernel/ufs_namei.c \
+	    $(TOPSRC)/sys/include/inode.h $(TOPSRC)/sys/include/namei.h \
+	    $(TOPSRC)/sys/include/mount.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_vfs_log -Wno-sign-compare \
+	    -Wno-array-bounds -c $< -o $@
+
 fat_subr.o: $(I386_FAT_SRC)/fat_subr.c $(I386_FAT_SRC)/fat.h \
 	    $(TOPSRC)/sys/include/types.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -283,6 +307,13 @@ fat_ro.o: $(I386_FAT_SRC)/fat_ro.c $(I386_FAT_SRC)/fat.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
+
+fat_vfs.o: $(I386_FAT_SRC)/fat_vfs.c $(I386_FAT_SRC)/fat.h \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/inode.h \
+	    $(TOPSRC)/sys/include/mount.h $(TOPSRC)/sys/include/namei.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_vfs_log -c $< -o $@
 
 fat_bootstrap.o: $(I386_PC_SRC)/fat_bootstrap.c \
 	    $(I386_SRC)/include/boot.h \
@@ -297,10 +328,22 @@ disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/disk_bootstrap.h \
 	    $(I386_SRC)/include/fat_bootstrap.h \
+	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/ide.h $(I386_DISK_SRC)/disk.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
 	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/fcntl.h \
 	    $(TOPSRC)/sys/include/ioctl.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+vfs_bootstrap.o: $(I386_PC_SRC)/vfs_bootstrap.c \
+	    $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/vfs_bootstrap.h $(I386_FAT_SRC)/fat.h \
+	    $(I386_SRC)/include/machine/layout.h \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/conf.h \
+	    $(TOPSRC)/sys/include/inode.h $(TOPSRC)/sys/include/mount.h \
+	    $(TOPSRC)/sys/include/namei.h $(TOPSRC)/sys/include/uio.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -387,6 +430,14 @@ kern_synch.o: $(TOPSRC)/sys/kernel/kern_synch.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+kern_clock.o: $(TOPSRC)/sys/kernel/kern_clock.c \
+	    $(TOPSRC)/sys/include/callout.h $(TOPSRC)/sys/include/kernel.h \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
+	    $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-unused-parameter -c $< -o $@
+
 scheduler.o: $(I386_PC_SRC)/scheduler.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/machine/machparam.h \
@@ -463,7 +514,6 @@ config.o: $(I386_PC_SRC)/config.c \
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/context.h \
 	    $(I386_SRC)/include/elf_bootstrap.h \
-	    $(I386_SRC)/include/fat_bootstrap.h \
 	    $(I386_SRC)/include/initfs.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h \
@@ -471,6 +521,7 @@ process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/user_bootstrap.h \
 	    $(I386_SRC)/include/user_stack.h \
+	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/layout.h \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/user.h \
@@ -599,6 +650,10 @@ ide-fat32-smoke: ide-fat32-smoke.img bootstrap-user.elf
 	cmp ide-fat32-smoke.img ide-fat32-smoke.check.img
 	rm -f ide-fat32-smoke.check.img
 
+ide-fat32-no-init-smoke.img: $(I386_TOOLS_SRC)/mkide.py
+	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --filesystem fat32 \
+	    --output $@
+
 run run-serial: rebsd-i686.bzimg ide-smoke.img
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
 	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
@@ -638,6 +693,22 @@ bios-fat32-boot-smoke: rebsd-i686-bios-floppy.img ide-fat32-smoke.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
 	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk ide-fat32-smoke.img --expect-filesystem fat32
+
+vfs-fallback-smoke: rebsd-i686.bzimg ide-fat32-no-init-smoke.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk ide-fat32-no-init-smoke.img --expect-filesystem fat32 \
+	    --expect-no-init
+
+bios-vfs-fallback-smoke: rebsd-i686-bios-floppy.img \
+	    ide-fat32-no-init-smoke.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --disk ide-fat32-no-init-smoke.img --expect-filesystem fat32 \
+	    --expect-no-init
 
 bios-ide-absent-smoke: rebsd-i686-bios-floppy.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -686,6 +757,7 @@ clean:
 	    initfs.img initfs.check.img initfs_image.o \
 	    ide-smoke.img ide-smoke.check.img \
 	    ide-fat32-smoke.img ide-fat32-smoke.check.img \
+	    ide-fat32-no-init-smoke.img \
 	    rebsd-i686-bios-floppy.img \
 	    rebsd-i686-bios-floppy.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \

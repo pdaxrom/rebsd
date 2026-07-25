@@ -20,6 +20,8 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-image-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-boot-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc fat32-boot-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-fat32-boot-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc vfs-fallback-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-vfs-fallback-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-ide-absent-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc trap-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke-matrix
@@ -45,14 +47,17 @@ protected-mode trampoline copies it to 1 MiB.  QEMU requires
 
 The IDE smoke image is now an 8192-sector MBR disk with a real read-only
 FAT16 partition, a two-cluster `/BOOT/ROOT.TXT`, and the separately linked
-ELF32 bootstrap as `/SBIN/INIT`.  Early i386 code mounts it through the
-common transport-independent FAT reader, with every sector read going
-through the generic partition-relative `disk_bdev_strategy`.  Normal QEMU
-smoke requires case-insensitive lookup, cross-cluster root read, EOF,
-missing-name and directory-read checks, then reads the complete multi-cluster
-ELF into a bounded 64 KiB bootstrap buffer.  The existing ELF loader maps and
-executes that disk image in CPL3 and reports `process-image: fat`; no-disk
-boots report `process-image: initfs` and execute the embedded fallback.
+ELF32 bootstrap as `/SBIN/INIT`.  The small transport-independent `fat_ro`
+reader remains an early geometry/chain diagnostic, with every sector read
+going through the generic partition-relative `disk_bdev_strategy`.  The
+actual root mount follows the same path used above Ci20 USB mass storage:
+block major 2, the common buffer cache, `fat_vfsops`, inode/name caches and
+`namei`.  Process 1 opens and reads `/sbin/init` through that VFS path into a
+bounded 64 KiB buffer.  The existing ELF loader maps and executes it in CPL3
+and reports `process-image: fat-vfs`; no-disk boots report
+`process-image: initfs` and execute the embedded fallback.  A separate FAT32
+gate also mounts a valid disk without `/sbin/init` and requires the same
+fallback, matching an IBM CF whose existing FAT partition has no ReBSD init.
 The existing open/write `EROFS` gates remain active.  Host tests exercise
 the same reader on FAT16 and FAT32.  A separate 64 MiB FAT32 image uses MBR
 type `0x0c` and partition start LBA `0x800`, matching the IBM CF's observed

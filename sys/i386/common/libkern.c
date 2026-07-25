@@ -115,3 +115,52 @@ bcopy(const void *source, void *destination, size_t size)
             *--to = *--from;
     }
 }
+
+int
+bcmp(const void *left_arg, const void *right_arg, size_t size)
+{
+    const unsigned char *left;
+    const unsigned char *right;
+
+    left = (const unsigned char *)left_arg;
+    right = (const unsigned char *)right_arg;
+    while (size-- != 0)
+        if (*left++ != *right++)
+            return 1;
+    return 0;
+}
+
+size_t
+strlen(const char *text)
+{
+    const char *end;
+
+    end = text;
+    while (*end != '\0')
+        ++end;
+    return (size_t)(end - text);
+}
+
+void
+insque(void *element_arg, void *predecessor_arg)
+{
+    void **element;
+    void **predecessor;
+
+    element = (void **)element_arg;
+    predecessor = (void **)predecessor_arg;
+    element[0] = predecessor[0];
+    element[1] = predecessor;
+    ((void **)predecessor[0])[1] = element;
+    predecessor[0] = element;
+}
+
+void
+remque(void *element_arg)
+{
+    void **element;
+
+    element = (void **)element_arg;
+    ((void **)element[1])[0] = element[0];
+    ((void **)element[0])[1] = element[1];
+}
