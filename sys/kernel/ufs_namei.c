@@ -238,7 +238,10 @@ namei (struct nameidata *ndp)
     /*
      * Copy the name into the buffer.
      */
-    error = copystr (ndp->ni_dirp, path, MAXPATHLEN, (u_int*) 0);
+    if (ndp->ni_segflg == NI_SYSSPACE)
+        error = copykstr(ndp->ni_dirp, path, MAXPATHLEN, (u_int *)0);
+    else
+        error = copyinstr(ndp->ni_dirp, path, MAXPATHLEN, (u_int *)0);
     if (error) {
         u.u_error = error;
         goto retNULL;

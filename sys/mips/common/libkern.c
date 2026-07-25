@@ -18,8 +18,9 @@ ffs(u_long value)
     return bit;
 }
 
-int
-copystr(caddr_t src, caddr_t dest, u_int maxlength, u_int *lencopied)
+static int
+copystr_internal(caddr_t src, caddr_t dest, u_int maxlength,
+    u_int *lencopied, int src_user)
 {
     caddr_t dest0 = dest;
     unsigned char buffer[COPYSTR_CHUNK];
@@ -29,19 +30,9 @@ copystr(caddr_t src, caddr_t dest, u_int maxlength, u_int *lencopied)
     unsigned i;
     int error = ENOENT;
     int terminated;
-    int src_user;
-    int dest_user;
 
-    src_user = (unsigned)src < 0x80000000u;
-    dest_user = (unsigned)dest < 0x80000000u;
     while (maxlength != 0) {
         chunk = maxlength < COPYSTR_CHUNK ? maxlength : COPYSTR_CHUNK;
-        if (dest_user) {
-            page_left = VM_PAGE_SIZE -
-                ((unsigned)dest & VM_PAGE_MASK);
-            if (chunk > page_left)
-                chunk = page_left;
-        }
         if (src_user) {
             /* Do not make a terminating NUL depend on the next user page. */
             page_left = VM_PAGE_SIZE -
@@ -69,26 +60,38 @@ copystr(caddr_t src, caddr_t dest, u_int maxlength, u_int *lencopied)
                 break;
             }
         }
-        if (dest_user)
-            error = copyout((caddr_t)buffer, dest, copied);
-        else {
-            bcopy((caddr_t)buffer, dest, copied);
-            error = 0;
-        }
-        if (error != 0)
-            goto done;
+        bcopy((caddr_t)buffer, dest, copied);
         src += copied;
         dest += copied;
         maxlength -= copied;
         if (terminated) {
             error = 0;
-            break;
+            goto done;
         }
     }
+    error = ENOENT;
 done:
     if (lencopied != 0)
         *lencopied = dest - dest0;
     return error;
+}
+
+int
+copyinstr(caddr_t src, caddr_t dest, u_int maxlength, u_int *lencopied)
+{
+    return copystr_internal(src, dest, maxlength, lencopied, 1);
+}
+
+int
+copykstr(caddr_t src, caddr_t dest, u_int maxlength, u_int *lencopied)
+{
+    return copystr_internal(src, dest, maxlength, lencopied, 0);
+}
+
+int
+copystr(caddr_t src, caddr_t dest, u_int maxlength, u_int *lencopied)
+{
+    return copykstr(src, dest, maxlength, lencopied);
 }
 
 size_t

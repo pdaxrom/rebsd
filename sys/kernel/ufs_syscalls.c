@@ -279,6 +279,7 @@ link()
     iupdat(ip, &time, &time, 1);
     iunlock(ip);
     ndp->ni_nameiop = CREATE;
+    ndp->ni_segflg = NI_USERSPACE;
     ndp->ni_dirp = (caddr_t)uap->linkname;
     xp = namei(ndp);
     if (xp != NULL) {
@@ -961,6 +962,7 @@ romfs_rename_out:
      * and target inodes are returned locked.
      */
     ndp->ni_nameiop = CREATE | LOCKPARENT | NOCACHE;
+    ndp->ni_segflg = NI_USERSPACE;
     ndp->ni_dirp = (caddr_t)uap->to;
     xp = namei(ndp);
     if (u.u_error) {

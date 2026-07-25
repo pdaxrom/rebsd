@@ -1,7 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: восемнадцать QEMU bring-up инкрементов и первый process-MD refactor
-выполнены, 2026-07-25.
+Статус: девятнадцать QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -294,10 +293,28 @@ Malta64. Следующий кодовый инкремент реализует
   `sigcontext` и дважды возвращаются через `int 0x80 sigreturn`;
 - обязательный marker `user-trap: ok` входит в normal/page smoke.
 
-Следующий инкремент: разделить исторический `copystr` на явные
-kernel-string/user-string operations и перевести pathname/exec syscall
-call sites. Затем можно собирать production `init_sysent` вместе с process
-bootstrap.
+Девятнадцатый QEMU bring-up инкремент завершён:
+
+- исторический `copystr` разделён на явные `copyinstr` для user source и
+  `copykstr` для kernel source; выбор больше не зависит от численного
+  значения low-linked i386 указателя;
+- `nameidata` хранит `NI_USERSPACE/NI_SYSSPACE`, а все kernel pathname
+  источники в `exec_script`, `core` и MIPS socket glue явно используют
+  `NDINIT_KERNEL`;
+- `exec` отдельно отслеживает источник interpreter name/argument,
+  исходного script name, `argv` и `envp`, поэтому длина и копирование
+  строки не используют MIPS address heuristic;
+- MIPS backend сохраняет совместимый `copystr` как kernel-string wrapper;
+  заодно исправлен общий случай исчерпания `maxlength`, который теперь
+  возвращает `ENOENT`, если NUL не найден;
+- i386 QEMU self-test проверяет low-linked kernel string, user string через
+  границу двух страниц, truncation и unmapped fault;
+- normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, host VM suite,
+  MaltaEL и N64 `kernel-objects` проходят.
+
+Следующий инкремент: включить production `init_sysent` и минимальный
+process bootstrap в i386 image, затем довести первый реальный `exec` до
+статического ELF32 init.
 
 ## 1. Цель и границы первого порта
 
@@ -533,8 +550,9 @@ Bootstrap-часть этапа, generic physical-page allocator, публичн
 и writable protection. Low-level mapper умеет `map/unmap/protect/extract`,
 USER mappings и `invlpg`; `pmap` создаёт отдельные process directories,
 активирует их через CR3 и освобождает page-table pages. Generic `vmspace`,
-anonymous faults и COW подключены к i386 page-fault handler. Ещё не
-выполнены process context switch и fault recovery для `copyin/copyout`.
+anonymous faults и COW подключены к i386 page-fault handler. Process
+context switch и безопасные `copyin/copyout/copyinstr`, работающие через
+vmspace access без прямого разыменования user VA из ring 0, выполнены.
 
 1. Нормализовать BIOS/boot-protocol memory map, исключая low memory, ROM,
    kernel image, modules и MMIO holes.

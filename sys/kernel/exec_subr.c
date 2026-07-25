@@ -408,13 +408,16 @@ exec_commit(struct exec_params *epp)
 /*
  * Save argv[] and envp[]
  */
+#define EXEC_ARG_KERNEL 0
+#define EXEC_ARG_USER   1
+
 static int
-exec_arg_length(char *string, int *length)
+exec_arg_length(char *string, int string_user, int *length)
 {
     unsigned char byte;
     int count;
 
-    if ((unsigned)string >= 0x80000000u) {
+    if (!string_user) {
         *length = strlen(string) + 1;
         return *length <= MAXBSIZE ? 0 : E2BIG;
     }
@@ -434,7 +437,7 @@ int exec_save_args(struct exec_params *epp)
 {
     unsigned len;
     caddr_t cp;
-    int argc, error, i, l;
+    int ap_user, argc, error, i, l;
     char **argp, *ap;
 
     epp->argc = epp->envc = 0;
@@ -461,6 +464,7 @@ int exec_save_args(struct exec_params *epp)
         if ((epp->argp = (char **)exec_alloc(argc * sizeof(char *), NBPW, epp)) == NULL)
             return ENOMEM;
         for (;;) {
+            ap_user = EXEC_ARG_USER;
             /*
              * For a interpreter script, the arg list is changed to
              * #! <interpreter name> <interpreter arg>
@@ -478,10 +482,12 @@ int exec_save_args(struct exec_params *epp)
                 ap = NULL;
 
             if (epp->sh.interpreted) {
-                if (epp->argc == 0)
+                if (epp->argc == 0) {
                     ap = epp->sh.interpname;
-                else if (epp->argc == 1 && epp->sh.interparg[0]) {
+                    ap_user = EXEC_ARG_KERNEL;
+                } else if (epp->argc == 1 && epp->sh.interparg[0]) {
                     ap = epp->sh.interparg;
+                    ap_user = EXEC_ARG_KERNEL;
                     --argp;
                 } else if ((epp->argc == 1 || (epp->argc == 2 && epp->sh.interparg[0]))) {
                     ap = epp->userfname;
@@ -490,12 +496,13 @@ int exec_save_args(struct exec_params *epp)
             }
             if (ap == 0)
                 break;
-            error = exec_arg_length(ap, &l);
+            error = exec_arg_length(ap, ap_user, &l);
             if (error != 0)
                 return error;
             if ((cp = exec_alloc(l, 1, epp)) == NULL)
                 return ENOMEM;
-            if (copystr(ap, cp, l, &len) != 0)
+            if ((ap_user ? copyinstr(ap, cp, l, &len) :
+                copykstr(ap, cp, l, &len)) != 0)
                 return EFAULT;
             epp->argp[epp->argc++] = cp;
             epp->argbc += len;;
@@ -528,12 +535,12 @@ int exec_save_args(struct exec_params *epp)
                 ap = NULL;
             if (ap == 0)
                 break;
-            error = exec_arg_length(ap, &l);
+            error = exec_arg_length(ap, EXEC_ARG_USER, &l);
             if (error != 0)
                 return error;
             if ((cp = exec_alloc(l, 1, epp)) == NULL)
                 return ENOMEM;
-            if (copystr(ap, cp, l, &len) != 0)
+            if (copyinstr(ap, cp, l, &len) != 0)
                 return EFAULT;
             epp->envp[epp->envc++] = cp;
             epp->envbc += len;
@@ -575,7 +582,7 @@ void exec_clear(struct exec_params *epp)
 #endif
 
     if (epp->argc != 0)
-        (void)copystr(epp->argp[0], u.u_comm, MAXCOMLEN, 0);
+        (void)copykstr(epp->argp[0], u.u_comm, MAXCOMLEN, 0);
 
     execsigs (u.u_procp);
 

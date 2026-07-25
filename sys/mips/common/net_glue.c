@@ -192,7 +192,7 @@ unpbind(path, len, ipp, unpsock)
 	struct nameidata nd;
 
 	bcopy(path, pth, len);
-	NDINIT(&nd, CREATE, FOLLOW, pth);
+	NDINIT_KERNEL(&nd, CREATE, FOLLOW, pth);
 	nd.ni_dirp[len - 2] = 0;
 	*ipp = 0;
 	ip = namei(&nd);
@@ -225,7 +225,7 @@ unpconn(path, len, so2, ipp)
 	bcopy(path, pth, len);
 	if (len == 0)
 		return (EINVAL);
-	NDINIT(&nd, LOOKUP, FOLLOW, pth);
+	NDINIT_KERNEL(&nd, LOOKUP, FOLLOW, pth);
 	nd.ni_dirp[len - 2] = 0;
 	ip = namei(&nd);
 	*ipp = ip;

@@ -572,7 +572,7 @@ core()
     while ((*np++ = *cp++))
         ;
     u.u_error = 0;
-    NDINIT (ndp, CREATE, FOLLOW, name);
+    NDINIT_KERNEL(ndp, CREATE, FOLLOW, name);
     ip = namei(ndp);
     if (ip == NULL) {
         if (u.u_error)

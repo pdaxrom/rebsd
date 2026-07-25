@@ -20,6 +20,7 @@
 struct nameidata {
     caddr_t ni_dirp;        /* pathname pointer */
     short   ni_nameiop;     /* see below */
+    short   ni_segflg;      /* address space containing ni_dirp */
     short   ni_error;       /* error return if any */
     off_t   ni_endoff;      /* end of useful stuff in directory */
     struct  inode *ni_pdir; /* inode of parent directory of dirp */
@@ -40,8 +41,17 @@ struct nameidata {
 #define FOLLOW      0x40    /* follow symbolic links */
 #define NOFOLLOW    0x0     /* don't follow symbolic links (pseudo) */
 
+#define NI_USERSPACE 0      /* ni_dirp is a user address */
+#define NI_SYSSPACE  1      /* ni_dirp is a kernel address */
+
 #define NDINIT(ndp,op,flags,namep) {\
     (ndp)->ni_nameiop = op | flags; \
+    (ndp)->ni_segflg = NI_USERSPACE; \
+    (ndp)->ni_dirp = namep; }
+
+#define NDINIT_KERNEL(ndp,op,flags,namep) {\
+    (ndp)->ni_nameiop = op | flags; \
+    (ndp)->ni_segflg = NI_SYSSPACE; \
     (ndp)->ni_dirp = namep; }
 
 /*

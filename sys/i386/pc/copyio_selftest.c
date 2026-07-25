@@ -9,9 +9,22 @@
 #define I386_COPYIO_TEST_VADDR  0x51000000u
 #define I386_COPYIO_TEST_SIZE   (2u * VM_PAGE_SIZE)
 
+static int
+i386_copyio_string_equal(const char *left, const char *right)
+{
+    while (*left == *right) {
+        if (*left == '\0')
+            return 1;
+        ++left;
+        ++right;
+    }
+    return 0;
+}
+
 int
 i386_copyio_selftest(void)
 {
+    static char kernel_string[] = "low-kernel-copykstr";
     struct vmspace *source;
     struct vmspace *child;
     vm_paddr_t source_first;
@@ -20,9 +33,12 @@ i386_copyio_selftest(void)
     vm_paddr_t child_second;
     vm_pfn_t free_before;
     vm_vaddr_t crossing;
+    vm_vaddr_t string_address;
     uint32_t source_value;
     uint32_t child_value;
     uint32_t output;
+    char copied_string[64];
+    u_int copied;
     int error;
 
     source = (struct vmspace *)0;
@@ -31,7 +47,15 @@ i386_copyio_selftest(void)
     child_value = 0xa57b3c18u;
     output = 0;
     crossing = I386_COPYIO_TEST_VADDR + VM_PAGE_SIZE - 2u;
+    string_address = I386_COPYIO_TEST_VADDR + VM_PAGE_SIZE - 7u;
     free_before = vm_page_boot_allocator.vpa_free_count;
+
+    copied = 0;
+    if (copykstr((caddr_t)kernel_string, copied_string,
+        sizeof(copied_string), &copied) != 0 ||
+        copied != sizeof(kernel_string) ||
+        !i386_copyio_string_equal(kernel_string, copied_string))
+        return EFAULT;
 
     if (copyin((caddr_t)crossing, (caddr_t)&output, 0) != 0 ||
         copyout((caddr_t)&source_value, (caddr_t)crossing, 0) != 0)
@@ -119,6 +143,32 @@ i386_copyio_selftest(void)
         (child_second & ~VM_PAGE_MASK)) {
         if (error == 0)
             error = EFAULT;
+        goto out;
+    }
+
+    error = copyout((caddr_t)kernel_string, (caddr_t)string_address,
+        sizeof(kernel_string));
+    if (error != 0)
+        goto out;
+    copied = 0;
+    error = copyinstr((caddr_t)string_address, copied_string,
+        sizeof(copied_string), &copied);
+    if (error != 0 || copied != sizeof(kernel_string) ||
+        !i386_copyio_string_equal(kernel_string, copied_string)) {
+        if (error == 0)
+            error = EFAULT;
+        goto out;
+    }
+    copied = 0;
+    if (copyinstr((caddr_t)string_address, copied_string, 4,
+        &copied) != ENOENT || copied != 4) {
+        error = EFAULT;
+        goto out;
+    }
+    if (copyinstr((caddr_t)(I386_COPYIO_TEST_VADDR +
+        I386_COPYIO_TEST_SIZE), copied_string, sizeof(copied_string),
+        &copied) != EFAULT) {
+        error = EFAULT;
         goto out;
     }
 

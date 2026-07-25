@@ -143,8 +143,8 @@ smount()
         error = ENOTDIR;
         goto    cmnout;
     }
-    copystr (uap->freg, mnton, sizeof (mnton) - 1, &lenon);
-    copystr (uap->fspec, mntfrom, sizeof (mntfrom) - 1, &lenfrom);
+    copyinstr(uap->freg, mnton, sizeof(mnton) - 1, &lenon);
+    copyinstr(uap->fspec, mntfrom, sizeof(mntfrom) - 1, &lenfrom);
 
     if (flags & MNT_UPDATE) {
         fs = ip->i_fs;

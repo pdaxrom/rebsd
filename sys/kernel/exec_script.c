@@ -59,7 +59,7 @@ exec_script_check(struct exec_params *epp)
         return ENOEXEC;
     bzero(&nd, sizeof nd);
     ndp = &nd;
-    ndp->ni_dirp = cp;
+    NDINIT_KERNEL(ndp, LOOKUP, FOLLOW, cp);
     while (*cp && *cp != ' ')
         cp++;
     if (*cp != '\0') {
@@ -67,7 +67,8 @@ exec_script_check(struct exec_params *epp)
         while (*cp && *cp == ' ')
             cp++;
         if (*cp) {
-            if ((error = copystr(cp, epp->sh.interparg, sizeof epp->sh.interparg, NULL)))
+            if ((error = copykstr(cp, epp->sh.interparg,
+                sizeof epp->sh.interparg, NULL)))
                 goto done;
         }
     }
@@ -75,11 +76,11 @@ exec_script_check(struct exec_params *epp)
     /*
      * the interpreter is the new file to exec
      */
-    ndp->ni_nameiop = LOOKUP | FOLLOW;
     ip = namei (ndp);
     if (ip == NULL)
         return u.u_error;
-    if ((error = copystr(ndp->ni_dent.d_name, epp->sh.interpname, sizeof epp->sh.interpname, NULL)))
+    if ((error = copykstr(ndp->ni_dent.d_name, epp->sh.interpname,
+        sizeof epp->sh.interpname, NULL)))
         goto done;
 
     /*

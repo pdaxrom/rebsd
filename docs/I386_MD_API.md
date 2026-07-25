@@ -1,11 +1,13 @@
 # i386 machine-dependent integration audit
 
 Статус: generic allocator, публичный i386 pmap, vmspace fault path,
-`copyin/copyout`, i386 u-area allocator, kernel context switch, fork/init
-frames, проверяемый ring-3 entry и `int 0x80` register ABI подключены; MIPS
+`copyin/copyout/copyinstr`, i386 u-area allocator, kernel context switch,
+fork/init frames, проверяемый ring-3 entry и `int 0x80` register ABI
+подключены; MIPS
 process symbols нейтрализованы, i386 `sysent` adapter, signal frame и
 user-return signal/reschedule path и user trap-to-signal translation
-проверены; следующий gate — явный user-string API, 2026-07-25.
+проверены; следующий gate — production `init_sysent` и process bootstrap,
+2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -81,10 +83,7 @@ replacement, executable mapping, сохранность low-linked kernel mappin
 
 До первого полноценного generic link остаются следующие MD blockers:
 
-1. Разделить исторический `copystr` на однозначные kernel-string и
-   user-string операции; low-linked i386 пока не может безопасно определять
-   тип указателя по одному virtual address.
-2. Добавить оставшиеся machine headers (`types`, `vmparam`, `cpu`, `fpu`,
+1. Добавить оставшиеся machine headers (`types`, `vmparam`, `cpu`, `fpu`,
    `limits`) и i386 Kconfig/file lists. Минимальные `layout.h` и
    `elf_machdep.h` уже задают ELF32, little-endian, `EM_386` и `R_386_*`;
    generic ELF loader использует `ELF_MACHDEP_ID_CASES` вместо `EM_MIPS`.
@@ -110,6 +109,13 @@ kernel-mode `#PF`. Bounds берутся из текущего `vm_map`, вкл�
 physical pages, read-only rejection и полный allocator reclaim. В раннем
 однопоточном image copy path помечен `VM_FAULT_CAN_SLEEP`; IRQ-safe вариант
 будет выбран после появления trap/process context accounting.
+
+User-string API теперь однозначен: `copyinstr` всегда читает из текущего
+user vmspace, `copykstr` всегда читает kernel memory, а совместимый
+`copystr` является только kernel-string wrapper. `nameidata` переносит
+`NI_USERSPACE/NI_SYSSPACE`, а `exec` явно различает user `argv/envp` и
+kernel shebang substitutions. Поэтому low-linked kernel address больше не
+может быть ошибочно принят за user pointer.
 
 Generic process код теперь использует нейтральные `md_curuser`,
 `md_uarea_alloc/fork/free`, `md_uarea_guard_init/check`, `md_init_process` и
@@ -223,11 +229,9 @@ unmapped `0x60000000`. User handlers проверяют `SIGILL`/faulting EIP и
 
 Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
 тянут остальные подсистемы. Публичный setter уже позволяет установить
-production `sysent`; оставшийся блокер pathname/exec syscalls — неоднозначный
-исторический `copystr`, который должен быть разделён на kernel-string и
-user-string operations.
+production `sysent`; pathname/exec call sites уже переведены на явное
+адресное пространство без pointer-range эвристики.
 
-1. Добавить явный user-string primitive и перевести syscall pathname/exec
-   call sites без pointer-range эвристики.
-2. Добавить оставшиеся machine headers/config lists.
-3. Затем включить production `init_sysent`, process bootstrap и exec ABI.
+1. Добавить оставшиеся machine headers/config lists.
+2. Включить production `init_sysent` и минимальный process bootstrap.
+3. Довести первый реальный `exec` до статического ELF32 init.
