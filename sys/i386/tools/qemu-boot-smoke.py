@@ -11,15 +11,37 @@ import subprocess
 import time
 
 
-REQUIRED_MARKERS = (
+BOOT_MARKERS = (
     "REBSD_I686_BOOT",
     "cpu: i686",
     "boot: linux-x86-2.02",
     "memory-map: ok",
     "gdt: ok",
     "console: com1,vga",
+    "idt: ok",
+    "exception-int3: ok",
+    "pic: ok",
+    "pit: hz=100",
+    "timer-ticks: ok",
     "HALT",
 )
+
+EXCEPTION_MARKERS = {
+    "divide": (
+        "REBSD_I686_BOOT",
+        "idt: ok",
+        "exception-int3: ok",
+        "exception: vector=0x00000000 error=0x00000000",
+        "PANIC: cpu exception",
+    ),
+    "gp": (
+        "REBSD_I686_BOOT",
+        "idt: ok",
+        "exception-int3: ok",
+        "exception: vector=0x0000000d error=",
+        "PANIC: cpu exception",
+    ),
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--memory", default="64M")
     parser.add_argument("--kernel", required=True, type=pathlib.Path)
     parser.add_argument("--timeout", type=float, default=8.0)
+    parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
     return parser.parse_args()
 
 
@@ -56,6 +79,19 @@ def main() -> None:
         "-no-reboot",
         "-no-shutdown",
     ]
+    if args.expect_exception:
+        command.extend(["-append", f"rebsd.trap={args.expect_exception}"])
+
+    markers = (
+        EXCEPTION_MARKERS[args.expect_exception]
+        if args.expect_exception
+        else BOOT_MARKERS
+    )
+    stop_marker = (
+        b"PANIC: cpu exception\r\n"
+        if args.expect_exception
+        else b"HALT\r\n"
+    )
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -72,7 +108,7 @@ def main() -> None:
             chunk = os.read(process.stdout.fileno(), 4096)
             if chunk:
                 output_bytes.extend(chunk)
-                if b"HALT\r\n" in output_bytes:
+                if stop_marker in output_bytes:
                     break
         if process.poll() is not None:
             break
@@ -90,7 +126,7 @@ def main() -> None:
 
     output = output_bytes.decode("utf-8", errors="replace")
     print(output, end="")
-    missing = [marker for marker in REQUIRED_MARKERS if marker not in output]
+    missing = [marker for marker in markers if marker not in output]
     if missing:
         raise SystemExit(
             "qemu-boot-smoke: missing serial markers: " + ", ".join(missing)

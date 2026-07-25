@@ -15,11 +15,15 @@ Use a separate object root:
 ```sh
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc all
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc trap-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke-matrix
 ```
 
-The matrix boots 32, 64, 128, and 256 MiB QEMU configurations.  Build
-artifacts are written under `O/obj/sys/i386/`; the source tree remains clean.
+The normal smoke validates IDT entry/return plus ten PIT timer IRQs.  The
+trap smoke deliberately raises both divide error (`#DE`) and general
+protection (`#GP`) and requires a diagnostic panic.  The matrix boots 32,
+64, 128, and 256 MiB QEMU configurations.  Build artifacts are written
+under `O/obj/sys/i386/`; the source tree remains clean.
 
 The default cross toolchain is:
 
@@ -31,6 +35,7 @@ Override it with `I686_TOOLCHAIN=/path` or `I686_PREFIX=/path/prefix-`.
 Override QEMU with `QEMU_I386=/path/qemu-system-i386`.
 
 Current scope is deliberately small: real-mode setup, A20, BIOS E820, flat
-protected mode, COM1, VGA text output, and a deterministic halt marker.  It
-does not yet connect the machine-independent kernel, paging, interrupts,
-storage, userland, or PCC.
+protected mode, COM1, VGA text output, a 256-entry IDT, CPU exception
+diagnostics, remapped dual 8259A PICs, and PIT IRQ0 at 100 Hz.  It does not
+yet connect the machine-independent kernel, paging, storage, userland, or
+PCC.

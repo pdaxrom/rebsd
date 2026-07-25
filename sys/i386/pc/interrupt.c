@@ -1,0 +1,128 @@
+#include "boot.h"
+#include "interrupt.h"
+
+#define I386_KERNEL_CODE_SELECTOR 0x0008u
+#define I386_IDT_INTERRUPT_GATE   0x8eu
+#define I386_IDT_USER_TRAP_GATE   0xefu
+#define I386_EXCEPTION_BREAKPOINT 3u
+#define I386_EXCEPTION_PAGE_FAULT 14u
+
+struct i386_idt_gate {
+    i386_u16 offset_low;
+    i386_u16 selector;
+    i386_u8 zero;
+    i386_u8 attributes;
+    i386_u16 offset_high;
+} __attribute__((packed));
+
+struct i386_idt_descriptor {
+    i386_u16 limit;
+    i386_u32 base;
+} __attribute__((packed));
+
+typedef void (*i386_vector_handler)(void);
+
+extern i386_vector_handler const i386_vector_table[I386_IRQ_BASE +
+    I386_IRQ_COUNT];
+extern i386_vector_handler const i386_unhandled_vector_entry;
+
+static struct i386_idt_gate i386_idt[I386_IDT_ENTRIES]
+    __attribute__((aligned(16)));
+static volatile i386_u32 i386_breakpoints;
+
+static void
+i386_idt_set_gate(unsigned vector, i386_vector_handler handler,
+    i386_u8 attributes)
+{
+    i386_u32 offset;
+
+    offset = (i386_u32)(unsigned long)handler;
+    i386_idt[vector].offset_low = (i386_u16)(offset & 0xffffu);
+    i386_idt[vector].selector = I386_KERNEL_CODE_SELECTOR;
+    i386_idt[vector].zero = 0;
+    i386_idt[vector].attributes = attributes;
+    i386_idt[vector].offset_high = (i386_u16)(offset >> 16);
+}
+
+void
+i386_idt_init(void)
+{
+    struct i386_idt_descriptor descriptor;
+    unsigned vector;
+
+    for (vector = 0; vector < I386_IDT_ENTRIES; ++vector)
+        i386_idt_set_gate(vector, i386_unhandled_vector_entry,
+            I386_IDT_INTERRUPT_GATE);
+    for (vector = 0; vector < I386_IRQ_BASE + I386_IRQ_COUNT; ++vector)
+        i386_idt_set_gate(vector, i386_vector_table[vector],
+            I386_IDT_INTERRUPT_GATE);
+    i386_idt_set_gate(I386_EXCEPTION_BREAKPOINT,
+        i386_vector_table[I386_EXCEPTION_BREAKPOINT],
+        I386_IDT_USER_TRAP_GATE);
+
+    descriptor.limit = (i386_u16)(sizeof(i386_idt) - 1u);
+    descriptor.base = (i386_u32)(unsigned long)i386_idt;
+    __asm__ volatile ("lidt %0" : : "m" (descriptor));
+}
+
+static void
+i386_exception_halt(const struct i386_trapframe *frame)
+{
+    i386_u32 cr2;
+
+    i386_early_puts("exception: vector=");
+    i386_early_put_hex32(frame->tf_vector);
+    i386_early_puts(" error=");
+    i386_early_put_hex32(frame->tf_error);
+    i386_early_puts(" eip=");
+    i386_early_put_hex32(frame->tf_eip);
+    if (frame->tf_vector == I386_EXCEPTION_PAGE_FAULT) {
+        __asm__ volatile ("movl %%cr2, %0" : "=r" (cr2));
+        i386_early_puts(" cr2=");
+        i386_early_put_hex32(cr2);
+    }
+    i386_early_putc('\n');
+    i386_early_puts("PANIC: cpu exception\n");
+
+    for (;;) {
+        __asm__ volatile ("cli; hlt");
+    }
+}
+
+void
+i386_interrupt_dispatch(struct i386_trapframe *frame)
+{
+    unsigned irq;
+
+    if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
+        ++i386_breakpoints;
+        return;
+    }
+
+    if (frame->tf_vector < I386_IRQ_BASE)
+        i386_exception_halt(frame);
+
+    if (frame->tf_vector >= I386_IRQ_BASE + I386_IRQ_COUNT)
+        i386_exception_halt(frame);
+
+    irq = frame->tf_vector - I386_IRQ_BASE;
+    if (!i386_pic_accept_irq(irq))
+        return;
+
+    if (irq == I386_IRQ_TIMER)
+        i386_pit_interrupt();
+
+    i386_pic_eoi(irq);
+}
+
+void
+i386_breakpoint_selftest(void)
+{
+    __asm__ volatile ("int3");
+}
+
+i386_u32
+i386_breakpoint_count(void)
+{
+    return i386_breakpoints;
+}

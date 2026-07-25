@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: исходный план, 2026-07-25.
+Статус: два QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -18,8 +18,25 @@
 - host `file` распознаёт image как Linux x86 bzImage с версией
   `ReBSD i686 early`.
 
-Следующая веха: IDT, CPU exceptions, dual 8259A PIC и PIT `HZ=100`.
-LILO HDD gate выполняется после появления Linux-среды для установщика.
+Второй QEMU bring-up инкремент также завершён:
+
+- установлена 256-entry IDT: отдельные stubs для 32 CPU exceptions и
+  IRQ0–IRQ15, остальные vectors ведут в диагностический default handler;
+- единый `struct i386_trapframe` сохраняет GPR, segment registers,
+  vector/error, EIP/CS/EFLAGS и место для будущих user ESP/SS;
+- recoverable `INT3` self-test проверяет dispatch и возврат через `iret`;
+- negative `trap-smoke` проверяет `#DE` без error code и `#GP` с
+  аппаратным error code;
+- dual 8259A remapped на `0x20`/`0x28`, все линии кроме IRQ0 маскированы,
+  реализованы EOI и spurious IRQ7/IRQ15;
+- PIT channel 0 работает в rate-generator mode с `HZ=100`; normal smoke
+  получает десять IRQ0 через `sti; hlt`;
+- normal smoke снова прошёл на QEMU с 32/64/128/256 МиБ RAM.
+
+Следующая веха: нормализация E820, физический page allocator и bootstrap
+paging. После включения paging добавляется deliberate `#PF` smoke с
+проверкой CR2. LILO HDD gate выполняется после появления Linux-среды для
+установщика.
 
 ## 1. Цель и границы первого порта
 
@@ -229,6 +246,11 @@ COM1. После этого тот же `rebsd-i686.bzimg` проходит LILO
 
 ### Этап 3. Exceptions, IRQ и время
 
+Низкоуровневый bring-up этого этапа выполнен. Подключение generic
+`hardclock` и полноценного `spl*` остаётся до момента, когда i386 войдёт в
+machine-independent kernel; page-fault handler уже выводит CR2, но
+deliberate `#PF` test возможен только после включения paging на этапе 4.
+
 1. Полная IDT для CPU exceptions и hardware IRQ.
 2. Единый `struct i386_trapframe`, одинаково пригодный для trap, syscall,
    signal и debugger paths.
@@ -392,7 +414,7 @@ script должен иметь безопасный fallback на `qemu32`.
    PCI IDs, поэтому первый IDE backend работает через legacy compatibility
    ports, а PCI bus-master DMA остаётся отдельной поздней задачей.
 
-## 8. Ближайший исполнимый инкремент
+## 8. Выполненные и ближайший исполнимый инкременты
 
 Первый инкремент содержит:
 
@@ -415,4 +437,19 @@ console: com1,vga
 HALT
 ```
 
-Следующий инкремент — IDT/PIC/PIT, а не userland или PCC.
+Definition of Done второго инкремента:
+
+```text
+idt: ok
+exception-int3: ok
+pic: ok
+pit: hz=100
+timer-ticks: ok
+HALT
+```
+
+Дополнительный `trap-smoke` обязан получить диагностический panic для
+`#DE` (vector 0) и `#GP` (vector 13 с error code).
+
+Следующий инкремент — E820 normalization, physical page allocator и
+bootstrap paging, а не userland или PCC.

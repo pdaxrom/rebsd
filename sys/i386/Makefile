@@ -26,12 +26,13 @@ PYTHON          ?= python3
 SETUP_SECTS      = 8
 SETUP_BYTES      = 4608
 
-KERNEL_OBJS      = entry.o early_console.o boot_main.o
+KERNEL_OBJS      = entry.o interrupt_entry.o early_console.o interrupt.o \
+                   pic.o pit.o boot_main.o
 
 .DEFAULT_GOAL := all
 
 .PHONY: all kernel toolchain-check run run-serial debug boot-smoke \
-	boot-smoke-matrix clean
+	trap-smoke exception-smoke boot-smoke-matrix clean
 
 all: toolchain-check kernel
 
@@ -58,13 +59,31 @@ setup.bin: setup.elf
 entry.o: $(I386_BOOT_SRC)/entry.S
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
 
+interrupt_entry.o: $(I386_BOOT_SRC)/interrupt_entry.S
+	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
+
 early_console.o: $(I386_PC_SRC)/early_console.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
+interrupt.o: $(I386_PC_SRC)/interrupt.c \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+pic.o: $(I386_PC_SRC)/pic.c $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/io.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+pit.o: $(I386_PC_SRC)/pit.c $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/io.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
-	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
@@ -97,6 +116,18 @@ boot-smoke: rebsd-i686.bzimg
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $<
+
+trap-smoke: rebsd-i686.bzimg
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --expect-exception divide
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --expect-exception gp
+
+exception-smoke: trap-smoke
 
 boot-smoke-matrix: rebsd-i686.bzimg
 	@for memory in 32M 64M 128M 256M; do \
