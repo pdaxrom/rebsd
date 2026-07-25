@@ -4,8 +4,8 @@
 # u-area allocator, context switch, fork/init frames, ring-3/TSS, int 0x80
 # ABI, production-numbered sysent bootstrap prefix, signal frame, user-return
 # work loop, user trap-to-signal path, proc0-compatible bootstrap process and
-# its persistent CPL3 production-syscall probe, embedded ELF32 loader and
-# exec-compatible initial user stack are built directly by
-# sys/i386/Makefile.  The machine-independent file list will be connected
-# after the process MD gate.
+# its persistent CPL3 production-syscall probe, read-only initfs-backed
+# ELF32 /sbin/init loader and exec-compatible initial user stack are built
+# directly by sys/i386/Makefile.  The machine-independent file list will
+# be connected after the process MD gate.
 #

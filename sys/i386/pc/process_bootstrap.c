@@ -7,6 +7,7 @@
 #include <vm/vmspace.h>
 
 #include "elf_bootstrap.h"
+#include "initfs.h"
 #include "interrupt.h"
 #include "privilege.h"
 #include "process.h"
@@ -177,8 +178,12 @@ int
 i386_process_bootstrap_user_probe(void)
 {
     static const unsigned char invalid_elf[] = { 0x7f, 'E', 'L', 'F' };
-    static const char *const bootstrap_argv[] = { "init", "elf" };
+    static const unsigned char invalid_initfs[] = { 'R', 'I', 'F', 'S' };
+    static const char *const bootstrap_argv[] = {
+        "/sbin/init", "initfs"
+    };
     static const char *const bootstrap_envp[] = { "A=i686" };
+    struct i386_initfs_file init_file;
     int resumed;
     volatile int error;
 
@@ -191,7 +196,15 @@ i386_process_bootstrap_user_probe(void)
     if (i386_elf_load_image(i386_bootstrap_vmspace, invalid_elf,
         sizeof(invalid_elf), &i386_bootstrap_user_image) != ENOEXEC)
         return EFAULT;
-    error = i386_elf_load_bootstrap_user(i386_bootstrap_vmspace,
+    if (i386_initfs_find(invalid_initfs, sizeof(invalid_initfs),
+        "/sbin/init", &init_file) != ENOEXEC ||
+        i386_initfs_find_embedded("/missing", &init_file) != ENOENT)
+        return EFAULT;
+    error = i386_initfs_find_embedded("/sbin/init", &init_file);
+    if (error != 0)
+        return error;
+    error = i386_elf_load_image(i386_bootstrap_vmspace,
+        init_file.iif_data, init_file.iif_size,
         &i386_bootstrap_user_image);
     if (error != 0)
         return error;

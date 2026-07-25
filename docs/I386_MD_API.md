@@ -8,9 +8,10 @@ process symbols нейтрализованы, i386 `sysent` adapter, signal fram
 user-return signal/reschedule path и user trap-to-signal translation
 проверены; production syscall prefix вызывает generic `getpid`, а
 постоянный proc0-совместимый bootstrap process удерживает активные
-u-area/vmspace/CR3/TSS и выполняет отдельно собранный ELF32/i386 image с
-production `getpid` и проверенным `argc/argv/envp` stack из собственного
-CPL3-контекста; следующий gate — filesystem-backed static init, 2026-07-25.
+u-area/vmspace/CR3/TSS и выполняет `/sbin/init` из проверяемого read-only
+initfs с production `getpid` и `argc/argv/envp` stack из собственного
+CPL3-контекста; следующий gate — generic process table/process 1,
+2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -285,14 +286,21 @@ NULL-terminated `argv[]`/`envp[]`, packed strings и верхнее слово �
 
 Отдельный `i386_user_enter_exec` входит с IF=1 и тем же register contract,
 который уже задаёт `md_user_frame_exec`: EBX=`argc`, ECX=`argv`,
-EDX=`envp`. Bootstrap ELF из CPL3 проверяет `init`, `elf`, `A=i686`,
+EDX=`envp`. Bootstrap ELF из CPL3 проверяет `/sbin/init`, `initfs`, `A=i686`,
 NULL terminators, alignment, reserved slot и top-of-stack `argv` word.
 `user-stack: ok` также означает, что `p_saddr/p_ssize` и u-area
 `u_ssize` соответствуют постоянному stack mapping.
 
+Статический ELF больше не передаётся loader напрямую как отдельный binary
+symbol. Детерминированный little-endian initfs содержит именованный
+`/sbin/init`; ранний parser проверяет magic/version, directory size,
+каждый path/data range, NUL termination, alignment и duplicate match.
+QEMU path отдельно требует отказ для malformed archive и `/missing`,
+lookup `/sbin/init`, ELF load и исполнение с `argv[0]=/sbin/init`.
+`initfs: ok` покрывает эту цепочку, а `make initfs-smoke` проверяет
+byte-for-byte воспроизводимость упаковки.
+
 1. Добавить оставшиеся machine headers/config lists.
-2. Подключить filesystem-backed static init и расширять production prefix
-   по его требованиям.
-3. Заменить bootstrap bridge на generic process table/process 1.
-4. Подключить полный `init_sysent`, когда его generic handlers войдут в
+2. Заменить bootstrap bridge на generic process table/process 1.
+3. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести `exec` до статического ELF32 init.

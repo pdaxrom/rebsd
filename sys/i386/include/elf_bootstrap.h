@@ -19,8 +19,6 @@ struct i386_elf_image {
 
 int i386_elf_load_image(struct vmspace *, const void *, unsigned,
     struct i386_elf_image *);
-int i386_elf_load_bootstrap_user(struct vmspace *,
-    struct i386_elf_image *);
 int i386_elf_unload_image(struct vmspace *, struct i386_elf_image *);
 
 #endif

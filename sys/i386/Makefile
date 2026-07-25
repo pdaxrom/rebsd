@@ -41,8 +41,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o memory.o paging.o \
-                   libkern.o elf_bootstrap.o user_stack.o \
-                   bootstrap_user_image.o \
+                   libkern.o elf_bootstrap.o initfs.o user_stack.o \
+                   initfs_image.o \
                    sysent_bootstrap.o kern_prot.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o process_bootstrap.o vm_param.o \
@@ -51,8 +51,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 
 .DEFAULT_GOAL := all
 
-.PHONY: all kernel toolchain-check run run-serial debug boot-smoke \
-	trap-smoke exception-smoke boot-smoke-matrix clean
+.PHONY: all kernel toolchain-check initfs-smoke run run-serial debug \
+	boot-smoke trap-smoke exception-smoke boot-smoke-matrix clean
 
 all: toolchain-check kernel
 
@@ -99,11 +99,21 @@ bootstrap-user.elf: bootstrap_user.o $(I386_USER_SRC)/bootstrap.ld
 	$(LD) $(I686_LDFLAGS) -T $(I386_USER_SRC)/bootstrap.ld \
 	    -o $@ bootstrap_user.o
 
-bootstrap_user_image.o: bootstrap-user.elf
+initfs.img: bootstrap-user.elf $(I386_TOOLS_SRC)/mkinitfs.py
+	$(PYTHON) $(I386_TOOLS_SRC)/mkinitfs.py --output $@ \
+	    --file /sbin/init=bootstrap-user.elf
+
+initfs_image.o: initfs.img
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 \
 	    --rename-section \
-	    .data=.rodata.bootstrap_user,alloc,load,readonly,data,contents \
+	    .data=.rodata.initfs,alloc,load,readonly,data,contents \
 	    $< $@
+
+initfs-smoke: initfs.img bootstrap-user.elf
+	$(PYTHON) $(I386_TOOLS_SRC)/mkinitfs.py --output initfs.check.img \
+	    --file /sbin/init=bootstrap-user.elf
+	cmp initfs.img initfs.check.img
+	rm -f initfs.check.img
 
 early_console.o: $(I386_PC_SRC)/early_console.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h
@@ -245,6 +255,12 @@ elf_bootstrap.o: $(I386_COMMON_SRC)/elf_bootstrap.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+initfs.o: $(I386_COMMON_SRC)/initfs.c \
+	    $(I386_SRC)/include/initfs.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 user_stack.o: $(I386_COMMON_SRC)/user_stack.c \
 	    $(I386_SRC)/include/user_stack.h \
 	    $(I386_VM_SRC)/vmspace.h \
@@ -317,6 +333,7 @@ context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
 
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/elf_bootstrap.h \
+	    $(I386_SRC)/include/initfs.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h \
 	    $(I386_SRC)/include/process.h $(I386_SRC)/include/syscall.h \
@@ -456,7 +473,8 @@ boot-smoke-matrix: rebsd-i686.bzimg
 
 clean:
 	rm -f setup.o setup.elf setup.bin setup.map \
-	    bootstrap_user.o bootstrap-user.elf \
+	    bootstrap_user.o bootstrap-user.elf bootstrap_user_image.o \
+	    initfs.img initfs.check.img initfs_image.o \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
 	    rebsd-i686.bzimg rebsd-i686.map
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine

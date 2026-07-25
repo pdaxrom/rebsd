@@ -9,9 +9,6 @@
 
 #define I386_ELF_MAX_PROGRAM_HEADERS 16u
 
-extern const unsigned char _binary_bootstrap_user_elf_start[];
-extern const unsigned char _binary_bootstrap_user_elf_end[];
-
 static int
 i386_elf_add(unsigned left, unsigned right, unsigned *result)
 {
@@ -257,16 +254,4 @@ i386_elf_load_image(struct vmspace *vmspace, const void *image,
 failed:
     (void)i386_elf_unload_image(vmspace, &candidate);
     return error;
-}
-
-int
-i386_elf_load_bootstrap_user(struct vmspace *vmspace,
-    struct i386_elf_image *result)
-{
-    unsigned image_size;
-
-    image_size = (unsigned)(_binary_bootstrap_user_elf_end -
-        _binary_bootstrap_user_elf_start);
-    return i386_elf_load_image(vmspace,
-        _binary_bootstrap_user_elf_start, image_size, result);
 }

@@ -16,12 +16,20 @@ _start:
     cmpl    $0, 8(%ecx)
     jne     .Lfailed
     movl    (%ecx), %esi
-    cmpl    $0x74696e69, (%esi)
+    cmpl    $0x6962732f, (%esi)
     jne     .Lfailed
-    cmpb    $0, 4(%esi)
+    cmpl    $0x6e692f6e, 4(%esi)
+    jne     .Lfailed
+    cmpw    $0x7469, 8(%esi)
+    jne     .Lfailed
+    cmpb    $0, 10(%esi)
     jne     .Lfailed
     movl    4(%ecx), %esi
-    cmpl    $0x00666c65, (%esi)
+    cmpl    $0x74696e69, (%esi)
+    jne     .Lfailed
+    cmpw    $0x7366, 4(%esi)
+    jne     .Lfailed
+    cmpb    $0, 6(%esi)
     jne     .Lfailed
     cmpl    $0, 4(%edx)
     jne     .Lfailed

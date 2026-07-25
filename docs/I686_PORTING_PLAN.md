@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать четыре QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: двадцать пять QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -403,8 +403,26 @@ Malta64. Следующий кодовый инкремент реализует
   32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
   проходят.
 
-Следующий инкремент: подключить источник статического init из filesystem,
-затем заменить временный process bridge на generic process table/process 1.
+Двадцать пятый QEMU bring-up инкремент завершён:
+
+- детерминированный read-only i386 initfs упаковывает отдельно связанный
+  ELF32 как именованный `/sbin/init`; формат использует фиксированный
+  little-endian header и directory entries;
+- ранний kernel parser проверяет magic/version, число записей, полный
+  размер, path/data ranges, NUL termination, 16-byte data alignment и
+  неоднозначный duplicate match до возврата файла;
+- bootstrap path требует `ENOEXEC` для malformed archive, `ENOENT` для
+  `/missing`, затем передаёт найденный `/sbin/init` обычному ELF32 loader;
+- CPL3 image проверяет `argv[0]=/sbin/init` и `argv[1]=initfs`, так что
+  `initfs: ok` подтверждает named lookup, ELF mappings, exec stack и
+  production syscall одним сквозным прогоном;
+- `make initfs-smoke` повторно создаёт архив и сравнивает его byte-for-byte;
+- clean build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
+  проходят.
+
+Следующий инкремент: заменить временный process bridge на generic process
+table/process 1, затем подключить полный `execve` и storage-backed rootfs.
 
 ## 1. Цель и границы первого порта
 
