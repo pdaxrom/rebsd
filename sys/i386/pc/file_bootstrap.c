@@ -236,6 +236,28 @@ close(void)
     u.u_error = closef(fp);
 }
 
+void
+i386_file_bootstrap_close_all(void)
+{
+    struct file *fp;
+    int descriptor;
+    int error;
+
+    error = 0;
+    for (descriptor = 0; descriptor <= u.u_lastfile; ++descriptor) {
+        fp = u.u_ofile[descriptor];
+        if (fp == (struct file *)0)
+            continue;
+        u.u_ofile[descriptor] = (struct file *)0;
+        u.u_pofile[descriptor] = 0;
+        if (closef(fp) != 0)
+            error = EIO;
+    }
+    u.u_lastfile = -1;
+    if (error != 0)
+        panic("i386 exit close");
+}
+
 static int
 i386_lseek_add(off_t base, off_t delta, off_t *result)
 {

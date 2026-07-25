@@ -9,5 +9,6 @@
 # user trap-to-signal translation, generic kern_synch run queue/scheduler
 # and generic newproc with production fork syscall.  Read-only
 # open/read/lseek/close now use the common FAT root through a minimal i386
-# descriptor adapter.  Remaining machine-independent files are connected
-# after descriptor teardown and exit/wait integration.
+# descriptor adapter, including shared offsets across fork and early exit
+# teardown.  Remaining machine-independent files are connected after the
+# bootstrap adapter is replaced by the generic fileops stack.

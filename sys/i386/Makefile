@@ -459,6 +459,7 @@ scheduler.o: $(I386_PC_SRC)/scheduler.c \
 	    -c $< -o $@
 
 process_lifecycle.o: $(I386_PC_SRC)/process_lifecycle.c \
+	    $(I386_SRC)/include/file_bootstrap.h \
 	    $(TOPSRC)/sys/include/inode.h $(TOPSRC)/sys/include/proc.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    $(TOPSRC)/sys/include/wait.h \
@@ -537,7 +538,8 @@ process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/layout.h \
-	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/user.h \
+	    $(TOPSRC)/sys/include/file.h $(TOPSRC)/sys/include/proc.h \
+	    $(TOPSRC)/sys/include/user.h \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \

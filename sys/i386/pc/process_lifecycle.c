@@ -6,6 +6,8 @@
 #include <sys/inode.h>
 #include <sys/wait.h>
 
+#include "file_bootstrap.h"
+
 void
 rexit(void)
 {
@@ -16,6 +18,7 @@ rexit(void)
     process = u.u_procp;
     parent = process->p_pptr;
     status = W_EXITCODE(u.u_arg[0], 0);
+    i386_file_bootstrap_close_all();
     if (u.u_cdir != (struct inode *)0 && u.u_cdir->i_count != 0)
         --u.u_cdir->i_count;
     if (proc_zombify(process, status) != 0)

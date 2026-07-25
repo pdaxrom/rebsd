@@ -61,12 +61,15 @@ fallback, matching an IBM CF whose existing FAT partition has no ReBSD init.
 Once in CPL3, the FAT-backed init opens its own `/sbin/init` through
 production `open(5)`, reads the ELF magic through `read(3)`, changes the
 file offset through `lseek(19)`, and releases the descriptor through
-`close(6)`.  The gate also requires `EBADF` after a repeated close and
-`EROFS` for a write open.  Host tests exercise the same reader on FAT16 and
-FAT32.  A separate 64 MiB FAT32 image uses MBR type `0x0c` and partition
-start LBA `0x800`, matching the IBM CF's observed scheme; direct-kernel and
-native-BIOS QEMU targets require the same root and storage-backed ELF/fd
-checks on that image.
+`close(6)`.  It keeps the descriptor across the first production `fork`;
+the child reads through the shared file object, advances the common offset,
+and early `exit` drops the inherited reference before the parent closes the
+last one.  The gate also requires `EBADF` after a repeated close and `EROFS`
+for a write open.  Host tests exercise the same reader on FAT16 and FAT32.
+A separate 64 MiB FAT32 image uses MBR type `0x0c` and partition start LBA
+`0x800`, matching the IBM CF's observed scheme; direct-kernel and native-BIOS
+QEMU targets require the same root and storage-backed ELF/fd checks on that
+image.
 
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
@@ -183,5 +186,5 @@ reads.  The early FAT reader mounts the first partition, reads a
 deterministic root probe and supplies `/sbin/init` to the process-1 ELF
 loader; ATA writes and DMA are intentionally absent.  A full VFS root used
 through ordinary read-only namei/open/read/lseek/close is now present.
-Writable storage, the remaining syscall table, full descriptor teardown,
+Writable storage, the remaining syscall table, generic non-inode fileops,
 complete userland, and PCC remain outside the current image.

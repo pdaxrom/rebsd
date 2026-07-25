@@ -52,6 +52,8 @@ BOOT_MARKERS = (
     "syscall-lseek: ok",
     "syscall-close: ok",
     "fd-fat-vfs: ok",
+    "fd-fork-shared-offset: ok",
+    "fd-exit-close: ok",
     "process-user: ok",
     "process-fork: ok",
     "syscall-fork: ok",
@@ -158,6 +160,8 @@ IDE_DISK_MARKERS = (
     "syscall-lseek: ok",
     "syscall-close: ok",
     "fd-fat-vfs: ok",
+    "fd-fork-shared-offset: ok",
+    "fd-exit-close: ok",
     "disk-close: ok",
 )
 
@@ -170,6 +174,8 @@ VFS_INIT_MARKERS = (
     "syscall-lseek: ok",
     "syscall-close: ok",
     "fd-fat-vfs: ok",
+    "fd-fork-shared-offset: ok",
+    "fd-exit-close: ok",
 )
 
 NO_DISK_BOOT_MARKERS = tuple(
@@ -232,6 +238,8 @@ EXCEPTION_MARKERS = {
         "syscall-lseek: ok",
         "syscall-close: ok",
         "fd-fat-vfs: ok",
+        "fd-fork-shared-offset: ok",
+        "fd-exit-close: ok",
         "process-user: ok",
         "process-fork: ok",
         "syscall-fork: ok",

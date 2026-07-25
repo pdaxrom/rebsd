@@ -96,27 +96,7 @@ _start:
     jne     .Lfailed
     cmpb    $0x46, bootstrap_read_data + 2
     jne     .Lfailed
-    movl    $6, %eax
-    xorl    %ebx, %ebx
-    int     $0x80
-    jc      .Lfailed
-    movl    $6, %eax
-    xorl    %ebx, %ebx
-    int     $0x80
-    jnc     .Lfailed
-    cmpl    $I386_BOOTSTRAP_EBADF, %eax
-    jne     .Lfailed
-    movl    $5, %eax
-    movl    $bootstrap_init_path, %ebx
-    movl    $1, %ecx
-    xorl    %edx, %edx
-    int     $0x80
-    jnc     .Lfailed
-    cmpl    $I386_BOOTSTRAP_EROFS, %eax
-    jne     .Lfailed
-    xorl    %eax, %eax
-    movl    $I386_BOOTSTRAP_VFS_FD_MAGIC, %ebx
-    int     $0x30
+    movl    $1, bootstrap_vfs_fd_active
 .Lvfs_fd_done:
     movl    $2, %eax
     int     $0x80
@@ -151,6 +131,39 @@ _start:
     jne     .Lfailed
     cmpl    $(I386_BOOTSTRAP_CHILD_EXIT_STATUS << 8), (%esp)
     jne     .Lfailed
+    cmpl    $0, bootstrap_vfs_fd_active
+    je      .Lvfs_fd_parent_done
+    movl    $19, %eax
+    xorl    %ebx, %ebx
+    xorl    %ecx, %ecx
+    movl    $1, %edx
+    xorl    %esi, %esi
+    int     $0x80
+    jc      .Lfailed
+    cmpl    $8, %eax
+    jne     .Lfailed
+    movl    $6, %eax
+    xorl    %ebx, %ebx
+    int     $0x80
+    jc      .Lfailed
+    movl    $6, %eax
+    xorl    %ebx, %ebx
+    int     $0x80
+    jnc     .Lfailed
+    cmpl    $I386_BOOTSTRAP_EBADF, %eax
+    jne     .Lfailed
+    movl    $5, %eax
+    movl    $bootstrap_init_path, %ebx
+    movl    $1, %ecx
+    xorl    %edx, %edx
+    int     $0x80
+    jnc     .Lfailed
+    cmpl    $I386_BOOTSTRAP_EROFS, %eax
+    jne     .Lfailed
+    xorl    %eax, %eax
+    movl    $I386_BOOTSTRAP_VFS_FD_MAGIC, %ebx
+    int     $0x30
+.Lvfs_fd_parent_done:
     movl    $0, (%esp)
     movl    $2, %eax
     int     $0x80
@@ -184,6 +197,19 @@ _start:
     int     $0x30
     ud2
 .Lchild1:
+    cmpl    $0, bootstrap_vfs_fd_active
+    je      .Lchild1_exit
+    movl    $3, %eax
+    xorl    %ebx, %ebx
+    movl    $bootstrap_read_data, %ecx
+    movl    $4, %edx
+    int     $0x80
+    jc      .Lfailed
+    cmpl    $4, %eax
+    jne     .Lfailed
+    cmpl    $0x00010101, bootstrap_read_data
+    jne     .Lfailed
+.Lchild1_exit:
     movl    $1, %eax
     movl    $I386_BOOTSTRAP_CHILD_EXIT_STATUS, %ebx
     int     $0x80
@@ -211,6 +237,8 @@ bootstrap_init_path:
 bootstrap_bss:
     .space 16
 bootstrap_read_data:
+    .space 4
+bootstrap_vfs_fd_active:
     .space 4
 
     .section .note.GNU-stack, "", @progbits

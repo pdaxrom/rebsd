@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: сорок четыре bring-up инкремента выполнены, включая два
+Статус: сорок пять bring-up инкрементов выполнены, включая два
 IBM 6563-W4G hardware gate и QEMU-only FAT16/FAT32 storage-backed ELF
 gates, 2026-07-25.
 
@@ -881,6 +881,30 @@ count через `fork`, закрывать унаследованные descrip
 после этого сближать bootstrap fd-код с общими
 `kern_descrip`/`sys_generic`/`sys_inode`. Повторный IBM запуск пока не
 требуется; ATA writes, DMA и IRQ mode не включены.
+
+Сорок пятый QEMU bring-up инкремент завершён:
+
+- FAT descriptor остаётся открытым во время первого production `fork`;
+  generic `newproc` копирует descriptor table и повышает reference count
+  общего `struct file` с 1 до 2;
+- kernel checkpoint требует, чтобы parent и child u-area ссылались на один
+  file object с offset 4 и refcount 2;
+- child читает следующие четыре ELF identification bytes через унаследованный
+  fd 0, проверяет `01 01 01 00` и сдвигает общий file offset до 8;
+- ранний `rexit` теперь закрывает все descriptors текущего process до
+  `proc_zombify`; child снимает свою ссылку, не освобождая используемый
+  parent inode;
+- после `wait4` parent получает offset 8 через `lseek(..., L_INCR)`, закрывает
+  последнюю ссылку и проходит прежние `EBADF`/`EROFS` проверки. Kernel
+  требует пустые descriptor/file tables после reap;
+- QEMU требует `fd-fork-shared-offset: ok` и `fd-exit-close: ok`; direct,
+  native BIOS, FAT16/FAT32, no-IDE, no-init fallback, exception gates и
+  старая `pc-i440fx-5.1` прошли.
+
+Следующий QEMU-only инкремент: добавить `dup`/`dup2` и close-on-exec
+семантику либо заменить соответствующие части bootstrap adapter общими
+`kern_descrip`/`sys_generic`/`sys_inode`, не включая запись на диск.
+Повторный IBM запуск пока не требуется.
 
 ## 1. Цель и границы первого порта
 

@@ -8,7 +8,8 @@
 # ELF32 /sbin/init loader, exec-compatible initial user stack and generic
 # kern_synch run queue/scheduler, generic newproc, production fork syscall,
 # and read-only open/read/lseek/close over the common FAT root are built
-# directly by sys/i386/Makefile.
-# The remaining machine-independent file list will be connected after
-# descriptor teardown and exit/wait integration.
+# directly by sys/i386/Makefile.  Shared file offsets/refcounts across fork
+# and descriptor teardown in early exit are QEMU-tested.
+# The remaining machine-independent file list will be connected as the
+# bootstrap descriptor adapter is replaced by the generic fileops stack.
 #
