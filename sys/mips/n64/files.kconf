@@ -115,6 +115,7 @@ mips/common/romfs_vfs.c              optional n64cart
 mips/n64/console_null.c              standard
 drm/drm.c                            standard
 drm/drm_fb.c                         standard
+drm/drm_fbmem.c                      standard
 mips/n64/video.c                     standard
 mips/n64/video_console.c             standard
 mips/n64/n64int.c                    standard

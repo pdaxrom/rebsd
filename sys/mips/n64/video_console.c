@@ -8,8 +8,10 @@
 #define N64_CONSOLE_CELL_W      6
 #define N64_CONSOLE_CELL_H      10
 #define N64_CONSOLE_GLYPH_H     8
-#define N64_CONSOLE_FG          0xffff
-#define N64_CONSOLE_BG          0x0001
+#define N64_CONSOLE_FG16        0xffffu
+#define N64_CONSOLE_BG16        0x0001u
+#define N64_CONSOLE_FG32        0xffffffffu
+#define N64_CONSOLE_BG32        0x000000ffu
 #define N64_CONSOLE_MAX_COLS    96
 #define N64_CONSOLE_MAX_ROWS    43
 #define N64_CONSOLE_CSI_PARAMS  8
@@ -28,6 +30,10 @@
 static unsigned console_mode = ~0u;
 static unsigned console_width;
 static unsigned console_height;
+static unsigned console_stride;
+static unsigned console_bpp;
+static unsigned console_fg;
+static unsigned console_bg;
 static unsigned console_x0;
 static unsigned console_y0;
 static unsigned console_cols;
@@ -175,12 +181,24 @@ n64_console_geometry(void)
     struct n64_video_info info;
 
     n64_video_get_info(&info);
+    if (info.width == 0 || info.height == 0 ||
+        (info.bpp != 16 && info.bpp != 32)) {
+        console_cols = 0;
+        console_rows = 0;
+        return;
+    }
     if (info.mode == console_mode)
         return;
 
     console_mode = info.mode;
     console_width = info.width;
     console_height = info.height;
+    console_stride = info.stride;
+    console_bpp = info.bpp;
+    console_fg = console_bpp == 32 ?
+        N64_CONSOLE_FG32 : N64_CONSOLE_FG16;
+    console_bg = console_bpp == 32 ?
+        N64_CONSOLE_BG32 : N64_CONSOLE_BG16;
     console_x0 = console_width / 20;
     console_y0 = console_height / 20;
     console_cols = (console_width - 2 * console_x0) / N64_CONSOLE_CELL_W;
@@ -193,9 +211,21 @@ n64_console_geometry(void)
 }
 
 static void
-n64_console_fill_cell(unsigned col, unsigned row, unsigned short color)
+n64_console_put_pixel(unsigned x, unsigned y, unsigned color)
 {
-    volatile unsigned short *fb;
+    volatile unsigned char *fb;
+
+    fb = (volatile unsigned char *)n64_video_framebuffer();
+    if (console_bpp == 32)
+        *(volatile unsigned *)(fb + y * console_stride + x * 4u) = color;
+    else
+        *(volatile unsigned short *)(fb + y * console_stride + x * 2u) =
+            (unsigned short)color;
+}
+
+static void
+n64_console_fill_cell(unsigned col, unsigned row, unsigned color)
+{
     unsigned x0;
     unsigned y0;
     unsigned x;
@@ -204,18 +234,16 @@ n64_console_fill_cell(unsigned col, unsigned row, unsigned short color)
     if (col >= console_cols || row >= console_rows)
         return;
 
-    fb = n64_video_framebuffer();
     x0 = console_x0 + col * N64_CONSOLE_CELL_W;
     y0 = console_y0 + row * N64_CONSOLE_CELL_H;
     for (y = 0; y < N64_CONSOLE_CELL_H; ++y)
         for (x = 0; x < N64_CONSOLE_CELL_W; ++x)
-            fb[(y0 + y) * console_width + x0 + x] = color;
+            n64_console_put_pixel(x0 + x, y0 + y, color);
 }
 
 static void
 n64_console_clear_area(void)
 {
-    volatile unsigned short *fb;
     unsigned x;
     unsigned y;
     unsigned x1;
@@ -224,23 +252,21 @@ n64_console_clear_area(void)
     if (console_cols == 0 || console_rows == 0)
         return;
 
-    fb = n64_video_framebuffer();
     x1 = console_x0 + console_cols * N64_CONSOLE_CELL_W;
     y1 = console_y0 + console_rows * N64_CONSOLE_CELL_H;
     for (y = console_y0; y < y1; ++y)
         for (x = console_x0; x < x1; ++x)
-            fb[y * console_width + x] = N64_CONSOLE_BG;
+            n64_console_put_pixel(x, y, console_bg);
 }
 
 static void
 n64_console_render_char(unsigned col, unsigned row, int ch, unsigned char attr,
     int invert)
 {
-    volatile unsigned short *fb;
     unsigned char glyph[5];
-    unsigned short fg;
-    unsigned short bg;
-    unsigned short tmp;
+    unsigned fg;
+    unsigned bg;
+    unsigned tmp;
     unsigned x0;
     unsigned y0;
     unsigned x;
@@ -249,8 +275,8 @@ n64_console_render_char(unsigned col, unsigned row, int ch, unsigned char attr,
     if (col >= console_cols || row >= console_rows)
         return;
 
-    fg = N64_CONSOLE_FG;
-    bg = N64_CONSOLE_BG;
+    fg = console_fg;
+    bg = console_bg;
     if (((attr & N64_CONSOLE_ATTR_REVERSE) != 0) ^ (invert != 0)) {
         tmp = fg;
         fg = bg;
@@ -262,23 +288,22 @@ n64_console_render_char(unsigned col, unsigned row, int ch, unsigned char attr,
         return;
 
     n64_console_glyph(ch, glyph);
-    fb = n64_video_framebuffer();
     x0 = console_x0 + col * N64_CONSOLE_CELL_W;
     y0 = console_y0 + row * N64_CONSOLE_CELL_H;
     for (x = 0; x < 5; ++x) {
         for (y = 0; y < N64_CONSOLE_GLYPH_H; ++y) {
             if ((glyph[x] & (1u << y)) == 0)
                 continue;
-            fb[(y0 + y) * console_width + x0 + x] = fg;
+            n64_console_put_pixel(x0 + x, y0 + y, fg);
             if ((attr & N64_CONSOLE_ATTR_BOLD) != 0 && x + 1 < 5)
-                fb[(y0 + y) * console_width + x0 + x + 1] = fg;
+                n64_console_put_pixel(x0 + x + 1, y0 + y, fg);
         }
     }
 
     if ((attr & N64_CONSOLE_ATTR_UNDERLINE) != 0) {
         y = N64_CONSOLE_GLYPH_H;
         for (x = 0; x < N64_CONSOLE_CELL_W; ++x)
-            fb[(y0 + y) * console_width + x0 + x] = fg;
+            n64_console_put_pixel(x0 + x, y0 + y, fg);
     }
 }
 

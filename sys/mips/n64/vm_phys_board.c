@@ -65,14 +65,8 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
         return error;
 
     if (ram_size >= N64_RDRAM_SIZE_8M) {
-#ifdef N64_DEBUG_USERMEM_4M
-        /* UART-only debug builds lend the framebuffer reserve to RAM disks. */
-        framebuffer_start = N64_USER_PHYS_END;
-        framebuffer_size = 0;
-#else
         framebuffer_start = N64_EXPANSION_FB_PHYS_START;
         framebuffer_size = N64_EXPANSION_FB_RESERVED_BYTES;
-#endif
         var_size = N64_RAMDISK_8M_VAR_BYTES;
         error = n64_vm_reserve(map, N64_STAGE0_PHYS_START,
             N64_STAGE0_PHYS_END,

@@ -135,7 +135,6 @@ static const struct expected_region n64_4m_map[] = {
     RESERVED(0x003a0000u, 0x00400000u, "swap"),
 };
 
-#ifdef N64_DEBUG_USERMEM_4M
 static const struct expected_region n64_8m_map[] = {
     RESERVED(0x00000000u, 0x00001000u, "vectors"),
     RESERVED(0x00001000u, 0x00080000u, "kernel"),
@@ -147,33 +146,6 @@ static const struct expected_region n64_8m_map[] = {
     RESERVED(0x00500000u, 0x00600000u, "/var ramdisk"),
     RESERVED(0x00600000u, 0x00800000u, "swap"),
 };
-#elif defined(N64_HIGHRES_FB)
-static const struct expected_region n64_8m_map[] = {
-    RESERVED(0x00000000u, 0x00001000u, "vectors"),
-    RESERVED(0x00001000u, 0x00080000u, "kernel"),
-    AVAILABLE(0x00080000u, 0x000fe000u, "rdram"),
-    RESERVED(0x000fe000u, 0x00100000u, "bootstrap u area"),
-    AVAILABLE(0x00100000u, 0x00300000u, "rdram"),
-    RESERVED(0x00300000u, 0x00380000u, "stage0/restart"),
-    AVAILABLE(0x00380000u, 0x00500000u, "rdram"),
-    RESERVED(0x00500000u, 0x005a0000u, "framebuffer"),
-    RESERVED(0x005a0000u, 0x006a0000u, "/var ramdisk"),
-    RESERVED(0x006a0000u, 0x00800000u, "swap"),
-};
-#else
-static const struct expected_region n64_8m_map[] = {
-    RESERVED(0x00000000u, 0x00001000u, "vectors"),
-    RESERVED(0x00001000u, 0x00080000u, "kernel"),
-    AVAILABLE(0x00080000u, 0x000fe000u, "rdram"),
-    RESERVED(0x000fe000u, 0x00100000u, "bootstrap u area"),
-    AVAILABLE(0x00100000u, 0x00300000u, "rdram"),
-    RESERVED(0x00300000u, 0x00380000u, "stage0/restart"),
-    AVAILABLE(0x00380000u, 0x00500000u, "rdram"),
-    RESERVED(0x00500000u, 0x00540000u, "framebuffer"),
-    RESERVED(0x00540000u, 0x00640000u, "/var ramdisk"),
-    RESERVED(0x00640000u, 0x00800000u, "swap"),
-};
-#endif
 #endif
 
 int

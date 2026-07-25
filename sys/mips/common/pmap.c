@@ -559,7 +559,9 @@ pmap_enter_device(struct pmap *pmap, vm_vaddr_t vaddr, vm_paddr_t paddr,
         (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED))
         return EINVAL;
     page = vm_page_lookup(pmap_allocator, paddr);
-    if (page != 0 && page->vmp_state != VM_PAGE_RESERVED)
+    if (page != 0 && page->vmp_state != VM_PAGE_RESERVED &&
+        !(page->vmp_state == VM_PAGE_WIRED &&
+        (page->vmp_flags & VM_PAGE_FLAG_DEVICE) != 0))
         return EBUSY;
     error = pmap_get_pte(pmap, vaddr, 1, &pte);
     if (error != 0)
@@ -1204,7 +1206,9 @@ pmap_validate(struct pmap *pmap)
                     pte & PMAP_PTE_PADDR);
                 if ((pte & PMAP_PTE_EXECUTE) != 0 ||
                     (page != 0 &&
-                    page->vmp_state != VM_PAGE_RESERVED))
+                    page->vmp_state != VM_PAGE_RESERVED &&
+                    !(page->vmp_state == VM_PAGE_WIRED &&
+                    (page->vmp_flags & VM_PAGE_FLAG_DEVICE) != 0)))
                     return EFAULT;
             }
         }

@@ -126,6 +126,15 @@ drmfb_linux_var(const struct drm_display_mode *mode,
         var->blue.length = 5;
         var->transp.length = 1;
         break;
+    case DRM_FORMAT_RGBA8888:
+        var->red.offset = 24;
+        var->red.length = 8;
+        var->green.offset = 16;
+        var->green.length = 8;
+        var->blue.offset = 8;
+        var->blue.length = 8;
+        var->transp.length = 8;
+        break;
     default:
         return EINVAL;
     }

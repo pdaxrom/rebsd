@@ -46,9 +46,6 @@ struct map swapmap[1] = {
 void
 kconfig(void)
 {
-#ifdef VIDEO_ENABLED
-    n64_video_attach();
-#endif
 #ifdef N64_USB_GDB
     /*
      * N64 does not walk conf_device_init, so n64cartdriver.d_init is not a

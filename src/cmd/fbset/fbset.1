@@ -5,12 +5,12 @@ fbset \- inspect or change a ReBSD DRM framebuffer
 .SH SYNOPSIS
 .B fbset
 [
-.I WIDTHxHEIGHT
+.I WIDTHxHEIGHTxBPP
 ]
 .PP
 .B fbset
 [
-.I width height
+.I width height bpp
 ]
 .PP
 .B fbset
@@ -35,7 +35,7 @@ pixel clock, and mapping information.
 .PP
 The
 .B \-l
-option lists every mode advertised by the kernel.  The active mode is marked
+option lists every resolution/depth mode advertised by the kernel.  The active mode is marked
 with an asterisk.
 .PP
 The
@@ -45,9 +45,12 @@ through the shared mapping returned by
 .IR /dev/fb0 .
 This is a direct mapping smoke test, not a write(2) transfer.
 .PP
+When the depth is omitted,
+.B fbset
+prefers the active depth and falls back to 16 bits.
 The Ci20 driver obtains monitor modes through HDMI DDC/EDID and retains
-640x480 XRGB8888 as a fallback.  The N64 driver exposes 320x240 RGBA5551 and,
-when framebuffer memory permits, 640x480 interlaced RGBA5551.
+640x480 XRGB8888 as a fallback.  The N64 driver exposes 320x240 RGBA5551 and
+RGBA8888 modes, plus both depths at 640x480 interlaced with an Expansion Pak.
 .SH EXAMPLES
 Show the current framebuffer mode:
 .PP
@@ -65,20 +68,20 @@ fbset -l
 .fi
 .RE
 .PP
-Select an advertised 640x480 mode:
+Select an advertised 320x240 32-bit mode:
 .PP
 .RS
 .nf
-fbset 640x480
+fbset 320x240x32
 .fi
 .RE
 .PP
-Fill an RGBA5551 framebuffer with blue, or an XRGB8888 framebuffer with red:
+Fill an RGBA5551 framebuffer with blue, or an RGBA8888 framebuffer with red:
 .PP
 .RS
 .nf
 fbset fill 0x001f
-fbset fill 0x00ff0000
+fbset fill 0xff0000ff
 .fi
 .RE
 .SH FILES

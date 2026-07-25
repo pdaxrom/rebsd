@@ -9,8 +9,8 @@ fbview \- display a JPEG image on a ReBSD DRM framebuffer
 streams a baseline JPEG image, scales it to fit the current
 .IR /dev/fb0
 mode while preserving aspect ratio, clears the framebuffer, and draws the image
-using the pixel format reported by the driver.  XRGB8888 and RGBA5551
-framebuffers are supported.
+using the pixel format reported by the driver.  XRGB8888, RGBA5551, and
+RGBA8888 framebuffers are supported.
 .PP
 Large images are decoded in MCU blocks directly into the framebuffer.
 The decoder selects 1/2, 1/4, or 1/8 JPEG downscaling when appropriate, so

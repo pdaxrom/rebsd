@@ -67,8 +67,8 @@ the expanded command set:
 This log predates the volatile `/var` RAM disk, expanded 8 MiB user window,
 and compressed RAM swap. Current default 8 MiB builds reserve 1 MiB for
 `/var` and print `user mem = 4096 kbytes` and
-`swap size = 3584 kbytes`.  With `N64_ZSWAP=0`, the same physical RAM pool is
-exposed as raw 1792 KiB swap.
+`swap size = 4096 kbytes`.  With `N64_ZSWAP=0`, the same physical RAM pool is
+exposed as raw 2048 KiB swap.
 
 ```
 ReBSD N64 stage0
@@ -1055,7 +1055,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 0x00000000..0x000fffff  kernel, vectors, bootstrap u area
 0x00100000..0x002fffff  VM page pool after bootstrap
 0x00300000..0x0033ffff  resident stage0/restart image
-0x00340000..0x0037ffff  320x240x16 framebuffer reserve
+0x00340000..0x0037ffff  stage0/early 320x240x16 framebuffer alias
 0x00380000..0x003fffff  RAM swap fallback
 ```
 
@@ -1066,20 +1066,14 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 0x00100000..0x002fffff  VM page pool after bootstrap
 0x00300000..0x0037ffff  resident stage0/restart image
 0x00380000..0x004fffff  VM page pool after bootstrap
-0x00500000..0x0053ffff  320x240x16 framebuffer reserve
-0x00540000..0x007fffff  Expansion Pak RAM block pool
+0x00500000..0x005fffff  /var RAM disk
+0x00600000..0x007fffff  Expansion Pak RAM swap store
 ```
 
-8 MiB high-resolution framebuffer build (`N64_HIGHRES_FB=1`):
-
-```
-0x00000000..0x000fffff  kernel, vectors, bootstrap u area
-0x00100000..0x002fffff  VM page pool after bootstrap
-0x00300000..0x0037ffff  resident stage0/restart image
-0x00380000..0x004fffff  VM page pool after bootstrap
-0x00500000..0x0059ffff  max 640x480x16 framebuffer reserve
-0x005a0000..0x007fffff  Expansion Pak RAM block pool
-```
+After VM startup, VI mode changes use exact page-rounded physically
+contiguous wired allocations instead of a fixed Expansion Pak framebuffer
+reserve. The early 320x240x16 console may keep using the stage0 alias until
+the first mode change.
 
 Important constants:
 
@@ -1098,12 +1092,8 @@ Important constants:
   after the bootstrap TLB entries are removed, ordinary pages in this range
   are allocated by VM.
 - `N64_BASE_SWAP_PHYS_START`: 4 MiB fallback swap base, `0x00380000`.
-- `N64_BASE_FB_PHYS_START`: 4 MiB framebuffer reserve base, `0x00340000`.
-- `N64_EXPANSION_FB_PHYS_START`: 8 MiB framebuffer reserve base,
-  `0x00500000`.
-- `N64_EXPANSION_SWAP_PHYS_START`: 8 MiB RAM block pool base after the
-  framebuffer reserve, `0x00540000` by default or `0x005a0000` with
-  `N64_HIGHRES_FB=1`.
+- `N64_BASE_FB_PHYS_START`: early 320x240x16 stage0 alias, `0x00340000`.
+- `N64_EXPANSION_SWAP_PHYS_START`: 8 MiB RAM block pool base, `0x00500000`.
 - `N64_FB_USER_VADDR_START`: uncached framebuffer user mapping base,
   `0x00800000`.
 
@@ -1307,11 +1297,8 @@ the volatile UFS target for `/var`:
 RAM block sizing:
 
 - 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB physical swap store.
-- 8 MiB default system: 1 MiB `/dev/ram0`, 1792 KiB physical swap store
-  after the resident stage0 image and reserved 320x240x16 framebuffer.
-- 8 MiB high-resolution framebuffer build (`N64_HIGHRES_FB=1`): 1 MiB
-  `/dev/ram0`, 1408 KiB physical swap store after the resident stage0 image
-  and reserved 640x480x16 framebuffer.
+- 8 MiB system: 1 MiB `/dev/ram0`, 2 MiB physical swap store. Framebuffers
+  no longer consume this block pool.
 
 `N64_ZSWAP=1` is the default.  It selects the shared MIPS zswap backend and
 keeps the same physical RAM store while exposing twice as many logical swap
@@ -1367,8 +1354,7 @@ The printed boot sizes therefore differ by installed RDRAM:
 
 ```
 4 MiB: swap size = 768 kbytes with zswap, 384 kbytes raw
-8 MiB: swap size = 3584 kbytes with zswap, 1792 kbytes raw
-8 MiB high-res: swap size = 2816 kbytes with zswap, 1408 kbytes raw
+8 MiB: swap size = 4096 kbytes with zswap, 2048 kbytes raw
 ```
 
 The root filesystem stays read-only. `/tmp` is a symlink to `/var/tmp` in the
@@ -1460,7 +1446,7 @@ rgbled 0 0 0       # off
 ```
 
 `/dev/fb0` is backed by the architecture-independent ReBSD DRM framebuffer
-core. It exposes the current 16-bit RGBA5551 framebuffer through read/write,
+core. It exposes the current RGBA5551 or RGBA8888 framebuffer through read/write,
 Linux fbdev ioctls, common ReBSD mode ioctls, and a controlled uncached
 `MAP_SHARED` mapping. The Linux-compatible subset is:
 
@@ -1473,8 +1459,8 @@ FBIOBLANK            unblank/blank/DPMS levels
 ```
 
 RGBA5551 is described as truecolor with red, green, blue, and transparency
-bitfields at 11:5, 6:5, 1:5, and 0:1. ReBSD extensions provide explicit mode
-enumeration:
+bitfields at 11:5, 6:5, 1:5, and 0:1. RGBA8888 uses 24:8, 16:8, 8:8, and
+0:8. ReBSD extensions provide explicit mode enumeration:
 
 ```
 DRMFBIOC_GETINFO   struct drmfb_info
@@ -1490,19 +1476,23 @@ requests in `<linux/fb.h>`.
 `DRMFBIOC_GETMAP` returns `vaddr`, `bytes`, and `reserved_bytes`. `vaddr` is an
 optional address hint for `mmap(2)`, not an installed mapping. `bytes` is the
 current usable framebuffer length for the selected mode; `reserved_bytes` is
-the physically reserved range. Programs map `bytes` from offset zero and use
+the page-rounded physically owned range. Programs map `bytes` from offset zero and use
 the address returned by `mmap`, which may differ from the hint.
 
 The default framebuffer mode is 320x240x16 on all N64 memory configurations.
-The 640x480 interlaced mode is available only in an 8 MiB build made with
-`N64_HIGHRES_FB=1`; the default build keeps that memory in the RAM block pool
-for swap pressure from the native compiler workload:
+Both 16-bit RGBA5551 and 32-bit RGBA8888 modes are available. Base 4 MiB
+systems expose 320x240x16/32; Expansion Pak systems additionally expose
+640x480x16/32 interlaced modes. A switch first allocates a contiguous wired
+VM run for the new mode, programs VI, revokes stale userspace mappings of the
+old buffer, and returns the old pages to VM. If the allocation fails, the
+active mode is left unchanged:
 
 ```
-fbset          # print current framebuffer mode
-fbset 320x240  # select progressive 320x240
-fbset 640x480  # select interlaced 640x480, high-res reserve only
-fbset fill 0x001f  # fill through an uncached MAP_SHARED mapping
+fbset             # print current framebuffer mode
+fbset -l          # list resolution/depth combinations
+fbset 320x240x32  # select progressive 32-bit RGBA
+fbset 640 480 16  # select interlaced RGBA5551, Expansion Pak only
+fbset fill 0xff0000ff  # fill current RGBA8888 buffer with red
 ```
 
 The former fixed framebuffer mapping and `fbset fill` path were hardware

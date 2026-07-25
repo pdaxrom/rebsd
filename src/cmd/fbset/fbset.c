@@ -17,8 +17,8 @@
 static void
 usage(void)
 {
-    fprintf(stderr, "usage: fbset [WIDTHxHEIGHT]\n");
-    fprintf(stderr, "       fbset [width height]\n");
+    fprintf(stderr, "usage: fbset [WIDTHxHEIGHT[xBPP]]\n");
+    fprintf(stderr, "       fbset [width height [bpp]]\n");
     fprintf(stderr, "       fbset -l\n");
     fprintf(stderr, "       fbset fill pixel-value\n");
     exit(1);
@@ -32,6 +32,8 @@ format_name(unsigned format)
         return "xrgb8888";
     case DRM_FORMAT_RGBA5551:
         return "rgba5551";
+    case DRM_FORMAT_RGBA8888:
+        return "rgba8888";
     default:
         return "unknown";
     }
@@ -51,25 +53,37 @@ parse_uint(const char *text)
 }
 
 static void
-parse_mode(int argc, char **argv, unsigned *width, unsigned *height)
+parse_mode(int argc, char **argv, unsigned *width, unsigned *height,
+    unsigned *bpp)
 {
     char *end;
+    char *next;
 
     if (argc == 2) {
-        end = strchr(argv[1], 'x');
-        if (end == 0)
+        next = strchr(argv[1], 'x');
+        if (next == 0)
             usage();
         errno = 0;
         *width = (unsigned)strtoul(argv[1], &end, 10);
-        if (errno || *end != 'x')
+        if (errno || end != next)
             usage();
-        *height = parse_uint(end + 1);
+        *height = (unsigned)strtoul(next + 1, &end, 10);
+        if (errno || end == next + 1)
+            usage();
+        if (*end == '\0') {
+            *bpp = 0;
+            return;
+        }
+        if (*end != 'x')
+            usage();
+        *bpp = parse_uint(end + 1);
         return;
     }
-    if (argc != 3)
+    if (argc != 3 && argc != 4)
         usage();
     *width = parse_uint(argv[1]);
     *height = parse_uint(argv[2]);
+    *bpp = argc == 4 ? parse_uint(argv[3]) : 0;
 }
 
 static int
@@ -93,9 +107,10 @@ open_fb(void)
 
 static unsigned
 find_mode(int fd, const struct drmfb_info *info, unsigned width,
-    unsigned height)
+    unsigned height, unsigned bpp)
 {
     struct drmfb_mode mode;
+    unsigned fallback = (unsigned)-1;
     unsigned index;
 
     for (index = 0; index < info->mode_count; ++index) {
@@ -106,10 +121,23 @@ find_mode(int fd, const struct drmfb_info *info, unsigned width,
                 strerror(errno));
             exit(1);
         }
-        if (mode.width == width && mode.height == height)
+        if (mode.width != width || mode.height != height)
+            continue;
+        if (bpp != 0 && mode.bpp == bpp)
             return index;
+        if (bpp == 0 && mode.bpp == info->bpp)
+            return index;
+        if (fallback == (unsigned)-1 || mode.bpp == 16)
+            fallback = index;
     }
-    fprintf(stderr, "fbset: mode %ux%u is not available\n", width, height);
+    if (bpp == 0 && fallback != (unsigned)-1)
+        return fallback;
+    if (bpp != 0)
+        fprintf(stderr, "fbset: mode %ux%ux%u is not available\n",
+            width, height, bpp);
+    else
+        fprintf(stderr, "fbset: mode %ux%u is not available\n",
+            width, height);
     exit(1);
     return 0;
 }
@@ -186,6 +214,13 @@ fill_fb(const struct drmfb_info *info, const struct drmfb_map *map,
             fb[i] = color & 0x00ffffffu;
         return;
     }
+    if (info->format == DRM_FORMAT_RGBA8888 && info->bpp == 32) {
+        volatile unsigned *fb = (volatile unsigned *)map->vaddr;
+
+        for (i = 0; i < info->fb_bytes / sizeof(*fb); ++i)
+            fb[i] = color;
+        return;
+    }
     if (info->format == DRM_FORMAT_RGBA5551 && info->bpp == 16) {
         volatile unsigned short *fb =
             (volatile unsigned short *)map->vaddr;
@@ -209,10 +244,11 @@ main(int argc, char **argv)
     struct fb_var_screeninfo var;
     unsigned width;
     unsigned height;
+    unsigned bpp;
     void *mapping = MAP_FAILED;
     int fd;
 
-    if (argc != 1 && argc != 2 && argc != 3)
+    if (argc < 1 || argc > 4)
         usage();
 
     fd = open_fb();
@@ -223,9 +259,9 @@ main(int argc, char **argv)
             close(fd);
             return 1;
         }
-        parse_mode(argc, argv, &width, &height);
+        parse_mode(argc, argv, &width, &height, &bpp);
         memset(&mode, 0, sizeof(mode));
-        mode.index = find_mode(fd, &info, width, height);
+        mode.index = find_mode(fd, &info, width, height, bpp);
         if (ioctl(fd, DRMFBIOC_SETMODE, &mode) < 0) {
             fprintf(stderr, "fbset: set mode: %s\n", strerror(errno));
             close(fd);

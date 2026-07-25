@@ -291,6 +291,49 @@ vmspace_unmap(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size)
 }
 
 int
+vmspace_revoke_device(vm_paddr_t paddr, vm_size_t size)
+{
+    struct vmspace *vmspace;
+    const struct vm_map_entry *entry;
+    vm_ooffset_t physical_end;
+    vm_ooffset_t entry_end;
+    vm_size_t entry_size;
+    unsigned space_index;
+    unsigned entry_index;
+    int error;
+
+    if (size == 0 || !vm_paddr_page_aligned(paddr) ||
+        !vm_size_page_aligned(size) ||
+        size - 1 > VM_PADDR_MAX - paddr)
+        return EINVAL;
+    physical_end = (vm_ooffset_t)paddr + size;
+    for (space_index = 0; space_index < VMSPACE_MAX_SPACES;
+        ++space_index) {
+        vmspace = &vmspace_pool[space_index];
+        if (!vmspace_valid(vmspace))
+            continue;
+restart:
+        for (entry_index = 0;
+            entry_index < vmspace->vms_map.vmm_count; ++entry_index) {
+            entry = &vmspace->vms_map.vmm_entries[entry_index];
+            if ((entry->vme_flags & VM_MAP_DEVICE) == 0)
+                continue;
+            entry_size = entry->vme_end - entry->vme_start;
+            entry_end = entry->vme_offset + entry_size;
+            if (entry_end <= paddr ||
+                entry->vme_offset >= physical_end)
+                continue;
+            error = vmspace_unmap(vmspace, entry->vme_start,
+                entry_size);
+            if (error != 0)
+                return error;
+            goto restart;
+        }
+    }
+    return 0;
+}
+
+int
 vmspace_sysv_attach(struct vmspace *vmspace,
     struct vm_sysv_shm *segment, vm_vaddr_t start, vm_size_t size,
     int pid, long now)
@@ -574,7 +617,9 @@ vmspace_device_arguments(vm_size_t size, vm_prot_t protection,
     remaining = size;
     while (remaining != 0) {
         page = vm_page_lookup(vmspace_allocator, address);
-        if (page != 0 && page->vmp_state != VM_PAGE_RESERVED)
+        if (page != 0 && page->vmp_state != VM_PAGE_RESERVED &&
+            !(page->vmp_state == VM_PAGE_WIRED &&
+            (page->vmp_flags & VM_PAGE_FLAG_DEVICE) != 0))
             return EBUSY;
         remaining -= VM_PAGE_SIZE;
         if (remaining != 0)

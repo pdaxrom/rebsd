@@ -706,13 +706,12 @@ the board-specific generated/appended manifest.
 
 - [x] Add an N64-local VI framebuffer layer instead of using n64cart UART as
   the system console backend
-- [x] Reserve framebuffer memory in `sys/mips/n64/layout.h`:
-  - 4 MiB systems get 320x240x16 only before the base RAM swap region
-  - 8 MiB systems get a 4 MiB user window and default to a 320x240x16 reserve
-    for more RAM swap; `N64_HIGHRES_FB=1` restores the 640x480x16 reserve
+- [x] Keep the early 320x240x16 console in the stage0 alias, then allocate
+  exact contiguous wired VM runs for 320x240x16/32 and, with Expansion Pak,
+  640x480x16/32 mode changes
 - [x] Add N64 compressed RAM swap (`N64_ZSWAP=1` by default) so native PCC
   smoke can use a larger logical swap map without stealing more physical RDRAM
-  from the VM page pool or the framebuffer reserve
+  from the VM page pool or active framebuffer allocation
 - [x] Move the compressed store into shared MIPS code, connect VM swap-slot
   discard to physical-unit reclamation, and exercise the N64 8 MiB layout on
   Malta64 before the next hardware run

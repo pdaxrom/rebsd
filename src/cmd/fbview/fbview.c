@@ -110,11 +110,19 @@ xrgb8888(const unsigned char *p)
     return ((unsigned)p[0] << 16) | ((unsigned)p[1] << 8) | p[2];
 }
 
+static unsigned
+rgba8888(const unsigned char *p)
+{
+    return ((unsigned)p[0] << 24) | ((unsigned)p[1] << 16) |
+        ((unsigned)p[2] << 8) | 0xffu;
+}
+
 static int
 supported_fb(const struct drmfb_info *info)
 {
     return (info->format == DRM_FORMAT_RGBA5551 && info->bpp == 16) ||
-        (info->format == DRM_FORMAT_XRGB8888 && info->bpp == 32);
+        (info->format == DRM_FORMAT_XRGB8888 && info->bpp == 32) ||
+        (info->format == DRM_FORMAT_RGBA8888 && info->bpp == 32);
 }
 
 static void
@@ -276,7 +284,8 @@ jpeg_output(JDEC *decoder, void *bitmap, JRECT *rect)
                     continue;
                 src = pixels + ((sy - rect->top) * block_width +
                     sx - rect->left) * RGB_CHANNELS;
-                row[dx] = xrgb8888(src);
+                row[dx] = session->info.format == DRM_FORMAT_RGBA8888 ?
+                    rgba8888(src) : xrgb8888(src);
             }
         }
     }

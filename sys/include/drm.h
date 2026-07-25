@@ -19,6 +19,7 @@
 
 #define DRM_FORMAT_XRGB8888         1
 #define DRM_FORMAT_RGBA5551         2
+#define DRM_FORMAT_RGBA8888         3
 
 #define DRM_MODE_FLAG_PHSYNC        (1u << 0)
 #define DRM_MODE_FLAG_NHSYNC        (1u << 1)
@@ -70,6 +71,7 @@ struct drmfb_mode {
 #ifdef KERNEL
 
 struct uio;
+struct vm_page;
 
 struct drm_display_mode {
     unsigned clock_khz;
@@ -96,6 +98,8 @@ struct drm_framebuffer {
     unsigned bpp;
     unsigned format;
     int cache_mode;
+    struct vm_page *pages;
+    unsigned npages;
 };
 
 struct drm_mode_config {
@@ -132,6 +136,9 @@ struct drm_driver {
         struct drm_framebuffer *);
     void (*disable)(struct drm_device *);
     void (*mode_changed)(struct drm_device *);
+    int (*prepare_fb)(struct drm_device *, const struct drm_display_mode *,
+        struct drm_framebuffer *);
+    void (*release_fb)(struct drm_device *, struct drm_framebuffer *);
 };
 
 struct drm_device {
@@ -160,6 +167,9 @@ int drm_mode_set_index(struct drm_device *, unsigned);
 int drm_mode_blank(struct drm_device *, int);
 int drm_mode_validate(const struct drm_display_mode *,
     const struct drm_framebuffer *);
+int drm_framebuffer_alloc_contiguous(struct drm_framebuffer *, unsigned,
+    unsigned);
+void drm_framebuffer_free_contiguous(struct drm_framebuffer *);
 
 int drmfb_open(dev_t, int, int);
 int drmfb_close(dev_t, int, int);

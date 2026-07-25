@@ -11,9 +11,9 @@
 
 static struct drm_device *drm_devices[DRM_MAX_DEVICES];
 
-int
-drm_mode_validate(const struct drm_display_mode *mode,
-    const struct drm_framebuffer *fb)
+static int
+drm_mode_layout_validate(const struct drm_display_mode *mode,
+    const struct drm_framebuffer *fb, int require_backing)
 {
     unsigned bytes_per_pixel;
 
@@ -26,7 +26,7 @@ drm_mode_validate(const struct drm_display_mode *mode,
         mode->vsync_start >= mode->vsync_end ||
         mode->vsync_end >= mode->vtotal)
         return EINVAL;
-    if (fb->vaddr == 0 || fb->width < mode->hdisplay ||
+    if (fb->width < mode->hdisplay ||
         fb->height < mode->vdisplay || fb->bpp == 0 ||
         (fb->bpp & 7u) != 0)
         return EINVAL;
@@ -35,10 +35,19 @@ drm_mode_validate(const struct drm_display_mode *mode,
         fb->width > (unsigned)-1 / bytes_per_pixel ||
         fb->stride < fb->width * bytes_per_pixel ||
         fb->height > (unsigned)-1 / fb->stride ||
-        fb->bytes < fb->stride * fb->height ||
-        fb->reserved_bytes < fb->bytes)
+        fb->bytes < fb->stride * fb->height)
+        return EINVAL;
+    if (require_backing &&
+        (fb->vaddr == 0 || fb->reserved_bytes < fb->bytes))
         return EINVAL;
     return 0;
+}
+
+int
+drm_mode_validate(const struct drm_display_mode *mode,
+    const struct drm_framebuffer *fb)
+{
+    return drm_mode_layout_validate(mode, fb, 1);
 }
 
 int
@@ -54,8 +63,9 @@ drm_device_register(struct drm_device *dev)
     if (dev->registered)
         return 0;
     for (i = 0; i < dev->mode_count; ++i)
-        if (drm_mode_validate(&dev->modes[i].mode,
-            &dev->modes[i].framebuffer) != 0)
+        if (drm_mode_layout_validate(&dev->modes[i].mode,
+            &dev->modes[i].framebuffer,
+            dev->driver->prepare_fb == 0) != 0)
             return EINVAL;
     for (minor = 0; minor < DRM_MAX_DEVICES; ++minor)
         if (drm_devices[minor] == 0)
@@ -85,6 +95,9 @@ drm_device_unregister(struct drm_device *dev)
         return;
     if (dev->crtc.enabled && dev->driver->disable != 0)
         (*dev->driver->disable)(dev);
+    if (dev->framebuffer.vaddr != 0 &&
+        dev->driver->release_fb != 0)
+        (*dev->driver->release_fb)(dev, &dev->framebuffer);
     if (dev->minor >= 0 && dev->minor < DRM_MAX_DEVICES &&
         drm_devices[dev->minor] == dev)
         drm_devices[dev->minor] = 0;
@@ -106,18 +119,27 @@ int
 drm_mode_set(struct drm_device *dev, const struct drm_display_mode *mode,
     struct drm_framebuffer *fb)
 {
+    struct drm_framebuffer candidate;
+    struct drm_framebuffer old;
     int error;
 
     if (dev == 0 || !dev->registered)
         return ENXIO;
-    error = drm_mode_validate(mode, fb);
+    candidate = *fb;
+    if (dev->driver->prepare_fb != 0) {
+        error = (*dev->driver->prepare_fb)(dev, mode, &candidate);
+        if (error != 0)
+            return error;
+    }
+    error = drm_mode_validate(mode, &candidate);
     if (error != 0)
-        return error;
-    error = (*dev->driver->enable)(dev, mode, fb);
+        goto fail;
+    error = (*dev->driver->enable)(dev, mode, &candidate);
     if (error != 0)
-        return error;
+        goto fail;
 
-    dev->framebuffer = *fb;
+    old = dev->framebuffer;
+    dev->framebuffer = candidate;
     dev->primary_plane.framebuffer = &dev->framebuffer;
     dev->primary_plane.enabled = 1;
     dev->crtc.mode = *mode;
@@ -126,7 +148,15 @@ drm_mode_set(struct drm_device *dev, const struct drm_display_mode *mode,
     dev->connector.status = DRM_CONNECTOR_CONNECTED;
     if (dev->driver->mode_changed != 0)
         (*dev->driver->mode_changed)(dev);
+    if (old.vaddr != 0 && dev->driver->release_fb != 0)
+        (*dev->driver->release_fb)(dev, &old);
     return 0;
+
+fail:
+    if (candidate.vaddr != fb->vaddr &&
+        dev->driver->release_fb != 0)
+        (*dev->driver->release_fb)(dev, &candidate);
+    return error;
 }
 
 int
@@ -166,6 +196,8 @@ drm_mode_set_index(struct drm_device *dev, unsigned index)
         return ENXIO;
     if (index >= dev->mode_count)
         return EINVAL;
+    if (index == dev->mode_index && dev->crtc.enabled)
+        return 0;
     config = &dev->modes[index];
     error = drm_mode_set(dev, &config->mode, &config->framebuffer);
     if (error == 0)

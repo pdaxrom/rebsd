@@ -32,7 +32,6 @@ ifneq ($(filter pcc-debug.z64,$(MAKECMDGOALS)),)
 N64_DEBUG_UART_ONLY := 1
 endif
 N64_MINIMAL_UART_ONLY ?= 0
-N64_HIGHRES_FB ?= 0
 N64_ZSWAP ?= 1
 N64_ENABLE_ROMFS ?= 1
 N64_MINIMAL_ROOTFS ?= $(N64_MINIMAL_UART_ONLY)
@@ -51,12 +50,9 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES)
 PARAM += -DN64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES)
 N64_IOCONF      = ioconf
-ifeq ($(N64_HIGHRES_FB),1)
-PARAM += -DN64_HIGHRES_FB
-endif
 ifneq ($(N64_ZSWAP),1)
 PARAM := $(filter-out -DMIPS_ZSWAP_ENABLED,$(PARAM))
 endif
@@ -893,11 +889,12 @@ CFILES += $(N64_BOARD_SRC)/n64reset.c
 endif
 
 ifeq ($(N64_DEBUG_UART_ONLY),1)
-OBJS := $(filter-out drm.o drm_fb.o video.o video_console.o si.o joybus.o \
+OBJS := $(filter-out drm.o drm_fb.o drm_fbmem.o video.o video_console.o si.o joybus.o \
     if_usbn.o n64usbnet_proto.o n64cart_usbnet.o n64cart_usbecm.o,$(OBJS))
 CFILES := $(filter-out \
     $S/drm/drm.c \
     $S/drm/drm_fb.c \
+    $S/drm/drm_fbmem.c \
     $S/mips/n64/video.c \
     $S/mips/n64/video_console.c \
     $S/mips/n64/si.c \
@@ -908,10 +905,11 @@ CFILES := $(filter-out \
     $S/mips/n64/n64cart_usbecm.c,$(CFILES))
 endif
 ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
-OBJS := $(filter-out drm.o drm_fb.o video.o video_console.o si.o joybus.o,$(OBJS))
+OBJS := $(filter-out drm.o drm_fb.o drm_fbmem.o video.o video_console.o si.o joybus.o,$(OBJS))
 CFILES := $(filter-out \
     $S/drm/drm.c \
     $S/drm/drm_fb.c \
+    $S/drm/drm_fbmem.c \
     $S/mips/n64/video.c \
     $S/mips/n64/video_console.c \
     $S/mips/n64/si.c \
