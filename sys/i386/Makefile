@@ -43,7 +43,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    pic.o pit.o memory.o paging.o \
                    libkern.o elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
-                   sysent_bootstrap.o kern_prot.o kern_proc.o copyio.o \
+                   sysent_bootstrap.o kern_prot.o kern_proc.o kern_synch.o \
+                   scheduler.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o config.o process_bootstrap.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
@@ -289,6 +290,20 @@ kern_proc.o: $(TOPSRC)/sys/kernel/kern_proc.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+kern_synch.o: $(TOPSRC)/sys/kernel/kern_synch.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
+	    $(TOPSRC)/sys/include/user.h $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+scheduler.o: $(I386_PC_SRC)/scheduler.c \
+	    $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/machine/machparam.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 copyio.o: $(I386_COMMON_SRC)/copyio.c \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -347,6 +362,7 @@ config.o: $(I386_PC_SRC)/config.c \
 	    -c $< -o $@
 
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/context.h \
 	    $(I386_SRC)/include/elf_bootstrap.h \
 	    $(I386_SRC)/include/initfs.h \
 	    $(I386_SRC)/include/interrupt.h \
@@ -410,6 +426,7 @@ $(VM_CORE_OBJS): %.o: $(I386_VM_SRC)/%.c \
 
 vmspace_bootstrap.o: $(I386_PC_SRC)/vmspace_bootstrap.c \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/user.h \
 	    $(I386_VM_SRC)/vmspace.h $(I386_VM_SRC)/vm_object.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \

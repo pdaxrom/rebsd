@@ -12,8 +12,8 @@ user-return signal/reschedule path и user trap-to-signal translation
 read-only initfs с production `getpid=1` и `argc/argv/envp` stack из
 собственного CPL3-контекста; proc0 владеет отдельными u-area/vmspace и
 повторно используемым idle context, проверенным двукратным
-proc1→proc0→proc1 switch; следующий gate — generic run queue/scheduler/fork
-integration, 2026-07-25.
+proc1→proc0→proc1 switch через generic `setrq/swtch`; следующий gate —
+`newproc`/fork integration, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -309,19 +309,28 @@ CPL3. `process-table: ok` проверяет обе очереди, обратн
 lookup, proc0 reservation и свободный `proc[2]`.
 
 Proc0 теперь владеет отдельными guarded u-area и kernel-only vmspace.
-Начальный `u_qsave` входит на собственном proc0 stack, а первый `setjmp`
-превращает его в повторно используемый scheduler-compatible idle
-continuation. После возврата `/sbin/init` из CPL3 на process 1 kernel stack
-QEMU дважды переключает proc1→proc0→proc1: первый раз через начальный
-context, второй — через сохранённый `u_qsave`. На каждом переходе
-проверяются текущий CR3/vmspace, `md_curuser`, `u_procp`, границы u-area
-stack, guard и `TSS.esp0`. Marker `proc0-context: ok` означает, что оба
-round-trip завершены и process 1 снова активен.
+Начальный `u_qsave` входит на собственном proc0 stack и вызывает настоящий
+generic `swtch`; его первый `setjmp` превращает context в повторно
+используемый idle continuation. После возврата `/sbin/init` из CPL3 на
+process 1 kernel stack QEMU дважды ставит process 1 в `qs` через generic
+`setrq` и вызывает generic `swtch`. Первый switch входит через начальный
+proc0 context, второй возобновляет сохранённый `u_qsave`; в обоих случаях
+proc0 выбирает process 1 из run queue и возвращает его через `u_rsave`.
 
-Run queue, generic `swtch`, `newproc` и fork нескольких живых процессов
-ещё не подключены.
+I386 `splhigh/splx` сохраняют и восстанавливают IF, а `idle` использует
+атомарную последовательность `sti; hlt`, исключающую потерянное пробуждение
+между разрешением IRQ и остановкой CPU. На переходах проверяются
+CR3/vmspace, `md_curuser`, `u_procp`, границы u-area stack, guards,
+`TSS.esp0`, опустошение `qs` и неизменность сохранённого proc0 `u_qsave`
+после второго прохода. `vmspace_current()` теперь, как MIPS backend,
+выводит process vmspace из `md_curuser->u_procp`, поэтому generic
+`vmspace_activate` и scheduler видят единый current-state contract. Markers
+`proc0-context: ok` и `scheduler-switch: ok` означают, что оба round-trip
+завершены и process 1 снова активен.
+
+`newproc` и fork нескольких живых процессов ещё не подключены.
 
 1. Добавить оставшиеся machine headers/config lists.
-2. Подключить generic run queue/`swtch`, затем `newproc`.
+2. Подключить `newproc` и выполнить fork process 1→process 2 через scheduler.
 3. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести generic `execve` до статического ELF32 init.

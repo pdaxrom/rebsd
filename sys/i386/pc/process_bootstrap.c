@@ -7,6 +7,7 @@
 #include <vm/vmspace.h>
 
 #include "context.h"
+#include "boot.h"
 #include "elf_bootstrap.h"
 #include "initfs.h"
 #include "interrupt.h"
@@ -22,7 +23,7 @@
 #define I386_PROCESS_USER_STACK_TOP  I386_USER_VADDR_END
 #define I386_PROCESS_USER_MAGIC      0x70726f63u
 #define I386_PROCESS_IDLE_MAGIC      0x69646c65u
-#define I386_PROCESS_IDLE_SWITCHES   2u
+#define I386_PROCESS_SCHED_SWITCHES  2u
 
 static struct proc *i386_bootstrap_proc;
 static struct user *i386_bootstrap_uarea;
@@ -30,14 +31,16 @@ static struct vmspace *i386_bootstrap_vmspace;
 static struct user *i386_idle_uarea;
 static struct vmspace *i386_idle_vmspace;
 static label_t i386_process_bootstrap_return;
+static label_t i386_process_idle_saved;
 static struct i386_elf_image i386_bootstrap_user_image;
 static struct i386_user_stack i386_bootstrap_user_stack;
 static int i386_process_table_ready;
 static int i386_bootstrap_ready;
 static volatile unsigned i386_process_idle_active;
 static volatile unsigned i386_process_idle_result;
-static volatile unsigned i386_process_idle_switches;
-static int i386_process_idle_tested;
+static volatile unsigned i386_process_scheduler_switches;
+static int i386_process_idle_entered;
+static int i386_process_scheduler_tested;
 static volatile unsigned i386_process_user_active;
 static volatile unsigned i386_process_user_result;
 
@@ -56,6 +59,19 @@ i386_process_context_init(label_t *context, struct user *up,
     context->val[I386_LABEL_ESP] = stack_pointer;
     context->val[I386_LABEL_EIP] = (unsigned)(unsigned long)entry;
     context->val[I386_LABEL_EFLAGS] = I386_EFLAGS_RESERVED;
+}
+
+static int
+i386_process_context_equal(const label_t *left, const label_t *right)
+{
+    unsigned index;
+
+    for (index = 0;
+        index < sizeof(left->val) / sizeof(left->val[0]); ++index) {
+        if (left->val[index] != right->val[index])
+            return 0;
+    }
+    return 1;
 }
 
 int
@@ -108,8 +124,9 @@ i386_process_bootstrap_validate(void)
         vmspace_current() != i386_bootstrap_vmspace ||
         i386_tss_kernel_stack() != kernel_stack)
         return EFAULT;
-    if (i386_process_idle_tested &&
-        i386_process_idle_switches != I386_PROCESS_IDLE_SWITCHES)
+    if (i386_process_scheduler_tested &&
+        (i386_process_scheduler_switches !=
+        I386_PROCESS_SCHED_SWITCHES || qs != (struct proc *)0))
         return EFAULT;
     return 0;
 }
@@ -280,62 +297,84 @@ i386_process_idle_validate(void)
     return 0;
 }
 
+static int
+i386_process_scheduler_fail(unsigned stage)
+{
+    i386_early_puts("scheduler-switch: failed stage=");
+    i386_early_put_hex32(stage);
+    i386_early_putc('\n');
+    return EFAULT;
+}
+
 static void
 i386_process_idle_entry(void)
 {
-    int resumed;
-
-    resumed = setjmp(&i386_idle_uarea->u_qsave);
-    if ((i386_process_idle_switches == 0 && resumed != 0) ||
-        (i386_process_idle_switches != 0 && resumed != 1) ||
+    if (i386_process_idle_entered ||
         i386_process_idle_validate() != 0)
         i386_process_idle_result = EFAULT;
     else {
-        ++i386_process_idle_switches;
+        i386_process_idle_entered = 1;
         i386_process_idle_result = I386_PROCESS_IDLE_MAGIC;
     }
-    if (i386_vmspace_activate(i386_bootstrap_vmspace) != 0)
-        i386_process_idle_result = EFAULT;
-    longjmp((size_t)i386_bootstrap_uarea,
-        &i386_bootstrap_uarea->u_rsave);
+    swtch();
+    i386_process_idle_result = EFAULT;
     for (;;)
         __asm__ volatile ("cli; hlt");
 }
 
 static int
-i386_process_idle_roundtrip(void)
+i386_process_scheduler_roundtrip(void)
 {
-    int resumed;
-    int error;
+    unsigned idle_stack;
+    int first;
 
     if (md_curuser != i386_bootstrap_uarea ||
         vmspace_current() != i386_bootstrap_vmspace ||
-        i386_process_idle_switches >= I386_PROCESS_IDLE_SWITCHES)
-        return EFAULT;
+        qs != (struct proc *)0 ||
+        i386_process_scheduler_switches >= I386_PROCESS_SCHED_SWITCHES)
+        return i386_process_scheduler_fail(1);
 
-    i386_process_idle_result = EFAULT;
+    first = i386_process_scheduler_switches == 0;
+    if (first)
+        i386_process_idle_result = EFAULT;
     i386_process_idle_active = 1;
-    resumed = setjmp(&i386_bootstrap_uarea->u_rsave);
-    if (resumed == 0) {
-        error = i386_vmspace_activate(i386_idle_vmspace);
-        if (error != 0) {
-            i386_process_idle_active = 0;
-            return error;
-        }
-        longjmp((size_t)i386_idle_uarea,
-            &i386_idle_uarea->u_qsave);
+    setrq(i386_bootstrap_proc);
+    if (qs != i386_bootstrap_proc) {
         i386_process_idle_active = 0;
-        return EFAULT;
+        return i386_process_scheduler_fail(2);
     }
+    swtch();
     i386_process_idle_active = 0;
-    if (resumed != 1 ||
-        i386_process_idle_result != I386_PROCESS_IDLE_MAGIC ||
-        md_curuser != i386_bootstrap_uarea ||
-        vmspace_current() != i386_bootstrap_vmspace ||
-        i386_tss_kernel_stack() !=
+    if (i386_process_idle_result != I386_PROCESS_IDLE_MAGIC)
+        return i386_process_scheduler_fail(31);
+    if (!i386_process_idle_entered)
+        return i386_process_scheduler_fail(32);
+    if (qs != (struct proc *)0)
+        return i386_process_scheduler_fail(33);
+    if (md_curuser != i386_bootstrap_uarea)
+        return i386_process_scheduler_fail(34);
+    if (vmspace_current() != i386_bootstrap_vmspace)
+        return i386_process_scheduler_fail(35);
+    if (i386_tss_kernel_stack() !=
         (unsigned)(unsigned long)i386_bootstrap_uarea + USIZE)
-        return EFAULT;
+        return i386_process_scheduler_fail(36);
     md_uarea_guard_check(i386_bootstrap_uarea);
+
+    idle_stack = (unsigned)(unsigned long)i386_idle_uarea;
+    if (i386_idle_uarea->u_qsave.val[I386_LABEL_ESP] < idle_stack ||
+        i386_idle_uarea->u_qsave.val[I386_LABEL_ESP] >=
+        idle_stack + USIZE ||
+        i386_idle_uarea->u_qsave.val[I386_LABEL_EIP] == 0 ||
+        i386_idle_uarea->u_qsave.val[I386_LABEL_EIP] ==
+        (unsigned)(unsigned long)i386_process_idle_entry)
+        return i386_process_scheduler_fail(4);
+    if (first)
+        bcopy(&i386_idle_uarea->u_qsave, &i386_process_idle_saved,
+            sizeof(i386_process_idle_saved));
+    else if (!i386_process_context_equal(&i386_idle_uarea->u_qsave,
+        &i386_process_idle_saved))
+        return i386_process_scheduler_fail(5);
+    ++i386_process_scheduler_switches;
     return 0;
 }
 
@@ -353,15 +392,15 @@ i386_process_user_kernel_return(void)
     if (i386_process_user_active &&
         i386_process_user_result == 0 &&
         stack_address >= stack_start && stack_address < stack_end &&
-        i386_process_idle_roundtrip() == 0 &&
-        i386_process_idle_roundtrip() == 0 &&
-        i386_process_idle_switches == I386_PROCESS_IDLE_SWITCHES &&
+        i386_process_scheduler_roundtrip() == 0 &&
+        i386_process_scheduler_roundtrip() == 0 &&
+        i386_process_scheduler_switches == I386_PROCESS_SCHED_SWITCHES &&
         i386_process_bootstrap_validate() == 0)
         i386_process_user_result = I386_PROCESS_USER_MAGIC;
     else
         i386_process_user_result = EFAULT;
     if (i386_process_user_result == I386_PROCESS_USER_MAGIC)
-        i386_process_idle_tested = 1;
+        i386_process_scheduler_tested = 1;
 
     longjmp((size_t)i386_bootstrap_uarea,
         &i386_process_bootstrap_return);

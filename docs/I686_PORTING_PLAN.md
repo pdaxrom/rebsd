@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать семь QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: двадцать восемь QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -459,9 +459,32 @@ Malta64. Следующий кодовый инкремент реализует
 
 Generic run queue/`swtch` и `newproc` ещё не входят в early image.
 
-Следующий инкремент: поставить process 1 в generic run queue, подключить
-штатный scheduler switch через новый proc0 context, затем включить
-`newproc` и fork нескольких живых процессов.
+Двадцать восьмой QEMU bring-up инкремент завершён:
+
+- early image впервые линкует общий `kern_synch.c`; его strong
+  `setpri/setrq/swtch` заменяют ранние weak fallback symbols;
+- i386 `splhigh/splx` сохраняют и восстанавливают EFLAGS.IF, а idle hook
+  использует атомарный `sti; hlt` и ранний fail-stop panic;
+- после возврата `/sbin/init` process 1 дважды ставится в generic `qs`;
+  proc0 запускает штатный `swtch`, выбирает PID 1 по priority/SLOAD и
+  возвращает его через `u_rsave`;
+- первый проход строит настоящий proc0 `u_qsave` внутри generic scheduler,
+  второй возобновляет тот же сохранённый context; тест проверяет, что label
+  не меняется, а `qs` после выбора пуст;
+- i386 `vmspace_current`, как MIPS backend, теперь сначала выводит vmspace
+  из `md_curuser->u_procp`, поэтому generic `vmspace_activate` согласован с
+  диагностикой CR3/current process;
+- marker `scheduler-switch: ok` дополняет `proc0-context: ok` и подтверждает
+  два полных generic scheduler round-trip;
+- clean build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
+  проходят.
+
+`newproc` и fork нескольких живых процессов ещё не входят в early image.
+
+Следующий инкремент: подключить generic `newproc`, создать process 2 через
+существующие `vmspace_clone/md_uarea_fork` и выполнить parent/child scheduler
+round-trip перед расширением syscall table.
 
 ## 1. Цель и границы первого порта
 

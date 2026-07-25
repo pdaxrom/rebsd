@@ -35,6 +35,7 @@ schedcpu (caddr_t arg)
     register struct proc *p;
     register int a;
 
+    (void)arg;
     wakeup((caddr_t)&lbolt);
     for (p = allproc; p != NULL; p = p->p_nxt) {
         if (p->p_time != 127)
@@ -338,6 +339,7 @@ setrun (struct proc *p)
     case SZOMB:
     default:
         panic("setrun");
+        return;
 
     case SSTOP:
     case SSLEEP:

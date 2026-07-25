@@ -5,6 +5,7 @@
 # sysent bootstrap prefix, i386 signal frame, user-return work loop and
 # generic process table/process 1 with its persistent CPL3
 # production-syscall probe, initfs-backed ELF32 /sbin/init loader and
-# exec-compatible user stack are linked by the early Makefile together
-# with user trap-to-signal translation.  Remaining machine-independent
-# files are connected after the scheduler gate.
+# exec-compatible user stack are linked by the early Makefile together with
+# user trap-to-signal translation and generic kern_synch run queue/scheduler.
+# Remaining machine-independent files are connected after the newproc/fork
+# gate.

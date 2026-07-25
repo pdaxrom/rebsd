@@ -55,4 +55,53 @@
 #define UCB_METER
 #endif
 
+#ifdef KERNEL
+#define USERMODE(ps)    (((ps) & 3u) == 3u)
+#define BASEPRI(ps)     (((ps) & 0x00000200u) != 0)
+
+#ifndef __ASSEMBLER__
+static inline int
+i386_intr_disable(void)
+{
+    unsigned flags;
+
+    __asm__ volatile ("pushfl; popl %0; cli"
+        : "=r" (flags) : : "memory");
+    return (int)flags;
+}
+
+static inline int
+i386_intr_enable(void)
+{
+    unsigned flags;
+
+    __asm__ volatile ("pushfl; popl %0; sti"
+        : "=r" (flags) : : "memory");
+    return (int)flags;
+}
+
+static inline void
+i386_intr_restore(int state)
+{
+    if (((unsigned)state & 0x00000200u) != 0)
+        __asm__ volatile ("sti" : : : "memory");
+    else
+        __asm__ volatile ("cli" : : : "memory");
+}
+
+void idle(void);
+#endif
+
+#define splbio()        i386_intr_disable()
+#define spltty()        i386_intr_disable()
+#define splclock()      i386_intr_disable()
+#define splhigh()       i386_intr_disable()
+#define splnet()        i386_intr_disable()
+#define splimp()        i386_intr_disable()
+#define splsoftclock()  i386_intr_enable()
+#define spl0()          i386_intr_enable()
+#define splx(s)         i386_intr_restore(s)
+#define noop()          __asm__ volatile ("nop")
+#endif
+
 #endif

@@ -1,4 +1,7 @@
+#include <sys/param.h>
 #include <sys/errno.h>
+#include <sys/user.h>
+#include <sys/proc.h>
 #include <vm/vmspace.h>
 
 #include "vmspace_bootstrap.h"
@@ -11,6 +14,9 @@ static struct vmspace *i386_vmspace_active;
 struct vmspace *
 vmspace_current(void)
 {
+    if (md_curuser != (struct user *)0 &&
+        md_curuser->u_procp != (struct proc *)0)
+        return md_curuser->u_procp->p_vmspace;
     return i386_vmspace_active;
 }
 
