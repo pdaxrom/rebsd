@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: девятнадцать QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: двадцать QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -312,9 +312,27 @@ Malta64. Следующий кодовый инкремент реализует
 - normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, host VM suite,
   MaltaEL и N64 `kernel-objects` проходят.
 
-Следующий инкремент: включить production `init_sysent` и минимальный
-process bootstrap в i386 image, затем довести первый реальный `exec` до
-статического ELF32 init.
+Двадцатый QEMU bring-up инкремент завершён:
+
+- ранний image получил bootstrap prefix production `sysent` с номерами
+  0–20 и точными argument counts из `kernel/init_sysent.c`; ещё не
+  подключённые подсистемы явно возвращают `ENOSYS`;
+- syscall 20 вызывает настоящий machine-independent
+  `kernel/kern_prot.c:getpid`, а linker garbage collection не удерживает
+  неиспользуемые функции того же generic object;
+- production table устанавливается до syscall self-test; временные таблицы
+  signal/trap тестов сохраняют и восстанавливают её;
+- QEMU CPL3 stream выполняет `eax=20; int 0x80` с настоящим `struct proc`,
+  получает PID 386, проверяет нулевой Carry и marker
+  `syscall-production: ok`;
+- `kern_prot.c` очищен от двух signedness warnings для строгой i686
+  `-Werror` сборки без изменения MIPS-семантики;
+- clean build, normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ,
+  host VM suite, MaltaEL и N64 `kernel-objects` проходят.
+
+Следующий инкремент: создать постоянный bootstrap process вместо тестового
+`struct proc`, затем расширить production prefix вызовами, необходимыми
+первому статическому ELF32 init.
 
 ## 1. Цель и границы первого порта
 

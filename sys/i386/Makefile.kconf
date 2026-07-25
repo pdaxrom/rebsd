@@ -2,7 +2,8 @@
 # Placeholder kconfig template for the experimental i686 port.
 # The early boot milestone, generic allocator, pmap, vmspace, copy I/O and
 # u-area allocator, context switch, fork/init frames, ring-3/TSS, int 0x80
-# ABI, generic sysent adapter, signal frame, user-return work loop and user
-# trap-to-signal path are built directly by sys/i386/Makefile.  The
-# machine-independent file list will be connected after the process MD gate.
+# ABI, production-numbered sysent bootstrap prefix, signal frame, user-return
+# work loop and user trap-to-signal path are built directly by
+# sys/i386/Makefile.  The machine-independent file list will be connected
+# after the process MD gate.
 #

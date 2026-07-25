@@ -64,7 +64,10 @@ work before `iret`; QEMU executes a real handler, trampoline and `int 0x80`
 sigreturn through that path.  User CPU exceptions now become BSD pending
 signals while kernel faults remain fatal; QEMU recovers through handlers
 from both a real `UD2` and a terminal unmapped page fault.  An explicit
-user-string copy API is the next gate.
+`copyinstr/copykstr` API now keeps low kernel addresses distinct from user
+pointers across pathname and exec code.  The early production syscall table
+contains the exact 0-20 prefix; QEMU invokes generic `kern_prot.c:getpid`
+as syscall 20 from CPL3 and requires `syscall-production: ok`.
 
 The default cross toolchain is:
 
@@ -87,9 +90,9 @@ i386 u-area operations exist; the kernel can save and restore
 scheduler-compatible i386 contexts, switch u-area stacks and resume copied
 fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
-contract and generic `sysent` adapter exist, but the full production table
-is not connected; pathname/exec call sites still need an unambiguous
-user-string primitive before the generic syscall set is safe on low-linked
-i386.
+contract and generic `sysent` adapter now install a production-numbered
+bootstrap prefix through syscall 20, including the real generic `getpid`
+handler.  The full table remains gated on the rest of the generic kernel,
+and a persistent bootstrap process is the next process milestone.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

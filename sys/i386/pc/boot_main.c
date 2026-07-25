@@ -381,6 +381,12 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("ring3: ok\n");
+    if (i386_syscall_install_production() != 0) {
+        i386_early_puts("syscall-production: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
     if (i386_syscall_selftest() != 0) {
         i386_early_puts("syscall-int80: failed\n");
         for (;;) {
@@ -388,6 +394,7 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("syscall-int80: ok\n");
+    i386_early_puts("syscall-production: ok\n");
     if (i386_signal_selftest() != 0) {
         i386_early_puts("signal-frame: failed\n");
         for (;;) {

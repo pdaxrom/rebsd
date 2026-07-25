@@ -19,6 +19,7 @@ struct sysent;
  */
 void i386_syscall_set_table(const struct sysent *, unsigned);
 void i386_syscall_get_table(const struct sysent **, unsigned *);
+int i386_syscall_install_production(void);
 void i386_syscall_dispatch(struct i386_trapframe *);
 int i386_syscall_handle_return(struct i386_trapframe *);
 int i386_syscall_selftest(void);

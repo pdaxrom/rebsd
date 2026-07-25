@@ -2,6 +2,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/user.h>
+#include <sys/proc.h>
 #include <vm/vmspace.h>
 
 #include "interrupt.h"
@@ -19,10 +20,12 @@
 #define I386_SYSCALL_RESTART_EIP  (I386_SYSCALL_TEST_CODE + 66u)
 #define I386_SYSCALL_JUST_EIP     (I386_SYSCALL_TEST_CODE + 76u)
 #define I386_SYSCALL_LONGJMP_EIP  (I386_SYSCALL_TEST_CODE + 85u)
+#define I386_SYSCALL_GETPID_EIP   (I386_SYSCALL_TEST_CODE + 94u)
 #define I386_SYSCALL_TEST_RESULT  21u
 #define I386_SYSCALL_TEST_RESULT2 0x53594332u
 #define I386_SYSCALL_RESTART_RESULT 0x52535432u
 #define I386_SYSCALL_TEST_MAGIC   0x696e7438u
+#define I386_SYSCALL_TEST_PID     386
 
 /*
  * eax=number; ebx/ecx/edx/esi/edi/ebp=arguments; eax/edx=results.
@@ -54,14 +57,18 @@ static const unsigned char i386_syscall_test_code[] = {
     0xb8, 0x05, 0x00, 0x00, 0x00,
     0xcd, 0x80,
     0xcd, 0x30,
+    0xb8, 0x14, 0x00, 0x00, 0x00,
+    0xcd, 0x80,
+    0xcd, 0x30,
     0x0f, 0x0b
 };
 
 typedef char i386_assert_syscall_code_eip[
-    sizeof(i386_syscall_test_code) == 87 ? 1 : -1];
+    sizeof(i386_syscall_test_code) == 96 ? 1 : -1];
 
 static struct user *i386_syscall_uarea;
 static struct vmspace *i386_syscall_vmspace;
+static struct proc i386_syscall_process;
 static volatile unsigned i386_syscall_active;
 static volatile unsigned i386_syscall_result;
 static volatile unsigned i386_syscall_phase;
@@ -157,6 +164,15 @@ i386_syscall_get_table(const struct sysent **table, unsigned *count)
 {
     *table = i386_syscall_table;
     *count = i386_syscall_table_count;
+}
+
+int
+i386_syscall_install_production(void)
+{
+    if (nsysent <= 20 || sysent[20].sy_call != getpid)
+        return EINVAL;
+    i386_syscall_set_table(sysent, (unsigned)nsysent);
+    return 0;
 }
 
 static void
@@ -341,6 +357,17 @@ i386_syscall_handle_return(struct i386_trapframe *frame)
         frame->tf_eax == EINTR &&
         (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 &&
         i386_syscall_longjmp_count == 1u &&
+        i386_tss_kernel_stack() == expected_stack) {
+        i386_syscall_set_table(sysent, (unsigned)nsysent);
+        i386_syscall_phase = 6;
+        return 1;
+    }
+
+    if (i386_syscall_phase == 6 &&
+        frame->tf_eip == I386_SYSCALL_GETPID_EIP &&
+        frame->tf_eax == I386_SYSCALL_TEST_PID &&
+        frame->tf_edx == 0 &&
+        (frame->tf_eflags & I386_EFLAGS_CARRY) == 0 &&
         i386_tss_kernel_stack() == expected_stack)
         i386_syscall_result = 0;
     else
@@ -383,6 +410,9 @@ i386_syscall_selftest(void)
     i386_syscall_count = 0;
     i386_syscall_restart_count = 0;
     i386_syscall_longjmp_count = 0;
+    if (i386_syscall_table != sysent ||
+        i386_syscall_table_count != (unsigned)nsysent)
+        return EFAULT;
     saved_table = i386_syscall_table;
     saved_table_count = i386_syscall_table_count;
     i386_syscall_set_table(i386_syscall_test_table,
@@ -418,6 +448,11 @@ i386_syscall_selftest(void)
         goto out;
 
     md_curuser = i386_syscall_uarea;
+    bzero(&i386_syscall_process, sizeof(i386_syscall_process));
+    i386_syscall_process.p_pid = I386_SYSCALL_TEST_PID;
+    i386_syscall_process.p_uarea = i386_syscall_uarea;
+    i386_syscall_process.p_vmspace = i386_syscall_vmspace;
+    i386_syscall_uarea->u_procp = &i386_syscall_process;
     i386_tss_set_kernel_stack((unsigned)(unsigned long)
         i386_syscall_uarea + USIZE);
 

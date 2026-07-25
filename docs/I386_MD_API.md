@@ -6,8 +6,8 @@ fork/init frames, проверяемый ring-3 entry и `int 0x80` register ABI
 подключены; MIPS
 process symbols нейтрализованы, i386 `sysent` adapter, signal frame и
 user-return signal/reschedule path и user trap-to-signal translation
-проверены; следующий gate — production `init_sysent` и process bootstrap,
-2026-07-25.
+проверены; production syscall prefix вызывает generic `getpid`; следующий
+gate — постоянный process bootstrap, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -227,11 +227,16 @@ unmapped `0x60000000`. User handlers проверяют `SIGILL`/faulting EIP и
 общий `int 0x80` trampoline и продолжают исходный поток. Тест также
 проверяет signal mask, два delivery и точный reclaim.
 
-Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
-тянут остальные подсистемы. Публичный setter уже позволяет установить
-production `sysent`; pathname/exec call sites уже переведены на явное
-адресное пространство без pointer-range эвристики.
+Полный `kernel/init_sysent.c` ещё не входит в early image: его таблица
+удержала бы обработчики всех пока не подключённых подсистем. Вместо этого
+ранний `sysent` содержит точный production prefix 0–20 с теми же номерами
+и argument counts. Неготовые entries возвращают `ENOSYS`, а номер 20
+реально вызывает generic `kern_prot.c:getpid`. QEMU исполняет этот вызов
+из CPL3 и проверяет PID из настоящего `struct proc`, Carry и обязательный
+marker `syscall-production: ok`. Pathname/exec call sites уже переведены
+на явное адресное пространство без pointer-range эвристики.
 
 1. Добавить оставшиеся machine headers/config lists.
-2. Включить production `init_sysent` и минимальный process bootstrap.
-3. Довести первый реальный `exec` до статического ELF32 init.
+2. Создать постоянный bootstrap process и расширять production prefix.
+3. Подключить полный `init_sysent`, когда его generic handlers войдут в
+   image, и довести `exec` до статического ELF32 init.

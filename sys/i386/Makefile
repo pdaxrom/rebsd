@@ -40,7 +40,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o memory.o paging.o \
-                   libkern.o copyio.o \
+                   libkern.o sysent_bootstrap.o kern_prot.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
@@ -214,6 +214,19 @@ paging.o: $(I386_PC_SRC)/paging.c $(I386_SRC)/include/memory.h \
 	    -c $< -o $@
 
 libkern.o: $(I386_COMMON_SRC)/libkern.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+sysent_bootstrap.o: $(I386_COMMON_SRC)/sysent_bootstrap.c \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+kern_prot.o: $(TOPSRC)/sys/kernel/kern_prot.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
+	    $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
