@@ -41,7 +41,17 @@ struct tm *gmtime(const time_t *);
 struct tm *localtime(const time_t *);
 char *asctime(const struct tm *);
 char *ctime(const time_t *);
+struct tm *gmtime_r(const time_t *, struct tm *);
+struct tm *localtime_r(const time_t *, struct tm *);
+char *asctime_r(const struct tm *, char *);
+char *ctime_r(const time_t *, char *);
 time_t time(time_t *);
+time_t mktime(struct tm *);
+time_t timegm(struct tm *);
+double difftime(time_t, time_t);
+void tzset(void);
+
+extern char *tzname[2];
 
 size_t strftime (char *s, size_t maxsize, const char *format,
     const struct tm *timeptr);

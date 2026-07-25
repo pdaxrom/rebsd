@@ -20,16 +20,17 @@
 int
 vsnprintf(char *str, size_t nbytes, const char *fmt, va_list args)
 {
-	FILE _strbuf;
+    FILE _strbuf;
+    int result;
 
-	if (nbytes == 0)
-		return 0;
-	_strbuf._flag = _IOWRT+_IOSTRG;
-	_strbuf._ptr = str;
-	_strbuf._cnt = nbytes - 1;
-	_doprnt (fmt, args, &_strbuf);
-	*_strbuf._ptr = 0;
-	return _strbuf._ptr - str;
+    _strbuf._flag = _IOWRT+_IOSTRG;
+    _strbuf._ptr = str;
+    _strbuf._cnt = nbytes == 0 ? 0 :
+        (nbytes - 1 > 0x7fffffffU ? 0x7fffffff : (int)nbytes - 1);
+    result = _doprnt(fmt, args, &_strbuf);
+    if (nbytes != 0)
+        *_strbuf._ptr = '\0';
+    return result;
 }
 
 int

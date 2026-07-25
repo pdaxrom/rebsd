@@ -64,7 +64,7 @@ struct xx
 	{ BREAK, "jump", "break"},
 	{ CONTINUE, "jump", "continue"},
 	{ FNCN, "fncn", "fncn"},
-	{ GETLINE, "getline", "getline"},
+	{ GETLINE, "getline", "awk_getline"},
 	{ 0, ""},
 };
 

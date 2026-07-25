@@ -9,8 +9,12 @@ include $(TOPSRC)/target.mk
 DEFS		=
 CFLAGS		+= ${DEFS} -Os
 
-SRCS		= strcspn.c strpbrk.c strerror.c strsep.c strspn.c strstr.c strtok.c strtok_r.c stpcpy.c wchar.c
-OBJS		= strcspn.o strpbrk.o strerror.o strsep.o strspn.o strstr.o strtok.o strtok_r.o stpcpy.o wchar.o
+SRCS		= memmem.c strcasestr.c strcspn.c strlcat.c strlcpy.c \
+		  strndup.c strpbrk.c strerror.c strsep.c strspn.c strstr.c \
+		  strtok.c strtok_r.c stpcpy.c wchar.c
+OBJS		= memmem.o strcasestr.o strcspn.o strlcat.o strlcpy.o \
+		  strndup.o strpbrk.o strerror.o strsep.o strspn.o strstr.o \
+		  strtok.o strtok_r.o stpcpy.o wchar.o
 
 all:		string.a
 

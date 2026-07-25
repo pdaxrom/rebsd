@@ -26,8 +26,10 @@ ifeq ($(LIBC_COMPILER_RUNTIME),libpcc)
 CFLAGS          += -DLIBC_USES_LIBPCC_RUNTIME
 COMPILER_HELPER_OBJS =
 else
-COMPILER_HELPER_OBJS = divdi3.o \
+COMPILER_HELPER_OBJS = cmpdi2.o \
+                  divdi3.o \
                   fixdfdi.o \
+                  floatdisf.o \
                   floatdidf.o \
                   moddi3.o \
                   udivdi3.o \

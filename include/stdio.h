@@ -5,6 +5,8 @@
  */
 #ifndef FILE
 
+#include <sys/types.h>
+
 #define BUFSIZ  1024
 extern  struct  _iobuf {
     int     _cnt;
@@ -74,6 +76,7 @@ FILE    *tmpfile (void);
 char    *tmpnam(char *s);
 int     fclose (FILE *);
 long    ftell (FILE *);
+off_t   ftello (FILE *);
 int     fflush (FILE *);
 int     fgetc (FILE *);
 int     ungetc (int, FILE *);
@@ -91,6 +94,7 @@ void    setbuffer (FILE *, char *, size_t);
 void    setlinebuf (FILE *);
 int     setvbuf (FILE *, char *, int, size_t);
 int     fseek (FILE *, long, int);
+int     fseeko (FILE *, off_t, int);
 int     rename(const char *, const char *);
 void    rewind (FILE *);
 int     remove (const char *);
@@ -104,6 +108,10 @@ int     fprintf (FILE *, const char *, ...);
 int     printf (const char *, ...);
 int     sprintf (char *, const char *, ...);
 int     snprintf (char *, size_t, const char *, ...);
+int     asprintf (char **, const char *, ...);
+int     dprintf (int, const char *, ...);
+ssize_t getdelim (char **, size_t *, int, FILE *);
+ssize_t getline (char **, size_t *, FILE *);
 
 int     fscanf (FILE *, const char *, ...);
 int     scanf (const char *, ...);
@@ -129,6 +137,14 @@ int     vfprintf (FILE *, const char *, va_list);
 int     vprintf (const char *, va_list);
 int     vsprintf (char *, const char *, va_list);
 int     vsnprintf (char *, size_t, const char *, va_list);
+int     vasprintf (char **, const char *, va_list);
+int     vdprintf (int, const char *, va_list);
+
+const char *fmtcheck(const char *, const char *)
+#ifdef __GNUC__
+    __attribute__((__format_arg__(2)))
+#endif
+    ;
 
 int     vfscanf (FILE *, const char *, va_list);
 int     vscanf (const char *, va_list);

@@ -44,6 +44,12 @@
 #define NULL            0       /* null pointer constant */
 #endif
 
+#if defined(__GNUC__) || defined(__PCC__)
+#define __unistd_noreturn __attribute__((__noreturn__))
+#else
+#define __unistd_noreturn
+#endif
+
 /* Values for the second argument to access.
    These may be OR'd together.  */
 #define R_OK            4       /* Test for read permission.  */
@@ -51,7 +57,7 @@
 #define X_OK            1       /* Test for execute permission.  */
 #define F_OK            0       /* Test for existence.  */
 
-void    _exit(int);
+void    _exit(int) __unistd_noreturn;
 int     access(const char *pathname, int mode);
 unsigned int alarm(unsigned);
 pid_t   fork(void);
@@ -67,9 +73,13 @@ pid_t   getppid(void);
 uid_t   getuid(void);
 off_t   lseek(int fd, off_t offset, int whence);
 ssize_t read(int fd, void *buf, size_t count);
+ssize_t pread(int fd, void *buf, size_t count, off_t offset);
+ssize_t pread64(int fd, void *buf, size_t count, off64_t offset);
 unsigned int sleep(unsigned int seconds);
 char    *ttyname(int fd);
 ssize_t write(int fd, const void *buf, size_t count);
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
+ssize_t pwrite64(int fd, const void *buf, size_t count, off64_t offset);
 int     truncate(const char *path, off_t length);
 int     ftruncate(int fd, off_t length);
 
@@ -138,7 +148,7 @@ extern  char    *__progname;            /* Program name, from crt0. */
 int     getopt(int argc, char * const argv[], const char *optstring);
 
 extern  char    *optarg;                /* getopt(3) external variables */
-extern  int     opterr, optind, optopt;
+extern  int     opterr, optind, optopt, optreset;
 
 int     gethostname(char *name, int namelen);
 int     sethostname(char *name, int namelen);
@@ -173,4 +183,5 @@ void    vwarnx(const char *fmt, va_list ap);
 #ifndef _VA_LIST_
 # undef va_list
 #endif
+#undef __unistd_noreturn
 #endif /* !_UNISTD_H_ */

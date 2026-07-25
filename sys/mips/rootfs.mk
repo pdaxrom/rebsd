@@ -172,11 +172,14 @@ MIPS_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
                          $(TOPSRC)/src/cmd/aoutio.h \
                          $(TOPSRC)/src/cmd/elf32_mips.h
 MIPS_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
+MIPS_MAGIC_DB = $(TOPSRC)/src/libmagic/magic.mgc.$(MIPS_ROOTFS_ENDIAN)
 MIPS_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 MIPS_AWK_SRCS = $(shell find $(TOPSRC)/src/cmd/awk -type f \( -name '*.[chly]' -o -name Makefile -o -name tokenscript \) 2>/dev/null)
+MIPS_MAN_SRCS = $(shell find $(TOPSRC)/src/man -type f \( \
+                -name '*.[0-9]' -o -name Makefile \) 2>/dev/null)
 MIPS_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/opt/bison/bin/bison,bison)
 MIPS_YACC ?= byacc
-MIPS_SRC_LIBS ?= libc libm libutil libtermlib libcurses libvmf libreadline libtcl
+MIPS_SRC_LIBS ?= libc libm libutil libtermlib libcurses libvmf libreadline libtcl libmagic
 MIPS_SRC_SUBDIRS ?= cmd
 MIPS_CMD_NONE = __mips_none__
 MIPS_BOARD_CMD_SUBDIRS ?=
@@ -190,6 +193,7 @@ MIPS_CMD_SCRIPTS ?= $(MIPS_CMD_NONE)
 MIPS_USR_BIN_FILES :=
 MIPS_USR_LIBEXEC_FILES :=
 MIPS_ROOTFS_CAT1_PAGES :=
+MIPS_ROOTFS_CAT5_PAGES :=
 MIPS_ROOTFS_CMD_CAT1_SOURCES :=
 MIPS_ROOTFS_CAT1_ALIASES :=
 MIPS_ROOTFS_CAT8_PAGES :=
@@ -205,11 +209,11 @@ MIPS_CMD_SUBDIRS ?= basic calendar chown chroot compress date2 deco dhclient dif
                   telnetd test wget umount uname xargs
 MIPS_CMD_SUBDIRS += $(MIPS_BOARD_CMD_SUBDIRS)
 MIPS_CMD_STDS ?= basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
-               du echo ed fgrep file free grep head hostid iostat join kill last ln \
+               du echo ed fgrep free grep head hostid iostat join kill last ln \
                mesg mkdir mv nice od off64-smoke-gcc pagesize pr printenv ps pwd rev rm rmail \
                rmdir size sleep sort split strace sum sync tail tar tee time touch vmstat \
                top tr tsort tty uniq uptime vm-pressure-smoke w wc whereis who
-MIPS_CMD_NSTDS ?= egrep expr
+MIPS_CMD_NSTDS ?= egrep expr file
 MIPS_CMD_OPERATORS ?= df
 MIPS_CMD_SCRIPTS ?= false nohup true
 MIPS_CMD_EXTRA_SUBDIRS ?= deco ptytest tcl $(MIPS_BOARD_CMD_SUBDIRS)
@@ -236,6 +240,7 @@ MIPS_ROOTFS_CAT1_PAGES ?= apropos awk basename cal cat cb chgrp chmod cmp col \
                         sed sh size sleep sort split strip sum tail tar tee \
                         time top touch tr true tsort tty uniq uptime vmstat w \
                         wc whatis who
+MIPS_ROOTFS_CAT5_PAGES ?= magic
 MIPS_ROOTFS_CMD_CAT1_SOURCES ?= as:as emg:emg env:env nm:nm sl:sl wget:wget
 MIPS_ROOTFS_BOARD_CMD_CAT1_SOURCES ?=
 MIPS_ROOTFS_CAT1_ALIASES ?= egrep:grep fgrep:grep uncompress:compress \
@@ -254,6 +259,9 @@ MIPS_LIBCURSES_SRCS = $(shell find $(TOPSRC)/src/libcurses -type f \( -name '*.[
 MIPS_LIBVMF_SRCS = $(shell find $(TOPSRC)/src/libvmf -type f \( -name '*.[chS]' -o -name Makefile -o -name '*.3' \) 2>/dev/null)
 MIPS_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
+MIPS_LIBMAGIC_SRCS = $(shell find $(TOPSRC)/src/libmagic -type f \( \
+                     -name '*.[chS]' -o -name Makefile -o -name magic \
+                     -o -name 'magic.mgc.*' \) 2>/dev/null)
 MIPS_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBM_SRCS = $(shell find $(TOPSRC)/src/libm -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 
@@ -925,7 +933,7 @@ $(MIPS_LIBC_ABI_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 
 $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
     $(MIPS_ROOTFS_FILES) \
-    $(MIPS_UTILITY_SMOKE_SRCS) $(MIPS_TERMCAP) \
+    $(MIPS_UTILITY_SMOKE_SRCS) $(MIPS_TERMCAP) $(MIPS_MAGIC_DB) \
     $(MIPS_INCLUDE_SRCS) $(MIPS_INCLUDE_LINKS) \
     $(MIPS_NATIVE_AS_SMOKE_SCRIPT) $(MIPS_NATIVE_AS_MATRIX_SCRIPT)
 	rm -rf $(MIPS_ROOTFS_STAGE)
@@ -988,6 +996,9 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 	mkdir -p $(MIPS_ROOTFS_USR_LIB)
 	mkdir -p $(MIPS_ROOTFS_USR_LIBEXEC)
 	mkdir -p $(MIPS_ROOTFS_USR_SHARE)/misc
+	if echo " $(MIPS_USR_BIN_FILES) " | grep ' file ' >/dev/null; then \
+	    cp -p $(MIPS_MAGIC_DB) $(MIPS_ROOTFS_USR_SHARE)/misc/magic.mgc; \
+	fi
 	mkdir -p $(MIPS_ROOTFS_USR_SHARE)/man/cat1
 	mkdir -p $(MIPS_ROOTFS_USR_SHARE)/man/cat5
 	mkdir -p $(MIPS_ROOTFS_USR_SHARE)/man/cat8
@@ -1000,7 +1011,7 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 
 $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
     $(MIPS_ROOTFS_USERLAND_STAMP) $(MIPS_ROOTFS_NATIVE_PCC_STAMPS) \
-    $(MIPS_MAKEWHATIS_SED) \
+    $(MIPS_MAKEWHATIS_SED) $(MIPS_MAN_SRCS) \
     $(MIPS_ROOTFS_MAKEFILE) Makefile
 	mkdir -p $(MIPS_ROOTFS_STAGE)/share/misc \
 	    $(MIPS_ROOTFS_STAGE)/share/man/cat1 \
@@ -1087,6 +1098,9 @@ $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
 	    dst=$${alias%:*}; src=$${alias#*:}; \
 	    cp $(MIPS_ROOTFS_USR_SHARE)/man/cat1/$$src.0 $(MIPS_ROOTFS_USR_SHARE)/man/cat1/$$dst.0; \
 	done
+	for page in $(MIPS_ROOTFS_CAT5_PAGES); do \
+	    GROFF_NO_SGR=1 $(DOCROFF) $(TOPSRC)/src/man/man5/$$page.5 > $(MIPS_ROOTFS_USR_SHARE)/man/cat5/$$page.0; \
+	done
 	for page in $(MIPS_ROOTFS_CAT8_PAGES); do \
 	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man8/$$page.8 > $(MIPS_ROOTFS_USR_SHARE)/man/cat8/$$page.0; \
 	done
@@ -1163,7 +1177,7 @@ $(MIPS_ROOTFS_USERLAND_STAMP): $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(MIPS_USERLAND_CRT0_DEPS) $(MIPS_NATIVE_CRT0_SRC) $(MIPS_LIBC_SRCS) \
     $(MIPS_LIBM_SRCS) $(MIPS_LIBUTIL_SRCS) $(MIPS_LIBTERMLIB_SRCS) \
     $(MIPS_LIBCURSES_SRCS) $(MIPS_LIBVMF_SRCS) $(MIPS_LIBREADLINE_SRCS) \
-    $(MIPS_LIBTCL_SRCS) $(MIPS_USER_SRCS) $(MIPS_AWK_SRCS) \
+    $(MIPS_LIBTCL_SRCS) $(MIPS_LIBMAGIC_SRCS) $(MIPS_USER_SRCS) $(MIPS_AWK_SRCS) \
     $(MIPS_INCLUDE_SRCS) $(MIPS_INCLUDE_LINKS) \
     $(MIPS_USERLAND_EXTRA_DEPS) $(MIPS_ROOTFS_MAKEFILE) Makefile
 	rm -rf $(MIPS_BUILD_ROOT)

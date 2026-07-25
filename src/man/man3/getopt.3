@@ -34,9 +34,11 @@
 .TH GETOPT 3 "January 12, 1996"
 .UC 6
 .SH NAME
-\fBgetopt\fP \- get option character from command line argument list
+\fBgetopt\fP, \fBgetopt_long\fP \- parse command line options
 .SH SYNOPSIS
-.B #include <stdlib.h>
+.B #include <unistd.h>
+.br
+.B #include <getopt.h>
 .sp
 .B extern char *optarg;
 .br
@@ -57,6 +59,20 @@
 .I char **argv;
 .br
 .I char *optstring;
+.sp
+.I int
+.br
+\fBgetopt_long\fP(argc, argv, optstring, longopts, longindex)
+.br
+.I int argc;
+.br
+.I char **argv;
+.br
+.I const char *optstring;
+.br
+.I const struct option *longopts;
+.br
+.I int *longindex;
 .SH DESCRIPTION
 The
 .BR getopt ()
@@ -65,6 +81,45 @@ function incrementally parses a command line argument list
 and returns the next
 .I known
 option character.
+.PP
+.B getopt_long
+also accepts GNU-style long options beginning with
+.BR \-\- .
+The
+.I longopts
+array is terminated by an entry whose
+.I name
+is NULL.  Each entry has the form:
+.PP
+.nf
+struct option {
+        const char *name;
+        int has_arg;
+        int *flag;
+        int val;
+};
+.fi
+.PP
+.I has_arg
+is
+.BR no_argument ,
+.BR required_argument ,
+or
+.BR optional_argument .
+If
+.I flag
+is NULL,
+.B getopt_long
+returns
+.IR val .
+Otherwise it stores
+.I val
+through
+.I flag
+and returns zero.
+When
+.I longindex
+is non-NULL, the selected array index is stored there.
 An option character is
 .I known
 if it has been specified in the string of accepted option characters,
@@ -141,8 +196,12 @@ by the option `\-\-'
 .BR getopt ()
 to signal the end of argument processing and return an
 .BR EOF . 
-When all options have been processed (i.e., up to the first non-option
-argument),
+Unless
+.B POSIXLY_CORRECT
+is set or
+.I optstring
+begins with `+', non-option operands are permuted behind options.
+When all options have been processed,
 .BR getopt ()
 returns
 .BR EOF .
@@ -178,6 +237,10 @@ variable was added to make it possible to call the
 function multiple times.
 This is an extension to the
 IEEE Std1003.2 (``POSIX'')
+.PP
+.B getopt_long
+and option permutation are compatible with the widely used GNU/BSD
+interfaces.
 specification.
 .SH EXAMPLE
 .nf

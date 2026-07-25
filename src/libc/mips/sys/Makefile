@@ -38,7 +38,8 @@ SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
                   ufetch.o ustore.o ucall.o umask.o vfork.o vhangup.o \
 		  rdglob.o wrglob.o msec.o kmemdev.o
 
-WIDEOBJS	= stat.o lstat.o fstat.o mmapraw.o lseek64w.o trunc64w.o ftrunc64w.o
+WIDEOBJS	= stat.o lstat.o fstat.o mmapraw.o lseek64w.o trunc64w.o \
+		  ftrunc64w.o preadw.o pwritew.o
 
 OBJS		= ${COBJS} ${ASMOBJS} ${SYSOBJS} ${WIDEOBJS}
 
@@ -63,6 +64,12 @@ trunc64w.o:	SYS.h
 
 ftrunc64w.o:	SYS.h
 		@printf '#include "SYS.h"\nSYS2(__ftruncate64_words,ftruncate64)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
+
+preadw.o:	SYS.h
+		@printf '#include "SYS.h"\nSYS2(__pread_words,pread)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
+
+pwritew.o:	SYS.h
+		@printf '#include "SYS.h"\nSYS2(__pwrite_words,pwrite)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
 
 stat.o:		SYS.h
 		@printf '#include "SYS.h"\nSYS2(stat,stat64)\n' | $(AS) ${ASFLAGS} - -c -o $*.o

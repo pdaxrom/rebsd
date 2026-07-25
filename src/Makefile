@@ -9,7 +9,7 @@ include $(TOPSRC)/target.mk
 # Programs that live in subdirectories, and have makefiles of their own.
 #
 LIBS_ALL	= startup-$(MACHINE) libc libm libutil libtermlib libcurses \
-                  libvmf libwiznet libreadline libgpanel libtcl
+                  libvmf libwiznet libreadline libgpanel libtcl libmagic
 SUBDIR_ALL	= share cmd games man
 
 # Platforms can restrict the source tree without duplicating this makefile.

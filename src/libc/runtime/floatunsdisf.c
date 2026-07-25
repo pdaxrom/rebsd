@@ -10,7 +10,7 @@
 #include "fp_lib.h"
 
 COMPILER_RT_ABI fp_t
-__floatunsdisf(du_int a)
+__floatundisf(du_int a)
 {
 	const int aWidth = sizeof a * CHAR_BIT;
 	int exponent;
@@ -40,4 +40,15 @@ __floatunsdisf(du_int a)
 
 	result += (rep_t)(exponent + exponentBias) << significandBits;
 	return fromRep(result);
+}
+
+/*
+ * PCC historically emits this misspelled name.  Keep a real wrapper instead
+ * of an alias: PCC accepts GCC attribute syntax for compatibility but does
+ * not emit an alias symbol for it.
+ */
+COMPILER_RT_ABI fp_t
+__floatunsdisf(du_int a)
+{
+	return __floatundisf(a);
 }

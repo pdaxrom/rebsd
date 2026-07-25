@@ -4,10 +4,10 @@
 .\"
 .\"	@(#)write.2	6.5 (Berkeley) 8/1/87
 .\"
-.TH WRITE 2 "August 1, 1987"
+.TH WRITE 2 "July 26, 2026"
 .UC 4
 .SH NAME
-write, writev \- write output
+write, writev, pwrite, pwrite64 \- write output
 .SH SYNOPSIS
 .nf
 .ft B
@@ -25,6 +25,25 @@ cc = writev(d, iov, iovcnt)
 int cc, d;
 struct iovec *iov;
 int iovcnt;
+.PP
+.ft B
+#include <unistd.h>
+.PP
+.ft B
+cc = pwrite(d, buf, nbytes, offset)
+ssize_t cc;
+int d;
+const void *buf;
+size_t nbytes;
+off_t offset;
+.PP
+.ft B
+cc = pwrite64(d, buf, nbytes, offset)
+ssize_t cc;
+int d;
+const void *buf;
+size_t nbytes;
+off64_t offset;
 .fi
 .SH DESCRIPTION
 .I Write
@@ -41,6 +60,23 @@ from the
 buffers specified by the members of the
 .I iov
 array: iov[0], iov[1], ..., iov[iovcnt\|\-\|1].
+.PP
+.I Pwrite
+performs the same write at the specified
+.I offset
+without reading or changing the file position associated with
+.IR d .
+The descriptor must refer to an object capable of seeking.
+The supplied offset is used even if the descriptor was opened with
+.BR O_APPEND .
+.I Pwrite64
+is an explicit large-file spelling of
+.IR pwrite ;
+on RetroBSD,
+.I off_t
+and
+.I off64_t
+are both 64 bits.
 .PP
 For 
 .IR writev ,
@@ -103,7 +139,9 @@ is set to indicate the error.
 .SH ERRORS
 .I Write
 and
-.I writev
+.IR writev ,
+and
+.I pwrite
 will fail and the file pointer will remain unchanged if one or more
 of the following are true:
 .TP 15
@@ -130,6 +168,17 @@ points outside the process's allocated address space.
 The pointer associated with
 .I d
 was negative.
+.TP 15
+[EINVAL]
+The
+.I offset
+given to
+.I pwrite
+was negative.
+.TP 15
+[ESPIPE]
+.I Pwrite
+was requested on a pipe, socket, or another non-seekable object.
 .TP 15
 [ENOSPC]
 There is no free space remaining on the file system

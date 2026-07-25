@@ -38,4 +38,7 @@
 
 #include <machine/limits.h>
 
+/* Writes no larger than this are atomic on a pipe. */
+#define PIPE_BUF        4096
+
 #endif /* !_LIMITS_H_ */

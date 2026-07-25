@@ -37,6 +37,12 @@ int __rebsd_isinfl(long double);
 int __rebsd_signbitf(float);
 int __rebsd_signbitd(double);
 int __rebsd_signbitl(long double);
+int __rebsd_isgreaterl(long double, long double);
+int __rebsd_isgreaterequall(long double, long double);
+int __rebsd_islessl(long double, long double);
+int __rebsd_islessequall(long double, long double);
+int __rebsd_islessgreaterl(long double, long double);
+int __rebsd_isunorderedl(long double, long double);
 
 double nan(const char *);
 float nanf(const char *);
@@ -99,6 +105,18 @@ double fmod(double x, double y);
     ((sizeof(x) == sizeof(long double) && sizeof(long double) != sizeof(double)) ? \
     __rebsd_isinfl((long double)(x)) : __rebsd_isinfd((double)(x))))
 #define isnan(x) (fpclassify(x) == FP_NAN)
+#define isgreater(x, y) \
+    __rebsd_isgreaterl((long double)(x), (long double)(y))
+#define isgreaterequal(x, y) \
+    __rebsd_isgreaterequall((long double)(x), (long double)(y))
+#define isless(x, y) \
+    __rebsd_islessl((long double)(x), (long double)(y))
+#define islessequal(x, y) \
+    __rebsd_islessequall((long double)(x), (long double)(y))
+#define islessgreater(x, y) \
+    __rebsd_islessgreaterl((long double)(x), (long double)(y))
+#define isunordered(x, y) \
+    __rebsd_isunorderedl((long double)(x), (long double)(y))
 #endif
 
 #if !defined(_ANSI_SOURCE) && !defined(_POSIX_SOURCE)

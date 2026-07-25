@@ -12,11 +12,14 @@
 /*
  * close a directory.
  */
-void
+int
 closedir(DIR *dirp)
 {
-	close(dirp->dd_fd);
+	int error;
+
+	error = close(dirp->dd_fd);
 	dirp->dd_fd = -1;
 	dirp->dd_loc = 0;
 	free(dirp);
+	return error;
 }

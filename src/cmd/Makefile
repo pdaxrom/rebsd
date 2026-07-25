@@ -34,7 +34,7 @@ SCRIPT_ALL	= false nohup true #lorder mkdep
 # explicit make lines.
 #
 STD_ALL		= basename cal cat cb chgrp chmod cmp col comm cp dd \
-                  diskspeed du echo ed fgrep file free grep head hostid join \
+                  diskspeed du echo ed fgrep free grep head hostid join \
                   kill last ln mesg mkdir mv nice od pagesize pr printenv ps \
                   off64-smoke-gcc pwd rev rm rmail rmdir size sleep sort split strace sum sync \
                   tail tar tee time top touch tr tsort tty uniq uptime w wc \
@@ -42,7 +42,7 @@ STD_ALL		= basename cal cat cb chgrp chmod cmp col comm cp dd \
 
 # C programs that live in the current directory and need explicit make lines.
 #
-NSTD_ALL	= bc expr egrep
+NSTD_ALL	= bc expr egrep file
 
 # Programs that must run setuid to root
 #
@@ -86,7 +86,7 @@ TTY		= $(call CMD_FILTER,TTY)
 #
 CMD_BUILD_STRIP ?= strip
 CMD_BIN_PROGS	= $(STD) $(NSTD) $(CMD_BUILD_STRIP)
-CMD_PATTERN_PROGS = $(filter-out size strip,$(CMD_BIN_PROGS))
+CMD_PATTERN_PROGS = $(filter-out size strip file,$(CMD_BIN_PROGS))
 BINS		= $(CMD_BIN_PROGS) $(SETUID) $(OPERATOR) $(KMEM) $(TTY) $(SCRIPT)
 
 all:		$(SUBDIR) $(BINS)
@@ -119,6 +119,13 @@ size strip: %: %.o aoutio.o
 size.o strip.o: elf32_mips.h
 
 off64-smoke-gcc: $(TOPSRC)/sys/mips/rootfs/root/off64-smoke.c
+
+file: file.c
+		$(CC) $(CFLAGS) -DHAVE_CONFIG_H -I../libmagic -c file.c
+		$(LD) $(LDFLAGS) -o file.elf file.o -lmagic -lm -lc
+		$(OBJDUMP) -S file.elf > file.dis
+		$(SIZE) file.elf
+		$(ELF2AOUT) file.elf file && /bin/rm file.elf
 
 aoutio.o:	aoutio.c aoutio.h
 		$(CC) $(CFLAGS) -c $<

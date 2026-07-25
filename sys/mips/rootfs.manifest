@@ -701,6 +701,8 @@ mode 0755
 file /usr/libexec/telnetd
 mode 0755
 
+file /usr/share/misc/magic.mgc
+
 file /usr/share/misc/more.help
 
 file /usr/share/emg.keys
@@ -942,6 +944,8 @@ file /usr/share/man/cat1/xargs.0
 file /usr/share/man/cat1/zcat.0
 
 file /usr/share/man/cat5/ar.0
+
+file /usr/share/man/cat5/magic.0
 
 file /usr/share/man/cat5/ranlib.0
 

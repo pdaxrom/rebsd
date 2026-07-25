@@ -21,6 +21,7 @@ extern void sc_msec();
 
 #define LSEEK64_NARG        4
 #define TRUNCATE64_NARG     3
+#define POSITIONED_IO_NARG  5
 
 /*
  * Reserved/unimplemented system calls in the range 0-150 inclusive
@@ -229,6 +230,8 @@ const struct sysent sysent[] = {
     { 3, shmat },               /* 173 = shmat */
     { 1, shmdt },               /* 174 = shmdt */
     { 3, shmctl },              /* 175 = shmctl */
+    { POSITIONED_IO_NARG, pread },  /* 176 = pread */
+    { POSITIONED_IO_NARG, pwrite }, /* 177 = pwrite */
 };
 
 const int nsysent = sizeof (sysent) / sizeof (sysent[0]);

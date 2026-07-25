@@ -5,10 +5,10 @@
 #include <unistd.h>
 
 int
-fseek(FILE *iop, long offset, int ptrname)
+fseeko(FILE *iop, off_t offset, int ptrname)
 {
 	register int resync, c;
-	long p = -1;			/* can't happen? */
+	off_t p = -1;			/* can't happen? */
 
 	iop->_flag &= ~_IOEOF;
 	if (iop->_flag&_IOREAD) {
@@ -17,7 +17,7 @@ fseek(FILE *iop, long offset, int ptrname)
 			c = iop->_cnt;
 			p = offset;
 			if (ptrname==0) {
-				long curpos = lseek(fileno(iop), 0L, 1);
+				off_t curpos = lseek(fileno(iop), 0, SEEK_CUR);
 				if (curpos == -1)
 					return (-1);
 				p += c - curpos;
@@ -54,4 +54,10 @@ fseek(FILE *iop, long offset, int ptrname)
 		    -1 : 0);
 	}
 	return(p==-1?-1:0);
+}
+
+int
+fseek(FILE *iop, long offset, int ptrname)
+{
+	return fseeko(iop, (off_t)offset, ptrname);
 }

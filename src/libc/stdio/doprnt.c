@@ -58,7 +58,17 @@ static int cvt (double number, int prec, int sharpflag, unsigned char *negp,
 int
 _doprnt (char const *fmt, va_list ap, FILE *stream)
 {
-#define PUTC(c) { putc (c, stream); ++retval; }
+#define PUTC(ch) do {                                                   \
+        unsigned char putc_value = (unsigned char)(ch);                 \
+        if (stream->_flag & _IOSTRG) {                                  \
+            if (stream->_cnt > 0) {                                     \
+                --stream->_cnt;                                         \
+                *stream->_ptr++ = putc_value;                            \
+            }                                                           \
+        } else                                                          \
+            (void)putc(putc_value, stream);                              \
+        ++retval;                                                       \
+    } while (0)
 	unsigned char nbuf [MAXNBUF], padding, *q;
 	const unsigned char *s;
 	unsigned char c, base, lflag, ladjust, sharpflag, neg, dot;

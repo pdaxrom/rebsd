@@ -63,6 +63,10 @@ typedef int     dev_t;
 #define _OFF_T
 typedef long long off_t;
 #endif
+#ifndef _OFF64_T
+#define _OFF64_T
+typedef off_t off64_t;
+#endif
 typedef u_int   uid_t;
 typedef u_int   gid_t;
 typedef int     pid_t;

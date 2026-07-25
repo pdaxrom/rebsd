@@ -14,16 +14,18 @@ OBJS		= ${STDOBJ} fgetc.o fgets.o fputc.o fputs.o gets.o puts.o \
                   feof.o ferror.o fileno.o
 
 STDSRC		= clrerr.c doscan.c exit.c ctors.c clnup.c fdopen.c filbuf.c findiop.c \
-		  flsbuf.c fopen.c fprintf.c fread.c freopen.c fseek.c \
-		  ftell.c fwrite.c getchar.c getw.c printf.c putchar.c putw.c \
+		  flsbuf.c fmtcheck.c fopen.c fprintf.c fread.c freopen.c fseek.c \
+		  ftell.c fwrite.c getchar.c getline.c getw.c printf.c putchar.c putw.c \
 		  rew.c scanf.c setbuf.c setbuffer.c setvbuf.c snprintf.c sprintf.c \
-		  strout.c ungetc.c vfprintf.c vprintf.c vsprintf.c wprintf.c \
+		  strout.c ungetc.c asprintf.c dprintf.c vfprintf.c vprintf.c \
+		  vsprintf.c wprintf.c \
 		  doprnt.c remove.c
 STDOBJ		= clrerr.o doscan.o exit.o ctors.o fdopen.o filbuf.o findiop.o \
-		  flsbuf.o fopen.o fprintf.o fread.o freopen.o fseek.o \
-		  ftell.o fwrite.o getchar.o getw.o printf.o putchar.o putw.o \
+		  flsbuf.o fmtcheck.o fopen.o fprintf.o fread.o freopen.o fseek.o \
+		  ftell.o fwrite.o getchar.o getline.o getw.o printf.o putchar.o putw.o \
 		  rew.o scanf.o setbuf.o setbuffer.o setvbuf.o snprintf.o sprintf.o \
-		  strout.o ungetc.o vfprintf.o vprintf.o vsprintf.o wprintf.o \
+		  strout.o ungetc.o asprintf.o dprintf.o vfprintf.o vprintf.o \
+		  vsprintf.o wprintf.o \
 		  doprnt.o remove.o
 
 TAGSFILE	= tags
