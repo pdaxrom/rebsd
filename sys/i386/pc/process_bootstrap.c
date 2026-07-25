@@ -6,6 +6,7 @@
 #include <machine/layout.h>
 #include <vm/vmspace.h>
 
+#include "context.h"
 #include "elf_bootstrap.h"
 #include "initfs.h"
 #include "interrupt.h"
@@ -20,16 +21,42 @@
 #define I386_PROCESS_USER_STACK      (I386_USER_VADDR_END - VM_PAGE_SIZE)
 #define I386_PROCESS_USER_STACK_TOP  I386_USER_VADDR_END
 #define I386_PROCESS_USER_MAGIC      0x70726f63u
+#define I386_PROCESS_IDLE_MAGIC      0x69646c65u
+#define I386_PROCESS_IDLE_SWITCHES   2u
 
 static struct proc *i386_bootstrap_proc;
 static struct user *i386_bootstrap_uarea;
 static struct vmspace *i386_bootstrap_vmspace;
+static struct user *i386_idle_uarea;
+static struct vmspace *i386_idle_vmspace;
+static label_t i386_process_bootstrap_return;
 static struct i386_elf_image i386_bootstrap_user_image;
 static struct i386_user_stack i386_bootstrap_user_stack;
 static int i386_process_table_ready;
 static int i386_bootstrap_ready;
+static volatile unsigned i386_process_idle_active;
+static volatile unsigned i386_process_idle_result;
+static volatile unsigned i386_process_idle_switches;
+static int i386_process_idle_tested;
 static volatile unsigned i386_process_user_active;
 static volatile unsigned i386_process_user_result;
+
+static void i386_process_idle_entry(void);
+
+static void
+i386_process_context_init(label_t *context, struct user *up,
+    void (*entry)(void))
+{
+    unsigned stack_pointer;
+
+    bzero(context, sizeof(*context));
+    stack_pointer = (unsigned)(unsigned long)up + USIZE;
+    stack_pointer -= sizeof(unsigned);
+    *(unsigned *)stack_pointer = 0;
+    context->val[I386_LABEL_ESP] = stack_pointer;
+    context->val[I386_LABEL_EIP] = (unsigned)(unsigned long)entry;
+    context->val[I386_LABEL_EFLAGS] = I386_EFLAGS_RESERVED;
+}
 
 int
 i386_process_bootstrap_validate(void)
@@ -39,10 +66,13 @@ i386_process_bootstrap_validate(void)
     if (!i386_bootstrap_ready ||
         i386_bootstrap_proc != &proc[1] ||
         i386_bootstrap_uarea == (struct user *)0 ||
-        i386_bootstrap_vmspace == (struct vmspace *)0)
+        i386_bootstrap_vmspace == (struct vmspace *)0 ||
+        i386_idle_uarea == (struct user *)0 ||
+        i386_idle_vmspace == (struct vmspace *)0)
         return EINVAL;
     kernel_stack = (unsigned)(unsigned long)i386_bootstrap_uarea + USIZE;
     md_uarea_guard_check(i386_bootstrap_uarea);
+    md_uarea_guard_check(i386_idle_uarea);
     if (md_curuser != i386_bootstrap_uarea ||
         i386_bootstrap_uarea->u_procp != i386_bootstrap_proc ||
         i386_bootstrap_proc->p_uarea != i386_bootstrap_uarea ||
@@ -65,6 +95,10 @@ i386_process_bootstrap_validate(void)
         proc[0].p_pptr != &proc[0] ||
         proc[0].p_stat != SRUN ||
         (proc[0].p_flag & (SLOAD | SSYS)) != (SLOAD | SSYS) ||
+        proc[0].p_uarea != i386_idle_uarea ||
+        proc[0].p_addr != (size_t)(unsigned long)i386_idle_uarea ||
+        proc[0].p_vmspace != i386_idle_vmspace ||
+        i386_idle_uarea->u_procp != &proc[0] ||
         proc[0].p_prev != &i386_bootstrap_proc->p_nxt ||
         proc[0].p_nxt != (struct proc *)0 ||
         freeproc != &proc[2] ||
@@ -73,6 +107,9 @@ i386_process_bootstrap_validate(void)
         pfind(2) != (struct proc *)0 ||
         vmspace_current() != i386_bootstrap_vmspace ||
         i386_tss_kernel_stack() != kernel_stack)
+        return EFAULT;
+    if (i386_process_idle_tested &&
+        i386_process_idle_switches != I386_PROCESS_IDLE_SWITCHES)
         return EFAULT;
     return 0;
 }
@@ -137,7 +174,9 @@ int
 i386_process_bootstrap(void)
 {
     struct proc *process;
+    struct user *idle_up;
     struct user *up;
+    struct vmspace *idle_vmspace;
     struct vmspace *vmspace;
     int error;
     int index;
@@ -148,17 +187,33 @@ i386_process_bootstrap(void)
         vmspace_current() != (struct vmspace *)0)
         return EBUSY;
 
-    up = md_uarea_alloc();
-    if (up == (struct user *)0)
+    idle_up = md_uarea_alloc();
+    if (idle_up == (struct user *)0)
         return ENOMEM;
+    up = md_uarea_alloc();
+    if (up == (struct user *)0) {
+        md_uarea_free(idle_up);
+        return ENOMEM;
+    }
+    idle_vmspace = (struct vmspace *)0;
     vmspace = (struct vmspace *)0;
     process = (struct proc *)0;
+    error = vmspace_create(&idle_vmspace);
+    if (error != 0)
+        goto failed;
     error = vmspace_create(&vmspace);
     if (error != 0)
         goto failed;
     error = i386_process_table_claim_init(&process);
     if (error != 0)
         goto failed;
+
+    proc[0].p_uarea = idle_up;
+    proc[0].p_addr = (size_t)(unsigned long)idle_up;
+    proc[0].p_vmspace = idle_vmspace;
+    idle_up->u_procp = &proc[0];
+    i386_process_context_init(&idle_up->u_qsave, idle_up,
+        i386_process_idle_entry);
 
     process->p_uarea = up;
     process->p_addr = (size_t)(unsigned long)up;
@@ -185,6 +240,8 @@ i386_process_bootstrap(void)
     i386_bootstrap_proc = process;
     i386_bootstrap_uarea = up;
     i386_bootstrap_vmspace = vmspace;
+    i386_idle_uarea = idle_up;
+    i386_idle_vmspace = idle_vmspace;
     i386_bootstrap_ready = 1;
     return i386_process_bootstrap_validate();
 
@@ -192,8 +249,94 @@ failed:
     i386_process_table_release_init(process);
     if (vmspace != (struct vmspace *)0)
         (void)vmspace_destroy(vmspace);
+    if (idle_vmspace != (struct vmspace *)0)
+        (void)vmspace_destroy(idle_vmspace);
     md_uarea_free(up);
+    md_uarea_free(idle_up);
     return error;
+}
+
+static int
+i386_process_idle_validate(void)
+{
+    volatile unsigned stack_probe;
+    unsigned kernel_stack;
+    unsigned stack_address;
+    unsigned stack_start;
+
+    stack_address = (unsigned)(unsigned long)&stack_probe;
+    stack_start = (unsigned)(unsigned long)i386_idle_uarea;
+    kernel_stack = stack_start + USIZE;
+    if (!i386_process_idle_active ||
+        md_curuser != i386_idle_uarea ||
+        i386_idle_uarea->u_procp != &proc[0] ||
+        proc[0].p_uarea != i386_idle_uarea ||
+        proc[0].p_vmspace != i386_idle_vmspace ||
+        vmspace_current() != i386_idle_vmspace ||
+        i386_tss_kernel_stack() != kernel_stack ||
+        stack_address < stack_start || stack_address >= kernel_stack)
+        return EFAULT;
+    md_uarea_guard_check(i386_idle_uarea);
+    return 0;
+}
+
+static void
+i386_process_idle_entry(void)
+{
+    int resumed;
+
+    resumed = setjmp(&i386_idle_uarea->u_qsave);
+    if ((i386_process_idle_switches == 0 && resumed != 0) ||
+        (i386_process_idle_switches != 0 && resumed != 1) ||
+        i386_process_idle_validate() != 0)
+        i386_process_idle_result = EFAULT;
+    else {
+        ++i386_process_idle_switches;
+        i386_process_idle_result = I386_PROCESS_IDLE_MAGIC;
+    }
+    if (i386_vmspace_activate(i386_bootstrap_vmspace) != 0)
+        i386_process_idle_result = EFAULT;
+    longjmp((size_t)i386_bootstrap_uarea,
+        &i386_bootstrap_uarea->u_rsave);
+    for (;;)
+        __asm__ volatile ("cli; hlt");
+}
+
+static int
+i386_process_idle_roundtrip(void)
+{
+    int resumed;
+    int error;
+
+    if (md_curuser != i386_bootstrap_uarea ||
+        vmspace_current() != i386_bootstrap_vmspace ||
+        i386_process_idle_switches >= I386_PROCESS_IDLE_SWITCHES)
+        return EFAULT;
+
+    i386_process_idle_result = EFAULT;
+    i386_process_idle_active = 1;
+    resumed = setjmp(&i386_bootstrap_uarea->u_rsave);
+    if (resumed == 0) {
+        error = i386_vmspace_activate(i386_idle_vmspace);
+        if (error != 0) {
+            i386_process_idle_active = 0;
+            return error;
+        }
+        longjmp((size_t)i386_idle_uarea,
+            &i386_idle_uarea->u_qsave);
+        i386_process_idle_active = 0;
+        return EFAULT;
+    }
+    i386_process_idle_active = 0;
+    if (resumed != 1 ||
+        i386_process_idle_result != I386_PROCESS_IDLE_MAGIC ||
+        md_curuser != i386_bootstrap_uarea ||
+        vmspace_current() != i386_bootstrap_vmspace ||
+        i386_tss_kernel_stack() !=
+        (unsigned)(unsigned long)i386_bootstrap_uarea + USIZE)
+        return EFAULT;
+    md_uarea_guard_check(i386_bootstrap_uarea);
+    return 0;
 }
 
 static void
@@ -210,13 +353,18 @@ i386_process_user_kernel_return(void)
     if (i386_process_user_active &&
         i386_process_user_result == 0 &&
         stack_address >= stack_start && stack_address < stack_end &&
+        i386_process_idle_roundtrip() == 0 &&
+        i386_process_idle_roundtrip() == 0 &&
+        i386_process_idle_switches == I386_PROCESS_IDLE_SWITCHES &&
         i386_process_bootstrap_validate() == 0)
         i386_process_user_result = I386_PROCESS_USER_MAGIC;
     else
         i386_process_user_result = EFAULT;
+    if (i386_process_user_result == I386_PROCESS_USER_MAGIC)
+        i386_process_idle_tested = 1;
 
     longjmp((size_t)i386_bootstrap_uarea,
-        &i386_bootstrap_uarea->u_rsave);
+        &i386_process_bootstrap_return);
     for (;;)
         __asm__ volatile ("cli; hlt");
 }
@@ -322,7 +470,7 @@ i386_process_bootstrap_user_probe(void)
 
     i386_process_user_result = EFAULT;
     i386_process_user_active = 1;
-    resumed = setjmp(&i386_bootstrap_uarea->u_rsave);
+    resumed = setjmp(&i386_process_bootstrap_return);
     if (resumed == 0)
         i386_user_enter_exec(i386_bootstrap_user_image.iei_entry,
             i386_bootstrap_user_stack.ius_stack_pointer,

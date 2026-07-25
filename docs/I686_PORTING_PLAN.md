@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать шесть QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: двадцать семь QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -438,12 +438,30 @@ Malta64. Следующий кодовый инкремент реализует
   32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
   проходят.
 
-Proc0 на этом шаге остаётся зарезервированным table slot без отдельного
-u-area/idle context; generic run queue, scheduler и `newproc` ещё не
-подключены.
+Двадцать седьмой QEMU bring-up инкремент завершён:
 
-Следующий инкремент: подключить proc0 idle context и generic scheduler/fork,
-затем расширять syscall table и переходить к полному `execve`.
+- proc0 получил собственные guarded u-area и kernel-only vmspace; его
+  `p_uarea/p_addr/p_vmspace` теперь являются постоянными process-table
+  ресурсами;
+- начальный proc0 `u_qsave` запускает idle entry на отдельном u-area stack,
+  после чего `setjmp` сохраняет continuation в формате штатного scheduler
+  ABI;
+- возврат `/sbin/init` из CPL3 происходит на process 1 kernel stack и
+  выполняет два proc1→proc0→proc1 round-trip: первый через начальный
+  context, второй через уже сохранённый proc0 `u_qsave`;
+- на каждом переходе QEMU проверяет CR3/vmspace, `md_curuser`, `u_procp`,
+  границы kernel stack, u-area guards и переключение `TSS.esp0`;
+- обязательный marker `proc0-context: ok` появляется только после обоих
+  переключений и повторной валидации активного process 1;
+- clean build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
+  проходят.
+
+Generic run queue/`swtch` и `newproc` ещё не входят в early image.
+
+Следующий инкремент: поставить process 1 в generic run queue, подключить
+штатный scheduler switch через новый proc0 context, затем включить
+`newproc` и fork нескольких живых процессов.
 
 ## 1. Цель и границы первого порта
 

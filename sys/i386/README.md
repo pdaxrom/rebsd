@@ -72,8 +72,12 @@ destructive self-tests, a persistent process 1 owns a guarded u-area and
 vmspace, keeps its CR3 and `md_curuser` active, and
 provides the live kernel stack selected by `TSS.esp0`.  It now occupies
 generic `proc[1]`, `allproc` and the PID hash, with proc0 reserved as the
-future idle slot; `process-bootstrap: ok` and `process-table: ok` validate
-that state.  Process 1 then enters
+idle slot; proc0 owns its own guarded u-area, vmspace and scheduler-format
+`u_qsave`.  After process 1 returns from CPL3 on its u-area stack, the
+kernel performs two proc1-to-proc0-to-proc1 switches.  Both switches change
+CR3, `md_curuser` and `TSS.esp0`; the second resumes proc0's saved idle
+continuation.  `process-bootstrap: ok`, `process-table: ok` and
+`proc0-context: ok` validate that state.  Process 1 enters
 CPL3 with an RX text mapping and an RW stack without VM execute permission,
 requires production `getpid` to return 1, and requires `process-user: ok`
 before timer IRQs.  The target non-PAE Pentium III has no hardware NX bit.
@@ -113,13 +117,14 @@ contract and generic `sysent` adapter now install a production-numbered
 bootstrap prefix through syscall 20, including the real generic `getpid`
 handler.  A persistent process 1 in the generic process table now keeps a
 real u-area, vmspace, CR3 and TSS kernel stack active after self-tests.
-Proc0 is reserved but does not yet have an idle context, and generic
-run queues/fork are not connected.  The first persistent user mapping
+Proc0 has a separate u-area/vmspace and a reusable saved idle context;
+generic run queues, `swtch` and `newproc` are not connected yet.  The first
+persistent user mapping
 executes production syscall 20 from CPL3 and validates generic VM
 text/stack permissions.  A minimal in-memory ELF32
 loader now maps RX text and RW data+BSS from named `/sbin/init` in the
 early initfs, and an exec-compatible `argc/argv/envp` stack is active.
-The generic process table, storage-backed root and full syscall table
-remain gated on the rest of the generic kernel.
+The generic scheduler, storage-backed root and full syscall table remain
+gated on the rest of the generic kernel.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

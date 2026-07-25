@@ -10,7 +10,9 @@ user-return signal/reschedule path и user trap-to-signal translation
 постоянный process 1 в generic `proc[]`/`allproc`/PID hash удерживает
 активные u-area/vmspace/CR3/TSS и выполняет `/sbin/init` из проверяемого
 read-only initfs с production `getpid=1` и `argc/argv/envp` stack из
-собственного CPL3-контекста; следующий gate — generic scheduler/fork
+собственного CPL3-контекста; proc0 владеет отдельными u-area/vmspace и
+повторно используемым idle context, проверенным двукратным
+proc1→proc0→proc1 switch; следующий gate — generic run queue/scheduler/fork
 integration, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
@@ -240,25 +242,22 @@ unmapped `0x60000000`. User handlers проверяют `SIGILL`/faulting EIP и
 marker `syscall-production: ok`. Pathname/exec call sites уже переведены
 на явное адресное пространство без pointer-range эвристики.
 
-После разрушаемых self-tests ранний image создаёт постоянный
-proc0-совместимый bootstrap process. Он получает отдельные guarded u-area
-и vmspace, PID/PPID 0, `SRUN|SLOAD|SSYS`, обычные proc0 defaults для
-`cmask`, supplementary groups и rlimits. Его vmspace активируется через
-CR3, `md_curuser` остаётся установленным, а `TSS.esp0` указывает на вершину
-u-area kernel stack во время последующих PIC/PIT и exception checks.
+После разрушаемых self-tests ранний image создаёт постоянный process 1 в
+generic process table. Он получает guarded u-area и vmspace, PID 1,
+parent proc0, `SRUN|SLOAD` без `SSYS`, обычные начальные `cmask`, groups и
+rlimits. Его vmspace активируется через CR3, `md_curuser` остаётся
+установленным, а `TSS.esp0` указывает на вершину u-area kernel stack.
 `process-bootstrap: ok` проверяет связи `proc`/`user`/`vmspace`, guard,
-current CR3 и TSS stack. Это намеренно ещё не generic process table,
-scheduler или process 1: bridge создаёт устойчивое MD-состояние, на котором
-можно запускать первый init path.
+current CR3 и TSS stack.
 
-Первый user probe уже использует именно этот постоянный процесс. В его
-vmspace остаются RX text mapping от `0x00400000` и RW/NX stack page у
-верхней границы user address space. NX здесь означает generic VM policy:
-целевой non-PAE Pentium III не имеет аппаратного NX. Код из CPL3 выполняет
-production syscall 20; generic `getpid` возвращает PID 0, Carry очищен, а privilege
-transition использует bootstrap `TSS.esp0`. Тестовый vector `0x30` пока
-нужен только для контролируемого возврата в продолжающийся ранний boot.
-Marker `process-user: ok` подтверждает frame, syscall result, protections и
+Первый user probe использует этот process 1. В его vmspace остаются RX text
+mapping от `0x00400000` и RW/NX stack page у верхней границы user address
+space. NX здесь означает generic VM policy: целевой non-PAE Pentium III не
+имеет аппаратного NX. Код из CPL3 выполняет production syscall 20; generic
+`getpid` возвращает PID 1, Carry очищен, а privilege transition использует
+process 1 `TSS.esp0`. Тестовый vector `0x30` пока нужен только для
+контролируемого возврата в продолжающийся ранний boot. Marker
+`process-user: ok` подтверждает frame, syscall result, protections и
 повторную проверку всех proc/u-area/vmspace invariants.
 
 Сырой byte stream заменён настоящим `bootstrap-user.elf`, отдельно
@@ -309,11 +308,20 @@ parent proc0 и только после этого связывает u-area/vms
 CPL3. `process-table: ok` проверяет обе очереди, обратные links, hash
 lookup, proc0 reservation и свободный `proc[2]`.
 
-Proc0 пока является только зарезервированным table slot без собственного
-u-area/idle context; run queue, `newproc`, scheduler и fork нескольких
-живых процессов ещё не подключены.
+Proc0 теперь владеет отдельными guarded u-area и kernel-only vmspace.
+Начальный `u_qsave` входит на собственном proc0 stack, а первый `setjmp`
+превращает его в повторно используемый scheduler-compatible idle
+continuation. После возврата `/sbin/init` из CPL3 на process 1 kernel stack
+QEMU дважды переключает proc1→proc0→proc1: первый раз через начальный
+context, второй — через сохранённый `u_qsave`. На каждом переходе
+проверяются текущий CR3/vmspace, `md_curuser`, `u_procp`, границы u-area
+stack, guard и `TSS.esp0`. Marker `proc0-context: ok` означает, что оба
+round-trip завершены и process 1 снова активен.
+
+Run queue, generic `swtch`, `newproc` и fork нескольких живых процессов
+ещё не подключены.
 
 1. Добавить оставшиеся machine headers/config lists.
-2. Подключить proc0 idle context, generic run queue/scheduler и `newproc`.
+2. Подключить generic run queue/`swtch`, затем `newproc`.
 3. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести generic `execve` до статического ELF32 init.
