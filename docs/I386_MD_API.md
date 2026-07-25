@@ -8,8 +8,9 @@ process symbols нейтрализованы, i386 `sysent` adapter, signal fram
 user-return signal/reschedule path и user trap-to-signal translation
 проверены; production syscall prefix вызывает generic `getpid`, а
 постоянный proc0-совместимый bootstrap process удерживает активные
-u-area/vmspace/CR3/TSS; следующий gate — первый production syscall в его
-CPL3-контексте, 2026-07-25.
+u-area/vmspace/CR3/TSS и выполняет production `getpid` из собственного
+CPL3-контекста; следующий gate — минимальный ELF32 user image loader,
+2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -249,9 +250,19 @@ current CR3 и TSS stack. Это намеренно ещё не generic process 
 scheduler или process 1: bridge создаёт устойчивое MD-состояние, на котором
 можно запускать первый init path.
 
+Первый user probe уже использует именно этот постоянный процесс. В его
+vmspace остаются RX text mapping от `0x00400000` и RW/NX stack page у
+верхней границы user address space. NX здесь означает generic VM policy:
+целевой non-PAE Pentium III не имеет аппаратного NX. Код из CPL3 выполняет
+production syscall 20; generic `getpid` возвращает PID 0, Carry очищен, а privilege
+transition использует bootstrap `TSS.esp0`. Тестовый vector `0x30` пока
+нужен только для контролируемого возврата в продолжающийся ранний boot.
+Marker `process-user: ok` подтверждает frame, syscall result, protections и
+повторную проверку всех proc/u-area/vmspace invariants.
+
 1. Добавить оставшиеся machine headers/config lists.
-2. Выполнить production syscall в CPL3 постоянного bootstrap process и
-   расширять production prefix по требованиям первого init.
+2. Выделить минимальный ELF32 user image loader и расширять production
+   prefix по требованиям первого init.
 3. Заменить bootstrap bridge на generic process table/process 1.
 4. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести `exec` до статического ELF32 init.

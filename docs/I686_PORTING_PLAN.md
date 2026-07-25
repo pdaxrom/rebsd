@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать один QEMU bring-up инкремент выполнен, 2026-07-25.
+Статус: двадцать два QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -347,9 +347,25 @@ Malta64. Следующий кодовый инкремент реализует
 - clean build, normal/trap smoke и RAM matrix
   32/64/128/256/768/1024 МиБ проходят.
 
-Следующий инкремент: выполнить production syscall из CPL3 уже в постоянном
-bootstrap vmspace/process, затем подготовить минимальный статический ELF32
-init и замену временного process bridge на generic process table.
+Двадцать второй QEMU bring-up инкремент завершён:
+
+- в постоянном bootstrap vmspace отображаются минимальный user text от
+  `0x00400000` и верхняя user stack page;
+- код сначала записывается через generic vmspace API, затем защищается
+  как read/execute; stack остаётся read/write без execute permission в
+  VM policy (non-PAE Pentium III аппаратно не предоставляет NX);
+- тот же proc0, u-area, CR3 и `TSS.esp0` реально входят в CPL3 и выполняют
+  production `eax=20; int 0x80`;
+- generic `getpid` возвращает PID 0 постоянного процесса с очищенным Carry,
+  после чего тестовый return vector возвращает управление через его
+  настоящий u-area kernel stack;
+- обязательный marker `process-user: ok` подтверждает production sysent,
+  VM protection policy, CPL3 frame и сохранность bootstrap invariants;
+- normal/trap smoke и RAM matrix 32/64/128/256/768/1024 МиБ проходят.
+
+Следующий инкремент: выделить загрузку user image из test probe в
+минимальный ELF32 loader, затем подготовить статический init и замену
+временного process bridge на generic process table/process 1.
 
 ## 1. Цель и границы первого порта
 

@@ -95,6 +95,7 @@ early_console.o: $(I386_PC_SRC)/early_console.c \
 
 interrupt.o: $(I386_PC_SRC)/interrupt.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/process.h \
 	    $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/trap.h \
 	    $(I386_SRC)/include/user_return.h \
@@ -282,8 +283,12 @@ context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
 	    -c $< -o $@
 
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
-	    $(I386_SRC)/include/process.h $(I386_SRC)/include/tss.h \
+	    $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/privilege.h \
+	    $(I386_SRC)/include/process.h $(I386_SRC)/include/syscall.h \
+	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
+	    $(I386_SRC)/include/machine/layout.h \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/user.h \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine

@@ -71,7 +71,10 @@ as syscall 20 from CPL3 and requires `syscall-production: ok`.  After the
 destructive self-tests, a persistent proc0-compatible bootstrap process owns
 a guarded u-area and vmspace, keeps its CR3 and `md_curuser` active, and
 provides the live kernel stack selected by `TSS.esp0`;
-`process-bootstrap: ok` validates that state before timer IRQs.
+`process-bootstrap: ok` validates that state.  The same process then enters
+CPL3 with an RX text mapping and an RW stack without VM execute permission,
+invokes production `getpid`, and requires `process-user: ok` before timer
+IRQs.  The target non-PAE Pentium III has no hardware NX bit.
 
 The default cross toolchain is:
 
@@ -98,7 +101,9 @@ contract and generic `sysent` adapter now install a production-numbered
 bootstrap prefix through syscall 20, including the real generic `getpid`
 handler.  A persistent proc0-compatible bootstrap process now keeps a real
 u-area, vmspace, CR3 and TSS kernel stack active after self-tests.  It is an
-MD integration bridge, not yet the generic process table or process 1.  The
-full syscall table remains gated on the rest of the generic kernel.
+MD integration bridge, not yet the generic process table or process 1.  Its
+first persistent user mapping executes production syscall 20 from CPL3 and
+validates generic VM text/stack permissions.  A minimal ELF32 loader and the
+full syscall table remain gated on the rest of the generic kernel.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

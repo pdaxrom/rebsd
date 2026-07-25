@@ -1,5 +1,6 @@
 #include "boot.h"
 #include "interrupt.h"
+#include "process.h"
 #include "syscall.h"
 #include "trap.h"
 #include "user_return.h"
@@ -121,6 +122,8 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
         if (i386_user_return_handle_test(frame))
             return;
         if (i386_trap_handle_test(frame))
+            return;
+        if (i386_process_handle_return(frame))
             return;
         i386_exception_halt(frame);
     }
