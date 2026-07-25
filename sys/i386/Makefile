@@ -11,6 +11,7 @@ I386_COMMON_SRC  = $(I386_SRC)/common
 I386_PC_SRC      = $(I386_SRC)/pc
 I386_USER_SRC    = $(I386_SRC)/user
 I386_TOOLS_SRC   = $(I386_SRC)/tools
+I386_DISK_SRC    = $(TOPSRC)/sys/disk
 I386_VM_SRC      = $(TOPSRC)/sys/vm
 I386_GEN_INCLUDE = $(CURDIR)/include
 I386_VM_INCLUDES = -I$(I386_GEN_INCLUDE) -I$(TOPSRC)/sys \
@@ -41,7 +42,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
-                   libkern.o elf_bootstrap.o initfs.o user_stack.o \
+                   libkern.o disk_subr.o elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
                    sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
                    kern_proc_lifecycle.o kern_synch.o scheduler.o \
@@ -240,8 +241,16 @@ pci.o: $(I386_PC_SRC)/pci.c $(I386_SRC)/include/boot.h \
 	    -c $< -o $@
 
 ide.o: $(I386_PC_SRC)/ide.c $(I386_SRC)/include/boot.h \
-	    $(I386_SRC)/include/ide.h $(I386_SRC)/include/io.h
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    $(I386_SRC)/include/ide.h $(I386_SRC)/include/io.h \
+	    $(I386_DISK_SRC)/disk.h $(TOPSRC)/sys/include/errno.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+disk_subr.o: $(I386_DISK_SRC)/disk_subr.c $(I386_DISK_SRC)/disk.h \
+	    $(TOPSRC)/sys/include/disk.h $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
 memory.o: $(I386_PC_SRC)/memory.c $(I386_SRC)/include/boot.h \

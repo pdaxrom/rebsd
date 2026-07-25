@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать четыре QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: тридцать пять QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -644,6 +644,31 @@ bootstrap probe и подключить MBR parser/дисковый backend бе
 носитель. Проверка на IBM 6563-W4G пока не требуется: hardware gate будет
 запрошен после завершения QEMU-only разборки partition table и
 контролируемого чтения нескольких LBA.
+
+Тридцать пятый QEMU bring-up инкремент завершён:
+
+- PATA transport реализует точный generic `struct disk_backend_ops`
+  read contract; `dbo_write` и `dbo_flush` оставлены `NULL`, а capacity и
+  present state доступны будущему `disk_attach`;
+- backend принимает 64-битный generic LBA, проверяет его против LBA28
+  capacity, ограничивает один запрос 128 секторами и разбивает его на
+  безопасные односекторные polling-команды;
+- i686 image теперь линкует существующий machine-independent
+  `sys/disk/disk_subr.c`, поэтому MBR signature, media bounds, partition
+  table и minor-to-region contract не дублируются в MD-коде;
+- deterministic image содержит активный MBR partition типа `0xB7`:
+  start LBA 64, length 4032; отдельные markers лежат в первых двух и
+  последнем секторах partition;
+- QEMU gate читает LBA0, два последовательных partition sectors и последний
+  LBA, подтверждает таблицу через generic parser и отдельно проверяет отказ
+  для LBA за концом media, слишком большого/нулевого request и `NULL` buffer;
+- обязательные markers фиксируют generic backend read, MBR type/start/size,
+  multi-LBA partition read, last-LBA read и transport bounds.
+
+Следующий инкремент: подключить read-only ATA ops к generic `disk_attach`
+и провести запросы whole-disk/partition через block-layer region contract.
+ATA-команды записи всё ещё не добавляются. Реальный IBM hardware gate будет
+нужен после этого QEMU-этапа и подготовки serial-only test image.
 
 ## 1. Цель и границы первого порта
 
