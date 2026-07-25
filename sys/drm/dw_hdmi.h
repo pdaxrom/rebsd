@@ -6,6 +6,7 @@
 #define _DRM_DW_HDMI_H_
 
 #include <sys/drm.h>
+#include <sys/i2c.h>
 
 struct dw_hdmi_mpll_config {
     unsigned max_clock_khz;
@@ -39,6 +40,8 @@ struct dw_hdmi {
     unsigned phy_status;
     unsigned phy_conf;
     unsigned i2c_timeouts;
+    unsigned ddc_timeouts;
+    struct i2c_adapter ddc;
 };
 
 int dw_hdmi_init(struct dw_hdmi *, const char *, void *,
@@ -48,5 +51,7 @@ int dw_hdmi_init(struct dw_hdmi *, const char *, void *,
     const struct dw_hdmi_plat_data *);
 int dw_hdmi_enable(struct dw_hdmi *, const struct drm_display_mode *);
 void dw_hdmi_disable(struct dw_hdmi *);
+int dw_hdmi_hpd(struct dw_hdmi *);
+struct i2c_adapter *dw_hdmi_ddc_adapter(struct dw_hdmi *);
 
 #endif /* _DRM_DW_HDMI_H_ */

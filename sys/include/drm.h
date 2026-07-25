@@ -131,6 +131,7 @@ struct drm_driver {
     int (*enable)(struct drm_device *, const struct drm_display_mode *,
         struct drm_framebuffer *);
     void (*disable)(struct drm_device *);
+    void (*mode_changed)(struct drm_device *);
 };
 
 struct drm_device {

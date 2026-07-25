@@ -1,9 +1,12 @@
 # Creator Ci20 HDMI framebuffer
 
 This port uses the ReBSD DRM/KMS core to drive the JZ4780 LCDC0 scanout path
-into the integrated Synopsys DesignWare HDMI block. It deliberately starts
-with the conservative fixed 640x480 progressive VGA timing in DVI-compatible
-RGB mode:
+into the integrated Synopsys DesignWare HDMI block. At boot it reads the
+monitor's EDID over HDMI DDC, advertises the supported progressive modes to
+the DRM core, and selects the monitor's preferred mode when the Ci20 clock,
+LCDC, PHY, and 8 MiB scanout reservation can support it. If HPD or EDID fails,
+it falls back to a conservative 640x480 progressive VGA timing in
+DVI-compatible RGB mode:
 
 - 640x480 visible pixels, 800x525 total;
 - 25.000 MHz actual pixel clock from the 1.2 GHz MPLL divided by 48
@@ -12,9 +15,8 @@ RGB mode:
 - 32-bit XRGB8888 scanout with a 2560-byte stride;
 - framebuffer at physical `0x0f800000`, with 8 MiB reserved for scanout.
 
-The fixed mode avoids depending on DDC/EDID during first bring-up and is
-accepted by ordinary HDMI monitors and capture devices. HDMI audio is not
-enabled.
+The fallback is accepted by ordinary HDMI monitors and capture devices. HDMI
+audio is not enabled.
 
 ## Driver architecture
 
@@ -25,14 +27,24 @@ Architecture-independent display code is outside the MIPS tree:
 - `sys/drm/drm.c` registers devices and validates/applies modesets;
 - `sys/drm/drm_fb.c` implements the common `/dev/fbN` read/write/ioctl/mmap
   path;
+- `sys/include/i2c.h` and `sys/i2c/i2c.c` define the common I2C bus/adapter
+  interface;
+- `sys/drm/drm_edid.c` reads and parses EDID without dynamic allocation;
 - `sys/drm/dw_hdmi.c` implements the Synopsys frame-composer, PHY, video
-  packetizer, sampler and main-controller sequence.
+  packetizer, sampler, main-controller sequence, and an I2C adapter for its
+  DDC master.
 
 `sys/mips/ci20/video.c` is the JZ4780 backend. It contains Ci20 board
 power/clock control, LCDC descriptors and timing, and the four-byte-stride
 MMIO binding for the common DW-HDMI bridge. The LCDC primary plane uses
 foreground 1: Linux marks foreground 0 broken on JZ4780, and requires both
 OSD and alpha enable for foreground 1.
+
+The DW-HDMI DDC master is exposed through the common I2C adapter API rather
+than being called directly by the EDID parser. The DW-HDMI PHY programming
+port remains private to the bridge: despite its name and register protocol,
+it is a dedicated 16-bit internal PHY control channel, not a reusable external
+I2C bus.
 
 Video attaches before the normal kernel clock starts. `kconfig()` therefore
 starts free-running TCU channel 3 before DRM attachment; `udelay()` must not
@@ -46,6 +58,12 @@ USB HID keyboard driver. UART4 is exposed independently as `/dev/ttyS0`, with
 its own tty state and getty/login session. Early kernel diagnostics use UART4
 until DRM is ready; normal console output is HDMI-only after that point, so
 the two login sessions cannot consume each other's input or output.
+
+The HDMI console is not constrained to the N64 television geometry. It uses
+the active EDID-selected framebuffer immediately, derives its tty rows and
+columns from that mode, and renders readable 12x20 pixel cells over 90 percent
+of the display. A 1920x1080 mode therefore exposes a 144x48 terminal. A
+runtime modeset recalculates the geometry and updates the tty window size.
 
 `/dev/fb0` is character major 5, DRM framebuffer minor 0. It supports byte
 reads/writes, uncached shared `mmap(2)`, and two userspace interfaces. The
@@ -76,6 +94,7 @@ DRMFBIOC_SETMODE   struct drmfb_mode
 The public header is `sys/include/drm.h`. This is the same API used by the N64
 VI DRM backend; platform code differs only in its modes and pixel formats.
 The root filesystem includes the common `fbset` and `fbview` utilities.
+`fbset -l` lists the EDID-derived modes and marks the active one.
 `fbview` streams baseline JPEG MCU blocks directly to scanout and selects
 1/2, 1/4, or 1/8 JPEG downscaling for large photos instead of allocating a
 full-size RGB image.
@@ -119,12 +138,15 @@ independent recovery/login channel.
 1. UART must report `ram size=0x40000000`.
 2. The VM summary must account for both RAM banks without a region covering
    the `0x10000000..0x2fffffff` hole.
-3. UART must report `dw-hdmi0: version=...` followed by
-   `ci20 video: DRM HDMI/DVI 640x480 XRGB8888 ...`; the monitor must show
-   the subsequent boot output and login prompt.
+3. UART must report `dw-hdmi0: version=...`, an `EDID ... modes=...` line,
+   and `ci20 video: DRM HDMI/DVI WIDTHxHEIGHT XRGB8888 ...`; the monitor must
+   show the subsequent boot output and login prompt. An explicit EDID failure
+   followed by 640x480 is an acceptable fallback test, but not an EDID success.
 4. Verify separate login prompts on HDMI `/dev/console` and UART `/dev/ttyS0`.
    Input and command output from one session must not appear in the other.
-5. Run `fbset`, `fbset fill 0x00ff0000`, and `fbview image.jpg` on HDMI.
+5. On a 1080p monitor, verify that `fbset` reports 1920x1080 with an
+   8294400-byte framebuffer and `stty size` reports 48 rows by 144 columns.
+   Run `fbset -l`, `fbset fill 0x00ff0000`, and `fbview image.jpg` on HDMI.
 6. Run a memory-pressure test large enough to allocate pages from the high
    bank, then repeat USB input and framebuffer output checks.
 
@@ -147,8 +169,10 @@ clock parents, board wiring, and initialization ordering.
   [DWC HDMI sequencing](https://github.com/MIPS/CI20_linux/blob/7dff33297116643485ca37141d804eddd793e834/drivers/gpu/drm/jz4780/dwc_hdmi.c).
 - Current Linux DRM:
   [Ingenic LCDC/plane implementation](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/ingenic/ingenic-drm-drv.c)
+  [JZ4780 DW-HDMI PHY tables](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/ingenic/ingenic-dw-hdmi.c),
+  [common Synopsys DW-HDMI bridge and DDC adapter](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c),
   and
-  [common Synopsys DW-HDMI bridge](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/bridge/synopsys/dw-hdmi.c).
+  [common EDID reader/parser](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/drm_edid.c).
 - NetBSD DRM:
   [common DW-HDMI bridge](https://github.com/NetBSD/src/blob/trunk/sys/dev/ic/dw_hdmi.c)
   and

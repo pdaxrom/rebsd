@@ -265,6 +265,7 @@ drmfb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
     struct drmfb_map *map;
     struct drmfb_mode *mode;
     struct drm_mode_config *config;
+    vm_size_t mapped;
 
     (void)flag;
     drm = drmfb_device(dev);
@@ -289,8 +290,11 @@ drmfb_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         return 0;
     case DRMFBIOC_GETMAP:
         map = (struct drmfb_map *)data;
+        if (vm_size_round_page(fb->bytes, &mapped) != 0 ||
+            mapped > fb->reserved_bytes)
+            return EINVAL;
         map->vaddr = fb->map_hint;
-        map->bytes = fb->bytes;
+        map->bytes = mapped;
         map->reserved_bytes = fb->reserved_bytes;
         return 0;
     case DRMFBIOC_GETMODE:

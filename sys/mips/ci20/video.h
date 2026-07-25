@@ -14,6 +14,7 @@ void ci20_video_clear(unsigned);
 int ci20_video_ready(void);
 
 void ci20_video_console_putc(int);
+void ci20_video_console_mode_changed(void);
 void ci20_video_console_winsize(struct winsize *);
 void ci20_video_console_tty_winsize(struct tty *);
 #endif

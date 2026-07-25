@@ -10,6 +10,7 @@
 #include <sys/errno.h>
 #include <sys/systm.h>
 #include <sys/drm.h>
+#include <sys/i2c.h>
 #include <drm/dw_hdmi.h>
 
 #define HDMI_DESIGN_ID              0x0000
@@ -17,7 +18,9 @@
 #define HDMI_PRODUCT_ID0            0x0002
 #define HDMI_PRODUCT_ID1            0x0003
 #define HDMI_CONFIG2_ID             0x0006
+#define HDMI_IH_I2CM_STAT0          0x0105
 #define HDMI_IH_I2CMPHY_STAT0       0x0108
+#define HDMI_IH_MUTE_I2CM_STAT0     0x0185
 #define HDMI_IH_MUTE                0x01ff
 #define HDMI_TX_INVID0              0x0200
 #define HDMI_TX_INSTUFFING          0x0201
@@ -71,6 +74,16 @@
 #define HDMI_A_HDCPCFG0             0x5000
 #define HDMI_A_HDCPCFG1             0x5001
 #define HDMI_A_VIDPOLCFG            0x5009
+#define HDMI_I2CM_SLAVE             0x7e00
+#define HDMI_I2CM_ADDRESS           0x7e01
+#define HDMI_I2CM_DATAI             0x7e03
+#define HDMI_I2CM_OPERATION         0x7e04
+#define HDMI_I2CM_INT               0x7e05
+#define HDMI_I2CM_CTLINT            0x7e06
+#define HDMI_I2CM_DIV               0x7e07
+#define HDMI_I2CM_SEGADDR           0x7e08
+#define HDMI_I2CM_SOFTRSTZ          0x7e09
+#define HDMI_I2CM_SEGPTR            0x7e0a
 
 #define HDMI_PHY_PDZ                0x80
 #define HDMI_PHY_ENTMDS             0x40
@@ -81,6 +94,17 @@
 #define HDMI_PHY_SELDIPIF           0x01
 #define HDMI_PHY_LOCK               0x01
 #define HDMI_PHY_HPD                0x02
+
+#define HDMI_I2CM_OPERATION_READ_EXT 0x02
+#define HDMI_I2CM_OPERATION_READ    0x01
+#define HDMI_I2CM_STATUS_DONE       0x02
+#define HDMI_I2CM_STATUS_ERROR      0x01
+#define HDMI_I2CM_INT_DONE_POL      0x08
+#define HDMI_I2CM_CTLINT_NACK_POL   0x80
+#define HDMI_I2CM_CTLINT_ARB_POL    0x08
+#define HDMI_I2CM_DDC_ADDRESS       0x50
+#define HDMI_I2CM_SEGMENT_ADDRESS   0x30
+#define HDMI_I2CM_TIMEOUT_US        20000u
 
 #define HDMI_PHY_I2C_CPCE_CTRL      0x06
 #define HDMI_PHY_I2C_GMPCTRL        0x15
@@ -127,6 +151,124 @@ dw_mask(struct dw_hdmi *hdmi, unsigned reg, unsigned mask,
     old = dw_read(hdmi, reg);
     dw_write(hdmi, reg, (old & ~mask) | (value & mask));
 }
+
+static void
+dw_ddc_init(struct dw_hdmi *hdmi)
+{
+    dw_write(hdmi, HDMI_I2CM_SOFTRSTZ, 0);
+    dw_delay(hdmi, 10);
+    dw_write(hdmi, HDMI_I2CM_DIV, 0);
+    dw_write(hdmi, HDMI_I2CM_INT, HDMI_I2CM_INT_DONE_POL);
+    dw_write(hdmi, HDMI_I2CM_CTLINT,
+        HDMI_I2CM_CTLINT_NACK_POL | HDMI_I2CM_CTLINT_ARB_POL);
+    dw_write(hdmi, HDMI_IH_I2CM_STAT0,
+        HDMI_I2CM_STATUS_DONE | HDMI_I2CM_STATUS_ERROR);
+    /*
+     * This implementation polls IH status, so keep the CPU interrupt muted.
+     * The status bits continue to latch while muted.
+     */
+    dw_write(hdmi, HDMI_IH_MUTE_I2CM_STAT0,
+        HDMI_I2CM_STATUS_DONE | HDMI_I2CM_STATUS_ERROR);
+}
+
+static int
+dw_ddc_wait(struct dw_hdmi *hdmi)
+{
+    unsigned elapsed;
+    unsigned status;
+
+    for (elapsed = 0; elapsed < HDMI_I2CM_TIMEOUT_US; elapsed += 10) {
+        status = dw_read(hdmi, HDMI_IH_I2CM_STAT0) &
+            (HDMI_I2CM_STATUS_DONE | HDMI_I2CM_STATUS_ERROR);
+        if (status != 0) {
+            dw_write(hdmi, HDMI_IH_I2CM_STAT0, status);
+            return (status & HDMI_I2CM_STATUS_ERROR) != 0 ? EIO : 0;
+        }
+        dw_delay(hdmi, 10);
+    }
+    ++hdmi->ddc_timeouts;
+    return ETIMEDOUT;
+}
+
+static int
+dw_ddc_read(struct dw_hdmi *hdmi, unsigned offset, unsigned segment,
+    unsigned char *data, unsigned length)
+{
+    unsigned operation;
+    unsigned i;
+    int error;
+
+    dw_write(hdmi, HDMI_I2CM_SLAVE, HDMI_I2CM_DDC_ADDRESS);
+    operation = HDMI_I2CM_OPERATION_READ;
+    if (segment != 0) {
+        dw_write(hdmi, HDMI_I2CM_SEGADDR, HDMI_I2CM_SEGMENT_ADDRESS);
+        dw_write(hdmi, HDMI_I2CM_SEGPTR, segment);
+        operation = HDMI_I2CM_OPERATION_READ_EXT;
+    }
+    for (i = 0; i < length; ++i) {
+        dw_write(hdmi, HDMI_IH_I2CM_STAT0,
+            HDMI_I2CM_STATUS_DONE | HDMI_I2CM_STATUS_ERROR);
+        dw_write(hdmi, HDMI_I2CM_ADDRESS, (offset + i) & 0xffu);
+        dw_write(hdmi, HDMI_I2CM_OPERATION, operation);
+        error = dw_ddc_wait(hdmi);
+        if (error != 0)
+            return error;
+        data[i] = dw_read(hdmi, HDMI_I2CM_DATAI);
+    }
+    return 0;
+}
+
+static int
+dw_ddc_transfer(struct i2c_adapter *adapter, struct i2c_msg *messages,
+    unsigned count)
+{
+    struct dw_hdmi *hdmi;
+    unsigned offset;
+    unsigned segment;
+    unsigned i;
+    int have_offset;
+    int error;
+
+    hdmi = (struct dw_hdmi *)adapter->cookie;
+    offset = 0;
+    segment = 0;
+    have_offset = 0;
+    error = 0;
+    dw_ddc_init(hdmi);
+    for (i = 0; i < count; ++i) {
+        if (messages[i].addr == HDMI_I2CM_SEGMENT_ADDRESS &&
+            (messages[i].flags & I2C_M_RD) == 0 &&
+            messages[i].len == 1) {
+            segment = messages[i].buf[0];
+            continue;
+        }
+        if (messages[i].addr != HDMI_I2CM_DDC_ADDRESS)
+            return EOPNOTSUPP;
+        if ((messages[i].flags & I2C_M_RD) == 0) {
+            if (messages[i].len != 1)
+                return EOPNOTSUPP;
+            offset = messages[i].buf[0];
+            have_offset = 1;
+            continue;
+        }
+        if (!have_offset)
+            return EINVAL;
+        error = dw_ddc_read(hdmi, offset, segment,
+            messages[i].buf, messages[i].len);
+        if (error != 0)
+            break;
+        offset = (offset + messages[i].len) & 0xffu;
+    }
+    if (error != 0 && hdmi->ddc_timeouts <= 1)
+        printf("%s: DDC transfer failed offset=%x segment=%x "
+            "status=%x error=%d\n", hdmi->name, offset, segment,
+            dw_read(hdmi, HDMI_IH_I2CM_STAT0), error);
+    return error;
+}
+
+static const struct i2c_adapter_ops dw_ddc_ops = {
+    dw_ddc_transfer,
+};
 
 static int
 dw_phy_i2c_write(struct dw_hdmi *hdmi, unsigned address, unsigned data)
@@ -383,6 +525,8 @@ dw_hdmi_init(struct dw_hdmi *hdmi, const char *name, void *cookie,
     void (*delay_us)(void *, unsigned),
     const struct dw_hdmi_plat_data *plat)
 {
+    int error;
+
     if (hdmi == 0 || name == 0 || read == 0 || write == 0 ||
         delay_us == 0 || plat == 0 || plat->mpll == 0 || plat->phy == 0)
         return EINVAL;
@@ -397,7 +541,10 @@ dw_hdmi_init(struct dw_hdmi *hdmi, const char *name, void *cookie,
     hdmi->phy_status = 0;
     hdmi->phy_conf = 0;
     hdmi->i2c_timeouts = 0;
-    return 0;
+    hdmi->ddc_timeouts = 0;
+    error = i2c_adapter_init(&hdmi->ddc, "dw-hdmi-ddc",
+        &dw_ddc_ops, hdmi);
+    return error;
 }
 
 int
@@ -454,4 +601,21 @@ dw_hdmi_disable(struct dw_hdmi *hdmi)
     dw_mask(hdmi, HDMI_PHY_CONF0, HDMI_PHY_TXPWRON, 0);
     dw_mask(hdmi, HDMI_PHY_CONF0, HDMI_PHY_PDDQ, HDMI_PHY_PDDQ);
     dw_mask(hdmi, HDMI_PHY_CONF0, HDMI_PHY_PDZ, 0);
+}
+
+int
+dw_hdmi_hpd(struct dw_hdmi *hdmi)
+{
+    if (hdmi == 0 || hdmi->read == 0)
+        return 0;
+    hdmi->phy_status = dw_read(hdmi, HDMI_PHY_STAT0);
+    return (hdmi->phy_status & HDMI_PHY_HPD) != 0;
+}
+
+struct i2c_adapter *
+dw_hdmi_ddc_adapter(struct dw_hdmi *hdmi)
+{
+    if (hdmi == 0 || hdmi->ddc.ops == 0)
+        return 0;
+    return &hdmi->ddc;
 }

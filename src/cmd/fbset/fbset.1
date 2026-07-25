@@ -14,6 +14,9 @@ fbset \- inspect or change a ReBSD DRM framebuffer
 ]
 .PP
 .B fbset
+.B \-l
+.PP
+.B fbset
 .B fill
 .I pixel-value
 .SH DESCRIPTION
@@ -31,21 +34,34 @@ prints the current geometry, pixel format, framebuffer address, mode index,
 pixel clock, and mapping information.
 .PP
 The
+.B \-l
+option lists every mode advertised by the kernel.  The active mode is marked
+with an asterisk.
+.PP
+The
 .B fill
 form fills the current framebuffer with the supplied native pixel value
 through the shared mapping returned by
 .IR /dev/fb0 .
 This is a direct mapping smoke test, not a write(2) transfer.
 .PP
-The Ci20 driver currently exposes 640x480 XRGB8888.  The N64 driver exposes
-320x240 RGBA5551 and, when framebuffer memory permits, 640x480 interlaced
-RGBA5551.
+The Ci20 driver obtains monitor modes through HDMI DDC/EDID and retains
+640x480 XRGB8888 as a fallback.  The N64 driver exposes 320x240 RGBA5551 and,
+when framebuffer memory permits, 640x480 interlaced RGBA5551.
 .SH EXAMPLES
 Show the current framebuffer mode:
 .PP
 .RS
 .nf
 fbset
+.fi
+.RE
+.PP
+List the available modes:
+.PP
+.RS
+.nf
+fbset -l
 .fi
 .RE
 .PP

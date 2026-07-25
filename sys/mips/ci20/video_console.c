@@ -13,10 +13,12 @@
 #define CELL_WIDTH              6u
 #define CELL_HEIGHT             10u
 #define GLYPH_HEIGHT            8u
-#define CONSOLE_COLS            96u
-#define CONSOLE_ROWS            43u
-#define CONSOLE_X               32u
-#define CONSOLE_Y               25u
+#define CELL_SCALE              2u
+#define CELL_PIXEL_WIDTH        (CELL_WIDTH * CELL_SCALE)
+#define CELL_PIXEL_HEIGHT       (CELL_HEIGHT * CELL_SCALE)
+#define CONSOLE_MAX_COLS        154u
+#define CONSOLE_MAX_ROWS        92u
+#define CONSOLE_MARGIN_DIV      20u
 #define CONSOLE_FG              0x00f0f0f0u
 #define CONSOLE_BG              0x00000000u
 #define CSI_PARAMS              4u
@@ -27,8 +29,15 @@
 #define STATE_OSC               3
 #define STATE_OSC_ESC           4
 
-static unsigned char cells[CONSOLE_ROWS][CONSOLE_COLS];
-static unsigned char attrs[CONSOLE_ROWS][CONSOLE_COLS];
+static unsigned char cells[CONSOLE_MAX_ROWS][CONSOLE_MAX_COLS];
+static unsigned char attrs[CONSOLE_MAX_ROWS][CONSOLE_MAX_COLS];
+static unsigned console_width;
+static unsigned console_height;
+static unsigned console_stride;
+static unsigned console_x0;
+static unsigned console_y0;
+static unsigned console_cols;
+static unsigned console_rows;
 static unsigned cursor_col;
 static unsigned cursor_row;
 static unsigned saved_col;
@@ -41,6 +50,33 @@ static int csi_private;
 static int cursor_visible = 1;
 static int cursor_drawn;
 static int console_initialized;
+
+static void
+console_geometry(void)
+{
+    struct drmfb_info info;
+    unsigned margin_x;
+    unsigned margin_y;
+
+    ci20_video_get_info(&info);
+    if (info.width == console_width && info.height == console_height &&
+        info.stride / sizeof(unsigned) == console_stride &&
+        console_cols != 0 && console_rows != 0)
+        return;
+    console_width = info.width;
+    console_height = info.height;
+    console_stride = info.stride / sizeof(unsigned);
+    margin_x = console_width / CONSOLE_MARGIN_DIV;
+    margin_y = console_height / CONSOLE_MARGIN_DIV;
+    console_cols = (console_width - 2u * margin_x) / CELL_PIXEL_WIDTH;
+    console_rows = (console_height - 2u * margin_y) / CELL_PIXEL_HEIGHT;
+    if (console_cols > CONSOLE_MAX_COLS)
+        console_cols = CONSOLE_MAX_COLS;
+    if (console_rows > CONSOLE_MAX_ROWS)
+        console_rows = CONSOLE_MAX_ROWS;
+    console_x0 = (console_width - console_cols * CELL_PIXEL_WIDTH) / 2u;
+    console_y0 = (console_height - console_rows * CELL_PIXEL_HEIGHT) / 2u;
+}
 
 static void
 glyph_set(unsigned char glyph[5], unsigned char a, unsigned char b,
@@ -162,9 +198,11 @@ render_cell(unsigned col, unsigned row, int invert)
     unsigned y;
     unsigned x0;
     unsigned y0;
+    unsigned sx;
+    unsigned sy;
     int ch;
 
-    if (col >= CONSOLE_COLS || row >= CONSOLE_ROWS)
+    if (col >= console_cols || row >= console_rows)
         return;
     ch = cells[row][col] ? cells[row][col] : ' ';
     fg = CONSOLE_FG;
@@ -175,18 +213,24 @@ render_cell(unsigned col, unsigned row, int invert)
         bg = swap;
     }
     fb = ci20_video_framebuffer();
-    x0 = CONSOLE_X + col * CELL_WIDTH;
-    y0 = CONSOLE_Y + row * CELL_HEIGHT;
-    for (y = 0; y < CELL_HEIGHT; ++y)
-        for (x = 0; x < CELL_WIDTH; ++x)
-            fb[(y0 + y) * 640u + x0 + x] = bg;
+    if (console_stride < console_width)
+        return;
+    x0 = console_x0 + col * CELL_PIXEL_WIDTH;
+    y0 = console_y0 + row * CELL_PIXEL_HEIGHT;
+    for (y = 0; y < CELL_PIXEL_HEIGHT; ++y)
+        for (x = 0; x < CELL_PIXEL_WIDTH; ++x)
+            fb[(y0 + y) * console_stride + x0 + x] = bg;
     if (ch == ' ')
         return;
     console_glyph(ch, glyph);
     for (x = 0; x < 5; ++x)
         for (y = 0; y < GLYPH_HEIGHT; ++y)
             if ((glyph[x] & (1u << y)) != 0)
-                fb[(y0 + y) * 640u + x0 + x] = fg;
+                for (sy = 0; sy < CELL_SCALE; ++sy)
+                    for (sx = 0; sx < CELL_SCALE; ++sx)
+                        fb[(y0 + y * CELL_SCALE + sy) *
+                            console_stride + x0 +
+                            x * CELL_SCALE + sx] = fg;
 }
 
 static void
@@ -195,8 +239,8 @@ render_all(void)
     unsigned row;
     unsigned col;
 
-    for (row = 0; row < CONSOLE_ROWS; ++row)
-        for (col = 0; col < CONSOLE_COLS; ++col)
+    for (row = 0; row < console_rows; ++row)
+        for (col = 0; col < console_cols; ++col)
             render_cell(col, row, 0);
 }
 
@@ -223,10 +267,10 @@ clear_range(unsigned row, unsigned first, unsigned end)
 {
     unsigned col;
 
-    if (row >= CONSOLE_ROWS || first >= CONSOLE_COLS)
+    if (row >= console_rows || first >= console_cols)
         return;
-    if (end > CONSOLE_COLS)
-        end = CONSOLE_COLS;
+    if (end > console_cols)
+        end = console_cols;
     for (col = first; col < end; ++col) {
         cells[row][col] = ' ';
         attrs[row][col] = attr;
@@ -240,14 +284,14 @@ scroll(void)
     unsigned row;
     unsigned col;
 
-    for (row = 0; row + 1 < CONSOLE_ROWS; ++row)
-        for (col = 0; col < CONSOLE_COLS; ++col) {
+    for (row = 0; row + 1 < console_rows; ++row)
+        for (col = 0; col < console_cols; ++col) {
             cells[row][col] = cells[row + 1][col];
             attrs[row][col] = attrs[row + 1][col];
         }
-    for (col = 0; col < CONSOLE_COLS; ++col) {
-        cells[CONSOLE_ROWS - 1][col] = ' ';
-        attrs[CONSOLE_ROWS - 1][col] = attr;
+    for (col = 0; col < console_cols; ++col) {
+        cells[console_rows - 1][col] = ' ';
+        attrs[console_rows - 1][col] = attr;
     }
     render_all();
 }
@@ -256,19 +300,19 @@ static void
 newline(void)
 {
     cursor_col = 0;
-    if (++cursor_row >= CONSOLE_ROWS) {
+    if (++cursor_row >= console_rows) {
         scroll();
-        cursor_row = CONSOLE_ROWS - 1;
+        cursor_row = console_rows - 1;
     }
 }
 
 static void
 clamp_cursor(void)
 {
-    if (cursor_col >= CONSOLE_COLS)
-        cursor_col = CONSOLE_COLS - 1;
-    if (cursor_row >= CONSOLE_ROWS)
-        cursor_row = CONSOLE_ROWS - 1;
+    if (cursor_col >= console_cols)
+        cursor_col = console_cols - 1;
+    if (cursor_row >= console_rows)
+        cursor_row = console_rows - 1;
 }
 
 static unsigned
@@ -314,21 +358,21 @@ csi_dispatch(int ch)
         break;
     case 'J':
         if (params[0] == 2 || params[0] == 3) {
-            for (row = 0; row < CONSOLE_ROWS; ++row)
-                clear_range(row, 0, CONSOLE_COLS);
+            for (row = 0; row < console_rows; ++row)
+                clear_range(row, 0, console_cols);
         } else {
-            clear_range(cursor_row, cursor_col, CONSOLE_COLS);
-            for (row = cursor_row + 1; row < CONSOLE_ROWS; ++row)
-                clear_range(row, 0, CONSOLE_COLS);
+            clear_range(cursor_row, cursor_col, console_cols);
+            for (row = cursor_row + 1; row < console_rows; ++row)
+                clear_range(row, 0, console_cols);
         }
         break;
     case 'K':
         if (params[0] == 2)
-            clear_range(cursor_row, 0, CONSOLE_COLS);
+            clear_range(cursor_row, 0, console_cols);
         else if (params[0] == 1)
             clear_range(cursor_row, 0, cursor_col + 1);
         else
-            clear_range(cursor_row, cursor_col, CONSOLE_COLS);
+            clear_range(cursor_row, cursor_col, console_cols);
         break;
     case 'm':
         attr = params[0] == 7 ? 1u : 0u;
@@ -408,7 +452,7 @@ put_character(int ch)
         cells[cursor_row][cursor_col] = ch;
         attrs[cursor_row][cursor_col] = attr;
         render_cell(cursor_col, cursor_row, 0);
-        if (++cursor_col >= CONSOLE_COLS)
+        if (++cursor_col >= console_cols)
             newline();
     }
 }
@@ -421,8 +465,9 @@ console_init(void)
 
     if (console_initialized || !ci20_video_ready())
         return;
-    for (row = 0; row < CONSOLE_ROWS; ++row)
-        for (col = 0; col < CONSOLE_COLS; ++col) {
+    console_geometry();
+    for (row = 0; row < CONSOLE_MAX_ROWS; ++row)
+        for (col = 0; col < CONSOLE_MAX_COLS; ++col) {
             cells[row][col] = ' ';
             attrs[row][col] = 0;
         }
@@ -436,18 +481,48 @@ ci20_video_console_putc(int ch)
     console_init();
     if (!console_initialized)
         return;
+    console_geometry();
     erase_cursor();
     put_character(ch);
     draw_cursor();
 }
 
 void
+ci20_video_console_mode_changed(void)
+{
+    unsigned row;
+    unsigned col;
+
+    if (!console_initialized)
+        return;
+    console_width = 0;
+    console_height = 0;
+    console_stride = 0;
+    console_geometry();
+    cursor_col = 0;
+    cursor_row = 0;
+    saved_col = 0;
+    saved_row = 0;
+    state = STATE_GROUND;
+    attr = 0;
+    cursor_drawn = 0;
+    for (row = 0; row < CONSOLE_MAX_ROWS; ++row)
+        for (col = 0; col < CONSOLE_MAX_COLS; ++col) {
+            cells[row][col] = ' ';
+            attrs[row][col] = 0;
+        }
+    ci20_video_clear(CONSOLE_BG);
+    draw_cursor();
+}
+
+void
 ci20_video_console_winsize(struct winsize *ws)
 {
-    ws->ws_row = CONSOLE_ROWS;
-    ws->ws_col = CONSOLE_COLS;
-    ws->ws_xpixel = CONSOLE_COLS * CELL_WIDTH;
-    ws->ws_ypixel = CONSOLE_ROWS * CELL_HEIGHT;
+    console_geometry();
+    ws->ws_row = console_rows;
+    ws->ws_col = console_cols;
+    ws->ws_xpixel = console_cols * CELL_PIXEL_WIDTH;
+    ws->ws_ypixel = console_rows * CELL_PIXEL_HEIGHT;
 }
 
 void

@@ -124,6 +124,8 @@ drm_mode_set(struct drm_device *dev, const struct drm_display_mode *mode,
     dev->crtc.enabled = 1;
     dev->encoder.enabled = 1;
     dev->connector.status = DRM_CONNECTOR_CONNECTED;
+    if (dev->driver->mode_changed != 0)
+        (*dev->driver->mode_changed)(dev);
     return 0;
 }
 

@@ -137,6 +137,7 @@ static void n64_drm_disable(struct drm_device *);
 static const struct drm_driver n64_drm_driver = {
     n64_drm_enable,
     n64_drm_disable,
+    0,
 };
 
 static unsigned

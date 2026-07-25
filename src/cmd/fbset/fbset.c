@@ -19,6 +19,7 @@ usage(void)
 {
     fprintf(stderr, "usage: fbset [WIDTHxHEIGHT]\n");
     fprintf(stderr, "       fbset [width height]\n");
+    fprintf(stderr, "       fbset -l\n");
     fprintf(stderr, "       fbset fill pixel-value\n");
     exit(1);
 }
@@ -152,6 +153,27 @@ print_info(const struct drmfb_info *info, const struct drmfb_map *map,
 }
 
 static void
+list_modes(int fd, const struct drmfb_info *info)
+{
+    struct drmfb_mode mode;
+    unsigned index;
+
+    for (index = 0; index < info->mode_count; ++index) {
+        memset(&mode, 0, sizeof(mode));
+        mode.index = index;
+        if (ioctl(fd, DRMFBIOC_GETMODE, &mode) < 0) {
+            fprintf(stderr, "fbset: get mode %u: %s\n", index,
+                strerror(errno));
+            exit(1);
+        }
+        printf("%c %u: %ux%u %u bpp %s clock=%uKHz stride=%u bytes=%u\n",
+            index == info->mode_index ? '*' : ' ', index,
+            mode.width, mode.height, mode.bpp, format_name(mode.format),
+            mode.pixel_clock_khz, mode.stride, mode.stride * mode.height);
+    }
+}
+
+static void
 fill_fb(const struct drmfb_info *info, const struct drmfb_map *map,
     unsigned color)
 {
@@ -194,7 +216,8 @@ main(int argc, char **argv)
         usage();
 
     fd = open_fb();
-    if (argc != 1 && !is_fill(argc, argv)) {
+    if (argc != 1 && !is_fill(argc, argv) &&
+        !(argc == 2 && strcmp(argv[1], "-l") == 0)) {
         if (ioctl(fd, DRMFBIOC_GETINFO, &info) < 0) {
             fprintf(stderr, "fbset: get info: %s\n", strerror(errno));
             close(fd);
@@ -243,6 +266,8 @@ main(int argc, char **argv)
         map.vaddr = (unsigned)mapping;
         fill_fb(&info, &map, parse_uint(argv[2]));
     }
+    if (argc == 2 && strcmp(argv[1], "-l") == 0)
+        list_modes(fd, &info);
     print_info(&info, &map, &fix, &var);
     if (mapping != MAP_FAILED)
         munmap(mapping, map.bytes);
