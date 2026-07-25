@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать восемь bring-up инкрементов выполнены, включая первый
+Статус: тридцать девять bring-up инкрементов выполнены, включая два
 IBM 6563-W4G hardware gate, 2026-07-25.
 
 ## Выполнено
@@ -737,10 +737,19 @@ drive. Перед gate сохранена рекомендация иметь р
   image повторяет host/ISA/IDE/VGA IDs и platform непосредственно перед
   `HALT` как компактный `hardware-summary`.
 
-Следующий внешний gate: загрузить обновлённый GRUB image и снять одной
-фотографией финальный `hardware-summary`, чтобы зафиксировать точные VIA
-694X/596B и AGP VGA IDs. После этого продолжить QEMU-first работу над
-read-only filesystem/root integration.
+Тридцать девятый bring-up инкремент завершён вторым IBM gate:
+
+- финальный VGA `hardware-summary` подтвердил VIA host `1106:0691`,
+  ISA southbridge `1106:0596` и IDE function `1106:0571`;
+- AGP VGA идентифицирован как 3Dfx Voodoo3 `121a:0005`;
+- официальная [PCI ID database](https://pci-ids.ucw.cz/) сопоставляет chipset с
+  VT82C693A/694x Apollo PRO133x, VT82C596 и VIA PIPC Bus Master IDE;
+- повторный реальный boot сохранил все read-only/`EROFS`, PIC/PIT и
+  `HALT` результаты первого gate.
+
+Точный IBM hardware baseline зафиксирован. Следующий инкремент возвращается
+в QEMU-first цикл: подключить read-only filesystem/root integration поверх
+уже проверенного generic disk strategy, не добавляя ATA writes.
 
 ## 1. Цель и границы первого порта
 
@@ -854,9 +863,10 @@ target-i386.mk             common GCC/binutils policy
 
 Физический hardware baseline — IBM PC 300GL desktop, machine type/model
 `6563-W4G`. Наличие AGP и chipset VIA Apollo Pro 133 на конкретной плате
-подтверждены владельцем. Точный объём RAM, CPU stepping, AGP adapter и
-дополнительные PCI-карты надо снять с самой машины; код `W4G` не найден в
-доступной редакции IBM model tables, поэтому эти параметры не предполагаются.
+подтверждены двумя hardware gates. Реальный PCI inventory: VIA
+VT82C693A/694x host `1106:0691`, VT82C596 ISA `1106:0596`, VIA IDE
+`1106:0571` и 3Dfx Voodoo3 AGP VGA `121a:0005`. Точный объём RAM, CPU
+stepping и дополнительные PCI-карты ещё надо снять с полного serial log.
 
 Документированный общий planar семейства 6563:
 

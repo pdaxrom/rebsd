@@ -1,6 +1,6 @@
 # Hardware gate: IBM 6563-W4G
 
-Первый gate успешно выполнен 2026-07-25 на реальном IBM 6563-W4G с
+Два gate успешно выполнены 2026-07-25 на реальном IBM 6563-W4G с
 VIA Apollo Pro 133, AGP VGA и IDE-CF. У машины нет floppy drive, поэтому
 существующий GRUB Legacy загрузил `rebsd-i686.bzimg` с Red Hat root
 partition `(hd0,2)`.
@@ -87,22 +87,29 @@ HALT
 reads, корректный MBR, bounded partition I/O, два независимых запрета
 записи, PIC и PIT на реальном chipset.
 
-## 4. Следующий hardware log
+## 4. Фактический PCI baseline
 
 Первый длинный VGA log вытеснил начальные PCI строки. Обновлённый image
-повторяет перед `HALT`:
+повторил inventory перед `HALT`:
 
 ```text
 hardware-summary: pci
-hardware-pci-host: ...
-hardware-pci-isa: ...
-hardware-pci-ide: ...
-hardware-pci-vga: ...
+hardware-pci-host: 0x11060691
+hardware-pci-isa: 0x11060596
+hardware-pci-ide: 0x11060571
+hardware-pci-vga: 0x121a0005
 hardware-pci-platform: via
 HALT
 ```
 
-Для следующего gate достаточно заменить только `/boot/rebsd-i686.bzimg`,
-сверить размер/checksum, загрузить существующий пункт GRUB и
-сфотографировать последние строки. COM1 `115200 8N1` остаётся желательным,
-но для фиксации PCI IDs больше не обязателен.
+По официальной [PCI ID database](https://pci-ids.ucw.cz/) это:
+
+- `1106:0691` — VIA VT82C693A/694x, Apollo PRO133x host bridge;
+- `1106:0596` — VIA VT82C596 ISA southbridge;
+- `1106:0571` — VIA PIPC Bus Master IDE function;
+- `121a:0005` — 3Dfx Interactive Voodoo3 AGP VGA.
+
+Ранний порт использует только совместимые legacy interfaces; VIA
+bus-master DMA и программирование AGP не включены. COM1 `115200 8N1`
+остаётся желательным для последующих длинных logs, но точный PCI baseline
+уже зафиксирован через VGA.

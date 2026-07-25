@@ -2,7 +2,7 @@
 
 This directory contains the GCC-only bring-up port for legacy BIOS PCs.  The
 first hardware target is an IBM PC 300GL 6563-W4G with a Pentium III, VIA
-Apollo Pro 133 chipset, AGP video, and legacy IDE.
+Apollo Pro 133 chipset, a 3Dfx Voodoo3 AGP adapter, and legacy IDE-CF.
 
 The initial image implements Linux/x86 boot protocol 2.02 and also contains
 a native legacy-BIOS boot sector.  `rebsd-i686.bzimg` is loaded directly by
