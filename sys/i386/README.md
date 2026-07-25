@@ -54,8 +54,9 @@ and return.  A DPL3 `int 0x80` gate now validates a six-register argument
 ABI, two return registers and BSD-style Carry/errno results.  The i386
 dispatcher now adapts an installed generic `struct sysent` table to
 `u_arg/u_rval/u_error`, including `u_qsave`, `ERESTART`, and `EJUSTRETURN`;
-the QEMU CPL3 stream exercises every return path.  Neutralizing the remaining
-MIPS-indexed `u_frame` consumers and adding post-syscall work is the next gate.
+the QEMU CPL3 stream exercises every return path.  Generic exec and ptrace now
+use an opaque saved-user-frame API with tested MIPS and i386 backends.  An
+i386 signal frame and post-syscall work are the next gate.
 
 The default cross toolchain is:
 

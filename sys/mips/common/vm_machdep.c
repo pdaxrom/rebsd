@@ -47,6 +47,61 @@ md_uarea_guard_check(const struct user *up)
         panic("kernel stack overflow");
 }
 
+void
+md_user_frame_exec(int *frame, unsigned entry, unsigned stack_pointer,
+    unsigned argc, unsigned arg_pointer, unsigned env_pointer)
+{
+    unsigned word;
+
+    if (frame == 0)
+        panic("null exec frame");
+    for (word = FRAME_R1; word <= FRAME_HI; word += FRAME_GPR_STRIDE)
+        mips_frame_set_gpr(frame, word, 0);
+    mips_frame_set_gpr(frame, FRAME_R4, (int)argc);
+    mips_frame_set_gpr(frame, FRAME_R5, (int)arg_pointer);
+    mips_frame_set_gpr(frame, FRAME_R6, (int)env_pointer);
+    mips_frame_set_gpr(frame, FRAME_SP, (int)stack_pointer);
+    frame[FRAME_PC] = (int)entry;
+    mips_frame_normalize_gprs(frame);
+}
+
+int
+md_user_frame_write(int *frame, int *address, int value)
+{
+    unsigned word;
+
+    if (frame == 0 || address == 0)
+        return -1;
+    for (word = 0; word < FRAME_WORDS; ++word) {
+        if (address != &frame[word] || !mips_frame_is_writable_word(word))
+            continue;
+        if (mips_frame_is_gpr_word(word))
+            mips_frame_set_gpr(frame, word, value);
+        else
+            *address = value;
+        return 0;
+    }
+    return -1;
+}
+
+int
+md_user_frame_set_pc(int *frame, unsigned pc)
+{
+    if (frame == 0)
+        return -1;
+    frame[FRAME_PC] = (int)pc;
+    return 0;
+}
+
+int
+md_user_frame_single_step(int *frame)
+{
+    if (frame == 0)
+        return -1;
+    frame[FRAME_STATUS] |= ST_RP;
+    return 0;
+}
+
 struct vmspace *
 vmspace_current(void)
 {

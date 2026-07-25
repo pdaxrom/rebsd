@@ -4,7 +4,7 @@
 `copyin/copyout`, i386 u-area allocator, kernel context switch, fork/init
 frames, проверяемый ring-3 entry и `int 0x80` register ABI подключены; MIPS
 process symbols нейтрализованы, i386 `sysent` adapter проверен, следующий
-gate — architecture-neutral saved-user-frame и post-syscall path, 2026-07-25.
+gate — i386 signal frame и post-syscall path, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -167,13 +167,22 @@ trapframe. CPL3-тест проверяет все эти ветви и `longjmp
 Вызов с более чем шестью аргументами отклоняется как `EINVAL` согласно
 зафиксированному ABI.
 
-Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
-тянут остальные подсистемы, а `exec`, signal и ptrace пока используют
-MIPS-индексы в `u_frame`. Публичный setter уже позволяет установить
-production `sysent` после завершения этого refactor.
+`exec_subr.c` и `sys_process.c` больше не включают MIPS `machine/io.h` и не
+используют `FRAME_*`. Общий `sys/user.h` задаёт opaque MD-операции для
+exec register setup, ptrace write, PC и single-step. MIPS реализация
+сохраняет прежние compact/MIPS3-wide frame semantics; i386 реализация
+формирует user selectors, `EIP/ESP`, начальные `argc/argv/envp` registers,
+фильтрует опасные EFLAGS при ptrace и использует x86 Trap Flag. QEMU
+u-area self-test проверяет этот контракт, а MaltaEL и N64 `kernel-objects`
+подтверждают отсутствие MIPS-регрессии.
 
-1. Заменить MIPS-indexed доступы к `u_frame` на machine-neutral MD API и
-   подключить post-syscall signal/reschedule path.
+Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
+тянут остальные подсистемы, а i386 signal delivery и post-syscall work ещё
+не реализованы. Публичный setter уже позволяет установить production
+`sysent` после завершения этих gates.
+
+1. Реализовать i386 signal frame/sigreturn и подключить post-syscall
+   signal/reschedule path.
 2. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
 3. Затем включить production `init_sysent`, process bootstrap и exec ABI.

@@ -10,7 +10,6 @@
 #include <sys/inode.h>
 #include <sys/vm.h>
 #include <sys/ptrace.h>
-#include <machine/io.h>
 
 struct ipc ipc;
 
@@ -116,28 +115,20 @@ procxmt()
     case PT_WRITE_U:
         i = (int)ipc.ip_addr;
         p = (int*)&u + i/sizeof(int);
-        for (i=0; i<FRAME_WORDS; i++) {
-            if (p == &u.u_frame[i] && mips_frame_is_writable_word(i)) {
-                if (mips_frame_is_gpr_word(i))
-                    mips_frame_set_gpr(u.u_frame, i, ipc.ip_data);
-                else
-                    *p = ipc.ip_data;
-                goto ok;
-            }
-        }
-        goto error;
-ok:
+        if (md_user_frame_write(u.u_frame, p, ipc.ip_data) != 0)
+            goto error;
         break;
 
     /* set signal and continue */
     /* one version causes a trace-trap */
     case PT_STEP:
-        /* Use Status.RP bit to indicate a single-step request. */
-        u.u_frame [FRAME_STATUS] |= ST_RP;
+        if (md_user_frame_single_step(u.u_frame) != 0)
+            goto error;
         /* FALL THROUGH TO ... */
     case PT_CONTINUE:
-        if ((int)ipc.ip_addr != 1)
-            u.u_frame [FRAME_PC] = (int)ipc.ip_addr;
+        if ((int)ipc.ip_addr != 1 &&
+            md_user_frame_set_pc(u.u_frame, (unsigned)ipc.ip_addr) != 0)
+            goto error;
         if (ipc.ip_data > NSIG)
             goto error;
         u.u_procp->p_ptracesig = ipc.ip_data;

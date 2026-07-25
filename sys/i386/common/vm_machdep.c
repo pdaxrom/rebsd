@@ -55,6 +55,83 @@ md_uarea_guard_check(const struct user *up)
         i386_uarea_halt();
 }
 
+void
+md_user_frame_exec(int *saved_frame, unsigned entry,
+    unsigned stack_pointer, unsigned argc, unsigned arg_pointer,
+    unsigned env_pointer)
+{
+    struct i386_trapframe *frame;
+
+    if (saved_frame == (int *)0)
+        i386_uarea_halt();
+    frame = (struct i386_trapframe *)saved_frame;
+    bzero(frame, sizeof(*frame));
+    frame->tf_gs = I386_USER_DATA_SELECTOR;
+    frame->tf_fs = I386_USER_DATA_SELECTOR;
+    frame->tf_es = I386_USER_DATA_SELECTOR;
+    frame->tf_ds = I386_USER_DATA_SELECTOR;
+    frame->tf_ebx = argc;
+    frame->tf_ecx = arg_pointer;
+    frame->tf_edx = env_pointer;
+    frame->tf_eip = entry;
+    frame->tf_cs = I386_USER_CODE_SELECTOR;
+    frame->tf_eflags = I386_EFLAGS_RESERVED | I386_EFLAGS_INTERRUPT;
+    frame->tf_useresp = stack_pointer;
+    frame->tf_ss = I386_USER_DATA_SELECTOR;
+}
+
+int
+md_user_frame_write(int *saved_frame, int *address, int value)
+{
+    struct i386_trapframe *frame;
+
+    if (saved_frame == (int *)0 || address == (int *)0)
+        return -1;
+    frame = (struct i386_trapframe *)saved_frame;
+    if (address == (int *)&frame->tf_eax ||
+        address == (int *)&frame->tf_ebx ||
+        address == (int *)&frame->tf_ecx ||
+        address == (int *)&frame->tf_edx ||
+        address == (int *)&frame->tf_esi ||
+        address == (int *)&frame->tf_edi ||
+        address == (int *)&frame->tf_ebp ||
+        address == (int *)&frame->tf_eip ||
+        address == (int *)&frame->tf_useresp) {
+        *address = value;
+        return 0;
+    }
+    if (address == (int *)&frame->tf_eflags) {
+        frame->tf_eflags = ((unsigned)value & I386_EFLAGS_USER_SETTABLE) |
+            I386_EFLAGS_RESERVED | I386_EFLAGS_INTERRUPT;
+        return 0;
+    }
+    return -1;
+}
+
+int
+md_user_frame_set_pc(int *saved_frame, unsigned pc)
+{
+    struct i386_trapframe *frame;
+
+    if (saved_frame == (int *)0)
+        return -1;
+    frame = (struct i386_trapframe *)saved_frame;
+    frame->tf_eip = pc;
+    return 0;
+}
+
+int
+md_user_frame_single_step(int *saved_frame)
+{
+    struct i386_trapframe *frame;
+
+    if (saved_frame == (int *)0)
+        return -1;
+    frame = (struct i386_trapframe *)saved_frame;
+    frame->tf_eflags |= I386_EFLAGS_TRACE;
+    return 0;
+}
+
 struct user *
 md_uarea_alloc(void)
 {

@@ -15,7 +15,6 @@
 #include <sys/dir.h>
 #include <sys/uio.h>
 #include <machine/debug.h>
-#include <machine/io.h>
 #include <vm/vmspace.h>
 #ifdef N64
 #include <machine/fpu.h>
@@ -569,39 +568,8 @@ void exec_clear(struct exec_params *epp)
     /*
      * Clear registers.
      */
-    u.u_frame [FRAME_R1] = 0;           /* $at */
-    u.u_frame [FRAME_R2] = 0;           /* $v0 */
-    u.u_frame [FRAME_R3] = 0;           /* $v1 */
-    u.u_frame [FRAME_R7] = 0;           /* $a3 */
-    u.u_frame [FRAME_R8] = 0;           /* $t0 */
-    u.u_frame [FRAME_R9] = 0;           /* $t1 */
-    u.u_frame [FRAME_R10] = 0;          /* $t2 */
-    u.u_frame [FRAME_R11] = 0;          /* $t3 */
-    u.u_frame [FRAME_R12] = 0;          /* $t4 */
-    u.u_frame [FRAME_R13] = 0;          /* $t5 */
-    u.u_frame [FRAME_R14] = 0;          /* $t6 */
-    u.u_frame [FRAME_R15] = 0;          /* $t7 */
-    u.u_frame [FRAME_R16] = 0;          /* $s0 */
-    u.u_frame [FRAME_R17] = 0;          /* $s1 */
-    u.u_frame [FRAME_R18] = 0;          /* $s2 */
-    u.u_frame [FRAME_R19] = 0;          /* $s3 */
-    u.u_frame [FRAME_R20] = 0;          /* $s4 */
-    u.u_frame [FRAME_R21] = 0;          /* $s5 */
-    u.u_frame [FRAME_R22] = 0;          /* $s6 */
-    u.u_frame [FRAME_R23] = 0;          /* $s7 */
-    u.u_frame [FRAME_R24] = 0;          /* $t8 */
-    u.u_frame [FRAME_R25] = 0;          /* $t9 */
-    u.u_frame [FRAME_FP] = 0;
-    u.u_frame [FRAME_RA] = 0;
-    u.u_frame [FRAME_LO] = 0;
-    u.u_frame [FRAME_HI] = 0;
-    u.u_frame [FRAME_GP] = 0;
-    u.u_frame [FRAME_SP] = epp->stack_pointer;
-    u.u_frame [FRAME_R4] = epp->argc;
-    u.u_frame [FRAME_R5] = epp->arg_pointer;
-    u.u_frame [FRAME_R6] = epp->env_pointer;
-    u.u_frame [FRAME_PC] = epp->entry;
-    mips_frame_normalize_gprs(u.u_frame);
+    md_user_frame_exec(u.u_frame, epp->entry, epp->stack_pointer,
+        epp->argc, epp->arg_pointer, epp->env_pointer);
 #ifdef N64
     bzero (&u.u_fpu, sizeof u.u_fpu);
 #endif

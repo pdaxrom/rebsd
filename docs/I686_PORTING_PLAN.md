@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: четырнадцать QEMU bring-up инкрементов и первый process-MD refactor
+Статус: пятнадцать QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -241,8 +241,21 @@ Malta64. Следующий кодовый инкремент реализует
 - normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, параллельная
   чистая сборка, host VM suite и `BOARD=maltael kernel-objects` проходят.
 
-Следующий инкремент: ввести machine-neutral API для сохранённого user frame,
-убрать прямые MIPS-индексы из exec/signal/ptrace и подключить i386
+Пятнадцатый QEMU bring-up инкремент завершён:
+
+- `sys/user.h` задаёт opaque MD API для exec register setup, ptrace write,
+  смены user PC и single-step;
+- `exec_subr.c` и `sys_process.c` больше не знают `FRAME_*`,
+  `mips_frame_*`, `ST_RP` и не включают MIPS `machine/io.h`;
+- MIPS backend сохраняет прежнюю семантику как для compact MaltaEL frame,
+  так и для 64-битных GPR slots N64;
+- i386 backend формирует user selectors и `EIP/ESP`, передаёт
+  `argc/argv/envp` в `EBX/ECX/EDX`, безопасно фильтрует EFLAGS и включает
+  x86 Trap Flag для `PT_STEP`;
+- QEMU u-area self-test проверяет exec/ptrace frame contract;
+- i386 normal smoke, host VM suite, MaltaEL и N64 `kernel-objects` проходят.
+
+Следующий инкремент: реализовать i386 signal frame/sigreturn и подключить
 post-syscall signal/reschedule semantics. После этого production
 `kernel/init_sysent.c` можно безопасно включить в i386 kernel configuration.
 

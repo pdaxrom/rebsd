@@ -126,6 +126,13 @@ void md_uarea_guard_init(struct user *);
 void md_uarea_guard_check(const struct user *);
 void md_uarea_free(struct user *);
 
+/* Opaque saved-user-frame operations supplied by each architecture. */
+void md_user_frame_exec(int *, unsigned, unsigned, unsigned, unsigned,
+    unsigned);
+int md_user_frame_write(int *, int *, int);
+int md_user_frame_set_pc(int *, unsigned);
+int md_user_frame_single_step(int *);
+
 /*
  * Increment user profiling counters.
  */

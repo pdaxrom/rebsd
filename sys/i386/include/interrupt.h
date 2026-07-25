@@ -17,6 +17,9 @@
 #define I386_SYSCALL_VECTOR       128u
 #define I386_VECTOR_TABLE_COUNT   49u
 #define I386_EFLAGS_CARRY         0x00000001u
+#define I386_EFLAGS_TRACE         0x00000100u
+#define I386_EFLAGS_INTERRUPT     0x00000200u
+#define I386_EFLAGS_USER_SETTABLE 0x00000dd5u
 
 /*
  * Stack layout built by interrupt_entry.S.  The processor does not push

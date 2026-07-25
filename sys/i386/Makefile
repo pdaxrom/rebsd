@@ -173,6 +173,7 @@ vm_machdep.o: $(I386_COMMON_SRC)/vm_machdep.c \
 
 uarea_selftest.o: $(I386_PC_SRC)/uarea_selftest.c \
 	    $(I386_SRC)/include/context.h \
+	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/process.h \
 	    $(I386_SRC)/include/machine/elf_machdep.h \
 	    $(I386_SRC)/include/machine/layout.h \
