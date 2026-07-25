@@ -3,8 +3,9 @@
 Статус: generic allocator, публичный i386 pmap, vmspace fault path,
 `copyin/copyout`, i386 u-area allocator, kernel context switch, fork/init
 frames, проверяемый ring-3 entry и `int 0x80` register ABI подключены; MIPS
-process symbols нейтрализованы, i386 `sysent` adapter и signal frame
-проверены; следующий gate — post-syscall signal/reschedule path, 2026-07-25.
+process symbols нейтрализованы, i386 `sysent` adapter, signal frame и
+user-return signal/reschedule path проверены; следующий gate — перевод
+user CPU faults в pending signals, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -187,13 +188,31 @@ kernel selectors или опасные EFLAGS. QEMU self-test проверяет
 alternate signal stack, формат frame, восстановление контекста, rejection
 поддельного `CS` и точный reclaim VM/u-area.
 
-Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
-тянут остальные подсистемы, а post-syscall signal/reschedule work ещё не
-подключён. Публичный setter уже позволяет установить production `sysent`
-после завершения этого gate.
+Общая assembly-эпилога trap/IRQ/syscall вызывает `i386_user_return`
+непосредственно перед восстановлением регистров. Для ring-0 frame это
+no-op; для CPL3 она устанавливает `u_frame`, разрешает прерывания,
+повторяет MIPS-порядок `CURSIG/postsig`, `setpri`, при `runrun` выполняет
+`setrq/swtch`, затем запрещает прерывания перед `iret`. Early image
+использует test operations вместо ещё не подключённых generic objects;
+их сильные `issignal/postsig/setpri/setrq/swtch` автоматически заменяют
+слабые ранние fallback symbols при production link.
 
-1. Подключить post-syscall signal/reschedule path к общему возврату в
-   user mode.
+QEMU CPL3-тест начинает с pending `SIGUSR1`, проходит общую эпилогу,
+исполняет реальный user handler, проверяющий cdecl signum/code/context,
+изменяет `sc_eax`, возвращается через user trampoline и вызывает
+`sigreturn` настоящим `int 0x80`. После восстановления исходного `EIP`
+проверяются изменённый `EAX`, signal mask, `ru_nsignals`, моделируемый
+`setrq/swtch`, `ru_nivcsw` и точный reclaim. PIC теперь remap/mask сразу
+после IDT, до первого кода, который разрешает IF; timer unmask остаётся
+перед PIT.
+
+Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
+тянут остальные подсистемы. Публичный setter уже позволяет установить
+production `sysent`, но user exceptions пока должны быть переведены из
+раннего panic path в `psignal` перед запуском непривилегированного userland.
+
+1. Преобразовать user CPU exceptions и terminal page faults в `psignal`,
+   оставив kernel faults диагностическими panic.
 2. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
 3. Затем включить production `init_sysent`, process bootstrap и exec ABI.

@@ -58,8 +58,11 @@ the QEMU CPL3 stream exercises every return path.  Generic exec and ptrace now
 use an opaque saved-user-frame API with tested MIPS and i386 backends.  The
 i386 signal ABI now builds cdecl handler frames on regular or alternate user
 stacks and validates complete `sigreturn` contexts; QEMU checks restoration,
-selector/EFLAGS hardening, and allocator reclamation.  Post-syscall signal
-and reschedule work is the next gate.
+selector/EFLAGS hardening, and allocator reclamation.  A CPL3-only common
+return loop now delivers pending signals and performs priority/reschedule
+work before `iret`; QEMU executes a real handler, trampoline and `int 0x80`
+sigreturn through that path.  Translating user CPU faults into pending
+signals is the next gate.
 
 The default cross toolchain is:
 
@@ -83,7 +86,7 @@ scheduler-compatible i386 contexts, switch u-area stacks and resume copied
 fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
 contract and generic `sysent` adapter exist, but the full production table
-is not connected and the common return path does not yet run pending signals
-or reschedule work.
+is not connected and user CPU exceptions still use the early diagnostic
+panic path.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

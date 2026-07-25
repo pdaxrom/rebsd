@@ -9,6 +9,7 @@
 #include "signal_machdep.h"
 #include "syscall.h"
 #include "tss.h"
+#include "user_return.h"
 #include "vm_bootstrap.h"
 #include "vmspace_bootstrap.h"
 
@@ -222,6 +223,8 @@ i386_boot_main(i386_u32 boot_params_phys)
 
     i386_idt_init();
     i386_early_puts("idt: ok\n");
+    /* Remap and mask the legacy PIC before any later path enables IF. */
+    i386_pic_init();
 
     i386_breakpoint_selftest();
     if (i386_breakpoint_count() != 1u) {
@@ -391,10 +394,16 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("signal-frame: ok\n");
+    if (i386_user_return_selftest() != 0) {
+        i386_early_puts("user-return: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("user-return: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 
-    i386_pic_init();
     i386_pic_unmask(I386_IRQ_TIMER);
     i386_early_puts("pic: ok\n");
 

@@ -109,6 +109,10 @@ i386_interrupt_common:
     call    i386_interrupt_dispatch
     addl    $4, %esp
 
+    pushl   %esp
+    call    i386_user_return
+    addl    $4, %esp
+
     .globl i386_trap_return
     .type i386_trap_return, @function
 i386_trap_return:

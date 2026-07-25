@@ -1,6 +1,7 @@
 #include "boot.h"
 #include "interrupt.h"
 #include "syscall.h"
+#include "user_return.h"
 #include "vmspace_bootstrap.h"
 
 #define I386_IDT_INTERRUPT_GATE   0x8eu
@@ -114,6 +115,8 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
         if (i386_privilege_handle_return(frame))
             return;
         if (i386_syscall_handle_return(frame))
+            return;
+        if (i386_user_return_handle_test(frame))
             return;
         i386_exception_halt(frame);
     }

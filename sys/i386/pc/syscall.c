@@ -152,6 +152,13 @@ i386_syscall_set_table(const struct sysent *table, unsigned count)
     i386_syscall_table_count = count;
 }
 
+void
+i386_syscall_get_table(const struct sysent **table, unsigned *count)
+{
+    *table = i386_syscall_table;
+    *count = i386_syscall_table_count;
+}
+
 static void
 i386_syscall_error(struct i386_trapframe *frame, int error)
 {

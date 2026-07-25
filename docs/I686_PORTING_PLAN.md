@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: шестнадцать QEMU bring-up инкрементов и первый process-MD refactor
+Статус: семнадцать QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -268,9 +268,23 @@ Malta64. Следующий кодовый инкремент реализует
   rejection kernel `CS`, alternate stack и точный reclaim allocator pages;
 - обязательный marker `signal-frame: ok` входит в normal/page smoke.
 
-Следующий инкремент: подключить post-syscall signal/reschedule semantics к
-общему возврату в user mode. После этого production
-`kernel/init_sysent.c` можно безопасно включить в i386 kernel configuration.
+Семнадцатый QEMU bring-up инкремент завершён:
+
+- общая interrupt assembly-эпилога вызывает CPL3-only `i386_user_return`
+  перед восстановлением registers и `iret`;
+- user-return loop устанавливает `u_frame`, с разрешёнными interrupts
+  повторяет MIPS semantics `CURSIG/postsig`, `setpri`, `setrq/swtch` и
+  учитывает `ru_nivcsw`;
+- PIC remap/mask перенесён сразу после IDT, поэтому разрешение IF до запуска
+  PIT не может принять BIOS IRQ0 на exception vector 8;
+- CPL3 QEMU stream получает pending `SIGUSR1`, исполняет реальный cdecl
+  handler и trampoline, вызывает `sigreturn` через `int 0x80`, возобновляет
+  исходный user EIP и проходит моделируемый reschedule;
+- обязательный marker `user-return: ok` входит в normal/page smoke.
+
+Следующий инкремент: преобразовать user CPU exceptions и terminal page
+faults в pending signals вместо раннего panic. После этого production
+`kernel/init_sysent.c` можно подключать вместе с process bootstrap.
 
 ## 1. Цель и границы первого порта
 
