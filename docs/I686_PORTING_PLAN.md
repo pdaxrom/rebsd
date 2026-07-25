@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: тридцать один QEMU bring-up инкремент выполнен, 2026-07-25.
 
 ## Выполнено
 
@@ -533,6 +533,37 @@ VFS descriptor/inode teardown, resource accounting и signal delivery.
 Следующий инкремент: отделить нейтральное освобождение
 vmspace/u-area/proc-table от VFS teardown и на этой основе включить child
 `exit` и parent `wait4`.
+
+Тридцать первый QEMU bring-up инкремент завершён:
+
+- filesystem-independent `proc_zombify` удаляет завершившийся process из
+  PID hash/`allproc`, сохраняет wait status и переносит его в `zombproc`;
+- `proc_reap` на стороне родителя освобождает отдельные child vmspace и
+  u-area, удаляет zombie и возвращает полностью очищенный `proc[2]` в
+  `freeproc`;
+- production syscall entries 1 и 7 вызывают ранние i386 `exit` и `wait4`;
+  ограниченный `wait4(-1, status, 0, 0)` усыпляет proc1 и возобновляется
+  после пробуждения ребёнком;
+- `/sbin/init` после production `fork` сообщает kernel о готовом parent,
+  вызывает `wait4`, а child выполняет `exit(42)`; parent получает PID 2 и
+  encoded status `42 << 8`;
+- полный маршрут проходит через generic run queue и `swtch`:
+  proc1(wait)→proc0→proc2(exit)→proc0→proc1(reap), без тестовой остановки
+  или внутреннего вызова `newproc`;
+- markers `syscall-exit: ok`, `syscall-wait4: ok` и `process-reap: ok`
+  подтверждают syscall ABI, wakeup и возврат всех child VM/process
+  ресурсов;
+- clean strict build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ, deterministic initfs, host VM tests и
+  объектные сборки MaltaEL/N64 проходят.
+
+Полный `kern_exit.c` всё ещё не подключён: VFS teardown, file descriptors,
+resource accounting, orphan reparenting, signals и расширенные варианты
+`wait4` остаются следующей интеграционной ступенью.
+
+Следующий инкремент: обобщить ранний lifecycle до полного generic
+exit/wait semantics либо подключить минимальный VFS/file layer, сохранив
+чистую границу с i386 MD-кодом.
 
 ## 1. Цель и границы первого порта
 

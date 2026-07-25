@@ -176,6 +176,12 @@ void sched (void);
 int newproc (int isvfork);
 
 /*
+ * Filesystem-independent process termination state transitions.
+ */
+int proc_zombify (struct proc *p, int status);
+int proc_reap (struct proc *parent, int pid, int *status, int *result);
+
+/*
  * Notify parent that vfork child is finished with parent's data.
  */
 void endvfork (void);

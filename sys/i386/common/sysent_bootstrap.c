@@ -19,13 +19,13 @@ nosys(void)
 
 const struct sysent sysent[] = {
     { 1, nosys },               /*   0 = out-of-range */
-    { 1, nosys },               /*   1 = exit */
+    { 1, rexit },               /*   1 = exit */
     { 0, fork },                /*   2 = fork */
     { 3, nosys },               /*   3 = read */
     { 3, nosys },               /*   4 = write */
     { 3, nosys },               /*   5 = open */
     { 1, nosys },               /*   6 = close */
-    { 4, nosys },               /*   7 = wait4 */
+    { 4, wait4 },               /*   7 = wait4 */
     { 0, nosys },               /*   8 = old creat */
     { 2, nosys },               /*   9 = link */
     { 1, nosys },               /*  10 = unlink */

@@ -435,6 +435,9 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_puts("process-user: ok\n");
     i386_early_puts("process-fork: ok\n");
     i386_early_puts("syscall-fork: ok\n");
+    i386_early_puts("syscall-exit: ok\n");
+    i386_early_puts("syscall-wait4: ok\n");
+    i386_early_puts("process-reap: ok\n");
     i386_early_puts("proc0-context: ok\n");
     i386_early_puts("scheduler-switch: ok\n");
     i386_early_puts("initfs: ok\n");

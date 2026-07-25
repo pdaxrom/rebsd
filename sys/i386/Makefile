@@ -44,7 +44,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    libkern.o elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
                    sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
-                   kern_synch.o scheduler.o copyio.o \
+                   kern_proc_lifecycle.o kern_synch.o scheduler.o \
+                   process_lifecycle.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o config.o process_bootstrap.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
@@ -299,6 +300,14 @@ kern_fork.o: $(TOPSRC)/sys/kernel/kern_fork.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+kern_proc_lifecycle.o: $(TOPSRC)/sys/kernel/kern_proc_lifecycle.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
+	    $(TOPSRC)/sys/include/user.h \
+	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 kern_synch.o: $(TOPSRC)/sys/kernel/kern_synch.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
 	    $(TOPSRC)/sys/include/user.h $(I386_VM_SRC)/vmspace.h \
@@ -310,6 +319,14 @@ scheduler.o: $(I386_PC_SRC)/scheduler.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/machine/machparam.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/time.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+process_lifecycle.o: $(I386_PC_SRC)/process_lifecycle.c \
+	    $(TOPSRC)/sys/include/inode.h $(TOPSRC)/sys/include/proc.h \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
+	    $(TOPSRC)/sys/include/wait.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

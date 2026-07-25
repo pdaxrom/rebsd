@@ -57,12 +57,28 @@ _start:
     jz      .Lchild
     cmpl    $2, %eax
     jne     .Lfailed
+    movl    $I386_BOOTSTRAP_FORK_PARENT_MAGIC, %ebx
+    int     $0x30
+    subl    $4, %esp
+    movl    $0, (%esp)
+    movl    $7, %eax
+    movl    $-1, %ebx
+    movl    %esp, %ecx
+    xorl    %edx, %edx
+    xorl    %esi, %esi
+    int     $0x80
+    cmpl    $2, %eax
+    jne     .Lfailed
+    cmpl    $(I386_BOOTSTRAP_CHILD_EXIT_STATUS << 8), (%esp)
+    jne     .Lfailed
+    addl    $4, %esp
     movl    $I386_BOOTSTRAP_USER_RETURN_MAGIC, %ebx
     int     $0x30
     ud2
 .Lchild:
-    movl    $I386_BOOTSTRAP_FORK_CHILD_MAGIC, %ebx
-    int     $0x30
+    movl    $1, %eax
+    movl    $I386_BOOTSTRAP_CHILD_EXIT_STATUS, %ebx
+    int     $0x80
     ud2
 .Lfailed:
     xorl    %ebx, %ebx
