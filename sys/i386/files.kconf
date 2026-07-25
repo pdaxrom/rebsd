@@ -7,5 +7,5 @@
 # production-syscall probe, initfs-backed ELF32 /sbin/init loader and
 # exec-compatible user stack are linked by the early Makefile together with
 # user trap-to-signal translation, generic kern_synch run queue/scheduler
-# and generic newproc.  Remaining machine-independent files are connected
-# after the fork/exit/wait syscall gate.
+# and generic newproc with production fork syscall.  Remaining
+# machine-independent files are connected after the exit/wait syscall gate.

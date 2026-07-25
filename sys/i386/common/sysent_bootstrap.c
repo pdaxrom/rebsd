@@ -20,7 +20,7 @@ nosys(void)
 const struct sysent sysent[] = {
     { 1, nosys },               /*   0 = out-of-range */
     { 1, nosys },               /*   1 = exit */
-    { 0, nosys },               /*   2 = fork */
+    { 0, fork },                /*   2 = fork */
     { 3, nosys },               /*   3 = read */
     { 3, nosys },               /*   4 = write */
     { 3, nosys },               /*   5 = open */

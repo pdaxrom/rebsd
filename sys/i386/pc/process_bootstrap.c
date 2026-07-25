@@ -523,7 +523,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
         frame->tf_edx != 0 ||
         frame->tf_ebx != I386_BOOTSTRAP_USER_RETURN_MAGIC ||
         (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 ||
-        frame->tf_eax != 1 ||
+        frame->tf_eax != 2 ||
         i386_bootstrap_proc->p_saddr != I386_PROCESS_USER_STACK ||
         i386_bootstrap_proc->p_ssize != VM_PAGE_SIZE ||
         i386_bootstrap_uarea->u_ssize != VM_PAGE_SIZE ||
@@ -534,10 +534,8 @@ i386_process_handle_return(struct i386_trapframe *frame)
     else
         i386_process_user_result = 0;
 
-    u.u_frame = (int *)frame;
     if (i386_process_user_result == 0) {
-        if (newproc(0) != 0 ||
-            qs != &proc[2] ||
+        if (qs != &proc[2] ||
             proc[2].p_pid != 2)
             i386_process_user_result = EFAULT;
         else {

@@ -309,7 +309,7 @@ kern_synch.o: $(TOPSRC)/sys/kernel/kern_synch.c \
 scheduler.o: $(I386_PC_SRC)/scheduler.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/machine/machparam.h \
-	    $(TOPSRC)/sys/include/time.h \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/time.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

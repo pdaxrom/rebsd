@@ -8,6 +8,15 @@ int noproc __attribute__((weak));
 char *panicstr __attribute__((weak));
 struct timeval time __attribute__((weak));
 
+void __attribute__((weak))
+log(int level, char *message, ...)
+{
+    (void)level;
+    i386_early_puts("kernel: ");
+    if (message != (char *)0)
+        i386_early_puts(message);
+}
+
 void
 idle(void)
 {

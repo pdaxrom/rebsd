@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать девять QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: тридцать QEMU bring-up инкрементов выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -510,6 +510,29 @@ process 2 ещё не подключены.
 
 Следующий инкремент: включить generic `fork` в production syscall table и
 замкнуть минимальный child `exit`/parent `wait` lifecycle.
+
+Тридцатый QEMU bring-up инкремент завершён:
+
+- production syscall table entry 2 теперь вызывает generic `fork`, а
+  installation gate проверяет одновременно `fork` и `getpid`;
+- `/sbin/init` вызывает `fork` через настоящий `int 0x80`: parent получает
+  PID 2, child возобновляет клонированный syscall trapframe с `eax=0`;
+- прежний внутренний вызов `newproc` из process probe удалён: создание PID 2
+  теперь происходит исключительно через production syscall dispatch;
+- marker `syscall-fork: ok` отделяет проверку syscall ABI от
+  `process-fork: ok`, проверяющего scheduler/CR3/u-area round-trip;
+- early weak `log` выводит диагностическое сообщение на COM1/VGA до
+  подключения общего kernel log;
+- clean strict build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ, host VM tests и объектные сборки MaltaEL/N64
+  проходят.
+
+Generic `kern_exit.c` пока не входит в early image: полный handler требует
+VFS descriptor/inode teardown, resource accounting и signal delivery.
+
+Следующий инкремент: отделить нейтральное освобождение
+vmspace/u-area/proc-table от VFS teardown и на этой основе включить child
+`exit` и parent `wait4`.
 
 ## 1. Цель и границы первого порта
 

@@ -169,7 +169,8 @@ i386_syscall_get_table(const struct sysent **table, unsigned *count)
 int
 i386_syscall_install_production(void)
 {
-    if (nsysent <= 20 || sysent[20].sy_call != getpid)
+    if (nsysent <= 20 || sysent[2].sy_call != fork ||
+        sysent[20].sy_call != getpid)
         return EINVAL;
     i386_syscall_set_table(sysent, (unsigned)nsysent);
     return 0;

@@ -14,7 +14,8 @@ read-only initfs с production `getpid=1` и `argc/argv/envp` stack из
 повторно используемым idle context, проверенным двукратным
 proc1→proc0→proc1 switch через generic `setrq/swtch`; generic `newproc`
 создаёт PID 2 с отдельными vmspace/u-area и запускает его через fork
-trampoline в CPL3; следующий gate — production `fork`/`exit`/`wait`,
+trampoline в CPL3; production syscall 2 выполняет этот путь через `int 0x80`
+с parent/child return ABI; следующий gate — `exit`/`wait`,
 2026-07-25.
 
 ## Существующий нейтральный VM контракт
@@ -336,9 +337,11 @@ Generic `newproc` теперь клонирует process 1 в PID 2. Новый
 `process-fork: ok` проверяет маршрут
 proc1→proc0→proc2(CPL3)→proc0→proc1, отдельные vmspace/u-area/TSS stack,
 `allproc`/PID hash и сохранённый child kernel continuation. Child остаётся
-живым в `SSTOP`; syscall 2 и `exit`/`wait` ещё не подключены.
+живым в `SSTOP`. Production syscall 2 вызывает generic `fork`; marker
+`syscall-fork: ok` подтверждает parent `eax=2`, child `eax=0`. `exit`/`wait`
+ещё не подключены.
 
 1. Добавить оставшиеся machine headers/config lists.
-2. Подключить production syscall `fork`, затем минимальные `exit`/`wait`.
+2. Подключить минимальные `exit`/`wait`.
 3. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести generic `execve` до статического ELF32 init.
