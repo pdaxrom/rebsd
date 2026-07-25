@@ -51,8 +51,11 @@ self-test follows the fork trampoline through the common `iret` epilogue
 while switching between two process vmspaces.  Flat user descriptors and a
 32-bit TSS now support a tested ring-3 entry, user trap, u-area stack switch
 and return.  A DPL3 `int 0x80` gate now validates a six-register argument
-ABI, two return registers and BSD-style Carry/errno results.  Connecting the
-generic `sysent` table is the next gate.
+ABI, two return registers and BSD-style Carry/errno results.  The i386
+dispatcher now adapts an installed generic `struct sysent` table to
+`u_arg/u_rval/u_error`, including `u_qsave`, `ERESTART`, and `EJUSTRETURN`;
+the QEMU CPL3 stream exercises every return path.  Neutralizing the remaining
+MIPS-indexed `u_frame` consumers and adding post-syscall work is the next gate.
 
 The default cross toolchain is:
 
@@ -75,6 +78,7 @@ i386 u-area operations exist; the kernel can save and restore
 scheduler-compatible i386 contexts, switch u-area stacks and resume copied
 fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
-contract exists, but production generic syscall dispatch is not connected.
+contract and generic `sysent` adapter exist, but the full production table
+and post-syscall signal path are not connected.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

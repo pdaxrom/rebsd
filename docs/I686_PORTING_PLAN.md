@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тринадцать QEMU bring-up инкрементов и первый process-MD refactor
+Статус: четырнадцать QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -225,9 +225,26 @@ Malta64. Следующий кодовый инкремент реализует
 - normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, параллельная
   чистая сборка, host VM suite и `BOARD=maltael kernel-objects` проходят.
 
-Следующий инкремент: адаптировать generic `sysent` dispatcher к i386
-trapframe, включая `u_arg`, `u_rval/u_rval2`, errno/Carry, restart и
-post-syscall signal semantics.
+Четырнадцатый QEMU bring-up инкремент завершён:
+
+- публичный `i386_syscall_set_table` отделяет register ABI от конкретной
+  `struct sysent` таблицы и готов принять production `sysent`;
+- dispatcher проверяет syscall number и максимум шесть аргументов, заполняет
+  `u_arg`, устанавливает `u_frame` и вызывает `sy_call` под `u_qsave`;
+- `u_rval/u_rval2`, positive errno/Carry, `ERESTART` и `EJUSTRETURN`
+  преобразуются обратно в i386 trapframe;
+- расширенный CPL3 stream проверяет успех с шестью аргументами, `EACCES`,
+  настоящий повтор двухбайтного `int 0x80`, неизменённый frame и
+  `u_qsave/longjmp` с `EINTR`;
+- неизвестный номер даёт `ENOSYS`, а запись `sysent` с семью аргументами —
+  `EINVAL`;
+- normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, параллельная
+  чистая сборка, host VM suite и `BOARD=maltael kernel-objects` проходят.
+
+Следующий инкремент: ввести machine-neutral API для сохранённого user frame,
+убрать прямые MIPS-индексы из exec/signal/ptrace и подключить i386
+post-syscall signal/reschedule semantics. После этого production
+`kernel/init_sysent.c` можно безопасно включить в i386 kernel configuration.
 
 ## 1. Цель и границы первого порта
 

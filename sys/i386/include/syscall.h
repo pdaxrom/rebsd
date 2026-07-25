@@ -2,6 +2,9 @@
 #define _I386_SYSCALL_H_
 
 struct i386_trapframe;
+struct sysent;
+
+#define I386_SYSCALL_MAX_ARGS 6u
 
 /*
  * int 0x80 register ABI:
@@ -14,6 +17,7 @@ struct i386_trapframe;
  * Carry is set.  The dispatcher must leave the user return frame otherwise
  * suitable for iret.
  */
+void i386_syscall_set_table(const struct sysent *, unsigned);
 void i386_syscall_dispatch(struct i386_trapframe *);
 int i386_syscall_handle_return(struct i386_trapframe *);
 int i386_syscall_selftest(void);

@@ -115,7 +115,8 @@ syscall_selftest.o: $(I386_PC_SRC)/syscall.c \
 	    $(I386_SRC)/include/interrupt.h $(I386_SRC)/include/privilege.h \
 	    $(I386_SRC)/include/syscall.h $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
-	    $(TOPSRC)/sys/include/user.h $(I386_VM_SRC)/vmspace.h \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
+	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

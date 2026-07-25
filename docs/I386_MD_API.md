@@ -3,8 +3,8 @@
 Статус: generic allocator, публичный i386 pmap, vmspace fault path,
 `copyin/copyout`, i386 u-area allocator, kernel context switch, fork/init
 frames, проверяемый ring-3 entry и `int 0x80` register ABI подключены; MIPS
-process symbols нейтрализованы, следующий gate — generic `sysent` dispatch,
-2026-07-25.
+process symbols нейтрализованы, i386 `sysent` adapter проверен, следующий
+gate — architecture-neutral saved-user-frame и post-syscall path, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -158,13 +158,22 @@ IDT vector `0x80` является DPL3 interrupt gate. Зафиксирован
 `EAX` содержит syscall number, `EBX/ECX/EDX/ESI/EDI/EBP` — до шести
 32-битных аргументов, `EAX/EDX` — два результата. Успех очищает Carry;
 ошибка возвращает положительный errno в `EAX` и устанавливает Carry.
-QEMU user stream сначала получает настоящий `ENOSYS+CF`, затем вызывает
-зарезервированный self-test syscall со всеми шестью аргументами и проверяет
-оба результата, сохранённые аргумент-регистры и очищенный Carry. Пока
-активен только этот тестовый номер; production `sysent` не вызывается.
+QEMU user stream сначала получает настоящий `ENOSYS+CF`, затем проходит
+установленную через `i386_syscall_set_table` локальную `struct sysent`
+таблицу. Адаптер заполняет `u_arg`, вызывает `sy_call` под `u_qsave`,
+возвращает `u_rval/u_rval2` и реализует positive errno, `ERESTART` с
+повтором двухбайтного `int 0x80`, а также `EJUSTRETURN` без изменения
+trapframe. CPL3-тест проверяет все эти ветви и `longjmp` из обработчика.
+Вызов с более чем шестью аргументами отклоняется как `EINVAL` согласно
+зафиксированному ABI.
 
-1. Подключить generic `sysent`, `u_arg/u_rval/u_error`, restart semantics и
-   post-syscall signal path.
+Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
+тянут остальные подсистемы, а `exec`, signal и ptrace пока используют
+MIPS-индексы в `u_frame`. Публичный setter уже позволяет установить
+production `sysent` после завершения этого refactor.
+
+1. Заменить MIPS-indexed доступы к `u_frame` на machine-neutral MD API и
+   подключить post-syscall signal/reschedule path.
 2. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
-3. Затем подключить process bootstrap и exec ABI.
+3. Затем включить production `init_sysent`, process bootstrap и exec ABI.
