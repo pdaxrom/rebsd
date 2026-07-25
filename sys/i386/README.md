@@ -46,7 +46,9 @@ COW isolation, invalid user ranges, protection and page reclamation.  The
 i386 process layer also allocates and reclaims guarded 16 KiB wired u-areas;
 its assembly context-switch self-test preserves callee-saved registers,
 EFLAGS and execution state while moving to a separate u-area kernel stack
-and back.  Schedulable fork/init frame construction is the next gate.
+and back.  Fork/init now construct schedulable kernel frames and the QEMU
+self-test follows the fork trampoline through the common `iret` epilogue
+while switching between two process vmspaces.  Ring-3 entry is the next gate.
 
 The default cross toolchain is:
 
@@ -66,7 +68,8 @@ allocator and implements the public pmap contract with per-process address
 spaces, generic vmspace, anonymous memory, COW and safe copy I/O.  Early swap
 is explicitly disabled.  The neutral process MD contract and structural
 i386 u-area operations exist; the kernel can save and restore
-scheduler-compatible i386 contexts and switch u-area stacks.  Fork/init
-frames are not connected yet.
+scheduler-compatible i386 contexts, switch u-area stacks and resume copied
+fork frames through the common interrupt return path.  User selectors, TSS,
+ring-3 entry and syscall dispatch are not connected yet.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

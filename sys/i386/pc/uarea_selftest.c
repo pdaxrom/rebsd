@@ -3,6 +3,7 @@
 #include <sys/user.h>
 #include <vm/vmspace.h>
 
+#include "context.h"
 #include "process.h"
 
 static int
@@ -46,14 +47,19 @@ i386_uarea_selftest(void)
     source->u_comm[3] = '6';
     source->u_comm[4] = '\0';
 
-    child = md_uarea_fork(source, 0);
+    child = md_uarea_fork(source, 1);
     if (child == (struct user *)0 || child == source ||
         child->u_uid != source->u_uid ||
         child->u_comm[0] != 'i' || child->u_comm[3] != '6' ||
         child->u_frame != (int *)0 ||
         !i386_uarea_zero(&child->u_qsave, sizeof(child->u_qsave)) ||
         !i386_uarea_zero(&child->u_rsave, sizeof(child->u_rsave)) ||
-        !i386_uarea_zero(&child->u_ssave, sizeof(child->u_ssave))) {
+        child->u_ssave.val[I386_LABEL_ESP] <
+            (unsigned)(unsigned long)child ||
+        child->u_ssave.val[I386_LABEL_ESP] >=
+            (unsigned)(unsigned long)child + USIZE ||
+        child->u_ssave.val[I386_LABEL_EIP] == 0 ||
+        child->u_ssave.val[I386_LABEL_EFLAGS] != I386_EFLAGS_RESERVED) {
         error = EFAULT;
         goto out;
     }

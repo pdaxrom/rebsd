@@ -4,6 +4,8 @@
 #include <vm/pmap.h>
 #include <vm/vmspace.h>
 
+#include "context.h"
+#include "interrupt.h"
 #include "memory.h"
 
 #define I386_UAREA_PAGES       (USIZE / VM_PAGE_SIZE)
@@ -13,6 +15,11 @@ typedef char i386_assert_uarea_page_multiple[
     (USIZE % VM_PAGE_SIZE) == 0 ? 1 : -1];
 typedef char i386_assert_user_fits_uarea[
     sizeof(struct user) < USIZE ? 1 : -1];
+typedef char i386_assert_frame_fits_uarea[
+    sizeof(struct user) + sizeof(struct i386_trapframe) < USIZE ? 1 : -1];
+
+extern void i386_fork_trampoline(void);
+extern void i386_init_trampoline(void);
 
 struct user *md_curuser;
 
@@ -21,6 +28,13 @@ i386_uarea_halt(void)
 {
     for (;;)
         __asm__ volatile ("cli; hlt");
+}
+
+/* Replaced by the machine-independent implementation in the full kernel. */
+void __attribute__((weak))
+md_init_process(void)
+{
+    i386_uarea_halt();
 }
 
 void
@@ -73,7 +87,12 @@ md_uarea_alloc(void)
 struct user *
 md_uarea_fork(const struct user *source, int bootstrap)
 {
+    const struct i386_trapframe *source_frame;
+    struct i386_trapframe *target_frame;
     struct user *target;
+    unsigned source_address;
+    unsigned source_frame_address;
+    unsigned stack_pointer;
 
     if (source == (const struct user *)0)
         return (struct user *)0;
@@ -84,9 +103,38 @@ md_uarea_fork(const struct user *source, int bootstrap)
     bzero((caddr_t)&target->u_qsave, sizeof(target->u_qsave));
     bzero((caddr_t)&target->u_rsave, sizeof(target->u_rsave));
     bzero((caddr_t)&target->u_ssave, sizeof(target->u_ssave));
-    target->u_frame = (int *)0;
     md_uarea_guard_init(target);
-    (void)bootstrap;
+
+    stack_pointer = (unsigned)(unsigned long)target + USIZE;
+    target->u_ssave.val[I386_LABEL_EFLAGS] = I386_EFLAGS_RESERVED;
+    if (bootstrap) {
+        stack_pointer -= sizeof(unsigned);
+        *(unsigned *)stack_pointer = 0;
+        target->u_frame = (int *)0;
+        target->u_ssave.val[I386_LABEL_ESP] = stack_pointer;
+        target->u_ssave.val[I386_LABEL_EIP] =
+            (unsigned)(unsigned long)i386_init_trampoline;
+        return target;
+    }
+
+    source_address = (unsigned)(unsigned long)source;
+    source_frame_address = (unsigned)(unsigned long)source->u_frame;
+    if ((source_frame_address & (sizeof(unsigned) - 1u)) != 0 ||
+        source_frame_address < source_address + sizeof(struct user) ||
+        source_frame_address > source_address + USIZE -
+            sizeof(struct i386_trapframe)) {
+        md_uarea_free(target);
+        return (struct user *)0;
+    }
+    source_frame = (const struct i386_trapframe *)source->u_frame;
+    stack_pointer -= sizeof(*target_frame);
+    target_frame = (struct i386_trapframe *)stack_pointer;
+    bcopy(source_frame, target_frame, sizeof(*target_frame));
+    target_frame->tf_eax = 0;
+    target->u_frame = (int *)target_frame;
+    target->u_ssave.val[I386_LABEL_ESP] = stack_pointer;
+    target->u_ssave.val[I386_LABEL_EIP] =
+        (unsigned)(unsigned long)i386_fork_trampoline;
     return target;
 }
 

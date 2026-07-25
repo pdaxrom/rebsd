@@ -358,6 +358,7 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("context-switch: ok\n");
+    i386_early_puts("fork-frame: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

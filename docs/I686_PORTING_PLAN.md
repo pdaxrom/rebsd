@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: десять QEMU bring-up инкрементов и первый process-MD refactor
+Статус: одиннадцать QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -174,9 +174,25 @@ Malta64. Следующий кодовый инкремент реализует
 - normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, host VM suite и
   `kernel-objects` для N64, CI20, Malta, MaltaEL и Malta64 проходят.
 
-Следующий инкремент: построить schedulable i386 fork/init frames, проверить
-переключение вместе с process vmspace/CR3 и затем подключить первый generic
-process bootstrap.
+Одиннадцатый QEMU bring-up инкремент завершён:
+
+- `md_uarea_fork` для обычного fork валидирует и копирует родительский i386
+  trapframe на новый kernel stack, возвращает ребёнку `EAX=0` и готовит
+  `u_ssave` для `i386_fork_trampoline`;
+- trampoline использует общий interrupt restore path и завершает переход
+  через настоящий `iret`, поэтому scheduler и interrupt ABI не расходятся;
+- bootstrap fork получает отдельный stack и `i386_init_trampoline` для
+  входа в generic `md_init_process` без копирования живого bootstrap stack;
+- scheduler-подобный QEMU self-test связывает две u-area с двумя
+  `struct proc` и двумя COW vmspace, меняет CR3 перед `longjmp` и проверяет
+  разные значения по одному VA до и после обратного switch;
+- обязательный boot marker `fork-frame: ok` подтверждает child `EAX=0`,
+  `md_curuser`, `u_procp`, stack bounds, COW/CR3 isolation и полный reclaim;
+- normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ, host VM suite и
+  `BOARD=maltael kernel-objects` проходят.
+
+Следующий инкремент: добавить user code/data GDT descriptors, TSS `esp0`,
+проверяемый ring-3 entry/return и затем первый `int 0x80` syscall gate.
 
 ## 1. Цель и границы первого порта
 

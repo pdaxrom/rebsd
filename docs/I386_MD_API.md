@@ -1,9 +1,9 @@
 # i386 machine-dependent integration audit
 
 Статус: generic allocator, публичный i386 pmap, vmspace fault path,
-`copyin/copyout`, i386 u-area allocator и kernel context switch подключены;
-MIPS process symbols нейтрализованы, следующий gate — fork/init frames и
-process bootstrap, 2026-07-25.
+`copyin/copyout`, i386 u-area allocator, kernel context switch и fork/init
+frames подключены; MIPS process symbols нейтрализованы, следующий gate —
+ring-3 entry и syscall ABI, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -131,11 +131,21 @@ Assembly `setjmp/longjmp` сохраняют и восстанавливают i
 stack, выполняет C entry point и возвращается в исходный context. Оба guard
 и точный reclaim четырёхстраничных u-area после перехода также проверяются.
 
-Fork-copy ещё не schedulable: первый `u_ssave` и i386 trapframe должны быть
-построены MD кодом, а не тестом.
+`md_uarea_fork` теперь строит schedulable frame. Обычный fork проверяет
+родительский `u_frame`, копирует i386 trapframe на вершину нового u-area,
+задаёт дочерний `EAX=0` и входит в общий interrupt restore/`iret` через
+`i386_fork_trampoline`. Bootstrap path получает отдельный kernel stack и
+`i386_init_trampoline`, вызывающий сильную generic реализацию
+`md_init_process`; ранний image предоставляет только слабый fail-stop stub.
 
-1. Подготовить fork/init kernel frames и проверить связку CR3 +
-   `md_curuser` в scheduler-подобном переходе.
+QEMU выполняет обычный fork frame до конца через ring-0 `iret`. Перед
+переходом активируется дочерний vmspace/CR3, дочерний C entry проверяет своё
+COW-значение по общему VA, `md_curuser`, `u_procp` и границы kernel stack,
+после чего активирует родительский vmspace и возвращается. Родитель видит
+своё исходное значение, а уничтожение обоих vmspace и u-area точно
+восстанавливает allocator counter.
+
+1. Добавить user code/data selectors, TSS `esp0` и проверяемый ring-3 entry.
 2. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
 3. Затем подключить process bootstrap, `int 0x80` и exec ABI.

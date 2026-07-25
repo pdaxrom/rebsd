@@ -2,7 +2,6 @@
 #include "interrupt.h"
 #include "vmspace_bootstrap.h"
 
-#define I386_KERNEL_CODE_SELECTOR 0x0008u
 #define I386_IDT_INTERRUPT_GATE   0x8eu
 #define I386_IDT_USER_TRAP_GATE   0xefu
 #define I386_EXCEPTION_BREAKPOINT 3u

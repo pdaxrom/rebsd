@@ -74,8 +74,9 @@ entry.o: $(I386_BOOT_SRC)/entry.S
 interrupt_entry.o: $(I386_BOOT_SRC)/interrupt_entry.S
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
 
-context.o: $(I386_COMMON_SRC)/context.S
-	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
+context.o: $(I386_COMMON_SRC)/context.S $(I386_SRC)/include/context.h
+	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
 
 early_console.o: $(I386_PC_SRC)/early_console.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h
@@ -128,6 +129,7 @@ copyio_selftest.o: $(I386_PC_SRC)/copyio_selftest.c \
 	    -c $< -o $@
 
 vm_machdep.o: $(I386_COMMON_SRC)/vm_machdep.c \
+	    $(I386_SRC)/include/context.h $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h \
 	    $(I386_SRC)/include/machine/elf_machdep.h \
 	    $(I386_SRC)/include/machine/layout.h \
@@ -138,6 +140,7 @@ vm_machdep.o: $(I386_COMMON_SRC)/vm_machdep.c \
 	    -c $< -o $@
 
 uarea_selftest.o: $(I386_PC_SRC)/uarea_selftest.c \
+	    $(I386_SRC)/include/context.h \
 	    $(I386_SRC)/include/process.h \
 	    $(I386_SRC)/include/machine/elf_machdep.h \
 	    $(I386_SRC)/include/machine/layout.h \
@@ -147,10 +150,14 @@ uarea_selftest.o: $(I386_PC_SRC)/uarea_selftest.c \
 	    -c $< -o $@
 
 context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
+	    $(I386_SRC)/include/context.h \
+	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/process.h \
+	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/elf_machdep.h \
 	    $(I386_SRC)/include/machine/layout.h \
-	    $(I386_GEN_INCLUDE)/sys/user.h $(I386_VM_SRC)/vmspace.h \
+	    $(I386_GEN_INCLUDE)/sys/proc.h $(I386_GEN_INCLUDE)/sys/user.h \
+	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

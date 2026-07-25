@@ -105,6 +105,9 @@ i386_interrupt_common:
     call    i386_interrupt_dispatch
     addl    $4, %esp
 
+    .globl i386_trap_return
+    .type i386_trap_return, @function
+i386_trap_return:
     popl    %eax
     movw    %ax, %gs
     popl    %eax
@@ -117,6 +120,7 @@ i386_interrupt_common:
     popal
     addl    $8, %esp
     iret
+    .size i386_trap_return, . - i386_trap_return
 
     .section .rodata, "a", @progbits
     .p2align 2

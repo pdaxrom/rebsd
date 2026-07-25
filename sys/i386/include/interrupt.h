@@ -8,6 +8,8 @@
 #define I386_IRQ_COUNT         16u
 #define I386_IRQ_TIMER         0u
 #define I386_PIT_HZ            100u
+#define I386_KERNEL_CODE_SELECTOR 0x0008u
+#define I386_KERNEL_DATA_SELECTOR 0x0010u
 
 /*
  * Stack layout built by interrupt_entry.S.  The processor does not push

@@ -1,13 +1,7 @@
+    #include "context.h"
+
     .section .text, "ax", @progbits
     .code32
-
-    .equ I386_LABEL_EBX,       0
-    .equ I386_LABEL_ESI,       4
-    .equ I386_LABEL_EDI,       8
-    .equ I386_LABEL_EBP,       12
-    .equ I386_LABEL_ESP,       16
-    .equ I386_LABEL_EIP,       20
-    .equ I386_LABEL_EFLAGS,    24
 
     .globl setjmp
     .type setjmp, @function
@@ -47,6 +41,22 @@ longjmp:
     movl    $1, %eax
     jmp     *%ecx
     .size longjmp, . - longjmp
+
+    .globl i386_fork_trampoline
+    .type i386_fork_trampoline, @function
+i386_fork_trampoline:
+    jmp     i386_trap_return
+    .size i386_fork_trampoline, . - i386_fork_trampoline
+
+    .globl i386_init_trampoline
+    .type i386_init_trampoline, @function
+i386_init_trampoline:
+    call    md_init_process
+1:
+    cli
+    hlt
+    jmp     1b
+    .size i386_init_trampoline, . - i386_init_trampoline
 
     /*
      * Exercise the public save/restore entry points without relying on C
