@@ -6,8 +6,10 @@ fork/init frames, проверяемый ring-3 entry и `int 0x80` register ABI
 подключены; MIPS
 process symbols нейтрализованы, i386 `sysent` adapter, signal frame и
 user-return signal/reschedule path и user trap-to-signal translation
-проверены; production syscall prefix вызывает generic `getpid`; следующий
-gate — постоянный process bootstrap, 2026-07-25.
+проверены; production syscall prefix вызывает generic `getpid`, а
+постоянный proc0-совместимый bootstrap process удерживает активные
+u-area/vmspace/CR3/TSS; следующий gate — первый production syscall в его
+CPL3-контексте, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -236,7 +238,20 @@ unmapped `0x60000000`. User handlers проверяют `SIGILL`/faulting EIP и
 marker `syscall-production: ok`. Pathname/exec call sites уже переведены
 на явное адресное пространство без pointer-range эвристики.
 
+После разрушаемых self-tests ранний image создаёт постоянный
+proc0-совместимый bootstrap process. Он получает отдельные guarded u-area
+и vmspace, PID/PPID 0, `SRUN|SLOAD|SSYS`, обычные proc0 defaults для
+`cmask`, supplementary groups и rlimits. Его vmspace активируется через
+CR3, `md_curuser` остаётся установленным, а `TSS.esp0` указывает на вершину
+u-area kernel stack во время последующих PIC/PIT и exception checks.
+`process-bootstrap: ok` проверяет связи `proc`/`user`/`vmspace`, guard,
+current CR3 и TSS stack. Это намеренно ещё не generic process table,
+scheduler или process 1: bridge создаёт устойчивое MD-состояние, на котором
+можно запускать первый init path.
+
 1. Добавить оставшиеся machine headers/config lists.
-2. Создать постоянный bootstrap process и расширять production prefix.
-3. Подключить полный `init_sysent`, когда его generic handlers войдут в
+2. Выполнить production syscall в CPL3 постоянного bootstrap process и
+   расширять production prefix по требованиям первого init.
+3. Заменить bootstrap bridge на generic process table/process 1.
+4. Подключить полный `init_sysent`, когда его generic handlers войдут в
    image, и довести `exec` до статического ELF32 init.

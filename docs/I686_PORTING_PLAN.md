@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: двадцать QEMU bring-up инкрементов выполнены, 2026-07-25.
+Статус: двадцать один QEMU bring-up инкремент выполнен, 2026-07-25.
 
 ## Выполнено
 
@@ -330,9 +330,26 @@ Malta64. Следующий кодовый инкремент реализует
 - clean build, normal/trap smoke, RAM matrix 32/64/128/256/768/1024 МиБ,
   host VM suite, MaltaEL и N64 `kernel-objects` проходят.
 
-Следующий инкремент: создать постоянный bootstrap process вместо тестового
-`struct proc`, затем расширить production prefix вызовами, необходимыми
-первому статическому ELF32 init.
+Двадцать первый QEMU bring-up инкремент завершён:
+
+- после разрушаемых self-tests создаётся постоянный proc0-совместимый
+  bootstrap process с PID/PPID 0 и состоянием `SRUN|SLOAD|SSYS`;
+- процесс получает собственные guarded 16-КиБ u-area и vmspace, а `u_procp`,
+  `p_uarea`, `p_addr` и `p_vmspace` связаны в согласованное состояние;
+- начальные `cmask`, groups и rlimits соответствуют generic proc0
+  invariants, не вовлекая пока scheduler/process table;
+- vmspace процесса становится активным CR3, `md_curuser` остаётся
+  установленным, а `TSS.esp0` указывает на вершину его kernel stack до
+  конца ранней загрузки;
+- обязательный marker `process-bootstrap: ok` проверяет все связи и guard;
+  timer IRQ и deliberate kernel faults проходят уже при существующем
+  current process;
+- clean build, normal/trap smoke и RAM matrix
+  32/64/128/256/768/1024 МиБ проходят.
+
+Следующий инкремент: выполнить production syscall из CPL3 уже в постоянном
+bootstrap vmspace/process, затем подготовить минимальный статический ELF32
+init и замену временного process bridge на generic process table.
 
 ## 1. Цель и границы первого порта
 

@@ -67,7 +67,11 @@ from both a real `UD2` and a terminal unmapped page fault.  An explicit
 `copyinstr/copykstr` API now keeps low kernel addresses distinct from user
 pointers across pathname and exec code.  The early production syscall table
 contains the exact 0-20 prefix; QEMU invokes generic `kern_prot.c:getpid`
-as syscall 20 from CPL3 and requires `syscall-production: ok`.
+as syscall 20 from CPL3 and requires `syscall-production: ok`.  After the
+destructive self-tests, a persistent proc0-compatible bootstrap process owns
+a guarded u-area and vmspace, keeps its CR3 and `md_curuser` active, and
+provides the live kernel stack selected by `TSS.esp0`;
+`process-bootstrap: ok` validates that state before timer IRQs.
 
 The default cross toolchain is:
 
@@ -92,7 +96,9 @@ fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
 contract and generic `sysent` adapter now install a production-numbered
 bootstrap prefix through syscall 20, including the real generic `getpid`
-handler.  The full table remains gated on the rest of the generic kernel,
-and a persistent bootstrap process is the next process milestone.
+handler.  A persistent proc0-compatible bootstrap process now keeps a real
+u-area, vmspace, CR3 and TSS kernel stack active after self-tests.  It is an
+MD integration bridge, not yet the generic process table or process 1.  The
+full syscall table remains gated on the rest of the generic kernel.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.
