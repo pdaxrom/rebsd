@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать три QEMU bring-up инкремента выполнены, 2026-07-25.
+Статус: тридцать четыре QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -616,6 +616,35 @@ exit/wait semantics либо подключить минимальный VFS/fil
 legacy compatibility-mode PIO IDENTIFY/read-only probe, сначала в QEMU,
 затем проверить PCI IDs и register mode по serial log IBM/VIA.
 
+Тридцать четвёртый QEMU bring-up инкремент завершён:
+
+- i386 port-I/O API дополнен 16-битным `inw`, а новый ранний ATA backend
+  работает через primary compatibility ports `0x1F0`/`0x3F6`;
+- probe явно выбирает primary master до первой проверки status: QEMU trace
+  подтвердил реальный BIOS-сценарий, где SeaBIOS оставляет выбранным
+  отсутствующий slave;
+- backend посылает только `IDENTIFY DEVICE` и односекторный
+  `READ SECTORS` для LBA0; команд записи, DMA и включения IRQ в нём нет;
+- `IDENTIFY` печатает model и LBA28 capacity, проверяет LBA capability,
+  отличает ATA от ATAPI и имеет ограниченные polling timeouts вместо
+  бесконечного ожидания;
+- детерминированный raw image имеет 4096 секторов, marker `REBSDIDE` и MBR
+  signature; QEMU подключает его через временный `snapshot=on`, не меняя
+  базовый image, а smoke требует
+  `ide-primary-master: ata`, `ide-sectors: 0x00001000`, успешное чтение
+  LBA0, marker и `0x55AA`;
+- отдельный no-disk smoke подтверждает, что отсутствие primary master
+  диагностируется и не мешает ядру дойти до timer gate и `HALT`;
+- normal/page smoke теперь проверяют IDE путь вместе с PCI inventory;
+  image generator имеет отдельную deterministic comparison; gate проходит
+  на QEMU `pc-i440fx-9.2` и самом старом доступном профиле `5.1`.
+
+Следующий инкремент: отделить reusable read-only PATA transfer API от
+bootstrap probe и подключить MBR parser/дисковый backend без записи на
+носитель. Проверка на IBM 6563-W4G пока не требуется: hardware gate будет
+запрошен после завершения QEMU-only разборки partition table и
+контролируемого чтения нескольких LBA.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых
@@ -636,9 +665,9 @@ IBM PC-совместимых компьютеров с legacy BIOS и проц�
 - GCC/binutils из `/Users/sash/Library/i686-toolchain`;
 - kernel и userland собираются GCC; PCC не меняется и не входит в i686-порт.
 
-На первом этапе не входят: UEFI, SMP/APIC, ACPI, PCI autodetection, USB,
-SATA/AHCI, DMA для IDE, графический framebuffer, динамическая линковка,
-PCC и поддержка 386/486/586.
+На первом этапе не входят: UEFI, SMP/APIC, ACPI resource/routing tables,
+PCI resource allocation, USB, SATA/AHCI, DMA для IDE, графический
+framebuffer, динамическая линковка, PCC и поддержка 386/486/586.
 
 Минимальная ISA: i686 без обязательных SSE/SSE2. Ядро и базовый userland
 собираются с `-march=i686 -mno-sse -mno-sse2`; использование x87 в ядре

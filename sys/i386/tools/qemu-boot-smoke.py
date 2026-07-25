@@ -64,11 +64,30 @@ BOOT_MARKERS = (
     "pci-isa: 0x80867000",
     "pci-ide: 0x80867010",
     "pci-platform: intel",
+    "ide-primary-master: ata",
+    "ide-sectors: 0x00001000",
+    "ide-lba28: ok",
+    "ide-lba0: ok",
+    "ide-image: rebsd-smoke",
+    "ide-mbr: present",
     "pic: ok",
     "pit: hz=100",
     "timer-ticks: ok",
     "HALT",
 )
+
+IDE_DISK_MARKERS = (
+    "ide-primary-master: ata",
+    "ide-sectors: 0x00001000",
+    "ide-lba28: ok",
+    "ide-lba0: ok",
+    "ide-image: rebsd-smoke",
+    "ide-mbr: present",
+)
+
+NO_DISK_BOOT_MARKERS = tuple(
+    marker for marker in BOOT_MARKERS if marker not in IDE_DISK_MARKERS
+) + ("ide-primary-master: none",)
 
 EXCEPTION_MARKERS = {
     "divide": (
@@ -129,6 +148,12 @@ EXCEPTION_MARKERS = {
         "pci-isa: 0x80867000",
         "pci-ide: 0x80867010",
         "pci-platform: intel",
+        "ide-primary-master: ata",
+        "ide-sectors: 0x00001000",
+        "ide-lba28: ok",
+        "ide-lba0: ok",
+        "ide-image: rebsd-smoke",
+        "ide-mbr: present",
         "exception: vector=0x0000000e error=0x00000003",
         " cr2=",
         "PANIC: cpu exception",
@@ -143,9 +168,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cpu", required=True)
     parser.add_argument("--memory", default="64M")
     parser.add_argument("--kernel", required=True, type=pathlib.Path)
+    parser.add_argument("--disk", type=pathlib.Path)
     parser.add_argument("--timeout", type=float, default=8.0)
     parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
-    return parser.parse_args()
+    parser.add_argument("--expect-no-disk", action="store_true")
+    args = parser.parse_args()
+    if args.expect_no_disk:
+        if args.disk is not None or args.expect_exception is not None:
+            parser.error("--expect-no-disk cannot be combined with disk/trap")
+    elif args.disk is None:
+        parser.error("--disk is required unless --expect-no-disk is used")
+    return args
 
 
 def main() -> None:
@@ -171,14 +204,25 @@ def main() -> None:
         "-no-reboot",
         "-no-shutdown",
     ]
+    if args.disk is not None:
+        command.extend(
+            [
+                "-drive",
+                (
+                    f"file={args.disk},format=raw,if=ide,index=0,"
+                    "media=disk,snapshot=on"
+                ),
+            ]
+        )
     if args.expect_exception:
         command.extend(["-append", f"rebsd.trap={args.expect_exception}"])
 
-    markers = (
-        EXCEPTION_MARKERS[args.expect_exception]
-        if args.expect_exception
-        else BOOT_MARKERS
-    )
+    if args.expect_exception:
+        markers = EXCEPTION_MARKERS[args.expect_exception]
+    elif args.expect_no_disk:
+        markers = NO_DISK_BOOT_MARKERS
+    else:
+        markers = BOOT_MARKERS
     stop_marker = (
         b"PANIC: cpu exception\r\n"
         if args.expect_exception

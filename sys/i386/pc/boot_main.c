@@ -1,5 +1,6 @@
 #include "boot.h"
 #include "copyio.h"
+#include "ide.h"
 #include "interrupt.h"
 #include "memory.h"
 #include "paging.h"
@@ -454,6 +455,7 @@ i386_boot_main(i386_u32 boot_params_phys)
             __asm__ volatile ("cli; hlt");
         }
     }
+    (void)i386_ide_probe();
 
     i386_exception_smoke(boot_params_phys);
 

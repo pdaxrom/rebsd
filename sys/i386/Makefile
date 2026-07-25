@@ -40,7 +40,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    syscall_selftest.o signal.o signal_selftest.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
-                   pic.o pit.o pci.o memory.o paging.o \
+                   pic.o pit.o pci.o ide.o memory.o paging.o \
                    libkern.o elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
                    sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
@@ -53,8 +53,9 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 
 .DEFAULT_GOAL := all
 
-.PHONY: all kernel toolchain-check initfs-smoke run run-serial debug \
-	boot-smoke trap-smoke exception-smoke boot-smoke-matrix clean
+.PHONY: all kernel toolchain-check initfs-smoke ide-smoke ide-absent-smoke \
+	run run-serial debug boot-smoke trap-smoke exception-smoke \
+	boot-smoke-matrix clean
 
 all: toolchain-check kernel
 
@@ -235,6 +236,11 @@ pit.o: $(I386_PC_SRC)/pit.c $(I386_SRC)/include/interrupt.h \
 
 pci.o: $(I386_PC_SRC)/pci.c $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/io.h $(I386_SRC)/include/pci.h
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    -c $< -o $@
+
+ide.o: $(I386_PC_SRC)/ide.c $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/ide.h $(I386_SRC)/include/io.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
@@ -466,6 +472,7 @@ vmspace_bootstrap.o: $(I386_PC_SRC)/vmspace_bootstrap.c \
 
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/copyio.h \
+	    $(I386_SRC)/include/ide.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
 	    $(I386_SRC)/include/pmap_bootstrap.h $(I386_SRC)/include/privilege.h \
@@ -494,51 +501,73 @@ rebsd-i686.bzimg: setup.bin rebsd-i686.bin \
 	$(PYTHON) $(I386_TOOLS_SRC)/mkboot.py \
 	    --setup setup.bin --kernel rebsd-i686.bin --output $@
 
-run run-serial: rebsd-i686.bzimg
+ide-smoke.img: $(I386_TOOLS_SRC)/mkide.py
+	$(PYTHON) $< --output $@
+
+ide-smoke: ide-smoke.img
+	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --output ide-smoke.check.img
+	cmp ide-smoke.img ide-smoke.check.img
+	rm -f ide-smoke.check.img
+
+run run-serial: rebsd-i686.bzimg ide-smoke.img
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
 	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
+	    -drive file=ide-smoke.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
 	    -serial stdio -display none -monitor none \
 	    -no-reboot -no-shutdown
 
-debug: rebsd-i686.bzimg
+debug: rebsd-i686.bzimg ide-smoke.img
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
 	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
+	    -drive file=ide-smoke.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
 	    -serial stdio -display none -monitor none \
 	    -no-reboot -no-shutdown -S -s
 
-boot-smoke: rebsd-i686.bzimg
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $<
-
-trap-smoke: rebsd-i686.bzimg
+boot-smoke: rebsd-i686.bzimg ide-smoke.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk ide-smoke.img
+
+ide-absent-smoke: rebsd-i686.bzimg
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --expect-no-disk
+
+trap-smoke: rebsd-i686.bzimg ide-smoke.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk ide-smoke.img \
 	    --expect-exception divide
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk ide-smoke.img \
 	    --expect-exception gp
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk ide-smoke.img \
 	    --expect-exception page
 
 exception-smoke: trap-smoke
 
-boot-smoke-matrix: rebsd-i686.bzimg
+boot-smoke-matrix: rebsd-i686.bzimg ide-smoke.img
 	@for memory in 32M 64M 128M 256M 768M 1024M; do \
 	    echo "boot-smoke-matrix: memory=$$memory"; \
 	    $(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	        --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	        --cpu $(QEMU_CPU) --memory $$memory --kernel $< || exit 1; \
+	        --cpu $(QEMU_CPU) --memory $$memory --kernel $< \
+	        --disk ide-smoke.img || exit 1; \
 	done
 
 clean:
 	rm -f setup.o setup.elf setup.bin setup.map \
 	    bootstrap_user.o bootstrap-user.elf bootstrap_user_image.o \
 	    initfs.img initfs.check.img initfs_image.o \
+	    ide-smoke.img ide-smoke.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
 	    rebsd-i686.bzimg rebsd-i686.map
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
