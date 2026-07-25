@@ -9,6 +9,7 @@
 #include "signal_machdep.h"
 #include "syscall.h"
 #include "tss.h"
+#include "trap.h"
 #include "user_return.h"
 #include "vm_bootstrap.h"
 #include "vmspace_bootstrap.h"
@@ -401,6 +402,13 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("user-return: ok\n");
+    if (i386_trap_selftest() != 0) {
+        i386_early_puts("user-trap: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    i386_early_puts("user-trap: ok\n");
 
     i386_exception_smoke(boot_params_phys);
 

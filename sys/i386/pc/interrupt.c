@@ -1,6 +1,7 @@
 #include "boot.h"
 #include "interrupt.h"
 #include "syscall.h"
+#include "trap.h"
 #include "user_return.h"
 #include "vmspace_bootstrap.h"
 
@@ -108,6 +109,7 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
 
     if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
         ++i386_breakpoints;
+        (void)i386_user_trap(frame, frame->tf_eip);
         return;
     }
 
@@ -117,6 +119,8 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
         if (i386_syscall_handle_return(frame))
             return;
         if (i386_user_return_handle_test(frame))
+            return;
+        if (i386_trap_handle_test(frame))
             return;
         i386_exception_halt(frame);
     }
@@ -134,10 +138,15 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
             (frame->tf_error & I386_PAGE_FAULT_USER) != 0 ||
             (frame->tf_cs & 3u) == 3u) == 0)
             return;
+        if (i386_user_trap(frame, cr2))
+            return;
     }
 
-    if (frame->tf_vector < I386_IRQ_BASE)
+    if (frame->tf_vector < I386_IRQ_BASE) {
+        if (i386_user_trap(frame, frame->tf_eip))
+            return;
         i386_exception_halt(frame);
+    }
 
     if (frame->tf_vector >= I386_IRQ_BASE + I386_IRQ_COUNT)
         i386_exception_halt(frame);

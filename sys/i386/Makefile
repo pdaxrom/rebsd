@@ -38,6 +38,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    early_console.o interrupt.o tss.o privilege_selftest.o \
                    syscall_selftest.o signal.o signal_selftest.o \
                    user_return.o user_return_selftest.o \
+                   trap.o trap_selftest.o \
                    pic.o pit.o memory.o paging.o \
                    libkern.o copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
@@ -95,6 +96,7 @@ early_console.o: $(I386_PC_SRC)/early_console.c \
 interrupt.o: $(I386_PC_SRC)/interrupt.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/syscall.h \
+	    $(I386_SRC)/include/trap.h \
 	    $(I386_SRC)/include/user_return.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
@@ -162,6 +164,27 @@ user_return_selftest.o: $(I386_PC_SRC)/user_return_selftest.c \
 	    $(I386_SRC)/include/signal_machdep.h \
 	    $(I386_SRC)/include/syscall.h $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/user_return.h \
+	    $(I386_SRC)/include/vmspace_bootstrap.h \
+	    $(TOPSRC)/sys/include/signal.h \
+	    $(TOPSRC)/sys/include/signalvar.h $(TOPSRC)/sys/include/user.h \
+	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+trap.o: $(I386_COMMON_SRC)/trap.c \
+	    $(I386_SRC)/include/interrupt.h $(I386_SRC)/include/trap.h \
+	    $(TOPSRC)/sys/include/signal.h $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+trap_selftest.o: $(I386_PC_SRC)/trap_selftest.c \
+	    $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/privilege.h \
+	    $(I386_SRC)/include/signal_machdep.h \
+	    $(I386_SRC)/include/syscall.h $(I386_SRC)/include/trap.h \
+	    $(I386_SRC)/include/tss.h $(I386_SRC)/include/user_return.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(TOPSRC)/sys/include/signal.h \
 	    $(TOPSRC)/sys/include/signalvar.h $(TOPSRC)/sys/include/user.h \
@@ -306,6 +329,7 @@ boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/signal_machdep.h \
 	    $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/tss.h \
+	    $(I386_SRC)/include/trap.h \
 	    $(I386_SRC)/include/user_return.h \
 	    $(I386_SRC)/include/vm_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \

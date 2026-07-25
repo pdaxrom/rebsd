@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: семнадцать QEMU bring-up инкрементов и первый process-MD refactor
+Статус: восемнадцать QEMU bring-up инкрементов и первый process-MD refactor
 выполнены, 2026-07-25.
 
 ## Выполнено
@@ -282,9 +282,22 @@ Malta64. Следующий кодовый инкремент реализует
   исходный user EIP и проходит моделируемый reschedule;
 - обязательный marker `user-return: ok` входит в normal/page smoke.
 
-Следующий инкремент: преобразовать user CPU exceptions и terminal page
-faults в pending signals вместо раннего panic. После этого production
-`kernel/init_sysent.c` можно подключать вместе с process bootstrap.
+Восемнадцатый QEMU bring-up инкремент завершён:
+
+- i386 CPU exceptions отображаются в BSD signals: `SIGFPE`, `SIGTRAP`,
+  `SIGILL`, `SIGBUS` и `SIGSEGV` согласно классу vector;
+- terminal CPL3 page fault после неуспешного pmap/vmspace resolution
+  становится `SIGSEGV`, а kernel faults сохраняют diagnostic panic;
+- NMI, double fault и machine check явно исключены из process delivery;
+- QEMU CPL3 stream последовательно переживает реальный `UD2→SIGILL` и
+  unmapped read `#PF→SIGSEGV`; handlers проверяют EIP/CR2 в `code`, правят
+  `sigcontext` и дважды возвращаются через `int 0x80 sigreturn`;
+- обязательный marker `user-trap: ok` входит в normal/page smoke.
+
+Следующий инкремент: разделить исторический `copystr` на явные
+kernel-string/user-string operations и перевести pathname/exec syscall
+call sites. Затем можно собирать production `init_sysent` вместе с process
+bootstrap.
 
 ## 1. Цель и границы первого порта
 

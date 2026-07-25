@@ -61,8 +61,10 @@ stacks and validates complete `sigreturn` contexts; QEMU checks restoration,
 selector/EFLAGS hardening, and allocator reclamation.  A CPL3-only common
 return loop now delivers pending signals and performs priority/reschedule
 work before `iret`; QEMU executes a real handler, trampoline and `int 0x80`
-sigreturn through that path.  Translating user CPU faults into pending
-signals is the next gate.
+sigreturn through that path.  User CPU exceptions now become BSD pending
+signals while kernel faults remain fatal; QEMU recovers through handlers
+from both a real `UD2` and a terminal unmapped page fault.  An explicit
+user-string copy API is the next gate.
 
 The default cross toolchain is:
 
@@ -86,7 +88,8 @@ scheduler-compatible i386 contexts, switch u-area stacks and resume copied
 fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
 contract and generic `sysent` adapter exist, but the full production table
-is not connected and user CPU exceptions still use the early diagnostic
-panic path.
+is not connected; pathname/exec call sites still need an unambiguous
+user-string primitive before the generic syscall set is safe on low-linked
+i386.
 The rest of the generic kernel, storage, userland, and PCC remain outside
 the current image.

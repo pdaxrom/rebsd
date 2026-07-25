@@ -4,8 +4,8 @@
 `copyin/copyout`, i386 u-area allocator, kernel context switch, fork/init
 frames, проверяемый ring-3 entry и `int 0x80` register ABI подключены; MIPS
 process symbols нейтрализованы, i386 `sysent` adapter, signal frame и
-user-return signal/reschedule path проверены; следующий gate — перевод
-user CPU faults в pending signals, 2026-07-25.
+user-return signal/reschedule path и user trap-to-signal translation
+проверены; следующий gate — явный user-string API, 2026-07-25.
 
 ## Существующий нейтральный VM контракт
 
@@ -206,13 +206,28 @@ QEMU CPL3-тест начинает с pending `SIGUSR1`, проходит об�
 после IDT, до первого кода, который разрешает IF; timer unmask остаётся
 перед PIT.
 
+User exceptions теперь отделены от kernel diagnostics. Divide/overflow/
+bound/FPU vectors дают `SIGFPE`, debug/breakpoint — `SIGTRAP`, invalid
+opcode — `SIGILL`, descriptor/alignment faults — `SIGBUS`, stack/GP и
+terminal page faults — `SIGSEGV`. NMI, double fault и machine check никогда
+не передаются процессу. Для `#PF` сначала остаётся прежняя попытка
+`pmap/vmspace` fault resolution; только неустранимая CPL3 ошибка становится
+pending signal. Kernel-mode faults по-прежнему завершаются диагностическим
+panic.
+
+Отдельный QEMU CPL3 stream последовательно исполняет `UD2` и чтение из
+unmapped `0x60000000`. User handlers проверяют `SIGILL`/faulting EIP и
+`SIGSEGV`/CR2 через cdecl `code`, правят `sc_eip/sc_eax`, дважды проходят
+общий `int 0x80` trampoline и продолжают исходный поток. Тест также
+проверяет signal mask, два delivery и точный reclaim.
+
 Полный `kernel/init_sysent.c` ещё не входит в early image: его обработчики
 тянут остальные подсистемы. Публичный setter уже позволяет установить
-production `sysent`, но user exceptions пока должны быть переведены из
-раннего panic path в `psignal` перед запуском непривилегированного userland.
+production `sysent`; оставшийся блокер pathname/exec syscalls — неоднозначный
+исторический `copystr`, который должен быть разделён на kernel-string и
+user-string operations.
 
-1. Преобразовать user CPU exceptions и terminal page faults в `psignal`,
-   оставив kernel faults диагностическими panic.
-2. Добавить явный user-string primitive и перевести syscall pathname/exec
+1. Добавить явный user-string primitive и перевести syscall pathname/exec
    call sites без pointer-range эвристики.
+2. Добавить оставшиеся machine headers/config lists.
 3. Затем включить production `init_sysent`, process bootstrap и exec ABI.
