@@ -60,6 +60,19 @@ i386_disk_has_at(const unsigned char *data, unsigned offset,
     return 1;
 }
 
+static unsigned
+i386_disk_fat_type(const unsigned char *data)
+{
+    if (data[510] != 0x55u || data[511] != 0xaau ||
+        !i386_disk_has_at(data, 3, "REBSD   "))
+        return 0;
+    if (i386_disk_has_at(data, 54, "FAT16   "))
+        return 16;
+    if (i386_disk_has_at(data, 82, "FAT32   "))
+        return 32;
+    return 0;
+}
+
 static void
 i386_disk_read(struct buf *bp, dev_t dev, disk_sector_t lba,
     unsigned count)
@@ -124,11 +137,11 @@ i386_disk_bootstrap(void)
         return EIO;
     }
     i386_early_puts("disk-partition: ");
-    if (part.dp_scheme == DISK_SCHEME_MBR &&
-        part.dp_type == 0x06u &&
-        part.dp_offset == 64u && part.dp_nsectors == 8128u &&
-        sectors == part.dp_nsectors)
-        i386_early_puts("rebsd-fat16\n");
+    if (part.dp_scheme == DISK_SCHEME_MBR && part.dp_type == 0x06u)
+        i386_early_puts("fat16\n");
+    else if (part.dp_scheme == DISK_SCHEME_MBR &&
+        (part.dp_type == 0x0bu || part.dp_type == 0x0cu))
+        i386_early_puts("fat32\n");
     else
         i386_early_puts("external\n");
 
@@ -138,10 +151,10 @@ i386_disk_bootstrap(void)
         i386_early_puts("disk-strategy-read: failed\n");
         return EIO;
     }
-    if (i386_disk_has_at(i386_disk_data, 3, "REBSD   ") &&
-        i386_disk_data[510] == 0x55u &&
-        i386_disk_data[511] == 0xaau)
+    if (i386_disk_fat_type(i386_disk_data) == 16)
         i386_early_puts("disk-strategy-read: rebsd-fat16\n");
+    else if (i386_disk_fat_type(i386_disk_data) == 32)
+        i386_early_puts("disk-strategy-read: rebsd-fat32\n");
     else
         i386_early_puts("disk-strategy-read: external\n");
 

@@ -81,7 +81,7 @@ BOOT_MARKERS = (
     "ide-bounds: ok",
     "disk-attach: read-only",
     "disk-write-open: erofs",
-    "disk-partition: rebsd-fat16",
+    "disk-partition: fat16",
     "disk-strategy-read: rebsd-fat16",
     "disk-strategy-eof: ok",
     "disk-strategy-write: erofs",
@@ -129,7 +129,7 @@ IDE_DISK_MARKERS = (
     "ide-bounds: ok",
     "disk-attach: read-only",
     "disk-write-open: erofs",
-    "disk-partition: rebsd-fat16",
+    "disk-partition: fat16",
     "disk-strategy-read: rebsd-fat16",
     "disk-strategy-eof: ok",
     "disk-strategy-write: erofs",
@@ -232,7 +232,7 @@ EXCEPTION_MARKERS = {
         "ide-bounds: ok",
         "disk-attach: read-only",
         "disk-write-open: erofs",
-        "disk-partition: rebsd-fat16",
+        "disk-partition: fat16",
         "disk-strategy-read: rebsd-fat16",
         "disk-strategy-eof: ok",
         "disk-strategy-write: erofs",
@@ -250,6 +250,28 @@ EXCEPTION_MARKERS = {
     ),
 }
 
+FAT32_MARKER_REPLACEMENTS = {
+    "ide-sectors: 0x00002000": "ide-sectors: 0x00020000",
+    "ide-part0-type: 0x00000006": "ide-part0-type: 0x0000000c",
+    "ide-part0-start: 0x0000000000000040":
+        "ide-part0-start: 0x0000000000000800",
+    "ide-part0-sectors: 0x0000000000001fc0":
+        "ide-part0-sectors: 0x000000000001f800",
+}
+
+
+def filesystem_markers(
+    markers: tuple[str, ...], filesystem: str
+) -> tuple[str, ...]:
+    if filesystem == "fat16":
+        return markers
+    return tuple(
+        FAT32_MARKER_REPLACEMENTS.get(marker, marker).replace(
+            "fat16", "fat32"
+        )
+        for marker in markers
+    )
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -261,6 +283,9 @@ def parse_args() -> argparse.Namespace:
     image.add_argument("--kernel", type=pathlib.Path)
     image.add_argument("--bios-image", type=pathlib.Path)
     parser.add_argument("--disk", type=pathlib.Path)
+    parser.add_argument(
+        "--expect-filesystem", choices=("fat16", "fat32"), default="fat16"
+    )
     parser.add_argument("--timeout", type=float, default=8.0)
     parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
     parser.add_argument("--expect-no-disk", action="store_true")
@@ -335,6 +360,7 @@ def main() -> None:
         markers = BIOS_BOOT_MARKERS
     else:
         markers = BOOT_MARKERS
+    markers = filesystem_markers(markers, args.expect_filesystem)
     stop_marker = (
         b"PANIC: cpu exception\r\n"
         if args.expect_exception

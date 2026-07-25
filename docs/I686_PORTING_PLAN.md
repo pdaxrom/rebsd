@@ -1,7 +1,7 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: сорок bring-up инкрементов выполнены, включая два
-IBM 6563-W4G hardware gate и следующий QEMU-only FAT root gate, 2026-07-25.
+Статус: сорок один bring-up инкремент выполнен, включая два
+IBM 6563-W4G hardware gate и QEMU-only FAT16/FAT32 root gates, 2026-07-25.
 
 ## Выполнено
 
@@ -774,10 +774,29 @@ drive. Перед gate сохранена рекомендация иметь р
 - direct Linux-protocol boot, native BIOS boot и оба no-IDE варианта
   проходят QEMU до `HALT`.
 
-Следующий инкремент остаётся QEMU-only: добавить отдельный deterministic
-FAT32/type-`0x0c` disk gate, затем определить выбор root partition и загрузку
-storage-backed ELF/init. Повторный IBM запуск до прохождения этих проверок
-не требуется.
+Сорок первый QEMU bring-up инкремент завершён:
+
+- `mkide.py` теперь независимо и детерминированно строит FAT16 и FAT32
+  images; новый FAT32 disk имеет 131072 секторов, MBR type `0x0c`, start
+  LBA `0x800` и length `0x1f800`, как у обнаруженного IBM partition;
+- FAT32 volume содержит BPB, FSInfo, backup boot/FSInfo, две одинаковые
+  FAT copies, root cluster, `/BOOT` и тот же двухкластерный
+  `/BOOT/ROOT.TXT`;
+- локальный `/sbin/fsck_msdos -n` проходит обе извлечённые partitions без
+  исправлений, orphan clusters или directory warnings;
+- IDE и generic disk diagnostics различают FAT16/FAT32 без привязки
+  filesystem reader к QEMU PIIX PCI ID;
+- `fat32-boot-smoke` и `bios-fat32-boot-smoke` проходят соответственно
+  Linux protocol и native BIOS handoff, требуют настоящий FAT32 mount,
+  lookup, cross-cluster read, EOF/`ENOENT`/`EISDIR`, оба `EROFS` gate,
+  timer и `HALT`;
+- весь тест выполняется через legacy PIO `READ SECTORS`; ATA writes, DMA и
+  IRQ mode не включались.
+
+Следующий инкремент остаётся QEMU-only: хранить настоящий ELF32 `/sbin/init`
+в FAT image, читать его через `fat_ro` и проверить тем же ELF loader вместо
+встроенного initfs probe. После этого можно определить безопасный opt-in
+hardware gate; сейчас повторный IBM запуск не требуется.
 
 ## 1. Цель и границы первого порта
 

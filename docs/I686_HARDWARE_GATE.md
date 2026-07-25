@@ -6,8 +6,10 @@ VIA Apollo Pro 133, AGP VGA и IDE-CF. У машины нет floppy drive, по
 partition `(hd0,2)`.
 
 В двух проверенных на IBM images файловая система ещё не монтировалась.
-Следующий код уже проходит QEMU-only read-only FAT16/FAT32 reader gate, но
-на IBM его пока повторять не требуется. ATA-команд записи всё ещё нет: IDE
+Следующий код уже проходит отдельные QEMU-only read-only FAT16 и FAT32
+reader gates; FAT32 использует тот же MBR type `0x0c` и start LBA `0x800`,
+что и IBM CF. На IBM его пока повторять не требуется. ATA-команд записи всё
+ещё нет: IDE
 backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
 регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
 `EROFS`.

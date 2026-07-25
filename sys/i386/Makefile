@@ -58,6 +58,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 .DEFAULT_GOAL := all
 
 .PHONY: all kernel bios-image toolchain-check initfs-smoke ide-smoke \
+	ide-fat32-smoke fat32-boot-smoke bios-fat32-boot-smoke \
 	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
 	run run-serial debug boot-smoke bios-boot-smoke trap-smoke \
 	exception-smoke boot-smoke-matrix clean
@@ -584,6 +585,15 @@ ide-smoke: ide-smoke.img
 	cmp ide-smoke.img ide-smoke.check.img
 	rm -f ide-smoke.check.img
 
+ide-fat32-smoke.img: $(I386_TOOLS_SRC)/mkide.py
+	$(PYTHON) $< --filesystem fat32 --output $@
+
+ide-fat32-smoke: ide-fat32-smoke.img
+	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --filesystem fat32 \
+	    --output ide-fat32-smoke.check.img
+	cmp ide-fat32-smoke.img ide-fat32-smoke.check.img
+	rm -f ide-fat32-smoke.check.img
+
 run run-serial: rebsd-i686.bzimg ide-smoke.img
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
 	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
@@ -604,12 +614,25 @@ boot-smoke: rebsd-i686.bzimg ide-smoke.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk ide-smoke.img
 
+fat32-boot-smoke: rebsd-i686.bzimg ide-fat32-smoke.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk ide-fat32-smoke.img --expect-filesystem fat32
+
 bios-boot-smoke: rebsd-i686-bios-floppy.img ide-smoke.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
 	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk ide-smoke.img
+
+bios-fat32-boot-smoke: rebsd-i686-bios-floppy.img ide-fat32-smoke.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --disk ide-fat32-smoke.img --expect-filesystem fat32
 
 bios-ide-absent-smoke: rebsd-i686-bios-floppy.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -657,6 +680,7 @@ clean:
 	    bootstrap_user.o bootstrap-user.elf bootstrap_user_image.o \
 	    initfs.img initfs.check.img initfs_image.o \
 	    ide-smoke.img ide-smoke.check.img \
+	    ide-fat32-smoke.img ide-fat32-smoke.check.img \
 	    rebsd-i686-bios-floppy.img \
 	    rebsd-i686-bios-floppy.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \

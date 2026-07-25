@@ -302,6 +302,19 @@ i386_ide_data_has(const i386_u8 *data, unsigned offset, const char *wanted)
     return 1;
 }
 
+static unsigned
+i386_ide_fat_type(const i386_u8 *data)
+{
+    if (data[510] != 0x55u || data[511] != 0xaau ||
+        !i386_ide_data_has(data, 3, "REBSD   "))
+        return 0;
+    if (i386_ide_data_has(data, 54, "FAT16   "))
+        return 16;
+    if (i386_ide_data_has(data, 82, "FAT32   "))
+        return 32;
+    return 0;
+}
+
 static void
 i386_ide_print_sector(const char *label, disk_sector_t value)
 {
@@ -350,10 +363,10 @@ i386_ide_partition_probe(void)
         i386_early_puts("ide-partition-read: failed\n");
         return 0;
     }
-    if (i386_ide_data_has(i386_ide_sector_data, 3, "REBSD   ") &&
-        i386_ide_sector_data[510] == 0x55u &&
-        i386_ide_sector_data[511] == 0xaau)
+    if (i386_ide_fat_type(i386_ide_sector_data) == 16)
         i386_early_puts("ide-partition-read: rebsd-fat16\n");
+    else if (i386_ide_fat_type(i386_ide_sector_data) == 32)
+        i386_early_puts("ide-partition-read: rebsd-fat32\n");
     else
         i386_early_puts("ide-partition-read: external\n");
 

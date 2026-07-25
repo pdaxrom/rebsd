@@ -18,6 +18,8 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc all
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-image-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-boot-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc fat32-boot-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-fat32-boot-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-ide-absent-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc trap-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke-matrix
@@ -48,7 +50,9 @@ read going through the generic partition-relative `disk_bdev_strategy`.
 Normal QEMU smoke requires case-insensitive lookup, cross-cluster read, EOF,
 missing-name and directory-read checks while the existing open/write
 `EROFS` gates remain active.  Host tests exercise the same reader on FAT16
-and FAT32.
+and FAT32.  A separate 64 MiB FAT32 image uses MBR type `0x0c` and partition
+start LBA `0x800`, matching the IBM CF's observed scheme; direct-kernel and
+native-BIOS QEMU targets require the same root checks on that image.
 
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
