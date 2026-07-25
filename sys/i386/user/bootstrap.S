@@ -53,8 +53,9 @@ _start:
     jne     .Lfailed
     movl    $2, %eax
     int     $0x80
+    jc      .Lfailed
     testl   %eax, %eax
-    jz      .Lchild
+    jz      .Lchild1
     cmpl    $2, %eax
     jne     .Lfailed
     movl    $I386_BOOTSTRAP_FORK_PARENT_MAGIC, %ebx
@@ -62,22 +63,67 @@ _start:
     subl    $4, %esp
     movl    $0, (%esp)
     movl    $7, %eax
-    movl    $-1, %ebx
+    movl    $2, %ebx
+    movl    %esp, %ecx
+    movl    $1, %edx
+    xorl    %esi, %esi
+    int     $0x80
+    jc      .Lfailed
+    testl   %eax, %eax
+    jne     .Lfailed
+    cmpl    $0, (%esp)
+    jne     .Lfailed
+    movl    $7, %eax
+    movl    $2, %ebx
     movl    %esp, %ecx
     xorl    %edx, %edx
     xorl    %esi, %esi
     int     $0x80
+    jc      .Lfailed
     cmpl    $2, %eax
     jne     .Lfailed
     cmpl    $(I386_BOOTSTRAP_CHILD_EXIT_STATUS << 8), (%esp)
+    jne     .Lfailed
+    movl    $0, (%esp)
+    movl    $2, %eax
+    int     $0x80
+    jc      .Lfailed
+    testl   %eax, %eax
+    jz      .Lchild2
+    cmpl    $3, %eax
+    jne     .Lfailed
+    movl    $I386_BOOTSTRAP_FORK2_PARENT_MAGIC, %ebx
+    int     $0x30
+    movl    $7, %eax
+    movl    $3, %ebx
+    movl    $I386_BOOTSTRAP_USER_END, %ecx
+    xorl    %edx, %edx
+    xorl    %esi, %esi
+    int     $0x80
+    jnc     .Lfailed
+    movl    $7, %eax
+    movl    $3, %ebx
+    movl    %esp, %ecx
+    xorl    %edx, %edx
+    xorl    %esi, %esi
+    int     $0x80
+    jc      .Lfailed
+    cmpl    $3, %eax
+    jne     .Lfailed
+    cmpl    $(I386_BOOTSTRAP_CHILD2_EXIT_STATUS << 8), (%esp)
     jne     .Lfailed
     addl    $4, %esp
     movl    $I386_BOOTSTRAP_USER_RETURN_MAGIC, %ebx
     int     $0x30
     ud2
-.Lchild:
+.Lchild1:
     movl    $1, %eax
     movl    $I386_BOOTSTRAP_CHILD_EXIT_STATUS, %ebx
+    int     $0x80
+    ud2
+.Lchild2:
+    movl    $1, %eax
+    movl    $I386_BOOTSTRAP_CHILD2_EXIT_STATUS, %ebx
     int     $0x80
     ud2
 .Lfailed:

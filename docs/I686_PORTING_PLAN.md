@@ -1,6 +1,6 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: тридцать один QEMU bring-up инкремент выполнен, 2026-07-25.
+Статус: тридцать два QEMU bring-up инкремента выполнены, 2026-07-25.
 
 ## Выполнено
 
@@ -564,6 +564,33 @@ resource accounting, orphan reparenting, signals и расширенные ва�
 Следующий инкремент: обобщить ранний lifecycle до полного generic
 exit/wait semantics либо подключить минимальный VFS/file layer, сохранив
 чистую границу с i386 MD-кодом.
+
+Тридцать второй QEMU bring-up инкремент завершён:
+
+- ранний production `wait4` принимает `WAIT_ANY` или конкретный
+  положительный PID и поддерживает `WNOHANG`, по-прежнему отклоняя
+  неподдержанные options и ненулевой `rusage`;
+- двухфазные `proc_waitable`/`proc_reap` отделяют поиск zombie от
+  освобождения ресурсов; status копируется в parent vmspace до изменения
+  очередей, поэтому `EFAULT` оставляет ребёнка доступным повторному wait;
+- первый child PID 2 сначала остаётся runnable, пока
+  `wait4(2, status, WNOHANG)` возвращает 0 и не меняет status, затем
+  blocking `wait4` усыпляет proc1 и получает `exit(42)`;
+- освобождённый `proc[2]` повторно используется вторым fork уже как PID 3;
+  контролируемый scheduler handoff даёт ребёнку выполнить `exit(43)` до
+  parent wait, проверяя отдельный путь готового zombie;
+- parent сначала получает ожидаемый `EFAULT` с неверным status pointer,
+  затем успешно повторяет `wait4(3, status, 0)` и возвращает `proc[2]` в
+  начало `freeproc`;
+- markers `wait4-nohang: ok`, `wait4-zombie: ok` и `wait4-efault: ok`
+  делают три режима обязательными для normal/page QEMU smoke;
+- clean strict build, normal/trap QEMU smoke, RAM matrix
+  32/64/128/256/768/1024 МиБ, deterministic initfs, host VM tests и
+  объектные сборки MaltaEL/N64 проходят.
+
+Следующий инкремент: добавить stop/continue semantics и resource accounting
+к wait lifecycle либо перейти к минимальному file/VFS слою, необходимому
+для production exec и дискового root.
 
 ## 1. Цель и границы первого порта
 

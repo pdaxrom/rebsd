@@ -46,6 +46,8 @@ static int i386_process_idle_entered;
 static int i386_process_scheduler_tested;
 static int i386_process_fork_created;
 static int i386_process_fork_parent_ready;
+static unsigned i386_process_fork_count;
+static int i386_process_zombie_before_wait;
 static int i386_process_fork_tested;
 static volatile unsigned i386_process_user_active;
 static volatile unsigned i386_process_user_result;
@@ -135,6 +137,8 @@ i386_process_bootstrap_validate(void)
     } else {
         if (i386_fork_child != &proc[2] ||
             !i386_process_fork_parent_ready ||
+            i386_process_fork_count != 2u ||
+            !i386_process_zombie_before_wait ||
             !i386_process_fork_tested ||
             allproc != i386_bootstrap_proc ||
             i386_bootstrap_proc->p_prev != &allproc ||
@@ -149,6 +153,7 @@ i386_process_bootstrap_validate(void)
             i386_fork_child->p_uarea != (struct user *)0 ||
             i386_fork_child->p_vmspace != (struct vmspace *)0 ||
             pfind(2) != (struct proc *)0 ||
+            pfind(3) != (struct proc *)0 ||
             i386_bootstrap_cdir.i_count != 1)
             return EFAULT;
     }
@@ -410,6 +415,8 @@ i386_process_fork_roundtrip(void)
 {
     if (!i386_process_fork_created ||
         !i386_process_fork_parent_ready ||
+        i386_process_fork_count != 2u ||
+        !i386_process_zombie_before_wait ||
         i386_fork_child != &proc[2] ||
         i386_process_idle_result != I386_PROCESS_IDLE_MAGIC ||
         !i386_process_idle_entered ||
@@ -429,6 +436,7 @@ i386_process_fork_roundtrip(void)
         i386_fork_child->p_vmspace != (struct vmspace *)0 ||
         i386_fork_child->p_uarea != (struct user *)0 ||
         pfind(2) != (struct proc *)0 ||
+        pfind(3) != (struct proc *)0 ||
         i386_bootstrap_cdir.i_count != 1)
         return i386_process_scheduler_fail(0x41);
     i386_process_fork_tested = 1;
@@ -470,12 +478,13 @@ int
 i386_process_handle_return(struct i386_trapframe *frame)
 {
     unsigned expected_stack;
+    int saved_priority;
 
     if (!i386_process_user_active)
         return 0;
 
     expected_stack = (unsigned)(unsigned long)i386_bootstrap_uarea + USIZE;
-    if (!i386_process_fork_parent_ready &&
+    if (i386_process_fork_count == 0u &&
         frame->tf_ebx == I386_BOOTSTRAP_FORK_PARENT_MAGIC) {
         if (md_curuser != i386_bootstrap_uarea ||
             u.u_procp != i386_bootstrap_proc ||
@@ -506,10 +515,80 @@ i386_process_handle_return(struct i386_trapframe *frame)
         i386_fork_child = &proc[2];
         i386_process_fork_created = 1;
         i386_process_fork_parent_ready = 1;
+        i386_process_fork_count = 1u;
+        return 1;
+    }
+
+    if (i386_process_fork_count == 1u &&
+        frame->tf_ebx == I386_BOOTSTRAP_FORK2_PARENT_MAGIC) {
+        if (md_curuser != i386_bootstrap_uarea ||
+            u.u_procp != i386_bootstrap_proc ||
+            frame->tf_vector != I386_USER_RETURN_VECTOR ||
+            frame->tf_cs != I386_USER_CODE_SELECTOR ||
+            frame->tf_ss != I386_USER_DATA_SELECTOR ||
+            frame->tf_ds != I386_USER_DATA_SELECTOR ||
+            frame->tf_useresp !=
+            i386_bootstrap_user_stack.ius_stack_pointer -
+            sizeof(unsigned) ||
+            (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 ||
+            frame->tf_eax != 3 ||
+            qs != i386_fork_child ||
+            i386_fork_child->p_pid != 3 ||
+            i386_fork_child->p_ppid != 1 ||
+            i386_fork_child->p_pptr != i386_bootstrap_proc ||
+            i386_fork_child->p_stat != SRUN ||
+            (i386_fork_child->p_flag & (SLOAD | SSWAP)) !=
+            (SLOAD | SSWAP) ||
+            i386_fork_child->p_vmspace == i386_bootstrap_vmspace ||
+            i386_fork_child->p_uarea == i386_bootstrap_uarea ||
+            freeproc != &proc[3] ||
+            pfind(2) != (struct proc *)0 ||
+            pfind(3) != i386_fork_child ||
+            i386_bootstrap_cdir.i_count != 2 ||
+            vmspace_current() != i386_bootstrap_vmspace ||
+            i386_tss_kernel_stack() != expected_stack) {
+            i386_process_user_result = EFAULT;
+            i386_privilege_return_to_kernel(frame,
+                (unsigned)(unsigned long)i386_process_user_kernel_return);
+            return 1;
+        }
+        md_uarea_guard_check(i386_fork_child->p_uarea);
+        saved_priority = i386_bootstrap_proc->p_pri;
+        i386_bootstrap_proc->p_pri = i386_fork_child->p_pri + 1;
+        setrq(i386_bootstrap_proc);
+        swtch();
+        i386_bootstrap_proc->p_pri = saved_priority;
+        if (md_curuser != i386_bootstrap_uarea ||
+            u.u_procp != i386_bootstrap_proc ||
+            qs != (struct proc *)0 ||
+            allproc != i386_bootstrap_proc ||
+            i386_bootstrap_proc->p_nxt != &proc[0] ||
+            zombproc != i386_fork_child ||
+            i386_fork_child->p_stat != SZOMB ||
+            i386_fork_child->p_pid != 3 ||
+            i386_fork_child->p_ppid != 1 ||
+            i386_fork_child->p_pptr != i386_bootstrap_proc ||
+            i386_fork_child->p_vmspace == (struct vmspace *)0 ||
+            i386_fork_child->p_uarea == (struct user *)0 ||
+            freeproc != &proc[3] ||
+            pfind(3) != (struct proc *)0 ||
+            i386_bootstrap_cdir.i_count != 1 ||
+            vmspace_current() != i386_bootstrap_vmspace ||
+            i386_tss_kernel_stack() != expected_stack) {
+            i386_process_user_result = EFAULT;
+            i386_privilege_return_to_kernel(frame,
+                (unsigned)(unsigned long)i386_process_user_kernel_return);
+            return 1;
+        }
+        md_uarea_guard_check(i386_fork_child->p_uarea);
+        i386_process_fork_count = 2u;
+        i386_process_zombie_before_wait = 1;
         return 1;
     }
 
     if (!i386_process_fork_parent_ready ||
+        i386_process_fork_count != 2u ||
+        !i386_process_zombie_before_wait ||
         md_curuser != i386_bootstrap_uarea ||
         frame->tf_vector != I386_USER_RETURN_VECTOR ||
         frame->tf_cs != I386_USER_CODE_SELECTOR ||
@@ -520,7 +599,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
         frame->tf_edx != 0 ||
         frame->tf_ebx != I386_BOOTSTRAP_USER_RETURN_MAGIC ||
         (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 ||
-        frame->tf_eax != 2 ||
+        frame->tf_eax != 3 ||
         i386_bootstrap_proc->p_saddr != I386_PROCESS_USER_STACK ||
         i386_bootstrap_proc->p_ssize != VM_PAGE_SIZE ||
         i386_bootstrap_uarea->u_ssize != VM_PAGE_SIZE ||

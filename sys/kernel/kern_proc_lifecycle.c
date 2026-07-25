@@ -38,13 +38,13 @@ proc_zombify(struct proc *process, int status)
 }
 
 int
-proc_reap(struct proc *parent, int pid, int *status, int *result)
+proc_waitable(struct proc *parent, int pid, struct proc **result)
 {
     struct proc *process;
     int child_found;
-    int error;
 
-    if (parent == (struct proc *)0 || result == (int *)0)
+    if (parent == (struct proc *)0 ||
+        result == (struct proc **)0)
         return EINVAL;
 
     child_found = 0;
@@ -54,24 +54,7 @@ proc_reap(struct proc *parent, int pid, int *status, int *result)
             continue;
         if (pid != -1 && process->p_pid != pid)
             continue;
-        if (process->p_vmspace != (struct vmspace *)0) {
-            error = vmspace_destroy(process->p_vmspace);
-            if (error != 0)
-                return error;
-            process->p_vmspace = (struct vmspace *)0;
-        }
-        if (status != (int *)0)
-            *status = process->p_xstat;
-        *result = process->p_pid;
-        if (process->p_uarea != (struct user *)0) {
-            md_uarea_free(process->p_uarea);
-            process->p_uarea = (struct user *)0;
-        }
-        if ((*process->p_prev = process->p_nxt) != (struct proc *)0)
-            process->p_nxt->p_prev = process->p_prev;
-        bzero(process, sizeof(*process));
-        process->p_nxt = freeproc;
-        freeproc = process;
+        *result = process;
         return 0;
     }
 
@@ -84,4 +67,31 @@ proc_reap(struct proc *parent, int pid, int *status, int *result)
         }
     }
     return child_found ? EWOULDBLOCK : ECHILD;
+}
+
+int
+proc_reap(struct proc *process)
+{
+    int error;
+
+    if (process == (struct proc *)0 || process->p_stat != SZOMB ||
+        process->p_prev == (struct proc **)0 ||
+        *process->p_prev != process)
+        return EINVAL;
+    if (process->p_vmspace != (struct vmspace *)0) {
+        error = vmspace_destroy(process->p_vmspace);
+        if (error != 0)
+            return error;
+        process->p_vmspace = (struct vmspace *)0;
+    }
+    if (process->p_uarea != (struct user *)0) {
+        md_uarea_free(process->p_uarea);
+        process->p_uarea = (struct user *)0;
+    }
+    if ((*process->p_prev = process->p_nxt) != (struct proc *)0)
+        process->p_nxt->p_prev = process->p_prev;
+    bzero(process, sizeof(*process));
+    process->p_nxt = freeproc;
+    freeproc = process;
+    return 0;
 }
