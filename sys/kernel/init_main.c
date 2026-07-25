@@ -33,44 +33,6 @@ size_t  physmem;            /* total amount of physical memory */
 int     boothowto;          /* reboot flags, from boot */
 
 /*
- * Initialize hash links for buffers.
- */
-static void
-bhinit()
-{
-    register int i;
-    register struct bufhd *bp;
-
-    for (bp = bufhash, i = 0; i < BUFHSZ; i++, bp++)
-        bp->b_forw = bp->b_back = (struct buf *)bp;
-}
-
-/*
- * Initialize the buffer I/O system by freeing
- * all buffers and setting all device buffer lists to empty.
- */
-static void
-binit()
-{
-    register struct buf *bp;
-    register int i;
-    caddr_t paddr;
-
-    for (bp = bfreelist; bp < &bfreelist[BQUEUES]; bp++)
-        bp->b_forw = bp->b_back = bp->av_forw = bp->av_back = bp;
-    paddr = bufdata;
-    for (i = 0; i < NBUF; i++, paddr += MAXBSIZE) {
-        bp = &buf[i];
-        bp->b_dev = NODEV;
-        bp->b_bcount = 0;
-        bp->b_addr = paddr;
-        binshash(bp, &bfreelist[BQ_AGE]);
-        bp->b_flags = B_BUSY|B_INVAL;
-        brelse(bp);
-    }
-}
-
-/*
  * Initialize clist by freeing all character blocks, then count
  * number of character devices. (Once-only routine)
  */
@@ -233,8 +195,7 @@ main()
     cinit();
     pqinit();
     ihinit();
-    bhinit();
-    binit();
+    bioinit();
     nchinit();
     clkstart();
 

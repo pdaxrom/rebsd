@@ -280,12 +280,8 @@ pipe()
         iput (ip);
         return;
     }
-#ifdef __mips__
-    /* Move a secondary return value to register $v1. */
+    /* Return the write descriptor in the ABI's secondary result register. */
     u.u_rval2 = u.u_rval;
-#else
-#error "pipe return value for unknown architecture"
-#endif
     u.u_rval = r;
     wf->f_flag = FWRITE;
     rf->f_flag = FREAD;

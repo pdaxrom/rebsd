@@ -2206,11 +2206,9 @@ fat_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
         error = EFBIG;
         goto fail;
     }
-    if (!fmp->fm_read_only) {
-        error = fat_count_free_clusters(fmp);
-        if (error)
-            goto fail;
-    }
+    error = fat_count_free_clusters(fmp);
+    if (error)
+        goto fail;
 
     mp->m_data = (caddr_t)fmp;
     mp->m_filsys.fs_ronly = fmp->fm_read_only;

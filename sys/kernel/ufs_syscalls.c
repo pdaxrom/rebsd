@@ -159,7 +159,7 @@ copen (int mode, int cmode, caddr_t fname)
             u.u_rval = indx;
             return(0);
         }
-        u.u_ofile[indx] = NULL;
+        fdrelease(indx);
         return(error);
     }
     ip = ndp->ni_ip;
@@ -178,7 +178,7 @@ copen (int mode, int cmode, caddr_t fname)
         if (error) {
 //printf ("copen: ino_lock failed, errno=%d\n", error);
             closef(fp);
-            u.u_ofile[indx] = NULL;
+            fdrelease(indx);
         }
     }
 //printf ("copen returned errno=%d\n", error);

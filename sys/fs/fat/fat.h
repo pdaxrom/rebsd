@@ -64,20 +64,6 @@ struct fat_dirent {
     unsigned fd_modify_date;
 };
 
-typedef int (*fat_sector_read_fn)(void *, unsigned, unsigned char *);
-
-struct fat_ro {
-    struct fat_volume fr_volume;
-    fat_sector_read_fn fr_read;
-    void *fr_arg;
-};
-
-struct fat_ro_node {
-    unsigned fn_attr;
-    unsigned fn_cluster;
-    unsigned fn_size;
-};
-
 int fat_volume_parse(struct fat_volume *, const unsigned char *, unsigned);
 int fat_cluster_valid(const struct fat_volume *, unsigned);
 unsigned fat_cluster_first_sector(const struct fat_volume *, unsigned);
@@ -98,11 +84,6 @@ void fat_dirent_encode(unsigned char *, const unsigned char *, unsigned,
 void fat_dirent_set_cluster_size(unsigned char *, unsigned, unsigned);
 void fat_directory_encode(unsigned char *, unsigned, unsigned);
 int fat_ascii_name_equal(const char *, unsigned, const char *, unsigned);
-
-int fat_ro_mount(struct fat_ro *, unsigned, fat_sector_read_fn, void *);
-int fat_ro_lookup(struct fat_ro *, const char *, struct fat_ro_node *);
-int fat_ro_read(struct fat_ro *, const struct fat_ro_node *, unsigned, void *,
-    unsigned, unsigned *);
 
 #ifdef KERNEL
 struct vfsops;

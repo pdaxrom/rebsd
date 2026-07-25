@@ -2,6 +2,7 @@
 #include <sys/buf.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
+#include <sys/inode.h>
 
 #include <disk/disk.h>
 
@@ -59,3 +60,29 @@ const struct bdevsw bdevsw[] = {
 };
 
 const int nblkdev = sizeof(bdevsw) / sizeof(bdevsw[0]) - 1;
+
+const struct cdevsw cdevsw[] = {
+    { 0 }
+};
+
+const int nchrdev = 0;
+
+dev_t
+chrtoblk(dev_t dev)
+{
+    (void)dev;
+    return NODEV;
+}
+
+int
+iskmemdev(dev_t dev)
+{
+    (void)dev;
+    return 0;
+}
+
+int
+isdisk(dev_t dev, int type)
+{
+    return type == IFBLK && major(dev) == I386_DISK_MAJOR;
+}

@@ -49,7 +49,6 @@ endvfork()
 void
 exit (int rv)
 {
-    register int i;
     register struct proc *p;
     struct  proc **pp;
 
@@ -61,14 +60,7 @@ exit (int rv)
      * 2.11 doesn't need to do this and it gets overwritten anyway.
      * p->p_realtimer.it_value = 0;
      */
-    for (i = 0; i <= u.u_lastfile; i++) {
-        register struct file *f;
-
-        f = u.u_ofile[i];
-        u.u_ofile[i] = NULL;
-        u.u_pofile[i] = 0;
-        (void) closef(f);
-    }
+    fdcloseall();
     ilock(u.u_cdir);
     iput(u.u_cdir);
     if (u.u_rdir) {

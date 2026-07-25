@@ -40,6 +40,17 @@ ufalloc(int i)
     return (-1);
 }
 
+void
+fdrelease(int fd)
+{
+    if ((unsigned)fd >= NOFILE)
+        return;
+    u.u_ofile[fd] = NULL;
+    u.u_pofile[fd] = 0;
+    while (u.u_lastfile >= 0 && u.u_ofile[u.u_lastfile] == NULL)
+        u.u_lastfile--;
+}
+
 /*
  * System calls on descriptors.
  */
@@ -239,9 +250,7 @@ close()
     register struct file *fp;
 
     GETF(fp, uap->i);
-    u.u_ofile[uap->i] = NULL;
-    while (u.u_lastfile >= 0 && u.u_ofile[u.u_lastfile] == NULL)
-        u.u_lastfile--;
+    fdrelease(uap->i);
     u.u_error = closef(fp);
     /* WHAT IF u.u_error ? */
 }
@@ -337,6 +346,7 @@ falloc()
             goto slot;
     log(LOG_ERR, "file: table full\n");
     u.u_error = ENFILE;
+    fdrelease(i);
     return (NULL);
 slot:
     u.u_ofile[i] = fp;
@@ -387,6 +397,21 @@ closef(struct file *fp)
     error = (*Fops[fp->f_type]->fo_close)(fp);
     fp->f_count = 0;
     return(error);
+}
+
+void
+fdcloseall(void)
+{
+    struct file *fp;
+    int descriptor;
+
+    for (descriptor = 0; descriptor <= u.u_lastfile; ++descriptor) {
+        fp = u.u_ofile[descriptor];
+        u.u_ofile[descriptor] = NULL;
+        u.u_pofile[descriptor] = 0;
+        (void)closef(fp);
+    }
+    u.u_lastfile = -1;
 }
 
 /*

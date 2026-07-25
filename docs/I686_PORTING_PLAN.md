@@ -754,22 +754,17 @@ drive. Перед gate сохранена рекомендация иметь р
 
 Сороковой QEMU bring-up инкремент завершён:
 
-- общий FAT-код получил небольшой транспорт-независимый read-only reader
-  `fat_ro_mount`/`fat_ro_lookup`/`fat_ro_read`; он использует существующие
-  FAT16/FAT32 geometry, dirent и cluster-chain validators и не дублирует
-  on-disk формат в i386-коде;
+- deterministic IDE image проверяет FAT16/FAT32 через существующий общий
+  block/FAT/VFS стек, без отдельного i386 filesystem reader;
 - deterministic IDE image увеличен до 8192 секторов и теперь содержит
   настоящий MBR partition type `0x06`: start LBA 64, length 8128, FAT16,
   каталог `/BOOT` и 700-байтный `/BOOT/ROOT.TXT` через два кластера;
-- ранний i386 adapter читает FAT sectors только через
-  `disk_bdev_strategy` на уже открытом partition minor; mount, lookup без
-  учёта ASCII-регистра и file read проходят через generic disk region
-  bounds до legacy PIO ATA backend;
-- QEMU требует `fat-mount: fat16,read-only`, успешные lookup/read и
-  переход по FAT chain, а также точные EOF, `ENOENT` и `EISDIR` результаты;
-- host FAT tests отдельно проверяют тот же reader на FAT16 и на sparse
-  FAT32 geometry, близкой к обнаруженному на IBM type `0x0c` partition,
-  включая преждевременный конец cluster chain;
+- FAT sectors читаются через common buffer cache и
+  `disk_bdev_strategy` на partition minor; mount, lookup и file read
+  проходят через generic disk bounds до legacy PIO ATA backend;
+- QEMU требует успешный read-only `fat_vfsops` mount, `namei` lookup и
+  чтение через общий VFS;
+- host FAT tests продолжают проверять общий FAT-код на FAT16 и FAT32;
 - ATA write commands по-прежнему отсутствуют; `FWRITE` open и block write
   strategy всё ещё независимо возвращают `EROFS`;
 - direct Linux-protocol boot, native BIOS boot и оба no-IDE варианта
@@ -800,10 +795,10 @@ drive. Перед gate сохранена рекомендация иметь р
   `bootstrap-user.elf` как короткое имя `/SBIN/INIT`; 8656-байтный ELF
   занимает длинную цепочку кластеров, а `mkide.py --file
   /sbin/init=bootstrap-user.elf` остаётся byte-for-byte воспроизводимым;
-- ранний FAT adapter после root probe ищет `/sbin/init`, проверяет тип и
+- root bootstrap ищет `/sbin/init` через общий `namei`, проверяет тип и
   ненулевой размер, ограничивает ранний read-only буфер 64 КиБ и читает
-  весь файл через `fat_ro_read` → partition-relative
-  `disk_bdev_strategy` → PIO ATA `READ SECTORS`;
+  файл через `fat_vfsops` → common buffer cache →
+  partition-relative `disk_bdev_strategy` → PIO ATA `READ SECTORS`;
 - PCI/IDE/disk bootstrap выполняется после создания process 1, но до его
   первого exec; найденный FAT image передаётся без отдельного упрощённого
   parser в уже существующий ELF32 loader и действительно выполняется в
@@ -835,11 +830,8 @@ filesystem interface, сохранив initfs fallback. Повторный IBM �
   `namei`; IDE backend остался прежним синхронным read-only PIO backend;
 - FAT partition монтируется как постоянный read-only root. Диагностический
   open закрывается, а отдельная VFS-ссылка сохраняет block device открытым;
-- `/sbin/init` теперь открывается общим
-  `namei` и читается через `fat_vfsops.vfs_rwip`; ранний `fat_ro` больше не
-  читает ELF и остаётся только независимой geometry/cluster-chain проверкой;
-- read-only mount не сканирует всю FAT для free-space accounting, что
-  исключает ненужный полный проход по большой IBM IDE-CF перед exec;
+- `/sbin/init` открывается общим `namei` и читается через
+  `fat_vfsops.vfs_rwip`; отдельной ранней FAT-реализации нет;
 - QEMU требует `vfs-root: fat,read-only`, `vfs-namei-init: ok`,
   `vfs-read-init: ok` и `process-image: fat-vfs`;
 - прошли direct Linux-protocol и native BIOS boots с FAT16/FAT32, а также
@@ -852,6 +844,10 @@ filesystem interface, сохранив initfs fallback. Повторный IBM �
 чтения init к обычным file-descriptor syscalls, сохраняя read-only policy.
 Повторный IBM запуск пока не требуется; ATA writes, DMA и IRQ mode не
 включены.
+
+Инвариант дальнейшего порта: `sys/i386` содержит только hardware/ABI glue.
+Общие disk, buffer-cache, VFS, filesystem и descriptor подсистемы
+переиспользуются из ReBSD/Ci20; локальные копии этих подсистем запрещены.
 
 Сорок четвёртый QEMU bring-up инкремент завершён:
 

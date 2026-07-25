@@ -15,6 +15,17 @@ i386_copyio_user_range(const struct vmspace *vmspace,
 }
 
 int
+baduaddr(caddr_t address)
+{
+    struct vmspace *vmspace;
+
+    vmspace = vmspace_current();
+    return vmspace == (struct vmspace *)0 ||
+        vmspace_check(vmspace, (vm_vaddr_t)(unsigned long)address, 1,
+        VM_PROT_NONE) != 0;
+}
+
+int
 copyout(const caddr_t from, caddr_t to, u_int nbytes)
 {
     struct vmspace *vmspace;

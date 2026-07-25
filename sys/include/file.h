@@ -53,11 +53,13 @@ struct file *getf (int f);
  * Allocate a user file descriptor and a file structure.
  */
 struct file *falloc (void);
+void fdrelease (int fd);
 
 /*
  * Internal form of close.
  */
 int closef (struct file *fp);
+void fdcloseall (void);
 
 /*
  * Set/clear file flags: nonblock and async.

@@ -12,6 +12,7 @@
 #include <sys/proc.h>
 
 int nproc = NPROC;
+int securelevel;
 struct timezone tz = { 0, 0 };
 struct namecache namecache[NNAMECACHE];
 char bufdata[NBUF * MAXBSIZE];

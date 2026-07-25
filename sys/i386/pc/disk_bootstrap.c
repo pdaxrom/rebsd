@@ -1,6 +1,5 @@
 #include "boot.h"
 #include "disk_bootstrap.h"
-#include "fat_bootstrap.h"
 #include "ide.h"
 #include "vfs_bootstrap.h"
 
@@ -182,15 +181,6 @@ i386_disk_bootstrap(void)
         i386_early_puts("disk-strategy-write: failed\n");
         return EIO;
     }
-
-    if (sectors <= 0xffffffffull) {
-        error = i386_fat_bootstrap(dev, (unsigned)sectors);
-        if (error != 0) {
-            (void)disk_bdev_close(dev, FREAD, 0);
-            return error;
-        }
-    } else
-        i386_early_puts("fat-root: media-too-large\n");
 
     error = i386_vfs_bootstrap_mount(dev);
     if (error != 0) {

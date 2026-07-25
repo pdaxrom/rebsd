@@ -264,7 +264,7 @@ static void
 lseek1(int fd, off_t off, int sbase, int wide)
 {
     register struct file *fp;
-    off_t result;
+    off_t result = 0;
 
     if ((fp = getf(fd)) == NULL)
         return;

@@ -22,7 +22,7 @@ I686_CODE_FLAGS = -ffreestanding -fno-builtin -fno-stack-protector \
                   -mno-sse -mno-sse2 -Wa,--noexecstack
 I686_WARN_FLAGS = -Wall -Wextra -Werror
 
-I686_CPPFLAGS   = -DKERNEL -DI386 -D__i386__ \
+I686_CPPFLAGS   = -DKERNEL -DI386 -D__i386__ -DFAT_ENABLED \
                   -DVM_PHYS_MAX_REGIONS=512 -DVM_SINGLE_THREADED \
                   -DVM_PAGER_NO_SWAP
 I686_CFLAGS     = $(I686_ARCH_FLAGS) $(I686_CODE_FLAGS) $(I686_WARN_FLAGS) \

@@ -47,13 +47,12 @@ protected-mode trampoline copies it to 1 MiB.  QEMU requires
 
 The IDE smoke image is now an 8192-sector MBR disk with a real read-only
 FAT16 partition, a two-cluster `/BOOT/ROOT.TXT`, and the separately linked
-ELF32 bootstrap as `/SBIN/INIT`.  The small transport-independent `fat_ro`
-reader remains an early geometry/chain diagnostic, with every sector read
-going through the generic partition-relative `disk_bdev_strategy`.  The
-actual root mount follows the same path used above Ci20 USB mass storage:
-block major 2, the common buffer cache, `fat_vfsops`, inode/name caches and
-`namei`.  Process 1 opens and reads `/sbin/init` through that VFS path into a
-bounded 64 KiB buffer.  The existing ELF loader maps and executes it in CPL3
+ELF32 bootstrap as `/SBIN/INIT`.  IDE and Ci20 USB mass storage converge at
+the generic block-device interface.  The root mount uses the existing common
+disk layer, buffer cache, `fat_vfsops`, inode/name caches and `namei`; i386
+does not carry a private filesystem reader.  Process 1 opens and reads
+`/sbin/init` through that VFS path into a bounded 64 KiB buffer.  The
+existing ELF loader maps and executes it in CPL3
 and reports `process-image: fat-vfs`; no-disk boots report
 `process-image: initfs` and execute the embedded fallback.  A separate FAT32
 gate also mounts a valid disk without `/sbin/init` and requires the same
@@ -65,11 +64,16 @@ file offset through `lseek(19)`, and releases the descriptor through
 the child reads through the shared file object, advances the common offset,
 and early `exit` drops the inherited reference before the parent closes the
 last one.  The gate also requires `EBADF` after a repeated close and `EROFS`
-for a write open.  Host tests exercise the same reader on FAT16 and FAT32.
+for a write open.  Host tests exercise the common FAT implementation on
+FAT16 and FAT32.
 A separate 64 MiB FAT32 image uses MBR type `0x0c` and partition start LBA
 `0x800`, matching the IBM CF's observed scheme; direct-kernel and native-BIOS
 QEMU targets require the same root and storage-backed ELF/fd checks on that
 image.
+
+Porting invariant: `sys/i386` contains only hardware and ABI glue.  Existing
+common disk, buffer-cache, VFS, filesystem and descriptor implementations
+must be reused rather than reimplemented locally.
 
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted

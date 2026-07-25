@@ -11,7 +11,6 @@
 #include "context.h"
 #include "boot.h"
 #include "elf_bootstrap.h"
-#include "file_bootstrap.h"
 #include "initfs.h"
 #include "interrupt.h"
 #include "privilege.h"
@@ -33,6 +32,22 @@ static struct proc *i386_bootstrap_proc;
 static struct user *i386_bootstrap_uarea;
 static struct vmspace *i386_bootstrap_vmspace;
 static struct user *i386_idle_uarea;
+
+static int
+i386_process_file_table_closed(void)
+{
+    int index;
+
+    if (u.u_lastfile != -1)
+        return 0;
+    for (index = 0; index < NOFILE; ++index)
+        if (u.u_ofile[index] != (struct file *)0)
+            return 0;
+    for (index = 0; index < NFILE; ++index)
+        if (file[index].f_count != 0)
+            return 0;
+    return 1;
+}
 static struct vmspace *i386_idle_vmspace;
 static struct proc *i386_fork_child;
 static struct inode i386_bootstrap_cdir;
@@ -503,7 +518,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
             sizeof(unsigned) ||
             (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 ||
             frame->tf_eax != 0 ||
-            i386_file_bootstrap_validate_closed() != 0 ||
+            !i386_process_file_table_closed() ||
             pfind(2) != (struct proc *)0 ||
             freeproc != i386_fork_child ||
             i386_fork_child->p_stat != 0 ||
@@ -556,7 +571,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
             u.u_ofile[0]->f_count != 2 ||
             u.u_ofile[0]->f_offset != 4)) ||
             (!i386_process_vfs_image &&
-            i386_file_bootstrap_validate_closed() != 0)) {
+            !i386_process_file_table_closed())) {
             i386_process_user_result = EFAULT;
             i386_privilege_return_to_kernel(frame,
                 (unsigned)(unsigned long)i386_process_user_kernel_return);
@@ -756,7 +771,7 @@ i386_process_bootstrap_user_probe(void)
         i386_process_user_result != I386_PROCESS_USER_MAGIC ||
         (i386_process_vfs_image && !i386_process_vfs_fd_tested) ||
         (!i386_process_vfs_image && i386_process_vfs_fd_tested) ||
-        i386_file_bootstrap_validate_closed() != 0)
+        !i386_process_file_table_closed())
         return EFAULT;
     if (i386_process_vfs_fd_tested) {
         i386_early_puts("syscall-open: ok\n");

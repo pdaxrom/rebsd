@@ -38,6 +38,15 @@ syscall_off64_result(off_t value)
     u.u_rval2 = result.word[1];
 }
 
+static int
+uio_user_address(const void *address)
+{
+    unsigned value;
+
+    value = (unsigned)address;
+    return value >= USER_DATA_START && value < USER_DATA_END;
+}
+
 /*
  * Move data to/from user space.
  */
@@ -58,7 +67,7 @@ uiomove (caddr_t cp, u_int n, struct uio *uio)
         }
         if (cnt > n)
             cnt = n;
-        if ((unsigned)iov->iov_base < KERNEL_DATA_START) {
+        if (uio_user_address(iov->iov_base)) {
             if (uio->uio_rw == UIO_READ)
                 error = copyout((caddr_t)cp, iov->iov_base, cnt);
             else
@@ -98,7 +107,7 @@ again:
         goto again;
     }
     byte = (unsigned char)c;
-    if ((unsigned)iov->iov_base < KERNEL_DATA_START) {
+    if (uio_user_address(iov->iov_base)) {
         if (copyout((caddr_t)&byte, iov->iov_base, 1) != 0)
             return EFAULT;
     } else
@@ -133,7 +142,7 @@ again:
             return (-1);
         goto again;
     }
-    if ((unsigned)iov->iov_base < KERNEL_DATA_START) {
+    if (uio_user_address(iov->iov_base)) {
         if (copyin(iov->iov_base, (caddr_t)&byte, 1) != 0)
             return (-1);
         c = byte;
@@ -153,7 +162,7 @@ again:
 int
 uiofmove(caddr_t cp, int n, struct uio *uio, struct iovec *iov)
 {
-    if ((unsigned)iov->iov_base < KERNEL_DATA_START) {
+    if (uio_user_address(iov->iov_base)) {
         if (uio->uio_rw == UIO_READ)
             return copyout(cp, iov->iov_base, n);
         return copyin(iov->iov_base, cp, n);

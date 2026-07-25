@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <fs/fat/fat.h>
 
 #define CHECK(expr) do {                                                \
@@ -28,13 +27,6 @@ set_le32(unsigned char *data, unsigned value)
     data[1] = (unsigned char)(value >> 8);
     data[2] = (unsigned char)(value >> 16);
     data[3] = (unsigned char)(value >> 24);
-}
-
-static unsigned
-get_le32(const unsigned char *data)
-{
-    return (unsigned)data[0] | ((unsigned)data[1] << 8) |
-        ((unsigned)data[2] << 16) | ((unsigned)data[3] << 24);
 }
 
 static void
@@ -230,191 +222,6 @@ test_directory_encoding(void)
     return 0;
 }
 
-struct fat_ro_image {
-    unsigned char boot[FAT_SECTOR_SIZE];
-    unsigned char fat[FAT_SECTOR_SIZE];
-    unsigned char root[FAT_SECTOR_SIZE];
-    unsigned char directory[FAT_SECTOR_SIZE];
-    unsigned char file_first[FAT_SECTOR_SIZE];
-    unsigned char file_second[FAT_SECTOR_SIZE];
-};
-
-static int
-fat_ro_image_read(void *arg, unsigned sector, unsigned char *data)
-{
-    struct fat_ro_image *image;
-    const unsigned char *source;
-
-    image = arg;
-    source = NULL;
-    switch (sector) {
-    case 0:
-        source = image->boot;
-        break;
-    case 1:
-    case 33:
-        source = image->fat;
-        break;
-    case 65:
-        source = image->root;
-        break;
-    case 69:
-        source = image->directory;
-        break;
-    case 70:
-        source = image->file_first;
-        break;
-    case 71:
-        source = image->file_second;
-        break;
-    default:
-        memset(data, 0, FAT_SECTOR_SIZE);
-        return sector < 8192 ? 0 : EIO;
-    }
-    memcpy(data, source, FAT_SECTOR_SIZE);
-    return 0;
-}
-
-static int
-test_read_only_reader(void)
-{
-    struct fat_ro_image image;
-    struct fat_ro reader;
-    struct fat_ro_node node;
-    struct fat_ro_node root;
-    unsigned char short_name[11];
-    unsigned char output[700];
-    unsigned count;
-
-    memset(&image, 0, sizeof(image));
-    boot_common(image.boot, 1, 1, 2, 8192);
-    set_le16(image.boot + 17, 64);
-    set_le16(image.boot + 22, 32);
-    set_le16(image.fat, 0xfff8);
-    set_le16(image.fat + 2, 0xffff);
-    set_le16(image.fat + 4, 0xffff);
-    set_le16(image.fat + 6, 4);
-    set_le16(image.fat + 8, 0xffff);
-
-    CHECK(fat_short_name_encode("boot", 4, short_name) == FAT_PARSE_OK);
-    fat_dirent_encode(image.root, short_name, FAT_ATTR_DIRECTORY, 2, 0);
-    fat_directory_encode(image.directory, 2, 0);
-    CHECK(fat_short_name_encode("root.txt", 8, short_name) ==
-        FAT_PARSE_OK);
-    fat_dirent_encode(image.directory + 2 * FAT_DIRENT_SIZE, short_name,
-        FAT_ATTR_ARCHIVE | FAT_ATTR_READ_ONLY, 3, sizeof(output));
-    memset(image.file_first, '.', sizeof(image.file_first));
-    memcpy(image.file_first, "REBSD FAT ROOT\n", 15);
-    memset(image.file_second, '.', sizeof(image.file_second));
-    memcpy(image.file_second, "REBSD FAT SECOND CLUSTER\n", 25);
-
-    CHECK(fat_ro_mount(&reader, 8192, fat_ro_image_read, &image) == 0);
-    CHECK(reader.fr_volume.fv_type == FAT_TYPE_16);
-    CHECK(fat_ro_lookup(&reader, "/boot/root.txt", &node) == 0);
-    CHECK(node.fn_cluster == 3 && node.fn_size == sizeof(output));
-    memset(output, 0, sizeof(output));
-    CHECK(fat_ro_read(&reader, &node, 0, output, sizeof(output), &count) ==
-        0);
-    CHECK(count == sizeof(output));
-    CHECK(memcmp(output, "REBSD FAT ROOT\n", 15) == 0);
-    CHECK(memcmp(output + FAT_SECTOR_SIZE,
-        "REBSD FAT SECOND CLUSTER\n", 25) == 0);
-    count = 1;
-    CHECK(fat_ro_read(&reader, &node, sizeof(output), output, 1, &count) ==
-        0);
-    CHECK(count == 0);
-    CHECK(fat_ro_lookup(&reader, "/BOOT/MISSING.TXT", &node) == ENOENT);
-    CHECK(fat_ro_lookup(&reader, "/boot/root.txt/child", &node) ==
-        ENOTDIR);
-    CHECK(fat_ro_lookup(&reader, "/boot/root.txt/", &node) == ENOTDIR);
-    CHECK(fat_ro_lookup(&reader, "/component-too-long", &node) ==
-        ENAMETOOLONG);
-    CHECK(fat_ro_lookup(&reader, "/", &root) == 0);
-    CHECK((root.fn_attr & FAT_ATTR_DIRECTORY) != 0);
-    CHECK(fat_ro_read(&reader, &root, 0, output, 1, &count) == EISDIR);
-
-    set_le16(image.fat + 6, 0xffff);
-    CHECK(fat_ro_lookup(&reader, "/boot/root.txt", &node) == 0);
-    CHECK(fat_ro_read(&reader, &node, 0, output, sizeof(output), &count) ==
-        EIO);
-    return 0;
-}
-
-#define FAT32_TEST_DATA_START       59168u
-#define FAT32_TEST_CLUSTER_SECTORS  8u
-#define FAT32_TEST_FILE_SIZE        (FAT32_TEST_CLUSTER_SECTORS * 512u + 100u)
-
-struct fat32_ro_image {
-    unsigned char boot[FAT_SECTOR_SIZE];
-    unsigned char fat[FAT_SECTOR_SIZE];
-    unsigned char root[FAT_SECTOR_SIZE];
-};
-
-static int
-fat32_ro_image_read(void *arg, unsigned sector, unsigned char *data)
-{
-    struct fat32_ro_image *image;
-
-    image = arg;
-    memset(data, 0, FAT_SECTOR_SIZE);
-    if (sector == 0)
-        memcpy(data, image->boot, FAT_SECTOR_SIZE);
-    else if (sector == 32)
-        memcpy(data, image->fat, FAT_SECTOR_SIZE);
-    else if (sector == FAT32_TEST_DATA_START)
-        memcpy(data, image->root, FAT_SECTOR_SIZE);
-    else if (sector >= FAT32_TEST_DATA_START +
-        FAT32_TEST_CLUSTER_SECTORS &&
-        sector < FAT32_TEST_DATA_START +
-        3 * FAT32_TEST_CLUSTER_SECTORS) {
-        memset(data, '.', FAT_SECTOR_SIZE);
-        if (sector == FAT32_TEST_DATA_START +
-            FAT32_TEST_CLUSTER_SECTORS)
-            memcpy(data, "REBSD FAT32 ROOT\n", 17);
-        else if (sector == FAT32_TEST_DATA_START +
-            2 * FAT32_TEST_CLUSTER_SECTORS)
-            memcpy(data, "REBSD FAT32 SECOND CLUSTER\n", 27);
-    }
-    return sector < 30298527u ? 0 : EIO;
-}
-
-static int
-test_fat32_read_only_reader(void)
-{
-    struct fat32_ro_image image;
-    struct fat_ro reader;
-    struct fat_ro_node node;
-    unsigned char short_name[11];
-    unsigned char output[FAT32_TEST_FILE_SIZE];
-    unsigned count;
-
-    memset(&image, 0, sizeof(image));
-    boot_common(image.boot, FAT32_TEST_CLUSTER_SECTORS, 32, 2,
-        30298527u);
-    set_le32(image.boot + 36, 29568);
-    set_le32(image.boot + 44, 2);
-    set_le32(image.fat + 8, 0x0fffffffu);
-    set_le32(image.fat + 12, 4);
-    set_le32(image.fat + 16, 0x0fffffffu);
-    CHECK(fat_short_name_encode("root.txt", 8, short_name) ==
-        FAT_PARSE_OK);
-    fat_dirent_encode(image.root, short_name, FAT_ATTR_ARCHIVE, 3,
-        sizeof(output));
-
-    CHECK(fat_ro_mount(&reader, 30298527u, fat32_ro_image_read, &image) ==
-        0);
-    CHECK(reader.fr_volume.fv_type == FAT_TYPE_32);
-    CHECK(fat_ro_lookup(&reader, "/ROOT.TXT", &node) == 0);
-    CHECK(node.fn_cluster == 3 && node.fn_size == sizeof(output));
-    CHECK(fat_ro_read(&reader, &node, 0, output, sizeof(output), &count) ==
-        0);
-    CHECK(count == sizeof(output));
-    CHECK(memcmp(output, "REBSD FAT32 ROOT\n", 17) == 0);
-    CHECK(memcmp(output + FAT32_TEST_CLUSTER_SECTORS * FAT_SECTOR_SIZE,
-        "REBSD FAT32 SECOND CLUSTER\n", 27) == 0);
-    return 0;
-}
-
 static int
 test_image(const char *path, unsigned expected_type)
 {
@@ -422,9 +229,6 @@ test_image(const char *path, unsigned expected_type)
     struct fat_volume volume;
     FILE *file;
     long bytes;
-    unsigned media_sectors;
-    unsigned partition_start;
-    int parsed;
 
     file = fopen(path, "rb");
     CHECK(file != NULL);
@@ -434,24 +238,9 @@ test_image(const char *path, unsigned expected_type)
     CHECK((unsigned long)bytes / FAT_SECTOR_SIZE <= 0xfffffffful);
     CHECK(fseek(file, 0, SEEK_SET) == 0);
     CHECK(fread(boot, sizeof(boot), 1, file) == 1);
-    media_sectors = (unsigned)((unsigned long)bytes / FAT_SECTOR_SIZE);
-    parsed = fat_volume_parse(&volume, boot, media_sectors);
-    if (parsed != FAT_PARSE_OK && boot[510] == 0x55 &&
-        boot[511] == 0xaa) {
-        partition_start = get_le32(boot + 446 + 8);
-        media_sectors = get_le32(boot + 446 + 12);
-        CHECK(partition_start <=
-            (unsigned)((unsigned long)bytes / FAT_SECTOR_SIZE));
-        CHECK(media_sectors <=
-            (unsigned)((unsigned long)bytes / FAT_SECTOR_SIZE) -
-            partition_start);
-        CHECK(fseek(file, (long)((unsigned long)partition_start *
-            FAT_SECTOR_SIZE), SEEK_SET) == 0);
-        CHECK(fread(boot, sizeof(boot), 1, file) == 1);
-        parsed = fat_volume_parse(&volume, boot, media_sectors);
-    }
     CHECK(fclose(file) == 0);
-    CHECK(parsed == FAT_PARSE_OK);
+    CHECK(fat_volume_parse(&volume, boot,
+        (unsigned)((unsigned long)bytes / FAT_SECTOR_SIZE)) == FAT_PARSE_OK);
     CHECK(volume.fv_type == expected_type);
     printf("fat_test: %s is FAT%u (%u sectors)\n", path,
         volume.fv_type, volume.fv_total_sectors);
@@ -467,8 +256,6 @@ main(int argc, char **argv)
     CHECK(test_names() == 0);
     CHECK(test_fat_encoding() == 0);
     CHECK(test_directory_encoding() == 0);
-    CHECK(test_read_only_reader() == 0);
-    CHECK(test_fat32_read_only_reader() == 0);
     if (argc == 3)
         CHECK(test_image(argv[1], (unsigned)strtoul(argv[2], NULL, 0)) == 0);
     else if (argc != 1) {

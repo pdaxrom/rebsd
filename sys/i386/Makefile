@@ -44,8 +44,12 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
                    libkern.o disk_subr.o disk.o devsw.o \
-                   ufs_bio.o ufs_namei.o fat_subr.o fat_ro.o fat_vfs.o \
-                   fat_bootstrap.o vfs_bootstrap.o file_bootstrap.o \
+                   ufs_alloc.o ufs_bio.o ufs_bmap.o ufs_fio.o \
+                   ufs_inode.o ufs_mount.o ufs_namei.o ufs_subr.o \
+                   ufs_syscalls.o ufs_syscalls2.o \
+                   sys_inode.o sys_generic.o sys_pipe.o vfs_vnops.o \
+                   kern_descrip.o kern_shm.o kern_subr.o kern_time.o \
+                   fat_subr.o fat_vfs.o vm_vnode.o vfs_bootstrap.o \
                    disk_bootstrap.o \
                    elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
@@ -277,7 +281,7 @@ disk.o: $(I386_DISK_SRC)/disk.c $(I386_DISK_SRC)/disk.h \
 
 devsw.o: $(I386_PC_SRC)/devsw.c $(I386_DISK_SRC)/disk.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/conf.h \
-	    $(TOPSRC)/sys/include/errno.h \
+	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/inode.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -289,6 +293,33 @@ ufs_bio.o: $(TOPSRC)/sys/kernel/ufs_bio.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+ufs_alloc.o: $(TOPSRC)/sys/kernel/ufs_alloc.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_vfs_log -Duprintf=i386_vfs_log \
+	    -Wno-sign-compare -c $< -o $@
+
+ufs_bmap.o: $(TOPSRC)/sys/kernel/ufs_bmap.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -c $< -o $@
+
+ufs_fio.o: $(TOPSRC)/sys/kernel/ufs_fio.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -c $< -o $@
+
+ufs_inode.o: $(TOPSRC)/sys/kernel/ufs_inode.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_vfs_log -Dlog=i386_vfs_syslog \
+	    -Wno-sign-compare -Wno-unused-parameter -c $< -o $@
+
+ufs_mount.o: $(TOPSRC)/sys/kernel/ufs_mount.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -Wno-unused-parameter -c $< -o $@
+
 ufs_namei.o: $(TOPSRC)/sys/kernel/ufs_namei.c \
 	    $(TOPSRC)/sys/include/inode.h $(TOPSRC)/sys/include/namei.h \
 	    $(TOPSRC)/sys/include/mount.h \
@@ -297,14 +328,68 @@ ufs_namei.o: $(TOPSRC)/sys/kernel/ufs_namei.c \
 	    -Dprintf=i386_vfs_log -Wno-sign-compare \
 	    -Wno-array-bounds -c $< -o $@
 
-fat_subr.o: $(I386_FAT_SRC)/fat_subr.c $(I386_FAT_SRC)/fat.h \
-	    $(TOPSRC)/sys/include/types.h \
+ufs_subr.o: $(TOPSRC)/sys/kernel/ufs_subr.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_vfs_log -Wno-sign-compare -c $< -o $@
+
+sys_inode.o: $(TOPSRC)/sys/kernel/sys_inode.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -Wno-implicit-fallthrough -Wno-clobbered \
+	    -c $< -o $@
+
+kern_subr.o: $(TOPSRC)/sys/kernel/kern_subr.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-fat_ro.o: $(I386_FAT_SRC)/fat_ro.c $(I386_FAT_SRC)/fat.h \
-	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/types.h \
+kern_descrip.o: $(TOPSRC)/sys/kernel/kern_descrip.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dlog=i386_vfs_syslog -Wno-sign-compare \
+	    -Wno-implicit-fallthrough -Wno-clobbered -Wno-unused-parameter \
+	    -c $< -o $@
+
+kern_shm.o: $(TOPSRC)/sys/kernel/kern_shm.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -c $< -o $@
+
+kern_time.o: $(TOPSRC)/sys/kernel/kern_time.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+sys_generic.o: $(TOPSRC)/sys/kernel/sys_generic.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -Wno-clobbered -Wno-unused-parameter \
+	    -c $< -o $@
+
+sys_pipe.o: $(TOPSRC)/sys/kernel/sys_pipe.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -c $< -o $@
+
+ufs_syscalls.o: $(TOPSRC)/sys/kernel/ufs_syscalls.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_vfs_log -Wno-sign-compare \
+	    -Wno-implicit-fallthrough -c $< -o $@
+
+ufs_syscalls2.o: $(TOPSRC)/sys/kernel/ufs_syscalls2.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_vfs_log -Wno-sign-compare -c $< -o $@
+
+vfs_vnops.o: $(TOPSRC)/sys/kernel/vfs_vnops.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -Wno-clobbered -c $< -o $@
+
+fat_subr.o: $(I386_FAT_SRC)/fat_subr.c $(I386_FAT_SRC)/fat.h \
+	    $(TOPSRC)/sys/include/types.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -316,19 +401,9 @@ fat_vfs.o: $(I386_FAT_SRC)/fat_vfs.c $(I386_FAT_SRC)/fat.h \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -Dprintf=i386_vfs_log -c $< -o $@
 
-fat_bootstrap.o: $(I386_PC_SRC)/fat_bootstrap.c \
-	    $(I386_SRC)/include/boot.h \
-	    $(I386_SRC)/include/fat_bootstrap.h $(I386_DISK_SRC)/disk.h \
-	    $(I386_FAT_SRC)/fat.h \
-	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/errno.h \
-	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -c $< -o $@
-
 disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/disk_bootstrap.h \
-	    $(I386_SRC)/include/fat_bootstrap.h \
 	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/ide.h $(I386_DISK_SRC)/disk.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
@@ -349,13 +424,7 @@ vfs_bootstrap.o: $(I386_PC_SRC)/vfs_bootstrap.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-file_bootstrap.o: $(I386_PC_SRC)/file_bootstrap.c \
-	    $(I386_SRC)/include/file_bootstrap.h \
-	    $(TOPSRC)/sys/include/dir.h $(TOPSRC)/sys/include/file.h \
-	    $(TOPSRC)/sys/include/inode.h \
-	    $(TOPSRC)/sys/include/mount.h $(TOPSRC)/sys/include/namei.h \
-	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/resource.h \
-	    $(TOPSRC)/sys/include/time.h $(TOPSRC)/sys/include/uio.h \
+vm_vnode.o: $(I386_VM_SRC)/vm_vnode.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -459,8 +528,8 @@ scheduler.o: $(I386_PC_SRC)/scheduler.c \
 	    -c $< -o $@
 
 process_lifecycle.o: $(I386_PC_SRC)/process_lifecycle.c \
-	    $(I386_SRC)/include/file_bootstrap.h \
-	    $(TOPSRC)/sys/include/inode.h $(TOPSRC)/sys/include/proc.h \
+	    $(TOPSRC)/sys/include/file.h $(TOPSRC)/sys/include/inode.h \
+	    $(TOPSRC)/sys/include/proc.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    $(TOPSRC)/sys/include/wait.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -527,7 +596,6 @@ config.o: $(I386_PC_SRC)/config.c \
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/context.h \
 	    $(I386_SRC)/include/elf_bootstrap.h \
-	    $(I386_SRC)/include/file_bootstrap.h \
 	    $(I386_SRC)/include/initfs.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h \
@@ -547,10 +615,12 @@ process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 
 $(I386_GEN_INCLUDE)/sys:
 	mkdir -p $(I386_GEN_INCLUDE)
+	rm -f $@
 	ln -s $(abspath $(TOPSRC)/sys/include) $@
 
 $(I386_GEN_INCLUDE)/machine:
 	mkdir -p $(I386_GEN_INCLUDE)
+	rm -f $@
 	ln -s $(abspath $(I386_SRC)/include/machine) $@
 
 vm_param.o: $(I386_VM_SRC)/vm_param.c \

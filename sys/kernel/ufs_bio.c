@@ -14,6 +14,34 @@
 #include <sys/proc.h>
 
 /*
+ * Initialize the buffer hash chains and buffer free lists.
+ */
+void
+bioinit(void)
+{
+    struct bufhd *head;
+    struct buf *bp;
+    caddr_t address;
+    int i;
+
+    for (head = bufhash, i = 0; i < BUFHSZ; ++i, ++head)
+        head->b_forw = head->b_back = (struct buf *)head;
+
+    for (bp = bfreelist; bp < &bfreelist[BQUEUES]; ++bp)
+        bp->b_forw = bp->b_back = bp->av_forw = bp->av_back = bp;
+    address = bufdata;
+    for (i = 0; i < NBUF; ++i, address += MAXBSIZE) {
+        bp = &buf[i];
+        bp->b_dev = NODEV;
+        bp->b_bcount = 0;
+        bp->b_addr = address;
+        binshash(bp, &bfreelist[BQ_AGE]);
+        bp->b_flags = B_BUSY | B_INVAL;
+        brelse(bp);
+    }
+}
+
+/*
  * Read in (if necessary) the block and return a buffer pointer.
  */
 struct buf *

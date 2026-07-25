@@ -258,6 +258,10 @@ namei (struct nameidata *ndp)
             dp = rootdir;
     } else
         dp = u.u_cdir;
+    if (dp == NULL) {
+        u.u_error = ENOENT;
+        goto retNULL;
+    }
     fs = dp->i_fs;
     ILOCK(dp);
     dp->i_count++;

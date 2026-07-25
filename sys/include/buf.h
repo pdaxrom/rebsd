@@ -109,6 +109,7 @@ struct buf *bread (dev_t dev, blkno_t blkno);
  * read-ahead block.
  */
 struct buf *breada (dev_t dev, blkno_t blkno, blkno_t rablkno);
+void bioinit (void);
 
 /*
  * Write the buffer, waiting for completion. Then release the buffer.
