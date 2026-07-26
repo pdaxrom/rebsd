@@ -196,6 +196,7 @@ i386_boot_main(i386_u32 boot_params_phys)
     unsigned index;
     i386_u32 page_phys;
     i386_u32 ticks;
+    int process_error;
 
     i386_early_console_init();
     i386_early_puts("REBSD_I686_BOOT\n");
@@ -451,9 +452,13 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
 
-    if (i386_process_bootstrap_user_probe() != 0 ||
+    process_error = i386_process_bootstrap_user_probe();
+    if (process_error != 0 ||
         i386_process_bootstrap_validate() != 0) {
         i386_early_puts("process-user: failed\n");
+        i386_early_puts("process-user-error: ");
+        i386_early_put_hex32((i386_u32)process_error);
+        i386_early_putc('\n');
         for (;;) {
             __asm__ volatile ("cli; hlt");
         }

@@ -12,7 +12,6 @@ I386_PC_SRC      = $(I386_SRC)/pc
 I386_USER_SRC    = $(I386_SRC)/user
 I386_TOOLS_SRC   = $(I386_SRC)/tools
 I386_DISK_SRC    = $(TOPSRC)/sys/disk
-I386_FAT_SRC     = $(TOPSRC)/sys/fs/fat
 I386_VM_SRC      = $(TOPSRC)/sys/vm
 I386_GEN_INCLUDE = $(CURDIR)/include
 I386_VM_INCLUDES = -I$(I386_GEN_INCLUDE) -I$(TOPSRC)/sys \
@@ -60,9 +59,9 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    ufs_syscalls.o ufs_syscalls2.o \
                    sys_inode.o sys_generic.o sys_pipe.o vfs_vnops.o \
                    kern_descrip.o kern_shm.o kern_subr.o kern_time.o \
-                   fat_subr.o fat_vfs.o vm_vnode.o vfs_bootstrap.o \
+                   vm_vnode.o vfs_bootstrap.o \
                    disk_bootstrap.o \
-                   exec_aout.o exec_conf.o exec_elf.o exec_elf_image.o \
+                   exec_aout.o exec_conf.o exec_elf.o exec_elf_loader.o \
                    exec_script.o exec_subr.o kern_exec.o rootfs_image.o \
                    init_sysent.o stubs.o kern_mman.o kern_prot.o \
                    kern_prot2.o kern_proc.o kern_fork.o \
@@ -80,8 +79,6 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 .DEFAULT_GOAL := all
 
 .PHONY: all kernel bios-image toolchain-check rootfs-smoke ide-smoke \
-	ide-fat32-smoke fat32-boot-smoke bios-fat32-boot-smoke \
-	vfs-fallback-smoke bios-vfs-fallback-smoke \
 	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
 	run run-serial debug boot-smoke bios-boot-smoke trap-smoke \
 	exception-smoke boot-smoke-matrix clean
@@ -427,19 +424,6 @@ vfs_vnops.o: $(TOPSRC)/sys/kernel/vfs_vnops.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-fat_subr.o: $(I386_FAT_SRC)/fat_subr.c $(I386_FAT_SRC)/fat.h \
-	    $(TOPSRC)/sys/include/types.h \
-	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -c $< -o $@
-
-fat_vfs.o: $(I386_FAT_SRC)/fat_vfs.c $(I386_FAT_SRC)/fat.h \
-	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/inode.h \
-	    $(TOPSRC)/sys/include/mount.h $(TOPSRC)/sys/include/namei.h \
-	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -c $< -o $@
-
 disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/disk_bootstrap.h \
@@ -454,7 +438,7 @@ disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
 
 vfs_bootstrap.o: $(I386_PC_SRC)/vfs_bootstrap.c \
 	    $(I386_SRC)/include/boot.h \
-	    $(I386_SRC)/include/vfs_bootstrap.h $(I386_FAT_SRC)/fat.h \
+	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/machine/layout.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/conf.h \
 	    $(TOPSRC)/sys/include/inode.h $(TOPSRC)/sys/include/mount.h \
@@ -484,7 +468,7 @@ libkern.o: $(TOPSRC)/sys/kernel/libkern.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-exec_elf_image.o: $(TOPSRC)/sys/kernel/exec_elf_image.c \
+exec_elf_loader.o: $(TOPSRC)/sys/kernel/exec_elf_loader.c \
 	    $(TOPSRC)/sys/include/exec_elf.h \
 	    $(TOPSRC)/sys/include/exec_elf_loader.h \
 	    $(I386_VM_SRC)/vmspace.h \
@@ -717,11 +701,9 @@ process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/process.h $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/user_bootstrap.h \
-	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/layout.h \
 	    $(TOPSRC)/sys/include/exec.h \
-	    $(TOPSRC)/sys/include/exec_elf_loader.h \
 	    $(TOPSRC)/sys/include/file.h \
 	    $(TOPSRC)/sys/include/proc.h \
 	    $(TOPSRC)/sys/include/user.h \
@@ -831,86 +813,34 @@ bios-image-smoke: rebsd-i686.bzimg rebsd-i686-bios-floppy.img
 	    rebsd-i686-bios-floppy.check.img
 	rm -f rebsd-i686-bios-floppy.check.img
 
-ide-smoke.img: bootstrap-user.elf $(I386_TOOLS_SRC)/mkide.py
-	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --output $@ \
-	    --file /sbin/init=bootstrap-user.elf
+ide-smoke: rootfs-smoke
 
-ide-smoke: ide-smoke.img bootstrap-user.elf
-	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --output ide-smoke.check.img \
-	    --file /sbin/init=bootstrap-user.elf
-	cmp ide-smoke.img ide-smoke.check.img
-	rm -f ide-smoke.check.img
-
-ide-fat32-smoke.img: bootstrap-user.elf $(I386_TOOLS_SRC)/mkide.py
-	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --filesystem fat32 \
-	    --output $@ --file /sbin/init=bootstrap-user.elf
-
-ide-fat32-smoke: ide-fat32-smoke.img bootstrap-user.elf
-	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --filesystem fat32 \
-	    --output ide-fat32-smoke.check.img \
-	    --file /sbin/init=bootstrap-user.elf
-	cmp ide-fat32-smoke.img ide-fat32-smoke.check.img
-	rm -f ide-fat32-smoke.check.img
-
-ide-fat32-no-init-smoke.img: $(I386_TOOLS_SRC)/mkide.py
-	$(PYTHON) $(I386_TOOLS_SRC)/mkide.py --filesystem fat32 \
-	    --output $@
-
-run run-serial: rebsd-i686.bzimg ide-smoke.img
+run run-serial: rebsd-i686.bzimg rootfs.img
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
 	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
-	    -drive file=ide-smoke.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
+	    -drive file=rootfs.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
 	    -serial stdio -display none -monitor none \
 	    -no-reboot -no-shutdown
 
-debug: rebsd-i686.bzimg ide-smoke.img
+debug: rebsd-i686.bzimg rootfs.img
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
 	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
-	    -drive file=ide-smoke.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
+	    -drive file=rootfs.img,format=raw,if=ide,index=0,media=disk,snapshot=on \
 	    -serial stdio -display none -monitor none \
 	    -no-reboot -no-shutdown -S -s
 
-boot-smoke: rebsd-i686.bzimg ide-smoke.img
+boot-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk ide-smoke.img
+	    --disk rootfs.img
 
-fat32-boot-smoke: rebsd-i686.bzimg ide-fat32-smoke.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk ide-fat32-smoke.img --expect-filesystem fat32
-
-bios-boot-smoke: rebsd-i686-bios-floppy.img ide-smoke.img
+bios-boot-smoke: rebsd-i686-bios-floppy.img rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
 	    --bios-image rebsd-i686-bios-floppy.img \
-	    --disk ide-smoke.img
-
-bios-fat32-boot-smoke: rebsd-i686-bios-floppy.img ide-fat32-smoke.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --disk ide-fat32-smoke.img --expect-filesystem fat32
-
-vfs-fallback-smoke: rebsd-i686.bzimg ide-fat32-no-init-smoke.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk ide-fat32-no-init-smoke.img --expect-filesystem fat32 \
-	    --expect-no-init
-
-bios-vfs-fallback-smoke: rebsd-i686-bios-floppy.img \
-	    ide-fat32-no-init-smoke.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --disk ide-fat32-no-init-smoke.img --expect-filesystem fat32 \
-	    --expect-no-init
+	    --disk rootfs.img
 
 bios-ide-absent-smoke: rebsd-i686-bios-floppy.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -925,32 +855,32 @@ ide-absent-smoke: rebsd-i686.bzimg
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --expect-no-disk
 
-trap-smoke: rebsd-i686.bzimg ide-smoke.img
+trap-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk ide-smoke.img \
+	    --disk rootfs.img \
 	    --expect-exception divide
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk ide-smoke.img \
+	    --disk rootfs.img \
 	    --expect-exception gp
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk ide-smoke.img \
+	    --disk rootfs.img \
 	    --expect-exception page
 
 exception-smoke: trap-smoke
 
-boot-smoke-matrix: rebsd-i686.bzimg ide-smoke.img
+boot-smoke-matrix: rebsd-i686.bzimg rootfs.img
 	@for memory in 32M 64M 128M 256M 768M 1024M; do \
 	    echo "boot-smoke-matrix: memory=$$memory"; \
 	    $(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	        --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	        --cpu $(QEMU_CPU) --memory $$memory --kernel $< \
-	        --disk ide-smoke.img || exit 1; \
+	        --disk rootfs.img || exit 1; \
 	done
 
 clean:
@@ -958,9 +888,6 @@ clean:
 	    bootstrap_user.o bootstrap-user.elf bootstrap_user_image.o \
 	    vers.c \
 	    rootfs.img rootfs.check.img rootfs_image.o \
-	    ide-smoke.img ide-smoke.check.img \
-	    ide-fat32-smoke.img ide-fat32-smoke.check.img \
-	    ide-fat32-no-init-smoke.img \
 	    rebsd-i686-bios-floppy.img \
 	    rebsd-i686-bios-floppy.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \

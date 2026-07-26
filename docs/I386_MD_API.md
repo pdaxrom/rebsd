@@ -9,7 +9,7 @@ user-return signal/reschedule path и user trap-to-signal translation
 проверены; production syscall prefix вызывает generic `getpid`, а
 постоянный process 1 в generic `proc[]`/`allproc`/PID hash удерживает
 активные u-area/vmspace/CR3/TSS и выполняет `/sbin/init` из read-only
-FAT или UFS root через общие disk/VFS/namei с production `getpid=1` и
+UFS root через общие disk/VFS/namei/exec с production `getpid=1` и
 `argc/argv/envp` stack из собственного CPL3-контекста; proc0 владеет
 отдельными u-area/vmspace и
 повторно используемым idle context, проверенным двукратным
@@ -265,15 +265,14 @@ process 1 `TSS.esp0`. Тестовый vector `0x30` пока нужен тол�
 повторную проверку всех proc/u-area/vmspace invariants.
 
 Сырой byte stream заменён настоящим `bootstrap-user.elf`, отдельно
-собранным тем же `i686-elf` GCC/binutils и встроенным в read-only kernel
-section. Ранний in-memory loader принимает только little-endian
+собранным тем же `i686-elf` GCC/binutils и установленным как
+`/sbin/init` в UFS. Общий inode-backed loader принимает только little-endian
 `ET_EXEC`/`EM_386`, проверяет границы header/program-header tables,
 alignment, user address range, неперекрытие page-rounded segments и entry
-в file-backed executable segment. Неизвестные program headers и W+X
+в file-backed executable segment. Dynamic/interpreter и W+X segments
 отклоняются. До восьми `PT_LOAD` сначала полностью валидируются, затем
-загружаются через generic vmspace, BSS явно обнуляется, и mappings получают
-финальные permissions из `PF_R/PF_W/PF_X`; partial failure выполняет
-rollback.
+читаются напрямую из inode через generic vmspace, BSS явно обнуляется, и
+mappings получают финальные permissions из `PF_R/PF_W/PF_X`.
 
 Тестовый ELF имеет RX text и RW data+BSS. Его CPL3 entry проверяет
 инициализированное слово, нулевой BSS и запись в него перед production
@@ -297,10 +296,11 @@ NULL terminators, alignment, reserved slot и top-of-stack `argv` word.
 Статический ELF больше не передаётся loader напрямую как отдельный binary
 symbol. Существующий `tools/fsutil` создаёт детерминированный little-endian
 UFS с именованным `/sbin/init`; общий memory-disk backend подключает image
-как read-only block device. FAT и UFS проходят один и тот же
-`vfs_mountroot`/`namei`/`rdwri` путь. `rootfs: ok` покрывает эту цепочку, а
-`make rootfs-smoke` проверяет UFS через `fsutil --check` и byte-for-byte
-воспроизводимость.
+как read-only block device для no-IDE gate, а ATA backend предоставляет тот
+же raw UFS как whole-device block device для IDE gate. Оба транспорта
+проходят один и тот же `vfs_mountroot`/`namei`/inode-exec путь.
+`rootfs: ok` покрывает эту цепочку, а `make rootfs-smoke` проверяет UFS через
+`fsutil --check` и byte-for-byte воспроизводимость.
 
 Board config теперь предоставляет штатные `proc[NPROC]` и `nproc`, а
 generic `kern_proc.c` — `pqinit`, `allproc/freeproc/zombproc`, PID hash и

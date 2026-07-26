@@ -90,8 +90,8 @@ provide:
   common `init_sysent.c`.
 - `pc/pci.c`, `pc/ide.c`, `pc/early_console.c`, and the MD portions of
   `pc/devsw.c`: PCI configuration mechanism 1, legacy ATA PIO, VGA/COM
-  console, and device-switch adapters.  Partitioning, buffer I/O, VFS, FAT,
-  and descriptor semantics remain common.
+  console, and device-switch adapters.  Disk layout, buffer I/O, VFS,
+  filesystem, and descriptor semantics remain common.
 
 The matching headers under `sys/i386/include` are retained only when they
 describe one of those hardware/ABI contracts or a temporary component listed
@@ -100,11 +100,12 @@ below.
 ### Common code already linked by i686
 
 The current i686 image directly compiles the existing common disk layer,
-UFS/FAT VFS, vnode/file-descriptor path, VM objects/maps/vmspace, fork,
+UFS VFS, vnode/file-descriptor path, VM objects/maps/vmspace, fork,
 exit/wait/resource, signal policy, scheduler, clock, the complete syscall
 table and its production exec/VM/sysctl handlers, libkern, and syscall
-stubs.  I386 adapters pass an ATA-backed `dev_t` into those interfaces;
-there is no i386 FAT parser or private file table.
+stubs.  I386 adapters pass an ATA-backed whole-device `dev_t` into those
+interfaces; there is no i386 filesystem parser, partition policy, private
+file table, or rootfs implementation.
 
 ### Bring-up tests, not production subsystems
 
@@ -128,28 +129,28 @@ bring-up probes.
 
 ## Common exec reuse completed
 
-The former `common/elf_bootstrap.c` and `include/elf_bootstrap.h` have been
-removed.  Memory-backed bootstrap images and inode-backed `exec` now share
-the target ELF header validator in `sys/kernel/exec_elf_image.c`; the target
-machine and byte order continue to come from each architecture's
-`machine/elf_machdep.h`.
+The former `common/elf_bootstrap.c`, `include/elf_bootstrap.h`, and
+`sys/kernel/exec_elf_image.c` have been removed.  The common
+`sys/kernel/exec_elf_loader.c` now owns ELF32 validation and mapping policy,
+while `sys/kernel/exec_elf.c` reads each segment directly from the executable
+inode.  The target machine and byte order continue to come from each
+architecture's `machine/elf_machdep.h`.
 
-The common memory-image loader uses the existing VM address/size overflow
-helpers, user-address limits, map-entry capacity, vmspace mappings and
-protection operations.  It supports validated non-overlapping `PT_LOAD`
-segments, BSS zeroing, final segment permissions, W^X rejection and complete
-rollback without an i386-private executable loader.
+The common loader uses the existing VM address/size overflow helpers,
+user-address limits, map-entry capacity, vmspace mappings and protection
+operations.  It supports validated non-overlapping `PT_LOAD` segments, BSS
+zeroing, final segment permissions and W^X rejection without an
+i386-private executable loader or a whole-file bootstrap buffer.
 
 The former `common/user_stack.c` and `include/user_stack.h` duplication has
 also been removed.  The i386 bootstrap fills `struct exec_params` and calls
 the common `sys/kernel/exec_subr.c::exec_setupstack`.
 
-The historical inode-backed path in `sys/kernel/exec_elf.c` still accepts only
-its original single RWX `PT_LOAD` layout through `exec_estab`.  That is now
-recorded as a limitation of the common exec implementation, not worked around
-by architecture-private code.  Connecting normal i386 `exec`/`init_main`
-requires extending that owning common path while preserving existing MIPS
-behavior.
+The historical single RWX `PT_LOAD` restriction in `sys/kernel/exec_elf.c`
+has been removed at the common owner.  MIPS/N64 user linker scripts now emit
+separate RX and RW segments and both GCC kernel-object builds pass.  I386
+enters `/sbin/init` through the same production `execve` path; connecting the
+remaining startup sequence to common `init_main` is still pending.
 
 ## Remaining reuse violations
 
@@ -169,7 +170,7 @@ common kernel paths.
 2. `common/vm_machdep.c` contains a weak fail-stop `md_init_process` because
    the current diagnostic image does not yet link common `init_main.c`.
 
-   It must disappear when item 2 is complete.  No process creation logic may
+   It must disappear when item 1 is complete.  No process creation logic may
    be added to this fallback.
 
 ## Validation gates
@@ -178,11 +179,10 @@ Every cleanup commit must pass:
 
 - i686 GCC full rebuild;
 - QEMU Linux-protocol and BIOS boot;
-- FAT16 and FAT32 roots;
-- IDE absent and `/sbin/init` absent fallback paths while they exist;
+- raw UFS over IDE and the same UFS over common memory disk when IDE is absent;
 - divide, general-protection, and page-fault negative gates;
-- host FAT, disk, and VM tests;
-- a current `BOARD=ci20` GCC build after any common-kernel change.
+- host disk and VM tests;
+- current `BOARD=ci20` and `BOARD=n64` GCC builds after common-kernel changes.
 
 Real IBM 6563-W4G testing is not required until these QEMU and cross-platform
 gates are green and the next hardware image is explicitly requested.

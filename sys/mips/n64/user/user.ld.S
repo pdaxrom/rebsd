@@ -1,4 +1,5 @@
 #include "../layout.h"
+#include "../../../vm/vm_constants.h"
 
 #ifdef mips
 #undef mips
@@ -13,7 +14,8 @@ ENTRY(_start)
 
 PHDRS
 {
-  user PT_LOAD FLAGS(7);
+  text PT_LOAD FLAGS(5);
+  data PT_LOAD FLAGS(6);
 }
 
 SECTIONS
@@ -26,12 +28,13 @@ SECTIONS
     *(.text .stub .text.* .gnu.linkonce.t.*)
     *(.rodata .rodata.* .gnu.linkonce.r.*)
     . = ALIGN(16);
-  } :user
+  } :text
 
   PROVIDE(__etext = .);
   PROVIDE(_etext = .);
   PROVIDE(etext = .);
 
+  . = ALIGN(VM_PAGE_BYTES);
   .data : {
     __data_start = .;
     _fdata = .;
@@ -51,7 +54,7 @@ SECTIONS
     KEEP(*(.fini_array .fini_array.*))
     PROVIDE(__DTOR_END__ = .);
     . = ALIGN(16);
-  } :user
+  } :data
 
   _edata = .;
   PROVIDE(edata = .);
@@ -66,7 +69,7 @@ SECTIONS
     *(.bss .bss.*)
     *(COMMON)
     . = ALIGN(16);
-  } :user
+  } :data
 
   _end = .;
   PROVIDE(end = .);

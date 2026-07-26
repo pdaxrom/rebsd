@@ -9,11 +9,11 @@
 #ifndef _VM_VM_PARAM_H_
 #define _VM_VM_PARAM_H_
 
+#include <vm/vm_constants.h>
 #include <vm/vm_types.h>
 
 /* Independent of the legacy NBPG == 1024 accounting unit. */
-#define VM_PAGE_SHIFT           12
-#define VM_PAGE_SIZE            ((vm_size_t)1u << VM_PAGE_SHIFT)
+#define VM_PAGE_SIZE            ((vm_size_t)VM_PAGE_BYTES)
 #define VM_PAGE_MASK            (VM_PAGE_SIZE - 1u)
 
 #define VM_PROT_NONE            ((vm_prot_t)0u)

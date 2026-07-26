@@ -29,33 +29,6 @@ i386_disk_zero(void *arg, unsigned length)
         *data++ = 0;
 }
 
-static int
-i386_disk_has_at(const unsigned char *data, unsigned offset,
-    const char *wanted)
-{
-    while (*wanted != '\0') {
-        if (offset >= DISK_SECTOR_SIZE ||
-            data[offset] != (unsigned char)*wanted)
-            return 0;
-        ++offset;
-        ++wanted;
-    }
-    return 1;
-}
-
-static unsigned
-i386_disk_fat_type(const unsigned char *data)
-{
-    if (data[510] != 0x55u || data[511] != 0xaau ||
-        !i386_disk_has_at(data, 3, "REBSD   "))
-        return 0;
-    if (i386_disk_has_at(data, 54, "FAT16   "))
-        return 16;
-    if (i386_disk_has_at(data, 82, "FAT32   "))
-        return 32;
-    return 0;
-}
-
 static void
 i386_disk_read(struct buf *bp, dev_t dev, disk_sector_t lba,
     unsigned count)
@@ -74,7 +47,6 @@ static int
 i386_disk_attach_ide(dev_t *devp)
 {
     struct disk_attach_args args;
-    struct diskpart64 part;
     struct buf bp;
     disk_sector_t sectors;
     dev_t dev;
@@ -96,14 +68,10 @@ i386_disk_attach_ide(dev_t *devp)
     i386_early_puts("disk-attach: read-only\n");
 
     dev = makedev(I386_DISK_MAJOR,
-        DISK_MINOR(unit, DISK_MINOR_PARTITION(0)));
+        DISK_MINOR(unit, DISK_MINOR_WHOLE));
     error = disk_bdev_open(dev, FREAD, 0);
-    if (error == ENXIO) {
-        i386_early_puts("disk-partition: absent\n");
-        return 0;
-    }
     if (error != 0) {
-        i386_early_puts("disk-partition: failed\n");
+        i386_early_puts("disk-open: failed\n");
         return error;
     }
     if (disk_bdev_open(dev, FWRITE, 0) != EROFS) {
@@ -112,21 +80,12 @@ i386_disk_attach_ide(dev_t *devp)
     }
     i386_early_puts("disk-write-open: erofs\n");
 
-    i386_disk_zero(&part, sizeof(part));
-    if (disk_bdev_ioctl(dev, DIOCGETPART64, (caddr_t)&part, FREAD) != 0 ||
-        disk_bdev_ioctl(dev, DIOCGETSECTORS64, (caddr_t)&sectors,
+    if (disk_bdev_ioctl(dev, DIOCGETSECTORS64, (caddr_t)&sectors,
         FREAD) != 0) {
-        i386_early_puts("disk-partition: failed\n");
+        i386_early_puts("disk-size: failed\n");
         return EIO;
     }
-    i386_early_puts("disk-partition: ");
-    if (part.dp_scheme == DISK_SCHEME_MBR && part.dp_type == 0x06u)
-        i386_early_puts("fat16\n");
-    else if (part.dp_scheme == DISK_SCHEME_MBR &&
-        (part.dp_type == 0x0bu || part.dp_type == 0x0cu))
-        i386_early_puts("fat32\n");
-    else
-        i386_early_puts("external\n");
+    i386_early_puts("disk-device: whole\n");
 
     i386_disk_read(&bp, dev, 0, sectors >= 2u ? 2u : 1u);
     if ((bp.b_flags & (B_DONE | B_ERROR)) != B_DONE ||
@@ -134,12 +93,7 @@ i386_disk_attach_ide(dev_t *devp)
         i386_early_puts("disk-strategy-read: failed\n");
         return EIO;
     }
-    if (i386_disk_fat_type(i386_disk_data) == 16)
-        i386_early_puts("disk-strategy-read: rebsd-fat16\n");
-    else if (i386_disk_fat_type(i386_disk_data) == 32)
-        i386_early_puts("disk-strategy-read: rebsd-fat32\n");
-    else
-        i386_early_puts("disk-strategy-read: external\n");
+    i386_early_puts("disk-strategy-read: ok\n");
 
     i386_disk_read(&bp, dev, sectors, 1);
     if ((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE &&

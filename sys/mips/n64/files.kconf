@@ -4,7 +4,7 @@
 kernel/exec_aout.c              standard
 kernel/exec_conf.c              standard
 kernel/exec_elf.c               standard
-kernel/exec_elf_image.c         standard
+kernel/exec_elf_loader.c        standard
 kernel/exec_script.c            standard
 kernel/exec_subr.c              standard
 kernel/init_main.c              standard

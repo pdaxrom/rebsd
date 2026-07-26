@@ -74,29 +74,20 @@ BOOT_MARKERS = (
     "pci-ide: 0x80867010",
     "pci-platform: intel",
     "ide-primary-master: ata",
-    "ide-sectors: 0x00002000",
+    "ide-sectors: 0x00000100",
     "ide-lba28: ok",
     "ide-backend-read: ok",
     "ide-lba0: ok",
-    "ide-image: rebsd-smoke",
-    "ide-mbr: present",
-    "ide-mbr-table: ok",
-    "ide-part0-type: 0x00000006",
-    "ide-part0-start: 0x0000000000000040",
-    "ide-part0-sectors: 0x0000000000001fc0",
-    "ide-partition-read: rebsd-fat16",
-    "ide-last-lba: rebsd-smoke",
     "ide-bounds: ok",
     "disk-attach: read-only",
     "disk-write-open: erofs",
-    "disk-partition: fat16",
-    "disk-strategy-read: rebsd-fat16",
+    "disk-device: whole",
+    "disk-strategy-read: ok",
     "disk-strategy-eof: ok",
     "disk-strategy-write: erofs",
     "rootfs-disk: read-only",
-    "vfs-root: fat,read-only",
-    "vfs-namei-init: ok",
-    "vfs-read-init: ok",
+    "vfs-root: ufs,ide,read-only",
+    "vfs-exec-init: ok",
     "disk-close: ok",
     "pic: ok",
     "pit: hz=100",
@@ -119,32 +110,24 @@ BIOS_BOOT_MARKERS = tuple(
 
 IDE_DISK_MARKERS = (
     "ide-primary-master: ata",
-    "ide-sectors: 0x00002000",
+    "ide-sectors: 0x00000100",
     "ide-lba28: ok",
     "ide-backend-read: ok",
     "ide-lba0: ok",
-    "ide-image: rebsd-smoke",
-    "ide-mbr: present",
-    "ide-mbr-table: ok",
-    "ide-part0-type: 0x00000006",
-    "ide-part0-start: 0x0000000000000040",
-    "ide-part0-sectors: 0x0000000000001fc0",
-    "ide-partition-read: rebsd-fat16",
-    "ide-last-lba: rebsd-smoke",
     "ide-bounds: ok",
     "disk-attach: read-only",
     "disk-write-open: erofs",
-    "disk-partition: fat16",
-    "disk-strategy-read: rebsd-fat16",
+    "disk-device: whole",
+    "disk-strategy-read: ok",
     "disk-strategy-eof: ok",
     "disk-strategy-write: erofs",
-    "vfs-root: fat,read-only",
+    "vfs-root: ufs,ide,read-only",
     "disk-close: ok",
 )
 
 NO_DISK_BOOT_MARKERS = tuple(
     marker for marker in BOOT_MARKERS if marker not in IDE_DISK_MARKERS
-) + ("vfs-root: ufs,read-only", "ide-primary-master: none")
+) + ("vfs-root: ufs,memory,read-only", "ide-primary-master: none")
 
 BIOS_NO_DISK_BOOT_MARKERS = tuple(
     "boot-loader: bios-int13"
@@ -224,58 +207,26 @@ EXCEPTION_MARKERS = {
         "pci-ide: 0x80867010",
         "pci-platform: intel",
         "ide-primary-master: ata",
-        "ide-sectors: 0x00002000",
+        "ide-sectors: 0x00000100",
         "ide-lba28: ok",
         "ide-backend-read: ok",
         "ide-lba0: ok",
-        "ide-image: rebsd-smoke",
-        "ide-mbr: present",
-        "ide-mbr-table: ok",
-        "ide-part0-type: 0x00000006",
-        "ide-part0-start: 0x0000000000000040",
-        "ide-part0-sectors: 0x0000000000001fc0",
-        "ide-partition-read: rebsd-fat16",
-        "ide-last-lba: rebsd-smoke",
         "ide-bounds: ok",
         "disk-attach: read-only",
         "disk-write-open: erofs",
-        "disk-partition: fat16",
-        "disk-strategy-read: rebsd-fat16",
+        "disk-device: whole",
+        "disk-strategy-read: ok",
         "disk-strategy-eof: ok",
         "disk-strategy-write: erofs",
         "rootfs-disk: read-only",
-        "vfs-root: fat,read-only",
-        "vfs-namei-init: ok",
-        "vfs-read-init: ok",
+        "vfs-root: ufs,ide,read-only",
+        "vfs-exec-init: ok",
         "disk-close: ok",
         "exception: vector=0x0000000e error=0x00000003",
         " cr2=",
         "PANIC: cpu exception",
     ),
 }
-
-FAT32_MARKER_REPLACEMENTS = {
-    "ide-sectors: 0x00002000": "ide-sectors: 0x00020000",
-    "ide-part0-type: 0x00000006": "ide-part0-type: 0x0000000c",
-    "ide-part0-start: 0x0000000000000040":
-        "ide-part0-start: 0x0000000000000800",
-    "ide-part0-sectors: 0x0000000000001fc0":
-        "ide-part0-sectors: 0x000000000001f800",
-}
-
-
-def filesystem_markers(
-    markers: tuple[str, ...], filesystem: str
-) -> tuple[str, ...]:
-    if filesystem == "fat16":
-        return markers
-    return tuple(
-        FAT32_MARKER_REPLACEMENTS.get(marker, marker).replace(
-            "fat16", "fat32"
-        )
-        for marker in markers
-    )
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -287,25 +238,15 @@ def parse_args() -> argparse.Namespace:
     image.add_argument("--kernel", type=pathlib.Path)
     image.add_argument("--bios-image", type=pathlib.Path)
     parser.add_argument("--disk", type=pathlib.Path)
-    parser.add_argument(
-        "--expect-filesystem", choices=("fat16", "fat32"), default="fat16"
-    )
     parser.add_argument("--timeout", type=float, default=8.0)
     parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
     parser.add_argument("--expect-no-disk", action="store_true")
-    parser.add_argument("--expect-no-init", action="store_true")
     args = parser.parse_args()
     if args.expect_no_disk:
-        if (
-            args.disk is not None
-            or args.expect_exception is not None
-            or args.expect_no_init
-        ):
+        if args.disk is not None or args.expect_exception is not None:
             parser.error("--expect-no-disk cannot be combined with disk/trap")
     elif args.disk is None:
         parser.error("--disk is required unless --expect-no-disk is used")
-    if args.expect_no_init and args.expect_exception is not None:
-        parser.error("--expect-no-init cannot be combined with a trap")
     if args.bios_image is not None and args.expect_exception is not None:
         parser.error("--bios-image cannot be combined with --expect-exception")
     return args
@@ -367,24 +308,10 @@ def main() -> None:
             if args.bios_image is not None
             else NO_DISK_BOOT_MARKERS
         )
-    elif args.expect_no_init:
-        markers = tuple(
-            marker
-            for marker in (
-                BIOS_BOOT_MARKERS
-                if args.bios_image is not None
-                else BOOT_MARKERS
-            )
-            if marker != "vfs-root: fat,read-only"
-        ) + (
-            "vfs-root: fat,no-init",
-            "vfs-root: ufs,read-only",
-        )
     elif args.bios_image is not None:
         markers = BIOS_BOOT_MARKERS
     else:
         markers = BOOT_MARKERS
-    markers = filesystem_markers(markers, args.expect_filesystem)
     stop_marker = (
         b"PANIC: cpu exception\r\n"
         if args.expect_exception

@@ -290,98 +290,6 @@ i386_ide_sector_count(void)
     return i386_ide_sectors;
 }
 
-static int
-i386_ide_data_has(const i386_u8 *data, unsigned offset, const char *wanted)
-{
-    while (*wanted != '\0') {
-        if (offset >= DISK_SECTOR_SIZE || data[offset] != (i386_u8)*wanted)
-            return 0;
-        ++offset;
-        ++wanted;
-    }
-    return 1;
-}
-
-static unsigned
-i386_ide_fat_type(const i386_u8 *data)
-{
-    if (data[510] != 0x55u || data[511] != 0xaau ||
-        !i386_ide_data_has(data, 3, "REBSD   "))
-        return 0;
-    if (i386_ide_data_has(data, 54, "FAT16   "))
-        return 16;
-    if (i386_ide_data_has(data, 82, "FAT32   "))
-        return 32;
-    return 0;
-}
-
-static void
-i386_ide_print_sector(const char *label, disk_sector_t value)
-{
-    i386_early_puts(label);
-    i386_early_put_hex64((i386_u32)(value >> 32), (i386_u32)value);
-    i386_early_putc('\n');
-}
-
-static int
-i386_ide_partition_probe(void)
-{
-    struct disk_mbr mbr;
-    struct disk_table table;
-    disk_sector_t count;
-    disk_sector_t start;
-    const struct disk_partition *part;
-    int error;
-
-    disk_mbr_parse(&mbr, i386_ide_sector_data, i386_ide_sectors);
-    if (!mbr.dm_valid) {
-        i386_early_puts("ide-mbr-table: invalid\n");
-        return 0;
-    }
-    if (disk_mbr_is_protective(&mbr)) {
-        i386_early_puts("ide-mbr-table: protective\n");
-        return 1;
-    }
-    disk_table_from_mbr(&table, &mbr);
-    if (disk_table_region(&table, i386_ide_sectors,
-        DISK_MINOR_PARTITION(0), &start, &count) != 0) {
-        i386_early_puts("ide-mbr-table: empty\n");
-        return 1;
-    }
-
-    part = &table.dt_partitions[0];
-    i386_early_puts("ide-mbr-table: ok\n");
-    i386_early_puts("ide-part0-type: ");
-    i386_early_put_hex32(part->dp_type);
-    i386_early_putc('\n');
-    i386_ide_print_sector("ide-part0-start: ", start);
-    i386_ide_print_sector("ide-part0-sectors: ", count);
-
-    error = i386_ide_ops.dbo_read(0, start, count >= 2u ? 2u : 1u,
-        i386_ide_sector_data);
-    if (error != 0) {
-        i386_early_puts("ide-partition-read: failed\n");
-        return 0;
-    }
-    if (i386_ide_fat_type(i386_ide_sector_data) == 16)
-        i386_early_puts("ide-partition-read: rebsd-fat16\n");
-    else if (i386_ide_fat_type(i386_ide_sector_data) == 32)
-        i386_early_puts("ide-partition-read: rebsd-fat32\n");
-    else
-        i386_early_puts("ide-partition-read: external\n");
-
-    error = i386_ide_ops.dbo_read(0, start + count - 1u, 1u,
-        i386_ide_sector_data);
-    if (error == 0 && i386_ide_data_has(i386_ide_sector_data, 0,
-        "REBSDEND"))
-        i386_early_puts("ide-last-lba: rebsd-smoke\n");
-    else if (error == 0)
-        i386_early_puts("ide-last-lba: external\n");
-    else
-        i386_early_puts("ide-last-lba: failed\n");
-    return 1;
-}
-
 int
 i386_ide_probe(void)
 {
@@ -419,14 +327,6 @@ i386_ide_probe(void)
     }
     i386_early_puts("ide-backend-read: ok\n");
     i386_early_puts("ide-lba0: ok\n");
-    i386_early_puts("ide-image: ");
-    i386_early_puts(i386_ide_data_has(i386_ide_sector_data, 0,
-        "REBSDIDE") ? "rebsd-smoke\n" : "external\n");
-    i386_early_puts("ide-mbr: ");
-    i386_early_puts(i386_ide_sector_data[510] == 0x55u &&
-        i386_ide_sector_data[511] == 0xaau ?
-        "present\n" : "absent\n");
-    (void)i386_ide_partition_probe();
     if (i386_ide_ops.dbo_read(0, i386_ide_sectors, 1,
         i386_ide_sector_data) == EINVAL &&
         i386_ide_ops.dbo_read(0, 0, IDE_MAX_READ_SECTORS + 1u,

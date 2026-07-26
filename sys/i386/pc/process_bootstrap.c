@@ -1,7 +1,6 @@
 #include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/exec.h>
-#include <sys/exec_elf_loader.h>
 #include <sys/file.h>
 #include <sys/inode.h>
 #include <sys/systm.h>
@@ -18,7 +17,6 @@
 #include "syscall.h"
 #include "tss.h"
 #include "user_bootstrap.h"
-#include "vfs_bootstrap.h"
 #include "vmspace_bootstrap.h"
 
 #define I386_PROCESS_USER_STACK      (I386_USER_VADDR_END - VM_PAGE_SIZE)
@@ -50,7 +48,6 @@ static struct vmspace *i386_idle_vmspace;
 static struct proc *i386_fork_child;
 static label_t i386_process_bootstrap_return;
 static label_t i386_process_idle_saved;
-static struct exec_elf_image i386_bootstrap_user_image;
 static struct exec_params i386_bootstrap_exec;
 static int i386_bootstrap_ready;
 static volatile unsigned i386_process_idle_active;
@@ -665,9 +662,12 @@ i386_process_handle_return(struct i386_trapframe *frame)
         frame->tf_ebx != I386_BOOTSTRAP_USER_RETURN_MAGIC ||
         (frame->tf_eflags & I386_EFLAGS_CARRY) != 0 ||
         frame->tf_eax != 3 ||
-        i386_bootstrap_proc->p_saddr != I386_PROCESS_USER_STACK ||
-        i386_bootstrap_proc->p_ssize != VM_PAGE_SIZE ||
-        i386_bootstrap_uarea->u_ssize != VM_PAGE_SIZE ||
+        i386_bootstrap_proc->p_saddr !=
+        (size_t)i386_bootstrap_exec.stack.vaddr ||
+        i386_bootstrap_proc->p_ssize !=
+        i386_bootstrap_exec.stack.len ||
+        i386_bootstrap_uarea->u_ssize !=
+        i386_bootstrap_exec.stack.len ||
         vmspace_check(i386_bootstrap_vmspace, frame->tf_eip, 1,
         VM_PROT_EXECUTE) != 0 ||
         i386_tss_kernel_stack() != expected_stack)
@@ -683,16 +683,16 @@ i386_process_handle_return(struct i386_trapframe *frame)
 int
 i386_process_bootstrap_user_probe(void)
 {
-    static const unsigned char invalid_elf[] = { 0x7f, 'E', 'L', 'F' };
-    static char bootstrap_arg0[] = "/sbin/init";
-    static char bootstrap_arg1[] = "rootfs";
-    static char bootstrap_env0[] = "A=i686";
-    static char *bootstrap_argv[] = {
-        bootstrap_arg0, bootstrap_arg1
+    struct i386_exec_user_args {
+        char path[sizeof("/sbin/init")];
+        char arg1[sizeof("rootfs")];
+        char env0[sizeof("A=i686")];
+        unsigned argv[3];
+        unsigned envp[2];
     };
-    static char *bootstrap_envp[] = { bootstrap_env0 };
-    const void *init_image;
-    unsigned init_size;
+    struct i386_exec_user_args args;
+    struct i386_trapframe exec_frame;
+    vm_vaddr_t args_address;
     int resumed;
     volatile int error;
 
@@ -702,60 +702,70 @@ i386_process_bootstrap_user_probe(void)
     error = i386_syscall_install_production();
     if (error != 0)
         return error;
-    if (exec_elf_image_load(i386_bootstrap_vmspace, invalid_elf,
-        sizeof(invalid_elf), &i386_bootstrap_user_image) != ENOEXEC)
-        return EFAULT;
-    error = i386_vfs_bootstrap_init_image(&init_image, &init_size);
     i386_process_vfs_fd_tested = 0;
+    args_address = I386_PROCESS_USER_STACK;
+    error = vmspace_map_anon(i386_bootstrap_vmspace, args_address,
+        VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, VM_MAP_STACK);
     if (error != 0)
         return error;
+    bzero(&args, sizeof(args));
+    bcopy("/sbin/init", args.path, sizeof(args.path));
+    bcopy("rootfs", args.arg1, sizeof(args.arg1));
+    bcopy("A=i686", args.env0, sizeof(args.env0));
+    args.argv[0] = args_address +
+        offsetof(struct i386_exec_user_args, path);
+    args.argv[1] = args_address +
+        offsetof(struct i386_exec_user_args, arg1);
+    args.envp[0] = args_address +
+        offsetof(struct i386_exec_user_args, env0);
+    error = vmspace_write(i386_bootstrap_vmspace, args_address,
+        &args, sizeof(args));
+    if (error != 0)
+        return error;
+
+    bzero(&exec_frame, sizeof(exec_frame));
+    u.u_frame = (int *)&exec_frame;
+    bzero(u.u_arg, sizeof(u.u_arg));
+    u.u_arg[0] = args.argv[0];
+    u.u_arg[1] = args_address +
+        offsetof(struct i386_exec_user_args, argv);
+    u.u_arg[2] = args_address +
+        offsetof(struct i386_exec_user_args, envp);
+    u.u_error = 0;
     i386_early_puts("process-image: vfs\n");
-    error = exec_elf_image_load(i386_bootstrap_vmspace, init_image,
-        init_size, &i386_bootstrap_user_image);
-    if (error != 0)
-        return error;
-    error = vmspace_map_anon(i386_bootstrap_vmspace,
-        I386_PROCESS_USER_STACK, VM_PAGE_SIZE,
-        VM_PROT_READ | VM_PROT_WRITE, VM_MAP_STACK);
-    if (error != 0)
-        goto failed;
+    execve();
+    if (u.u_error != 0)
+        return u.u_error;
+    i386_early_puts("vfs-exec-init: ok\n");
+    i386_bootstrap_vmspace = i386_bootstrap_proc->p_vmspace;
+    if (i386_bootstrap_vmspace == (struct vmspace *)0 ||
+        vmspace_current() != i386_bootstrap_vmspace)
+        return EFAULT;
+
     bzero(&i386_bootstrap_exec, sizeof(i386_bootstrap_exec));
-    i386_bootstrap_exec.argp = bootstrap_argv;
-    i386_bootstrap_exec.envp = bootstrap_envp;
-    i386_bootstrap_exec.argc =
-        sizeof(bootstrap_argv) / sizeof(bootstrap_argv[0]);
-    i386_bootstrap_exec.envc =
-        sizeof(bootstrap_envp) / sizeof(bootstrap_envp[0]);
-    i386_bootstrap_exec.argbc =
-        sizeof(bootstrap_arg0) + sizeof(bootstrap_arg1);
-    i386_bootstrap_exec.envbc = sizeof(bootstrap_env0);
+    i386_bootstrap_exec.entry = exec_frame.tf_eip;
+    i386_bootstrap_exec.stack_pointer = exec_frame.tf_useresp;
+    i386_bootstrap_exec.argc = exec_frame.tf_ebx;
+    i386_bootstrap_exec.arg_pointer = exec_frame.tf_ecx;
+    i386_bootstrap_exec.env_pointer = exec_frame.tf_edx;
     i386_bootstrap_exec.stack.vaddr =
-        (caddr_t)(unsigned long)I386_PROCESS_USER_STACK;
-    i386_bootstrap_exec.stack.len = VM_PAGE_SIZE;
+        (caddr_t)(unsigned long)i386_bootstrap_proc->p_saddr;
+    i386_bootstrap_exec.stack.len = i386_bootstrap_proc->p_ssize;
     i386_bootstrap_exec.vmspace = i386_bootstrap_vmspace;
-    error = vmspace_zero(i386_bootstrap_vmspace,
-        I386_PROCESS_USER_STACK, VM_PAGE_SIZE);
-    if (error == 0)
-        error = exec_setupstack(i386_bootstrap_user_image.eei_entry,
-            &i386_bootstrap_exec);
-    if (error != 0)
-        goto failed;
     if (vmspace_check(i386_bootstrap_vmspace,
-            i386_bootstrap_user_image.eei_entry, 1,
+            i386_bootstrap_exec.entry, 1,
             VM_PROT_EXECUTE) != 0 ||
         vmspace_check(i386_bootstrap_vmspace,
-            i386_bootstrap_user_image.eei_entry, 1,
+            i386_bootstrap_exec.entry, 1,
             VM_PROT_WRITE) == 0 ||
-        vmspace_check(i386_bootstrap_vmspace, I386_PROCESS_USER_STACK,
-            VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE) != 0 ||
-        vmspace_check(i386_bootstrap_vmspace, I386_PROCESS_USER_STACK,
-            VM_PAGE_SIZE, VM_PROT_EXECUTE) == 0) {
-        error = EFAULT;
-        goto failed;
-    }
-    i386_bootstrap_proc->p_saddr = I386_PROCESS_USER_STACK;
-    i386_bootstrap_proc->p_ssize = VM_PAGE_SIZE;
-    i386_bootstrap_uarea->u_ssize = VM_PAGE_SIZE;
+        vmspace_check(i386_bootstrap_vmspace,
+            (vm_vaddr_t)i386_bootstrap_exec.stack.vaddr,
+            i386_bootstrap_exec.stack.len,
+            VM_PROT_READ | VM_PROT_WRITE) != 0 ||
+        vmspace_check(i386_bootstrap_vmspace,
+            (vm_vaddr_t)i386_bootstrap_exec.stack.vaddr,
+            i386_bootstrap_exec.stack.len, VM_PROT_EXECUTE) == 0)
+        return EFAULT;
 
     i386_process_user_result = EFAULT;
     i386_process_user_active = 1;
@@ -782,11 +792,4 @@ i386_process_bootstrap_user_probe(void)
         i386_early_puts("fd-exit-close: ok\n");
     }
     return i386_process_bootstrap_validate();
-
-failed:
-    (void)vmspace_unmap(i386_bootstrap_vmspace,
-        I386_PROCESS_USER_STACK, VM_PAGE_SIZE);
-    (void)exec_elf_image_unload(i386_bootstrap_vmspace,
-        &i386_bootstrap_user_image);
-    return error;
 }

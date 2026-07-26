@@ -88,6 +88,8 @@ int exec_save_args(struct exec_params *epp);
 int exec_stack_size(struct exec_params *epp, unsigned *size);
 void exec_clear(struct exec_params *epp);
 int exec_commit(struct exec_params *epp);
+void execv(void);
+void execve(void);
 
 #else /* KERNEL */
 #include <sys/exec_aout.h>

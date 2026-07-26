@@ -1,8 +1,9 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: сорок пять bring-up инкрементов выполнены, включая два
-IBM 6563-W4G hardware gate и QEMU-only FAT16/FAT32 storage-backed ELF
-gates, 2026-07-25.
+Статус: два IBM 6563-W4G hardware gate сохранены как фактические результаты;
+текущий QEMU path использует только существующий raw UFS через общие
+disk/VFS/inode-exec владельцы. Ошибочная FAT-root ветка отменена и удалена
+из текущей реализации, 2026-07-26.
 
 ## Выполнено
 
@@ -136,7 +137,8 @@ gates, 2026-07-25.
 User-string copy выделяется в
 явный API, потому что low-linked i386 не может использовать MIPS-эвристику
 по адресу указателя.
-LILO HDD gate выполняется после появления Linux-среды для установщика.
+IBM HDD gate уже выполнен существующим GRUB Legacy через Linux/x86 boot
+protocol; установка другого boot loader не требуется.
 
 Первый шаг process-MD gate также завершён: generic headers, init, fork,
 scheduler и exit больше не ссылаются на `mips_curuser` или
@@ -366,23 +368,22 @@ Malta64. Следующий кодовый инкремент реализует
 - normal/trap smoke и RAM matrix 32/64/128/256/768/1024 МиБ проходят.
 
 Двадцать третий QEMU bring-up инкремент завершён; последующий общий аудит
-удалил архитектурную реализацию ELF loader:
+удалил временный memory-image путь:
 
 - минимальная user-программа теперь отдельно собирается GCC/binutils
-  toolchain в настоящий `ET_EXEC` ELF32/i386, а затем встраивается в
-  read-only секцию kernel image;
-- общий `sys/kernel/exec_elf_image.c` валидирует ELF
+  toolchain в настоящий `ET_EXEC` ELF32/i386 и устанавливается как
+  `/sbin/init` в UFS;
+- общий `sys/kernel/exec_elf_loader.c` валидирует ELF
   magic/class/data/ABI, target machine из `machine/elf_machdep.h`, header
   bounds, alignment, user ranges, entry point и неперекрывающиеся
-  `PT_LOAD`; тот же общий валидатор заголовка использует inode-backed
-  `sys/kernel/exec_elf.c`;
-- loader отклоняет interpreter/неизвестные program headers и W+X segments,
-  загружает файлы через generic vmspace, явно обнуляет BSS, применяет
-  финальные `PF_R/PF_W/PF_X` permissions и откатывает mappings при ошибке;
+  `PT_LOAD`; inode-backed `sys/kernel/exec_elf.c` читает сегменты напрямую
+  из executable inode;
+- loader отклоняет interpreter/dynamic и W+X segments, явно обнуляет BSS и
+  применяет финальные `PF_R/PF_W/PF_X` permissions;
 - `sys/i386/common/elf_bootstrap.c` и его приватный header удалены; i386
-  вызывает только общий loader, который также собирается для существующих
-  MIPS-конфигураций;
-- встроенный ELF содержит отдельные RX text и RW data+BSS segments; CPL3
+  вызывает production `execve`, а общий loader также собирается для
+  существующих MIPS-конфигураций;
+- ELF содержит отдельные RX text и RW data+BSS segments; CPL3
   код проверяет initialized data, нулевой BSS и запись в него до production
   `getpid`;
 - entry point берётся из ELF header, а не из kernel-константы; обязательный
@@ -756,9 +757,17 @@ drive. Перед gate сохранена рекомендация иметь р
 - повторный реальный boot сохранил все read-only/`EROFS`, PIC/PIT и
   `HALT` результаты первого gate.
 
-Точный IBM hardware baseline зафиксирован. Следующий инкремент возвращается
-в QEMU-first цикл: подключить read-only filesystem/root integration поверх
-уже проверенного generic disk strategy, не добавляя ATA writes.
+Точный IBM hardware baseline зафиксирован. Дальнейшая разработка остаётся
+QEMU-first и не добавляет ATA writes.
+
+### Отменённая ветка инкрементов 40–45
+
+Ниже сохранён только журнал ошибочной FAT-root реализации. Инкременты 40–45
+отменены: они не задают текущую архитектуру, требования или тестовые gates.
+Созданные тогда i386 FAT image generator, FAT-root выбор, whole-file
+`/sbin/init` buffer, локальные descriptor/process части и связанные QEMU
+targets удалены. Возвращать любой из этих путей без предварительного
+явного согласования запрещено.
 
 Сороковой QEMU bring-up инкремент завершён:
 
@@ -910,17 +919,17 @@ count через `fork`, закрывать унаследованные descrip
 `kern_descrip`/`sys_generic`/`sys_inode`, не включая запись на диск.
 Повторный IBM запуск пока не требуется.
 
-Сорок шестой cleanup-инкремент заменяет временные пути общими владельцами:
+На этом отменённая ветка заканчивается.
+
+Сорок шестой cleanup-инкремент начал возврат к общим владельцам:
 
 - приватные `common/initfs.c`, `include/initfs.h` и `tools/mkinitfs.py`
   удалены;
 - существующий `tools/fsutil` создаёт детерминированный little-endian UFS с
   `/sbin/init`, а общий `disk_memory_attach` регистрирует image как read-only
   block device;
-- FAT на IDE-CF и встроенный UFS используют общие disk, buffer cache,
-  `vfs_mountroot`, inode/name cache, `namei`, `rdwri` и descriptor paths;
-- FAT без `/sbin/init` размонтируется общим `vfs_unmountroot`, после чего
-  выбирается UFS. No-IDE сразу выбирает UFS;
+- UFS использует общие disk, buffer cache, `vfs_mountroot`, inode/name cache,
+  `namei`, `rdwri` и descriptor paths;
 - локальная подмена `biodone` удалена. Она не освобождала common read-ahead
   buffer и зависала при чтении UFS; теперь используется `ufs_bio.c::biodone`;
 - compile-time подмены `printf`/`log` на пустые i386 adapters удалены.
@@ -930,7 +939,7 @@ count через `fork`, закрывать унаследованные descrip
   byte-for-byte сборку. QEMU markers унифицированы как `process-image: vfs`,
   `fd-vfs: ok` и `rootfs: ok`.
 
-Ссылки на initfs в предыдущих инкрементах ниже описывают удалённое
+Ссылки на initfs и FAT-root в отменённом журнале выше описывают удалённое
 историческое состояние и не являются текущей архитектурой порта.
 
 Сорок седьмой cleanup-инкремент начал замену ручного process startup:
@@ -953,8 +962,36 @@ count через `fork`, закрывать унаследованные descrip
 - `ct_ticks`, `pipedev`, VM accounting storage и генератор `vers.c` перенесены
   к общим архитектурно-нейтральным владельцам; MIPS-платы используют те же
   владельцы;
-- строгая i686 GCC-сборка, полная QEMU-матрица, host FAT/disk/VM tests и
+- строгая i686 GCC-сборка, полная QEMU-матрица, host disk/VM tests и
   `kernel-objects` для Ci20/N64 с GCC прошли. PCC не запускался и не менялся.
+
+Сорок девятый cleanup-инкремент завершил удаление FAT-root самодеятельности
+и общего ELF-дублирования:
+
+- `sys/i386/tools/mkide.py`, i386 FAT objects/flags, FAT-root selection,
+  filesystem-content parsing в ATA/disk bootstrap и FAT-specific QEMU targets
+  удалены;
+- один и тот же `rootfs.img`, созданный существующим `tools/fsutil`, проходит
+  как raw read-only UFS через IDE whole-device backend или через существующий
+  common memory-disk backend при отсутствии IDE;
+- `/sbin/init` разрешается общим `namei` и выполняется production `execve`;
+  `sys/kernel/exec_elf.c` читает сегменты прямо из inode, без i386 whole-file
+  buffer;
+- ELF32 validation/mapping принадлежит общему
+  `sys/kernel/exec_elf_loader.c`; MIPS, N64 и i686 используют этот owner.
+  MIPS/N64 linker scripts формируют отдельные RX/RW `PT_LOAD`, поэтому общий
+  loader не требует RWX;
+- i386 page-fault path получает активный vmspace через общий
+  `vmspace_current()`, устраняя устаревшее локальное состояние после
+  `exec`/scheduler switch;
+- прошли строгая i686 GCC-сборка, direct и BIOS QEMU boot, оба no-IDE gate,
+  rootfs/bios-image smoke, exception gates, RAM matrix 32–1024 МиБ, host
+  disk/VM tests и GCC `kernel-objects` для Ci20/N64. PCC не запускался и не
+  менялся.
+
+Следующий QEMU-only cleanup: заменить оставшийся ручной proc1/startup path
+в `sys/i386/pc/process_bootstrap.c` на владельца в common `init_main`, не
+добавляя i386 process policy. Реальное IBM-тестирование пока не требуется.
 
 ## 1. Цель и границы первого порта
 
@@ -965,7 +1002,7 @@ IBM PC-совместимых компьютеров с legacy BIOS и проц�
 
 - uniprocessor i686, protected mode, paging с 4 КиБ страницами;
 - legacy BIOS; ранний boot contract совместим с Linux/x86 boot protocol
-  2.02, чтобы один image загружался QEMU `-kernel` и LILO `image=`;
+  2.02, чтобы один image загружался QEMU `-kernel` и GRUB Legacy `kernel`;
 - QEMU `pc-i440fx` как референсная машина;
 - VGA text console и COM1;
 - 8259A PIC и 8253/8254 PIT;
@@ -1001,12 +1038,10 @@ framebuffer, динамическая линковка, PCC и поддержк�
 Compile smoke с указанными ниже freestanding-флагами уже выполнен:
 получен little-endian `ELF32` object с machine `Intel 80386`. В системе также
 есть `/opt/homebrew/bin/qemu-system-i386` версии 11.0.1 с моделями
-`pc-i440fx` и `pentium3`. Утилита `lilo` на macOS host сейчас не найдена.
-Она не блокирует первый hardware gate: один image поддерживает прямой QEMU
-`-kernel`, будущий LILO `image=` и native legacy-BIOS boot sector; для
-последнего собирается raw 1.44 MB floppy artifact. Установка LILO в HDD
-image позднее потребует Linux VM/container или запуска установщика на
-реальной машине.
+`pc-i440fx` и `pentium3`. Один image поддерживает прямой QEMU `-kernel`,
+существующий GRUB Legacy на IBM и native legacy-BIOS boot sector; для
+последнего собирается raw 1.44 MB floppy artifact. Установка LILO не
+требуется.
 
 Базовые переменные сборки:
 
@@ -1130,7 +1165,7 @@ Stock QEMU не эмулирует точный VIA 694X/596B planar. Рефер
 Критерий готовности: минимальный ELF32 kernel корректно определяется
 `readelf` как `ELF32`, `Intel 80386`, little-endian, без undefined symbols.
 
-### Этап 2. Linux boot protocol, LILO и ранняя консоль
+### Этап 2. Linux boot protocol, GRUB Legacy и ранняя консоль
 
 1. Собирать два связанных артефакта:
    `rebsd-i686.elf` для symbols/debug и `rebsd-i686.bzimg` в формате,
@@ -1148,28 +1183,28 @@ Stock QEMU не эмулирует точный VIA 694X/596B planar. Рефер
        -m 64M -kernel rebsd-i686.bzimg -serial stdio -display none
    ```
 
-5. Первый BIOS gate загружает тот же payload без LILO из
+5. Первый BIOS gate загружает тот же payload напрямую из
    `rebsd-i686-bios-floppy.img`; boot sector и setup используют только CHS
-   `INT 13h` reads. Поздний BIOS/HDD gate устанавливает LILO и загружает
-   `rebsd-i686.bzimg` через:
+   `INT 13h` reads. IBM BIOS/HDD gate использует уже установленный GRUB
+   Legacy и загружает `rebsd-i686.bzimg` через:
 
    ```text
-   image=/boot/rebsd-i686.bzimg
-       label=rebsd
-       read-only
+   title ReBSD i686
+       root (hd0,2)
+       kernel /boot/rebsd-i686.bzimg
    ```
 
-   LILO `other=` не является основным HDD-путём: он только chainloads boot
-   sector. Собственный boot sector предназначен для contiguous raw floppy,
-   а filesystem-aware HDD loading остаётся задачей LILO.
+   Собственный boot sector предназначен для contiguous raw floppy; на
+   реальном IBM без floppy используется Linux/x86 protocol через GRUB.
 6. Создать GDT с kernel/user code/data descriptors и TSS.
 7. Реализовать ранний COM1 polling и VGA text output.
-8. Добавить `run`, `run-serial`, `debug` и позднее `run-lilo-disk`.
+8. Добавить `run`, `run-serial`, `debug` и документированный GRUB hardware
+   gate.
 
 Критерий готовности: в QEMU стабильно печатаются banner, нормализованная
 BIOS E820 memory map и результат self-check GDT; panic также виден через
-COM1. Native BIOS floppy path уже проходит QEMU, LILO boot с HDD image
-остаётся отдельным поздним gate.
+COM1. Native BIOS floppy path проходит QEMU, а GRUB Legacy HDD boot уже
+подтверждён на IBM 6563-W4G.
 
 ### Этап 3. Exceptions, IRQ и время
 
@@ -1339,10 +1374,10 @@ script должен иметь безопасный fallback на `qemu32`.
    undefined symbols; kernel не должен случайно зависеть от host libgcc.
    Нужные целочисленные helpers либо линкуются из target libgcc осознанно,
    либо реализуются в `libkern`.
-4. **BIOS/LILO-различия.** После handoff kernel не должен вызывать BIOS в
-   protected mode. QEMU direct boot и LILO обязаны сходиться в одном
-   `i386_bootinfo`; отсутствующие boot-protocol поля setup дополняет через
-   BIOS до переключения в protected mode.
+4. **Различия boot paths.** После handoff kernel не должен вызывать BIOS в
+   protected mode. QEMU direct boot, native BIOS setup и GRUB Legacy обязаны
+   сходиться в одном `i386_bootinfo`; отсутствующие boot-protocol поля setup
+   дополняет через BIOS до переключения в protected mode.
 5. **FPU context corruption.** До полноценного save/restore пользовательский
    x87 выключен; lazy-FPU можно добавлять позже.
 6. **Старое железо без serial.** VGA panic console обязательна, но serial

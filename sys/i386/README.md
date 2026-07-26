@@ -6,8 +6,9 @@ Apollo Pro 133 chipset, a 3Dfx Voodoo3 AGP adapter, and legacy IDE-CF.
 
 The initial image implements Linux/x86 boot protocol 2.02 and also contains
 a native legacy-BIOS boot sector.  `rebsd-i686.bzimg` is loaded directly by
-QEMU (and later by LILO), while `rebsd-i686-bios-floppy.img` boots the same
-payload through BIOS INT 13h without requiring LILO.
+QEMU and by the IBM's existing GRUB Legacy, while
+`rebsd-i686-bios-floppy.img` boots the same payload through BIOS INT 13h
+without installing another boot loader.
 
 ## Build and smoke test
 
@@ -18,10 +19,8 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc all
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-image-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-boot-smoke
-make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc fat32-boot-smoke
-make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-fat32-boot-smoke
-make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc vfs-fallback-smoke
-make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-vfs-fallback-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc rootfs-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc ide-absent-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-ide-absent-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc trap-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke-matrix
@@ -45,33 +44,28 @@ protected-mode trampoline copies it to 1 MiB.  QEMU requires
 `boot-loader: linux-protocol`.  The first IBM 6563-W4G procedure is in
 `docs/I686_HARDWARE_GATE.md`.
 
-The IDE smoke image is now an 8192-sector MBR disk with a real read-only
-FAT16 partition, a two-cluster `/BOOT/ROOT.TXT`, and the separately linked
-ELF32 bootstrap as `/SBIN/INIT`.  IDE and Ci20 USB mass storage converge at
-the generic block-device interface.  The root mount uses the existing common
-disk layer, buffer cache, `fat_vfsops`, inode/name caches and `namei`; i386
-does not carry a private filesystem reader.  Process 1 opens and reads
-`/sbin/init` through that VFS path into a bounded 64 KiB buffer.  The
-existing ELF loader maps and executes it in CPL3
-and reports `process-image: vfs`.  A deterministic read-only UFS image,
-created by the existing `tools/fsutil`, is attached through the common
-memory-disk backend and supplies the root when IDE is absent.  A separate
-FAT32 gate mounts a valid disk without `/sbin/init`, unmounts it through the
-common root-mount API, and selects the same embedded UFS root.  This matches
-an IBM CF whose existing FAT partition has no ReBSD init.
-Once in CPL3, the FAT-backed init opens its own `/sbin/init` through
-production `open(5)`, reads the ELF magic through `read(3)`, changes the
-file offset through `lseek(19)`, and releases the descriptor through
-`close(6)`.  It keeps the descriptor across the first production `fork`;
-the child reads through the shared file object, advances the common offset,
-and early `exit` drops the inherited reference before the parent closes the
-last one.  The gate also requires `EBADF` after a repeated close and `EROFS`
-for a write open.  Host tests exercise the common FAT implementation on
-FAT16 and FAT32.
-A separate 64 MiB FAT32 image uses MBR type `0x0c` and partition start LBA
-`0x800`, matching the IBM CF's observed scheme; direct-kernel and native-BIOS
-QEMU targets require the same root and storage-backed ELF/fd checks on that
-image.
+The IDE smoke uses the deterministic read-only UFS image produced by the
+existing `tools/fsutil`.  IDE and Ci20 USB mass storage converge at the
+generic block-device interface; i386 contributes only the ATA backend and
+passes the whole-device `dev_t` to the common disk and VFS owners.  UFS is
+mounted through `vfs_mountroot`, `/sbin/init` is resolved with common
+`namei`, and common inode-backed `execve` reads and maps its ELF segments
+directly from the inode.  There is no i386 filesystem parser, rootfs format,
+whole-file executable buffer, or private executable loader.
+
+The same UFS image is embedded through the existing common memory-disk
+backend for the no-IDE gate.  This is a transport fallback for the same
+standard root filesystem, not a second root design.  The existing IBM
+IDE-CF remains read-only and is not treated as a ReBSD root unless it
+contains a valid UFS with `/sbin/init`.
+
+Once in CPL3, init opens its own `/sbin/init` through production `open(5)`,
+reads the ELF magic through `read(3)`, changes the file offset through
+`lseek(19)`, and releases the descriptor through `close(6)`.  It keeps the
+descriptor across the first production `fork`; the child reads through the
+shared file object, advances the common offset, and early `exit` drops the
+inherited reference before the parent closes the last one.  The gate also
+requires `EBADF` after a repeated close and `EROFS` for a write open.
 
 Porting invariant: `sys/i386` contains only hardware and ABI glue.  Existing
 common disk, buffer-cache, VFS, filesystem and descriptor implementations
@@ -143,11 +137,10 @@ CPL3 with an RX text mapping and an RW stack without VM execute permission,
 requires production `getpid` to return 1, and requires `process-user: ok`
 before timer IRQs.  The target non-PAE Pentium III has no hardware NX bit.
 The user payload is a separately linked ELF32/i386 `ET_EXEC`, installed as
-`/sbin/init` both in a deterministic read-only UFS image and in the FAT smoke
-images, and loaded from two `PT_LOAD` segments.  FAT is preferred when its
-file is present; otherwise the embedded UFS image is selected.  Both roots
-use the common disk, buffer-cache, VFS, inode and namei paths.  The common
-ELF image loader checks
+`/sbin/init` in a deterministic read-only UFS image and loaded from two
+`PT_LOAD` segments.  The IDE and memory-disk transports expose that same
+image through the common disk, buffer-cache, VFS, inode and namei paths.
+The common inode ELF loader checks
 bounds, alignment, target ABI, entry, user ranges, overlap and W+X, zero-fills
 BSS, applies final permissions, and requires `elf32-user: ok`; there is no
 i386-private executable loader.
@@ -187,15 +180,13 @@ twice.  Generic `newproc` creates PID 2 and runs its cloned trapframe in
 CPL3 through production syscall 2; production child `exit`/parent `wait4`
 and reap paths are connected and tested.
 The first persistent user mapping executes production syscall 20 from CPL3
-and validates generic VM text/stack permissions.  The common memory-backed
-ELF32 loader maps RX text and RW data+BSS after `/sbin/init` has been read
-through the mounted common VFS, and the common exec stack path supplies
-`argc/argv/envp`.
-A read-only legacy primary-master ATA PIO backend now attaches through the
-generic disk layer, parses MBR partitions and exercises real block strategy
-reads.  The common FAT/VFS path mounts the first partition, reads a
-deterministic root probe and supplies `/sbin/init` to the process-1 ELF
-loader; ATA writes and DMA are intentionally absent.  A full VFS root used
-through ordinary read-only namei/open/read/lseek/close is now present.
+and validates generic VM text/stack permissions.  Common inode-backed exec
+maps RX text and RW data+BSS directly from `/sbin/init` on the mounted UFS,
+and the common exec stack path supplies `argc/argv/envp`.
+A read-only legacy primary-master ATA PIO backend attaches through the
+generic disk layer and exercises real whole-device block strategy reads.
+The common UFS/VFS path mounts the raw UFS device and supplies `/sbin/init`
+to process 1; ATA writes and DMA are intentionally absent.  The root is used
+through ordinary read-only namei/open/read/lseek/close operations.
 Writable storage, generic non-inode fileops, complete userland, and PCC
 remain outside the current image.

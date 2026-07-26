@@ -54,18 +54,20 @@ i386_vmspace_deactivate(struct vmspace *vmspace)
 int
 i386_vmspace_fault_active(unsigned address, unsigned access, int user)
 {
+    struct vmspace *vmspace;
     int error;
     unsigned context;
 
-    if (i386_vmspace_active == (struct vmspace *)0)
+    vmspace = vmspace_current();
+    if (vmspace == (struct vmspace *)0)
         return ENOENT;
     error = pmap_fault_active((vm_vaddr_t)address, (vm_prot_t)access,
         user);
     if (error == 0)
         return 0;
     context = user ? VM_FAULT_USER : VM_FAULT_KERNEL;
-    return vmspace_fault_context(i386_vmspace_active,
-        (vm_vaddr_t)address, (vm_prot_t)access,
+    return vmspace_fault_context(vmspace, (vm_vaddr_t)address,
+        (vm_prot_t)access,
         context | VM_FAULT_CAN_SLEEP);
 }
 
