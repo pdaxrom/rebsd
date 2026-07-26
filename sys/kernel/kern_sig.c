@@ -37,8 +37,8 @@ cansignal (struct proc *q, int signum)
     fill_from_u(q, &ruid, NULL, NULL, NULL, 0); /* XXX */
     if (curp->p_uid == 0 ||     /* c effective root */
         u.u_ruid == ruid ||     /* c real = t real */
-        curp->p_uid == ruid ||      /* c effective = t real */
-        u.u_ruid == q->p_uid || /* c real = t effective */
+        (uid_t)curp->p_uid == ruid ||      /* c effective = t real */
+        u.u_ruid == (uid_t)q->p_uid || /* c real = t effective */
         curp->p_uid == q->p_uid ||  /* c effective = t effective */
         (signum == SIGCONT && inferior(q)))
         return(1);
@@ -555,13 +555,16 @@ core()
     register struct nameidata *ndp = &nd;
     register char *np;
     char    *cp, name[MAXCOMLEN + 6];
+    off_t core_size;
 
     /*
      * Don't dump if not root.
      */
     if (! suser())
         return(0);
-    if (USIZE + u.u_dsize + u.u_ssize >= u.u_rlimit[RLIMIT_CORE].rlim_cur)
+    core_size = (off_t)USIZE + (off_t)u.u_dsize + (off_t)u.u_ssize;
+    if (u.u_rlimit[RLIMIT_CORE].rlim_cur < 0 ||
+        core_size >= (off_t)u.u_rlimit[RLIMIT_CORE].rlim_cur)
         return (0);
     cp = u.u_comm;
     np = name;

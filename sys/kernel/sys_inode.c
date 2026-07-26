@@ -106,13 +106,12 @@ ino_ioctl(struct file *fp, u_int com, caddr_t data)
         }
         if (com == FIONBIO || com == FIOASYNC)  /* XXX */
             return (0);         /* XXX */
-        /* fall into ... */
+        return (ENOTTY);
 
     default:
         return (ENOTTY);
 
     case IFCHR:
-        dev = ip->i_rdev;
         u.u_rval = 0;
         if (setjmp(&u.u_qsave)) {
             /*
@@ -122,9 +121,9 @@ ino_ioctl(struct file *fp, u_int com, caddr_t data)
              */
             return(u.u_error);
         }
+        dev = ip->i_rdev;
         return((*cdevsw[major(dev)].d_ioctl)(dev,com,data,fp->f_flag));
     case IFBLK:
-        dev = ip->i_rdev;
         u.u_rval = 0;
         if (setjmp(&u.u_qsave)) {
             /*
@@ -134,6 +133,7 @@ ino_ioctl(struct file *fp, u_int com, caddr_t data)
              */
             return(u.u_error);
         }
+        dev = ip->i_rdev;
         return((*bdevsw[major(dev)].d_ioctl)(dev,com,data,fp->f_flag));
     }
 }
@@ -189,7 +189,8 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
     register struct buf *bp;
     off_t osize;
     blkno_t lbn, bn;
-    int n, on, type, resid;
+    u_int n, on, resid;
+    int type;
     int error = 0;
     int flags;
     struct mount *mp;
@@ -318,8 +319,8 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
                 off_t diff = ip->i_size - uio->uio_offset;
                 if (diff <= 0)
                     return (0);
-                if (diff < n)
-                    n = diff;
+                if (diff < (off_t)n)
+                    n = (u_int)diff;
                 bn = bmap(ip, (daddr_t)lbn, B_READ, flags);
             } else
                 bn = bmap(ip,(daddr_t)lbn,B_WRITE,
@@ -496,14 +497,12 @@ closei (struct inode *ip, int flag)
     register struct file *fp;
     int mode, error;
     dev_t   dev;
-    int (*cfunc)(dev_t, int, int);
 
     mode = ip->i_mode & IFMT;
     dev = ip->i_rdev;
 
     switch (mode) {
     case IFCHR:
-        cfunc = cdevsw[major(dev)].d_close;
         break;
     case IFBLK:
         /*
@@ -513,7 +512,6 @@ closei (struct inode *ip, int flag)
         for (mp = mount; mp < &mount[NMOUNT]; mp++)
             if (mp->m_inodp != NULL && mp->m_dev == dev)
                 return(0);
-        cfunc = bdevsw[major(dev)].d_close;
         break;
     default:
         return(0);
@@ -553,8 +551,10 @@ closei (struct inode *ip, int flag)
          */
         if ((error = u.u_error) == 0)
             error = EINTR;
-    } else
-        error = (*cfunc)(dev, flag, mode);
+    } else if (mode == IFCHR)
+        error = (*cdevsw[major(dev)].d_close)(dev, flag, mode);
+    else
+        error = (*bdevsw[major(dev)].d_close)(dev, flag, mode);
     return (error);
 }
 
@@ -682,7 +682,7 @@ openi (struct inode *ip, int mode)
     case IFCHR:
         if (ip->i_fs->fs_flags & MNT_NODEV)
             return(ENXIO);
-        if ((u_int)maj >= nchrdev)
+        if (maj >= nchrdev)
             return (ENXIO);
         if (mode & FWRITE) {
             /*
@@ -710,7 +710,7 @@ openi (struct inode *ip, int mode)
     case IFBLK:
         if (ip->i_fs->fs_flags & MNT_NODEV)
             return(ENXIO);
-        if ((u_int)maj >= nblkdev)
+        if (maj >= nblkdev)
             return (ENXIO);
         /*
          * When running in very secure mode, do not allow

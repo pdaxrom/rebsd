@@ -22,6 +22,7 @@ getpriority()
     } *uap = (struct a *)u.u_arg;
     register struct proc *p;
     register int low = PRIO_MAX + 1;
+    uid_t target_uid;
 
     switch (uap->which) {
     case PRIO_PROCESS:
@@ -43,10 +44,11 @@ getpriority()
         }
         break;
     case PRIO_USER:
-        if (uap->who == 0)
-            uap->who = u.u_uid;
+        if (uap->who < 0)
+            break;
+        target_uid = uap->who == 0 ? u.u_uid : (uid_t)uap->who;
         for (p = allproc; p != NULL; p = p->p_nxt) {
-            if (p->p_uid == uap->who &&
+            if ((uid_t)p->p_uid == target_uid &&
                 p->p_nice < low)
                 low = p->p_nice;
         }
@@ -66,7 +68,8 @@ static void
 donice(struct proc *p, int n)
 {
     if (u.u_uid && u.u_ruid &&
-        u.u_uid != p->p_uid && u.u_ruid != p->p_uid) {
+        u.u_uid != (uid_t)p->p_uid &&
+        u.u_ruid != (uid_t)p->p_uid) {
         u.u_error = EPERM;
         return;
     }
@@ -91,6 +94,7 @@ setpriority()
     } *uap = (struct a *)u.u_arg;
     register struct proc *p;
     register int found = 0;
+    uid_t target_uid;
 
     switch (uap->which) {
     case PRIO_PROCESS:
@@ -113,10 +117,11 @@ setpriority()
             }
         break;
     case PRIO_USER:
-        if (uap->who == 0)
-            uap->who = u.u_uid;
+        if (uap->who < 0)
+            break;
+        target_uid = uap->who == 0 ? u.u_uid : (uid_t)uap->who;
         for (p = allproc; p != NULL; p = p->p_nxt)
-            if (p->p_uid == uap->who) {
+            if ((uid_t)p->p_uid == target_uid) {
                 donice(p, uap->prio);
                 found++;
             }

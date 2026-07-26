@@ -711,29 +711,30 @@ fchown()
 int
 chown1 (struct inode *ip, int uid, int gid)
 {
-    int ouid, ogid;
+    uid_t ouid;
+    gid_t ogid;
+    uid_t newuid;
+    gid_t newgid;
 
-    if (uid == -1)
-        uid = ip->i_uid;
-    if (gid == -1)
-        gid = ip->i_gid;
+    newuid = uid == -1 ? ip->i_uid : (uid_t)uid;
+    newgid = gid == -1 ? ip->i_gid : (gid_t)gid;
     /*
      * If we don't own the file, are trying to change the owner
      * of the file, or are not a member of the target group,
      * the caller must be superuser or the call fails.
      */
-    if ((u.u_uid != ip->i_uid || uid != ip->i_uid ||
-        !groupmember((gid_t)gid)) && !suser())
+    if ((u.u_uid != ip->i_uid || newuid != ip->i_uid ||
+        !groupmember(newgid)) && !suser())
         return (u.u_error);
     ouid = ip->i_uid;
     ogid = ip->i_gid;
-    ip->i_uid = uid;
-    ip->i_gid = gid;
-    if (ouid != uid || ogid != gid)
+    ip->i_uid = newuid;
+    ip->i_gid = newgid;
+    if (ouid != newuid || ogid != newgid)
         ip->i_flag |= ICHG;
-    if (ouid != uid && u.u_uid != 0)
+    if (ouid != newuid && u.u_uid != 0)
         ip->i_mode &= ~ISUID;
-    if (ogid != gid && u.u_uid != 0)
+    if (ogid != newgid && u.u_uid != 0)
         ip->i_mode &= ~ISGID;
     return (0);
 }
@@ -847,7 +848,8 @@ rename()
     } *uap = (struct a *)u.u_arg;
     register struct inode *ip, *xp, *dp;
     struct dirtemplate dirbuf;
-    int doingdirectory = 0, oldparent = 0, newparent = 0;
+    int doingdirectory = 0;
+    ino_t oldparent = 0, newparent = 0;
     struct  nameidata nd;
     struct  nameidata tnd;
     register struct nameidata *ndp = &nd;

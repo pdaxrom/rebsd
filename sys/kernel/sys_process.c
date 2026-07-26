@@ -124,8 +124,9 @@ procxmt()
     case PT_STEP:
         if (md_user_frame_single_step(u.u_frame) != 0)
             goto error;
-        /* FALL THROUGH TO ... */
+        goto continue_process;
     case PT_CONTINUE:
+continue_process:
         if ((int)ipc.ip_addr != 1 &&
             md_user_frame_set_pc(u.u_frame, (unsigned)ipc.ip_addr) != 0)
             goto error;
@@ -137,7 +138,7 @@ procxmt()
     /* force exit */
     case PT_KILL:
         exit(u.u_procp->p_ptracesig);
-        /*NOTREACHED*/
+        goto error;
 
     default:
 error:

@@ -298,46 +298,44 @@ ufs_alloc.o: $(TOPSRC)/sys/kernel/ufs_alloc.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -Dprintf=i386_vfs_log -Duprintf=i386_vfs_log \
-	    -Wno-sign-compare -c $< -o $@
+	    -c $< -o $@
 
 ufs_bmap.o: $(TOPSRC)/sys/kernel/ufs_bmap.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -c $< -o $@
+	    -c $< -o $@
 
 ufs_fio.o: $(TOPSRC)/sys/kernel/ufs_fio.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -c $< -o $@
+	    -c $< -o $@
 
 ufs_inode.o: $(TOPSRC)/sys/kernel/ufs_inode.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -Dprintf=i386_vfs_log -Dlog=i386_vfs_syslog \
-	    -Wno-sign-compare -Wno-unused-parameter -c $< -o $@
+	    -c $< -o $@
 
 ufs_mount.o: $(TOPSRC)/sys/kernel/ufs_mount.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -Wno-unused-parameter -c $< -o $@
+	    -c $< -o $@
 
 ufs_namei.o: $(TOPSRC)/sys/kernel/ufs_namei.c \
 	    $(TOPSRC)/sys/include/inode.h $(TOPSRC)/sys/include/namei.h \
 	    $(TOPSRC)/sys/include/mount.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -Wno-sign-compare \
-	    -Wno-array-bounds -c $< -o $@
+	    -Dprintf=i386_vfs_log -c $< -o $@
 
 ufs_subr.o: $(TOPSRC)/sys/kernel/ufs_subr.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -Wno-sign-compare -c $< -o $@
+	    -Dprintf=i386_vfs_log -c $< -o $@
 
 sys_inode.o: $(TOPSRC)/sys/kernel/sys_inode.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -Wno-implicit-fallthrough -Wno-clobbered \
 	    -c $< -o $@
 
 kern_subr.o: $(TOPSRC)/sys/kernel/kern_subr.c \
@@ -348,14 +346,12 @@ kern_subr.o: $(TOPSRC)/sys/kernel/kern_subr.c \
 kern_descrip.o: $(TOPSRC)/sys/kernel/kern_descrip.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dlog=i386_vfs_syslog -Wno-sign-compare \
-	    -Wno-implicit-fallthrough -Wno-clobbered -Wno-unused-parameter \
-	    -c $< -o $@
+	    -Dlog=i386_vfs_syslog -c $< -o $@
 
 kern_shm.o: $(TOPSRC)/sys/kernel/kern_shm.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -c $< -o $@
+	    -c $< -o $@
 
 kern_time.o: $(TOPSRC)/sys/kernel/kern_time.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -365,29 +361,27 @@ kern_time.o: $(TOPSRC)/sys/kernel/kern_time.c \
 sys_generic.o: $(TOPSRC)/sys/kernel/sys_generic.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -Wno-clobbered -Wno-unused-parameter \
 	    -c $< -o $@
 
 sys_pipe.o: $(TOPSRC)/sys/kernel/sys_pipe.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -c $< -o $@
+	    -c $< -o $@
 
 ufs_syscalls.o: $(TOPSRC)/sys/kernel/ufs_syscalls.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -Wno-sign-compare \
-	    -Wno-implicit-fallthrough -c $< -o $@
+	    -Dprintf=i386_vfs_log -c $< -o $@
 
 ufs_syscalls2.o: $(TOPSRC)/sys/kernel/ufs_syscalls2.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -Wno-sign-compare -c $< -o $@
+	    -Dprintf=i386_vfs_log -c $< -o $@
 
 vfs_vnops.o: $(TOPSRC)/sys/kernel/vfs_vnops.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -Wno-clobbered -c $< -o $@
+	    -c $< -o $@
 
 fat_subr.o: $(I386_FAT_SRC)/fat_subr.c $(I386_FAT_SRC)/fat.h \
 	    $(TOPSRC)/sys/include/types.h \
@@ -511,7 +505,7 @@ kern_exit.o: $(TOPSRC)/sys/kernel/kern_exit.c \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -c $< -o $@
+	    -c $< -o $@
 
 kern_resource.o: $(TOPSRC)/sys/kernel/kern_resource.c \
 	    $(TOPSRC)/sys/include/kernel.h $(TOPSRC)/sys/include/proc.h \
@@ -519,7 +513,7 @@ kern_resource.o: $(TOPSRC)/sys/kernel/kern_resource.c \
 	    $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -c $< -o $@
+	    -c $< -o $@
 
 kern_sig.o: $(TOPSRC)/sys/kernel/kern_sig.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/signalvar.h \
@@ -527,21 +521,21 @@ kern_sig.o: $(TOPSRC)/sys/kernel/kern_sig.c \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -Wno-sign-compare -c $< -o $@
+	    -Dprintf=i386_vfs_log -c $< -o $@
 
 kern_sig2.o: $(TOPSRC)/sys/kernel/kern_sig2.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/signalvar.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -c $< -o $@
+	    -c $< -o $@
 
 sys_process.o: $(TOPSRC)/sys/kernel/sys_process.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/ptrace.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-sign-compare -Wno-implicit-fallthrough -c $< -o $@
+	    -c $< -o $@
 
 kern_synch.o: $(TOPSRC)/sys/kernel/kern_synch.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
@@ -556,7 +550,7 @@ kern_clock.o: $(TOPSRC)/sys/kernel/kern_clock.c \
 	    $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Wno-unused-parameter -c $< -o $@
+	    -c $< -o $@
 
 scheduler.o: $(I386_PC_SRC)/scheduler.c \
 	    $(I386_SRC)/include/boot.h \

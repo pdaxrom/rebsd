@@ -107,7 +107,8 @@ syncip(struct inode *ip)
 int
 badblock (struct fs *fp, daddr_t bn)
 {
-    if (bn < fp->fs_isize || bn >= fp->fs_fsize) {
+    if (bn < 0 || (u_int)bn < fp->fs_isize ||
+        (u_int)bn >= fp->fs_fsize) {
         printf("bad block %D, ",bn);
         fserr(fp, "bad block");
         return (1);

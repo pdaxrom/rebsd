@@ -45,7 +45,8 @@ rwuio (struct uio *uio, int positioned)
     };
     register struct file *fp;
     register struct iovec *iov;
-    u_int i, count;
+    int i;
+    u_int count;
     off_t   total;
 
     GETF(fp, ((struct a *)u.u_arg)->fdes);
@@ -503,6 +504,8 @@ pselect()
 int
 seltrue(dev_t dev, int flag)
 {
+    (void)dev;
+    (void)flag;
     return (1);
 }
 
@@ -534,6 +537,8 @@ sorw(struct file *fp, struct uio *uio)
         return(SORECEIVE((struct socket *)fp->f_socket, 0, uio, 0, 0));
     return(SOSEND((struct socket *)fp->f_socket, 0, uio, 0, 0));
 #else
+    (void)fp;
+    (void)uio;
     return (EOPNOTSUPP);
 #endif
 }
@@ -544,6 +549,9 @@ soctl(struct file *fp, u_int com, char *data)
 #ifdef  INET
     return (SOO_IOCTL(fp, com, data));
 #else
+    (void)fp;
+    (void)com;
+    (void)data;
     return (EOPNOTSUPP);
 #endif
 }
@@ -554,6 +562,8 @@ sosel(struct file *fp, int flag)
 #ifdef  INET
     return (SOO_SELECT(fp, flag));
 #else
+    (void)fp;
+    (void)flag;
     return (EOPNOTSUPP);
 #endif
 }
@@ -568,6 +578,7 @@ socls(struct file *fp)
         error = SOCLOSE((struct socket *)fp->f_data);
     fp->f_data = 0;
 #else
+    (void)fp;
     error = EOPNOTSUPP;
 #endif
     return(error);
@@ -592,6 +603,7 @@ const struct fileops *const Fops[] = {
 void
 nostrategy (struct buf *bp)
 {
+    (void)bp;
     /* Empty. */
 }
 

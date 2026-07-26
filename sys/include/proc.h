@@ -22,7 +22,7 @@ struct  proc {
     struct  proc **p_prev;          /* also zombies, and free proc's */
     struct  proc *p_pptr;           /* pointer to process structure of parent */
     short   p_flag;
-    short   p_uid;                  /* user id, used to direct tty signals */
+    u_short p_uid;                  /* user id, used to direct tty signals */
     short   p_pid;                  /* unique process id */
     short   p_ppid;                 /* process id of parent */
     long    p_sig;                  /* signals pending to this process */

@@ -60,6 +60,14 @@
  * Check permissions, and call the VOP_OPEN (openi for 2.11) or VOP_CREATE
  * (maknode) routine.
  */
+static int
+vn_openi_interruptible(struct inode *ip, int fmode)
+{
+    if (setjmp(&u.u_qsave))
+        return EINTR;
+    return openi(ip, fmode);
+}
+
 int
 vn_open (struct nameidata *ndp, int fmode, int cmode)
 {
@@ -130,11 +138,7 @@ vn_open (struct nameidata *ndp, int fmode, int cmode)
      * 2.11 returns the inode unlocked (for now).
      */
     iunlock(ip);        /* because namei returns a locked inode */
-    if (setjmp(&u.u_qsave)) {
-        error = EINTR;  /* opens are not restarted after signals */
-        goto lbad;
-    }
-    error = openi (ip, fmode);
+    error = vn_openi_interruptible(ip, fmode);
     if (error) {
         goto lbad;
     }

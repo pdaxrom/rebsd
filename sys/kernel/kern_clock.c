@@ -40,6 +40,7 @@ gatherstats(caddr_t pc, int ps)
 {
     register int cpstate;
 
+    (void)pc;
     /*
      * Determine what state the cpu is in.
      */

@@ -422,7 +422,7 @@ iupdat (struct inode *ip, struct timeval *ta, struct timeval *tm, int waitfor)
 #define TRIPLE  2   /* index of triple indirect block */
 
 static void
-trsingle (struct inode *ip, struct buf *bp, daddr_t last, int aflags)
+trsingle (struct inode *ip, struct buf *bp, daddr_t last)
 {
     register const daddr_t *bstart, *bstop;
     const daddr_t *blarray = (const daddr_t*) bp->b_addr;
@@ -506,7 +506,7 @@ indirtrunc (struct inode *ip, daddr_t bn, daddr_t lastbn, int level, int aflags)
      * and that doesn't work well with recursion.
      */
     if (level == SINGLE)
-        trsingle (ip, bp, last, aflags);
+        trsingle (ip, bp, last);
     else {
         register daddr_t *bstart, *bstop;
 

@@ -107,7 +107,7 @@ ufs_setattr (struct inode *ip, struct vattr *vap)
 
     if (ip->i_fs->fs_ronly) /* can't change anything on a RO fs */
         return(EROFS);
-    if (vap->va_flags != VNOVAL) {
+    if (vap->va_flags != (u_int)VNOVAL) {
         if (u.u_uid != ip->i_uid && !suser())
             return(u.u_error);
         if (u.u_uid == 0) {

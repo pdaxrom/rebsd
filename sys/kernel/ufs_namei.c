@@ -926,7 +926,7 @@ direnter(struct inode *ip, struct nameidata *ndp)
     register struct inode *dp = ndp->ni_pdir;
     struct buf *bp;
     int loc, spacefree, error = 0;
-    u_int dsize;
+    int dsize;
     int newentrysize;
     char *dirbuf;
 
@@ -1095,12 +1095,11 @@ dirempty (struct inode *ip, ino_t parentino)
 {
     register off_t off;
     struct dirtemplate dbuf;
-    register struct direct *dp = (struct direct *)&dbuf;
     int error, count;
 #define MINDIRSIZ (sizeof (struct dirtemplate) / 2)
 
-    for (off = 0; off < ip->i_size; off += dp->d_reclen) {
-        error = rdwri (UIO_READ, ip, (caddr_t) dp, MINDIRSIZ,
+    for (off = 0; off < ip->i_size; ) {
+        error = rdwri (UIO_READ, ip, (caddr_t)&dbuf, MINDIRSIZ,
             off, IO_UNIT, &count);
         /*
          * Since we read MINDIRSIZ, residual must
@@ -1109,24 +1108,25 @@ dirempty (struct inode *ip, ino_t parentino)
         if (error || count != 0)
             return (0);
         /* avoid infinite loops */
-        if (dp->d_reclen == 0)
+        if (dbuf.dot_reclen == 0)
             return (0);
+        off += dbuf.dot_reclen;
         /* skip empty entries */
-        if (dp->d_ino == 0)
+        if (dbuf.dot_ino == 0)
             continue;
         /* accept only "." and ".." */
-        if (dp->d_namlen > 2)
+        if (dbuf.dot_namlen > 2)
             return (0);
-        if (dp->d_name[0] != '.')
+        if (dbuf.dot_name[0] != '.')
             return (0);
         /*
          * At this point d_namlen must be 1 or 2.
          * 1 implies ".", 2 implies ".." if second
          * char is also "."
          */
-        if (dp->d_namlen == 1)
+        if (dbuf.dot_namlen == 1)
             continue;
-        if (dp->d_name[1] == '.' && dp->d_ino == parentino)
+        if (dbuf.dot_name[1] == '.' && dbuf.dot_ino == parentino)
             continue;
         return (0);
     }

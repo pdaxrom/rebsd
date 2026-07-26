@@ -128,7 +128,7 @@ ialloc (struct inode *pip)
     int i;
     struct dinode *dp;
     ino_t ino;
-    daddr_t adr;
+    u_int adr;
     ino_t inobas;
     int first;
     char *emsg = "no inodes free";
