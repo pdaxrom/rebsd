@@ -43,6 +43,12 @@ extern struct map swapmap[];    /* space for swap allocation */
 size_t malloc (struct map *mp, size_t nbytes);
 
 /*
+ * Return the number of entries, including the terminating entry, needed
+ * for worst-case fragmentation with fixed-size allocations.
+ */
+size_t rmap_required_entries(size_t total, size_t allocation_unit);
+
+/*
  * Free the previously allocated units at addr into the specified map.
  */
 void mfree (struct map *mp, size_t nbytes, size_t addr);

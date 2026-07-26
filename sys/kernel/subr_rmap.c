@@ -34,6 +34,29 @@
  * delimiter.
  */
 
+size_t
+rmap_required_entries(size_t total, size_t allocation_unit)
+{
+    size_t allocations;
+    size_t extents;
+
+    if (total == 0 || allocation_unit == 0)
+        return 0;
+
+    allocations = total / allocation_unit;
+    extents = allocations / 2 + allocations % 2;
+
+    /*
+     * A partial unit at the end is permanently free.  It adds another
+     * extent only when the last complete unit in the alternating layout
+     * is allocated.
+     */
+    if (total % allocation_unit != 0 && allocations % 2 == 0)
+        ++extents;
+
+    return extents + 1;       /* zero-sized terminating entry */
+}
+
 /*
  * Allocate 'size' units from the given map.  Return the base of the
  * allocated space.  In a map, the addresses are increasing and the

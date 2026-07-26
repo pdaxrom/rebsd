@@ -50,15 +50,6 @@
 
 #include <machine/layout.h>
 
-/*
- * The pager allocates swap in 4K units.  An alternating allocated/free
- * layout needs one descriptor per two pages, plus the terminating entry.
- * The 8 MiB N64 layout exposes at most 4 MiB of logical zswap.
- */
-#ifndef SMAPSIZ
-#define SMAPSIZ         ((((N64_SIZE_4M / 4096u) + 1u) / 2u) + 1u)
-#endif
-
 #define N64_RDRAM_SIZE          N64_BASE_RDRAM_SIZE
 
 #define KERNEL_DATA_START       N64_KERNEL_DATA_START

@@ -289,6 +289,8 @@ test_pmap(void)
     struct vm_phys_map map;
     struct pmap_stats stats;
     struct pmap_tlb_diagnostics diagnostics;
+    struct vm_page_request page_request;
+    struct vm_page *direct_run;
     struct vm_page *page1;
     struct vm_page *page2;
     struct vm_page *page3;
@@ -317,6 +319,18 @@ test_pmap(void)
     CHECK(pmap_system_init(&allocator) == 0);
     CHECK(test_tlb_flushes == 1);
     CHECK(test_asid == 0);
+    vm_page_request_init(&page_request);
+    page_request.vpr_npages = 2;
+    page_request.vpr_state = VM_PAGE_WIRED;
+    CHECK(vm_page_alloc(&allocator, &page_request, &direct_run) == 0);
+    CHECK(pmap_pages_direct_map(direct_run, 2, PMAP_CACHE_CACHED) ==
+        &test_ram[direct_run->vmp_paddr]);
+    CHECK(pmap_pages_direct_map(direct_run, 0, PMAP_CACHE_CACHED) == NULL);
+    CHECK(vm_page_counter_dec(&allocator, direct_run,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_counter_dec(&allocator, direct_run + 1,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_free(&allocator, direct_run, 2) == 0);
     CHECK(pmap_create(&pmap1) == 0);
     CHECK(pmap_create(&pmap2) == 0);
     CHECK(pmap_create(&pmap3) == 0);

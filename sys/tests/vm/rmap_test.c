@@ -27,6 +27,67 @@ panic(char *message)
     __builtin_trap();
 }
 
+static size_t
+maximum_free_extents(size_t total, size_t allocation_unit)
+{
+    size_t allocations;
+    size_t maximum;
+    unsigned long pattern;
+    unsigned long patterns;
+
+    allocations = total / allocation_unit;
+    patterns = 1ul << allocations;
+    maximum = 0;
+    for (pattern = 0; pattern < patterns; ++pattern) {
+        size_t extents;
+        size_t index;
+        int previous_free;
+
+        extents = 0;
+        previous_free = 0;
+        for (index = 0; index < allocations; ++index) {
+            int current_free;
+
+            current_free = (pattern & (1ul << index)) == 0;
+            if (current_free && !previous_free)
+                ++extents;
+            previous_free = current_free;
+        }
+        if (total % allocation_unit != 0 && !previous_free)
+            ++extents;
+        if (extents > maximum)
+            maximum = extents;
+    }
+    return maximum;
+}
+
+static int
+test_runtime_sizing(void)
+{
+    size_t allocation_unit;
+    size_t expected;
+    size_t total;
+
+    CHECK(rmap_required_entries(0, 4) == 0);
+    CHECK(rmap_required_entries(4096, 0) == 0);
+    CHECK(rmap_required_entries(4096, 4) == 513);
+    CHECK(rmap_required_entries(32768, 4) == 4097);
+
+    /*
+     * Exhaust every allocation/free layout for small maps, including
+     * devices whose reported size is not a multiple of the page unit.
+     */
+    for (allocation_unit = 1; allocation_unit <= 6; ++allocation_unit) {
+        for (total = 1; total <= 12; ++total) {
+            expected = maximum_free_extents(total,
+                allocation_unit) + 1;
+            CHECK(rmap_required_entries(total,
+                allocation_unit) == expected);
+        }
+    }
+    return 0;
+}
+
 static int
 test_maximum_swap_fragmentation(void)
 {
@@ -95,6 +156,8 @@ test_overflow_does_not_write_past_limit(void)
 int
 main(void)
 {
+    if (test_runtime_sizing() != 0)
+        return 1;
     if (test_maximum_swap_fragmentation() != 0)
         return 1;
     if (test_overflow_does_not_write_past_limit() != 0)

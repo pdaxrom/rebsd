@@ -50,14 +50,6 @@
 
 #include <machine/layout.h>
 
-/*
- * Size the swap resource map for worst-case 4K-page fragmentation instead
- * of tying it to the unrelated process-table size.
- */
-#ifndef SMAPSIZ
-#define SMAPSIZ         ((((CI20_RAMSWAP_BYTES / 4096u) + 1u) / 2u) + 1u)
-#endif
-
 #define MAXMEM                  MIPS_USER_MAXMEM
 
 #define KERNEL_DATA_START       CI20_KERNEL_DATA_START

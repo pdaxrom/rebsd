@@ -90,6 +90,7 @@ int pmap_clear_page_modify(struct vm_page *);
 vm_paddr_t pmap_cache_alias_mask(void);
 int pmap_page_sync(struct vm_page *, unsigned);
 int pmap_sync_phys_range(vm_paddr_t, vm_size_t, unsigned);
+void *pmap_pages_direct_map(struct vm_page *, vm_pfn_t, enum pmap_cache);
 void *pmap_page_direct_map(struct vm_page *, enum pmap_cache);
 void *pmap_device_direct_map(vm_paddr_t, enum pmap_cache);
 int pmap_get_stats(struct pmap_stats *);
