@@ -1123,28 +1123,30 @@ USB не является отдельной i686 storage-подсистемой
 общий USB core/hub -> общий umass BOT/SCSI -> общий sys/disk major 2 -> sdN
 ```
 
-QEMU EHCI/OHCI-инкремент выполнен:
+QEMU EHCI/OHCI/UHCI-инкремент выполнен:
 
 - i686 напрямую линкует существующие `usb_core`, service/task queue,
-  `uhub`, `ehci`, `ohci`, `ukbd`, `umass` BOT/SCSI, общий DMA allocator и
-  `sys/disk`;
-- `sys/i386` добавляет только PCI class/progif discovery, uncached MMIO,
-  coherent DMA-pool attachment и 8259 IRQ adapter;
+  `uhub`, `ehci`, `ohci`, `uhci`, `ukbd`, `umass` BOT/SCSI, общий DMA
+  allocator и `sys/disk`;
+- `sys/i386` добавляет только PCI class/progif discovery, uncached MMIO
+  для OHCI/EHCI, I/O-port callbacks для UHCI, coherent DMA-pool attachment
+  и 8259 IRQ adapter;
 - direct и BIOS QEMU с `usb-ehci`/`usb-storage` проходят enumeration,
   SCSI inquiry/capacity и общий `disk_attach`; отдельные direct/BIOS QEMU
   gates с `pci-ohci`/`usb-kbd` проходят общий HID boot-keyboard attach;
+- direct и BIOS QEMU с PIIX3 UHCI проходят общий control/bulk/interrupt
+  HCD: отдельные gates покрывают boot keyboard и mass storage как `sd1`
+  с IDE и `sd0` без IDE; тот же gate проходит на `pc-i440fx-5.1`;
 - при наличии IDE он остаётся `sd0`, USB получает `sd1`; без IDE USB
   получает `sd0`. Romdisk остаётся root `(0,0)` и не занимает `sdN`;
 - все QEMU пути требуют `vfs-root: ufs,romdisk,read-only`.
 
 Оставшийся hardware-порядок:
 
-1. общий UHCI HCD отсутствует в дереве. Для PIIX/VIA USB его нужно добавить
-   как архитектурно нейтральный HCD в `sys/usb`, после отдельного аудита
-   NetBSD-origin и существующего `usb_hcd_ops`; i386 будет содержать только
-   attachment к PCI controller;
-2. на IBM 6563-W4G проверить PCI ID USB function VIA, затем тот же
+1. на IBM 6563-W4G проверить PCI ID USB function VIA, затем тот же
    enumeration/read-only gate на реальной флешке;
+2. проверить low-speed boot keyboard на UHCI; QEMU boot keyboard является
+   full-speed, а low-speed TD flag отдельно покрыт host fake-I/O тестом;
 3. IDE и USB получают `sdN` по общему attach order. Номер `sdN` не задаёт
    root policy: debug root остаётся romdisk `(0,0)`.
 

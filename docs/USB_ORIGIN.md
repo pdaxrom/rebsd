@@ -64,6 +64,9 @@ is updated as each later phase imports or materially adapts a source.
 | `sys/dev/usb/ehci.c` | `sys/usb/ehci.c` | generic EHCI HCD | compact control/bulk, periodic interrupt-IN, split-transaction, root-port, completion, abort, and companion-handoff adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ehcireg.h` | `sys/usb/ehcireg.h` | EHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/ehcivar.h` | `sys/usb/ehcivar.h` | EHCI private state | fixed-schedule bounded-state adaptation; original notice and RCS id retained |
+| `sys/dev/usb/uhci.c` | `sys/usb/uhci.c` | generic UHCI HCD | fixed frame list, control/bulk chunking, periodic interrupt-IN, root-port polling and completion/abort adaptation; original notice and RCS id retained |
+| `sys/dev/usb/uhcireg.h` | `sys/usb/uhcireg.h` | UHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/uhcivar.h` | `sys/usb/uhcivar.h` | UHCI private state | fixed-schedule bounded-state adaptation; original notice and RCS id retained |
 | `sys/dev/usb/usbhid.h` | `sys/usb/usbhid.h` | HID class requests needed by boot keyboards | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/uhidev.h` | `sys/usb/uhidev.h` or compact equivalent | HID definitions needed by boot keyboards | reference only |
 | `sys/dev/usb/ukbd.c` | `sys/usb/ukbd.c` | HID boot keyboard only | compact boot-protocol adaptation; original notice and RCS id retained |
@@ -141,10 +144,27 @@ These values identify the exact files in the verified NetBSD 3.1 archive.
 | `umass.c` | 1.117 | 54,006 |
 | `umassvar.h` | 1.23 | 8,295 |
 
+UHCI was audited against newer upstream files because it was not part of the
+original Ci20 import.  These are read-only source references, not additions
+to the verified NetBSD 3.1 archive:
+
+| File | RCS revision | Bytes |
+| --- | --- | ---: |
+| `uhci.c` | 1.320 | 105,786 |
+| `uhcireg.h` | 1.22 | 7,943 |
+| `uhcivar.h` | 1.57 | 6,709 |
+
 ## Hardware-Specific References
 
+NetBSD `sys/dev/pci/uhci_pci.c` revision 1.67 was used as a read-only
+cross-check for the PCI class/progif match, BAR4 I/O-space mapping,
+bus-master enable, interrupt setup, USB revision register, and the
+`PCI_LEGSUP_USBPIRQDEN` legacy-support value.  ReBSD did not import that
+attachment: `sys/i386/pc/usb_pci.c` supplies the existing thin PCI/I/O/IRQ
+boundary.
+
 Hardware references do not alter the origin of the generic USB stack.  They
-are used only by the JZ4780/Ci20 attachment layer.
+are used only by the corresponding machine-dependent attachment layer.
 
 | Reference | Intended use | Current status |
 | --- | --- | --- |

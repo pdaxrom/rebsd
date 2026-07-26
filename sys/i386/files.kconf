@@ -27,8 +27,9 @@ usb/ukbdmap.c                   optional ukbd
 usb/ukbd.c                      optional ukbd
 usb/ehci.c                      optional ehci
 usb/ohci.c                      optional ohci
+usb/uhci.c                      optional uhci
 usb/umass_bbb.c                 optional umass
 usb/umass.c                     optional umass
 i386/pc/dma.c                   optional dma
-i386/pc/usb_pci.c               optional usb ehci ohci
+i386/pc/usb_pci.c               optional usb ehci ohci uhci
 i386/pc/romdisk.c               standard

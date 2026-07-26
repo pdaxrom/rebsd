@@ -25,6 +25,12 @@ i386_inw(unsigned short port)
     return value;
 }
 
+static inline void
+i386_outw(unsigned short port, unsigned short value)
+{
+    __asm__ volatile ("outw %0, %w1" : : "a" (value), "Nd" (port));
+}
+
 static inline unsigned int
 i386_inl(unsigned short port)
 {

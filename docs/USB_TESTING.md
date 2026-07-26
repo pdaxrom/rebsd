@@ -27,6 +27,7 @@ The 2026-07-15 external-hub candidate passes all USB, disk, and FAT gates:
 | `uhub_test` | external-hub power/reset, interrupt bitmap, child attach/detach, recovery, rapid replug and recursive teardown | pass |
 | `ukbd_test` | boot reports, modifiers, repeats, release tracking | pass |
 | `ohci_test` | control/periodic ED/TDs, IRQ, RHSC masking, reconnect and keyboard input | pass |
+| `uhci_test` | frame/QH/TD schedule, low-speed control and interrupt flags, root reset, and multi-chunk bulk IN/OUT | pass |
 | `ehci_test` | async control/bulk, periodic interrupt-IN, split transactions, atomic QH link/unlink, hub removal/reconnect and companion routing | pass |
 | `ci20 usb hw tests` | VBUS, clock, PHY and reset ordering with fake JZ4780 registers | pass |
 | `umass_test` | BOT framing/recovery, SCSI probe/capacity, bounded `READ(10)`/`WRITE(10)`, cache flush and command/wire errors | pass |

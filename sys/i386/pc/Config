@@ -15,5 +15,6 @@ service         uhub
 service         ukbd
 service         ehci
 service         ohci
+service         uhci
 
 config          unix    root on major 0 minor 0

@@ -7,9 +7,11 @@
 
 #define I386_PCI_CLASS_SERIAL_BUS       0x0cu
 #define I386_PCI_SUBCLASS_USB           0x03u
+#define I386_PCI_INTERFACE_UHCI         0x00u
 #define I386_PCI_INTERFACE_OHCI         0x10u
 #define I386_PCI_INTERFACE_EHCI         0x20u
 
+#define I386_PCI_COMMAND_IO             0x0001u
 #define I386_PCI_COMMAND_MEMORY         0x0002u
 #define I386_PCI_COMMAND_MASTER         0x0004u
 

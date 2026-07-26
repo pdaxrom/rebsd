@@ -29,7 +29,7 @@ include $(TOPSRC)/target-i386.mk
 # kconfig emits in PARAM for the declarative configuration.
 I686_CPPFLAGS  += -DDMA_ENABLED -DDISK_ENABLED -DUSB_ENABLED \
                   -DUMASS_ENABLED -DUHUB_ENABLED -DUKBD_ENABLED \
-                  -DEHCI_ENABLED -DOHCI_ENABLED
+                  -DEHCI_ENABLED -DOHCI_ENABLED -DUHCI_ENABLED
 
 QEMU_I386       ?= qemu-system-i386
 QEMU_MACHINE    ?= pc-i440fx-9.2
@@ -63,7 +63,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    libkern.o cons.o subr_dma.o \
                    disk_subr.o disk.o romdisk.o i386_romdisk.o \
                    usb_subr.o usb_core.o usb_service.o usb_task.o \
-                   uhub.o ukbdmap.o ukbd.o ehci.o ohci.o \
+                   uhub.o ukbdmap.o ukbd.o ehci.o ohci.o uhci.o \
                    umass_bbb.o umass.o i386_dma.o usb_pci.o \
                    devsw.o \
                    ufs_alloc.o ufs_bio.o ufs_bmap.o ufs_fio.o \
@@ -97,6 +97,10 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 	usb-mass-storage-ide-absent-smoke \
 	bios-usb-mass-storage-ide-absent-smoke \
 	ohci-keyboard-smoke bios-ohci-keyboard-smoke \
+	uhci-keyboard-smoke bios-uhci-keyboard-smoke \
+	uhci-mass-storage-smoke bios-uhci-mass-storage-smoke \
+	uhci-mass-storage-ide-absent-smoke \
+	bios-uhci-mass-storage-ide-absent-smoke \
 	usb-combined-smoke bios-usb-combined-smoke \
 	run run-serial debug boot-smoke bios-boot-smoke trap-smoke \
 	exception-smoke boot-smoke-matrix clean
@@ -333,7 +337,7 @@ cons.o: $(TOPSRC)/sys/kernel/cons.c \
 	    -c $< -o $@
 
 usb_subr.o usb_core.o usb_service.o usb_task.o uhub.o ukbdmap.o ukbd.o \
-ehci.o ohci.o umass_bbb.o umass.o: %.o: $(I386_USB_SRC)/%.c \
+ehci.o ohci.o uhci.o umass_bbb.o umass.o: %.o: $(I386_USB_SRC)/%.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -350,6 +354,7 @@ usb_pci.o: $(I386_PC_SRC)/usb_pci.c \
 	    $(I386_SRC)/include/pci.h \
 	    $(I386_SRC)/include/usb_pci.h \
 	    $(I386_USB_SRC)/ehcivar.h $(I386_USB_SRC)/ohcivar.h \
+	    $(I386_USB_SRC)/uhcivar.h \
 	    $(I386_USB_SRC)/uhub.h $(I386_USB_SRC)/ukbd.h \
 	    $(I386_USB_SRC)/umass.h $(I386_USB_SRC)/usbvar.h \
 	    $(TOPSRC)/sys/vm/pmap.h \
@@ -967,6 +972,46 @@ bios-ohci-keyboard-smoke: rebsd-i686-bios-floppy.img rootfs.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
 	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk rootfs.img --ohci-keyboard --timeout 20
+
+uhci-keyboard-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --uhci-keyboard --timeout 20
+
+bios-uhci-keyboard-smoke: rebsd-i686-bios-floppy.img rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --disk rootfs.img --uhci-keyboard --timeout 20
+
+uhci-mass-storage-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --uhci-disk rootfs.img --timeout 20
+
+bios-uhci-mass-storage-smoke: rebsd-i686-bios-floppy.img rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --disk rootfs.img --uhci-disk rootfs.img --timeout 20
+
+uhci-mass-storage-ide-absent-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --uhci-disk rootfs.img --expect-no-disk --timeout 20
+
+bios-uhci-mass-storage-ide-absent-smoke: \
+	    rebsd-i686-bios-floppy.img rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --uhci-disk rootfs.img --expect-no-disk --timeout 20
 
 usb-combined-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \

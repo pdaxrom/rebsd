@@ -28,6 +28,12 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc usb-mass-storage-ide-absen
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-usb-mass-storage-ide-absent-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc ohci-keyboard-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-ohci-keyboard-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc uhci-keyboard-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-uhci-keyboard-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc uhci-mass-storage-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-uhci-mass-storage-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc uhci-mass-storage-ide-absent-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-uhci-mass-storage-ide-absent-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc usb-combined-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc bios-usb-combined-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc trap-smoke
@@ -67,17 +73,17 @@ only the COM1/VGA poll/getc/putc/winsize hooks, and common `ukbd` feeds the
 same `cninput` path.
 
 IDE and USB mass storage use the separate generic block-device major 2 and
-the common `sdN` namespace.  The QEMU EHCI/OHCI paths directly reuse the
+the common `sdN` namespace.  The QEMU EHCI/OHCI/UHCI paths directly reuse the
 existing USB core, hub, `umass` BOT/SCSI transport, `ukbd`, DMA allocator,
-EHCI/OHCI HCDs, and `sys/disk` backend contract.  I386 supplies only PCI
-discovery, uncached MMIO through the public pmap device mapping contract,
-coherent DMA-pool attachment, and the 8259 IRQ adapter.  With IDE,
+EHCI/OHCI/UHCI HCDs, and `sys/disk` backend contract.  I386 supplies only
+PCI discovery, uncached MMIO through the public pmap device mapping contract,
+UHCI I/O-port access, coherent DMA-pool attachment, and the 8259 IRQ adapter.
+With IDE,
 ATA is `sd0` and USB is `sd1`; without IDE, USB is `sd0`.  The embedded
 romdisk never consumes an `sdN` unit and remains the sole debug root.
-The tree does not yet contain a common UHCI HCD required by the IBM's
-legacy VIA USB controller; that HCD must be architecture-neutral, with only
-its PCI attachment under `sys/i386`.  The IBM IDE-CF and its Red Hat
-partitions remain outside the debug-root policy.
+The common UHCI HCD passes PIIX3 QEMU boot-keyboard and mass-storage gates;
+the next USB validation point is the IBM's legacy VIA controller.  The IBM
+IDE-CF and its Red Hat partitions remain outside the debug-root policy.
 
 Proc0 is initialized only by common `kern_proc.c::proc0_bootstrap`.
 Common `newproc` allocates proc1, its u-area/vmspace, process-list entries,

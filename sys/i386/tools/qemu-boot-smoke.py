@@ -157,6 +157,24 @@ OHCI_KEYBOARD_MARKERS = (
     "ohci0: irq enabled line=",
 )
 
+UHCI_MARKERS = (
+    "uhci0: pci-id=0x80867020",
+    "uhci0: UHCI revision=10 ports=2 control/bulk/interrupt",
+    "uhci0: irq ",
+)
+
+UHCI_KEYBOARD_MARKERS = UHCI_MARKERS + (
+    "ukbd0: HID boot-keyboard driver ready",
+    "ukbd0: boot keyboard, interrupt in 0x81, 8 bytes",
+    "uhci0: port1 device attached speed=full",
+)
+
+UHCI_MASS_STORAGE_MARKERS = UHCI_MARKERS + (
+    "umass0: SCSI/Bulk-Only driver ready",
+    "umass0: QEMU QEMU HARDDISK",
+    "uhci0: port1 device attached speed=full",
+)
+
 EXCEPTION_MARKERS = {
     "divide": (
         "REBSD_I686_BOOT",
@@ -260,6 +278,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disk", type=pathlib.Path)
     parser.add_argument("--usb-disk", type=pathlib.Path)
     parser.add_argument("--ohci-keyboard", action="store_true")
+    parser.add_argument("--uhci-keyboard", action="store_true")
+    parser.add_argument("--uhci-disk", type=pathlib.Path)
     parser.add_argument("--timeout", type=float, default=8.0)
     parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
     parser.add_argument("--expect-no-disk", action="store_true")
@@ -277,6 +297,16 @@ def parse_args() -> argparse.Namespace:
         parser.error(
             "--ohci-keyboard cannot be combined with --expect-exception"
         )
+    if args.uhci_keyboard and args.expect_exception is not None:
+        parser.error(
+            "--uhci-keyboard cannot be combined with --expect-exception"
+        )
+    if args.uhci_disk is not None and args.expect_exception is not None:
+        parser.error("--uhci-disk cannot be combined with --expect-exception")
+    if args.uhci_keyboard and args.uhci_disk is not None:
+        parser.error("--uhci-keyboard and --uhci-disk use the same UHCI port")
+    if args.usb_disk is not None and args.uhci_disk is not None:
+        parser.error("only one USB mass-storage device is supported")
     return args
 
 
@@ -348,6 +378,24 @@ def main() -> None:
                 "usb-kbd,bus=ohci.0,port=1",
             ]
         )
+    if args.uhci_keyboard or args.uhci_disk is not None:
+        command.extend(["-device", "piix3-usb-uhci,id=uhci"])
+    if args.uhci_keyboard:
+        command.extend(
+            ["-device", "usb-kbd,bus=uhci.0,port=1"]
+        )
+    if args.uhci_disk is not None:
+        command.extend(
+            [
+                "-drive",
+                (
+                    f"file={args.uhci_disk},format=raw,if=none,"
+                    "id=uhcimass,snapshot=on"
+                ),
+                "-device",
+                "usb-storage,bus=uhci.0,port=1,drive=uhcimass",
+            ]
+        )
     if args.expect_exception:
         command.extend(["-append", f"rebsd.trap={args.expect_exception}"])
 
@@ -372,6 +420,15 @@ def main() -> None:
         )
     if args.ohci_keyboard:
         markers += OHCI_KEYBOARD_MARKERS
+    if args.uhci_keyboard:
+        markers += UHCI_KEYBOARD_MARKERS
+    if args.uhci_disk is not None:
+        markers += UHCI_MASS_STORAGE_MARKERS
+        markers += (
+            "sd1: 256 512-byte sectors (128 KB), removable"
+            if args.disk is not None
+            else "sd0: 256 512-byte sectors (128 KB), removable",
+        )
     stop_marker = (
         b"PANIC: cpu exception\r\n"
         if args.expect_exception

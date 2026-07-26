@@ -14,9 +14,11 @@ partition `(hd0,2)`.
 USB Mass Storage уже подключён через существующие USB core/`umass`/generic
 disk владельцы на major 2: с IDE он получает `sd1`, без IDE — `sd0`.
 Общие OHCI и `ukbd` подключены отдельными direct/BIOS QEMU gates для
-full/low-speed HID устройств на платах с OHCI controller.
-Для VIA USB на IBM сначала требуется отсутствующий в дереве общий UHCI HCD;
-до его реализации тестирование USB на реальном железе не требуется.
+HID устройств на платах с OHCI controller. Общий UHCI HCD теперь проходит
+direct/BIOS QEMU с PIIX3 boot keyboard и mass storage, включая режим без IDE;
+host fake-I/O gate отдельно проверяет low-speed TD flags. Следующий USB gate
+уже требует реальную VIA-функцию IBM: сначала boot keyboard, затем
+read-only mass storage.
 ATA-команд записи всё ещё нет: IDE
 backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
 регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
@@ -36,6 +38,10 @@ make -C sys/i386 BOARD=pc \
     usb-mass-storage-ide-absent-smoke \
     bios-usb-mass-storage-ide-absent-smoke \
     ohci-keyboard-smoke bios-ohci-keyboard-smoke \
+    uhci-keyboard-smoke bios-uhci-keyboard-smoke \
+    uhci-mass-storage-smoke bios-uhci-mass-storage-smoke \
+    uhci-mass-storage-ide-absent-smoke \
+    bios-uhci-mass-storage-ide-absent-smoke \
     usb-combined-smoke bios-usb-combined-smoke
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
