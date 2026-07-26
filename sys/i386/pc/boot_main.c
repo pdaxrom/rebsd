@@ -17,6 +17,9 @@
 #include "vm_bootstrap.h"
 #include "vmspace_bootstrap.h"
 
+static i386_u32 i386_boot_params_saved;
+static void i386_boot_proc0_continue(void);
+
 static void
 i386_cpuid(i386_u32 leaf, i386_u32 *eax, i386_u32 *ebx,
     i386_u32 *ecx, i386_u32 *edx)
@@ -195,8 +198,6 @@ i386_boot_main(i386_u32 boot_params_phys)
     unsigned e820_count;
     unsigned index;
     i386_u32 page_phys;
-    i386_u32 ticks;
-    int process_error;
 
     i386_early_console_init();
     i386_early_puts("REBSD_I686_BOOT\n");
@@ -439,6 +440,18 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_puts("process-bootstrap: ok\n");
     i386_early_puts("process-table: ok\n");
 
+    i386_boot_params_saved = boot_params_phys;
+    i386_process_enter_proc0(i386_boot_proc0_continue);
+}
+
+static void
+i386_boot_proc0_continue(void)
+{
+    i386_u32 boot_params_phys;
+    i386_u32 ticks;
+    int process_error;
+
+    boot_params_phys = i386_boot_params_saved;
     if (i386_pci_probe() != 0) {
         i386_early_puts("pci: failed\n");
         for (;;) {

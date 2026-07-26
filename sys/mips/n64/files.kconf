@@ -8,6 +8,7 @@ kernel/exec_elf_loader.c        standard
 kernel/exec_script.c            standard
 kernel/exec_subr.c              standard
 kernel/init_main.c              standard
+kernel/init_process.c           standard
 kernel/init_sysent.c            standard
 kernel/kern_clock.c             standard
 kernel/kern_descrip.c           standard

@@ -6,7 +6,7 @@ fork/init frames, проверяемый ring-3 entry и `int 0x80` register ABI
 подключены; MIPS
 process symbols нейтрализованы, i386 `sysent` adapter, signal frame и
 user-return signal/reschedule path и user trap-to-signal translation
-проверены; production syscall prefix вызывает generic `getpid`, а
+проверены; полная общая syscall table вызывает generic `getpid`, а
 постоянный process 1 в generic `proc[]`/`allproc`/PID hash удерживает
 активные u-area/vmspace/CR3/TSS и выполняет `/sbin/init` из read-only
 UFS root через общие disk/VFS/namei/exec с production `getpid=1` и
@@ -14,10 +14,10 @@ UFS root через общие disk/VFS/namei/exec с production `getpid=1` и
 отдельными u-area/vmspace и
 повторно используемым idle context, проверенным двукратным
 proc1→proc0→proc1 switch через generic `setrq/swtch`; generic `newproc`
-создаёт PID 2 с отдельными vmspace/u-area и запускает его через fork
-trampoline в CPL3; production syscall 2 выполняет этот путь через `int 0x80`
-с parent/child return ABI; следующий gate — `exit`/`wait`,
-2026-07-25.
+создаёт как proc1, так и тестовые дочерние процессы; общий `init_process`
+и стандартный `icode` запускают production `execv("/sbin/init")`, а i386
+предоставляет только trampoline и user-entry ABI; production fork/exit/wait4
+пути проходят через `int 0x80`, 2026-07-26.
 
 ## Существующий нейтральный VM контракт
 
@@ -89,14 +89,13 @@ replacement, executable mapping, сохранность low-linked kernel mappin
 входит в ранний порт. Ядро всё ещё исполняется по low-linked адресу 1 МиБ,
 поэтому pmap отклоняет user mapping, пересекающий загруженный kernel image.
 
-## Generic kernel blockers
+## Generic kernel integration
 
-До первого полноценного generic link остаются следующие MD blockers:
-
-1. Добавить оставшиеся machine headers (`types`, `vmparam`, `cpu`, `fpu`,
-   `limits`) и i386 Kconfig/file lists. Минимальные `layout.h` и
-   `elf_machdep.h` уже задают ELF32, little-endian, `EM_386` и `R_386_*`;
-   generic ELF loader использует `ELF_MACHDEP_ID_CASES` вместо `EM_MIPS`.
+Первый полноценный generic link выполнен. I386 image линкует общие process,
+syscall, exec, VM, UFS/VFS, descriptor, signal-policy и scheduler owners.
+Machine headers задают только i386 ABI и hardware contracts; общий ELF
+loader получает ELF32, little-endian и `EM_386` из
+`machine/elf_machdep.h`.
 
 PCC не входит в этот список и остаётся нетронутым.
 
@@ -128,12 +127,10 @@ kernel shebang substitutions. Поэтому low-linked kernel address боль�
 может быть ошибочно принят за user pointer.
 
 Generic process код теперь использует нейтральные `md_curuser`,
-`md_uarea_alloc/fork/free`, `md_uarea_guard_init/check`, `md_init_process` и
-`md_user_enter`. MIPS сохранил прежнюю реализацию и только предоставляет её
-через новый контракт; внутренних `mips_fork_trampoline` и
-`mips_init_trampoline` это не касается. `kernel-objects` проходят для N64,
-CI20, Malta big/little endian и Malta64, а object symbol audit подтверждает
-парные definition/reference для всех новых точек входа.
+`md_uarea_alloc/fork/free`, `md_uarea_guard_init/check` и `md_user_enter`.
+Process-1 policy находится в общем `kernel/init_process.c`; MIPS и i386
+trampoline вызывают один `init_process`, а каждая архитектура реализует
+только вход в user mode. `kernel-objects` проходят для N64 и Ci20 с GCC.
 
 I386 реализация выделяет u-area размером `USIZE=16 КиБ` как четыре
 contiguous `VM_PAGE_WIRED` страницы и адресует их через kernel direct map.
@@ -153,8 +150,8 @@ stack, выполняет C entry point и возвращается в исхо�
 родительский `u_frame`, копирует i386 trapframe на вершину нового u-area,
 задаёт дочерний `EAX=0` и входит в общий interrupt restore/`iret` через
 `i386_fork_trampoline`. Bootstrap path получает отдельный kernel stack и
-`i386_init_trampoline`, вызывающий сильную generic реализацию
-`md_init_process`; ранний image предоставляет только слабый fail-stop stub.
+`i386_init_trampoline`, вызывающий общий `init_process`; weak fallback
+удалён.
 
 QEMU выполняет обычный fork frame до конца через ring-0 `iret`. Перед
 переходом активируется дочерний vmspace/CR3, дочерний C entry проверяет своё
@@ -209,9 +206,8 @@ alternate signal stack, формат frame, восстановление кон�
 no-op; для CPL3 она устанавливает `u_frame`, разрешает прерывания,
 повторяет MIPS-порядок `CURSIG/postsig`, `setpri`, при `runrun` выполняет
 `setrq/swtch`, затем запрещает прерывания перед `iret`. Early image
-использует test operations вместо ещё не подключённых generic objects;
-их сильные `issignal/postsig/setpri/setrq/swtch` автоматически заменяют
-слабые ранние fallback symbols при production link.
+напрямую линкует общие `issignal/postsig/setpri/setrq/swtch`; слабых
+ранних fallback symbols больше нет.
 
 QEMU CPL3-тест начинает с pending `SIGUSR1`, проходит общую эпилогу,
 исполняет реальный user handler, проверяющий cdecl signum/code/context,
@@ -237,22 +233,22 @@ unmapped `0x60000000`. User handlers проверяют `SIGILL`/faulting EIP и
 общий `int 0x80` trampoline и продолжают исходный поток. Тест также
 проверяет signal mask, два delivery и точный reclaim.
 
-Полный `kernel/init_sysent.c` ещё не входит в early image: его таблица
-удержала бы обработчики всех пока не подключённых подсистем. Вместо этого
-ранний `sysent` содержит точный production prefix 0–20 с теми же номерами
-и argument counts. Неготовые entries возвращают `ENOSYS`, а номер 20
-реально вызывает generic `kern_prot.c:getpid`. QEMU исполняет этот вызов
-из CPL3 и проверяет PID из настоящего `struct proc`, Carry и обязательный
-marker `syscall-production: ok`. Pathname/exec call sites уже переведены
-на явное адресное пространство без pointer-range эвристики.
+I386 image линкует полную общую таблицу 0–177 из
+`kernel/init_sysent.c`. Подключённые entries вызывают реальные common
+handlers, остальные штатно приходят в общий `nosys`; отдельного syscall
+prefix или режима совместимости нет. Номер 20 вызывает generic
+`kern_prot.c:getpid`, а номер 11 используется стандартным `icode` для
+`execv`. QEMU проверяет PID из настоящего `struct proc`, Carry и
+обязательный marker `syscall-production: ok`. Pathname/exec call sites
+используют явное адресное пространство без pointer-range эвристики.
 
-После разрушаемых self-tests ранний image создаёт постоянный process 1 в
-generic process table. Он получает guarded u-area и vmspace, PID 1,
-parent proc0, `SRUN|SLOAD` без `SSYS`, обычные начальные `cmask`, groups и
-rlimits. Его vmspace активируется через CR3, `md_curuser` остаётся
-установленным, а `TSS.esp0` указывает на вершину u-area kernel stack.
-`process-bootstrap: ok` проверяет связи `proc`/`user`/`vmspace`, guard,
-current CR3 и TSS stack.
+После разрушаемых self-tests общий `newproc` создаёт постоянный process 1 в
+generic process table. Общие fork/process owners назначают ему PID 1,
+parent proc0, guarded u-area, отдельный vmspace, `SRUN|SLOAD` без `SSYS`,
+`cmask`, groups и rlimits. Scheduler запускает `i386_init_trampoline` на
+новом kernel stack; тот передаёт управление общему `init_process`.
+`process-bootstrap: ok` и `process-table: ok` проверяют связи
+`proc`/`user`/`vmspace`, очереди, PID hash, guard, CR3 и TSS stack.
 
 Первый user probe использует этот process 1. В его vmspace остаются RX text
 mapping от `0x00400000` и RW/NX stack page у верхней границы user address
@@ -279,19 +275,15 @@ mappings получают финальные permissions из `PF_R/PF_W/PF_X`.
 syscall 20, поэтому `elf32-user: ok` покрывает не только parser, но и
 фактические mappings, загрузку данных, zero-fill, entry point и исполнение.
 
-Ранний stack builder повторяет существенный ABI generic
-`exec_setupstack`: четыре reserved argument slots, 8-byte aligned ESP,
-NULL-terminated `argv[]`/`envp[]`, packed strings и верхнее слово с
-указателем `argv` для `/bin/ps`. Размеры и адресная арифметика проверяются
-до изменения stack page; затем она обнуляется и заполняется через
-`vmspace_write`.
-
-Отдельный `i386_user_enter_exec` входит с IF=1 и тем же register contract,
-который уже задаёт `md_user_frame_exec`: EBX=`argc`, ECX=`argv`,
-EDX=`envp`. Bootstrap ELF из CPL3 проверяет `/sbin/init`, `rootfs`, `A=i686`,
-NULL terminators, alignment, reserved slot и top-of-stack `argv` word.
-`user-stack: ok` также означает, что `p_saddr/p_ssize` и u-area
-`u_ssize` соответствуют постоянному stack mapping.
+Production `exec_setupstack` создаёт четыре reserved argument slots,
+8-byte aligned ESP, NULL-terminated `argv[]`/`envp[]`, packed strings и
+верхнее слово с указателем `argv` для `/bin/ps`. Стандартный общий `icode`
+передаёт `argv = {"init", "-", NULL}` и `envp = NULL`; bootstrap ELF
+проверяет эти значения, alignment, reserved slot и top-of-stack `argv`
+word. `md_user_frame_exec` задаёт i386 register contract EBX=`argc`,
+ECX=`argv`, EDX=`envp`. `user-stack: ok` также означает, что
+`p_saddr/p_ssize` и u-area `u_ssize` соответствуют постоянному stack
+mapping.
 
 Статический ELF больше не передаётся loader напрямую как отдельный binary
 symbol. Существующий `tools/fsutil` создаёт детерминированный little-endian
@@ -304,12 +296,12 @@ UFS с именованным `/sbin/init`; общий memory-disk backend по�
 
 Board config теперь предоставляет штатные `proc[NPROC]` и `nproc`, а
 generic `kern_proc.c` — `pqinit`, `allproc/freeproc/zombproc`, PID hash и
-`pfind`. Ранний path резервирует proc0 metadata, снимает `proc[1]` с
-`freeproc`, ставит его во главе `allproc` и в hash bucket PID 1, назначает
-parent proc0 и только после этого связывает u-area/vmspace. User init не
-помечен `SSYS`; production `getpid` обязан вернуть 1 непосредственно в
-CPL3. `process-table: ok` проверяет обе очереди, обратные links, hash
-lookup, proc0 reservation и свободный `proc[2]`.
+`pfind`. Общий `proc0_bootstrap` резервирует proc0, а общий `newproc`
+выделяет `proc[1]`, связывает u-area/vmspace, ставит процесс в `allproc`,
+PID hash и run queue и назначает parent proc0. User init не помечен `SSYS`;
+production `getpid` обязан вернуть 1 непосредственно в CPL3.
+`process-table: ok` проверяет очереди, обратные links, hash lookup, proc0
+reservation и свободный `proc[2]`.
 
 Proc0 теперь владеет отдельными guarded u-area и kernel-only vmspace.
 Начальный `u_qsave` входит на собственном proc0 stack и вызывает настоящий

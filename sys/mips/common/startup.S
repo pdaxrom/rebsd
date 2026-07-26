@@ -12,7 +12,7 @@
         .extern u_end
 #ifndef N64_PREFLIGHT
         .extern md_curuser
-        .extern md_init_process
+        .extern init_process
 #endif
         .extern main
 
@@ -66,7 +66,7 @@ mips_kernel_entry:
         .globl  mips_init_trampoline
         .ent    mips_init_trampoline
 mips_init_trampoline:
-        jal     md_init_process
+        jal     init_process
         nop
 1:
         b       1b

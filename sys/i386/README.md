@@ -59,6 +59,13 @@ standard root filesystem, not a second root design.  The existing IBM
 IDE-CF remains read-only and is not treated as a ReBSD root unless it
 contains a valid UFS with `/sbin/init`.
 
+Proc0 is initialized only by common `kern_proc.c::proc0_bootstrap`.
+Common `newproc` allocates proc1, its u-area/vmspace, process-list entries,
+PID hash entry, and scheduler frame.  The i386 init trampoline calls common
+`kernel/init_process.c`; standard `icode` then invokes production syscall 11
+to execute `/sbin/init`.  I386 owns only its context and user-entry ABI, not
+process creation or exec policy.
+
 Once in CPL3, init opens its own `/sbin/init` through production `open(5)`,
 reads the ELF magic through `read(3)`, changes the file offset through
 `lseek(19)`, and releases the descriptor through `close(6)`.  It keeps the
@@ -144,9 +151,10 @@ The common inode ELF loader checks
 bounds, alignment, target ABI, entry, user ranges, overlap and W+X, zero-fills
 BSS, applies final permissions, and requires `elf32-user: ok`; there is no
 i386-private executable loader.
-An exec-compatible initial stack supplies `argc` in EBX, `argv` in ECX and
-`envp` in EDX, with pointer arrays, packed strings, alignment, reserved
-slots and the historical top `argv` word validated by the CPL3 image;
+The common exec stack supplies `argc` in EBX, `argv` in ECX and `envp` in
+EDX.  The standard initial arguments are `{"init", "-", NULL}` with
+`envp == NULL`; the CPL3 image validates pointer arrays, packed strings,
+alignment, reserved slots and the historical top `argv` word.
 `user-stack: ok` is required.
 
 The default cross toolchain is:
@@ -172,8 +180,8 @@ fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
 contract and generic `sysent` adapter now install the complete common syscall
 table, including the real generic `getpid`, exec, VM and sysctl handlers.
-A persistent process 1 in the generic process table now keeps a
-real u-area, vmspace, CR3 and TSS kernel stack active after self-tests.
+A persistent process 1 created by common `newproc` now keeps a real u-area,
+vmspace, CR3 and TSS kernel stack active after self-tests.
 Proc0 has a separate u-area/vmspace and a reusable saved idle context;
 generic `setrq`/`swtch` and the `qs` run queue are connected and tested
 twice.  Generic `newproc` creates PID 2 and runs its cloned trapframe in

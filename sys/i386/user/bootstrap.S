@@ -16,29 +16,14 @@ _start:
     cmpl    $0, 8(%ecx)
     jne     .Lfailed
     movl    (%ecx), %esi
-    cmpl    $0x6962732f, (%esi)
+    cmpl    $0x74696e69, (%esi)
     jne     .Lfailed
-    cmpl    $0x6e692f6e, 4(%esi)
-    jne     .Lfailed
-    cmpw    $0x7469, 8(%esi)
-    jne     .Lfailed
-    cmpb    $0, 10(%esi)
+    cmpb    $0, 4(%esi)
     jne     .Lfailed
     movl    4(%ecx), %esi
-    cmpl    $0x746f6f72, (%esi)
+    cmpw    $0x002d, (%esi)
     jne     .Lfailed
-    cmpw    $0x7366, 4(%esi)
-    jne     .Lfailed
-    cmpb    $0, 6(%esi)
-    jne     .Lfailed
-    cmpl    $0, 4(%edx)
-    jne     .Lfailed
-    movl    (%edx), %esi
-    cmpl    $0x36693d41, (%esi)
-    jne     .Lfailed
-    cmpw    $0x3638, 4(%esi)
-    jne     .Lfailed
-    cmpb    $0, 6(%esi)
+    testl   %edx, %edx
     jne     .Lfailed
     cmpl    $I386_BOOTSTRAP_USER_DATA_MAGIC, bootstrap_data
     jne     .Lfailed

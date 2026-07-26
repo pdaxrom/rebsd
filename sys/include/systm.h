@@ -72,7 +72,7 @@ extern dev_t    pipedev;            /* pipe device */
 extern  const char icode[];         /* user init code */
 extern  const char icodeend[];      /* its end */
 extern  const char initflags[];     /* init flags string */
-void md_init_process(void);
+void init_process(void);
 void md_user_enter(unsigned, unsigned);
 
 struct inode;

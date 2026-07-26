@@ -44,4 +44,19 @@ i386_user_enter_exec:
     iret
     .size i386_user_enter_exec, . - i386_user_enter_exec
 
+    .globl md_user_enter
+    .type md_user_enter, @function
+md_user_enter:
+    subl    $24, %esp
+    movl    28(%esp), %eax
+    movl    %eax, 4(%esp)
+    movl    32(%esp), %eax
+    movl    %eax, 8(%esp)
+    movl    $0, (%esp)
+    movl    $0, 12(%esp)
+    movl    $0, 16(%esp)
+    movl    $0, 20(%esp)
+    jmp     i386_user_enter_exec
+    .size md_user_enter, . - md_user_enter
+
     .section .note.GNU-stack, "", @progbits

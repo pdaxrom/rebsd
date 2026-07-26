@@ -8,6 +8,7 @@ int i386_context_selftest(void);
 int i386_context_register_selftest(void *, unsigned);
 int i386_process_bootstrap(void);
 int i386_process_bootstrap_validate(void);
+void i386_process_enter_proc0(void (*)(void)) __attribute__((noreturn));
 int i386_process_bootstrap_user_probe(void);
 int i386_process_handle_return(struct i386_trapframe *);
 

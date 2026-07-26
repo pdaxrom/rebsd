@@ -62,7 +62,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    vm_vnode.o vfs_bootstrap.o \
                    disk_bootstrap.o \
                    exec_aout.o exec_conf.o exec_elf.o exec_elf_loader.o \
-                   exec_script.o exec_subr.o kern_exec.o rootfs_image.o \
+                   exec_script.o exec_subr.o kern_exec.o init_process.o \
+                   rootfs_image.o \
                    init_sysent.o stubs.o kern_mman.o kern_prot.o \
                    kern_prot2.o kern_proc.o kern_fork.o \
                    kern_exit.o kern_resource.o kern_sig.o kern_sig2.o \
@@ -117,7 +118,8 @@ interrupt_entry.o: $(I386_BOOT_SRC)/interrupt_entry.S
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -c $< -o $@
 
 context.o: $(I386_COMMON_SRC)/context.S $(I386_SRC)/include/context.h \
-	    $(I386_SRC)/include/tss.h
+	    $(I386_SRC)/include/tss.h \
+	    $(I386_SRC)/include/machine/layout.h
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
@@ -141,8 +143,7 @@ $(FSUTIL): $(wildcard $(TOPSRC)/tools/fsutil/*.c) \
 
 $(I386_ROOTFS_STAGE)/sbin/init: bootstrap-user.elf
 	mkdir -p $(I386_ROOTFS_STAGE)/sbin
-	cp $< $@
-	chmod 0555 $@
+	install -m 0555 $< $@
 
 rootfs.img: $(FSUTIL) $(I386_SRC)/rootfs.manifest \
 	    $(I386_ROOTFS_STAGE)/sbin/init
@@ -472,6 +473,14 @@ exec_elf_loader.o: $(TOPSRC)/sys/kernel/exec_elf_loader.c \
 	    $(TOPSRC)/sys/include/exec_elf.h \
 	    $(TOPSRC)/sys/include/exec_elf_loader.h \
 	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+init_process.o: $(TOPSRC)/sys/kernel/init_process.c \
+	    $(TOPSRC)/sys/include/param.h $(TOPSRC)/sys/include/proc.h \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
+	    $(I386_VM_SRC)/pmap.h $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

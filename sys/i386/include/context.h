@@ -24,4 +24,9 @@
 #define I386_EFLAGS_RESERVED 0x00000002
 #define I386_UAREA_SIZE       16384
 
+#ifndef __ASSEMBLER__
+void i386_context_enter(void *, void (*)(void))
+    __attribute__((noreturn));
+#endif
+
 #endif

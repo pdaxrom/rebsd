@@ -993,6 +993,28 @@ count через `fork`, закрывать унаследованные descrip
 в `sys/i386/pc/process_bootstrap.c` на владельца в common `init_main`, не
 добавляя i386 process policy. Реальное IBM-тестирование пока не требуется.
 
+Пятидесятый cleanup-инкремент завершил замену ручного proc1 startup:
+
+- process-1 trampoline вынесен из `init_main.c` в общий
+  `sys/kernel/init_process.c`; MIPS, N64, Ci20 и i686 линкуют один owner;
+- i686 больше не снимает proc1 с `freeproc`, не правит PID hash, не создаёт
+  для него u-area/vmspace вручную и не вызывает `execve` из MD C-кода;
+  proc1 создаётся общим `newproc`;
+- общий `init_process` отображает стандартный `icode`, а i386 icode вызывает
+  production syscall 11 `execv("/sbin/init", {"init", "-", NULL})`;
+- weak fail-stop `md_init_process`, локальный proc1 allocator и
+  cross-process `longjmp` удалены; i386 оставляет только scheduler-format
+  trampoline, `md_user_enter` и переход на настоящий proc0 u-area stack;
+- строгая i686 GCC-сборка, direct и BIOS QEMU boot, оба no-IDE gate,
+  rootfs/bios-image smoke, exception gates, RAM matrix 32–1024 МиБ, host
+  disk/VM tests и GCC `kernel-objects` для Ci20/N64 прошли. PCC не запускался
+  и не менялся.
+
+Оставшийся `pc/boot_main.c` оркестрирует разрушаемые i386 bring-up tests.
+Следующий cleanup должен отделить diagnostic image от обычного startup,
+переиспользуя общий boot path и не добавляя i386 subsystem policy. Реальное
+IBM-тестирование пока не требуется.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых

@@ -32,13 +32,6 @@ i386_uarea_halt(void)
         __asm__ volatile ("cli; hlt");
 }
 
-/* Replaced by the machine-independent implementation in the full kernel. */
-void __attribute__((weak))
-md_init_process(void)
-{
-    i386_uarea_halt();
-}
-
 void
 md_uarea_guard_init(struct user *up)
 {

@@ -1,4 +1,5 @@
-    #include "context.h"
+#include "context.h"
+#include <machine/layout.h>
 
     .section .text, "ax", @progbits
     .code32
@@ -56,12 +57,24 @@ i386_fork_trampoline:
     .globl i386_init_trampoline
     .type i386_init_trampoline, @function
 i386_init_trampoline:
-    call    md_init_process
+    call    init_process
 1:
     cli
     hlt
     jmp     1b
     .size i386_init_trampoline, . - i386_init_trampoline
+
+    .globl i386_context_enter
+    .type i386_context_enter, @function
+i386_context_enter:
+    cli
+    movl    4(%esp), %eax
+    addl    $I386_UAREA_SIZE, %eax
+    movl    8(%esp), %edx
+    movl    %eax, %esp
+    pushl   $0
+    jmp     *%edx
+    .size i386_context_enter, . - i386_context_enter
 
     /*
      * Exercise the public save/restore entry points without relying on C
@@ -111,5 +124,35 @@ i386_context_register_selftest:
     leave
     ret
     .size i386_context_register_selftest, . - i386_context_register_selftest
+
+    /*
+     * Initial user code copied to process 1 by the common init_process().
+     */
+    .section .text.icode, "ax", @progbits
+    .globl icode, icodeend, initflags
+    .type icode, @function
+    .type icodeend, @function
+icode:
+    movl    $(etcinit - icode + I386_USER_VADDR_START), %ebx
+    movl    $(argv - icode + I386_USER_VADDR_START), %ecx
+    movl    $11, %eax
+    int     $0x80
+    movl    %eax, %ebx
+    movl    $1, %eax
+    int     $0x80
+1:
+    jmp     1b
+etcinit:
+    .ascii  "/sbin/init\0"
+    .p2align 2
+initflags:
+    .ascii  "-\0\0\0\0\0\0\0\0\0\0"
+    .p2align 2
+argv:
+    .long   etcinit + 6 - icode + I386_USER_VADDR_START
+    .long   initflags - icode + I386_USER_VADDR_START
+    .long   0
+icodeend:
+    nop
 
     .section .note.GNU-stack, "", @progbits

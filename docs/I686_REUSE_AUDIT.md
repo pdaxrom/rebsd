@@ -34,6 +34,8 @@ for the cleanup commit.
 | compile-time `printf`/`log` renames plus quiet i386 adapters | common `subr_prf.c`, `tty.c`, and `tty_subr.c`; i386 now provides only `cnputc` through its COM1/VGA console |
 | weak i386 `panic`, `panicstr`, and `log` definitions | common `subr_prf.c`; the MD halt operation remains in the i386 console/boot boundary |
 | duplicate i386 proc0 vmspace, u-area, rlimit, signal, and process-queue initialization | common `kern_proc.c::proc0_bootstrap`, also used by `init_main.c` for MIPS/N64/Ci20 |
+| manual i386 proc1 slot, PID hash, u-area/vmspace initialization, and kernel-side `execve` | common `newproc`, the common process-1 trampoline in `kernel/init_process.c`, standard `icode`, and production user-side `execv` |
+| weak i386 `md_init_process` fail-stop fallback | direct linkage of common `init_process`; i386 supplies only its scheduler trampoline and `md_user_enter` ABI |
 | MIPS-local `ct_ticks`, `pipedev`, and version generator ownership | common `kern_clock.c`, `sys_pipe.c`, and architecture-neutral `tools/build/gen-vers.py` |
 
 The zombie test was corrected to follow the existing common lifecycle:
@@ -102,10 +104,11 @@ below.
 The current i686 image directly compiles the existing common disk layer,
 UFS VFS, vnode/file-descriptor path, VM objects/maps/vmspace, fork,
 exit/wait/resource, signal policy, scheduler, clock, the complete syscall
-table and its production exec/VM/sysctl handlers, libkern, and syscall
-stubs.  I386 adapters pass an ATA-backed whole-device `dev_t` into those
-interfaces; there is no i386 filesystem parser, partition policy, private
-file table, or rootfs implementation.
+table and its production exec/VM/sysctl handlers, process-1 initialization,
+libkern, and syscall stubs.  I386 adapters pass an ATA-backed whole-device
+`dev_t` into those interfaces; there is no i386 filesystem parser, partition
+policy, private file table, rootfs implementation, or process-creation
+policy.
 
 ### Bring-up tests, not production subsystems
 
@@ -149,29 +152,23 @@ the common `sys/kernel/exec_subr.c::exec_setupstack`.
 The historical single RWX `PT_LOAD` restriction in `sys/kernel/exec_elf.c`
 has been removed at the common owner.  MIPS/N64 user linker scripts now emit
 separate RX and RW segments and both GCC kernel-object builds pass.  I386
-enters `/sbin/init` through the same production `execve` path; connecting the
-remaining startup sequence to common `init_main` is still pending.
+enters `/sbin/init` through standard `icode` and the same production `execv`
+path.
 
-## Remaining reuse violations
+## Remaining cleanup boundary
 
-These pre-existing parts still work, but violate the project reuse and
-no-workaround gates.  They block completion until replaced by their owning
-common kernel paths.
+The audited i386 path no longer allocates proc1, edits the PID hash, builds
+proc1 VM state, or invokes `execve` in machine-dependent C.  Common
+`newproc` creates proc1, `init_process` maps standard `icode`, and that user
+bootstrap invokes production syscall 11 for `/sbin/init`.
 
-1. `pc/process_bootstrap.c`, `pc/vm_bootstrap.c`,
-   `pc/vmspace_bootstrap.c`, and much of `pc/boot_main.c` still manually
-   establish proc1 and startup state also owned by `sys/kernel/init_main.c`.
-   Proc0 itself now enters through the shared `proc0_bootstrap` owner.
-
-   Removal requires linking the common startup and exec path after the
-   console/root-device adapters exist.  Process lifecycle itself is already
-   common; no additional i386 process policy may be added here.
-
-2. `common/vm_machdep.c` contains a weak fail-stop `md_init_process` because
-   the current diagnostic image does not yet link common `init_main.c`.
-
-   It must disappear when item 1 is complete.  No process creation logic may
-   be added to this fallback.
+The current image still runs destructive i386 bring-up probes before and
+after mounting root.  `pc/boot_main.c` therefore remains diagnostic
+orchestration instead of the final normal boot entry.  This is not an
+alternate process, filesystem, exec, or scheduler implementation.  Its
+removal condition remains the diagnostic-build split described above; that
+work must reuse the normal common startup sequence and must not add i386
+policy.
 
 ## Validation gates
 
