@@ -58,7 +58,6 @@ static volatile unsigned long mips_timer_late_max_tick;
 static volatile unsigned long mips_timer_clock_last_us;
 static volatile unsigned long mips_timer_clock_max_us;
 static volatile unsigned mips_interrupt_depth;
-volatile unsigned int ct_ticks = 0;
 static unsigned long mips_systrace_sequence;
 
 #if defined(N64_USB_GDB) || defined(N64_RESET_DUMP)

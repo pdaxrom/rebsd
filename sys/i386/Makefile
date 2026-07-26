@@ -284,8 +284,12 @@ pic.o: $(I386_PC_SRC)/pic.c $(I386_SRC)/include/interrupt.h \
 	    -c $< -o $@
 
 pit.o: $(I386_PC_SRC)/pit.c $(I386_SRC)/include/interrupt.h \
-	    $(I386_SRC)/include/io.h
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    $(I386_SRC)/include/io.h \
+	    $(I386_SRC)/include/machine/machparam.h \
+	    $(TOPSRC)/sys/include/param.h $(TOPSRC)/sys/include/proc.h \
+	    $(TOPSRC)/sys/include/resource.h $(TOPSRC)/sys/include/time.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
 pci.o: $(I386_PC_SRC)/pci.c $(I386_SRC)/include/boot.h \
@@ -791,6 +795,8 @@ boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/trap.h \
 	    $(I386_SRC)/include/user_return.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
+	    $(I386_SRC)/include/machine/machparam.h \
+	    $(TOPSRC)/sys/include/param.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

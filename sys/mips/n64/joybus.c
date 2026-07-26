@@ -54,8 +54,6 @@ static int n64keyboard_console_port = -1;
 static unsigned n64keyboard_console_last_poll;
 static unsigned n64keyboard_console_last_scan;
 
-extern volatile unsigned int ct_ticks;
-
 static const struct n64keyboard_ascii n64keyboard_ascii_map[] = {
     { 0x0d07, 'a', 'A' }, { 0x0708, 'b', 'B' },
     { 0x0508, 'c', 'C' }, { 0x0507, 'd', 'D' },

@@ -1046,6 +1046,24 @@ i386 boot policy не добавляется. Реальное IBM-тестир�
 - host disk/VM tests и GCC `kernel-objects` для Ci20/N64 прошли. PCC не
   запускался и не менялся.
 
+Пятьдесят третий cleanup-инкремент подключает i386 к common kernel clock:
+
+- стандартный MD-hook `clkstart` программирует 8254 на `HZ` и открывает
+  IRQ0 в 8259A;
+- i386 IRQ frame передаёт interrupted PC, CPL и saved IF общему
+  `hardclock`; отдельной i386 clock policy нет;
+- прежний `i386_pit_init` стал внутренней hardware-функцией, а
+  `timer-ticks` остаётся только наблюдаемым QEMU-счётчиком;
+- существующий QEMU timer gate теперь исполняет общий `hardclock`, а не
+  отдельный diagnostic-only IRQ путь и требует `hardclock-ticks: ok`;
+- `ct_ticks` имеет единственный storage owner в `kern_clock.c`; оставшееся
+  MIPS definition и локальные `extern` declarations удалены в пользу общего
+  `systm.h`.
+- clean i686 suite прошёл для direct/BIOS boot, IDE/no-IDE, `#DE/#GP/#PF`
+  и RAM 32/64/128/256/768/1024 МиБ;
+- host disk/VM tests и GCC `kernel-objects` для Ci20/N64 прошли. PCC не
+  запускался и не менялся.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых

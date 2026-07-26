@@ -15,6 +15,7 @@
 #include "user_return.h"
 #include "vmspace_bootstrap.h"
 
+#include <sys/param.h>
 #include <sys/systm.h>
 #include <vm/pmap.h>
 #include <vm/vm_page.h>
@@ -500,23 +501,23 @@ i386_boot_proc0_continue(void)
 
     i386_exception_smoke(boot_params_phys);
 
-    i386_pic_unmask(I386_IRQ_TIMER);
+    clkstart();
     i386_early_puts("pic: ok\n");
 
-    i386_pit_init();
     i386_early_puts("pit: hz=100\n");
     i386_pit_wait(10u);
     ticks = i386_pit_ticks();
     i386_early_puts("timer-ticks: ");
     i386_early_put_hex32(ticks);
     i386_early_putc('\n');
-    if (ticks < 10u) {
+    if (ticks < 10u || ct_ticks < 10u) {
         i386_early_puts("timer-ticks: failed\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");
         }
     }
     i386_early_puts("timer-ticks: ok\n");
+    i386_early_puts("hardclock-ticks: ok\n");
     i386_pci_report_summary();
     i386_early_puts("HALT\n");
 

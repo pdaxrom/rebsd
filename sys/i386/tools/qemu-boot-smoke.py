@@ -92,6 +92,7 @@ BOOT_MARKERS = (
     "pic: ok",
     "pit: hz=100",
     "timer-ticks: ok",
+    "hardclock-ticks: ok",
     "hardware-summary: pci",
     "hardware-pci-host: 0x80861237",
     "hardware-pci-isa: 0x80867000",

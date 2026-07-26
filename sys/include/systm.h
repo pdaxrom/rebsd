@@ -59,6 +59,7 @@ extern char runin;                  /* scheduling flag */
 extern char runout;                 /* scheduling flag */
 extern int  runrun;                 /* scheduling flag */
 extern char curpri;                 /* more scheduling */
+extern volatile unsigned int ct_ticks; /* hardware clock interrupts */
 
 extern u_int    swapstart, nswap;   /* start and size of swap space */
 extern int      updlock;            /* lock for sync */

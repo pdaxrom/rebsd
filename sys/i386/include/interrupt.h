@@ -61,8 +61,7 @@ void i386_pic_unmask(unsigned irq);
 int i386_pic_accept_irq(unsigned irq);
 void i386_pic_eoi(unsigned irq);
 
-void i386_pit_init(void);
-void i386_pit_interrupt(void);
+void i386_pit_interrupt(i386_u32, i386_u32);
 i386_u32 i386_pit_ticks(void);
 void i386_pit_wait(i386_u32 ticks);
 

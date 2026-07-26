@@ -12,7 +12,6 @@
 #endif
 
 long dumplo;
-extern volatile unsigned int ct_ticks;
 struct proc;
 void psignal(struct proc *p, int sig);
 

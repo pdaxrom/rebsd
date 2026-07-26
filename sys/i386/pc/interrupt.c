@@ -106,6 +106,7 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
 {
     i386_u32 cr2;
     unsigned access;
+    i386_u32 clock_ps;
     unsigned irq;
 
     if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
@@ -158,8 +159,16 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
     if (!i386_pic_accept_irq(irq))
         return;
 
-    if (irq == I386_IRQ_TIMER)
-        i386_pit_interrupt();
+    if (irq == I386_IRQ_TIMER) {
+        /*
+         * hardclock's MD ps contract is expressed through USERMODE and
+         * BASEPRI.  Preserve the interrupted CPL from CS and IF from the
+         * saved EFLAGS in the single value consumed by those macros.
+         */
+        clock_ps = (frame->tf_cs & 3u) |
+            (frame->tf_eflags & I386_EFLAGS_INTERRUPT);
+        i386_pit_interrupt(frame->tf_eip, clock_ps);
+    }
 
     i386_pic_eoi(irq);
 }

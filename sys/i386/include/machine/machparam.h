@@ -90,6 +90,7 @@ i386_intr_restore(int state)
 }
 
 void idle(void);
+void clkstart(void);
 #endif
 
 #define splbio()        i386_intr_disable()

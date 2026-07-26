@@ -1,3 +1,8 @@
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/proc.h>
+
 #include "interrupt.h"
 #include "io.h"
 
@@ -8,7 +13,7 @@
 
 static volatile i386_u32 i386_timer_ticks;
 
-void
+static void
 i386_pit_init(void)
 {
     i386_u32 divisor;
@@ -21,9 +26,17 @@ i386_pit_init(void)
 }
 
 void
-i386_pit_interrupt(void)
+i386_pit_interrupt(i386_u32 pc, i386_u32 ps)
 {
     ++i386_timer_ticks;
+    hardclock((caddr_t)(unsigned long)pc, (int)ps);
+}
+
+void
+clkstart(void)
+{
+    i386_pit_init();
+    i386_pic_unmask(I386_IRQ_TIMER);
 }
 
 i386_u32
