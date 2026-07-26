@@ -9,7 +9,7 @@
 #include <sys/vm.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
-#include <machine/debug.h>
+#include <sys/debug.h>
 #include <vm/vm_object.h>
 #ifdef USB_ENABLED
 #include <usb/usb_task.h>

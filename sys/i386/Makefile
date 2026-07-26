@@ -51,7 +51,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    kern_descrip.o kern_shm.o kern_subr.o kern_time.o \
                    fat_subr.o fat_vfs.o vm_vnode.o vfs_bootstrap.o \
                    disk_bootstrap.o \
-                   elf_bootstrap.o initfs.o user_stack.o \
+                   elf_bootstrap.o initfs.o exec_subr.o \
                    initfs_image.o \
                    init_sysent.o stubs.o kern_prot.o kern_proc.o kern_fork.o \
                    kern_exit.o kern_resource.o kern_sig.o kern_sig2.o \
@@ -460,8 +460,8 @@ initfs.o: $(I386_COMMON_SRC)/initfs.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-user_stack.o: $(I386_COMMON_SRC)/user_stack.c \
-	    $(I386_SRC)/include/user_stack.h \
+exec_subr.o: $(TOPSRC)/sys/kernel/exec_subr.c \
+	    $(TOPSRC)/sys/include/debug.h $(TOPSRC)/sys/include/exec.h \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
@@ -633,11 +633,11 @@ process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/process.h $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/user_bootstrap.h \
-	    $(I386_SRC)/include/user_stack.h \
 	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/layout.h \
-	    $(TOPSRC)/sys/include/file.h $(TOPSRC)/sys/include/proc.h \
+	    $(TOPSRC)/sys/include/exec.h $(TOPSRC)/sys/include/file.h \
+	    $(TOPSRC)/sys/include/proc.h \
 	    $(TOPSRC)/sys/include/user.h \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine

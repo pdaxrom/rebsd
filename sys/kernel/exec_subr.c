@@ -14,7 +14,7 @@
 #include <sys/exec.h>
 #include <sys/dir.h>
 #include <sys/uio.h>
-#include <machine/debug.h>
+#include <sys/debug.h>
 #include <vm/vmspace.h>
 #ifdef N64
 #include <machine/fpu.h>
@@ -435,9 +435,9 @@ exec_arg_length(char *string, int string_user, int *length)
 
 int exec_save_args(struct exec_params *epp)
 {
-    unsigned len;
+    u_int argc, len;
     caddr_t cp;
-    int ap_user, argc, error, i, l;
+    int ap_user, error, i, l;
     char **argp, *ap;
 
     epp->argc = epp->envc = 0;

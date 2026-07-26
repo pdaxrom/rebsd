@@ -385,9 +385,11 @@ Malta64. Следующий кодовый инкремент реализует
   32/64/128/256/768/1024 МиБ проходят с прежними
   `process-bootstrap: ok` и `process-user: ok`.
 
-Двадцать четвёртый QEMU bring-up инкремент завершён:
+Двадцать четвёртый QEMU bring-up инкремент первоначально использовал
+временный i386 stack builder; после общего аудита он удалён:
 
-- ранний i386 stack builder повторяет layout generic `exec_setupstack`:
+- i386 bootstrap заполняет общий `struct exec_params` и вызывает
+  `sys/kernel/exec_subr.c::exec_setupstack`, который формирует layout:
   reserved argument slots, `argv[]`, `envp[]`, packed strings и верхнее
   слово `argv` для `/bin/ps`, с 8-байтным stack alignment;
 - все размеры, pointer arrays и границы stack mapping проверяются до записи,

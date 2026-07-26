@@ -119,19 +119,24 @@ Removal condition: introduce a QEMU diagnostic build option and make the
 default kernel use the normal common startup path without executing destructive
 bring-up probes.
 
-## Remaining temporary duplication
+## Remaining reuse violations
 
-These parts still work, but they are not accepted as final architecture.
+These pre-existing parts still work, but violate the project reuse and
+no-workaround gates.  They block completion until replaced by their owning
+common kernel paths.
 
-1. `common/elf_bootstrap.c` duplicates executable loading and
-   `common/user_stack.c` duplicates argument-stack construction already owned
-   by `sys/kernel/exec_elf.c` and `sys/kernel/exec_subr.c`.
+1. `common/elf_bootstrap.c` duplicates executable loading already owned by
+   `sys/kernel/exec_elf.c`.
 
    The existing common ELF loader currently accepts only the historical
    single RWX `PT_LOAD` format.  The i386 bootstrap test ELF has separate RX
    and RW segments and enforces W^X.  Removal requires extending the common
    ELF loader to multiple validated `PT_LOAD` segments, preserving the MIPS
    legacy format, then enabling the common exec syscall/path for i386.
+
+The former `common/user_stack.c` and `include/user_stack.h` duplication has
+been removed.  The i386 bootstrap now fills `struct exec_params` and calls the
+common `sys/kernel/exec_subr.c::exec_setupstack`.
 
 2. `common/initfs.c`, `tools/mkinitfs.py`, and the embedded initfs image are a
    private file container used only as a no-disk fallback.
