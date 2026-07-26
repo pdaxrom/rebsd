@@ -117,14 +117,10 @@ vm_anon_busy_wait(struct vm_anon *anon, int nowait)
         }
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
         vm_object_stat_increment(&vm_object_statistics.vos_busy_waits);
-#if defined(VM_SINGLE_THREADED)
-        return EBUSY;
-#else
         int error = tsleep((caddr_t)anon, PSWP, 0);
 
         if (error != 0)
             return error;
-#endif
 #else
         return EBUSY;
 #endif
@@ -139,9 +135,7 @@ vm_anon_busy_clear(struct vm_anon *anon)
         return;
     anon->va_flags &= ~VM_ANON_BUSY;
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
-#if !defined(VM_SINGLE_THREADED)
     wakeup((caddr_t)anon);
-#endif
 #endif
 }
 

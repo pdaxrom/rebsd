@@ -1064,6 +1064,21 @@ i386 boot policy не добавляется. Реальное IBM-тестир�
 - host disk/VM tests и GCC `kernel-objects` для Ci20/N64 прошли. PCC не
   запускался и не менялся.
 
+Пятьдесят четвёртый cleanup-инкремент полностью удаляет ранний
+`VM_SINGLE_THREADED` и его условную ветку из common VM:
+
+- i686 уже линкует общий `kern_synch`, scheduler и clock, поэтому busy
+  anonymous pages используют существующий `tsleep`/`wakeup` contract;
+- отдельного i386 locking path и замены ожидания на `EBUSY` больше нет;
+- `VM_PAGER_NO_SWAP` этим инкрементом не маскируется и не объявляется
+  политикой: normal common startup остаётся заблокирован до подключения
+  настоящего swap device через существующую конфигурацию.
+- clean i686 suite прошёл для direct/BIOS boot, IDE/no-IDE, `#DE/#GP/#PF`
+  и RAM 32/64/128/256/768/1024 МиБ; symbol audit подтверждает ссылки
+  `vm_object.o` на общие `tsleep` и `wakeup`;
+- host disk/VM tests и GCC `kernel-objects` для Ci20/N64 прошли. PCC не
+  запускался и не менялся.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых

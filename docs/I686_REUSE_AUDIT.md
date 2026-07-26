@@ -58,7 +58,7 @@ The i686 commits changed common kernel and MIPS sources as well as adding
 | Split user `copyinstr` from kernel `copykstr` and carry the namei source-space flag | Keep.  User pointers and kernel shebang/path strings now have explicit, different paths. |
 | Move `bioinit` ownership out of MIPS startup and into common buffer-cache initialization | Keep.  This is common subsystem initialization. |
 | Factor descriptor close/release helpers used by exit/fork tests | Keep.  The implementation stays in `kern_descrip.c`; i386 has no copy. |
-| Generalize VM/pmap comments and add explicit no-swap/single-thread bootstrap capabilities | Keep for the bring-up configuration.  The VM implementation remains common. |
+| Generalize VM/pmap comments and add explicit no-swap/single-thread bootstrap capabilities | Remove `VM_SINGLE_THREADED` and its common conditional branch: every kernel uses the same `tsleep`/`wakeup` busy-page contract.  `VM_PAGER_NO_SWAP` remains an incomplete normal-startup blocker until the existing configuration mechanism supplies a real swap device; it is not accepted as a final port policy. |
 | Add `kern_proc_lifecycle.c` and private i386 lifecycle helpers | Remove.  These duplicated existing exit/wait/resource code. |
 | Add private i386 libkern, sysent, and weak signal/scheduler implementations | Remove or replace with common objects, as listed above. |
 
