@@ -25,6 +25,7 @@ struct  proc {
     short   p_uid;                  /* user id, used to direct tty signals */
     short   p_pid;                  /* unique process id */
     short   p_ppid;                 /* process id of parent */
+    short   p_pgrp;                 /* process group, retained for zombies */
     long    p_sig;                  /* signals pending to this process */
     int     p_stat;
     struct  user *p_uarea;          /* resident user area/kernel stack */
@@ -33,9 +34,9 @@ struct  proc {
     /*
      * Union to overwrite information no longer needed by ZOMBIED
      * process with exit information for the parent process.  The
-     * two structures have been carefully set up to use the same
-     * amount of memory.  Must be very careful that any values in
-     * p_alive are not used for zombies (zombproc).
+     * union reserves enough memory for either representation.  Values in
+     * p_alive must not be used for zombies (zombproc); identity fields
+     * needed by wait(), including p_pgrp, live outside the union.
      */
     union {
         struct {
@@ -49,7 +50,6 @@ struct  proc {
             long    P_sigmask;      /* current signal mask */
             long    P_sigignore;    /* signals being ignored */
             long    P_sigcatch;     /* signals being caught by user */
-            short   P_pgrp;         /* name of process group leader */
             struct  proc *P_link;   /* linked list of running processes */
             size_t  P_addr;         /* address of u. area */
             size_t  P_daddr;        /* address of data area */
@@ -76,7 +76,6 @@ struct  proc {
 #define p_sigmask       p_un.p_alive.P_sigmask
 #define p_sigignore     p_un.p_alive.P_sigignore
 #define p_sigcatch      p_un.p_alive.P_sigcatch
-#define p_pgrp          p_un.p_alive.P_pgrp
 #define p_link          p_un.p_alive.P_link
 #define p_addr          p_un.p_alive.P_addr
 #define p_daddr         p_un.p_alive.P_daddr

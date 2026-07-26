@@ -25,6 +25,7 @@
 #define SMOKE_GPR64_SPIN_COUNT  8000000u
 
 static volatile sig_atomic_t smoke_signal_seen;
+static volatile sig_atomic_t smoke_child_exited;
 static volatile unsigned smoke_bad_address = 1;
 static unsigned char smoke_file_page[SMOKE_VM_PAGE_SIZE];
 
@@ -79,6 +80,57 @@ smoke_signal(int signo)
 {
     if (signo == SIGUSR1)
         smoke_signal_seen = 1;
+    else if (signo == SIGCHLD)
+        smoke_child_exited = 1;
+}
+
+static int
+smoke_setpgrp(pid_t pid, pid_t pgrp)
+{
+    int (*bsd_setpgrp)();
+
+    bsd_setpgrp = (int (*)())setpgrp;
+    return (*bsd_setpgrp)(pid, pgrp);
+}
+
+static int
+smoke_wait_zombie_group(void)
+{
+    sig_t old_handler;
+    pid_t child;
+    pid_t waited;
+    int status;
+
+    smoke_child_exited = 0;
+    old_handler = signal(SIGCHLD, smoke_signal);
+    if (old_handler == SIG_ERR)
+        return 1;
+    child = fork();
+    if (child < 0) {
+        (void)signal(SIGCHLD, old_handler);
+        return 2;
+    }
+    if (child == 0) {
+        if (smoke_setpgrp(0, getpid()) < 0)
+            _exit(1);
+        _exit(SMOKE_FORK_STATUS);
+    }
+    while (!smoke_child_exited)
+        pause();
+
+    /*
+     * SIGCHLD proves that the child is already a zombie.  waitpid() with
+     * a negative pid must still match its retained process group.
+     */
+    waited = waitpid(-child, &status, 0);
+    (void)signal(SIGCHLD, old_handler);
+    if (waited != child) {
+        (void)waitpid(child, &status, 0);
+        return 3;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != SMOKE_FORK_STATUS)
+        return 4;
+    return 0;
 }
 
 static int
@@ -352,6 +404,8 @@ main(int argc, char **argv)
     if (signal(SIGUSR1, smoke_signal) == SIG_ERR ||
         kill(getpid(), SIGUSR1) != 0 || !smoke_signal_seen)
         return smoke_fail("signal delivery");
+    if (smoke_wait_zombie_group() != 0)
+        return smoke_fail("waitpid zombie process group");
 #ifdef MIPS_VM_PROCESS_SMOKE_GPR64
     if (smoke_gpr64_signal_frame() != 0)
         return smoke_fail("MIPS III 64-bit GPR signal frame");
