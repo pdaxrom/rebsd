@@ -1350,9 +1350,3 @@ pmap_bootstrap_stats(struct pmap_stats *stats)
 {
     return pmap_get_stats(stats);
 }
-
-int
-i386_pmap_bootstrap_init(void)
-{
-    return pmap_system_init(&vm_page_boot_allocator);
-}

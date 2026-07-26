@@ -1033,6 +1033,19 @@ N64 build pattern и подключение штатного i686 image к commo
 До определения всех существующих common startup dependencies отдельная
 i386 boot policy не добавляется. Реальное IBM-тестирование пока не требуется.
 
+Пятьдесят второй cleanup-инкремент удаляет бессодержательные VM wrappers:
+
+- `i386_pmap_bootstrap_init` и его private header удалены; boot path вызывает
+  общий `pmap_system_init` напрямую;
+- `i386_vmspace_bootstrap_init` удалён; boot path вызывает общий
+  `vmspace_system_init` напрямую;
+- i386 pmap hardware backend, `vmspace_current`/activate/deactivate/fault
+  adapters и QEMU selftests не меняют своих контрактов;
+- строгая i686 GCC-сборка, direct/BIOS QEMU с IDE и без IDE,
+  rootfs/bios-image smoke, exception gates и RAM matrix 32–1024 МиБ прошли;
+- host disk/VM tests и GCC `kernel-objects` для Ci20/N64 прошли. PCC не
+  запускался и не менялся.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых

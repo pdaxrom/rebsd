@@ -21,17 +21,6 @@ vmspace_current(void)
 }
 
 int
-i386_vmspace_bootstrap_init(void)
-{
-    int error;
-
-    error = vmspace_system_init(&vm_page_boot_allocator);
-    if (error == 0)
-        i386_vmspace_active = (struct vmspace *)0;
-    return error;
-}
-
-int
 i386_vmspace_activate(struct vmspace *vmspace)
 {
     int error;

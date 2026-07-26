@@ -37,6 +37,7 @@ for the cleanup commit.
 | manual i386 proc1 slot, PID hash, u-area/vmspace initialization, and kernel-side `execve` | common `newproc`, the common process-1 trampoline in `kernel/init_process.c`, standard `icode`, and production user-side `execv` |
 | weak i386 `md_init_process` fail-stop fallback | direct linkage of common `init_process`; i386 supplies only its scheduler trampoline and `md_user_enter` ABI |
 | `pc/vm_bootstrap.c` and its private bootstrap API | common `vm_phys_bootstrap`; i386 now supplies only `vm_phys_board_register`, direct-map, and poison MD operations in `pc/vm_phys_board.c` |
+| `i386_pmap_bootstrap_init`, `i386_vmspace_bootstrap_init`, and the private pmap-bootstrap header | direct calls to common `pmap_system_init` and `vmspace_system_init`; i386 keeps only its pmap backend, active-vmspace adapters, and selftests |
 | MIPS-local `ct_ticks`, `pipedev`, and version generator ownership | common `kern_clock.c`, `sys_pipe.c`, and architecture-neutral `tools/build/gen-vers.py` |
 
 The zombie test was corrected to follow the existing common lifecycle:

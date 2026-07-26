@@ -6,7 +6,6 @@
 #include "memory.h"
 #include "paging.h"
 #include "pci.h"
-#include "pmap_bootstrap.h"
 #include "privilege.h"
 #include "process.h"
 #include "signal_machdep.h"
@@ -17,8 +16,10 @@
 #include "vmspace_bootstrap.h"
 
 #include <sys/systm.h>
+#include <vm/pmap.h>
 #include <vm/vm_page.h>
 #include <vm/vm_phys.h>
+#include <vm/vmspace.h>
 
 static i386_u32 i386_boot_params_saved;
 static void i386_boot_proc0_continue(void);
@@ -349,7 +350,7 @@ i386_boot_main(i386_u32 boot_params_phys)
     }
     i386_early_puts("vm-page-selftest: ok\n");
 
-    if (i386_pmap_bootstrap_init() != 0) {
+    if (pmap_system_init(&vm_page_boot_allocator) != 0) {
         i386_early_puts("pmap-public: failed\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");
@@ -363,7 +364,7 @@ i386_boot_main(i386_u32 boot_params_phys)
     }
     i386_early_puts("pmap-public: ok\n");
 
-    if (i386_vmspace_bootstrap_init() != 0 ||
+    if (vmspace_system_init(&vm_page_boot_allocator) != 0 ||
         i386_vmspace_bootstrap_selftest() != 0) {
         i386_early_puts("vmspace-selftest: failed\n");
         for (;;) {

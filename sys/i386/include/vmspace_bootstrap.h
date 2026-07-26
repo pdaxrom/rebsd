@@ -3,7 +3,6 @@
 
 struct vmspace;
 
-int i386_vmspace_bootstrap_init(void);
 int i386_vmspace_bootstrap_selftest(void);
 int i386_vmspace_activate(struct vmspace *);
 void i386_vmspace_deactivate(struct vmspace *);
