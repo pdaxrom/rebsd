@@ -119,26 +119,38 @@ Removal condition: introduce a QEMU diagnostic build option and make the
 default kernel use the normal common startup path without executing destructive
 bring-up probes.
 
+## Common exec reuse completed
+
+The former `common/elf_bootstrap.c` and `include/elf_bootstrap.h` have been
+removed.  Memory-backed bootstrap images and inode-backed `exec` now share
+the target ELF header validator in `sys/kernel/exec_elf_image.c`; the target
+machine and byte order continue to come from each architecture's
+`machine/elf_machdep.h`.
+
+The common memory-image loader uses the existing VM address/size overflow
+helpers, user-address limits, map-entry capacity, vmspace mappings and
+protection operations.  It supports validated non-overlapping `PT_LOAD`
+segments, BSS zeroing, final segment permissions, W^X rejection and complete
+rollback without an i386-private executable loader.
+
+The former `common/user_stack.c` and `include/user_stack.h` duplication has
+also been removed.  The i386 bootstrap fills `struct exec_params` and calls
+the common `sys/kernel/exec_subr.c::exec_setupstack`.
+
+The historical inode-backed path in `sys/kernel/exec_elf.c` still accepts only
+its original single RWX `PT_LOAD` layout through `exec_estab`.  That is now
+recorded as a limitation of the common exec implementation, not worked around
+by architecture-private code.  Connecting normal i386 `exec`/`init_main`
+requires extending that owning common path while preserving existing MIPS
+behavior.
+
 ## Remaining reuse violations
 
 These pre-existing parts still work, but violate the project reuse and
 no-workaround gates.  They block completion until replaced by their owning
 common kernel paths.
 
-1. `common/elf_bootstrap.c` duplicates executable loading already owned by
-   `sys/kernel/exec_elf.c`.
-
-   The existing common ELF loader currently accepts only the historical
-   single RWX `PT_LOAD` format.  The i386 bootstrap test ELF has separate RX
-   and RW segments and enforces W^X.  Removal requires extending the common
-   ELF loader to multiple validated `PT_LOAD` segments, preserving the MIPS
-   legacy format, then enabling the common exec syscall/path for i386.
-
-The former `common/user_stack.c` and `include/user_stack.h` duplication has
-been removed.  The i386 bootstrap now fills `struct exec_params` and calls the
-common `sys/kernel/exec_subr.c::exec_setupstack`.
-
-2. `common/initfs.c`, `tools/mkinitfs.py`, and the embedded initfs image are a
+1. `common/initfs.c`, `tools/mkinitfs.py`, and the embedded initfs image are a
    private file container used only as a no-disk fallback.
 
    Removal requires using an existing block-device filesystem path.  The
@@ -146,7 +158,7 @@ common `sys/kernel/exec_subr.c::exec_setupstack`.
    Ci20/Malta, with only an i386 memory-backed device adapter.  The IDE-CF
    path must continue to mount through the common disk/VFS/filesystem stack.
 
-3. `pc/process_bootstrap.c`, `pc/vm_bootstrap.c`,
+2. `pc/process_bootstrap.c`, `pc/vm_bootstrap.c`,
    `pc/vmspace_bootstrap.c`, and much of `pc/boot_main.c` manually establish
    proc0/proc1 and startup state also owned by `sys/kernel/init_main.c`.
 
@@ -154,17 +166,17 @@ common `sys/kernel/exec_subr.c::exec_setupstack`.
    console/root-device adapters exist.  Process lifecycle itself is already
    common; no additional i386 process policy may be added here.
 
-4. `pc/scheduler.c` contains genuine MD `idle()`, but its early
+3. `pc/scheduler.c` contains genuine MD `idle()`, but its early
    console-only `panic`/`log` fallback overlaps `sys/kernel/subr_prf.c`.
 
    Removal requires a small i386 `cnputc` console adapter and the appropriate
    common printf/tty dependencies.  Until then the fallback remains weak and
    is classified as bootstrap-only, not as an i386 logging subsystem.
 
-5. `common/vm_machdep.c` contains a weak fail-stop `md_init_process` because
+4. `common/vm_machdep.c` contains a weak fail-stop `md_init_process` because
    the current diagnostic image does not yet link common `init_main.c`.
 
-   It must disappear when item 3 is complete.  No process creation logic may
+   It must disappear when item 2 is complete.  No process creation logic may
    be added to this fallback.
 
 ## Validation gates

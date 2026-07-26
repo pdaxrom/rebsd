@@ -51,7 +51,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    kern_descrip.o kern_shm.o kern_subr.o kern_time.o \
                    fat_subr.o fat_vfs.o vm_vnode.o vfs_bootstrap.o \
                    disk_bootstrap.o \
-                   elf_bootstrap.o initfs.o exec_subr.o \
+                   exec_elf_image.o initfs.o exec_subr.o \
                    initfs_image.o \
                    init_sysent.o stubs.o kern_prot.o kern_proc.o kern_fork.o \
                    kern_exit.o kern_resource.o kern_sig.o kern_sig2.o \
@@ -445,10 +445,9 @@ libkern.o: $(TOPSRC)/sys/kernel/libkern.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-elf_bootstrap.o: $(I386_COMMON_SRC)/elf_bootstrap.c \
-	    $(I386_SRC)/include/elf_bootstrap.h \
-	    $(I386_SRC)/include/machine/layout.h \
+exec_elf_image.o: $(TOPSRC)/sys/kernel/exec_elf_image.c \
 	    $(TOPSRC)/sys/include/exec_elf.h \
+	    $(TOPSRC)/sys/include/exec_elf_loader.h \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
@@ -626,7 +625,6 @@ config.o: $(I386_PC_SRC)/config.c \
 
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/context.h \
-	    $(I386_SRC)/include/elf_bootstrap.h \
 	    $(I386_SRC)/include/initfs.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h \
@@ -636,7 +634,9 @@ process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    $(I386_SRC)/include/machine/layout.h \
-	    $(TOPSRC)/sys/include/exec.h $(TOPSRC)/sys/include/file.h \
+	    $(TOPSRC)/sys/include/exec.h \
+	    $(TOPSRC)/sys/include/exec_elf_loader.h \
+	    $(TOPSRC)/sys/include/file.h \
 	    $(TOPSRC)/sys/include/proc.h \
 	    $(TOPSRC)/sys/include/user.h \
 	    $(I386_VM_SRC)/vmspace.h \

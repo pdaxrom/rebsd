@@ -365,17 +365,23 @@ Malta64. Следующий кодовый инкремент реализует
   VM protection policy, CPL3 frame и сохранность bootstrap invariants;
 - normal/trap smoke и RAM matrix 32/64/128/256/768/1024 МиБ проходят.
 
-Двадцать третий QEMU bring-up инкремент завершён:
+Двадцать третий QEMU bring-up инкремент завершён; последующий общий аудит
+удалил архитектурную реализацию ELF loader:
 
 - минимальная user-программа теперь отдельно собирается GCC/binutils
   toolchain в настоящий `ET_EXEC` ELF32/i386, а затем встраивается в
   read-only секцию kernel image;
-- ранний in-memory loader валидирует ELF magic/class/data/ABI, `EM_386`,
-  header bounds, alignment, user ranges, entry point и до восьми
-  неперекрывающихся `PT_LOAD`;
+- общий `sys/kernel/exec_elf_image.c` валидирует ELF
+  magic/class/data/ABI, target machine из `machine/elf_machdep.h`, header
+  bounds, alignment, user ranges, entry point и неперекрывающиеся
+  `PT_LOAD`; тот же общий валидатор заголовка использует inode-backed
+  `sys/kernel/exec_elf.c`;
 - loader отклоняет interpreter/неизвестные program headers и W+X segments,
   загружает файлы через generic vmspace, явно обнуляет BSS, применяет
   финальные `PF_R/PF_W/PF_X` permissions и откатывает mappings при ошибке;
+- `sys/i386/common/elf_bootstrap.c` и его приватный header удалены; i386
+  вызывает только общий loader, который также собирается для существующих
+  MIPS-конфигураций;
 - встроенный ELF содержит отдельные RX text и RW data+BSS segments; CPL3
   код проверяет initialized data, нулевой BSS и запись в него до production
   `getpid`;

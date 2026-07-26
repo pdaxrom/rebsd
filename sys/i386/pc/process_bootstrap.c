@@ -1,6 +1,7 @@
 #include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/exec.h>
+#include <sys/exec_elf_loader.h>
 #include <sys/file.h>
 #include <sys/inode.h>
 #include <sys/systm.h>
@@ -11,7 +12,6 @@
 
 #include "context.h"
 #include "boot.h"
-#include "elf_bootstrap.h"
 #include "initfs.h"
 #include "interrupt.h"
 #include "privilege.h"
@@ -52,7 +52,7 @@ static struct proc *i386_fork_child;
 static struct inode i386_bootstrap_cdir;
 static label_t i386_process_bootstrap_return;
 static label_t i386_process_idle_saved;
-static struct i386_elf_image i386_bootstrap_user_image;
+static struct exec_elf_image i386_bootstrap_user_image;
 static struct exec_params i386_bootstrap_exec;
 static int i386_process_table_ready;
 static int i386_bootstrap_ready;
@@ -703,7 +703,7 @@ i386_process_bootstrap_user_probe(void)
     error = i386_syscall_install_production();
     if (error != 0)
         return error;
-    if (i386_elf_load_image(i386_bootstrap_vmspace, invalid_elf,
+    if (exec_elf_image_load(i386_bootstrap_vmspace, invalid_elf,
         sizeof(invalid_elf), &i386_bootstrap_user_image) != ENOEXEC)
         return EFAULT;
     if (i386_initfs_find(invalid_initfs, sizeof(invalid_initfs),
@@ -724,7 +724,7 @@ i386_process_bootstrap_user_probe(void)
         i386_early_puts("process-image: initfs\n");
     } else
         return error;
-    error = i386_elf_load_image(i386_bootstrap_vmspace, init_image,
+    error = exec_elf_image_load(i386_bootstrap_vmspace, init_image,
         init_size, &i386_bootstrap_user_image);
     if (error != 0)
         return error;
@@ -750,15 +750,15 @@ i386_process_bootstrap_user_probe(void)
     error = vmspace_zero(i386_bootstrap_vmspace,
         I386_PROCESS_USER_STACK, VM_PAGE_SIZE);
     if (error == 0)
-        error = exec_setupstack(i386_bootstrap_user_image.iei_entry,
+        error = exec_setupstack(i386_bootstrap_user_image.eei_entry,
             &i386_bootstrap_exec);
     if (error != 0)
         goto failed;
     if (vmspace_check(i386_bootstrap_vmspace,
-            i386_bootstrap_user_image.iei_entry, 1,
+            i386_bootstrap_user_image.eei_entry, 1,
             VM_PROT_EXECUTE) != 0 ||
         vmspace_check(i386_bootstrap_vmspace,
-            i386_bootstrap_user_image.iei_entry, 1,
+            i386_bootstrap_user_image.eei_entry, 1,
             VM_PROT_WRITE) == 0 ||
         vmspace_check(i386_bootstrap_vmspace, I386_PROCESS_USER_STACK,
             VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE) != 0 ||
@@ -801,7 +801,7 @@ i386_process_bootstrap_user_probe(void)
 failed:
     (void)vmspace_unmap(i386_bootstrap_vmspace,
         I386_PROCESS_USER_STACK, VM_PAGE_SIZE);
-    (void)i386_elf_unload_image(i386_bootstrap_vmspace,
+    (void)exec_elf_image_unload(i386_bootstrap_vmspace,
         &i386_bootstrap_user_image);
     return error;
 }

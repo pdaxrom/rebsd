@@ -141,9 +141,10 @@ The user payload is a separately linked ELF32/i386 `ET_EXEC`, packaged as
 `/sbin/init` both in deterministic read-only initfs and in the FAT smoke
 images, and loaded from two `PT_LOAD` segments.  FAT is preferred when its
 file is present; initfs is the deterministic fallback and its lookup still
-validates the complete embedded directory.  The ELF loader checks bounds,
-alignment, entry, user ranges, overlap and W+X, zero-fills BSS, applies
-final permissions, and requires `elf32-user: ok`.
+validates the complete embedded directory.  The common ELF image loader checks
+bounds, alignment, target ABI, entry, user ranges, overlap and W+X, zero-fills
+BSS, applies final permissions, and requires `elf32-user: ok`; there is no
+i386-private executable loader.
 An exec-compatible initial stack supplies `argc` in EBX, `argv` in ECX and
 `envp` in EDX, with pointer arrays, packed strings, alignment, reserved
 slots and the historical top `argv` word validated by the CPL3 image;
@@ -179,11 +180,10 @@ generic `setrq`/`swtch` and the `qs` run queue are connected and tested
 twice.  Generic `newproc` creates PID 2 and runs its cloned trapframe in
 CPL3 through production syscall 2; production child `exit`/parent `wait4`
 and reap paths are connected and tested.
-The first persistent user mapping
-executes production syscall 20 from CPL3 and validates generic VM
-text/stack permissions.  A minimal in-memory ELF32
-loader now maps RX text and RW data+BSS from named `/sbin/init` in the
-early initfs, and an exec-compatible `argc/argv/envp` stack is active.
+The first persistent user mapping executes production syscall 20 from CPL3
+and validates generic VM text/stack permissions.  The common memory-backed
+ELF32 loader maps RX text and RW data+BSS from named `/sbin/init` in the early
+initfs, and the common exec stack path supplies `argc/argv/envp`.
 A read-only legacy primary-master ATA PIO backend now attaches through the
 generic disk layer, parses MBR partitions and exercises real block strategy
 reads.  The early FAT reader mounts the first partition, reads a

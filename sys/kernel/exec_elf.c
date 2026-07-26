@@ -70,6 +70,7 @@
 #include <sys/namei.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
+#include <sys/exec_elf_loader.h>
 #include <sys/fcntl.h>
 #include <sys/signalvar.h>
 #include <sys/mount.h>
@@ -85,17 +86,6 @@ extern char sigcode[], esigcode[];
 /* round up and down to page boundaries. */
 #define ELF_ROUND(a, b)     (((a) + (b) - 1) & ~((b) - 1))
 #define ELF_TRUNC(a, b)     ((a) & ~((b) - 1))
-
-static int
-elf_machine_supported(unsigned machine)
-{
-    switch (machine) {
-    ELF_MACHDEP_ID_CASES
-    default:
-        return 0;
-    }
-    return 1;
-}
 
 /*
  * elf_check(): Prepare an Elf binary's exec package
@@ -117,9 +107,6 @@ exec_elf_check(struct exec_params *epp)
     int error, phsize;
     unsigned i;
 
-    const char elfident[] = {ELFMAG0, ELFMAG1, ELFMAG2, ELFMAG3,
-                 ELFCLASS32, ELF_TARGET_DATA, EV_CURRENT, ELFOSABI_SYSV, 0};
-
     /*
      * Check that this is an ELF file that we can handle,
      * and do some sanity checks on the header
@@ -127,15 +114,7 @@ exec_elf_check(struct exec_params *epp)
     if (epp->hdr_len < 0 ||
         (unsigned)epp->hdr_len < sizeof(struct elf_ehdr))
         return ENOEXEC;
-    for (i = 0; i < sizeof elfident; i++)
-        if (epp->hdr.elf.e_ident[i] !=  elfident[i])
-            return ENOEXEC;
-    if (epp->hdr.elf.e_type != ET_EXEC)
-        return ENOEXEC;
-    if (!elf_machine_supported(epp->hdr.elf.e_machine) ||
-        epp->hdr.elf.e_version != EV_CURRENT)
-        return ENOEXEC;
-    if (epp->hdr.elf.e_phentsize != sizeof(struct elf_phdr) || epp->hdr.elf.e_phoff == 0 || epp->hdr.elf.e_phnum == 0)
+    if (!exec_elf_header_valid(&epp->hdr.elf))
         return ENOEXEC;
     if (epp->hdr.elf.e_shnum == 0 || epp->hdr.elf.e_shentsize != sizeof(struct elf_shdr))
         return ENOEXEC;
