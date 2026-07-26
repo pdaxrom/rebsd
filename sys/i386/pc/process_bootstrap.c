@@ -52,7 +52,6 @@ static label_t i386_process_bootstrap_return;
 static label_t i386_process_idle_saved;
 static struct exec_elf_image i386_bootstrap_user_image;
 static struct exec_params i386_bootstrap_exec;
-static int i386_process_table_ready;
 static int i386_bootstrap_ready;
 static volatile unsigned i386_process_idle_active;
 static volatile unsigned i386_process_idle_result;
@@ -202,14 +201,6 @@ i386_process_table_claim_init(struct proc **result)
 
     if (result == (struct proc **)0)
         return EINVAL;
-    if (!i386_process_table_ready) {
-        pqinit();
-        proc[0].p_stat = SRUN;
-        proc[0].p_flag = SLOAD | SSYS;
-        proc[0].p_nice = NZERO;
-        proc[0].p_pptr = &proc[0];
-        i386_process_table_ready = 1;
-    }
     if (allproc != &proc[0] || freeproc != &proc[1] ||
         zombproc != (struct proc *)0 ||
         pidhash[PIDHASH(1)] != (struct proc *)0)
@@ -257,10 +248,10 @@ i386_process_bootstrap(void)
     struct proc *process;
     struct user *idle_up;
     struct user *up;
-    struct vmspace *idle_vmspace;
     struct vmspace *vmspace;
     int error;
     int index;
+    int proc0_ready;
 
     if (i386_bootstrap_ready)
         return i386_process_bootstrap_validate();
@@ -276,23 +267,24 @@ i386_process_bootstrap(void)
         md_uarea_free(idle_up);
         return ENOMEM;
     }
-    idle_vmspace = (struct vmspace *)0;
     vmspace = (struct vmspace *)0;
     process = (struct proc *)0;
-    error = vmspace_create(&idle_vmspace);
-    if (error != 0)
-        goto failed;
+    proc0_ready = 0;
     error = vmspace_create(&vmspace);
     if (error != 0)
         goto failed;
+    md_curuser = idle_up;
+    error = proc0_bootstrap(idle_up);
+    if (error != 0) {
+        md_curuser = (struct user *)0;
+        goto failed;
+    }
+    proc0_ready = 1;
+    i386_idle_vmspace = proc[0].p_vmspace;
     error = i386_process_table_claim_init(&process);
     if (error != 0)
         goto failed;
 
-    proc[0].p_uarea = idle_up;
-    proc[0].p_addr = (size_t)(unsigned long)idle_up;
-    proc[0].p_vmspace = idle_vmspace;
-    idle_up->u_procp = &proc[0];
     i386_process_context_init(&idle_up->u_qsave, idle_up,
         i386_process_idle_entry);
 
@@ -323,7 +315,6 @@ i386_process_bootstrap(void)
     i386_bootstrap_uarea = up;
     i386_bootstrap_vmspace = vmspace;
     i386_idle_uarea = idle_up;
-    i386_idle_vmspace = idle_vmspace;
     i386_bootstrap_ready = 1;
     return i386_process_bootstrap_validate();
 
@@ -331,8 +322,10 @@ failed:
     i386_process_table_release_init(process);
     if (vmspace != (struct vmspace *)0)
         (void)vmspace_destroy(vmspace);
-    if (idle_vmspace != (struct vmspace *)0)
-        (void)vmspace_destroy(idle_vmspace);
+    if (proc0_ready)
+        return error;
+    if (md_curuser == idle_up)
+        md_curuser = (struct user *)0;
     md_uarea_free(up);
     md_uarea_free(idle_up);
     return error;

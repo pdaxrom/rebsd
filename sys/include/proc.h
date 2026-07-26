@@ -105,6 +105,7 @@ extern int nproc;
  * Init the process queues.
  */
 void pqinit (void);
+int proc0_bootstrap(struct user *);
 
 /*
  * Find a process by pid.

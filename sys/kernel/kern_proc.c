@@ -4,12 +4,70 @@
  * specifies the terms and conditions for redistribution.
  */
 #include <sys/param.h>
+#include <sys/errno.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
+#include <vm/vmspace.h>
 
 struct proc *pidhash [PIDHSZ];
 struct proc *freeproc, *zombproc, *allproc, *qs; /* lists of procs in various states */
+
+/*
+ * Establish process 0 after the machine has supplied its bootstrap u-area
+ * and the common VM allocators are ready.  All architectures enter the
+ * process and scheduler code through this single owner.
+ */
+int
+proc0_bootstrap(struct user *up)
+{
+    struct proc *p;
+    int error;
+    int index;
+
+    if (up == 0 || md_curuser != up)
+        return EINVAL;
+    p = &proc[0];
+    if (p->p_uarea != 0 || p->p_vmspace != 0 || p->p_stat != 0)
+        return EBUSY;
+
+    p->p_uarea = up;
+    p->p_addr = (size_t)up;
+    error = vmspace_create(&p->p_vmspace);
+    if (error != 0)
+        goto failed;
+    error = vmspace_activate(p->p_vmspace);
+    if (error != 0)
+        goto failed;
+    p->p_stat = SRUN;
+    p->p_flag = SLOAD | SSYS;
+    p->p_nice = NZERO;
+    p->p_pptr = p;
+
+    up->u_procp = p;
+    up->u_cmask = CMASK;
+    up->u_lastfile = -1;
+    for (index = 1; index < NGROUPS; ++index)
+        up->u_groups[index] = NOGROUP;
+    for (index = 0; index < RLIM_NLIMITS; ++index) {
+        up->u_rlimit[index].rlim_cur = RLIM_INFINITY;
+        up->u_rlimit[index].rlim_max = RLIM_INFINITY;
+    }
+    siginit(p);
+    pqinit();
+    return 0;
+
+failed:
+    if (p->p_vmspace != 0) {
+        (void)vmspace_destroy(p->p_vmspace);
+        p->p_vmspace = 0;
+    }
+    p->p_uarea = 0;
+    p->p_addr = 0;
+    return error;
+}
 
 /*
  * Is p an inferior of the current process?

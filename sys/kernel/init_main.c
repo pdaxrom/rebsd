@@ -126,8 +126,6 @@ md_init_process(void)
 int
 main()
 {
-    register struct proc *p;
-    register int i;
     register struct fs *fs = NULL;
     int error;
     int s __attribute__((unused));
@@ -159,27 +157,9 @@ main()
     n64_video_attach();
 #endif
 
-    /*
-     * Set up system process 0 (swapper).
-     */
-    p = &proc[0];
-    p->p_uarea = md_curuser;
-    p->p_addr = (size_t)p->p_uarea;
-    error = vmspace_create(&p->p_vmspace);
-    if (error != 0 || vmspace_activate(p->p_vmspace) != 0)
-        panic("proc0 vmspace");
-    p->p_stat = SRUN;
-    p->p_flag |= SLOAD | SSYS;
-    p->p_nice = NZERO;
-
-    u.u_procp = p;          /* init user structure */
-    u.u_cmask = CMASK;
-    u.u_lastfile = -1;
-    for (i = 1; i < NGROUPS; i++)
-        u.u_groups[i] = NOGROUP;
-    for (i = 0; i < sizeof(u.u_rlimit)/sizeof(u.u_rlimit[0]); i++)
-        u.u_rlimit[i].rlim_cur = u.u_rlimit[i].rlim_max =
-            RLIM_INFINITY;
+    error = proc0_bootstrap(md_curuser);
+    if (error != 0)
+        panic("proc0 bootstrap");
 #ifdef N64
     /*
      * The first N64 systems use a small volatile /var RAM disk.  Keep core
@@ -187,9 +167,6 @@ main()
      */
     u.u_rlimit[RLIMIT_CORE].rlim_cur = 0;
 #endif
-
-    /* Initialize signal state for process 0 */
-    siginit (p);
 
     /*
      * Initialize tables, protocols, and set up well-known inodes.
@@ -199,7 +176,6 @@ main()
 #endif
     coutinit();
     cinit();
-    pqinit();
     ihinit();
     bioinit();
     nchinit();

@@ -120,7 +120,9 @@ destructive self-tests, a persistent process 1 owns a guarded u-area and
 vmspace, keeps its CR3 and `md_curuser` active, and
 provides the live kernel stack selected by `TSS.esp0`.  It now occupies
 generic `proc[1]`, `allproc` and the PID hash, with proc0 reserved as the
-idle slot; proc0 owns its own guarded u-area, vmspace and scheduler-format
+idle slot.  Common `kern_proc.c::proc0_bootstrap`, shared with normal
+MIPS/N64/Ci20 startup, owns proc0 vmspace, u-area, rlimits, signal state and
+process queues; i386 supplies its guarded u-area and scheduler-format
 `u_qsave`.  After process 1 returns from CPL3 on its u-area stack, the
 kernel performs two proc1-to-proc0-to-proc1 switches.  Both switches change
 CR3, `md_curuser` and `TSS.esp0`; the second resumes proc0's saved idle

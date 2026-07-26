@@ -33,6 +33,7 @@ for the cleanup commit.
 | local `i386_disk_biodone` selected with a compiler macro | common `ufs_bio.c::biodone`; the local completion skipped buffer-cache read-ahead release |
 | compile-time `printf`/`log` renames plus quiet i386 adapters | common `subr_prf.c`, `tty.c`, and `tty_subr.c`; i386 now provides only `cnputc` through its COM1/VGA console |
 | weak i386 `panic`, `panicstr`, and `log` definitions | common `subr_prf.c`; the MD halt operation remains in the i386 console/boot boundary |
+| duplicate i386 proc0 vmspace, u-area, rlimit, signal, and process-queue initialization | common `kern_proc.c::proc0_bootstrap`, also used by `init_main.c` for MIPS/N64/Ci20 |
 
 The zombie test was corrected to follow the existing common lifecycle:
 `kern_exit.c` destroys a dead process's vmspace before it becomes waitable.
@@ -155,8 +156,9 @@ no-workaround gates.  They block completion until replaced by their owning
 common kernel paths.
 
 1. `pc/process_bootstrap.c`, `pc/vm_bootstrap.c`,
-   `pc/vmspace_bootstrap.c`, and much of `pc/boot_main.c` manually establish
-   proc0/proc1 and startup state also owned by `sys/kernel/init_main.c`.
+   `pc/vmspace_bootstrap.c`, and much of `pc/boot_main.c` still manually
+   establish proc1 and startup state also owned by `sys/kernel/init_main.c`.
+   Proc0 itself now enters through the shared `proc0_bootstrap` owner.
 
    Removal requires linking the common startup and exec path after the
    console/root-device adapters exist.  Process lifecycle itself is already
