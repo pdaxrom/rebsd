@@ -81,9 +81,13 @@ must be reused rather than reimplemented locally.
 The low-level paging backend also self-tests map/unmap/protect/extract,
 supervisor/user permissions, resident translation replacement, and targeted
 TLB invalidation through `invlpg`.  The normalized E820 ranges back the
-generic physical-page allocator; bootstrap and metadata pages stay reserved,
-and the generic allocation/free/poison self-test runs in QEMU.  A permanent
-kernel direct map covers the first 1 GiB of physical memory.  The public
+generic physical-page allocator through the standard
+`vm_phys_board_register` hook.  Common `vm_phys_bootstrap` owns metadata
+reservation, map finalization, and allocator initialization; i386 owns only
+the E820 ownership description, direct map, and poison operation.  Bootstrap
+and metadata pages stay reserved, and the generic allocation/free/poison
+self-test runs in QEMU.  A permanent kernel direct map covers the first
+1 GiB of physical memory.  The public
 i386 pmap self-test creates two address spaces, switches CR3, validates
 isolation/protection/execution, and verifies that wired page-table pages are
 reclaimed.  The image also links generic `vm_map`/`vm_object`/`vmspace`;

@@ -1015,6 +1015,24 @@ count через `fork`, закрывать унаследованные descrip
 переиспользуя общий boot path и не добавляя i386 subsystem policy. Реальное
 IBM-тестирование пока не требуется.
 
+Пятьдесят первый cleanup-инкремент удалил private i386 VM bootstrap:
+
+- `sys/i386/pc/vm_bootstrap.c` и его private header удалены;
+- `sys/i386/pc/vm_phys_board.c` реализует только установленный общий MD-hook
+  `vm_phys_board_register`, direct-map и poison operations;
+- metadata reserve, финализация physical map, запуск `vm_page_allocator` и
+  его self-test выполняются существующими общими
+  `vm_phys_bootstrap`/`vm_page_bootstrap_selftest`;
+- чистая строгая i686 GCC-сборка, direct/BIOS QEMU с IDE и без IDE,
+  rootfs/bios-image smoke, exception gates и RAM matrix 32–1024 МиБ прошли;
+- host disk/VM tests и GCC `kernel-objects` для Ci20/N64 прошли. PCC не
+  запускался и не менялся.
+
+Следующим остаётся отделение diagnostic/preflight image по уже существующему
+N64 build pattern и подключение штатного i686 image к common `init_main`.
+До определения всех существующих common startup dependencies отдельная
+i386 boot policy не добавляется. Реальное IBM-тестирование пока не требуется.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых

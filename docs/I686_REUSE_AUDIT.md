@@ -36,6 +36,7 @@ for the cleanup commit.
 | duplicate i386 proc0 vmspace, u-area, rlimit, signal, and process-queue initialization | common `kern_proc.c::proc0_bootstrap`, also used by `init_main.c` for MIPS/N64/Ci20 |
 | manual i386 proc1 slot, PID hash, u-area/vmspace initialization, and kernel-side `execve` | common `newproc`, the common process-1 trampoline in `kernel/init_process.c`, standard `icode`, and production user-side `execv` |
 | weak i386 `md_init_process` fail-stop fallback | direct linkage of common `init_process`; i386 supplies only its scheduler trampoline and `md_user_enter` ABI |
+| `pc/vm_bootstrap.c` and its private bootstrap API | common `vm_phys_bootstrap`; i386 now supplies only `vm_phys_board_register`, direct-map, and poison MD operations in `pc/vm_phys_board.c` |
 | MIPS-local `ct_ticks`, `pipedev`, and version generator ownership | common `kern_clock.c`, `sys_pipe.c`, and architecture-neutral `tools/build/gen-vers.py` |
 
 The zombie test was corrected to follow the existing common lifecycle:
@@ -76,10 +77,11 @@ provide:
 - `common/context.S`, `common/privilege.S`, `pc/tss.c`, `pc/interrupt.c`,
   `pc/pic.c`, and `pc/pit.c`: i386 context restore, rings, TSS, IDT, 8259A,
   and 8254.
-- `pc/memory.c`, `pc/paging.c`, and `common/pmap.c`: E820 normalization,
-  non-PAE page tables, CR3, `invlpg`, and the i386 backend of the common pmap
-  contract.  Pmap policy that can be shared later must not be copied from or
-  into the MIPS backend casually.
+- `pc/memory.c`, `pc/paging.c`, `pc/vm_phys_board.c`, and
+  `common/pmap.c`: E820 normalization, the `vm_phys_board_register` ownership
+  description, non-PAE page tables, CR3, `invlpg`, and the i386 backend of
+  the common pmap contract.  Physical-map finalization, metadata reservation,
+  and page-allocator bootstrap remain common.
 - `common/copyio.c` and the MD part of `common/vm_machdep.c`: user-address
   access through the active i386 vmspace, u-area allocation, fork frames, and
   saved-register operations required by common process/exec/ptrace code.
@@ -123,7 +125,7 @@ hardware image:
 - `pc/uarea_selftest.c`
 - `pc/user_return_selftest.c`
 - the self-test portions of `common/pmap.c`, `pc/paging.c`,
-  `pc/privilege.c`, `pc/syscall.c`, `pc/vm_bootstrap.c`,
+  `pc/privilege.c`, `pc/syscall.c`,
   `pc/vmspace_bootstrap.c`, and `pc/process_bootstrap.c`
 
 Removal condition: introduce a QEMU diagnostic build option and make the

@@ -74,7 +74,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o config.o sysctl.o process_bootstrap.o \
                    vm_param.o \
-                   vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
+                   vm_phys.o vm_page.o vm_phys_board.o pmap.o \
                    $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
 
 .DEFAULT_GOAL := all
@@ -749,9 +749,9 @@ vm_page.o: $(I386_VM_SRC)/vm_page.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-vm_bootstrap.o: $(I386_PC_SRC)/vm_bootstrap.c \
+vm_phys_board.o: $(I386_PC_SRC)/vm_phys_board.c \
 	    $(I386_SRC)/include/memory.h \
-	    $(I386_SRC)/include/vm_bootstrap.h \
+	    $(I386_VM_SRC)/vm_phys.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -790,7 +790,6 @@ boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	    $(I386_SRC)/include/tss.h \
 	    $(I386_SRC)/include/trap.h \
 	    $(I386_SRC)/include/user_return.h \
-	    $(I386_SRC)/include/vm_bootstrap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \

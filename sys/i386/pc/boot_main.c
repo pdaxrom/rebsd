@@ -14,8 +14,11 @@
 #include "tss.h"
 #include "trap.h"
 #include "user_return.h"
-#include "vm_bootstrap.h"
 #include "vmspace_bootstrap.h"
+
+#include <sys/systm.h>
+#include <vm/vm_page.h>
+#include <vm/vm_phys.h>
 
 static i386_u32 i386_boot_params_saved;
 static void i386_boot_proc0_continue(void);
@@ -194,6 +197,7 @@ void
 i386_boot_main(i386_u32 boot_params_phys)
 {
     const struct i386_phys_range *range;
+    struct vm_page_stats vm_stats;
     volatile i386_u32 *page;
     unsigned e820_count;
     unsigned index;
@@ -319,23 +323,25 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_put_hex32(i386_memory_free_pages());
     i386_early_putc('\n');
 
-    if (i386_vm_bootstrap_init() != 0) {
+    i386_memory_handoff();
+    if (vm_phys_bootstrap((vm_size_t)physmem) != 0 ||
+        vm_page_bootstrap_stats(&vm_stats) != 0) {
         i386_early_puts("vm-page-bootstrap: failed\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");
         }
     }
     i386_early_puts("vm-pages-total: ");
-    i386_early_put_hex32(i386_vm_total_pages());
+    i386_early_put_hex32(vm_stats.vps_total);
     i386_early_putc('\n');
     i386_early_puts("vm-pages-free: ");
-    i386_early_put_hex32(i386_vm_free_pages());
+    i386_early_put_hex32(vm_stats.vps_free);
     i386_early_putc('\n');
     i386_early_puts("vm-pages-reserved: ");
-    i386_early_put_hex32(i386_vm_reserved_pages());
+    i386_early_put_hex32(vm_stats.vps_reserved);
     i386_early_putc('\n');
     i386_early_puts("vm-bootstrap-reserved: ok\n");
-    if (i386_vm_bootstrap_selftest() != 0) {
+    if (vm_page_bootstrap_selftest() != 0) {
         i386_early_puts("vm-page-selftest: failed\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");

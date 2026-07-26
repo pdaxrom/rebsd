@@ -64,9 +64,11 @@ reload CR3. Поэтому первый i386 backend реализуется от
 - QEMU self-test resident replacement, RO protection, USER bit и removal.
 
 Ранний allocator остаётся monotonic только до bootstrap generic VM. Затем
-нормализованные E820 ranges передаются в `vm_phys_map` и
-`vm_page_allocator`: уже использованный prefix и allocator metadata
-помечаются reserved, остальные страницы доступны buddy allocator.
+`pc/vm_phys_board.c::vm_phys_board_register` передаёт нормализованные E820
+ranges и уже использованные bootstrap prefixes общему
+`vm_phys_bootstrap`. Общий owner выполняет metadata reserve, финализацию
+`vm_phys_map` и запуск `vm_page_allocator`: занятые страницы помечаются
+reserved, остальные страницы становятся доступны allocator.
 `vm_page_bootstrap_selftest` проверяет обычное и constrained allocation,
 free и poison через kernel direct map.
 
