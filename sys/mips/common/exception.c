@@ -483,7 +483,6 @@ mips_microtime(struct timeval *tv, u_int tick_usec)
 void
 mips_clock_intr(int *frame, unsigned status)
 {
-    ct_ticks++;
 #ifdef N64
 #ifdef N64CART_ENABLED
     n64cart_uart_intr();

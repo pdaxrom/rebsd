@@ -9,7 +9,6 @@
 #include <vm/vmspace.h>
 #include <machine/layout.h>
 
-dev_t pipedev;
 extern int boothowto;
 extern int waittime;
 

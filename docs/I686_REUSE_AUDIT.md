@@ -24,7 +24,7 @@ for the cleanup commit.
 | --- | --- |
 | `sys/i386/common/libkern.c` | `sys/kernel/libkern.c`, moved from the already shared MIPS implementation |
 | MIPS-only location of `stubs.c` plus private i386 `nosys` ownership | `sys/kernel/stubs.c` |
-| `sys/i386/common/sysent_bootstrap.c` | common `sys/kernel/init_sysent.c`, with a build-time prefix selection |
+| `sys/i386/common/sysent_bootstrap.c` and `REBSD_SYSCALL_BOOTSTRAP` | complete common `sys/kernel/init_sysent.c` table, with no architecture selection |
 | `sys/i386/pc/process_lifecycle.c` | common `sys/kernel/kern_exit.c` and `sys/kernel/kern_resource.c` |
 | `sys/kernel/kern_proc_lifecycle.c`, added by the i686 branch | the same existing common exit/wait/reap path |
 | weak i386 `psignal`, `issignal`, `postsig`, `setpri`, `setrq`, and `swtch` fallbacks | common `kern_sig.c`, `kern_sig2.c`, `kern_synch.c`, and `kern_clock.c` |
@@ -34,6 +34,7 @@ for the cleanup commit.
 | compile-time `printf`/`log` renames plus quiet i386 adapters | common `subr_prf.c`, `tty.c`, and `tty_subr.c`; i386 now provides only `cnputc` through its COM1/VGA console |
 | weak i386 `panic`, `panicstr`, and `log` definitions | common `subr_prf.c`; the MD halt operation remains in the i386 console/boot boundary |
 | duplicate i386 proc0 vmspace, u-area, rlimit, signal, and process-queue initialization | common `kern_proc.c::proc0_bootstrap`, also used by `init_main.c` for MIPS/N64/Ci20 |
+| MIPS-local `ct_ticks`, `pipedev`, and version generator ownership | common `kern_clock.c`, `sys_pipe.c`, and architecture-neutral `tools/build/gen-vers.py` |
 
 The zombie test was corrected to follow the existing common lifecycle:
 `kern_exit.c` destroys a dead process's vmspace before it becomes waitable.
@@ -100,9 +101,10 @@ below.
 
 The current i686 image directly compiles the existing common disk layer,
 UFS/FAT VFS, vnode/file-descriptor path, VM objects/maps/vmspace, fork,
-exit/wait/resource, signal policy, scheduler, clock, syscall prefix, libkern,
-and syscall stubs.  I386 adapters pass an ATA-backed `dev_t` into those
-interfaces; there is no i386 FAT parser or private file table.
+exit/wait/resource, signal policy, scheduler, clock, the complete syscall
+table and its production exec/VM/sysctl handlers, libkern, and syscall
+stubs.  I386 adapters pass an ATA-backed `dev_t` into those interfaces;
+there is no i386 FAT parser or private file table.
 
 ### Bring-up tests, not production subsystems
 

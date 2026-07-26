@@ -36,6 +36,11 @@ FSUTIL           = $(FSUTIL_DIR)/fsutil
 I386_ROOTFS_STAGE = rootfs-stage
 I386_ROOTFS_KBYTES = 128
 I386_ROOTFS_EPOCH = 1
+I386_VERSION_GENERATOR = $(TOPSRC)/tools/build/gen-vers.py
+I386_COMPILER_VERSION = $(shell $(CC) --version 2>/dev/null | sed -n '1p')
+I386_GIT_REV = $(or $(shell git -C $(TOPSRC) rev-parse HEAD 2>/dev/null),unknown)
+I386_GIT_BRANCH = $(or $(shell git -C $(TOPSRC) symbolic-ref --short -q HEAD 2>/dev/null),detached)
+I386_GIT_DIRTY = $(shell test -n "$$(git -C $(TOPSRC) status --porcelain --untracked-files=normal 2>/dev/null)" && echo 1 || echo 0)
 
 SETUP_SECTS      = 8
 SETUP_BYTES      = 4608
@@ -57,14 +62,18 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    kern_descrip.o kern_shm.o kern_subr.o kern_time.o \
                    fat_subr.o fat_vfs.o vm_vnode.o vfs_bootstrap.o \
                    disk_bootstrap.o \
-                   exec_elf_image.o exec_subr.o rootfs_image.o \
-                   init_sysent.o stubs.o kern_prot.o kern_proc.o kern_fork.o \
+                   exec_aout.o exec_conf.o exec_elf.o exec_elf_image.o \
+                   exec_script.o exec_subr.o kern_exec.o rootfs_image.o \
+                   init_sysent.o stubs.o kern_mman.o kern_prot.o \
+                   kern_prot2.o kern_proc.o kern_fork.o \
                    kern_exit.o kern_resource.o kern_sig.o kern_sig2.o \
-                   sys_process.o kern_synch.o kern_clock.o subr_prf.o \
-                   tty.o tty_subr.o scheduler.o \
+                   kern_sysctl.o kern_sysv_shm.o sys_process.o \
+                   kern_synch.o kern_clock.o subr_prf.o \
+                   tty.o tty_subr.o vm_sched.o scheduler.o vers.o \
                    copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
-                   context_selftest.o config.o process_bootstrap.o vm_param.o \
+                   context_selftest.o config.o sysctl.o process_bootstrap.o \
+                   vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
                    $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
 
@@ -76,6 +85,9 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
 	run run-serial debug boot-smoke bios-boot-smoke trap-smoke \
 	exception-smoke boot-smoke-matrix clean
+
+.PHONY: FORCE
+FORCE:
 
 all: toolchain-check kernel bios-image
 
@@ -457,8 +469,9 @@ vm_vnode.o: $(I386_VM_SRC)/vm_vnode.c \
 	    -c $< -o $@
 
 memory.o: $(I386_PC_SRC)/memory.c $(I386_SRC)/include/boot.h \
-	    $(I386_SRC)/include/memory.h
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    $(I386_SRC)/include/memory.h $(TOPSRC)/sys/include/systm.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
 paging.o: $(I386_PC_SRC)/paging.c $(I386_SRC)/include/memory.h \
@@ -479,6 +492,13 @@ exec_elf_image.o: $(TOPSRC)/sys/kernel/exec_elf_image.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+exec_aout.o exec_conf.o exec_elf.o exec_script.o kern_exec.o \
+kern_mman.o kern_prot2.o kern_sysctl.o kern_sysv_shm.o: %.o: \
+	    $(TOPSRC)/sys/kernel/%.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 exec_subr.o: $(TOPSRC)/sys/kernel/exec_subr.c \
 	    $(TOPSRC)/sys/include/debug.h $(TOPSRC)/sys/include/exec.h \
 	    $(I386_VM_SRC)/vmspace.h \
@@ -490,7 +510,7 @@ init_sysent.o: $(TOPSRC)/sys/kernel/init_sysent.c \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -DREBSD_SYSCALL_BOOTSTRAP -c $< -o $@
+	    -c $< -o $@
 
 stubs.o: $(TOPSRC)/sys/kernel/stubs.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/signalvar.h \
@@ -578,6 +598,28 @@ kern_clock.o: $(TOPSRC)/sys/kernel/kern_clock.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+vm_sched.o: $(TOPSRC)/sys/kernel/vm_sched.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+vers.c: FORCE $(I386_VERSION_GENERATOR) \
+	    $(TOPSRC)/sys/include/rebsd_version.h
+	$(PYTHON) $(I386_VERSION_GENERATOR) --output $@ \
+	    --version-header "$(TOPSRC)/sys/include/rebsd_version.h" \
+	    --ident I686_PC --build-number 1 \
+	    --build-date "reproducible i686 build" --compiler gcc \
+	    --build-user unknown --build-host unknown \
+	    --toolchain "$(notdir $(CC))" \
+	    --toolchain-version "$(I386_COMPILER_VERSION)" \
+	    --git-rev "$(I386_GIT_REV)" --git-branch "$(I386_GIT_BRANCH)" \
+	    --dirty "$(I386_GIT_DIRTY)" --target i386 --cpu i686 \
+	    --fpu soft --byteorder little
+
+vers.o: vers.c
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 subr_prf.o: $(TOPSRC)/sys/kernel/subr_prf.c \
 	    $(TOPSRC)/sys/include/systm.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -657,6 +699,13 @@ context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
 config.o: $(I386_PC_SRC)/config.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/time.h \
 	    $(TOPSRC)/sys/include/resource.h $(TOPSRC)/sys/include/kernel.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+sysctl.o: $(I386_PC_SRC)/sysctl.c \
+	    $(I386_SRC)/include/machine/cpu.h \
+	    $(TOPSRC)/sys/include/sysctl.h $(TOPSRC)/sys/include/systm.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -907,6 +956,7 @@ boot-smoke-matrix: rebsd-i686.bzimg ide-smoke.img
 clean:
 	rm -f setup.o setup.elf setup.bin setup.map \
 	    bootstrap_user.o bootstrap-user.elf bootstrap_user_image.o \
+	    vers.c \
 	    rootfs.img rootfs.check.img rootfs_image.o \
 	    ide-smoke.img ide-smoke.check.img \
 	    ide-fat32-smoke.img ide-fat32-smoke.check.img \

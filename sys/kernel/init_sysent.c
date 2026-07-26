@@ -6,7 +6,9 @@
  * specifies the terms and conditions for redistribution.
  */
 #include <sys/param.h>
+#include <sys/errno.h>
 #include <sys/systm.h>
+#include <sys/user.h>
 #include <sys/glob.h>
 
 #ifdef INET
@@ -19,23 +21,15 @@
 
 extern void sc_msec();
 
+static void
+reserved_enosys(void)
+{
+    u.u_error = ENOSYS;
+}
+
 #define LSEEK64_NARG        4
 #define TRUNCATE64_NARG     3
 #define POSITIONED_IO_NARG  5
-
-#ifdef REBSD_SYSCALL_BOOTSTRAP
-#define write       nosys
-#define link        nosys
-#define unlink      nosys
-#define execv       nosys
-#define chdir       nosys
-#define fchdir      nosys
-#define mknod       nosys
-#define chmod       nosys
-#define chown       nosys
-#define chflags     nosys
-#define fchflags    nosys
-#endif
 
 /*
  * Reserved/unimplemented system calls in the range 0-150 inclusive
@@ -75,7 +69,6 @@ const struct sysent sysent[] = {
     { 2, fchflags },            /*  18 = fchflags */
     { 4, lseek },               /*  19 = lseek */
     { 0, getpid },              /*  20 = getpid */
-#ifndef REBSD_SYSCALL_BOOTSTRAP
     { 3, smount },              /*  21 = mount */
     { 1, umount },              /*  22 = umount */
     { 6, __sysctl },            /*  23 = __sysctl */
@@ -221,9 +214,9 @@ const struct sysent sysent[] = {
      * 2BSD special calls
      */
     { 0, nosys },               /* 151 = unused */
-    { 2, ustore },              /* 152 = ustore */
-    { 1, ufetch },              /* 153 = ufetch */
-    { 4, ucall },               /* 154 = ucall */
+    { 2, reserved_enosys },     /* 152 = ustore (unsupported) */
+    { 1, reserved_enosys },     /* 153 = ufetch (unsupported) */
+    { 4, reserved_enosys },     /* 154 = ucall (unsupported) */
     { 0, nosys },               /* 155 = fperr */
     { LSEEK64_NARG, lseek64 },  /* 156 = lseek64 */
     { TRUNCATE64_NARG, truncate64 }, /* 157 = truncate64 */
@@ -247,7 +240,6 @@ const struct sysent sysent[] = {
     { 3, shmctl },              /* 175 = shmctl */
     { POSITIONED_IO_NARG, pread },  /* 176 = pread */
     { POSITIONED_IO_NARG, pwrite }, /* 177 = pwrite */
-#endif
 };
 
 const int nsysent = sizeof (sysent) / sizeof (sysent[0]);

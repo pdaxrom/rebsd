@@ -113,9 +113,10 @@ sigreturn through that path.  User CPU exceptions now become BSD pending
 signals while kernel faults remain fatal; QEMU recovers through handlers
 from both a real `UD2` and a terminal unmapped page fault.  An explicit
 `copyinstr/copykstr` API now keeps low kernel addresses distinct from user
-pointers across pathname and exec code.  The early production syscall table
-contains the exact 0-20 prefix; QEMU invokes generic `kern_prot.c:getpid`
-as syscall 20 from CPL3 and requires `syscall-production: ok`.  After the
+pointers across pathname and exec code.  The early syscall prefix has been
+replaced by the complete common 0-177 `sys/kernel/init_sysent.c` table and
+its real common handlers; QEMU invokes generic `kern_prot.c:getpid` as
+syscall 20 from CPL3 and requires `syscall-production: ok`.  After the
 destructive self-tests, a persistent process 1 owns a guarded u-area and
 vmspace, keeps its CR3 and `md_curuser` active, and
 provides the live kernel stack selected by `TSS.esp0`.  It now occupies
@@ -176,9 +177,9 @@ i386 u-area operations exist; the kernel can save and restore
 scheduler-compatible i386 contexts, switch u-area stacks and resume copied
 fork frames through the common interrupt return path.  User selectors, TSS
 and ring-3 trap/return are connected and tested.  The low-level `int 0x80`
-contract and generic `sysent` adapter now install a production-numbered
-bootstrap prefix through syscall 20, including the real generic `getpid`
-handler.  A persistent process 1 in the generic process table now keeps a
+contract and generic `sysent` adapter now install the complete common syscall
+table, including the real generic `getpid`, exec, VM and sysctl handlers.
+A persistent process 1 in the generic process table now keeps a
 real u-area, vmspace, CR3 and TSS kernel stack active after self-tests.
 Proc0 has a separate u-area/vmspace and a reusable saved idle context;
 generic `setrq`/`swtch` and the `qs` run queue are connected and tested
@@ -192,9 +193,9 @@ through the mounted common VFS, and the common exec stack path supplies
 `argc/argv/envp`.
 A read-only legacy primary-master ATA PIO backend now attaches through the
 generic disk layer, parses MBR partitions and exercises real block strategy
-reads.  The early FAT reader mounts the first partition, reads a
+reads.  The common FAT/VFS path mounts the first partition, reads a
 deterministic root probe and supplies `/sbin/init` to the process-1 ELF
 loader; ATA writes and DMA are intentionally absent.  A full VFS root used
 through ordinary read-only namei/open/read/lseek/close is now present.
-Writable storage, the remaining syscall table, generic non-inode fileops,
-complete userland, and PCC remain outside the current image.
+Writable storage, generic non-inode fileops, complete userland, and PCC
+remain outside the current image.

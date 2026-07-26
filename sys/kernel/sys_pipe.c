@@ -5,6 +5,8 @@
  */
 #include <sys/param.h>
 #include <sys/systm.h>
+
+dev_t pipedev;
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/inode.h>

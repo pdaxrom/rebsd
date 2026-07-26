@@ -148,8 +148,11 @@ mmap(void)
 
     uap = (struct a *)u.u_arg;
     vmspace = vmspace_current();
+    object = 0;
     inode = 0;
     device_mapping = 0;
+    maximum = VM_PROT_NONE;
+    had_object = 0;
     error = 0;
     if (vmspace == 0 || uap->length == 0 ||
         (uap->protection & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0) {

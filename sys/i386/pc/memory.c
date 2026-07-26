@@ -1,6 +1,9 @@
 #include "boot.h"
 #include "memory.h"
 
+#include <sys/param.h>
+#include <sys/systm.h>
+
 #define I386_E820_USABLE 1u
 
 extern char __kernel_end[];
@@ -212,6 +215,7 @@ i386_memory_init(i386_u32 boot_params_phys)
         i386_total_pages +=
             (i386_ranges[index].end - i386_ranges[index].start) /
             I386_PAGE_SIZE;
+    physmem = (size_t)i386_total_pages * I386_PAGE_SIZE;
     i386_free_pages = i386_total_pages;
     i386_alloc_next = i386_ranges[0].start;
     return i386_total_pages != 0;

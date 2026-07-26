@@ -538,7 +538,7 @@ int sysctl_rdlong (void *oldp, size_t *oldlenp, void *newp, long val);
  * Get old / set new parameters for a string value.
  */
 int sysctl_string (void *oldp, size_t *oldlenp,
-    void *newp, size_t newlen, char *str, int maxlen);
+    void *newp, size_t newlen, char *str, size_t maxlen);
 
 /*
  * As above, but read-only.
@@ -549,7 +549,7 @@ int sysctl_rdstring (void *oldp, size_t *oldlenp, void *newp, const char *str);
  * Get old parameters for a structure.
  */
 int sysctl_rdstruct (void *oldp, size_t *oldlenp,
-    void *newp, void *sp, int len);
+    void *newp, void *sp, size_t len);
 
 #else   /* !KERNEL */
 

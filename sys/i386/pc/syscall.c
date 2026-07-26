@@ -169,11 +169,13 @@ i386_syscall_get_table(const struct sysent **table, unsigned *count)
 int
 i386_syscall_install_production(void)
 {
-    if (nsysent <= 20 || sysent[1].sy_call != rexit ||
+    if (nsysent <= 177 || sysent[1].sy_call != rexit ||
         sysent[2].sy_call != fork || sysent[3].sy_call != read ||
         sysent[5].sy_call != open || sysent[6].sy_call != close ||
-        sysent[7].sy_call != wait4 || sysent[19].sy_call != lseek ||
-        sysent[20].sy_call != getpid)
+        sysent[7].sy_call != wait4 || sysent[11].sy_call != execv ||
+        sysent[19].sy_call != lseek || sysent[20].sy_call != getpid ||
+        sysent[59].sy_call != execve || sysent[162].sy_call != mmap ||
+        sysent[175].sy_call != shmctl || sysent[177].sy_call != pwrite)
         return EINVAL;
     i386_syscall_set_table(sysent, (unsigned)nsysent);
     return 0;

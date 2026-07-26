@@ -842,7 +842,7 @@ SYSTEM_GITREV := $(or $(shell git -C $(TOPSRC) rev-parse HEAD 2>/dev/null),unkno
 SYSTEM_GIT_BRANCH := $(or $(shell git -C $(TOPSRC) symbolic-ref --short -q HEAD 2>/dev/null),detached)
 SYSTEM_GIT_DIRTY := $(shell test -n "$$(git -C $(TOPSRC) status --porcelain --untracked-files=normal 2>/dev/null)" && echo 1 || echo 0)
 SYSTEM_TARGET = $(if $(filter little,$(N64_USERLAND_ENDIAN)),mipsel,mips)
-VERSION_GENERATOR = $(TOPSRC)/sys/mips/tools/gen-vers.py
+VERSION_GENERATOR = $(TOPSRC)/tools/build/gen-vers.py
 GENERATE_VERS = python3 $(VERSION_GENERATOR) --output vers.c \
                   --version-header "$(TOPSRC)/sys/include/rebsd_version.h" \
                   --ident "$(SYSTEM_KERNEL_IDENT)" \

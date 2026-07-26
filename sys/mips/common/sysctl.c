@@ -252,28 +252,6 @@ static const struct {
     { 0, 0 },
 };
 
-void
-ucall(void)
-{
-    /*
-     * PIC32 uses these calls for board autoconfig and MMIO access. MIPS keeps
-     * hardware control behind explicit drivers, ioctls, or sysctl nodes.
-     */
-    u.u_error = ENOSYS;
-}
-
-void
-ufetch(void)
-{
-    u.u_error = ENOSYS;
-}
-
-void
-ustore(void)
-{
-    u.u_error = ENOSYS;
-}
-
 int
 cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     void *newp, size_t newlen)

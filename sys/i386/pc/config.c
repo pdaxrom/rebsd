@@ -1,6 +1,7 @@
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/callout.h>
+#include <sys/clist.h>
 #include <sys/dir.h>
 #include <sys/file.h>
 #include <sys/inode.h>
@@ -10,6 +11,8 @@
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
+#include <sys/map.h>
+#include <sys/tty.h>
 
 dev_t rootdev = NODEV;
 int nproc = NPROC;
@@ -26,5 +29,9 @@ struct mount mount[NMOUNT];
 struct buf buf[NBUF], bfreelist[BQUEUES];
 struct bufhd bufhash[BUFHSZ];
 struct proc proc[NPROC];
-char runin;
-char runout;
+struct cblock cfree[NCLIST];
+struct tty cnttys[1];
+struct mapent swapent[SMAPSIZ];
+struct map swapmap[1] = {
+    { swapent, &swapent[SMAPSIZ], "swapmap" },
+};

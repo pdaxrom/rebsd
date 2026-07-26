@@ -25,7 +25,8 @@ int exec_aout_check(struct exec_params *epp)
     unsigned stack_size;
     int error;
 
-    if (epp->hdr_len < sizeof(struct exec))
+    if (epp->hdr_len < 0 ||
+        (unsigned)epp->hdr_len < sizeof(struct exec))
         return ENOEXEC;
     if (!(N_GETMID(epp->hdr.aout) == MID_ZERO &&
           N_GETFLAG(epp->hdr.aout) == 0))
@@ -98,9 +99,8 @@ int exec_aout_check(struct exec_params *epp)
     error = vmspace_read_inode(epp->vmspace, epp->ip,
         (vm_vaddr_t)epp->data.vaddr, epp->hdr.aout.a_data,
         sizeof(struct exec) + epp->hdr.aout.a_text);
-    if (error)
-        DEBUG("read image returned error=%d\n", error);
     if (error) {
+        DEBUG("read image returned error=%d\n", error);
         return error;
     }
 

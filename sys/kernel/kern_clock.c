@@ -12,6 +12,7 @@
 #include <sys/systm.h>
 
 int noproc;                 /* no one is running just now */
+volatile unsigned int ct_ticks; /* hardware clock interrupts since boot */
 
 struct callout *callfree, calltodo;
 
@@ -154,6 +155,7 @@ hardclock(caddr_t pc, int ps)
      * Decrementing just the first of these serves to decrement the time
      * to all events.
      */
+    ++ct_ticks;
     p1 = calltodo.c_next;
     while (p1) {
         if (--p1->c_time > 0)

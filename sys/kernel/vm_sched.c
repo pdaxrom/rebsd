@@ -20,6 +20,8 @@
 int     maxslp = MAXSLP;
 char    runin;                  /* scheduling flag */
 char    runout;                 /* scheduling flag */
+u_int   swapstart, nswap;       /* start and size of swap space */
+size_t  physmem;                /* total physical memory in bytes */
 size_t  freemem;                /* remaining clicks of free memory */
 short avenrun[3];
 struct vmtotal total;

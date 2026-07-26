@@ -18,7 +18,6 @@
 #endif
 #include <machine/video.h>
 
-dev_t pipedev;
 extern int boothowto;
 extern int waittime;
 

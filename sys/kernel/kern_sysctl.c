@@ -373,6 +373,7 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, s
 int
 hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
+    (void)newlen;
     /* all sysctl names at this level are terminal */
     if (namelen != 1)
         return (ENOTDIR);       /* overloaded */
@@ -966,9 +967,11 @@ sysctl_rdlong(void *oldp, size_t *oldlenp, void *newp, long val)
  * for a string-valued sysctl function.
  */
 int
-sysctl_string(void *oldp, size_t *oldlenp, void *newp, size_t newlen, char *str, int maxlen)
+sysctl_string(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
+    char *str, size_t maxlen)
 {
-    int len, error = 0;
+    size_t len;
+    int error = 0;
 
     len = strlen(str) + 1;
     if (oldp && *oldlenp < len)
@@ -992,7 +995,8 @@ sysctl_string(void *oldp, size_t *oldlenp, void *newp, size_t newlen, char *str,
 int
 sysctl_rdstring(void *oldp, size_t *oldlenp, void *newp, const char *str)
 {
-    int len, error = 0;
+    size_t len;
+    int error = 0;
 
     len = strlen(str) + 1;
     if (oldp && *oldlenp < len)
@@ -1010,7 +1014,8 @@ sysctl_rdstring(void *oldp, size_t *oldlenp, void *newp, const char *str)
  * for a structure oriented sysctl function.
  */
 int
-sysctl_struct(void *oldp, size_t *oldlenp, void *newp, size_t newlen, void *sp, int len)
+sysctl_struct(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
+    void *sp, size_t len)
 {
     int error = 0;
 
@@ -1032,7 +1037,8 @@ sysctl_struct(void *oldp, size_t *oldlenp, void *newp, size_t newlen, void *sp, 
  * for a structure oriented sysctl function.
  */
 int
-sysctl_rdstruct(void *oldp, size_t *oldlenp, void *newp, void *sp, int len)
+sysctl_rdstruct(void *oldp, size_t *oldlenp, void *newp, void *sp,
+    size_t len)
 {
     int error = 0;
 
@@ -1052,7 +1058,8 @@ sysctl_rdstruct(void *oldp, size_t *oldlenp, void *newp, void *sp, int len)
 int
 sysctl_file(char *where, size_t *sizep)
 {
-    int buflen, error;
+    size_t buflen;
+    int error;
     register struct file *fp;
     struct  file *fpp;
     char *start = where;
@@ -1138,7 +1145,8 @@ sysctl_procfiles(char *where, size_t *sizep)
     struct user *up;
     struct proc *p;
     char *start;
-    int buflen, error, fd, needed;
+    size_t buflen, needed;
+    int error, fd;
 
     start = where;
     buflen = where != NULL ? *sizep : 0;
@@ -1334,8 +1342,8 @@ sysctl_doproc(int *name, u_int namelen, char *where, size_t *sizep)
     register struct kinfo_proc *dp = (struct kinfo_proc *)where;
     struct kinfo_proc kproc;
     struct user *up;
-    int needed = 0;
-    int buflen = where != NULL ? *sizep : 0;
+    size_t needed = 0;
+    size_t buflen = where != NULL ? *sizep : 0;
     int doingzomb;
     int error = 0;
     dev_t ttyd;
