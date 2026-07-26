@@ -31,6 +31,20 @@ REQUIRED_DEVICES = (
     ("cdev", "/dev/console"),
 )
 
+EXECUTABLE_DIRECTORIES = (
+    "/bin/",
+    "/sbin/",
+    "/usr/bin/",
+    "/usr/sbin/",
+    "/libexec/",
+    "/usr/libexec/",
+)
+
+COMMAND_MAN_DIRECTORIES = (
+    "/usr/share/man/cat1/",
+    "/usr/share/man/cat8/",
+)
+
 
 def fail(messages):
     for message in messages:
@@ -78,14 +92,48 @@ def check_stage(stage):
     return errors
 
 
-def check_manifest(manifest):
+def check_manifest(stage, manifest):
     if not manifest.is_file():
         return [f"manifest is not a file: {manifest}"]
     text = manifest.read_text(encoding="utf-8", errors="replace")
+    payload = {
+        line.split(maxsplit=1)[1]
+        for line in text.splitlines()
+        if line.startswith(("file /", "symlink /"))
+    }
     errors = []
     for kind, path in REQUIRED_DEVICES:
         if f"{kind} {path}" not in text:
             errors.append(f"manifest is missing {kind} {path}")
+
+    commands = {}
+    for path in sorted(payload):
+        if not path.startswith(EXECUTABLE_DIRECTORIES):
+            continue
+        staged = stage / path.lstrip("/")
+        try:
+            mode = staged.stat().st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(mode) and mode & 0o111:
+            commands.setdefault(staged.name, []).append(path)
+
+    for name, paths in sorted(commands.items()):
+        for directory in COMMAND_MAN_DIRECTORIES:
+            page = f"{directory}{name}.0"
+            if (stage / page.lstrip("/")).is_file() and page not in payload:
+                errors.append(
+                    f"manifest is missing man page {page} for {', '.join(paths)}"
+                )
+
+    for page in sorted(payload):
+        if not page.startswith(COMMAND_MAN_DIRECTORIES) or not page.endswith(".0"):
+            continue
+        command = Path(page).stem
+        if command not in commands:
+            errors.append(
+                f"manifest includes man page {page} without an installed command"
+            )
     return errors
 
 
@@ -97,7 +145,7 @@ def main():
     args = parser.parse_args()
 
     errors = check_stage(args.stage)
-    errors.extend(check_manifest(args.manifest))
+    errors.extend(check_manifest(args.stage, args.manifest))
     if errors:
         return fail(errors)
 

@@ -681,7 +681,7 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
 	        /^symlink \/bin\/cpp$$/ { skip = 1; next } \
 	        skip && /^target / { skip = 0; next } \
 	        /^dir \/usr\/libexec\/pcc$$/ { next } \
-	        /^file \/(usr\/bin\/(cc|cpp|pcc)|usr\/lib\/libpcc\.a|usr\/libexec\/pcc\/(ccom|cpp))$$/ { skip = 1; next } \
+	        /^file \/(usr\/bin\/(cc|cpp|pcc)|usr\/lib\/libpcc\.a|usr\/libexec\/pcc\/(ccom|cpp)|usr\/share\/man\/cat1\/(cc|cpp|pcc)\.0)$$/ { skip = 1; next } \
 	        skip && /^mode / { skip = 0; next } \
 	        { skip = 0; print }' $@ > $@.tmp; \
 	    mv $@.tmp $@; \

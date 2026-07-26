@@ -53,10 +53,12 @@ char *getmntpt(char *name);
 void prtstat(register struct statfs *sfsp, register int maxwidth);
 void ufs_df(char *file, int maxwidth);
 const char *fstypename(int type);
+void humanize(char *buf, unsigned long long bytes);
 void     usage();
 
 int iflag;
 int tflag;
+int hflag;
 
 int
 main(
@@ -69,8 +71,11 @@ main(
     int ch, err, i, maxwidth, width;
     char *mntpt;
 
-    while ((ch = getopt(argc, argv, "iT")) != EOF)
+    while ((ch = getopt(argc, argv, "hiT")) != EOF)
         switch (ch) {
+        case 'h':
+            hflag = 1;
+            break;
         case 'i':
             iflag = 1;
             break;
@@ -161,6 +166,46 @@ fsbtoblk(
 }
 
 /*
+ * Format a byte count using binary units.  Keep the result compact enough
+ * for df's fixed-width columns.
+ */
+void
+humanize(
+    char *buf,
+    unsigned long long bytes)
+{
+    static const char units[] = "BKMGTPE";
+    unsigned long long value;
+    unsigned long remainder;
+    unsigned unit;
+    unsigned tenth;
+
+    value = bytes;
+    remainder = 0;
+    unit = 0;
+    while (value >= 1024 && unit < sizeof(units) - 2) {
+        remainder = (unsigned long)(value % 1024);
+        value /= 1024;
+        unit++;
+    }
+    if (unit != 0 && value < 10 && remainder != 0) {
+        tenth = (remainder * 10 + 512) / 1024;
+        if (tenth == 10) {
+            value++;
+            tenth = 0;
+        }
+        if (tenth != 0) {
+            sprintf(buf, "%lu.%u%c", (unsigned long)value, tenth,
+                units[unit]);
+            return;
+        }
+    } else if (remainder >= 512) {
+        value++;
+    }
+    sprintf(buf, "%lu%c", (unsigned long)value, units[unit]);
+}
+
+/*
  * Print out status about a filesystem.
  */
 void
@@ -172,21 +217,25 @@ prtstat(
     static int headerlen, timesthrough;
     static char *header;
     long used, availblks;
+    char sizebuf[12], usedbuf[12], availbuf[12];
     ino_t   inodes, iused;
 
     if (maxwidth < 11)
         maxwidth = 11;
     if (++timesthrough == 1) {
 /*      header = getbsize(&headerlen, &blocksize); */
-        header = "1K-blocks";
+        header = hflag ? "Size" : "1K-blocks";
         blocksize = 1024;
-        headerlen = 9;
+        headerlen = hflag ? 6 : 9;
 
         (void)printf("%-*.*s ", maxwidth, maxwidth, "Filesystem");
         if (tflag)
             (void)printf("%-6s ", "Type");
-        (void)printf("%s     Used    Avail Capacity",
-            header);
+        if (hflag)
+            (void)printf("%6s %6s %6s Capacity", header, "Used",
+                "Avail");
+        else
+            (void)printf("%s     Used    Avail Capacity", header);
         if (iflag)
             (void)printf(" iused   ifree  %%iused");
         (void)printf("  Mounted on\n");
@@ -196,10 +245,19 @@ prtstat(
         (void)printf(" %-6s", fstypename(sfsp->f_type));
     used = sfsp->f_blocks - sfsp->f_bfree;
     availblks = sfsp->f_bavail + used;
-    (void)printf(" %*ld %8ld %8ld", headerlen,
-        fsbtoblk(sfsp->f_blocks, sfsp->f_bsize, blocksize),
-        fsbtoblk(used, sfsp->f_bsize, blocksize),
-        fsbtoblk(sfsp->f_bavail, sfsp->f_bsize, blocksize));
+    if (hflag) {
+        humanize(sizebuf, (unsigned long long)sfsp->f_blocks *
+            sfsp->f_bsize);
+        humanize(usedbuf, (unsigned long long)used * sfsp->f_bsize);
+        humanize(availbuf, (unsigned long long)sfsp->f_bavail *
+            sfsp->f_bsize);
+        (void)printf(" %6s %6s %6s", sizebuf, usedbuf, availbuf);
+    } else {
+        (void)printf(" %*ld %8ld %8ld", headerlen,
+            fsbtoblk(sfsp->f_blocks, sfsp->f_bsize, blocksize),
+            fsbtoblk(used, sfsp->f_bsize, blocksize),
+            fsbtoblk(sfsp->f_bavail, sfsp->f_bsize, blocksize));
+    }
     (void)printf(" %5lu%%",
         availblks == 0 ? 100 : (unsigned long)used * 100 / availblks);
     if (iflag) {
@@ -302,6 +360,6 @@ bread(
 void
 usage()
 {
-    (void)fprintf(stderr, "usage: df [-iT] [file | file_system ...]\n");
+    (void)fprintf(stderr, "usage: df [-hiT] [file | file_system ...]\n");
     exit(1);
 }

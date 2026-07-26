@@ -477,6 +477,28 @@ check_regex(void)
 }
 
 static int
+check_getopt(void)
+{
+    char *arguments[] = {
+        "getopt-smoke", "operand", "-a", NULL
+    };
+    int option;
+
+    opterr = 0;
+    optind = 1;
+    optreset = 1;
+    option = getopt(3, arguments, "-a");
+    if (option != 1 || optarg == NULL ||
+        strcmp(optarg, "operand") != 0 || optind != 2)
+        return bad("getopt in-order operand");
+    if (getopt(3, arguments, "-a") != 'a' || optind != 3)
+        return bad("getopt in-order option");
+    if (getopt(3, arguments, "-a") != -1)
+        return bad("getopt in-order end");
+    return 0;
+}
+
+static int
 check_getopt_long(void)
 {
     static const struct option options[] = {
@@ -562,6 +584,8 @@ main(void)
     if (check_modern_string())
         return 1;
     if (check_regex())
+        return 1;
+    if (check_getopt())
         return 1;
     if (check_getopt_long())
         return 1;

@@ -26,16 +26,14 @@ KCONFIG_SRCS    = $(KCONFIG_DIR)/Makefile $(KCONFIG_DIR)/config.h \
                   $(KCONFIG_DIR)/config.y $(KCONFIG_DIR)/lang.l \
                   $(KCONFIG_DIR)/main.c $(KCONFIG_DIR)/mkioconf.c \
                   $(KCONFIG_DIR)/mkmakefile.c $(KCONFIG_DIR)/mkswapconf.c
-BOARD_KCONFIG_SRCS = $(wildcard $(BOARD_SOURCE_DIR)/Makefile.kconf \
+BOARD_KCONFIG_SRCS = $(TOPSRC)/sys/mips/Makefile.kconf \
+                     $(TOPSRC)/sys/mips/files.kconf \
+                     $(TOPSRC)/sys/mips/devices.kconf \
+                     $(wildcard $(BOARD_SOURCE_DIR)/Makefile.kconf \
                      $(BOARD_SOURCE_DIR)/files.kconf \
                      $(BOARD_SOURCE_DIR)/files.* \
                      $(BOARD_SOURCE_DIR)/devices.kconf \
                      $(BOARD_SOURCE_DIR)/devices.*)
-ifeq ($(BOARD_KCONFIG_SRCS),)
-BOARD_KCONFIG_SRCS = $(TOPSRC)/sys/mips/Makefile.kconf \
-                     $(TOPSRC)/sys/mips/files.kconf \
-                     $(TOPSRC)/sys/mips/devices.kconf
-endif
 
 .PHONY: all reconfig clean clean-all unix kernel kernel-objects rootfs.img run run-early run-net \
 	    run-vr4300 kernel.z64 preflight.z64 \

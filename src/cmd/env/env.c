@@ -48,6 +48,12 @@ main(int argc, char **argv)
 
 	while ((ch = getopt(argc, argv, "-i")) != -1)
 		switch((char)ch) {
+		case 1:
+			if (optarg == NULL || strcmp(optarg, "-") != 0) {
+				--optind;
+				goto options_done;
+			}
+			/* FALLTHROUGH */
 		case '-':			/* obsolete */
 		case 'i':
 			environ = cleanenv;
@@ -58,6 +64,7 @@ main(int argc, char **argv)
 			usage();
 		}
 
+options_done:
 	for (argv += optind; *argv && (p = strchr(*argv, '=')); ++argv)
 		(void)setenv(*argv, ++p, 1);
 
