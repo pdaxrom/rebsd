@@ -20,7 +20,15 @@ _start:
     subl    %edi, %ecx
     rep stosb
 
-    movl    $__bootstrap_stack_top, %esp
+    /* The common process code uses this u-area as proc0's kernel stack. */
+    movl    $__bootstrap_uarea_start, %edi
+    movl    $__bootstrap_uarea_end, %ecx
+    subl    %edi, %ecx
+    xorl    %eax, %eax
+    rep stosb
+    movl    $__bootstrap_uarea_start, md_curuser
+
+    movl    $__bootstrap_uarea_end, %esp
     andl    $-16, %esp
     pushl   %ebx
     call    i386_boot_main

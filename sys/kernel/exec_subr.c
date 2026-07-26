@@ -598,4 +598,11 @@ void exec_clear(struct exec_params *epp)
     }
     while (u.u_lastfile >= 0 && u.u_ofile [u.u_lastfile] == NULL)
         u.u_lastfile--;
+
+    /*
+     * The machine-dependent frame now contains the new program's entry
+     * registers.  Do not let the syscall return path overwrite them with
+     * the old execve call's return values.
+     */
+    u.u_error = EJUSTRETURN;
 }

@@ -10,12 +10,12 @@ include $(TOPSRC)/target.mk
 
 CFLAGS          = -O ${DEFS}
 
-SRCS		= crt0.c
-OBJS		= crt0.o
+SRCS		= crt0.c ../startup/crt0.c
+OBJS		= crt0-entry.o crt0-common.o
 
 TAGSFILE	= tags
 
-all:		${OBJS}
+all:		crt0.o
 		cp crt0.o ../
 
 install:	${OBJS}
@@ -24,8 +24,14 @@ install:	${OBJS}
 #		$(INSTALL) mcrt0.o ${DESTDIR}/lib/mcrt0.o
 #		$(INSTALL) gcrt0.o ${DESTDIR}/usr/lib/gcrt0.o
 
-crt0.o:		crt0.c
+crt0-entry.o:	crt0.c
 		$(CC) ${DEFS} ${CFLAGS} -c $< -o $@
+
+crt0-common.o:	../startup/crt0.c
+		$(CC) ${DEFS} ${CFLAGS} -c $< -o $@
+
+crt0.o:		${OBJS}
+		$(LD) -r -z noexecstack -o $@ ${OBJS}
 
 tags:
 		cwd=`pwd`; \

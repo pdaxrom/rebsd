@@ -58,7 +58,7 @@ The i686 commits changed common kernel and MIPS sources as well as adding
 | Split user `copyinstr` from kernel `copykstr` and carry the namei source-space flag | Keep.  User pointers and kernel shebang/path strings now have explicit, different paths. |
 | Move `bioinit` ownership out of MIPS startup and into common buffer-cache initialization | Keep.  This is common subsystem initialization. |
 | Factor descriptor close/release helpers used by exit/fork tests | Keep.  The implementation stays in `kern_descrip.c`; i386 has no copy. |
-| Generalize VM/pmap comments and add explicit no-swap/single-thread bootstrap capabilities | Remove `VM_SINGLE_THREADED` and its common conditional branch: every kernel uses the same `tsleep`/`wakeup` busy-page contract.  `VM_PAGER_NO_SWAP` remains an incomplete normal-startup blocker until the existing configuration mechanism supplies a real swap device; it is not accepted as a final port policy. |
+| Generalize VM/pmap comments and no-swap/single-thread bootstrap | Remove `VM_SINGLE_THREADED` and the private no-swap build selection.  Every kernel uses the same `tsleep`/`wakeup` busy-page contract; `swap none` now generates `NODEV`, and common `init_main` simply skips swap initialization when configuration supplies no device. |
 | Add `kern_proc_lifecycle.c` and private i386 lifecycle helpers | Remove.  These duplicated existing exit/wait/resource code. |
 | Add private i386 libkern, sysent, and weak signal/scheduler implementations | Remove or replace with common objects, as listed above. |
 
@@ -91,7 +91,7 @@ provide:
   frame, exception-to-signal mapping, selectors/EFLAGS validation, and the
   return-to-CPL3 ABI.  Signal selection, delivery policy, priorities, and run
   queues come from the common kernel.
-- `pc/syscall.c` up to the MD dispatcher: the `int 0x80` register ABI and
+- `common/syscall.c`: the `int 0x80` register ABI and
   carry/errno/restart conversion.  Syscall numbering and handlers come from
   common `init_sysent.c`.
 - `pc/pci.c`, `pc/ide.c`, `pc/early_console.c`, and the MD portions of
@@ -126,25 +126,17 @@ is no i386 filesystem parser, partition policy, private file table, rootfs
 format, USB core, HID decoder, SCSI transport, mass-storage driver, or
 process-creation policy.
 
-### Bring-up tests, not production subsystems
+### Obsolete bring-up implementation removed
 
-The following files are in-kernel QEMU tests.  They do not justify a parallel
-kernel implementation and must eventually be excluded from the normal
-hardware image:
+The private process/VFS bootstrap, the old one-off `/sbin/init` ELF and
+rootfs manifest, and the DPL3 context/copy/signal/trap/u-area return test
+suite have been deleted rather than retained as an alternative kernel path.
+The production image therefore has no private proc1 constructor, private
+VFS mount path, diagnostic return vector, or marker-only init program.
 
-- `pc/context_selftest.c`
-- `pc/copyio_selftest.c`
-- `pc/signal_selftest.c`
-- `pc/trap_selftest.c`
-- `pc/uarea_selftest.c`
-- `pc/user_return_selftest.c`
-- the self-test portions of `common/pmap.c`, `pc/paging.c`,
-  `pc/privilege.c`, `pc/syscall.c`,
-  `pc/vmspace_bootstrap.c`, and `pc/process_bootstrap.c`
-
-Removal condition: introduce a QEMU diagnostic build option and make the
-default kernel use the normal common startup path without executing destructive
-bring-up probes.
+Backend validation that belongs to the implementation it tests remains with
+the corresponding pmap, paging, and vmspace code.  It does not replace
+common process, exec, VFS, filesystem, or userland owners.
 
 ## Common exec reuse completed
 
@@ -171,38 +163,35 @@ separate RX and RW segments and both GCC kernel-object builds pass.  I386
 enters `/sbin/init` through standard `icode` and the same production `execv`
 path.
 
-## Remaining cleanup boundary
+## Normal startup boundary
 
 The audited i386 path no longer allocates proc1, edits the PID hash, builds
 proc1 VM state, or invokes `execve` in machine-dependent C.  Common
 `newproc` creates proc1, `init_process` maps standard `icode`, and that user
 bootstrap invokes production syscall 11 for `/sbin/init`.
 
-The current image still runs destructive i386 bring-up probes before and
-after mounting root.  `pc/boot_main.c` therefore remains diagnostic
-orchestration instead of the final normal boot entry.  This is not an
-alternate process, filesystem, exec, or scheduler implementation.  Its
-removal condition remains the diagnostic-build split described above; that
-work must reuse the normal common startup sequence and must not add i386
-policy.
+`pc/boot_main.c` now saves the BIOS parameters, initializes only MD hardware,
+and calls common `sys/kernel/init_main.c::main`.  The obsolete private VFS
+and process bootstrap implementations and their diagnostic probes have been
+removed.  Common startup initializes tables, mounts the configured romdisk
+root, creates proc1 and enters `/sbin/init`.
 
-`pc/vfs_bootstrap.c` still sequences table initialization and the common
-`vfs_mountroot` call for that diagnostic image.  Root selection and fallback
-logic have been removed: it accepts only the already attached embedded UFS
-device.  The file remains an explicit cleanup item and must disappear when
-the normal image enters common `init_main`; it is not a second VFS owner.
+The production QEMU gate continues through getty and login into `/bin/sh`.
+This replaces the former marker-only `HALT` gate with observable userland
+execution.
 
 ## Validation gates
 
 Every cleanup commit must pass:
 
 - i686 GCC full rebuild;
-- QEMU Linux-protocol and BIOS boot;
+- QEMU Linux-protocol boot through login and shell;
 - embedded read-only UFS root with IDE present and absent, while IDE remains
   an additional read-only common block device;
-- divide, general-protection, and page-fault negative gates;
 - host disk and VM tests;
 - current `BOARD=ci20` and `BOARD=n64` GCC builds after common-kernel changes.
 
-Real IBM 6563-W4G testing is not required until these QEMU and cross-platform
-gates are green and the next hardware image is explicitly requested.
+The native BIOS floppy loader moves 64 KiB CHS-loaded chunks to high memory
+with BIOS `INT 15h/AH=87`; its deterministic image and full userland boot are
+part of the QEMU gate.  Real IBM 6563-W4G testing is not required until the
+next hardware image is explicitly requested.

@@ -13,8 +13,10 @@ service         usb
 service         umass
 service         uhub
 service         ukbd
+service         pc
 service         ehci
 service         ohci
 service         uhci
 
 config          unix    root on major 0 minor 0
+                        swap none

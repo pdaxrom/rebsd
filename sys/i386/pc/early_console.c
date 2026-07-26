@@ -1,4 +1,5 @@
 #include "boot.h"
+#include "interrupt.h"
 #include "io.h"
 
 #include <machine/console.h>
@@ -32,7 +33,7 @@ i386_serial_init(void)
     i386_outb(COM1_BASE + COM_DATA, 0x01);
     i386_outb(COM1_BASE + COM_IER, 0x00);
     i386_outb(COM1_BASE + COM_LINE_CTRL, 0x03);
-    i386_outb(COM1_BASE + COM_FIFO, 0xc7);
+    i386_outb(COM1_BASE + COM_FIFO, 0x07);
     i386_outb(COM1_BASE + COM_MODEM_CTRL, 0x0b);
 }
 
@@ -114,6 +115,26 @@ i386_early_console_init(void)
 {
     i386_serial_init();
     i386_vga_clear();
+}
+
+static int
+i386_console_intr(void *arg)
+{
+    extern void cnintr(void);
+
+    (void)arg;
+    cnintr();
+    return 1;
+}
+
+int
+i386_console_irq_enable(void)
+{
+    if (!i386_irq_establish(I386_IRQ_COM1, i386_console_intr, 0))
+        return 0;
+    i386_outb(COM1_BASE + COM_IER, 0x01);
+    i386_pic_unmask(I386_IRQ_COM1);
+    return 1;
 }
 
 int

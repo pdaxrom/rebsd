@@ -29,6 +29,13 @@ STDSRC		= abort.c abs.c alarm.c atof.c atoi.c atol.c calloc.c closedir.c crypt.c
 		  telldir.c time.c timezone.c ttyname.c ttyslot.c ualarm.c usleep.c \
 		  strdup.c uname.c wait.c wait3.c waitpid.c
 
+# Portable owners for the primitives which some machine directories replace
+# with optimized assembly.  During libc.a assembly, a machine object with the
+# same basename replaces this fallback without changing callers.
+STDSRC		+= bcmp-disabled.c bcopy-disabled.c bzero-disabled.c \
+		   ffs-disabled.c index-disabled.c rindex-disabled.c \
+		   strcmp-disabled.c strlen-disabled.c
+
 STDOBJ		= abort.o abs.o alarm.o atof.o atoi.o atol.o calloc.o closedir.o crypt.o \
 		  ctime.o ctime_r.o ctype_.o daemon.o devname.o ecvt.o err.o \
 		  execvp.o fakcu.o frexp.o fstab.o gcvt.o getenv.o getgrent.o \
@@ -47,7 +54,28 @@ STDOBJ		= abort.o abs.o alarm.o atof.o atoi.o atol.o calloc.o closedir.o crypt.o
 		  telldir.o time.o timezone.o ttyname.o ttyslot.o ualarm.o usleep.o \
 		  strdup.o uname.o wait.o wait3.o waitpid.o
 
-ifneq ($(filter $(TARGET_PLATFORM),n64 mips),)
+STDOBJ		+= bcmp.o bcopy.o bzero.o ffs.o index.o rindex.o strcmp.o strlen.o
+
+all:		gen.a
+
+bcmp.o:		bcmp-disabled.c
+		$(CC) $(CFLAGS) -c $< -o $@
+bcopy.o:	bcopy-disabled.c
+		$(CC) $(CFLAGS) -c $< -o $@
+bzero.o:	bzero-disabled.c
+		$(CC) $(CFLAGS) -c $< -o $@
+ffs.o:		ffs-disabled.c
+		$(CC) $(CFLAGS) -c $< -o $@
+index.o:	index-disabled.c
+		$(CC) $(CFLAGS) -c $< -o $@
+rindex.o:	rindex-disabled.c
+		$(CC) $(CFLAGS) -c $< -o $@
+strcmp.o:	strcmp-disabled.c
+		$(CC) $(CFLAGS) -c $< -o $@
+strlen.o:	strlen-disabled.c
+		$(CC) $(CFLAGS) -c $< -o $@
+
+ifneq ($(filter $(TARGET_PLATFORM),n64 mips i386),)
 STDSRC		+= isinf.c isnan.c modf.c
 STDOBJ		+= isinf.o isnan.o modf.o
 endif

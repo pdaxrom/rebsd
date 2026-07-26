@@ -22,6 +22,7 @@
  * this software.
  */
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include "bsdfs.h"
 
@@ -65,6 +66,7 @@ int fs_block_free (fs_t *fs, unsigned int bno)
     if (verbose > 1)
         printf ("free block %d, total %d\n", bno, fs->nfree);
     if (fs->nfree >= NICFREE) {
+        memset (buf, 0, sizeof (buf));
         fs_put32 (fs, &buf[0], fs->nfree);
         for (i=0; i<NICFREE; i++)
             fs_put32 (fs, &buf[(i + 1) * 4], fs->free[i]);

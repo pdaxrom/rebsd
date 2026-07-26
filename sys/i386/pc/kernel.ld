@@ -43,10 +43,11 @@ SECTIONS
     } :data
     __bss_end = ALIGN(16);
 
-    .bootstrap_stack __bss_end (NOLOAD) : {
+    __bootstrap_uarea_start = __bss_end;
+    .bootstrap_uarea __bootstrap_uarea_start (NOLOAD) : {
         . = . + 16384;
     } :data
-    __bootstrap_stack_top = .;
+    __bootstrap_uarea_end = .;
 
     __kernel_end = ALIGN(4096);
 

@@ -7,6 +7,7 @@ int i386_console_poll(void);
 int i386_console_getc(void);
 void i386_console_putc(int);
 void i386_console_tty_winsize(struct tty *);
+int i386_console_irq_enable(void);
 
 #define md_console_poll        i386_console_poll
 #define md_console_getc        i386_console_getc

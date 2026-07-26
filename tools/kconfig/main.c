@@ -67,12 +67,16 @@ config_open(const char *name)
 int main(int argc, char **argv)
 {
     int ch;
+    int interfaces_only = 0;
     char *slash;
 
-    while ((ch = getopt(argc, argv, "g")) != EOF)
+    while ((ch = getopt(argc, argv, "gi")) != EOF)
         switch (ch) {
         case 'g':
             debugging++;
+            break;
+        case 'i':
+            interfaces_only = 1;
             break;
         case '?':
         default:
@@ -83,7 +87,7 @@ int main(int argc, char **argv)
 
     if (argc != 1) {
     usage:
-        fputs("usage: kconfig [-gp] sysname\n", stderr);
+        fputs("usage: kconfig [-gi] sysname\n", stderr);
         exit(1);
     }
 
@@ -111,12 +115,13 @@ int main(int argc, char **argv)
     if (yyparse())
         exit(3);
 
-    if (arch != ARCH_MIPS) {
-        printf("Specify architecture, e.g. ``architecture mips''\n");
+    if (arch != ARCH_MIPS && arch != ARCH_I386) {
+        printf("Specify a supported architecture\n");
         exit(1);
     }
     ioconf();
-    makefile(); /* build Makefile */
+    if (!interfaces_only)
+        makefile(); /* build Makefile */
     swapconf(); /* swap config files */
     exit(0);
 }

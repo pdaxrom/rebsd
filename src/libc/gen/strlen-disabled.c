@@ -4,11 +4,10 @@
  */
 #include <string.h>
 
-int
-strlen(s)
-	register char *s;
+size_t
+strlen(const char *s)
 {
-	register n;
+	register size_t n;
 
 	n = 0;
 	while (*s++)

@@ -33,7 +33,7 @@
 %token  MAKEOPTIONS
 %token  PINS
 %token  PRIORITY
-%token  SERVICE
+%token  SERVICE NONE
 %token  SIGNAL
 %token  ROOT
 %token  SEMICOLON
@@ -168,6 +168,9 @@ Config_spec:
             if (strcmp($2, "mips") == 0) {
                 arch = ARCH_MIPS;
                 archname = "mips";
+            } else if (strcmp($2, "i386") == 0) {
+                arch = ARCH_I386;
+                archname = "i386";
             } else
                 yyerror("Unknown architecture");
         }
@@ -270,6 +273,14 @@ System_parameter:
 
 swap_spec:
     SWAP optional_on swap_device_list
+        |
+    SWAP optional_on NONE
+        = {
+            struct file_list *fl = newflist(SWAPSPEC);
+
+            fl->f_fn = strdup("none");
+            mkswap(*confp, fl, 0, 0);
+        }
     ;
 
 swap_device_list:
@@ -788,6 +799,7 @@ void check_nexus(struct device *dev, int num)
     switch (arch) {
 
     case ARCH_MIPS:
+    case ARCH_I386:
         break;
     }
 }
@@ -862,7 +874,7 @@ void checksystemspec(struct file_list *fl)
      * Default dump device and warn if place is not a
      * swap area.
      */
-    if (fl->f_dumpdev == NODEV)
+    if (fl->f_dumpdev == NODEV && swap->f_swapdev != NODEV)
         fl->f_dumpdev = swap->f_swapdev;
     if (fl->f_dumpdev != swap->f_swapdev) {
         struct file_list *p = swap->f_next;
@@ -883,6 +895,8 @@ dev_t *
 verifyswap(struct file_list *fl, dev_t checked[], dev_t *pchecked)
 {
     for (;fl && fl->f_type == SWAPSPEC; fl = fl->f_next) {
+        if (fl->f_swapdev == NODEV)
+            continue;
         if (eq(fl->f_fn, "generic"))
             continue;
         if (alreadychecked(fl->f_swapdev, checked, pchecked))
@@ -916,7 +930,8 @@ void verifysystemspecs()
 #define samedev(dev1, dev2) \
     ((minor(dev1) &~ 07) != (minor(dev2) &~ 07))
 
-        if (!alreadychecked(fl->f_dumpdev, checked, pchecked)) {
+        if (fl->f_dumpdev != NODEV &&
+            !alreadychecked(fl->f_dumpdev, checked, pchecked)) {
             if (!finddev(fl->f_dumpdev))
                 deverror(fl->f_needs, "dump");
             *pchecked++ = fl->f_dumpdev;

@@ -138,21 +138,30 @@ main()
     time.tv_sec = fs->fs_time;
     boottime = time;
 
-    /* Find a swap file. */
-    swapstart = 1;
-    (*bdevsw[major(swapdev)].d_open)(swapdev, FREAD|FWRITE, S_IFBLK);
-    nswap = (*bdevsw[major(swapdev)].d_psize)(swapdev);
-    if (nswap <= 0)
-        panic ("zero swap size");   /* don't want to panic, but what ? */
-    mfree (swapmap, nswap, swapstart);
-    error = vm_pager_swap_init();
-    if (error != 0)
-        panic("swap pager init");
+    /* Initialize swap when the system configuration supplies a device. */
+    if (swapdev != NODEV) {
+        swapstart = 1;
+        (*bdevsw[major(swapdev)].d_open)(swapdev,
+            FREAD|FWRITE, S_IFBLK);
+        nswap = (*bdevsw[major(swapdev)].d_psize)(swapdev);
+        if (nswap <= 0)
+            panic ("zero swap size"); /* don't want to panic, but what ? */
+        mfree (swapmap, nswap, swapstart);
+        error = vm_pager_swap_init();
+        if (error != 0)
+            panic("swap pager init");
+    } else {
+        swapstart = 0;
+        nswap = 0;
+    }
 
     printf ("phys mem  = %u kbytes\n", physmem / 1024);
     printf ("user mem  = %u kbytes\n", MAXMEM / 1024);
     printf ("root dev  = (%d,%d)\n", major(rootdev), minor(rootdev));
-    printf ("swap dev  = (%d,%d)\n", major(swapdev), minor(swapdev));
+    if (swapdev == NODEV)
+        printf ("swap dev  = none\n");
+    else
+        printf ("swap dev  = (%d,%d)\n", major(swapdev), minor(swapdev));
     printf ("root size = %u kbytes\n", fs->fs_fsize * DEV_BSIZE / 1024);
     printf ("swap size = %u kbytes\n", nswap * DEV_BSIZE / 1024);
 

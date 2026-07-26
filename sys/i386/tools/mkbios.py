@@ -15,7 +15,6 @@ BOOT_FLAG_OFFSET = 0x1FE
 SETUP_SECTS_OFFSET = 0x1F1
 SYSSIZE_OFFSET = 0x1F4
 HEADER_OFFSET = 0x202
-BIOS_KERNEL_MAX_PARAGRAPHS = 0x7000
 FLOPPY_SECTORS_PER_TRACK = 18
 
 
@@ -55,11 +54,8 @@ def main() -> None:
         raise SystemExit("mkbios: setup sectors extend beyond kernel image")
 
     syssize = struct.unpack_from("<I", image, SYSSIZE_OFFSET)[0]
-    if syssize == 0 or syssize > BIOS_KERNEL_MAX_PARAGRAPHS:
-        raise SystemExit(
-            f"mkbios: kernel syssize {syssize} paragraphs exceeds "
-            f"BIOS loader limit {BIOS_KERNEL_MAX_PARAGRAPHS}"
-        )
+    if syssize == 0:
+        raise SystemExit("mkbios: kernel syssize is zero")
     kernel_sectors = (syssize + 31) // 32
     if setup_bytes + kernel_sectors * SECTOR_BYTES > FLOPPY_BYTES:
         raise SystemExit("mkbios: setup and padded kernel exceed floppy image")

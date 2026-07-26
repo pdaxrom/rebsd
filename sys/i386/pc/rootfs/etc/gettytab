@@ -1,0 +1,5 @@
+default:\
+	:ap:im=\r\n\r\nReBSD/i686 %r (%t)\r\n\r\n:
+
+std.default|default-baud:\
+	:cb:ce:ck:

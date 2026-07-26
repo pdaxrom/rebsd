@@ -25,9 +25,11 @@
 #define KERNEL_LOAD_ADDRESS     0x00100000
 #define BIOS_SETUP_SEGMENT      0x9000
 #define BIOS_SETUP_ENTRY_SEGMENT 0x9020
-#define BIOS_KERNEL_SEGMENT     0x1000
-#define BIOS_KERNEL_MAX_PARAGRAPHS 0x7000
+#define BIOS_KERNEL_STAGING_SEGMENT 0x1000
+#define BIOS_KERNEL_CHUNK_SECTORS 128
+#define BIOS_FLOPPY_SECTORS     2880
 #define BIOS_KERNEL_START_LBA   (SETUP_SECTS + 1)
+#define BIOS_KERNEL_MAX_SECTORS (BIOS_FLOPPY_SECTORS - BIOS_KERNEL_START_LBA)
 
     .section .setup, "ax", @progbits
     .code16
@@ -156,18 +158,19 @@ setup_trampoline:
 
 /*
  * Read the protected-mode payload through legacy INT 13h, one sector at a
- * time, into 0x10000..0x7ffff.  This deliberately uses CHS so the first
- * hardware gate works with a plain 1.44 MB floppy and an old BIOS without
- * Enhanced Disk Drive extensions.
+ * time.  Each 64 KiB chunk is staged at 0x10000 and moved to its final
+ * high-memory address with the standard INT 15h/AH=87 service used by
+ * historical bzImage loaders.  Disk access remains CHS-only, so no Enhanced
+ * Disk Drive extension is required.
  */
 bios_load_kernel:
     movl    0x01f4, %eax                /* syssize in 16-byte paragraphs */
     testl   %eax, %eax
     jz      bios_load_failed
-    cmpl    $BIOS_KERNEL_MAX_PARAGRAPHS, %eax
-    ja      bios_load_failed
     addl    $31, %eax
     shrl    $5, %eax                    /* sectors = ceil(syssize / 32) */
+    cmpl    $BIOS_KERNEL_MAX_SECTORS, %eax
+    ja      bios_load_failed
     movw    %ax, bios_sector_count
 
     movw    $18, bios_sectors_per_track
@@ -193,11 +196,13 @@ bios_geometry_ready:
     jnz     bios_load_failed
     movw    %ax, bios_sectors_per_cylinder
     movw    $BIOS_KERNEL_START_LBA, bios_current_lba
-    movw    $BIOS_KERNEL_SEGMENT, bios_load_segment
+    movw    $BIOS_KERNEL_STAGING_SEGMENT, bios_load_segment
+    movw    $0, bios_chunk_sectors
+    movb    $0x10, bios_move_dst_base + 2
 
 bios_load_next:
     cmpw    $0, bios_sector_count
-    je      bios_load_done
+    je      bios_load_final_chunk
 
     movw    bios_current_lba, %ax
     xorw    %dx, %dx
@@ -240,8 +245,25 @@ bios_read_sector:
 bios_sector_loaded:
     incw    bios_current_lba
     addw    $0x20, bios_load_segment
+    incw    bios_chunk_sectors
     decw    bios_sector_count
+    cmpw    $BIOS_KERNEL_CHUNK_SECTORS, bios_chunk_sectors
+    jb      bios_load_next
+
+    movw    $0x8000, %cx                /* words in a full 64 KiB chunk */
+    call    bios_move_kernel_chunk
+    jc      bios_load_failed
+    movw    $0, bios_chunk_sectors
+    movw    $BIOS_KERNEL_STAGING_SEGMENT, bios_load_segment
     jmp     bios_load_next
+
+bios_load_final_chunk:
+    movw    bios_chunk_sectors, %cx
+    testw   %cx, %cx
+    jz      bios_load_done
+    shlw    $8, %cx                     /* 512-byte sectors to words */
+    call    bios_move_kernel_chunk
+    jc      bios_load_failed
 
 bios_load_done:
     clc
@@ -249,6 +271,52 @@ bios_load_done:
 bios_load_failed:
     stc
     ret
+
+bios_move_kernel_chunk:
+    pushw   %ax
+    pushw   %bx
+    pushw   %dx
+    pushw   %si
+    pushw   %di
+    pushw   %es
+    movw    %ds, %ax
+    movw    %ax, %es
+    movw    $bios_move_gdt, %si
+    movw    $0x8700, %ax
+    int     $0x15
+    jc      bios_move_kernel_failed
+    incb    bios_move_dst_base + 2      /* advance destination by 64 KiB */
+    clc
+    jmp     bios_move_kernel_return
+bios_move_kernel_failed:
+    stc
+bios_move_kernel_return:
+    popw    %es
+    popw    %di
+    popw    %si
+    popw    %dx
+    popw    %bx
+    popw    %ax
+    ret
+
+.align 8
+bios_move_gdt:
+    .word 0, 0, 0, 0
+    .word 0, 0, 0, 0
+bios_move_src:
+    .word 0xffff
+bios_move_src_base:
+    .byte 0x00, 0x00, 0x01             /* base 0x00010000 */
+    .byte 0x93
+    .word 0x0000
+bios_move_dst:
+    .word 0xffff
+bios_move_dst_base:
+    .byte 0x00, 0x00, 0x10             /* base 0x00100000 */
+    .byte 0x93
+    .word 0x0000
+    .word 0, 0, 0, 0                   /* BIOS code descriptor */
+    .word 0, 0, 0, 0                   /* BIOS data descriptor */
 
 bios_sectors_per_track:
     .word 0
@@ -261,6 +329,8 @@ bios_current_lba:
 bios_sector_count:
     .word 0
 bios_load_segment:
+    .word 0
+bios_chunk_sectors:
     .word 0
 bios_cylinder:
     .word 0
@@ -384,21 +454,6 @@ protected_entry:
     movw    %ax, %ss
     leal    0x8000(%esi), %esp
 
-    cmpb    $BIOS_LOADER_TYPE, BOOT_PARAMS_LOADER_TYPE(%esi)
-    jne     protected_kernel_ready
-    cmpb    $BIOS_LOADER_VERSION, BOOT_PARAMS_EXT_LOADER_VER(%esi)
-    jne     protected_kernel_ready
-    cmpb    $BIOS_LOADER_EXTENSION, BOOT_PARAMS_EXT_LOADER_TYPE(%esi)
-    jne     protected_kernel_ready
-    pushl   %esi
-    movl    0x01f4(%esi), %ecx
-    shll    $2, %ecx                    /* paragraphs to 32-bit words */
-    movl    $0x00010000, %esi
-    movl    $KERNEL_LOAD_ADDRESS, %edi
-    rep movsl
-    popl    %esi
-
-protected_kernel_ready:
     movl    $KERNEL_LOAD_ADDRESS, %eax
     jmp     *%eax
 

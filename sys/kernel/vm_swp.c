@@ -192,6 +192,7 @@ physio(void (*strat) (struct buf*), struct buf *bp, dev_t dev, int rw,
 int
 rawrw (dev_t dev, struct uio *uio, int flag)
 {
+    (void)flag;
     return (physio(cdevsw[major(dev)].d_strategy, (struct buf *)NULL, dev,
         uio->uio_rw == UIO_READ ? B_READ : B_WRITE, uio));
 }
@@ -200,6 +201,7 @@ rawrw (dev_t dev, struct uio *uio, int flag)
 int
 rawrw512 (dev_t dev, struct uio *uio, int flag)
 {
+    (void)flag;
     return (physio_shift(cdevsw[major(dev)].d_strategy,
         (struct buf *)NULL, dev,
         uio->uio_rw == UIO_READ ? B_READ : B_WRITE, uio, 9u));

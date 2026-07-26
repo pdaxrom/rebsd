@@ -9,6 +9,25 @@ FAT-root, IDE→memory fallback и регистрация romdisk в `sdN` от�
 i686 storage-план через существующие USB/`umass`/generic disk владельцы,
 2026-07-26.
 
+Текущая веха normal boot завершена:
+
+- `sys/i386/pc/boot_main.c` выполняет только MD hardware startup и передаёт
+  управление общему `sys/kernel/init_main.c::main`;
+- конфигурация `swap none` создаёт обычный `NODEV`; общий startup не
+  инициализирует swap, если устройство не задано, без i686 feature-флага;
+- встроенный read-only UFS содержит GCC userland: `init`, `getty`, `login`,
+  `sh`, `hostname` и `stty`;
+- QEMU без внешнего диска монтирует romdisk root, создаёт proc1 общим кодом,
+  запускает `/sbin/init`, принимает `root` через общий console/TTY и
+  выполняет команду в `/bin/sh`;
+- native BIOS loader загружает полный embedded image CHS-чтениями через
+  64-КиБ staging buffer и стандартный `INT 15h/AH=87` high-memory move;
+- normal kernel больше не линкует i386 diagnostic `*_selftest.o`, private
+  VFS bootstrap или process-bootstrap и не завершает штатную загрузку через
+  marker `HALT`;
+- следующий этап остаётся QEMU-only: расширение нужного userland,
+  external IDE/USB mount path и PS/2/RTC/VGA.
+
 ## Выполнено
 
 Первый QEMU bring-up инкремент завершён 2026-07-25:
@@ -109,8 +128,8 @@ i686 storage-план через существующие USB/`umass`/generic di
   units;
 - добавлены минимальные i386 `bzero`/`bcopy`, необходимые generic kernel
   коду до подключения общего libkern;
-- для раннего однопоточного режима явно заданы `VM_SINGLE_THREADED` и
-  `VM_PAGER_NO_SWAP`; anonymous pages и COW работают, swap не имитируется;
+- на раннем однопоточном диагностическом этапе swap ещё не
+  инициализировался; anonymous pages и COW работали без имитации swap;
 - MD activation регистрирует текущий vmspace, а i386 `#PF` сначала
   проверяет существующий pmap и затем вызывает `vmspace_fault_context`;
 - QEMU self-test проверяет anonymous fault, kernel read/write access,
@@ -993,9 +1012,9 @@ count через `fork`, закрывать унаследованные descrip
   disk/VM tests и GCC `kernel-objects` для Ci20/N64. PCC не запускался и не
   менялся.
 
-Следующий QEMU-only cleanup: заменить оставшийся ручной proc1/startup path
-в `sys/i386/pc/process_bootstrap.c` на владельца в common `init_main`, не
-добавляя i386 process policy. Реальное IBM-тестирование пока не требуется.
+Следующий QEMU-only cleanup на этом историческом этапе был заменой ручного
+proc1/startup path на владельца в common `init_main` без добавления i386
+process policy. Реальное IBM-тестирование для этого не требовалось.
 
 Пятидесятый cleanup-инкремент завершил замену ручного proc1 startup:
 
@@ -1074,9 +1093,9 @@ i386 boot policy не добавляется. Реальное IBM-тестир�
 - i686 уже линкует общий `kern_synch`, scheduler и clock, поэтому busy
   anonymous pages используют существующий `tsleep`/`wakeup` contract;
 - отдельного i386 locking path и замены ожидания на `EBUSY` больше нет;
-- `VM_PAGER_NO_SWAP` этим инкрементом не маскируется и не объявляется
-  политикой: normal common startup остаётся заблокирован до подключения
-  настоящего swap device через существующую конфигурацию.
+- специальный no-swap build path этим инкрементом не добавляется:
+  normal common startup должен получить состояние swap из существующей
+  конфигурации.
 - clean i686 suite прошёл для direct/BIOS boot, IDE/no-IDE, `#DE/#GP/#PF`
   и RAM 32/64/128/256/768/1024 МиБ; symbol audit подтверждает ссылки
   `vm_object.o` на общие `tsleep` и `wakeup`;
@@ -1109,10 +1128,10 @@ policy:
   включаемых `layout.h` и `vm_constants.h`, поэтому Ci20/Malta/N64 scripts
   корректно пересоздаются при изменении общих констант.
 
-Оставшийся `pc/vfs_bootstrap.c` только обслуживает diagnostic image и не
-содержит выбора root. Он должен быть удалён при подключении normal image к
-common `init_main`; swap policy этим инкрементом не определяется и
-`VM_PAGER_NO_SWAP` остаётся явным blocker, а не принятой политикой.
+Исторический `pc/vfs_bootstrap.c` обслуживал только diagnostic image и не
+содержал выбора root; он удалён вместе с private process bootstrap и старым
+тестовым init. Normal image входит в common `init_main`; `swap none`
+проходит через общий config как `NODEV`.
 
 ## Обязательный i686 USB Mass Storage этап
 

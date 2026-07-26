@@ -32,21 +32,19 @@ make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 all
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
-    boot-smoke bios-image-smoke bios-boot-smoke \
-    ide-absent-smoke bios-ide-absent-smoke \
-    usb-mass-storage-smoke bios-usb-mass-storage-smoke \
+    rootfs-smoke boot-smoke bios-image-smoke bios-boot-smoke \
+    ide-smoke ide-absent-smoke bios-ide-absent-smoke \
+    usb-mass-storage-smoke \
     usb-mass-storage-ide-absent-smoke \
-    bios-usb-mass-storage-ide-absent-smoke \
-    ohci-keyboard-smoke bios-ohci-keyboard-smoke \
-    uhci-keyboard-smoke bios-uhci-keyboard-smoke \
-    uhci-mass-storage-smoke bios-uhci-mass-storage-smoke \
+    ohci-keyboard-smoke uhci-keyboard-smoke \
+    uhci-mass-storage-smoke \
     uhci-mass-storage-ide-absent-smoke \
-    bios-uhci-mass-storage-ide-absent-smoke \
-    usb-combined-smoke bios-usb-combined-smoke
-make -C sys/i386 BOARD=pc \
-    O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
-    QEMU_MACHINE=pc-i440fx-5.1 bios-boot-smoke
+    usb-combined-smoke
 ```
+
+The native floppy gate loads the same full embedded UFS payload in QEMU
+through CHS and `INT 15h/AH=87`.  The floppy-less IBM continues to use the
+Linux/x86-protocol `rebsd-i686.bzimg` through GRUB Legacy.
 
 GRUB-compatible artifact:
 

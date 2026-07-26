@@ -3,9 +3,6 @@
  * All rights reserved.  The Berkeley software License Agreement
  * specifies the terms and conditions for redistribution.
  */
-#include <stdlib.h>
-#include <unistd.h>
-
 /*
  * C runtime startoff.  When an a.out is loaded by the kernel, the kernel
  * sets up the stack as follows:
@@ -52,29 +49,13 @@
  * Crt0 simply moves the env to environ variable, calculates
  * the __progname and then calls main.
  */
-extern int main (int, char **, char **);
-extern void __do_global_ctors (void);
-
-char **environ;
-char *__progname = "";
-
 void _start (int, char **, char **);
+void __rebsd_start(int, char **, char **);
 
 /* The entry function. */
 void
 _start (int argc, char **argv, char **env)
 {
         asm volatile ("la $gp, _gp");
-
-	environ = env;
-	if (argc > 0 && argv[0] != 0) {
-		char *s;
-
-		__progname = argv[0];
-		for (s = __progname; *s != '\0'; s++)
-			if (*s == '/')
-				__progname = s + 1;
-	}
-	__do_global_ctors ();
-	exit (main (argc, argv, env));
+	__rebsd_start(argc, argv, env);
 }

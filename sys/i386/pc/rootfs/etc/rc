@@ -1,0 +1,8 @@
+#!/bin/sh
+HOME=/; export HOME
+PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
+PAGER=/bin/cat; export PAGER
+
+/bin/hostname rebsd-i686
+
+exit 0

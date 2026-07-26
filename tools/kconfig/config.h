@@ -128,6 +128,7 @@ struct config {
 extern int arch;
 extern char *archname;
 #define ARCH_MIPS 1
+#define ARCH_I386 2
 
 /*
  * For each architecture, a set of CPU's may be specified as supported.

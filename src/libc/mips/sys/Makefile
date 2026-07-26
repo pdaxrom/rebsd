@@ -9,8 +9,6 @@ CFLAGS          += -Os
 # rest of the system calls are generated with printf(1) and do not have
 # source files associated with them.
 
-COBJS		= sbrk.o execl.o execle.o execlp.o execv.o mmap.o off64.o
-
 ASMOBJS		= _exit.o _brk.o getpgrp.o pipe.o ptrace.o sigaction.o
 
 SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
@@ -41,7 +39,7 @@ SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
 WIDEOBJS	= stat.o lstat.o fstat.o mmapraw.o lseek64w.o trunc64w.o \
 		  ftrunc64w.o preadw.o pwritew.o
 
-OBJS		= ${COBJS} ${ASMOBJS} ${SYSOBJS} ${WIDEOBJS}
+OBJS		= ${ASMOBJS} ${SYSOBJS} ${WIDEOBJS}
 
 TAGSFILE	= tags
 

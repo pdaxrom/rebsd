@@ -278,27 +278,21 @@ prefix или режима совместимости нет. Номер 20 вы
 обязательный marker `syscall-production: ok`. Pathname/exec call sites
 используют явное адресное пространство без pointer-range эвристики.
 
-После разрушаемых self-tests общий `newproc` создаёт постоянный process 1 в
-generic process table. Общие fork/process owners назначают ему PID 1,
-parent proc0, guarded u-area, отдельный vmspace, `SRUN|SLOAD` без `SSYS`,
-`cmask`, groups и rlimits. Scheduler запускает `i386_init_trampoline` на
-новом kernel stack; тот передаёт управление общему `init_process`.
-`process-bootstrap: ok` и `process-table: ok` проверяют связи
-`proc`/`user`/`vmspace`, очереди, PID hash, guard, CR3 и TSS stack.
+Общий `newproc` создаёт постоянный process 1 в generic process table. Общие
+fork/process owners назначают ему PID 1, parent proc0, guarded u-area,
+отдельный vmspace, `SRUN|SLOAD` без `SSYS`, `cmask`, groups и rlimits.
+Scheduler запускает тонкий i386 trampoline на новом kernel stack; тот
+передаёт управление общему `init_process`. Стандартный `icode` выполняет
+production syscall 11 для `/sbin/init`.
 
-Первый user probe использует этот process 1. В его vmspace остаются RX text
-mapping от `0x00400000` и RW/NX stack page у верхней границы user address
-space. NX здесь означает generic VM policy: целевой non-PAE Pentium III не
-имеет аппаратного NX. Код из CPL3 выполняет production syscall 20; generic
-`getpid` возвращает PID 1, Carry очищен, а privilege transition использует
-process 1 `TSS.esp0`. Тестовый vector `0x30` пока нужен только для
-контролируемого возврата в продолжающийся ранний boot. Marker
-`process-user: ok` подтверждает frame, syscall result, protections и
-повторную проверку всех proc/u-area/vmspace invariants.
+Старые private process/VFS bootstrap, DPL3 probe/return vector и
+marker-only init удалены. I386 содержит только необходимый MD contract:
+syscall/trap frame ABI, переключение контекста, TSS/CR3 и подготовку
+регистров для входа в user mode.
 
-Сырой byte stream заменён настоящим `bootstrap-user.elf`, отдельно
-собранным тем же `i686-elf` GCC/binutils и установленным как
-`/sbin/init` в UFS. Общий inode-backed loader принимает только little-endian
+Настоящий `/sbin/init` и последующая цепочка `getty` → `login` → `/bin/sh`
+собираются GCC как ELF32/i386 и устанавливаются в UFS. Общий inode-backed
+loader принимает только little-endian
 `ET_EXEC`/`EM_386`, проверяет границы header/program-header tables,
 alignment, user address range, неперекрытие page-rounded segments и entry
 в file-backed executable segment. Dynamic/interpreter и W+X segments
@@ -306,20 +300,12 @@ alignment, user address range, неперекрытие page-rounded segments и
 читаются напрямую из inode через generic vmspace, BSS явно обнуляется, и
 mappings получают финальные permissions из `PF_R/PF_W/PF_X`.
 
-Тестовый ELF имеет RX text и RW data+BSS. Его CPL3 entry проверяет
-инициализированное слово, нулевой BSS и запись в него перед production
-syscall 20, поэтому `elf32-user: ok` покрывает не только parser, но и
-фактические mappings, загрузку данных, zero-fill, entry point и исполнение.
-
 Production `exec_setupstack` создаёт четыре reserved argument slots,
 8-byte aligned ESP, NULL-terminated `argv[]`/`envp[]`, packed strings и
 верхнее слово с указателем `argv` для `/bin/ps`. Стандартный общий `icode`
-передаёт `argv = {"init", "-", NULL}` и `envp = NULL`; bootstrap ELF
-проверяет эти значения, alignment, reserved slot и top-of-stack `argv`
-word. `md_user_frame_exec` задаёт i386 register contract EBX=`argc`,
-ECX=`argv`, EDX=`envp`. `user-stack: ok` также означает, что
-`p_saddr/p_ssize` и u-area `u_ssize` соответствуют постоянному stack
-mapping.
+передаёт `argv = {"init", "-", NULL}` и `envp = NULL`.
+`md_user_frame_exec` задаёт i386 register contract EBX=`argc`, ECX=`argv`,
+EDX=`envp`; всё остальное построение стека остаётся общим.
 
 Статический ELF больше не передаётся loader напрямую как отдельный binary
 symbol. Существующий `tools/fsutil` создаёт детерминированный little-endian

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Boot the early i686 image under QEMU and require serial markers."""
+"""Boot the normal i686 system and require a working login shell."""
 
 from __future__ import annotations
 
@@ -11,137 +11,40 @@ import subprocess
 import time
 
 
-BOOT_MARKERS = (
+CORE_MARKERS = (
     "REBSD_I686_BOOT",
     "cpu: i686",
     "boot: linux-x86-2.02",
-    "boot-loader: linux-protocol",
     "memory-map: ok",
-    "gdt: ok",
-    "tss: ok",
-    "console: com1,vga",
-    "idt: ok",
-    "exception-int3: ok",
+    "interrupts: idt,pic ready",
     "memory-normalized: ok",
-    "physical-allocator: ok",
     "paging: on",
-    "cr0.wp: on",
-    "kernel-text-ro: ok",
-    "pmap-primitives: ok",
-    "tlb-invlpg: ok",
-    "vm-bootstrap-reserved: ok",
-    "vm-page-selftest: ok",
-    "pmap-public: ok",
-    "vmspace-selftest: ok",
-    "vmspace-page-fault: ok",
-    "copyio-selftest: ok",
-    "uarea-selftest: ok",
-    "context-switch: ok",
-    "fork-frame: ok",
-    "ring3: ok",
-    "syscall-int80: ok",
     "syscall-production: ok",
-    "signal-frame: ok",
-    "user-return: ok",
-    "user-trap: ok",
-    "process-bootstrap: ok",
-    "process-table: ok",
-    "process-image: vfs",
-    "syscall-open: ok",
-    "syscall-read: ok",
-    "syscall-lseek: ok",
-    "syscall-close: ok",
-    "fd-vfs: ok",
-    "fd-fork-shared-offset: ok",
-    "fd-exit-close: ok",
-    "process-user: ok",
-    "process-fork: ok",
-    "syscall-fork: ok",
-    "syscall-exit: ok",
-    "syscall-wait4: ok",
-    "wait4-nohang: ok",
-    "wait4-zombie: ok",
-    "wait4-efault: ok",
-    "process-reap: ok",
-    "proc0-context: ok",
-    "scheduler-switch: ok",
-    "rootfs: ok",
-    "elf32-user: ok",
-    "user-stack: ok",
+    "ReBSD 0.1-Resurgence (I686_PC)",
+    "vm page: self-test ok",
+    "pmap: self-test ok",
+    "disk: block layer ready",
+    "usb0: core ready",
     "pci: mechanism=1",
-    "pci-host: 0x80861237",
-    "pci-isa: 0x80867000",
-    "pci-ide: 0x80867010",
-    "pci-platform: intel",
-    "ide-primary-master: ata",
-    "ide-sectors: 0x00000100",
-    "ide-lba28: ok",
-    "ide-backend-read: ok",
-    "ide-lba0: ok",
-    "ide-bounds: ok",
-    "disk-attach: read-only",
-    "disk-write-open: erofs",
-    "disk-device: whole",
-    "disk-strategy-read: ok",
-    "disk-strategy-eof: ok",
-    "disk-strategy-write: erofs",
-    "vfs-root: ufs,romdisk,read-only",
-    "vfs-exec-init: ok",
-    "disk-close: ok",
-    "pic: ok",
-    "pit: hz=100",
-    "timer-ticks: ok",
-    "hardclock-ticks: ok",
-    "hardware-summary: pci",
-    "hardware-pci-host: 0x80861237",
-    "hardware-pci-isa: 0x80867000",
-    "hardware-pci-ide: 0x80867010",
-    "hardware-pci-vga: 0x12341111",
-    "hardware-pci-platform: intel",
-    "HALT",
-)
-
-BIOS_BOOT_MARKERS = tuple(
-    "boot-loader: bios-int13"
-    if marker == "boot-loader: linux-protocol"
-    else marker
-    for marker in BOOT_MARKERS
+    "root dev  = (0,0)",
+    "swap dev  = none",
+    "root size = 1024 kbytes",
+    "ReBSD/i686 0.1-Resurgence (console)",
+    "login:",
+    "REBSD_I686_SHELL_OK",
 )
 
 IDE_DISK_MARKERS = (
     "ide-primary-master: ata",
-    "ide-sectors: 0x00000100",
     "ide-lba28: ok",
     "ide-backend-read: ok",
     "ide-lba0: ok",
     "ide-bounds: ok",
-    "disk-attach: read-only",
-    "disk-write-open: erofs",
-    "disk-device: whole",
-    "disk-strategy-read: ok",
-    "disk-strategy-eof: ok",
-    "disk-strategy-write: erofs",
-    "disk-close: ok",
-)
-
-NO_DISK_BOOT_MARKERS = tuple(
-    marker for marker in BOOT_MARKERS if marker not in IDE_DISK_MARKERS
-) + ("ide-primary-master: none",)
-
-BIOS_NO_DISK_BOOT_MARKERS = tuple(
-    "boot-loader: bios-int13"
-    if marker == "boot-loader: linux-protocol"
-    else marker
-    for marker in NO_DISK_BOOT_MARKERS
+    "sd0: 2048 512-byte sectors (1024 KB), read-only",
 )
 
 USB_MASS_STORAGE_MARKERS = (
     "ehci0: pci-id=0x808624cd",
-    "dma: i686 coherent pool",
-    "usb0: initializing core",
-    "usb0: core ready",
-    "umass0: SCSI/Bulk-Only driver ready",
-    "uhub0: external hub driver ready",
     "ehci0: EHCI version=100",
     "umass0: QEMU QEMU HARDDISK",
     "ehci0: port1 device attached speed=high",
@@ -150,7 +53,6 @@ USB_MASS_STORAGE_MARKERS = (
 
 OHCI_KEYBOARD_MARKERS = (
     "ohci0: pci-id=0x106b003f",
-    "ukbd0: HID boot-keyboard driver ready",
     "ohci0: OHCI revision=10",
     "ukbd0: boot keyboard, interrupt in 0x81, 8 bytes",
     "ohci0: port1 device attached speed=full",
@@ -164,107 +66,15 @@ UHCI_MARKERS = (
 )
 
 UHCI_KEYBOARD_MARKERS = UHCI_MARKERS + (
-    "ukbd0: HID boot-keyboard driver ready",
     "ukbd0: boot keyboard, interrupt in 0x81, 8 bytes",
     "uhci0: port1 device attached speed=full",
 )
 
 UHCI_MASS_STORAGE_MARKERS = UHCI_MARKERS + (
-    "umass0: SCSI/Bulk-Only driver ready",
     "umass0: QEMU QEMU HARDDISK",
     "uhci0: port1 device attached speed=full",
 )
 
-EXCEPTION_MARKERS = {
-    "divide": (
-        "REBSD_I686_BOOT",
-        "boot-loader: linux-protocol",
-        "idt: ok",
-        "exception-int3: ok",
-        "exception: vector=0x00000000 error=0x00000000",
-        "PANIC: cpu exception",
-    ),
-    "gp": (
-        "REBSD_I686_BOOT",
-        "boot-loader: linux-protocol",
-        "idt: ok",
-        "exception-int3: ok",
-        "exception: vector=0x0000000d error=",
-        "PANIC: cpu exception",
-    ),
-    "page": (
-        "REBSD_I686_BOOT",
-        "boot-loader: linux-protocol",
-        "memory-normalized: ok",
-        "paging: on",
-        "cr0.wp: on",
-        "kernel-text-ro: ok",
-        "pmap-primitives: ok",
-        "tlb-invlpg: ok",
-        "vm-bootstrap-reserved: ok",
-        "vm-page-selftest: ok",
-        "pmap-public: ok",
-        "vmspace-selftest: ok",
-        "vmspace-page-fault: ok",
-        "copyio-selftest: ok",
-        "uarea-selftest: ok",
-        "context-switch: ok",
-        "fork-frame: ok",
-        "ring3: ok",
-        "syscall-int80: ok",
-        "syscall-production: ok",
-        "signal-frame: ok",
-        "user-return: ok",
-        "user-trap: ok",
-        "process-bootstrap: ok",
-        "process-table: ok",
-        "process-image: vfs",
-        "syscall-open: ok",
-        "syscall-read: ok",
-        "syscall-lseek: ok",
-        "syscall-close: ok",
-        "fd-vfs: ok",
-        "fd-fork-shared-offset: ok",
-        "fd-exit-close: ok",
-        "process-user: ok",
-        "process-fork: ok",
-        "syscall-fork: ok",
-        "syscall-exit: ok",
-        "syscall-wait4: ok",
-        "wait4-nohang: ok",
-        "wait4-zombie: ok",
-        "wait4-efault: ok",
-        "process-reap: ok",
-        "proc0-context: ok",
-        "scheduler-switch: ok",
-        "rootfs: ok",
-        "elf32-user: ok",
-        "user-stack: ok",
-        "pci: mechanism=1",
-        "pci-host: 0x80861237",
-        "pci-isa: 0x80867000",
-        "pci-ide: 0x80867010",
-        "pci-platform: intel",
-        "ide-primary-master: ata",
-        "ide-sectors: 0x00000100",
-        "ide-lba28: ok",
-        "ide-backend-read: ok",
-        "ide-lba0: ok",
-        "ide-bounds: ok",
-        "disk-attach: read-only",
-        "disk-write-open: erofs",
-        "disk-device: whole",
-        "disk-strategy-read: ok",
-        "disk-strategy-eof: ok",
-        "disk-strategy-write: erofs",
-        "vfs-root: ufs,romdisk,read-only",
-        "vfs-exec-init: ok",
-        "disk-close: ok",
-        "exception: vector=0x0000000e error=0x00000003",
-        " cr2=",
-        "PANIC: cpu exception",
-    ),
-}
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -280,29 +90,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ohci-keyboard", action="store_true")
     parser.add_argument("--uhci-keyboard", action="store_true")
     parser.add_argument("--uhci-disk", type=pathlib.Path)
-    parser.add_argument("--timeout", type=float, default=8.0)
-    parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
     parser.add_argument("--expect-no-disk", action="store_true")
+    parser.add_argument("--timeout", type=float, default=15.0)
     args = parser.parse_args()
-    if args.expect_no_disk:
-        if args.disk is not None or args.expect_exception is not None:
-            parser.error("--expect-no-disk cannot be combined with disk/trap")
-    elif args.disk is None:
-        parser.error("--disk is required unless --expect-no-disk is used")
-    if args.bios_image is not None and args.expect_exception is not None:
-        parser.error("--bios-image cannot be combined with --expect-exception")
-    if args.usb_disk is not None and args.expect_exception is not None:
-        parser.error("--usb-disk cannot be combined with --expect-exception")
-    if args.ohci_keyboard and args.expect_exception is not None:
-        parser.error(
-            "--ohci-keyboard cannot be combined with --expect-exception"
-        )
-    if args.uhci_keyboard and args.expect_exception is not None:
-        parser.error(
-            "--uhci-keyboard cannot be combined with --expect-exception"
-        )
-    if args.uhci_disk is not None and args.expect_exception is not None:
-        parser.error("--uhci-disk cannot be combined with --expect-exception")
+
+    if args.expect_no_disk and args.disk is not None:
+        parser.error("--expect-no-disk cannot be combined with --disk")
     if args.uhci_keyboard and args.uhci_disk is not None:
         parser.error("--uhci-keyboard and --uhci-disk use the same UHCI port")
     if args.usb_disk is not None and args.uhci_disk is not None:
@@ -310,8 +103,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def main() -> None:
-    args = parse_args()
+def qemu_command(args: argparse.Namespace) -> list[str]:
     command = [
         args.qemu,
         "-machine",
@@ -381,9 +173,7 @@ def main() -> None:
     if args.uhci_keyboard or args.uhci_disk is not None:
         command.extend(["-device", "piix3-usb-uhci,id=uhci"])
     if args.uhci_keyboard:
-        command.extend(
-            ["-device", "usb-kbd,bus=uhci.0,port=1"]
-        )
+        command.extend(["-device", "usb-kbd,bus=uhci.0,port=1"])
     if args.uhci_disk is not None:
         command.extend(
             [
@@ -396,27 +186,27 @@ def main() -> None:
                 "usb-storage,bus=uhci.0,port=1,drive=uhcimass",
             ]
         )
-    if args.expect_exception:
-        command.extend(["-append", f"rebsd.trap={args.expect_exception}"])
+    return command
 
-    if args.expect_exception:
-        markers = EXCEPTION_MARKERS[args.expect_exception]
-    elif args.expect_no_disk:
-        markers = (
-            BIOS_NO_DISK_BOOT_MARKERS
-            if args.bios_image is not None
-            else NO_DISK_BOOT_MARKERS
-        )
-    elif args.bios_image is not None:
-        markers = BIOS_BOOT_MARKERS
+
+def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
+    markers = CORE_MARKERS + (
+        "boot-loader: bios-int13"
+        if args.bios_image is not None
+        else "boot-loader: linux-protocol",
+    )
+    if args.disk is None:
+        markers += ("ide-primary-master: none",)
     else:
-        markers = BOOT_MARKERS
+        markers += IDE_DISK_MARKERS
     if args.usb_disk is not None:
         markers += USB_MASS_STORAGE_MARKERS
         markers += (
-            "sd1: 256 512-byte sectors (128 KB), removable"
-            if args.disk is not None
-            else "sd0: 256 512-byte sectors (128 KB), removable",
+            (
+                "sd1: 2048 512-byte sectors (1024 KB), removable"
+                if args.disk is not None
+                else "sd0: 2048 512-byte sectors (1024 KB), removable"
+            ),
         )
     if args.ohci_keyboard:
         markers += OHCI_KEYBOARD_MARKERS
@@ -425,24 +215,29 @@ def main() -> None:
     if args.uhci_disk is not None:
         markers += UHCI_MASS_STORAGE_MARKERS
         markers += (
-            "sd1: 256 512-byte sectors (128 KB), removable"
-            if args.disk is not None
-            else "sd0: 256 512-byte sectors (128 KB), removable",
+            (
+                "sd1: 2048 512-byte sectors (1024 KB), removable"
+                if args.disk is not None
+                else "sd0: 2048 512-byte sectors (1024 KB), removable"
+            ),
         )
-    stop_marker = (
-        b"PANIC: cpu exception\r\n"
-        if args.expect_exception
-        else b"HALT\r\n"
-    )
+    return markers
+
+
+def main() -> None:
+    args = parse_args()
     process = subprocess.Popen(
-        command,
+        qemu_command(args),
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-    if process.stdout is None:
-        raise SystemExit("qemu-boot-smoke: failed to capture QEMU output")
+    if process.stdin is None or process.stdout is None:
+        raise SystemExit("qemu-boot-smoke: failed to open QEMU pipes")
 
     output_bytes = bytearray()
+    login_sent = False
+    shell_command_sent = False
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
         ready, _, _ = select.select([process.stdout], [], [], 0.1)
@@ -450,8 +245,20 @@ def main() -> None:
             chunk = os.read(process.stdout.fileno(), 4096)
             if chunk:
                 output_bytes.extend(chunk)
-                if stop_marker in output_bytes:
-                    break
+        if not login_sent and b"login: " in output_bytes:
+            process.stdin.write(b"root\n")
+            process.stdin.flush()
+            login_sent = True
+        if (
+            login_sent
+            and not shell_command_sent
+            and b"\r\n# " in output_bytes
+        ):
+            process.stdin.write(b"echo REBSD_I686_SHELL_OK\n")
+            process.stdin.flush()
+            shell_command_sent = True
+        if shell_command_sent and b"\r\nREBSD_I686_SHELL_OK\r\n" in output_bytes:
+            break
         if process.poll() is not None:
             break
 
@@ -468,7 +275,9 @@ def main() -> None:
 
     output = output_bytes.decode("utf-8", errors="replace")
     print(output, end="")
-    missing = [marker for marker in markers if marker not in output]
+    missing = [
+        marker for marker in expected_markers(args) if marker not in output
+    ]
     if missing:
         raise SystemExit(
             "qemu-boot-smoke: missing serial markers: " + ", ".join(missing)

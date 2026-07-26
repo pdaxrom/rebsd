@@ -7,13 +7,13 @@
 /*
  * bzero -- vax movc5 instruction
  */
-bzero(b, length)
-	register char *b;
-	register unsigned int length;
+void
+bzero(void *vb, unsigned int length)
 {
+	register char *b = vb;
+
 	if (length)
 		do
 			*b++ = '\0';
 		while (--length);
-	return(length);
 }

@@ -1,1 +1,2 @@
-# Device declarations are added with the IDT/PIC/PIT integration phase.
+romdisk 0
+disk    2

@@ -15,6 +15,4 @@ struct i386_sigframe {
     struct sigcontext sf_sc;
 };
 
-int i386_signal_selftest(void);
-
 #endif

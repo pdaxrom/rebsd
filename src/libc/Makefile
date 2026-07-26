@@ -27,7 +27,8 @@ TOPSRC		= $(shell cd ../..; pwd)
 include $(TOPSRC)/target.mk
 
 DEFS		= -Wall -Werror
-ALL		= gen stdio stdlib string inet net compat runtime ${MACHINE}
+LIBC_ALL	= gen stdio stdlib string inet net compat runtime sys ${MACHINE}
+ALL		= $(if $(LIBC_ONLY),$(filter $(LIBC_ONLY),$(LIBC_ALL)),$(LIBC_ALL))
 
 all:            ../libc.a
 

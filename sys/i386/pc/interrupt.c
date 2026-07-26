@@ -1,9 +1,7 @@
 #include "boot.h"
 #include "interrupt.h"
-#include "process.h"
 #include "syscall.h"
 #include "trap.h"
-#include "user_return.h"
 #include "vmspace_bootstrap.h"
 
 #include <machine/machparam.h>
@@ -37,8 +35,6 @@ extern void i386_vector_128(void);
 
 static struct i386_idt_gate i386_idt[I386_IDT_ENTRIES]
     __attribute__((aligned(16)));
-static volatile i386_u32 i386_breakpoints;
-
 struct i386_irq_registration {
     i386_irq_handler_t ir_handler;
     void *ir_arg;
@@ -98,9 +94,6 @@ i386_idt_init(void)
     i386_idt_set_gate(I386_EXCEPTION_BREAKPOINT,
         i386_vector_table[I386_EXCEPTION_BREAKPOINT],
         I386_IDT_USER_TRAP_GATE);
-    i386_idt_set_gate(I386_USER_RETURN_VECTOR,
-        i386_vector_table[I386_USER_RETURN_VECTOR],
-        I386_IDT_USER_TRAP_GATE);
     i386_idt_set_gate(I386_SYSCALL_VECTOR, i386_vector_128,
         I386_IDT_USER_INTERRUPT_GATE);
 
@@ -143,21 +136,7 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
     unsigned slot;
 
     if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
-        ++i386_breakpoints;
-        (void)i386_user_trap(frame, frame->tf_eip);
-        return;
-    }
-
-    if (frame->tf_vector == I386_USER_RETURN_VECTOR) {
-        if (i386_privilege_handle_return(frame))
-            return;
-        if (i386_syscall_handle_return(frame))
-            return;
-        if (i386_user_return_handle_test(frame))
-            return;
-        if (i386_trap_handle_test(frame))
-            return;
-        if (i386_process_handle_return(frame))
+        if (i386_user_trap(frame, frame->tf_eip))
             return;
         i386_exception_halt(frame);
     }
@@ -209,16 +188,4 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
                 i386_irq_handlers[irq][slot].ir_arg);
 
     i386_pic_eoi(irq);
-}
-
-void
-i386_breakpoint_selftest(void)
-{
-    __asm__ volatile ("int3");
-}
-
-i386_u32
-i386_breakpoint_count(void)
-{
-    return i386_breakpoints;
 }

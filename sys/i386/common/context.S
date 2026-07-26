@@ -77,55 +77,6 @@ i386_context_enter:
     .size i386_context_enter, . - i386_context_enter
 
     /*
-     * Exercise the public save/restore entry points without relying on C
-     * compiler allocation of callee-saved registers.
-     */
-    .globl i386_context_register_selftest
-    .type i386_context_register_selftest, @function
-i386_context_register_selftest:
-    pushl   %ebp
-    movl    %esp, %ebp
-    pushl   %ebx
-    pushl   %esi
-    pushl   %edi
-
-    movl    $0x13579bdf, %ebx
-    movl    $0x2468ace0, %esi
-    movl    $0x55aa33cc, %edi
-    pushl   8(%ebp)
-    call    setjmp
-    addl    $4, %esp
-    testl   %eax, %eax
-    jnz     1f
-
-    movl    $0xdeadbeef, %ebx
-    movl    $0xc001d00d, %esi
-    movl    $0x0badf00d, %edi
-    pushl   8(%ebp)
-    pushl   12(%ebp)
-    call    longjmp
-    ud2
-
-1:
-    cmpl    $0x13579bdf, %ebx
-    jne     2f
-    cmpl    $0x2468ace0, %esi
-    jne     2f
-    cmpl    $0x55aa33cc, %edi
-    jne     2f
-    xorl    %eax, %eax
-    jmp     3f
-2:
-    movl    $1, %eax
-3:
-    popl    %edi
-    popl    %esi
-    popl    %ebx
-    leave
-    ret
-    .size i386_context_register_selftest, . - i386_context_register_selftest
-
-    /*
      * Initial user code copied to process 1 by the common init_process().
      */
     .section .text.icode, "ax", @progbits

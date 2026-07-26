@@ -8,9 +8,7 @@
  * bcmp -- vax cmpc3 instruction
  */
 int
-bcmp(v1, v2, length)
-	const void *v1, *v2;
-	unsigned long length;
+bcmp(const void *v1, const void *v2, unsigned long length)
 {
         register const char *b1 = v1;
         register const char *b2 = v2;

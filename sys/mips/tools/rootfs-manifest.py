@@ -30,6 +30,11 @@ def relative(stage, path):
     return "/" + path.relative_to(stage).as_posix()
 
 
+def is_excluded(rel, prefixes):
+    return any(rel == prefix or rel.startswith(prefix + "/")
+               for prefix in prefixes)
+
+
 def mode_string(path):
     return f"{stat.S_IMODE(path.lstat().st_mode):04o}"
 
@@ -39,11 +44,14 @@ def main():
     parser.add_argument("--stage", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--devices", type=Path)
+    parser.add_argument("--exclude", action="append", default=[],
+                        help="exclude an absolute rootfs path and its contents")
     args = parser.parse_args()
 
     stage = args.stage.resolve()
     if not stage.is_dir():
         parser.error(f"stage is not a directory: {stage}")
+    excludes = tuple("/" + item.strip("/") for item in args.exclude)
 
     lines = [
         "#",
@@ -62,6 +70,8 @@ def main():
         if is_internal(stage, path):
             continue
         rel = relative(stage, path)
+        if is_excluded(rel, excludes):
+            continue
         if path.is_symlink():
             lines.extend((f"symlink {rel}", f"target {os.readlink(path)}", ""))
         elif path.is_dir():

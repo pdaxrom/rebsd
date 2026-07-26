@@ -1,0 +1,75 @@
+bdev /dev/romdisk
+major 0
+minor 0
+
+bdev /dev/sd0
+major 2
+minor 0
+
+bdev /dev/sd0a
+major 2
+minor 1
+
+bdev /dev/sd0b
+major 2
+minor 2
+
+bdev /dev/sd0c
+major 2
+minor 3
+
+bdev /dev/sd0d
+major 2
+minor 4
+
+bdev /dev/sd0e
+major 2
+minor 5
+
+bdev /dev/sd0f
+major 2
+minor 6
+
+bdev /dev/sd0g
+major 2
+minor 7
+
+bdev /dev/sd0h
+major 2
+minor 8
+
+bdev /dev/sd0i
+major 2
+minor 9
+
+bdev /dev/sd0j
+major 2
+minor 10
+
+bdev /dev/sd0k
+major 2
+minor 11
+
+bdev /dev/sd0l
+major 2
+minor 12
+
+bdev /dev/sd0m
+major 2
+minor 13
+
+bdev /dev/sd0n
+major 2
+minor 14
+
+bdev /dev/sd0o
+major 2
+minor 15
+
+bdev /dev/sd0p
+major 2
+minor 16
+
+cdev /dev/console
+major 0
+minor 0
