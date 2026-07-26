@@ -20,7 +20,13 @@ Selected upstream fragments:
 file 5.47 and `magic-endian.c`.  Supplying a native-endian database matters:
 although libmagic can byte-swap a foreign database, doing so would dirty every
 page of a private mapping.  Native databases let RetroBSD keep the mapping
-read-only and demand-paged instead of copying rules into the process heap.
+read-only, shared, and demand-paged instead of copying rules into the process
+heap.  Clean rule pages can therefore be discarded and faulted back from the
+database without consuming swap.
+
+The input side is bounded separately.  For regular files smaller than
+`FILE_BYTES_MAX`, libmagic allocates only the actual file size rather than the
+full seven-megabyte inspection ceiling.
 
 To rebuild after editing `magic`, use a host file 5.47:
 

@@ -45,6 +45,27 @@ COMMAND_MAN_DIRECTORIES = (
     "/usr/share/man/cat8/",
 )
 
+MANUAL_DIRECTORY = "/usr/share/man/"
+
+# Command manuals are matched to an executable with the same basename.
+# Manuals for formats, configuration files, ABIs, and other non-command
+# objects need an explicit rootfs-object rule so that new manual sections
+# cannot silently become unconditional payload.
+MANUAL_OBJECTS = {
+    "/usr/share/man/cat5/ar.0": (
+        "/usr/bin/ar",
+        "/usr/include/ar.h",
+    ),
+    "/usr/share/man/cat5/magic.0": (
+        "/usr/share/misc/magic.mgc",
+        "/usr/include/magic.h",
+    ),
+    "/usr/share/man/cat5/ranlib.0": (
+        "/usr/bin/ranlib",
+        "/usr/include/ranlib.h",
+    ),
+}
+
 
 def fail(messages):
     for message in messages:
@@ -118,22 +139,51 @@ def check_manifest(stage, manifest):
         if stat.S_ISREG(mode) and mode & 0o111:
             commands.setdefault(staged.name, []).append(path)
 
-    for name, paths in sorted(commands.items()):
-        for directory in COMMAND_MAN_DIRECTORIES:
-            page = f"{directory}{name}.0"
-            if (stage / page.lstrip("/")).is_file() and page not in payload:
+    staged_pages = {
+        f"/{path.relative_to(stage)}"
+        for path in (stage / MANUAL_DIRECTORY.lstrip("/")).glob("cat[1-9]/*.0")
+        if path.is_file()
+    }
+    packaged_pages = {
+        path
+        for path in payload
+        if path.startswith(MANUAL_DIRECTORY) and path.endswith(".0")
+    }
+
+    for page in sorted(staged_pages):
+        directory = f"{Path(page).parent}/"
+        if directory in COMMAND_MAN_DIRECTORIES:
+            command = Path(page).stem
+            paths = commands.get(command, ())
+            if paths and page not in payload:
                 errors.append(
                     f"manifest is missing man page {page} for {', '.join(paths)}"
                 )
-
-    for page in sorted(payload):
-        if not page.startswith(COMMAND_MAN_DIRECTORIES) or not page.endswith(".0"):
+            elif not paths and page in payload:
+                errors.append(
+                    f"manifest includes man page {page} without an installed command"
+                )
             continue
-        command = Path(page).stem
-        if command not in commands:
+
+        if page not in MANUAL_OBJECTS:
             errors.append(
-                f"manifest includes man page {page} without an installed command"
+                f"manual object rule is missing for non-command page {page}"
             )
+
+    for page, objects in sorted(MANUAL_OBJECTS.items()):
+        installed = [path for path in objects if path in payload]
+        if installed and page not in payload:
+            errors.append(
+                f"manifest is missing man page {page} for {', '.join(installed)}"
+            )
+        elif not installed and page in payload:
+            errors.append(
+                f"manifest includes man page {page} without any described object: "
+                f"{', '.join(objects)}"
+            )
+
+    for page in sorted(packaged_pages - staged_pages):
+        errors.append(f"manifest includes unavailable man page {page}")
     return errors
 
 

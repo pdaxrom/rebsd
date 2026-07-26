@@ -470,7 +470,7 @@ rootfs-boot-smoke-runtime: rootfs-contract-check \
 	    --ram $(MALTA_QEMU_RAM) \
 	    --timeout 300 --silence-timeout 60 \
 	    --require-login \
-	    --command '/root/libc-abi-smoke >/dev/null && PAGER=cat man free >/dev/null && PAGER=cat man ifconfig >/dev/null && df -h >/dev/null && echo ROOTFS_BOOT_SMOKE_OK' \
+	    --command '/root/libc-abi-smoke >/dev/null && PAGER=cat man free >/dev/null && PAGER=cat man ifconfig >/dev/null && df -h >/dev/null && file /bin/sh >/dev/null && echo ROOTFS_BOOT_SMOKE_OK' \
 	    --expect "ROOTFS_BOOT_SMOKE_OK"
 
 vm-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)

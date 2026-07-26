@@ -260,7 +260,7 @@ MIPS_LIBVMF_SRCS = $(shell find $(TOPSRC)/src/libvmf -type f \( -name '*.[chS]' 
 MIPS_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBMAGIC_SRCS = $(shell find $(TOPSRC)/src/libmagic -type f \( \
-                     -name '*.[chS]' -o -name Makefile -o -name magic \
+                     -name '*.[chS]' -o -name Makefile \
                      -o -name 'magic.mgc.*' \) 2>/dev/null)
 MIPS_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBM_SRCS = $(shell find $(TOPSRC)/src/libm -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
