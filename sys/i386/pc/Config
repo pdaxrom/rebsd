@@ -6,3 +6,14 @@ cpu             "I686"
 board           "PC"
 
 options         "CONS_MAJOR=0", "CONS_MINOR=0"
+
+service         dma
+service         disk
+service         usb
+service         umass
+service         uhub
+service         ukbd
+service         ehci
+service         ohci
+
+config          unix    root on major 0 minor 0

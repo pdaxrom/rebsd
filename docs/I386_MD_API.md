@@ -72,6 +72,40 @@ reserved, остальные страницы становятся доступ�
 `vm_page_bootstrap_selftest` проверяет обычное и constrained allocation,
 free и poison через kernel direct map.
 
+## PCI USB/DMA boundary
+
+QEMU USB Mass Storage и OHCI HID keyboard подключены без i386-копий USB,
+HID или storage code:
+
+- общий `sys/kernel/subr_dma.c` владеет DMA allocation/sync contract;
+- общие `sys/usb/usb_core.c`, `usb_task.c`, `uhub.c`, `ehci.c`, `ohci.c`,
+  `ukbd.c`, `ukbdmap.c`, `umass_bbb.c` и `umass.c` владеют enumeration,
+  transfers, HID decoding, BOT/SCSI и class-driver policy;
+- общий `sys/disk/disk.c` присваивает USB-накопителю очередной `sdN`;
+- `pc/dma.c` только предоставляет coherent contiguous i686 pool;
+- `pc/pci.c` выполняет единый PCI walk и поиск OHCI/EHCI по
+  class/subclass/progif;
+- i386 backend общего `pmap_device_direct_map()` отображает высокие PCI BAR
+  в shared kernel-only uncached MMIO window;
+- `pc/usb_pci.c` связывает BAR callbacks и IRQ с общими `ehci_softc` и
+  `ohci_softc`;
+- `pc/interrupt.c` предоставляет разделяемую 8259 IRQ registration boundary.
+
+Direct и BIOS QEMU smoke проверяют варианты IDE `sd0` + USB `sd1` и USB
+`sd0` без IDE, а также OHCI enumeration и attach общей HID boot keyboard.
+Во всех случаях root остаётся общим romdisk `(0,0)`.
+
+## Console boundary
+
+Общий `sys/kernel/cons.c` владеет console cdev, TTY queues, `cninput`,
+`cnintr`, `cnread`, `cnwrite`, `cnioctl` и `cnselect`. Он используется i686,
+обычными MIPS boards и N64 вместо трёх архитектурных копий консольного
+драйвера. Machine-dependent `machine/console.h` предоставляет только
+`md_console_poll`, `md_console_getc`, `md_console_putc` и
+`md_console_tty_winsize`; на i686 эти hooks используют COM1 и VGA text.
+Общий `ukbd` подаёт HID keyboard input в тот же `cninput`, не создавая
+отдельной i386 input/TTY подсистемы.
+
 Страницы существующего bootstrap page directory/page tables уже
 зарезервированы и не могут попасть в free lists. Публичный
 `sys/i386/common/pmap.c` выделяет свои directory и table pages как

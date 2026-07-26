@@ -26,7 +26,7 @@
 #define PMAP_TABLE_ENTRIES           1024u
 #define PMAP_DIRECTORY_SHIFT         22u
 #define PMAP_INDEX_MASK              0x3ffu
-#define PMAP_USER_END                I386_KERNEL_BASE
+#define PMAP_USER_END                I386_USER_VADDR_END
 #define PMAP_MAX_MAPS                (NPROC + 4)
 
 #define PMAP_PTE_PRESENT             0x001u
@@ -45,6 +45,8 @@
 #define PMAP_OWNED_WORDS             (PMAP_DIRECTORY_ENTRIES / 32u)
 #define PMAP_SELFTEST_DATA_VA        0x40000000u
 #define PMAP_SELFTEST_CODE_VA        0x40004000u
+#define PMAP_SELFTEST_DEVICE_VA      0x40008000u
+#define PMAP_SELFTEST_DEVICE_PADDR   0xf0000000u
 
 extern char __kernel_start[];
 extern char __kernel_end[];
@@ -62,6 +64,7 @@ static struct pmap *pmap_active;
 static struct pmap_stats pmap_statistics;
 static struct pmap_tlb_diagnostics pmap_diagnostics;
 static vm_paddr_t pmap_bootstrap_directory;
+static vm_vaddr_t pmap_device_vaddr_next;
 static unsigned pmap_initialized;
 
 static void
@@ -385,6 +388,7 @@ pmap_system_init(struct vm_page_allocator *allocator)
     pmap_zero(&pmap_diagnostics, sizeof(pmap_diagnostics));
     pmap_allocator = allocator;
     pmap_active = (struct pmap *)0;
+    pmap_device_vaddr_next = I386_DEVICE_VADDR_START;
     pmap_initialized = 1;
     return 0;
 }
@@ -543,7 +547,6 @@ pmap_enter_device(struct pmap *pmap, vm_vaddr_t vaddr, vm_paddr_t paddr,
 
     if (!pmap_valid(pmap) || !vm_vaddr_page_aligned(vaddr) ||
         vaddr >= PMAP_USER_END || !vm_paddr_page_aligned(paddr) ||
-        paddr >= I386_PHYS_LIMIT ||
         !pmap_protection_valid(protection, 0) ||
         (protection & VM_PROT_EXECUTE) != 0 ||
         (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED))
@@ -1025,19 +1028,138 @@ pmap_page_direct_map(struct vm_page *page, enum pmap_cache cache)
     return pmap_direct(page->vmp_paddr);
 }
 
+static void *
+pmap_device_window_find(vm_paddr_t paddr, enum pmap_cache cache,
+    int *cache_alias)
+{
+    uint32_t *directory;
+    uint32_t *table;
+    uint32_t entry;
+    vm_vaddr_t vaddr;
+
+    *cache_alias = 0;
+    directory = (uint32_t *)pmap_direct(pmap_bootstrap_directory);
+    if (directory == (uint32_t *)0)
+        return (void *)0;
+    for (vaddr = I386_DEVICE_VADDR_START;
+        vaddr < pmap_device_vaddr_next; vaddr += VM_PAGE_SIZE) {
+        entry = directory[pmap_directory_index(vaddr)];
+        if ((entry & PMAP_PTE_PRESENT) == 0)
+            continue;
+        table = (uint32_t *)pmap_direct(entry & PMAP_PTE_FRAME);
+        if (table == (uint32_t *)0)
+            return (void *)0;
+        entry = table[pmap_table_index(vaddr)];
+        if ((entry & (PMAP_PTE_PRESENT | PMAP_PTE_DEVICE)) !=
+            (PMAP_PTE_PRESENT | PMAP_PTE_DEVICE) ||
+            (entry & PMAP_PTE_FRAME) != paddr)
+            continue;
+        if (((entry & PMAP_PTE_CACHE_DISABLE) != 0) !=
+            (cache == PMAP_CACHE_UNCACHED)) {
+            *cache_alias = 1;
+            return (void *)0;
+        }
+        return (void *)(uintptr_t)vaddr;
+    }
+    return (void *)0;
+}
+
+static int
+pmap_device_window_table(vm_vaddr_t vaddr, uint32_t **result)
+{
+    uint32_t *directory;
+    uint32_t *table;
+    vm_paddr_t table_paddr;
+    uint32_t directory_entry;
+    unsigned directory_index;
+    unsigned i;
+    int error;
+
+    directory = (uint32_t *)pmap_direct(pmap_bootstrap_directory);
+    if (directory == (uint32_t *)0)
+        return EFAULT;
+    directory_index = pmap_directory_index(vaddr);
+    directory_entry = directory[directory_index];
+    if ((directory_entry & PMAP_PTE_PRESENT) == 0) {
+        for (i = 0; i < PMAP_MAX_MAPS; ++i) {
+            if (!pmap_maps[i].pm_in_use)
+                continue;
+            if (pmap_directory_owned(&pmap_maps[i], directory_index) ||
+                (pmap_maps[i].pm_directory[directory_index] &
+                PMAP_PTE_PRESENT) != 0)
+                return EBUSY;
+        }
+        error = pmap_alloc_table_page(&table_paddr, &table);
+        if (error != 0)
+            return error;
+        directory_entry = table_paddr | PMAP_PTE_PRESENT |
+            PMAP_PTE_WRITABLE;
+        directory[directory_index] = directory_entry;
+    } else {
+        table = (uint32_t *)pmap_direct(
+            directory_entry & PMAP_PTE_FRAME);
+        if (table == (uint32_t *)0)
+            return EFAULT;
+    }
+    for (i = 0; i < PMAP_MAX_MAPS; ++i) {
+        if (!pmap_maps[i].pm_in_use)
+            continue;
+        if (pmap_directory_owned(&pmap_maps[i], directory_index))
+            return EBUSY;
+        if ((pmap_maps[i].pm_directory[directory_index] &
+            PMAP_PTE_PRESENT) != 0 &&
+            pmap_maps[i].pm_directory[directory_index] !=
+            directory_entry)
+            return EBUSY;
+    }
+    for (i = 0; i < PMAP_MAX_MAPS; ++i) {
+        if (!pmap_maps[i].pm_in_use)
+            continue;
+        pmap_maps[i].pm_directory[directory_index] = directory_entry;
+    }
+    *result = table;
+    return 0;
+}
+
 void *
 pmap_device_direct_map(vm_paddr_t paddr, enum pmap_cache cache)
 {
     struct vm_page *page;
+    uint32_t *table;
+    uint32_t entry;
+    void *mapping;
+    int cache_alias;
 
     if (!pmap_initialized || !vm_paddr_page_aligned(paddr) ||
-        paddr >= I386_DIRECT_MAP_SIZE ||
         (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED))
         return (void *)0;
-    page = vm_page_lookup(pmap_allocator, paddr);
-    if (page == (struct vm_page *)0 && paddr >= 0x00400000u)
+    if (paddr < I386_DIRECT_MAP_SIZE) {
+        page = vm_page_lookup(pmap_allocator, paddr);
+        if (page == (struct vm_page *)0 && paddr >= 0x00400000u)
+            return (void *)0;
+        return pmap_direct(paddr);
+    }
+
+    mapping = pmap_device_window_find(paddr, cache, &cache_alias);
+    if (mapping != (void *)0 || cache_alias)
+        return mapping;
+    if (pmap_device_vaddr_next < I386_DEVICE_VADDR_START ||
+        pmap_device_vaddr_next >= I386_DEVICE_VADDR_END)
         return (void *)0;
-    return pmap_direct(paddr);
+    if (pmap_device_window_table(pmap_device_vaddr_next, &table) != 0)
+        return (void *)0;
+    entry = table[pmap_table_index(pmap_device_vaddr_next)];
+    if ((entry & PMAP_PTE_PRESENT) != 0)
+        return (void *)0;
+    entry = paddr | PMAP_PTE_PRESENT | PMAP_PTE_WRITABLE |
+        PMAP_PTE_DEVICE;
+    if (cache == PMAP_CACHE_UNCACHED)
+        entry |= PMAP_PTE_CACHE_DISABLE;
+    table[pmap_table_index(pmap_device_vaddr_next)] = entry;
+    mapping = (void *)(uintptr_t)pmap_device_vaddr_next;
+    i386_paging_invalidate_page(pmap_device_vaddr_next);
+    pmap_device_vaddr_next += VM_PAGE_SIZE;
+    return mapping;
 }
 
 int
@@ -1182,6 +1304,7 @@ pmap_bootstrap_selftest(void)
     volatile uint32_t *second_backing;
     volatile unsigned char *code_backing;
     volatile uint32_t *test_address;
+    void *device_mapping;
     vm_paddr_t paddr;
     vm_pfn_t free_before;
     int error;
@@ -1191,6 +1314,17 @@ pmap_bootstrap_selftest(void)
     first_page = (struct vm_page *)0;
     second_page = (struct vm_page *)0;
     code_page = (struct vm_page *)0;
+    device_mapping = pmap_device_direct_map(PMAP_SELFTEST_DEVICE_PADDR,
+        PMAP_CACHE_UNCACHED);
+    if ((vm_vaddr_t)(uintptr_t)device_mapping <
+        I386_DEVICE_VADDR_START ||
+        (vm_vaddr_t)(uintptr_t)device_mapping >=
+        I386_DEVICE_VADDR_END ||
+        pmap_device_direct_map(PMAP_SELFTEST_DEVICE_PADDR,
+        PMAP_CACHE_UNCACHED) != device_mapping ||
+        pmap_device_direct_map(PMAP_SELFTEST_DEVICE_PADDR,
+        PMAP_CACHE_CACHED) != (void *)0)
+        return EFAULT;
     free_before = pmap_allocator->vpa_free_count;
     error = pmap_create(&first);
     if (error != 0)
@@ -1212,6 +1346,21 @@ pmap_bootstrap_selftest(void)
             error = EFAULT;
         goto out;
     }
+    error = pmap_enter_device(first, PMAP_SELFTEST_DEVICE_VA,
+        PMAP_SELFTEST_DEVICE_PADDR, VM_PROT_READ | VM_PROT_WRITE,
+        PMAP_CACHE_UNCACHED);
+    if (error != 0)
+        goto out;
+    error = pmap_extract(first, PMAP_SELFTEST_DEVICE_VA, &paddr);
+    if (error != 0 || paddr != PMAP_SELFTEST_DEVICE_PADDR) {
+        if (error == 0)
+            error = EFAULT;
+        goto out;
+    }
+    error = pmap_remove(first, PMAP_SELFTEST_DEVICE_VA,
+        PMAP_SELFTEST_DEVICE_VA + VM_PAGE_SIZE);
+    if (error != 0)
+        goto out;
     error = pmap_selftest_alloc(&first_page);
     if (error != 0)
         goto out;

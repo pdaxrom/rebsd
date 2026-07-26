@@ -7,6 +7,7 @@
 #define I386_IRQ_BASE          32u
 #define I386_IRQ_COUNT         16u
 #define I386_IRQ_TIMER         0u
+#define I386_IRQ_MAX_HANDLERS  4u
 #define I386_PIT_HZ            100u
 #define I386_KERNEL_CODE_SELECTOR 0x0008u
 #define I386_KERNEL_DATA_SELECTOR 0x0010u
@@ -49,8 +50,12 @@ struct i386_trapframe {
     i386_u32 tf_ss;
 };
 
+typedef int (*i386_irq_handler_t)(void *);
+
 void i386_idt_init(void);
 void i386_interrupt_dispatch(struct i386_trapframe *frame);
+int i386_irq_establish(unsigned irq, i386_irq_handler_t handler,
+    void *arg);
 int i386_privilege_handle_return(struct i386_trapframe *frame);
 void i386_privilege_return_to_kernel(struct i386_trapframe *, unsigned);
 void i386_breakpoint_selftest(void);

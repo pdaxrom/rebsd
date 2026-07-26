@@ -70,6 +70,9 @@ struct usb_device *usb_root_hub_device(struct usb_root_hub *, unsigned);
 usb_error_t usb_root_hub_recover_device(struct usb_device *);
 
 usb_error_t uhub_register(struct usb_core *);
+#ifdef KERNEL
+void uhubattach(int);
+#endif
 unsigned usb_external_hub_count(void);
 struct usb_device *usb_external_hub_device(struct usb_device *, unsigned);
 

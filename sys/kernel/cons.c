@@ -17,6 +17,8 @@ cnopen(dev_t dev, int flag, int mode)
 {
     struct tty *tp;
 
+    (void)flag;
+    (void)mode;
     if (minor(dev) != 0)
         return ENXIO;
 
@@ -29,7 +31,7 @@ cnopen(dev_t dev, int flag, int mode)
         tp->t_flags = ECHO | XTABS | CRMOD | CRTBS | CRTERA |
             CTLECH | CRTKIL;
     }
-    mips_console_tty_winsize(tp);
+    md_console_tty_winsize(tp);
     tp->t_state |= TS_CARR_ON;
 
     return ttyopen(dev, tp);
@@ -38,8 +40,12 @@ cnopen(dev_t dev, int flag, int mode)
 int
 cnclose(dev_t dev, int flag, int mode)
 {
-    struct tty *tp = &cnttys[0];
+    struct tty *tp;
 
+    (void)dev;
+    (void)flag;
+    (void)mode;
+    tp = &cnttys[0];
     ttywflush(tp);
     ttyclose(tp);
     return 0;
@@ -48,6 +54,7 @@ cnclose(dev_t dev, int flag, int mode)
 int
 cnread(dev_t dev, struct uio *uio, int flag)
 {
+    (void)dev;
     cnintr();
     return ttread(&cnttys[0], uio, flag);
 }
@@ -55,6 +62,7 @@ cnread(dev_t dev, struct uio *uio, int flag)
 int
 cnwrite(dev_t dev, struct uio *uio, int flag)
 {
+    (void)dev;
     return ttwrite(&cnttys[0], uio, flag);
 }
 
@@ -74,9 +82,8 @@ cnintr(void)
     if ((cnttys[0].t_state & TS_ISOPEN) == 0)
         return;
 
-    while (mips_console_poll()) {
-        cninput(mips_console_getc());
-    }
+    while (md_console_poll())
+        cninput(md_console_getc());
 }
 
 static void
@@ -93,7 +100,7 @@ cnstart(struct tty *tp)
     tp->t_state |= TS_BUSY;
     while ((c = getc(&tp->t_outq)) >= 0) {
         splx(s);
-        mips_console_putc(c);
+        md_console_putc(c);
         s = spltty();
     }
     tp->t_state &= ~TS_BUSY;
@@ -104,6 +111,7 @@ cnstart(struct tty *tp)
 int
 cnselect(dev_t dev, int rw)
 {
+    (void)dev;
     cnintr();
     return ttyselect(&cnttys[0], rw);
 }
@@ -113,8 +121,9 @@ cnioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 {
     int error;
 
+    (void)dev;
     if (cmd == TIOCGWINSZ) {
-        mips_console_tty_winsize(&cnttys[0]);
+        md_console_tty_winsize(&cnttys[0]);
         *(struct winsize *)addr = cnttys[0].t_winsize;
         return 0;
     }
@@ -128,12 +137,12 @@ void
 cnputc(char c)
 {
     if (c == '\n')
-        mips_console_putc('\r');
-    mips_console_putc(c);
+        md_console_putc('\r');
+    md_console_putc(c);
 }
 
 int
 cngetc(void)
 {
-    return mips_console_getc();
+    return md_console_getc();
 }

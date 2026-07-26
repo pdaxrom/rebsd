@@ -49,6 +49,21 @@ i386_pci_config_read32(i386_u8 bus, i386_u8 device,
     return i386_inl(PCI_CONFIG_DATA);
 }
 
+void
+i386_pci_config_write32(i386_u8 bus, i386_u8 device,
+    i386_u8 function, i386_u8 offset, i386_u32 value)
+{
+    i386_u32 address;
+
+    address = PCI_CONFIG_ENABLE |
+        ((i386_u32)bus << 16) |
+        ((i386_u32)(device & 0x1fu) << 11) |
+        ((i386_u32)(function & 0x07u) << 8) |
+        ((i386_u32)offset & 0xfcu);
+    i386_outl(PCI_CONFIG_ADDRESS, address);
+    i386_outl(PCI_CONFIG_DATA, value);
+}
+
 static int
 i386_pci_mechanism_present(void)
 {
@@ -86,6 +101,88 @@ i386_pci_function_read(i386_u8 bus, i386_u8 device,
     return 1;
 }
 
+typedef int (*i386_pci_visit_t)(const struct i386_pci_function *, void *);
+
+static int
+i386_pci_walk(i386_pci_visit_t visit, void *arg)
+{
+    struct i386_pci_function candidate;
+    i386_u32 header;
+    unsigned bus;
+    unsigned device;
+    unsigned function_count;
+    unsigned function_index;
+
+    if (visit == (i386_pci_visit_t)0 ||
+        !i386_pci_mechanism_present())
+        return 0;
+    for (bus = 0; bus < 256u; ++bus) {
+        for (device = 0; device < 32u; ++device) {
+            if (!i386_pci_function_read((i386_u8)bus,
+                (i386_u8)device, 0, &candidate))
+                continue;
+            header = i386_pci_config_read32((i386_u8)bus,
+                (i386_u8)device, 0, 0x0cu);
+            function_count =
+                ((header >> 16) & PCI_HEADER_MULTIFUNCTION) != 0 ?
+                8u : 1u;
+            for (function_index = 0;
+                function_index < function_count; ++function_index) {
+                if (function_index != 0 &&
+                    !i386_pci_function_read((i386_u8)bus,
+                    (i386_u8)device, (i386_u8)function_index,
+                    &candidate))
+                    continue;
+                if (visit(&candidate, arg))
+                    return 1;
+            }
+        }
+    }
+    return 1;
+}
+
+struct i386_pci_class_search {
+    i386_u8 class_code;
+    i386_u8 subclass;
+    i386_u8 programming_interface;
+    struct i386_pci_function *result;
+    int found;
+};
+
+static int
+i386_pci_match_class(const struct i386_pci_function *candidate, void *arg)
+{
+    struct i386_pci_class_search *search;
+
+    search = (struct i386_pci_class_search *)arg;
+    if (candidate->class_code != search->class_code ||
+        candidate->subclass != search->subclass ||
+        candidate->programming_interface !=
+        search->programming_interface)
+        return 0;
+    *search->result = *candidate;
+    search->found = 1;
+    return 1;
+}
+
+int
+i386_pci_find_class(i386_u8 class_code, i386_u8 subclass,
+    i386_u8 programming_interface, struct i386_pci_function *result)
+{
+    struct i386_pci_class_search search;
+
+    if (result == (struct i386_pci_function *)0)
+        return 0;
+    search.class_code = class_code;
+    search.subclass = subclass;
+    search.programming_interface = programming_interface;
+    search.result = result;
+    search.found = 0;
+    if (!i386_pci_walk(i386_pci_match_class, &search))
+        return 0;
+    return search.found;
+}
+
 static void
 i386_pci_inventory_add(struct i386_pci_inventory *inventory,
     const struct i386_pci_function *function)
@@ -115,6 +212,14 @@ i386_pci_inventory_add(struct i386_pci_inventory *inventory,
         inventory->vga = *function;
         inventory->have_vga = 1;
     }
+}
+
+static int
+i386_pci_inventory_visit(const struct i386_pci_function *function,
+    void *arg)
+{
+    i386_pci_inventory_add((struct i386_pci_inventory *)arg, function);
+    return 0;
 }
 
 static void
@@ -162,41 +267,15 @@ i386_pci_report_summary(void)
 int
 i386_pci_probe(void)
 {
-    struct i386_pci_function function;
     struct i386_pci_inventory inventory;
-    i386_u32 header;
-    unsigned bus;
-    unsigned device;
-    unsigned function_count;
     unsigned function_index;
 
     i386_pci_inventory_valid = 0;
-    if (!i386_pci_mechanism_present())
-        return 1;
     for (function_index = 0;
         function_index < sizeof(inventory); ++function_index)
         ((i386_u8 *)&inventory)[function_index] = 0;
-
-    for (bus = 0; bus < 256u; ++bus) {
-        for (device = 0; device < 32u; ++device) {
-            if (!i386_pci_function_read((i386_u8)bus,
-                (i386_u8)device, 0, &function))
-                continue;
-            i386_pci_inventory_add(&inventory, &function);
-            header = i386_pci_config_read32((i386_u8)bus,
-                (i386_u8)device, 0, 0x0cu);
-            function_count =
-                ((header >> 16) & PCI_HEADER_MULTIFUNCTION) != 0 ?
-                8u : 1u;
-            for (function_index = 1;
-                function_index < function_count; ++function_index) {
-                if (i386_pci_function_read((i386_u8)bus,
-                    (i386_u8)device, (i386_u8)function_index,
-                    &function))
-                    i386_pci_inventory_add(&inventory, &function);
-            }
-        }
-    }
+    if (!i386_pci_walk(i386_pci_inventory_visit, &inventory))
+        return 1;
 
     if (!inventory.have_host || !inventory.have_isa ||
         !inventory.have_ide)

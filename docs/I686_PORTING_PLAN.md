@@ -937,8 +937,9 @@ count через `fork`, закрывать унаследованные descrip
 - локальная подмена `biodone` удалена. Она не освобождала common read-ahead
   buffer и зависала при чтении UFS; теперь используется `ufs_bio.c::biodone`;
 - compile-time подмены `printf`/`log` на пустые i386 adapters удалены.
-  Подключены общие `subr_prf`, TTY и clist owners; i386 реализует только
-  `cnputc` через COM1/VGA и MD halt;
+  Подключены общие `subr_prf`, TTY и clist owners; после общего console
+  cleanup i386 реализует только COM1/VGA poll/getc/putc/winsize hooks и MD
+  halt, а console cdev/TTY path принадлежит `sys/kernel/cons.c`;
 - `rootfs-smoke` проверяет UFS через `fsutil --check` и повторную
   byte-for-byte сборку. QEMU markers унифицированы как `process-image: vfs`,
   `fd-vfs: ok` и `rootfs: ok`.
@@ -1122,20 +1123,29 @@ USB не является отдельной i686 storage-подсистемой
 общий USB core/hub -> общий umass BOT/SCSI -> общий sys/disk major 2 -> sdN
 ```
 
-Порядок работ:
+QEMU EHCI/OHCI-инкремент выполнен:
 
-1. подключить к i686 существующие общие USB core, hub, service/task queue,
-   `umass`, OHCI и EHCI без копирования исходников в `sys/i386`;
-2. добавить только необходимые i386 PCI, interrupt и DMA adapters;
-3. для QEMU сначала пройти enumeration, attach, MBR/GPT и read-only raw I/O
-   на USB Mass Storage через существующий `umass` и generic disk;
-4. общий UHCI HCD отсутствует в дереве. Для PIIX/VIA USB его нужно добавить
+- i686 напрямую линкует существующие `usb_core`, service/task queue,
+  `uhub`, `ehci`, `ohci`, `ukbd`, `umass` BOT/SCSI, общий DMA allocator и
+  `sys/disk`;
+- `sys/i386` добавляет только PCI class/progif discovery, uncached MMIO,
+  coherent DMA-pool attachment и 8259 IRQ adapter;
+- direct и BIOS QEMU с `usb-ehci`/`usb-storage` проходят enumeration,
+  SCSI inquiry/capacity и общий `disk_attach`; отдельные direct/BIOS QEMU
+  gates с `pci-ohci`/`usb-kbd` проходят общий HID boot-keyboard attach;
+- при наличии IDE он остаётся `sd0`, USB получает `sd1`; без IDE USB
+  получает `sd0`. Romdisk остаётся root `(0,0)` и не занимает `sdN`;
+- все QEMU пути требуют `vfs-root: ufs,romdisk,read-only`.
+
+Оставшийся hardware-порядок:
+
+1. общий UHCI HCD отсутствует в дереве. Для PIIX/VIA USB его нужно добавить
    как архитектурно нейтральный HCD в `sys/usb`, после отдельного аудита
    NetBSD-origin и существующего `usb_hcd_ops`; i386 будет содержать только
    attachment к PCI controller;
-5. на IBM 6563-W4G проверить PCI ID USB function VIA, затем тот же
+2. на IBM 6563-W4G проверить PCI ID USB function VIA, затем тот же
    enumeration/read-only gate на реальной флешке;
-6. IDE и USB получают `sdN` по общему attach order. Номер `sdN` не задаёт
+3. IDE и USB получают `sdN` по общему attach order. Номер `sdN` не задаёт
    root policy: debug root остаётся romdisk `(0,0)`.
 
 Запрещены отдельные i386 USB core, `umass`, SCSI transport, partition parser,

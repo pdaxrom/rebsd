@@ -10,9 +10,13 @@ partition `(hd0,2)`.
 общий byte-backed romdisk расположен на block major 0 minor 0 и является
 единственным root как при наличии, так и при отсутствии IDE. IDE-CF
 регистрируется через общий disk major 2 как `sd0`; её Red Hat разделы не
-участвуют в выборе root. На IBM это пока повторять не требуется. USB Mass
-Storage является обязательным следующим storage-этапом и будет подключён
-через существующие USB core/`umass`/generic disk владельцы, также на major 2.
+участвуют в выборе root. На IBM это пока повторять не требуется. QEMU EHCI
+USB Mass Storage уже подключён через существующие USB core/`umass`/generic
+disk владельцы на major 2: с IDE он получает `sd1`, без IDE — `sd0`.
+Общие OHCI и `ukbd` подключены отдельными direct/BIOS QEMU gates для
+full/low-speed HID устройств на платах с OHCI controller.
+Для VIA USB на IBM сначала требуется отсутствующий в дереве общий UHCI HCD;
+до его реализации тестирование USB на реальном железе не требуется.
 ATA-команд записи всё ещё нет: IDE
 backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
 регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
@@ -27,7 +31,12 @@ make -C sys/i386 BOARD=pc \
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
     boot-smoke bios-image-smoke bios-boot-smoke \
-    ide-absent-smoke bios-ide-absent-smoke
+    ide-absent-smoke bios-ide-absent-smoke \
+    usb-mass-storage-smoke bios-usb-mass-storage-smoke \
+    usb-mass-storage-ide-absent-smoke \
+    bios-usb-mass-storage-ide-absent-smoke \
+    ohci-keyboard-smoke bios-ohci-keyboard-smoke \
+    usb-combined-smoke bios-usb-combined-smoke
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
     QEMU_MACHINE=pc-i440fx-5.1 bios-boot-smoke

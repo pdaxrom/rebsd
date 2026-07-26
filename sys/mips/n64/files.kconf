@@ -124,7 +124,7 @@ mips/n64/n64int.c                    standard
 mips/n64/n64pi.c                     standard
 mips/n64/si.c                        standard
 mips/n64/joybus.c                    standard
-mips/n64/cons.c                      standard
+kernel/cons.c                        standard
 mips/n64/devsw.c                     standard
 mips/n64/clock.c                     standard
 mips/n64/machdep.c                   standard

@@ -31,7 +31,7 @@ for the cleanup commit.
 | weak i386 `noproc` and `time` storage | common `kern_clock.c` and `kern_time.c` |
 | `sys/i386/common/initfs.c`, `include/initfs.h`, `tools/mkinitfs.py`, and the later `disk_memory_attach` root path | deterministic UFS from existing `tools/fsutil`, exposed at major 0 minor 0 by common `sys/disk/romdisk` and mounted by common VFS/UFS |
 | local `i386_disk_biodone` selected with a compiler macro | common `ufs_bio.c::biodone`; the local completion skipped buffer-cache read-ahead release |
-| compile-time `printf`/`log` renames plus quiet i386 adapters | common `subr_prf.c`, `tty.c`, and `tty_subr.c`; i386 now provides only `cnputc` through its COM1/VGA console |
+| compile-time `printf`/`log` renames plus quiet i386 adapters | common `subr_prf.c`, `tty.c`, `tty_subr.c`, and `cons.c`; i386 provides only COM1/VGA poll/getc/putc/winsize hooks |
 | weak i386 `panic`, `panicstr`, and `log` definitions | common `subr_prf.c`; the MD halt operation remains in the i386 console/boot boundary |
 | duplicate i386 proc0 vmspace, u-area, rlimit, signal, and process-queue initialization | common `kern_proc.c::proc0_bootstrap`, also used by `init_main.c` for MIPS/N64/Ci20 |
 | manual i386 proc1 slot, PID hash, u-area/vmspace initialization, and kernel-side `execve` | common `newproc`, the common process-1 trampoline in `kernel/init_process.c`, standard `icode`, and production user-side `execv` |
@@ -98,6 +98,13 @@ provide:
   `pc/devsw.c`: PCI configuration mechanism 1, legacy ATA PIO, VGA/COM
   console, and device-switch adapters.  Disk layout, buffer I/O, VFS,
   filesystem, and descriptor semantics remain common.
+- `pc/dma.c` and `pc/usb_pci.c`: i686 coherent DMA-pool, PCI BAR/MMIO and
+  IRQ attachment to the common DMA/USB/EHCI/OHCI interfaces.  USB
+  enumeration, hub policy, HID boot-key decoding, BOT/SCSI, mass-storage
+  media operations, partition parsing, disk naming and I/O remain common.
+- `pc/early_console.c`: only COM1/VGA poll/getc/putc/winsize primitives for
+  common `sys/kernel/cons.c`.  Console cdev, TTY queues and input policy are
+  common and the former MIPS/N64 copies have been removed.
 
 The matching headers under `sys/i386/include` are retained only when they
 describe one of those hardware/ABI contracts or a temporary component listed
@@ -105,15 +112,19 @@ below.
 
 ### Common code already linked by i686
 
-The current i686 image directly compiles the existing common disk layer,
+The current i686 image directly compiles the existing common console and TTY
+driver, disk layer,
+DMA allocator, USB core/task/hub, EHCI/OHCI HCDs, `ukbd` and `umass`
+BOT/SCSI driver,
 UFS VFS, vnode/file-descriptor path, VM objects/maps/vmspace, fork,
 exit/wait/resource, signal policy, scheduler, clock, the complete syscall
 table and its production exec/VM/sysctl handlers, process-1 initialization,
 libkern, and syscall stubs.  The embedded UFS and ATA whole-device are both
 registered through the common disk interface.  Only the embedded read-only
-UFS is selected as root; ATA remains an additional read-only device.  There
+UFS is selected as root; ATA and USB remain additional devices.  There
 is no i386 filesystem parser, partition policy, private file table, rootfs
-format, or process-creation policy.
+format, USB core, HID decoder, SCSI transport, mass-storage driver, or
+process-creation policy.
 
 ### Bring-up tests, not production subsystems
 

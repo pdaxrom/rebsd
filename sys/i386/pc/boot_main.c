@@ -12,9 +12,11 @@
 #include "syscall.h"
 #include "tss.h"
 #include "trap.h"
+#include "usb_pci.h"
 #include "user_return.h"
 #include "vmspace_bootstrap.h"
 
+#include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <vm/pmap.h>
@@ -204,6 +206,7 @@ i386_boot_main(i386_u32 boot_params_phys)
     unsigned e820_count;
     unsigned index;
     i386_u32 page_phys;
+    int usb_error;
 
     i386_early_console_init();
     i386_early_puts("REBSD_I686_BOOT\n");
@@ -324,7 +327,6 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_puts("physical-free-pages: ");
     i386_early_put_hex32(i386_memory_free_pages());
     i386_early_putc('\n');
-
     i386_memory_handoff();
     if (vm_phys_bootstrap((vm_size_t)physmem) != 0 ||
         vm_page_bootstrap_stats(&vm_stats) != 0) {
@@ -364,6 +366,21 @@ i386_boot_main(i386_u32 boot_params_phys)
         }
     }
     i386_early_puts("pmap-public: ok\n");
+    if (i386_pci_probe() != 0) {
+        i386_early_puts("pci: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
+    usb_error = i386_usb_pci_prepare();
+    if (usb_error != 0 && usb_error != ENXIO) {
+        i386_early_puts("usb-pci: PCI preparation failed, error=");
+        i386_early_put_hex32((i386_u32)usb_error);
+        i386_early_putc('\n');
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
 
     if (vmspace_system_init(&vm_page_boot_allocator) != 0 ||
         i386_vmspace_bootstrap_selftest() != 0) {
@@ -460,12 +477,6 @@ i386_boot_proc0_continue(void)
     int process_error;
 
     boot_params_phys = i386_boot_params_saved;
-    if (i386_pci_probe() != 0) {
-        i386_early_puts("pci: failed\n");
-        for (;;) {
-            __asm__ volatile ("cli; hlt");
-        }
-    }
     if (i386_disk_bootstrap(i386_ide_probe()) != 0) {
         i386_early_puts("root-mount: failed\n");
         for (;;) {
@@ -518,6 +529,12 @@ i386_boot_proc0_continue(void)
     }
     i386_early_puts("timer-ticks: ok\n");
     i386_early_puts("hardclock-ticks: ok\n");
+    if (i386_usb_attach() != 0) {
+        i386_early_puts("usb-pci: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
     i386_pci_report_summary();
     i386_early_puts("HALT\n");
 

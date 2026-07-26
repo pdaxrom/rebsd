@@ -1390,8 +1390,9 @@ Current character devices, verified in the generated ROM rootfs:
 /dev/kbd0     c 10,0
 ```
 
-`/dev/console` is a normal RetroBSD tty endpoint backed by `sys/mips/n64/cons.c`.
-It uses `sys/mips/n64/video_console.c` for VI framebuffer output. The framebuffer
+`/dev/console` is a normal RetroBSD tty endpoint backed by the common
+`sys/kernel/cons.c` driver through N64 console hooks. It uses
+`sys/mips/n64/video_console.c` for VI framebuffer output. The framebuffer
 console does not consume n64cart UART input; serial login input belongs to
 `/dev/ttyS0`. Console output is not mirrored to the UART, so keyboard echo and
 shell output on `/dev/console` stay separate from serial logins.
@@ -2075,7 +2076,8 @@ Boot and ROM:
 
 Console and interrupts:
 
-- `sys/mips/n64/cons.c`
+- `sys/kernel/cons.c`
+- `sys/mips/n64/console.h`
 - `sys/mips/n64/n64cart_uart.c`
 - `sys/mips/n64/n64cart_rgbled.c`
 - `sys/mips/n64/n64cart_rgbled.h`

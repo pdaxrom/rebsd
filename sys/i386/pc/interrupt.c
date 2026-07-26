@@ -6,6 +6,8 @@
 #include "user_return.h"
 #include "vmspace_bootstrap.h"
 
+#include <machine/machparam.h>
+
 #define I386_IDT_INTERRUPT_GATE   0x8eu
 #define I386_IDT_USER_TRAP_GATE   0xefu
 #define I386_IDT_USER_INTERRUPT_GATE 0xeeu
@@ -36,6 +38,36 @@ extern void i386_vector_128(void);
 static struct i386_idt_gate i386_idt[I386_IDT_ENTRIES]
     __attribute__((aligned(16)));
 static volatile i386_u32 i386_breakpoints;
+
+struct i386_irq_registration {
+    i386_irq_handler_t ir_handler;
+    void *ir_arg;
+};
+
+static struct i386_irq_registration
+    i386_irq_handlers[I386_IRQ_COUNT][I386_IRQ_MAX_HANDLERS];
+
+int
+i386_irq_establish(unsigned irq, i386_irq_handler_t handler, void *arg)
+{
+    unsigned slot;
+    int state;
+
+    if (irq >= I386_IRQ_COUNT || handler == (i386_irq_handler_t)0)
+        return 0;
+    state = i386_intr_disable();
+    for (slot = 0; slot < I386_IRQ_MAX_HANDLERS; ++slot) {
+        if (i386_irq_handlers[irq][slot].ir_handler ==
+            (i386_irq_handler_t)0) {
+            i386_irq_handlers[irq][slot].ir_arg = arg;
+            i386_irq_handlers[irq][slot].ir_handler = handler;
+            i386_intr_restore(state);
+            return 1;
+        }
+    }
+    i386_intr_restore(state);
+    return 0;
+}
 
 static void
 i386_idt_set_gate(unsigned vector, i386_vector_handler handler,
@@ -108,6 +140,7 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
     unsigned access;
     i386_u32 clock_ps;
     unsigned irq;
+    unsigned slot;
 
     if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
         ++i386_breakpoints;
@@ -169,6 +202,11 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
             (frame->tf_eflags & I386_EFLAGS_INTERRUPT);
         i386_pit_interrupt(frame->tf_eip, clock_ps);
     }
+    for (slot = 0; slot < I386_IRQ_MAX_HANDLERS; ++slot)
+        if (i386_irq_handlers[irq][slot].ir_handler !=
+            (i386_irq_handler_t)0)
+            (void)i386_irq_handlers[irq][slot].ir_handler(
+                i386_irq_handlers[irq][slot].ir_arg);
 
     i386_pic_eoi(irq);
 }

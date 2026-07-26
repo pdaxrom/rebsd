@@ -135,6 +135,28 @@ BIOS_NO_DISK_BOOT_MARKERS = tuple(
     for marker in NO_DISK_BOOT_MARKERS
 )
 
+USB_MASS_STORAGE_MARKERS = (
+    "ehci0: pci-id=0x808624cd",
+    "dma: i686 coherent pool",
+    "usb0: initializing core",
+    "usb0: core ready",
+    "umass0: SCSI/Bulk-Only driver ready",
+    "uhub0: external hub driver ready",
+    "ehci0: EHCI version=100",
+    "umass0: QEMU QEMU HARDDISK",
+    "ehci0: port1 device attached speed=high",
+    "ehci0: irq 11 enabled",
+)
+
+OHCI_KEYBOARD_MARKERS = (
+    "ohci0: pci-id=0x106b003f",
+    "ukbd0: HID boot-keyboard driver ready",
+    "ohci0: OHCI revision=10",
+    "ukbd0: boot keyboard, interrupt in 0x81, 8 bytes",
+    "ohci0: port1 device attached speed=full",
+    "ohci0: irq enabled line=",
+)
+
 EXCEPTION_MARKERS = {
     "divide": (
         "REBSD_I686_BOOT",
@@ -236,6 +258,8 @@ def parse_args() -> argparse.Namespace:
     image.add_argument("--kernel", type=pathlib.Path)
     image.add_argument("--bios-image", type=pathlib.Path)
     parser.add_argument("--disk", type=pathlib.Path)
+    parser.add_argument("--usb-disk", type=pathlib.Path)
+    parser.add_argument("--ohci-keyboard", action="store_true")
     parser.add_argument("--timeout", type=float, default=8.0)
     parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
     parser.add_argument("--expect-no-disk", action="store_true")
@@ -247,6 +271,12 @@ def parse_args() -> argparse.Namespace:
         parser.error("--disk is required unless --expect-no-disk is used")
     if args.bios_image is not None and args.expect_exception is not None:
         parser.error("--bios-image cannot be combined with --expect-exception")
+    if args.usb_disk is not None and args.expect_exception is not None:
+        parser.error("--usb-disk cannot be combined with --expect-exception")
+    if args.ohci_keyboard and args.expect_exception is not None:
+        parser.error(
+            "--ohci-keyboard cannot be combined with --expect-exception"
+        )
     return args
 
 
@@ -295,6 +325,29 @@ def main() -> None:
                 ),
             ]
         )
+    if args.usb_disk is not None:
+        command.extend(
+            [
+                "-device",
+                "usb-ehci,id=ehci",
+                "-drive",
+                (
+                    f"file={args.usb_disk},format=raw,if=none,"
+                    "id=usbmass,snapshot=on"
+                ),
+                "-device",
+                "usb-storage,bus=ehci.0,port=1,drive=usbmass",
+            ]
+        )
+    if args.ohci_keyboard:
+        command.extend(
+            [
+                "-device",
+                "pci-ohci,id=ohci",
+                "-device",
+                "usb-kbd,bus=ohci.0,port=1",
+            ]
+        )
     if args.expect_exception:
         command.extend(["-append", f"rebsd.trap={args.expect_exception}"])
 
@@ -310,6 +363,15 @@ def main() -> None:
         markers = BIOS_BOOT_MARKERS
     else:
         markers = BOOT_MARKERS
+    if args.usb_disk is not None:
+        markers += USB_MASS_STORAGE_MARKERS
+        markers += (
+            "sd1: 256 512-byte sectors (128 KB), removable"
+            if args.disk is not None
+            else "sd0: 256 512-byte sectors (128 KB), removable",
+        )
+    if args.ohci_keyboard:
+        markers += OHCI_KEYBOARD_MARKERS
     stop_marker = (
         b"PANIC: cpu exception\r\n"
         if args.expect_exception

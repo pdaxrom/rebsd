@@ -5,4 +5,11 @@
 #define I386_USER_VADDR_START  0x00400000
 #define I386_USER_VADDR_END    0x80000000
 
+/*
+ * Kernel-only mappings for PCI MMIO live above the user ABI and below the
+ * permanent physical-memory direct map.
+ */
+#define I386_DEVICE_VADDR_START 0xb0000000
+#define I386_DEVICE_VADDR_END   0xc0000000
+
 #endif

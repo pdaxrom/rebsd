@@ -13,3 +13,22 @@
 # is exposed by the common read-only romdisk block driver at major 0 minor 0.
 # Remaining machine-independent files are connected as the diagnostic
 # bootstrap is replaced by normal common startup.
+kernel/cons.c                   standard
+kernel/subr_dma.c               optional dma
+disk/disk_subr.c                optional disk
+disk/disk.c                     optional disk
+disk/romdisk.c                  standard
+usb/usb_subr.c                  optional usb
+usb/usb_core.c                  optional usb
+usb/usb_service.c               optional usb
+usb/usb_task.c                  optional usb
+usb/uhub.c                      optional uhub
+usb/ukbdmap.c                   optional ukbd
+usb/ukbd.c                      optional ukbd
+usb/ehci.c                      optional ehci
+usb/ohci.c                      optional ohci
+usb/umass_bbb.c                 optional umass
+usb/umass.c                     optional umass
+i386/pc/dma.c                   optional dma
+i386/pc/usb_pci.c               optional usb ehci ohci
+i386/pc/romdisk.c               standard

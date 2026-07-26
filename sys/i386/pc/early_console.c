@@ -1,7 +1,9 @@
 #include "boot.h"
 #include "io.h"
 
+#include <machine/console.h>
 #include <sys/reboot.h>
+#include <sys/tty.h>
 #include <sys/types.h>
 
 #define COM1_BASE       0x03f8u
@@ -11,6 +13,7 @@
 #define COM_LINE_CTRL   3u
 #define COM_MODEM_CTRL  4u
 #define COM_LINE_STATUS 5u
+#define COM_LSR_RX_READY 0x01u
 #define COM_LSR_TX_IDLE 0x20u
 
 #define VGA_TEXT_BASE   0x000b8000u
@@ -113,19 +116,43 @@ i386_early_console_init(void)
     i386_vga_clear();
 }
 
+int
+i386_console_poll(void)
+{
+    return (i386_inb(COM1_BASE + COM_LINE_STATUS) &
+        COM_LSR_RX_READY) != 0;
+}
+
+int
+i386_console_getc(void)
+{
+    while (!i386_console_poll())
+        __asm__ volatile ("pause");
+    return i386_inb(COM1_BASE + COM_DATA);
+}
+
+void
+i386_console_putc(int ch)
+{
+    i386_serial_putc((char)ch);
+    i386_vga_putc((char)ch);
+}
+
+void
+i386_console_tty_winsize(struct tty *tp)
+{
+    tp->t_winsize.ws_row = VGA_ROWS;
+    tp->t_winsize.ws_col = VGA_COLUMNS;
+    tp->t_winsize.ws_xpixel = 0;
+    tp->t_winsize.ws_ypixel = 0;
+}
+
 void
 i386_early_putc(char ch)
 {
     if (ch == '\n')
-        i386_serial_putc('\r');
-    i386_serial_putc(ch);
-    i386_vga_putc(ch);
-}
-
-void
-cnputc(char ch)
-{
-    i386_early_putc(ch);
+        i386_console_putc('\r');
+    i386_console_putc(ch);
 }
 
 void
