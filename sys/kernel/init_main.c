@@ -167,6 +167,9 @@ main()
     register struct proc *p;
     register int i;
     register struct fs *fs = NULL;
+    size_t swapmap_entries;
+    size_t swapmap_required;
+    size_t swap_page_blocks;
     int error;
     int s __attribute__((unused));
 
@@ -267,6 +270,12 @@ main()
     nswap = (*bdevsw[major(swapdev)].d_psize)(swapdev);
     if (nswap <= 0)
         panic ("zero swap size");   /* don't want to panic, but what ? */
+    swap_page_blocks = VM_PAGE_SIZE / DEV_BSIZE;
+    swapmap_entries = swapmap[0].m_limit - swapmap[0].m_map;
+    swapmap_required =
+        ((nswap / swap_page_blocks + 1) / 2) + 1;
+    if (swapmap_entries < swapmap_required)
+        panic("swap map too small");
     mfree (swapmap, nswap, swapstart);
     error = vm_pager_swap_init();
     if (error != 0)

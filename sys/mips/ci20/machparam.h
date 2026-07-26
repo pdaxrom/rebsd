@@ -34,10 +34,6 @@
 #define NNAMECACHE      (NINODE * 11/10)
 #define NCALL           (16 + 2 * MAXUSERS)
 #define NCLIST          32
-#ifndef SMAPSIZ
-#define SMAPSIZ         NPROC
-#endif
-
 #define DEV_BSIZE       1024
 #define DEV_BSHIFT      10
 #define DEV_BMASK       (DEV_BSIZE-1)
@@ -53,6 +49,14 @@
 #define ctob(x)         ((x) * NBPG)
 
 #include <machine/layout.h>
+
+/*
+ * Size the swap resource map for worst-case 4K-page fragmentation instead
+ * of tying it to the unrelated process-table size.
+ */
+#ifndef SMAPSIZ
+#define SMAPSIZ         ((((CI20_RAMSWAP_BYTES / 4096u) + 1u) / 2u) + 1u)
+#endif
 
 #define MAXMEM                  MIPS_USER_MAXMEM
 

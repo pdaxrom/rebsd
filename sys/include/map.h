@@ -24,7 +24,7 @@
  */
 struct map {
     struct mapent   *m_map;     /* start of the map */
-    struct mapent   *m_limit;   /* address of last slot in map */
+    struct mapent   *m_limit;   /* one past the last slot in map */
     char            *m_name;    /* name of resource */
 /* we use m_name when the map overflows, in warning messages */
 };

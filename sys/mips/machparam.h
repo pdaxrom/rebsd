@@ -38,10 +38,6 @@
 #define NNAMECACHE      (NINODE * 11/10)
 #define NCALL           (16 + 2 * MAXUSERS)
 #define NCLIST          32
-#ifndef SMAPSIZ
-#define SMAPSIZ         NPROC
-#endif
-
 #define DEV_BSIZE       1024
 #define DEV_BSHIFT      10
 #define DEV_BMASK       (DEV_BSIZE-1)
@@ -57,6 +53,21 @@
 #define ctob(x)         ((x) * NBPG)
 
 #include <machine/layout.h>
+
+#ifdef MIPS_ZSWAP_ENABLED
+#define MALTA_SWAPMAP_BYTES     \
+    ((MALTA_RAMSWAP_BYTES * 2u) < MIPS_SIZE_8M ? \
+    (MALTA_RAMSWAP_BYTES * 2u) : MIPS_SIZE_8M)
+#else
+#define MALTA_SWAPMAP_BYTES     MALTA_RAMSWAP_BYTES
+#endif
+/*
+ * One entry per possible free 4K-page run in the maximally fragmented
+ * swap address space, plus its zero-sized terminator.
+ */
+#ifndef SMAPSIZ
+#define SMAPSIZ         ((((MALTA_SWAPMAP_BYTES / 4096u) + 1u) / 2u) + 1u)
+#endif
 
 #define MAXMEM                  MIPS_USER_MAXMEM
 

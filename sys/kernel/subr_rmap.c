@@ -144,7 +144,7 @@ mfree (struct map *mp, size_t size, size_t addr)
 
     /* doesn't abut.  Make a new entry and check for map overflow. */
     for (start = bp; bp->m_size; ++bp);
-    if (++bp > mp->m_limit)
+    if (++bp >= mp->m_limit) {
         /*
          * too many segments; if this happens, the correct fix
          * is to make the map bigger; you can't afford to lose
@@ -152,9 +152,11 @@ mfree (struct map *mp, size_t size, size_t addr)
          * use the above "for" loop to find the smallest entry
          * and toss it.
          */
+#ifndef REBSD_RMAP_HOST_TEST
         printf("%s: overflow, lost %u clicks at 0%o\n",
             mp->m_name, size, addr);
-    else {
+#endif
+    } else {
         for (ep = bp - 1; ep >= start; *bp-- = *ep--);
         start->m_addr = addr;
         start->m_size = size;
