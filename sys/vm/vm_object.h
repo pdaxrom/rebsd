@@ -70,6 +70,7 @@ int vm_object_update(struct vm_object *, vm_ooffset_t, const void *,
 int vm_object_zero_range(struct vm_object *, vm_ooffset_t, vm_size_t);
 int vm_object_invalidate(struct vm_object *, vm_ooffset_t, vm_size_t);
 int vm_object_get_stats(struct vm_object_stats *);
+int vm_pager_alloc_pages(const struct vm_page_request *, struct vm_page **);
 int vm_pager_reclaim_page(void);
 int vm_pager_pageout_scan(void);
 

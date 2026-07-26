@@ -921,6 +921,18 @@ main(int argc, char **argv)
             (unsigned char)(index * 37 + 11))
             return smoke_fail("memory pressure data");
     }
+    child = fork();
+    if (child < 0)
+        return smoke_fail("fork under memory pressure");
+    if (child == 0) {
+        if ((unsigned char)pressure[
+            (SMOKE_PRESSURE_PAGES - 1) * SMOKE_VM_PAGE_SIZE] !=
+            (unsigned char)((SMOKE_PRESSURE_PAGES - 1) * 37 + 11))
+            _exit(1);
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0)
+        return smoke_fail("fork data under memory pressure");
     if (sbrk(-SMOKE_PRESSURE_PAGES * SMOKE_VM_PAGE_SIZE) == (void *)-1)
         return smoke_fail("memory pressure shrink");
 
