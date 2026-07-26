@@ -1,5 +1,25 @@
 # ReBSD port development rules
 
+## No autonomous design gate
+
+Any autonomous invention or deviation from the established ReBSD system is
+prohibited.
+
+- Treat the existing machine-independent implementation, documented system
+  design, build configuration, filesystem layout, boot policy, ABI, and the
+  behavior shared by supported architectures as the required standard.
+- Do not invent or infer a replacement design, policy, compatibility mode,
+  filesystem, root device, boot source or fallback, image format, ABI,
+  permission model, subsystem contract, or architecture-private path.
+- Before any departure from the established system, stop work, describe the
+  exact proposed departure and its reason, and obtain the user's explicit
+  approval.  Silence, convenience, QEMU bring-up, a passing test, or a local
+  implementation gap is not approval.
+- If the existing standard is missing, ambiguous, or cannot be identified
+  after a tree-wide audit, ask the user instead of choosing or deducing one.
+- Approval applies only to the exact departure requested.  It does not
+  authorize adjacent changes or further assumptions.
+
 ## Architecture reuse gate
 
 Every architecture and board port must reuse the existing
