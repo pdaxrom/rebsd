@@ -1,2 +1,3 @@
 # name    getty                           type    status      comments
 console   "/libexec/getty std.default"    vt100   on secure
+ttyS0     "/libexec/getty std.default"    vt100   on secure

@@ -1,12 +1,10 @@
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/time.h>
 
 #include "boot.h"
 
-int noproc __attribute__((weak));
+extern int noproc;
 char *panicstr __attribute__((weak));
-struct timeval time __attribute__((weak));
 
 void __attribute__((weak))
 log(int level, char *message, ...)

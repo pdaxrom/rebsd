@@ -21,6 +21,21 @@ extern void sc_msec();
 
 #define LSEEK64_NARG        4
 #define TRUNCATE64_NARG     3
+#define POSITIONED_IO_NARG  5
+
+#ifdef REBSD_SYSCALL_BOOTSTRAP
+#define write       nosys
+#define link        nosys
+#define unlink      nosys
+#define execv       nosys
+#define chdir       nosys
+#define fchdir      nosys
+#define mknod       nosys
+#define chmod       nosys
+#define chown       nosys
+#define chflags     nosys
+#define fchflags    nosys
+#endif
 
 /*
  * Reserved/unimplemented system calls in the range 0-150 inclusive
@@ -60,6 +75,7 @@ const struct sysent sysent[] = {
     { 2, fchflags },            /*  18 = fchflags */
     { 4, lseek },               /*  19 = lseek */
     { 0, getpid },              /*  20 = getpid */
+#ifndef REBSD_SYSCALL_BOOTSTRAP
     { 3, smount },              /*  21 = mount */
     { 1, umount },              /*  22 = umount */
     { 6, __sysctl },            /*  23 = __sysctl */
@@ -229,6 +245,9 @@ const struct sysent sysent[] = {
     { 3, shmat },               /* 173 = shmat */
     { 1, shmdt },               /* 174 = shmdt */
     { 3, shmctl },              /* 175 = shmctl */
+    { POSITIONED_IO_NARG, pread },  /* 176 = pread */
+    { POSITIONED_IO_NARG, pwrite }, /* 177 = pwrite */
+#endif
 };
 
 const int nsysent = sizeof (sysent) / sizeof (sysent[0]);

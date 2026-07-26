@@ -4,10 +4,10 @@
 .\"
 .\"	@(#)read.2	6.6 (Berkeley) 8/1/87
 .\"
-.TH READ 2 "August 1, 1987"
+.TH READ 2 "July 26, 2026"
 .UC 4
 .SH NAME
-read, readv \- read input
+read, readv, pread, pread64 \- read input
 .SH SYNOPSIS
 .nf
 .ft B
@@ -25,6 +25,25 @@ cc = readv(d, iov, iovcnt)
 int cc, d;
 struct iovec *iov;
 int iovcnt;
+.PP
+.ft B
+#include <unistd.h>
+.PP
+.ft B
+cc = pread(d, buf, nbytes, offset)
+ssize_t cc;
+int d;
+void *buf;
+size_t nbytes;
+off_t offset;
+.PP
+.ft B
+cc = pread64(d, buf, nbytes, offset)
+ssize_t cc;
+int d;
+void *buf;
+size_t nbytes;
+off64_t offset;
 .fi
 .SH DESCRIPTION
 .I Read
@@ -41,6 +60,21 @@ into the
 buffers specified by the members of the
 .I iov
 array: iov[0], iov[1], ..., iov[iovcnt\|\-\|1].
+.PP
+.I Pread
+performs the same read at the specified
+.I offset
+without reading or changing the file position associated with
+.IR d .
+The descriptor must refer to an object capable of seeking.
+.I Pread64
+is an explicit large-file spelling of
+.IR pread ;
+on RetroBSD,
+.I off_t
+and
+.I off64_t
+are both 64 bits.
 .PP
 For 
 .IR readv ,
@@ -84,7 +118,9 @@ object is undefined.
 Upon successful completion,
 .I read
 and
-.I readv
+.IR readv ,
+and
+.I pread
 return the number of bytes actually read and placed in the buffer.
 The system guarantees to read the number of bytes requested if
 the descriptor references a normal file that has that many bytes left
@@ -101,7 +137,9 @@ is set to indicate the error.
 .SH "ERRORS
 .I Read
 and
-.I readv
+.IR readv ,
+and
+.I pread
 will fail if one or more of the following are true:
 .TP 15
 [EBADF]
@@ -121,6 +159,17 @@ any data arrived by the delivery of a signal.
 The pointer associated with
 .I d
 was negative.
+.TP 15
+[EINVAL]
+The
+.I offset
+given to
+.I pread
+was negative.
+.TP 15
+[ESPIPE]
+.I Pread
+was requested on a pipe, socket, or another non-seekable object.
 .TP 15
 [EWOULDBLOCK]
 The file was marked for non-blocking I/O,

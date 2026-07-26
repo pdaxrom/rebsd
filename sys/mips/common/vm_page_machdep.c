@@ -2,6 +2,9 @@
 
 #include <sys/types.h>
 #include <sys/errno.h>
+#ifdef CI20
+#include <machine/layout.h>
+#endif
 #include <vm/vm_page.h>
 
 #define MIPS_VM_KSEG0_BASE          0x80000000u
@@ -10,6 +13,13 @@
 void *
 vm_page_md_direct_map(vm_paddr_t paddr, vm_size_t size)
 {
+#ifdef CI20
+    if (size != 0 && paddr >= CI20_HIGH_RAM_PHYS_START &&
+        paddr < CI20_HIGH_RAM_PHYS_START + CI20_HIGH_RAM_BYTES &&
+        size - 1 < CI20_HIGH_RAM_PHYS_START + CI20_HIGH_RAM_BYTES - paddr)
+        return (void *)(uintptr_t)(CI20_HIGH_RAM_VADDR_START +
+            (paddr - CI20_HIGH_RAM_PHYS_START));
+#endif
     if (size == 0 || paddr > MIPS_VM_DIRECT_PHYS_MASK ||
         size - 1 > MIPS_VM_DIRECT_PHYS_MASK - paddr)
         return 0;

@@ -111,8 +111,6 @@ void setchars()
 		p = *charnames[i];
 		if (p && *p)
 			*charvars[i] = *p;
-		else
-			*charvars[i] = '\377';
 	}
 }
 

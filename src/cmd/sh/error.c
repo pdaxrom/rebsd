@@ -65,6 +65,7 @@ void done()
 #ifdef ACCOUNT
     doacct();
 #endif
+    sh_edit_save_history();
     exit(exitval);
 }
 

@@ -61,6 +61,8 @@ static void exfile(BOOL prof)
         dfault(&ps1nod, (userid ? stdprompt : supprompt));
         dfault(&ps2nod, readmsg);
         flags |= ttyflg | prompt;
+        sh_edit_init();
+        job_init(input);
         ignsig(SIGTERM);
         if (mailpnod.namflg != N_DEFAULT)
             setmail(mailpnod.namval);
@@ -95,6 +97,7 @@ static void exfile(BOOL prof)
         exitset();
 
         if ((flags & prompt) && standin->fstak == NIL && !eof) {
+            job_notify();
             if (mailp) {
                 time(&curtime);
 
@@ -104,7 +107,7 @@ static void exfile(BOOL prof)
                 }
             }
 
-            prprompt(ps1nod.namval);
+            sh_edit_prompt(ps1nod.namval);
 
 #ifdef TIME_OUT
             alarm(TIMEOUT);
@@ -267,7 +270,7 @@ int main(int c, char **v, char **e)
 void chkpr()
 {
     if ((flags & prompt) && standin->fstak == NIL)
-        prs(ps2nod.namval);
+        sh_edit_prompt(ps2nod.namval);
 }
 
 void settmp()

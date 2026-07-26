@@ -16,14 +16,11 @@
  *   0x00100000..0x002fffff  VM page pool after bootstrap
  *   0x00300000..0x0037ffff  resident stage0/restart image
  *   0x00380000..0x004fffff  VM page pool after bootstrap
- *   0x00500000..0x0053ffff  320x240x16 framebuffer reserve
- *   0x00540000..0x0063ffff  /var RAM disk
- *   0x00640000..0x007fffff  Expansion Pak RAM swap store
+ *   0x00500000..0x005fffff  /var RAM disk
+ *   0x00600000..0x007fffff  Expansion Pak RAM swap store
  *
- * With N64_HIGHRES_FB:
- *   0x00500000..0x0059ffff  max 640x480x16 framebuffer reserve
- *   0x005a0000..0x0069ffff  /var RAM disk
- *   0x006a0000..0x007fffff  Expansion Pak RAM swap store
+ * N64 VI framebuffers are contiguous wired VM allocations and therefore do
+ * not occupy a fixed Expansion Pak reserve.
  */
 #define N64_SIZE_512K                  0x00080000
 #define N64_SIZE_1M                    0x00100000
@@ -100,11 +97,7 @@
 #define N64_BASE_FB_RESERVED_BYTES     N64_VIDEO_320_MAP_BYTES
 #define N64_BASE_FB_PHYS_START         (N64_BASE_SWAP_PHYS_START - N64_BASE_FB_RESERVED_BYTES)
 #define N64_EXPANSION_FB_PHYS_START    N64_USER_PHYS_END_8M
-#ifdef N64_HIGHRES_FB
-#define N64_EXPANSION_FB_RESERVED_BYTES N64_VIDEO_640_MAP_BYTES
-#else
-#define N64_EXPANSION_FB_RESERVED_BYTES N64_VIDEO_320_MAP_BYTES
-#endif
+#define N64_EXPANSION_FB_RESERVED_BYTES 0
 #define N64_EXPANSION_SWAP_PHYS_START  (N64_EXPANSION_FB_PHYS_START + N64_EXPANSION_FB_RESERVED_BYTES)
 
 #endif

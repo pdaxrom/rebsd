@@ -13,6 +13,8 @@
 
 int nproc = NPROC;
 int securelevel;
+int hz = HZ;
+int usechz = (1000000L + HZ - 1) / HZ;
 struct timezone tz = { 0, 0 };
 struct namecache namecache[NNAMECACHE];
 char bufdata[NBUF * MAXBSIZE];

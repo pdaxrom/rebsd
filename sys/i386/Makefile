@@ -53,9 +53,10 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    disk_bootstrap.o \
                    elf_bootstrap.o initfs.o user_stack.o \
                    initfs_image.o \
-                   sysent_bootstrap.o kern_prot.o kern_proc.o kern_fork.o \
-                   kern_proc_lifecycle.o kern_synch.o kern_clock.o scheduler.o \
-                   process_lifecycle.o copyio.o \
+                   init_sysent.o stubs.o kern_prot.o kern_proc.o kern_fork.o \
+                   kern_exit.o kern_resource.o kern_sig.o kern_sig2.o \
+                   sys_process.o kern_synch.o kern_clock.o scheduler.o \
+                   copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o config.o process_bootstrap.o vm_param.o \
                    vm_phys.o vm_page.o vm_bootstrap.o pmap.o \
@@ -439,7 +440,7 @@ paging.o: $(I386_PC_SRC)/paging.c $(I386_SRC)/include/memory.h \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
-libkern.o: $(I386_COMMON_SRC)/libkern.c \
+libkern.o: $(TOPSRC)/sys/kernel/libkern.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -466,7 +467,14 @@ user_stack.o: $(I386_COMMON_SRC)/user_stack.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-sysent_bootstrap.o: $(I386_COMMON_SRC)/sysent_bootstrap.c \
+init_sysent.o: $(TOPSRC)/sys/kernel/init_sysent.c \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -DREBSD_SYSCALL_BOOTSTRAP -c $< -o $@
+
+stubs.o: $(TOPSRC)/sys/kernel/stubs.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/signalvar.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
@@ -496,13 +504,45 @@ kern_fork.o: $(TOPSRC)/sys/kernel/kern_fork.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-kern_proc_lifecycle.o: $(TOPSRC)/sys/kernel/kern_proc_lifecycle.c \
-	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
-	    $(TOPSRC)/sys/include/user.h \
+kern_exit.o: $(TOPSRC)/sys/kernel/kern_exit.c \
+	    $(TOPSRC)/sys/include/file.h $(TOPSRC)/sys/include/inode.h \
+	    $(TOPSRC)/sys/include/kernel.h $(TOPSRC)/sys/include/proc.h \
+	    $(TOPSRC)/sys/include/resource.h $(TOPSRC)/sys/include/systm.h \
+	    $(TOPSRC)/sys/include/user.h $(TOPSRC)/sys/include/wait.h \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -c $< -o $@
+	    -Wno-sign-compare -c $< -o $@
+
+kern_resource.o: $(TOPSRC)/sys/kernel/kern_resource.c \
+	    $(TOPSRC)/sys/include/kernel.h $(TOPSRC)/sys/include/proc.h \
+	    $(TOPSRC)/sys/include/resource.h $(TOPSRC)/sys/include/systm.h \
+	    $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -c $< -o $@
+
+kern_sig.o: $(TOPSRC)/sys/kernel/kern_sig.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/signalvar.h \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
+	    $(I386_VM_SRC)/vmspace.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Dprintf=i386_vfs_log -Wno-sign-compare -c $< -o $@
+
+kern_sig2.o: $(TOPSRC)/sys/kernel/kern_sig2.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/signalvar.h \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -c $< -o $@
+
+sys_process.o: $(TOPSRC)/sys/kernel/sys_process.c \
+	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/ptrace.h \
+	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -Wno-sign-compare -Wno-implicit-fallthrough -c $< -o $@
 
 kern_synch.o: $(TOPSRC)/sys/kernel/kern_synch.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
@@ -523,15 +563,6 @@ scheduler.o: $(I386_PC_SRC)/scheduler.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/machine/machparam.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/time.h \
-	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -c $< -o $@
-
-process_lifecycle.o: $(I386_PC_SRC)/process_lifecycle.c \
-	    $(TOPSRC)/sys/include/file.h $(TOPSRC)/sys/include/inode.h \
-	    $(TOPSRC)/sys/include/proc.h \
-	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
-	    $(TOPSRC)/sys/include/wait.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

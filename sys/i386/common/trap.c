@@ -6,18 +6,6 @@
 #include "interrupt.h"
 #include "trap.h"
 
-/*
- * The production kern_sig.c definition replaces this early-image fallback.
- * Keeping the fallback useful lets the QEMU trap test exercise the same
- * pending-mask handoff without linking the complete process subsystem.
- */
-void __attribute__((weak))
-psignal(struct proc *process, int signum)
-{
-    if (process != (struct proc *)0 && signum > 0 && signum < NSIG)
-        process->p_sig |= sigmask(signum);
-}
-
 int
 i386_trap_signal(unsigned vector)
 {

@@ -1,23 +1,171 @@
-.\"	@(#)file.1	6.1 (Berkeley) 4/29/85
-.\"
-.TH FILE 1 "April 29, 1985"
-.AT 3
+.TH FILE 1 "June 17, 2025" "file 5.47"
 .SH NAME
 file \- determine file type
 .SH SYNOPSIS
 .B file
-file ...
+.RB [ \-bcdEhiklLNnprsSvzZ0 ]
+.RB [ \-\-apple ]
+.RB [ \-\-extension ]
+.RB [ \-\-mime-encoding ]
+.RB [ \-\-mime-type ]
+.RB [ \-e
+.IR testname ]
+.RB [ \-F
+.IR separator ]
+.RB [ \-f
+.IR namefile ]
+.RB [ \-m
+.IR magicfiles ]
+.RB [ \-P
+.IR name=value ]
+.I file ...
+.br
+.B file \-C
+.RB [ \-m
+.IR magicfiles ]
+.br
+.B file \-\-help
 .SH DESCRIPTION
-.I File
-performs a series of tests on each argument
-in an attempt to classify it.
-If an argument appears to be ascii,
-.I file
-examines the first 512 bytes
-and tries to guess its language.
-.SH BUGS
-It often makes mistakes.
-In particular it often suggests that
-command files are C programs.
+.B file
+5.47 classifies each operand using filesystem metadata, built-in structural
+tests, and the compiled libmagic database
+.IR /usr/share/misc/magic.mgc .
+It recognizes executable and object formats, archives, filesystems,
+documents, media, source code, scripts, encodings, and many other formats.
 .PP
-Does not recognize Pascal or LISP.
+The database is mapped read-only and demand-paged.  Input is inspected through
+bounded reads and positioned I/O; the descriptor's current offset is not
+changed by libmagic.
+.SH OPTIONS
+.TP
+.B \-b
+Brief output: do not prepend the file name.
+.TP
+.B \-c
+Check the syntax of a text magic file.
+.TP
+.B \-C
+Compile a text magic file to
+.BR .mgc .
+.TP
+.B \-d
+Enable debugging output.
+.TP
+.BI \-e " testname"
+Exclude a test.  Names include
+.BR apptype ,
+.BR ascii ,
+.BR cdf ,
+.BR compress ,
+.BR csv ,
+.BR elf ,
+.BR encoding ,
+.BR json ,
+.BR simh ,
+.BR soft ,
+and
+.BR tar .
+.TP
+.B \-E
+Treat filesystem errors as fatal classification errors.
+.TP
+.BI \-f " namefile"
+Read file names, one per line, from
+.IR namefile .
+Use
+.B -
+for standard input.
+.TP
+.BI \-F " separator"
+Use
+.I separator
+between the name and result.
+.TP
+.B \-h
+Do not follow symbolic links.
+.TP
+.B \-i
+Print MIME type and character encoding.
+.TP
+.B \-k
+Continue after the first matching rule.
+.TP
+.B \-L
+Follow symbolic links.
+.TP
+.B \-l
+List magic rules in strength order.
+.TP
+.BI \-m " magicfiles"
+Use the specified colon-separated magic paths.
+.TP
+.B \-N
+Do not pad file names.
+.TP
+.B \-n
+Flush output after every file.
+.TP
+.B \-p
+Preserve access time.
+.TP
+.BI \-P " name=value"
+Set a libmagic limit such as
+.BR bytes ,
+.BR encoding ,
+.BR indir ,
+.BR name ,
+or
+.BR regex .
+.TP
+.B \-r
+Do not escape non-printing result bytes.
+.TP
+.B \-s
+Read block and character devices.
+.TP
+.B \-v
+Print the program and magic database versions.
+.TP
+.B \-z
+Inspect the contents of compressed files when a matching decompressor is
+available.
+.TP
+.B \-Z
+Like
+.BR \-z ,
+but report only the uncompressed content type.
+.TP
+.B \-0
+Terminate the file-name field with a NUL byte.
+.TP
+.B \-\-apple
+Print Apple creator/type information.
+.TP
+.B \-\-extension
+Print a slash-separated list of likely file-name extensions.
+.TP
+.B \-\-mime-type
+Print only the MIME media type.
+.TP
+.B \-\-mime-encoding
+Print only the MIME character encoding.
+.SH ENVIRONMENT
+.TP
+.B MAGIC
+Colon-separated path used instead of the default database.
+.TP
+.B POSIXLY_CORRECT
+Follow symbolic links by default and use POSIX option processing.
+.SH FILES
+.TP
+.I /usr/share/misc/magic.mgc
+Compiled magic database.
+.SH EXIT STATUS
+Zero means every requested operation succeeded.  A non-zero status reports
+an invalid option, an unreadable operand, an invalid database, or another
+classification error.
+.SH SEE ALSO
+.BR strings (1),
+.BR stat (2),
+.BR mmap (2),
+.BR pread (2)

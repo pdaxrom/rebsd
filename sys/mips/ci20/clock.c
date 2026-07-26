@@ -85,33 +85,54 @@ intc_unmask(unsigned irq)
 }
 
 void
-clkstart(void)
+ci20_delay_init(void)
 {
-    unsigned bit = 1u << CI20_TCU_CHANNEL;
-    unsigned delay_bit = 1u << CI20_DELAY_CHANNEL;
-    unsigned flags = TCU_FFLAG(CI20_TCU_CHANNEL) |
-        TCU_HFLAG(CI20_TCU_CHANNEL);
-    unsigned delay_flags = TCU_FFLAG(CI20_DELAY_CHANNEL) |
-        TCU_HFLAG(CI20_DELAY_CHANNEL);
+    unsigned bit;
+    unsigned flags;
 
-    tcu_write(TCU_TSCR, bit | delay_bit);
-    tcu_write(TCU_TECR, bit | delay_bit);
-    tcu_write(TCU_TMSR, 0xffffffffu);
-    tcu_write(TCU_TCSR(CI20_TCU_CHANNEL),
-        TCU_TCSR_EXT_EN | TCU_TCSR_PRESCALE64);
-    tcu_write(TCU_TDFR(CI20_TCU_CHANNEL), CI20_TCU_PERIOD);
-    tcu_write(TCU_TDHR(CI20_TCU_CHANNEL), 0xffff);
-    tcu_write(TCU_TCNT(CI20_TCU_CHANNEL), 0);
+    if (ci20_delay_ready)
+        return;
+
+    bit = 1u << CI20_DELAY_CHANNEL;
+    flags = TCU_FFLAG(CI20_DELAY_CHANNEL) |
+        TCU_HFLAG(CI20_DELAY_CHANNEL);
+    tcu_write(TCU_TSCR, bit);
+    tcu_write(TCU_TECR, bit);
+    tcu_write(TCU_TMSR, flags);
     tcu_write(TCU_TCSR(CI20_DELAY_CHANNEL),
         TCU_TCSR_EXT_EN | TCU_TCSR_PRESCALE64);
     tcu_write(TCU_TDFR(CI20_DELAY_CHANNEL), CI20_DELAY_PERIOD);
     tcu_write(TCU_TDHR(CI20_DELAY_CHANNEL), CI20_DELAY_PERIOD);
     tcu_write(TCU_TCNT(CI20_DELAY_CHANNEL), 0);
-    tcu_write(TCU_TFCR, flags | delay_flags);
+    tcu_write(TCU_TFCR, flags);
+    tcu_write(TCU_TESR, bit);
+    ci20_delay_ready = 1;
+}
+
+void
+clkstart(void)
+{
+    unsigned bit = 1u << CI20_TCU_CHANNEL;
+    unsigned flags = TCU_FFLAG(CI20_TCU_CHANNEL) |
+        TCU_HFLAG(CI20_TCU_CHANNEL);
+
+    /*
+     * Channel 3 may already be running: early board attachment needs real
+     * delays before the kernel starts the periodic clock on channel 0.
+     */
+    ci20_delay_init();
+    tcu_write(TCU_TSCR, bit);
+    tcu_write(TCU_TECR, bit);
+    tcu_write(TCU_TMSR, flags);
+    tcu_write(TCU_TCSR(CI20_TCU_CHANNEL),
+        TCU_TCSR_EXT_EN | TCU_TCSR_PRESCALE64);
+    tcu_write(TCU_TDFR(CI20_TCU_CHANNEL), CI20_TCU_PERIOD);
+    tcu_write(TCU_TDHR(CI20_TCU_CHANNEL), 0xffff);
+    tcu_write(TCU_TCNT(CI20_TCU_CHANNEL), 0);
+    tcu_write(TCU_TFCR, flags);
     tcu_write(TCU_TMSR, TCU_HFLAG(CI20_TCU_CHANNEL));
     tcu_write(TCU_TMCR, TCU_FFLAG(CI20_TCU_CHANNEL));
-    tcu_write(TCU_TESR, bit | delay_bit);
-    ci20_delay_ready = 1;
+    tcu_write(TCU_TESR, bit);
 
     intc_unmask(CI20_TCU_IRQ);
 

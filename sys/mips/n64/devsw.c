@@ -11,7 +11,7 @@
 #include <machine/romdisk.h>
 #include <stdint.h>
 #ifdef VIDEO_ENABLED
-#include <machine/video.h>
+#include <sys/drm.h>
 #endif
 #ifdef INPUT_ENABLED
 #include <machine/joybus.h>
@@ -233,9 +233,9 @@ const struct cdevsw cdevsw[] = {
 #   error Wrong N64_FB_MAJOR value!
 #endif
 #ifdef VIDEO_ENABLED
-        n64fb_open, n64fb_close, n64fb_read, n64fb_write,
-        n64fb_ioctl, n64_nullstop, 0, n64_seltrue,
-        n64_nostrategy, 0, 0, n64fb_mmap,
+        drmfb_open, drmfb_close, drmfb_read, drmfb_write,
+        drmfb_ioctl, n64_nullstop, 0, n64_seltrue,
+        n64_nostrategy, 0, 0, drmfb_mmap,
 #else
         NOCDEV
 #endif

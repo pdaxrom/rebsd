@@ -145,6 +145,11 @@ compile_board "$tmp/ci20_map_test" "$top/sys/mips/ci20" \
     -DTEST_CI20 -DCI20_RAM_SIZE_OVERRIDE=0x10000000u \
     -DCI20_ROMDISK_BYTES_OVERRIDE=0x02000000u \
     -DCI20_RAMSWAP_BYTES_OVERRIDE=0x02000000u
+compile_board "$tmp/ci20_1g_map_test" "$top/sys/mips/ci20" \
+    "$top/sys/mips/ci20/vm_phys_board.c" 0x00180000u \
+    -DTEST_CI20_1G -DCI20_RAM_SIZE_OVERRIDE=0x40000000u \
+    -DCI20_ROMDISK_BYTES_OVERRIDE=0x02000000u \
+    -DCI20_RAMSWAP_BYTES_OVERRIDE=0x02000000u
 compile_board "$tmp/n64_map_test" "$top/sys/mips/n64" \
     "$top/sys/mips/n64/vm_phys_board.c" 0x00080000u -DTEST_N64
 compile_board "$tmp/n64_debug_map_test" "$top/sys/mips/n64" \
@@ -175,6 +180,7 @@ if [ "$mode" = test ]; then
     "$tmp/malta_map_test"
     "$tmp/malta_n64_8m_map_test"
     "$tmp/ci20_map_test"
+    "$tmp/ci20_1g_map_test"
     "$tmp/n64_map_test"
     "$tmp/n64_debug_map_test"
     "$tmp/n64_highres_map_test"

@@ -1,4 +1,11 @@
 mips/ci20/uart.c               optional ci20_uart
+i2c/i2c.c                       standard
+drm/drm.c                       standard
+drm/drm_fb.c                    standard
+drm/drm_edid.c                  standard
+drm/dw_hdmi.c                   standard
+mips/ci20/video.c              standard
+mips/ci20/video_console.c      standard
 mips/ci20/if_dm9000.c          optional ci20_dm9000
 mips/ci20/devsw.c              standard
 mips/ci20/clock.c              standard

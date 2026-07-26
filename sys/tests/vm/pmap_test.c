@@ -16,6 +16,7 @@
 #define TEST_FILE       0x10008000u
 #define TEST_SHARED_FILE 0x1000c000u
 #define TEST_DEVICE     0x10010000u
+#define TEST_DYNAMIC_DEVICE 0x10012000u
 #define TEST_COW_SHARED_HINT 0x10014000u
 #define TEST_COW_ALIAS_HINT 0x10017000u
 #define TEST_DEVICE_PADDR (TEST_RAM_SIZE - VM_PAGE_SIZE)
@@ -473,10 +474,12 @@ test_vmspace(void)
     struct test_object_pager file_pager;
     struct test_shared_pager shared_file_pager;
     struct vm_object_stats object_stats;
+    struct vm_page_request page_request;
     const struct vm_map_entry *map_entry;
     struct vm_page *wired_page;
     struct vm_page *wired_after;
     struct vm_page *device_page;
+    struct vm_page *dynamic_device_page;
     unsigned char input[32];
     unsigned char output[32];
     int resident;
@@ -590,6 +593,20 @@ test_vmspace(void)
     CHECK(vmspace_wire(source, TEST_DEVICE, VM_PAGE_SIZE, 1) == 0);
     CHECK(device_page->vmp_wire_count == 0);
     CHECK(vmspace_wire(source, TEST_DEVICE, VM_PAGE_SIZE, 0) == 0);
+    vm_page_request_init(&page_request);
+    page_request.vpr_state = VM_PAGE_WIRED;
+    CHECK(vm_page_alloc(&allocator, &page_request,
+        &dynamic_device_page) == 0);
+    CHECK(vmspace_map_device(source, TEST_DYNAMIC_DEVICE, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+        dynamic_device_page->vmp_paddr, PMAP_CACHE_UNCACHED) == EBUSY);
+    CHECK(vm_page_device_claim(&allocator, dynamic_device_page, 1) == 0);
+    CHECK(vmspace_map_device(source, TEST_DYNAMIC_DEVICE, VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+        dynamic_device_page->vmp_paddr, PMAP_CACHE_UNCACHED) == 0);
+    output[0] = 0xa7;
+    CHECK(vmspace_write(source, TEST_DYNAMIC_DEVICE + 3, output, 1) == 0);
+    CHECK(test_ram[dynamic_device_page->vmp_paddr + 3] == 0xa7);
     output[0] = 0;
     CHECK(vmspace_read(source, shared_address, output, 1) == 0 &&
         output[0] == 0x63 && shared_file_pager.pageins == 1);
@@ -698,6 +715,19 @@ test_vmspace(void)
     output[0] = 0;
     CHECK(vmspace_read(child, TEST_DEVICE + 7, output, 1) == 0 &&
         output[0] == 0x44);
+    CHECK(vm_map_lookup(&source->vms_map, TEST_DYNAMIC_DEVICE) != 0);
+    CHECK(vm_map_lookup(&child->vms_map, TEST_DYNAMIC_DEVICE) != 0);
+    output[0] = 0;
+    CHECK(vmspace_read(child, TEST_DYNAMIC_DEVICE + 3, output, 1) == 0 &&
+        output[0] == 0xa7);
+    CHECK(vmspace_revoke_device(dynamic_device_page->vmp_paddr,
+        VM_PAGE_SIZE) == 0);
+    CHECK(vm_map_lookup(&source->vms_map, TEST_DYNAMIC_DEVICE) == 0);
+    CHECK(vm_map_lookup(&child->vms_map, TEST_DYNAMIC_DEVICE) == 0);
+    CHECK(vm_page_device_release(&allocator, dynamic_device_page, 1) == 0);
+    CHECK(vm_page_counter_dec(&allocator, dynamic_device_page,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_free(&allocator, dynamic_device_page, 1) == 0);
     output[0] = 0x55;
     CHECK(vmspace_write(child, TEST_DEVICE + 7, output, 1) == 0);
     output[0] = 0;

@@ -75,9 +75,11 @@ clean: FRC
 
 P=${DESTDIR}${MDIR}
 
-REM= sbrk.0 dup2.0 fstat.0 lstat.0 readv.0 recvfrom.0 sendmsg.0 recvmsg.0 \
+REM= sbrk.0 dup2.0 fstat.0 lstat.0 readv.0 pread.0 pread64.0 \
+	recvfrom.0 sendmsg.0 recvmsg.0 \
 	sendto.0 fstatfs.0 wait3.0 wait4.0 waitpid.0 fchdir.0 fchflags.0 \
-	fchmod.0 fchown.0 umount.0 writev.0 getppid.0 ftruncate.0 \
+	fchmod.0 fchown.0 umount.0 writev.0 pwrite.0 pwrite64.0 \
+	getppid.0 ftruncate.0 \
 	pselect.0 munmap.0 mprotect.0 msync.0 madvise.0 mincore.0 \
 	mlock.0 munlock.0 \
 	shmat.0 shmdt.0 shmctl.0 \
@@ -92,6 +94,8 @@ install: _make_01
 	ln -f ${P}/stat.0 ${P}/fstat.0
 	ln -f ${P}/stat.0 ${P}/lstat.0
 	ln -f ${P}/read.0 ${P}/readv.0
+	ln -f ${P}/read.0 ${P}/pread.0
+	ln -f ${P}/read.0 ${P}/pread64.0
 	ln -f ${P}/recv.0 ${P}/recvfrom.0
 	ln -f ${P}/recv.0 ${P}/recvmsg.0
 	ln -f ${P}/send.0 ${P}/sendmsg.0
@@ -117,6 +121,8 @@ install: _make_01
 	ln -f ${P}/shmget.0 ${P}/shmdt.0
 	ln -f ${P}/shmget.0 ${P}/shmctl.0
 	ln -f ${P}/write.0 ${P}/writev.0
+	ln -f ${P}/write.0 ${P}/pwrite.0
+	ln -f ${P}/write.0 ${P}/pwrite64.0
 	ln -f ${P}/getpid.0 ${P}/getppid.0
 	ln -f ${P}/truncate.0 ${P}/ftruncate.0
 	ln -f ${P}/gethostid.0 ${P}/sethostid.0

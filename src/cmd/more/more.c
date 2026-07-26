@@ -115,7 +115,7 @@ int command(char *filename, FILE *f);
 void erase(int col);
 void cleareol(void);
 int pr(char *s1);
-int getline(FILE *f, int *length);
+int more_getline(FILE *f, int *length);
 void prbuf(char *s, int n);
 void Sprintf(int n);
 int number(char *cmd);
@@ -567,7 +567,7 @@ screen (FILE *f, int num_lines)
 
     for (;;) {
 	while (num_lines > 0 && !Pause) {
-	    if ((nchars = getline (f, &length)) == EOF)
+	    if ((nchars = more_getline (f, &length)) == EOF)
 	    {
 		if (clreol)
 		    clreos();
@@ -721,7 +721,7 @@ prompt (char *filename)
 ** Get a logical line
 */
 int
-getline(FILE *f, int *length)
+more_getline(FILE *f, int *length)
 {
     register int	c;
     register char	*p;

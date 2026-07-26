@@ -8,6 +8,9 @@
 #include <sys/uio.h>
 #include <sys/user.h>
 #include <machine/console.h>
+#ifdef VIDEO_ENABLED
+#include <machine/video.h>
+#endif
 
 #define CI20_UART4      0xb0034000u
 #define CI20_INTC       0xb0001000u
@@ -501,18 +504,33 @@ mips_board_intr(int *frame, unsigned status)
 int
 mips_console_poll(void)
 {
-    return ci20_uart_poll();
+    /*
+     * USB keyboards feed cninput() directly.  UART4 belongs exclusively to
+     * /dev/ttyS0, so the framebuffer console must never drain its RX FIFO.
+     */
+    return 0;
 }
 
 int
 mips_console_getc(void)
 {
-    return ci20_uart_getc();
+    return -1;
 }
 
 void
 mips_console_putc(int ch)
 {
+#ifdef VIDEO_ENABLED
+    if (ci20_video_ready()) {
+        ci20_video_console_putc(ch);
+        return;
+    }
+#endif
+    /*
+     * Preserve early diagnostics on UART until DRM owns the system console.
+     * Once video is live, normal console traffic and the ttyS0 login session
+     * are independent.
+     */
     ci20_uart_putc(ch);
 }
 
@@ -525,6 +543,12 @@ mips_console_debug_putc(int ch)
 void
 mips_console_winsize(struct winsize *ws)
 {
+#ifdef VIDEO_ENABLED
+    if (ci20_video_ready()) {
+        ci20_video_console_winsize(ws);
+        return;
+    }
+#endif
     ws->ws_row = 24;
     ws->ws_col = 80;
     ws->ws_xpixel = 0;
@@ -534,6 +558,12 @@ mips_console_winsize(struct winsize *ws)
 void
 mips_console_tty_winsize(struct tty *tp)
 {
+#ifdef VIDEO_ENABLED
+    if (ci20_video_ready()) {
+        ci20_video_console_tty_winsize(tp);
+        return;
+    }
+#endif
     if (tp->t_winsize.ws_row == 0)
         tp->t_winsize.ws_row = 24;
     if (tp->t_winsize.ws_col == 0)

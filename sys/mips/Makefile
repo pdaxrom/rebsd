@@ -26,13 +26,16 @@ KCONFIG_SRCS    = $(KCONFIG_DIR)/Makefile $(KCONFIG_DIR)/config.h \
                   $(KCONFIG_DIR)/config.y $(KCONFIG_DIR)/lang.l \
                   $(KCONFIG_DIR)/main.c $(KCONFIG_DIR)/mkioconf.c \
                   $(KCONFIG_DIR)/mkmakefile.c $(KCONFIG_DIR)/mkswapconf.c
-BOARD_KCONFIG_SRCS = $(wildcard $(BOARD_SOURCE_DIR)/Makefile.kconf \
-                     $(BOARD_SOURCE_DIR)/files.kconf $(BOARD_SOURCE_DIR)/devices.kconf)
-ifeq ($(BOARD_KCONFIG_SRCS),)
-BOARD_KCONFIG_SRCS = $(TOPSRC)/sys/mips/Makefile.kconf \
-                     $(TOPSRC)/sys/mips/files.kconf \
-                     $(TOPSRC)/sys/mips/devices.kconf
-endif
+COMMON_KCONFIG_SRCS = $(TOPSRC)/sys/mips/Makefile \
+                      $(TOPSRC)/sys/mips/Makefile.kconf \
+                      $(TOPSRC)/sys/mips/files.kconf \
+                      $(TOPSRC)/sys/mips/devices.kconf
+BOARD_KCONFIG_SRCS = $(COMMON_KCONFIG_SRCS) \
+                     $(wildcard $(BOARD_SOURCE_DIR)/Makefile.kconf \
+                     $(BOARD_SOURCE_DIR)/files.kconf \
+                     $(BOARD_SOURCE_DIR)/files.* \
+                     $(BOARD_SOURCE_DIR)/devices.kconf \
+                     $(BOARD_SOURCE_DIR)/devices.*)
 
 .PHONY: all reconfig clean clean-all unix kernel kernel-objects rootfs.img run run-early run-net \
 	    run-vr4300 kernel.z64 preflight.z64 \
@@ -84,6 +87,7 @@ cross-pcc-sdk cross-pcc-sdk-tools clean-cross-pcc-sdk:
 
 reconfig: $(KCONFIG)
 	mkdir -p $(BOARD_DIR)
+	rm -rf $(BOARD_DIR)/.deps
 	cd $(BOARD_DIR) && $(KCONFIG) $(TOPSRC)/sys/mips/$(BOARD)/Config
 
 clean:
@@ -103,6 +107,7 @@ clean-all:
 
 $(BOARD_DIR)/Makefile: $(BOARD_SOURCE_DIR)/Config $(BOARD_KCONFIG_SRCS) $(KCONFIG)
 	mkdir -p $(BOARD_DIR)
+	rm -rf $(BOARD_DIR)/.deps
 	cd $(BOARD_DIR) && $(KCONFIG) $(TOPSRC)/sys/mips/$(BOARD)/Config
 
 $(KCONFIG): $(KCONFIG_SRCS)

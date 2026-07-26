@@ -11,14 +11,6 @@
 #include "interrupt.h"
 #include "signal_machdep.h"
 
-void __attribute__((weak))
-fatalsig(int signum)
-{
-    (void)signum;
-    for (;;)
-        __asm__ volatile ("cli; hlt");
-}
-
 static int
 i386_signal_frame_address(struct i386_trapframe *frame, int sig,
     vm_vaddr_t *address, int *oonstack)

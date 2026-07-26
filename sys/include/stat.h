@@ -97,6 +97,7 @@ typedef char stat32_layout_must_remain_56_bytes[
 #define S_ISCHR(m)  ((m & S_IFMT) == S_IFCHR)   /* character special */
 #define S_ISBLK(m)  ((m & S_IFMT) == S_IFBLK)   /* block special */
 #define S_ISREG(m)  ((m & S_IFMT) == S_IFREG)   /* regular */
+#define S_ISFIFO(m) ((m & S_IFMT) == S_IFIFO)   /* FIFO or pipe */
 #define S_ISLNK(m)  ((m & S_IFMT) == S_IFLNK)   /* symbolic link */
 #define S_ISSOCK(m) ((m & S_IFMT) == S_IFSOCK)  /* socket */
 

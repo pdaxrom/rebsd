@@ -80,6 +80,7 @@ def command_run(args):
     last = time.time()
     started = time.time()
     saw_expect = False
+    saw_login = False
 
     with log.open("wb") as log_file:
         try:
@@ -105,11 +106,16 @@ def command_run(args):
 
                 if state == "login":
                     if "login:" in buf:
+                        saw_login = True
                         time.sleep(0.1)
                         os.write(master, b"root\n")
                         state = "shell"
                         buf = ""
                     elif SHELL_PROMPT_RE.search(buf):
+                        if args.require_login:
+                            raise RuntimeError(
+                                "single-user shell reached before login prompt"
+                            )
                         state = "shell"
                 elif state == "shell" and SHELL_PROMPT_RE.search(buf):
                     write_command(
@@ -145,9 +151,13 @@ def command_run(args):
     summary = {
         "expect": args.expect,
         "matched": args.expect in text,
+        "require_login": args.require_login,
+        "saw_login": saw_login,
     }
     print("\n" + json.dumps(summary, indent=2, sort_keys=True))
-    return 0 if summary["matched"] else 1
+    return 0 if summary["matched"] and (
+        not args.require_login or saw_login
+    ) else 1
 
 
 def main():
@@ -166,6 +176,7 @@ def main():
     parser.add_argument("--line-delay", type=float, default=0.06)
     parser.add_argument("--write-chunk-size", type=int, default=0)
     parser.add_argument("--chunk-delay", type=float, default=0.0)
+    parser.add_argument("--require-login", action="store_true")
     args = parser.parse_args()
     return command_run(args)
 

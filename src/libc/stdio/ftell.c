@@ -3,11 +3,14 @@
  * Coordinates with buffering.
  */
 #include <stdio.h>
+#include <errno.h>
+#include <limits.h>
 #include <unistd.h>
 
-long ftell(FILE *iop)
+off_t
+ftello(FILE *iop)
 {
-	register long tres;
+	register off_t tres;
 	register int adjust;
 
 	if (iop->_cnt < 0)
@@ -25,4 +28,17 @@ long ftell(FILE *iop)
 		return(tres);
 	tres += adjust;
 	return(tres);
+}
+
+long
+ftell(FILE *iop)
+{
+	off_t offset;
+
+	offset = ftello(iop);
+	if (offset < (off_t)LONG_MIN || offset > (off_t)LONG_MAX) {
+		errno = EOVERFLOW;
+		return -1;
+	}
+	return (long)offset;
 }

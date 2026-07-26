@@ -633,7 +633,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
             i386_fork_child->p_pid != 3 ||
             i386_fork_child->p_ppid != 1 ||
             i386_fork_child->p_pptr != i386_bootstrap_proc ||
-            i386_fork_child->p_vmspace == (struct vmspace *)0 ||
+            i386_fork_child->p_vmspace != (struct vmspace *)0 ||
             i386_fork_child->p_uarea == (struct user *)0 ||
             freeproc != &proc[3] ||
             pfind(3) != (struct proc *)0 ||

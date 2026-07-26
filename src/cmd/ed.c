@@ -106,7 +106,7 @@ static void global(int k);
 static void nonzero(void);
 static void join(void);
 static void move(int cflag);
-static char *getline(int tl);
+static char *ed_getline(int tl);
 static void setall(void);
 static void exfile(void);
 static void substitute(int inglob);
@@ -325,7 +325,7 @@ void commands()
             nonzero();
             a1 = addr1;
             do {
-                putstr(getline(*a1++));
+                putstr(ed_getline(*a1++));
             } while (a1 <= addr2);
             dot = addr2;
             listf = 0;
@@ -716,7 +716,7 @@ void putfile()
     fp = genbuf;
     a1 = addr1;
     do {
-        lp = getline(*a1++);
+        lp = ed_getline(*a1++);
         for (;;) {
             if (--nib < 0) {
                 n = fp - genbuf;
@@ -839,7 +839,7 @@ void gdelete()
     fchange = 1;
 }
 
-char *getline(int tl)
+char *ed_getline(int tl)
 {
     char *bp, *lp;
     int nl;
@@ -1004,7 +1004,7 @@ void join()
 
     gp = genbuf;
     for (a1 = addr1; a1 <= addr2; a1++) {
-        lp = getline(*a1);
+        lp = ed_getline(*a1);
         while ((*gp = *lp++))
             if (gp++ >= &genbuf[LBSIZE - 2])
                 error(Q);
@@ -1207,7 +1207,7 @@ int getcopy()
 {
     if (addr1 > addr2)
         return (EOF);
-    getline(*addr1++);
+    ed_getline(*addr1++);
     return (0);
 }
 
@@ -1358,7 +1358,7 @@ int execute(int gf, int *addr)
     } else {
         if (addr == zero)
             return (0);
-        p1 = getline(*addr);
+        p1 = ed_getline(*addr);
         locs = 0;
     }
     p2 = expbuf;

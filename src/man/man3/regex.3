@@ -1,70 +1,87 @@
-.\" Copyright (c) 1980 Regents of the University of California.
-.\" All rights reserved.  The Berkeley software License Agreement
-.\" specifies the terms and conditions for redistribution.
-.\"
-.\"	@(#)regex.3	6.1 (Berkeley) 5/15/85
-.\"
-.TH REGEX 3 "May 15, 1985"
-.UC
+.TH REGEX 3 "July 26, 2026"
 .SH NAME
-re_comp, re_exec \- regular expression handler
+regcomp, regexec, regerror, regfree, re_comp, re_exec \- POSIX regular expressions
 .SH SYNOPSIS
-.B char *re_comp(s)
-.br
-.B char *s;
+.B #include <regex.h>
 .PP
-.B re_exec(s)
+.BI "int regcomp(regex_t *" preg ", const char *" pattern ", int " cflags ");"
+.PP
+.BI "int regexec(const regex_t *" preg ", const char *" string ,
+.BI "    size_t " nmatch ", regmatch_t " pmatch[] ", int " eflags ");"
+.PP
+.BI "size_t regerror(int " errcode ", const regex_t *" preg ,
+.BI "    char *" errbuf ", size_t " errbuf_size ");"
+.PP
+.BI "void regfree(regex_t *" preg ");"
+.PP
+.BI "char *re_comp(const char *" pattern ");"
 .br
-.B char *s;
+.BI "int re_exec(const char *" string ");"
 .SH DESCRIPTION
-.I Re_comp
-compiles a string into an internal form suitable for pattern matching. 
-.I Re_exec 
-checks the argument string against the last string passed to
-.I re_comp.
+.B regcomp
+compiles a POSIX basic regular expression.  With
+.B REG_EXTENDED
+it compiles an extended regular expression.  The implementation supports
+subexpressions, alternation, back references in basic expressions, interval
+quantifiers such as
+.BR {2,4} ,
+bracket expressions, and POSIX character classes such as
+.BR [[:alpha:]] .
 .PP
-.I Re_comp
-returns 0 if the string
-.I s
-was compiled successfully; otherwise a string containing an
-error message is returned. If 
-.I re_comp
-is passed 0 or a null string, it returns without changing the currently
-compiled regular expression.
+Compilation flags are:
+.TP
+.B REG_EXTENDED
+Use extended rather than basic syntax.
+.TP
+.B REG_ICASE
+Ignore case.
+.TP
+.B REG_NOSUB
+Do not report subexpression offsets.
+.TP
+.B REG_NEWLINE
+Make newline-sensitive matching rules apply.
 .PP
-.I Re_exec
-returns 1 if the string
-.I s
-matches the last compiled regular expression, 0 if the string
-.I s
-failed to match the last compiled regular expression, and \-1 if the compiled
-regular expression was invalid (indicating an internal error).
+.B regexec
+returns zero if
+.I string
+matches.  If offsets are requested,
+.I pmatch[0]
+describes the whole match and later entries describe parenthesized
+subexpressions.  Unmatched entries contain \-1.
 .PP
-The strings passed to both
-.I re_comp
+Execution flags are:
+.TP
+.B REG_NOTBOL
+The beginning of the supplied string is not a beginning of line.
+.TP
+.B REG_NOTEOL
+The end of the supplied string is not an end of line.
+.TP
+.B REG_STARTEND
+Use
+.I pmatch[0]
+as the input byte range, allowing embedded NUL bytes.
+.PP
+.B regerror
+turns an error code into text and returns the buffer size required, including
+the terminating NUL.
+.B regfree
+releases all storage owned by a compiled expression.
+.PP
+.B re_comp
 and
-.I re_exec
-may have trailing or embedded newline characters; 
-they are terminated by nulls.
-The regular expressions recognized are described in the manual entry for 
-.IR ed (1),
-given the above difference.
-.SH "SEE ALSO"
-ed(1), ex(1), egrep(1), fgrep(1), grep(1)
-.SH DIAGNOSTICS
-.I Re_exec
-returns \-1 for an internal error.
-.PP
-.I Re_comp
-returns one of the following strings if an error occurs:
-.PP
-.nf
-.in +0.5i
-\fINo previous regular expression,
-Regular expression too long,
-unmatched \e(,
-missing ],
-too many \e(\e) pairs,
-unmatched \e).\fP
-.in -0.5i
-.fi
+.B re_exec
+remain available for old BSD source.  New code should use the POSIX
+interfaces because they are reentrant and allow multiple compiled patterns.
+.SH RETURN VALUES
+.B regexec
+returns
+.B REG_NOMATCH
+when no match exists.  Compilation and execution errors use the
+.B REG_*
+codes declared in
+.IR <regex.h> .
+.SH SEE ALSO
+.BR ed (1),
+.BR grep (1)

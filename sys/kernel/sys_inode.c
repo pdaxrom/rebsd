@@ -58,6 +58,35 @@ ino_rw(struct file *fp, struct uio *uio)
     return (error);
 }
 
+/*
+ * Perform positional I/O without consulting or changing fp->f_offset.
+ * The caller has already rejected non-inode descriptors and initialized
+ * uio_offset from the syscall argument.
+ */
+int
+ino_rwat(struct file *fp, struct uio *uio)
+{
+    register struct inode *ip = (struct inode *)fp->f_data;
+    int error, ioflag, type;
+
+    if (uio->uio_offset < 0)
+        return (EINVAL);
+    type = ip->i_mode & IFMT;
+    if (type != IFCHR)
+        ILOCK(ip);
+    ioflag = 0;
+    if (fp->f_flag & FNONBLOCK)
+        ioflag |= IO_NDELAY;
+    if (uio->uio_rw == UIO_WRITE &&
+        (fp->f_flag & FFSYNC ||
+        (ip->i_fs->fs_flags & MNT_SYNCHRONOUS)))
+        ioflag |= IO_SYNC;
+    error = rwip(ip, uio, ioflag);
+    if (type != IFCHR)
+        IUNLOCK(ip);
+    return (error);
+}
+
 int
 ino_ioctl(struct file *fp, u_int com, caddr_t data)
 {

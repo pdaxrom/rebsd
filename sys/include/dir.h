@@ -82,7 +82,7 @@ extern  DIR *opendir (const char *);
 extern  struct direct *readdir (DIR *);
 extern  long telldir (DIR *);
 extern  void seekdir (DIR *, long);
-extern  void closedir (DIR *);
+extern  int closedir (DIR *);
 
 #define rewinddir(dirp) seekdir ((dirp), (long)0)
 #define dirfd(dirp) ((dirp)->dd_fd)

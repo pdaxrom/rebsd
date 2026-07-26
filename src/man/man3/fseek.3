@@ -3,25 +3,19 @@
 .TH FSEEK 3S  "February 24, 1986"
 .AT 3
 .SH NAME
-fseek, ftell, rewind \- reposition a stream
+fseek, fseeko, ftell, ftello, rewind \- reposition a stream
 .SH SYNOPSIS
 .B #include <stdio.h>
 .PP
-.B fseek(stream, offset, ptrname)
-.br
-.SM
-.B FILE
-.B *stream;
-.br
-.B long offset;
+.BI "int fseek(FILE *" stream ", long " offset ", int " whence ");"
 .PP
-.B long ftell(stream)
-.br
-.SM
-.B FILE
-.B *stream;
+.BI "int fseeko(FILE *" stream ", off_t " offset ", int " whence ");"
 .PP
-.B rewind(stream)
+.BI "long ftell(FILE *" stream ");"
+.PP
+.BI "off_t ftello(FILE *" stream ");"
+.PP
+.BI "void rewind(FILE *" stream ");"
 .SH DESCRIPTION
 .I Fseek
 sets the position of the next input or output
@@ -32,8 +26,20 @@ The new position is at the signed distance
 bytes
 from the beginning, the current position, or the end of the file,
 according as 
-.I ptrname
-has the value 0, 1, or 2.
+.I whence
+is
+.BR SEEK_SET ,
+.BR SEEK_CUR ,
+or
+.BR SEEK_END .
+.PP
+.B fseeko
+is the large-file interface.  Its
+.I off_t
+argument is 64 bits on RetroBSD and can address offsets above 4 GiB.
+.B fseek
+is the source-compatible interface whose offset is a 32-bit
+.IR long .
 .PP
 .I Fseek
 undoes any effects of
@@ -50,6 +56,10 @@ and the only foolproof way to obtain an
 for
 .IR fseek .
 .PP
+.B ftello
+returns the same position as a 64-bit
+.IR off_t .
+.PP
 .IR Rewind ( stream )
 is equivalent to
 .IR fseek ( stream ,
@@ -58,5 +68,18 @@ is equivalent to
 lseek(2),
 fopen(3S)
 .SH DIAGNOSTICS
-.I Fseek
-returns \-1 for improper seeks, otherwise zero.
+.B fseek
+and
+.B fseeko
+return \-1 for improper seeks and zero on success.
+.B ftell
+and
+.B ftello
+return \-1 on error.
+If the position does not fit in a
+.IR long ,
+.B ftell
+fails with
+.BR EOVERFLOW ;
+.B ftello
+still returns the full offset.

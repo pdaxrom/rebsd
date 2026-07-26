@@ -24,7 +24,7 @@ vsprintf(char *str, const char *fmt, va_list ap)
 
 	f._flag = _IOWRT+_IOSTRG;
 	f._ptr = str;
-	f._cnt = 32767;
+	f._cnt = 0x7fffffff;
 	_doprnt(fmt, ap, &f);
 	*f._ptr = 0;
 	return (f._ptr - str);

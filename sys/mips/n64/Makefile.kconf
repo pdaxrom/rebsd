@@ -32,7 +32,6 @@ ifneq ($(filter pcc-debug.z64,$(MAKECMDGOALS)),)
 N64_DEBUG_UART_ONLY := 1
 endif
 N64_MINIMAL_UART_ONLY ?= 0
-N64_HIGHRES_FB ?= 0
 N64_ZSWAP ?= 1
 N64_ENABLE_ROMFS ?= 1
 N64_MINIMAL_ROOTFS ?= $(N64_MINIMAL_UART_ONLY)
@@ -43,7 +42,7 @@ N64_MINIMAL_ROOTFS = 1
 N64_MINIMAL_PCC_SMOKE = 0
 N64_ENABLE_ROMFS = 0
 endif
-N64_MINIMAL_ROOTFS_KBYTES ?= $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),3072,$(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),6144,2048))
+N64_MINIMAL_ROOTFS_KBYTES ?= $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),3072,$(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),7168,2048))
 N64_MINIMAL_ROOTFS_STAGE = rootfs.minimal.stage
 N64_MINIMAL_ROOTFS_MANIFEST = rootfs.minimal.manifest
 N64_MINIMAL_ROOTFS_IMG = rootfs.minimal.img
@@ -51,12 +50,9 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_HIGHRES_FB).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES)
 PARAM += -DN64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES)
 N64_IOCONF      = ioconf
-ifeq ($(N64_HIGHRES_FB),1)
-PARAM += -DN64_HIGHRES_FB
-endif
 ifneq ($(N64_ZSWAP),1)
 PARAM := $(filter-out -DMIPS_ZSWAP_ENABLED,$(PARAM))
 endif
@@ -515,7 +511,7 @@ N64_MINIMAL_SRC_MAKE = GROFF_NO_SGR=1 $(MAKE) -C $(MIPS_BUILD_SRC_DIR) \
                ELF2AOUT="$(N64_MINIMAL_USERLAND_ELF2AOUT)" \
                LDFLAGS="$(N64_MINIMAL_USERLAND_LDFLAGS)" \
                LIBC_COMPILER_RUNTIME=$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),libpcc,libc) \
-               SRC_ONLY_LIBS="startup-mips libc libm libutil" \
+               SRC_ONLY_LIBS="startup-mips libc libm libutil libreadline" \
                SRC_ONLY_SUBDIR="cmd" \
                CMD_ONLY_SUBDIR="$(N64_MINIMAL_ROOTFS_CMD_SUBDIRS)" \
                CMD_ONLY_STD="$(N64_MINIMAL_ROOTFS_CMD_STDS)" \
@@ -893,9 +889,12 @@ CFILES += $(N64_BOARD_SRC)/n64reset.c
 endif
 
 ifeq ($(N64_DEBUG_UART_ONLY),1)
-OBJS := $(filter-out video.o video_console.o si.o joybus.o \
+OBJS := $(filter-out drm.o drm_fb.o drm_fbmem.o video.o video_console.o si.o joybus.o \
     if_usbn.o n64usbnet_proto.o n64cart_usbnet.o n64cart_usbecm.o,$(OBJS))
 CFILES := $(filter-out \
+    $S/drm/drm.c \
+    $S/drm/drm_fb.c \
+    $S/drm/drm_fbmem.c \
     $S/mips/n64/video.c \
     $S/mips/n64/video_console.c \
     $S/mips/n64/si.c \
@@ -906,8 +905,11 @@ CFILES := $(filter-out \
     $S/mips/n64/n64cart_usbecm.c,$(CFILES))
 endif
 ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
-OBJS := $(filter-out video.o video_console.o si.o joybus.o,$(OBJS))
+OBJS := $(filter-out drm.o drm_fb.o drm_fbmem.o video.o video_console.o si.o joybus.o,$(OBJS))
 CFILES := $(filter-out \
+    $S/drm/drm.c \
+    $S/drm/drm_fb.c \
+    $S/drm/drm_fbmem.c \
     $S/mips/n64/video.c \
     $S/mips/n64/video_console.c \
     $S/mips/n64/si.c \
@@ -1104,6 +1106,7 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(N64_UTILITY_SMOKE_SRCS) $(N64_LINPACK_SMOKE_SRC) \
     $(MIPS_COMPILER_BENCH_SRC) $(MIPS_NATIVE_CRT0_SRC) \
     $(MIPS_LIBC_SRCS) $(MIPS_LIBM_SRCS) $(MIPS_LIBUTIL_SRCS) \
+    $(N64_LIBREADLINE_SRCS) \
     $(MIPS_USER_SRCS) \
     $(N64_MINIMAL_USERLAND_EXTRA_DEPS) $(N64_PCC_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile Makefile

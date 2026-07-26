@@ -387,6 +387,58 @@ vm_page_index(struct vm_page_allocator *allocator, struct vm_page *page,
 }
 
 static int
+vm_page_device_range(struct vm_page_allocator *allocator,
+    struct vm_page *first, vm_pfn_t npages, int claim)
+{
+    struct vm_page *page;
+    vm_paddr_t expected;
+    vm_pfn_t index;
+    vm_pfn_t i;
+    int error;
+
+    if (npages == 0)
+        return EINVAL;
+    error = vm_page_index(allocator, first, &index);
+    if (error != 0 || npages > allocator->vpa_page_count - index)
+        return EINVAL;
+    expected = first->vmp_paddr;
+    for (i = 0; i < npages; ++i) {
+        page = &allocator->vpa_pages[index + i];
+        if (page->vmp_paddr != expected + i * VM_PAGE_SIZE ||
+            page->vmp_state != VM_PAGE_WIRED ||
+            page->vmp_wire_count == 0)
+            return EBUSY;
+        if (claim) {
+            if ((page->vmp_flags & VM_PAGE_FLAG_DEVICE) != 0)
+                return EALREADY;
+        } else if ((page->vmp_flags & VM_PAGE_FLAG_DEVICE) == 0)
+            return EINVAL;
+    }
+    for (i = 0; i < npages; ++i) {
+        page = &allocator->vpa_pages[index + i];
+        if (claim)
+            page->vmp_flags |= VM_PAGE_FLAG_DEVICE;
+        else
+            page->vmp_flags &= ~VM_PAGE_FLAG_DEVICE;
+    }
+    return 0;
+}
+
+int
+vm_page_device_claim(struct vm_page_allocator *allocator,
+    struct vm_page *first, vm_pfn_t npages)
+{
+    return vm_page_device_range(allocator, first, npages, 1);
+}
+
+int
+vm_page_device_release(struct vm_page_allocator *allocator,
+    struct vm_page *first, vm_pfn_t npages)
+{
+    return vm_page_device_range(allocator, first, npages, 0);
+}
+
+static int
 vm_page_counts_zero(const struct vm_page *page)
 {
     return page->vmp_wire_count == 0 && page->vmp_hold_count == 0 &&
@@ -419,6 +471,8 @@ vm_page_free(struct vm_page_allocator *allocator, struct vm_page *first,
         if (page->vmp_state == VM_PAGE_RESERVED ||
             page->vmp_state == VM_PAGE_BAD)
             return EPERM;
+        if ((page->vmp_flags & VM_PAGE_FLAG_DEVICE) != 0)
+            return EBUSY;
         if (!vm_page_counts_zero(page))
             return EBUSY;
     }

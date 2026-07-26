@@ -12,15 +12,16 @@ SRCS		= ${STDSRC}
 OBJS		= ${STDOBJ}
 
 STDSRC		= abort.c abs.c alarm.c atof.c atoi.c atol.c calloc.c closedir.c crypt.c \
-		  ctime.c ctype_.c daemon.c devname.c ecvt.c err.c \
+		  ctime.c ctime_r.c ctype_.c daemon.c devname.c ecvt.c err.c \
 		  execvp.c fakcu.c frexp.c fstab.c gcvt.c getenv.c getgrent.c \
                   getgrgid.c getgrnam.c getlogin.c \
 		  getgrouplist.c gethostname.c getpagesize.c \
 		  getpass.c getpwent.c getloadavg.c getmntinfo.c \
 		  getttyent.c getttynam.c getusershell.c getwd.c labs.c \
-		  initgroups.c isatty.c isinff.c isnanf.c ldexp.c malloc.c mathclass.c \
-                  mktemp.c modff.c nan.c ndbm.c nlist.c knlist.c opendir.c perror.c popen.c \
-                  psignal.c qsort.c random.c readdir.c regex.c scandir.c \
+		  initgroups.c isatty.c isinff.c isnanf.c ldexp.c locale.c malloc.c mathclass.c \
+                  mktime.c mktemp.c modff.c nan.c ndbm.c nlist.c knlist.c opendir.c perror.c popen.c \
+                  psignal.c qsort.c random.c readdir.c regex.c regcomp.c regerror.c \
+		  regexec.c regfree.c scandir.c \
                   seekdir.c setmode.c sethostname.c setenv.c siglist.c \
                   signal.c siginterrupt.c sigsetops.c \
 		  sleep.c strcasecmp.c strftime.c swab.c sysctl.c syslog.c system.c \
@@ -29,15 +30,16 @@ STDSRC		= abort.c abs.c alarm.c atof.c atoi.c atol.c calloc.c closedir.c crypt.c
 		  strdup.c uname.c wait.c wait3.c waitpid.c
 
 STDOBJ		= abort.o abs.o alarm.o atof.o atoi.o atol.o calloc.o closedir.o crypt.o \
-		  ctime.o ctype_.o daemon.o devname.o ecvt.o err.o \
+		  ctime.o ctime_r.o ctype_.o daemon.o devname.o ecvt.o err.o \
 		  execvp.o fakcu.o frexp.o fstab.o gcvt.o getenv.o getgrent.o \
                   getgrgid.o getgrnam.o getlogin.o \
 		  getgrouplist.o gethostname.o getpagesize.o \
 		  getpass.o getpwent.o getloadavg.o getmntinfo.o \
 		  getttyent.o getttynam.o getusershell.o getwd.o labs.o \
-		  initgroups.o isatty.o isinff.o isnanf.o ldexp.o malloc.o mathclass.o \
-                  mktemp.o modff.o nan.o ndbm.o nlist.o knlist.o opendir.o perror.o popen.o \
-                  psignal.o qsort.o random.o readdir.o regex.o scandir.o \
+		  initgroups.o isatty.o isinff.o isnanf.o ldexp.o locale.o malloc.o mathclass.o \
+                  mktime.o mktemp.o modff.o nan.o ndbm.o nlist.o knlist.o opendir.o perror.o popen.o \
+                  psignal.o qsort.o random.o readdir.o regex.o regcomp.o regerror.o \
+		  regexec.o regfree.o scandir.o \
                   seekdir.o setmode.o sethostname.o setenv.o siglist.o \
                   signal.o siginterrupt.o sigsetops.o \
 		  sleep.o strcasecmp.o strftime.o swab.o sysctl.o syslog.o system.o \

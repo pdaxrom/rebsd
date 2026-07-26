@@ -350,6 +350,18 @@ n64cart_flash_fw_size(void)
     return n64cart_flash_read_reg(N64CART_FW_SIZE);
 }
 
+static unsigned
+n64cart_flash_fw_size_locked(void)
+{
+    unsigned fw_size;
+
+    if (n64pi_bus_enter(&n64cart_flash_pi_owner) != 0)
+        panic("n64cart flash PI lock");
+    fw_size = n64cart_flash_fw_size();
+    n64pi_bus_leave(&n64cart_flash_pi_owner);
+    return fw_size;
+}
+
 static int
 n64cart_flash_probe_info(struct n64cart_flash_info *info)
 {
@@ -362,8 +374,14 @@ n64cart_flash_probe_info(struct n64cart_flash_info *info)
 
     n64cart_flash_access_lock();
     n64cart_flash_do_cmd(N64CART_FLASH_CMD_JEDEC, 0, jedec, sizeof(jedec));
-    info->fw_size = n64cart_flash_fw_size();
     n64cart_flash_access_unlock();
+    /*
+     * N64CART_FW_SIZE is a cartridge control register, not flash data.
+     * Sample it after restoring quad-ROM mode, matching the sequence
+     * validated on real N64cart hardware.  Keep the standalone register
+     * access serialized with ROM, USB, UART, and flash PI clients.
+     */
+    info->fw_size = n64cart_flash_fw_size_locked();
 
     mf = jedec[0];
     id = ((unsigned)jedec[1] << 8) | jedec[2];

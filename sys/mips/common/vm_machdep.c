@@ -122,6 +122,10 @@ md_uarea_alloc(void)
     request.vpr_npages = MIPS_UAREA_PAGES;
     request.vpr_alignment = VM_PAGE_SIZE;
     request.vpr_state = VM_PAGE_WIRED;
+#ifdef CI20
+    /* u areas are persistent KSEG0 pointers on the 32-bit Ci20 kernel. */
+    request.vpr_max_address = MIPS_UAREA_PHYS_MASK;
+#endif
     error = vm_page_alloc(&vm_page_boot_allocator, &request, &page);
     if (error != 0)
         return 0;

@@ -168,3 +168,39 @@ __rebsd_isinfl(long double x)
                 return 0;
         return __rebsd_signbitl(x) ? -1 : 1;
 }
+
+int
+__rebsd_isunorderedl(long double x, long double y)
+{
+        return __fpclassifyl(x) == FP_NAN || __fpclassifyl(y) == FP_NAN;
+}
+
+int
+__rebsd_isgreaterl(long double x, long double y)
+{
+        return !__rebsd_isunorderedl(x, y) && x > y;
+}
+
+int
+__rebsd_isgreaterequall(long double x, long double y)
+{
+        return !__rebsd_isunorderedl(x, y) && x >= y;
+}
+
+int
+__rebsd_islessl(long double x, long double y)
+{
+        return !__rebsd_isunorderedl(x, y) && x < y;
+}
+
+int
+__rebsd_islessequall(long double x, long double y)
+{
+        return !__rebsd_isunorderedl(x, y) && x <= y;
+}
+
+int
+__rebsd_islessgreaterl(long double x, long double y)
+{
+        return !__rebsd_isunorderedl(x, y) && x != y;
+}

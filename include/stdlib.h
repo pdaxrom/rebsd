@@ -47,6 +47,12 @@
 #define NULL            0
 #endif
 
+#if defined(__GNUC__) || defined(__PCC__)
+#define __stdlib_noreturn __attribute__((__noreturn__))
+#else
+#define __stdlib_noreturn
+#endif
+
 #define EXIT_FAILURE    1
 #define EXIT_SUCCESS    0
 
@@ -62,26 +68,29 @@ typedef struct {
 typedef unsigned size_t;
 #endif
 
-void    abort(void);
+void    abort(void) __stdlib_noreturn;
 int     abs(int);
 int     atexit(void (*)(void));
 int     atoi(const char *);
 long    atol(const char *);
 void    *calloc(size_t, size_t);
 div_t   div(int, int);
-void    exit(int);
+void    exit(int) __stdlib_noreturn;
 void    free(void *);
 char    *getenv(const char *);
 long    labs(long);
 void    *malloc(size_t);
 char    *mktemp(char *);
 int     mkstemp(char *);
+void    *reallocarray(void *, size_t, size_t);
 void    qsort(void *, size_t, size_t, int (*)(const void *, const void *));
 int     rand(void);
 void    *realloc(void*, size_t);
 void    srand(unsigned);
 long    strtol(const char *, char **, int);
 unsigned long strtoul(const char *, char **, int);
+long long strtoll(const char *, char **, int);
+unsigned long long strtoull(const char *, char **, int);
 int     system(const char *);
 
 int     putenv(char *string);
@@ -111,5 +120,7 @@ char    *fcvt(double, int, int *, int *);
 char    *gcvt(double, int, char *);
 
 void    setkey(const char *key);
+
+#undef __stdlib_noreturn
 
 #endif /* _STDLIB_H_ */

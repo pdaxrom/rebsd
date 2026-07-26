@@ -39,9 +39,21 @@
 #ifndef __READLINE_H
 #define __READLINE_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define READLINE_MAX_LINE 4096
+
+typedef struct readline_completions {
+    size_t len;
+    char **cvec;
+} readline_completions;
+
+typedef void readline_completion_callback(const char *line, size_t cursor,
+                                           readline_completions *completions);
 
 /*
  * Read a line of input.
@@ -49,6 +61,25 @@ extern "C" {
  * A NULL PROMPT means none.
  */
 char *readline(const char *prompt);
+
+/*
+ * Read a line using explicit input and output descriptors.  This is useful
+ * to programs which move their standard descriptors before reading commands.
+ */
+char *readline_fd(const char *prompt, int input_fd, int output_fd);
+
+/*
+ * Register an application-specific completion callback.  Completion strings
+ * are complete replacement lines, not just the word being completed.
+ */
+void readline_set_completion_callback(readline_completion_callback *callback);
+int readline_add_completion(readline_completions *completions,
+                            const char *line);
+
+/*
+ * Restore the terminal after an asynchronous interruption of readline_fd().
+ */
+void readline_abort(void);
 
 /*
  * Clear the screen.

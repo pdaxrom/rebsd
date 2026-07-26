@@ -1,0 +1,27 @@
+RetroBSD libmagic database
+==========================
+
+`magic` is a size-conscious selection from the upstream file 5.47 Magdir
+database.  It covers executable and object formats, archives, compression,
+filesystems, firmware, disk partitioning, documents, images, audio/video,
+crypto material, source and script languages, and the common formats used
+when developing RetroBSD.
+
+Selected upstream fragments:
+
+    aout archive audio cafebabe c-lang commands compress crypto database der
+    diff elf filesystems firmware fonts gcc git gpt images javascript jpeg
+    linux lua mach magic mail.news make mips msdos msooxml ole2compounddocs
+    pdf perl pgp pgp-binary-keys python riff rtf ruby rust securitycerts sgml
+    ssh ssl subtitle tcl tex timezone unicode uuencode varied.out varied.script
+    web webassembly windows wordprocessors zip
+
+`magic.mgc.little` and `magic.mgc.big` were compiled from that text using
+file 5.47 and `magic-endian.c`.  Supplying a native-endian database matters:
+although libmagic can byte-swap a foreign database, doing so would dirty every
+page of a private mapping.  Native databases let RetroBSD keep the mapping
+read-only and demand-paged instead of copying rules into the process heap.
+
+To rebuild after editing `magic`, use a host file 5.47:
+
+    make FILE_HOST=/path/to/file-5.47 regen-magic

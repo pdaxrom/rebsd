@@ -7,43 +7,6 @@
 #include "interrupt.h"
 #include "user_return.h"
 
-/*
- * The early QEMU image does not yet link kern_sig.c or kern_synch.c.
- * A production kernel supplies strong definitions for all of these.
- */
-int runrun __attribute__((weak));
-char curpri __attribute__((weak));
-
-int __attribute__((weak))
-issignal(struct proc *process)
-{
-    (void)process;
-    return 0;
-}
-
-void __attribute__((weak))
-postsig(int signum)
-{
-    (void)signum;
-}
-
-int __attribute__((weak))
-setpri(struct proc *process)
-{
-    return process->p_pri;
-}
-
-void __attribute__((weak))
-setrq(struct proc *process)
-{
-    (void)process;
-}
-
-void __attribute__((weak))
-swtch(void)
-{
-}
-
 static struct i386_user_return_ops i386_user_return_test_ops;
 static int i386_user_return_test_ops_active;
 

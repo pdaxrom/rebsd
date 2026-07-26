@@ -38,7 +38,7 @@ badiov(register struct iovec *iov, u_int iovcnt)
 }
 
 static void
-rwuio (struct uio *uio)
+rwuio (struct uio *uio, int positioned)
 {
     struct a {
         int     fdes;
@@ -51,6 +51,10 @@ rwuio (struct uio *uio)
     GETF(fp, ((struct a *)u.u_arg)->fdes);
     if ((fp->f_flag & (uio->uio_rw == UIO_READ ? FREAD : FWRITE)) == 0) {
         u.u_error = EBADF;
+        return;
+    }
+    if (positioned && fp->f_type != DTYPE_INODE) {
+        u.u_error = ESPIPE;
         return;
     }
     total = 0;
@@ -79,7 +83,9 @@ rwuio (struct uio *uio)
         if (uio->uio_resid == count)
             return;
         u.u_error = 0;
-    } else
+    } else if (positioned)
+        u.u_error = ino_rwat(fp, uio);
+    else
         u.u_error = (*Fops[fp->f_type]->fo_rw) (fp, uio);
 
     u.u_rval = count - uio->uio_resid;
@@ -104,7 +110,33 @@ read()
     auio.uio_iov = &aiov;
     auio.uio_iovcnt = 1;
     auio.uio_rw = UIO_READ;
-    rwuio (&auio);
+    rwuio (&auio, 0);
+}
+
+/*
+ * Positioned read.  The offset is carried as two explicit syscall words so
+ * the kernel ABI does not depend on the compiler's alignment of 64-bit
+ * arguments in the o32 calling convention.
+ */
+void
+pread()
+{
+    register struct a {
+        int     fdes;
+        char    *cbuf;
+        unsigned count;
+        int     offset[2];
+    } *uap = (struct a *)u.u_arg;
+    struct uio auio;
+    struct iovec aiov;
+
+    aiov.iov_base = (caddr_t)uap->cbuf;
+    aiov.iov_len = uap->count;
+    auio.uio_iov = &aiov;
+    auio.uio_iovcnt = 1;
+    auio.uio_rw = UIO_READ;
+    auio.uio_offset = syscall_off64_arg(uap->offset);
+    rwuio (&auio, 1);
 }
 
 void
@@ -129,7 +161,7 @@ readv()
         uap->iovcnt * sizeof (struct iovec));
     if (u.u_error)
         return;
-    rwuio (&auio);
+    rwuio (&auio, 0);
 }
 
 /*
@@ -151,7 +183,32 @@ write()
     auio.uio_rw = UIO_WRITE;
     aiov.iov_base = uap->cbuf;
     aiov.iov_len = uap->count;
-    rwuio (&auio);
+    rwuio (&auio, 0);
+}
+
+/*
+ * Positioned write.  Unlike write(2), this deliberately does not honor
+ * O_APPEND: the caller-supplied offset is the position of the write.
+ */
+void
+pwrite()
+{
+    register struct a {
+        int     fdes;
+        char    *cbuf;
+        unsigned count;
+        int     offset[2];
+    } *uap = (struct a *)u.u_arg;
+    struct uio auio;
+    struct iovec aiov;
+
+    aiov.iov_base = uap->cbuf;
+    aiov.iov_len = uap->count;
+    auio.uio_iov = &aiov;
+    auio.uio_iovcnt = 1;
+    auio.uio_rw = UIO_WRITE;
+    auio.uio_offset = syscall_off64_arg(uap->offset);
+    rwuio (&auio, 1);
 }
 
 void
@@ -176,7 +233,7 @@ writev()
         uap->iovcnt * sizeof (struct iovec));
     if (u.u_error)
         return;
-    rwuio (&auio);
+    rwuio (&auio, 0);
 }
 
 /*

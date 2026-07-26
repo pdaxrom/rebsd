@@ -228,7 +228,11 @@ void    umount (void), smount (void);
 void    sync (void), reboot (void), __sysctl (void);
 
 /* 2.1 generic operations */
-void    read (void), write (void), readv (void), writev (void), ioctl (void);
+void    read (void), write (void), pread (void), pwrite (void);
+void    readv (void), writev (void), ioctl (void);
+struct file;
+struct uio;
+int     ino_rwat (struct file *, struct uio *);
 
 /* 2.2 file system */
 void    chdir (void), fchdir (void), chroot (void);
