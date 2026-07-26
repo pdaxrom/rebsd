@@ -12,8 +12,9 @@
 #include "defs.h"
 
 /*
- * defs.h maps free() to the shell's private allocator.  readline() returns
- * memory from libc, so this file must use the real libc free().
+ * defs.h maps free() directly to the shell allocator.  readline() uses the
+ * standard malloc/free interface supplied by heap.c, including its small
+ * allocation header, so release returned lines through that interface.
  */
 #undef free
 
