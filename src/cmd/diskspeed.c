@@ -79,6 +79,7 @@ int main(int argc, char **argv)
     int blocksize_kbytes = 4;
     int datasize_mbytes = 8;
     int nbytes, fd, n, pass;
+    int result;
     char *filename = 0;
     unsigned t0, msec;
 
@@ -171,11 +172,13 @@ int main(int argc, char **argv)
     if (readonly)
         fd = open(filename, O_RDONLY);
     else
-        fd = open(filename, O_RDWR | O_CREAT, 0664);
+        fd = open(filename, O_RDWR | O_CREAT | O_EXCL, 0664);
     if (fd < 0) {
-        fprintf(stderr, "Cannot open file '%s'.\n", filename);
-        exit(-1);
+        perror(filename);
+        free(block);
+        return 1;
     }
+    result = 1;
     if (verbose && !readonly)
         printf("Created file '%s'.\n", filename);
 
@@ -186,7 +189,7 @@ int main(int argc, char **argv)
         for (pass = 0; pass < writepasses; ++pass) {
             if (lseek(fd, 0, SEEK_SET) != 0) {
                 fprintf(stderr, "Cannot seek file '%s'.\n", filename);
-                exit(-1);
+                goto cleanup;
             }
             sync();
             usleep(200000);
@@ -197,7 +200,7 @@ int main(int argc, char **argv)
                 if (write(fd, block, nbytes) != nbytes) {
                     fprintf(stderr, "Write error at pass %d block %d.\n",
                         pass + 1, n);
-                    exit(-1);
+                    goto cleanup;
                 }
             }
             /* Include filesystem and device-cache drain in the result. */
@@ -226,13 +229,13 @@ int main(int argc, char **argv)
     }
     if (lseek(fd, 0, SEEK_SET) != 0) {
         fprintf(stderr, "Cannot seek file '%s'.\n", filename);
-        exit(-1);
+        goto cleanup;
     }
     t0 = current_msec();
     for (n=0; n<datasize_mbytes*1024/blocksize_kbytes; n++) {
         if (read(fd, block, nbytes) != nbytes) {
             fprintf(stderr, "Read error at block %d.\n", n);
-            exit(-1);
+            goto cleanup;
         }
     }
     msec = elapsed_msec(t0);
@@ -240,11 +243,14 @@ int main(int argc, char **argv)
         datasize_mbytes, msec/1000, msec%1000,
         datasize_mbytes*1024000U / msec);
 
+    result = 0;
+
+cleanup:
     close(fd);
     free(block);
     if (!readonly)
         unlink(filename);
-    if (verbose && !readonly)
+    if (verbose && !readonly && result == 0)
         printf("File '%s' deleted.\n", filename);
-    return 0;
+    return result;
 }

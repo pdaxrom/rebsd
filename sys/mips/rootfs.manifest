@@ -103,6 +103,12 @@ mode 0775
 file /root/sh-comsubst-smoke.sh
 mode 0775
 
+file /root/diskspeed-enospc-smoke.sh
+mode 0775
+
+file /root/rootfs-boot-smoke.sh
+mode 0775
+
 file /root/lang-smoke.sh
 mode 0775
 
