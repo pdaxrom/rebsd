@@ -30,7 +30,37 @@ union malloc_header {
 static malloc_header_t malloc_base;
 static malloc_header_t *malloc_freep;
 
-void free(void *);
+static void
+malloc_insert_free(malloc_header_t *block)
+{
+	malloc_header_t *current;
+
+	if (malloc_freep == NULL) {
+		malloc_base.free.next = &malloc_base;
+		malloc_base.free.units = 0;
+		malloc_freep = &malloc_base;
+	}
+	for (current = malloc_freep;
+	    !(block > current && block < current->free.next);
+	    current = current->free.next) {
+		if (current >= current->free.next &&
+		    (block > current || block < current->free.next))
+			break;
+	}
+	if (block + block->free.units == current->free.next) {
+		block->free.units += current->free.next->free.units;
+		block->free.next = current->free.next->free.next;
+	} else {
+		block->free.next = current->free.next;
+	}
+	if (current + current->free.units == block) {
+		current->free.units += block->free.units;
+		current->free.next = block->free.next;
+	} else {
+		current->free.next = block;
+	}
+	malloc_freep = current;
+}
 
 static malloc_header_t *
 malloc_morecore(size_t units)
@@ -55,7 +85,7 @@ malloc_morecore(size_t units)
 		return NULL;
 	block = memory;
 	block->free.units = units;
-	free(block + 1);
+	malloc_insert_free(block);
 	return malloc_freep;
 }
 
@@ -106,36 +136,11 @@ void
 free(void *pointer)
 {
 	malloc_header_t *block;
-	malloc_header_t *current;
 
 	if (pointer == NULL)
 		return;
 	block = (malloc_header_t *)pointer - 1;
-	if (malloc_freep == NULL) {
-		malloc_base.free.next = &malloc_base;
-		malloc_base.free.units = 0;
-		malloc_freep = &malloc_base;
-	}
-	for (current = malloc_freep;
-	    !(block > current && block < current->free.next);
-	    current = current->free.next) {
-		if (current >= current->free.next &&
-		    (block > current || block < current->free.next))
-			break;
-	}
-	if (block + block->free.units == current->free.next) {
-		block->free.units += current->free.next->free.units;
-		block->free.next = current->free.next->free.next;
-	} else {
-		block->free.next = current->free.next;
-	}
-	if (current + current->free.units == block) {
-		current->free.units += block->free.units;
-		current->free.next = block->free.next;
-	} else {
-		current->free.next = block;
-	}
-	malloc_freep = current;
+	malloc_insert_free(block);
 }
 
 void *
