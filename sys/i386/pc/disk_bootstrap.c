@@ -1,6 +1,7 @@
 #include "boot.h"
 #include "disk_bootstrap.h"
 #include "ide.h"
+#include "romdisk.h"
 #include "vfs_bootstrap.h"
 
 #include <sys/buf.h>
@@ -14,10 +15,6 @@
 #define I386_DISK_MAJOR 2u
 
 static unsigned char i386_disk_data[DISK_SECTOR_SIZE * 2u];
-static struct disk_memory i386_rootfs_memory;
-
-extern const unsigned char _binary_rootfs_img_start[];
-extern const unsigned char _binary_rootfs_img_end[];
 
 static void
 i386_disk_zero(void *arg, unsigned length)
@@ -126,48 +123,19 @@ i386_disk_attach_ide(void)
     return 0;
 }
 
-static int
-i386_disk_attach_rootfs(dev_t *devp)
-{
-    size_t image_size;
-    unsigned unit;
-    int error;
-
-    *devp = NODEV;
-    image_size = (size_t)(_binary_rootfs_img_end -
-        _binary_rootfs_img_start);
-    error = disk_memory_attach(&i386_rootfs_memory,
-        _binary_rootfs_img_start, image_size, &unit);
-    if (error != 0) {
-        i386_early_puts("rootfs-disk: failed\n");
-        return error;
-    }
-    *devp = makedev(I386_DISK_MAJOR,
-        DISK_MINOR(unit, DISK_MINOR_WHOLE));
-    if (disk_bdev_open(*devp, FWRITE, 0) != EROFS) {
-        i386_early_puts("rootfs-disk: writable\n");
-        return EIO;
-    }
-    i386_early_puts("rootfs-disk: read-only\n");
-    return 0;
-}
-
 int
 i386_disk_bootstrap(int ide_present)
 {
-    dev_t root_dev;
     int error;
 
     diskattach(0);
-    error = i386_disk_attach_rootfs(&root_dev);
-    if (error != 0)
-        return error;
     if (ide_present) {
         error = i386_disk_attach_ide();
         if (error != 0)
             return error;
     }
-    error = i386_vfs_bootstrap_mount(root_dev);
+    error = i386_vfs_bootstrap_mount(
+        makedev(I386_ROMDISK_MAJOR, I386_ROMDISK_ROOT_MINOR));
     if (error != 0)
         return error;
     return 0;

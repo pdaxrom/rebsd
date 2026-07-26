@@ -45,19 +45,24 @@ protected-mode trampoline copies it to 1 MiB.  QEMU requires
 `docs/I686_HARDWARE_GATE.md`.
 
 The deterministic UFS image produced by the existing `tools/fsutil` is
-embedded and registered first through the common memory-disk backend.  It is
-the sole read-only root device during bring-up, both with and without an IDE
-disk.  UFS is mounted through `vfs_mountroot`, `/sbin/init` is resolved with
-common `namei`, and common inode-backed `execve` reads and maps its ELF
-segments directly from the inode.  There is no i386 filesystem parser,
-rootfs format, whole-file executable buffer, or private executable loader.
+embedded as the read-only romdisk at block major 0, minor 0, matching the
+Ci20 root-device layout.  The byte-backed block operations are owned by the
+common `sys/disk/romdisk` driver; i386, Ci20, and Malta supply only their
+linker-defined image bounds.  UFS is mounted through `vfs_mountroot`,
+`/sbin/init` is resolved with common `namei`, and common inode-backed
+`execve` reads and maps its ELF segments directly from the inode.  There is
+no i386 filesystem parser, rootfs format, whole-file executable buffer, or
+private executable loader.
 
-IDE and Ci20 USB mass storage converge at the generic block-device
-interface; i386 contributes only the ATA backend.  An IDE disk is registered
-after the embedded root and exercised as an additional read-only whole
-device.  It is never selected as root and there is no IDE-to-memory root
-fallback.  The existing IBM IDE-CF and its Red Hat partitions therefore
-remain outside the ReBSD root policy.
+IDE and USB mass storage use the separate generic block-device major 2 and
+the common `sdN` namespace.  The current ATA backend attaches first as
+`sd0`; the embedded romdisk never consumes an `sdN` unit.  The mandatory USB
+phase will reuse the existing USB core, hub, `umass` BOT/SCSI transport, and
+`sys/disk` backend contract.  I386 will supply only PCI interrupt/DMA and
+host-controller attachment; it will not gain a private USB, mass-storage, or
+disk stack.  IDE and USB attachment order may change their `sdN` unit, so
+neither is selected as root.  The IBM IDE-CF and its Red Hat partitions
+remain outside the debug-root policy.
 
 Proc0 is initialized only by common `kern_proc.c::proc0_bootstrap`.
 Common `newproc` allocates proc1, its u-area/vmspace, process-list entries,

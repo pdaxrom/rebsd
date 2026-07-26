@@ -4,12 +4,12 @@
 # switch, fork/init frames, ring-3/TSS, int 0x80 ABI, production-numbered
 # sysent bootstrap prefix, i386 signal frame, user-return work loop and
 # generic process table/process 1 with its persistent CPL3
-# production-syscall probe, common FAT/UFS-root-backed ELF32 /sbin/init and
+# production-syscall probe, common UFS-root-backed ELF32 /sbin/init and
 # exec-compatible user stack are linked by the early Makefile together with
 # user trap-to-signal translation, generic kern_synch run queue/scheduler
 # and generic newproc with production fork syscall.  Read-only
 # open/read/lseek/close use the common VFS and descriptor paths, including
 # shared offsets across fork and early exit teardown.  The embedded UFS root
-# is attached through the common disk layer.  Remaining machine-independent
-# files are connected as the diagnostic bootstrap is replaced by normal
-# common startup.
+# is exposed by the common read-only romdisk block driver at major 0 minor 0.
+# Remaining machine-independent files are connected as the diagnostic
+# bootstrap is replaced by normal common startup.

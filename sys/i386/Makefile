@@ -53,7 +53,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
-                   libkern.o disk_subr.o disk.o disk_memory.o devsw.o \
+                   libkern.o disk_subr.o disk.o romdisk.o i386_romdisk.o \
+                   devsw.o \
                    ufs_alloc.o ufs_bio.o ufs_bmap.o ufs_fio.o \
                    ufs_inode.o ufs_mount.o ufs_namei.o ufs_subr.o \
                    ufs_syscalls.o ufs_syscalls2.o \
@@ -157,7 +158,7 @@ rootfs.img: $(FSUTIL) $(I386_SRC)/rootfs.manifest \
 rootfs_image.o: rootfs.img
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 \
 	    --rename-section \
-	    .data=.rodata.rootfs,alloc,load,readonly,data,contents \
+	    .data=.romdisk,alloc,load,readonly,data,contents \
 	    $< $@
 
 rootfs-smoke: rootfs.img bootstrap-user.elf
@@ -321,14 +322,22 @@ disk.o: $(I386_DISK_SRC)/disk.c $(I386_DISK_SRC)/disk.h \
 	    -DDISK_WRITE_BACK_MAX_SECTORS=32u \
 	    -c $< -o $@
 
-disk_memory.o: $(I386_DISK_SRC)/disk_memory.c $(I386_DISK_SRC)/disk.h \
-	    $(TOPSRC)/sys/include/disk.h $(TOPSRC)/sys/include/errno.h \
+romdisk.o: $(I386_DISK_SRC)/romdisk.c $(I386_DISK_SRC)/romdisk.h \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
+	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/systm.h \
 	    $(TOPSRC)/sys/include/types.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+i386_romdisk.o: $(I386_PC_SRC)/romdisk.c \
+	    $(I386_SRC)/include/romdisk.h $(I386_DISK_SRC)/romdisk.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 devsw.o: $(I386_PC_SRC)/devsw.c $(I386_DISK_SRC)/disk.h \
+	    $(I386_SRC)/include/romdisk.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/conf.h \
 	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/inode.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -432,6 +441,7 @@ vfs_vnops.o: $(TOPSRC)/sys/kernel/vfs_vnops.c \
 disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/disk_bootstrap.h \
+	    $(I386_SRC)/include/romdisk.h \
 	    $(I386_SRC)/include/vfs_bootstrap.h \
 	    $(I386_SRC)/include/ide.h $(I386_DISK_SRC)/disk.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
@@ -694,6 +704,7 @@ context_selftest.o: $(I386_PC_SRC)/context_selftest.c \
 	    -c $< -o $@
 
 config.o: $(I386_PC_SRC)/config.c \
+	    $(I386_SRC)/include/romdisk.h \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/time.h \
 	    $(TOPSRC)/sys/include/resource.h $(TOPSRC)/sys/include/kernel.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine

@@ -2,9 +2,11 @@
 
 Статус: два IBM 6563-W4G hardware gate сохранены как фактические результаты;
 текущий QEMU path всегда использует встроенный read-only UFS root через
-общие disk/VFS/inode-exec владельцы. IDE подключается только как
-дополнительное read-only block device. Ошибочная FAT-root ветка и
-IDE→memory root fallback отменены и удалены из текущей реализации,
+общий romdisk major 0 minor 0 и общие VFS/UFS/inode-exec владельцы. IDE
+подключается через отдельный generic disk major 2 как `sd0`. Ошибочные
+FAT-root, IDE→memory fallback и регистрация romdisk в `sdN` отменены и
+удалены из текущей реализации. USB Mass Storage включён в обязательный
+i686 storage-план через существующие USB/`umass`/generic disk владельцы,
 2026-07-26.
 
 ## Выполнено
@@ -928,8 +930,8 @@ count через `fork`, закрывать унаследованные descrip
 - приватные `common/initfs.c`, `include/initfs.h` и `tools/mkinitfs.py`
   удалены;
 - существующий `tools/fsutil` создаёт детерминированный little-endian UFS с
-  `/sbin/init`, а общий `disk_memory_attach` регистрирует image как read-only
-  block device;
+  `/sbin/init`, а общий `sys/disk/romdisk` предоставляет image как read-only
+  block major 0 minor 0;
 - UFS использует общие disk, buffer cache, `vfs_mountroot`, inode/name cache,
   `namei`, `rdwri` и descriptor paths;
 - локальная подмена `biodone` удалена. Она не освобождала common read-ahead
@@ -973,9 +975,8 @@ count через `fork`, закрывать унаследованные descrip
 - `sys/i386/tools/mkide.py`, i386 FAT objects/flags, FAT-root selection,
   filesystem-content parsing в ATA/disk bootstrap и FAT-specific QEMU targets
   удалены;
-- один и тот же `rootfs.img`, созданный существующим `tools/fsutil`, проходит
-  как raw read-only UFS через IDE whole-device backend или через существующий
-  common memory-disk backend при отсутствии IDE;
+- один и тот же `rootfs.img`, созданный существующим `tools/fsutil`,
+  встраивается как raw read-only UFS romdisk независимо от наличия IDE;
 - `/sbin/init` разрешается общим `namei` и выполняется production `execve`;
   `sys/kernel/exec_elf.c` читает сегменты прямо из inode, без i386 whole-file
   buffer;
@@ -1084,23 +1085,61 @@ i386 boot policy не добавляется. Реальное IBM-тестир�
 Пятьдесят пятый cleanup-инкремент зафиксировал утверждённую debug root
 policy:
 
-- встроенный UFS через общий `disk_memory_attach` регистрируется первым и
-  является единственным read-only root device;
-- IDE регистрируется после него как дополнительный read-only whole-device;
+- встроенный UFS предоставляется общим `sys/disk/romdisk` на block major 0
+  minor 0 и является единственным read-only root device;
+- Ci20, Malta и i686 используют один byte-backed romdisk owner; платформы
+  задают только linker bounds image;
+- IDE регистрируется через отдельный generic disk major 2 как `sd0`;
   наличие и содержимое IDE больше не участвуют в выборе root;
 - удалены IDE→memory fallback и отдельная проверка `/sbin/init` при выборе
   root; `/sbin/init` проверяется штатным общим `namei`/`exec` путём;
 - direct и BIOS QEMU boots с IDE и без IDE требуют
-  `vfs-root: ufs,memory,read-only`; в IDE-варианте лог подтверждает
-  `sd0` для встроенного UFS и `sd1` для IDE;
+  `vfs-root: ufs,romdisk,read-only`; romdisk не занимает `sdN`;
 - clean i686 build, rootfs/bios-image smoke, `#DE/#GP/#PF`, RAM matrix
-  32–1024 МиБ, host disk/VM tests и GCC `kernel-objects` для Ci20/N64
-  прошли. PCC не запускался и не менялся.
+  32–1024 МиБ, host disk/VM tests и `kernel-objects` для Ci20, MaltaEL и
+  N64 прошли;
+- полные Ci20 и MaltaEL kernel/rootfs сборки прошли последовательно и
+  слинковали общий `romdisk.o` с соответствующим `romdisk_machdep.o`;
+- полный MIPS-профиль штатно проверил уже существующий MIPS PCC runtime.
+  PCC source/config не менялись, а PCC для i686 не подключался;
+- межархитектурная проверка обнаружила предыдущую ошибку общей
+  `VM_PAGE_BYTES`: C-суффикс `u` попадал в MIPS linker script. Константа
+  исправлена в общем заголовке, а правило генерации теперь зависит от
+  включаемых `layout.h` и `vm_constants.h`, поэтому Ci20/Malta/N64 scripts
+  корректно пересоздаются при изменении общих констант.
 
 Оставшийся `pc/vfs_bootstrap.c` только обслуживает diagnostic image и не
 содержит выбора root. Он должен быть удалён при подключении normal image к
 common `init_main`; swap policy этим инкрементом не определяется и
 `VM_PAGER_NO_SWAP` остаётся явным blocker, а не принятой политикой.
+
+## Обязательный i686 USB Mass Storage этап
+
+USB не является отдельной i686 storage-подсистемой. Реализация обязана
+переиспользовать уже работающую на Ci20 цепочку:
+
+```text
+общий USB core/hub -> общий umass BOT/SCSI -> общий sys/disk major 2 -> sdN
+```
+
+Порядок работ:
+
+1. подключить к i686 существующие общие USB core, hub, service/task queue,
+   `umass`, OHCI и EHCI без копирования исходников в `sys/i386`;
+2. добавить только необходимые i386 PCI, interrupt и DMA adapters;
+3. для QEMU сначала пройти enumeration, attach, MBR/GPT и read-only raw I/O
+   на USB Mass Storage через существующий `umass` и generic disk;
+4. общий UHCI HCD отсутствует в дереве. Для PIIX/VIA USB его нужно добавить
+   как архитектурно нейтральный HCD в `sys/usb`, после отдельного аудита
+   NetBSD-origin и существующего `usb_hcd_ops`; i386 будет содержать только
+   attachment к PCI controller;
+5. на IBM 6563-W4G проверить PCI ID USB function VIA, затем тот же
+   enumeration/read-only gate на реальной флешке;
+6. IDE и USB получают `sdN` по общему attach order. Номер `sdN` не задаёт
+   root policy: debug root остаётся romdisk `(0,0)`.
+
+Запрещены отдельные i386 USB core, `umass`, SCSI transport, partition parser,
+filesystem path или собственный namespace устройств.
 
 ## 1. Цель и границы первого порта
 
@@ -1122,9 +1161,11 @@ IBM PC-совместимых компьютеров с legacy BIOS и проц�
 - GCC/binutils из `/Users/sash/Library/i686-toolchain`;
 - kernel и userland собираются GCC; PCC не меняется и не входит в i686-порт.
 
-На первом этапе не входят: UEFI, SMP/APIC, ACPI resource/routing tables,
-PCI resource allocation, USB, SATA/AHCI, DMA для IDE, графический
+В завершённый первый boot-этап не входили: UEFI, SMP/APIC, ACPI
+resource/routing tables, USB, SATA/AHCI, DMA для IDE, графический
 framebuffer, динамическая линковка, PCC и поддержка 386/486/586.
+USB Mass Storage теперь является обязательным последующим этапом по плану
+выше, а не исключённой возможностью порта.
 
 Минимальная ISA: i686 без обязательных SSE/SSE2. Ядро и базовый userland
 собираются с `-march=i686 -mno-sse -mno-sse2`; использование x87 в ядре

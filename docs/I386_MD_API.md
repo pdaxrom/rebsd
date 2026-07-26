@@ -289,11 +289,13 @@ mapping.
 
 Статический ELF больше не передаётся loader напрямую как отдельный binary
 symbol. Существующий `tools/fsutil` создаёт детерминированный little-endian
-UFS с именованным `/sbin/init`; общий memory-disk backend всегда подключает
-его первым как единственный read-only root device. ATA whole-device
-регистрируется затем как дополнительное read-only block device и не
-участвует в выборе root. Варианты с IDE и без IDE проходят один и тот же
-`vfs_mountroot`/`namei`/inode-exec путь от встроенного UFS.
+UFS с именованным `/sbin/init`; общий `sys/disk/romdisk` предоставляет его
+как read-only block major 0 minor 0. I386 задаёт только linker bounds image,
+как Ci20 и Malta. ATA whole-device регистрируется через отдельный общий disk
+major 2 как `sd0` и не участвует в выборе root. Будущий USB Mass Storage
+переиспользует существующие USB core/`umass` и тот же generic disk major 2;
+отдельного i386 storage path не будет. Варианты с IDE и без IDE проходят
+один и тот же `vfs_mountroot`/`namei`/inode-exec путь от встроенного UFS.
 `rootfs: ok` покрывает эту цепочку, а `make rootfs-smoke` проверяет UFS через
 `fsutil --check` и byte-for-byte воспроизводимость.
 

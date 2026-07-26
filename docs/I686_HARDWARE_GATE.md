@@ -7,11 +7,13 @@ partition `(hd0,2)`.
 
 В двух проверенных на IBM images файловая система ещё не монтировалась.
 Текущий код проходит QEMU-only gate со встроенным read-only UFS root:
-memory-disk регистрируется первым и является единственным root как при
-наличии, так и при отсутствии IDE. IDE-CF регистрируется только как
-дополнительное read-only block device; её Red Hat разделы не участвуют в
-выборе root. На IBM это пока повторять не требуется. ATA-команд записи всё
-ещё нет: IDE
+общий byte-backed romdisk расположен на block major 0 minor 0 и является
+единственным root как при наличии, так и при отсутствии IDE. IDE-CF
+регистрируется через общий disk major 2 как `sd0`; её Red Hat разделы не
+участвуют в выборе root. На IBM это пока повторять не требуется. USB Mass
+Storage является обязательным следующим storage-этапом и будет подключён
+через существующие USB core/`umass`/generic disk владельцы, также на major 2.
+ATA-команд записи всё ещё нет: IDE
 backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
 регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
 `EROFS`.

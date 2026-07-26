@@ -22,6 +22,13 @@ SECTIONS
         *(.rodata .rodata.*)
     } :text
 
+    .romdisk ALIGN(16) : {
+        __i386_romdisk_start = .;
+        KEEP(*(.romdisk))
+        KEEP(*(.romdisk.*))
+        __i386_romdisk_end = .;
+    } :text
+
     __kernel_ro_end = .;
 
     .data ALIGN(4096) : {

@@ -6,6 +6,8 @@
 
 #include <disk/disk.h>
 
+#include "romdisk.h"
+
 #define I386_DISK_MAJOR 2
 
 static int
@@ -47,7 +49,13 @@ i386_noioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
       i386_noioctl, 0 }
 
 const struct bdevsw bdevsw[] = {
-    I386_NOBDEV,
+    {
+#if I386_ROMDISK_MAJOR != 0
+#error Wrong I386_ROMDISK_MAJOR value
+#endif
+        i386romdisk_open, i386romdisk_close, i386romdisk_strategy,
+        i386romdisk_size, i386romdisk_ioctl, 0
+    },
     I386_NOBDEV,
     {
 #if I386_DISK_MAJOR != 2
@@ -84,5 +92,7 @@ iskmemdev(dev_t dev)
 int
 isdisk(dev_t dev, int type)
 {
-    return type == IFBLK && major(dev) == I386_DISK_MAJOR;
+    return type == IFBLK &&
+        (major(dev) == I386_ROMDISK_MAJOR ||
+        major(dev) == I386_DISK_MAJOR);
 }

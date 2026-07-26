@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <sys/disk.h>
 #include <disk/disk.h>
+#include <disk/romdisk.h>
 
 #define CHECK(expr) do {                                                \
     if (!(expr))                                                        \
@@ -14,6 +15,7 @@
 } while (0)
 
 #define TEST_SECTORS               64u
+#define TEST_ROMDISK_BLOCK_BYTES   1024u
 #define TEST_GPT_ENTRY_BYTES       (128u * 128u)
 #define TEST_GPT_MEDIA_SECTORS     0x100000400ULL
 #define TEST_GPT_PARTITION_LBA     0x100000000ULL
@@ -64,6 +66,12 @@ test_copy(void *to_arg, const void *from_arg, size_t length)
     from = (const unsigned char *)from_arg;
     while (length-- != 0)
         *to++ = *from++;
+}
+
+void
+bcopy(const void *from, void *to, size_t length)
+{
+    test_copy(to, from, length);
 }
 
 static int
@@ -383,29 +391,33 @@ test_open_detach_reuse(void)
 }
 
 static int
-test_memory_backend(void)
+test_romdisk(void)
 {
-    struct disk_memory memory;
+    struct romdisk romdisk;
     struct buf bp;
-    unsigned char media[2u * DISK_SECTOR_SIZE];
-    unsigned char data[DISK_SECTOR_SIZE];
-    unsigned unit;
+    unsigned char media[2u * TEST_ROMDISK_BLOCK_BYTES];
+    unsigned char data[TEST_ROMDISK_BLOCK_BYTES];
     unsigned i;
     dev_t dev;
+    int blocks;
 
     for (i = 0; i < sizeof(media); ++i)
         media[i] = (unsigned char)(i ^ 0x5au);
-    media[510] = 0x55;
-    media[511] = 0xaa;
+    romdisk.rd_start = media;
+    romdisk.rd_end = media + sizeof(media);
+    romdisk.rd_minor = 7;
+    romdisk.rd_block_shift = 10;
+    dev = makedev(0, romdisk.rd_minor);
 
-    diskattach(0);
-    CHECK(disk_memory_attach(&memory, media, sizeof(media) - 1u,
-        &unit) == EINVAL);
-    CHECK(disk_memory_attach(&memory, media, sizeof(media), &unit) == 0);
-    CHECK(unit == 0);
-    dev = makedev(2, DISK_MINOR(unit, DISK_MINOR_WHOLE));
-    CHECK(disk_bdev_open(dev, FWRITE, 0) == EROFS);
-    CHECK(disk_bdev_open(dev, FREAD, 0) == 0);
+    CHECK(romdisk_bdev_open(&romdisk, makedev(0, 6), FREAD, 0) == ENXIO);
+    CHECK(romdisk_bdev_open(&romdisk, dev, FWRITE, 0) == EROFS);
+    CHECK(romdisk_bdev_open(&romdisk, dev, FREAD, 0) == 0);
+    CHECK(romdisk_bdev_size(&romdisk, dev) == 2);
+    CHECK(romdisk_bdev_size(&romdisk, makedev(0, 6)) == 0);
+    blocks = 0;
+    CHECK(romdisk_bdev_ioctl(&romdisk, dev, DIOCGETMEDIASIZE,
+        (caddr_t)&blocks, FREAD) == 0);
+    CHECK(blocks == 2);
 
     test_zero(&bp, sizeof(bp));
     test_zero(data, sizeof(data));
@@ -414,12 +426,30 @@ test_memory_backend(void)
     bp.b_bcount = sizeof(data);
     bp.b_addr = (caddr_t)data;
     bp.b_flags = B_READ | B_PHYS;
-    disk_bdev_strategy(&bp);
+    romdisk_bdev_strategy(&romdisk, &bp);
     CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
     CHECK(bp.b_resid == 0);
-    CHECK(test_equal(data, media + DISK_SECTOR_SIZE, sizeof(data)));
-    CHECK(disk_bdev_close(dev, FREAD, 0) == 0);
-    disk_detach(unit, &memory);
+    CHECK(test_equal(data, media + TEST_ROMDISK_BLOCK_BYTES, sizeof(data)));
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = dev;
+    bp.b_blkno = 2;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_READ | B_PHYS;
+    romdisk_bdev_strategy(&romdisk, &bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(bp.b_resid == sizeof(data));
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = dev;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_PHYS;
+    romdisk_bdev_strategy(&romdisk, &bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == (B_DONE | B_ERROR));
+    CHECK(bp.b_error == EROFS);
+    CHECK(romdisk_bdev_close(&romdisk, dev, FREAD, 0) == 0);
     return 0;
 }
 
@@ -845,7 +875,7 @@ test_gpt_64_bit_lifecycle(void)
 int
 main(void)
 {
-    CHECK(test_memory_backend() == 0);
+    CHECK(test_romdisk() == 0);
     CHECK(test_open_detach_reuse() == 0);
     CHECK(test_partition_write_and_flush() == 0);
     CHECK(test_raw_odd_sector_addressing() == 0);

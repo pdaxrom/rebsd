@@ -29,7 +29,7 @@ for the cleanup commit.
 | `sys/kernel/kern_proc_lifecycle.c`, added by the i686 branch | the same existing common exit/wait/reap path |
 | weak i386 `psignal`, `issignal`, `postsig`, `setpri`, `setrq`, and `swtch` fallbacks | common `kern_sig.c`, `kern_sig2.c`, `kern_synch.c`, and `kern_clock.c` |
 | weak i386 `noproc` and `time` storage | common `kern_clock.c` and `kern_time.c` |
-| `sys/i386/common/initfs.c`, `include/initfs.h`, and `tools/mkinitfs.py` | deterministic UFS from existing `tools/fsutil`, attached by common `disk_memory_attach` and mounted by common VFS/UFS |
+| `sys/i386/common/initfs.c`, `include/initfs.h`, `tools/mkinitfs.py`, and the later `disk_memory_attach` root path | deterministic UFS from existing `tools/fsutil`, exposed at major 0 minor 0 by common `sys/disk/romdisk` and mounted by common VFS/UFS |
 | local `i386_disk_biodone` selected with a compiler macro | common `ufs_bio.c::biodone`; the local completion skipped buffer-cache read-ahead release |
 | compile-time `printf`/`log` renames plus quiet i386 adapters | common `subr_prf.c`, `tty.c`, and `tty_subr.c`; i386 now provides only `cnputc` through its COM1/VGA console |
 | weak i386 `panic`, `panicstr`, and `log` definitions | common `subr_prf.c`; the MD halt operation remains in the i386 console/boot boundary |

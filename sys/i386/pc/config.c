@@ -14,7 +14,9 @@
 #include <sys/map.h>
 #include <sys/tty.h>
 
-dev_t rootdev = NODEV;
+#include "romdisk.h"
+
+dev_t rootdev = makedev(I386_ROMDISK_MAJOR, I386_ROMDISK_ROOT_MINOR);
 int nproc = NPROC;
 int securelevel;
 int hz = HZ;

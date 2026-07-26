@@ -44,13 +44,13 @@ i386_vfs_bootstrap_mount(dev_t dev)
     error = vfs_mountroot(MOUNT_UFS, dev,
         MNT_RDONLY | MNT_NOATIME, &rootdir);
     if (error != 0) {
-        i386_early_puts("vfs-root: ufs,memory,failed\n");
+        i386_early_puts("vfs-root: ufs,romdisk,failed\n");
         return error;
     }
     i386_vfs_dev = dev;
     rootdev = dev;
     i386_vfs_mounted = 1;
-    i386_early_puts("vfs-root: ufs,memory,read-only\n");
+    i386_early_puts("vfs-root: ufs,romdisk,read-only\n");
 
     igrab(rootdir);
     IUNLOCK(rootdir);
