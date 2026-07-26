@@ -584,17 +584,15 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
 
     error = n64cart_flash_getinfo(&info);
     if (cmd == N64CARTFLASHIOC_GETINFO) {
-        error = copyout((caddr_t)&info, data, sizeof(info));
-        return error;
+        *(struct n64cart_flash_info *)data = info;
+        return 0;
     }
     if (error != 0)
         return error;
 
     switch (cmd) {
     case N64CARTFLASHIOC_READ:
-        error = copyin(data, (caddr_t)&io, sizeof(io));
-        if (error != 0)
-            return error;
+        io = *(struct n64cart_flash_io *)data;
         error = n64cart_flash_check_io(&info, &io);
         if (error != 0)
             return error;
@@ -605,9 +603,7 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         return copyout((caddr_t)n64cart_flash_buf, io.buffer, io.size);
 
     case N64CARTFLASHIOC_WRITE:
-        error = copyin(data, (caddr_t)&io, sizeof(io));
-        if (error != 0)
-            return error;
+        io = *(struct n64cart_flash_io *)data;
         error = n64cart_flash_check_write_range(&info, io.offset,
             io.size, io.buffer);
         if (error != 0)
@@ -621,9 +617,7 @@ n64cart_flash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         return n64cart_flash_write_sector_raw(io.offset, n64cart_flash_buf);
 
     case N64CARTFLASHIOC_ERASE:
-        error = copyin(data, (caddr_t)&offset, sizeof(offset));
-        if (error != 0)
-            return error;
+        offset = *(unsigned *)data;
         error = n64cart_flash_check_erase_range(&info, offset);
         if (error != 0)
             return error;

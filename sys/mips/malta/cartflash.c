@@ -316,19 +316,21 @@ malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
     malta_cartflash_info(&minfo);
 
     if (cmd == MIPSROMFSFLASHIOC_GETINFO) {
+        struct mipsromfs_flash_info *result;
+
+        result = (struct mipsromfs_flash_info *)data;
         info.jedec_id = minfo.jedec_id;
         info.rom_size = minfo.rom_size;
         info.fw_size = minfo.fw_size;
         info.romfs_offset = minfo.romfs_offset;
         info.sector_size = minfo.sector_size;
-        return copyout((caddr_t)&info, data, sizeof(info));
+        *result = info;
+        return 0;
     }
 
     switch (cmd) {
     case MIPSROMFSFLASHIOC_READ:
-        error = copyin(data, (caddr_t)&io, sizeof(io));
-        if (error)
-            return error;
+        io = *(struct mipsromfs_flash_io *)data;
         error = malta_cartflash_check_range(&minfo, io.offset, io.size,
             io.buffer);
         if (error)
@@ -340,9 +342,7 @@ malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
         return copyout((caddr_t)malta_cartflash_buf, io.buffer, io.size);
 
     case MIPSROMFSFLASHIOC_WRITE:
-        error = copyin(data, (caddr_t)&io, sizeof(io));
-        if (error)
-            return error;
+        io = *(struct mipsromfs_flash_io *)data;
         error = malta_cartflash_check_write_range(&minfo, io.offset,
             io.size, io.buffer);
         if (error)
@@ -357,9 +357,7 @@ malta_cartflash_ioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
             malta_cartflash_buf);
 
     case MIPSROMFSFLASHIOC_ERASE:
-        error = copyin(data, (caddr_t)&offset, sizeof(offset));
-        if (error)
-            return error;
+        offset = *(unsigned *)data;
         return malta_cartflash_backend_erase_sector(offset);
 
     default:

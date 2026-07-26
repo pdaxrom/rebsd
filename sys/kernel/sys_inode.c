@@ -99,9 +99,9 @@ ino_ioctl(struct file *fp, u_int com, caddr_t data)
     case IFDIR:
         if (com == FIONREAD) {
             if (fp->f_type==DTYPE_PIPE && !(fp->f_flag&FREAD))
-                *(off_t *)data = 0;
+                *(long *)data = 0;
             else
-                *(off_t *)data = ip->i_size - fp->f_offset;
+                *(long *)data = (long)(ip->i_size - fp->f_offset);
             return (0);
         }
         if (com == FIONBIO || com == FIOASYNC)  /* XXX */

@@ -94,6 +94,7 @@ struct ttysize {
 #define IOC_OUT         0x40000000      /* copy out parameters */
 #define IOC_IN          0x80000000      /* copy in parameters */
 #define IOC_INOUT       (IOC_IN|IOC_OUT)
+#define IOCPARM_LEN(x)  (((x) >> 16) & IOCPARM_MASK)
 
 #define _IO(x,y)        (IOC_VOID |                               ((x)<<8)|y)
 #define _IOR(x,y,t)     (IOC_OUT  |((sizeof(t)&IOCPARM_MASK)<<16)|((x)<<8)|y)

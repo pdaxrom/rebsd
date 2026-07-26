@@ -5,6 +5,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
+#include <sys/ioctl.h>
 #include <sys/vmparam.h>
 #include <sys/wait.h>
 #include <errno.h>
@@ -158,6 +159,70 @@ smoke_hw_usermem(long *value)
 }
 
 static int
+smoke_ioctl_cow(void)
+{
+    struct sgttyb *settings;
+    char *page;
+    pid_t child;
+    int error;
+
+    page = mmap(0, SMOKE_VM_PAGE_SIZE, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (page == MAP_FAILED)
+        return 1;
+    settings = (struct sgttyb *)page;
+    memset(settings, 0, sizeof(*settings));
+    child = fork();
+    if (child < 0) {
+        (void)munmap(page, SMOKE_VM_PAGE_SIZE);
+        return 2;
+    }
+    if (child == 0) {
+        for (;;)
+            pause();
+    }
+
+    /*
+     * fork left the page COW in both processes.  IOC_OUT must use copyout
+     * rather than letting ttioctl store through this user address in kernel
+     * mode, which used to raise an unrecoverable TLB-modified exception.
+    */
+    error = ioctl(STDIN_FILENO, TIOCGETP, settings);
+    (void)kill(child, SIGKILL);
+    if (smoke_wait_signal(child, SIGKILL) != 0)
+        error = -1;
+    if (munmap(page, SMOKE_VM_PAGE_SIZE) != 0)
+        error = -1;
+    return error == 0 ? 0 : 3;
+}
+
+static int
+smoke_fionread(void)
+{
+    static const char payload[] = "ready";
+    int fds[2];
+    long available;
+
+    if (pipe(fds) < 0)
+        return 1;
+    if (write(fds[1], payload, sizeof(payload) - 1) !=
+        (ssize_t)(sizeof(payload) - 1)) {
+        (void)close(fds[0]);
+        (void)close(fds[1]);
+        return 2;
+    }
+    available = -1;
+    if (ioctl(fds[0], FIONREAD, &available) < 0) {
+        (void)close(fds[0]);
+        (void)close(fds[1]);
+        return 3;
+    }
+    (void)close(fds[0]);
+    (void)close(fds[1]);
+    return available == (long)(sizeof(payload) - 1) ? 0 : 4;
+}
+
+static int
 smoke_large_brk(int page_size)
 {
     char *grown;
@@ -293,6 +358,10 @@ main(int argc, char **argv)
 #endif
     if (smoke_stack(4) != 25)
         return smoke_fail("stack growth");
+    if (smoke_ioctl_cow() != 0)
+        return smoke_fail("ioctl IOC_OUT to COW page");
+    if (smoke_fionread() != 0)
+        return smoke_fail("FIONREAD typed ioctl");
 
     arena[0] = 0x21;
     child = fork();
