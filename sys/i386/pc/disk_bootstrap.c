@@ -44,7 +44,7 @@ i386_disk_read(struct buf *bp, dev_t dev, disk_sector_t lba,
 }
 
 static int
-i386_disk_attach_ide(dev_t *devp)
+i386_disk_attach_ide(void)
 {
     struct disk_attach_args args;
     struct buf bp;
@@ -59,7 +59,6 @@ i386_disk_attach_ide(dev_t *devp)
     args.da_sector_size = DISK_SECTOR_SIZE;
     args.da_flags = DISK_FLAG_READ_ONLY;
 
-    *devp = NODEV;
     error = disk_attach(&args, &unit);
     if (error != 0) {
         i386_early_puts("disk-attach: failed\n");
@@ -124,7 +123,6 @@ i386_disk_attach_ide(dev_t *devp)
         return EIO;
     }
     i386_early_puts("disk-close: ok\n");
-    *devp = dev;
     return 0;
 }
 
@@ -157,21 +155,19 @@ i386_disk_attach_rootfs(dev_t *devp)
 int
 i386_disk_bootstrap(int ide_present)
 {
-    dev_t preferred_dev;
-    dev_t fallback_dev;
+    dev_t root_dev;
     int error;
 
     diskattach(0);
-    preferred_dev = NODEV;
+    error = i386_disk_attach_rootfs(&root_dev);
+    if (error != 0)
+        return error;
     if (ide_present) {
-        error = i386_disk_attach_ide(&preferred_dev);
+        error = i386_disk_attach_ide();
         if (error != 0)
             return error;
     }
-    error = i386_disk_attach_rootfs(&fallback_dev);
-    if (error != 0)
-        return error;
-    error = i386_vfs_bootstrap_mount(preferred_dev, fallback_dev);
+    error = i386_vfs_bootstrap_mount(root_dev);
     if (error != 0)
         return error;
     return 0;

@@ -6,12 +6,12 @@ VIA Apollo Pro 133, AGP VGA и IDE-CF. У машины нет floppy drive, по
 partition `(hd0,2)`.
 
 В двух проверенных на IBM images файловая система ещё не монтировалась.
-Текущий код уже проходит QEMU-only read-only FAT16/FAT32 и встроенный UFS
-root gates: FAT32 использует тот же MBR type `0x0c` и start LBA `0x800`, что
-и IBM CF, читает `/sbin/init` через generic disk/VFS и выполняет его в CPL3.
-При отсутствии IDE или `/sbin/init` на FAT выбирается детерминированный UFS,
-подключённый через общий memory-disk backend. На IBM это пока повторять не
-требуется. ATA-команд записи всё ещё нет: IDE
+Текущий код проходит QEMU-only gate со встроенным read-only UFS root:
+memory-disk регистрируется первым и является единственным root как при
+наличии, так и при отсутствии IDE. IDE-CF регистрируется только как
+дополнительное read-only block device; её Red Hat разделы не участвуют в
+выборе root. На IBM это пока повторять не требуется. ATA-команд записи всё
+ещё нет: IDE
 backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
 регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
 `EROFS`.
@@ -24,12 +24,11 @@ make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 all
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
-    boot-smoke fat32-boot-smoke bios-image-smoke \
-    bios-boot-smoke bios-fat32-boot-smoke \
+    boot-smoke bios-image-smoke bios-boot-smoke \
     ide-absent-smoke bios-ide-absent-smoke
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
-    QEMU_MACHINE=pc-i440fx-5.1 bios-fat32-boot-smoke
+    QEMU_MACHINE=pc-i440fx-5.1 bios-boot-smoke
 ```
 
 GRUB-compatible artifact:

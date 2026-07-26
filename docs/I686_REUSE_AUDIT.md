@@ -109,10 +109,11 @@ The current i686 image directly compiles the existing common disk layer,
 UFS VFS, vnode/file-descriptor path, VM objects/maps/vmspace, fork,
 exit/wait/resource, signal policy, scheduler, clock, the complete syscall
 table and its production exec/VM/sysctl handlers, process-1 initialization,
-libkern, and syscall stubs.  I386 adapters pass an ATA-backed whole-device
-`dev_t` into those interfaces; there is no i386 filesystem parser, partition
-policy, private file table, rootfs implementation, or process-creation
-policy.
+libkern, and syscall stubs.  The embedded UFS and ATA whole-device are both
+registered through the common disk interface.  Only the embedded read-only
+UFS is selected as root; ATA remains an additional read-only device.  There
+is no i386 filesystem parser, partition policy, private file table, rootfs
+format, or process-creation policy.
 
 ### Bring-up tests, not production subsystems
 
@@ -174,13 +175,20 @@ removal condition remains the diagnostic-build split described above; that
 work must reuse the normal common startup sequence and must not add i386
 policy.
 
+`pc/vfs_bootstrap.c` still sequences table initialization and the common
+`vfs_mountroot` call for that diagnostic image.  Root selection and fallback
+logic have been removed: it accepts only the already attached embedded UFS
+device.  The file remains an explicit cleanup item and must disappear when
+the normal image enters common `init_main`; it is not a second VFS owner.
+
 ## Validation gates
 
 Every cleanup commit must pass:
 
 - i686 GCC full rebuild;
 - QEMU Linux-protocol and BIOS boot;
-- raw UFS over IDE and the same UFS over common memory disk when IDE is absent;
+- embedded read-only UFS root with IDE present and absent, while IDE remains
+  an additional read-only common block device;
 - divide, general-protection, and page-fault negative gates;
 - host disk and VM tests;
 - current `BOARD=ci20` and `BOARD=n64` GCC builds after common-kernel changes.

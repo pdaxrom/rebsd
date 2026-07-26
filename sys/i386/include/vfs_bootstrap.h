@@ -3,6 +3,6 @@
 
 #include <sys/types.h>
 
-int i386_vfs_bootstrap_mount(dev_t preferred_dev, dev_t fallback_dev);
+int i386_vfs_bootstrap_mount(dev_t dev);
 
 #endif

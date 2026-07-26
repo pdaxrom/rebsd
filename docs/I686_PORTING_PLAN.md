@@ -1,9 +1,11 @@
 # План портирования ReBSD на i686/BIOS
 
 Статус: два IBM 6563-W4G hardware gate сохранены как фактические результаты;
-текущий QEMU path использует только существующий raw UFS через общие
-disk/VFS/inode-exec владельцы. Ошибочная FAT-root ветка отменена и удалена
-из текущей реализации, 2026-07-26.
+текущий QEMU path всегда использует встроенный read-only UFS root через
+общие disk/VFS/inode-exec владельцы. IDE подключается только как
+дополнительное read-only block device. Ошибочная FAT-root ветка и
+IDE→memory root fallback отменены и удалены из текущей реализации,
+2026-07-26.
 
 ## Выполнено
 
@@ -1078,6 +1080,27 @@ i386 boot policy не добавляется. Реальное IBM-тестир�
   `vm_object.o` на общие `tsleep` и `wakeup`;
 - host disk/VM tests и GCC `kernel-objects` для Ci20/N64 прошли. PCC не
   запускался и не менялся.
+
+Пятьдесят пятый cleanup-инкремент зафиксировал утверждённую debug root
+policy:
+
+- встроенный UFS через общий `disk_memory_attach` регистрируется первым и
+  является единственным read-only root device;
+- IDE регистрируется после него как дополнительный read-only whole-device;
+  наличие и содержимое IDE больше не участвуют в выборе root;
+- удалены IDE→memory fallback и отдельная проверка `/sbin/init` при выборе
+  root; `/sbin/init` проверяется штатным общим `namei`/`exec` путём;
+- direct и BIOS QEMU boots с IDE и без IDE требуют
+  `vfs-root: ufs,memory,read-only`; в IDE-варианте лог подтверждает
+  `sd0` для встроенного UFS и `sd1` для IDE;
+- clean i686 build, rootfs/bios-image smoke, `#DE/#GP/#PF`, RAM matrix
+  32–1024 МиБ, host disk/VM tests и GCC `kernel-objects` для Ci20/N64
+  прошли. PCC не запускался и не менялся.
+
+Оставшийся `pc/vfs_bootstrap.c` только обслуживает diagnostic image и не
+содержит выбора root. Он должен быть удалён при подключении normal image к
+common `init_main`; swap policy этим инкрементом не определяется и
+`VM_PAGER_NO_SWAP` остаётся явным blocker, а не принятой политикой.
 
 ## 1. Цель и границы первого порта
 

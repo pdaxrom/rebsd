@@ -86,7 +86,7 @@ BOOT_MARKERS = (
     "disk-strategy-eof: ok",
     "disk-strategy-write: erofs",
     "rootfs-disk: read-only",
-    "vfs-root: ufs,ide,read-only",
+    "vfs-root: ufs,memory,read-only",
     "vfs-exec-init: ok",
     "disk-close: ok",
     "pic: ok",
@@ -122,13 +122,12 @@ IDE_DISK_MARKERS = (
     "disk-strategy-read: ok",
     "disk-strategy-eof: ok",
     "disk-strategy-write: erofs",
-    "vfs-root: ufs,ide,read-only",
     "disk-close: ok",
 )
 
 NO_DISK_BOOT_MARKERS = tuple(
     marker for marker in BOOT_MARKERS if marker not in IDE_DISK_MARKERS
-) + ("vfs-root: ufs,memory,read-only", "ide-primary-master: none")
+) + ("ide-primary-master: none",)
 
 BIOS_NO_DISK_BOOT_MARKERS = tuple(
     "boot-loader: bios-int13"
@@ -220,7 +219,7 @@ EXCEPTION_MARKERS = {
         "disk-strategy-eof: ok",
         "disk-strategy-write: erofs",
         "rootfs-disk: read-only",
-        "vfs-root: ufs,ide,read-only",
+        "vfs-root: ufs,memory,read-only",
         "vfs-exec-init: ok",
         "disk-close: ok",
         "exception: vector=0x0000000e error=0x00000003",

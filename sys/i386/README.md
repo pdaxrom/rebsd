@@ -44,20 +44,20 @@ protected-mode trampoline copies it to 1 MiB.  QEMU requires
 `boot-loader: linux-protocol`.  The first IBM 6563-W4G procedure is in
 `docs/I686_HARDWARE_GATE.md`.
 
-The IDE smoke uses the deterministic read-only UFS image produced by the
-existing `tools/fsutil`.  IDE and Ci20 USB mass storage converge at the
-generic block-device interface; i386 contributes only the ATA backend and
-passes the whole-device `dev_t` to the common disk and VFS owners.  UFS is
-mounted through `vfs_mountroot`, `/sbin/init` is resolved with common
-`namei`, and common inode-backed `execve` reads and maps its ELF segments
-directly from the inode.  There is no i386 filesystem parser, rootfs format,
-whole-file executable buffer, or private executable loader.
+The deterministic UFS image produced by the existing `tools/fsutil` is
+embedded and registered first through the common memory-disk backend.  It is
+the sole read-only root device during bring-up, both with and without an IDE
+disk.  UFS is mounted through `vfs_mountroot`, `/sbin/init` is resolved with
+common `namei`, and common inode-backed `execve` reads and maps its ELF
+segments directly from the inode.  There is no i386 filesystem parser,
+rootfs format, whole-file executable buffer, or private executable loader.
 
-The same UFS image is embedded through the existing common memory-disk
-backend for the no-IDE gate.  This is a transport fallback for the same
-standard root filesystem, not a second root design.  The existing IBM
-IDE-CF remains read-only and is not treated as a ReBSD root unless it
-contains a valid UFS with `/sbin/init`.
+IDE and Ci20 USB mass storage converge at the generic block-device
+interface; i386 contributes only the ATA backend.  An IDE disk is registered
+after the embedded root and exercised as an additional read-only whole
+device.  It is never selected as root and there is no IDE-to-memory root
+fallback.  The existing IBM IDE-CF and its Red Hat partitions therefore
+remain outside the ReBSD root policy.
 
 Proc0 is initialized only by common `kern_proc.c::proc0_bootstrap`.
 Common `newproc` allocates proc1, its u-area/vmspace, process-list entries,
@@ -149,8 +149,8 @@ requires production `getpid` to return 1, and requires `process-user: ok`
 before timer IRQs.  The target non-PAE Pentium III has no hardware NX bit.
 The user payload is a separately linked ELF32/i386 `ET_EXEC`, installed as
 `/sbin/init` in a deterministic read-only UFS image and loaded from two
-`PT_LOAD` segments.  The IDE and memory-disk transports expose that same
-image through the common disk, buffer-cache, VFS, inode and namei paths.
+`PT_LOAD` segments.  The embedded memory disk exposes that image through the
+common disk, buffer-cache, VFS, inode and namei paths.
 The common inode ELF loader checks
 bounds, alignment, target ABI, entry, user ranges, overlap and W+X, zero-fills
 BSS, applies final permissions, and requires `elf32-user: ok`; there is no
@@ -176,8 +176,10 @@ diagnostics, remapped dual 8259A PICs, PIT IRQ0 at 100 Hz, normalized
 physical RAM, non-PAE 4 KiB bootstrap paging, and reusable low-level page
 mapping primitives.  It links the machine-independent `vm_phys`/`vm_page`
 allocator and implements the public pmap contract with per-process address
-spaces, generic vmspace, anonymous memory, COW and safe copy I/O.  Early swap
-is explicitly disabled.  The neutral process MD contract and structural
+spaces, generic vmspace, anonymous memory, COW and safe copy I/O.  The
+diagnostic image does not yet enter the normal swap-initializing startup;
+the remaining `VM_PAGER_NO_SWAP` build flag is an audited blocker, not an
+accepted port policy.  The neutral process MD contract and structural
 i386 u-area operations exist; the kernel can save and restore
 scheduler-compatible i386 contexts, switch u-area stacks and resume copied
 fork frames through the common interrupt return path.  User selectors, TSS
@@ -197,8 +199,9 @@ maps RX text and RW data+BSS directly from `/sbin/init` on the mounted UFS,
 and the common exec stack path supplies `argc/argv/envp`.
 A read-only legacy primary-master ATA PIO backend attaches through the
 generic disk layer and exercises real whole-device block strategy reads.
-The common UFS/VFS path mounts the raw UFS device and supplies `/sbin/init`
-to process 1; ATA writes and DMA are intentionally absent.  The root is used
-through ordinary read-only namei/open/read/lseek/close operations.
+The common UFS/VFS path mounts the embedded memory-backed UFS device and
+supplies `/sbin/init` to process 1; ATA writes and DMA are intentionally
+absent.  The root is used through ordinary read-only
+namei/open/read/lseek/close operations.
 Writable storage, generic non-inode fileops, complete userland, and PCC
 remain outside the current image.

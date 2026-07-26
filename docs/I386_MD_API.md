@@ -289,10 +289,11 @@ mapping.
 
 Статический ELF больше не передаётся loader напрямую как отдельный binary
 symbol. Существующий `tools/fsutil` создаёт детерминированный little-endian
-UFS с именованным `/sbin/init`; общий memory-disk backend подключает image
-как read-only block device для no-IDE gate, а ATA backend предоставляет тот
-же raw UFS как whole-device block device для IDE gate. Оба транспорта
-проходят один и тот же `vfs_mountroot`/`namei`/inode-exec путь.
+UFS с именованным `/sbin/init`; общий memory-disk backend всегда подключает
+его первым как единственный read-only root device. ATA whole-device
+регистрируется затем как дополнительное read-only block device и не
+участвует в выборе root. Варианты с IDE и без IDE проходят один и тот же
+`vfs_mountroot`/`namei`/inode-exec путь от встроенного UFS.
 `rootfs: ok` покрывает эту цепочку, а `make rootfs-smoke` проверяет UFS через
 `fsutil --check` и byte-for-byte воспроизводимость.
 
