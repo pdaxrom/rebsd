@@ -352,9 +352,9 @@ check_stdio_file(void)
     if (strcmp(line, "record:37:ok\n") != 0)
         return bad("stdio content");
     checked = "%s:%d";
-    fallback = "%s:%ld";
+    fallback = "%10s:%05d";
     if (fmtcheck(checked, fallback) != checked ||
-        fmtcheck("%s:%u", fallback) != fallback)
+        fmtcheck("%s:%ld", fallback) != fallback)
         return bad("fmtcheck");
     return 0;
 }
@@ -369,6 +369,7 @@ check_modern_types(void)
     uintmax_t unsigned_value;
     size_t count;
     void *array;
+    unsigned char *resized;
 
     signed_value = strtoimax("-4294967298!", &end, 10);
     if (signed_value != -4294967298LL || *end != '!')
@@ -396,6 +397,31 @@ check_modern_types(void)
     if (array == NULL)
         return bad("reallocarray");
     free(array);
+
+    errno = 0;
+    array = calloc(SIZE_MAX, 2);
+    if (array != NULL || errno != ENOMEM) {
+        free(array);
+        return bad("calloc overflow");
+    }
+
+    resized = malloc(257);
+    if (resized == NULL)
+        return bad("malloc");
+    memset(resized, 0x5a, 257);
+    resized = realloc(resized, 31);
+    if (resized == NULL || resized[0] != 0x5a ||
+        resized[30] != 0x5a) {
+        free(resized);
+        return bad("realloc shrink");
+    }
+    resized = realloc(resized, 4097);
+    if (resized == NULL || resized[0] != 0x5a ||
+        resized[30] != 0x5a) {
+        free(resized);
+        return bad("realloc grow");
+    }
+    free(resized);
     return 0;
 }
 
@@ -465,6 +491,16 @@ check_regex(void)
         return bad("regexec ERE/captures");
     }
     regfree(&expression);
+
+    error = regcomp(&expression,
+        "^#!.*/bin/execlineb([[:space:]].*)*$",
+        REG_EXTENDED | REG_NEWLINE);
+    if (error != 0)
+        return bad("regcomp libmagic shell rule");
+    error = regexec(&expression, "#!/bin/sh\n", 1, match, 0);
+    regfree(&expression);
+    if (error != REG_NOMATCH)
+        return bad("regexec libmagic shell rule");
 
     error = regcomp(&expression, "^two$", REG_EXTENDED | REG_NEWLINE);
     if (error != 0)
