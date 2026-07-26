@@ -444,8 +444,12 @@ i386_boot_main(i386_u32 boot_params_phys)
             __asm__ volatile ("cli; hlt");
         }
     }
-    if (i386_ide_probe() != 0)
-        (void)i386_disk_bootstrap();
+    if (i386_disk_bootstrap(i386_ide_probe()) != 0) {
+        i386_early_puts("root-mount: failed\n");
+        for (;;) {
+            __asm__ volatile ("cli; hlt");
+        }
+    }
 
     if (i386_process_bootstrap_user_probe() != 0 ||
         i386_process_bootstrap_validate() != 0) {
@@ -465,7 +469,7 @@ i386_boot_main(i386_u32 boot_params_phys)
     i386_early_puts("process-reap: ok\n");
     i386_early_puts("proc0-context: ok\n");
     i386_early_puts("scheduler-switch: ok\n");
-    i386_early_puts("initfs: ok\n");
+    i386_early_puts("rootfs: ok\n");
     i386_early_puts("elf32-user: ok\n");
     i386_early_puts("user-stack: ok\n");
 

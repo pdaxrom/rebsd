@@ -8,33 +8,16 @@
 #include <sys/errno.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/param.h>
 #include <sys/types.h>
 
 #define I386_DISK_MAJOR 2u
 
 static unsigned char i386_disk_data[DISK_SECTOR_SIZE * 2u];
+static struct disk_memory i386_rootfs_memory;
 
-/*
- * The early image has no configured tty/log subsystem yet.  The generic
- * disk object is compiled with printf renamed to this quiet adapter; the
- * explicit serial markers below remain the bootstrap diagnostics.
- */
-void
-i386_disk_log(char *format, ...)
-{
-    (void)format;
-}
-
-/*
- * Early PIO strategy calls are synchronous and use stack-owned buffers.
- * This completion hook is intentionally local to the early disk object.
- */
-void
-i386_disk_biodone(struct buf *bp)
-{
-    if (bp != 0)
-        bp->b_flags |= B_DONE;
-}
+extern const unsigned char _binary_rootfs_img_start[];
+extern const unsigned char _binary_rootfs_img_end[];
 
 static void
 i386_disk_zero(void *arg, unsigned length)
@@ -87,8 +70,8 @@ i386_disk_read(struct buf *bp, dev_t dev, disk_sector_t lba,
     disk_bdev_strategy(bp);
 }
 
-int
-i386_disk_bootstrap(void)
+static int
+i386_disk_attach_ide(dev_t *devp)
 {
     struct disk_attach_args args;
     struct diskpart64 part;
@@ -104,7 +87,7 @@ i386_disk_bootstrap(void)
     args.da_sector_size = DISK_SECTOR_SIZE;
     args.da_flags = DISK_FLAG_READ_ONLY;
 
-    diskattach(0);
+    *devp = NODEV;
     error = disk_attach(&args, &unit);
     if (error != 0) {
         i386_early_puts("disk-attach: failed\n");
@@ -182,16 +165,60 @@ i386_disk_bootstrap(void)
         return EIO;
     }
 
-    error = i386_vfs_bootstrap_mount(dev);
-    if (error != 0) {
-        (void)disk_bdev_close(dev, FREAD, 0);
-        return error;
-    }
-
     if (disk_bdev_close(dev, FREAD, 0) != 0) {
         i386_early_puts("disk-close: failed\n");
         return EIO;
     }
     i386_early_puts("disk-close: ok\n");
+    *devp = dev;
+    return 0;
+}
+
+static int
+i386_disk_attach_rootfs(dev_t *devp)
+{
+    size_t image_size;
+    unsigned unit;
+    int error;
+
+    *devp = NODEV;
+    image_size = (size_t)(_binary_rootfs_img_end -
+        _binary_rootfs_img_start);
+    error = disk_memory_attach(&i386_rootfs_memory,
+        _binary_rootfs_img_start, image_size, &unit);
+    if (error != 0) {
+        i386_early_puts("rootfs-disk: failed\n");
+        return error;
+    }
+    *devp = makedev(I386_DISK_MAJOR,
+        DISK_MINOR(unit, DISK_MINOR_WHOLE));
+    if (disk_bdev_open(*devp, FWRITE, 0) != EROFS) {
+        i386_early_puts("rootfs-disk: writable\n");
+        return EIO;
+    }
+    i386_early_puts("rootfs-disk: read-only\n");
+    return 0;
+}
+
+int
+i386_disk_bootstrap(int ide_present)
+{
+    dev_t preferred_dev;
+    dev_t fallback_dev;
+    int error;
+
+    diskattach(0);
+    preferred_dev = NODEV;
+    if (ide_present) {
+        error = i386_disk_attach_ide(&preferred_dev);
+        if (error != 0)
+            return error;
+    }
+    error = i386_disk_attach_rootfs(&fallback_dev);
+    if (error != 0)
+        return error;
+    error = i386_vfs_bootstrap_mount(preferred_dev, fallback_dev);
+    if (error != 0)
+        return error;
     return 0;
 }

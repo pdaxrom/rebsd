@@ -1513,7 +1513,8 @@ ttwrite (struct tty *tp, struct uio *uio, int flag)
 {
     char *cp;
     register int cc, ce;
-    int i, hiwat, cnt, error, s;
+    int i, hiwat, error, s;
+    u_int cnt;
     char obuf[OBUFSIZ];
 
     hiwat = TTHIWAT(tp);

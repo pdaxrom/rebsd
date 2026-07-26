@@ -46,12 +46,12 @@ BOOT_MARKERS = (
     "user-trap: ok",
     "process-bootstrap: ok",
     "process-table: ok",
-    "process-image: fat-vfs",
+    "process-image: vfs",
     "syscall-open: ok",
     "syscall-read: ok",
     "syscall-lseek: ok",
     "syscall-close: ok",
-    "fd-fat-vfs: ok",
+    "fd-vfs: ok",
     "fd-fork-shared-offset: ok",
     "fd-exit-close: ok",
     "process-user: ok",
@@ -65,7 +65,7 @@ BOOT_MARKERS = (
     "process-reap: ok",
     "proc0-context: ok",
     "scheduler-switch: ok",
-    "initfs: ok",
+    "rootfs: ok",
     "elf32-user: ok",
     "user-stack: ok",
     "pci: mechanism=1",
@@ -93,6 +93,7 @@ BOOT_MARKERS = (
     "disk-strategy-read: rebsd-fat16",
     "disk-strategy-eof: ok",
     "disk-strategy-write: erofs",
+    "rootfs-disk: read-only",
     "vfs-root: fat,read-only",
     "vfs-namei-init: ok",
     "vfs-read-init: ok",
@@ -138,35 +139,12 @@ IDE_DISK_MARKERS = (
     "disk-strategy-eof: ok",
     "disk-strategy-write: erofs",
     "vfs-root: fat,read-only",
-    "vfs-namei-init: ok",
-    "vfs-read-init: ok",
-    "process-image: fat-vfs",
-    "syscall-open: ok",
-    "syscall-read: ok",
-    "syscall-lseek: ok",
-    "syscall-close: ok",
-    "fd-fat-vfs: ok",
-    "fd-fork-shared-offset: ok",
-    "fd-exit-close: ok",
     "disk-close: ok",
-)
-
-VFS_INIT_MARKERS = (
-    "vfs-namei-init: ok",
-    "vfs-read-init: ok",
-    "process-image: fat-vfs",
-    "syscall-open: ok",
-    "syscall-read: ok",
-    "syscall-lseek: ok",
-    "syscall-close: ok",
-    "fd-fat-vfs: ok",
-    "fd-fork-shared-offset: ok",
-    "fd-exit-close: ok",
 )
 
 NO_DISK_BOOT_MARKERS = tuple(
     marker for marker in BOOT_MARKERS if marker not in IDE_DISK_MARKERS
-) + ("process-image: initfs", "ide-primary-master: none")
+) + ("vfs-root: ufs,read-only", "ide-primary-master: none")
 
 BIOS_NO_DISK_BOOT_MARKERS = tuple(
     "boot-loader: bios-int13"
@@ -218,12 +196,12 @@ EXCEPTION_MARKERS = {
         "user-trap: ok",
         "process-bootstrap: ok",
         "process-table: ok",
-        "process-image: fat-vfs",
+        "process-image: vfs",
         "syscall-open: ok",
         "syscall-read: ok",
         "syscall-lseek: ok",
         "syscall-close: ok",
-        "fd-fat-vfs: ok",
+        "fd-vfs: ok",
         "fd-fork-shared-offset: ok",
         "fd-exit-close: ok",
         "process-user: ok",
@@ -237,7 +215,7 @@ EXCEPTION_MARKERS = {
         "process-reap: ok",
         "proc0-context: ok",
         "scheduler-switch: ok",
-        "initfs: ok",
+        "rootfs: ok",
         "elf32-user: ok",
         "user-stack: ok",
         "pci: mechanism=1",
@@ -265,6 +243,7 @@ EXCEPTION_MARKERS = {
         "disk-strategy-read: rebsd-fat16",
         "disk-strategy-eof: ok",
         "disk-strategy-write: erofs",
+        "rootfs-disk: read-only",
         "vfs-root: fat,read-only",
         "vfs-namei-init: ok",
         "vfs-read-init: ok",
@@ -396,8 +375,11 @@ def main() -> None:
                 if args.bios_image is not None
                 else BOOT_MARKERS
             )
-            if marker not in VFS_INIT_MARKERS
-        ) + ("process-image: initfs",)
+            if marker != "vfs-root: fat,read-only"
+        ) + (
+            "vfs-root: fat,no-init",
+            "vfs-root: ufs,read-only",
+        )
     elif args.bios_image is not None:
         markers = BIOS_BOOT_MARKERS
     else:
@@ -447,13 +429,6 @@ def main() -> None:
         raise SystemExit(
             "qemu-boot-smoke: missing serial markers: " + ", ".join(missing)
         )
-    if args.expect_no_init:
-        unexpected = [marker for marker in VFS_INIT_MARKERS if marker in output]
-        if unexpected:
-            raise SystemExit(
-                "qemu-boot-smoke: unexpected serial markers: "
-                + ", ".join(unexpected)
-            )
     print("qemu-boot-smoke: ok")
 
 

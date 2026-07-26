@@ -4,16 +4,6 @@
 #include "boot.h"
 
 extern int noproc;
-char *panicstr __attribute__((weak));
-
-void __attribute__((weak))
-log(int level, char *message, ...)
-{
-    (void)level;
-    i386_early_puts("kernel: ");
-    if (message != (char *)0)
-        i386_early_puts(message);
-}
 
 void
 idle(void)
@@ -24,16 +14,4 @@ idle(void)
     state = splhigh();
     __asm__ volatile ("sti; hlt" : : : "memory");
     splx(state);
-}
-
-void __attribute__((weak))
-panic(char *message)
-{
-    panicstr = message;
-    i386_early_puts("PANIC: ");
-    if (message != (char *)0)
-        i386_early_puts(message);
-    i386_early_putc('\n');
-    for (;;)
-        __asm__ volatile ("cli; hlt");
 }

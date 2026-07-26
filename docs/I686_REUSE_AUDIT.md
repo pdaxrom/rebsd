@@ -29,6 +29,10 @@ for the cleanup commit.
 | `sys/kernel/kern_proc_lifecycle.c`, added by the i686 branch | the same existing common exit/wait/reap path |
 | weak i386 `psignal`, `issignal`, `postsig`, `setpri`, `setrq`, and `swtch` fallbacks | common `kern_sig.c`, `kern_sig2.c`, `kern_synch.c`, and `kern_clock.c` |
 | weak i386 `noproc` and `time` storage | common `kern_clock.c` and `kern_time.c` |
+| `sys/i386/common/initfs.c`, `include/initfs.h`, and `tools/mkinitfs.py` | deterministic UFS from existing `tools/fsutil`, attached by common `disk_memory_attach` and mounted by common VFS/UFS |
+| local `i386_disk_biodone` selected with a compiler macro | common `ufs_bio.c::biodone`; the local completion skipped buffer-cache read-ahead release |
+| compile-time `printf`/`log` renames plus quiet i386 adapters | common `subr_prf.c`, `tty.c`, and `tty_subr.c`; i386 now provides only `cnputc` through its COM1/VGA console |
+| weak i386 `panic`, `panicstr`, and `log` definitions | common `subr_prf.c`; the MD halt operation remains in the i386 console/boot boundary |
 
 The zombie test was corrected to follow the existing common lifecycle:
 `kern_exit.c` destroys a dead process's vmspace before it becomes waitable.
@@ -150,15 +154,7 @@ These pre-existing parts still work, but violate the project reuse and
 no-workaround gates.  They block completion until replaced by their owning
 common kernel paths.
 
-1. `common/initfs.c`, `tools/mkinitfs.py`, and the embedded initfs image are a
-   private file container used only as a no-disk fallback.
-
-   Removal requires using an existing block-device filesystem path.  The
-   preferred target is the same read-only UFS/romdisk model used by
-   Ci20/Malta, with only an i386 memory-backed device adapter.  The IDE-CF
-   path must continue to mount through the common disk/VFS/filesystem stack.
-
-2. `pc/process_bootstrap.c`, `pc/vm_bootstrap.c`,
+1. `pc/process_bootstrap.c`, `pc/vm_bootstrap.c`,
    `pc/vmspace_bootstrap.c`, and much of `pc/boot_main.c` manually establish
    proc0/proc1 and startup state also owned by `sys/kernel/init_main.c`.
 
@@ -166,14 +162,7 @@ common kernel paths.
    console/root-device adapters exist.  Process lifecycle itself is already
    common; no additional i386 process policy may be added here.
 
-3. `pc/scheduler.c` contains genuine MD `idle()`, but its early
-   console-only `panic`/`log` fallback overlaps `sys/kernel/subr_prf.c`.
-
-   Removal requires a small i386 `cnputc` console adapter and the appropriate
-   common printf/tty dependencies.  Until then the fallback remains weak and
-   is classified as bootstrap-only, not as an i386 logging subsystem.
-
-4. `common/vm_machdep.c` contains a weak fail-stop `md_init_process` because
+2. `common/vm_machdep.c` contains a weak fail-stop `md_init_process` because
    the current diagnostic image does not yet link common `init_main.c`.
 
    It must disappear when item 2 is complete.  No process creation logic may

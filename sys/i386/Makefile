@@ -30,6 +30,12 @@ QEMU_MACHINE    ?= pc-i440fx-9.2
 QEMU_CPU        ?= pentium3
 QEMU_MEMORY     ?= 64M
 PYTHON          ?= python3
+HOSTCC          ?= cc
+FSUTIL_DIR       = $(TOPOBJ)/tools/fsutil
+FSUTIL           = $(FSUTIL_DIR)/fsutil
+I386_ROOTFS_STAGE = rootfs-stage
+I386_ROOTFS_KBYTES = 128
+I386_ROOTFS_EPOCH = 1
 
 SETUP_SECTS      = 8
 SETUP_BYTES      = 4608
@@ -43,7 +49,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    user_return.o user_return_selftest.o \
                    trap.o trap_selftest.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
-                   libkern.o disk_subr.o disk.o devsw.o \
+                   libkern.o disk_subr.o disk.o disk_memory.o devsw.o \
                    ufs_alloc.o ufs_bio.o ufs_bmap.o ufs_fio.o \
                    ufs_inode.o ufs_mount.o ufs_namei.o ufs_subr.o \
                    ufs_syscalls.o ufs_syscalls2.o \
@@ -51,11 +57,11 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    kern_descrip.o kern_shm.o kern_subr.o kern_time.o \
                    fat_subr.o fat_vfs.o vm_vnode.o vfs_bootstrap.o \
                    disk_bootstrap.o \
-                   exec_elf_image.o initfs.o exec_subr.o \
-                   initfs_image.o \
+                   exec_elf_image.o exec_subr.o rootfs_image.o \
                    init_sysent.o stubs.o kern_prot.o kern_proc.o kern_fork.o \
                    kern_exit.o kern_resource.o kern_sig.o kern_sig2.o \
-                   sys_process.o kern_synch.o kern_clock.o scheduler.o \
+                   sys_process.o kern_synch.o kern_clock.o subr_prf.o \
+                   tty.o tty_subr.o scheduler.o \
                    copyio.o \
                    copyio_selftest.o vm_machdep.o uarea_selftest.o \
                    context_selftest.o config.o process_bootstrap.o vm_param.o \
@@ -64,7 +70,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
 
 .DEFAULT_GOAL := all
 
-.PHONY: all kernel bios-image toolchain-check initfs-smoke ide-smoke \
+.PHONY: all kernel bios-image toolchain-check rootfs-smoke ide-smoke \
 	ide-fat32-smoke fat32-boot-smoke bios-fat32-boot-smoke \
 	vfs-fallback-smoke bios-vfs-fallback-smoke \
 	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
@@ -118,25 +124,47 @@ bootstrap-user.elf: bootstrap_user.o $(I386_USER_SRC)/bootstrap.ld
 	$(LD) $(I686_LDFLAGS) -T $(I386_USER_SRC)/bootstrap.ld \
 	    -o $@ bootstrap_user.o
 
-initfs.img: bootstrap-user.elf $(I386_TOOLS_SRC)/mkinitfs.py
-	$(PYTHON) $(I386_TOOLS_SRC)/mkinitfs.py --output $@ \
-	    --file /sbin/init=bootstrap-user.elf
+$(FSUTIL): $(wildcard $(TOPSRC)/tools/fsutil/*.c) \
+	    $(TOPSRC)/tools/fsutil/bsdfs.h \
+	    $(TOPSRC)/tools/fsutil/manifest.h
+	$(MAKE) -C $(TOPSRC)/tools/fsutil OBJDIR=$(FSUTIL_DIR) \
+	    CC="$(HOSTCC)" all
 
-initfs_image.o: initfs.img
+$(I386_ROOTFS_STAGE)/sbin/init: bootstrap-user.elf
+	mkdir -p $(I386_ROOTFS_STAGE)/sbin
+	cp $< $@
+	chmod 0555 $@
+
+rootfs.img: $(FSUTIL) $(I386_SRC)/rootfs.manifest \
+	    $(I386_ROOTFS_STAGE)/sbin/init
+	rm -f $@
+	SOURCE_DATE_EPOCH=$(I386_ROOTFS_EPOCH) $(FSUTIL) --new \
+	    --endian=little --size=$(I386_ROOTFS_KBYTES) \
+	    --manifest=$(I386_SRC)/rootfs.manifest \
+	    $@ $(I386_ROOTFS_STAGE)
+	$(FSUTIL) --check $@
+
+rootfs_image.o: rootfs.img
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 \
 	    --rename-section \
-	    .data=.rodata.initfs,alloc,load,readonly,data,contents \
+	    .data=.rodata.rootfs,alloc,load,readonly,data,contents \
 	    $< $@
 
-initfs-smoke: initfs.img bootstrap-user.elf
-	$(PYTHON) $(I386_TOOLS_SRC)/mkinitfs.py --output initfs.check.img \
-	    --file /sbin/init=bootstrap-user.elf
-	cmp initfs.img initfs.check.img
-	rm -f initfs.check.img
+rootfs-smoke: rootfs.img bootstrap-user.elf
+	rm -f rootfs.check.img
+	SOURCE_DATE_EPOCH=$(I386_ROOTFS_EPOCH) $(FSUTIL) --new \
+	    --endian=little --size=$(I386_ROOTFS_KBYTES) \
+	    --manifest=$(I386_SRC)/rootfs.manifest \
+	    rootfs.check.img $(I386_ROOTFS_STAGE)
+	$(FSUTIL) --check rootfs.check.img
+	cmp rootfs.img rootfs.check.img
+	rm -f rootfs.check.img
 
 early_console.o: $(I386_PC_SRC)/early_console.c \
-	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/io.h \
+	    $(TOPSRC)/sys/include/reboot.h $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
 interrupt.o: $(I386_PC_SRC)/interrupt.c \
@@ -273,11 +301,17 @@ disk.o: $(I386_DISK_SRC)/disk.c $(I386_DISK_SRC)/disk.h \
 	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/types.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_disk_log -Dbiodone=i386_disk_biodone \
 	    -DDISK_READ_CACHE_SLOTS=1u \
 	    -DDISK_READ_AHEAD_MAX_SECTORS=16u \
 	    -DDISK_WRITE_CACHE_SLOTS=1u \
 	    -DDISK_WRITE_BACK_MAX_SECTORS=32u \
+	    -c $< -o $@
+
+disk_memory.o: $(I386_DISK_SRC)/disk_memory.c $(I386_DISK_SRC)/disk.h \
+	    $(TOPSRC)/sys/include/disk.h $(TOPSRC)/sys/include/errno.h \
+	    $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
 devsw.o: $(I386_PC_SRC)/devsw.c $(I386_DISK_SRC)/disk.h \
@@ -297,7 +331,6 @@ ufs_bio.o: $(TOPSRC)/sys/kernel/ufs_bio.c \
 ufs_alloc.o: $(TOPSRC)/sys/kernel/ufs_alloc.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -Duprintf=i386_vfs_log \
 	    -c $< -o $@
 
 ufs_bmap.o: $(TOPSRC)/sys/kernel/ufs_bmap.c \
@@ -313,7 +346,6 @@ ufs_fio.o: $(TOPSRC)/sys/kernel/ufs_fio.c \
 ufs_inode.o: $(TOPSRC)/sys/kernel/ufs_inode.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -Dlog=i386_vfs_syslog \
 	    -c $< -o $@
 
 ufs_mount.o: $(TOPSRC)/sys/kernel/ufs_mount.c \
@@ -326,12 +358,12 @@ ufs_namei.o: $(TOPSRC)/sys/kernel/ufs_namei.c \
 	    $(TOPSRC)/sys/include/mount.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -c $< -o $@
+	    -c $< -o $@
 
 ufs_subr.o: $(TOPSRC)/sys/kernel/ufs_subr.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -c $< -o $@
+	    -c $< -o $@
 
 sys_inode.o: $(TOPSRC)/sys/kernel/sys_inode.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -346,7 +378,7 @@ kern_subr.o: $(TOPSRC)/sys/kernel/kern_subr.c \
 kern_descrip.o: $(TOPSRC)/sys/kernel/kern_descrip.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dlog=i386_vfs_syslog -c $< -o $@
+	    -c $< -o $@
 
 kern_shm.o: $(TOPSRC)/sys/kernel/kern_shm.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -371,12 +403,12 @@ sys_pipe.o: $(TOPSRC)/sys/kernel/sys_pipe.c \
 ufs_syscalls.o: $(TOPSRC)/sys/kernel/ufs_syscalls.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -c $< -o $@
+	    -c $< -o $@
 
 ufs_syscalls2.o: $(TOPSRC)/sys/kernel/ufs_syscalls2.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -c $< -o $@
+	    -c $< -o $@
 
 vfs_vnops.o: $(TOPSRC)/sys/kernel/vfs_vnops.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -394,7 +426,7 @@ fat_vfs.o: $(I386_FAT_SRC)/fat_vfs.c $(I386_FAT_SRC)/fat.h \
 	    $(TOPSRC)/sys/include/mount.h $(TOPSRC)/sys/include/namei.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -c $< -o $@
+	    -c $< -o $@
 
 disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
 	    $(I386_SRC)/include/boot.h \
@@ -443,12 +475,6 @@ exec_elf_image.o: $(TOPSRC)/sys/kernel/exec_elf_image.c \
 	    $(TOPSRC)/sys/include/exec_elf.h \
 	    $(TOPSRC)/sys/include/exec_elf_loader.h \
 	    $(I386_VM_SRC)/vmspace.h \
-	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -c $< -o $@
-
-initfs.o: $(I386_COMMON_SRC)/initfs.c \
-	    $(I386_SRC)/include/initfs.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -521,7 +547,7 @@ kern_sig.o: $(TOPSRC)/sys/kernel/kern_sig.c \
 	    $(I386_VM_SRC)/vmspace.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
-	    -Dprintf=i386_vfs_log -c $< -o $@
+	    -c $< -o $@
 
 kern_sig2.o: $(TOPSRC)/sys/kernel/kern_sig2.c \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/signalvar.h \
@@ -548,6 +574,24 @@ kern_clock.o: $(TOPSRC)/sys/kernel/kern_clock.c \
 	    $(TOPSRC)/sys/include/callout.h $(TOPSRC)/sys/include/kernel.h \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/systm.h \
 	    $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+subr_prf.o: $(TOPSRC)/sys/kernel/subr_prf.c \
+	    $(TOPSRC)/sys/include/systm.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+tty.o: $(TOPSRC)/sys/kernel/tty.c \
+	    $(TOPSRC)/sys/include/tty.h $(TOPSRC)/sys/include/systm.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+tty_subr.o: $(TOPSRC)/sys/kernel/tty_subr.c \
+	    $(TOPSRC)/sys/include/clist.h $(TOPSRC)/sys/include/tty.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -619,7 +663,6 @@ config.o: $(I386_PC_SRC)/config.c \
 
 process_bootstrap.o: $(I386_PC_SRC)/process_bootstrap.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/context.h \
-	    $(I386_SRC)/include/initfs.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/privilege.h \
 	    $(I386_SRC)/include/process.h $(I386_SRC)/include/syscall.h \
@@ -864,7 +907,7 @@ boot-smoke-matrix: rebsd-i686.bzimg ide-smoke.img
 clean:
 	rm -f setup.o setup.elf setup.bin setup.map \
 	    bootstrap_user.o bootstrap-user.elf bootstrap_user_image.o \
-	    initfs.img initfs.check.img initfs_image.o \
+	    rootfs.img rootfs.check.img rootfs_image.o \
 	    ide-smoke.img ide-smoke.check.img \
 	    ide-fat32-smoke.img ide-fat32-smoke.check.img \
 	    ide-fat32-no-init-smoke.img \
@@ -872,6 +915,7 @@ clean:
 	    rebsd-i686-bios-floppy.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
 	    rebsd-i686.bzimg rebsd-i686.map
+	rm -rf $(I386_ROOTFS_STAGE)
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	rmdir $(I386_GEN_INCLUDE) 2>/dev/null || true
 

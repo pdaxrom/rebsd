@@ -53,10 +53,12 @@ disk layer, buffer cache, `fat_vfsops`, inode/name caches and `namei`; i386
 does not carry a private filesystem reader.  Process 1 opens and reads
 `/sbin/init` through that VFS path into a bounded 64 KiB buffer.  The
 existing ELF loader maps and executes it in CPL3
-and reports `process-image: fat-vfs`; no-disk boots report
-`process-image: initfs` and execute the embedded fallback.  A separate FAT32
-gate also mounts a valid disk without `/sbin/init` and requires the same
-fallback, matching an IBM CF whose existing FAT partition has no ReBSD init.
+and reports `process-image: vfs`.  A deterministic read-only UFS image,
+created by the existing `tools/fsutil`, is attached through the common
+memory-disk backend and supplies the root when IDE is absent.  A separate
+FAT32 gate mounts a valid disk without `/sbin/init`, unmounts it through the
+common root-mount API, and selects the same embedded UFS root.  This matches
+an IBM CF whose existing FAT partition has no ReBSD init.
 Once in CPL3, the FAT-backed init opens its own `/sbin/init` through
 production `open(5)`, reads the ELF magic through `read(3)`, changes the
 file offset through `lseek(19)`, and releases the descriptor through
@@ -137,11 +139,12 @@ Process 1 enters
 CPL3 with an RX text mapping and an RW stack without VM execute permission,
 requires production `getpid` to return 1, and requires `process-user: ok`
 before timer IRQs.  The target non-PAE Pentium III has no hardware NX bit.
-The user payload is a separately linked ELF32/i386 `ET_EXEC`, packaged as
-`/sbin/init` both in deterministic read-only initfs and in the FAT smoke
+The user payload is a separately linked ELF32/i386 `ET_EXEC`, installed as
+`/sbin/init` both in a deterministic read-only UFS image and in the FAT smoke
 images, and loaded from two `PT_LOAD` segments.  FAT is preferred when its
-file is present; initfs is the deterministic fallback and its lookup still
-validates the complete embedded directory.  The common ELF image loader checks
+file is present; otherwise the embedded UFS image is selected.  Both roots
+use the common disk, buffer-cache, VFS, inode and namei paths.  The common
+ELF image loader checks
 bounds, alignment, target ABI, entry, user ranges, overlap and W+X, zero-fills
 BSS, applies final permissions, and requires `elf32-user: ok`; there is no
 i386-private executable loader.
@@ -182,8 +185,9 @@ CPL3 through production syscall 2; production child `exit`/parent `wait4`
 and reap paths are connected and tested.
 The first persistent user mapping executes production syscall 20 from CPL3
 and validates generic VM text/stack permissions.  The common memory-backed
-ELF32 loader maps RX text and RW data+BSS from named `/sbin/init` in the early
-initfs, and the common exec stack path supplies `argc/argv/envp`.
+ELF32 loader maps RX text and RW data+BSS after `/sbin/init` has been read
+through the mounted common VFS, and the common exec stack path supplies
+`argc/argv/envp`.
 A read-only legacy primary-master ATA PIO backend now attaches through the
 generic disk layer, parses MBR partitions and exercises real block strategy
 reads.  The early FAT reader mounts the first partition, reads a

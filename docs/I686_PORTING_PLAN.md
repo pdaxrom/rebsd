@@ -910,6 +910,29 @@ count через `fork`, закрывать унаследованные descrip
 `kern_descrip`/`sys_generic`/`sys_inode`, не включая запись на диск.
 Повторный IBM запуск пока не требуется.
 
+Сорок шестой cleanup-инкремент заменяет временные пути общими владельцами:
+
+- приватные `common/initfs.c`, `include/initfs.h` и `tools/mkinitfs.py`
+  удалены;
+- существующий `tools/fsutil` создаёт детерминированный little-endian UFS с
+  `/sbin/init`, а общий `disk_memory_attach` регистрирует image как read-only
+  block device;
+- FAT на IDE-CF и встроенный UFS используют общие disk, buffer cache,
+  `vfs_mountroot`, inode/name cache, `namei`, `rdwri` и descriptor paths;
+- FAT без `/sbin/init` размонтируется общим `vfs_unmountroot`, после чего
+  выбирается UFS. No-IDE сразу выбирает UFS;
+- локальная подмена `biodone` удалена. Она не освобождала common read-ahead
+  buffer и зависала при чтении UFS; теперь используется `ufs_bio.c::biodone`;
+- compile-time подмены `printf`/`log` на пустые i386 adapters удалены.
+  Подключены общие `subr_prf`, TTY и clist owners; i386 реализует только
+  `cnputc` через COM1/VGA и MD halt;
+- `rootfs-smoke` проверяет UFS через `fsutil --check` и повторную
+  byte-for-byte сборку. QEMU markers унифицированы как `process-image: vfs`,
+  `fd-vfs: ok` и `rootfs: ok`.
+
+Ссылки на initfs в предыдущих инкрементах ниже описывают удалённое
+историческое состояние и не являются текущей архитектурой порта.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых

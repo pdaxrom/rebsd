@@ -1,0 +1,11 @@
+default
+owner 0
+group 0
+dirmode 0555
+filemode 0444
+
+dir /sbin
+mode 0555
+
+file /sbin/init
+mode 0555

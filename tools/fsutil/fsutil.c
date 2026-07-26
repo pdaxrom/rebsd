@@ -54,6 +54,46 @@ static const char *program_version =
 
 static const char *program_bug_address = "<serge@vak.ru>";
 
+time_t
+fsutil_now(void)
+{
+    static int initialized;
+    static int reproducible;
+    static time_t timestamp;
+    const char *text;
+    char *end;
+    long long value;
+
+    if (!initialized) {
+        initialized = 1;
+        text = getenv("SOURCE_DATE_EPOCH");
+        if (text != 0 && *text != '\0') {
+            errno = 0;
+            end = 0;
+            value = strtoll(text, &end, 10);
+            if (errno != 0 || end == text || *end != '\0' || value < 0 ||
+                (long long)(time_t)value != value) {
+                fprintf(stderr, "fsutil: invalid SOURCE_DATE_EPOCH\n");
+                exit(1);
+            }
+            timestamp = (time_t)value;
+            reproducible = 1;
+        }
+    }
+    if (!reproducible)
+        time(&timestamp);
+    return timestamp;
+}
+
+time_t
+fsutil_mtime(time_t source)
+{
+    const char *text;
+
+    text = getenv("SOURCE_DATE_EPOCH");
+    return text != 0 && *text != '\0' ? fsutil_now() : source;
+}
+
 static struct option program_options[] = {
     { "help",           no_argument,        0,  'h' },
     { "version",        no_argument,        0,  'V' },
@@ -418,7 +458,7 @@ int add_device (fs_t *fs, char *name, int mode, int owner, int group,
     dev.addr[1] = majr << 8 | minr;
     dev.uid = owner;
     dev.gid = group;
-    time (&dev.mtime);
+    dev.mtime = fsutil_now();
     return fs_inode_save (&dev, 1);
 }
 
@@ -483,7 +523,7 @@ int add_file (fs_t *fs, const char *path, const char *dirname,
     }
     file.inode.uid = owner;
     file.inode.gid = group;
-    file.inode.mtime = st.st_mtime;
+    file.inode.mtime = fsutil_mtime(st.st_mtime);
     file.inode.dirty = 1;
     if (! fs_file_close (&file))
         ok = 0;
@@ -517,7 +557,7 @@ int add_symlink (fs_t *fs, const char *path, const char *link,
     }
     file.inode.uid = owner;
     file.inode.gid = group;
-    time (&file.inode.mtime);
+    file.inode.mtime = fsutil_now();
     file.inode.dirty = 1;
     if (! fs_file_close (&file))
         ok = 0;

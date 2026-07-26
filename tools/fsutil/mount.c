@@ -201,7 +201,7 @@ int op_create(const char *path, mode_t mode, struct fuse_file_info *fi)
         fi->fh = 0;
         return -EIO;
     }
-    fh->inode.mtime = time(0);
+    fh->inode.mtime = fsutil_now();
     fh->inode.dirty = 1;
     fs_file_close (fh);
     fi->fh = (intptr_t) fh;
@@ -249,7 +249,7 @@ int op_write(const char *path, const char *buf, size_t size, off_t offset,
         printlog("--- read failed\n");
         return -EIO;
     }
-    fh->inode.mtime = time(0);
+    fh->inode.mtime = fsutil_now();
     fh->inode.dirty = 1;
     return size;
 }
@@ -292,7 +292,7 @@ int op_truncate(const char *path, off_t newsize)
         return -EINVAL;
     }
     fs_inode_truncate (&f.inode, newsize);
-    f.inode.mtime = time(0);
+    f.inode.mtime = fsutil_now();
     f.inode.dirty = 1;
     fs_file_close (&f);
     return 0;
@@ -316,7 +316,7 @@ int op_ftruncate(const char *path, off_t offset, struct fuse_file_info *fi)
         return -EINVAL;
     }
     fs_inode_truncate (&fh->inode, offset);
-    fh->inode.mtime = time(0);
+    fh->inode.mtime = fsutil_now();
     fh->inode.dirty = 1;
     fs_file_close (fh);
     return 0;
@@ -564,7 +564,7 @@ int op_mknod(const char *path, mode_t mode, dev_t dev)
     if (S_ISCHR(mode) || S_ISBLK(mode)) {
         inode.addr[1] = major(dev) << 8 | minor(dev);
     }
-    inode.mtime = time(0);
+    inode.mtime = fsutil_now();
     inode.dirty = 1;
     if (! fs_inode_save (&inode, 0)) {
         printlog("--- create failed\n");
@@ -634,7 +634,7 @@ int op_symlink(const char *path, const char *newpath)
         printlog("--- write failed\n");
         return -EIO;
     }
-    inode.mtime = time(0);
+    inode.mtime = fsutil_now();
     inode.dirty = 1;
     if (! fs_inode_save (&inode, 0)) {
         printlog("--- create failed\n");

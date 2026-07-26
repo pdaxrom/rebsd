@@ -384,6 +384,102 @@ out:
     return (0);
 }
 
+/*
+ * Mount a filesystem as the process namespace root.  Root mounts do not
+ * have a real covered inode, so reserve their mount-table slot with the
+ * historical non-NULL sentinel after acquiring the root inode.
+ */
+int
+vfs_mountroot(int fstype, dev_t dev, int flags, struct inode **rootp)
+{
+    struct mount *mp;
+    struct inode *root;
+    struct fs *fs;
+    int error;
+    int openflags;
+
+    if (rootp == 0)
+        return EINVAL;
+    *rootp = 0;
+    u.u_error = 0;
+    if (fstype == MOUNT_UFS)
+        fs = mountfs(dev, flags, 0);
+    else
+        fs = vfs_mountfs(fstype, dev, flags, 0);
+    if (fs == 0)
+        return u.u_error != 0 ? u.u_error : EIO;
+
+    mp = (struct mount *)((char *)fs - offsetof(struct mount, m_filsys));
+    root = iget(dev, fs, ROOTINO);
+    if (root == 0) {
+        error = u.u_error != 0 ? u.u_error : EIO;
+        if (mp->m_ops != 0 && mp->m_ops->vfs_unmount != 0)
+            (void)(*mp->m_ops->vfs_unmount)(mp);
+        openflags = FREAD;
+        if ((mp->m_ops == 0 ||
+            (mp->m_ops->vfs_flags & VFSOPS_READ_ONLY) == 0) &&
+            (flags & MNT_RDONLY) == 0)
+            openflags |= FWRITE;
+        (void)(*bdevsw[major(dev)].d_close)(dev, openflags, S_IFBLK);
+        binval(dev);
+        bzero(mp, sizeof(*mp));
+        u.u_error = error;
+        return error;
+    }
+    IUNLOCK(root);
+    mp->m_inodp = (struct inode *)1;
+    *rootp = root;
+    return 0;
+}
+
+/*
+ * Release an early root mount before any process has acquired cwd/root
+ * references.  Refuse replacement once another live inode belongs to it.
+ */
+int
+vfs_unmountroot(struct inode **rootp)
+{
+    struct mount *mp;
+    struct inode *root;
+    struct inode *ip;
+    struct vfsops *ops;
+    dev_t dev;
+    int error;
+    int openflags;
+
+    if (rootp == 0 || (root = *rootp) == 0 || root->i_fs == 0)
+        return EINVAL;
+    mp = (struct mount *)((char *)root->i_fs -
+        offsetof(struct mount, m_filsys));
+    if (mp->m_inodp != (struct inode *)1 || root->i_number != ROOTINO ||
+        root->i_count != 1)
+        return EBUSY;
+    for (ip = inode; ip < &inode[NINODE]; ++ip)
+        if (ip != root && ip->i_dev == mp->m_dev && ip->i_count != 0)
+            return EBUSY;
+
+    dev = mp->m_dev;
+    ops = mp->m_ops;
+    openflags = FREAD;
+    if ((ops == 0 || (ops->vfs_flags & VFSOPS_READ_ONLY) == 0) &&
+        (mp->m_flags & MNT_RDONLY) == 0)
+        openflags |= FWRITE;
+    nchinval(dev);
+    mp->m_inodp = 0;
+    *rootp = 0;
+    irele(root);
+    if (iflush(dev) < 0)
+        return EBUSY;
+    error = 0;
+    if (ops != 0 && ops->vfs_unmount != 0)
+        error = (*ops->vfs_unmount)(mp);
+    if (error == 0)
+        error = (*bdevsw[major(dev)].d_close)(dev, openflags, S_IFBLK);
+    binval(dev);
+    bzero(mp, sizeof(*mp));
+    return error;
+}
+
 static int
 unmount1 (caddr_t fname)
 {

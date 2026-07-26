@@ -144,6 +144,8 @@ extern struct vfsops ufs_vfsops;
 
 struct vfsops *vfs_getops(int fstype);
 struct fs *vfs_mountfs(int fstype, dev_t dev, int flags, struct inode *ip);
+int vfs_mountroot(int fstype, dev_t dev, int flags, struct inode **rootp);
+int vfs_unmountroot(struct inode **rootp);
 int vfs_statfs(struct mount *mp, struct statfs *sbp);
 int vfs_sync(struct mount *mp);
 

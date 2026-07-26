@@ -383,6 +383,47 @@ test_open_detach_reuse(void)
 }
 
 static int
+test_memory_backend(void)
+{
+    struct disk_memory memory;
+    struct buf bp;
+    unsigned char media[2u * DISK_SECTOR_SIZE];
+    unsigned char data[DISK_SECTOR_SIZE];
+    unsigned unit;
+    unsigned i;
+    dev_t dev;
+
+    for (i = 0; i < sizeof(media); ++i)
+        media[i] = (unsigned char)(i ^ 0x5au);
+    media[510] = 0x55;
+    media[511] = 0xaa;
+
+    diskattach(0);
+    CHECK(disk_memory_attach(&memory, media, sizeof(media) - 1u,
+        &unit) == EINVAL);
+    CHECK(disk_memory_attach(&memory, media, sizeof(media), &unit) == 0);
+    CHECK(unit == 0);
+    dev = makedev(2, DISK_MINOR(unit, DISK_MINOR_WHOLE));
+    CHECK(disk_bdev_open(dev, FWRITE, 0) == EROFS);
+    CHECK(disk_bdev_open(dev, FREAD, 0) == 0);
+
+    test_zero(&bp, sizeof(bp));
+    test_zero(data, sizeof(data));
+    bp.b_dev = dev;
+    bp.b_blkno = 1;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_READ | B_PHYS;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(bp.b_resid == 0);
+    CHECK(test_equal(data, media + DISK_SECTOR_SIZE, sizeof(data)));
+    CHECK(disk_bdev_close(dev, FREAD, 0) == 0);
+    disk_detach(unit, &memory);
+    return 0;
+}
+
+static int
 test_partition_write_and_flush(void)
 {
     struct fake_media media;
@@ -804,6 +845,7 @@ test_gpt_64_bit_lifecycle(void)
 int
 main(void)
 {
+    CHECK(test_memory_backend() == 0);
     CHECK(test_open_detach_reuse() == 0);
     CHECK(test_partition_write_and_flush() == 0);
     CHECK(test_raw_odd_sector_addressing() == 0);

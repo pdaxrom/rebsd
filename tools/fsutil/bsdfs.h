@@ -156,6 +156,9 @@ typedef enum {
     INODE_OP_LINK,                      /* make a link to a file */
 } fs_op_t;
 
+time_t fsutil_now(void);
+time_t fsutil_mtime(time_t source);
+
 int fs_seek (fs_t *fs, unsigned long offset);
 unsigned fs_get16 (fs_t *fs, const unsigned char *data);
 unsigned fs_get32 (fs_t *fs, const unsigned char *data);

@@ -8,9 +8,10 @@ process symbols нейтрализованы, i386 `sysent` adapter, signal fram
 user-return signal/reschedule path и user trap-to-signal translation
 проверены; production syscall prefix вызывает generic `getpid`, а
 постоянный process 1 в generic `proc[]`/`allproc`/PID hash удерживает
-активные u-area/vmspace/CR3/TSS и выполняет `/sbin/init` из проверяемого
-read-only initfs с production `getpid=1` и `argc/argv/envp` stack из
-собственного CPL3-контекста; proc0 владеет отдельными u-area/vmspace и
+активные u-area/vmspace/CR3/TSS и выполняет `/sbin/init` из read-only
+FAT или UFS root через общие disk/VFS/namei с production `getpid=1` и
+`argc/argv/envp` stack из собственного CPL3-контекста; proc0 владеет
+отдельными u-area/vmspace и
 повторно используемым idle context, проверенным двукратным
 proc1→proc0→proc1 switch через generic `setrq/swtch`; generic `newproc`
 создаёт PID 2 с отдельными vmspace/u-area и запускает его через fork
@@ -288,19 +289,18 @@ NULL-terminated `argv[]`/`envp[]`, packed strings и верхнее слово �
 
 Отдельный `i386_user_enter_exec` входит с IF=1 и тем же register contract,
 который уже задаёт `md_user_frame_exec`: EBX=`argc`, ECX=`argv`,
-EDX=`envp`. Bootstrap ELF из CPL3 проверяет `/sbin/init`, `initfs`, `A=i686`,
+EDX=`envp`. Bootstrap ELF из CPL3 проверяет `/sbin/init`, `rootfs`, `A=i686`,
 NULL terminators, alignment, reserved slot и top-of-stack `argv` word.
 `user-stack: ok` также означает, что `p_saddr/p_ssize` и u-area
 `u_ssize` соответствуют постоянному stack mapping.
 
 Статический ELF больше не передаётся loader напрямую как отдельный binary
-symbol. Детерминированный little-endian initfs содержит именованный
-`/sbin/init`; ранний parser проверяет magic/version, directory size,
-каждый path/data range, NUL termination, alignment и duplicate match.
-QEMU path отдельно требует отказ для malformed archive и `/missing`,
-lookup `/sbin/init`, ELF load и исполнение с `argv[0]=/sbin/init`.
-`initfs: ok` покрывает эту цепочку, а `make initfs-smoke` проверяет
-byte-for-byte воспроизводимость упаковки.
+symbol. Существующий `tools/fsutil` создаёт детерминированный little-endian
+UFS с именованным `/sbin/init`; общий memory-disk backend подключает image
+как read-only block device. FAT и UFS проходят один и тот же
+`vfs_mountroot`/`namei`/`rdwri` путь. `rootfs: ok` покрывает эту цепочку, а
+`make rootfs-smoke` проверяет UFS через `fsutil --check` и byte-for-byte
+воспроизводимость.
 
 Board config теперь предоставляет штатные `proc[NPROC]` и `nproc`, а
 generic `kern_proc.c` — `pqinit`, `allproc/freeproc/zombproc`, PID hash и

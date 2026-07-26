@@ -89,9 +89,9 @@ static int create_root_directory (fs_t *fs)
     inode.size = BSDFS_BSIZE;
     inode.flags = 0;
 
-    time (&inode.ctime);
-    time (&inode.atime);
-    time (&inode.mtime);
+    inode.ctime = fsutil_now();
+    inode.atime = fsutil_now();
+    inode.mtime = fsutil_now();
 
     /* directory - put in extra links */
     memset (buf, 0, sizeof(buf));
@@ -133,9 +133,9 @@ static int create_lost_found_directory (fs_t *fs)
     inode.size = BSDFS_BSIZE;
     inode.flags = 0;
 
-    time (&inode.ctime);
-    time (&inode.atime);
-    time (&inode.mtime);
+    inode.ctime = fsutil_now();
+    inode.atime = fsutil_now();
+    inode.mtime = fsutil_now();
 
     /* directory - put in extra links */
     memset (buf, 0, sizeof(buf));
@@ -264,9 +264,9 @@ static int create_swap_file (fs_t *fs)
     inode.nlink = 1;
     inode.dirty = 1;
 
-    time (&inode.ctime);
-    time (&inode.atime);
-    time (&inode.mtime);
+    inode.ctime = fsutil_now();
+    inode.atime = fsutil_now();
+    inode.mtime = fsutil_now();
 
     for (lbn=0; lbn<fs->swapsz; lbn++)
         map_block_swap (&inode, lbn);

@@ -27,19 +27,7 @@ static unsigned i386_vfs_init_size;
 static int i386_vfs_initialized;
 static int i386_vfs_mounted;
 static dev_t i386_vfs_dev;
-
-void
-i386_vfs_log(char *format, ...)
-{
-    (void)format;
-}
-
-void
-i386_vfs_syslog(int level, char *format, ...)
-{
-    (void)level;
-    (void)format;
-}
+static int i386_vfs_type;
 
 static void
 i386_vfs_init(void)
@@ -54,48 +42,84 @@ i386_vfs_init(void)
     i386_vfs_initialized = 1;
 }
 
-int
-i386_vfs_bootstrap_mount(dev_t dev)
+static int
+i386_vfs_has_init(void)
 {
-    struct fs *fs;
-    struct mount *mp;
-    struct inode *root;
+    struct nameidata nd;
+    struct inode *ip;
+    int error;
+
+    bzero(&nd, sizeof(nd));
+    NDINIT_KERNEL(&nd, LOOKUP, FOLLOW, "/sbin/init");
+    u.u_error = 0;
+    ip = namei(&nd);
+    if (ip == 0)
+        return u.u_error != 0 ? u.u_error : ENOENT;
+    error = (ip->i_mode & IFMT) == IFREG && ip->i_size > 0 ? 0 : ENOEXEC;
+    iput(ip);
+    return error;
+}
+
+static int
+i386_vfs_select_root(int type, dev_t dev)
+{
+    int error;
+
+    error = vfs_mountroot(type, dev, MNT_RDONLY | MNT_NOATIME, &rootdir);
+    if (error != 0)
+        return error;
+    error = i386_vfs_has_init();
+    if (error != 0) {
+        int unmount_error;
+
+        unmount_error = vfs_unmountroot(&rootdir);
+        return unmount_error != 0 ? unmount_error : error;
+    }
+    i386_vfs_dev = dev;
+    i386_vfs_type = type;
+    rootdev = dev;
+    i386_vfs_mounted = 1;
+    return 0;
+}
+
+int
+i386_vfs_bootstrap_mount(dev_t preferred_dev, dev_t fallback_dev)
+{
     int error;
 
     if (i386_vfs_mounted)
-        return dev == i386_vfs_dev ? 0 : EBUSY;
+        return fallback_dev == i386_vfs_dev ||
+            preferred_dev == i386_vfs_dev ? 0 : EBUSY;
     i386_vfs_init();
-    u.u_error = 0;
-    fs = vfs_mountfs(MOUNT_FAT, dev, MNT_RDONLY | MNT_NOATIME,
-        (struct inode *)0);
-    if (fs == (struct fs *)0) {
-        error = u.u_error != 0 ? u.u_error : EIO;
-        goto failed;
-    }
-    mp = (struct mount *)((int)fs - offsetof(struct mount, m_filsys));
-    root = iget(dev, fs, ROOTINO);
-    if (root == (struct inode *)0) {
-        error = u.u_error != 0 ? u.u_error : EIO;
-        (void)(*mp->m_ops->vfs_unmount)(mp);
-        (void)(*bdevsw[major(dev)].d_close)(dev, FREAD, S_IFBLK);
-        bzero(mp, sizeof(*mp));
-        goto failed_log;
-    }
-    IUNLOCK(root);
-    rootdir = root;
-    i386_vfs_dev = dev;
-    i386_vfs_mounted = 1;
-    i386_early_puts("vfs-root: fat,read-only\n");
-    return 0;
 
-failed:
-failed_log:
-    if (error == EINVAL || error == EOPNOTSUPP) {
-        i386_early_puts("vfs-root: unavailable\n");
-        return 0;
+    if (preferred_dev != NODEV) {
+        error = i386_vfs_select_root(MOUNT_FAT, preferred_dev);
+        if (error == 0) {
+            i386_early_puts("vfs-root: fat,read-only\n");
+            goto selected;
+        }
+        if (error == ENOENT || error == ENOEXEC)
+            i386_early_puts("vfs-root: fat,no-init\n");
+        else if (error == EINVAL || error == EOPNOTSUPP || error == ENXIO)
+            i386_early_puts("vfs-root: fat,unavailable\n");
+        else {
+            i386_early_puts("vfs-root: fat,failed\n");
+            return error;
+        }
     }
-    i386_early_puts("vfs-root: failed\n");
-    return error;
+
+    error = i386_vfs_select_root(MOUNT_UFS, fallback_dev);
+    if (error != 0) {
+        i386_early_puts("vfs-root: ufs,failed\n");
+        return error;
+    }
+    i386_early_puts("vfs-root: ufs,read-only\n");
+
+selected:
+    igrab(rootdir);
+    IUNLOCK(rootdir);
+    u.u_cdir = rootdir;
+    return 0;
 }
 
 int
@@ -110,6 +134,9 @@ i386_vfs_bootstrap_init_image(const void **data, unsigned *size)
         return EINVAL;
     if (!i386_vfs_mounted)
         return ENOENT;
+    if (rootdir == 0 || u.u_cdir != rootdir ||
+        (i386_vfs_type != MOUNT_FAT && i386_vfs_type != MOUNT_UFS))
+        return EIO;
 
     bzero(&nd, sizeof(nd));
     NDINIT_KERNEL(&nd, LOOKUP, FOLLOW, "/sbin/init");

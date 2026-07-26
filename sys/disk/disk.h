@@ -97,6 +97,15 @@ struct disk_attach_args {
     unsigned da_write_back_sectors;
 };
 
+/*
+ * Read-only memory media for embedded filesystem images.  Callers own the
+ * backing bytes and this descriptor for the lifetime of the attached disk.
+ */
+struct disk_memory {
+    const unsigned char *dm_data;
+    size_t dm_bytes;
+};
+
 void disk_mbr_parse(struct disk_mbr *, const unsigned char *, disk_sector_t);
 int disk_mbr_is_protective(const struct disk_mbr *);
 void disk_table_from_mbr(struct disk_table *, const struct disk_mbr *);
@@ -117,6 +126,7 @@ struct buf;
 struct uio;
 
 int disk_attach(const struct disk_attach_args *, unsigned *);
+int disk_memory_attach(struct disk_memory *, const void *, size_t, unsigned *);
 void disk_detach(unsigned, void *);
 void diskattach(int);
 

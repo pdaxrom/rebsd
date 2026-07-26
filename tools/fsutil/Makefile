@@ -1,9 +1,12 @@
 CC		= gcc -g
 CFLAGS		= -O -Wall
 DESTDIR		= /usr/local
-OBJS		= fsutil.o superblock.o block.o inode.o create.o check.o \
+OBJDIR		?= .
+OBJNAMES	= fsutil.o superblock.o block.o inode.o create.o check.o \
                   file.o mount.o manifest.o
-PROG		= fsutil
+OBJS		= $(addprefix $(OBJDIR)/,$(OBJNAMES))
+PROGNAME	= fsutil
+PROG		= $(OBJDIR)/$(PROGNAME)
 
 # Enable mount option.
 #ENABLE_FUSE    = 1
@@ -24,29 +27,36 @@ endif
 all:		$(PROG)
 
 install:	$(PROG)
-		install -s $(PROG) ${DESTDIR}/bin/$(PROG)
+		install -s $(PROG) ${DESTDIR}/bin/$(PROGNAME)
 clean:
-		rm -rf *~ *.o *.lst *.dis $(PROG) $(PROG).dSYM
+		rm -f $(OBJS) $(PROG)
+		rm -rf $(PROG).dSYM
 
-$(PROG):	$(OBJS)
+$(PROG):	$(OBJS) | $(OBJDIR)
 		$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
 root.bin:       $(PROG)
-		./$(PROG) -n16384 -s2048 $@
-		./$(PROG) -v $@
-		./$(PROG) -c $@
+		$(PROG) -n16384 -s2048 $@
+		$(PROG) -v $@
+		$(PROG) -c $@
 
 swap.bin:
 		dd bs=1k count=2048 < /dev/zero > $@
 
-mount.o: mount.c bsdfs.h
+$(OBJDIR):
+		mkdir -p $@
+
+$(OBJDIR)/mount.o: mount.c bsdfs.h | $(OBJDIR)
 		$(CC) $(CFLAGS) $(MOUNT_CFLAGS) -c -o $@ $<
 
-block.o: block.c bsdfs.h
-check.o: check.c bsdfs.h
-create.o: create.c bsdfs.h
-file.o: file.c bsdfs.h
-fsutil.o: fsutil.c bsdfs.h manifest.h
-inode.o: inode.c bsdfs.h
-manifest.o: manifest.c bsdfs.h manifest.h
-superblock.o: superblock.c bsdfs.h
+$(OBJDIR)/block.o: block.c bsdfs.h
+$(OBJDIR)/check.o: check.c bsdfs.h
+$(OBJDIR)/create.o: create.c bsdfs.h
+$(OBJDIR)/file.o: file.c bsdfs.h
+$(OBJDIR)/fsutil.o: fsutil.c bsdfs.h manifest.h
+$(OBJDIR)/inode.o: inode.c bsdfs.h
+$(OBJDIR)/manifest.o: manifest.c bsdfs.h manifest.h
+$(OBJDIR)/superblock.o: superblock.c bsdfs.h
+
+$(OBJDIR)/%.o: %.c | $(OBJDIR)
+		$(CC) $(CFLAGS) -c -o $@ $<

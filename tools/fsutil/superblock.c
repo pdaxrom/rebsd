@@ -334,7 +334,7 @@ int fs_sync (fs_t *fs, int force)
     if (! force && ! fs->dirty)
         return 1;
 
-    time (&fs->utime);
+    fs->utime = fsutil_now();
     if (! fs_seek (fs, 0))
         return 0;
 

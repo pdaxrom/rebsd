@@ -25,7 +25,7 @@ _start:
     cmpb    $0, 10(%esi)
     jne     .Lfailed
     movl    4(%ecx), %esi
-    cmpl    $0x74696e69, (%esi)
+    cmpl    $0x746f6f72, (%esi)
     jne     .Lfailed
     cmpw    $0x7366, 4(%esi)
     jne     .Lfailed

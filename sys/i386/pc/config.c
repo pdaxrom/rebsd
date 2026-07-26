@@ -11,6 +11,7 @@
 #include <sys/namei.h>
 #include <sys/proc.h>
 
+dev_t rootdev = NODEV;
 int nproc = NPROC;
 int securelevel;
 int hz = HZ;

@@ -12,7 +12,6 @@
 
 #include "context.h"
 #include "boot.h"
-#include "initfs.h"
 #include "interrupt.h"
 #include "privilege.h"
 #include "process.h"
@@ -49,7 +48,6 @@ i386_process_file_table_closed(void)
 }
 static struct vmspace *i386_idle_vmspace;
 static struct proc *i386_fork_child;
-static struct inode i386_bootstrap_cdir;
 static label_t i386_process_bootstrap_return;
 static label_t i386_process_idle_saved;
 static struct exec_elf_image i386_bootstrap_user_image;
@@ -66,12 +64,26 @@ static int i386_process_fork_parent_ready;
 static unsigned i386_process_fork_count;
 static int i386_process_zombie_before_wait;
 static int i386_process_fork_tested;
-static int i386_process_vfs_image;
 static int i386_process_vfs_fd_tested;
 static volatile unsigned i386_process_user_active;
 static volatile unsigned i386_process_user_result;
 
 static void i386_process_idle_entry(void);
+
+static int
+i386_process_root_refs(unsigned count)
+{
+    return rootdir != (struct inode *)0 && u.u_cdir == rootdir &&
+        rootdir->i_count == count;
+}
+
+static int
+i386_process_root_state(void)
+{
+    if (rootdir == (struct inode *)0)
+        return u.u_cdir == (struct inode *)0;
+    return i386_process_root_refs(2u);
+}
 
 static void
 i386_process_context_init(label_t *context, struct user *up,
@@ -151,7 +163,7 @@ i386_process_bootstrap_validate(void)
             proc[0].p_prev != &i386_bootstrap_proc->p_nxt ||
             freeproc != &proc[2] ||
             pfind(2) != (struct proc *)0 ||
-            i386_bootstrap_cdir.i_count != 1)
+            !i386_process_root_state())
             return EFAULT;
     } else {
         if (i386_fork_child != &proc[2] ||
@@ -173,7 +185,7 @@ i386_process_bootstrap_validate(void)
             i386_fork_child->p_vmspace != (struct vmspace *)0 ||
             pfind(2) != (struct proc *)0 ||
             pfind(3) != (struct proc *)0 ||
-            i386_bootstrap_cdir.i_count != 1)
+            !i386_process_root_state())
             return EFAULT;
     }
     if (i386_process_scheduler_tested &&
@@ -292,8 +304,7 @@ i386_process_bootstrap(void)
     process->p_nice = NZERO;
 
     up->u_procp = process;
-    i386_bootstrap_cdir.i_count = 1;
-    up->u_cdir = &i386_bootstrap_cdir;
+    up->u_cdir = (struct inode *)0;
     up->u_cmask = CMASK;
     up->u_lastfile = -1;
     for (index = 1; index < NGROUPS; ++index)
@@ -456,7 +467,7 @@ i386_process_fork_roundtrip(void)
         i386_fork_child->p_uarea != (struct user *)0 ||
         pfind(2) != (struct proc *)0 ||
         pfind(3) != (struct proc *)0 ||
-        i386_bootstrap_cdir.i_count != 1)
+        !i386_process_root_refs(2u))
         return i386_process_scheduler_fail(0x41);
     i386_process_fork_tested = 1;
     return 0;
@@ -505,7 +516,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
     expected_stack = (unsigned)(unsigned long)i386_bootstrap_uarea + USIZE;
     if (i386_process_fork_count == 1u &&
         frame->tf_ebx == I386_BOOTSTRAP_VFS_FD_MAGIC) {
-        if (!i386_process_vfs_image || i386_process_vfs_fd_tested ||
+        if (i386_process_vfs_fd_tested ||
             md_curuser != i386_bootstrap_uarea ||
             u.u_procp != i386_bootstrap_proc ||
             frame->tf_vector != I386_USER_RETURN_VECTOR ||
@@ -524,7 +535,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
             i386_fork_child->p_pid != 0 ||
             i386_fork_child->p_uarea != (struct user *)0 ||
             i386_fork_child->p_vmspace != (struct vmspace *)0 ||
-            i386_bootstrap_cdir.i_count != 1 ||
+            !i386_process_root_refs(2u) ||
             vmspace_current() != i386_bootstrap_vmspace ||
             i386_tss_kernel_stack() != expected_stack) {
             i386_process_user_result = EFAULT;
@@ -563,14 +574,11 @@ i386_process_handle_return(struct i386_trapframe *frame)
             return 1;
         }
         md_uarea_guard_check(proc[2].p_uarea);
-        if ((i386_process_vfs_image &&
-            (u.u_lastfile != 0 || proc[2].p_uarea->u_lastfile != 0 ||
+        if (u.u_lastfile != 0 || proc[2].p_uarea->u_lastfile != 0 ||
             u.u_ofile[0] == (struct file *)0 ||
             proc[2].p_uarea->u_ofile[0] != u.u_ofile[0] ||
             u.u_ofile[0]->f_count != 2 ||
-            u.u_ofile[0]->f_offset != 4)) ||
-            (!i386_process_vfs_image &&
-            !i386_process_file_table_closed())) {
+            u.u_ofile[0]->f_offset != 4) {
             i386_process_user_result = EFAULT;
             i386_privilege_return_to_kernel(frame,
                 (unsigned)(unsigned long)i386_process_user_kernel_return);
@@ -608,7 +616,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
             freeproc != &proc[3] ||
             pfind(2) != (struct proc *)0 ||
             pfind(3) != i386_fork_child ||
-            i386_bootstrap_cdir.i_count != 2 ||
+            !i386_process_root_refs(3u) ||
             vmspace_current() != i386_bootstrap_vmspace ||
             i386_tss_kernel_stack() != expected_stack) {
             i386_process_user_result = EFAULT;
@@ -636,7 +644,7 @@ i386_process_handle_return(struct i386_trapframe *frame)
             i386_fork_child->p_uarea == (struct user *)0 ||
             freeproc != &proc[3] ||
             pfind(3) != (struct proc *)0 ||
-            i386_bootstrap_cdir.i_count != 1 ||
+            !i386_process_root_refs(2u) ||
             vmspace_current() != i386_bootstrap_vmspace ||
             i386_tss_kernel_stack() != expected_stack) {
             i386_process_user_result = EFAULT;
@@ -683,15 +691,13 @@ int
 i386_process_bootstrap_user_probe(void)
 {
     static const unsigned char invalid_elf[] = { 0x7f, 'E', 'L', 'F' };
-    static const unsigned char invalid_initfs[] = { 'R', 'I', 'F', 'S' };
     static char bootstrap_arg0[] = "/sbin/init";
-    static char bootstrap_arg1[] = "initfs";
+    static char bootstrap_arg1[] = "rootfs";
     static char bootstrap_env0[] = "A=i686";
     static char *bootstrap_argv[] = {
         bootstrap_arg0, bootstrap_arg1
     };
     static char *bootstrap_envp[] = { bootstrap_env0 };
-    struct i386_initfs_file init_file;
     const void *init_image;
     unsigned init_size;
     int resumed;
@@ -706,24 +712,11 @@ i386_process_bootstrap_user_probe(void)
     if (exec_elf_image_load(i386_bootstrap_vmspace, invalid_elf,
         sizeof(invalid_elf), &i386_bootstrap_user_image) != ENOEXEC)
         return EFAULT;
-    if (i386_initfs_find(invalid_initfs, sizeof(invalid_initfs),
-        "/sbin/init", &init_file) != ENOEXEC ||
-        i386_initfs_find_embedded("/missing", &init_file) != ENOENT)
-        return EFAULT;
-    error = i386_initfs_find_embedded("/sbin/init", &init_file);
+    error = i386_vfs_bootstrap_init_image(&init_image, &init_size);
+    i386_process_vfs_fd_tested = 0;
     if (error != 0)
         return error;
-    error = i386_vfs_bootstrap_init_image(&init_image, &init_size);
-    i386_process_vfs_image = error == 0;
-    i386_process_vfs_fd_tested = 0;
-    if (error == 0)
-        i386_early_puts("process-image: fat-vfs\n");
-    else if (error == ENOENT) {
-        init_image = init_file.iif_data;
-        init_size = init_file.iif_size;
-        i386_early_puts("process-image: initfs\n");
-    } else
-        return error;
+    i386_early_puts("process-image: vfs\n");
     error = exec_elf_image_load(i386_bootstrap_vmspace, init_image,
         init_size, &i386_bootstrap_user_image);
     if (error != 0)
@@ -783,8 +776,7 @@ i386_process_bootstrap_user_probe(void)
     i386_process_user_active = 0;
     if (resumed != 1 ||
         i386_process_user_result != I386_PROCESS_USER_MAGIC ||
-        (i386_process_vfs_image && !i386_process_vfs_fd_tested) ||
-        (!i386_process_vfs_image && i386_process_vfs_fd_tested) ||
+        !i386_process_vfs_fd_tested ||
         !i386_process_file_table_closed())
         return EFAULT;
     if (i386_process_vfs_fd_tested) {
@@ -792,7 +784,7 @@ i386_process_bootstrap_user_probe(void)
         i386_early_puts("syscall-read: ok\n");
         i386_early_puts("syscall-lseek: ok\n");
         i386_early_puts("syscall-close: ok\n");
-        i386_early_puts("fd-fat-vfs: ok\n");
+        i386_early_puts("fd-vfs: ok\n");
         i386_early_puts("fd-fork-shared-offset: ok\n");
         i386_early_puts("fd-exit-close: ok\n");
     }

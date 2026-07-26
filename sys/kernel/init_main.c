@@ -214,10 +214,10 @@ main()
 
     /* Mount a root filesystem. */
     s = spl0();
-    fs = mountfs (rootdev, (boothowto & RB_RDONLY) ? MNT_RDONLY : 0, 0);
-    if (! fs)
+    if (vfs_mountroot(MOUNT_UFS, rootdev,
+        (boothowto & RB_RDONLY) ? MNT_RDONLY : 0, &rootdir) != 0)
         panic ("No root filesystem found!");
-    mount[0].m_inodp = (struct inode*) 1;   /* XXX */
+    fs = rootdir->i_fs;
     mount_updname (fs, "/", "root", 1, 4);
     time.tv_sec = fs->fs_time;
     boottime = time;
@@ -253,8 +253,6 @@ main()
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("mipsboot: before rootdir iget\n");
 #endif
-    rootdir = iget (rootdev, &mount[0].m_filsys, (ino_t) ROOTINO);
-    iunlock (rootdir);
 #if defined(N64_TRACE) || defined(MIPS_TRACE)
     printf ("mipsboot: after rootdir iget\n");
 #endif

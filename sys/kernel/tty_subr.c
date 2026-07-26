@@ -289,7 +289,8 @@ b_to_q (char *cp, int cc, struct clist *q)
             bp->c_next = NULL;
             cq = bp->c_info;
         }
-        nc = MIN(cc, sizeof (struct cblock) - ((int)cq & CROUND));
+        nc = MIN(cc, (int)sizeof (struct cblock) -
+            ((int)cq & CROUND));
         (void) bcopy(cp, cq, (unsigned)nc);
         cp += nc;
         cq += nc;

@@ -1,6 +1,9 @@
 #include "boot.h"
 #include "io.h"
 
+#include <sys/reboot.h>
+#include <sys/types.h>
+
 #define COM1_BASE       0x03f8u
 #define COM_DATA        0u
 #define COM_IER         1u
@@ -120,10 +123,28 @@ i386_early_putc(char ch)
 }
 
 void
+cnputc(char ch)
+{
+    i386_early_putc(ch);
+}
+
+void
 i386_early_puts(const char *text)
 {
     while (*text != '\0')
         i386_early_putc(*text++);
+}
+
+void
+boot(dev_t dev, int howto)
+{
+    (void)dev;
+    __asm__ volatile ("cli");
+    if ((howto & RB_HALT) == 0)
+        i386_early_puts("reboot: unsupported\n");
+    i386_early_puts("halted\n");
+    for (;;)
+        __asm__ volatile ("hlt");
 }
 
 static void
