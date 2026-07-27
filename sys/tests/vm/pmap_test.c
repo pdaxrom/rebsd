@@ -27,6 +27,7 @@
 #define TEST_GROW_PAGES 65u
 #define TEST_PRESSURE_PAGES 70u
 #define TEST_LOW_FREE_PAGES 55u
+#define TEST_FORK_PRESSURE_PAGES 62u
 #define TEST_CHURN_ITERATIONS 512u
 #define TEST_CHURN_PAGES 8u
 
@@ -288,6 +289,8 @@ test_pmap(void)
     struct vm_phys_map map;
     struct pmap_stats stats;
     struct pmap_tlb_diagnostics diagnostics;
+    struct vm_page_request page_request;
+    struct vm_page *direct_run;
     struct vm_page *page1;
     struct vm_page *page2;
     struct vm_page *page3;
@@ -316,6 +319,18 @@ test_pmap(void)
     CHECK(pmap_system_init(&allocator) == 0);
     CHECK(test_tlb_flushes == 1);
     CHECK(test_asid == 0);
+    vm_page_request_init(&page_request);
+    page_request.vpr_npages = 2;
+    page_request.vpr_state = VM_PAGE_WIRED;
+    CHECK(vm_page_alloc(&allocator, &page_request, &direct_run) == 0);
+    CHECK(pmap_pages_direct_map(direct_run, 2, PMAP_CACHE_CACHED) ==
+        &test_ram[direct_run->vmp_paddr]);
+    CHECK(pmap_pages_direct_map(direct_run, 0, PMAP_CACHE_CACHED) == NULL);
+    CHECK(vm_page_counter_dec(&allocator, direct_run,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_counter_dec(&allocator, direct_run + 1,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_free(&allocator, direct_run, 2) == 0);
     CHECK(pmap_create(&pmap1) == 0);
     CHECK(pmap_create(&pmap2) == 0);
     CHECK(pmap_create(&pmap3) == 0);
@@ -849,13 +864,18 @@ test_pager(void)
 {
     struct vm_page_allocator allocator;
     struct vm_phys_map map;
+    struct vm_page_request request;
     struct vm_page metadata[TEST_RAM_SIZE / VM_PAGE_SIZE];
+    struct vm_page *reserve;
+    struct vm_page *wired;
     struct test_shared_pager shared_pager;
     struct vm_object *shared_object;
     struct vm_object_stats stats;
+    struct vmspace *child;
     struct vmspace *space;
     vm_paddr_t paddr;
     vm_vaddr_t evicted;
+    vm_pfn_t reclaim_before;
     unsigned written;
     unsigned char value;
     unsigned index;
@@ -896,6 +916,49 @@ test_pager(void)
         value == 0x5e && shared_pager.pageins >= 2);
     CHECK(vmspace_destroy(space) == 0);
     CHECK(shared_pager.references == 0 && shared_pager.releases == 1);
+    CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
+
+    /*
+     * Fork needs wired pmap pages, and the MIPS u-area additionally needs
+     * a physically contiguous run.  Both must reclaim pageable memory
+     * instead of reporting ENOMEM while swap is available.
+     */
+    CHECK(test_pager_reset(&allocator, &map, metadata, 16) == 0);
+    CHECK(vmspace_create(&space) == 0);
+    CHECK(vmspace_map_anon(space, TEST_PRESSURE,
+        TEST_FORK_PRESSURE_PAGES * VM_PAGE_SIZE,
+        VM_PROT_READ | VM_PROT_WRITE, 0) == 0);
+    for (index = 0; index < TEST_FORK_PRESSURE_PAGES; ++index) {
+        value = (unsigned char)(index * 13u + 5u);
+        CHECK(vmspace_write(space,
+            TEST_PRESSURE + index * VM_PAGE_SIZE, &value, 1) == 0);
+    }
+    vm_page_request_init(&request);
+    request.vpr_state = VM_PAGE_WIRED;
+    CHECK(vm_page_alloc(&allocator, &request, &reserve) == 0);
+    CHECK(allocator.vpa_free_count < 2);
+    CHECK(vm_object_get_stats(&stats) == 0);
+    reclaim_before = stats.vos_reclaim_attempts;
+    CHECK(vmspace_clone(space, &child) == 0);
+    CHECK(vm_object_get_stats(&stats) == 0);
+    CHECK(stats.vos_reclaim_attempts > reclaim_before);
+    vm_page_request_init(&request);
+    request.vpr_npages = 2;
+    request.vpr_state = VM_PAGE_WIRED;
+    request.vpr_max_address = 32 * VM_PAGE_SIZE - 1;
+    CHECK(vm_page_alloc(&allocator, &request, &wired) == ENOMEM);
+    CHECK(vm_pager_alloc_pages(&request, &wired) == 0);
+    CHECK(wired->vmp_paddr + VM_PAGE_SIZE <= request.vpr_max_address);
+    CHECK(vm_page_counter_dec(&allocator, wired,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_counter_dec(&allocator, wired + 1,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_free(&allocator, wired, 2) == 0);
+    CHECK(vm_page_counter_dec(&allocator, reserve,
+        VM_PAGE_COUNTER_WIRE) == 0);
+    CHECK(vm_page_free(&allocator, reserve, 1) == 0);
+    CHECK(vmspace_destroy(child) == 0);
+    CHECK(vmspace_destroy(space) == 0);
     CHECK(allocator.vpa_free_count == TEST_RAM_SIZE / VM_PAGE_SIZE);
 
     /*

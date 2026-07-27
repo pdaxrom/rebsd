@@ -403,10 +403,11 @@ static int vm_object_range_valid(const struct vm_object *, vm_ooffset_t,
     vm_size_t);
 
 static int vm_pager_reclaim_one(struct vm_anon *, vm_paddr_t,
-    vm_paddr_t);
+    vm_paddr_t, vm_paddr_t);
 
-int
-vm_pager_reclaim_page(void)
+static int
+vm_pager_reclaim_filtered(vm_paddr_t color_mask, vm_paddr_t color,
+    vm_paddr_t max_address)
 {
     unsigned pass;
     int error;
@@ -415,10 +416,42 @@ vm_pager_reclaim_page(void)
     for (pass = 0; pass < 3 && error != 0; ++pass) {
         vm_object_stat_increment(
             &vm_object_statistics.vos_reclaim_attempts);
-        error = vm_pager_reclaim_one(0, 0, 0);
+        error = vm_pager_reclaim_one(0, color_mask, color, max_address);
         if (error != 0)
             vm_object_stat_increment(
                 &vm_object_statistics.vos_reclaim_failures);
+    }
+    return error;
+}
+
+int
+vm_pager_reclaim_page(void)
+{
+    return vm_pager_reclaim_filtered(0, 0, VM_PADDR_MAX);
+}
+
+int
+vm_pager_alloc_pages(const struct vm_page_request *request,
+    struct vm_page **result)
+{
+    vm_pfn_t reclaimed;
+    int error;
+
+    if (!vm_object_initialized || request == 0 || result == 0)
+        return EINVAL;
+    error = vm_page_alloc(vm_object_allocator, request, result);
+    for (reclaimed = 0; error == ENOMEM &&
+        reclaimed < vm_object_allocator->vpa_page_count; ++reclaimed) {
+        /*
+         * Reclaim any eligible page in the allocation zone.  A
+         * multi-page run may contain pages whose cache colors differ from
+         * the requested start page, so filtering every victim by the
+         * start color can make a satisfiable contiguous request fail.
+         */
+        if (vm_pager_reclaim_filtered(0, 0,
+            request->vpr_max_address) != 0)
+            break;
+        error = vm_page_alloc(vm_object_allocator, request, result);
     }
     return error;
 }
@@ -440,7 +473,8 @@ vm_object_page_allocate(vm_paddr_t color_mask, vm_paddr_t color,
     for (pass = 0; error == ENOMEM && pass < 3; ++pass) {
         vm_object_stat_increment(
             &vm_object_statistics.vos_reclaim_attempts);
-        if (vm_pager_reclaim_one(0, color_mask, color) != 0)
+        if (vm_pager_reclaim_one(0, color_mask, color,
+            VM_PADDR_MAX) != 0)
             vm_object_stat_increment(
                 &vm_object_statistics.vos_reclaim_failures);
         error = vm_page_alloc(vm_object_allocator, &request, result);
@@ -1203,7 +1237,7 @@ restart_check:
 
 static int
 vm_pager_reclaim_one(struct vm_anon *exclude, vm_paddr_t color_mask,
-    vm_paddr_t color)
+    vm_paddr_t color, vm_paddr_t max_address)
 {
     struct vm_anon *anon;
     struct vm_page *page;
@@ -1222,7 +1256,9 @@ vm_pager_reclaim_one(struct vm_anon *exclude, vm_paddr_t color_mask,
             anon->va_page == 0 || (anon->va_flags & VM_ANON_BUSY) != 0)
             continue;
         page = anon->va_page;
-        if ((page->vmp_paddr & color_mask) != color)
+        if (max_address < VM_PAGE_MASK ||
+            page->vmp_paddr > max_address - VM_PAGE_MASK ||
+            (page->vmp_paddr & color_mask) != color)
             continue;
         if (page->vmp_wire_count != 0 || page->vmp_busy_count != 0)
             continue;
@@ -1388,7 +1424,7 @@ vm_pager_pageout_scan(void)
         return 0;
     aged = 0;
     while (vm_object_allocator->vpa_free_count < VM_PAGER_FREE_TARGET) {
-        error = vm_pager_reclaim_one(0, 0, 0);
+        error = vm_pager_reclaim_one(0, 0, 0, VM_PADDR_MAX);
         if (error == ENOMEM && aged++ == 0)
             continue;
         if (error != 0)

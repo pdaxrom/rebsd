@@ -109,23 +109,29 @@ typedef struct {
 } cset;
 
 static inline void
-CHadd(cset *cs, char c)
+CHadd(cset *cs, int c)
 {
-	cs->ptr[(uch)c] |= cs->mask;
-	cs->hash += c;
+	unsigned index = (unsigned)c & (unsigned)UCHAR_MAX;
+
+	cs->ptr[index] |= cs->mask;
+	cs->hash += (uch)index;
 }
 
 static inline void
-CHsub(cset *cs, char c)
+CHsub(cset *cs, int c)
 {
-	cs->ptr[(uch)c] &= ~cs->mask;
-	cs->hash -= c;
+	unsigned index = (unsigned)c & (unsigned)UCHAR_MAX;
+
+	cs->ptr[index] &= ~cs->mask;
+	cs->hash -= (uch)index;
 }
 
 static inline int
-CHIN(const cset *cs, char c)
+CHIN(const cset *cs, int c)
 {
-	return (cs->ptr[(uch)c] & cs->mask) != 0;
+	unsigned index = (unsigned)c & (unsigned)UCHAR_MAX;
+
+	return (cs->ptr[index] & cs->mask) != 0;
 }
 
 /*

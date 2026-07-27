@@ -13,6 +13,7 @@
 #include <sys/proc.h>
 #include <machine/io.h>
 #include <vm/pmap.h>
+#include <vm/vm_object.h>
 #include <vm/vmspace.h>
 
 #define MIPS_UAREA_PAGES       (USIZE / VM_PAGE_SIZE)
@@ -126,7 +127,12 @@ md_uarea_alloc(void)
     /* u areas are persistent KSEG0 pointers on the 32-bit Ci20 kernel. */
     request.vpr_max_address = MIPS_UAREA_PHYS_MASK;
 #endif
-    error = vm_page_alloc(&vm_page_boot_allocator, &request, &page);
+    /*
+     * A process u-area is wired and physically contiguous.  Under user
+     * memory pressure a plain vm_page_alloc() can fail even when pageable
+     * pages and swap are available, so let the pager create a suitable run.
+     */
+    error = vm_pager_alloc_pages(&request, &page);
     if (error != 0)
         return 0;
     up = (struct user *)pmap_page_direct_map(page, PMAP_CACHE_CACHED);

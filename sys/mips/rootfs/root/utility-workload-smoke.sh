@@ -3,7 +3,9 @@
 # Build and run a small set of real ReBSD utilities from source with both
 # native compiler driver names.  This keeps the workload small enough for N64
 # while covering normal utility source, stdio file I/O, getopt, multi-source
-# links, and a.out header parsing.
+# links, and a.out header parsing.  Completed binaries are removed as soon as
+# their checks finish so active compiler temporaries retain headroom in the
+# 1 MiB N64 /var file system.
 #
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
@@ -25,8 +27,6 @@ dir=$base.dir
 rm -rf "$dir"
 mkdir "$dir" || exit 1
 cd "$dir" || exit 1
-cp "$src"/basename.c "$src"/sum.c "$src"/size.c \
-    "$src"/aoutio.c "$src"/aoutio.h "$src"/elf32_mips.h . || exit 1
 
 cleanup()
 {
@@ -57,25 +57,29 @@ run_compiler()
 
 	rm -f basename sum size *.out
 
-	$cc -O -o basename basename.c || fail "$cc basename compile"
+	$cc -O -o basename "$src"/basename.c ||
+	    fail "$cc basename compile"
 	./basename /usr/bin/pcc > basename.out ||
 	    fail "$cc basename run"
 	grep '^pcc$' basename.out >/dev/null ||
 	    fail "$cc basename output"
+	cp basename "$prefix-basename" ||
+	    fail "$cc basename save"
+	rm -f basename.out
 
-	$cc -O -o sum sum.c || fail "$cc sum compile"
+	$cc -O -o sum "$src"/sum.c || fail "$cc sum compile"
 	./sum sample.txt > sum.out || fail "$cc sum run"
 	grep '^48897[ 	][ 	]*1$' sum.out >/dev/null ||
 	    fail "$cc sum output"
+	rm -f sum sum.out
 
-	$cc -O $endian_cflag -I. -o size size.c aoutio.c ||
+	$cc -O $endian_cflag -I"$src" -o size \
+	    "$src"/size.c "$src"/aoutio.c ||
 	    fail "$cc size compile"
 	./size ./basename > size.out || fail "$cc size run"
 	grep '^text' size.out >/dev/null || fail "$cc size header"
 
-	cp basename "$prefix-basename"
-	cp sum "$prefix-sum"
-	cp size "$prefix-size"
+	rm -f basename size size.out
 }
 
 run_compiler /usr/bin/cc cc

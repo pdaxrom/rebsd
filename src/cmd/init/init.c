@@ -373,8 +373,12 @@ void wstart(struct tab *p)
 {
     register int pid;
     time_t t;
+    time_t oldtime;
+    int oldcnt;
     int dowait = 0;
 
+    oldtime = p->windtime;
+    oldcnt = p->windcnt;
     time(&t);
     p->windcnt++;
     if ((t - p->windtime) >= 60) {
@@ -388,6 +392,14 @@ void wstart(struct tab *p)
 
     pid = fork();
 
+    if (pid < 0) {
+        p->windtime = oldtime;
+        p->windcnt = oldcnt;
+        p->wpid = -1;
+        syslog(LOG_ERR, "cannot fork window '%s %s': %m; retrying",
+            p->wcmd, p->line);
+        return;
+    }
     if (pid == 0) {
         signal(SIGTERM, SIG_DFL);
         signal(SIGHUP, SIG_IGN);
@@ -407,8 +419,12 @@ void dfork(struct tab *p)
 {
     register int pid;
     time_t t;
+    time_t oldtime;
+    int oldcnt;
     int dowait = 0;
 
+    oldtime = p->gettytime;
+    oldcnt = p->gettycnt;
     time(&t);
     p->gettycnt++;
     if ((t - p->gettytime) >= 60) {
@@ -420,6 +436,14 @@ void dfork(struct tab *p)
         p->gettycnt = 1;
     }
     pid = fork();
+    if (pid < 0) {
+        p->gettytime = oldtime;
+        p->gettycnt = oldcnt;
+        p->pid = -1;
+        syslog(LOG_ERR, "cannot fork getty '%s %s': %m; retrying",
+            p->comn, p->line);
+        return;
+    }
     if (pid == 0) {
         signal(SIGTERM, SIG_DFL);
         signal(SIGHUP, SIG_IGN);
@@ -444,6 +468,7 @@ void multiple()
 {
     register struct tab *p;
     register int pid;
+    int retrying;
     long omask;
     static struct sigvec mvec = { merge, sigmask(SIGTERM), 0 };
 
@@ -458,17 +483,62 @@ void multiple()
 
     sigvec(SIGHUP, &mvec, (struct sigvec *)0);
     for (;;) {
-        pid = wait((int *)0);
-        if (pid == -1)
-            return;
+        /*
+         * A transient fork failure must not permanently remove a login
+         * terminal.  Retry missing children without waiting for an
+         * unrelated getty or window process to exit first.
+         */
+        retrying = 0;
+        for (p = itab; p; p = p->next) {
+            if (p->wpid == -1) {
+                wstart(p);
+                if (p->wpid == -1)
+                    retrying = 1;
+            }
+            if (p->pid == -1) {
+                dfork(p);
+                if (p->pid == -1)
+                    retrying = 1;
+            }
+        }
+
+        pid = waitpid(WAIT_ANY, (int *)0, retrying ? WNOHANG : 0);
+        if (pid == 0) {
+            sleep(1);
+            continue;
+        }
+        if (pid == -1) {
+            if (errno == EINTR)
+                continue;
+            if (errno == ECHILD) {
+                /*
+                 * Repair stale bookkeeping instead of falling back through
+                 * main(), which would tear down an otherwise healthy
+                 * multi-user system.
+                 */
+                for (p = itab; p; p = p->next) {
+                    if (p->wpid > 0)
+                        p->wpid = -1;
+                    if (p->pid > 0)
+                        p->pid = -1;
+                }
+            } else {
+                syslog(LOG_ERR, "wait for login children: %m");
+            }
+            if (itab)
+                sleep(1);
+            else
+                pause();
+            continue;
+        }
         omask = sigblock(sigmask(SIGHUP));
         for (p = itab; p; p = p->next) {
             /* must restart window system BEFORE emulator */
-            if (p->wpid == pid || p->wpid == -1)
+            if (p->wpid == pid)
                 wstart(p);
-            if (p->pid == pid || p->pid == -1) {
+            if (p->pid == pid) {
                 /* disown the window system */
-                if (p->wpid)
+                if (p->wpid > 0)
                     kill(p->wpid, SIGHUP);
                 rmut(p);
                 dfork(p);

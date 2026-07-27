@@ -764,6 +764,11 @@ temporary space than the original 512 KiB `/var` RAM disk can provide.  The N64
 default `/dev/ram0` reservation is therefore 1 MiB.  The 4 MiB user window is
 unchanged; with zswap the expected 8 MiB boot report becomes
 `user mem = 4096 kbytes` and `swap size = 3584 kbytes`.
+The workload serializes its persistent outputs within that reservation: only
+the first compiler's `basename` binary is retained for the cross-driver
+comparison, while copied sources, `sum`, `size`, and their output files are
+not kept across later compiler invocations.  This leaves the remaining space
+for the active `cpp`, `ccom`, assembler, and linker temporary files.
 
 QEMU Malta exposes only a 4 MiB BIOS/pflash ROM window.  The normal PCC rootfs
 does not fit there, so the smoke layout keeps the rootfs outside guest

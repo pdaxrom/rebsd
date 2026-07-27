@@ -34,6 +34,29 @@
  * delimiter.
  */
 
+size_t
+rmap_required_entries(size_t total, size_t allocation_unit)
+{
+    size_t allocations;
+    size_t extents;
+
+    if (total == 0 || allocation_unit == 0)
+        return 0;
+
+    allocations = total / allocation_unit;
+    extents = allocations / 2 + allocations % 2;
+
+    /*
+     * A partial unit at the end is permanently free.  It adds another
+     * extent only when the last complete unit in the alternating layout
+     * is allocated.
+     */
+    if (total % allocation_unit != 0 && allocations % 2 == 0)
+        ++extents;
+
+    return extents + 1;       /* zero-sized terminating entry */
+}
+
 /*
  * Allocate 'size' units from the given map.  Return the base of the
  * allocated space.  In a map, the addresses are increasing and the
@@ -144,7 +167,7 @@ mfree (struct map *mp, size_t size, size_t addr)
 
     /* doesn't abut.  Make a new entry and check for map overflow. */
     for (start = bp; bp->m_size; ++bp);
-    if (++bp > mp->m_limit)
+    if (++bp >= mp->m_limit) {
         /*
          * too many segments; if this happens, the correct fix
          * is to make the map bigger; you can't afford to lose
@@ -152,9 +175,11 @@ mfree (struct map *mp, size_t size, size_t addr)
          * use the above "for" loop to find the smallest entry
          * and toss it.
          */
+#ifndef REBSD_RMAP_HOST_TEST
         printf("%s: overflow, lost %u clicks at 0%o\n",
             mp->m_name, size, addr);
-    else {
+#endif
+    } else {
         for (ep = bp - 1; ep >= start; *bp-- = *ep--);
         start->m_addr = addr;
         start->m_size = size;

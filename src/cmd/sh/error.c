@@ -43,6 +43,7 @@ void exitsh(int xno)
         clearup();
         restore(0);
         clear_buff();
+        exitsig = 0;
         execbrk = breakcnt = funcnt = 0;
         longjmp(errshell, 1);
     }
@@ -66,6 +67,13 @@ void done()
     doacct();
 #endif
     sh_edit_save_history();
+    if (exitsig) {
+        int sig = exitsig;
+
+        exitsig = 0;
+        signal(sig, SIG_DFL);
+        kill(getpid(), sig);
+    }
     exit(exitval);
 }
 

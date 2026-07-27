@@ -3327,6 +3327,10 @@ file_private struct magic_map *
 apprentice_map(struct magic_set *ms, const char *fn)
 {
 	int fd;
+#ifdef QUICK
+	int writable;
+	uint32_t magicno;
+#endif
 	struct stat st;
 	char *dbname = NULL;
 	struct magic_map *map;
@@ -3358,9 +3362,17 @@ apprentice_map(struct magic_set *ms, const char *fn)
 
 	map->len = CAST(size_t, st.st_size);
 #ifdef QUICK
+	if (pread(fd, &magicno, sizeof(magicno), CAST(off_t, 0)) !=
+	    CAST(ssize_t, sizeof(magicno))) {
+		file_badread(ms);
+		goto error;
+	}
+	writable = magicno != MAGICNO && swap4(magicno) == MAGICNO;
 	map->type = MAP_TYPE_MMAP;
-	if ((map->p = mmap(0, CAST(size_t, st.st_size), PROT_READ|PROT_WRITE,
-	    MAP_PRIVATE|MAP_FILE, fd, CAST(off_t, 0))) == MAP_FAILED) {
+	if ((map->p = mmap(0, CAST(size_t, st.st_size),
+	    writable ? PROT_READ|PROT_WRITE : PROT_READ,
+	    (writable ? MAP_PRIVATE : MAP_SHARED)|MAP_FILE, fd,
+	    CAST(off_t, 0))) == MAP_FAILED) {
 		file_error(ms, errno, "cannot map `%s'", dbname);
 		goto error;
 	}
@@ -3382,7 +3394,8 @@ apprentice_map(struct magic_set *ms, const char *fn)
 		goto error;
 	}
 #ifdef QUICK
-	if (mprotect(map->p, CAST(size_t, st.st_size), PROT_READ) == -1) {
+	if (writable &&
+	    mprotect(map->p, CAST(size_t, st.st_size), PROT_READ) == -1) {
 		file_error(ms, errno, "cannot mprotect `%s'", dbname);
 		goto error;
 	}

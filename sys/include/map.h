@@ -24,7 +24,7 @@
  */
 struct map {
     struct mapent   *m_map;     /* start of the map */
-    struct mapent   *m_limit;   /* address of last slot in map */
+    struct mapent   *m_limit;   /* one past the last slot in map */
     char            *m_name;    /* name of resource */
 /* we use m_name when the map overflows, in warning messages */
 };
@@ -41,6 +41,12 @@ extern struct map swapmap[];    /* space for swap allocation */
  * Allocate units from the given map.
  */
 size_t malloc (struct map *mp, size_t nbytes);
+
+/*
+ * Return the number of entries, including the terminating entry, needed
+ * for worst-case fragmentation with fixed-size allocations.
+ */
+size_t rmap_required_entries(size_t total, size_t allocation_unit);
 
 /*
  * Free the previously allocated units at addr into the specified map.

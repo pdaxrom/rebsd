@@ -84,6 +84,19 @@ compile_zswap()
 
 compile_zswap "$tmp/zswap_test"
 
+compile_rmap()
+{
+    output=$1
+    shift
+    "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
+        -fno-builtin-malloc -DKERNEL -DREBSD_RMAP_HOST_TEST \
+        -I "$top/sys" -idirafter "$top/include" \
+        "$@" "$top/sys/kernel/subr_rmap.c" \
+        "$script_dir/rmap_test.c" -o "$output"
+}
+
+compile_rmap "$tmp/rmap_test"
+
 if compile "$tmp/vm_test_sanitize" -fsanitize=address,undefined \
     -fno-omit-frame-pointer >/dev/null 2>&1; then
     :
@@ -110,6 +123,13 @@ if compile_pmap "$tmp/pmap_test_sanitize" -fsanitize=address,undefined \
     :
 else
     rm -f "$tmp/pmap_test_sanitize"
+fi
+
+if compile_rmap "$tmp/rmap_test_sanitize" \
+    -fsanitize=address,undefined -fno-omit-frame-pointer >/dev/null 2>&1; then
+    :
+else
+    rm -f "$tmp/rmap_test_sanitize"
 fi
 
 compile_board()
@@ -165,6 +185,7 @@ if [ "$mode" = test ]; then
     "$tmp/vm_map_test"
     "$tmp/pmap_test"
     "$tmp/zswap_test"
+    "$tmp/rmap_test"
     if [ -x "$tmp/vm_test_sanitize" ]; then
         "$tmp/vm_test_sanitize"
     fi
@@ -176,6 +197,9 @@ if [ "$mode" = test ]; then
     fi
     if [ -x "$tmp/pmap_test_sanitize" ]; then
         "$tmp/pmap_test_sanitize"
+    fi
+    if [ -x "$tmp/rmap_test_sanitize" ]; then
+        "$tmp/rmap_test_sanitize"
     fi
     "$tmp/malta_map_test"
     "$tmp/malta_n64_8m_map_test"

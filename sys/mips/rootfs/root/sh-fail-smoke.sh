@@ -26,5 +26,15 @@ do
 	echo "sh-fail-smoke: parent shell survived $i"
 done
 
+sh -c 'kill -2 $$'
+rc=$?
+if test "$rc" != 130
+then
+	echo "sh-fail-smoke: SIGINT status $rc, expected 130" >&2
+	rm -f $src $obj
+	exit 1
+fi
+echo "sh-fail-smoke: SIGINT status preserved"
+
 rm -f $src $obj
 echo "sh-fail-smoke ok"

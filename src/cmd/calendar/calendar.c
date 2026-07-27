@@ -74,6 +74,10 @@ main(int argc, char *argv[])
 
 	while ((ch = getopt(argc, argv, "-a")) != EOF)
 		switch (ch) {
+		case 1:
+			if (optarg == NULL || strcmp(optarg, "-") != 0)
+				usage();
+			/* FALLTHROUGH */
 		case '-':		/* backward contemptible */
 		case 'a':
 			if (getuid()) {

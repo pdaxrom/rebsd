@@ -457,7 +457,7 @@ ttioctl(struct tty *tp, u_int com, caddr_t data, int flag)
 
     /* return number of characters immediately available */
     case FIONREAD:
-        *(off_t *)data = ttnread(tp);
+        *(long *)data = ttnread(tp);
         break;
 
     case TIOCOUTQ:

@@ -35,10 +35,18 @@ BOOL trapflg[MAXTRAP] = {
 
 /* ========     fault handling routines    ======== */
 
-void fault(int sig)
+static void
+notesig(int sig)
 {
     register int flag;
 
+    flag = (trapcom[sig] ? TRAPSET : SIGSET);
+    trapnote |= flag;
+    trapflg[sig] |= flag;
+}
+
+void fault(int sig)
+{
     signal(sig, fault);
     if (sig == SIGSEGV) {
         if (setbrk(brkincr) == (char *)-1)
@@ -47,12 +55,48 @@ void fault(int sig)
         if (flags & waiting)
             done();
     } else {
-        flag = (trapcom[sig] ? TRAPSET : SIGSET);
-        trapnote |= flag;
-        trapflg[sig] |= flag;
+        notesig(sig);
         if (sig == SIGINT)
             wasintr++;
     }
+}
+
+/*
+ * A foreground job runs in its own process group, so an interactive shell
+ * does not receive the terminal's SIGINT directly.  Reflect an interrupted
+ * foreground status into the shell executor without disturbing wait(2).
+ */
+void
+jobfault(int sig)
+{
+    notesig(sig);
+}
+
+/*
+ * Preserve the conventional 128+signal status when the default signal path
+ * leaves the shell.  The historical code reused the last command's status,
+ * which made an interrupted script look like an ordinary failure and let an
+ * enclosing interactive while loop start it again.
+ */
+int
+sigstatus()
+{
+    register int i;
+    int status;
+
+    status = exitval ? exitval : SIGFAIL;
+    exitsig = 0;
+    for (i = 1; i < MAXTRAP; i++) {
+        if (trapflg[i] & SIGSET) {
+            status = i | SIGFLG;
+            exitsig = i;
+            break;
+        }
+    }
+    for (i = 1; i < MAXTRAP; i++)
+        trapflg[i] &= ~SIGSET;
+    trapnote &= ~SIGSET;
+    return (status);
 }
 
 int ignsig(int n)

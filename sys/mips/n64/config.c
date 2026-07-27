@@ -11,7 +11,6 @@
 #include <sys/namei.h>
 #include <sys/user.h>
 #include <sys/proc.h>
-#include <sys/map.h>
 #include <sys/systm.h>
 #include <machine/ramswap.h>
 #include <machine/video.h>
@@ -37,11 +36,6 @@ struct file file[NFILE];
 
 int securelevel = 0;
 int waittime = -1;
-
-struct mapent swapent[SMAPSIZ];
-struct map swapmap[1] = {
-    { swapent, &swapent[SMAPSIZ], "swapmap" },
-};
 
 void
 kconfig(void)

@@ -87,6 +87,8 @@ vmspace_create(struct vmspace **result)
         return ENOSPC;
     vmspace_zero_memory(vmspace, sizeof(*vmspace));
     error = pmap_create(&vmspace->vms_pmap);
+    while (error == ENOMEM && vm_pager_reclaim_page() == 0)
+        error = pmap_create(&vmspace->vms_pmap);
     if (error != 0)
         return error;
     error = vm_map_init(&vmspace->vms_map, VMSPACE_USER_MIN,
@@ -1141,6 +1143,22 @@ vmspace_clone(struct vmspace *source, struct vmspace **result)
                 effective &= ~VM_PROT_WRITE;
             error = pmap_enter(target->vms_pmap, address, page,
                 effective, PMAP_CACHE_CACHED);
+            while (error == ENOMEM &&
+                vm_pager_reclaim_page() == 0) {
+                /*
+                 * Reclaim may have selected the very object page that was
+                 * about to be mapped.  Re-read it instead of retaining a
+                 * stale vm_page pointer; an evicted page needs no child PTE.
+                 */
+                page = vm_object_resident_page(
+                    target_entry->vme_object, offset);
+                if (page == 0) {
+                    error = 0;
+                    break;
+                }
+                error = pmap_enter(target->vms_pmap, address, page,
+                    effective, PMAP_CACHE_CACHED);
+            }
             if (error != 0)
                 goto fail;
         }

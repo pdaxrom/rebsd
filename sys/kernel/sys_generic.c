@@ -250,6 +250,12 @@ ioctl()
         caddr_t cmarg;
     } *uap;
     u_int com;
+    u_int nbytes;
+    caddr_t data;
+    union {
+        long long align;
+        char bytes[IOCPARM_MASK + 1];
+    } argument;
 
     uap = (struct a *)u.u_arg;
     fp = getf(uap->fdes);
@@ -260,13 +266,24 @@ ioctl()
         return;
     }
     com = (u_int) uap->cmd;
+    nbytes = IOCPARM_LEN(com);
+    data = uap->cmarg;
     if (com & (IOC_IN | IOC_OUT)) {
-        /* Check user address. */
-        u_int nbytes = (com & ~(IOC_INOUT | IOC_VOID)) >> 16;
-        if (baduaddr (uap->cmarg) ||
-            baduaddr (uap->cmarg + nbytes - 1)) {
-            u.u_error = EFAULT;
-            return;
+        /*
+         * Typed ioctls are marshalled through kernel memory.  Besides
+         * keeping drivers away from untrusted addresses, copyout resolves
+         * a read-only COW mapping before publishing an IOC_OUT result.
+         * Zero-length commands retain the historical raw argument ABI used
+         * by scalar GPIO/SPI operations and legacy encoded commands.
+         */
+        if (nbytes != 0) {
+            data = argument.bytes;
+            if (com & IOC_IN) {
+                u.u_error = copyin(uap->cmarg, data, nbytes);
+                if (u.u_error)
+                    return;
+            } else
+                bzero(data, nbytes);
         }
     }
 
@@ -278,19 +295,22 @@ ioctl()
         u.u_pofile[uap->fdes] &= ~UF_EXCLOSE;
         return;
     case FIONBIO:
-        u.u_error = fset (fp, FNONBLOCK, *(int*) uap->cmarg);
+        u.u_error = fset (fp, FNONBLOCK, *(int*) data);
         return;
     case FIOASYNC:
-        u.u_error = fset (fp, FASYNC, *(int*) uap->cmarg);
+        u.u_error = fset (fp, FASYNC, *(int*) data);
         return;
     case FIOSETOWN:
-        u.u_error = fsetown (fp, *(int*) uap->cmarg);
+        u.u_error = fsetown (fp, *(int*) data);
         return;
     case FIOGETOWN:
-        u.u_error = fgetown (fp, (int*) uap->cmarg);
-        return;
+        u.u_error = fgetown (fp, (int*) data);
+        break;
     }
-    u.u_error = (*Fops[fp->f_type]->fo_ioctl) (fp, com, uap->cmarg);
+    if (com != FIOGETOWN)
+        u.u_error = (*Fops[fp->f_type]->fo_ioctl) (fp, com, data);
+    if (u.u_error == 0 && (com & IOC_OUT) && nbytes != 0)
+        u.u_error = copyout(data, uap->cmarg, nbytes);
 }
 
 int nselcoll;

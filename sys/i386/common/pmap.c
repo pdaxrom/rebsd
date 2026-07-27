@@ -1016,16 +1016,41 @@ pmap_sync_phys_range(vm_paddr_t paddr, vm_size_t size,
 }
 
 void *
-pmap_page_direct_map(struct vm_page *page, enum pmap_cache cache)
+pmap_pages_direct_map(struct vm_page *page, vm_pfn_t page_count,
+    enum pmap_cache cache)
 {
+    struct vm_page *current;
+    vm_paddr_t paddr;
+    vm_paddr_t expected;
+    vm_size_t size;
+    vm_pfn_t index;
+
     if (!pmap_initialized || page == (struct vm_page *)0 ||
-        vm_page_lookup(pmap_allocator, page->vmp_paddr) != page ||
-        page->vmp_state == VM_PAGE_FREE ||
-        page->vmp_state == VM_PAGE_RESERVED ||
-        page->vmp_state == VM_PAGE_BAD ||
+        page_count == 0 || page_count > VM_SIZE_MAX / VM_PAGE_SIZE ||
         (cache != PMAP_CACHE_CACHED && cache != PMAP_CACHE_UNCACHED))
         return (void *)0;
-    return pmap_direct(page->vmp_paddr);
+    paddr = page->vmp_paddr;
+    size = page_count * VM_PAGE_SIZE;
+    if (size > I386_DIRECT_MAP_SIZE ||
+        paddr > I386_DIRECT_MAP_SIZE - size)
+        return (void *)0;
+    for (index = 0; index < page_count; ++index) {
+        expected = paddr + index * VM_PAGE_SIZE;
+        current = vm_page_lookup(pmap_allocator, expected);
+        if (current == (struct vm_page *)0 ||
+            (index == 0 && current != page) ||
+            current->vmp_state == VM_PAGE_FREE ||
+            current->vmp_state == VM_PAGE_RESERVED ||
+            current->vmp_state == VM_PAGE_BAD)
+            return (void *)0;
+    }
+    return pmap_direct(paddr);
+}
+
+void *
+pmap_page_direct_map(struct vm_page *page, enum pmap_cache cache)
+{
+    return pmap_pages_direct_map(page, 1, cache);
 }
 
 static void *

@@ -422,9 +422,10 @@ file_private const char *
 file_or_fd(struct magic_set *ms, const char *inname, int fd)
 {
 	int	rv = -1;
-	unsigned char *buf;
+	unsigned char *buf = NULL;
 	struct stat	sb;
 	ssize_t nbytes = 0;	/* number of bytes read from a datafile */
+	size_t howmany;
 	int	ispipe = 0;
 	int	okstat = 0;
 	off_t	pos = CAST(off_t, -1);
@@ -437,9 +438,6 @@ file_or_fd(struct magic_set *ms, const char *inname, int fd)
 	 * some overlapping space for matches near EOF
 	 */
 #define SLOP (1 + sizeof(union VALUETYPE))
-	if ((buf = CAST(unsigned char *, malloc(ms->bytes_max + SLOP))) == NULL)
-		return NULL;
-
 	switch (file_fsmagic(ms, inname, &sb)) {
 	case -1:		/* error */
 		goto done;
@@ -492,14 +490,33 @@ file_or_fd(struct magic_set *ms, const char *inname, int fd)
 	}
 
 	/*
-	 * try looking at the first ms->bytes_max bytes
+	 * Do not reserve bytes_max unconditionally.  Besides wasting address
+	 * space, that makes a small file impossible to identify on systems
+	 * whose per-process limit is lower than FILE_BYTES_MAX.
+	 */
+	howmany = ms->bytes_max;
+	if (okstat && S_ISREG(sb.st_mode) && sb.st_size >= 0 &&
+	    CAST(uintmax_t, sb.st_size) < CAST(uintmax_t, howmany))
+		howmany = CAST(size_t, sb.st_size);
+	if (howmany > SIZE_MAX - SLOP) {
+		errno = EOVERFLOW;
+		file_error(ms, errno, "input buffer size is too large");
+		goto done;
+	}
+	if ((buf = CAST(unsigned char *, malloc(howmany + SLOP))) == NULL) {
+		file_oomem(ms, howmany + SLOP);
+		goto done;
+	}
+
+	/*
+	 * try looking at the first howmany bytes
 	 */
 	if (ispipe) {
 		if (fd != -1) {
 			ssize_t r = 0;
 
 			while ((r = sread(fd, RCAST(void *, &buf[nbytes]),
-			    CAST(size_t, ms->bytes_max - nbytes), 1)) > 0) {
+			    howmany - CAST(size_t, nbytes), 1)) > 0) {
 				nbytes += r;
 				if (r < PIPE_BUF) break;
 			}
@@ -515,12 +532,12 @@ file_or_fd(struct magic_set *ms, const char *inname, int fd)
 
 	} else if (fd != -1) {
 		/* Windows refuses to read from a big console buffer. */
-		size_t howmany =
+		size_t read_size =
 #ifdef WIN32
 		    _isatty(fd) ? 8 * 1024 :
 #endif
-		    ms->bytes_max;
-		if ((nbytes = read(fd, RCAST(void *, buf), howmany)) == -1) {
+		    howmany;
+		if ((nbytes = read(fd, RCAST(void *, buf), read_size)) == -1) {
 			if (inname == NULL && fd != STDIN_FILENO)
 				file_error(ms, errno, "cannot read fd %d", fd);
 			else

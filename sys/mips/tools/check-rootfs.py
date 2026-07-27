@@ -31,6 +31,41 @@ REQUIRED_DEVICES = (
     ("cdev", "/dev/console"),
 )
 
+EXECUTABLE_DIRECTORIES = (
+    "/bin/",
+    "/sbin/",
+    "/usr/bin/",
+    "/usr/sbin/",
+    "/libexec/",
+    "/usr/libexec/",
+)
+
+COMMAND_MAN_DIRECTORIES = (
+    "/usr/share/man/cat1/",
+    "/usr/share/man/cat8/",
+)
+
+MANUAL_DIRECTORY = "/usr/share/man/"
+
+# Command manuals are matched to an executable with the same basename.
+# Manuals for formats, configuration files, ABIs, and other non-command
+# objects need an explicit rootfs-object rule so that new manual sections
+# cannot silently become unconditional payload.
+MANUAL_OBJECTS = {
+    "/usr/share/man/cat5/ar.0": (
+        "/usr/bin/ar",
+        "/usr/include/ar.h",
+    ),
+    "/usr/share/man/cat5/magic.0": (
+        "/usr/share/misc/magic.mgc",
+        "/usr/include/magic.h",
+    ),
+    "/usr/share/man/cat5/ranlib.0": (
+        "/usr/bin/ranlib",
+        "/usr/include/ranlib.h",
+    ),
+}
+
 
 def fail(messages):
     for message in messages:
@@ -78,14 +113,77 @@ def check_stage(stage):
     return errors
 
 
-def check_manifest(manifest):
+def check_manifest(stage, manifest):
     if not manifest.is_file():
         return [f"manifest is not a file: {manifest}"]
     text = manifest.read_text(encoding="utf-8", errors="replace")
+    payload = {
+        line.split(maxsplit=1)[1]
+        for line in text.splitlines()
+        if line.startswith(("file /", "symlink /"))
+    }
     errors = []
     for kind, path in REQUIRED_DEVICES:
         if f"{kind} {path}" not in text:
             errors.append(f"manifest is missing {kind} {path}")
+
+    commands = {}
+    for path in sorted(payload):
+        if not path.startswith(EXECUTABLE_DIRECTORIES):
+            continue
+        staged = stage / path.lstrip("/")
+        try:
+            mode = staged.stat().st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(mode) and mode & 0o111:
+            commands.setdefault(staged.name, []).append(path)
+
+    staged_pages = {
+        f"/{path.relative_to(stage)}"
+        for path in (stage / MANUAL_DIRECTORY.lstrip("/")).glob("cat[1-9]/*.0")
+        if path.is_file()
+    }
+    packaged_pages = {
+        path
+        for path in payload
+        if path.startswith(MANUAL_DIRECTORY) and path.endswith(".0")
+    }
+
+    for page in sorted(staged_pages):
+        directory = f"{Path(page).parent}/"
+        if directory in COMMAND_MAN_DIRECTORIES:
+            command = Path(page).stem
+            paths = commands.get(command, ())
+            if paths and page not in payload:
+                errors.append(
+                    f"manifest is missing man page {page} for {', '.join(paths)}"
+                )
+            elif not paths and page in payload:
+                errors.append(
+                    f"manifest includes man page {page} without an installed command"
+                )
+            continue
+
+        if page not in MANUAL_OBJECTS:
+            errors.append(
+                f"manual object rule is missing for non-command page {page}"
+            )
+
+    for page, objects in sorted(MANUAL_OBJECTS.items()):
+        installed = [path for path in objects if path in payload]
+        if installed and page not in payload:
+            errors.append(
+                f"manifest is missing man page {page} for {', '.join(installed)}"
+            )
+        elif not installed and page in payload:
+            errors.append(
+                f"manifest includes man page {page} without any described object: "
+                f"{', '.join(objects)}"
+            )
+
+    for page in sorted(packaged_pages - staged_pages):
+        errors.append(f"manifest includes unavailable man page {page}")
     return errors
 
 
@@ -97,7 +195,7 @@ def main():
     args = parser.parse_args()
 
     errors = check_stage(args.stage)
-    errors.extend(check_manifest(args.manifest))
+    errors.extend(check_manifest(args.stage, args.manifest))
     if errors:
         return fail(errors)
 

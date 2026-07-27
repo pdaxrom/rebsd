@@ -53,6 +53,7 @@ jmp_buf errshell;
 
 /* fault handling */
 BOOL trapnote;
+int exitsig;
 
 /* execflgs */
 int exitval;

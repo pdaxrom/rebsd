@@ -676,6 +676,14 @@ Job control is disabled when the shell has no controlling terminal.
 .br
 With interactive job control, terminal signals are delivered to the
 foreground process group.
+If a foreground job is interrupted, the shell records status
+.RI 128+signal
+and abandons the current compound command.
+Thus an INTERRUPT also stops an interactive
+.B for
+or
+.B while
+loop instead of starting its next iteration.
 Background jobs do not receive terminal-generated INTERRUPT, QUIT or
 SUSPEND signals while they remain in the background.
 When brought to the foreground with

@@ -236,7 +236,7 @@ logioctl(dev, com, data, flag)
         splx(s);
         if (l < 0)
             l += MSG_BSIZE;
-        *(off_t *)data = l;
+        *(long *)data = l;
         break;
     case FIONBIO:
         break;

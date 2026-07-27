@@ -11,7 +11,6 @@
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
-#include <sys/map.h>
 #include <sys/errno.h>
 #include <sys/systm.h>
 
@@ -36,11 +35,6 @@ struct buf buf[NBUF], bfreelist[BQUEUES];
 struct bufhd bufhash[BUFHSZ];
 struct proc proc[NPROC];
 struct cblock cfree[NCLIST];
-struct mapent swapent[SMAPSIZ];
-struct map swapmap[1] = {
-    { swapent, &swapent[SMAPSIZ], "swapmap" },
-};
-
 void
 kconfig(void)
 {

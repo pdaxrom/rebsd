@@ -4,7 +4,6 @@
  * specifies the terms and conditions for redistribution.
  */
 #include <unistd.h>
-#include <string.h>
 #include <errno.h>
 
 extern char _end[];
@@ -22,15 +21,9 @@ sbrk (int incr)
 			/* add increment to curbrk */
 			_curbrk = addr;
 		} else {
-                        extern char *__progname;
-                        if (__progname && *__progname) {
-                                static const char message[] = ": Out of memory\n";
-                                write(2, __progname, strlen(__progname));
-                                write(2, message, sizeof(message) - 1);
-                        }
-                        errno = ENOMEM;
-                        return (void*) -1;
-                }
+			errno = ENOMEM;
+			return (void*) -1;
+		}
 	}
 	/* return old break address */
 	return oldbrk;

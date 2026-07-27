@@ -236,8 +236,10 @@ job_wait(struct job *jp, BOOL resume)
     int pid;
     int sig;
     int rc;
+    BOOL interrupted;
 
     rc = 0;
+    interrupted = FALSE;
     jp->state = JOB_RUNNING;
     job_set_foreground(jp->pgrp);
     if (resume)
@@ -261,6 +263,7 @@ job_wait(struct job *jp, BOOL resume)
 
         sig = WTERMSIG(w.w_status);
         rc = sig ? sig | SIGFLG : WEXITSTATUS(w.w_status);
+        interrupted = sig == SIGINT;
         if (sig && sysmsg[sig]) {
             prs(sysmsg[sig]);
             if (WCOREDUMP(w.w_status))
@@ -272,6 +275,8 @@ job_wait(struct job *jp, BOOL resume)
     }
 
     job_set_foreground(shell_pgrp);
+    if (interrupted)
+        jobfault(SIGINT);
     if (jp->used && jp->state == JOB_STOPPED) {
         newline();
         job_print_direct(jp, "Stopped");

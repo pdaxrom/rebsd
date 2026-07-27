@@ -13,6 +13,7 @@
 #include <sys/inode.h>
 #include <sys/conf.h>
 #include <sys/buf.h>
+#include <sys/errno.h>
 #include <sys/fcntl.h>
 #include <sys/vm.h>
 #include <sys/clist.h>
@@ -30,6 +31,60 @@
 #ifdef N64
 #include <machine/video.h>
 #endif
+
+struct map swapmap[1] = {
+    { 0, 0, "swapmap" },
+};
+
+/*
+ * The swap device reports its usable size at run time.  Allocate a wired
+ * resource map large enough for the worst possible fragmentation of that
+ * exact address space instead of reserving a board-specific static table.
+ */
+static int
+swapmap_bootstrap(size_t total, size_t allocation_unit)
+{
+    struct vm_page_request request;
+    struct vm_page *pages;
+    struct mapent *entries;
+    vm_size_t bytes;
+    vm_size_t storage_size;
+    vm_pfn_t page_count;
+    vm_pfn_t index;
+    size_t entry_count;
+    int error;
+
+    entry_count = rmap_required_entries(total, allocation_unit);
+    if (entry_count == 0 ||
+        entry_count > VM_SIZE_MAX / sizeof(*entries))
+        return EOVERFLOW;
+    bytes = entry_count * sizeof(*entries);
+    error = vm_size_round_page(bytes, &storage_size);
+    if (error != 0)
+        return error;
+    page_count = storage_size / VM_PAGE_SIZE;
+
+    vm_page_request_init(&request);
+    request.vpr_npages = page_count;
+    request.vpr_state = VM_PAGE_WIRED;
+    error = vm_page_alloc(&vm_page_boot_allocator, &request, &pages);
+    if (error != 0)
+        return error;
+    entries = pmap_pages_direct_map(pages, page_count,
+        PMAP_CACHE_CACHED);
+    if (entries == 0) {
+        for (index = 0; index < page_count; ++index)
+            (void)vm_page_counter_dec(&vm_page_boot_allocator,
+                pages + index, VM_PAGE_COUNTER_WIRE);
+        (void)vm_page_free(&vm_page_boot_allocator, pages, page_count);
+        return EFAULT;
+    }
+
+    bzero((caddr_t)entries, storage_size);
+    swapmap[0].m_map = entries;
+    swapmap[0].m_limit = entries + entry_count;
+    return 0;
+}
 
 /*
  * Initialize clist by freeing all character blocks, then count
@@ -67,6 +122,7 @@ int
 main()
 {
     register struct fs *fs = NULL;
+    size_t swap_page_blocks;
     int error;
     int s __attribute__((unused));
 
@@ -146,6 +202,13 @@ main()
         nswap = (*bdevsw[major(swapdev)].d_psize)(swapdev);
         if (nswap <= 0)
             panic ("zero swap size"); /* don't want to panic, but what ? */
+        if (VM_PAGE_SIZE < DEV_BSIZE ||
+            VM_PAGE_SIZE % DEV_BSIZE != 0)
+            panic("invalid swap allocation unit");
+        swap_page_blocks = VM_PAGE_SIZE / DEV_BSIZE;
+        error = swapmap_bootstrap(nswap, swap_page_blocks);
+        if (error != 0)
+            panic("cannot allocate swap map");
         mfree (swapmap, nswap, swapstart);
         error = vm_pager_swap_init();
         if (error != 0)

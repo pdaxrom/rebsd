@@ -38,10 +38,6 @@
 #define NNAMECACHE      (NINODE * 11/10)
 #define NCALL           (16 + 2 * MAXUSERS)
 #define NCLIST          32
-#ifndef SMAPSIZ
-#define SMAPSIZ         NPROC
-#endif
-
 #define DEV_BSIZE       1024
 #define DEV_BSHIFT      10
 #define DEV_BMASK       (DEV_BSIZE-1)

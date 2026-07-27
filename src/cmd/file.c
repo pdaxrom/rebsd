@@ -627,7 +627,8 @@ fname_print(const char *inname)
 file_private int
 process(struct magic_set *ms, const char *inname, int wid)
 {
-	const char *type, c = nulsep > 1 ? '\0' : '\n';
+	const char *type, *error;
+	char c = nulsep > 1 ? '\0' : '\n';
 	int std_in = strcmp(inname, "-") == 0;
 	int haderror = 0;
 
@@ -649,7 +650,10 @@ process(struct magic_set *ms, const char *inname, int wid)
 	type = magic_file(ms, std_in ? NULL : inname);
 
 	if (type == NULL) {
-		haderror |= printf("ERROR: %s%c", magic_error(ms), c);
+		error = magic_error(ms);
+		if (error == NULL)
+			error = "libmagic failed without an error message";
+		haderror |= printf("ERROR: %s%c", error, c) < 0;
 	} else {
 		haderror |= printf("%s%c", type, c) < 0;
 	}

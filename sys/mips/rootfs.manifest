@@ -103,6 +103,12 @@ mode 0775
 file /root/sh-comsubst-smoke.sh
 mode 0775
 
+file /root/diskspeed-enospc-smoke.sh
+mode 0775
+
+file /root/rootfs-boot-smoke.sh
+mode 0775
+
 file /root/lang-smoke.sh
 mode 0775
 
@@ -839,6 +845,8 @@ file /usr/share/man/cat1/more.0
 
 file /usr/share/man/cat1/mv.0
 
+file /usr/share/man/cat1/netstat.0
+
 file /usr/share/man/cat1/nice.0
 
 file /usr/share/man/cat1/nm.0
@@ -971,6 +979,8 @@ file /usr/share/man/cat8/getty.0
 
 file /usr/share/man/cat8/gpt.0
 
+file /usr/share/man/cat8/ifconfig.0
+
 file /usr/share/man/cat8/inetd.0
 
 file /usr/share/man/cat8/halt.0
@@ -993,9 +1003,13 @@ file /usr/share/man/cat8/pstat.0
 
 file /usr/share/man/cat8/poweroff.0
 
+file /usr/share/man/cat8/ping.0
+
 file /usr/share/man/cat8/reboot.0
 
 file /usr/share/man/cat8/renice.0
+
+file /usr/share/man/cat8/route.0
 
 file /usr/share/man/cat8/shutdown.0
 

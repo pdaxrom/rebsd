@@ -31,6 +31,14 @@ not active items for the current C/static-a.out PCC milestone.
   `/var: write failed, file system full`.  After interrupting the run,
   `/dev/ram0` showed only 185 KiB used and 822 KiB free out of 1007 KiB, so no
   named-file accumulation was left behind.
+  - A later 2026-07-27 log identified a separate peak in
+    `utility-workload-smoke.sh`: repeated ENOSPC messages stopped immediately
+    when Ctrl-C ran that script's cleanup, and `/var` returned to 19 KiB used.
+    The workload had retained copied sources and six linked test binaries while
+    the next PCC process also held its unlinked `tmpfile()` streams.  It now
+    compiles from the read-only source tree, keeps only the `basename` binary
+    needed for the compiler comparison, and removes every other artifact as
+    soon as its check completes.
   - `/tmp` resolves to `/var/tmp`.  Native PCC `cpp` opens two `tmpfile()`
     streams, `ccom` opens another prototype stream, and libc `tmpfile()`
     unlinks its backing file immediately.  Open unlinked files can therefore

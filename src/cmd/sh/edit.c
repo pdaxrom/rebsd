@@ -12,9 +12,9 @@
 #include "defs.h"
 
 /*
- * defs.h maps free() to the shell's internal afree() entry point.  Readline
- * uses the standard allocation interface supplied by memory.c, so keep that
- * interface visible here.
+ * defs.h maps free() directly to the shell allocator.  readline() uses the
+ * standard malloc/free interface supplied by heap.c, including its small
+ * allocation header, so release returned lines through that interface.
  */
 #undef free
 

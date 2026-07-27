@@ -358,6 +358,19 @@ int main(int argc, char **argv)
 
     while ((ch = getopt(argc, argv, "-M:P:afkw")) != EOF)
         switch ((char)ch) {
+        case 1:
+            /*
+             * A leading '-' in the option string enables the modern
+             * getopt(3) IN_ORDER mode.  It returns operands as option 1.
+             * Keep the historic lone "-" spelling for CAT, then stop at
+             * the first real manual title.
+             */
+            if (optarg && !strcmp(optarg, "-")) {
+                how |= CAT;
+                break;
+            }
+            --optind;
+            goto options_done;
         case '-':
             how |= CAT;
             break;
@@ -389,6 +402,7 @@ int main(int argc, char **argv)
         default:
             usage();
         }
+options_done:
     argv += optind;
 
     if (!*argv)

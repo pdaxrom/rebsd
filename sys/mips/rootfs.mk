@@ -262,7 +262,7 @@ MIPS_LIBVMF_SRCS = $(shell find $(TOPSRC)/src/libvmf -type f \( -name '*.[chS]' 
 MIPS_LIBREADLINE_SRCS = $(shell find $(TOPSRC)/src/libreadline -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBTCL_SRCS = $(shell find $(TOPSRC)/src/libtcl -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBMAGIC_SRCS = $(shell find $(TOPSRC)/src/libmagic -type f \( \
-                     -name '*.[chS]' -o -name Makefile -o -name magic \
+                     -name '*.[chS]' -o -name Makefile \
                      -o -name 'magic.mgc.*' \) 2>/dev/null)
 MIPS_LIBC_SRCS = $(shell find $(TOPSRC)/src/libc -type f \( -name '*.[chS]' -o -name '*.inc' -o -name Makefile \) 2>/dev/null)
 MIPS_LIBM_SRCS = $(shell find $(TOPSRC)/src/libm -type f \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
@@ -682,7 +682,7 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
 	        /^symlink \/bin\/cpp$$/ { skip = 1; next } \
 	        skip && /^target / { skip = 0; next } \
 	        /^dir \/usr\/libexec\/pcc$$/ { next } \
-	        /^file \/(usr\/bin\/(cc|cpp|pcc)|usr\/lib\/libpcc\.a|usr\/libexec\/pcc\/(ccom|cpp))$$/ { skip = 1; next } \
+	        /^file \/(usr\/bin\/(cc|cpp|pcc)|usr\/lib\/libpcc\.a|usr\/libexec\/pcc\/(ccom|cpp)|usr\/share\/man\/cat1\/(cc|cpp|pcc)\.0)$$/ { skip = 1; next } \
 	        skip && /^mode / { skip = 0; next } \
 	        { skip = 0; print }' $@ > $@.tmp; \
 	    mv $@.tmp $@; \

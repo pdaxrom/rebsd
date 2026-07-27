@@ -69,6 +69,13 @@ is 6 MiB and omits development files and the native compiler while retaining
 the libc ABI smoke binary.  The N64-specific minimal profile additionally
 retains its VR4300 VM and PCC diagnostics.
 
+The same contract makes manual packaging follow the rootfs contents.
+Command pages in sections 1 and 8 are included only with the corresponding
+installed executable.  Pages for formats, configuration files, ABIs, and
+other non-command objects have explicit object rules; a page without its
+described object, a described object with an available but omitted page, or a
+new non-command page without a rule fails the build.
+
 Run the complete isolated matrix with:
 
 ```sh

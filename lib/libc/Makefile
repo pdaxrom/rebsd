@@ -8,7 +8,8 @@ vpath %.c $(LIBCDIR)/mips/sys $(LIBCDIR)/gen $(LIBCDIR)/stdio \
           $(LIBCDIR)/stdlib $(LIBCDIR)/string $(LIBCDIR)/inet \
           $(LIBCDIR)/compat $(LIBCDIR)/runtime
 
-CFLAGS		= -Os -B$(TOPSRC)/lib/ $(DEFS) -Wa,-x -Wall -Werror
+CFLAGS		= -Os -B$(TOPSRC)/lib/ -I$(TOPSRC)/include $(DEFS) \
+		  -Wa,-x -Wall -Werror
 ASFLAGS		+= -B$(TOPSRC)/lib/ $(DEFS) -Wa,-x -I$(LIBCDIR)/mips/sys
 
 # modules which can not use SYSCALL and must be assembled from sources.  The
@@ -76,7 +77,7 @@ OBJS            += fgetc.o fgets.o fputc.o fputs.o gets.o puts.o \
                    remove.o feof.o ferror.o fileno.o
 
 # libc/stdlib
-OBJS            += getopt.o getsubopt.o strtol.o strtoul.o strtod.o
+OBJS            += getopt_long.o getsubopt.o strtol.o strtoul.o strtod.o
 
 # libc/string
 OBJS            += strcspn.o strpbrk.o strerror.o strsep.o strspn.o \

@@ -5,6 +5,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
+#include <sys/ioctl.h>
 #include <sys/vmparam.h>
 #include <sys/wait.h>
 #include <errno.h>
@@ -24,6 +25,7 @@
 #define SMOKE_GPR64_SPIN_COUNT  8000000u
 
 static volatile sig_atomic_t smoke_signal_seen;
+static volatile sig_atomic_t smoke_child_exited;
 static volatile unsigned smoke_bad_address = 1;
 static unsigned char smoke_file_page[SMOKE_VM_PAGE_SIZE];
 
@@ -78,6 +80,57 @@ smoke_signal(int signo)
 {
     if (signo == SIGUSR1)
         smoke_signal_seen = 1;
+    else if (signo == SIGCHLD)
+        smoke_child_exited = 1;
+}
+
+static int
+smoke_setpgrp(pid_t pid, pid_t pgrp)
+{
+    int (*bsd_setpgrp)();
+
+    bsd_setpgrp = (int (*)())setpgrp;
+    return (*bsd_setpgrp)(pid, pgrp);
+}
+
+static int
+smoke_wait_zombie_group(void)
+{
+    sig_t old_handler;
+    pid_t child;
+    pid_t waited;
+    int status;
+
+    smoke_child_exited = 0;
+    old_handler = signal(SIGCHLD, smoke_signal);
+    if (old_handler == SIG_ERR)
+        return 1;
+    child = fork();
+    if (child < 0) {
+        (void)signal(SIGCHLD, old_handler);
+        return 2;
+    }
+    if (child == 0) {
+        if (smoke_setpgrp(0, getpid()) < 0)
+            _exit(1);
+        _exit(SMOKE_FORK_STATUS);
+    }
+    while (!smoke_child_exited)
+        pause();
+
+    /*
+     * SIGCHLD proves that the child is already a zombie.  waitpid() with
+     * a negative pid must still match its retained process group.
+     */
+    waited = waitpid(-child, &status, 0);
+    (void)signal(SIGCHLD, old_handler);
+    if (waited != child) {
+        (void)waitpid(child, &status, 0);
+        return 3;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != SMOKE_FORK_STATUS)
+        return 4;
+    return 0;
 }
 
 static int
@@ -155,6 +208,70 @@ smoke_hw_usermem(long *value)
         return -1;
     }
     return 0;
+}
+
+static int
+smoke_ioctl_cow(void)
+{
+    struct sgttyb *settings;
+    char *page;
+    pid_t child;
+    int error;
+
+    page = mmap(0, SMOKE_VM_PAGE_SIZE, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (page == MAP_FAILED)
+        return 1;
+    settings = (struct sgttyb *)page;
+    memset(settings, 0, sizeof(*settings));
+    child = fork();
+    if (child < 0) {
+        (void)munmap(page, SMOKE_VM_PAGE_SIZE);
+        return 2;
+    }
+    if (child == 0) {
+        for (;;)
+            pause();
+    }
+
+    /*
+     * fork left the page COW in both processes.  IOC_OUT must use copyout
+     * rather than letting ttioctl store through this user address in kernel
+     * mode, which used to raise an unrecoverable TLB-modified exception.
+    */
+    error = ioctl(STDIN_FILENO, TIOCGETP, settings);
+    (void)kill(child, SIGKILL);
+    if (smoke_wait_signal(child, SIGKILL) != 0)
+        error = -1;
+    if (munmap(page, SMOKE_VM_PAGE_SIZE) != 0)
+        error = -1;
+    return error == 0 ? 0 : 3;
+}
+
+static int
+smoke_fionread(void)
+{
+    static const char payload[] = "ready";
+    int fds[2];
+    long available;
+
+    if (pipe(fds) < 0)
+        return 1;
+    if (write(fds[1], payload, sizeof(payload) - 1) !=
+        (ssize_t)(sizeof(payload) - 1)) {
+        (void)close(fds[0]);
+        (void)close(fds[1]);
+        return 2;
+    }
+    available = -1;
+    if (ioctl(fds[0], FIONREAD, &available) < 0) {
+        (void)close(fds[0]);
+        (void)close(fds[1]);
+        return 3;
+    }
+    (void)close(fds[0]);
+    (void)close(fds[1]);
+    return available == (long)(sizeof(payload) - 1) ? 0 : 4;
 }
 
 static int
@@ -287,12 +404,18 @@ main(int argc, char **argv)
     if (signal(SIGUSR1, smoke_signal) == SIG_ERR ||
         kill(getpid(), SIGUSR1) != 0 || !smoke_signal_seen)
         return smoke_fail("signal delivery");
+    if (smoke_wait_zombie_group() != 0)
+        return smoke_fail("waitpid zombie process group");
 #ifdef MIPS_VM_PROCESS_SMOKE_GPR64
     if (smoke_gpr64_signal_frame() != 0)
         return smoke_fail("MIPS III 64-bit GPR signal frame");
 #endif
     if (smoke_stack(4) != 25)
         return smoke_fail("stack growth");
+    if (smoke_ioctl_cow() != 0)
+        return smoke_fail("ioctl IOC_OUT to COW page");
+    if (smoke_fionread() != 0)
+        return smoke_fail("FIONREAD typed ioctl");
 
     arena[0] = 0x21;
     child = fork();
@@ -798,6 +921,18 @@ main(int argc, char **argv)
             (unsigned char)(index * 37 + 11))
             return smoke_fail("memory pressure data");
     }
+    child = fork();
+    if (child < 0)
+        return smoke_fail("fork under memory pressure");
+    if (child == 0) {
+        if ((unsigned char)pressure[
+            (SMOKE_PRESSURE_PAGES - 1) * SMOKE_VM_PAGE_SIZE] !=
+            (unsigned char)((SMOKE_PRESSURE_PAGES - 1) * 37 + 11))
+            _exit(1);
+        _exit(SMOKE_FORK_STATUS);
+    }
+    if (smoke_wait(child, SMOKE_FORK_STATUS) != 0)
+        return smoke_fail("fork data under memory pressure");
     if (sbrk(-SMOKE_PRESSURE_PAGES * SMOKE_VM_PAGE_SIZE) == (void *)-1)
         return smoke_fail("memory pressure shrink");
 

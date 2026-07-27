@@ -11,7 +11,7 @@ df \- disk free
 .SH SYNOPSIS
 .B df
 [
-.B \-iT
+.B \-hiT
 ] [ filesystem ... ] [ file ... ]
 .SH DESCRIPTION
 .I Df
@@ -30,6 +30,9 @@ is printed.
 The reported numbers are in kilobytes.
 .PP
 Other options are:
+.TP
+.B \-h
+Print sizes in human-readable binary units.
 .TP
 .B \-i
 Report also the number of inodes which are used and free.
