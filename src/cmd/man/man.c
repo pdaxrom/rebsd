@@ -131,17 +131,20 @@ static int manual(MANDIR *section, char *name)
     register char *beg, *end;
     register MANDIR *dp;
     register int res;
+    int dirlen;
     char fname[MAXPATHLEN + 1];
 
     if (strlen(name) > MAXNAMLEN - 2) /* leave room for the ".0" */
         name[MAXNAMLEN - 2] = '\0';
     for (beg = manpath, res = 0;; beg = end + 1) {
-        if ((end = index(beg, ':')))
-            *end = '\0';
+        end = index(beg, ':');
+        dirlen = end ? end - beg : strlen(beg);
         for (dp = section; dp->name; ++dp) {
-            (void)sprintf(fname, "%s/%s/%s.0", beg, dp->name, name);
+            (void)sprintf(fname, "%.*s/%s/%s.0", dirlen, beg,
+                dp->name, name);
             if (access(fname, R_OK)) {
-                (void)sprintf(fname, "%s/%s/%s/%s.0", beg, dp->name, machine, name);
+                (void)sprintf(fname, "%.*s/%s/%s/%s.0", dirlen, beg,
+                    dp->name, machine, name);
                 if (access(fname, R_OK))
                     continue;
             }
@@ -157,7 +160,6 @@ static int manual(MANDIR *section, char *name)
         }
         if (!end)
             return (res);
-        *end = ':';
     }
     /*NOTREACHED*/
     return 0;

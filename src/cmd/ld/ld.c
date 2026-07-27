@@ -2485,15 +2485,36 @@ expr_add(struct expr_parser *e)
 }
 
 static unsigned
-expr_relation(struct expr_parser *e)
+expr_shift(struct expr_parser *e)
 {
     unsigned v, r;
 
     v = expr_add(e);
+    for (;;) {
+        expr_skip(e);
+        if (e->p[0] == '<' && e->p[1] == '<') {
+            e->p += 2;
+            r = expr_add(e);
+            v = r < sizeof(v) * 8 ? v << r : 0;
+        } else if (e->p[0] == '>' && e->p[1] == '>') {
+            e->p += 2;
+            r = expr_add(e);
+            v = r < sizeof(v) * 8 ? v >> r : 0;
+        } else
+            return v;
+    }
+}
+
+static unsigned
+expr_relation(struct expr_parser *e)
+{
+    unsigned v, r;
+
+    v = expr_shift(e);
     expr_skip(e);
     if (e->p[0] == '<' && e->p[1] == '=') {
         e->p += 2;
-        r = expr_add(e);
+        r = expr_shift(e);
         return v <= r;
     }
     return v;

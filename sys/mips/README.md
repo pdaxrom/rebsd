@@ -97,6 +97,12 @@ make -C sys/mips BOARD=malta O=/private/tmp/rebsd-malta-min \
     rootfs-boot-smoke-runtime
 ```
 
+The full-profile boot gate exercises the complete interactive command set.
+The minimal-profile gate runs the shared `libc-abi-smoke` binary because that
+profile intentionally omits the manuals and commands required by
+`rootfs-boot-smoke.sh`.  Both profiles also run the common process-reaping
+check.
+
 CI20 has no matching QEMU machine in this tree, so its matrix entry is a
 kernel/rootfs build plus the same rootfs contract check.
 

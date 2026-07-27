@@ -128,8 +128,6 @@ MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.stamp
 MIPS_ROOTFS_COMMON_FILES = $(shell find $(TOPSRC)/sys/mips/rootfs \
                            -type f -o -type l 2>/dev/null)
 MIPS_ROOTFS_OVERLAY_FILES =
-MIPS_COMMON_MACHINE_HEADERS ?= console cpu devmajors elf_machdep float fpu io \
-                              layout limits machparam ramswap romdisk
 MIPS_TRACE       ?= 0
 VM_DIAGNOSTIC    ?= 0
 FSUTIL          = $(OBJTOP)/tools/fsutil/fsutil
@@ -208,6 +206,28 @@ VM_IO_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-io-smoke.$(MIPS_ROOTFS_ABI).log
 VM_NE2K_SMOKE_LOG ?= $(TOPOBJ)/tests/vm-ne2k-smoke.$(MIPS_ROOTFS_ABI).log
 ROOTFS_BOOT_SMOKE_LOG ?= \
     $(TOPOBJ)/tests/rootfs-boot-smoke.$(MIPS_ROOTFS_PROFILE).$(MIPS_ROOTFS_ABI).log
+ROOTFS_BOOT_SMOKE_COMMAND_full = /root/rootfs-boot-smoke.sh
+ROOTFS_BOOT_SMOKE_EXPECT_full = rootfs boot smoke: ok
+ROOTFS_BOOT_SMOKE_COMMAND_minimal = /root/libc-abi-smoke
+ROOTFS_BOOT_SMOKE_EXPECT_minimal = libc abi smoke ok
+ROOTFS_BOOT_SMOKE_COMMAND ?= \
+    $(ROOTFS_BOOT_SMOKE_COMMAND_$(MIPS_ROOTFS_PROFILE))
+ROOTFS_BOOT_SMOKE_EXPECT ?= \
+    $(ROOTFS_BOOT_SMOKE_EXPECT_$(MIPS_ROOTFS_PROFILE))
+ROOTFS_PROC_REAP_COMMAND_full = \
+    for i in 1 2 3 4 5 6 7 8; do \
+        for j in 1 2 3 4; do /bin/true || exit 1; done; \
+    done; pstat -p
+ROOTFS_PROC_REAP_EXPECT_full = active processes
+ROOTFS_PROC_REAP_COMMAND_minimal = \
+    for i in 1 2 3 4 5 6 7 8; do \
+        for j in 1 2 3 4; do /bin/ls / >/dev/null || exit 1; done; \
+    done; /bin/ps -x
+ROOTFS_PROC_REAP_EXPECT_minimal = PID
+ROOTFS_PROC_REAP_COMMAND ?= \
+    $(ROOTFS_PROC_REAP_COMMAND_$(MIPS_ROOTFS_PROFILE))
+ROOTFS_PROC_REAP_EXPECT ?= \
+    $(ROOTFS_PROC_REAP_EXPECT_$(MIPS_ROOTFS_PROFILE))
 VM_STRESS_ITERATIONS ?= 8
 MIPS_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/malta/rootfs
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
@@ -470,8 +490,8 @@ rootfs-boot-smoke-runtime: rootfs-contract-check \
 	    --ram $(MALTA_QEMU_RAM) \
 	    --timeout 300 --silence-timeout 60 \
 	    --require-login \
-	    --command '/root/rootfs-boot-smoke.sh' \
-	    --expect "rootfs boot smoke: ok"
+	    --command '$(ROOTFS_BOOT_SMOKE_COMMAND)' \
+	    --expect "$(ROOTFS_BOOT_SMOKE_EXPECT)"
 	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
 	    --malta-dir $(abspath .) \
 	    --kernel $(MALTA_RUNTIME_KERNEL) \
@@ -480,8 +500,8 @@ rootfs-boot-smoke-runtime: rootfs-contract-check \
 	    --ram $(MALTA_QEMU_RAM) \
 	    --timeout 300 --silence-timeout 60 \
 	    --require-login \
-	    --command 'for i in 1 2 3 4 5 6 7 8; do for j in 1 2 3 4; do /bin/true || exit 1; done; done; pstat -p' \
-	    --expect "active processes"
+	    --command '$(ROOTFS_PROC_REAP_COMMAND)' \
+	    --expect "$(ROOTFS_PROC_REAP_EXPECT)"
 
 vm-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	$(MAKE) $(MALTA_RUNTIME_KERNEL)

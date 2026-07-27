@@ -138,14 +138,6 @@ N64_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
                          $(TOPSRC)/src/cmd/aoutio.c \
                          $(TOPSRC)/src/cmd/aoutio.h \
                          $(TOPSRC)/src/cmd/elf32_mips.h
-N64_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
-                   $(TOPSRC)/sys/mips/include $(TOPSRC)/sys/mips/n64/include \
-                   -type f -name '*.h' \
-                   2>/dev/null) \
-                   $(wildcard $(TOPSRC)/sys/mips/*.h \
-                   $(TOPSRC)/sys/mips/n64/*.h)
-N64_INCLUDE_LINKS = $(shell find $(TOPSRC)/include -maxdepth 1 -type l \
-                    2>/dev/null)
 N64_NATIVE_DIR = n64-native-runtime.$(N64_USERLAND_ABI)
 N64_NATIVE_TREE = $(N64_NATIVE_DIR)/tree
 N64_NATIVE_SOFTFLOAT_DIR = $(N64_NATIVE_DIR)/softfloat
@@ -173,7 +165,6 @@ N64_ELF_RELOC_CHECK = python3 $(TOPSRC)/sys/mips/n64/native/check-mips-elf-reloc
 N64_NATIVE_PCC_MAKEFILE = $(TOPSRC)/sys/mips/tools/Makefile.native-pcc
 N64_NATIVE_PCC_CONFIG = $(TOPSRC)/sys/mips/tools/native-pcc-config.h
 N64_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
-N64_COMMON_MACHINE_HEADERS = cpu elf_machdep float fpu io limits
 N64_NATIVE_AR = $(N64_PREFIX)ar
 N64_GNU_AS ?= $(N64_PREFIX)as
 N64_NATIVE_STAMP = $(N64_NATIVE_DIR)/.built
@@ -304,7 +295,7 @@ N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(TOPSRC)/include/nlist.h \
                        $(TOPSRC)/include/ranlib.h \
                        $(TOPSRC)/include/sys/exec_aout.h
-N64_NATIVE_RUNTIME_SRCS = $(N64_NATIVE_TOOL_SRCS) $(N64_INCLUDE_SRCS) \
+N64_NATIVE_RUNTIME_SRCS = $(N64_NATIVE_TOOL_SRCS) $(MIPS_INCLUDE_SRCS) \
                           $(N64_NATIVE_CRT0_SRC) $(N64_LIBC_SRCS) \
                           $(N64_LIBM_SRCS) $(N64_LIBPCC_SRCS) \
                           $(TOPSRC)/target.mk $(TOPSRC)/target-n64.mk
@@ -576,6 +567,7 @@ MIPS_CMD_EXTRA_SUBDIRS = deco fbset fbview n64input ptytest rgbled \
                          romfsctl tcl
 MIPS_STB_DIR ?= $(N64_STB_DIR)
 MIPS_COMMON_MACHINE_HEADERS = cpu elf_machdep float fpu io limits
+MIPS_SHARED_MACHINE_HEADERS = jmpbuf types
 MIPS_BOARD_MACHINE_HEADER_DIR = $(TOPSRC)/sys/mips/n64
 MIPS_NATIVE_DIR = n64-native-runtime.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_TOOLS = n64-native-tools
@@ -1079,22 +1071,14 @@ $(N64_BUILD_MODE_STAMP):
 	touch $@
 
 ifeq ($(N64_MINIMAL_ROOTFS),1)
-$(N64_PCC_HOST_INCLUDE_STAMP): $(N64_INCLUDE_SRCS) $(N64_INCLUDE_LINKS)
-	rm -rf $(N64_PCC_HOST_INCLUDE)
-	mkdir -p $(N64_PCC_HOST_INCLUDE)
-	cp -pR $(TOPSRC)/include/. $(N64_PCC_HOST_INCLUDE)/
-	rm -rf $(N64_PCC_HOST_INCLUDE)/machine $(N64_PCC_HOST_INCLUDE)/sys
-	cp -pR $(TOPSRC)/sys/include $(N64_PCC_HOST_INCLUDE)/sys
-	mkdir -p $(N64_PCC_HOST_INCLUDE)/mips
-	cp -p $(TOPSRC)/sys/mips/*.h $(N64_PCC_HOST_INCLUDE)/mips/
-	mkdir -p $(N64_PCC_HOST_INCLUDE)/machine
-	cp -p $(TOPSRC)/sys/mips/n64/*.h $(N64_PCC_HOST_INCLUDE)/machine/
-	for header in $(N64_COMMON_MACHINE_HEADERS); do \
-	    cp -p $(TOPSRC)/sys/mips/$$header.h \
-	        $(N64_PCC_HOST_INCLUDE)/machine/$$header.h; \
-	done
-	cp -p $(TOPSRC)/sys/mips/include/machine/types.h \
-	    $(N64_PCC_HOST_INCLUDE)/machine/types.h
+$(N64_PCC_HOST_INCLUDE_STAMP): $(MIPS_INCLUDE_SRCS) \
+    $(MIPS_INCLUDE_LINKS) $(MIPS_INSTALL_USER_HEADERS)
+	$(MIPS_INSTALL_USER_HEADERS) $(TOPSRC) \
+	    $(N64_PCC_HOST_INCLUDE) \
+	    "$(MIPS_BOARD_MACHINE_HEADER_DIR)" \
+	    no \
+	    "$(MIPS_SHARED_MACHINE_HEADERS)" \
+	    $(MIPS_COMMON_MACHINE_HEADERS)
 	touch $@
 endif
 
@@ -1317,33 +1301,11 @@ endif
 	touch $@
 
 $(N64_MINIMAL_ROOTFS_MANIFEST): $(N64_MINIMAL_ROOTFS_STAGE)/.stamp \
-    $(N64_ROOTFS_DEVNODES)
-	rm -f $@
-	{ \
-	    printf '%s\n' '#'; \
-	    printf '%s\n' '# Minimal N64 VM/PCC hardware-test root filesystem.'; \
-	    printf '%s\n\n' '#'; \
-	    printf '%s\n' 'default'; \
-	    printf '%s\n' 'owner 0'; \
-	    printf '%s\n' 'group 0'; \
-	    printf '%s\n' 'dirmode 0775'; \
-	    printf '%s\n\n' 'filemode 0664'; \
-	    find $(N64_MINIMAL_ROOTFS_STAGE) -type d | sort | while read path; do \
-	        rel=$${path#$(N64_MINIMAL_ROOTFS_STAGE)}; \
-	        if [ -n "$$rel" ]; then printf 'dir %s\n\n' "$$rel"; fi; \
-	    done; \
-	    find $(N64_MINIMAL_ROOTFS_STAGE) -type l | sort | while read path; do \
-	        rel=$${path#$(N64_MINIMAL_ROOTFS_STAGE)}; \
-	        target=$$(readlink "$$path"); \
-	        printf 'symlink %s\ntarget %s\n\n' "$$rel" "$$target"; \
-	    done; \
-	    find $(N64_MINIMAL_ROOTFS_STAGE) -type f | sort | while read path; do \
-	        rel=$${path#$(N64_MINIMAL_ROOTFS_STAGE)}; \
-	        if [ -x "$$path" ]; then mode=0775; else mode=0664; fi; \
-	        printf 'file %s\nmode %s\n\n' "$$rel" "$$mode"; \
-	    done; \
-	    cat $(N64_ROOTFS_DEVNODES); \
-	} > $@
+    $(N64_ROOTFS_DEVNODES) $(MIPS_ROOTFS_MANIFEST_SCRIPT)
+	python3 $(MIPS_ROOTFS_MANIFEST_SCRIPT) \
+	    --stage $(N64_MINIMAL_ROOTFS_STAGE) \
+	    --output $@ \
+	    --devices $(N64_ROOTFS_DEVNODES)
 
 $(N64_MINIMAL_ROOTFS_IMG): $(FSUTIL) $(MIPS_ROOTFS_CHECK_SCRIPT) \
     $(N64_MINIMAL_ROOTFS_MANIFEST)

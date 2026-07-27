@@ -353,6 +353,7 @@ int main(int argc, char **argv)
         } else
             (*((*cv)->df_put))(0, *cv);
     }
+    return (0);
 }
 
 void put_addr(long a, long l, char c)

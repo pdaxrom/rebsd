@@ -9,6 +9,7 @@
 #   - ld can resolve an undefined symbol from a ranlib-indexed archive;
 #   - nm, size, and strip read/write the same big-endian a.out objects;
 #   - when GNU as is supplied, ReBSD as emits the same VR4300 text bytes.
+#   - the ELF linker evaluates shifts in linker-script layout expressions.
 #
 
 if test $# -ne 7 && test $# -ne 8; then
@@ -102,6 +103,10 @@ gnu_text=$tmpdir/gnu.text
 retro_text=$tmpdir/retro.text
 gnu_log=$tmpdir/gnu.log
 objcopy_log=$tmpdir/objcopy.log
+elf_s=$tmpdir/elf.s
+elf_o=$tmpdir/elf.o
+elf_ld=$tmpdir/elf.ld
+elf_app=$tmpdir/elf-app
 
 cat > "$main_s" <<'EOF'
 .text
@@ -197,6 +202,36 @@ big:
 	.space 0x800
 EOF
 
+cat > "$elf_s" <<'EOF'
+.text
+.globl _start
+_start:
+	nop
+.data
+.globl test_data
+test_data:
+	.word 1
+EOF
+
+cat > "$elf_ld" <<'EOF'
+OUTPUT_FORMAT("elf32-bigmips")
+OUTPUT_ARCH(mips)
+ENTRY(_start)
+PHDRS
+{
+	text PT_LOAD FLAGS(5);
+	data PT_LOAD FLAGS(6);
+}
+SECTIONS
+{
+	. = 0x00400000;
+	.text : { *(.text) } :text
+	. = ALIGN((1 << 12));
+	. = . + ((8 >> 3) - 1);
+	.data : { *(.data) } :data
+}
+EOF
+
 be32()
 {
 	od -An -tx1 -j "$2" -N 4 "$1" | tr -d '[:space:]'
@@ -284,6 +319,15 @@ check_gnu_text "$end_o" "$end_s" end
 check_gnu_text "$chain_main_o" "$chain_main_s" chain-main
 check_gnu_text "$chain_mid_o" "$chain_mid_s" chain-mid
 check_gnu_text "$chain_leaf_o" "$chain_leaf_s" chain-leaf
+
+if test -n "$gnu_as"; then
+	"$gnu_as" -EB -mips3 -march=vr4300 -o "$elf_o" "$elf_s" || exit 1
+	"$ld_bin" --elf -EB -T "$elf_ld" -o "$elf_app" "$elf_o" || exit 1
+	check_field "$elf_app" 0 7f454c46
+	check_field "$elf_app" 84 00000001
+	check_field "$elf_app" 92 00401000
+	check_field "$elf_app" 112 00001000
+fi
 
 check_exec "$main_o" 00000106 00000010
 check_exec "$foo_o" 00000106 00000010

@@ -106,6 +106,8 @@ MIPS_ROOTFS_USER_COMPAT_STAMP = $(MIPS_ROOTFS_STAGE)/.userland
 MIPS_ROOTFS_WHATIS = $(MIPS_ROOTFS_USR_SHARE)/man/whatis
 MIPS_ROOTFS_CHECK_SCRIPT = $(TOPSRC)/sys/mips/tools/check-rootfs.py
 MIPS_ROOTFS_MANIFEST_SCRIPT = $(TOPSRC)/sys/mips/tools/rootfs-manifest.py
+MIPS_INSTALL_USER_HEADERS = \
+    $(TOPSRC)/sys/mips/tools/install-user-headers.sh
 MIPS_ROOTFS_CONTRACT_LABEL ?= \
     $(MIPS_ROOTFS_TARGET_PLATFORM)-$(MIPS_ROOTFS_PROFILE)
 MIPS_ROOTFS_DYNAMIC_MANIFEST ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),1,0)
@@ -164,6 +166,7 @@ MIPS_INCLUDE_LINKS = $(shell find $(TOPSRC)/include -maxdepth 1 -type l \
                     2>/dev/null)
 MIPS_COMMON_MACHINE_HEADERS ?= console cpu devmajors elf_machdep float fpu io \
                                layout limits machparam ramswap romdisk
+MIPS_SHARED_MACHINE_HEADERS ?= debug jmpbuf types
 MIPS_BOARD_MACHINE_HEADER_DIR ?=
 MIPS_BOARD_INCLUDE_DIR ?=
 
@@ -662,15 +665,14 @@ $(MIPS_ROOTFS_ELF2AOUT): $(MIPS_ROOTFS_ELF2AOUT_SRCS)
 
 ifeq ($(MIPS_ROOTFS_DYNAMIC_MANIFEST),1)
 $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) \
-    $(MIPS_ROOTFS_MANIFEST_SCRIPT) $(MIPS_ROOTFS_BOARD_MANIFEST) \
+    $(MIPS_ROOTFS_MANIFEST_SCRIPT) $(MIPS_ROOTFS_MANIFEST) \
+    $(MIPS_ROOTFS_BOARD_MANIFEST) \
     $(MIPS_ROOTFS_USER_STAMP) $(MIPS_ROOTFS_EXTRA_STAMPS)
-	if [ "$(MIPS_ROOTFS_PRUNE_DEVEL)" = "1" ]; then \
-	    rm -rf $(MIPS_ROOTFS_STAGE)/usr/include \
-	        $(MIPS_ROOTFS_STAGE)/usr/lib \
-	        $(MIPS_ROOTFS_STAGE)/usr/share; \
-	fi
 	python3 $(MIPS_ROOTFS_MANIFEST_SCRIPT) \
 	    --stage $(MIPS_ROOTFS_STAGE) --output $@ \
+	    --attributes $(MIPS_ROOTFS_MANIFEST) \
+	    $(if $(filter 1,$(MIPS_ROOTFS_PRUNE_DEVEL)),\
+	        --exclude /usr/include --exclude /usr/lib --exclude /usr/share,) \
 	    $(if $(MIPS_ROOTFS_BOARD_MANIFEST),--devices $(MIPS_ROOTFS_BOARD_MANIFEST),)
 else
 $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
@@ -936,6 +938,7 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
     $(MIPS_ROOTFS_FILES) \
     $(MIPS_UTILITY_SMOKE_SRCS) $(MIPS_TERMCAP) $(MIPS_MAGIC_DB) \
     $(MIPS_INCLUDE_SRCS) $(MIPS_INCLUDE_LINKS) \
+    $(MIPS_INSTALL_USER_HEADERS) \
     $(MIPS_NATIVE_AS_SMOKE_SCRIPT) $(MIPS_NATIVE_AS_MATRIX_SCRIPT)
 	rm -rf $(MIPS_ROOTFS_STAGE)
 	mkdir -p $(MIPS_ROOTFS_STAGE)
@@ -949,30 +952,12 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 	    cp -p $$src $(MIPS_ROOTFS_STAGE)/root/utility-src/; \
 	done
 	cp -p $(MIPS_TERMCAP) $(MIPS_ROOTFS_STAGE)/etc/termcap
-	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)
-	cp -pR $(TOPSRC)/include/. $(MIPS_ROOTFS_USR_INCLUDE)/
-	rm -rf $(MIPS_ROOTFS_USR_INCLUDE)/machine $(MIPS_ROOTFS_USR_INCLUDE)/sys
-	cp -pR $(TOPSRC)/sys/include $(MIPS_ROOTFS_USR_INCLUDE)/sys
-	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/net
-	cp -p $(TOPSRC)/sys/net/*.h $(MIPS_ROOTFS_USR_INCLUDE)/net/
-	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/netinet
-	for header in $(MIPS_NETINET_USER_HEADERS); do \
-	    cp -p $$header $(MIPS_ROOTFS_USR_INCLUDE)/netinet/; \
-	done
-	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/mips
-	cp -p $(TOPSRC)/sys/mips/*.h $(MIPS_ROOTFS_USR_INCLUDE)/mips/
-	mkdir -p $(MIPS_ROOTFS_USR_INCLUDE)/machine
-	if [ -n "$(MIPS_BOARD_MACHINE_HEADER_DIR)" ] && \
-	    [ -d "$(MIPS_BOARD_MACHINE_HEADER_DIR)" ]; then \
-	    cp -p $(MIPS_BOARD_MACHINE_HEADER_DIR)/*.h \
-	        $(MIPS_ROOTFS_USR_INCLUDE)/machine/; \
-	fi
-	for header in $(MIPS_COMMON_MACHINE_HEADERS); do \
-	    cp -p $(TOPSRC)/sys/mips/$$header.h \
-	        $(MIPS_ROOTFS_USR_INCLUDE)/machine/$$header.h; \
-	done
-	cp -p $(TOPSRC)/sys/mips/include/machine/*.h \
-	    $(MIPS_ROOTFS_USR_INCLUDE)/machine/
+	$(MIPS_INSTALL_USER_HEADERS) $(TOPSRC) \
+	    $(MIPS_ROOTFS_USR_INCLUDE) \
+	    "$(MIPS_BOARD_MACHINE_HEADER_DIR)" \
+	    yes \
+	    "$(MIPS_SHARED_MACHINE_HEADERS)" \
+	    $(MIPS_COMMON_MACHINE_HEADERS)
 	mkdir -p $(MIPS_ROOTFS_STAGE)/lib
 	mkdir -p $(MIPS_ROOTFS_STAGE)/sbin
 	mkdir -p $(MIPS_ROOTFS_STAGE)/bin
@@ -1134,6 +1119,10 @@ rootfs-contract-check: $(MIPS_ROOTFS_CHECK_SCRIPT) $(MIPS_ROOTFS_IMAGE_DEPS)
 	python3 $(MIPS_ROOTFS_CHECK_SCRIPT) \
 	    --stage $(MIPS_ROOTFS_IMAGE_STAGE) \
 	    --manifest $(MIPS_ROOTFS_IMAGE_MANIFEST) \
+	    $(if $(filter 1,$(MIPS_ROOTFS_PRUNE_DEVEL)),\
+	        --exclude-stage-prefix /usr/include \
+	        --exclude-stage-prefix /usr/lib \
+	        --exclude-stage-prefix /usr/share,) \
 	    --label $(MIPS_ROOTFS_CONTRACT_LABEL)
 
 rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_CHECK_SCRIPT) $(MIPS_ROOTFS_IMAGE_DEPS)

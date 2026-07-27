@@ -151,6 +151,6 @@ int nextc(struct string *s)
             c = *s->p++;
     }
     if (c == 0)
-        *--s->p = 0;
+        --s->p;
     return (c & 0377);
 }

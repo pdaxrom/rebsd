@@ -31,7 +31,7 @@ crt0-common.o:	../startup/crt0.c
 		$(CC) ${DEFS} ${CFLAGS} -c $< -o $@
 
 crt0.o:		${OBJS}
-		$(LD) -r -z noexecstack -o $@ ${OBJS}
+		$(LD) -nostdlib -r -o $@ ${OBJS}
 
 tags:
 		cwd=`pwd`; \

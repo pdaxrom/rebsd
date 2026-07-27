@@ -27,6 +27,12 @@ echo '	.half 0x9abc' >> $src
 
 as $as_endian -mips3 -march=vr4300 -o $obj $src || exit 1
 
+od -b $obj >/dev/null || {
+	echo "sh-comsubst-smoke: od failed" >&2
+	rm -f $src $obj
+	exit 1
+}
+
 for i in 0 1 2 3 4 5 6 7
 do
 	echo "sh-comsubst-smoke: iteration $i"

@@ -113,7 +113,14 @@ def check_stage(stage):
     return errors
 
 
-def check_manifest(stage, manifest):
+def is_below_prefix(path, prefixes):
+    return any(
+        path == prefix or path.startswith(f"{prefix}/")
+        for prefix in prefixes
+    )
+
+
+def check_manifest(stage, manifest, excluded_stage_prefixes):
     if not manifest.is_file():
         return [f"manifest is not a file: {manifest}"]
     text = manifest.read_text(encoding="utf-8", errors="replace")
@@ -143,6 +150,9 @@ def check_manifest(stage, manifest):
         f"/{path.relative_to(stage)}"
         for path in (stage / MANUAL_DIRECTORY.lstrip("/")).glob("cat[1-9]/*.0")
         if path.is_file()
+        and not is_below_prefix(
+            f"/{path.relative_to(stage)}", excluded_stage_prefixes
+        )
     }
     packaged_pages = {
         path
@@ -172,7 +182,11 @@ def check_manifest(stage, manifest):
 
     for page, objects in sorted(MANUAL_OBJECTS.items()):
         installed = [path for path in objects if path in payload]
-        if installed and page not in payload:
+        if (
+            installed
+            and page not in payload
+            and not is_below_prefix(page, excluded_stage_prefixes)
+        ):
             errors.append(
                 f"manifest is missing man page {page} for {', '.join(installed)}"
             )
@@ -192,10 +206,25 @@ def main():
     parser.add_argument("--stage", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--label", default="rootfs")
+    parser.add_argument(
+        "--exclude-stage-prefix",
+        action="append",
+        default=[],
+        help=(
+            "ignore staged source files below an absolute path which the "
+            "selected rootfs profile excludes from its payload"
+        ),
+    )
     args = parser.parse_args()
 
+    excluded_stage_prefixes = tuple(
+        "/" + prefix.strip("/")
+        for prefix in args.exclude_stage_prefix
+    )
     errors = check_stage(args.stage)
-    errors.extend(check_manifest(args.stage, args.manifest))
+    errors.extend(
+        check_manifest(args.stage, args.manifest, excluded_stage_prefixes)
+    )
     if errors:
         return fail(errors)
 

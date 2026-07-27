@@ -35,14 +35,39 @@ def is_excluded(rel, prefixes):
                for prefix in prefixes)
 
 
-def mode_string(path):
-    return f"{stat.S_IMODE(path.lstat().st_mode):04o}"
+def declared_modes(manifest):
+    modes = {}
+    current = None
+
+    if manifest is None:
+        return modes
+    for raw_line in manifest.read_text(
+        encoding="utf-8", errors="strict"
+    ).splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split(maxsplit=1)
+        command = fields[0]
+        argument = fields[1] if len(fields) == 2 else ""
+        if command in ("dir", "file", "link", "symlink"):
+            current = argument
+        elif command == "mode" and current is not None:
+            modes[current] = int(argument, 8)
+        elif command == "default":
+            current = None
+    return modes
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--attributes",
+        type=Path,
+        help="preserve explicit modes from the canonical base manifest",
+    )
     parser.add_argument("--devices", type=Path)
     parser.add_argument("--exclude", action="append", default=[],
                         help="exclude an absolute rootfs path and its contents")
@@ -52,6 +77,7 @@ def main():
     if not stage.is_dir():
         parser.error(f"stage is not a directory: {stage}")
     excludes = tuple("/" + item.strip("/") for item in args.exclude)
+    modes = declared_modes(args.attributes)
 
     lines = [
         "#",
@@ -75,9 +101,11 @@ def main():
         if path.is_symlink():
             lines.extend((f"symlink {rel}", f"target {os.readlink(path)}", ""))
         elif path.is_dir():
-            lines.extend((f"dir {rel}", f"mode {mode_string(path)}", ""))
+            mode = modes.get(rel, stat.S_IMODE(path.lstat().st_mode))
+            lines.extend((f"dir {rel}", f"mode {mode:04o}", ""))
         elif path.is_file():
-            lines.extend((f"file {rel}", f"mode {mode_string(path)}", ""))
+            mode = modes.get(rel, stat.S_IMODE(path.lstat().st_mode))
+            lines.extend((f"file {rel}", f"mode {mode:04o}", ""))
 
     if args.devices:
         lines.append(args.devices.read_text(encoding="utf-8").rstrip())

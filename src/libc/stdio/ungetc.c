@@ -12,10 +12,12 @@ ungetc(int c, FILE *iop)
 			iop->_ptr++;
 		else
 			return (EOF);
-        }
+	}
 
 	iop->_cnt++;
-	*--iop->_ptr = c;
+	--iop->_ptr;
+	if ((iop->_flag & _IOSTRG) == 0)
+		*iop->_ptr = c;
 
 	return (c);
 }
