@@ -21,9 +21,25 @@
 #define VGA_COLUMNS     80u
 #define VGA_ROWS        25u
 #define VGA_ATTRIBUTE   0x07u
+#define VGA_CRTC_INDEX  0x03d4u
+#define VGA_CRTC_DATA   0x03d5u
+#define VGA_CURSOR_HIGH 0x0eu
+#define VGA_CURSOR_LOW  0x0fu
 
 static unsigned vga_row;
 static unsigned vga_column;
+
+static void
+i386_vga_cursor_update(void)
+{
+    unsigned position;
+
+    position = vga_row * VGA_COLUMNS + vga_column;
+    i386_outb(VGA_CRTC_INDEX, VGA_CURSOR_HIGH);
+    i386_outb(VGA_CRTC_DATA, (i386_u8)(position >> 8));
+    i386_outb(VGA_CRTC_INDEX, VGA_CURSOR_LOW);
+    i386_outb(VGA_CRTC_DATA, (i386_u8)position);
+}
 
 static void
 i386_serial_init(void)
@@ -61,6 +77,7 @@ i386_vga_clear(void)
         vga[index] = (i386_u16)((VGA_ATTRIBUTE << 8) | ' ');
     vga_row = 0;
     vga_column = 0;
+    i386_vga_cursor_update();
 }
 
 static void
@@ -92,9 +109,7 @@ i386_vga_putc(char ch)
     vga = (volatile i386_u16 *)VGA_TEXT_BASE;
     if (ch == '\r') {
         vga_column = 0;
-        return;
-    }
-    if (ch == '\n') {
+    } else if (ch == '\n') {
         vga_column = 0;
         ++vga_row;
     } else {
@@ -108,6 +123,7 @@ i386_vga_putc(char ch)
     }
     if (vga_row == VGA_ROWS)
         i386_vga_scroll();
+    i386_vga_cursor_update();
 }
 
 void
