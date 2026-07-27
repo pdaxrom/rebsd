@@ -284,6 +284,7 @@ check_stdio_file(void)
     char *dynamic;
     char *field;
     char line[64];
+    char temporary[32];
     const char *checked;
     const char *fallback;
     size_t capacity, field_capacity;
@@ -351,6 +352,19 @@ check_stdio_file(void)
     unlink(path);
     if (strcmp(line, "record:37:ok\n") != 0)
         return bad("stdio content");
+    fp = tmpfile();
+    if (fp == NULL)
+        return bad("tmpfile");
+    if (fputs("temporary stream\n", fp) == EOF ||
+        fflush(fp) != 0 ||
+        fseek(fp, 0L, SEEK_SET) != 0 ||
+        fgets(temporary, sizeof(temporary), fp) == NULL ||
+        strcmp(temporary, "temporary stream\n") != 0) {
+        fclose(fp);
+        return bad("tmpfile stream");
+    }
+    if (fclose(fp) != 0)
+        return bad("tmpfile close");
     checked = "%s:%d";
     fallback = "%10s:%05d";
     if (fmtcheck(checked, fallback) != checked ||

@@ -15,6 +15,7 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 #include <sys/param.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -24,14 +25,26 @@
 FILE *
 tmpfile()
 {
+	char name[] = _PATH_USRTMP "tmp.XXXXXX";
 	FILE *fp;
-	char *f;
+	int fd, saved_errno;
 
-	if (!(f = tmpnam((char *)NULL)) || !(fp = fopen(f, "w+"))) {
-		fprintf(stderr, "tmpfile: cannot open %s.\n", f);
+	fd = mkstemp(name);
+	if (fd < 0)
+		return(NULL);
+	if (unlink(name) < 0) {
+		saved_errno = errno;
+		(void)close(fd);
+		errno = saved_errno;
 		return(NULL);
 	}
-	(void)unlink(f);
+	fp = fdopen(fd, "w+");
+	if (fp == NULL) {
+		saved_errno = errno;
+		(void)close(fd);
+		errno = saved_errno;
+		return(NULL);
+	}
 	return(fp);
 }
 

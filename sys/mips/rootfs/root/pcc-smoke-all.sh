@@ -47,6 +47,15 @@ export LINPACK_MIN_SECONDS
 
 failures=0
 
+resource_snapshot()
+{
+	echo "PCC_SMOKE_RESOURCES_BEGIN $1"
+	free
+	pstat -T
+	df
+	echo "PCC_SMOKE_RESOURCES_END $1"
+}
+
 run_smoke()
 {
 	name=$1
@@ -58,6 +67,7 @@ run_smoke()
 	echo "PCC_SMOKE_RC $name $rc"
 	echo "PCC_SMOKE_END $name"
 	if test $rc != 0; then
+		resource_snapshot "failure-$name"
 		failures=`expr $failures + 1`
 	fi
 }
@@ -90,6 +100,7 @@ run_smoke linpack /root/linpack-smoke.sh
 run_smoke compiler-bench /root/mips-compiler-bench-smoke.sh
 run_smoke runtime-quick /root/runtime-stress.sh quick
 
+resource_snapshot end
 echo "PCC_SMOKE_ALL_FAILURES $failures"
 date
 if test $failures = 0; then
