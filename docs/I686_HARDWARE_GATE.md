@@ -32,8 +32,8 @@ make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 all
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
-    rootfs-smoke boot-smoke bios-image-smoke bios-boot-smoke \
-    ide-smoke ide-absent-smoke bios-ide-absent-smoke \
+    rootfs-smoke boot-smoke \
+    ide-smoke ide-absent-smoke \
     usb-mass-storage-smoke \
     usb-mass-storage-ide-absent-smoke \
     ohci-keyboard-smoke uhci-keyboard-smoke \
@@ -42,9 +42,8 @@ make -C sys/i386 BOARD=pc \
     usb-combined-smoke
 ```
 
-The native floppy gate loads the same full embedded UFS payload in QEMU
-through CHS and `INT 15h/AH=87`.  The floppy-less IBM continues to use the
-Linux/x86-protocol `rebsd-i686.bzimg` through GRUB Legacy.
+Все перечисленные gates загружают один Linux/x86-protocol artifact
+`rebsd-i686.bzimg`. На floppy-less IBM этот же файл загружает GRUB Legacy.
 
 GRUB-compatible artifact:
 

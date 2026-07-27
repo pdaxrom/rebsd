@@ -169,7 +169,7 @@ $(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
 .PHONY: FORCE
 FORCE:
 
-all: toolchain-check kernel bios-image
+all: toolchain-check kernel
 
 kernel: rebsd-i686.bzimg
 

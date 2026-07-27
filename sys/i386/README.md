@@ -42,7 +42,7 @@ Its initial GCC userland contains:
 - `/libexec/getty`;
 - `/bin/login`;
 - `/bin/sh`;
-- `/bin/hostname` and `/bin/stty`;
+- `/bin/hostname`, `/bin/ls` and `/bin/stty`;
 - the existing common account, profile and network configuration files.
 
 The filesystem is read-only by policy during bring-up.  It is not FAT and
@@ -61,10 +61,10 @@ title ReBSD i686
     kernel /boot/rebsd-i686.bzimg
 ```
 
-The deterministic `rebsd-i686-bios-floppy.img` also contains the complete
-embedded UFS payload.  Its native loader uses CHS reads into a 64 KiB staging
-buffer and the standard BIOS `INT 15h/AH=87` service to move each chunk to
-high memory.  QEMU verifies that this path reaches the same root shell.
+`rebsd-i686.bzimg` is the only installation artifact produced by the default
+build and the only image copied to target machines.  The separate raw-floppy
+target is retained solely as an explicitly requested loader regression; it is
+not part of `all` and is not a release or hardware-gate artifact.
 
 ## Architecture boundary
 

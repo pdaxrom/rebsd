@@ -36,6 +36,8 @@ i686 storage-план через существующие USB/`umass`/generic di
 - toolchain gate подтверждает `i686-elf`, GCC 14.2.0 и ELF32/i386;
 - собираются `rebsd-i686.elf` и Linux boot-protocol 2.02 image
   `rebsd-i686.bzimg`;
+- единственный штатный install/hardware-gate artifact —
+  `rebsd-i686.bzimg`; default `all` не создаёт дополнительный image format;
 - real-mode setup получает BIOS E820, включает A20 и переходит через flat
   GDT в 32-битный payload по адресу 1 МиБ;
 - работают ранние COM1 и VGA text consoles;
@@ -1348,9 +1350,9 @@ Stock QEMU не эмулирует точный VIA 694X/596B planar. Рефер
 
 ### Этап 2. Linux boot protocol, GRUB Legacy и ранняя консоль
 
-1. Собирать два связанных артефакта:
-   `rebsd-i686.elf` для symbols/debug и `rebsd-i686.bzimg` в формате,
-   совместимом с Linux/x86 boot protocol 2.02.
+1. Собирать `rebsd-i686.elf` только для symbols/debug и единственный
+   устанавливаемый artifact `rebsd-i686.bzimg` в формате, совместимом с
+   Linux/x86 boot protocol 2.02.
 2. Добавить real-mode boot sector/setup с обязательными полями:
    `0xAA55`, `HdrS`, `setup_sects`, protocol `0x0202`,
    `LOAD_HIGH` и 32-bit entry. Protected-mode payload грузится с 1 МиБ.
@@ -1364,10 +1366,8 @@ Stock QEMU не эмулирует точный VIA 694X/596B planar. Рефер
        -m 64M -kernel rebsd-i686.bzimg -serial stdio -display none
    ```
 
-5. Первый BIOS gate загружает тот же payload напрямую из
-   `rebsd-i686-bios-floppy.img`; boot sector и setup используют только CHS
-   `INT 13h` reads. IBM BIOS/HDD gate использует уже установленный GRUB
-   Legacy и загружает `rebsd-i686.bzimg` через:
+5. BIOS/HDD gate использует уже установленный GRUB Legacy и загружает
+   единственный install artifact `rebsd-i686.bzimg` через:
 
    ```text
    title ReBSD i686
@@ -1375,8 +1375,6 @@ Stock QEMU не эмулирует точный VIA 694X/596B planar. Рефер
        kernel /boot/rebsd-i686.bzimg
    ```
 
-   Собственный boot sector предназначен для contiguous raw floppy; на
-   реальном IBM без floppy используется Linux/x86 protocol через GRUB.
 6. Создать GDT с kernel/user code/data descriptors и TSS.
 7. Реализовать ранний COM1 polling и VGA text output.
 8. Добавить `run`, `run-serial`, `debug` и документированный GRUB hardware
