@@ -1,44 +1,11 @@
 #include <sys/param.h>
 #include <sys/errno.h>
-#include <sys/user.h>
-#include <sys/proc.h>
 #include <vm/vmspace.h>
 
 #include "vmspace_bootstrap.h"
 
 #define I386_VMSPACE_TEST_VADDR  0x50000000u
 #define I386_VMSPACE_TEST_SIZE   (2u * VM_PAGE_SIZE)
-
-static struct vmspace *i386_vmspace_active;
-
-struct vmspace *
-vmspace_current(void)
-{
-    if (md_curuser != (struct user *)0 &&
-        md_curuser->u_procp != (struct proc *)0)
-        return md_curuser->u_procp->p_vmspace;
-    return i386_vmspace_active;
-}
-
-int
-i386_vmspace_activate(struct vmspace *vmspace)
-{
-    int error;
-
-    error = vmspace_activate(vmspace);
-    if (error == 0)
-        i386_vmspace_active = vmspace;
-    return error;
-}
-
-void
-i386_vmspace_deactivate(struct vmspace *vmspace)
-{
-    if (i386_vmspace_active != vmspace)
-        return;
-    pmap_deactivate(vmspace->vms_pmap);
-    i386_vmspace_active = (struct vmspace *)0;
-}
 
 int
 i386_vmspace_fault_active(unsigned address, unsigned access, int user)
@@ -104,7 +71,7 @@ i386_vmspace_bootstrap_selftest(void)
             error = EFAULT;
         goto out;
     }
-    error = i386_vmspace_activate(source);
+    error = vmspace_activate(source);
     if (error != 0)
         goto out;
     mapped = (volatile uint32_t *)(I386_VMSPACE_TEST_VADDR + 36u);
@@ -163,7 +130,7 @@ i386_vmspace_bootstrap_selftest(void)
             error = EFAULT;
         goto out;
     }
-    error = i386_vmspace_activate(child);
+    error = vmspace_activate(child);
     if (error != 0)
         goto out;
     output = *(volatile uint32_t *)(I386_VMSPACE_TEST_VADDR + 37u);
@@ -196,8 +163,8 @@ i386_vmspace_bootstrap_selftest(void)
     error = 0;
 
 out:
-    if (i386_vmspace_active != (struct vmspace *)0)
-        i386_vmspace_deactivate(i386_vmspace_active);
+    if (vmspace_current() != (struct vmspace *)0)
+        vmspace_deactivate(vmspace_current());
     if (source != (struct vmspace *)0) {
         if (vmspace_destroy(source) != 0 && error == 0)
             error = EFAULT;

@@ -162,33 +162,6 @@ i386_usb_pci_delay_ms(void *arg, unsigned milliseconds)
     i386_pit_wait(ticks);
 }
 
-static const char *
-i386_usb_hub_operation(enum usb_root_hub_event event)
-{
-    switch (event) {
-    case USB_ROOT_HUB_EVENT_STATUS_ERROR:
-        return "status";
-    case USB_ROOT_HUB_EVENT_POWER_ERROR:
-        return "power";
-    case USB_ROOT_HUB_EVENT_RESET_ERROR:
-        return "reset";
-    case USB_ROOT_HUB_EVENT_ENUM_ERROR:
-        return "enumeration";
-    default:
-        return "unknown";
-    }
-}
-
-static const char *
-i386_usb_speed_name(unsigned speed)
-{
-    if (speed == USB_SPEED_HIGH)
-        return "high";
-    if (speed == USB_SPEED_LOW)
-        return "low";
-    return "full";
-}
-
 static void
 i386_usb_hub_event(void *arg, unsigned port,
     enum usb_root_hub_event event, struct usb_device *device,
@@ -200,7 +173,7 @@ i386_usb_hub_event(void *arg, unsigned port,
     if (event == USB_ROOT_HUB_EVENT_ATTACH && device != 0) {
         printf("%s: port%u device attached speed=%s "
             "vendor=%x product=%x\n", controller->up_name, port,
-            i386_usb_speed_name(device->ud_speed),
+            usb_speed_string(device->ud_speed),
             UGETW(device->ud_desc.idVendor),
             UGETW(device->ud_desc.idProduct));
     } else if (event == USB_ROOT_HUB_EVENT_DETACH) {
@@ -208,7 +181,7 @@ i386_usb_hub_event(void *arg, unsigned port,
             controller->up_name, port);
     } else {
         printf("%s: port%u %s failed: %s\n", controller->up_name,
-            port, i386_usb_hub_operation(event),
+            port, usb_root_hub_event_string(event),
             usb_status_string(status));
     }
 }

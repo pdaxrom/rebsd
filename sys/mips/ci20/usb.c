@@ -213,23 +213,6 @@ ci20_usb_print_device(const char *name, const struct usb_device *device)
     }
 }
 
-static const char *
-ci20_usb_hub_operation(enum usb_root_hub_event event)
-{
-    switch (event) {
-    case USB_ROOT_HUB_EVENT_STATUS_ERROR:
-        return "status";
-    case USB_ROOT_HUB_EVENT_POWER_ERROR:
-        return "power";
-    case USB_ROOT_HUB_EVENT_RESET_ERROR:
-        return "reset";
-    case USB_ROOT_HUB_EVENT_ENUM_ERROR:
-        return "enumeration";
-    default:
-        return "unknown";
-    }
-}
-
 static void
 ci20_usb_hub_event(void *arg, unsigned port,
     enum usb_root_hub_event event, struct usb_device *device,
@@ -240,8 +223,7 @@ ci20_usb_hub_event(void *arg, unsigned port,
 
     context = arg;
     if (event == USB_ROOT_HUB_EVENT_ATTACH && device != 0) {
-        speed = device->ud_speed == USB_SPEED_LOW ? "low" :
-            device->ud_speed == USB_SPEED_HIGH ? "high" : "full";
+        speed = usb_speed_string(device->ud_speed);
         printf("%s: port%u device attached speed=%s\n",
             context->uch_name, port, speed);
         ci20_usb_print_device(context->uch_name, device);
@@ -252,7 +234,7 @@ ci20_usb_hub_event(void *arg, unsigned port,
             (void)ehci_reclaim_port(&ci20_ehci, port);
     } else {
         printf("%s: port%u %s failed: %s\n", context->uch_name, port,
-            ci20_usb_hub_operation(event), usb_status_string(status));
+            usb_root_hub_event_string(event), usb_status_string(status));
         if (context == &ci20_ehci_hub_context &&
             event == USB_ROOT_HUB_EVENT_ENUM_ERROR)
             printf("ehci0: diagnostic cmd=%x status=%x intr=%x "
@@ -332,7 +314,7 @@ ci20_ehci_owner_change(void *arg, unsigned port, int companion,
         printf("ehci0: port%u reclaimed from ohci0\n", port);
         return;
     }
-    speed_name = speed == USB_SPEED_LOW ? "low" : "full";
+    speed_name = usb_speed_string(speed);
     printf("ehci0: port%u handoff to ohci0 speed=%s\n",
         port, speed_name);
 }

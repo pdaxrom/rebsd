@@ -1,11 +1,37 @@
 # i686 whole-port reuse audit
 
-Status: active cleanup after the 2026-07-26 audit.
+Status: duplicate cleanup completed and validated on 2026-07-27.
 
 This document is the inventory for the whole i686 port.  It covers every
 kernel area touched during bring-up, not only disk, VFS, FAT, and file
 descriptors.  A QEMU marker is test evidence; it does not by itself prove that
 the implementation belongs in `sys/i386`.
+
+## Cross-architecture duplicate cleanup
+
+The follow-up comparison covered all C, assembly, and public-header sources
+under `sys/i386` and `sys/mips`, plus the generated object lists for i686,
+Ci20, Malta, and N64.  It removed the remaining shared behavior from board
+directories:
+
+| Former duplicate | Common owner after cleanup |
+| --- | --- |
+| Process, file, inode, buffer, mount, callout, clist, clock, and security storage in every board `config.c` | `sys/kernel/kern_tables.c` |
+| Errno strings, historical kernel nlist, console sysctl, and sysctl dispatch | `sys/kernel/kern_machdep.c`; each architecture implements only `md_sysctl` hardware queries |
+| Device-switch rejection/null helpers repeated by i386, Ci20, Malta, and N64 | `sys/kernel/sys_generic.c` |
+| Identical MIPS `/dev/mem`, `/dev/kmem`, `/dev/null`, and `/dev/zero` implementation in three board device switches | `sys/mips/common/memdev.c` |
+| Per-board romdisk open/close/strategy/size/ioctl wrappers and the N64 private block implementation | `sys/disk/romdisk.c`; MD files now provide only image bounds or N64 ROM-read operations |
+| Separate i386 and MIPS active-vmspace tracking | `sys/vm/vmspace.c` |
+| USB speed and root-hub event string switches in i386 and Ci20 attachment code | `sys/usb/usb_core.c` and `sys/usb/uhub.c` |
+| N64 copy of the complete common MIPS kconfig source list | `sys/mips/files.kconf` plus board-only `sys/mips/n64/files.N64` |
+
+The remaining same-named i386/MIPS sources implement actual hardware or ABI
+boundaries: pmap/page tables, traps and signals, context switching, physical
+memory discovery, interrupt controllers, DMA, PCI/board attachment, console
+hardware, and architecture-specific sysctl values.  Romdisk MD descriptors
+contain only linker symbols, minor numbers, or N64 ROM access callbacks; all
+block-device semantics stay common.  A content-hash pass found no identical
+i386/MIPS C or assembly implementation left behind.
 
 ## Baseline correction
 

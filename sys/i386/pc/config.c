@@ -1,16 +1,4 @@
 #include <sys/param.h>
-#include <sys/buf.h>
-#include <sys/callout.h>
-#include <sys/clist.h>
-#include <sys/dir.h>
-#include <sys/file.h>
-#include <sys/inode.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/kernel.h>
-#include <sys/mount.h>
-#include <sys/namei.h>
-#include <sys/proc.h>
 #include <sys/errno.h>
 #include <sys/systm.h>
 
@@ -19,22 +7,6 @@
 #include "pci.h"
 #include "usb_pci.h"
 
-int nproc = NPROC;
-int securelevel;
-int waittime = -1;
-int hz = HZ;
-int usechz = (1000000L + HZ - 1) / HZ;
-struct timezone tz = { 0, 0 };
-struct namecache namecache[NNAMECACHE];
-char bufdata[NBUF * MAXBSIZE];
-struct file file[NFILE];
-struct inode inode[NINODE];
-struct callout callout[NCALL];
-struct mount mount[NMOUNT];
-struct buf buf[NBUF], bfreelist[BQUEUES];
-struct bufhd bufhash[BUFHSZ];
-struct proc proc[NPROC];
-struct cblock cfree[NCLIST];
 void
 kconfig(void)
 {

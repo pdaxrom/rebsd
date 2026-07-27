@@ -403,6 +403,7 @@ test_romdisk(void)
 
     for (i = 0; i < sizeof(media); ++i)
         media[i] = (unsigned char)(i ^ 0x5au);
+    test_zero(&romdisk, sizeof(romdisk));
     romdisk.rd_start = media;
     romdisk.rd_end = media + sizeof(media);
     romdisk.rd_minor = 7;

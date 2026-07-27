@@ -1,3 +1,4 @@
+mips/common/startup.S          standard compile-with "${COMPILE_S}"
 mips/ci20/uart.c               optional ci20_uart
 i2c/i2c.c                       standard
 drm/drm.c                       standard

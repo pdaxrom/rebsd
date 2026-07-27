@@ -11,6 +11,8 @@
 #include <sys/errno.h>
 #include <sys/systm.h>
 #include <sys/inode.h>
+#include <sys/user.h>
+#include <sys/proc.h>
 #include <sys/uio.h>
 #define VMSPACE_MAX_SPACES      (NPROC + 4)
 #define vmspace_zero_memory(p, n) bzero((caddr_t)(p), (unsigned)(n))
@@ -35,6 +37,7 @@
 static struct vmspace vmspace_pool[VMSPACE_MAX_SPACES];
 struct vm_page_allocator *vmspace_allocator;
 static unsigned vmspace_initialized;
+static struct vmspace *vmspace_active;
 
 int
 vmspace_valid(const struct vmspace *vmspace)
@@ -52,6 +55,7 @@ vmspace_system_init(struct vm_page_allocator *allocator)
     if (allocator == 0 || allocator->vpa_initialized == 0)
         return EINVAL;
     vmspace_zero_memory(vmspace_pool, sizeof(vmspace_pool));
+    vmspace_active = 0;
     error = vm_object_system_init(allocator);
     if (error != 0)
         return error;
@@ -422,6 +426,7 @@ vmspace_destroy(struct vmspace *vmspace)
 
     if (!vmspace_valid(vmspace))
         return EINVAL;
+    vmspace_deactivate(vmspace);
     while (vmspace->vms_sysv_attachment_count != 0) {
         error = vmspace_sysv_detach(vmspace,
             vmspace->vms_sysv_attachments[0].vsa_start, 0, 0);
@@ -445,10 +450,34 @@ vmspace_destroy(struct vmspace *vmspace)
 int
 vmspace_activate(struct vmspace *vmspace)
 {
+    int error;
+
     if (!vmspace_valid(vmspace))
         return EINVAL;
-    return pmap_activate(vmspace->vms_pmap);
+    error = pmap_activate(vmspace->vms_pmap);
+    if (error == 0)
+        vmspace_active = vmspace;
+    return error;
 }
+
+void
+vmspace_deactivate(struct vmspace *vmspace)
+{
+    if (vmspace == 0 || vmspace_active != vmspace)
+        return;
+    pmap_deactivate(vmspace->vms_pmap);
+    vmspace_active = 0;
+}
+
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+struct vmspace *
+vmspace_current(void)
+{
+    if (md_curuser != 0 && md_curuser->u_procp != 0)
+        return md_curuser->u_procp->p_vmspace;
+    return vmspace_active;
+}
+#endif
 
 static int
 vmspace_cache_alias_valid(vm_vaddr_t start, unsigned flags,

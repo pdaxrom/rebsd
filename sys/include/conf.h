@@ -72,6 +72,12 @@ extern const struct cdevsw cdevsw[];
 
 int rawrw (dev_t dev, struct uio *uio, int flag);
 int rawrw512 (dev_t dev, struct uio *uio, int flag);
+int noopen (dev_t dev, int flag, int mode);
+int nullopen (dev_t dev, int flag, int mode);
+int norw (dev_t dev, struct uio *uio, int flag);
+int noioctl (dev_t dev, u_int cmd, caddr_t data, int flag);
+daddr_t nosize (dev_t dev);
+int nullstop (struct tty *tp, int flag);
 #endif
 
 #endif

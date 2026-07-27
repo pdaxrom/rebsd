@@ -1,5 +1,4 @@
 #include <sys/param.h>
-#include <sys/conf.h>
 #include <sys/errno.h>
 #include <sys/file.h>
 #include <sys/inode.h>
@@ -13,18 +12,13 @@
 #include <machine/cpu.h>
 
 int
-cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
+md_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     void *newp, size_t newlen)
 {
-    dev_t dev;
-
     (void)newlen;
     if (namelen != 1)
         return ENOTDIR;
     switch (name[0]) {
-    case CPU_CONSDEV:
-        dev = NODEV;
-        return sysctl_rdstruct(oldp, oldlenp, newp, &dev, sizeof(dev));
     case CPU_FREQ_KHZ:
         return EOPNOTSUPP;
     case CPU_RAM_BYTES:

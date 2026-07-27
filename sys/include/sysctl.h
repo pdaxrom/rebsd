@@ -512,6 +512,8 @@ extern struct sysctl_lock memlock;
 typedef int (sysctlfn) (int *name, u_int namelen,
     void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
+sysctlfn md_sysctl;
+
 /*
  * Get old / set new parameters for an integer value.
  */

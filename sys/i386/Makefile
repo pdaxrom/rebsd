@@ -134,7 +134,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    exec_aout.o exec_conf.o exec_elf.o exec_elf_loader.o \
                    exec_script.o exec_subr.o kern_exec.o init_process.o \
                    rootfs_image.o \
-                   init_sysent.o stubs.o kern_mman.o kern_prot.o \
+                   init_sysent.o kern_tables.o stubs.o kern_machdep.o \
+                   kern_mman.o kern_prot.o \
                    kern_prot2.o kern_proc.o kern_fork.o \
                    kern_exit.o kern_resource.o kern_sig.o kern_sig2.o \
                    kern_sysctl.o kern_sysv_shm.o sys_process.o \
@@ -627,7 +628,8 @@ init_main.o: $(TOPSRC)/sys/kernel/init_main.c \
 	    -c $< -o $@
 
 exec_aout.o exec_conf.o exec_elf.o exec_script.o kern_exec.o \
-kern_mman.o kern_prot2.o kern_sysctl.o kern_sysv_shm.o: %.o: \
+kern_tables.o kern_machdep.o kern_mman.o kern_prot2.o kern_sysctl.o \
+kern_sysv_shm.o: %.o: \
 	    $(TOPSRC)/sys/kernel/%.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \

@@ -103,14 +103,6 @@ md_user_frame_single_step(int *frame)
     return 0;
 }
 
-struct vmspace *
-vmspace_current(void)
-{
-    if (md_curuser == 0 || u.u_procp == 0)
-        return 0;
-    return u.u_procp->p_vmspace;
-}
-
 struct user *
 md_uarea_alloc(void)
 {

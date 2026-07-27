@@ -1,3 +1,4 @@
+mips/common/startup.S           standard compile-with "${COMPILE_S}"
 mips/malta/uart.c               optional malta_uart
 mips/malta/devsw.c              standard
 mips/malta/clock.c              standard

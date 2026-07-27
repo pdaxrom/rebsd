@@ -627,6 +627,58 @@ nostrategy (struct buf *bp)
     /* Empty. */
 }
 
+int
+noopen (dev_t dev, int flag, int mode)
+{
+    (void)dev;
+    (void)flag;
+    (void)mode;
+    return ENXIO;
+}
+
+int
+nullopen (dev_t dev, int flag, int mode)
+{
+    (void)dev;
+    (void)flag;
+    (void)mode;
+    return 0;
+}
+
+int
+norw (dev_t dev, struct uio *uio, int flag)
+{
+    (void)dev;
+    (void)uio;
+    (void)flag;
+    return EIO;
+}
+
+int
+noioctl (dev_t dev, u_int cmd, caddr_t data, int flag)
+{
+    (void)dev;
+    (void)cmd;
+    (void)data;
+    (void)flag;
+    return EIO;
+}
+
+daddr_t
+nosize (dev_t dev)
+{
+    (void)dev;
+    return 0;
+}
+
+int
+nullstop (struct tty *tp, int flag)
+{
+    (void)tp;
+    (void)flag;
+    return 0;
+}
+
 #ifndef INET
 /*
  * socket(2) and socketpair(2) if networking not available.

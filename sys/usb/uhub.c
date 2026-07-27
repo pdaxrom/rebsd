@@ -72,6 +72,23 @@ usb_root_hub_event(struct usb_root_hub *hub, unsigned port,
         hub->urh_event(hub->urh_event_arg, port, event, device, status);
 }
 
+const char *
+usb_root_hub_event_string(enum usb_root_hub_event event)
+{
+    switch (event) {
+    case USB_ROOT_HUB_EVENT_STATUS_ERROR:
+        return "status";
+    case USB_ROOT_HUB_EVENT_POWER_ERROR:
+        return "power";
+    case USB_ROOT_HUB_EVENT_RESET_ERROR:
+        return "reset";
+    case USB_ROOT_HUB_EVENT_ENUM_ERROR:
+        return "enumeration";
+    default:
+        return "unknown";
+    }
+}
+
 static usb_error_t
 usb_root_hub_clear_change(struct usb_root_hub *hub, unsigned port,
     unsigned change)
@@ -451,16 +468,6 @@ uhub_reset_port(struct usb_external_hub *hub, unsigned port,
     return uhub_port_status(hub, port, port_status);
 }
 
-static const char *
-uhub_speed_name(unsigned speed)
-{
-    if (speed == USB_SPEED_HIGH)
-        return "high";
-    if (speed == USB_SPEED_LOW)
-        return "low";
-    return "full";
-}
-
 static usb_error_t
 uhub_arm_interrupt(struct usb_external_hub *hub)
 {
@@ -575,7 +582,7 @@ uhub_explore_port(struct usb_external_hub *hub, unsigned port)
     hub_port->uep_device = device;
     printf("uhub%u: port%u device attached speed=%s addr=%u "
         "vendor=%x product=%x\n", hub->ueh_unit, port,
-        uhub_speed_name(speed), device->ud_address,
+        usb_speed_string(speed), device->ud_address,
         UGETW(device->ud_desc.idVendor), UGETW(device->ud_desc.idProduct));
     return USB_STATUS_NORMAL_COMPLETION;
 }
@@ -836,7 +843,7 @@ uhub_attach_interface(struct usb_interface *interface)
     }
     printf("uhub%u: %u ports, %s-speed hub addr=%u, powered\n",
         hub->ueh_unit, hub->ueh_port_count,
-        hub->ueh_device->ud_speed == USB_SPEED_HIGH ? "high" : "full",
+        usb_speed_string(hub->ueh_device->ud_speed),
         hub->ueh_device->ud_address);
     return USB_STATUS_NORMAL_COMPLETION;
 

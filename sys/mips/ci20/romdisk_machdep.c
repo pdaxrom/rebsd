@@ -9,35 +9,13 @@ static const struct romdisk mips_romdisk = {
     __ci20_romdisk_start,
     __ci20_romdisk_end,
     MIPS_ROMDISK_ROOT_MINOR,
-    DEV_BSHIFT
+    DEV_BSHIFT,
+    0,
+    0
 };
 
-int
-mipsromdisk_open(dev_t dev, int flag, int mode)
+const struct romdisk *
+romdisk_md_device(void)
 {
-    return romdisk_bdev_open(&mips_romdisk, dev, flag, mode);
-}
-
-int
-mipsromdisk_close(dev_t dev, int flag, int mode)
-{
-    return romdisk_bdev_close(&mips_romdisk, dev, flag, mode);
-}
-
-daddr_t
-mipsromdisk_size(dev_t dev)
-{
-    return romdisk_bdev_size(&mips_romdisk, dev);
-}
-
-void
-mipsromdisk_strategy(struct buf *bp)
-{
-    romdisk_bdev_strategy(&mips_romdisk, bp);
-}
-
-int
-mipsromdisk_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
-{
-    return romdisk_bdev_ioctl(&mips_romdisk, dev, cmd, addr, flag);
+    return &mips_romdisk;
 }

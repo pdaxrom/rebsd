@@ -68,6 +68,7 @@ usb_error_t usb_root_hub_start(struct usb_root_hub *, struct usb_bus *,
 void usb_root_hub_stop(struct usb_root_hub *);
 struct usb_device *usb_root_hub_device(struct usb_root_hub *, unsigned);
 usb_error_t usb_root_hub_recover_device(struct usb_device *);
+const char *usb_root_hub_event_string(enum usb_root_hub_event);
 
 usb_error_t uhub_register(struct usb_core *);
 #ifdef KERNEL

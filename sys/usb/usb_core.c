@@ -77,6 +77,16 @@ usb_status_string(usb_error_t status)
     return names[status];
 }
 
+const char *
+usb_speed_string(unsigned speed)
+{
+    if (speed == USB_SPEED_HIGH)
+        return "high";
+    if (speed == USB_SPEED_LOW)
+        return "low";
+    return "full";
+}
+
 void
 usb_core_init(struct usb_core *core)
 {

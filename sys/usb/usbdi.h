@@ -74,6 +74,7 @@ typedef void (*usb_callback_t)(struct usb_xfer *, void *, usb_error_t);
 #define USB_ENUM_TIMEOUT_MS     250u
 
 const char *usb_status_string(usb_error_t);
+const char *usb_speed_string(unsigned);
 
 usb_error_t usb_open_pipe(struct usb_interface *, uByte,
     struct usb_pipe **);

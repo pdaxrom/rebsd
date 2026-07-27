@@ -41,6 +41,7 @@ int vmspace_create(struct vmspace **);
 int vmspace_clone(struct vmspace *, struct vmspace **);
 int vmspace_destroy(struct vmspace *);
 int vmspace_activate(struct vmspace *);
+void vmspace_deactivate(struct vmspace *);
 int vmspace_map_object(struct vmspace *, vm_vaddr_t, vm_size_t,
     vm_prot_t, vm_prot_t, unsigned, struct vm_object *, vm_ooffset_t);
 int vmspace_map_object_any(struct vmspace *, vm_vaddr_t, vm_size_t,

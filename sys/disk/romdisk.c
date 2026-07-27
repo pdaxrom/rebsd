@@ -22,21 +22,41 @@ void bcopy(const void *, void *, size_t);
 
 #include <disk/romdisk.h>
 
-static unsigned
-romdisk_bytes(const struct romdisk *romdisk)
+static int
+romdisk_media(const struct romdisk *romdisk, unsigned *size)
 {
-    return (unsigned)(romdisk->rd_end - romdisk->rd_start);
+    if (romdisk == 0 || size == 0)
+        return EINVAL;
+    if (romdisk->rd_ops != 0 && romdisk->rd_ops->rd_media != 0)
+        return romdisk->rd_ops->rd_media(romdisk->rd_cookie, size);
+    if (romdisk->rd_start == 0 || romdisk->rd_end <= romdisk->rd_start)
+        return ENXIO;
+    *size = (unsigned)(romdisk->rd_end - romdisk->rd_start);
+    return 0;
+}
+
+static int
+romdisk_read(const struct romdisk *romdisk, unsigned offset, void *data,
+    unsigned nbytes)
+{
+    if (romdisk->rd_ops != 0 && romdisk->rd_ops->rd_read != 0)
+        return romdisk->rd_ops->rd_read(romdisk->rd_cookie, offset, data,
+            nbytes);
+    bcopy(romdisk->rd_start + offset, data, nbytes);
+    return 0;
 }
 
 int
 romdisk_bdev_open(const struct romdisk *romdisk, dev_t dev, int flag, int mode)
 {
+    unsigned size;
+
     (void)mode;
     if (minor(dev) != romdisk->rd_minor)
         return ENXIO;
     if (flag & FWRITE)
         return EROFS;
-    return romdisk_bytes(romdisk) != 0 ? 0 : ENXIO;
+    return romdisk_media(romdisk, &size);
 }
 
 int
@@ -53,9 +73,13 @@ romdisk_bdev_close(const struct romdisk *romdisk, dev_t dev, int flag,
 daddr_t
 romdisk_bdev_size(const struct romdisk *romdisk, dev_t dev)
 {
+    unsigned size;
+
     if (minor(dev) != romdisk->rd_minor)
         return 0;
-    return romdisk_bytes(romdisk) >> romdisk->rd_block_shift;
+    if (romdisk_media(romdisk, &size) != 0)
+        return 0;
+    return size >> romdisk->rd_block_shift;
 }
 
 static void
@@ -72,8 +96,13 @@ romdisk_bdev_strategy(const struct romdisk *romdisk, struct buf *bp)
     unsigned offset;
     unsigned nbytes;
     unsigned size;
+    int error;
 
-    size = romdisk_bytes(romdisk);
+    error = romdisk_media(romdisk, &size);
+    if (error != 0) {
+        romdisk_done_error(bp, error);
+        return;
+    }
     if (minor(bp->b_dev) != romdisk->rd_minor) {
         romdisk_done_error(bp, ENXIO);
         return;
@@ -106,7 +135,11 @@ romdisk_bdev_strategy(const struct romdisk *romdisk, struct buf *bp)
         bp->b_bcount = nbytes;
     }
 
-    bcopy(romdisk->rd_start + offset, bp->b_addr, nbytes);
+    error = romdisk_read(romdisk, offset, bp->b_addr, nbytes);
+    if (error != 0) {
+        romdisk_done_error(bp, error);
+        return;
+    }
     biodone(bp);
 }
 
@@ -123,3 +156,35 @@ romdisk_bdev_ioctl(const struct romdisk *romdisk, dev_t dev, u_int cmd,
         return EINVAL;
     }
 }
+
+#if defined(KERNEL) && !defined(DISK_HOST_TEST)
+int
+romdisk_open(dev_t dev, int flag, int mode)
+{
+    return romdisk_bdev_open(romdisk_md_device(), dev, flag, mode);
+}
+
+int
+romdisk_close(dev_t dev, int flag, int mode)
+{
+    return romdisk_bdev_close(romdisk_md_device(), dev, flag, mode);
+}
+
+daddr_t
+romdisk_size(dev_t dev)
+{
+    return romdisk_bdev_size(romdisk_md_device(), dev);
+}
+
+void
+romdisk_strategy(struct buf *bp)
+{
+    romdisk_bdev_strategy(romdisk_md_device(), bp);
+}
+
+int
+romdisk_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
+{
+    return romdisk_bdev_ioctl(romdisk_md_device(), dev, cmd, addr, flag);
+}
+#endif

@@ -6,13 +6,14 @@
 #include <sys/tty.h>
 #include <sys/uio.h>
 #include <disk/disk.h>
+#include <disk/romdisk.h>
 #include <machine/devmajors.h>
 #include <machine/ramswap.h>
 #include <machine/romdisk.h>
+#include <mips/common/devsw.h>
 #ifdef VIDEO_ENABLED
 #include <sys/drm.h>
 #endif
-#include <stdint.h>
 
 #ifdef PTY_ENABLED
 #include <sys/pty.h>
@@ -30,59 +31,6 @@ int ci20_uart_select(dev_t dev, int rw);
 char ci20_uart_raw_read(dev_t dev);
 void ci20_uart_raw_write(dev_t dev, char ch);
 
-int
-nulldev(void)
-{
-    return 0;
-}
-
-int
-noopen(dev_t dev, int flag, int mode)
-{
-    return ENXIO;
-}
-
-static int
-mips_null_open(dev_t dev, int flag, int mode)
-{
-    return 0;
-}
-
-int
-norw(dev_t dev, struct uio *uio, int flag)
-{
-    return EIO;
-}
-
-int
-noioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
-{
-    return EIO;
-}
-
-daddr_t
-nosize(dev_t dev)
-{
-    return 0;
-}
-
-static void
-mips_nostrategy(struct buf *bp)
-{
-}
-
-static int
-mips_seltrue(dev_t dev, int rw)
-{
-    return 1;
-}
-
-static int
-mips_nullstop(struct tty *tp, int flag)
-{
-    return 0;
-}
-
 static char
 mips_console_raw_read(dev_t dev)
 {
@@ -97,76 +45,13 @@ mips_console_raw_write(dev_t dev, char ch)
     cnputc(ch);
 }
 
-static int
-mips_mmrw(dev_t dev, struct uio *uio, int flag)
-{
-    register struct iovec *iov;
-    int error;
-    register u_int c;
-    uintptr_t memaddr;
-    uintptr_t memlast;
-
-    error = 0;
-    while (uio->uio_resid && error == 0) {
-        iov = uio->uio_iov;
-        if (iov->iov_len == 0) {
-            uio->uio_iov++;
-            uio->uio_iovcnt--;
-            if (uio->uio_iovcnt < 0)
-                panic("mips_mmrw");
-            continue;
-        }
-
-        switch (minor(dev)) {
-        case 0:
-        case 1:
-            if (uio->uio_offset < 0 || uio->uio_offset > UINTPTR_MAX ||
-                (off_t)(iov->iov_len - 1) >
-                (off_t)UINTPTR_MAX - uio->uio_offset)
-                return EFAULT;
-            memaddr = (uintptr_t)uio->uio_offset;
-            memlast = memaddr + iov->iov_len - 1;
-            if ((badkaddr((caddr_t)memaddr) &&
-                baduaddr((caddr_t)memaddr)) ||
-                (badkaddr((caddr_t)memlast) &&
-                baduaddr((caddr_t)memlast)))
-                return EFAULT;
-            error = uiomove((caddr_t)memaddr, iov->iov_len, uio);
-            break;
-        case 2:
-            if (uio->uio_rw == UIO_READ)
-                return 0;
-            c = iov->iov_len;
-            iov->iov_base += c;
-            iov->iov_len -= c;
-            uio->uio_offset += c;
-            uio->uio_resid -= c;
-            break;
-        case 3:
-            if (uio->uio_rw == UIO_WRITE)
-                return EIO;
-            c = iov->iov_len;
-            bzero(iov->iov_base, c);
-            iov->iov_base += c;
-            iov->iov_len -= c;
-            uio->uio_offset += c;
-            uio->uio_resid -= c;
-            break;
-        default:
-            return EINVAL;
-        }
-    }
-
-    return error;
-}
-
 #define NOBDEV \
-    noopen, noopen, mips_nostrategy, nosize, noioctl, 0
+    noopen, noopen, nostrategy, nosize, noioctl, 0
 
 const struct bdevsw bdevsw[] = {
     {
-        mipsromdisk_open, mipsromdisk_close, mipsromdisk_strategy,
-        mipsromdisk_size, mipsromdisk_ioctl, 0,
+        romdisk_open, romdisk_close, romdisk_strategy,
+        romdisk_size, romdisk_ioctl, 0,
     },
     {
         mipsramswap_open, mipsramswap_close, mipsramswap_strategy,
@@ -185,30 +70,30 @@ const struct bdevsw bdevsw[] = {
 const int nblkdev = sizeof(bdevsw) / sizeof(bdevsw[0]) - 1;
 
 #define NOCDEV \
-    noopen, noopen, norw, norw, noioctl, mips_nullstop, 0, mips_seltrue, \
-    mips_nostrategy, 0, 0, 0
+    noopen, noopen, norw, norw, noioctl, nullstop, 0, seltrue, \
+    nostrategy, 0, 0, 0
 
 const struct cdevsw cdevsw[] = {
     {
         cnopen, cnclose, cnread, cnwrite,
-        cnioctl, mips_nullstop, cnttys, cnselect,
-        mips_nostrategy, mips_console_raw_read, mips_console_raw_write,
+        cnioctl, nullstop, cnttys, cnselect,
+        nostrategy, mips_console_raw_read, mips_console_raw_write,
     },
     {
 #if MEM_MAJOR != 1
 #   error Wrong MEM_MAJOR value!
 #endif
-        mips_null_open, mips_null_open, mips_mmrw, mips_mmrw,
-        noioctl, mips_nullstop, 0, mips_seltrue,
-        mips_nostrategy, 0, 0,
+        nullopen, nullopen, mips_mmrw, mips_mmrw,
+        noioctl, nullstop, 0, seltrue,
+        nostrategy, 0, 0,
     },
     {
 #if MIPS_TTY_MAJOR != 2
 #   error Wrong MIPS_TTY_MAJOR value!
 #endif
-        syopen, mips_null_open, syread, sywrite,
-        syioctl, mips_nullstop, 0, mips_seltrue,
-        mips_nostrategy, 0, 0,
+        syopen, nullopen, syread, sywrite,
+        syioctl, nullstop, 0, seltrue,
+        nostrategy, 0, 0,
     },
     {
 #if MIPS_SERIAL_MAJOR != 3
@@ -216,9 +101,9 @@ const struct cdevsw cdevsw[] = {
 #endif
         ci20_uart_open, ci20_uart_close,
         ci20_uart_read, ci20_uart_write,
-        ci20_uart_ioctl, mips_nullstop,
+        ci20_uart_ioctl, nullstop,
         ci20_uart_ttys, ci20_uart_select,
-        mips_nostrategy, ci20_uart_raw_read, ci20_uart_raw_write,
+        nostrategy, ci20_uart_raw_read, ci20_uart_raw_write,
     },
     { NOCDEV },
     {
@@ -227,8 +112,8 @@ const struct cdevsw cdevsw[] = {
 #endif
 #ifdef VIDEO_ENABLED
         drmfb_open, drmfb_close, drmfb_read, drmfb_write,
-        drmfb_ioctl, mips_nullstop, 0, mips_seltrue,
-        mips_nostrategy, 0, 0, drmfb_mmap,
+        drmfb_ioctl, nullstop, 0, seltrue,
+        nostrategy, 0, 0, drmfb_mmap,
 #else
         NOCDEV
 #endif
@@ -241,8 +126,8 @@ const struct cdevsw cdevsw[] = {
 #endif
 #ifdef PTY_ENABLED
         ptsopen, ptsclose, ptsread, ptswrite,
-        ptyioctl, mips_nullstop, pt_tty, ptcselect,
-        mips_nostrategy, 0, 0,
+        ptyioctl, nullstop, pt_tty, ptcselect,
+        nostrategy, 0, 0,
 #else
         NOCDEV
 #endif
@@ -253,8 +138,8 @@ const struct cdevsw cdevsw[] = {
 #endif
 #ifdef PTY_ENABLED
         ptcopen, ptcclose, ptcread, ptcwrite,
-        ptyioctl, mips_nullstop, pt_tty, ptcselect,
-        mips_nostrategy, 0, 0,
+        ptyioctl, nullstop, pt_tty, ptcselect,
+        nostrategy, 0, 0,
 #else
         NOCDEV
 #endif
@@ -264,7 +149,7 @@ const struct cdevsw cdevsw[] = {
 #   error Wrong MIPS_RDISK_MAJOR value!
 #endif
         disk_cdev_open, disk_cdev_close, disk_cdev_read, disk_cdev_write,
-        disk_cdev_ioctl, mips_nullstop, 0, mips_seltrue,
+        disk_cdev_ioctl, nullstop, 0, seltrue,
         disk_bdev_strategy, 0, 0,
     },
     { 0 },
