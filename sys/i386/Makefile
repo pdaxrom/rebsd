@@ -93,7 +93,7 @@ I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 SRC_ONLY_LIBS="startup-i386 libc libutil libreadline" \
                 LIBC_ONLY="gen stdio stdlib string compat runtime sys i386" \
                 SRC_ONLY_SUBDIR=cmd \
-                CMD_ONLY_SUBDIR="getty hostname init login sh stty" \
+                CMD_ONLY_SUBDIR="getty hostname init login ls sh stty" \
                 CMD_ONLY_STD="$(I386_USER_NONE)" \
                 CMD_ONLY_SCRIPT="$(I386_USER_NONE)" \
                 CMD_ONLY_NSTD="$(I386_USER_NONE)" \
@@ -146,6 +146,9 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    vm_param.o \
                    vm_phys.o vm_page.o vm_phys_board.o pmap.o \
                    $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
+
+$(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
+	    $(I386_SRC)/include/machine/layout.h
 
 .DEFAULT_GOAL := all
 
@@ -280,6 +283,7 @@ $(I386_ROOTFS_STAGE)/.userland: $(I386_ROOTFS_STAGE)/.base \
 	test -x $(I386_ROOTFS_STAGE)/bin/sh
 	test -x $(I386_ROOTFS_STAGE)/libexec/getty
 	test -x $(I386_ROOTFS_STAGE)/bin/login
+	test -x $(I386_ROOTFS_STAGE)/bin/ls
 	touch $@
 
 $(I386_ROOTFS_MANIFEST): $(I386_ROOTFS_STAGE)/.userland \

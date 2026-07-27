@@ -743,7 +743,29 @@ vm_page_allocator_stats(const struct vm_page_allocator *allocator,
 struct vm_page_allocator vm_page_boot_allocator;
 
 extern void *vm_page_md_direct_map(vm_paddr_t, vm_size_t);
-extern int vm_page_md_poison(void *, vm_paddr_t, uint8_t, int);
+
+static int
+vm_page_md_poison(void *argument, vm_paddr_t paddr, uint8_t value,
+    int check_only)
+{
+    volatile uint8_t *bytes;
+    vm_size_t index;
+
+    (void)argument;
+    bytes = (volatile uint8_t *)vm_page_md_direct_map(paddr,
+        VM_PAGE_SIZE);
+    if (bytes == 0)
+        return EFAULT;
+    for (index = 0; index < VM_PAGE_SIZE; ++index) {
+        if (check_only) {
+            if (bytes[index] != value)
+                return EFAULT;
+        } else {
+            bytes[index] = value;
+        }
+    }
+    return 0;
+}
 
 int
 vm_page_bootstrap_init(const struct vm_phys_map *map,

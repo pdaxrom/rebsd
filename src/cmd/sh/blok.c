@@ -19,7 +19,6 @@ struct blk *bloktop; /* top of arena (last blok) */
 
 char *brkbegin;
 
-#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
 static void
 sh_diag_puts(const char *s)
 {
@@ -85,9 +84,6 @@ sh_alloc_check(struct blk *p, const char *where, unsigned rbytes)
     if (sh_bad_blk(p))
         sh_alloc_corrupt(where, p, NIL, rbytes);
 }
-#else
-#define sh_alloc_check(p, where, rbytes) ((void)0)
-#endif
 
 char *alloc(unsigned nbytes)
 {
@@ -149,7 +145,6 @@ void addblok(unsigned reqd)
     reqd += brkincr;
     reqd &= ~(brkincr - 1);
     blokp = bloktop;
-#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
     {
         char *needbrk;
         unsigned grow;
@@ -161,7 +156,6 @@ void addblok(unsigned reqd)
                 error(nostack);
         }
     }
-#endif
     bloktop = bloktop->word = (struct blk *)(Rcheat(bloktop) + reqd);
     bloktop->word = (struct blk *)(brkbegin + 1);
     {
@@ -181,18 +175,14 @@ void free(void *ap)
     register struct blk *p;
 
     if ((p = ap) && p < bloktop) {
-#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
         if (sh_bad_blk(p) || p <= (struct blk *)brkbegin)
             sh_alloc_corrupt("free-arg", p, NIL, 0);
-#endif
 #ifdef DEBUG
         chkbptr(p);
 #endif
         --p;
-#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
         if (sh_bad_blk(p))
             sh_alloc_corrupt("free-head", p, NIL, 0);
-#endif
         p->word = (struct blk *)(Rcheat(p->word) & ~BUSY);
     }
 }

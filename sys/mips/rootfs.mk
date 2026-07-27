@@ -287,13 +287,11 @@ MIPS_NATIVE_LIBS = crt0.o libc.a libm.a libpcc.a
 MIPS_NATIVE_SOFTFLOAT_LIBS = libpcc.a
 MIPS_NATIVE_TARGET_FLAGS_vr4300 = $(MIPS_ROOTFS_ENDIAN_CPP) -DTARGET_VR4300 \
                                   -DTARGET_MIPS_STRICT_ALIGN64 \
-                                  -DTARGET_MIPS_SH_ALLOC_GUARD \
                                   -DTARGET_NO_ABICALLS \
                                   $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
                                   $(MIPS_ROOTFS_EXTRA_CPPFLAGS)
 MIPS_NATIVE_TARGET_FLAGS_mips32r2 = $(MIPS_ROOTFS_ENDIAN_CPP) \
                                     -DTARGET_MIPS32R2 \
-                                    -DTARGET_MIPS_SH_ALLOC_GUARD \
                                     -DTARGET_NO_ABICALLS \
                                     $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
                                     $(MIPS_ROOTFS_EXTRA_CPPFLAGS)

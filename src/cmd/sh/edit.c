@@ -12,8 +12,9 @@
 #include "defs.h"
 
 /*
- * defs.h maps free() to the shell's private allocator.  readline() returns
- * memory from libc, so this file must use the real libc free().
+ * defs.h maps free() to the shell's internal afree() entry point.  Readline
+ * uses the standard allocation interface supplied by memory.c, so keep that
+ * interface visible here.
  */
 #undef free
 

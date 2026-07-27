@@ -29,9 +29,19 @@ CORE_MARKERS = (
     "root dev  = (0,0)",
     "swap dev  = none",
     "root size = 1024 kbytes",
+    "user mem  = 65536 kbytes",
     "ReBSD/i686 0.1-Resurgence (console)",
     "login:",
+    "REBSD_I686_LS_OK",
     "REBSD_I686_SHELL_OK",
+)
+
+FORBIDDEN_MARKERS = (
+    ": Out of memory",
+    "\r\nno space\r\n",
+    "exception:",
+    "PANIC:",
+    "panic:",
 )
 
 IDE_DISK_MARKERS = (
@@ -237,7 +247,9 @@ def main() -> None:
 
     output_bytes = bytearray()
     login_sent = False
+    ls_command_sent = False
     shell_command_sent = False
+    completed = False
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
         ready, _, _ = select.select([process.stdout], [], [], 0.1)
@@ -251,13 +263,28 @@ def main() -> None:
             login_sent = True
         if (
             login_sent
-            and not shell_command_sent
+            and not ls_command_sent
             and b"\r\n# " in output_bytes
         ):
-            process.stdin.write(b"echo REBSD_I686_SHELL_OK\n")
+            process.stdin.write(b"/bin/ls /bin/l?\n")
+            process.stdin.flush()
+            ls_command_sent = True
+        if (
+            ls_command_sent
+            and not shell_command_sent
+            and b"\r\n/bin/ls\r\n" in output_bytes
+        ):
+            process.stdin.write(
+                b"echo REBSD_I686_LS_OK REBSD_I686_SHELL_OK\n"
+            )
             process.stdin.flush()
             shell_command_sent = True
-        if shell_command_sent and b"\r\nREBSD_I686_SHELL_OK\r\n" in output_bytes:
+        if (
+            shell_command_sent
+            and b"\r\nREBSD_I686_LS_OK REBSD_I686_SHELL_OK\r\n"
+            in output_bytes
+        ):
+            completed = True
             break
         if process.poll() is not None:
             break
@@ -275,12 +302,22 @@ def main() -> None:
 
     output = output_bytes.decode("utf-8", errors="replace")
     print(output, end="")
+    if not completed:
+        raise SystemExit(
+            "qemu-boot-smoke: login command sequence did not complete"
+        )
     missing = [
         marker for marker in expected_markers(args) if marker not in output
     ]
     if missing:
         raise SystemExit(
             "qemu-boot-smoke: missing serial markers: " + ", ".join(missing)
+        )
+    forbidden = [marker for marker in FORBIDDEN_MARKERS if marker in output]
+    if forbidden:
+        raise SystemExit(
+            "qemu-boot-smoke: forbidden serial markers: "
+            + ", ".join(forbidden)
         )
     print("qemu-boot-smoke: ok")
 

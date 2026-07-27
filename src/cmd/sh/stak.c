@@ -62,13 +62,11 @@ void tdystak(char *x) /* try to bring stack back to x */
 void stakchk()
 {
     if ((brkend - stakbas) > BRKINCR + BRKINCR) {
-#if defined(TARGET_MIPS_SH_ALLOC_GUARD) || defined(TARGET_VR4300)
         extern struct blk *bloktop;
         char *newbrk = brkend - BRKINCR;
 
         if (bloktop != NIL && newbrk <= (char *)(bloktop + 2))
             return;
-#endif
         setbrk(-BRKINCR);
     }
 }

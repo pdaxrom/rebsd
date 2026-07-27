@@ -16,26 +16,6 @@ vm_page_md_direct_map(vm_paddr_t paddr, vm_size_t size)
 }
 
 int
-vm_page_md_poison(void *argument, vm_paddr_t paddr, uint8_t value,
-    int check_only)
-{
-    volatile uint8_t *bytes;
-    unsigned index;
-
-    (void)argument;
-    bytes = (volatile uint8_t *)paddr;
-    for (index = 0; index < VM_PAGE_SIZE; ++index) {
-        if (check_only) {
-            if (bytes[index] != value)
-                return EFAULT;
-        } else {
-            bytes[index] = value;
-        }
-    }
-    return 0;
-}
-
-int
 vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
 {
     const struct i386_phys_range *range;

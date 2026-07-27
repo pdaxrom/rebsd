@@ -47,7 +47,7 @@
 #define stacktop(siz)   (USER_DATA_END)
 #define stackbas(siz)   (USER_DATA_END - (siz))
 
-#define MAXMEM          (96 * 1024)
+#define MAXMEM          I386_USER_MAXMEM
 #define USIZE           16384
 #define SSIZE           2048
 
