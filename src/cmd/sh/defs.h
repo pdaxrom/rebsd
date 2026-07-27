@@ -259,6 +259,7 @@ extern unsigned brkincr;
 extern BOOL trapnote;
 extern char *trapcom[];
 extern BOOL trapflg[];
+extern int exitsig;
 
 /* name tree and words */
 extern char **environ;
@@ -333,7 +334,7 @@ extern int eflag;
 
 #define sigchk()           \
     if (trapnote & SIGSET) \
-    exitsh(exitval ? exitval : SIGFAIL)
+    exitsh(sigstatus())
 
 #define exitset() retval = exitval
 
@@ -416,6 +417,8 @@ int initio(struct ionod *iop, int save);
 char *getpath(char *s);
 void prt(long t);
 void getsig(int n);
+void jobfault(int sig);
+int sigstatus(void);
 void prn_buff(int n);
 void oldsigs(void);
 void execa(char *at[], short pos);
