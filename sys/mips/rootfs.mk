@@ -113,6 +113,11 @@ MIPS_ROOTFS_CONTRACT_LABEL ?= \
 MIPS_ROOTFS_DYNAMIC_MANIFEST ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),1,0)
 MIPS_ROOTFS_PRUNE_DEVEL ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),1,0)
 MIPS_ROOTFS_INSTALL_AWK ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),0,1)
+MIPS_ROOTFS_CHECK_PROFILE_ARGS = \
+    $(if $(filter 1,$(MIPS_ROOTFS_PRUNE_DEVEL)),\
+        --exclude-stage-prefix /usr/include \
+        --exclude-stage-prefix /usr/lib \
+        --exclude-stage-prefix /usr/share,)
 MIPS_PCC_HOST_INCLUDE ?= $(MIPS_ROOTFS_USR_INCLUDE)
 MIPS_PCC_HOST_INCLUDE_STAMP ?= $(MIPS_ROOTFS_BASE_STAMP)
 MIPS_ROOTFS_TARGET_PLATFORM ?= mips
@@ -1119,10 +1124,7 @@ rootfs-contract-check: $(MIPS_ROOTFS_CHECK_SCRIPT) $(MIPS_ROOTFS_IMAGE_DEPS)
 	python3 $(MIPS_ROOTFS_CHECK_SCRIPT) \
 	    --stage $(MIPS_ROOTFS_IMAGE_STAGE) \
 	    --manifest $(MIPS_ROOTFS_IMAGE_MANIFEST) \
-	    $(if $(filter 1,$(MIPS_ROOTFS_PRUNE_DEVEL)),\
-	        --exclude-stage-prefix /usr/include \
-	        --exclude-stage-prefix /usr/lib \
-	        --exclude-stage-prefix /usr/share,) \
+	    $(MIPS_ROOTFS_CHECK_PROFILE_ARGS) \
 	    --label $(MIPS_ROOTFS_CONTRACT_LABEL)
 
 rootfs.img: $(FSUTIL) $(MIPS_ROOTFS_CHECK_SCRIPT) $(MIPS_ROOTFS_IMAGE_DEPS)
