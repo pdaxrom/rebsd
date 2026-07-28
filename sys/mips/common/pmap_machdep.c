@@ -21,8 +21,6 @@
 #define PMAP_MD_PHYS_MASK       0x1fffffffu
 #define PMAP_MD_ASID_MASK       0x000000ffu
 #define PMAP_MD_ENTRYHI_MASK    0xffffe0ffu
-#define PMAP_MD_INVALID_BASE    0x40000000u
-#define PMAP_MD_TLB_PAIR_SIZE   0x00002000u
 #ifdef CI20
 #define PMAP_MD_PERMANENT_WIRED 4u
 #else
@@ -158,13 +156,77 @@ pmap_md_tlb_invalidate(unsigned entryhi)
         index < pmap_md_tlb_entries();
     if (found) {
         mips_tlb_write_indexed(index, TLB_PAGEMASK_4K,
-            PMAP_MD_INVALID_BASE + index * PMAP_MD_TLB_PAIR_SIZE,
-            0, 0);
+            mips_tlb_invalid_entryhi(index), 0, 0);
     }
     mips_write_c0_register(C0_PAGEMASK, 0, saved_pagemask);
     mips_write_c0_register(C0_ENTRYHI, 0, saved_entryhi);
     mips_intr_restore(status);
     return found;
+}
+
+int
+pmap_md_tlb_lookup(unsigned entryhi, unsigned *result_index,
+    unsigned *result_pagemask, unsigned *result_entryhi,
+    unsigned *result_entrylo0, unsigned *result_entrylo1)
+{
+    unsigned saved_index;
+    unsigned saved_entryhi;
+    unsigned saved_entrylo0;
+    unsigned saved_entrylo1;
+    unsigned saved_pagemask;
+    unsigned index;
+    unsigned wired;
+    int status;
+    int error;
+
+    if (result_index == 0 || result_pagemask == 0 ||
+        result_entryhi == 0 || result_entrylo0 == 0 ||
+        result_entrylo1 == 0)
+        return EINVAL;
+
+    status = mips_intr_disable();
+    saved_index = mips_read_c0_register(C0_INDEX, 0);
+    saved_entryhi = mips_read_c0_register(C0_ENTRYHI, 0);
+    saved_entrylo0 = mips_read_c0_register(C0_ENTRYLO0, 0);
+    saved_entrylo1 = mips_read_c0_register(C0_ENTRYLO1, 0);
+    saved_pagemask = mips_read_c0_register(C0_PAGEMASK, 0);
+    mips_write_c0_register(C0_ENTRYHI, 0,
+        entryhi & PMAP_MD_ENTRYHI_MASK);
+    asm volatile (
+        "nop\n"
+        "nop\n"
+        "nop\n"
+        "tlbp\n"
+        "nop\n"
+        "nop\n"
+        "nop"
+        : : : "memory");
+    index = mips_read_c0_register(C0_INDEX, 0);
+    wired = mips_read_c0_register(C0_WIRED, 0);
+    if ((index & 0x80000000u) != 0 || index < wired ||
+        index >= pmap_md_tlb_entries()) {
+        error = ENOENT;
+    } else {
+        asm volatile (
+            "tlbr\n"
+            "nop\n"
+            "nop\n"
+            "nop"
+            : : : "memory");
+        *result_index = index;
+        *result_pagemask = mips_read_c0_register(C0_PAGEMASK, 0);
+        *result_entryhi = mips_read_c0_register(C0_ENTRYHI, 0);
+        *result_entrylo0 = mips_read_c0_register(C0_ENTRYLO0, 0);
+        *result_entrylo1 = mips_read_c0_register(C0_ENTRYLO1, 0);
+        error = 0;
+    }
+    mips_write_c0_register(C0_INDEX, 0, saved_index);
+    mips_write_c0_register(C0_PAGEMASK, 0, saved_pagemask);
+    mips_write_c0_register(C0_ENTRYLO0, 0, saved_entrylo0);
+    mips_write_c0_register(C0_ENTRYLO1, 0, saved_entrylo1);
+    mips_write_c0_register(C0_ENTRYHI, 0, saved_entryhi);
+    mips_intr_restore(status);
+    return error;
 }
 
 void
@@ -184,8 +246,7 @@ pmap_md_tlb_flush(void)
     wired = mips_read_c0_register(C0_WIRED, 0);
     for (index = wired; index < entries; ++index) {
         mips_tlb_write_indexed(index, TLB_PAGEMASK_4K,
-            PMAP_MD_INVALID_BASE + index * PMAP_MD_TLB_PAIR_SIZE,
-            0, 0);
+            mips_tlb_invalid_entryhi(index), 0, 0);
     }
     mips_write_c0_register(C0_PAGEMASK, 0, saved_pagemask);
     mips_write_c0_register(C0_ENTRYHI, 0, saved_entryhi);
@@ -207,8 +268,7 @@ pmap_md_legacy_user_disable(void)
     entries = pmap_md_legacy_user_entries();
     for (index = 0; index < entries; ++index) {
         mips_tlb_write_indexed(index, TLB_PAGEMASK_4K,
-            PMAP_MD_INVALID_BASE + index * PMAP_MD_TLB_PAIR_SIZE,
-            0, 0);
+            mips_tlb_invalid_entryhi(index), 0, 0);
     }
     mips_write_c0_register(C0_WIRED, 0, PMAP_MD_PERMANENT_WIRED);
     mips_write_c0_register(C0_PAGEMASK, 0, saved_pagemask);

@@ -172,6 +172,16 @@
 
 #ifndef __ASSEMBLER__
 
+/*
+ * Give each invalid TLB slot a distinct VPN in unmapped KSEG0.  TLB probes
+ * must never encounter these addresses during ordinary mapped user access.
+ */
+static inline unsigned
+mips_tlb_invalid_entryhi(unsigned index)
+{
+    return 0x80000000u + index * 0x00002000u;
+}
+
 static inline int
 mips_frame_is_gpr_word(unsigned word)
 {

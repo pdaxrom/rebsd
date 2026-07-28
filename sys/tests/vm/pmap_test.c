@@ -420,10 +420,20 @@ test_pmap(void)
     CHECK(diagnostics.ptd_repeat == 2);
     CHECK(diagnostics.ptd_active_pmap == (unsigned)(uintptr_t)pmap3);
     CHECK(diagnostics.ptd_active_asid == test_asid);
+    CHECK(diagnostics.ptd_active_generation != 0);
+    CHECK(diagnostics.ptd_active_generation ==
+        diagnostics.ptd_asid_generation);
+    CHECK(diagnostics.ptd_next_asid > diagnostics.ptd_active_asid);
     CHECK((diagnostics.ptd_query_pte & 1u) != 0);
     CHECK(diagnostics.ptd_query_entryhi == test_entryhi);
     CHECK(diagnostics.ptd_query_entrylo0 == test_entrylo0);
     CHECK(diagnostics.ptd_query_entrylo1 == test_entrylo1);
+    CHECK(diagnostics.ptd_hardware_found == 0);
+    CHECK(diagnostics.ptd_hardware_index == 0);
+    CHECK(diagnostics.ptd_hardware_pagemask == 0);
+    CHECK(diagnostics.ptd_hardware_entryhi == 0);
+    CHECK(diagnostics.ptd_hardware_entrylo0 == 0);
+    CHECK(diagnostics.ptd_hardware_entrylo1 == 0);
     CHECK(device_page->vmp_hold_count == 0 &&
         device_page->vmp_reference_count == 0 &&
         device_page->vmp_dirty_count == 0);

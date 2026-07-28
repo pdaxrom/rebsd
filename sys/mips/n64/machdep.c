@@ -191,7 +191,7 @@ n64_tlb_init(void)
     mips_write_c0_register(C0_WIRED, 0, 0);
     for (i = 0; i < N64_TLB_ENTRIES; ++i) {
         mips_tlb_write_indexed(i, TLB_PAGEMASK_4K,
-            0x40000000u + i * 0x2000u, 0, 0);
+            mips_tlb_invalid_entryhi(i), 0, 0);
     }
 
     for (i = 0; i < user_pairs; ++i) {

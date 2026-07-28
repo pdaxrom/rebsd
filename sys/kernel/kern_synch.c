@@ -398,7 +398,6 @@ swtch()
     register struct proc *p, *q;
     register int n;
     struct proc *pp, *pq;
-    int s;
 
 #ifdef UCB_METER
     cnt.v_swtch++;
@@ -411,6 +410,13 @@ swtch()
             return;
         }
         /* Switch from user process to swapper. */
+        /*
+         * Keep the pmap/ASID switch and mips_curuser publication in
+         * longjmp() under one interrupt-disabled interval.  An interrupt
+         * between those operations would run with the new address space but
+         * the old u-area.
+         */
+        (void)splhigh();
         if (vmspace_activate(proc[0].p_vmspace) != 0)
             panic("proc0 pmap");
         mips_uarea_guard_check(proc[0].p_uarea);
@@ -438,7 +444,7 @@ swtch()
         return;
     }
 loop:
-    s = splhigh();
+    (void)splhigh();
     noproc = 0;
     runrun = 0;
 #ifdef DIAGNOSTIC
@@ -477,7 +483,6 @@ loop:
     else
         qs = p->p_link;
     curpri = n;
-    splx(s);
     /*
      * the rsave (ssave) contents are interpreted
      * in the new address space
@@ -488,6 +493,11 @@ loop:
     printf ("mipsswtch: pick pid=%d paddr=%x sswap=%x pri=%d\n",
         p->p_pid, p->p_addr, n, p->p_pri);
 #endif
+    /*
+     * Do not re-enable interrupts until longjmp() has installed both the
+     * selected pmap and its u-area.  longjmp() publishes mips_curuser and
+     * enables interrupts immediately before resuming the saved context.
+     */
     if (vmspace_activate(p->p_vmspace) != 0)
         panic("process pmap");
     mips_uarea_guard_check(p->p_uarea);

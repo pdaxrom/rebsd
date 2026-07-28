@@ -17,6 +17,8 @@
 #ifdef N64
 #include <machine/console.h>
 #include <machine/n64.h>
+#include <machine/ramswap.h>
+#include <mips/common/zswap.h>
 #ifdef N64_USB_GDB
 #include <machine/n64gdb.h>
 #endif
@@ -85,6 +87,187 @@ mips_trace_user_fault(const char *kind, int *frame, unsigned badvaddr)
     printf("user fault: %s pc=%08x address=%08x pid=%d comm=%s\n",
         kind, frame[FRAME_PC], badvaddr,
         u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
+}
+#endif
+
+#ifdef N64
+static int
+n64_user_fault_read_word(unsigned paddr, unsigned *cached, unsigned *uncached)
+{
+    unsigned rdram;
+
+    if (cached == 0 || uncached == 0 || (paddr & 3u) != 0)
+        return EINVAL;
+    rdram = n64_rdram_size();
+    if (paddr >= rdram || sizeof(unsigned) > rdram - paddr)
+        return EFAULT;
+    *cached = *(volatile unsigned *)N64_PHYS_TO_KSEG0(paddr);
+    *uncached = *(volatile unsigned *)N64_PHYS_TO_KSEG1(paddr);
+    return 0;
+}
+
+static int
+n64_user_fault_tlb_paddr(const struct pmap_tlb_diagnostics *tlb,
+    unsigned vaddr, unsigned *paddr)
+{
+    unsigned entrylo;
+    unsigned page;
+
+    if (tlb == 0 || paddr == 0 || !tlb->ptd_hardware_found ||
+        tlb->ptd_hardware_pagemask != TLB_PAGEMASK_4K)
+        return EINVAL;
+    entrylo = (vaddr & VM_PAGE_SIZE) != 0 ?
+        tlb->ptd_hardware_entrylo1 : tlb->ptd_hardware_entrylo0;
+    if ((entrylo & TLB_ENTRYLO_V) == 0)
+        return ENOENT;
+    page = (entrylo & ~0x3fu) << 6;
+    *paddr = page | (vaddr & VM_PAGE_MASK);
+    return 0;
+}
+
+static void
+n64_dump_user_mapping(const char *label, unsigned vaddr)
+{
+    struct pmap_tlb_diagnostics tlb;
+    unsigned cached_word;
+    unsigned expected_paddr;
+    unsigned ignored_cached;
+    unsigned tlb_paddr;
+    unsigned tlb_word;
+    unsigned uncached_word;
+    int expected_word_error;
+    int pmap_error;
+    int tlb_word_error;
+
+    pmap_error = pmap_get_tlb_diagnostics(vaddr, &tlb);
+    expected_paddr = 0;
+    cached_word = 0;
+    uncached_word = 0;
+    expected_word_error = EFAULT;
+    tlb_paddr = 0;
+    tlb_word = 0;
+    tlb_word_error = EFAULT;
+    if (pmap_error == 0 &&
+        (tlb.ptd_query_pte & 0x001u) != 0) {
+        expected_paddr = (tlb.ptd_query_pte & ~VM_PAGE_MASK) |
+            (vaddr & VM_PAGE_MASK);
+        expected_word_error = n64_user_fault_read_word(expected_paddr,
+            &cached_word, &uncached_word);
+    }
+    if (pmap_error == 0 &&
+        n64_user_fault_tlb_paddr(&tlb, vaddr, &tlb_paddr) == 0)
+        tlb_word_error = n64_user_fault_read_word(tlb_paddr,
+            &ignored_cached, &tlb_word);
+
+    printf("N64_USER_FAULT map=%s vaddr=%08x error=%d pmap=%08x "
+        "asid=%u generation=%u/%u next=%u pte=%08x paddr=%08x\n",
+        label, vaddr, pmap_error,
+        pmap_error == 0 ? tlb.ptd_active_pmap : 0,
+        pmap_error == 0 ? tlb.ptd_active_asid : 0,
+        pmap_error == 0 ? tlb.ptd_active_generation : 0,
+        pmap_error == 0 ? tlb.ptd_asid_generation : 0,
+        pmap_error == 0 ? tlb.ptd_next_asid : 0,
+        pmap_error == 0 ? tlb.ptd_query_pte : 0, expected_paddr);
+    printf("N64_USER_FAULT expected hi=%08x lo0=%08x lo1=%08x "
+        "word_error=%d cached=%08x uncached=%08x\n",
+        pmap_error == 0 ? tlb.ptd_query_entryhi : 0,
+        pmap_error == 0 ? tlb.ptd_query_entrylo0 : 0,
+        pmap_error == 0 ? tlb.ptd_query_entrylo1 : 0,
+        expected_word_error, cached_word, uncached_word);
+    printf("N64_USER_FAULT hardware found=%u index=%u mask=%08x "
+        "hi=%08x lo0=%08x lo1=%08x paddr=%08x "
+        "word_error=%d word=%08x\n",
+        pmap_error == 0 ? tlb.ptd_hardware_found : 0,
+        pmap_error == 0 ? tlb.ptd_hardware_index : 0,
+        pmap_error == 0 ? tlb.ptd_hardware_pagemask : 0,
+        pmap_error == 0 ? tlb.ptd_hardware_entryhi : 0,
+        pmap_error == 0 ? tlb.ptd_hardware_entrylo0 : 0,
+        pmap_error == 0 ? tlb.ptd_hardware_entrylo1 : 0,
+        tlb_paddr, tlb_word_error, tlb_word);
+    printf("N64_USER_FAULT refill count=%lu last_pmap=%08x "
+        "last_vaddr=%08x repeat=%u fast_pc=%08x fast_vaddr=%08x "
+        "fast_repeat=%u directory=%08x/%08x\n",
+        pmap_error == 0 ? (unsigned long)tlb.ptd_refills : 0,
+        pmap_error == 0 ? tlb.ptd_last_pmap : 0,
+        pmap_error == 0 ? tlb.ptd_last_vaddr : 0,
+        pmap_error == 0 ? tlb.ptd_repeat : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_epc : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_vaddr : 0,
+        pmap_error == 0 ? tlb.ptd_fast_repeat : 0,
+        pmap_error == 0 ? tlb.ptd_active_directory : 0,
+        pmap_error == 0 ? tlb.ptd_fast_directory : 0);
+}
+
+static void
+n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
+    unsigned badvaddr, int signal, int vm_error)
+{
+    struct mips_zswap_stats zswap;
+    struct vm_object_stats object;
+    struct pmap_stats pmap;
+    unsigned entryhi;
+    unsigned faultpc;
+    unsigned wired;
+    int object_error;
+    int pmap_error;
+    int zswap_error;
+
+    faultpc = frame[FRAME_PC] + ((rawcause & CA_BD) != 0 ? NBPW : 0);
+    entryhi = mips_read_c0_register(C0_ENTRYHI, 0);
+    wired = mips_read_c0_register(C0_WIRED, 0);
+    pmap_error = pmap_get_stats(&pmap);
+    object_error = vm_object_get_stats(&object);
+#ifdef MIPS_ZSWAP_ENABLED
+    zswap_error = n64ramswap_get_zswap_stats(&zswap);
+#else
+    bzero((caddr_t)&zswap, sizeof(zswap));
+    zswap_error = ENXIO;
+#endif
+
+    printf("\nN64_USER_FAULT kind=%s signal=%d vm_error=%d pid=%d "
+        "comm=%s epc=%08x pc=%08x cause=%08x code=%u ce=%u "
+        "status=%08x badvaddr=%08x\n",
+        kind, signal, vm_error, u.u_procp ? u.u_procp->p_pid : -1,
+        u.u_comm, frame[FRAME_PC], faultpc, rawcause,
+        (rawcause & CA_EXC_CODE) >> 2, (rawcause & CA_CE) >> 28,
+        frame[FRAME_STATUS], badvaddr);
+    printf("N64_USER_FAULT sp=%08x ra=%08x entryhi=%08x wired=%u\n",
+        frame[FRAME_SP], frame[FRAME_RA], entryhi, wired);
+    printf("N64_USER_FAULT vm stats_error=%d pageins=%lu pageouts=%lu "
+        "swap_failures=%lu resident=%lu swapped=%lu\n",
+        object_error,
+        object_error == 0 ? (unsigned long)object.vos_pageins : 0,
+        object_error == 0 ? (unsigned long)object.vos_pageouts : 0,
+        object_error == 0 ? (unsigned long)object.vos_swap_failures : 0,
+        object_error == 0 ? (unsigned long)object.vos_resident_pages : 0,
+        object_error == 0 ? (unsigned long)object.vos_swapped_pages : 0);
+    printf("N64_USER_FAULT pmap stats_error=%d refills=%lu "
+        "flushes=%lu rollovers=%lu invalidations=%lu\n",
+        pmap_error,
+        pmap_error == 0 ? (unsigned long)pmap.pms_tlb_refills : 0,
+        pmap_error == 0 ? (unsigned long)pmap.pms_full_flushes : 0,
+        pmap_error == 0 ? (unsigned long)pmap.pms_asid_rollovers : 0,
+        pmap_error == 0 ?
+        (unsigned long)pmap.pms_targeted_invalidations : 0);
+    printf("N64_USER_FAULT zswap stats_error=%d read_errors=%u "
+        "last=%u block=%u unit=%u units=%u length=%u flags=%04x "
+        "valid=%u raw=%u compressed=%u used_units=%u/%u\n",
+        zswap_error,
+        zswap_error == 0 ? zswap.mzs_read_errors : 0,
+        zswap_error == 0 ? zswap.mzs_last_error : 0,
+        zswap_error == 0 ? zswap.mzs_last_error_block : 0,
+        zswap_error == 0 ? zswap.mzs_last_error_unit : 0,
+        zswap_error == 0 ? zswap.mzs_last_error_units : 0,
+        zswap_error == 0 ? zswap.mzs_last_error_length : 0,
+        zswap_error == 0 ? zswap.mzs_last_error_flags : 0,
+        zswap_error == 0 ? zswap.mzs_valid_blocks : 0,
+        zswap_error == 0 ? zswap.mzs_raw_blocks : 0,
+        zswap_error == 0 ? zswap.mzs_compressed_blocks : 0,
+        zswap_error == 0 ? zswap.mzs_used_units : 0,
+        zswap_error == 0 ? zswap.mzs_phys_units : 0);
+    n64_dump_user_mapping("pc", faultpc);
+    if (badvaddr != faultpc)
+        n64_dump_user_mapping("badvaddr", badvaddr);
 }
 #endif
 
@@ -803,6 +986,10 @@ exception(int *frame)
             frame[FRAME_STATUS] = (frame[FRAME_STATUS] | ST_CU1) & ~ST_FR;
             goto ret;
         }
+#ifdef N64
+        n64_dump_user_fault("coprocessor", frame, rawcause, badvaddr,
+            SIGEMT, -1);
+#endif
         psig = SIGEMT;
         mips_intr_enable();
         break;
@@ -831,10 +1018,17 @@ exception(int *frame)
         vm_error = mips_user_vm_fault(badvaddr, VM_PROT_WRITE);
         if (vm_error == 0)
             goto ret;
-        if (mips_grow_user_stack(badvaddr, 1) == 0 &&
-            mips_user_vm_fault(badvaddr, VM_PROT_WRITE) == 0)
-            goto ret;
+        if (mips_grow_user_stack(badvaddr, 1) == 0) {
+            vm_error = mips_user_vm_fault(badvaddr, VM_PROT_WRITE);
+            if (vm_error == 0)
+                goto ret;
+        }
         psig = vm_error == ENXIO || vm_error == EIO ? SIGBUS : SIGSEGV;
+#ifdef N64
+        if (psig == SIGBUS)
+            n64_dump_user_fault("vm-write", frame, rawcause, badvaddr,
+                psig, vm_error);
+#endif
         mips_intr_enable();
         break;
 
@@ -842,10 +1036,17 @@ exception(int *frame)
         vm_error = mips_user_vm_fault(badvaddr, VM_PROT_READ);
         if (vm_error == 0)
             goto ret;
-        if (mips_grow_user_stack(badvaddr, 1) == 0 &&
-            mips_user_vm_fault(badvaddr, VM_PROT_READ) == 0)
-            goto ret;
+        if (mips_grow_user_stack(badvaddr, 1) == 0) {
+            vm_error = mips_user_vm_fault(badvaddr, VM_PROT_READ);
+            if (vm_error == 0)
+                goto ret;
+        }
         psig = vm_error == ENXIO || vm_error == EIO ? SIGBUS : SIGSEGV;
+#ifdef N64
+        if (psig == SIGBUS)
+            n64_dump_user_fault("vm-read", frame, rawcause, badvaddr,
+                psig, vm_error);
+#endif
         mips_intr_enable();
         break;
 
@@ -866,6 +1067,10 @@ exception(int *frame)
             mips_trace_user_fault("address", frame, badvaddr);
 #endif
             psig = SIGBUS;
+#ifdef N64
+            n64_dump_user_fault("address", frame, rawcause, badvaddr,
+                psig, -1);
+#endif
             break;
         case CA_IBE + USER:
         case CA_DBE + USER:
@@ -873,6 +1078,10 @@ exception(int *frame)
             mips_trace_user_fault("bus", frame, badvaddr);
 #endif
             psig = SIGBUS;
+#ifdef N64
+            n64_dump_user_fault("bus", frame, rawcause, badvaddr,
+                psig, -1);
+#endif
             break;
         case CA_RI + USER:
             psig = SIGILL;
