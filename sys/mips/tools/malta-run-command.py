@@ -26,18 +26,16 @@ def write_all(master, data):
 
 
 def write_command(master, command, line_delay, chunk_size, chunk_delay):
-    wrapped = command + "\necho " + COMMAND_DONE + "$?\n"
-    for line in wrapped.splitlines(True):
-        data = line.encode("ascii")
-        if chunk_size:
-            for off in range(0, len(data), chunk_size):
-                write_all(master, data[off:off + chunk_size])
-                if chunk_delay:
-                    time.sleep(chunk_delay)
-        else:
-            write_all(master, data)
-        if len(line) > 1 and line_delay:
-            time.sleep(line_delay)
+    data = (command + "\n").encode("ascii")
+    if chunk_size:
+        for off in range(0, len(data), chunk_size):
+            write_all(master, data[off:off + chunk_size])
+            if chunk_delay:
+                time.sleep(chunk_delay)
+    else:
+        write_all(master, data)
+    if len(data) > 1 and line_delay:
+        time.sleep(line_delay)
 
 
 def command_run(args):
@@ -121,9 +119,17 @@ def command_run(args):
                     write_command(
                         master, args.command, args.line_delay,
                         args.write_chunk_size, args.chunk_delay)
-                    state = "running"
+                    state = "command"
                     buf = ""
-                elif (state == "running" and
+                elif (state == "command" and not ready and
+                      SHELL_PROMPT_RE.search(buf)):
+                    write_command(
+                        master, "echo " + COMMAND_DONE + "$?",
+                        args.line_delay, args.write_chunk_size,
+                        args.chunk_delay)
+                    state = "status"
+                    buf = ""
+                elif (state == "status" and
                       re.search(r"(?:^|[\r\n])#?\s*" +
                                 re.escape(COMMAND_DONE), buf) and
                       re.search(r"(?:^|[\r\n])#\s*$", buf)):
@@ -131,7 +137,8 @@ def command_run(args):
 
                 if time.time() - started > args.timeout:
                     raise TimeoutError("QEMU command timeout")
-                if state == "running" and time.time() - last > args.silence_timeout:
+                if (state in ("command", "status") and
+                        time.time() - last > args.silence_timeout):
                     raise TimeoutError("no QEMU output during command")
         finally:
             try:
