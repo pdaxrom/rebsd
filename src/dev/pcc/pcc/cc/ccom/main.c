@@ -97,8 +97,9 @@ segvcatch(int a)
 {
 	char buf[1024];
 
-	snprintf(buf, sizeof buf, "%sinternal compiler error: %s, line %d\n",
-	    nerrors ? "" : "major ", ftitle, lineno);
+	snprintf(buf, sizeof buf,
+	    "%sinternal compiler error: signal %d, %s, line %d\n",
+	    nerrors ? "" : "major ", a, ftitle, lineno);
 	(void)write(STDERR_FILENO, buf, strlen(buf));
 	_exit(1);
 }

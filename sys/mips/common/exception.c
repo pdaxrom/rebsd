@@ -209,6 +209,7 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
     unsigned wired;
     int object_error;
     int pmap_error;
+    int vmspace_error;
     int zswap_error;
 
     faultpc = frame[FRAME_PC] + ((rawcause & CA_BD) != 0 ? NBPW : 0);
@@ -216,6 +217,8 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
     wired = mips_read_c0_register(C0_WIRED, 0);
     pmap_error = pmap_get_stats(&pmap);
     object_error = vm_object_get_stats(&object);
+    vmspace_error = u.u_procp != 0 && u.u_procp->p_vmspace != 0 ?
+        vmspace_validate(u.u_procp->p_vmspace) : EINVAL;
 #ifdef MIPS_ZSWAP_ENABLED
     zswap_error = n64ramswap_get_zswap_stats(&zswap);
 #else
@@ -232,6 +235,54 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
         frame[FRAME_STATUS], badvaddr);
     printf("N64_USER_FAULT sp=%08x ra=%08x entryhi=%08x wired=%u\n",
         frame[FRAME_SP], frame[FRAME_RA], entryhi, wired);
+    printf("N64_USER_FAULT data=%08x+%08x stack=%08x+%08x "
+        "vmspace_error=%d\n",
+        u.u_procp ? (unsigned)u.u_procp->p_daddr : 0,
+        u.u_procp ? (unsigned)u.u_procp->p_dsize : 0,
+        u.u_procp ? (unsigned)u.u_procp->p_saddr : 0,
+        u.u_procp ? (unsigned)u.u_procp->p_ssize : 0, vmspace_error);
+    printf("N64_USER_FAULT r1=%08x r2=%08x r3=%08x "
+        "r4=%08x r5=%08x r6=%08x r7=%08x\n",
+        frame[FRAME_R1], frame[FRAME_R2], frame[FRAME_R3],
+        frame[FRAME_R4], frame[FRAME_R5], frame[FRAME_R6],
+        frame[FRAME_R7]);
+    printf("N64_USER_FAULT r8=%08x r9=%08x r10=%08x "
+        "r11=%08x r12=%08x r13=%08x r14=%08x r15=%08x\n",
+        frame[FRAME_R8], frame[FRAME_R9], frame[FRAME_R10],
+        frame[FRAME_R11], frame[FRAME_R12], frame[FRAME_R13],
+        frame[FRAME_R14], frame[FRAME_R15]);
+    printf("N64_USER_FAULT r16=%08x r17=%08x r18=%08x "
+        "r19=%08x r20=%08x r21=%08x r22=%08x r23=%08x\n",
+        frame[FRAME_R16], frame[FRAME_R17], frame[FRAME_R18],
+        frame[FRAME_R19], frame[FRAME_R20], frame[FRAME_R21],
+        frame[FRAME_R22], frame[FRAME_R23]);
+    printf("N64_USER_FAULT r24=%08x r25=%08x gp=%08x "
+        "fp=%08x lo=%08x hi=%08x\n",
+        frame[FRAME_R24], frame[FRAME_R25], frame[FRAME_GP],
+        frame[FRAME_FP], frame[FRAME_LO], frame[FRAME_HI]);
+    printf("N64_USER_FAULT high r1=%08x r2=%08x r3=%08x "
+        "r4=%08x r5=%08x r6=%08x r7=%08x\n",
+        frame[FRAME_R1 - 1], frame[FRAME_R2 - 1],
+        frame[FRAME_R3 - 1], frame[FRAME_R4 - 1],
+        frame[FRAME_R5 - 1], frame[FRAME_R6 - 1],
+        frame[FRAME_R7 - 1]);
+    printf("N64_USER_FAULT high r8=%08x r9=%08x r10=%08x "
+        "r11=%08x r12=%08x r13=%08x r14=%08x r15=%08x\n",
+        frame[FRAME_R8 - 1], frame[FRAME_R9 - 1],
+        frame[FRAME_R10 - 1], frame[FRAME_R11 - 1],
+        frame[FRAME_R12 - 1], frame[FRAME_R13 - 1],
+        frame[FRAME_R14 - 1], frame[FRAME_R15 - 1]);
+    printf("N64_USER_FAULT high r16=%08x r17=%08x r18=%08x "
+        "r19=%08x r20=%08x r21=%08x r22=%08x r23=%08x\n",
+        frame[FRAME_R16 - 1], frame[FRAME_R17 - 1],
+        frame[FRAME_R18 - 1], frame[FRAME_R19 - 1],
+        frame[FRAME_R20 - 1], frame[FRAME_R21 - 1],
+        frame[FRAME_R22 - 1], frame[FRAME_R23 - 1]);
+    printf("N64_USER_FAULT high r24=%08x r25=%08x gp=%08x "
+        "fp=%08x lo=%08x hi=%08x\n",
+        frame[FRAME_R24 - 1], frame[FRAME_R25 - 1],
+        frame[FRAME_GP - 1], frame[FRAME_FP - 1],
+        frame[FRAME_LO - 1], frame[FRAME_HI - 1]);
     printf("N64_USER_FAULT vm stats_error=%d pageins=%lu pageouts=%lu "
         "swap_failures=%lu resident=%lu swapped=%lu\n",
         object_error,
@@ -714,9 +765,15 @@ mips_grow_user_stack(vm_vaddr_t address, int from_fault)
 }
 
 static int
-mips_check_user_stack(int *frame)
+mips_check_user_stack(int *frame, unsigned rawcause)
 {
-    return mips_grow_user_stack(frame[FRAME_SP], 0) == 0 ? 0 : SIGSEGV;
+    if (mips_grow_user_stack(frame[FRAME_SP], 0) == 0)
+        return 0;
+#ifdef N64
+    n64_dump_user_fault("stack", frame, rawcause, frame[FRAME_SP],
+        SIGSEGV, EFAULT);
+#endif
+    return SIGSEGV;
 }
 
 static void
@@ -739,7 +796,7 @@ mips_restore_user_fpu(int status)
 }
 
 static void
-mips_syscall(int *frame)
+mips_syscall(int *frame, unsigned rawcause)
 {
     const struct sysent *callp = &sysent[0];
     unsigned arg;
@@ -758,6 +815,10 @@ mips_syscall(int *frame)
 
         if (copyin((caddr_t)opc, (caddr_t)&instruction,
             sizeof(instruction)) != 0) {
+#ifdef N64
+            n64_dump_user_fault("syscall-fetch", frame, rawcause,
+                opc, SIGSEGV, EFAULT);
+#endif
             if (systrace)
                 uprintf("STRACE signal pid=%d sig=%d reason=fetch "
                     "pc=%08x sp=%08x\n", u.u_procp->p_pid, SIGSEGV,
@@ -957,7 +1018,7 @@ exception(int *frame)
         if ((cause & USER) && runrun) {
             u.u_frame = frame;
             u.u_code = frame[FRAME_PC];
-            psig = mips_check_user_stack(frame);
+            psig = mips_check_user_stack(frame, rawcause);
             if (psig)
                 break;
             mips_intr_enable();
@@ -973,10 +1034,10 @@ exception(int *frame)
         u.u_error = 0;
         u.u_frame = frame;
         u.u_code = frame[FRAME_PC];
-        psig = mips_check_user_stack(frame);
+        psig = mips_check_user_stack(frame, rawcause);
         if (psig)
             break;
-        mips_syscall(frame);
+        mips_syscall(frame, rawcause);
         goto out;
 
     case CA_CPU + USER:
@@ -1023,9 +1084,8 @@ exception(int *frame)
         }
         psig = vm_error == ENXIO || vm_error == EIO ? SIGBUS : SIGSEGV;
 #ifdef N64
-        if (psig == SIGBUS)
-            n64_dump_user_fault("vm-write", frame, rawcause, badvaddr,
-                psig, vm_error);
+        n64_dump_user_fault("vm-write", frame, rawcause, badvaddr,
+            psig, vm_error);
 #endif
         mips_intr_enable();
         break;
@@ -1041,9 +1101,8 @@ exception(int *frame)
         }
         psig = vm_error == ENXIO || vm_error == EIO ? SIGBUS : SIGSEGV;
 #ifdef N64
-        if (psig == SIGBUS)
-            n64_dump_user_fault("vm-read", frame, rawcause, badvaddr,
-                psig, vm_error);
+        n64_dump_user_fault("vm-read", frame, rawcause, badvaddr,
+            psig, vm_error);
 #endif
         mips_intr_enable();
         break;
