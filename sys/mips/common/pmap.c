@@ -69,6 +69,10 @@ extern void pmap_md_activate(unsigned);
 extern void pmap_md_tlb_update(unsigned, unsigned, unsigned);
 extern int pmap_md_tlb_invalidate(unsigned);
 extern void pmap_md_tlb_flush(void);
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+extern int pmap_md_tlb_lookup(unsigned, unsigned *, unsigned *, unsigned *,
+    unsigned *, unsigned *);
+#endif
 extern void *pmap_md_direct_map(vm_paddr_t, vm_size_t, enum pmap_cache);
 extern int pmap_md_page_sync(vm_paddr_t, unsigned);
 extern int pmap_md_range_sync(vm_paddr_t, vm_size_t, unsigned);
@@ -692,8 +696,21 @@ pmap_extract(struct pmap *pmap, vm_vaddr_t vaddr, vm_paddr_t *result)
 int
 pmap_activate(struct pmap *pmap)
 {
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+    int interrupt_status;
+#endif
+
     if (!pmap_valid(pmap))
         return EINVAL;
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+    /*
+     * The fast-refill directory, EntryHi ASID, and diagnostic active pmap
+     * form one hardware context.  Publish them with interrupts masked so an
+     * exception can never observe a directory from one process and an ASID
+     * from another.
+     */
+    interrupt_status = splhigh();
+#endif
     if (pmap->pm_asid == 0 ||
         pmap->pm_generation != pmap_asid_generation) {
         if (pmap_next_asid > PMAP_ASID_LAST) {
@@ -711,17 +728,28 @@ pmap_activate(struct pmap *pmap)
     mips_pmap_fast_directory = pmap->pm_directory;
     pmap_md_activate(pmap->pm_asid);
     pmap_active = pmap;
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+    splx(interrupt_status);
+#endif
     return 0;
 }
 
 void
 pmap_deactivate(struct pmap *pmap)
 {
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+    int interrupt_status;
+
+    interrupt_status = splhigh();
+#endif
     if (pmap_active == pmap) {
         mips_pmap_fast_directory = 0;
         pmap_md_activate(0);
         pmap_active = 0;
     }
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+    splx(interrupt_status);
+#endif
 }
 
 int
@@ -1150,10 +1178,20 @@ pmap_get_tlb_diagnostics(vm_vaddr_t vaddr,
     diagnostics->ptd_active_pmap = (unsigned)(uintptr_t)pmap_active;
     diagnostics->ptd_active_asid =
         pmap_active != 0 ? pmap_active->pm_asid : 0;
+    diagnostics->ptd_active_generation =
+        pmap_active != 0 ? pmap_active->pm_generation : 0;
+    diagnostics->ptd_asid_generation = pmap_asid_generation;
+    diagnostics->ptd_next_asid = pmap_next_asid;
     diagnostics->ptd_query_pte = 0;
     diagnostics->ptd_query_entryhi = 0;
     diagnostics->ptd_query_entrylo0 = 0;
     diagnostics->ptd_query_entrylo1 = 0;
+    diagnostics->ptd_hardware_found = 0;
+    diagnostics->ptd_hardware_index = 0;
+    diagnostics->ptd_hardware_pagemask = 0;
+    diagnostics->ptd_hardware_entryhi = 0;
+    diagnostics->ptd_hardware_entrylo0 = 0;
+    diagnostics->ptd_hardware_entrylo1 = 0;
     diagnostics->ptd_fast_last_epc = mips_pmap_fast_last_epc;
     diagnostics->ptd_fast_last_vaddr = mips_pmap_fast_last_vaddr;
     diagnostics->ptd_fast_repeat = mips_pmap_fast_repeat;
@@ -1174,6 +1212,15 @@ pmap_get_tlb_diagnostics(vm_vaddr_t vaddr,
         even_pte == 0 ? 0 : pmap_tlb_entrylo(*even_pte);
     diagnostics->ptd_query_entrylo1 =
         odd_pte == 0 ? 0 : pmap_tlb_entrylo(*odd_pte);
+#if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
+    if (pmap_md_tlb_lookup(diagnostics->ptd_query_entryhi,
+        &diagnostics->ptd_hardware_index,
+        &diagnostics->ptd_hardware_pagemask,
+        &diagnostics->ptd_hardware_entryhi,
+        &diagnostics->ptd_hardware_entrylo0,
+        &diagnostics->ptd_hardware_entrylo1) == 0)
+        diagnostics->ptd_hardware_found = 1;
+#endif
     return 0;
 }
 

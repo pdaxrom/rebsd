@@ -26,6 +26,7 @@ SECTIONS
   .text : {
     _ftext = .;
     *(.text .stub .text.* .gnu.linkonce.t.*)
+    __text_code_end = .;
     *(.rodata .rodata.* .gnu.linkonce.r.*)
     . = ALIGN(16);
   } :text

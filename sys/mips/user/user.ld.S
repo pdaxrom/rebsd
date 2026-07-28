@@ -30,6 +30,7 @@ SECTIONS
   .text : {
     _ftext = .;
     *(.text .stub .text.* .gnu.linkonce.t.*)
+    __text_code_end = .;
     *(.rodata .rodata.* .gnu.linkonce.r.*)
     *(.eh_frame .eh_frame.*)
     . = ALIGN(16);

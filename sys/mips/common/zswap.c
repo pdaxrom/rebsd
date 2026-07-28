@@ -10,6 +10,9 @@
 #define MIPS_ZSWAP_F_VALID         0x0001
 #define MIPS_ZSWAP_F_ZERO          0x0002
 #define MIPS_ZSWAP_F_RAW           0x0004
+#define MIPS_ZSWAP_F_MASK          0x00ff
+#define MIPS_ZSWAP_CHECKSUM_SHIFT  8
+#define MIPS_ZSWAP_CHECKSUM_MASK   0xff00
 
 static void
 mips_zswap_zero(void *address, unsigned bytes)
@@ -179,6 +182,25 @@ mips_zswap_is_zero(const u_char *src)
         if (src[i] != 0)
             return 0;
     return 1;
+}
+
+/*
+ * Store an inexpensive integrity byte in the otherwise unused high byte of
+ * entry flags.  This detects corruption of both raw and compressed backing
+ * data without increasing the fixed metadata footprint on small systems.
+ */
+static unsigned
+mips_zswap_checksum(const u_char *src)
+{
+    unsigned checksum;
+    unsigned i;
+
+    checksum = 0xa5;
+    for (i = 0; i < MIPS_ZSWAP_BLOCK_BYTES; ++i) {
+        checksum = ((checksum << 5) | (checksum >> 3)) & 0xff;
+        checksum ^= src[i];
+    }
+    return checksum;
 }
 
 static int
@@ -370,25 +392,73 @@ mips_zswap_read_block(struct mips_zswap *zswap, unsigned block,
     u_char *dst)
 {
     struct mips_zswap_entry *entry;
+    unsigned checksum;
+    unsigned flags;
     unsigned i;
+    int error;
 
     if (block >= zswap->mz_blocks)
         return EINVAL;
     entry = &zswap->mz_entry[block];
-    if ((entry->flags & MIPS_ZSWAP_F_VALID) == 0 ||
-        (entry->flags & MIPS_ZSWAP_F_ZERO)) {
+    if ((entry->flags & MIPS_ZSWAP_F_VALID) == 0) {
         for (i = 0; i < MIPS_ZSWAP_BLOCK_BYTES; ++i)
             dst[i] = 0;
         return 0;
     }
-    if (entry->flags & MIPS_ZSWAP_F_RAW) {
-        mips_zswap_copy_from_store(zswap, entry->unit, dst,
-            MIPS_ZSWAP_BLOCK_BYTES);
+    flags = entry->flags & MIPS_ZSWAP_F_MASK;
+    if (flags & MIPS_ZSWAP_F_ZERO) {
+        if (flags != (MIPS_ZSWAP_F_VALID | MIPS_ZSWAP_F_ZERO) ||
+            entry->unit != 0 || entry->units != 0 ||
+            entry->length != 0 ||
+            (entry->flags & MIPS_ZSWAP_CHECKSUM_MASK) != 0) {
+            error = MIPS_ZSWAP_ERROR_METADATA;
+            goto read_error;
+        }
+        for (i = 0; i < MIPS_ZSWAP_BLOCK_BYTES; ++i)
+            dst[i] = 0;
         return 0;
     }
-    mips_zswap_copy_from_store(zswap, entry->unit, zswap->mz_comp,
-        entry->length);
-    return mips_zswap_decompress(zswap->mz_comp, entry->length, dst);
+    if ((flags & ~(MIPS_ZSWAP_F_VALID | MIPS_ZSWAP_F_ZERO |
+        MIPS_ZSWAP_F_RAW)) != 0 || entry->units == 0 ||
+        entry->unit >= zswap->mz_phys_units ||
+        entry->units > zswap->mz_phys_units - entry->unit ||
+        entry->length == 0 ||
+        entry->length > entry->units * MIPS_ZSWAP_UNIT_BYTES ||
+        ((flags & MIPS_ZSWAP_F_RAW) != 0 &&
+        (entry->units != MIPS_ZSWAP_UNITS_PER_BLOCK ||
+        entry->length != MIPS_ZSWAP_BLOCK_BYTES))) {
+        error = MIPS_ZSWAP_ERROR_METADATA;
+        goto read_error;
+    }
+    if (flags & MIPS_ZSWAP_F_RAW) {
+        mips_zswap_copy_from_store(zswap, entry->unit, dst,
+            MIPS_ZSWAP_BLOCK_BYTES);
+    } else {
+        mips_zswap_copy_from_store(zswap, entry->unit, zswap->mz_comp,
+            entry->length);
+        if (mips_zswap_decompress(zswap->mz_comp, entry->length, dst) != 0) {
+            error = MIPS_ZSWAP_ERROR_DECOMPRESS;
+            goto read_error;
+        }
+    }
+    checksum = mips_zswap_checksum(dst);
+    if (checksum !=
+        ((entry->flags & MIPS_ZSWAP_CHECKSUM_MASK) >>
+        MIPS_ZSWAP_CHECKSUM_SHIFT)) {
+        error = MIPS_ZSWAP_ERROR_CHECKSUM;
+        goto read_error;
+    }
+    return 0;
+
+read_error:
+    ++zswap->mz_read_errors;
+    zswap->mz_last_error = error;
+    zswap->mz_last_error_block = block;
+    zswap->mz_last_error_unit = entry->unit;
+    zswap->mz_last_error_units = entry->units;
+    zswap->mz_last_error_length = entry->length;
+    zswap->mz_last_error_flags = entry->flags;
+    return EIO;
 }
 
 static int
@@ -454,7 +524,8 @@ mips_zswap_write_block(struct mips_zswap *zswap, unsigned block,
     entry->unit = (u_short)unit;
     entry->units = (u_short)units;
     entry->length = (u_short)len;
-    entry->flags = (u_short)flags;
+    entry->flags = (u_short)(flags |
+        (mips_zswap_checksum(src) << MIPS_ZSWAP_CHECKSUM_SHIFT));
     return 0;
 }
 
@@ -562,6 +633,13 @@ mips_zswap_get_stats(const struct mips_zswap *zswap,
     mips_zswap_zero(stats, sizeof(*stats));
     stats->mzs_logical_blocks = zswap->mz_blocks;
     stats->mzs_phys_units = zswap->mz_phys_units;
+    stats->mzs_read_errors = zswap->mz_read_errors;
+    stats->mzs_last_error = zswap->mz_last_error;
+    stats->mzs_last_error_block = zswap->mz_last_error_block;
+    stats->mzs_last_error_unit = zswap->mz_last_error_unit;
+    stats->mzs_last_error_units = zswap->mz_last_error_units;
+    stats->mzs_last_error_length = zswap->mz_last_error_length;
+    stats->mzs_last_error_flags = zswap->mz_last_error_flags;
     for (block = 0; block < zswap->mz_blocks; ++block) {
         entry = &zswap->mz_entry[block];
         if ((entry->flags & MIPS_ZSWAP_F_VALID) == 0)

@@ -12,6 +12,11 @@
 #define MIPS_ZSWAP_MAX_UNITS         16384
 #define MIPS_ZSWAP_HASH_SIZE         1024
 
+#define MIPS_ZSWAP_ERROR_NONE        0
+#define MIPS_ZSWAP_ERROR_METADATA    1
+#define MIPS_ZSWAP_ERROR_DECOMPRESS  2
+#define MIPS_ZSWAP_ERROR_CHECKSUM    3
+
 struct mips_zswap_entry {
     u_short unit;
     u_short units;
@@ -27,6 +32,13 @@ struct mips_zswap_stats {
     unsigned mzs_raw_blocks;
     unsigned mzs_compressed_blocks;
     unsigned mzs_used_units;
+    unsigned mzs_read_errors;
+    unsigned mzs_last_error;
+    unsigned mzs_last_error_block;
+    unsigned mzs_last_error_unit;
+    unsigned mzs_last_error_units;
+    unsigned mzs_last_error_length;
+    unsigned mzs_last_error_flags;
 };
 
 struct mips_zswap {
@@ -41,6 +53,13 @@ struct mips_zswap {
     unsigned mz_blocks;
     unsigned mz_phys_units;
     unsigned mz_alloc_hint;
+    unsigned mz_read_errors;
+    unsigned mz_last_error;
+    unsigned mz_last_error_block;
+    unsigned mz_last_error_unit;
+    unsigned mz_last_error_units;
+    unsigned mz_last_error_length;
+    unsigned mz_last_error_flags;
     int mz_initialized;
 };
 

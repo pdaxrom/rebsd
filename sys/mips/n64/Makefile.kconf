@@ -1377,18 +1377,11 @@ pcc-debug-image:
 	    N64_PCC_DEBUG_ROOTFS_KBYTES=$(N64_PCC_DEBUG_ROOTFS_KBYTES) \
 	    pcc-debug.z64
 
-pcc-hw-test-stage: $(N64_ROOTFS_BUILD_MANIFEST) $(MIPS_PCC_PROVIDER_DEPS) \
+pcc-hw-test-stage: $(N64_ROOTFS_BUILD_MANIFEST) $(N64_LINPACK_ROOTFS_STAMP) \
+    $(MIPS_PCC_PROVIDER_DEPS) \
     $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_AOUT_AR) \
     $(N64_LINPACK_SMOKE_SCRIPT) $(N64_LINPACK_SMOKE_SRC) \
     $(N64_PCC_REGRESS_SCRIPT) $(N64_PCC_TEST_SRCS)
-	python3 $(N64_LINPACK_SMOKE_SCRIPT) build \
-	    --source $(abspath $(N64_LINPACK_SMOKE_SRC)) \
-	    --out $(N64_LINPACK_SMOKE_OUT) \
-	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
-	    --pcc $(MIPS_PCC_CC) \
-	    --cpu $(N64_USERLAND_CPU) \
-	    --float-abi $(N64_USERLAND_FLOAT) \
-	    --endian $(N64_USERLAND_ENDIAN)
 	python3 $(N64_LINPACK_SMOKE_SCRIPT) stage \
 	    --out $(N64_LINPACK_SMOKE_OUT) \
 	    --rootfs $(abspath $(N64_ROOTFS_STAGE)) \
