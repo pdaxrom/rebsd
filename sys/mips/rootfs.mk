@@ -306,6 +306,8 @@ MIPS_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolcha
 MIPS_NATIVE_PCC_MAKEFILE = $(TOPSRC)/sys/mips/tools/Makefile.native-pcc
 MIPS_NATIVE_PCC_CONFIG = $(TOPSRC)/sys/mips/tools/native-pcc-config.h
 MIPS_VR4300_HILO_CHECK = $(TOPSRC)/sys/mips/n64/native/check-vr4300-hilo.sh
+MIPS_VR4300_ORDER_CHECK = python3 \
+    $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py
 MIPS_ASYNC_EPILOGUE_CHECK = $(TOPSRC)/sys/mips/n64/native/check-mips-async-epilogue.sh
 MIPS_REAL_MAKE ?= $(if $(REBSD_REAL_MAKE),$(REBSD_REAL_MAKE),$(MAKE))
 MIPS_NATIVE_PCC_BUILD ?= mips-native-pcc-build.$(MIPS_ROOTFS_ABI)
@@ -1456,7 +1458,8 @@ $(MIPS_NATIVE_PCC_STAMP): $(MIPS_DEV_PCC_SRCS) $(MIPS_NATIVE_STAMP) \
     $(MIPS_NATIVE_DIR)/libm.a $(MIPS_NATIVE_DIR)/libpcc.a \
     $(MIPS_NATIVE_SOFTFLOAT_DIR)/libpcc.a $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(MIPS_ROOTFS_MAKEFILE) Makefile \
-    $(if $(filter vr4300,$(MIPS_ROOTFS_CPU)),$(MIPS_VR4300_HILO_CHECK)) \
+    $(if $(filter vr4300,$(MIPS_ROOTFS_CPU)),$(MIPS_VR4300_HILO_CHECK) \
+    $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py) \
     $(MIPS_ASYNC_EPILOGUE_CHECK)
 	rm -rf $(MIPS_NATIVE_PCC_BUILD) $(MIPS_NATIVE_PCC_DIR)
 	$(MIPS_REAL_MAKE) -f $(MIPS_NATIVE_PCC_MAKEFILE) \
@@ -1482,6 +1485,9 @@ $(MIPS_NATIVE_PCC_STAMP): $(MIPS_DEV_PCC_SRCS) $(MIPS_NATIVE_STAMP) \
 	        $(MIPS_PCC_AOUT) $(MIPS_ROOTFS_ENDIAN_FLAG) \
 	            $(MIPS_NATIVE_PCC_DIR)/$$tool | \
 	            $(MIPS_VR4300_HILO_CHECK) /dev/stdin; \
+	        $(MIPS_PCC_AOUT) $(MIPS_ROOTFS_ENDIAN_FLAG) \
+	            $(MIPS_NATIVE_PCC_DIR)/$$tool | \
+	            $(MIPS_VR4300_ORDER_CHECK) --strict-potential /dev/stdin; \
 	    done; \
 	fi
 	@for tool in cc cpp ccom; do \

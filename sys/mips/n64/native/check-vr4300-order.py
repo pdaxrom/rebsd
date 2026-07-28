@@ -21,6 +21,10 @@ INSN_RE = re.compile(
 )
 FUNC_RE = re.compile(r"^\s*[0-9a-fA-F]+\s+<([^>]+)>:\s*$")
 MEM_RE = re.compile(r"(-?(?:0x[0-9a-fA-F]+|[0-9]+))\(([^)]+)\)")
+TARGET_RE = re.compile(
+    r"(?:^|,)\s*(?:0x)?([0-9a-fA-F]+)"
+    r"(?:\s*<[^>]+>)?\s*$"
+)
 
 
 CP0_ALIASES = {
@@ -156,6 +160,23 @@ def is_multdiv(op: str) -> bool:
     return op in {"mult", "multu", "dmult", "dmultu", "div", "divu", "ddiv", "ddivu"}
 
 
+def is_fp_mul(op: str) -> bool:
+    return op in {"mul.s", "mul.d"}
+
+
+def is_multiply(op: str) -> bool:
+    return is_fp_mul(op) or op in {"mult", "multu", "dmult", "dmultu"}
+
+
+def control_target(insn: Instruction) -> int | None:
+    if not is_control(insn.op) or insn.op in {"jr", "jalr", "eret", "deret"}:
+        return None
+    match = TARGET_RE.search(insn.operands)
+    if match is None:
+        return None
+    return int(match.group(1), 16)
+
+
 def parse_immediate(text: str) -> int | None:
     try:
         return int(text, 0)
@@ -244,6 +265,7 @@ def add_gap_finding(
 
 def scan(instructions: list[Instruction]) -> list[Finding]:
     findings: list[Finding] = []
+    by_address = {insn.address: insn for insn in instructions}
 
     # A control transfer in another control transfer's delay slot is
     # architecturally unpredictable.
@@ -272,9 +294,45 @@ def scan(instructions: list[Instruction]) -> list[Finding]:
                     )
                 )
 
+        # A multiply reached immediately after mul.s/mul.d triggers the
+        # VR4300 mulmul erratum.  A multiply in a control-transfer delay
+        # slot therefore also has to be checked against the taken target;
+        # the linear scan below covers the fall-through path.
+        if is_fp_mul(delay.op):
+            target_address = control_target(insn)
+            if target_address is None and insn.op in {"jr", "jalr"}:
+                findings.append(
+                    Finding(
+                        "POTENTIAL", "vr4300-fpmul-dynamic-target",
+                        "mul.s/mul.d in a dynamic jump delay slot has an "
+                        "unverifiable next instruction",
+                        delay, insn,
+                    )
+                )
+            elif target_address is not None:
+                target = by_address.get(target_address)
+                if target is not None and is_multiply(target.op):
+                    add_gap_finding(
+                        findings, delay, target, 0, 1,
+                        "vr4300-fpmul-branch-target",
+                        "multiply at the taken target follows mul.s/mul.d "
+                        "in the delay slot",
+                    )
+
     for index, producer in enumerate(instructions):
         window = contiguous_window(instructions, index, 7)
         producer_cp0 = cp0_register(producer)
+
+        if (
+            is_fp_mul(producer.op)
+            and window
+            and is_multiply(window[0].op)
+        ):
+            add_gap_finding(
+                findings, producer, window[0], 0, 1,
+                "vr4300-fpmul-multiply",
+                "multiply follows mul.s/mul.d without a separator",
+            )
 
         for offset, consumer in enumerate(window):
             between = offset
