@@ -53,6 +53,9 @@ MIPS_BUILD_TOOLCHAIN_DIR ?= $(TOPOBJ)/toolchain
 MIPS_ROOTFS_ENDIAN_FLAG_big = -EB
 MIPS_ROOTFS_ENDIAN_FLAG_little = -EL
 MIPS_ROOTFS_ENDIAN_FLAG = $(MIPS_ROOTFS_ENDIAN_FLAG_$(MIPS_ROOTFS_ENDIAN))
+MIPS_PCC_ENDIAN_FLAG_big = -mbig-endian
+MIPS_PCC_ENDIAN_FLAG_little = -mlittle-endian
+MIPS_PCC_ENDIAN_FLAG = $(MIPS_PCC_ENDIAN_FLAG_$(MIPS_ROOTFS_ENDIAN))
 MIPS_ROOTFS_ENDIAN_CPP_big = -DTARGET_BIG_ENDIAN
 MIPS_ROOTFS_ENDIAN_CPP_little = -DTARGET_LITTLE_ENDIAN
 MIPS_ROOTFS_ENDIAN_CPP = $(MIPS_ROOTFS_ENDIAN_CPP_$(MIPS_ROOTFS_ENDIAN))
@@ -305,8 +308,7 @@ MIPS_NATIVE_TARGET_FLAGS_mips32r2 = $(MIPS_ROOTFS_ENDIAN_CPP) \
                                     $(MIPS_ROOTFS_EXTRA_CPPFLAGS)
 MIPS_NATIVE_TARGET_FLAGS ?= $(MIPS_NATIVE_TARGET_FLAGS_$(MIPS_ROOTFS_CPU))
 MIPS_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
-MIPS_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-cc.sh
-MIPS_NATIVE_ASWRAP_SCRIPT = $(TOPSRC)/sys/mips/n64/native/n64-aout-as.sh
+MIPS_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/tools/mips-native-cc.sh
 MIPS_HOST_PORTABLECC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
 MIPS_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 MIPS_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
@@ -317,6 +319,7 @@ MIPS_VR4300_HILO_CHECK = $(TOPSRC)/sys/mips/n64/native/check-vr4300-hilo.sh
 MIPS_VR4300_ORDER_CHECK = python3 \
     $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py
 MIPS_ASYNC_EPILOGUE_CHECK = $(TOPSRC)/sys/mips/n64/native/check-mips-async-epilogue.sh
+MIPS_ELF_ENDIAN_CHECK = $(TOPSRC)/sys/mips/tools/check-elf-endian.py
 MIPS_REAL_MAKE ?= $(if $(REBSD_REAL_MAKE),$(REBSD_REAL_MAKE),$(MAKE))
 MIPS_NATIVE_PCC_BUILD ?= mips-native-pcc-build.$(MIPS_ROOTFS_ABI)
 MIPS_NATIVE_PCC_DIR ?= mips-native-pcc.$(MIPS_ROOTFS_ABI)
@@ -356,7 +359,7 @@ MIPS_DEV_PCC_SRCS = $(MIPS_NATIVE_PCC_MAKEFILE) $(MIPS_NATIVE_PCC_CONFIG) \
                    -o -name configure -o -name config.sub \
                    -o -name config.guess \) 2>/dev/null)
 MIPS_NATIVE_TOOL_SRCS = $(MIPS_NATIVE_MKHOSTINCLUDE) $(MIPS_NATIVE_CC_SCRIPT) \
-                       $(MIPS_NATIVE_ASWRAP_SCRIPT) \
+                       $(MIPS_ELF_ENDIAN_CHECK) \
                        $(MIPS_NATIVE_AS_SMOKE_SCRIPT) \
                        $(MIPS_NATIVE_AS_MATRIX_SCRIPT) \
                        $(MIPS_NATIVE_AOUT_SMOKE_SCRIPT) \
@@ -450,13 +453,15 @@ MIPS_PCC_SIZE = $(MIPS_PCC_SYSTEM_SIZE)
 MIPS_PCC_STRIP = $(MIPS_PCC_SYSTEM_STRIP)
 MIPS_PCC_PROVIDER_DEPS =
 endif
-MIPS_PCC_RUNTIME_CC = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) \
+MIPS_PCC_RUNTIME_CC = $(MIPS_PCC_CC) $(MIPS_PCC_ENDIAN_FLAG) \
+                     -march=$(MIPS_ROOTFS_CPU) \
                      $(MIPS_ROOTFS_FLOAT_FLAG) \
                      -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/include) \
                      -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/n64/include) \
                      -I$(abspath $(MIPS_NATIVE_TREE)/include)
 MIPS_PCC_RUNTIME_AS = $(MIPS_PCC_RUNTIME_CC) -x assembler-with-cpp -c
-MIPS_PCC_RUNTIME_SOFT_CC = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) \
+MIPS_PCC_RUNTIME_SOFT_CC = $(MIPS_PCC_CC) $(MIPS_PCC_ENDIAN_FLAG) \
+                          -march=$(MIPS_ROOTFS_CPU) \
                           -msoft-float \
                           -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/include) \
                           -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/n64/include) \
@@ -485,13 +490,15 @@ MIPS_USERLAND_LDFLAGS = --nmagic -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
 MIPS_USERLAND_CRT0_DEPS = $(MIPS_BUILD_SRC_DIR)/crt0.o
 MIPS_USERLAND_EXTRA_DEPS = $(MIPS_ROOTFS_EXEC_FORMAT_DEPS)
 else ifeq ($(MIPS_ROOTFS_COMPILER),pcc)
-MIPS_USERLAND_CC = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) \
+MIPS_USERLAND_CC = $(MIPS_PCC_CC) $(MIPS_PCC_ENDIAN_FLAG) \
+                  -march=$(MIPS_ROOTFS_CPU) \
                   $(MIPS_ROOTFS_FLOAT_FLAG) $(MIPS_ROOTFS_ENDIAN_CPP) \
                   $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
                   $(MIPS_ROOTFS_EXTRA_CPPFLAGS) \
                   $(MIPS_ROOTFS_INCLUDES)
 MIPS_USERLAND_AS = $(MIPS_USERLAND_CC) -x assembler-with-cpp -c
-MIPS_USERLAND_LD = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) \
+MIPS_USERLAND_LD = $(MIPS_PCC_CC) $(MIPS_PCC_ENDIAN_FLAG) \
+                  -march=$(MIPS_ROOTFS_CPU) \
                   $(MIPS_ROOTFS_FLOAT_FLAG)
 MIPS_USERLAND_AR = $(MIPS_PCC_AR)
 MIPS_USERLAND_RANLIB = $(MIPS_PCC_RANLIB)
@@ -516,10 +523,11 @@ endif
 # Build the native PCC executables with the selected userland compiler.  The
 # GCC path goes through the existing GCC-to-a.out driver so its objects remain
 # link-compatible with the native ReBSD toolchain.
-MIPS_NATIVE_PCC_GCC_CC = N64_AOUT_TOPSRC=$(abspath $(MIPS_NATIVE_TREE)) \
-    N64_AOUT_AS=$(abspath $(MIPS_NATIVE_AS)) \
-    N64_PREFIX=$(MIPS_ROOTFS_GCC_PREFIX) \
-    N64_AOUT_CPU=$(MIPS_ROOTFS_CPU) N64_AOUT_FLOAT=$(MIPS_ROOTFS_FLOAT) \
+MIPS_NATIVE_PCC_GCC_CC = MIPS_NATIVE_TOPSRC=$(abspath $(MIPS_NATIVE_TREE)) \
+    MIPS_NATIVE_AS=$(abspath $(MIPS_NATIVE_AS)) \
+    MIPS_NATIVE_PREFIX=$(MIPS_ROOTFS_GCC_PREFIX) \
+    MIPS_NATIVE_CPU=$(MIPS_ROOTFS_CPU) MIPS_NATIVE_FLOAT=$(MIPS_ROOTFS_FLOAT) \
+    MIPS_NATIVE_ENDIAN=$(MIPS_ROOTFS_ENDIAN) \
     $(abspath $(MIPS_NATIVE_CC_SCRIPT))
 MIPS_NATIVE_PCC_TARGET_CC ?= \
     $(if $(filter gcc,$(MIPS_ROOTFS_COMPILER)),\
@@ -527,18 +535,20 @@ MIPS_NATIVE_PCC_TARGET_CC ?= \
 MIPS_NATIVE_PCC_TARGET_ENDIAN_FLAG ?= \
     $(if $(filter gcc,$(MIPS_ROOTFS_COMPILER)),,\
     $(if $(filter big,$(MIPS_ROOTFS_ENDIAN)),-mbig-endian,-mlittle-endian))
-MIPS_NATIVE_GCC_RUNTIME_CC = N64_AOUT_TOPSRC=$(abspath $(MIPS_NATIVE_TREE)) \
-    N64_AOUT_AS=$(abspath $(MIPS_NATIVE_AS)) \
-    N64_PREFIX=$(MIPS_ROOTFS_GCC_PREFIX) \
-    N64_AOUT_CPU=$(MIPS_ROOTFS_CPU) N64_AOUT_FLOAT=$(MIPS_ROOTFS_FLOAT) \
+MIPS_NATIVE_GCC_RUNTIME_CC = MIPS_NATIVE_TOPSRC=$(abspath $(MIPS_NATIVE_TREE)) \
+    MIPS_NATIVE_AS=$(abspath $(MIPS_NATIVE_AS)) \
+    MIPS_NATIVE_PREFIX=$(MIPS_ROOTFS_GCC_PREFIX) \
+    MIPS_NATIVE_CPU=$(MIPS_ROOTFS_CPU) MIPS_NATIVE_FLOAT=$(MIPS_ROOTFS_FLOAT) \
+    MIPS_NATIVE_ENDIAN=$(MIPS_ROOTFS_ENDIAN) \
     $(abspath $(MIPS_NATIVE_CC_SCRIPT)) \
     -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/include) \
     -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/n64/include) \
     -I$(abspath $(MIPS_NATIVE_TREE)/include)
-MIPS_NATIVE_GCC_RUNTIME_SOFT_CC = N64_AOUT_TOPSRC=$(abspath $(MIPS_NATIVE_TREE)) \
-    N64_AOUT_AS=$(abspath $(MIPS_NATIVE_AS)) \
-    N64_PREFIX=$(MIPS_ROOTFS_GCC_PREFIX) \
-    N64_AOUT_CPU=$(MIPS_ROOTFS_CPU) N64_AOUT_FLOAT=soft \
+MIPS_NATIVE_GCC_RUNTIME_SOFT_CC = MIPS_NATIVE_TOPSRC=$(abspath $(MIPS_NATIVE_TREE)) \
+    MIPS_NATIVE_AS=$(abspath $(MIPS_NATIVE_AS)) \
+    MIPS_NATIVE_PREFIX=$(MIPS_ROOTFS_GCC_PREFIX) \
+    MIPS_NATIVE_CPU=$(MIPS_ROOTFS_CPU) MIPS_NATIVE_FLOAT=soft \
+    MIPS_NATIVE_ENDIAN=$(MIPS_ROOTFS_ENDIAN) \
     $(abspath $(MIPS_NATIVE_CC_SCRIPT)) \
     -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/include) \
     -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/n64/include) \
@@ -1346,7 +1356,8 @@ endif
 
 $(MIPS_NATIVE_DIR)/crt0.o: $(MIPS_NATIVE_CRT0_SRC) $(MIPS_PCC_PROVIDER_DEPS)
 	mkdir -p $(MIPS_NATIVE_DIR)
-	$(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT_FLAG) \
+	$(MIPS_PCC_CC) $(MIPS_PCC_ENDIAN_FLAG) \
+	    -march=$(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT_FLAG) \
 	    -x assembler-with-cpp -c -o $@ $(MIPS_NATIVE_CRT0_SRC)
 
 $(MIPS_NATIVE_DIR)/libc.a $(MIPS_NATIVE_DIR)/libm.a \
@@ -1433,6 +1444,14 @@ $(MIPS_NATIVE_STAMP): $(MIPS_NATIVE_RUNTIME_SRCS) $(MIPS_PCC_PROVIDER_DEPS) \
 	$(MIPS_PCC_RANLIB) $(MIPS_NATIVE_SOFTFLOAT_DIR)/libpcc.a
 	cp $(MIPS_NATIVE_TREE)/src/libc.a $(MIPS_NATIVE_DIR)/libc.a
 	cp $(MIPS_NATIVE_TREE)/src/libm.a $(MIPS_NATIVE_DIR)/libm.a
+	if [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "elf" ]; then \
+	    python3 $(MIPS_ELF_ENDIAN_CHECK) \
+	        --endian $(MIPS_ROOTFS_ENDIAN) \
+	        --file $(MIPS_NATIVE_DIR)/crt0.o \
+	        --tree $(MIPS_NATIVE_TREE)/src \
+	        --tree $(MIPS_NATIVE_DIR)/libpcc-build \
+	        --tree $(MIPS_NATIVE_DIR)/softfloat-build; \
+	fi
 	if [ "$(MIPS_PCC_PROVIDER)" = "cross" ]; then \
 	    mkdir -p $(MIPS_CROSS_PCC_LIB) $(MIPS_CROSS_PCC_SOFTFLOAT_LIB); \
 	    for lib in $(MIPS_NATIVE_LIBS); do \
@@ -1472,6 +1491,14 @@ $(MIPS_NATIVE_PCC_STAMP): $(MIPS_DEV_PCC_SRCS) $(MIPS_NATIVE_STAMP) \
 	@test -x $(MIPS_NATIVE_PCC_DIR)/cc
 	@test -x $(MIPS_NATIVE_PCC_DIR)/cpp
 	@test -x $(MIPS_NATIVE_PCC_DIR)/ccom
+	if [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "elf" ]; then \
+	    python3 $(MIPS_ELF_ENDIAN_CHECK) \
+	        --endian $(MIPS_ROOTFS_ENDIAN) \
+	        --file $(MIPS_NATIVE_PCC_DIR)/cc \
+	        --file $(MIPS_NATIVE_PCC_DIR)/cpp \
+	        --file $(MIPS_NATIVE_PCC_DIR)/ccom \
+	        --tree $(MIPS_NATIVE_PCC_BUILD); \
+	fi
 	@set -e; for tool in cc cpp ccom; do \
 	    binary=$(MIPS_NATIVE_PCC_DIR)/$$tool; \
 	    disassembly=$(MIPS_NATIVE_PCC_DIR)/.$$tool.final.dis; \
