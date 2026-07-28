@@ -86,7 +86,7 @@ The matrix creates a timestamped directory below
 `/private/tmp/rebsd-rootfs-matrix` unless `ROOTFS_MATRIX_OUT` is supplied.  It
 boots and logs in on QEMU Malta, Malta64, and MaltaEL; build-checks the CI20
 image; builds the N64 `uartmin-gcc`, `uartmin-pcc-gcc`, and
-`uartmin-pcc-pcc` ROMs; and finally boots each exact 6 MiB filesystem under
+`uartmin-pcc-pcc` ROMs; and finally boots each exact N64 filesystem under
 the Malta64/R4000 8 MiB memory profile.  Every board and N64 compiler
 combination uses a separate object tree.  A single board build can use the
 same gate directly:

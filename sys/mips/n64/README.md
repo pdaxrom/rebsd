@@ -1318,7 +1318,7 @@ normal ROMs.  Every minimal image contains `init`, login support,
 `vm-process-smoke`, and `vm-stress-smoke.sh`.  With a PCC userland,
 `N64_MINIMAL_PCC_SMOKE` defaults to `1` and adds the native compiler, the exact
 commands/scripts/sources used by `pcc-smoke-all.sh`, and no unrelated userland
-programs.  That profile defaults to a 6144 KiB rootfs; the VM-only profile
+programs.  That profile defaults to a 7168 KiB rootfs; the VM-only profile
 defaults to 2048 KiB.
 
 The reproducible GCC-kernel/PCC-userland hardware-test build is:
@@ -1329,7 +1329,7 @@ make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-vm-pcc-min \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
     N64_USERLAND_ENDIAN=big N64_USERLAND_EXEC_FORMAT=aout \
     N64_MINIMAL_ROOTFS=1 N64_MINIMAL_PCC_SMOKE=1 \
-    N64_MINIMAL_ROOTFS_KBYTES=6144 N64_ROOTFS_NATIVE_PCC=1 \
+    N64_MINIMAL_ROOTFS_KBYTES=7168 N64_ROOTFS_NATIVE_PCC=1 \
     N64_ZSWAP=1 all
 ```
 

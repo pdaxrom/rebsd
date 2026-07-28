@@ -14,7 +14,7 @@ make -C sys/mips BOARD=n64 O=/tmp/rebsd-n64-gdb reconfig
 make -C sys/mips BOARD=n64 O=/tmp/rebsd-n64-gdb \
     N64_USB_GDB=1 N64_MINIMAL_ROOTFS=1 \
     N64_MINIMAL_PCC_SMOKE=1 \
-    N64_MINIMAL_ROOTFS_KBYTES=6144 kernel.z64
+    N64_MINIMAL_ROOTFS_KBYTES=7168 kernel.z64
 ```
 
 The useful outputs are under
@@ -24,7 +24,7 @@ so a normal and a debug kernel should normally use different `O=` trees.
 The debug build keeps DWARF source/line information and symbols in `unix.elf`;
 the ROM embeds a separate load-only `unix.runtime.elf` so flashing stays quick.
 
-The command above uses the existing 6 MiB PCC hardware-test rootfs. It includes
+The command above uses the existing 7 MiB PCC hardware-test rootfs. It includes
 the native compiler, its runtime and headers, and `/root/pcc-smoke-all.sh`, but
 still omits unrelated full-userland content. The runner prints every smoke and
 compiler phase so the last line before a hang can be correlated with GDB.
