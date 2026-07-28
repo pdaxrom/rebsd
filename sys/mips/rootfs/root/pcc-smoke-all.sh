@@ -46,6 +46,7 @@ export LINPACK_ARRAY_SIZE
 export LINPACK_MIN_SECONDS
 
 failures=0
+failed_tests=
 
 resource_snapshot()
 {
@@ -69,6 +70,7 @@ run_smoke()
 	if test $rc != 0; then
 		resource_snapshot "failure-$name"
 		failures=`expr $failures + 1`
+		failed_tests="$failed_tests $name:$rc"
 	fi
 }
 
@@ -102,6 +104,9 @@ run_smoke runtime-quick /root/runtime-stress.sh quick
 
 resource_snapshot end
 echo "PCC_SMOKE_ALL_FAILURES $failures"
+if test $failures != 0; then
+	echo "PCC_SMOKE_ALL_FAILED_TESTS$failed_tests"
+fi
 date
 if test $failures = 0; then
 	echo "PCC_SMOKE_ALL_OK"
