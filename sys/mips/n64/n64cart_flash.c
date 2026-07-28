@@ -22,6 +22,7 @@
 #define N64CART_FLASH_CMD_ADDR_LEN     5u
 #define N64CART_FLASH_CMD_DUMMY_LEN    1u
 #define N64CART_FLASH_PAGE             256u
+#define N64CART_FLASH_ROMFS_ALIGN      0x8000u
 #define N64CART_FLASH_READAHEAD_SECTORS 8u
 #define N64CART_FLASH_READAHEAD_SIZE   \
     (N64CART_FLASH_SECTOR * N64CART_FLASH_READAHEAD_SECTORS)
@@ -130,9 +131,11 @@ n64cart_flash_restore_quad_rom_mode(void)
 }
 
 static void
-n64cart_flash_access_lock(void)
+n64cart_flash_access_lock(unsigned *fw_size)
 {
     if (n64cart_flash_access_depth != 0) {
+        if (fw_size != 0)
+            panic("nested n64cart flash info");
         ++n64cart_flash_access_depth;
         return;
     }
@@ -140,6 +143,13 @@ n64cart_flash_access_lock(void)
         panic("n64cart flash PI lock");
     n64cart_flash_access_depth = 1;
     n64cart_flash_cs_force(1);
+    /*
+     * FW_SIZE is a cartridge control register.  Capture it while the
+     * cartridge is still in normal quad-ROM mode and while the same PI
+     * ownership that protects the following SPI transaction is held.
+     */
+    if (fw_size != 0)
+        *fw_size = n64cart_flash_read_reg(N64CART_FW_SIZE);
     n64cart_flash_enter_spi_command_mode();
 }
 
@@ -223,7 +233,7 @@ n64cart_flash_wait_ready(void)
 int
 n64cart_flash_sync(void)
 {
-    n64cart_flash_access_lock();
+    n64cart_flash_access_lock(0);
     n64cart_flash_wait_ready();
     n64cart_flash_access_unlock();
     return 0;
@@ -307,7 +317,7 @@ n64cart_flash_read_cached(const struct n64cart_flash_info *info,
     if (len == 0 || offset + size > base + len)
         return EINVAL;
 
-    n64cart_flash_access_lock();
+    n64cart_flash_access_lock(0);
     n64cart_flash_read(base, n64cart_flash_read_cache, len);
     n64cart_flash_access_unlock();
 
@@ -344,50 +354,20 @@ n64cart_flash_erase_sector(unsigned addr)
     n64cart_flash_wait_ready();
 }
 
-static unsigned
-n64cart_flash_fw_size(void)
-{
-    return n64cart_flash_read_reg(N64CART_FW_SIZE);
-}
-
-static unsigned
-n64cart_flash_fw_size_locked(void)
-{
-    unsigned fw_size;
-
-    if (n64pi_bus_enter(&n64cart_flash_pi_owner) != 0)
-        panic("n64cart flash PI lock");
-    fw_size = n64cart_flash_fw_size();
-    n64pi_bus_leave(&n64cart_flash_pi_owner);
-    return fw_size;
-}
-
 static int
-n64cart_flash_probe_info(struct n64cart_flash_info *info)
+n64cart_flash_decode_info(struct n64cart_flash_info *info,
+    const unsigned char *jedec, unsigned fw_size)
 {
-    unsigned char jedec[4];
     unsigned mf;
     unsigned id;
     unsigned i;
 
     bzero(info, sizeof(*info));
-
-    n64cart_flash_access_lock();
-    n64cart_flash_do_cmd(N64CART_FLASH_CMD_JEDEC, 0, jedec, sizeof(jedec));
-    n64cart_flash_access_unlock();
-    /*
-     * N64CART_FW_SIZE is a cartridge control register, not flash data.
-     * Sample it after restoring quad-ROM mode, matching the sequence
-     * validated on real N64cart hardware.  Keep the standalone register
-     * access serialized with ROM, USB, UART, and flash PI clients.
-     */
-    info->fw_size = n64cart_flash_fw_size_locked();
-
     mf = jedec[0];
     id = ((unsigned)jedec[1] << 8) | jedec[2];
     info->jedec_id = (mf << 16) | id;
     info->sector_size = N64CART_FLASH_SECTOR;
-    info->romfs_offset = (info->fw_size + 0x7fffu) & ~0x7fffu;
+    info->fw_size = fw_size;
 
     for (i = 0; i < sizeof(n64cart_flash_chips) /
         sizeof(n64cart_flash_chips[0]); ++i) {
@@ -395,10 +375,61 @@ n64cart_flash_probe_info(struct n64cart_flash_info *info)
             n64cart_flash_chips[i].id == id) {
             info->rom_size = n64cart_flash_chips[i].mbytes *
                 1024u * 1024u;
-            return 0;
+            break;
         }
     }
-    return ENODEV;
+    if (info->rom_size == 0)
+        return ENODEV;
+    if (info->fw_size == 0 ||
+        info->fw_size > info->rom_size -
+        (N64CART_FLASH_ROMFS_ALIGN - 1))
+        return EIO;
+    info->romfs_offset =
+        (info->fw_size + N64CART_FLASH_ROMFS_ALIGN - 1) &
+        ~(N64CART_FLASH_ROMFS_ALIGN - 1);
+    if (info->romfs_offset == 0 ||
+        info->romfs_offset >= info->rom_size)
+        return EIO;
+    return 0;
+}
+
+static int
+n64cart_flash_probe_info(struct n64cart_flash_info *info)
+{
+    unsigned char jedec[4];
+    unsigned fw_size;
+
+    n64cart_flash_access_lock(&fw_size);
+    n64cart_flash_do_cmd(N64CART_FLASH_CMD_JEDEC, 0, jedec, sizeof(jedec));
+    n64cart_flash_access_unlock();
+    return n64cart_flash_decode_info(info, jedec, fw_size);
+}
+
+/*
+ * Re-read both hardware-owned parts of the protection geometry immediately
+ * before a destructive command.  The caller holds one uninterrupted PI
+ * transaction from the FW_SIZE sample through the eventual WREN and address
+ * bytes, so stale or damaged cached kernel state cannot expose firmware.
+ */
+static int
+n64cart_flash_live_info_locked(struct n64cart_flash_info *info,
+    unsigned fw_size)
+{
+    unsigned char jedec[4];
+
+    n64cart_flash_do_cmd(N64CART_FLASH_CMD_JEDEC, 0, jedec, sizeof(jedec));
+    return n64cart_flash_decode_info(info, jedec, fw_size);
+}
+
+static int
+n64cart_flash_info_matches(const struct n64cart_flash_info *cached,
+    const struct n64cart_flash_info *live)
+{
+    return cached->jedec_id == live->jedec_id &&
+        cached->rom_size == live->rom_size &&
+        cached->fw_size == live->fw_size &&
+        cached->romfs_offset == live->romfs_offset &&
+        cached->sector_size == live->sector_size;
 }
 
 static int
@@ -511,6 +542,8 @@ int
 n64cart_flash_write_sector_raw(unsigned offset, const void *buffer)
 {
     struct n64cart_flash_info info;
+    struct n64cart_flash_info live;
+    unsigned fw_size;
     int error;
 
     error = n64cart_flash_info(&info);
@@ -524,16 +557,25 @@ n64cart_flash_write_sector_raw(unsigned offset, const void *buffer)
         return EINVAL;
 
     n64cart_flash_read_cache_invalidate();
-    n64cart_flash_access_lock();
-    n64cart_flash_write_sector(offset, buffer);
+    n64cart_flash_access_lock(&fw_size);
+    error = n64cart_flash_live_info_locked(&live, fw_size);
+    if (error == 0 && !n64cart_flash_info_matches(&info, &live))
+        error = EIO;
+    if (error == 0)
+        error = n64cart_flash_check_write_range(&live, offset,
+            N64CART_FLASH_SECTOR, buffer);
+    if (error == 0)
+        n64cart_flash_write_sector(offset, buffer);
     n64cart_flash_access_unlock();
-    return 0;
+    return error;
 }
 
 int
 n64cart_flash_erase_sector_raw(unsigned offset)
 {
     struct n64cart_flash_info info;
+    struct n64cart_flash_info live;
+    unsigned fw_size;
     int error;
 
     error = n64cart_flash_info(&info);
@@ -544,10 +586,16 @@ n64cart_flash_erase_sector_raw(unsigned offset)
         return error;
 
     n64cart_flash_read_cache_invalidate();
-    n64cart_flash_access_lock();
-    n64cart_flash_erase_sector(offset);
+    n64cart_flash_access_lock(&fw_size);
+    error = n64cart_flash_live_info_locked(&live, fw_size);
+    if (error == 0 && !n64cart_flash_info_matches(&info, &live))
+        error = EIO;
+    if (error == 0)
+        error = n64cart_flash_check_erase_range(&live, offset);
+    if (error == 0)
+        n64cart_flash_erase_sector(offset);
     n64cart_flash_access_unlock();
-    return 0;
+    return error;
 }
 
 int
