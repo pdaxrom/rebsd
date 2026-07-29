@@ -2065,6 +2065,37 @@ current validation observation, not a declaration that the rare N64 fault is
 resolved; a future occurrence must retain the full `N64_USER_FAULT stack` and
 `N64_USER_FAULT frame` output.
 
+A later N64 capture localized a native `ccom` failure more tightly.  The
+fault occurred in `yyparse` at `0x00403d9c`, while loading through `a0`.
+The exact linked instruction stream is:
+
+```
+00403d8c  sll    a0,v0,1
+00403d90  lui    at,0x48
+00403d94  addiu  at,at,-8968
+00403d98  addu   a0,at,a0
+00403d9c  lh     a2,0(a0)
+```
+
+The saved registers were `v0=0x20`, `at=0x0047dcf8`, and `a0=0x40`.
+`0x0047dcf8` is `yycheck`, so sequential execution requires the load address
+to be `0x0047dd38`.  No control transfer in the linked binary targets
+`0x00403d9c`; the observed register state therefore cannot result from
+retiring the preceding `addu`.  The executable PTE and live TLB entry still
+agreed, the instruction at EPC agreed through cached and uncached physical
+aliases, VM validation passed, and neither swap nor zswap had been used.
+This rules out an ordinary parser-table bounds failure and localizes the next
+gate to exception return versus stale instruction-cache state on physical
+VR4300 hardware.
+
+The common MIPS exception diagnostics now retain the immediately preceding
+full exception, including EPC, Cause, `at`, `v0`, and `a0`.  A user fault also
+dumps a nine-word instruction window around EPC.  Fast-refill diagnostics are
+published only after a resident PTE has actually been installed, so a slow VM
+fault no longer overwrites the last successful refill immediately before the
+failure.  These remain observation-only changes: they do not retry the
+instruction, alter scheduling, change cache policy, or modify PCC output.
+
 ## Disabled board-call ABI
 
 PIC32 implements `ucall`, `ufetch`, and `ustore` as privileged board/autoconfig

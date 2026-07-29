@@ -63,42 +63,6 @@ _mips_tlb_refill_vector_end:
 
         .ent    mips_tlb_refill_entry
 mips_tlb_refill_entry:
-        /*
-         * Record consecutive identical refill sites.  This uses only k0/k1
-         * and cached kernel globals, so the interrupted GPR file is intact
-         * and no console, lock, allocator, or VM policy is involved.
-         */
-        mfc0    $k0, $14                /* EPC */
-        mfc0    $k1, $8                 /* BadVAddr */
-        xor     $k0, $k0, $k1
-        la      $k1, mips_pmap_fast_last_hash
-        lw      $k1, 0($k1)
-        bne     $k0, $k1, mips_tlb_refill_new_site
-        nop
-        la      $k0, mips_pmap_fast_repeat
-        lw      $k1, 0($k0)
-        addiu   $k1, $k1, 1
-        bnez    $k1, mips_tlb_refill_repeat_ready
-        nop
-        addiu   $k1, $zero, -1         /* saturate on wrap */
-mips_tlb_refill_repeat_ready:
-        sw      $k1, 0($k0)
-        b       mips_tlb_refill_site_recorded
-        nop
-mips_tlb_refill_new_site:
-        la      $k1, mips_pmap_fast_last_hash
-        sw      $k0, 0($k1)
-        addiu   $k0, $zero, 1
-        la      $k1, mips_pmap_fast_repeat
-        sw      $k0, 0($k1)
-mips_tlb_refill_site_recorded:
-        mfc0    $k0, $14
-        la      $k1, mips_pmap_fast_last_epc
-        sw      $k0, 0($k1)
-        mfc0    $k0, $8
-        la      $k1, mips_pmap_fast_last_vaddr
-        sw      $k0, 0($k1)
-
         mfc0    $k0, $8                 /* BadVAddr */
         bltz    $k0, mips_tlb_refill_slow
         nop
@@ -246,6 +210,44 @@ mips_tlb_refill_site_recorded:
         nop
         nop
         nop
+        /*
+         * Publish diagnostics only after a resident mapping was accepted
+         * and installed.  A miss which falls through to the full VM fault
+         * path must leave the preceding successful fast refill visible in
+         * the subsequent fault report.  Only k0/k1 and cached kernel
+         * globals are touched, so the interrupted GPR file remains intact.
+         */
+        mfc0    $k0, $14                /* EPC */
+        mfc0    $k1, $8                 /* BadVAddr */
+        xor     $k0, $k0, $k1
+        la      $k1, mips_pmap_fast_last_hash
+        lw      $k1, 0($k1)
+        bne     $k0, $k1, mips_tlb_refill_new_site
+        nop
+        la      $k0, mips_pmap_fast_repeat
+        lw      $k1, 0($k0)
+        addiu   $k1, $k1, 1
+        bnez    $k1, mips_tlb_refill_repeat_ready
+        nop
+        addiu   $k1, $zero, -1         /* saturate on wrap */
+mips_tlb_refill_repeat_ready:
+        sw      $k1, 0($k0)
+        b       mips_tlb_refill_site_recorded
+        nop
+mips_tlb_refill_new_site:
+        la      $k1, mips_pmap_fast_last_hash
+        sw      $k0, 0($k1)
+        addiu   $k0, $zero, 1
+        la      $k1, mips_pmap_fast_repeat
+        sw      $k0, 0($k1)
+mips_tlb_refill_site_recorded:
+        mfc0    $k0, $14
+        la      $k1, mips_pmap_fast_last_epc
+        sw      $k0, 0($k1)
+        mfc0    $k0, $8
+        la      $k1, mips_pmap_fast_last_vaddr
+        sw      $k0, 0($k1)
+
         la      $k0, mips_pmap_fast_refills
         lw      $k1, 0($k0)
         addiu   $k1, $k1, 1

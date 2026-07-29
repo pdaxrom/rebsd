@@ -89,6 +89,33 @@ mips_trace_user_fault(const char *kind, int *frame, unsigned badvaddr)
 }
 #endif
 
+struct mips_exception_snapshot {
+    int valid;
+    unsigned frame;
+    unsigned pc;
+    unsigned sp;
+    unsigned ra;
+    unsigned status;
+    unsigned cause;
+    unsigned badvaddr;
+    unsigned at;
+    unsigned v0;
+    unsigned a0;
+    int pid;
+    char comm[MAXCOMLEN + 1];
+};
+
+static struct mips_exception_snapshot exception_snapshots[2];
+static unsigned exception_snapshot_index;
+#define last_exception \
+    exception_snapshots[exception_snapshot_index]
+#define previous_exception \
+    exception_snapshots[exception_snapshot_index ^ 1u]
+static int exception_panic_prepared;
+
+static void exception_dump_snapshot(char *,
+    struct mips_exception_snapshot *);
+
 #ifdef N64
 static int
 n64_user_fault_read_word(unsigned paddr, unsigned *cached, unsigned *uncached)
@@ -191,6 +218,29 @@ n64_dump_user_stack(unsigned sp, unsigned fp)
             next_cached > end - 2 * sizeof(unsigned))
             break;
         current = next_cached;
+    }
+}
+
+static void
+n64_dump_user_code(unsigned pc)
+{
+    unsigned cached;
+    unsigned current;
+    unsigned paddr;
+    unsigned uncached;
+    int error;
+    int word;
+
+    current = (pc & ~3u) - 4u * NBPW;
+    for (word = -4; word <= 4; ++word, current += NBPW) {
+        paddr = 0;
+        cached = 0;
+        uncached = 0;
+        error = n64_user_fault_read_vaddr(current, &paddr, &cached,
+            &uncached);
+        printf("N64_USER_FAULT code rel=%d vaddr=%08x error=%d "
+            "paddr=%08x cached=%08x uncached=%08x\n",
+            word, current, error, paddr, cached, uncached);
     }
 }
 
@@ -406,6 +456,8 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
         zswap_error == 0 ? zswap.mzs_compressed_blocks : 0,
         zswap_error == 0 ? zswap.mzs_used_units : 0,
         zswap_error == 0 ? zswap.mzs_phys_units : 0);
+    exception_dump_snapshot("previous exception", &previous_exception);
+    n64_dump_user_code(faultpc);
     n64_dump_user_stack(frame[FRAME_SP], frame[FRAME_FP]);
     n64_dump_user_mapping("pc", faultpc);
     if (badvaddr != faultpc)
@@ -436,22 +488,6 @@ void mips_board_timer_intr(void) __attribute__((weak));
 int mips_board_microtime(struct timeval *tv, u_int tick_usec)
     __attribute__((weak));
 #endif
-
-struct mips_exception_snapshot {
-    int valid;
-    unsigned frame;
-    unsigned pc;
-    unsigned sp;
-    unsigned ra;
-    unsigned status;
-    unsigned cause;
-    unsigned badvaddr;
-    int pid;
-    char comm[MAXCOMLEN + 1];
-};
-
-static struct mips_exception_snapshot last_exception;
-static int exception_panic_prepared;
 
 int
 mips_in_interrupt(void)
@@ -529,6 +565,7 @@ exception_save_snapshot(int *frame, unsigned rawcause, unsigned badvaddr)
     int i;
 
     p = u.u_procp;
+    exception_snapshot_index ^= 1u;
     last_exception.valid = 1;
     last_exception.frame = (unsigned)frame;
     last_exception.pc = frame[FRAME_PC];
@@ -537,6 +574,9 @@ exception_save_snapshot(int *frame, unsigned rawcause, unsigned badvaddr)
     last_exception.status = frame[FRAME_STATUS];
     last_exception.cause = rawcause;
     last_exception.badvaddr = badvaddr;
+    last_exception.at = frame[FRAME_R1];
+    last_exception.v0 = frame[FRAME_R2];
+    last_exception.a0 = frame[FRAME_R4];
     last_exception.pid = p ? p->p_pid : -1;
     for (i = 0; i < MAXCOMLEN && u.u_comm[i]; ++i)
         last_exception.comm[i] = u.u_comm[i];
@@ -546,11 +586,16 @@ exception_save_snapshot(int *frame, unsigned rawcause, unsigned badvaddr)
 static void
 exception_dump_snapshot(char *tag, struct mips_exception_snapshot *snap)
 {
+    if (!snap->valid) {
+        printf("*** %s: unavailable\n", tag);
+        return;
+    }
     printf("*** %s: frame=%08x pc=%08x sp=%08x ra=%08x\n",
         tag, snap->frame, snap->pc, snap->sp, snap->ra);
-    printf("*** %s: status=%08x cause=%08x badvaddr=%08x pid=%d comm=%s\n",
-        tag, snap->status, snap->cause, snap->badvaddr, snap->pid,
-        snap->comm);
+    printf("*** %s: status=%08x cause=%08x badvaddr=%08x "
+        "at=%08x v0=%08x a0=%08x pid=%d comm=%s\n",
+        tag, snap->status, snap->cause, snap->badvaddr,
+        snap->at, snap->v0, snap->a0, snap->pid, snap->comm);
 }
 
 static void
