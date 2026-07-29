@@ -8,10 +8,12 @@
 
 #include <disk/disk.h>
 #include <disk/romdisk.h>
+#include <input/mousevar.h>
 
 #include "romdisk.h"
 
 #define I386_DISK_MAJOR 2
+#define I386_MOUSE_MAJOR 1
 
 static void
 i386_nostrategy(struct buf *bp)
@@ -76,6 +78,14 @@ const struct cdevsw cdevsw[] = {
         cnioctl, nullstop, cnttys, cnselect,
         i386_nostrategy, i386_console_raw_read,
         i386_console_raw_write, 0
+    },
+    {
+#if I386_MOUSE_MAJOR != 1
+#error Wrong I386_MOUSE_MAJOR value
+#endif
+        mouse_open, mouse_close, mouse_read, norw,
+        mouse_ioctl, nullstop, 0, mouse_select,
+        i386_nostrategy, 0, 0, 0
     },
     { 0 }
 };

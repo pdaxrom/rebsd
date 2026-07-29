@@ -15,7 +15,8 @@ Ci20 platform attachment
         -> USB core and transfer API
         -> hub and interface matching
         -> class drivers
-             |-> HID boot keyboard
+             |-> HID boot keyboard -> common keyboard mapper/console
+             |-> HID boot mouse -> common mouse event device
              `-> mass-storage BOT/SCSI -> common disk backend
 ```
 

@@ -460,9 +460,14 @@ The common MIPS console owns `cnttys[0]` and feeds received characters through
 machine-independent submission point, so it does not know about the console
 implementation and no USB check is hard-wired into `cnread()`.
 
-The first HID driver supports only boot-protocol keyboards, 8-byte reports,
-modifier state, press/release tracking, and a basic US map.  A generic HID
-report parser and wscons-style framework are not imported.
+The keyboard HID driver supports boot-protocol 8-byte reports, modifier
+state, press/release tracking, and a basic US map.  The map now lives in
+`sys/input` and is shared with PS/2 rather than being USB-private.
+
+The boot-mouse HID driver normalizes button and relative-axis reports into
+the common `struct mouse_event` API used by PS/2 mouse input.  Class drivers
+do not own cdev queues or board-specific device ABIs.  A generic HID report
+parser and wscons-style framework are not imported.
 
 ## Locking Model
 

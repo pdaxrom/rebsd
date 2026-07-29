@@ -19,7 +19,8 @@ mkdir -p "$tmp"
     "$top/sys/usb/uhub.c" \
     "$top/sys/usb/ohci.c" \
     "$top/sys/usb/ukbd.c" \
-    "$top/sys/usb/ukbdmap.c" \
+    "$top/sys/usb/ukbd_decode.c" \
+    "$top/sys/input/kbdmap.c" \
     ohci_test.c -o "$tmp/ohci_test"
 
 if [ "$mode" = test ]; then

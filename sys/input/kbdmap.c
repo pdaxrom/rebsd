@@ -4,8 +4,8 @@
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (lennart@augustsson.net) at
+ * This code is derived from software contributed to The NetBSD
+ * Foundation by Lennart Augustsson (lennart@augustsson.net) at
  * Carlstedt Research & Technology.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,62 +37,26 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <usb/ukbd.h>
+#include <input/kbd.h>
 
-#define UKBD_MOD_LCTRL          0x01u
-#define UKBD_MOD_LSHIFT         0x02u
-#define UKBD_MOD_RCTRL          0x10u
-#define UKBD_MOD_RSHIFT         0x20u
-#define UKBD_USAGE_CAPS_LOCK    57u
-
-static void
-ukbd_zero(void *vptr, size_t length)
-{
-    uByte *ptr;
-
-    ptr = (uByte *)vptr;
-    while (length-- != 0)
-        *ptr++ = 0;
-}
+#define KBD_USAGE_CAPS_LOCK    57u
 
 void
-ukbd_decoder_init(struct ukbd_decoder *decoder)
+kbd_mapper_init(struct kbd_mapper *mapper)
 {
-    if (decoder != 0)
-        ukbd_zero(decoder, sizeof(*decoder));
-}
-
-static int
-ukbd_was_down(const struct ukbd_decoder *decoder, uByte usage)
-{
-    unsigned i;
-
-    for (i = 0; i < UKBD_BOOT_KEY_COUNT; ++i)
-        if (decoder->ukd_keys[i] == usage)
-            return 1;
-    return 0;
-}
-
-static int
-ukbd_seen_in_report(const uByte *report, unsigned before, uByte usage)
-{
-    unsigned i;
-
-    for (i = 0; i < before; ++i)
-        if (report[2 + i] == usage)
-            return 1;
-    return 0;
+    if (mapper != 0)
+        mapper->km_caps_lock = 0;
 }
 
 static void
-ukbd_emit_sequence(ukbd_emit_t emit, void *arg, const char *sequence)
+kbd_emit_sequence(kbd_emit_t emit, void *arg, const char *sequence)
 {
     while (*sequence != '\0')
         emit(arg, (unsigned char)*sequence++);
 }
 
 static int
-ukbd_punctuation(uByte usage, int shifted)
+kbd_punctuation(unsigned usage, int shifted)
 {
     switch (usage) {
     case 45:
@@ -124,7 +88,7 @@ ukbd_punctuation(uByte usage, int shifted)
 }
 
 static int
-ukbd_ascii(uByte usage, int shifted, int caps_lock, int control)
+kbd_ascii(unsigned usage, int shifted, int caps_lock, int control)
 {
     static const char digits[] = "1234567890";
     static const char shifted_digits[] = "!@#$%^&*()";
@@ -141,7 +105,7 @@ ukbd_ascii(uByte usage, int shifted, int caps_lock, int control)
     if (usage >= 30 && usage <= 39)
         return shifted ? shifted_digits[usage - 30] : digits[usage - 30];
     if (usage >= 45 && usage <= 56)
-        return ukbd_punctuation(usage, shifted);
+        return kbd_punctuation(usage, shifted);
     switch (usage) {
     case 40:
     case 88:
@@ -159,77 +123,54 @@ ukbd_ascii(uByte usage, int shifted, int caps_lock, int control)
     }
 }
 
-static void
-ukbd_emit_usage(struct ukbd_decoder *decoder, uByte modifiers, uByte usage,
-    ukbd_emit_t emit, void *arg)
+void
+kbd_mapper_key_down(struct kbd_mapper *mapper, unsigned modifiers,
+    unsigned usage, kbd_emit_t emit, void *arg)
 {
     int character;
     int control;
     int shifted;
 
-    if (usage == UKBD_USAGE_CAPS_LOCK) {
-        decoder->ukd_caps_lock = !decoder->ukd_caps_lock;
+    if (mapper == 0 || emit == 0)
+        return;
+    if (usage == KBD_USAGE_CAPS_LOCK) {
+        mapper->km_caps_lock = !mapper->km_caps_lock;
         return;
     }
     switch (usage) {
     case 74:
-        ukbd_emit_sequence(emit, arg, "\033[H");
+        kbd_emit_sequence(emit, arg, "\033[H");
         return;
     case 75:
-        ukbd_emit_sequence(emit, arg, "\033[5~");
+        kbd_emit_sequence(emit, arg, "\033[5~");
         return;
     case 76:
-        ukbd_emit_sequence(emit, arg, "\033[3~");
+        kbd_emit_sequence(emit, arg, "\033[3~");
         return;
     case 77:
-        ukbd_emit_sequence(emit, arg, "\033[F");
+        kbd_emit_sequence(emit, arg, "\033[F");
         return;
     case 78:
-        ukbd_emit_sequence(emit, arg, "\033[6~");
+        kbd_emit_sequence(emit, arg, "\033[6~");
         return;
     case 79:
-        ukbd_emit_sequence(emit, arg, "\033[C");
+        kbd_emit_sequence(emit, arg, "\033[C");
         return;
     case 80:
-        ukbd_emit_sequence(emit, arg, "\033[D");
+        kbd_emit_sequence(emit, arg, "\033[D");
         return;
     case 81:
-        ukbd_emit_sequence(emit, arg, "\033[B");
+        kbd_emit_sequence(emit, arg, "\033[B");
         return;
     case 82:
-        ukbd_emit_sequence(emit, arg, "\033[A");
+        kbd_emit_sequence(emit, arg, "\033[A");
         return;
     default:
         break;
     }
-    shifted = (modifiers & (UKBD_MOD_LSHIFT | UKBD_MOD_RSHIFT)) != 0;
-    control = (modifiers & (UKBD_MOD_LCTRL | UKBD_MOD_RCTRL)) != 0;
-    character = ukbd_ascii(usage, shifted, decoder->ukd_caps_lock,
-        control);
+    shifted = (modifiers & (KBD_MOD_LSHIFT | KBD_MOD_RSHIFT)) != 0;
+    control = (modifiers & (KBD_MOD_LCTRL | KBD_MOD_RCTRL)) != 0;
+    character = kbd_ascii(usage, shifted, mapper->km_caps_lock, control);
     if (character >= 0)
         emit(arg, character);
-}
-
-void
-ukbd_decode_boot_report(struct ukbd_decoder *decoder, const uByte *report,
-    size_t length, ukbd_emit_t emit, void *arg)
-{
-    unsigned i;
-    uByte usage;
-
-    if (decoder == 0 || report == 0 || emit == 0 ||
-        length != UKBD_BOOT_REPORT_SIZE)
-        return;
-    for (i = 0; i < UKBD_BOOT_KEY_COUNT; ++i)
-        if (report[2 + i] >= 1 && report[2 + i] <= 3)
-            return;
-    for (i = 0; i < UKBD_BOOT_KEY_COUNT; ++i) {
-        usage = report[2 + i];
-        if (usage == 0 || ukbd_was_down(decoder, usage) ||
-            ukbd_seen_in_report(report, i, usage))
-            continue;
-        ukbd_emit_usage(decoder, report[0], usage, emit, arg);
-    }
-    for (i = 0; i < UKBD_BOOT_KEY_COUNT; ++i)
-        decoder->ukd_keys[i] = report[2 + i];
 }

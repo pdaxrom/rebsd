@@ -74,13 +74,17 @@ free и poison через kernel direct map.
 
 ## PCI USB/DMA boundary
 
-QEMU USB Mass Storage и OHCI/UHCI HID keyboard подключены без i386-копий USB,
-HID или storage code:
+QEMU USB Mass Storage, OHCI/UHCI HID keyboard и HID mouse подключены без
+i386-копий USB, HID, input или storage code:
 
 - общий `sys/kernel/subr_dma.c` владеет DMA allocation/sync contract;
 - общие `sys/usb/usb_core.c`, `usb_task.c`, `uhub.c`, `ehci.c`, `ohci.c`,
-  `uhci.c`, `ukbd.c`, `ukbdmap.c`, `umass_bbb.c` и `umass.c` владеют enumeration,
-  transfers, HID decoding, BOT/SCSI и class-driver policy;
+  `uhci.c`, `ukbd.c`, `ukbd_decode.c`, `ums.c`, `umsmap.c`, `umass_bbb.c`
+  и `umass.c` владеют enumeration, transfers, HID decoding, BOT/SCSI и
+  class-driver policy;
+- общие `sys/input/kbdmap.c`, `ps2.c` и `mouse.c` владеют раскладкой,
+  PS/2 protocol decoding и очередями `/dev/mouseN`;
+- `pc/i8042.c` владеет только x86 I/O ports, controller setup и IRQ1/IRQ12;
 - общий `sys/disk/disk.c` присваивает USB-накопителю очередной `sdN`;
 - `pc/dma.c` только предоставляет coherent contiguous i686 pool;
 - `pc/pci.c` выполняет единый PCI walk и поиск UHCI/OHCI/EHCI по
@@ -92,8 +96,9 @@ HID или storage code:
 - `pc/interrupt.c` предоставляет разделяемую 8259 IRQ registration boundary.
 
 Direct и BIOS QEMU smoke проверяют варианты IDE `sd0` + USB `sd1` и USB
-`sd0` без IDE, а также OHCI/UHCI enumeration и attach общей HID boot keyboard.
-Во всех случаях root остаётся общим romdisk `(0,0)`.
+`sd0` без IDE, OHCI/UHCI attach общих HID boot keyboard/mouse drivers и
+i8042 keyboard/mouse traffic. Во всех случаях root остаётся общим romdisk
+`(0,0)`.
 
 ## Console boundary
 
@@ -103,8 +108,9 @@ Direct и BIOS QEMU smoke проверяют варианты IDE `sd0` + USB `s
 драйвера. Machine-dependent `machine/console.h` предоставляет только
 `md_console_poll`, `md_console_getc`, `md_console_putc` и
 `md_console_tty_winsize`; на i686 эти hooks используют COM1 и VGA text.
-Общий `ukbd` подаёт HID keyboard input в тот же `cninput`, не создавая
-отдельной i386 input/TTY подсистемы.
+Общие `ukbd` и PS/2 decoder подают keyboard input в тот же `cninput`, не
+создавая отдельной i386 input/TTY подсистемы. PS/2 и USB mouse transports
+подают нормализованные события в общий `sys/input/mouse.c`.
 
 Страницы существующего bootstrap page directory/page tables уже
 зарезервированы и не могут попасть в free lists. Публичный

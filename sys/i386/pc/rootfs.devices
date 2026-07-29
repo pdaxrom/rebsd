@@ -73,3 +73,11 @@ minor 16
 cdev /dev/console
 major 0
 minor 0
+
+cdev /dev/mouse0
+major 1
+minor 0
+
+cdev /dev/mouse1
+major 1
+minor 1

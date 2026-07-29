@@ -7,7 +7,10 @@ import argparse
 import os
 import pathlib
 import select
+import shutil
+import socket
 import subprocess
+import tempfile
 import time
 
 
@@ -24,6 +27,10 @@ CORE_MARKERS = (
     "vm page: self-test ok",
     "pmap: self-test ok",
     "disk: block layer ready",
+    "mouse0: source psm0",
+    "i8042: controller ready, keyboard=present mouse=present",
+    "pckbd0: PS/2 keyboard, set 2 with controller translation, irq 1",
+    "psm0: PS/2 mouse, 3-byte packets, irq 12 as mouse0",
     "usb0: core ready",
     "pci: mechanism=1",
     "root dev  = (0,0)",
@@ -85,6 +92,23 @@ UHCI_MASS_STORAGE_MARKERS = UHCI_MARKERS + (
     "uhci0: port1 device attached speed=full",
 )
 
+OHCI_MOUSE_MARKERS = (
+    "ohci0: pci-id=0x106b003f",
+    "ohci0: OHCI revision=10",
+    "mouse1: source ums0",
+    "ums0: HID boot mouse, interrupt in 0x81, 4 bytes",
+    "ohci0: port1 device attached speed=full",
+    "ohci0: irq enabled line=",
+    "mouse1: input active",
+)
+
+UHCI_MOUSE_MARKERS = UHCI_MARKERS + (
+    "mouse1: source ums0",
+    "ums0: HID boot mouse, interrupt in 0x81, 4 bytes",
+    "uhci0: port1 device attached speed=full",
+    "mouse1: input active",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -98,22 +122,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disk", type=pathlib.Path)
     parser.add_argument("--usb-disk", type=pathlib.Path)
     parser.add_argument("--ohci-keyboard", action="store_true")
+    parser.add_argument("--ohci-mouse", action="store_true")
     parser.add_argument("--uhci-keyboard", action="store_true")
+    parser.add_argument("--uhci-mouse", action="store_true")
     parser.add_argument("--uhci-disk", type=pathlib.Path)
+    parser.add_argument("--ps2-keyboard", action="store_true")
+    parser.add_argument("--ps2-mouse", action="store_true")
     parser.add_argument("--expect-no-disk", action="store_true")
     parser.add_argument("--timeout", type=float, default=15.0)
     args = parser.parse_args()
 
     if args.expect_no_disk and args.disk is not None:
         parser.error("--expect-no-disk cannot be combined with --disk")
-    if args.uhci_keyboard and args.uhci_disk is not None:
-        parser.error("--uhci-keyboard and --uhci-disk use the same UHCI port")
+    if sum(
+        (
+            args.uhci_keyboard,
+            args.uhci_mouse,
+            args.uhci_disk is not None,
+        )
+    ) > 1:
+        parser.error("UHCI keyboard, mouse, and disk use the same test port")
     if args.usb_disk is not None and args.uhci_disk is not None:
         parser.error("only one USB mass-storage device is supported")
     return args
 
 
-def qemu_command(args: argparse.Namespace) -> list[str]:
+def qemu_command(
+    args: argparse.Namespace, monitor_path: pathlib.Path | None
+) -> list[str]:
     command = [
         args.qemu,
         "-machine",
@@ -129,7 +165,11 @@ def qemu_command(args: argparse.Namespace) -> list[str]:
         "-display",
         "none",
         "-monitor",
-        "none",
+        (
+            f"unix:{monitor_path},server=on,wait=off"
+            if monitor_path is not None
+            else "none"
+        ),
         "-no-reboot",
         "-no-shutdown",
     ]
@@ -180,10 +220,21 @@ def qemu_command(args: argparse.Namespace) -> list[str]:
                 "usb-kbd,bus=ohci.0,port=1",
             ]
         )
-    if args.uhci_keyboard or args.uhci_disk is not None:
+    if args.ohci_mouse:
+        command.extend(
+            [
+                "-device",
+                "pci-ohci,id=ohci",
+                "-device",
+                "usb-mouse,bus=ohci.0,port=1",
+            ]
+        )
+    if args.uhci_keyboard or args.uhci_mouse or args.uhci_disk is not None:
         command.extend(["-device", "piix3-usb-uhci,id=uhci"])
     if args.uhci_keyboard:
         command.extend(["-device", "usb-kbd,bus=uhci.0,port=1"])
+    if args.uhci_mouse:
+        command.extend(["-device", "usb-mouse,bus=uhci.0,port=1"])
     if args.uhci_disk is not None:
         command.extend(
             [
@@ -220,8 +271,12 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         )
     if args.ohci_keyboard:
         markers += OHCI_KEYBOARD_MARKERS
+    if args.ohci_mouse:
+        markers += OHCI_MOUSE_MARKERS
     if args.uhci_keyboard:
         markers += UHCI_KEYBOARD_MARKERS
+    if args.uhci_mouse:
+        markers += UHCI_MOUSE_MARKERS
     if args.uhci_disk is not None:
         markers += UHCI_MASS_STORAGE_MARKERS
         markers += (
@@ -234,19 +289,80 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
     return markers
 
 
+def monitor_connect(
+    path: pathlib.Path, deadline: float
+) -> socket.socket:
+    last_error: OSError | None = None
+
+    while time.monotonic() < deadline:
+        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            connection.connect(str(path))
+            connection.settimeout(0.2)
+            try:
+                connection.recv(4096)
+            except TimeoutError:
+                pass
+            return connection
+        except OSError as error:
+            last_error = error
+            connection.close()
+            time.sleep(0.02)
+    raise RuntimeError(f"QEMU monitor connection failed: {last_error}")
+
+
+def monitor_command(connection: socket.socket, command: str) -> None:
+    connection.sendall(command.encode("ascii") + b"\n")
+    time.sleep(0.03)
+    try:
+        connection.recv(4096)
+    except TimeoutError:
+        pass
+
+
+def monitor_send_text(connection: socket.socket, text: str) -> None:
+    key_names = {
+        "\n": "ret",
+    }
+
+    for character in text:
+        key = key_names.get(character, character)
+        monitor_command(connection, f"sendkey {key}")
+
+
 def main() -> None:
     args = parse_args()
+    needs_monitor = (
+        args.ps2_keyboard
+        or args.ps2_mouse
+        or args.ohci_mouse
+        or args.uhci_mouse
+    )
+    monitor_dir = (
+        pathlib.Path(tempfile.mkdtemp(prefix="rebsd-qemu-", dir="/tmp"))
+        if needs_monitor
+        else None
+    )
+    monitor_path = (
+        monitor_dir / "monitor.sock" if monitor_dir is not None else None
+    )
     process = subprocess.Popen(
-        qemu_command(args),
+        qemu_command(args, monitor_path),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
     if process.stdin is None or process.stdout is None:
         raise SystemExit("qemu-boot-smoke: failed to open QEMU pipes")
+    monitor = (
+        monitor_connect(monitor_path, time.monotonic() + 3.0)
+        if monitor_path is not None
+        else None
+    )
 
     output_bytes = bytearray()
     login_sent = False
+    mouse_sent = False
     ls_command_sent = False
     shell_command_sent = False
     completed = False
@@ -258,9 +374,21 @@ def main() -> None:
             if chunk:
                 output_bytes.extend(chunk)
         if not login_sent and b"login: " in output_bytes:
-            process.stdin.write(b"root\n")
-            process.stdin.flush()
+            if args.ps2_keyboard:
+                assert monitor is not None
+                monitor_send_text(monitor, "root\n")
+            else:
+                process.stdin.write(b"root\n")
+                process.stdin.flush()
             login_sent = True
+        if (
+            not mouse_sent
+            and monitor is not None
+            and b"ReBSD/i686 0.1-Resurgence (console)" in output_bytes
+            and (args.ps2_mouse or args.ohci_mouse or args.uhci_mouse)
+        ):
+            monitor_command(monitor, "mouse_move 7 5")
+            mouse_sent = True
         if (
             login_sent
             and not ls_command_sent
@@ -299,6 +427,10 @@ def main() -> None:
     else:
         tail, _ = process.communicate()
     output_bytes.extend(tail)
+    if monitor is not None:
+        monitor.close()
+    if monitor_dir is not None:
+        shutil.rmtree(monitor_dir)
 
     output = output_bytes.decode("utf-8", errors="replace")
     print(output, end="")

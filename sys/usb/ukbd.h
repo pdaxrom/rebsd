@@ -9,6 +9,7 @@
 #ifndef _USB_UKBD_H_
 #define _USB_UKBD_H_
 
+#include <input/kbd.h>
 #include <usb/usbdi.h>
 
 #define UKBD_BOOT_REPORT_SIZE   8u
@@ -18,14 +19,12 @@ struct usb_core;
 
 struct ukbd_decoder {
     uByte ukd_keys[UKBD_BOOT_KEY_COUNT];
-    uByte ukd_caps_lock;
+    struct kbd_mapper ukd_mapper;
 };
-
-typedef void (*ukbd_emit_t)(void *, int);
 
 void ukbd_decoder_init(struct ukbd_decoder *);
 void ukbd_decode_boot_report(struct ukbd_decoder *, const uByte *, size_t,
-    ukbd_emit_t, void *);
+    kbd_emit_t, void *);
 usb_error_t ukbd_register(struct usb_core *);
 void ukbdattach(int);
 

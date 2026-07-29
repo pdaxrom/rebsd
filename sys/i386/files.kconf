@@ -15,6 +15,9 @@
 # bootstrap is replaced by normal common startup.
 kernel/cons.c                   standard
 kernel/subr_dma.c               optional dma
+input/kbdmap.c                  optional ukbd i8042
+input/ps2.c                     optional i8042
+input/mouse.c                   optional i8042 ums
 disk/disk_subr.c                optional disk
 disk/disk.c                     optional disk
 disk/romdisk.c                  standard
@@ -23,13 +26,16 @@ usb/usb_core.c                  optional usb
 usb/usb_service.c               optional usb
 usb/usb_task.c                  optional usb
 usb/uhub.c                      optional uhub
-usb/ukbdmap.c                   optional ukbd
+usb/ukbd_decode.c               optional ukbd
 usb/ukbd.c                      optional ukbd
+usb/umsmap.c                    optional ums
+usb/ums.c                       optional ums
 usb/ehci.c                      optional ehci
 usb/ohci.c                      optional ohci
 usb/uhci.c                      optional uhci
 usb/umass_bbb.c                 optional umass
 usb/umass.c                     optional umass
 i386/pc/dma.c                   optional dma
+i386/pc/i8042.c                 optional i8042
 i386/pc/usb_pci.c               optional usb ehci ohci uhci
 i386/pc/romdisk.c               standard

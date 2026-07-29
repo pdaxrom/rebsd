@@ -1154,10 +1154,14 @@ QEMU EHCI/OHCI/UHCI-инкремент выполнен:
   и 8259 IRQ adapter;
 - direct и BIOS QEMU с `usb-ehci`/`usb-storage` проходят enumeration,
   SCSI inquiry/capacity и общий `disk_attach`; отдельные direct/BIOS QEMU
-  gates с `pci-ohci`/`usb-kbd` проходят общий HID boot-keyboard attach;
+  gates с `pci-ohci`/`usb-kbd` и `usb-mouse` проходят общие HID
+  boot-keyboard/boot-mouse drivers;
 - direct и BIOS QEMU с PIIX3 UHCI проходят общий control/bulk/interrupt
-  HCD: отдельные gates покрывают boot keyboard и mass storage как `sd1`
-  с IDE и `sd0` без IDE; тот же gate проходит на `pc-i440fx-5.1`;
+  HCD: отдельные gates покрывают boot keyboard, boot mouse и mass storage
+  как `sd1` с IDE и `sd0` без IDE; тот же storage gate проходит на
+  `pc-i440fx-5.1`;
+- общий `sys/input` владеет keyboard mapping, PS/2 decoding и mouse event
+  device; i386 i8042-код ограничен transport setup и IRQ1/IRQ12;
 - при наличии IDE он остаётся `sd0`, USB получает `sd1`; без IDE USB
   получает `sd0`. Romdisk остаётся root `(0,0)` и не занимает `sdN`;
 - все QEMU пути требуют `vfs-root: ufs,romdisk,read-only`.
@@ -1166,8 +1170,9 @@ QEMU EHCI/OHCI/UHCI-инкремент выполнен:
 
 1. на IBM 6563-W4G проверить PCI ID USB function VIA, затем тот же
    enumeration/read-only gate на реальной флешке;
-2. проверить low-speed boot keyboard на UHCI; QEMU boot keyboard является
-   full-speed, а low-speed TD flag отдельно покрыт host fake-I/O тестом;
+2. проверить PS/2 keyboard/mouse и USB boot keyboard/mouse на реальном IBM;
+   QEMU HID devices являются full-speed, а low-speed TD flag отдельно
+   покрыт host fake-I/O тестом;
 3. IDE и USB получают `sdN` по общему attach order. Номер `sdN` не задаёт
    root policy: debug root остаётся romdisk `(0,0)`.
 
@@ -1187,7 +1192,7 @@ IBM PC-совместимых компьютеров с legacy BIOS и проц�
 - QEMU `pc-i440fx` как референсная машина;
 - VGA text console и COM1;
 - 8259A PIC и 8253/8254 PIT;
-- PS/2-клавиатура;
+- PS/2-клавиатура и мышь;
 - PATA/IDE в PIO-режиме;
 - MBR и существующая файловая система ReBSD;
 - статические ELF32 i386 executables;
@@ -1479,7 +1484,7 @@ vmspace access без прямого разыменования user VA из rin
 Порядок драйверов:
 
 1. VGA text console + COM1 tty.
-2. i8042/PS/2 keyboard.
+2. i8042 transport; общие PS/2 keyboard/mouse decoders.
 3. RTC CMOS для wall clock.
 4. PCI configuration mechanism #1 только как инфраструктура обнаружения.
 5. PIIX PATA/IDE, сначала PIO polling, затем IRQ mode.

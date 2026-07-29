@@ -20,6 +20,9 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc kernel
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc rootfs-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc ide-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc ps2-input-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc \
+    ohci-mouse-smoke uhci-mouse-smoke
 ```
 
 `boot-smoke` boots without an external disk and proves this complete path:
@@ -34,6 +37,12 @@ appear as a read-only common `sd0`, but root remains the embedded romdisk at
 block major 0, minor 0.  USB mass-storage tests use the same common `sdN`
 namespace and the existing USB core, hubs, EHCI/OHCI/UHCI, `umass` BOT/SCSI
 and disk code.  The romdisk never consumes an `sdN` number.
+
+`ps2-input-smoke` injects keyboard and mouse traffic through QEMU's i8042
+IRQs.  The keyboard logs in through the common console/TTY path, while the
+mouse publishes events through `/dev/mouse0`.  The OHCI and UHCI mouse gates
+use the same machine-independent mouse queue and `/dev/mouse1`; only the
+transport-specific decoders differ.
 
 The root image is built deterministically by the existing `tools/fsutil`.
 Its initial GCC userland contains:
@@ -69,16 +78,19 @@ not part of `all` and is not a release or hardware-gate artifact.
 ## Architecture boundary
 
 `sys/i386` owns only x86 hardware and ABI work: BIOS handoff, E820, paging,
-IDT/PIC/PIT, TSS/context frames, COM1/VGA primitives, PCI discovery, legacy
-ATA PIO, PCI BAR mapping, USB host-controller attachment and the `int 0x80`
-register adapter.
+IDT/PIC/PIT, TSS/context frames, COM1/VGA primitives, i8042 port and IRQ
+transport, PCI discovery, legacy ATA PIO, PCI BAR mapping, USB
+host-controller attachment and the `int 0x80` register adapter.
 
 All policy and reusable subsystems remain in common code: VM, scheduler,
 process lifecycle, exec, signal policy, syscall handlers, console/TTY,
-disk/partition handling, USB enumeration and class drivers, VFS/UFS and
-file descriptors.  The no-swap debug configuration is represented by
+keyboard mapping, PS/2 keyboard and mouse decoding, mouse event devices,
+disk/partition handling, USB enumeration and HID class drivers, VFS/UFS
+and file descriptors.  The no-swap debug configuration is represented by
 `swap none`/`NODEV` in the normal kernel configuration path; there is no
-i686 pager compatibility flag.
+i686 pager compatibility flag.  N64's existing Joybus mouse snapshot ABI is
+unchanged; new transports use the common event API rather than duplicating
+it in a board directory.
 
 PCC is not part of the i686 build and must not be changed.
 
@@ -88,7 +100,7 @@ PCC is not part of the i686 build and must not be changed.
    environment.
 2. Keep external IDE and USB devices on the common disk path; add ordinary
    mount support without changing the embedded UFS root policy.
-3. Complete PS/2 keyboard, RTC and VGA-console validation for machines
-   without a serial terminal.
+3. Complete RTC validation; PS/2 keyboard/mouse and VGA-console input are
+   QEMU-complete and await the real IBM gate.
 4. Run the full QEMU RAM, IDE and USB matrix and common MIPS/N64 regressions.
 5. Request a new IBM 6563-W4G test only after those gates are green.

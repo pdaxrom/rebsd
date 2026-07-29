@@ -5,7 +5,9 @@ compile:
 	sh ./smoke-usb-core.sh compile
 	sh ./smoke-usb-task.sh compile
 	sh ./smoke-uhub.sh compile
+	sh ./smoke-input.sh compile
 	sh ./smoke-ukbd.sh compile
+	sh ./smoke-ums.sh compile
 	sh ./smoke-ohci.sh compile
 	sh ./smoke-uhci.sh compile
 	sh ./smoke-ehci.sh compile
@@ -17,7 +19,9 @@ test:
 	sh ./smoke-usb-core.sh test
 	sh ./smoke-usb-task.sh test
 	sh ./smoke-uhub.sh test
+	sh ./smoke-input.sh test
 	sh ./smoke-ukbd.sh test
+	sh ./smoke-ums.sh test
 	sh ./smoke-ohci.sh test
 	sh ./smoke-uhci.sh test
 	sh ./smoke-ehci.sh test

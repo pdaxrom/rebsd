@@ -26,6 +26,8 @@ The 2026-07-15 external-hub candidate passes all USB, disk, and FAT gates:
 | `usb_task_test` | bounded FIFO, coalescing, exhaustion, cancellation, rearm | pass |
 | `uhub_test` | external-hub power/reset, interrupt bitmap, child attach/detach, recovery, rapid replug and recursive teardown | pass |
 | `ukbd_test` | boot reports, modifiers, repeats, release tracking | pass |
+| `input_test` | common PS/2 set-1 keyboard and three-byte mouse decoding | pass |
+| `ums_test` | HID boot-mouse report normalization and button/motion events | pass |
 | `ohci_test` | control/periodic ED/TDs, IRQ, RHSC masking, reconnect and keyboard input | pass |
 | `uhci_test` | frame/QH/TD schedule, low-speed control and interrupt flags, root reset, and multi-chunk bulk IN/OUT | pass |
 | `ehci_test` | async control/bulk, periodic interrupt-IN, split transactions, atomic QH link/unlink, hub removal/reconnect and companion routing | pass |

@@ -7,7 +7,9 @@
 #define I386_IRQ_BASE          32u
 #define I386_IRQ_COUNT         16u
 #define I386_IRQ_TIMER         0u
+#define I386_IRQ_KEYBOARD      1u
 #define I386_IRQ_COM1          4u
+#define I386_IRQ_PS2_MOUSE     12u
 #define I386_IRQ_MAX_HANDLERS  4u
 #define I386_PIT_HZ            100u
 #define I386_KERNEL_CODE_SELECTOR 0x0008u

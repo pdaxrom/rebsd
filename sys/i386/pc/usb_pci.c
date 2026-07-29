@@ -16,6 +16,7 @@
 #include <usb/uhcivar.h>
 #include <usb/uhub.h>
 #include <usb/ukbd.h>
+#include <usb/ums.h>
 #include <usb/umass.h>
 #include <usb/usbvar.h>
 #include <vm/pmap.h>
@@ -566,6 +567,7 @@ i386_usb_attach(void)
     umassattach(0);
     uhubattach(0);
     ukbdattach(0);
+    umsattach(0);
     if (i386_uhci_pci.up_present) {
         error = i386_uhci_attach();
         if (error != 0)

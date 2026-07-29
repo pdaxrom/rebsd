@@ -17,6 +17,7 @@ KCONFIG_SRCS     = $(KCONFIG_DIR)/Makefile $(KCONFIG_DIR)/config.h \
                    $(KCONFIG_DIR)/main.c $(KCONFIG_DIR)/mkioconf.c \
                    $(KCONFIG_DIR)/mkmakefile.c $(KCONFIG_DIR)/mkswapconf.c
 I386_DISK_SRC    = $(TOPSRC)/sys/disk
+I386_INPUT_SRC   = $(TOPSRC)/sys/input
 I386_USB_SRC     = $(TOPSRC)/sys/usb
 I386_VM_SRC      = $(TOPSRC)/sys/vm
 I386_GEN_INCLUDE = $(CURDIR)/include
@@ -34,6 +35,7 @@ include $(TOPSRC)/target-i386.mk
 # kconfig emits in PARAM for the declarative configuration.
 I686_CPPFLAGS  += -DDMA_ENABLED -DDISK_ENABLED -DUSB_ENABLED \
                   -DUMASS_ENABLED -DUHUB_ENABLED -DUKBD_ENABLED \
+                  -DUMS_ENABLED -DI8042_ENABLED \
                   -DEHCI_ENABLED -DOHCI_ENABLED -DUHCI_ENABLED
 
 QEMU_I386       ?= qemu-system-i386
@@ -119,9 +121,11 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    signal.o user_return.o trap.o \
                    pic.o pit.o pci.o ide.o memory.o paging.o \
                    libkern.o cons.o subr_dma.o \
+                   kbdmap.o ps2.o mouse.o i8042.o \
                    disk_subr.o disk.o romdisk.o i386_romdisk.o \
                    usb_subr.o usb_core.o usb_service.o usb_task.o \
-                   uhub.o ukbdmap.o ukbd.o ehci.o ohci.o uhci.o \
+                   uhub.o ukbd_decode.o ukbd.o umsmap.o ums.o \
+                   ehci.o ohci.o uhci.o \
                    umass_bbb.o umass.o i386_dma.o usb_pci.o \
                    devsw.o \
                    ufs_alloc.o ufs_bio.o ufs_bmap.o ufs_fio.o \
@@ -159,7 +163,10 @@ $(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
 	usb-mass-storage-ide-absent-smoke \
 	bios-usb-mass-storage-ide-absent-smoke \
 	ohci-keyboard-smoke bios-ohci-keyboard-smoke \
+	ohci-mouse-smoke bios-ohci-mouse-smoke \
 	uhci-keyboard-smoke bios-uhci-keyboard-smoke \
+	uhci-mouse-smoke bios-uhci-mouse-smoke \
+	ps2-input-smoke bios-ps2-input-smoke \
 	uhci-mass-storage-smoke bios-uhci-mass-storage-smoke \
 	uhci-mass-storage-ide-absent-smoke \
 	bios-uhci-mass-storage-ide-absent-smoke \
@@ -410,8 +417,23 @@ cons.o: $(TOPSRC)/sys/kernel/cons.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-usb_subr.o usb_core.o usb_service.o usb_task.o uhub.o ukbdmap.o ukbd.o \
-ehci.o ohci.o uhci.o umass_bbb.o umass.o: %.o: $(I386_USB_SRC)/%.c \
+usb_subr.o usb_core.o usb_service.o usb_task.o uhub.o ukbd_decode.o ukbd.o \
+umsmap.o ums.o ehci.o ohci.o uhci.o umass_bbb.o umass.o: %.o: \
+	    $(I386_USB_SRC)/%.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+kbdmap.o ps2.o mouse.o: %.o: $(I386_INPUT_SRC)/%.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+i8042.o: $(I386_PC_SRC)/i8042.c \
+	    $(I386_SRC)/include/i8042.h \
+	    $(I386_SRC)/include/interrupt.h $(I386_SRC)/include/io.h \
+	    $(I386_INPUT_SRC)/kbd.h $(I386_INPUT_SRC)/mousevar.h \
+	    $(I386_INPUT_SRC)/ps2.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -430,7 +452,8 @@ usb_pci.o: $(I386_PC_SRC)/usb_pci.c \
 	    $(I386_USB_SRC)/ehcivar.h $(I386_USB_SRC)/ohcivar.h \
 	    $(I386_USB_SRC)/uhcivar.h \
 	    $(I386_USB_SRC)/uhub.h $(I386_USB_SRC)/ukbd.h \
-	    $(I386_USB_SRC)/umass.h $(I386_USB_SRC)/usbvar.h \
+	    $(I386_USB_SRC)/umass.h $(I386_USB_SRC)/ums.h \
+	    $(I386_USB_SRC)/usbvar.h \
 	    $(TOPSRC)/sys/vm/pmap.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
@@ -1013,6 +1036,19 @@ bios-ohci-keyboard-smoke: rebsd-i686-bios-floppy.img rootfs.img
 	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk rootfs.img --ohci-keyboard --timeout 20
 
+ohci-mouse-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --ohci-mouse --timeout 20
+
+bios-ohci-mouse-smoke: rebsd-i686-bios-floppy.img rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --disk rootfs.img --ohci-mouse --timeout 20
+
 uhci-keyboard-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
@@ -1025,6 +1061,32 @@ bios-uhci-keyboard-smoke: rebsd-i686-bios-floppy.img rootfs.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
 	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk rootfs.img --uhci-keyboard --timeout 20
+
+uhci-mouse-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --uhci-mouse --timeout 20
+
+bios-uhci-mouse-smoke: rebsd-i686-bios-floppy.img rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --disk rootfs.img --uhci-mouse --timeout 20
+
+ps2-input-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --ps2-keyboard --ps2-mouse --timeout 20
+
+bios-ps2-input-smoke: rebsd-i686-bios-floppy.img rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
+	    --bios-image rebsd-i686-bios-floppy.img \
+	    --disk rootfs.img --ps2-keyboard --ps2-mouse --timeout 20
 
 uhci-mass-storage-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \

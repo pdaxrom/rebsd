@@ -15,10 +15,11 @@ USB Mass Storage уже подключён через существующие U
 disk владельцы на major 2: с IDE он получает `sd1`, без IDE — `sd0`.
 Общие OHCI и `ukbd` подключены отдельными direct/BIOS QEMU gates для
 HID устройств на платах с OHCI controller. Общий UHCI HCD теперь проходит
-direct/BIOS QEMU с PIIX3 boot keyboard и mass storage, включая режим без IDE;
-host fake-I/O gate отдельно проверяет low-speed TD flags. Следующий USB gate
-уже требует реальную VIA-функцию IBM: сначала boot keyboard, затем
-read-only mass storage.
+direct/BIOS QEMU с PIIX3 boot keyboard, boot mouse и mass storage, включая
+режим без IDE; host fake-I/O gate отдельно проверяет low-speed TD flags.
+i8042 keyboard/mouse также проходят direct/BIOS QEMU с реальными IRQ1/IRQ12.
+Следующий input gate уже требует реальный i8042 и VIA USB IBM; storage gate
+остаётся отдельной read-only проверкой.
 ATA-команд записи всё ещё нет: IDE
 backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
 регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
@@ -36,7 +37,9 @@ make -C sys/i386 BOARD=pc \
     ide-smoke ide-absent-smoke \
     usb-mass-storage-smoke \
     usb-mass-storage-ide-absent-smoke \
-    ohci-keyboard-smoke uhci-keyboard-smoke \
+    ps2-input-smoke \
+    ohci-keyboard-smoke ohci-mouse-smoke \
+    uhci-keyboard-smoke uhci-mouse-smoke \
     uhci-mass-storage-smoke \
     uhci-mass-storage-ide-absent-smoke \
     usb-combined-smoke

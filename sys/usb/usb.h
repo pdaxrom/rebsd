@@ -323,6 +323,7 @@ typedef struct {
 #define UICLASS_HID             0x03
 #define UISUBCLASS_BOOT         0x01
 #define UIPROTO_BOOT_KEYBOARD   0x01
+#define UIPROTO_BOOT_MOUSE      0x02
 #define UICLASS_MASS            0x08
 #define UISUBCLASS_SCSI         0x06
 #define UIPROTO_MASS_BBB        0x50
@@ -335,6 +336,7 @@ typedef struct {
 #define USB_CLASS_HID           UICLASS_HID
 #define USB_SUBCLASS_BOOT       UISUBCLASS_BOOT
 #define USB_PROTOCOL_KEYBOARD   UIPROTO_BOOT_KEYBOARD
+#define USB_PROTOCOL_MOUSE      UIPROTO_BOOT_MOUSE
 #define USB_CLASS_MASS_STORAGE  UICLASS_MASS
 #define USB_CLASS_HUB           UICLASS_HUB
 

@@ -24,8 +24,8 @@ The recorded digest covers the unmodified downloaded archive.
 ## Import Policy
 
 NetBSD 3.1 is the primary source for USB protocol definitions, USB core object
-relationships, hub handling, OHCI, EHCI, HID boot keyboard support, and USB
-Mass Storage Bulk-Only Transport.  The code is adapted to ReBSD APIs; the
+relationships, hub handling, OHCI, EHCI, HID boot keyboard and mouse support,
+and USB Mass Storage Bulk-Only Transport.  The code is adapted to ReBSD APIs; the
 NetBSD autoconfiguration, device framework, bus_space, bus_dma, kernel thread,
 mutex, PMF, sysmon, proplib, kauth, and kqueue frameworks are not imported to
 satisfy dependencies.
@@ -67,10 +67,10 @@ is updated as each later phase imports or materially adapts a source.
 | `sys/dev/usb/uhci.c` | `sys/usb/uhci.c` | generic UHCI HCD | fixed frame list, control/bulk chunking, periodic interrupt-IN, root-port polling and completion/abort adaptation; original notice and RCS id retained |
 | `sys/dev/usb/uhcireg.h` | `sys/usb/uhcireg.h` | UHCI registers and descriptors | compact adaptation; original notice and RCS id retained |
 | `sys/dev/usb/uhcivar.h` | `sys/usb/uhcivar.h` | UHCI private state | fixed-schedule bounded-state adaptation; original notice and RCS id retained |
-| `sys/dev/usb/usbhid.h` | `sys/usb/usbhid.h` | HID class requests needed by boot keyboards | compact adaptation; original notice and RCS id retained |
-| `sys/dev/usb/uhidev.h` | `sys/usb/uhidev.h` or compact equivalent | HID definitions needed by boot keyboards | reference only |
+| `sys/dev/usb/usbhid.h` | `sys/usb/usbhid.h` | HID class requests needed by boot keyboards and mice | compact adaptation; original notice and RCS id retained |
+| `sys/dev/usb/uhidev.h` | `sys/usb/uhidev.h` or compact equivalent | HID definitions needed by boot keyboards and mice | reference only |
 | `sys/dev/usb/ukbd.c` | `sys/usb/ukbd.c` | HID boot keyboard only | compact boot-protocol adaptation; original notice and RCS id retained |
-| `sys/dev/usb/ukbdmap.c` | `sys/usb/ukbdmap.c` | basic US key map | compact ASCII/terminal adaptation; original notice and RCS id retained |
+| `sys/dev/usb/ukbdmap.c` | `sys/input/kbdmap.c` | basic US key map shared by USB and PS/2 keyboards | compact ASCII/terminal adaptation; original notice and RCS id retained |
 | `sys/dev/usb/umass.c` | `sys/usb/umass.c`, `sys/usb/umass_bbb.c` | single-LUN BOT and compact read/write SCSI command set | compact synchronous adaptation; original notices and RCS id retained |
 | `sys/dev/usb/umassvar.h` | `sys/usb/umassvar.h` | compact umass BOT state | compact adaptation; original notice and RCS id retained |
 
@@ -98,7 +98,10 @@ NetBSD USB sources:
 | `sys/usb/usb_service.c` | Generic bounded-core service instance used by platform HCD attachments |
 | `sys/usb/usb_task.h` | Fixed task record adapted from the classic `usbdi.h` concept; original notice and RCS id retained |
 | `sys/usb/uhub.h` | Native bounded root/external-hub state, child topology, and event interface |
-| `sys/usb/ukbd.h` | Bounded boot-report decoder and driver-registration interface |
+| `sys/input/kbd.h`, `sys/input/ps2.[ch]` | Native common keyboard mapper contract and PS/2 set-1 keyboard/mouse decoders |
+| `sys/include/mouse.h`, `sys/input/mouse.c`, `sys/input/mousevar.h` | Native transport-independent mouse event ABI, bounded queues, cdev and source contract |
+| `sys/usb/ukbd.h`, `sys/usb/ukbd_decode.c` | Bounded boot-report decoder and driver-registration interface |
+| `sys/usb/ums.[ch]`, `sys/usb/umsmap.c` | Native HID boot-mouse class driver and report mapper feeding the common mouse event layer |
 | `sys/usb/umass.h` | Native single-LUN SCSI media interface with bounded read, write, and flush operations; no partition or filesystem policy |
 | `sys/disk/disk.[ch]` | Native transport-independent disk registry, `bdevsw` entry points, units/minors, and backend contract |
 | `sys/disk/disk_subr.c` | Native bounded classic-MBR parser shared by every disk transport |

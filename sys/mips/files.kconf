@@ -88,8 +88,9 @@ usb/usb_task.c                 optional usb
 usb/uhub.c                     optional uhub
 usb/ehci.c                     optional ehci
 usb/ohci.c                     optional ohci
+usb/ukbd_decode.c              optional ukbd
 usb/ukbd.c                     optional ukbd
-usb/ukbdmap.c                  optional ukbd
+input/kbdmap.c                 optional ukbd
 usb/umass_bbb.c                optional umass
 usb/umass.c                    optional umass
 
