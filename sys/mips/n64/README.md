@@ -2023,6 +2023,48 @@ make -C sys/mips BOARD=n64 N64_TRACE=1 kernel.z64
 The trace currently prints a limited number of syscall entry/exit messages
 from the exception handler. It is intended for bring-up debugging only.
 
+### Native PCC long-run fault diagnostics
+
+The 2026-07-29 real-hardware investigation added diagnostic coverage for a
+rare native PCC smoke failure on N64.  The first complete fault capture showed
+that `/usr/bin/ld` reached `malloc_insert_free()` through `free()` with the
+invalid pointer `0x25`, then raised an address exception while reading
+`0x21`.  The recorded executable PTE, live TLB entry, physical instruction
+address, and cached/uncached instruction words all agreed.  VM validation
+passed, no page had been swapped, and zswap reported no error.  Repeated
+post-fault hashes of `pcc`, `cpp`, and `ccom` also matched the build artifacts.
+This localizes the next investigation to corruption of runtime state; it does
+not yet identify where the bad pointer originated.
+
+The following diagnostic facilities are present:
+
+- The PCC minimal rootfs installs `/usr/bin/md5`, so the compiler driver and
+  helper binaries can be checked before and immediately after a fault.
+- A user fault temporarily mirrors the primary console output to the n64cart
+  debug UART.  A VI-console build therefore records the complete
+  `N64_USER_FAULT` report in the serial log without changing the configured
+  console.
+- The report includes all saved GPR halves, EPC, Cause, Status, BadVAddr,
+  process layout, VM/pmap/zswap counters, the queried PTE, the matching live
+  TLB entry, and cached/uncached physical instruction words.
+- The report also reads the current user stack through the active pmap and
+  prints bounded stack words plus the frame-pointer chain.  Each entry includes
+  its physical address and cached/uncached values, allowing the saved caller
+  return address and a possible cache-coherency discrepancy to be identified
+  on the next occurrence.
+
+These changes are diagnostic only.  They do not retry an operation, validate
+or suppress `free()`, alter allocator policy, change VM or pmap behavior, or
+modify PCC-generated code.  GCC- and PCC-built N64 kernels pass their build
+gates, and the exact N64 rootfs passes native PCC smoke and process-reaping
+checks under Malta64/QEMU.
+
+At the time of this update, continued real-hardware runs on both N64 and
+Creator Ci20 are proceeding normally without another failure.  This is a
+current validation observation, not a declaration that the rare N64 fault is
+resolved; a future occurrence must retain the full `N64_USER_FAULT stack` and
+`N64_USER_FAULT frame` output.
+
 ## Disabled board-call ABI
 
 PIC32 implements `ucall`, `ufetch`, and `ustore` as privileged board/autoconfig
