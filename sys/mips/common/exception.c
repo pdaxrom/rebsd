@@ -106,6 +106,95 @@ n64_user_fault_read_word(unsigned paddr, unsigned *cached, unsigned *uncached)
 }
 
 static int
+n64_user_fault_read_vaddr(unsigned vaddr, unsigned *paddr,
+    unsigned *cached, unsigned *uncached)
+{
+    struct vmspace *vmspace;
+    vm_paddr_t physical;
+    int error;
+
+    if ((vaddr & 3u) != 0 || paddr == 0 || cached == 0 || uncached == 0)
+        return EINVAL;
+    vmspace = u.u_procp != 0 ? u.u_procp->p_vmspace : 0;
+    if (vmspace == 0 || vmspace->vms_pmap == 0)
+        return EFAULT;
+    error = pmap_extract(vmspace->vms_pmap, vaddr, &physical);
+    if (error != 0)
+        return error;
+    *paddr = physical;
+    return n64_user_fault_read_word(physical, cached, uncached);
+}
+
+static void
+n64_dump_user_stack(unsigned sp, unsigned fp)
+{
+    unsigned cached;
+    unsigned current;
+    unsigned end;
+    unsigned next_cached;
+    unsigned next_paddr;
+    unsigned next_uncached;
+    unsigned paddr;
+    unsigned ra_cached;
+    unsigned ra_paddr;
+    unsigned ra_uncached;
+    unsigned start;
+    unsigned uncached;
+    int depth;
+    int error;
+    int next_error;
+    int ra_error;
+    int word;
+
+    if (u.u_procp == 0)
+        return;
+    start = (unsigned)u.u_procp->p_saddr;
+    end = start + (unsigned)u.u_procp->p_ssize;
+    if (end < start || end - start < 2 * sizeof(unsigned))
+        return;
+    printf("N64_USER_FAULT stack-bounds=%08x-%08x\n", start, end);
+
+    current = sp & ~3u;
+    for (word = 0; word < 16 && current >= start &&
+        current <= end - sizeof(unsigned); word++, current += NBPW) {
+        paddr = 0;
+        cached = 0;
+        uncached = 0;
+        error = n64_user_fault_read_vaddr(current, &paddr, &cached,
+            &uncached);
+        printf("N64_USER_FAULT stack addr=%08x error=%d paddr=%08x "
+            "cached=%08x uncached=%08x\n",
+            current, error, paddr, cached, uncached);
+    }
+
+    current = fp;
+    for (depth = 0; depth < 12 && (current & 3u) == 0 &&
+        current >= start && current <= end - 2 * sizeof(unsigned);
+        depth++) {
+        next_paddr = 0;
+        next_cached = 0;
+        next_uncached = 0;
+        next_error = n64_user_fault_read_vaddr(current, &next_paddr,
+            &next_cached, &next_uncached);
+        ra_paddr = 0;
+        ra_cached = 0;
+        ra_uncached = 0;
+        ra_error = n64_user_fault_read_vaddr(current + NBPW, &ra_paddr,
+            &ra_cached, &ra_uncached);
+        printf("N64_USER_FAULT frame depth=%d fp=%08x "
+            "next_error=%d next_paddr=%08x next=%08x/%08x "
+            "word1_error=%d word1_paddr=%08x word1=%08x/%08x\n",
+            depth, current, next_error, next_paddr, next_cached,
+            next_uncached, ra_error, ra_paddr, ra_cached, ra_uncached);
+        if (next_error != 0 || next_cached <= current ||
+            next_cached < start ||
+            next_cached > end - 2 * sizeof(unsigned))
+            break;
+        current = next_cached;
+    }
+}
+
+static int
 n64_user_fault_tlb_paddr(const struct pmap_tlb_diagnostics *tlb,
     unsigned vaddr, unsigned *paddr)
 {
@@ -317,6 +406,7 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
         zswap_error == 0 ? zswap.mzs_compressed_blocks : 0,
         zswap_error == 0 ? zswap.mzs_used_units : 0,
         zswap_error == 0 ? zswap.mzs_phys_units : 0);
+    n64_dump_user_stack(frame[FRAME_SP], frame[FRAME_FP]);
     n64_dump_user_mapping("pc", faultpc);
     if (badvaddr != faultpc)
         n64_dump_user_mapping("badvaddr", badvaddr);
