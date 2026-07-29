@@ -209,9 +209,11 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
     unsigned wired;
     int object_error;
     int pmap_error;
+    int previous_debug_mirror;
     int vmspace_error;
     int zswap_error;
 
+    previous_debug_mirror = n64_console_debug_mirror(1);
     faultpc = frame[FRAME_PC] + ((rawcause & CA_BD) != 0 ? NBPW : 0);
     entryhi = mips_read_c0_register(C0_ENTRYHI, 0);
     wired = mips_read_c0_register(C0_WIRED, 0);
@@ -318,6 +320,7 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
     n64_dump_user_mapping("pc", faultpc);
     if (badvaddr != faultpc)
         n64_dump_user_mapping("badvaddr", badvaddr);
+    (void)n64_console_debug_mirror(previous_debug_mirror);
 }
 #endif
 

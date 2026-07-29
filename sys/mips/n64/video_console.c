@@ -979,12 +979,21 @@ n64_console_putc(int ch)
     n64_console_draw_cursor();
 }
 
+int
+n64_console_debug_mirror(int enable)
+{
+    int previous = console_panic_mirror;
+
+    console_panic_mirror = enable != 0;
+    return previous;
+}
+
 void
 n64_console_panic_mode(void)
 {
     struct n64_video_info info;
 
-    console_panic_mirror = 1;
+    (void)n64_console_debug_mirror(1);
     n64_video_get_info(&info);
     if (info.mode != N64FB_MODE_320X240)
         (void)n64_video_set_mode(N64FB_MODE_320X240);

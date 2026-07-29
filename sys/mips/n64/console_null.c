@@ -27,6 +27,13 @@ n64_console_debug_putc(int ch)
     (void)ch;
 }
 
+int __attribute__((weak))
+n64_console_debug_mirror(int enable)
+{
+    (void)enable;
+    return 0;
+}
+
 void __attribute__((weak))
 n64_console_panic_mode(void)
 {
