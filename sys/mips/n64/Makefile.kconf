@@ -406,7 +406,7 @@ N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
 
 N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty init login ls mkfs mount netstat sh stty \
     sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
-    ld make nm pstat ranlib sed) \
+    ld make md5 nm pstat ranlib sed) \
     $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),dhclient ifconfig ping route sed)
 N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod cmp iostat mkdir ps rm sleep strace \
     vm-pressure-smoke \
@@ -420,7 +420,7 @@ N64_MINIMAL_ROOTFS_CMD_OPERATORS = \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),df,$(N64_CMD_NONE))
 N64_MINIMAL_ROOTFS_CMD_KMEM = $(N64_CMD_NONE)
 N64_MINIMAL_ROOTFS_USR_BIN_FILES = vm-pressure-smoke \
-    $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),free)
+    $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),free md5)
 N64_MINIMAL_ROOTFS_PCC_TEST_NAMES = \
     alias-stress-smoke.c alias-stress-smoke.sh \
     build-workload-smoke.sh cc-pcc-smoke.sh ccom-stress.sh \
@@ -1232,6 +1232,7 @@ ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
 endif
 ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/bin/kill
+	test -x $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/md5
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/free
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/pstat
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/bin/df
