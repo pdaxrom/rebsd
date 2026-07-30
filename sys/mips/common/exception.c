@@ -14,6 +14,7 @@
 #include <vm/vmspace.h>
 #include <machine/io.h>
 #include <machine/fpu.h>
+#include <mips/common/exception_diagnostics.h>
 #ifdef N64
 #include <machine/console.h>
 #include <machine/n64.h>
@@ -61,6 +62,9 @@ static volatile unsigned long mips_timer_clock_last_us;
 static volatile unsigned long mips_timer_clock_max_us;
 static volatile unsigned mips_interrupt_depth;
 static unsigned long mips_systrace_sequence;
+volatile unsigned
+    mips_exception_restore_diagnostics[MIPS_RESTORE_DIAG_WORDS]
+    __attribute__((aligned(8)));
 
 #if defined(N64_USB_GDB) || defined(N64_RESET_DUMP)
 extern char n64_gdb_emergency_stack[];
@@ -91,6 +95,7 @@ mips_trace_user_fault(const char *kind, int *frame, unsigned badvaddr)
 
 struct mips_exception_snapshot {
     int valid;
+    unsigned sequence;
     unsigned frame;
     unsigned pc;
     unsigned sp;
@@ -101,22 +106,57 @@ struct mips_exception_snapshot {
     unsigned at;
     unsigned v0;
     unsigned a0;
+    unsigned at_high;
+    unsigned v0_high;
+    unsigned a0_high;
+    unsigned entryhi;
+    unsigned count;
+    unsigned compare;
     int pid;
     char comm[MAXCOMLEN + 1];
 };
 
-static struct mips_exception_snapshot exception_snapshots[2];
+#define MIPS_EXCEPTION_HISTORY  8u
+static struct mips_exception_snapshot
+    exception_snapshots[MIPS_EXCEPTION_HISTORY];
 static unsigned exception_snapshot_index;
+static unsigned exception_snapshot_sequence;
 #define last_exception \
     exception_snapshots[exception_snapshot_index]
-#define previous_exception \
-    exception_snapshots[exception_snapshot_index ^ 1u]
 static int exception_panic_prepared;
 
-static void exception_dump_snapshot(char *,
-    struct mips_exception_snapshot *);
+static void exception_dump_snapshot(const char *,
+    const struct mips_exception_snapshot *);
+
+static unsigned
+exception_frame_gpr_high(const int *frame, unsigned word)
+{
+#if MIPS_FRAME_GPR64
+    return frame[word - 1];
+#else
+    return frame[word] < 0 ? ~0u : 0;
+#endif
+}
 
 #ifdef N64
+extern int pmap_md_icache_tag_diagnostics(vm_vaddr_t, unsigned *,
+    unsigned *, unsigned *);
+extern void mips_cp0_diagnostics(unsigned *);
+
+static unsigned
+mips_restore_diagnostic(unsigned offset)
+{
+    return mips_exception_restore_diagnostics[offset / sizeof(unsigned)];
+}
+
+static const struct mips_exception_snapshot *
+exception_snapshot_age(unsigned age)
+{
+    return &exception_snapshots[
+        (exception_snapshot_index - age) &
+        (MIPS_EXCEPTION_HISTORY - 1)];
+}
+
 static int
 n64_user_fault_read_word(unsigned paddr, unsigned *cached, unsigned *uncached)
 {
@@ -244,6 +284,64 @@ n64_dump_user_code(unsigned pc)
     }
 }
 
+static void
+n64_dump_user_icache_tag(unsigned pc)
+{
+    unsigned index_address;
+    unsigned taghi;
+    unsigned taglo;
+    int error;
+
+    index_address = 0;
+    taglo = 0;
+    taghi = 0;
+    error = pmap_md_icache_tag_diagnostics(pc, &index_address,
+        &taglo, &taghi);
+    printf("N64_USER_FAULT icache vaddr=%08x index=%08x error=%d "
+        "taglo=%08x taghi=%08x ptag=%05x state=%u\n",
+        pc, index_address, error, taglo, taghi,
+        (taglo >> 8) & 0x000fffffu, (taglo >> 6) & 3u);
+}
+
+static void
+n64_dump_exception_history(void)
+{
+    const struct mips_exception_snapshot *snapshot;
+    unsigned age;
+
+    for (age = 1; age < MIPS_EXCEPTION_HISTORY; ++age) {
+        snapshot = exception_snapshot_age(age);
+        if (!snapshot->valid)
+            break;
+        printf("N64_USER_FAULT exception-history age=%u\n", age);
+        exception_dump_snapshot("prior exception", snapshot);
+    }
+}
+
+static void
+n64_dump_restore_diagnostics(void)
+{
+    printf("N64_USER_FAULT restore sequence=%u frame=%08x epc=%08x "
+        "status=%08x count=%08x\n",
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_SEQUENCE),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_FRAME),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_EPC),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_STATUS),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_COUNT));
+    printf("N64_USER_FAULT restore at=%08x%08x v0=%08x%08x "
+        "a0=%08x%08x sp=%08x%08x ra=%08x%08x\n",
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_AT_HIGH),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_AT),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_V0_HIGH),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_V0),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_A0_HIGH),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_A0),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_SP_HIGH),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_SP),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_RA_HIGH),
+        mips_restore_diagnostic(MIPS_RESTORE_DIAG_RA));
+}
+
 static int
 n64_user_fault_tlb_paddr(const struct pmap_tlb_diagnostics *tlb,
     unsigned vaddr, unsigned *paddr)
@@ -323,17 +421,41 @@ n64_dump_user_mapping(const char *label, unsigned vaddr)
         pmap_error == 0 ? tlb.ptd_hardware_entrylo1 : 0,
         tlb_paddr, tlb_word_error, tlb_word);
     printf("N64_USER_FAULT refill count=%lu last_pmap=%08x "
-        "last_vaddr=%08x repeat=%u fast_pc=%08x fast_vaddr=%08x "
-        "fast_repeat=%u directory=%08x/%08x\n",
+        "last_vaddr=%08x repeat=%u fast_sequence=%u "
+        "fast_pc=%08x fast_vaddr=%08x fast_repeat=%u\n",
         pmap_error == 0 ? (unsigned long)tlb.ptd_refills : 0,
         pmap_error == 0 ? tlb.ptd_last_pmap : 0,
         pmap_error == 0 ? tlb.ptd_last_vaddr : 0,
         pmap_error == 0 ? tlb.ptd_repeat : 0,
+        pmap_error == 0 ? tlb.ptd_fast_sequence : 0,
         pmap_error == 0 ? tlb.ptd_fast_last_epc : 0,
         pmap_error == 0 ? tlb.ptd_fast_last_vaddr : 0,
-        pmap_error == 0 ? tlb.ptd_fast_repeat : 0,
+        pmap_error == 0 ? tlb.ptd_fast_repeat : 0);
+    printf("N64_USER_FAULT fast at=%08x%08x v0=%08x%08x "
+        "a0=%08x%08x cause=%08x status=%08x count=%08x\n",
+        pmap_error == 0 ? tlb.ptd_fast_last_at_high : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_at : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_v0_high : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_v0 : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_a0_high : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_a0 : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_cause : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_status : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_count : 0);
+    printf("N64_USER_FAULT fast index=%08x random=%u hi=%08x "
+        "lo0=%08x lo1=%08x pte_pair=%08x pte0=%08x pte1=%08x "
+        "directory=%08x/%08x/%08x\n",
+        pmap_error == 0 ? tlb.ptd_fast_last_index : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_random : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_entryhi : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_entrylo0 : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_entrylo1 : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_pte_pair : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_pte0 : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_pte1 : 0,
         pmap_error == 0 ? tlb.ptd_active_directory : 0,
-        pmap_error == 0 ? tlb.ptd_fast_directory : 0);
+        pmap_error == 0 ? tlb.ptd_fast_directory : 0,
+        pmap_error == 0 ? tlb.ptd_fast_last_directory : 0);
 }
 
 static void
@@ -343,19 +465,67 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
     struct mips_zswap_stats zswap;
     struct vm_object_stats object;
     struct pmap_stats pmap;
+    unsigned cp0[MIPS_CP0_DIAG_WORDS];
+    unsigned compare;
+    unsigned config;
+    unsigned count;
+    unsigned cp0_cause;
+    unsigned cp0_epc;
+    unsigned cp0_status;
+    unsigned cp0_badvaddr;
+    unsigned cacheerr;
+    unsigned context;
+    unsigned ecc;
     unsigned entryhi;
+    unsigned entrylo0;
+    unsigned entrylo1;
+    unsigned errorepc;
     unsigned faultpc;
+    unsigned index;
+    unsigned lladdr;
+    unsigned pagemask;
+    unsigned prid;
+    unsigned random;
+    unsigned taghi;
+    unsigned taglo;
+    unsigned watchhi;
+    unsigned watchlo;
     unsigned wired;
+    unsigned xcontext;
     int object_error;
     int pmap_error;
     int previous_debug_mirror;
     int vmspace_error;
     int zswap_error;
 
-    previous_debug_mirror = n64_console_debug_mirror(1);
     faultpc = frame[FRAME_PC] + ((rawcause & CA_BD) != 0 ? NBPW : 0);
-    entryhi = mips_read_c0_register(C0_ENTRYHI, 0);
-    wired = mips_read_c0_register(C0_WIRED, 0);
+    mips_cp0_diagnostics(cp0);
+    index = cp0[MIPS_CP0_DIAG_INDEX / sizeof(unsigned)];
+    random = cp0[MIPS_CP0_DIAG_RANDOM / sizeof(unsigned)];
+    entrylo0 = cp0[MIPS_CP0_DIAG_ENTRYLO0 / sizeof(unsigned)];
+    entrylo1 = cp0[MIPS_CP0_DIAG_ENTRYLO1 / sizeof(unsigned)];
+    pagemask = cp0[MIPS_CP0_DIAG_PAGEMASK / sizeof(unsigned)];
+    entryhi = cp0[MIPS_CP0_DIAG_ENTRYHI / sizeof(unsigned)];
+    wired = cp0[MIPS_CP0_DIAG_WIRED / sizeof(unsigned)];
+    count = cp0[MIPS_CP0_DIAG_COUNT / sizeof(unsigned)];
+    compare = cp0[MIPS_CP0_DIAG_COMPARE / sizeof(unsigned)];
+    cp0_status = cp0[MIPS_CP0_DIAG_STATUS / sizeof(unsigned)];
+    cp0_cause = cp0[MIPS_CP0_DIAG_CAUSE / sizeof(unsigned)];
+    cp0_epc = cp0[MIPS_CP0_DIAG_EPC / sizeof(unsigned)];
+    config = cp0[MIPS_CP0_DIAG_CONFIG / sizeof(unsigned)];
+    watchlo = cp0[MIPS_CP0_DIAG_WATCHLO / sizeof(unsigned)];
+    watchhi = cp0[MIPS_CP0_DIAG_WATCHHI / sizeof(unsigned)];
+    errorepc = cp0[MIPS_CP0_DIAG_ERROREPC / sizeof(unsigned)];
+    context = cp0[MIPS_CP0_DIAG_CONTEXT / sizeof(unsigned)];
+    cp0_badvaddr = cp0[MIPS_CP0_DIAG_BADVADDR / sizeof(unsigned)];
+    prid = cp0[MIPS_CP0_DIAG_PRID / sizeof(unsigned)];
+    lladdr = cp0[MIPS_CP0_DIAG_LLADDR / sizeof(unsigned)];
+    xcontext = cp0[MIPS_CP0_DIAG_XCONTEXT / sizeof(unsigned)];
+    ecc = cp0[MIPS_CP0_DIAG_ECC / sizeof(unsigned)];
+    cacheerr = cp0[MIPS_CP0_DIAG_CACHEERR / sizeof(unsigned)];
+    taglo = cp0[MIPS_CP0_DIAG_TAGLO / sizeof(unsigned)];
+    taghi = cp0[MIPS_CP0_DIAG_TAGHI / sizeof(unsigned)];
+    previous_debug_mirror = n64_console_debug_mirror(1);
     pmap_error = pmap_get_stats(&pmap);
     object_error = vm_object_get_stats(&object);
     vmspace_error = u.u_procp != 0 && u.u_procp->p_vmspace != 0 ?
@@ -376,6 +546,29 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
         frame[FRAME_STATUS], badvaddr);
     printf("N64_USER_FAULT sp=%08x ra=%08x entryhi=%08x wired=%u\n",
         frame[FRAME_SP], frame[FRAME_RA], entryhi, wired);
+    printf("N64_USER_FAULT cp0 status=%08x cause=%08x epc=%08x "
+        "errorepc=%08x count=%08x compare=%08x config=%08x\n",
+        cp0_status, cp0_cause, cp0_epc, errorepc, count, compare, config);
+    printf("N64_USER_FAULT cp0 index=%08x random=%u pagemask=%08x "
+        "entryhi=%08x entrylo0=%08x entrylo1=%08x wired=%u\n",
+        index, random, pagemask, entryhi, entrylo0, entrylo1, wired);
+    printf("N64_USER_FAULT cp0 watchlo=%08x watchhi=%08x "
+        "interrupt_depth=%u systrace_sequence=%lu ticks=%lu\n",
+        watchlo, watchhi, mips_interrupt_depth, mips_systrace_sequence,
+        (unsigned long)ct_ticks);
+    printf("N64_USER_FAULT cp0 context=%08x badvaddr=%08x "
+        "xcontext=%08x lladdr=%08x prid=%08x\n",
+        context, cp0_badvaddr, xcontext, lladdr, prid);
+    printf("N64_USER_FAULT cp0 ecc=%08x cacheerr=%08x "
+        "taglo=%08x taghi=%08x\n",
+        ecc, cacheerr, taglo, taghi);
+    printf("N64_USER_FAULT timer irq=%lu late=%lu "
+        "late_last_us=%lu late_max_us=%lu late_last_tick=%lu "
+        "late_max_tick=%lu clock_last_us=%lu clock_max_us=%lu\n",
+        mips_timer_irq_count, mips_timer_late_count,
+        mips_timer_late_last_us, mips_timer_late_max_us,
+        mips_timer_late_last_tick, mips_timer_late_max_tick,
+        mips_timer_clock_last_us, mips_timer_clock_max_us);
     printf("N64_USER_FAULT data=%08x+%08x stack=%08x+%08x "
         "vmspace_error=%d\n",
         u.u_procp ? (unsigned)u.u_procp->p_daddr : 0,
@@ -456,8 +649,10 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
         zswap_error == 0 ? zswap.mzs_compressed_blocks : 0,
         zswap_error == 0 ? zswap.mzs_used_units : 0,
         zswap_error == 0 ? zswap.mzs_phys_units : 0);
-    exception_dump_snapshot("previous exception", &previous_exception);
+    n64_dump_restore_diagnostics();
+    n64_dump_exception_history();
     n64_dump_user_code(faultpc);
+    n64_dump_user_icache_tag(faultpc);
     n64_dump_user_stack(frame[FRAME_SP], frame[FRAME_FP]);
     n64_dump_user_mapping("pc", faultpc);
     if (badvaddr != faultpc)
@@ -565,8 +760,12 @@ exception_save_snapshot(int *frame, unsigned rawcause, unsigned badvaddr)
     int i;
 
     p = u.u_procp;
-    exception_snapshot_index ^= 1u;
+    exception_snapshot_index =
+        (exception_snapshot_index + 1) & (MIPS_EXCEPTION_HISTORY - 1);
+    if (++exception_snapshot_sequence == 0)
+        ++exception_snapshot_sequence;
     last_exception.valid = 1;
+    last_exception.sequence = exception_snapshot_sequence;
     last_exception.frame = (unsigned)frame;
     last_exception.pc = frame[FRAME_PC];
     last_exception.sp = frame[FRAME_SP];
@@ -577,6 +776,15 @@ exception_save_snapshot(int *frame, unsigned rawcause, unsigned badvaddr)
     last_exception.at = frame[FRAME_R1];
     last_exception.v0 = frame[FRAME_R2];
     last_exception.a0 = frame[FRAME_R4];
+    last_exception.at_high =
+        exception_frame_gpr_high(frame, FRAME_R1);
+    last_exception.v0_high =
+        exception_frame_gpr_high(frame, FRAME_R2);
+    last_exception.a0_high =
+        exception_frame_gpr_high(frame, FRAME_R4);
+    last_exception.entryhi = mips_read_c0_register(C0_ENTRYHI, 0);
+    last_exception.count = mips_read_c0_register(C0_COUNT, 0);
+    last_exception.compare = mips_read_c0_register(C0_COMPARE, 0);
     last_exception.pid = p ? p->p_pid : -1;
     for (i = 0; i < MAXCOMLEN && u.u_comm[i]; ++i)
         last_exception.comm[i] = u.u_comm[i];
@@ -584,18 +792,25 @@ exception_save_snapshot(int *frame, unsigned rawcause, unsigned badvaddr)
 }
 
 static void
-exception_dump_snapshot(char *tag, struct mips_exception_snapshot *snap)
+exception_dump_snapshot(const char *tag,
+    const struct mips_exception_snapshot *snap)
 {
     if (!snap->valid) {
         printf("*** %s: unavailable\n", tag);
         return;
     }
-    printf("*** %s: frame=%08x pc=%08x sp=%08x ra=%08x\n",
-        tag, snap->frame, snap->pc, snap->sp, snap->ra);
+    printf("*** %s: sequence=%u frame=%08x pc=%08x sp=%08x ra=%08x\n",
+        tag, snap->sequence, snap->frame, snap->pc, snap->sp, snap->ra);
     printf("*** %s: status=%08x cause=%08x badvaddr=%08x "
         "at=%08x v0=%08x a0=%08x pid=%d comm=%s\n",
         tag, snap->status, snap->cause, snap->badvaddr,
         snap->at, snap->v0, snap->a0, snap->pid, snap->comm);
+    printf("*** %s: entryhi=%08x count=%08x compare=%08x\n",
+        tag, snap->entryhi, snap->count, snap->compare);
+    printf("*** %s: full-at=%08x%08x full-v0=%08x%08x "
+        "full-a0=%08x%08x\n",
+        tag, snap->at_high, snap->at, snap->v0_high, snap->v0,
+        snap->a0_high, snap->a0);
 }
 
 static void

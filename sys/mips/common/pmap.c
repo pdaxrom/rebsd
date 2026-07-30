@@ -25,6 +25,7 @@
 #endif
 
 #include <vm/pmap.h>
+#include <mips/common/exception_diagnostics.h>
 
 #define PMAP_DIRECTORY_ENTRIES  1024u
 #define PMAP_TABLE_ENTRIES      1024u
@@ -100,9 +101,16 @@ uint32_t *mips_pmap_fast_directory;
 volatile unsigned mips_pmap_fast_refills;
 volatile unsigned mips_pmap_fast_scratch;
 volatile unsigned mips_pmap_fast_last_hash;
-volatile unsigned mips_pmap_fast_last_epc;
-volatile unsigned mips_pmap_fast_last_vaddr;
 volatile unsigned mips_pmap_fast_repeat;
+volatile unsigned
+    mips_pmap_fast_diagnostics[MIPS_REFILL_DIAG_WORDS]
+    __attribute__((aligned(8)));
+
+static unsigned
+pmap_fast_diagnostic(unsigned offset)
+{
+    return mips_pmap_fast_diagnostics[offset / sizeof(unsigned)];
+}
 
 static void
 pmap_stat_increment(vm_pfn_t *value)
@@ -391,9 +399,9 @@ pmap_system_init(struct vm_page_allocator *allocator)
     mips_pmap_fast_refills = 0;
     mips_pmap_fast_scratch = 0;
     mips_pmap_fast_last_hash = 0;
-    mips_pmap_fast_last_epc = 0;
-    mips_pmap_fast_last_vaddr = 0;
     mips_pmap_fast_repeat = 0;
+    pmap_zero((void *)mips_pmap_fast_diagnostics,
+        sizeof(mips_pmap_fast_diagnostics));
     pmap_asid_generation = 1;
     pmap_next_asid = PMAP_ASID_FIRST;
     pmap_initialized = 1;
@@ -1192,8 +1200,48 @@ pmap_get_tlb_diagnostics(vm_vaddr_t vaddr,
     diagnostics->ptd_hardware_entryhi = 0;
     diagnostics->ptd_hardware_entrylo0 = 0;
     diagnostics->ptd_hardware_entrylo1 = 0;
-    diagnostics->ptd_fast_last_epc = mips_pmap_fast_last_epc;
-    diagnostics->ptd_fast_last_vaddr = mips_pmap_fast_last_vaddr;
+    diagnostics->ptd_fast_sequence =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_SEQUENCE);
+    diagnostics->ptd_fast_last_epc =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_EPC);
+    diagnostics->ptd_fast_last_vaddr =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_BADVADDR);
+    diagnostics->ptd_fast_last_at =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_AT);
+    diagnostics->ptd_fast_last_v0 =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_V0);
+    diagnostics->ptd_fast_last_a0 =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_A0);
+    diagnostics->ptd_fast_last_cause =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_CAUSE);
+    diagnostics->ptd_fast_last_status =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_STATUS);
+    diagnostics->ptd_fast_last_entryhi =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_ENTRYHI);
+    diagnostics->ptd_fast_last_entrylo0 =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_ENTRYLO0);
+    diagnostics->ptd_fast_last_entrylo1 =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_ENTRYLO1);
+    diagnostics->ptd_fast_last_index =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_INDEX);
+    diagnostics->ptd_fast_last_random =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_RANDOM);
+    diagnostics->ptd_fast_last_count =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_COUNT);
+    diagnostics->ptd_fast_last_pte_pair =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_PTE_PAIR);
+    diagnostics->ptd_fast_last_directory =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_DIRECTORY);
+    diagnostics->ptd_fast_last_pte0 =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_PTE0);
+    diagnostics->ptd_fast_last_pte1 =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_PTE1);
+    diagnostics->ptd_fast_last_at_high =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_AT_HIGH);
+    diagnostics->ptd_fast_last_v0_high =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_V0_HIGH);
+    diagnostics->ptd_fast_last_a0_high =
+        pmap_fast_diagnostic(MIPS_REFILL_DIAG_A0_HIGH);
     diagnostics->ptd_fast_repeat = mips_pmap_fast_repeat;
     diagnostics->ptd_active_directory = pmap_active == 0 ? 0 :
         (unsigned)(uintptr_t)pmap_active->pm_directory;

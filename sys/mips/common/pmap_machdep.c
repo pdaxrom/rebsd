@@ -342,6 +342,37 @@ pmap_md_icache_index_invalidate(unsigned address)
 {
     asm volatile ("cache 0x00, 0(%0)" :: "r" (address) : "memory");
 }
+
+int
+pmap_md_icache_tag_diagnostics(vm_vaddr_t vaddr, unsigned *index_address,
+    unsigned *taglo, unsigned *taghi)
+{
+    unsigned address;
+    unsigned saved_taghi;
+    unsigned saved_taglo;
+    int status;
+
+    if (index_address == 0 || taglo == 0 || taghi == 0)
+        return EINVAL;
+
+    address = PMAP_MD_KSEG0_BASE |
+        (vaddr & (PMAP_MD_ICACHE_SIZE - 1));
+    address &= ~(PMAP_MD_ICACHE_LINE - 1);
+    status = mips_intr_disable();
+    saved_taglo = mips_read_c0_register(C0_TAGLO, 0);
+    saved_taghi = mips_read_c0_register(C0_TAGHI, 0);
+    asm volatile (
+        "cache 0x04, 0(%0)\n"
+        "nop"
+        : : "r" (address) : "memory");
+    *taglo = mips_read_c0_register(C0_TAGLO, 0);
+    *taghi = mips_read_c0_register(C0_TAGHI, 0);
+    mips_write_c0_register(C0_TAGLO, 0, saved_taglo);
+    mips_write_c0_register(C0_TAGHI, 0, saved_taghi);
+    mips_intr_restore(status);
+    *index_address = address;
+    return 0;
+}
 #endif
 
 int

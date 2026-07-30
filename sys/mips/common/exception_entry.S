@@ -1,5 +1,6 @@
 #include <machine/io.h>
 #include <machine/machparam.h>
+#include <mips/common/exception_diagnostics.h>
         /*
          * PCC's assembler preprocessor can remove a conditional block without
          * preserving a statement boundary.  Semicolons immediately before or
@@ -21,9 +22,9 @@
         .extern mips_pmap_fast_refills
         .extern mips_pmap_fast_scratch
         .extern mips_pmap_fast_last_hash
-        .extern mips_pmap_fast_last_epc
-        .extern mips_pmap_fast_last_vaddr
         .extern mips_pmap_fast_repeat
+        .extern mips_pmap_fast_diagnostics
+        .extern mips_exception_restore_diagnostics
 
         .section .exception,"ax",@progbits
         .globl  _mips_exception_vector
@@ -35,6 +36,7 @@
         .globl  mips_exception_entry_end
         .globl  mips_exception_restore_start
         .globl  mips_exception_restore_end
+        .globl  mips_cp0_diagnostics
 
         .ent    _mips_exception_vector
 _mips_exception_vector:
@@ -217,6 +219,65 @@ mips_tlb_refill_entry:
          * the subsequent fault report.  Only k0/k1 and cached kernel
          * globals are touched, so the interrupted GPR file remains intact.
          */
+        la      $k0, mips_pmap_fast_diagnostics
+        mfc0    $k1, $14
+        sw      $k1, MIPS_REFILL_DIAG_EPC($k0)
+        mfc0    $k1, $8
+        sw      $k1, MIPS_REFILL_DIAG_BADVADDR($k0)
+        sw      $1, MIPS_REFILL_DIAG_AT($k0)
+        sw      $2, MIPS_REFILL_DIAG_V0($k0)
+        sw      $4, MIPS_REFILL_DIAG_A0($k0)
+#if MIPS_FRAME_GPR64
+        sd      $1, MIPS_REFILL_DIAG_AT_HIGH($k0)
+        sd      $2, MIPS_REFILL_DIAG_V0_HIGH($k0)
+        sd      $4, MIPS_REFILL_DIAG_A0_HIGH($k0) ;
+#else
+        sra     $k1, $1, 31
+        sw      $k1, MIPS_REFILL_DIAG_AT_HIGH($k0)
+        sw      $1, MIPS_REFILL_DIAG_AT_LOW_COPY($k0)
+        sra     $k1, $2, 31
+        sw      $k1, MIPS_REFILL_DIAG_V0_HIGH($k0)
+        sw      $2, MIPS_REFILL_DIAG_V0_LOW_COPY($k0)
+        sra     $k1, $4, 31
+        sw      $k1, MIPS_REFILL_DIAG_A0_HIGH($k0)
+        sw      $4, MIPS_REFILL_DIAG_A0_LOW_COPY($k0) ;
+#endif
+        mfc0    $k1, $13
+        sw      $k1, MIPS_REFILL_DIAG_CAUSE($k0)
+        mfc0    $k1, $12
+        sw      $k1, MIPS_REFILL_DIAG_STATUS($k0)
+        mfc0    $k1, $10
+        sw      $k1, MIPS_REFILL_DIAG_ENTRYHI($k0)
+        mfc0    $k1, $2
+        sw      $k1, MIPS_REFILL_DIAG_ENTRYLO0($k0)
+        mfc0    $k1, $3
+        sw      $k1, MIPS_REFILL_DIAG_ENTRYLO1($k0)
+        mfc0    $k1, $0
+        sw      $k1, MIPS_REFILL_DIAG_INDEX($k0)
+        mfc0    $k1, $1
+        sw      $k1, MIPS_REFILL_DIAG_RANDOM($k0)
+        mfc0    $k1, $9
+        sw      $k1, MIPS_REFILL_DIAG_COUNT($k0)
+        la      $k1, mips_pmap_fast_scratch
+        lw      $k1, 0($k1)
+        sw      $k1, MIPS_REFILL_DIAG_PTE_PAIR($k0)
+        lw      $k1, MIPS_REFILL_DIAG_PTE_PAIR($k0)
+        lw      $k1, 0($k1)
+        sw      $k1, MIPS_REFILL_DIAG_PTE0($k0)
+        lw      $k1, MIPS_REFILL_DIAG_PTE_PAIR($k0)
+        lw      $k1, 4($k1)
+        sw      $k1, MIPS_REFILL_DIAG_PTE1($k0)
+        la      $k1, mips_pmap_fast_directory
+        lw      $k1, 0($k1)
+        sw      $k1, MIPS_REFILL_DIAG_DIRECTORY($k0)
+        lw      $k1, MIPS_REFILL_DIAG_SEQUENCE($k0)
+        addiu   $k1, $k1, 1
+        bnez    $k1, mips_tlb_refill_diag_ready
+        nop
+        addiu   $k1, $zero, 1
+mips_tlb_refill_diag_ready:
+        sw      $k1, MIPS_REFILL_DIAG_SEQUENCE($k0)
+
         mfc0    $k0, $14                /* EPC */
         mfc0    $k1, $8                 /* BadVAddr */
         xor     $k0, $k0, $k1
@@ -241,13 +302,6 @@ mips_tlb_refill_new_site:
         la      $k1, mips_pmap_fast_repeat
         sw      $k0, 0($k1)
 mips_tlb_refill_site_recorded:
-        mfc0    $k0, $14
-        la      $k1, mips_pmap_fast_last_epc
-        sw      $k0, 0($k1)
-        mfc0    $k0, $8
-        la      $k1, mips_pmap_fast_last_vaddr
-        sw      $k0, 0($k1)
-
         la      $k0, mips_pmap_fast_refills
         lw      $k1, 0($k0)
         addiu   $k1, $k1, 1
@@ -522,6 +576,66 @@ mips_exception_restore_start:
         lw      $30, (16+FRAME_FP*4)($sp) ;
 #endif
 
+        /*
+         * Record the complete low-word state which this common restore path
+         * is about to return to.  The sequence word is stored last so a fault
+         * report can distinguish a completed publication from stale fields.
+         */
+        la      $k0, mips_exception_restore_diagnostics
+        sw      $sp, MIPS_RESTORE_DIAG_FRAME($k0)
+        lw      $k1, (16+FRAME_PC*4)($sp)
+        sw      $k1, MIPS_RESTORE_DIAG_EPC($k0)
+        lw      $k1, (16+FRAME_STATUS*4)($sp)
+        sw      $k1, MIPS_RESTORE_DIAG_STATUS($k0)
+        sw      $1, MIPS_RESTORE_DIAG_AT($k0)
+        sw      $2, MIPS_RESTORE_DIAG_V0($k0)
+        sw      $4, MIPS_RESTORE_DIAG_A0($k0)
+#if MIPS_FRAME_GPR64
+        sd      $1, MIPS_RESTORE_DIAG_AT_HIGH($k0)
+        sd      $2, MIPS_RESTORE_DIAG_V0_HIGH($k0)
+        sd      $4, MIPS_RESTORE_DIAG_A0_HIGH($k0) ;
+#else
+        sra     $k1, $1, 31
+        sw      $k1, MIPS_RESTORE_DIAG_AT_HIGH($k0)
+        sw      $1, MIPS_RESTORE_DIAG_AT_LOW_COPY($k0)
+        sra     $k1, $2, 31
+        sw      $k1, MIPS_RESTORE_DIAG_V0_HIGH($k0)
+        sw      $2, MIPS_RESTORE_DIAG_V0_LOW_COPY($k0)
+        sra     $k1, $4, 31
+        sw      $k1, MIPS_RESTORE_DIAG_A0_HIGH($k0)
+        sw      $4, MIPS_RESTORE_DIAG_A0_LOW_COPY($k0) ;
+#endif
+        lw      $k1, (16+FRAME_SP*4)($sp)
+        sw      $k1, MIPS_RESTORE_DIAG_SP($k0)
+        lw      $k1, (16+FRAME_RA*4)($sp)
+        sw      $k1, MIPS_RESTORE_DIAG_RA($k0)
+#if MIPS_FRAME_GPR64
+        ld      $k1, (16+(FRAME_SP-1)*4)($sp)
+        sd      $k1, MIPS_RESTORE_DIAG_SP_HIGH($k0)
+        ld      $k1, (16+(FRAME_RA-1)*4)($sp)
+        sd      $k1, MIPS_RESTORE_DIAG_RA_HIGH($k0) ;
+#else
+        lw      $k1, (16+FRAME_SP*4)($sp)
+        sra     $k1, $k1, 31
+        sw      $k1, MIPS_RESTORE_DIAG_SP_HIGH($k0)
+        lw      $k1, (16+FRAME_SP*4)($sp)
+        sw      $k1, MIPS_RESTORE_DIAG_SP_LOW_COPY($k0)
+        lw      $k1, (16+FRAME_RA*4)($sp)
+        sra     $k1, $k1, 31
+        sw      $k1, MIPS_RESTORE_DIAG_RA_HIGH($k0)
+        lw      $k1, (16+FRAME_RA*4)($sp)
+        sw      $k1, MIPS_RESTORE_DIAG_RA_LOW_COPY($k0) ;
+#endif
+        mfc0    $k1, $9
+        sw      $k1, MIPS_RESTORE_DIAG_COUNT($k0)
+        lw      $k1, MIPS_RESTORE_DIAG_SEQUENCE($k0)
+        addiu   $k1, $k1, 1
+        bnez    $k1, mips_exception_restore_diag_ready
+        nop
+        addiu   $k1, $zero, 1
+mips_exception_restore_diag_ready:
+        sw      $k1, MIPS_RESTORE_DIAG_SEQUENCE($k0)
+
         lw      $31, (16+FRAME_STATUS*4)($sp)
         ori     $31, $31, ST_EXL
         mtc0    $31, $12
@@ -565,6 +679,62 @@ mips_fork_trampoline:
         j       mips_exception_restore_start
         nop
         .end    mips_fork_trampoline
+
+        .ent    mips_cp0_diagnostics
+mips_cp0_diagnostics:
+        mfc0    $v0, $0
+        sw      $v0, MIPS_CP0_DIAG_INDEX($a0)
+        mfc0    $v0, $1
+        sw      $v0, MIPS_CP0_DIAG_RANDOM($a0)
+        mfc0    $v0, $2
+        sw      $v0, MIPS_CP0_DIAG_ENTRYLO0($a0)
+        mfc0    $v0, $3
+        sw      $v0, MIPS_CP0_DIAG_ENTRYLO1($a0)
+        mfc0    $v0, $5
+        sw      $v0, MIPS_CP0_DIAG_PAGEMASK($a0)
+        mfc0    $v0, $6
+        sw      $v0, MIPS_CP0_DIAG_WIRED($a0)
+        mfc0    $v0, $9
+        sw      $v0, MIPS_CP0_DIAG_COUNT($a0)
+        mfc0    $v0, $10
+        sw      $v0, MIPS_CP0_DIAG_ENTRYHI($a0)
+        mfc0    $v0, $11
+        sw      $v0, MIPS_CP0_DIAG_COMPARE($a0)
+        mfc0    $v0, $12
+        sw      $v0, MIPS_CP0_DIAG_STATUS($a0)
+        mfc0    $v0, $13
+        sw      $v0, MIPS_CP0_DIAG_CAUSE($a0)
+        mfc0    $v0, $14
+        sw      $v0, MIPS_CP0_DIAG_EPC($a0)
+        mfc0    $v0, $16
+        sw      $v0, MIPS_CP0_DIAG_CONFIG($a0)
+        mfc0    $v0, $18
+        sw      $v0, MIPS_CP0_DIAG_WATCHLO($a0)
+        mfc0    $v0, $19
+        sw      $v0, MIPS_CP0_DIAG_WATCHHI($a0)
+        mfc0    $v0, $30
+        sw      $v0, MIPS_CP0_DIAG_ERROREPC($a0)
+        mfc0    $v0, $4
+        sw      $v0, MIPS_CP0_DIAG_CONTEXT($a0)
+        mfc0    $v0, $8
+        sw      $v0, MIPS_CP0_DIAG_BADVADDR($a0)
+        mfc0    $v0, $15
+        sw      $v0, MIPS_CP0_DIAG_PRID($a0)
+        mfc0    $v0, $17
+        sw      $v0, MIPS_CP0_DIAG_LLADDR($a0)
+        mfc0    $v0, $20
+        sw      $v0, MIPS_CP0_DIAG_XCONTEXT($a0)
+        mfc0    $v0, $26
+        sw      $v0, MIPS_CP0_DIAG_ECC($a0)
+        mfc0    $v0, $27
+        sw      $v0, MIPS_CP0_DIAG_CACHEERR($a0)
+        mfc0    $v0, $28
+        sw      $v0, MIPS_CP0_DIAG_TAGLO($a0)
+        mfc0    $v0, $29
+        sw      $v0, MIPS_CP0_DIAG_TAGHI($a0)
+        jr      $ra
+        nop
+        .end    mips_cp0_diagnostics
 
 #if defined(N64_USB_GDB) || defined(N64_RESET_DUMP)
         .section .bss,"aw",@nobits

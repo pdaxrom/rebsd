@@ -8,6 +8,7 @@
 #include <vm/vm_shm.h>
 #include <vm/vm_sysv_shm.h>
 #include <vm/vmspace.h>
+#include <mips/common/exception_diagnostics.h>
 
 #define TEST_RAM_SIZE   (64u * VM_PAGE_SIZE)
 #define TEST_VADDR      0x10000000u
@@ -49,6 +50,15 @@ static unsigned test_tlb_invalidations;
 static unsigned test_tlb_flushes;
 static unsigned test_syncs;
 static unsigned test_last_sync_operations;
+
+extern volatile unsigned
+    mips_pmap_fast_diagnostics[MIPS_REFILL_DIAG_WORDS];
+
+static void
+test_set_fast_diagnostic(unsigned offset, unsigned value)
+{
+    mips_pmap_fast_diagnostics[offset / sizeof(unsigned)] = value;
+}
 
 struct test_object_pager {
     unsigned references;
@@ -412,6 +422,27 @@ test_pmap(void)
     CHECK(pmap_fault(pmap3, TEST_DEVICE, VM_PROT_READ, 1) == 0);
     CHECK(pmap_fault(pmap3, TEST_DEVICE, VM_PROT_WRITE, 1) == 0);
     CHECK(pmap_fault(pmap3, TEST_DEVICE, VM_PROT_WRITE, 1) == 0);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_SEQUENCE, 0x101u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_EPC, 0x102u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_BADVADDR, 0x103u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_AT, 0x104u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_V0, 0x105u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_A0, 0x106u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_CAUSE, 0x107u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_STATUS, 0x108u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_ENTRYHI, 0x109u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_ENTRYLO0, 0x10au);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_ENTRYLO1, 0x10bu);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_INDEX, 0x10cu);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_RANDOM, 0x10du);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_COUNT, 0x10eu);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_PTE_PAIR, 0x10fu);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_DIRECTORY, 0x110u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_PTE0, 0x111u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_PTE1, 0x112u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_AT_HIGH, 0x113u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_V0_HIGH, 0x114u);
+    test_set_fast_diagnostic(MIPS_REFILL_DIAG_A0_HIGH, 0x115u);
     CHECK(pmap_get_tlb_diagnostics(TEST_DEVICE, &diagnostics) == 0);
     CHECK(diagnostics.ptd_refills == 7);
     CHECK(diagnostics.ptd_last_pmap == (unsigned)(uintptr_t)pmap3);
@@ -434,6 +465,27 @@ test_pmap(void)
     CHECK(diagnostics.ptd_hardware_entryhi == 0);
     CHECK(diagnostics.ptd_hardware_entrylo0 == 0);
     CHECK(diagnostics.ptd_hardware_entrylo1 == 0);
+    CHECK(diagnostics.ptd_fast_sequence == 0x101u);
+    CHECK(diagnostics.ptd_fast_last_epc == 0x102u);
+    CHECK(diagnostics.ptd_fast_last_vaddr == 0x103u);
+    CHECK(diagnostics.ptd_fast_last_at == 0x104u);
+    CHECK(diagnostics.ptd_fast_last_v0 == 0x105u);
+    CHECK(diagnostics.ptd_fast_last_a0 == 0x106u);
+    CHECK(diagnostics.ptd_fast_last_cause == 0x107u);
+    CHECK(diagnostics.ptd_fast_last_status == 0x108u);
+    CHECK(diagnostics.ptd_fast_last_entryhi == 0x109u);
+    CHECK(diagnostics.ptd_fast_last_entrylo0 == 0x10au);
+    CHECK(diagnostics.ptd_fast_last_entrylo1 == 0x10bu);
+    CHECK(diagnostics.ptd_fast_last_index == 0x10cu);
+    CHECK(diagnostics.ptd_fast_last_random == 0x10du);
+    CHECK(diagnostics.ptd_fast_last_count == 0x10eu);
+    CHECK(diagnostics.ptd_fast_last_pte_pair == 0x10fu);
+    CHECK(diagnostics.ptd_fast_last_directory == 0x110u);
+    CHECK(diagnostics.ptd_fast_last_pte0 == 0x111u);
+    CHECK(diagnostics.ptd_fast_last_pte1 == 0x112u);
+    CHECK(diagnostics.ptd_fast_last_at_high == 0x113u);
+    CHECK(diagnostics.ptd_fast_last_v0_high == 0x114u);
+    CHECK(diagnostics.ptd_fast_last_a0_high == 0x115u);
     CHECK(device_page->vmp_hold_count == 0 &&
         device_page->vmp_reference_count == 0 &&
         device_page->vmp_dirty_count == 0);

@@ -5,8 +5,10 @@
 #define _MIPS_IO_H_
 
 #define C0_INDEX        0
+#define C0_RANDOM       1
 #define C0_ENTRYLO0     2
 #define C0_ENTRYLO1     3
+#define C0_CONTEXT      4
 #define C0_PAGEMASK     5
 #define C0_WIRED        6
 #define C0_BADVADDR     8
@@ -16,10 +18,14 @@
 #define C0_STATUS       12
 #define C0_CAUSE        13
 #define C0_EPC          14
+#define C0_PRID         15
 #define C0_CONFIG       16
+#define C0_LLADDR       17
 #define C0_WATCHLO      18
 #define C0_WATCHHI      19
 #define C0_XCONTEXT     20
+#define C0_ECC          26
+#define C0_CACHEERR     27
 #define C0_TAGLO        28
 #define C0_TAGHI        29
 #define C0_ERROREPC     30
