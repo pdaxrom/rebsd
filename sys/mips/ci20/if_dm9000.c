@@ -731,11 +731,12 @@ dm9000_stop(struct dm9000_softc *sc)
 }
 
 void
-ci20_dm9000attach(void)
+ci20_dm9000attach(int unit)
 {
     struct dm9000_softc *sc = &dm9000_softc[0];
     struct ifnet *ifp = &sc->sc_if;
 
+    (void)unit;
     dm9000_fallback_enaddr(sc->sc_ac.ac_enaddr);
     sc->sc_present = 1;
     sc->sc_hw_ready = 0;

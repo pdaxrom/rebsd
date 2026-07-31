@@ -182,7 +182,7 @@ main()
     /* Attach services. */
     struct conf_service *svc;
     for (svc = conf_service_init; svc->svc_attach != NULL; svc++)
-        (*svc->svc_attach)();
+        (*svc->svc_attach)(0);
 
     /* Mount a root filesystem. */
     s = spl0();

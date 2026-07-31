@@ -77,14 +77,9 @@ usbnattach(int unit)
 }
 
 void
-usbnetattach(void)
+usbnetattach(int unit)
 {
-    /*
-     * kconfig services are invoked through conf_service_init without
-     * arguments.  Do not consume the caller's stale a0 register as a unit:
-     * it made attachment depend on which service happened to run before us.
-     */
-    usbnattach(0);
+    usbnattach(unit);
 }
 
 void

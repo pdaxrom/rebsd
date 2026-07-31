@@ -83,7 +83,7 @@ struct conf_device {
  * This structure describes optional software services.
  */
 struct conf_service {
-    void        (*svc_attach)();    /* routine to initialize service */
+    void        (*svc_attach)(int); /* routine to initialize unit zero */
 };
 
 /* Define special unit types used by the config program */

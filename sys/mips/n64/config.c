@@ -22,7 +22,8 @@ kconfig(void)
 }
 
 void
-nintendoattach(void)
+nintendoattach(int unit)
 {
+    (void)unit;
     pipedev = makedev(N64_RAMSWAP_MAJOR, N64_RAMDISK_VAR_MINOR);
 }

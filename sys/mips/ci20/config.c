@@ -15,7 +15,8 @@ kconfig(void)
 }
 
 void
-creatorattach(void)
+creatorattach(int unit)
 {
+    (void)unit;
     pipedev = makedev(MIPS_RAMSWAP_MAJOR, MIPS_RAMDISK_VAR_MINOR);
 }
