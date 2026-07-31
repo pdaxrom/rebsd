@@ -1,5 +1,5 @@
 /*
- * MIPS glue for the imported 2.11BSD networking code.
+ * Machine-independent glue for the imported 2.11BSD networking code.
  */
 #include <sys/param.h>
 #ifdef INET
@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/errno.h>
 #include <sys/mbuf.h>
+#include <sys/protosw.h>
 #include <netinet/in.h>
 
 #if ENDIAN == LITTLE

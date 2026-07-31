@@ -129,9 +129,9 @@ mips/common/exception.c         standard
 mips/common/memdev.c            standard
 mips/common/fpu.S               standard compile-with "${COMPILE_FPU_S}"
 kernel/cons.c                   standard
-mips/common/in_cksum.c          optional inet
-mips/common/net_glue.c          optional inet
-mips/common/netinit.c           optional inet
+net/in_cksum.c                  optional inet
+net/net_glue.c                  optional inet
+net/netinit.c                   optional inet
 mips/common/signal.c            standard
 mips/common/sysctl.c            standard
 mips/common/vm_page_machdep.c   standard

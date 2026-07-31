@@ -118,6 +118,7 @@ in_pcbconnect(inp, nam)
 {
 	struct in_ifaddr *ia;
 	struct sockaddr_in *ifaddr;
+	struct in_addr laddr;
 	register struct sockaddr_in *sin = mtod(nam, struct sockaddr_in *);
 
 	if (nam->m_len != sizeof (*sin))
@@ -141,7 +142,8 @@ in_pcbconnect(inp, nam)
 		  (in_ifaddr->ia_ifp->if_flags & IFF_BROADCAST))
 		    sin->sin_addr = satosin(&in_ifaddr->ia_broadaddr)->sin_addr;
 	}
-	if (inp->inp_laddr.s_addr == INADDR_ANY) {
+	laddr = inp->inp_laddr;
+	if (laddr.s_addr == INADDR_ANY) {
 		register struct route *ro;
 		struct ifnet *ifp;
 
@@ -193,18 +195,19 @@ in_pcbconnect(inp, nam)
 				return (EADDRNOTAVAIL);
 		}
 		ifaddr = (struct sockaddr_in *)&ia->ia_addr;
+		laddr = ifaddr->sin_addr;
 	}
 	if (in_pcblookup(inp->inp_head,
 	    sin->sin_addr,
 	    sin->sin_port,
-	    inp->inp_laddr.s_addr ? inp->inp_laddr.s_addr : ifaddr->sin_addr.s_addr,
+	    laddr.s_addr,
 	    inp->inp_lport,
 	    0))
 		return (EADDRINUSE);
 	if (inp->inp_laddr.s_addr == INADDR_ANY) {
 		if (inp->inp_lport == 0)
 			(void)in_pcbbind(inp, (struct mbuf *)0);
-		inp->inp_laddr = ifaddr->sin_addr;
+		inp->inp_laddr = laddr;
 	}
 	inp->inp_faddr = sin->sin_addr;
 	inp->inp_fport = sin->sin_port;

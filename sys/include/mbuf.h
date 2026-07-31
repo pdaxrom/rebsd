@@ -21,7 +21,7 @@
  * (NMBUFS / 8) + NMBCLUSTERS < 40
  */
 #define	NMBUFS		170			/* number of mbufs */
-#if defined(MIPS) || defined(__mips__)
+#if defined(MIPS) || defined(__mips__) || defined(I386) || defined(__i386__)
 #define	MSIZE		256			/* size of an mbuf */
 #else
 #define	MSIZE		128			/* size of an mbuf */
@@ -37,7 +37,7 @@
 #define	MCLOFSET	CLOFSET
 #endif
 
-#if defined(MIPS) || defined(__mips__)
+#if defined(MIPS) || defined(__mips__) || defined(I386) || defined(__i386__)
 #define	MMINOFF		12			/* mbuf header length */
 #define	MTAIL		4
 #else
@@ -68,8 +68,8 @@ struct mbuf {
 	u_short	m_off;			/* offset of data */
 	short	m_len;			/* amount of data in this mbuf */
 	short	m_type;			/* mbuf type (0 == free) */
-#if defined(MIPS) || defined(__mips__)
-	u_short	m_pad;			/* align data on 32-bit MIPS */
+#if defined(MIPS) || defined(__mips__) || defined(I386) || defined(__i386__)
+	u_short	m_pad;			/* align data on 32-bit machine ports */
 #endif
 	u_char	m_dat[MLEN];		/* data storage */
 	struct	mbuf *m_act;		/* link in higher-level mbuf list */

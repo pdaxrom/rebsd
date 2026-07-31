@@ -26,8 +26,8 @@
 #ifdef pdp11
 #define	setsoftnet()	{ extern int knetisr; mtkd(&knetisr, 1); }
 #endif
-#ifdef MIPS
-#define	setsoftnet()	/* polled from the MIPS timer interrupt path */
+#if defined(MIPS) || defined(I386)
+#define	setsoftnet()	/* polled from the machine interrupt return path */
 #endif
 
 /*

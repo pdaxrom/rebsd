@@ -16,6 +16,7 @@ service         uhub
 service         ukbd
 service         ums
 service         pc
+service         inet
 service         ehci
 service         ohci
 service         uhci

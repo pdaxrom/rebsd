@@ -1,8 +1,9 @@
 /*
- * Direct MIPS replacements for the 2.11BSD PDP networking overlay macros.
+ * Direct replacements for the 2.11BSD PDP networking overlay macros on
+ * flat-address-space machine ports.
  */
-#ifndef _MIPS_NET_MAC_H_
-#define _MIPS_NET_MAC_H_
+#ifndef _NET_NET_MAC_H_
+#define _NET_NET_MAC_H_
 
 struct mbuf;
 struct socket;

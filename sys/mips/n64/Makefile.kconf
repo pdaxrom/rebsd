@@ -954,9 +954,9 @@ CFILES := $(filter-out \
     $S/netinet/tcp_timer.c \
     $S/netinet/tcp_usrreq.c \
     $S/netinet/udp_usrreq.c \
-    $S/mips/common/in_cksum.c \
-    $S/mips/common/net_glue.c \
-    $S/mips/common/netinit.c \
+    $S/net/in_cksum.c \
+    $S/net/net_glue.c \
+    $S/net/netinit.c \
     $S/mips/n64/n64cart_rgbled.c \
     $S/mips/n64/n64cart_flash.c \
     $S/mips/n64/romfs_backend.c \

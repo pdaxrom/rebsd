@@ -14,6 +14,11 @@
 #define I386_PAGE_FAULT_WRITE     0x02u
 #define I386_PAGE_FAULT_USER      0x04u
 
+#ifdef INET
+extern int netisr;
+void netintr(void);
+#endif
+
 struct i386_idt_gate {
     i386_u16 offset_low;
     i386_u16 selector;
@@ -144,6 +149,10 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
 
     if (frame->tf_vector == I386_SYSCALL_VECTOR) {
         i386_syscall_dispatch(frame);
+#ifdef INET
+        if (netisr)
+            netintr();
+#endif
         return;
     }
 
@@ -192,4 +201,8 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
                 i386_irq_handlers[irq][slot].ir_arg);
 
     i386_pic_eoi(irq);
+#ifdef INET
+    if (netisr)
+        netintr();
+#endif
 }

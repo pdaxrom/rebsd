@@ -45,7 +45,10 @@ CORE_MARKERS = (
     "REBSD_I686_AWK_OK",
     "REBSD_I686_FREE_OK",
     "REBSD_I686_DF_OK",
+    "lo0",
+    "127.0.0.1",
     "REBSD_I686_NETSTAT_OK",
+    "REBSD_I686_LOOPBACK_OK",
     "REBSD_I686_FULL_ROOTFS_OK",
     "REBSD_I686_SHELL_OK",
 )
@@ -179,6 +182,8 @@ def qemu_command(
         ),
         "-no-reboot",
         "-no-shutdown",
+        "-nic",
+        "none",
     ]
     if args.kernel is not None:
         command.extend(["-kernel", str(args.kernel)])
@@ -395,9 +400,13 @@ def main() -> None:
             b"\r\nREBSD_I686_DF_OK\r\n",
         ),
         (
-            b"/usr/bin/netstat -ian; rc=$?; "
-            b"/bin/test $rc -le 1 && echo REBSD_I686_NETSTAT_OK\n",
+            b"/usr/bin/netstat -ian && echo REBSD_I686_NETSTAT_OK\n",
             b"\r\nREBSD_I686_NETSTAT_OK\r\n",
+        ),
+        (
+            b"/usr/bin/ping -n -c 1 127.0.0.1 && "
+            b"echo REBSD_I686_LOOPBACK_OK\n",
+            b"\r\nREBSD_I686_LOOPBACK_OK\r\n",
         ),
         (
             b"echo REBSD_I686_FULL_ROOTFS_OK REBSD_I686_SHELL_OK\n",

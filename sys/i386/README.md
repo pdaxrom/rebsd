@@ -28,12 +28,20 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc \
 `boot-smoke` boots without an external disk and proves this complete path,
 then runs representative programs from the full root filesystem (`ls`,
 `uname`, `md5`, `awk`, `free`, `df` and the stack-growth regression in
-`netstat`):
+`netstat`).  It also requires `lo0` to own `127.0.0.1` and completes an ICMP
+echo exchange through that address:
 
 ```text
 embedded UFS -> common init_main -> proc1 -> /sbin/init
              -> getty -> /bin/login -> /bin/sh
 ```
+
+The common IPv4 stack and loopback interface are initialized independently
+of physical network-device discovery.  Consequently `lo0` and `127.0.0.1`
+are always available on a normal i686 boot even when no Ethernet adapter is
+present.  i686 uses the same socket, protocol, interface and loopback sources
+as the MIPS boards; only delivery of deferred network work enters through the
+x86 interrupt-return boundary.
 
 `ide-smoke` adds the UFS image as an external legacy ATA disk.  It must
 appear as a read-only common `sd0`, but root remains the embedded romdisk at

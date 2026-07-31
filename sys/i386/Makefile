@@ -20,9 +20,13 @@ I386_DISK_SRC    = $(TOPSRC)/sys/disk
 I386_INPUT_SRC   = $(TOPSRC)/sys/input
 I386_USB_SRC     = $(TOPSRC)/sys/usb
 I386_VM_SRC      = $(TOPSRC)/sys/vm
+I386_NET_SRC     = $(TOPSRC)/sys/net
+I386_NETINET_SRC = $(TOPSRC)/sys/netinet
 I386_GEN_INCLUDE = $(CURDIR)/include
 I386_VM_INCLUDES = -I$(I386_GEN_INCLUDE) -I$(TOPSRC)/sys \
                    -I$(I386_SRC)/include
+I386_INET_INCLUDES = -I$(TOPSRC)/include/sys -I$(I386_NET_SRC) \
+                     -I$(I386_NETINET_SRC)
 
 ifeq ($(BOARD),pc)
 else
@@ -37,7 +41,14 @@ include $(TOPSRC)/mk/rootfs-userland.mk
 I686_CPPFLAGS  += -DDMA_ENABLED -DDISK_ENABLED -DUSB_ENABLED \
                   -DUMASS_ENABLED -DUHUB_ENABLED -DUKBD_ENABLED \
                   -DUMS_ENABLED -DI8042_ENABLED \
-                  -DEHCI_ENABLED -DOHCI_ENABLED -DUHCI_ENABLED
+                  -DEHCI_ENABLED -DOHCI_ENABLED -DUHCI_ENABLED \
+                  -DINET_ENABLED -DINET -DSUPERVISOR
+
+I686_INET_CFLAGS = $(filter-out -Wextra,$(I686_CFLAGS)) \
+                   -Wno-comment -Wno-endif-labels -Wno-implicit-int \
+                   -Wno-implicit-function-declaration \
+                   -Wno-parentheses -Wno-return-mismatch \
+                   -Wno-return-type -Wno-old-style-definition
 
 QEMU_I386       ?= qemu-system-i386
 QEMU_MACHINE    ?= pc-i440fx-9.2
@@ -97,7 +108,8 @@ I386_ROOTFS_MACHINE_HEADERS = $(shell find $(I386_SRC)/include/machine \
 I386_ROOTFS_COMMON_HEADERS = $(shell find $(TOPSRC)/include \
                                $(TOPSRC)/sys/include $(TOPSRC)/sys/net \
                                $(TOPSRC)/sys/netinet \
-                               \( -type f -o -type l \) 2>/dev/null)
+                               \( -type f -name '*.h' -o -type l \) \
+                               2>/dev/null)
 I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 TARGET_PLATFORM=i386 \
                 DESTDIR=$(abspath $(I386_ROOTFS_STAGE)) \
@@ -142,6 +154,13 @@ SETUP_BYTES      = 4608
 VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
                    vmspace.o vmspace_access.o vmspace_fault.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
+INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
+                   uipc_socket.o uipc_socket2.o uipc_syscalls.o \
+                   af.o if.o if_loop.o raw_cb.o raw_usrreq.o route.o \
+                   in.o in_pcb.o in_proto.o ip_icmp.o ip_input.o \
+                   ip_output.o raw_ip.o tcp_debug.o tcp_input.o \
+                   tcp_output.o tcp_subr.o tcp_timer.o tcp_usrreq.o \
+                   udp_usrreq.o in_cksum.o net_glue.o netinit.o
 KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    early_console.o interrupt.o tss.o syscall.o \
                    signal.o user_return.o trap.o \
@@ -176,7 +195,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    config.o ioconf.o swapunix.o sysctl.o \
                    vm_param.o \
                    vm_phys.o vm_page.o vm_phys_board.o pmap.o \
-                   $(VM_CORE_OBJS) vmspace_bootstrap.o boot_main.o
+                   $(VM_CORE_OBJS) $(INET_OBJS) \
+                   vmspace_bootstrap.o boot_main.o
 
 $(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
 	    $(I386_SRC)/include/machine/layout.h
@@ -272,6 +292,7 @@ $(I386_ROOTFS_STAGE)/.base: $(I386_ROOTFS_COMMON_FILES) \
 	    $(I386_ROOTFS_STAGE)/libexec \
 	    $(I386_ROOTFS_STAGE)/root \
 	    $(I386_ROOTFS_STAGE)/sbin \
+	    $(I386_ROOTFS_STAGE)/share/misc \
 	    $(I386_ROOTFS_STAGE)/share/man/cat1 \
 	    $(I386_ROOTFS_STAGE)/share/man/cat3 \
 	    $(I386_ROOTFS_STAGE)/share/man/cat5 \
@@ -534,6 +555,25 @@ umsmap.o ums.o ehci.o ohci.o uhci.o umass_bbb.o umass.o: %.o: \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
+
+sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o uipc_socket.o \
+uipc_socket2.o uipc_syscalls.o: %.o: $(TOPSRC)/sys/kernel/%.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_INET_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    $(I386_INET_INCLUDES) -c $< -o $@
+
+af.o if.o if_loop.o raw_cb.o raw_usrreq.o route.o in_cksum.o net_glue.o \
+netinit.o: %.o: $(I386_NET_SRC)/%.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_INET_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    $(I386_INET_INCLUDES) -c $< -o $@
+
+in.o in_pcb.o in_proto.o ip_icmp.o ip_input.o ip_output.o raw_ip.o \
+tcp_debug.o tcp_input.o tcp_output.o tcp_subr.o tcp_timer.o tcp_usrreq.o \
+udp_usrreq.o: %.o: $(I386_NETINET_SRC)/%.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_INET_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    $(I386_INET_INCLUDES) -c $< -o $@
 
 kbdmap.o ps2.o mouse.o: %.o: $(I386_INPUT_SRC)/%.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
