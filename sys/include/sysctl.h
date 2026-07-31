@@ -36,6 +36,8 @@
 #ifndef _SYS_SYSCTL_H_
 #define _SYS_SYSCTL_H_
 
+#include <sys/hw_inventory.h>
+
 /*
  * These are for the eproc, etext, einode, efile and map structures.
  */
@@ -384,7 +386,9 @@ struct kinfo_procfile {
 #define HW_DISKSTATS    9       /* struct: diskstats[] */
 #define HW_CPU          10      /* string: configured CPU target */
 #define HW_FPU          11      /* string: configured FPU ABI */
-#define HW_MAXID        12      /* number of valid hw ids */
+#define HW_USBDEVICES   12      /* struct: USB device snapshot */
+#define HW_PCIDEVICES   13      /* struct: PCI function snapshot */
+#define HW_MAXID        14      /* number of valid hw ids */
 
 #ifndef KERNEL
 #define CTL_HW_NAMES { \
@@ -400,6 +404,8 @@ struct kinfo_procfile {
     { "diskstats", CTLTYPE_STRUCT }, \
     { "cpu", CTLTYPE_STRING }, \
     { "fpu", CTLTYPE_STRING }, \
+    { "usbdevices", CTLTYPE_STRUCT }, \
+    { "pcidevices", CTLTYPE_STRUCT }, \
 }
 #endif
 

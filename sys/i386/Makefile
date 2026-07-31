@@ -36,6 +36,10 @@ endif
 include $(TOPSRC)/target-i386.mk
 include $(TOPSRC)/mk/rootfs-userland.mk
 
+I386_ROOTFS_CMD_SUBDIRS = $(REBSD_ROOTFS_CMD_SUBDIRS) lsusb lspci
+I386_ROOTFS_CMD_EXTRA_SUBDIRS = $(REBSD_ROOTFS_CMD_EXTRA_SUBDIRS) \
+                               lsusb lspci
+
 # The direct bring-up build carries the same service feature symbols that
 # kconfig emits in PARAM for the declarative configuration.
 I686_CPPFLAGS  += -DDMA_ENABLED -DDISK_ENABLED -DUSB_ENABLED \
@@ -122,7 +126,7 @@ I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 SRC_ONLY_LIBS="startup-i386 $(REBSD_ROOTFS_LIBS)" \
                 LIBC_ONLY="$(REBSD_ROOTFS_LIBC_DIRS) i386" \
                 SRC_ONLY_SUBDIR="$(REBSD_ROOTFS_SUBDIRS)" \
-                CMD_ONLY_SUBDIR="$(REBSD_ROOTFS_CMD_SUBDIRS)" \
+                CMD_ONLY_SUBDIR="$(I386_ROOTFS_CMD_SUBDIRS)" \
                 CMD_ONLY_STD="$(REBSD_ROOTFS_CMD_STDS)" \
                 CMD_ONLY_SCRIPT="$(REBSD_ROOTFS_CMD_SCRIPTS)" \
                 CMD_ONLY_NSTD="$(REBSD_ROOTFS_CMD_NSTDS)" \
@@ -130,7 +134,7 @@ I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 CMD_ONLY_OPERATOR="$(REBSD_ROOTFS_CMD_OPERATORS)" \
                 CMD_ONLY_KMEM="$(I386_USER_NONE)" \
                 CMD_ONLY_TTY="$(I386_USER_NONE)" \
-                CMD_EXTRA_SUBDIR="$(REBSD_ROOTFS_CMD_EXTRA_SUBDIRS)" \
+                CMD_EXTRA_SUBDIR="$(I386_ROOTFS_CMD_EXTRA_SUBDIRS)" \
                 SMUX_SUBDIRS=retro \
                 CMD_BUILD_STRIP=
 I386_AWK_MAKE = $(MAKE) -C $(I386_USERLAND_SRC)/cmd/awk \
@@ -530,8 +534,11 @@ pit.o: $(I386_PC_SRC)/pit.c $(I386_SRC)/include/interrupt.h \
 	    -c $< -o $@
 
 pci.o: $(I386_PC_SRC)/pci.c $(I386_SRC)/include/boot.h \
-	    $(I386_SRC)/include/io.h $(I386_SRC)/include/pci.h
-	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
+	    $(I386_SRC)/include/io.h $(I386_SRC)/include/pci.h \
+	    $(TOPSRC)/sys/include/hw_inventory.h \
+	    $(TOPSRC)/sys/include/hw_inventory_provider.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
 subr_dma.o: $(TOPSRC)/sys/kernel/subr_dma.c \

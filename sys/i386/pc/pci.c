@@ -1,3 +1,5 @@
+#include <sys/hw_inventory_provider.h>
+
 #include "boot.h"
 #include "io.h"
 #include "pci.h"
@@ -24,6 +26,7 @@ struct i386_pci_inventory {
     struct i386_pci_function isa;
     struct i386_pci_function ide;
     struct i386_pci_function vga;
+    struct kinfo_pci_inventory *snapshot;
     unsigned count;
     int have_host;
     int have_isa;
@@ -32,6 +35,7 @@ struct i386_pci_inventory {
 };
 
 static struct i386_pci_inventory i386_pci_last_inventory;
+static struct kinfo_pci_inventory i386_pci_last_snapshot;
 static int i386_pci_inventory_valid;
 
 i386_u32
@@ -96,6 +100,7 @@ i386_pci_function_read(i386_u8 bus, i386_u8 device,
     result->product = (i386_u16)(identity >> 16);
     result->programming_interface =
         (i386_u8)((class_revision >> 8) & 0xffu);
+    result->revision = (i386_u8)(class_revision & 0xffu);
     result->subclass = (i386_u8)((class_revision >> 16) & 0xffu);
     result->class_code = (i386_u8)(class_revision >> 24);
     return 1;
@@ -187,7 +192,25 @@ static void
 i386_pci_inventory_add(struct i386_pci_inventory *inventory,
     const struct i386_pci_function *function)
 {
+    struct kinfo_pci_device *device;
+
     ++inventory->count;
+    if (inventory->snapshot->kpi_count < KINFO_PCI_MAXDEVICES) {
+        device = &inventory->snapshot->kpi_devices[
+            inventory->snapshot->kpi_count++];
+        device->kpd_bus = function->bus;
+        device->kpd_device = function->device;
+        device->kpd_function = function->function;
+        device->kpd_class = function->class_code;
+        device->kpd_subclass = function->subclass;
+        device->kpd_programming_interface =
+            function->programming_interface;
+        device->kpd_revision = function->revision;
+        device->kpd_vendor = function->vendor;
+        device->kpd_product = function->product;
+    } else {
+        inventory->snapshot->kpi_truncated = 1;
+    }
     if (!inventory->have_host &&
         function->class_code == PCI_CLASS_BRIDGE &&
         function->subclass == PCI_SUBCLASS_HOST) {
@@ -212,6 +235,14 @@ i386_pci_inventory_add(struct i386_pci_inventory *inventory,
         inventory->vga = *function;
         inventory->have_vga = 1;
     }
+}
+
+static struct kinfo_pci_inventory *
+i386_pci_inventory_snapshot(void)
+{
+    if (!i386_pci_inventory_valid)
+        return (struct kinfo_pci_inventory *)0;
+    return &i386_pci_last_snapshot;
 }
 
 static int
@@ -274,8 +305,16 @@ i386_pci_probe(void)
     for (function_index = 0;
         function_index < sizeof(inventory); ++function_index)
         ((i386_u8 *)&inventory)[function_index] = 0;
+    for (function_index = 0;
+        function_index < sizeof(i386_pci_last_snapshot); ++function_index)
+        ((i386_u8 *)&i386_pci_last_snapshot)[function_index] = 0;
+    inventory.snapshot = &i386_pci_last_snapshot;
     if (!i386_pci_walk(i386_pci_inventory_visit, &inventory))
         return 1;
+
+    i386_pci_last_inventory = inventory;
+    i386_pci_inventory_valid = 1;
+    hw_inventory_register_pci(i386_pci_inventory_snapshot);
 
     if (!inventory.have_host || !inventory.have_isa ||
         !inventory.have_ide)
@@ -290,7 +329,5 @@ i386_pci_probe(void)
     if (inventory.have_vga)
         i386_pci_print_id("pci-vga: ", &inventory.vga);
     i386_pci_print_platform("pci-platform: ", &inventory);
-    i386_pci_last_inventory = inventory;
-    i386_pci_inventory_valid = 1;
     return 0;
 }

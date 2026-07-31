@@ -49,6 +49,7 @@
 #include <sys/vm.h>
 #include <sys/map.h>
 #include <sys/sysctl.h>
+#include <sys/hw_inventory_provider.h>
 #include <sys/rebsd_version.h>
 #include <vm/vm_page.h>
 #include <vm/vm_object.h>
@@ -130,6 +131,9 @@ long hostid;
 char hostname[MAXHOSTNAMELEN];
 int hostnamelen;
 
+static hw_usb_inventory_provider_t hw_usb_inventory_provider;
+static hw_pci_inventory_provider_t hw_pci_inventory_provider;
+
 static int sysctl_clockrate (char *where, size_t *sizep);
 static int sysctl_inode (char *where, size_t *sizep);
 static int sysctl_file (char *where, size_t *sizep);
@@ -138,6 +142,18 @@ static int sysctl_procfiles(char *where, size_t *sizep);
 #ifdef INET
 static int sysctl_netinfo(void *, size_t *, void *);
 #endif
+
+void
+hw_inventory_register_usb(hw_usb_inventory_provider_t provider)
+{
+    hw_usb_inventory_provider = provider;
+}
+
+void
+hw_inventory_register_pci(hw_pci_inventory_provider_t provider)
+{
+    hw_pci_inventory_provider = provider;
+}
 
 static void
 sysctl_diskname(char *dst, const char *name, int unit)
@@ -374,6 +390,9 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, s
 int
 hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
+    struct kinfo_usb_inventory *usb_inventory;
+    struct kinfo_pci_inventory *pci_inventory;
+
     (void)newlen;
     /* all sysctl names at this level are terminal */
     if (namelen != 1)
@@ -398,6 +417,22 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
         return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_cpu));
     case HW_FPU:
         return (sysctl_rdstring(oldp, oldlenp, newp, rebsd_fpu));
+    case HW_USBDEVICES:
+        if (hw_usb_inventory_provider == NULL)
+            return (EOPNOTSUPP);
+        usb_inventory = hw_usb_inventory_provider();
+        if (usb_inventory == NULL)
+            return (ENXIO);
+        return (sysctl_rdstruct(oldp, oldlenp, newp,
+            usb_inventory, sizeof(*usb_inventory)));
+    case HW_PCIDEVICES:
+        if (hw_pci_inventory_provider == NULL)
+            return (EOPNOTSUPP);
+        pci_inventory = hw_pci_inventory_provider();
+        if (pci_inventory == NULL)
+            return (ENXIO);
+        return (sysctl_rdstruct(oldp, oldlenp, newp,
+            pci_inventory, sizeof(*pci_inventory)));
     default:
         return (EOPNOTSUPP);
     }

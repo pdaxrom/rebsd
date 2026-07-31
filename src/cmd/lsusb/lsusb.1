@@ -1,0 +1,14 @@
+.TH LSUSB 1 "July 31, 2026" "ReBSD"
+.SH NAME
+lsusb \- list USB devices
+.SH SYNOPSIS
+.B lsusb
+.SH DESCRIPTION
+.B lsusb
+prints one line for each connected device known to the common USB core.
+The bus and device numbers and the USB vendor and product identifiers are
+read from the read-only
+.B hw.usbdevices
+kernel snapshot.
+.SH SEE ALSO
+.BR sysctl (3)

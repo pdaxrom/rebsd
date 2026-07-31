@@ -279,6 +279,20 @@ parse(
 		break;
 
 	case CTL_HW:
+		switch (mib[1]) {
+		case HW_USBDEVICES:
+			if (flags == 0)
+				return;
+			fprintf(stderr,
+			    "Use lsusb to view %s information\n", string);
+			return;
+		case HW_PCIDEVICES:
+			if (flags == 0)
+				return;
+			fprintf(stderr,
+			    "Use lspci to view %s information\n", string);
+			return;
+		}
 		break;
 
 	case CTL_VM:

@@ -242,9 +242,9 @@ MIPS_PCC_HOST_PREFIX ?= $(PCC_HOST_PREFIX)
 MIPS_LINPACK_SMOKE_OUT ?= $(LINPACK_SMOKE_OUT)
 MIPS_LINPACK_SMOKE_MANIFEST ?= $(LINPACK_SMOKE_MANIFEST)
 MIPS_ROOTFS_BOARD_MANIFEST_0775 ?= \
-    $(if $(CI20_PORT),/usr/bin/fbset /usr/bin/fbview,)
+    $(if $(CI20_PORT),/usr/bin/fbset /usr/bin/fbview /usr/bin/lsusb,)
 MIPS_ROOTFS_BOARD_CMD_CAT1_SOURCES ?= \
-    $(if $(CI20_PORT),fbset:fbset fbview:fbview,)
+    $(if $(CI20_PORT),fbset:fbset fbview:fbview lsusb:lsusb,)
 
 .DEFAULT_GOAL := all
 include ../rootfs.mk

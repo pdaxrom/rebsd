@@ -12,6 +12,7 @@ mkdir -p "$tmp"
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
     -DREBSD_DMA_HOST_TEST -idirafter "$top/include" -idirafter "$top/sys" \
     "$top/sys/kernel/subr_dma.c" \
+    "$top/sys/tests/usb/hw_inventory_stub.c" \
     "$top/sys/usb/usb_subr.c" \
     "$top/sys/usb/usb_core.c" \
     "$top/sys/usb/usb_service.c" \

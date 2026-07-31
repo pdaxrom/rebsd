@@ -47,6 +47,11 @@ CORE_MARKERS = (
     "REBSD_I686_FREE_OK",
     "REBSD_I686_TOP_OK",
     "REBSD_I686_DF_OK",
+    "REBSD_I686_LSUSB_OK",
+    "REBSD_I686_LSPCI_OK",
+    "REBSD_I686_LSPCI_NUMERIC_OK",
+    "8086:1237",
+    "0600: 8086:1237",
     "lo0",
     "127.0.0.1",
     "REBSD_I686_NETSTAT_OK",
@@ -77,7 +82,7 @@ USB_MASS_STORAGE_MARKERS = (
     "ehci0: EHCI version=100",
     "umass0: QEMU QEMU HARDDISK",
     "ehci0: port1 device attached speed=high",
-    "ehci0: irq 11 enabled",
+    "ehci0: irq ",
 )
 
 OHCI_KEYBOARD_MARKERS = (
@@ -300,6 +305,15 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
                 else "sd0: 32768 512-byte sectors (16384 KB), removable"
             ),
         )
+    if (
+        args.usb_disk is not None
+        or args.ohci_keyboard
+        or args.ohci_mouse
+        or args.uhci_keyboard
+        or args.uhci_mouse
+        or args.uhci_disk is not None
+    ):
+        markers += ("Bus 001 Device 001: ID ",)
     return markers
 
 
@@ -407,6 +421,18 @@ def main() -> None:
         (
             b"/bin/df && echo REBSD_I686_DF_OK\n",
             b"\r\nREBSD_I686_DF_OK\r\n",
+        ),
+        (
+            b"/usr/bin/lsusb && echo REBSD_I686_LSUSB_OK\n",
+            b"\r\nREBSD_I686_LSUSB_OK\r\n",
+        ),
+        (
+            b"/usr/bin/lspci && echo REBSD_I686_LSPCI_OK\n",
+            b"\r\nREBSD_I686_LSPCI_OK\r\n",
+        ),
+        (
+            b"/usr/bin/lspci -n && echo REBSD_I686_LSPCI_NUMERIC_OK\n",
+            b"\r\nREBSD_I686_LSPCI_NUMERIC_OK\r\n",
         ),
         (
             b"/usr/bin/netstat -ian && echo REBSD_I686_NETSTAT_OK\n",

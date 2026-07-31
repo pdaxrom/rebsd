@@ -1,0 +1,21 @@
+.TH LSPCI 1 "July 31, 2026" "ReBSD"
+.SH NAME
+lspci \- list PCI functions
+.SH SYNOPSIS
+.B lspci
+[
+.B \-n
+]
+.SH DESCRIPTION
+.B lspci
+prints the bus address, class, vendor and product identifiers, and revision
+of every function found by the kernel PCI probe.
+The information comes from the read-only
+.B hw.pcidevices
+kernel snapshot; the utility does not access PCI configuration space.
+.PP
+The
+.B \-n
+option prints the numeric PCI class and subclass instead of a class name.
+.SH SEE ALSO
+.BR sysctl (3)

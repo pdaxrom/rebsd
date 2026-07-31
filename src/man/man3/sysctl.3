@@ -212,6 +212,8 @@ privilege may change the value.
 	HW\_PAGESIZE	integer	no
 	HW\_CPU	string	no
 	HW\_FPU	string	no
+	HW\_USBDEVICES	struct	no
+	HW\_PCIDEVICES	struct	no
 .\".It HW\_DISKNAMES	integer	no
 .\".It HW\_DISKSTATS	integer	no
 .fi
@@ -252,6 +254,16 @@ HW_CPU
 HW_FPU
 .br
 	The configured floating-point ABI, \fBhard\fP or \fBsoft\fP.
+.sp
+HW_USBDEVICES
+.br
+	A bounded, pointer-free snapshot of devices connected to the common
+	USB core.  Use \fBlsusb\fP(1) to display it.
+.sp
+HW_PCIDEVICES
+.br
+	A bounded, pointer-free snapshot of PCI functions found by the kernel
+	probe.  Use \fBlspci\fP(1) to display it.
 .sp
 .\".It Fa HW_DISKNAMES
 .\".It Fa HW_DISKSTATS

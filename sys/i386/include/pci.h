@@ -22,6 +22,7 @@ struct i386_pci_function {
     i386_u8 class_code;
     i386_u8 subclass;
     i386_u8 programming_interface;
+    i386_u8 revision;
     i386_u16 vendor;
     i386_u16 product;
 };
