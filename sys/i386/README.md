@@ -27,7 +27,8 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc \
 
 `boot-smoke` boots without an external disk and proves this complete path,
 then runs representative programs from the full root filesystem (`ls`,
-`uname`, `md5`, `awk`, `free` and `df`):
+`uname`, `md5`, `awk`, `free`, `df` and the stack-growth regression in
+`netstat`):
 
 ```text
 embedded UFS -> common init_main -> proc1 -> /sbin/init

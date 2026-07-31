@@ -45,6 +45,7 @@ CORE_MARKERS = (
     "REBSD_I686_AWK_OK",
     "REBSD_I686_FREE_OK",
     "REBSD_I686_DF_OK",
+    "REBSD_I686_NETSTAT_OK",
     "REBSD_I686_FULL_ROOTFS_OK",
     "REBSD_I686_SHELL_OK",
 )
@@ -392,6 +393,11 @@ def main() -> None:
         (
             b"/bin/df && echo REBSD_I686_DF_OK\n",
             b"\r\nREBSD_I686_DF_OK\r\n",
+        ),
+        (
+            b"/usr/bin/netstat -ian; rc=$?; "
+            b"/bin/test $rc -le 1 && echo REBSD_I686_NETSTAT_OK\n",
+            b"\r\nREBSD_I686_NETSTAT_OK\r\n",
         ),
         (
             b"echo REBSD_I686_FULL_ROOTFS_OK REBSD_I686_SHELL_OK\n",

@@ -131,6 +131,7 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
 {
     i386_u32 cr2;
     unsigned access;
+    int user_fault;
     i386_u32 clock_ps;
     unsigned irq;
     unsigned slot;
@@ -150,9 +151,12 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
         __asm__ volatile ("movl %%cr2, %0" : "=r" (cr2));
         access = (frame->tf_error & I386_PAGE_FAULT_WRITE) != 0 ?
             0x02u : 0x01u;
-        if (i386_vmspace_fault_active(cr2, access,
-            (frame->tf_error & I386_PAGE_FAULT_USER) != 0 ||
-            (frame->tf_cs & 3u) == 3u) == 0)
+        user_fault = (frame->tf_error & I386_PAGE_FAULT_USER) != 0 ||
+            (frame->tf_cs & 3u) == 3u;
+        if (i386_vmspace_fault_active(cr2, access, user_fault) == 0)
+            return;
+        if (user_fault && i386_grow_user_stack(cr2, 1) == 0 &&
+            i386_vmspace_fault_active(cr2, access, user_fault) == 0)
             return;
         if (i386_user_trap(frame, cr2))
             return;

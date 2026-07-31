@@ -10,16 +10,14 @@
 #include "context.h"
 #include "interrupt.h"
 #include "signal_machdep.h"
+#include "trap.h"
 
 static int
 i386_signal_frame_address(struct i386_trapframe *frame, int sig,
     vm_vaddr_t *address, int *oonstack)
 {
-    struct proc *process;
-    vm_vaddr_t guard_end;
     vm_vaddr_t stack_top;
 
-    process = u.u_procp;
     *oonstack = u.u_sigstk.ss_flags & SA_ONSTACK;
     if ((u.u_psflags & SAS_ALTSTACK) != 0 &&
         (u.u_sigstk.ss_flags & SA_ONSTACK) == 0 &&
@@ -40,20 +38,7 @@ i386_signal_frame_address(struct i386_trapframe *frame, int sig,
     if ((u.u_sigstk.ss_flags & SA_ONSTACK) != 0)
         return 0;
 
-    if (vm_vaddr_round_page(process->p_daddr + u.u_dsize,
-        &guard_end) != 0 || guard_end > VM_VADDR_MAX - VM_PAGE_SIZE)
-        return EFAULT;
-    guard_end += VM_PAGE_SIZE;
-    if (*address < guard_end ||
-        vmspace_grow_stack(process->p_vmspace, process->p_saddr,
-            *address, guard_end) != 0)
-        return EFAULT;
-    if (process->p_ssize < USER_DATA_END - *address) {
-        process->p_ssize = USER_DATA_END - *address;
-        process->p_saddr = *address;
-        u.u_ssize = process->p_ssize;
-    }
-    return 0;
+    return i386_grow_user_stack(*address, 0);
 }
 
 void

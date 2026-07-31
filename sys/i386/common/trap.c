@@ -1,7 +1,9 @@
+#include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/signal.h>
 #include <sys/user.h>
 #include <sys/proc.h>
+#include <vm/vmspace.h>
 
 #include "interrupt.h"
 #include "trap.h"
@@ -53,4 +55,38 @@ i386_user_trap(struct i386_trapframe *frame, unsigned code)
     u.u_code = (int)code;
     psignal(process, signum);
     return 1;
+}
+
+int
+i386_grow_user_stack(unsigned address, int from_fault)
+{
+    struct proc *process;
+    vm_vaddr_t guard_end;
+    vm_vaddr_t old_page;
+
+    process = u.u_procp;
+    if (process == (struct proc *)0 ||
+        process->p_vmspace == (struct vmspace *)0 ||
+        vm_vaddr_round_page(process->p_daddr + process->p_dsize,
+            &guard_end) != 0 ||
+        guard_end > VM_VADDR_MAX - VM_PAGE_SIZE)
+        return EFAULT;
+    guard_end += VM_PAGE_SIZE;
+    if ((vm_vaddr_t)address < guard_end || address > USER_DATA_END)
+        return EFAULT;
+
+    old_page = vm_vaddr_trunc_page(process->p_saddr);
+    if (from_fault &&
+        vm_vaddr_trunc_page((vm_vaddr_t)address) >= old_page)
+        return EFAULT;
+    if (vmspace_grow_stack(process->p_vmspace, process->p_saddr,
+        (vm_vaddr_t)address, guard_end) != 0)
+        return EFAULT;
+
+    if (process->p_ssize < USER_DATA_END - address) {
+        process->p_ssize = USER_DATA_END - address;
+        process->p_saddr = address;
+        u.u_ssize = process->p_ssize;
+    }
+    return 0;
 }
