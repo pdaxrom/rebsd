@@ -15,10 +15,7 @@
 typedef long time_t;
 #endif
 
-#ifndef _SIZE_T
-#define _SIZE_T
-typedef unsigned size_t;
-#endif
+#include <stddef.h>
 
 /*
  * Structure returned by gmtime and localtime calls (see ctime(3)).

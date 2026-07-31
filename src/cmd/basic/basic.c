@@ -103,7 +103,7 @@
 #   include </usr/include/stdio.h>
 #   define ustore(addr, value)  /*empty*/
 #   define ufetch(addr)         0
-#elif defined(TARGET_VR4300) || defined(TARGET_MIPS32R2)
+#elif defined(TARGET_VR4300) || defined(TARGET_MIPS32R2) || defined(__i386__)
 #   include <stdio.h>
 #   define ustore(addr, value)  /*empty*/
 #   define ufetch(addr)         0

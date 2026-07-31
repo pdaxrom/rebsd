@@ -1,11 +1,19 @@
 #ifndef _STDDEF_H_
 #define _STDDEF_H_
 
+#ifdef __PTRDIFF_TYPE__
+typedef __PTRDIFF_TYPE__ ptrdiff_t;
+#else
 typedef int ptrdiff_t;
+#endif
 
 #ifndef _SIZE_T
 #define _SIZE_T
+#ifdef __SIZE_TYPE__
+typedef __SIZE_TYPE__ size_t;
+#else
 typedef unsigned size_t;
+#endif
 #endif
 
 #ifndef _WCHAR_T

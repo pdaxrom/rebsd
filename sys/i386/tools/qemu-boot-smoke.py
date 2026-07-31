@@ -35,11 +35,17 @@ CORE_MARKERS = (
     "pci: mechanism=1",
     "root dev  = (0,0)",
     "swap dev  = none",
-    "root size = 1024 kbytes",
+    "root size = 16384 kbytes",
     "user mem  = 65536 kbytes",
     "ReBSD/i686 0.1-Resurgence (console)",
     "login:",
     "REBSD_I686_LS_OK",
+    "REBSD_I686_UNAME_OK",
+    "REBSD_I686_MD5_OK",
+    "REBSD_I686_AWK_OK",
+    "REBSD_I686_FREE_OK",
+    "REBSD_I686_DF_OK",
+    "REBSD_I686_FULL_ROOTFS_OK",
     "REBSD_I686_SHELL_OK",
 )
 
@@ -57,7 +63,7 @@ IDE_DISK_MARKERS = (
     "ide-backend-read: ok",
     "ide-lba0: ok",
     "ide-bounds: ok",
-    "sd0: 2048 512-byte sectors (1024 KB), read-only",
+    "sd0: 32768 512-byte sectors (16384 KB), read-only",
 )
 
 USB_MASS_STORAGE_MARKERS = (
@@ -264,9 +270,9 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         markers += USB_MASS_STORAGE_MARKERS
         markers += (
             (
-                "sd1: 2048 512-byte sectors (1024 KB), removable"
+                "sd1: 32768 512-byte sectors (16384 KB), removable"
                 if args.disk is not None
-                else "sd0: 2048 512-byte sectors (1024 KB), removable"
+                else "sd0: 32768 512-byte sectors (16384 KB), removable"
             ),
         )
     if args.ohci_keyboard:
@@ -281,9 +287,9 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         markers += UHCI_MASS_STORAGE_MARKERS
         markers += (
             (
-                "sd1: 2048 512-byte sectors (1024 KB), removable"
+                "sd1: 32768 512-byte sectors (16384 KB), removable"
                 if args.disk is not None
-                else "sd0: 2048 512-byte sectors (1024 KB), removable"
+                else "sd0: 32768 512-byte sectors (16384 KB), removable"
             ),
         )
     return markers
@@ -363,8 +369,38 @@ def main() -> None:
     output_bytes = bytearray()
     login_sent = False
     mouse_sent = False
-    ls_command_sent = False
-    shell_command_sent = False
+    commands = (
+        (b"/bin/ls /bin/l?\n", b"/bin/ls"),
+        (b"echo REBSD_I686_LS_OK\n", b"\r\nREBSD_I686_LS_OK\r\n"),
+        (
+            b"/bin/uname && echo REBSD_I686_UNAME_OK\n",
+            b"\r\nREBSD_I686_UNAME_OK\r\n",
+        ),
+        (
+            b"/usr/bin/md5 /bin/sh && echo REBSD_I686_MD5_OK\n",
+            b"\r\nREBSD_I686_MD5_OK\r\n",
+        ),
+        (
+            b"/usr/bin/awk 'BEGIN { print \"REBSD_I686_AWK_OK\" }' "
+            b"/etc/passwd\n",
+            b"\r\nREBSD_I686_AWK_OK\r\n",
+        ),
+        (
+            b"/usr/bin/free && echo REBSD_I686_FREE_OK\n",
+            b"\r\nREBSD_I686_FREE_OK\r\n",
+        ),
+        (
+            b"/bin/df && echo REBSD_I686_DF_OK\n",
+            b"\r\nREBSD_I686_DF_OK\r\n",
+        ),
+        (
+            b"echo REBSD_I686_FULL_ROOTFS_OK REBSD_I686_SHELL_OK\n",
+            b"\r\nREBSD_I686_FULL_ROOTFS_OK REBSD_I686_SHELL_OK\r\n",
+        ),
+    )
+    command_index = 0
+    command_sent = False
+    command_output_start = 0
     completed = False
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
@@ -391,29 +427,25 @@ def main() -> None:
             mouse_sent = True
         if (
             login_sent
-            and not ls_command_sent
-            and b"\r\n# " in output_bytes
+            and command_index < len(commands)
+            and not command_sent
+            and output_bytes.endswith(b"\r\n# ")
         ):
-            process.stdin.write(b"/bin/ls /bin/l?\n")
+            command_output_start = len(output_bytes)
+            process.stdin.write(commands[command_index][0])
             process.stdin.flush()
-            ls_command_sent = True
+            command_sent = True
         if (
-            ls_command_sent
-            and not shell_command_sent
-            and b"\r\n/bin/ls\r\n" in output_bytes
+            command_sent
+            and commands[command_index][1]
+            in output_bytes[command_output_start:]
+            and output_bytes.endswith(b"\r\n# ")
         ):
-            process.stdin.write(
-                b"echo REBSD_I686_LS_OK REBSD_I686_SHELL_OK\n"
-            )
-            process.stdin.flush()
-            shell_command_sent = True
-        if (
-            shell_command_sent
-            and b"\r\nREBSD_I686_LS_OK REBSD_I686_SHELL_OK\r\n"
-            in output_bytes
-        ):
-            completed = True
-            break
+            command_index += 1
+            command_sent = False
+            if command_index == len(commands):
+                completed = True
+                break
         if process.poll() is not None:
             break
 

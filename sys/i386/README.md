@@ -25,7 +25,9 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc \
     ohci-mouse-smoke uhci-mouse-smoke
 ```
 
-`boot-smoke` boots without an external disk and proves this complete path:
+`boot-smoke` boots without an external disk and proves this complete path,
+then runs representative programs from the full root filesystem (`ls`,
+`uname`, `md5`, `awk`, `free` and `df`):
 
 ```text
 embedded UFS -> common init_main -> proc1 -> /sbin/init
@@ -44,15 +46,13 @@ mouse publishes events through `/dev/mouse0`.  The OHCI and UHCI mouse gates
 use the same machine-independent mouse queue and `/dev/mouse1`; only the
 transport-specific decoders differ.
 
-The root image is built deterministically by the existing `tools/fsutil`.
-Its initial GCC userland contains:
-
-- `/sbin/init`;
-- `/libexec/getty`;
-- `/bin/login`;
-- `/bin/sh`;
-- `/bin/hostname`, `/bin/ls` and `/bin/stty`;
-- the existing common account, profile and network configuration files.
+The 16 MiB root image is built deterministically by the existing
+`tools/fsutil`.  Its GCC userland uses the shared full-rootfs profile in
+`mk/rootfs-userland.mk`: the normal libraries, administrative tools, shells,
+editors, network utilities, diagnostics, manual pages and the existing common
+account/profile/network configuration.  MIPS boards consume that same profile
+and add only their architecture-specific tools.  PCC remains enabled for the
+N64 and MIPS board images, but is deliberately absent from i686.
 
 The filesystem is read-only by policy during bring-up.  It is not FAT and
 there is no i386-private filesystem, executable loader, disk layer, process
@@ -92,15 +92,18 @@ i686 pager compatibility flag.  N64's existing Joybus mouse snapshot ABI is
 unchanged; new transports use the common event API rather than duplicating
 it in a board directory.
 
+The low-linked kernel includes the embedded UFS image.  The linker verifies
+that the complete kernel stays below the 32 MiB user virtual-address base,
+and early paging maps the complete kernel rather than assuming a 4 MiB image.
+User physical pages are still demand allocated; the virtual-address boundary
+does not reserve 32 MiB of RAM per process.
+
 PCC is not part of the i686 build and must not be changed.
 
-## Next QEMU-only work
+## Next hardware gates
 
-1. Expand the GCC userland only as required by the normal boot and test
-   environment.
-2. Keep external IDE and USB devices on the common disk path; add ordinary
-   mount support without changing the embedded UFS root policy.
-3. Complete RTC validation; PS/2 keyboard/mouse and VGA-console input are
-   QEMU-complete and await the real IBM gate.
-4. Run the full QEMU RAM, IDE and USB matrix and common MIPS/N64 regressions.
-5. Request a new IBM 6563-W4G test only after those gates are green.
+1. Boot the full `rebsd-i686.bzimg` from GRUB Legacy on the IBM 6563-W4G.
+2. Verify the full userland, PS/2 keyboard/mouse and VGA cursor on the IBM.
+3. Keep external IDE and USB devices on the common disk path and validate
+   ordinary mounts without changing the embedded read-only UFS root policy.
+4. Complete RTC and USB mass-storage validation on the VIA Apollo Pro 133.

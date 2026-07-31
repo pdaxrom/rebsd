@@ -1,3 +1,9 @@
+#include "../include/machine/layout.h"
+
+#ifdef i386
+#undef i386
+#endif
+
 OUTPUT_FORMAT("elf32-i386")
 OUTPUT_ARCH(i386)
 ENTRY(_start)
@@ -59,4 +65,6 @@ SECTIONS
 
     ASSERT(_start == 0x00100000,
         "i686 protected-mode entry must be linked at 1 MiB")
+    ASSERT(__kernel_end <= I386_USER_VADDR_START,
+        "i686 kernel overlaps the user virtual address range")
 }

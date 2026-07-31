@@ -63,10 +63,7 @@ typedef struct {
         int rem;
 } div_t;
 
-#ifndef _SIZE_T
-#define _SIZE_T
-typedef unsigned size_t;
-#endif
+#include <stddef.h>
 
 void    abort(void) __stdlib_noreturn;
 int     abs(int);

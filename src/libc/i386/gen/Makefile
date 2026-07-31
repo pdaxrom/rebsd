@@ -2,7 +2,7 @@ TOPSRC		= $(shell cd ../../../..; pwd)
 include $(TOPSRC)/target.mk
 
 ASFLAGS		+= $(DEFS)
-OBJS		= setjmp.o
+OBJS		= byteorder.o setjmp.o
 
 all:		gen.a
 

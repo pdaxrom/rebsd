@@ -152,6 +152,9 @@ i386_paging_init(void)
         return 0;
     if (!i386_paging_map_identity(
         (i386_u32)(unsigned long)__kernel_start,
+        (i386_u32)(unsigned long)__kernel_end) ||
+        !i386_paging_map_direct(
+        (i386_u32)(unsigned long)__kernel_start,
         (i386_u32)(unsigned long)__kernel_end))
         return 0;
 

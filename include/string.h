@@ -7,10 +7,7 @@
 #define NULL    0
 #endif
 
-#ifndef _SIZE_T
-#define _SIZE_T
-typedef unsigned size_t;
-#endif
+#include <stddef.h>
 
 char    *strcat (char *, const char *);
 char    *strncat (char *, const char *, size_t);

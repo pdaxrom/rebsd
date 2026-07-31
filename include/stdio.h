@@ -40,10 +40,7 @@ extern  struct  _iobuf {
 #define NULL        0
 #endif
 
-#ifndef _SIZE_T
-#define _SIZE_T
-typedef unsigned size_t;
-#endif
+#include <stddef.h>
 
 #define FILE        struct _iobuf
 #define EOF         (-1)

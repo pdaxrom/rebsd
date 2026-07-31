@@ -30,10 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _SIZE_T
-#define _SIZE_T
-typedef unsigned size_t;
-#endif
+#include <stddef.h>
 
 int      bcmp(const void *, const void *, size_t);
 void     bcopy(const void *, void *, size_t);

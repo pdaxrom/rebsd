@@ -50,7 +50,11 @@ typedef char *  caddr_t;
 typedef u_int   ino_t;
 #ifndef _SIZE_T
 #define _SIZE_T
-typedef u_int   size_t;
+#ifdef __SIZE_TYPE__
+typedef __SIZE_TYPE__ size_t;
+#else
+typedef u_int size_t;
+#endif
 #endif
 #ifndef __ssize_t_defined
 #ifndef _SSIZE_T

@@ -1,8 +1,12 @@
 #ifndef _I386_LAYOUT_H_
 #define _I386_LAYOUT_H_
 
-/* Keep the first 4 MiB clear of NULL/low-memory and kernel bootstrap maps. */
-#define I386_USER_VADDR_START  0x00400000
+/*
+ * The low-linked kernel keeps an identity mapping while user processes run.
+ * Reserve enough low virtual address space for the kernel and its embedded
+ * full root filesystem; the kernel linker enforces this boundary.
+ */
+#define I386_USER_VADDR_START  0x02000000
 #define I386_USER_MAXMEM       0x04000000
 #define I386_USER_VADDR_END    0x80000000
 

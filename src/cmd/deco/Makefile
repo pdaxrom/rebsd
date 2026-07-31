@@ -18,11 +18,10 @@ CFLAGS		+= $(if $(filter n64,$(TARGET_PLATFORM)),-DDECO_N64=1)
 
 BIN		= deco
 DECO_LIBS	= -ltermcap
-SRCS		= cap.c choice.c cmd.c com.c dir.c draw.c edit.c env.c \
+SRCS		= cap.c choice.c cmd.c com.c deco_setpgid.c dir.c draw.c edit.c env.c \
 		  ex.c help.c hexview.c key.c main.c menu.c mh.c pw.c \
 		  rec.c run.c scr.c tty.c ut.c view.c
-ASM_SRCS	= deco_setpgid.S
-OBJS		= $(SRCS:.c=.o) $(ASM_SRCS:.S=.o)
+OBJS		= $(SRCS:.c=.o)
 MAN		= deco.0
 HELP		= help/e.general help/e.edit help/e.view help/e.hexview
 
@@ -38,9 +37,6 @@ $(BIN):		$(OBJS)
 
 .1.0:
 		$(MANROFF) $< > $@
-
-.S.o:
-		$(CC) $(CFLAGS) -x assembler-with-cpp -c $< -o $@
 
 clean:
 		rm -f *.o *.elf $(MAN) *.dis tags *~ $(BIN)

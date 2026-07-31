@@ -162,7 +162,7 @@ __sysctl()
 {
     register struct sysctl_args *uap = (struct sysctl_args*) u.u_arg;
     int error;
-    u_int oldlen = 0;
+    size_t oldlen = 0;
     sysctlfn *fn;
     int name [CTL_MAXNAME];
 

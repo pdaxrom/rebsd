@@ -7,6 +7,9 @@
 #
 
 MIPS_ROOTFS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
+include $(TOPSRC)/mk/rootfs-userland.mk
+MIPS_ROOTFS_MAKEFILES = $(MIPS_ROOTFS_MAKEFILE) \
+                        $(TOPSRC)/mk/rootfs-userland.mk
 MIPS_ROOTFS_PROFILE ?= full
 MIPS_ROOTFS_PROFILES = full minimal
 ifeq ($(filter $(MIPS_ROOTFS_PROFILE),$(MIPS_ROOTFS_PROFILES)),)
@@ -110,7 +113,7 @@ MIPS_ROOTFS_WHATIS = $(MIPS_ROOTFS_USR_SHARE)/man/whatis
 MIPS_ROOTFS_CHECK_SCRIPT = $(TOPSRC)/sys/mips/tools/check-rootfs.py
 MIPS_ROOTFS_MANIFEST_SCRIPT = $(TOPSRC)/sys/mips/tools/rootfs-manifest.py
 MIPS_INSTALL_USER_HEADERS = \
-    $(TOPSRC)/sys/mips/tools/install-user-headers.sh
+    $(TOPSRC)/tools/build/install-user-headers.sh
 MIPS_ROOTFS_CONTRACT_LABEL ?= \
     $(MIPS_ROOTFS_TARGET_PLATFORM)-$(MIPS_ROOTFS_PROFILE)
 MIPS_ROOTFS_DYNAMIC_MANIFEST ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),1,0)
@@ -192,8 +195,8 @@ MIPS_MAN_SRCS = $(shell find $(TOPSRC)/src/man -type f \( \
                 -name '*.[0-9]' -o -name Makefile \) 2>/dev/null)
 MIPS_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/opt/bison/bin/bison,bison)
 MIPS_YACC ?= byacc
-MIPS_SRC_LIBS ?= libc libm libutil libtermlib libcurses libvmf libreadline libtcl libmagic
-MIPS_SRC_SUBDIRS ?= cmd
+MIPS_SRC_LIBS ?= $(REBSD_ROOTFS_LIBS)
+MIPS_SRC_SUBDIRS ?= $(REBSD_ROOTFS_SUBDIRS)
 MIPS_CMD_NONE = __mips_none__
 MIPS_BOARD_CMD_SUBDIRS ?=
 MIPS_BOARD_USR_BIN_FILES ?=
@@ -213,54 +216,29 @@ MIPS_ROOTFS_CAT8_PAGES :=
 MIPS_ROOTFS_CAT8_ALIASES :=
 endif
 
-MIPS_CMD_SUBDIRS ?= basic calendar chown chroot compress date2 deco dhclient diff emg env \
-                  fdisk find fold forth fsck fsck.fat fstat getty gpt hostname id ifconfig inetd init \
-                  aout ar as ld login ls make man md5 med mkfs mkfs.fat mknod \
-                  mkpasswd mount more netstat nm pdc picoc ping printf pstat ptytest \
-                  ranlib reboot renice retroforth route sed setty \
-                  sh shutdown sl smux stty sysctl tcl telnet \
-                  telnetd test wget umount uname xargs
+MIPS_CMD_SUBDIRS ?= $(REBSD_ROOTFS_CMD_SUBDIRS) aout ar as ld nm ranlib
 MIPS_CMD_SUBDIRS += $(MIPS_BOARD_CMD_SUBDIRS)
-MIPS_CMD_STDS ?= basename cal cat cb chgrp chmod cmp col comm cp dd diskspeed \
-               du echo ed fgrep free grep head hostid iostat join kill last ln \
-               mesg mkdir mv nice od off64-smoke-gcc pagesize pr printenv ps pwd rev rm rmail \
-               rmdir size sleep sort split strace sum sync tail tar tee time touch vmstat \
-               top tr tsort tty uniq uptime vm-pressure-smoke w wc whereis who
-MIPS_CMD_NSTDS ?= egrep expr file
-MIPS_CMD_OPERATORS ?= df
-MIPS_CMD_SCRIPTS ?= false nohup true
-MIPS_CMD_EXTRA_SUBDIRS ?= deco ptytest tcl $(MIPS_BOARD_CMD_SUBDIRS)
+MIPS_CMD_STDS ?= $(REBSD_ROOTFS_CMD_STDS) off64-smoke-gcc size
+MIPS_CMD_NSTDS ?= $(REBSD_ROOTFS_CMD_NSTDS)
+MIPS_CMD_OPERATORS ?= $(REBSD_ROOTFS_CMD_OPERATORS)
+MIPS_CMD_SCRIPTS ?= $(REBSD_ROOTFS_CMD_SCRIPTS)
+MIPS_CMD_EXTRA_SUBDIRS ?= $(REBSD_ROOTFS_CMD_EXTRA_SUBDIRS) \
+                           $(MIPS_BOARD_CMD_SUBDIRS)
 MIPS_STB_DIR ?=
 MIPS_STB_SRCS = $(wildcard $(MIPS_STB_DIR)/stb_image.h)
-MIPS_USR_BIN_FILES ?= aout apropos ar as awk basename basic cal calendar cb \
-                    chgrp cmp col comm compress deco diff diskspeed du ed \
-                    egrep emg env fgrep file find fold forth free grep groups head \
-                    hostid id iostat join last ld man matrix-as-vr4300 \
-                    matrix-as-vr4300.sh make md5 med mesg more nice nm nohup \
-                    od off64-smoke-gcc pagesize pdc picoc pr printf printenv ps ptytest \
-                    ranlib renice renumber retroforth rev rmail \
-                    setty size sl smux smoke-as-vr4300 smoke-as-vr4300.sh \
-                    sort split strace strip sum sysctl tail tar tcl tee telnet time \
-                    top touch tsort tty uncompress uniq uptime vm-pressure-smoke vmstat w wc \
-                    wget whatis whereis who whoami xargs zcat \
+MIPS_USR_BIN_FILES ?= $(REBSD_ROOTFS_USR_BIN_FILES) aout ar as ld \
+                    matrix-as-vr4300 matrix-as-vr4300.sh nm \
+                    off64-smoke-gcc ranlib renumber size \
+                    smoke-as-vr4300 smoke-as-vr4300.sh strip \
                     $(MIPS_BOARD_USR_BIN_FILES)
-MIPS_USR_LIBEXEC_FILES ?= bigram code
-MIPS_ROOTFS_CAT1_PAGES ?= apropos awk basename cal cat cb chgrp chmod cmp col \
-                        comm compress cp date dd df diff du echo ed expr \
-                        false file find fold free grep head hostid iostat join kill last \
-                        ln login ls make man mesg mkdir more mv nice od \
-                        pagesize pr ps pcc printenv pwd rev rm rmail rmdir \
-                        sed sh size sleep sort split strip sum tail tar tee \
-                        time top touch tr true tsort tty uniq uptime vmstat w \
-                        wc whatis who
-MIPS_ROOTFS_CAT5_PAGES ?= magic
-MIPS_ROOTFS_CMD_CAT1_SOURCES ?= as:as emg:emg env:env nm:nm sl:sl wget:wget
+MIPS_USR_LIBEXEC_FILES ?= $(REBSD_ROOTFS_USR_LIBEXEC_FILES)
+MIPS_ROOTFS_CAT1_PAGES ?= $(REBSD_ROOTFS_CAT1_PAGES) pcc size strip
+MIPS_ROOTFS_CAT5_PAGES ?= $(REBSD_ROOTFS_CAT5_PAGES)
+MIPS_ROOTFS_CMD_CAT1_SOURCES ?= $(REBSD_ROOTFS_CMD_CAT1_SOURCES) as:as nm:nm
 MIPS_ROOTFS_BOARD_CMD_CAT1_SOURCES ?=
-MIPS_ROOTFS_CAT1_ALIASES ?= egrep:grep fgrep:grep uncompress:compress \
-                          zcat:compress nohup:nice cc:pcc cpp:pcc
-MIPS_ROOTFS_CAT8_PAGES ?= fsck fstat getty sync
-MIPS_ROOTFS_CAT8_ALIASES ?= fsck.ufs:fsck mkfs.ufs:mkfs fastboot:reboot halt:reboot poweroff:reboot \
-                          bootloader:reboot
+MIPS_ROOTFS_CAT1_ALIASES ?= $(REBSD_ROOTFS_CAT1_ALIASES) cc:pcc cpp:pcc
+MIPS_ROOTFS_CAT8_PAGES ?= $(REBSD_ROOTFS_CAT8_PAGES)
+MIPS_ROOTFS_CAT8_ALIASES ?= $(REBSD_ROOTFS_CAT8_ALIASES)
 MIPS_USER_SRCS = $(TOPSRC)/target.mk $(TOPSRC)/target-mips.mk \
                 $(TOPSRC)/target-n64.mk \
                 $(TOPSRC)/src/Makefile $(TOPSRC)/src/cmd/Makefile \
@@ -681,7 +659,7 @@ $(MIPS_ROOTFS_ELF2AOUT): $(MIPS_ROOTFS_ELF2AOUT_SRCS)
 	$(MAKE) -C $(TOPSRC)/tools/elf2aout
 
 ifeq ($(MIPS_ROOTFS_DYNAMIC_MANIFEST),1)
-$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) \
+$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILES) \
     $(MIPS_ROOTFS_MANIFEST_SCRIPT) $(MIPS_ROOTFS_MANIFEST) \
     $(MIPS_ROOTFS_BOARD_MANIFEST) \
     $(MIPS_ROOTFS_USER_STAMP) $(MIPS_ROOTFS_EXTRA_STAMPS)
@@ -692,7 +670,7 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) \
 	        --exclude /usr/include --exclude /usr/lib --exclude /usr/share,) \
 	    $(if $(MIPS_ROOTFS_BOARD_MANIFEST),--devices $(MIPS_ROOTFS_BOARD_MANIFEST),)
 else
-$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILE) $(MIPS_ROOTFS_MANIFEST) \
+$(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILES) $(MIPS_ROOTFS_MANIFEST) \
     $(MIPS_ROOTFS_BOARD_MANIFEST) $(MIPS_ROOTFS_USER_STAMP) \
     $(MIPS_ROOTFS_EXTRA_STAMPS)
 	cp $(MIPS_ROOTFS_MANIFEST) $@
@@ -888,7 +866,7 @@ $(MIPS_COMPILER_BENCH_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 $(MIPS_VM_PROCESS_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
     $(MIPS_VM_PROCESS_SMOKE_SRC) $(MIPS_VM_PROCESS_SMOKE_GPR64_SRCS) \
     $(MIPS_USERLAND_EXTRA_DEPS) \
-    $(MIPS_ROOTFS_MAKEFILE)
+    $(MIPS_ROOTFS_MAKEFILES)
 	rm -f $(MIPS_VM_PROCESS_SMOKE_OUT) \
 	    $(MIPS_VM_PROCESS_SMOKE_OUT).o \
 	    $(MIPS_VM_PROCESS_SMOKE_GPR64_OBJ) \
@@ -914,7 +892,7 @@ $(MIPS_VM_PROCESS_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 
 $(MIPS_NET_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
     $(MIPS_NET_SMOKE_SRC) $(MIPS_USERLAND_EXTRA_DEPS) \
-    $(MIPS_ROOTFS_MAKEFILE)
+    $(MIPS_ROOTFS_MAKEFILES)
 	rm -f $(MIPS_NET_SMOKE_OUT) \
 	    $(MIPS_NET_SMOKE_OUT).o \
 	    $(MIPS_NET_SMOKE_OUT).linked
@@ -933,7 +911,7 @@ $(MIPS_NET_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 
 $(MIPS_LIBC_ABI_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
     $(MIPS_LIBC_ABI_SMOKE_SRC) $(MIPS_USERLAND_EXTRA_DEPS) \
-    $(MIPS_ROOTFS_MAKEFILE)
+    $(MIPS_ROOTFS_MAKEFILES)
 	rm -f $(MIPS_LIBC_ABI_SMOKE_OUT) \
 	    $(MIPS_LIBC_ABI_SMOKE_OUT).o \
 	    $(MIPS_LIBC_ABI_SMOKE_OUT).linked
@@ -951,7 +929,7 @@ $(MIPS_LIBC_ABI_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/libc-abi-smoke
 	touch $@
 
-$(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
+$(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILES) \
     $(MIPS_ROOTFS_FILES) \
     $(MIPS_UTILITY_SMOKE_SRCS) $(MIPS_TERMCAP) $(MIPS_MAGIC_DB) \
     $(MIPS_INCLUDE_SRCS) $(MIPS_INCLUDE_LINKS) \
@@ -971,6 +949,7 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 	cp -p $(MIPS_TERMCAP) $(MIPS_ROOTFS_STAGE)/etc/termcap
 	$(MIPS_INSTALL_USER_HEADERS) $(TOPSRC) \
 	    $(MIPS_ROOTFS_USR_INCLUDE) \
+	    mips \
 	    "$(MIPS_BOARD_MACHINE_HEADER_DIR)" \
 	    yes \
 	    "$(MIPS_SHARED_MACHINE_HEADERS)" \
@@ -1015,7 +994,7 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILE) \
 $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
     $(MIPS_ROOTFS_USERLAND_STAMP) $(MIPS_ROOTFS_NATIVE_PCC_STAMPS) \
     $(MIPS_MAKEWHATIS_SED) $(MIPS_MAN_SRCS) \
-    $(MIPS_ROOTFS_MAKEFILE) Makefile
+    $(MIPS_ROOTFS_MAKEFILES) Makefile
 	mkdir -p $(MIPS_ROOTFS_STAGE)/share/misc \
 	    $(MIPS_ROOTFS_STAGE)/share/man/cat1 \
 	    $(MIPS_ROOTFS_STAGE)/share/man/cat5 \
@@ -1183,7 +1162,7 @@ $(MIPS_ROOTFS_USERLAND_STAMP): $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(MIPS_LIBCURSES_SRCS) $(MIPS_LIBVMF_SRCS) $(MIPS_LIBREADLINE_SRCS) \
     $(MIPS_LIBTCL_SRCS) $(MIPS_LIBMAGIC_SRCS) $(MIPS_USER_SRCS) $(MIPS_AWK_SRCS) \
     $(MIPS_INCLUDE_SRCS) $(MIPS_INCLUDE_LINKS) \
-    $(MIPS_USERLAND_EXTRA_DEPS) $(MIPS_ROOTFS_MAKEFILE) Makefile
+    $(MIPS_USERLAND_EXTRA_DEPS) $(MIPS_ROOTFS_MAKEFILES) Makefile
 	rm -rf $(MIPS_BUILD_ROOT)
 	mkdir -p $(MIPS_BUILD_SRC_DIR)
 	cp -pR $(TOPSRC)/src/. $(MIPS_BUILD_SRC_DIR)/
@@ -1382,7 +1361,7 @@ MIPS_NATIVE_LIBM_MAKE = $(MAKE) -C $(MIPS_NATIVE_TREE)/src/libm \
 	AR="$(MIPS_PCC_AR)" RANLIB="$(MIPS_PCC_RANLIB)"
 
 $(MIPS_NATIVE_STAMP): $(MIPS_NATIVE_RUNTIME_SRCS) $(MIPS_PCC_PROVIDER_DEPS) \
-    $(MIPS_NATIVE_DIR)/crt0.o $(MIPS_ROOTFS_MAKEFILE)
+    $(MIPS_NATIVE_DIR)/crt0.o $(MIPS_ROOTFS_MAKEFILES)
 	rm -rf $(MIPS_NATIVE_TREE)
 	mkdir -p $(MIPS_NATIVE_TREE)/src $(MIPS_NATIVE_TREE)/sys/mips/n64
 	cp -pR $(TOPSRC)/include $(MIPS_NATIVE_TREE)/
@@ -1468,7 +1447,7 @@ $(MIPS_NATIVE_PCC_STAMP): $(MIPS_DEV_PCC_SRCS) $(MIPS_NATIVE_STAMP) \
     $(MIPS_NATIVE_DIR)/crt0.o $(MIPS_NATIVE_DIR)/libc.a \
     $(MIPS_NATIVE_DIR)/libm.a $(MIPS_NATIVE_DIR)/libpcc.a \
     $(MIPS_NATIVE_SOFTFLOAT_DIR)/libpcc.a $(MIPS_ROOTFS_USER_LDSCRIPT) \
-    $(MIPS_ROOTFS_MAKEFILE) Makefile \
+    $(MIPS_ROOTFS_MAKEFILES) Makefile \
     $(if $(filter vr4300,$(MIPS_ROOTFS_CPU)),$(MIPS_VR4300_HILO_CHECK) \
     $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py) \
     $(MIPS_ASYNC_EPILOGUE_CHECK)

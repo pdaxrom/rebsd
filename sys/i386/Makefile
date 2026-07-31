@@ -30,6 +30,7 @@ $(error Unsupported i386 BOARD=$(BOARD); expected pc)
 endif
 
 include $(TOPSRC)/target-i386.mk
+include $(TOPSRC)/mk/rootfs-userland.mk
 
 # The direct bring-up build carries the same service feature symbols that
 # kconfig emits in PARAM for the declarative configuration.
@@ -47,20 +48,32 @@ HOSTCC          ?= cc
 FSUTIL_DIR       = $(TOPOBJ)/tools/fsutil
 FSUTIL           = $(FSUTIL_DIR)/fsutil
 I386_ROOTFS_STAGE = rootfs-stage
-I386_ROOTFS_KBYTES = 1024
+I386_ROOTFS_KBYTES ?= 16384
 I386_ROOTFS_EPOCH = 1
 I386_ROOTFS_BOARD_DIR = $(I386_PC_SRC)/rootfs
 I386_ROOTFS_DEVICES = $(I386_PC_SRC)/rootfs.devices
 I386_ROOTFS_MANIFEST = rootfs.generated.manifest
 I386_ROOTFS_MANIFEST_TOOL = $(TOPSRC)/sys/mips/tools/rootfs-manifest.py
+I386_ROOTFS_MAKEFILES = $(TOPSRC)/sys/i386/Makefile \
+                        $(TOPSRC)/mk/rootfs-userland.mk
+I386_INSTALL_USER_HEADERS = $(TOPSRC)/tools/build/install-user-headers.sh
+I386_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
+I386_MAGIC_DB = $(TOPSRC)/src/libmagic/magic.mgc.little
+I386_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
+I386_MAN_SRCS = $(shell find $(TOPSRC)/src/man -type f \
+                    \( -name '*.[0-9]' -o -name Makefile \) 2>/dev/null)
+I386_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/opt/bison/bin/bison,bison)
 I386_USERLAND_BUILD = $(CURDIR)/i386-userland-build
 I386_USERLAND_SRC = $(I386_USERLAND_BUILD)/src
 I386_USERLAND_STAMP = i386-userland.gcc.elf.stamp
 I386_USER_LDSCRIPT = i386-user.ld
 I386_USER_LDSCRIPT_SRC = $(I386_SRC)/user/user.ld.S
+I386_KERNEL_LDSCRIPT = i386-kernel.ld
+I386_KERNEL_LDSCRIPT_SRC = $(I386_PC_SRC)/kernel.ld.S
 I386_USER_NONE = __i386_none__
 I386_USERLAND_INCLUDES = -I$(abspath $(I386_ROOTFS_STAGE)/usr/include)
 I386_USERLAND_CC = $(CC) $(I686_ARCH_FLAGS) \
+                   -DTARGET_LITTLE_ENDIAN \
                    -ffreestanding -fno-builtin -fno-stack-protector \
                    -fno-pic -fno-pie -fno-asynchronous-unwind-tables \
                    -fno-unwind-tables -mno-sse -mno-sse2 \
@@ -74,6 +87,7 @@ I386_USERLAND_SRCS = $(shell find $(TOPSRC)/src -type f \
                        \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 I386_ROOTFS_COMMON_FILES = $(TOPSRC)/sys/mips/rootfs/etc/group \
                            $(TOPSRC)/sys/mips/rootfs/etc/hosts \
+                           $(TOPSRC)/sys/mips/rootfs/etc/inetd.conf \
                            $(TOPSRC)/sys/mips/rootfs/etc/passwd \
                            $(TOPSRC)/sys/mips/rootfs/etc/profile \
                            $(TOPSRC)/sys/mips/rootfs/etc/services \
@@ -81,7 +95,8 @@ I386_ROOTFS_COMMON_FILES = $(TOPSRC)/sys/mips/rootfs/etc/group \
 I386_ROOTFS_MACHINE_HEADERS = $(shell find $(I386_SRC)/include/machine \
                                -type f -name '*.h' 2>/dev/null)
 I386_ROOTFS_COMMON_HEADERS = $(shell find $(TOPSRC)/include \
-                               $(TOPSRC)/sys/include \
+                               $(TOPSRC)/sys/include $(TOPSRC)/sys/net \
+                               $(TOPSRC)/sys/netinet \
                                \( -type f -o -type l \) 2>/dev/null)
 I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 TARGET_PLATFORM=i386 \
@@ -92,18 +107,29 @@ I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 NM="$(NM)" SIZE="$(SIZE)" OBJDUMP="$(OBJDUMP)" \
                 ELF2AOUT=cp \
                 LDFLAGS="$(I386_USERLAND_LDFLAGS)" \
-                SRC_ONLY_LIBS="startup-i386 libc libutil libreadline" \
-                LIBC_ONLY="gen stdio stdlib string compat runtime sys i386" \
-                SRC_ONLY_SUBDIR=cmd \
-                CMD_ONLY_SUBDIR="getty hostname init login ls sh stty" \
-                CMD_ONLY_STD="$(I386_USER_NONE)" \
-                CMD_ONLY_SCRIPT="$(I386_USER_NONE)" \
-                CMD_ONLY_NSTD="$(I386_USER_NONE)" \
+                SRC_ONLY_LIBS="startup-i386 $(REBSD_ROOTFS_LIBS)" \
+                LIBC_ONLY="$(REBSD_ROOTFS_LIBC_DIRS) i386" \
+                SRC_ONLY_SUBDIR="$(REBSD_ROOTFS_SUBDIRS)" \
+                CMD_ONLY_SUBDIR="$(REBSD_ROOTFS_CMD_SUBDIRS)" \
+                CMD_ONLY_STD="$(REBSD_ROOTFS_CMD_STDS)" \
+                CMD_ONLY_SCRIPT="$(REBSD_ROOTFS_CMD_SCRIPTS)" \
+                CMD_ONLY_NSTD="$(REBSD_ROOTFS_CMD_NSTDS)" \
                 CMD_ONLY_SETUID="$(I386_USER_NONE)" \
-                CMD_ONLY_OPERATOR="$(I386_USER_NONE)" \
+                CMD_ONLY_OPERATOR="$(REBSD_ROOTFS_CMD_OPERATORS)" \
                 CMD_ONLY_KMEM="$(I386_USER_NONE)" \
                 CMD_ONLY_TTY="$(I386_USER_NONE)" \
+                CMD_EXTRA_SUBDIR="$(REBSD_ROOTFS_CMD_EXTRA_SUBDIRS)" \
+                SMUX_SUBDIRS=retro \
                 CMD_BUILD_STRIP=
+I386_AWK_MAKE = $(MAKE) -C $(I386_USERLAND_SRC)/cmd/awk \
+                TARGET_PLATFORM=i386 \
+                DESTDIR=$(abspath $(I386_ROOTFS_STAGE)) \
+                CC="$(I386_USERLAND_CC)" \
+                AS="$(I386_USERLAND_CC) -x assembler-with-cpp -c" \
+                LD="$(LD)" AR="$(AR)" RANLIB="$(RANLIB)" \
+                NM="$(NM)" SIZE="$(SIZE)" OBJDUMP="$(OBJDUMP)" \
+                ELF2AOUT=cp LDFLAGS="$(I386_USERLAND_LDFLAGS)" \
+                YACC="$(I386_BISON) -y"
 I386_VERSION_GENERATOR = $(TOPSRC)/tools/build/gen-vers.py
 I386_COMPILER_VERSION = $(shell $(CC) --version 2>/dev/null | sed -n '1p')
 I386_GIT_REV = $(or $(shell git -C $(TOPSRC) rev-parse HEAD 2>/dev/null),unknown)
@@ -228,9 +254,15 @@ $(I386_USER_LDSCRIPT): $(I386_USER_LDSCRIPT_SRC) \
 	    $(TOPSRC)/sys/vm/vm_constants.h
 	$(CC) -E -P -x c -I$(TOPSRC)/sys -I$(I386_SRC) $< -o $@
 
+$(I386_KERNEL_LDSCRIPT): $(I386_KERNEL_LDSCRIPT_SRC) \
+	    $(I386_SRC)/include/machine/layout.h
+	$(CC) -E -P -x c -I$(I386_SRC) $< -o $@
+
 $(I386_ROOTFS_STAGE)/.base: $(I386_ROOTFS_COMMON_FILES) \
 	    $(I386_ROOTFS_COMMON_HEADERS) \
 	    $(I386_ROOTFS_MACHINE_HEADERS) \
+	    $(I386_INSTALL_USER_HEADERS) $(I386_TERMCAP) $(I386_MAGIC_DB) \
+	    $(I386_ROOTFS_MAKEFILES) \
 	    $(shell find $(I386_ROOTFS_BOARD_DIR) -type f 2>/dev/null)
 	rm -rf $(I386_ROOTFS_STAGE)
 	mkdir -p $(I386_ROOTFS_STAGE)/bin \
@@ -241,14 +273,22 @@ $(I386_ROOTFS_STAGE)/.base: $(I386_ROOTFS_COMMON_FILES) \
 	    $(I386_ROOTFS_STAGE)/root \
 	    $(I386_ROOTFS_STAGE)/sbin \
 	    $(I386_ROOTFS_STAGE)/share/man/cat1 \
+	    $(I386_ROOTFS_STAGE)/share/man/cat3 \
+	    $(I386_ROOTFS_STAGE)/share/man/cat5 \
 	    $(I386_ROOTFS_STAGE)/share/man/cat8 \
 	    $(I386_ROOTFS_STAGE)/usr/include \
-	    $(I386_ROOTFS_STAGE)/usr/share \
+	    $(I386_ROOTFS_STAGE)/usr/bin \
+	    $(I386_ROOTFS_STAGE)/usr/libexec \
+	    $(I386_ROOTFS_STAGE)/usr/share/man/cat1 \
+	    $(I386_ROOTFS_STAGE)/usr/share/man/cat5 \
+	    $(I386_ROOTFS_STAGE)/usr/share/man/cat8 \
+	    $(I386_ROOTFS_STAGE)/usr/share/misc \
 	    $(I386_ROOTFS_STAGE)/var/log \
 	    $(I386_ROOTFS_STAGE)/var/run \
 	    $(I386_ROOTFS_STAGE)/var/tmp
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/group \
 	    $(TOPSRC)/sys/mips/rootfs/etc/hosts \
+	    $(TOPSRC)/sys/mips/rootfs/etc/inetd.conf \
 	    $(TOPSRC)/sys/mips/rootfs/etc/passwd \
 	    $(TOPSRC)/sys/mips/rootfs/etc/profile \
 	    $(TOPSRC)/sys/mips/rootfs/etc/services \
@@ -256,19 +296,22 @@ $(I386_ROOTFS_STAGE)/.base: $(I386_ROOTFS_COMMON_FILES) \
 	cp -p $(TOPSRC)/sys/mips/rootfs/root/.profile \
 	    $(I386_ROOTFS_STAGE)/root/.profile
 	cp -pR $(I386_ROOTFS_BOARD_DIR)/. $(I386_ROOTFS_STAGE)/
-	cp -pR $(TOPSRC)/include/. $(I386_ROOTFS_STAGE)/usr/include/
-	rm -rf $(I386_ROOTFS_STAGE)/usr/include/machine \
-	    $(I386_ROOTFS_STAGE)/usr/include/sys
-	cp -pR $(TOPSRC)/sys/include \
-	    $(I386_ROOTFS_STAGE)/usr/include/sys
-	cp -pR $(I386_SRC)/include/machine \
-	    $(I386_ROOTFS_STAGE)/usr/include/machine
+	cp -p $(I386_TERMCAP) $(I386_ROOTFS_STAGE)/etc/termcap
+	cp -p $(I386_MAGIC_DB) \
+	    $(I386_ROOTFS_STAGE)/usr/share/misc/magic.mgc
+	$(I386_INSTALL_USER_HEADERS) $(TOPSRC) \
+	    $(I386_ROOTFS_STAGE)/usr/include i386 \
+	    $(I386_SRC)/include/machine yes ""
+	rm -f $(I386_ROOTFS_STAGE)/etc/resolv.conf
+	ln -s ../var/run/resolv.conf $(I386_ROOTFS_STAGE)/etc/resolv.conf
 	ln -s var/tmp $(I386_ROOTFS_STAGE)/tmp
 	touch $@
 
 $(I386_USERLAND_STAMP): $(I386_ROOTFS_STAGE)/.base \
 	    $(I386_USER_LDSCRIPT) $(I386_USERLAND_SRCS) \
-	    $(TOPSRC)/target.mk $(TOPSRC)/target-i386.mk
+	    $(TOPSRC)/target.mk $(TOPSRC)/target-i386.mk \
+	    $(I386_MAKEWHATIS_SED) $(I386_MAN_SRCS) \
+	    $(I386_ROOTFS_MAKEFILES)
 	rm -rf $(I386_USERLAND_BUILD)
 	mkdir -p $(I386_USERLAND_SRC)
 	cp -pR $(TOPSRC)/src/. $(I386_USERLAND_SRC)/
@@ -282,7 +325,75 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_STAGE)/.base \
 	    $(I386_USERLAND_BUILD)/target-i386.mk
 	$(I386_SRC_MAKE) clean
 	$(I386_SRC_MAKE) all
+	$(I386_AWK_MAKE) clean
+	$(I386_AWK_MAKE) awk
 	$(I386_SRC_MAKE) install
+	$(I386_AWK_MAKE) install
+	mkdir -p $(I386_ROOTFS_STAGE)/usr/lib/ldscripts
+	cp -p $(I386_USERLAND_SRC)/crt0.o \
+	    $(I386_ROOTFS_STAGE)/usr/lib/crt0.o
+	cp -p $(I386_USERLAND_SRC)/libc.a \
+	    $(I386_ROOTFS_STAGE)/usr/lib/libc.a
+	cp -p $(I386_USERLAND_SRC)/libm.a \
+	    $(I386_ROOTFS_STAGE)/usr/lib/libm.a
+	cp -p $(I386_USER_LDSCRIPT) \
+	    $(I386_ROOTFS_STAGE)/usr/lib/ldscripts/elf32-i386.ld
+	$(RANLIB) $(I386_ROOTFS_STAGE)/usr/lib/libc.a
+	$(RANLIB) $(I386_ROOTFS_STAGE)/usr/lib/libm.a
+	for bin in $(REBSD_ROOTFS_USR_BIN_FILES); do \
+	    if [ -e $(I386_ROOTFS_STAGE)/bin/$$bin ]; then \
+	        mv -f $(I386_ROOTFS_STAGE)/bin/$$bin \
+	            $(I386_ROOTFS_STAGE)/usr/bin/$$bin; \
+	    fi; \
+	done
+	for file in $(REBSD_ROOTFS_USR_LIBEXEC_FILES); do \
+	    if [ -e $(I386_ROOTFS_STAGE)/libexec/$$file ]; then \
+	        mv -f $(I386_ROOTFS_STAGE)/libexec/$$file \
+	            $(I386_ROOTFS_STAGE)/usr/libexec/$$file; \
+	    fi; \
+	done
+	if [ -d $(I386_ROOTFS_STAGE)/share ]; then \
+	    cp -pR $(I386_ROOTFS_STAGE)/share/. \
+	        $(I386_ROOTFS_STAGE)/usr/share/; \
+	    rm -rf $(I386_ROOTFS_STAGE)/share; \
+	fi
+	for page in $(REBSD_ROOTFS_CAT1_PAGES); do \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 \
+	        > $(I386_ROOTFS_STAGE)/usr/share/man/cat1/$$page.0; \
+	done
+	for spec in $(REBSD_ROOTFS_CMD_CAT1_SOURCES); do \
+	    dir=$${spec%:*}; page=$${spec#*:}; \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/cmd/$$dir/$$page.1 \
+	        > $(I386_ROOTFS_STAGE)/usr/share/man/cat1/$$page.0; \
+	done
+	for alias in $(REBSD_ROOTFS_CAT1_ALIASES); do \
+	    dst=$${alias%:*}; src=$${alias#*:}; \
+	    cp $(I386_ROOTFS_STAGE)/usr/share/man/cat1/$$src.0 \
+	        $(I386_ROOTFS_STAGE)/usr/share/man/cat1/$$dst.0; \
+	done
+	for page in $(REBSD_ROOTFS_CAT5_PAGES); do \
+	    GROFF_NO_SGR=1 $(DOCROFF) $(TOPSRC)/src/man/man5/$$page.5 \
+	        > $(I386_ROOTFS_STAGE)/usr/share/man/cat5/$$page.0; \
+	done
+	for page in $(REBSD_ROOTFS_CAT8_PAGES); do \
+	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man8/$$page.8 \
+	        > $(I386_ROOTFS_STAGE)/usr/share/man/cat8/$$page.0; \
+	done
+	for alias in $(REBSD_ROOTFS_CAT8_ALIASES); do \
+	    dst=$${alias%:*}; src=$${alias#*:}; \
+	    cp $(I386_ROOTFS_STAGE)/usr/share/man/cat8/$$src.0 \
+	        $(I386_ROOTFS_STAGE)/usr/share/man/cat8/$$dst.0; \
+	done
+	rm -f $(I386_ROOTFS_STAGE)/usr/share/man/whatis.tmp
+	touch $(I386_ROOTFS_STAGE)/usr/share/man/whatis.tmp
+	for file in `find $(I386_ROOTFS_STAGE)/usr/share/man/cat* \
+	    -type f -name '*.0' -print`; do \
+	    sed -n -f $(I386_MAKEWHATIS_SED) $$file \
+	        >> $(I386_ROOTFS_STAGE)/usr/share/man/whatis.tmp; \
+	done
+	sort -u $(I386_ROOTFS_STAGE)/usr/share/man/whatis.tmp \
+	    > $(I386_ROOTFS_STAGE)/usr/share/man/whatis
+	rm -f $(I386_ROOTFS_STAGE)/usr/share/man/whatis.tmp
 	touch $@
 
 $(I386_ROOTFS_STAGE)/.userland: $(I386_ROOTFS_STAGE)/.base \
@@ -295,10 +406,10 @@ $(I386_ROOTFS_STAGE)/.userland: $(I386_ROOTFS_STAGE)/.base \
 	touch $@
 
 $(I386_ROOTFS_MANIFEST): $(I386_ROOTFS_STAGE)/.userland \
-	    $(I386_ROOTFS_MANIFEST_TOOL) $(I386_ROOTFS_DEVICES)
+	    $(I386_ROOTFS_MANIFEST_TOOL) $(I386_ROOTFS_DEVICES) \
+	    $(I386_ROOTFS_MAKEFILES)
 	$(PYTHON) $(I386_ROOTFS_MANIFEST_TOOL) \
 	    --stage $(I386_ROOTFS_STAGE) --output $@ \
-	    --exclude /usr/include \
 	    --devices $(I386_ROOTFS_DEVICES)
 
 rootfs.img: $(FSUTIL) $(I386_ROOTFS_MANIFEST) \
@@ -940,8 +1051,8 @@ boot_main.o: $(I386_PC_SRC)/boot_main.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-rebsd-i686.elf: $(KERNEL_OBJS) $(I386_PC_SRC)/kernel.ld
-	$(LD) $(I686_LDFLAGS) --gc-sections -T $(I386_PC_SRC)/kernel.ld \
+rebsd-i686.elf: $(KERNEL_OBJS) $(I386_KERNEL_LDSCRIPT)
+	$(LD) $(I686_LDFLAGS) --gc-sections -T $(I386_KERNEL_LDSCRIPT) \
 	    -Map rebsd-i686.map -o $@ $(KERNEL_OBJS)
 	$(SIZE) $@
 
@@ -1156,6 +1267,7 @@ clean:
 	    vers.c \
 	    rootfs.img rootfs.check.img rootfs_image.o \
 	    $(I386_ROOTFS_MANIFEST) $(I386_USER_LDSCRIPT) \
+	    $(I386_KERNEL_LDSCRIPT) \
 	    $(I386_USERLAND_STAMP) \
 	    rebsd-i686-bios-floppy.img \
 	    rebsd-i686-bios-floppy.check.img \

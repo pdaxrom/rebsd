@@ -28,6 +28,7 @@ COMPILER_HELPER_OBJS =
 else
 COMPILER_HELPER_OBJS = cmpdi2.o \
                   divdi3.o \
+                  divmoddi4.o \
                   fixdfdi.o \
                   floatdisf.o \
                   floatdidf.o \
