@@ -416,7 +416,7 @@ malta-early.elf: malta-early.o $(TOPSRC)/sys/mips/malta/malta.ld
 unix.bin: unix.elf
 	$(OBJCOPY) -O binary --remove-section=.romdisk unix.elf unix.bin
 
-malta64-stage0.o: $(MALTA64_SRC)/stage0.S | .deps
+malta64-stage0.o: $(MALTA64_SRC)/stage0.S $(MALTA_BUILD_MODE_STAMP) | .deps
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
 
 malta64-stage0-kernel.o: $(MALTA64_SRC)/stage0_kernel_blob.S unix.bin | .deps
@@ -434,7 +434,7 @@ malta64.elf: malta64-stage0.o malta64-stage0-kernel.o \
 	$(MALTA64_STAGE_SIZE) $@
 	$(MALTA64_STAGE_OBJDUMP) -d -S $@ > malta64.dis
 
-malta64-early.o: $(MALTA64_SRC)/early_uart64.S | .deps
+malta64-early.o: $(MALTA64_SRC)/early_uart64.S $(MALTA_BUILD_MODE_STAMP) | .deps
 	$(MALTA64_STAGE_CC) $(MALTA64_STAGE_ASFLAGS) $< -o $@
 
 malta64-early.elf: malta64-early.o $(MALTA64_STAGE_LD_SCRIPT)

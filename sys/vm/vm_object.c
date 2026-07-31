@@ -36,6 +36,7 @@ extern int swap(size_t, size_t, int, int);
 #endif
 
 #define VM_ANON_MAX            2048
+#define VM_OBJECT_PAGE_HASH_BUCKETS 256u
 #define VM_ANON_BUSY           0x01u
 #define VM_ANON_DIRTY          0x02u
 #define VM_SWAP_BLOCKS         (VM_PAGE_SIZE / VM_PAGER_DEV_BSIZE)
@@ -47,6 +48,7 @@ extern int swap(size_t, size_t, int, int);
 
 struct vm_anon {
     struct vm_page *va_page;
+    struct vm_anon *va_free_next;
     const struct vm_object_pager_ops *va_pager;
     void           *va_pager_cookie;
     vm_ooffset_t    va_pager_offset;
@@ -58,6 +60,8 @@ struct vm_anon {
 
 struct vm_object_page {
     struct vm_object_page *vop_next;
+    struct vm_object_page *vop_hash_next;
+    struct vm_object      *vop_object;
     struct vm_anon        *vop_anon;
     vm_pfn_t               vop_index;
     unsigned               vop_in_use;
@@ -65,6 +69,7 @@ struct vm_object_page {
 
 struct vm_object {
     struct vm_object_page *vo_pages;
+    struct vm_object      *vo_free_next;
     const struct vm_object_pager_ops *vo_pager;
     void                  *vo_pager_cookie;
     vm_ooffset_t           vo_pager_offset;
@@ -76,6 +81,11 @@ struct vm_object {
 static struct vm_object vm_object_pool[VM_OBJECT_MAX];
 static struct vm_object_page vm_object_page_pool[VM_ANON_MAX];
 static struct vm_anon vm_anon_pool[VM_ANON_MAX];
+static struct vm_object *vm_object_free;
+static struct vm_object_page *vm_object_page_free_list;
+static struct vm_anon *vm_anon_free;
+static struct vm_object_page
+    *vm_object_page_hash[VM_OBJECT_PAGE_HASH_BUCKETS];
 static struct vm_page_allocator *vm_object_allocator;
 static struct vm_object_stats vm_object_statistics;
 static unsigned vm_object_initialized;
@@ -149,42 +159,41 @@ vm_object_valid(const struct vm_object *object)
 static struct vm_object_page *
 vm_object_page_alloc(void)
 {
-    unsigned index;
+    struct vm_object_page *page;
 
-    for (index = 0; index < VM_ANON_MAX; ++index) {
-        if (vm_object_page_pool[index].vop_in_use == 0) {
-            vm_object_zero(&vm_object_page_pool[index],
-                sizeof(vm_object_page_pool[index]));
-            vm_object_page_pool[index].vop_in_use = 1;
-            return &vm_object_page_pool[index];
-        }
-    }
-    return 0;
+    page = vm_object_page_free_list;
+    if (page == 0)
+        return 0;
+    vm_object_page_free_list = page->vop_next;
+    vm_object_zero(page, sizeof(*page));
+    page->vop_in_use = 1;
+    return page;
 }
 
 static void
 vm_object_page_free(struct vm_object_page *page)
 {
-    if (page != 0)
-        vm_object_zero(page, sizeof(*page));
+    if (page == 0)
+        return;
+    vm_object_zero(page, sizeof(*page));
+    page->vop_next = vm_object_page_free_list;
+    vm_object_page_free_list = page;
 }
 
 static struct vm_anon *
 vm_anon_alloc(void)
 {
-    unsigned index;
+    struct vm_anon *anon;
 
-    for (index = 0; index < VM_ANON_MAX; ++index) {
-        if (vm_anon_pool[index].va_in_use == 0) {
-            vm_object_zero(&vm_anon_pool[index],
-                sizeof(vm_anon_pool[index]));
-            vm_anon_pool[index].va_in_use = 1;
-            vm_anon_pool[index].va_references = 1;
-            vm_object_stat_increment(&vm_object_statistics.vos_anon_pages);
-            return &vm_anon_pool[index];
-        }
-    }
-    return 0;
+    anon = vm_anon_free;
+    if (anon == 0)
+        return 0;
+    vm_anon_free = anon->va_free_next;
+    vm_object_zero(anon, sizeof(*anon));
+    anon->va_in_use = 1;
+    anon->va_references = 1;
+    vm_object_stat_increment(&vm_object_statistics.vos_anon_pages);
+    return anon;
 }
 
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST) && \
@@ -326,6 +335,8 @@ vm_anon_release(struct vm_anon *anon)
         vm_object_stat_decrement(&vm_object_statistics.vos_swapped_pages);
     }
     vm_object_zero(anon, sizeof(*anon));
+    anon->va_free_next = vm_anon_free;
+    vm_anon_free = anon;
     vm_object_stat_decrement(&vm_object_statistics.vos_anon_pages);
     return 0;
 }
@@ -357,12 +368,60 @@ static struct vm_object_page *
 vm_object_page_find(const struct vm_object *object, vm_pfn_t index)
 {
     struct vm_object_page *page;
+    unsigned bucket;
 
-    for (page = object->vo_pages; page != 0; page = page->vop_next) {
-        if (page->vop_index == index)
+    bucket = (unsigned)((((uintptr_t)object >> 4) ^ index) &
+        (VM_OBJECT_PAGE_HASH_BUCKETS - 1));
+    for (page = vm_object_page_hash[bucket]; page != 0;
+        page = page->vop_hash_next) {
+        if (page->vop_object == object && page->vop_index == index)
             return page;
     }
     return 0;
+}
+
+static void
+vm_object_page_link(struct vm_object *object, struct vm_object_page *page)
+{
+    unsigned bucket;
+
+    bucket = (unsigned)((((uintptr_t)object >> 4) ^ page->vop_index) &
+        (VM_OBJECT_PAGE_HASH_BUCKETS - 1));
+    page->vop_object = object;
+    page->vop_next = object->vo_pages;
+    object->vo_pages = page;
+    page->vop_hash_next = vm_object_page_hash[bucket];
+    vm_object_page_hash[bucket] = page;
+}
+
+static void
+vm_object_page_hash_unlink(struct vm_object *object,
+    struct vm_object_page *target)
+{
+    struct vm_object_page **hash_link;
+    unsigned bucket;
+
+    bucket = (unsigned)((((uintptr_t)object >> 4) ^ target->vop_index) &
+        (VM_OBJECT_PAGE_HASH_BUCKETS - 1));
+    for (hash_link = &vm_object_page_hash[bucket];
+        *hash_link != 0 && *hash_link != target;
+        hash_link = &(*hash_link)->vop_hash_next)
+        continue;
+    VM_ASSERT(*hash_link == target);
+    if (*hash_link == target)
+        *hash_link = target->vop_hash_next;
+    target->vop_hash_next = 0;
+    target->vop_object = 0;
+}
+
+static void
+vm_object_page_unlink_at(struct vm_object *object,
+    struct vm_object_page **link, struct vm_object_page *target)
+{
+    VM_ASSERT(link != 0 && *link == target);
+    *link = target->vop_next;
+    vm_object_page_hash_unlink(object, target);
+    target->vop_next = 0;
 }
 
 static void
@@ -374,10 +433,11 @@ vm_object_page_unlink(struct vm_object *object,
     for (link = &object->vo_pages; *link != 0;
         link = &(*link)->vop_next) {
         if (*link == target) {
-            *link = target->vop_next;
+            vm_object_page_unlink_at(object, link, target);
             return;
         }
     }
+    VM_ASSERT(*link == target);
 }
 
 static int
@@ -527,12 +587,29 @@ vm_anon_make_resident(struct vm_anon *anon, int zero_fault,
 int
 vm_object_system_init(struct vm_page_allocator *allocator)
 {
+    unsigned index;
+
     if (allocator == 0 || allocator->vpa_initialized == 0)
         return EINVAL;
     vm_object_zero(vm_object_pool, sizeof(vm_object_pool));
     vm_object_zero(vm_object_page_pool, sizeof(vm_object_page_pool));
     vm_object_zero(vm_anon_pool, sizeof(vm_anon_pool));
+    vm_object_zero(vm_object_page_hash, sizeof(vm_object_page_hash));
     vm_object_zero(&vm_object_statistics, sizeof(vm_object_statistics));
+    vm_object_free = 0;
+    for (index = VM_OBJECT_MAX; index-- != 0;) {
+        vm_object_pool[index].vo_free_next = vm_object_free;
+        vm_object_free = &vm_object_pool[index];
+    }
+    vm_object_page_free_list = 0;
+    vm_anon_free = 0;
+    for (index = VM_ANON_MAX; index-- != 0;) {
+        vm_object_page_pool[index].vop_next =
+            vm_object_page_free_list;
+        vm_object_page_free_list = &vm_object_page_pool[index];
+        vm_anon_pool[index].va_free_next = vm_anon_free;
+        vm_anon_free = &vm_anon_pool[index];
+    }
     vm_object_allocator = allocator;
     vm_pager_clock = 0;
     vm_pager_swap_ready = 0;
@@ -552,7 +629,6 @@ vm_object_create(vm_size_t size, struct vm_object **result)
 {
     struct vm_object *object;
     vm_pfn_t pages;
-    unsigned index;
     int error;
 
     if (!vm_object_initialized || result == 0)
@@ -561,19 +637,17 @@ vm_object_create(vm_size_t size, struct vm_object **result)
     if (error != 0)
         return EINVAL;
     *result = 0;
-    for (index = 0; index < VM_OBJECT_MAX; ++index) {
-        if (vm_object_pool[index].vo_in_use == 0) {
-            object = &vm_object_pool[index];
-            vm_object_zero(object, sizeof(*object));
-            object->vo_size = pages;
-            object->vo_references = 1;
-            object->vo_in_use = 1;
-            vm_object_stat_increment(&vm_object_statistics.vos_objects);
-            *result = object;
-            return 0;
-        }
-    }
-    return ENOSPC;
+    object = vm_object_free;
+    if (object == 0)
+        return ENOSPC;
+    vm_object_free = object->vo_free_next;
+    vm_object_zero(object, sizeof(*object));
+    object->vo_size = pages;
+    object->vo_references = 1;
+    object->vo_in_use = 1;
+    vm_object_stat_increment(&vm_object_statistics.vos_objects);
+    *result = object;
+    return 0;
 }
 
 int
@@ -688,8 +762,7 @@ vm_object_clone(const struct vm_object *source, struct vm_object **result)
         ++source_page->vop_anon->va_references;
         target_page->vop_index = source_page->vop_index;
         target_page->vop_anon = source_page->vop_anon;
-        target_page->vop_next = target->vo_pages;
-        target->vo_pages = target_page;
+        vm_object_page_link(target, target_page);
     }
     *result = target;
     return 0;
@@ -699,7 +772,6 @@ int
 vm_object_release(struct vm_object *object)
 {
     struct vm_object_page *page;
-    struct vm_object_page *next;
     int error;
 
     if (!vm_object_valid(object) || object->vo_references == 0)
@@ -717,17 +789,19 @@ vm_object_release(struct vm_object *object)
         if (error != 0)
             return error;
     }
-    for (page = object->vo_pages; page != 0; page = next) {
-        next = page->vop_next;
+    while ((page = object->vo_pages) != 0) {
         error = vm_anon_release(page->vop_anon);
         if (error != 0)
             return error;
+        vm_object_page_unlink_at(object, &object->vo_pages, page);
         vm_object_page_free(page);
     }
     if (object->vo_pager != 0)
         object->vo_pager->vpo_release(object->vo_pager_cookie);
     object->vo_references = 0;
     vm_object_zero(object, sizeof(*object));
+    object->vo_free_next = vm_object_free;
+    vm_object_free = object;
     vm_object_stat_decrement(&vm_object_statistics.vos_objects);
     return 0;
 }
@@ -867,8 +941,7 @@ retry:
             anon->va_pager_cookie = object->vo_pager_cookie;
             anon->va_pager_offset = object->vo_pager_offset + offset;
         }
-        object_page->vop_next = object->vo_pages;
-        object->vo_pages = object_page;
+        vm_object_page_link(object, object_page);
     }
     need_pagein = object->vo_pager != 0 &&
         object_page->vop_anon->va_page == 0 &&
@@ -987,7 +1060,7 @@ vm_object_remove(struct vm_object *object, vm_ooffset_t offset,
         error = vm_anon_release(page->vop_anon);
         if (error != 0)
             return error;
-        *link = page->vop_next;
+        vm_object_page_unlink_at(object, link, page);
         vm_object_page_free(page);
     }
     return 0;
@@ -1229,7 +1302,7 @@ restart_check:
         error = vm_anon_release(page->vop_anon);
         if (error != 0)
             return error;
-        *link = page->vop_next;
+        vm_object_page_unlink_at(object, link, page);
         vm_object_page_free(page);
     }
     return 0;

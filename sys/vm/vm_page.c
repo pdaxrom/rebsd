@@ -157,6 +157,7 @@ vm_page_allocator_init(struct vm_page_allocator *allocator,
     allocator->vpa_frees = 0;
     allocator->vpa_allocation_failures = 0;
     allocator->vpa_poison_failures = 0;
+    allocator->vpa_free_hint = 0;
     allocator->vpa_poison = 0;
     allocator->vpa_poison_arg = 0;
     allocator->vpa_initialized = 0;
@@ -268,15 +269,80 @@ vm_page_scrub(struct vm_page_allocator *allocator, struct vm_page *page)
     return error;
 }
 
-int
-vm_page_alloc(struct vm_page_allocator *allocator,
-    const struct vm_page_request *request, struct vm_page **result)
+static int
+vm_page_find_run(struct vm_page_allocator *allocator,
+    const struct vm_page_request *request, vm_size_t run_size,
+    vm_pfn_t first, vm_pfn_t limit, vm_pfn_t *result)
 {
     struct vm_page *page;
     vm_paddr_t start;
     vm_paddr_t last_start;
     vm_paddr_t last_byte;
+    vm_pfn_t i;
+    vm_pfn_t j;
+
+    if (first > limit || request->vpr_npages > limit - first)
+        return ENOENT;
+    i = first;
+    while (i + request->vpr_npages <= limit) {
+        page = &allocator->vpa_pages[i];
+        start = page->vmp_paddr;
+        if (start > request->vpr_max_address)
+            break;
+        if (page->vmp_state != VM_PAGE_FREE ||
+            (start & (request->vpr_alignment - 1)) != 0 ||
+            (start & request->vpr_color_mask) != request->vpr_color) {
+            ++i;
+            continue;
+        }
+        if (run_size - 1 > VM_PADDR_MAX - start) {
+            ++i;
+            continue;
+        }
+        last_byte = start + run_size - 1;
+        if (last_byte > request->vpr_max_address) {
+            ++i;
+            continue;
+        }
+        if (request->vpr_boundary != 0 &&
+            (start / request->vpr_boundary) !=
+            (last_byte / request->vpr_boundary)) {
+            ++i;
+            continue;
+        }
+        last_start = start + run_size - VM_PAGE_SIZE;
+        for (j = 0; j < request->vpr_npages; ++j) {
+            page = &allocator->vpa_pages[i + j];
+            if (page->vmp_state != VM_PAGE_FREE ||
+                page->vmp_paddr != start + j * VM_PAGE_SIZE)
+                break;
+        }
+        if (j == request->vpr_npages &&
+            allocator->vpa_pages[i + j - 1].vmp_paddr == last_start) {
+            *result = i;
+            return 0;
+        }
+        /*
+         * An unavailable page blocks every candidate through i + j, so
+         * resume after it.  A physical discontinuity does not make the
+         * page at i + j unavailable: it can begin a run in the next RAM
+         * region and must be reconsidered.
+         */
+        if (page->vmp_state != VM_PAGE_FREE)
+            i += j + 1;
+        else
+            i += j;
+    }
+    return ENOENT;
+}
+
+int
+vm_page_alloc(struct vm_page_allocator *allocator,
+    const struct vm_page_request *request, struct vm_page **result)
+{
+    struct vm_page *page;
     vm_size_t run_size;
+    vm_pfn_t wrap_limit;
     vm_pfn_t i;
     vm_pfn_t j;
     int error;
@@ -292,33 +358,19 @@ vm_page_alloc(struct vm_page_allocator *allocator,
         return ENOMEM;
     }
 
-    for (i = 0; i + request->vpr_npages <= allocator->vpa_page_count;
-        ++i) {
-        page = &allocator->vpa_pages[i];
-        start = page->vmp_paddr;
-        if (page->vmp_state != VM_PAGE_FREE ||
-            (start & (request->vpr_alignment - 1)) != 0 ||
-            (start & request->vpr_color_mask) != request->vpr_color)
-            continue;
-        if (run_size - 1 > VM_PADDR_MAX - start)
-            continue;
-        last_byte = start + run_size - 1;
-        if (last_byte > request->vpr_max_address)
-            continue;
-        if (request->vpr_boundary != 0 &&
-            (start / request->vpr_boundary) !=
-            (last_byte / request->vpr_boundary))
-            continue;
-        last_start = start + run_size - VM_PAGE_SIZE;
-        for (j = 0; j < request->vpr_npages; ++j) {
-            page = &allocator->vpa_pages[i + j];
-            if (page->vmp_state != VM_PAGE_FREE ||
-                page->vmp_paddr != start + j * VM_PAGE_SIZE)
-                break;
-        }
-        if (j != request->vpr_npages ||
-            allocator->vpa_pages[i + j - 1].vmp_paddr != last_start)
-            continue;
+    error = vm_page_find_run(allocator, request, run_size,
+        allocator->vpa_free_hint, allocator->vpa_page_count, &i);
+    if (error != 0 && allocator->vpa_free_hint != 0) {
+        wrap_limit = allocator->vpa_free_hint;
+        if (request->vpr_npages - 1 >
+            allocator->vpa_page_count - wrap_limit)
+            wrap_limit = allocator->vpa_page_count;
+        else
+            wrap_limit += request->vpr_npages - 1;
+        error = vm_page_find_run(allocator, request, run_size, 0,
+            wrap_limit, &i);
+    }
+    if (error == 0) {
         for (j = 0; j < request->vpr_npages; ++j) {
             error = vm_page_poison_check(allocator,
                 &allocator->vpa_pages[i + j]);
@@ -354,6 +406,9 @@ vm_page_alloc(struct vm_page_allocator *allocator,
         allocator->vpa_free_count -= request->vpr_npages;
         vm_page_stat_add(&allocator->vpa_allocations,
             request->vpr_npages);
+        allocator->vpa_free_hint = i + request->vpr_npages;
+        if (allocator->vpa_free_hint >= allocator->vpa_page_count)
+            allocator->vpa_free_hint = 0;
         *result = &allocator->vpa_pages[i];
         VM_ASSERT((*result)->vmp_state == request->vpr_state);
         VM_ASSERT(allocator->vpa_free_count < allocator->vpa_page_count);
@@ -496,6 +551,8 @@ vm_page_free(struct vm_page_allocator *allocator, struct vm_page *first,
             page->vmp_flags &= ~VM_PAGE_FLAG_POISONED;
     }
     allocator->vpa_free_count += npages;
+    if (index < allocator->vpa_free_hint)
+        allocator->vpa_free_hint = index;
     vm_page_stat_add(&allocator->vpa_frees, npages);
     return 0;
 }
@@ -683,6 +740,7 @@ vm_page_allocator_validate(const struct vm_page_allocator *allocator,
 
     if (allocator == 0 || map == 0 || !allocator->vpa_initialized ||
         allocator->vpa_pages == 0 || allocator->vpa_page_count == 0 ||
+        allocator->vpa_free_hint >= allocator->vpa_page_count ||
         !map->vpm_finalized)
         return EINVAL;
     free_count = 0;

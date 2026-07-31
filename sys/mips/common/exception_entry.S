@@ -212,13 +212,12 @@ mips_tlb_refill_entry:
         nop
         nop
         nop
-        /*
-         * Publish diagnostics only after a resident mapping was accepted
-         * and installed.  A miss which falls through to the full VM fault
-         * path must leave the preceding successful fast refill visible in
-         * the subsequent fault report.  Only k0/k1 and cached kernel
-         * globals are touched, so the interrupted GPR file remains intact.
-         */
+/*
+ * A production refill returns immediately after maintaining the cheap
+ * saturating counter below.  VM_DIAGNOSTIC builds retain the complete CP0,
+ * PTE, and interrupted-register snapshot used by hardware fault analysis.
+ */
+#ifdef VM_DIAGNOSTIC
         la      $k0, mips_pmap_fast_diagnostics
         mfc0    $k1, $14
         sw      $k1, MIPS_REFILL_DIAG_EPC($k0)
@@ -302,6 +301,7 @@ mips_tlb_refill_new_site:
         la      $k1, mips_pmap_fast_repeat
         sw      $k0, 0($k1)
 mips_tlb_refill_site_recorded:
+#endif
         la      $k0, mips_pmap_fast_refills
         lw      $k1, 0($k0)
         addiu   $k1, $k1, 1

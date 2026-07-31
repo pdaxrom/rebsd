@@ -22,7 +22,17 @@ use their `_context` forms without `VM_FAULT_CAN_SLEEP`.
 
 Diagnostic invariants are enabled reproducibly with `VM_DIAGNOSTIC=1` on the
 normal out-of-tree board build command.  They add panic-on-corruption checks
-without changing a VM structure or the user ABI.
+without changing the user ABI.  Production MIPS builds retain the saturating
+fast-refill counter but omit the per-refill CP0/PTE/register snapshot;
+`VM_DIAGNOSTIC=1` restores that complete snapshot.
+
+The shared VM hot paths use one common next-fit physical-page allocator and a
+hash for resident `(object, page-index)` lookup.  The shared MIPS `pmap` keeps
+reverse mappings for managed pages, so page reclaim and reference/modify
+clearing visit only mappings of the requested physical page.  Cached N64
+mappings retain the existing four-colour invariant; range cache maintenance
+therefore operates on the matching KSEG0 indices instead of sweeping both
+complete caches.
 
 Normal demand faults and user protection failures do not print to the kernel
 console.  Fatal kernel mapping faults still dump their context before panic.

@@ -346,9 +346,9 @@ test_pmap(void)
     CHECK(pmap_create(&pmap3) == 0);
     prepare_free = allocator.vpa_free_count;
     CHECK(pmap_prepare(pmap3, TEST_PRESSURE) == 0);
-    CHECK(allocator.vpa_free_count + 1 == prepare_free);
+    CHECK(allocator.vpa_free_count + 2 == prepare_free);
     CHECK(pmap_prepare(pmap3, TEST_PRESSURE + VM_PAGE_SIZE) == 0);
-    CHECK(allocator.vpa_free_count + 1 == prepare_free);
+    CHECK(allocator.vpa_free_count + 2 == prepare_free);
     CHECK(pmap_prepare(pmap3, TEST_PRESSURE + 1) == EINVAL);
     CHECK(pmap_prepare(pmap3, 0x80000000u) == EINVAL);
     CHECK(test_page_alloc(&allocator, TEST_VADDR, &page1) == 0);
@@ -500,6 +500,30 @@ test_pmap(void)
     CHECK(pmap_remove(pmap3, TEST_DEVICE,
         TEST_DEVICE + VM_PAGE_SIZE) == 0);
 
+    CHECK(pmap_enter(pmap2, TEST_SHARED, page1,
+        VM_PROT_READ | VM_PROT_WRITE, PMAP_CACHE_CACHED) == 0);
+    CHECK(pmap_activate(pmap2) == 0);
+    CHECK(pmap_fault(pmap2, TEST_SHARED, VM_PROT_READ, 1) == 0);
+    CHECK(pmap_fault(pmap2, TEST_SHARED, VM_PROT_WRITE, 1) == 0);
+    CHECK(page1->vmp_hold_count == 2);
+    CHECK(page1->vmp_reference_count == 2);
+    CHECK(page1->vmp_dirty_count == 1);
+    CHECK(pmap_clear_page_reference(page1) == 0);
+    CHECK(page1->vmp_reference_count == 0);
+    CHECK(!pmap_is_referenced(pmap1, TEST_VADDR));
+    CHECK(!pmap_is_referenced(pmap2, TEST_SHARED));
+    CHECK(pmap_clear_page_modify(page1) == 0);
+    CHECK(page1->vmp_dirty_count == 0);
+    CHECK(!pmap_is_modified(pmap2, TEST_SHARED));
+    CHECK(pmap_validate(pmap1) == 0);
+    CHECK(pmap_validate(pmap2) == 0);
+    CHECK(pmap_remove_page(page1) == 0);
+    CHECK(page1->vmp_hold_count == 0);
+    CHECK(pmap_extract(pmap1, TEST_VADDR, &paddr) == ENOENT);
+    CHECK(pmap_extract(pmap2, TEST_SHARED, &paddr) == ENOENT);
+    CHECK(pmap_validate(pmap1) == 0);
+    CHECK(pmap_validate(pmap2) == 0);
+
     CHECK(pmap_remove(pmap2, TEST_VADDR,
         TEST_VADDR + VM_PAGE_SIZE) == 0);
     CHECK(pmap_extract(pmap2, TEST_VADDR, &paddr) == ENOENT);
@@ -516,10 +540,10 @@ test_pmap(void)
         &test_ram[page1->vmp_paddr]);
 
     CHECK(pmap_get_stats(&stats) == 0);
-    CHECK(stats.pms_mappings == 2);
-    CHECK(stats.pms_resident_pages == 2);
-    CHECK(stats.pms_tlb_refills == 7);
-    CHECK(stats.pms_tlb_modified == 2);
+    CHECK(stats.pms_mappings == 1);
+    CHECK(stats.pms_resident_pages == 1);
+    CHECK(stats.pms_tlb_refills == 9);
+    CHECK(stats.pms_tlb_modified == 3);
     CHECK(stats.pms_protection_faults == 1);
     CHECK(stats.pms_full_flushes == 2);
     CHECK(stats.pms_asid_rollovers == 1);

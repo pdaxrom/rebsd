@@ -199,6 +199,10 @@ test_constraints_and_contiguous_runs(void)
     request.vpr_alignment = 4u * VM_PAGE_SIZE;
     request.vpr_boundary = 8u * VM_PAGE_SIZE;
     request.vpr_max_address = TEST_RAM_BASE + 6u * VM_PAGE_SIZE - 1;
+    allocator.vpa_free_hint = 5;
+    CHECK(vm_page_alloc(&allocator, &request, &first) == 0);
+    CHECK(first->vmp_paddr == TEST_RAM_BASE + 4u * VM_PAGE_SIZE);
+    CHECK(vm_page_free(&allocator, first, 2) == 0);
     CHECK(vm_page_alloc(&allocator, &request, &first) == 0);
     CHECK((first->vmp_paddr & (request.vpr_alignment - 1)) == 0);
     CHECK(first->vmp_paddr == TEST_RAM_BASE + 4u * VM_PAGE_SIZE);
@@ -241,6 +245,34 @@ test_constraints_and_contiguous_runs(void)
     request.vpr_color = 0;
     request.vpr_npages = 0;
     CHECK(vm_page_alloc(&allocator, &request, &first) == EINVAL);
+    CHECK(vm_page_allocator_validate(&allocator, &map) == 0);
+    return 0;
+}
+
+static int
+test_discontinuous_runs(void)
+{
+    struct vm_page_allocator allocator;
+    struct vm_page_request request;
+    struct vm_phys_map map;
+    struct vm_page discontinuous_metadata[6];
+    struct vm_page *run;
+
+    memset(&allocator, 0, sizeof(allocator));
+    memset(discontinuous_metadata, 0, sizeof(discontinuous_metadata));
+    vm_phys_map_init(&map);
+    CHECK(vm_phys_map_add_ram(&map, TEST_RAM_BASE,
+        2u * VM_PAGE_SIZE, "first ram") == 0);
+    CHECK(vm_phys_map_add_ram(&map, TEST_RAM_BASE + 4u * VM_PAGE_SIZE,
+        4u * VM_PAGE_SIZE, "second ram") == 0);
+    CHECK(vm_phys_map_finalize(&map) == 0);
+    CHECK(vm_page_allocator_init(&allocator, &map,
+        discontinuous_metadata, sizeof(discontinuous_metadata)) == 0);
+    vm_page_request_init(&request);
+    request.vpr_npages = 3;
+    CHECK(vm_page_alloc(&allocator, &request, &run) == 0);
+    CHECK(run->vmp_paddr == TEST_RAM_BASE + 4u * VM_PAGE_SIZE);
+    CHECK(vm_page_free(&allocator, run, 3) == 0);
     CHECK(vm_page_allocator_validate(&allocator, &map) == 0);
     return 0;
 }
@@ -362,6 +394,8 @@ main(void)
     if (test_single_page_and_poison() != 0)
         return 1;
     if (test_constraints_and_contiguous_runs() != 0)
+        return 1;
+    if (test_discontinuous_runs() != 0)
         return 1;
     if (test_low_memory_and_fragmentation() != 0)
         return 1;

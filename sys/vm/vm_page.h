@@ -66,6 +66,7 @@ struct vm_page_allocator {
     vm_pfn_t           vpa_frees;
     vm_pfn_t           vpa_allocation_failures;
     vm_pfn_t           vpa_poison_failures;
+    vm_pfn_t           vpa_free_hint;
     vm_page_poison_fn  vpa_poison;
     void              *vpa_poison_arg;
     unsigned           vpa_initialized;

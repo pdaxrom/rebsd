@@ -855,12 +855,12 @@ i386-kconfig.stamp: $(I386_PC_SRC)/Config \
 
 ioconf.c swapunix.c: i386-kconfig.stamp
 
-ioconf.o: ioconf.c \
+ioconf.o: ioconf.c i386-kconfig.stamp \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-swapunix.o: swapunix.c \
+swapunix.o: swapunix.c i386-kconfig.stamp \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
