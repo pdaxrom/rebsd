@@ -202,7 +202,8 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
 
     i386_pic_eoi(irq);
 #ifdef INET
-    if (irq == I386_IRQ_TIMER && netisr)
+    /* Drain protocol work at the return boundary of the IRQ that queued it. */
+    if (netisr)
         netintr();
 #endif
 }

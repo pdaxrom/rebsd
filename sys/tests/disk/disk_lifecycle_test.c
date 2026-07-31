@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <sys/disk.h>
 #include <disk/disk.h>
+#include <disk/ramdisk.h>
 #include <disk/romdisk.h>
 
 #define CHECK(expr) do {                                                \
@@ -455,6 +456,72 @@ test_romdisk(void)
 }
 
 static int
+test_ramdisk(void)
+{
+    struct ramdisk ramdisk;
+    struct buf bp;
+    unsigned char media[2u * TEST_ROMDISK_BLOCK_BYTES];
+    unsigned char data[TEST_ROMDISK_BLOCK_BYTES];
+    unsigned i;
+    dev_t dev;
+    int blocks;
+
+    test_zero(media, sizeof(media));
+    test_zero(&ramdisk, sizeof(ramdisk));
+    ramdisk.rd_start = media;
+    ramdisk.rd_end = media + sizeof(media);
+    ramdisk.rd_minor = 1;
+    ramdisk.rd_block_shift = 10;
+    dev = makedev(1, ramdisk.rd_minor);
+
+    CHECK(ramdisk_bdev_open(&ramdisk, makedev(1, 0), FREAD, 0) == ENXIO);
+    CHECK(ramdisk_bdev_open(&ramdisk, dev, FREAD | FWRITE, 0) == 0);
+    CHECK(ramdisk_bdev_size(&ramdisk, dev) == 2);
+    blocks = 0;
+    CHECK(ramdisk_bdev_ioctl(&ramdisk, dev, DIOCGETMEDIASIZE,
+        (caddr_t)&blocks, FREAD) == 0);
+    CHECK(blocks == 2);
+
+    for (i = 0; i < sizeof(data); ++i)
+        data[i] = (unsigned char)(i ^ 0xa5u);
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = dev;
+    bp.b_blkno = 1;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_PHYS;
+    ramdisk_bdev_strategy(&ramdisk, &bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(bp.b_resid == 0);
+    CHECK(test_equal(media + TEST_ROMDISK_BLOCK_BYTES, data,
+        sizeof(data)));
+
+    test_zero(data, sizeof(data));
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = dev;
+    bp.b_blkno = 1;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_READ | B_PHYS;
+    ramdisk_bdev_strategy(&ramdisk, &bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(test_equal(data, media + TEST_ROMDISK_BLOCK_BYTES,
+        sizeof(data)));
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = dev;
+    bp.b_blkno = 2;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_READ | B_PHYS;
+    ramdisk_bdev_strategy(&ramdisk, &bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(bp.b_resid == sizeof(data));
+    CHECK(ramdisk_bdev_close(&ramdisk, dev, FREAD | FWRITE, 0) == 0);
+    return 0;
+}
+
+static int
 test_partition_write_and_flush(void)
 {
     struct fake_media media;
@@ -877,6 +944,7 @@ int
 main(void)
 {
     CHECK(test_romdisk() == 0);
+    CHECK(test_ramdisk() == 0);
     CHECK(test_open_detach_reuse() == 0);
     CHECK(test_partition_write_and_flush() == 0);
     CHECK(test_raw_odd_sector_addressing() == 0);

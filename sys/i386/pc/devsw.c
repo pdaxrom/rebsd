@@ -4,6 +4,7 @@
 #include <sys/conf.h>
 #include <sys/errno.h>
 #include <sys/inode.h>
+#include <sys/memdev.h>
 #include <sys/systm.h>
 
 #include <disk/disk.h>
@@ -11,9 +12,10 @@
 #include <input/mousevar.h>
 
 #include "romdisk.h"
+#include "ramdisk.h"
 
 #define I386_DISK_MAJOR 2
-#define I386_MOUSE_MAJOR 1
+#define I386_MOUSE_MAJOR 2
 
 static void
 i386_nostrategy(struct buf *bp)
@@ -21,16 +23,6 @@ i386_nostrategy(struct buf *bp)
     bp->b_error = ENXIO;
     bp->b_resid = bp->b_bcount;
     bp->b_flags |= B_ERROR | B_DONE;
-}
-
-static int
-i386_noioctl(dev_t dev, u_int cmd, caddr_t data, int flag)
-{
-    (void)dev;
-    (void)cmd;
-    (void)data;
-    (void)flag;
-    return ENXIO;
 }
 
 static char
@@ -47,10 +39,6 @@ i386_console_raw_write(dev_t dev, char ch)
     cnputc(ch);
 }
 
-#define I386_NOBDEV \
-    { noopen, noopen, i386_nostrategy, nosize, \
-      i386_noioctl, 0 }
-
 const struct bdevsw bdevsw[] = {
     {
 #if I386_ROMDISK_MAJOR != 0
@@ -59,7 +47,13 @@ const struct bdevsw bdevsw[] = {
         romdisk_open, romdisk_close, romdisk_strategy,
         romdisk_size, romdisk_ioctl, 0
     },
-    I386_NOBDEV,
+    {
+#if I386_RAMDISK_MAJOR != 1
+#error Wrong I386_RAMDISK_MAJOR value
+#endif
+        i386_ramdisk_open, i386_ramdisk_close, i386_ramdisk_strategy,
+        i386_ramdisk_size, i386_ramdisk_ioctl, 0
+    },
     {
 #if I386_DISK_MAJOR != 2
 #error Wrong I386_DISK_MAJOR value
@@ -80,7 +74,16 @@ const struct cdevsw cdevsw[] = {
         i386_console_raw_write, 0
     },
     {
-#if I386_MOUSE_MAJOR != 1
+#if MEM_MAJOR != 1
+#error Wrong MEM_MAJOR value
+#endif
+        memdev_nullzero_open, memdev_nullzero_open,
+        memdev_nullzero_rw, memdev_nullzero_rw,
+        noioctl, nullstop, 0, seltrue,
+        i386_nostrategy, 0, 0, 0
+    },
+    {
+#if I386_MOUSE_MAJOR != 2
 #error Wrong I386_MOUSE_MAJOR value
 #endif
         mouse_open, mouse_close, mouse_read, norw,
@@ -111,5 +114,6 @@ isdisk(dev_t dev, int type)
 {
     return type == IFBLK &&
         (major(dev) == I386_ROMDISK_MAJOR ||
+        major(dev) == I386_RAMDISK_MAJOR ||
         major(dev) == I386_DISK_MAJOR);
 }

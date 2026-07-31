@@ -60,6 +60,8 @@ int i386_irq_establish(unsigned irq, i386_irq_handler_t handler,
     void *arg);
 void i386_pic_init(void);
 void i386_pic_unmask(unsigned irq);
+int i386_pic_set_level(unsigned irq);
+int i386_pic_irq_pending(unsigned irq);
 int i386_pic_accept_irq(unsigned irq);
 void i386_pic_eoi(unsigned irq);
 

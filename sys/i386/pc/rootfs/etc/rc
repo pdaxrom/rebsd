@@ -5,4 +5,17 @@ PAGER=/bin/cat; export PAGER
 
 /bin/hostname rebsd-i686
 
+if /sbin/mount /var >/dev/null 2>&1; then
+        :
+else
+        /sbin/mkfs -i 4096 /dev/ram0 >/dev/null 2>&1
+        /sbin/mount /var >/dev/null 2>&1
+fi
+
+mkdir /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
+chmod 1777 /var/tmp
+: >/var/run/utmp
+: >/var/log/wtmp
+chmod 664 /var/run/utmp /var/log/wtmp
+
 exit 0

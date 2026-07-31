@@ -175,7 +175,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    ide.o memory.o paging.o \
                    libkern.o cons.o subr_dma.o \
                    kbdmap.o ps2.o mouse.o i8042.o \
-                   disk_subr.o disk.o romdisk.o i386_romdisk.o \
+                   disk_subr.o disk.o romdisk.o ramdisk.o i386_romdisk.o \
+                   i386_ramdisk.o \
                    usb_subr.o usb_core.o usb_service.o usb_task.o \
                    uhub.o ukbd_decode.o ukbd.o umsmap.o ums.o \
                    ehci.o ohci.o uhci.o \
@@ -186,6 +187,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    ufs_syscalls.o ufs_syscalls2.o \
                    sys_inode.o sys_generic.o sys_pipe.o vfs_vnops.o \
                    kern_descrip.o kern_shm.o kern_subr.o kern_time.o \
+                   nullzero.o \
                    vm_vnode.o \
                    disk_bootstrap.o \
                    exec_aout.o exec_conf.o exec_elf.o exec_elf_loader.o \
@@ -672,14 +674,29 @@ romdisk.o: $(I386_DISK_SRC)/romdisk.c $(I386_DISK_SRC)/romdisk.h \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+ramdisk.o: $(I386_DISK_SRC)/ramdisk.c $(I386_DISK_SRC)/ramdisk.h \
+	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
+	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/systm.h \
+	    $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 i386_romdisk.o: $(I386_PC_SRC)/romdisk.c \
 	    $(I386_SRC)/include/romdisk.h $(I386_DISK_SRC)/romdisk.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+i386_ramdisk.o: $(I386_PC_SRC)/ramdisk.c \
+	    $(I386_SRC)/include/ramdisk.h $(I386_DISK_SRC)/ramdisk.h \
+	    $(TOPSRC)/sys/include/buf.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 devsw.o: $(I386_PC_SRC)/devsw.c $(I386_DISK_SRC)/disk.h \
-	    $(I386_SRC)/include/romdisk.h \
+	    $(I386_SRC)/include/ramdisk.h $(I386_SRC)/include/romdisk.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/conf.h \
 	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/inode.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/tty.h \
@@ -752,6 +769,12 @@ kern_shm.o: $(TOPSRC)/sys/kernel/kern_shm.c \
 	    -c $< -o $@
 
 kern_time.o: $(TOPSRC)/sys/kernel/kern_time.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+nullzero.o: $(TOPSRC)/sys/kernel/nullzero.c \
+	    $(TOPSRC)/sys/include/memdev.h $(TOPSRC)/sys/include/uio.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -1016,6 +1039,7 @@ vm_machdep.o: $(I386_COMMON_SRC)/vm_machdep.c \
 config.o: $(I386_PC_SRC)/config.c \
 	    $(I386_SRC)/include/disk_bootstrap.h \
 	    $(I386_SRC)/include/ide.h $(I386_SRC)/include/pci.h \
+	    $(I386_SRC)/include/ramdisk.h \
 	    $(I386_SRC)/include/usb_pci.h \
 	    $(TOPSRC)/sys/include/proc.h $(TOPSRC)/sys/include/time.h \
 	    $(TOPSRC)/sys/include/resource.h $(TOPSRC)/sys/include/kernel.h \

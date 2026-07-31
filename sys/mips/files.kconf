@@ -127,6 +127,7 @@ netinet/udp_usrreq.c            optional inet
 mips/common/exception_entry.S   standard compile-with "${COMPILE_S}"
 mips/common/exception.c         standard
 mips/common/memdev.c            standard
+kernel/nullzero.c               standard
 mips/common/fpu.S               standard compile-with "${COMPILE_FPU_S}"
 kernel/cons.c                   standard
 net/in_cksum.c                  optional inet

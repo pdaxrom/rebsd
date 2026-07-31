@@ -3,6 +3,7 @@
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/disk.h>
+#include <disk/ramdisk.h>
 #include <machine/n64.h>
 #include <machine/ramswap.h>
 #ifdef MIPS_ZSWAP_ENABLED
@@ -18,6 +19,7 @@ static unsigned ramswap_bytes;
 static unsigned ramswap_store_bytes;
 static unsigned ramdisk_var_base;
 static unsigned ramdisk_var_bytes;
+static struct ramdisk var_device;
 #ifdef MIPS_ZSWAP_ENABLED
 static struct mips_zswap ramswap_zswap;
 #endif
@@ -52,6 +54,10 @@ ramswap_configure(void)
         var_bytes = 0;
     ramdisk_var_base = pool_base;
     ramdisk_var_bytes = var_bytes;
+    var_device.rd_start = N64_PHYS_TO_KSEG1(ramdisk_var_base);
+    var_device.rd_end = var_device.rd_start + ramdisk_var_bytes;
+    var_device.rd_minor = N64_RAMDISK_VAR_MINOR;
+    var_device.rd_block_shift = DEV_BSHIFT;
     ramswap_base = ramdisk_var_base + ramdisk_var_bytes;
     ramswap_store_bytes = pool_bytes - ramdisk_var_bytes;
     ramswap_bytes = ramswap_store_bytes;
@@ -63,6 +69,13 @@ ramswap_configure(void)
 #endif
 }
 
+static const struct ramdisk *
+var_ramdisk(void)
+{
+    ramswap_configure();
+    return &var_device;
+}
+
 static int
 ramregion(dev_t dev, unsigned *base, unsigned *bytes)
 {
@@ -72,10 +85,6 @@ ramregion(dev_t dev, unsigned *base, unsigned *bytes)
     case N64_RAMSWAP_MINOR:
         *base = ramswap_base;
         *bytes = ramswap_bytes;
-        return 0;
-    case N64_RAMDISK_VAR_MINOR:
-        *base = ramdisk_var_base;
-        *bytes = ramdisk_var_bytes;
         return 0;
     default:
         *base = 0;
@@ -91,6 +100,8 @@ n64ramswap_open(dev_t dev, int flag, int mode)
     unsigned bytes;
     int error;
 
+    if (minor(dev) == N64_RAMDISK_VAR_MINOR)
+        return ramdisk_bdev_open(var_ramdisk(), dev, flag, mode);
     error = ramregion(dev, &base, &bytes);
     if (error != 0)
         return error;
@@ -109,6 +120,8 @@ n64ramswap_size(dev_t dev)
     unsigned base;
     unsigned bytes;
 
+    if (minor(dev) == N64_RAMDISK_VAR_MINOR)
+        return ramdisk_bdev_size(var_ramdisk(), dev);
     if (ramregion(dev, &base, &bytes) != 0)
         return 0;
     return bytes >> DEV_BSHIFT;
@@ -134,6 +147,10 @@ n64ramswap_strategy(struct buf *bp)
     unsigned i;
     int error;
 
+    if (minor(bp->b_dev) == N64_RAMDISK_VAR_MINOR) {
+        ramdisk_bdev_strategy(var_ramdisk(), bp);
+        return;
+    }
     error = ramregion(bp->b_dev, &base, &bytes);
     if (error != 0 || bytes == 0) {
         ramswap_done_error(bp, error != 0 ? error : ENXIO);
@@ -216,6 +233,8 @@ n64ramswap_get_zswap_stats(struct mips_zswap_stats *stats)
 int
 n64ramswap_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 {
+    if (minor(dev) == N64_RAMDISK_VAR_MINOR)
+        return ramdisk_bdev_ioctl(var_ramdisk(), dev, cmd, addr, flag);
     switch (cmd) {
     case DIOCGETMEDIASIZE:
         *(int *)addr = n64ramswap_size(dev);

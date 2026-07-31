@@ -15,6 +15,7 @@ mips/ci20/usb_hw.c             optional usb ehci ohci
 mips/ci20/usb.c                optional usb ehci ohci
 mips/ci20/machdep.c            standard
 disk/romdisk.c                 standard
+disk/ramdisk.c                 standard
 mips/ci20/romdisk_machdep.c    standard
 mips/ci20/romfs_backend.c      standard
 mips/common/romfs_core.c       standard

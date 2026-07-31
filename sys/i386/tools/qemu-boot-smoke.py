@@ -43,9 +43,11 @@ CORE_MARKERS = (
     "REBSD_I686_LS_OK",
     "REBSD_I686_UNAME_OK",
     "REBSD_I686_MD5_OK",
+    "REBSD_I686_MEMDEV_OK",
     "REBSD_I686_AWK_OK",
     "REBSD_I686_FREE_OK",
     "REBSD_I686_TOP_OK",
+    "/dev/ram0",
     "REBSD_I686_DF_OK",
     "REBSD_I686_LSUSB_OK",
     "REBSD_I686_LSPCI_OK",
@@ -404,6 +406,11 @@ def main() -> None:
         (
             b"/usr/bin/md5 /bin/sh && echo REBSD_I686_MD5_OK\n",
             b"\r\nREBSD_I686_MD5_OK\r\n",
+        ),
+        (
+            b"/bin/dd if=/dev/zero of=/dev/null bs=16 count=1 && "
+            b"echo REBSD_I686_MEMDEV_OK\n",
+            b"\r\nREBSD_I686_MEMDEV_OK\r\n",
         ),
         (
             b"/usr/bin/awk 'BEGIN { print \"REBSD_I686_AWK_OK\" }' "

@@ -5,8 +5,7 @@ VIA Apollo Pro 133, AGP VGA и IDE-CF. У машины нет floppy drive, по
 существующий GRUB Legacy загрузил `rebsd-i686.bzimg` с Red Hat root
 partition `(hd0,2)`.
 
-В двух проверенных на IBM images файловая система ещё не монтировалась.
-Текущий код проходит QEMU-only gate со встроенным read-only UFS root:
+Текущий код проходит QEMU gate со встроенным read-only UFS root:
 общий byte-backed romdisk расположен на block major 0 minor 0 и является
 единственным root как при наличии, так и при отсутствии IDE. IDE-CF
 регистрируется через общий disk major 2 как `sd0`; её Red Hat разделы не
@@ -19,7 +18,10 @@ direct/BIOS QEMU с PIIX3 boot keyboard, boot mouse и mass storage, включ�
 режим без IDE; host fake-I/O gate отдельно проверяет low-speed TD flags.
 i8042 keyboard/mouse также проходят direct/BIOS QEMU с реальными IRQ1/IRQ12.
 Следующий input gate уже требует реальный i8042 и VIA USB IBM; storage gate
-остаётся отдельной read-only проверкой.
+остаётся отдельной read-only проверкой. Как на Ci20 и N64, writable `/var`
+создаётся при каждой загрузке как UFS на общем RAM block driver; i686
+подключает 1 MiB backing store как `/dev/ram0`, а `/tmp` указывает на
+`/var/tmp`.
 Установленный PCI Ethernet controller определён как Realtek `10ec:8169`
 revision `10`; общий `sys/pci` RTL8169 driver подключает его как `re0`.
 QEMU 11 не содержит модели RTL8169, поэтому аппаратно-точный automated gate
@@ -152,8 +154,12 @@ bus-master DMA и программирование AGP не включены. CO
 ```
 
 Ожидаемый attach содержит `re0: RTL8169`, MAC version/XID, BAR, IRQ и MAC
-address.  До настройки адреса надо сохранить полный экран/serial log, затем
-проверить интерфейс и link:
+address. i686 устанавливает legacy PCI INTx в level-triggered режим через
+ELCR до unmask и разбирает запланированный protocol input сразу на
+interrupt-return boundary после EOI. PIT channel 0 используется для
+microsecond interpolation между 100 Hz тиками, поэтому `ping` больше не
+должен быть искусственно округлён к 10 ms. До настройки адреса надо сохранить
+полный экран/serial log, затем проверить интерфейс и link:
 
 ```sh
 /sbin/ifconfig re0
@@ -165,10 +171,14 @@ address.  До настройки адреса надо сохранить по�
 
 ```sh
 /sbin/ifconfig re0 inet <address> netmask <mask> broadcast <broadcast> up
-/usr/bin/ping -n -c 20 <gateway-or-lan-host>
+/usr/bin/ping -n -c 50 <gateway-or-lan-host>
 /usr/bin/netstat -ian
+/bin/mount
+/bin/df
 ```
 
 Критерий: `re0` остаётся `RUNNING`, link поднимается, ICMP проходит в обе
-стороны, а `Ierrs`, `Oerrs` и `Coll` не растут.  После этого нужен длительный
-сетевой прогон на реальной IBM; эмулятор не заменяет этот gate.
+стороны без секундных задержек, значения RTT не зажаты в шаг 10 ms, а
+`Ierrs`, `Oerrs` и `Coll` не растут. `mount` и `df` должны показывать
+`/dev/ram0` на `/var`. После этого нужен длительный сетевой прогон на реальной
+IBM; QEMU 11 не имеет модели RTL8169 и не заменяет этот gate.

@@ -4,6 +4,7 @@ mips/malta/devsw.c              standard
 mips/malta/clock.c              standard
 mips/malta/machdep.c            standard
 disk/romdisk.c                  standard
+disk/ramdisk.c                  standard
 mips/malta/romdisk_machdep.c    standard
 mips/common/romfs_core.c        standard
 mips/common/romfs_vfs.c         standard

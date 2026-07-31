@@ -2,6 +2,10 @@ bdev /dev/romdisk
 major 0
 minor 0
 
+bdev /dev/ram0
+major 1
+minor 1
+
 bdev /dev/sd0
 major 2
 minor 0
@@ -74,10 +78,20 @@ cdev /dev/console
 major 0
 minor 0
 
-cdev /dev/mouse0
+cdev /dev/null
 major 1
+minor 2
+mode 0666
+
+cdev /dev/zero
+major 1
+minor 3
+mode 0666
+
+cdev /dev/mouse0
+major 2
 minor 0
 
 cdev /dev/mouse1
-major 1
+major 2
 minor 1

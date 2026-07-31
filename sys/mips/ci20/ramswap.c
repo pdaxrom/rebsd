@@ -3,8 +3,21 @@
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/disk.h>
+#include <disk/ramdisk.h>
 #include <machine/layout.h>
 #include <machine/ramswap.h>
+
+static const struct ramdisk *
+var_ramdisk(void)
+{
+    static struct ramdisk ramdisk;
+
+    ramdisk.rd_start = MIPS_PHYS_TO_KSEG1(CI20_RAMDISK_VAR_PHYS_START);
+    ramdisk.rd_end = ramdisk.rd_start + CI20_RAMDISK_VAR_BYTES;
+    ramdisk.rd_minor = MIPS_RAMDISK_VAR_MINOR;
+    ramdisk.rd_block_shift = DEV_BSHIFT;
+    return &ramdisk;
+}
 
 static int
 ramregion(dev_t dev, unsigned *base, unsigned *bytes)
@@ -13,10 +26,6 @@ ramregion(dev_t dev, unsigned *base, unsigned *bytes)
     case MIPS_RAMSWAP_MINOR:
         *base = CI20_RAMSWAP_PHYS_START;
         *bytes = CI20_RAMSWAP_BYTES;
-        return 0;
-    case MIPS_RAMDISK_VAR_MINOR:
-        *base = CI20_RAMDISK_VAR_PHYS_START;
-        *bytes = CI20_RAMDISK_VAR_BYTES;
         return 0;
     default:
         *base = 0;
@@ -30,7 +39,11 @@ mipsramswap_open(dev_t dev, int flag, int mode)
 {
     unsigned base;
     unsigned bytes;
-    int error = ramregion(dev, &base, &bytes);
+    int error;
+
+    if (minor(dev) == MIPS_RAMDISK_VAR_MINOR)
+        return ramdisk_bdev_open(var_ramdisk(), dev, flag, mode);
+    error = ramregion(dev, &base, &bytes);
 
     (void)base;
     return error == 0 && bytes != 0 ? 0 : (error != 0 ? error : ENXIO);
@@ -48,6 +61,8 @@ mipsramswap_size(dev_t dev)
     unsigned base;
     unsigned bytes;
 
+    if (minor(dev) == MIPS_RAMDISK_VAR_MINOR)
+        return ramdisk_bdev_size(var_ramdisk(), dev);
     if (ramregion(dev, &base, &bytes) != 0)
         return 0;
     return bytes >> 10;
@@ -73,6 +88,10 @@ mipsramswap_strategy(struct buf *bp)
     unsigned i;
     int error;
 
+    if (minor(bp->b_dev) == MIPS_RAMDISK_VAR_MINOR) {
+        ramdisk_bdev_strategy(var_ramdisk(), bp);
+        return;
+    }
     error = ramregion(bp->b_dev, &base, &bytes);
     if (error != 0 || bytes == 0) {
         ramswap_done_error(bp, error != 0 ? error : ENXIO);
@@ -118,6 +137,8 @@ mipsramswap_strategy(struct buf *bp)
 int
 mipsramswap_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 {
+    if (minor(dev) == MIPS_RAMDISK_VAR_MINOR)
+        return ramdisk_bdev_ioctl(var_ramdisk(), dev, cmd, addr, flag);
     switch (cmd) {
     case DIOCGETMEDIASIZE:
         *(int *)addr = mipsramswap_size(dev);

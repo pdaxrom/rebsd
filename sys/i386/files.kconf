@@ -14,6 +14,7 @@
 # Remaining machine-independent files are connected as the diagnostic
 # bootstrap is replaced by normal common startup.
 kernel/cons.c                   standard
+kernel/nullzero.c               standard
 kernel/subr_dma.c               optional dma
 pci/pci.c                       optional pc
 pci/rtl8169.c                   optional rtl8169
@@ -25,6 +26,7 @@ input/mouse.c                   optional i8042 ums
 disk/disk_subr.c                optional disk
 disk/disk.c                     optional disk
 disk/romdisk.c                  standard
+disk/ramdisk.c                  standard
 usb/usb_subr.c                  optional usb
 usb/usb_core.c                  optional usb
 usb/usb_service.c               optional usb
@@ -44,3 +46,4 @@ i386/pc/pci.c                   optional pc
 i386/pc/i8042.c                 optional i8042
 i386/pc/usb_pci.c               optional usb ehci ohci uhci
 i386/pc/romdisk.c               standard
+i386/pc/ramdisk.c               standard

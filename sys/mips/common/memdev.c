@@ -1,6 +1,7 @@
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
+#include <sys/memdev.h>
 #include <sys/systm.h>
 #include <sys/uio.h>
 
@@ -11,11 +12,12 @@ mips_mmrw(dev_t dev, struct uio *uio, int flag)
 {
     register struct iovec *iov;
     int error;
-    register u_int c;
     uintptr_t memaddr;
     uintptr_t memlast;
 
     (void)flag;
+    if (minor(dev) == NULL_MINOR || minor(dev) == ZERO_MINOR)
+        return memdev_nullzero_rw(dev, uio, flag);
     error = 0;
     while (uio->uio_resid && error == 0) {
         iov = uio->uio_iov;
@@ -42,25 +44,6 @@ mips_mmrw(dev_t dev, struct uio *uio, int flag)
                 baduaddr((caddr_t)memlast)))
                 return EFAULT;
             error = uiomove((caddr_t)memaddr, iov->iov_len, uio);
-            break;
-        case NULL_MINOR:
-            if (uio->uio_rw == UIO_READ)
-                return 0;
-            c = iov->iov_len;
-            iov->iov_base += c;
-            iov->iov_len -= c;
-            uio->uio_offset += c;
-            uio->uio_resid -= c;
-            break;
-        case ZERO_MINOR:
-            if (uio->uio_rw == UIO_WRITE)
-                return EIO;
-            c = iov->iov_len;
-            bzero(iov->iov_base, c);
-            iov->iov_base += c;
-            iov->iov_len -= c;
-            uio->uio_offset += c;
-            uio->uio_resid -= c;
             break;
         default:
             return EINVAL;

@@ -9,9 +9,11 @@
 #define PIT_INPUT_HZ       1193182u
 #define PIT_CHANNEL_0      0x0040u
 #define PIT_COMMAND        0x0043u
+#define PIT_CHANNEL_0_LATCH 0x00u
 #define PIT_CHANNEL_0_RATE 0x34u
 
 static volatile i386_u32 i386_timer_ticks;
+static i386_u32 i386_pit_divisor;
 
 static void
 i386_pit_init(void)
@@ -19,10 +21,40 @@ i386_pit_init(void)
     i386_u32 divisor;
 
     divisor = (PIT_INPUT_HZ + I386_PIT_HZ / 2u) / I386_PIT_HZ;
+    i386_pit_divisor = divisor;
     i386_timer_ticks = 0;
     i386_outb(PIT_COMMAND, PIT_CHANNEL_0_RATE);
     i386_outb(PIT_CHANNEL_0, (i386_u8)(divisor & 0xffu));
     i386_outb(PIT_CHANNEL_0, (i386_u8)(divisor >> 8));
+}
+
+void
+i386_microtime(struct timeval *tv, u_int tick_usec)
+{
+    i386_u32 count;
+    i386_u32 elapsed;
+    i386_u32 usec;
+
+    if (tv == 0 || tick_usec == 0 || i386_pit_divisor == 0)
+        return;
+    i386_outb(PIT_COMMAND, PIT_CHANNEL_0_LATCH);
+    count = i386_inb(PIT_CHANNEL_0);
+    count |= (i386_u32)i386_inb(PIT_CHANNEL_0) << 8;
+    if (i386_pic_irq_pending(I386_IRQ_TIMER))
+        usec = tick_usec - 1u;
+    else {
+        if (count == 0 || count > i386_pit_divisor)
+            count = i386_pit_divisor;
+        elapsed = i386_pit_divisor - count;
+        usec = (elapsed * tick_usec) / i386_pit_divisor;
+        if (usec >= tick_usec)
+            usec = tick_usec - 1u;
+    }
+    tv->tv_usec += usec;
+    if (tv->tv_usec >= 1000000L) {
+        tv->tv_sec += tv->tv_usec / 1000000L;
+        tv->tv_usec %= 1000000L;
+    }
 }
 
 void

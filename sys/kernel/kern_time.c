@@ -13,9 +13,13 @@ struct timeval boottime;
 struct timeval time;
 int adjdelta;
 int lbolt;                  /* awoken once a second */
+static struct timeval lastmicrotime;
 
 #ifdef MIPS
 void mips_microtime(struct timeval *tv, u_int tick_usec);
+#endif
+#ifdef I386
+void i386_microtime(struct timeval *tv, u_int tick_usec);
 #endif
 
 static void
@@ -47,6 +51,7 @@ setthetime (struct timeval *tv)
     s = splhigh();
     time = *tv;
     lbolt = time.tv_usec / usechz;
+    lastmicrotime = time;
     splx(s);
 #ifdef  notyet
     /*
@@ -75,6 +80,19 @@ microtime(struct timeval *tv)
 #ifdef MIPS
     mips_microtime(tv, usechz);
 #endif
+#ifdef I386
+    i386_microtime(tv, usechz);
+#endif
+    if (tv->tv_sec < lastmicrotime.tv_sec ||
+        (tv->tv_sec == lastmicrotime.tv_sec &&
+        tv->tv_usec <= lastmicrotime.tv_usec)) {
+        *tv = lastmicrotime;
+        if (++tv->tv_usec >= 1000000L) {
+            ++tv->tv_sec;
+            tv->tv_usec = 0;
+        }
+    }
+    lastmicrotime = *tv;
     splx(s);
 }
 

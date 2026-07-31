@@ -28,8 +28,10 @@ make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc \
 `boot-smoke` boots without an external disk and proves this complete path,
 then runs representative programs from the full root filesystem (`ls`,
 `uname`, `md5`, `awk`, `free`, `df` and the stack-growth regression in
-`netstat`).  It also requires `lo0` to own `127.0.0.1` and completes an ICMP
-echo exchange through that address:
+`netstat`).  It verifies the common `/dev/null` and `/dev/zero` operations,
+requires the writable UFS `/dev/ram0` filesystem to be mounted on `/var`,
+requires `lo0` to own `127.0.0.1` and completes an ICMP echo exchange through
+that address:
 
 ```text
 embedded UFS -> common init_main -> proc1 -> /sbin/init
@@ -40,8 +42,11 @@ The common IPv4 stack and loopback interface are initialized independently
 of physical network-device discovery.  Consequently `lo0` and `127.0.0.1`
 are always available on a normal i686 boot even when no Ethernet adapter is
 present.  i686 uses the same socket, protocol, interface and loopback sources
-as the MIPS boards; deferred network work runs after system calls and timer
-interrupts, outside device interrupt handlers such as PS/2 IRQ1 and IRQ12.
+as the MIPS boards.  Deferred network work runs at interrupt-return and
+system-call-return boundaries, after the hardware handler and PIC EOI.  PCI
+INTx lines are programmed as level-triggered through the PC ELCR before they
+are unmasked; fixed ISA edge-triggered lines such as PS/2 IRQ1 and IRQ12 keep
+their ISA trigger mode.
 
 The IBM PCI Ethernet adapter `10ec:8169` is exposed as `re0`.  PCI bus
 enumeration, BAR probing, resource access and the RTL8169/RTL8110 hardware
@@ -80,9 +85,12 @@ account/profile/network configuration.  MIPS boards consume that same profile
 and add only their architecture-specific tools.  PCC remains enabled for the
 N64 and MIPS board images, but is deliberately absent from i686.
 
-The filesystem is read-only by policy during bring-up.  It is not FAT and
-there is no i386-private filesystem, executable loader, disk layer, process
-implementation or syscall table.
+The embedded root filesystem is read-only by policy during bring-up.  As on
+Ci20 and N64, `/var` is a writable UFS filesystem created at boot on the
+common directly-addressable RAM block driver; i686 attaches a 1 MiB backing
+store as `/dev/ram0`.  `/tmp` remains the standard symlink to `/var/tmp`.
+Root is not FAT and there is no i386-private filesystem, executable loader,
+disk layer, process implementation or syscall table.
 
 ## Boot loaders
 
@@ -135,5 +143,6 @@ PCC is not part of the i686 build and must not be changed.
 3. Keep external IDE and USB devices on the common disk path and validate
    ordinary mounts without changing the embedded read-only UFS root policy.
 4. Complete RTC and USB mass-storage validation on the VIA Apollo Pro 133.
-5. Validate `re0` attach, link, static IPv4, ARP, ICMP RX/TX and sustained
-   traffic on the installed `10ec:8169` PCI adapter.
+5. Validate `re0` attach, level-triggered INTx, link, static IPv4, ARP, ICMP
+   RX/TX latency and sustained traffic on the installed `10ec:8169` PCI
+   adapter.

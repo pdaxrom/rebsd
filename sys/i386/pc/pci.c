@@ -255,6 +255,8 @@ i386_pci_interrupt_establish(void *cookie, unsigned interrupt,
     (void)cookie;
     if (interrupt == 0 || interrupt >= I386_IRQ_COUNT)
         return EINVAL;
+    if (!i386_pic_set_level(interrupt))
+        return EINVAL;
     if (!i386_irq_establish(interrupt, handler, arg))
         return ENOMEM;
     i386_pic_unmask(interrupt);
