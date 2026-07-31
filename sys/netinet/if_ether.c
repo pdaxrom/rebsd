@@ -35,8 +35,10 @@
 #include "domain.h"
 #include "protosw.h"
 #include "../net/if.h"
+#include "../net/netisr.h"
 #include "in.h"
 #include "in_systm.h"
+#include "in_var.h"
 #include "ip.h"
 #include "if_ether.h"
 
@@ -578,5 +580,179 @@ ether_sprintf(ap)
 	}
 	*--cp = 0;
 	return (etherbuf);
+}
+
+/*
+ * Machine-independent Ethernet frame construction and protocol delivery.
+ * Hardware drivers provide only their arpcom and their transmit-start hook.
+ */
+int
+ether_output_enqueue(struct arpcom *ac, struct mbuf *m0,
+    struct sockaddr *dst, int (*start)(int))
+{
+	struct ifnet *ifp;
+	struct mbuf *m;
+	struct ether_header *eh;
+	struct in_addr idst;
+	u_char edst[6];
+	int error, s, type, usetrailers;
+
+	ifp = &ac->ac_if;
+	m = m0;
+	if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) !=
+	    (IFF_UP | IFF_RUNNING)) {
+		error = ENETDOWN;
+		goto bad;
+	}
+
+	switch (dst->sa_family) {
+	case AF_INET:
+		idst = ((struct sockaddr_in *)dst)->sin_addr;
+		if (!arpresolve(ac, m, &idst, edst, &usetrailers))
+			return 0;
+		type = ETHERTYPE_IP;
+		break;
+
+	case AF_UNSPEC:
+		eh = (struct ether_header *)dst->sa_data;
+		bcopy((caddr_t)eh->ether_dhost, (caddr_t)edst, sizeof(edst));
+		type = eh->ether_type;
+		break;
+
+	default:
+		printf("%s%d: can't handle af%d\n", ifp->if_name,
+		    ifp->if_unit, dst->sa_family);
+		error = EAFNOSUPPORT;
+		goto bad;
+	}
+
+	if (m->m_off > MMAXOFF ||
+	    MMINOFF + sizeof(struct ether_header) > m->m_off) {
+		m = m_get(M_DONTWAIT, MT_HEADER);
+		if (m == 0) {
+			error = ENOBUFS;
+			goto bad;
+		}
+		m->m_next = m0;
+		m->m_off = MMINOFF;
+		m->m_len = sizeof(struct ether_header);
+	} else {
+		m->m_off -= sizeof(struct ether_header);
+		m->m_len += sizeof(struct ether_header);
+	}
+
+	eh = mtod(m, struct ether_header *);
+	eh->ether_type = htons((u_short)type);
+	bcopy((caddr_t)edst, (caddr_t)eh->ether_dhost, sizeof(edst));
+	bcopy((caddr_t)ac->ac_enaddr, (caddr_t)eh->ether_shost,
+	    sizeof(ac->ac_enaddr));
+
+	s = splimp();
+	if (IF_QFULL(&ifp->if_snd)) {
+		IF_DROP(&ifp->if_snd);
+		splx(s);
+		m_freem(m);
+		return ENOBUFS;
+	}
+	IF_ENQUEUE(&ifp->if_snd, m);
+	(*start)(ifp->if_unit);
+	splx(s);
+	return 0;
+
+bad:
+	m_freem(m0);
+	return error;
+}
+
+static struct mbuf *
+ether_frame_mbuf(struct ifnet *ifp, const u_char *buf, int len)
+{
+	struct mbuf *top, **mp, *m;
+	int n;
+
+	top = 0;
+	mp = &top;
+	while (len > 0) {
+		MGET(m, M_DONTWAIT, MT_DATA);
+		if (m == 0)
+			goto bad;
+		m->m_off = MMINOFF;
+		if (ifp != 0) {
+			m->m_len = MIN(MLEN - sizeof(struct ifnet *), len);
+			m->m_off += sizeof(struct ifnet *);
+		} else
+			m->m_len = MIN(MLEN, len);
+		n = m->m_len;
+		bcopy((caddr_t)buf, mtod(m, caddr_t), n);
+		buf += n;
+		len -= n;
+		*mp = m;
+		mp = &m->m_next;
+		if (ifp != 0) {
+			m->m_len += sizeof(struct ifnet *);
+			m->m_off -= sizeof(struct ifnet *);
+			*(mtod(m, struct ifnet **)) = ifp;
+			ifp = 0;
+		}
+	}
+	return top;
+
+bad:
+	m_freem(top);
+	return 0;
+}
+
+int
+ether_input_frame(struct arpcom *ac, const unsigned char *frame,
+    unsigned length)
+{
+	struct ifnet *ifp;
+	struct ether_header *eh;
+	struct ifqueue *inq;
+	struct mbuf *m;
+	int s, type;
+
+	ifp = &ac->ac_if;
+	if (length < sizeof(struct ether_header)) {
+		ifp->if_ierrors++;
+		return EMSGSIZE;
+	}
+	eh = (struct ether_header *)frame;
+	type = ntohs((u_short)eh->ether_type);
+	length -= sizeof(struct ether_header);
+	m = ether_frame_mbuf(ifp, frame + sizeof(struct ether_header),
+	    (int)length);
+	if (m == 0) {
+		ifp->if_ierrors++;
+		return ENOBUFS;
+	}
+
+	switch (type) {
+	case ETHERTYPE_IP:
+		schednetisr(NETISR_IP);
+		inq = &ipintrq;
+		break;
+
+	case ETHERTYPE_ARP:
+		arpinput(ac, m);
+		ifp->if_ipackets++;
+		return 0;
+
+	default:
+		m_freem(m);
+		return EAFNOSUPPORT;
+	}
+
+	s = splimp();
+	if (IF_QFULL(inq)) {
+		IF_DROP(inq);
+		splx(s);
+		m_freem(m);
+		return ENOBUFS;
+	}
+	IF_ENQUEUE(inq, m);
+	ifp->if_ipackets++;
+	splx(s);
+	return 0;
 }
 #endif

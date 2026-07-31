@@ -20,6 +20,11 @@ direct/BIOS QEMU с PIIX3 boot keyboard, boot mouse и mass storage, включ�
 i8042 keyboard/mouse также проходят direct/BIOS QEMU с реальными IRQ1/IRQ12.
 Следующий input gate уже требует реальный i8042 и VIA USB IBM; storage gate
 остаётся отдельной read-only проверкой.
+Установленный PCI Ethernet controller определён как Realtek `10ec:8169`
+revision `10`; общий `sys/pci` RTL8169 driver подключает его как `re0`.
+QEMU 11 не содержит модели RTL8169, поэтому аппаратно-точный automated gate
+использует fake PCI/BAR/DMA/IRQ backend, а следующий сетевой gate выполняется
+на IBM.
 ATA-команд записи всё ещё нет: IDE
 backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
 регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
@@ -137,3 +142,33 @@ HALT
 bus-master DMA и программирование AGP не включены. COM1 `115200 8N1`
 остаётся желательным для последующих длинных logs, но точный PCI baseline
 уже зафиксирован через VGA.
+
+## 5. RTL8169 Ethernet gate
+
+Дополнительный PCI controller на IBM определён фактическим `lspci`:
+
+```text
+00:10.0 Ethernet controller: 10ec:8169 (rev 10)
+```
+
+Ожидаемый attach содержит `re0: RTL8169`, MAC version/XID, BAR, IRQ и MAC
+address.  До настройки адреса надо сохранить полный экран/serial log, затем
+проверить интерфейс и link:
+
+```sh
+/sbin/ifconfig re0
+/usr/bin/netstat -ian
+```
+
+Для первого RX/TX gate используется свободный статический адрес из локальной
+сети, указанный владельцем сети, без изменения rootfs и без записи на IDE-CF:
+
+```sh
+/sbin/ifconfig re0 inet <address> netmask <mask> broadcast <broadcast> up
+/usr/bin/ping -n -c 20 <gateway-or-lan-host>
+/usr/bin/netstat -ian
+```
+
+Критерий: `re0` остаётся `RUNNING`, link поднимается, ICMP проходит в обе
+стороны, а `Ierrs`, `Oerrs` и `Coll` не растут.  После этого нужен длительный
+сетевой прогон на реальной IBM; эмулятор не заменяет этот gate.

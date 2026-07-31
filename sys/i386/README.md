@@ -43,6 +43,23 @@ present.  i686 uses the same socket, protocol, interface and loopback sources
 as the MIPS boards; deferred network work runs after system calls and timer
 interrupts, outside device interrupt handlers such as PS/2 IRQ1 and IRQ12.
 
+The IBM PCI Ethernet adapter `10ec:8169` is exposed as `re0`.  PCI bus
+enumeration, BAR probing, resource access and the RTL8169/RTL8110 hardware
+driver are machine-independent code under `sys/pci`; i686 supplies only PCI
+configuration mechanism 1, I/O/MMIO mapping and legacy INTx routing.  The
+driver supports the original RTL8169/RTL8110 MAC versions 2 through 6, uses
+common DMA allocation and the same `ifnet`/ARP/IPv4 path as the MIPS Ethernet
+drivers.  Its register and MAC-version definitions are checked against the
+[upstream Linux r8169 driver](https://github.com/torvalds/linux/blob/master/drivers/net/ethernet/realtek/r8169_main.c).
+
+QEMU 11 has no RTL8169 device model.  The exact controller path is therefore
+covered by a fake-hardware host test (PCI config and BARs, DMA rings, RX/TX,
+link interrupt and PCI system-error recovery):
+
+```sh
+make -C sys/tests/pci test
+```
+
 `ide-smoke` adds the UFS image as an external legacy ATA disk.  It must
 appear as a read-only common `sd0`, but root remains the embedded romdisk at
 block major 0, minor 0.  USB mass-storage tests use the same common `sdN`
@@ -88,14 +105,16 @@ not part of `all` and is not a release or hardware-gate artifact.
 
 `sys/i386` owns only x86 hardware and ABI work: BIOS handoff, E820, paging,
 IDT/PIC/PIT, TSS/context frames, COM1/VGA primitives, i8042 port and IRQ
-transport, PCI discovery, legacy ATA PIO, PCI BAR mapping, USB
+transport, PCI configuration mechanism 1 and resource/INTx mapping, legacy
+ATA PIO, USB
 host-controller attachment and the `int 0x80` register adapter.
 
 All policy and reusable subsystems remain in common code: VM, scheduler,
 process lifecycle, exec, signal policy, syscall handlers, console/TTY,
 keyboard mapping, PS/2 keyboard and mouse decoding, mouse event devices,
-disk/partition handling, USB enumeration and HID class drivers, VFS/UFS
-and file descriptors.  The no-swap debug configuration is represented by
+disk/partition handling, PCI enumeration and BAR contracts, RTL8169 Ethernet,
+USB enumeration and HID class drivers, VFS/UFS and file descriptors.  The
+no-swap debug configuration is represented by
 `swap none`/`NODEV` in the normal kernel configuration path; there is no
 i686 pager compatibility flag.  N64's existing Joybus mouse snapshot ABI is
 unchanged; new transports use the common event API rather than duplicating
@@ -116,3 +135,5 @@ PCC is not part of the i686 build and must not be changed.
 3. Keep external IDE and USB devices on the common disk path and validate
    ordinary mounts without changing the embedded read-only UFS root policy.
 4. Complete RTC and USB mass-storage validation on the VIA Apollo Pro 133.
+5. Validate `re0` attach, link, static IPv4, ARP, ICMP RX/TX and sustained
+   traffic on the installed `10ec:8169` PCI adapter.

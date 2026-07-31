@@ -1179,6 +1179,30 @@ QEMU EHCI/OHCI/UHCI-инкремент выполнен:
 Запрещены отдельные i386 USB core, `umass`, SCSI transport, partition parser,
 filesystem path или собственный namespace устройств.
 
+## Общий PCI Ethernet этап
+
+PCI Ethernet для IBM реализуется как общий, переносимый subsystem, поскольку
+PCI не принадлежит архитектуре i686:
+
+- `sys/pci` владеет enumeration, config/resource API, BAR probing и общим
+  RTL8169/RTL8110 hardware driver; архитектура предоставляет только механизм
+  конфигурации, отображение I/O/MMIO, INTx и delay;
+- BSD `re0` front-end использует общий `ifnet`, ARP и IPv4. Повторявшиеся в
+  Malta NE2000, Ci20 DM9000 и MIPS USB Ethernet сборка/разбор Ethernet frames
+  перенесены в `sys/netinet/if_ether.c` и удалены из драйверов;
+- первый точный controller — фактически установленный `10ec:8169` revision
+  `10`; поддерживаются исходные MAC versions 2--6, DMA descriptor rings,
+  copper MII autonegotiation и shared legacy INTx;
+- fake-hardware host gate проверяет PCI status preservation, I/O/32/64-bit
+  BAR, отклонение неизвестного XID, RX/TX rings, link IRQ и system-error
+  recovery. QEMU 11 не имеет RTL8169 model, поэтому реальный RX/TX gate
+  остаётся за IBM;
+- строгие i686, Ci20/N64 с native PCC и обе Malta endian kernel-сборки
+  являются обязательной межархитектурной регрессией этого этапа.
+
+Запрещены i386-private Ethernet frame/ARP path, копия PCI enumeration или
+подмена фактического `10ec:8169` другим QEMU-only контроллером.
+
 ## 1. Цель и границы первого порта
 
 Цель — получить отдельный 32-битный little-endian порт ReBSD для старых

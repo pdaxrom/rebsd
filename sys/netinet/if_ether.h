@@ -83,4 +83,7 @@ struct	arptab {
 extern u_char etherbroadcastaddr[6];
 struct	arptab *arptnew();
 char *ether_sprintf();
+int ether_output_enqueue(struct arpcom *, struct mbuf *, struct sockaddr *,
+    int (*)(int));
+int ether_input_frame(struct arpcom *, const unsigned char *, unsigned);
 #endif

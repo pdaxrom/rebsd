@@ -1,79 +1,123 @@
-#include <sys/hw_inventory_provider.h>
+/*
+ * i686 machine-dependent attachment for the common PCI bus.
+ */
 
 #include "boot.h"
+#include "interrupt.h"
 #include "io.h"
 #include "pci.h"
+
+#include <sys/errno.h>
+#include <sys/systm.h>
+#include <vm/pmap.h>
 
 #define PCI_CONFIG_ADDRESS       0x0cf8u
 #define PCI_CONFIG_DATA          0x0cfcu
 #define PCI_CONFIG_ENABLE        0x80000000u
 
-#define PCI_CLASS_MASS_STORAGE   0x01u
-#define PCI_SUBCLASS_IDE         0x01u
-#define PCI_CLASS_BRIDGE         0x06u
-#define PCI_SUBCLASS_HOST        0x00u
-#define PCI_SUBCLASS_ISA         0x01u
-#define PCI_CLASS_DISPLAY        0x03u
-#define PCI_SUBCLASS_VGA         0x00u
-
-#define PCI_HEADER_MULTIFUNCTION 0x80u
-
-#define PCI_VENDOR_INTEL        0x8086u
-#define PCI_VENDOR_VIA          0x1106u
+#define PCI_VENDOR_INTEL         0x8086u
+#define PCI_VENDOR_VIA           0x1106u
 
 struct i386_pci_inventory {
-    struct i386_pci_function host;
-    struct i386_pci_function isa;
-    struct i386_pci_function ide;
-    struct i386_pci_function vga;
-    struct kinfo_pci_inventory *snapshot;
-    unsigned count;
+    struct pci_device host;
+    struct pci_device isa;
+    struct pci_device ide;
+    struct pci_device vga;
     int have_host;
     int have_isa;
     int have_ide;
     int have_vga;
 };
 
+static struct pci_bus i386_pci;
 static struct i386_pci_inventory i386_pci_last_inventory;
-static struct kinfo_pci_inventory i386_pci_last_snapshot;
 static int i386_pci_inventory_valid;
 
-i386_u32
-i386_pci_config_read32(i386_u8 bus, i386_u8 device,
-    i386_u8 function, i386_u8 offset)
+static i386_u32
+i386_pci_config_address(unsigned char bus, unsigned char device,
+    unsigned char function, unsigned char offset)
 {
-    i386_u32 address;
-
-    address = PCI_CONFIG_ENABLE |
+    return PCI_CONFIG_ENABLE |
         ((i386_u32)bus << 16) |
         ((i386_u32)(device & 0x1fu) << 11) |
         ((i386_u32)(function & 0x07u) << 8) |
         ((i386_u32)offset & 0xfcu);
+}
+
+static unsigned char
+i386_pci_config_read8(void *cookie, unsigned char bus,
+    unsigned char device, unsigned char function, unsigned char offset)
+{
+    (void)cookie;
+    i386_outl(PCI_CONFIG_ADDRESS,
+        i386_pci_config_address(bus, device, function, offset));
+    return i386_inb((i386_u16)(PCI_CONFIG_DATA + (offset & 3u)));
+}
+
+static unsigned short
+i386_pci_config_read16(void *cookie, unsigned char bus,
+    unsigned char device, unsigned char function, unsigned char offset)
+{
+    (void)cookie;
+    i386_outl(PCI_CONFIG_ADDRESS,
+        i386_pci_config_address(bus, device, function, offset));
+    return i386_inw((i386_u16)(PCI_CONFIG_DATA + (offset & 2u)));
+}
+
+static unsigned
+i386_pci_config_read32(void *cookie, unsigned char bus,
+    unsigned char device, unsigned char function, unsigned char offset)
+{
+    i386_u32 address;
+
+    (void)cookie;
+    address = i386_pci_config_address(bus, device, function, offset);
     i386_outl(PCI_CONFIG_ADDRESS, address);
     return i386_inl(PCI_CONFIG_DATA);
 }
 
-void
-i386_pci_config_write32(i386_u8 bus, i386_u8 device,
-    i386_u8 function, i386_u8 offset, i386_u32 value)
+static void
+i386_pci_config_write8(void *cookie, unsigned char bus,
+    unsigned char device, unsigned char function, unsigned char offset,
+    unsigned char value)
+{
+    (void)cookie;
+    i386_outl(PCI_CONFIG_ADDRESS,
+        i386_pci_config_address(bus, device, function, offset));
+    i386_outb((i386_u16)(PCI_CONFIG_DATA + (offset & 3u)), value);
+}
+
+static void
+i386_pci_config_write16(void *cookie, unsigned char bus,
+    unsigned char device, unsigned char function, unsigned char offset,
+    unsigned short value)
+{
+    (void)cookie;
+    i386_outl(PCI_CONFIG_ADDRESS,
+        i386_pci_config_address(bus, device, function, offset));
+    i386_outw((i386_u16)(PCI_CONFIG_DATA + (offset & 2u)), value);
+}
+
+static void
+i386_pci_config_write32(void *cookie, unsigned char bus,
+    unsigned char device, unsigned char function, unsigned char offset,
+    unsigned value)
 {
     i386_u32 address;
 
-    address = PCI_CONFIG_ENABLE |
-        ((i386_u32)bus << 16) |
-        ((i386_u32)(device & 0x1fu) << 11) |
-        ((i386_u32)(function & 0x07u) << 8) |
-        ((i386_u32)offset & 0xfcu);
+    (void)cookie;
+    address = i386_pci_config_address(bus, device, function, offset);
     i386_outl(PCI_CONFIG_ADDRESS, address);
     i386_outl(PCI_CONFIG_DATA, value);
 }
 
 static int
-i386_pci_mechanism_present(void)
+i386_pci_mechanism_present(void *cookie)
 {
     i386_u32 saved;
     i386_u32 value;
 
+    (void)cookie;
     saved = i386_inl(PCI_CONFIG_ADDRESS);
     i386_outl(PCI_CONFIG_ADDRESS, PCI_CONFIG_ENABLE);
     value = i386_inl(PCI_CONFIG_ADDRESS);
@@ -81,185 +125,181 @@ i386_pci_mechanism_present(void)
     return value == PCI_CONFIG_ENABLE;
 }
 
-static int
-i386_pci_function_read(i386_u8 bus, i386_u8 device,
-    i386_u8 function, struct i386_pci_function *result)
+static void *
+i386_pci_map_mmio(i386_u32 paddr, size_t size)
 {
-    i386_u32 class_revision;
-    i386_u32 identity;
+    void *first;
+    void *mapping;
+    i386_u32 offset;
+    i386_u32 physical;
+    i386_u32 span;
+    i386_u32 mapped;
 
-    identity = i386_pci_config_read32(bus, device, function, 0x00u);
-    if ((identity & 0xffffu) == I386_PCI_VENDOR_INVALID ||
-        (identity & 0xffffu) == 0)
+    if (size == 0 ||
+        paddr > 0xffffffffu - ((i386_u32)size - 1u))
         return 0;
-    class_revision = i386_pci_config_read32(bus, device, function, 0x08u);
-    result->bus = bus;
-    result->device = device;
-    result->function = function;
-    result->vendor = (i386_u16)(identity & 0xffffu);
-    result->product = (i386_u16)(identity >> 16);
-    result->programming_interface =
-        (i386_u8)((class_revision >> 8) & 0xffu);
-    result->revision = (i386_u8)(class_revision & 0xffu);
-    result->subclass = (i386_u8)((class_revision >> 16) & 0xffu);
-    result->class_code = (i386_u8)(class_revision >> 24);
-    return 1;
-}
-
-typedef int (*i386_pci_visit_t)(const struct i386_pci_function *, void *);
-
-static int
-i386_pci_walk(i386_pci_visit_t visit, void *arg)
-{
-    struct i386_pci_function candidate;
-    i386_u32 header;
-    unsigned bus;
-    unsigned device;
-    unsigned function_count;
-    unsigned function_index;
-
-    if (visit == (i386_pci_visit_t)0 ||
-        !i386_pci_mechanism_present())
+    offset = paddr & VM_PAGE_MASK;
+    physical = paddr & ~(i386_u32)VM_PAGE_MASK;
+    if ((i386_u32)size > 0xffffffffu - offset - VM_PAGE_MASK)
         return 0;
-    for (bus = 0; bus < 256u; ++bus) {
-        for (device = 0; device < 32u; ++device) {
-            if (!i386_pci_function_read((i386_u8)bus,
-                (i386_u8)device, 0, &candidate))
-                continue;
-            header = i386_pci_config_read32((i386_u8)bus,
-                (i386_u8)device, 0, 0x0cu);
-            function_count =
-                ((header >> 16) & PCI_HEADER_MULTIFUNCTION) != 0 ?
-                8u : 1u;
-            for (function_index = 0;
-                function_index < function_count; ++function_index) {
-                if (function_index != 0 &&
-                    !i386_pci_function_read((i386_u8)bus,
-                    (i386_u8)device, (i386_u8)function_index,
-                    &candidate))
-                    continue;
-                if (visit(&candidate, arg))
-                    return 1;
-            }
-        }
+    span = ((i386_u32)size + offset + VM_PAGE_MASK) &
+        ~(i386_u32)VM_PAGE_MASK;
+    first = 0;
+    for (mapped = 0; mapped < span; mapped += VM_PAGE_SIZE) {
+        mapping = pmap_device_direct_map(physical + mapped,
+            PMAP_CACHE_UNCACHED);
+        if (mapping == 0 ||
+            (first != 0 && (unsigned char *)mapping !=
+            (unsigned char *)first + mapped))
+            return 0;
+        if (first == 0)
+            first = mapping;
     }
-    return 1;
+    return (unsigned char *)first + offset;
 }
-
-struct i386_pci_class_search {
-    i386_u8 class_code;
-    i386_u8 subclass;
-    i386_u8 programming_interface;
-    struct i386_pci_function *result;
-    int found;
-};
 
 static int
-i386_pci_match_class(const struct i386_pci_function *candidate, void *arg)
+i386_pci_map_resource(void *cookie, enum pci_resource_type type,
+    unsigned long long address, size_t size, u_long *handle)
 {
-    struct i386_pci_class_search *search;
+    void *mapping;
 
-    search = (struct i386_pci_class_search *)arg;
-    if (candidate->class_code != search->class_code ||
-        candidate->subclass != search->subclass ||
-        candidate->programming_interface !=
-        search->programming_interface)
+    (void)cookie;
+    if (handle == 0 || size == 0)
+        return EINVAL;
+    if (type == PCI_RESOURCE_IO) {
+        if (address > 0xffffu || size - 1u > 0xffffu - (size_t)address)
+            return EOVERFLOW;
+        *handle = (u_long)address;
         return 0;
-    *search->result = *candidate;
-    search->found = 1;
-    return 1;
+    }
+    if (type != PCI_RESOURCE_MEMORY || address > 0xffffffffu)
+        return EOPNOTSUPP;
+    mapping = i386_pci_map_mmio((i386_u32)address, size);
+    if (mapping == 0)
+        return ENOMEM;
+    *handle = (u_long)mapping;
+    return 0;
 }
 
-int
-i386_pci_find_class(i386_u8 class_code, i386_u8 subclass,
-    i386_u8 programming_interface, struct i386_pci_function *result)
+static unsigned char
+i386_pci_resource_read8(void *cookie, enum pci_resource_type type,
+    u_long handle, size_t offset)
 {
-    struct i386_pci_class_search search;
+    (void)cookie;
+    if (type == PCI_RESOURCE_IO)
+        return i386_inb((i386_u16)(handle + offset));
+    return *(volatile unsigned char *)(handle + offset);
+}
 
-    if (result == (struct i386_pci_function *)0)
-        return 0;
-    search.class_code = class_code;
-    search.subclass = subclass;
-    search.programming_interface = programming_interface;
-    search.result = result;
-    search.found = 0;
-    if (!i386_pci_walk(i386_pci_match_class, &search))
-        return 0;
-    return search.found;
+static unsigned short
+i386_pci_resource_read16(void *cookie, enum pci_resource_type type,
+    u_long handle, size_t offset)
+{
+    (void)cookie;
+    if (type == PCI_RESOURCE_IO)
+        return i386_inw((i386_u16)(handle + offset));
+    return *(volatile unsigned short *)(handle + offset);
+}
+
+static unsigned
+i386_pci_resource_read32(void *cookie, enum pci_resource_type type,
+    u_long handle, size_t offset)
+{
+    (void)cookie;
+    if (type == PCI_RESOURCE_IO)
+        return i386_inl((i386_u16)(handle + offset));
+    return *(volatile unsigned *)(handle + offset);
 }
 
 static void
-i386_pci_inventory_add(struct i386_pci_inventory *inventory,
-    const struct i386_pci_function *function)
+i386_pci_resource_write8(void *cookie, enum pci_resource_type type,
+    u_long handle, size_t offset, unsigned char value)
 {
-    struct kinfo_pci_device *device;
-
-    ++inventory->count;
-    if (inventory->snapshot->kpi_count < KINFO_PCI_MAXDEVICES) {
-        device = &inventory->snapshot->kpi_devices[
-            inventory->snapshot->kpi_count++];
-        device->kpd_bus = function->bus;
-        device->kpd_device = function->device;
-        device->kpd_function = function->function;
-        device->kpd_class = function->class_code;
-        device->kpd_subclass = function->subclass;
-        device->kpd_programming_interface =
-            function->programming_interface;
-        device->kpd_revision = function->revision;
-        device->kpd_vendor = function->vendor;
-        device->kpd_product = function->product;
-    } else {
-        inventory->snapshot->kpi_truncated = 1;
-    }
-    if (!inventory->have_host &&
-        function->class_code == PCI_CLASS_BRIDGE &&
-        function->subclass == PCI_SUBCLASS_HOST) {
-        inventory->host = *function;
-        inventory->have_host = 1;
-    }
-    if (!inventory->have_isa &&
-        function->class_code == PCI_CLASS_BRIDGE &&
-        function->subclass == PCI_SUBCLASS_ISA) {
-        inventory->isa = *function;
-        inventory->have_isa = 1;
-    }
-    if (!inventory->have_ide &&
-        function->class_code == PCI_CLASS_MASS_STORAGE &&
-        function->subclass == PCI_SUBCLASS_IDE) {
-        inventory->ide = *function;
-        inventory->have_ide = 1;
-    }
-    if (!inventory->have_vga &&
-        function->class_code == PCI_CLASS_DISPLAY &&
-        function->subclass == PCI_SUBCLASS_VGA) {
-        inventory->vga = *function;
-        inventory->have_vga = 1;
-    }
+    (void)cookie;
+    if (type == PCI_RESOURCE_IO)
+        i386_outb((i386_u16)(handle + offset), value);
+    else
+        *(volatile unsigned char *)(handle + offset) = value;
+    __asm__ volatile ("" : : : "memory");
 }
 
-static struct kinfo_pci_inventory *
-i386_pci_inventory_snapshot(void)
+static void
+i386_pci_resource_write16(void *cookie, enum pci_resource_type type,
+    u_long handle, size_t offset, unsigned short value)
 {
-    if (!i386_pci_inventory_valid)
-        return (struct kinfo_pci_inventory *)0;
-    return &i386_pci_last_snapshot;
+    (void)cookie;
+    if (type == PCI_RESOURCE_IO)
+        i386_outw((i386_u16)(handle + offset), value);
+    else
+        *(volatile unsigned short *)(handle + offset) = value;
+    __asm__ volatile ("" : : : "memory");
+}
+
+static void
+i386_pci_resource_write32(void *cookie, enum pci_resource_type type,
+    u_long handle, size_t offset, unsigned value)
+{
+    (void)cookie;
+    if (type == PCI_RESOURCE_IO)
+        i386_outl((i386_u16)(handle + offset), value);
+    else
+        *(volatile unsigned *)(handle + offset) = value;
+    __asm__ volatile ("" : : : "memory");
 }
 
 static int
-i386_pci_inventory_visit(const struct i386_pci_function *function,
-    void *arg)
+i386_pci_interrupt_establish(void *cookie, unsigned interrupt,
+    pci_interrupt_handler_t handler, void *arg)
 {
-    i386_pci_inventory_add((struct i386_pci_inventory *)arg, function);
+    (void)cookie;
+    if (interrupt == 0 || interrupt >= I386_IRQ_COUNT)
+        return EINVAL;
+    if (!i386_irq_establish(interrupt, handler, arg))
+        return ENOMEM;
+    i386_pic_unmask(interrupt);
     return 0;
 }
 
 static void
-i386_pci_print_id(const char *label,
-    const struct i386_pci_function *function)
+i386_pci_delay_us(void *cookie, unsigned microseconds)
+{
+    (void)cookie;
+    while (microseconds-- != 0)
+        i386_io_wait();
+}
+
+static const struct pci_bus_ops i386_pci_ops = {
+    i386_pci_mechanism_present,
+    i386_pci_config_read8,
+    i386_pci_config_read16,
+    i386_pci_config_read32,
+    i386_pci_config_write8,
+    i386_pci_config_write16,
+    i386_pci_config_write32,
+    i386_pci_map_resource,
+    i386_pci_resource_read8,
+    i386_pci_resource_read16,
+    i386_pci_resource_read32,
+    i386_pci_resource_write8,
+    i386_pci_resource_write16,
+    i386_pci_resource_write32,
+    i386_pci_interrupt_establish,
+    i386_pci_delay_us,
+};
+
+struct pci_bus *
+i386_pci_bus(void)
+{
+    return i386_pci.pb_attached ? &i386_pci : 0;
+}
+
+static void
+i386_pci_print_id(const char *label, const struct pci_device *function)
 {
     i386_early_puts(label);
-    i386_early_put_hex32(((i386_u32)function->vendor << 16) |
-        function->product);
+    i386_early_put_hex32(((i386_u32)function->pd_vendor << 16) |
+        function->pd_product);
     i386_early_putc('\n');
 }
 
@@ -268,11 +308,11 @@ i386_pci_print_platform(const char *label,
     const struct i386_pci_inventory *inventory)
 {
     i386_early_puts(label);
-    if (inventory->host.vendor == PCI_VENDOR_VIA ||
-        inventory->isa.vendor == PCI_VENDOR_VIA ||
-        inventory->ide.vendor == PCI_VENDOR_VIA)
+    if (inventory->host.pd_vendor == PCI_VENDOR_VIA ||
+        inventory->isa.pd_vendor == PCI_VENDOR_VIA ||
+        inventory->ide.pd_vendor == PCI_VENDOR_VIA)
         i386_early_puts("via\n");
-    else if (inventory->host.vendor == PCI_VENDOR_INTEL)
+    else if (inventory->host.pd_vendor == PCI_VENDOR_INTEL)
         i386_early_puts("intel\n");
     else
         i386_early_puts("generic\n");
@@ -299,29 +339,31 @@ int
 i386_pci_probe(void)
 {
     struct i386_pci_inventory inventory;
-    unsigned function_index;
+    int error;
 
     i386_pci_inventory_valid = 0;
-    for (function_index = 0;
-        function_index < sizeof(inventory); ++function_index)
-        ((i386_u8 *)&inventory)[function_index] = 0;
-    for (function_index = 0;
-        function_index < sizeof(i386_pci_last_snapshot); ++function_index)
-        ((i386_u8 *)&i386_pci_last_snapshot)[function_index] = 0;
-    inventory.snapshot = &i386_pci_last_snapshot;
-    if (!i386_pci_walk(i386_pci_inventory_visit, &inventory))
-        return 1;
+    bzero(&inventory, sizeof(inventory));
+    error = pci_bus_scan(&i386_pci, &i386_pci_ops, 0);
+    if (error != 0)
+        return error;
 
+    inventory.have_host = pci_find_class(&i386_pci, PCI_CLASS_BRIDGE,
+        PCI_SUBCLASS_HOST, PCI_INTERFACE_ANY, &inventory.host);
+    inventory.have_isa = pci_find_class(&i386_pci, PCI_CLASS_BRIDGE,
+        PCI_SUBCLASS_ISA, PCI_INTERFACE_ANY, &inventory.isa);
+    inventory.have_ide = pci_find_class(&i386_pci,
+        PCI_CLASS_MASS_STORAGE, PCI_SUBCLASS_IDE, PCI_INTERFACE_ANY,
+        &inventory.ide);
+    inventory.have_vga = pci_find_class(&i386_pci, PCI_CLASS_DISPLAY,
+        PCI_SUBCLASS_VGA, PCI_INTERFACE_ANY, &inventory.vga);
     i386_pci_last_inventory = inventory;
     i386_pci_inventory_valid = 1;
-    hw_inventory_register_pci(i386_pci_inventory_snapshot);
 
-    if (!inventory.have_host || !inventory.have_isa ||
-        !inventory.have_ide)
-        return 1;
+    if (!inventory.have_host || !inventory.have_isa || !inventory.have_ide)
+        return ENXIO;
     i386_early_puts("pci: mechanism=1\n");
     i386_early_puts("pci-functions: ");
-    i386_early_put_hex32(inventory.count);
+    i386_early_put_hex32(pci_bus_function_count(&i386_pci));
     i386_early_putc('\n');
     i386_pci_print_id("pci-host: ", &inventory.host);
     i386_pci_print_id("pci-isa: ", &inventory.isa);

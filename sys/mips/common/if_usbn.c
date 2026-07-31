@@ -46,8 +46,6 @@ static int usbnioctl(struct ifnet *ifp, int cmd, caddr_t data);
 static int usbninit(int unit);
 static int usbnstart(int unit);
 static int usbnwatchdog(int unit);
-static struct mbuf *usbnget(struct ifnet *ifp, const unsigned char *buf,
-    int len);
 
 void
 usbnattach(int unit)
@@ -151,78 +149,8 @@ static int
 usbnoutput(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst)
 {
     struct usbn_softc *sc = &usbn_softc[ifp->if_unit];
-    struct mbuf *m = m0;
-    struct ether_header *eh;
-    struct in_addr idst;
-    unsigned char edst[6];
-    int error, off, s, type, usetrailers;
 
-    if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) !=
-        (IFF_UP | IFF_RUNNING)) {
-        error = ENETDOWN;
-        goto bad;
-    }
-
-    switch (dst->sa_family) {
-    case AF_INET:
-        idst = ((struct sockaddr_in *)dst)->sin_addr;
-        if (!arpresolve(&sc->sc_ac, m, &idst, edst, &usetrailers))
-            return 0;
-        off = ntohs((u_short)mtod(m, struct ip *)->ip_len) - m->m_len;
-        type = ETHERTYPE_IP;
-        break;
-
-    case AF_UNSPEC:
-        eh = (struct ether_header *)dst->sa_data;
-        bcopy((caddr_t)eh->ether_dhost, (caddr_t)edst, sizeof(edst));
-        type = eh->ether_type;
-        off = 0;
-        break;
-
-    default:
-        printf("usbn%d: can't handle af%d\n", ifp->if_unit,
-            dst->sa_family);
-        error = EAFNOSUPPORT;
-        goto bad;
-    }
-    (void)off;
-
-    if (m->m_off > MMAXOFF ||
-        MMINOFF + sizeof(struct ether_header) > m->m_off) {
-        m = m_get(M_DONTWAIT, MT_HEADER);
-        if (m == 0) {
-            error = ENOBUFS;
-            goto bad;
-        }
-        m->m_next = m0;
-        m->m_off = MMINOFF;
-        m->m_len = sizeof(struct ether_header);
-    } else {
-        m->m_off -= sizeof(struct ether_header);
-        m->m_len += sizeof(struct ether_header);
-    }
-
-    eh = mtod(m, struct ether_header *);
-    eh->ether_type = htons((u_short)type);
-    bcopy((caddr_t)edst, (caddr_t)eh->ether_dhost, sizeof(edst));
-    bcopy((caddr_t)sc->sc_ac.ac_enaddr, (caddr_t)eh->ether_shost,
-        sizeof(sc->sc_ac.ac_enaddr));
-
-    s = splimp();
-    if (IF_QFULL(&ifp->if_snd)) {
-        IF_DROP(&ifp->if_snd);
-        splx(s);
-        m_freem(m);
-        return ENOBUFS;
-    }
-    IF_ENQUEUE(&ifp->if_snd, m);
-    usbnstart(ifp->if_unit);
-    splx(s);
-    return 0;
-
-bad:
-    m_freem(m0);
-    return error;
+    return ether_output_enqueue(&sc->sc_ac, m0, dst, usbnstart);
 }
 
 static int
@@ -342,96 +270,15 @@ usbn_tx_done(int unit, int error)
     splx(s);
 }
 
-static struct mbuf *
-usbnget(struct ifnet *ifp, const unsigned char *buf, int len)
-{
-    struct mbuf *top, **mp, *m;
-    int n;
-
-    top = 0;
-    mp = &top;
-    while (len > 0) {
-        MGET(m, M_DONTWAIT, MT_DATA);
-        if (m == 0)
-            goto bad;
-        m->m_off = MMINOFF;
-        if (ifp) {
-            m->m_len = MIN(MLEN - sizeof(struct ifnet *), len);
-            m->m_off += sizeof(struct ifnet *);
-        } else
-            m->m_len = MIN(MLEN, len);
-        n = m->m_len;
-        bcopy((caddr_t)buf, mtod(m, caddr_t), n);
-        buf += n;
-        len -= n;
-        *mp = m;
-        mp = &m->m_next;
-        if (ifp) {
-            m->m_len += sizeof(struct ifnet *);
-            m->m_off -= sizeof(struct ifnet *);
-            *(mtod(m, struct ifnet **)) = ifp;
-            ifp = 0;
-        }
-    }
-    return top;
-
-bad:
-    m_freem(top);
-    return 0;
-}
-
 void
 usbn_input(int unit, const unsigned char *frame, unsigned len)
 {
     struct usbn_softc *sc;
-    struct ether_header *eh;
-    struct ifqueue *inq;
-    struct mbuf *m;
-    int s, type;
 
     if (unit < 0 || unit >= USBN_NUNITS)
         return;
     sc = &usbn_softc[unit];
     if (!sc->sc_present || (sc->sc_if.if_flags & IFF_RUNNING) == 0)
         return;
-    if (len < sizeof(struct ether_header)) {
-        sc->sc_if.if_ierrors++;
-        return;
-    }
-
-    eh = (struct ether_header *)frame;
-    type = ntohs((u_short)eh->ether_type);
-    len -= sizeof(struct ether_header);
-    m = usbnget(&sc->sc_if, frame + sizeof(struct ether_header), len);
-    if (m == 0) {
-        sc->sc_if.if_ierrors++;
-        return;
-    }
-
-    switch (type) {
-    case ETHERTYPE_IP:
-        schednetisr(NETISR_IP);
-        inq = &ipintrq;
-        break;
-
-    case ETHERTYPE_ARP:
-        arpinput(&sc->sc_ac, m);
-        sc->sc_if.if_ipackets++;
-        return;
-
-    default:
-        m_freem(m);
-        return;
-    }
-
-    s = splimp();
-    if (IF_QFULL(inq)) {
-        IF_DROP(inq);
-        splx(s);
-        m_freem(m);
-        return;
-    }
-    IF_ENQUEUE(inq, m);
-    sc->sc_if.if_ipackets++;
-    splx(s);
+    (void)ether_input_frame(&sc->sc_ac, frame, len);
 }

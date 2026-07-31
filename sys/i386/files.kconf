@@ -15,6 +15,10 @@
 # bootstrap is replaced by normal common startup.
 kernel/cons.c                   standard
 kernel/subr_dma.c               optional dma
+pci/pci.c                       optional pc
+pci/rtl8169.c                   optional rtl8169
+pci/if_re.c                     optional rtl8169
+netinet/if_ether.c              optional ether
 input/kbdmap.c                  optional ukbd i8042
 input/ps2.c                     optional i8042
 input/mouse.c                   optional i8042 ums
@@ -36,6 +40,7 @@ usb/uhci.c                      optional uhci
 usb/umass_bbb.c                 optional umass
 usb/umass.c                     optional umass
 i386/pc/dma.c                   optional dma
+i386/pc/pci.c                   optional pc
 i386/pc/i8042.c                 optional i8042
 i386/pc/usb_pci.c               optional usb ehci ohci uhci
 i386/pc/romdisk.c               standard

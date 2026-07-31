@@ -160,8 +160,6 @@ static void dm9000poll(int unit);
 static unsigned dm9000recv(struct dm9000_softc *sc);
 static void dm9000_trace_icmp(struct dm9000_softc *sc, unsigned char *frame,
     unsigned frame_len);
-static struct mbuf *dm9000get(struct ifnet *ifp, unsigned char *buf,
-    int len);
 static int dm9000_hw_probe(struct dm9000_softc *sc);
 static void dm9000_chip_init(struct dm9000_softc *sc);
 static void dm9000_stop(struct dm9000_softc *sc);
@@ -818,77 +816,8 @@ static int
 dm9000output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst)
 {
     struct dm9000_softc *sc = &dm9000_softc[ifp->if_unit];
-    struct mbuf *m = m0;
-    struct ether_header *eh;
-    struct in_addr idst;
-    unsigned char edst[6];
-    int error, off, s, type, usetrailers;
 
-    if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) !=
-        (IFF_UP | IFF_RUNNING)) {
-        error = ENETDOWN;
-        goto bad;
-    }
-
-    switch (dst->sa_family) {
-    case AF_INET:
-        idst = ((struct sockaddr_in *)dst)->sin_addr;
-        if (!arpresolve(&sc->sc_ac, m, &idst, edst, &usetrailers))
-            return 0;
-        off = ntohs((u_short)mtod(m, struct ip *)->ip_len) - m->m_len;
-        type = ETHERTYPE_IP;
-        break;
-
-    case AF_UNSPEC:
-        eh = (struct ether_header *)dst->sa_data;
-        bcopy((caddr_t)eh->ether_dhost, (caddr_t)edst, sizeof(edst));
-        type = eh->ether_type;
-        off = 0;
-        break;
-
-    default:
-        printf("dm%d: can't handle af%d\n", ifp->if_unit, dst->sa_family);
-        error = EAFNOSUPPORT;
-        goto bad;
-    }
-    (void)off;
-
-    if (m->m_off > MMAXOFF ||
-        MMINOFF + sizeof(struct ether_header) > m->m_off) {
-        m = m_get(M_DONTWAIT, MT_HEADER);
-        if (m == 0) {
-            error = ENOBUFS;
-            goto bad;
-        }
-        m->m_next = m0;
-        m->m_off = MMINOFF;
-        m->m_len = sizeof(struct ether_header);
-    } else {
-        m->m_off -= sizeof(struct ether_header);
-        m->m_len += sizeof(struct ether_header);
-    }
-
-    eh = mtod(m, struct ether_header *);
-    eh->ether_type = htons((u_short)type);
-    bcopy((caddr_t)edst, (caddr_t)eh->ether_dhost, sizeof(edst));
-    bcopy((caddr_t)sc->sc_ac.ac_enaddr, (caddr_t)eh->ether_shost,
-        sizeof(sc->sc_ac.ac_enaddr));
-
-    s = splimp();
-    if (IF_QFULL(&ifp->if_snd)) {
-        IF_DROP(&ifp->if_snd);
-        splx(s);
-        m_freem(m);
-        return ENOBUFS;
-    }
-    IF_ENQUEUE(&ifp->if_snd, m);
-    dm9000start(ifp->if_unit);
-    splx(s);
-    return 0;
-
-bad:
-    m_freem(m0);
-    return error;
+    return ether_output_enqueue(&sc->sc_ac, m0, dst, dm9000start);
 }
 
 static int
@@ -1022,54 +951,14 @@ ci20_dm9000_intr(void)
     return handled;
 }
 
-static struct mbuf *
-dm9000get(struct ifnet *ifp, unsigned char *buf, int len)
-{
-    struct mbuf *top, **mp, *m;
-    int n;
-
-    top = 0;
-    mp = &top;
-    while (len > 0) {
-        MGET(m, M_DONTWAIT, MT_DATA);
-        if (m == 0)
-            goto bad;
-        m->m_off = MMINOFF;
-        if (ifp) {
-            m->m_len = MIN(MLEN - sizeof(struct ifnet *), len);
-            m->m_off += sizeof(struct ifnet *);
-        } else
-            m->m_len = MIN(MLEN, len);
-        n = m->m_len;
-        bcopy((caddr_t)buf, mtod(m, caddr_t), n);
-        buf += n;
-        len -= n;
-        *mp = m;
-        mp = &m->m_next;
-        if (ifp) {
-            m->m_len += sizeof(struct ifnet *);
-            m->m_off -= sizeof(struct ifnet *);
-            *(mtod(m, struct ifnet **)) = ifp;
-            ifp = 0;
-        }
-    }
-    return top;
-
-bad:
-    m_freem(top);
-    return 0;
-}
-
 static unsigned
 dm9000recv(struct dm9000_softc *sc)
 {
     struct ether_header *eh;
-    struct ifqueue *inq;
-    struct mbuf *m;
     unsigned char frame[DM9000_PKT_MAX];
     unsigned status, len, rxbyte;
     unsigned received = 0;
-    int s, type;
+    int type;
 
     for (;;) {
         (void)dm9000_read(DM9000_MRCMDX);
@@ -1106,38 +995,6 @@ dm9000recv(struct dm9000_softc *sc)
         type = ntohs((u_short)eh->ether_type);
         if (type == ETHERTYPE_IP)
             dm9000_trace_icmp(sc, frame, len);
-        len -= sizeof(struct ether_header);
-        m = dm9000get(&sc->sc_if, frame + sizeof(struct ether_header), len);
-        if (m == 0) {
-            sc->sc_if.if_ierrors++;
-            continue;
-        }
-
-        switch (type) {
-        case ETHERTYPE_IP:
-            schednetisr(NETISR_IP);
-            inq = &ipintrq;
-            break;
-
-        case ETHERTYPE_ARP:
-            arpinput(&sc->sc_ac, m);
-            sc->sc_if.if_ipackets++;
-            continue;
-
-        default:
-            m_freem(m);
-            continue;
-        }
-
-        s = splimp();
-        if (IF_QFULL(inq)) {
-            IF_DROP(inq);
-            splx(s);
-            m_freem(m);
-            continue;
-        }
-        IF_ENQUEUE(inq, m);
-        sc->sc_if.if_ipackets++;
-        splx(s);
+        (void)ether_input_frame(&sc->sc_ac, frame, len);
     }
 }

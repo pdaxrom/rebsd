@@ -18,6 +18,7 @@ KCONFIG_SRCS     = $(KCONFIG_DIR)/Makefile $(KCONFIG_DIR)/config.h \
                    $(KCONFIG_DIR)/mkmakefile.c $(KCONFIG_DIR)/mkswapconf.c
 I386_DISK_SRC    = $(TOPSRC)/sys/disk
 I386_INPUT_SRC   = $(TOPSRC)/sys/input
+I386_PCI_SRC     = $(TOPSRC)/sys/pci
 I386_USB_SRC     = $(TOPSRC)/sys/usb
 I386_VM_SRC      = $(TOPSRC)/sys/vm
 I386_NET_SRC     = $(TOPSRC)/sys/net
@@ -46,6 +47,8 @@ I686_CPPFLAGS  += -DDMA_ENABLED -DDISK_ENABLED -DUSB_ENABLED \
                   -DUMASS_ENABLED -DUHUB_ENABLED -DUKBD_ENABLED \
                   -DUMS_ENABLED -DI8042_ENABLED \
                   -DEHCI_ENABLED -DOHCI_ENABLED -DUHCI_ENABLED \
+                  -DETHER_ENABLED -DETHER_NUNITS=1 \
+                  -DRTL8169_ENABLED \
                   -DINET_ENABLED -DINET -DSUPERVISOR
 
 I686_INET_CFLAGS = $(filter-out -Wextra,$(I686_CFLAGS)) \
@@ -160,7 +163,7 @@ VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
 INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
                    uipc_socket.o uipc_socket2.o uipc_syscalls.o \
-                   af.o if.o if_loop.o raw_cb.o raw_usrreq.o route.o \
+                   af.o if.o if_ether.o if_loop.o raw_cb.o raw_usrreq.o route.o \
                    in.o in_pcb.o in_proto.o ip_icmp.o ip_input.o \
                    ip_output.o raw_ip.o tcp_debug.o tcp_input.o \
                    tcp_output.o tcp_subr.o tcp_timer.o tcp_usrreq.o \
@@ -168,7 +171,8 @@ INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
 KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    early_console.o interrupt.o tss.o syscall.o \
                    signal.o user_return.o trap.o \
-                   pic.o pit.o pci.o ide.o memory.o paging.o \
+                   pic.o pit.o pci_core.o i386_pci.o rtl8169_hw.o if_re.o \
+                   ide.o memory.o paging.o \
                    libkern.o cons.o subr_dma.o \
                    kbdmap.o ps2.o mouse.o i8042.o \
                    disk_subr.o disk.o romdisk.o i386_romdisk.o \
@@ -533,13 +537,31 @@ pit.o: $(I386_PC_SRC)/pit.c $(I386_SRC)/include/interrupt.h \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-pci.o: $(I386_PC_SRC)/pci.c $(I386_SRC)/include/boot.h \
-	    $(I386_SRC)/include/io.h $(I386_SRC)/include/pci.h \
+pci_core.o: $(I386_PCI_SRC)/pci.c $(I386_PCI_SRC)/pci.h \
 	    $(TOPSRC)/sys/include/hw_inventory.h \
 	    $(TOPSRC)/sys/include/hw_inventory_provider.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
+
+i386_pci.o: $(I386_PC_SRC)/pci.c $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/io.h $(I386_SRC)/include/pci.h \
+	    $(I386_PCI_SRC)/pci.h $(TOPSRC)/sys/vm/pmap.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+rtl8169_hw.o: $(I386_PCI_SRC)/rtl8169.c $(I386_PCI_SRC)/rtl8169.h \
+	    $(I386_PCI_SRC)/pci.h $(TOPSRC)/sys/include/dma.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+if_re.o: $(I386_PCI_SRC)/if_re.c $(I386_PCI_SRC)/rtl8169.h \
+	    $(I386_PCI_SRC)/pci.h $(I386_NETINET_SRC)/if_ether.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_INET_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    $(I386_INET_INCLUDES) -c $< -o $@
 
 subr_dma.o: $(TOPSRC)/sys/kernel/subr_dma.c \
 	    $(TOPSRC)/sys/include/dma.h $(TOPSRC)/sys/include/errno.h \
@@ -575,7 +597,7 @@ netinit.o: %.o: $(I386_NET_SRC)/%.c \
 	$(CC) $(I686_INET_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    $(I386_INET_INCLUDES) -c $< -o $@
 
-in.o in_pcb.o in_proto.o ip_icmp.o ip_input.o ip_output.o raw_ip.o \
+if_ether.o in.o in_pcb.o in_proto.o ip_icmp.o ip_input.o ip_output.o raw_ip.o \
 tcp_debug.o tcp_input.o tcp_output.o tcp_subr.o tcp_timer.o tcp_usrreq.o \
 udp_usrreq.o: %.o: $(I386_NETINET_SRC)/%.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -606,6 +628,7 @@ usb_pci.o: $(I386_PC_SRC)/usb_pci.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/pci.h \
+	    $(I386_PCI_SRC)/pci.h \
 	    $(I386_SRC)/include/usb_pci.h \
 	    $(I386_USB_SRC)/ehcivar.h $(I386_USB_SRC)/ohcivar.h \
 	    $(I386_USB_SRC)/uhcivar.h \
