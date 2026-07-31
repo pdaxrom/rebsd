@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import pathlib
+import re
 import select
 import shutil
 import socket
@@ -44,6 +45,7 @@ CORE_MARKERS = (
     "REBSD_I686_MD5_OK",
     "REBSD_I686_AWK_OK",
     "REBSD_I686_FREE_OK",
+    "REBSD_I686_TOP_OK",
     "REBSD_I686_DF_OK",
     "lo0",
     "127.0.0.1",
@@ -399,6 +401,10 @@ def main() -> None:
             b"\r\nREBSD_I686_FREE_OK\r\n",
         ),
         (
+            b"/usr/bin/top -n 1 && echo REBSD_I686_TOP_OK\n",
+            b"\r\nREBSD_I686_TOP_OK\r\n",
+        ),
+        (
             b"/bin/df && echo REBSD_I686_DF_OK\n",
             b"\r\nREBSD_I686_DF_OK\r\n",
         ),
@@ -513,6 +519,25 @@ def main() -> None:
         raise SystemExit(
             "qemu-boot-smoke: forbidden serial markers: "
             + ", ".join(forbidden)
+        )
+    free_match = re.search(
+        r"Mem:\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+", output
+    )
+    top_match = re.search(
+        r"mem\s+(\d+)K total\s+(\d+)K used\s+(\d+)K free", output
+    )
+    if free_match is None or top_match is None:
+        raise SystemExit("qemu-boot-smoke: missing memory summaries")
+    free_total, free_used, free_free = map(int, free_match.groups())
+    top_total, top_used, top_free = map(int, top_match.groups())
+    if free_used + free_free != free_total:
+        raise SystemExit("qemu-boot-smoke: inconsistent free memory summary")
+    if top_used + top_free != top_total:
+        raise SystemExit("qemu-boot-smoke: inconsistent top memory summary")
+    if top_total != free_total:
+        raise SystemExit(
+            "qemu-boot-smoke: top/free memory totals differ: "
+            f"{top_total} != {free_total}"
         )
     print("qemu-boot-smoke: ok")
 

@@ -86,7 +86,8 @@ TTY		= $(call CMD_FILTER,TTY)
 #
 CMD_BUILD_STRIP ?= strip
 CMD_BIN_PROGS	= $(STD) $(NSTD) $(CMD_BUILD_STRIP)
-CMD_PATTERN_PROGS = $(filter-out size strip file,$(CMD_BIN_PROGS))
+VM_MEMORY_PROGS = $(filter free top,$(CMD_BIN_PROGS))
+CMD_PATTERN_PROGS = $(filter-out size strip file $(VM_MEMORY_PROGS),$(CMD_BIN_PROGS))
 BINS		= $(CMD_BIN_PROGS) $(SETUID) $(OPERATOR) $(KMEM) $(TTY) $(SCRIPT)
 
 all:		$(SUBDIR) $(BINS)
@@ -103,6 +104,15 @@ $(CMD_PATTERN_PROGS) $(SETUID) $(KMEM) $(OPERATOR) $(TTY): %: %.c
 		$(OBJDUMP) -S $@.elf > $@.dis
 		$(SIZE) $@.elf
 		$(ELF2AOUT) $@.elf $@ && /bin/rm $@.elf
+
+$(VM_MEMORY_PROGS): %: %.o vm_memory.o
+		$(LD) $(LDFLAGS) -o $@.elf $@.o vm_memory.o $(LIBS)
+		$(OBJDUMP) -S $@.elf > $@.dis
+		$(SIZE) $@.elf
+		$(ELF2AOUT) $@.elf $@ && /bin/rm $@.elf
+
+free.o top.o: vm_memory.h
+vm_memory.o: vm_memory.c vm_memory.h
 
 # Files listed in $(NSTD) have explicit make lines given below.
 

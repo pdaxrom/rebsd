@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "vm_memory.h"
+
 static long
 sysctl_long2(int top, int leaf, const char *name)
 {
@@ -63,22 +65,10 @@ read_swap_free_kb(void)
     return blocks * DEV_BSIZE / 1024;
 }
 
-static long
-pages_to_kb(long pages, long page_size)
-{
-    if (pages <= 0 || page_size <= 0)
-        return 0;
-    if (page_size >= 1024)
-        return pages * (page_size / 1024);
-    return pages / (1024 / page_size);
-}
-
 int
 main(int argc, char **argv)
 {
-    long phys_kb, total_kb, used_kb, free_kb, active_kb;
-    long page_size, page_total, page_free, page_reserved, page_bad;
-    long page_active, page_usable;
+    struct vm_memory_info memory;
     long swap_total_kb, swap_used_kb, swap_free_kb;
     int human = 0;
     int ch;
@@ -94,30 +84,10 @@ main(int argc, char **argv)
         }
     }
 
-    phys_kb = sysctl_long2(CTL_HW, HW_PHYSMEM, "hw.physmem") / 1024;
-    page_size = sysctl_long2(CTL_HW, HW_PAGESIZE, "hw.pagesize");
-    page_total = sysctl_long2(CTL_VM, VM_PHYSPAGES, "vm.page_total");
-    page_free = sysctl_long2(CTL_VM, VM_FREEPAGES, "vm.page_free");
-    page_reserved = sysctl_long2(CTL_VM, VM_RESERVEDPAGES,
-        "vm.page_reserved");
-    page_bad = sysctl_long2(CTL_VM, VM_BADPAGES, "vm.page_bad");
-    page_active = sysctl_long2(CTL_VM, VM_OBJECTRESIDENT,
-        "vm.object_resident");
-    page_usable = page_total - page_reserved - page_bad;
-    if (page_usable < 0)
-        page_usable = 0;
-    if (page_free < 0)
-        page_free = 0;
-    if (page_free > page_usable)
-        page_free = page_usable;
-    if (page_active < 0)
-        page_active = 0;
-    if (page_active > page_usable - page_free)
-        page_active = page_usable - page_free;
-    total_kb = pages_to_kb(page_usable, page_size);
-    free_kb = pages_to_kb(page_free, page_size);
-    used_kb = total_kb - free_kb;
-    active_kb = pages_to_kb(page_active, page_size);
+    if (vm_memory_read(&memory) < 0) {
+        perror("vm memory");
+        return 1;
+    }
     swap_total_kb = sysctl_long2(CTL_VM, VM_SWAPTOTAL,
         "vm.swap_total") / 1024;
     swap_free_kb = read_swap_free_kb();
@@ -129,18 +99,20 @@ main(int argc, char **argv)
         printf("%-6s %6s %6s %6s %6s\n",
             "", "total", "used", "free", "act");
         printf("%-6s %5ldK %5ldK %5ldK %5ldK\n", "Mem:",
-            total_kb, used_kb, free_kb, active_kb);
+            memory.vmi_total_kb, memory.vmi_used_kb,
+            memory.vmi_free_kb, memory.vmi_active_kb);
         printf("%-6s %5ldK %5ldK %5ldK\n", "Swap:",
             swap_total_kb, swap_used_kb, swap_free_kb);
-        printf("%-6s %5ldK\n", "Phys:", phys_kb);
+        printf("%-6s %5ldK\n", "Phys:", memory.vmi_phys_kb);
     } else {
         printf("%-6s %6s %6s %6s %6s\n",
             "", "total", "used", "free", "act");
         printf("%-6s %6ld %6ld %6ld %6ld\n", "Mem:",
-            total_kb, used_kb, free_kb, active_kb);
+            memory.vmi_total_kb, memory.vmi_used_kb,
+            memory.vmi_free_kb, memory.vmi_active_kb);
         printf("%-6s %6ld %6ld %6ld\n", "Swap:",
             swap_total_kb, swap_used_kb, swap_free_kb);
-        printf("%-6s %6ld\n", "Phys:", phys_kb);
+        printf("%-6s %6ld\n", "Phys:", memory.vmi_phys_kb);
     }
     return 0;
 }

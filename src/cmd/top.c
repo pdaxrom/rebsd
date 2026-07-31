@@ -11,6 +11,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "vm_memory.h"
+
 static const char *
 state_name(int state)
 {
@@ -90,34 +92,6 @@ read_procs(size_t *countp)
     return procs;
 }
 
-static long
-sysctl_long2(int top, int leaf)
-{
-    int mib[2];
-    long value;
-    size_t size;
-
-    mib[0] = top;
-    mib[1] = leaf;
-    size = sizeof(value);
-    if (sysctl(mib, 2, &value, &size, NULL, 0) < 0)
-        return 0;
-    return value;
-}
-
-static void
-read_vmtotal(struct vmtotal *total)
-{
-    int mib[2];
-    size_t size;
-
-    memset(total, 0, sizeof(*total));
-    mib[0] = CTL_VM;
-    mib[1] = VM_METER;
-    size = sizeof(*total);
-    (void)sysctl(mib, 2, total, &size, NULL, 0);
-}
-
 static void
 print_load(void)
 {
@@ -136,20 +110,18 @@ static void
 show_top(int lines)
 {
     struct kinfo_proc *procs;
-    struct vmtotal total;
+    struct vm_memory_info memory;
     time_t now;
     struct tm *tm;
     size_t count, i, shown;
-    long user_kb, used_kb, free_kb;
 
     procs = read_procs(&count);
     qsort(procs, count, sizeof(*procs), proc_compare);
-    read_vmtotal(&total);
-    user_kb = sysctl_long2(CTL_HW, HW_USERMEM) / 1024;
-    used_kb = total.t_vm / DEV_BSIZE;
-    if (used_kb > user_kb)
-        used_kb = user_kb;
-    free_kb = user_kb - used_kb;
+    if (vm_memory_read(&memory) < 0) {
+        perror("top: vm memory");
+        free(procs);
+        exit(1);
+    }
     time(&now);
     tm = localtime(&now);
 
@@ -157,7 +129,8 @@ show_top(int lines)
         printf("%02d:%02d  ", tm->tm_hour, tm->tm_min);
     print_load();
     printf("  mem %ldK total %ldK used %ldK free  procs %u\n",
-        user_kb, used_kb, free_kb, (unsigned)count);
+        memory.vmi_total_kb, memory.vmi_used_kb,
+        memory.vmi_free_kb, (unsigned)count);
     printf("  PID  PPID UID STAT PRI NI CPU SIZE  RSS COMMAND\n");
 
     shown = 0;
