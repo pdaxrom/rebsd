@@ -335,6 +335,7 @@ def monitor_command(connection: socket.socket, command: str) -> None:
 def monitor_send_text(connection: socket.socket, text: str) -> None:
     key_names = {
         "\n": "ret",
+        " ": "spc",
     }
 
     for character in text:
@@ -375,6 +376,8 @@ def main() -> None:
     output_bytes = bytearray()
     login_sent = False
     mouse_sent = False
+    ps2_post_network_sent = False
+    ps2_post_network_output_start = 0
     commands = (
         (b"/bin/ls /bin/l?\n", b"/bin/ls"),
         (b"echo REBSD_I686_LS_OK\n", b"\r\nREBSD_I686_LS_OK\r\n"),
@@ -459,8 +462,21 @@ def main() -> None:
             command_index += 1
             command_sent = False
             if command_index == len(commands):
-                completed = True
-                break
+                if args.ps2_keyboard:
+                    assert monitor is not None
+                    ps2_post_network_output_start = len(output_bytes)
+                    monitor_send_text(monitor, "echo ps2postnetok\n")
+                    ps2_post_network_sent = True
+                else:
+                    completed = True
+                    break
+        if (
+            ps2_post_network_sent
+            and b"\r\nps2postnetok\r\n# "
+            in output_bytes[ps2_post_network_output_start:]
+        ):
+            completed = True
+            break
         if process.poll() is not None:
             break
 

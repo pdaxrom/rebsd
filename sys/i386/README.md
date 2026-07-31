@@ -40,8 +40,8 @@ The common IPv4 stack and loopback interface are initialized independently
 of physical network-device discovery.  Consequently `lo0` and `127.0.0.1`
 are always available on a normal i686 boot even when no Ethernet adapter is
 present.  i686 uses the same socket, protocol, interface and loopback sources
-as the MIPS boards; only delivery of deferred network work enters through the
-x86 interrupt-return boundary.
+as the MIPS boards; deferred network work runs after system calls and timer
+interrupts, outside device interrupt handlers such as PS/2 IRQ1 and IRQ12.
 
 `ide-smoke` adds the UFS image as an external legacy ATA disk.  It must
 appear as a read-only common `sd0`, but root remains the embedded romdisk at

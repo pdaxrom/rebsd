@@ -202,7 +202,7 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
 
     i386_pic_eoi(irq);
 #ifdef INET
-    if (netisr)
+    if (irq == I386_IRQ_TIMER && netisr)
         netintr();
 #endif
 }

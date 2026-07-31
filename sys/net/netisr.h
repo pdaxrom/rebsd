@@ -27,7 +27,7 @@
 #define	setsoftnet()	{ extern int knetisr; mtkd(&knetisr, 1); }
 #endif
 #if defined(MIPS) || defined(I386)
-#define	setsoftnet()	/* polled from the machine interrupt return path */
+#define	setsoftnet()	/* polled from machine-dependent safe points */
 #endif
 
 /*
