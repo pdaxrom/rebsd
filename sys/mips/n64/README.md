@@ -517,9 +517,11 @@ current N64 work is staged as follows:
 - on 2026-07-06, the full hard-float PCC zswap ROM booted on real N64 hardware
   to `ttyS0` root login.  The full rootfs mounted from ROM, `ls -l /` showed
   the expected `/bin`, `/sbin`, `/usr`, `/var`, and `/cart` layout, and
-  `uptime` worked.  The full smoke remains open because `uname -a` triggered a
-  kernel `TLB load/fetch` panic after login; this points at a remaining runtime
-  timing/race or interrupt-path issue rather than a rootfs packaging failure;
+  `uptime` worked.  Later long-run smoke failures that appeared as random
+  userland faults were traced to the aggressive PI DOM1 pulse width in the
+  default libdragon ROM header on the tested RP2040-based N64cart.  ReBSD N64
+  ROMs now use the hardware-tested `0x40` pulse width by default; see
+  [ROM image layout](#rom-image-layout);
 - N64 disables core dumps by default because the volatile `/var` filesystem is
   small. If core dumps are enabled explicitly, a crashing compiler can still
   exhaust the RAM disk, but that must be reported as an I/O or space error and
@@ -685,6 +687,21 @@ n64tool --toc --title "REBSD N64" \
     --align 256 kernel_stage0.stripped.elf \
     --align 1024 rootfs.img
 ```
+
+Every N64 ROM build then validates the native Z64 header and sets the PI
+Domain 1 pulse-width byte to `0x40`.  Consequently, released images start with
+`80 37 40 40`, rather than the libdragon default `80 37 12 40`.  The more
+conservative timing is the N64 hardware default for ReBSD and applies equally
+to `kernel.z64`, `preflight.z64`, and `pcc-debug.z64`.
+
+This setting is required for reliable sustained ROM access on the tested
+RP2040-based N64cart.  With the default `0x12` pulse width, repeated native PCC
+tests eventually failed at unrelated instructions after executable pages had
+been loaded from the ROM-backed UFS root filesystem.  Uploading the same image
+with N64cart's `--fix-pi-bus-speed=40` option eliminated those failures during
+an overnight run, while the same workload remained stable for three days on
+Creator CI20.  The build now writes the equivalent value into the image
+itself, so N64cart uploads do not require that external option.
 
 For `preflight.z64`, `stage0.stripped.elf` is used instead of
 `kernel_stage0.stripped.elf`.

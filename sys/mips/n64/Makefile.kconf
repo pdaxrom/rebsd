@@ -24,6 +24,7 @@ N64_FPU_CODE    = $(N64_KERNEL_BASE) -mhard-float
 N64_TRACE       ?= 0
 VM_DIAGNOSTIC   ?= 0
 N64_STAGE0_RESERVED_BYTES ?= 0x00080000
+N64_PI_DOM1_PULSE ?= 0x40
 N64_DEBUG_UART_ONLY ?= 0
 N64_USB_GDB ?= 0
 N64_RESET_DUMP ?= $(N64_USB_GDB)
@@ -50,7 +51,7 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES).$(N64_PI_DOM1_PULSE)
 PARAM += -DN64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES)
 N64_IOCONF      = ioconf
 ifneq ($(N64_ZSWAP),1)
@@ -742,6 +743,7 @@ SIZE            = $(N64_PREFIX)size
 STRIP           = $(N64_PREFIX)strip
 NM              = $(N64_PREFIX)nm
 N64_TOOL        = $(N64_TOOLCHAIN)/bin/n64tool
+N64_ROM_PI_TOOL = $(N64_BOARD_SRC)/native/set-rom-pi-pulse.py
 FSUTIL          = $(OBJTOP)/tools/fsutil/fsutil
 ELF2AOUT        = $(OBJTOP)/tools/elf2aout/elf2aout
 
@@ -1365,9 +1367,10 @@ $(N64_PCC_DEBUG_ROOTFS_IMG): $(FSUTIL) pcc-debug-stage
 	    $@ $(N64_PCC_DEBUG_ROOTFS_STAGE)
 	$(FSUTIL) --check $@
 
-pcc-debug.z64: kernel_stage0.stripped.elf $(N64_PCC_DEBUG_ROOTFS_IMG)
+pcc-debug.z64: kernel_stage0.stripped.elf $(N64_PCC_DEBUG_ROOTFS_IMG) $(N64_ROM_PI_TOOL)
 	cp $(N64_PCC_DEBUG_ROOTFS_IMG) $(N64_PCC_DEBUG_TOC_ROOTFS_IMG)
 	$(N64_TOOL) --toc --title "REBSD PCCDBG" --output $@ --align 256 kernel_stage0.stripped.elf --align 1024 $(N64_PCC_DEBUG_TOC_ROOTFS_IMG)
+	python3 $(N64_ROM_PI_TOOL) --pulse $(N64_PI_DOM1_PULSE) $@
 
 pcc-debug-image:
 	$(MAKE) clean
@@ -1398,11 +1401,13 @@ pcc-hw-test-image: pcc-hw-test-stage
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil
 
-preflight.z64: stage0.stripped.elf $(N64_ROM_ROOTFS_IMG)
+preflight.z64: stage0.stripped.elf $(N64_ROM_ROOTFS_IMG) $(N64_ROM_PI_TOOL)
 	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 stage0.stripped.elf --align 1024 $(N64_ROM_ROOTFS_IMG)
+	python3 $(N64_ROM_PI_TOOL) --pulse $(N64_PI_DOM1_PULSE) $@
 
-kernel.z64: kernel_stage0.stripped.elf $(N64_ROM_ROOTFS_IMG)
+kernel.z64: kernel_stage0.stripped.elf $(N64_ROM_ROOTFS_IMG) $(N64_ROM_PI_TOOL)
 	$(N64_TOOL) --toc --title "REBSD N64" --output $@ --align 256 kernel_stage0.stripped.elf --align 1024 $(N64_ROM_ROOTFS_IMG)
+	python3 $(N64_ROM_PI_TOOL) --pulse $(N64_PI_DOM1_PULSE) $@
 
 preflight.o: $(N64_BOARD_SRC)/preflight.c ${SYSTEM_DEP}
 	${COMPILE_C}
