@@ -16,6 +16,9 @@
 kernel/cons.c                   standard
 kernel/nullzero.c               standard
 kernel/subr_dma.c               optional dma
+kernel/clock_subr.c             standard
+kernel/todr.c                   standard
+rtc/mc146818.c                  optional i386_rtc
 pci/pci.c                       optional pc
 pci/rtl8169.c                   optional rtl8169
 pci/if_re.c                     optional rtl8169
@@ -47,3 +50,4 @@ i386/pc/i8042.c                 optional i8042
 i386/pc/usb_pci.c               optional usb ehci ohci uhci
 i386/pc/romdisk.c               standard
 i386/pc/ramdisk.c               standard
+i386/pc/rtc.c                   optional i386_rtc

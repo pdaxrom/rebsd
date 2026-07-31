@@ -20,6 +20,7 @@ I386_DISK_SRC    = $(TOPSRC)/sys/disk
 I386_INPUT_SRC   = $(TOPSRC)/sys/input
 I386_PCI_SRC     = $(TOPSRC)/sys/pci
 I386_USB_SRC     = $(TOPSRC)/sys/usb
+I386_RTC_SRC     = $(TOPSRC)/sys/rtc
 I386_VM_SRC      = $(TOPSRC)/sys/vm
 I386_NET_SRC     = $(TOPSRC)/sys/net
 I386_NETINET_SRC = $(TOPSRC)/sys/netinet
@@ -49,6 +50,7 @@ I686_CPPFLAGS  += -DDMA_ENABLED -DDISK_ENABLED -DUSB_ENABLED \
                   -DEHCI_ENABLED -DOHCI_ENABLED -DUHCI_ENABLED \
                   -DETHER_ENABLED -DETHER_NUNITS=1 \
                   -DRTL8169_ENABLED \
+                  -DI386_RTC_ENABLED \
                   -DINET_ENABLED -DINET -DSUPERVISOR
 
 I686_INET_CFLAGS = $(filter-out -Wextra,$(I686_CFLAGS)) \
@@ -173,7 +175,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    signal.o user_return.o trap.o \
                    pic.o pit.o pci_core.o i386_pci.o rtl8169_hw.o if_re.o \
                    ide.o memory.o paging.o \
-                   libkern.o cons.o subr_dma.o \
+                   libkern.o cons.o subr_dma.o clock_subr.o todr.o \
+                   mc146818.o i386_rtc.o \
                    kbdmap.o ps2.o mouse.o i8042.o \
                    disk_subr.o disk.o romdisk.o ramdisk.o i386_romdisk.o \
                    i386_ramdisk.o \
@@ -769,6 +772,29 @@ kern_shm.o: $(TOPSRC)/sys/kernel/kern_shm.c \
 	    -c $< -o $@
 
 kern_time.o: $(TOPSRC)/sys/kernel/kern_time.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+clock_subr.o: $(TOPSRC)/sys/kernel/clock_subr.c \
+	    $(TOPSRC)/sys/include/todr.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+todr.o: $(TOPSRC)/sys/kernel/todr.c $(TOPSRC)/sys/include/todr.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+mc146818.o: $(I386_RTC_SRC)/mc146818.c \
+	    $(I386_RTC_SRC)/mc146818.h $(TOPSRC)/sys/include/todr.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+i386_rtc.o: $(I386_PC_SRC)/rtc.c $(I386_RTC_SRC)/mc146818.h \
+	    $(I386_SRC)/include/io.h $(TOPSRC)/sys/include/todr.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

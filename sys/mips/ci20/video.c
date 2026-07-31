@@ -16,6 +16,8 @@
 #include <machine/video.h>
 #include <vm/pmap.h>
 
+#include "cgu.h"
+
 #define CI20_CPM_BASE           0xb0000000u
 #define CI20_GPIO_BASE          0xb0010000u
 #define CI20_HDMI_BASE          0xb0180000u
@@ -41,13 +43,6 @@
 #define CPM_HDMICDR_STOP        (1u << 26)
 #define CPM_SPCR0_HDMI          (1u << 11)
 #define CPM_SPCR0_LCD           (1u << 10)
-#define CPM_PLL_M_SHIFT         19
-#define CPM_PLL_M_MASK          0x1fffu
-#define CPM_PLL_N_SHIFT         13
-#define CPM_PLL_N_MASK          0x3fu
-#define CPM_PLL_OD_SHIFT        9
-#define CPM_PLL_OD_MASK         0xfu
-#define CPM_PLL_ENABLE          (1u << 0)
 
 #define GPIO_PA                 0
 #define GPIO_PF                 5
@@ -129,7 +124,6 @@
 #define CI20_VIDEO_PIXEL_KHZ    25175u
 #define CI20_VIDEO_MAP_HINT     0x08000000u
 #define CI20_CLOCK_WAIT_US      10000u
-#define CI20_EXCLK_KHZ          48000u
 #define CI20_PIXEL_MIN_KHZ      13500u
 #define CI20_PIXEL_MAX_KHZ      216000u
 #define CI20_VIDEO_MAX_MODES    (DRM_EDID_MAX_MODES + 1u)
@@ -263,24 +257,6 @@ ci20_clock_wait(unsigned reg, unsigned busy)
     return ETIMEDOUT;
 }
 
-static unsigned
-ci20_pll_rate_khz(unsigned reg)
-{
-    unsigned divider;
-    unsigned multiplier;
-    unsigned value;
-
-    value = ci20_read32(CI20_CPM_BASE, reg);
-    if ((value & CPM_PLL_ENABLE) == 0)
-        return 0;
-    multiplier = ((value >> CPM_PLL_M_SHIFT) & CPM_PLL_M_MASK) + 1u;
-    divider = (((value >> CPM_PLL_N_SHIFT) & CPM_PLL_N_MASK) + 1u) *
-        (((value >> CPM_PLL_OD_SHIFT) & CPM_PLL_OD_MASK) + 1u);
-    if (divider == 0 || multiplier > (unsigned)-1 / CI20_EXCLK_KHZ)
-        return 0;
-    return CI20_EXCLK_KHZ * multiplier / divider;
-}
-
 static int
 ci20_pixel_clock_find(unsigned requested, struct ci20_pixel_clock *result)
 {
@@ -296,7 +272,7 @@ ci20_pixel_clock_find(unsigned requested, struct ci20_pixel_clock *result)
     bzero(result, sizeof(*result));
     best_delta = (unsigned)-1;
     for (i = 0; i < sizeof(registers) / sizeof(registers[0]); ++i) {
-        candidate.parent_khz = ci20_pll_rate_khz(registers[i]);
+        candidate.parent_khz = ci20_cgu_pll_rate_khz(registers[i]);
         if (candidate.parent_khz == 0)
             continue;
         candidate.divider =

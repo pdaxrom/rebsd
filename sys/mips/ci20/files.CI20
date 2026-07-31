@@ -1,11 +1,16 @@
 mips/common/startup.S          standard compile-with "${COMPILE_S}"
 mips/ci20/uart.c               optional ci20_uart
 i2c/i2c.c                       standard
+rtc/pcf8563.c                   optional ci20_rtc
+rtc/jz4780.c                    optional ci20_rtc
 drm/drm.c                       standard
 drm/drm_fb.c                    standard
 drm/drm_edid.c                  standard
 drm/dw_hdmi.c                   standard
 mips/ci20/video.c              standard
+mips/ci20/cgu.c                standard
+mips/ci20/i2c4.c               optional ci20_rtc
+mips/ci20/rtc.c                optional ci20_rtc
 mips/ci20/video_console.c      standard
 mips/ci20/if_dm9000.c          optional ci20_dm9000
 mips/ci20/devsw.c              standard

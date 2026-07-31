@@ -60,6 +60,18 @@ make -C sys/mips BOARD=maltael rootfs.img kernel
 make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
 ```
 
+## Time-of-day clocks
+
+All MIPS boards use the common TODR provider and Gregorian conversion code.
+Boards without an attached hardware clock retain the existing embedded
+filesystem timestamp fallback.  Creator Ci20 attaches two hardware providers:
+the board PCF8563 on I2C4 at address `0x51` is primary and the JZ4780 internal
+RTC is secondary.  The I2C4 adapter contains only JZ4780 clock, pinmux and
+register access; PCF8563 calendar/BCD handling and JZ4780 RTC semantics live
+under `sys/rtc` and are reusable by other boards.  A successful
+`settimeofday` writes every writable attached RTC so the primary and fallback
+remain synchronized.
+
 ## Minimal rootfs regression matrix
 
 Every filesystem image is checked for the boot-critical files (`init`, `sh`,

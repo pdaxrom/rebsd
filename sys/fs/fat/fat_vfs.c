@@ -10,6 +10,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/todr.h>
 #include <sys/user.h>
 #include <sys/inode.h>
 #include <sys/fs.h>
@@ -420,53 +421,28 @@ fat_get_le16(const unsigned char *data)
     return (unsigned)data[0] | ((unsigned)data[1] << 8);
 }
 
-static int
-fat_leap_year(unsigned year)
-{
-    return (year % 4u) == 0 &&
-        ((year % 100u) != 0 || (year % 400u) == 0);
-}
-
 static time_t
 fat_timestamp(unsigned date, unsigned clock)
 {
-    static const unsigned char month_days[12] = {
-        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
-    };
-    unsigned year, month, day, hour, minute, second;
-    unsigned days, y, m, limit;
-    long seconds, adjustment;
+    struct clock_ymdhms dt;
+    time_t timestamp;
+    long seconds;
+    long adjustment;
+    int error;
 
-    year = 1980u + ((date >> 9) & 0x7fu);
-    month = (date >> 5) & 0x0fu;
-    day = date & 0x1fu;
-    hour = (clock >> 11) & 0x1fu;
-    minute = (clock >> 5) & 0x3fu;
-    second = (clock & 0x1fu) * 2u;
-    if (month == 0 || month > 12u || day == 0 || hour > 23u ||
-        minute > 59u || second > 59u)
-        return 0;
-    limit = month_days[month - 1u];
-    if (month == 2u && fat_leap_year(year))
-        ++limit;
-    if (day > limit)
-        return 0;
-
-    days = 0;
-    for (y = 1970u; y < year; ++y)
-        days += fat_leap_year(y) ? 366u : 365u;
-    for (m = 1; m < month; ++m) {
-        days += month_days[m - 1u];
-        if (m == 2u && fat_leap_year(year))
-            ++days;
-    }
-    days += day - 1u;
-    seconds = (long)hour * 3600l + (long)minute * 60l + (long)second;
-    if (days > 0x7ffffffful / 86400ul ||
-        (days == 0x7ffffffful / 86400ul &&
-        (unsigned long)seconds > 0x7ffffffful % 86400ul))
+    dt.dt_year = 1980u + ((date >> 9) & 0x7fu);
+    dt.dt_mon = (date >> 5) & 0x0fu;
+    dt.dt_day = date & 0x1fu;
+    dt.dt_wday = 0;
+    dt.dt_hour = (clock >> 11) & 0x1fu;
+    dt.dt_min = (clock >> 5) & 0x3fu;
+    dt.dt_sec = (clock & 0x1fu) * 2u;
+    error = clock_ymdhms_to_secs(&dt, &timestamp);
+    if (error == EOVERFLOW)
         return (time_t)0x7fffffffl;
-    seconds += (long)days * 86400l;
+    if (error != 0)
+        return 0;
+    seconds = (long)timestamp;
     if (tz.tz_minuteswest < -1440 || tz.tz_minuteswest > 1440)
         adjustment = 0;
     else

@@ -27,6 +27,8 @@ CORE_MARKERS = (
     "ReBSD 0.1-Resurgence (I686_PC)",
     "vm page: self-test ok",
     "pmap: self-test ok",
+    "todr: mc146818 registered priority 200",
+    "todr: mc146818 20",
     "disk: block layer ready",
     "mouse0: source psm0",
     "i8042: controller ready, keyboard=present mouse=present",

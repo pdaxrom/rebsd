@@ -26,7 +26,17 @@ i686 storage-план через существующие USB/`umass`/generic di
   VFS bootstrap или process-bootstrap и не завершает штатную загрузку через
   marker `HALT`;
 - следующий этап остаётся QEMU-only: расширение нужного userland,
-  external IDE/USB mount path и PS/2/RTC/VGA.
+  external IDE/USB mount path и PS/2/VGA.
+
+Общий этап аппаратного времени завершён 2026-08-01 одновременно для i686 и
+Ci20.  `sys/kernel/todr.c` выбирает hardware provider по приоритету, выполняет
+fallback на timestamp root filesystem и записывает все доступные RTC после
+успешного `settimeofday`.  i686 использует MC146818 CMOS; Ci20 использует
+PCF8563 через I2C4 как primary и внутренний JZ4780 RTC как secondary.  BCD и
+Gregorian conversion находятся только в общем коде; FAT также переиспользует
+его вместо собственной копии.  QEMU i686 подтверждает выбор `mc146818` и
+загрузку с аппаратным UTC временем; Ci20 требует только финального gate на
+реальной плате для чтения PCF8563 и проверки сохранения после выключения.
 
 ## Выполнено
 

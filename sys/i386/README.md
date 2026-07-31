@@ -48,6 +48,15 @@ INTx lines are programmed as level-triggered through the PC ELCR before they
 are unmasked; fixed ISA edge-triggered lines such as PS/2 IRQ1 and IRQ12 keep
 their ISA trigger mode.
 
+Wall-clock time uses the machine-independent BSD TODR layer in
+`sys/kernel/todr.c`.  The PC attachment only supplies MC146818 CMOS register
+access through ports `0x70`/`0x71`; BCD/binary and 12/24-hour decoding,
+Gregorian conversion, provider selection and `settimeofday` write-back are
+shared with the MIPS boards.  At boot a valid CMOS value takes precedence
+over the embedded filesystem timestamp.  QEMU `boot-smoke` verifies that the
+selected provider is `mc146818` and that the kernel reports a current UTC
+hardware time.
+
 The IBM PCI Ethernet adapter `10ec:8169` is exposed as `re0`.  PCI bus
 enumeration, BAR probing, resource access and the RTL8169/RTL8110 hardware
 driver are machine-independent code under `sys/pci`; i686 supplies only PCI
@@ -142,7 +151,8 @@ PCC is not part of the i686 build and must not be changed.
 2. Verify the full userland, PS/2 keyboard/mouse and VGA cursor on the IBM.
 3. Keep external IDE and USB devices on the common disk path and validate
    ordinary mounts without changing the embedded read-only UFS root policy.
-4. Complete RTC and USB mass-storage validation on the VIA Apollo Pro 133.
+4. Validate CMOS persistence after `date`/`settimeofday` and USB mass storage
+   on the VIA Apollo Pro 133.
 5. Validate `re0` attach, level-triggered INTx, link, static IPv4, ARP, ICMP
    RX/TX latency and sustained traffic on the installed `10ec:8169` PCI
    adapter.

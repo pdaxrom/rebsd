@@ -8,6 +8,7 @@
 #include <sys/proc.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/todr.h>
 
 struct timeval boottime;
 struct timeval time;
@@ -53,12 +54,7 @@ setthetime (struct timeval *tv)
     lbolt = time.tv_usec / usechz;
     lastmicrotime = time;
     splx(s);
-#ifdef  notyet
-    /*
-     * if you have a time of day board, use it here
-     */
     resettodr();
-#endif
 }
 
 /*

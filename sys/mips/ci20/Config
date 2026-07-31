@@ -29,6 +29,7 @@ options         "VIDEO_ENABLED"
 device          "ci20_uart"
 
 service         creator
+service         "ci20_rtc"
 service         dma
 service         disk
 service         fat
