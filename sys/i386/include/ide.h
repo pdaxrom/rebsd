@@ -3,13 +3,10 @@
 
 #include <disk/disk.h>
 
-/*
- * Probe the primary master through the legacy ATA compatibility ports.
- * The backend issues only IDENTIFY DEVICE and READ SECTORS; its write and
- * flush operations are deliberately absent.
- */
+/* Thin i686 attachment for the common PCI IDE backend. */
 int i386_ide_probe(void);
 const struct disk_backend_ops *i386_ide_backend_ops(void);
+void *i386_ide_backend_arg(void);
 disk_sector_t i386_ide_sector_count(void);
 
 #endif

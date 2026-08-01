@@ -19,7 +19,8 @@ Use a separate object directory:
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc kernel
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc rootfs-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke
-make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc ide-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc \
+    ide-pio-smoke ide-dma-smoke ide-auto-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc ps2-input-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc \
     ohci-mouse-smoke uhci-mouse-smoke
@@ -74,9 +75,21 @@ link interrupt and PCI system-error recovery):
 make -C sys/tests/pci test
 ```
 
-`ide-smoke` adds the UFS image as an external legacy ATA disk.  It must
-appear as a read-only common `sd0`, but root remains the embedded romdisk at
-block major 0, minor 0.  USB mass-storage tests use the same common `sdN`
+The IDE gates add the UFS image as an external legacy ATA disk and exercise
+forced PIO, forced PCI bus-master MWDMA and automatic mode selection.  The
+machine-independent `sys/pci/pciide.c` driver owns IDENTIFY, PIO and DMA
+transfers, controller timings, IRQ completion, reset and the permanent
+DMA-error-to-PIO transition.  The i386 attachment only supplies the fixed
+compatibility ports, IRQ14 and scheduler wait/wakeup boundary.  QEMU's PIIX3
+and the IBM's VIA 82C596B/82C571 path are supported.  Host fake-hardware
+tests cover PIO and DMA reads/writes/cache flushes, PIIX/VIA timing
+programming, automatic capability fallback and injected DMA error/timeout;
+the external disk published by the i686
+kernel deliberately remains read-only, so the real CF is not written.
+
+The external ATA disk must appear as a read-only common `sd0`, while root
+remains the embedded romdisk at block major 0, minor 0.  USB mass-storage
+tests use the same common `sdN`
 namespace and the existing USB core, hubs, EHCI/OHCI/UHCI, `umass` BOT/SCSI
 and disk code.  The romdisk never consumes an `sdN` number.
 
@@ -110,8 +123,13 @@ GRUB Legacy installation:
 ```text
 title ReBSD i686
     root (hd0,2)
-    kernel /boot/rebsd-i686.bzimg
+    kernel /boot/rebsd-i686.bzimg ata=auto
 ```
+
+`ata=auto` selects the highest common MWDMA mode and otherwise stays in PIO.
+For diagnostics, `ata=pio` forces the fallback path and `ata=dma` requires
+DMA attachment.  These are selections of the same driver, not separate
+compatibility implementations.
 
 `rebsd-i686.bzimg` is the only installation artifact produced by the default
 build and the only image copied to target machines.  The separate raw-floppy
@@ -123,7 +141,7 @@ not part of `all` and is not a release or hardware-gate artifact.
 `sys/i386` owns only x86 hardware and ABI work: BIOS handoff, E820, paging,
 IDT/PIC/PIT, TSS/context frames, COM1/VGA primitives, i8042 port and IRQ
 transport, PCI configuration mechanism 1 and resource/INTx mapping, legacy
-ATA PIO, USB
+ATA compatibility-port and IRQ14 attachment, USB
 host-controller attachment and the `int 0x80` register adapter.
 
 All policy and reusable subsystems remain in common code: VM, scheduler,
@@ -151,8 +169,10 @@ PCC is not part of the i686 build and must not be changed.
 2. Verify the full userland, PS/2 keyboard/mouse and VGA cursor on the IBM.
 3. Keep external IDE and USB devices on the common disk path and validate
    ordinary mounts without changing the embedded read-only UFS root policy.
-4. Validate CMOS persistence after `date`/`settimeofday` and USB mass storage
+4. Validate forced PIO, forced MWDMA and automatic ATA selection on the VIA
+   controller, keeping the CF exposed read-only for this gate.
+5. Validate CMOS persistence after `date`/`settimeofday` and USB mass storage
    on the VIA Apollo Pro 133.
-5. Validate `re0` attach, level-triggered INTx, link, static IPv4, ARP, ICMP
+6. Validate `re0` attach, level-triggered INTx, link, static IPv4, ARP, ICMP
    RX/TX latency and sustained traffic on the installed `10ec:8169` PCI
    adapter.

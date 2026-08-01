@@ -27,10 +27,11 @@ revision `10`; общий `sys/pci` RTL8169 driver подключает его �
 QEMU 11 не содержит модели RTL8169, поэтому аппаратно-точный automated gate
 использует fake PCI/BAR/DMA/IRQ backend, а следующий сетевой gate выполняется
 на IBM.
-ATA-команд записи всё ещё нет: IDE
-backend предоставляет только `IDENTIFY` и `READ SECTORS`, generic disk
-регистрируется с `DISK_FLAG_READ_ONLY`, а оба write gates возвращают
-`EROFS`.
+Общий `sys/pci/pciide` transport теперь реализует IDENTIFY, PIO,
+PCI bus-master MWDMA, IRQ completion, reset, write и cache flush. Запись
+проверяется только host fake-hardware gate. i686 по-прежнему регистрирует
+IDE-CF с `DISK_FLAG_READ_ONLY`, поэтому обычный kernel path не посылает
+команды записи реальному CF, а write-open/strategy возвращают `EROFS`.
 
 ## 1. Собрать и повторить QEMU gate
 
@@ -41,7 +42,7 @@ make -C sys/i386 BOARD=pc \
 make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
     rootfs-smoke boot-smoke \
-    ide-smoke ide-absent-smoke \
+    ide-pio-smoke ide-dma-smoke ide-auto-smoke ide-absent-smoke \
     usb-mass-storage-smoke \
     usb-mass-storage-ide-absent-smoke \
     ps2-input-smoke \
@@ -76,12 +77,27 @@ sudo sync
 ```text
 title ReBSD i686 test
 	root (hd0,2)
-	kernel /boot/rebsd-i686.bzimg
+	kernel /boot/rebsd-i686.bzimg ata=pio
 ```
 
 GRUB переустанавливать не требуется; `initrd`, `root=`, `ro`, `rhgb` и
 `quiet` не используются. До замены image надо сохранить backup CF или
 как минимум исходного `grub.conf`.
+
+Первый повторный storage gate выполняется с `ata=pio`. После сохранения
+полного boot log тот же image проверяется сначала с `ata=dma`, затем с
+`ata=auto`. Во всех трёх случаях IDE-CF остаётся read-only на generic disk
+уровне. Ожидаемые mode markers:
+
+```text
+ata0: mode=pio policy=forced
+ata0: mode=mwdmaN bus-master irq=14
+```
+
+Если DMA transfer завершится ошибкой или timeout, текущая операция получает
+`EIO`, controller останавливается и сбрасывается, а все последующие операции
+идут через PIO. Это тот же общий driver path, отдельного i386 fallback-driver
+нет.
 
 ## 3. Фактический результат первого запуска
 
@@ -140,10 +156,10 @@ HALT
 - `1106:0571` — VIA PIPC Bus Master IDE function;
 - `121a:0005` — 3Dfx Interactive Voodoo3 AGP VGA.
 
-Ранний порт использует только совместимые legacy interfaces; VIA
-bus-master DMA и программирование AGP не включены. COM1 `115200 8N1`
-остаётся желательным для последующих длинных logs, но точный PCI baseline
-уже зафиксирован через VGA.
+ATA data registers остаются в BIOS compatibility mode, а общий PCI IDE
+driver использует bus-master BAR, MWDMA и IRQ14. AGP programming не включён.
+COM1 `115200 8N1` остаётся желательным для последующих длинных logs, но
+точный PCI baseline уже зафиксирован через VGA.
 
 ## 5. RTL8169 Ethernet gate
 

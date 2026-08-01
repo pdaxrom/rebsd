@@ -11,6 +11,7 @@ i386_disk_attach_ide(void)
 
     bzero(&args, sizeof(args));
     args.da_ops = i386_ide_backend_ops();
+    args.da_arg = i386_ide_backend_arg();
     args.da_sector_count = i386_ide_sector_count();
     args.da_sector_size = DISK_SECTOR_SIZE;
     args.da_flags = DISK_FLAG_READ_ONLY;

@@ -142,6 +142,9 @@ def parse_args() -> argparse.Namespace:
     image.add_argument("--kernel", type=pathlib.Path)
     image.add_argument("--bios-image", type=pathlib.Path)
     parser.add_argument("--disk", type=pathlib.Path)
+    parser.add_argument(
+        "--ata-mode", choices=("auto", "pio", "dma"), default="auto"
+    )
     parser.add_argument("--usb-disk", type=pathlib.Path)
     parser.add_argument("--ohci-keyboard", action="store_true")
     parser.add_argument("--ohci-mouse", action="store_true")
@@ -156,6 +159,8 @@ def parse_args() -> argparse.Namespace:
 
     if args.expect_no_disk and args.disk is not None:
         parser.error("--expect-no-disk cannot be combined with --disk")
+    if args.bios_image is not None and args.ata_mode != "auto":
+        parser.error("forced ATA modes require direct --kernel boot")
     if sum(
         (
             args.uhci_keyboard,
@@ -199,6 +204,8 @@ def qemu_command(
     ]
     if args.kernel is not None:
         command.extend(["-kernel", str(args.kernel)])
+        if args.ata_mode != "auto":
+            command.extend(["-append", f"ata={args.ata_mode}"])
     else:
         command.extend(
             [
@@ -284,6 +291,10 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         markers += ("ide-primary-master: none",)
     else:
         markers += IDE_DISK_MARKERS
+        if args.ata_mode == "pio":
+            markers += ("ata0: mode=pio policy=forced",)
+        else:
+            markers += ("ata0: mode=mwdma2 bus-master irq=14",)
     if args.usb_disk is not None:
         markers += USB_MASS_STORAGE_MARKERS
         markers += (

@@ -12,6 +12,7 @@
 #include <machine/console.h>
 
 static i386_u32 i386_boot_params_saved;
+static char i386_boot_command_line_saved[256];
 
 extern int main(void);
 static void i386_boot_fatal(const char *) __attribute__((noreturn));
@@ -23,6 +24,45 @@ i386_boot_byte(i386_u32 offset)
 
     bytes = (const volatile i386_u8 *)i386_boot_params_saved;
     return bytes[offset];
+}
+
+static i386_u32
+i386_boot_word(i386_u32 offset)
+{
+    const volatile i386_u8 *bytes;
+
+    bytes = (const volatile i386_u8 *)i386_boot_params_saved;
+    return (i386_u32)bytes[offset] |
+        ((i386_u32)bytes[offset + 1u] << 8) |
+        ((i386_u32)bytes[offset + 2u] << 16) |
+        ((i386_u32)bytes[offset + 3u] << 24);
+}
+
+static void
+i386_boot_save_command_line(void)
+{
+    const volatile char *source;
+    i386_u32 address;
+    unsigned index;
+
+    i386_boot_command_line_saved[0] = '\0';
+    address = i386_boot_word(I386_BOOT_PARAMS_CMDLINE_PTR);
+    if (address == 0 || address > 0x3fffff00u)
+        return;
+    source = (const volatile char *)address;
+    for (index = 0; index + 1u < sizeof(i386_boot_command_line_saved);
+        ++index) {
+        i386_boot_command_line_saved[index] = source[index];
+        if (source[index] == '\0')
+            return;
+    }
+    i386_boot_command_line_saved[index] = '\0';
+}
+
+const char *
+i386_boot_command_line(void)
+{
+    return i386_boot_command_line_saved;
 }
 
 static void
@@ -38,6 +78,7 @@ void
 startup(void)
 {
     i386_early_console_init();
+    i386_boot_save_command_line();
     i386_early_puts("REBSD_I686_BOOT\n");
     i386_early_puts("cpu: i686\n");
     i386_early_puts("boot: linux-x86-2.02\n");

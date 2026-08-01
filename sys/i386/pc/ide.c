@@ -1,338 +1,188 @@
+/*
+ * i686 attachment for the machine-independent PCI IDE driver.
+ */
+
 #include "boot.h"
 #include "ide.h"
-#include "io.h"
+#include "interrupt.h"
+#include "pci.h"
 
 #include <sys/errno.h>
+#include <sys/param.h>
+#include <sys/user.h>
+#include <sys/proc.h>
+#include <sys/systm.h>
 
-#define IDE_PRIMARY_BASE        0x01f0u
-#define IDE_PRIMARY_CONTROL     0x03f6u
+#include <pci/pciide.h>
 
-#define IDE_REG_DATA            0u
-#define IDE_REG_ERROR           1u
-#define IDE_REG_SECTOR_COUNT    2u
-#define IDE_REG_LBA_LOW         3u
-#define IDE_REG_LBA_MID         4u
-#define IDE_REG_LBA_HIGH        5u
-#define IDE_REG_DRIVE           6u
-#define IDE_REG_STATUS          7u
-#define IDE_REG_COMMAND         7u
+#define I386_IDE_WAIT_TICKS     (5u * I386_PIT_HZ)
 
-#define IDE_STATUS_ERROR        0x01u
-#define IDE_STATUS_DATA_REQUEST 0x08u
-#define IDE_STATUS_DEVICE_FAULT 0x20u
-#define IDE_STATUS_BUSY         0x80u
-
-#define IDE_COMMAND_READ        0x20u
-#define IDE_COMMAND_IDENTIFY    0xecu
-
-#define IDE_IDENTIFY_MODEL_FIRST    27u
-#define IDE_IDENTIFY_MODEL_WORDS    20u
-#define IDE_IDENTIFY_CAPABILITIES   49u
-#define IDE_IDENTIFY_LBA28_LOW      60u
-#define IDE_IDENTIFY_LBA28_HIGH     61u
-#define IDE_CAPABILITY_LBA          0x0200u
-
-#define IDE_SECTOR_WORDS        256u
-#define IDE_POLL_LIMIT          1000000u
-#define IDE_MAX_READ_SECTORS    128u
-
-static i386_u16 i386_ide_identify_words[IDE_SECTOR_WORDS];
-static i386_u8 i386_ide_sector_data[DISK_SECTOR_SIZE * 2u];
-static i386_u32 i386_ide_sectors;
-static int i386_ide_available;
-
-static void
-i386_ide_print_register(const char *label, i386_u8 value)
-{
-    i386_early_puts(label);
-    i386_early_put_hex32(value);
-    i386_early_putc('\n');
-}
-
-static i386_u8
-i386_ide_status(void)
-{
-    return i386_inb(IDE_PRIMARY_BASE + IDE_REG_STATUS);
-}
-
-static void
-i386_ide_delay_400ns(void)
-{
-    unsigned index;
-
-    for (index = 0; index < 4u; ++index)
-        (void)i386_inb(IDE_PRIMARY_CONTROL);
-}
+static struct pciide_softc i386_pciide;
+static unsigned char i386_ide_probe_data[DISK_SECTOR_SIZE];
 
 static int
-i386_ide_wait_not_busy(i386_u8 *last_status)
+i386_ide_token_equal(const char *text, const char *word)
 {
-    i386_u8 status;
-    unsigned count;
+    while (*word != '\0' && *text == *word) {
+        ++text;
+        ++word;
+    }
+    return *word == '\0' && (*text == '\0' || *text == ' ');
+}
 
-    status = 0xffu;
-    for (count = 0; count < IDE_POLL_LIMIT; ++count) {
-        status = i386_ide_status();
-        if ((status & IDE_STATUS_BUSY) == 0) {
-            *last_status = status;
+static const char *
+i386_ide_token_value(const char *text, const char *name)
+{
+    while (*name != '\0') {
+        if (*text == '\0' || *text != *name)
             return 0;
+        ++text;
+        ++name;
+    }
+    return text;
+}
+
+static enum pciide_mode_policy
+i386_ide_mode_policy(void)
+{
+    const char *command_line;
+    const char *value;
+
+    command_line = i386_boot_command_line();
+    while (*command_line != '\0') {
+        while (*command_line == ' ')
+            ++command_line;
+        value = i386_ide_token_value(command_line, "ata=");
+        if (value != 0) {
+            if (i386_ide_token_equal(value, "pio"))
+                return PCIIDE_MODE_PIO;
+            if (i386_ide_token_equal(value, "dma"))
+                return PCIIDE_MODE_DMA;
+            if (i386_ide_token_equal(value, "auto"))
+                return PCIIDE_MODE_AUTO;
         }
+        while (*command_line != '\0' && *command_line != ' ')
+            ++command_line;
     }
-    *last_status = status;
-    return 1;
+    return PCIIDE_MODE_AUTO;
 }
 
 static int
-i386_ide_wait_data(void)
+i386_ide_irq_establish(void *cookie, unsigned irq,
+    pci_interrupt_handler_t handler, void *arg)
 {
-    i386_u8 status;
-    unsigned count;
-
-    for (count = 0; count < IDE_POLL_LIMIT; ++count) {
-        status = i386_ide_status();
-        if ((status & IDE_STATUS_BUSY) != 0)
-            continue;
-        if ((status & (IDE_STATUS_ERROR | IDE_STATUS_DEVICE_FAULT)) != 0)
-            return 1;
-        if ((status & IDE_STATUS_DATA_REQUEST) != 0)
-            return 0;
-    }
-    return 1;
-}
-
-static void
-i386_ide_read_identify_words(void)
-{
-    unsigned index;
-
-    for (index = 0; index < IDE_SECTOR_WORDS; ++index)
-        i386_ide_identify_words[index] =
-            i386_inw(IDE_PRIMARY_BASE + IDE_REG_DATA);
-}
-
-static void
-i386_ide_read_sector_words(i386_u8 *data)
-{
-    i386_u16 word;
-    unsigned index;
-
-    for (index = 0; index < IDE_SECTOR_WORDS; ++index) {
-        word = i386_inw(IDE_PRIMARY_BASE + IDE_REG_DATA);
-        data[index * 2u] = (i386_u8)word;
-        data[index * 2u + 1u] = (i386_u8)(word >> 8);
-    }
-}
-
-static int
-i386_ide_identify(void)
-{
-    i386_u8 lba_high;
-    i386_u8 lba_mid;
-    i386_u8 status;
-
-    /*
-     * A BIOS may leave either device selected.  Select the master before
-     * interpreting a zero status as "no device".
-     */
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_DRIVE, 0xa0u);
-    i386_ide_delay_400ns();
-    status = i386_ide_status();
-    i386_ide_print_register("ide-initial-status: ", status);
-    if (status == 0 || status == 0xffu) {
-        i386_early_puts("ide-identify-failure: no-status\n");
-        return 1;
-    }
-
-    if (i386_ide_wait_not_busy(&status) != 0) {
-        i386_early_puts("ide-identify-failure: select-timeout\n");
-        return 1;
-    }
-
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_SECTOR_COUNT, 0);
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_LBA_LOW, 0);
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_LBA_MID, 0);
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_LBA_HIGH, 0);
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_COMMAND, IDE_COMMAND_IDENTIFY);
-
-    status = i386_ide_status();
-    if (status == 0 || status == 0xffu) {
-        i386_early_puts("ide-identify-failure: command-status\n");
-        return 1;
-    }
-    if (i386_ide_wait_not_busy(&status) != 0) {
-        i386_early_puts("ide-identify-failure: command-timeout\n");
-        return 1;
-    }
-    /*
-     * ATAPI devices leave a non-zero signature here after IDENTIFY DEVICE.
-     * The first bootstrap driver deliberately supports only ATA disks.
-     */
-    lba_mid = i386_inb(IDE_PRIMARY_BASE + IDE_REG_LBA_MID);
-    lba_high = i386_inb(IDE_PRIMARY_BASE + IDE_REG_LBA_HIGH);
-    if (lba_mid != 0 || lba_high != 0) {
-        i386_ide_print_register("ide-signature-mid: ", lba_mid);
-        i386_ide_print_register("ide-signature-high: ", lba_high);
-        i386_early_puts("ide-identify-failure: non-ata\n");
-        return 1;
-    }
-    if (i386_ide_wait_data() != 0) {
-        i386_ide_print_register("ide-command-status: ",
-            i386_ide_status());
-        i386_ide_print_register("ide-command-error: ",
-            i386_inb(IDE_PRIMARY_BASE + IDE_REG_ERROR));
-        i386_early_puts("ide-identify-failure: no-data\n");
-        return 1;
-    }
-
-    i386_ide_read_identify_words();
-    return 0;
-}
-
-static void
-i386_ide_print_model(void)
-{
-    char model[IDE_IDENTIFY_MODEL_WORDS * 2u + 1u];
-    i386_u16 word;
-    unsigned end;
-    unsigned index;
-
-    for (index = 0; index < IDE_IDENTIFY_MODEL_WORDS; ++index) {
-        word = i386_ide_identify_words[
-            IDE_IDENTIFY_MODEL_FIRST + index];
-        model[index * 2u] = (char)(word >> 8);
-        model[index * 2u + 1u] = (char)(word & 0xffu);
-    }
-    end = IDE_IDENTIFY_MODEL_WORDS * 2u;
-    while (end != 0 && model[end - 1u] == ' ')
-        --end;
-    model[end] = '\0';
-
-    i386_early_puts("ide-model: ");
-    for (index = 0; index < end; ++index)
-        i386_early_putc(model[index]);
-    i386_early_putc('\n');
-}
-
-static int
-i386_ide_read_one(i386_u32 lba, i386_u8 *data)
-{
-    i386_u8 status;
-
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_DRIVE,
-        (i386_u8)(0xe0u | ((lba >> 24) & 0x0fu)));
-    i386_ide_delay_400ns();
-    if (i386_ide_wait_not_busy(&status) != 0 ||
-        status == 0 || status == 0xffu)
-        return EIO;
-
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_SECTOR_COUNT, 1);
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_LBA_LOW, (i386_u8)lba);
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_LBA_MID, (i386_u8)(lba >> 8));
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_LBA_HIGH, (i386_u8)(lba >> 16));
-    i386_outb(IDE_PRIMARY_BASE + IDE_REG_COMMAND, IDE_COMMAND_READ);
-    if (i386_ide_wait_data() != 0)
-        return EIO;
-
-    i386_ide_read_sector_words(data);
-    if (i386_ide_wait_not_busy(&status) != 0 ||
-        (status & (IDE_STATUS_ERROR | IDE_STATUS_DEVICE_FAULT)) != 0)
-        return EIO;
+    (void)cookie;
+    if (irq != PCIIDE_PRIMARY_IRQ ||
+        !i386_irq_establish(irq, handler, arg))
+        return EINVAL;
+    i386_pic_unmask(irq);
     return 0;
 }
 
 static int
-i386_ide_backend_read(void *arg, disk_sector_t lba, unsigned count,
-    void *data_arg)
+i386_ide_wait(void *cookie, volatile unsigned *done, unsigned ticks)
 {
-    i386_u8 *data;
-    unsigned index;
+    i386_u32 start;
+    int error;
+    int state;
 
-    (void)arg;
-    if (!i386_ide_available)
-        return ENXIO;
-    if (data_arg == 0 || count == 0 || count > IDE_MAX_READ_SECTORS ||
-        lba >= i386_ide_sectors ||
-        (disk_sector_t)count > (disk_sector_t)i386_ide_sectors - lba)
+    (void)cookie;
+    if (done == 0 || ticks == 0)
         return EINVAL;
 
-    data = (i386_u8 *)data_arg;
-    for (index = 0; index < count; ++index) {
-        if (i386_ide_read_one((i386_u32)lba + index,
-            data + index * DISK_SECTOR_SIZE) != 0)
-            return EIO;
+    /* Autoconfiguration runs in proc0 before the scheduler is available. */
+    if (u.u_procp == &proc[0]) {
+        start = i386_pit_ticks();
+        while (!*done &&
+            (i386_u32)(i386_pit_ticks() - start) < ticks)
+            __asm__ volatile ("sti; hlt; cli" : : : "memory");
+        return *done ? 0 : ETIMEDOUT;
     }
-    return 0;
+
+    state = splhigh();
+    error = 0;
+    while (!*done && error == 0)
+        error = tsleep((caddr_t)done, PRIBIO, ticks);
+    splx(state);
+    if (error == EWOULDBLOCK)
+        return ETIMEDOUT;
+    return error;
 }
 
-static int
-i386_ide_backend_present(void *arg)
+static void
+i386_ide_wakeup(void *cookie, volatile unsigned *done)
 {
-    (void)arg;
-    return i386_ide_available;
+    (void)cookie;
+    wakeup((caddr_t)done);
 }
-
-static const struct disk_backend_ops i386_ide_ops = {
-    i386_ide_backend_read,
-    0,
-    0,
-    i386_ide_backend_present
-};
 
 const struct disk_backend_ops *
 i386_ide_backend_ops(void)
 {
-    return &i386_ide_ops;
+    return pciide_disk_ops(&i386_pciide);
+}
+
+void *
+i386_ide_backend_arg(void)
+{
+    return &i386_pciide;
 }
 
 disk_sector_t
 i386_ide_sector_count(void)
 {
-    return i386_ide_sectors;
+    return pciide_sector_count(&i386_pciide);
 }
 
 int
 i386_ide_probe(void)
 {
+    struct pciide_attach_args args;
+    const struct disk_backend_ops *ops;
     int error;
 
-    i386_ide_available = 0;
-    i386_ide_sectors = 0;
-    if (i386_ide_identify() != 0) {
+    bzero(&args, sizeof(args));
+    args.pa_device = i386_pci_ide_device();
+    args.pa_isa_device = i386_pci_isa_device();
+    if (args.pa_device == 0) {
         i386_early_puts("ide-primary-master: none\n");
+        return 0;
+    }
+    args.pa_policy = i386_ide_mode_policy();
+    args.pa_command_port = PCIIDE_PRIMARY_COMMAND_PORT;
+    args.pa_control_port = PCIIDE_PRIMARY_CONTROL_PORT;
+    args.pa_irq = PCIIDE_PRIMARY_IRQ;
+    args.pa_wait_ticks = I386_IDE_WAIT_TICKS;
+    args.pa_irq_establish = i386_ide_irq_establish;
+    args.pa_wait = i386_ide_wait;
+    args.pa_wakeup = i386_ide_wakeup;
+    error = pciide_attach(&i386_pciide, &args);
+    if (error != 0) {
+        i386_early_puts("ide-primary-master: none\n");
+        i386_early_puts("ide-attach-error: ");
+        i386_early_put_hex32((i386_u32)error);
+        i386_early_putc('\n');
         return 0;
     }
 
     i386_early_puts("ide-primary-master: ata\n");
-    i386_ide_print_model();
-    i386_ide_sectors = (i386_u32)i386_ide_identify_words[
-        IDE_IDENTIFY_LBA28_LOW] |
-        ((i386_u32)i386_ide_identify_words[
-        IDE_IDENTIFY_LBA28_HIGH] << 16);
-    i386_early_puts("ide-sectors: ");
-    i386_early_put_hex32(i386_ide_sectors);
-    i386_early_putc('\n');
-
-    if ((i386_ide_identify_words[IDE_IDENTIFY_CAPABILITIES] &
-        IDE_CAPABILITY_LBA) == 0 || i386_ide_sectors == 0) {
-        i386_early_puts("ide-lba28: unsupported\n");
-        return 0;
-    }
     i386_early_puts("ide-lba28: ok\n");
-    i386_ide_available = 1;
-    error = i386_ide_ops.dbo_read(0, 0, 1, i386_ide_sector_data);
+    ops = pciide_disk_ops(&i386_pciide);
+    error = ops->dbo_read(&i386_pciide, 0, 1, i386_ide_probe_data);
     if (error != 0) {
         i386_early_puts("ide-lba0: failed\n");
-        i386_ide_available = 0;
         return 0;
     }
     i386_early_puts("ide-backend-read: ok\n");
     i386_early_puts("ide-lba0: ok\n");
-    if (i386_ide_ops.dbo_read(0, i386_ide_sectors, 1,
-        i386_ide_sector_data) == EINVAL &&
-        i386_ide_ops.dbo_read(0, 0, IDE_MAX_READ_SECTORS + 1u,
-        i386_ide_sector_data) == EINVAL &&
-        i386_ide_ops.dbo_read(0, 0, 1, 0) == EINVAL &&
-        i386_ide_ops.dbo_read(0, 0, 0, i386_ide_sector_data) == EINVAL)
+    if (ops->dbo_read(&i386_pciide,
+        pciide_sector_count(&i386_pciide), 1, i386_ide_probe_data) ==
+        EINVAL &&
+        ops->dbo_read(&i386_pciide,
+        pciide_sector_count(&i386_pciide) - 1, 2,
+        i386_ide_probe_data) == EINVAL &&
+        ops->dbo_read(&i386_pciide, 0, 1, 0) == EINVAL &&
+        ops->dbo_read(&i386_pciide, 0, 0, i386_ide_probe_data) == EINVAL)
         i386_early_puts("ide-bounds: ok\n");
     else
         i386_early_puts("ide-bounds: failed\n");

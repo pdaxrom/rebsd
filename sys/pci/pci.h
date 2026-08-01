@@ -143,6 +143,9 @@ void pci_config_write16(const struct pci_device *, unsigned char,
 int pci_device_enable(const struct pci_device *, unsigned);
 int pci_map_bar(const struct pci_device *, unsigned, size_t,
     struct pci_resource *);
+int pci_map_fixed_resource(const struct pci_device *,
+    enum pci_resource_type, unsigned long long, size_t,
+    struct pci_resource *);
 int pci_interrupt_establish(const struct pci_device *,
     pci_interrupt_handler_t, void *);
 void pci_delay_us(const struct pci_device *, unsigned);

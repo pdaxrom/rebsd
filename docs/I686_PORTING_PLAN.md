@@ -1189,6 +1189,38 @@ QEMU EHCI/OHCI/UHCI-инкремент выполнен:
 Запрещены отдельные i386 USB core, `umass`, SCSI transport, partition parser,
 filesystem path или собственный namespace устройств.
 
+## Общий PCI IDE PIO/DMA этап
+
+Следующий storage-инкремент завершён после стабильного PIO baseline:
+
+- ATA transport перенесён из `sys/i386` в общий `sys/pci/pciide`; он владеет
+  IDENTIFY/LBA28, PIO read/write, cache flush, PCI bus-master MWDMA,
+  controller timings, PRDT, IRQ completion, reset и error recovery;
+- i386 оставляет только BIOS compatibility ports, edge-triggered IRQ14 и
+  adapter к общему scheduler wait/wakeup contract;
+- поддержаны QEMU PIIX3 `8086:7010` и фактическая IBM VIA IDE `1106:0571`
+  при VIA 596B ISA bridge `1106:0596`; timing fields сверены с реализациями
+  NetBSD для PIIX и Apollo/VIA IDE;
+- `ata=pio`, `ata=dma` и `ata=auto` выбирают режим одного общего driver.
+  Automatic mode выбирает максимальный общий MWDMA0--2 и остаётся в PIO,
+  если controller/device/DMA resources не поддерживают DMA;
+- DMA завершается по IRQ14. Error или timeout завершает текущий request с
+  `EIO`, останавливает и сбрасывает channel и навсегда переводит следующие
+  операции этого attachment в PIO;
+- host fake-hardware gate проверяет PIO/DMA read, write, cache flush,
+  PIIX/VIA timing registers, capability fallback и injected DMA error/timeout.
+  QEMU отдельно проходит
+  forced PIO, forced DMA и automatic selection;
+- общий ATA backend содержит полный write/flush contract, но i686 пока
+  публикует внешний IDE-CF с `DISK_FLAG_READ_ONLY`. Поэтому реальный gate не
+  выполняет ATA write и не меняет Red Hat/GRUB CF; embedded read-only UFS
+  остаётся root `(0,0)`.
+
+Следующий аппаратный gate: на IBM сначала `ata=pio`, затем `ata=dma` и
+`ata=auto`, каждый раз с read-only `sd0` и сохранением полного mode/error
+log. Разрешение записи на настоящий CF является отдельным изменением disk
+policy и без явного разрешения не выполняется.
+
 ## Общий PCI Ethernet этап
 
 PCI Ethernet для IBM реализуется как общий, переносимый subsystem, поскольку
@@ -1227,15 +1259,16 @@ IBM PC-совместимых компьютеров с legacy BIOS и проц�
 - VGA text console и COM1;
 - 8259A PIC и 8253/8254 PIT;
 - PS/2-клавиатура и мышь;
-- PATA/IDE в PIO-режиме;
+- PATA/IDE: общий PIO fallback и PCI bus-master MWDMA;
 - MBR и существующая файловая система ReBSD;
 - статические ELF32 i386 executables;
 - GCC/binutils из `/Users/sash/Library/i686-toolchain`;
 - kernel и userland собираются GCC; PCC не меняется и не входит в i686-порт.
 
-В завершённый первый boot-этап не входили: UEFI, SMP/APIC, ACPI
+В завершённый первый boot-этап исторически не входили: UEFI, SMP/APIC, ACPI
 resource/routing tables, USB, SATA/AHCI, DMA для IDE, графический
 framebuffer, динамическая линковка, PCC и поддержка 386/486/586.
+USB и IDE DMA добавлены последующими общими этапами, описанными выше.
 USB Mass Storage теперь является обязательным последующим этапом по плану
 выше, а не исключённой возможностью порта.
 
@@ -1341,12 +1374,11 @@ stepping и дополнительные PCI-карты ещё надо снят
 - PCI-to-IDE controller, PIO modes 0–4, primary IRQ 14, secondary IRQ 15;
 - PC100/PC133 SDRAM, BIOS memory autoconfiguration.
 
-Первый порт намеренно использует только общие PC-интерфейсы, одинаковые для
-QEMU и IBM: 8259A, PIT, PS/2, COM1, VGA text buffer и legacy IDE PIO ports.
-AGP configuration и vendor-specific VIA bus-master DMA не нужны для boot и
-добавляются только после стабильной загрузки с IDE. На первом hardware boot
-IDE используется в BIOS compatibility mode через primary `0x1F0`/IRQ14 и
-secondary `0x170`/IRQ15.
+Первый hardware boot намеренно использовал только общие PC-интерфейсы,
+одинаковые для QEMU и IBM: 8259A, PIT, PS/2, COM1, VGA text buffer и legacy
+IDE PIO ports. После стабильного PIO gate общий PCI IDE driver добавил PIIX
+и VIA bus-master MWDMA, сохранив primary `0x1F0`/IRQ14 compatibility mode и
+PIO fallback. AGP configuration по-прежнему не включён.
 
 Stock QEMU не эмулирует точный VIA 694X/596B planar. Референсный профиль
 `pc-i440fx-9.2,pentium3` проверяет общий legacy PC слой; отдельный
@@ -1521,7 +1553,7 @@ vmspace access без прямого разыменования user VA из rin
 2. i8042 transport; общие PS/2 keyboard/mouse decoders.
 3. RTC CMOS для wall clock.
 4. PCI configuration mechanism #1 только как инфраструктура обнаружения.
-5. PIIX PATA/IDE, сначала PIO polling, затем IRQ mode.
+5. Общий PIIX/VIA PATA/IDE: PIO fallback и IRQ-driven bus-master MWDMA.
 6. Подключение IDE к существующему `sys/disk` backend contract.
 7. MBR partition discovery и root filesystem с IDE-диска.
 8. NE2000/RTL8139 — после стабильного storage и VM.
@@ -1602,8 +1634,9 @@ script должен иметь безопасный fallback на `qemu32`.
    остаётся основным машинно-читаемым test channel.
 
 7. **Различие QEMU и IBM chipset.** QEMU PIIX и IBM VIA 596B имеют разные
-   PCI IDs, поэтому первый IDE backend работает через legacy compatibility
-   ports, а PCI bus-master DMA остаётся отдельной поздней задачей.
+   PCI IDs. Общий IDE backend сохраняет legacy compatibility task-file ports,
+   но программирует отдельные PIIX/VIA timing registers и общий PCI
+   bus-master interface; оба режима обязаны сохранять PIO fallback.
 
 ## 8. Выполненные и ближайший исполнимый инкременты
 

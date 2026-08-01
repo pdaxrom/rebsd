@@ -296,6 +296,24 @@ i386_pci_bus(void)
     return i386_pci.pb_attached ? &i386_pci : 0;
 }
 
+const struct pci_device *
+i386_pci_ide_device(void)
+{
+    if (!i386_pci_inventory_valid ||
+        !i386_pci_last_inventory.have_ide)
+        return 0;
+    return &i386_pci_last_inventory.ide;
+}
+
+const struct pci_device *
+i386_pci_isa_device(void)
+{
+    if (!i386_pci_inventory_valid ||
+        !i386_pci_last_inventory.have_isa)
+        return 0;
+    return &i386_pci_last_inventory.isa;
+}
+
 static void
 i386_pci_print_id(const char *label, const struct pci_device *function)
 {

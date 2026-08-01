@@ -20,6 +20,7 @@ kernel/clock_subr.c             standard
 kernel/todr.c                   standard
 rtc/mc146818.c                  optional i386_rtc
 pci/pci.c                       optional pc
+pci/pciide.c                    optional pc disk dma
 pci/rtl8169.c                   optional rtl8169
 pci/if_re.c                     optional rtl8169
 netinet/if_ether.c              optional ether

@@ -177,7 +177,8 @@ I386_RUNTIME_OBJS = divdi3.o divmoddi4.o moddi3.o udivdi3.o \
 KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    early_console.o interrupt.o tss.o syscall.o \
                    signal.o user_return.o trap.o \
-                   pic.o pit.o pci_core.o i386_pci.o rtl8169_hw.o if_re.o \
+                   pic.o pit.o pci_core.o pciide.o i386_pci.o \
+                   rtl8169_hw.o if_re.o \
                    ide.o memory.o paging.o \
                    libkern.o cons.o subr_dma.o clock_subr.o todr.o \
                    mc146818.o i386_rtc.o \
@@ -221,6 +222,7 @@ $(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
 .DEFAULT_GOAL := all
 
 .PHONY: all kernel bios-image toolchain-check rootfs-smoke ide-smoke \
+	ide-pio-smoke ide-dma-smoke ide-auto-smoke \
 	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
 	usb-mass-storage-smoke bios-usb-mass-storage-smoke \
 	usb-mass-storage-ide-absent-smoke \
@@ -558,6 +560,13 @@ pci_core.o: $(I386_PCI_SRC)/pci.c $(I386_PCI_SRC)/pci.h \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+pciide.o: $(I386_PCI_SRC)/pciide.c $(I386_PCI_SRC)/pciide.h \
+	    $(I386_PCI_SRC)/pci.h $(I386_DISK_SRC)/disk.h \
+	    $(TOPSRC)/sys/include/dma.h $(TOPSRC)/sys/include/errno.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 i386_pci.o: $(I386_PC_SRC)/pci.c $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/io.h $(I386_SRC)/include/pci.h \
 	    $(I386_PCI_SRC)/pci.h $(TOPSRC)/sys/vm/pmap.h \
@@ -662,7 +671,8 @@ usb_pci.o: $(I386_PC_SRC)/usb_pci.c \
 	    -c $< -o $@
 
 ide.o: $(I386_PC_SRC)/ide.c $(I386_SRC)/include/boot.h \
-	    $(I386_SRC)/include/ide.h $(I386_SRC)/include/io.h \
+	    $(I386_SRC)/include/ide.h $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/pci.h $(I386_PCI_SRC)/pciide.h \
 	    $(I386_DISK_SRC)/disk.h $(TOPSRC)/sys/include/errno.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
@@ -1218,6 +1228,24 @@ ide-smoke: rebsd-i686.bzimg rootfs.img
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk rootfs.img
+
+ide-auto-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --ata-mode auto
+
+ide-pio-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --ata-mode pio
+
+ide-dma-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --ata-mode dma
 
 run run-serial: rebsd-i686.bzimg
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \

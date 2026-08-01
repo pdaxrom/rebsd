@@ -30,6 +30,7 @@ void i386_early_putc(char ch);
 void i386_early_puts(const char *text);
 void i386_early_put_hex32(i386_u32 value);
 void i386_early_put_hex64(i386_u32 high, i386_u32 low);
+const char *i386_boot_command_line(void);
 
 void i386_boot_main(i386_u32 boot_params_phys)
     __attribute__((noreturn));

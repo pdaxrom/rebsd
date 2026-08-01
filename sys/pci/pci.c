@@ -406,6 +406,31 @@ pci_map_bar(const struct pci_device *device, unsigned bar, size_t minimum_size,
 }
 
 int
+pci_map_fixed_resource(const struct pci_device *device,
+    enum pci_resource_type type, unsigned long long address, size_t size,
+    struct pci_resource *resource)
+{
+    u_long handle;
+    int error;
+
+    if (device == 0 || device->pd_bus == 0 || resource == 0 || size == 0 ||
+        (type != PCI_RESOURCE_IO && type != PCI_RESOURCE_MEMORY))
+        return EINVAL;
+    error = device->pd_bus->pb_ops->pbo_map_resource(
+        device->pd_bus->pb_cookie, type, address, size, &handle);
+    if (error != 0)
+        return error;
+    resource->pr_bus = device->pd_bus;
+    resource->pr_type = type;
+    resource->pr_bar = 0xffffffffu;
+    resource->pr_prefetchable = 0;
+    resource->pr_address = address;
+    resource->pr_size = size;
+    resource->pr_handle = handle;
+    return 0;
+}
+
+int
 pci_interrupt_establish(const struct pci_device *device,
     pci_interrupt_handler_t handler, void *arg)
 {
