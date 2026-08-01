@@ -277,9 +277,9 @@ void ptime(struct psout *a)
     time_t  tm;
 
     tm = (a->o_utime + a->o_stime + 30) / hz;
-    printf("%3ld:",tm / 60);
+    printf("%3lld:", (long long)(tm / 60));
     tm %= 60;
-    printf(tm < 10 ? "0%ld" : "%ld",tm);
+    printf(tm < 10 ? "0%lld" : "%lld", (long long)tm);
 }
 
 char *uhdr = "USER       PID NICE SZ TTY  TIME";

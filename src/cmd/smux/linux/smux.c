@@ -161,8 +161,8 @@ int main(int argc, char *argv[])
     fd_set rfd;
     fd_set efd;
     struct timeval tv;
-    unsigned int doping = time(NULL) + 5;
-    unsigned int nextping = time(NULL) + 10;
+    time_t doping = time(NULL) + 5;
+    time_t nextping = time(NULL) + 10;
     int sockfd;
     struct sockaddr_in sa;
     int infd;

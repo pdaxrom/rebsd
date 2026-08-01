@@ -5,6 +5,7 @@
  */
 #include	<stdio.h>
 #include	<stdlib.h>
+#include	<time.h>
 #include	"deck.h"
 
 /*
@@ -14,9 +15,7 @@ void makedeck(
     CARD	d[])
 {
 	register  int		i, j, k;
-	long			time(long *);
-
-	i = time( (long *) 0 );
+	i = (int)time(NULL);
 	i = ( (i&0xff) << 8 ) | ( (i >> 8)&0xff ) | 1;
 	srand( i );
 	k = 0;

@@ -45,7 +45,7 @@ char	*argv[];
 	char *ptr;
 	char *fullpath;
 	int 	duration;
-	char	count_str[6], start_str[12], path_str[81], *dur_str;
+	char	count_str[6], start_str[24], path_str[81], *dur_str;
 	time_t	start_time, this_time;
 
 #ifdef DEBUG
@@ -77,12 +77,12 @@ char	*argv[];
 		duration = atoi(argv[2]);
 		dur_str = argv[2];
 		iter = (unsigned long)atoi(argv[3]); /* where are we now ? */
-		sscanf(argv[4], "%lu", &start_time);
+		sscanf(argv[4], "%lld", &start_time);
 		fullpath = argv[0];
 		}
 
 	sprintf(count_str, "%lu", ++iter); /* increment the execl counter */
-	sprintf(start_str, "%lu", start_time);
+	sprintf(start_str, "%lld", (long long)start_time);
 	time(&this_time);
 	if (this_time - start_time >= duration) { /* time has run out */
 		fprintf(stderr, "%lu loops\n", iter);

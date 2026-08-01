@@ -19,30 +19,19 @@
         *cp               = n % 10 + '0';      \
     }
 
-static char pattern[] = "00-Mon-1900 00:00:00";
-
-char *timestr(long tim)
+char *timestr(time_t tim)
 {
-    struct tm *t     = localtime(&tim);
-    register char *p = pattern;
+    static char result[21];
+    static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    struct tm *t = localtime(&tim);
 
-    STOREINT(p, t->tm_mday);
-    if (*p == '0')
-        *p = ' ';
-
-    strncpy(p + 3, &"JanFebMarAprMayJunJulAugSepOctNovDec"[t->tm_mon * 3], 3);
-    STOREINT(p + 9, t->tm_year);
-    if (t->tm_year < 100) {
-        p[7] = '1';
-        p[8] = '9';
-    } else {
-        p[7] = '2';
-        p[8] = '0';
-    }
-    STOREINT(p + 12, t->tm_hour);
-    STOREINT(p + 15, t->tm_min);
-    STOREINT(p + 18, t->tm_sec);
-    return (p);
+    if (t == NULL || t->tm_mon < 0 || t->tm_mon > 11 ||
+        t->tm_year < -1900 || t->tm_year > 8099)
+        return (NULL);
+    snprintf(result, sizeof(result), "%2d-%.3s-%04d %02d:%02d:%02d",
+             t->tm_mday, &months[t->tm_mon * 3], t->tm_year + 1900,
+             t->tm_hour, t->tm_min, t->tm_sec);
+    return (result);
 }
 
 char *getmachine()

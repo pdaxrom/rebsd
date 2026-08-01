@@ -60,7 +60,7 @@ gtime(ap)
             return(-1);
     }
 
-    L = localtime((time_t *)&tv.tv_sec);
+    L = localtime(&tv.tv_sec);
     year = L->tm_year;          /* defaults */
     month = L->tm_mon + 1;
     day = L->tm_mday;
@@ -179,7 +179,7 @@ main(argc,argv)
     if (!uflag) {       /* convert to GMT assuming local time */
         tv.tv_sec += (long)tz.tz_minuteswest * SECS_PER_MIN;
                 /* now fix up local daylight time */
-        if (localtime((time_t *)&tv.tv_sec)->tm_isdst)
+        if (localtime(&tv.tv_sec)->tm_isdst)
             tv.tv_sec -= SECS_PER_HOUR;
     }
     if (nflag || 1 /*!netsettime(tv)*/) {
@@ -191,7 +191,7 @@ main(argc,argv)
         if ((wf = open(_PATH_WTMP, O_WRONLY | O_APPEND)) < 0)
             fputs("date: can't write wtmp file.\n",stderr);
         else {
-            (void)time((time_t *)&wtmp[1].ut_time);
+            (void)time(&wtmp[1].ut_time);
             /*NOSTRICT*/
             (void)write(wf,(char *)wtmp,sizeof(wtmp));
             (void)close(wf);
@@ -209,13 +209,13 @@ display:
         exit(1);
     }
     if (uflag) {
-        ap = asctime(gmtime((time_t *)&tv.tv_sec));
+        ap = asctime(gmtime(&tv.tv_sec));
         tzn = "GMT";
     }
     else {
         struct tm   *tp;
 
-        tp = localtime((time_t *)&tv.tv_sec);
+        tp = localtime(&tv.tv_sec);
         ap = asctime(tp);
         tzn = tp->tm_zone;
     }

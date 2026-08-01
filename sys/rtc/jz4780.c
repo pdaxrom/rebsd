@@ -94,6 +94,8 @@ jz_settime(struct todr_chip_handle *handle,
     error = clock_ymdhms_to_secs(dt, &seconds);
     if (error != 0)
         return error;
+    if (seconds < 0 || (unsigned long long)seconds > 0xffffffffull)
+        return EOVERFLOW;
     sc = (struct jz4780_rtc_softc *)handle->todr_cookie;
     error = jz_write(sc, JZ_RTC_SECONDS, (unsigned)seconds);
     if (error != 0)

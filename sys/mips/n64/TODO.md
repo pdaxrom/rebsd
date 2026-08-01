@@ -54,7 +54,7 @@ N64cart ROMFS, USB CDC ECM networking, and polling UART.
 - [x] Hardware-smoke the shared rootfs overlay on N64 after moving it to
   `sys/mips/rootfs`: `smoke-as-vr4300`, `matrix-as-vr4300`,
   `/root/types-smoke.sh`, `/root/ll-smoke.sh`, `/root/ll-abi-smoke.sh`,
-  `/root/cc-pcc-smoke.sh`, `mount`, `df`, `w`, `ps aux`, `/sbin/pstat -T`,
+  `/root/cc-pcc-smoke.sh`, `mount`, `df`, `w`, `ps aux`, `/usr/sbin/pstat -T`,
   and `/root/romfs-smoke.sh` all passed.
 - [x] Fix incremental N64 rootfs staging so legacy `/share` install
   directories are recreated before every userland install; repeated
@@ -357,7 +357,7 @@ the board-specific generated/appended manifest.
   `tcl`.
 - [x] Include all files installed by the selected shared command makefiles that
   are needed for the normal rootfs rather than leaving staged artifacts out of
-  `rootfs.img`: PCC `cc`/`cpp` aliases, `/usr/bin/sysctl`, `/sbin/updatedb`,
+  `rootfs.img`: PCC `cc`/`cpp` aliases, `/usr/bin/sysctl`, `/usr/sbin/updatedb`,
   `/usr/libexec/bigram`, `/usr/libexec/code`, generated `/usr/include`
   headers, `/usr/lib` compiler runtime archives, `/bin/cpp`, and
   `/usr/libexec/pcc/ccom`.
@@ -689,8 +689,8 @@ the board-specific generated/appended manifest.
   than a preferred new N64 ABI.
 - [x] Move N64 kernel namelist export to the shared MIPS `CPU_NLIST` sysctl
   path. `knlist(3)` now works without a `/vmunix` file, and Malta QEMU smoke
-  covers `w`, `ps ax`, `vmstat`, `vmstat -f`, `/sbin/pstat -T`, and
-  `/sbin/pstat -p`.
+  covers `w`, `ps ax`, `vmstat`, `vmstat -f`, `/usr/sbin/pstat -T`, and
+  `/usr/sbin/pstat -p`.
 - [x] Keep `ucall`, `ufetch`, and `ustore` as `ENOSYS` on N64; the PIC32
   implementation is board/autoconfig-specific and should not be reused as an
   N64 ABI

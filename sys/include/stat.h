@@ -26,37 +26,13 @@ struct  stat
     long    st_blksize;
     long    st_blocks;
     u_int   st_flags;
+    int32_t st_spare2;      /* fixes the native time64 ABI size at 80 bytes */
 };
 
-#if defined(__mips__) || defined(MIPS)
-typedef char stat_layout_must_remain_64_bytes[
-    sizeof(struct stat) == 64 ? 1 : -1];
+#if defined(__mips__) || defined(MIPS) || defined(__i386__) || defined(I386)
+typedef char stat_time64_layout_must_remain_80_bytes[
+    sizeof(struct stat) == 80 ? 1 : -1];
 #endif
-
-/*
- * Layout returned by the original 32-bit stat syscalls.  Keep this fixed so
- * binaries built before off_t became 64 bits retain their kernel ABI.
- */
-struct stat32
-{
-    int32_t  st_dev;
-    uint32_t st_ino;
-    uint32_t st_mode;
-    int32_t  st_nlink;
-    uint32_t st_uid;
-    uint32_t st_gid;
-    int32_t  st_rdev;
-    int32_t  st_size;
-    int32_t  st_atime;
-    int32_t  st_mtime;
-    int32_t  st_ctime;
-    int32_t  st_blksize;
-    int32_t  st_blocks;
-    uint32_t st_flags;
-};
-
-typedef char stat32_layout_must_remain_56_bytes[
-    sizeof(struct stat32) == 56 ? 1 : -1];
 
 #define S_IFMT  0170000         /* type of file */
 #define     S_IFDIR 0040000     /* directory */

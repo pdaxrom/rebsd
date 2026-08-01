@@ -11,7 +11,8 @@
 
 void printt(char *s, struct timeval *tv)
 {
-    fprintf(stderr, "%9ld.%01ld %s ", tv->tv_sec, tv->tv_usec / 100000, s);
+    fprintf(stderr, "%9lld.%01ld %s ", (long long)tv->tv_sec,
+            tv->tv_usec / 100000, s);
 }
 
 int main(int argc, char **argv)

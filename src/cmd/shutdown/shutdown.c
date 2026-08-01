@@ -186,7 +186,7 @@ int main(
 		fprintf(stderr, "NOT super-user\n");
 		finish(0);
 	}
-	nowtime = time((long *)0);
+	nowtime = time(NULL);
 	sdt = getsdt(argv[0]);
 	argc--, argv++;
 	nolog2[0] = '\0';
@@ -239,7 +239,7 @@ int main(
 		}
 		if (sint >= stogo || sint == 0)
 			f = "FINAL ";
-		nowtime = time((long *)0);
+		nowtime = time(NULL);
 		(void) lseek(ufd, 0L, 0);
 		while (read(ufd,(char *)&utmp,sizeof utmp)==sizeof utmp)
 		if (utmp.ut_name[0] &&
@@ -308,7 +308,7 @@ int main(
 #endif
 			finish(0);
 		}
-		stogo = sdt - time((long *) 0);
+		stogo = sdt - time(NULL);
 		if (stogo > 0 && sint > 0)
 			sleep((unsigned)(sint<stogo ? sint : stogo));
 		stogo -= sint;
@@ -338,7 +338,7 @@ getsdt(
 		if (t <= 0)
 			t = 5;
 		t *= 60;
-		tim = time((long *) 0) + t;
+		tim = time(NULL) + t;
 		return(tim);
 	}
 	t = 0;
@@ -356,7 +356,7 @@ getsdt(
 		goto badform;
 	tim += t;
 	tim *= 60;
-	t1 = time((long *) 0);
+	t1 = time(NULL);
 	lt = localtime(&t1);
 	t = lt->tm_sec + lt->tm_min*60 + (long)lt->tm_hour*3600;
 	if (tim < t || tim >= ((long)24*3600)) {

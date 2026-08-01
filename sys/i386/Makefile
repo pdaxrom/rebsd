@@ -21,6 +21,7 @@ I386_INPUT_SRC   = $(TOPSRC)/sys/input
 I386_PCI_SRC     = $(TOPSRC)/sys/pci
 I386_USB_SRC     = $(TOPSRC)/sys/usb
 I386_RTC_SRC     = $(TOPSRC)/sys/rtc
+I386_RUNTIME_SRC = $(TOPSRC)/src/libc/runtime
 I386_VM_SRC      = $(TOPSRC)/sys/vm
 I386_NET_SRC     = $(TOPSRC)/sys/net
 I386_NETINET_SRC = $(TOPSRC)/sys/netinet
@@ -170,6 +171,8 @@ INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
                    ip_output.o raw_ip.o tcp_debug.o tcp_input.o \
                    tcp_output.o tcp_subr.o tcp_timer.o tcp_usrreq.o \
                    udp_usrreq.o in_cksum.o net_glue.o netinit.o
+I386_RUNTIME_OBJS = divdi3.o divmoddi4.o moddi3.o udivdi3.o \
+                    udivmoddi4.o umoddi3.o
 KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    early_console.o interrupt.o tss.o syscall.o \
                    signal.o user_return.o trap.o \
@@ -208,7 +211,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    config.o ioconf.o swapunix.o sysctl.o \
                    vm_param.o \
                    vm_phys.o vm_page.o vm_phys_board.o pmap.o \
-                   $(VM_CORE_OBJS) $(INET_OBJS) \
+                   $(VM_CORE_OBJS) $(INET_OBJS) $(I386_RUNTIME_OBJS) \
                    vmspace_bootstrap.o boot_main.o
 
 $(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
@@ -312,6 +315,7 @@ $(I386_ROOTFS_STAGE)/.base: $(I386_ROOTFS_COMMON_FILES) \
 	    $(I386_ROOTFS_STAGE)/share/man/cat8 \
 	    $(I386_ROOTFS_STAGE)/usr/include \
 	    $(I386_ROOTFS_STAGE)/usr/bin \
+	    $(I386_ROOTFS_STAGE)/usr/sbin \
 	    $(I386_ROOTFS_STAGE)/usr/libexec \
 	    $(I386_ROOTFS_STAGE)/usr/share/man/cat1 \
 	    $(I386_ROOTFS_STAGE)/usr/share/man/cat5 \
@@ -433,6 +437,10 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_STAGE)/.base \
 $(I386_ROOTFS_STAGE)/.userland: $(I386_ROOTFS_STAGE)/.base \
 	    $(I386_USERLAND_STAMP)
 	test -x $(I386_ROOTFS_STAGE)/sbin/init
+	for bin in $(REBSD_ROOTFS_USR_SBIN_FILES); do \
+	    test -x $(I386_ROOTFS_STAGE)/usr/sbin/$$bin; \
+	    test ! -e $(I386_ROOTFS_STAGE)/sbin/$$bin; \
+	done
 	test -x $(I386_ROOTFS_STAGE)/bin/sh
 	test -x $(I386_ROOTFS_STAGE)/libexec/getty
 	test -x $(I386_ROOTFS_STAGE)/bin/login
@@ -613,6 +621,13 @@ kbdmap.o ps2.o mouse.o: %.o: $(I386_INPUT_SRC)/%.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
+
+$(I386_RUNTIME_OBJS): %.o: $(I386_RUNTIME_SRC)/%.c \
+	    $(I386_RUNTIME_SRC)/int_lib.h $(I386_RUNTIME_SRC)/int_types.h \
+	    $(I386_RUNTIME_SRC)/int_util.h $(I386_RUNTIME_SRC)/int_div_impl.inc \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -I$(I386_RUNTIME_SRC) -c $< -o $@
 
 i8042.o: $(I386_PC_SRC)/i8042.c \
 	    $(I386_SRC)/include/i8042.h \

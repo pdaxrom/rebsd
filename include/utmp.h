@@ -19,11 +19,13 @@
 #define UT_LINESIZE 8
 #define UT_HOSTSIZE 16
 
+#include <sys/types.h>
+
 struct utmp {
     char    ut_line[UT_LINESIZE];
     char    ut_name[UT_NAMESIZE];
     char    ut_host[UT_HOSTSIZE];
-    long    ut_time;
+    time_t  ut_time;
 };
 
 void login(struct utmp *ut);

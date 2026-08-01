@@ -321,7 +321,7 @@ The MIPS rootfs includes the first network userland set:
 - `/usr/bin/wget`
 - `/usr/bin/telnet`
 - `/usr/libexec/telnetd`
-- `/sbin/inetd`
+- `/usr/sbin/inetd`
 
 `dhclient` writes `/var/run/dhclient.lease` and `/var/run/resolv.conf`; the
 rootfs keeps `/etc/resolv.conf` as a symlink to the writable resolver file.
@@ -507,7 +507,7 @@ current N64 work is staged as follows:
 - on 2026-06-25, the shared `sys/mips/rootfs` overlay move was smoke-tested on
   real N64 hardware: `smoke-as-vr4300`, `matrix-as-vr4300`,
   `/root/types-smoke.sh`, `/root/ll-smoke.sh`, `/root/ll-abi-smoke.sh`,
-  `/root/cc-pcc-smoke.sh`, `mount`, `df`, `w`, `ps aux`, `/sbin/pstat -T`,
+  `/root/cc-pcc-smoke.sh`, `mount`, `df`, `w`, `ps aux`, `/usr/sbin/pstat -T`,
   and `/root/romfs-smoke.sh` all passed;
 - on 2026-07-06, the UART-only boot isolation ROMs all booted on real N64
   hardware: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap. These builds
@@ -1609,7 +1609,7 @@ The kernel symbol lookup for those tools goes through the shared MIPS
 N64 and Malta therefore use the same `sys/mips/common/sysctl.c` symbol export
 table for `_proc`, `_nproc`, `_inode`, `_file`, `_cp_time`, `_sum`, and related
 diagnostic variables. Malta QEMU smoke-testing should include `w`, `ps ax`,
-`vmstat`, `vmstat -f`, `/sbin/pstat -T`, and `/sbin/pstat -p` before trying the
+`vmstat`, `vmstat -f`, `/usr/sbin/pstat -T`, and `/usr/sbin/pstat -p` before trying the
 same ROM on real N64 hardware.
 
 The shared rootfs also includes `/root/runtime-stress.sh` for multi-hour

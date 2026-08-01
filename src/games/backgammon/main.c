@@ -112,7 +112,7 @@ main (
 	register int	i;		/* non-descript index */
 	register int	l;		/* non-descript index */
 	register char	c;		/* non-descript character storage */
-	long	t;                      /* time for random num generator */
+	time_t	t;                    /* time for random num generator */
 
 	/* initialization */
 	bflag = 2;					/* default no board */

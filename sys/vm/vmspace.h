@@ -67,8 +67,8 @@ int vmspace_map_anon_fixed(struct vmspace *, vm_vaddr_t, vm_size_t,
     vm_prot_t, unsigned);
 int vmspace_unmap(struct vmspace *, vm_vaddr_t, vm_size_t);
 int vmspace_sysv_attach(struct vmspace *, struct vm_sysv_shm *,
-    vm_vaddr_t, vm_size_t, int, long);
-int vmspace_sysv_detach(struct vmspace *, vm_vaddr_t, int, long);
+    vm_vaddr_t, vm_size_t, int, int64_t);
+int vmspace_sysv_detach(struct vmspace *, vm_vaddr_t, int, int64_t);
 int vmspace_protect(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vmspace_wire(struct vmspace *, vm_vaddr_t, vm_size_t, int);
 int vmspace_mincore(const struct vmspace *, vm_vaddr_t, int *);

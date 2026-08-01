@@ -255,8 +255,8 @@ close()
     /* WHAT IF u.u_error ? */
 }
 
-static void
-fstat1(int wide)
+void
+fstat()
 {
     register struct file *fp;
     register struct a {
@@ -292,31 +292,9 @@ fstat1(int wide)
         u.u_error = EINVAL;
         break;
     }
-    if (u.u_error == 0) {
-        if (wide) {
-            u.u_error = copyout((caddr_t)&ub, (caddr_t)uap->sb,
-                sizeof (ub));
-        } else {
-            struct stat32 ub32;
-
-            u.u_error = stat_to_stat32(&ub, &ub32);
-            if (u.u_error == 0)
-                u.u_error = copyout((caddr_t)&ub32, (caddr_t)uap->sb,
-                    sizeof (ub32));
-        }
-    }
-}
-
-void
-fstat()
-{
-    fstat1(0);
-}
-
-void
-fstat64()
-{
-    fstat1(1);
+    if (u.u_error == 0)
+        u.u_error = copyout((caddr_t)&ub, (caddr_t)uap->sb,
+            sizeof (ub));
 }
 
 struct  file *lastf;

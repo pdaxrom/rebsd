@@ -30,6 +30,10 @@ The kern.buildinfo node is the convenient multi-line summary. The build
 number defaults to 1 and may be set with REBSD_BUILD_NUMBER; reproducible
 builds may supply REBSD_BUILD_DATE.
 
+All supported 32-bit architectures use the native signed 64-bit `time_t` ABI.
+The ABI and the unchanged legacy UFS disk-format boundary are documented in
+[docs/TIME64.md](docs/TIME64.md).
+
 ## Source Roadmap
 
     bin         User commands.

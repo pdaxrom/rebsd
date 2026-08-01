@@ -52,7 +52,7 @@ do
 		ps ax >/dev/null || exit 1
 		vmstat >/dev/null || exit 1
 		w >/dev/null || exit 1
-		/sbin/pstat -T >/dev/null || exit 1
+		/usr/sbin/pstat -T >/dev/null || exit 1
 
 		if false; then
 			echo "runtime-stress: false returned success" >&2

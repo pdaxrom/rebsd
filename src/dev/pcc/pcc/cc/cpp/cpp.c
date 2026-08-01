@@ -395,8 +395,8 @@ main(int argc, char **argv)
 		t2.tv_usec += 1000000;
 		t2.tv_sec -= 1;
 	}
-	fprintf(stderr, "cpp total time: %ld s %ld us\n",
-	     (long)t2.tv_sec, (long)t2.tv_usec);
+	fprintf(stderr, "cpp total time: %lld s %ld us\n",
+	     (long long)t2.tv_sec, t2.tv_usec);
 #endif
 	if (Eflag && warnings > 0)
 		return 2;
@@ -2327,7 +2327,13 @@ prline(const usch *s)
 void
 cntline(void)
 {
-	if (skpows < 10)
+	/*
+	 * With -P there is no #line directive to stand in for a long run of
+	 * newlines.  Calling prtline() would feed one newline back through
+	 * putch(), where it remains pending until skpows is cleared below and
+	 * adjacent tokens can consequently be joined.
+	 */
+	if (skpows < 10 || Pflag)
 		for (; skpows > 0; skpows--)
 			putchar('\n');
 	else

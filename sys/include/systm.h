@@ -239,7 +239,6 @@ int     ino_rwat (struct file *, struct uio *);
 void    chdir (void), fchdir (void), chroot (void);
 void    mkdir (void), rmdir (void), chflags (void), fchflags (void);
 void    open (void), mknod (void), unlink (void), stat (void), fstat (void), lstat (void);
-void    stat64 (void), fstat64 (void), lstat64 (void);
 void    chown (void), fchown (void), chmod (void), fchmod (void), utimes (void);
 void    link (void), symlink (void), readlink (void), rename (void);
 void    lseek (void), truncate (void), ftruncate (void), saccess (void), fsync (void);
@@ -255,10 +254,6 @@ void    sendmsg (void), recvmsg (void), shutdown (void), setsockopt (void), gets
 void    getsockname (void), getpeername (void), pipe (void);
 
 void    umask (void);           /* XXX */
-
-struct stat;
-struct stat32;
-int     stat_to_stat32 (const struct stat *, struct stat32 *);
 
 /* 2.4 processes */
 void    ptrace (void);

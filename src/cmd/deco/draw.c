@@ -109,7 +109,7 @@ void drawbanners()
     VPutChar('.');
     if (group)
         VPutString(group);
-    if ((curtime = timestr(time((long *)0))))
+    if ((curtime = timestr(time(NULL))))
         VMPutString(0, COLS - 1 - strlen(curtime), curtime);
     VStandEnd();
     VMPutString(LINES - 1, 0,

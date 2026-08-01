@@ -403,6 +403,7 @@ int isfrom(char *lp)
 void bulkmail(int argc, char **argv)
 {
     char *truename;
+    time_t now;
     int first;
     char *cp;
     char *newargv[1000];
@@ -474,8 +475,8 @@ void bulkmail(int argc, char **argv)
         usage();
     if (truename == 0)
         truename = my_name;
-    time(&iop);
-    fprintf(tmpf, "%s%s %s", from, truename, ctime(&iop));
+    time(&now);
+    fprintf(tmpf, "%s%s %s", from, truename, ctime(&now));
     iop = ftell(tmpf);
     flgf = first = 1;
     for (;;) {

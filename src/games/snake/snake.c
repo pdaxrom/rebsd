@@ -90,7 +90,7 @@ char *p;
 char ch, savec;
 char *kl, *kr, *ku, *kd;
 int repeat=1;
-long tv;
+time_t tv;
 char *tn;
 
 int mx [8] = {
@@ -440,7 +440,7 @@ logit(
 char *msg)
 {
 	FILE *logfile;
-	long t;
+	time_t t;
 
 	if ((logfile=fopen(LOGFILE, "a")) != NULL) {
 		time(&t);

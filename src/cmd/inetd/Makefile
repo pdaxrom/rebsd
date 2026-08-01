@@ -29,7 +29,7 @@ $(MAN): $(MANSRC)
 
 install: all
 	cp $(MAN) $(DESTDIR)/share/man/cat8/
-	install -m 755 $(BIN) $(DESTDIR)/sbin
+	install -m 755 $(BIN) $(DESTDIR)/usr/sbin
 
 clean:
 	rm -f *.o *.elf $(BIN) $(MAN) *.dis

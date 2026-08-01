@@ -273,7 +273,7 @@ main(argc, argv)
 		exit(1);
 	}
 	if (!(options & F_PINGFILLED))
-		for (i = 8; i < datalen; ++i)
+		for (i = sizeof(struct timeval); i < datalen; ++i)
 			*datap++ = i;
 
 	ident = getpid() & 0xFFFF;
@@ -399,9 +399,9 @@ catcher()
  * pinger --
  *	Compose and transmit an ICMP ECHO REQUEST packet.  The IP packet
  * will be added on by the kernel.  The ID field is our UNIX process ID,
- * and the sequence number is an ascending integer.  The first 8 bytes
- * of the data portion are used to hold a UNIX "timeval" struct in VAX
- * byte-order, to compute the round-trip time.
+ * and the sequence number is an ascending integer.  The first
+ * sizeof(struct timeval) bytes of the data portion hold the send time,
+ * which is echoed back to compute the round-trip time.
  */
 pinger()
 {
@@ -523,15 +523,16 @@ pr_pack(buf, cc, from)
 			if (dupflag)
 				(void)printf(" (DUP!)");
 			/* check the data */
-			cp = (u_char*)&icp->icmp_data[8];
+			cp = (u_char *)&icp->icmp_data[sizeof(struct timeval)];
 			dp = &outpack[8 + sizeof(struct timeval)];
-			for (i = 8; i < datalen; ++i, ++cp, ++dp) {
+			for (i = sizeof(struct timeval); i < datalen;
+			    ++i, ++cp, ++dp) {
 				if (*cp != *dp) {
 	(void)printf("\nwrong data byte #%d should be 0x%x but was 0x%x",
 	    i, *dp, *cp);
 					cp = (u_char*)&icp->icmp_data[0];
-					for (i = 8; i < datalen; ++i, ++cp) {
-						if ((i % 32) == 8)
+					for (i = 0; i < datalen; ++i, ++cp) {
+						if ((i % 32) == 0)
 							(void)printf("\n\t");
 						(void)printf("%x ", *cp);
 					}

@@ -102,6 +102,7 @@ MIPS_ROOTFS_EXTERNAL_IMAGE ?=
 MIPS_ROOTFS_STAGE ?= rootfs.stage
 MIPS_ROOTFS_STAMP = $(MIPS_ROOTFS_USER_STAMP)
 MIPS_ROOTFS_USR_BIN = $(MIPS_ROOTFS_STAGE)/usr/bin
+MIPS_ROOTFS_USR_SBIN = $(MIPS_ROOTFS_STAGE)/usr/sbin
 MIPS_ROOTFS_USR_LIB = $(MIPS_ROOTFS_STAGE)/usr/lib
 MIPS_ROOTFS_USR_LIBEXEC = $(MIPS_ROOTFS_STAGE)/usr/libexec
 MIPS_ROOTFS_USR_INCLUDE = $(MIPS_ROOTFS_STAGE)/usr/include
@@ -975,6 +976,7 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILES) \
 	mkdir -p $(MIPS_ROOTFS_STAGE)/share/man/cat5
 	mkdir -p $(MIPS_ROOTFS_STAGE)/share/man/cat8
 	mkdir -p $(MIPS_ROOTFS_USR_BIN)
+	mkdir -p $(MIPS_ROOTFS_USR_SBIN)
 	mkdir -p $(MIPS_ROOTFS_USR_LIB)
 	mkdir -p $(MIPS_ROOTFS_USR_LIBEXEC)
 	mkdir -p $(MIPS_ROOTFS_USR_SHARE)/misc
@@ -1003,7 +1005,8 @@ $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
 	if [ "$(MIPS_ROOTFS_INSTALL_AWK)" = "1" ]; then \
 	    $(MIPS_AWK_MAKE) install; \
 	fi
-	mkdir -p $(MIPS_ROOTFS_USR_BIN) $(MIPS_ROOTFS_USR_LIB) \
+	mkdir -p $(MIPS_ROOTFS_USR_BIN) $(MIPS_ROOTFS_USR_SBIN) \
+	    $(MIPS_ROOTFS_USR_LIB) \
 	    $(MIPS_ROOTFS_USR_LIB)/$(MIPS_ROOTFS_LDSCRIPTS_DIR) \
 	    $(MIPS_ROOTFS_USR_LIB)/softfloat \
 	    $(MIPS_ROOTFS_USR_LIBEXEC) $(MIPS_ROOTFS_USR_SHARE)
@@ -1020,6 +1023,10 @@ $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
 	    if [ -e $(MIPS_ROOTFS_STAGE)/libexec/$$file ]; then \
 	        mv -f $(MIPS_ROOTFS_STAGE)/libexec/$$file $(MIPS_ROOTFS_USR_LIBEXEC)/$$file; \
 	    fi; \
+	done
+	for bin in $(REBSD_ROOTFS_USR_SBIN_FILES); do \
+	    test -x $(MIPS_ROOTFS_USR_SBIN)/$$bin; \
+	    test ! -e $(MIPS_ROOTFS_STAGE)/sbin/$$bin; \
 	done
 	if [ "$(MIPS_ROOTFS_NATIVE_PCC)" = "1" ]; then \
 	    rm -f $(MIPS_ROOTFS_USR_BIN)/cc $(MIPS_ROOTFS_USR_BIN)/cpp \

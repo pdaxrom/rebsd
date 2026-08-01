@@ -12,7 +12,7 @@ REBSD_ROOTFS_SUBDIRS = cmd
 REBSD_ROOTFS_CMD_SUBDIRS = basic calendar chown chroot compress date2 deco \
     dhclient diff emg env fdisk find fold forth fsck fsck.fat fstat getty \
     gpt hostname id ifconfig inetd init login ls make man md5 med mkfs \
-    mkfs.fat mknod mkpasswd mount more netstat pdc picoc ping printf pstat \
+    mkfs.fat mknod mkpasswd mount more netstat ntpdate pdc picoc ping printf pstat \
     ptytest reboot renice retroforth route sed setty sh shutdown sl smux \
     stty sysctl tcl telnet telnetd test wget umount uname xargs
 # These portable commands are intentionally not part of the historical
@@ -38,6 +38,8 @@ REBSD_ROOTFS_USR_BIN_FILES = apropos awk basename basic cal calendar cb \
     uniq uptime vm-pressure-smoke vmstat w wc wget whatis whereis who whoami \
     xargs zcat
 REBSD_ROOTFS_USR_LIBEXEC_FILES = bigram code
+REBSD_ROOTFS_USR_SBIN_FILES = chown chroot inetd mkpasswd ntpdate pstat \
+    updatedb
 
 REBSD_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col \
     comm compress cp date dd df diff du echo ed expr false file find fold \

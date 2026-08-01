@@ -132,6 +132,8 @@ mc_settime(struct todr_chip_handle *handle, const struct clock_ymdhms *dt)
     error = clock_ymdhms_validate(dt);
     if (error != 0)
         return error;
+    if (dt->dt_year > 2099u)
+        return EOVERFLOW;
     sc = (struct mc146818_softc *)handle->todr_cookie;
     error = mc_wait_update(sc);
     if (error != 0)

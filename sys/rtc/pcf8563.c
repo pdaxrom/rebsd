@@ -85,6 +85,8 @@ pcf8563_settime(struct todr_chip_handle *handle,
     error = clock_ymdhms_validate(dt);
     if (error != 0)
         return error;
+    if (dt->dt_year > 2099u)
+        return EOVERFLOW;
     sc = (struct pcf8563_softc *)handle->todr_cookie;
     data[0] = (unsigned char)clock_bin_to_bcd(dt->dt_sec);
     data[1] = (unsigned char)clock_bin_to_bcd(dt->dt_min);

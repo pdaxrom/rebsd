@@ -443,6 +443,7 @@ int endtape()
 void getdir()
 {
     struct stat *sp;
+    unsigned long long archive_value;
     int i;
 top:
     readtape((char *)&dblock);
@@ -455,8 +456,10 @@ top:
     sp->st_uid = i;
     sscanf(dblock.dbuf.gid, "%o", &i);
     sp->st_gid = i;
-    sscanf(dblock.dbuf.size, "%lo", &sp->st_size);
-    sscanf(dblock.dbuf.mtime, "%lo", &sp->st_mtime);
+    archive_value = strtoull(dblock.dbuf.size, NULL, 8);
+    sp->st_size = (off_t)archive_value;
+    archive_value = strtoull(dblock.dbuf.mtime, NULL, 8);
+    sp->st_mtime = (time_t)archive_value;
     sscanf(dblock.dbuf.chksum, "%o", &chksum);
     if (chksum != (i = checksum())) {
         fprintf(stderr, "tar: directory checksum error (%d != %d)\n", chksum, i);
@@ -936,7 +939,7 @@ void tomodes(struct stat *sp)
     sprintf(dblock.dbuf.gid, "%6o ", sp->st_gid);
     sprintf(dblock.dbuf.size, "%11llo ",
         (unsigned long long)sp->st_size);
-    sprintf(dblock.dbuf.mtime, "%11lo ", sp->st_mtime);
+    sprintf(dblock.dbuf.mtime, "%11llo ", (unsigned long long)sp->st_mtime);
 }
 
 int checksum()
@@ -1000,7 +1003,7 @@ int checkf(char *name, int mode, int howmuch)
 int checkupdate(char *arg)
 {
     char name[100];
-    long mtime;
+    unsigned long long mtime;
     daddr_t seekp;
 
     rewind(tfile);
@@ -1008,8 +1011,8 @@ int checkupdate(char *arg)
         if ((seekp = lookup(arg)) < 0)
             return (1);
         fseek(tfile, seekp, 0);
-        fscanf(tfile, "%s %lo", name, &mtime);
-        return (stbuf.st_mtime > mtime);
+        fscanf(tfile, "%s %llo", name, &mtime);
+        return (stbuf.st_mtime > (time_t)mtime);
     }
 }
 

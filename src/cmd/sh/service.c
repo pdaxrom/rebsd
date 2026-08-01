@@ -532,7 +532,7 @@ void preacct(char *cmdadr)
     char *simple();
 
     if (acctnod.namval && *acctnod.namval) {
-        sabuf.ac_btime = time((long *)NUL);
+        sabuf.ac_btime = (long)time(NULL);
         before = times(&buffer);
         sabuf.ac_uid = getuid();
         sabuf.ac_gid = getgid();

@@ -115,7 +115,7 @@ void log_score(int list_em)
 
 		thisscore.time = clocktick;
 		thisscore.planes = safe_planes;
-		thisscore.real_time = time(0) - start_time;
+		thisscore.real_time = (int)(time(NULL) - start_time);
 
 		for (i = 0; i < num_scores; i++) {
 			if (strcmp(thisscore.name, score[i].name) == 0 &&

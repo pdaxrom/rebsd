@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
     // Storage for all the FDs for the various streams
     int fds[MAXFD];
     fd_set rfd;
-    unsigned int nextping = time(NULL) + 10;
+    time_t nextping = time(NULL) + 10;
     fds[0] = 0;
     int i;
     struct timeval tv;

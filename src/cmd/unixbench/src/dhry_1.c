@@ -38,6 +38,7 @@ char SCCSid[] = "@(#) @(#)dhry_1.c:3.4 -- 5/15/91 19:30:21";
 #include <stdlib.h>
 #include <string.h>
 #include "dhry.h"
+#include <time.h>
 #include "timeit.c"
 
 unsigned long Run_Index;
@@ -81,13 +82,11 @@ extern  int     times ();
                 /* Measurements should last at least about 2 seconds */
 #endif
 #ifdef TIME
-extern long     time();
-                /* see library function "time"  */
 #define Too_Small_Time 2
                 /* Measurements should last at least 2 seconds */
 #endif
 
-long            Begin_Time,
+time_t          Begin_Time,
                 End_Time,
                 User_Time;
 float           Microseconds,
@@ -185,7 +184,7 @@ char	*argv[];
   Begin_Time = (long) time_info.tms_utime;
 #endif
 #ifdef TIME
-  Begin_Time = time ( (long *) 0);
+  Begin_Time = time (NULL);
 #endif
 #endif /* SELF_TIMED */
 
@@ -244,7 +243,7 @@ char	*argv[];
   End_Time = (long) time_info.tms_utime;
 #endif
 #ifdef TIME
-  End_Time = time ( (long *) 0);
+  End_Time = time (NULL);
 #endif
 #endif /* SELF_TIMED */
 
@@ -427,5 +426,4 @@ register int    l;
         while (l--) *d++ = *s++;
 }
 #endif
-
 

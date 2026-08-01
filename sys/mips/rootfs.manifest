@@ -18,6 +18,7 @@ dir /root
 dir /sbin
 dir /usr
 dir /usr/bin
+dir /usr/sbin
 dir /usr/lib
 dir /usr/lib/ldscripts
 dir /usr/lib/deco
@@ -1021,13 +1022,15 @@ file /usr/share/man/cat8/sysctl.0
 
 file /usr/share/man/cat8/umount.0
 
+file /usr/share/man/cat8/ntpdate.0
+
 file /sbin/bootloader
 mode 0775
 
-file /sbin/chown
+file /usr/sbin/chown
 mode 0775
 
-file /sbin/chroot
+file /usr/sbin/chroot
 mode 04751
 
 file /sbin/fastboot
@@ -1051,10 +1054,13 @@ mode 0755
 file /sbin/dhclient
 mode 0775
 
+file /usr/sbin/ntpdate
+mode 0755
+
 file /sbin/ifconfig
 mode 0775
 
-file /sbin/inetd
+file /usr/sbin/inetd
 mode 0775
 
 file /sbin/route
@@ -1078,13 +1084,13 @@ mode 0775
 file /sbin/mknod
 mode 0775
 
-file /sbin/mkpasswd
+file /usr/sbin/mkpasswd
 mode 0775
 
 file /sbin/mount
 mode 0775
 
-file /sbin/pstat
+file /usr/sbin/pstat
 mode 02755
 
 file /sbin/poweroff
@@ -1099,5 +1105,5 @@ mode 04750
 file /sbin/umount
 mode 0775
 
-file /sbin/updatedb
+file /usr/sbin/updatedb
 mode 0775

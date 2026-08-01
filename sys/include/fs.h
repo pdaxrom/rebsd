@@ -6,6 +6,8 @@
 #ifndef _SYS_FS_H_
 #define _SYS_FS_H_
 
+#include <stdint.h>
+
 /*
  * The root inode is the root of the file system.
  * Inode 0 can't be used for normal purposes and
@@ -51,7 +53,7 @@ struct  fs
     int     fs_fmod;                /* super block modified flag */
     int     fs_ilock;               /* lock during i-list manipulation */
     int     fs_ronly;               /* mounted read-only flag */
-    time_t  fs_time;                /* last super block update */
+    int32_t fs_time;                /* legacy on-disk update time */
     u_int   fs_tfree;               /* total free blocks */
     ino_t   fs_tinode;              /* total free inodes */
     char    fs_fsmnt [MAXMNTLEN];   /* ordinary file mounted on */

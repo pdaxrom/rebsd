@@ -41,9 +41,9 @@
 #define _PATH_CTIMED    "/libexec/ctimed"
 #define _PATH_LOCALLIB  "/usr/local/lib/"
 #define _PATH_SBIN      "/sbin/"
-#define _PATH_USRSBIN   "/sbin/"
-#define _PATH_MKPASSWD  "/sbin/mkpasswd"
-#define _PATH_SENDMAIL  "/sbin/sendmail"
+#define _PATH_USRSBIN   "/usr/sbin/"
+#define _PATH_MKPASSWD  "/usr/sbin/mkpasswd"
+#define _PATH_SENDMAIL  "/usr/sbin/sendmail"
 #define _PATH_SHARE     "/usr/share/"
 #define _PATH_ZONEINFO  "/usr/share/zoneinfo"   /* Time zone object file directory */
 #define _PATH_TMP       "/tmp/"

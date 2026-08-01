@@ -307,7 +307,7 @@ N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = basic calendar chown chroot compress date2 deco dhclient diff emg env fbset \
                   fbview find fold forth fsck fstat getty hostname id ifconfig inetd init \
                   aout ar as ld login ls make man md5 med mkfs mknod \
-                  mkpasswd mount more n64input netstat nm pdc picoc ping printf pstat ptytest \
+                  mkpasswd mount more n64input netstat nm ntpdate pdc picoc ping printf pstat ptytest \
                   ranlib reboot renice retroforth rgbled romfsctl route sed setty \
                   sh shutdown sl smux stty sysctl tcl telnet \
                   telnetd test wget umount uname xargs
@@ -964,18 +964,14 @@ CFILES := $(filter-out \
     $S/mips/common/romfs_vfs.c,$(CFILES))
 endif
 
-PCC_KERNEL_RUNTIME_OBJS =
-PCC_KERNEL_RUNTIME_SRCS =
-ifeq ($(N64_KERNEL_COMPILER),pcc)
-include $(TOPSRC)/sys/mips/pcc-kernel-runtime.mk
-endif
+include $(TOPSRC)/sys/mips/kernel-runtime.mk
 
 SYSTEM_OBJ      = startup.o ${OBJS} $(N64_IOCONF).o \
-                  $(PCC_KERNEL_RUNTIME_OBJS)
+                  $(MIPS_KERNEL_RUNTIME_OBJS)
 SYSTEM_DEP      = Makefile $(N64_IOCONF_SRC) $(N64_KERNEL_LDSCRIPT) \
                   $(TOPSRC)/sys/include/rebsd_version.h \
                   $(VERSION_GENERATOR) \
-                  $(KERNEL_COMPILER_DEPS) $(PCC_KERNEL_RUNTIME_SRCS)
+                  $(KERNEL_COMPILER_DEPS) $(MIPS_KERNEL_RUNTIME_SRCS)
 ifeq ($(N64_KERNEL_COMPILER),pcc)
 SYSTEM_DEP      += $(N64_VR4300_HILO_CHECK) $(N64_ASYNC_EPILOGUE_CHECK) \
                   $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py \
@@ -1125,6 +1121,7 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/share/man/cat5 \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/share/man/cat8 \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/sbin \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/include \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/lib/ldscripts \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/libexec/pcc \
@@ -1236,7 +1233,8 @@ ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/bin/kill
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/md5
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/free
-	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/pstat
+	test -x $(N64_MINIMAL_ROOTFS_STAGE)/usr/sbin/pstat
+	test ! -e $(N64_MINIMAL_ROOTFS_STAGE)/sbin/pstat
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/bin/df
 	cp -p $(N64_MINIMAL_ROOTFS_PCC_TEST_FILES) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/

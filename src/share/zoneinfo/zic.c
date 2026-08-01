@@ -272,7 +272,7 @@ static void error(char *string)
     ++errors;
 }
 
-static void usage()
+static void usage(void)
 {
     (void)fprintf(stderr,
                   "%s: usage is %s [ -v ] [ -l localtime ] [ -d directory ] [ filename ... ]\n",
@@ -283,14 +283,11 @@ static void usage()
 static char *lcltime = NULL;
 static char *directory = NULL;
 
-static void setboundaries()
+static void setboundaries(void)
 {
-    time_t bit;
     struct tm zerotm = { 0 };
 
-    for (bit = 1; bit > 0; bit <<= 1)
-        ;
-    if (bit == 0) { /* time_t is an unsigned type */
+    if ((time_t)-1 > 0) {
         tt_signed = FALSE;
         min_time = 0;
         max_time = ~(time_t)0;
@@ -937,7 +934,7 @@ static int rcomp(const void *va, const void *vb)
 /*
 ** Associate sets of rules with zones.
 */
-static void associate()
+static void associate(void)
 {
     struct zone *zp;
     struct rule *rp;
@@ -1086,19 +1083,73 @@ static int mkdirs(char *name)
 
 static void puttzcode(long val, FILE *fp)
 {
+    unsigned long value;
     int c;
     int shift;
 
+    value = (unsigned long)val & 0xfffffffful;
     for (shift = 24; shift >= 0; shift -= 8) {
-        c = val >> shift;
+        c = value >> shift;
         (void)putc(c, fp);
     }
+}
+
+static void puttzcode64(time_t val, FILE *fp)
+{
+    unsigned long long value;
+    int c;
+    int shift;
+
+    value = (unsigned long long)val;
+    for (shift = 56; shift >= 0; shift -= 8) {
+        c = value >> shift;
+        (void)putc(c, fp);
+    }
+}
+
+static void puttzhead(FILE *fp, int transitions)
+{
+    int i;
+
+    (void)fwrite(TZ_MAGIC, 1, 4, fp);
+    (void)putc(TZ_VERSION_2, fp);
+    for (i = 0; i < 15; ++i)
+        (void)putc(0, fp);
+    puttzcode(0, fp);               /* ttisutcnt */
+    puttzcode(0, fp);               /* ttisstdcnt */
+    puttzcode(0, fp);               /* leapcnt */
+    puttzcode(eitol(transitions), fp);
+    puttzcode(eitol(typecnt), fp);
+    puttzcode(eitol(charcnt), fp);
+}
+
+static void puttzdata(FILE *fp, int first, int transitions, int wide)
+{
+    int i;
+
+    for (i = 0; i < transitions; ++i) {
+        if (wide)
+            puttzcode64(ats[first + i], fp);
+        else
+            puttzcode((long)ats[first + i], fp);
+    }
+    if (transitions > 0)
+        (void)fwrite((char *)&types[first], sizeof types[0],
+            transitions, fp);
+    for (i = 0; i < typecnt; ++i) {
+        puttzcode((long)gmtoffs[i], fp);
+        (void)putc(isdsts[i], fp);
+        (void)putc(abbrinds[i], fp);
+    }
+    if (charcnt != 0)
+        (void)fwrite(chars, sizeof chars[0], charcnt, fp);
 }
 
 static void writezone(char *name)
 {
     FILE *fp;
-    int i;
+    int first32;
+    int count32;
     char fullname[BUFSIZ];
 
     if (strlen(directory) + 1 + strlen(name) >= sizeof fullname) {
@@ -1115,21 +1166,19 @@ static void writezone(char *name)
             exit(1);
         }
     }
-    (void)fseek(fp, (long)sizeof((struct tzhead *)0)->tzh_reserved, 0);
-    puttzcode(eitol(timecnt), fp);
-    puttzcode(eitol(typecnt), fp);
-    puttzcode(eitol(charcnt), fp);
-    for (i = 0; i < timecnt; ++i)
-        puttzcode((long)ats[i], fp);
-    if (timecnt > 0)
-        (void)fwrite((char *)types, sizeof types[0], (int)timecnt, fp);
-    for (i = 0; i < typecnt; ++i) {
-        puttzcode((long)gmtoffs[i], fp);
-        (void)putc(isdsts[i], fp);
-        (void)putc(abbrinds[i], fp);
-    }
-    if (charcnt != 0)
-        (void)fwrite(chars, sizeof chars[0], (int)charcnt, fp);
+    first32 = 0;
+    while (first32 < timecnt && ats[first32] < (-2147483647LL - 1LL))
+        ++first32;
+    count32 = first32;
+    while (count32 < timecnt && ats[count32] <= 2147483647LL)
+        ++count32;
+    count32 -= first32;
+
+    puttzhead(fp, count32);
+    puttzdata(fp, first32, count32, FALSE);
+    puttzhead(fp, timecnt);
+    puttzdata(fp, 0, timecnt, TRUE);
+    (void)fwrite("\n\n", 1, 2, fp);
     if (ferror(fp) || fclose(fp)) {
         (void)fprintf(stderr, "%s: Write error on ", progname);
         perror(fullname);

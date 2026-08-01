@@ -202,7 +202,7 @@ ufs_sync(struct mount *mp)
     if (fs->fs_fmod) {
         bp = getblk(mp->m_dev, SUPERB);
         fs->fs_fmod = 0;
-        fs->fs_time = time.tv_sec;
+        fs->fs_time = (int32_t)time.tv_sec;
         bcopy(fs, bp->b_addr, sizeof (struct fs));
         bwrite(bp);
         error = geterror(bp);

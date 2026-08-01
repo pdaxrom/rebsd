@@ -26,8 +26,6 @@
 #include <paths.h>
 #include "chpass.h"
 
-static char dmsize[] =
-	{ -1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 static char *months[] =
 	{ "January", "February", "March", "April", "May", "June",
 	  "July", "August", "September", "October", "November",
@@ -40,8 +38,12 @@ ttoa(time_t tval)
 
 	if (tval) {
 		tp = localtime(&tval);
-		(void)sprintf(tbuf, "%s %d, 19%d", months[tp->tm_mon],
-		    tp->tm_mday, tp->tm_year);
+		if (tp == NULL) {
+			*tbuf = '\0';
+			return(tbuf);
+		}
+		(void)sprintf(tbuf, "%s %d, %d", months[tp->tm_mon],
+		    tp->tm_mday, 1900 + tp->tm_year);
 	}
 	else
 		*tbuf = '\0';
@@ -52,18 +54,13 @@ int
 atot(char *p, time_t *store)
 {
 	register char *t, **mp;
-	static struct tm *lt;
+	struct tm tm;
 	time_t tval;
 	int day, month, year;
 
 	if (!*p) {
 		*store = 0;
 		return(0);
-	}
-	if (!lt) {
-		unsetenv("TZ");
-		(void)time(&tval);
-		lt = localtime(&tval);
 	}
 	if (!(t = strtok(p, " \t")))
 		goto bad;
@@ -86,26 +83,20 @@ atot(char *p, time_t *store)
 
 #define	TM_YEAR_BASE	1900
 #define	EPOCH_YEAR	1970
-#define	DAYSPERNYEAR	365
-#define	DAYSPERLYEAR	366
-#define	HOURSPERDAY	24
-#define	MINSPERHOUR	60
-#define	SECSPERMIN	60
-#define	isleap(y) (((y) % 4) == 0 && ((y) % 100) != 0 || ((y) % 400) == 0)
 
 	if (year < 100)
 		year += TM_YEAR_BASE;
 	if (year <= EPOCH_YEAR)
 bad:		return(1);
-	tval = isleap(year) && month > 2;
-	for (--year; year >= EPOCH_YEAR; --year)
-		tval += isleap(year) ?
-		    DAYSPERLYEAR : DAYSPERNYEAR;
-	while (--month)
-		tval += dmsize[month];
-	tval += day;
-	tval = tval * HOURSPERDAY * MINSPERHOUR * SECSPERMIN;
-	tval -= lt->tm_gmtoff;
+	bzero(&tm, sizeof(tm));
+	tm.tm_year = year - TM_YEAR_BASE;
+	tm.tm_mon = month - 1;
+	tm.tm_mday = day;
+	tm.tm_isdst = -1;
+	tval = mktime(&tm);
+	if (tval == (time_t)-1 || tm.tm_year != year - TM_YEAR_BASE ||
+	    tm.tm_mon != month - 1 || tm.tm_mday != day)
+		goto bad;
 	*store = tval;
 	return(0);
 }

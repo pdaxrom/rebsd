@@ -443,7 +443,7 @@ done:
 }
 
 static void
-stat1 (int follow, int wide)
+stat1 (int follow)
 {
     register struct inode *ip;
     register struct a {
@@ -460,17 +460,8 @@ stat1 (int follow, int wide)
         return;
     (void) ino_stat(ip, &sb);
     iput(ip);
-    if (wide) {
-        u.u_error = copyout((caddr_t)&sb, (caddr_t)uap->ub,
-            sizeof (sb));
-    } else {
-        struct stat32 sb32;
-
-        u.u_error = stat_to_stat32(&sb, &sb32);
-        if (u.u_error == 0)
-            u.u_error = copyout((caddr_t)&sb32, (caddr_t)uap->ub,
-                sizeof (sb32));
-    }
+    u.u_error = copyout((caddr_t)&sb, (caddr_t)uap->ub,
+        sizeof (sb));
 }
 
 /*
@@ -479,13 +470,7 @@ stat1 (int follow, int wide)
 void
 stat()
 {
-    stat1 (FOLLOW, 0);
-}
-
-void
-stat64()
-{
-    stat1 (FOLLOW, 1);
+    stat1 (FOLLOW);
 }
 
 /*
@@ -494,13 +479,7 @@ stat64()
 void
 lstat()
 {
-    stat1 (NOFOLLOW, 0);
-}
-
-void
-lstat64()
-{
-    stat1 (NOFOLLOW, 1);
+    stat1 (NOFOLLOW);
 }
 
 /*

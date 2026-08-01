@@ -67,7 +67,7 @@ balloc(struct inode *ip, int flags)
          */
         bp = getblk(ip->i_dev, SUPERB);
         fs->fs_fmod = 0;
-        fs->fs_time = time.tv_sec;
+        fs->fs_time = (int32_t)time.tv_sec;
         {
             register struct fs *fps;
 

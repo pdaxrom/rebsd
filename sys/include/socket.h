@@ -15,6 +15,8 @@
 #ifndef	_SYS_SOCKET_H_
 #define	_SYS_SOCKET_H_
 
+#include <sys/types.h>
+
 /*
  * Definitions related to sockets: types, address families, options.
  */
@@ -184,4 +186,12 @@ struct msghdr {
 #define	MSG_DONTROUTE	0x4		/* send without using routing tables */
 
 #define	MSG_MAXIOVLEN	16
+
+#ifndef KERNEL
+int socket(int, int, int);
+ssize_t sendto(int, const void *, size_t, int,
+    const struct sockaddr *, int);
+ssize_t recvfrom(int, void *, size_t, int, struct sockaddr *, int *);
+#endif
+
 #endif	/* _SYS_SOCKET_H_ */

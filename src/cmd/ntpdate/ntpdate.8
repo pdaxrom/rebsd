@@ -1,0 +1,44 @@
+.TH NTPDATE 8 "August 2026" ReBSD
+.SH NAME
+ntpdate \- set the system clock from an NTP server
+.SH SYNOPSIS
+.B ntpdate
+[
+.B \-qv
+] [
+.B \-t
+.I seconds
+]
+.I server
+.SH DESCRIPTION
+.B ntpdate
+sends an SNTP request through the machine-independent IPv4/UDP stack,
+validates the reply, calculates the standard four-timestamp clock offset,
+and steps the system clock with
+.BR settimeofday (2).
+The common TODR layer then writes the new UTC value to every writable
+hardware clock attached to the system.
+.PP
+The server may be an IPv4 address or a host name.
+NTP era reconstruction uses the 64-bit ReBSD
+.I time_t
+and accepts timestamps after the NTP rollover in 2036.
+.SH OPTIONS
+.TP
+.B \-q
+Query and print the result without changing the clock.
+.TP
+.B \-v
+Print the protocol version and server stratum.
+.TP
+.BI \-t " seconds"
+Wait this many seconds for a reply.  The default is 5 seconds.
+.SH FILES
+.I /var/run/resolv.conf
+is normally populated by
+.BR dhclient (8)
+and used for server-name lookup.
+.SH SEE ALSO
+.BR date (1),
+.BR settimeofday (2),
+.BR dhclient (8)

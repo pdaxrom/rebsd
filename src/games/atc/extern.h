@@ -9,7 +9,8 @@
 
 extern char		GAMES[], LOG[], *file;
 
-extern int		clocktick, safe_planes, start_time, test_mode;
+extern int		clocktick, safe_planes, test_mode;
+extern time_t		start_time;
 
 extern FILE		*filein, *fileout;
 

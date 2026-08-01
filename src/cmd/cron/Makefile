@@ -52,7 +52,7 @@ CFLAGS          += -Werror -I.
 
 
 DESTROOT	=	$(DESTDIR)
-DESTSBIN	=	$(DESTROOT)/sbin
+DESTSBIN	=	$(DESTROOT)/usr/sbin
 DESTBIN		=	$(DESTROOT)/bin
 DESTMAN		=	$(DESTROOT)/share/man
 INCLUDE		=	-I.

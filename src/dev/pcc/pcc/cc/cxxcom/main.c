@@ -330,8 +330,8 @@ main(int argc, char *argv[])
 		t2.tv_usec += 1000000;
 		t2.tv_sec -= 1;
 	}
-	fprintf(stderr, "ccom total time: %ld s %ld us\n",
-	    t2.tv_sec, t2.tv_usec);
+	fprintf(stderr, "ccom total time: %lld s %ld us\n",
+	    (long long)t2.tv_sec, t2.tv_usec);
 #endif
 
 	if (sflag)

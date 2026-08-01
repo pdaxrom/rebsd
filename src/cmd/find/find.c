@@ -25,7 +25,7 @@ struct anode {
 
 int Nn; /* number of nodes */
 char *Fname;
-long Now;
+time_t Now;
 int Argc, Ai, Pi;
 char **Argv;
 
@@ -35,7 +35,7 @@ short *Buf, *Dbuf, *Wp;
 int Bufsize = 5120;
 int Wct = 2560;
 
-long Newer;
+time_t Newer;
 
 int Xdev = 1;        /* true if SHOULD cross devices (file systems) */
 struct stat Devstat; /* stats of each argument path's file system */

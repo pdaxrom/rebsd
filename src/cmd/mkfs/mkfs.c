@@ -488,7 +488,7 @@ main (
 		exit (1);
 	}
 	time (&utime);
-	filsys.fs.fs_time = utime;
+	filsys.fs.fs_time = (int32_t)utime;
 	filsys.fs.fs_magic1 = FSMAGIC1;
 	filsys.fs.fs_magic2 = FSMAGIC2;
 	filsys.fs.fs_tfree = 0;

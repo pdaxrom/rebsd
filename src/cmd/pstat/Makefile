@@ -30,7 +30,7 @@ depend:         ${SRCS}
 
 install:        pstat
 		cp ${MAN} ${DESTDIR}/share/man/cat8/
-		install -m 755 pstat ${DESTDIR}/sbin/pstat
+		install -m 755 pstat ${DESTDIR}/usr/sbin/pstat
 
 lint:           ${SRCS}
 		lint -hax ${SRCS}

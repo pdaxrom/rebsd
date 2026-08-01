@@ -226,7 +226,8 @@ res_send(buf, buflen, answer, anslen)
 				}
 			} else
 #endif /* BSD */
-			if (sendto(s, buf, buflen, 0, &_res.nsaddr_list[ns],
+			if (sendto(s, buf, buflen, 0,
+			    (struct sockaddr *)&_res.nsaddr_list[ns],
 			    sizeof(struct sockaddr)) != buflen) {
 #ifdef DEBUG
 				if (_res.options & RES_DEBUG)

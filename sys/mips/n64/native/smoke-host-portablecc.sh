@@ -143,6 +143,7 @@ ln -sf "$target-pcpp" "$target_bindir/cpp"
 
 tmp=${TMPDIR:-/tmp}/rebsd-host-portablecc.$$
 trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
+    "$tmp.cpp.S" "$tmp.cpp.out" \
     "$tmp.default.s" "$tmp.noomit.s" \
     "$tmp.normal.s" "$tmp.stats.s" "$tmp.stats2.s" "$tmp.stats.off" \
     "$tmp.stats.log" "$tmp.stats2.log" "$tmp.ssa.s" "$tmp.ssa.log" \
@@ -158,6 +159,27 @@ trap 'rm -f "$tmp.c" "$tmp.s" "$tmp.o" "$tmp.macros" "$tmp.err" \
     "$tmp.weak-first.s" "$tmp.weak-first.o" \
     "$tmp.weak-second.s" "$tmp.weak-second.o" \
     "$tmp.weak-start.s" "$tmp.weak-start.o" "$tmp.weak.elf"' 0 1 2 3 15
+
+cat > "$tmp.cpp.S" <<'EOF'
+first_token
+#if 0
+discarded
+#if 1
+discarded_nested_true
+#else
+discarded_nested_false
+#endif
+discarded_tail
+#endif
+second_token
+EOF
+"$pcc" -E -P -x assembler-with-cpp -o "$tmp.cpp.out" "$tmp.cpp.S"
+grep '^first_token$' "$tmp.cpp.out" >/dev/null
+grep '^second_token$' "$tmp.cpp.out" >/dev/null
+if grep 'first_tokensecond_token' "$tmp.cpp.out" >/dev/null; then
+	echo "PCC -P joined tokens across a nested false conditional" >&2
+	exit 1
+fi
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>

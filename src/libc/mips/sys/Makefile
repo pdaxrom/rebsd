@@ -70,13 +70,13 @@ pwritew.o:	SYS.h
 		@printf '#include "SYS.h"\nSYS2(__pwrite_words,pwrite)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
 
 stat.o:		SYS.h
-		@printf '#include "SYS.h"\nSYS2(stat,stat64)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
+		@printf '#include "SYS.h"\nSYS(stat)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
 
 lstat.o:	SYS.h
-		@printf '#include "SYS.h"\nSYS2(lstat,lstat64)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
+		@printf '#include "SYS.h"\nSYS(lstat)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
 
 fstat.o:	SYS.h
-		@printf '#include "SYS.h"\nSYS2(fstat,fstat64)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
+		@printf '#include "SYS.h"\nSYS(fstat)\n' | $(AS) ${ASFLAGS} - -c -o $*.o
 
 clean:
 		rm -f *~ *.o a.out sys.a

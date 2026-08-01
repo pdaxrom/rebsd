@@ -15,7 +15,8 @@ days_from_civil(long long year, unsigned month, unsigned day)
 	year -= month <= 2;
 	era = (year >= 0 ? year : year - 399) / 400;
 	yoe = (unsigned)(year - era * 400);
-	doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+	month = month > 2 ? month - 3 : month + 9;
+	doy = (153 * month + 2) / 5 + day - 1;
 	doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
 	return era * 146097 + (long long)doe - 719468;
 }
@@ -40,12 +41,6 @@ tm_seconds(const struct tm *tm)
 	    ((long long)tm->tm_mday - 1) * 86400 +
 	    (long long)tm->tm_hour * 3600 +
 	    (long long)tm->tm_min * 60 + tm->tm_sec;
-}
-
-static int
-in_time_t_range(long long value)
-{
-	return value >= (long long)LONG_MIN && value <= (long long)LONG_MAX;
 }
 
 static int
@@ -100,10 +95,10 @@ mktime(struct tm *tm)
 	 */
 	for (i = 0; i < sizeof(sample_delta) / sizeof(sample_delta[0]); i++) {
 		sample = wanted + sample_delta[i];
-		if (sample < LONG_MIN)
-			sample = LONG_MIN;
-		else if (sample > LONG_MAX)
-			sample = LONG_MAX;
+		if (sample < LLONG_MIN)
+			sample = LLONG_MIN;
+		else if (sample > LLONG_MAX)
+			sample = LLONG_MAX;
 		sample_time = (time_t)sample;
 		local = localtime(&sample_time);
 		if (local != 0)
@@ -131,8 +126,6 @@ mktime(struct tm *tm)
 		time_t t;
 
 		candidate = wanted - offsets[j];
-		if (!in_time_t_range(candidate))
-			continue;
 		t = (time_t)candidate;
 		local = localtime(&t);
 		if (local == 0)
@@ -199,10 +192,6 @@ timegm(struct tm *tm)
 		return (time_t)-1;
 	}
 	value = tm_seconds(tm);
-	if (!in_time_t_range(value)) {
-		errno = EOVERFLOW;
-		return (time_t)-1;
-	}
 	result = (time_t)value;
 	normalized = gmtime(&result);
 	if (normalized != 0)

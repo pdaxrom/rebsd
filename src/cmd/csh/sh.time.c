@@ -172,7 +172,7 @@ pdeltat(t1, t0)
 	struct timeval td;
 
 	tvsub(&td, t1, t0);
-	printf("%ld.%01ld", td.tv_sec, td.tv_usec/100000);
+	printf("%lld.%01ld", (long long)td.tv_sec, td.tv_usec/100000);
 }
 
 tvadd(tsum, t0)

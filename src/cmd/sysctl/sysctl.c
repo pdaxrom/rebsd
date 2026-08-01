@@ -407,7 +407,7 @@ doit:
 			fprintf(stdout, "%s = %s", string,
 			    ctime(&btp->tv_sec));
 		else
-			fprintf(stdout, "%d\n", btp->tv_sec);
+			fprintf(stdout, "%lld\n", (long long)btp->tv_sec);
 		return;
 	}
 	if (special & CONSDEV) {

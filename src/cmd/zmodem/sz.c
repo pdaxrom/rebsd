@@ -788,8 +788,9 @@ wctxpn(char *name)
 #ifdef STAT
 #ifndef XX
 		if (fstat(fileno(in), &f)!= -1)
-			sprintf(p, "%llu %lo %o 0 %d %ld",
-			  (unsigned long long)f.st_size, f.st_mtime,
+			sprintf(p, "%llu %llo %o 0 %d %ld",
+			  (unsigned long long)f.st_size,
+			  (unsigned long long)f.st_mtime,
 			  f.st_mode, Filesleft, Totalleft);
 		Totalleft -= f.st_size;
 #endif

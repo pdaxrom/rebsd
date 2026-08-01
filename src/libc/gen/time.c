@@ -10,7 +10,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 
-long
+time_t
 time(time_t *t)
 {
 	struct timeval tt;

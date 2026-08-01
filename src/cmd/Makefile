@@ -16,13 +16,16 @@ SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar chflags \
                   man md5 med more netstat nm passwd pdc picoc ping portio printf pwm \
                   ranlib re renice retroforth scm sed setty sh sl \
                   smux stty sysctl telnet telnetd test uname wget wiznet xargs \
-                  zmodem gtest msec cron compress date2 tip \
-                  talloc uucp viless virus yacc
+                  zmodem gtest msec compress date2 tip \
+                  uucp viless virus yacc
 
 # /sbin
-SUBDIR_ALL    += chown chroot dhclient disktool fsck fsck.fat getty gpt ifconfig inetd init \
-                  mkfs mkfs.fat mknod mkpasswd mount pstat \
-                  reboot route shutdown umount update vipw
+SUBDIR_ALL    += dhclient disktool fsck fsck.fat getty gpt ifconfig init \
+                  mkfs mkfs.fat mknod mount reboot route shutdown umount
+
+# /usr/sbin
+SUBDIR_ALL    += chown chroot cron inetd mkpasswd ntpdate pstat \
+                  talloc update vipw
 
 # TODO: lex m4 reloc sre pforth
 

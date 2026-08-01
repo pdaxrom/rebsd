@@ -23,8 +23,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#define	ATOI2(ar)	(ar[0] - '0') * 10 + (ar[1] - '0'); ar += 2;
-
 static struct timeval	tv;
 static int	retval;
 
@@ -36,24 +34,34 @@ static struct utmp	wtmp[2] = {
 	{ "{", "", "", 0 }
 };
 
+static int
+atoi2(char **textp)
+{
+	char *text = *textp;
+
+	*textp += 2;
+	return (text[0] - '0') * 10 + (text[1] - '0');
+}
+
 /*
  * gtime --
  *	convert user's time into number of seconds
  */
 static int
 gtime(
-	register char	*ap)		/* user argument */
+	char	*ap)			/* user argument */
 {
 	register int	year, month;
 	register char	*C;		/* pointer into time argument */
 	struct tm	*L;
-	int	day, hour, mins, secs;
+	struct tm	parsed;
+	int	day, hour, mins, secs, four_digit_year;
 
 	for (secs = 0, C = ap;*C;++C) {
 		if (*C == '.') {		/* seconds provided */
 			if (strlen(C) != 3)
 				return(1);
-			*C = NULL;
+			*C = '\0';
 			secs = (C[1] - '0') * 10 + (C[2] - '0');
 			break;
 		}
@@ -61,28 +69,51 @@ gtime(
 			return(-1);
 	}
 
-	L = localtime((time_t *)&tv.tv_sec);
-	year = L->tm_year;			/* defaults */
+	L = localtime(&tv.tv_sec);
+	if (L == NULL)
+		return(1);
+	year = L->tm_year + TM_YEAR_BASE;	/* defaults */
 	month = L->tm_mon + 1;
 	day = L->tm_mday;
+	four_digit_year = 1;
 
 	switch ((int)(C - ap)) {		/* length */
-		case 10:			/* yymmddhhmm */
-			year = ATOI2(ap);
+		case 12:			/* ccyymmddhhmm */
+			year = atoi2(&ap) * 100;
+			year += atoi2(&ap);
+			/* FALLTHROUGH */
 		case 8:				/* mmddhhmm */
-			month = ATOI2(ap);
+			month = atoi2(&ap);
+			/* FALLTHROUGH */
 		case 6:				/* ddhhmm */
-			day = ATOI2(ap);
+			day = atoi2(&ap);
+			/* FALLTHROUGH */
 		case 4:				/* hhmm */
-			hour = ATOI2(ap);
-			mins = ATOI2(ap);
+			hour = atoi2(&ap);
+			mins = atoi2(&ap);
+			break;
+		case 10:			/* yymmddhhmm */
+			year = atoi2(&ap);
+			four_digit_year = 0;
+			month = atoi2(&ap);
+			day = atoi2(&ap);
+			hour = atoi2(&ap);
+			mins = atoi2(&ap);
 			break;
 		default:
 			return(1);
 	}
 
-	if (*ap || month < 1 || month > 12 || day < 1 || day > 31 ||
+	if (*ap || month < 1 || month > 12 || day < 1 ||
 	     mins < 0 || mins > 59 || secs < 0 || secs > 59)
+		return(1);
+	if (!four_digit_year) {
+		year += TM_YEAR_BASE;
+		if (year < EPOCH_YEAR)
+			year += 100;
+	}
+	dmsize[2] = isleap(year) ? 29 : 28;
+	if (day > dmsize[month])
 		return(1);
 	if (hour == 24) {
 		++day;
@@ -91,22 +122,16 @@ gtime(
 	else if (hour < 0 || hour > 23)
 		return(1);
 
-	tv.tv_sec = 0;
-	year += TM_YEAR_BASE;
-/* If year < EPOCH_YEAR, assume it's in the next century and
-   the system has not yet been patched to move TM_YEAR_BASE up yet */
-	if (year < EPOCH_YEAR)
-		year += 100;
-	if (isleap(year) && month > 2)
-		++tv.tv_sec;
-	for (--year;year >= EPOCH_YEAR;--year)
-		tv.tv_sec += isleap(year) ? DAYS_PER_LYEAR : DAYS_PER_NYEAR;
-	while (--month)
-		tv.tv_sec += dmsize[month];
-	tv.tv_sec += day - 1;
-	tv.tv_sec = HOURS_PER_DAY * tv.tv_sec + hour;
-	tv.tv_sec = MINS_PER_HOUR * tv.tv_sec + mins;
-	tv.tv_sec = SECS_PER_MIN * tv.tv_sec + secs;
+	bzero(&parsed, sizeof(parsed));
+	parsed.tm_year = year - TM_YEAR_BASE;
+	parsed.tm_mon = month - 1;
+	parsed.tm_mday = day;
+	parsed.tm_hour = hour;
+	parsed.tm_min = mins;
+	parsed.tm_sec = secs;
+	tv.tv_sec = timegm(&parsed);
+	if (tv.tv_sec == (time_t)-1)
+		return(1);
 	return(0);
 }
 
@@ -300,7 +325,7 @@ int main(
 	int	argc,
 	char	**argv)
 {
-	static char	usage[] = "usage: date [-nu] [-d dst] [-t timezone] [yymmddhhmm[.ss]]\n";
+	static char	usage[] = "usage: date [-nu] [-d dst] [-t timezone] [ccyymmddhhmm[.ss]]\n";
 	struct timezone	tz;
 	char	*ap,			/* time string */
 		*tzn;			/* time zone */
@@ -371,7 +396,7 @@ int main(
 	if (!uflag) {		/* convert to GMT assuming local time */
 		tv.tv_sec += (long)tz.tz_minuteswest * SECS_PER_MIN;
 				/* now fix up local daylight time */
-		if (localtime((time_t *)&tv.tv_sec)->tm_isdst)
+		if (localtime(&tv.tv_sec)->tm_isdst)
 			tv.tv_sec -= SECS_PER_HOUR;
 	}
 	if (nflag || 1 /*!netsettime(tv)*/) {
@@ -383,7 +408,7 @@ int main(
 		if ((wf = open(_PATH_WTMP, O_WRONLY | O_APPEND)) < 0)
 			fputs("date: can't write wtmp file.\n",stderr);
 		else {
-			(void)time((time_t *)&wtmp[1].ut_time);
+			(void)time(&wtmp[1].ut_time);
 			/*NOSTRICT*/
 			(void)write(wf,(char *)wtmp,sizeof(wtmp));
 			(void)close(wf);
@@ -401,12 +426,12 @@ display:
 		exit(1);
 	}
 	if (uflag) {
-		fmttime(fmt,gmtime((time_t *)&tv.tv_sec));
+		fmttime(fmt,gmtime(&tv.tv_sec));
 	}
 	else {
 		struct tm	*tp;
 
-		tp = localtime((time_t *)&tv.tv_sec);
+		tp = localtime(&tv.tv_sec);
 		fmttime(fmt,tp);
 	}
 	exit(retval);

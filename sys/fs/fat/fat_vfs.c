@@ -426,8 +426,8 @@ fat_timestamp(unsigned date, unsigned clock)
 {
     struct clock_ymdhms dt;
     time_t timestamp;
-    long seconds;
-    long adjustment;
+    time_t seconds;
+    time_t adjustment;
     int error;
 
     dt.dt_year = 1980u + ((date >> 9) & 0x7fu);
@@ -438,20 +438,16 @@ fat_timestamp(unsigned date, unsigned clock)
     dt.dt_min = (clock >> 5) & 0x3fu;
     dt.dt_sec = (clock & 0x1fu) * 2u;
     error = clock_ymdhms_to_secs(&dt, &timestamp);
-    if (error == EOVERFLOW)
-        return (time_t)0x7fffffffl;
     if (error != 0)
         return 0;
-    seconds = (long)timestamp;
+    seconds = timestamp;
     if (tz.tz_minuteswest < -1440 || tz.tz_minuteswest > 1440)
         adjustment = 0;
     else
-        adjustment = (long)tz.tz_minuteswest * 60l;
-    if (adjustment > 0 && seconds > 0x7fffffffl - adjustment)
-        return (time_t)0x7fffffffl;
+        adjustment = (time_t)tz.tz_minuteswest * 60;
     if (adjustment < 0 && seconds < -adjustment)
         return 0;
-    return (time_t)(seconds + adjustment);
+    return seconds + adjustment;
 }
 
 static void

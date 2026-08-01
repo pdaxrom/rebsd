@@ -24,7 +24,7 @@ struct fileblk *standin = &stdfile;
 int mailchk = 0;
 
 static char *mailp;
-static long *mod_time = (long *)NIL;
+static time_t *mod_time = (time_t *)NIL;
 
 #ifdef pdp11
 #include <execargs.h>
@@ -36,8 +36,8 @@ void chkmail(void);
 
 static void exfile(BOOL prof)
 {
-    long mailtime = 0; /* Must not be a register variable */
-    long curtime = 0;
+    time_t mailtime = 0; /* Must not be a register variable */
+    time_t curtime = 0;
     register int userid;
 
     /*
@@ -302,7 +302,7 @@ void chkmail()
     register char *s = mailp;
     register char *save;
 
-    long *ptr = mod_time;
+    time_t *ptr = mod_time;
     char *start;
     BOOL flg;
     struct stat statb;
@@ -354,7 +354,7 @@ void setmail(char *mailpath)
     register char *s = mailpath;
     register int cnt = 1;
 
-    long *ptr;
+    time_t *ptr;
 
     free(mod_time);
     if ((mailp = mailpath)) {
@@ -365,7 +365,7 @@ void setmail(char *mailpath)
             s++;
         }
 
-        ptr = mod_time = (long *)alloc(sizeof(long) * cnt);
+        ptr = mod_time = (time_t *)alloc(sizeof(time_t) * cnt);
 
         while (cnt) {
             *ptr = 0;

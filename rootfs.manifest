@@ -18,6 +18,8 @@ dir /libexec
 dir /sbin
 dir /tmp
 dir /u
+dir /usr
+dir /usr/sbin
 
 #
 # Block devices.
@@ -628,10 +630,6 @@ target /bin/sz
 #
 # Files: /sbin
 #
-file /sbin/chown
-file /sbin/chroot
-mode 04755
-file /sbin/cron
 file /sbin/disktool
 file /sbin/fdisk
 file /sbin/fsck
@@ -639,18 +637,11 @@ file /sbin/init
 mode 0700
 file /sbin/mkfs
 file /sbin/mknod
-file /sbin/mkpasswd
 file /sbin/mount
-file /sbin/pstat
-mode 02755
 file /sbin/reboot
 file /sbin/shutdown
 mode 04750
-file /sbin/talloc
 file /sbin/umount
-file /sbin/update
-file /sbin/updatedb
-file /sbin/vipw
 
 link /sbin/bootloader
 target /sbin/reboot
@@ -660,6 +651,21 @@ link /sbin/halt
 target /sbin/reboot
 link /sbin/poweroff
 target /sbin/reboot
+
+#
+# Files: /usr/sbin
+#
+file /usr/sbin/chown
+file /usr/sbin/chroot
+mode 04755
+file /usr/sbin/cron
+file /usr/sbin/mkpasswd
+file /usr/sbin/pstat
+mode 02755
+file /usr/sbin/talloc
+file /usr/sbin/update
+file /usr/sbin/updatedb
+file /usr/sbin/vipw
 
 #
 # Files: /games

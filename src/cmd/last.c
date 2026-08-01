@@ -20,7 +20,7 @@
 #define NMAX sizeof(buf[0].ut_name)
 #define LMAX sizeof(buf[0].ut_line)
 #define HMAX sizeof(buf[0].ut_host)
-#define SECDAY ((long)24 * 60 * 60)
+#define SECDAY ((time_t)24 * 60 * 60)
 
 #define lineq(a, b) (!strncmp(a, b, LMAX))
 #define nameq(a, b) (!strncmp(a, b, NMAX))
@@ -34,7 +34,7 @@ int nameargs;
 
 struct utmp buf[128];
 char ttnames[MAXTTYS][LMAX + 1];
-long logouts[MAXTTYS];
+time_t logouts[MAXTTYS];
 
 static char *strspl(char *left, char *right);
 static int want(struct utmp *bp);
@@ -67,12 +67,12 @@ int main(int ac, char **av)
     char wtmpfile[256];
     char progname[256];
     struct utmp *bp;
-    long otime;
+    time_t otime;
     struct stat stb;
     int print;
     int sinput = 0;
     char *crmsg = (char *)0;
-    long crtime;
+    time_t crtime;
     long outrec = 0;
     long maxrec = 0x7fffffffL;
 
@@ -155,7 +155,7 @@ int main(int ac, char **av)
                 else if (otime == 0)
                     printf("  still logged in\n");
                 else {
-                    long delta;
+                    time_t delta;
                     if (otime < 0) {
                         otime = -otime;
                         printf("- %s", crmsg);
@@ -165,7 +165,8 @@ int main(int ac, char **av)
                     if (delta < SECDAY)
                         printf("  (%5.5s)\n", asctime(gmtime(&delta)) + 11);
                     else
-                        printf(" (%ld+%5.5s)\n", delta / SECDAY, asctime(gmtime(&delta)) + 11);
+                        printf(" (%lld+%5.5s)\n", (long long)(delta / SECDAY),
+                               asctime(gmtime(&delta)) + 11);
                 }
                 fflush(stdout);
                 if (++outrec >= maxrec)

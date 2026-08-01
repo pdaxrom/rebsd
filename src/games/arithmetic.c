@@ -15,9 +15,9 @@ int	right[MAX];
 int	left[MAX];
 int	rights;
 int	wrongs;
-long	stvec;
-long	etvec;
-long	dtvec;
+time_t	stvec;
+time_t	etvec;
+time_t	dtvec;
 
 void score()
 {
@@ -28,8 +28,8 @@ void score()
 
 	if (rights == 0)
                 return;
-	printf("Total time %ld seconds; %.1f seconds per problem\n\n\n",
-		etvec - stvec,
+	printf("Total time %lld seconds; %.1f seconds per problem\n\n\n",
+		(long long)(etvec - stvec),
 		(etvec - stvec) / (rights + 0.));
 
 	sleep(3);
@@ -160,7 +160,7 @@ int main(int argc, char *argv[])
 		left[i] = right[i] = i;
 	}
 	time(&stvec);
-	k = stvec;
+	k = (int)stvec;
 	srand13(k);
 	k = 0;
 	l = 0;

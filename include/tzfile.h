@@ -13,11 +13,19 @@
 ** Each file begins with. . .
 */
 struct tzhead {
-    char    tzh_reserved[32];   /* reserved for future use */
+    char    tzh_magic[4];       /* "TZif" */
+    char    tzh_version[1];     /* '\0', '2', '3', or '4' */
+    char    tzh_reserved[15];
+    char    tzh_ttisutcnt[4];   /* UTC/local indicators */
+    char    tzh_ttisstdcnt[4];  /* standard/wall indicators */
+    char    tzh_leapcnt[4];     /* leap-second records */
     char    tzh_timecnt[4];     /* coded number of transition times */
     char    tzh_typecnt[4];     /* coded number of local time types */
     char    tzh_charcnt[4];     /* coded number of abbr. chars */
 };
+
+#define TZ_MAGIC        "TZif"
+#define TZ_VERSION_2    '2'
 
 /*
 ** . . .followed by. . .

@@ -33,6 +33,8 @@ test_calendar(void)
     time_t seconds;
     unsigned value;
 
+    CHECK(sizeof(time_t) == 8);
+
     memset(&dt, 0, sizeof(dt));
     dt.dt_year = 1970;
     dt.dt_mon = 1;
@@ -62,9 +64,24 @@ test_calendar(void)
     dt.dt_min = 14;
     dt.dt_sec = 7;
     CHECK(clock_ymdhms_to_secs(&dt, &seconds) == 0 &&
-        (unsigned long)seconds == 0x7ffffffful);
+        (unsigned long long)seconds == 0x7fffffffull);
     ++dt.dt_sec;
-    CHECK(clock_ymdhms_to_secs(&dt, &seconds) == EOVERFLOW);
+    CHECK(clock_ymdhms_to_secs(&dt, &seconds) == 0 &&
+        (unsigned long long)seconds == 0x80000000ull);
+    CHECK(clock_secs_to_ymdhms(seconds, &back) == 0 &&
+        back.dt_year == 2038 && back.dt_mon == 1 && back.dt_day == 19 &&
+        back.dt_hour == 3 && back.dt_min == 14 && back.dt_sec == 8);
+
+    dt.dt_year = 2100;
+    dt.dt_mon = 3;
+    dt.dt_day = 1;
+    dt.dt_wday = 1;
+    dt.dt_hour = 0;
+    dt.dt_min = 0;
+    dt.dt_sec = 0;
+    CHECK(clock_ymdhms_to_secs(&dt, &seconds) == 0);
+    CHECK(clock_secs_to_ymdhms(seconds, &back) == 0);
+    CHECK(memcmp(&dt, &back, sizeof(dt)) == 0);
     CHECK(clock_bcd_to_bin(0x59, &value) == 0 && value == 59);
     CHECK(clock_bcd_to_bin(0x6a, &value) == EINVAL);
     CHECK(clock_bin_to_bcd(42) == 0x42);
@@ -124,6 +141,8 @@ test_mc146818(void)
     CHECK(attached->todr_settime_ymdhms(attached, &dt) == 0);
     CHECK(fake.regs[0x09] == 0x27 && fake.regs[0x08] == 0x09 &&
         fake.regs[0x04] == 0x23 && fake.regs[0x00] == 0x01);
+    dt.dt_year = 2100;
+    CHECK(attached->todr_settime_ymdhms(attached, &dt) == EOVERFLOW);
     return 0;
 }
 
@@ -188,6 +207,8 @@ test_pcf8563(void)
     dt.dt_sec = 58;
     CHECK(attached->todr_settime_ymdhms(attached, &dt) == 0);
     CHECK(fake.regs[7] == 0x92 && fake.regs[8] == 0x99);
+    dt.dt_year = 2100;
+    CHECK(attached->todr_settime_ymdhms(attached, &dt) == EOVERFLOW);
     return 0;
 }
 
@@ -251,6 +272,8 @@ test_jz4780(void)
     dt.dt_min = 3;
     CHECK(attached->todr_settime_ymdhms(attached, &dt) == 0);
     CHECK(fake.regs[0x34 / 4] == 0x12345678);
+    dt.dt_year = 2107;
+    CHECK(attached->todr_settime_ymdhms(attached, &dt) == EOVERFLOW);
     return 0;
 }
 

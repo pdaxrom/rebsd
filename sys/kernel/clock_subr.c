@@ -8,8 +8,8 @@
 #include <sys/errno.h>
 #include <sys/todr.h>
 
-#define CLOCK_SECONDS_PER_DAY   86400ul
-#define CLOCK_TIME_MAX          0x7ffffffful
+#define CLOCK_SECONDS_PER_DAY   86400ll
+#define CLOCK_EPOCH_ADJUSTMENT  719468ll
 
 static int
 clock_leap_year(unsigned year)
@@ -32,6 +32,28 @@ clock_month_days(unsigned year, unsigned month)
     return days[month - 1u];
 }
 
+static long long
+clock_days_from_civil(unsigned year, unsigned month, unsigned day)
+{
+    long long adjusted_year;
+    long long era;
+    unsigned year_of_era;
+    unsigned day_of_year;
+    unsigned day_of_era;
+
+    adjusted_year = year;
+    if (month <= 2u)
+        --adjusted_year;
+    era = adjusted_year / 400ll;
+    year_of_era = (unsigned)(adjusted_year - era * 400ll);
+    month = month > 2u ? month - 3u : month + 9u;
+    day_of_year = (153u * month + 2u) /
+        5u + day - 1u;
+    day_of_era = year_of_era * 365u + year_of_era / 4u -
+        year_of_era / 100u + day_of_year;
+    return era * 146097ll + day_of_era - CLOCK_EPOCH_ADJUSTMENT;
+}
+
 int
 clock_ymdhms_validate(const struct clock_ymdhms *dt)
 {
@@ -50,10 +72,8 @@ clock_ymdhms_validate(const struct clock_ymdhms *dt)
 int
 clock_ymdhms_to_secs(const struct clock_ymdhms *dt, time_t *result)
 {
-    unsigned long days;
-    unsigned long seconds;
-    unsigned year;
-    unsigned month;
+    long long days;
+    long long seconds;
     int error;
 
     if (result == 0)
@@ -62,60 +82,53 @@ clock_ymdhms_to_secs(const struct clock_ymdhms *dt, time_t *result)
     if (error != 0)
         return error;
 
-    days = 0;
-    for (year = 1970u; year < dt->dt_year; ++year)
-        days += clock_leap_year(year) ? 366u : 365u;
-    for (month = 1u; month < dt->dt_mon; ++month)
-        days += clock_month_days(dt->dt_year, month);
-    days += dt->dt_day - 1u;
-    seconds = (unsigned long)dt->dt_hour * 3600ul +
-        (unsigned long)dt->dt_min * 60ul + dt->dt_sec;
-    if (days > CLOCK_TIME_MAX / CLOCK_SECONDS_PER_DAY ||
-        (days == CLOCK_TIME_MAX / CLOCK_SECONDS_PER_DAY &&
-        seconds > CLOCK_TIME_MAX % CLOCK_SECONDS_PER_DAY))
-        return EOVERFLOW;
-    *result = (time_t)(days * CLOCK_SECONDS_PER_DAY + seconds);
+    days = clock_days_from_civil(dt->dt_year, dt->dt_mon, dt->dt_day);
+    seconds = days * CLOCK_SECONDS_PER_DAY +
+        (long long)dt->dt_hour * 3600ll +
+        (long long)dt->dt_min * 60ll + dt->dt_sec;
+    *result = (time_t)seconds;
     return 0;
 }
 
 int
 clock_secs_to_ymdhms(time_t value, struct clock_ymdhms *dt)
 {
-    unsigned long days;
-    unsigned long seconds;
-    unsigned limit;
-    unsigned year;
+    long long days;
+    long long era;
+    long long year;
+    unsigned day_of_era;
+    unsigned year_of_era;
+    unsigned day_of_year;
+    unsigned month_prime;
+    unsigned seconds;
     unsigned month;
 
-    if (dt == 0 || value < 0 || (unsigned long)value > CLOCK_TIME_MAX)
+    if (dt == 0 || value < 0)
         return EINVAL;
-    days = (unsigned long)value / CLOCK_SECONDS_PER_DAY;
-    seconds = (unsigned long)value % CLOCK_SECONDS_PER_DAY;
-    dt->dt_wday = (unsigned)((days + 4u) % 7u);
+    days = value / CLOCK_SECONDS_PER_DAY;
+    seconds = (unsigned)(value % CLOCK_SECONDS_PER_DAY);
+    dt->dt_wday = (unsigned)((days + 4ll) % 7ll);
 
-    year = 1970u;
-    for (;;) {
-        limit = clock_leap_year(year) ? 366u : 365u;
-        if (days < limit)
-            break;
-        days -= limit;
-        ++year;
-    }
-    month = 1u;
-    for (;;) {
-        limit = clock_month_days(year, month);
-        if (days < limit)
-            break;
-        days -= limit;
-        ++month;
-    }
-    dt->dt_year = year;
+    days += CLOCK_EPOCH_ADJUSTMENT;
+    era = days / 146097ll;
+    day_of_era = (unsigned)(days - era * 146097ll);
+    year_of_era = (day_of_era - day_of_era / 1460u +
+        day_of_era / 36524u - day_of_era / 146096u) / 365u;
+    year = (long long)year_of_era + era * 400ll;
+    day_of_year = day_of_era - (365u * year_of_era +
+        year_of_era / 4u - year_of_era / 100u);
+    month_prime = (5u * day_of_year + 2u) / 153u;
+    month = month_prime < 10u ? month_prime + 3u : month_prime - 9u;
+    year += month <= 2u;
+    if (year < 1970ll || (unsigned long long)year > 0xffffffffull)
+        return EOVERFLOW;
+    dt->dt_year = (unsigned)year;
     dt->dt_mon = month;
-    dt->dt_day = (unsigned)days + 1u;
-    dt->dt_hour = (unsigned)(seconds / 3600ul);
-    seconds %= 3600ul;
-    dt->dt_min = (unsigned)(seconds / 60ul);
-    dt->dt_sec = (unsigned)(seconds % 60ul);
+    dt->dt_day = day_of_year - (153u * month_prime + 2u) / 5u + 1u;
+    dt->dt_hour = seconds / 3600u;
+    seconds %= 3600u;
+    dt->dt_min = seconds / 60u;
+    dt->dt_sec = seconds % 60u;
     return 0;
 }
 

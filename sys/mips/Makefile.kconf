@@ -348,20 +348,16 @@ COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
 
 %CFILES
 
-PCC_KERNEL_RUNTIME_OBJS =
-PCC_KERNEL_RUNTIME_SRCS =
-ifeq ($(MIPS_KERNEL_COMPILER),pcc)
-include $(TOPSRC)/sys/mips/pcc-kernel-runtime.mk
-endif
+include $(TOPSRC)/sys/mips/kernel-runtime.mk
 
 MALTA_PROFILE_OBJS = $(if $(MALTA_N64_8M_PROFILE),$(if $(filter zswap.o,$(OBJS)),,zswap.o),)
 MALTA_BUILD_MODE_STAMP = .build-mode.$(MIPS_KERNEL_COMPILER).$(MALTA_MEMORY_PROFILE).$(MALTA_RAM_KBYTES).$(MALTA_RAMSWAP_KBYTES).$(CI20_RAM_KBYTES).$(CI20_RAMSWAP_KBYTES).$(MIPS_ROOTFS_KBYTES).$(MIPS_TRACE).$(VM_DIAGNOSTIC)
-SYSTEM_OBJ      = ${OBJS} $(MALTA_PROFILE_OBJS) ioconf.o rootfs.o $(PCC_KERNEL_RUNTIME_OBJS)
+SYSTEM_OBJ      = ${OBJS} $(MALTA_PROFILE_OBJS) ioconf.o rootfs.o $(MIPS_KERNEL_RUNTIME_OBJS)
 SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
                   $(TOPSRC)/sys/include/rebsd_version.h \
                   $(VERSION_GENERATOR) \
                   $(if $(MALTA_N64_8M_PROFILE),$(TOPSRC)/sys/mips/common/zswap.c $(TOPSRC)/sys/mips/common/zswap.h,) \
-                  $(KERNEL_COMPILER_DEPS) $(PCC_KERNEL_RUNTIME_SRCS)
+                  $(KERNEL_COMPILER_DEPS) $(MIPS_KERNEL_RUNTIME_SRCS)
 SYSTEM_LD_HEAD  = $(GENERATE_VERS); \
                   ${COMPILE_VERS_C}; \
                   rm -f $@

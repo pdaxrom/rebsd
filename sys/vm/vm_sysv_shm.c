@@ -37,9 +37,9 @@ struct vm_sysv_shm {
     unsigned          vss_attach_count;
     int               vss_creator_pid;
     int               vss_last_pid;
-    long              vss_attach_time;
-    long              vss_detach_time;
-    long              vss_change_time;
+    int64_t           vss_attach_time;
+    int64_t           vss_detach_time;
+    int64_t           vss_change_time;
     unsigned          vss_in_use;
     unsigned          vss_removed;
 };
@@ -144,7 +144,7 @@ vm_sysv_shm_lookup_id(int id, struct vm_sysv_shm **result)
 
 int
 vm_sysv_shm_create(int key, vm_size_t size, unsigned owner,
-    unsigned group, unsigned mode, int creator_pid, long now,
+    unsigned group, unsigned mode, int creator_pid, int64_t now,
     struct vm_sysv_shm **result)
 {
     struct vm_sysv_shm *existing;
@@ -223,7 +223,7 @@ vm_sysv_shm_get_info(const struct vm_sysv_shm *segment,
 
 int
 vm_sysv_shm_set_permissions(struct vm_sysv_shm *segment, unsigned owner,
-    unsigned group, unsigned mode, long now)
+    unsigned group, unsigned mode, int64_t now)
 {
     if (!vm_sysv_valid(segment) || segment->vss_removed != 0)
         return EINVAL;
@@ -235,7 +235,7 @@ vm_sysv_shm_set_permissions(struct vm_sysv_shm *segment, unsigned owner,
 }
 
 int
-vm_sysv_shm_mark_remove(struct vm_sysv_shm *segment, int pid, long now)
+vm_sysv_shm_mark_remove(struct vm_sysv_shm *segment, int pid, int64_t now)
 {
     if (!vm_sysv_valid(segment) || segment->vss_removed != 0)
         return EINVAL;
@@ -263,7 +263,7 @@ vm_sysv_shm_object_reference(struct vm_sysv_shm *segment,
 }
 
 int
-vm_sysv_shm_attach(struct vm_sysv_shm *segment, int pid, long now)
+vm_sysv_shm_attach(struct vm_sysv_shm *segment, int pid, int64_t now)
 {
     if (!vm_sysv_valid(segment) ||
         (segment->vss_removed != 0 && pid != 0))
@@ -279,7 +279,7 @@ vm_sysv_shm_attach(struct vm_sysv_shm *segment, int pid, long now)
 }
 
 int
-vm_sysv_shm_detach(struct vm_sysv_shm *segment, int pid, long now)
+vm_sysv_shm_detach(struct vm_sysv_shm *segment, int pid, int64_t now)
 {
     if (!vm_sysv_valid(segment) || segment->vss_attach_count == 0)
         return EINVAL;

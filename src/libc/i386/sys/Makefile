@@ -66,15 +66,15 @@ pwritew.o:	SYS.h
 		    $(CC) $(CFLAGS) $(ASFLAGS) -x assembler-with-cpp -c - -o $@
 
 stat.o:		SYS.h
-		@printf '#include "SYS.h"\nSYS2(stat,stat64)\n' | \
+		@printf '#include "SYS.h"\nSYS(stat)\n' | \
 		    $(CC) $(CFLAGS) $(ASFLAGS) -x assembler-with-cpp -c - -o $@
 
 lstat.o:	SYS.h
-		@printf '#include "SYS.h"\nSYS2(lstat,lstat64)\n' | \
+		@printf '#include "SYS.h"\nSYS(lstat)\n' | \
 		    $(CC) $(CFLAGS) $(ASFLAGS) -x assembler-with-cpp -c - -o $@
 
 fstat.o:	SYS.h
-		@printf '#include "SYS.h"\nSYS2(fstat,fstat64)\n' | \
+		@printf '#include "SYS.h"\nSYS(fstat)\n' | \
 		    $(CC) $(CFLAGS) $(ASFLAGS) -x assembler-with-cpp -c - -o $@
 
 clean:

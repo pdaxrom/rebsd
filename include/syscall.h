@@ -177,9 +177,9 @@
 #define SYS_lseek64     156
 #define SYS_truncate64  157
 #define SYS_ftruncate64 158
-#define SYS_stat64      159
-#define SYS_lstat64     160
-#define SYS_fstat64     161
+                                /* 159 is unused */
+                                /* 160 is unused */
+                                /* 161 is unused */
 #define SYS_mmap        162
 #define SYS_munmap      163
 #define SYS_mprotect    164

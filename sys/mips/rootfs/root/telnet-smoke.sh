@@ -50,7 +50,7 @@ echo "step 7: start inetd telnet service"
 cat >/var/tmp/telnet-smoke-inetd.conf <<EOF
 telnet-smoke stream tcp nowait root /usr/libexec/telnetd telnetd -i -s /bin/sh
 EOF
-/sbin/inetd -1 -f /var/tmp/telnet-smoke-inetd.conf &
+/usr/sbin/inetd -1 -f /var/tmp/telnet-smoke-inetd.conf &
 server=$!
 sleep 1
 

@@ -456,32 +456,8 @@ ino_stat(struct inode *ip, struct stat *sb)
      */
     sb->st_blocks = btod (ip->i_size);
     sb->st_flags = ip->i_flags;
+    sb->st_spare2 = 0;
     return (0);
-}
-
-int
-stat_to_stat32(const struct stat *src, struct stat32 *dst)
-{
-    if (src->st_size < INT32_MIN || src->st_size > INT32_MAX ||
-        src->st_blksize < INT32_MIN || src->st_blksize > INT32_MAX ||
-        src->st_blocks < INT32_MIN || src->st_blocks > INT32_MAX)
-        return EOVERFLOW;
-
-    dst->st_dev = src->st_dev;
-    dst->st_ino = src->st_ino;
-    dst->st_mode = src->st_mode;
-    dst->st_nlink = src->st_nlink;
-    dst->st_uid = src->st_uid;
-    dst->st_gid = src->st_gid;
-    dst->st_rdev = src->st_rdev;
-    dst->st_size = src->st_size;
-    dst->st_atime = src->st_atime;
-    dst->st_mtime = src->st_mtime;
-    dst->st_ctime = src->st_ctime;
-    dst->st_blksize = src->st_blksize;
-    dst->st_blocks = src->st_blocks;
-    dst->st_flags = src->st_flags;
-    return 0;
 }
 
 /*

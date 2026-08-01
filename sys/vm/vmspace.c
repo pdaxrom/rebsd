@@ -342,7 +342,7 @@ restart:
 int
 vmspace_sysv_attach(struct vmspace *vmspace,
     struct vm_sysv_shm *segment, vm_vaddr_t start, vm_size_t size,
-    int pid, long now)
+    int pid, int64_t now)
 {
     const struct vm_map_entry *entry;
     struct vmspace_sysv_attachment *attachment;
@@ -385,7 +385,7 @@ vmspace_sysv_attach(struct vmspace *vmspace,
 
 int
 vmspace_sysv_detach(struct vmspace *vmspace, vm_vaddr_t start,
-    int pid, long now)
+    int pid, int64_t now)
 {
     struct vmspace_sysv_attachment attachment;
     unsigned count;

@@ -278,7 +278,7 @@ Source reference:
 - [x] Add a minimal `inetd(8)` path for service-on-demand startup:
   - `/etc/services`
   - `/etc/inetd.conf`
-  - `/sbin/inetd`
+  - `/usr/sbin/inetd`
   - `telnetd -i` inetd mode
   - keep plain TELNET disabled in the shipped config by default.
   - verified on Malta with `/root/telnet-smoke.sh`, including the one-shot

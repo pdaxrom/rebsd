@@ -27,7 +27,7 @@ char mesg[3000];
 int msize, sline;
 struct utmp *utmp;
 char who[UT_NAMESIZE + 1] = "???";
-long clock;
+time_t clock;
 struct tm *localclock;
 
 static void sendmes(char *tty);

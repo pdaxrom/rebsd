@@ -125,7 +125,8 @@ int main(int ac, char *av[])
 	struct itimerval	itv;
 #endif
 
-	start_time = seed = time(0);
+	start_time = time(NULL);
+	seed = (int)start_time;
 
 	name = *av++;
 	while (*av) {

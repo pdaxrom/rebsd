@@ -30,9 +30,9 @@ struct vm_sysv_shm_info {
     unsigned  vssi_attach_count;
     int       vssi_creator_pid;
     int       vssi_last_pid;
-    long      vssi_attach_time;
-    long      vssi_detach_time;
-    long      vssi_change_time;
+    int64_t   vssi_attach_time;
+    int64_t   vssi_detach_time;
+    int64_t   vssi_change_time;
     int       vssi_removed;
 };
 
@@ -46,17 +46,17 @@ struct vm_sysv_shm_stats {
 
 int vm_sysv_shm_system_init(void);
 int vm_sysv_shm_create(int, vm_size_t, unsigned, unsigned, unsigned,
-    int, long, struct vm_sysv_shm **);
+    int, int64_t, struct vm_sysv_shm **);
 int vm_sysv_shm_lookup_key(int, struct vm_sysv_shm **);
 int vm_sysv_shm_lookup_id(int, struct vm_sysv_shm **);
 int vm_sysv_shm_get_info(const struct vm_sysv_shm *,
     struct vm_sysv_shm_info *);
 int vm_sysv_shm_set_permissions(struct vm_sysv_shm *, unsigned, unsigned,
-    unsigned, long);
-int vm_sysv_shm_mark_remove(struct vm_sysv_shm *, int, long);
+    unsigned, int64_t);
+int vm_sysv_shm_mark_remove(struct vm_sysv_shm *, int, int64_t);
 int vm_sysv_shm_object_reference(struct vm_sysv_shm *, struct vm_object **);
-int vm_sysv_shm_attach(struct vm_sysv_shm *, int, long);
-int vm_sysv_shm_detach(struct vm_sysv_shm *, int, long);
+int vm_sysv_shm_attach(struct vm_sysv_shm *, int, int64_t);
+int vm_sysv_shm_detach(struct vm_sysv_shm *, int, int64_t);
 int vm_sysv_shm_get_stats(struct vm_sysv_shm_stats *);
 
 #endif /* _VM_VM_SYSV_SHM_H_ */

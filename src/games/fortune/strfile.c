@@ -226,7 +226,7 @@ void randomize(long *seekpts)
 	register long	*origsp;
 
 	Tbl.str_flags |= STR_RANDOM;
-	srandom(time((long *) NULL) + getpid());
+	srandom((unsigned)(time(NULL) + getpid()));
 	origsp = seekpts;
 	for (j = 0; j <= Delim; j++) {
 

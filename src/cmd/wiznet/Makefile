@@ -5,7 +5,6 @@ CFLAGS          += -O -Wall -Werror
 LIBS            += -lwiznet -lc
 
 EXAMPLES        = telnet \
-                  ntpdate \
                   chat-server \
                   web-client \
                   web-server
@@ -25,12 +24,6 @@ web-server:     web-server.o
 		${ELF2AOUT} $@.elf $@
 
 telnet:         telnet.o
-		${LD} ${LDFLAGS} -o $@.elf $< ${LIBS}
-		${OBJDUMP} -S $@.elf > $@.dis
-		${SIZE} $@.elf
-		${ELF2AOUT} $@.elf $@
-
-ntpdate:        ntpdate.o
 		${LD} ${LDFLAGS} -o $@.elf $< ${LIBS}
 		${OBJDUMP} -S $@.elf > $@.dis
 		${SIZE} $@.elf

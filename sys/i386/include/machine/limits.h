@@ -21,6 +21,10 @@
 #define LONG_MAX        2147483647L
 #define LONG_MIN        (-2147483647L-1L)
 
+#define ULLONG_MAX      0xffffffffffffffffULL
+#define LLONG_MAX       0x7fffffffffffffffLL
+#define LLONG_MIN       (-LLONG_MAX-1LL)
+
 #define SSIZE_MAX       INT_MAX
 #define SIZE_T_MAX      UINT_MAX
 

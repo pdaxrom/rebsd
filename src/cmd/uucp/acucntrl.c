@@ -280,7 +280,7 @@ register int len;
 post(device, name)
 char *device, *name;
 {
-	(void)time((time_t *)&utmp.ut_time);
+	(void)time(&utmp.ut_time);
 	strncpy(utmp.ut_line, device, LINSIZ);
 	strncpy(utmp.ut_name, name,  NAMSIZ);
 	if (lseek(etcutmp, utmploc, 0) < 0)
