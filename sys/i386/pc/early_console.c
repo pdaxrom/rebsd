@@ -2,6 +2,7 @@
 #include "interrupt.h"
 #include "io.h"
 
+#include <console/vtconsole.h>
 #include <machine/console.h>
 #include <sys/reboot.h>
 #include <sys/tty.h>
@@ -23,23 +24,88 @@
 #define VGA_ATTRIBUTE   0x07u
 #define VGA_CRTC_INDEX  0x03d4u
 #define VGA_CRTC_DATA   0x03d5u
+#define VGA_CURSOR_START 0x0au
 #define VGA_CURSOR_HIGH 0x0eu
 #define VGA_CURSOR_LOW  0x0fu
 
-static unsigned vga_row;
-static unsigned vga_column;
+static unsigned char vga_cells[VGA_ROWS][VGA_COLUMNS];
+static unsigned char vga_attrs[VGA_ROWS][VGA_COLUMNS];
+static struct vtconsole vga_console;
 
 static void
-i386_vga_cursor_update(void)
+i386_vga_cursor_position(unsigned column, unsigned row)
 {
     unsigned position;
 
-    position = vga_row * VGA_COLUMNS + vga_column;
+    position = row * VGA_COLUMNS + column;
     i386_outb(VGA_CRTC_INDEX, VGA_CURSOR_HIGH);
     i386_outb(VGA_CRTC_DATA, (i386_u8)(position >> 8));
     i386_outb(VGA_CRTC_INDEX, VGA_CURSOR_LOW);
     i386_outb(VGA_CRTC_DATA, (i386_u8)position);
 }
+
+static i386_u8
+i386_vga_attribute(unsigned char attr)
+{
+    if ((attr & VTCONSOLE_ATTR_REVERSE) != 0)
+        return 0x70u;
+    if ((attr & VTCONSOLE_ATTR_BOLD) != 0)
+        return 0x0fu;
+    return VGA_ATTRIBUTE;
+}
+
+static void
+i386_vga_render_cell(void *arg, unsigned column, unsigned row, int cursor)
+{
+    volatile i386_u16 *vga;
+    i386_u8 attribute;
+
+    (void)arg;
+    if (column >= VGA_COLUMNS || row >= VGA_ROWS)
+        return;
+    attribute = i386_vga_attribute(vga_attrs[row][column]);
+    if (cursor)
+        attribute = (i386_u8)((attribute << 4) | (attribute >> 4));
+    vga = (volatile i386_u16 *)VGA_TEXT_BASE;
+    vga[row * VGA_COLUMNS + column] =
+        (i386_u16)((attribute << 8) | vga_cells[row][column]);
+}
+
+static void
+i386_vga_render_all(void *arg)
+{
+    unsigned row;
+    unsigned column;
+
+    (void)arg;
+    for (row = 0; row < VGA_ROWS; ++row)
+        for (column = 0; column < VGA_COLUMNS; ++column)
+            i386_vga_render_cell(0, column, row, 0);
+}
+
+static void
+i386_vga_cursor(void *arg, unsigned column, unsigned row, int visible)
+{
+    i386_u8 start;
+
+    (void)arg;
+    i386_outb(VGA_CRTC_INDEX, VGA_CURSOR_START);
+    start = i386_inb(VGA_CRTC_DATA);
+    if (visible)
+        start &= (i386_u8)~0x20u;
+    else
+        start |= 0x20u;
+    i386_outb(VGA_CRTC_DATA, start);
+    if (visible)
+        i386_vga_cursor_position(column, row);
+}
+
+static const struct vtconsole_ops i386_vga_ops = {
+    i386_vga_render_cell,
+    i386_vga_render_all,
+    i386_vga_cursor,
+    0
+};
 
 static void
 i386_serial_init(void)
@@ -67,70 +133,24 @@ i386_serial_putc(char ch)
 }
 
 static void
-i386_vga_clear(void)
+i386_vga_init(void)
 {
-    volatile i386_u16 *vga;
-    unsigned index;
-
-    vga = (volatile i386_u16 *)VGA_TEXT_BASE;
-    for (index = 0; index < VGA_COLUMNS * VGA_ROWS; ++index)
-        vga[index] = (i386_u16)((VGA_ATTRIBUTE << 8) | ' ');
-    vga_row = 0;
-    vga_column = 0;
-    i386_vga_cursor_update();
-}
-
-static void
-i386_vga_scroll(void)
-{
-    volatile i386_u16 *vga;
-    unsigned row;
-    unsigned column;
-
-    vga = (volatile i386_u16 *)VGA_TEXT_BASE;
-    for (row = 1; row < VGA_ROWS; ++row) {
-        for (column = 0; column < VGA_COLUMNS; ++column) {
-            vga[(row - 1) * VGA_COLUMNS + column] =
-                vga[row * VGA_COLUMNS + column];
-        }
-    }
-    for (column = 0; column < VGA_COLUMNS; ++column) {
-        vga[(VGA_ROWS - 1) * VGA_COLUMNS + column] =
-            (i386_u16)((VGA_ATTRIBUTE << 8) | ' ');
-    }
-    vga_row = VGA_ROWS - 1;
+    vtconsole_init(&vga_console, &vga_cells[0][0], &vga_attrs[0][0],
+        VGA_COLUMNS, VGA_COLUMNS, VGA_ROWS, &i386_vga_ops, 0);
+    vtconsole_set_geometry(&vga_console, VGA_COLUMNS, VGA_ROWS);
 }
 
 static void
 i386_vga_putc(char ch)
 {
-    volatile i386_u16 *vga;
-
-    vga = (volatile i386_u16 *)VGA_TEXT_BASE;
-    if (ch == '\r') {
-        vga_column = 0;
-    } else if (ch == '\n') {
-        vga_column = 0;
-        ++vga_row;
-    } else {
-        vga[vga_row * VGA_COLUMNS + vga_column] =
-            (i386_u16)((VGA_ATTRIBUTE << 8) | (i386_u8)ch);
-        ++vga_column;
-        if (vga_column == VGA_COLUMNS) {
-            vga_column = 0;
-            ++vga_row;
-        }
-    }
-    if (vga_row == VGA_ROWS)
-        i386_vga_scroll();
-    i386_vga_cursor_update();
+    vtconsole_putc(&vga_console, (i386_u8)ch);
 }
 
 void
 i386_early_console_init(void)
 {
     i386_serial_init();
-    i386_vga_clear();
+    i386_vga_init();
 }
 
 static int

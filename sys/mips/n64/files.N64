@@ -1,4 +1,5 @@
 mips/n64/n64cart_uart.c         optional n64cart
+console/vtconsole.c             standard
 mips/n64/n64cart_rgbled.c       optional n64cart
 mips/n64/n64cart_flash.c        optional n64cart
 mips/n64/romfs_backend.c        optional n64cart

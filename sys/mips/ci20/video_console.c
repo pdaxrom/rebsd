@@ -6,6 +6,7 @@
  * copyright notice and this permission notice appear in all copies.
  */
 
+#include <console/vtconsole.h>
 #include <sys/param.h>
 #include <sys/tty.h>
 #include <machine/video.h>
@@ -21,16 +22,9 @@
 #define CONSOLE_MARGIN_DIV      20u
 #define CONSOLE_FG              0x00f0f0f0u
 #define CONSOLE_BG              0x00000000u
-#define CSI_PARAMS              4u
-
-#define STATE_GROUND            0
-#define STATE_ESC               1
-#define STATE_CSI               2
-#define STATE_OSC               3
-#define STATE_OSC_ESC           4
-
 static unsigned char cells[CONSOLE_MAX_ROWS][CONSOLE_MAX_COLS];
 static unsigned char attrs[CONSOLE_MAX_ROWS][CONSOLE_MAX_COLS];
+static struct vtconsole console_vt;
 static unsigned console_width;
 static unsigned console_height;
 static unsigned console_stride;
@@ -38,18 +32,18 @@ static unsigned console_x0;
 static unsigned console_y0;
 static unsigned console_cols;
 static unsigned console_rows;
-static unsigned cursor_col;
-static unsigned cursor_row;
-static unsigned saved_col;
-static unsigned saved_row;
-static unsigned state;
-static unsigned attr;
-static unsigned params[CSI_PARAMS];
-static unsigned param_index;
-static int csi_private;
-static int cursor_visible = 1;
-static int cursor_drawn;
 static int console_initialized;
+
+static void vt_render_cell(void *, unsigned, unsigned, int);
+static void vt_render_all(void *);
+static void vt_cursor(void *, unsigned, unsigned, int);
+
+static const struct vtconsole_ops console_vt_ops = {
+    vt_render_cell,
+    vt_render_all,
+    vt_cursor,
+    0
+};
 
 static void
 console_geometry(void)
@@ -76,6 +70,8 @@ console_geometry(void)
         console_rows = CONSOLE_MAX_ROWS;
     console_x0 = (console_width - console_cols * CELL_PIXEL_WIDTH) / 2u;
     console_y0 = (console_height - console_rows * CELL_PIXEL_HEIGHT) / 2u;
+    if (console_initialized)
+        vtconsole_set_geometry(&console_vt, console_cols, console_rows);
 }
 
 static void
@@ -207,7 +203,7 @@ render_cell(unsigned col, unsigned row, int invert)
     ch = cells[row][col] ? cells[row][col] : ' ';
     fg = CONSOLE_FG;
     bg = CONSOLE_BG;
-    if (((attrs[row][col] & 1u) != 0) ^ invert) {
+    if (((attrs[row][col] & VTCONSOLE_ATTR_REVERSE) != 0) ^ invert) {
         unsigned swap = fg;
         fg = bg;
         bg = swap;
@@ -245,234 +241,38 @@ render_all(void)
 }
 
 static void
-erase_cursor(void)
+vt_render_cell(void *arg, unsigned col, unsigned row, int invert)
 {
-    if (cursor_drawn) {
-        render_cell(cursor_col, cursor_row, 0);
-        cursor_drawn = 0;
-    }
+    (void)arg;
+    render_cell(col, row, invert);
 }
 
 static void
-draw_cursor(void)
+vt_render_all(void *arg)
 {
-    if (cursor_visible && !cursor_drawn) {
-        render_cell(cursor_col, cursor_row, 1);
-        cursor_drawn = 1;
-    }
-}
-
-static void
-clear_range(unsigned row, unsigned first, unsigned end)
-{
-    unsigned col;
-
-    if (row >= console_rows || first >= console_cols)
-        return;
-    if (end > console_cols)
-        end = console_cols;
-    for (col = first; col < end; ++col) {
-        cells[row][col] = ' ';
-        attrs[row][col] = attr;
-        render_cell(col, row, 0);
-    }
-}
-
-static void
-scroll(void)
-{
-    unsigned row;
-    unsigned col;
-
-    for (row = 0; row + 1 < console_rows; ++row)
-        for (col = 0; col < console_cols; ++col) {
-            cells[row][col] = cells[row + 1][col];
-            attrs[row][col] = attrs[row + 1][col];
-        }
-    for (col = 0; col < console_cols; ++col) {
-        cells[console_rows - 1][col] = ' ';
-        attrs[console_rows - 1][col] = attr;
-    }
+    (void)arg;
     render_all();
 }
 
 static void
-newline(void)
+vt_cursor(void *arg, unsigned col, unsigned row, int visible)
 {
-    cursor_col = 0;
-    if (++cursor_row >= console_rows) {
-        scroll();
-        cursor_row = console_rows - 1;
-    }
-}
-
-static void
-clamp_cursor(void)
-{
-    if (cursor_col >= console_cols)
-        cursor_col = console_cols - 1;
-    if (cursor_row >= console_rows)
-        cursor_row = console_rows - 1;
-}
-
-static unsigned
-csi_param(unsigned index, unsigned default_value)
-{
-    if (index >= CSI_PARAMS || params[index] == 0)
-        return default_value;
-    return params[index];
-}
-
-static void
-csi_dispatch(int ch)
-{
-    unsigned count;
-    unsigned row;
-
-    if (csi_private) {
-        if ((ch == 'h' || ch == 'l') && params[0] == 25)
-            cursor_visible = ch == 'h';
-        return;
-    }
-    count = csi_param(0, 1);
-    switch (ch) {
-    case 'A':
-        cursor_row = count > cursor_row ? 0 : cursor_row - count;
-        break;
-    case 'B':
-        cursor_row += count;
-        clamp_cursor();
-        break;
-    case 'C':
-        cursor_col += count;
-        clamp_cursor();
-        break;
-    case 'D':
-        cursor_col = count > cursor_col ? 0 : cursor_col - count;
-        break;
-    case 'H':
-    case 'f':
-        cursor_row = csi_param(0, 1) - 1;
-        cursor_col = csi_param(1, 1) - 1;
-        clamp_cursor();
-        break;
-    case 'J':
-        if (params[0] == 2 || params[0] == 3) {
-            for (row = 0; row < console_rows; ++row)
-                clear_range(row, 0, console_cols);
-        } else {
-            clear_range(cursor_row, cursor_col, console_cols);
-            for (row = cursor_row + 1; row < console_rows; ++row)
-                clear_range(row, 0, console_cols);
-        }
-        break;
-    case 'K':
-        if (params[0] == 2)
-            clear_range(cursor_row, 0, console_cols);
-        else if (params[0] == 1)
-            clear_range(cursor_row, 0, cursor_col + 1);
-        else
-            clear_range(cursor_row, cursor_col, console_cols);
-        break;
-    case 'm':
-        attr = params[0] == 7 ? 1u : 0u;
-        break;
-    case 's':
-        saved_col = cursor_col;
-        saved_row = cursor_row;
-        break;
-    case 'u':
-        cursor_col = saved_col;
-        cursor_row = saved_row;
-        clamp_cursor();
-        break;
-    default:
-        break;
-    }
-}
-
-static void
-put_character(int ch)
-{
-    unsigned i;
-
-    if (state == STATE_ESC) {
-        if (ch == '[') {
-            for (i = 0; i < CSI_PARAMS; ++i)
-                params[i] = 0;
-            param_index = 0;
-            csi_private = 0;
-            state = STATE_CSI;
-        } else if (ch == ']') {
-            state = STATE_OSC;
-        } else {
-            state = STATE_GROUND;
-        }
-        return;
-    }
-    if (state == STATE_CSI) {
-        if (ch >= '0' && ch <= '9') {
-            params[param_index] = params[param_index] * 10u +
-                (unsigned)(ch - '0');
-        } else if (ch == ';' && param_index + 1 < CSI_PARAMS) {
-            ++param_index;
-        } else if (ch == '?') {
-            csi_private = 1;
-        } else if (ch >= 0x40 && ch <= 0x7e) {
-            csi_dispatch(ch);
-            state = STATE_GROUND;
-        }
-        return;
-    }
-    if (state == STATE_OSC) {
-        if (ch == '\007')
-            state = STATE_GROUND;
-        else if (ch == 0x1b)
-            state = STATE_OSC_ESC;
-        return;
-    }
-    if (state == STATE_OSC_ESC) {
-        state = ch == '\\' ? STATE_GROUND : STATE_OSC;
-        return;
-    }
-    if (ch == 0x1b) {
-        state = STATE_ESC;
-    } else if (ch == '\r') {
-        cursor_col = 0;
-    } else if (ch == '\n' || ch == '\013' || ch == '\014') {
-        newline();
-    } else if (ch == '\b') {
-        if (cursor_col != 0)
-            --cursor_col;
-    } else if (ch == '\t') {
-        do {
-            put_character(' ');
-        } while ((cursor_col & 7u) != 0);
-    } else if (ch >= 0x20 && ch < 0x7f) {
-        cells[cursor_row][cursor_col] = ch;
-        attrs[cursor_row][cursor_col] = attr;
-        render_cell(cursor_col, cursor_row, 0);
-        if (++cursor_col >= console_cols)
-            newline();
-    }
+    (void)arg;
+    render_cell(col, row, visible);
 }
 
 static void
 console_init(void)
 {
-    unsigned row;
-    unsigned col;
-
     if (console_initialized || !ci20_video_ready())
         return;
     console_geometry();
-    for (row = 0; row < CONSOLE_MAX_ROWS; ++row)
-        for (col = 0; col < CONSOLE_MAX_COLS; ++col) {
-            cells[row][col] = ' ';
-            attrs[row][col] = 0;
-        }
     ci20_video_clear(CONSOLE_BG);
+    vtconsole_init(&console_vt, &cells[0][0], &attrs[0][0],
+        CONSOLE_MAX_COLS, CONSOLE_MAX_COLS, CONSOLE_MAX_ROWS,
+        &console_vt_ops, 0);
     console_initialized = 1;
+    vtconsole_set_geometry(&console_vt, console_cols, console_rows);
 }
 
 void
@@ -482,37 +282,26 @@ ci20_video_console_putc(int ch)
     if (!console_initialized)
         return;
     console_geometry();
-    erase_cursor();
-    put_character(ch);
-    draw_cursor();
+    vtconsole_putc(&console_vt, ch);
 }
 
 void
 ci20_video_console_mode_changed(void)
 {
-    unsigned row;
-    unsigned col;
+    unsigned old_cols;
+    unsigned old_rows;
 
     if (!console_initialized)
         return;
+    old_cols = console_vt.vc_cols;
+    old_rows = console_vt.vc_rows;
     console_width = 0;
     console_height = 0;
     console_stride = 0;
-    console_geometry();
-    cursor_col = 0;
-    cursor_row = 0;
-    saved_col = 0;
-    saved_row = 0;
-    state = STATE_GROUND;
-    attr = 0;
-    cursor_drawn = 0;
-    for (row = 0; row < CONSOLE_MAX_ROWS; ++row)
-        for (col = 0; col < CONSOLE_MAX_COLS; ++col) {
-            cells[row][col] = ' ';
-            attrs[row][col] = 0;
-        }
     ci20_video_clear(CONSOLE_BG);
-    draw_cursor();
+    console_geometry();
+    if (old_cols == console_cols && old_rows == console_rows)
+        vtconsole_reset(&console_vt);
 }
 
 void

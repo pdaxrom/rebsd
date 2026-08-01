@@ -366,6 +366,7 @@ def monitor_command(connection: socket.socket, command: str) -> None:
 
 def monitor_send_text(connection: socket.socket, text: str) -> None:
     key_names = {
+        "\b": "backspace",
         "\n": "ret",
         " ": "spc",
     }
@@ -488,7 +489,7 @@ def main() -> None:
         if not login_sent and b"login: " in output_bytes:
             if args.ps2_keyboard:
                 assert monitor is not None
-                monitor_send_text(monitor, "root\n")
+                monitor_send_text(monitor, "roox\bt\n")
             else:
                 process.stdin.write(b"root\n")
                 process.stdin.flush()
@@ -523,7 +524,9 @@ def main() -> None:
                 if args.ps2_keyboard:
                     assert monitor is not None
                     ps2_post_network_output_start = len(output_bytes)
-                    monitor_send_text(monitor, "echo ps2postnetok\n")
+                    monitor_send_text(
+                        monitor, "echo ps2postnetox\bk\n"
+                    )
                     ps2_post_network_sent = True
                 else:
                     completed = True

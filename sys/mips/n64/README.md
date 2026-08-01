@@ -1419,15 +1419,16 @@ The text console draws inside a 5% safe area to keep characters away from CRT
 or capture-device overscan. This margin applies only to `video_console.c`;
 `/dev/fb0` still exposes the full framebuffer.
 
-The framebuffer console keeps its own text cell buffer and renders that buffer
-into the VI framebuffer. This is intentionally separate from `/dev/fb0`
-graphics access: the console is a tty renderer, while `/dev/fb0` remains the
-raw framebuffer device. The console parser handles the basic VT100 output used
-by shells and pagers: printable ASCII, CR/LF/TAB/BS, ESC save/restore/reset,
-CSI cursor movement, erase line/display, insert/delete character and line, SGR
-bold/underline/reverse attributes, OSC skipping, and `CSI ?25h/?25l` cursor
-visibility. Backspace only moves the console cursor left; BSD tty erase echo
-still performs the visible erase through the normal `BS SPACE BS` sequence.
+The framebuffer console renders the cell buffer owned by the common
+`sys/console/vtconsole.c` core into the VI framebuffer. This is intentionally
+separate from `/dev/fb0` graphics access: the console is a tty renderer, while
+`/dev/fb0` remains the raw framebuffer device. N64, Ci20 and i686 share the
+same parser for the basic VT100 output used by shells and pagers: printable
+ASCII, CR/LF/TAB/BS, ESC save/restore/reset, CSI cursor movement, erase
+line/display, insert/delete character and line, SGR bold/underline/reverse
+attributes, OSC skipping, and `CSI ?25h/?25l` cursor visibility. Backspace
+only moves the console cursor left; BSD tty erase echo still performs the
+visible erase through the normal `BS SPACE BS` sequence.
 
 `/dev/console` reports its current text geometry through `TIOCGWINSZ`. The
 reported character rows and columns are derived from the framebuffer console

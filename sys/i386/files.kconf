@@ -14,6 +14,7 @@
 # Remaining machine-independent files are connected as the diagnostic
 # bootstrap is replaced by normal common startup.
 kernel/cons.c                   standard
+console/vtconsole.c            standard
 kernel/nullzero.c               standard
 kernel/subr_dma.c               optional dma
 kernel/clock_subr.c             standard

@@ -1216,10 +1216,26 @@ filesystem path или собственный namespace устройств.
   выполняет ATA write и не меняет Red Hat/GRUB CF; embedded read-only UFS
   остаётся root `(0,0)`.
 
-Следующий аппаратный gate: на IBM сначала `ata=pio`, затем `ata=dma` и
-`ata=auto`, каждый раз с read-only `sd0` и сохранением полного mode/error
-log. Разрешение записи на настоящий CF является отдельным изменением disk
-policy и без явного разрешения не выполняется.
+Аппаратный gate 2026-08-02 подтвердил на IBM принудительные `ata=pio` и
+`ata=dma`: в каждом режиме 4 MiB были прочитаны из read-only `sd0` через
+обычный `dd`. Следующий запуск проверяет `ata=auto` с сохранением полного
+mode/error log. Разрешение записи на настоящий CF является отдельным
+изменением disk policy и без явного разрешения не выполняется.
+
+## Общая VT100 text console
+
+Framebuffer/text adapters i686, N64 и Ci20 используют один
+`sys/console/vtconsole.c`. Общий код владеет cell/attribute buffer, VT100/CSI
+parser, прокруткой, очисткой и положением cursor; архитектурные файлы только
+рисуют cell и показывают аппаратный или программный cursor. Это устраняет
+прежнее дублирование N64/Ci20 и исправляет i686 VGA, который до этого печатал
+readline sequences `CSI 0 K` и `CSI n C` как обычный текст.
+
+Регрессия `sys/tests/console` проверяет точный Backspace redraw readline,
+обычный BSD `BS SPACE BS`, SGR, erase и cursor visibility. i686
+`ps2-input-smoke` вводит через i8042 ошибочный login и команду, затем исправляет
+их Backspace. Реальный IBM gate должен визуально подтвердить очистку хвоста
+строки и правильную позицию VGA cursor.
 
 ## Общий PCI Ethernet этап
 

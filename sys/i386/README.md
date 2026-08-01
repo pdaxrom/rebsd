@@ -94,10 +94,14 @@ namespace and the existing USB core, hubs, EHCI/OHCI/UHCI, `umass` BOT/SCSI
 and disk code.  The romdisk never consumes an `sdN` number.
 
 `ps2-input-smoke` injects keyboard and mouse traffic through QEMU's i8042
-IRQs.  The keyboard logs in through the common console/TTY path, while the
-mouse publishes events through `/dev/mouse0`.  The OHCI and UHCI mouse gates
-use the same machine-independent mouse queue and `/dev/mouse1`; only the
-transport-specific decoders differ.
+IRQs.  The keyboard logs in through the common console/TTY path and the test
+deliberately corrects both the login name and a shell command with Backspace.
+The i386 VGA adapter only renders text cells and programs the hardware cursor;
+VT100 parsing and line-edit redraw sequences are owned by the shared
+`sys/console/vtconsole.c` core also used by the N64 and Ci20 framebuffer
+consoles.  The mouse publishes events through `/dev/mouse0`.  The OHCI and
+UHCI mouse gates use the same machine-independent mouse queue and
+`/dev/mouse1`; only the transport-specific decoders differ.
 
 The 16 MiB root image is built deterministically by the existing
 `tools/fsutil`.  Its GCC userland uses the shared full-rootfs profile in
@@ -165,12 +169,14 @@ PCC is not part of the i686 build and must not be changed.
 
 ## Next hardware gates
 
-1. Boot the full `rebsd-i686.bzimg` from GRUB Legacy on the IBM 6563-W4G.
-2. Verify the full userland, PS/2 keyboard/mouse and VGA cursor on the IBM.
+1. Recheck Backspace/readline redraw and VGA cursor placement with the shared
+   VT100 console build on the IBM 6563-W4G.
+2. Verify USB keyboard/mouse input on the IBM; PS/2 keyboard/mouse attachment
+   and input are already confirmed.
 3. Keep external IDE and USB devices on the common disk path and validate
    ordinary mounts without changing the embedded read-only UFS root policy.
-4. Validate forced PIO, forced MWDMA and automatic ATA selection on the VIA
-   controller, keeping the CF exposed read-only for this gate.
+4. Validate automatic ATA selection on the VIA controller.  Forced PIO and
+   forced MWDMA reads are already confirmed with the CF exposed read-only.
 5. Validate CMOS persistence after `date`/`settimeofday` and USB mass storage
    on the VIA Apollo Pro 133.
 6. Validate `re0` attach, level-triggered INTx, link, static IPv4, ARP, ICMP

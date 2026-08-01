@@ -33,6 +33,12 @@ PCI bus-master MWDMA, IRQ completion, reset, write и cache flush. Запись
 IDE-CF с `DISK_FLAG_READ_ONLY`, поэтому обычный kernel path не посылает
 команды записи реальному CF, а write-open/strategy возвращают `EROFS`.
 
+2026-08-02 на том же IBM отдельно подтверждены оба storage режима одного
+общего driver: принудительный PIO и PCI bus-master MWDMA. В обоих режимах
+`dd if=/dev/sd0 of=/dev/null bs=32768 count=128` прочитал 4 MiB, а внешний
+IDE-CF остался read-only. Проверка `ata=auto` остаётся отдельным следующим
+запуском.
+
 ## 1. Собрать и повторить QEMU gate
 
 ```sh
@@ -84,10 +90,9 @@ GRUB переустанавливать не требуется; `initrd`, `root
 `quiet` не используются. До замены image надо сохранить backup CF или
 как минимум исходного `grub.conf`.
 
-Первый повторный storage gate выполняется с `ata=pio`. После сохранения
-полного boot log тот же image проверяется сначала с `ata=dma`, затем с
-`ata=auto`. Во всех трёх случаях IDE-CF остаётся read-only на generic disk
-уровне. Ожидаемые mode markers:
+Принудительные `ata=pio` и `ata=dma` уже проверены на реальном VIA. Следующий
+storage запуск использует `ata=auto`. Во всех трёх случаях IDE-CF остаётся
+read-only на generic disk уровне. Mode markers:
 
 ```text
 ata0: mode=pio policy=forced
@@ -161,7 +166,23 @@ driver использует bus-master BAR, MWDMA и IRQ14. AGP programming не
 COM1 `115200 8N1` остаётся желательным для последующих длинных logs, но
 точный PCI baseline уже зафиксирован через VGA.
 
-## 5. RTL8169 Ethernet gate
+## 5. VGA terminal gate
+
+PS/2 Backspace дошёл через i8042 и общий TTY/readline, но старый i386 VGA
+backend печатал управляющие последовательности redraw буквально: на экране
+появлялись `ESC[0K`, `ESC[nC` и символы очищаемого хвоста строки. Исправление
+не добавляет отдельный i386 parser. VT100 state machine и cell buffer вынесены
+из существующих N64/Ci20 реализаций в общий `sys/console/vtconsole.c`; i686,
+N64 и Ci20 оставляют только аппаратный renderer и cursor adapter.
+
+Host regression воспроизводит точную последовательность readline после
+Backspace (`CR`, сокращённая строка, `CSI 0 K`, `CR`, `CSI n C`). QEMU
+`ps2-input-smoke` дополнительно вводит ошибочный login и shell command и
+исправляет их настоящей PS/2 клавишей Backspace. На IBM остаётся визуально
+подтвердить, что хвост строки очищается, а VGA cursor возвращается в конец
+отредактированной команды.
+
+## 6. RTL8169 Ethernet gate
 
 Дополнительный PCI controller на IBM определён фактическим `lspci`:
 

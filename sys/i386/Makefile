@@ -10,6 +10,7 @@ I386_BOOT_SRC    = $(I386_SRC)/boot
 I386_COMMON_SRC  = $(I386_SRC)/common
 I386_PC_SRC      = $(I386_SRC)/pc
 I386_TOOLS_SRC   = $(I386_SRC)/tools
+I386_CONSOLE_SRC = $(TOPSRC)/sys/console
 KCONFIG_DIR      = $(TOPSRC)/tools/kconfig
 KCONFIG          = $(OBJTOP)/tools/kconfig/kconfig
 KCONFIG_SRCS     = $(KCONFIG_DIR)/Makefile $(KCONFIG_DIR)/config.h \
@@ -175,7 +176,7 @@ INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
 I386_RUNTIME_OBJS = divdi3.o divmoddi4.o moddi3.o udivdi3.o \
                     udivmoddi4.o umoddi3.o
 KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
-                   early_console.o interrupt.o tss.o syscall.o \
+                   early_console.o vtconsole.o interrupt.o tss.o syscall.o \
                    signal.o user_return.o trap.o \
                    pic.o pit.o pci_core.o pciide.o i386_pci.o \
                    rtl8169_hw.o if_re.o \
@@ -489,6 +490,11 @@ early_console.o: $(I386_PC_SRC)/early_console.c \
 	    $(TOPSRC)/sys/include/reboot.h $(TOPSRC)/sys/include/tty.h \
 	    $(TOPSRC)/sys/include/types.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+vtconsole.o: $(I386_CONSOLE_SRC)/vtconsole.c \
+	    $(I386_CONSOLE_SRC)/vtconsole.h
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
