@@ -317,7 +317,7 @@ struct anode *e3()
         return mk(ok, (struct anode *)i, (struct anode *)0);
     } else if (EQ(a, "-cpio")) {
         if ((Cpio = creat(b, 0666)) < 0) {
-            fprintf(stderr, "find: cannot create < %s >\n", s);
+            fprintf(stderr, "find: cannot create < %s >\n", b);
             exit(1);
         }
         Buf = (short *)sbrk(512);

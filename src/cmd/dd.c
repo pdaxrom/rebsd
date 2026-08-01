@@ -168,7 +168,7 @@ int number(int big)
 
         case '\0':
             if (n >= big || n < 0) {
-                fprintf(stderr, "dd: argument %D out of range\n", n);
+                fprintf(stderr, "dd: argument %ld out of range\n", n);
                 exit(1);
             }
             return (n);

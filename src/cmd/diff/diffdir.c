@@ -164,7 +164,8 @@ only(struct dir *dp, int which)
 	char *file = which == 1 ? file1 : file2;
 	char *efile = which == 1 ? efile1 : efile2;
 
-	printf("Only in %.*s: %s\n", efile - file - 1, file, dp->d_entry);
+	printf("Only in %.*s: %s\n", (int)(efile - file - 1), file,
+	    dp->d_entry);
 }
 
 int

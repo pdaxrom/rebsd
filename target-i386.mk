@@ -28,7 +28,8 @@ I686_CODE_FLAGS = -ffreestanding -fno-builtin -fno-stack-protector \
                   -ffunction-sections -fdata-sections \
                   -fno-asynchronous-unwind-tables -fno-unwind-tables \
                   -mno-sse -mno-sse2 -Wa,--noexecstack
-I686_WARN_FLAGS = -Wall -Wextra -Werror
+I686_FORMAT_WARN_FLAGS = -Wformat=2 -Werror=format
+I686_WARN_FLAGS = -Wall -Wextra -Werror $(I686_FORMAT_WARN_FLAGS)
 
 I686_CPPFLAGS   = -DKERNEL -DI386 -D__i386__ \
                   -DVM_PHYS_MAX_REGIONS=512
@@ -43,6 +44,7 @@ I686_LDFLAGS    = -m elf_i386 -z noexecstack
 CFLAGS          = -m32 -march=i686 -mtune=generic -ffreestanding \
                   -fno-builtin -fno-stack-protector -fno-pic -fno-pie \
                   -fno-asynchronous-unwind-tables -fno-unwind-tables \
-                  -mno-sse -mno-sse2 -mlong-double-64 -Os
+                  -mno-sse -mno-sse2 -mlong-double-64 \
+                  $(I686_FORMAT_WARN_FLAGS) -Os
 LIBS            = -lc
 ELF2AOUT        = cp

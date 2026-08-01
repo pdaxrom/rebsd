@@ -69,10 +69,11 @@ void putline()
 {
     char *cbuf;
 
-    printf("%-*.*s %-*.*s", NMAX, NMAX, utmp.ut_name, LMAX, LMAX, utmp.ut_line);
+    printf("%-*.*s %-*.*s", (int)NMAX, (int)NMAX, utmp.ut_name,
+           (int)LMAX, (int)LMAX, utmp.ut_line);
     cbuf = ctime(&utmp.ut_time);
     printf("%.12s", cbuf + 4);
     if (utmp.ut_host[0])
-        printf("\t(%.*s)", HMAX, utmp.ut_host);
+        printf("\t(%.*s)", (int)HMAX, utmp.ut_host);
     putchar('\n');
 }

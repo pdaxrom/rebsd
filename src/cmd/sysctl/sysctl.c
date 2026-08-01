@@ -302,7 +302,7 @@ parse(
 			getloadavg(loads, 3);
 			if (!nflag)
 				fprintf(stdout, "%s: ", string);
-			fprintf(stdout, "%u.%02u %u.%02u %u.02u\n",
+			fprintf(stdout, "%u.%02u %u.%02u %u.%02u\n",
                                 loads[0] / 100, loads[0] % 100,
                                 loads[1] / 100, loads[1] % 100,
                                 loads[2] / 100, loads[2] % 100);
@@ -351,7 +351,7 @@ parse(
 	}
 doit:
 	if (bufp) {
-		fprintf(stderr, "name %s in %s is unknown\n", *bufp, string);
+		fprintf(stderr, "name %s in %s is unknown\n", bufp, string);
 		return;
 	}
 	if (newsize > 0) {
@@ -442,7 +442,7 @@ doit:
 		} else {
 			if (!nflag)
 				fprintf(stdout, "%s: %s -> ", string, buf);
-			fprintf(stdout, "%s\n", newval);
+			fprintf(stdout, "%s\n", (char *)newval);
 		}
 		return;
 

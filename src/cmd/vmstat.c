@@ -300,7 +300,7 @@ loop:
     printf("%7ld", total.t_avm);
     if (pflag)
         printf("%4ld", total.t_avm ? (total.t_avmtxt * 100) / total.t_avm : 0);
-    printf("%6d", pfree);
+    printf("%6zu", pfree);
 
     if (pflag) {
         printf("%4ld%3ld ", rate.v_swpin / nintv, rate.v_swpout / nintv);

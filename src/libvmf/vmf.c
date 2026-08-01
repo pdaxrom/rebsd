@@ -151,7 +151,8 @@ struct vseg *vmmapseg(struct vspace *vspace, u_short segno)
 
     if (segno >= vspace->v_maxsegno || segno < 0) {
 #ifdef DEBUG
-        fprintf(stderr, "vmmapseg vspace0%o segno%d\n", vspace, segno);
+        fprintf(stderr, "vmmapseg vspace=%p segno%d\n", (void *)vspace,
+            segno);
 #endif
         vmerror("vmmapseg: bad segno");
     }
@@ -171,7 +172,8 @@ struct vseg *vmmapseg(struct vspace *vspace, u_short segno)
             debugseg(s, "dump on");
             if (s->s_flags & S_DIRTY)
                 if (swap(s, false) != 0) {
-                    fprintf(stderr, "write swap, v=%d fd=%d\n", s->s_vspace, s->s_vspace->v_fd);
+                    fprintf(stderr, "write swap, v=%p fd=%d\n",
+                        (void *)s->s_vspace, s->s_vspace->v_fd);
                     exit(-2);
                 }
             s->s_vspace = vspace;

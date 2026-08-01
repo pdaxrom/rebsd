@@ -134,6 +134,12 @@ close_archive(int fd)
 	to = strtol(buf, (char **)NULL, base); \
 }
 
+#define	AR_ATOI64(from, to, len, base) { \
+	bcopy(from, buf, len); \
+	buf[len] = '\0'; \
+	to = strtoll(buf, (char **)NULL, base); \
+}
+
 /*
  * get_arobj --
  *	read the archive header for this member
@@ -163,11 +169,11 @@ get_arobj(int fd)
 #define	DECIMAL	10
 #define	OCTAL	 8
 
-	AR_ATOI(hdr->ar_date, chdr.date, sizeof(hdr->ar_date), DECIMAL);
+	AR_ATOI64(hdr->ar_date, chdr.date, sizeof(hdr->ar_date), DECIMAL);
 	AR_ATOI(hdr->ar_uid, chdr.uid, sizeof(hdr->ar_uid), DECIMAL);
 	AR_ATOI(hdr->ar_gid, chdr.gid, sizeof(hdr->ar_gid), DECIMAL);
 	AR_ATOI(hdr->ar_mode, chdr.mode, sizeof(hdr->ar_mode), OCTAL);
-	AR_ATOI(hdr->ar_size, chdr.size, sizeof(hdr->ar_size), DECIMAL);
+	AR_ATOI64(hdr->ar_size, chdr.size, sizeof(hdr->ar_size), DECIMAL);
 
 	/* Leading spaces should never happen. */
 	if (hdr->ar_name[0] == ' ')
@@ -268,6 +274,7 @@ put_arobj(CF *cfp, struct stat *sb)
 	register int lname;
 	register char *name;
 	struct ar_hdr *hdr;
+	int hlen;
 	off_t size;
 
 	/*
@@ -293,17 +300,23 @@ put_arobj(CF *cfp, struct stat *sb)
 				    name, OLDARMAXNAME, name);
 				(void)fflush(stderr);
 			}
-			(void)sprintf(hb, HDR3, name, sb->st_mtime, sb->st_uid,
-			    sb->st_gid, sb->st_mode, (long) sb->st_size, ARFMAG);
+			hlen = snprintf(hb, sizeof(hb), HDR3, name,
+			    (long long)sb->st_mtime, sb->st_uid, sb->st_gid,
+			    sb->st_mode, (long long)sb->st_size, ARFMAG);
 			lname = 0;
 		} else if (lname > sizeof(hdr->ar_name) || index(name, ' '))
-			(void)sprintf(hb, HDR1, AR_EFMT1, lname, sb->st_mtime,
-			    sb->st_uid, sb->st_gid, sb->st_mode,
-			    (long) sb->st_size + lname, ARFMAG);
+			hlen = snprintf(hb, sizeof(hb), HDR1, AR_EFMT1, lname,
+			    (long long)sb->st_mtime, sb->st_uid, sb->st_gid,
+			    sb->st_mode, (long long)sb->st_size + lname, ARFMAG);
 		else {
 			lname = 0;
-			(void)sprintf(hb, HDR2, name, sb->st_mtime, sb->st_uid,
-			    sb->st_gid, sb->st_mode, (long) sb->st_size, ARFMAG);
+			hlen = snprintf(hb, sizeof(hb), HDR2, name,
+			    (long long)sb->st_mtime, sb->st_uid, sb->st_gid,
+			    sb->st_mode, (long long)sb->st_size, ARFMAG);
+		}
+		if (hlen != sizeof(HDR)) {
+			errno = EOVERFLOW;
+			error(cfp->rname);
 		}
 		size = sb->st_size;
 	} else {

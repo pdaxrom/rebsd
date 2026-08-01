@@ -92,7 +92,8 @@ int main(int argc, char **argv)
         if (!end)
             (void)sprintf(fname, "%s/%s", beg, WHATIS);
         else {
-            (void)sprintf(fname, "%.*s/%s", end - beg, beg, WHATIS);
+            (void)sprintf(fname, "%.*s/%s", (int)(end - beg), beg,
+                WHATIS);
             ++end;
         }
         if (!freopen(fname, "r", stdin))

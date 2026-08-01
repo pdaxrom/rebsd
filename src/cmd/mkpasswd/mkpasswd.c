@@ -153,7 +153,7 @@ int main(
 		p = buf;
 #define	COMPACT(e)	t = e; while ((*p++ = *t++));
 		COMPACT(_pw_passwd.pw_name);
-		(void)sprintf(nbuf, "%ld", offset);
+		(void)sprintf(nbuf, "%lld", (long long)offset);
 		COMPACT(nbuf);
 		bcopy((char *)&_pw_passwd.pw_uid, p, sizeof(int));
 		p += sizeof(int);
@@ -182,8 +182,9 @@ int main(
 		/* create original format password file entry */
 		if (!makeold)
 			continue;
-		fprintf(oldfp, "%s:%d:%d:%d:%s:%s:%s\n", _pw_passwd.pw_name,
-                    offset, _pw_passwd.pw_uid, _pw_passwd.pw_gid,
+		fprintf(oldfp, "%s:%lld:%d:%d:%s:%s:%s\n",
+		    _pw_passwd.pw_name, (long long)offset, _pw_passwd.pw_uid,
+		    _pw_passwd.pw_gid,
                     _pw_passwd.pw_gecos, _pw_passwd.pw_dir,
                     _pw_passwd.pw_shell);
 	}

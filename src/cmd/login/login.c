@@ -511,10 +511,10 @@ void dolastlog(int quiet)
 				    24-5, (char *)ctime(&ll.ll_time));
 				if (*ll.ll_host != '\0')
 					(void)printf("from %.*s\n",
-					    sizeof(ll.ll_host), ll.ll_host);
+					    (int)sizeof(ll.ll_host), ll.ll_host);
 				else
 					(void)printf("on %.*s\n",
-					    sizeof(ll.ll_line), ll.ll_line);
+					    (int)sizeof(ll.ll_line), ll.ll_line);
 			}
 			(void)lseek(fd, (off_t)pwd->pw_uid * sizeof(ll), L_SET);
 		}

@@ -133,8 +133,10 @@ int main(int ac, char **av)
             print = want(bp);
             if (print) {
                 ct = ctime(&bp->ut_time);
-                printf("%-*.*s  %-*.*s %-*.*s %10.10s %5.5s ", NMAX, NMAX, bp->ut_name, LMAX, LMAX,
-                       bp->ut_line, HMAX, HMAX, bp->ut_host, ct, 11 + ct);
+                printf("%-*.*s  %-*.*s %-*.*s %10.10s %5.5s ",
+                       (int)NMAX, (int)NMAX, bp->ut_name,
+                       (int)LMAX, (int)LMAX, bp->ut_line,
+                       (int)HMAX, (int)HMAX, bp->ut_host, ct, 11 + ct);
             }
             for (i = 0; i < MAXTTYS; i++) {
                 if (ttnames[i][0] == 0) {

@@ -350,8 +350,8 @@ bread(
     if ((nr = read(rfd, buf, cnt)) != cnt) {
         /* Probably a dismounted disk if errno == EIO. */
         if (errno != EIO)
-            (void)fprintf(stderr, "\ndf: %ld: %s\n",
-                off, strerror(nr > 0 ? EIO : errno));
+            (void)fprintf(stderr, "\ndf: %lld: %s\n",
+                (long long)off, strerror(nr > 0 ? EIO : errno));
         return (0);
     }
     return (1);

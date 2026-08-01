@@ -150,8 +150,9 @@ static void MDTimeTrial ()
    * (Bug fix from Ric Anderson, ric@Artisoft.COM.)
    */
   printf
- ("Speed = %ld bytes/second\n",
-  (long)TEST_BLOCK_LEN * (long)TEST_BLOCK_COUNT/((endTime-startTime) != 0 ? (endTime-startTime):1));
+ ("Speed = %lld bytes/second\n",
+  (long long)TEST_BLOCK_LEN * TEST_BLOCK_COUNT /
+  ((endTime-startTime) != 0 ? (endTime-startTime):1));
 }
 
 /* Digests a reference suite of strings and prints the results.

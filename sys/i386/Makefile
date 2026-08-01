@@ -99,7 +99,8 @@ I386_USERLAND_CC = $(CC) $(I686_ARCH_FLAGS) \
                    -fno-pic -fno-pie -fno-asynchronous-unwind-tables \
                    -fno-unwind-tables -mno-sse -mno-sse2 \
                    -mlong-double-64 -nostdinc \
-                   $(I386_USERLAND_INCLUDES) -Werror
+                   $(I386_USERLAND_INCLUDES) \
+                   $(I686_FORMAT_WARN_FLAGS) -Werror
 I386_USERLAND_LDFLAGS = --nmagic -z noexecstack \
                         -T$(abspath $(I386_USER_LDSCRIPT)) \
                         $(abspath $(I386_USERLAND_SRC)/crt0.o) \

@@ -5,6 +5,7 @@
  */
 #ifndef FILE
 
+#include <sys/cdefs.h>
 #include <sys/types.h>
 
 #define BUFSIZ  1024
@@ -101,18 +102,18 @@ int     putw(int w, FILE *stream);
 size_t  fread (void *, size_t, size_t, FILE *);
 size_t  fwrite (const void *, size_t, size_t, FILE *);
 
-int     fprintf (FILE *, const char *, ...);
-int     printf (const char *, ...);
-int     sprintf (char *, const char *, ...);
-int     snprintf (char *, size_t, const char *, ...);
-int     asprintf (char **, const char *, ...);
-int     dprintf (int, const char *, ...);
+int     fprintf (FILE *, const char *, ...) __printflike(2, 3);
+int     printf (const char *, ...) __printflike(1, 2);
+int     sprintf (char *, const char *, ...) __printflike(2, 3);
+int     snprintf (char *, size_t, const char *, ...) __printflike(3, 4);
+int     asprintf (char **, const char *, ...) __printflike(2, 3);
+int     dprintf (int, const char *, ...) __printflike(2, 3);
 ssize_t getdelim (char **, size_t *, int, FILE *);
 ssize_t getline (char **, size_t *, FILE *);
 
-int     fscanf (FILE *, const char *, ...);
-int     scanf (const char *, ...);
-int     sscanf (const char *, const char *, ...);
+int     fscanf (FILE *, const char *, ...) __scanflike(2, 3);
+int     scanf (const char *, ...) __scanflike(1, 2);
+int     sscanf (const char *, const char *, ...) __scanflike(2, 3);
 
 #define getchar()   getc(stdin)
 #define putchar(x)  putc(x,stdout)
@@ -130,12 +131,12 @@ int     sscanf (const char *, const char *, ...);
 # endif
 #endif
 
-int     vfprintf (FILE *, const char *, va_list);
-int     vprintf (const char *, va_list);
-int     vsprintf (char *, const char *, va_list);
-int     vsnprintf (char *, size_t, const char *, va_list);
-int     vasprintf (char **, const char *, va_list);
-int     vdprintf (int, const char *, va_list);
+int     vfprintf (FILE *, const char *, va_list) __printflike(2, 0);
+int     vprintf (const char *, va_list) __printflike(1, 0);
+int     vsprintf (char *, const char *, va_list) __printflike(2, 0);
+int     vsnprintf (char *, size_t, const char *, va_list) __printflike(3, 0);
+int     vasprintf (char **, const char *, va_list) __printflike(2, 0);
+int     vdprintf (int, const char *, va_list) __printflike(2, 0);
 
 const char *fmtcheck(const char *, const char *)
 #ifdef __GNUC__
@@ -143,9 +144,9 @@ const char *fmtcheck(const char *, const char *)
 #endif
     ;
 
-int     vfscanf (FILE *, const char *, va_list);
-int     vscanf (const char *, va_list);
-int     vsscanf (const char *, const char *, va_list);
+int     vfscanf (FILE *, const char *, va_list) __scanflike(2, 0);
+int     vscanf (const char *, va_list) __scanflike(1, 0);
+int     vsscanf (const char *, const char *, va_list) __scanflike(2, 0);
 
 int     _doprnt (const char *, va_list, FILE *);
 int     _doscan (FILE *, const char *, va_list);

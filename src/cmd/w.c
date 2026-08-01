@@ -162,10 +162,11 @@ int main(int argc, char **argv)
 
         /* Headers for rest of output */
         if (lflag)
-            printf("%-*.*s %-*.*s  login@  idle   JCPU   PCPU  what\n", NMAX, NMAX, "User", LMAX,
-                   LMAX, "tty");
+            printf("%-*.*s %-*.*s  login@  idle   JCPU   PCPU  what\n",
+                   (int)NMAX, (int)NMAX, "User", (int)LMAX,
+                   (int)LMAX, "tty");
         else
-            printf("%-*.*s tty idle  what\n", NMAX, NMAX, "User");
+            printf("%-*.*s tty idle  what\n", (int)NMAX, (int)NMAX, "User");
         fflush(stdout);
     }
 
@@ -228,12 +229,12 @@ void gettty()
 void putline()
 {
     /* print login name of the user */
-    printf("%-*.*s ", NMAX, NMAX, utmp.ut_name);
+    printf("%-*.*s ", (int)NMAX, (int)NMAX, utmp.ut_name);
 
     /* print tty user is on */
     if (lflag)
         /* long form: all (up to) LMAX chars */
-        printf("%-*.*s", LMAX, LMAX, utmp.ut_line);
+        printf("%-*.*s", (int)LMAX, (int)LMAX, utmp.ut_line);
     else {
         /* short form: 2 chars, skipping 'tty' if there */
         if (utmp.ut_line[0] == 't' && utmp.ut_line[1] == 't' && utmp.ut_line[2] == 'y')
@@ -290,14 +291,14 @@ void prttime(time_t tim, char *tail)
     int didhrs = 0;
 
     if (tim >= 60) {
-        printf("%3ld:", tim / 60);
+        printf("%3lld:", (long long)(tim / 60));
         didhrs++;
     } else {
         printf("    ");
     }
     tim %= 60;
     if (tim > 0 || didhrs) {
-        printf(didhrs && tim < 10 ? "%02ld" : "%2ld", tim);
+        printf(didhrs && tim < 10 ? "%02lld" : "%2lld", (long long)tim);
     } else {
         printf("  ");
     }
@@ -342,13 +343,13 @@ void readpr()
         exit(1);
     }
     if (size % sizeof(struct kinfo_proc) != 0) {
-        fprintf(stderr, "proc size mismatch (%d total, %d chunks)\n", size,
+        fprintf(stderr, "proc size mismatch (%zu total, %zu chunks)\n", size,
                 sizeof(struct kinfo_proc));
         exit(1);
     }
     kpt = (struct kinfo_proc *)malloc(size);
     if (kpt == (struct kinfo_proc *)NULL) {
-        fprintf(stderr, "Not %d bytes of memory for proc table\n", size);
+        fprintf(stderr, "Not %zu bytes of memory for proc table\n", size);
         exit(1);
     }
     if (sysctl(mib, 4, kpt, &size, NULL, 0) == -1) {

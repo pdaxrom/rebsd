@@ -24,7 +24,7 @@
 #define INADDR_NONE ((u_long)-1)
 #endif
 
-#define C(x)    ((x) & 0xff)
+#define C(x)    ((unsigned)((x) & 0xff))
 
 struct rtentry route;
 int s;
