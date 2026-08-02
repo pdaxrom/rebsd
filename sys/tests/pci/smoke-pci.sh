@@ -34,6 +34,7 @@ if [ "$mode" = test ]; then
 "$tmp/pciide_test" auto-fallback
 "$tmp/pciide_test" dma-error
 "$tmp/pciide_test" dma-timeout
+"$tmp/pciide_test" dma-early-irq
 elif [ "$mode" != compile ]; then
     echo "usage: $0 [compile|test]" >&2
     exit 2

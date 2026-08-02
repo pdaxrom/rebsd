@@ -73,6 +73,8 @@ struct pciide_softc {
     volatile unsigned ps_dma_active;
     volatile unsigned ps_dma_done;
     volatile unsigned ps_dma_error;
+    volatile unsigned ps_dma_bm_status;
+    volatile unsigned ps_dma_ata_status;
     pciide_wait_t ps_wait;
     pciide_wakeup_t ps_wakeup;
     void *ps_platform_cookie;

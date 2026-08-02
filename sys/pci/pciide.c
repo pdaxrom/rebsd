@@ -492,14 +492,27 @@ pciide_interrupt(void *arg)
     if (sc == 0 || !sc->ps_dma_active)
         return 0;
     status = pci_resource_read8(&sc->ps_bus_master, PCIIDE_BM_STATUS);
+    ata_status = pciide_command_read8(sc, ATA_REG_STATUS);
+    sc->ps_dma_bm_status = status;
+    sc->ps_dma_ata_status = ata_status;
+
+    /*
+     * In compatibility mode the ATA device owns the dedicated channel IRQ.
+     * Some controllers can deliver that IRQ before the bus-master interrupt
+     * status bit is visible.  ATA guarantees that BSY is clear when INTRQ is
+     * asserted, so do not discard a completed command solely because the
+     * bus-master latch is late.
+     */
     if ((status & (PCIIDE_BM_STATUS_ERROR |
-        PCIIDE_BM_STATUS_INTERRUPT)) == 0)
+        PCIIDE_BM_STATUS_INTERRUPT)) == 0 &&
+        (ata_status & ATA_STATUS_BUSY) != 0)
         return 0;
     pciide_dma_stop(sc);
-    ata_status = pciide_command_read8(sc, ATA_REG_STATUS);
     sc->ps_dma_error =
         (status & PCIIDE_BM_STATUS_ERROR) != 0 ||
-        (ata_status & (ATA_STATUS_ERROR | ATA_STATUS_DEVICE_FAULT)) != 0;
+        ata_status == 0 || ata_status == 0xffu ||
+        (ata_status & (ATA_STATUS_BUSY | ATA_STATUS_ERROR |
+        ATA_STATUS_DEVICE_FAULT)) != 0;
     pciide_dma_clear_status(sc);
     sc->ps_dma_active = 0;
     sc->ps_dma_done = 1;
@@ -544,6 +557,8 @@ pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
     pci_resource_write8(&sc->ps_bus_master, PCIIDE_BM_COMMAND, command);
     sc->ps_dma_done = 0;
     sc->ps_dma_error = 0;
+    sc->ps_dma_bm_status = 0xffu;
+    sc->ps_dma_ata_status = 0xffu;
     sc->ps_dma_active = 1;
     pciide_program_lba(sc, lba, count);
     pciide_command_write8(sc, ATA_REG_COMMAND,
@@ -554,6 +569,21 @@ pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
         sc->ps_wait_ticks);
     pciide_control_write(sc, ATA_CONTROL_INTERRUPT_DISABLE);
     if (error != 0 || !sc->ps_dma_done || sc->ps_dma_error) {
+        if (!sc->ps_dma_done) {
+            sc->ps_dma_bm_status = pci_resource_read8(
+                &sc->ps_bus_master, PCIIDE_BM_STATUS);
+            sc->ps_dma_ata_status = pciide_command_read8(sc,
+                ATA_REG_STATUS);
+        }
+        printf("ata0: DMA failure wait=%d done=%u dma-error=%u "
+            "lba=%u sectors=%u\n", error, sc->ps_dma_done,
+            sc->ps_dma_error, lba, count);
+        printf("ata0: DMA registers command=%x status=%x ata=%x "
+            "prdt=%x\n",
+            pci_resource_read8(&sc->ps_bus_master,
+                PCIIDE_BM_COMMAND), sc->ps_dma_bm_status,
+            sc->ps_dma_ata_status,
+            pci_resource_read32(&sc->ps_bus_master, PCIIDE_BM_PRDT));
         pciide_disable_dma(sc);
         return EIO;
     }

@@ -82,6 +82,7 @@ struct fake_ata {
     unsigned wakeups;
     unsigned inject_dma_error;
     unsigned inject_dma_timeout;
+    unsigned inject_early_ata_irq;
     pci_interrupt_handler_t handler;
     void *handler_arg;
 };
@@ -330,6 +331,12 @@ fake_dma_start(struct fake_ata *ata)
     else {
         CHECK(ata->command == ATA_COMMAND_WRITE_DMA);
         memcpy(ata->disk + disk_offset, buffer, byte_count);
+    }
+    if (ata->inject_early_ata_irq) {
+        ata->inject_early_ata_irq = 0;
+        CHECK(ata->handler != 0);
+        CHECK(ata->handler(ata->handler_arg) == 1);
+        return;
     }
     ata->bus_master[BM_STATUS] |= BM_STATUS_INTERRUPT;
     if (ata->inject_dma_error) {
@@ -583,7 +590,12 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
         CHECK((ata.config[PIIX_IDETIM / 4u] & 0xffffu) == 0x8000u);
 
     memcpy(original, ata.disk + 7u * DISK_SECTOR_SIZE, sizeof(original));
-    if (failure != 0) {
+    if (failure == 3) {
+        ata.inject_early_ata_irq = 1;
+        CHECK(ops->dbo_read(&sc, 7, 1, data) == 0);
+        CHECK(pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_DMA);
+        CHECK(memcmp(data, original, sizeof(data)) == 0);
+    } else if (failure != 0) {
         if (failure == 1)
             ata.inject_dma_error = 1;
         else
@@ -609,7 +621,7 @@ main(int argc, char **argv)
 {
     if (argc != 2) {
         fprintf(stderr,
-            "usage: %s pio|dma|via-dma|auto-fallback|dma-error|dma-timeout\n",
+            "usage: %s pio|dma|via-dma|auto-fallback|dma-error|dma-timeout|dma-early-irq\n",
             argv[0]);
         return 2;
     }
@@ -625,6 +637,8 @@ main(int argc, char **argv)
         test_mode(PCIIDE_MODE_DMA, 1, 1, 0);
     else if (strcmp(argv[1], "dma-timeout") == 0)
         test_mode(PCIIDE_MODE_DMA, 1, 2, 0);
+    else if (strcmp(argv[1], "dma-early-irq") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 3, 1);
     else
         return 2;
     printf("pciide %s test: ok\n", argv[1]);

@@ -36,8 +36,13 @@ IDE-CF с `DISK_FLAG_READ_ONLY`, поэтому обычный kernel path не 
 2026-08-02 на том же IBM отдельно подтверждены оба storage режима одного
 общего driver: принудительный PIO и PCI bus-master MWDMA. В обоих режимах
 `dd if=/dev/sd0 of=/dev/null bs=32768 count=128` прочитал 4 MiB, а внешний
-IDE-CF остался read-only. Проверка `ata=auto` остаётся отдельным следующим
-запуском.
+IDE-CF остался read-only. Более поздняя DMA-загрузка обнаружила плавающую
+гонку VIA: ATA IRQ14 мог прийти до защёлкивания bus-master interrupt status,
+а общий handler ошибочно отбрасывал такой IRQ и через пять секунд снимал
+`sd0` после timeout. Handler теперь завершает compatibility-mode DMA по
+снятому ATA BSY, как требует ATA IRQ boundary, и host gate воспроизводит
+ранний ATA IRQ отдельно. Повторный реальный `ata=dma` gate обязателен;
+проверка `ata=auto` выполняется только после него.
 
 ## 1. Собрать и повторить QEMU gate
 
@@ -90,9 +95,11 @@ GRUB переустанавливать не требуется; `initrd`, `root
 `quiet` не используются. До замены image надо сохранить backup CF или
 как минимум исходного `grub.conf`.
 
-Принудительные `ata=pio` и `ata=dma` уже проверены на реальном VIA. Следующий
-storage запуск использует `ata=auto`. Во всех трёх случаях IDE-CF остаётся
-read-only на generic disk уровне. Mode markers:
+Принудительный `ata=pio` проверен на реальном VIA. Первый `ata=dma` прогон
+прошёл, но последующий запуск обнаружил описанную выше гонку раннего IRQ;
+исправленный DMA handler требует повторного аппаратного gate. После него
+следующий storage запуск использует `ata=auto`. Во всех трёх случаях IDE-CF
+остаётся read-only на generic disk уровне. Mode markers:
 
 ```text
 ata0: mode=pio policy=forced
