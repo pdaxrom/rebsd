@@ -232,7 +232,7 @@ $(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
 	ohci-mouse-smoke bios-ohci-mouse-smoke \
 	uhci-keyboard-smoke bios-uhci-keyboard-smoke \
 	uhci-mouse-smoke bios-uhci-mouse-smoke \
-	ps2-input-smoke bios-ps2-input-smoke \
+	ps2-input-smoke ide-dma-ps2-input-smoke bios-ps2-input-smoke \
 	uhci-mass-storage-smoke bios-uhci-mass-storage-smoke \
 	uhci-mass-storage-ide-absent-smoke \
 	bios-uhci-mass-storage-ide-absent-smoke \
@@ -1367,6 +1367,13 @@ ps2-input-smoke: rebsd-i686.bzimg rootfs.img
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk rootfs.img --ps2-keyboard --ps2-mouse --timeout 20
+
+ide-dma-ps2-input-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --ata-mode dma \
+	    --ps2-keyboard --ps2-mouse --timeout 20
 
 bios-ps2-input-smoke: rebsd-i686-bios-floppy.img rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \

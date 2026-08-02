@@ -92,11 +92,14 @@ i386_ide_wait(void *cookie, volatile unsigned *done, unsigned ticks)
 
     /* Autoconfiguration runs in proc0 before the scheduler is available. */
     if (u.u_procp == &proc[0]) {
+        state = i386_intr_disable();
         start = i386_pit_ticks();
         while (!*done &&
             (i386_u32)(i386_pit_ticks() - start) < ticks)
             __asm__ volatile ("sti; hlt; cli" : : : "memory");
-        return *done ? 0 : ETIMEDOUT;
+        error = *done ? 0 : ETIMEDOUT;
+        i386_intr_restore(state);
+        return error;
     }
 
     state = splhigh();

@@ -1246,6 +1246,13 @@ revision для определения VT82C596B, проверяет сохра�
 После reset незавершённый запрос повторяется через PIO. Mode line показывает
 `pio-timing`, raw `identify-mwdma`, `identify-udma` и `identify-pio`.
 
+Успешный DMA также выявил ошибку i386 scheduler adapter: ранний proc0 wait
+разрешал прерывания на время `hlt`, но возвращался с IF=0 независимо от
+исходного состояния. Из-за этого после IDE attach переставали приходить
+PS/2 IRQ1/IRQ12. Adapter теперь сохраняет и восстанавливает EFLAGS IF, а
+combined `ide-dma-ps2-input-smoke` выполняет PS/2 login и повторный ввод после
+дисковых и сетевых операций.
+
 Для диагностики добавлен общий BSD kernel message ring
 на 16 KiB. Все machine-independent `printf` сохраняются в нём независимо от
 наличия logger daemon, а `/sbin/dmesg` получает неразрушающий снимок через

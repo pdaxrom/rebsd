@@ -61,6 +61,14 @@ error/timeout он сбрасывает channel и повторяет незав
 PIO, поэтому `sd0` не исчезает. Повторный реальный `ata=dma` gate обязателен;
 проверка `ata=auto` выполняется только после него.
 
+Отдельная i386-регрессия успешного DMA была в proc0 wait adapter: ожидание
+через `sti; hlt; cli` всегда возвращалось с очищенным IF, хотя до входа
+прерывания могли быть разрешены. После дисковой инициализации это прекращало
+IRQ1/IRQ12 и внешне выглядело как поломка PS/2. Adapter теперь сохраняет и
+восстанавливает исходный interrupt state. `ide-dma-ps2-input-smoke` проверяет
+PS/2 login, Backspace, mouse IRQ и повторный ввод с клавиатуры после полного
+DMA/network smoke, чтобы IDE больше не мог незаметно выключить input IRQ.
+
 ## 1. Собрать и повторить QEMU gate
 
 ```sh
@@ -71,6 +79,7 @@ make -C sys/i386 BOARD=pc \
     O=/Users/sash/Work/N64/rebsd-i686-build/ibm6563 \
     rootfs-smoke boot-smoke \
     ide-pio-smoke ide-dma-smoke ide-auto-smoke ide-absent-smoke \
+    ide-dma-ps2-input-smoke \
     usb-mass-storage-smoke \
     usb-mass-storage-ide-absent-smoke \
     ps2-input-smoke \
