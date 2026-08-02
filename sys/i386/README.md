@@ -43,11 +43,12 @@ The common IPv4 stack and loopback interface are initialized independently
 of physical network-device discovery.  Consequently `lo0` and `127.0.0.1`
 are always available on a normal i686 boot even when no Ethernet adapter is
 present.  i686 uses the same socket, protocol, interface and loopback sources
-as the MIPS boards.  Deferred network work runs at interrupt-return and
-system-call-return boundaries, after the hardware handler and PIC EOI.  PCI
-INTx lines are programmed as level-triggered through the PC ELCR before they
-are unmasked; fixed ISA edge-triggered lines such as PS/2 IRQ1 and IRQ12 keep
-their ISA trigger mode.
+as the MIPS boards.  The interrupt-return boundary immediately drains network
+work produced by handlers of the current IRQ.  Work which was already pending
+is drained at system-call or timer return, so unrelated PS/2 IRQ1 and IRQ12
+never execute the deferred network stack.  PCI INTx lines are programmed as
+level-triggered through the PC ELCR before they are unmasked; fixed ISA
+edge-triggered lines keep their ISA trigger mode.
 
 Wall-clock time uses the machine-independent BSD TODR layer in
 `sys/kernel/todr.c`.  The PC attachment only supplies MC146818 CMOS register

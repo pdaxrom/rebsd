@@ -140,6 +140,9 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
     i386_u32 clock_ps;
     unsigned irq;
     unsigned slot;
+#ifdef INET
+    int netisr_before;
+#endif
 
     if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
         if (i386_user_trap(frame, frame->tf_eip))
@@ -184,6 +187,18 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
     if (!i386_pic_accept_irq(irq))
         return;
 
+#ifdef INET
+    /*
+     * Record the deferred-network state before invoking this IRQ's device
+     * handlers.  Only work produced at this interrupt boundary may be
+     * drained here: running an older pending netisr from an unrelated PS/2
+     * IRQ makes keyboard/mouse delivery execute the network stack in hard
+     * interrupt context.  System-call and timer return remain the safe
+     * fallback boundaries for work which was already pending.
+     */
+    netisr_before = netisr;
+#endif
+
     if (irq == I386_IRQ_TIMER) {
         /*
          * hardclock's MD ps contract is expressed through USERMODE and
@@ -202,8 +217,8 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
 
     i386_pic_eoi(irq);
 #ifdef INET
-    /* Drain protocol work at the return boundary of the IRQ that queued it. */
-    if (netisr)
+    if (netisr != netisr_before ||
+        (irq == I386_IRQ_TIMER && netisr != 0))
         netintr();
 #endif
 }
