@@ -31,6 +31,7 @@
 #define ATA_STATUS_ERROR           0x01u
 #define ATA_STATUS_DATA_REQUEST    0x08u
 #define ATA_STATUS_READY           0x40u
+#define ATA_STATUS_BUSY            0x80u
 
 #define ATA_COMMAND_READ_SECTORS   0x20u
 #define ATA_COMMAND_WRITE_SECTORS  0x30u
@@ -56,6 +57,8 @@
 #define VIA_DATATIM                0x48u
 #define VIA_IDECONF_PRIMARY_ENABLE 0x00000002u
 #define VIA_MWDMA2_TIMING          0x20000000u
+#define VIA_MWDMA1_TIMING          0x22000000u
+#define VIA_MWDMA0_TIMING          0xa8000000u
 
 #define CHECK(expression) do {                                         \
     if (!(expression)) {                                               \
@@ -323,6 +326,7 @@ fake_dma_start(struct fake_ata *ata)
     CHECK(disk_offset + byte_count <= sizeof(ata->disk));
     if (ata->inject_dma_timeout) {
         ata->inject_dma_timeout = 0;
+        ata->task[ATA_REG_STATUS] = ATA_STATUS_BUSY;
         return;
     }
     buffer = fake_dma + dma_offset;
@@ -503,6 +507,7 @@ fake_init(struct fake_ata *ata, int dma_capable)
     ata->identify[60] = FAKE_DISK_SECTORS;
     ata->identify[61] = 0;
     ata->identify[63] = dma_capable ? 0x0007u : 0;
+    ata->identify[64] = dma_capable ? 0x0003u : 0;
     ata->identify[83] = 0x1000u;
     for (i = 0; i < 20u; ++i) {
         unsigned first;
@@ -519,7 +524,7 @@ fake_init(struct fake_ata *ata, int dma_capable)
 
 static void
 test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
-    int via)
+    int via, unsigned pio_modes, unsigned expected_mwdma)
 {
     struct fake_ata ata;
     struct pci_bus bus;
@@ -535,6 +540,7 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
     int error;
 
     fake_init(&ata, dma_capable);
+    ata.identify[64] = (unsigned short)pio_modes;
     memset(&bus, 0, sizeof(bus));
     bus.pb_ops = &fake_ops;
     bus.pb_cookie = &ata;
@@ -574,15 +580,22 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
     if (policy == PCIIDE_MODE_DMA ||
         (policy == PCIIDE_MODE_AUTO && dma_capable)) {
         CHECK(pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_DMA);
-        CHECK(pciide_mwdma_mode(&sc) == 2u);
+        CHECK(pciide_mwdma_mode(&sc) == expected_mwdma);
         CHECK(ata.irq == PCIIDE_PRIMARY_IRQ);
     } else
         CHECK(pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_PIO);
     if (via) {
         CHECK((ata.config[VIA_IDECONF / 4u] &
             VIA_IDECONF_PRIMARY_ENABLE) != 0);
-        CHECK((ata.config[VIA_DATATIM / 4u] & 0xff000000u) ==
-            VIA_MWDMA2_TIMING);
+        if (expected_mwdma == 2u)
+            CHECK((ata.config[VIA_DATATIM / 4u] & 0xff000000u) ==
+                VIA_MWDMA2_TIMING);
+        else if (expected_mwdma == 1u)
+            CHECK((ata.config[VIA_DATATIM / 4u] & 0xff000000u) ==
+                VIA_MWDMA1_TIMING);
+        else
+            CHECK((ata.config[VIA_DATATIM / 4u] & 0xff000000u) ==
+                VIA_MWDMA0_TIMING);
     } else if (pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_DMA)
         CHECK((ata.config[PIIX_IDETIM / 4u] & 0xffffu) ==
             PIIX_MWDMA2_TIMING);
@@ -600,8 +613,9 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
             ata.inject_dma_error = 1;
         else
             ata.inject_dma_timeout = 1;
-        CHECK(ops->dbo_read(&sc, 7, 1, data) == EIO);
+        CHECK(ops->dbo_read(&sc, 7, 1, data) == 0);
         CHECK(pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_PIO);
+        CHECK(memcmp(data, original, sizeof(data)) == 0);
     }
     CHECK(ops->dbo_read(&sc, 7, 1, data) == 0);
     CHECK(memcmp(data, original, sizeof(data)) == 0);
@@ -621,24 +635,32 @@ main(int argc, char **argv)
 {
     if (argc != 2) {
         fprintf(stderr,
-            "usage: %s pio|dma|via-dma|auto-fallback|dma-error|dma-timeout|dma-early-irq\n",
+            "usage: %s pio|dma|piix-dma-pio2|via-dma|via-dma-pio3|via-dma-pio2|auto-fallback|dma-error|dma-timeout|via-dma-timeout|dma-early-irq\n",
             argv[0]);
         return 2;
     }
     if (strcmp(argv[1], "pio") == 0)
-        test_mode(PCIIDE_MODE_PIO, 1, 0, 0);
+        test_mode(PCIIDE_MODE_PIO, 1, 0, 0, 3, 2);
     else if (strcmp(argv[1], "dma") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 0, 0);
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 0, 3, 2);
+    else if (strcmp(argv[1], "piix-dma-pio2") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 0, 0, 2);
     else if (strcmp(argv[1], "via-dma") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 0, 1);
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 3, 2);
+    else if (strcmp(argv[1], "via-dma-pio3") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 1, 1);
+    else if (strcmp(argv[1], "via-dma-pio2") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 0, 0);
     else if (strcmp(argv[1], "auto-fallback") == 0)
-        test_mode(PCIIDE_MODE_AUTO, 0, 0, 0);
+        test_mode(PCIIDE_MODE_AUTO, 0, 0, 0, 0, 0);
     else if (strcmp(argv[1], "dma-error") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 1, 0);
+        test_mode(PCIIDE_MODE_DMA, 1, 1, 0, 3, 2);
     else if (strcmp(argv[1], "dma-timeout") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 2, 0);
+        test_mode(PCIIDE_MODE_DMA, 1, 2, 0, 3, 2);
+    else if (strcmp(argv[1], "via-dma-timeout") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 2, 1, 3, 2);
     else if (strcmp(argv[1], "dma-early-irq") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 3, 1);
+        test_mode(PCIIDE_MODE_DMA, 1, 3, 1, 3, 2);
     else
         return 2;
     printf("pciide %s test: ok\n", argv[1]);

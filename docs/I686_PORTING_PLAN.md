@@ -1204,9 +1204,10 @@ filesystem path или собственный namespace устройств.
 - `ata=pio`, `ata=dma` и `ata=auto` выбирают режим одного общего driver.
   Automatic mode выбирает максимальный общий MWDMA0--2 и остаётся в PIO,
   если controller/device/DMA resources не поддерживают DMA;
-- DMA завершается по IRQ14. Error или timeout завершает текущий request с
-  `EIO`, останавливает и сбрасывает channel и навсегда переводит следующие
-  операции этого attachment в PIO;
+- DMA завершается по IRQ14. Error или timeout останавливает и сбрасывает
+  channel, переводит attachment в PIO и повторяет ещё не подтверждённую
+  операцию через тот же общий PIO path; следующие операции также используют
+  PIO;
 - host fake-hardware gate проверяет PIO/DMA read, write, cache flush,
   PIIX/VIA timing registers, capability fallback и injected DMA error/timeout.
   QEMU отдельно проходит
@@ -1226,9 +1227,19 @@ host regression воспроизводит ранний ATA IRQ без BM interr
 является отдельным
 изменением disk policy и без явного разрешения не выполняется.
 
-Повторный аппаратный `ata=dma` gate показал, что VIA/CF проблема ещё не
-закрыта: после `ide-lba28: ok` attach может продолжиться только после timeout,
-не опубликовав `sd0`. Для диагностики добавлен общий BSD kernel message ring
+Повторный аппаратный `ata=dma` gate показал, что проблема VIA IDE DMA ещё не
+закрыта: bus-master остался active (`command=09`, `status=21`), ATA сохранил
+`BSY` (`status=80`), а interrupt/error не появился. Это не потерянный готовый
+IRQ: сама передача не завершилась. После timeout старый error path включал
+PIO, но возвращал `EIO` probe-запросу и поэтому не публиковал `sd0`.
+
+Исправленный общий driver после reset повторяет этот же незавершённый запрос
+через PIO. Выбор MWDMA также приведён к алгоритму NetBSD Apollo: заявленный
+MWDMA0--2 ограничивается advanced PIO modes из IDENTIFY word 64, поскольку
+VIA использует сопряжённые data timings. Mode line теперь показывает
+`pio-timing`, raw `identify-mwdma` и `identify-pio`.
+
+Для диагностики добавлен общий BSD kernel message ring
 на 16 KiB. Все machine-independent `printf` сохраняются в нём независимо от
 наличия logger daemon, а `/sbin/dmesg` получает неразрушающий снимок через
 read-only `kern.msgbuf`. Этот код общий для i686, Ci20 и N64; отдельного i386
@@ -1243,8 +1254,9 @@ dmesg | grep ata0
 dmesg | grep pciide
 ```
 
-До анализа этого журнала DMA на VIA не считается исправленным; PIO остаётся
-рабочим fallback.
+До повторного аппаратного запуска DMA на VIA не считается исправленным; PIO
+остаётся рабочим fallback и теперь сохраняет `sd0` даже после первого DMA
+timeout.
 
 ## Общая VT100 text console
 

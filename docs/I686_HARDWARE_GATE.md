@@ -33,7 +33,7 @@ PCI bus-master MWDMA, IRQ completion, reset, write и cache flush. Запись
 IDE-CF с `DISK_FLAG_READ_ONLY`, поэтому обычный kernel path не посылает
 команды записи реальному CF, а write-open/strategy возвращают `EROFS`.
 
-2026-08-02 на том же IBM отдельно подтверждены оба storage режима одного
+2026-08-02 на том же IBM отдельно проверены оба storage режима одного
 общего driver: принудительный PIO и PCI bus-master MWDMA. В обоих режимах
 `dd if=/dev/sd0 of=/dev/null bs=32768 count=128` прочитал 4 MiB, а внешний
 IDE-CF остался read-only. Более поздняя DMA-загрузка обнаружила плавающую
@@ -41,7 +41,15 @@ IDE-CF остался read-only. Более поздняя DMA-загрузка 
 а общий handler ошибочно отбрасывал такой IRQ и через пять секунд снимал
 `sd0` после timeout. Handler теперь завершает compatibility-mode DMA по
 снятому ATA BSY, как требует ATA IRQ boundary, и host gate воспроизводит
-ранний ATA IRQ отдельно. Повторный реальный `ata=dma` gate обязателен;
+ранний ATA IRQ отдельно. Следующий bootlog уточнил диагноз: bus-master
+остался active (`command=09`, `status=21`), ATA остался busy (`status=80`),
+а interrupt/error не был установлен. Значит конкретный timeout не является
+потерянным завершившим IRQ.
+
+Общий driver теперь ограничивает MWDMA PIO-возможностями IDENTIFY по тому же
+правилу, что NetBSD Apollo, и печатает оба raw capability words. После DMA
+error/timeout он сбрасывает channel и повторяет незавершённый запрос через
+PIO, поэтому `sd0` не исчезает. Повторный реальный `ata=dma` gate обязателен;
 проверка `ata=auto` выполняется только после него.
 
 ## 1. Собрать и повторить QEMU gate
@@ -103,13 +111,13 @@ GRUB переустанавливать не требуется; `initrd`, `root
 
 ```text
 ata0: mode=pio policy=forced
-ata0: mode=mwdmaN bus-master irq=14
+ata0: mode=mwdmaN bus-master irq=14 pio-timing=P identify-mwdma=X identify-pio=Y
 ```
 
-Если DMA transfer завершится ошибкой или timeout, текущая операция получает
-`EIO`, controller останавливается и сбрасывается, а все последующие операции
-идут через PIO. Это тот же общий driver path, отдельного i386 fallback-driver
-нет.
+Если DMA transfer завершится ошибкой или timeout, controller останавливается
+и сбрасывается, незавершённая операция повторяется через PIO, а все
+последующие операции также идут через PIO. Это тот же общий driver path,
+отдельного i386 fallback-driver нет.
 
 ## 3. Фактический результат первого запуска
 

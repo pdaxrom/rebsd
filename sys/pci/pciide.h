@@ -63,6 +63,7 @@ struct pciide_softc {
     enum pciide_mode_policy ps_policy;
     enum pciide_transfer_mode ps_mode;
     unsigned ps_mwdma_mode;
+    unsigned ps_pio_mode;
     unsigned ps_irq;
     unsigned ps_wait_ticks;
     unsigned ps_attached;
