@@ -16,6 +16,7 @@
 kernel/cons.c                   standard
 console/vtconsole.c            standard
 kernel/nullzero.c               standard
+kernel/subr_msgbuf.c            standard
 kernel/subr_dma.c               optional dma
 kernel/clock_subr.c             standard
 kernel/todr.c                   standard

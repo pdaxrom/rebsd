@@ -1,0 +1,18 @@
+.TH DMESG 8 "August 2, 2026"
+.SH NAME
+dmesg \- display the kernel message buffer
+.SH SYNOPSIS
+.B dmesg
+.SH DESCRIPTION
+.B dmesg
+displays the messages retained by the kernel since the current boot.
+The messages are returned as a non-destructive snapshot of the common
+kernel message ring, so running
+.B dmesg
+does not clear it or interfere with another reader.
+.SH FILES
+.TP
+.B kern.msgbuf
+Read-only sysctl node containing the retained messages in chronological order.
+.SH SEE ALSO
+.BR sysctl (8)

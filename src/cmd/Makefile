@@ -20,7 +20,7 @@ SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar chflags \
                   uucp viless virus yacc
 
 # /sbin
-SUBDIR_ALL    += dhclient disktool fsck fsck.fat getty gpt ifconfig init \
+SUBDIR_ALL    += dhclient disktool dmesg fsck fsck.fat getty gpt ifconfig init \
                   mkfs mkfs.fat mknod mount reboot route shutdown umount
 
 # /usr/sbin

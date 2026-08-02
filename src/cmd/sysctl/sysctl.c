@@ -269,6 +269,12 @@ parse(
 			fprintf(stderr,
 			    "Use ps to view %s information\n", string);
 			return;
+		case KERN_MSGBUF:
+			if (flags == 0)
+				return;
+			fprintf(stderr,
+			    "Use dmesg to view %s information\n", string);
+			return;
 		case KERN_CLOCKRATE:
 			special |= CLOCK;
 			break;

@@ -4,7 +4,8 @@
  * specifies the terms and conditions for redistribution.
  */
 #define MSG_MAGIC   0x063061
-#define MSG_BSIZE   2048
+#define MSG_BSIZE   16384
+#define MSG_NLOG    1
 
 struct  msgbuf {
     long    msg_magic;
@@ -16,6 +17,10 @@ struct  msgbuf {
 #define logMSG      0       /* /dev/klog */
 
 #ifdef KERNEL
+extern struct msgbuf msgbuf[MSG_NLOG];
+
+int msgbuf_sysctl(void *oldp, size_t *oldlenp, void *newp);
+
 /*
  * Check that log is open by a user program.
  */

@@ -128,6 +128,7 @@ main()
     int s __attribute__((unused));
 
     md_uarea_guard_init(md_curuser);
+    loginit();
     startup();
     printf ("\n%s\n", version);
     kconfig();
@@ -168,9 +169,6 @@ main()
     /*
      * Initialize tables, protocols, and set up well-known inodes.
      */
-#ifdef LOG_ENABLED
-    loginit();
-#endif
     coutinit();
     cinit();
     ihinit();

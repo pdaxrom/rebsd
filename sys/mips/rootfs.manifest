@@ -990,6 +990,8 @@ file /usr/share/man/cat8/init.0
 
 file /usr/share/man/cat8/mkfs.0
 
+file /usr/share/man/cat8/dmesg.0
+
 file /usr/share/man/cat8/mkfs.fat.0
 
 file /usr/share/man/cat8/mkfs.ufs.0
@@ -1053,6 +1055,9 @@ mode 0755
 
 file /sbin/dhclient
 mode 0775
+
+file /sbin/dmesg
+mode 0755
 
 file /usr/sbin/ntpdate
 mode 0755

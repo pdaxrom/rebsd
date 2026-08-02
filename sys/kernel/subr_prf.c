@@ -51,12 +51,10 @@ putchar (int c, int flags, struct tty *tp)
         }
         splx(s);
     }
-#ifdef LOG_ENABLED
     if ((flags & TOLOG) && c != '\0' && c != '\r' && c != 0177) {
         char sym = c;
         logwrt (&sym, 1, logMSG);
     }
-#endif
     if ((flags & TOCONS) && c != '\0')
         cnputc(c);
 }

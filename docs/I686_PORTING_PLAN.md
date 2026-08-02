@@ -1226,6 +1226,26 @@ host regression воспроизводит ранний ATA IRQ без BM interr
 является отдельным
 изменением disk policy и без явного разрешения не выполняется.
 
+Повторный аппаратный `ata=dma` gate показал, что VIA/CF проблема ещё не
+закрыта: после `ide-lba28: ok` attach может продолжиться только после timeout,
+не опубликовав `sd0`. Для диагностики добавлен общий BSD kernel message ring
+на 16 KiB. Все machine-independent `printf` сохраняются в нём независимо от
+наличия logger daemon, а `/sbin/dmesg` получает неразрушающий снимок через
+read-only `kern.msgbuf`. Этот код общий для i686, Ci20 и N64; отдельного i386
+bootlog нет.
+
+На следующем IBM запуске полный журнал можно сохранить в writable RAM `/var`:
+
+```sh
+dmesg
+dmesg >/var/tmp/dmesg.txt
+dmesg | grep ata0
+dmesg | grep pciide
+```
+
+До анализа этого журнала DMA на VIA не считается исправленным; PIO остаётся
+рабочим fallback.
+
 ## Общая VT100 text console
 
 Framebuffer/text adapters i686, N64 и Ci20 используют один

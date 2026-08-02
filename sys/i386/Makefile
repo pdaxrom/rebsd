@@ -208,7 +208,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    kern_exit.o kern_resource.o kern_sig.o kern_sig2.o \
                    kern_sysctl.o kern_sysv_shm.o sys_process.o \
                    init_main.o kern_synch.o kern_clock.o subr_prf.o \
-                   subr_rmap.o \
+                   subr_msgbuf.o subr_rmap.o \
                    tty.o tty_subr.o vm_sched.o vm_swp.o scheduler.o vers.o \
                    copyio.o vm_machdep.o \
                    config.o ioconf.o swapunix.o sysctl.o \
@@ -1048,6 +1048,12 @@ vers.o: vers.c
 
 subr_prf.o: $(TOPSRC)/sys/kernel/subr_prf.c \
 	    $(TOPSRC)/sys/include/systm.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+subr_msgbuf.o: $(TOPSRC)/sys/kernel/subr_msgbuf.c \
+	    $(TOPSRC)/sys/include/msgbuf.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@

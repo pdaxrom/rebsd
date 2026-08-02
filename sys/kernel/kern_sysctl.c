@@ -48,6 +48,7 @@
 #include <sys/dk.h>
 #include <sys/vm.h>
 #include <sys/map.h>
+#include <sys/msgbuf.h>
 #include <sys/sysctl.h>
 #include <sys/hw_inventory_provider.h>
 #include <sys/rebsd_version.h>
@@ -378,6 +379,8 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, s
 #endif
     case KERN_PROCFILES:
         return (sysctl_procfiles(oldp, oldlenp));
+    case KERN_MSGBUF:
+        return (msgbuf_sysctl(oldp, oldlenp, newp));
     default:
         return (EOPNOTSUPP);
     }

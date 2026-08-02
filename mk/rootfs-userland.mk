@@ -10,7 +10,7 @@ REBSD_ROOTFS_LIBC_DIRS = gen stdio stdlib string inet net compat runtime sys
 REBSD_ROOTFS_SUBDIRS = cmd
 
 REBSD_ROOTFS_CMD_SUBDIRS = basic calendar chown chroot compress date2 deco \
-    dhclient diff emg env fdisk find fold forth fsck fsck.fat fstat getty \
+    dhclient diff dmesg emg env fdisk find fold forth fsck fsck.fat fstat getty \
     gpt hostname id ifconfig inetd init login ls make man md5 med mkfs \
     mkfs.fat mknod mkpasswd mount more netstat ntpdate pdc picoc ping printf pstat \
     ptytest reboot renice retroforth route sed setty sh shutdown sl smux \

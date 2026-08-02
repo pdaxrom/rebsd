@@ -60,6 +60,7 @@ CORE_MARKERS = (
     "127.0.0.1",
     "REBSD_I686_NETSTAT_OK",
     "REBSD_I686_LOOPBACK_OK",
+    "REBSD_I686_DMESG_OK",
     "REBSD_I686_TIME64_2040",
     "REBSD_I686_FULL_ROOTFS_OK",
     "REBSD_I686_SHELL_OK",
@@ -471,6 +472,11 @@ def main() -> None:
             b"/usr/bin/ping -n -c 1 127.0.0.1 && "
             b"echo REBSD_I686_LOOPBACK_OK\n",
             b"\r\nREBSD_I686_LOOPBACK_OK\r\n",
+        ),
+        (
+            b"/sbin/dmesg | /usr/bin/grep 'ata0: mode=' && "
+            b"echo REBSD_I686_DMESG_OK\n",
+            b"\r\nREBSD_I686_DMESG_OK\r\n",
         ),
         (
             b"/bin/date -nu 204001020304.05 >/dev/null && "

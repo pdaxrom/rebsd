@@ -150,7 +150,8 @@ struct ctlname {
 #define KERN_TTY            35  /* struct: console tty snapshot */
 #define KERN_NETINFO        36  /* struct: bounded network snapshot */
 #define KERN_PROCFILES      37  /* struct: process descriptor snapshots */
-#define KERN_MAXID          38  /* number of valid kern ids */
+#define KERN_MSGBUF         38  /* bytes: retained kernel messages */
+#define KERN_MAXID          39  /* number of valid kern ids */
 
 /* KERN_TOOLCHAIN subtypes.  The node itself returns the tool name. */
 #define KERN_TOOLCHAIN_VERSION 1 /* string: toolchain version */
@@ -196,6 +197,7 @@ struct ctlname {
     { "tty", CTLTYPE_STRUCT }, \
     { "netinfo", CTLTYPE_STRUCT }, \
     { "procfiles", CTLTYPE_STRUCT }, \
+    { "msgbuf", CTLTYPE_STRUCT }, \
 }
 
 #define CTL_KERN_TOOLCHAIN_NAMES { \

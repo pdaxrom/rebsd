@@ -16,8 +16,8 @@
  * error logging daemon.
  */
 
-#define NLOG    1
-int nlog = 1;
+#define NLOG    MSG_NLOG
+int nlog = MSG_NLOG;
 
 #include <sys/param.h>
 #include <sys/user.h>
@@ -42,8 +42,6 @@ const struct devspec logdevs[] = {
 #define LOG_OPEN    0x01
 #define LOG_ASYNC   0x04
 #define LOG_RDWAIT  0x08
-
-struct  msgbuf  msgbuf[NLOG];
 
 static struct logsoftc {
     int     sc_state;       /* see above for possibilities */
@@ -254,83 +252,6 @@ logioctl(dev, com, data, flag)
         break;
     default:
         return(-1);
-    }
-    return(0);
-}
-
-/*
- * This is inefficient for single character writes.  Alas, changing this
- * to be buffered would affect the networking code's use of printf.
-*/
-int
-logwrt (buf, len, log)
-    char    *buf;
-    int len;
-    int log;
-{
-    register struct msgbuf *mp = &msgbuf[log];
-    struct  logsoftc *lp = &logsoftc[log];
-    register int    infront;
-    int  s, n, writer, err = 0;
-
-    if (mp->msg_magic != MSG_MAGIC || (len > MSG_BSIZE))
-        return(-1);
-    /*
-     * Hate to do this but since this can be called from anywhere in the kernel
-     * we have to hold off any interrupt service routines so they don't change
-     * things.  This looks like a lot of code but it isn't really.
-     */
-    s = splhigh();
-    while (len) {
-again:      infront = MSG_BSIZE - mp->msg_bufx;
-        if (infront <= 0) {
-            mp->msg_bufx = 0;
-            infront = MSG_BSIZE - mp->msg_bufr;
-        }
-        n = mp->msg_bufr - mp->msg_bufx;
-        if (n < 0)      /* bufr < bufx */
-            writer = (MSG_BSIZE - mp->msg_bufx) + mp->msg_bufr;
-        else if (n == 0)
-            writer = MSG_BSIZE;
-        else {
-            writer = n;
-            infront = n;
-        }
-        if (len > writer) {
-            /*
-             * won't fit.  the total number of bytes to be written is
-             * greater than the number available.  the buffer is full.
-             * throw away the old data and keep the current data by resetting
-             * the 'writer' pointer to the current 'reader' position.  Bump the
-             * overrun counter in case anyone wants to look at it for debugging.
-             */
-            lp->sc_overrun++;
-            mp->msg_bufx = mp->msg_bufr;
-            goto again;
-        }
-        if (infront > len)
-            infront = len;
-        bcopy(buf, &mp->msg_bufc[mp->msg_bufx], infront);
-        mp->msg_bufx += infront;
-        len -= infront;
-        buf += infront;
-    }
-    splx(s);
-    return(err);
-}
-
-/*
- * Initialize the log driver.  Called from the system startup code (machdep2.c).
- * All buffers are the same (MSG_BSIZE) size.
- */
-int
-loginit()
-{
-    register struct msgbuf *mp;
-
-    for (mp = &msgbuf[0]; mp < &msgbuf[NLOG]; mp++) {
-        mp->msg_magic = MSG_MAGIC;
-        mp->msg_bufx = mp->msg_bufr = 0;
     }
     return(0);
 }
