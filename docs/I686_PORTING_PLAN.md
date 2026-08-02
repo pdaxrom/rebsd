@@ -1194,7 +1194,7 @@ filesystem path или собственный namespace устройств.
 Следующий storage-инкремент завершён после стабильного PIO baseline:
 
 - ATA transport перенесён из `sys/i386` в общий `sys/pci/pciide`; он владеет
-  IDENTIFY/LBA28, PIO read/write, cache flush, PCI bus-master MWDMA,
+  IDENTIFY/LBA28, PIO read/write, cache flush, PCI bus-master MWDMA/UDMA,
   controller timings, PRDT, IRQ completion, reset и error recovery;
 - i386 оставляет только BIOS compatibility ports, edge-triggered IRQ14 и
   adapter к общему scheduler wait/wakeup contract;
@@ -1202,7 +1202,7 @@ filesystem path или собственный namespace устройств.
   при VIA 596B ISA bridge `1106:0596`; timing fields сверены с реализациями
   NetBSD для PIIX и Apollo/VIA IDE;
 - `ata=pio`, `ata=dma` и `ata=auto` выбирают режим одного общего driver.
-  Automatic mode выбирает максимальный общий MWDMA0--2 и остаётся в PIO,
+  Automatic mode выбирает максимальный общий UDMA/MWDMA и остаётся в PIO,
   если controller/device/DMA resources не поддерживают DMA;
 - DMA завершается по IRQ14. Error или timeout останавливает и сбрасывает
   channel, переводит attachment в PIO и повторяет ещё не подтверждённую
@@ -1233,11 +1233,18 @@ host regression воспроизводит ранний ATA IRQ без BM interr
 IRQ: сама передача не завершилась. После timeout старый error path включал
 PIO, но возвращал `EIO` probe-запросу и поэтому не публиковал `sd0`.
 
-Исправленный общий driver после reset повторяет этот же незавершённый запрос
-через PIO. Выбор MWDMA также приведён к алгоритму NetBSD Apollo: заявленный
-MWDMA0--2 ограничивается advanced PIO modes из IDENTIFY word 64, поскольку
-VIA использует сопряжённые data timings. Mode line теперь показывает
-`pio-timing`, raw `identify-mwdma` и `identify-pio`.
+Linux 2.6.9 на том же IBM определил VT82C596B revision 0x12 как UDMA66 и
+подтвердил UDMA4 для этого ATA device. Полный ReBSD register dump выявил
+рассогласование: BIOS UDMA primary-master state `e0080000` оставался включён,
+хотя устройство уже было переведено в MWDMA2. Это объясняет одновременно
+активный bus master и вечный ATA `BSY`.
+
+Исправленный общий driver поддерживает VIA UDMA0--4, использует ISA bridge
+revision для определения VT82C596B, проверяет сохранённое BIOS cable state и
+программирует Apollo UDMA timing. Для MWDMA он обязательно очищает UDMA state
+того же drive и сопрягает MWDMA с advanced PIO modes из IDENTIFY word 64.
+После reset незавершённый запрос повторяется через PIO. Mode line показывает
+`pio-timing`, raw `identify-mwdma`, `identify-udma` и `identify-pio`.
 
 Для диагностики добавлен общий BSD kernel message ring
 на 16 KiB. Все machine-independent `printf` сохраняются в нём независимо от
@@ -1311,7 +1318,7 @@ IBM PC-совместимых компьютеров с legacy BIOS и проц�
 - VGA text console и COM1;
 - 8259A PIC и 8253/8254 PIT;
 - PS/2-клавиатура и мышь;
-- PATA/IDE: общий PIO fallback и PCI bus-master MWDMA;
+- PATA/IDE: общий PIO fallback и PCI bus-master MWDMA/UDMA;
 - MBR и существующая файловая система ReBSD;
 - статические ELF32 i386 executables;
 - GCC/binutils из `/Users/sash/Library/i686-toolchain`;
@@ -1429,7 +1436,7 @@ stepping и дополнительные PCI-карты ещё надо снят
 Первый hardware boot намеренно использовал только общие PC-интерфейсы,
 одинаковые для QEMU и IBM: 8259A, PIT, PS/2, COM1, VGA text buffer и legacy
 IDE PIO ports. После стабильного PIO gate общий PCI IDE driver добавил PIIX
-и VIA bus-master MWDMA, сохранив primary `0x1F0`/IRQ14 compatibility mode и
+и VIA bus-master MWDMA/UDMA, сохранив primary `0x1F0`/IRQ14 compatibility mode и
 PIO fallback. AGP configuration по-прежнему не включён.
 
 Stock QEMU не эмулирует точный VIA 694X/596B planar. Референсный профиль
@@ -1605,7 +1612,7 @@ vmspace access без прямого разыменования user VA из rin
 2. i8042 transport; общие PS/2 keyboard/mouse decoders.
 3. RTC CMOS для wall clock.
 4. PCI configuration mechanism #1 только как инфраструктура обнаружения.
-5. Общий PIIX/VIA PATA/IDE: PIO fallback и IRQ-driven bus-master MWDMA.
+5. Общий PIIX/VIA PATA/IDE: PIO fallback и IRQ-driven bus-master MWDMA/UDMA.
 6. Подключение IDE к существующему `sys/disk` backend contract.
 7. MBR partition discovery и root filesystem с IDE-диска.
 8. NE2000/RTL8139 — после стабильного storage и VM.

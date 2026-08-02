@@ -55,10 +55,15 @@
 #define PIIX_MWDMA2_TIMING         0xa309u
 #define VIA_IDECONF                0x40u
 #define VIA_DATATIM                0x48u
+#define VIA_UDMA                   0x50u
 #define VIA_IDECONF_PRIMARY_ENABLE 0x00000002u
 #define VIA_MWDMA2_TIMING          0x20000000u
 #define VIA_MWDMA1_TIMING          0x22000000u
 #define VIA_MWDMA0_TIMING          0xa8000000u
+#define VIA_BIOS_UDMA66_TIMING     0xe0080000u
+#define VIA_UDMA4_TIMING           0xc0080000u
+#define VIA_UDMA66_MODE2_TIMING    0xc2080000u
+#define VIA_UDMA33_MODE2_TIMING    0xc0000000u
 
 #define CHECK(expression) do {                                         \
     if (!(expression)) {                                               \
@@ -86,6 +91,7 @@ struct fake_ata {
     unsigned inject_dma_error;
     unsigned inject_dma_timeout;
     unsigned inject_early_ata_irq;
+    unsigned transfer_mode;
     pci_interrupt_handler_t handler;
     void *handler_arg;
 };
@@ -393,9 +399,11 @@ fake_resource_write8(void *cookie, enum pci_resource_type type,
         ++ata->flushes;
         ata->task[ATA_REG_STATUS] = ATA_STATUS_READY;
     } else if (value == ATA_COMMAND_SET_FEATURES ||
-        value == ATA_COMMAND_READ_DMA || value == ATA_COMMAND_WRITE_DMA)
+        value == ATA_COMMAND_READ_DMA || value == ATA_COMMAND_WRITE_DMA) {
+        if (value == ATA_COMMAND_SET_FEATURES)
+            ata->transfer_mode = ata->task[ATA_REG_SECTOR_COUNT];
         ata->task[ATA_REG_STATUS] = ATA_STATUS_READY;
-    else
+    } else
         ata->task[ATA_REG_STATUS] = ATA_STATUS_ERROR;
 }
 
@@ -524,7 +532,8 @@ fake_init(struct fake_ata *ata, int dma_capable)
 
 static void
 test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
-    int via, unsigned pio_modes, unsigned expected_mwdma)
+    int via, unsigned pio_modes, unsigned expected_mwdma,
+    unsigned via_udma_case)
 {
     struct fake_ata ata;
     struct pci_bus bus;
@@ -541,6 +550,15 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
 
     fake_init(&ata, dma_capable);
     ata.identify[64] = (unsigned short)pio_modes;
+    if (via) {
+        ata.config[VIA_UDMA / 4u] = VIA_BIOS_UDMA66_TIMING;
+        if (via_udma_case != 0) {
+            ata.identify[53] |= 0x0004u;
+            ata.identify[88] = 0x001fu;
+            if (via_udma_case != 1u)
+                ata.config[VIA_UDMA / 4u] &= ~0x00080000u;
+        }
+    }
     memset(&bus, 0, sizeof(bus));
     bus.pb_ops = &fake_ops;
     bus.pb_cookie = &ata;
@@ -557,6 +575,8 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
     memset(&isa, 0, sizeof(isa));
     isa.pd_vendor = 0x1106u;
     isa.pd_product = 0x0596u;
+    isa.pd_revision = via_udma_case == 3u ? 0x0fu :
+        (via_udma_case != 0 ? 0x12u : 0);
     memset(&args, 0, sizeof(args));
     args.pa_device = &device;
     args.pa_isa_device = via ? &isa : 0;
@@ -579,15 +599,31 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
     CHECK(ops != 0 && pciide_sector_count(&sc) == FAKE_DISK_SECTORS);
     if (policy == PCIIDE_MODE_DMA ||
         (policy == PCIIDE_MODE_AUTO && dma_capable)) {
+        unsigned expected_mode;
+
+        expected_mode = via_udma_case == 1u ? 4u :
+            (via_udma_case != 0 ? 2u : expected_mwdma);
         CHECK(pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_DMA);
-        CHECK(pciide_mwdma_mode(&sc) == expected_mwdma);
+        CHECK(pciide_dma_protocol(&sc) ==
+            (via_udma_case != 0 ? PCIIDE_DMA_UDMA : PCIIDE_DMA_MWDMA));
+        CHECK(pciide_dma_mode(&sc) == expected_mode);
+        CHECK(ata.transfer_mode ==
+            ((via_udma_case != 0 ? 0x40u : 0x20u) | expected_mode));
         CHECK(ata.irq == PCIIDE_PRIMARY_IRQ);
     } else
         CHECK(pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_PIO);
     if (via) {
         CHECK((ata.config[VIA_IDECONF / 4u] &
             VIA_IDECONF_PRIMARY_ENABLE) != 0);
-        if (expected_mwdma == 2u)
+        if (via_udma_case == 1u)
+            CHECK(ata.config[VIA_UDMA / 4u] == VIA_UDMA4_TIMING);
+        else if (via_udma_case == 2u)
+            CHECK(ata.config[VIA_UDMA / 4u] ==
+                VIA_UDMA66_MODE2_TIMING);
+        else if (via_udma_case == 3u)
+            CHECK(ata.config[VIA_UDMA / 4u] ==
+                VIA_UDMA33_MODE2_TIMING);
+        else if (expected_mwdma == 2u)
             CHECK((ata.config[VIA_DATATIM / 4u] & 0xff000000u) ==
                 VIA_MWDMA2_TIMING);
         else if (expected_mwdma == 1u)
@@ -596,6 +632,8 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
         else
             CHECK((ata.config[VIA_DATATIM / 4u] & 0xff000000u) ==
                 VIA_MWDMA0_TIMING);
+        if (via_udma_case == 0)
+            CHECK((ata.config[VIA_UDMA / 4u] & 0xff000000u) == 0);
     } else if (pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_DMA)
         CHECK((ata.config[PIIX_IDETIM / 4u] & 0xffffu) ==
             PIIX_MWDMA2_TIMING);
@@ -615,6 +653,9 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
             ata.inject_dma_timeout = 1;
         CHECK(ops->dbo_read(&sc, 7, 1, data) == 0);
         CHECK(pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_PIO);
+        CHECK(ata.transfer_mode == 0x08u);
+        if (via)
+            CHECK((ata.config[VIA_UDMA / 4u] & 0xff000000u) == 0);
         CHECK(memcmp(data, original, sizeof(data)) == 0);
     }
     CHECK(ops->dbo_read(&sc, 7, 1, data) == 0);
@@ -635,32 +676,40 @@ main(int argc, char **argv)
 {
     if (argc != 2) {
         fprintf(stderr,
-            "usage: %s pio|dma|piix-dma-pio2|via-dma|via-dma-pio3|via-dma-pio2|auto-fallback|dma-error|dma-timeout|via-dma-timeout|dma-early-irq\n",
+            "usage: %s pio|dma|piix-dma-pio2|via-dma|via-dma-pio3|via-dma-pio2|via-udma66|via-udma66-no80|via-udma33|auto-fallback|dma-error|dma-timeout|via-dma-timeout|via-udma-timeout|dma-early-irq\n",
             argv[0]);
         return 2;
     }
     if (strcmp(argv[1], "pio") == 0)
-        test_mode(PCIIDE_MODE_PIO, 1, 0, 0, 3, 2);
+        test_mode(PCIIDE_MODE_PIO, 1, 0, 0, 3, 2, 0);
     else if (strcmp(argv[1], "dma") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 0, 0, 3, 2);
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 0, 3, 2, 0);
     else if (strcmp(argv[1], "piix-dma-pio2") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 0, 0, 0, 2);
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 0, 0, 2, 0);
     else if (strcmp(argv[1], "via-dma") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 3, 2);
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 3, 2, 0);
     else if (strcmp(argv[1], "via-dma-pio3") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 1, 1);
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 1, 1, 0);
     else if (strcmp(argv[1], "via-dma-pio2") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 0, 0);
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 0, 0, 0);
+    else if (strcmp(argv[1], "via-udma66") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 3, 2, 1);
+    else if (strcmp(argv[1], "via-udma66-no80") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 3, 2, 2);
+    else if (strcmp(argv[1], "via-udma33") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 0, 1, 3, 2, 3);
     else if (strcmp(argv[1], "auto-fallback") == 0)
-        test_mode(PCIIDE_MODE_AUTO, 0, 0, 0, 0, 0);
+        test_mode(PCIIDE_MODE_AUTO, 0, 0, 0, 0, 0, 0);
     else if (strcmp(argv[1], "dma-error") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 1, 0, 3, 2);
+        test_mode(PCIIDE_MODE_DMA, 1, 1, 0, 3, 2, 0);
     else if (strcmp(argv[1], "dma-timeout") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 2, 0, 3, 2);
+        test_mode(PCIIDE_MODE_DMA, 1, 2, 0, 3, 2, 0);
     else if (strcmp(argv[1], "via-dma-timeout") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 2, 1, 3, 2);
+        test_mode(PCIIDE_MODE_DMA, 1, 2, 1, 3, 2, 0);
+    else if (strcmp(argv[1], "via-udma-timeout") == 0)
+        test_mode(PCIIDE_MODE_DMA, 1, 2, 1, 3, 2, 1);
     else if (strcmp(argv[1], "dma-early-irq") == 0)
-        test_mode(PCIIDE_MODE_DMA, 1, 3, 1, 3, 2);
+        test_mode(PCIIDE_MODE_DMA, 1, 3, 1, 3, 2, 0);
     else
         return 2;
     printf("pciide %s test: ok\n", argv[1]);

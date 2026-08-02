@@ -30,6 +30,11 @@ enum pciide_transfer_mode {
     PCIIDE_TRANSFER_DMA
 };
 
+enum pciide_dma_protocol {
+    PCIIDE_DMA_MWDMA = 0,
+    PCIIDE_DMA_UDMA
+};
+
 typedef int (*pciide_irq_establish_t)(void *, unsigned,
     pci_interrupt_handler_t, void *);
 typedef int (*pciide_wait_t)(void *, volatile unsigned *, unsigned);
@@ -62,7 +67,8 @@ struct pciide_softc {
     disk_sector_t ps_sector_count;
     enum pciide_mode_policy ps_policy;
     enum pciide_transfer_mode ps_mode;
-    unsigned ps_mwdma_mode;
+    enum pciide_dma_protocol ps_dma_protocol;
+    unsigned ps_dma_mode;
     unsigned ps_pio_mode;
     unsigned ps_irq;
     unsigned ps_wait_ticks;
@@ -85,7 +91,8 @@ int pciide_attach(struct pciide_softc *, const struct pciide_attach_args *);
 const struct disk_backend_ops *pciide_disk_ops(struct pciide_softc *);
 disk_sector_t pciide_sector_count(const struct pciide_softc *);
 enum pciide_transfer_mode pciide_transfer_mode(const struct pciide_softc *);
-unsigned pciide_mwdma_mode(const struct pciide_softc *);
+enum pciide_dma_protocol pciide_dma_protocol(const struct pciide_softc *);
+unsigned pciide_dma_mode(const struct pciide_softc *);
 int pciide_interrupt(void *);
 
 #endif /* _PCI_PCIIDE_H_ */

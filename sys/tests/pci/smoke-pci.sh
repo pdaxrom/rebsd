@@ -34,10 +34,14 @@ if [ "$mode" = test ]; then
 "$tmp/pciide_test" via-dma
 "$tmp/pciide_test" via-dma-pio3
 "$tmp/pciide_test" via-dma-pio2
+"$tmp/pciide_test" via-udma66
+"$tmp/pciide_test" via-udma66-no80
+"$tmp/pciide_test" via-udma33
 "$tmp/pciide_test" auto-fallback
 "$tmp/pciide_test" dma-error
 "$tmp/pciide_test" dma-timeout
 "$tmp/pciide_test" via-dma-timeout
+"$tmp/pciide_test" via-udma-timeout
 "$tmp/pciide_test" dma-early-irq
 elif [ "$mode" != compile ]; then
     echo "usage: $0 [compile|test]" >&2

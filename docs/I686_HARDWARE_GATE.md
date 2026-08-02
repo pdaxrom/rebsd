@@ -28,13 +28,13 @@ QEMU 11 не содержит модели RTL8169, поэтому аппара�
 использует fake PCI/BAR/DMA/IRQ backend, а следующий сетевой gate выполняется
 на IBM.
 Общий `sys/pci/pciide` transport теперь реализует IDENTIFY, PIO,
-PCI bus-master MWDMA, IRQ completion, reset, write и cache flush. Запись
+PCI bus-master MWDMA/UDMA, IRQ completion, reset, write и cache flush. Запись
 проверяется только host fake-hardware gate. i686 по-прежнему регистрирует
 IDE-CF с `DISK_FLAG_READ_ONLY`, поэтому обычный kernel path не посылает
 команды записи реальному CF, а write-open/strategy возвращают `EROFS`.
 
 2026-08-02 на том же IBM отдельно проверены оба storage режима одного
-общего driver: принудительный PIO и PCI bus-master MWDMA. В обоих режимах
+общего driver: принудительный PIO и PCI bus-master DMA. В обоих режимах
 `dd if=/dev/sd0 of=/dev/null bs=32768 count=128` прочитал 4 MiB, а внешний
 IDE-CF остался read-only. Более поздняя DMA-загрузка обнаружила плавающую
 гонку VIA: ATA IRQ14 мог прийти до защёлкивания bus-master interrupt status,
@@ -46,8 +46,17 @@ IDE-CF остался read-only. Более поздняя DMA-загрузка 
 а interrupt/error не был установлен. Значит конкретный timeout не является
 потерянным завершившим IRQ.
 
-Общий driver теперь ограничивает MWDMA PIO-возможностями IDENTIFY по тому же
-правилу, что NetBSD Apollo, и печатает оба raw capability words. После DMA
+Следующий bootlog и Linux 2.6.9 на той же машине показали точную причину:
+BIOS оставлял VT82C596B primary master в UDMA66 (`udma=e0080000`), а ReBSD
+переводил устройство в MWDMA2 без смены протокола в контроллере. Получалось
+рассогласование controller/device, поэтому bus master и ATA оставались
+active/busy.
+
+Общий driver теперь выбирает UDMA0--4 на VT82C596B revision 0x12 и новее,
+учитывает BIOS cable state как штатный VIA driver и программирует UDMA timing
+по таблицам Apollo. Если устройство предоставляет только MWDMA, UDMA enable
+primary master сначала очищается, а MWDMA ограничивается PIO-возможностями
+IDENTIFY. После DMA
 error/timeout он сбрасывает channel и повторяет незавершённый запрос через
 PIO, поэтому `sd0` не исчезает. Повторный реальный `ata=dma` gate обязателен;
 проверка `ata=auto` выполняется только после него.
@@ -111,7 +120,8 @@ GRUB переустанавливать не требуется; `initrd`, `root
 
 ```text
 ata0: mode=pio policy=forced
-ata0: mode=mwdmaN bus-master irq=14 pio-timing=P identify-mwdma=X identify-pio=Y
+ata0: mode=udmaN bus-master irq=14 pio-timing=P identify-mwdma=X identify-udma=Y identify-pio=Z
+ata0: mode=mwdmaN bus-master irq=14 pio-timing=P identify-mwdma=X identify-udma=Y identify-pio=Z
 ```
 
 Если DMA transfer завершится ошибкой или timeout, controller останавливается
@@ -177,7 +187,7 @@ HALT
 - `121a:0005` — 3Dfx Interactive Voodoo3 AGP VGA.
 
 ATA data registers остаются в BIOS compatibility mode, а общий PCI IDE
-driver использует bus-master BAR, MWDMA и IRQ14. AGP programming не включён.
+driver использует bus-master BAR, UDMA/MWDMA и IRQ14. AGP programming не включён.
 COM1 `115200 8N1` остаётся желательным для последующих длинных logs, но
 точный PCI baseline уже зафиксирован через VGA.
 

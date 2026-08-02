@@ -44,6 +44,7 @@
 #define ATA_FEATURE_SET_TRANSFER_MODE   0x03u
 #define ATA_TRANSFER_PIO_FLOW           0x08u
 #define ATA_TRANSFER_MWDMA              0x20u
+#define ATA_TRANSFER_UDMA               0x40u
 
 #define ATA_IDENTIFY_MODEL_FIRST        27u
 #define ATA_IDENTIFY_MODEL_WORDS        20u
@@ -51,12 +52,14 @@
 #define ATA_IDENTIFY_VALIDITY           53u
 #define ATA_IDENTIFY_MWDMA              63u
 #define ATA_IDENTIFY_PIO                64u
+#define ATA_IDENTIFY_UDMA               88u
 #define ATA_IDENTIFY_LBA28_LOW          60u
 #define ATA_IDENTIFY_LBA28_HIGH         61u
 #define ATA_IDENTIFY_COMMAND_SET_2      83u
 #define ATA_CAPABILITY_DMA              0x0100u
 #define ATA_CAPABILITY_LBA              0x0200u
 #define ATA_VALIDITY_WORDS_64_70        0x0002u
+#define ATA_VALIDITY_WORD_88            0x0004u
 #define ATA_FLUSH_CACHE_SUPPORTED       0x1000u
 
 #define PCIIDE_INTERFACE_PRIMARY_NATIVE 0x01u
@@ -99,14 +102,23 @@
 #define VIA_MISCTIM                     0x4cu
 #define VIA_UDMA                        0x50u
 #define VIA_IDECONF_PRIMARY_ENABLE      0x00000002u
+#define VIA_UDMA_PRIMARY_MASTER_MASK    0xff000000u
+#define VIA_UDMA_PRIMARY_MASTER_ENABLE  0xc0000000u
+#define VIA_UDMA_PRIMARY_MASTER_BIOS    0x20000000u
+#define VIA_UDMA_PRIMARY_MASTER_TIME    0x07000000u
+#define VIA_UDMA_PRIMARY_CLK66          0x00080000u
 
 #define PCIIDE_POLL_ATTEMPTS            100000u
 #define PCIIDE_RESET_SETTLE_US          2000u
+#define PCIIDE_RESET_POLL_ATTEMPTS      31000u
+#define PCIIDE_RESET_POLL_US            1000u
 
 static const unsigned char piix_mwdma_isp[] = { 0u, 2u, 2u };
 static const unsigned char piix_mwdma_rtc[] = { 0u, 2u, 3u };
 static const unsigned char via_pio_pulse[] = { 10u, 10u, 10u, 2u, 2u };
 static const unsigned char via_pio_recovery[] = { 8u, 8u, 8u, 2u, 0u };
+static const unsigned char via_udma66_timing[] = { 3u, 3u, 2u, 1u, 0u };
+static const unsigned char via_udma33_timing[] = { 3u, 2u, 0u };
 
 static void
 pciide_zero(void *data_arg, size_t size)
@@ -201,6 +213,22 @@ static int
 pciide_wait_not_busy(struct pciide_softc *sc, int reject_errors)
 {
     return pciide_wait_status(sc, 0, ATA_STATUS_BUSY, reject_errors);
+}
+
+static int
+pciide_wait_reset(struct pciide_softc *sc)
+{
+    unsigned char status;
+    unsigned attempt;
+
+    for (attempt = 0; attempt < PCIIDE_RESET_POLL_ATTEMPTS; ++attempt) {
+        status = pciide_command_read8(sc, ATA_REG_STATUS);
+        if (status != 0 && status != 0xffu &&
+            (status & ATA_STATUS_BUSY) == 0)
+            return 0;
+        pci_delay_us(&sc->ps_device, PCIIDE_RESET_POLL_US);
+    }
+    return ETIMEDOUT;
 }
 
 static int
@@ -371,7 +399,8 @@ pciide_configure_piix(struct pciide_softc *sc, int dma,
 }
 
 static void
-pciide_configure_via(struct pciide_softc *sc, unsigned pio_mode)
+pciide_configure_via(struct pciide_softc *sc, unsigned pio_mode,
+    unsigned udma_cap, unsigned udma_mode)
 {
     unsigned config;
 
@@ -385,6 +414,24 @@ pciide_configure_via(struct pciide_softc *sc, unsigned pio_mode)
     config |= (unsigned)via_pio_recovery[pio_mode] << 24;
     config |= (unsigned)via_pio_pulse[pio_mode] << 28;
     pci_config_write32(&sc->ps_device, VIA_DATATIM, config);
+
+    /*
+     * Primary master occupies the high byte of the VIA UDMA register.
+     * Always clear the BIOS-selected protocol before selecting PIO/MWDMA;
+     * otherwise a device switched to MWDMA still sees UDMA signalling from
+     * the controller.  Preserve the primary-slave byte and channel state.
+     */
+    config = pci_config_read32(&sc->ps_device, VIA_UDMA);
+    config &= ~VIA_UDMA_PRIMARY_MASTER_MASK;
+    if (udma_cap != 0) {
+        config |= VIA_UDMA_PRIMARY_MASTER_ENABLE;
+        if (udma_cap >= 4u) {
+            config |= (unsigned)via_udma66_timing[udma_mode] << 24;
+            config |= VIA_UDMA_PRIMARY_CLK66;
+        } else
+            config |= (unsigned)via_udma33_timing[udma_mode] << 24;
+    }
+    pci_config_write32(&sc->ps_device, VIA_UDMA, config);
 }
 
 static int
@@ -401,7 +448,7 @@ pciide_controller_supported(struct pciide_softc *sc)
     return 0;
 }
 
-static void
+static int
 pciide_configure_pio(struct pciide_softc *sc)
 {
     if (sc->ps_device.pd_vendor == PCIIDE_VENDOR_INTEL &&
@@ -409,8 +456,8 @@ pciide_configure_pio(struct pciide_softc *sc)
         pciide_configure_piix(sc, 0, 0);
     else if (sc->ps_device.pd_vendor == PCIIDE_VENDOR_VIA &&
         sc->ps_device.pd_product == PCIIDE_PRODUCT_VIA_IDE)
-        pciide_configure_via(sc, 0);
-    (void)pciide_set_transfer_mode(sc, ATA_TRANSFER_PIO_FLOW);
+        pciide_configure_via(sc, 0, 0, 0);
+    return pciide_set_transfer_mode(sc, ATA_TRANSFER_PIO_FLOW);
 }
 
 static int
@@ -432,6 +479,54 @@ pciide_choose_mwdma(struct pciide_softc *sc, unsigned *mode)
         return EOPNOTSUPP;
 
     return 0;
+}
+
+static int
+pciide_via_has_80wire(struct pciide_softc *sc)
+{
+    unsigned config;
+
+    /*
+     * The VT82C596B has no independent cable-status register.  The VIA
+     * driver recovers the BIOS cable decision from the programmed UDMA state:
+     * primary Clk66 enabled, primary master enabled for UDMA, and a 66 MHz
+     * timing value.  Read this before replacing the BIOS timing.
+     */
+    config = pci_config_read32(&sc->ps_device, VIA_UDMA);
+    return (config & VIA_UDMA_PRIMARY_CLK66) != 0 &&
+        (config & VIA_UDMA_PRIMARY_MASTER_BIOS) != 0 &&
+        (config & VIA_UDMA_PRIMARY_MASTER_TIME) < (2u << 24);
+}
+
+static int
+pciide_choose_via_udma(struct pciide_softc *sc, unsigned *mode,
+    unsigned *controller_cap)
+{
+    unsigned cap;
+    unsigned selection_cap;
+    unsigned supported;
+    int candidate;
+
+    if (sc->ps_isa_device.pd_vendor != PCIIDE_VENDOR_VIA ||
+        sc->ps_isa_device.pd_product != PCIIDE_PRODUCT_VIA_596 ||
+        (sc->ps_identify[ATA_IDENTIFY_VALIDITY] &
+        ATA_VALIDITY_WORD_88) == 0)
+        return EOPNOTSUPP;
+
+    /* VT82C596 revision 0x12 and later is the UDMA66-capable 596B. */
+    cap = sc->ps_isa_device.pd_revision >= 0x12u ? 4u : 2u;
+    selection_cap = cap;
+    if (selection_cap > 2u && !pciide_via_has_80wire(sc))
+        selection_cap = 2u;
+    supported = sc->ps_identify[ATA_IDENTIFY_UDMA] & 0x1fu;
+    for (candidate = (int)selection_cap; candidate >= 0; --candidate) {
+        if ((supported & (1u << (unsigned)candidate)) != 0) {
+            *mode = (unsigned)candidate;
+            *controller_cap = cap;
+            return 0;
+        }
+    }
+    return EOPNOTSUPP;
 }
 
 static void
@@ -497,22 +592,38 @@ pciide_soft_reset(struct pciide_softc *sc)
     pci_delay_us(&sc->ps_device, 5);
     pciide_control_write(sc, ATA_CONTROL_INTERRUPT_DISABLE);
     pci_delay_us(&sc->ps_device, PCIIDE_RESET_SETTLE_US);
-    return pciide_wait_not_busy(sc, 0);
+    return pciide_wait_reset(sc);
 }
 
-static void
+static int
 pciide_disable_dma(struct pciide_softc *sc)
 {
+    unsigned char status;
+    int error;
+
     pciide_dma_stop(sc);
     pciide_dma_clear_status(sc);
     sc->ps_dma_active = 0;
     sc->ps_dma_done = 0;
     sc->ps_dma_ready = 0;
     sc->ps_dma_failed = 1;
+    error = pciide_soft_reset(sc);
+    if (error != 0) {
+        status = pciide_command_read8(sc, ATA_REG_STATUS);
+        printf("ata0: DMA fallback reset failed error=%d ata=%x\n",
+            error, status);
+        return error;
+    }
+    error = pciide_configure_pio(sc);
+    if (error != 0) {
+        status = pciide_command_read8(sc, ATA_REG_STATUS);
+        printf("ata0: DMA fallback PIO setup failed error=%d ata=%x\n",
+            error, status);
+        return error;
+    }
     sc->ps_mode = PCIIDE_TRANSFER_PIO;
-    (void)pciide_soft_reset(sc);
-    pciide_configure_pio(sc);
     printf("ata0: DMA disabled after transfer failure; subsequent I/O uses PIO\n");
+    return 0;
 }
 
 int
@@ -635,7 +746,9 @@ pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
                 pci_config_read32(&sc->ps_device, VIA_DATATIM),
                 pci_config_read32(&sc->ps_device, VIA_MISCTIM),
                 pci_config_read32(&sc->ps_device, VIA_UDMA));
-        pciide_disable_dma(sc);
+        error = pciide_disable_dma(sc);
+        if (error != 0)
+            return error;
         return EIO;
     }
     error = dma_sync_for_cpu(&sc->ps_buffer_dma, 0, bytes,
@@ -705,9 +818,15 @@ pciide_backend_read(void *arg, disk_sector_t lba, unsigned count,
             chunk = PCIIDE_DMA_MAX_SECTORS;
         error = pciide_dma_transfer(sc, (unsigned)lba + done, chunk,
             data + done * DISK_SECTOR_SIZE, 0);
-        if (error != 0 && sc->ps_mode == PCIIDE_TRANSFER_PIO)
-            return pciide_pio_read(sc, (unsigned)lba + done,
+        if (error != 0 && sc->ps_mode == PCIIDE_TRANSFER_PIO) {
+            error = pciide_pio_read(sc, (unsigned)lba + done,
                 count - done, data + done * DISK_SECTOR_SIZE);
+            if (error != 0)
+                printf("ata0: PIO retry failed error=%d lba=%u "
+                    "sectors=%u\n", error, (unsigned)lba + done,
+                    count - done);
+            return error;
+        }
         if (error != 0)
             return error;
         done += chunk;
@@ -741,9 +860,15 @@ pciide_backend_write(void *arg, disk_sector_t lba, unsigned count,
             chunk = PCIIDE_DMA_MAX_SECTORS;
         error = pciide_dma_transfer(sc, (unsigned)lba + done, chunk,
             (void *)(data + done * DISK_SECTOR_SIZE), 1);
-        if (error != 0 && sc->ps_mode == PCIIDE_TRANSFER_PIO)
-            return pciide_pio_write(sc, (unsigned)lba + done,
+        if (error != 0 && sc->ps_mode == PCIIDE_TRANSFER_PIO) {
+            error = pciide_pio_write(sc, (unsigned)lba + done,
                 count - done, data + done * DISK_SECTOR_SIZE);
+            if (error != 0)
+                printf("ata0: PIO retry failed error=%d lba=%u "
+                    "sectors=%u\n", error, (unsigned)lba + done,
+                    count - done);
+            return error;
+        }
         if (error != 0)
             return error;
         done += chunk;
@@ -794,9 +919,11 @@ static int
 pciide_dma_attach(struct pciide_softc *sc,
     const struct pciide_attach_args *args)
 {
+    enum pciide_dma_protocol protocol;
     unsigned char status;
     unsigned mode;
     unsigned pio_mode;
+    unsigned via_udma_cap;
     int error;
 
     if ((sc->ps_device.pd_interface & PCIIDE_INTERFACE_BUS_MASTER) == 0 ||
@@ -804,11 +931,30 @@ pciide_dma_attach(struct pciide_softc *sc,
         args->pa_irq_establish == 0 || args->pa_wait == 0 ||
         args->pa_wakeup == 0 || args->pa_wait_ticks == 0)
         return EOPNOTSUPP;
-    error = pciide_choose_mwdma(sc, &mode);
-    if (error != 0)
-        return error;
+    protocol = PCIIDE_DMA_MWDMA;
+    via_udma_cap = 0;
+    error = EOPNOTSUPP;
+    if (sc->ps_device.pd_vendor == PCIIDE_VENDOR_VIA) {
+        error = pciide_choose_via_udma(sc, &mode, &via_udma_cap);
+        if (error == 0)
+            protocol = PCIIDE_DMA_UDMA;
+    }
+    if (error != 0) {
+        error = pciide_choose_mwdma(sc, &mode);
+        if (error != 0)
+            return error;
+    }
     pio_mode = mode == 0 ? 0 : mode + 2u;
-    if (sc->ps_device.pd_vendor == PCIIDE_VENDOR_VIA)
+    if (protocol == PCIIDE_DMA_UDMA) {
+        pio_mode = 0;
+        if ((sc->ps_identify[ATA_IDENTIFY_VALIDITY] &
+            ATA_VALIDITY_WORDS_64_70) != 0) {
+            if ((sc->ps_identify[ATA_IDENTIFY_PIO] & 0x02u) != 0)
+                pio_mode = 4;
+            else if ((sc->ps_identify[ATA_IDENTIFY_PIO] & 0x01u) != 0)
+                pio_mode = 3;
+        }
+    } else if (sc->ps_device.pd_vendor == PCIIDE_VENDOR_VIA)
         pciide_via_pair_mwdma(sc, &mode, &pio_mode);
     error = pci_map_bar(&sc->ps_device, PCIIDE_BUS_MASTER_BAR,
         PCIIDE_BUS_MASTER_BYTES, &sc->ps_bus_master);
@@ -835,12 +981,13 @@ pciide_dma_attach(struct pciide_softc *sc,
     if (sc->ps_device.pd_vendor == PCIIDE_VENDOR_INTEL)
         pciide_configure_piix(sc, 1, mode);
     else
-        pciide_configure_via(sc, pio_mode);
+        pciide_configure_via(sc, pio_mode, via_udma_cap, mode);
     error = pciide_set_transfer_mode(sc,
-        (unsigned char)(ATA_TRANSFER_MWDMA | mode));
+        (unsigned char)((protocol == PCIIDE_DMA_UDMA ?
+        ATA_TRANSFER_UDMA : ATA_TRANSFER_MWDMA) | mode));
     if (error != 0) {
         pciide_dma_release(sc);
-        pciide_configure_pio(sc);
+        (void)pciide_configure_pio(sc);
         return error;
     }
     status = pci_resource_read8(&sc->ps_bus_master, PCIIDE_BM_STATUS);
@@ -852,10 +999,11 @@ pciide_dma_attach(struct pciide_softc *sc,
         args->pa_irq, pciide_interrupt, sc);
     if (error != 0) {
         pciide_dma_release(sc);
-        pciide_configure_pio(sc);
+        (void)pciide_configure_pio(sc);
         return error;
     }
-    sc->ps_mwdma_mode = mode;
+    sc->ps_dma_protocol = protocol;
+    sc->ps_dma_mode = mode;
     sc->ps_pio_mode = pio_mode;
     sc->ps_irq = args->pa_irq;
     sc->ps_wait_ticks = args->pa_wait_ticks;
@@ -920,20 +1068,32 @@ pciide_attach(struct pciide_softc *sc, const struct pciide_attach_args *args)
             sc->ps_present = 0;
             return error;
         }
-        if (error != 0)
-            pciide_configure_pio(sc);
-    } else
-        pciide_configure_pio(sc);
+        if (error != 0) {
+            error = pciide_configure_pio(sc);
+            if (error != 0) {
+                sc->ps_present = 0;
+                return error;
+            }
+        }
+    } else {
+        error = pciide_configure_pio(sc);
+        if (error != 0) {
+            sc->ps_present = 0;
+            return error;
+        }
+    }
     sc->ps_disk_ops.dbo_read = pciide_backend_read;
     sc->ps_disk_ops.dbo_write = pciide_backend_write;
     sc->ps_disk_ops.dbo_flush = pciide_backend_flush;
     sc->ps_disk_ops.dbo_present = pciide_backend_present;
     sc->ps_attached = 1;
     if (sc->ps_mode == PCIIDE_TRANSFER_DMA)
-        printf("ata0: mode=mwdma%u bus-master irq=%u pio-timing=%u "
-            "identify-mwdma=%x identify-pio=%x\n",
-            sc->ps_mwdma_mode, sc->ps_irq, sc->ps_pio_mode,
+        printf("ata0: mode=%s%u bus-master irq=%u pio-timing=%u "
+            "identify-mwdma=%x identify-udma=%x identify-pio=%x\n",
+            sc->ps_dma_protocol == PCIIDE_DMA_UDMA ? "udma" : "mwdma",
+            sc->ps_dma_mode, sc->ps_irq, sc->ps_pio_mode,
             sc->ps_identify[ATA_IDENTIFY_MWDMA],
+            sc->ps_identify[ATA_IDENTIFY_UDMA],
             sc->ps_identify[ATA_IDENTIFY_PIO]);
     else if (args->pa_policy == PCIIDE_MODE_PIO)
         printf("ata0: mode=pio policy=forced\n");
@@ -960,8 +1120,14 @@ pciide_transfer_mode(const struct pciide_softc *sc)
     return sc != 0 ? sc->ps_mode : PCIIDE_TRANSFER_PIO;
 }
 
-unsigned
-pciide_mwdma_mode(const struct pciide_softc *sc)
+enum pciide_dma_protocol
+pciide_dma_protocol(const struct pciide_softc *sc)
 {
-    return sc != 0 ? sc->ps_mwdma_mode : 0;
+    return sc != 0 ? sc->ps_dma_protocol : PCIIDE_DMA_MWDMA;
+}
+
+unsigned
+pciide_dma_mode(const struct pciide_softc *sc)
+{
+    return sc != 0 ? sc->ps_dma_mode : 0;
 }
