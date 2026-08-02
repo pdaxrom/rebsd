@@ -131,6 +131,13 @@ UHCI_MOUSE_MARKERS = UHCI_MARKERS + (
     "mouse1: input active",
 )
 
+PIO_CLOCK_COMMAND = (
+    b"echo REBSD_I686_PIO_CLOCK_BEGIN; "
+    b"/usr/bin/time /bin/dd if=/dev/sd0 of=/dev/null "
+    b"bs=1048576 count=8; echo REBSD_I686_PIO_CLOCK_END\n",
+    b"\r\nREBSD_I686_PIO_CLOCK_END\r\n",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -475,9 +482,13 @@ def main() -> None:
             b"\r\nREBSD_I686_FULL_ROOTFS_OK REBSD_I686_SHELL_OK\r\n",
         ),
     )
+    if args.disk is not None and args.ata_mode == "pio":
+        commands += (PIO_CLOCK_COMMAND,)
     command_index = 0
     command_sent = False
     command_output_start = 0
+    pio_clock_host_start: float | None = None
+    pio_clock_host_elapsed: float | None = None
     completed = False
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
@@ -511,6 +522,8 @@ def main() -> None:
             command_output_start = len(output_bytes)
             process.stdin.write(commands[command_index][0])
             process.stdin.flush()
+            if commands[command_index] == PIO_CLOCK_COMMAND:
+                pio_clock_host_start = time.monotonic()
             command_sent = True
         if (
             command_sent
@@ -518,6 +531,11 @@ def main() -> None:
             in output_bytes[command_output_start:]
             and output_bytes.endswith(b"\r\n# ")
         ):
+            if commands[command_index] == PIO_CLOCK_COMMAND:
+                assert pio_clock_host_start is not None
+                pio_clock_host_elapsed = (
+                    time.monotonic() - pio_clock_host_start
+                )
             command_index += 1
             command_sent = False
             if command_index == len(commands):
@@ -575,6 +593,23 @@ def main() -> None:
             "qemu-boot-smoke: forbidden serial markers: "
             + ", ".join(forbidden)
         )
+    if args.disk is not None and args.ata_mode == "pio":
+        pio_clock_match = re.search(
+            r"REBSD_I686_PIO_CLOCK_BEGIN.*?"
+            r"([0-9]+\.[0-9]) real.*?"
+            r"REBSD_I686_PIO_CLOCK_END",
+            output,
+            re.DOTALL,
+        )
+        if pio_clock_match is None or pio_clock_host_elapsed is None:
+            raise SystemExit("qemu-boot-smoke: missing PIO clock result")
+        pio_clock_guest_elapsed = float(pio_clock_match.group(1))
+        if pio_clock_guest_elapsed + 0.15 < pio_clock_host_elapsed * 0.5:
+            raise SystemExit(
+                "qemu-boot-smoke: PIT clock lost during PIO syscall: "
+                f"guest={pio_clock_guest_elapsed:.1f}s "
+                f"host={pio_clock_host_elapsed:.3f}s"
+            )
     free_match = re.search(
         r"Mem:\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+", output
     )

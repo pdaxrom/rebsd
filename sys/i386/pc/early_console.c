@@ -4,6 +4,7 @@
 
 #include <console/vtconsole.h>
 #include <machine/console.h>
+#include <machine/machparam.h>
 #include <sys/reboot.h>
 #include <sys/tty.h>
 #include <sys/types.h>
@@ -191,8 +192,12 @@ i386_console_getc(void)
 void
 i386_console_putc(int ch)
 {
+    int s;
+
+    s = spltty();
     i386_serial_putc((char)ch);
     i386_vga_putc((char)ch);
+    splx(s);
 }
 
 void

@@ -79,11 +79,15 @@ cninput(int c)
 void
 cnintr(void)
 {
+    int s;
+
     if ((cnttys[0].t_state & TS_ISOPEN) == 0)
         return;
 
+    s = spltty();
     while (md_console_poll())
         cninput(md_console_getc());
+    splx(s);
 }
 
 static void

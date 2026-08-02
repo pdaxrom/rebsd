@@ -8,7 +8,6 @@
 
 #define I386_IDT_INTERRUPT_GATE   0x8eu
 #define I386_IDT_USER_TRAP_GATE   0xefu
-#define I386_IDT_USER_INTERRUPT_GATE 0xeeu
 #define I386_EXCEPTION_BREAKPOINT 3u
 #define I386_EXCEPTION_PAGE_FAULT 14u
 #define I386_PAGE_FAULT_WRITE     0x02u
@@ -99,8 +98,9 @@ i386_idt_init(void)
     i386_idt_set_gate(I386_EXCEPTION_BREAKPOINT,
         i386_vector_table[I386_EXCEPTION_BREAKPOINT],
         I386_IDT_USER_TRAP_GATE);
+    /* Preserve user IF so hardware interrupts remain live in system calls. */
     i386_idt_set_gate(I386_SYSCALL_VECTOR, i386_vector_128,
-        I386_IDT_USER_INTERRUPT_GATE);
+        I386_IDT_USER_TRAP_GATE);
 
     descriptor.limit = (i386_u16)(sizeof(i386_idt) - 1u);
     descriptor.base = (i386_u32)(unsigned long)i386_idt;
