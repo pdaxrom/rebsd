@@ -2,6 +2,7 @@
 #include "ide.h"
 
 #include <disk/disk.h>
+#include <pci/pciide.h>
 #include <sys/systm.h>
 
 int
@@ -15,5 +16,6 @@ i386_disk_attach_ide(void)
     args.da_sector_count = i386_ide_sector_count();
     args.da_sector_size = DISK_SECTOR_SIZE;
     args.da_flags = DISK_FLAG_READ_ONLY;
+    args.da_read_ahead_sectors = PCIIDE_DMA_MAX_SECTORS;
     return disk_attach(&args, 0);
 }

@@ -92,6 +92,10 @@ struct fake_ata {
     unsigned inject_dma_timeout;
     unsigned inject_early_ata_irq;
     unsigned transfer_mode;
+    unsigned dma_starts;
+    unsigned last_dma_bytes;
+    unsigned last_dma_count;
+    unsigned last_dma_lba;
     pci_interrupt_handler_t handler;
     void *handler_arg;
 };
@@ -325,6 +329,10 @@ fake_dma_start(struct fake_ata *ata)
     byte_count = fake_load32(prd + 4u) & 0xffffu;
     if (byte_count == 0)
         byte_count = 0x10000u;
+    ++ata->dma_starts;
+    ata->last_dma_bytes = byte_count;
+    ata->last_dma_count = ata->current_count;
+    ata->last_dma_lba = ata->current_lba;
     CHECK(buffer_address >= fake_dma_address());
     dma_offset = buffer_address - fake_dma_address();
     CHECK(dma_offset + byte_count <= sizeof(fake_dma));
@@ -544,6 +552,7 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
     const struct disk_backend_ops *ops;
     unsigned char original[DISK_SECTOR_SIZE];
     unsigned char data[DISK_SECTOR_SIZE];
+    unsigned char dma_data[PCIIDE_DMA_BUFFER_BYTES];
     unsigned char replacement[DISK_SECTOR_SIZE];
     unsigned i;
     int error;
@@ -660,6 +669,17 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
     }
     CHECK(ops->dbo_read(&sc, 7, 1, data) == 0);
     CHECK(memcmp(data, original, sizeof(data)) == 0);
+    if (pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_DMA && failure == 0) {
+        ata.dma_starts = 0;
+        CHECK(ops->dbo_read(&sc, 16, PCIIDE_DMA_MAX_SECTORS,
+            dma_data) == 0);
+        CHECK(ata.dma_starts == 1u);
+        CHECK(ata.last_dma_lba == 16u);
+        CHECK(ata.last_dma_count == PCIIDE_DMA_MAX_SECTORS);
+        CHECK(ata.last_dma_bytes == PCIIDE_DMA_BUFFER_BYTES);
+        CHECK(memcmp(dma_data, ata.disk + 16u * DISK_SECTOR_SIZE,
+            sizeof(dma_data)) == 0);
+    }
     for (i = 0; i < sizeof(replacement); ++i)
         replacement[i] = (unsigned char)(0xa5u ^ i);
     CHECK(ops->dbo_write(&sc, 9, 1, replacement) == 0);

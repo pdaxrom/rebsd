@@ -696,7 +696,7 @@ disk.o: $(I386_DISK_SRC)/disk.c $(I386_DISK_SRC)/disk.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -DDISK_READ_CACHE_SLOTS=1u \
-	    -DDISK_READ_AHEAD_MAX_SECTORS=16u \
+	    -DDISK_READ_AHEAD_MAX_SECTORS=64u \
 	    -DDISK_WRITE_CACHE_SLOTS=1u \
 	    -DDISK_WRITE_BACK_MAX_SECTORS=32u \
 	    -c $< -o $@
@@ -865,6 +865,7 @@ vfs_vnops.o: $(TOPSRC)/sys/kernel/vfs_vnops.c \
 disk_bootstrap.o: $(I386_PC_SRC)/disk_bootstrap.c \
 	    $(I386_SRC)/include/disk_bootstrap.h \
 	    $(I386_SRC)/include/ide.h $(I386_DISK_SRC)/disk.h \
+	    $(I386_PCI_SRC)/pciide.h \
 	    $(TOPSRC)/sys/include/systm.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \

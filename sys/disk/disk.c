@@ -740,6 +740,10 @@ disk_attach(const struct disk_attach_args *args, unsigned *unitp)
         disk_lba_string(kbytes_text, sc->ds_sector_count >> 1),
         (sc->ds_flags & DISK_FLAG_READ_ONLY) != 0 ? ", read-only" : "",
         (sc->ds_flags & DISK_FLAG_REMOVABLE) != 0 ? ", removable" : "");
+    if (sc->ds_read_ahead_sectors != 0)
+        printf("sd%u: read-ahead=%u sectors (%u KB)\n", sc->ds_unit,
+            sc->ds_read_ahead_sectors,
+            sc->ds_read_ahead_sectors >> 1);
     if (sc->ds_table.dt_from_backup)
         printf("sd%u: using backup GPT; primary is invalid\n", sc->ds_unit);
     for (i = 0; i < DISK_PARTITIONS; ++i) {

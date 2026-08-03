@@ -88,6 +88,12 @@ programming, automatic capability fallback and injected DMA error/timeout;
 the external disk published by the i686
 kernel deliberately remains read-only, so the real CF is not written.
 
+The PCI IDE backend publishes its 32 KiB maximum DMA command size to the
+existing machine-independent disk read-ahead contract.  Sequential buffered
+reads of `/dev/sd0` therefore issue one 64-sector ATA command per window
+instead of 32 one-kilobyte commands.  PIO remains the same backend fallback;
+no alternate disk path or cache implementation is used.
+
 The external ATA disk must appear as a read-only common `sd0`, while root
 remains the embedded romdisk at block major 0, minor 0.  USB mass-storage
 tests use the same common `sdN`

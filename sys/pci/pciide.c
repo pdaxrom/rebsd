@@ -80,8 +80,6 @@
 #define PCIIDE_PRD_BYTES                8u
 #define PCIIDE_PRD_ALIGNMENT            4u
 #define PCIIDE_DMA_BUFFER_ALIGNMENT     0x10000u
-#define PCIIDE_DMA_MAX_SECTORS          \
-    (PCIIDE_DMA_BUFFER_BYTES / DISK_SECTOR_SIZE)
 
 #define PCIIDE_VENDOR_INTEL             0x8086u
 #define PCIIDE_PRODUCT_PIIX3            0x7010u

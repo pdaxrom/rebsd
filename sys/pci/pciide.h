@@ -18,6 +18,8 @@
 #define PCIIDE_PRIMARY_CONTROL_PORT     0x03f6u
 #define PCIIDE_PRIMARY_IRQ              14u
 #define PCIIDE_DMA_BUFFER_BYTES         (32u * 1024u)
+#define PCIIDE_DMA_MAX_SECTORS          \
+    (PCIIDE_DMA_BUFFER_BYTES / DISK_SECTOR_SIZE)
 
 enum pciide_mode_policy {
     PCIIDE_MODE_AUTO = 0,
