@@ -83,6 +83,8 @@ struct disk_backend_ops {
     int (*dbo_write)(void *, disk_sector_t, unsigned, const void *);
     int (*dbo_flush)(void *);
     int (*dbo_present)(void *);
+    int (*dbo_read_phys)(void *, disk_sector_t, unsigned, void *);
+    int (*dbo_write_phys)(void *, disk_sector_t, unsigned, const void *);
 };
 
 struct disk_attach_args {

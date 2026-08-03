@@ -60,7 +60,6 @@ CORE_MARKERS = (
     "127.0.0.1",
     "REBSD_I686_NETSTAT_OK",
     "REBSD_I686_LOOPBACK_OK",
-    "REBSD_I686_DMESG_OK",
     "REBSD_I686_TIME64_2040",
     "REBSD_I686_FULL_ROOTFS_OK",
     "REBSD_I686_SHELL_OK",
@@ -138,6 +137,12 @@ IDE_CLOCK_COMMAND = (
     b"/usr/bin/time /bin/dd if=/dev/sd0 of=/dev/null "
     b"bs=1048576 count=8; echo REBSD_I686_IDE_CLOCK_END\n",
     b"\r\nREBSD_I686_IDE_CLOCK_END\r\n",
+)
+
+IDE_DMESG_COMMAND = (
+    b"/sbin/dmesg | /usr/bin/grep 'ata0: mode=' && "
+    b"echo REBSD_I686_DMESG_OK\n",
+    b"\r\nREBSD_I686_DMESG_OK\r\n",
 )
 
 IDE_RAW_COMMAND = (
@@ -307,10 +312,13 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         markers += ("ide-primary-master: none",)
     else:
         markers += IDE_DISK_MARKERS
+        markers += ("REBSD_I686_DMESG_OK",)
         if args.ata_mode == "pio":
             markers += ("ata0: mode=pio policy=forced",)
         else:
             markers += ("ata0: mode=mwdma2 bus-master irq=14",)
+            if args.ata_mode == "dma":
+                markers += ("ata0: direct scatter/gather DMA active",)
     if args.usb_disk is not None:
         markers += USB_MASS_STORAGE_MARKERS
         markers += (
@@ -482,11 +490,6 @@ def main() -> None:
             b"\r\nREBSD_I686_LOOPBACK_OK\r\n",
         ),
         (
-            b"/sbin/dmesg | /usr/bin/grep 'ata0: mode=' && "
-            b"echo REBSD_I686_DMESG_OK\n",
-            b"\r\nREBSD_I686_DMESG_OK\r\n",
-        ),
-        (
             b"/bin/date -nu 204001020304.05 >/dev/null && "
             b"/bin/date -u -f REBSD_I686_TIME64_%Y && echo\n",
             b"\r\nREBSD_I686_TIME64_2040\r\n",
@@ -496,6 +499,8 @@ def main() -> None:
             b"\r\nREBSD_I686_FULL_ROOTFS_OK REBSD_I686_SHELL_OK\r\n",
         ),
     )
+    if args.disk is not None:
+        commands += (IDE_DMESG_COMMAND,)
     if args.disk is not None and args.ata_mode in ("pio", "dma"):
         commands += (IDE_CLOCK_COMMAND, IDE_RAW_COMMAND)
     command_index = 0

@@ -736,7 +736,9 @@ static const struct disk_backend_ops umass_disk_ops = {
     umass_disk_read,
     umass_disk_write,
     umass_disk_flush,
-    umass_disk_present
+    umass_disk_present,
+    0,
+    0
 };
 
 static int

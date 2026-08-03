@@ -942,6 +942,109 @@ vmspace_wire(struct vmspace *vmspace, vm_vaddr_t start, vm_size_t size,
 }
 
 int
+vmspace_unpin_pages(struct vm_page **pages, unsigned page_count)
+{
+    unsigned index;
+    int error;
+    int first_error;
+
+    if (pages == 0 || page_count == 0)
+        return EINVAL;
+    first_error = 0;
+    for (index = page_count; index-- != 0;) {
+        if (pages[index] == 0) {
+            if (first_error == 0)
+                first_error = EINVAL;
+            continue;
+        }
+        error = vm_page_counter_dec(vmspace_allocator, pages[index],
+            VM_PAGE_COUNTER_HOLD);
+        if (error != 0 && first_error == 0)
+            first_error = error;
+        pages[index] = 0;
+    }
+    return first_error;
+}
+
+int
+vmspace_pin_pages(struct vmspace *vmspace, vm_vaddr_t start,
+    vm_size_t size, vm_prot_t protection, struct vm_page **pages,
+    unsigned page_capacity, unsigned *page_count)
+{
+    const struct vm_map_entry *entry;
+    struct vm_page *page;
+    vm_ooffset_t offset;
+    vm_paddr_t paddr;
+    vm_vaddr_t address;
+    vm_vaddr_t end;
+    vm_vaddr_t first;
+    vm_vaddr_t last;
+    unsigned count;
+    unsigned needed;
+    int error;
+
+    if (!vmspace_valid(vmspace) || size == 0 || pages == 0 ||
+        page_count == 0 || page_capacity == 0 ||
+        protection == VM_PROT_NONE ||
+        (protection & ~(VM_PROT_READ | VM_PROT_WRITE)) != 0 ||
+        vm_vaddr_add(start, size, &end) != 0 ||
+        vm_vaddr_round_page(end, &last) != 0)
+        return EINVAL;
+    *page_count = 0;
+    first = vm_vaddr_trunc_page(start);
+    needed = (unsigned)((last - first) / VM_PAGE_SIZE);
+    if (needed == 0 || needed > page_capacity)
+        return EFBIG;
+    error = vmspace_check(vmspace, start, size, protection);
+    if (error != 0)
+        return error;
+
+    count = 0;
+    for (address = first; address < last; address += VM_PAGE_SIZE) {
+        entry = vm_map_lookup(&vmspace->vms_map, address);
+        if (entry == 0 || entry->vme_object == 0 ||
+            (entry->vme_flags & VM_MAP_DEVICE) != 0) {
+            error = EFAULT;
+            goto fail;
+        }
+        error = vmspace_fault_context(vmspace, address,
+            (protection & VM_PROT_WRITE) != 0 ?
+            VM_PROT_WRITE : VM_PROT_READ,
+            VM_FAULT_COPY | VM_FAULT_CAN_SLEEP);
+        if (error != 0)
+            goto fail;
+        error = pmap_extract(vmspace->vms_pmap, address, &paddr);
+        if (error != 0)
+            goto fail;
+        page = vm_page_lookup(vmspace_allocator,
+            paddr & ~VM_PAGE_MASK);
+        if (page == 0) {
+            error = EFAULT;
+            goto fail;
+        }
+        error = vm_page_counter_inc(vmspace_allocator, page,
+            VM_PAGE_COUNTER_HOLD);
+        if (error != 0)
+            goto fail;
+        pages[count++] = page;
+        if ((protection & VM_PROT_WRITE) != 0) {
+            offset = entry->vme_offset +
+                (address - entry->vme_start);
+            error = vm_object_mark_dirty(entry->vme_object, offset);
+            if (error != 0)
+                goto fail;
+        }
+    }
+    *page_count = count;
+    return 0;
+
+fail:
+    if (count != 0)
+        (void)vmspace_unpin_pages(pages, count);
+    return error;
+}
+
+int
 vmspace_mincore(const struct vmspace *vmspace, vm_vaddr_t address,
     int *resident)
 {

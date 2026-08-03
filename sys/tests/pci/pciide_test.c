@@ -13,6 +13,8 @@
 #define FAKE_DISK_SECTORS          512u
 #define FAKE_DMA_BYTES             (192u * 1024u)
 #define FAKE_DMA_ADDRESS_BASE      0x01000000u
+#define FAKE_MAP_ADDRESS_BASE      0x02000000u
+#define FAKE_MAP_SEGMENT_BYTES     4096u
 
 #define FAKE_HANDLE_COMMAND        1u
 #define FAKE_HANDLE_CONTROL        2u
@@ -103,6 +105,11 @@ struct fake_ata {
 
 static unsigned char fake_dma[FAKE_DMA_BYTES]
     __attribute__((aligned(256)));
+static struct dma_map *fake_loaded_map;
+static unsigned char *fake_loaded_vaddr;
+static unsigned fake_map_loads;
+static unsigned fake_map_unloads;
+static int fake_map_reject;
 
 static dma_addr_t
 fake_dma_address(void)
@@ -132,6 +139,83 @@ fake_store32(unsigned char *data, unsigned value)
     data[2] = (unsigned char)(value >> 16);
     data[3] = (unsigned char)(value >> 24);
 }
+
+static unsigned char *
+fake_dma_resolve(unsigned address, unsigned length)
+{
+    size_t logical_offset;
+    unsigned index;
+
+    if (address >= fake_dma_address() &&
+        (size_t)(address - fake_dma_address()) + length <=
+        sizeof(fake_dma))
+        return fake_dma + (address - fake_dma_address());
+    CHECK(fake_loaded_map != 0 && fake_loaded_vaddr != 0);
+    logical_offset = 0;
+    for (index = 0; index < fake_loaded_map->dm_segment_count; ++index) {
+        const struct dma_segment *segment;
+
+        segment = &fake_loaded_map->dm_segments[index];
+        if (address >= segment->ds_addr &&
+            (size_t)(address - segment->ds_addr) + length <=
+            segment->ds_len)
+            return fake_loaded_vaddr + logical_offset +
+                (address - segment->ds_addr);
+        logical_offset += segment->ds_len;
+    }
+    CHECK(0);
+    return 0;
+}
+
+static int
+fake_dma_map_load(struct dma_map *map, void *vaddr, size_t size,
+    enum dma_direction direction)
+{
+    size_t chunk;
+    size_t remaining;
+    unsigned index;
+
+    (void)direction;
+    if (fake_map_reject)
+        return EFBIG;
+    remaining = size;
+    index = 0;
+    while (remaining != 0) {
+        if (index >= map->dm_max_segments)
+            return EFBIG;
+        chunk = remaining > FAKE_MAP_SEGMENT_BYTES ?
+            FAKE_MAP_SEGMENT_BYTES : remaining;
+        map->dm_segments[index].ds_addr =
+            FAKE_MAP_ADDRESS_BASE + index * 0x2000u;
+        map->dm_segments[index].ds_len = chunk;
+        remaining -= chunk;
+        ++index;
+    }
+    map->dm_segment_count = index;
+    map->dm_backend_cookie = vaddr;
+    fake_loaded_map = map;
+    fake_loaded_vaddr = vaddr;
+    ++fake_map_loads;
+    return 0;
+}
+
+static void
+fake_dma_map_unload(struct dma_map *map)
+{
+    CHECK(map == fake_loaded_map);
+    fake_loaded_map = 0;
+    fake_loaded_vaddr = 0;
+    ++fake_map_unloads;
+}
+
+static const struct dma_backend_ops fake_dma_ops = {
+    0,
+    0,
+    fake_dma_map_load,
+    fake_dma_map_unload,
+    0,
+    0,
+};
 
 static unsigned
 fake_task_lba(const struct fake_ata *ata)
@@ -336,19 +420,16 @@ fake_dma_start(struct fake_ata *ata)
     total_bytes = 0;
     descriptor = 0;
     do {
-        CHECK(descriptor < 2u);
+        CHECK(descriptor < DMA_MAP_MAX_SEGMENTS);
         buffer_address = fake_load32(prd + descriptor * 8u);
         flags = fake_load32(prd + descriptor * 8u + 4u);
         byte_count = flags & 0xffffu;
         if (byte_count == 0)
             byte_count = 0x10000u;
-        CHECK(buffer_address >= fake_dma_address());
-        dma_offset = buffer_address - fake_dma_address();
-        CHECK(dma_offset + byte_count <= sizeof(fake_dma));
         CHECK(disk_offset + total_bytes + byte_count <=
             sizeof(ata->disk));
         if (!ata->inject_dma_timeout) {
-            buffer = fake_dma + dma_offset;
+            buffer = fake_dma_resolve(buffer_address, byte_count);
             if (ata->command == ATA_COMMAND_READ_DMA)
                 memcpy(buffer, ata->disk + disk_offset + total_bytes,
                     byte_count);
@@ -535,6 +616,11 @@ fake_init(struct fake_ata *ata, int dma_capable)
     unsigned i;
 
     memset(ata, 0, sizeof(*ata));
+    fake_loaded_map = 0;
+    fake_loaded_vaddr = 0;
+    fake_map_loads = 0;
+    fake_map_unloads = 0;
+    fake_map_reject = 0;
     ata->config[PCI_CONFIG_COMMAND_STATUS / 4u] = 0;
     ata->config[PCI_CONFIG_BAR(4) / 4u] = 0xc001u;
     ata->task[ATA_REG_STATUS] = ATA_STATUS_READY;
@@ -620,7 +706,8 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
     args.pa_wakeup = fake_wakeup;
     args.pa_platform_cookie = &ata;
     CHECK(dma_pool_init(fake_dma, fake_dma_address(), sizeof(fake_dma),
-        DMA_32BIT | DMA_COHERENT | DMA_CONTIGUOUS, 0) == 0);
+        DMA_32BIT | DMA_COHERENT | DMA_CONTIGUOUS,
+        &fake_dma_ops) == 0);
     error = pciide_attach(&sc, &args);
     if (error != 0)
         fprintf(stderr, "pciide attach error: %d\n", error);
@@ -681,7 +768,11 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
             ata.inject_dma_error = 1;
         else
             ata.inject_dma_timeout = 1;
-        CHECK(ops->dbo_read(&sc, 7, 1, data) == 0);
+        if (failure == 1) {
+            CHECK(ops->dbo_read_phys(&sc, 7, 1, data) == 0);
+            CHECK(fake_map_loads == 1u && fake_map_unloads == 1u);
+        } else
+            CHECK(ops->dbo_read(&sc, 7, 1, data) == 0);
         CHECK(pciide_transfer_mode(&sc) == PCIIDE_TRANSFER_PIO);
         CHECK(ata.transfer_mode == 0x08u);
         if (via)
@@ -701,6 +792,22 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
         CHECK(ata.last_dma_descriptors == 2u);
         CHECK(memcmp(dma_data, ata.disk + 16u * DISK_SECTOR_SIZE,
             sizeof(dma_data)) == 0);
+        fake_map_reject = 1;
+        ata.dma_starts = 0;
+        CHECK(ops->dbo_read_phys(&sc, 16, PCIIDE_DMA_MAX_SECTORS,
+            dma_data) == 0);
+        CHECK(ata.dma_starts == 1u && ata.last_dma_descriptors == 2u);
+        fake_map_reject = 0;
+        ata.dma_starts = 0;
+        CHECK(ops->dbo_read_phys != 0);
+        CHECK(ops->dbo_read_phys(&sc, 16, PCIIDE_DMA_MAX_SECTORS,
+            dma_data) == 0);
+        CHECK(ata.dma_starts == 1u && fake_map_loads == 1u &&
+            fake_map_unloads == 1u);
+        CHECK(ata.last_dma_descriptors ==
+            PCIIDE_DMA_BUFFER_BYTES / FAKE_MAP_SEGMENT_BYTES);
+        CHECK(memcmp(dma_data, ata.disk + 16u * DISK_SECTOR_SIZE,
+            sizeof(dma_data)) == 0);
         for (i = 0; i < sizeof(dma_data); ++i)
             dma_data[i] = (unsigned char)(0x5au ^ i);
         ata.dma_starts = 0;
@@ -713,6 +820,14 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
         CHECK(ata.last_dma_descriptors == 2u);
         CHECK(memcmp(ata.disk + 256u * DISK_SECTOR_SIZE, dma_data,
             sizeof(dma_data)) == 0);
+        ata.dma_starts = 0;
+        CHECK(ops->dbo_write_phys != 0);
+        CHECK(ops->dbo_write_phys(&sc, 256u,
+            PCIIDE_DMA_MAX_SECTORS, dma_data) == 0);
+        CHECK(ata.dma_starts == 1u && fake_map_loads == 2u &&
+            fake_map_unloads == 2u);
+        CHECK(ata.last_dma_descriptors ==
+            PCIIDE_DMA_BUFFER_BYTES / FAKE_MAP_SEGMENT_BYTES);
     }
     for (i = 0; i < sizeof(replacement); ++i)
         replacement[i] = (unsigned char)(0xa5u ^ i);

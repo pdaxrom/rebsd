@@ -64,6 +64,7 @@ struct pciide_softc {
     struct pci_resource ps_bus_master;
     struct dma_mem ps_prd_dma;
     struct dma_mem ps_buffer_dma;
+    struct dma_map ps_data_map;
     struct disk_backend_ops ps_disk_ops;
     unsigned short ps_identify[256];
     disk_sector_t ps_sector_count;
@@ -79,6 +80,7 @@ struct pciide_softc {
     unsigned ps_flush_supported;
     unsigned ps_dma_ready;
     unsigned ps_dma_failed;
+    unsigned ps_direct_dma_reported;
     volatile unsigned ps_dma_active;
     volatile unsigned ps_dma_done;
     volatile unsigned ps_dma_error;

@@ -29,6 +29,9 @@ typedef u_int dma_addr_t;
 #ifndef DMA_MAX_ALLOCS
 #define DMA_MAX_ALLOCS          32
 #endif
+#ifndef DMA_MAP_MAX_SEGMENTS
+#define DMA_MAP_MAX_SEGMENTS    64
+#endif
 
 #define DMA_ZERO               0x0001u
 #define DMA_32BIT              0x0002u
@@ -43,6 +46,8 @@ enum dma_direction {
     DMA_BIDIRECTIONAL
 };
 
+struct vm_page;
+
 struct dma_mem {
     void       *dm_vaddr;
     dma_addr_t  dm_paddr;
@@ -52,11 +57,42 @@ struct dma_mem {
     unsigned    dm_cookie;
 };
 
+struct dma_segment {
+    dma_addr_t ds_addr;
+    size_t ds_len;
+};
+
+/*
+ * A loaded map describes one virtually contiguous buffer as bus-address
+ * segments.  The final fields are storage for the machine-dependent
+ * page pins; callers and device drivers must not inspect them.
+ */
+struct dma_map {
+    struct dma_segment dm_segments[DMA_MAP_MAX_SEGMENTS];
+    void       *dm_vaddr;
+    size_t      dm_size;
+    size_t      dm_max_segment_size;
+    size_t      dm_boundary;
+    dma_addr_t  dm_max_address;
+    unsigned    dm_segment_count;
+    unsigned    dm_max_segments;
+    unsigned    dm_loaded;
+    enum dma_direction dm_direction;
+    void       *dm_backend_cookie;
+    unsigned    dm_backend_page_count;
+    struct vm_page *dm_backend_pages[DMA_MAP_MAX_SEGMENTS];
+};
+
 struct dma_backend_ops {
     void (*dbo_sync_for_device)(const struct dma_mem *, size_t, size_t,
         enum dma_direction);
     void (*dbo_sync_for_cpu)(const struct dma_mem *, size_t, size_t,
         enum dma_direction);
+    int (*dbo_map_load)(struct dma_map *, void *, size_t,
+        enum dma_direction);
+    void (*dbo_map_unload)(struct dma_map *);
+    void (*dbo_map_sync_for_device)(const struct dma_map *);
+    void (*dbo_map_sync_for_cpu)(const struct dma_map *);
 };
 
 int dma_pool_init(void *vaddr, dma_addr_t paddr, size_t size,
@@ -73,5 +109,11 @@ int dma_sync_for_device(struct dma_mem *mem, size_t offset, size_t length,
     enum dma_direction direction);
 int dma_sync_for_cpu(struct dma_mem *mem, size_t offset, size_t length,
     enum dma_direction direction);
+
+int dma_map_load(struct dma_map *, void *, size_t, unsigned, size_t,
+    size_t, dma_addr_t, enum dma_direction);
+int dma_map_unload(struct dma_map *);
+int dma_map_sync_for_device(struct dma_map *);
+int dma_map_sync_for_cpu(struct dma_map *);
 
 #endif /* _SYS_DMA_H_ */

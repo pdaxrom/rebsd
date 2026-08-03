@@ -423,3 +423,132 @@ dma_sync_for_cpu(struct dma_mem *mem, size_t offset, size_t length,
 {
     return dma_sync(mem, offset, length, direction, 0);
 }
+
+static void
+dma_map_zero(struct dma_map *map)
+{
+    DMA_MEMZERO(map, sizeof(*map));
+}
+
+static int
+dma_map_validate(const struct dma_map *map)
+{
+    const struct dma_segment *segment;
+    size_t total;
+    size_t end;
+    unsigned index;
+
+    if (map->dm_segment_count == 0 ||
+        map->dm_segment_count > map->dm_max_segments ||
+        map->dm_segment_count > DMA_MAP_MAX_SEGMENTS)
+        return EINVAL;
+    total = 0;
+    for (index = 0; index < map->dm_segment_count; ++index) {
+        segment = &map->dm_segments[index];
+        if (segment->ds_len == 0 ||
+            segment->ds_len > map->dm_max_segment_size ||
+            segment->ds_addr > map->dm_max_address ||
+            segment->ds_len - 1 >
+            (size_t)(map->dm_max_address - segment->ds_addr))
+            return EINVAL;
+        end = (size_t)segment->ds_addr + segment->ds_len - 1;
+        if (map->dm_boundary != 0 &&
+            ((size_t)segment->ds_addr / map->dm_boundary) !=
+            (end / map->dm_boundary))
+            return EINVAL;
+        if (segment->ds_len > map->dm_size - total)
+            return EINVAL;
+        total += segment->ds_len;
+    }
+    return total == map->dm_size ? 0 : EINVAL;
+}
+
+int
+dma_map_load(struct dma_map *map, void *vaddr, size_t size,
+    unsigned max_segments, size_t max_segment_size, size_t boundary,
+    dma_addr_t max_address, enum dma_direction direction)
+{
+    const struct dma_backend_ops *ops;
+    int error;
+
+    if (map == 0 || vaddr == 0 || size == 0 || max_segments == 0 ||
+        max_segments > DMA_MAP_MAX_SEGMENTS || max_segment_size == 0 ||
+        (boundary != 0 && !dma_powerof2(boundary)) ||
+        (direction != DMA_TO_DEVICE && direction != DMA_FROM_DEVICE &&
+        direction != DMA_BIDIRECTIONAL))
+        return EINVAL;
+    if (map->dm_loaded)
+        return EBUSY;
+    if (!dma_pool.dp_initialized || dma_pool.dp_ops == 0 ||
+        dma_pool.dp_ops->dbo_map_load == 0 ||
+        dma_pool.dp_ops->dbo_map_unload == 0)
+        return EOPNOTSUPP;
+
+    dma_map_zero(map);
+    map->dm_vaddr = vaddr;
+    map->dm_size = size;
+    map->dm_max_segments = max_segments;
+    map->dm_max_segment_size = max_segment_size;
+    map->dm_boundary = boundary;
+    map->dm_max_address = max_address;
+    map->dm_direction = direction;
+    ops = dma_pool.dp_ops;
+    error = ops->dbo_map_load(map, vaddr, size, direction);
+    if (error != 0) {
+        dma_map_zero(map);
+        return error;
+    }
+    error = dma_map_validate(map);
+    if (error != 0) {
+        if (ops->dbo_map_unload != 0)
+            ops->dbo_map_unload(map);
+        dma_map_zero(map);
+        return error;
+    }
+    map->dm_loaded = 1;
+    return 0;
+}
+
+int
+dma_map_unload(struct dma_map *map)
+{
+    const struct dma_backend_ops *ops;
+
+    if (map == 0 || !map->dm_loaded)
+        return EINVAL;
+    ops = dma_pool.dp_ops;
+    if (ops == 0 || ops->dbo_map_unload == 0)
+        return EOPNOTSUPP;
+    ops->dbo_map_unload(map);
+    dma_map_zero(map);
+    return 0;
+}
+
+static int
+dma_map_sync(struct dma_map *map, int for_device)
+{
+    const struct dma_backend_ops *ops;
+
+    if (map == 0 || !map->dm_loaded || dma_map_validate(map) != 0)
+        return EINVAL;
+    ops = dma_pool.dp_ops;
+    if (ops == 0)
+        return EOPNOTSUPP;
+    if (for_device && ops->dbo_map_sync_for_device != 0)
+        ops->dbo_map_sync_for_device(map);
+    if (!for_device && ops->dbo_map_sync_for_cpu != 0)
+        ops->dbo_map_sync_for_cpu(map);
+    return 0;
+}
+
+int
+dma_map_sync_for_device(struct dma_map *map)
+{
+    return dma_map_sync(map, 1);
+}
+
+int
+dma_map_sync_for_cpu(struct dma_map *map)
+{
+    return dma_map_sync(map, 0);
+}

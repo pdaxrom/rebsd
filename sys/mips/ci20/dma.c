@@ -42,6 +42,10 @@ ci20_dma_barrier(const struct dma_mem *mem, size_t offset, size_t length,
 static const struct dma_backend_ops ci20_dma_ops = {
     ci20_dma_barrier,
     ci20_dma_barrier,
+    0,
+    0,
+    0,
+    0,
 };
 
 void

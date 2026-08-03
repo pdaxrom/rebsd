@@ -1266,6 +1266,23 @@ DMA-команду на каждый 1-KiB buffer-cache block.
 `disk_cdev_*`/`rawrw512()` и тот же backend без buffer cache; новой
 архитектурной реализации диска нет.
 
+Следующий общий DMA-инкремент устраняет дополнительную копию raw I/O. В
+`sys/include/dma.h` и `sys/kernel/subr_dma.c` добавлен machine-independent
+scatter/gather map contract с ограничениями на количество и размер сегментов,
+максимальный bus address и boundary. Общий VM pin API закрепляет страницы
+`B_PHYS` запроса без изменения пользовательского `mlock` состояния; для
+device-to-memory заранее разрешается COW и страницы помечаются dirty. i386
+backend только переводит закреплённые страницы в физические сегменты.
+
+`sys/disk` предоставляет необязательные physical-I/O операции backend: PCI IDE
+использует их для прямого PRDT, а существующие USB mass storage и остальные
+backend продолжают работать через прежний общий read/write contract. Если
+конкретный user buffer нельзя описать PRDT, PCI IDE штатно использует coherent
+bounce buffer. Ошибка уже запущенной ATA DMA сохраняет существующий reset и
+PIO retry. QEMU forced-DMA gate выполняет raw `/dev/rsd0` I/O и требует
+`ata0: direct scatter/gather DMA active`, поэтому простой успешный boot больше
+не может ошибочно считаться проверкой прямого DMA.
+
 Аудит после повторного IBM gate обнаружил, что более ранний фикс `5dc16c3f`, запрещавший
 выполнять deferred network work из PS/2 IRQ, был ошибочно отменён изменением
 latency в `299d2696`. Правильная граница сохраняет оба требования: dispatcher

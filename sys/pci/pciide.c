@@ -78,8 +78,7 @@
 
 #define PCIIDE_PRD_END                  0x80000000u
 #define PCIIDE_PRD_MAX_BYTES            0x10000u
-#define PCIIDE_PRD_ENTRIES              \
-    (PCIIDE_DMA_BUFFER_BYTES / PCIIDE_PRD_MAX_BYTES)
+#define PCIIDE_PRD_ENTRIES              DMA_MAP_MAX_SEGMENTS
 #define PCIIDE_PRDT_BYTES               (PCIIDE_PRD_ENTRIES * 8u)
 #define PCIIDE_PRD_ALIGNMENT            4u
 #define PCIIDE_DMA_BUFFER_ALIGNMENT     0x10000u
@@ -656,61 +655,70 @@ pciide_interrupt(void *arg)
 }
 
 static int
-pciide_prepare_prdt(struct pciide_softc *sc, size_t bytes)
+pciide_prepare_prdt(struct pciide_softc *sc,
+    const struct dma_segment *segments, unsigned segment_count,
+    size_t bytes)
 {
     unsigned char *prd;
     dma_addr_t address;
     size_t chunk;
     size_t remaining;
+    size_t segment_remaining;
+    size_t total;
     unsigned entry;
     unsigned count;
+    unsigned segment_index;
 
-    if (bytes == 0 || bytes > PCIIDE_DMA_BUFFER_BYTES)
+    if (segments == 0 || segment_count == 0 || bytes == 0 ||
+        bytes > PCIIDE_DMA_BUFFER_BYTES)
         return EINVAL;
     prd = (unsigned char *)sc->ps_prd_dma.dm_vaddr;
-    address = sc->ps_buffer_dma.dm_paddr;
-    remaining = bytes;
     entry = 0;
-    while (remaining != 0) {
-        if (entry >= PCIIDE_PRD_ENTRIES)
-            return EFBIG;
-        chunk = PCIIDE_PRD_MAX_BYTES -
-            (size_t)(address & (PCIIDE_PRD_MAX_BYTES - 1u));
-        if (chunk > remaining)
-            chunk = remaining;
-        pciide_store_le32(prd + entry * 8u, address);
-        count = chunk == PCIIDE_PRD_MAX_BYTES ? 0u : (unsigned)chunk;
-        if (chunk == remaining)
-            count |= PCIIDE_PRD_END;
-        pciide_store_le32(prd + entry * 8u + 4u, count);
-        address += chunk;
-        remaining -= chunk;
-        ++entry;
+    total = 0;
+    for (segment_index = 0; segment_index < segment_count;
+        ++segment_index) {
+        address = segments[segment_index].ds_addr;
+        segment_remaining = segments[segment_index].ds_len;
+        if (segment_remaining == 0 || segment_remaining > bytes - total)
+            return EINVAL;
+        while (segment_remaining != 0) {
+            if (entry >= PCIIDE_PRD_ENTRIES)
+                return EFBIG;
+            chunk = PCIIDE_PRD_MAX_BYTES -
+                (size_t)(address & (PCIIDE_PRD_MAX_BYTES - 1u));
+            if (chunk > segment_remaining)
+                chunk = segment_remaining;
+            remaining = bytes - total;
+            if (chunk > remaining)
+                return EINVAL;
+            pciide_store_le32(prd + entry * 8u, address);
+            count = chunk == PCIIDE_PRD_MAX_BYTES ? 0u :
+                (unsigned)chunk;
+            total += chunk;
+            if (total == bytes)
+                count |= PCIIDE_PRD_END;
+            pciide_store_le32(prd + entry * 8u + 4u, count);
+            address += (dma_addr_t)chunk;
+            segment_remaining -= chunk;
+            ++entry;
+        }
     }
+    if (total != bytes)
+        return EINVAL;
     return dma_sync_for_device(&sc->ps_prd_dma, 0,
         entry * 8u, DMA_TO_DEVICE);
 }
 
 static int
-pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
-    void *data_arg, int write)
+pciide_dma_execute(struct pciide_softc *sc, unsigned lba, unsigned count,
+    int write, dma_addr_t diagnostic_address, const char *source)
 {
     unsigned char command;
-    size_t bytes;
     int error;
 
     if (!sc->ps_dma_ready || count == 0 ||
         count > PCIIDE_DMA_MAX_SECTORS)
         return EINVAL;
-    bytes = (size_t)count * DISK_SECTOR_SIZE;
-    if (write)
-        bcopy(data_arg, sc->ps_buffer_dma.dm_vaddr, bytes);
-    error = pciide_prepare_prdt(sc, bytes);
-    if (error == 0)
-        error = dma_sync_for_device(&sc->ps_buffer_dma, 0, bytes,
-            write ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
-    if (error != 0)
-        return error;
 
     pciide_control_write(sc, 0);
     pciide_dma_stop(sc);
@@ -748,9 +756,10 @@ pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
                 PCIIDE_BM_COMMAND), sc->ps_dma_bm_status,
             sc->ps_dma_ata_status,
             pci_resource_read32(&sc->ps_bus_master, PCIIDE_BM_PRDT));
-        printf("ata0: DMA descriptor buffer=%x bytes=%u direction=%s\n",
-            sc->ps_buffer_dma.dm_paddr, (unsigned)bytes,
-            write ? "write" : "read");
+        printf("ata0: DMA descriptor buffer=%x bytes=%u direction=%s "
+            "source=%s\n", diagnostic_address,
+            count * DISK_SECTOR_SIZE, write ? "write" : "read",
+            source);
         printf("ata0: DMA PCI id=%x:%x interface=%x command=%x bar4=%x\n",
             sc->ps_device.pd_vendor, sc->ps_device.pd_product,
             sc->ps_device.pd_interface,
@@ -770,13 +779,85 @@ pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
             return error;
         return EIO;
     }
-    error = dma_sync_for_cpu(&sc->ps_buffer_dma, 0, bytes,
-        write ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
+    return 0;
+}
+
+static int
+pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
+    void *data_arg, int write)
+{
+    struct dma_segment segment;
+    size_t bytes;
+    int error;
+
+    if (!sc->ps_dma_ready || count == 0 ||
+        count > PCIIDE_DMA_MAX_SECTORS)
+        return EINVAL;
+    bytes = (size_t)count * DISK_SECTOR_SIZE;
+    if (write)
+        bcopy(data_arg, sc->ps_buffer_dma.dm_vaddr, bytes);
+    segment.ds_addr = sc->ps_buffer_dma.dm_paddr;
+    segment.ds_len = bytes;
+    error = pciide_prepare_prdt(sc, &segment, 1, bytes);
+    if (error == 0)
+        error = dma_sync_for_device(&sc->ps_buffer_dma, 0, bytes,
+            write ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
+    if (error == 0)
+        error = pciide_dma_execute(sc, lba, count, write,
+            segment.ds_addr, "bounce");
+    if (error == 0)
+        error = dma_sync_for_cpu(&sc->ps_buffer_dma, 0, bytes,
+            write ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
     if (error != 0)
         return error;
     if (!write)
         bcopy(sc->ps_buffer_dma.dm_vaddr, data_arg, bytes);
     return 0;
+}
+
+static int
+pciide_dma_transfer_phys(struct pciide_softc *sc, unsigned lba,
+    unsigned count, void *data_arg, int write)
+{
+    enum dma_direction direction;
+    size_t bytes;
+    int error;
+    int device_synced;
+    int sync_error;
+    int unload_error;
+
+    if (!sc->ps_dma_ready || count == 0 ||
+        count > PCIIDE_DMA_MAX_SECTORS)
+        return EINVAL;
+    bytes = (size_t)count * DISK_SECTOR_SIZE;
+    direction = write ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
+    error = dma_map_load(&sc->ps_data_map, data_arg, bytes,
+        PCIIDE_PRD_ENTRIES, PCIIDE_PRD_MAX_BYTES,
+        PCIIDE_PRD_MAX_BYTES, 0xffffffffu, direction);
+    if (error != 0)
+        return error;
+    error = pciide_prepare_prdt(sc, sc->ps_data_map.dm_segments,
+        sc->ps_data_map.dm_segment_count, bytes);
+    device_synced = 0;
+    if (error == 0)
+        error = dma_map_sync_for_device(&sc->ps_data_map);
+    if (error == 0) {
+        device_synced = 1;
+        error = pciide_dma_execute(sc, lba, count, write,
+            sc->ps_data_map.dm_segments[0].ds_addr, "direct");
+    }
+    sync_error = device_synced ?
+        dma_map_sync_for_cpu(&sc->ps_data_map) : 0;
+    unload_error = dma_map_unload(&sc->ps_data_map);
+    if (error == 0)
+        error = sync_error;
+    if (error == 0)
+        error = unload_error;
+    if (error == 0 && !sc->ps_direct_dma_reported) {
+        sc->ps_direct_dma_reported = 1;
+        printf("ata0: direct scatter/gather DMA active\n");
+    }
+    return error;
 }
 
 static int
@@ -888,6 +969,90 @@ pciide_backend_write(void *arg, disk_sector_t lba, unsigned count,
                     count - done);
             return error;
         }
+        if (error != 0)
+            return error;
+        done += chunk;
+    }
+    return 0;
+}
+
+static int
+pciide_dma_map_constraint_error(int error)
+{
+    return error == EFBIG || error == EOPNOTSUPP;
+}
+
+static int
+pciide_backend_read_phys(void *arg, disk_sector_t lba, unsigned count,
+    void *data_arg)
+{
+    struct pciide_softc *sc;
+    unsigned char *data;
+    unsigned chunk;
+    unsigned done;
+    int error;
+
+    sc = (struct pciide_softc *)arg;
+    if (sc == 0 || !sc->ps_present)
+        return ENXIO;
+    if (data_arg == 0 || count == 0 || lba >= sc->ps_sector_count ||
+        (disk_sector_t)count > sc->ps_sector_count - lba)
+        return EINVAL;
+    if (sc->ps_mode == PCIIDE_TRANSFER_PIO)
+        return pciide_backend_read(arg, lba, count, data_arg);
+    data = (unsigned char *)data_arg;
+    done = 0;
+    while (done < count) {
+        chunk = count - done;
+        if (chunk > PCIIDE_DMA_MAX_SECTORS)
+            chunk = PCIIDE_DMA_MAX_SECTORS;
+        error = pciide_dma_transfer_phys(sc, (unsigned)lba + done,
+            chunk, data + done * DISK_SECTOR_SIZE, 0);
+        if (pciide_dma_map_constraint_error(error))
+            return pciide_backend_read(arg, lba + done, count - done,
+                data + done * DISK_SECTOR_SIZE);
+        if (error != 0 && sc->ps_mode == PCIIDE_TRANSFER_PIO)
+            return pciide_pio_read(sc, (unsigned)lba + done,
+                count - done, data + done * DISK_SECTOR_SIZE);
+        if (error != 0)
+            return error;
+        done += chunk;
+    }
+    return 0;
+}
+
+static int
+pciide_backend_write_phys(void *arg, disk_sector_t lba, unsigned count,
+    const void *data_arg)
+{
+    struct pciide_softc *sc;
+    const unsigned char *data;
+    unsigned chunk;
+    unsigned done;
+    int error;
+
+    sc = (struct pciide_softc *)arg;
+    if (sc == 0 || !sc->ps_present)
+        return ENXIO;
+    if (data_arg == 0 || count == 0 || lba >= sc->ps_sector_count ||
+        (disk_sector_t)count > sc->ps_sector_count - lba)
+        return EINVAL;
+    if (sc->ps_mode == PCIIDE_TRANSFER_PIO)
+        return pciide_backend_write(arg, lba, count, data_arg);
+    data = (const unsigned char *)data_arg;
+    done = 0;
+    while (done < count) {
+        chunk = count - done;
+        if (chunk > PCIIDE_DMA_MAX_SECTORS)
+            chunk = PCIIDE_DMA_MAX_SECTORS;
+        error = pciide_dma_transfer_phys(sc, (unsigned)lba + done,
+            chunk, (void *)(data + done * DISK_SECTOR_SIZE), 1);
+        if (pciide_dma_map_constraint_error(error))
+            return pciide_backend_write(arg, lba + done, count - done,
+                data + done * DISK_SECTOR_SIZE);
+        if (error != 0 && sc->ps_mode == PCIIDE_TRANSFER_PIO)
+            return pciide_pio_write(sc, (unsigned)lba + done,
+                count - done, data + done * DISK_SECTOR_SIZE);
         if (error != 0)
             return error;
         done += chunk;
@@ -1105,6 +1270,8 @@ pciide_attach(struct pciide_softc *sc, const struct pciide_attach_args *args)
     sc->ps_disk_ops.dbo_write = pciide_backend_write;
     sc->ps_disk_ops.dbo_flush = pciide_backend_flush;
     sc->ps_disk_ops.dbo_present = pciide_backend_present;
+    sc->ps_disk_ops.dbo_read_phys = pciide_backend_read_phys;
+    sc->ps_disk_ops.dbo_write_phys = pciide_backend_write_phys;
     sc->ps_attached = 1;
     if (sc->ps_mode == PCIIDE_TRANSFER_DMA)
         printf("ata0: mode=%s%u bus-master irq=%u pio-timing=%u "

@@ -581,6 +581,7 @@ test_vmspace(void)
     struct vm_page *wired_after;
     struct vm_page *device_page;
     struct vm_page *dynamic_device_page;
+    struct vm_page *pinned_pages[3];
     unsigned char input[32];
     unsigned char output[32];
     int resident;
@@ -593,6 +594,7 @@ test_vmspace(void)
     vm_size_t grow_size;
     vm_pfn_t free_before;
     unsigned map_count;
+    unsigned pinned_count;
     unsigned sync_before;
     unsigned i;
 
@@ -779,12 +781,32 @@ test_vmspace(void)
         (PMAP_SYNC_DATA | PMAP_SYNC_INSTRUCTION));
     CHECK(vmspace_map_anon_fixed(source, TEST_VADDR + 1,
         VM_PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE, 0) == EINVAL);
+    memset(pinned_pages, 0, sizeof(pinned_pages));
+    CHECK(vmspace_pin_pages(source, TEST_VADDR + VM_PAGE_SIZE - 16,
+        32, VM_PROT_READ, pinned_pages, 1, &pinned_count) == EFBIG);
+    CHECK(vmspace_pin_pages(source, TEST_VADDR + VM_PAGE_SIZE - 16,
+        32, VM_PROT_READ, pinned_pages, 3, &pinned_count) == 0);
+    CHECK(pinned_count == 2 && pinned_pages[0] != pinned_pages[1]);
+    CHECK(pinned_pages[0]->vmp_hold_count == 2 &&
+        pinned_pages[1]->vmp_hold_count == 2);
+    CHECK(vmspace_unpin_pages(pinned_pages, pinned_count) == 0);
+    CHECK(pinned_pages[0] == 0 && pinned_pages[1] == 0);
+    CHECK(vmspace_pin_pages(source, TEST_DEVICE, 1, VM_PROT_READ,
+        pinned_pages, 3, &pinned_count) == EFAULT);
     CHECK(vmspace_wire(source, any_address, VM_PAGE_SIZE, 1) == 0);
     map_entry = vm_map_lookup(&source->vms_map, any_address);
     CHECK(map_entry != 0 && (map_entry->vme_flags & VM_MAP_WIRED) != 0);
     wired_page = vm_object_resident_page(map_entry->vme_object,
         map_entry->vme_offset);
     CHECK(wired_page != 0 && wired_page->vmp_wire_count == 1);
+    CHECK(vmspace_pin_pages(source, any_address, VM_PAGE_SIZE,
+        VM_PROT_WRITE, pinned_pages, 3, &pinned_count) == 0);
+    CHECK(pinned_count == 1 && pinned_pages[0] == wired_page &&
+        wired_page->vmp_wire_count == 1 &&
+        wired_page->vmp_hold_count == 2);
+    CHECK(vmspace_unpin_pages(pinned_pages, pinned_count) == 0);
+    CHECK(wired_page->vmp_wire_count == 1 &&
+        wired_page->vmp_hold_count == 1);
     CHECK(vmspace_unmap(source, any_address, VM_PAGE_SIZE) == 0);
     CHECK(wired_page->vmp_state == VM_PAGE_FREE &&
         wired_page->vmp_wire_count == 0);

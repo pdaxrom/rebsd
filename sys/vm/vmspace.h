@@ -71,6 +71,9 @@ int vmspace_sysv_attach(struct vmspace *, struct vm_sysv_shm *,
 int vmspace_sysv_detach(struct vmspace *, vm_vaddr_t, int, int64_t);
 int vmspace_protect(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);
 int vmspace_wire(struct vmspace *, vm_vaddr_t, vm_size_t, int);
+int vmspace_pin_pages(struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t,
+    struct vm_page **, unsigned, unsigned *);
+int vmspace_unpin_pages(struct vm_page **, unsigned);
 int vmspace_mincore(const struct vmspace *, vm_vaddr_t, int *);
 int vmspace_sync(struct vmspace *, vm_vaddr_t, vm_size_t, unsigned);
 int vmspace_check(const struct vmspace *, vm_vaddr_t, vm_size_t, vm_prot_t);

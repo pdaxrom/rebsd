@@ -29,6 +29,8 @@ struct fake_media {
     unsigned write_count;
     unsigned flush_count;
     unsigned read_count;
+    unsigned phys_read_count;
+    unsigned phys_write_count;
     disk_sector_t last_write_sector;
     unsigned last_write_count;
     disk_sector_t last_read_sector;
@@ -150,18 +152,37 @@ fake_present(void *arg)
     return ((struct fake_media *)arg)->present;
 }
 
+static int
+fake_read_phys(void *arg, disk_sector_t sector, unsigned count, void *data)
+{
+    ++((struct fake_media *)arg)->phys_read_count;
+    return fake_read(arg, sector, count, data);
+}
+
+static int
+fake_write_phys(void *arg, disk_sector_t sector, unsigned count,
+    const void *data)
+{
+    ++((struct fake_media *)arg)->phys_write_count;
+    return fake_write(arg, sector, count, data);
+}
+
 static const struct disk_backend_ops fake_ops = {
     fake_read,
     0,
     0,
-    fake_present
+    fake_present,
+    0,
+    0
 };
 
 static const struct disk_backend_ops fake_writable_ops = {
     fake_read,
     fake_write,
     fake_flush,
-    fake_present
+    fake_present,
+    fake_read_phys,
+    fake_write_phys
 };
 
 static void
@@ -270,7 +291,9 @@ static const struct disk_backend_ops fake_gpt_ops = {
     fake_gpt_read,
     0,
     0,
-    fake_gpt_present
+    fake_gpt_present,
+    0,
+    0
 };
 
 static int
@@ -604,6 +627,7 @@ test_raw_odd_sector_addressing(void)
     CHECK(bp.b_resid == 0);
     for (i = 0; i < sizeof(data); ++i)
         CHECK(data[i] == 0xa5);
+    CHECK(media.phys_read_count == 1);
 
     for (i = 0; i < sizeof(data); ++i)
         data[i] = 0x3c;
@@ -618,6 +642,7 @@ test_raw_odd_sector_addressing(void)
     CHECK(bp.b_resid == 0);
     CHECK(test_equal(media.data + 3 * DISK_SECTOR_SIZE, data,
         sizeof(data)));
+    CHECK(media.phys_write_count == 1);
 
     for (i = 0; i < sizeof(data); ++i)
         data[i] = 0x69;
@@ -632,6 +657,7 @@ test_raw_odd_sector_addressing(void)
     CHECK(bp.b_resid == 0);
     CHECK(test_equal(media.data + (TEST_SECTORS - 1u) * DISK_SECTOR_SIZE,
         data, sizeof(data)));
+    CHECK(media.phys_write_count == 2);
 
     disk_detach(unit, &media);
     return 0;

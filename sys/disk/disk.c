@@ -908,8 +908,12 @@ disk_bdev_strategy(struct buf *bp)
 
     if ((bp->b_flags & B_READ) != 0) {
         if ((bp->b_flags & B_PHYS) != 0) {
-            error = sc->ds_ops->dbo_read(sc->ds_arg, start + relative,
-                requested, bp->b_addr);
+            if (sc->ds_ops->dbo_read_phys != 0)
+                error = sc->ds_ops->dbo_read_phys(sc->ds_arg,
+                    start + relative, requested, bp->b_addr);
+            else
+                error = sc->ds_ops->dbo_read(sc->ds_arg,
+                    start + relative, requested, bp->b_addr);
             if (error == 0)
                 disk_write_cache_overlay(sc, start + relative, requested,
                     bp->b_addr);
@@ -925,9 +929,15 @@ disk_bdev_strategy(struct buf *bp)
                 bp->b_addr);
         } else {
             error = disk_write_cache_flush(sc);
-            if (error == 0)
-                error = sc->ds_ops->dbo_write(sc->ds_arg,
-                    start + relative, requested, bp->b_addr);
+            if (error == 0) {
+                if ((bp->b_flags & B_PHYS) != 0 &&
+                    sc->ds_ops->dbo_write_phys != 0)
+                    error = sc->ds_ops->dbo_write_phys(sc->ds_arg,
+                        start + relative, requested, bp->b_addr);
+                else
+                    error = sc->ds_ops->dbo_write(sc->ds_arg,
+                        start + relative, requested, bp->b_addr);
+            }
             if (error == 0)
                 sc->ds_dirty = 1;
         }
