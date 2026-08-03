@@ -132,18 +132,6 @@ pciide_zero(void *data_arg, size_t size)
 }
 
 static void
-pciide_copy(void *destination_arg, const void *source_arg, size_t size)
-{
-    unsigned char *destination;
-    const unsigned char *source;
-
-    destination = (unsigned char *)destination_arg;
-    source = (const unsigned char *)source_arg;
-    while (size-- != 0)
-        *destination++ = *source++;
-}
-
-static void
 pciide_store_le32(unsigned char *data, unsigned value)
 {
     data[0] = (unsigned char)value;
@@ -716,7 +704,7 @@ pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
         return EINVAL;
     bytes = (size_t)count * DISK_SECTOR_SIZE;
     if (write)
-        pciide_copy(sc->ps_buffer_dma.dm_vaddr, data_arg, bytes);
+        bcopy(data_arg, sc->ps_buffer_dma.dm_vaddr, bytes);
     error = pciide_prepare_prdt(sc, bytes);
     if (error == 0)
         error = dma_sync_for_device(&sc->ps_buffer_dma, 0, bytes,
@@ -787,7 +775,7 @@ pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
     if (error != 0)
         return error;
     if (!write)
-        pciide_copy(data_arg, sc->ps_buffer_dma.dm_vaddr, bytes);
+        bcopy(sc->ps_buffer_dma.dm_vaddr, data_arg, bytes);
     return 0;
 }
 
