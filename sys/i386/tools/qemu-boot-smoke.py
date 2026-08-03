@@ -79,8 +79,8 @@ IDE_DISK_MARKERS = (
     "ide-backend-read: ok",
     "ide-lba0: ok",
     "ide-bounds: ok",
-    "sd0: 32768 512-byte sectors (16384 KB), read-only",
-    "sd0: read-ahead=256 sectors (128 KB)",
+    "wd0: 32768 512-byte sectors (16384 KB), read-only",
+    "wd0: read-ahead=256 sectors (128 KB)",
 )
 
 USB_MASS_STORAGE_MARKERS = (
@@ -134,7 +134,7 @@ UHCI_MOUSE_MARKERS = UHCI_MARKERS + (
 
 IDE_CLOCK_COMMAND = (
     b"echo REBSD_I686_IDE_CLOCK_BEGIN; "
-    b"/usr/bin/time /bin/dd if=/dev/sd0 of=/dev/null "
+    b"/usr/bin/time /bin/dd if=/dev/wd0 of=/dev/null "
     b"bs=1048576 count=8; echo REBSD_I686_IDE_CLOCK_END\n",
     b"\r\nREBSD_I686_IDE_CLOCK_END\r\n",
 )
@@ -147,7 +147,7 @@ IDE_DMESG_COMMAND = (
 
 IDE_RAW_COMMAND = (
     b"echo REBSD_I686_IDE_RAW_BEGIN; "
-    b"/usr/bin/time /bin/dd if=/dev/rsd0 of=/dev/null "
+    b"/usr/bin/time /bin/dd if=/dev/rwd0 of=/dev/null "
     b"bs=1048576 count=8; echo REBSD_I686_IDE_RAW_END\n",
     b"\r\nREBSD_I686_IDE_RAW_END\r\n",
 )
@@ -321,13 +321,7 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
                 markers += ("ata0: direct scatter/gather DMA active",)
     if args.usb_disk is not None:
         markers += USB_MASS_STORAGE_MARKERS
-        markers += (
-            (
-                "sd1: 32768 512-byte sectors (16384 KB), removable"
-                if args.disk is not None
-                else "sd0: 32768 512-byte sectors (16384 KB), removable"
-            ),
-        )
+        markers += ("sd0: 32768 512-byte sectors (16384 KB), removable",)
     if args.ohci_keyboard:
         markers += OHCI_KEYBOARD_MARKERS
     if args.ohci_mouse:
@@ -338,13 +332,7 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         markers += UHCI_MOUSE_MARKERS
     if args.uhci_disk is not None:
         markers += UHCI_MASS_STORAGE_MARKERS
-        markers += (
-            (
-                "sd1: 32768 512-byte sectors (16384 KB), removable"
-                if args.disk is not None
-                else "sd0: 32768 512-byte sectors (16384 KB), removable"
-            ),
-        )
+        markers += ("sd0: 32768 512-byte sectors (16384 KB), removable",)
     if (
         args.usb_disk is not None
         or args.ohci_keyboard

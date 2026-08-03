@@ -14,9 +14,11 @@
 #include "romdisk.h"
 #include "ramdisk.h"
 
-#define I386_DISK_MAJOR 2
+#define I386_SDISK_MAJOR 2
+#define I386_WDISK_MAJOR 3
 #define I386_MOUSE_MAJOR 2
-#define I386_RDISK_MAJOR 3
+#define I386_RSDISK_MAJOR 3
+#define I386_RWDISK_MAJOR 4
 
 static void
 i386_nostrategy(struct buf *bp)
@@ -56,11 +58,18 @@ const struct bdevsw bdevsw[] = {
         i386_ramdisk_size, i386_ramdisk_ioctl, 0
     },
     {
-#if I386_DISK_MAJOR != 2
-#error Wrong I386_DISK_MAJOR value
+#if I386_SDISK_MAJOR != 2
+#error Wrong I386_SDISK_MAJOR value
 #endif
         disk_bdev_open, disk_bdev_close, disk_bdev_strategy,
         disk_bdev_size, disk_bdev_ioctl, 0
+    },
+    {
+#if I386_WDISK_MAJOR != 3
+#error Wrong I386_WDISK_MAJOR value
+#endif
+        disk_wd_bdev_open, disk_wd_bdev_close, disk_wd_bdev_strategy,
+        disk_wd_bdev_size, disk_wd_bdev_ioctl, 0
     },
     { 0 }
 };
@@ -92,12 +101,20 @@ const struct cdevsw cdevsw[] = {
         i386_nostrategy, 0, 0, 0
     },
     {
-#if I386_RDISK_MAJOR != 3
-#error Wrong I386_RDISK_MAJOR value
+#if I386_RSDISK_MAJOR != 3
+#error Wrong I386_RSDISK_MAJOR value
 #endif
         disk_cdev_open, disk_cdev_close, disk_cdev_read, disk_cdev_write,
         disk_cdev_ioctl, nullstop, 0, seltrue,
         disk_bdev_strategy, 0, 0, 0
+    },
+    {
+#if I386_RWDISK_MAJOR != 4
+#error Wrong I386_RWDISK_MAJOR value
+#endif
+        disk_wd_cdev_open, disk_wd_cdev_close, disk_wd_cdev_read,
+        disk_wd_cdev_write, disk_wd_cdev_ioctl, nullstop, 0, seltrue,
+        disk_wd_bdev_strategy, 0, 0, 0
     },
     { 0 }
 };
@@ -107,8 +124,10 @@ const int nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]) - 1;
 dev_t
 chrtoblk(dev_t dev)
 {
-    if (major(dev) == I386_RDISK_MAJOR)
-        return makedev(I386_DISK_MAJOR, minor(dev));
+    if (major(dev) == I386_RSDISK_MAJOR)
+        return makedev(I386_SDISK_MAJOR, minor(dev));
+    if (major(dev) == I386_RWDISK_MAJOR)
+        return makedev(I386_WDISK_MAJOR, minor(dev));
     return NODEV;
 }
 
@@ -123,10 +142,12 @@ int
 isdisk(dev_t dev, int type)
 {
     if (type == IFCHR)
-        return major(dev) == I386_RDISK_MAJOR;
+        return major(dev) == I386_RSDISK_MAJOR ||
+            major(dev) == I386_RWDISK_MAJOR;
     if (type != IFBLK)
         return 0;
     return major(dev) == I386_ROMDISK_MAJOR ||
         major(dev) == I386_RAMDISK_MAJOR ||
-        major(dev) == I386_DISK_MAJOR;
+        major(dev) == I386_SDISK_MAJOR ||
+        major(dev) == I386_WDISK_MAJOR;
 }

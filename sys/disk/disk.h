@@ -39,6 +39,15 @@ typedef unsigned long long disk_sector_t;
 #define DISK_FLAG_READ_ONLY             0x0001u
 #define DISK_FLAG_REMOVABLE             0x0002u
 
+/*
+ * Device-name classes are part of the machine-independent disk contract.
+ * Direct-access SCSI devices (including USB mass storage) use sdN, while
+ * ATA/IDE devices use wdN.  A class has its own unit-number namespace.
+ */
+#define DISK_CLASS_SD                   0u
+#define DISK_CLASS_WD                   1u
+#define DISK_CLASS_COUNT                2u
+
 struct disk_partition {
     unsigned char dp_status;
     unsigned char dp_type;
@@ -93,6 +102,7 @@ struct disk_attach_args {
     disk_sector_t da_sector_count;
     unsigned da_sector_size;
     unsigned da_flags;
+    unsigned da_class;
     /* Optional sequential-read window, in 512-byte sectors. */
     unsigned da_read_ahead_sectors;
     /* Optional buffered-write combining window, in 512-byte sectors. */
@@ -118,6 +128,7 @@ int disk_gpt_entry_parse(struct disk_partition *, const unsigned char *,
 struct buf;
 struct uio;
 
+/* disk_attach returns an opaque handle used only by disk_detach. */
 int disk_attach(const struct disk_attach_args *, unsigned *);
 void disk_detach(unsigned, void *);
 void diskattach(int);
@@ -132,6 +143,17 @@ int disk_cdev_close(dev_t, int, int);
 int disk_cdev_read(dev_t, struct uio *, int);
 int disk_cdev_write(dev_t, struct uio *, int);
 int disk_cdev_ioctl(dev_t, u_int, caddr_t, int);
+
+int disk_wd_bdev_open(dev_t, int, int);
+int disk_wd_bdev_close(dev_t, int, int);
+void disk_wd_bdev_strategy(struct buf *);
+daddr_t disk_wd_bdev_size(dev_t);
+int disk_wd_bdev_ioctl(dev_t, u_int, caddr_t, int);
+int disk_wd_cdev_open(dev_t, int, int);
+int disk_wd_cdev_close(dev_t, int, int);
+int disk_wd_cdev_read(dev_t, struct uio *, int);
+int disk_wd_cdev_write(dev_t, struct uio *, int);
+int disk_wd_cdev_ioctl(dev_t, u_int, caddr_t, int);
 #endif
 
 #endif /* _DISK_DISK_H_ */

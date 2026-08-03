@@ -579,7 +579,7 @@ struct umass_softc {
     unsigned us_unit;
     unsigned us_dying;
     unsigned us_disk_attached;
-    unsigned us_disk_unit;
+    unsigned us_disk_handle;
     struct usb_interface *us_interface;
     struct usb_pipe *us_bulk_in;
     struct usb_pipe *us_bulk_out;
@@ -804,7 +804,7 @@ static void
 umass_cleanup(struct usb_interface *interface, struct umass_softc *sc)
 {
     if (sc->us_disk_attached) {
-        disk_detach(sc->us_disk_unit, sc);
+        disk_detach(sc->us_disk_handle, sc);
         sc->us_disk_attached = 0;
     }
     if (sc->us_bulk_in != 0)
@@ -890,9 +890,10 @@ umass_attach_interface(struct usb_interface *interface)
     disk_args.da_sector_count = sc->us_media.um_sector_count;
     disk_args.da_sector_size = sc->us_media.um_sector_size;
     disk_args.da_flags = DISK_FLAG_REMOVABLE;
+    disk_args.da_class = DISK_CLASS_SD;
     disk_args.da_read_ahead_sectors = UMASS_MAX_READ_SECTORS;
     disk_args.da_write_back_sectors = UMASS_MAX_WRITE_SECTORS;
-    if (disk_attach(&disk_args, &sc->us_disk_unit) != 0) {
+    if (disk_attach(&disk_args, &sc->us_disk_handle) != 0) {
         error = USB_STATUS_IO_ERROR;
         goto fail;
     }

@@ -74,6 +74,74 @@ bdev /dev/sd0p
 major 2
 minor 16
 
+bdev /dev/wd0
+major 3
+minor 0
+
+bdev /dev/wd0a
+major 3
+minor 1
+
+bdev /dev/wd0b
+major 3
+minor 2
+
+bdev /dev/wd0c
+major 3
+minor 3
+
+bdev /dev/wd0d
+major 3
+minor 4
+
+bdev /dev/wd0e
+major 3
+minor 5
+
+bdev /dev/wd0f
+major 3
+minor 6
+
+bdev /dev/wd0g
+major 3
+minor 7
+
+bdev /dev/wd0h
+major 3
+minor 8
+
+bdev /dev/wd0i
+major 3
+minor 9
+
+bdev /dev/wd0j
+major 3
+minor 10
+
+bdev /dev/wd0k
+major 3
+minor 11
+
+bdev /dev/wd0l
+major 3
+minor 12
+
+bdev /dev/wd0m
+major 3
+minor 13
+
+bdev /dev/wd0n
+major 3
+minor 14
+
+bdev /dev/wd0o
+major 3
+minor 15
+
+bdev /dev/wd0p
+major 3
+minor 16
+
 cdev /dev/rsd0
 major 3
 minor 0
@@ -140,6 +208,74 @@ minor 15
 
 cdev /dev/rsd0p
 major 3
+minor 16
+
+cdev /dev/rwd0
+major 4
+minor 0
+
+cdev /dev/rwd0a
+major 4
+minor 1
+
+cdev /dev/rwd0b
+major 4
+minor 2
+
+cdev /dev/rwd0c
+major 4
+minor 3
+
+cdev /dev/rwd0d
+major 4
+minor 4
+
+cdev /dev/rwd0e
+major 4
+minor 5
+
+cdev /dev/rwd0f
+major 4
+minor 6
+
+cdev /dev/rwd0g
+major 4
+minor 7
+
+cdev /dev/rwd0h
+major 4
+minor 8
+
+cdev /dev/rwd0i
+major 4
+minor 9
+
+cdev /dev/rwd0j
+major 4
+minor 10
+
+cdev /dev/rwd0k
+major 4
+minor 11
+
+cdev /dev/rwd0l
+major 4
+minor 12
+
+cdev /dev/rwd0m
+major 4
+minor 13
+
+cdev /dev/rwd0n
+major 4
+minor 14
+
+cdev /dev/rwd0o
+major 4
+minor 15
+
+cdev /dev/rwd0p
+major 4
 minor 16
 
 cdev /dev/console

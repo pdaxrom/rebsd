@@ -91,20 +91,21 @@ kernel deliberately remains read-only, so the real CF is not written.
 The PCI IDE backend publishes its 128 KiB maximum DMA command size to the
 existing machine-independent disk read-ahead contract.  Each ATA command uses
 a standard two-entry PRDT whose 64 KiB regions do not cross a 64 KiB boundary.
-Sequential buffered reads of `/dev/sd0` therefore issue one 256-sector ATA
+Sequential buffered reads of `/dev/wd0` therefore issue one 256-sector ATA
 command per window instead of 128 one-kilobyte commands.  PIO remains the same
 backend fallback; no alternate disk path or cache implementation is used.
 
-The i686 device switch also exposes the existing common raw-disk character
-interface as `/dev/rsd0` through `/dev/rsd0p`, matching the Ci20/Malta disk
-contract.  Raw I/O uses `disk_cdev_*`, `rawrw512()` and the same backend while
-bypassing the 1 KiB buffer cache.  Requests must be aligned to 512-byte sectors.
+The common disk layer assigns BSD device-name classes independently of the
+transport attachment order.  ATA/IDE disks use `wdN` and the raw `rwdN`
+character devices; direct-access SCSI disks, including USB mass storage, use
+`sdN` and `rsdN`.  Thus the IBM IDE-CF device is read-only `wd0`/`rwd0`, and a
+USB disk is `sd0`/`rsd0` even when both devices are attached.  Raw I/O uses the
+same common disk strategy, `rawrw512()` and backend while bypassing the 1 KiB
+buffer cache.  Requests must be aligned to 512-byte sectors.
 
-The external ATA disk must appear as a read-only common `sd0`/`rsd0`, while root
-remains the embedded romdisk at block major 0, minor 0.  USB mass-storage
-tests use the same common `sdN`
-namespace and the existing USB core, hubs, EHCI/OHCI/UHCI, `umass` BOT/SCSI
-and disk code.  The romdisk never consumes an `sdN` number.
+Root remains the embedded romdisk at block major 0, minor 0.  USB mass-storage
+tests reuse the existing USB core, hubs, EHCI/OHCI/UHCI, `umass` BOT/SCSI and
+common disk code.  The romdisk consumes neither a `wdN` nor an `sdN` number.
 
 `ps2-input-smoke` injects keyboard and mouse traffic through QEMU's i8042
 IRQs.  The keyboard logs in through the common console/TTY path and the test

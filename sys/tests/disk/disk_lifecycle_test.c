@@ -324,7 +324,8 @@ fake_init(struct fake_media *media, unsigned pattern)
 }
 
 static int
-fake_attach(struct fake_media *media, unsigned *unitp)
+fake_attach_class(struct fake_media *media, unsigned disk_class,
+    unsigned *unitp)
 {
     struct disk_attach_args args;
 
@@ -334,8 +335,15 @@ fake_attach(struct fake_media *media, unsigned *unitp)
     args.da_sector_count = TEST_SECTORS;
     args.da_sector_size = DISK_SECTOR_SIZE;
     args.da_flags = DISK_FLAG_READ_ONLY | DISK_FLAG_REMOVABLE;
+    args.da_class = disk_class;
     args.da_read_ahead_sectors = 16u;
     return disk_attach(&args, unitp);
+}
+
+static int
+fake_attach(struct fake_media *media, unsigned *unitp)
+{
+    return fake_attach_class(media, DISK_CLASS_SD, unitp);
 }
 
 static int
@@ -411,6 +419,57 @@ test_open_detach_reuse(void)
     second.present = 0;
     CHECK(fake_attach(&third, &unit) == 0 && unit == 0);
     disk_detach(0, &third);
+    return 0;
+}
+
+static int
+test_disk_class_namespaces(void)
+{
+    struct fake_media sd_media, wd_media;
+    struct buf bp;
+    unsigned char sd_data[DISK_SECTOR_SIZE];
+    unsigned char wd_data[DISK_SECTOR_SIZE];
+    unsigned sd_handle;
+    unsigned wd_handle;
+    dev_t sd0;
+    dev_t wd0;
+
+    fake_init(&sd_media, 0x11u);
+    fake_init(&wd_media, 0x55u);
+    diskattach(0);
+    CHECK(fake_attach_class(&sd_media, DISK_CLASS_SD, &sd_handle) == 0);
+    CHECK(fake_attach_class(&wd_media, DISK_CLASS_WD, &wd_handle) == 0);
+
+    /* Each class starts at unit zero even when both backends are present. */
+    sd0 = makedev(2, DISK_MINOR(0, DISK_MINOR_WHOLE));
+    wd0 = makedev(3, DISK_MINOR(0, DISK_MINOR_WHOLE));
+    CHECK(disk_bdev_open(sd0, FREAD, 0) == 0);
+    CHECK(disk_wd_bdev_open(wd0, FREAD, 0) == 0);
+    CHECK(disk_bdev_open(makedev(2, DISK_MINOR(1, 0)), FREAD, 0) == ENXIO);
+    CHECK(disk_wd_bdev_open(makedev(3, DISK_MINOR(1, 0)), FREAD, 0) ==
+        ENXIO);
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = sd0;
+    bp.b_bcount = sizeof(sd_data);
+    bp.b_addr = (caddr_t)sd_data;
+    bp.b_flags = B_READ;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(sd_data[0] == sd_media.data[0]);
+
+    test_zero(&bp, sizeof(bp));
+    bp.b_dev = wd0;
+    bp.b_bcount = sizeof(wd_data);
+    bp.b_addr = (caddr_t)wd_data;
+    bp.b_flags = B_READ;
+    disk_wd_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(wd_data[0] == wd_media.data[0]);
+    CHECK(disk_bdev_close(sd0, FREAD, 0) == 0);
+    CHECK(disk_wd_bdev_close(wd0, FREAD, 0) == 0);
+    disk_detach(sd_handle, &sd_media);
+    disk_detach(wd_handle, &wd_media);
     return 0;
 }
 
@@ -972,6 +1031,7 @@ main(void)
     CHECK(test_romdisk() == 0);
     CHECK(test_ramdisk() == 0);
     CHECK(test_open_detach_reuse() == 0);
+    CHECK(test_disk_class_namespaces() == 0);
     CHECK(test_partition_write_and_flush() == 0);
     CHECK(test_raw_odd_sector_addressing() == 0);
     CHECK(test_buffered_read_ahead() == 0);
