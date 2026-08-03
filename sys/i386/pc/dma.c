@@ -6,7 +6,7 @@
 #include <sys/errno.h>
 #include <sys/systm.h>
 
-#define I386_DMA_POOL_BYTES     (256u * 1024u)
+#define I386_DMA_POOL_BYTES     (512u * 1024u)
 #define I386_DMA_POOL_ALIGN     4096u
 
 static unsigned char i386_dma_storage[I386_DMA_POOL_BYTES]

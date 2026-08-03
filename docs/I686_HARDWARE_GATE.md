@@ -70,10 +70,21 @@ PS/2 login, Backspace, mouse IRQ и повторный ввод с клавиа�
 DMA/network smoke, чтобы IDE больше не мог незаметно выключить input IRQ.
 
 Последовательное чтение `/dev/sd0` использует общий disk read-ahead размером
-64 сектора, равным 32-KiB DMA buffer PCI IDE. В `dmesg` должна присутствовать
-строка `sd0: read-ahead=64 sectors (32 KB)`. Это объединяет 1-KiB запросы
+256 секторов, равным 128-KiB DMA buffer PCI IDE. Одна ATA-команда описывается
+двумя стандартными 64-KiB PRD. В `dmesg` должна присутствовать строка
+`sd0: read-ahead=256 sectors (128 KB)`. Это объединяет 1-KiB запросы
 буферного блочного устройства в одну ATA DMA-команду; PIO остаётся штатным
-fallback того же backend.
+fallback того же backend. Общий BSD raw-disk path доступен как `/dev/rsd0` и
+обходит buffer cache; отдельного i386 raw driver нет.
+
+Сравнение buffered и raw путей на одном и том же объёме (128 MiB):
+
+```sh
+/usr/bin/time /bin/dd if=/dev/sd0 of=/dev/null bs=65536 count=2048
+/usr/bin/time /bin/dd if=/dev/rsd0 of=/dev/null bs=1048576 count=128
+```
+
+Размер блока и смещение raw-запроса должны быть кратны 512 байтам.
 
 Аудит после аппаратного повтора обнаружил ещё одну независимую регрессию:
 изменение сетевого

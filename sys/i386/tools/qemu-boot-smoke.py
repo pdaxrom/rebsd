@@ -81,6 +81,7 @@ IDE_DISK_MARKERS = (
     "ide-lba0: ok",
     "ide-bounds: ok",
     "sd0: 32768 512-byte sectors (16384 KB), read-only",
+    "sd0: read-ahead=256 sectors (128 KB)",
 )
 
 USB_MASS_STORAGE_MARKERS = (
@@ -137,6 +138,13 @@ IDE_CLOCK_COMMAND = (
     b"/usr/bin/time /bin/dd if=/dev/sd0 of=/dev/null "
     b"bs=1048576 count=8; echo REBSD_I686_IDE_CLOCK_END\n",
     b"\r\nREBSD_I686_IDE_CLOCK_END\r\n",
+)
+
+IDE_RAW_COMMAND = (
+    b"echo REBSD_I686_IDE_RAW_BEGIN; "
+    b"/usr/bin/time /bin/dd if=/dev/rsd0 of=/dev/null "
+    b"bs=1048576 count=8; echo REBSD_I686_IDE_RAW_END\n",
+    b"\r\nREBSD_I686_IDE_RAW_END\r\n",
 )
 
 
@@ -489,7 +497,7 @@ def main() -> None:
         ),
     )
     if args.disk is not None and args.ata_mode in ("pio", "dma"):
-        commands += (IDE_CLOCK_COMMAND,)
+        commands += (IDE_CLOCK_COMMAND, IDE_RAW_COMMAND)
     command_index = 0
     command_sent = False
     command_output_start = 0

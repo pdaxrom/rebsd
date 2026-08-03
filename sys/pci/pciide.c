@@ -77,7 +77,10 @@
 #define PCIIDE_BM_STATUS_DRIVE0_DMA     0x20u
 
 #define PCIIDE_PRD_END                  0x80000000u
-#define PCIIDE_PRD_BYTES                8u
+#define PCIIDE_PRD_MAX_BYTES            0x10000u
+#define PCIIDE_PRD_ENTRIES              \
+    (PCIIDE_DMA_BUFFER_BYTES / PCIIDE_PRD_MAX_BYTES)
+#define PCIIDE_PRDT_BYTES               (PCIIDE_PRD_ENTRIES * 8u)
 #define PCIIDE_PRD_ALIGNMENT            4u
 #define PCIIDE_DMA_BUFFER_ALIGNMENT     0x10000u
 
@@ -665,10 +668,45 @@ pciide_interrupt(void *arg)
 }
 
 static int
+pciide_prepare_prdt(struct pciide_softc *sc, size_t bytes)
+{
+    unsigned char *prd;
+    dma_addr_t address;
+    size_t chunk;
+    size_t remaining;
+    unsigned entry;
+    unsigned count;
+
+    if (bytes == 0 || bytes > PCIIDE_DMA_BUFFER_BYTES)
+        return EINVAL;
+    prd = (unsigned char *)sc->ps_prd_dma.dm_vaddr;
+    address = sc->ps_buffer_dma.dm_paddr;
+    remaining = bytes;
+    entry = 0;
+    while (remaining != 0) {
+        if (entry >= PCIIDE_PRD_ENTRIES)
+            return EFBIG;
+        chunk = PCIIDE_PRD_MAX_BYTES -
+            (size_t)(address & (PCIIDE_PRD_MAX_BYTES - 1u));
+        if (chunk > remaining)
+            chunk = remaining;
+        pciide_store_le32(prd + entry * 8u, address);
+        count = chunk == PCIIDE_PRD_MAX_BYTES ? 0u : (unsigned)chunk;
+        if (chunk == remaining)
+            count |= PCIIDE_PRD_END;
+        pciide_store_le32(prd + entry * 8u + 4u, count);
+        address += chunk;
+        remaining -= chunk;
+        ++entry;
+    }
+    return dma_sync_for_device(&sc->ps_prd_dma, 0,
+        entry * 8u, DMA_TO_DEVICE);
+}
+
+static int
 pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
     void *data_arg, int write)
 {
-    unsigned char *prd;
     unsigned char command;
     size_t bytes;
     int error;
@@ -679,12 +717,7 @@ pciide_dma_transfer(struct pciide_softc *sc, unsigned lba, unsigned count,
     bytes = (size_t)count * DISK_SECTOR_SIZE;
     if (write)
         pciide_copy(sc->ps_buffer_dma.dm_vaddr, data_arg, bytes);
-    prd = (unsigned char *)sc->ps_prd_dma.dm_vaddr;
-    pciide_store_le32(prd, sc->ps_buffer_dma.dm_paddr);
-    pciide_store_le32(prd + 4,
-        (unsigned)bytes | PCIIDE_PRD_END);
-    error = dma_sync_for_device(&sc->ps_prd_dma, 0, PCIIDE_PRD_BYTES,
-        DMA_TO_DEVICE);
+    error = pciide_prepare_prdt(sc, bytes);
     if (error == 0)
         error = dma_sync_for_device(&sc->ps_buffer_dma, 0, bytes,
             write ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
@@ -958,7 +991,7 @@ pciide_dma_attach(struct pciide_softc *sc,
         PCIIDE_BUS_MASTER_BYTES, &sc->ps_bus_master);
     if (error != 0)
         return error;
-    error = dma_alloc(&sc->ps_prd_dma, PCIIDE_PRD_BYTES,
+    error = dma_alloc(&sc->ps_prd_dma, PCIIDE_PRDT_BYTES,
         PCIIDE_PRD_ALIGNMENT,
         DMA_ZERO | DMA_32BIT | DMA_COHERENT | DMA_CONTIGUOUS);
     if (error != 0)

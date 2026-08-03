@@ -10,7 +10,7 @@
 #include <pci/pciide.h>
 
 #define FAKE_CONFIG_WORDS          64u
-#define FAKE_DISK_SECTORS          128u
+#define FAKE_DISK_SECTORS          512u
 #define FAKE_DMA_BYTES             (192u * 1024u)
 #define FAKE_DMA_ADDRESS_BASE      0x01000000u
 
@@ -95,6 +95,7 @@ struct fake_ata {
     unsigned dma_starts;
     unsigned last_dma_bytes;
     unsigned last_dma_count;
+    unsigned last_dma_descriptors;
     unsigned last_dma_lba;
     pci_interrupt_handler_t handler;
     void *handler_arg;
@@ -316,39 +317,56 @@ fake_dma_start(struct fake_ata *ata)
     unsigned char *buffer;
     unsigned buffer_address;
     unsigned byte_count;
+    unsigned descriptor;
+    unsigned flags;
     unsigned prd_address;
+    unsigned total_bytes;
     size_t dma_offset;
     size_t disk_offset;
 
     prd_address = fake_load32(&ata->bus_master[BM_PRDT]);
     CHECK(prd_address >= fake_dma_address());
     dma_offset = prd_address - fake_dma_address();
-    CHECK(dma_offset + 8u <= sizeof(fake_dma));
+    CHECK(dma_offset + 16u <= sizeof(fake_dma));
     prd = fake_dma + dma_offset;
-    buffer_address = fake_load32(prd);
-    byte_count = fake_load32(prd + 4u) & 0xffffu;
-    if (byte_count == 0)
-        byte_count = 0x10000u;
     ++ata->dma_starts;
-    ata->last_dma_bytes = byte_count;
     ata->last_dma_count = ata->current_count;
     ata->last_dma_lba = ata->current_lba;
-    CHECK(buffer_address >= fake_dma_address());
-    dma_offset = buffer_address - fake_dma_address();
-    CHECK(dma_offset + byte_count <= sizeof(fake_dma));
     disk_offset = (size_t)ata->current_lba * DISK_SECTOR_SIZE;
-    CHECK(disk_offset + byte_count <= sizeof(ata->disk));
+    total_bytes = 0;
+    descriptor = 0;
+    do {
+        CHECK(descriptor < 2u);
+        buffer_address = fake_load32(prd + descriptor * 8u);
+        flags = fake_load32(prd + descriptor * 8u + 4u);
+        byte_count = flags & 0xffffu;
+        if (byte_count == 0)
+            byte_count = 0x10000u;
+        CHECK(buffer_address >= fake_dma_address());
+        dma_offset = buffer_address - fake_dma_address();
+        CHECK(dma_offset + byte_count <= sizeof(fake_dma));
+        CHECK(disk_offset + total_bytes + byte_count <=
+            sizeof(ata->disk));
+        if (!ata->inject_dma_timeout) {
+            buffer = fake_dma + dma_offset;
+            if (ata->command == ATA_COMMAND_READ_DMA)
+                memcpy(buffer, ata->disk + disk_offset + total_bytes,
+                    byte_count);
+            else {
+                CHECK(ata->command == ATA_COMMAND_WRITE_DMA);
+                memcpy(ata->disk + disk_offset + total_bytes, buffer,
+                    byte_count);
+            }
+        }
+        total_bytes += byte_count;
+        ++descriptor;
+    } while ((flags & 0x80000000u) == 0);
+    ata->last_dma_bytes = total_bytes;
+    ata->last_dma_descriptors = descriptor;
     if (ata->inject_dma_timeout) {
         ata->inject_dma_timeout = 0;
         ata->task[ATA_REG_STATUS] = ATA_STATUS_BUSY;
         return;
-    }
-    buffer = fake_dma + dma_offset;
-    if (ata->command == ATA_COMMAND_READ_DMA)
-        memcpy(buffer, ata->disk + disk_offset, byte_count);
-    else {
-        CHECK(ata->command == ATA_COMMAND_WRITE_DMA);
-        memcpy(ata->disk + disk_offset, buffer, byte_count);
     }
     if (ata->inject_early_ata_irq) {
         ata->inject_early_ata_irq = 0;
@@ -398,6 +416,9 @@ fake_resource_write8(void *cookie, enum pci_resource_type type,
     ata->command = value;
     ata->current_lba = fake_task_lba(ata);
     ata->current_count = ata->task[ATA_REG_SECTOR_COUNT];
+    if (ata->current_count == 0 &&
+        (value == ATA_COMMAND_READ_DMA || value == ATA_COMMAND_WRITE_DMA))
+        ata->current_count = 256u;
     ata->data_word = 0;
     if (value == ATA_COMMAND_IDENTIFY || value == ATA_COMMAND_READ_SECTORS ||
         value == ATA_COMMAND_WRITE_SECTORS)
@@ -677,7 +698,20 @@ test_mode(enum pciide_mode_policy policy, int dma_capable, int failure,
         CHECK(ata.last_dma_lba == 16u);
         CHECK(ata.last_dma_count == PCIIDE_DMA_MAX_SECTORS);
         CHECK(ata.last_dma_bytes == PCIIDE_DMA_BUFFER_BYTES);
+        CHECK(ata.last_dma_descriptors == 2u);
         CHECK(memcmp(dma_data, ata.disk + 16u * DISK_SECTOR_SIZE,
+            sizeof(dma_data)) == 0);
+        for (i = 0; i < sizeof(dma_data); ++i)
+            dma_data[i] = (unsigned char)(0x5au ^ i);
+        ata.dma_starts = 0;
+        CHECK(ops->dbo_write(&sc, 256u, PCIIDE_DMA_MAX_SECTORS,
+            dma_data) == 0);
+        CHECK(ata.dma_starts == 1u);
+        CHECK(ata.last_dma_lba == 256u);
+        CHECK(ata.last_dma_count == PCIIDE_DMA_MAX_SECTORS);
+        CHECK(ata.last_dma_bytes == PCIIDE_DMA_BUFFER_BYTES);
+        CHECK(ata.last_dma_descriptors == 2u);
+        CHECK(memcmp(ata.disk + 256u * DISK_SECTOR_SIZE, dma_data,
             sizeof(dma_data)) == 0);
     }
     for (i = 0; i < sizeof(replacement); ++i)

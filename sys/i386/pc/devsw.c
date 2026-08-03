@@ -16,6 +16,7 @@
 
 #define I386_DISK_MAJOR 2
 #define I386_MOUSE_MAJOR 2
+#define I386_RDISK_MAJOR 3
 
 static void
 i386_nostrategy(struct buf *bp)
@@ -90,6 +91,14 @@ const struct cdevsw cdevsw[] = {
         mouse_ioctl, nullstop, 0, mouse_select,
         i386_nostrategy, 0, 0, 0
     },
+    {
+#if I386_RDISK_MAJOR != 3
+#error Wrong I386_RDISK_MAJOR value
+#endif
+        disk_cdev_open, disk_cdev_close, disk_cdev_read, disk_cdev_write,
+        disk_cdev_ioctl, nullstop, 0, seltrue,
+        disk_bdev_strategy, 0, 0, 0
+    },
     { 0 }
 };
 
@@ -98,7 +107,8 @@ const int nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]) - 1;
 dev_t
 chrtoblk(dev_t dev)
 {
-    (void)dev;
+    if (major(dev) == I386_RDISK_MAJOR)
+        return makedev(I386_DISK_MAJOR, minor(dev));
     return NODEV;
 }
 
@@ -112,8 +122,11 @@ iskmemdev(dev_t dev)
 int
 isdisk(dev_t dev, int type)
 {
-    return type == IFBLK &&
-        (major(dev) == I386_ROMDISK_MAJOR ||
+    if (type == IFCHR)
+        return major(dev) == I386_RDISK_MAJOR;
+    if (type != IFBLK)
+        return 0;
+    return major(dev) == I386_ROMDISK_MAJOR ||
         major(dev) == I386_RAMDISK_MAJOR ||
-        major(dev) == I386_DISK_MAJOR);
+        major(dev) == I386_DISK_MAJOR;
 }

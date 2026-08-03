@@ -74,6 +74,74 @@ bdev /dev/sd0p
 major 2
 minor 16
 
+cdev /dev/rsd0
+major 3
+minor 0
+
+cdev /dev/rsd0a
+major 3
+minor 1
+
+cdev /dev/rsd0b
+major 3
+minor 2
+
+cdev /dev/rsd0c
+major 3
+minor 3
+
+cdev /dev/rsd0d
+major 3
+minor 4
+
+cdev /dev/rsd0e
+major 3
+minor 5
+
+cdev /dev/rsd0f
+major 3
+minor 6
+
+cdev /dev/rsd0g
+major 3
+minor 7
+
+cdev /dev/rsd0h
+major 3
+minor 8
+
+cdev /dev/rsd0i
+major 3
+minor 9
+
+cdev /dev/rsd0j
+major 3
+minor 10
+
+cdev /dev/rsd0k
+major 3
+minor 11
+
+cdev /dev/rsd0l
+major 3
+minor 12
+
+cdev /dev/rsd0m
+major 3
+minor 13
+
+cdev /dev/rsd0n
+major 3
+minor 14
+
+cdev /dev/rsd0o
+major 3
+minor 15
+
+cdev /dev/rsd0p
+major 3
+minor 16
+
 cdev /dev/console
 major 0
 minor 0
