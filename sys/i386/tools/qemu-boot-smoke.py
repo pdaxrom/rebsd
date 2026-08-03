@@ -162,6 +162,12 @@ FAT_MOUNT_COMMAND = (
     b"\r\nREBSD_I686_FAT_MOUNT_OK\r\n",
 )
 
+FAT_FSCK_GEOMETRY_COMMAND = (
+    b"/sbin/fsck.fat -n /dev/rwd0a; "
+    b"echo REBSD_I686_FAT_FSCK_GEOMETRY_OK\n",
+    b"\r\nREBSD_I686_FAT_FSCK_GEOMETRY_OK\r\n",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -344,6 +350,10 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
                 "fat: BPB size ",
                 "limiting to device",
                 "fat0: FAT32",
+                "FAT32 boot sector declares ",
+                "tail clusters are free; no FAT chain crosses "
+                "the device boundary",
+                "REBSD_I686_FAT_FSCK_GEOMETRY_OK",
             )
         else:
             markers += ("fat0: FAT16",)
@@ -519,6 +529,8 @@ def main() -> None:
         commands += (IDE_DMESG_COMMAND,)
     if args.fat_mount_smoke:
         commands += (FAT_MOUNT_COMMAND,)
+    if args.expect_fat_limited:
+        commands += (FAT_FSCK_GEOMETRY_COMMAND,)
     if args.disk is not None and args.ata_mode in ("pio", "dma"):
         commands += (IDE_CLOCK_COMMAND, IDE_RAW_COMMAND)
     command_index = 0

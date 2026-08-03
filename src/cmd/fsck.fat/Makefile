@@ -7,7 +7,8 @@ include $(TOPSRC)/target.mk
 PROG            = fsck.fat
 OBJS            = main.o fat_subr.o
 MAN             = fsck.fat.0
-CFLAGS          += -Werror -Wall -Os -I$(TOPSRC)/sys
+CFLAGS          += -Werror -Wall -Os -I$(TOPSRC)/sys \
+                   -DREBSD_FSCK_DEVICE_IOCTL
 
 all:            $(PROG) $(MAN)
 

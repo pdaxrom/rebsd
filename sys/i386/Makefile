@@ -1285,7 +1285,7 @@ fat-mount-smoke: rebsd-i686.bzimg $(I386_FAT_SMOKE_IMAGE) \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk $(I386_FAT32_SMOKE_IMAGE) --fat-mount-smoke \
-	    --expect-fat-limited --timeout 20
+	    --expect-fat-limited --timeout 30
 
 ide-auto-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \

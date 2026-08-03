@@ -16,6 +16,18 @@ checks FAT copies, cluster chains, directories, lost clusters, and FAT32
 FSInfo metadata.
 The filesystem must not be mounted read-write while it is checked.
 .PP
+For a FAT32 filesystem whose boot sector declares more sectors than the
+backing block device or image contains,
+.B fsck.fat
+uses the device boundary for all reads and checks the excluded FAT entries and
+all links crossing that boundary.  It offers to reduce the primary and backup
+boot-sector geometry only when every excluded cluster represented by the FAT
+is free, every remaining excluded cluster is outside the FAT itself, and no
+FAT chain crosses the boundary.  It never relocates allocated clusters.
+Geometry repair requires an interactive confirmation or
+.BR \-y ;
+preen mode leaves it unresolved.
+.PP
 The checker uses a compact allocation bitmap and reads the FAT a sector at a
 time, so its memory use is suitable for small ReBSD systems.
 .SH OPTIONS

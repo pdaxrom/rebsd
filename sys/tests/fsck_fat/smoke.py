@@ -27,6 +27,12 @@ def write_at(path, offset, data):
         image.write(data)
 
 
+def read32(path, offset):
+    with path.open("rb") as image:
+        image.seek(offset)
+        return struct.unpack("<I", image.read(4))[0]
+
+
 def make_fat16(path):
     total = 32768
     reserved = 1
@@ -105,9 +111,12 @@ def make_fat32(path):
     for index in range(fats):
         write_at(path, (reserved + index * fat_sectors) * SECTOR, fat)
     return {
+        "total": total,
         "reserved": reserved,
         "fat_sectors": fat_sectors,
         "clusters": clusters,
+        "data_sector": reserved + fats * fat_sectors,
+        "max_cluster": clusters + 1,
     }
 
 
@@ -125,6 +134,49 @@ def set_fat32(path, geometry, cluster, value, copies=(0, 1)):
             geometry["reserved"] + index * geometry["fat_sectors"]
         ) * SECTOR + cluster * 4
         write_at(path, offset, struct.pack("<I", value))
+
+
+def set_fsinfo32(path, free_clusters, next_free):
+    for sector in (1, 7):
+        write_at(
+            path,
+            sector * SECTOR + 488,
+            struct.pack("<II", free_clusters, next_free),
+        )
+
+
+def directory_entry(name, cluster):
+    entry = bytearray(32)
+    entry[0:11] = name
+    entry[11] = 0x10
+    put16(entry, 20, cluster >> 16)
+    put16(entry, 26, cluster & 0xFFFF)
+    return entry
+
+
+def make_multicluster_parent32(path, geometry):
+    root = bytearray(SECTOR)
+    parent_first = bytearray(SECTOR)
+    parent_second = bytearray(SECTOR)
+    child = bytearray(SECTOR)
+
+    root[0:32] = directory_entry(b"PARENT     ", 4)
+    parent_first[0:32] = directory_entry(b".          ", 4)
+    parent_first[32:64] = directory_entry(b"..         ", 0)
+    for offset in range(64, SECTOR, 32):
+        parent_first[offset] = 0xE5
+    parent_second[0:32] = directory_entry(b"CHILD      ", 6)
+    child[0:32] = directory_entry(b".          ", 6)
+    child[32:64] = directory_entry(b"..         ", 4)
+
+    set_fat32(path, geometry, 4, 5)
+    set_fat32(path, geometry, 5, 0x0FFFFFFF)
+    set_fat32(path, geometry, 6, 0x0FFFFFFF)
+    write_at(path, geometry["data_sector"] * SECTOR, root)
+    write_at(path, (geometry["data_sector"] + 2) * SECTOR, parent_first)
+    write_at(path, (geometry["data_sector"] + 3) * SECTOR, parent_second)
+    write_at(path, (geometry["data_sector"] + 4) * SECTOR, child)
+    set_fsinfo32(path, geometry["clusters"] - 4, 3)
 
 
 def set_root_file16(
@@ -180,6 +232,7 @@ def run(checker, expected, *arguments):
             f"{' '.join(map(str, arguments))}: expected {expected}, "
             f"got {result.returncode}"
         )
+    return result.stdout
 
 
 def main():
@@ -256,6 +309,82 @@ def main():
         clean32 = work / "clean32.img"
         geometry32 = make_fat32(clean32)
         run(checker, 0, "-n", clean32)
+
+        parent32 = work / "multicluster-parent32.img"
+        shutil.copyfile(clean32, parent32)
+        make_multicluster_parent32(parent32, geometry32)
+        output = run(checker, 0, "-n", parent32)
+        if "entry is inconsistent" in output:
+            raise RuntimeError(
+                "correct '..' entry in a multicluster parent was rejected"
+            )
+
+        short_geometry32 = work / "short-geometry32.img"
+        shutil.copyfile(clean32, short_geometry32)
+        short_sectors = geometry32["total"] - 64
+        with short_geometry32.open("r+b") as image:
+            image.truncate(short_sectors * SECTOR)
+        output = run(checker, 4, "-n", short_geometry32)
+        if "64 tail clusters are free" not in output:
+            raise RuntimeError("safe FAT32 tail was not audited")
+        run(checker, 4, "-p", short_geometry32)
+        if read32(short_geometry32, 32) != geometry32["total"]:
+            raise RuntimeError("preen mode changed FAT32 geometry")
+        run(checker, 1, "-y", short_geometry32)
+        if read32(short_geometry32, 32) != short_sectors:
+            raise RuntimeError("primary FAT32 geometry was not repaired")
+        if read32(short_geometry32, 6 * SECTOR + 32) != short_sectors:
+            raise RuntimeError("backup FAT32 geometry was not repaired")
+        run(checker, 0, "-n", short_geometry32)
+
+        undersized_fat32 = work / "undersized-fat32.img"
+        shutil.copyfile(clean32, undersized_fat32)
+        oversized_total = 300000
+        write_at(undersized_fat32, 32, struct.pack("<I", oversized_total))
+        write_at(
+            undersized_fat32,
+            6 * SECTOR + 32,
+            struct.pack("<I", oversized_total),
+        )
+        output = run(checker, 4, "-n", undersized_fat32)
+        if "declared tail clusters have no FAT entries" not in output:
+            raise RuntimeError("undersized FAT was not audited safely")
+        run(checker, 1, "-y", undersized_fat32)
+        if read32(undersized_fat32, 32) != geometry32["total"]:
+            raise RuntimeError("undersized FAT32 geometry was not repaired")
+        run(checker, 0, "-n", undersized_fat32)
+
+        allocated_tail32 = work / "allocated-tail32.img"
+        shutil.copyfile(clean32, allocated_tail32)
+        set_fat32(
+            allocated_tail32,
+            geometry32,
+            geometry32["max_cluster"],
+            0x0FFFFFFF,
+        )
+        with allocated_tail32.open("r+b") as image:
+            image.truncate(short_sectors * SECTOR)
+        output = run(checker, 4, "-y", allocated_tail32)
+        if "1 allocated tail cluster" not in output:
+            raise RuntimeError("allocated FAT32 tail was not rejected")
+        if read32(allocated_tail32, 32) != geometry32["total"]:
+            raise RuntimeError("unsafe FAT32 geometry was modified")
+
+        boundary_link32 = work / "boundary-link32.img"
+        shutil.copyfile(clean32, boundary_link32)
+        set_fat32(
+            boundary_link32,
+            geometry32,
+            5,
+            geometry32["max_cluster"],
+        )
+        with boundary_link32.open("r+b") as image:
+            image.truncate(short_sectors * SECTOR)
+        output = run(checker, 4, "-y", boundary_link32)
+        if "1 link crosses the device boundary" not in output:
+            raise RuntimeError("cross-boundary FAT32 link was not rejected")
+        if read32(boundary_link32, 32) != geometry32["total"]:
+            raise RuntimeError("linked FAT32 geometry was modified")
 
         fsinfo32 = work / "fsinfo32.img"
         shutil.copyfile(clean32, fsinfo32)

@@ -15,7 +15,10 @@
  */
 
 #include <sys/types.h>
-#include <sys/stat.h>
+#ifdef REBSD_FSCK_DEVICE_IOCTL
+#include <sys/disk.h>
+#include <sys/ioctl.h>
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -58,7 +61,9 @@ struct fat_checker {
     int was_dirty;
     int had_io_error;
     struct options options;
+    struct fat_volume declared_volume;
     struct fat_volume volume;
+    unsigned media_sectors;
     unsigned char boot[FAT_SECTOR_SIZE];
     unsigned char *claimed;
     unsigned claimed_bytes;
@@ -139,6 +144,44 @@ operational_error(struct fat_checker *checker, const char *what)
 {
     message(checker, "%s: %s\n", what, strerror(errno));
     checker->fatal = 1;
+}
+
+static int
+get_media_sectors(int fd, unsigned *sectors)
+{
+    off_t current;
+    off_t end;
+
+    *sectors = 0;
+#ifdef REBSD_FSCK_DEVICE_IOCTL
+    {
+        disk_sector_t sectors64;
+
+        sectors64 = 0;
+        if (ioctl(fd, DIOCGETSECTORS64, &sectors64) == 0 &&
+            sectors64 != 0) {
+            *sectors = sectors64 > (disk_sector_t)0xffffffffu ?
+                0xffffffffu : (unsigned)sectors64;
+            return 0;
+        }
+    }
+#endif
+
+    /* Regular images and host block devices commonly support SEEK_END. */
+    current = lseek(fd, (off_t)0, SEEK_CUR);
+    end = lseek(fd, (off_t)0, SEEK_END);
+    if (current >= 0)
+        (void)lseek(fd, current, SEEK_SET);
+    if (end <= 0)
+        return 0;
+    if (end % FAT_SECTOR_SIZE != 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    end /= FAT_SECTOR_SIZE;
+    *sectors = end > (off_t)0xffffffffu ?
+        0xffffffffu : (unsigned)end;
+    return 0;
 }
 
 static int
@@ -314,6 +357,207 @@ fat_read(struct fat_checker *checker, unsigned cluster, unsigned *value)
 {
     return fat_read_from(checker, checker->volume.fv_active_fat,
         cluster, value);
+}
+
+static int
+fat_read_geometry_from(struct fat_checker *checker,
+    const struct fat_volume *volume, unsigned fat_index, unsigned cluster,
+    unsigned *value)
+{
+    unsigned char data[FAT_SECTOR_SIZE];
+    unsigned byte_offset;
+    unsigned entry_size;
+    unsigned sector;
+    unsigned offset;
+
+    entry_size = volume->fv_type == FAT_TYPE_16 ? 2u : 4u;
+    if (fat_index >= volume->fv_fat_count ||
+        cluster > volume->fv_max_cluster)
+        return -1;
+    byte_offset = cluster * entry_size;
+    sector = volume->fv_reserved_sectors +
+        fat_index * volume->fv_fat_sectors +
+        byte_offset / FAT_SECTOR_SIZE;
+    offset = byte_offset & (FAT_SECTOR_SIZE - 1u);
+    if (sector >= volume->fv_reserved_sectors +
+        (fat_index + 1u) * volume->fv_fat_sectors ||
+        offset + entry_size > FAT_SECTOR_SIZE)
+        return -1;
+    if (read_sector(checker, sector, data) < 0)
+        return -1;
+    *value = fat_fat_decode(volume, data + offset);
+    return 0;
+}
+
+static int
+boot_geometry_matches(const unsigned char *primary,
+    const unsigned char *backup)
+{
+    unsigned i;
+
+    if (backup[510] != 0x55u || backup[511] != 0xaau)
+        return 0;
+    for (i = 11; i < 90u; ++i) {
+        if (i >= 32u && i < 36u)
+            continue;
+        if (primary[i] != backup[i])
+            return 0;
+    }
+    return 1;
+}
+
+static int
+check_media_geometry(struct fat_checker *checker)
+{
+    unsigned char backup_data[FAT_SECTOR_SIZE];
+    unsigned char primary_data[FAT_SECTOR_SIZE];
+    unsigned cluster;
+    unsigned fat;
+    unsigned value;
+    unsigned tail_allocated;
+    unsigned boundary_links;
+    unsigned backup;
+    unsigned declared_clusters;
+    unsigned declared_max_cluster;
+    unsigned fat_entries;
+    unsigned audited_max_cluster;
+    unsigned audited_tail_clusters;
+    unsigned unrepresented_tail_clusters;
+
+    if (checker->volume.fv_declared_sectors <=
+        checker->volume.fv_total_sectors)
+        return 0;
+    message(checker, "FAT%u boot sector declares %u sectors but "
+        "device contains %u\n", checker->volume.fv_type,
+        checker->volume.fv_declared_sectors,
+        checker->volume.fv_total_sectors);
+    if (checker->volume.fv_type != FAT_TYPE_32) {
+        message(checker,
+            "automatic geometry repair is supported only for FAT32\n");
+        checker->uncorrected = 1;
+        checker->read_only = 1;
+        return 0;
+    }
+
+    declared_clusters = (checker->volume.fv_declared_sectors -
+        checker->volume.fv_data_start) /
+        checker->volume.fv_sectors_per_cluster;
+    declared_max_cluster = declared_clusters + 1u;
+    fat_entries = checker->volume.fv_fat_sectors *
+        (FAT_SECTOR_SIZE / 4u);
+    audited_max_cluster = declared_max_cluster;
+    if (audited_max_cluster >= fat_entries)
+        audited_max_cluster = fat_entries - 1u;
+    if (audited_max_cluster < checker->volume.fv_max_cluster)
+        audited_max_cluster = checker->volume.fv_max_cluster;
+    audited_tail_clusters = audited_max_cluster -
+        checker->volume.fv_max_cluster;
+    unrepresented_tail_clusters = declared_max_cluster -
+        audited_max_cluster;
+    checker->declared_volume = checker->volume;
+    checker->declared_volume.fv_total_sectors =
+        checker->volume.fv_declared_sectors;
+    checker->declared_volume.fv_cluster_count =
+        audited_max_cluster - 1u;
+    checker->declared_volume.fv_max_cluster = audited_max_cluster;
+
+    tail_allocated = 0;
+    for (cluster = checker->volume.fv_max_cluster + 1u;
+        cluster <= audited_max_cluster; ++cluster) {
+        for (fat = 0; fat < checker->declared_volume.fv_fat_count;
+            ++fat) {
+            if (fat_read_geometry_from(checker,
+                &checker->declared_volume, fat, cluster, &value) < 0) {
+                errno = EIO;
+                operational_error(checker,
+                    "read FAT entries beyond device geometry");
+                return -1;
+            }
+            if (value != FAT_CLUSTER_FREE) {
+                ++tail_allocated;
+                break;
+            }
+        }
+    }
+
+    boundary_links = 0;
+    for (cluster = 2; cluster <= checker->volume.fv_max_cluster;
+        ++cluster) {
+        if (fat_read_geometry_from(checker, &checker->declared_volume,
+            checker->declared_volume.fv_active_fat, cluster, &value) < 0) {
+            errno = EIO;
+            operational_error(checker, "read FAT geometry links");
+            return -1;
+        }
+        if (value > checker->volume.fv_max_cluster &&
+            !fat_cluster_is_eoc(&checker->volume, value) &&
+            !fat_cluster_is_bad(&checker->volume, value))
+            ++boundary_links;
+    }
+    if (tail_allocated != 0 || boundary_links != 0) {
+        message(checker,
+            "cannot reduce FAT32 geometry: %u allocated tail cluster%s, "
+            "%u link%s cross%s the device boundary\n",
+            tail_allocated, tail_allocated == 1u ? "" : "s",
+            boundary_links, boundary_links == 1u ? "" : "s",
+            boundary_links == 1u ? "es" : "");
+        message(checker,
+            "no repairs will be written until those clusters are relocated\n");
+        checker->uncorrected = 1;
+        checker->read_only = 1;
+        return 0;
+    }
+
+    backup = get_le16(checker->boot + 50);
+    if (backup == 0 || backup == 0xffffu ||
+        backup >= checker->volume.fv_reserved_sectors) {
+        message(checker,
+            "cannot safely repair geometry: no valid FAT32 backup "
+            "boot sector is configured\n");
+        checker->uncorrected = 1;
+        checker->read_only = 1;
+        return 0;
+    }
+    if (read_sector(checker, backup, backup_data) < 0)
+        return -1;
+    if (!boot_geometry_matches(checker->boot, backup_data)) {
+        message(checker,
+            "cannot safely repair geometry: FAT32 backup boot sector "
+            "does not match primary\n");
+        checker->uncorrected = 1;
+        checker->read_only = 1;
+        return 0;
+    }
+
+    if (unrepresented_tail_clusters != 0)
+        message(checker, "%u declared tail cluster%s have no FAT "
+            "entr%s and cannot be allocated\n",
+            unrepresented_tail_clusters,
+            unrepresented_tail_clusters == 1u ? "" : "s",
+            unrepresented_tail_clusters == 1u ? "y" : "ies");
+    message(checker, "%u %stail cluster%s are free; no FAT chain "
+        "crosses the device boundary\n", audited_tail_clusters,
+        unrepresented_tail_clusters == 0 ? "" : "representable ",
+        audited_tail_clusters == 1u ? "" : "s");
+    if (!want_fix(checker, 0, "Reduce FAT32 size from %u to %u sectors",
+        checker->volume.fv_declared_sectors,
+        checker->volume.fv_total_sectors)) {
+        checker->read_only = 1;
+        return 0;
+    }
+
+    memcpy(primary_data, checker->boot, sizeof(primary_data));
+    put_le32(primary_data + 32, checker->volume.fv_total_sectors);
+    put_le32(backup_data + 32, checker->volume.fv_total_sectors);
+    if (write_sector(checker, backup, backup_data) < 0 ||
+        write_sector(checker, 0, primary_data) < 0)
+        return -1;
+    memcpy(checker->boot, primary_data, sizeof(checker->boot));
+    checker->volume.fv_declared_sectors =
+        checker->volume.fv_total_sectors;
+    checker->declared_volume = checker->volume;
+    message(checker, "FAT32 primary and backup boot geometry updated\n");
+    return 0;
 }
 
 static int
@@ -986,7 +1230,7 @@ scan_directory(struct fat_checker *checker, unsigned start,
         sector = fat_cluster_first_sector(&checker->volume, cluster);
         for (i = 0; i < checker->volume.fv_sectors_per_cluster && !stop;
             ++i)
-            if (scan_directory_sector(checker, sector + i, cluster,
+            if (scan_directory_sector(checker, sector + i, start,
                 parent_cluster, path, depth, is_root, &lfn, &stop) < 0)
                 return -1;
         if (fat_read(checker, cluster, &next) < 0)
@@ -1189,7 +1433,6 @@ static int
 check_one(const char *name, const struct options *options)
 {
     struct fat_checker checker;
-    struct stat st;
     unsigned next_free;
     int parse_result;
     int flags;
@@ -1213,6 +1456,11 @@ check_one(const char *name, const struct options *options)
         operational_error(&checker, "open");
         return FSCK_EXIT_OPERATIONAL;
     }
+    if (get_media_sectors(checker.fd, &checker.media_sectors) < 0) {
+        operational_error(&checker, "determine media size");
+        close(checker.fd);
+        return FSCK_EXIT_OPERATIONAL;
+    }
     memset(&checker.volume, 0, sizeof(checker.volume));
     if (lseek(checker.fd, (off_t)0, SEEK_SET) != 0 ||
         read(checker.fd, checker.boot, FAT_SECTOR_SIZE) != FAT_SECTOR_SIZE) {
@@ -1220,27 +1468,12 @@ check_one(const char *name, const struct options *options)
         close(checker.fd);
         return FSCK_EXIT_OPERATIONAL;
     }
-    parse_result = fat_volume_parse(&checker.volume, checker.boot, 0);
+    parse_result = fat_volume_parse(&checker.volume, checker.boot,
+        checker.media_sectors);
     if (parse_result != FAT_PARSE_OK) {
-        message(&checker, "%s FAT boot sector\n",
+        message(&checker, "%s FAT geometry for media boundary\n",
             parse_result == FAT_PARSE_UNSUPPORTED ?
             "unsupported" : "invalid");
-        close(checker.fd);
-        return FSCK_EXIT_OPERATIONAL;
-    }
-    if (fstat(checker.fd, &st) == 0 && S_ISREG(st.st_mode) &&
-        st.st_size < (off_t)checker.volume.fv_total_sectors *
-        FAT_SECTOR_SIZE) {
-        message(&checker, "image is shorter than FAT volume\n");
-        close(checker.fd);
-        return FSCK_EXIT_OPERATIONAL;
-    }
-    checker.claimed_bytes =
-        (checker.volume.fv_max_cluster + 8u) >> 3;
-    checker.claimed = calloc(checker.claimed_bytes, 1);
-    if (checker.claimed == 0) {
-        message(&checker, "cannot allocate %u-byte cluster bitmap\n",
-            checker.claimed_bytes);
         close(checker.fd);
         return FSCK_EXIT_OPERATIONAL;
     }
@@ -1250,6 +1483,17 @@ check_one(const char *name, const struct options *options)
         checker.volume.fv_sectors_per_cluster,
         checker.volume.fv_fat_count,
         checker.volume.fv_fat_count == 1u ? "" : "s");
+    if (check_media_geometry(&checker) < 0)
+        goto done;
+    checker.claimed_bytes =
+        (checker.volume.fv_max_cluster + 8u) >> 3;
+    checker.claimed = calloc(checker.claimed_bytes, 1);
+    if (checker.claimed == 0) {
+        message(&checker, "cannot allocate %u-byte cluster bitmap\n",
+            checker.claimed_bytes);
+        close(checker.fd);
+        return FSCK_EXIT_OPERATIONAL;
+    }
     printf("** Phase 1 - Read and compare FATs\n");
     if (compare_fats(&checker) < 0 ||
         check_reserved_entries(&checker) < 0 ||
