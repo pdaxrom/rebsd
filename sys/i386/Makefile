@@ -75,6 +75,7 @@ I386_ROOTFS_STAGE = rootfs-stage
 I386_ROOTFS_KBYTES ?= 16384
 I386_ROOTFS_EPOCH = 1
 I386_FAT_SMOKE_IMAGE = fat-smoke.img
+I386_FAT32_SMOKE_IMAGE = fat32-oversize-smoke.img
 I386_HOST_MKFS_FAT = mkfs.fat.host
 I386_FAT_SMOKE_TOOL = $(I386_TOOLS_SRC)/mkfat-smoke.py
 I386_ROOTFS_BOARD_DIR = $(I386_PC_SRC)/rootfs
@@ -499,6 +500,12 @@ $(I386_FAT_SMOKE_IMAGE): $(I386_HOST_MKFS_FAT) $(I386_FAT_SMOKE_TOOL)
 	rm -f $@
 	$(PYTHON) $(I386_FAT_SMOKE_TOOL) \
 	    --mkfs ./$(I386_HOST_MKFS_FAT) --output $@
+
+$(I386_FAT32_SMOKE_IMAGE): $(I386_HOST_MKFS_FAT) $(I386_FAT_SMOKE_TOOL)
+	rm -f $@
+	$(PYTHON) $(I386_FAT_SMOKE_TOOL) \
+	    --mkfs ./$(I386_HOST_MKFS_FAT) --output $@ --fat 32 \
+	    --declared-extra-sectors 3576
 
 early_console.o: $(I386_PC_SRC)/early_console.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
@@ -1268,11 +1275,17 @@ ide-smoke: rebsd-i686.bzimg rootfs.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk rootfs.img
 
-fat-mount-smoke: rebsd-i686.bzimg $(I386_FAT_SMOKE_IMAGE)
+fat-mount-smoke: rebsd-i686.bzimg $(I386_FAT_SMOKE_IMAGE) \
+	    $(I386_FAT32_SMOKE_IMAGE)
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk $(I386_FAT_SMOKE_IMAGE) --fat-mount-smoke --timeout 20
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk $(I386_FAT32_SMOKE_IMAGE) --fat-mount-smoke \
+	    --expect-fat-limited --timeout 20
 
 ide-auto-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -1481,7 +1494,8 @@ boot-smoke-matrix: rebsd-i686.bzimg
 clean:
 	rm -f setup.o setup.elf setup.bin setup.map \
 	    vers.c \
-	    $(I386_FAT_SMOKE_IMAGE) $(I386_HOST_MKFS_FAT) \
+	    $(I386_FAT_SMOKE_IMAGE) $(I386_FAT32_SMOKE_IMAGE) \
+	    $(I386_HOST_MKFS_FAT) \
 	    rootfs.img rootfs.check.img rootfs_image.o \
 	    $(I386_ROOTFS_MANIFEST) $(I386_USER_LDSCRIPT) \
 	    $(I386_KERNEL_LDSCRIPT) \

@@ -73,14 +73,17 @@ FORBIDDEN_MARKERS = (
     "panic:",
 )
 
-IDE_DISK_MARKERS = (
+IDE_COMMON_MARKERS = (
     "ide-primary-master: ata",
     "ide-lba28: ok",
     "ide-backend-read: ok",
     "ide-lba0: ok",
     "ide-bounds: ok",
-    "wd0: 32768 512-byte sectors (16384 KB), read-only",
     "wd0: read-ahead=256 sectors (128 KB)",
+)
+
+IDE_DISK_MARKERS = IDE_COMMON_MARKERS + (
+    "wd0: 32768 512-byte sectors (16384 KB), read-only",
 )
 
 USB_MASS_STORAGE_MARKERS = (
@@ -171,6 +174,7 @@ def parse_args() -> argparse.Namespace:
     image.add_argument("--bios-image", type=pathlib.Path)
     parser.add_argument("--disk", type=pathlib.Path)
     parser.add_argument("--fat-mount-smoke", action="store_true")
+    parser.add_argument("--expect-fat-limited", action="store_true")
     parser.add_argument(
         "--ata-mode", choices=("auto", "pio", "dma"), default="auto"
     )
@@ -190,6 +194,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--expect-no-disk cannot be combined with --disk")
     if args.fat_mount_smoke and args.disk is None:
         parser.error("--fat-mount-smoke requires --disk")
+    if args.expect_fat_limited and not args.fat_mount_smoke:
+        parser.error("--expect-fat-limited requires --fat-mount-smoke")
     if args.bios_image is not None and args.ata_mode != "auto":
         parser.error("forced ATA modes require direct --kernel boot")
     if sum(
@@ -321,7 +327,9 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
     if args.disk is None:
         markers += ("ide-primary-master: none",)
     else:
-        markers += IDE_DISK_MARKERS
+        markers += (
+            IDE_COMMON_MARKERS if args.fat_mount_smoke else IDE_DISK_MARKERS
+        )
         markers += ("REBSD_I686_DMESG_OK",)
         if args.ata_mode == "pio":
             markers += ("ata0: mode=pio policy=forced",)
@@ -329,6 +337,16 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
             markers += ("ata0: mode=mwdma2 bus-master irq=14",)
             if args.ata_mode == "dma":
                 markers += ("ata0: direct scatter/gather DMA active",)
+    if args.fat_mount_smoke:
+        markers += ("wd0a: MBR type=", "REBSD_I686_FAT_MOUNT_OK")
+        if args.expect_fat_limited:
+            markers += (
+                "fat: BPB size ",
+                "limiting to device",
+                "fat0: FAT32",
+            )
+        else:
+            markers += ("fat0: FAT16",)
     if args.usb_disk is not None:
         markers += USB_MASS_STORAGE_MARKERS
         markers += ("sd0: 32768 512-byte sectors (16384 KB), removable",)

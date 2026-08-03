@@ -2174,6 +2174,12 @@ fat_mount(struct mount *mp, dev_t dev, int flags, struct inode *ip)
         error = parsed == FAT_PARSE_UNSUPPORTED ? EOPNOTSUPP : EINVAL;
         goto fail;
     }
+    if (fmp->fm_volume.fv_declared_sectors >
+        fmp->fm_volume.fv_total_sectors)
+        printf("fat: BPB size %u exceeds device %u sectors; "
+            "limiting to device\n",
+            fmp->fm_volume.fv_declared_sectors,
+            fmp->fm_volume.fv_total_sectors);
     if (fmp->fm_volume.fv_total_sectors > FAT_MAX_FILE_SECTORS) {
         error = EFBIG;
         goto fail;

@@ -23,5 +23,10 @@ writing cannot be mounted read-write.
 Current structural limits are a 4 GiB minus one byte maximum file size (the
 FAT directory entry stores an unsigned 32-bit size) and a volume smaller than
 120 GiB (the synthetic inode encoding reserves the upper inode range for
-directories). Free-space accounting is not scanned yet, so `df` does not yet
-report the available cluster count accurately.
+directories). Free-space accounting is scanned from the active FAT when the
+filesystem is mounted, so `df` reports the effective free cluster count.
+
+The block device is authoritative when a stale FAT BPB declares more sectors
+than its enclosing partition.  The effective FAT geometry is limited to the
+device boundary, so cluster traversal and allocation cannot enter the next
+partition.

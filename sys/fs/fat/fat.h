@@ -36,6 +36,7 @@
 
 struct fat_volume {
     unsigned fv_type;
+    unsigned fv_declared_sectors;
     unsigned fv_total_sectors;
     unsigned fv_reserved_sectors;
     unsigned fv_fat_start;

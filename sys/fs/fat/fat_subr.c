@@ -93,8 +93,16 @@ fat_volume_parse(struct fat_volume *volume, const unsigned char *boot,
         sectors_per_cluster > 128u || reserved == 0 || fats == 0 ||
         fats > 4u || total_sectors == 0 || fat_sectors == 0)
         return FAT_PARSE_INVALID;
+    volume->fv_declared_sectors = total_sectors;
+    /*
+     * The block device is the authoritative I/O boundary.  Existing FAT
+     * volumes can contain a stale BPB total after their enclosing partition
+     * was shortened.  Limit the effective geometry to the device so neither
+     * traversal nor allocation can address sectors in the following
+     * partition.
+     */
     if (media_sectors != 0 && total_sectors > media_sectors)
-        return FAT_PARSE_INVALID;
+        total_sectors = media_sectors;
     if (root_entries > (0xffffffffu - (FAT_SECTOR_SIZE - 1u)) /
         FAT_DIRENT_SIZE)
         return FAT_PARSE_INVALID;

@@ -106,6 +106,31 @@ test_fat32(void)
 }
 
 static int
+test_fat32_limited_to_device(void)
+{
+    unsigned char boot[FAT_SECTOR_SIZE];
+    struct fat_volume volume;
+    unsigned media_sectors;
+    unsigned expected_clusters;
+
+    boot_common(boot, 32, 64, 2, 31247953);
+    set_le32(boot + 36, 7628);
+    set_le32(boot + 44, 0xf003);
+    media_sectors = 31244377;
+    expected_clusters = (media_sectors - (64 + 2 * 7628)) / 32;
+    CHECK(fat_volume_parse(&volume, boot, media_sectors) == FAT_PARSE_OK);
+    CHECK(volume.fv_type == FAT_TYPE_32);
+    CHECK(volume.fv_declared_sectors == 31247953);
+    CHECK(volume.fv_total_sectors == media_sectors);
+    CHECK(volume.fv_cluster_count == expected_clusters);
+    CHECK(volume.fv_max_cluster == expected_clusters + 1);
+    CHECK(fat_cluster_first_sector(&volume, volume.fv_max_cluster) <
+        media_sectors);
+    CHECK(!fat_cluster_valid(&volume, volume.fv_max_cluster + 1));
+    return 0;
+}
+
+static int
 test_rejects_bad_bpb(void)
 {
     unsigned char boot[FAT_SECTOR_SIZE];
@@ -252,6 +277,7 @@ main(int argc, char **argv)
 {
     CHECK(test_fat16() == 0);
     CHECK(test_fat32() == 0);
+    CHECK(test_fat32_limited_to_device() == 0);
     CHECK(test_rejects_bad_bpb() == 0);
     CHECK(test_names() == 0);
     CHECK(test_fat_encoding() == 0);
