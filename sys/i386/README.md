@@ -103,6 +103,13 @@ USB disk is `sd0`/`rsd0` even when both devices are attached.  Raw I/O uses the
 same common disk strategy, `rawrw512()` and backend while bypassing the 1 KiB
 buffer cache.  Requests must be aligned to 512-byte sectors.
 
+The i686 kernel uses the shared `sys/fs/fat` FAT16/FAT32 VFS implementation.
+Filesystems are mounted through block partition devices, for example
+`mount -t fat -r /dev/wd0a /mnt`; raw `rwdN`/`rsdN` character devices remain
+for aligned direct I/O and filesystem utilities.  `fat-mount-smoke` builds an
+MBR/FAT16 test disk and verifies the complete `/dev/wd0a` mount, directory
+read and unmount path under QEMU.
+
 Root remains the embedded romdisk at block major 0, minor 0.  USB mass-storage
 tests reuse the existing USB core, hubs, EHCI/OHCI/UHCI, `umass` BOT/SCSI and
 common disk code.  The romdisk consumes neither a `wdN` nor an `sdN` number.

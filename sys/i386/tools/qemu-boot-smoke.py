@@ -152,6 +152,13 @@ IDE_RAW_COMMAND = (
     b"\r\nREBSD_I686_IDE_RAW_END\r\n",
 )
 
+FAT_MOUNT_COMMAND = (
+    b"/sbin/mount -t fat -r /dev/wd0a /mnt && "
+    b"/bin/ls /mnt >/dev/null && /sbin/umount /mnt && "
+    b"echo REBSD_I686_FAT_MOUNT_OK\n",
+    b"\r\nREBSD_I686_FAT_MOUNT_OK\r\n",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -163,6 +170,7 @@ def parse_args() -> argparse.Namespace:
     image.add_argument("--kernel", type=pathlib.Path)
     image.add_argument("--bios-image", type=pathlib.Path)
     parser.add_argument("--disk", type=pathlib.Path)
+    parser.add_argument("--fat-mount-smoke", action="store_true")
     parser.add_argument(
         "--ata-mode", choices=("auto", "pio", "dma"), default="auto"
     )
@@ -180,6 +188,8 @@ def parse_args() -> argparse.Namespace:
 
     if args.expect_no_disk and args.disk is not None:
         parser.error("--expect-no-disk cannot be combined with --disk")
+    if args.fat_mount_smoke and args.disk is None:
+        parser.error("--fat-mount-smoke requires --disk")
     if args.bios_image is not None and args.ata_mode != "auto":
         parser.error("forced ATA modes require direct --kernel boot")
     if sum(
@@ -489,6 +499,8 @@ def main() -> None:
     )
     if args.disk is not None:
         commands += (IDE_DMESG_COMMAND,)
+    if args.fat_mount_smoke:
+        commands += (FAT_MOUNT_COMMAND,)
     if args.disk is not None and args.ata_mode in ("pio", "dma"):
         commands += (IDE_CLOCK_COMMAND, IDE_RAW_COMMAND)
     command_index = 0
