@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/rebsd_version.h>
 #include "gettytab.h"
@@ -46,6 +47,7 @@ char	hostname[32];
 char	name[16];
 char	dev[] = "/dev/";
 char	ctty[] = "/dev/console";
+char	devtty[] = "/dev/tty";
 char	ttyn[32];
 
 #define	OBUFSIZ		128
@@ -128,9 +130,21 @@ int main(int argc, char *argv[])
 	if (argc <= 2 || strcmp(argv[2], "-") == 0)
 	    strcpy(ttyn, ttyname(0));
 	else {
+	    int fd;
+
 	    strcpy(ttyn, dev);
 	    strncat(ttyn, argv[2], sizeof(ttyn)-sizeof(dev));
 	    if (strcmp(argv[0], "+") != 0) {
+		/*
+		 * A getty child may inherit init's controlling terminal.  Detach
+		 * before opening the configured line so vhangup() revokes that
+		 * line, not another getty's terminal.
+		 */
+		fd = open(devtty, O_RDWR);
+		if (fd >= 0) {
+		    (void) ioctl(fd, TIOCNOTTY, (char *)0);
+		    (void) close(fd);
+		}
 		chown(ttyn, 0, 0);
 		chmod(ttyn, 0622);
 		/*

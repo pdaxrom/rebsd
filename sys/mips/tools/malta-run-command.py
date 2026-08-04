@@ -79,6 +79,8 @@ def command_run(args):
     started = time.time()
     saw_expect = False
     saw_login = False
+    command_sent = False
+    command_output = ""
 
     with log.open("wb") as log_file:
         try:
@@ -95,6 +97,8 @@ def command_run(args):
                     text = data.decode("latin1", errors="replace")
                     sys.stdout.write(text)
                     sys.stdout.flush()
+                    if command_sent:
+                        command_output += text
                     buf += text
                     if args.expect in buf:
                         saw_expect = True
@@ -119,9 +123,11 @@ def command_run(args):
                     write_command(
                         master, args.command, args.line_delay,
                         args.write_chunk_size, args.chunk_delay)
+                    command_sent = True
                     state = "command"
                     buf = ""
-                elif (state == "command" and not ready and
+                elif (state == "command" and not args.terminal_expect and
+                      not ready and
                       SHELL_PROMPT_RE.search(buf)):
                     write_command(
                         master, "echo " + COMMAND_DONE + "$?",
@@ -133,6 +139,9 @@ def command_run(args):
                       re.search(r"(?:^|[\r\n])#?\s*" +
                                 re.escape(COMMAND_DONE), buf) and
                       re.search(r"(?:^|[\r\n])#\s*$", buf)):
+                    break
+                if (state == "command" and args.terminal_expect and
+                        saw_expect):
                     break
 
                 if time.time() - started > args.timeout:
@@ -158,13 +167,17 @@ def command_run(args):
     summary = {
         "expect": args.expect,
         "matched": args.expect in text,
+        "forbidden_after_command": [
+            marker for marker in args.forbid_after_command
+            if marker in command_output
+        ],
         "require_login": args.require_login,
         "saw_login": saw_login,
     }
     print("\n" + json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary["matched"] and (
         not args.require_login or saw_login
-    ) else 1
+    ) and not summary["forbidden_after_command"] else 1
 
 
 def main():
@@ -184,6 +197,8 @@ def main():
     parser.add_argument("--write-chunk-size", type=int, default=0)
     parser.add_argument("--chunk-delay", type=float, default=0.0)
     parser.add_argument("--require-login", action="store_true")
+    parser.add_argument("--terminal-expect", action="store_true")
+    parser.add_argument("--forbid-after-command", action="append", default=[])
     args = parser.parse_args()
     return command_run(args)
 

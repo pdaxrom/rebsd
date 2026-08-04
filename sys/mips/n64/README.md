@@ -929,25 +929,26 @@ file sizes, matching `usb-romfs list -h`.
 
 ## Login path
 
-The N64 root filesystem uses the standard RetroBSD multi-user path instead of
-an N64-only shell jump:
+The N64 root filesystem uses the common System V/IRIX-style multi-user path
+instead of an N64-only shell jump:
 
 1. the kernel starts `/sbin/init`;
 2. the copied `icode` passes `"-"` as the init option string, matching the
    PIC32 bootstrap convention and not requesting `-s`;
-3. `init` runs `/etc/rc`;
-4. `init` reads `/etc/ttys`;
-5. the enabled `console` and `ttyS0` entries start
-   `/libexec/getty std.default`;
+3. `init` reads `/etc/inittab`, runs the `sysinit` entry
+   `/etc/rc.sysinit`, and enters the configured default runlevel;
+4. the runlevel `wait` entry dispatches `/etc/rc 2`;
+5. the `console` and `ttyS0` `respawn` entries start
+   `/libexec/getty std.default` independently;
 6. `getty` opens `/dev/console` or `/dev/ttyS0`, prints the login prompt, and
    execs `/bin/login`;
 7. `login` authenticates against `/etc/passwd`, reads `/etc/group`, prints
    `/etc/motd`, and starts `/bin/sh` as a login shell.
 
-This intentionally leaves `src/cmd/init` behavior unchanged. If no getty lines
-are enabled, `init` can still fall back to the single-user path after the
-multi-user loop has no children to supervise; N64 avoids that by enabling secure
-`console` and `ttyS0` lines in `/etc/ttys`.
+Before opening a named terminal, `getty` detaches any controlling terminal
+inherited from `init`.  Consequently the `ttyS0` getty cannot revoke or hang up
+the framebuffer console getty.  `/etc/inittab` controls which gettys run;
+`/etc/ttys` retains the terminal type and `secure` login policy metadata.
 
 Hardware smoke test on real n64cart hardware shows both login paths coming up:
 
@@ -1049,8 +1050,11 @@ is writable by default; ROMFS unmount and reboot both wait for the flash WIP bit
 to clear before reboot jumps back to stage0.
 
 This is a software restart through the ROM-loaded stage0 image, not a full
-console hardware reset. `halt`/`poweroff` requests disable interrupts and stop
-the CPU in a `wait` loop.
+console hardware reset.  Plain `reboot` and `halt` first request System V
+runlevels 6 and 0 respectively.  `init` stops supervised gettys before
+running `/etc/rc6.d` or `/etc/rc0.d`; the final script performs the direct
+kernel operation with `reboot -q` or `halt -q`.  The N64 halt path then disables
+interrupts and stops the CPU in a `wait` loop without respawning login prompts.
 
 Hardware smoke-test passed on Expansion Pak hardware: `/sbin/reboot` syncs,
 jumps through stage0, reloads the kernel, detects `0x00800000` RDRAM, mounts

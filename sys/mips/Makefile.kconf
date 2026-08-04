@@ -222,7 +222,7 @@ ROOTFS_PROC_REAP_EXPECT_full = active processes
 ROOTFS_PROC_REAP_COMMAND_minimal = \
     for i in 1 2 3 4 5 6 7 8; do \
         for j in 1 2 3 4; do /bin/ls / >/dev/null || exit 1; done; \
-    done; /bin/ps -x
+    done; ps -x
 ROOTFS_PROC_REAP_EXPECT_minimal = PID
 ROOTFS_PROC_REAP_COMMAND ?= \
     $(ROOTFS_PROC_REAP_COMMAND_$(MIPS_ROOTFS_PROFILE))
@@ -472,7 +472,7 @@ run-net: $(MALTA_RUNTIME_KERNEL)
         vm-pressure-smoke-runtime \
         vm-diagnostics-pcc-runtime vm-io-smoke-runtime \
         vm-ne2k-smoke-runtime \
-        rootfs-boot-smoke-runtime \
+        rootfs-boot-smoke-runtime rootfs-halt-smoke-runtime \
         rootfs-patch rootfs-repack-kernel rootfs-patch-kernel FORCE
 
 rootfs-boot-smoke-runtime: rootfs-contract-check \
@@ -498,6 +498,21 @@ rootfs-boot-smoke-runtime: rootfs-contract-check \
 	    --require-login \
 	    --command '$(ROOTFS_PROC_REAP_COMMAND)' \
 	    --expect "$(ROOTFS_PROC_REAP_EXPECT)"
+
+rootfs-halt-smoke-runtime: rootfs-contract-check \
+    $(MALTA_RUN_COMMAND_SCRIPT)
+	$(MAKE) $(MALTA_RUNTIME_KERNEL)
+	python3 $(MALTA_RUN_COMMAND_SCRIPT) \
+	    --malta-dir $(abspath .) \
+	    --kernel $(MALTA_RUNTIME_KERNEL) \
+	    --log $(ROOTFS_BOOT_SMOKE_LOG).halt \
+	    --qemu $(MALTA_QEMU) $(MALTA_QEMU_CPU_ARG) \
+	    --ram $(MALTA_QEMU_RAM) \
+	    --timeout 300 --silence-timeout 60 \
+	    --require-login --terminal-expect \
+	    --forbid-after-command 'login:' \
+	    --forbid-after-command "CAUTION: some process(es) wouldn't die" \
+	    --command halt --expect halted
 
 vm-smoke-runtime: $(MIPS_ROOTFS_STAMP) $(MALTA_RUN_COMMAND_SCRIPT)
 	$(MAKE) $(MALTA_RUNTIME_KERNEL)

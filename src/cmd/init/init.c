@@ -107,6 +107,7 @@ static struct init_entry *pending_entries;
 static volatile sig_atomic_t requested_signal;
 static volatile sig_atomic_t child_event;
 static volatile sig_atomic_t power_event;
+static volatile sig_atomic_t idle_event;
 static char current_level;
 static int boot_actions_done;
 
@@ -174,6 +175,13 @@ power_handler(int signo)
 }
 
 static void
+idle_handler(int signo)
+{
+    (void)signo;
+    idle_event = 1;
+}
+
+static void
 install_handler(int signo, sig_t handler)
 {
     struct sigaction action;
@@ -202,7 +210,7 @@ install_signal_handlers(void)
     }
     install_handler(SIGCHLD, child_handler);
     install_handler(SIGPWR, power_handler);
-    signal(SIGTSTP, SIG_IGN);
+    install_handler(SIGTSTP, idle_handler);
     signal(SIGTTIN, SIG_IGN);
     signal(SIGTTOU, SIG_IGN);
 }
@@ -800,6 +808,7 @@ process_request(void)
     if (map == NULL)
         return;
     if (signo == SIGHUP) {
+        idle_event = 0;
         if (reload_inittab(1) == 0)
             start_level_entries(current_level, 0);
         return;
@@ -840,25 +849,26 @@ has_inhibited_entries(void)
 static void
 supervise(void)
 {
-    int dead;
-
     for (;;) {
-        dead = reap_children(WNOHANG);
-        if (dead > 0)
-            (void)reload_inittab(0);
+        (void)reap_children(WNOHANG);
         if (requested_signal != 0)
             process_request();
         if (power_event) {
             power_event = 0;
             run_power_actions();
         }
+        if (idle_event) {
+            if (has_children())
+                (void)reap_children(0);
+            else
+                pause();
+            continue;
+        }
         start_level_entries(current_level, 0);
         if (requested_signal != 0 || power_event)
             continue;
         if (has_children()) {
-            dead = reap_children(0);
-            if (dead > 0)
-                (void)reload_inittab(0);
+            (void)reap_children(0);
         } else if (has_inhibited_entries()) {
             sleep(1);
         } else {

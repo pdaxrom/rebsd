@@ -4,7 +4,7 @@
 .\"
 .\"	@(#)reboot.8	2.2 (2.11BSD) 1996/11/16
 .\"
-.TH REBOOT 8 "May 24, 1996"
+.TH REBOOT 8 "August 4, 2026" "ReBSD" "System Manager's Manual"
 .UC 2
 .SH NAME
 reboot \- stopping and restarting the system
@@ -36,12 +36,16 @@ mode.  If there are no users then
 .B /sbin/reboot
 can be used without shutting the system down first.
 .PP
-Reboot normally causes the disks to be synced and allows the system to
-perform other shutdown activities such as resynchronizing hardware
-time-of-day clocks.  A multi-user reboot (as described below) is then
-initiated.  This causes a system to be booted and an automatic disk check
-to be performed.  If all this succeeds without incident, the system is then
-brought up for multi-user operation.
+Without special operation flags,
+.B reboot
+requests System V runlevel 6 and
+.B halt
+requests runlevel 0.  Process 1 stops supervised processes and runs the
+configured
+.IR rc (8)
+scripts before the final quick kernel operation.  The
+.B \-q
+form is reserved for that final runlevel script and for emergency use.
 .PP
 Options to reboot are:
 .TP
@@ -51,8 +55,8 @@ Don't try to tell
 what's about to happen.
 .TP
 .B \-q
-Reboot quickly and ungracefully, without shutting down running processes
-first.
+Perform the kernel operation directly, without changing runlevel or stopping
+supervised processes first.
 .TP
 .B \-n
 Don't sync before rebooting.  This can be used if a disk or the processor

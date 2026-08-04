@@ -28,6 +28,7 @@
 
 #define	REBOOT	"/sbin/reboot"
 #define	HALT	"/sbin/halt"
+#define	TELINIT	"/etc/telinit"
 #define MAXINTS 20
 #define	HOURS	*3600
 #define MINUTES	*60
@@ -292,7 +293,8 @@ int main(
 				execle(REBOOT, "reboot", "-l", nosync, 0, 0);
 			if (halt)
 				execle(HALT, "halt", "-l", nosync, 0, 0);
-			(void) kill(1, SIGTERM);	/* to single user */
+			execl(TELINIT, "telinit", "S", (char *)0);
+			perror(TELINIT);
 #else
 			if (doreboot)
 				printf("REBOOT");

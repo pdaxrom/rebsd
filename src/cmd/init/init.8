@@ -88,6 +88,13 @@ actions.
 There is deliberately no Linux
 .I initctl
 FIFO or Linux init control ABI.
+.PP
+The traditional
+.B SIGTSTP
+idle request stops respawning supervised children until a
+.B SIGHUP
+request resumes normal supervision.  This keeps direct emergency reboot
+operations compatible with process 1 without bypassing its child tracking.
 .SH FILES
 .TP
 .I /etc/inittab

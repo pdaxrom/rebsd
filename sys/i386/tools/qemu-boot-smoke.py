@@ -240,6 +240,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--uhci-disk", type=pathlib.Path)
     parser.add_argument("--ps2-keyboard", action="store_true")
     parser.add_argument("--ps2-mouse", action="store_true")
+    parser.add_argument("--halt-smoke", action="store_true")
     parser.add_argument("--expect-no-disk", action="store_true")
     parser.add_argument("--timeout", type=float, default=15.0)
     args = parser.parse_args()
@@ -524,6 +525,8 @@ def main() -> None:
     respawn_output_start = 0
     respawn_login_sent = False
     respawn_probe_sent = False
+    halt_sent = False
+    halt_output_start = 0
     commands = (
         (b"/bin/ls /bin/l?\n", b"/bin/ls"),
         (b"echo REBSD_I686_LS_OK\n", b"\r\nREBSD_I686_LS_OK\r\n"),
@@ -705,6 +708,7 @@ def main() -> None:
         if (
             respawn_login_sent
             and not respawn_probe_sent
+            and not halt_sent
             and output_bytes.endswith(b"\r\n# ")
         ):
             process.stdin.write(b"echo REBSD_I686_INIT_RESPAWN_OK\n")
@@ -712,8 +716,21 @@ def main() -> None:
             respawn_probe_sent = True
         if (
             respawn_probe_sent
+            and not halt_sent
             and b"\r\nREBSD_I686_INIT_RESPAWN_OK\r\n# "
             in output_bytes[respawn_output_start:]
+        ):
+            if args.halt_smoke:
+                halt_output_start = len(output_bytes)
+                process.stdin.write(b"halt\n")
+                process.stdin.flush()
+                halt_sent = True
+            else:
+                completed = True
+                break
+        if (
+            halt_sent
+            and b"halted\r\n" in output_bytes[halt_output_start:]
         ):
             completed = True
             break
@@ -754,6 +771,18 @@ def main() -> None:
             "qemu-boot-smoke: forbidden serial markers: "
             + ", ".join(forbidden)
         )
+    if args.halt_smoke:
+        halt_output = output_bytes[halt_output_start:].decode(
+            "utf-8", errors="replace"
+        )
+        if "login:" in halt_output:
+            raise SystemExit(
+                "qemu-boot-smoke: init respawned a login during halt"
+            )
+        if "CAUTION: some process(es) wouldn't die" in halt_output:
+            raise SystemExit(
+                "qemu-boot-smoke: halt could not terminate all processes"
+            )
     if args.disk is not None and args.ata_mode in ("pio", "dma"):
         ide_clock_match = re.search(
             r"REBSD_I686_IDE_CLOCK_BEGIN.*?"

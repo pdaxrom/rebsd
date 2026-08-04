@@ -21,6 +21,7 @@
 #include <sys/signal.h>
 
 #define	OPTS	"lqnhdarsfRD"
+#define TELINIT "/etc/telinit"
 
 static void markdown(void);
 
@@ -112,6 +113,19 @@ int main(
 			sync();
 		reboot(howto);
 		perror(myname);
+		exit(EX_OSERR);
+	}
+	/*
+	 * Plain halt and reboot requests follow the configured System V
+	 * shutdown runlevels.  The final rc scripts call this program with
+	 * -q, after init has stopped every supervised process.
+	 */
+	if (howto == RB_HALT || howto == 0) {
+		char *level = howto == RB_HALT ? "0" : "6";
+
+		execl(TELINIT, "telinit", level, (char *)0);
+		fprintf(stderr, "%s: cannot request runlevel %s: %s\n",
+		    myname, level, strerror(errno));
 		exit(EX_OSERR);
 	}
         /*

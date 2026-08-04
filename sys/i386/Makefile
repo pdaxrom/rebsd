@@ -259,7 +259,7 @@ $(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
 	uhci-mass-storage-ide-absent-smoke \
 	bios-uhci-mass-storage-ide-absent-smoke \
 	usb-combined-smoke bios-usb-combined-smoke \
-	run run-serial debug boot-smoke bios-boot-smoke \
+	run run-serial debug boot-smoke init-halt-smoke bios-boot-smoke \
 	boot-smoke-matrix clean
 
 .PHONY: FORCE
@@ -1375,6 +1375,12 @@ boot-smoke: rebsd-i686.bzimg
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $<
+
+init-halt-smoke: rebsd-i686.bzimg
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --halt-smoke --timeout 20
 
 bios-boot-smoke: rebsd-i686-bios-floppy.img rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
