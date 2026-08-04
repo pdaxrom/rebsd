@@ -704,6 +704,8 @@ physio_shift(void (*strat) (struct buf*), struct buf *bp, dev_t dev, int rw,
         bp->b_error = 0;
         while (iov->iov_len) {
             bp->b_flags = B_BUSY | B_PHYS | B_INVAL | rw;
+            if (block_shift == 9u)
+                bp->b_flags |= B_SECTOR512;
             bp->b_dev = dev;
             bp->b_addr = iov->iov_base;
             bp->b_blkno = (blkno_t)(uio->uio_offset >> block_shift);

@@ -936,8 +936,8 @@ disk_bdev_strategy_class(unsigned disk_class, struct buf *bp)
     }
 
     block = (disk_sector_t)bp->b_blkno;
-    /* Raw character I/O numbers B_PHYS requests in 512-byte sectors. */
-    if ((bp->b_flags & B_PHYS) != 0)
+    /* Raw character I/O explicitly numbers requests in 512-byte sectors. */
+    if ((bp->b_flags & B_SECTOR512) != 0)
         relative = block;
     else {
         if (block > (sectors >> 1)) {

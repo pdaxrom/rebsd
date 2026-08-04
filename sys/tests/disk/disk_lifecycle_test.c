@@ -663,6 +663,43 @@ test_partition_write_and_flush(void)
 }
 
 static int
+test_physical_buffer_block_addressing(void)
+{
+    struct fake_media media;
+    struct buf bp;
+    unsigned char data[DISK_SECTOR_SIZE];
+    unsigned unit;
+    unsigned i;
+    dev_t whole;
+
+    fake_init(&media, 12);
+    for (i = 0; i < DISK_SECTOR_SIZE; ++i) {
+        media.data[DISK_SECTOR_SIZE + i] = 0xa5;
+        media.data[2 * DISK_SECTOR_SIZE + i] = 0x5a;
+    }
+    diskattach(0);
+    CHECK(fake_writable_attach(&media, &unit) == 0 && unit == 0);
+    whole = makedev(2, DISK_MINOR(0, DISK_MINOR_WHOLE));
+
+    test_zero(&bp, sizeof(bp));
+    test_zero(data, sizeof(data));
+    bp.b_dev = whole;
+    bp.b_blkno = 1;
+    bp.b_bcount = sizeof(data);
+    bp.b_addr = (caddr_t)data;
+    bp.b_flags = B_READ | B_PHYS;
+    disk_bdev_strategy(&bp);
+    CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
+    CHECK(bp.b_resid == 0);
+    for (i = 0; i < sizeof(data); ++i)
+        CHECK(data[i] == 0x5a);
+    CHECK(media.phys_read_count == 1);
+
+    disk_detach(unit, &media);
+    return 0;
+}
+
+static int
 test_raw_odd_sector_addressing(void)
 {
     struct fake_media media;
@@ -687,7 +724,7 @@ test_raw_odd_sector_addressing(void)
     bp.b_blkno = 1;
     bp.b_bcount = sizeof(data);
     bp.b_addr = (caddr_t)data;
-    bp.b_flags = B_READ | B_PHYS;
+    bp.b_flags = B_READ | B_PHYS | B_SECTOR512;
     disk_bdev_strategy(&bp);
     CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
     CHECK(bp.b_resid == 0);
@@ -702,7 +739,7 @@ test_raw_odd_sector_addressing(void)
     bp.b_blkno = 3;
     bp.b_bcount = sizeof(data);
     bp.b_addr = (caddr_t)data;
-    bp.b_flags = B_PHYS;
+    bp.b_flags = B_PHYS | B_SECTOR512;
     disk_bdev_strategy(&bp);
     CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
     CHECK(bp.b_resid == 0);
@@ -717,7 +754,7 @@ test_raw_odd_sector_addressing(void)
     bp.b_blkno = TEST_SECTORS - 1u;
     bp.b_bcount = sizeof(data);
     bp.b_addr = (caddr_t)data;
-    bp.b_flags = B_PHYS;
+    bp.b_flags = B_PHYS | B_SECTOR512;
     disk_bdev_strategy(&bp);
     CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
     CHECK(bp.b_resid == 0);
@@ -778,7 +815,7 @@ test_buffered_read_ahead(void)
     bp.b_blkno = 2;
     bp.b_bcount = sizeof(update);
     bp.b_addr = (caddr_t)update;
-    bp.b_flags = B_PHYS;
+    bp.b_flags = B_PHYS | B_SECTOR512;
     disk_bdev_strategy(&bp);
     CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
 
@@ -864,7 +901,7 @@ test_buffered_write_combining(void)
     bp.b_blkno = 2;
     bp.b_bcount = sizeof(observed);
     bp.b_addr = (caddr_t)observed;
-    bp.b_flags = B_READ | B_PHYS;
+    bp.b_flags = B_READ | B_PHYS | B_SECTOR512;
     disk_bdev_strategy(&bp);
     CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
     CHECK(test_equal(observed, first, sizeof(first)));
@@ -898,7 +935,7 @@ test_buffered_write_combining(void)
     bp.b_blkno = 30;
     bp.b_bcount = sizeof(raw);
     bp.b_addr = (caddr_t)raw;
-    bp.b_flags = B_PHYS;
+    bp.b_flags = B_PHYS | B_SECTOR512;
     disk_bdev_strategy(&bp);
     CHECK((bp.b_flags & (B_DONE | B_ERROR)) == B_DONE);
     CHECK(media.write_count == 3 && media.flush_count == 1);
@@ -1040,6 +1077,7 @@ main(void)
     CHECK(test_open_detach_reuse() == 0);
     CHECK(test_disk_class_namespaces() == 0);
     CHECK(test_partition_write_and_flush() == 0);
+    CHECK(test_physical_buffer_block_addressing() == 0);
     CHECK(test_raw_odd_sector_addressing() == 0);
     CHECK(test_buffered_read_ahead() == 0);
     CHECK(test_buffered_write_combining() == 0);

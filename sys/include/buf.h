@@ -183,6 +183,7 @@ int geterror (struct buf *bp);
 #define B_LOCKED    0x02000     /* locked in core (not reusable) */
 #define B_UBAREMAP  0x04000     /* addr UNIBUS virtual, not physical */
 #define B_RAMREMAP  0x08000     /* remapped into ramdisk */
+#define B_SECTOR512 0x10000     /* b_blkno is in 512-byte sectors */
 
 /*
  * Insq/Remq for the buffer hash lists.

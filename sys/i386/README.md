@@ -180,9 +180,11 @@ process lifecycle, exec, signal policy, syscall handlers, console/TTY,
 keyboard mapping, PS/2 keyboard and mouse decoding, mouse event devices,
 disk/partition handling, PCI enumeration and BAR contracts, RTL8169 Ethernet,
 USB enumeration and HID class drivers, VFS/UFS and file descriptors.  The
-no-swap debug configuration is represented by
-`swap none`/`NODEV` in the normal kernel configuration path; there is no
-i686 pager compatibility flag.  N64's existing Joybus mouse snapshot ABI is
+kernel configuration keeps `swap none`/`NODEV` because swap devices are
+selected at run time rather than compiled into an i686 image.  The common VM
+pager is active and accepts Linux swap v1 devices through `mkswap`, `swapon`
+and `swapoff`; there is no i686 pager compatibility flag.  N64's existing
+Joybus mouse snapshot ABI is
 unchanged; new transports use the common event API rather than duplicating
 it in a board directory.
 
@@ -217,7 +219,30 @@ machine has confirmed all of the following with the normal
    sustained traffic on the installed `10ec:8169`, including concurrent
    IDE DMA, USB and PS/2 activity without growing interface error counters.
 
-The next i686 kernel increment is therefore no longer a hardware bring-up
-workaround or another private PC subsystem.  It is the normal common swap
-configuration/pager attachment; the current PC configuration deliberately
-uses `swap none`.
+Swap is now under user control and is not tied to the kernel build.  For
+example, an IDE partition can be formatted and enabled with:
+
+```text
+mkswap /dev/rwd0b
+swapon /dev/wd0b
+free
+swapoff /dev/wd0b
+```
+
+Several devices may be enabled simultaneously.  `swapoff` migrates resident
+pages before detaching the selected device.  The same common pager accepts a
+runtime RAM block device; compression belongs to that block device, so the
+device can hold either swap or a filesystem:
+
+```text
+ramctl create /dev/ram1 backing=8M size=24M compression
+mkswap /dev/ram1
+swapon /dev/ram1
+ramctl status /dev/ram1
+swapoff /dev/ram1
+ramctl destroy /dev/ram1
+```
+
+`size` is the logical capacity.  `backing` is the maximum RAM consumed by the
+compressed store; it is not a second swap-specific limit.  Uncompressed RAM
+devices omit `compression` and normally use `size=VALUE` or `size=all`.

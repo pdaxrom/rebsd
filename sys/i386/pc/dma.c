@@ -6,7 +6,10 @@
 #include <sys/errno.h>
 #include <sys/systm.h>
 
+#include <machine/layout.h>
 #include <vm/vmspace.h>
+
+#include "memory.h"
 
 #define I386_DMA_POOL_BYTES     (512u * 1024u)
 #define I386_DMA_POOL_ALIGN     4096u
@@ -82,10 +85,25 @@ i386_dma_map_load(struct dma_map *map, void *vaddr, size_t size,
     unsigned page_index;
     int error;
 
+    address = (vm_vaddr_t)(u_int)vaddr;
+    if (address < I386_USER_VADDR_START) {
+        if (size > I386_USER_VADDR_START - address)
+            return EFAULT;
+        return i386_dma_map_add(map, (dma_addr_t)address, size);
+    }
+    if (address >= I386_KERNEL_BASE) {
+        address -= I386_KERNEL_BASE;
+        if (address >= I386_DIRECT_MAP_SIZE ||
+            size > I386_DIRECT_MAP_SIZE - address)
+            return EFAULT;
+        return i386_dma_map_add(map, (dma_addr_t)address, size);
+    }
+    if (address >= I386_USER_VADDR_END ||
+        size > I386_USER_VADDR_END - address)
+        return EFAULT;
     vmspace = vmspace_current();
     if (vmspace == 0)
         return EFAULT;
-    address = (vm_vaddr_t)(u_int)vaddr;
     error = vmspace_pin_pages(vmspace, address, (vm_size_t)size,
         direction == DMA_TO_DEVICE ? VM_PROT_READ :
         (direction == DMA_FROM_DEVICE ? VM_PROT_WRITE :
