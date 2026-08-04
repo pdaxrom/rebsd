@@ -126,6 +126,8 @@ DEVICE_NODES = [
     ("bdev", "/dev/romdisk", 0, 0, ""),
     ("bdev", "/dev/ram0", 1, 0, ""),
     ("bdev", "/dev/ram1", 1, 1, ""),
+    ("bdev", "/dev/ram2", 1, 2, ""),
+    ("bdev", "/dev/ram3", 1, 3, ""),
     ("cdev", "/dev/console", 0, 0, ""),
     ("cdev", "/dev/tty", 2, 0, ""),
     ("cdev", "/dev/ttyS0", 3, 0, ""),
@@ -274,7 +276,7 @@ HOME=/; export HOME
 PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 
 echo N64_PCC_DEBUG_RC_BEGIN
-/usr/sbin/ramctl create /dev/ram0 size=all
+/usr/sbin/ramctl create /dev/ram0 size=1M
 mkfs -i 4096 /dev/ram0
 rc=$?
 echo N64_PCC_DEBUG_MKFS_RC $rc

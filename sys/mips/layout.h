@@ -25,11 +25,10 @@
  *   0x002fc000..0x002fdfff  free after removal of historical u0
  *   0x002fe000..0x002fffff  proc0 bootstrap u area/kernel stack
  *   0x00300000..0x006fffff  legacy user-window reserve (unwired after proc1)
- *   0x00700000..0x007fffff  /var ramdisk
+ *   0x00700000..0x007fffff  general-purpose RAM
  *   0x00800000..             root filesystem loaded by QEMU outside physmem
  *                             in low-memory smoke configurations
- *                             followed by Malta cartflash sparse storage and
- *                             then the optional ram1 backing pool
+ *                             followed by Malta cartflash sparse storage
  *
  * Malta PCC smoke builds may override the RAM and root filesystem sizes from
  * the board makefile when the staged userland no longer fits in 16 MiB.
@@ -82,11 +81,6 @@
 #define MALTA_STAGE0_BYTES             MIPS_SIZE_512K
 #define MALTA_FRAMEBUFFER_PHYS_START   0x00500000
 #define MALTA_FRAMEBUFFER_BYTES        0x00040000
-#define MALTA_RAMDISK_VAR_PHYS_START   0x00540000
-#define MALTA_RAMDISK_VAR_BYTES        MIPS_SIZE_1M
-#else
-#define MALTA_RAMDISK_VAR_PHYS_START   0x00700000
-#define MALTA_RAMDISK_VAR_BYTES        MIPS_SIZE_1M
 #endif
 #define MALTA_ROMDISK_PHYS_START       0x00800000
 #ifdef MALTA_ROMDISK_BYTES_OVERRIDE
@@ -97,20 +91,4 @@
 #define MALTA_CARTFLASH_PHYS_START     (MALTA_ROMDISK_PHYS_START + \
                                          MALTA_ROMDISK_BYTES)
 #define MALTA_CARTFLASH_BYTES          MIPS_SIZE_2M
-#ifdef MALTA_N64_8M_PROFILE
-#define MALTA_RAMDISK_DATA_PHYS_START  0x00640000
-#else
-#define MALTA_RAMDISK_DATA_PHYS_START  (MALTA_CARTFLASH_PHYS_START + \
-                                         MALTA_CARTFLASH_BYTES)
-#endif
-#ifdef MALTA_RAMDISK_DATA_BYTES_OVERRIDE
-#define MALTA_RAMDISK_DATA_BYTES       MALTA_RAMDISK_DATA_BYTES_OVERRIDE
-#else
-#define MALTA_RAMDISK_DATA_BYTES       \
-                                        (MALTA_RAM_SIZE > \
-                                         MALTA_RAMDISK_DATA_PHYS_START ? \
-                                         MALTA_RAM_SIZE - \
-                                         MALTA_RAMDISK_DATA_PHYS_START : 0)
-#endif
-
 #endif

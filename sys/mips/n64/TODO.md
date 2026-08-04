@@ -394,18 +394,16 @@ the board-specific generated/appended manifest.
   RAM-backed block devices rather than inventing a separate inode filesystem:
   this keeps mount, namei, read/write, directory, and fsck behavior aligned
   with the current kernel.
-- [x] Split N64 volatile RAM storage into general block-device minors:
-  - reserve `/dev/ram0` for `/var` and `/dev/ram1` for runtime-selected use
-  - size it from detected RDRAM, with conservative 4 MiB defaults and larger
-    8 MiB defaults
-  - keep both physical pools disjoint
+- [x] Expose equal dynamic RAM block-device minors.  Boot policy creates
+  `/dev/ram0` for `/var` and `/dev/ram1` for compressed swap, but the kernel
+  does not reserve either minor or a per-device physical pool.
 - [x] Generate `/dev/ram0` from kernel device definitions, not by hand-editing
   the staged rootfs.
 - [x] Teach the N64 boot scripts to create volatile filesystems at startup:
   `mkfs` the RAM disk, mount `/var`, then create required runtime directories
   such as `/var/run`, `/var/log`, `/var/tmp`, and `/var/lock`.
-- [x] Route `pipe(2)` temporary inodes to the writable `/dev/ram0` filesystem
-  through N64 `pipedev` setup, so shell pipelines work after `/var` is mounted.
+- [x] Keep anonymous `pipe(2)` objects entirely in-core so pipelines and shell
+  command substitution work before any writable filesystem is mounted.
 - [x] Keep `/tmp` and `/var` volatile for the first version; later ROMFS or
   another writable block device can provide persistent upper storage.
 - [x] Hardware smoke-test volatile mounts:

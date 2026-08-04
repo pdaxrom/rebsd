@@ -144,33 +144,6 @@ ramdisk_controller_init(struct ramdisk_controller *controller)
         ramdisk_zero(controller, sizeof(*controller));
 }
 
-int
-ramdisk_controller_register_pool(struct ramdisk_controller *controller,
-    int minor_number, volatile void *backing, unsigned backing_bytes,
-    unsigned flags)
-{
-    struct ramdisk_slot *slot;
-
-    if (controller == 0 || minor_number < 0 ||
-        minor_number >= RAMDISK_MAX_DEVICES ||
-        (flags & ~RAMDISK_POOL_DYNAMIC) != 0)
-        return EINVAL;
-    if ((flags & RAMDISK_POOL_DYNAMIC) != 0) {
-        if (backing != 0)
-            return EINVAL;
-    } else if (backing == 0 || backing_bytes == 0 ||
-        (backing_bytes & ((1u << RAMDISK_DEVICE_BLOCK_SHIFT) - 1)) != 0)
-        return EINVAL;
-    slot = &controller->rc_slot[minor_number];
-    if (slot->rs_pool != 0 || slot->rs_pool_flags != 0 ||
-        slot->rs_configured || slot->rs_open_count != 0)
-        return EBUSY;
-    slot->rs_pool = backing;
-    slot->rs_pool_bytes = backing_bytes;
-    slot->rs_pool_flags = flags;
-    return 0;
-}
-
 static struct ramdisk_slot *
 ramdisk_controller_slot(struct ramdisk_controller *controller, dev_t dev)
 {
@@ -180,10 +153,6 @@ ramdisk_controller_slot(struct ramdisk_controller *controller, dev_t dev)
         return 0;
     unit = minor(dev);
     if (unit >= RAMDISK_MAX_DEVICES)
-        return 0;
-    if (controller->rc_slot[unit].rs_pool == 0 &&
-        (controller->rc_slot[unit].rs_pool_flags &
-        RAMDISK_POOL_DYNAMIC) == 0)
         return 0;
     return &controller->rc_slot[unit];
 }
@@ -257,27 +226,18 @@ ramdisk_slot_configure(struct ramdisk_slot *slot, int minor_number,
         slot->rs_configured || slot->rs_open_count != 1)
         return EINVAL;
     backing_bytes = request->rdc_backing_bytes;
-    if (slot->rs_pool_flags & RAMDISK_POOL_DYNAMIC) {
-        if (backing_bytes == 0)
-            return EINVAL;
+    if (backing_bytes == 0)
+        return EINVAL;
 #ifdef DISK_HOST_TEST
-        return EOPNOTSUPP;
+    return EOPNOTSUPP;
 #else
-        error = ramdisk_storage_alloc(backing_bytes,
-            &slot->rs_backing_pages, &slot->rs_backing_page_count,
-            &allocation);
-        if (error != 0)
-            return error;
-        backing = allocation;
+    error = ramdisk_storage_alloc(backing_bytes,
+        &slot->rs_backing_pages, &slot->rs_backing_page_count,
+        &allocation);
+    if (error != 0)
+        return error;
+    backing = allocation;
 #endif
-    } else {
-        if (backing_bytes == 0)
-            backing_bytes = slot->rs_pool_bytes;
-        if (backing_bytes > slot->rs_pool_bytes)
-            return ENOSPC;
-        backing = slot->rs_pool;
-        ramdisk_zero((void *)backing, backing_bytes);
-    }
     media_bytes = request->rdc_media_bytes;
     if (request->rdc_flags & RAMDISK_CONFIG_COMPRESSION) {
         if (media_bytes == 0 ||
@@ -388,7 +348,6 @@ ramdisk_controller_ioctl(struct ramdisk_controller *controller, dev_t dev,
             return EINVAL;
         info = (struct ramdisk_info *)addr;
         ramdisk_zero(info, sizeof(*info));
-        info->rdi_backing_capacity = slot->rs_pool_bytes;
         info->rdi_open_count = slot->rs_open_count;
         info->rdi_configured = slot->rs_configured;
         if (slot->rs_configured) {

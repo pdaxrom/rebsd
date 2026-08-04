@@ -218,6 +218,7 @@ N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 N64_DEVNODES_AWK = $(TOPSRC)/sys/mips/n64/devnodes.awk
 N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h \
                     $(TOPSRC)/sys/mips/ramdisk.h \
+                    $(TOPSRC)/sys/include/disk.h \
                     $(TOPSRC)/sys/mips/n64/n64cart_flash.h \
                     $(TOPSRC)/sys/mips/n64/devmajors.h \
                     $(TOPSRC)/sys/include/conf.h \
@@ -1086,7 +1087,7 @@ $(N64_PCC_HOST_INCLUDE_STAMP): $(MIPS_INCLUDE_SRCS) \
 endif
 
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
-	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/ramdisk.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
+	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/ramdisk.h $(TOPSRC)/sys/include/disk.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
 
 $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(N64_MINIMAL_ROOTFS_FILES) $(N64_TERMCAP) \
@@ -1191,7 +1192,15 @@ endif
 	    printf '%s\n' '#!/bin/sh'; \
 	    printf '%s\n' 'PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH'; \
 	    printf '%s\n' 'echo N64_MINIMAL_RC_BEGIN'; \
-	    printf '%s\n' '/usr/sbin/ramctl create /dev/ram0 size=all >/dev/null'; \
+	    printf '%s\n' 'physmem=`/bin/sysctl -n hw.physmem`'; \
+	    printf '%s\n' 'if test "$$physmem" -le 4194304; then'; \
+	    printf '%s\n' '	var_size=128K'; \
+	    printf '%s\n' '	swap_backing=384K'; \
+	    printf '%s\n' 'else'; \
+	    printf '%s\n' '	var_size=1M'; \
+	    printf '%s\n' '	swap_backing=2M'; \
+	    printf '%s\n' 'fi'; \
+	    printf '%s\n' '/usr/sbin/ramctl create /dev/ram0 size=$$var_size >/dev/null'; \
 	    printf '%s\n' 'if mkfs -i 4096 /dev/ram0 >/dev/null; then'; \
 	    printf '%s\n' '	if mount /var >/dev/null; then'; \
 	    printf '%s\n' '		mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null'; \
@@ -1207,7 +1216,7 @@ endif
 	    printf '%s\n' '	echo N64_MINIMAL_VAR_MKFS_FAIL'; \
 	    printf '%s\n' '	exit 1'; \
 	    printf '%s\n' 'fi'; \
-	    printf '%s\n' 'if /usr/sbin/ramctl create /dev/ram1 backing=all size=2x compression >/dev/null; then'; \
+	    printf '%s\n' 'if /usr/sbin/ramctl create /dev/ram1 backing=$$swap_backing size=2x compression >/dev/null; then'; \
 	    printf '%s\n' '	if /usr/sbin/mkswap /dev/ram1 >/dev/null; then /usr/sbin/swapon /dev/ram1; fi'; \
 	    printf '%s\n' 'fi'; \
 	    printf '%s\n' 'echo N64_MINIMAL_RC_END'; \

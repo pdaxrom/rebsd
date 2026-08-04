@@ -122,7 +122,7 @@ int flock(int fd, int operation);
 }
 #define DTYPE_INODE     1   /* file */
 #define DTYPE_SOCKET    2   /* communications endpoint */
-#define DTYPE_PIPE      3   /* I don't want to hear it, okay? */
+#define DTYPE_PIPE      3   /* anonymous in-core pipe */
 #define DTYPE_SHM       4   /* POSIX shared-memory object */
 #define DTYPE_FIFO      5   /* POSIX named pipe */
 #endif

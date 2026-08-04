@@ -5,7 +5,7 @@ PAGER=/bin/cat; export PAGER
 
 /bin/hostname rebsd-i686
 
-/usr/sbin/ramctl create /dev/ram0 size=all >/dev/null 2>&1
+/usr/sbin/ramctl create /dev/ram0 size=1M >/dev/null 2>&1
 if /sbin/mount /var >/dev/null 2>&1; then
         :
 else

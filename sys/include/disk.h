@@ -99,7 +99,6 @@ struct ramdisk_configure {
 struct ramdisk_info {
     u_int rdi_media_bytes;
     u_int rdi_backing_bytes;
-    u_int rdi_backing_capacity;
     u_int rdi_flags;
     u_int rdi_open_count;
     u_int rdi_configured;

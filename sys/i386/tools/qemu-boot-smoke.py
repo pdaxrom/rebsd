@@ -686,6 +686,14 @@ def main() -> None:
                 b"\r\nREBSD_I686_RAMCOMP_CREATE_OK\r\n",
             ),
             (
+                b"/usr/sbin/ramctl create /dev/ram2 size=512K && "
+                b"/usr/sbin/ramctl status /dev/ram2 | "
+                b"/usr/bin/grep 'size=524288, backing=524288, "
+                b"compression=off' && "
+                b"echo REBSD_I686_RAM2_DYNAMIC_OK\n",
+                b"\r\nREBSD_I686_RAM2_DYNAMIC_OK\r\n",
+            ),
+            (
                 b"/usr/sbin/ramctl status /dev/ram1 | "
                 b"/usr/bin/grep 'size=2097152, backing=1048576, "
                 b"compression=on' && "
@@ -731,6 +739,13 @@ def main() -> None:
                 b"/usr/bin/grep 'not configured' && "
                 b"echo REBSD_I686_RAMCOMP_DESTROY_OK\n",
                 b"\r\nREBSD_I686_RAMCOMP_DESTROY_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/ramctl destroy /dev/ram2 && "
+                b"/usr/sbin/ramctl status /dev/ram2 | "
+                b"/usr/bin/grep 'not configured' && "
+                b"echo REBSD_I686_RAM2_DESTROY_OK\n",
+                b"\r\nREBSD_I686_RAM2_DESTROY_OK\r\n",
             ),
         )
     command_index = 0

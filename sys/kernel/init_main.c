@@ -121,7 +121,6 @@ main()
     nchinit();
     clkstart();
 
-    pipedev = rootdev;
 
     /* Attach services. */
     struct conf_service *svc;

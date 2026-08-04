@@ -65,9 +65,10 @@ Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
 the expanded command set:
 
 This log predates the volatile `/var` RAM disk, expanded 8 MiB user window,
-and runtime compressed RAM devices. Current default 8 MiB boots reserve 1 MiB
-for `/var`; rc.sysinit creates compressed `/dev/ram1` with the remaining pool,
-formats it as Linux swap v1, and attaches it from userland.
+and runtime compressed RAM devices. Current default 8 MiB boots dynamically
+allocate 1 MiB for `/dev/ram0`; rc.sysinit independently creates compressed
+`/dev/ram1` with 2 MiB of VM backing, formats it as Linux swap v1, and attaches
+it from userland.
 
 ```
 ReBSD N64 stage0
@@ -667,7 +668,7 @@ headers:
 - source: `sys/mips/n64/devnodes.awk`
 - source: `sys/mips/n64/romdisk.h`
 - shared source: `sys/mips/ramdisk.h`
-- board source: `sys/mips/n64/ramdisk_machdep.c`
+- shared source: `sys/mips/common/ramdisk_mips.c`
 - source: `sys/mips/n64/devmajors.h`
 - source: `sys/include/conf.h`
 - generated: `sys/mips/n64/rootfs.devnodes.manifest`
@@ -1078,7 +1079,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 0x00100000..0x002fffff  VM page pool after bootstrap
 0x00300000..0x0033ffff  resident stage0/restart image
 0x00340000..0x0037ffff  stage0/early 320x240x16 framebuffer alias
-0x00380000..0x003fffff  ram1 backing pool
+0x00380000..0x003fffff  VM page pool
 ```
 
 8 MiB system:
@@ -1087,9 +1088,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 0x00000000..0x000fffff  kernel, vectors, bootstrap u area
 0x00100000..0x002fffff  VM page pool after bootstrap
 0x00300000..0x0037ffff  resident stage0/restart image
-0x00380000..0x004fffff  VM page pool after bootstrap
-0x00500000..0x005fffff  /var RAM disk
-0x00600000..0x007fffff  Expansion Pak ram1 backing pool
+0x00380000..0x007fffff  VM page pool after bootstrap
 ```
 
 After VM startup, VI mode changes use exact page-rounded physically
@@ -1113,9 +1112,7 @@ Important constants:
 - `N64_USER_PHYS_START`: legacy bootstrap user-mapping base, `0x00100000`;
   after the bootstrap TLB entries are removed, ordinary pages in this range
   are allocated by VM.
-- `N64_BASE_RAMDISK_DATA_PHYS_START`: 4 MiB ram1 pool base, `0x00380000`.
 - `N64_BASE_FB_PHYS_START`: early 320x240x16 stage0 alias, `0x00340000`.
-- `N64_EXPANSION_RAMDISK_DATA_PHYS_START`: 8 MiB RAM block pool base.
 - `N64_FB_USER_VADDR_START`: uncached framebuffer user mapping base,
   `0x00800000`.
 
@@ -1182,7 +1179,8 @@ The VM bootstrap invalidates those temporary entries, resets `C0_Wired`, and
 uses per-process 4 KiB pmap entries with ASIDs for normal execution. The
 framebuffer is no longer a global wired mapping. `/dev/fb0` authorizes an
 uncached `MAP_SHARED` device mapping in the calling process; its physical
-reserve remains rounded up so the mapping cannot overlap the RAM-device pool:
+reserve remains rounded up so the mapping cannot overlap pages managed by the
+VM allocator:
 
 ```
 4 MiB: physical 0x00340000..0x0037ffff
@@ -1308,22 +1306,26 @@ Block major 0 is the ROM-backed root disk:
 /dev/romdisk  b 0,0
 ```
 
-Block major 1 is the N64 RAM-backed block controller. Minor 0 is the volatile
-UFS target for `/var`; minor 1 is a general-purpose data device:
+Block major 1 is the common RAM-backed block controller.  Minors 0 through 3
+are equivalent, initially unconfigured dynamic devices.  The boot policy uses
+minor 0 for volatile `/var` and minor 1 for swap:
 
 ```
 /dev/ram0     b 1,0
 /dev/ram1     b 1,1
+/dev/ram2     b 1,2
+/dev/ram3     b 1,3
 ```
 
-RAM block sizing:
+Default boot sizing:
 
-- 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB `/dev/ram1` backing pool.
-- 8 MiB system: 1 MiB `/dev/ram0`, 2 MiB `/dev/ram1` backing pool. Framebuffers
-  no longer consume this block pool.
+- 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB `/dev/ram1` backing.
+- 8 MiB system: 1 MiB `/dev/ram0`, 2 MiB `/dev/ram1` backing.
 
+These sizes are runtime boot-script policy, not fixed physical pools.  RAM is
+allocated from VM by `ramctl create` and returned by `ramctl destroy`.
 Compression is selected when a RAM block device is created.  The normal boot
-uses `ramctl create /dev/ram1 backing=all size=2x compression`; each logical
+uses an explicit backing size and `size=2x compression`; each logical
 1 KiB block is stored as zero, raw, or compressed data in 256-byte physical
 units.  The resulting ordinary block device can hold swap or a filesystem.
 Discarding a block releases its compressed physical units.  If data cannot fit
@@ -1368,7 +1370,7 @@ make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-usbnet-min \
     N64_BUILD_CONFIG=usbnetmin-pcc-gcc all
 ```
 
-The runtime devices therefore differ by installed RDRAM:
+The runtime boot policy therefore differs by installed RDRAM:
 
 ```
 4 MiB: /dev/ram1 backing = 384 KiB, default compressed size = 768 KiB
@@ -1384,10 +1386,9 @@ login/accounting tools have writable files after multi-user boot. The same
 script mounts the fixed n64cart ROMFS at `/cart` through the `/etc/fstab`
 entry for `/dev/cartflash0`.
 
-The kernel pipe implementation allocates temporary pipe inodes on `pipedev`.
-The N64 attach code sets `pipedev` to `/dev/ram0`; after `/etc/rc` mounts
-`/var`, shell pipelines use the writable RAM-backed UFS instead of the
-read-only cartridge root.
+Anonymous pipes are in-core kernel objects and do not depend on a mounted
+filesystem.  Shell pipelines and command substitution therefore work during
+`rc.sysinit`, before userland creates `/dev/ram0` and mounts `/var`.
 
 ## Character devices and tty
 

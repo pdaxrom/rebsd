@@ -1235,8 +1235,7 @@ sysctl_procfiles(char *where, size_t *sizep)
             if (fp == NULL)
                 continue;
             ip = NULL;
-            if (fp->f_type == DTYPE_INODE || fp->f_type == DTYPE_PIPE ||
-                fp->f_type == DTYPE_FIFO)
+            if (fp->f_type == DTYPE_INODE || fp->f_type == DTYPE_FIFO)
                 ip = (struct inode *)fp->f_data;
             needed += sizeof(struct kinfo_procfile);
             if (buflen >= sizeof(struct kinfo_procfile)) {

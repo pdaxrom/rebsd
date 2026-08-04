@@ -18,7 +18,6 @@ struct ramcomp_stats;
 struct vm_page;
 
 #define RAMDISK_F_COMPRESSION    RAMDISK_CONFIG_COMPRESSION
-#define RAMDISK_POOL_DYNAMIC     0x01u
 
 struct ramdisk_config {
     volatile void *rdc_backing;
@@ -45,9 +44,6 @@ struct ramdisk {
 
 struct ramdisk_slot {
     struct ramdisk rs_disk;
-    volatile unsigned char *rs_pool;
-    unsigned rs_pool_bytes;
-    unsigned rs_pool_flags;
     unsigned rs_open_count;
     unsigned rs_configured;
     struct ramcomp *rs_compression;
@@ -69,8 +65,6 @@ void ramdisk_bdev_strategy(const struct ramdisk *, struct buf *);
 daddr_t ramdisk_bdev_size(const struct ramdisk *, dev_t);
 int ramdisk_bdev_ioctl(const struct ramdisk *, dev_t, u_int, caddr_t, int);
 void ramdisk_controller_init(struct ramdisk_controller *);
-int ramdisk_controller_register_pool(struct ramdisk_controller *, int,
-    volatile void *, unsigned, unsigned);
 int ramdisk_controller_open(struct ramdisk_controller *, dev_t, int, int);
 int ramdisk_controller_close(struct ramdisk_controller *, dev_t, int, int);
 void ramdisk_controller_strategy(struct ramdisk_controller *, struct buf *);

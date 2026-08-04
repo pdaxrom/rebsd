@@ -24,11 +24,12 @@ creates and removes runtime RAM block devices.  The
 .B size
 argument is the visible block-device size.  The
 .B backing
-argument is the physical RAM budget.  Values accept K, M, and G suffixes;
-.B all
-selects the complete platform-reserved pool and
+argument is the physical RAM budget allocated when the command runs.  Values
+accept K, M, and G suffixes.  If
+.B backing
+is omitted, it is equal to the visible size.  The visible size may use
 .I Nx
-multiplies the backing size.
+to multiply an explicitly supplied backing size.
 .PP
 Without compression the visible size must equal the backing size.  With
 .B compression
@@ -42,5 +43,8 @@ The resulting ordinary block device may be formatted as a filesystem or as
 swap.  It must be unmounted and removed from swap before it can be destroyed.
 .PP
 .B ramctl list
-prints every currently configured RAM block device.  Devices registered by
-the platform but not yet configured are omitted.
+prints every currently configured RAM block device.  Unconfigured device
+nodes are omitted.  Every available ramN device has the same capabilities;
+the create arguments alone determine its backing, visible size, and whether
+compression is enabled.  Destroying a device releases all of its backing and
+compression-metadata pages to the VM allocator.

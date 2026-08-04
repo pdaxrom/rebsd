@@ -27,7 +27,6 @@ mips/n64/memory.c               standard
 disk/romdisk.c                  standard
 disk/ramdisk.c                  standard
 mips/n64/romdisk_machdep.c      standard
-mips/n64/ramdisk_machdep.c      standard
 mips/common/ramdisk_mips.c      standard
 mips/n64/config.c               standard
 mips/n64/vm_phys_board.c        standard

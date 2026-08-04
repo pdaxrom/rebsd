@@ -272,11 +272,11 @@ fstat()
         return;
     switch (fp->f_type) {
 
-    case DTYPE_PIPE:
     case DTYPE_INODE:
         u.u_error = ino_stat((struct inode *)fp->f_data, &ub);
-        if (fp->f_type == DTYPE_PIPE)
-            ub.st_size -= fp->f_offset;
+        break;
+    case DTYPE_PIPE:
+        u.u_error = pipe_stat(fp, &ub);
         break;
 
     case DTYPE_FIFO:

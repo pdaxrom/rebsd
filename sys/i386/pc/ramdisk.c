@@ -8,31 +8,15 @@
 
 #include "ramdisk.h"
 
-static unsigned char i386_var_storage[I386_RAMDISK_VAR_BYTES]
-    __attribute__((aligned(4096)));
 static struct ramdisk_controller i386_ramdisks;
 static int i386_ramdisks_initialized;
 
 static int
 i386_ramdisk_attach(void)
 {
-    int unit;
-    int error;
-
     if (i386_ramdisks_initialized)
         return 0;
     ramdisk_controller_init(&i386_ramdisks);
-    error = ramdisk_controller_register_pool(&i386_ramdisks,
-        I386_RAMDISK_VAR_MINOR, i386_var_storage,
-        sizeof(i386_var_storage), 0);
-    if (error != 0)
-        return error;
-    for (unit = 1; unit < RAMDISK_MAX_DEVICES; ++unit) {
-        error = ramdisk_controller_register_pool(&i386_ramdisks,
-            unit, 0, 0, RAMDISK_POOL_DYNAMIC);
-        if (error != 0)
-            return error;
-    }
     i386_ramdisks_initialized = 1;
     return 0;
 }

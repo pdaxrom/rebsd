@@ -447,7 +447,7 @@ Remaining work:
 - Run the updated PCC userland/rootfs gate on real N64 hardware in both
   hard-float and soft-float modes after the Malta64/R4000 and Malta QEMU
   matrix stays stable.  Default N64 startup creates compressed `/dev/ram1`
-  from userland so its logical capacity can exceed the backing pool without
+  from userland so its logical capacity can exceed the dynamic backing store without
   reducing the 4 MiB Expansion Pak user window.
 - Decide the long-term PCC kernel FPU policy for soft-float kernel builds.  The
   current validated kernel gates are hard-float unless a test explicitly states
@@ -745,15 +745,15 @@ malta mips32r2 hard:   10996.368 and 10518.260 KFLOPS
 malta mips32r2 soft:     817.298 and 742.086 KFLOPS
 ```
 
-The Malta64 low-memory swap check on 2026-07-06 used the N64-sized profile
-`MALTA_RAM_KBYTES=8192 MALTA_RAMDISK_DATA_KBYTES=4608 MALTA_QEMU_RAM=64M` with the
-rootfs linked at physical `0x00800000`.  Boot reported `phys mem = 8192 kbytes`,
-`user mem = 4096 kbytes`, `root size = 16384 kbytes`, and
-`swap size = 4608 kbytes`; `/root/pcc-smoke-all.sh` finished with
+The Malta64 low-memory swap check on 2026-07-06 used the former fixed-pool
+N64-sized profile with the rootfs linked at physical `0x00800000`.  That
+historical image reported `phys mem = 8192 kbytes`, `user mem = 4096 kbytes`,
+`root size = 16384 kbytes`, and `swap size = 4608 kbytes`;
+`/root/pcc-smoke-all.sh` finished with
 `PCC_SMOKE_ALL_FAILURES 0` and `PCC_SMOKE_ALL_RC:0`.  The `linpack-pcc` result
 inside that run was `12096.004` and `12172.076` KFLOPS.
 
-The 32-bit Malta low-memory swap check on 2026-07-06 used the same profile with
+The 32-bit Malta low-memory swap check on 2026-07-06 used the same historical profile with
 `MIPS_ROOTFS_CPU=mips32r2` and hard-float PCC userland.  Boot again reported
 `phys mem = 8192 kbytes`, `user mem = 4096 kbytes`, `root size = 16384 kbytes`,
 and `swap size = 4608 kbytes`; `/root/pcc-smoke-all.sh` finished with
@@ -761,11 +761,12 @@ and `swap size = 4608 kbytes`; `/root/pcc-smoke-all.sh` finished with
 inside that run was `10751.999`, `10294.467`, and `10132.773` KFLOPS.
 
 On real 8 MiB N64 hardware, the native utility workload needs more writable
-temporary space than the original 512 KiB `/var` RAM disk can provide.  The N64
-default `/dev/ram0` reservation is therefore 1 MiB.  The 4 MiB user window is
+temporary space than the original 512 KiB `/var` RAM disk can provide.  N64
+startup therefore creates `/dev/ram0` with 1 MiB of dynamically allocated VM
+backing.  The 4 MiB user window is
 unchanged; with compressed `/dev/ram1` the expected 8 MiB boot report becomes
 `user mem = 4096 kbytes` and `swap size = 3584 kbytes`.
-The workload serializes its persistent outputs within that reservation: only
+The workload serializes its persistent outputs within that device: only
 the first compiler's `basename` binary is retained for the cross-driver
 comparison, while copied sources, `sum`, `size`, and their output files are
 not kept across later compiler invocations.  This leaves the remaining space

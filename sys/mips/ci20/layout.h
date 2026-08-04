@@ -30,9 +30,8 @@
  *   0x002fc000..0x002fdfff  free after removal of historical u0
  *   0x002fe000..0x002fffff  proc0 bootstrap u area/kernel stack
  *   0x00300000..0x006fffff  legacy user-window reserve (unwired after proc1)
- *   0x00700000..0x007fffff  /var RAM disk
+ *   0x00700000..0x007fffff  general-purpose RAM
  *   0x00800000..             linked root filesystem
- *                             followed by optional RAM-backed swap
  *   0x0f800000..0x0fffffff  HDMI framebuffer reserve
  */
 #define CI20_PHYS_RAM_BASE             0x00000000
@@ -68,8 +67,6 @@
 #define MIPS_USER_VADDR_END            (MIPS_USER_VADDR_START + MIPS_USER_MAXMEM)
 #define MIPS_USER_GP_OFFSET            0x00007ff0
 
-#define CI20_RAMDISK_VAR_PHYS_START    0x00700000
-#define CI20_RAMDISK_VAR_BYTES         CI20_SIZE_1M
 #define CI20_ROMDISK_PHYS_START        0x00800000
 #define CI20_FRAMEBUFFER_PHYS_START    0x0f800000
 #define CI20_FRAMEBUFFER_BYTES         CI20_SIZE_8M
@@ -78,21 +75,4 @@
 #else
 #define CI20_ROMDISK_BYTES             CI20_SIZE_16M
 #endif
-#define CI20_RAMDISK_DATA_PHYS_START   (CI20_ROMDISK_PHYS_START + \
-                                         CI20_ROMDISK_BYTES)
-#define CI20_RAMDISK_DATA_MAX_BYTES    \
-                                        (CI20_FRAMEBUFFER_PHYS_START > \
-                                         CI20_RAMDISK_DATA_PHYS_START ? \
-                                         CI20_FRAMEBUFFER_PHYS_START - \
-                                         CI20_RAMDISK_DATA_PHYS_START : 0)
-#ifdef CI20_RAMDISK_DATA_BYTES_OVERRIDE
-#define CI20_RAMDISK_DATA_BYTES        \
-                                        (CI20_RAMDISK_DATA_BYTES_OVERRIDE < \
-                                         CI20_RAMDISK_DATA_MAX_BYTES ? \
-                                         CI20_RAMDISK_DATA_BYTES_OVERRIDE : \
-                                         CI20_RAMDISK_DATA_MAX_BYTES)
-#else
-#define CI20_RAMDISK_DATA_BYTES        CI20_RAMDISK_DATA_MAX_BYTES
-#endif
-
 #endif

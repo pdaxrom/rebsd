@@ -5,7 +5,16 @@ PAGER=/bin/cat; export PAGER
 
 /bin/hostname malta
 
-/usr/sbin/ramctl create /dev/ram0 size=all >/dev/null 2>&1
+physmem=`/bin/sysctl -n hw.physmem`
+if test "$physmem" -le 8388608; then
+        swap_backing=1792K
+elif test "$physmem" -le 33554432; then
+        swap_backing=6M
+else
+        swap_backing=22M
+fi
+
+/usr/sbin/ramctl create /dev/ram0 size=1M >/dev/null 2>&1
 if /sbin/mount /var >/dev/null 2>&1; then
         :
 else
@@ -19,7 +28,7 @@ chmod 1777 /var/tmp
 : >/var/log/wtmp
 chmod 664 /var/run/utmp /var/log/wtmp
 
-if /usr/sbin/ramctl create /dev/ram1 backing=all size=2x compression \
+if /usr/sbin/ramctl create /dev/ram1 backing=$swap_backing size=2x compression \
     >/dev/null 2>&1; then
         if /usr/sbin/mkswap /dev/ram1 >/dev/null 2>&1; then
                 /usr/sbin/swapon /dev/ram1

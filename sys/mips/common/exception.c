@@ -530,8 +530,7 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
     object_error = vm_object_get_stats(&object);
     vmspace_error = u.u_procp != 0 && u.u_procp->p_vmspace != 0 ?
         vmspace_validate(u.u_procp->p_vmspace) : EINVAL;
-    ramcomp_error = mips_ramdisk_compression_stats(
-        MIPS_RAMDISK_DATA_MINOR, &ramcomp);
+    ramcomp_error = mips_ramdisk_compression_stats(&ramcomp);
 
     printf("\nN64_USER_FAULT kind=%s signal=%d vm_error=%d pid=%d "
         "comm=%s epc=%08x pc=%08x cause=%08x code=%u ce=%u "

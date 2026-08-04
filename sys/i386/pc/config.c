@@ -19,7 +19,6 @@ pcattach(int unit)
     int error;
 
     (void)unit;
-    pipedev = makedev(I386_RAMDISK_MAJOR, I386_RAMDISK_VAR_MINOR);
     error = i386_pci_probe();
     if (error != 0) {
         printf("pci: probe failed, error=%d\n", error);

@@ -81,19 +81,10 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
         return error;
 #endif
     error = malta_vm_reserve_present(map, ram_size,
-        MALTA_RAMDISK_VAR_PHYS_START, MALTA_RAMDISK_VAR_BYTES,
-        "/var ramdisk");
-    if (error != 0)
-        return error;
-    error = malta_vm_reserve_present(map, ram_size,
         MALTA_ROMDISK_PHYS_START, MALTA_ROMDISK_BYTES, "rootfs");
     if (error != 0)
         return error;
     error = malta_vm_reserve_present(map, ram_size,
         MALTA_CARTFLASH_PHYS_START, MALTA_CARTFLASH_BYTES, "cartflash");
-    if (error != 0)
-        return error;
-    return malta_vm_reserve_present(map, ram_size,
-        MALTA_RAMDISK_DATA_PHYS_START, MALTA_RAMDISK_DATA_BYTES,
-        "ram1 pool");
+    return error;
 }

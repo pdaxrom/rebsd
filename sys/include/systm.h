@@ -70,7 +70,6 @@ extern long     dumplo;             /* offset into dumpdev */
 extern dev_t    swapdev;            /* swapping device */
 int swap(size_t blkno, size_t coreaddr, int count, int rdflg);
 void swap_discard(size_t blkno, size_t nblocks);
-extern dev_t    pipedev;            /* pipe device */
 
 extern  const char icode[];         /* user init code */
 extern  const char icodeend[];      /* its end */
@@ -242,6 +241,7 @@ struct stat;
 int     ino_rwat (struct file *, struct uio *);
 int     fifo_open (struct inode *, int);
 int     fifo_stat (struct file *, struct stat *);
+int     pipe_stat (struct file *, struct stat *);
 
 /* 2.2 file system */
 void    chdir (void), fchdir (void), chroot (void);

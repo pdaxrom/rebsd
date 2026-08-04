@@ -17,33 +17,21 @@ usage(void)
         "       ramctl destroy special\n"
         "       ramctl status special\n"
         "       ramctl list\n"
-        "values: bytes, K, M, G, all, or Nx (for example 2x)\n");
+        "values: bytes, K, M, G; size may also be Nx when backing is set\n");
     exit(1);
 }
 
 static int
-parse_number(const char *text, unsigned base, unsigned *result)
+parse_absolute(const char *text, unsigned *result)
 {
     unsigned long value;
     unsigned long multiplier;
     char *end;
 
-    if (strcmp(text, "all") == 0) {
-        if (base == 0)
-            return -1;
-        *result = base;
-        return 0;
-    }
     value = strtoul(text, &end, 10);
     if (end == text)
         return -1;
     multiplier = 1;
-    if ((*end == 'x' || *end == 'X') && end[1] == '\0') {
-        if (base == 0 || value == 0 || value > 0xffffffffUL / base)
-            return -1;
-        *result = (unsigned)(value * base);
-        return 0;
-    }
     if ((*end == 'k' || *end == 'K') && end[1] == '\0')
         multiplier = 1024UL;
     else if ((*end == 'm' || *end == 'M') && end[1] == '\0')
@@ -56,6 +44,23 @@ parse_number(const char *text, unsigned base, unsigned *result)
         return -1;
     *result = (unsigned)(value * multiplier);
     return 0;
+}
+
+static int
+parse_media_size(const char *text, unsigned backing, unsigned *result)
+{
+    unsigned long value;
+    char *end;
+
+    value = strtoul(text, &end, 10);
+    if (end != text && (*end == 'x' || *end == 'X') && end[1] == '\0') {
+        if (backing == 0 || value == 0 ||
+            value > 0xffffffffUL / backing)
+            return -1;
+        *result = (unsigned)(value * backing);
+        return 0;
+    }
+    return parse_absolute(text, result);
 }
 
 static int
@@ -92,8 +97,6 @@ show_status(const char *path)
             info.rdi_media_bytes, info.rdi_backing_bytes,
             (info.rdi_flags & RAMDISK_CONFIG_COMPRESSION) ? "on" :
             "off");
-    if (info.rdi_backing_capacity != 0)
-        printf(", backing-capacity=%u", info.rdi_backing_capacity);
     putchar('\n');
     close(fd);
     return 0;
@@ -155,7 +158,6 @@ static int
 create_device(int argc, char **argv)
 {
     struct ramdisk_configure config;
-    struct ramdisk_info info;
     const char *size_text;
     const char *backing_text;
     const char *path;
@@ -184,33 +186,24 @@ create_device(int argc, char **argv)
     fd = open_device(path);
     if (fd < 0)
         return 1;
-    if (ioctl(fd, RAMDIOCGETINFO, &info) < 0) {
-        perror("RAMDIOCGETINFO");
-        close(fd);
-        return 1;
-    }
     memset(&config, 0, sizeof(config));
     if (backing_text != 0) {
-        if (parse_number(backing_text, info.rdi_backing_capacity,
+        if (parse_absolute(backing_text,
             &config.rdc_backing_bytes) < 0) {
             fprintf(stderr, "ramctl: invalid backing size: %s\n",
                 backing_text);
             close(fd);
             return 1;
         }
-    } else
-        config.rdc_backing_bytes = info.rdi_backing_capacity;
-    if (config.rdc_backing_bytes == 0) {
-        fprintf(stderr, "ramctl: backing= is required for this device\n");
-        close(fd);
-        return 1;
     }
-    if (parse_number(size_text, config.rdc_backing_bytes,
+    if (parse_media_size(size_text, config.rdc_backing_bytes,
         &config.rdc_media_bytes) < 0) {
         fprintf(stderr, "ramctl: invalid media size: %s\n", size_text);
         close(fd);
         return 1;
     }
+    if (config.rdc_backing_bytes == 0)
+        config.rdc_backing_bytes = config.rdc_media_bytes;
     if (compression)
         config.rdc_flags |= RAMDISK_CONFIG_COMPRESSION;
     if (ioctl(fd, RAMDIOCCONFIGURE, &config) < 0) {

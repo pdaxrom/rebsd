@@ -6,22 +6,15 @@
 #include <disk/ramdisk.h>
 #include <machine/ramdisk.h>
 
-int mips_ramdisk_register_pools(struct ramdisk_controller *);
-
 static struct ramdisk_controller mips_ramdisks;
 static int mips_ramdisks_initialized;
 
 static int
 mips_ramdisk_attach(void)
 {
-    int error;
-
     if (mips_ramdisks_initialized)
         return 0;
     ramdisk_controller_init(&mips_ramdisks);
-    error = mips_ramdisk_register_pools(&mips_ramdisks);
-    if (error != 0)
-        return error;
     mips_ramdisks_initialized = 1;
     return 0;
 }
@@ -72,11 +65,18 @@ mips_ramdisk_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 }
 
 int
-mips_ramdisk_compression_stats(int minor_number,
-    struct ramcomp_stats *stats)
+mips_ramdisk_compression_stats(struct ramcomp_stats *stats)
 {
+    int unit;
+    int error;
+
     if (mips_ramdisk_attach() != 0)
         return ENXIO;
-    return ramdisk_controller_compression_stats(&mips_ramdisks,
-        minor_number, stats);
+    for (unit = 0; unit < RAMDISK_MAX_DEVICES; ++unit) {
+        error = ramdisk_controller_compression_stats(&mips_ramdisks,
+            unit, stats);
+        if (error == 0)
+            return 0;
+    }
+    return ENXIO;
 }

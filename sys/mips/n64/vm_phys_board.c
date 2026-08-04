@@ -28,10 +28,7 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     vm_paddr_t framebuffer_start;
     vm_paddr_t framebuffer_end;
     vm_paddr_t framebuffer_owned_start;
-    vm_paddr_t pool_start;
-    vm_paddr_t var_end;
     vm_size_t framebuffer_size;
-    vm_size_t var_size;
     int error;
 
     if (ram_size != N64_RDRAM_SIZE_4M && ram_size != N64_RDRAM_SIZE_8M)
@@ -67,7 +64,6 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     if (ram_size >= N64_RDRAM_SIZE_8M) {
         framebuffer_start = N64_EXPANSION_FB_PHYS_START;
         framebuffer_size = N64_EXPANSION_FB_RESERVED_BYTES;
-        var_size = N64_RAMDISK_8M_VAR_BYTES;
         error = n64_vm_reserve(map, N64_STAGE0_PHYS_START,
             N64_STAGE0_PHYS_END,
             "stage0/restart");
@@ -77,7 +73,6 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     } else {
         framebuffer_start = N64_BASE_FB_PHYS_START;
         framebuffer_size = N64_BASE_FB_RESERVED_BYTES;
-        var_size = N64_RAMDISK_4M_VAR_BYTES;
         error = n64_vm_reserve(map, N64_STAGE0_PHYS_START,
             framebuffer_start, "stage0/restart");
         if (error != 0)
@@ -99,14 +94,5 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     if (error != 0)
         return error;
 
-    pool_start = framebuffer_end;
-    if (var_size >= ram_size - pool_start)
-        var_size = 0;
-    error = vm_paddr_add(pool_start, var_size, &var_end);
-    if (error != 0 || var_end > ram_size)
-        return EINVAL;
-    error = n64_vm_reserve(map, pool_start, var_end, "/var ramdisk");
-    if (error != 0)
-        return error;
-    return n64_vm_reserve(map, var_end, ram_size, "ram1 pool");
+    return 0;
 }

@@ -23,6 +23,9 @@
 #ifndef NFIFO
 #define NFIFO       (NFILE / 4) /* simultaneously active named FIFOs */
 #endif
+#ifndef NPIPE
+#define NPIPE       (NFILE / 4) /* simultaneously active anonymous pipes */
+#endif
 
 #define MAXUPRC     20      /* max processes per user */
 #define NOFILE      30      /* max open files per process */

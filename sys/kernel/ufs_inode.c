@@ -593,16 +593,7 @@ itrunc (struct inode *oip, off_t length, int ioflags)
     if (ioflags & IO_SYNC)
         aflags |= B_SYNC;
 
-    /*
-     * special hack for pipes, since size for them isn't the size of
-     * the file, it's the amount currently waiting for transfer.  It's
-     * unclear that this will work, though, because pipes can (although
-     * rarely do) get bigger than MAXPIPSIZ.  Don't think it worked
-     * in V7 either, I don't really understand what's going on.
-     */
-    if (oip->i_flag & IPIPE)
-        oip->i_size = MAXPIPSIZ;
-    else if (oip->i_size == length)
+    if (oip->i_size == length)
         goto updret;
 
     /*

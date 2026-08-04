@@ -5,7 +5,7 @@ PAGER=/bin/cat; export PAGER
 
 /bin/hostname ci20
 
-/usr/sbin/ramctl create /dev/ram0 size=all >/dev/null 2>&1
+/usr/sbin/ramctl create /dev/ram0 size=1M >/dev/null 2>&1
 if /sbin/mount /var >/dev/null 2>&1; then
         :
 else
@@ -19,7 +19,7 @@ chmod 1777 /var/tmp
 : >/var/log/wtmp
 chmod 664 /var/run/utmp /var/log/wtmp
 
-if /usr/sbin/ramctl create /dev/ram1 backing=all size=2x compression \
+if /usr/sbin/ramctl create /dev/ram1 backing=32M size=2x compression \
     >/dev/null 2>&1; then
         if /usr/sbin/mkswap /dev/ram1 >/dev/null 2>&1; then
                 /usr/sbin/swapon /dev/ram1

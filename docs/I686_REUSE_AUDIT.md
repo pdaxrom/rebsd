@@ -65,7 +65,7 @@ for the cleanup commit.
 | `pc/vm_bootstrap.c` and its private bootstrap API | common `vm_phys_bootstrap`; i386 now supplies only `vm_phys_board_register`, direct-map, and poison MD operations in `pc/vm_phys_board.c` |
 | `i386_pmap_bootstrap_init`, `i386_vmspace_bootstrap_init`, and the private pmap-bootstrap header | direct calls to common `pmap_system_init` and `vmspace_system_init`; i386 keeps only its pmap backend, active-vmspace adapters, and selftests |
 | PIT IRQ diagnostic counter without the kernel clock owner | standard MD `clkstart` programs/unmasks the 8254, and IRQ0 dispatches to common `hardclock`; the counter remains observation only |
-| MIPS-local `ct_ticks`, `pipedev`, and version generator ownership | common `kern_clock.c`, `sys_pipe.c`, and architecture-neutral `tools/build/gen-vers.py` |
+| MIPS-local `ct_ticks`, pipe backing, and version generator ownership | common `kern_clock.c`, filesystem-independent in-core `sys_pipe.c`, and architecture-neutral `tools/build/gen-vers.py` |
 
 The zombie test was corrected to follow the existing common lifecycle:
 `kern_exit.c` destroys a dead process's vmspace before it becomes waitable.

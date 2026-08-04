@@ -33,6 +33,17 @@ function emit_pty_nodes(i, n) {
     }
 }
 
+function emit_ramdisk_nodes(i, n) {
+    require_value("MIPS_RAMDISK_MAJOR")
+    require_value("MIPS_RAMDISK_FIRST_MINOR")
+    require_value("RAMDISK_MAX_DEVICES")
+    n = defs["RAMDISK_MAX_DEVICES"] + 0
+    for (i = 0; i < n; i++)
+        emit_node("bdev", "/dev/ram" i,
+            defs["MIPS_RAMDISK_MAJOR"],
+            defs["MIPS_RAMDISK_FIRST_MINOR"] + i, "")
+}
+
 function emit_input_nodes(i) {
     require_value("N64_JOYPAD_MAJOR")
     require_value("N64_MOUSE_MAJOR")
@@ -55,8 +66,6 @@ END {
     require_value("N64_ROMDISK_MAJOR")
     require_value("N64_ROMDISK_ROOT_MINOR")
     require_value("MIPS_RAMDISK_MAJOR")
-    require_value("MIPS_RAMDISK_VAR_MINOR")
-    require_value("MIPS_RAMDISK_DATA_MINOR")
     require_value("N64_TTY_MAJOR")
     require_value("N64_SERIAL_MAJOR")
     require_value("N64_RGBLED_MAJOR")
@@ -71,10 +80,7 @@ END {
     print "#"
     emit_node("bdev", "/dev/romdisk",
         defs["N64_ROMDISK_MAJOR"], defs["N64_ROMDISK_ROOT_MINOR"], "")
-    emit_node("bdev", "/dev/ram0",
-        defs["MIPS_RAMDISK_MAJOR"], defs["MIPS_RAMDISK_VAR_MINOR"], "")
-    emit_node("bdev", "/dev/ram1",
-        defs["MIPS_RAMDISK_MAJOR"], defs["MIPS_RAMDISK_DATA_MINOR"], "")
+    emit_ramdisk_nodes()
     emit_node("cdev", "/dev/console",
         defs["CONS_MAJOR"], defs["CONS_MINOR"], "")
     emit_node("cdev", "/dev/tty", defs["N64_TTY_MAJOR"], 0, "")

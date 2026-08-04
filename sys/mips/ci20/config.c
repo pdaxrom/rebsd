@@ -18,5 +18,4 @@ void
 creatorattach(int unit)
 {
     (void)unit;
-    pipedev = makedev(MIPS_RAMDISK_MAJOR, MIPS_RAMDISK_VAR_MINOR);
 }

@@ -107,28 +107,25 @@ item.
 ## MIPS little-endian emulator prerequisite
 
 Run the same common VM implementation as a MIPS32r2 little-endian kernel and
-userland before testing Ci20 hardware.  The large reserved RAM-swap area below
-intentionally leaves about 5 MiB allocatable, allowing the bounded diagnostic
-to force pageout and pagein without changing the normal 256 MiB Ci20 layout.
+userland before testing Ci20 hardware.  The boot script dynamically creates
+the compressed RAM device from VM pages; no RAM-disk area is reserved in the
+board memory map.
 
 ```sh
 make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
     MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
-    MALTA_RAMDISK_DATA_KBYTES=34816 \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
     VM_PRESSURE_ARGS=-rs vm-pressure-smoke-runtime
 
 make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
     MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
-    MALTA_RAMDISK_DATA_KBYTES=34816 \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
     VM_STRESS_ITERATIONS=100 vm-stress-runtime
 
 make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
     MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
-    MALTA_RAMDISK_DATA_KBYTES=34816 \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
     vm-diagnostics-pcc-runtime

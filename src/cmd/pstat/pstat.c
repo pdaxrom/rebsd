@@ -141,12 +141,11 @@ doinode(void)
         putf(ip->i_flag & IWANT, 'W'); putf(ip->i_flag & ITEXT, 'T');
         putf(ip->i_flag & ICHG, 'C'); putf(ip->i_flag & ISHLOCK, 'S');
         putf(ip->i_flag & IEXLOCK, 'E'); putf(ip->i_flag & ILWAIT, 'Z');
-        putf(ip->i_flag & IPIPE, 'P'); putf(ip->i_flag & IMOD, 'm');
+        putchar('-'); putf(ip->i_flag & IMOD, 'm');
         putf(ip->i_flag & IRENAME, 'r'); putf(ip->i_flag & IXMOD, 'x');
         printf("%4u%4d,%3d%4u%4u%6lu %7.1o%4u%5u",
             ip->i_count, major(ip->i_dev), minor(ip->i_dev),
-            ip->i_flag & IPIPE ? 0 : ip->i_shlockc,
-            ip->i_flag & IPIPE ? 0 : ip->i_exlockc,
+            ip->i_shlockc, ip->i_exlockc,
             (unsigned long)ip->i_number, ip->i_mode, ip->i_nlink,
             ip->i_uid);
         if ((ip->i_mode & IFMT) == IFBLK || (ip->i_mode & IFMT) == IFCHR)

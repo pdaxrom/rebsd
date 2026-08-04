@@ -187,9 +187,6 @@ vn_close(struct inode *ip, int flags)
  * File table inode close routine.  This is called from 'closef()' via the
  * "Fops" table (the 'inodeops' entry).
  *
- * NOTE: pipes are a special case of inode and have their own 'pipe_close'
- * entry in the 'pipeops' table. See sys_pipe.c for pipe_close().
- *
  * In 4.4BSD this routine called vn_close() but since 2.11 does not do the
  * writecheck counting we can skip the overhead of nesting another level down
  * and call closei() and irele() ourself.

@@ -175,7 +175,7 @@ for the staged root image but cap kernel-visible RAM and swap explicitly:
 ```sh
 make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 \
     MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_KBYTES=16384 \
-    MALTA_RAM_KBYTES=8192 MALTA_RAMDISK_DATA_KBYTES=4608 MALTA_QEMU_RAM=64M kernel
+    MALTA_RAM_KBYTES=8192 MALTA_QEMU_RAM=64M kernel
 ```
 
 This layout maps the Malta root image at physical `0x00800000`, gives the guest
@@ -203,10 +203,12 @@ ReBSD for Malta64: built on user@host with pcc Portable C Compiler ..., cpu=vr43
 ```
 
 Compression is a runtime property of a normal RAM block device, not of the VM
-swap pager.  `ramctl create /dev/ram1 backing=all size=2x compression` exposes
-a logical device larger than its physical pool.  The device can then hold
+swap pager.  Every `ramN` is an equivalent, initially unconfigured device.
+`ramctl create /dev/ram1 backing=2M size=2x compression` dynamically allocates
+a 2 MiB backing store and exposes a 4 MiB logical device.  The device can then hold
 Linux swap v1 or a filesystem; swap is attached and detached with `swapon` and
-`swapoff`.  There is no build-time compressed-swap selector.
+`swapoff`.  `ramctl destroy` returns the backing pages to VM.  There is no
+build-time compressed-swap selector or board-reserved RAM-disk pool.
 
 The 2026-07-06 real N64 UART-only boot isolation matrix passed for all four
 debug ROMs: PCC and GCC kernels with raw and compressed RAM-device profiles.  These ROMs

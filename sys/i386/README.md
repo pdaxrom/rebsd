@@ -245,4 +245,6 @@ ramctl destroy /dev/ram1
 
 `size` is the logical capacity.  `backing` is the maximum RAM consumed by the
 compressed store; it is not a second swap-specific limit.  Uncompressed RAM
-devices omit `compression` and normally use `size=VALUE` or `size=all`.
+devices omit `compression`; `size=VALUE` also supplies the backing size when
+`backing` is omitted.  All `ramN` devices begin unconfigured, allocate their
+backing pages dynamically at `ramctl create`, and return them at `destroy`.

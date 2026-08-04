@@ -4,9 +4,17 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 
 /bin/hostname n64
 
-# The cartridge root remains read-only. Create one volatile UFS filesystem for
-# runtime state; /tmp is a rootfs symlink to /var/tmp.
-/usr/sbin/ramctl create /dev/ram0 size=all >/dev/null
+# The cartridge root remains read-only. Size the runtime devices from installed
+# RAM; ram0 and ram1 are otherwise identical dynamic devices.
+physmem=`/bin/sysctl -n hw.physmem`
+if test "$physmem" -le 4194304; then
+	var_size=128K
+	swap_backing=384K
+else
+	var_size=1M
+	swap_backing=2M
+fi
+/usr/sbin/ramctl create /dev/ram0 size=$var_size >/dev/null
 if mkfs -i 4096 /dev/ram0 >/dev/null; then
 	if mount /var; then
 		mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
@@ -19,7 +27,7 @@ fi
 
 # Compression belongs to the RAM block device; swap itself remains the
 # standard Linux swap v1 format and is attached by userland.
-if /usr/sbin/ramctl create /dev/ram1 backing=all size=2x compression; then
+if /usr/sbin/ramctl create /dev/ram1 backing=$swap_backing size=2x compression; then
 	if /usr/sbin/mkswap /dev/ram1; then
 		/usr/sbin/swapon /dev/ram1
 	fi

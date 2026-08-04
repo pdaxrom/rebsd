@@ -1,277 +1,368 @@
 /*
- * Copyright (c) 1986 Regents of the University of California.
- * All rights reserved.  The Berkeley software License Agreement
- * specifies the terms and conditions for redistribution.
+ * Copyright (c) 2026 The ReBSD Project.
+ * All rights reserved.
+ *
+ * Anonymous pipes are in-core kernel objects.  They do not allocate an inode
+ * or use a mounted filesystem, so pipe(2) is available before userland has
+ * configured any writable block device.
  */
 #include <sys/param.h>
 #include <sys/systm.h>
-
-dev_t pipedev;
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/inode.h>
 #include <sys/file.h>
 #include <sys/fs.h>
-#include <sys/mount.h>
 #include <sys/uio.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
 
-int
-readp (struct file *fp, struct uio *uio, int flag)
+struct pipe_info {
+    int             pi_inuse;
+    int             pi_locked;
+    int             pi_wanted;
+    u_int           pi_readers;
+    u_int           pi_writers;
+    u_int           pi_head;
+    u_int           pi_tail;
+    u_int           pi_count;
+    uid_t           pi_uid;
+    gid_t           pi_gid;
+    struct proc     *pi_rsel;
+    struct proc     *pi_wsel;
+    int             pi_rscoll;
+    int             pi_wscoll;
+    char            pi_buffer[MAXPIPSIZ];
+};
+
+static struct pipe_info pipe_table[NPIPE];
+
+static void
+pipe_lock(struct pipe_info *pi)
 {
-    register struct inode *ip;
+    while (pi->pi_locked) {
+        pi->pi_wanted = 1;
+        sleep((caddr_t)pi, PPIPE);
+    }
+    pi->pi_locked = 1;
+}
+
+static void
+pipe_unlock(struct pipe_info *pi)
+{
+    pi->pi_locked = 0;
+    if (pi->pi_wanted) {
+        pi->pi_wanted = 0;
+        wakeup((caddr_t)pi);
+    }
+}
+
+static struct pipe_info *
+pipe_alloc(void)
+{
+    struct pipe_info *pi;
+    int i, s;
+
+    s = splhigh();
+    for (i = 0; i < NPIPE; ++i) {
+        pi = &pipe_table[i];
+        if (!pi->pi_inuse) {
+            pi->pi_inuse = 1;
+            pi->pi_locked = 0;
+            pi->pi_wanted = 0;
+            pi->pi_readers = 1;
+            pi->pi_writers = 1;
+            pi->pi_head = 0;
+            pi->pi_tail = 0;
+            pi->pi_count = 0;
+            pi->pi_uid = u.u_uid;
+            pi->pi_gid = u.u_groups[0];
+            pi->pi_rsel = NULL;
+            pi->pi_wsel = NULL;
+            pi->pi_rscoll = 0;
+            pi->pi_wscoll = 0;
+            splx(s);
+            return pi;
+        }
+    }
+    splx(s);
+    return NULL;
+}
+
+static void
+pipe_free(struct pipe_info *pi)
+{
+    int s;
+
+    s = splhigh();
+    pi->pi_inuse = 0;
+    splx(s);
+}
+
+static void
+pipe_wake_readers(struct pipe_info *pi)
+{
+    wakeup((caddr_t)&pi->pi_count);
+    if (pi->pi_rsel != NULL) {
+        selwakeup(pi->pi_rsel, pi->pi_rscoll);
+        pi->pi_rsel = NULL;
+        pi->pi_rscoll = 0;
+    }
+}
+
+static void
+pipe_wake_writers(struct pipe_info *pi)
+{
+    wakeup((caddr_t)&pi->pi_tail);
+    if (pi->pi_wsel != NULL) {
+        selwakeup(pi->pi_wsel, pi->pi_wscoll);
+        pi->pi_wsel = NULL;
+        pi->pi_wscoll = 0;
+    }
+}
+
+static int
+pipe_read_move(struct pipe_info *pi, struct uio *uio, u_int amount)
+{
+    u_int before, moved, part;
     int error;
 
-    ip = (struct inode *)fp->f_data;
-loop:
-    /* Very conservative locking. */
-    ILOCK(ip);
-
-    /* If nothing in the pipe, wait (unless FNONBLOCK is set). */
-    if (ip->i_size == 0) {
-        /*
-         * If there are not both reader and writer active,
-         * return without satisfying read.
-         */
-        IUNLOCK(ip);
-        if (ip->i_count != 2)
-            return (0);
-        if (fp->f_flag & FNONBLOCK)
-            return (EWOULDBLOCK);
-        ip->i_mode |= IREAD;
-        sleep((caddr_t)ip+4, PPIPE);
-        goto loop;
+    while (amount != 0) {
+        part = MIN(amount, (u_int)MAXPIPSIZ - pi->pi_head);
+        before = uio->uio_resid;
+        error = uiomove((caddr_t)&pi->pi_buffer[pi->pi_head], part, uio);
+        moved = before - uio->uio_resid;
+        pi->pi_head = (pi->pi_head + moved) % MAXPIPSIZ;
+        pi->pi_count -= moved;
+        amount -= moved;
+        if (error != 0 || moved != part)
+            return error != 0 ? error : EFAULT;
     }
-
-    uio->uio_offset = fp->f_offset;
-    error = rwip(ip, uio, flag);
-    fp->f_offset = uio->uio_offset;
-
-    /*
-     * If reader has caught up with writer, reset
-     * offset and size to 0.
-     */
-    if (fp->f_offset == ip->i_size) {
-        fp->f_offset = 0;
-        ip->i_size = 0;
-        if (ip->i_mode & IWRITE) {
-            ip->i_mode &= ~IWRITE;
-            wakeup((caddr_t)ip+2);
-        }
-        if (ip->i_wsel) {
-            selwakeup(ip->i_wsel, (long)(ip->i_flag & IWCOLL));
-            ip->i_wsel = 0;
-            ip->i_flag &= ~IWCOLL;
-        }
-    }
-    IUNLOCK(ip);
-    return (error);
+    return 0;
 }
 
-int
-writep (struct file *fp, struct uio *uio, int flag)
+static int
+pipe_write_move(struct pipe_info *pi, struct uio *uio, u_int amount)
 {
-    register struct inode *ip;
-    register int c;
-    int error = 0;
+    u_int before, moved, part;
+    int error;
 
-    ip = (struct inode *)fp->f_data;
-    c = uio->uio_resid;
-    ILOCK(ip);
-    if ((fp->f_flag & FNONBLOCK) && ip->i_size + c >= MAXPIPSIZ) {
-        error = EWOULDBLOCK;
-        goto done;
+    while (amount != 0) {
+        part = MIN(amount, (u_int)MAXPIPSIZ - pi->pi_tail);
+        before = uio->uio_resid;
+        error = uiomove((caddr_t)&pi->pi_buffer[pi->pi_tail], part, uio);
+        moved = before - uio->uio_resid;
+        pi->pi_tail = (pi->pi_tail + moved) % MAXPIPSIZ;
+        pi->pi_count += moved;
+        amount -= moved;
+        if (error != 0 || moved != part)
+            return error != 0 ? error : EFAULT;
     }
-loop:
-    /* If all done, return. */
-    if (c == 0) {
-        uio->uio_resid = 0;
-        goto done;
-    }
-
-    /*
-     * If there are not both read and write sides of the pipe active,
-     * return error and signal too.
-     */
-    if (ip->i_count != 2) {
-        psignal(u.u_procp, SIGPIPE);
-        error = EPIPE;
-done:       IUNLOCK(ip);
-        return (error);
-    }
-
-    /*
-     * If the pipe is full, wait for reads to deplete
-     * and truncate it.
-     */
-    if (ip->i_size >= MAXPIPSIZ) {
-        ip->i_mode |= IWRITE;
-        IUNLOCK(ip);
-        sleep((caddr_t)ip+2, PPIPE);
-        ILOCK(ip);
-        goto loop;
-    }
-
-    /*
-     * Write what is possible and loop back.
-     * If writing less than MAXPIPSIZ, it always goes.
-     * One can therefore get a file > MAXPIPSIZ if write
-     * sizes do not divide MAXPIPSIZ.
-     */
-    uio->uio_offset = ip->i_size;
-    uio->uio_resid = MIN((u_int)c, (u_int)MAXPIPSIZ);
-    c -= uio->uio_resid;
-    error = rwip(ip, uio, flag);
-    if (ip->i_mode&IREAD) {
-        ip->i_mode &= ~IREAD;
-        wakeup((caddr_t)ip+4);
-    }
-    if (ip->i_rsel) {
-        selwakeup(ip->i_rsel, (long)(ip->i_flag & IRCOLL));
-        ip->i_rsel = 0;
-        ip->i_flag &= ~IRCOLL;
-    }
-    goto loop;
+    return 0;
 }
 
-int
-pipe_rw (struct file *fp, struct uio *uio)
+static int
+pipe_read(struct file *fp, struct uio *uio)
 {
-    int flag = 0;
+    struct pipe_info *pi;
+    u_int initial, amount;
+    int error;
 
+    pi = (struct pipe_info *)fp->f_data;
+    initial = uio->uio_resid;
+    pipe_lock(pi);
+    while (pi->pi_count == 0) {
+        if (pi->pi_writers == 0) {
+            pipe_unlock(pi);
+            return 0;
+        }
+        if (fp->f_flag & FNONBLOCK) {
+            pipe_unlock(pi);
+            return EWOULDBLOCK;
+        }
+        pipe_unlock(pi);
+        error = tsleep((caddr_t)&pi->pi_count, PPIPE | PCATCH, 0);
+        if (error != 0)
+            return error;
+        pipe_lock(pi);
+    }
+    amount = MIN(uio->uio_resid, pi->pi_count);
+    error = pipe_read_move(pi, uio, amount);
+    if (uio->uio_resid != initial) {
+        pipe_wake_writers(pi);
+        if (error != 0)
+            error = 0;
+    }
+    pipe_unlock(pi);
+    return error;
+}
+
+static int
+pipe_write(struct file *fp, struct uio *uio)
+{
+    struct pipe_info *pi;
+    u_int initial, atomic, available, amount;
+    int error;
+
+    pi = (struct pipe_info *)fp->f_data;
+    initial = uio->uio_resid;
+    atomic = initial <= MAXPIPSIZ;
+    error = 0;
+    pipe_lock(pi);
+    while (uio->uio_resid != 0) {
+        if (pi->pi_readers == 0) {
+            psignal(u.u_procp, SIGPIPE);
+            error = EPIPE;
+            break;
+        }
+        available = MAXPIPSIZ - pi->pi_count;
+        if (available == 0 || (atomic && available < uio->uio_resid)) {
+            if (fp->f_flag & FNONBLOCK) {
+                error = EWOULDBLOCK;
+                break;
+            }
+            pipe_unlock(pi);
+            error = tsleep((caddr_t)&pi->pi_tail, PPIPE | PCATCH, 0);
+            if (error != 0) {
+                if (uio->uio_resid != initial)
+                    return 0;
+                return error;
+            }
+            pipe_lock(pi);
+            continue;
+        }
+        amount = atomic ? uio->uio_resid : MIN(uio->uio_resid, available);
+        error = pipe_write_move(pi, uio, amount);
+        if (amount != 0)
+            pipe_wake_readers(pi);
+        if (error != 0)
+            break;
+    }
+    if (uio->uio_resid != initial && error != 0)
+        error = 0;
+    pipe_unlock(pi);
+    return error;
+}
+
+static int
+pipe_rw(struct file *fp, struct uio *uio)
+{
     if (uio->uio_rw == UIO_READ)
-        return (readp(fp, uio, flag));
-    return (writep(fp, uio, flag));
+        return pipe_read(fp, uio);
+    return pipe_write(fp, uio);
 }
 
-int
-pipe_select (struct file *fp, int which)
+static int
+pipe_ioctl(struct file *fp, u_int com, char *data)
 {
-    register struct inode *ip = (struct inode *)fp->f_data;
-    register struct proc *p;
-    register int retval = 0;
+    struct pipe_info *pi;
+
+    if (com == FIONBIO || com == FIOASYNC)
+        return 0;
+    if (com != FIONREAD)
+        return ENOTTY;
+    pi = (struct pipe_info *)fp->f_data;
+    pipe_lock(pi);
+    *(long *)data = (long)pi->pi_count;
+    pipe_unlock(pi);
+    return 0;
+}
+
+static int
+pipe_select(struct file *fp, int which)
+{
+    struct pipe_info *pi;
+    struct proc *p;
+    int ready;
     extern int selwait;
 
-    ILOCK(ip);
-    if (ip->i_count != 2)
-        retval = 1;
-
-    else switch (which) {
-    case FREAD:
-        if (ip->i_size) {
-            retval = 1;
-            break;
-        }
-        if ((p = ip->i_rsel) && p->p_wchan == (caddr_t)&selwait)
-            ip->i_flag |= IRCOLL;
+    pi = (struct pipe_info *)fp->f_data;
+    ready = 0;
+    pipe_lock(pi);
+    if (which == FREAD) {
+        if (pi->pi_count != 0 || pi->pi_writers == 0)
+            ready = 1;
+        else if ((p = pi->pi_rsel) != NULL &&
+            p->p_wchan == (caddr_t)&selwait)
+            pi->pi_rscoll = 1;
         else
-            ip->i_rsel = u.u_procp;
-        break;
-
-    case FWRITE:
-        if (ip->i_size < MAXPIPSIZ) {
-            retval = 1;
-            break;
-        }
-        if ((p = ip->i_wsel) && p->p_wchan == (caddr_t)&selwait)
-            ip->i_flag |= IWCOLL;
+            pi->pi_rsel = u.u_procp;
+    } else if (which == FWRITE) {
+        if (pi->pi_readers == 0 || pi->pi_count < MAXPIPSIZ)
+            ready = 1;
+        else if ((p = pi->pi_wsel) != NULL &&
+            p->p_wchan == (caddr_t)&selwait)
+            pi->pi_wscoll = 1;
         else
-            ip->i_wsel = u.u_procp;
-        break;
+            pi->pi_wsel = u.u_procp;
     }
-    IUNLOCK(ip);
-    return(retval);
+    pipe_unlock(pi);
+    return ready;
 }
 
-/*
- * This routine was pulled out of what used to be called 'ino_close'.  Doing
- * so saved a test of the inode belonging to a pipe.   We know this is a pipe
- * because the inode type was DTYPE_PIPE.  The dispatch in closef() can come
- * directly here instead of the general inode close routine.
- *
- * This routine frees the inode by calling 'iput'.  The inode must be
- * unlocked prior to calling this routine because an 'ilock' is done prior
- * to the select wakeup processing.
- */
-int
+static int
 pipe_close(struct file *fp)
 {
-    register struct inode *ip = (struct inode *)fp->f_data;
+    struct pipe_info *pi;
 
-    ilock(ip);
-#ifdef  DIAGNOSTIC
-    if ((ip->i_flag & IPIPE) == 0)
-        panic("pipe_close !IPIPE");
-#endif
-    if (ip->i_rsel) {
-        selwakeup(ip->i_rsel, (long)(ip->i_flag & IRCOLL));
-        ip->i_rsel = 0;
-        ip->i_flag &= ~IRCOLL;
-    }
-    if (ip->i_wsel) {
-        selwakeup(ip->i_wsel, (long)(ip->i_flag & IWCOLL));
-        ip->i_wsel = 0;
-        ip->i_flag &= ~IWCOLL;
-    }
-    ip->i_mode &= ~(IREAD|IWRITE);
-    wakeup((caddr_t)ip+2);
-    wakeup((caddr_t)ip+4);
+    pi = (struct pipe_info *)fp->f_data;
+    pipe_lock(pi);
+    if ((fp->f_flag & FREAD) && pi->pi_readers != 0)
+        pi->pi_readers--;
+    if ((fp->f_flag & FWRITE) && pi->pi_writers != 0)
+        pi->pi_writers--;
+    pipe_wake_readers(pi);
+    pipe_wake_writers(pi);
+    if (pi->pi_readers == 0 && pi->pi_writers == 0) {
+        pipe_unlock(pi);
+        pipe_free(pi);
+    } else
+        pipe_unlock(pi);
+    fp->f_data = NULL;
+    return 0;
+}
 
-    /*
-     * And finally decrement the reference count and (likely) release the inode.
-     */
-    iput(ip);
-    return(0);
+int
+pipe_stat(struct file *fp, struct stat *sb)
+{
+    struct pipe_info *pi;
+
+    pi = (struct pipe_info *)fp->f_data;
+    pipe_lock(pi);
+    sb->st_mode = S_IFIFO | S_IRUSR | S_IWUSR;
+    sb->st_nlink = 1;
+    sb->st_uid = pi->pi_uid;
+    sb->st_gid = pi->pi_gid;
+    sb->st_size = pi->pi_count;
+    sb->st_blksize = MAXPIPSIZ;
+    sb->st_blocks = 0;
+    pipe_unlock(pi);
+    return 0;
 }
 
 const struct fileops pipeops = {
-    pipe_rw, ino_ioctl, pipe_select, pipe_close
+    pipe_rw, pipe_ioctl, pipe_select, pipe_close
 };
 
 /*
- * The sys-pipe entry.
- * Allocate an inode on the root device.  Allocate 2
- * file structures.  Put it all together with flags.
+ * Create one read endpoint and one write endpoint.  The secondary syscall
+ * result register carries the write descriptor on both supported ABIs.
  */
 void
-pipe()
+pipe(void)
 {
-    register struct inode *ip;
-    register struct file *rf, *wf;
-    static struct mount *mp;
-    struct inode itmp;
+    struct pipe_info *pi;
+    struct file *rf, *wf;
     int r;
 
-    /*
-     * if pipedev not yet found, or not available, get it; if can't
-     * find it, use rootdev.  It would be cleaner to wander around
-     * and fix it so that this and getfs() only check m_dev OR
-     * m_inodp, but hopefully the mount table isn't scanned enough
-     * to make it a problem.  Besides, 4.3's is just as bad.  Basic
-     * fantasy is that if m_inodp is set, m_dev *will* be okay.
-     */
-    if (! mp || ! mp->m_inodp || mp->m_dev != pipedev) {
-        for (mp = &mount[0]; ; ++mp) {
-            if (mp == &mount[NMOUNT]) {
-                mp = &mount[0];     /* use root */
-                break;
-            }
-            if (mp->m_inodp == NULL || mp->m_dev != pipedev)
-                continue;
-            break;
-        }
-        if (mp->m_filsys.fs_ronly) {
-            u.u_error = EROFS;
-            return;
-        }
-    }
-    itmp.i_fs = &mp->m_filsys;
-    itmp.i_dev = mp->m_dev;
-    ip = ialloc (&itmp);
-    if (ip == NULL)
+    pi = pipe_alloc();
+    if (pi == NULL) {
+        u.u_error = ENFILE;
         return;
+    }
     rf = falloc();
     if (rf == NULL) {
-        iput (ip);
+        pipe_free(pi);
         return;
     }
     r = u.u_rval;
@@ -279,17 +370,13 @@ pipe()
     if (wf == NULL) {
         rf->f_count = 0;
         u.u_ofile[r] = NULL;
-        iput (ip);
+        pipe_free(pi);
         return;
     }
-    /* Return the write descriptor in the ABI's secondary result register. */
     u.u_rval2 = u.u_rval;
     u.u_rval = r;
-    wf->f_flag = FWRITE;
     rf->f_flag = FREAD;
+    wf->f_flag = FWRITE;
     rf->f_type = wf->f_type = DTYPE_PIPE;
-    rf->f_data = wf->f_data = (caddr_t) ip;
-    ip->i_count = 2;
-    ip->i_mode = IFREG;
-    ip->i_flag = IACC | IUPD | ICHG | IPIPE;
+    rf->f_data = wf->f_data = (caddr_t)pi;
 }

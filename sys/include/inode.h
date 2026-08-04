@@ -347,7 +347,6 @@ void nchinval (dev_t dev);
 #define ILWAIT      0x200       /* someone waiting on file lock */
 #define IMOD        0x400       /* inode has been modified */
 #define IRENAME     0x800       /* inode is being renamed */
-#define IPIPE       0x1000      /* inode is a pipe */
 #define IRCOLL      0x2000      /* read select collision on pipe */
 #define IWCOLL      0x4000      /* write select collision on pipe */
 #define IXMOD       0x8000      /* inode is text, but impure (XXX) */

@@ -35,6 +35,8 @@ REQUIRED_DEVICES = (
     ("bdev", "/dev/romdisk"),
     ("bdev", "/dev/ram0"),
     ("bdev", "/dev/ram1"),
+    ("bdev", "/dev/ram2"),
+    ("bdev", "/dev/ram3"),
     ("cdev", "/dev/console"),
 )
 

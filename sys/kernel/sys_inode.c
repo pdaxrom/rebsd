@@ -373,8 +373,6 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
         if (uio->uio_rw == UIO_READ) {
             if (n + on == DEV_BSIZE || uio->uio_offset == ip->i_size) {
                 bp->b_flags |= B_AGE;
-                if (ip->i_flag & IPIPE)
-                    bp->b_flags &= ~B_DELWRI;
             }
             brelse(bp);
         } else {
@@ -387,7 +385,7 @@ rwip (struct inode *ip, struct uio *uio, int ioflag)
              * called (and I/O initiated)  constantly.  Not sure what to do about this yet
              * but this comment is being placed here as a reminder.
              */
-            else if (n + on == DEV_BSIZE && !(ip->i_flag & IPIPE)) {
+            else if (n + on == DEV_BSIZE) {
                 bp->b_flags |= B_AGE;
                 bawrite(bp);
             } else
