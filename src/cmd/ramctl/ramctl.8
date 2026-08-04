@@ -16,6 +16,8 @@ ramctl \- configure RAM block devices
 .br
 .B ramctl status
 .I special
+.br
+.B ramctl list
 .SH DESCRIPTION
 .B ramctl
 creates and removes runtime RAM block devices.  The
@@ -38,3 +40,7 @@ ramctl create /dev/ram1 backing=4M size=8M compression
 .PP
 The resulting ordinary block device may be formatted as a filesystem or as
 swap.  It must be unmounted and removed from swap before it can be destroyed.
+.PP
+.B ramctl list
+prints every currently configured RAM block device.  Devices registered by
+the platform but not yet configured are omitted.

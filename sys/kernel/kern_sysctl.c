@@ -668,6 +668,10 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     struct vm_shm_stats shm_stats;
     struct vm_sysv_shm_stats sysv_shm_stats;
     long page_value;
+    struct swap_device_info swap_info;
+    size_t swap_bytes;
+    unsigned swap_count;
+    unsigned swap_index;
     int error;
     int reset;
     int i;
@@ -694,6 +698,31 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
     case VM_SWAPTOTAL:
         return (sysctl_rdlong(oldp, oldlenp, newp,
             (long)swap_total_blocks() * DEV_BSIZE));
+    case VM_SWAPDEVICES:
+        if (newp != NULL)
+            return EPERM;
+        swap_count = swap_device_count();
+        swap_bytes = (size_t)swap_count * sizeof(swap_info);
+        if (oldp == NULL) {
+            *oldlenp = swap_bytes;
+            return 0;
+        }
+        if (*oldlenp < swap_bytes) {
+            *oldlenp = swap_bytes;
+            return ENOMEM;
+        }
+        for (swap_index = 0; swap_index < swap_count; ++swap_index) {
+            error = swap_device_snapshot(swap_index, &swap_info);
+            if (error != 0)
+                return error;
+            error = copyout((caddr_t)&swap_info,
+                (caddr_t)oldp + swap_index * sizeof(swap_info),
+                sizeof(swap_info));
+            if (error != 0)
+                return error;
+        }
+        *oldlenp = swap_bytes;
+        return 0;
     case VM_UCBSTATS:
         bzero(&ucb, sizeof(ucb));
 #ifdef UCB_METER

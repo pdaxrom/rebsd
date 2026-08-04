@@ -16,6 +16,7 @@ usage(void)
         "[compression]\n"
         "       ramctl destroy special\n"
         "       ramctl status special\n"
+        "       ramctl list\n"
         "values: bytes, K, M, G, all, or Nx (for example 2x)\n");
     exit(1);
 }
@@ -74,9 +75,11 @@ show_status(const char *path)
     struct ramdisk_info info;
     int fd;
 
-    fd = open_device(path);
-    if (fd < 0)
+    fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        perror(path);
         return 1;
+    }
     if (ioctl(fd, RAMDIOCGETINFO, &info) < 0) {
         perror("RAMDIOCGETINFO");
         close(fd);
@@ -94,6 +97,41 @@ show_status(const char *path)
     putchar('\n');
     close(fd);
     return 0;
+}
+
+static int
+list_devices(void)
+{
+    struct ramdisk_info info;
+    char path[16];
+    unsigned unit;
+    int fd;
+    int result;
+
+    result = 0;
+    for (unit = 0; unit < RAMDISK_MAX_DEVICES; ++unit) {
+        sprintf(path, "/dev/ram%u", unit);
+        fd = open(path, O_RDONLY);
+        if (fd < 0) {
+            if (errno != ENOENT && errno != ENXIO) {
+                perror(path);
+                result = 1;
+            }
+            continue;
+        }
+        if (ioctl(fd, RAMDIOCGETINFO, &info) < 0) {
+            if (errno != ENXIO) {
+                perror(path);
+                result = 1;
+            }
+            close(fd);
+            continue;
+        }
+        close(fd);
+        if (info.rdi_configured)
+            result |= show_status(path);
+    }
+    return result;
 }
 
 static int
@@ -187,6 +225,8 @@ create_device(int argc, char **argv)
 int
 main(int argc, char **argv)
 {
+    if (argc == 2 && strcmp(argv[1], "list") == 0)
+        return list_devices();
     if (argc < 3)
         usage();
     if (strcmp(argv[1], "create") == 0)

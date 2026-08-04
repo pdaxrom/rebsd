@@ -4,6 +4,8 @@ swapon \- enable a Linux swap partition
 .SH SYNOPSIS
 .B swapon
 .I special
+.br
+.B swapon -s
 .SH DESCRIPTION
 .B swapon
 makes the block device named by
@@ -21,6 +23,12 @@ honoured, and pages listed as bad in the header are excluded from allocation.
 .PP
 RAM-backed raw swap configured for an embedded platform at kernel build time
 continues to use that platform's existing boot-time configuration.
+.PP
+With
+.B -s,
+.B swapon
+lists every active swap block device with its device path, format, usable
+size, used space, and free space.
 .SH EXAMPLES
 .PP
 .nf

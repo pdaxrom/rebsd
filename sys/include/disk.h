@@ -87,6 +87,7 @@ struct disk_discard {
  * compressed device may expose more media than its backing store.
  */
 #define RAMDISK_CONFIG_COMPRESSION 0x01u
+#define RAMDISK_MAX_DEVICES         4
 
 struct ramdisk_configure {
     u_int rdc_media_bytes;

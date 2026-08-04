@@ -656,6 +656,12 @@ def main() -> None:
                 b"\r\nREBSD_I686_SWAPON_B_OK\r\n",
             ),
             (
+                b"/usr/sbin/swapon -s | /usr/bin/grep /dev/wd0a && "
+                b"/usr/sbin/swapon -s | /usr/bin/grep /dev/wd0b && "
+                b"echo REBSD_I686_SWAPON_LIST_OK\n",
+                b"\r\nREBSD_I686_SWAPON_LIST_OK\r\n",
+            ),
+            (
                 b"/usr/sbin/swapoff /dev/wd0a && /usr/bin/free && "
                 b"echo REBSD_I686_SWAPOFF_A_OK\n",
                 b"\r\nREBSD_I686_SWAPOFF_A_OK\r\n",
@@ -685,6 +691,12 @@ def main() -> None:
                 b"compression=on' && "
                 b"echo REBSD_I686_RAMCOMP_SIZE_OK\n",
                 b"\r\nREBSD_I686_RAMCOMP_SIZE_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/ramctl list | /usr/bin/grep '^/dev/ram0:' && "
+                b"/usr/sbin/ramctl list | /usr/bin/grep '^/dev/ram1:' && "
+                b"echo REBSD_I686_RAMCTL_LIST_OK\n",
+                b"\r\nREBSD_I686_RAMCTL_LIST_OK\r\n",
             ),
             (
                 b"/usr/sbin/mkswap /dev/ram1 && "

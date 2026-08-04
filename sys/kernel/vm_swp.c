@@ -509,6 +509,32 @@ swap_device_count(void)
 }
 
 int
+swap_device_snapshot(unsigned index, struct swap_device_info *info)
+{
+    struct swap_device *device;
+
+    if (info == 0)
+        return EINVAL;
+    for (device = swap_devices; device != 0 && index != 0;
+        device = device->sd_next)
+        --index;
+    if (device == 0)
+        return ENOENT;
+    bzero((caddr_t)info, sizeof(*info));
+    info->sdi_dev = device->sd_dev;
+    info->sdi_total_blocks = (u_long)(device->sd_usable_pages *
+        device->sd_page_blocks);
+    info->sdi_used_blocks = (u_long)(device->sd_used_pages *
+        device->sd_page_blocks);
+    if (device->sd_linux_format)
+        info->sdi_flags |= SWAP_DEVICE_INFO_LINUX;
+    if (device->sd_flags & SWAP_DEVICE_DRAINING)
+        info->sdi_flags |= SWAP_DEVICE_INFO_DRAINING;
+    info->sdi_badpages = device->sd_badpages;
+    return 0;
+}
+
+int
 swap_unconfigure(dev_t dev)
 {
     struct swap_device **link;

@@ -18,7 +18,6 @@ struct ramcomp_stats;
 struct vm_page;
 
 #define RAMDISK_F_COMPRESSION    RAMDISK_CONFIG_COMPRESSION
-#define RAMDISK_MAX_DEVICES      4
 #define RAMDISK_POOL_DYNAMIC     0x01u
 
 struct ramdisk_config {

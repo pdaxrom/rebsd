@@ -53,7 +53,8 @@
 #define VM_RECLAIMFAILURES 42 /* long: reclaim passes without progress */
 #define VM_UCBSTATS 43      /* struct kinfo_ucb_stats: legacy counters */
 #define VM_UCBRESET 44      /* int: reset legacy cumulative counters */
-#define VM_MAXID    45      /* number of valid vm ids */
+#define VM_SWAPDEVICES 45   /* struct swap_device_info[]: active swap */
+#define VM_MAXID    46      /* number of valid vm ids */
 
 #ifndef KERNEL
 #define CTL_VM_NAMES { \
@@ -102,6 +103,7 @@
     { "reclaim_failures", CTLTYPE_LONG }, \
     { "ucb_stats", CTLTYPE_STRUCT }, \
     { "ucb_reset", CTLTYPE_INT }, \
+    { "swap_devices", CTLTYPE_STRUCT }, \
 }
 #endif
 
