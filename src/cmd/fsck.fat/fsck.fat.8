@@ -16,6 +16,10 @@ checks FAT copies, cluster chains, directories, lost clusters, and FAT32
 FSInfo metadata.
 The filesystem must not be mounted read-write while it is checked.
 .PP
+The FAT32 FSInfo next-free field is a search hint.  An unknown value or any
+cluster number inside the volume is valid even when that cluster is currently
+allocated; only an out-of-range value is repaired.
+.PP
 For a FAT32 filesystem whose boot sector declares more sectors than the
 backing block device or image contains,
 .B fsck.fat

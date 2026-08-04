@@ -397,9 +397,22 @@ def main():
         shutil.copyfile(clean32, next32)
         write_at(next32, SECTOR + 492, struct.pack("<I", 2))
         write_at(next32, 7 * SECTOR + 492, struct.pack("<I", 2))
-        run(checker, 4, "-n", next32)
-        run(checker, 1, "-y", next32)
-        run(checker, 0, "-n", next32)
+        output = run(checker, 0, "-n", next32)
+        if "next-free cluster" in output:
+            raise RuntimeError("allocated in-range next-free hint was rejected")
+
+        next_range32 = work / "next-range32.img"
+        shutil.copyfile(clean32, next_range32)
+        set_fsinfo32(
+            next_range32,
+            geometry32["clusters"] - 1,
+            geometry32["max_cluster"] + 1,
+        )
+        output = run(checker, 4, "-n", next_range32)
+        if "next-free cluster" not in output or "out of range" not in output:
+            raise RuntimeError("out-of-range next-free hint was not rejected")
+        run(checker, 1, "-y", next_range32)
+        run(checker, 0, "-n", next_range32)
 
         backup_fsinfo32 = work / "backup-fsinfo32.img"
         shutil.copyfile(clean32, backup_fsinfo32)

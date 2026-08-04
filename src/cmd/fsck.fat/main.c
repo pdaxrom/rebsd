@@ -1329,7 +1329,6 @@ check_fsinfo(struct fat_checker *checker)
     unsigned stored_next;
     unsigned actual_free;
     unsigned actual_next;
-    unsigned stored_next_value;
     int valid;
     int next_invalid;
     int needs_update;
@@ -1349,16 +1348,17 @@ check_fsinfo(struct fat_checker *checker)
         return -1;
     checker->free_clusters = actual_free;
     next_invalid = 0;
-    if (stored_next != 0xffffffffu) {
-        if (actual_free == 0 || stored_next < 2u ||
-            stored_next > checker->volume.fv_max_cluster) {
-            next_invalid = 1;
-        } else {
-            if (fat_read(checker, stored_next, &stored_next_value) < 0)
-                return -1;
-            next_invalid = stored_next_value != FAT_CLUSTER_FREE;
-        }
-    }
+    /*
+     * FSI_Nxt_Free is a search hint, not an assertion that the named
+     * cluster is free.  A FAT implementation may leave a valid in-range
+     * hint pointing at an allocated cluster; the allocator must continue
+     * searching from there.  Only the reserved unknown value or an
+     * in-range cluster number is valid on disk.
+     */
+    if (stored_next != 0xffffffffu &&
+        (stored_next < 2u ||
+        stored_next > checker->volume.fv_max_cluster))
+        next_invalid = 1;
     needs_update = !valid ||
         (stored_free != 0xffffffffu && stored_free != actual_free) ||
         next_invalid;
@@ -1368,7 +1368,7 @@ check_fsinfo(struct fat_checker *checker)
         message(checker, "FSInfo free count %u should be %u\n",
             stored_free, actual_free);
     else if (next_invalid)
-        message(checker, "FSInfo next-free cluster %u is not free\n",
+        message(checker, "FSInfo next-free cluster %u is out of range\n",
             stored_next);
     backup = get_le16(checker->boot + 50);
     backup_fsinfo = backup + fsinfo;
