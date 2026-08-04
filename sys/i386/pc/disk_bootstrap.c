@@ -15,7 +15,7 @@ i386_disk_attach_ide(void)
     args.da_arg = i386_ide_backend_arg();
     args.da_sector_count = i386_ide_sector_count();
     args.da_sector_size = DISK_SECTOR_SIZE;
-    args.da_flags = DISK_FLAG_READ_ONLY;
+    args.da_flags = 0;
     args.da_class = DISK_CLASS_WD;
     args.da_read_ahead_sectors = PCIIDE_DMA_MAX_SECTORS;
     return disk_attach(&args, 0);

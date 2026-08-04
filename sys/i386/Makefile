@@ -1285,7 +1285,7 @@ fat-mount-smoke: rebsd-i686.bzimg $(I386_FAT_SMOKE_IMAGE) \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk $(I386_FAT32_SMOKE_IMAGE) --fat-mount-smoke \
-	    --expect-fat-limited --timeout 30
+	    --expect-fat-limited --fat-repair-smoke --timeout 30
 
 ide-auto-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -1297,13 +1297,13 @@ ide-pio-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk rootfs.img --ata-mode pio
+	    --disk rootfs.img --ata-mode pio --ide-write-smoke --timeout 30
 
 ide-dma-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk rootfs.img --ata-mode dma
+	    --disk rootfs.img --ata-mode dma --ide-write-smoke --timeout 30
 
 run run-serial: rebsd-i686.bzimg
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \

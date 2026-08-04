@@ -83,7 +83,7 @@ IDE_COMMON_MARKERS = (
 )
 
 IDE_DISK_MARKERS = IDE_COMMON_MARKERS + (
-    "wd0: 32768 512-byte sectors (16384 KB), read-only",
+    "wd0: 32768 512-byte sectors (16384 KB)",
 )
 
 USB_MASS_STORAGE_MARKERS = (
@@ -155,6 +155,41 @@ IDE_RAW_COMMAND = (
     b"\r\nREBSD_I686_IDE_RAW_END\r\n",
 )
 
+IDE_WRITE_COMMANDS = (
+    (
+        b"/bin/dd if=/dev/rwd0 of=/var/ide.orig bs=512 count=1 "
+        b"skip=32767 && echo REBSD_I686_IDE_SAVE_OK\n",
+        b"\r\nREBSD_I686_IDE_SAVE_OK\r\n",
+    ),
+    (
+        b"/bin/dd if=/dev/zero of=/var/ide.zero bs=512 count=1 && "
+        b"echo REBSD_I686_IDE_PATTERN_OK\n",
+        b"\r\nREBSD_I686_IDE_PATTERN_OK\r\n",
+    ),
+    (
+        b"/bin/dd if=/var/ide.zero of=/dev/rwd0 bs=512 count=1 "
+        b"seek=32767 && /bin/sync && echo REBSD_I686_IDE_ZERO_OK\n",
+        b"\r\nREBSD_I686_IDE_ZERO_OK\r\n",
+    ),
+    (
+        b"/bin/dd if=/dev/rwd0 of=/var/ide.check bs=512 count=1 "
+        b"skip=32767 && /usr/bin/cmp /var/ide.zero /var/ide.check && "
+        b"echo REBSD_I686_IDE_READBACK_OK\n",
+        b"\r\nREBSD_I686_IDE_READBACK_OK\r\n",
+    ),
+    (
+        b"/bin/dd if=/var/ide.orig of=/dev/rwd0 bs=512 count=1 "
+        b"seek=32767 && /bin/sync && echo REBSD_I686_IDE_RESTORE_OK\n",
+        b"\r\nREBSD_I686_IDE_RESTORE_OK\r\n",
+    ),
+    (
+        b"/bin/dd if=/dev/rwd0 of=/var/ide.check bs=512 count=1 "
+        b"skip=32767 && /usr/bin/cmp /var/ide.orig /var/ide.check && "
+        b"echo REBSD_I686_IDE_WRITE_OK\n",
+        b"\r\nREBSD_I686_IDE_WRITE_OK\r\n",
+    ),
+)
+
 FAT_MOUNT_COMMAND = (
     b"/sbin/mount -t fat -r /dev/wd0a /mnt && "
     b"/bin/ls /mnt >/dev/null && /sbin/umount /mnt && "
@@ -166,6 +201,13 @@ FAT_FSCK_GEOMETRY_COMMAND = (
     b"/sbin/fsck.fat -n /dev/rwd0a; "
     b"echo REBSD_I686_FAT_FSCK_GEOMETRY_OK\n",
     b"\r\nREBSD_I686_FAT_FSCK_GEOMETRY_OK\r\n",
+)
+
+FAT_FSCK_REPAIR_COMMAND = (
+    b"/sbin/fsck.fat -y /dev/rwd0a; "
+    b"/sbin/fsck.fat -n /dev/rwd0a && "
+    b"echo REBSD_I686_FAT_FSCK_REPAIR_OK\n",
+    b"\r\nREBSD_I686_FAT_FSCK_REPAIR_OK\r\n",
 )
 
 
@@ -181,6 +223,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disk", type=pathlib.Path)
     parser.add_argument("--fat-mount-smoke", action="store_true")
     parser.add_argument("--expect-fat-limited", action="store_true")
+    parser.add_argument("--fat-repair-smoke", action="store_true")
+    parser.add_argument("--ide-write-smoke", action="store_true")
     parser.add_argument(
         "--ata-mode", choices=("auto", "pio", "dma"), default="auto"
     )
@@ -202,6 +246,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--fat-mount-smoke requires --disk")
     if args.expect_fat_limited and not args.fat_mount_smoke:
         parser.error("--expect-fat-limited requires --fat-mount-smoke")
+    if args.fat_repair_smoke and not args.expect_fat_limited:
+        parser.error("--fat-repair-smoke requires --expect-fat-limited")
+    if args.ide_write_smoke and args.disk is None:
+        parser.error("--ide-write-smoke requires --disk")
     if args.bios_image is not None and args.ata_mode != "auto":
         parser.error("forced ATA modes require direct --kernel boot")
     if sum(
@@ -353,8 +401,15 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
                 "FAT32 boot sector declares ",
                 "tail clusters are free; no FAT chain crosses "
                 "the device boundary",
-                "REBSD_I686_FAT_FSCK_GEOMETRY_OK",
             )
+            if args.fat_repair_smoke:
+                markers += (
+                    "FAT32 primary and backup boot geometry updated",
+                    "FILESYSTEM WAS MODIFIED",
+                    "REBSD_I686_FAT_FSCK_REPAIR_OK",
+                )
+            else:
+                markers += ("REBSD_I686_FAT_FSCK_GEOMETRY_OK",)
         else:
             markers += ("fat0: FAT16",)
     if args.usb_disk is not None:
@@ -530,9 +585,15 @@ def main() -> None:
     if args.fat_mount_smoke:
         commands += (FAT_MOUNT_COMMAND,)
     if args.expect_fat_limited:
-        commands += (FAT_FSCK_GEOMETRY_COMMAND,)
+        commands += (
+            FAT_FSCK_REPAIR_COMMAND
+            if args.fat_repair_smoke
+            else FAT_FSCK_GEOMETRY_COMMAND,
+        )
     if args.disk is not None and args.ata_mode in ("pio", "dma"):
         commands += (IDE_CLOCK_COMMAND, IDE_RAW_COMMAND)
+    if args.ide_write_smoke:
+        commands += IDE_WRITE_COMMANDS
     command_index = 0
     command_sent = False
     command_output_start = 0

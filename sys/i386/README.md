@@ -84,9 +84,12 @@ DMA-error-to-PIO transition.  The i386 attachment only supplies the fixed
 compatibility ports, IRQ14 and scheduler wait/wakeup boundary.  QEMU's PIIX3
 and the IBM's VIA 82C596B/82C571 path are supported.  Host fake-hardware
 tests cover PIO and DMA reads/writes/cache flushes, PIIX/VIA timing
-programming, automatic capability fallback and injected DMA error/timeout;
-the external disk published by the i686
-kernel deliberately remains read-only, so the real CF is not written.
+programming, automatic capability fallback and injected DMA error/timeout.
+The external IDE disk is writable through the same common disk strategy.
+The forced PIO and DMA QEMU gates overwrite one sector, read it back, restore
+the original contents, flush the device and verify the restoration.  QEMU
+runs these destructive checks in a temporary snapshot, so their backing disk
+images remain unchanged.
 
 The PCI IDE backend publishes its 128 KiB maximum DMA command size to the
 existing machine-independent disk read-ahead contract.  Each ATA command uses
@@ -98,7 +101,7 @@ backend fallback; no alternate disk path or cache implementation is used.
 The common disk layer assigns BSD device-name classes independently of the
 transport attachment order.  ATA/IDE disks use `wdN` and the raw `rwdN`
 character devices; direct-access SCSI disks, including USB mass storage, use
-`sdN` and `rsdN`.  Thus the IBM IDE-CF device is read-only `wd0`/`rwd0`, and a
+`sdN` and `rsdN`.  Thus the IBM IDE-CF device is writable `wd0`/`rwd0`, and a
 USB disk is `sd0`/`rsd0` even when both devices are attached.  Raw I/O uses the
 same common disk strategy, `rawrw512()` and backend while bypassing the 1 KiB
 buffer cache.  Requests must be aligned to 512-byte sectors.
@@ -109,6 +112,9 @@ Filesystems are mounted through block partition devices, for example
 for aligned direct I/O and filesystem utilities.  `fat-mount-smoke` builds an
 MBR/FAT16 test disk and verifies the complete `/dev/wd0a` mount, directory
 read and unmount path under QEMU.
+The FAT32 geometry gate additionally runs `fsck.fat -y` against an oversized
+test filesystem, reopens it read-only, and verifies that the corrected primary
+and backup boot sectors persist.  That repair also runs in a QEMU snapshot.
 
 Root remains the embedded romdisk at block major 0, minor 0.  USB mass-storage
 tests reuse the existing USB core, hubs, EHCI/OHCI/UHCI, `umass` BOT/SCSI and
@@ -195,9 +201,10 @@ PCC is not part of the i686 build and must not be changed.
 2. Verify USB keyboard/mouse input on the IBM; PS/2 keyboard/mouse attachment
    and input are already confirmed.
 3. Keep external IDE and USB devices on the common disk path and validate
-   ordinary mounts without changing the embedded read-only UFS root policy.
-4. Validate automatic ATA selection on the VIA controller.  Forced PIO and
-   forced MWDMA reads are already confirmed with the CF exposed read-only.
+   writable mounts without changing the embedded read-only UFS root policy.
+4. Validate automatic ATA selection and write/flush operation on the VIA
+   controller.  Forced PIO and UDMA reads are already confirmed; repair tests
+   should first use the backed-up CF image.
 5. Validate CMOS persistence after `date`/`settimeofday` and USB mass storage
    on the VIA Apollo Pro 133.
 6. Validate `re0` attach, level-triggered INTx, link, static IPv4, ARP, ICMP
