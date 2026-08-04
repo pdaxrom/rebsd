@@ -177,7 +177,7 @@ MIPS_INCLUDE_SRCS = $(shell find $(TOPSRC)/include $(TOPSRC)/sys/include \
 MIPS_INCLUDE_LINKS = $(shell find $(TOPSRC)/include -maxdepth 1 -type l \
                     2>/dev/null)
 MIPS_COMMON_MACHINE_HEADERS ?= console cpu devmajors elf_machdep float fpu io \
-                               layout limits machparam ramswap romdisk
+                               layout limits machparam ramdisk romdisk
 MIPS_SHARED_MACHINE_HEADERS ?= debug jmpbuf types
 MIPS_BOARD_MACHINE_HEADER_DIR ?=
 MIPS_BOARD_INCLUDE_DIR ?=

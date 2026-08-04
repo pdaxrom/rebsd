@@ -76,6 +76,8 @@ int vm_pager_pageout_scan(void);
 
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
 int vm_pager_swap_init(void);
+void vm_pager_swap_disable(void);
+int vm_pager_swapoff(size_t, size_t);
 #else
 int vm_pager_debug_swap_configure(unsigned);
 void vm_pager_debug_fail_io(int, int);

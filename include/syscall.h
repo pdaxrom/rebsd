@@ -196,3 +196,4 @@
 #define SYS_shmctl      175
 #define SYS_pread       176
 #define SYS_pwrite      177
+#define SYS_swapoff     178

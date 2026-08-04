@@ -76,7 +76,7 @@ static const struct expected_region malta_map[] = {
     RESERVED(0x00700000u, 0x00800000u, "/var ramdisk"),
     RESERVED(0x00800000u, 0x02800000u, "rootfs"),
     RESERVED(0x02800000u, 0x02a00000u, "cartflash"),
-    RESERVED(0x02a00000u, 0x04000000u, "swap"),
+    RESERVED(0x02a00000u, 0x04000000u, "ram1 pool"),
 };
 #elif defined(TEST_MALTA_N64_8M)
 static const struct expected_region malta_n64_8m_map[] = {
@@ -89,7 +89,7 @@ static const struct expected_region malta_n64_8m_map[] = {
     AVAILABLE(0x00380000u, 0x00500000u, "ram"),
     RESERVED(0x00500000u, 0x00540000u, "framebuffer"),
     RESERVED(0x00540000u, 0x00640000u, "/var ramdisk"),
-    RESERVED(0x00640000u, 0x00800000u, "swap"),
+    RESERVED(0x00640000u, 0x00800000u, "ram1 pool"),
 };
 #elif defined(TEST_CI20) || defined(TEST_CI20_1G)
 #if defined(TEST_CI20)
@@ -101,7 +101,7 @@ static const struct expected_region ci20_256m_map[] = {
     RESERVED(0x00300000u, 0x00700000u, "legacy user window"),
     RESERVED(0x00700000u, 0x00800000u, "/var ramdisk"),
     RESERVED(0x00800000u, 0x02800000u, "rootfs"),
-    RESERVED(0x02800000u, 0x04800000u, "swap"),
+    RESERVED(0x02800000u, 0x04800000u, "ram1 pool"),
     AVAILABLE(0x04800000u, 0x0f800000u, "low ram"),
     RESERVED(0x0f800000u, 0x10000000u, "framebuffer"),
 };
@@ -116,7 +116,7 @@ static const struct expected_region ci20_1g_map[] = {
     RESERVED(0x00300000u, 0x00700000u, "legacy user window"),
     RESERVED(0x00700000u, 0x00800000u, "/var ramdisk"),
     RESERVED(0x00800000u, 0x02800000u, "rootfs"),
-    RESERVED(0x02800000u, 0x04800000u, "swap"),
+    RESERVED(0x02800000u, 0x04800000u, "ram1 pool"),
     AVAILABLE(0x04800000u, 0x0f800000u, "low ram"),
     RESERVED(0x0f800000u, 0x10000000u, "framebuffer"),
     AVAILABLE(0x30000000u, 0x60000000u, "high ram"),
@@ -132,7 +132,7 @@ static const struct expected_region n64_4m_map[] = {
     RESERVED(0x00300000u, 0x00340000u, "stage0/restart"),
     RESERVED(0x00340000u, 0x00380000u, "stage0/framebuffer alias"),
     RESERVED(0x00380000u, 0x003a0000u, "/var ramdisk"),
-    RESERVED(0x003a0000u, 0x00400000u, "swap"),
+    RESERVED(0x003a0000u, 0x00400000u, "ram1 pool"),
 };
 
 static const struct expected_region n64_8m_map[] = {
@@ -144,7 +144,7 @@ static const struct expected_region n64_8m_map[] = {
     RESERVED(0x00300000u, 0x00380000u, "stage0/restart"),
     AVAILABLE(0x00380000u, 0x00500000u, "rdram"),
     RESERVED(0x00500000u, 0x00600000u, "/var ramdisk"),
-    RESERVED(0x00600000u, 0x00800000u, "swap"),
+    RESERVED(0x00600000u, 0x00800000u, "ram1 pool"),
 };
 #endif
 

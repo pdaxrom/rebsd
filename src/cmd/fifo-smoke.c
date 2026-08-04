@@ -278,13 +278,35 @@ out:
     (void)unlink(FIFO_PATH);
 }
 
-int
-main(void)
+static void
+usage(void)
 {
-    test_basic();
-    test_unlink_and_sigpipe();
-    test_blocking_open();
-    test_multiple_and_atomic();
+    fprintf(stderr,
+        "usage: fifo-smoke [basic|unlink|blocking|atomic]\n");
+}
+
+int
+main(int argc, char **argv)
+{
+    if (argc > 2) {
+        usage();
+        return 2;
+    }
+    if (argc == 1 || strcmp(argv[1], "basic") == 0)
+        test_basic();
+    if (argc == 1 || strcmp(argv[1], "unlink") == 0)
+        test_unlink_and_sigpipe();
+    if (argc == 1 || strcmp(argv[1], "blocking") == 0)
+        test_blocking_open();
+    if (argc == 1 || strcmp(argv[1], "atomic") == 0)
+        test_multiple_and_atomic();
+    if (argc == 2 && strcmp(argv[1], "basic") != 0 &&
+        strcmp(argv[1], "unlink") != 0 &&
+        strcmp(argv[1], "blocking") != 0 &&
+        strcmp(argv[1], "atomic") != 0) {
+        usage();
+        return 2;
+    }
     if (failures != 0) {
         fprintf(stderr, "FIFO_SMOKE_FAIL %d\n", failures);
         return 1;

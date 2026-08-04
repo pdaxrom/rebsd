@@ -38,6 +38,7 @@
 #include <sys/param.h>
 #include <sys/user.h>
 #include <sys/systm.h>
+#include <sys/swap.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/kernel.h>
@@ -654,7 +655,7 @@ debug_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, 
  * VM_METER refreshes vmtotal() before copying the cached totals so short
  * lived commands see current memory counters.
  *
- * The swapmap case is 2.11BSD extension.
+ * Swap totals are aggregate values across all configured devices.
  */
 int
 vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
@@ -687,17 +688,12 @@ vm_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, siz
         vmtotal();
         return (sysctl_rdstruct(oldp, oldlenp, newp, &total,
             sizeof(total)));
-    case VM_SWAPMAP:
-        if (oldp == NULL) {
-            *oldlenp = (char *)swapmap[0].m_limit -
-                    (char *)swapmap[0].m_map;
-            return(0);
-        }
-        return (sysctl_rdstruct(oldp, oldlenp, newp, swapmap[0].m_map,
-            (int)swapmap[0].m_limit - (int)swapmap[0].m_map));
+    case VM_SWAPFREE:
+        return (sysctl_rdlong(oldp, oldlenp, newp,
+            (long)swap_free_blocks() * DEV_BSIZE));
     case VM_SWAPTOTAL:
         return (sysctl_rdlong(oldp, oldlenp, newp,
-            (long)nswap * DEV_BSIZE));
+            (long)swap_total_blocks() * DEV_BSIZE));
     case VM_UCBSTATS:
         bzero(&ucb, sizeof(ucb));
 #ifdef UCB_METER

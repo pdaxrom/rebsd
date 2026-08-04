@@ -187,5 +187,6 @@ const char *const syscallnames[] = {
     "shmctl",           /* 175 = shmctl */
     "pread",            /* 176 = pread */
     "pwrite",           /* 177 = pwrite */
+    "swapoff",          /* 178 = swapoff */
 };
 #endif

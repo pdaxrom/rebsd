@@ -1,6 +1,6 @@
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <machine/ramswap.h>
+#include <machine/ramdisk.h>
 #ifdef N64_USB_GDB
 #include <machine/n64gdb.h>
 #endif
@@ -25,5 +25,5 @@ void
 nintendoattach(int unit)
 {
     (void)unit;
-    pipedev = makedev(N64_RAMSWAP_MAJOR, N64_RAMDISK_VAR_MINOR);
+    pipedev = makedev(MIPS_RAMDISK_MAJOR, MIPS_RAMDISK_VAR_MINOR);
 }

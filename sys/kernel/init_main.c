@@ -69,7 +69,6 @@ int
 main()
 {
     register struct fs *fs = NULL;
-    struct swap_config_info swap_info;
     int error;
     int s __attribute__((unused));
 
@@ -138,24 +137,20 @@ main()
     mount_updname (fs, "/", "root", 1, 4);
     inittodr(fs->fs_time);
 
-    /* Initialize swap when the system configuration supplies a device. */
-    if (swapdev != NODEV) {
-        error = swap_configure(swapdev, SWAP_CONFIG_ALLOW_RAW,
-            &swap_info);
-        if (error != 0)
-            printf("swap: disabled, error=%d\n", error);
-    } else {
-        swapstart = 0;
-        nswap = 0;
-    }
+    /* Swap devices are formatted and attached by userland. */
+    swapdev = NODEV;
+    swapstart = 0;
+    nswap = 0;
 
     printf ("phys mem  = %u kbytes\n", physmem / 1024);
     printf ("user mem  = %u kbytes\n", MAXMEM / 1024);
     printf ("root dev  = (%d,%d)\n", major(rootdev), minor(rootdev));
+    printf ("swap devices = %u\n", swap_device_count());
     if (swapdev == NODEV || nswap == 0)
         printf ("swap dev  = none\n");
     else
-        printf ("swap dev  = (%d,%d)\n", major(swapdev), minor(swapdev));
+        printf ("swap dev  = (%d,%d)\n",
+            major(swapdev), minor(swapdev));
     printf ("root size = %u kbytes\n", fs->fs_fsize * DEV_BSIZE / 1024);
     printf ("swap size = %u kbytes\n", nswap * DEV_BSIZE / 1024);
 

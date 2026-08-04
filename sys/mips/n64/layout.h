@@ -9,7 +9,7 @@
  *   0x00100000..0x002fffff  VM page pool after bootstrap
  *   0x00300000..0x0033ffff  resident stage0/restart image
  *   0x00340000..0x0037ffff  stage0/320x240x16 framebuffer alias
- *   0x00380000..0x003fffff  RAM swap fallback
+ *   0x00380000..0x003fffff  ram1 backing pool
  *
  * 8 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, bootstrap u area
@@ -17,7 +17,7 @@
  *   0x00300000..0x0037ffff  resident stage0/restart image
  *   0x00380000..0x004fffff  VM page pool after bootstrap
  *   0x00500000..0x005fffff  /var RAM disk
- *   0x00600000..0x007fffff  Expansion Pak RAM swap store
+ *   0x00600000..0x007fffff  Expansion Pak ram1 backing pool
  *
  * N64 VI framebuffers are contiguous wired VM allocations and therefore do
  * not occupy a fixed Expansion Pak reserve.
@@ -77,8 +77,10 @@
 #define N64_USER_GP_OFFSET             0x00007ff0
 #define N64_FB_USER_VADDR_START        N64_USER_VADDR_END
 
-#define N64_BASE_SWAP_BYTES            N64_SIZE_512K
-#define N64_BASE_SWAP_PHYS_START       (N64_BASE_RDRAM_SIZE - N64_BASE_SWAP_BYTES)
+#define N64_BASE_RAMDISK_DATA_BYTES    N64_SIZE_512K
+#define N64_BASE_RAMDISK_DATA_PHYS_START \
+                                        (N64_BASE_RDRAM_SIZE - \
+                                         N64_BASE_RAMDISK_DATA_BYTES)
 #define N64_RAMDISK_4M_VAR_BYTES       0x00020000
 #define N64_RAMDISK_8M_VAR_BYTES       0x00100000
 
@@ -95,9 +97,13 @@
 #define N64_VIDEO_320_MAP_BYTES        N64_VIDEO_MAP_ROUND(N64_VIDEO_320_BYTES)
 #define N64_VIDEO_640_MAP_BYTES        N64_VIDEO_MAP_ROUND(N64_VIDEO_640_BYTES)
 #define N64_BASE_FB_RESERVED_BYTES     N64_VIDEO_320_MAP_BYTES
-#define N64_BASE_FB_PHYS_START         (N64_BASE_SWAP_PHYS_START - N64_BASE_FB_RESERVED_BYTES)
+#define N64_BASE_FB_PHYS_START         \
+                                        (N64_BASE_RAMDISK_DATA_PHYS_START - \
+                                         N64_BASE_FB_RESERVED_BYTES)
 #define N64_EXPANSION_FB_PHYS_START    N64_USER_PHYS_END_8M
 #define N64_EXPANSION_FB_RESERVED_BYTES 0
-#define N64_EXPANSION_SWAP_PHYS_START  (N64_EXPANSION_FB_PHYS_START + N64_EXPANSION_FB_RESERVED_BYTES)
+#define N64_EXPANSION_RAMDISK_DATA_PHYS_START \
+                                        (N64_EXPANSION_FB_PHYS_START + \
+                                         N64_EXPANSION_FB_RESERVED_BYTES)
 
 #endif

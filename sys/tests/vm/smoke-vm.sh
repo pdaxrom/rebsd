@@ -69,17 +69,18 @@ compile_pmap()
 
 compile_pmap "$tmp/pmap_test"
 
-compile_zswap()
+compile_ramcomp()
 {
     output=$1
     "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
         -DREBSD_VM_HOST_TEST -I "$top/sys" \
         -idirafter "$top/include" \
-        "$top/sys/vm/zswap.c" "$script_dir/zswap_test.c" \
+        "$top/sys/disk/ramcomp.c" \
+        "$top/sys/tests/disk/ramcomp_test.c" \
         -o "$output"
 }
 
-compile_zswap "$tmp/zswap_test"
+compile_ramcomp "$tmp/ramcomp_test"
 
 compile_linux_swap()
 {
@@ -167,17 +168,17 @@ compile_board "$tmp/malta_n64_8m_map_test" "$top/sys/mips" \
     -DTEST_MALTA_N64_8M -DMALTA_N64_8M_PROFILE \
     -DMALTA_RAM_SIZE_OVERRIDE=0x00800000u \
     -DMALTA_ROMDISK_BYTES_OVERRIDE=0x02000000u \
-    -DMALTA_RAMSWAP_BYTES_OVERRIDE=0x001c0000u
+    -DMALTA_RAMDISK_DATA_BYTES_OVERRIDE=0x001c0000u
 compile_board "$tmp/ci20_map_test" "$top/sys/mips/ci20" \
     "$top/sys/mips/ci20/vm_phys_board.c" 0x00180000u \
     -DTEST_CI20 -DCI20_RAM_SIZE_OVERRIDE=0x10000000u \
     -DCI20_ROMDISK_BYTES_OVERRIDE=0x02000000u \
-    -DCI20_RAMSWAP_BYTES_OVERRIDE=0x02000000u
+    -DCI20_RAMDISK_DATA_BYTES_OVERRIDE=0x02000000u
 compile_board "$tmp/ci20_1g_map_test" "$top/sys/mips/ci20" \
     "$top/sys/mips/ci20/vm_phys_board.c" 0x00180000u \
     -DTEST_CI20_1G -DCI20_RAM_SIZE_OVERRIDE=0x40000000u \
     -DCI20_ROMDISK_BYTES_OVERRIDE=0x02000000u \
-    -DCI20_RAMSWAP_BYTES_OVERRIDE=0x02000000u
+    -DCI20_RAMDISK_DATA_BYTES_OVERRIDE=0x02000000u
 compile_board "$tmp/n64_map_test" "$top/sys/mips/n64" \
     "$top/sys/mips/n64/vm_phys_board.c" 0x00080000u -DTEST_N64
 compile_board "$tmp/n64_debug_map_test" "$top/sys/mips/n64" \
@@ -192,7 +193,7 @@ if [ "$mode" = test ]; then
     "$tmp/vm_page_test"
     "$tmp/vm_map_test"
     "$tmp/pmap_test"
-    "$tmp/zswap_test"
+    "$tmp/ramcomp_test"
     "$tmp/swap_linux_test"
     "$tmp/rmap_test"
     if [ -x "$tmp/vm_test_sanitize" ]; then

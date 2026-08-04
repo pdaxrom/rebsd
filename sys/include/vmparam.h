@@ -11,7 +11,7 @@
  */
 #define VM_METER    1       /* struct vmmeter */
 #define VM_LOADAVG  2       /* struct loadavg */
-#define VM_SWAPMAP  3       /* struct mapent _swapmap[] */
+#define VM_SWAPFREE 3       /* long: free swap bytes */
 #define VM_SWAPTOTAL 4      /* long: total swap bytes */
 #define VM_PHYSPAGES 5      /* long: physical RAM pages */
 #define VM_FREEPAGES 6      /* long: allocatable physical pages */
@@ -60,7 +60,7 @@
     { 0, 0 }, \
     { "vmmeter", CTLTYPE_STRUCT }, \
     { "loadavg", CTLTYPE_STRUCT }, \
-    { "swapmap", CTLTYPE_STRUCT }, \
+    { "swap_free", CTLTYPE_LONG }, \
     { "swap_total", CTLTYPE_LONG }, \
     { "page_total", CTLTYPE_LONG }, \
     { "page_free", CTLTYPE_LONG }, \

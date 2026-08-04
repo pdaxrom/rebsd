@@ -10,12 +10,13 @@
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/errno.h>
-#include <sys/map.h>
+#include <sys/swap.h>
 #include <sys/systm.h>
 #define VM_OBJECT_MAX          (NPROC * VM_MAP_MAX_ENTRIES)
 #define vm_object_zero(p, n)   bzero((caddr_t)(p), (unsigned)(n))
 #define vm_object_copy(s, d, n) bcopy((s), (d), (unsigned)(n))
 #define VM_PAGER_DEV_BSIZE     DEV_BSIZE
+#define vm_pager_swap_slot_draining(slot) swap_slot_draining(slot)
 #else
 #include <errno.h>
 #include <string.h>
@@ -23,6 +24,7 @@
 #define vm_object_zero(p, n)   memset((p), 0, (n))
 #define vm_object_copy(s, d, n) memcpy((d), (s), (n))
 #define VM_PAGER_DEV_BSIZE     1024u
+#define vm_pager_swap_slot_draining(slot) 0
 #endif
 
 #include <vm/vm_object.h>
@@ -200,7 +202,7 @@ vm_pager_swap_alloc(void)
 {
     if (!vm_pager_swap_ready)
         return 0;
-    return malloc(swapmap, VM_SWAP_BLOCKS);
+    return swap_slot_alloc();
 }
 
 static void
@@ -208,7 +210,7 @@ vm_pager_swap_free(size_t slot)
 {
     if (slot != 0) {
         swap_discard(slot, VM_SWAP_BLOCKS);
-        mfree(swapmap, VM_SWAP_BLOCKS, slot);
+        swap_slot_free(slot);
     }
 }
 
@@ -1328,6 +1330,9 @@ vm_pager_reclaim_one(struct vm_anon *exclude, vm_paddr_t color_mask,
             continue;
         if (page->vmp_wire_count != 0 || page->vmp_busy_count != 0)
             continue;
+        if (anon->va_swap_slot != 0 &&
+            vm_pager_swap_slot_draining(anon->va_swap_slot))
+            continue;
         if (page->vmp_reference_count != 0) {
             (void)pmap_clear_page_reference(page);
             page->vmp_state = VM_PAGE_ACTIVE;
@@ -1455,6 +1460,50 @@ vm_pager_swap_init(void)
     vm_pager_swap_ready = 1;
     return 0;
 #endif
+}
+
+void
+vm_pager_swap_disable(void)
+{
+    vm_pager_swap_ready = 0;
+}
+
+int
+vm_pager_swapoff(size_t first, size_t end)
+{
+    struct vm_anon *anon;
+    size_t slot;
+    unsigned index;
+    int error;
+
+    if (!vm_object_initialized || first == 0 || first >= end)
+        return EINVAL;
+    for (index = 0; index < VM_ANON_MAX; ++index) {
+        anon = &vm_anon_pool[index];
+retry:
+        slot = anon->va_swap_slot;
+        if (anon->va_in_use == 0 || slot < first || slot >= end)
+            continue;
+        error = vm_anon_busy_wait(anon, 0);
+        if (error != 0)
+            return error;
+        if (anon->va_in_use == 0 || anon->va_swap_slot != slot)
+            goto retry;
+        anon->va_flags |= VM_ANON_BUSY;
+        if (anon->va_page == 0) {
+            error = vm_anon_make_resident(anon, 0, 0, 0);
+            if (error != 0) {
+                vm_anon_busy_clear(anon);
+                return error;
+            }
+        }
+        anon->va_swap_slot = 0;
+        vm_pager_swap_free(slot);
+        vm_object_stat_decrement(
+            &vm_object_statistics.vos_swapped_pages);
+        vm_anon_busy_clear(anon);
+    }
+    return 0;
 }
 #else
 int

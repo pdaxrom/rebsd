@@ -186,7 +186,6 @@ static const struct {
 #ifdef UCB_METER
     { "_sum",           (int)&sum           },  /* vmstat */
 #endif
-    { "_swapmap",       (int)&swapmap       },  /* pstat */
     { "_tk_nin",        (int)&tk_nin        },  /* iostat */
     { "_tk_nout",       (int)&tk_nout       },  /* iostat */
     { "_total",         (int)&total         },  /* vmstat */

@@ -44,7 +44,7 @@ The current port boots a base RetroBSD system from a cartridge ROM image:
 - A RandNET keyboard on any controller port is polled through SI/Joybus and
   feeds `/dev/console` input while `/dev/ttyS0` remains available for serial
   login.
-- `/dev/romdisk`, `/dev/swap`, `/dev/ram0`, `/dev/null`,
+- `/dev/romdisk`, `/dev/ram0`, `/dev/ram1`, `/dev/null`,
   `/dev/zero`, `/dev/ttyS0`, `/dev/rgbled0`, `/dev/cartflash0`,
   `/dev/fb0`, Joybus input devices, and the pty nodes are generated into the
   root filesystem from kernel device definitions.
@@ -65,10 +65,9 @@ Known hardware smoke test on a real 8 MiB system, verified 2026-06-12 before
 the expanded command set:
 
 This log predates the volatile `/var` RAM disk, expanded 8 MiB user window,
-and compressed RAM swap. Current default 8 MiB builds reserve 1 MiB for
-`/var` and print `user mem = 4096 kbytes` and
-`swap size = 4096 kbytes`.  With `N64_ZSWAP=0`, the same physical RAM pool is
-exposed as raw 2048 KiB swap.
+and runtime compressed RAM devices. Current default 8 MiB boots reserve 1 MiB
+for `/var`; rc.sysinit creates compressed `/dev/ram1` with the remaining pool,
+formats it as Linux swap v1, and attaches it from userland.
 
 ```
 ReBSD N64 stage0
@@ -510,11 +509,11 @@ current N64 work is staged as follows:
   `/root/cc-pcc-smoke.sh`, `mount`, `df`, `w`, `ps aux`, `/usr/sbin/pstat -T`,
   and `/root/romfs-smoke.sh` all passed;
 - on 2026-07-06, the UART-only boot isolation ROMs all booted on real N64
-  hardware: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap. These builds
+  hardware with PCC and GCC kernels and raw/compressed RAM-device profiles. These builds
   use `N64_MINIMAL_UART_ONLY=1`; the minimal rootfs must include `/bin/login`
   in addition to `/libexec/getty`, otherwise entering `root` only respawns the
   login prompt because `getty` cannot exec the login program;
-- on 2026-07-06, the full hard-float PCC zswap ROM booted on real N64 hardware
+- on 2026-07-06, the full hard-float PCC compressed-RAM ROM booted on real N64 hardware
   to `ttyS0` root login.  The full rootfs mounted from ROM, `ls -l /` showed
   the expected `/bin`, `/sbin`, `/usr`, `/var`, and `/cart` layout, and
   `uptime` worked.  Later long-run smoke failures that appeared as random
@@ -667,7 +666,8 @@ headers:
 - board source: `sys/mips/n64/rootfs/`
 - source: `sys/mips/n64/devnodes.awk`
 - source: `sys/mips/n64/romdisk.h`
-- source: `sys/mips/n64/ramswap.h`
+- shared source: `sys/mips/ramdisk.h`
+- board source: `sys/mips/n64/ramdisk_machdep.c`
 - source: `sys/mips/n64/devmajors.h`
 - source: `sys/include/conf.h`
 - generated: `sys/mips/n64/rootfs.devnodes.manifest`
@@ -1078,7 +1078,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 0x00100000..0x002fffff  VM page pool after bootstrap
 0x00300000..0x0033ffff  resident stage0/restart image
 0x00340000..0x0037ffff  stage0/early 320x240x16 framebuffer alias
-0x00380000..0x003fffff  RAM swap fallback
+0x00380000..0x003fffff  ram1 backing pool
 ```
 
 8 MiB system:
@@ -1089,7 +1089,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 0x00300000..0x0037ffff  resident stage0/restart image
 0x00380000..0x004fffff  VM page pool after bootstrap
 0x00500000..0x005fffff  /var RAM disk
-0x00600000..0x007fffff  Expansion Pak RAM swap store
+0x00600000..0x007fffff  Expansion Pak ram1 backing pool
 ```
 
 After VM startup, VI mode changes use exact page-rounded physically
@@ -1113,9 +1113,9 @@ Important constants:
 - `N64_USER_PHYS_START`: legacy bootstrap user-mapping base, `0x00100000`;
   after the bootstrap TLB entries are removed, ordinary pages in this range
   are allocated by VM.
-- `N64_BASE_SWAP_PHYS_START`: 4 MiB fallback swap base, `0x00380000`.
+- `N64_BASE_RAMDISK_DATA_PHYS_START`: 4 MiB ram1 pool base, `0x00380000`.
 - `N64_BASE_FB_PHYS_START`: early 320x240x16 stage0 alias, `0x00340000`.
-- `N64_EXPANSION_SWAP_PHYS_START`: 8 MiB RAM block pool base, `0x00500000`.
+- `N64_EXPANSION_RAMDISK_DATA_PHYS_START`: 8 MiB RAM block pool base.
 - `N64_FB_USER_VADDR_START`: uncached framebuffer user mapping base,
   `0x00800000`.
 
@@ -1182,7 +1182,7 @@ The VM bootstrap invalidates those temporary entries, resets `C0_Wired`, and
 uses per-process 4 KiB pmap entries with ASIDs for normal execution. The
 framebuffer is no longer a global wired mapping. `/dev/fb0` authorizes an
 uncached `MAP_SHARED` device mapping in the calling process; its physical
-reserve remains rounded up so the mapping cannot overlap RAM swap:
+reserve remains rounded up so the mapping cannot overlap the RAM-device pool:
 
 ```
 4 MiB: physical 0x00340000..0x0037ffff
@@ -1308,29 +1308,26 @@ Block major 0 is the ROM-backed root disk:
 /dev/romdisk  b 0,0
 ```
 
-Block major 1 is the N64 RAM-backed block pool. Minor 0 is swap; minor 1 is
-the volatile UFS target for `/var`:
+Block major 1 is the N64 RAM-backed block controller. Minor 0 is the volatile
+UFS target for `/var`; minor 1 is a general-purpose data device:
 
 ```
-/dev/swap     b 1,0
-/dev/ram0     b 1,1
+/dev/ram0     b 1,0
+/dev/ram1     b 1,1
 ```
 
 RAM block sizing:
 
-- 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB physical swap store.
-- 8 MiB system: 1 MiB `/dev/ram0`, 2 MiB physical swap store. Framebuffers
+- 4 MiB system: 128 KiB `/dev/ram0`, 384 KiB `/dev/ram1` backing pool.
+- 8 MiB system: 1 MiB `/dev/ram0`, 2 MiB `/dev/ram1` backing pool. Framebuffers
   no longer consume this block pool.
 
-`N64_ZSWAP=1` is the default.  It selects the shared VM zswap backend and
-keeps the same physical RAM store while exposing twice as many logical swap
-blocks to the VM swap pager.  Each logical 1 KiB swap block is stored as zero,
-raw, or compressed data in 256-byte physical units.  Releasing a VM swap slot
-also discards its compressed physical units, so repeated pageout/pagein cycles
-can reuse the store.  If a page cannot be represented in the physical store,
-swapout fails with `ENOMEM` instead of panicking.  `N64_ZSWAP=0` restores the
-raw RAM swap sizing for comparison.  Other MIPS boards can select
-`ZSWAP_ENABLED` in their board configuration and use the same backend.
+Compression is selected when a RAM block device is created.  The normal boot
+uses `ramctl create /dev/ram1 backing=all size=2x compression`; each logical
+1 KiB block is stored as zero, raw, or compressed data in 256-byte physical
+units.  The resulting ordinary block device can hold swap or a filesystem.
+Discarding a block releases its compressed physical units.  If data cannot fit
+in the physical store, the write fails with `ENOMEM` instead of panicking.
 
 `N64_MINIMAL_ROOTFS=1` builds a dependency-tracked hardware-test rootfs while
 keeping the normal N64 console and device configuration.  It is still packaged
@@ -1350,8 +1347,7 @@ make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-vm-pcc-min \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
     N64_USERLAND_ENDIAN=big N64_USERLAND_EXEC_FORMAT=aout \
     N64_MINIMAL_ROOTFS=1 N64_MINIMAL_PCC_SMOKE=1 \
-    N64_MINIMAL_ROOTFS_KBYTES=7168 N64_ROOTFS_NATIVE_PCC=1 \
-    N64_ZSWAP=1 all
+    N64_MINIMAL_ROOTFS_KBYTES=7168 N64_ROOTFS_NATIVE_PCC=1 all
 ```
 
 `N64_MINIMAL_UART_ONLY=1` selects the same minimal-rootfs machinery and also
@@ -1372,11 +1368,11 @@ make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-usbnet-min \
     N64_BUILD_CONFIG=usbnetmin-pcc-gcc all
 ```
 
-The printed boot sizes therefore differ by installed RDRAM:
+The runtime devices therefore differ by installed RDRAM:
 
 ```
-4 MiB: swap size = 768 kbytes with zswap, 384 kbytes raw
-8 MiB: swap size = 4096 kbytes with zswap, 2048 kbytes raw
+4 MiB: /dev/ram1 backing = 384 KiB, default compressed size = 768 KiB
+8 MiB: /dev/ram1 backing = 2048 KiB, default compressed size = 4096 KiB
 ```
 
 The root filesystem stays read-only. `/tmp` is a symlink to `/var/tmp` in the
@@ -2053,7 +2049,7 @@ that `/usr/bin/ld` reached `malloc_insert_free()` through `free()` with the
 invalid pointer `0x25`, then raised an address exception while reading
 `0x21`.  The recorded executable PTE, live TLB entry, physical instruction
 address, and cached/uncached instruction words all agreed.  VM validation
-passed, no page had been swapped, and zswap reported no error.  Repeated
+passed, no page had been swapped, and ramcomp reported no error.  Repeated
 post-fault hashes of `pcc`, `cpp`, and `ccom` also matched the build artifacts.
 This localizes the next investigation to corruption of runtime state; it does
 not yet identify where the bad pointer originated.
@@ -2067,7 +2063,7 @@ The following diagnostic facilities are present:
   `N64_USER_FAULT` report in the serial log without changing the configured
   console.
 - The report includes all saved GPR halves, EPC, Cause, Status, BadVAddr,
-  process layout, VM/pmap/zswap counters, the queried PTE, the matching live
+  process layout, VM/pmap/ramcomp counters, the queried PTE, the matching live
   TLB entry, and cached/uncached physical instruction words.
 - The report also reads the current user stack through the active pmap and
   prints bounded stack words plus the frame-pointer chain.  Each entry includes
@@ -2105,7 +2101,7 @@ to be `0x0047dd38`.  No control transfer in the linked binary targets
 `0x00403d9c`; the observed register state therefore cannot result from
 retiring the preceding `addu`.  The executable PTE and live TLB entry still
 agreed, the instruction at EPC agreed through cached and uncached physical
-aliases, VM validation passed, and neither swap nor zswap had been used.
+aliases, VM validation passed, and neither swap nor ramcomp had been used.
 This rules out an ordinary parser-table bounds failure and localizes the next
 gate to exception return versus stale instruction-cache state on physical
 VR4300 hardware.
@@ -2207,7 +2203,7 @@ Build and generated data:
 - Rootfs is intentionally read-only.
 - The kernel and user ABI remain 32-bit o32; a 64-bit kernel/userland ABI is
   outside the current low-memory N64 target.
-- Swap is RAM-backed, not persistent storage.
+- The default swap device is a volatile compressed RAM block device.
 - Reboot is a software restart through the resident stage0 image, not a full
   hardware reset.
 - `/dev/mem`, `/dev/kmem`, `ucall`, `ufetch`, and `ustore` are intentionally

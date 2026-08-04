@@ -100,6 +100,7 @@ int     sethostid(long hostid);
 void    setusershell(void);
 void    sync(void);
 int     swapon(const char *path);
+int     swapoff(const char *path);
 unsigned int ualarm(unsigned usecs, unsigned interval);
 void    usleep(unsigned);
 int     pause(void);

@@ -82,6 +82,29 @@ struct disk_discard {
 };
 
 /*
+ * Runtime configuration for a RAM block device.  rdc_media_bytes is the
+ * visible device size; rdc_backing_bytes is the physical RAM budget.  A
+ * compressed device may expose more media than its backing store.
+ */
+#define RAMDISK_CONFIG_COMPRESSION 0x01u
+
+struct ramdisk_configure {
+    u_int rdc_media_bytes;
+    u_int rdc_backing_bytes;
+    u_int rdc_flags;
+    u_int rdc_reserved;
+};
+
+struct ramdisk_info {
+    u_int rdi_media_bytes;
+    u_int rdi_backing_bytes;
+    u_int rdi_backing_capacity;
+    u_int rdi_flags;
+    u_int rdi_open_count;
+    u_int rdi_configured;
+};
+
+/*
  * Disk-specific ioctls.
  */
 #define DIOCGETMEDIASIZE _IOR('d', 1, int)              /* get size in kbytes */
@@ -93,5 +116,8 @@ struct disk_discard {
 #define DIOCGETPART64    _IOR('d', 7, struct diskpart64)/* 64-bit partition */
 #define DIOCGETSCHEME    _IOR('d', 8, unsigned)         /* DISK_SCHEME_* */
 #define DIOCDISCARD      _IOW('d', 9, struct disk_discard) /* release range */
+#define RAMDIOCCONFIGURE _IOW('r', 1, struct ramdisk_configure)
+#define RAMDIOCDESTROY   _IO ('r', 2)
+#define RAMDIOCGETINFO   _IOR('r', 3, struct ramdisk_info)
 
 #endif /* _SYS_DISK_H_ */

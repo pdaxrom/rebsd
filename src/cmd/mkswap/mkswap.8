@@ -1,0 +1,12 @@
+.TH MKSWAP 8
+.SH NAME
+mkswap \- initialise a Linux swap v1 block device
+.SH SYNOPSIS
+.B mkswap
+.I special
+.SH DESCRIPTION
+.B mkswap
+writes a Linux swap v1 header to
+.IR special .
+The device may then be enabled with
+.BR swapon (8).

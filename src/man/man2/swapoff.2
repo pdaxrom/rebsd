@@ -1,0 +1,34 @@
+.TH SWAPOFF 2 "August 2026"
+.SH NAME
+swapoff \- remove a block device from paging
+.SH SYNOPSIS
+.nf
+.B #include <unistd.h>
+.PP
+.B int swapoff(const char *special);
+.fi
+.SH DESCRIPTION
+.I Swapoff
+stops allocation from the named block device and makes every anonymous page
+which still uses that device resident before closing it.  Other swap devices
+remain available throughout the operation.
+.SH RETURN VALUE
+Zero is returned on success.  On failure, \-1 is returned and
+.I errno
+is set.
+.SH ERRORS
+.TP 15
+[EPERM]
+The caller is not the super-user.
+.TP 15
+[EINVAL]
+The named device is not active swap.
+.TP 15
+[ENOMEM]
+There is insufficient physical memory to make the remaining pages resident.
+.TP 15
+[EIO]
+An error occurred while paging data in from the device.
+.SH SEE ALSO
+.BR swapon (2),
+.BR swapoff (8)

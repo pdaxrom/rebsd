@@ -35,8 +35,6 @@ struct mapent {
 };
 
 #ifdef KERNEL
-extern struct map swapmap[];    /* space for swap allocation */
-
 /*
  * Allocate units from the given map.
  */

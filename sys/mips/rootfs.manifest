@@ -1026,6 +1026,8 @@ file /usr/share/man/cat8/mknod.0
 
 file /usr/share/man/cat8/mkpasswd.0
 
+file /usr/share/man/cat8/mkswap.0
+
 file /usr/share/man/cat8/mount.0
 
 file /usr/share/man/cat8/pstat.0
@@ -1036,6 +1038,8 @@ file /usr/share/man/cat8/ping.0
 
 file /usr/share/man/cat8/reboot.0
 
+file /usr/share/man/cat8/ramctl.0
+
 file /usr/share/man/cat8/renice.0
 
 file /usr/share/man/cat8/route.0
@@ -1045,6 +1049,8 @@ file /usr/share/man/cat8/shutdown.0
 file /usr/share/man/cat8/sync.0
 
 file /usr/share/man/cat8/swapon.0
+
+file /usr/share/man/cat8/swapoff.0
 
 file /usr/share/man/cat8/telnetd.0
 
@@ -1123,6 +1129,12 @@ mode 0775
 file /usr/sbin/mkpasswd
 mode 0775
 
+file /usr/sbin/mkswap
+mode 0755
+
+file /usr/sbin/ramctl
+mode 0755
+
 file /sbin/mount
 mode 0775
 
@@ -1142,6 +1154,9 @@ file /sbin/umount
 mode 0775
 
 file /usr/sbin/swapon
+mode 0755
+
+file /usr/sbin/swapoff
 mode 0755
 
 file /usr/sbin/updatedb

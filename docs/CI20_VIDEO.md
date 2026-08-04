@@ -116,7 +116,7 @@ half of the final entry remains invalid. Page-table pages and kernel u areas
 are constrained to the low direct-mapped bank because the exception refill
 path and persistent kernel-stack pointers use KSEG0.
 
-The framebuffer is reserved at the top of the low bank. Rootfs and RAM swap
+The framebuffer is reserved at the top of the low bank. Rootfs and RAM-device pools
 therefore remain below `0x0f800000` and never cross the physical hole.
 
 ## Build and host gates

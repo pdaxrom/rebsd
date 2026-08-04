@@ -285,14 +285,14 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   versus 4453.809 GCC KFLOPS, or 81.53%; PCC improves 6.64% over G6 and all
   Linpack/debug status markers pass.
 - [x] Boot-isolate the updated N64 kernel/rootfs path on real hardware with
-  UART-only minimal ROMs: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap
+  UART-only minimal ROMs using PCC/GCC and raw/compressed RAM-device profiles;
   all reached login on 2026-07-06.  The minimal rootfs now includes
   `/bin/login`, so `getty` can exec the login program instead of respawning the
   prompt after a username is entered.
-- [x] Boot the updated hard-float PCC full zswap N64 rootfs on real hardware:
+- [x] Boot the updated hard-float PCC full compressed-RAM N64 rootfs on real hardware:
   root login works, the ROM rootfs layout is visible, and `uptime` runs.
 - [x] Hardware-smoke the VM process path on an 8 MiB N64 with a GCC kernel,
-  PCC hard-float a.out userland, and zswap: `/root/vm-process-smoke` and the
+  PCC hard-float a.out userland, and compressed RAM: `/root/vm-process-smoke` and the
   100-iteration `/root/vm-stress-smoke.sh` gate passed on 2026-07-18 without
   counter leaks.  The hardware-only failure was a cached colour mismatch
   between a resident shared page and its private COW mapping; cached COW
@@ -394,13 +394,11 @@ the board-specific generated/appended manifest.
   RAM-backed block devices rather than inventing a separate inode filesystem:
   this keeps mount, namei, read/write, directory, and fsck behavior aligned
   with the current kernel.
-- [x] Split N64 volatile RAM storage from swap instead of reusing `/dev/swap`
-  directly:
-  - reserve one small RAM disk minor, `/dev/ram0`, for `/var`
+- [x] Split N64 volatile RAM storage into general block-device minors:
+  - reserve `/dev/ram0` for `/var` and `/dev/ram1` for runtime-selected use
   - size it from detected RDRAM, with conservative 4 MiB defaults and larger
     8 MiB defaults
-  - subtract the reserved RAM disk bytes from the swap region so the areas do
-    not overlap
+  - keep both physical pools disjoint
 - [x] Generate `/dev/ram0` from kernel device definitions, not by hand-editing
   the staged rootfs.
 - [x] Teach the N64 boot scripts to create volatile filesystems at startup:
@@ -411,8 +409,7 @@ the board-specific generated/appended manifest.
 - [x] Keep `/tmp` and `/var` volatile for the first version; later ROMFS or
   another writable block device can provide persistent upper storage.
 - [x] Hardware smoke-test volatile mounts:
-  - boot reaches login with `swap size = 3584 kbytes` on default 8 MiB
-    zswap hardware builds, or `1792 kbytes` with `N64_ZSWAP=0`
+  - boot reaches login with runtime compressed `/dev/ram1` attached as swap
   - `/dev/ram0` exists as a block device
   - `mount` shows `/var` mounted read/write
   - `ls -l /tmp` shows a symlink to `/var/tmp`
@@ -709,16 +706,15 @@ the board-specific generated/appended manifest.
 - [x] Keep the early 320x240x16 console in the stage0 alias, then allocate
   exact contiguous wired VM runs for 320x240x16/32 and, with Expansion Pak,
   640x480x16/32 mode changes
-- [x] Add N64 compressed RAM swap (`N64_ZSWAP=1` by default) so native PCC
-  smoke can use a larger logical swap map without stealing more physical RDRAM
+- [x] Add runtime compression to the common RAM block device so native PCC
+  smoke can use a larger logical device without stealing more physical RDRAM
   from the VM page pool or active framebuffer allocation
-- [x] Move the compressed store into shared MIPS code, connect VM swap-slot
-  discard to physical-unit reclamation, and exercise the N64 8 MiB layout on
-  Malta64 before the next hardware run
-- [x] Confirm the UART-only `N64_ZSWAP=1` and `N64_ZSWAP=0` debug ROMs boot on
-  real N64 hardware with both PCC-built and GCC-built kernels.
+- [x] Keep the swap pager format-independent; create, format, attach, detach,
+  and destroy compressed RAM devices from userland.
+- [x] Confirm UART-only raw and compressed RAM-device profiles boot on real N64
+  hardware with both PCC-built and GCC-built kernels.
 - [x] Run compressible and raw `vm-pressure-smoke` on the 8 MiB UART-only
-  GCC-kernel/GCC-userland minimal profile with 4 MiB logical zswap.  The
+  GCC-kernel/GCC-userland minimal profile with 4 MiB logical ramcomp.  The
   2026-07-25 hardware run completed with 245/115 and 460/330
   pageout/pagein counts respectively, no data corruption, zero swap failures,
   and status zero.
@@ -841,7 +837,7 @@ the board-specific generated/appended manifest.
   - [x] after adding basic tools, run `cat /etc/rc`, `pwd`, `uname`, `id`, and
     `stty`
   - [x] verify `uname -a` ends with `mips`, not `pic32`
-  - [ ] Re-check `uname -a` on the current PCC full zswap ROM; the 2026-07-06
+  - [ ] Re-check `uname -a` on the current PCC full ramcomp ROM; the 2026-07-06
     hardware boot reaches root login and runs `uptime`, but `uname -a` now
     panics with `TLB load/fetch`
   - [x] run `sleep 1` and verify it returns by timeout without `Ctrl-C`

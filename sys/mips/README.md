@@ -180,10 +180,10 @@ explicit in-guest rebuild on a profile with enough process memory.
 ### N64 8 MiB QEMU gate
 
 `BOARD=malta64 MALTA_MEMORY_PROFILE=n64-8m` uses the R4000 emulator with the
-same kernel load address, 4 MiB user limit, framebuffer, `/var`, and swap
+same kernel load address, 4 MiB user limit, framebuffer, `/var`, and ram1
 reservations as an 8 MiB N64.  The profile fixes the kernel-visible RAM at
-8192 KiB and enables the shared MIPS compressed RAM-swap backend: the 1792 KiB
-physical store exposes 3584 KiB of logical swap.  QEMU still needs 32 or 64
+8192 KiB; startup turns the 1792 KiB ram1 pool into a 3584 KiB compressed
+block device and formats it as swap.  QEMU still needs 32 or 64
 MiB of backing RAM because the emulator-only rootfs blob starts at physical
 8 MiB; that backing is excluded from the kernel physical map.
 
@@ -289,10 +289,12 @@ make -C sys/mips BOARD=maltael run
 
 The Malta kernel-visible RAM size is controlled by `MALTA_RAM_KBYTES`; QEMU's
 `-m`/`MALTA_QEMU_RAM` must still be large enough to contain the QEMU-loaded
-root image and optional RAM swap backing.  The root filesystem is linked at
+root image and optional ram1 backing pool.  The root filesystem is linked at
 physical `0x00800000`, outside `physmem` in 8 MiB low-memory smoke runs, and
-RAM swap starts after that image unless `MALTA_RAMSWAP_KBYTES` overrides the
-logical swap size.  QEMU Malta's real BIOS/pflash ROM window is only 4 MiB, so
+the ram1 backing pool starts after that image unless
+`MALTA_RAMDISK_DATA_KBYTES` overrides its physical size.  Its logical size and
+compression are selected at runtime with `ramctl`.  QEMU Malta's real
+BIOS/pflash ROM window is only 4 MiB, so
 the normal 16-32 MiB PCC rootfs cannot be stored there.
 
 At the login prompt, use the passwordless root account:
@@ -389,7 +391,7 @@ absolute paths.
 To increase the Malta root filesystem, keep these three values in sync:
 
 - `MIPS_ROOTFS_KBYTES` in `sys/mips/Makefile.kconf`;
-- `MALTA_ROMDISK_BYTES` and the following `MALTA_RAMSWAP_PHYS_START` layout in
+- `MALTA_ROMDISK_BYTES` and the following `MALTA_RAMDISK_DATA_PHYS_START` layout in
   `sys/mips/layout.h`;
 - the `romdisk` memory region length in `sys/mips/malta/malta.ld` and
   `sys/mips/malta/malta64.ld`;

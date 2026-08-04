@@ -141,6 +141,6 @@ net/netinit.c                   optional inet
 mips/common/signal.c            standard
 mips/common/sysctl.c            standard
 mips/common/vm_page_machdep.c   standard
-vm/zswap.c                     optional zswap_enabled
+disk/ramcomp.c                   standard
 kernel/libkern.c               standard
 kernel/stubs.c                  standard

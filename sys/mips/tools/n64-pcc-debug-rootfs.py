@@ -89,6 +89,7 @@ COPY_PATHS = [
     "/sbin/mkfs",
     "/sbin/mount",
     "/sbin/reboot",
+    "/usr/sbin/ramctl",
     "/usr/bin/aout",
     "/usr/bin/ar",
     "/usr/bin/as",
@@ -123,8 +124,8 @@ ROOT_SYMLINKS = {
 
 DEVICE_NODES = [
     ("bdev", "/dev/romdisk", 0, 0, ""),
-    ("bdev", "/dev/swap", 1, 0, ""),
-    ("bdev", "/dev/ram0", 1, 1, ""),
+    ("bdev", "/dev/ram0", 1, 0, ""),
+    ("bdev", "/dev/ram1", 1, 1, ""),
     ("cdev", "/dev/console", 0, 0, ""),
     ("cdev", "/dev/tty", 2, 0, ""),
     ("cdev", "/dev/ttyS0", 3, 0, ""),
@@ -273,6 +274,7 @@ HOME=/; export HOME
 PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 
 echo N64_PCC_DEBUG_RC_BEGIN
+/usr/sbin/ramctl create /dev/ram0 size=all
 mkfs -i 4096 /dev/ram0
 rc=$?
 echo N64_PCC_DEBUG_MKFS_RC $rc
@@ -323,7 +325,7 @@ ttyS0     "/libexec/getty std.default"    vt100   off secure
 def make_fstab():
     return """/dev/romdisk\t/\tufs\tro\t0\t0
 /dev/ram0\t/var\tufs\trw\t0\t0
-/dev/swap\tnone\tswap\tsw\t0\t0
+/dev/ram1\tnone\tswap\tsw\t0\t0
 """
 
 

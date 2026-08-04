@@ -11,7 +11,8 @@
 
 #ifdef KERNEL
 
-#define SWAP_CONFIG_ALLOW_RAW   0x01
+struct buf;
+struct uio;
 
 struct swap_config_info {
     size_t      sci_usable_blocks;
@@ -19,7 +20,14 @@ struct swap_config_info {
     unsigned    sci_badpages;
 };
 
-int swap_configure(dev_t, int, struct swap_config_info *);
+int swap_configure(dev_t, struct swap_config_info *);
+int swap_unconfigure(dev_t);
+size_t swap_slot_alloc(void);
+void swap_slot_free(size_t);
+int swap_slot_draining(size_t);
+size_t swap_total_blocks(void);
+size_t swap_free_blocks(void);
+unsigned swap_device_count(void);
 
 extern int swopen(dev_t dev, int mode, int flag);
 extern int swclose(dev_t dev, int mode, int flag);

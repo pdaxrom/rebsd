@@ -541,6 +541,7 @@ static int
 test_ramdisk(void)
 {
     struct ramdisk ramdisk;
+    struct ramdisk_config config;
     struct buf bp;
     unsigned char media[2u * TEST_ROMDISK_BLOCK_BYTES];
     unsigned char data[TEST_ROMDISK_BLOCK_BYTES];
@@ -550,11 +551,17 @@ test_ramdisk(void)
 
     test_zero(media, sizeof(media));
     test_zero(&ramdisk, sizeof(ramdisk));
-    ramdisk.rd_start = media;
-    ramdisk.rd_end = media + sizeof(media);
-    ramdisk.rd_minor = 1;
-    ramdisk.rd_block_shift = 10;
-    dev = makedev(1, ramdisk.rd_minor);
+    config.rdc_backing = media;
+    config.rdc_backing_bytes = sizeof(media);
+    config.rdc_media_bytes = sizeof(media);
+    config.rdc_minor = 1;
+    config.rdc_block_shift = 10;
+    config.rdc_flags = 0;
+    config.rdc_compression = 0;
+    config.rdc_compression_metadata = 0;
+    config.rdc_compression_metadata_bytes = 0;
+    CHECK(ramdisk_init(&ramdisk, &config) == 0);
+    dev = makedev(1, config.rdc_minor);
 
     CHECK(ramdisk_bdev_open(&ramdisk, makedev(1, 0), FREAD, 0) == ENXIO);
     CHECK(ramdisk_bdev_open(&ramdisk, dev, FREAD | FWRITE, 0) == 0);

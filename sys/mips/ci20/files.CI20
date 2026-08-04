@@ -26,6 +26,7 @@ mips/ci20/romdisk_machdep.c    standard
 mips/ci20/romfs_backend.c      standard
 mips/common/romfs_core.c       standard
 mips/common/romfs_vfs.c        standard
-mips/ci20/ramswap.c            standard
+mips/ci20/ramdisk_machdep.c    standard
+mips/common/ramdisk_mips.c     standard
 mips/ci20/config.c             standard
 mips/ci20/vm_phys_board.c      standard

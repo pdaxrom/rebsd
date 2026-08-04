@@ -7,11 +7,11 @@ bdev /dev/romdisk
 major 0
 minor 0
 
-bdev /dev/swap
+bdev /dev/ram0
 major 1
 minor 0
 
-bdev /dev/ram0
+bdev /dev/ram1
 major 1
 minor 1
 

@@ -54,9 +54,9 @@ END {
 
     require_value("N64_ROMDISK_MAJOR")
     require_value("N64_ROMDISK_ROOT_MINOR")
-    require_value("N64_RAMSWAP_MAJOR")
-    require_value("N64_RAMSWAP_MINOR")
-    require_value("N64_RAMDISK_VAR_MINOR")
+    require_value("MIPS_RAMDISK_MAJOR")
+    require_value("MIPS_RAMDISK_VAR_MINOR")
+    require_value("MIPS_RAMDISK_DATA_MINOR")
     require_value("N64_TTY_MAJOR")
     require_value("N64_SERIAL_MAJOR")
     require_value("N64_RGBLED_MAJOR")
@@ -71,10 +71,10 @@ END {
     print "#"
     emit_node("bdev", "/dev/romdisk",
         defs["N64_ROMDISK_MAJOR"], defs["N64_ROMDISK_ROOT_MINOR"], "")
-    emit_node("bdev", "/dev/swap",
-        defs["N64_RAMSWAP_MAJOR"], defs["N64_RAMSWAP_MINOR"], "")
     emit_node("bdev", "/dev/ram0",
-        defs["N64_RAMSWAP_MAJOR"], defs["N64_RAMDISK_VAR_MINOR"], "")
+        defs["MIPS_RAMDISK_MAJOR"], defs["MIPS_RAMDISK_VAR_MINOR"], "")
+    emit_node("bdev", "/dev/ram1",
+        defs["MIPS_RAMDISK_MAJOR"], defs["MIPS_RAMDISK_DATA_MINOR"], "")
     emit_node("cdev", "/dev/console",
         defs["CONS_MAJOR"], defs["CONS_MINOR"], "")
     emit_node("cdev", "/dev/tty", defs["N64_TTY_MAJOR"], 0, "")

@@ -36,6 +36,9 @@ ihinit()
     register struct inode *ip = inode;
     register union  ihead *ih = ihead;
 
+    if (inode_table_stride != sizeof(*ip))
+        panic("inode table ABI mismatch");
+
     for (i = INOHSZ; --i >= 0; ih++) {
         ih->ih_head[0] = ih;
         ih->ih_head[1] = ih;
@@ -146,8 +149,15 @@ loop:
         u.u_error = ENFILE;
         return(NULL);
     }
-    if (ip->i_count)
+    if (ip->i_count) {
+        printf("inode: free-list corruption ip=%x dev=%x ino=%u "
+            "count=%d mode=%x nlink=%d flag=%x freef=%x freeb=%x "
+            "proc=%d %s\n", ip, ip->i_dev, ip->i_number,
+            ip->i_count, ip->i_mode, ip->i_nlink, ip->i_flag,
+            ip->i_freef, ip->i_freeb,
+            u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
         panic("free inode isn't");
+    }
     {
     register struct inode *iq;
 

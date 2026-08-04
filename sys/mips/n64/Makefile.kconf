@@ -33,7 +33,6 @@ ifneq ($(filter pcc-debug.z64,$(MAKECMDGOALS)),)
 N64_DEBUG_UART_ONLY := 1
 endif
 N64_MINIMAL_UART_ONLY ?= 0
-N64_ZSWAP ?= 1
 N64_ENABLE_ROMFS ?= 1
 N64_MINIMAL_ROOTFS ?= $(N64_MINIMAL_UART_ONLY)
 N64_MINIMAL_PCC_SMOKE ?= $(if $(filter pcc,$(N64_USERLAND_COMPILER)),1,0)
@@ -51,12 +50,9 @@ N64_ROM_ROOTFS_IMG = rootfs.img
 ifeq ($(N64_MINIMAL_UART_ONLY),1)
 N64_DEBUG_UART_ONLY = 1
 endif
-N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_ZSWAP).$(N64_STAGE0_RESERVED_BYTES).$(N64_PI_DOM1_PULSE).$(VM_DIAGNOSTIC)
+N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(N64_DEBUG_UART_ONLY).$(N64_USB_GDB).$(N64_RESET_DUMP).$(N64_MINIMAL_UART_ONLY).$(N64_MINIMAL_ROOTFS).$(N64_MINIMAL_PCC_SMOKE).$(N64_MINIMAL_USBNET_DEBUG).$(N64_STAGE0_RESERVED_BYTES).$(N64_PI_DOM1_PULSE).$(VM_DIAGNOSTIC)
 PARAM += -DN64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES)
 N64_IOCONF      = ioconf
-ifneq ($(N64_ZSWAP),1)
-PARAM := $(filter-out -DZSWAP_ENABLED,$(PARAM))
-endif
 ifeq ($(N64_DEBUG_UART_ONLY),1)
 PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
     -DUSBNET_ENABLED -DUSBNET_ECM -DUSBNET_VENDOR,$(PARAM))
@@ -221,7 +217,7 @@ N64_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 N64_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
 N64_DEVNODES_AWK = $(TOPSRC)/sys/mips/n64/devnodes.awk
 N64_DEVNODES_SRCS = $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h \
-                    $(TOPSRC)/sys/mips/n64/ramswap.h \
+                    $(TOPSRC)/sys/mips/ramdisk.h \
                     $(TOPSRC)/sys/mips/n64/n64cart_flash.h \
                     $(TOPSRC)/sys/mips/n64/devmajors.h \
                     $(TOPSRC)/sys/include/conf.h \
@@ -405,8 +401,8 @@ N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).$(N64_USERLAND_ABI).s
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
 
-N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty init login ls mkfs mount netstat reboot sh stty \
-    sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
+N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty init login ls mkfs mkswap mount netstat ramctl reboot sh stty \
+    swapon swapoff sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
     ld make md5 nm pstat ranlib sed) \
     $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),dhclient ifconfig ping route sed)
 N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod cmp iostat mkdir ps rm sleep strace \
@@ -1090,7 +1086,7 @@ $(N64_PCC_HOST_INCLUDE_STAMP): $(MIPS_INCLUDE_SRCS) \
 endif
 
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
-	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/n64/ramswap.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
+	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/ramdisk.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
 
 $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(N64_MINIMAL_ROOTFS_FILES) $(N64_TERMCAP) \
@@ -1195,6 +1191,7 @@ endif
 	    printf '%s\n' '#!/bin/sh'; \
 	    printf '%s\n' 'PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH'; \
 	    printf '%s\n' 'echo N64_MINIMAL_RC_BEGIN'; \
+	    printf '%s\n' '/usr/sbin/ramctl create /dev/ram0 size=all >/dev/null'; \
 	    printf '%s\n' 'if mkfs -i 4096 /dev/ram0 >/dev/null; then'; \
 	    printf '%s\n' '	if mount /var >/dev/null; then'; \
 	    printf '%s\n' '		mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null'; \
@@ -1210,6 +1207,9 @@ endif
 	    printf '%s\n' '	echo N64_MINIMAL_VAR_MKFS_FAIL'; \
 	    printf '%s\n' '	exit 1'; \
 	    printf '%s\n' 'fi'; \
+	    printf '%s\n' 'if /usr/sbin/ramctl create /dev/ram1 backing=all size=2x compression >/dev/null; then'; \
+	    printf '%s\n' '	if /usr/sbin/mkswap /dev/ram1 >/dev/null; then /usr/sbin/swapon /dev/ram1; fi'; \
+	    printf '%s\n' 'fi'; \
 	    printf '%s\n' 'echo N64_MINIMAL_RC_END'; \
 	    printf '%s\n' 'exit 0'; \
 	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc.sysinit
@@ -1217,7 +1217,7 @@ endif
 	{ \
 	    printf '%s\n' '/dev/romdisk	/	ufs	ro	0	0'; \
 	    printf '%s\n' '/dev/ram0	/var	ufs	rw	0	0'; \
-	    printf '%s\n' '/dev/swap	none	swap	sw	0	0'; \
+	    printf '%s\n' '/dev/ram1	none	swap	sw	0	0'; \
 	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/fstab
 	# Keep build and installation as separate make invocations.  With a
 	# parallel parent make, passing both goals at once lets install race all;

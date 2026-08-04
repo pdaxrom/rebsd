@@ -422,9 +422,9 @@ Completed for this milestone:
 - PCC kernel builds now use the standalone cross PCC path without GCC wrapper
   scripts.  The verified Malta and Malta64 QEMU hard-float gates compile the
   kernel with PCC, build the PCC rootfs, boot, and run `/root/pcc-smoke-all.sh`.
-  The N64 PCC hard-float full zswap ROM build also completes for hardware
-  smoke, and the UART-only real-hardware boot isolation matrix passed with PCC
-  and GCC kernels, raw swap, and zswap.
+  The N64 PCC hard-float full ROM build also completes for hardware smoke, and
+  the UART-only real-hardware boot isolation matrix passed with PCC and GCC
+  kernels and both raw and compressed RAM-device profiles.
 - N64 PCC kernel builds assemble PCC-generated kernel `.s` files with the
   ReBSD assembler in ELF mode and link the final kernel with the ReBSD linker
   in ELF mode: `mips-rebsd-as --elf -EB -march=vr4300` and
@@ -446,9 +446,9 @@ Remaining work:
 
 - Run the updated PCC userland/rootfs gate on real N64 hardware in both
   hard-float and soft-float modes after the Malta64/R4000 and Malta QEMU
-  matrix stays stable.  Default N64 hardware builds use `N64_ZSWAP=1` so the
-  old whole-process swapper gets a larger logical swap map without reducing the
-  4 MiB Expansion Pak user window.
+  matrix stays stable.  Default N64 startup creates compressed `/dev/ram1`
+  from userland so its logical capacity can exceed the backing pool without
+  reducing the 4 MiB Expansion Pak user window.
 - Decide the long-term PCC kernel FPU policy for soft-float kernel builds.  The
   current validated kernel gates are hard-float unless a test explicitly states
   otherwise.
@@ -550,7 +550,7 @@ make -C sys/mips/malta unix.elf \
 make -C sys/mips/n64 kernel.z64 preflight.z64 \
     N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
-    N64_USERLAND_ENDIAN=big N64_ZSWAP=1
+    N64_USERLAND_ENDIAN=big
 
 make -C sys/mips/n64 kernel.z64 \
     N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
@@ -701,10 +701,11 @@ The current C gate is green in these environments:
   with `N64_PCC_DEBUG_RUNNER_RC 0` and `N64_PCC_DEBUG_RC_END`.  A fresh
   soft-float hardware pass is still pending.
 - N64 UART-only boot isolation on real hardware passed on 2026-07-06 for
-  PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap.  The minimal debug
+  PCC and GCC kernels with raw and compressed RAM-device profiles.  The minimal debug
   rootfs includes `/bin/login`; without it `getty` respawns after username
   entry because `/bin/login` cannot be executed.
-- N64 hard-float PCC kernel/userland full rootfs ROM build with `N64_ZSWAP=1`.
+- N64 hard-float PCC kernel/userland full rootfs ROM build with runtime
+  compressed `/dev/ram1`.
   The ROM boots on real hardware to root login and basic shell use; `ls -l /`
   and `uptime` work.  Full runtime validation is still pending because
   `uname -a` currently triggers a kernel `TLB load/fetch` panic after login.
@@ -745,7 +746,7 @@ malta mips32r2 soft:     817.298 and 742.086 KFLOPS
 ```
 
 The Malta64 low-memory swap check on 2026-07-06 used the N64-sized profile
-`MALTA_RAM_KBYTES=8192 MALTA_RAMSWAP_KBYTES=4608 MALTA_QEMU_RAM=64M` with the
+`MALTA_RAM_KBYTES=8192 MALTA_RAMDISK_DATA_KBYTES=4608 MALTA_QEMU_RAM=64M` with the
 rootfs linked at physical `0x00800000`.  Boot reported `phys mem = 8192 kbytes`,
 `user mem = 4096 kbytes`, `root size = 16384 kbytes`, and
 `swap size = 4608 kbytes`; `/root/pcc-smoke-all.sh` finished with
@@ -762,7 +763,7 @@ inside that run was `10751.999`, `10294.467`, and `10132.773` KFLOPS.
 On real 8 MiB N64 hardware, the native utility workload needs more writable
 temporary space than the original 512 KiB `/var` RAM disk can provide.  The N64
 default `/dev/ram0` reservation is therefore 1 MiB.  The 4 MiB user window is
-unchanged; with zswap the expected 8 MiB boot report becomes
+unchanged; with compressed `/dev/ram1` the expected 8 MiB boot report becomes
 `user mem = 4096 kbytes` and `swap size = 3584 kbytes`.
 The workload serializes its persistent outputs within that reservation: only
 the first compiler's `basename` binary is retained for the cross-driver
@@ -802,8 +803,8 @@ The expected compile/link failures are target-aware policy cases for
 - `pcclist/init004` requires TLS.
 
 The N64 hardware smoke uses `/root/pcc-smoke-all.sh` from the normal PCC rootfs.
-Default hardware ROMs use `N64_ZSWAP=1`; use `N64_ZSWAP=0` only for raw
-swap-regression comparison.  The smoke covers native PCC compile/link/run,
+Default hardware ROMs configure `/dev/ram1` at runtime; raw-device regression
+uses `ramctl` without the `compression` option.  The smoke covers native PCC compile/link/run,
 shell/login-sensitive paths, repeated `ccom`, libc/math/wide-character policy
 smoke tests, DHCP receive support, real small utility rebuilds, and Linpack
 binaries built with both GCC and PCC.
@@ -909,7 +910,7 @@ Linpack gain.  It still leaves the compiler below the 75-85% medium-term goal,
 so the next work must target call/inlining overhead rather than generalizing
 the loop pass without evidence.
 
-The current hard-float PCC full zswap ROM has reached root login on real N64
+The current hard-float PCC full compressed-RAM ROM has reached root login on real N64
 hardware and can run basic shell commands.  It is slow on hardware, and the
 `uname -a` panic suggests an unresolved timing/race or interrupt-path issue
 rather than a rootfs packaging failure.

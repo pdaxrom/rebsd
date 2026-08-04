@@ -10,6 +10,8 @@ makes the block device named by
 .I special
 available to the machine-independent VM pager.
 The caller must be the super-user.
+Multiple devices may be active at the same time; page allocations are
+distributed across devices which have free space.
 .PP
 Devices enabled at run time must contain a valid Linux swap version 1
 header with the
@@ -26,9 +28,6 @@ swapon /dev/wd0b
 .fi
 .SH SEE ALSO
 .BR swapon (2),
+.BR swapoff (8),
 .BR free (1),
 .BR pstat (8)
-.SH BUGS
-ReBSD currently supports one active swap device.  There is no
-.B swapoff
-operation; reboot before removing or reformatting an active swap device.

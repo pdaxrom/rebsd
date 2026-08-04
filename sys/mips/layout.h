@@ -29,7 +29,7 @@
  *   0x00800000..             root filesystem loaded by QEMU outside physmem
  *                             in low-memory smoke configurations
  *                             followed by Malta cartflash sparse storage and
- *                             then optional RAM swap
+ *                             then the optional ram1 backing pool
  *
  * Malta PCC smoke builds may override the RAM and root filesystem sizes from
  * the board makefile when the staged userland no longer fits in 16 MiB.
@@ -98,16 +98,19 @@
                                          MALTA_ROMDISK_BYTES)
 #define MALTA_CARTFLASH_BYTES          MIPS_SIZE_2M
 #ifdef MALTA_N64_8M_PROFILE
-#define MALTA_RAMSWAP_PHYS_START       0x00640000
+#define MALTA_RAMDISK_DATA_PHYS_START  0x00640000
 #else
-#define MALTA_RAMSWAP_PHYS_START       (MALTA_CARTFLASH_PHYS_START + \
+#define MALTA_RAMDISK_DATA_PHYS_START  (MALTA_CARTFLASH_PHYS_START + \
                                          MALTA_CARTFLASH_BYTES)
 #endif
-#ifdef MALTA_RAMSWAP_BYTES_OVERRIDE
-#define MALTA_RAMSWAP_BYTES            MALTA_RAMSWAP_BYTES_OVERRIDE
+#ifdef MALTA_RAMDISK_DATA_BYTES_OVERRIDE
+#define MALTA_RAMDISK_DATA_BYTES       MALTA_RAMDISK_DATA_BYTES_OVERRIDE
 #else
-#define MALTA_RAMSWAP_BYTES            (MALTA_RAM_SIZE > MALTA_RAMSWAP_PHYS_START ? \
-                                         MALTA_RAM_SIZE - MALTA_RAMSWAP_PHYS_START : 0)
+#define MALTA_RAMDISK_DATA_BYTES       \
+                                        (MALTA_RAM_SIZE > \
+                                         MALTA_RAMDISK_DATA_PHYS_START ? \
+                                         MALTA_RAM_SIZE - \
+                                         MALTA_RAMDISK_DATA_PHYS_START : 0)
 #endif
 
 #endif

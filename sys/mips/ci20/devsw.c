@@ -8,7 +8,7 @@
 #include <disk/disk.h>
 #include <disk/romdisk.h>
 #include <machine/devmajors.h>
-#include <machine/ramswap.h>
+#include <machine/ramdisk.h>
 #include <machine/romdisk.h>
 #include <mips/common/devsw.h>
 #ifdef VIDEO_ENABLED
@@ -54,8 +54,8 @@ const struct bdevsw bdevsw[] = {
         romdisk_size, romdisk_ioctl, 0,
     },
     {
-        mipsramswap_open, mipsramswap_close, mipsramswap_strategy,
-        mipsramswap_size, mipsramswap_ioctl, 0,
+        mips_ramdisk_open, mips_ramdisk_close, mips_ramdisk_strategy,
+        mips_ramdisk_size, mips_ramdisk_ioctl, BDEV_DISCARD,
     },
     {
 #if MIPS_DISK_MAJOR != 2
@@ -180,6 +180,6 @@ isdisk(dev_t dev, int type)
         return 0;
 
     return major(dev) == MIPS_ROMDISK_MAJOR ||
-        major(dev) == MIPS_RAMSWAP_MAJOR ||
+        major(dev) == MIPS_RAMDISK_MAJOR ||
         major(dev) == MIPS_DISK_MAJOR;
 }

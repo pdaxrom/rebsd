@@ -266,32 +266,25 @@ ttyprt(struct tty *tp, int line)
 static void
 doswap(void)
 {
-    int mapmib[2] = { CTL_VM, VM_SWAPMAP };
     int totalmib[2] = { CTL_VM, VM_SWAPTOTAL };
-    struct mapent *map;
+    int freemib[2] = { CTL_VM, VM_SWAPFREE };
     long totalbytes;
-    unsigned long freeblocks;
-    size_t size, count, i, totalsize;
+    long freebytes;
+    size_t totalsize;
 
-    map = snapshot(mapmib, 2, &size);
-    if (map == NULL) {
-        fprintf(stderr, "pstat: VM_SWAPMAP: %s\n", strerror(errno));
-        return;
-    }
     totalsize = sizeof(totalbytes);
     if (sysctl(totalmib, 2, &totalbytes, &totalsize, NULL, 0) < 0) {
         fprintf(stderr, "pstat: VM_SWAPTOTAL: %s\n", strerror(errno));
-        free(map);
         return;
     }
-    count = size / sizeof(*map);
-    freeblocks = 0;
-    for (i = 0; i < count && map[i].m_size != 0; i++)
-        freeblocks += map[i].m_size;
-    printf("%u/%u swapmap entries\n", (unsigned)i, (unsigned)count);
+    totalsize = sizeof(freebytes);
+    if (sysctl(freemib, 2, &freebytes, &totalsize, NULL, 0) < 0) {
+        fprintf(stderr, "pstat: VM_SWAPFREE: %s\n", strerror(errno));
+        return;
+    }
     printf("%lu kbytes swap used, %lu kbytes free\n",
-        (unsigned long)(totalbytes / DEV_BSIZE) - freeblocks, freeblocks);
-    free(map);
+        (unsigned long)((totalbytes - freebytes) / 1024),
+        (unsigned long)(freebytes / 1024));
 }
 
 static int

@@ -108,5 +108,5 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     error = n64_vm_reserve(map, pool_start, var_end, "/var ramdisk");
     if (error != 0)
         return error;
-    return n64_vm_reserve(map, var_end, ram_size, "swap");
+    return n64_vm_reserve(map, var_end, ram_size, "ram1 pool");
 }

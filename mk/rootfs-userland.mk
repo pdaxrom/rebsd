@@ -12,9 +12,9 @@ REBSD_ROOTFS_SUBDIRS = cmd
 REBSD_ROOTFS_CMD_SUBDIRS = basic calendar chkconfig chown chroot compress date2 deco \
     dhclient diff dmesg emg env fdisk find fold forth fsck fsck.fat fstat getty \
     gpt hostname id ifconfig inetd init login ls make man md5 med mkfs \
-    mkfs.fat mknod mkpasswd mount more netstat ntpdate pdc picoc ping printf pstat \
+    mkfs.fat mknod mkpasswd mkswap mount more netstat ntpdate pdc picoc ping printf pstat ramctl \
     ptytest reboot renice retroforth route sed setty sh shutdown sl smux \
-    stty swapon sysctl tcl telnet telnetd test wget umount uname xargs
+    stty swapon swapoff sysctl tcl telnet telnetd test wget umount uname xargs
 # These portable commands are intentionally not part of the historical
 # src/cmd/Makefile SUBDIR_ALL set.  Add them through its public extension
 # point so every full-rootfs architecture builds the same programs.
@@ -39,7 +39,7 @@ REBSD_ROOTFS_USR_BIN_FILES = apropos awk basename basic cal calendar cb \
     xargs zcat
 REBSD_ROOTFS_USR_LIBEXEC_FILES = bigram code
 REBSD_ROOTFS_USR_SBIN_FILES = chkconfig chown chroot inetd mkpasswd ntpdate \
-    pstat swapon updatedb
+    mkswap pstat ramctl swapon swapoff updatedb
 
 REBSD_ROOTFS_CAT1_PAGES = apropos awk basename cal cat cb chgrp chmod cmp col \
     comm compress cp date dd df diff du echo ed expr false file find fold \

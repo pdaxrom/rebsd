@@ -173,6 +173,7 @@ void cinvalall (void);
 extern u_int nextinodeid;       /* unique id generator */
 
 extern struct inode inode[];    /* the inode table itself */
+extern const u_int inode_table_stride;
 extern struct inode *rootdir;   /* pointer to inode of root directory */
 
 /*

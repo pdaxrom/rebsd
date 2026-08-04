@@ -83,7 +83,8 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     if (error != 0)
         return error;
     error = ci20_vm_reserve_low_present(map, low_ram_size,
-        CI20_RAMSWAP_PHYS_START, CI20_RAMSWAP_BYTES, "swap");
+        CI20_RAMDISK_DATA_PHYS_START, CI20_RAMDISK_DATA_BYTES,
+        "ram1 pool");
     if (error != 0)
         return error;
     return ci20_vm_reserve_low_present(map, low_ram_size,

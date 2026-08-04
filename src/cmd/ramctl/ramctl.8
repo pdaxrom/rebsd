@@ -1,0 +1,40 @@
+.TH RAMCTL 8
+.SH NAME
+ramctl \- configure RAM block devices
+.SH SYNOPSIS
+.B ramctl create
+.I special
+.B size=value
+[
+.B backing=value
+] [
+.B compression
+]
+.br
+.B ramctl destroy
+.I special
+.br
+.B ramctl status
+.I special
+.SH DESCRIPTION
+.B ramctl
+creates and removes runtime RAM block devices.  The
+.B size
+argument is the visible block-device size.  The
+.B backing
+argument is the physical RAM budget.  Values accept K, M, and G suffixes;
+.B all
+selects the complete platform-reserved pool and
+.I Nx
+multiplies the backing size.
+.PP
+Without compression the visible size must equal the backing size.  With
+.B compression
+the visible size may exceed the physical backing, for example:
+.PP
+.RS
+ramctl create /dev/ram1 backing=4M size=8M compression
+.RE
+.PP
+The resulting ordinary block device may be formatted as a filesystem or as
+swap.  It must be unmounted and removed from swap before it can be destroyed.

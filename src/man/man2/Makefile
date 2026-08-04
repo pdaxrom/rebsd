@@ -38,7 +38,7 @@ SRCS=	accept.2 access.2 acct.2 adjtime.2 bind.2 brk.2 chdir.2 chmod.2 \
 	sigaction.2 sigaltstack.2 sigpending.2 sigprocmask.2 sigsuspend.2 \
 	sigreturn.2 sigsetmask.2 sigstack.2 sigwait.2 sigvec.2 socket.2 \
 	socketpair.2 \
-	stat.2 statfs.2 swapon.2 symlink.2 sync.2 syscall.2 truncate.2 ucall.2 \
+	stat.2 statfs.2 swapon.2 swapoff.2 symlink.2 sync.2 syscall.2 truncate.2 ucall.2 \
 	umask.2 unlink.2 utimes.2 vfork.2 vhangup.2 wait.2 write.2
 OBJS=	accept.0 access.0 acct.0 adjtime.0 bind.0 brk.0 chdir.0 chmod.0 \
 	chown.0 chroot.0 close.0 connect.0 creat.0 dup.0 execve.0 exit.0 \
@@ -58,7 +58,7 @@ OBJS=	accept.0 access.0 acct.0 adjtime.0 bind.0 brk.0 chdir.0 chmod.0 \
 	sigaction.0 sigaltstack.0 sigpending.0 sigprocmask.0 sigsuspend.0 \
 	sigreturn.0 sigsetmask.0 sigstack.0 sigwait.0 sigvec.0 socket.0 \
 	socketpair.0 \
-	stat.0 statfs.0 swapon.0 symlink.0 sync.0 syscall.0 truncate.0 ucall.0 \
+	stat.0 statfs.0 swapon.0 swapoff.0 symlink.0 sync.0 syscall.0 truncate.0 ucall.0 \
 	umask.0 unlink.0 utimes.0 vfork.0 vhangup.0 wait.0 write.0
 
 .SUFFIXES: .2 .0

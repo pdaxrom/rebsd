@@ -78,20 +78,21 @@
 #else
 #define CI20_ROMDISK_BYTES             CI20_SIZE_16M
 #endif
-#define CI20_RAMSWAP_PHYS_START        (CI20_ROMDISK_PHYS_START + \
+#define CI20_RAMDISK_DATA_PHYS_START   (CI20_ROMDISK_PHYS_START + \
                                          CI20_ROMDISK_BYTES)
-#define CI20_RAMSWAP_MAX_BYTES         \
+#define CI20_RAMDISK_DATA_MAX_BYTES    \
                                         (CI20_FRAMEBUFFER_PHYS_START > \
-                                         CI20_RAMSWAP_PHYS_START ? \
+                                         CI20_RAMDISK_DATA_PHYS_START ? \
                                          CI20_FRAMEBUFFER_PHYS_START - \
-                                         CI20_RAMSWAP_PHYS_START : 0)
-#ifdef CI20_RAMSWAP_BYTES_OVERRIDE
-#define CI20_RAMSWAP_BYTES             (CI20_RAMSWAP_BYTES_OVERRIDE < \
-                                         CI20_RAMSWAP_MAX_BYTES ? \
-                                         CI20_RAMSWAP_BYTES_OVERRIDE : \
-                                         CI20_RAMSWAP_MAX_BYTES)
+                                         CI20_RAMDISK_DATA_PHYS_START : 0)
+#ifdef CI20_RAMDISK_DATA_BYTES_OVERRIDE
+#define CI20_RAMDISK_DATA_BYTES        \
+                                        (CI20_RAMDISK_DATA_BYTES_OVERRIDE < \
+                                         CI20_RAMDISK_DATA_MAX_BYTES ? \
+                                         CI20_RAMDISK_DATA_BYTES_OVERRIDE : \
+                                         CI20_RAMDISK_DATA_MAX_BYTES)
 #else
-#define CI20_RAMSWAP_BYTES             CI20_RAMSWAP_MAX_BYTES
+#define CI20_RAMDISK_DATA_BYTES        CI20_RAMDISK_DATA_MAX_BYTES
 #endif
 
 #endif

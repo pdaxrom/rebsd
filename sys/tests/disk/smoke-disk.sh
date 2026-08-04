@@ -17,7 +17,8 @@ mkdir -p "$tmp"
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic -DKERNEL -D__mips__ \
     -DDISK_HOST_TEST -I "$top/include" -I "$top/sys" \
     "$top/sys/disk/disk_subr.c" "$top/sys/disk/disk.c" \
-    "$top/sys/disk/romdisk.c" "$top/sys/disk/ramdisk.c" \
+    "$top/sys/disk/romdisk.c" "$top/sys/disk/ramcomp.c" \
+    "$top/sys/disk/ramdisk.c" \
     disk_lifecycle_test.c -o "$tmp/disk_lifecycle_test"
 
 "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \

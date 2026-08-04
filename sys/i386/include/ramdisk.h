@@ -6,7 +6,7 @@
 struct buf;
 
 #define I386_RAMDISK_MAJOR       1
-#define I386_RAMDISK_VAR_MINOR   1
+#define I386_RAMDISK_VAR_MINOR   0
 #define I386_RAMDISK_VAR_BYTES   (1024u * 1024u)
 
 int i386_ramdisk_open(dev_t, int, int);

@@ -229,6 +229,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expect-fat-limited", action="store_true")
     parser.add_argument("--fat-repair-smoke", action="store_true")
     parser.add_argument("--ide-write-smoke", action="store_true")
+    parser.add_argument("--swap-smoke", action="store_true")
+    parser.add_argument("--ramdisk-smoke", action="store_true")
     parser.add_argument(
         "--ata-mode", choices=("auto", "pio", "dma"), default="auto"
     )
@@ -255,6 +257,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--fat-repair-smoke requires --expect-fat-limited")
     if args.ide_write_smoke and args.disk is None:
         parser.error("--ide-write-smoke requires --disk")
+    if args.swap_smoke and args.disk is None:
+        parser.error("--swap-smoke requires --disk")
     if args.bios_image is not None and args.ata_mode != "auto":
         parser.error("forced ATA modes require direct --kernel boot")
     if sum(
@@ -386,9 +390,16 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
     if args.disk is None:
         markers += ("ide-primary-master: none",)
     else:
-        markers += (
-            IDE_COMMON_MARKERS if args.fat_mount_smoke else IDE_DISK_MARKERS
-        )
+        if args.fat_mount_smoke:
+            markers += IDE_COMMON_MARKERS
+        elif args.swap_smoke:
+            markers += IDE_COMMON_MARKERS + (
+                "wd0: 65536 512-byte sectors (32768 KB)",
+                "wd0a: MBR type=82",
+                "wd0b: MBR type=82",
+            )
+        else:
+            markers += IDE_DISK_MARKERS
         markers += ("REBSD_I686_DMESG_OK",)
         if args.ata_mode == "pio":
             markers += ("ata0: mode=pio policy=forced",)
@@ -587,8 +598,20 @@ def main() -> None:
             b"\r\nREBSD_I686_TIME64_2040\r\n",
         ),
         (
-            b"/usr/bin/fifo-smoke\n",
-            b"\r\nFIFO_SMOKE_PASS\r\n",
+            b"/usr/bin/fifo-smoke basic && echo FIFO_BASIC_PASS\n",
+            b"\r\nFIFO_BASIC_PASS\r\n",
+        ),
+        (
+            b"/usr/bin/fifo-smoke unlink && echo FIFO_UNLINK_PASS\n",
+            b"\r\nFIFO_UNLINK_PASS\r\n",
+        ),
+        (
+            b"/usr/bin/fifo-smoke blocking && echo FIFO_BLOCKING_PASS\n",
+            b"\r\nFIFO_BLOCKING_PASS\r\n",
+        ),
+        (
+            b"/usr/bin/fifo-smoke atomic && echo FIFO_ATOMIC_PASS\n",
+            b"\r\nFIFO_ATOMIC_PASS\r\n",
         ),
         (
             b"/etc/telinit Q && echo REBSD_I686_TELINIT_Q_OK\n",
@@ -620,6 +643,84 @@ def main() -> None:
         commands += (IDE_CLOCK_COMMAND, IDE_RAW_COMMAND)
     if args.ide_write_smoke:
         commands += IDE_WRITE_COMMANDS
+    if args.swap_smoke:
+        commands += (
+            (
+                b"/usr/sbin/swapon /dev/wd0a && "
+                b"echo REBSD_I686_SWAPON_A_OK\n",
+                b"\r\nREBSD_I686_SWAPON_A_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/swapon /dev/wd0b && /usr/bin/free && "
+                b"echo REBSD_I686_SWAPON_B_OK\n",
+                b"\r\nREBSD_I686_SWAPON_B_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/swapoff /dev/wd0a && /usr/bin/free && "
+                b"echo REBSD_I686_SWAPOFF_A_OK\n",
+                b"\r\nREBSD_I686_SWAPOFF_A_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/swapoff /dev/wd0b && /usr/bin/free && "
+                b"echo REBSD_I686_SWAPOFF_B_OK\n",
+                b"\r\nREBSD_I686_SWAPOFF_B_OK\r\n",
+            ),
+        )
+    if args.ramdisk_smoke:
+        commands += (
+            (
+                b"/usr/sbin/ramctl status /dev/ram0 && "
+                b"echo REBSD_I686_RAM0_STATUS_OK\n",
+                b"\r\nREBSD_I686_RAM0_STATUS_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/ramctl create /dev/ram1 backing=1M "
+                b"size=2x compression && "
+                b"echo REBSD_I686_RAMCOMP_CREATE_OK\n",
+                b"\r\nREBSD_I686_RAMCOMP_CREATE_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/ramctl status /dev/ram1 | "
+                b"/usr/bin/grep 'size=2097152, backing=1048576, "
+                b"compression=on' && "
+                b"echo REBSD_I686_RAMCOMP_SIZE_OK\n",
+                b"\r\nREBSD_I686_RAMCOMP_SIZE_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/mkswap /dev/ram1 && "
+                b"/usr/sbin/swapon /dev/ram1 && /usr/bin/free && "
+                b"echo REBSD_I686_RAMCOMP_SWAPON_OK\n",
+                b"\r\nREBSD_I686_RAMCOMP_SWAPON_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/swapoff /dev/ram1 && "
+                b"echo REBSD_I686_RAMCOMP_SWAPOFF_OK\n",
+                b"\r\nREBSD_I686_RAMCOMP_SWAPOFF_OK\r\n",
+            ),
+            (
+                b"/sbin/mkfs -i 4096 /dev/ram1 && "
+                b"/sbin/mount -o rw /dev/ram1 /mnt && "
+                b"echo ramcomp-filesystem-ok >/mnt/ramcomp-smoke && "
+                b"/bin/sync && /sbin/umount /mnt && "
+                b"echo REBSD_I686_RAMCOMP_MKFS_OK\n",
+                b"\r\nREBSD_I686_RAMCOMP_MKFS_OK\r\n",
+            ),
+            (
+                b"/sbin/mount -o rw /dev/ram1 /mnt && "
+                b"/bin/cat /mnt/ramcomp-smoke | "
+                b"/usr/bin/grep ramcomp-filesystem-ok && "
+                b"/sbin/umount /mnt && "
+                b"echo REBSD_I686_RAMCOMP_REMOUNT_OK\n",
+                b"\r\nREBSD_I686_RAMCOMP_REMOUNT_OK\r\n",
+            ),
+            (
+                b"/usr/sbin/ramctl destroy /dev/ram1 && "
+                b"/usr/sbin/ramctl status /dev/ram1 | "
+                b"/usr/bin/grep 'not configured' && "
+                b"echo REBSD_I686_RAMCOMP_DESTROY_OK\n",
+                b"\r\nREBSD_I686_RAMCOMP_DESTROY_OK\r\n",
+            ),
+        )
     command_index = 0
     command_sent = False
     command_output_start = 0

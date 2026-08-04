@@ -19,17 +19,17 @@ MIPS_ARCH_ENDIAN ?= $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),-EL,-EB)
 MIPS_ARCH ?= $(if $(MALTA_PORT64),$(MIPS_ARCH_ENDIAN) -mips3 -mabi=32 -mtune=$(MALTA_CPU_TUNE),$(MIPS_ARCH_ENDIAN) -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE))
 MALTA_QEMU_RAM ?= $(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),64M,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),64M,32M))
 MALTA_RAM_KBYTES ?= $(if $(MALTA_N64_8M_PROFILE),8192,$(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),65536,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),65536,32768)))
-MALTA_RAMSWAP_KBYTES ?= $(if $(MALTA_N64_8M_PROFILE),1792,)
+MALTA_RAMDISK_DATA_KBYTES ?= $(if $(MALTA_N64_8M_PROFILE),1792,)
 ifneq ($(MALTA_N64_8M_PROFILE),)
 ifneq ($(MALTA_RAM_KBYTES),8192)
 $(error MALTA_MEMORY_PROFILE=n64-8m requires MALTA_RAM_KBYTES=8192)
 endif
-ifneq ($(MALTA_RAMSWAP_KBYTES),1792)
-$(error MALTA_MEMORY_PROFILE=n64-8m requires MALTA_RAMSWAP_KBYTES=1792)
+ifneq ($(MALTA_RAMDISK_DATA_KBYTES),1792)
+$(error MALTA_MEMORY_PROFILE=n64-8m requires MALTA_RAMDISK_DATA_KBYTES=1792)
 endif
 endif
 CI20_RAM_KBYTES ?= 1048576
-CI20_RAMSWAP_KBYTES ?= $(if $(CI20_PORT),32768,)
+CI20_RAMDISK_DATA_KBYTES ?= $(if $(CI20_PORT),32768,)
 MALTA_QEMU ?= $(if $(MALTA_PORT64),qemu-system-mips64,qemu-system-mips)
 MALTA_QEMU_CPU ?= $(if $(MALTA_PORT64),R4000,)
 MALTA_QEMU_CPU_OPT = $(if $(MALTA_QEMU_CPU),-cpu $(MALTA_QEMU_CPU),)
@@ -254,12 +254,12 @@ CPPFLAGS        = -I. -I$(TOPSRC)/include -I$(TOPSRC)/sys \
                   ${PARAM} -DKERNEL -DMIPS \
                   $(MIPS_TARGET_ENDIAN_CFLAGS_$(MIPS_TARGET_ENDIAN)) \
                   -DROMFS_ENABLED \
-                  $(if $(MALTA_N64_8M_PROFILE),-DMALTA_N64_8M_PROFILE -DZSWAP_ENABLED,) \
+                  $(if $(MALTA_N64_8M_PROFILE),-DMALTA_N64_8M_PROFILE,) \
                   -DMALTA_RAM_SIZE_OVERRIDE='($(MALTA_RAM_KBYTES) * 1024u)' \
                   -DMALTA_ROMDISK_BYTES_OVERRIDE='($(MIPS_ROOTFS_KBYTES) * 1024u)' \
                   $(if $(CI20_PORT),-DCI20_RAM_SIZE_OVERRIDE='($(CI20_RAM_KBYTES) * 1024u)' -DCI20_ROMDISK_BYTES_OVERRIDE='($(MIPS_ROOTFS_KBYTES) * 1024u)',) \
-                  $(if $(MALTA_RAMSWAP_KBYTES),-DMALTA_RAMSWAP_BYTES_OVERRIDE='($(MALTA_RAMSWAP_KBYTES) * 1024u)',) \
-                  $(if $(CI20_PORT),$(if $(CI20_RAMSWAP_KBYTES),-DCI20_RAMSWAP_BYTES_OVERRIDE='($(CI20_RAMSWAP_KBYTES) * 1024u)',),) \
+                  $(if $(MALTA_RAMDISK_DATA_KBYTES),-DMALTA_RAMDISK_DATA_BYTES_OVERRIDE='($(MALTA_RAMDISK_DATA_KBYTES) * 1024u)',) \
+                  $(if $(CI20_PORT),$(if $(CI20_RAMDISK_DATA_KBYTES),-DCI20_RAMDISK_DATA_BYTES_OVERRIDE='($(CI20_RAMDISK_DATA_KBYTES) * 1024u)',),) \
                   -DHW_MACHINE_NAME='"$(SYSTEM_TARGET)"' \
                   -DHW_MODEL_NAME='"$(MALTA_HW_MODEL)"'
 ifneq ($(filter -DINET_ENABLED,$(PARAM)),)
@@ -350,13 +350,13 @@ COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
 
 include $(TOPSRC)/sys/mips/kernel-runtime.mk
 
-MALTA_PROFILE_OBJS = $(if $(MALTA_N64_8M_PROFILE),$(if $(filter zswap.o,$(OBJS)),,zswap.o),)
-MALTA_BUILD_MODE_STAMP = .build-mode.$(MIPS_KERNEL_COMPILER).$(MALTA_MEMORY_PROFILE).$(MALTA_RAM_KBYTES).$(MALTA_RAMSWAP_KBYTES).$(CI20_RAM_KBYTES).$(CI20_RAMSWAP_KBYTES).$(MIPS_ROOTFS_KBYTES).$(MIPS_TRACE).$(VM_DIAGNOSTIC)
+MALTA_PROFILE_OBJS =
+MALTA_BUILD_MODE_STAMP = .build-mode.$(MIPS_KERNEL_COMPILER).$(MALTA_MEMORY_PROFILE).$(MALTA_RAM_KBYTES).$(MALTA_RAMDISK_DATA_KBYTES).$(CI20_RAM_KBYTES).$(CI20_RAMDISK_DATA_KBYTES).$(MIPS_ROOTFS_KBYTES).$(MIPS_TRACE).$(VM_DIAGNOSTIC)
 SYSTEM_OBJ      = ${OBJS} $(MALTA_PROFILE_OBJS) ioconf.o rootfs.o $(MIPS_KERNEL_RUNTIME_OBJS)
 SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
                   $(TOPSRC)/sys/include/rebsd_version.h \
                   $(VERSION_GENERATOR) \
-                  $(if $(MALTA_N64_8M_PROFILE),$(TOPSRC)/sys/vm/zswap.c $(TOPSRC)/sys/vm/zswap.h,) \
+                  $(TOPSRC)/sys/disk/ramcomp.h \
                   $(KERNEL_COMPILER_DEPS) $(MIPS_KERNEL_RUNTIME_SRCS)
 SYSTEM_LD_HEAD  = $(GENERATE_VERS); \
                   ${COMPILE_VERS_C}; \
@@ -873,12 +873,6 @@ ioconf.o: ioconf.c ${SYSTEM_DEP} | machine sys .deps
 
 ${SYSTEM_OBJ} swapunix.o: | machine sys .deps
 $(filter-out rootfs.o,$(SYSTEM_OBJ)) swapunix.o: $(MALTA_BUILD_MODE_STAMP)
-
-ifneq ($(MALTA_N64_8M_PROFILE),)
-zswap.o: $(TOPSRC)/sys/vm/zswap.c \
-         $(TOPSRC)/sys/vm/zswap.h ${SYSTEM_DEP} | machine sys .deps
-	${COMPILE_C}
-endif
 
 $(FSUTIL):
 	$(MAKE) -C $(TOPSRC)/tools/fsutil

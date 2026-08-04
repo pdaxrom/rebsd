@@ -6,6 +6,7 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 
 # The cartridge root remains read-only. Create one volatile UFS filesystem for
 # runtime state; /tmp is a rootfs symlink to /var/tmp.
+/usr/sbin/ramctl create /dev/ram0 size=all >/dev/null
 if mkfs -i 4096 /dev/ram0 >/dev/null; then
 	if mount /var; then
 		mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
@@ -13,6 +14,14 @@ if mkfs -i 4096 /dev/ram0 >/dev/null; then
 		: >/var/run/utmp
 		: >/var/log/wtmp
 		chmod 664 /var/run/utmp /var/log/wtmp
+	fi
+fi
+
+# Compression belongs to the RAM block device; swap itself remains the
+# standard Linux swap v1 format and is attached by userland.
+if /usr/sbin/ramctl create /dev/ram1 backing=all size=2x compression; then
+	if /usr/sbin/mkswap /dev/ram1; then
+		/usr/sbin/swapon /dev/ram1
 	fi
 fi
 

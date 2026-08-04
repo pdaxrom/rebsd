@@ -1,0 +1,22 @@
+.TH SWAPOFF 8 "August 2026" ReBSD
+.SH NAME
+swapoff \- disable a swap device
+.SH SYNOPSIS
+.B swapoff
+.I special
+.SH DESCRIPTION
+.B swapoff
+stops new allocations on the named swap device, pages in every anonymous
+page still backed by it, and then closes the device.  Other configured swap
+devices remain active.  The operation fails without changing the active
+device set if insufficient physical memory prevents the remaining pages from
+being made resident.
+.SH EXAMPLES
+.PP
+.nf
+swapoff /dev/wd0b
+.fi
+.SH SEE ALSO
+.BR swapon (8),
+.BR free (1),
+.BR pstat (8)

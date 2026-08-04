@@ -24,7 +24,7 @@ SUBDIR_ALL    += chkconfig dhclient disktool dmesg fsck fsck.fat getty gpt ifcon
                   mkfs mkfs.fat mknod mount reboot route shutdown umount
 
 # /usr/sbin
-SUBDIR_ALL    += chown chroot cron inetd mkpasswd ntpdate pstat swapon \
+SUBDIR_ALL    += chown chroot cron inetd mkpasswd mkswap ntpdate pstat ramctl swapon swapoff \
                   talloc update vipw
 
 # TODO: lex m4 reloc sre pforth

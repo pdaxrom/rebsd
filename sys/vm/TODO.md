@@ -286,7 +286,7 @@ must then pass the applicable matrix below.
   native PCC/a.out hard-float userland, including the 100-cycle stress and
   leak-counter gate.  Confirmed on 2026-07-18.
 - [x] N64 8 MiB UART-only GCC-kernel/GCC-userland pressure gate with a
-  2 MiB minimal rootfs and 4 MiB logical zswap, confirmed on 2026-07-25 with
+  2 MiB minimal rootfs and 4 MiB logical ramcomp, confirmed on 2026-07-25 with
   ROM SHA-256
   `7d2e8ec493097ad14ea4ff8c630a71925862fcc785be11fe2e13bce80da747b2`:
   compressible pressure completed with 245 pageouts and 115 pageins; raw
@@ -298,7 +298,7 @@ must then pass the applicable matrix below.
   - [x] 100 iterations of `/root/vm-stress-smoke.sh`
   - [ ] compressible and incompressible `/usr/bin/vm-pressure-smoke`; the
     UART-only minimal profile passed, while the full profile still needs a
-    zero-swap-failure raw run with its smaller 3584 KiB logical zswap
+    zero-swap-failure raw run with its smaller 3584 KiB logical ramcomp
   - [x] `/dev/fb0` `MAP_SHARED` through `fbset fill` and `fbview`
 - [ ] After the 8 MiB MMU gate is complete, repeat the reduced hardware gate
   on a base 4 MiB N64: boot/login, `/root/vm-process-smoke`, and eight

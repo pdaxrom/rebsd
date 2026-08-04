@@ -31,6 +31,7 @@ struct namecache namecache[NNAMECACHE];
 char bufdata[NBUF * MAXBSIZE];
 struct file file[NFILE];
 struct inode inode[NINODE];
+const u_int inode_table_stride = sizeof(inode[0]);
 struct callout callout[NCALL];
 struct mount mount[NMOUNT];
 struct buf buf[NBUF], bfreelist[BQUEUES];

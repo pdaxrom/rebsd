@@ -240,6 +240,7 @@ const struct sysent sysent[] = {
     { 3, shmctl },              /* 175 = shmctl */
     { POSITIONED_IO_NARG, pread },  /* 176 = pread */
     { POSITIONED_IO_NARG, pwrite }, /* 177 = pwrite */
+    { 1, swapoff },             /* 178 = swapoff */
 };
 
 const int nsysent = sizeof (sysent) / sizeof (sysent[0]);

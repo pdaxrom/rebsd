@@ -449,12 +449,10 @@ main (
 	 * done so and invoked us.  This program should not be run manually unless
 	 * you are absolutely sure you know what you are doing - use 'newfs' instead.
 	 */
-	fso = creat (special, 0666);
+	fso = open (special, O_RDWR | O_CREAT, 0666);
 	if (fso < 0)
-		err (1, "cannot create %s\n", special);
-	fsi = open (special, 0);
-	if (fsi < 0)
 		err (1, "cannot open %s\n", special);
+	fsi = fso;
 
 	printf ("Size: %u kbytes\n", kbytes);
 	if (kbytes == 0) {

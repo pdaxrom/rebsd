@@ -61,7 +61,7 @@ extern int  runrun;                 /* scheduling flag */
 extern char curpri;                 /* more scheduling */
 extern volatile unsigned int ct_ticks; /* hardware clock interrupts */
 
-extern u_int    swapstart, nswap;   /* start and size of swap space */
+extern u_int    swapstart, nswap;   /* aggregate configured swap blocks */
 extern int      updlock;            /* lock for sync */
 extern blkno_t  rablock;            /* block to be read ahead */
 extern dev_t    rootdev;            /* device of the root */
@@ -79,6 +79,7 @@ void init_process(void);
 void md_user_enter(unsigned, unsigned);
 int getmdev(dev_t *, caddr_t);
 void swapon(void);
+void swapoff(void);
 
 struct inode;
 daddr_t bmap (struct inode *ip, daddr_t bn, int rwflg, int flags);

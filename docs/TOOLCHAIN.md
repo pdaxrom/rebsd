@@ -8,8 +8,8 @@ Malta, Malta64, MaltaEL, CI20, and N64.  PCC has passed the Malta,
 Malta64/R4000, and MaltaEL QEMU hard-float and soft-float rootfs gates, plus
 hard-float PCC kernel/rootfs QEMU gates for Malta and Malta64.  The updated
 N64 UART-only boot matrix passed on
-real hardware with PCC and GCC kernels, raw swap, and zswap.  The current N64
-hard-float PCC full zswap ROM boots on real hardware to root login and basic
+real hardware with PCC and GCC kernels.  The current N64 hard-float PCC ROM
+with a runtime compressed RAM block device boots on real hardware to root login and basic
 shell use (`ls`, `uptime`).  The full updated N64 hard/soft PCC rootfs smoke
 still needs fresh real hardware passes before becoming the N64 hardware
 baseline.  On 2026-07-07 the full N64 hard-float PCC userland build gate
@@ -104,13 +104,13 @@ make -C sys/mips BOARD=malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 M
 make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
 make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
 make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
-make -C sys/mips BOARD=n64 N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
+make -C sys/mips BOARD=n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
 make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
 make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
 make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
 make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ZSWAP=1 kernel.z64 preflight.z64
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 N64_ZSWAP=1 kernel.z64 preflight.z64
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
+make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 kernel.z64 preflight.z64
 ```
 
 Use `N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc` for normal N64
@@ -175,7 +175,7 @@ for the staged root image but cap kernel-visible RAM and swap explicitly:
 ```sh
 make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 \
     MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_KBYTES=16384 \
-    MALTA_RAM_KBYTES=8192 MALTA_RAMSWAP_KBYTES=4608 MALTA_QEMU_RAM=64M kernel
+    MALTA_RAM_KBYTES=8192 MALTA_RAMDISK_DATA_KBYTES=4608 MALTA_QEMU_RAM=64M kernel
 ```
 
 This layout maps the Malta root image at physical `0x00800000`, gives the guest
@@ -202,19 +202,20 @@ Kernel version banners record the selected compiler and ABI, for example:
 ReBSD for Malta64: built on user@host with pcc Portable C Compiler ..., cpu=vr4300, float=hard, endian=big
 ```
 
-N64 builds default to `N64_ZSWAP=1`.  The compressed RAM swap backend exposes a
-larger logical swap map on real hardware while keeping the same physical RDRAM
-pool.  Use `N64_ZSWAP=0` only when comparing against the old raw RAM swap
-layout.
+Compression is a runtime property of a normal RAM block device, not of the VM
+swap pager.  `ramctl create /dev/ram1 backing=all size=2x compression` exposes
+a logical device larger than its physical pool.  The device can then hold
+Linux swap v1 or a filesystem; swap is attached and detached with `swapon` and
+`swapoff`.  There is no build-time compressed-swap selector.
 
 The 2026-07-06 real N64 UART-only boot isolation matrix passed for all four
-debug ROMs: PCC/raw swap, PCC/zswap, GCC/raw swap, and GCC/zswap.  These ROMs
+debug ROMs: PCC and GCC kernels with raw and compressed RAM-device profiles.  These ROMs
 use `N64_MINIMAL_UART_ONLY=1` and a small rootfs containing `/sbin/init`,
 `/libexec/getty`, `/bin/login`, `/bin/sh`, and the basic mount/fs tools.  The
 minimal rootfs must keep `/bin/login`; without it `getty` accepts a username,
 fails its login exec, exits, and `init` immediately respawns a new login prompt.
 
-The full 2026-07-06 N64 hard-float PCC zswap ROM also reached root login on
+The full 2026-07-06 N64 hard-float PCC compressed-RAM ROM also reached root login on
 real hardware.  Basic shell commands including `ls -l /` and `uptime` worked.
 The full smoke is not closed yet: `uname -a` currently triggers a kernel
 `TLB load/fetch` panic after login, so that path remains an open runtime issue.

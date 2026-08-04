@@ -20,8 +20,7 @@ make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-vm-pcc-min \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
     N64_USERLAND_ENDIAN=big N64_USERLAND_EXEC_FORMAT=aout \
     N64_MINIMAL_ROOTFS=1 N64_MINIMAL_PCC_SMOKE=1 \
-    N64_MINIMAL_ROOTFS_KBYTES=7168 N64_ROOTFS_NATIVE_PCC=1 \
-    N64_ZSWAP=1 all
+    N64_MINIMAL_ROOTFS_KBYTES=7168 N64_ROOTFS_NATIVE_PCC=1 all
 
 make -C sys/mips BOARD=ci20 O=/work/rebsd-hw/ci20-gcc \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
@@ -87,8 +86,8 @@ make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
 
 `vm-pressure-runtime` requires observable pageout and reverse-order pagein and
 prints bounded progress with VM counters.  The second invocation uses
-incompressible page contents and therefore covers zswap's raw-block path as
-well as its compressed path.  When a valid rootfs already exists, use
+incompressible page contents and therefore covers the compressed RAM device's
+raw-block path as well as its compressed path.  When a valid rootfs already exists, use
 `vm-pressure-smoke-runtime` to dependency-build only that utility, inject it
 through `rootfs-patch-kernel`, and run the same test without rebuilding the
 rest of userland.  `vm-diagnostics-pcc-runtime` may be used with
@@ -115,21 +114,21 @@ to force pageout and pagein without changing the normal 256 MiB Ci20 layout.
 ```sh
 make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
     MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
-    MALTA_RAMSWAP_KBYTES=34816 \
+    MALTA_RAMDISK_DATA_KBYTES=34816 \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
     VM_PRESSURE_ARGS=-rs vm-pressure-smoke-runtime
 
 make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
     MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
-    MALTA_RAMSWAP_KBYTES=34816 \
+    MALTA_RAMDISK_DATA_KBYTES=34816 \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
     VM_STRESS_ITERATIONS=100 vm-stress-runtime
 
 make -C sys/mips BOARD=maltael O=/work/rebsd-qemu/mipsel-vm \
     MALTA_QEMU_RAM=64M MALTA_RAM_KBYTES=65536 \
-    MALTA_RAMSWAP_KBYTES=34816 \
+    MALTA_RAMDISK_DATA_KBYTES=34816 \
     MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
     vm-diagnostics-pcc-runtime
@@ -174,7 +173,7 @@ outside the kernel build.
    pagein counts and zero swap failures.  `vm-pressure-smoke` rejects any
    observed swap failure instead of printing a false success; `-s` additionally
    requires actual pageout and pagein activity.  The `-r` run covers
-   incompressible data and zswap's raw-block path.  If a later command stalls,
+   incompressible data and the compressed RAM device's raw-block path.  If a later command stalls,
    rerun only that command under `/usr/bin/strace`; syscall tracing is inherited
    across fork/exec and is written to the invoking UART terminal without
    enabling global kernel tracing.  For example:

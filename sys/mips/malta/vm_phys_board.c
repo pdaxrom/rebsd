@@ -94,5 +94,6 @@ vm_phys_board_register(struct vm_phys_map *map, vm_size_t ram_size)
     if (error != 0)
         return error;
     return malta_vm_reserve_present(map, ram_size,
-        MALTA_RAMSWAP_PHYS_START, MALTA_RAMSWAP_BYTES, "swap");
+        MALTA_RAMDISK_DATA_PHYS_START, MALTA_RAMDISK_DATA_BYTES,
+        "ram1 pool");
 }

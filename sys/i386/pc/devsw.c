@@ -55,7 +55,7 @@ const struct bdevsw bdevsw[] = {
 #error Wrong I386_RAMDISK_MAJOR value
 #endif
         i386_ramdisk_open, i386_ramdisk_close, i386_ramdisk_strategy,
-        i386_ramdisk_size, i386_ramdisk_ioctl, 0
+        i386_ramdisk_size, i386_ramdisk_ioctl, BDEV_DISCARD
     },
     {
 #if I386_SDISK_MAJOR != 2

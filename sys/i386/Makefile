@@ -41,6 +41,13 @@ endif
 include $(TOPSRC)/target-i386.mk
 include $(TOPSRC)/mk/rootfs-userland.mk
 
+# Keep every kernel object tied to the complete header graph seen by GCC.
+# Explicit source prerequisites below document ownership, while generated
+# dependency files prevent mixed kernel ABIs after a common header changes.
+I686_DEPFLAGS = -MT $@ -MMD -MP -MF .deps/$(@:.o=.d)
+I686_CFLAGS  += $(I686_DEPFLAGS)
+I686_ASFLAGS += $(I686_DEPFLAGS)
+
 I386_ROOTFS_CMD_SUBDIRS = $(REBSD_ROOTFS_CMD_SUBDIRS) lsusb lspci
 I386_ROOTFS_CMD_EXTRA_SUBDIRS = $(REBSD_ROOTFS_CMD_EXTRA_SUBDIRS) \
                                lsusb lspci
@@ -84,8 +91,10 @@ I386_ROOTFS_KBYTES ?= 16384
 I386_ROOTFS_EPOCH = 1
 I386_FAT_SMOKE_IMAGE = fat-smoke.img
 I386_FAT32_SMOKE_IMAGE = fat32-oversize-smoke.img
+I386_SWAP_SMOKE_IMAGE = swap-smoke.img
 I386_HOST_MKFS_FAT = mkfs.fat.host
 I386_FAT_SMOKE_TOOL = $(I386_TOOLS_SRC)/mkfat-smoke.py
+I386_SWAP_SMOKE_TOOL = $(I386_TOOLS_SRC)/mkswap-smoke.py
 I386_ROOTFS_BOARD_DIR = $(I386_PC_SRC)/rootfs
 I386_ROOTFS_DEVICES = $(I386_PC_SRC)/rootfs.devices
 I386_ROOTFS_MANIFEST = rootfs.generated.manifest
@@ -204,7 +213,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o fpu.o \
                    libkern.o cons.o subr_dma.o clock_subr.o todr.o \
                    mc146818.o i386_rtc.o \
                    kbdmap.o ps2.o mouse.o i8042.o \
-                   disk_subr.o disk.o romdisk.o ramdisk.o i386_romdisk.o \
+                   disk_subr.o disk.o romdisk.o ramcomp.o ramdisk.o i386_romdisk.o \
                    i386_ramdisk.o \
                    fat_subr.o fat_vfs.o \
                    usb_subr.o usb_core.o usb_service.o usb_task.o \
@@ -240,12 +249,19 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o fpu.o \
 
 $(KERNEL_OBJS): $(I386_SRC)/include/machine/machparam.h \
 	    $(I386_SRC)/include/machine/layout.h
+$(KERNEL_OBJS) setup.o: | .deps
+
+.deps:
+	mkdir -p $@
+
+-include $(KERNEL_OBJS:%.o=.deps/%.d) .deps/setup.d
 
 .DEFAULT_GOAL := all
 
 .PHONY: all kernel bios-image toolchain-check rootfs-smoke ide-smoke \
 	fat-mount-smoke \
 	ide-pio-smoke ide-dma-smoke ide-auto-smoke \
+	ramdisk-smoke \
 	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
 	usb-mass-storage-smoke bios-usb-mass-storage-smoke \
 	usb-mass-storage-ide-absent-smoke \
@@ -555,6 +571,10 @@ $(I386_FAT32_SMOKE_IMAGE): $(I386_HOST_MKFS_FAT) $(I386_FAT_SMOKE_TOOL)
 	    --mkfs ./$(I386_HOST_MKFS_FAT) --output $@ --fat 32 \
 	    --declared-extra-sectors 3576
 
+$(I386_SWAP_SMOKE_IMAGE): $(I386_SWAP_SMOKE_TOOL)
+	rm -f $@
+	$(PYTHON) $(I386_SWAP_SMOKE_TOOL) --output $@
+
 early_console.o: $(I386_PC_SRC)/early_console.c \
 	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/io.h \
@@ -792,9 +812,16 @@ romdisk.o: $(I386_DISK_SRC)/romdisk.c $(I386_DISK_SRC)/romdisk.h \
 	    -c $< -o $@
 
 ramdisk.o: $(I386_DISK_SRC)/ramdisk.c $(I386_DISK_SRC)/ramdisk.h \
+	    $(I386_DISK_SRC)/ramcomp.h \
 	    $(TOPSRC)/sys/include/buf.h $(TOPSRC)/sys/include/disk.h \
 	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/systm.h \
 	    $(TOPSRC)/sys/include/types.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+ramcomp.o: $(I386_DISK_SRC)/ramcomp.c $(I386_DISK_SRC)/ramcomp.h \
+	    $(TOPSRC)/sys/include/errno.h $(TOPSRC)/sys/include/types.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -1359,6 +1386,18 @@ ide-dma-smoke: rebsd-i686.bzimg rootfs.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk rootfs.img --ata-mode dma --ide-write-smoke --timeout 30
 
+swap-smoke: rebsd-i686.bzimg $(I386_SWAP_SMOKE_IMAGE)
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk $(I386_SWAP_SMOKE_IMAGE) --swap-smoke --timeout 30
+
+ramdisk-smoke: rebsd-i686.bzimg
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --ramdisk-smoke --timeout 30
+
 run run-serial: rebsd-i686.bzimg
 	$(QEMU_I386) -machine $(QEMU_MACHINE) -cpu $(QEMU_CPU) \
 	    -accel tcg -m $(QEMU_MEMORY) -kernel $< \
@@ -1555,6 +1594,7 @@ clean:
 	rm -f setup.o setup.elf setup.bin setup.map \
 	    vers.c \
 	    $(I386_FAT_SMOKE_IMAGE) $(I386_FAT32_SMOKE_IMAGE) \
+	    $(I386_SWAP_SMOKE_IMAGE) \
 	    $(I386_HOST_MKFS_FAT) \
 	    rootfs.img rootfs.check.img rootfs_image.o \
 	    $(I386_ROOTFS_MANIFEST) $(I386_USER_LDSCRIPT) \
@@ -1568,6 +1608,7 @@ clean:
 	rm -rf $(I386_ROOTFS_STAGE)
 	rm -rf $(I386_ROOTFS_BASE)
 	rm -rf $(I386_USERLAND_BUILD)
+	rm -rf .deps
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	rmdir $(I386_GEN_INCLUDE) 2>/dev/null || true
 

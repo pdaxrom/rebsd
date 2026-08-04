@@ -8,7 +8,6 @@
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
-#include <sys/map.h>
 #include <sys/ioctl.h>
 #include <sys/disk.h>
 #include <sys/errno.h>
@@ -23,55 +22,69 @@
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
 
-struct map swapmap[1] = {
-    { 0, 0, "swapmap" },
+#define SWAP_DEVICE_DRAINING 0x01u
+
+struct swap_device {
+    struct swap_device *sd_next;
+    struct vm_page     *sd_storage_pages;
+    vm_pfn_t            sd_storage_page_count;
+    dev_t               sd_dev;
+    size_t              sd_base_page;
+    size_t              sd_total_pages;
+    size_t              sd_usable_pages;
+    size_t              sd_used_pages;
+    size_t              sd_alloc_hint;
+    size_t              sd_page_blocks;
+    u_char             *sd_bitmap;
+    unsigned            sd_flags;
+    unsigned            sd_linux_format;
+    unsigned            sd_badpages;
 };
 
 static unsigned char swap_header[SWAP_LINUX_PAGE_BYTES]
     __attribute__((aligned(VM_PAGE_SIZE)));
-static struct vm_page *swapmap_storage_pages;
-static vm_pfn_t swapmap_storage_page_count;
+static struct swap_device *swap_devices;
+static struct swap_device *swap_alloc_device;
 
 static void
-swapmap_storage_release(void)
+swap_device_storage_release(struct swap_device *device)
 {
     vm_pfn_t index;
 
-    if (swapmap_storage_pages == 0)
+    if (device == 0 || device->sd_storage_pages == 0)
         return;
-    for (index = 0; index < swapmap_storage_page_count; ++index)
+    for (index = 0; index < device->sd_storage_page_count; ++index)
         if (vm_page_counter_dec(&vm_page_boot_allocator,
-            swapmap_storage_pages + index, VM_PAGE_COUNTER_WIRE) != 0)
-            panic("swap map unwire");
-    if (vm_page_free(&vm_page_boot_allocator, swapmap_storage_pages,
-        swapmap_storage_page_count) != 0)
-        panic("swap map free");
-    swapmap_storage_pages = 0;
-    swapmap_storage_page_count = 0;
-    swapmap[0].m_map = 0;
-    swapmap[0].m_limit = 0;
+            device->sd_storage_pages + index,
+            VM_PAGE_COUNTER_WIRE) != 0)
+            panic("swap device unwire");
+    if (vm_page_free(&vm_page_boot_allocator, device->sd_storage_pages,
+        device->sd_storage_page_count) != 0)
+        panic("swap device free");
 }
 
 static int
-swapmap_storage_alloc(size_t total, size_t allocation_unit)
+swap_device_storage_alloc(size_t total_pages,
+    struct swap_device **result)
 {
     struct vm_page_request request;
     struct vm_page *pages;
-    struct mapent *entries;
+    struct swap_device *device;
+    size_t bitmap_bytes;
     vm_size_t bytes;
     vm_size_t storage_size;
     vm_pfn_t page_count;
     vm_pfn_t index;
-    size_t entry_count;
     int error;
 
-    if (swapmap_storage_pages != 0)
-        return EBUSY;
-    entry_count = rmap_required_entries(total, allocation_unit);
-    if (entry_count == 0 ||
-        entry_count > VM_SIZE_MAX / sizeof(*entries))
+    if (result == 0 || total_pages < 2)
+        return EINVAL;
+    if (total_pages > VM_SIZE_MAX - 7)
         return EOVERFLOW;
-    bytes = entry_count * sizeof(*entries);
+    bitmap_bytes = (total_pages + 7) >> 3;
+    if (bitmap_bytes > VM_SIZE_MAX - sizeof(*device))
+        return EOVERFLOW;
+    bytes = sizeof(*device) + bitmap_bytes;
     error = vm_size_round_page(bytes, &storage_size);
     if (error != 0)
         return error;
@@ -83,9 +96,9 @@ swapmap_storage_alloc(size_t total, size_t allocation_unit)
     error = vm_page_alloc(&vm_page_boot_allocator, &request, &pages);
     if (error != 0)
         return error;
-    entries = pmap_pages_direct_map(pages, page_count,
+    device = pmap_pages_direct_map(pages, page_count,
         PMAP_CACHE_CACHED);
-    if (entries == 0) {
+    if (device == 0) {
         for (index = 0; index < page_count; ++index)
             (void)vm_page_counter_dec(&vm_page_boot_allocator,
                 pages + index, VM_PAGE_COUNTER_WIRE);
@@ -93,52 +106,165 @@ swapmap_storage_alloc(size_t total, size_t allocation_unit)
         return EFAULT;
     }
 
-    bzero((caddr_t)entries, storage_size);
-    swapmap_storage_pages = pages;
-    swapmap_storage_page_count = page_count;
-    swapmap[0].m_map = entries;
-    swapmap[0].m_limit = entries + entry_count;
+    bzero((caddr_t)device, storage_size);
+    device->sd_storage_pages = pages;
+    device->sd_storage_page_count = page_count;
+    device->sd_bitmap = (u_char *)(device + 1);
+    device->sd_total_pages = total_pages;
+    *result = device;
     return 0;
 }
 
-static size_t
-swapmap_add_extent(unsigned first_page, unsigned end_page,
-    size_t page_blocks)
+static int
+swap_bitmap_test(const struct swap_device *device, size_t page)
 {
-    size_t blocks;
-    size_t start;
+    return (device->sd_bitmap[page >> 3] &
+        (1u << (page & 7))) != 0;
+}
 
-    if (first_page >= end_page)
-        return 0;
-    start = (size_t)first_page * page_blocks;
-    blocks = (size_t)(end_page - first_page) * page_blocks;
-    mfree(swapmap, blocks, start);
-    return blocks;
+static void
+swap_bitmap_set(struct swap_device *device, size_t page, int allocated)
+{
+    if (allocated)
+        device->sd_bitmap[page >> 3] |= 1u << (page & 7);
+    else
+        device->sd_bitmap[page >> 3] &= ~(1u << (page & 7));
 }
 
 static int
-swapmap_linux_init(const struct swap_linux_info *linux_swap,
-    size_t page_blocks, size_t *usable_blocks)
+swap_device_bitmap_init(struct swap_device *device,
+    const struct swap_linux_info *linux_swap)
 {
-    unsigned current;
     unsigned badpage;
     unsigned index;
+    size_t bitmap_bytes;
     int error;
 
-    current = 1;
-    *usable_blocks = 0;
+    bitmap_bytes = (device->sd_total_pages + 7) >> 3;
+    bzero((caddr_t)device->sd_bitmap, bitmap_bytes);
+    swap_bitmap_set(device, 0, 1);
+    device->sd_usable_pages = device->sd_total_pages - 1;
     for (index = 0; index < linux_swap->sli_badpages; ++index) {
         error = swap_linux_badpage(swap_header, linux_swap, index,
             &badpage);
         if (error != 0)
             return error;
-        *usable_blocks += swapmap_add_extent(current, badpage,
-            page_blocks);
-        current = badpage + 1u;
+        if (badpage == 0 || badpage >= device->sd_total_pages ||
+            swap_bitmap_test(device, badpage))
+            return EINVAL;
+        swap_bitmap_set(device, badpage, 1);
+        --device->sd_usable_pages;
     }
-    *usable_blocks += swapmap_add_extent(current,
-        linux_swap->sli_last_page + 1u, page_blocks);
-    return *usable_blocks != 0 ? 0 : ENOSPC;
+    device->sd_alloc_hint = 1;
+    return device->sd_usable_pages != 0 ? 0 : ENOSPC;
+}
+
+static struct swap_device *
+swap_device_find_dev(dev_t dev)
+{
+    struct swap_device *device;
+
+    for (device = swap_devices; device != 0; device = device->sd_next)
+        if (device->sd_dev == dev)
+            return device;
+    return 0;
+}
+
+static struct swap_device *
+swap_device_find_slot(size_t slot, size_t *local_block)
+{
+    struct swap_device *device;
+    size_t page;
+
+    if (slot == 0 || VM_PAGE_SIZE % DEV_BSIZE != 0)
+        return 0;
+    for (device = swap_devices; device != 0; device = device->sd_next) {
+        if (slot % device->sd_page_blocks != 0)
+            continue;
+        page = slot / device->sd_page_blocks;
+        if (page < device->sd_base_page ||
+            page >= device->sd_base_page + device->sd_total_pages)
+            continue;
+        if (local_block != 0)
+            *local_block = (page - device->sd_base_page) *
+                device->sd_page_blocks;
+        return device;
+    }
+    return 0;
+}
+
+static int
+swap_device_assign_base(struct swap_device *device)
+{
+    struct swap_device **link;
+    struct swap_device *current;
+    size_t base;
+
+    base = 1;
+    link = &swap_devices;
+    while ((current = *link) != 0) {
+        if (base <= SIZE_MAX - device->sd_total_pages &&
+            base + device->sd_total_pages <= current->sd_base_page)
+            break;
+        if (current->sd_base_page >
+            SIZE_MAX - current->sd_total_pages)
+            return EOVERFLOW;
+        base = current->sd_base_page + current->sd_total_pages;
+        link = &current->sd_next;
+    }
+    if (base > SIZE_MAX - device->sd_total_pages ||
+        base + device->sd_total_pages >
+        SIZE_MAX / device->sd_page_blocks)
+        return EOVERFLOW;
+    device->sd_base_page = base;
+    device->sd_next = current;
+    *link = device;
+    if (swap_alloc_device == 0)
+        swap_alloc_device = device;
+    return 0;
+}
+
+static int
+swap_device_io(dev_t dev, size_t blkno, size_t coreaddr,
+    int count, int rdflg)
+{
+    struct buf *bp;
+    int error;
+    int s;
+
+    if (major(dev) >= nblkdev)
+        return ENXIO;
+    bp = geteblk();
+    error = 0;
+    while (count != 0) {
+        int n;
+
+        bp->b_flags = B_BUSY | B_PHYS | B_INVAL | rdflg;
+        bp->b_dev = dev;
+        bp->b_bcount = count;
+        bp->b_blkno = blkno;
+        bp->b_addr = (caddr_t)coreaddr;
+        (*bdevsw[major(dev)].d_strategy)(bp);
+        s = splbio();
+        while ((bp->b_flags & B_DONE) == 0)
+            sleep((caddr_t)bp, PSWP);
+        splx(s);
+        if ((bp->b_flags & B_ERROR) != 0 || bp->b_resid != 0) {
+            error = (bp->b_flags & B_ERROR) != 0 ?
+                geterror(bp) : EIO;
+            break;
+        }
+        n = bp->b_bcount;
+        if (n <= 0 || n > count) {
+            error = EIO;
+            break;
+        }
+        count -= n;
+        coreaddr += n;
+        blkno += btod(n);
+    }
+    brelse(bp);
+    return error;
 }
 
 /*
@@ -147,9 +273,8 @@ swapmap_linux_init(const struct swap_linux_info *linux_swap,
 int
 swap (size_t blkno, size_t coreaddr, int count, int rdflg)
 {
-    register struct buf *bp;
-    int s;
-    int error = 0;
+    struct swap_device *device;
+    size_t local_block;
 #ifdef N64_TRACE
     static int n64_swap_trace;
 #endif
@@ -169,46 +294,20 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
         cnt.v_kbout += (count + 1023) / 1024;
     }
 #endif
-    bp = geteblk();         /* allocate a buffer header */
-
-    while (count) {
-        int n;
-
-        bp->b_flags = B_BUSY | B_PHYS | B_INVAL | rdflg;
-        bp->b_dev = swapdev;
-        bp->b_bcount = count;
-        bp->b_blkno = blkno;
-        bp->b_addr = (caddr_t) coreaddr;
-        (*bdevsw[major(swapdev)].d_strategy) (bp);
-#ifdef N64_TRACE
-        if (n64_swap_trace < 16) {
-            printf ("n64swapio: strategy flags=%x resid=%d\n",
-                bp->b_flags, bp->b_resid);
-            n64_swap_trace++;
-        }
-#endif
-        s = splbio();
-        while ((bp->b_flags & B_DONE) == 0)
-            sleep ((caddr_t)bp, PSWP);
-        splx (s);
-        if ((bp->b_flags & B_ERROR) || bp->b_resid) {
-            error = (bp->b_flags & B_ERROR) ? geterror(bp) : EIO;
-            break;
-        }
-        n = bp->b_bcount;
-        count -= n;
-        coreaddr += n;
-        blkno += btod (n);
-    }
-    brelse(bp);
-    return error;
+    device = swap_device_find_slot(blkno, &local_block);
+    if (device == 0 || count <= 0 ||
+        (size_t)btod(count) >
+        device->sd_total_pages * device->sd_page_blocks - local_block)
+        return EINVAL;
+    return swap_device_io(device->sd_dev, local_block, coreaddr,
+        count, rdflg);
 }
 
 int
-swap_configure(dev_t dev, int flags, struct swap_config_info *info)
+swap_configure(dev_t dev, struct swap_config_info *info)
 {
     struct swap_linux_info linux_swap;
-    dev_t previous_swapdev;
+    struct swap_device *device;
     size_t page_blocks;
     daddr_t blocks;
     int error;
@@ -216,18 +315,16 @@ swap_configure(dev_t dev, int flags, struct swap_config_info *info)
     if (info == 0 || dev == NODEV || major(dev) >= nblkdev)
         return EINVAL;
     bzero((caddr_t)info, sizeof(*info));
-    if (nswap != 0 || swapmap_storage_pages != 0)
+    if (swap_device_find_dev(dev) != 0)
         return EBUSY;
     if (VM_PAGE_SIZE < DEV_BSIZE || VM_PAGE_SIZE % DEV_BSIZE != 0 ||
         VM_PAGE_SIZE != SWAP_LINUX_PAGE_BYTES)
         return EINVAL;
 
-    previous_swapdev = swapdev;
-    swapdev = dev;
     error = (*bdevsw[major(dev)].d_open)(dev,
         FREAD | FWRITE, S_IFBLK);
     if (error != 0)
-        goto fail_unopened;
+        return error;
     blocks = (*bdevsw[major(dev)].d_psize)(dev);
     if (blocks <= 0) {
         error = ENOSPC;
@@ -237,44 +334,56 @@ swap_configure(dev_t dev, int flags, struct swap_config_info *info)
         error = EOVERFLOW;
         goto fail;
     }
-    nswap = (u_int)blocks;
     page_blocks = VM_PAGE_SIZE / DEV_BSIZE;
-    error = swap(0, (size_t)swap_header, VM_PAGE_SIZE, B_READ);
+    if ((size_t)blocks / page_blocks < 2) {
+        error = ENOSPC;
+        goto fail;
+    }
+    error = swap_device_storage_alloc((size_t)blocks / page_blocks,
+        &device);
     if (error != 0)
         goto fail;
+    device->sd_dev = dev;
+    device->sd_page_blocks = page_blocks;
+    error = swap_device_io(dev, 0, (size_t)swap_header,
+        VM_PAGE_SIZE, B_READ);
+    if (error != 0)
+        goto fail_storage;
     error = swap_linux_parse(swap_header, sizeof(swap_header),
-        nswap / page_blocks, &linux_swap);
+        device->sd_total_pages, &linux_swap);
     if (error == 0) {
-        nswap = (linux_swap.sli_last_page + 1u) * page_blocks;
-        swapstart = page_blocks;
+        device->sd_total_pages = linux_swap.sli_last_page + 1u;
+        device->sd_linux_format = 1;
+        device->sd_badpages = linux_swap.sli_badpages;
         info->sci_linux_format = 1;
         info->sci_badpages = linux_swap.sli_badpages;
-    } else if (error == ENOENT && (flags & SWAP_CONFIG_ALLOW_RAW) != 0) {
-        swapstart = 1;
+        error = swap_device_bitmap_init(device, &linux_swap);
     } else {
         if (error == ENOENT)
             error = EINVAL;
-        goto fail;
-    }
-
-    error = swapmap_storage_alloc(nswap, page_blocks);
-    if (error != 0)
-        goto fail;
-    if (info->sci_linux_format) {
-        error = swapmap_linux_init(&linux_swap, page_blocks,
-            &info->sci_usable_blocks);
-    } else if (nswap > swapstart) {
-        info->sci_usable_blocks = nswap - swapstart;
-        mfree(swapmap, info->sci_usable_blocks, swapstart);
-        error = 0;
-    } else {
-        error = ENOSPC;
+        goto fail_storage;
     }
     if (error != 0)
-        goto fail;
+        goto fail_storage;
+    if (device->sd_usable_pages >
+        ((u_int)~0u - nswap) / page_blocks) {
+        error = EOVERFLOW;
+        goto fail_storage;
+    }
+    error = swap_device_assign_base(device);
+    if (error != 0)
+        goto fail_storage;
+    info->sci_usable_blocks = device->sd_usable_pages * page_blocks;
+    nswap += (u_int)info->sci_usable_blocks;
+    swapstart = 0;
+    if (swapdev == NODEV)
+        swapdev = dev;
     error = vm_pager_swap_init();
-    if (error != 0)
-        goto fail;
+    if (error != 0) {
+        (void)swap_unconfigure(dev);
+        bzero((caddr_t)info, sizeof(*info));
+        return error;
+    }
 
     if (info->sci_linux_format) {
         printf("swap: Linux v1, %u usable kbytes, %u bad pages\n",
@@ -286,23 +395,175 @@ swap_configure(dev_t dev, int flags, struct swap_config_info *info)
     }
     return 0;
 
+fail_storage:
+    swap_device_storage_release(device);
 fail:
-    swapmap_storage_release();
     (void)(*bdevsw[major(dev)].d_close)(dev,
         FREAD | FWRITE, S_IFBLK);
-fail_unopened:
-    swapstart = 0;
-    nswap = 0;
-    swapdev = previous_swapdev;
     bzero((caddr_t)info, sizeof(*info));
     return error;
 }
 
-/*
- * Enable a validated Linux swap v1 block device at run time.  Embedded
- * boards which deliberately configure raw RAM swap call swap_configure()
- * during boot with SWAP_CONFIG_ALLOW_RAW instead.
- */
+size_t
+swap_slot_alloc(void)
+{
+    struct swap_device *device;
+    struct swap_device *first;
+    size_t page;
+    size_t pass;
+
+    first = swap_alloc_device != 0 ? swap_alloc_device : swap_devices;
+    if (first == 0)
+        return 0;
+    device = first;
+    do {
+        if ((device->sd_flags & SWAP_DEVICE_DRAINING) == 0 &&
+            device->sd_used_pages < device->sd_usable_pages) {
+            for (pass = 0; pass < 2; ++pass) {
+                size_t first_page;
+                size_t end_page;
+
+                first_page = pass == 0 ? device->sd_alloc_hint : 1;
+                end_page = pass == 0 ? device->sd_total_pages :
+                    device->sd_alloc_hint;
+                for (page = first_page; page < end_page; ++page) {
+                    if (swap_bitmap_test(device, page))
+                        continue;
+                    swap_bitmap_set(device, page, 1);
+                    ++device->sd_used_pages;
+                    device->sd_alloc_hint = page + 1;
+                    if (device->sd_alloc_hint >=
+                        device->sd_total_pages)
+                        device->sd_alloc_hint = 1;
+                    swap_alloc_device = device->sd_next != 0 ?
+                        device->sd_next : swap_devices;
+                    return (device->sd_base_page + page) *
+                        device->sd_page_blocks;
+                }
+            }
+        }
+        device = device->sd_next != 0 ? device->sd_next : swap_devices;
+    } while (device != first);
+    return 0;
+}
+
+void
+swap_slot_free(size_t slot)
+{
+    struct swap_device *device;
+    size_t local_block;
+    size_t page;
+
+    device = swap_device_find_slot(slot, &local_block);
+    if (device == 0 || local_block % device->sd_page_blocks != 0)
+        panic("swap slot free");
+    page = local_block / device->sd_page_blocks;
+    if (page == 0 || page >= device->sd_total_pages ||
+        !swap_bitmap_test(device, page) || device->sd_used_pages == 0)
+        panic("swap slot state");
+    swap_bitmap_set(device, page, 0);
+    --device->sd_used_pages;
+    if (page < device->sd_alloc_hint)
+        device->sd_alloc_hint = page;
+}
+
+int
+swap_slot_draining(size_t slot)
+{
+    struct swap_device *device;
+
+    device = swap_device_find_slot(slot, 0);
+    return device != 0 &&
+        (device->sd_flags & SWAP_DEVICE_DRAINING) != 0;
+}
+
+size_t
+swap_total_blocks(void)
+{
+    return nswap;
+}
+
+size_t
+swap_free_blocks(void)
+{
+    struct swap_device *device;
+    size_t blocks;
+
+    blocks = 0;
+    for (device = swap_devices; device != 0; device = device->sd_next)
+        blocks += (device->sd_usable_pages - device->sd_used_pages) *
+            device->sd_page_blocks;
+    return blocks;
+}
+
+unsigned
+swap_device_count(void)
+{
+    struct swap_device *device;
+    unsigned count;
+
+    count = 0;
+    for (device = swap_devices; device != 0; device = device->sd_next)
+        ++count;
+    return count;
+}
+
+int
+swap_unconfigure(dev_t dev)
+{
+    struct swap_device **link;
+    struct swap_device *device;
+    dev_t closing_dev;
+    size_t first;
+    size_t end;
+    size_t blocks;
+    int error;
+
+    for (link = &swap_devices; (device = *link) != 0;
+        link = &device->sd_next)
+        if (device->sd_dev == dev)
+            break;
+    if (device == 0)
+        return EINVAL;
+    if ((device->sd_flags & SWAP_DEVICE_DRAINING) != 0)
+        return EBUSY;
+    device->sd_flags |= SWAP_DEVICE_DRAINING;
+    first = device->sd_base_page * device->sd_page_blocks;
+    end = (device->sd_base_page + device->sd_total_pages) *
+        device->sd_page_blocks;
+    error = vm_pager_swapoff(first, end);
+    if (error != 0) {
+        device->sd_flags &= ~SWAP_DEVICE_DRAINING;
+        return error;
+    }
+    if (device->sd_used_pages != 0)
+        panic("swapoff slots");
+    blocks = device->sd_usable_pages * device->sd_page_blocks;
+    closing_dev = device->sd_dev;
+    if (swap_alloc_device == device)
+        swap_alloc_device = device->sd_next != 0 ?
+            device->sd_next : swap_devices;
+    *link = device->sd_next;
+    if (swap_alloc_device == device)
+        swap_alloc_device = swap_devices;
+    if (nswap < blocks)
+        panic("swap total");
+    nswap -= (u_int)blocks;
+    if (swapdev == closing_dev)
+        swapdev = swap_devices != 0 ? swap_devices->sd_dev : NODEV;
+    if (swap_devices == 0) {
+        swap_alloc_device = 0;
+        vm_pager_swap_disable();
+    }
+    (void)(*bdevsw[major(closing_dev)].d_close)(closing_dev,
+        FREAD | FWRITE, S_IFBLK);
+    swap_device_storage_release(device);
+    printf("swap: device (%d,%d) disabled\n",
+        major(closing_dev), minor(closing_dev));
+    return 0;
+}
+
+/* Enable a validated Linux swap v1 block device at run time. */
 void
 swapon(void)
 {
@@ -318,7 +579,27 @@ swapon(void)
     uap = (struct a *)u.u_arg;
     error = getmdev(&dev, uap->special);
     if (error == 0)
-        error = swap_configure(dev, 0, &info);
+        error = swap_configure(dev, &info);
+    u.u_error = error;
+    if (error == 0)
+        u.u_rval = 0;
+}
+
+void
+swapoff(void)
+{
+    struct a {
+        char *special;
+    } *uap;
+    dev_t dev;
+    int error;
+
+    if (!suser())
+        return;
+    uap = (struct a *)u.u_arg;
+    error = getmdev(&dev, uap->special);
+    if (error == 0)
+        error = swap_unconfigure(dev);
     u.u_error = error;
     if (error == 0)
         u.u_rval = 0;
@@ -331,14 +612,20 @@ swap_discard(size_t blkno, size_t nblocks)
     const struct bdevsw *device;
     int error;
 
-    if (swapdev == NODEV || nblocks == 0)
+    struct swap_device *swap_device;
+    size_t local_block;
+
+    if (nblocks == 0)
         return;
-    device = &bdevsw[major(swapdev)];
+    swap_device = swap_device_find_slot(blkno, &local_block);
+    if (swap_device == 0)
+        panic("swap discard slot");
+    device = &bdevsw[major(swap_device->sd_dev)];
     if ((device->d_flags & BDEV_DISCARD) == 0)
         return;
-    range.dd_offset = (disk_sector_t)blkno * (DEV_BSIZE / 512);
+    range.dd_offset = (disk_sector_t)local_block * (DEV_BSIZE / 512);
     range.dd_length = (disk_sector_t)nblocks * (DEV_BSIZE / 512);
-    error = (*device->d_ioctl)(swapdev, DIOCDISCARD,
+    error = (*device->d_ioctl)(swap_device->sd_dev, DIOCDISCARD,
         (caddr_t)&range, FWRITE);
     if (error != 0)
         panic("swap discard");

@@ -33,8 +33,8 @@ REQUIRED_SYMLINKS = (
 
 REQUIRED_DEVICES = (
     ("bdev", "/dev/romdisk"),
-    ("bdev", "/dev/swap"),
     ("bdev", "/dev/ram0"),
+    ("bdev", "/dev/ram1"),
     ("cdev", "/dev/console"),
 )
 

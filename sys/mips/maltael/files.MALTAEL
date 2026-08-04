@@ -9,7 +9,8 @@ mips/malta/romdisk_machdep.c    standard
 mips/common/romfs_core.c        standard
 mips/common/romfs_vfs.c         standard
 mips/malta/cartflash.c          standard
-mips/malta/ramswap.c            standard
+mips/malta/ramdisk_machdep.c    standard
+mips/common/ramdisk_mips.c      standard
 mips/malta/config.c             standard
 mips/malta/if_ne.c              optional malta_ne
 mips/common/if_usbn.c           optional usbnet
