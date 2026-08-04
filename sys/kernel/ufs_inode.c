@@ -174,6 +174,8 @@ loop:
     ip->i_flag = ILOCKED;
     ip->i_count++;
     ip->i_lastr = 0;
+    ip->i_socket = NULL;
+    ip->i_fifo = NULL;
     if (fs != 0) {
 	struct mount *mp = (struct mount *)
 	    ((int)fs - offsetof(struct mount, m_filsys));

@@ -51,6 +51,7 @@ longjmp:
     .globl i386_fork_trampoline
     .type i386_fork_trampoline, @function
 i386_fork_trampoline:
+    call    i386_fpu_restore_current
     jmp     i386_trap_return
     .size i386_fork_trampoline, . - i386_fork_trampoline
 

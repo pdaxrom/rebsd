@@ -129,7 +129,7 @@ vn_open (struct nameidata *ndp, int fmode, int cmode)
             }
         }
     }
-    if (fmode & O_TRUNC)
+    if ((fmode & O_TRUNC) && (ip->i_mode & IFMT) == IFREG)
         itrunc(ip, (off_t)0, fmode & O_FSYNC ? IO_SYNC : 0);
     /*
      * 4.4 returns the vnode locked from vn_open which means that each caller

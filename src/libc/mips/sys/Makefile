@@ -23,13 +23,13 @@ SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
 		  shm_open.o shm_unlink.o shmget.o shmat.o shmdt.o shmctl.o \
 		  reboot.o \
 		  recv.o recvfrom.o recvmsg.o rename.o rmdir.o select.o send.o sendmsg.o \
-		  sendto.o setgroups.o setitimer.o setpgrp.o setpriority.o setquota.o \
+		  sendto.o setgroups.o setitimer.o setpgid.o setpriority.o setquota.o \
 		  setuid.o seteuid.o setgid.o setegid.o \
 		  setrlimit.o setsockopt.o settimeofday.o shutdown.o \
 		  sigaltstack.o socket.o socketpair.o symlink.o \
 		  sigprocmask.o sigstack.o sigwait.o \
 		  statfs.o fstatfs.o getfsstat.o \
-		  umount.o unlink.o utimes.o wait4.o write.o writev.o \
+		  umount.o unlink.o utimes.o wait4.o write.o writev.o swapon.o \
 		  sigsuspend.o \
 		  getgid.o getegid.o getpid.o \
 		  getppid.o getuid.o geteuid.o profil.o sigpending.o sync.o \

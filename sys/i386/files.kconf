@@ -18,6 +18,8 @@ console/vtconsole.c            standard
 kernel/nullzero.c               standard
 kernel/subr_msgbuf.c            standard
 kernel/subr_dma.c               optional dma
+kernel/sys_fifo.c               standard
+i386/common/fpu.c               optional i386_fpu
 kernel/clock_subr.c             standard
 kernel/todr.c                   standard
 rtc/mc146818.c                  optional i386_rtc

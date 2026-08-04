@@ -47,6 +47,12 @@ static void
 i386_syscall_error(struct i386_trapframe *frame, int error)
 {
     frame->tf_eax = (unsigned)error;
+    /*
+     * libc turns EAX into -1 after saving errno.  Keep the secondary
+     * return word negative as well so 64-bit syscall results become the
+     * required (off_t)-1 instead of 0x00000000ffffffff.
+     */
+    frame->tf_edx = (unsigned)-1;
     frame->tf_eflags |= I386_EFLAGS_CARRY;
 }
 

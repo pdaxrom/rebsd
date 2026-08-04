@@ -17,12 +17,12 @@ SYSOBJS		= __sysctl.o accept.o access.o adjtime.o bind.o chdir.o \
 		  munmap.o mprotect.o msync.o madvise.o mincore.o mlock.o munlock.o \
 		  shm_open.o shm_unlink.o shmget.o shmat.o shmdt.o shmctl.o \
 		  reboot.o recv.o recvfrom.o recvmsg.o rename.o rmdir.o select.o \
-		  send.o sendmsg.o sendto.o setgroups.o setitimer.o setpgrp.o \
+		  send.o sendmsg.o sendto.o setgroups.o setitimer.o setpgid.o \
 		  setpriority.o setquota.o setuid.o seteuid.o setgid.o setegid.o \
 		  setrlimit.o setsockopt.o settimeofday.o shutdown.o \
 		  sigaltstack.o socket.o socketpair.o symlink.o sigprocmask.o \
 		  sigstack.o sigwait.o statfs.o fstatfs.o getfsstat.o umount.o \
-		  unlink.o utimes.o wait4.o write.o writev.o sigsuspend.o \
+		  unlink.o utimes.o wait4.o write.o writev.o sigsuspend.o swapon.o \
 		  getgid.o getegid.o getpid.o getppid.o getuid.o geteuid.o \
 		  profil.o sigpending.o sync.o ufetch.o ustore.o ucall.o umask.o \
 		  vfork.o vhangup.o rdglob.o wrglob.o msec.o kmemdev.o

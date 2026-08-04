@@ -55,7 +55,13 @@ I686_CPPFLAGS  += -DDMA_ENABLED -DDISK_ENABLED -DUSB_ENABLED \
                   -DETHER_ENABLED -DETHER_NUNITS=1 \
                   -DRTL8169_ENABLED \
                   -DI386_RTC_ENABLED \
+                  -DI386_FPU_ENABLED \
                   -DINET_ENABLED -DINET -DSUPERVISOR
+
+I386_SSE ?= 0
+ifeq ($(I386_SSE),1)
+I686_CPPFLAGS += -DI386_SSE_ENABLED
+endif
 
 I686_INET_CFLAGS = $(filter-out -Wextra,$(I686_CFLAGS)) \
                    -Wno-comment -Wno-endif-labels -Wno-implicit-int \
@@ -72,6 +78,8 @@ HOSTCC          ?= cc
 FSUTIL_DIR       = $(TOPOBJ)/tools/fsutil
 FSUTIL           = $(FSUTIL_DIR)/fsutil
 I386_ROOTFS_STAGE = rootfs-stage
+I386_ROOTFS_BASE = rootfs-base
+I386_ROOTFS_BASE_STAMP = i386-rootfs-base.stamp
 I386_ROOTFS_KBYTES ?= 16384
 I386_ROOTFS_EPOCH = 1
 I386_FAT_SMOKE_IMAGE = fat-smoke.img
@@ -93,13 +101,14 @@ I386_MAN_SRCS = $(shell find $(TOPSRC)/src/man -type f \
 I386_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/opt/bison/bin/bison,bison)
 I386_USERLAND_BUILD = $(CURDIR)/i386-userland-build
 I386_USERLAND_SRC = $(I386_USERLAND_BUILD)/src
+I386_USERLAND_DESTDIR = $(I386_USERLAND_BUILD)/rootfs-install
 I386_USERLAND_STAMP = i386-userland.gcc.elf.stamp
 I386_USER_LDSCRIPT = i386-user.ld
 I386_USER_LDSCRIPT_SRC = $(I386_SRC)/user/user.ld.S
 I386_KERNEL_LDSCRIPT = i386-kernel.ld
 I386_KERNEL_LDSCRIPT_SRC = $(I386_PC_SRC)/kernel.ld.S
 I386_USER_NONE = __i386_none__
-I386_USERLAND_INCLUDES = -I$(abspath $(I386_ROOTFS_STAGE)/usr/include)
+I386_USERLAND_INCLUDES = -I$(abspath $(I386_ROOTFS_BASE)/usr/include)
 I386_USERLAND_CC = $(CC) $(I686_ARCH_FLAGS) \
                    -DTARGET_LITTLE_ENDIAN \
                    -ffreestanding -fno-builtin -fno-stack-protector \
@@ -116,9 +125,13 @@ I386_USERLAND_SRCS = $(shell find $(TOPSRC)/src -type f \
                        \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 I386_ROOTFS_COMMON_FILES = $(TOPSRC)/sys/mips/rootfs/etc/group \
                            $(TOPSRC)/sys/mips/rootfs/etc/hosts \
+                           $(TOPSRC)/sys/mips/rootfs/etc/inittab \
                            $(TOPSRC)/sys/mips/rootfs/etc/inetd.conf \
                            $(TOPSRC)/sys/mips/rootfs/etc/passwd \
                            $(TOPSRC)/sys/mips/rootfs/etc/profile \
+                           $(TOPSRC)/sys/mips/rootfs/etc/rc \
+                           $(TOPSRC)/sys/mips/rootfs/etc/rc0.d/S99halt \
+                           $(TOPSRC)/sys/mips/rootfs/etc/rc6.d/S99reboot \
                            $(TOPSRC)/sys/mips/rootfs/etc/services \
                            $(TOPSRC)/sys/mips/rootfs/root/.profile
 I386_ROOTFS_MACHINE_HEADERS = $(shell find $(I386_SRC)/include/machine \
@@ -130,7 +143,7 @@ I386_ROOTFS_COMMON_HEADERS = $(shell find $(TOPSRC)/include \
                                2>/dev/null)
 I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 TARGET_PLATFORM=i386 \
-                DESTDIR=$(abspath $(I386_ROOTFS_STAGE)) \
+                DESTDIR=$(abspath $(I386_USERLAND_DESTDIR)) \
                 CC="$(I386_USERLAND_CC)" \
                 AS="$(I386_USERLAND_CC) -x assembler-with-cpp -c" \
                 LD="$(LD)" AR="$(AR)" RANLIB="$(RANLIB)" \
@@ -153,7 +166,7 @@ I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 CMD_BUILD_STRIP=
 I386_AWK_MAKE = $(MAKE) -C $(I386_USERLAND_SRC)/cmd/awk \
                 TARGET_PLATFORM=i386 \
-                DESTDIR=$(abspath $(I386_ROOTFS_STAGE)) \
+                DESTDIR=$(abspath $(I386_USERLAND_DESTDIR)) \
                 CC="$(I386_USERLAND_CC)" \
                 AS="$(I386_USERLAND_CC) -x assembler-with-cpp -c" \
                 LD="$(LD)" AR="$(AR)" RANLIB="$(RANLIB)" \
@@ -170,6 +183,7 @@ SETUP_SECTS      = 8
 SETUP_BYTES      = 4608
 
 VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
+                   swap_linux.o \
                    vmspace.o vmspace_access.o vmspace_fault.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
 INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
@@ -181,7 +195,7 @@ INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
                    udp_usrreq.o in_cksum.o net_glue.o netinit.o
 I386_RUNTIME_OBJS = divdi3.o divmoddi4.o moddi3.o udivdi3.o \
                     udivmoddi4.o umoddi3.o
-KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
+KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o fpu.o \
                    early_console.o vtconsole.o interrupt.o tss.o syscall.o \
                    signal.o user_return.o trap.o \
                    pic.o pit.o pci_core.o pciide.o i386_pci.o \
@@ -201,7 +215,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o \
                    ufs_alloc.o ufs_bio.o ufs_bmap.o ufs_fio.o \
                    ufs_inode.o ufs_mount.o ufs_namei.o ufs_subr.o \
                    ufs_syscalls.o ufs_syscalls2.o \
-                   sys_inode.o sys_generic.o sys_pipe.o vfs_vnops.o \
+                   sys_inode.o sys_generic.o sys_pipe.o sys_fifo.o vfs_vnops.o \
                    kern_descrip.o kern_shm.o kern_subr.o kern_time.o \
                    nullzero.o \
                    vm_vnode.o \
@@ -291,6 +305,13 @@ privilege.o: $(I386_COMMON_SRC)/privilege.S $(I386_SRC)/include/context.h
 	$(CC) $(I686_ASFLAGS) $(I686_CPPFLAGS) -I$(I386_SRC)/include \
 	    -c $< -o $@
 
+fpu.o: $(I386_COMMON_SRC)/fpu.c $(I386_SRC)/include/fpu.h \
+	    $(I386_SRC)/include/interrupt.h \
+	    $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 $(FSUTIL): $(wildcard $(TOPSRC)/tools/fsutil/*.c) \
 	    $(TOPSRC)/tools/fsutil/bsdfs.h \
 	    $(TOPSRC)/tools/fsutil/manifest.h
@@ -306,59 +327,64 @@ $(I386_KERNEL_LDSCRIPT): $(I386_KERNEL_LDSCRIPT_SRC) \
 	    $(I386_SRC)/include/machine/layout.h
 	$(CC) -E -P -x c -I$(I386_SRC) $< -o $@
 
-$(I386_ROOTFS_STAGE)/.base: $(I386_ROOTFS_COMMON_FILES) \
+$(I386_ROOTFS_BASE_STAMP): $(I386_ROOTFS_COMMON_FILES) \
 	    $(I386_ROOTFS_COMMON_HEADERS) \
 	    $(I386_ROOTFS_MACHINE_HEADERS) \
 	    $(I386_INSTALL_USER_HEADERS) $(I386_TERMCAP) $(I386_MAGIC_DB) \
 	    $(I386_ROOTFS_MAKEFILES) \
 	    $(shell find $(I386_ROOTFS_BOARD_DIR) -type f 2>/dev/null)
-	rm -rf $(I386_ROOTFS_STAGE)
-	mkdir -p $(I386_ROOTFS_STAGE)/bin \
-	    $(I386_ROOTFS_STAGE)/dev \
-	    $(I386_ROOTFS_STAGE)/etc \
-	    $(I386_ROOTFS_STAGE)/lib \
-	    $(I386_ROOTFS_STAGE)/libexec \
-	    $(I386_ROOTFS_STAGE)/mnt \
-	    $(I386_ROOTFS_STAGE)/root \
-	    $(I386_ROOTFS_STAGE)/sbin \
-	    $(I386_ROOTFS_STAGE)/share/misc \
-	    $(I386_ROOTFS_STAGE)/share/man/cat1 \
-	    $(I386_ROOTFS_STAGE)/share/man/cat3 \
-	    $(I386_ROOTFS_STAGE)/share/man/cat5 \
-	    $(I386_ROOTFS_STAGE)/share/man/cat8 \
-	    $(I386_ROOTFS_STAGE)/usr/include \
-	    $(I386_ROOTFS_STAGE)/usr/bin \
-	    $(I386_ROOTFS_STAGE)/usr/sbin \
-	    $(I386_ROOTFS_STAGE)/usr/libexec \
-	    $(I386_ROOTFS_STAGE)/usr/share/man/cat1 \
-	    $(I386_ROOTFS_STAGE)/usr/share/man/cat5 \
-	    $(I386_ROOTFS_STAGE)/usr/share/man/cat8 \
-	    $(I386_ROOTFS_STAGE)/usr/share/misc \
-	    $(I386_ROOTFS_STAGE)/var/log \
-	    $(I386_ROOTFS_STAGE)/var/run \
-	    $(I386_ROOTFS_STAGE)/var/tmp
+	rm -rf $(I386_ROOTFS_BASE)
+	mkdir -p $(I386_ROOTFS_BASE)/bin \
+	    $(I386_ROOTFS_BASE)/dev \
+	    $(I386_ROOTFS_BASE)/etc \
+	    $(I386_ROOTFS_BASE)/etc/rc0.d \
+	    $(I386_ROOTFS_BASE)/etc/rc6.d \
+	    $(I386_ROOTFS_BASE)/lib \
+	    $(I386_ROOTFS_BASE)/libexec \
+	    $(I386_ROOTFS_BASE)/mnt \
+	    $(I386_ROOTFS_BASE)/root \
+	    $(I386_ROOTFS_BASE)/sbin \
+	    $(I386_ROOTFS_BASE)/usr/include \
+	    $(I386_ROOTFS_BASE)/usr/bin \
+	    $(I386_ROOTFS_BASE)/usr/sbin \
+	    $(I386_ROOTFS_BASE)/usr/libexec \
+	    $(I386_ROOTFS_BASE)/usr/share/man/cat1 \
+	    $(I386_ROOTFS_BASE)/usr/share/man/cat3 \
+	    $(I386_ROOTFS_BASE)/usr/share/man/cat5 \
+	    $(I386_ROOTFS_BASE)/usr/share/man/cat8 \
+	    $(I386_ROOTFS_BASE)/usr/share/misc \
+	    $(I386_ROOTFS_BASE)/var/config \
+	    $(I386_ROOTFS_BASE)/var/log \
+	    $(I386_ROOTFS_BASE)/var/run \
+	    $(I386_ROOTFS_BASE)/var/tmp
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/group \
 	    $(TOPSRC)/sys/mips/rootfs/etc/hosts \
+	    $(TOPSRC)/sys/mips/rootfs/etc/inittab \
 	    $(TOPSRC)/sys/mips/rootfs/etc/inetd.conf \
 	    $(TOPSRC)/sys/mips/rootfs/etc/passwd \
 	    $(TOPSRC)/sys/mips/rootfs/etc/profile \
+	    $(TOPSRC)/sys/mips/rootfs/etc/rc \
 	    $(TOPSRC)/sys/mips/rootfs/etc/services \
-	    $(I386_ROOTFS_STAGE)/etc/
+	    $(I386_ROOTFS_BASE)/etc/
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc0.d/S99halt \
+	    $(I386_ROOTFS_BASE)/etc/rc0.d/S99halt
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc6.d/S99reboot \
+	    $(I386_ROOTFS_BASE)/etc/rc6.d/S99reboot
 	cp -p $(TOPSRC)/sys/mips/rootfs/root/.profile \
-	    $(I386_ROOTFS_STAGE)/root/.profile
-	cp -pR $(I386_ROOTFS_BOARD_DIR)/. $(I386_ROOTFS_STAGE)/
-	cp -p $(I386_TERMCAP) $(I386_ROOTFS_STAGE)/etc/termcap
+	    $(I386_ROOTFS_BASE)/root/.profile
+	cp -pR $(I386_ROOTFS_BOARD_DIR)/. $(I386_ROOTFS_BASE)/
+	cp -p $(I386_TERMCAP) $(I386_ROOTFS_BASE)/etc/termcap
 	cp -p $(I386_MAGIC_DB) \
-	    $(I386_ROOTFS_STAGE)/usr/share/misc/magic.mgc
+	    $(I386_ROOTFS_BASE)/usr/share/misc/magic.mgc
 	$(I386_INSTALL_USER_HEADERS) $(TOPSRC) \
-	    $(I386_ROOTFS_STAGE)/usr/include i386 \
+	    $(I386_ROOTFS_BASE)/usr/include i386 \
 	    $(I386_SRC)/include/machine yes ""
-	rm -f $(I386_ROOTFS_STAGE)/etc/resolv.conf
-	ln -s ../var/run/resolv.conf $(I386_ROOTFS_STAGE)/etc/resolv.conf
-	ln -s var/tmp $(I386_ROOTFS_STAGE)/tmp
+	rm -f $(I386_ROOTFS_BASE)/etc/resolv.conf
+	ln -s ../var/run/resolv.conf $(I386_ROOTFS_BASE)/etc/resolv.conf
+	ln -s var/tmp $(I386_ROOTFS_BASE)/tmp
 	touch $@
 
-$(I386_USERLAND_STAMP): $(I386_ROOTFS_STAGE)/.base \
+$(I386_USERLAND_STAMP): $(I386_ROOTFS_BASE_STAMP) \
 	    $(I386_USER_LDSCRIPT) $(I386_USERLAND_SRCS) \
 	    $(TOPSRC)/target.mk $(TOPSRC)/target-i386.mk \
 	    $(I386_MAKEWHATIS_SED) $(I386_MAN_SRCS) \
@@ -374,12 +400,33 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_STAGE)/.base \
 	ln -s $(abspath $(TOPSRC))/target.mk $(I386_USERLAND_BUILD)/target.mk
 	ln -s $(abspath $(TOPSRC))/target-i386.mk \
 	    $(I386_USERLAND_BUILD)/target-i386.mk
+	mkdir -p $(I386_USERLAND_DESTDIR)/bin \
+	    $(I386_USERLAND_DESTDIR)/etc \
+	    $(I386_USERLAND_DESTDIR)/lib \
+	    $(I386_USERLAND_DESTDIR)/libexec \
+	    $(I386_USERLAND_DESTDIR)/sbin \
+	    $(I386_USERLAND_DESTDIR)/share/man/cat1 \
+	    $(I386_USERLAND_DESTDIR)/share/man/cat3 \
+	    $(I386_USERLAND_DESTDIR)/share/man/cat5 \
+	    $(I386_USERLAND_DESTDIR)/share/man/cat8 \
+	    $(I386_USERLAND_DESTDIR)/share/misc \
+	    $(I386_USERLAND_DESTDIR)/usr/bin \
+	    $(I386_USERLAND_DESTDIR)/usr/libexec \
+	    $(I386_USERLAND_DESTDIR)/usr/sbin \
+	    $(I386_USERLAND_DESTDIR)/usr/share/man/cat1 \
+	    $(I386_USERLAND_DESTDIR)/usr/share/man/cat3 \
+	    $(I386_USERLAND_DESTDIR)/usr/share/man/cat5 \
+	    $(I386_USERLAND_DESTDIR)/usr/share/man/cat8
 	$(I386_SRC_MAKE) clean
 	$(I386_SRC_MAKE) all
 	$(I386_AWK_MAKE) clean
 	$(I386_AWK_MAKE) awk
 	$(I386_SRC_MAKE) install
 	$(I386_AWK_MAKE) install
+	rm -rf $(I386_ROOTFS_STAGE)
+	mkdir -p $(I386_ROOTFS_STAGE)
+	cp -pR $(I386_ROOTFS_BASE)/. $(I386_ROOTFS_STAGE)/
+	cp -pR $(I386_USERLAND_DESTDIR)/. $(I386_ROOTFS_STAGE)/
 	mkdir -p $(I386_ROOTFS_STAGE)/usr/lib/ldscripts
 	cp -p $(I386_USERLAND_SRC)/crt0.o \
 	    $(I386_ROOTFS_STAGE)/usr/lib/crt0.o
@@ -447,9 +494,10 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_STAGE)/.base \
 	rm -f $(I386_ROOTFS_STAGE)/usr/share/man/whatis.tmp
 	touch $@
 
-$(I386_ROOTFS_STAGE)/.userland: $(I386_ROOTFS_STAGE)/.base \
-	    $(I386_USERLAND_STAMP)
+$(I386_ROOTFS_STAGE)/.userland: $(I386_USERLAND_STAMP)
 	test -x $(I386_ROOTFS_STAGE)/sbin/init
+	test -L $(I386_ROOTFS_STAGE)/etc/init
+	test -L $(I386_ROOTFS_STAGE)/etc/telinit
 	for bin in $(REBSD_ROOTFS_USR_SBIN_FILES); do \
 	    test -x $(I386_ROOTFS_STAGE)/usr/sbin/$$bin; \
 	    test ! -e $(I386_ROOTFS_STAGE)/sbin/$$bin; \
@@ -523,7 +571,8 @@ vtconsole.o: $(I386_CONSOLE_SRC)/vtconsole.c \
 	    -c $< -o $@
 
 interrupt.o: $(I386_PC_SRC)/interrupt.c \
-	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/fpu.h \
+	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/syscall.h \
 	    $(I386_SRC)/include/trap.h \
 	    $(I386_SRC)/include/vmspace_bootstrap.h \
@@ -555,7 +604,7 @@ signal.o: $(I386_COMMON_SRC)/signal.c \
 	    -c $< -o $@
 
 user_return.o: $(I386_COMMON_SRC)/user_return.c \
-	    $(I386_SRC)/include/interrupt.h \
+	    $(I386_SRC)/include/fpu.h $(I386_SRC)/include/interrupt.h \
 	    $(TOPSRC)/sys/include/signalvar.h \
 	    $(TOPSRC)/sys/include/systm.h $(TOPSRC)/sys/include/user.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
@@ -876,6 +925,11 @@ sys_generic.o: $(TOPSRC)/sys/kernel/sys_generic.c \
 	    -c $< -o $@
 
 sys_pipe.o: $(TOPSRC)/sys/kernel/sys_pipe.c \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+sys_fifo.o: $(TOPSRC)/sys/kernel/sys_fifo.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -1231,7 +1285,7 @@ vmspace_bootstrap.o: $(I386_PC_SRC)/vmspace_bootstrap.c \
 	    -c $< -o $@
 
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
-	    $(I386_SRC)/include/boot.h \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/fpu.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
 	    $(I386_SRC)/include/syscall.h \
@@ -1499,12 +1553,14 @@ clean:
 	    rootfs.img rootfs.check.img rootfs_image.o \
 	    $(I386_ROOTFS_MANIFEST) $(I386_USER_LDSCRIPT) \
 	    $(I386_KERNEL_LDSCRIPT) \
+	    $(I386_ROOTFS_BASE_STAMP) \
 	    $(I386_USERLAND_STAMP) \
 	    rebsd-i686-bios-floppy.img \
 	    rebsd-i686-bios-floppy.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
 	    rebsd-i686.bzimg rebsd-i686.map
 	rm -rf $(I386_ROOTFS_STAGE)
+	rm -rf $(I386_ROOTFS_BASE)
 	rm -rf $(I386_USERLAND_BUILD)
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	rmdir $(I386_GEN_INCLUDE) 2>/dev/null || true

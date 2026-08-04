@@ -17,11 +17,18 @@ REQUIRED_EXECUTABLES = (
 )
 
 REQUIRED_FILES = (
+    "etc/inittab",
     "etc/rc",
+    "etc/rc.sysinit",
     "etc/ttys",
     "etc/passwd",
     "etc/group",
     "etc/fstab",
+)
+
+REQUIRED_SYMLINKS = (
+    ("etc/init", "../sbin/init"),
+    ("etc/telinit", "../sbin/init"),
 )
 
 REQUIRED_DEVICES = (
@@ -32,6 +39,7 @@ REQUIRED_DEVICES = (
 )
 
 EXECUTABLE_DIRECTORIES = (
+    "/etc/",
     "/bin/",
     "/sbin/",
     "/usr/bin/",
@@ -59,6 +67,9 @@ MANUAL_OBJECTS = {
     "/usr/share/man/cat5/magic.0": (
         "/usr/share/misc/magic.mgc",
         "/usr/include/magic.h",
+    ),
+    "/usr/share/man/cat5/inittab.0": (
+        "/etc/inittab",
     ),
     "/usr/share/man/cat5/ranlib.0": (
         "/usr/bin/ranlib",
@@ -103,6 +114,16 @@ def check_stage(stage):
             errors.append(f"/{relative} is not a regular file")
         elif path.stat().st_size == 0:
             errors.append(f"/{relative} is empty")
+
+    for relative, target in REQUIRED_SYMLINKS:
+        path = stage / relative
+        if not path.is_symlink():
+            errors.append(f"/{relative} is not a symlink")
+        elif os.readlink(path) != target:
+            errors.append(
+                f"/{relative} points to {os.readlink(path)!r}, "
+                f"expected {target!r}"
+            )
 
     tmp = stage / "tmp"
     if not tmp.is_symlink():

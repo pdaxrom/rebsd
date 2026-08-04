@@ -42,6 +42,7 @@ extern struct file file[];
 extern const struct fileops *const Fops[];
 extern const struct fileops inodeops;
 extern const struct fileops pipeops;
+extern const struct fileops fifoops;
 extern const struct fileops shmops;
 
 /*
@@ -123,5 +124,6 @@ int flock(int fd, int operation);
 #define DTYPE_SOCKET    2   /* communications endpoint */
 #define DTYPE_PIPE      3   /* I don't want to hear it, okay? */
 #define DTYPE_SHM       4   /* POSIX shared-memory object */
+#define DTYPE_FIFO      5   /* POSIX named pipe */
 #endif
 #endif  /* _SYS_FILE_H_ */

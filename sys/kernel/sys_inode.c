@@ -655,6 +655,9 @@ openi (struct inode *ip, int mode)
 
     switch (ip->i_mode&IFMT) {
 
+    case IFIFO:
+        return fifo_open(ip, mode);
+
     case IFCHR:
         if (ip->i_fs->fs_flags & MNT_NODEV)
             return(ENXIO);

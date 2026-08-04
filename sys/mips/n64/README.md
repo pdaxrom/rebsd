@@ -1318,7 +1318,7 @@ RAM block sizing:
 - 8 MiB system: 1 MiB `/dev/ram0`, 2 MiB physical swap store. Framebuffers
   no longer consume this block pool.
 
-`N64_ZSWAP=1` is the default.  It selects the shared MIPS zswap backend and
+`N64_ZSWAP=1` is the default.  It selects the shared VM zswap backend and
 keeps the same physical RAM store while exposing twice as many logical swap
 blocks to the VM swap pager.  Each logical 1 KiB swap block is stored as zero,
 raw, or compressed data in 256-byte physical units.  Releasing a VM swap slot
@@ -1326,7 +1326,7 @@ also discards its compressed physical units, so repeated pageout/pagein cycles
 can reuse the store.  If a page cannot be represented in the physical store,
 swapout fails with `ENOMEM` instead of panicking.  `N64_ZSWAP=0` restores the
 raw RAM swap sizing for comparison.  Other MIPS boards can select
-`MIPS_ZSWAP_ENABLED` in their board configuration and use the same backend.
+`ZSWAP_ENABLED` in their board configuration and use the same backend.
 
 `N64_MINIMAL_ROOTFS=1` builds a dependency-tracked hardware-test rootfs while
 keeping the normal N64 console and device configuration.  It is still packaged

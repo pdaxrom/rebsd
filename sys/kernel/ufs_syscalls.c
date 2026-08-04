@@ -166,6 +166,8 @@ copen (int mode, int cmode, caddr_t fname)
     u.u_dupfd = 0;
 
     fp->f_data = (caddr_t)ip;
+    if ((ip->i_mode & IFMT) == IFIFO)
+        fp->f_type = DTYPE_FIFO;
 
     if (flags & (O_EXLOCK | O_SHLOCK)) {
         if (flags & O_EXLOCK)
@@ -215,7 +217,7 @@ mknod()
     struct  nameidata nd;
     register struct nameidata *ndp = &nd;
 
-    if (! suser())
+    if ((uap->fmode & IFMT) != IFIFO && !suser())
         return;
     NDINIT (ndp, CREATE, NOFOLLOW, uap->fname);
     ip = namei(ndp);
@@ -1455,7 +1457,7 @@ getinode(int fdes)
         u.u_error = EBADF;
         return ((struct inode *)0);
     }
-    if (fp->f_type != DTYPE_INODE) {
+    if (fp->f_type != DTYPE_INODE && fp->f_type != DTYPE_FIFO) {
         u.u_error = EINVAL;
         return ((struct inode *)0);
     }

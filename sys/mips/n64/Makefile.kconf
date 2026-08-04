@@ -55,7 +55,7 @@ N64_BUILD_MODE_STAMP = .build-mode.$(N64_BUILD_CONFIG).$(N64_KERNEL_COMPILER).$(
 PARAM += -DN64_STAGE0_RESERVED_BYTES=$(N64_STAGE0_RESERVED_BYTES)
 N64_IOCONF      = ioconf
 ifneq ($(N64_ZSWAP),1)
-PARAM := $(filter-out -DMIPS_ZSWAP_ENABLED,$(PARAM))
+PARAM := $(filter-out -DZSWAP_ENABLED,$(PARAM))
 endif
 ifeq ($(N64_DEBUG_UART_ONLY),1)
 PARAM := $(filter-out -DVIDEO_ENABLED -DINPUT_ENABLED \
@@ -405,7 +405,7 @@ N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).$(N64_USERLAND_ABI).s
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
 
-N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty init login ls mkfs mount netstat sh stty \
+N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty init login ls mkfs mount netstat reboot sh stty \
     sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
     ld make md5 nm pstat ranlib sed) \
     $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),dhclient ifconfig ping route sed)
@@ -462,6 +462,9 @@ N64_MINIMAL_COMPILER_BENCH_LINKED = \
     n64-minimal-mips-compiler-bench-pcc.linked
 N64_MINIMAL_ROOTFS_FILES = \
     $(TOPSRC)/sys/mips/rootfs/etc/group \
+    $(TOPSRC)/sys/mips/rootfs/etc/rc \
+    $(TOPSRC)/sys/mips/rootfs/etc/rc0.d/S99halt \
+    $(TOPSRC)/sys/mips/rootfs/etc/rc6.d/S99reboot \
     $(TOPSRC)/sys/mips/rootfs/etc/passwd \
     $(TOPSRC)/sys/mips/rootfs/etc/profile \
     $(TOPSRC)/sys/mips/n64/rootfs/etc/gettytab \
@@ -1114,6 +1117,8 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	mkdir -p $(N64_MINIMAL_ROOTFS_STAGE)/bin \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/dev \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc0.d \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc6.d \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/lib \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/libexec \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root \
@@ -1126,6 +1131,7 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/include \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/lib/ldscripts \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/libexec/pcc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/var/config \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/var/db \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/var/lock \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/var/log \
@@ -1137,6 +1143,12 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/passwd
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/profile \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/profile
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc0.d/S99halt \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc0.d/S99halt
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc6.d/S99reboot \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc6.d/S99reboot
 ifeq ($(N64_MINIMAL_USBNET_DEBUG),1)
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/hosts \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/hosts
@@ -1158,6 +1170,23 @@ else
 	cp -p $(TOPSRC)/sys/mips/n64/rootfs/etc/ttys \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/ttys
 endif
+	{ \
+	    printf '%s\n' '# ReBSD/N64 minimal System V initialization table.'; \
+	    printf '%s\n' 'is::sysinit:/etc/rc.sysinit'; \
+	    printf '%s\n' 'id:2:initdefault:'; \
+	    printf '%s\n' 'r0:0:wait:/etc/rc 0'; \
+	    printf '%s\n' 'r1:1:wait:/etc/rc 1'; \
+	    printf '%s\n' 'r2:2:wait:/etc/rc 2'; \
+	    printf '%s\n' 'r3:3:wait:/etc/rc 3'; \
+	    printf '%s\n' 'r4:4:wait:/etc/rc 4'; \
+	    printf '%s\n' 'r5:5:wait:/etc/rc 5'; \
+	    printf '%s\n' 'r6:6:wait:/etc/rc 6'; \
+	    printf '%s\n' 'su:S:respawn:/bin/sh'; \
+	    printf '%s\n' 'co:2345:respawn:/libexec/getty std.default console 0<&- 1>&- 2>&-'; \
+	    if [ "$(N64_DEBUG_UART_ONLY)" != "1" ]; then \
+	        printf '%s\n' 's0:2345:respawn:/libexec/getty std.default ttyS0 0<&- 1>&- 2>&-'; \
+	    fi; \
+	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/inittab
 	cp -p $(N64_TERMCAP) $(N64_MINIMAL_ROOTFS_STAGE)/etc/termcap
 	cp -p $(TOPSRC)/sys/mips/rootfs/root/.profile \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/.profile
@@ -1168,7 +1197,7 @@ endif
 	    printf '%s\n' 'echo N64_MINIMAL_RC_BEGIN'; \
 	    printf '%s\n' 'if mkfs -i 4096 /dev/ram0 >/dev/null; then'; \
 	    printf '%s\n' '	if mount /var >/dev/null; then'; \
-	    printf '%s\n' '		mkdir /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null'; \
+	    printf '%s\n' '		mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null'; \
 	    printf '%s\n' '		chmod 1777 /var/tmp'; \
 	    printf '%s\n' '		: >/var/run/utmp'; \
 	    printf '%s\n' '		: >/var/log/wtmp'; \
@@ -1183,8 +1212,8 @@ endif
 	    printf '%s\n' 'fi'; \
 	    printf '%s\n' 'echo N64_MINIMAL_RC_END'; \
 	    printf '%s\n' 'exit 0'; \
-	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc
-	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc
+	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc.sysinit
+	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc.sysinit
 	{ \
 	    printf '%s\n' '/dev/romdisk	/	ufs	ro	0	0'; \
 	    printf '%s\n' '/dev/ram0	/var	ufs	rw	0	0'; \
@@ -1202,6 +1231,8 @@ endif
 	        $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/$$bin; \
 	done
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/init
+	test -L $(N64_MINIMAL_ROOTFS_STAGE)/etc/init
+	test -L $(N64_MINIMAL_ROOTFS_STAGE)/etc/telinit
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/bin/sh
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/libexec/getty
 	test -x $(N64_MINIMAL_ROOTFS_STAGE)/sbin/mkfs

@@ -8,10 +8,138 @@
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
+#include <sys/map.h>
+#include <sys/ioctl.h>
+#include <sys/disk.h>
 #include <sys/errno.h>
+#include <sys/fcntl.h>
+#include <sys/stat.h>
+#include <sys/swap.h>
 #include <sys/systm.h>
 #include <sys/vm.h>
 #include <sys/uio.h>
+#include <vm/pmap.h>
+#include <vm/swap_linux.h>
+#include <vm/vm_object.h>
+#include <vm/vm_page.h>
+
+struct map swapmap[1] = {
+    { 0, 0, "swapmap" },
+};
+
+static unsigned char swap_header[SWAP_LINUX_PAGE_BYTES]
+    __attribute__((aligned(VM_PAGE_SIZE)));
+static struct vm_page *swapmap_storage_pages;
+static vm_pfn_t swapmap_storage_page_count;
+
+static void
+swapmap_storage_release(void)
+{
+    vm_pfn_t index;
+
+    if (swapmap_storage_pages == 0)
+        return;
+    for (index = 0; index < swapmap_storage_page_count; ++index)
+        if (vm_page_counter_dec(&vm_page_boot_allocator,
+            swapmap_storage_pages + index, VM_PAGE_COUNTER_WIRE) != 0)
+            panic("swap map unwire");
+    if (vm_page_free(&vm_page_boot_allocator, swapmap_storage_pages,
+        swapmap_storage_page_count) != 0)
+        panic("swap map free");
+    swapmap_storage_pages = 0;
+    swapmap_storage_page_count = 0;
+    swapmap[0].m_map = 0;
+    swapmap[0].m_limit = 0;
+}
+
+static int
+swapmap_storage_alloc(size_t total, size_t allocation_unit)
+{
+    struct vm_page_request request;
+    struct vm_page *pages;
+    struct mapent *entries;
+    vm_size_t bytes;
+    vm_size_t storage_size;
+    vm_pfn_t page_count;
+    vm_pfn_t index;
+    size_t entry_count;
+    int error;
+
+    if (swapmap_storage_pages != 0)
+        return EBUSY;
+    entry_count = rmap_required_entries(total, allocation_unit);
+    if (entry_count == 0 ||
+        entry_count > VM_SIZE_MAX / sizeof(*entries))
+        return EOVERFLOW;
+    bytes = entry_count * sizeof(*entries);
+    error = vm_size_round_page(bytes, &storage_size);
+    if (error != 0)
+        return error;
+    page_count = storage_size / VM_PAGE_SIZE;
+
+    vm_page_request_init(&request);
+    request.vpr_npages = page_count;
+    request.vpr_state = VM_PAGE_WIRED;
+    error = vm_page_alloc(&vm_page_boot_allocator, &request, &pages);
+    if (error != 0)
+        return error;
+    entries = pmap_pages_direct_map(pages, page_count,
+        PMAP_CACHE_CACHED);
+    if (entries == 0) {
+        for (index = 0; index < page_count; ++index)
+            (void)vm_page_counter_dec(&vm_page_boot_allocator,
+                pages + index, VM_PAGE_COUNTER_WIRE);
+        (void)vm_page_free(&vm_page_boot_allocator, pages, page_count);
+        return EFAULT;
+    }
+
+    bzero((caddr_t)entries, storage_size);
+    swapmap_storage_pages = pages;
+    swapmap_storage_page_count = page_count;
+    swapmap[0].m_map = entries;
+    swapmap[0].m_limit = entries + entry_count;
+    return 0;
+}
+
+static size_t
+swapmap_add_extent(unsigned first_page, unsigned end_page,
+    size_t page_blocks)
+{
+    size_t blocks;
+    size_t start;
+
+    if (first_page >= end_page)
+        return 0;
+    start = (size_t)first_page * page_blocks;
+    blocks = (size_t)(end_page - first_page) * page_blocks;
+    mfree(swapmap, blocks, start);
+    return blocks;
+}
+
+static int
+swapmap_linux_init(const struct swap_linux_info *linux_swap,
+    size_t page_blocks, size_t *usable_blocks)
+{
+    unsigned current;
+    unsigned badpage;
+    unsigned index;
+    int error;
+
+    current = 1;
+    *usable_blocks = 0;
+    for (index = 0; index < linux_swap->sli_badpages; ++index) {
+        error = swap_linux_badpage(swap_header, linux_swap, index,
+            &badpage);
+        if (error != 0)
+            return error;
+        *usable_blocks += swapmap_add_extent(current, badpage,
+            page_blocks);
+        current = badpage + 1u;
+    }
+    *usable_blocks += swapmap_add_extent(current,
+        linux_swap->sli_last_page + 1u, page_blocks);
+    return *usable_blocks != 0 ? 0 : ENOSPC;
+}
 
 /*
  * swap I/O
@@ -74,6 +202,146 @@ swap (size_t blkno, size_t coreaddr, int count, int rdflg)
     }
     brelse(bp);
     return error;
+}
+
+int
+swap_configure(dev_t dev, int flags, struct swap_config_info *info)
+{
+    struct swap_linux_info linux_swap;
+    dev_t previous_swapdev;
+    size_t page_blocks;
+    daddr_t blocks;
+    int error;
+
+    if (info == 0 || dev == NODEV || major(dev) >= nblkdev)
+        return EINVAL;
+    bzero((caddr_t)info, sizeof(*info));
+    if (nswap != 0 || swapmap_storage_pages != 0)
+        return EBUSY;
+    if (VM_PAGE_SIZE < DEV_BSIZE || VM_PAGE_SIZE % DEV_BSIZE != 0 ||
+        VM_PAGE_SIZE != SWAP_LINUX_PAGE_BYTES)
+        return EINVAL;
+
+    previous_swapdev = swapdev;
+    swapdev = dev;
+    error = (*bdevsw[major(dev)].d_open)(dev,
+        FREAD | FWRITE, S_IFBLK);
+    if (error != 0)
+        goto fail_unopened;
+    blocks = (*bdevsw[major(dev)].d_psize)(dev);
+    if (blocks <= 0) {
+        error = ENOSPC;
+        goto fail;
+    }
+    if ((daddr_t)(u_int)blocks != blocks) {
+        error = EOVERFLOW;
+        goto fail;
+    }
+    nswap = (u_int)blocks;
+    page_blocks = VM_PAGE_SIZE / DEV_BSIZE;
+    error = swap(0, (size_t)swap_header, VM_PAGE_SIZE, B_READ);
+    if (error != 0)
+        goto fail;
+    error = swap_linux_parse(swap_header, sizeof(swap_header),
+        nswap / page_blocks, &linux_swap);
+    if (error == 0) {
+        nswap = (linux_swap.sli_last_page + 1u) * page_blocks;
+        swapstart = page_blocks;
+        info->sci_linux_format = 1;
+        info->sci_badpages = linux_swap.sli_badpages;
+    } else if (error == ENOENT && (flags & SWAP_CONFIG_ALLOW_RAW) != 0) {
+        swapstart = 1;
+    } else {
+        if (error == ENOENT)
+            error = EINVAL;
+        goto fail;
+    }
+
+    error = swapmap_storage_alloc(nswap, page_blocks);
+    if (error != 0)
+        goto fail;
+    if (info->sci_linux_format) {
+        error = swapmap_linux_init(&linux_swap, page_blocks,
+            &info->sci_usable_blocks);
+    } else if (nswap > swapstart) {
+        info->sci_usable_blocks = nswap - swapstart;
+        mfree(swapmap, info->sci_usable_blocks, swapstart);
+        error = 0;
+    } else {
+        error = ENOSPC;
+    }
+    if (error != 0)
+        goto fail;
+    error = vm_pager_swap_init();
+    if (error != 0)
+        goto fail;
+
+    if (info->sci_linux_format) {
+        printf("swap: Linux v1, %u usable kbytes, %u bad pages\n",
+            (unsigned)(info->sci_usable_blocks * DEV_BSIZE / 1024),
+            info->sci_badpages);
+    } else {
+        printf("swap: raw, %u usable kbytes\n",
+            (unsigned)(info->sci_usable_blocks * DEV_BSIZE / 1024));
+    }
+    return 0;
+
+fail:
+    swapmap_storage_release();
+    (void)(*bdevsw[major(dev)].d_close)(dev,
+        FREAD | FWRITE, S_IFBLK);
+fail_unopened:
+    swapstart = 0;
+    nswap = 0;
+    swapdev = previous_swapdev;
+    bzero((caddr_t)info, sizeof(*info));
+    return error;
+}
+
+/*
+ * Enable a validated Linux swap v1 block device at run time.  Embedded
+ * boards which deliberately configure raw RAM swap call swap_configure()
+ * during boot with SWAP_CONFIG_ALLOW_RAW instead.
+ */
+void
+swapon(void)
+{
+    struct a {
+        char *special;
+    } *uap;
+    struct swap_config_info info;
+    dev_t dev;
+    int error;
+
+    if (!suser())
+        return;
+    uap = (struct a *)u.u_arg;
+    error = getmdev(&dev, uap->special);
+    if (error == 0)
+        error = swap_configure(dev, 0, &info);
+    u.u_error = error;
+    if (error == 0)
+        u.u_rval = 0;
+}
+
+void
+swap_discard(size_t blkno, size_t nblocks)
+{
+    struct disk_discard range;
+    const struct bdevsw *device;
+    int error;
+
+    if (swapdev == NODEV || nblocks == 0)
+        return;
+    device = &bdevsw[major(swapdev)];
+    if ((device->d_flags & BDEV_DISCARD) == 0)
+        return;
+    range.dd_offset = (disk_sector_t)blkno * (DEV_BSIZE / 512);
+    range.dd_length = (disk_sector_t)nblocks * (DEV_BSIZE / 512);
+    error = (*device->d_ioctl)(swapdev, DIOCDISCARD,
+        (caddr_t)&range, FWRITE);
+    if (error != 0)
+        panic("swap discard");
 }
 
 /*

@@ -72,6 +72,9 @@ COPY_PATHS = [
     "/etc/group",
     "/etc/motd",
     "/etc/passwd",
+    "/etc/rc",
+    "/etc/rc0.d",
+    "/etc/rc6.d",
     "/etc/termcap",
     "/libexec/getty",
     "/root/ccom-stress.sh",
@@ -82,8 +85,10 @@ COPY_PATHS = [
     "/root/mips-compiler-bench-gcc",
     "/root/mips-compiler-bench-pcc",
     "/sbin/init",
+    "/sbin/halt",
     "/sbin/mkfs",
     "/sbin/mount",
+    "/sbin/reboot",
     "/usr/bin/aout",
     "/usr/bin/ar",
     "/usr/bin/as",
@@ -112,6 +117,8 @@ ROOT_SYMLINKS = {
     "/lib/libm.a": "../usr/lib/libm.a",
     "/lib/libpcc.a": "../usr/lib/libpcc.a",
     "/tmp": "var/tmp",
+    "/etc/init": "../sbin/init",
+    "/etc/telinit": "../sbin/init",
 }
 
 DEVICE_NODES = [
@@ -260,7 +267,7 @@ def make_run_script(tests):
     return "\n".join(lines) + "\n"
 
 
-def make_rc():
+def make_rc_sysinit():
     return """#!/bin/sh
 HOME=/; export HOME
 PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
@@ -274,7 +281,7 @@ if [ $rc -eq 0 ]; then
     rc=$?
     echo N64_PCC_DEBUG_MOUNT_DIRECT_RC $rc
     if [ $rc -eq 0 ]; then
-        mkdir /var/db /var/log /var/run /var/tmp /var/lock
+        mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock
         chmod 1777 /var/tmp
         : >/var/run/utmp
         : >/var/log/wtmp
@@ -289,6 +296,20 @@ fi
 /root/n64-pcc-debug-runner
 echo N64_PCC_DEBUG_RUNNER_RC $?
 echo N64_PCC_DEBUG_RC_END
+"""
+
+
+def make_inittab():
+    return """# N64 PCC debug System V initialization table.
+is::sysinit:/etc/rc.sysinit
+id:2:initdefault:
+r0:0:wait:/etc/rc 0
+r1:1:wait:/etc/rc 1
+r2:2:wait:/etc/rc 2
+r3:3:wait:/etc/rc 3
+r4:4:wait:/etc/rc 4
+r5:5:wait:/etc/rc 5
+r6:6:wait:/etc/rc 6
 """
 
 
@@ -363,7 +384,8 @@ def stage_rootfs(args):
         ensure_parent(sh_dst)
         shutil.copy2(runner_src, sh_dst)
         os.chmod(sh_dst, 0o775)
-    write_file(out_rootfs, "/etc/rc", make_rc(), 0o775)
+    write_file(out_rootfs, "/etc/inittab", make_inittab(), 0o664)
+    write_file(out_rootfs, "/etc/rc.sysinit", make_rc_sysinit(), 0o775)
     write_file(out_rootfs, "/etc/ttys", make_ttys(), 0o664)
     write_file(out_rootfs, "/etc/fstab", make_fstab(), 0o664)
     write_file(out_rootfs, "/etc/profile", make_profile(), 0o664)

@@ -6,14 +6,14 @@
 #include <disk/ramdisk.h>
 #include <machine/layout.h>
 #include <machine/ramswap.h>
-#ifdef MIPS_ZSWAP_ENABLED
-#include <mips/common/zswap.h>
-#if DEV_BSIZE != MIPS_ZSWAP_BLOCK_BYTES || \
-    DEV_BSHIFT != MIPS_ZSWAP_BLOCK_SHIFT
-#error "MIPS zswap block geometry must match the kernel device block size"
+#ifdef ZSWAP_ENABLED
+#include <vm/zswap.h>
+#if DEV_BSIZE != ZSWAP_BLOCK_BYTES || \
+    DEV_BSHIFT != ZSWAP_BLOCK_SHIFT
+#error "zswap block geometry must match the kernel device block size"
 #endif
 
-static struct mips_zswap ramswap_zswap;
+static struct zswap ramswap_zswap;
 static unsigned ramswap_logical_bytes;
 
 static void
@@ -21,8 +21,8 @@ ramswap_configure(void)
 {
     if (ramswap_logical_bytes != 0)
         return;
-    ramswap_logical_bytes = mips_zswap_logical_bytes(MALTA_RAMSWAP_BYTES);
-    if (mips_zswap_init(&ramswap_zswap,
+    ramswap_logical_bytes = zswap_logical_bytes(MALTA_RAMSWAP_BYTES);
+    if (zswap_init(&ramswap_zswap,
         MIPS_PHYS_TO_KSEG1(MALTA_RAMSWAP_PHYS_START),
         MALTA_RAMSWAP_BYTES) != 0)
         ramswap_logical_bytes = 0;
@@ -47,7 +47,7 @@ ramregion(dev_t dev, unsigned *base, unsigned *bytes)
     switch (minor(dev)) {
     case MIPS_RAMSWAP_MINOR:
         *base = MALTA_RAMSWAP_PHYS_START;
-#ifdef MIPS_ZSWAP_ENABLED
+#ifdef ZSWAP_ENABLED
         ramswap_configure();
         *bytes = ramswap_logical_bytes;
 #else
@@ -148,13 +148,13 @@ mipsramswap_strategy(struct buf *bp)
         bp->b_bcount = nbytes;
     }
 
-#ifdef MIPS_ZSWAP_ENABLED
+#ifdef ZSWAP_ENABLED
     if (minor(bp->b_dev) == MIPS_RAMSWAP_MINOR) {
         if (bp->b_flags & B_READ)
-            error = mips_zswap_read(&ramswap_zswap, offset,
+            error = zswap_read(&ramswap_zswap, offset,
                 bp->b_addr, nbytes);
         else
-            error = mips_zswap_write(&ramswap_zswap, offset,
+            error = zswap_write(&ramswap_zswap, offset,
                 bp->b_addr, nbytes);
         if (error != 0) {
             ramswap_done_error(bp, error);
@@ -178,18 +178,6 @@ mipsramswap_strategy(struct buf *bp)
     biodone(bp);
 }
 
-void
-mipsramswap_discard(size_t blkno, size_t nblocks)
-{
-#ifdef MIPS_ZSWAP_ENABLED
-    ramswap_configure();
-    mips_zswap_discard(&ramswap_zswap, blkno, nblocks);
-#else
-    (void)blkno;
-    (void)nblocks;
-#endif
-}
-
 int
 mipsramswap_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
 {
@@ -199,6 +187,22 @@ mipsramswap_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
     case DIOCGETMEDIASIZE:
         *(int *)addr = mipsramswap_size(dev);
         return 0;
+#ifdef ZSWAP_ENABLED
+    case DIOCDISCARD: {
+        const struct disk_discard *range;
+
+        if (minor(dev) != MIPS_RAMSWAP_MINOR)
+            return EINVAL;
+        range = (const struct disk_discard *)addr;
+        if ((range->dd_offset | range->dd_length) & 1u)
+            return EINVAL;
+        ramswap_configure();
+        zswap_discard(&ramswap_zswap,
+            (size_t)(range->dd_offset >> 1),
+            (size_t)(range->dd_length >> 1));
+        return 0;
+    }
+#endif
     default:
         return EINVAL;
     }

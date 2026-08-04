@@ -40,6 +40,7 @@ kernel/subr_rmap.c              standard
 kernel/sys_generic.c            standard
 kernel/sys_inode.c              standard
 kernel/sys_pipe.c               standard
+kernel/sys_fifo.c               standard
 kernel/sys_process.c            standard
 kernel/syscalls.c               standard
 kernel/tty.c                    standard
@@ -62,6 +63,7 @@ kernel/vm_sched.c               standard
 kernel/vm_swp.c                 standard
 
 vm/vm_param.c                  standard
+vm/swap_linux.c                standard
 vm/vm_phys.c                   standard
 vm/vm_page.c                   standard
 vm/vm_map.c                    standard
@@ -139,6 +141,6 @@ net/netinit.c                   optional inet
 mips/common/signal.c            standard
 mips/common/sysctl.c            standard
 mips/common/vm_page_machdep.c   standard
-mips/common/zswap.c             optional mips_zswap_enabled
+vm/zswap.c                     optional zswap_enabled
 kernel/libkern.c               standard
 kernel/stubs.c                  standard

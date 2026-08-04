@@ -35,7 +35,8 @@ char	*sys_siglist[NSIG] = {
 	"Virtual timer expired",	/* SIGVTALRM */
 	"Profiling timer expired",	/* SIGPROF */
 	"Window size changes",		/* SIGWINCH */
-	"Signal 29",
+	"Information request",          /* SIGINFO */
 	"User defined signal 1",	/* SIGUSR1 */
-	"User defined signal 2"		/* SIGUSR2 */
+	"User defined signal 2",	/* SIGUSR2 */
+	"Power fail/restart"		/* SIGPWR */
 };

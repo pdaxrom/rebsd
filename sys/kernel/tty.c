@@ -1467,7 +1467,8 @@ checktandem:
 int
 ttycheckoutq (struct tty *tp, int wait)
 {
-    int hiwat, s, oldsig;
+    int hiwat, s;
+    sigset_t oldsig;
 
     hiwat = TTHIWAT(tp);
     s = spltty();

@@ -6,11 +6,11 @@
 #include <disk/ramdisk.h>
 #include <machine/n64.h>
 #include <machine/ramswap.h>
-#ifdef MIPS_ZSWAP_ENABLED
-#include <mips/common/zswap.h>
-#if DEV_BSIZE != MIPS_ZSWAP_BLOCK_BYTES || \
-    DEV_BSHIFT != MIPS_ZSWAP_BLOCK_SHIFT
-#error "MIPS zswap block geometry must match the kernel device block size"
+#ifdef ZSWAP_ENABLED
+#include <vm/zswap.h>
+#if DEV_BSIZE != ZSWAP_BLOCK_BYTES || \
+    DEV_BSHIFT != ZSWAP_BLOCK_SHIFT
+#error "zswap block geometry must match the kernel device block size"
 #endif
 #endif
 
@@ -20,8 +20,8 @@ static unsigned ramswap_store_bytes;
 static unsigned ramdisk_var_base;
 static unsigned ramdisk_var_bytes;
 static struct ramdisk var_device;
-#ifdef MIPS_ZSWAP_ENABLED
-static struct mips_zswap ramswap_zswap;
+#ifdef ZSWAP_ENABLED
+static struct zswap ramswap_zswap;
 #endif
 
 static void
@@ -61,9 +61,9 @@ ramswap_configure(void)
     ramswap_base = ramdisk_var_base + ramdisk_var_bytes;
     ramswap_store_bytes = pool_bytes - ramdisk_var_bytes;
     ramswap_bytes = ramswap_store_bytes;
-#ifdef MIPS_ZSWAP_ENABLED
-    ramswap_bytes = mips_zswap_logical_bytes(ramswap_store_bytes);
-    if (mips_zswap_init(&ramswap_zswap,
+#ifdef ZSWAP_ENABLED
+    ramswap_bytes = zswap_logical_bytes(ramswap_store_bytes);
+    if (zswap_init(&ramswap_zswap,
         N64_PHYS_TO_KSEG1(ramswap_base), ramswap_store_bytes) != 0)
         ramswap_bytes = 0;
 #endif
@@ -180,13 +180,13 @@ n64ramswap_strategy(struct buf *bp)
         bp->b_bcount = nbytes;
     }
 
-#ifdef MIPS_ZSWAP_ENABLED
+#ifdef ZSWAP_ENABLED
     if (minor(bp->b_dev) == N64_RAMSWAP_MINOR) {
         if (bp->b_flags & B_READ)
-            error = mips_zswap_read(&ramswap_zswap, offset,
+            error = zswap_read(&ramswap_zswap, offset,
                 bp->b_addr, nbytes);
         else
-            error = mips_zswap_write(&ramswap_zswap, offset,
+            error = zswap_write(&ramswap_zswap, offset,
                 bp->b_addr, nbytes);
         if (error != 0) {
             ramswap_done_error(bp, error);
@@ -209,24 +209,12 @@ n64ramswap_strategy(struct buf *bp)
     biodone(bp);
 }
 
-void
-n64ramswap_discard(size_t blkno, size_t nblocks)
-{
-#ifdef MIPS_ZSWAP_ENABLED
-    ramswap_configure();
-    mips_zswap_discard(&ramswap_zswap, blkno, nblocks);
-#else
-    (void)blkno;
-    (void)nblocks;
-#endif
-}
-
-#ifdef MIPS_ZSWAP_ENABLED
+#ifdef ZSWAP_ENABLED
 int
-n64ramswap_get_zswap_stats(struct mips_zswap_stats *stats)
+n64ramswap_get_zswap_stats(struct zswap_stats *stats)
 {
     ramswap_configure();
-    return mips_zswap_get_stats(&ramswap_zswap, stats);
+    return zswap_get_stats(&ramswap_zswap, stats);
 }
 #endif
 
@@ -239,6 +227,22 @@ n64ramswap_ioctl(dev_t dev, u_int cmd, caddr_t addr, int flag)
     case DIOCGETMEDIASIZE:
         *(int *)addr = n64ramswap_size(dev);
         return 0;
+#ifdef ZSWAP_ENABLED
+    case DIOCDISCARD: {
+        const struct disk_discard *range;
+
+        if (minor(dev) != N64_RAMSWAP_MINOR)
+            return EINVAL;
+        range = (const struct disk_discard *)addr;
+        if ((range->dd_offset | range->dd_length) & 1u)
+            return EINVAL;
+        ramswap_configure();
+        zswap_discard(&ramswap_zswap,
+            (size_t)(range->dd_offset >> 1),
+            (size_t)(range->dd_length >> 1));
+        return 0;
+    }
+#endif
     default:
         return EINVAL;
     }

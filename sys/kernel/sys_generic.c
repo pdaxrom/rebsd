@@ -614,7 +614,7 @@ const struct fileops socketops = {
 };
 
 const struct fileops *const Fops[] = {
-    NULL, &inodeops, &socketops, &pipeops, &shmops
+    NULL, &inodeops, &socketops, &pipeops, &shmops, &fifoops
 };
 
 /*

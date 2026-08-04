@@ -20,6 +20,9 @@
 #ifndef NMOUNT
 #define NMOUNT      2       /* number of mountable file systems */
 #endif
+#ifndef NFIFO
+#define NFIFO       (NFILE / 4) /* simultaneously active named FIFOs */
+#endif
 
 #define MAXUPRC     20      /* max processes per user */
 #define NOFILE      30      /* max open files per process */

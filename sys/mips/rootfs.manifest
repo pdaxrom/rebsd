@@ -11,6 +11,8 @@ dir /bin
 dir /cart
 dir /dev
 dir /etc
+dir /etc/rc0.d
+dir /etc/rc6.d
 dir /lib
 dir /libexec
 dir /mnt
@@ -37,6 +39,7 @@ target ../usr/bin/cpp
 symlink /tmp
 target var/tmp
 dir /var
+dir /var/config
 dir /var/lock
 dir /var/log
 dir /var/run
@@ -46,7 +49,18 @@ file /etc/motd
 
 file /etc/profile
 
+file /etc/inittab
+
 file /etc/rc
+mode 0775
+
+file /etc/rc.sysinit
+mode 0775
+
+file /etc/rc0.d/S99halt
+mode 0775
+
+file /etc/rc6.d/S99reboot
 mode 0775
 
 file /etc/fstab
@@ -65,6 +79,12 @@ file /etc/services
 
 symlink /etc/resolv.conf
 target ../var/run/resolv.conf
+
+symlink /etc/init
+target ../sbin/init
+
+symlink /etc/telinit
+target ../sbin/init
 
 file /etc/ttys
 
@@ -954,6 +974,8 @@ file /usr/share/man/cat1/zcat.0
 
 file /usr/share/man/cat5/ar.0
 
+file /usr/share/man/cat5/inittab.0
+
 file /usr/share/man/cat5/magic.0
 
 file /usr/share/man/cat5/ranlib.0
@@ -961,6 +983,8 @@ file /usr/share/man/cat5/ranlib.0
 file /usr/share/man/cat8/bootloader.0
 
 file /usr/share/man/cat8/chown.0
+
+file /usr/share/man/cat8/chkconfig.0
 
 file /usr/share/man/cat8/chroot.0
 
@@ -987,6 +1011,8 @@ file /usr/share/man/cat8/inetd.0
 file /usr/share/man/cat8/halt.0
 
 file /usr/share/man/cat8/init.0
+
+file /usr/share/man/cat8/telinit.0
 
 file /usr/share/man/cat8/mkfs.0
 
@@ -1018,6 +1044,8 @@ file /usr/share/man/cat8/shutdown.0
 
 file /usr/share/man/cat8/sync.0
 
+file /usr/share/man/cat8/swapon.0
+
 file /usr/share/man/cat8/telnetd.0
 
 file /usr/share/man/cat8/sysctl.0
@@ -1031,6 +1059,9 @@ mode 0775
 
 file /usr/sbin/chown
 mode 0775
+
+file /usr/sbin/chkconfig
+mode 0755
 
 file /usr/sbin/chroot
 mode 04751
@@ -1109,6 +1140,9 @@ mode 04750
 
 file /sbin/umount
 mode 0775
+
+file /usr/sbin/swapon
+mode 0755
 
 file /usr/sbin/updatedb
 mode 0775

@@ -28,13 +28,14 @@ $(SUBDIR):	FRC | $(LIBS)
 
 FRC:
 
-# Installing from a parallel multi-goal invocation such as "make -j all
-# install" must not race the build.  Several legacy recursive install rules
-# intentionally ignore individual copy errors; without this dependency that
-# can produce a filesystem image with no init or shell.
+# Installation is ordered after the complete build.  Do not pass the two
+# goals "all install" to recursive makes: under -j they are independent goals
+# unless every child makefile restates the ordering, and installation can
+# otherwise race generation of programs and manual pages.
 install: all
-		-for i in $(SUBDIR); do \
-			$(MAKE) -C $$i DESTDIR=$(DESTDIR) all install; done
+		for i in $(SUBDIR); do \
+			$(MAKE) -C $$i DESTDIR=$(DESTDIR) install || exit $$?; \
+		done
 
 clean:
 		rm -f a.out core *.s *.o *.a *~

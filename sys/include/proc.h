@@ -6,6 +6,8 @@
 #ifndef _SYS_PROC_H_
 #define _SYS_PROC_H_
 
+#include <sys/signal.h>
+
 struct user;
 struct vmspace;
 
@@ -26,7 +28,7 @@ struct  proc {
     short   p_pid;                  /* unique process id */
     short   p_ppid;                 /* process id of parent */
     short   p_pgrp;                 /* process group, retained for zombies */
-    long    p_sig;                  /* signals pending to this process */
+    sigset_t p_sig;                  /* signals pending to this process */
     int     p_stat;
     struct  user *p_uarea;          /* resident user area/kernel stack */
     struct  vmspace *p_vmspace;     /* process virtual address space */
@@ -47,9 +49,9 @@ struct  proc {
             char    P_slptime;      /* secs sleeping */
             char    P_ptracesig;    /* used between parent & traced child */
             struct proc *P_hash;    /* hashed based on p_pid */
-            long    P_sigmask;      /* current signal mask */
-            long    P_sigignore;    /* signals being ignored */
-            long    P_sigcatch;     /* signals being caught by user */
+            sigset_t P_sigmask;        /* current signal mask */
+            sigset_t P_sigignore;      /* signals being ignored */
+            sigset_t P_sigcatch;       /* signals being caught by user */
             struct  proc *P_link;   /* linked list of running processes */
             size_t  P_addr;         /* address of u. area */
             size_t  P_daddr;        /* address of data area */

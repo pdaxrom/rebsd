@@ -202,7 +202,10 @@ md_uarea_fork(const struct user *source, int bootstrap)
     stack_pointer -= sizeof(*target_frame);
     target_frame = (struct i386_trapframe *)stack_pointer;
     bcopy(source_frame, target_frame, sizeof(*target_frame));
+    /* Complete the child half of the i386 syscall return ABI. */
     target_frame->tf_eax = 0;
+    target_frame->tf_edx = 0;
+    target_frame->tf_eflags &= ~I386_EFLAGS_CARRY;
     target->u_frame = (int *)target_frame;
     target->u_ssave.val[I386_LABEL_ESP] = stack_pointer;
     target->u_ssave.val[I386_LABEL_EIP] =

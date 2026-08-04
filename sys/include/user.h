@@ -8,7 +8,7 @@
 #include "exec.h"
 #include "time.h"
 #include "resource.h"
-#if defined(N64) || defined(MIPS)
+#if defined(N64) || defined(MIPS) || defined(I386)
 #include <machine/fpu.h>
 #endif
 #else
@@ -57,16 +57,18 @@ struct user {
 
 /* 1.3 - signal management */
     sig_t   u_signal[NSIG];         /* disposition of signals */
-    long    u_sigmask[NSIG];        /* signals to be blocked */
-    long    u_sigonstack;           /* signals to take on sigstack */
-    long    u_sigintr;              /* signals that interrupt syscalls */
-    long    u_oldmask;              /* saved mask from before sigpause */
+    sigset_t u_sigmask[NSIG];       /* signals to be blocked */
+    sigset_t u_sigonstack;          /* signals to take on sigstack */
+    sigset_t u_sigintr;             /* signals that interrupt syscalls */
+    sigset_t u_oldmask;             /* saved mask from before sigpause */
     int     u_code;                 /* ``code'' to trap */
     int     u_psflags;              /* Process Signal flags */
     struct  sigaltstack u_sigstk;   /* signal stack info */
     u_int   u_sigtramp;             /* pointer to trampoline code in user space */
 #if defined(MIPS) || defined(N64)
     struct  mips_fpu_state u_fpu;   /* saved MIPS FPU state */
+#elif defined(I386)
+    struct  i386_fpu_state u_fpu;   /* saved x87/SSE state */
 #endif
 
 /* 1.4 - descriptor management */

@@ -331,6 +331,10 @@ fsync()
 
     if ((ip = getinode(uap->fd)) == NULL)
         return;
+    if ((ip->i_mode & IFMT) == IFIFO) {
+        u.u_error = EINVAL;
+        return;
+    }
     ilock(ip);
     u.u_error = vm_vnode_fsync_locked(ip);
     iunlock(ip);

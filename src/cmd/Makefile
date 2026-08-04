@@ -20,11 +20,11 @@ SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar chflags \
                   uucp viless virus yacc
 
 # /sbin
-SUBDIR_ALL    += dhclient disktool dmesg fsck fsck.fat getty gpt ifconfig init \
+SUBDIR_ALL    += chkconfig dhclient disktool dmesg fsck fsck.fat getty gpt ifconfig init \
                   mkfs mkfs.fat mknod mount reboot route shutdown umount
 
 # /usr/sbin
-SUBDIR_ALL    += chown chroot cron inetd mkpasswd ntpdate pstat \
+SUBDIR_ALL    += chown chroot cron inetd mkpasswd ntpdate pstat swapon \
                   talloc update vipw
 
 # TODO: lex m4 reloc sre pforth
@@ -37,8 +37,8 @@ SCRIPT_ALL	= false nohup true #lorder mkdep
 # explicit make lines.
 #
 STD_ALL		= basename cal cat cb chgrp chmod cmp col comm cp dd \
-                  diskspeed du echo ed fgrep free grep head hostid join \
-                  kill last ln mesg mkdir mv nice od pagesize pr printenv ps \
+                  diskspeed du echo ed fgrep fifo-smoke free grep head hostid join \
+                  kill last ln mesg mkdir mkfifo mv nice od pagesize pr printenv ps \
                   off64-smoke-gcc pwd rev rm rmail rmdir size sleep sort split strace sum sync \
                   tail tar tee time top touch tr tsort tty uniq uptime w wc \
                   iostat vm-pressure-smoke vmstat whereis who
@@ -146,21 +146,28 @@ aoutio.o:	aoutio.c aoutio.h
 $(SCRIPT): %: %.sh
 		install -c $< $@
 
-install:	$(BINS)
+install:	all
 		@if [ -n "$(strip $(CMD_BIN_PROGS))" ]; then \
 			install $(CMD_BIN_PROGS) $(DESTDIR)/bin/; \
 		fi
-		-for i in $(SUBDIR); do \
-			$(MAKE) -C $$i $(MFLAGS) DESTDIR=$(DESTDIR) install; done
-		-for i in $(SCRIPT); do install $$i $(DESTDIR)/bin/$$i; done
-		-for i in $(SETUID); do \
-			install -m 4751 $$i $(DESTDIR)/bin/$$i; done
-		-for i in $(OPERATOR); do \
-			install -m 2751 $$i $(DESTDIR)/bin/$$i; done
-		-for i in $(KMEM); do \
-			install -m 2751 $$i $(DESTDIR)/bin/$$i; done
-		-for i in $(TTY); do \
-			install -m 2751 $$i $(DESTDIR)/bin/$$i; done
+		for i in $(SUBDIR); do \
+			$(MAKE) -C $$i $(MFLAGS) DESTDIR=$(DESTDIR) install || exit $$?; \
+		done
+		for i in $(SCRIPT); do \
+			install $$i $(DESTDIR)/bin/$$i || exit $$?; \
+		done
+		for i in $(SETUID); do \
+			install -m 4751 $$i $(DESTDIR)/bin/$$i || exit $$?; \
+		done
+		for i in $(OPERATOR); do \
+			install -m 2751 $$i $(DESTDIR)/bin/$$i || exit $$?; \
+		done
+		for i in $(KMEM); do \
+			install -m 2751 $$i $(DESTDIR)/bin/$$i || exit $$?; \
+		done
+		for i in $(TTY); do \
+			install -m 2751 $$i $(DESTDIR)/bin/$$i || exit $$?; \
+		done
 
 clean:
 		/bin/rm -f $(BINS) bc.c egrep.c expr.c a.out core *.s *.o *.dis *.elf *~ y.tab.c errs

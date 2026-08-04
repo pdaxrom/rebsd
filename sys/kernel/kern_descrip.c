@@ -279,6 +279,10 @@ fstat()
             ub.st_size -= fp->f_offset;
         break;
 
+    case DTYPE_FIFO:
+        u.u_error = fifo_stat(fp, &ub);
+        break;
+
     case DTYPE_SHM:
         u.u_error = shm_fstat(fp, &ub);
         break;

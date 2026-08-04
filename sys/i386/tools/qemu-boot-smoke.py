@@ -61,6 +61,10 @@ CORE_MARKERS = (
     "REBSD_I686_NETSTAT_OK",
     "REBSD_I686_LOOPBACK_OK",
     "REBSD_I686_TIME64_2040",
+    "FIFO_SMOKE_PASS",
+    "REBSD_I686_TELINIT_Q_OK",
+    "REBSD_I686_CHKCONFIG_OK",
+    "REBSD_I686_INIT_RESPAWN_OK",
     "REBSD_I686_FULL_ROOTFS_OK",
     "REBSD_I686_SHELL_OK",
 )
@@ -516,6 +520,10 @@ def main() -> None:
     mouse_sent = False
     ps2_post_network_sent = False
     ps2_post_network_output_start = 0
+    respawn_exit_sent = False
+    respawn_output_start = 0
+    respawn_login_sent = False
+    respawn_probe_sent = False
     commands = (
         (b"/bin/ls /bin/l?\n", b"/bin/ls"),
         (b"echo REBSD_I686_LS_OK\n", b"\r\nREBSD_I686_LS_OK\r\n"),
@@ -574,6 +582,21 @@ def main() -> None:
             b"/bin/date -nu 204001020304.05 >/dev/null && "
             b"/bin/date -u -f REBSD_I686_TIME64_%Y && echo\n",
             b"\r\nREBSD_I686_TIME64_2040\r\n",
+        ),
+        (
+            b"/usr/bin/fifo-smoke\n",
+            b"\r\nFIFO_SMOKE_PASS\r\n",
+        ),
+        (
+            b"/etc/telinit Q && echo REBSD_I686_TELINIT_Q_OK\n",
+            b"\r\nREBSD_I686_TELINIT_Q_OK\r\n",
+        ),
+        (
+            b"/usr/sbin/chkconfig -f init-smoke on && "
+            b"/usr/sbin/chkconfig init-smoke && "
+            b"/usr/sbin/chkconfig init-smoke off && "
+            b"echo REBSD_I686_CHKCONFIG_OK\n",
+            b"\r\nREBSD_I686_CHKCONFIG_OK\r\n",
         ),
         (
             b"echo REBSD_I686_FULL_ROOTFS_OK REBSD_I686_SHELL_OK\n",
@@ -657,12 +680,40 @@ def main() -> None:
                     )
                     ps2_post_network_sent = True
                 else:
-                    completed = True
-                    break
+                    respawn_output_start = len(output_bytes)
+                    process.stdin.write(b"exit\n")
+                    process.stdin.flush()
+                    respawn_exit_sent = True
         if (
             ps2_post_network_sent
             and b"\r\nps2postnetok\r\n# "
             in output_bytes[ps2_post_network_output_start:]
+        ):
+            respawn_output_start = len(output_bytes)
+            process.stdin.write(b"exit\n")
+            process.stdin.flush()
+            respawn_exit_sent = True
+            ps2_post_network_sent = False
+        if (
+            respawn_exit_sent
+            and not respawn_login_sent
+            and b"login: " in output_bytes[respawn_output_start:]
+        ):
+            process.stdin.write(b"root\n")
+            process.stdin.flush()
+            respawn_login_sent = True
+        if (
+            respawn_login_sent
+            and not respawn_probe_sent
+            and output_bytes.endswith(b"\r\n# ")
+        ):
+            process.stdin.write(b"echo REBSD_I686_INIT_RESPAWN_OK\n")
+            process.stdin.flush()
+            respawn_probe_sent = True
+        if (
+            respawn_probe_sent
+            and b"\r\nREBSD_I686_INIT_RESPAWN_OK\r\n# "
+            in output_bytes[respawn_output_start:]
         ):
             completed = True
             break

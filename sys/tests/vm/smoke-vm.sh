@@ -72,17 +72,25 @@ compile_pmap "$tmp/pmap_test"
 compile_zswap()
 {
     output=$1
-    include_dir="$tmp/include-${output##*/}"
-    mkdir -p "$include_dir"
-    ln -s "$top/sys/mips" "$include_dir/machine"
     "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
-        -DREBSD_VM_HOST_TEST -I "$include_dir" -I "$top/sys" \
+        -DREBSD_VM_HOST_TEST -I "$top/sys" \
         -idirafter "$top/include" \
-        "$top/sys/mips/common/zswap.c" "$script_dir/zswap_test.c" \
+        "$top/sys/vm/zswap.c" "$script_dir/zswap_test.c" \
         -o "$output"
 }
 
 compile_zswap "$tmp/zswap_test"
+
+compile_linux_swap()
+{
+    output=$1
+    "$cc" -std=c99 -Wall -Wextra -Werror -pedantic \
+        -DREBSD_VM_HOST_TEST -I "$top/sys" -idirafter "$top/include" \
+        "$top/sys/vm/swap_linux.c" \
+        "$script_dir/swap_linux_test.c" -o "$output"
+}
+
+compile_linux_swap "$tmp/swap_linux_test"
 
 compile_rmap()
 {
@@ -185,6 +193,7 @@ if [ "$mode" = test ]; then
     "$tmp/vm_map_test"
     "$tmp/pmap_test"
     "$tmp/zswap_test"
+    "$tmp/swap_linux_test"
     "$tmp/rmap_test"
     if [ -x "$tmp/vm_test_sanitize" ]; then
         "$tmp/vm_test_sanitize"

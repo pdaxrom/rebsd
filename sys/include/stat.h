@@ -52,7 +52,7 @@ typedef char stat_time64_layout_must_remain_80_bytes[
  * Definitions of flags in mode that are 4.4 compatible.
  */
 
-#define S_IFIFO 0010000         /* named pipe (fifo) - Not used by 2.11BSD */
+#define S_IFIFO 0010000         /* named pipe (FIFO) */
 
 #define S_IRWXU 0000700         /* RWX mask for owner */
 #define S_IRUSR 0000400         /* R for owner */
@@ -109,6 +109,7 @@ int     chmod(const char *path, mode_t mode);
 int     fchmod(int fd, mode_t mode);
 mode_t  umask(mode_t cmask);
 int     mkdir(const char *path, mode_t mode);
+int     mkfifo(const char *path, mode_t mode);
 
 #endif
 

@@ -85,15 +85,6 @@ smoke_signal(int signo)
 }
 
 static int
-smoke_setpgrp(pid_t pid, pid_t pgrp)
-{
-    int (*bsd_setpgrp)();
-
-    bsd_setpgrp = (int (*)())setpgrp;
-    return (*bsd_setpgrp)(pid, pgrp);
-}
-
-static int
 smoke_wait_zombie_group(void)
 {
     sig_t old_handler;
@@ -111,7 +102,7 @@ smoke_wait_zombie_group(void)
         return 2;
     }
     if (child == 0) {
-        if (smoke_setpgrp(0, getpid()) < 0)
+        if (setpgid(0, getpid()) < 0)
             _exit(1);
         _exit(SMOKE_FORK_STATUS);
     }

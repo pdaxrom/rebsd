@@ -41,7 +41,7 @@ struct mips_sigframe {
 };
 
 void
-sendsig(sig_t p, int sig, long mask)
+sendsig(sig_t p, int sig, sigset_t mask)
 {
     int *regs = u.u_frame;
     struct mips_sigframe local_frame;

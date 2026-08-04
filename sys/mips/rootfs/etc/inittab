@@ -1,0 +1,14 @@
+# ReBSD System V/IRIX-style process initialization table.
+is::sysinit:/etc/rc.sysinit
+id:2:initdefault:
+
+r0:0:wait:/etc/rc 0
+r1:1:wait:/etc/rc 1
+r2:2:wait:/etc/rc 2
+r3:3:wait:/etc/rc 3
+r4:4:wait:/etc/rc 4
+r5:5:wait:/etc/rc 5
+r6:6:wait:/etc/rc 6
+
+su:S:respawn:/bin/sh
+co:2345:respawn:/libexec/getty std.default console 0<&- 1>&- 2>&-

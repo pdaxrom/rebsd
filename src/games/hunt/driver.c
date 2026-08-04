@@ -194,7 +194,7 @@ init()
 
 # ifndef DEBUG
 	(void) ioctl(fileno(stdout), TIOCNOTTY, NULL);
-	(void) setpgrp(getpid(), getpid());
+	(void) setpgid(0, 0);
 	(void) signal(SIGHUP, SIG_IGN);
 	(void) signal(SIGINT, SIG_IGN);
 	(void) signal(SIGQUIT, SIG_IGN);

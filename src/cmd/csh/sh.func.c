@@ -1088,7 +1088,7 @@ retry:
 			goto retry;
 		}
 		(void) ioctl(FSHTTY, TIOCSPGRP, (char *)&shpgrp);
-		(void) setpgrp(0, shpgrp);
+		(void) setpgid(0, shpgrp);
 	}
 	(void) ioctl(FSHTTY, TIOCGETD, (char *)&oldisc);
 	if (oldisc != NTTYDISC) {

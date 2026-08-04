@@ -30,25 +30,11 @@ static BOOL job_initialized;
 
 extern char *sysmsg[];
 
-/*
- * The RetroBSD kernel implements the historical setpgrp(pid, pgrp)
- * system call, while the public header exposes POSIX setpgrp(void).
- * Call the raw entry through an unprototyped function pointer.
- */
-static int
-job_setpgrp(int pid, int pgrp)
-{
-    int (*bsd_setpgrp)();
-
-    bsd_setpgrp = (int (*)())setpgrp;
-    return ((*bsd_setpgrp)(pid, pgrp));
-}
-
 static void
 job_set_foreground(int pgrp)
 {
     if (job_tty >= 0)
-        ioctl(job_tty, TIOCSPGRP, &pgrp);
+        tcsetpgrp(job_tty, pgrp);
 }
 
 void
@@ -67,22 +53,23 @@ job_init(int tty_fd)
 
     pid = getpid();
     old_pgrp = getpgrp();
-    if (old_pgrp != pid && job_setpgrp(0, pid) < 0)
+    /* Do not stop the shell while it takes foreground ownership. */
+    ignsig(SIGTSTP);
+    ignsig(SIGTTIN);
+    ignsig(SIGTTOU);
+    if (old_pgrp != pid && setpgid(0, pid) < 0)
         return;
 
     shell_pgrp = getpgrp();
     job_tty = tty_fd;
     if (shell_pgrp <= 0 ||
-        ioctl(job_tty, TIOCSPGRP, &shell_pgrp) < 0) {
+        tcsetpgrp(job_tty, shell_pgrp) < 0) {
         if (old_pgrp > 0 && old_pgrp != shell_pgrp)
-            job_setpgrp(0, old_pgrp);
+            setpgid(0, old_pgrp);
         job_tty = -1;
         return;
     }
 
-    ignsig(SIGTSTP);
-    ignsig(SIGTTIN);
-    ignsig(SIGTTOU);
     job_enabled = TRUE;
 }
 
@@ -98,7 +85,7 @@ job_child_start()
     int pid;
 
     pid = getpid();
-    job_setpgrp(0, pid);
+    setpgid(0, pid);
 }
 
 void
@@ -290,7 +277,7 @@ job_forked(int pid, BOOL background, struct trenod *tree)
     struct job *jp;
     struct job temporary;
 
-    job_setpgrp(pid, pid);
+    setpgid(pid, pid);
     jp = job_alloc(pid, background, tree);
     if (jp == NIL) {
         if (background) {

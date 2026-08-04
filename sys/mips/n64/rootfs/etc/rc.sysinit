@@ -8,7 +8,7 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 # runtime state; /tmp is a rootfs symlink to /var/tmp.
 if mkfs -i 4096 /dev/ram0 >/dev/null; then
 	if mount /var; then
-		mkdir /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
+		mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
 		chmod 1777 /var/tmp
 		: >/var/run/utmp
 		: >/var/log/wtmp

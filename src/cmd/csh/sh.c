@@ -314,7 +314,7 @@ retry:
 				shpgrp = getpid();
 				tpgrp = shpgrp;
 				(void) ioctl(f, TIOCSPGRP, (char *)&shpgrp);
-				(void) setpgrp(0, shpgrp);
+				(void) setpgid(0, shpgrp);
 				(void) ioctl(dcopy(f, FSHTTY), FIOCLEX,
 					(char *)0);
 			} else {
@@ -379,7 +379,7 @@ untty()
 {
 
 	if (tpgrp > 0) {
-		(void) setpgrp(0, opgrp);
+		(void) setpgid(0, opgrp);
 		(void) ioctl(FSHTTY, TIOCSPGRP, (char *)&opgrp);
 		if (oldisc != -1 && oldisc != NTTYDISC) {
 #ifdef DEBUG

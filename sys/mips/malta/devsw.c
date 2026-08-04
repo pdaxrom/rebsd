@@ -55,7 +55,12 @@ const struct bdevsw bdevsw[] = {
     },
     {
         mipsramswap_open, mipsramswap_close, mipsramswap_strategy,
-        mipsramswap_size, mipsramswap_ioctl, 0,
+        mipsramswap_size, mipsramswap_ioctl,
+#ifdef ZSWAP_ENABLED
+        BDEV_DISCARD,
+#else
+        0,
+#endif
     },
     {
 #ifdef DISK_ENABLED

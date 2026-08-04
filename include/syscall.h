@@ -91,7 +91,7 @@
 #define SYS_getgroups   79
 #define SYS_setgroups   80
 #define SYS_getpgrp     81
-#define SYS_setpgrp     82
+#define SYS_setpgid     82
 #define SYS_setitimer   83
                                 /* 84 is old; wait,wait3 */
 #define SYS_swapon      85

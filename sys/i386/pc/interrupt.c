@@ -1,4 +1,5 @@
 #include "boot.h"
+#include "fpu.h"
 #include "interrupt.h"
 #include "syscall.h"
 #include "trap.h"
@@ -143,6 +144,8 @@ i386_interrupt_dispatch(struct i386_trapframe *frame)
 #ifdef INET
     int netisr_before;
 #endif
+
+    i386_fpu_save_user(frame);
 
     if (frame->tf_vector == I386_EXCEPTION_BREAKPOINT) {
         if (i386_user_trap(frame, frame->tf_eip))

@@ -59,7 +59,7 @@
 static void
 setsigvec(int signum, struct sigaction *sa)
 {
-    unsigned long bit;
+    sigset_t bit;
     register struct proc *p = u.u_procp;
 
     bit = sigmask(signum);
@@ -117,7 +117,7 @@ sigaction()
     struct sigaction vec;
     register struct sigaction *sa;
     register int signum;
-    u_long bit;
+    sigset_t bit;
     int error = 0;
 
     u.u_sigtramp = uap->sigtramp;   /* save trampoline address */
@@ -165,7 +165,7 @@ out:
 void
 fatalsig(int signum)
 {
-    unsigned long mask;
+    sigset_t mask;
     register struct proc *p = u.u_procp;
 
     u.u_signal[signum] = SIG_DFL;
@@ -247,7 +247,7 @@ void
 sigpending()
 {
     register struct a {
-        struct sigset_t *set;
+        sigset_t *set;
     } *uap = (struct a *)u.u_arg;
     register int error = 0;
     struct  proc *p = u.u_procp;
@@ -268,7 +268,7 @@ void
 sigsuspend()
 {
     register struct a {
-        struct sigset_t *set;
+        sigset_t *set;
     } *uap = (struct a *)u.u_arg;
     sigset_t nmask = 0;
     struct proc *p = u.u_procp;

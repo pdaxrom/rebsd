@@ -16,7 +16,7 @@
 #include <sys/uio.h>
 #include <sys/debug.h>
 #include <vm/vmspace.h>
-#ifdef N64
+#if defined(N64) || defined(I386)
 #include <machine/fpu.h>
 #endif
 
@@ -579,6 +579,8 @@ void exec_clear(struct exec_params *epp)
         epp->argc, epp->arg_pointer, epp->env_pointer);
 #ifdef N64
     bzero (&u.u_fpu, sizeof u.u_fpu);
+#elif defined(I386)
+    i386_fpu_exec_reset();
 #endif
 
     if (epp->argc != 0)

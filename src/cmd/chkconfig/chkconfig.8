@@ -1,0 +1,55 @@
+.TH CHKCONFIG 8 "August 4, 2026" "ReBSD" "System Manager's Manual"
+.SH NAME
+chkconfig \- examine or change system configuration flags
+.SH SYNOPSIS
+.B chkconfig
+[
+.B \-s
+]
+.br
+.B chkconfig
+.I flag
+.br
+.B chkconfig
+[
+.B \-f
+]
+.I flag
+[
+.B on
+|
+.B off
+]
+.SH DESCRIPTION
+.B chkconfig
+provides the IRIX-style interface to the system configuration flags kept in
+.IR /var/config .
+With no operands it lists every flag and its state, sorted by flag name.
+The
+.B \-s
+option sorts the list by state and then by name.
+.PP
+With a single
+.I flag
+operand,
+.B chkconfig
+exits with status zero when the flag exists and is on, and status one when it
+is off or does not exist.  No output is produced.
+.PP
+The optional
+.B on
+or
+.B off
+operand changes the flag.  The flag file must already exist unless
+.B \-f
+is specified.
+.SH FILES
+.TP
+.I /var/config
+System configuration flag directory.  A flag is on when its file contains the
+string
+.BR on ;
+all other contents mean off.
+.SH EXIT STATUS
+For a query, zero means on and one means off or absent.  For listing or update
+operations, zero means success and nonzero means an error occurred.

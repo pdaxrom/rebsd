@@ -5,6 +5,7 @@
 #include <sys/proc.h>
 
 #include "interrupt.h"
+#include "fpu.h"
 
 static int
 i386_user_return_next_signal(struct proc *process)
@@ -51,4 +52,5 @@ i386_user_return(struct i386_trapframe *frame)
     }
     i386_user_return_reschedule(process);
     __asm__ volatile ("cli" : : : "memory");
+    i386_fpu_restore_user(frame);
 }

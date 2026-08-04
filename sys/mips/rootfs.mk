@@ -446,8 +446,7 @@ MIPS_PCC_RUNTIME_SOFT_CC = $(MIPS_PCC_CC) $(MIPS_PCC_ENDIAN_FLAG) \
                           -I$(abspath $(MIPS_NATIVE_TREE)/sys/mips/n64/include) \
                           -I$(abspath $(MIPS_NATIVE_TREE)/include)
 
-MIPS_ROOTFS_INCLUDES = -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)/machine) \
-                       -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE))
+MIPS_ROOTFS_INCLUDES = -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE))
 
 ifeq ($(MIPS_ROOTFS_COMPILER),gcc)
 MIPS_USERLAND_CC = $(MIPS_ROOTFS_GCC_PREFIX)gcc $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) $(MIPS_ROOTFS_ENDIAN_CPP) $(MIPS_ROOTFS_TOOLCHAIN_CPP) $(MIPS_ROOTFS_EXTRA_CPPFLAGS) $(MIPS_ROOTFS_INCLUDES) \
@@ -963,6 +962,7 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILES) \
 	mkdir -p $(MIPS_ROOTFS_STAGE)/mnt
 	mkdir -p $(MIPS_ROOTFS_STAGE)/libexec
 	mkdir -p $(MIPS_ROOTFS_STAGE)/var/db
+	mkdir -p $(MIPS_ROOTFS_STAGE)/var/config
 	mkdir -p $(MIPS_ROOTFS_STAGE)/var/lock
 	mkdir -p $(MIPS_ROOTFS_STAGE)/var/log
 	mkdir -p $(MIPS_ROOTFS_STAGE)/var/run

@@ -26,9 +26,6 @@
 #endif
 
 #include <vm/vm_object.h>
-#if defined(N64) || defined(MIPS_ZSWAP_ENABLED)
-#include <machine/ramswap.h>
-#endif
 #include <vm/vm_assert.h>
 
 #if defined(KERNEL) && !defined(REBSD_VM_HOST_TEST)
@@ -210,11 +207,7 @@ static void
 vm_pager_swap_free(size_t slot)
 {
     if (slot != 0) {
-#if defined(N64)
-        n64ramswap_discard(slot, VM_SWAP_BLOCKS);
-#elif defined(MIPS_ZSWAP_ENABLED)
-        mipsramswap_discard(slot, VM_SWAP_BLOCKS);
-#endif
+        swap_discard(slot, VM_SWAP_BLOCKS);
         mfree(swapmap, VM_SWAP_BLOCKS, slot);
     }
 }

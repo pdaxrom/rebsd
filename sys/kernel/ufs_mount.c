@@ -22,7 +22,7 @@
  * Check that the user's argument is a reasonable
  * thing on which to mount, otherwise return error.
  */
-static int
+int
 getmdev (dev_t *pdev, caddr_t fname)
 {
     register dev_t dev;

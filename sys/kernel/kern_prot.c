@@ -103,6 +103,8 @@ setpgrp()
 
     if (uap->pid == 0)      /* silly... */
         uap->pid = u.u_procp->p_pid;
+    if (uap->pgrp == 0)
+        uap->pgrp = uap->pid;
     p = pfind(uap->pid);
     if (p == 0) {
         u.u_error = ESRCH;

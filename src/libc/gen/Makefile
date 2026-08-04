@@ -19,10 +19,11 @@ STDSRC		= abort.c abs.c alarm.c atof.c atoi.c atol.c calloc.c closedir.c crypt.c
 		  getpass.c getpwent.c getloadavg.c getmntinfo.c \
 		  getttyent.c getttynam.c getusershell.c getwd.c labs.c \
 		  initgroups.c isatty.c isinff.c isnanf.c ldexp.c locale.c malloc.c mathclass.c \
-                  mktime.c mktemp.c modff.c nan.c ndbm.c nlist.c knlist.c opendir.c perror.c popen.c \
+                  mktime.c mkfifo.c mktemp.c modff.c nan.c ndbm.c nlist.c knlist.c opendir.c perror.c popen.c \
                   psignal.c qsort.c random.c readdir.c regex.c regcomp.c regerror.c \
 		  regexec.c regfree.c scandir.c \
-                  seekdir.c setmode.c sethostname.c setenv.c siglist.c \
+                  seekdir.c setmode.c sethostname.c setenv.c setpgrp.c \
+                  tcgetpgrp.c tcsetpgrp.c siglist.c \
                   signal.c siginterrupt.c sigsetops.c \
 		  sleep.c strcasecmp.c strftime.c swab.c sysctl.c syslog.c system.c \
 		  strcat.c strncat.c strcpy.c strncpy.c strncmp.c \
@@ -44,10 +45,11 @@ STDOBJ		= abort.o abs.o alarm.o atof.o atoi.o atol.o calloc.o closedir.o crypt.o
 		  getpass.o getpwent.o getloadavg.o getmntinfo.o \
 		  getttyent.o getttynam.o getusershell.o getwd.o labs.o \
 		  initgroups.o isatty.o isinff.o isnanf.o ldexp.o locale.o malloc.o mathclass.o \
-                  mktime.o mktemp.o modff.o nan.o ndbm.o nlist.o knlist.o opendir.o perror.o popen.o \
+                  mktime.o mkfifo.o mktemp.o modff.o nan.o ndbm.o nlist.o knlist.o opendir.o perror.o popen.o \
                   psignal.o qsort.o random.o readdir.o regex.o regcomp.o regerror.o \
 		  regexec.o regfree.o scandir.o \
-                  seekdir.o setmode.o sethostname.o setenv.o siglist.o \
+                  seekdir.o setmode.o sethostname.o setenv.o setpgrp.o \
+                  tcgetpgrp.o tcsetpgrp.o siglist.o \
                   signal.o siginterrupt.o sigsetops.o \
 		  sleep.o strcasecmp.o strftime.o swab.o sysctl.o syslog.o system.o \
 		  strcat.o strncat.o strcpy.o strncpy.o strncmp.o \

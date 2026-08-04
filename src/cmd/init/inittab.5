@@ -1,0 +1,110 @@
+.TH INITTAB 5 "August 4, 2026" "ReBSD" "File Formats Manual"
+.SH NAME
+inittab \- System V process initialization table
+.SH DESCRIPTION
+The
+.I /etc/inittab
+file describes the processes started and supervised by
+.BR init (8).
+Each entry has four colon-separated fields:
+.PP
+.RS
+.I id:runlevels:action:process
+.RE
+.PP
+Blank lines and lines beginning with
+.B #
+are ignored.  A backslash immediately before a newline continues an entry.
+A complete logical entry may contain at most 512 bytes.
+.SH FIELDS
+.TP
+.I id
+A unique identifier containing one through four characters.
+.TP
+.I runlevels
+Zero or more of
+.BR 0 \- 6 ,
+.BR S ,
+.BR s ,
+.BR a ,
+.BR b ,
+and
+.BR c .
+The
+.BR a ,
+.BR b ,
+and
+.B c
+levels are on-demand levels.
+.TP
+.I action
+One of the actions described below.
+.TP
+.I process
+A command executed as
+.BR "sh -c 'exec process'" .
+.SH ACTIONS
+.TP
+.B sysinit
+Wait for the process during early system initialization, before init opens
+the console.  Runlevels are ignored.  All
+.B sysinit
+entries finish before any boot action begins.
+.TP
+.B boot
+Start the process without waiting the first time init enters a matching
+non-single-user runlevel after boot.
+.TP
+.B bootwait
+Start the process and wait for it the first time init enters a matching
+non-single-user runlevel after boot.
+.TP
+.B initdefault
+Select the initial runlevel.  If several real runlevels are specified, the
+highest numbered level is selected.  An empty runlevel field means
+.B 0123456
+and therefore selects level 6.  The process field is empty.
+.TP
+.B respawn
+Start the process whenever the selected runlevel is active and restart it
+after it exits.
+.TP
+.B ondemand
+Like
+.BR respawn ,
+but selected only by a request for runlevel
+.BR a ,
+.BR b ,
+or
+.BR c .
+.TP
+.B once
+Start the process once when entering a selected runlevel without waiting.
+.TP
+.B wait
+Start the process when entering a selected runlevel and wait for it.
+.TP
+.B powerfail
+Start the process after
+.B SIGPWR
+without waiting.
+.TP
+.B powerwait
+Start the process after
+.B SIGPWR
+and wait for it.
+.TP
+.B off
+Do not start the entry and stop its existing process when the table is
+reloaded.  The process field may be empty.
+.SH EXAMPLE
+.nf
+is::sysinit:/etc/rc.sysinit
+id:2:initdefault:
+r2:2:wait:/etc/rc 2
+su:S:respawn:/bin/sh
+co:2345:respawn:/libexec/getty std.default console
+.fi
+.SH SEE ALSO
+.BR init (8),
+.BR getty (8)

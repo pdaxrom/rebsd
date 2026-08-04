@@ -1064,7 +1064,7 @@ pfork(t, wanttty)
 		if (wanttty > 0)
 			(void) ioctl(FSHTTY, TIOCSPGRP, (char *)&pgrp);
 		if (wanttty >= 0 && tpgrp >= 0)
-			(void) setpgrp(0, pgrp);
+			(void) setpgid(0, pgrp);
 		if (tpgrp > 0)
 			tpgrp = 0;		/* gave tty away */
 		/*

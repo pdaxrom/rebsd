@@ -1,0 +1,34 @@
+.TH SWAPON 8 "August 2026" ReBSD
+.SH NAME
+swapon \- enable a Linux swap partition
+.SH SYNOPSIS
+.B swapon
+.I special
+.SH DESCRIPTION
+.B swapon
+makes the block device named by
+.I special
+available to the machine-independent VM pager.
+The caller must be the super-user.
+.PP
+Devices enabled at run time must contain a valid Linux swap version 1
+header with the
+.B SWAPSPACE2
+signature.  The header page is reserved, the recorded last-page boundary is
+honoured, and pages listed as bad in the header are excluded from allocation.
+.PP
+RAM-backed raw swap configured for an embedded platform at kernel build time
+continues to use that platform's existing boot-time configuration.
+.SH EXAMPLES
+.PP
+.nf
+swapon /dev/wd0b
+.fi
+.SH SEE ALSO
+.BR swapon (2),
+.BR free (1),
+.BR pstat (8)
+.SH BUGS
+ReBSD currently supports one active swap device.  There is no
+.B swapoff
+operation; reboot before removing or reformatting an active swap device.

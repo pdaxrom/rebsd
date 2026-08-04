@@ -102,6 +102,18 @@ int main(
 		syslog(LOG_CRIT, "%s; %s by %s",
 			args, (howto&RB_HALT)?"halted":"rebooted", user);
 	}
+	/*
+	 * The System V runlevel scripts invoke halt/reboot with -q after init
+	 * has already stopped the supervised processes.  In quick mode, perform
+	 * the requested kernel operation directly and do not signal process 1.
+	 */
+	if (quickly) {
+		if (!(howto & RB_NOSYNC))
+			sync();
+		reboot(howto);
+		perror(myname);
+		exit(EX_OSERR);
+	}
         /*
          * Do a sync early on so disks start transfers while we're killing
          * processes.
@@ -131,7 +143,7 @@ int main(
                 //sleep(1);
         }
 
-	if (! quickly) {
+	{
 		for (i = 1; ; i++) {
 			if (kill(-1, SIGKILL) == -1) {
 				if (errno == ESRCH)

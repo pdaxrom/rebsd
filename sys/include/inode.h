@@ -100,6 +100,7 @@ struct inode {
     u_int           i_flags;        /* user changeable flags */
     struct icommon2 i_ic2;
     struct socket   *i_socket;      /* AF_UNIX socket bound to inode */
+    struct fifo_info *i_fifo;       /* active POSIX named-pipe state */
 };
 
 /*
@@ -354,6 +355,7 @@ void nchinval (dev_t dev);
 #define IFMT        0170000     /* type of file */
 #define IFCHR       0020000     /* character special */
 #define IFDIR       0040000     /* directory */
+#define IFIFO       0010000     /* named pipe (FIFO) */
 #define IFBLK       0060000     /* block special */
 #define IFREG       0100000     /* regular */
 #define IFLNK       0120000     /* symbolic link */

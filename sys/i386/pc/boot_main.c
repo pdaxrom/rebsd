@@ -1,4 +1,5 @@
 #include "boot.h"
+#include "fpu.h"
 #include "interrupt.h"
 #include "memory.h"
 #include "paging.h"
@@ -101,6 +102,13 @@ startup(void)
     i386_tss_set_kernel_stack(
         (unsigned)(unsigned long)md_curuser + USIZE);
     i386_idt_init();
+    if (i386_fpu_init() != 0)
+        i386_boot_fatal("fpu: unavailable");
+#ifdef I386_SSE_ENABLED
+    i386_early_puts("fpu: x87,sse context\n");
+#else
+    i386_early_puts("fpu: x87 context\n");
+#endif
     i386_pic_init();
     if (!i386_console_irq_enable())
         i386_boot_fatal("console-irq: failed");

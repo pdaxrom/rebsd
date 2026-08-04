@@ -154,6 +154,15 @@ int main(int argc, char *argv[])
 		signal(SIGHUP, SIG_DFL);
 	    }
 	}
+	/*
+	 * init starts each inittab command in its own process group.  Make that
+	 * group the terminal foreground group before issuing tty-changing
+	 * ioctls; otherwise the tty layer correctly stops getty with SIGTTOU.
+	 */
+	(void) setpgid(0, 0);
+	(void) signal(SIGTTOU, SIG_IGN);
+	(void) tcsetpgrp(0, getpgrp());
+	(void) signal(SIGTTOU, SIG_DFL);
 
 	gettable("default", defent, defstrs);
 	gendefaults();

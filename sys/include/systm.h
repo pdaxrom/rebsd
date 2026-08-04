@@ -68,6 +68,8 @@ extern dev_t    rootdev;            /* device of the root */
 extern dev_t    dumpdev;            /* device to take dumps on */
 extern long     dumplo;             /* offset into dumpdev */
 extern dev_t    swapdev;            /* swapping device */
+int swap(size_t blkno, size_t coreaddr, int count, int rdflg);
+void swap_discard(size_t blkno, size_t nblocks);
 extern dev_t    pipedev;            /* pipe device */
 
 extern  const char icode[];         /* user init code */
@@ -75,6 +77,8 @@ extern  const char icodeend[];      /* its end */
 extern  const char initflags[];     /* init flags string */
 void init_process(void);
 void md_user_enter(unsigned, unsigned);
+int getmdev(dev_t *, caddr_t);
+void swapon(void);
 
 struct inode;
 daddr_t bmap (struct inode *ip, daddr_t bn, int rwflg, int flags);
@@ -233,7 +237,10 @@ void    read (void), write (void), pread (void), pwrite (void);
 void    readv (void), writev (void), ioctl (void);
 struct file;
 struct uio;
+struct stat;
 int     ino_rwat (struct file *, struct uio *);
+int     fifo_open (struct inode *, int);
+int     fifo_stat (struct file *, struct stat *);
 
 /* 2.2 file system */
 void    chdir (void), fchdir (void), chroot (void);

@@ -72,6 +72,16 @@ struct diskpart64 {
 };
 
 /*
+ * Advisory discard range expressed in 512-byte sectors.  Block devices
+ * which advertise BDEV_DISCARD must either release the complete range or
+ * return an error; ordinary disks need not implement this operation.
+ */
+struct disk_discard {
+    disk_sector_t dd_offset;
+    disk_sector_t dd_length;
+};
+
+/*
  * Disk-specific ioctls.
  */
 #define DIOCGETMEDIASIZE _IOR('d', 1, int)              /* get size in kbytes */
@@ -82,5 +92,6 @@ struct diskpart64 {
 #define DIOCGETSECTORS64 _IOR('d', 6, disk_sector_t)    /* 64-bit sector count */
 #define DIOCGETPART64    _IOR('d', 7, struct diskpart64)/* 64-bit partition */
 #define DIOCGETSCHEME    _IOR('d', 8, unsigned)         /* DISK_SCHEME_* */
+#define DIOCDISCARD      _IOW('d', 9, struct disk_discard) /* release range */
 
 #endif /* _SYS_DISK_H_ */

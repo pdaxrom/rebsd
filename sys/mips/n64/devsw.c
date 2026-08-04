@@ -54,7 +54,12 @@ const struct bdevsw bdevsw[] = {
     },
     {
         n64ramswap_open, n64ramswap_close, n64ramswap_strategy,
-        n64ramswap_size, n64ramswap_ioctl, 0,
+        n64ramswap_size, n64ramswap_ioctl,
+#ifdef ZSWAP_ENABLED
+        BDEV_DISCARD,
+#else
+        0,
+#endif
     },
     { 0 },
 };

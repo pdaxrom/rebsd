@@ -107,6 +107,7 @@ const char sigprop [NSIG + 1] = {
     SA_IGNORE,              /* SIGINFO */
     SA_KILL,                /* SIGUSR1 */
     SA_KILL,                /* SIGUSR2 */
+    SA_IGNORE,              /* SIGPWR */
 };
 #endif /* SIGPROP */
 

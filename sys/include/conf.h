@@ -34,6 +34,9 @@ struct bdevsw
     int     d_flags;                                /* tape flag */
 };
 
+/* d_flags capabilities. */
+#define BDEV_DISCARD    0x02    /* DIOCDISCARD releases backing storage */
+
 #define MEM_MAJOR       1
 
 /*

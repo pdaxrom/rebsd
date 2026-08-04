@@ -1,0 +1,28 @@
+.TH MKFIFO 1 "August 4, 2026"
+.SH NAME
+mkfifo \- make named pipes
+.SH SYNOPSIS
+.B mkfifo
+[
+.BI \-m " mode"
+]
+.I fifo ...
+.SH DESCRIPTION
+.B mkfifo
+creates each named pipe operand.  A named pipe transfers data between
+processes without storing the data in the filesystem.
+.PP
+The default access mode is 0666, modified by the process umask.
+.TP
+.BI \-m " mode"
+Set the access mode of newly created FIFOs.  The mode may be octal or
+symbolic, using the syntax accepted by chmod(1).
+.SH EXIT STATUS
+The utility exits zero when all FIFOs were created successfully, and
+nonzero if an error occurred.
+.SH SEE ALSO
+chmod(1), open(2), read(2), select(2), write(2), mkfifo(2)
+.SH STANDARDS
+The
+.B mkfifo
+utility conforms to POSIX.1.

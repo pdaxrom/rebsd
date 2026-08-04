@@ -46,32 +46,32 @@ sigvec(int signo, struct sigvec *sv, struct sigvec *osv)
 	return(ret);
 }
 
-int
-sigsetmask(int mask)
+sigset_t
+sigsetmask(sigset_t mask)
 {
-	long omask;
+	sigset_t omask;
 	int n;
 
-	n = sigprocmask(SIG_SETMASK, (sigset_t *) &mask, (sigset_t *) &omask);
+	n = sigprocmask(SIG_SETMASK, &mask, &omask);
 	if (n)
-		return((long)n);
+		return((sigset_t)n);
+	return(omask);
+}
+
+sigset_t
+sigblock(sigset_t mask)
+{
+	sigset_t omask;
+	int n;
+
+	n = sigprocmask(SIG_BLOCK, &mask, &omask);
+	if (n)
+		return((sigset_t)n);
 	return(omask);
 }
 
 int
-sigblock(int mask)
+sigpause(sigset_t mask)
 {
-	long omask;
-	int n;
-
-	n = sigprocmask(SIG_BLOCK, (sigset_t *) &mask, (sigset_t *) &omask);
-	if (n)
-		return((long)n);
-	return(omask);
-}
-
-int
-sigpause(int mask)
-{
-	return(sigsuspend((sigset_t *)&mask));
+	return(sigsuspend(&mask));
 }

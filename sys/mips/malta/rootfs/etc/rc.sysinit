@@ -12,7 +12,7 @@ else
         /sbin/mount /var >/dev/null 2>&1
 fi
 
-mkdir /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
+mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
 chmod 1777 /var/tmp
 : >/var/run/utmp
 : >/var/log/wtmp

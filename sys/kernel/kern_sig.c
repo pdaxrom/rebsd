@@ -214,7 +214,7 @@ psignal(struct proc *p, int sig)
     register int s;
     sig_t action;
     int prop;
-    long mask;
+    sigset_t mask;
 
     mask = sigmask(sig);
     prop = sigprop[sig];
@@ -401,7 +401,7 @@ int
 issignal (struct proc *p)
 {
     register int sig;
-    long mask;
+    sigset_t mask;
     int prop;
 
     for (;;) {
@@ -617,7 +617,7 @@ void
 postsig(int sig)
 {
     register struct proc *p = u.u_procp;
-    long mask = sigmask(sig), returnmask;
+    sigset_t mask = sigmask(sig), returnmask;
     register sig_t action;
 
     p->p_sig &= ~mask;
@@ -668,7 +668,7 @@ void
 execsigs(register struct proc *p)
 {
     register int nc;
-    unsigned long mask;
+    sigset_t mask;
 
     /*
      * Reset caught signals.  Held signals remain held

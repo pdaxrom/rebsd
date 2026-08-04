@@ -42,7 +42,7 @@ i386_signal_frame_address(struct i386_trapframe *frame, int sig,
 }
 
 void
-sendsig(sig_t handler, int sig, long mask)
+sendsig(sig_t handler, int sig, sigset_t mask)
 {
     struct i386_trapframe *frame;
     struct i386_sigframe signal_frame;

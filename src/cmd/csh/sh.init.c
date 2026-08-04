@@ -235,8 +235,8 @@ struct	mesg {
 	"VTALRM","Virtual timer expired",
 	"PROF",	"Profiling timer expired",
 	"WINCH","Window size changed",
-	0,	"Signal 29",
+	"INFO",	"Information request",
 	"USR1",	"User defined signal 1",
 	"USR2",	"User defined signal 2",
-	0,	"Signal 32"
+	"PWR",	"Power failure"
 };

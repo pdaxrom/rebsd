@@ -19,7 +19,7 @@
 #include <machine/console.h>
 #include <machine/n64.h>
 #include <machine/ramswap.h>
-#include <mips/common/zswap.h>
+#include <vm/zswap.h>
 #ifdef N64_USB_GDB
 #include <machine/n64gdb.h>
 #endif
@@ -462,7 +462,7 @@ static void
 n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
     unsigned badvaddr, int signal, int vm_error)
 {
-    struct mips_zswap_stats zswap;
+    struct zswap_stats zswap;
     struct vm_object_stats object;
     struct pmap_stats pmap;
     unsigned cp0[MIPS_CP0_DIAG_WORDS];
@@ -530,7 +530,7 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
     object_error = vm_object_get_stats(&object);
     vmspace_error = u.u_procp != 0 && u.u_procp->p_vmspace != 0 ?
         vmspace_validate(u.u_procp->p_vmspace) : EINVAL;
-#ifdef MIPS_ZSWAP_ENABLED
+#ifdef ZSWAP_ENABLED
     zswap_error = n64ramswap_get_zswap_stats(&zswap);
 #else
     bzero((caddr_t)&zswap, sizeof(zswap));
@@ -637,18 +637,18 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
         "last=%u block=%u unit=%u units=%u length=%u flags=%04x "
         "valid=%u raw=%u compressed=%u used_units=%u/%u\n",
         zswap_error,
-        zswap_error == 0 ? zswap.mzs_read_errors : 0,
-        zswap_error == 0 ? zswap.mzs_last_error : 0,
-        zswap_error == 0 ? zswap.mzs_last_error_block : 0,
-        zswap_error == 0 ? zswap.mzs_last_error_unit : 0,
-        zswap_error == 0 ? zswap.mzs_last_error_units : 0,
-        zswap_error == 0 ? zswap.mzs_last_error_length : 0,
-        zswap_error == 0 ? zswap.mzs_last_error_flags : 0,
-        zswap_error == 0 ? zswap.mzs_valid_blocks : 0,
-        zswap_error == 0 ? zswap.mzs_raw_blocks : 0,
-        zswap_error == 0 ? zswap.mzs_compressed_blocks : 0,
-        zswap_error == 0 ? zswap.mzs_used_units : 0,
-        zswap_error == 0 ? zswap.mzs_phys_units : 0);
+        zswap_error == 0 ? zswap.zss_read_errors : 0,
+        zswap_error == 0 ? zswap.zss_last_error : 0,
+        zswap_error == 0 ? zswap.zss_last_error_block : 0,
+        zswap_error == 0 ? zswap.zss_last_error_unit : 0,
+        zswap_error == 0 ? zswap.zss_last_error_units : 0,
+        zswap_error == 0 ? zswap.zss_last_error_length : 0,
+        zswap_error == 0 ? zswap.zss_last_error_flags : 0,
+        zswap_error == 0 ? zswap.zss_valid_blocks : 0,
+        zswap_error == 0 ? zswap.zss_raw_blocks : 0,
+        zswap_error == 0 ? zswap.zss_compressed_blocks : 0,
+        zswap_error == 0 ? zswap.zss_used_units : 0,
+        zswap_error == 0 ? zswap.zss_phys_units : 0);
     n64_dump_restore_diagnostics();
     n64_dump_exception_history();
     n64_dump_user_code(faultpc);

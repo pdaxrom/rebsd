@@ -11,6 +11,16 @@
 
 #ifdef KERNEL
 
+#define SWAP_CONFIG_ALLOW_RAW   0x01
+
+struct swap_config_info {
+    size_t      sci_usable_blocks;
+    unsigned    sci_linux_format;
+    unsigned    sci_badpages;
+};
+
+int swap_configure(dev_t, int, struct swap_config_info *);
+
 extern int swopen(dev_t dev, int mode, int flag);
 extern int swclose(dev_t dev, int mode, int flag);
 extern void swstrategy(register struct buf *bp);
