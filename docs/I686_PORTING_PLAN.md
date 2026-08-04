@@ -1,13 +1,13 @@
 # План портирования ReBSD на i686/BIOS
 
-Статус: два IBM 6563-W4G hardware gate сохранены как фактические результаты;
-текущий QEMU path всегда использует встроенный read-only UFS root через
-общий romdisk major 0 minor 0 и общие VFS/UFS/inode-exec владельцы. IDE
-подключается через отдельный generic disk major 2 как `sd0`. Ошибочные
-FAT-root, IDE→memory fallback и регистрация romdisk в `sdN` отменены и
-удалены из текущей реализации. USB Mass Storage включён в обязательный
-i686 storage-план через существующие USB/`umass`/generic disk владельцы,
-2026-07-26.
+Статус: IBM 6563-W4G hardware gate завершён 2026-08-04. Текущий QEMU и
+аппаратный path всегда используют встроенный read-only UFS root через общий
+romdisk major 0 minor 0 и общие VFS/UFS/inode-exec владельцы. IDE публикуется
+общим disk layer как writable `wdN`/`rwdN`, а USB Mass Storage через общий
+USB/`umass`/SCSI path как `sdN`/`rsdN`; на проверенной конфигурации это `wd0`
+для IDE-CF и `sd0` для USB-диска. Ошибочные FAT-root, IDE→memory fallback и
+регистрация romdisk в disk namespace отменены и удалены из текущей
+реализации.
 
 Текущая веха normal boot завершена:
 
@@ -25,8 +25,8 @@ i686 storage-план через существующие USB/`umass`/generic di
 - normal kernel больше не линкует i386 diagnostic `*_selftest.o`, private
   VFS bootstrap или process-bootstrap и не завершает штатную загрузку через
   marker `HALT`;
-- следующий этап остаётся QEMU-only: расширение нужного userland,
-  external IDE/USB mount path и PS/2/VGA.
+- полный GCC userland, external IDE/USB mount path, PS/2/VGA, RTC, PCI
+  Ethernet и VIA IDE UDMA4 подтверждены QEMU gates и реальным IBM.
 
 Общий этап аппаратного времени завершён 2026-08-01 одновременно для i686 и
 Ci20.  `sys/kernel/todr.c` выбирает hardware provider по приоритету, выполняет
@@ -35,8 +35,8 @@ fallback на timestamp root filesystem и записывает все дост�
 PCF8563 через I2C4 как primary и внутренний JZ4780 RTC как secondary.  BCD и
 Gregorian conversion находятся только в общем коде; FAT также переиспользует
 его вместо собственной копии.  QEMU i686 подтверждает выбор `mc146818` и
-загрузку с аппаратным UTC временем; Ci20 требует только финального gate на
-реальной плате для чтения PCF8563 и проверки сохранения после выключения.
+загрузку с аппаратным UTC временем; сохранение времени после выключения
+подтверждено на реальных IBM и Ci20.
 
 ## Выполнено
 
@@ -1172,19 +1172,14 @@ QEMU EHCI/OHCI/UHCI-инкремент выполнен:
   `pc-i440fx-5.1`;
 - общий `sys/input` владеет keyboard mapping, PS/2 decoding и mouse event
   device; i386 i8042-код ограничен transport setup и IRQ1/IRQ12;
-- при наличии IDE он остаётся `sd0`, USB получает `sd1`; без IDE USB
-  получает `sd0`. Romdisk остаётся root `(0,0)` и не занимает `sdN`;
+- IDE использует класс `wdN`, USB Mass Storage использует `sdN`; при их
+  совместной работе проверены `wd0` и `sd0`. Romdisk остаётся root `(0,0)`
+  и не занимает ни один внешний disk namespace;
 - все QEMU пути требуют `vfs-root: ufs,romdisk,read-only`.
 
-Оставшийся hardware-порядок:
-
-1. на IBM 6563-W4G проверить PCI ID USB function VIA, затем тот же
-   enumeration/read-only gate на реальной флешке;
-2. проверить PS/2 keyboard/mouse и USB boot keyboard/mouse на реальном IBM;
-   QEMU HID devices являются full-speed, а low-speed TD flag отдельно
-   покрыт host fake-I/O тестом;
-3. IDE и USB получают `sdN` по общему attach order. Номер `sdN` не задаёт
-   root policy: debug root остаётся romdisk `(0,0)`.
+Реальный IBM gate завершён: VIA UHCI keyboard/mouse и mass storage проверены
+одновременно с PS/2 input и IDE; USB-диск публикуется как `sd0`, IDE как
+`wd0`, а root policy остаётся romdisk `(0,0)`.
 
 Запрещены отдельные i386 USB core, `umass`, SCSI transport, partition parser,
 filesystem path или собственный namespace устройств.
@@ -1212,10 +1207,17 @@ filesystem path или собственный namespace устройств.
   PIIX/VIA timing registers, capability fallback и injected DMA error/timeout.
   QEMU отдельно проходит
   forced PIO, forced DMA и automatic selection;
-- общий ATA backend содержит полный write/flush contract, но i686 пока
-  публикует внешний IDE-CF с `DISK_FLAG_READ_ONLY`. Поэтому реальный gate не
-  выполняет ATA write и не меняет Red Hat/GRUB CF; embedded read-only UFS
-  остаётся root `(0,0)`.
+- общий ATA backend содержит полный write/flush contract. После явного
+  разрешения владельца i686 публикует IDE-диски writable как `wdN`/`rwdN`;
+  write, flush и сохранность после перезагрузки проверены на резервируемом
+  IDE-CF. Embedded read-only UFS остаётся root `(0,0)`.
+
+Финальный IBM gate 2026-08-04 подтвердил `ata=auto`, VIA UDMA4, прямой
+scatter/gather DMA, forced-PIO fallback, read-write FAT mount и полный
+sync/unmount/remount/`fsck.fat -n` цикл. Также подтверждены PS/2 и USB input,
+USB Mass Storage, VT100 Backspace/cursor, MC146818 persistence и длительный
+RTL8169 traffic одновременно с IDE DMA и input. Аппаратных блокеров у этого
+i686/BIOS этапа больше нет.
 
 Аппаратный gate 2026-08-02 подтвердил на IBM принудительный `ata=pio` и один
 прогон `ata=dma`: в каждом режиме 4 MiB были прочитаны из read-only `sd0`

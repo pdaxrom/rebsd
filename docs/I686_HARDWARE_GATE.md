@@ -1,5 +1,32 @@
 # Hardware gate: IBM 6563-W4G
 
+## Current acceptance status
+
+The IBM 6563-W4G hardware gate was completed on 2026-08-04 with the normal
+`rebsd-i686.bzimg` artifact.  The verified configuration uses the embedded
+read-only UFS root, writable IDE `wd0`/`rwd0`, USB mass-storage `sd0`/`rsd0`,
+writable `/var` on `/dev/ram0`, and `lo0` independently of physical Ethernet.
+
+The physical machine confirmed:
+
+- automatic VIA VT82C596B UDMA4, direct scatter/gather DMA, forced-PIO
+  fallback, ATA writes and cache-flush persistence across reboot;
+- read-write FAT mount and mutation followed by sync, unmount, remount and a
+  clean `fsck.fat -n`; the FAT32 repair utility also persists approved raw
+  repairs without treating a merely stale FSInfo next-free hint as damage;
+- PS/2 keyboard/mouse, VIA UHCI keyboard/mouse and USB mass storage while IDE
+  remains `wd0` and USB remains `sd0`;
+- shared VT100 Backspace/readline redraw and correct VGA cursor placement;
+- MC146818 set/read persistence after power removal;
+- RTL8169 attach, level-triggered INTx, link, IPv4/ARP/ICMP and sustained
+  traffic concurrently with IDE DMA, USB and PS/2 without growing interface
+  error counters.
+
+The chronological logs below retain the device names and read-only policy
+printed by the older images that produced them.  Those historical `sd0`
+references describe the IDE disk before disk-class naming was corrected;
+they are not the current ABI.
+
 Два gate успешно выполнены 2026-07-25 на реальном IBM 6563-W4G с
 VIA Apollo Pro 133, AGP VGA и IDE-CF. У машины нет floppy drive, поэтому
 существующий GRUB Legacy загрузил `rebsd-i686.bzimg` с Red Hat root

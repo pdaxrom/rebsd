@@ -194,19 +194,30 @@ does not reserve 32 MiB of RAM per process.
 
 PCC is not part of the i686 build and must not be changed.
 
-## Next hardware gates
+## IBM 6563-W4G hardware gate
 
-1. Recheck Backspace/readline redraw and VGA cursor placement with the shared
-   VT100 console build on the IBM 6563-W4G.
-2. Verify USB keyboard/mouse input on the IBM; PS/2 keyboard/mouse attachment
-   and input are already confirmed.
-3. Keep external IDE and USB devices on the common disk path and validate
-   writable mounts without changing the embedded read-only UFS root policy.
-4. Validate automatic ATA selection and write/flush operation on the VIA
-   controller.  Forced PIO and UDMA reads are already confirmed; repair tests
-   should first use the backed-up CF image.
-5. Validate CMOS persistence after `date`/`settimeofday` and USB mass storage
-   on the VIA Apollo Pro 133.
-6. Validate `re0` attach, level-triggered INTx, link, static IPv4, ARP, ICMP
-   RX/TX latency and sustained traffic on the installed `10ec:8169` PCI
-   adapter.
+The initial IBM/VIA hardware gate was completed on 2026-08-04.  The physical
+machine has confirmed all of the following with the normal
+`rebsd-i686.bzimg` build:
+
+1. Backspace/readline redraw and VGA hardware-cursor placement through the
+   shared VT100 console.
+2. PS/2 keyboard and mouse plus USB keyboard and mouse through the VIA UHCI
+   controller.
+3. USB mass storage on the common SCSI disk path alongside the IDE disk:
+   IDE remains `wd0`/`rwd0`, while USB mass storage is `sd0`/`rsd0`.
+4. Read-write FAT mounting, file and directory mutation, sync, unmount,
+   remount and a clean subsequent `fsck.fat -n`, without changing the
+   embedded read-only UFS root policy.
+5. Automatic VIA ATA selection, UDMA4 direct scatter/gather I/O, write and
+   cache-flush persistence across reboot; forced PIO remains the tested
+   fallback.
+6. MC146818 persistence after `date`/`settimeofday` and power removal.
+7. `re0` attach, level-triggered INTx, link, IPv4/ARP/ICMP latency and
+   sustained traffic on the installed `10ec:8169`, including concurrent
+   IDE DMA, USB and PS/2 activity without growing interface error counters.
+
+The next i686 kernel increment is therefore no longer a hardware bring-up
+workaround or another private PC subsystem.  It is the normal common swap
+configuration/pager attachment; the current PC configuration deliberately
+uses `swap none`.
