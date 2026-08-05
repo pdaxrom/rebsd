@@ -26,10 +26,11 @@ done
 
 tmp=/var/tmp/native-pcc-smoke.$$
 rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.ccom.s" "$tmp.s" "$tmp.o" "$tmp.pcc" \
+	"$tmp.cpp-fd.c" "$tmp.cpp-fd.i" \
     "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" \
     "$tmp.freopen.out" "$tmp.cdefs" "$tmp.cdefs.c" "$tmp.out"
 rm -f "$tmp.mman" "$tmp.mman.c"
-trap 'rc=$?; rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.ccom.s" "$tmp.s" "$tmp.o" "$tmp.pcc" "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" "$tmp.freopen.out" "$tmp.cdefs" "$tmp.cdefs.c" "$tmp.mman" "$tmp.mman.c" "$tmp.out"; exit $rc' 0 1 2 3 15
+trap 'rc=$?; rm -f "$tmp" "$tmp.c" "$tmp.i" "$tmp.ccom.s" "$tmp.s" "$tmp.o" "$tmp.pcc" "$tmp.cpp-fd.c" "$tmp.cpp-fd.i" "$tmp.ctime" "$tmp.ctime.c" "$tmp.freopen" "$tmp.freopen.c" "$tmp.freopen.out" "$tmp.cdefs" "$tmp.cdefs.c" "$tmp.mman" "$tmp.mman.c" "$tmp.out"; exit $rc' 0 1 2 3 15
 
 cat > "$tmp.c" <<'EOF'
 #include <stdio.h>
@@ -66,6 +67,53 @@ echo "step 1: cpp"
 /usr/bin/cpp "$tmp.c" > "$tmp.i" || exit 1
 test -s "$tmp.i" || exit 1
 grep native-pcc-main "$tmp.i" >/dev/null || exit 1
+
+echo "step 1a: cpp include descriptor reuse"
+cat > "$tmp.cpp-fd.c" <<'EOF'
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stddef.h>
+PCC_CPP_FD_REUSE_OK
+EOF
+/usr/bin/cpp "$tmp.cpp-fd.c" > "$tmp.cpp-fd.i" || exit 1
+grep PCC_CPP_FD_REUSE_OK "$tmp.cpp-fd.i" >/dev/null || exit 1
 
 echo "step 2: direct ccom"
 /usr/libexec/pcc/ccom -v "$tmp.i" "$tmp.ccom.s" || exit 1

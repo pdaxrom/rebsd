@@ -929,6 +929,16 @@ pushfile(FILE *ifp, const usch *file, int idx, void *incs)
 	if (otrulvl != trulvl || flslvl)
 		error("unterminated conditional");
 
+	/*
+	 * Each #include is opened before pushfile() is entered.  The include
+	 * stack stores automatic state, so this is the one normal-exit point
+	 * which owns the stream.  Keeping it open until process exit exhausts
+	 * ReBSD's system file table during ordinary, include-heavy compiles.
+	 */
+	if (fclose(ifp) == EOF)
+		error("cannot close input file");
+	ic->ifp = NULL;
+
 	ifiles = ic->next;
 	inclevel--;
 	free(pbeg);
