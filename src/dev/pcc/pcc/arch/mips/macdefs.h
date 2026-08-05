@@ -168,8 +168,8 @@ struct mips_target {
 	!MIPS_SOFT_FLOAT_DEFAULT, MIPS_FIX4300_DEFAULT }
 
 #if defined(os_rebsd)
-#define MIPS_DATA_ALIGN64	(mips_target.isa == MIPS_ISA_MIPS32R2 ? 32 : 64)
-/* ReBSD mips32r2 keeps integer pairs packed, but o32 FP64 uses even slots. */
+#define MIPS_DATA_ALIGN64	64
+/* MIPS o32 gives 64-bit integer and floating-point objects 8-byte alignment. */
 #define MIPS_INT64_ARG_ALIGN	MIPS_DATA_ALIGN64
 #define MIPS_FP64_ARG_ALIGN	64
 #define MIPS_FIX4300_ACTIVE	((mips_target.capabilities & \

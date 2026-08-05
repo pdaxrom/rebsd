@@ -1125,7 +1125,7 @@ sysctl_file(char *where, size_t *sizep)
     size_t buflen;
     int error;
     register struct file *fp;
-    struct  file *fpp;
+    struct kinfo_file kf;
     char *start = where;
     register int i;
 
@@ -1134,32 +1134,33 @@ sysctl_file(char *where, size_t *sizep)
         for (i = 0, fp = file; fp < file+NFILE; fp++)
             if (fp->f_count) i++;
 
-#define FPTRSZ  sizeof (struct file *)
-#define FILESZ  sizeof (struct file)
         /*
          * overestimate by 5 files
          */
-        *sizep = (i + 5) * (FILESZ + FPTRSZ);
+        *sizep = (i + 5) * sizeof(struct kinfo_file);
         return (0);
     }
 
     /*
-     * array of extended file structures: first the address then the
-     * file structure.
+     * Export complete kinfo_file objects.  Copying the pointer and file
+     * separately omits the ABI padding between and after those members on
+     * targets where off_t requires 64-bit alignment.
      */
     for (fp = file; fp < file+NFILE; fp++) {
         if (fp->f_count == 0)
             continue;
-        if (buflen < (FPTRSZ + FILESZ)) {
+        if (buflen < sizeof(kf)) {
             *sizep = where - start;
             return (ENOMEM);
         }
-        fpp = fp;
-        if ((error = copyout ((caddr_t) &fpp, (caddr_t) where, FPTRSZ)) ||
-            (error = copyout ((caddr_t) fp, (caddr_t) (where + FPTRSZ), FILESZ)))
+        bzero(&kf, sizeof(kf));
+        kf.kp_filep = fp;
+        kf.kp_file = *fp;
+        error = copyout((caddr_t)&kf, (caddr_t)where, sizeof(kf));
+        if (error)
             return (error);
-        buflen -= (FPTRSZ + FILESZ);
-        where += (FPTRSZ + FILESZ);
+        buflen -= sizeof(kf);
+        where += sizeof(kf);
     }
     *sizep = where - start;
     return (0);

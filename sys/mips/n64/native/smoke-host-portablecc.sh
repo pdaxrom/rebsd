@@ -388,7 +388,7 @@ typedef char check_sd_size[(sizeof(struct sd) == EXPECT_SIZE) ? 1 : -1];
 EOF
 
 "$pcc" -march=vr4300 -DEXPECT_SIZE=16 -c -o "$tmp.o" "$tmp.c"
-"$pcc" -march=mips32r2 -DEXPECT_SIZE=12 -c -o "$tmp.o" "$tmp.c"
+"$pcc" -march=mips32r2 -DEXPECT_SIZE=16 -c -o "$tmp.o" "$tmp.c"
 
 cat > "$tmp.c" <<'EOF'
 int

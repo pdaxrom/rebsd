@@ -123,7 +123,9 @@ ci20_halt_snapshot
 
 The procedure selects JZ4780 core 0, requests a halt, waits at most two
 seconds, prints PC (`pc`), stack pointer (`r29`) and return address (`r31`),
-and resumes the target even if a register read fails. A successful result ends
+and always attempts to resume the target.  Context read, restore, resume and
+single-step failures are propagated: OpenOCD must not execute `DERET` using an
+invalid or partially restored register context.  A successful result ends
 with output equivalent to:
 
 ```text
@@ -182,6 +184,18 @@ sudo "$OCD" -d2 -s tools/ci20/openocd/build/OpenOCD-XBurst/tcl \
 Keep the UART terminal open and verify that U-Boot or ReBSD still responds
 after a halt snapshot.
 
+Reset the complete JZ4780 SoC, including both cores and peripherals, through
+the watchdog when a fresh U-Boot boot is required:
+
+```text
+ci20_soc_reset
+```
+
+This is a destructive target action, not a probe.  Keep UART open before
+issuing it so the U-Boot countdown and all early boot output are captured.
+The command does not write NAND, UBI, RAM images or any filesystem; it only
+programs the JZ4780 watchdog reset sequence.
+
 If an otherwise silent ReBSD system resumes UART and USB operation only after
 this halt/resume cycle, record the snapshot as evidence of an idle wakeup
 failure; do not treat JTAG as a production recovery mechanism. Ci20 currently
@@ -197,8 +211,8 @@ The patch contains four Ci20/XBurst correctness fixes:
    `Pause-DR`.  XBurst treats `Pause-DR` as another capture while ECR is
    selected, otherwise discarding the value just shifted in.
 2. The cached ECR template does not replay the XBurst read/write `ROCC` bit.
-3. A failed `EjtagBrk` or PRACC operation is propagated instead of continuing
-   with an invalid register context.
+3. Failed `EjtagBrk`, PRACC, context restore, resume and single-step operations
+   are propagated instead of continuing with an invalid register context.
 4. The first XBurst PRACC sequence disables and invalidates the branch target
    buffer through CP0 Config7 before normal context access.
 

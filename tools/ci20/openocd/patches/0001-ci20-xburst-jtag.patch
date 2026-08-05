@@ -202,3 +202,237 @@ index 7fbe54b..e154308 100644
  	return mips32_examine(target);
  }
  
+diff --git a/src/target/mips32.c b/src/target/mips32.c
+--- a/src/target/mips32.c
++++ b/src/target/mips32.c
+@@ -325,5 +325,6 @@ int mips32_restore_context(struct target *target)
+ {
+ 	unsigned int i;
++	int retval;
+ 
+ 	/* get pointers to arch-specific information */
+ 	struct mips32_common *mips32 = target_to_mips32(target);
+@@ -333,15 +334,19 @@ int mips32_restore_context(struct target *target)
+ 
+ 	for (i = 0; i < MIPS32_NUM_REGS; i++) {
+-		if (mips32->core_cache->reg_list[i].dirty)
+-			mips32->write_core_reg(target, i);
++		if (mips32->core_cache->reg_list[i].dirty) {
++			retval = mips32->write_core_reg(target, i);
++			if (retval != ERROR_OK)
++				return retval;
++		}
+ 	}
+ 
+ 	/* If FP Coprocessor available then read FP registers */
+ 	if (mips32->fp_imp == FP_IMP) {
+ 		uint32_t status;
++		int status_retval;
+ 
+ 		/* Read Status register, save it and modify to enable CP0 */
+-		int retval = mips32_cp0_read(ejtag_info, &status, 12, 0);
++		retval = mips32_cp0_read(ejtag_info, &status, 12, 0);
+ 		if (retval != ERROR_OK) {
+ 			LOG_DEBUG("reading status register failed");
+ 			return retval;
+@@ -353,15 +358,25 @@ int mips32_restore_context(struct target *target)
+ 		/* write FPU registers */
+ 		retval = mips32_pracc_write_fpu_regs(ejtag_info, (uint32_t *)(&mips32->core_regs[MIPS32_F0]));
+-		if (retval != ERROR_OK)
+-			LOG_INFO("mips32->read_fpu_reg failed");
++		if (retval != ERROR_OK) {
++			LOG_ERROR("writing FPU registers failed");
++			status_retval = mips32_cp0_write(ejtag_info, status, 12, 0);
++			if (status_retval != ERROR_OK)
++				LOG_ERROR("restoring status register also failed");
++			return retval;
++		}
+ 
+ 		/* restore previous setting */
+-		if ((mips32_cp0_write(ejtag_info, status, 12, 0)) != ERROR_OK)
++		retval = mips32_cp0_write(ejtag_info, status, 12, 0);
++		if (retval != ERROR_OK) {
+ 			LOG_DEBUG("writing status register failed");
++			return retval;
++		}
+ 	}
+ 
+ 	/* write core regs */
+-	mips32_pracc_write_regs(ejtag_info, mips32->core_regs);
++	retval = mips32_pracc_write_regs(ejtag_info, mips32->core_regs);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	return ERROR_OK;
+ }
+diff --git a/src/target/mips_xburst.c b/src/target/mips_xburst.c
+--- a/src/target/mips_xburst.c
++++ b/src/target/mips_xburst.c
+@@ -378,17 +378,26 @@ static int mips_xburst_single_step_core(struct target *target)
+ {
+ 	struct mips32_common *mips32 = target_to_mips32(target);
+ 	struct mips_ejtag *ejtag_info = &mips32->ejtag_info;
++	int retval;
+ 
+ 	/* configure single step mode */
+-	mips_ejtag_config_step(ejtag_info, 1);
++	retval = mips_ejtag_config_step(ejtag_info, 1);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	/* disable interrupts while stepping */
+-	mips32_enable_interrupts(target, 0);
++	retval = mips32_enable_interrupts(target, 0);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	/* exit debug mode */
+-	mips_ejtag_exit_debug(ejtag_info);
++	retval = mips_ejtag_exit_debug(ejtag_info);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+-	mips_xburst_debug_entry(target);
++	retval = mips_xburst_debug_entry(target);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	return ERROR_OK;
+ }
+@@ -428,6 +440,7 @@ static int mips_xburst_internal_restore(struct target *target, int current,
+ 	struct mips_ejtag *ejtag_info = &mips32->ejtag_info;
+ 	struct breakpoint *breakpoint = NULL;
+ 	uint32_t resume_pc;
++	int retval;
+ 
+ 	if (target->state != TARGET_HALTED) {
+ 		LOG_WARNING("target not halted");
+@@ -451,7 +464,9 @@ static int mips_xburst_internal_restore(struct target *target, int current,
+ 	else
+ 		resume_pc = buf_get_u32(mips32->core_cache->reg_list[MIPS32_PC].value, 0, 32);
+ 
+-	mips32_restore_context(target);
++	retval = mips32_restore_context(target);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	/* the front-end may request us not to handle breakpoints */
+ 	if (handle_breakpoints) {
+@@ -460,17 +475,29 @@ static int mips_xburst_internal_restore(struct target *target, int current,
+ 		breakpoint = breakpoint_find(target, resume_pc);
+ 		if (breakpoint) {
+ 			LOG_DEBUG("unset breakpoint at 0x%8.8" PRIx32 "", breakpoint->address);
+-			mips_xburst_unset_breakpoint(target, breakpoint);
+-			mips_xburst_single_step_core(target);
+-			mips_xburst_set_breakpoint(target, breakpoint);
++			retval = mips_xburst_unset_breakpoint(target, breakpoint);
++			if (retval != ERROR_OK)
++				return retval;
++			retval = mips_xburst_single_step_core(target);
++			if (retval != ERROR_OK) {
++				(void)mips_xburst_set_breakpoint(target, breakpoint);
++				return retval;
++			}
++			retval = mips_xburst_set_breakpoint(target, breakpoint);
++			if (retval != ERROR_OK)
++				return retval;
+ 		}
+ 	}
+ 
+ 	/* enable interrupts if we are running */
+-	mips32_enable_interrupts(target, !debug_execution);
++	retval = mips32_enable_interrupts(target, !debug_execution);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+ 	/* exit debug mode */
+-	mips_ejtag_exit_debug(ejtag_info);
++	retval = mips_ejtag_exit_debug(ejtag_info);
++	if (retval != ERROR_OK)
++		return retval;
+ 	target->debug_reason = DBG_REASON_NOTHALTED;
+ 
+ 	/* registers are now invalid */
+@@ -505,6 +546,7 @@ static int mips_xburst_step(struct target *target, int current,
+ 	struct mips32_common *mips32 = target_to_mips32(target);
+ 	struct mips_ejtag *ejtag_info = &mips32->ejtag_info;
+ 	struct breakpoint *breakpoint = NULL;
++	int retval;
+ 
+ 	if (target->state != TARGET_HALTED) {
+ 		LOG_WARNING("target not halted");
+@@ -522,38 +564,63 @@ static int mips_xburst_step(struct target *target, int current,
+ 	if (handle_breakpoints) {
+ 		breakpoint = breakpoint_find(target,
+ 				buf_get_u32(mips32->core_cache->reg_list[MIPS32_PC].value, 0, 32));
+-		if (breakpoint)
+-			mips_xburst_unset_breakpoint(target, breakpoint);
++		if (breakpoint) {
++			retval = mips_xburst_unset_breakpoint(target, breakpoint);
++			if (retval != ERROR_OK)
++				return retval;
++		}
+ 	}
+ 
+ 	/* restore context */
+-	mips32_restore_context(target);
++	retval = mips32_restore_context(target);
++	if (retval != ERROR_OK)
++		goto restore_breakpoint;
+ 
+ 	/* configure single step mode */
+-	mips_ejtag_config_step(ejtag_info, 1);
++	retval = mips_ejtag_config_step(ejtag_info, 1);
++	if (retval != ERROR_OK)
++		goto restore_breakpoint;
+ 
+ 	target->debug_reason = DBG_REASON_SINGLESTEP;
+ 
+-	target_call_event_callbacks(target, TARGET_EVENT_RESUMED);
+-
+ 	/* disable interrupts while stepping */
+-	mips32_enable_interrupts(target, 0);
++	retval = mips32_enable_interrupts(target, 0);
++	if (retval != ERROR_OK)
++		goto restore_breakpoint;
+ 
+ 	/* exit debug mode */
+-	mips_ejtag_exit_debug(ejtag_info);
++	retval = mips_ejtag_exit_debug(ejtag_info);
++	if (retval != ERROR_OK)
++		goto restore_breakpoint;
++	target_call_event_callbacks(target, TARGET_EVENT_RESUMED);
+ 
+ 	/* registers are now invalid */
+ 	register_cache_invalidate(mips32->core_cache);
+ 
+ 	LOG_DEBUG("target stepped ");
+-	mips_xburst_debug_entry(target);
++	retval = mips_xburst_debug_entry(target);
++	if (retval != ERROR_OK)
++		return retval;
+ 
+-	if (breakpoint)
+-		mips_xburst_set_breakpoint(target, breakpoint);
++	if (breakpoint) {
++		retval = mips_xburst_set_breakpoint(target, breakpoint);
++		if (retval != ERROR_OK)
++			return retval;
++	}
+ 
+ 	target_call_event_callbacks(target, TARGET_EVENT_HALTED);
+ 
+ 	return ERROR_OK;
++
++restore_breakpoint:
++	if (breakpoint) {
++		int restore_retval;
++
++		restore_retval = mips_xburst_set_breakpoint(target, breakpoint);
++		if (restore_retval != ERROR_OK)
++			LOG_ERROR("failed to restore breakpoint after step error");
++	}
++	return retval;
+ }
+ 
+ static void mips_xburst_enable_breakpoints(struct target *target)

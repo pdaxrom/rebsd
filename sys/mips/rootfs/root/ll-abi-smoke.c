@@ -7,11 +7,7 @@ struct abi_rec {
 	int tail;
 };
 
-#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
-#define EXPECT_ABI_VALUE_OFFSET 4
-#else
 #define EXPECT_ABI_VALUE_OFFSET 8
-#endif
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__

@@ -304,6 +304,44 @@ fstat()
 struct  file *lastf;
 
 /*
+ * Emit one bounded ownership report when the global file table is exhausted.
+ * A file reference which is absent from every process descriptor table and
+ * is not accounted for by f_msgcount is a leaked reference.  Keep this in the
+ * common descriptor layer so the same invariant is checked on every port.
+ */
+static void
+file_table_full_report(void)
+{
+    struct file *fp;
+    struct proc *p;
+    struct user *up;
+    int fd, refs;
+
+    printf("file: table ownership report pid=%d comm=%s\n",
+        u.u_procp != NULL ? u.u_procp->p_pid : -1, u.u_comm);
+    for (fp = file; fp < file + NFILE; fp++) {
+        if (fp->f_count == 0)
+            continue;
+        refs = 0;
+        for (p = allproc; p != NULL; p = p->p_nxt) {
+            up = p->p_uarea;
+            if (up == NULL)
+                continue;
+            for (fd = 0; fd <= up->u_lastfile && fd < NOFILE; fd++) {
+                if (up->u_ofile[fd] != fp)
+                    continue;
+                refs++;
+                printf("file[%d]: owner pid=%d fd=%d comm=%s\n",
+                    (int)(fp - file), p->p_pid, fd, up->u_comm);
+            }
+        }
+        printf("file[%d]: count=%u owners=%d msg=%d type=%d flags=%x data=%p\n",
+            (int)(fp - file), fp->f_count, refs, fp->f_msgcount,
+            fp->f_type, fp->f_flag, fp->f_data);
+    }
+}
+
+/*
  * Allocate a user file descriptor
  * and a file structure.
  * Initialize the descriptor
@@ -314,6 +352,7 @@ falloc()
 {
     register struct file *fp;
     register int i;
+    static int table_full_reported;
 
     i = ufalloc(0);
     if (i < 0)
@@ -327,10 +366,15 @@ falloc()
         if (fp->f_count == 0)
             goto slot;
     log(LOG_ERR, "file: table full\n");
+    if (!table_full_reported) {
+        table_full_reported = 1;
+        file_table_full_report();
+    }
     u.u_error = ENFILE;
     fdrelease(i);
     return (NULL);
 slot:
+    table_full_reported = 0;
     u.u_ofile[i] = fp;
     fp->f_count = 1;
     fp->f_data = 0;

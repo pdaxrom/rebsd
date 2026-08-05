@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
 	if (argc <= 2 || strcmp(argv[2], "-") == 0)
 	    strcpy(ttyn, ttyname(0));
 	else {
-	    int fd;
+	    int fd, descriptor;
 
 	    strcpy(ttyn, dev);
 	    strncat(ttyn, argv[2], sizeof(ttyn)-sizeof(dev));
@@ -151,7 +151,10 @@ int main(int argc, char *argv[])
 		 * Delay the open so DTR stays down long enough to be detected.
 		 */
 		//sleep(2);
-		while (open(ttyn, O_RDWR) != 0) {
+		for (;;) {
+			fd = open(ttyn, O_RDWR);
+			if (fd >= 0)
+				break;
 			if (repcnt % 10 == 0) {
 				syslog(LOG_ERR, "%s: %m", ttyn);
 				closelog();
@@ -161,10 +164,25 @@ int main(int argc, char *argv[])
 		}
 		signal(SIGHUP, SIG_IGN);
 		vhangup();
-		(void) open(ttyn, O_RDWR);
-		close(0);
-		dup(1);
-		dup(0);
+		(void) close(fd);
+		for (;;) {
+			fd = open(ttyn, O_RDWR);
+			if (fd >= 0)
+				break;
+			if (repcnt % 10 == 0) {
+				syslog(LOG_ERR, "%s: %m", ttyn);
+				closelog();
+			}
+			repcnt++;
+			sleep(60);
+		}
+		for (descriptor = 0; descriptor <= 2; descriptor++)
+			if (fd != descriptor && dup2(fd, descriptor) < 0) {
+				syslog(LOG_ERR, "%s: dup2: %m", ttyn);
+				_exit(1);
+			}
+		if (fd > 2)
+			(void) close(fd);
 		signal(SIGHUP, SIG_DFL);
 	    }
 	}

@@ -244,8 +244,8 @@ and inspect N64 userland objects without assuming PIC32 little-endian MIPS32r2.
   `/usr/libexec/pcc/ccom`; old `lcc`, `lccom`, `smallc`, `smlrc`, and legacy
   `src/cmd/cc`/`src/cmd/cpp`/`src/cmd/ccom` sources are no longer installed.
 - [x] Add PCC MIPS CPU and float ABI selectors for the shared rootfs:
-  `vr4300` keeps the old N64/Malta64 8-byte alignment policy, `mips32r2` uses
-  the Malta 4-byte o32 layout, and `hard`/`soft` keep separate runtime,
+  `vr4300` and `mips32r2` use the standard MIPS o32 8-byte alignment for
+  64-bit objects, and `hard`/`soft` keep separate runtime,
   native PCC, rootfs, and smoke build directories. The QEMU matrix passed on
   2026-07-05 for `malta64/vr4300 hard`, `malta64/vr4300 soft`,
   `malta/mips32r2 hard`, and `malta/mips32r2 soft` with
