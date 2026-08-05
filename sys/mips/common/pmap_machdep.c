@@ -39,6 +39,69 @@ extern unsigned pmap_md_legacy_user_entries(void);
 #define PMAP_MD_ICACHE_SIZE     (16u * 1024u)
 #endif
 
+#ifdef CI20
+static unsigned pmap_md_icache_line;
+static unsigned pmap_md_icache_sets;
+static unsigned pmap_md_icache_ways;
+static unsigned pmap_md_icache_way_size;
+
+static void pmap_md_sync(void);
+
+static void
+pmap_md_icache_index_invalidate(void)
+{
+    unsigned address;
+    unsigned end;
+    unsigned way;
+
+    for (way = 0; way < pmap_md_icache_ways; ++way) {
+        address = PMAP_MD_KSEG0_BASE + way * pmap_md_icache_way_size;
+        end = address + pmap_md_icache_way_size;
+        for (; address < end; address += pmap_md_icache_line) {
+            asm volatile ("cache 0x00, 0(%0)" :: "r" (address) :
+                "memory");
+        }
+    }
+    pmap_md_sync();
+}
+#endif
+
+int
+pmap_md_cache_init(void)
+{
+#ifdef CI20
+    unsigned config1;
+    unsigned line_field;
+    unsigned sets_field;
+    unsigned ways_field;
+
+    config1 = mips_read_c0_register(C0_CONFIG, 1);
+    line_field = (config1 >> C0_CONFIG1_IL_SHIFT) &
+        C0_CONFIG1_CACHE_MASK;
+    sets_field = (config1 >> C0_CONFIG1_IS_SHIFT) &
+        C0_CONFIG1_CACHE_MASK;
+    ways_field = (config1 >> C0_CONFIG1_IA_SHIFT) &
+        C0_CONFIG1_CACHE_MASK;
+    if (line_field == 0)
+        return ENXIO;
+    pmap_md_icache_line = 2u << line_field;
+    pmap_md_icache_sets = 64u << sets_field;
+    pmap_md_icache_ways = ways_field + 1u;
+    pmap_md_icache_way_size = pmap_md_icache_line *
+        pmap_md_icache_sets;
+#endif
+    return 0;
+}
+
+void
+pmap_md_cache_activate(void)
+{
+#ifdef CI20
+    /* XBurst has a virtually tagged I-cache: discard the old VA context. */
+    pmap_md_icache_index_invalidate();
+#endif
+}
+
 vm_paddr_t
 pmap_md_cache_alias_mask(void)
 {
@@ -319,11 +382,13 @@ pmap_md_dcache_invalidate(unsigned address)
     asm volatile ("cache 0x11, 0(%0)" :: "r" (address) : "memory");
 }
 
+#ifndef CI20
 static void
 pmap_md_icache_invalidate(unsigned address)
 {
     asm volatile ("cache 0x10, 0(%0)" :: "r" (address) : "memory");
 }
+#endif
 
 #ifdef N64
 int
@@ -396,12 +461,17 @@ pmap_md_range_sync(vm_paddr_t paddr, vm_size_t size, unsigned operations)
         pmap_md_sync();
     }
     if ((operations & PMAP_SYNC_INSTRUCTION) != 0) {
+#ifdef CI20
+        /* A KSEG0 hit cannot match an XBurst user-VA I-cache tag. */
+        pmap_md_icache_index_invalidate();
+#else
         address = (unsigned)mapping & ~(PMAP_MD_ICACHE_LINE - 1);
         end = ((unsigned)mapping + size + PMAP_MD_ICACHE_LINE - 1) &
             ~(PMAP_MD_ICACHE_LINE - 1);
         for (; address < end; address += PMAP_MD_ICACHE_LINE)
             pmap_md_icache_invalidate(address);
         pmap_md_sync();
+#endif
     }
     return 0;
 }

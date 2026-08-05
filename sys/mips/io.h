@@ -30,6 +30,11 @@
 #define C0_TAGHI        29
 #define C0_ERROREPC     30
 
+#define C0_CONFIG1_IS_SHIFT 22u
+#define C0_CONFIG1_IL_SHIFT 19u
+#define C0_CONFIG1_IA_SHIFT 16u
+#define C0_CONFIG1_CACHE_MASK 7u
+
 #define ST_IE           0x00000001u
 #define ST_EXL          0x00000002u
 #define ST_ERL          0x00000004u
@@ -239,16 +244,36 @@ mips_get_stack_pointer(void)
     return x;
 }
 
+#if (defined(__mips_isa_rev) && __mips_isa_rev >= 1) || \
+    defined(__mips32r2)
 #define mips_read_c0_register(reg, sel) \
     ({  unsigned __value; \
-        (void)(sel); \
+        asm volatile ("mfc0 %0, $%1, %2" : "=r" (__value) : \
+            "K" (reg), "K" (sel)); \
+        __value; \
+    })
+
+#define mips_write_c0_register(reg, sel, value) \
+    do { \
+        asm volatile ( \
+        "mtc0 %0, $%1, %2\n" \
+        "nop\n" \
+        "nop\n" \
+        "nop" \
+        : : "r" ((unsigned)(value)), "K" (reg), "K" (sel)); \
+    } while (0)
+#else
+/* MIPS III CP0 instructions do not encode the register-select operand. */
+#define mips_read_c0_register(reg, sel) \
+    ({  unsigned __value; \
+        (void)sizeof(char[(sel) == 0 ? 1 : -1]); \
         asm volatile ("mfc0 %0, $%1" : "=r" (__value) : "K" (reg)); \
         __value; \
     })
 
 #define mips_write_c0_register(reg, sel, value) \
     do { \
-        (void)(sel); \
+        (void)sizeof(char[(sel) == 0 ? 1 : -1]); \
         asm volatile ( \
         "mtc0 %0, $%1\n" \
         "nop\n" \
@@ -256,6 +281,7 @@ mips_get_stack_pointer(void)
         "nop" \
         : : "r" ((unsigned)(value)), "K" (reg)); \
     } while (0)
+#endif
 
 static inline void
 mips_tlb_write_indexed(unsigned index, unsigned pagemask, unsigned entryhi,

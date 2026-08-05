@@ -216,8 +216,8 @@ again:
     bzero(&child->p_uarea->u_ru, sizeof(child->p_uarea->u_ru));
     bzero(&child->p_uarea->u_cru, sizeof(child->p_uarea->u_cru));
     child->p_stat = SRUN;
-#if defined(N64_TRACE) || defined(MIPS_TRACE)
-    printf ("mipsfork: child ready pid=%d paddr=%x\n",
+#ifdef N64_TRACE
+    printf ("mipsfork: child ready pid=%d uarea=%x\n",
         child->p_pid, child->p_addr);
 #endif
     child->p_flag |= SSWAP;

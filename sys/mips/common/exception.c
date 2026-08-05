@@ -82,14 +82,71 @@ n64_emergency_frame(const int *frame)
 static unsigned mips_user_fault_trace_count;
 
 static void
+mips_trace_user_mapping(const char *label, unsigned vaddr)
+{
+    struct pmap_tlb_diagnostics tlb;
+    struct vmspace *vmspace;
+    vm_paddr_t paddr;
+    unsigned config0;
+    unsigned config1;
+    unsigned config7;
+    int extract_error;
+    int tlb_error;
+
+    vmspace = u.u_procp != 0 ? u.u_procp->p_vmspace : 0;
+    paddr = 0;
+    extract_error = vmspace != 0 && vmspace->vms_pmap != 0 ?
+        pmap_extract(vmspace->vms_pmap, vaddr, &paddr) : EFAULT;
+    tlb_error = pmap_get_tlb_diagnostics(vaddr, &tlb);
+    config0 = mips_read_c0_register(C0_CONFIG, 0);
+#ifdef CI20
+    config1 = mips_read_c0_register(C0_CONFIG, 1);
+    config7 = mips_read_c0_register(C0_CONFIG, 7);
+#else
+    config1 = 0;
+    config7 = 0;
+#endif
+    printf("user fault map: %s vaddr=%08x extract_error=%d "
+        "paddr=%08x tlb_error=%d pte=%08x\n",
+        label, vaddr, extract_error, (unsigned)paddr, tlb_error,
+        tlb_error == 0 ? tlb.ptd_query_pte : 0);
+    printf("user fault tlb: %s asid=%u generation=%u/%u "
+        "expected=%08x/%08x/%08x hardware=%u:%u:%08x/%08x/%08x\n",
+        label,
+        tlb_error == 0 ? tlb.ptd_active_asid : 0,
+        tlb_error == 0 ? tlb.ptd_active_generation : 0,
+        tlb_error == 0 ? tlb.ptd_asid_generation : 0,
+        tlb_error == 0 ? tlb.ptd_query_entryhi : 0,
+        tlb_error == 0 ? tlb.ptd_query_entrylo0 : 0,
+        tlb_error == 0 ? tlb.ptd_query_entrylo1 : 0,
+        tlb_error == 0 ? tlb.ptd_hardware_found : 0,
+        tlb_error == 0 ? tlb.ptd_hardware_index : 0,
+        tlb_error == 0 ? tlb.ptd_hardware_entryhi : 0,
+        tlb_error == 0 ? tlb.ptd_hardware_entrylo0 : 0,
+        tlb_error == 0 ? tlb.ptd_hardware_entrylo1 : 0);
+    printf("user fault cpu: config0=%08x k0=%u config1=%08x "
+        "config7=%08x\n", config0, config0 & 7u, config1, config7);
+}
+
+static void
 mips_trace_user_fault(const char *kind, int *frame, unsigned badvaddr)
 {
+    unsigned faultpc;
+
     if (mips_user_fault_trace_count >= 32)
         return;
     ++mips_user_fault_trace_count;
-    printf("user fault: %s pc=%08x address=%08x pid=%d comm=%s\n",
-        kind, frame[FRAME_PC], badvaddr,
+    faultpc = frame[FRAME_PC] +
+        ((mips_read_c0_register(C0_CAUSE, 0) & CA_BD) != 0 ? NBPW : 0);
+    printf("user fault: %s pc=%08x faultpc=%08x address=%08x "
+        "cause=%08x status=%08x sp=%08x ra=%08x pid=%d comm=%s\n",
+        kind, frame[FRAME_PC], faultpc, badvaddr,
+        mips_read_c0_register(C0_CAUSE, 0), frame[FRAME_STATUS],
+        frame[FRAME_SP], frame[FRAME_RA],
         u.u_procp ? u.u_procp->p_pid : -1, u.u_comm);
+    mips_trace_user_mapping("pc", faultpc);
+    if (badvaddr != faultpc)
+        mips_trace_user_mapping("badvaddr", badvaddr);
 }
 #endif
 
@@ -1117,6 +1174,9 @@ mips_check_user_stack(int *frame, unsigned rawcause)
 {
     if (mips_grow_user_stack(frame[FRAME_SP], 0) == 0)
         return 0;
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+    mips_trace_user_fault("stack", frame, frame[FRAME_SP]);
+#endif
 #ifdef N64
     n64_dump_user_fault("stack", frame, rawcause, frame[FRAME_SP],
         SIGSEGV, EFAULT);
@@ -1163,6 +1223,9 @@ mips_syscall(int *frame, unsigned rawcause)
 
         if (copyin((caddr_t)opc, (caddr_t)&instruction,
             sizeof(instruction)) != 0) {
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+            mips_trace_user_fault("syscall-fetch", frame, opc);
+#endif
 #ifdef N64
             n64_dump_user_fault("syscall-fetch", frame, rawcause,
                 opc, SIGSEGV, EFAULT);
@@ -1187,7 +1250,7 @@ mips_syscall(int *frame, unsigned rawcause)
             frame[FRAME_R4], frame[FRAME_R5], frame[FRAME_R6],
             frame[FRAME_R7]);
     }
-#if defined(N64_TRACE) || defined(MIPS_TRACE)
+#ifdef N64_TRACE
     {
         static int syscall_trace_count;
         if (syscall_trace_count < 100) {
@@ -1431,6 +1494,10 @@ exception(int *frame)
                 goto ret;
         }
         psig = vm_error == ENXIO || vm_error == EIO ? SIGBUS : SIGSEGV;
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+        if (u.u_signal[psig] == SIG_DFL)
+            mips_trace_user_fault("vm-write", frame, badvaddr);
+#endif
 #ifdef N64
         n64_dump_user_fault("vm-write", frame, rawcause, badvaddr,
             psig, vm_error);
@@ -1448,6 +1515,10 @@ exception(int *frame)
                 goto ret;
         }
         psig = vm_error == ENXIO || vm_error == EIO ? SIGBUS : SIGSEGV;
+#if defined(N64_TRACE) || defined(MIPS_TRACE)
+        if (u.u_signal[psig] == SIG_DFL)
+            mips_trace_user_fault("vm-read", frame, badvaddr);
+#endif
 #ifdef N64
         n64_dump_user_fault("vm-read", frame, rawcause, badvaddr,
             psig, vm_error);

@@ -70,6 +70,8 @@
 /* Low-level MIPS operations supplied by pmap_machdep.c or the host test. */
 extern unsigned pmap_md_tlb_entries(void);
 extern unsigned pmap_md_wired_entries(void);
+extern int pmap_md_cache_init(void);
+extern void pmap_md_cache_activate(void);
 extern void pmap_md_activate(unsigned);
 extern void pmap_md_tlb_update(unsigned, unsigned, unsigned);
 extern int pmap_md_tlb_invalidate(unsigned);
@@ -673,6 +675,8 @@ pmap_remove_pte(struct pmap *pmap, vm_vaddr_t vaddr, uint32_t *pte)
 int
 pmap_system_init(struct vm_page_allocator *allocator)
 {
+    int error;
+
     if (allocator == 0 || allocator->vpa_initialized == 0)
         return EINVAL;
     if (pmap_md_tlb_entries() == 0 ||
@@ -695,6 +699,9 @@ pmap_system_init(struct vm_page_allocator *allocator)
         sizeof(mips_pmap_fast_diagnostics));
     pmap_asid_generation = 1;
     pmap_next_asid = PMAP_ASID_FIRST;
+    error = pmap_md_cache_init();
+    if (error != 0)
+        return error;
     pmap_initialized = 1;
     pmap_md_activate(0);
     pmap_md_tlb_flush();
@@ -1037,6 +1044,8 @@ pmap_activate(struct pmap *pmap)
         pmap->pm_asid = pmap_next_asid++;
         pmap->pm_generation = pmap_asid_generation;
     }
+    if (pmap_active != pmap)
+        pmap_md_cache_activate();
     mips_pmap_fast_directory = pmap->pm_directory;
     pmap_md_activate(pmap->pm_asid);
     pmap_active = pmap;

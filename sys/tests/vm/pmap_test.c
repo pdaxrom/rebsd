@@ -48,6 +48,8 @@ static unsigned test_entrylo1;
 static unsigned test_tlb_updates;
 static unsigned test_tlb_invalidations;
 static unsigned test_tlb_flushes;
+static unsigned test_cache_inits;
+static unsigned test_cache_activations;
 static unsigned test_syncs;
 static unsigned test_last_sync_operations;
 
@@ -190,6 +192,19 @@ pmap_md_wired_entries(void)
     return 2;
 }
 
+int
+pmap_md_cache_init(void)
+{
+    ++test_cache_inits;
+    return 0;
+}
+
+void
+pmap_md_cache_activate(void)
+{
+    ++test_cache_activations;
+}
+
 void
 pmap_md_activate(unsigned asid)
 {
@@ -327,6 +342,7 @@ test_pmap(void)
     free_before = allocator.vpa_free_count;
 
     CHECK(pmap_system_init(&allocator) == 0);
+    CHECK(test_cache_inits == 1);
     CHECK(test_tlb_flushes == 1);
     CHECK(test_asid == 0);
     vm_page_request_init(&page_request);
@@ -378,6 +394,9 @@ test_pmap(void)
         ENOENT);
 
     CHECK(pmap_activate(pmap1) == 0);
+    CHECK(test_cache_activations == 1);
+    CHECK(pmap_activate(pmap1) == 0);
+    CHECK(test_cache_activations == 1);
     asid1 = test_asid;
     CHECK(asid1 != 0);
     CHECK(pmap_fault(pmap1, TEST_VADDR, VM_PROT_READ, 1) == 0);
@@ -402,6 +421,7 @@ test_pmap(void)
     CHECK(pmap_fault(pmap1, TEST_VADDR, VM_PROT_READ, 1) == 0);
 
     CHECK(pmap_activate(pmap2) == 0);
+    CHECK(test_cache_activations == 2);
     asid2 = test_asid;
     CHECK(asid2 != 0 && asid2 != asid1);
     CHECK(pmap_fault(pmap2, TEST_VADDR, VM_PROT_READ, 1) == 0);
@@ -410,6 +430,7 @@ test_pmap(void)
 
     pmap_debug_force_asid_rollover();
     CHECK(pmap_activate(pmap3) == 0);
+    CHECK(test_cache_activations == 3);
     CHECK(test_tlb_flushes == 2);
     CHECK(test_asid == 1);
 
