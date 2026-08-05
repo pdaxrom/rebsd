@@ -12,6 +12,15 @@ and `fstat` syscall numbers now expose the native time64 layout.  This follows
 the current NetBSD model for new binaries while intentionally omitting
 NetBSD's separate compatibility syscalls for old binaries.
 
+All native structures crossing the kernel/user boundary have an explicit,
+compiler-independent 32-bit layout.  In particular, `timeval` and `timespec`
+are 16 bytes, `itimerval` is 32 bytes, and `rusage` is 88 bytes.  Explicit
+reserved words also fix the 32-bit layouts of `shmid_ds`, `kinfo_proc`, and
+`kinfo_procfile`.  Header assertions make both the GCC-built kernel and the
+GCC/PCC-built userland reject any accidental layout drift at compile time.
+The reserved words are not compatibility shims: they define the only native
+ABI and must be zero when the kernel returns a structure to userland.
+
 Calendar conversion uses Gregorian 400-year eras rather than loops bounded by
 a 32-bit epoch.  The common RTC layer accepts post-2038 dates.  Individual RTC
 drivers still reject values their hardware cannot represent: MC146818 and

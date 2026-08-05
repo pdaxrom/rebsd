@@ -1,2 +1,5 @@
 #!/bin/sh
+. /etc/rc.status
+rc_stop 'system for reboot'
+rc_result 0
 exec /sbin/reboot -q

@@ -496,14 +496,24 @@ int execute(struct trenod *argt, int exec_link, int errorflg, int *pf1, int *pf2
 
                 else if (comtype == FUNCTION) {
                     struct namnod *n;
+                    struct dolnod *argsav;
+                    struct dolnod *argforav;
+                    char **dolvav;
+                    int dolcav;
                     short index;
 
                     n = findnam(com[0]);
 
                     funcnt++;
                     index = initio(io, 1);
+                    argforav = argfor;
+                    dolvav = dolv;
+                    dolcav = dolc;
+                    argsav = useargs();
                     setargs(com);
                     execute((struct trenod *)(n->namenv), exec_link, errorflg, pf1, pf2);
+                    restoreargs(argsav, dolvav, dolcav);
+                    argfor = argforav;
                     execbrk = 0;
                     restore(index);
                     funcnt--;

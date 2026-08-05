@@ -8,6 +8,7 @@
 #define _SYS_TIME_H_
 
 #include <sys/types.h>
+#include <stdint.h>
 
 /*
  * Structure returned by gettimeofday(2) system call,
@@ -16,7 +17,11 @@
 struct timeval {
     time_t  tv_sec;         /* seconds */
     long    tv_usec;        /* and microseconds */
+    int32_t tv_pad;         /* fixed 16-byte native ABI */
 };
+
+typedef char timeval_time64_layout_must_remain_16_bytes[
+    sizeof(struct timeval) == 16 ? 1 : -1];
 
 /*
  * Structure defined by POSIX.4 to be like a timeval but with nanoseconds
@@ -26,7 +31,11 @@ struct timeval {
 struct timespec {
     time_t tv_sec;          /* seconds */
     long   tv_nsec;         /* and nanoseconds */
+    int32_t tv_pad;         /* fixed 16-byte native ABI */
 };
+
+typedef char timespec_time64_layout_must_remain_16_bytes[
+    sizeof(struct timespec) == 16 ? 1 : -1];
 
 struct timezone {
     int     tz_minuteswest; /* minutes west of Greenwich */
@@ -50,7 +59,8 @@ struct timezone {
                             ((tvp)->tv_sec cmp (uvp)->tv_sec || \
                              (tvp)->tv_sec == (uvp)->tv_sec && \
                              (tvp)->tv_usec cmp (uvp)->tv_usec)
-#define timerclear(tvp)     (tvp)->tv_sec = (tvp)->tv_usec = 0
+#define timerclear(tvp)     \
+    ((tvp)->tv_sec = (tvp)->tv_usec = (tvp)->tv_pad = 0)
 
 /*
  * Names of the interval timers, and structure
@@ -69,6 +79,9 @@ struct  itimerval {
     struct  timeval it_interval;    /* timer interval */
     struct  timeval it_value;       /* current value */
 };
+
+typedef char itimerval_time64_layout_must_remain_32_bytes[
+    sizeof(struct itimerval) == 32 ? 1 : -1];
 
 #ifdef KERNEL
 /*

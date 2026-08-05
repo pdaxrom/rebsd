@@ -75,8 +75,7 @@ static const struct expected_region malta_map[] = {
     RESERVED(0x00300000u, 0x00700000u, "legacy user window"),
     AVAILABLE(0x00700000u, 0x00800000u, "ram"),
     RESERVED(0x00800000u, 0x02800000u, "rootfs"),
-    RESERVED(0x02800000u, 0x02a00000u, "cartflash"),
-    AVAILABLE(0x02a00000u, 0x04000000u, "ram"),
+    AVAILABLE(0x02800000u, 0x04000000u, "ram"),
 };
 #elif defined(TEST_MALTA_N64_8M)
 static const struct expected_region malta_n64_8m_map[] = {

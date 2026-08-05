@@ -234,3 +234,21 @@ struct dolnod *useargs()
     }
     return (dolh);
 }
+
+/*
+ * Restore the positional-parameter frame saved by useargs().  Shell
+ * functions call setargs(), so without restoring dolh/dolv/dolc a nested
+ * function permanently replaces its caller's $@.
+ */
+void restoreargs(struct dolnod *blk, char **argv, int argc)
+{
+    freedolh();
+    dolh = blk;
+    if (blk == NIL) {
+        dolv = NIL;
+        dolc = 0;
+        return;
+    }
+    dolv = argv;
+    dolc = argc;
+}

@@ -14,6 +14,7 @@ trap 'rm -rf "$tmp"' 0 1 2 3 15
 echo "step 1: shell"
 sh /root/sh-fail-smoke.sh || exit 1
 sh /root/sh-comsubst-smoke.sh || exit 1
+sh /root/sh-function-smoke.sh || exit 1
 
 echo "step 2: awk"
 echo '2 3' | awk '{ print $1 * $2 + 4 }' > "$tmp/awk.out" || exit 1

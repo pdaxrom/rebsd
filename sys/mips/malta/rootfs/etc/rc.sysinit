@@ -2,39 +2,31 @@
 HOME=/; export HOME
 PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 PAGER=/bin/cat; export PAGER
+. /etc/rc.status
+. /etc/rc.storage
 
-/bin/hostname malta
+if ! rc_run 'hostname' /bin/hostname malta; then
+	exit 1
+fi
 
-physmem=`/bin/sysctl -n hw.physmem`
+physmem=`/usr/bin/sysctl -n hw.physmem`
+# The full Malta image reserves 32M for the embedded root filesystem.  Keep
+# the default contiguous RAM backing below the remaining VM run; the 2x media
+# size is provided by compression and is not part of this physical budget.
 if test "$physmem" -le 8388608; then
         swap_backing=1792K
 elif test "$physmem" -le 33554432; then
         swap_backing=6M
 else
-        swap_backing=22M
+        swap_backing=16M
 fi
 
-/usr/sbin/ramctl create /dev/ram0 size=1M >/dev/null 2>&1
-if /sbin/mount /var >/dev/null 2>&1; then
-        :
-else
-        /sbin/mkfs /dev/ram0 >/dev/null 2>&1
-        /sbin/mount /var >/dev/null 2>&1
+if ! rc_var_setup /dev/ram0 1M 4096; then
+	exit 1
 fi
 
-mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
-chmod 1777 /var/tmp
-: >/var/run/utmp
-: >/var/log/wtmp
-chmod 664 /var/run/utmp /var/log/wtmp
-
-if /usr/sbin/ramctl create /dev/ram1 backing=$swap_backing size=2x compression \
-    >/dev/null 2>&1; then
-        if /usr/sbin/mkswap /dev/ram1 >/dev/null 2>&1; then
-                /usr/sbin/swapon /dev/ram1
-        fi
+if ! rc_compressed_swap_setup /dev/ram1 "$swap_backing" 2x; then
+	exit 1
 fi
-
-mount /cart
 
 exit 0

@@ -402,7 +402,7 @@ N64_USERLAND_STAMP = n64-userland.$(N64_USERLAND_COMPILER).$(N64_USERLAND_ABI).s
 N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
 
-N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty init login ls mkfs mkswap mount netstat ramctl reboot sh stty \
+N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty hostname init login ls mkfs mkswap mount netstat ramctl reboot sh stty \
     swapon swapoff sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
     ld make md5 nm pstat ranlib sed) \
     $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),dhclient ifconfig ping route sed)
@@ -417,7 +417,7 @@ N64_MINIMAL_ROOTFS_CMD_SCRIPTS = \
 N64_MINIMAL_ROOTFS_CMD_OPERATORS = \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),df,$(N64_CMD_NONE))
 N64_MINIMAL_ROOTFS_CMD_KMEM = $(N64_CMD_NONE)
-N64_MINIMAL_ROOTFS_USR_BIN_FILES = vm-pressure-smoke \
+N64_MINIMAL_ROOTFS_USR_BIN_FILES = sysctl vm-pressure-smoke \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),free md5)
 N64_MINIMAL_ROOTFS_PCC_TEST_NAMES = \
     alias-stress-smoke.c alias-stress-smoke.sh \
@@ -432,6 +432,7 @@ N64_MINIMAL_ROOTFS_PCC_TEST_NAMES = \
     mips-compiler-bench-smoke.sh native-pcc-smoke.sh \
     pcc-fpu-smoke.c pcc-smoke-all.sh pcc-smoke.c pcc-smoke.sh \
     runtime-stress.sh sh-comsubst-smoke.sh sh-fail-smoke.sh \
+    sh-function-smoke.sh \
     types-smoke.c types-smoke.sh utility-workload-smoke.sh \
     wide-policy-smoke.c wide-policy-smoke.sh
 N64_MINIMAL_ROOTFS_PCC_TEST_FILES = \
@@ -460,6 +461,8 @@ N64_MINIMAL_COMPILER_BENCH_LINKED = \
 N64_MINIMAL_ROOTFS_FILES = \
     $(TOPSRC)/sys/mips/rootfs/etc/group \
     $(TOPSRC)/sys/mips/rootfs/etc/rc \
+    $(TOPSRC)/sys/mips/rootfs/etc/rc.status \
+    $(TOPSRC)/sys/mips/rootfs/etc/rc.storage \
     $(TOPSRC)/sys/mips/rootfs/etc/rc0.d/S99halt \
     $(TOPSRC)/sys/mips/rootfs/etc/rc6.d/S99reboot \
     $(TOPSRC)/sys/mips/rootfs/etc/passwd \
@@ -1087,7 +1090,7 @@ $(N64_PCC_HOST_INCLUDE_STAMP): $(MIPS_INCLUDE_SRCS) \
 endif
 
 $(N64_ROOTFS_DEVNODES): $(N64_DEVNODES_SRCS) Makefile
-	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/ramdisk.h $(TOPSRC)/sys/include/disk.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
+	awk -v cons_major="$(N64_CONS_MAJOR)" -v cons_minor="$(N64_CONS_MINOR)" -v pty_enabled="$(N64_PTY_ENABLED)" -v pty_nunits="$(N64_PTY_NUNITS)" -v romfs_enabled="$(N64_ENABLE_ROMFS)" -f $(N64_DEVNODES_AWK) $(TOPSRC)/sys/mips/n64/romdisk.h $(TOPSRC)/sys/mips/ramdisk.h $(TOPSRC)/sys/include/disk.h $(TOPSRC)/sys/mips/n64/devmajors.h $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/pty.h > $@
 
 $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
     $(N64_MINIMAL_ROOTFS_FILES) $(N64_TERMCAP) \
@@ -1142,6 +1145,10 @@ $(N64_MINIMAL_ROOTFS_STAGE)/.stamp: $(MIPS_ROOTFS_USER_LDSCRIPT) \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/profile
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc.status \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc.status
+	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc.storage \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc.storage
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc0.d/S99halt \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc0.d/S99halt
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc6.d/S99reboot \
@@ -1191,8 +1198,10 @@ endif
 	{ \
 	    printf '%s\n' '#!/bin/sh'; \
 	    printf '%s\n' 'PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH'; \
-	    printf '%s\n' 'echo N64_MINIMAL_RC_BEGIN'; \
-	    printf '%s\n' 'physmem=`/bin/sysctl -n hw.physmem`'; \
+	    printf '%s\n' '. /etc/rc.status'; \
+	    printf '%s\n' '. /etc/rc.storage'; \
+	    printf '%s\n' 'if ! rc_run hostname /bin/hostname n64; then exit 1; fi'; \
+	    printf '%s\n' 'physmem=`/usr/bin/sysctl -n hw.physmem`'; \
 	    printf '%s\n' 'if test "$$physmem" -le 4194304; then'; \
 	    printf '%s\n' '	var_size=128K'; \
 	    printf '%s\n' '	swap_backing=384K'; \
@@ -1200,26 +1209,15 @@ endif
 	    printf '%s\n' '	var_size=1M'; \
 	    printf '%s\n' '	swap_backing=2M'; \
 	    printf '%s\n' 'fi'; \
-	    printf '%s\n' '/usr/sbin/ramctl create /dev/ram0 size=$$var_size >/dev/null'; \
-	    printf '%s\n' 'if mkfs -i 4096 /dev/ram0 >/dev/null; then'; \
-	    printf '%s\n' '	if mount /var >/dev/null; then'; \
-	    printf '%s\n' '		mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null'; \
-	    printf '%s\n' '		chmod 1777 /var/tmp'; \
-	    printf '%s\n' '		: >/var/run/utmp'; \
-	    printf '%s\n' '		: >/var/log/wtmp'; \
-	    printf '%s\n' '		chmod 664 /var/run/utmp /var/log/wtmp'; \
-	    printf '%s\n' '	else'; \
-	    printf '%s\n' '		echo N64_MINIMAL_VAR_MOUNT_FAIL'; \
-	    printf '%s\n' '		exit 1'; \
-	    printf '%s\n' '	fi'; \
-	    printf '%s\n' 'else'; \
-	    printf '%s\n' '	echo N64_MINIMAL_VAR_MKFS_FAIL'; \
-	    printf '%s\n' '	exit 1'; \
-	    printf '%s\n' 'fi'; \
-	    printf '%s\n' 'if /usr/sbin/ramctl create /dev/ram1 backing=$$swap_backing size=2x compression >/dev/null; then'; \
-	    printf '%s\n' '	if /usr/sbin/mkswap /dev/ram1 >/dev/null; then /usr/sbin/swapon /dev/ram1; fi'; \
-	    printf '%s\n' 'fi'; \
-	    printf '%s\n' 'echo N64_MINIMAL_RC_END'; \
+	    printf '%s\n' 'if ! rc_var_setup /dev/ram0 "$$var_size" 4096; then exit 1; fi'; \
+	    printf '%s\n' 'if ! rc_compressed_swap_setup /dev/ram1 "$$swap_backing" 2x; then exit 1; fi'; \
+	    if [ "$(N64_ENABLE_ROMFS)" = "1" ]; then \
+	    printf '%s\n' 'rc_start "mount /cart"'; \
+	    printf '%s\n' 'mount /cart >/dev/console 2>&1'; \
+	    printf '%s\n' 'rc_status=$$?'; \
+	    printf '%s\n' 'rc_result "$$rc_status"'; \
+	    printf '%s\n' 'if test "$$rc_status" -ne 0; then exit "$$rc_status"; fi'; \
+	    fi; \
 	    printf '%s\n' 'exit 0'; \
 	} > $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc.sysinit
 	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/etc/rc.sysinit

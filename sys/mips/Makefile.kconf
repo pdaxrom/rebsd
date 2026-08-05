@@ -248,7 +248,6 @@ CPPFLAGS        = -I. -I$(TOPSRC)/include -I$(TOPSRC)/sys \
                   -I$(TOPSRC)/sys/mips/include \
                   ${PARAM} -DKERNEL -DMIPS \
                   $(MIPS_TARGET_ENDIAN_CFLAGS_$(MIPS_TARGET_ENDIAN)) \
-                  -DROMFS_ENABLED \
                   $(if $(MALTA_N64_8M_PROFILE),-DMALTA_N64_8M_PROFILE,) \
                   -DMALTA_RAM_SIZE_OVERRIDE='($(MALTA_RAM_KBYTES) * 1024u)' \
                   -DMALTA_ROMDISK_BYTES_OVERRIDE='($(MIPS_ROOTFS_KBYTES) * 1024u)' \

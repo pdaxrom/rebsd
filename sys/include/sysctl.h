@@ -37,6 +37,7 @@
 #define _SYS_SYSCTL_H_
 
 #include <sys/hw_inventory.h>
+#include <stdint.h>
 
 /*
  * These are for the eproc, etext, einode, efile and map structures.
@@ -234,7 +235,13 @@ struct kinfo_proc {
     time_t  ki_cutime;          /* reaped-child user CPU ticks */
     time_t  ki_cstime;          /* reaped-child system CPU ticks */
     int     ki_sigs;            /* SIGINT/SIGQUIT disposition summary */
+    int32_t ki_pad;             /* fixed 32-bit native ABI tail padding */
 };
+
+#if defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 4
+typedef char kinfo_proc_time64_layout_must_remain_224_bytes[
+    sizeof(struct kinfo_proc) == 224 ? 1 : -1];
+#endif
 
 /*
  * KERN_INODE returns an array of augmented inode structures:
@@ -365,6 +372,7 @@ struct kinfo_procfile {
     int     kpf_flags;
     u_long  kpf_filep;
     u_long  kpf_datap;
+    int32_t kpf_pad;
     off_t   kpf_offset;
     dev_t   kpf_dev;
     dev_t   kpf_rdev;
@@ -373,6 +381,11 @@ struct kinfo_procfile {
     off_t   kpf_size;
     char    kpf_comm[MAXCOMLEN + 1];
 };
+
+#if defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 4
+typedef char kinfo_procfile_off64_layout_must_remain_128_bytes[
+    sizeof(struct kinfo_procfile) == 128 ? 1 : -1];
+#endif
 
 /*
  * CTL_HW identifiers

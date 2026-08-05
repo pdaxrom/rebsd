@@ -1,12 +1,16 @@
 #!/bin/sh
 HOME=/; export HOME
 PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
+. /etc/rc.status
+. /etc/rc.storage
 
-/bin/hostname n64
+if ! rc_run 'hostname' /bin/hostname n64; then
+	exit 1
+fi
 
 # The cartridge root remains read-only. Size the runtime devices from installed
 # RAM; ram0 and ram1 are otherwise identical dynamic devices.
-physmem=`/bin/sysctl -n hw.physmem`
+physmem=`/usr/bin/sysctl -n hw.physmem`
 if test "$physmem" -le 4194304; then
 	var_size=128K
 	swap_backing=384K
@@ -14,26 +18,21 @@ else
 	var_size=1M
 	swap_backing=2M
 fi
-/usr/sbin/ramctl create /dev/ram0 size=$var_size >/dev/null
-if mkfs -i 4096 /dev/ram0 >/dev/null; then
-	if mount /var; then
-		mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
-		chmod 1777 /var/tmp
-		: >/var/run/utmp
-		: >/var/log/wtmp
-		chmod 664 /var/run/utmp /var/log/wtmp
-	fi
+if ! rc_var_setup /dev/ram0 "$var_size" 4096; then
+	exit 1
 fi
 
 # Compression belongs to the RAM block device; swap itself remains the
 # standard Linux swap v1 format and is attached by userland.
-if /usr/sbin/ramctl create /dev/ram1 backing=$swap_backing size=2x compression; then
-	if /usr/sbin/mkswap /dev/ram1; then
-		/usr/sbin/swapon /dev/ram1
-	fi
+if ! rc_compressed_swap_setup /dev/ram1 "$swap_backing" 2x; then
+	exit 1
 fi
 
 # The n64cart cartridge flash is fixed hardware, not removable media.
 # init deliberately runs rc with normal output detached. Keep a cartridge
 # mount failure fatal, but send mount_romfs's errno to the visible console.
+rc_start 'mount /cart'
 mount /cart >/dev/console 2>&1
+rc_status=$?
+rc_result "$rc_status"
+exit "$rc_status"

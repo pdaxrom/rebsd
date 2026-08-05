@@ -10,6 +10,7 @@
 #define _SYS_SHM_H_
 
 #include <sys/ipc.h>
+#include <stdint.h>
 
 #define SHM_RDONLY      010000
 #define SHM_RND         020000
@@ -28,10 +29,16 @@ struct shmid_ds {
     pid_t           shm_lpid;
     pid_t           shm_cpid;
     shmatt_t        shm_nattch;
+    int32_t         shm_pad;
     time_t          shm_atime;
     time_t          shm_dtime;
     time_t          shm_ctime;
 };
+
+#if defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 4
+typedef char shmid_ds_time64_layout_must_remain_72_bytes[
+    sizeof(struct shmid_ds) == 72 ? 1 : -1];
+#endif
 
 #ifndef KERNEL
 int shmget(key_t, size_t, int);

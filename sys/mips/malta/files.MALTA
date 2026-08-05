@@ -6,9 +6,6 @@ mips/malta/machdep.c            standard
 disk/romdisk.c                  standard
 disk/ramdisk.c                  standard
 mips/malta/romdisk_machdep.c    standard
-mips/common/romfs_core.c        standard
-mips/common/romfs_vfs.c         standard
-mips/malta/cartflash.c          standard
 mips/common/ramdisk_mips.c      standard
 mips/malta/config.c             standard
 mips/malta/if_ne.c              optional malta_ne

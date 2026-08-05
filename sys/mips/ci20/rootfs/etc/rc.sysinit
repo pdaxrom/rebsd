@@ -2,28 +2,19 @@
 HOME=/; export HOME
 PATH=/bin:/sbin:/usr/bin:/usr/sbin; export PATH
 PAGER=/bin/cat; export PAGER
+. /etc/rc.status
+. /etc/rc.storage
 
-/bin/hostname ci20
-
-/usr/sbin/ramctl create /dev/ram0 size=1M >/dev/null 2>&1
-if /sbin/mount /var >/dev/null 2>&1; then
-        :
-else
-        /sbin/mkfs /dev/ram0 >/dev/null 2>&1
-        /sbin/mount /var >/dev/null 2>&1
+if ! rc_run 'hostname' /bin/hostname ci20; then
+	exit 1
 fi
 
-mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock 2>/dev/null
-chmod 1777 /var/tmp
-: >/var/run/utmp
-: >/var/log/wtmp
-chmod 664 /var/run/utmp /var/log/wtmp
+if ! rc_var_setup /dev/ram0 1M 4096; then
+	exit 1
+fi
 
-if /usr/sbin/ramctl create /dev/ram1 backing=32M size=2x compression \
-    >/dev/null 2>&1; then
-        if /usr/sbin/mkswap /dev/ram1 >/dev/null 2>&1; then
-                /usr/sbin/swapon /dev/ram1
-        fi
+if ! rc_compressed_swap_setup /dev/ram1 32M 2x; then
+	exit 1
 fi
 
 exit 0

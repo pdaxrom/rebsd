@@ -13,7 +13,7 @@ MEMORY
 {
   kernel (rwx) : ORIGIN = 0xffffffff80100000, LENGTH = 2032K
   uarea  (rw!x): ORIGIN = 0xffffffff802fe000, LENGTH = 8K
-  romdisk (rwx) : ORIGIN = 0xffffffff80800000, LENGTH = 34816K
+  romdisk (rwx) : ORIGIN = 0xffffffff80800000, LENGTH = 32768K
 }
 
 u       = ORIGIN(uarea);
@@ -55,16 +55,6 @@ SECTIONS
     . = ALIGN(16);
     __malta_romdisk_end = .;
   } > romdisk
-
-  .cartflash_bss (NOLOAD) : {
-    __malta_cartflash_start = .;
-    KEEP(*(.cartflash_bss))
-    KEEP(*(.cartflash_bss.*))
-    . = ALIGN(16);
-    __malta_cartflash_end = .;
-  } > romdisk
-  ASSERT((__malta_cartflash_end - __malta_cartflash_start) <= 0x200000,
-         "malta cartflash reserve overflow")
 
   /DISCARD/ : { *(.reginfo) *(.MIPS.abiflags) *(.MIPS.options) *(.pdr) *(.got) *(.got.plt) }
 }

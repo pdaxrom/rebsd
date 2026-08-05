@@ -317,23 +317,10 @@ The serial console is attached to stdio. Exit QEMU with `Ctrl-A x` when using
 
 ## ROMFS and cart flash
 
-The writable cartridge ROMFS VFS code lives in `sys/mips/common` and uses a
-small board backend instead of calling N64 hardware directly.
-
-- N64 uses `sys/mips/n64/romfs_backend.c`, which routes sector read/write/erase
-  to the n64cart flash driver.
-- Malta uses `sys/mips/malta/cartflash.c`, which exposes `/dev/cartflash0` as
-  an 8 MiB sparse NOR-flash emulator. Unallocated sectors read as `0xff`, erase
-  frees a sector, and writes enforce NOR `1 -> 0` programming semantics. The
-  sparse sector backing store is linked after the QEMU-loaded root image, not in
-  the kernel `.bss`, so PCC kernel builds do not consume the fixed 2 MiB kernel
-  link area with test flash storage.
-
-Malta mounts the fake flash automatically:
-
-```
-/dev/cartflash0 /cart romfs rw 0 0
-```
+The writable cartridge ROMFS VFS code lives in `sys/mips/common`.  Only N64
+exposes the cartridge device and `/cart`: `sys/mips/n64/romfs_backend.c`
+routes sector read/write/erase to the n64cart flash driver.  Malta, MaltaEL,
+Malta64, Ci20, and i686 do not provide `/dev/cartflash0` or `/cart`.
 
 The generated `run` target uses the current Malta layout:
 
@@ -384,8 +371,8 @@ Both boards keep the same small `/bin` boot/single-user command set. Diagnostics
 and the native toolchain live under `/usr/bin`, with headers and archives under
 `/usr/include` and `/usr/lib`. The login profile sets
 `PATH=/bin:/sbin:/usr/bin:/usr/sbin`, so target-side smoke scripts can call
-`as`, `cc`, `pcc`, `romfsctl`, `ps`, `vmstat`, `w`, and `wc` without hard-coded
-absolute paths.
+`as`, `cc`, `pcc`, `ps`, `vmstat`, `w`, and `wc` without hard-coded absolute
+paths.  N64 additionally installs `romfsctl` for its cartridge.
 
 To increase the Malta root filesystem, keep these values in sync:
 
@@ -397,26 +384,7 @@ To increase the Malta root filesystem, keep these values in sync:
 
 If the root image grows past the current 32 MiB address plan, also raise
 `MALTA_QEMU_RAM`.  Raise `MALTA_RAM_KBYTES` only when the guest should see more
-kernel-visible RAM. The current `/cart` device is separate: it is an 8 MiB
-sparse RAM-backed NOR flash emulator for ROMFS tests, not the boot root
-filesystem.
-
-After logging in as `root`:
-
-```
-mount
-romfsctl info
-df -T /cart
-cd /cart && diskspeed -m 1
-mkdir /cart/malta-test
-echo hello >/cart/malta-test/a.txt
-cat /cart/malta-test/a.txt
-mv /cart/malta-test/a.txt /cart/malta-test/b.txt
-rm /cart/malta-test/b.txt
-rmdir /cart/malta-test
-cd /
-/sbin/umount /cart
-```
+kernel-visible RAM.
 
 Shared target-side regression checks that should pass on Malta before moving a
 new rootfs or toolchain change to N64 hardware:

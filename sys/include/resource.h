@@ -47,6 +47,9 @@ struct  rusage {
 #define ru_last     ru_nivcsw
 };
 
+typedef char rusage_time64_layout_must_remain_88_bytes[
+    sizeof(struct rusage) == 88 ? 1 : -1];
+
 struct  k_rusage {                  /* KERNEL RUSAGE STRUCTURE */
 #define k_ru_first  ru_utime
     long            ru_utime;       /* user time used ('hz' ticks) */

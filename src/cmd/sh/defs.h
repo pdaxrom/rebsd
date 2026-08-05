@@ -447,6 +447,7 @@ void postclr(void);
 void rename(int f1, int f2);
 void chkpipe(int *pv);
 struct dolnod *useargs(void);
+void restoreargs(struct dolnod *blk, char **argv, int argc);
 void trim(char *at);
 struct dolnod *freeargs(struct dolnod *blk);
 int gmatch(char *s, char *p);

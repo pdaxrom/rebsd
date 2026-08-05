@@ -560,6 +560,10 @@ def main() -> None:
             b"\r\nREBSD_I686_AWK_OK\r\n",
         ),
         (
+            b"/root/sh-function-smoke.sh && echo REBSD_I686_SH_FUNCTION_OK\n",
+            b"\r\nREBSD_I686_SH_FUNCTION_OK\r\n",
+        ),
+        (
             b"/usr/bin/free && echo REBSD_I686_FREE_OK\n",
             b"\r\nREBSD_I686_FREE_OK\r\n",
         ),

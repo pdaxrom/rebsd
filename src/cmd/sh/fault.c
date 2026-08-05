@@ -120,9 +120,40 @@ void getsig(int n)
         signal(i, fault);
 }
 
-void (*sigval[])() = {
-    0,    done, fault, fault, done, done,    abort,   done,    done, SIG_DFL, done,    done,
-    done, done, fault, fault, done, SIG_DFL, SIG_DFL, SIG_DFL, done, SIG_DFL, SIG_DFL, SIG_DFL,
+void (*sigval[MAXTRAP])() = {
+    0,       /* 0 */
+    done,    /* SIGHUP */
+    fault,   /* SIGINT */
+    fault,   /* SIGQUIT */
+    done,    /* SIGILL */
+    done,    /* SIGTRAP */
+    abort,   /* SIGIOT */
+    done,    /* SIGEMT */
+    done,    /* SIGFPE */
+    SIG_DFL, /* SIGKILL */
+    done,    /* SIGBUS */
+    done,    /* SIGSEGV */
+    done,    /* SIGSYS */
+    done,    /* SIGPIPE */
+    fault,   /* SIGALRM */
+    fault,   /* SIGTERM */
+    done,    /* SIGURG */
+    SIG_DFL, /* SIGSTOP */
+    SIG_DFL, /* SIGTSTP */
+    SIG_DFL, /* SIGCONT */
+    done,    /* SIGCHLD */
+    SIG_DFL, /* SIGTTIN */
+    SIG_DFL, /* SIGTTOU */
+    SIG_DFL, /* SIGIO */
+    done,    /* SIGXCPU */
+    done,    /* SIGXFSZ */
+    fault,   /* SIGVTALRM */
+    fault,   /* SIGPROF */
+    SIG_DFL, /* SIGWINCH */
+    SIG_DFL, /* SIGINFO */
+    done,    /* SIGUSR1 */
+    done,    /* SIGUSR2 */
+    done,    /* SIGPWR */
 };
 
 void setsig(int n)

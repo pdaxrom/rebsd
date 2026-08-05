@@ -106,6 +106,7 @@ cdf_timestamp_to_timespec(struct timespec *ts, cdf_timestamp_t t)
 
 	/* Unit is 100's of nanoseconds */
 	ts->tv_nsec = (t % CDF_TIME_PREC) * 100;
+	ts->tv_pad = 0;
 
 	t /= CDF_TIME_PREC;
 	tm.tm_sec = CAST(int, t % 60);

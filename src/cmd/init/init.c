@@ -698,14 +698,16 @@ entry_matches_level(const struct init_entry *entry, char level)
     return entry->levels == 0 || (entry->levels & mask) != 0;
 }
 
-static void
+static int
 run_sysinit_actions(void)
 {
     struct init_entry *entry;
+    int failed = 0;
 
     for (entry = entries; entry != NULL; entry = entry->next)
-        if (entry->action == ACT_SYSINIT)
-            (void)wait_entry(entry);
+        if (entry->action == ACT_SYSINIT && wait_entry(entry) != 0)
+            failed = 1;
+    return failed;
 }
 
 static void
@@ -938,10 +940,15 @@ main(int argc, char **argv)
     umask(022);
     setenv("HOME", "/", 1);
     setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin", 1);
-    install_signal_handlers();
-    entries = read_inittab();
-    run_sysinit_actions();
     open_console();
+    install_signal_handlers();
+    console("init: reading %s\n", INITTAB);
+    entries = read_inittab();
+    console("init: running system initialization\n");
+    if (run_sysinit_actions() != 0)
+        console("init: system initialization failed\n");
+    else
+        console("init: system initialization complete\n");
     if (entries == NULL) {
         console("init: no usable %s; entering single-user mode\n", INITTAB);
         entries = single_user_table();

@@ -202,12 +202,14 @@ MIPS_CMD_NONE = __mips_none__
 MIPS_BOARD_CMD_SUBDIRS ?=
 MIPS_BOARD_USR_BIN_FILES ?=
 ifeq ($(MIPS_ROOTFS_PROFILE),minimal)
-MIPS_CMD_SUBDIRS ?= fstat getty hostname init login ls mkfs mount netstat sh stty
+MIPS_CMD_SUBDIRS ?= fstat getty hostname init login ls mkfs mkswap mount \
+                    netstat ramctl sh stty swapon swapoff sysctl
 MIPS_CMD_STDS ?= cat chmod cmp iostat mkdir ps rm sleep strace sync vmstat
 MIPS_CMD_NSTDS ?= $(MIPS_CMD_NONE)
 MIPS_CMD_OPERATORS ?= $(MIPS_CMD_NONE)
 MIPS_CMD_SCRIPTS ?= $(MIPS_CMD_NONE)
-MIPS_USR_BIN_FILES :=
+MIPS_USR_BIN_FILES := sysctl
+MIPS_USR_SBIN_FILES := mkswap ramctl swapon swapoff
 MIPS_USR_LIBEXEC_FILES :=
 MIPS_ROOTFS_CAT1_PAGES :=
 MIPS_ROOTFS_CAT5_PAGES :=
@@ -233,6 +235,7 @@ MIPS_USR_BIN_FILES ?= $(REBSD_ROOTFS_USR_BIN_FILES) aout ar as ld \
                     smoke-as-vr4300 smoke-as-vr4300.sh strip \
                     $(MIPS_BOARD_USR_BIN_FILES)
 MIPS_USR_LIBEXEC_FILES ?= $(REBSD_ROOTFS_USR_LIBEXEC_FILES)
+MIPS_USR_SBIN_FILES ?= $(REBSD_ROOTFS_USR_SBIN_FILES)
 MIPS_ROOTFS_CAT1_PAGES ?= $(REBSD_ROOTFS_CAT1_PAGES) pcc size strip
 MIPS_ROOTFS_CAT5_PAGES ?= $(REBSD_ROOTFS_CAT5_PAGES)
 MIPS_ROOTFS_CMD_CAT1_SOURCES ?= $(REBSD_ROOTFS_CMD_CAT1_SOURCES) as:as nm:nm
@@ -957,7 +960,6 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILES) \
 	mkdir -p $(MIPS_ROOTFS_STAGE)/lib
 	mkdir -p $(MIPS_ROOTFS_STAGE)/sbin
 	mkdir -p $(MIPS_ROOTFS_STAGE)/bin
-	mkdir -p $(MIPS_ROOTFS_STAGE)/cart
 	mkdir -p $(MIPS_ROOTFS_STAGE)/dev
 	mkdir -p $(MIPS_ROOTFS_STAGE)/mnt
 	mkdir -p $(MIPS_ROOTFS_STAGE)/libexec
@@ -1024,9 +1026,9 @@ $(MIPS_ROOTFS_USER_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
 	        mv -f $(MIPS_ROOTFS_STAGE)/libexec/$$file $(MIPS_ROOTFS_USR_LIBEXEC)/$$file; \
 	    fi; \
 	done
-	for bin in $(REBSD_ROOTFS_USR_SBIN_FILES); do \
-	    test -x $(MIPS_ROOTFS_USR_SBIN)/$$bin; \
-	    test ! -e $(MIPS_ROOTFS_STAGE)/sbin/$$bin; \
+	for bin in $(MIPS_USR_SBIN_FILES); do \
+	    test -x $(MIPS_ROOTFS_USR_SBIN)/$$bin || exit $$?; \
+	    test ! -e $(MIPS_ROOTFS_STAGE)/sbin/$$bin || exit $$?; \
 	done
 	if [ "$(MIPS_ROOTFS_NATIVE_PCC)" = "1" ]; then \
 	    rm -f $(MIPS_ROOTFS_USR_BIN)/cc $(MIPS_ROOTFS_USR_BIN)/cpp \

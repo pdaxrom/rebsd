@@ -11,14 +11,22 @@ from pathlib import Path
 REQUIRED_EXECUTABLES = (
     "sbin/init",
     "bin/sh",
+    "bin/hostname",
     "libexec/getty",
     "sbin/mkfs",
     "sbin/mount",
+    "usr/bin/sysctl",
+    "usr/sbin/mkswap",
+    "usr/sbin/ramctl",
+    "usr/sbin/swapon",
+    "usr/sbin/swapoff",
 )
 
 REQUIRED_FILES = (
     "etc/inittab",
     "etc/rc",
+    "etc/rc.status",
+    "etc/rc.storage",
     "etc/rc.sysinit",
     "etc/ttys",
     "etc/passwd",
@@ -153,6 +161,10 @@ def check_manifest(stage, manifest, excluded_stage_prefixes):
         if line.startswith(("file /", "symlink /"))
     }
     errors = []
+    for relative in REQUIRED_EXECUTABLES + REQUIRED_FILES:
+        path = f"/{relative}"
+        if path not in payload:
+            errors.append(f"manifest is missing file {path}")
     for kind, path in REQUIRED_DEVICES:
         if f"{kind} {path}" not in text:
             errors.append(f"manifest is missing {kind} {path}")

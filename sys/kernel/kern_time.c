@@ -48,6 +48,7 @@ setthetime (struct timeval *tv)
     }
 #endif
 /* WHAT DO WE DO ABOUT PENDING REAL-TIME TIMEOUTS??? */
+    tv->tv_pad = 0;
     boottime.tv_sec += tv->tv_sec - time.tv_sec;
     s = splhigh();
     time = *tv;
@@ -71,6 +72,7 @@ microtime(struct timeval *tv)
 
     s = splhigh();
     *tv = time;
+    tv->tv_pad = 0;
     ms = lbolt;
     tv->tv_usec = (long)ms * usechz;
 #ifdef MIPS
@@ -157,6 +159,7 @@ adjtime()
         sizeof (struct timeval));
     if (u.u_error)
         return;
+    atv.tv_pad = 0;
     adjust = (atv.tv_sec * hz) + (atv.tv_usec / usechz);
     /* if unstoreable values, just set the clock */
     if (adjust > 0x7fff || adjust < -0x8000) {
@@ -198,8 +201,7 @@ getitimer()
         u.u_error = EINVAL;
         return;
     }
-    aitv.it_interval.tv_usec = 0;
-    aitv.it_value.tv_usec = 0;
+    bzero((caddr_t)&aitv, sizeof(aitv));
     s = splclock();
     if (uap->which == ITIMER_REAL) {
         register struct proc *p = u.u_procp;

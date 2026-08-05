@@ -369,7 +369,7 @@ pipe(void)
     wf = falloc();
     if (wf == NULL) {
         rf->f_count = 0;
-        u.u_ofile[r] = NULL;
+        fdrelease(r);
         pipe_free(pi);
         return;
     }

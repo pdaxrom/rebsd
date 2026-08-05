@@ -231,12 +231,23 @@ ramdisk_slot_configure(struct ramdisk_slot *slot, int minor_number,
 #ifdef DISK_HOST_TEST
     return EOPNOTSUPP;
 #else
+    printf("ram%d: allocating %uK backing for %uK media%s\n",
+        minor_number, backing_bytes >> 10,
+        request->rdc_media_bytes >> 10,
+        (request->rdc_flags & RAMDISK_CONFIG_COMPRESSION) != 0 ?
+        ", compressed" : "");
     error = ramdisk_storage_alloc(backing_bytes,
         &slot->rs_backing_pages, &slot->rs_backing_page_count,
         &allocation);
-    if (error != 0)
+    if (error != 0) {
+        printf("ram%d: backing allocation failed, error=%d\n",
+            minor_number, error);
         return error;
+    }
     backing = allocation;
+    printf("ram%d: backing ready at phys=%lx, %u pages\n",
+        minor_number, (unsigned long)slot->rs_backing_pages->vmp_paddr,
+        slot->rs_backing_page_count);
 #endif
     media_bytes = request->rdc_media_bytes;
     if (request->rdc_flags & RAMDISK_CONFIG_COMPRESSION) {
@@ -255,6 +266,8 @@ ramdisk_slot_configure(struct ramdisk_slot *slot, int minor_number,
         goto fail;
 #else
         allocation_bytes = sizeof(struct ramcomp) + metadata_bytes;
+        printf("ram%d: allocating %uK compression metadata\n",
+            minor_number, allocation_bytes >> 10);
         error = ramdisk_storage_alloc(allocation_bytes,
             &slot->rs_metadata_pages, &slot->rs_metadata_page_count,
             &allocation);
@@ -286,9 +299,19 @@ ramdisk_slot_configure(struct ramdisk_slot *slot, int minor_number,
     if (error != 0)
         goto fail;
     slot->rs_configured = 1;
+#ifndef DISK_HOST_TEST
+    printf("ram%d: configured, media=%uK backing=%uK%s\n",
+        minor_number, media_bytes >> 10, backing_bytes >> 10,
+        (request->rdc_flags & RAMDISK_CONFIG_COMPRESSION) != 0 ?
+        " compressed" : "");
+#endif
     return 0;
 
 fail:
+#ifndef DISK_HOST_TEST
+    printf("ram%d: configuration failed, error=%d\n",
+        minor_number, error);
+#endif
     ramdisk_slot_release(slot);
     return error;
 }

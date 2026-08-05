@@ -139,10 +139,13 @@ I386_ROOTFS_COMMON_FILES = $(TOPSRC)/sys/mips/rootfs/etc/group \
                            $(TOPSRC)/sys/mips/rootfs/etc/passwd \
                            $(TOPSRC)/sys/mips/rootfs/etc/profile \
                            $(TOPSRC)/sys/mips/rootfs/etc/rc \
+                           $(TOPSRC)/sys/mips/rootfs/etc/rc.status \
+                           $(TOPSRC)/sys/mips/rootfs/etc/rc.storage \
                            $(TOPSRC)/sys/mips/rootfs/etc/rc0.d/S99halt \
                            $(TOPSRC)/sys/mips/rootfs/etc/rc6.d/S99reboot \
                            $(TOPSRC)/sys/mips/rootfs/etc/services \
-                           $(TOPSRC)/sys/mips/rootfs/root/.profile
+                           $(TOPSRC)/sys/mips/rootfs/root/.profile \
+                           $(TOPSRC)/sys/mips/rootfs/root/sh-function-smoke.sh
 I386_ROOTFS_MACHINE_HEADERS = $(shell find $(I386_SRC)/include/machine \
                                -type f -name '*.h' 2>/dev/null)
 I386_ROOTFS_COMMON_HEADERS = $(shell find $(TOPSRC)/include \
@@ -380,6 +383,8 @@ $(I386_ROOTFS_BASE_STAMP): $(I386_ROOTFS_COMMON_FILES) \
 	    $(TOPSRC)/sys/mips/rootfs/etc/passwd \
 	    $(TOPSRC)/sys/mips/rootfs/etc/profile \
 	    $(TOPSRC)/sys/mips/rootfs/etc/rc \
+	    $(TOPSRC)/sys/mips/rootfs/etc/rc.status \
+	    $(TOPSRC)/sys/mips/rootfs/etc/rc.storage \
 	    $(TOPSRC)/sys/mips/rootfs/etc/services \
 	    $(I386_ROOTFS_BASE)/etc/
 	cp -p $(TOPSRC)/sys/mips/rootfs/etc/rc0.d/S99halt \
@@ -388,6 +393,8 @@ $(I386_ROOTFS_BASE_STAMP): $(I386_ROOTFS_COMMON_FILES) \
 	    $(I386_ROOTFS_BASE)/etc/rc6.d/S99reboot
 	cp -p $(TOPSRC)/sys/mips/rootfs/root/.profile \
 	    $(I386_ROOTFS_BASE)/root/.profile
+	cp -p $(TOPSRC)/sys/mips/rootfs/root/sh-function-smoke.sh \
+	    $(I386_ROOTFS_BASE)/root/sh-function-smoke.sh
 	cp -pR $(I386_ROOTFS_BOARD_DIR)/. $(I386_ROOTFS_BASE)/
 	cp -p $(I386_TERMCAP) $(I386_ROOTFS_BASE)/etc/termcap
 	cp -p $(I386_MAGIC_DB) \

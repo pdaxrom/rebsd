@@ -1,0 +1,57 @@
+#!/bin/sh
+# Common dynamic RAM-disk setup for early System V initialization.
+
+rc_var_setup()
+{
+	rc_var_device=$1
+	rc_var_size=$2
+	rc_var_inode_bytes=$3
+
+	if ! rc_run "RAM disk ${rc_var_device} for /var" \
+	    /usr/sbin/ramctl create "$rc_var_device" size="$rc_var_size"; then
+		return 1
+	fi
+	rc_start "filesystem on ${rc_var_device}"
+	if test "$rc_var_inode_bytes" -gt 0; then
+		/sbin/mkfs -i "$rc_var_inode_bytes" "$rc_var_device" \
+		    >/dev/null 2>&1
+	else
+		/sbin/mkfs "$rc_var_device" >/dev/null 2>&1
+	fi
+	rc_status=$?
+	rc_result "$rc_status"
+	if test "$rc_status" -ne 0; then
+		return "$rc_status"
+	fi
+	if ! rc_run 'mount /var' /sbin/mount /var; then
+		return 1
+	fi
+	rc_start 'runtime directories'
+	mkdir /var/config /var/db /var/log /var/run /var/tmp /var/lock \
+	    2>/dev/null &&
+	    chmod 1777 /var/tmp &&
+	    : >/var/run/utmp &&
+	    : >/var/log/wtmp &&
+	    chmod 664 /var/run/utmp /var/log/wtmp
+	rc_status=$?
+	rc_result "$rc_status"
+	return "$rc_status"
+}
+
+rc_compressed_swap_setup()
+{
+	rc_swap_device=$1
+	rc_swap_backing=$2
+	rc_swap_size=$3
+
+	if ! rc_run "compressed RAM disk ${rc_swap_device} for swap" \
+	    /usr/sbin/ramctl create "$rc_swap_device" \
+	    backing="$rc_swap_backing" size="$rc_swap_size" compression; then
+		return 1
+	fi
+	if ! rc_run "swap format on ${rc_swap_device}" \
+	    /usr/sbin/mkswap "$rc_swap_device"; then
+		return 1
+	fi
+	rc_run "swap on ${rc_swap_device}" /usr/sbin/swapon "$rc_swap_device"
+}

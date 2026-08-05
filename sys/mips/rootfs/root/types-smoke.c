@@ -1,4 +1,8 @@
 #include <sys/types.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 
 typedef signed char schar;
@@ -284,6 +288,9 @@ check_stack_double2(a, b, c, d, e)
 int
 check_sizes()
 {
+	struct rusage ru;
+	struct shmid_ds shm;
+
 	if (sizeof(char) != 1)
 		return bad("sizeof char");
 	if (sizeof(short) != 2)
@@ -312,6 +319,42 @@ check_sizes()
 		return bad("sizeof struct in_addr");
 	if (sizeof(struct sockaddr_in) != 16)
 		return bad("sizeof struct sockaddr_in");
+	if (sizeof(struct timeval) != 16)
+		return bad("sizeof struct timeval");
+	if (sizeof(struct timespec) != 16)
+		return bad("sizeof struct timespec");
+	if (sizeof(struct itimerval) != 32)
+		return bad("sizeof struct itimerval");
+	if (sizeof(struct rusage) != 88)
+		return bad("sizeof struct rusage");
+	if ((int)((char *)&ru.ru_maxrss - (char *)&ru) != 32)
+		return bad("struct rusage layout");
+	if (sizeof(struct shmid_ds) != 72)
+		return bad("sizeof struct shmid_ds");
+	if ((int)((char *)&shm.shm_atime - (char *)&shm) != 48)
+		return bad("struct shmid_ds layout");
+	if (sizeof(struct stat) != 80)
+		return bad("sizeof struct stat");
+	return 0;
+}
+
+int
+check_time_syscall_abi()
+{
+	volatile ulong before;
+	struct timeval tv;
+	volatile ulong after;
+
+	before = 0x1234abcdUL;
+	after = 0x89abcdefUL;
+	if (gettimeofday(&tv, (struct timezone *)0) != 0)
+		return bad("gettimeofday");
+	if (before != 0x1234abcdUL || after != 0x89abcdefUL)
+		return bad("gettimeofday stack overwrite");
+	if (tv.tv_usec < 0 || tv.tv_usec >= 1000000L)
+		return bad("gettimeofday usec");
+	if (tv.tv_pad != 0)
+		return bad("gettimeofday padding");
 	return 0;
 }
 
@@ -681,6 +724,8 @@ int
 main()
 {
 	if (check_sizes())
+		return 1;
+	if (check_time_syscall_abi())
 		return 1;
 	if (check_global_static_init())
 		return 1;

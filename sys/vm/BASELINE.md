@@ -40,14 +40,13 @@ build (normally 32 or 64 MiB), `ROOTFS_SIZE` is likewise configurable, and
 | `[0x00300000, 0x00700000)` | physical backing of the fixed user window |
 | `[0x00700000, 0x00800000)` | `/var` RAM disk |
 | `[0x00800000, 0x00800000 + ROOTFS_SIZE)` | linked root filesystem, clipped to installed RAM |
-| following 2 MiB | in-RAM cartflash sparse backing, clipped to installed RAM |
 | following configured range | RAM swap, clipped to installed RAM |
 | all remaining RAM | currently unused RAM |
 
-The cartflash storage and the Ci20 DMA pool described below are linked kernel
-storage or explicitly reserved RAM; they are not MMIO apertures.  Malta PCI,
-UART, chipset, and other MMIO ranges are outside this RAM map and must remain
-device mappings rather than allocatable pages.
+The Ci20 DMA pool described below is explicitly reserved RAM, not an MMIO
+aperture.  Malta PCI, UART, chipset, and other MMIO ranges are outside this RAM
+map and must remain device mappings rather than allocatable pages.  Cartridge
+flash and `/cart` exist only on N64 and are not part of the Malta RAM map.
 
 The CPU TLB is cleared at startup.  Malta, MaltaEL, and Malta64 use 16 entries.
 Entries 0 and 1 are then wired as two 1 MiB page pairs, mapping user virtual

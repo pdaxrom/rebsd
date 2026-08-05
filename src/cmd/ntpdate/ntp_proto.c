@@ -70,6 +70,7 @@ ntp_unix_usec_to_timeval(long long value, struct timeval *tv)
     }
     tv->tv_sec = (time_t)seconds;
     tv->tv_usec = remainder;
+    tv->tv_pad = 0;
 }
 
 void

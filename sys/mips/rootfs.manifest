@@ -8,7 +8,6 @@ dirmode 0775
 filemode 0664
 
 dir /bin
-dir /cart
 dir /dev
 dir /etc
 dir /etc/rc0.d
@@ -56,6 +55,9 @@ mode 0775
 
 file /etc/rc.sysinit
 mode 0775
+
+file /etc/rc.status
+file /etc/rc.storage
 
 file /etc/rc0.d/S99halt
 mode 0775
@@ -122,6 +124,9 @@ file /root/sh-fail-smoke.sh
 mode 0775
 
 file /root/sh-comsubst-smoke.sh
+mode 0775
+
+file /root/sh-function-smoke.sh
 mode 0775
 
 file /root/diskspeed-enospc-smoke.sh
