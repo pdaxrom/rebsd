@@ -69,15 +69,10 @@ struct byte_ulong_rec {
 	char tail;
 };
 
-#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
-#define EXPECT_LAYOUT_DOUBLE_OFFSET 20
-#define EXPECT_LAYOUT_TAIL_OFFSET 28
-#define EXPECT_LAYOUT_SIZE 32
-#else
+/* ReBSD uses the same 8-byte o32 aggregate alignment on every MIPS CPU. */
 #define EXPECT_LAYOUT_DOUBLE_OFFSET 24
 #define EXPECT_LAYOUT_TAIL_OFFSET 32
 #define EXPECT_LAYOUT_SIZE 40
-#endif
 
 schar gsc = -5;
 uchar guc = 250;

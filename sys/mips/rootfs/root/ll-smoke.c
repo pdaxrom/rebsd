@@ -8,13 +8,9 @@ struct llrec {
 	int c;
 };
 
-#if defined(__mips32r2) || defined(TARGET_MIPS32R2)
-#define EXPECT_LLREC_OFFSET 4
-#define EXPECT_LLREC_SIZE 16
-#else
+/* ReBSD uses the same 8-byte o32 aggregate alignment on every MIPS CPU. */
 #define EXPECT_LLREC_OFFSET 8
 #define EXPECT_LLREC_SIZE 24
-#endif
 
 llong gs = 0x1122334455667788LL;
 ullong gu = 0x8877665544332211ULL;
