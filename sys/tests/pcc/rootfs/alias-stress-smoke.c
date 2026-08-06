@@ -22,6 +22,12 @@
 #define EXPECT_CHAR_ALIAS_CHECKSUM 2759576698UL
 #endif
 
+#if defined(__i386__)
+#define EXPECT_REVERSE_CHECKSUM 1602776859UL
+#else
+#define EXPECT_REVERSE_CHECKSUM 499871515UL
+#endif
+
 struct alias_leaf {
 	unsigned char code;
 	short delta;
@@ -159,8 +165,9 @@ check_pointer_and_dispatch(void)
 	if (got != EXPECT_FORWARD_CHECKSUM)
 		return bad_ulong("forward checksum", got, EXPECT_FORWARD_CHECKSUM);
 	got = (*walkers[1])(nodes, NODE_COUNT);
-	if (got != 499871515UL)
-		return bad_ulong("reverse checksum", got, 499871515UL);
+	if (got != EXPECT_REVERSE_CHECKSUM)
+		return bad_ulong("reverse checksum", got,
+		    EXPECT_REVERSE_CHECKSUM);
 	return 0;
 }
 

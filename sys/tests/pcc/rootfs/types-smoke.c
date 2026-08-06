@@ -44,7 +44,8 @@ union endian_word {
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define SMOKE_LITTLE_ENDIAN 1
-#elif defined(__MIPSEL__) || defined(__mipsel__) || defined(TARGET_LITTLE_ENDIAN)
+#elif defined(__i386__) || defined(__MIPSEL__) || defined(__mipsel__) || \
+    defined(TARGET_LITTLE_ENDIAN)
 #define SMOKE_LITTLE_ENDIAN 1
 #else
 #define SMOKE_LITTLE_ENDIAN 0
@@ -69,10 +70,16 @@ struct byte_ulong_rec {
 	char tail;
 };
 
+#if defined(__i386__)
+#define EXPECT_LAYOUT_DOUBLE_OFFSET 20
+#define EXPECT_LAYOUT_TAIL_OFFSET 28
+#define EXPECT_LAYOUT_SIZE 32
+#else
 /* ReBSD uses the same 8-byte o32 aggregate alignment on every MIPS CPU. */
 #define EXPECT_LAYOUT_DOUBLE_OFFSET 24
 #define EXPECT_LAYOUT_TAIL_OFFSET 32
 #define EXPECT_LAYOUT_SIZE 40
+#endif
 
 schar gsc = -5;
 uchar guc = 250;

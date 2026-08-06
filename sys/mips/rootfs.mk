@@ -182,11 +182,7 @@ MIPS_SHARED_MACHINE_HEADERS ?= debug jmpbuf types
 MIPS_BOARD_MACHINE_HEADER_DIR ?=
 MIPS_BOARD_INCLUDE_DIR ?=
 
-MIPS_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
-                         $(TOPSRC)/src/cmd/sum.c \
-                         $(TOPSRC)/src/cmd/size.c \
-                         $(TOPSRC)/src/cmd/aoutio.c \
-                         $(TOPSRC)/src/cmd/aoutio.h
+MIPS_UTILITY_SMOKE_SRCS = $(REBSD_PCC_SMOKE_UTILITY_SRCS)
 MIPS_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 MIPS_MAGIC_DB = $(TOPSRC)/src/libmagic/magic.mgc.$(MIPS_ROOTFS_ENDIAN)
 MIPS_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
@@ -596,7 +592,7 @@ MIPS_AWK_MAKE = $(MAKE) -C $(MIPS_BUILD_SRC_DIR)/cmd/awk \
                YACC="$(MIPS_YACC)"
 
 MIPS_LINPACK_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/tools/linpack-smoke.py
-MIPS_LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
+MIPS_LINPACK_SMOKE_SRC = $(REBSD_PCC_SMOKE_ROOT)/linpack.c
 MIPS_LINPACK_SMOKE_OUT ?= $(MIPS_BUILD_TEST_DIR)/linpack-smoke
 MIPS_LINPACK_SMOKE_MANIFEST ?= rootfs.linpack-smoke.manifest
 MIPS_LINPACK_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.linpack-smoke.$(MIPS_ROOTFS_ABI)
@@ -614,9 +610,9 @@ MIPS_LINPACK_GCC_DEPS ?=
 MIPS_LINPACK_PCC_LDSCRIPT_NAME = $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),elf32-littlemips.ld,elf32-bigmips.ld)
 MIPS_LINPACK_PCC_LDSCRIPT = $(MIPS_ROOTFS_USR_LIB)/ldscripts/$(MIPS_LINPACK_PCC_LDSCRIPT_NAME)
 MIPS_LINPACK_PCC_LINKER_SCRIPT = $(if $(wildcard $(MIPS_LINPACK_PCC_LDSCRIPT)),-T $(abspath $(MIPS_LINPACK_PCC_LDSCRIPT)),)
-MIPS_COMPILER_BENCH_SRC = $(TOPSRC)/sys/mips/rootfs/root/mips-compiler-bench.c
-MIPS_COMPILER_BENCH_OUT ?= $(MIPS_BUILD_TEST_DIR)/mips-compiler-bench
-MIPS_COMPILER_BENCH_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.mips-compiler-bench.$(MIPS_ROOTFS_ABI)
+MIPS_COMPILER_BENCH_SRC = $(REBSD_PCC_SMOKE_ROOT)/compiler-bench.c
+MIPS_COMPILER_BENCH_OUT ?= $(MIPS_BUILD_TEST_DIR)/compiler-bench
+MIPS_COMPILER_BENCH_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.compiler-bench.$(MIPS_ROOTFS_ABI)
 MIPS_VM_PROCESS_SMOKE_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke.c
 MIPS_VM_PROCESS_SMOKE_GPR64_SRC = $(TOPSRC)/sys/mips/tools/vm-process-smoke-gpr64.S
 MIPS_VM_PROCESS_SMOKE_OUT ?= $(MIPS_BUILD_TEST_DIR)/vm-process-smoke.$(USERLAND_COMPILER).$(MIPS_ROOTFS_ABI)
@@ -628,7 +624,7 @@ MIPS_VM_PROCESS_SMOKE_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.vm-process-smoke.$(US
 MIPS_NET_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/net-smoke.c
 MIPS_NET_SMOKE_OUT ?= $(MIPS_BUILD_TEST_DIR)/net-smoke.$(USERLAND_COMPILER).$(MIPS_ROOTFS_ABI)
 MIPS_NET_SMOKE_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.net-smoke.$(USERLAND_COMPILER).$(MIPS_ROOTFS_ABI)
-MIPS_LIBC_ABI_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/libc-abi-smoke.c
+MIPS_LIBC_ABI_SMOKE_SRC = $(REBSD_PCC_SMOKE_ROOT)/libc-abi-smoke.c
 MIPS_LIBC_ABI_SMOKE_OUT ?= $(MIPS_BUILD_TEST_DIR)/libc-abi-smoke.$(USERLAND_COMPILER).$(MIPS_ROOTFS_ABI)
 MIPS_LIBC_ABI_SMOKE_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.libc-abi-smoke.$(USERLAND_COMPILER).$(MIPS_ROOTFS_ABI)
 MIPS_ROOTFS_EXTRA_STAMPS ?=
@@ -737,9 +733,9 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILES) $(MIPS_ROOTFS_MANIFEST) 
 	    printf '\nfile /root/linpack-pcc\nmode 0775\n' >> $@; \
 	    printf '\nfile /root/linpack-kernels-pcc\nmode 0775\n' >> $@; \
 	    if [ "$(MIPS_ROOTFS_LINPACK_GCC)" = "1" ]; then \
-	        printf '\nfile /root/mips-compiler-bench-gcc\nmode 0775\n' >> $@; \
+	        printf '\nfile /root/compiler-bench-gcc\nmode 0775\n' >> $@; \
 	    fi; \
-	    printf '\nfile /root/mips-compiler-bench-pcc\nmode 0775\n' >> $@; \
+	    printf '\nfile /root/compiler-bench-pcc\nmode 0775\n' >> $@; \
 	fi
 	printf '\nfile /root/vm-process-smoke\nmode 0775\n' >> $@
 	printf '\nfile /root/net-smoke\nmode 0775\n' >> $@
@@ -832,37 +828,37 @@ $(MIPS_COMPILER_BENCH_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 	    -O2 $(MIPS_LINPACK_PCC_LINKER_SCRIPT) \
 	    -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
 	    -L$(abspath $(MIPS_ROOTFS_USR_LIB)) \
-	    -o $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-pcc \
+	    -o $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-pcc \
 	    $(MIPS_COMPILER_BENCH_SRC)
 	if [ "$(MIPS_ROOTFS_LINPACK_GCC)" = "1" ]; then \
 	    $(MIPS_LINPACK_GCC_COMPILE) \
 	        -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
-	        -O2 -c -o $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.o \
+	        -O2 -c -o $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.o \
 	        $(MIPS_COMPILER_BENCH_SRC); \
 	    $(MIPS_LINPACK_GCC_LINK) \
-	        $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.o \
+	        $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.o \
 	        -L$(MIPS_LINPACK_GCC_LIBDIR) \
-	        -o $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked \
+	        -o $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
 	        -lc; \
 	    if [ "$(MIPS_LINPACK_GCC_LINK_FORMAT)" = "aout" ]; then \
-	        mv -f $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked \
-	            $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc; \
+	        mv -f $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
+	            $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc; \
 	    elif [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "aout" ]; then \
 	        $(abspath $(MIPS_ROOTFS_ELF2AOUT)) \
-	            $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked \
-	            $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc; \
-	        rm -f $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked; \
+	            $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
+	            $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc; \
+	        rm -f $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked; \
 	    else \
-	        mv -f $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc.linked \
-	            $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc; \
+	        mv -f $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
+	            $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc; \
 	    fi; \
-	    cp -p $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-gcc \
-	        $(MIPS_ROOTFS_STAGE)/root/mips-compiler-bench-gcc; \
-	    chmod 0775 $(MIPS_ROOTFS_STAGE)/root/mips-compiler-bench-gcc; \
+	    cp -p $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc \
+	        $(MIPS_ROOTFS_STAGE)/root/compiler-bench-gcc; \
+	    chmod 0775 $(MIPS_ROOTFS_STAGE)/root/compiler-bench-gcc; \
 	fi
-	cp -p $(MIPS_COMPILER_BENCH_OUT)/mips-compiler-bench-pcc \
-	    $(MIPS_ROOTFS_STAGE)/root/mips-compiler-bench-pcc
-	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/mips-compiler-bench-pcc
+	cp -p $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-pcc \
+	    $(MIPS_ROOTFS_STAGE)/root/compiler-bench-pcc
+	chmod 0775 $(MIPS_ROOTFS_STAGE)/root/compiler-bench-pcc
 	touch $@
 
 $(MIPS_VM_PROCESS_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
@@ -933,6 +929,7 @@ $(MIPS_LIBC_ABI_SMOKE_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 
 $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILES) \
     $(MIPS_ROOTFS_FILES) \
+    $(REBSD_PCC_SMOKE_TEST_FILES) \
     $(MIPS_UTILITY_SMOKE_SRCS) $(MIPS_TERMCAP) $(MIPS_MAGIC_DB) \
     $(MIPS_INCLUDE_SRCS) $(MIPS_INCLUDE_LINKS) \
     $(MIPS_INSTALL_USER_HEADERS) \
@@ -940,6 +937,9 @@ $(MIPS_ROOTFS_BASE_STAMP): $(MIPS_ROOTFS_MAKEFILES) \
 	rm -rf $(MIPS_ROOTFS_STAGE)
 	mkdir -p $(MIPS_ROOTFS_STAGE)
 	cp -pR $(MIPS_ROOTFS_COMMON_DIR)/. $(MIPS_ROOTFS_STAGE)/
+	cp -p $(REBSD_PCC_SMOKE_TEST_FILES) $(MIPS_ROOTFS_STAGE)/root/
+	chmod 0775 $(addprefix $(MIPS_ROOTFS_STAGE)/root/,\
+	    $(REBSD_PCC_SMOKE_SCRIPT_NAMES))
 	if [ -n "$(MIPS_ROOTFS_BOARD_DIR)" ] && \
 	    [ -d "$(MIPS_ROOTFS_BOARD_DIR)" ]; then \
 	    cp -pR $(MIPS_ROOTFS_BOARD_DIR)/. $(MIPS_ROOTFS_STAGE)/; \

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Narrow N64 shell repro for command substitution with a pipe.  The
+# Shell repro for command substitution with a pipe.  The
 # assembler smoke uses this path before the first expected-reject case.
 #
 
@@ -8,24 +8,32 @@ cd /tmp || cd /var/tmp || exit 1
 
 src=sh-comsubst-smoke.$$.s
 obj=sh-comsubst-smoke.$$.o
-as_endian=-EB
+as_flags='-EB -mips3 -march=vr4300'
+data_directive=.half
 half_pattern='*022064377376126170232274*'
 
-if cc -dM -E - </dev/null 2>/dev/null | grep '^#define __MIPSEL__' >/dev/null
-then
-	as_endian=-EL
+macros=`cc -dM -E - </dev/null 2>/dev/null`
+case "$macros" in
+*__i386__*)
+	as_flags='--32 -march=i386'
+	data_directive=.short
 	half_pattern='*064022376377170126274232*'
-fi
+	;;
+*__MIPSEL__*)
+	as_flags='-EL -mips3 -march=vr4300'
+	half_pattern='*064022376377170126274232*'
+	;;
+esac
 
 rm -f $src $obj
 echo ".data" > $src
 echo "halfprobe:" >> $src
-echo '	.half 0x1234' >> $src
-echo '	.half 0xfffe' >> $src
-echo '	.half 0x5678' >> $src
-echo '	.half 0x9abc' >> $src
+echo "	$data_directive 0x1234" >> $src
+echo "	$data_directive 0xfffe" >> $src
+echo "	$data_directive 0x5678" >> $src
+echo "	$data_directive 0x9abc" >> $src
 
-as $as_endian -mips3 -march=vr4300 -o $obj $src || exit 1
+as $as_flags -o $obj $src || exit 1
 
 od -b $obj >/dev/null || {
 	echo "sh-comsubst-smoke: od failed" >&2

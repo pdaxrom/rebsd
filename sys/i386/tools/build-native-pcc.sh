@@ -121,7 +121,7 @@ cp -p "$syslib/crt0.o" "$syslib/libc.a" "$syslib/libm.a" \
 	LDSCRIPT="$ldscript" CRT0="$syslib/crt0.o" LIBDIR="$syslib" all
 
 "$cross_pcc" -march=i686 -c -o "$workdir/host-smoke.o" \
-	"$topsrc/sys/i386/pc/rootfs/root/pcc-smoke.c"
+	"$topsrc/sys/tests/pcc/rootfs/pcc-smoke.c"
 test -s "$workdir/host-smoke.o"
 for tool in "$native_out/cc" "$native_out/cpp" "$native_out/ccom"; do
 	test -x "$tool"

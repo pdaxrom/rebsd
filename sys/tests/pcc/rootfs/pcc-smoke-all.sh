@@ -99,7 +99,7 @@ run_smoke sh-fail /root/sh-fail-smoke.sh
 run_smoke sh-comsubst /root/sh-comsubst-smoke.sh
 run_smoke ccom-stress /root/ccom-stress.sh "$CCOM_STRESS_COUNT"
 run_smoke linpack /root/linpack-smoke.sh
-run_smoke compiler-bench /root/mips-compiler-bench-smoke.sh
+run_smoke compiler-bench /root/compiler-bench-smoke.sh
 run_smoke runtime-quick /root/runtime-stress.sh quick
 
 resource_snapshot end

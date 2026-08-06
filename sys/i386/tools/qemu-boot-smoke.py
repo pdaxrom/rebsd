@@ -38,7 +38,7 @@ CORE_MARKERS = (
     "pci: mechanism=1",
     "root dev  = (0,0)",
     "swap dev  = none",
-    "root size = 16384 kbytes",
+    "root size = 24576 kbytes",
     "user mem  = 65536 kbytes",
     "ReBSD/i686 0.1-Resurgence (console)",
     "login:",
@@ -85,10 +85,6 @@ IDE_COMMON_MARKERS = (
     "ide-lba0: ok",
     "ide-bounds: ok",
     "wd0: read-ahead=256 sectors (128 KB)",
-)
-
-IDE_DISK_MARKERS = IDE_COMMON_MARKERS + (
-    "wd0: 32768 512-byte sectors (16384 KB)",
 )
 
 USB_MASS_STORAGE_MARKERS = (
@@ -245,6 +241,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ps2-mouse", action="store_true")
     parser.add_argument("--halt-smoke", action="store_true")
     parser.add_argument("--pcc-smoke", action="store_true")
+    parser.add_argument("--pcc-ccom-stress-count", type=int, default=100)
     parser.add_argument("--expect-no-disk", action="store_true")
     parser.add_argument("--timeout", type=float, default=15.0)
     args = parser.parse_args()
@@ -273,6 +270,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("UHCI keyboard, mouse, and disk use the same test port")
     if args.usb_disk is not None and args.uhci_disk is not None:
         parser.error("only one USB mass-storage device is supported")
+    if args.pcc_ccom_stress_count < 1:
+        parser.error("--pcc-ccom-stress-count must be positive")
     return args
 
 
@@ -401,7 +400,11 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
                 "wd0b: MBR type=82",
             )
         else:
-            markers += IDE_DISK_MARKERS
+            disk_bytes = args.disk.stat().st_size
+            markers += IDE_COMMON_MARKERS + (
+                f"wd0: {disk_bytes // 512} 512-byte sectors "
+                f"({disk_bytes // 1024} KB)",
+            )
         markers += ("REBSD_I686_DMESG_OK",)
         if args.ata_mode == "pio":
             markers += ("ata0: mode=pio policy=forced",)
@@ -454,7 +457,7 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
     ):
         markers += ("Bus 001 Device 001: ID ",)
     if args.pcc_smoke:
-        markers += ("PCC_I686_SELFHOST_OK", "PCC_SMOKE_ALL_OK")
+        markers += ("native pcc smoke ok", "PCC_SMOKE_ALL_OK")
     return markers
 
 
@@ -601,11 +604,6 @@ def main() -> None:
             b"\r\nREBSD_I686_LOOPBACK_OK\r\n",
         ),
         (
-            b"/bin/date -nu 204001020304.05 >/dev/null && "
-            b"/bin/date -u -f REBSD_I686_TIME64_%Y && echo\n",
-            b"\r\nREBSD_I686_TIME64_2040\r\n",
-        ),
-        (
             b"/usr/bin/fifo-smoke basic && echo FIFO_BASIC_PASS\n",
             b"\r\nFIFO_BASIC_PASS\r\n",
         ),
@@ -640,7 +638,10 @@ def main() -> None:
     if args.pcc_smoke:
         commands += (
             (
-                b"/root/pcc-smoke-all.sh\n",
+                (
+                    f"CCOM_STRESS_COUNT={args.pcc_ccom_stress_count} "
+                    "/root/pcc-smoke-all.sh\n"
+                ).encode("ascii"),
                 b"\r\nPCC_SMOKE_ALL_OK\r\n",
             ),
         )
@@ -763,6 +764,13 @@ def main() -> None:
                 b"\r\nREBSD_I686_RAM2_DESTROY_OK\r\n",
             ),
         )
+    commands += (
+        (
+            b"/bin/date -nu 204001020304.05 >/dev/null && "
+            b"/bin/date -u -f REBSD_I686_TIME64_%Y && echo\n",
+            b"\r\nREBSD_I686_TIME64_2040\r\n",
+        ),
+    )
     command_index = 0
     command_sent = False
     command_output_start = 0

@@ -1,5 +1,5 @@
 /*
- * Small compiler-oriented benchmark corpus for ReBSD/MIPS.
+ * Small compiler-oriented benchmark corpus for ReBSD.
  *
  * Each kernel isolates a common code-generation class.  The benchmark is
  * intentionally self-contained so the same source can be built, linked, and
@@ -352,12 +352,12 @@ self_test(void)
 	failures = 0;
 	for (i = 0; i < sizeof(benchmarks) / sizeof(benchmarks[0]); i++) {
 		actual = benchmarks[i].function(1);
-		printf("MIPS_COMPILER_BENCH_SELFTEST_VALUE %s %08x%08x\n",
+		printf("COMPILER_BENCH_SELFTEST_VALUE %s %08x%08x\n",
 		    benchmarks[i].name, (unsigned int)(actual >> 32),
 		    (unsigned int)actual);
 		if (benchmarks[i].expected != 0ULL &&
 		    actual != benchmarks[i].expected) {
-			printf("MIPS_COMPILER_BENCH_SELFTEST_FAIL %s "
+			printf("COMPILER_BENCH_SELFTEST_FAIL %s "
 			    "expected=%08x%08x actual=%08x%08x\n",
 			    benchmarks[i].name,
 			    (unsigned int)(benchmarks[i].expected >> 32),
@@ -394,7 +394,7 @@ run_benchmark(const struct benchmark *bench, double min_seconds)
 		    elapsed / 1000000.0;
 	else
 		rate = 0.0;
-	printf("MIPS_COMPILER_BENCH_RESULT %s reps=%u seconds=%.6f "
+	printf("COMPILER_BENCH_RESULT %s reps=%u seconds=%.6f "
 	    "mwork_s=%.3f checksum=%08x%08x\n", bench->name, reps, elapsed,
 	    rate, (unsigned int)(checksum >> 32), (unsigned int)checksum);
 }
@@ -408,7 +408,7 @@ main(void)
 	int failures;
 
 	min_seconds = 0.25;
-	value = getenv("MIPS_COMPILER_BENCH_MIN_SECONDS");
+	value = getenv("COMPILER_BENCH_MIN_SECONDS");
 	if (value != NULL && *value != '\0')
 		min_seconds = atof(value);
 	if (min_seconds < 0.0)
@@ -417,15 +417,15 @@ main(void)
 	initialize_inputs();
 	result_sink = 0;
 	fp_sink = 0.0;
-	printf("MIPS_COMPILER_BENCH_BEGIN min_seconds=%.3f\n", min_seconds);
+	printf("COMPILER_BENCH_BEGIN min_seconds=%.3f\n", min_seconds);
 	failures = self_test();
-	printf("MIPS_COMPILER_BENCH_SELFTEST %d\n", failures);
+	printf("COMPILER_BENCH_SELFTEST %d\n", failures);
 	if (failures == 0)
 		for (i = 0; i < sizeof(benchmarks) / sizeof(benchmarks[0]); i++)
 			run_benchmark(&benchmarks[i], min_seconds);
-	printf("MIPS_COMPILER_BENCH_SINK %08x%08x %.9e\n",
+	printf("COMPILER_BENCH_SINK %08x%08x %.9e\n",
 	    (unsigned int)(result_sink >> 32), (unsigned int)result_sink,
 	    fp_sink);
-	printf("MIPS_COMPILER_BENCH_END %d\n", failures);
+	printf("COMPILER_BENCH_END %d\n", failures);
 	return failures != 0;
 }

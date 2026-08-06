@@ -864,24 +864,24 @@ run_compiler_bench_comparison(void)
 {
 	int fails;
 	int rc;
-	char *gcc_argv[] = { "/root/mips-compiler-bench-gcc", NULL };
-	char *pcc_argv[] = { "/root/mips-compiler-bench-pcc", NULL };
+	char *gcc_argv[] = { "/root/compiler-bench-gcc", NULL };
+	char *pcc_argv[] = { "/root/compiler-bench-pcc", NULL };
 
 	fails = 0;
 	printf("N64_COMPILER_BENCH_CONFIG min_seconds=1\n");
-	if (setenv("MIPS_COMPILER_BENCH_MIN_SECONDS", "1", 1) < 0) {
+	if (setenv("COMPILER_BENCH_MIN_SECONDS", "1", 1) < 0) {
 		printf("N64_COMPILER_BENCH_ENV_FAIL %d\n", errno);
 		return 1;
 	}
 
 	printf("N64_COMPILER_BENCH_BEGIN gcc\n");
-	rc = run_argv("mips-compiler-bench-gcc", NULL, gcc_argv);
+	rc = run_argv("compiler-bench-gcc", NULL, gcc_argv);
 	printf("N64_COMPILER_BENCH_RC gcc %d\n", rc);
 	printf("N64_COMPILER_BENCH_END gcc\n");
 	fails += rc != 0;
 
 	printf("N64_COMPILER_BENCH_BEGIN pcc\n");
-	rc = run_argv("mips-compiler-bench-pcc", NULL, pcc_argv);
+	rc = run_argv("compiler-bench-pcc", NULL, pcc_argv);
 	printf("N64_COMPILER_BENCH_RC pcc %d\n", rc);
 	printf("N64_COMPILER_BENCH_END pcc\n");
 	fails += rc != 0;

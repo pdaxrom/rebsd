@@ -14,10 +14,12 @@ export PATH
 src=/root/utility-src
 endian_cflag=-DTARGET_BIG_ENDIAN
 
-if cc -dM -E - </dev/null 2>/dev/null | grep '^#define __MIPSEL__' >/dev/null
-then
+macros=`cc -dM -E - </dev/null 2>/dev/null`
+case "$macros" in
+*__MIPSEL__*|*__i386__*)
 	endian_cflag=-DTARGET_LITTLE_ENDIAN
-fi
+	;;
+esac
 
 cd /var/tmp || exit 1
 

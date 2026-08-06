@@ -111,7 +111,7 @@ FSUTIL           = $(FSUTIL_DIR)/fsutil
 I386_ROOTFS_STAGE = rootfs-stage
 I386_ROOTFS_BASE = rootfs-base
 I386_ROOTFS_BASE_STAMP = i386-rootfs-base.stamp
-I386_ROOTFS_KBYTES ?= 16384
+I386_ROOTFS_KBYTES ?= 24576
 I386_ROOTFS_EPOCH = 1
 I386_FAT_SMOKE_IMAGE = fat-smoke.img
 I386_FAT32_SMOKE_IMAGE = fat32-oversize-smoke.img
@@ -137,6 +137,7 @@ I386_USERLAND_SRC = $(I386_USERLAND_BUILD)/src
 I386_USERLAND_DESTDIR = $(I386_USERLAND_BUILD)/rootfs-install
 I386_USERLAND_STAMP = i386-userland.$(USERLAND_COMPILER).elf.stamp
 I386_ROOTFS_NATIVE_PCC ?= 1
+I386_PCC_SMOKE_CCOM_STRESS_COUNT ?= 100
 I386_PCC_WORK = $(CURDIR)/i386-pcc-build
 I386_PCC_BUILD_SCRIPT = $(I386_TOOLS_SRC)/build-native-pcc.sh
 I386_PCC_BOOTSTRAP_BUILD = $(CURDIR)/i386-pcc-bootstrap
@@ -148,6 +149,10 @@ I386_PCC_CROSS_PCC = $(I386_PCC_WORK)/host-pcc/bin/i386-rebsd-pcc
 I386_PCC_TOOLS = $(I386_PCC_WORK)/tools
 I386_PCC_NATIVE_OUT = $(I386_PCC_WORK)/native
 I386_PCC_SYSLIB = $(I386_PCC_WORK)/syslib
+I386_PCC_SMOKE_BUILD = $(I386_PCC_WORK)/smoke
+I386_PCC_LIBC_ABI_SMOKE = $(I386_PCC_SMOKE_BUILD)/libc-abi-smoke
+I386_PCC_LINPACK_SMOKE = $(I386_PCC_SMOKE_BUILD)/linpack-pcc
+I386_PCC_COMPILER_BENCH = $(I386_PCC_SMOKE_BUILD)/compiler-bench-pcc
 I386_PCC_SRCS = $(I386_PCC_BUILD_SCRIPT) \
                 $(TOPSRC)/src/dev/pcc/Makefile.native \
                 $(TOPSRC)/src/dev/pcc/native-config.h \
@@ -161,11 +166,16 @@ I386_PCC_SRCS = $(I386_PCC_BUILD_SCRIPT) \
                     -type f \( -name '*.[ch]' -o -name Makefile \) \
                     2>/dev/null) \
                 $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/strip.c \
-                $(TOPSRC)/src/cmd/aoutio.c $(TOPSRC)/src/cmd/aoutio.h
+                $(TOPSRC)/src/cmd/aoutio.c $(TOPSRC)/src/cmd/aoutio.h \
+                $(REBSD_PCC_SMOKE_TEST_FILES)
 ifeq ($(I386_ROOTFS_NATIVE_PCC),1)
 I386_ROOTFS_PCC_DEPS = $(I386_PCC_STAGE_STAMP)
+I386_ROOTFS_PCC_TEST_FILES = $(REBSD_PCC_SMOKE_TEST_FILES)
+I386_ROOTFS_PCC_UTILITY_SRCS = $(REBSD_PCC_SMOKE_UTILITY_SRCS)
 else
 I386_ROOTFS_PCC_DEPS =
+I386_ROOTFS_PCC_TEST_FILES =
+I386_ROOTFS_PCC_UTILITY_SRCS =
 endif
 I386_USER_LDSCRIPT = i386-user.ld
 I386_USER_LDSCRIPT_SRC = $(I386_SRC)/user/user.ld.S
@@ -448,6 +458,7 @@ $(I386_KERNEL_LDSCRIPT): $(I386_KERNEL_LDSCRIPT_SRC) \
 	$(I386_GCC_CC) -E -P -x c -I$(I386_SRC) $< -o $@
 
 $(I386_ROOTFS_BASE_STAMP): $(I386_ROOTFS_COMMON_FILES) \
+	    $(I386_ROOTFS_PCC_TEST_FILES) $(I386_ROOTFS_PCC_UTILITY_SRCS) \
 	    $(I386_ROOTFS_COMMON_HEADERS) \
 	    $(I386_ROOTFS_MACHINE_HEADERS) \
 	    $(I386_INSTALL_USER_HEADERS) $(I386_TERMCAP) $(I386_MAGIC_DB) \
@@ -496,6 +507,14 @@ $(I386_ROOTFS_BASE_STAMP): $(I386_ROOTFS_COMMON_FILES) \
 	    $(I386_ROOTFS_BASE)/root/.profile
 	cp -p $(TOPSRC)/sys/mips/rootfs/root/sh-function-smoke.sh \
 	    $(I386_ROOTFS_BASE)/root/sh-function-smoke.sh
+	if [ "$(I386_ROOTFS_NATIVE_PCC)" = 1 ]; then \
+	    cp -p $(I386_ROOTFS_PCC_TEST_FILES) $(I386_ROOTFS_BASE)/root/; \
+	    chmod 0775 $(addprefix $(I386_ROOTFS_BASE)/root/,\
+	        $(REBSD_PCC_SMOKE_SCRIPT_NAMES)); \
+	    mkdir -p $(I386_ROOTFS_BASE)/root/utility-src; \
+	    cp -p $(I386_ROOTFS_PCC_UTILITY_SRCS) \
+	        $(I386_ROOTFS_BASE)/root/utility-src/; \
+	fi
 	cp -pR $(I386_ROOTFS_BOARD_DIR)/. $(I386_ROOTFS_BASE)/
 	cp -p $(I386_TERMCAP) $(I386_ROOTFS_BASE)/etc/termcap
 	cp -p $(I386_MAGIC_DB) \
@@ -653,7 +672,18 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_BASE_STAMP) \
 	touch $@
 
 $(I386_PCC_STAGE_STAMP): $(I386_USERLAND_STAMP) \
-	    $(I386_PCC_TOOLCHAIN_STAMP)
+	    $(I386_PCC_TOOLCHAIN_STAMP) $(REBSD_PCC_SMOKE_TEST_FILES)
+	rm -rf $(I386_PCC_SMOKE_BUILD)
+	mkdir -p $(I386_PCC_SMOKE_BUILD)
+	$(I386_PCC_CROSS_PCC) -march=i686 -O2 \
+	    -o $(I386_PCC_LIBC_ABI_SMOKE) \
+	    $(REBSD_PCC_SMOKE_ROOT)/libc-abi-smoke.c
+	$(I386_PCC_CROSS_PCC) -march=i686 -O2 \
+	    -o $(I386_PCC_LINPACK_SMOKE) \
+	    $(REBSD_PCC_SMOKE_ROOT)/linpack.c -lm
+	$(I386_PCC_CROSS_PCC) -march=i686 -O2 \
+	    -o $(I386_PCC_COMPILER_BENCH) \
+	    $(REBSD_PCC_SMOKE_ROOT)/compiler-bench.c
 	mkdir -p $(I386_ROOTFS_STAGE)/usr/bin \
 	    $(I386_ROOTFS_STAGE)/usr/libexec/pcc \
 	    $(I386_ROOTFS_STAGE)/usr/lib/pcc/i386-pc-rebsd/1.2.0.DEVEL/include \
@@ -669,6 +699,18 @@ $(I386_PCC_STAGE_STAMP): $(I386_USERLAND_STAMP) \
 	    $(I386_ROOTFS_STAGE)/usr/lib/libpcc.a
 	cp -p $(I386_PCC_SYSLIB)/libpcc.a \
 	    $(I386_ROOTFS_STAGE)/usr/lib/pcc/i386-pc-rebsd/1.2.0.DEVEL/lib/libpcc.a
+	cp -p $(I386_PCC_LIBC_ABI_SMOKE) \
+	    $(I386_ROOTFS_STAGE)/root/libc-abi-smoke
+	cp -p $(I386_PCC_LINPACK_SMOKE) \
+	    $(I386_ROOTFS_STAGE)/root/linpack-pcc
+	cp -p $(I386_PCC_COMPILER_BENCH) \
+	    $(I386_ROOTFS_STAGE)/root/compiler-bench-pcc
+	printf '%s\n' \
+	    'CCOM_STRESS_COUNT=$(I386_PCC_SMOKE_CCOM_STRESS_COUNT)' \
+	    > $(I386_ROOTFS_STAGE)/etc/pcc-smoke.conf
+	chmod 0775 $(I386_ROOTFS_STAGE)/root/libc-abi-smoke \
+	    $(I386_ROOTFS_STAGE)/root/linpack-pcc \
+	    $(I386_ROOTFS_STAGE)/root/compiler-bench-pcc
 	touch $@
 
 $(I386_ROOTFS_STAGE)/.userland: $(I386_USERLAND_STAMP) \
@@ -1526,7 +1568,9 @@ pcc-smoke-runtime: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk rootfs.img --pcc-smoke --timeout 180
+	    --disk rootfs.img --pcc-smoke \
+	    --pcc-ccom-stress-count $(I386_PCC_SMOKE_CCOM_STRESS_COUNT) \
+	    --timeout 180
 
 fat-mount-smoke: rebsd-i686.bzimg $(I386_FAT_SMOKE_IMAGE) \
 	    $(I386_FAT32_SMOKE_IMAGE)

@@ -129,11 +129,7 @@ N64_ROOTFS_FILES = $(shell find $(N64_ROOTFS_COMMON_DIR) \
                    $(N64_ROOTFS_BOARD_DIR) -type f 2>/dev/null)
 N64_ROOTFS_DIRS = $(shell find $(N64_ROOTFS_COMMON_DIR) \
                   $(N64_ROOTFS_BOARD_DIR) -type d 2>/dev/null)
-N64_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
-                         $(TOPSRC)/src/cmd/sum.c \
-                         $(TOPSRC)/src/cmd/size.c \
-                         $(TOPSRC)/src/cmd/aoutio.c \
-                         $(TOPSRC)/src/cmd/aoutio.h
+N64_UTILITY_SMOKE_SRCS = $(REBSD_PCC_SMOKE_UTILITY_SRCS)
 N64_NATIVE_DIR = n64-native-runtime.$(N64_USERLAND_ABI)
 N64_NATIVE_TREE = $(N64_NATIVE_DIR)/tree
 N64_NATIVE_SOFTFLOAT_DIR = $(N64_NATIVE_DIR)/softfloat
@@ -182,7 +178,7 @@ N64_PCC_DEBUG_RUNNER_SRC = $(TOPSRC)/sys/mips/tools/n64-pcc-debug-runner.c
 N64_PCC_DEBUG_RUNNER_OBJ = n64-pcc-debug-runner.o
 N64_PCC_DEBUG_RUNNER = n64-pcc-debug-runner
 N64_LINPACK_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/tools/linpack-smoke.py
-N64_LINPACK_SMOKE_SRC = $(TOPSRC)/sys/mips/rootfs/root/linpack.c
+N64_LINPACK_SMOKE_SRC = $(REBSD_PCC_SMOKE_ROOT)/linpack.c
 N64_LINPACK_SMOKE_OUT ?= $(TOPOBJ)/tests/n64-linpack-smoke
 N64_LINPACK_SMOKE_MANIFEST = rootfs.linpack-smoke.manifest
 N64_LINPACK_ROOTFS_STAMP = $(N64_ROOTFS_STAGE)/.linpack-smoke
@@ -417,26 +413,12 @@ N64_MINIMAL_ROOTFS_CMD_OPERATORS = \
 N64_MINIMAL_ROOTFS_CMD_KMEM = $(N64_CMD_NONE)
 N64_MINIMAL_ROOTFS_USR_BIN_FILES = sysctl vm-pressure-smoke \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),free md5)
-N64_MINIMAL_ROOTFS_PCC_TEST_NAMES = \
-    alias-stress-smoke.c alias-stress-smoke.sh \
-    build-workload-smoke.sh cc-pcc-smoke.sh ccom-stress.sh \
-    libc-abi-smoke.c libc-abi-smoke.sh \
-    libc-string-smoke.c libc-string-smoke.sh \
-    libpcc-helper-smoke.c libpcc-helper-smoke.sh \
-    linpack-smoke.sh \
-    ll-abi-smoke.c ll-abi-smoke.s ll-abi-smoke.sh \
-    ll-smoke.c ll-smoke.sh make-workload-smoke.sh \
-    math-class-smoke.c math-class-smoke.sh \
-    mips-compiler-bench-smoke.sh native-pcc-smoke.sh \
-    pcc-fpu-smoke.c pcc-smoke-all.sh pcc-smoke.c pcc-smoke.sh \
-    runtime-stress.sh sh-comsubst-smoke.sh sh-fail-smoke.sh \
-    sh-function-smoke.sh \
-    types-smoke.c types-smoke.sh utility-workload-smoke.sh \
-    wide-policy-smoke.c wide-policy-smoke.sh
+N64_MINIMAL_ROOTFS_PCC_TEST_NAMES = $(REBSD_PCC_SMOKE_TEST_NAMES) \
+                                    sh-function-smoke.sh
 N64_MINIMAL_ROOTFS_PCC_TEST_FILES = \
     $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),\
-    $(addprefix $(TOPSRC)/sys/mips/rootfs/root/,\
-    $(N64_MINIMAL_ROOTFS_PCC_TEST_NAMES)))
+    $(REBSD_PCC_SMOKE_TEST_FILES) \
+    $(TOPSRC)/sys/mips/rootfs/root/sh-function-smoke.sh)
 N64_MINIMAL_USBNET_TEST_NAMES = usbn-smoke.sh usbn-dhcp-smoke.sh
 N64_MINIMAL_USBNET_TEST_FILES = \
     $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),\
@@ -453,9 +435,9 @@ N64_MINIMAL_LIBC_ABI_OBJ = n64-minimal-libc-abi-smoke.o
 N64_MINIMAL_LIBC_ABI_LINKED = n64-minimal-libc-abi-smoke.linked
 N64_MINIMAL_LINPACK_OBJ = n64-minimal-linpack-pcc.o
 N64_MINIMAL_LINPACK_LINKED = n64-minimal-linpack-pcc.linked
-N64_MINIMAL_COMPILER_BENCH_OBJ = n64-minimal-mips-compiler-bench-pcc.o
+N64_MINIMAL_COMPILER_BENCH_OBJ = n64-minimal-compiler-bench-pcc.o
 N64_MINIMAL_COMPILER_BENCH_LINKED = \
-    n64-minimal-mips-compiler-bench-pcc.linked
+    n64-minimal-compiler-bench-pcc.linked
 N64_MINIMAL_ROOTFS_FILES = \
     $(TOPSRC)/sys/mips/rootfs/etc/group \
     $(TOPSRC)/sys/mips/rootfs/etc/rc \
@@ -1313,7 +1295,7 @@ ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	ln -s ../usr/lib/libpcc.a $(N64_MINIMAL_ROOTFS_STAGE)/lib/libpcc.a
 	$(N64_MINIMAL_USERLAND_CC) -O2 -c \
 	    -o $(N64_MINIMAL_LIBC_ABI_OBJ) \
-	    $(TOPSRC)/sys/mips/rootfs/root/libc-abi-smoke.c
+	    $(REBSD_PCC_SMOKE_ROOT)/libc-abi-smoke.c
 	$(N64_MINIMAL_USERLAND_LD) $(N64_MINIMAL_USERLAND_LDFLAGS) \
 	    -o $(N64_MINIMAL_LIBC_ABI_LINKED) \
 	    $(N64_MINIMAL_LIBC_ABI_OBJ) -lc
@@ -1334,11 +1316,11 @@ ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	    $(N64_MINIMAL_COMPILER_BENCH_OBJ) -lc
 	$(N64_MINIMAL_USERLAND_ELF2AOUT) \
 	    $(N64_MINIMAL_COMPILER_BENCH_LINKED) \
-	    $(N64_MINIMAL_ROOTFS_STAGE)/root/mips-compiler-bench-pcc
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/compiler-bench-pcc
 	chmod 0775 $(N64_MINIMAL_ROOTFS_STAGE)/root/*.sh \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/libc-abi-smoke \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/root/linpack-pcc \
-	    $(N64_MINIMAL_ROOTFS_STAGE)/root/mips-compiler-bench-pcc \
+	    $(N64_MINIMAL_ROOTFS_STAGE)/root/compiler-bench-pcc \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/* \
 	    $(N64_MINIMAL_ROOTFS_STAGE)/usr/libexec/pcc/*
 endif

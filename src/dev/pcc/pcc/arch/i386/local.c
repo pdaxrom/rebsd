@@ -1092,6 +1092,11 @@ fixdef(struct symtab *sp)
 {
 #ifdef GCC_COMPAT
 	struct attr *ap;
+
+	/* Undefined weak declarations also need an ELF binding directive. */
+	if (sp->sclass == EXTERN && sp->slevel == 0 &&
+	    attr_find(sp->sap, GCC_ATYP_WEAK) != NULL)
+		printf(PRTPREF "\t.weak %s\n", getexname(sp));
 #endif
 
 #ifdef TLS

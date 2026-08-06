@@ -9,6 +9,33 @@ REBSD_ROOTFS_LIBS = libc libm libutil libtermlib libcurses libvmf \
 REBSD_ROOTFS_LIBC_DIRS = gen stdio stdlib string inet net compat runtime sys
 REBSD_ROOTFS_SUBDIRS = cmd
 
+# Architecture-independent PCC compiler/runtime test suite.  Architecture
+# ports stage these files unchanged; the few ABI probes select their machine
+# contract at compile or run time.
+REBSD_PCC_SMOKE_ROOT = $(TOPSRC)/sys/tests/pcc/rootfs
+REBSD_PCC_SMOKE_SCRIPT_NAMES = \
+    alias-stress-smoke.sh build-workload-smoke.sh cc-pcc-smoke.sh \
+    ccom-stress.sh libc-abi-smoke.sh libc-string-smoke.sh \
+    libpcc-helper-smoke.sh linpack-smoke.sh ll-abi-smoke.sh ll-smoke.sh \
+    make-workload-smoke.sh math-class-smoke.sh \
+    compiler-bench-smoke.sh native-pcc-smoke.sh pcc-smoke-all.sh \
+    pcc-smoke.sh runtime-stress.sh sh-comsubst-smoke.sh sh-fail-smoke.sh \
+    types-smoke.sh utility-workload-smoke.sh wide-policy-smoke.sh
+REBSD_PCC_SMOKE_SOURCE_NAMES = \
+    alias-stress-smoke.c libc-abi-smoke.c libc-string-smoke.c \
+    libpcc-helper-smoke.c linpack.c ll-abi-smoke.c ll-abi-smoke.s \
+    ll-smoke.c math-class-smoke.c compiler-bench.c \
+    pcc-fpu-smoke.c pcc-smoke.c types-smoke.c wide-policy-smoke.c
+REBSD_PCC_SMOKE_TEST_NAMES = $(REBSD_PCC_SMOKE_SCRIPT_NAMES) \
+                             $(REBSD_PCC_SMOKE_SOURCE_NAMES)
+REBSD_PCC_SMOKE_TEST_FILES = $(addprefix $(REBSD_PCC_SMOKE_ROOT)/,\
+                             $(REBSD_PCC_SMOKE_TEST_NAMES))
+REBSD_PCC_SMOKE_UTILITY_SRCS = $(TOPSRC)/src/cmd/basename.c \
+                               $(TOPSRC)/src/cmd/sum.c \
+                               $(TOPSRC)/src/cmd/size.c \
+                               $(TOPSRC)/src/cmd/aoutio.c \
+                               $(TOPSRC)/src/cmd/aoutio.h
+
 REBSD_ROOTFS_CMD_SUBDIRS = basic calendar chkconfig chown chroot compress date2 deco \
     dhclient diff dmesg emg env fdisk find fold forth fsck fsck.fat fstat getty \
     gpt hostname id ifconfig inetd init login ls make man md5 med mkfs \

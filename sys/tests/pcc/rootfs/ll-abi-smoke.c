@@ -7,12 +7,17 @@ struct abi_rec {
 	int tail;
 };
 
+#if defined(__i386__)
+#define EXPECT_ABI_VALUE_OFFSET 4
+#else
 #define EXPECT_ABI_VALUE_OFFSET 8
+#endif
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define SMOKE_LITTLE_ENDIAN 1
-#elif defined(__MIPSEL__) || defined(__mipsel__) || defined(TARGET_LITTLE_ENDIAN)
+#elif defined(__i386__) || defined(__MIPSEL__) || defined(__mipsel__) || \
+    defined(TARGET_LITTLE_ENDIAN)
 #define SMOKE_LITTLE_ENDIAN 1
 #else
 #define SMOKE_LITTLE_ENDIAN 0
