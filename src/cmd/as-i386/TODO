@@ -1,0 +1,8 @@
+as-i386 follow-up work
+======================
+
+- Add the remaining GNU as 32-bit encodings beyond the classic IA-32 scope:
+  AES/PCLMUL, BMI/BMI2, AVX/AVX2, FMA, XOP and the VEX/EVEX/APX/AVX-512
+  families.  This requires a separate VEX/EVEX-capable operand and prefix
+  encoder; unsupported -march extensions must remain hard errors until their
+  instruction and negative-gate matrices are complete.

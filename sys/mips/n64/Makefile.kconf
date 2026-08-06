@@ -133,8 +133,7 @@ N64_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
                          $(TOPSRC)/src/cmd/sum.c \
                          $(TOPSRC)/src/cmd/size.c \
                          $(TOPSRC)/src/cmd/aoutio.c \
-                         $(TOPSRC)/src/cmd/aoutio.h \
-                         $(TOPSRC)/src/cmd/elf32_mips.h
+                         $(TOPSRC)/src/cmd/aoutio.h
 N64_NATIVE_DIR = n64-native-runtime.$(N64_USERLAND_ABI)
 N64_NATIVE_TREE = $(N64_NATIVE_DIR)/tree
 N64_NATIVE_SOFTFLOAT_DIR = $(N64_NATIVE_DIR)/softfloat
@@ -288,6 +287,7 @@ N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(TOPSRC)/src/cmd/aoutio.h \
                        $(TOPSRC)/include/a.out.h \
                        $(TOPSRC)/include/ar.h \
+                       $(TOPSRC)/include/elf32.h \
                        $(TOPSRC)/include/nlist.h \
                        $(TOPSRC)/include/ranlib.h \
                        $(TOPSRC)/include/sys/exec_aout.h

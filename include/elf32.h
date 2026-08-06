@@ -1,5 +1,5 @@
-#ifndef _REBSD_ELF32_MIPS_H_
-#define _REBSD_ELF32_MIPS_H_
+#ifndef _ELF32_H_
+#define _ELF32_H_
 
 #define EI_DATA         5
 #define ELFMAG0         0x7f
@@ -13,6 +13,7 @@
 
 #define ET_REL          1
 #define ET_EXEC         2
+#define EM_386          3
 #define EM_MIPS         8
 
 #define EF_MIPS_NOREORDER  0x00000001
@@ -49,6 +50,11 @@
 #define STT_SECTION     3
 #define STT_FILE        4
 
+#define STV_DEFAULT     0
+#define STV_INTERNAL    1
+#define STV_HIDDEN      2
+#define STV_PROTECTED   3
+
 #define ELF_ST_BIND(i)      ((i) >> 4)
 #define ELF_ST_TYPE(i)      ((i) & 0xf)
 #define ELF_ST_INFO(b, t)   (((b) << 4) | ((t) & 0xf))
@@ -66,6 +72,22 @@
 #define R_MIPS_GPREL16      7
 #define R_MIPS_PC16         10
 #define R_MIPS_GPREL32      12
+
+#define R_386_NONE          0
+#define R_386_32            1
+#define R_386_PC32          2
+#define R_386_GOT32         3
+#define R_386_PLT32         4
+#define R_386_COPY          5
+#define R_386_GLOB_DAT      6
+#define R_386_JMP_SLOT      7
+#define R_386_RELATIVE      8
+#define R_386_GOTOFF        9
+#define R_386_GOTPC         10
+#define R_386_16            20
+#define R_386_PC16          21
+#define R_386_8             22
+#define R_386_PC8           23
 
 typedef struct {
     unsigned char e_ident[16];

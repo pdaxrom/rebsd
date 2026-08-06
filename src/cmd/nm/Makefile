@@ -21,7 +21,7 @@ nm:          	${OBJS}
 aoutio.o:       $(CMD_PARENT_SRC)/aoutio.c $(CMD_PARENT_SRC)/aoutio.h
 		${CC} ${CFLAGS} -c -o $@ $<
 
-nm.o:           $(CMD_PARENT_SRC)/elf32_mips.h
+nm.o:           $(TOPSRC)/include/elf32.h
 
 $(MAN):         $(MANSRC)
 		${MANROFF} $< > $@

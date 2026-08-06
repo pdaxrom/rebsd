@@ -1,8 +1,17 @@
 .TH LD 1 "July 5, 2026" "ReBSD"
 .SH NAME
-ld \- ReBSD MIPS link editor
+ld \- ReBSD a.out and ELF32 link editor
 .SH SYNOPSIS
 .B ld
+[
+.B \-\-elf
+|
+.B \-\-aout
+]
+[
+.B \-m
+.I emulation
+]
 [
 .B \-sSxXrdtv
 ]
@@ -38,7 +47,8 @@ ld \- ReBSD MIPS link editor
 .I name
 ]
 [
-.BI \-T address
+.B \-T
+.I address-or-script
 ]
 .I file
 \&...
@@ -46,11 +56,9 @@ ld \- ReBSD MIPS link editor
 .B ld
 combines ReBSD
 .B a.out
-object files and archives into an executable or relocatable output file.
-It resolves external references, searches archive libraries, writes MIPS
-relocation records when needed, and emits the ReBSD
-.B a.out
-format used by the native toolchain.
+or ELF32 object files and archives into an executable or relocatable output
+file.  ELF inputs may target MIPS32 or 32-bit i386; objects for different
+machines or byte orders cannot be mixed.
 .PP
 The default output file is
 .IR a.out .
@@ -75,13 +83,25 @@ and
 .BR end .
 It also defines the constructor and destructor range symbols used by the
 ReBSD C runtime.
-MIPS text/data/BSS alignment from input objects is preserved in the output;
-this keeps VR4300 8-byte text alignment and Malta MIPS32r2 4-byte text
+Input text/data/BSS alignment is preserved in the output.  For MIPS this
+keeps VR4300 8-byte text alignment and Malta MIPS32r2 4-byte text
 alignment compatible with the CPU mode selected by
 .BR as (1)
 and
 .BR pcc (1).
 .SH OPTIONS
+.TP
+.B \--elf
+Select ELF32 linking.  ELF input also selects this mode automatically.
+.TP
+.B \--aout
+Select the legacy ReBSD a.out linker.
+.TP
+.BI \-m " emulation"
+Select
+.B elf_i386
+or an ELF32 MIPS emulation.  The machine is otherwise taken from the first
+ELF object.
 .TP
 .BI \-o " file"
 Write the output to
@@ -139,21 +159,14 @@ Use
 as the output entry point.
 If no entry point is specified, the target default text base is used.
 .TP
-.BI \-T address
-Set the text segment base address.
-The target default is selected when
-.B ld
-is built.
+.BI \-T " address-or-script"
+Set the a.out text base address, or read an ELF linker script.
 .TP
 .B \-EL
-Read and write little\-endian
-.B a.out
-objects.
+Read and write little\-endian objects.
 .TP
 .B \-EB
-Read and write big\-endian
-.B a.out
-objects.
+Read and write big\-endian objects.  ELF32/i386 rejects this option.
 .TP
 .B \-r
 Produce relocatable output and preserve relocation records.
@@ -201,6 +214,9 @@ Standard libraries.
 .TP
 .I /usr/local/lib/lib*.a
 Standard libraries.
+.TP
+.I /usr/lib/ldscripts/elf32-i386.ld
+Default ELF32/i386 linker script.
 .SH SEE ALSO
 .BR as (1),
 .BR cc (1),

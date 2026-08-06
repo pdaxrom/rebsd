@@ -1,5 +1,5 @@
 /*
- * Linker for RetroBSD, MIPS32 architecture.
+ * Linker for RetroBSD a.out and ELF32 targets.
  *
  * Copyright (C) 2011 Serge Vakulenko, <serge@vak.ru>
  *
@@ -48,7 +48,7 @@
 #include <ranlib.h>
 #include <stdarg.h>
 #include "../aoutio.h"
-#include "../elf32_mips.h"
+#include <elf32.h>
 
 #define W 4              /* word size in bytes */
 #define ELF_LOAD_ALIGN 0x1000
@@ -2111,6 +2111,54 @@ static char *elf_script_file;
 static char *elf_entry_symbol;
 static int elf_mode;
 static unsigned elf_last_dot;
+static unsigned elf_target_machine;
+static int elf_target_big;
+static int elf_target_endian_known;
+
+static void
+elf_select_endian(int big, const char *source)
+{
+    if (elf_target_endian_known && elf_target_big != big)
+        error(2, "%s selects an incompatible ELF byte order", source);
+    if (elf_target_machine == EM_386 && big)
+        error(2, "%s: ELF32/i386 is little-endian", source);
+    elf_target_big = big;
+    elf_target_endian_known = 1;
+    aout_set_big_endian(big);
+}
+
+static void
+elf_select_machine(unsigned machine, int big, const char *source)
+{
+    if (machine != EM_MIPS && machine != EM_386)
+        error(2, "%s: unsupported ELF32 machine %u", source, machine);
+    if (elf_target_machine && elf_target_machine != machine)
+        error(2, "%s: cannot mix ELF32 machine types", source);
+    if (machine == EM_386 && big)
+        error(2, "%s: big-endian ELF32/i386 object", source);
+    elf_target_machine = machine;
+    elf_select_endian(big, source);
+}
+
+static void
+elf_select_emulation(const char *name)
+{
+    if (strcmp(name, "elf_i386") == 0 || strcmp(name, "elf32-i386") == 0) {
+        elf_select_machine(EM_386, 0, name);
+        return;
+    }
+    if (strcmp(name, "elf32btsmip") == 0 ||
+        strcmp(name, "elf32-bigmips") == 0) {
+        elf_select_machine(EM_MIPS, 1, name);
+        return;
+    }
+    if (strcmp(name, "elf32ltsmip") == 0 ||
+        strcmp(name, "elf32-littlemips") == 0) {
+        elf_select_machine(EM_MIPS, 0, name);
+        return;
+    }
+    error(2, "unsupported ELF emulation %s", name);
+}
 
 static void *
 elf_reserve_array(void *ptr, int *cap, int need, int max, size_t size,
@@ -2163,6 +2211,18 @@ elf_get32p(const unsigned char *p, int big)
 }
 
 static void
+elf_put16p(unsigned char *p, unsigned value, int big)
+{
+    if (big) {
+        p[0] = value >> 8;
+        p[1] = value;
+    } else {
+        p[0] = value;
+        p[1] = value >> 8;
+    }
+}
+
+static void
 elf_put32p(unsigned char *p, unsigned value, int big)
 {
     if (big) {
@@ -2179,15 +2239,27 @@ elf_put32p(unsigned char *p, unsigned value, int big)
 }
 
 static unsigned
+elf_load16buf(unsigned char *p)
+{
+    return elf_get16p(p, elf_target_big);
+}
+
+static unsigned
 elf_load32buf(unsigned char *p)
 {
-    return elf_get32p(p, aout_is_big_endian());
+    return elf_get32p(p, elf_target_big);
+}
+
+static void
+elf_store16buf(unsigned char *p, unsigned value)
+{
+    elf_put16p(p, value, elf_target_big);
 }
 
 static void
 elf_store32buf(unsigned char *p, unsigned value)
 {
-    elf_put32p(p, value, aout_is_big_endian());
+    elf_put32p(p, value, elf_target_big);
 }
 
 static unsigned
@@ -3207,8 +3279,10 @@ elf_read_ehdr(struct elf_input *in)
     in->ehdr.e_shentsize = elf_get16p(p + 46, in->big);
     in->ehdr.e_shnum = elf_get16p(p + 48, in->big);
     in->ehdr.e_shstrndx = elf_get16p(p + 50, in->big);
-    if (in->ehdr.e_type != ET_REL || in->ehdr.e_machine != EM_MIPS)
+    if (in->ehdr.e_type != ET_REL ||
+        (in->ehdr.e_machine != EM_MIPS && in->ehdr.e_machine != EM_386))
         error(2, "%s: unsupported ELF object", in->name);
+    elf_select_machine(in->ehdr.e_machine, in->big, in->name);
 }
 
 static Elf32_Shdr
@@ -3423,7 +3497,11 @@ elf_member_defines_needed(unsigned char *data, unsigned size)
         return 0;
     big = data[EI_DATA] == ELFDATA2MSB;
     if (elf_get16p(data + 16, big) != ET_REL ||
-        elf_get16p(data + 18, big) != EM_MIPS)
+        (elf_get16p(data + 18, big) != EM_MIPS &&
+         elf_get16p(data + 18, big) != EM_386) ||
+        (elf_target_machine &&
+         elf_get16p(data + 18, big) != elf_target_machine) ||
+        (elf_target_endian_known && big != elf_target_big))
         return 0;
     shoff = elf_get32p(data + 32, big);
     shentsize = elf_get16p(data + 46, big);
@@ -3938,8 +4016,60 @@ elf_apply_relocs(void)
                 type = ELF_R_TYPE(info);
                 place = einsec[target].addr + roff;
                 loc = eout[outidx].buf + einsec[target].outoff + roff;
-                word = elf_load32buf(loc);
                 svalue = elf_symbol_value(i, symidx);
+                if (elf_target_machine == EM_386) {
+                    int gotidx;
+                    unsigned gotval;
+
+                    switch (type) {
+                    case R_386_NONE:
+                        break;
+                    case R_386_32:
+                        word = elf_load32buf(loc);
+                        elf_store32buf(loc, word + svalue);
+                        break;
+                    case R_386_PC32:
+                    case R_386_PLT32:
+                        word = elf_load32buf(loc);
+                        elf_store32buf(loc, word + svalue - place);
+                        break;
+                    case R_386_GOTOFF:
+                    case R_386_GOTPC:
+                        gotidx = elf_find_lsym("_GLOBAL_OFFSET_TABLE_");
+                        if (gotidx < 0 || !elsym[gotidx].defined)
+                            error(2, "%s: _GLOBAL_OFFSET_TABLE_ is undefined",
+                                in->name);
+                        gotval = elsym[gotidx].value;
+                        word = elf_load32buf(loc);
+                        if (type == R_386_GOTOFF)
+                            elf_store32buf(loc, word + svalue - gotval);
+                        else
+                            elf_store32buf(loc, word + gotval - place);
+                        break;
+                    case R_386_16:
+                        word = elf_load16buf(loc);
+                        elf_store16buf(loc, word + svalue);
+                        break;
+                    case R_386_PC16:
+                        word = elf_load16buf(loc);
+                        elf_store16buf(loc, word + svalue - place);
+                        break;
+                    case R_386_8:
+                        loc[0] += svalue;
+                        break;
+                    case R_386_PC8:
+                        loc[0] += svalue - place;
+                        break;
+                    case R_386_GOT32:
+                        error(2, "%s: R_386_GOT32 requires a dynamic GOT",
+                            in->name);
+                        break;
+                    default:
+                        error(2, "unsupported i386 relocation %u", type);
+                    }
+                    continue;
+                }
+                word = elf_load32buf(loc);
                 switch (type) {
                 case R_MIPS_NONE:
                     break;
@@ -4206,6 +4336,8 @@ elf_reloc_add_relocation(struct elf_reloc_outsec *out, unsigned offset,
 static unsigned
 elf_reloc_output_flags(void)
 {
+    if (elf_target_machine == EM_386)
+        return 0;
     return EF_MIPS_NOREORDER | EF_MIPS_ABI_O32 |
 #ifdef TARGET_VR4300
         EF_MIPS_ARCH_3;
@@ -4453,10 +4585,10 @@ elf_write_relocatable(void)
     eh.e_ident[2] = ELFMAG2;
     eh.e_ident[3] = ELFMAG3;
     eh.e_ident[4] = ELFCLASS32;
-    eh.e_ident[EI_DATA] = aout_is_big_endian() ? ELFDATA2MSB : ELFDATA2LSB;
+    eh.e_ident[EI_DATA] = elf_target_big ? ELFDATA2MSB : ELFDATA2LSB;
     eh.e_ident[6] = EV_CURRENT;
     eh.e_type = ET_REL;
-    eh.e_machine = EM_MIPS;
+    eh.e_machine = elf_target_machine;
     eh.e_version = EV_CURRENT;
     eh.e_shoff = off;
     eh.e_flags = elf_reloc_output_flags();
@@ -4706,10 +4838,10 @@ elf_write_output(void)
     eh.e_ident[2] = ELFMAG2;
     eh.e_ident[3] = ELFMAG3;
     eh.e_ident[4] = ELFCLASS32;
-    eh.e_ident[EI_DATA] = aout_is_big_endian() ? ELFDATA2MSB : ELFDATA2LSB;
+    eh.e_ident[EI_DATA] = elf_target_big ? ELFDATA2MSB : ELFDATA2LSB;
     eh.e_ident[6] = EV_CURRENT;
     eh.e_type = ET_EXEC;
-    eh.e_machine = EM_MIPS;
+    eh.e_machine = elf_target_machine;
     eh.e_version = EV_CURRENT;
     eh.e_entry = entry;
     eh.e_phoff = sizeof(Elf32_Ehdr);
@@ -4897,6 +5029,11 @@ elf_default_script_from_tool(const char *name)
     bindir = elf_tool_bindir();
     if (!bindir)
         return 0;
+    if (elf_target_machine == EM_386) {
+        path = elf_try_script_path(bindir, "../lib/ldscripts", name);
+        free(bindir);
+        return path;
+    }
     target = savestr(elf_endian_target());
     len = strlen("../") + strlen(target) + strlen("/lib/ldscripts") + 1;
     rel = malloc(len);
@@ -4935,7 +5072,10 @@ elf_default_script(void)
     const char *name, *root;
     char *path;
 
-    name = aout_is_big_endian() ? "elf32-bigmips.ld" : "elf32-littlemips.ld";
+    if (elf_target_machine == EM_386)
+        name = "elf32-i386.ld";
+    else
+        name = elf_target_big ? "elf32-bigmips.ld" : "elf32-littlemips.ld";
     root = sysroot[0] ? sysroot : "/";
     path = elf_try_script_path(root, "usr/lib/ldscripts", name);
     if (path)
@@ -4968,6 +5108,21 @@ elf_parse_args(int argc, char **argv)
         }
         if (strcmp(a, "--aout") == 0)
             continue;
+        if (strcmp(a, "-m") == 0) {
+            if (++i >= argc)
+                error(2, "-m: argument missing");
+            elf_select_emulation(argv[i]);
+            continue;
+        }
+        if (strncmp(a, "-m", 2) == 0 && a[2]) {
+            elf_select_emulation(a + 2);
+            continue;
+        }
+        if (strcmp(a, "-z") == 0) {
+            if (++i >= argc)
+                error(2, "-z: argument missing");
+            continue;
+        }
         if (strncmp(a, "--sysroot=", 10) == 0)
             continue;
         if (strcmp(a, "--sysroot") == 0) {
@@ -5025,12 +5180,22 @@ elf_parse_args(int argc, char **argv)
             elf_entry_symbol = argv[i];
             continue;
         }
+        if (strcmp(a, "-u") == 0) {
+            if (++i >= argc)
+                error(2, "-u: argument missing");
+            elf_add_lsym(argv[i]);
+            continue;
+        }
+        if (strncmp(a, "-u", 2) == 0 && a[2]) {
+            elf_add_lsym(a + 2);
+            continue;
+        }
         if (strcmp(a, "-EL") == 0) {
-            aout_set_big_endian(0);
+            elf_select_endian(0, "-EL");
             continue;
         }
         if (strcmp(a, "-EB") == 0) {
-            aout_set_big_endian(1);
+            elf_select_endian(1, "-EB");
             continue;
         }
         if (a[0] == '-' && a[1] && !elf_arg_takes_value(a[1]))
@@ -5055,6 +5220,8 @@ elf_main(int argc, char **argv)
     int i;
 
     elf_parse_args(argc, argv);
+    if (!elf_target_machine)
+        error(2, "ELF link has no input machine type; use -m");
     elf_collect_symbols();
     elf_load_archives();
     if (rflag) {
@@ -5210,11 +5377,26 @@ ld_args_want_elf(int argc, char **argv)
             continue;
         }
         if (strcmp(a, "-EL") == 0) {
-            aout_set_big_endian(0);
+            elf_select_endian(0, "-EL");
             continue;
         }
         if (strcmp(a, "-EB") == 0) {
-            aout_set_big_endian(1);
+            elf_select_endian(1, "-EB");
+            continue;
+        }
+        if (strcmp(a, "-m") == 0) {
+            force_elf = 1;
+            if (++i < argc)
+                elf_select_emulation(argv[i]);
+            continue;
+        }
+        if (strncmp(a, "-m", 2) == 0 && a[2]) {
+            force_elf = 1;
+            elf_select_emulation(a + 2);
+            continue;
+        }
+        if (strcmp(a, "-z") == 0) {
+            i++;
             continue;
         }
         if (strcmp(a, "--sysroot") == 0 || strcmp(a, "-o") == 0 ||
@@ -5298,8 +5480,9 @@ int main(int argc, char **argv)
         printf("  -d              Force common symbols to be defined\n");
         printf("  -t              Increase trace verbosity (up to 3)\n");
         printf("  -v              Enable verbose diagnostics\n");
-        printf("  --elf           Link ELF32 MIPS objects using a linker script\n");
+        printf("  --elf           Link ELF32 MIPS or i386 objects\n");
         printf("  --aout          Link legacy ReBSD a.out objects\n");
+        printf("  -m emulation    Select elf_i386 or a MIPS ELF32 emulation\n");
         exit(4);
     }
     if (signal(SIGINT, SIG_IGN) != SIG_IGN)

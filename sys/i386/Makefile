@@ -48,9 +48,14 @@ I686_DEPFLAGS = -MT $@ -MMD -MP -MF .deps/$(@:.o=.d)
 I686_CFLAGS  += $(I686_DEPFLAGS)
 I686_ASFLAGS += $(I686_DEPFLAGS)
 
-I386_ROOTFS_CMD_SUBDIRS = $(REBSD_ROOTFS_CMD_SUBDIRS) lsusb lspci
+I386_ROOTFS_CMD_SUBDIRS = $(REBSD_ROOTFS_CMD_SUBDIRS) ar as-i386 ld nm ranlib \
+                          lsusb lspci
 I386_ROOTFS_CMD_EXTRA_SUBDIRS = $(REBSD_ROOTFS_CMD_EXTRA_SUBDIRS) \
-                               lsusb lspci
+                               as-i386 lsusb lspci
+I386_ROOTFS_CMD_STDS = $(REBSD_ROOTFS_CMD_STDS) size
+I386_ROOTFS_USR_BIN_FILES = $(REBSD_ROOTFS_USR_BIN_FILES) \
+                            ar as ld nm ranlib size strip
+I386_ROOTFS_CAT1_PAGES = $(REBSD_ROOTFS_CAT1_PAGES) size strip
 
 # The direct bring-up build carries the same service feature symbols that
 # kconfig emits in PARAM for the declarative configuration.
@@ -166,7 +171,7 @@ I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 LIBC_ONLY="$(REBSD_ROOTFS_LIBC_DIRS) i386" \
                 SRC_ONLY_SUBDIR="$(REBSD_ROOTFS_SUBDIRS)" \
                 CMD_ONLY_SUBDIR="$(I386_ROOTFS_CMD_SUBDIRS)" \
-                CMD_ONLY_STD="$(REBSD_ROOTFS_CMD_STDS)" \
+                CMD_ONLY_STD="$(I386_ROOTFS_CMD_STDS)" \
                 CMD_ONLY_SCRIPT="$(REBSD_ROOTFS_CMD_SCRIPTS)" \
                 CMD_ONLY_NSTD="$(REBSD_ROOTFS_CMD_NSTDS)" \
                 CMD_ONLY_SETUID="$(I386_USER_NONE)" \
@@ -175,7 +180,7 @@ I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 CMD_ONLY_TTY="$(I386_USER_NONE)" \
                 CMD_EXTRA_SUBDIR="$(I386_ROOTFS_CMD_EXTRA_SUBDIRS)" \
                 SMUX_SUBDIRS=retro \
-                CMD_BUILD_STRIP=
+                CMD_BUILD_STRIP=strip
 I386_AWK_MAKE = $(MAKE) -C $(I386_USERLAND_SRC)/cmd/awk \
                 TARGET_PLATFORM=i386 \
                 DESTDIR=$(abspath $(I386_USERLAND_DESTDIR)) \
@@ -461,7 +466,7 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_BASE_STAMP) \
 	    $(I386_ROOTFS_STAGE)/usr/lib/ldscripts/elf32-i386.ld
 	$(RANLIB) $(I386_ROOTFS_STAGE)/usr/lib/libc.a
 	$(RANLIB) $(I386_ROOTFS_STAGE)/usr/lib/libm.a
-	for bin in $(REBSD_ROOTFS_USR_BIN_FILES); do \
+	for bin in $(I386_ROOTFS_USR_BIN_FILES); do \
 	    if [ -e $(I386_ROOTFS_STAGE)/bin/$$bin ]; then \
 	        mv -f $(I386_ROOTFS_STAGE)/bin/$$bin \
 	            $(I386_ROOTFS_STAGE)/usr/bin/$$bin; \
@@ -478,7 +483,7 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_BASE_STAMP) \
 	        $(I386_ROOTFS_STAGE)/usr/share/; \
 	    rm -rf $(I386_ROOTFS_STAGE)/share; \
 	fi
-	for page in $(REBSD_ROOTFS_CAT1_PAGES); do \
+	for page in $(I386_ROOTFS_CAT1_PAGES); do \
 	    GROFF_NO_SGR=1 $(MANROFF) $(TOPSRC)/src/man/man1/$$page.1 \
 	        > $(I386_ROOTFS_STAGE)/usr/share/man/cat1/$$page.0; \
 	done

@@ -1,0 +1,102 @@
+.TH AS 1
+.SH NAME
+as \- assemble AT&T syntax i386 source into an ELF32 object
+.SH SYNOPSIS
+.B as
+[
+.B --elf
+]
+[
+.B --32
+]
+[
+.B \-gkuvxX
+]
+[
+.B \-O\fIlevel\fP
+]
+[
+.B \-EL
+]
+[
+.BI \-march= CPU[,+EXTENSION...]
+]
+[
+.BI \-mtune= CPU
+]
+[
+.B \-o
+.I outfile
+]
+[
+.I infile
+]
+.SH DESCRIPTION
+.I As
+translates 32-bit i386 assembly written in AT&T syntax into an ELF32
+relocatable object.  The output byte order is always little-endian, regardless
+of the byte order of the host running the assembler.
+.PP
+The accepted instruction set covers the i386 through i686 integer, system and
+x87 instruction families, MMX and AMD 3DNow!, SSE through SSE4.2, AMD SSE4a
+and system extensions, Cyrix SMM instructions, and VIA/Centaur PadLock
+instructions.  GNU-style sections and symbol attributes, numeric local labels,
+and the ELF32/i386 REL relocations used by static and PIC programs are also
+supported.
+.SH OPTIONS
+.TP
+.B \--elf, --32
+Select ELF32/i386 output.  These options are accepted for compatibility; ELF32
+is the only output format.
+.TP
+.B \-o \fIoutfile\fP
+Write the object to
+.IR outfile .
+The default is
+.IR a.out .
+.TP
+.B \-u
+Report undefined symbols as errors.
+.TP
+.B \-x
+Discard unreferenced local symbols.
+.TP
+.B \-X
+Discard unreferenced local symbols whose names begin with
+.B L
+or a period.
+.TP
+.B \-EL
+Select little-endian output.  This is the i386 default.
+.TP
+.B \-EB
+Rejected because ELF32/i386 object files are little-endian.
+.TP
+.BI \-march= CPU[,+EXTENSION...]
+Select the accepted instruction set using GNU
+.IR as -compatible
+CPU and extension names.  Extensions can be prefixed with
+.B no
+to disable them.  The special CPU names
+.B push
+and
+.B pop
+save and restore the current selection.
+.TP
+.BI \-mtune= CPU
+Validate and record a GNU-compatible scheduling CPU selection.  Instruction
+encoding is controlled by
+.BR \-march .
+.TP
+.B \--target-help
+List supported CPU and extension names.
+.TP
+.B \--target-info
+Print the configured object format, byte order, CPU selections, and ISA mask.
+.SH NOTES
+AES/PCLMUL, BMI/BMI2, AVX/AVX2, FMA, XOP, and VEX/EVEX/APX/AVX-512 encodings
+are outside this assembler's current classic IA-32 scope and are rejected.
+.SH SEE ALSO
+.BR cc (1),
+.BR ld (1),
+.BR nm (1)

@@ -69,6 +69,7 @@
 #include <ranlib.h>
 #include <a.out.h>
 #include "../aoutio.h"
+#include <elf32.h>
 
 #ifdef CROSS
 #   include "../ar/archive.h"
@@ -137,6 +138,154 @@ unsigned int fgetword (
         return aout_get32(f);
 }
 
+static unsigned
+elf_get16(const unsigned char *p, int big)
+{
+	if (big)
+		return ((unsigned)p[0] << 8) | p[1];
+	return p[0] | ((unsigned)p[1] << 8);
+}
+
+static unsigned
+elf_get32(const unsigned char *p, int big)
+{
+	if (big)
+		return ((unsigned)p[0] << 24) | ((unsigned)p[1] << 16) |
+		    ((unsigned)p[2] << 8) | p[3];
+	return p[0] | ((unsigned)p[1] << 8) | ((unsigned)p[2] << 16) |
+	    ((unsigned)p[3] << 24);
+}
+
+static int
+elf_range_ok(unsigned size, unsigned off, unsigned len)
+{
+	return off <= size && len <= size - off;
+}
+
+static void
+ranlib_add(const char *name, int len, off_t member_off)
+{
+	RLIB *rp;
+
+	if (len <= 0)
+		return;
+	if (len > 255) {
+		errno = EINVAL;
+		error(archive);
+	}
+	rp = (RLIB *)emalloc(sizeof(RLIB));
+	rp->next = NULL;
+	rp->pos = member_off;
+	rp->symlen = len;
+	rp->sym = (char *)emalloc(len + 1);
+	bcopy(name, rp->sym, len);
+	rp->sym[len] = 0;
+	tsymlen += len;
+	*pnext = rp;
+	pnext = &rp->next;
+	++symcnt;
+}
+
+/*
+ * Add global and weak definitions from an ELF32 archive member.
+ * Return zero for a non-ELF member and one for a recognized ELF member.
+ */
+static int
+relf(int rfd, off_t r_off, off_t w_off)
+{
+	unsigned char *data;
+	unsigned size, machine, shoff, shnum, shentsize;
+	unsigned i;
+	int big;
+	ssize_t got;
+	unsigned done;
+
+	size = chdr.size;
+	if (size < sizeof(Elf32_Ehdr))
+		return 0;
+	data = emalloc(size);
+	if (lseek(rfd, r_off, SEEK_SET) == (off_t)-1)
+		error(archive);
+	for (done = 0; done < size; done += got) {
+		got = read(rfd, data + done, size - done);
+		if (got <= 0) {
+			free(data);
+			if (got == 0)
+				errno = EINVAL;
+			error(archive);
+		}
+	}
+	if (data[0] != ELFMAG0 || data[1] != ELFMAG1 ||
+	    data[2] != ELFMAG2 || data[3] != ELFMAG3) {
+		free(data);
+		return 0;
+	}
+	if (data[4] != ELFCLASS32 ||
+	    (data[EI_DATA] != ELFDATA2LSB && data[EI_DATA] != ELFDATA2MSB)) {
+		free(data);
+		errno = EINVAL;
+		error(archive);
+	}
+	big = data[EI_DATA] == ELFDATA2MSB;
+	machine = elf_get16(data + 18, big);
+	if (elf_get16(data + 16, big) != ET_REL ||
+	    (machine != EM_MIPS && machine != EM_386)) {
+		free(data);
+		errno = EINVAL;
+		error(archive);
+	}
+	shoff = elf_get32(data + 32, big);
+	shentsize = elf_get16(data + 46, big);
+	shnum = elf_get16(data + 48, big);
+	if (shentsize < sizeof(Elf32_Shdr) ||
+	    !elf_range_ok(size, shoff, shnum * shentsize)) {
+		free(data);
+		errno = EINVAL;
+		error(archive);
+	}
+	for (i = 0; i < shnum; i++) {
+		unsigned char *sh = data + shoff + i * shentsize;
+		unsigned symoff, symsize, symentsize, link;
+		unsigned stroff, strsize, nsym, j;
+
+		if (elf_get32(sh + 4, big) != SHT_SYMTAB)
+			continue;
+		symoff = elf_get32(sh + 16, big);
+		symsize = elf_get32(sh + 20, big);
+		link = elf_get32(sh + 24, big);
+		symentsize = elf_get32(sh + 36, big);
+		if (symentsize < sizeof(Elf32_Sym) || link >= shnum ||
+		    !elf_range_ok(size, symoff, symsize))
+			continue;
+		sh = data + shoff + link * shentsize;
+		if (elf_get32(sh + 4, big) != SHT_STRTAB)
+			continue;
+		stroff = elf_get32(sh + 16, big);
+		strsize = elf_get32(sh + 20, big);
+		if (!elf_range_ok(size, stroff, strsize))
+			continue;
+		nsym = symsize / symentsize;
+		for (j = 1; j < nsym; j++) {
+			unsigned char *sym = data + symoff + j * symentsize;
+			unsigned name = elf_get32(sym, big);
+			unsigned shndx = elf_get16(sym + 14, big);
+			unsigned bind = ELF_ST_BIND(sym[12]);
+			const char *sname, *end;
+
+			if ((bind != STB_GLOBAL && bind != STB_WEAK) ||
+			    shndx == SHN_UNDEF || name == 0 || name >= strsize)
+				continue;
+			sname = (const char *)data + stroff + name;
+			end = memchr(sname, 0, strsize - name);
+			if (!end)
+				continue;
+			ranlib_add(sname, end - sname, w_off);
+		}
+	}
+	free(data);
+	return 1;
+}
+
 /*
  * Read a symbol table entry.
  * Return a number of bytes read, 0 on end of table or -1 on EOF.
@@ -181,7 +330,6 @@ void rexec(
 	int rfd,
 	int wfd)
 {
-	register RLIB *rp;
 	long nsyms;
 	register int nr, symlen;
 	struct exec ebuf;
@@ -190,6 +338,8 @@ void rexec(
 	/* Get current offsets for original and tmp files. */
 	r_off = lseek(rfd, (off_t)0, SEEK_CUR);
 	w_off = lseek(wfd, (off_t)0, SEEK_CUR);
+	if (relf(rfd, r_off, w_off))
+		goto bad1;
 
 	/* Read in exec structure. */
 	nr = aout_read_exec_fd(rfd, &ebuf);
@@ -233,18 +383,7 @@ void rexec(
 		if ((type & N_TYPE) == N_UNDF && ! value)
 			continue;
 
-		rp = (RLIB *)emalloc(sizeof(RLIB));
-		rp->next = NULL;
-		rp->pos = w_off;
-		rp->symlen = symlen;
-		rp->sym = (char*) emalloc(symlen + 1);
-		bcopy(name, rp->sym, symlen + 1);
-		tsymlen += symlen;
-
-		/* Build in forward order for "ar -m" command. */
-		*pnext = rp;
-		pnext = &rp->next;
-		++symcnt;
+		ranlib_add(name, symlen, w_off);
 	}
 bad1:	(void)lseek(rfd, (off_t)r_off, SEEK_SET);
 }

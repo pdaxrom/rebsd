@@ -188,8 +188,6 @@ file /root/utility-src/aoutio.c
 
 file /root/utility-src/aoutio.h
 
-file /root/utility-src/elf32_mips.h
-
 file /root/utility-src/basename.c
 
 file /root/utility-src/size.c

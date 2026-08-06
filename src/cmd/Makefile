@@ -129,7 +129,7 @@ size strip: %: %.o aoutio.o
 		$(SIZE) $@.elf
 		$(ELF2AOUT) $@.elf $@ && /bin/rm $@.elf
 
-size.o strip.o: elf32_mips.h
+size.o strip.o: $(TOPSRC)/include/elf32.h
 
 off64-smoke-gcc: $(TOPSRC)/sys/mips/rootfs/root/off64-smoke.c
 

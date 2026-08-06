@@ -34,7 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "../aoutio.h"
-#include "../elf32_mips.h"
+#include <elf32.h>
 
 #define WORDSZ 4 /* word size in bytes */
 #ifdef TARGET_VR4300

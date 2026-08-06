@@ -11,6 +11,8 @@ OBJS            = archive.o ranlib.o aoutio.o
 MAN		= ranlib.0 ranlib.5.0
 MANSRC		= ranlib.1
 
+ranlib.o:       $(TOPSRC)/include/elf32.h
+
 all:            ranlib $(MAN)
 
 ranlib:         ${OBJS}

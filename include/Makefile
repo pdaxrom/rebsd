@@ -18,7 +18,7 @@
 #
 DESTDIR=
 SUBDIRS=arpa pascal protocols OLD
-STD=	a.out.h ar.h assert.h ctype.h curses.h disktab.h fcntl.h \
+STD=	a.out.h ar.h assert.h ctype.h curses.h disktab.h elf32.h fcntl.h \
 	fstab.h grp.h iso646.h lastlog.h math.h memory.h mp.h mtab.h \
 	ndbm.h netdb.h nlist.h pcc.h pwd.h ranlib.h resolv.h setjmp.h \
 	sgtty.h short_names.h stab.h stdio.h string.h strings.h \

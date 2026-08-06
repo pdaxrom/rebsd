@@ -186,8 +186,7 @@ MIPS_UTILITY_SMOKE_SRCS = $(TOPSRC)/src/cmd/basename.c \
                          $(TOPSRC)/src/cmd/sum.c \
                          $(TOPSRC)/src/cmd/size.c \
                          $(TOPSRC)/src/cmd/aoutio.c \
-                         $(TOPSRC)/src/cmd/aoutio.h \
-                         $(TOPSRC)/src/cmd/elf32_mips.h
+                         $(TOPSRC)/src/cmd/aoutio.h
 MIPS_TERMCAP = $(TOPSRC)/src/libtermlib/termcap/termcap.small
 MIPS_MAGIC_DB = $(TOPSRC)/src/libmagic/magic.mgc.$(MIPS_ROOTFS_ENDIAN)
 MIPS_MAKEWHATIS_SED = $(TOPSRC)/src/man/makewhatis.sed
@@ -366,7 +365,7 @@ MIPS_NATIVE_TOOL_SRCS = $(MIPS_NATIVE_MKHOSTINCLUDE) $(MIPS_NATIVE_CC_SCRIPT) \
                        $(TOPSRC)/src/cmd/nm/nm.c \
                        $(TOPSRC)/src/cmd/size.c \
                        $(TOPSRC)/src/cmd/strip.c \
-                       $(TOPSRC)/src/cmd/elf32_mips.h \
+                       $(TOPSRC)/include/elf32.h \
                        $(TOPSRC)/src/cmd/aoutio.c \
                        $(TOPSRC)/src/cmd/aoutio.h \
                        $(TOPSRC)/include/a.out.h \
@@ -1203,7 +1202,8 @@ $(MIPS_NATIVE_HOST_INCLUDE_STAMP): $(MIPS_NATIVE_MKHOSTINCLUDE) \
 
 $(MIPS_NATIVE_AS): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/a.out.h
+    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/a.out.h \
+    $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc -DCROSS $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
@@ -1211,7 +1211,8 @@ $(MIPS_NATIVE_AS): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 
 $(MIPS_NATIVE_LD): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/a.out.h
+    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/a.out.h \
+    $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc -DCROSS $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
@@ -1256,7 +1257,7 @@ $(MIPS_NATIVE_AOUT_AR): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 
 $(MIPS_NATIVE_AOUT_RANLIB): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/ranlib/ranlib.c $(TOPSRC)/src/cmd/ar/archive.c \
-    $(TOPSRC)/src/cmd/ar/extern.h
+    $(TOPSRC)/src/cmd/ar/extern.h $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc -DCROSS $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
@@ -1266,7 +1267,7 @@ $(MIPS_NATIVE_AOUT_RANLIB): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 
 $(MIPS_NATIVE_AOUT_NM): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/src/cmd/elf32_mips.h
+    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc -DCROSS $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
@@ -1275,7 +1276,7 @@ $(MIPS_NATIVE_AOUT_NM): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 
 $(MIPS_NATIVE_AOUT_SIZE): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/src/cmd/elf32_mips.h
+    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
@@ -1283,7 +1284,7 @@ $(MIPS_NATIVE_AOUT_SIZE): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 
 $(MIPS_NATIVE_AOUT_STRIP): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/src/cmd/elf32_mips.h
+    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \

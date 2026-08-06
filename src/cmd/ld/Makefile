@@ -14,6 +14,8 @@ OBJS            = ld.o aoutio.o
 MAN		= ld.0
 MANSRC		= ld.1
 
+ld.o:           $(TOPSRC)/include/elf32.h
+
 all:            ld $(MAN)
 
 ld:             ${OBJS}

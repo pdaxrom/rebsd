@@ -13,6 +13,8 @@ OBJS            = as.o aoutio.o
 MAN             = as.0
 MANSRC          = as.1
 
+as.o:           $(TOPSRC)/include/elf32.h
+
 all:            as $(MAN)
 
 as:             ${OBJS}

@@ -23,7 +23,7 @@
 #include <a.out.h>
 #include <ar.h>
 #include "../aoutio.h"
-#include "../elf32_mips.h"
+#include <elf32.h>
 
 #ifdef CROSS
 #include "../ar/archive.h"
@@ -193,7 +193,8 @@ elf_read_ehdr_at(FILE *f, off_t base, Elf32_Ehdr *eh, int *le)
     eh->e_shentsize = elf_get16(b + 46, *le);
     eh->e_shnum = elf_get16(b + 48, *le);
     eh->e_shstrndx = elf_get16(b + 50, *le);
-    return eh->e_machine == EM_MIPS && eh->e_version == EV_CURRENT;
+    return (eh->e_machine == EM_MIPS || eh->e_machine == EM_386) &&
+        eh->e_version == EV_CURRENT;
 }
 
 static int
