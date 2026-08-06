@@ -5,8 +5,8 @@
 # profile removes video, controller input, ROMFS, and native PCC workloads so
 # USB Ethernet can be exercised with the smallest useful userland.
 #
-N64_KERNEL_COMPILER := pcc
-N64_USERLAND_COMPILER := gcc
+KERNEL_COMPILER := pcc
+USERLAND_COMPILER := gcc
 N64_USERLAND_CPU := vr4300
 N64_USERLAND_FLOAT := hard
 N64_USERLAND_ENDIAN := big

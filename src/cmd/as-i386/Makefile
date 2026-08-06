@@ -7,7 +7,7 @@ include $(TOPSRC)/target.mk
 CFLAGS         += -Werror -Wall -Os
 HOST_CC        ?= cc
 I686_PREFIX    ?= i686-elf-
-BYTE_TESTS      = basic pcc pic resolve reloc16 isa simd-full x87 legacy vendor \
+BYTE_TESTS      = basic pcc pic resolve reloc16 isa simd-full x87 legacy vendor statements \
 		  options cpu-options
 
 OBJS            = as.o
@@ -63,6 +63,8 @@ test:
 		$(I686_PREFIX)readelf -h -S -s -r tests/pic.o
 		@$(I686_PREFIX)readelf -r tests/reloc16.o | grep -q R_386_16
 		@$(I686_PREFIX)readelf -r tests/reloc16.o | grep -q R_386_8
+		@$(I686_PREFIX)readelf -s tests/statements.o | \
+		    grep -Eq 'WEAK.*weak_target'
 		@set -e; for t in $(BYTE_TESTS) cyrix vendor-netbsd; do \
 		    $(I686_PREFIX)objdump -dr tests/$$t.o > tests/$$t.dis; \
 		done

@@ -387,7 +387,7 @@ The kernel is compiled with `-msoft-float` so normal C code does not emit FPU
 instructions. The FPU save/restore assembly and N64 userland are built with
 hard-float support.
 
-GCC remains the default kernel compiler.  `N64_KERNEL_COMPILER=pcc` is an
+GCC remains the default kernel compiler.  `KERNEL_COMPILER=pcc` is an
 explicit gate.  In that mode, PCC compiles kernel C to assembly, the ReBSD
 assembler assembles it as ELF big-endian VR4300 code, and the final kernel link
 uses the ReBSD linker in ELF mode:
@@ -554,10 +554,10 @@ Full PCC userland builds need a larger root image than the historical default.
 The current build gate uses 32768 KiB and covers both kernel compiler choices:
 
 ```
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc \
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc \
     N64_ROOTFS_KBYTES=32768 kernel.z64
 
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc \
     N64_ROOTFS_KBYTES=32768 kernel.z64
 ```
 
@@ -570,8 +570,8 @@ hard-float a.out userland.  The architecture entry point creates a clean
 out-of-tree profile automatically:
 
 ```
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc \
-    N64_USERLAND_COMPILER=pcc N64_USERLAND_CPU=vr4300 \
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=gcc \
+    USERLAND_COMPILER=pcc N64_USERLAND_CPU=vr4300 \
     N64_USERLAND_FLOAT=hard N64_USERLAND_EXEC_FORMAT=aout \
     N64_PCC_DEBUG_ROOTFS_KBYTES=6144 pcc-debug-image
 ```
@@ -1291,7 +1291,7 @@ make -C sys/mips BOARD=n64 N64_ROOTFS_KBYTES=24576 kernel.z64
 Full PCC userland currently requires 32768 KiB:
 
 ```
-make -C sys/mips BOARD=n64 N64_USERLAND_COMPILER=pcc \
+make -C sys/mips BOARD=n64 USERLAND_COMPILER=pcc \
     N64_ROOTFS_KBYTES=32768 kernel.z64
 ```
 
@@ -1345,7 +1345,7 @@ The reproducible GCC-kernel/PCC-userland hardware-test build is:
 
 ```sh
 make -C sys/mips BOARD=n64 O=/work/rebsd-hw/n64-vm-pcc-min \
-    N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc \
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
     N64_USERLAND_ENDIAN=big N64_USERLAND_EXEC_FORMAT=aout \
     N64_MINIMAL_ROOTFS=1 N64_MINIMAL_PCC_SMOKE=1 \

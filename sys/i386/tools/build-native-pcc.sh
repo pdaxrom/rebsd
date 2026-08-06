@@ -1,17 +1,16 @@
 #!/bin/sh
 set -e
 
-if [ "$#" -ne 6 ]; then
-	echo "usage: $0 topsrc workdir stage include-dir runtime-dir ldscript" >&2
+if [ "$#" -ne 5 ]; then
+	echo "usage: $0 topsrc workdir include-dir runtime-dir ldscript" >&2
 	exit 2
 fi
 
 topsrc=$1
 workdir=$2
-stage=$3
-incdir=$4
-runtime_dir=$5
-ldscript=$6
+incdir=$3
+runtime_dir=$4
+ldscript=$5
 hostcc=${HOSTCC:-cc}
 make=${REBSD_REAL_MAKE:-${MAKE:-make}}
 target=i386-rebsd
@@ -29,7 +28,7 @@ syslib=$workdir/syslib
 native_build=$workdir/native-build
 native_out=$workdir/native
 
-for path in "$topsrc" "$stage" "$incdir" "$runtime_dir"; do
+for path in "$topsrc" "$incdir" "$runtime_dir"; do
 	test -d "$path"
 done
 test -f "$ldscript"
@@ -121,22 +120,9 @@ cp -p "$syslib/crt0.o" "$syslib/libc.a" "$syslib/libm.a" \
 	TARGET_CC="$cross_pcc" TARGET_LD="$tools/ld" \
 	LDSCRIPT="$ldscript" CRT0="$syslib/crt0.o" LIBDIR="$syslib" all
 
-mkdir -p "$stage/usr/bin" "$stage/usr/libexec/pcc" \
-	"$stage/usr/lib/pcc/i386-pc-rebsd/$version/include" \
-	"$stage/usr/lib/pcc/i386-pc-rebsd/$version/lib"
-cp -p "$native_out/cc" "$stage/usr/bin/cc"
-cp -p "$native_out/cc" "$stage/usr/bin/pcc"
-cp -p "$native_out/cc" "$stage/usr/bin/cpp"
-cp -p "$native_out/cpp" "$stage/usr/libexec/pcc/cpp"
-cp -p "$native_out/ccom" "$stage/usr/libexec/pcc/ccom"
-cp -p "$syslib/libpcc.a" "$stage/usr/lib/libpcc.a"
-cp -p "$syslib/libpcc.a" \
-	"$stage/usr/lib/pcc/i386-pc-rebsd/$version/lib/libpcc.a"
-
 "$cross_pcc" -march=i686 -c -o "$workdir/host-smoke.o" \
 	"$topsrc/sys/i386/pc/rootfs/root/pcc-smoke.c"
 test -s "$workdir/host-smoke.o"
-for tool in "$stage/usr/bin/cc" "$stage/usr/bin/pcc" \
-	"$stage/usr/libexec/pcc/cpp" "$stage/usr/libexec/pcc/ccom"; do
+for tool in "$native_out/cc" "$native_out/cpp" "$native_out/ccom"; do
 	test -x "$tool"
 done

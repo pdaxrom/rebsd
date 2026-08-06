@@ -36,8 +36,8 @@ layout, parallel-build rules, and make compatibility.
 The shared MIPS rootfs rules support these compiler and ABI selectors:
 
 ```text
-MIPS_ROOTFS_COMPILER=gcc|pcc
-MIPS_KERNEL_COMPILER=gcc|pcc
+USERLAND_COMPILER=gcc|pcc
+KERNEL_COMPILER=gcc|pcc
 MIPS_ROOTFS_CPU=vr4300|mips32r2
 MIPS_ROOTFS_FLOAT=hard|soft
 MIPS_ROOTFS_ENDIAN=big|little
@@ -49,15 +49,15 @@ The normal big-endian boards are:
 make tools
 make -C sys/mips BOARD=malta rootfs.img kernel
 make -C sys/mips BOARD=malta64 rootfs.img kernel
-make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
-make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
+make -C sys/mips BOARD=malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc kernel
+make -C sys/mips BOARD=malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc kernel
 ```
 
 The little-endian board supports GCC and PCC:
 
 ```sh
 make -C sys/mips BOARD=maltael rootfs.img kernel
-make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
+make -C sys/mips BOARD=maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc rootfs.img kernel
 ```
 
 ## Time-of-day clocks
@@ -139,19 +139,19 @@ The full PCC QEMU smoke gate is `pcc-smoke-all-runtime`.  It boots QEMU,
 runs `/root/pcc-smoke-all.sh`, and expects `PCC_SMOKE_ALL_RC:0`:
 
 ```sh
-make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
-make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
-make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
-make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
-make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
-make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
 ```
 
 For the hardware-image build gates used by the VM matrix:
 
 ```sh
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 all
-make -C sys/mips BOARD=ci20 MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc all
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 all
+make -C sys/mips BOARD=ci20 KERNEL_COMPILER=gcc USERLAND_COMPILER=gcc all
 ```
 
 Focused VM gates build every required artifact in the selected object root,
@@ -192,27 +192,27 @@ Use separate object roots for the GCC and PCC userland gates:
 ```sh
 make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
     MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=32M \
-    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 all
 make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
     MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=64M \
-    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=pcc \
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc \
     MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_EXEC_FORMAT=aout \
     MIPS_ROOTFS_KBYTES=32768 all
 make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-pcc-pcc \
     MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=64M \
-    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc \
     MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_EXEC_FORMAT=aout \
     MIPS_ROOTFS_KBYTES=32768 all
 
 make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc \
     MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=32M \
-    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc \
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=gcc \
     MIPS_ROOTFS_NATIVE_PCC=0 MIPS_ROOTFS_KBYTES=16384 \
     VM_STRESS_ITERATIONS=100 vm-stress-runtime
 make -C sys/mips BOARD=malta64 O=/work/rebsd-qemu/n64-8m-gcc-pcc \
     MALTA_MEMORY_PROFILE=n64-8m MALTA_QEMU_RAM=64M \
-    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=pcc \
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc \
     MIPS_ROOTFS_NATIVE_PCC=1 MIPS_ROOTFS_EXEC_FORMAT=aout \
     MIPS_ROOTFS_KBYTES=32768 native-pcc-smoke-runtime
 ```
@@ -275,7 +275,7 @@ For little-endian Malta, build the default GCC image or select PCC explicitly:
 
 ```
 make -C sys/mips BOARD=maltael rootfs.img kernel
-make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
+make -C sys/mips BOARD=maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc rootfs.img kernel
 ```
 
 The `maltael` config defaults to

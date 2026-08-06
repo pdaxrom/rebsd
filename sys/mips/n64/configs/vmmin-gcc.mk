@@ -4,8 +4,8 @@
 # Keep only the polling UART console, reset dump, compressed swap, and the
 # process/pressure smoke tools required by the final MMU hardware gate.
 #
-N64_KERNEL_COMPILER := gcc
-N64_USERLAND_COMPILER := gcc
+KERNEL_COMPILER := gcc
+USERLAND_COMPILER := gcc
 N64_USERLAND_CPU := vr4300
 N64_USERLAND_FLOAT := hard
 N64_USERLAND_ENDIAN := big

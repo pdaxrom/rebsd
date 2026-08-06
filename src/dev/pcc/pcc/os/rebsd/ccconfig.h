@@ -5,8 +5,15 @@
  */
 
 /* common cpp predefines */
+#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
+#define PCC_REBSD_CPP_FORMAT "-D__ELF__",
+#else
+#define PCC_REBSD_CPP_FORMAT
+#endif
+
 #define CPPADD	{ \
 	"-T", \
+	PCC_REBSD_CPP_FORMAT \
 	"-D__ReBSD__", "-D__REBSD__", "-D__rebsd__", \
 	"-D__RETROBSD__", "-D__retrobsd__", \
 	"-D__BSD__", "-D__unix__", "-Dunix", \
@@ -243,9 +250,11 @@
 #define PCC_SETUP_LD_ARGS { \
 	strlist_append(&early_linker_flags, "--elf"); \
 	strlist_append(&early_linker_flags, "-X"); \
-	strlist_append(&early_linker_flags, "-T"); \
-	strlist_append(&early_linker_flags, \
-	    cat_sysroot(sysroot, LIBDIR "ldscripts/elf32-i386.ld")); \
+	if (!rflag) { \
+		strlist_append(&early_linker_flags, "-T"); \
+		strlist_append(&early_linker_flags, \
+		    cat_sysroot(sysroot, LIBDIR "ldscripts/elf32-i386.ld")); \
+	} \
 }
 
 #else

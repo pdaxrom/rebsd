@@ -72,8 +72,8 @@ def main():
         ("maltael", {}),
     )
     minimal = {
-        "MIPS_KERNEL_COMPILER": "gcc",
-        "MIPS_ROOTFS_COMPILER": "gcc",
+        "KERNEL_COMPILER": "gcc",
+        "USERLAND_COMPILER": "gcc",
         "MIPS_ROOTFS_NATIVE_PCC": "0",
         "MIPS_ROOTFS_PROFILE": "minimal",
         "MIPS_ROOTFS_KBYTES": "6144",

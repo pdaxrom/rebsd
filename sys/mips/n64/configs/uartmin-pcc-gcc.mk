@@ -2,8 +2,8 @@
 # Minimal N64 hardware-test image: PCC kernel assembled and linked by the
 # native ReBSD MIPS tools, with the known-good GCC userland.
 #
-N64_KERNEL_COMPILER := pcc
-N64_USERLAND_COMPILER := gcc
+KERNEL_COMPILER := pcc
+USERLAND_COMPILER := gcc
 N64_USERLAND_CPU := vr4300
 N64_USERLAND_FLOAT := hard
 N64_USERLAND_ENDIAN := big

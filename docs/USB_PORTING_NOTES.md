@@ -39,7 +39,7 @@ The following clean out-of-tree Ci20 build completed successfully on
 
 ```sh
 make -C sys/mips BOARD=ci20 \
-    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc all
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=gcc all
 ```
 
 The generated object profile is
@@ -50,7 +50,7 @@ The corresponding PCC baseline also completed successfully:
 
 ```sh
 make -C sys/mips BOARD=ci20 \
-    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc all
+    KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc all
 ```
 
 The generated object profile is

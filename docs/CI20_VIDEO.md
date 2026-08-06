@@ -126,7 +126,7 @@ bank.
 ```sh
 sh sys/tests/vm/smoke-vm.sh test
 make -C sys/mips BOARD=ci20 \
-    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc all
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=gcc all
 ```
 
 The VM suite builds and validates both the legacy 256 MiB map and the full

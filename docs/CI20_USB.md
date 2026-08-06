@@ -330,7 +330,7 @@ Build the GCC Ci20 image with the normal project command:
 
 ```sh
 make -C sys/mips BOARD=ci20 \
-    MIPS_KERNEL_COMPILER=gcc MIPS_ROOTFS_COMPILER=gcc kernel
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=gcc kernel
 ```
 
 The object profile places the result at

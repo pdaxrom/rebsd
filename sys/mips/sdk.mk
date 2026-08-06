@@ -32,7 +32,7 @@ MIPS_SDK_TMP ?= $(if $(TMPDIR),$(TMPDIR),/tmp)
 MIPS_SDK_BUILD ?= $(if $(TOPOBJ),$(TOPOBJ)/toolchain/cross-pcc-build.$(MIPS_SDK_ABI),$(MIPS_SDK_TMP)/rebsd-cross-pcc-build.$(MIPS_SDK_ABI))
 MIPS_SDK_PREFIX ?= $(if $(TOPOBJ),$(TOPOBJ)/toolchain/cross-pcc-install.$(MIPS_SDK_ABI),$(MIPS_SDK_TMP)/rebsd-cross-pcc-install.$(MIPS_SDK_ABI))
 
-MIPS_ROOTFS_COMPILER = pcc
+USERLAND_COMPILER = pcc
 MIPS_ROOTFS_CPU = $(MIPS_SDK_CPU)
 MIPS_ROOTFS_FLOAT = $(MIPS_SDK_FLOAT)
 MIPS_ROOTFS_ENDIAN = $(MIPS_SDK_ENDIAN)

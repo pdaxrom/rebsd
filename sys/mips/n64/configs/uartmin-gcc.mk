@@ -1,8 +1,8 @@
 #
 # Minimal N64 hardware-test image: one GCC-built kernel and GCC userland.
 #
-N64_KERNEL_COMPILER := gcc
-N64_USERLAND_COMPILER := gcc
+KERNEL_COMPILER := gcc
+USERLAND_COMPILER := gcc
 N64_USERLAND_CPU := vr4300
 N64_USERLAND_FLOAT := hard
 N64_USERLAND_ENDIAN := big

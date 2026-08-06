@@ -18,18 +18,18 @@ echo PCC_I686_SMOKE_STEP cpp
 cpp /root/pcc-smoke.c > "$tmp.i"
 grep 'i686 pcc smoke ok' "$tmp.i" >/dev/null
 echo PCC_I686_SMOKE_STEP cc-S
-cc -v -S -o "$tmp.s" /root/pcc-smoke.c
+cc -O -v -S -o "$tmp.s" /root/pcc-smoke.c
 echo PCC_I686_SMOKE_STEP as
 as --32 -o "$tmp.o" "$tmp.s"
 echo PCC_I686_SMOKE_STEP ld-r
 ld -r -o "$tmp.ro" "$tmp.o"
 test -s "$tmp.ro"
 echo PCC_I686_SMOKE_STEP cc-link
-cc -o "$tmp" /root/pcc-smoke.c
+cc -O -o "$tmp" /root/pcc-smoke.c
 echo PCC_I686_SMOKE_STEP cc-run
 "$tmp" | grep 'i686 pcc smoke ok' >/dev/null
 echo PCC_I686_SMOKE_STEP pcc-link
-pcc -o "$tmp" /root/pcc-smoke.c
+pcc -O -o "$tmp" /root/pcc-smoke.c
 echo PCC_I686_SMOKE_STEP pcc-run
 "$tmp" | grep 'i686 pcc smoke ok' >/dev/null
 echo PCC_I686_SELFHOST_OK

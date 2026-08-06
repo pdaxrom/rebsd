@@ -17,8 +17,8 @@ endif
 MALTA_CPU_TUNE ?= $(if $(MALTA_PORT64),r4000,24kf)
 MIPS_ARCH_ENDIAN ?= $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),-EL,-EB)
 MIPS_ARCH ?= $(if $(MALTA_PORT64),$(MIPS_ARCH_ENDIAN) -mips3 -mabi=32 -mtune=$(MALTA_CPU_TUNE),$(MIPS_ARCH_ENDIAN) -mips32 -mabi=32 -mtune=$(MALTA_CPU_TUNE))
-MALTA_QEMU_RAM ?= $(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),64M,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),64M,32M))
-MALTA_RAM_KBYTES ?= $(if $(MALTA_N64_8M_PROFILE),8192,$(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),65536,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),65536,32768)))
+MALTA_QEMU_RAM ?= $(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),64M,$(if $(filter pcc,$(USERLAND_COMPILER)),64M,32M))
+MALTA_RAM_KBYTES ?= $(if $(MALTA_N64_8M_PROFILE),8192,$(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),65536,$(if $(filter pcc,$(USERLAND_COMPILER)),65536,32768)))
 ifneq ($(MALTA_N64_8M_PROFILE),)
 ifneq ($(MALTA_RAM_KBYTES),8192)
 $(error MALTA_MEMORY_PROFILE=n64-8m requires MALTA_RAM_KBYTES=8192)
@@ -55,19 +55,14 @@ MALTA64_STAGE_LDFLAGS ?= -m elf64btsmip -nostdlib
 MALTA64_LLVM_BINDIR ?= /opt/homebrew/opt/llvm/bin
 MALTA64_STAGE_SIZE ?= $(MALTA64_LLVM_BINDIR)/llvm-size
 MALTA64_STAGE_OBJDUMP ?= $(MALTA64_LLVM_BINDIR)/llvm-objdump
-MIPS_ROOTFS_COMPILER ?= $(if $(N64_USERLAND_COMPILER),$(N64_USERLAND_COMPILER),gcc)
-MIPS_ROOTFS_COMPILERS = gcc pcc
-ifneq ($(N64_USERLAND_COMPILER),)
-ifneq ($(MIPS_ROOTFS_COMPILER),$(N64_USERLAND_COMPILER))
-$(error MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER) conflicts with N64_USERLAND_COMPILER=$(N64_USERLAND_COMPILER))
-endif
-endif
-ifeq ($(filter $(MIPS_ROOTFS_COMPILER),$(MIPS_ROOTFS_COMPILERS)),)
-$(error Unsupported MIPS_ROOTFS_COMPILER=$(MIPS_ROOTFS_COMPILER); expected one of $(MIPS_ROOTFS_COMPILERS))
+USERLAND_COMPILER ?= gcc
+USERLAND_COMPILERS = gcc pcc
+ifeq ($(filter $(USERLAND_COMPILER),$(USERLAND_COMPILERS)),)
+$(error Unsupported USERLAND_COMPILER=$(USERLAND_COMPILER); expected one of $(USERLAND_COMPILERS))
 endif
 MIPS_ROOTFS_PROFILE ?= full
 MIPS_ROOTFS_NATIVE_PCC ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),0,1)
-MIPS_ROOTFS_KBYTES ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),6144,$(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),32768,$(if $(filter pcc,$(MIPS_ROOTFS_COMPILER)),32768,16384)))
+MIPS_ROOTFS_KBYTES ?= $(if $(filter minimal,$(MIPS_ROOTFS_PROFILE)),6144,$(if $(filter 1,$(MIPS_ROOTFS_NATIVE_PCC)),32768,$(if $(filter pcc,$(USERLAND_COMPILER)),32768,16384)))
 MIPS_ROOTFS_CPU ?= $(if $(N64_USERLAND_CPU),$(N64_USERLAND_CPU),$(if $(MALTA_PORT64),vr4300,mips32r2))
 MIPS_ROOTFS_CPUS = vr4300 mips32r2
 ifneq ($(N64_USERLAND_CPU),)
@@ -109,10 +104,10 @@ ifeq ($(filter $(MIPS_ROOTFS_EXEC_FORMAT),$(MIPS_ROOTFS_EXEC_FORMATS)),)
 $(error Unsupported MIPS_ROOTFS_EXEC_FORMAT=$(MIPS_ROOTFS_EXEC_FORMAT); expected one of $(MIPS_ROOTFS_EXEC_FORMATS))
 endif
 MIPS_ROOTFS_ABI = $(MIPS_ROOTFS_ENDIAN).$(MIPS_ROOTFS_CPU).$(MIPS_ROOTFS_FLOAT).$(MIPS_ROOTFS_EXEC_FORMAT)
-MIPS_KERNEL_COMPILER ?= gcc
-MIPS_KERNEL_COMPILERS = gcc pcc
-ifeq ($(filter $(MIPS_KERNEL_COMPILER),$(MIPS_KERNEL_COMPILERS)),)
-$(error Unsupported MIPS_KERNEL_COMPILER=$(MIPS_KERNEL_COMPILER); expected one of $(MIPS_KERNEL_COMPILERS))
+KERNEL_COMPILER ?= gcc
+KERNEL_COMPILERS = gcc pcc
+ifeq ($(filter $(KERNEL_COMPILER),$(KERNEL_COMPILERS)),)
+$(error Unsupported KERNEL_COMPILER=$(KERNEL_COMPILER); expected one of $(KERNEL_COMPILERS))
 endif
 MIPS_ROOTFS_COMMON_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
 MIPS_ROOTFS_BOARD_MANIFEST ?= $(TOPSRC)/sys/mips/malta/rootfs.manifest
@@ -172,7 +167,7 @@ VM_STRESS_LOG ?= $(TOPOBJ)/tests/vm-stress.$(MIPS_ROOTFS_ABI).log
 VM_PRESSURE_LOG ?= $(TOPOBJ)/tests/vm-pressure.$(MIPS_ROOTFS_ABI).log
 VM_PRESSURE_ARGS ?= -s
 VM_PRESSURE_SMOKE_DIR ?= \
-    $(TOPOBJ)/tests/vm-pressure-smoke.$(MIPS_ROOTFS_COMPILER).$(MIPS_ROOTFS_ABI)
+    $(TOPOBJ)/tests/vm-pressure-smoke.$(USERLAND_COMPILER).$(MIPS_ROOTFS_ABI)
 VM_PRESSURE_SMOKE_OBJ = $(VM_PRESSURE_SMOKE_DIR)/vm-pressure-smoke.o
 VM_PRESSURE_SMOKE_LINKED = $(VM_PRESSURE_SMOKE_DIR)/vm-pressure-smoke.linked
 VM_PRESSURE_SMOKE_BIN = $(VM_PRESSURE_SMOKE_DIR)/usr/bin/vm-pressure-smoke
@@ -284,7 +279,7 @@ KERNEL_COMPILER_DEPS =
 COMPILE_C       = ${KERNEL_CC} ${CFLAGS} -c $<
 COMPILE_VERS_C  = ${KERNEL_CC} ${VERS_CFLAGS} -MT vers.o -MP -MD \
                   -MF .deps/vers.dep -c vers.c -o vers.o
-ifeq ($(MIPS_KERNEL_COMPILER),pcc)
+ifeq ($(KERNEL_COMPILER),pcc)
 KERNEL_CC       = $(MIPS_PCC_CC) -march=$(MIPS_ROOTFS_CPU) -msoft-float \
                   -fomit-frame-pointer
 KERNEL_COMPILER_DEPS = $(MIPS_PCC_PROVIDER_DEPS)
@@ -304,10 +299,10 @@ SYSTEM_BUILD_USER ?= $(shell id -un 2>/dev/null || echo unknown)
 SYSTEM_BUILD_HOST ?= $(shell hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)
 SYSTEM_COMPILER_VERSION_gcc = $(shell $(firstword $(CC)) --version 2>/dev/null | sed -n '1p')
 SYSTEM_COMPILER_VERSION_pcc = $(shell $(firstword $(MIPS_PCC_CC)) -v 2>&1 | sed -n '/Portable C Compiler/{p;q;}')
-SYSTEM_COMPILER_VERSION = $(or $(SYSTEM_COMPILER_VERSION_$(MIPS_KERNEL_COMPILER)),unknown)
+SYSTEM_COMPILER_VERSION = $(or $(SYSTEM_COMPILER_VERSION_$(KERNEL_COMPILER)),unknown)
 SYSTEM_TOOLCHAIN_gcc = $(notdir $(firstword $(CC)))
 SYSTEM_TOOLCHAIN_pcc = $(notdir $(firstword $(MIPS_PCC_CC)))
-SYSTEM_TOOLCHAIN = $(or $(SYSTEM_TOOLCHAIN_$(MIPS_KERNEL_COMPILER)),unknown)
+SYSTEM_TOOLCHAIN = $(or $(SYSTEM_TOOLCHAIN_$(KERNEL_COMPILER)),unknown)
 SYSTEM_BUILD_NUMBER ?= $(or $(REBSD_BUILD_NUMBER),1)
 SYSTEM_KERNEL_IDENT ?= GENERIC
 SYSTEM_BUILD_DATE := $(or $(REBSD_BUILD_DATE),$(shell LC_ALL=C date '+%a %b %e %H:%M:%S %Z %Y'))
@@ -321,7 +316,7 @@ GENERATE_VERS = python3 $(VERSION_GENERATOR) --output vers.c \
                   --ident "$(SYSTEM_KERNEL_IDENT)" \
                   --build-number "$(SYSTEM_BUILD_NUMBER)" \
                   --build-date "$(SYSTEM_BUILD_DATE)" \
-                  --compiler "$(MIPS_KERNEL_COMPILER)" \
+                  --compiler "$(KERNEL_COMPILER)" \
                   --build-user "$(SYSTEM_BUILD_USER)" \
                   --build-host "$(SYSTEM_BUILD_HOST)" \
                   --toolchain "$(SYSTEM_TOOLCHAIN)" \
@@ -343,7 +338,7 @@ COMPILE_FPU_S   = ${AS} ${FPU_ASFLAGS} $< -o $@
 include $(TOPSRC)/sys/mips/kernel-runtime.mk
 
 MALTA_PROFILE_OBJS =
-MALTA_BUILD_MODE_STAMP = .build-mode.$(MIPS_KERNEL_COMPILER).$(MALTA_MEMORY_PROFILE).$(MALTA_RAM_KBYTES).$(CI20_RAM_KBYTES).$(MIPS_ROOTFS_KBYTES).$(MIPS_TRACE).$(VM_DIAGNOSTIC)
+MALTA_BUILD_MODE_STAMP = .build-mode.$(KERNEL_COMPILER).$(MALTA_MEMORY_PROFILE).$(MALTA_RAM_KBYTES).$(CI20_RAM_KBYTES).$(MIPS_ROOTFS_KBYTES).$(MIPS_TRACE).$(VM_DIAGNOSTIC)
 SYSTEM_OBJ      = ${OBJS} $(MALTA_PROFILE_OBJS) ioconf.o rootfs.o $(MIPS_KERNEL_RUNTIME_OBJS)
 SYSTEM_DEP      = Makefile ioconf.c $(MALTA_KERNEL_LD_SCRIPT) \
                   $(TOPSRC)/sys/include/rebsd_version.h \

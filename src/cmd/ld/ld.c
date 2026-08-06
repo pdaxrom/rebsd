@@ -4532,7 +4532,6 @@ elf_write_relocatable(void)
             }
         }
     }
-
     shnum = 1 + nout;
     for (i = 0; i < nout; i++)
         if (out[i].nrel)
@@ -4704,15 +4703,21 @@ elf_write_output(void)
 {
     FILE *f;
     Elf32_Ehdr eh;
-    Elf32_Phdr ph[ELF_MAX_OUTSECS];
-    Elf32_Shdr sh[ELF_MAX_OUTSECS + 4];
+    Elf32_Phdr *ph;
+    Elf32_Shdr *sh;
     Elf32_Sym sym;
     struct wstrtab shstr, str;
-    unsigned ph_fileend[ELF_MAX_OUTSECS], ph_memend[ELF_MAX_OUTSECS];
+    unsigned *ph_fileend, *ph_memend;
     unsigned phnum, shnum, pos, off, symtab_idx, strtab_idx, shstr_idx;
     unsigned nsyms, first_global, entry;
     int i, idx;
 
+    ph = calloc(neout ? neout : 1, sizeof(*ph));
+    sh = calloc((neout ? neout : 1) + 4, sizeof(*sh));
+    ph_fileend = calloc(neout ? neout : 1, sizeof(*ph_fileend));
+    ph_memend = calloc(neout ? neout : 1, sizeof(*ph_memend));
+    if (!ph || !sh || !ph_fileend || !ph_memend)
+        error(2, "out of memory");
     wstr_init(&shstr);
     wstr_init(&str);
     for (i = 0; i < nephdr; i++)
@@ -4803,7 +4808,6 @@ elf_write_output(void)
     }
 
     shnum = 1;
-    memset(sh, 0, sizeof(sh));
     for (i = 0; i < neout; i++) {
         if (eout[i].size == 0)
             continue;
@@ -4946,6 +4950,10 @@ elf_write_output(void)
         elf_write_shdr_file(f, &sh[i]);
     fclose(f);
     chmod_executable_output();
+    free(ph_memend);
+    free(ph_fileend);
+    free(sh);
+    free(ph);
 }
 
 static int
@@ -5128,7 +5136,6 @@ elf_parse_args(int argc, char **argv)
     int i;
 
     ofilfnd = 0;
-    collectlibdirs(argc, argv);
     for (i = 1; i < argc; i++) {
         char *a = argv[i];
 

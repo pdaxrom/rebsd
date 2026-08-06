@@ -17,7 +17,7 @@ also keep required empty directories in Git.
 make -C sys/mips BOARD=malta64 O=/work/rebsd-malta64 all
 make -C sys/mips BOARD=maltael O=/work/rebsd-maltael all
 make -C sys/mips BOARD=n64 O=/work/rebsd-n64 \
-    N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc all
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc all
 ```
 
 Do not invoke `make` in `sys/mips/<board>`.  The board `Makefile`, `ioconf.c`,

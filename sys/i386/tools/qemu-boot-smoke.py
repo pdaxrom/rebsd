@@ -47,6 +47,7 @@ CORE_MARKERS = (
     "REBSD_I686_MD5_OK",
     "REBSD_I686_MEMDEV_OK",
     "REBSD_I686_AWK_OK",
+    "REBSD_I686_AWK_EXIT_OK",
     "REBSD_I686_FREE_OK",
     "REBSD_I686_TOP_OK",
     "/dev/ram0",
@@ -559,8 +560,8 @@ def main() -> None:
         ),
         (
             b"/usr/bin/awk 'BEGIN { print \"REBSD_I686_AWK_OK\" }' "
-            b"/etc/passwd\n",
-            b"\r\nREBSD_I686_AWK_OK\r\n",
+            b"/etc/passwd && echo REBSD_I686_AWK_EXIT_OK\n",
+            b"\r\nREBSD_I686_AWK_OK\r\nREBSD_I686_AWK_EXIT_OK\r\n",
         ),
         (
             b"/root/sh-function-smoke.sh && echo REBSD_I686_SH_FUNCTION_OK\n",

@@ -1495,6 +1495,7 @@ deltemp(NODE *p, void *arg)
 {
 	int (*aor)[2] = arg;
 	NODE *l;
+	TWORD t;
 
 	if (p->n_op == TEMP) {
 		if (aor[regno(p)][0] == 0) {
@@ -1508,11 +1509,18 @@ deltemp(NODE *p, void *arg)
 		p->n_op = PLUS;
 		l = p->n_left;
 		l->n_op = REG;
-		l->n_type = INCREF(l->n_type);
+		/*
+		 * Keep the type of the address expression.  The backing OREG may
+		 * use a scalar storage type after TEMP lowering, which must not
+		 * turn (for example) a pointer-to-structure into unsigned *.
+		 */
+		l->n_type = p->n_type;
 		p->n_right = mklnode(ICON, getlval(l), 0, INT);
 	} else if (p->n_op == ADDROF && p->n_left->n_op == UMUL) {
+		t = p->n_type;
 		l = p->n_left;
 		*p = *p->n_left->n_left;
+		p->n_type = t;
 		nfree(l->n_left);
 		nfree(l);
 	}

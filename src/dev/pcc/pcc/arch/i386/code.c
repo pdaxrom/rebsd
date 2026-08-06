@@ -266,6 +266,15 @@ mycallspec(struct callspec *cs)
 #endif
 	}
 	cs->stkadj = (parmoff-ARGINIT)/SZCHAR;
+	/*
+	 * The i386 ABI makes a structure-returning callee pop the hidden
+	 * result pointer (see eoftn()), while the caller still pops the
+	 * ordinary arguments.  Do not count that hidden word twice.
+	 */
+	if ((cs->rv.flags & RV_CALLEE) == 0 &&
+	    (cs->rv.flags & RV_STRET) != 0 &&
+	    (cs->rv.flags & RV_ARG0_REG) == 0)
+		cs->stkadj -= SZINT/SZCHAR;
 }
 #endif
 

@@ -1005,8 +1005,8 @@ main(int argc, char *argv[])
 			break;
 
 		case 'z':
-			argp = cat(argp, nxtopt(0));
 			strlist_append(&middle_linker_flags, argp);
+			strlist_append(&middle_linker_flags, nxtopt("-z"));
 			break;
 
 		}
@@ -5400,7 +5400,7 @@ setup_ld_flags(void)
 #endif
 	if (sysroot && *sysroot)
 		strlist_append(&early_linker_flags, cat("--sysroot=", sysroot));
-	if (!nostdlib) {
+	if (!nostdlib && !rflag) {
 		/* library search paths */
 		if (pcclibdir)
 			strlist_append(&late_linker_flags,
@@ -5422,7 +5422,7 @@ setup_ld_flags(void)
 				strlist_append(&late_linker_flags, deflibs[i]);
 		}
 	}
-	if (!nostartfiles) {
+	if (!nostartfiles && !rflag) {
 		if (Bstatic) {
 			b = CRTBEGIN_T;
 			e = CRTEND_T;

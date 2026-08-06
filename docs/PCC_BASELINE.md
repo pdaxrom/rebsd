@@ -13,7 +13,7 @@ before it can become a selectable userland compiler.
   intermediate format.
 - Default target ABI: big-endian MIPS o32.
 
-`N64_USERLAND_COMPILER` is the userland compiler selector. Its default is
+`USERLAND_COMPILER` is the userland compiler selector. Its default is
 `gcc`. `pcc` is opt-in and builds userland through the imported PortableCC
 frontend while continuing to use the in-tree ReBSD a.out assembler, linker,
 archive tool, and ranlib.

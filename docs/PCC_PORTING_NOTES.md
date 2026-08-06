@@ -57,22 +57,19 @@ GCC remains the default compiler for kernel and userland builds.  PCC is a
 supported opt-in userland/rootfs compiler:
 
 ```sh
-make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
-make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
-make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
-make -C sys/mips/malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
-make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
+make -C sys/mips/malta USERLAND_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips/malta USERLAND_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
+make -C sys/mips/malta64 USERLAND_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips/malta64 USERLAND_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
+make -C sys/mips/n64 USERLAND_COMPILER=pcc kernel.z64 preflight.z64
 ```
 
-`MIPS_ROOTFS_COMPILER` and `N64_USERLAND_COMPILER` are aliases for the same
-userland compiler choice at different make entry points.  If only one is set,
-the other entry point inherits it.  If both are set and disagree, make aborts.
-The supported values are `gcc` and `pcc`.
+`USERLAND_COMPILER` is the common userland compiler selector at every MIPS
+make entry point, including N64.  The supported values are `gcc` and `pcc`.
 
-These selectors change the target userland/rootfs compiler only.  The kernel
-compiler is selected independently with `MIPS_KERNEL_COMPILER` for Malta and
-Malta64, or `N64_KERNEL_COMPILER` for N64.  PCC kernel builds are explicit
-gates; the default remains GCC.
+This selector changes the target userland/rootfs compiler only.  The kernel
+compiler is selected independently with the common `KERNEL_COMPILER`
+selector.  PCC kernel builds are explicit gates; the default remains GCC.
 
 The rootfs selectors shared by Malta, Malta64, and N64 are:
 
@@ -86,7 +83,7 @@ the N64 and common `MIPS_ROOTFS_*` names are set, they must agree.
 
 `MIPS_ROOTFS_ENDIAN=little` selects the `mipsel-rebsd` cross target for PCC
 SDK/rootfs flows.  The checked-in `maltael` default remains
-`MIPS_ROOTFS_COMPILER=gcc`, while the opt-in PCC kernel/rootfs hard-float and
+`USERLAND_COMPILER=gcc`, while the opt-in PCC kernel/rootfs hard-float and
 soft-float gates are validated on QEMU.
 
 ## MIPS ISA And Tuning
@@ -331,7 +328,7 @@ real hardware validation passed on 2026-07-11 with
 `docs/PCC_MIPS_SCHEDULER_REPORT.md`.
 
 The 2026-07-11 clean-build audit later invalidated the C2 through D1 hardware
-runs as PCC-kernel evidence.  `N64_KERNEL_COMPILER` was absent from the N64
+runs as PCC-kernel evidence.  `KERNEL_COMPILER` was absent from the N64
 build-mode stamp, allowing stale GCC kernel objects to survive a compiler
 switch while `vers.o` reported `with pcc`.  The images still validate PCC
 userland/debug execution.  Commit `776e41af` adds the compiler to the stamp;
@@ -432,9 +429,9 @@ Completed for this milestone:
   GCC toolchain.
 - The 2026-07-07 N64 build-only gate completed both full hard-float
   PCC-userland ROM variants:
-  `N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768`
+  `KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768`
   and
-  `N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768`.
+  `KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768`.
   Both generated root images passed `fsutil --check`; the resulting kernel
   ELFs are big-endian MIPS-III ELF executables.  This was not a real-hardware
   smoke pass.
@@ -492,7 +489,7 @@ wrapper scripts remain only for the legacy GCC-based userland path.
 Rootfs builds normally use the standalone SDK with:
 
 ```sh
-make -C sys/mips/malta MIPS_ROOTFS_COMPILER=pcc \
+make -C sys/mips/malta USERLAND_COMPILER=pcc \
     MIPS_PCC_PROVIDER=cross MIPS_PCC_HOST_PREFIX=/path/cross-pcc \
     linpack-smoke-runtime
 ```
@@ -514,12 +511,12 @@ The dependency gate can be repeated without cleaning as follows:
 
 ```sh
 make -C sys/mips/malta64 \
-    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc \
     MIPS_ROOTFS_FLOAT=soft \
     pcc-regress-compile linpack-smoke-build unix.elf
 touch src/dev/pcc/pcc/arch/mips/local2.c
 make -C sys/mips/malta64 \
-    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc \
     MIPS_ROOTFS_FLOAT=soft \
     pcc-regress-compile linpack-smoke-build unix.elf
 ```
@@ -538,22 +535,22 @@ commands are:
 
 ```sh
 make -C sys/mips/malta64 malta64.elf \
-    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc \
     MIPS_ROOTFS_CPU=vr4300 MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_ENDIAN=big \
     MIPS_PCC_PROVIDER=cross
 
 make -C sys/mips/malta unix.elf \
-    MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc \
+    KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc \
     MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_ENDIAN=big \
     MIPS_PCC_PROVIDER=cross
 
 make -C sys/mips/n64 kernel.z64 preflight.z64 \
-    N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
+    KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
     N64_USERLAND_ENDIAN=big
 
 make -C sys/mips/n64 kernel.z64 \
-    N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc \
+    KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc \
     N64_USERLAND_CPU=vr4300 N64_USERLAND_FLOAT=hard \
     N64_USERLAND_ENDIAN=big N64_ROOTFS_KBYTES=32768
 ```

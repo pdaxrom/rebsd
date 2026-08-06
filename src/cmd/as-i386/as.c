@@ -3421,8 +3421,10 @@ static void directive(char *line)
     n = split_args(rest, arg, 16);
     if (!strcmp(name, ".globl") || !strcmp(name, ".global")) {
         for (i = 0; i < n; i++) {
-            get_symbol(arg[i])->bind = STB_GLOBAL;
-            get_symbol(arg[i])->binding_set = 1;
+            Symbol *s = get_symbol(arg[i]);
+            if (s->bind != STB_WEAK)
+                s->bind = STB_GLOBAL;
+            s->binding_set = 1;
         }
         return;
     }
@@ -3642,11 +3644,10 @@ static void remove_comment(char *line)
     }
 }
 
-static void assemble_line(char *line)
+static void assemble_statement(char *line)
 {
     char *p, *colon, *start;
     unsigned digit;
-    remove_comment(line);
     p = trim(line);
     if (!*p)
         return;
@@ -3690,6 +3691,25 @@ static void assemble_line(char *line)
         directive(p);
     else
         assemble_instruction(p);
+}
+
+static void assemble_line(char *line)
+{
+    char *p, *start;
+    int quote = 0;
+
+    remove_comment(line);
+    start = line;
+    for (p = line; *p; p++) {
+        if (*p == '"' && (p == line || p[-1] != '\\'))
+            quote = !quote;
+        else if (*p == ';' && !quote) {
+            *p = 0;
+            assemble_statement(start);
+            start = p + 1;
+        }
+    }
+    assemble_statement(start);
 }
 
 static int assemble_file(FILE *fp, const char *name)
@@ -3951,7 +3971,7 @@ static void write_object(void)
     Buffer out = { 0 }, str = { 0 }, shstr = { 0 }, symtab = { 0 };
     Buffer rel[MAX_SECTIONS];
     unsigned secname[MAX_SECTIONS], relname[MAX_SECTIONS], secoff[MAX_SECTIONS];
-    unsigned reloff[MAX_SECTIONS], symname[MAX_SYMBOLS];
+    unsigned reloff[MAX_SECTIONS], *symname;
     unsigned symtab_index, strtab_index, shstr_index, shnum, shoff, first_global;
     unsigned i, j, nrelsec = 0, off;
     FILE *fp;
@@ -3992,6 +4012,8 @@ static void write_object(void)
     }
     if (errors)
         return;
+    /* Size this workspace for the input instead of putting 32 KiB on stack. */
+    symname = xrealloc(0, (nsymbol ? (unsigned)nsymbol : 1) * sizeof(*symname));
     for (i = 0; i < (unsigned)nsymbol; i++)
         if (!symbols[i].defined && !symbols[i].binding_set &&
             !local_name(symbols[i].name))
@@ -4039,8 +4061,10 @@ static void write_object(void)
             put_sym(&symtab, symname[i], value, s->size, ELF_ST_INFO(s->bind, s->type), s->other,
                     shndx);
         }
-    if (errors)
+    if (errors) {
+        free(symname);
         return;
+    }
     /* Emit REL records in fixup order, grouped by target section. */
     for (i = 0; i < (unsigned)nsection; i++) {
         for (j = 0; j < (unsigned)nfixup; j++)
@@ -4142,6 +4166,7 @@ static void write_object(void)
         fatal("cannot create %s", outfile);
     if (fwrite(out.data, 1, out.size, fp) != out.size || fclose(fp))
         fatal("cannot write %s", outfile);
+    free(symname);
 }
 
 static IsaMask cpu_level(unsigned level)

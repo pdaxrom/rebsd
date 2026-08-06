@@ -2,9 +2,9 @@
 
 The kernel and userland build with the existing GCC-based toolchain by default.
 
-PortableCC/pcc is available as a supported opt-in compiler for the MIPS rootfs
-and N64 userland.  PCC kernel builds are also available as explicit gates for
-Malta, Malta64, MaltaEL, CI20, and N64.  PCC has passed the Malta,
+PortableCC/pcc is available as a supported opt-in compiler for i686 and MIPS
+userland.  PCC kernel builds are also available as explicit MIPS gates.  PCC
+has passed the i686 GCC-kernel/PCC-userland QEMU self-build gate and the Malta,
 Malta64/R4000, and MaltaEL QEMU hard-float and soft-float rootfs gates, plus
 hard-float PCC kernel/rootfs QEMU gates for Malta and Malta64.  The updated
 N64 UART-only boot matrix passed on
@@ -18,8 +18,8 @@ and passed `fsutil --check`.
 
 Current policy:
 
-- Kernel build: GCC by default.  PCC kernel builds are opt-in with
-  `MIPS_KERNEL_COMPILER=pcc` or `N64_KERNEL_COMPILER=pcc`.
+- Kernel build: GCC by default.  MIPS PCC kernel builds are opt-in with
+  `KERNEL_COMPILER=pcc`; i686 kernels use GCC.
 - Userland build: GCC by default.
 - Supported userland compiler selectors: `gcc` and `pcc`.
 - Supported rootfs endian selectors: `big` and `little`.  Big-endian PCC uses
@@ -39,13 +39,12 @@ Current policy:
 - Native `/usr/bin/cc` and `/usr/bin/pcc`: imported PCC in the rootfs.
 - C++/`p++`: deferred to future work and not installed by default.
 
-The userland compiler selector is intentionally separate from the kernel
-compiler.  There are two make variable names because the tree has two entry
-points into the same userland/rootfs choice:
+The compiler selectors are common to every architecture and keep the kernel
+choice independent from the userland choice:
 
-- `N64_USERLAND_COMPILER` is the direct N64 userland selector.
-- `MIPS_ROOTFS_COMPILER` is the Malta, Malta64, MaltaEL, and CI20 rootfs
-  selector.
+- `KERNEL_COMPILER` selects the kernel compiler.  i686 accepts `gcc`; MIPS
+  accepts `gcc` and `pcc`.
+- `USERLAND_COMPILER=gcc|pcc` selects the userland/rootfs compiler.
 - `MIPS_ROOTFS_CPU` selects the rootfs CPU ABI.  Supported values are
   `vr4300` and `mips32r2`.
 - `N64_USERLAND_FLOAT` and `MIPS_ROOTFS_FLOAT` select the userland/rootfs float
@@ -56,11 +55,19 @@ points into the same userland/rootfs choice:
   aliases for the same ABI selectors.  If both alias families are set, they
   must agree.
 
-They are aliases for the same compiler mode.  If only one is set, the other
-entry point inherits it.  If both are set to different values, the build fails
-early.  Both variables default to `gcc`; `pcc` selects the imported PCC
-frontend for userland while keeping the in-tree ReBSD `as`, `ld`, `ar`, and
-`ranlib` as the target binary tools.
+Both compiler selectors default to `gcc`.  Setting `USERLAND_COMPILER=pcc`
+selects the imported PCC frontend for userland while keeping the in-tree ReBSD
+`as`, `ld`, `ar`, and `ranlib` as the target binary tools.
+
+The i686 PCC gate builds the kernel with GCC, builds the complete userland with
+PCC, then uses the target-native PCC toolchain inside QEMU:
+
+```sh
+make -C sys/i386 BOARD=pc KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc \
+    pcc-host-smoke
+make -C sys/i386 BOARD=pc KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc \
+    pcc-smoke-runtime
+```
 
 ## MIPS ELF Support
 
@@ -98,22 +105,22 @@ Common build forms:
 
 ```sh
 make tools
-make -C sys/mips BOARD=malta MIPS_ROOTFS_COMPILER=pcc native-pcc-smoke-runtime
-make -C sys/mips BOARD=malta MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
-make -C sys/mips BOARD=malta MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
-make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc native-pcc-regress-runtime
-make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
-make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc rootfs.img kernel
-make -C sys/mips BOARD=n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
-make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
-make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc kernel
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 kernel.z64 preflight.z64
+make -C sys/mips BOARD=malta USERLAND_COMPILER=pcc native-pcc-smoke-runtime
+make -C sys/mips BOARD=malta USERLAND_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips BOARD=malta USERLAND_COMPILER=pcc MIPS_ROOTFS_CPU=mips32r2 MIPS_ROOTFS_FLOAT=soft linpack-smoke-runtime
+make -C sys/mips BOARD=malta64 USERLAND_COMPILER=pcc native-pcc-regress-runtime
+make -C sys/mips BOARD=malta64 USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft native-pcc-regress-runtime
+make -C sys/mips BOARD=maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc rootfs.img kernel
+make -C sys/mips BOARD=n64 USERLAND_COMPILER=pcc kernel.z64 preflight.z64
+make -C sys/mips BOARD=malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc kernel
+make -C sys/mips BOARD=malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc kernel
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 kernel.z64
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc kernel.z64 preflight.z64
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc N64_MINIMAL_UART_ONLY=1 kernel.z64 preflight.z64
 ```
 
-Use `N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc` for normal N64
+Use `KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc` for normal N64
 hardware and performance validation.  PCC-kernel N64 builds are currently
 substantially slower and should be treated as explicit compiler-correctness
 tests rather than the default hardware gate.
@@ -127,12 +134,12 @@ requires `PCC_SMOKE_ALL_RC:0`.
 Full PCC QEMU gates:
 
 ```sh
-make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
-make -C sys/mips BOARD=malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
-make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
-make -C sys/mips BOARD=malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
-make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime
-make -C sys/mips BOARD=maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
+make -C sys/mips BOARD=maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime
+make -C sys/mips BOARD=maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime
 ```
 
 The QEMU PCC smoke matrix verified on 2026-07-12 from clean, independent
@@ -154,8 +161,8 @@ and 0.9 MFLOPS for soft-float.
 Build-only PCC board gates for targets without a QEMU smoke target:
 
 ```sh
-make -C sys/mips BOARD=n64 N64_KERNEL_COMPILER=pcc N64_USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 all
-make -C sys/mips BOARD=ci20 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc all
+make -C sys/mips BOARD=n64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc N64_ROOTFS_KBYTES=32768 all
+make -C sys/mips BOARD=ci20 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc all
 ```
 
 The obsolete PIC32 port is not part of ReBSD; the supported targets are the
@@ -173,7 +180,7 @@ For N64-like Malta/Malta64 low-memory smoke, keep QEMU backing RAM large enough
 for the staged root image but cap kernel-visible RAM and swap explicitly:
 
 ```sh
-make -C sys/mips BOARD=malta64 MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 \
+make -C sys/mips BOARD=malta64 USERLAND_COMPILER=pcc MIPS_ROOTFS_CPU=vr4300 \
     MIPS_ROOTFS_FLOAT=hard MIPS_ROOTFS_KBYTES=16384 \
     MALTA_RAM_KBYTES=8192 MALTA_QEMU_RAM=64M kernel
 ```
@@ -187,8 +194,8 @@ Malta/MIPS32r2 hard-float with `PCC_SMOKE_ALL_RC:0`.
 
 `pcc` mode controls how the target userland and libraries are built.  It does
 not switch the kernel or N64 stage0 by itself.  Kernel PCC builds must be
-requested explicitly with `MIPS_KERNEL_COMPILER=pcc` or
-`N64_KERNEL_COMPILER=pcc`.  When that selector is active, the kernel assembly
+requested explicitly with `KERNEL_COMPILER=pcc`.  When that selector is
+active, the kernel assembly
 and link steps still use ReBSD tools, not GNU `as`/`ld`; N64 stage0 remains on
 the external N64 GCC toolchain.  PCC runtime builds do not use GCC wrappers:
 the standalone cross SDK first builds the ReBSD tools and cross PCC without

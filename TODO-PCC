@@ -13,8 +13,8 @@ not active items for the current C/static-a.out PCC milestone.
 - Further PCC kernel/userland work is deferred while the supported N64
   baseline remains GCC kernel + GCC userland.  Do not change that baseline to
   hide a PCC-only failure.
-- `MIPS_ROOTFS_COMPILER=pcc` and `N64_USERLAND_COMPILER=pcc` are supported
-  opt-in C userland modes after the Malta, Malta64/R4000, and real N64 gates.
+- `USERLAND_COMPILER=pcc` is the common opt-in C userland mode after the
+  Malta, Malta64/R4000, and real N64 gates.
 - ReBSD must keep using its existing `as`, `ld`, `ar`, and `ranlib`; no GNU
   binutils or LLVM dependency is allowed for the target toolchain.
 - First working target is big-endian MIPS o32 for Malta and N64/VR4300-class
@@ -85,12 +85,12 @@ not active items for the current C/static-a.out PCC milestone.
     byte-identical; MIPS32R2 uses the independent operation to hide interlocked
     load latency before the first dependent use.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed with `PCC_SMOKE_ALL_RC:0`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Logs:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
@@ -145,12 +145,12 @@ not active items for the current C/static-a.out PCC milestone.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
     `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
     `-fomit-frame-pointer`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Linpack QEMU results for the final matrix were approximately:
     Malta64 hard `13759/13549`, Malta64 soft `805/801`, Malta hard
     `13263/13563`, Malta soft `1024/1041`, MaltaEL hard `13609/13509`, and
@@ -180,12 +180,12 @@ not active items for the current C/static-a.out PCC milestone.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
     `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
     `-fomit-frame-pointer`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Linpack QEMU results for the final matrix were approximately:
     Malta64 hard `13387/13760`, Malta64 soft `896/899`, Malta hard
     `13118/13349`, Malta soft `1003/1001`, MaltaEL hard `13723/13574`, and
@@ -220,12 +220,12 @@ not active items for the current C/static-a.out PCC milestone.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
     `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
     `-fomit-frame-pointer`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Linpack QEMU results for the final matrix were approximately:
     Malta64 hard `13025/13214`, Malta64 soft `848/860`, Malta hard
     `12517/12406`, Malta soft `978/970`, MaltaEL hard `12657/12683`, and
@@ -254,12 +254,12 @@ not active items for the current C/static-a.out PCC milestone.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
     `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
     `-fomit-frame-pointer`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Linpack QEMU results for the final matrix were approximately:
     Malta64 hard `13124/12897`, Malta64 soft `794/797`, Malta hard
     `12444/12668`, Malta soft `970/974`, MaltaEL hard `12930/13042`, and
@@ -290,12 +290,12 @@ not active items for the current C/static-a.out PCC milestone.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
     `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
     `-fomit-frame-pointer`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Logs:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
@@ -320,12 +320,12 @@ not active items for the current C/static-a.out PCC milestone.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
     `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with `-msoft-float` and
     `-fomit-frame-pointer`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Logs:
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.hard.elf.log`,
     `/private/tmp/rebsd-pcc-smoke-all-malta64-big.vr4300.soft.elf.log`,
@@ -349,12 +349,12 @@ not active items for the current C/static-a.out PCC milestone.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
     `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with
     `-msoft-float -fomit-frame-pointer`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Logs:
     `/private/tmp/rebsd-omitfp-leaf-malta64-hard.log`,
     `/private/tmp/rebsd-omitfp-leaf-malta64-soft.log`,
@@ -379,12 +379,12 @@ not active items for the current C/static-a.out PCC milestone.
   - Full PCC-kernel/PCC-rootfs QEMU gates passed again with
     `PCC_SMOKE_ALL_RC:0`, including PCC kernel builds with
     `-msoft-float -fomit-frame-pointer`:
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta64 MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/malta MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc pcc-smoke-all-runtime`
-    `make -C sys/mips/maltael MIPS_KERNEL_COMPILER=pcc MIPS_ROOTFS_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta64 KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/malta KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc pcc-smoke-all-runtime`
+    `make -C sys/mips/maltael KERNEL_COMPILER=pcc USERLAND_COMPILER=pcc MIPS_ROOTFS_FLOAT=soft pcc-smoke-all-runtime`
   - Logs:
     `/private/tmp/rebsd-used-sregs-malta64-hard.log`,
     `/private/tmp/rebsd-used-sregs-malta64-soft.log`,
@@ -1439,13 +1439,8 @@ not active items for the current C/static-a.out PCC milestone.
     hardware readiness.
 - [x] Make the userland compiler selectable.
   - Default remains GCC until explicitly changed.
-  - `MIPS_ROOTFS_COMPILER=gcc|pcc` selects the shared Malta/Malta64 rootfs
-    compiler mode.
-  - `N64_USERLAND_COMPILER=gcc|pcc` selects the direct N64 userland compiler
-    mode.
-  - These are aliases for the same compiler choice at different make entry
-    points.  If only one is set, the other entry point inherits it; if both
-    are set and conflict, make aborts.
+  - `USERLAND_COMPILER=gcc|pcc` selects the userland/rootfs compiler at every
+    MIPS make entry point, including N64.
   - PCC mode keeps the kernel, stage0, and target binary tools on the existing
     ReBSD/GCC/a.out flow.
 - [x] Decide long-term runtime policy for PCC support libraries.
@@ -1546,8 +1541,8 @@ not active items for the current C/static-a.out PCC milestone.
   - `fsutil --add` now propagates `add_object()` and final sync failures too.
   - Verified with missing-file and inode-exhaustion negative tests
     (`FSUTIL_*_RC:255`), a positive image plus `fsutil --check`, Malta
-    `MIPS_ROOTFS_COMPILER=pcc rootfs.img`, and N64
-    `N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
+    `USERLAND_COMPILER=pcc rootfs.img`, and N64
+    `USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
 - [x] Replace temporary compatibility stubs with real policy.
   - Core wide-char and wide-stdio APIs now live in libc as a coherent
     ASCII/byte-oriented ReBSD wide ABI surface.
@@ -1657,8 +1652,8 @@ not active items for the current C/static-a.out PCC milestone.
     or in the exact public type declarations, not by reverting to empty
     argument lists.
   - Verification after the header/fstab cleanup: `make -C sys/mips/n64
-    N64_USERLAND_COMPILER=pcc rootfs.stage/.userland.pcc` passes; full native
-    PCC regressions with `MIPS_ROOTFS_COMPILER=pcc` pass on both
+    USERLAND_COMPILER=pcc rootfs.stage/.userland.pcc` passes; full native
+    PCC regressions with `USERLAND_COMPILER=pcc` pass on both
     `BOARD=malta64` and `BOARD=malta` with 317 total, 287 compile-pass, 30
     expected compile-fail, 0 unexpected compile-fail, and 277/277 runtime
     pass.
@@ -1671,9 +1666,9 @@ not active items for the current C/static-a.out PCC milestone.
     `usbnetattach()`/`usbnpoll()` compatibility branch was removed from
     `if_usbn.c`.
   - Verification: `make -C sys/mips/n64 N64_DEBUG_UART_ONLY=1
-    N64_USERLAND_COMPILER=pcc pcc-debug.z64` passes, the debug kernel symbol
+    USERLAND_COMPILER=pcc pcc-debug.z64` passes, the debug kernel symbol
     table contains no `usbnetattach`/`usbnpoll`, and the normal
-    `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`
+    `make -C sys/mips/n64 USERLAND_COMPILER=pcc kernel.z64 preflight.z64`
     path still links the real USBNet symbols.
   - Real N64 hardware validation after this cleanup passed.
 - [x] Re-run the N64 native PCC debug image after absolute native tool paths,
@@ -1721,7 +1716,7 @@ not active items for the current C/static-a.out PCC milestone.
     N64 hardware.
   - The separate `sys/mips/malta64` R4000 gate now provides usable QEMU
     evidence: `make -C sys/mips BOARD=malta64 native-pcc-regress-runtime
-    MIPS_ROOTFS_COMPILER=pcc` boots with `qemu-system-mips64 -M malta -cpu
+    USERLAND_COMPILER=pcc` boots with `qemu-system-mips64 -M malta -cpu
     R4000 -m 32M -nographic` and passes 317 total checks, 287 compile-pass,
     30 expected compile-fail, 0 unexpected compile-fail, and 277/277 runtime
     pass.
@@ -1764,7 +1759,7 @@ not active items for the current C/static-a.out PCC milestone.
     `sys/mips/n64/pcc-debug.z64` confirms `N64_PCC_DEBUG_MODE` and the
     extended test names are present in the image.
   - Malta64/R4000 target-side native PCC regression was re-run after this
-    runner change with `MIPS_ROOTFS_COMPILER=pcc`.  The QEMU command used
+    runner change with `USERLAND_COMPILER=pcc`.  The QEMU command used
     `qemu-system-mips64 -M malta -cpu R4000 -m 32M -nographic`; the summary
     in `/private/tmp/rebsd-malta64-native-pcc-regress-after-n64-debug-all.log`
     is 317 total, 287 compile-pass, 30 expected compile-fail, 0 unexpected
@@ -1806,7 +1801,7 @@ not active items for the current C/static-a.out PCC milestone.
     `-L` paths unchanged.
   - Clean local build completed on 2026-07-03:
     `make -C sys/mips/n64 clean` followed by
-    `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
+    `make -C sys/mips/n64 USERLAND_COMPILER=pcc kernel.z64 preflight.z64`.
   - Clean local build repeated on 2026-07-04 after the target sysroot fix:
     `rootfs.img`, `kernel.z64`, and `preflight.z64` all rebuilt successfully.
   - The normal PCC rootfs is not the shell-stub/debug-runner image: staged
@@ -1841,7 +1836,7 @@ not active items for the current C/static-a.out PCC milestone.
     `NATIVE_PCC_SMOKE_RC:0` plus `DHCP_DNS_RC:0`.
   - Clean N64 PCC image build after the fix completed with
     `make -C sys/mips/n64 clean` followed by
-    `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64
+    `make -C sys/mips/n64 USERLAND_COMPILER=pcc kernel.z64
     preflight.z64`.  The generated rootfs is marked `.userland.pcc`, contains
     `/root/dhcp-recv-smoke.sh`, `/root/linpack-gcc`, and `/root/linpack-pcc`,
     and the freshly installed N64 host PCC also emits `lbu`/`lhu` for
@@ -1888,8 +1883,8 @@ not active items for the current C/static-a.out PCC milestone.
   - Policy: this remains a diagnostic build mode for PCC hardware work, not a
     separate supported N64 board profile.
   - Verified locally with `make -C sys/mips/n64 N64_DEBUG_UART_ONLY=1
-    N64_USERLAND_COMPILER=pcc pcc-debug.z64` and normal
-    `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`;
+    USERLAND_COMPILER=pcc pcc-debug.z64` and normal
+    `make -C sys/mips/n64 USERLAND_COMPILER=pcc kernel.z64 preflight.z64`;
     the operator also reported that the updated image passes on real N64
     hardware.
   - Basic C++ smoke attempts fail in the frontend before reaching ReBSD `as` or
@@ -1958,10 +1953,8 @@ not active items for the current C/static-a.out PCC milestone.
 - [x] Make userland compiler selection explicit after Malta is green.
   - Default remains GCC until intentionally changed.
   - Supported values are `gcc` and `pcc`.
-  - Shared MIPS ports use `MIPS_ROOTFS_COMPILER`.
-  - Direct N64 builds use `N64_USERLAND_COMPILER`.
-  - The two names are aliases for the same selected compiler mode and are
-    validated for conflicts.
+  - All MIPS ports, including direct N64 builds, use
+    `USERLAND_COMPILER`.
 - [x] Add documentation for the compiler selector.
   - `docs/TOOLCHAIN.md` documents the policy, supported values, and common
     Malta/Malta64/N64 command forms.
@@ -1980,7 +1973,7 @@ not active items for the current C/static-a.out PCC milestone.
   - Linpack smoke passes with `LINPACK_RC:0`; latest default-size Malta64
     numbers are GCC about 14.4 MFLOPS and PCC about 12.2 MFLOPS.
 - [x] Build N64 artifacts with the selected compiler mode.
-  - `make -C sys/mips/n64 N64_USERLAND_COMPILER=pcc kernel.z64 preflight.z64`
+  - `make -C sys/mips/n64 USERLAND_COMPILER=pcc kernel.z64 preflight.z64`
     builds the normal PCC rootfs image.
 - [x] Leave N64 hardware validation to the operator.
   - Real N64 hardware validation passed `/root/pcc-smoke-all.sh` with
@@ -4170,7 +4163,7 @@ Backend work, kept small:
     could reuse GCC kernel objects while `vers.o` reported `with pcc`; the D1
     `main` prologue exactly matches a fresh GCC `-O2` compile.  Their hardware
     results validate PCC userland/debug execution, not a PCC-built kernel.
-    Commit `776e41af` adds `N64_KERNEL_COMPILER` to the stamp.  Future N64 PCC
+    Commit `776e41af` adds `KERNEL_COMPILER` to the stamp.  Future N64 PCC
     kernel gates must be clean builds or carry a `.build-mode.pcc.*` stamp.
 - [x] Reduce avoidable frame-pointer and outgoing-argument stack traffic.
   - [x] First Milestone D substep: reserve a fixed 16-byte o32 home area for

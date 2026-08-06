@@ -63,7 +63,7 @@ All supported boards use out-of-tree builds. For example:
 ```shell
 make -C sys/mips BOARD=malta64 O=/work/rebsd-malta64 all
 make -C sys/mips BOARD=n64 O=/work/rebsd-n64 \
-    N64_KERNEL_COMPILER=gcc N64_USERLAND_COMPILER=pcc all
+    KERNEL_COMPILER=gcc USERLAND_COMPILER=pcc all
 ```
 
 `O` is the uppercase Latin letter O (for object/output), not the digit zero

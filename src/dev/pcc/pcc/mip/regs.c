@@ -3245,7 +3245,7 @@ temparg(struct interpass *ipole, REGW *w)
  * Be careful to not destroy the basic block structure in the first scan.
  */
 static int
-RewriteProgram(struct interpass *ip)
+RewriteProgram(struct interpass *ip, int allow_remat, int *did_remat)
 {
 	REGW shortregs, longregs, saveregs, *next, *q;
 	REGW *w;
@@ -3289,7 +3289,8 @@ RewriteProgram(struct interpass *ip)
 #endif
 	rwtyp = 0;
 	remat_done = 0;
-	for (w = DLIST_NEXT(&longregs, link); w != &longregs; w = next) {
+	for (w = DLIST_NEXT(&longregs, link);
+	    allow_remat && w != &longregs; w = next) {
 		next = DLIST_NEXT(w, link);
 		si = &sblock[w - nblock];
 		if ((si->flags & SPILL_REMATERIALIZABLE) == 0 ||
@@ -3297,6 +3298,7 @@ RewriteProgram(struct interpass *ip)
 			continue;
 		DLIST_REMOVE(w, link);
 		remat_done = 1;
+		*did_remat = 1;
 		optstats_note_rematerialized();
 	}
 
@@ -3394,7 +3396,7 @@ ngenregs(struct p2env *p2e)
 	int i, j, tbits;
 	int uu[NPERMREG] = { -1 };
 	int xnsavregs[NPERMREG];
-	int beenhere = 0;
+	int beenhere = 0, did_remat, remat_used = 0;
 	TWORD type;
 
 	DLIST_INIT(&lunused, link);
@@ -3553,10 +3555,13 @@ onlyperm: /* XXX - should not have to redo all */
 	RPRINTIP(ipole);
 
 	if (!WLISTEMPTY(spilledNodes)) {
-		switch (RewriteProgram(ipole)) {
+		did_remat = 0;
+		switch (RewriteProgram(ipole, remat_used == 0, &did_remat)) {
 		case ONLYPERM:
 			goto onlyperm;
 		case SMALL:
+			if (did_remat)
+				remat_used = 1;
 			optimize(p2e);
 			if (beenhere++ == MAXLOOP)
 				comperr("cannot color graph - COLORMAP() bug?");

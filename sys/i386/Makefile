@@ -41,6 +41,25 @@ endif
 include $(TOPSRC)/target-i386.mk
 include $(TOPSRC)/mk/rootfs-userland.mk
 
+KERNEL_COMPILER ?= gcc
+USERLAND_COMPILER ?= gcc
+I386_KERNEL_COMPILERS = gcc
+I386_USERLAND_COMPILERS = gcc pcc
+ifeq ($(filter $(KERNEL_COMPILER),$(I386_KERNEL_COMPILERS)),)
+$(error Unsupported KERNEL_COMPILER=$(KERNEL_COMPILER); expected one of $(I386_KERNEL_COMPILERS))
+endif
+ifeq ($(filter $(USERLAND_COMPILER),$(I386_USERLAND_COMPILERS)),)
+$(error Unsupported USERLAND_COMPILER=$(USERLAND_COMPILER); expected one of $(I386_USERLAND_COMPILERS))
+endif
+
+I386_GCC_CC := $(CC)
+I386_GCC_LD := $(LD)
+I386_GCC_AR := $(AR)
+I386_GCC_RANLIB := $(RANLIB)
+I386_GCC_NM := $(NM)
+I386_GCC_SIZE := $(SIZE)
+I386_GCC_OBJDUMP := $(OBJDUMP)
+
 # Keep every kernel object tied to the complete header graph seen by GCC.
 # Explicit source prerequisites below document ownership, while generated
 # dependency files prevent mixed kernel ABIs after a common header changes.
@@ -116,11 +135,19 @@ I386_BISON ?= $(if $(wildcard /opt/homebrew/opt/bison/bin/bison),/opt/homebrew/o
 I386_USERLAND_BUILD = $(CURDIR)/i386-userland-build
 I386_USERLAND_SRC = $(I386_USERLAND_BUILD)/src
 I386_USERLAND_DESTDIR = $(I386_USERLAND_BUILD)/rootfs-install
-I386_USERLAND_STAMP = i386-userland.gcc.elf.stamp
+I386_USERLAND_STAMP = i386-userland.$(USERLAND_COMPILER).elf.stamp
 I386_ROOTFS_NATIVE_PCC ?= 1
 I386_PCC_WORK = $(CURDIR)/i386-pcc-build
 I386_PCC_BUILD_SCRIPT = $(I386_TOOLS_SRC)/build-native-pcc.sh
+I386_PCC_BOOTSTRAP_BUILD = $(CURDIR)/i386-pcc-bootstrap
+I386_PCC_BOOTSTRAP_SRC = $(I386_PCC_BOOTSTRAP_BUILD)/src
+I386_PCC_BOOTSTRAP_STAMP = $(I386_PCC_BOOTSTRAP_BUILD)/.runtime
+I386_PCC_TOOLCHAIN_STAMP = $(I386_PCC_WORK)/.toolchain
 I386_PCC_STAGE_STAMP = $(I386_ROOTFS_STAGE)/.native-pcc
+I386_PCC_CROSS_PCC = $(I386_PCC_WORK)/host-pcc/bin/i386-rebsd-pcc
+I386_PCC_TOOLS = $(I386_PCC_WORK)/tools
+I386_PCC_NATIVE_OUT = $(I386_PCC_WORK)/native
+I386_PCC_SYSLIB = $(I386_PCC_WORK)/syslib
 I386_PCC_SRCS = $(I386_PCC_BUILD_SCRIPT) \
                 $(TOPSRC)/src/dev/pcc/Makefile.native \
                 $(TOPSRC)/src/dev/pcc/native-config.h \
@@ -146,7 +173,7 @@ I386_KERNEL_LDSCRIPT = i386-kernel.ld
 I386_KERNEL_LDSCRIPT_SRC = $(I386_PC_SRC)/kernel.ld.S
 I386_USER_NONE = __i386_none__
 I386_USERLAND_INCLUDES = -I$(abspath $(I386_ROOTFS_BASE)/usr/include)
-I386_USERLAND_CC = $(CC) $(I686_ARCH_FLAGS) \
+I386_GCC_USERLAND_CC = $(I386_GCC_CC) $(I686_ARCH_FLAGS) \
                    -DTARGET_LITTLE_ENDIAN \
                    -ffreestanding -fno-builtin -fno-stack-protector \
                    -fno-pic -fno-pie -fno-asynchronous-unwind-tables \
@@ -154,10 +181,38 @@ I386_USERLAND_CC = $(CC) $(I686_ARCH_FLAGS) \
                    -mlong-double-64 -nostdinc \
                    $(I386_USERLAND_INCLUDES) \
                    $(I686_FORMAT_WARN_FLAGS) -Werror
-I386_USERLAND_LDFLAGS = --nmagic -z noexecstack \
+I386_GCC_USERLAND_LDFLAGS = --nmagic -z noexecstack \
                         -T$(abspath $(I386_USER_LDSCRIPT)) \
                         $(abspath $(I386_USERLAND_SRC)/crt0.o) \
                         -L$(abspath $(I386_USERLAND_SRC))
+ifeq ($(USERLAND_COMPILER),gcc)
+I386_USERLAND_CC = $(I386_GCC_USERLAND_CC)
+I386_USERLAND_LD = $(I386_GCC_LD)
+I386_USERLAND_AR = $(I386_GCC_AR)
+I386_USERLAND_RANLIB = $(I386_GCC_RANLIB)
+I386_USERLAND_NM = $(I386_GCC_NM)
+I386_USERLAND_SIZE = $(I386_GCC_SIZE)
+I386_USERLAND_OBJDUMP = $(I386_GCC_OBJDUMP)
+I386_USERLAND_LDFLAGS = $(I386_GCC_USERLAND_LDFLAGS)
+I386_USERLAND_COMPILER_RUNTIME = libc
+I386_USERLAND_EXTRA_DEPS =
+else
+I386_USERLAND_CC = $(I386_PCC_CROSS_PCC) -march=i686 \
+                   -DTARGET_LITTLE_ENDIAN $(I386_USERLAND_INCLUDES)
+I386_USERLAND_LD = $(I386_PCC_CROSS_PCC) -march=i686
+I386_USERLAND_AR = $(I386_PCC_TOOLS)/ar
+I386_USERLAND_RANLIB = $(I386_PCC_TOOLS)/ranlib
+I386_USERLAND_NM = $(I386_PCC_TOOLS)/nm
+I386_USERLAND_SIZE = $(I386_PCC_TOOLS)/size
+I386_USERLAND_OBJDUMP = true
+I386_USERLAND_LDFLAGS = -nostartfiles \
+                        -T$(abspath $(I386_USER_LDSCRIPT)) \
+                        $(abspath $(I386_USERLAND_SRC)/crt0.o) \
+                        -L$(abspath $(I386_USERLAND_SRC)) \
+                        -L$(abspath $(I386_PCC_SYSLIB))
+I386_USERLAND_COMPILER_RUNTIME = libpcc
+I386_USERLAND_EXTRA_DEPS = $(I386_PCC_TOOLCHAIN_STAMP)
+endif
 I386_USERLAND_SRCS = $(shell find $(TOPSRC)/src -type f \
                        \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
 I386_ROOTFS_COMMON_FILES = $(TOPSRC)/sys/mips/rootfs/etc/group \
@@ -186,10 +241,13 @@ I386_SRC_MAKE = $(MAKE) -C $(I386_USERLAND_SRC) \
                 DESTDIR=$(abspath $(I386_USERLAND_DESTDIR)) \
                 CC="$(I386_USERLAND_CC)" \
                 AS="$(I386_USERLAND_CC) -x assembler-with-cpp -c" \
-                LD="$(LD)" AR="$(AR)" RANLIB="$(RANLIB)" \
-                NM="$(NM)" SIZE="$(SIZE)" OBJDUMP="$(OBJDUMP)" \
+                LD="$(I386_USERLAND_LD)" AR="$(I386_USERLAND_AR)" \
+                RANLIB="$(I386_USERLAND_RANLIB)" \
+                NM="$(I386_USERLAND_NM)" SIZE="$(I386_USERLAND_SIZE)" \
+                OBJDUMP="$(I386_USERLAND_OBJDUMP)" \
                 ELF2AOUT=cp \
                 LDFLAGS="$(I386_USERLAND_LDFLAGS)" \
+                LIBC_COMPILER_RUNTIME=$(I386_USERLAND_COMPILER_RUNTIME) \
                 SRC_ONLY_LIBS="startup-i386 $(REBSD_ROOTFS_LIBS)" \
                 LIBC_ONLY="$(REBSD_ROOTFS_LIBC_DIRS) i386" \
                 SRC_ONLY_SUBDIR="$(REBSD_ROOTFS_SUBDIRS)" \
@@ -209,12 +267,26 @@ I386_AWK_MAKE = $(MAKE) -C $(I386_USERLAND_SRC)/cmd/awk \
                 DESTDIR=$(abspath $(I386_USERLAND_DESTDIR)) \
                 CC="$(I386_USERLAND_CC)" \
                 AS="$(I386_USERLAND_CC) -x assembler-with-cpp -c" \
-                LD="$(LD)" AR="$(AR)" RANLIB="$(RANLIB)" \
-                NM="$(NM)" SIZE="$(SIZE)" OBJDUMP="$(OBJDUMP)" \
+                LD="$(I386_USERLAND_LD)" AR="$(I386_USERLAND_AR)" \
+                RANLIB="$(I386_USERLAND_RANLIB)" \
+                NM="$(I386_USERLAND_NM)" SIZE="$(I386_USERLAND_SIZE)" \
+                OBJDUMP="$(I386_USERLAND_OBJDUMP)" \
                 ELF2AOUT=cp LDFLAGS="$(I386_USERLAND_LDFLAGS)" \
                 YACC="$(I386_BISON) -y"
+I386_PCC_BOOTSTRAP_MAKE = $(MAKE) -C $(I386_PCC_BOOTSTRAP_SRC) \
+                TARGET_PLATFORM=i386 \
+                CC="$(I386_GCC_USERLAND_CC)" \
+                AS="$(I386_GCC_USERLAND_CC) -x assembler-with-cpp -c" \
+                LD="$(I386_GCC_LD)" AR="$(I386_GCC_AR)" \
+                RANLIB="$(I386_GCC_RANLIB)" \
+                NM="$(I386_GCC_NM)" SIZE="$(I386_GCC_SIZE)" \
+                OBJDUMP="$(I386_GCC_OBJDUMP)" ELF2AOUT=cp \
+                LIBC_COMPILER_RUNTIME=libc \
+                SRC_ONLY_LIBS="startup-i386 libc libm" \
+                LIBC_ONLY="$(REBSD_ROOTFS_LIBC_DIRS) i386" \
+                SRC_ONLY_SUBDIR="$(I386_USER_NONE)"
 I386_VERSION_GENERATOR = $(TOPSRC)/tools/build/gen-vers.py
-I386_COMPILER_VERSION = $(shell $(CC) --version 2>/dev/null | sed -n '1p')
+I386_COMPILER_VERSION = $(shell $(I386_GCC_CC) --version 2>/dev/null | sed -n '1p')
 I386_GIT_REV = $(or $(shell git -C $(TOPSRC) rev-parse HEAD 2>/dev/null),unknown)
 I386_GIT_BRANCH = $(or $(shell git -C $(TOPSRC) symbolic-ref --short -q HEAD 2>/dev/null),detached)
 I386_GIT_DIRTY = $(shell test -n "$$(git -C $(TOPSRC) status --porcelain --untracked-files=normal 2>/dev/null)" && echo 1 || echo 0)
@@ -369,11 +441,11 @@ $(FSUTIL): $(wildcard $(TOPSRC)/tools/fsutil/*.c) \
 $(I386_USER_LDSCRIPT): $(I386_USER_LDSCRIPT_SRC) \
 	    $(I386_SRC)/include/machine/layout.h \
 	    $(TOPSRC)/sys/vm/vm_constants.h
-	$(CC) -E -P -x c -I$(TOPSRC)/sys -I$(I386_SRC) $< -o $@
+	$(I386_GCC_CC) -E -P -x c -I$(TOPSRC)/sys -I$(I386_SRC) $< -o $@
 
 $(I386_KERNEL_LDSCRIPT): $(I386_KERNEL_LDSCRIPT_SRC) \
 	    $(I386_SRC)/include/machine/layout.h
-	$(CC) -E -P -x c -I$(I386_SRC) $< -o $@
+	$(I386_GCC_CC) -E -P -x c -I$(I386_SRC) $< -o $@
 
 $(I386_ROOTFS_BASE_STAMP): $(I386_ROOTFS_COMMON_FILES) \
 	    $(I386_ROOTFS_COMMON_HEADERS) \
@@ -436,11 +508,45 @@ $(I386_ROOTFS_BASE_STAMP): $(I386_ROOTFS_COMMON_FILES) \
 	ln -s var/tmp $(I386_ROOTFS_BASE)/tmp
 	touch $@
 
+$(I386_PCC_BOOTSTRAP_STAMP): $(I386_ROOTFS_BASE_STAMP) \
+	    $(I386_USERLAND_SRCS) $(TOPSRC)/target.mk \
+	    $(TOPSRC)/target-i386.mk
+	rm -rf $(I386_PCC_BOOTSTRAP_BUILD)
+	mkdir -p $(I386_PCC_BOOTSTRAP_SRC)
+	cp -pR $(TOPSRC)/src/. $(I386_PCC_BOOTSTRAP_SRC)/
+	ln -s $(abspath $(TOPSRC))/include $(I386_PCC_BOOTSTRAP_BUILD)/include
+	ln -s $(abspath $(TOPSRC))/lib $(I386_PCC_BOOTSTRAP_BUILD)/lib
+	ln -s $(abspath $(TOPSRC))/sys $(I386_PCC_BOOTSTRAP_BUILD)/sys
+	ln -s $(abspath $(TOPSRC))/tools $(I386_PCC_BOOTSTRAP_BUILD)/tools
+	ln -s $(abspath $(TOPSRC))/target.mk \
+	    $(I386_PCC_BOOTSTRAP_BUILD)/target.mk
+	ln -s $(abspath $(TOPSRC))/target-i386.mk \
+	    $(I386_PCC_BOOTSTRAP_BUILD)/target-i386.mk
+	$(I386_PCC_BOOTSTRAP_MAKE) clean
+	$(I386_PCC_BOOTSTRAP_MAKE) all
+	test -f $(I386_PCC_BOOTSTRAP_SRC)/crt0.o
+	test -f $(I386_PCC_BOOTSTRAP_SRC)/libc.a
+	test -f $(I386_PCC_BOOTSTRAP_SRC)/libm.a
+	touch $@
+
+$(I386_PCC_TOOLCHAIN_STAMP): $(I386_PCC_BOOTSTRAP_STAMP) \
+	    $(I386_PCC_SRCS) $(I386_USER_LDSCRIPT)
+	HOSTCC="$(HOSTCC)" REBSD_REAL_MAKE="$(REBSD_REAL_MAKE)" \
+	    sh $(I386_PCC_BUILD_SCRIPT) $(abspath $(TOPSRC)) \
+	    $(abspath $(I386_PCC_WORK)) \
+	    $(abspath $(I386_ROOTFS_BASE)/usr/include) \
+	    $(abspath $(I386_PCC_BOOTSTRAP_SRC)) \
+	    $(abspath $(I386_USER_LDSCRIPT))
+	test -x $(I386_PCC_CROSS_PCC)
+	test -x $(I386_PCC_NATIVE_OUT)/cc
+	test -f $(I386_PCC_SYSLIB)/libpcc.a
+	touch $@
+
 $(I386_USERLAND_STAMP): $(I386_ROOTFS_BASE_STAMP) \
 	    $(I386_USER_LDSCRIPT) $(I386_USERLAND_SRCS) \
 	    $(TOPSRC)/target.mk $(TOPSRC)/target-i386.mk \
 	    $(I386_MAKEWHATIS_SED) $(I386_MAN_SRCS) \
-	    $(I386_ROOTFS_MAKEFILES)
+	    $(I386_ROOTFS_MAKEFILES) $(I386_USERLAND_EXTRA_DEPS)
 	rm -rf $(I386_USERLAND_BUILD)
 	mkdir -p $(I386_USERLAND_SRC)
 	cp -pR $(TOPSRC)/src/. $(I386_USERLAND_SRC)/
@@ -488,8 +594,8 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_BASE_STAMP) \
 	    $(I386_ROOTFS_STAGE)/usr/lib/libm.a
 	cp -p $(I386_USER_LDSCRIPT) \
 	    $(I386_ROOTFS_STAGE)/usr/lib/ldscripts/elf32-i386.ld
-	$(RANLIB) $(I386_ROOTFS_STAGE)/usr/lib/libc.a
-	$(RANLIB) $(I386_ROOTFS_STAGE)/usr/lib/libm.a
+	$(I386_USERLAND_RANLIB) $(I386_ROOTFS_STAGE)/usr/lib/libc.a
+	$(I386_USERLAND_RANLIB) $(I386_ROOTFS_STAGE)/usr/lib/libm.a
 	for bin in $(I386_ROOTFS_USR_BIN_FILES); do \
 	    if [ -e $(I386_ROOTFS_STAGE)/bin/$$bin ]; then \
 	        mv -f $(I386_ROOTFS_STAGE)/bin/$$bin \
@@ -546,14 +652,23 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_BASE_STAMP) \
 	rm -f $(I386_ROOTFS_STAGE)/usr/share/man/whatis.tmp
 	touch $@
 
-$(I386_PCC_STAGE_STAMP): $(I386_USERLAND_STAMP) $(I386_PCC_SRCS) \
-	    $(I386_USER_LDSCRIPT)
-	HOSTCC="$(HOSTCC)" REBSD_REAL_MAKE="$(REBSD_REAL_MAKE)" \
-	    sh $(I386_PCC_BUILD_SCRIPT) $(abspath $(TOPSRC)) \
-	    $(abspath $(I386_PCC_WORK)) $(abspath $(I386_ROOTFS_STAGE)) \
-	    $(abspath $(I386_ROOTFS_BASE)/usr/include) \
-	    $(abspath $(I386_USERLAND_SRC)) \
-	    $(abspath $(I386_USER_LDSCRIPT))
+$(I386_PCC_STAGE_STAMP): $(I386_USERLAND_STAMP) \
+	    $(I386_PCC_TOOLCHAIN_STAMP)
+	mkdir -p $(I386_ROOTFS_STAGE)/usr/bin \
+	    $(I386_ROOTFS_STAGE)/usr/libexec/pcc \
+	    $(I386_ROOTFS_STAGE)/usr/lib/pcc/i386-pc-rebsd/1.2.0.DEVEL/include \
+	    $(I386_ROOTFS_STAGE)/usr/lib/pcc/i386-pc-rebsd/1.2.0.DEVEL/lib
+	cp -p $(I386_PCC_NATIVE_OUT)/cc $(I386_ROOTFS_STAGE)/usr/bin/cc
+	cp -p $(I386_PCC_NATIVE_OUT)/cc $(I386_ROOTFS_STAGE)/usr/bin/pcc
+	cp -p $(I386_PCC_NATIVE_OUT)/cc $(I386_ROOTFS_STAGE)/usr/bin/cpp
+	cp -p $(I386_PCC_NATIVE_OUT)/cpp \
+	    $(I386_ROOTFS_STAGE)/usr/libexec/pcc/cpp
+	cp -p $(I386_PCC_NATIVE_OUT)/ccom \
+	    $(I386_ROOTFS_STAGE)/usr/libexec/pcc/ccom
+	cp -p $(I386_PCC_SYSLIB)/libpcc.a \
+	    $(I386_ROOTFS_STAGE)/usr/lib/libpcc.a
+	cp -p $(I386_PCC_SYSLIB)/libpcc.a \
+	    $(I386_ROOTFS_STAGE)/usr/lib/pcc/i386-pc-rebsd/1.2.0.DEVEL/lib/libpcc.a
 	touch $@
 
 $(I386_ROOTFS_STAGE)/.userland: $(I386_USERLAND_STAMP) \
@@ -1196,7 +1311,8 @@ vers.c: FORCE $(I386_VERSION_GENERATOR) \
 	$(PYTHON) $(I386_VERSION_GENERATOR) --output $@ \
 	    --version-header "$(TOPSRC)/sys/include/rebsd_version.h" \
 	    --ident I686_PC --build-number 1 \
-	    --build-date "reproducible i686 build" --compiler gcc \
+	    --build-date "reproducible i686 build" \
+	    --compiler "$(KERNEL_COMPILER)" \
 	    --build-user unknown --build-host unknown \
 	    --toolchain "$(notdir $(CC))" \
 	    --toolchain-version "$(I386_COMPILER_VERSION)" \
@@ -1666,6 +1782,7 @@ clean:
 	rm -rf $(I386_ROOTFS_BASE)
 	rm -rf $(I386_USERLAND_BUILD)
 	rm -rf $(I386_PCC_WORK)
+	rm -rf $(I386_PCC_BOOTSTRAP_BUILD)
 	rm -rf .deps
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	rmdir $(I386_GEN_INCLUDE) 2>/dev/null || true
