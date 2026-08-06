@@ -21,12 +21,15 @@
 #define MAX_SECTIONS 64
 #define MAX_SYMBOLS 8192
 #define MAX_FIXUPS 32768
+#define MAX_ALIGNS 8192
 #define MAX_TERMS 6
 #define MAX_LINE 4096
 #define MAX_INCLUDE 16
 
 #define SEC_ABS (-2)
 #define FIX_PC8 0xfe
+#define FIX_RELAX_JMP 0xfd
+#define FIX_RELAX_JCC 0xfc
 typedef unsigned char Byte;
 typedef unsigned long long IsaMask;
 
@@ -84,6 +87,14 @@ typedef struct {
     unsigned char size;
     unsigned char reloc;
 } Fixup;
+
+typedef struct {
+    Section *sec;
+    unsigned offset;
+    unsigned size;
+    unsigned align;
+    unsigned char fill;
+} Alignment;
 
 typedef struct {
     int kind;
@@ -156,7 +167,8 @@ typedef struct {
 static Section sections[MAX_SECTIONS];
 static Symbol symbols[MAX_SYMBOLS];
 static Fixup fixups[MAX_FIXUPS];
-static int nsection, nsymbol, nfixup;
+static Alignment alignments[MAX_ALIGNS];
+static int nsection, nsymbol, nfixup, nalignment;
 static Section *cursec, *prevsec;
 static Section *secstack[16];
 static int nsecstack;
@@ -2037,13 +2049,13 @@ static int emit_io(const char *mn, Operand *op, int n)
     return 1;
 }
 
-static void emit_short_relative(Expr *e, unsigned opcode)
+static void emit_short_relative(Expr *e, unsigned opcode, unsigned reloc)
 {
     unsigned off;
     emit8(opcode);
     off = cursec->size;
     emit8(0);
-    add_fixup(cursec, off, 1, e, FIX_PC8);
+    add_fixup(cursec, off, 1, e, reloc);
 }
 
 static int local_branch_target(Expr *e)
@@ -2082,7 +2094,7 @@ static int emit_loop(const char *mn, Operand *op, int n)
         fail("bad short branch operand");
         return 1;
     }
-    emit_short_relative(&op[0].expr, tab[i].opcode);
+    emit_short_relative(&op[0].expr, tab[i].opcode, FIX_PC8);
     return 1;
 }
 
@@ -3017,19 +3029,23 @@ static void assemble_instruction(char *line)
         return;
     if (mnemonic(mn, "shld", &sz) || mnemonic(mn, "shrd", &sz)) {
         int right = !strncmp(mn, "shrd", 4);
-        if (!require_n(n, 3, mn) || !is_gpr(&op[1]) || !is_gpr_or_mem(&op[2])) {
+        Operand *count = n == 3 ? &op[0] : 0;
+        Operand *src = n == 3 ? &op[1] : &op[0];
+        Operand *dst = n == 3 ? &op[2] : &op[1];
+        if ((n != 2 && n != 3) || !is_gpr(src) || !is_gpr_or_mem(dst)) {
             fail("bad double shift operands");
             return;
         }
-        size_prefix(operand_size(0, &op[2], sz));
+        size_prefix(operand_size(0, dst, sz));
         emit8(0x0f);
-        if (op[0].kind == O_IMM) {
+        if (count && count->kind == O_IMM) {
             emit8(right ? 0xac : 0xa4);
-            emit_modrm(op[1].reg, &op[2]);
-            emit_expr(&op[0].expr, 1, 0);
-        } else if (op[0].kind == O_REG && op[0].reg == 1) {
+            emit_modrm(src->reg, dst);
+            emit_expr(&count->expr, 1, 0);
+        } else if (!count || (count->kind == O_REG && count->reg == 1 &&
+                              count->reg_size == 1)) {
             emit8(right ? 0xad : 0xa5);
-            emit_modrm(op[1].reg, &op[2]);
+            emit_modrm(src->reg, dst);
         } else
             fail("bad double shift count");
         return;
@@ -3096,7 +3112,7 @@ static void assemble_instruction(char *line)
             emit_modrm(4, &op[0]);
         } else if (op[0].kind == O_MEM && !op[0].indirect)
             if (local_branch_target(&op[0].expr))
-                emit_short_relative(&op[0].expr, 0xeb);
+                emit_short_relative(&op[0].expr, 0xeb, FIX_RELAX_JMP);
             else
                 emit_relative(&op[0].expr, 0xe9, -1, R_386_PC32);
         else
@@ -3109,7 +3125,7 @@ static void assemble_instruction(char *line)
             return;
         }
         if (local_branch_target(&op[0].expr))
-            emit_short_relative(&op[0].expr, 0x70 + cc);
+            emit_short_relative(&op[0].expr, 0x70 + cc, FIX_RELAX_JCC);
         else
             emit_relative(&op[0].expr, 0x0f, 0x80 + cc, R_386_PC32);
         return;
@@ -3271,18 +3287,28 @@ static int string_bytes(const char *text, int nul)
 
 static void do_align(unsigned align, int fill, int explicit_fill)
 {
-    unsigned target;
+    Alignment *a;
+    unsigned start, target;
     if (!power_of_two(align)) {
         fail("alignment must be a power of two");
         return;
     }
     if (align > cursec->align)
         cursec->align = align;
-    target = align_up(cursec->size, align);
+    if (nalignment >= MAX_ALIGNS)
+        fatal("too many alignment directives");
+    start = cursec->size;
+    target = align_up(start, align);
     if (!explicit_fill)
         fill = (cursec->flags & SHF_EXECINSTR) ? 0x90 : 0;
     while (cursec->size < target)
         emit8(fill);
+    a = &alignments[nalignment++];
+    a->sec = cursec;
+    a->offset = start;
+    a->size = target - start;
+    a->align = align;
+    a->fill = (unsigned char)fill;
 }
 
 static int constant_arg(const char *s, long long *v)
@@ -3780,6 +3806,146 @@ static void put_sym(Buffer *b, unsigned name, unsigned value, unsigned size, uns
     buf16(b, shndx);
 }
 
+static void shift_section_tail(Section *sec, unsigned threshold, int delta,
+                               unsigned span_start, Alignment *skip)
+{
+    int secno = (int)(sec - sections);
+    int i, j;
+
+    for (i = 0; i < nsymbol; i++) {
+        Symbol *s = &symbols[i];
+        unsigned long long end;
+        if (!s->defined || s->common || s->sec != secno)
+            continue;
+        end = (unsigned long long)s->value + s->size;
+        if (s->size && s->value < span_start && end >= threshold)
+            s->size = (unsigned)((long long)s->size + delta);
+        if (s->value >= threshold)
+            s->value = (unsigned)((long long)s->value + delta);
+    }
+    for (i = 0; i < nfixup; i++) {
+        Fixup *f = &fixups[i];
+        if (f->sec == sec && f->offset >= threshold)
+            f->offset = (unsigned)((long long)f->offset + delta);
+        if (f->expr.parse_sec == secno && f->expr.parse_dot >= threshold)
+            f->expr.parse_dot =
+                (unsigned)((long long)f->expr.parse_dot + delta);
+        for (j = 0; j < f->expr.nterm; j++)
+            if (!f->expr.term[j].sym && f->expr.term[j].sec == secno &&
+                f->expr.term[j].value >= threshold)
+                f->expr.term[j].value =
+                    (unsigned)((long long)f->expr.term[j].value + delta);
+    }
+    for (i = 0; i < nalignment; i++)
+        if (&alignments[i] != skip && alignments[i].sec == sec &&
+            alignments[i].offset >= threshold)
+            alignments[i].offset =
+                (unsigned)((long long)alignments[i].offset + delta);
+}
+
+static void insert_section_bytes(Section *sec, unsigned offset, unsigned count)
+{
+    if (offset > sec->size)
+        fatal("internal branch relaxation offset");
+    sec_need(sec, count);
+    if (sec->type != SHT_NOBITS) {
+        memmove(sec->data + offset + count, sec->data + offset,
+                sec->size - offset);
+        memset(sec->data + offset, 0, count);
+    }
+    sec->size += count;
+    shift_section_tail(sec, offset, (int)count, offset, 0);
+}
+
+static void resize_alignment(Alignment *a, unsigned size)
+{
+    Section *sec = a->sec;
+    unsigned oldend = a->offset + a->size;
+    int delta = (int)size - (int)a->size;
+
+    if (!delta)
+        return;
+    if (delta > 0)
+        sec_need(sec, (unsigned)delta);
+    if (sec->type != SHT_NOBITS) {
+        memmove(sec->data + a->offset + size, sec->data + oldend,
+                sec->size - oldend);
+        memset(sec->data + a->offset, a->fill, size);
+    }
+    sec->size = (unsigned)((long long)sec->size + delta);
+    shift_section_tail(sec, oldend, delta, a->offset, a);
+    a->size = size;
+}
+
+static void relax_alignments(void)
+{
+    int i;
+    for (i = 0; i < nalignment; i++) {
+        Alignment *a = &alignments[i];
+        unsigned target = align_up(a->offset, a->align);
+        resize_alignment(a, target - a->offset);
+    }
+}
+
+static int short_branch_value(Fixup *f, long long *value)
+{
+    Expr e = f->expr;
+    reduce_expr(&e);
+    if (expr_absolute(&e, value)) {
+        *value -= f->offset + 1;
+        return 1;
+    }
+    if (e.nterm == 1 && e.term[0].sign == 1 && e.term[0].sym &&
+        e.term[0].sym->defined && !e.term[0].sym->common &&
+        e.term[0].sym->sec == (int)(f->sec - sections)) {
+        *value = e.addend + e.term[0].sym->value - (f->offset + 1);
+        return 1;
+    }
+    return 0;
+}
+
+static void relax_branches(void)
+{
+    int changed, i;
+    do {
+        changed = 0;
+        for (i = 0; i < nfixup; i++) {
+            Fixup *f = &fixups[i];
+            Section *sec;
+            unsigned start, opcode, cc;
+            long long value;
+            if (f->reloc != FIX_RELAX_JMP && f->reloc != FIX_RELAX_JCC)
+                continue;
+            if (!short_branch_value(f, &value) ||
+                (value >= -128 && value <= 127))
+                continue;
+            sec = f->sec;
+            start = f->offset - 1;
+            opcode = sec->data[start];
+            if (f->reloc == FIX_RELAX_JMP) {
+                if (opcode != 0xeb)
+                    fatal("internal short jump opcode");
+                insert_section_bytes(sec, f->offset + 1, 3);
+                sec->data[start] = 0xe9;
+            } else {
+                if ((opcode & 0xf0) != 0x70)
+                    fatal("internal short conditional jump opcode");
+                cc = opcode & 15;
+                insert_section_bytes(sec, f->offset + 1, 4);
+                sec->data[start] = 0x0f;
+                sec->data[start + 1] = 0x80 + cc;
+                f->offset++;
+            }
+            f->size = 4;
+            f->expr.addend -= 4;
+            f->reloc = R_386_PC32;
+            changed = 1;
+        }
+        if (changed)
+            relax_alignments();
+    } while (changed);
+}
+
 static void write_object(void)
 {
     Buffer out = { 0 }, str = { 0 }, shstr = { 0 }, symtab = { 0 };
@@ -3789,6 +3955,9 @@ static void write_object(void)
     unsigned symtab_index, strtab_index, shstr_index, shnum, shoff, first_global;
     unsigned i, j, nrelsec = 0, off;
     FILE *fp;
+    relax_branches();
+    if (errors)
+        return;
     memset(rel, 0, sizeof(rel));
     buf8(&str, 0);
     buf8(&shstr, 0);
@@ -3799,14 +3968,9 @@ static void write_object(void)
         Symbol *s;
         long long v;
         reduce_expr(&e);
-        if (f->reloc == FIX_PC8) {
-            if (expr_absolute(&e, &v))
-                v -= f->offset + 1;
-            else if (e.nterm == 1 && e.term[0].sign == 1 && e.term[0].sym &&
-                     e.term[0].sym->defined && !e.term[0].sym->common &&
-                     e.term[0].sym->sec == (int)(f->sec - sections))
-                v = e.addend + e.term[0].sym->value - (f->offset + 1);
-            else {
+        if (f->reloc == FIX_PC8 || f->reloc == FIX_RELAX_JMP ||
+            f->reloc == FIX_RELAX_JCC) {
+            if (!short_branch_value(f, &v)) {
                 fail("short branch target must be defined in the same section");
                 continue;
             }
@@ -3884,7 +4048,9 @@ static void write_object(void)
                 Expr e = fixups[j].expr;
                 Symbol *s;
                 long long v;
-                if (fixups[j].reloc == FIX_PC8)
+                if (fixups[j].reloc == FIX_PC8 ||
+                    fixups[j].reloc == FIX_RELAX_JMP ||
+                    fixups[j].reloc == FIX_RELAX_JCC)
                     continue;
                 reduce_expr(&e);
                 if (expr_absolute(&e, &v) || local_pc32_value(&fixups[j], &e, &v))

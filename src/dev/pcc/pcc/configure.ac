@@ -142,6 +142,7 @@ case "$target_os" in
 	abi=elf
 	wchar_type=USHORT
 	case "$target_cpu" in
+	    i?86) targmach=i386 endian=little ;;
 	    mipsel*) targmach=mips endian=little ;;
 	    mips*) targmach=mips endian=big ;;
 	esac
@@ -309,6 +310,11 @@ fi
 
 if test "X$targmachdir" = X ; then
 	targmachdir=$targmach
+fi
+
+targetobjs=
+if test "$targmach" = mips ; then
+	targetobjs=target.o
 fi
 
 case "$host_os" in
@@ -696,6 +702,7 @@ AC_SUBST(targos)
 AC_SUBST(targosver)
 AC_SUBST(targmach)
 AC_SUBST(targmachdir)
+AC_SUBST(targetobjs)
 AC_SUBST(hostos)
 AC_SUBST(prefix)
 AC_SUBST(exec_prefix)

@@ -1,7 +1,7 @@
 /*	$Id$	*/
 
 /*
- * Various settings that controls how the C compiler works for ReBSD/MIPS.
+ * Various settings that control how the C compiler works for ReBSD.
  */
 
 /* common cpp predefines */
@@ -12,6 +12,8 @@
 	"-D__BSD__", "-D__unix__", "-Dunix", \
 	NULL, \
 }
+
+#if defined(mach_mips)
 
 #ifdef TARGET_BIG_ENDIAN
 #define CPPMD_ENDIAN "-D__MIPSEB__", "-D__MIPSEB", "-DMIPSEB", "-D_MIPSEB",
@@ -211,6 +213,44 @@
 		strlist_append(&early_linker_flags, \
 		    cat("-L", cat_sysroot(sysroot, SOFTFLOATLIBDIR))); \
 }
+
+#elif defined(mach_i386)
+
+#define CPPMDADD { \
+	"-D__i386__", "-D__i386", "-Di386", \
+	NULL, \
+}
+
+#define CRTBEGIN	0
+#define CRTEND		0
+#define CRTI		0
+#define CRTN		0
+#undef PCCLIBDIR
+#define PCCLIBDIR	NULL
+
+#define CRT0		LIBDIR "crt0.o"
+#define DEFLIBDIRS	{ LIBDIR, NULL }
+#define DEFLIBS		{ "-lpcc", "-lc", "-lpcc", NULL }
+#define DEFPROFLIBS	{ "-lpcc", "-lc", "-lpcc", NULL }
+#define DEFCXXLIBS	{ "-lpcc", "-lc", "-lpcc", NULL }
+
+#define STARTLABEL	"_start"
+
+#define PCC_SETUP_AS_ARGS { \
+	strlist_append(&assembler_flags, "--32"); \
+}
+
+#define PCC_SETUP_LD_ARGS { \
+	strlist_append(&early_linker_flags, "--elf"); \
+	strlist_append(&early_linker_flags, "-X"); \
+	strlist_append(&early_linker_flags, "-T"); \
+	strlist_append(&early_linker_flags, \
+	    cat_sysroot(sysroot, LIBDIR "ldscripts/elf32-i386.ld")); \
+}
+
+#else
+#error ReBSD PCC target architecture is not configured
+#endif
 
 #define PCC_SIZE_TYPE		"unsigned int"
 #define PCC_PTRDIFF_TYPE	"int"

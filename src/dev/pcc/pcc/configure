@@ -650,6 +650,7 @@ ADD_CPPFLAGS
 ADD_CFLAGS
 hostos
 targmachdir
+targetobjs
 targmach
 targosver
 targos
@@ -3031,6 +3032,7 @@ case "$target_os" in
 	abi=elf
 	wchar_type=USHORT
 	case "$target_cpu" in
+	    i?86) targmach=i386 endian=little ;;
 	    mipsel*) targmach=mips endian=little ;;
 	    mips*) targmach=mips endian=big ;;
 	esac
@@ -3198,6 +3200,11 @@ fi
 
 if test "X$targmachdir" = X ; then
 	targmachdir=$targmach
+fi
+
+targetobjs=
+if test "$targmach" = mips ; then
+	targetobjs=target.o
 fi
 
 case "$host_os" in

@@ -843,7 +843,8 @@ andable(P1ND *p)
 int
 cisreg(TWORD t)
 {
-	if (t == FLOAT || t == DOUBLE || t == LDOUBLE)
+	if (t == FLOAT || t == DOUBLE || t == LDOUBLE ||
+	    t == LONGLONG || t == ULONGLONG)
 		return 0; /* not yet */
 	return 1;
 }

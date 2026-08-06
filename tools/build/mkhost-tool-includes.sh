@@ -5,7 +5,7 @@ topsrc=$1
 outdir=$2
 
 if [ -z "$topsrc" ] || [ -z "$outdir" ]; then
-    echo "usage: mkhostinclude.sh topsrc outdir" >&2
+    echo "usage: mkhost-tool-includes.sh topsrc outdir" >&2
     exit 1
 fi
 

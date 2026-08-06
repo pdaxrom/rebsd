@@ -28,7 +28,8 @@ $(MAN):         $(MANSRC)
 		$(MANROFF) $< > $@
 
 clean:
-		rm -f *.o *.0 *.elf as as-host tags *~ *.dis tests/*.o tests/*.dis tests/*.bin
+		rm -f *.o *.0 *.elf as as-host ld-host tags *~ *.dis tests/*.o tests/*.dis tests/*.bin
+		rm -rf tests/host-tool-includes
 
 install:        all
 		install as $(DESTDIR)/bin/
@@ -65,4 +66,17 @@ test:
 		@set -e; for t in $(BYTE_TESTS) cyrix vendor-netbsd; do \
 		    $(I686_PREFIX)objdump -dr tests/$$t.o > tests/$$t.dis; \
 		done
-		rm -f as-host
+		$(TOPSRC)/tools/build/mkhost-tool-includes.sh $(TOPSRC) \
+		    tests/host-tool-includes
+		$(HOST_CC) -DCROSS -O2 -Itests/host-tool-includes \
+		    -I$(TOPSRC)/src/cmd \
+		    -o ld-host $(TOPSRC)/src/cmd/ld/ld.c \
+		    $(TOPSRC)/src/cmd/aoutio.c
+		./ld-host --elf -r -o tests/common-r.o \
+		    tests/basic.o tests/resolve.o
+		./ld-host --elf -T tests/i386.ld -o tests/common.elf \
+		    tests/common-r.o
+		@$(I686_PREFIX)objdump -dr tests/common.elf | \
+		    grep -Eq 'movl[[:space:]]+\$$0x89abcdef,0x201c'
+		rm -f as-host ld-host tests/common-r.o tests/common.elf
+		rm -rf tests/host-tool-includes

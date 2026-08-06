@@ -243,6 +243,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ps2-keyboard", action="store_true")
     parser.add_argument("--ps2-mouse", action="store_true")
     parser.add_argument("--halt-smoke", action="store_true")
+    parser.add_argument("--pcc-smoke", action="store_true")
     parser.add_argument("--expect-no-disk", action="store_true")
     parser.add_argument("--timeout", type=float, default=15.0)
     args = parser.parse_args()
@@ -451,6 +452,8 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         or args.uhci_disk is not None
     ):
         markers += ("Bus 001 Device 001: ID ",)
+    if args.pcc_smoke:
+        markers += ("PCC_I686_SELFHOST_OK", "PCC_SMOKE_ALL_OK")
     return markers
 
 
@@ -633,6 +636,13 @@ def main() -> None:
             b"\r\nREBSD_I686_FULL_ROOTFS_OK REBSD_I686_SHELL_OK\r\n",
         ),
     )
+    if args.pcc_smoke:
+        commands += (
+            (
+                b"/root/pcc-smoke-all.sh\n",
+                b"\r\nPCC_SMOKE_ALL_OK\r\n",
+            ),
+        )
     if args.disk is not None:
         commands += (IDE_DMESG_COMMAND,)
     if args.fat_mount_smoke:

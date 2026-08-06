@@ -115,6 +115,7 @@ struct mips_target {
 };
 
 #if defined(os_rebsd)
+#define TARGET_HAS_MYOPTIM_PRE 1
 #define MIPS_HARDFLOAT_O32_ABI 1
 #define TARGET_NO_ABICALLS
 #define TARGET_NO_REORDER

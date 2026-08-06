@@ -765,11 +765,15 @@ pass2_compile(struct interpass *ip)
 
 	fixxasm(p2e); /* setup for extended asm */
 
+#ifdef TARGET_HAS_MYOPTIM_PRE
 	myoptim_pre(&p2e->ipole);
+#endif
 	p2regalloc_done = 0;
 	optimize(p2e);
 	optstats_capture_cfg(p2e);
+#ifdef TARGET_HAS_MYOPTIM_PRE
 	myoptim_pre(&p2e->ipole);
+#endif
 	ngenregs(p2e);
 	p2regalloc_done = 1;
 	myoptim(&p2e->ipole);

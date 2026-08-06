@@ -3774,7 +3774,35 @@ elf_discard_sections(void)
 static void
 elf_place_common(struct elf_outsec *out, unsigned *dot)
 {
-    int i;
+    int i, j;
+
+    /*
+     * PCC emits function-local static storage as local SHN_COMMON symbols.
+     * They cannot be merged through the global symbol table because equal
+     * local names in different input files denote different objects.  Give
+     * each one storage when the linker script places COMMON, and turn it
+     * into an absolute input value for relocation processing below.
+     */
+    for (i = 0; i < neinput; i++) {
+        struct elf_input *in = &einput[i];
+
+        for (j = 1; j < in->nsym; j++) {
+            Elf32_Sym *s = &in->symtab[j];
+            unsigned align;
+
+            if (ELF_ST_BIND(s->st_info) != STB_LOCAL ||
+                s->st_shndx != SHN_COMMON)
+                continue;
+            align = s->st_value ? s->st_value : 1;
+            *dot = elf_align(*dot, align);
+            s->st_value = *dot;
+            s->st_shndx = SHN_ABS;
+            *dot += s->st_size;
+            if (out->align < align)
+                out->align = align;
+            out->flags |= SHF_ALLOC | SHF_WRITE;
+        }
+    }
 
     for (i = 0; i < nelsym; i++) {
         if (!elsym[i].common)
@@ -4418,7 +4446,9 @@ elf_write_relocatable(void)
                 continue;
             memset(&sym, 0, sizeof(sym));
             sym = *s;
-            if (s->st_shndx < (unsigned)in->shnum &&
+            if (s->st_shndx == SHN_COMMON) {
+                /* Preserve local commons for a later final link. */
+            } else if (s->st_shndx < (unsigned)in->shnum &&
                 (sec = in->secmap[s->st_shndx]) >= 0) {
                 sym.st_shndx = out[einsec[sec].out].shndx;
                 sym.st_value = s->st_value + einsec[sec].outoff;

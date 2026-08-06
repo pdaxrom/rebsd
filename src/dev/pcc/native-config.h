@@ -1,4 +1,4 @@
-/* Common configuration for a PCC compiler running on ReBSD/MIPS. */
+/* Common configuration for a PCC compiler running on ReBSD. */
 #define ELFABI 1
 #define HAVE_ALLOCA 1
 #define HAVE_ALLOCA_H 1

@@ -220,7 +220,9 @@ extern	NODE
 void eoftn(struct interpass_prolog *);
 void prologue(struct interpass_prolog *);
 void e2print(NODE *p, int down, int *a, int *b);
+#ifdef TARGET_HAS_MYOPTIM_PRE
 void myoptim_pre(struct interpass *);
+#endif
 void myoptim(struct interpass *);
 void cbgen(int op, int label);
 int match(NODE *p, int cookie);

@@ -47,7 +47,9 @@
 #define SZINT		32
 #define SZFLOAT		32
 #define SZDOUBLE	64
-#ifdef MACHOABI
+#if defined(os_rebsd)
+#define SZLDOUBLE	64
+#elif defined(MACHOABI)
 #define SZLDOUBLE	128
 #else
 #define SZLDOUBLE	96
@@ -65,7 +67,9 @@
 #define ALINT		32
 #define ALFLOAT		32
 #define ALDOUBLE	32
-#ifdef MACHOABI
+#if defined(os_rebsd)
+#define ALLDOUBLE	32
+#elif defined(MACHOABI)
 #define ALLDOUBLE	128
 #else
 #define ALLDOUBLE	32
@@ -152,8 +156,13 @@ typedef long long OFFSZ;
 #define STOSTARG(p)
 #define genfcall(a,b)	gencall(a,b)
 
+#if defined(os_rebsd)
+#define	szty(t)	(((t) == DOUBLE || (t) == FLOAT || (t) == LDOUBLE || \
+	(t) == LONGLONG || (t) == ULONGLONG) ? 2 : 1)
+#else
 #define	szty(t)	(((t) == DOUBLE || (t) == FLOAT || \
 	(t) == LONGLONG || (t) == ULONGLONG) ? 2 : (t) == LDOUBLE ? 3 : 1)
+#endif
 
 /*
  * The x86 has a bunch of register classes, most of them interfering
@@ -467,6 +476,11 @@ extern int msettings;
 #define	FLT_PREFIX	IEEEFP_32
 #define	USE_IEEEFP_64
 #define	DBL_PREFIX	IEEEFP_64
+#if defined(os_rebsd)
+#define	LDBL_PREFIX	IEEEFP_64
+#define	DEFAULT_FPI_DEFS { &fpi_binary32, &fpi_binary64, &fpi_binary64 }
+#else
 #define	USE_IEEEFP_X80
 #define	LDBL_PREFIX	IEEEFP_X80
 #define	DEFAULT_FPI_DEFS { &fpi_binary32, &fpi_binary64, &fpi_binaryx80 }
+#endif

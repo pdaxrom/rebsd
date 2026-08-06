@@ -50,7 +50,7 @@ DRIVERS=pcc pcpp p++
 
 all: $(DEST)
 
-OBJS=	cc.o compat.o strlist.o target.o xalloc.o
+OBJS=	cc.o compat.o strlist.o @targetobjs@ xalloc.o
 
 cc.o:	$(srcdir)/cc.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(srcdir)/cc.c

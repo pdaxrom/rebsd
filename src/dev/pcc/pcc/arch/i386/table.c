@@ -1427,13 +1427,21 @@ struct optab table[] = {
 	SO_N,	TLDOUBLE,
 	SHFL,	TFLOAT|TDOUBLE|TLDOUBLE,
 		0,	RDEST,
+#if defined(os_rebsd)
+		"\tfstl AL\n", },
+#else
 		"	fstpt AL\n	fldt AL\n", }, /* XXX */
+#endif
 
 { ASSIGN,	FOREFF,
 	SO_N,	TLDOUBLE,
 	SHFL,	TFLOAT|TDOUBLE|TLDOUBLE,
 		0,	0,
+#if defined(os_rebsd)
+		"\tfstpl AL\n", },
+#else
 		"	fstpt AL\n", },
+#endif
 
 { ASSIGN,	INFL,
 	SO_N,	TDOUBLE,
@@ -1464,7 +1472,11 @@ struct optab table[] = {
 	SHFL,		TLDOUBLE,
 	SD_O_N,	TLDOUBLE,
 		0,	RDEST,
+#if defined(os_rebsd)
+		"\tfldl AR\n", },
+#else
 		"	fldt AR\n", },
+#endif
 
 { ASSIGN,	INFL|FOREFF,
 	SHFL,		TDOUBLE,
@@ -1695,7 +1707,11 @@ struct optab table[] = {
 	SANY,	TANY,
 	SOREG,	TLDOUBLE,
 		XSL(D),	RESC1,
+#if defined(os_rebsd)
+		"\tfldl AL\n", },
+#else
 		"	fldt AL\n", },
+#endif
 
 { UMUL,	INFL,
 	SANY,	TANY,
@@ -1912,7 +1928,11 @@ struct optab table[] = {
 	SANY,		TLDOUBLE,
 	SO_N,	TLDOUBLE,
 		XSL(D),	RESC1,
+#if defined(os_rebsd)
+		"\tfldl AL\n", },
+#else
 		"	fldt AL\n", },
+#endif
 
 { OPLTYPE,	INDREG,
 	SANY,		TDOUBLE,
@@ -2072,7 +2092,11 @@ struct optab table[] = {
 	SDREG,	TLDOUBLE,
 	SANY,		TLDOUBLE,
 		0,	0,
+#if defined(os_rebsd)
+		"\tsubl $8,%esp\n\tfstpl (%esp)\n", },
+#else
 		"	subl $12,%esp\n	fstpt (%esp)\n", },
+#endif
 
 { STARG,	FOREFF,
 	SAREG,	TPTRTO|TSTRUCT,

@@ -117,6 +117,29 @@ I386_USERLAND_BUILD = $(CURDIR)/i386-userland-build
 I386_USERLAND_SRC = $(I386_USERLAND_BUILD)/src
 I386_USERLAND_DESTDIR = $(I386_USERLAND_BUILD)/rootfs-install
 I386_USERLAND_STAMP = i386-userland.gcc.elf.stamp
+I386_ROOTFS_NATIVE_PCC ?= 1
+I386_PCC_WORK = $(CURDIR)/i386-pcc-build
+I386_PCC_BUILD_SCRIPT = $(I386_TOOLS_SRC)/build-native-pcc.sh
+I386_PCC_STAGE_STAMP = $(I386_ROOTFS_STAGE)/.native-pcc
+I386_PCC_SRCS = $(I386_PCC_BUILD_SCRIPT) \
+                $(TOPSRC)/src/dev/pcc/Makefile.native \
+                $(TOPSRC)/src/dev/pcc/native-config.h \
+                $(TOPSRC)/tools/build/mkhost-tool-includes.sh \
+                $(shell find $(TOPSRC)/src/dev/pcc/pcc \
+                    $(TOPSRC)/src/dev/pcc/pcc-libs/libpcc \
+                    -type f 2>/dev/null) \
+                $(shell find $(TOPSRC)/src/cmd/as-i386 \
+                    $(TOPSRC)/src/cmd/ld $(TOPSRC)/src/cmd/ar \
+                    $(TOPSRC)/src/cmd/ranlib $(TOPSRC)/src/cmd/nm \
+                    -type f \( -name '*.[ch]' -o -name Makefile \) \
+                    2>/dev/null) \
+                $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/strip.c \
+                $(TOPSRC)/src/cmd/aoutio.c $(TOPSRC)/src/cmd/aoutio.h
+ifeq ($(I386_ROOTFS_NATIVE_PCC),1)
+I386_ROOTFS_PCC_DEPS = $(I386_PCC_STAGE_STAMP)
+else
+I386_ROOTFS_PCC_DEPS =
+endif
 I386_USER_LDSCRIPT = i386-user.ld
 I386_USER_LDSCRIPT_SRC = $(I386_SRC)/user/user.ld.S
 I386_KERNEL_LDSCRIPT = i386-kernel.ld
@@ -267,6 +290,7 @@ $(KERNEL_OBJS) setup.o: | .deps
 .DEFAULT_GOAL := all
 
 .PHONY: all kernel bios-image toolchain-check rootfs-smoke ide-smoke \
+	pcc-host-smoke pcc-smoke-runtime \
 	fat-mount-smoke \
 	ide-pio-smoke ide-dma-smoke ide-auto-smoke \
 	ramdisk-smoke \
@@ -522,7 +546,18 @@ $(I386_USERLAND_STAMP): $(I386_ROOTFS_BASE_STAMP) \
 	rm -f $(I386_ROOTFS_STAGE)/usr/share/man/whatis.tmp
 	touch $@
 
-$(I386_ROOTFS_STAGE)/.userland: $(I386_USERLAND_STAMP)
+$(I386_PCC_STAGE_STAMP): $(I386_USERLAND_STAMP) $(I386_PCC_SRCS) \
+	    $(I386_USER_LDSCRIPT)
+	HOSTCC="$(HOSTCC)" REBSD_REAL_MAKE="$(REBSD_REAL_MAKE)" \
+	    sh $(I386_PCC_BUILD_SCRIPT) $(abspath $(TOPSRC)) \
+	    $(abspath $(I386_PCC_WORK)) $(abspath $(I386_ROOTFS_STAGE)) \
+	    $(abspath $(I386_ROOTFS_BASE)/usr/include) \
+	    $(abspath $(I386_USERLAND_SRC)) \
+	    $(abspath $(I386_USER_LDSCRIPT))
+	touch $@
+
+$(I386_ROOTFS_STAGE)/.userland: $(I386_USERLAND_STAMP) \
+	    $(I386_ROOTFS_PCC_DEPS)
 	test -x $(I386_ROOTFS_STAGE)/sbin/init
 	test -L $(I386_ROOTFS_STAGE)/etc/init
 	test -L $(I386_ROOTFS_STAGE)/etc/telinit
@@ -1368,6 +1403,15 @@ ide-smoke: rebsd-i686.bzimg rootfs.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk rootfs.img
 
+pcc-host-smoke: $(I386_PCC_STAGE_STAMP)
+	@echo "pcc-host-smoke: cross compiler and target-native self-build ok"
+
+pcc-smoke-runtime: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --pcc-smoke --timeout 180
+
 fat-mount-smoke: rebsd-i686.bzimg $(I386_FAT_SMOKE_IMAGE) \
 	    $(I386_FAT32_SMOKE_IMAGE)
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -1613,6 +1657,7 @@ clean:
 	    $(I386_KERNEL_LDSCRIPT) \
 	    $(I386_ROOTFS_BASE_STAMP) \
 	    $(I386_USERLAND_STAMP) \
+	    $(I386_PCC_STAGE_STAMP) \
 	    rebsd-i686-bios-floppy.img \
 	    rebsd-i686-bios-floppy.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
@@ -1620,6 +1665,7 @@ clean:
 	rm -rf $(I386_ROOTFS_STAGE)
 	rm -rf $(I386_ROOTFS_BASE)
 	rm -rf $(I386_USERLAND_BUILD)
+	rm -rf $(I386_PCC_WORK)
 	rm -rf .deps
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	rmdir $(I386_GEN_INCLUDE) 2>/dev/null || true

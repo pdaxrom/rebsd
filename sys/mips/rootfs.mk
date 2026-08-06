@@ -288,14 +288,14 @@ MIPS_NATIVE_TARGET_FLAGS_mips32r2 = $(MIPS_ROOTFS_ENDIAN_CPP) \
                                     $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
                                     $(MIPS_ROOTFS_EXTRA_CPPFLAGS)
 MIPS_NATIVE_TARGET_FLAGS ?= $(MIPS_NATIVE_TARGET_FLAGS_$(MIPS_ROOTFS_CPU))
-MIPS_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/sys/mips/n64/native/mkhostinclude.sh
+MIPS_NATIVE_MKHOSTINCLUDE = $(TOPSRC)/tools/build/mkhost-tool-includes.sh
 MIPS_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/tools/mips-native-cc.sh
 MIPS_HOST_PORTABLECC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
 MIPS_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 MIPS_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
 MIPS_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
-MIPS_NATIVE_PCC_MAKEFILE = $(TOPSRC)/sys/mips/tools/Makefile.native-pcc
-MIPS_NATIVE_PCC_CONFIG = $(TOPSRC)/sys/mips/tools/native-pcc-config.h
+MIPS_NATIVE_PCC_MAKEFILE = $(TOPSRC)/src/dev/pcc/Makefile.native
+MIPS_NATIVE_PCC_CONFIG = $(TOPSRC)/src/dev/pcc/native-config.h
 MIPS_VR4300_HILO_CHECK = $(TOPSRC)/sys/mips/n64/native/check-vr4300-hilo.sh
 MIPS_VR4300_ORDER_CHECK = python3 \
     $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py

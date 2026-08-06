@@ -132,6 +132,7 @@ typedef struct regw {
 	int r_nclass[NUMCLASS+1];	/* count of adjacent classes */
 	struct regw *r_alias;		/* aliased temporary */
 	int r_color;		/* final node color */
+	int r_spillreg;		/* base register for an existing spill slot */
 	struct regw *r_onlist;	/* which work list this node belongs to */
 	MOVL *r_moveList;	/* moves associated with this node */
 	int nodnum;		/* Human-readable node number */
@@ -2815,22 +2816,13 @@ longtemp(NODE *p, void *arg)
 #ifdef MYLONGTEMP
 		MYLONGTEMP(p, w);
 #endif
-		/*
-		 * r_class normally holds the register class.  During leaf
-		 * rewriting it is reused as the base register for an existing
-		 * stack slot (see temparg()).  Do not treat a raw class value as
-		 * a base register; otherwise CLASSA becomes register 1, which is
-		 * $at on MIPS.
-		 */
-		if (w->r_class >= CLASSA && w->r_class <= CLASSG)
-			w->r_class = 0;
-		if (w->r_class == 0) {
+		if (w->r_spillreg == 0) {
 			before = p2maxautooff;
 			w->r_color = freetemp(szty(p->n_type));
 			optstats_note_spill_slot((unsigned)(p2maxautooff - before));
-			w->r_class = FPREG; /* XXX - assumption? */
+			w->r_spillreg = FPREG; /* XXX - assumption? */
 		}
-		storemod(p, w->r_color, w->r_class);
+		storemod(p, w->r_color, w->r_spillreg);
 		break;
 	}
 }
@@ -3317,7 +3309,7 @@ RewriteProgram(struct interpass *ip)
 	}
 	if (!DLIST_ISEMPTY(&longregs, link)) {
 		DLIST_FOREACH(w, &longregs, link) {
-			w->r_class = xtemps ? temparg(ip, w) : 0;
+			w->r_spillreg = xtemps ? temparg(ip, w) : 0;
 		}
 		leafrewrite(ip, &longregs);
 		if (!remat_done)

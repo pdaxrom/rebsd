@@ -1,8 +1,8 @@
-# Build PCC binaries that run natively on ReBSD/MIPS.
+# Build PCC binaries that run natively on ReBSD.
 
 TOPSRC ?= ../../..
 PCC_SRC = $(TOPSRC)/src/dev/pcc/pcc
-CONFIG_BASE = $(TOPSRC)/sys/mips/tools/native-pcc-config.h
+CONFIG_BASE = $(TOPSRC)/src/dev/pcc/native-config.h
 THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
 
 BUILD ?= native-pcc-build
@@ -14,9 +14,7 @@ TARGET_ENDIAN_FLAG ?= $(ENDIAN_FLAG)
 LDSCRIPT ?= mips-user.ld
 CRT0 ?= crt0.o
 LIBDIR ?= .
-PCC_CPU ?= vr4300
-PCC_FLOAT ?= hard
-PCC_ENDIAN ?= big
+PCC_ARCH ?= mips
 PCC_EXEC_FORMAT ?= elf
 HOSTCC ?= cc
 BISON ?= bison
@@ -28,6 +26,15 @@ TARGET_CONFIG = $(BUILD)/target-config/config.h
 
 HOST_POINTER_SIZE ?= $(shell printf '' | $(HOSTCC) -dM -E - 2>/dev/null | awk '$$2 == "__SIZEOF_POINTER__" { print $$3; exit }')
 HOST_BYTE_ORDER ?= $(shell printf '' | $(HOSTCC) -dM -E - 2>/dev/null | awk '$$2 == "__BYTE_ORDER__" { if ($$3 == "__ORDER_BIG_ENDIAN__") print "big"; else print "little"; exit }')
+
+ifeq ($(PCC_ARCH),mips)
+PCC_CPU ?= vr4300
+PCC_FLOAT ?= hard
+PCC_ENDIAN ?= big
+ARCH_DIR = mips
+MACH_DEFINE = -Dmach_mips
+CC_TARGET_NAMES = target
+CCOM_TARGET_NAMES = target
 
 ifeq ($(PCC_CPU),vr4300)
 CPU_DEFINE = -DMIPS_CPU_DEFAULT=MIPS_CPU_VR4300
@@ -67,6 +74,39 @@ else
 $(error Unsupported PCC_ENDIAN=$(PCC_ENDIAN))
 endif
 
+else ifeq ($(PCC_ARCH),i386)
+PCC_CPU ?= i686
+PCC_FLOAT ?= hard
+PCC_ENDIAN ?= little
+ARCH_DIR = i386
+MACH_DEFINE = -Dmach_i386
+CC_TARGET_NAMES =
+CCOM_TARGET_NAMES =
+TARGET_TRIPLE = i386-pc-rebsd
+ENDIAN_DEFINE = -DTARGET_LITTLE_ENDIAN=1
+ENDIAN_CONFIG = \#define TARGET_LITTLE_ENDIAN 1
+ENDIAN_FLAG =
+LD_ENDIAN_FLAG =
+TARGET_HOST_ENDIAN = little
+CPU_DEFINE =
+FLOAT_DEFINE =
+FLOAT_FLAG =
+SOFT_LIBDIR =
+
+ifeq ($(filter $(PCC_CPU),i386 i486 i586 i686),)
+$(error Unsupported PCC_CPU=$(PCC_CPU))
+endif
+ifneq ($(PCC_FLOAT),hard)
+$(error Unsupported PCC_FLOAT=$(PCC_FLOAT); i386 uses the x87 ABI)
+endif
+ifneq ($(PCC_ENDIAN),little)
+$(error Unsupported PCC_ENDIAN=$(PCC_ENDIAN); i386 is little-endian)
+endif
+
+else
+$(error Unsupported PCC_ARCH=$(PCC_ARCH))
+endif
+
 ifeq ($(PCC_EXEC_FORMAT),elf)
 EXEC_DEFINE = -DREBSD_TOOLCHAIN_ELF_DEFAULT
 LD_EXEC_FLAG = --elf
@@ -94,8 +134,8 @@ TARGET_WORDS_CONFIG =
 endif
 
 COMMON_DEFS = -DGCC_COMPAT -DPCC_DEBUG -D_ISOC99_SOURCE -Dos_rebsd \
-              -Dmach_mips -DTARGOSVER=0 $(ENDIAN_DEFINE)
-COMMON_INCLUDES = -I$(PCC_SRC)/mip -I$(PCC_SRC)/arch/mips \
+              $(MACH_DEFINE) -DTARGOSVER=0 $(ENDIAN_DEFINE)
+COMMON_INCLUDES = -I$(PCC_SRC)/mip -I$(PCC_SRC)/arch/$(ARCH_DIR) \
                   -I$(PCC_SRC)/os/rebsd -I$(PCC_SRC)/common
 TARGET_ARCH = -march=$(PCC_CPU) $(FLOAT_FLAG) $(TARGET_ENDIAN_FLAG)
 TARGET_CFLAGS = $(TARGET_ARCH) -Os -fno-builtin -fno-stack-protector \
@@ -118,7 +158,8 @@ CC_SRC = $(PCC_SRC)/cc/cc
 CC_BUILD = $(BUILD)/cc
 CC_OBJDIR = $(BUILD)/obj/cc
 CC_OBJS = $(CC_OBJDIR)/cc.o $(CC_OBJDIR)/compat.o \
-          $(CC_OBJDIR)/strlist.o $(CC_OBJDIR)/target.o \
+          $(CC_OBJDIR)/strlist.o \
+          $(addprefix $(CC_OBJDIR)/,$(addsuffix .o,$(CC_TARGET_NAMES))) \
           $(CC_OBJDIR)/xalloc.o
 
 CCOM_SRC = $(PCC_SRC)/cc/ccom
@@ -127,13 +168,11 @@ CCOM_OBJDIR = $(BUILD)/obj/ccom
 CCOM_LOCAL_NAMES = builtins complex dwarf gcc_compat init inline main optim \
                    params pftn stabs symtabs trees
 CCOM_MIP_NAMES = cfgverify common match optim2 optstats reader regs ssalower
-CCOM_ARCH_NAMES = code local local2 order table target
+CCOM_ARCH_NAMES = code local local2 order table $(CCOM_TARGET_NAMES)
 CCOM_COMMON_NAMES = compat softfloat unicode
 CCOM_GENERATED_NAMES = cgram external scan
-CCOM_NAMES = builtins cgram cfgverify code common compat complex dwarf \
-             external gcc_compat init inline local local2 main match optim \
-             optim2 optstats order params pftn reader regs scan softfloat \
-             ssalower stabs symtabs table target trees unicode
+CCOM_NAMES = $(CCOM_LOCAL_NAMES) $(CCOM_MIP_NAMES) $(CCOM_ARCH_NAMES) \
+             $(CCOM_COMMON_NAMES) $(CCOM_GENERATED_NAMES)
 CCOM_OBJS = $(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_NAMES)))
 
 .PHONY: all clean check
@@ -209,7 +248,8 @@ $(CC_OBJDIR)/strlist.o $(CC_OBJDIR)/xalloc.o: \
     $(CC_OBJDIR)/%.o: $(PCC_SRC)/cc/driver/%.c $(TARGET_CONFIG)
 	$(COMPILE_DRIVER)
 
-$(CC_OBJDIR)/target.o: $(PCC_SRC)/arch/mips/target.c $(TARGET_CONFIG)
+$(addprefix $(CC_OBJDIR)/,$(addsuffix .o,$(CC_TARGET_NAMES))): \
+	$(CC_OBJDIR)/%.o: $(PCC_SRC)/arch/$(ARCH_DIR)/%.c $(TARGET_CONFIG)
 	$(COMPILE_DRIVER)
 
 $(OUT)/cc: $(CC_OBJS) $(CRT0)
@@ -218,11 +258,11 @@ $(OUT)/cc: $(CC_OBJS) $(CRT0)
 	chmod 775 $@
 
 $(CCOM_BUILD)/mkext: $(PCC_SRC)/mip/mkext.c \
-    $(PCC_SRC)/mip/common.c $(PCC_SRC)/arch/mips/table.c $(HOST_CONFIG)
+    $(PCC_SRC)/mip/common.c $(PCC_SRC)/arch/$(ARCH_DIR)/table.c $(HOST_CONFIG)
 	@mkdir -p $(dir $@)
 	$(HOSTCC) $(HOST_CFLAGS) -I$(CCOM_SRC) -DMKEXT -o $@ \
 	    $(PCC_SRC)/mip/mkext.c $(PCC_SRC)/mip/common.c \
-	    $(PCC_SRC)/arch/mips/table.c
+	    $(PCC_SRC)/arch/$(ARCH_DIR)/table.c
 
 $(CCOM_BUILD)/.external: $(CCOM_BUILD)/mkext
 	cd $(CCOM_BUILD) && ./mkext
@@ -262,7 +302,7 @@ $(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_MIP_NAMES))): \
 	    -c -o $@ $<
 
 $(addprefix $(CCOM_OBJDIR)/,$(addsuffix .o,$(CCOM_ARCH_NAMES))): \
-	$(CCOM_OBJDIR)/%.o: $(PCC_SRC)/arch/mips/%.c $(TARGET_CONFIG) \
+	$(CCOM_OBJDIR)/%.o: $(PCC_SRC)/arch/$(ARCH_DIR)/%.c $(TARGET_CONFIG) \
 	$(CCOM_BUILD)/cgram.h $(CCOM_BUILD)/external.h
 	@mkdir -p $(dir $@)
 	$(TARGET_CC) $(TARGET_CFLAGS) -I$(CCOM_BUILD) -I$(CCOM_SRC) \

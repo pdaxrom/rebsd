@@ -73,7 +73,7 @@ GNU make conditionals and functions.
 ## Native PCC
 
 PCC binaries that run inside ReBSD are built by
-`sys/mips/tools/Makefile.native-pcc`.  It has explicit targets for generated
+`src/dev/pcc/Makefile.native`.  It has explicit targets for generated
 configuration headers, yacc/flex sources, host `mkext`, target objects, and
 the native `cc`, `cpp`, and `ccom` binaries.  Malta and N64 pass their ABI and
 tool paths to this Makefile; no Python build driver is used.
