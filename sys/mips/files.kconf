@@ -1,7 +1,6 @@
 #
 # Kernel sources shared by big-endian MIPS ports.
 #
-kernel/exec_aout.c              standard
 kernel/exec_conf.c              standard
 kernel/exec_elf.c               standard
 kernel/exec_elf_loader.c        standard

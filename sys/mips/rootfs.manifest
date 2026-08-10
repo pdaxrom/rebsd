@@ -291,7 +291,6 @@ file /usr/lib/libpcc.a
 file /bin/[
 mode 0775
 
-file /usr/bin/aout
 mode 0775
 
 file /usr/bin/apropos

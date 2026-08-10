@@ -39,7 +39,7 @@ ifeq ($(filter $(MIPS_ROOTFS_ENDIAN),$(MIPS_ROOTFS_ENDIANS)),)
 $(error Unsupported MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN); expected one of $(MIPS_ROOTFS_ENDIANS))
 endif
 MIPS_ROOTFS_EXEC_FORMAT ?= elf
-MIPS_ROOTFS_EXEC_FORMATS = aout elf
+MIPS_ROOTFS_EXEC_FORMATS = elf
 ifeq ($(filter $(MIPS_ROOTFS_EXEC_FORMAT),$(MIPS_ROOTFS_EXEC_FORMATS)),)
 $(error Unsupported MIPS_ROOTFS_EXEC_FORMAT=$(MIPS_ROOTFS_EXEC_FORMAT); expected one of $(MIPS_ROOTFS_EXEC_FORMATS))
 endif
@@ -65,9 +65,7 @@ MIPS_ROOTFS_ENDIAN_CPP = $(MIPS_ROOTFS_ENDIAN_CPP_$(MIPS_ROOTFS_ENDIAN))
 MIPS_ROOTFS_ENDIAN_CPP1_big = -DTARGET_BIG_ENDIAN=1
 MIPS_ROOTFS_ENDIAN_CPP1_little = -DTARGET_LITTLE_ENDIAN=1
 MIPS_ROOTFS_ENDIAN_CPP1 = $(MIPS_ROOTFS_ENDIAN_CPP1_$(MIPS_ROOTFS_ENDIAN))
-MIPS_ROOTFS_TOOLCHAIN_CPP_aout =
-MIPS_ROOTFS_TOOLCHAIN_CPP_elf = -DREBSD_TOOLCHAIN_ELF_DEFAULT
-MIPS_ROOTFS_TOOLCHAIN_CPP ?= $(MIPS_ROOTFS_TOOLCHAIN_CPP_$(MIPS_ROOTFS_EXEC_FORMAT))
+MIPS_ROOTFS_TOOLCHAIN_CPP ?=
 MIPS_ROOTFS_EXTRA_CPPFLAGS ?=
 MIPS_ROOTFS_LD_EMULATION_big = elf32ebmip
 MIPS_ROOTFS_LD_EMULATION_little = elf32elmip
@@ -137,12 +135,7 @@ MIPS_ROOTFS_INSTALLED_LDSCRIPT_big = $(MIPS_ROOTFS_LDSCRIPTS_DIR)/elf32-bigmips.
 MIPS_ROOTFS_INSTALLED_LDSCRIPT_little = $(MIPS_ROOTFS_LDSCRIPTS_DIR)/elf32-littlemips.ld
 MIPS_ROOTFS_INSTALLED_LDSCRIPT ?= $(MIPS_ROOTFS_INSTALLED_LDSCRIPT_$(MIPS_ROOTFS_ENDIAN))
 MIPS_ROOTFS_INSTALLED_LDSCRIPT_PATH = /usr/lib/$(MIPS_ROOTFS_INSTALLED_LDSCRIPT)
-MIPS_ROOTFS_ELF2AOUT ?= $(MIPS_BUILD_TOOL_DIR)/elf2aout/elf2aout
-MIPS_ROOTFS_ELF2AOUT_SRCS = $(TOPSRC)/tools/elf2aout/Makefile \
-                            $(TOPSRC)/tools/elf2aout/elf2aout.c
-MIPS_ROOTFS_EXEC_FORMAT_DEPS_aout = $(MIPS_ROOTFS_ELF2AOUT)
-MIPS_ROOTFS_EXEC_FORMAT_DEPS_elf =
-MIPS_ROOTFS_EXEC_FORMAT_DEPS = $(MIPS_ROOTFS_EXEC_FORMAT_DEPS_$(MIPS_ROOTFS_EXEC_FORMAT))
+MIPS_ROOTFS_EXEC_FORMAT_DEPS =
 MIPS_ROOTFS_USERLAND_STAMP_PREFIX ?= mips-userland
 MIPS_ROOTFS_USERLAND_STAMP = $(MIPS_ROOTFS_USERLAND_STAMP_PREFIX).$(USERLAND_COMPILER).$(MIPS_ROOTFS_ABI).stamp
 MIPS_ROOTFS_CLEAN_ARTIFACTS = $(MIPS_ROOTFS_STAGE) \
@@ -214,7 +207,7 @@ MIPS_ROOTFS_CAT8_PAGES :=
 MIPS_ROOTFS_CAT8_ALIASES :=
 endif
 
-MIPS_CMD_SUBDIRS ?= $(REBSD_ROOTFS_CMD_SUBDIRS) aout ar as ld nm ranlib
+MIPS_CMD_SUBDIRS ?= $(REBSD_ROOTFS_CMD_SUBDIRS) ar as ld nm ranlib
 MIPS_CMD_SUBDIRS += $(MIPS_BOARD_CMD_SUBDIRS)
 MIPS_CMD_STDS ?= $(REBSD_ROOTFS_CMD_STDS) off64-smoke-gcc size
 MIPS_CMD_NSTDS ?= $(REBSD_ROOTFS_CMD_NSTDS)
@@ -224,7 +217,7 @@ MIPS_CMD_EXTRA_SUBDIRS ?= $(REBSD_ROOTFS_CMD_EXTRA_SUBDIRS) \
                            $(MIPS_BOARD_CMD_SUBDIRS)
 MIPS_STB_DIR ?=
 MIPS_STB_SRCS = $(wildcard $(MIPS_STB_DIR)/stb_image.h)
-MIPS_USR_BIN_FILES ?= $(REBSD_ROOTFS_USR_BIN_FILES) aout ar as ld \
+MIPS_USR_BIN_FILES ?= $(REBSD_ROOTFS_USR_BIN_FILES) ar as ld \
                     matrix-as-vr4300 matrix-as-vr4300.sh nm \
                     off64-smoke-gcc ranlib renumber size \
                     smoke-as-vr4300 smoke-as-vr4300.sh strip \
@@ -263,12 +256,11 @@ MIPS_NATIVE_HOST_INCLUDE = $(MIPS_NATIVE_TOOLS)/include
 MIPS_NATIVE_HOST_INCLUDE_STAMP = $(MIPS_NATIVE_HOST_INCLUDE)/.stamp
 MIPS_NATIVE_AS = $(MIPS_NATIVE_TOOLS)/as
 MIPS_NATIVE_LD = $(MIPS_NATIVE_TOOLS)/ld
-MIPS_NATIVE_AOUT = $(MIPS_NATIVE_TOOLS)/aout
-MIPS_NATIVE_AOUT_AR = $(MIPS_NATIVE_TOOLS)/ar
-MIPS_NATIVE_AOUT_RANLIB = $(MIPS_NATIVE_TOOLS)/ranlib
-MIPS_NATIVE_AOUT_NM = $(MIPS_NATIVE_TOOLS)/nm
-MIPS_NATIVE_AOUT_SIZE = $(MIPS_NATIVE_TOOLS)/size
-MIPS_NATIVE_AOUT_STRIP = $(MIPS_NATIVE_TOOLS)/strip
+MIPS_NATIVE_AR = $(MIPS_NATIVE_TOOLS)/ar
+MIPS_NATIVE_RANLIB = $(MIPS_NATIVE_TOOLS)/ranlib
+MIPS_NATIVE_NM = $(MIPS_NATIVE_TOOLS)/nm
+MIPS_NATIVE_SIZE = $(MIPS_NATIVE_TOOLS)/size
+MIPS_NATIVE_STRIP = $(MIPS_NATIVE_TOOLS)/strip
 MIPS_NATIVE_CRT0_SRC = $(TOPSRC)/lib/startup/crt0.s
 MIPS_NATIVE_STAMP = $(MIPS_NATIVE_DIR)/.built
 MIPS_NATIVE_LIBS = crt0.o libc.a libm.a libpcc.a
@@ -289,7 +281,7 @@ MIPS_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/tools/mips-native-cc.sh
 MIPS_HOST_PORTABLECC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
 MIPS_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 MIPS_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
-MIPS_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
+MIPS_NATIVE_ELF_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-elf-toolchain.sh
 MIPS_NATIVE_PCC_MAKEFILE = $(TOPSRC)/src/dev/pcc/Makefile.native
 MIPS_NATIVE_PCC_CONFIG = $(TOPSRC)/src/dev/pcc/native-config.h
 MIPS_VR4300_HILO_CHECK = $(TOPSRC)/sys/mips/n64/native/check-vr4300-hilo.sh
@@ -339,12 +331,9 @@ MIPS_NATIVE_TOOL_SRCS = $(MIPS_NATIVE_MKHOSTINCLUDE) $(MIPS_NATIVE_CC_SCRIPT) \
                        $(MIPS_ELF_ENDIAN_CHECK) \
                        $(MIPS_NATIVE_AS_SMOKE_SCRIPT) \
                        $(MIPS_NATIVE_AS_MATRIX_SCRIPT) \
-                       $(MIPS_NATIVE_AOUT_SMOKE_SCRIPT) \
+                       $(MIPS_NATIVE_ELF_SMOKE_SCRIPT) \
                        $(TOPSRC)/src/cmd/as/as.c \
                        $(TOPSRC)/src/cmd/ld/ld.c \
-                       $(TOPSRC)/src/cmd/aout/aout.c \
-                       $(TOPSRC)/src/cmd/aout/mips-dis.c \
-                       $(TOPSRC)/src/cmd/aout/mips-opcode.h \
                        $(TOPSRC)/src/cmd/ar/append.c \
                        $(TOPSRC)/src/cmd/ar/ar.c \
                        $(TOPSRC)/src/cmd/ar/archive.c \
@@ -368,7 +357,9 @@ MIPS_NATIVE_TOOL_SRCS = $(MIPS_NATIVE_MKHOSTINCLUDE) $(MIPS_NATIVE_CC_SCRIPT) \
                        $(TOPSRC)/include/ar.h \
                        $(TOPSRC)/include/nlist.h \
                        $(TOPSRC)/include/ranlib.h \
-                       $(TOPSRC)/include/sys/exec_aout.h
+                       $(TOPSRC)/src/cmd/endianio.c \
+                       $(TOPSRC)/src/cmd/endianio.h \
+                       $(TOPSRC)/src/cmd/reloc.h
 MIPS_NATIVE_RUNTIME_SRCS = $(MIPS_NATIVE_TOOL_SRCS) $(MIPS_INCLUDE_SRCS) \
                           $(MIPS_NATIVE_CRT0_SRC) $(MIPS_LIBC_SRCS) \
                           $(MIPS_LIBM_SRCS) $(MIPS_LIBPCC_SRCS) \
@@ -392,7 +383,6 @@ MIPS_HOST_CCOM = $(MIPS_PCC_HOST_PREFIX)/libexec/$(MIPS_CROSS_PCC_TRIPLE)-ccom
 MIPS_PCC_TOOLCHAIN_STAMP = $(MIPS_PCC_HOST_PREFIX)/.rebsd-pcc-toolchain.stamp
 MIPS_CROSS_PCC_AS = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-as
 MIPS_CROSS_PCC_LD = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-ld
-MIPS_CROSS_PCC_AOUT = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-aout
 MIPS_CROSS_PCC_AR = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-ar
 MIPS_CROSS_PCC_RANLIB = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-ranlib
 MIPS_CROSS_PCC_NM = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-nm
@@ -401,7 +391,6 @@ MIPS_CROSS_PCC_STRIP = $(MIPS_PCC_HOST_PREFIX)/bin/$(MIPS_CROSS_PCC_TRIPLE)-stri
 MIPS_PCC_SYSTEM_CC ?= cc
 MIPS_PCC_SYSTEM_AS ?= as
 MIPS_PCC_SYSTEM_LD ?= ld
-MIPS_PCC_SYSTEM_AOUT ?= aout
 MIPS_PCC_SYSTEM_AR ?= ar
 MIPS_PCC_SYSTEM_RANLIB ?= ranlib
 MIPS_PCC_SYSTEM_NM ?= nm
@@ -411,7 +400,6 @@ ifeq ($(MIPS_PCC_PROVIDER),cross)
 MIPS_PCC_CC = $(MIPS_HOST_PCC)
 MIPS_PCC_AS = $(MIPS_CROSS_PCC_AS)
 MIPS_PCC_LD = $(MIPS_CROSS_PCC_LD)
-MIPS_PCC_AOUT = $(MIPS_CROSS_PCC_AOUT)
 MIPS_PCC_AR = $(MIPS_CROSS_PCC_AR)
 MIPS_PCC_RANLIB = $(MIPS_CROSS_PCC_RANLIB)
 MIPS_PCC_NM = $(MIPS_CROSS_PCC_NM)
@@ -422,7 +410,6 @@ else ifeq ($(MIPS_PCC_PROVIDER),system)
 MIPS_PCC_CC = $(MIPS_PCC_SYSTEM_CC)
 MIPS_PCC_AS = $(MIPS_PCC_SYSTEM_AS)
 MIPS_PCC_LD = $(MIPS_PCC_SYSTEM_LD)
-MIPS_PCC_AOUT = $(MIPS_PCC_SYSTEM_AOUT)
 MIPS_PCC_AR = $(MIPS_PCC_SYSTEM_AR)
 MIPS_PCC_RANLIB = $(MIPS_PCC_SYSTEM_RANLIB)
 MIPS_PCC_NM = $(MIPS_PCC_SYSTEM_NM)
@@ -457,9 +444,7 @@ MIPS_USERLAND_RANLIB = $(MIPS_ROOTFS_GCC_PREFIX)ranlib
 MIPS_USERLAND_NM = $(MIPS_ROOTFS_GCC_PREFIX)nm
 MIPS_USERLAND_SIZE = $(MIPS_ROOTFS_GCC_PREFIX)size
 MIPS_USERLAND_OBJDUMP = $(MIPS_ROOTFS_GCC_PREFIX)objdump
-MIPS_USERLAND_ELF2AOUT_aout = $(abspath $(MIPS_ROOTFS_ELF2AOUT))
-MIPS_USERLAND_ELF2AOUT_elf = cp
-MIPS_USERLAND_ELF2AOUT = $(MIPS_USERLAND_ELF2AOUT_$(MIPS_ROOTFS_EXEC_FORMAT))
+MIPS_USERLAND_ELF2AOUT = cp
 MIPS_USERLAND_LDFLAGS = --nmagic -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
                        $(abspath $(MIPS_BUILD_SRC_DIR)/crt0.o) \
                        -L$(abspath $(MIPS_BUILD_SRC_DIR))
@@ -596,7 +581,7 @@ MIPS_LINPACK_SMOKE_SRC = $(REBSD_PCC_SMOKE_ROOT)/linpack.c
 MIPS_LINPACK_SMOKE_OUT ?= $(MIPS_BUILD_TEST_DIR)/linpack-smoke
 MIPS_LINPACK_SMOKE_MANIFEST ?= rootfs.linpack-smoke.manifest
 MIPS_LINPACK_ROOTFS_STAMP = $(MIPS_ROOTFS_STAGE)/.linpack-smoke.$(MIPS_ROOTFS_ABI)
-MIPS_ROOTFS_LINPACK_GCC ?= $(if $(filter gcc,$(USERLAND_COMPILER)),1,0)
+MIPS_ROOTFS_LINPACK_GCC ?= 1
 MIPS_LINPACK_GCC_COMPILE ?= $(MIPS_ROOTFS_GCC_PREFIX)gcc \
     $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) $(MIPS_ROOTFS_TOOLCHAIN_CPP) \
     $(MIPS_ROOTFS_EXTRA_CPPFLAGS)
@@ -607,6 +592,43 @@ MIPS_LINPACK_GCC_LINK ?= $(MIPS_ROOTFS_GCC_PREFIX)ld \
 MIPS_LINPACK_GCC_LIBDIR ?= $(abspath $(MIPS_BUILD_SRC_DIR))
 MIPS_LINPACK_GCC_LINK_FORMAT ?= elf
 MIPS_LINPACK_GCC_DEPS ?=
+ifeq ($(USERLAND_COMPILER).$(MIPS_ROOTFS_EXEC_FORMAT),pcc.elf)
+MIPS_LINPACK_GCC_RUNTIME_DIR = \
+    $(MIPS_BUILD_ROOT)-gcc-linpack-runtime
+MIPS_LINPACK_GCC_RUNTIME_TREE = $(MIPS_LINPACK_GCC_RUNTIME_DIR)/tree
+MIPS_LINPACK_GCC_RUNTIME_STAMP = $(MIPS_LINPACK_GCC_RUNTIME_DIR)/.built
+MIPS_LINPACK_GCC_RUNTIME_CC = $(MIPS_ROOTFS_GCC_PREFIX)gcc \
+    $(MIPS_ROOTFS_ARCH) $(MIPS_ROOTFS_CODE) $(MIPS_ROOTFS_ENDIAN_CPP) \
+    $(MIPS_ROOTFS_TOOLCHAIN_CPP) $(MIPS_ROOTFS_EXTRA_CPPFLAGS) \
+    $(MIPS_ROOTFS_INCLUDES)
+MIPS_LINPACK_GCC_RUNTIME_LIBC_MAKE = $(MAKE) -C \
+    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/src/libc \
+    TARGET_PLATFORM=$(MIPS_ROOTFS_TARGET_PLATFORM) \
+    MIPS_ROOTFS_CPU=$(MIPS_ROOTFS_CPU) \
+    MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN) \
+    N64_USER_LDSCRIPT=$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
+    CC="$(MIPS_LINPACK_GCC_RUNTIME_CC)" \
+    AS="$(MIPS_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c" \
+    AR="$(MIPS_ROOTFS_GCC_PREFIX)ar" \
+    RANLIB="$(MIPS_ROOTFS_GCC_PREFIX)ranlib" \
+    LIBC_COMPILER_RUNTIME=libc
+MIPS_LINPACK_GCC_RUNTIME_LIBM_MAKE = $(MAKE) -C \
+    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/src/libm \
+    TARGET_PLATFORM=$(MIPS_ROOTFS_TARGET_PLATFORM) \
+    MIPS_ROOTFS_CPU=$(MIPS_ROOTFS_CPU) \
+    MIPS_ROOTFS_ENDIAN=$(MIPS_ROOTFS_ENDIAN) \
+    N64_USER_LDSCRIPT=$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
+    CC="$(MIPS_LINPACK_GCC_RUNTIME_CC)" \
+    AS="$(MIPS_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c" \
+    AR="$(MIPS_ROOTFS_GCC_PREFIX)ar" \
+    RANLIB="$(MIPS_ROOTFS_GCC_PREFIX)ranlib"
+MIPS_LINPACK_GCC_LINK = $(MIPS_ROOTFS_GCC_PREFIX)ld \
+    -m $(MIPS_ROOTFS_LD_EMULATION) --nmagic \
+    -T$(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
+    $(abspath $(MIPS_LINPACK_GCC_RUNTIME_DIR)/crt0.o)
+MIPS_LINPACK_GCC_LIBDIR = $(abspath $(MIPS_LINPACK_GCC_RUNTIME_DIR))
+MIPS_LINPACK_GCC_DEPS = $(MIPS_LINPACK_GCC_RUNTIME_STAMP)
+endif
 MIPS_LINPACK_PCC_LDSCRIPT_NAME = $(if $(filter little,$(MIPS_ROOTFS_ENDIAN)),elf32-littlemips.ld,elf32-bigmips.ld)
 MIPS_LINPACK_PCC_LDSCRIPT = $(MIPS_ROOTFS_USR_LIB)/ldscripts/$(MIPS_LINPACK_PCC_LDSCRIPT_NAME)
 MIPS_LINPACK_PCC_LINKER_SCRIPT = $(if $(wildcard $(MIPS_LINPACK_PCC_LDSCRIPT)),-T $(abspath $(MIPS_LINPACK_PCC_LDSCRIPT)),)
@@ -652,9 +674,6 @@ MIPS_ROOTFS_EXTRA_USR_BIN_FILES ?= \
 $(MIPS_ROOTFS_USER_LDSCRIPT): $(MIPS_ROOTFS_USER_LDSCRIPT_SRC) \
     $(MIPS_ROOTFS_USER_LDSCRIPT_DEPS)
 	$(CC) -E -P -undef -x c $(CPPFLAGS) $< -o $@
-
-$(MIPS_ROOTFS_ELF2AOUT): $(MIPS_ROOTFS_ELF2AOUT_SRCS)
-	$(MAKE) -C $(TOPSRC)/tools/elf2aout
 
 ifeq ($(MIPS_ROOTFS_DYNAMIC_MANIFEST),1)
 $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILES) \
@@ -742,6 +761,42 @@ $(MIPS_ROOTFS_BUILD_MANIFEST): $(MIPS_ROOTFS_MAKEFILES) $(MIPS_ROOTFS_MANIFEST) 
 	printf '\nfile /root/libc-abi-smoke\nmode 0775\n' >> $@
 endif
 
+ifeq ($(USERLAND_COMPILER).$(MIPS_ROOTFS_EXEC_FORMAT),pcc.elf)
+$(MIPS_LINPACK_GCC_RUNTIME_STAMP): $(MIPS_ROOTFS_BASE_STAMP) \
+    $(MIPS_NATIVE_CRT0_SRC) $(MIPS_LIBC_SRCS) $(MIPS_LIBM_SRCS) \
+    $(MIPS_INCLUDE_SRCS) $(MIPS_ROOTFS_USER_LDSCRIPT) \
+    $(TOPSRC)/target.mk $(TOPSRC)/target-mips.mk $(TOPSRC)/target-n64.mk \
+    $(MIPS_ROOTFS_MAKEFILES)
+	rm -rf $(MIPS_LINPACK_GCC_RUNTIME_DIR)
+	mkdir -p $(MIPS_LINPACK_GCC_RUNTIME_TREE)/src \
+	    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/sys/mips/n64
+	cp -pR $(TOPSRC)/include $(MIPS_LINPACK_GCC_RUNTIME_TREE)/
+	cp -pR $(TOPSRC)/sys/include $(MIPS_LINPACK_GCC_RUNTIME_TREE)/sys/
+	cp -p $(TOPSRC)/sys/mips/*.h \
+	    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/sys/mips/
+	cp -p $(TOPSRC)/sys/mips/n64/*.h \
+	    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/sys/mips/n64/
+	cp -pR $(TOPSRC)/sys/mips/n64/include \
+	    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/sys/mips/n64/
+	cp -pR $(TOPSRC)/src/libc $(TOPSRC)/src/libm \
+	    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/src/
+	cp -p $(TOPSRC)/target.mk $(TOPSRC)/target-mips.mk \
+	    $(TOPSRC)/target-n64.mk $(MIPS_LINPACK_GCC_RUNTIME_TREE)/
+	$(MIPS_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c \
+	    -o $(MIPS_LINPACK_GCC_RUNTIME_DIR)/crt0.o \
+	    $(MIPS_NATIVE_CRT0_SRC)
+	$(MIPS_LINPACK_GCC_RUNTIME_LIBC_MAKE) clean
+	$(MIPS_LINPACK_GCC_RUNTIME_LIBC_MAKE) all
+	$(MIPS_ROOTFS_GCC_PREFIX)ranlib \
+	    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/src/libc.a
+	$(MIPS_LINPACK_GCC_RUNTIME_LIBM_MAKE) clean
+	$(MIPS_LINPACK_GCC_RUNTIME_LIBM_MAKE) all
+	cp -p $(MIPS_LINPACK_GCC_RUNTIME_TREE)/src/libc.a \
+	    $(MIPS_LINPACK_GCC_RUNTIME_TREE)/src/libm.a \
+	    $(MIPS_LINPACK_GCC_RUNTIME_DIR)/
+	touch $@
+endif
+
 $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS) \
     $(MIPS_ROOTFS_EXEC_FORMAT_DEPS) $(MIPS_LINPACK_SMOKE_SCRIPT) \
     $(MIPS_LINPACK_SMOKE_SRC) $(MIPS_LINPACK_GCC_DEPS)
@@ -770,18 +825,8 @@ $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS
 	        -L$(MIPS_LINPACK_GCC_LIBDIR) \
 	        -o $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
 	        -lm -lc; \
-	    if [ "$(MIPS_LINPACK_GCC_LINK_FORMAT)" = "aout" ]; then \
-	        mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc; \
-	    elif [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "aout" ]; then \
-	        $(abspath $(MIPS_ROOTFS_ELF2AOUT)) \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc; \
-	        rm -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked; \
-	    else \
-	        mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc; \
-	    fi; \
+	    mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc.linked \
+	        $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc; \
 	    $(MIPS_LINPACK_GCC_COMPILE) \
 	        -I$(abspath $(MIPS_ROOTFS_USR_INCLUDE)) \
 	        -O2 -DLINPACK_KERNEL_BENCH -c \
@@ -792,18 +837,8 @@ $(MIPS_LINPACK_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) $(MIPS_PCC_PROVIDER_DEPS
 	        -L$(MIPS_LINPACK_GCC_LIBDIR) \
 	        -o $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc.linked \
 	        -lm -lc; \
-	    if [ "$(MIPS_LINPACK_GCC_LINK_FORMAT)" = "aout" ]; then \
-	        mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc.linked \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc; \
-	    elif [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "aout" ]; then \
-	        $(abspath $(MIPS_ROOTFS_ELF2AOUT)) \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc.linked \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc; \
-	        rm -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc.linked; \
-	    else \
-	        mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc.linked \
-	            $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc; \
-	    fi; \
+	    mv -f $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc.linked \
+	        $(MIPS_LINPACK_SMOKE_OUT)/linpack-kernels-gcc; \
 	    cp -p $(MIPS_LINPACK_SMOKE_OUT)/linpack-gcc \
 	        $(MIPS_ROOTFS_STAGE)/root/linpack-gcc; \
 	    chmod 0775 $(MIPS_ROOTFS_STAGE)/root/linpack-gcc; \
@@ -840,18 +875,8 @@ $(MIPS_COMPILER_BENCH_ROOTFS_STAMP): $(MIPS_ROOTFS_USER_STAMP) \
 	        -L$(MIPS_LINPACK_GCC_LIBDIR) \
 	        -o $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
 	        -lc; \
-	    if [ "$(MIPS_LINPACK_GCC_LINK_FORMAT)" = "aout" ]; then \
-	        mv -f $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
-	            $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc; \
-	    elif [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "aout" ]; then \
-	        $(abspath $(MIPS_ROOTFS_ELF2AOUT)) \
-	            $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
-	            $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc; \
-	        rm -f $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked; \
-	    else \
-	        mv -f $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
-	            $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc; \
-	    fi; \
+	    mv -f $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc.linked \
+	        $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc; \
 	    cp -p $(MIPS_COMPILER_BENCH_OUT)/compiler-bench-gcc \
 	        $(MIPS_ROOTFS_STAGE)/root/compiler-bench-gcc; \
 	    chmod 0775 $(MIPS_ROOTFS_STAGE)/root/compiler-bench-gcc; \
@@ -1201,13 +1226,13 @@ $(MIPS_NATIVE_HOST_INCLUDE_STAMP): $(MIPS_NATIVE_MKHOSTINCLUDE) \
 	touch $@
 
 $(MIPS_NATIVE_AS): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/a.out.h \
-    $(TOPSRC)/include/elf32.h
+    $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/endianio.c \
+    $(TOPSRC)/src/cmd/endianio.h $(TOPSRC)/src/cmd/reloc.h \
+    $(TOPSRC)/include/elf32.h $(TOPSRC)/include/nlist.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc -DCROSS $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -o $@ $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/aoutio.c
+	    -o $@ $(TOPSRC)/src/cmd/as/as.c $(TOPSRC)/src/cmd/endianio.c
 
 $(MIPS_NATIVE_LD): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c \
@@ -1218,20 +1243,7 @@ $(MIPS_NATIVE_LD): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -o $@ $(TOPSRC)/src/cmd/ld/ld.c $(TOPSRC)/src/cmd/aoutio.c
 
-$(MIPS_NATIVE_AOUT): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/aout/aout.c $(TOPSRC)/src/cmd/aout/mips-dis.c \
-    $(TOPSRC)/src/cmd/aout/mips-opcode.h \
-    $(TOPSRC)/src/cmd/aoutio.c $(TOPSRC)/src/cmd/aoutio.h \
-    $(TOPSRC)/include/a.out.h
-	mkdir -p $(MIPS_NATIVE_TOOLS)
-	cc -DCROSS $(MIPS_NATIVE_TARGET_FLAGS) \
-	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -I$(TOPSRC)/src/cmd/aout \
-	    -o $@ $(TOPSRC)/src/cmd/aout/aout.c \
-	    $(TOPSRC)/src/cmd/aout/mips-dis.c \
-	    $(TOPSRC)/src/cmd/aoutio.c
-
-$(MIPS_NATIVE_AOUT_AR): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
+$(MIPS_NATIVE_AR): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/ar/append.c $(TOPSRC)/src/cmd/ar/ar.c \
     $(TOPSRC)/src/cmd/ar/archive.c $(TOPSRC)/src/cmd/ar/contents.c \
     $(TOPSRC)/src/cmd/ar/delete.c $(TOPSRC)/src/cmd/ar/extract.c \
@@ -1255,7 +1267,7 @@ $(MIPS_NATIVE_AOUT_AR): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 	    $(TOPSRC)/src/cmd/ar/replace.c \
 	    $(TOPSRC)/src/cmd/ar/strmode.c
 
-$(MIPS_NATIVE_AOUT_RANLIB): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
+$(MIPS_NATIVE_RANLIB): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
     $(TOPSRC)/src/cmd/ranlib/ranlib.c $(TOPSRC)/src/cmd/ar/archive.c \
     $(TOPSRC)/src/cmd/ar/extern.h $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
@@ -1265,44 +1277,40 @@ $(MIPS_NATIVE_AOUT_RANLIB): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
 	    -o $@ $(TOPSRC)/src/cmd/ranlib/ranlib.c \
 	    $(TOPSRC)/src/cmd/ar/archive.c $(TOPSRC)/src/cmd/aoutio.c
 
-$(MIPS_NATIVE_AOUT_NM): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/elf32.h
+$(MIPS_NATIVE_NM): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc -DCROSS $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
 	    -I$(TOPSRC)/src/cmd/ar \
-	    -o $@ $(TOPSRC)/src/cmd/nm/nm.c $(TOPSRC)/src/cmd/aoutio.c
+	    -o $@ $(TOPSRC)/src/cmd/nm/nm.c
 
-$(MIPS_NATIVE_AOUT_SIZE): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/elf32.h
+$(MIPS_NATIVE_SIZE): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/size.c $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -o $@ $(TOPSRC)/src/cmd/size.c $(TOPSRC)/src/cmd/aoutio.c
+	    -o $@ $(TOPSRC)/src/cmd/size.c
 
-$(MIPS_NATIVE_AOUT_STRIP): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
-    $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c \
-    $(TOPSRC)/src/cmd/aoutio.h $(TOPSRC)/include/elf32.h
+$(MIPS_NATIVE_STRIP): $(MIPS_NATIVE_HOST_INCLUDE_STAMP) \
+    $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/include/elf32.h
 	mkdir -p $(MIPS_NATIVE_TOOLS)
 	cc $(MIPS_NATIVE_TARGET_FLAGS) \
 	    -I$(MIPS_NATIVE_HOST_INCLUDE) -I$(TOPSRC)/src/cmd \
-	    -o $@ $(TOPSRC)/src/cmd/strip.c $(TOPSRC)/src/cmd/aoutio.c
+	    -o $@ $(TOPSRC)/src/cmd/strip.c
 
 $(MIPS_PCC_TOOLCHAIN_STAMP): $(MIPS_HOST_PORTABLECC_SCRIPT) $(MIPS_DEV_PCC_SRCS) \
     $(MIPS_PCC_HOST_INCLUDE_STAMP) $(MIPS_NATIVE_AS) $(MIPS_NATIVE_LD) \
-    $(MIPS_NATIVE_AOUT) $(MIPS_NATIVE_AOUT_AR) $(MIPS_NATIVE_AOUT_RANLIB) \
-    $(MIPS_NATIVE_AOUT_NM) $(MIPS_NATIVE_AOUT_SIZE) \
-    $(MIPS_NATIVE_AOUT_STRIP) $(MIPS_ROOTFS_USER_LDSCRIPT)
+    $(MIPS_NATIVE_AR) $(MIPS_NATIVE_RANLIB) \
+    $(MIPS_NATIVE_NM) $(MIPS_NATIVE_SIZE) \
+    $(MIPS_NATIVE_STRIP) $(MIPS_ROOTFS_USER_LDSCRIPT)
 	sh $(MIPS_HOST_PORTABLECC_SCRIPT) $(abspath $(TOPSRC)) \
 	    $(abspath $(MIPS_PCC_HOST_BUILD)) \
 	    $(abspath $(MIPS_PCC_HOST_PREFIX)) \
 	    $(abspath $(MIPS_PCC_HOST_INCLUDE)) \
 	    $(abspath $(MIPS_NATIVE_AS)) $(abspath $(MIPS_NATIVE_LD)) \
 	    $(MIPS_ROOTFS_CPU) $(MIPS_ROOTFS_FLOAT) $(MIPS_ROOTFS_ENDIAN) \
-	    $(abspath $(MIPS_ROOTFS_USER_LDSCRIPT)) \
-	    $(MIPS_ROOTFS_EXEC_FORMAT)
+	    $(abspath $(MIPS_ROOTFS_USER_LDSCRIPT))
 	@test -x $(MIPS_HOST_PCC)
 	@test -x $(MIPS_HOST_CCOM)
 	@{ cksum $(MIPS_HOST_PCC); cksum $(MIPS_HOST_CCOM); } > $@.tmp
@@ -1311,13 +1319,13 @@ $(MIPS_PCC_TOOLCHAIN_STAMP): $(MIPS_HOST_PORTABLECC_SCRIPT) $(MIPS_DEV_PCC_SRCS)
 $(MIPS_HOST_PCC): $(MIPS_PCC_TOOLCHAIN_STAMP)
 	@test -x $@
 
-$(MIPS_CROSS_PCC_AS) $(MIPS_CROSS_PCC_LD) $(MIPS_CROSS_PCC_AOUT) \
+$(MIPS_CROSS_PCC_AS) $(MIPS_CROSS_PCC_LD) \
     $(MIPS_CROSS_PCC_AR) $(MIPS_CROSS_PCC_RANLIB) $(MIPS_CROSS_PCC_NM) \
     $(MIPS_CROSS_PCC_SIZE) $(MIPS_CROSS_PCC_STRIP): \
     $(MIPS_PCC_TOOLCHAIN_STAMP)
 	@test -x $@
 
-.PHONY: smoke-as-vr4300 matrix-as-vr4300 smoke-aout-toolchain \
+.PHONY: smoke-as-vr4300 matrix-as-vr4300 smoke-elf-toolchain \
         smoke-host-portablecc
 smoke-as-vr4300: $(MIPS_NATIVE_AS) $(MIPS_NATIVE_AS_SMOKE_SCRIPT)
 	$(MIPS_NATIVE_AS_SMOKE_SCRIPT) $(abspath $(MIPS_NATIVE_AS))
@@ -1325,14 +1333,14 @@ smoke-as-vr4300: $(MIPS_NATIVE_AS) $(MIPS_NATIVE_AS_SMOKE_SCRIPT)
 matrix-as-vr4300: $(MIPS_NATIVE_AS) $(MIPS_NATIVE_AS_MATRIX_SCRIPT)
 	$(MIPS_NATIVE_AS_MATRIX_SCRIPT) $(abspath $(MIPS_NATIVE_AS)) $(MIPS_ROOTFS_GCC_PREFIX)as
 
-smoke-aout-toolchain: $(MIPS_NATIVE_AS) $(MIPS_NATIVE_LD) \
-    $(MIPS_NATIVE_AOUT_AR) $(MIPS_NATIVE_AOUT_RANLIB) \
-    $(MIPS_NATIVE_AOUT_NM) $(MIPS_NATIVE_AOUT_SIZE) $(MIPS_NATIVE_AOUT_STRIP) \
-    $(MIPS_NATIVE_AOUT_SMOKE_SCRIPT)
-	$(MIPS_NATIVE_AOUT_SMOKE_SCRIPT) $(abspath $(MIPS_NATIVE_AS)) \
-	    $(abspath $(MIPS_NATIVE_LD)) $(abspath $(MIPS_NATIVE_AOUT_AR)) \
-	    $(abspath $(MIPS_NATIVE_AOUT_RANLIB)) $(abspath $(MIPS_NATIVE_AOUT_NM)) \
-	    $(abspath $(MIPS_NATIVE_AOUT_SIZE)) $(abspath $(MIPS_NATIVE_AOUT_STRIP)) \
+smoke-elf-toolchain: $(MIPS_NATIVE_AS) $(MIPS_NATIVE_LD) \
+    $(MIPS_NATIVE_AR) $(MIPS_NATIVE_RANLIB) \
+    $(MIPS_NATIVE_NM) $(MIPS_NATIVE_SIZE) $(MIPS_NATIVE_STRIP) \
+    $(MIPS_NATIVE_ELF_SMOKE_SCRIPT)
+	$(MIPS_NATIVE_ELF_SMOKE_SCRIPT) $(abspath $(MIPS_NATIVE_AS)) \
+	    $(abspath $(MIPS_NATIVE_LD)) $(abspath $(MIPS_NATIVE_AR)) \
+	    $(abspath $(MIPS_NATIVE_RANLIB)) $(abspath $(MIPS_NATIVE_NM)) \
+	    $(abspath $(MIPS_NATIVE_SIZE)) $(abspath $(MIPS_NATIVE_STRIP)) \
 	    $(MIPS_ROOTFS_GCC_PREFIX)as
 
 ifeq ($(MIPS_PCC_PROVIDER),cross)
@@ -1475,7 +1483,6 @@ $(MIPS_NATIVE_PCC_STAMP): $(MIPS_DEV_PCC_SRCS) $(MIPS_NATIVE_STAMP) \
 	    PCC_CPU=$(MIPS_ROOTFS_CPU) \
 	    PCC_FLOAT=$(MIPS_ROOTFS_FLOAT) \
 	    PCC_ENDIAN=$(MIPS_ROOTFS_ENDIAN) \
-	    PCC_EXEC_FORMAT=$(MIPS_ROOTFS_EXEC_FORMAT) \
 	    BISON="$(MIPS_BISON)" all
 	@test -x $(MIPS_NATIVE_PCC_DIR)/cc
 	@test -x $(MIPS_NATIVE_PCC_DIR)/cpp
@@ -1491,16 +1498,11 @@ $(MIPS_NATIVE_PCC_STAMP): $(MIPS_DEV_PCC_SRCS) $(MIPS_NATIVE_STAMP) \
 	@set -e; for tool in cc cpp ccom; do \
 	    binary=$(MIPS_NATIVE_PCC_DIR)/$$tool; \
 	    disassembly=$(MIPS_NATIVE_PCC_DIR)/.$$tool.final.dis; \
-	    if [ "$(MIPS_ROOTFS_EXEC_FORMAT)" = "elf" ]; then \
-	        code_end=`$(MIPS_ROOTFS_GCC_PREFIX)nm -n $$binary | \
-	            awk '$$3 == "__text_code_end" { print "0x" $$1; exit }'`; \
-	        test -n "$$code_end"; \
-	        $(MIPS_ROOTFS_GCC_PREFIX)objdump -z -d \
-	            --stop-address=$$code_end $$binary > $$disassembly; \
-	    else \
-	        $(MIPS_PCC_AOUT) $(MIPS_ROOTFS_ENDIAN_FLAG) \
-	            $$binary > $$disassembly; \
-	    fi; \
+	    code_end=`$(MIPS_ROOTFS_GCC_PREFIX)nm -n $$binary | \
+	        awk '$$3 == "__text_code_end" { print "0x" $$1; exit }'`; \
+	    test -n "$$code_end"; \
+	    $(MIPS_ROOTFS_GCC_PREFIX)objdump -z -d \
+	        --stop-address=$$code_end $$binary > $$disassembly; \
 	    if [ "$(MIPS_ROOTFS_CPU)" = "vr4300" ]; then \
 	        $(MIPS_VR4300_HILO_CHECK) $$disassembly; \
 	        $(MIPS_VR4300_ORDER_CHECK) --strict-potential $$disassembly; \

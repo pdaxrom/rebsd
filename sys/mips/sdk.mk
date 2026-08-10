@@ -64,7 +64,6 @@ cross-pcc-sdk: cross-pcc-sdk-runtime
 	@echo "cpu=$(MIPS_SDK_CPU) float=$(MIPS_SDK_FLOAT) endian=$(MIPS_SDK_ENDIAN)"
 
 cross-pcc-sdk-tools: $(MIPS_HOST_PCC)
-	@test -x $(MIPS_CROSS_PCC_AOUT)
 
 cross-pcc-sdk-runtime: $(MIPS_NATIVE_STAMP)
 	@test -f $(MIPS_CROSS_PCC_LIB)/libpcc.a

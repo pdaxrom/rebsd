@@ -28,12 +28,13 @@
 #else
 #include <stdio.h>
 #endif
-#include <a.out.h>
+#include <nlist.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "../aoutio.h"
+#include "../endianio.h"
+#include "../reloc.h"
 #include <elf32.h>
 
 #define WORDSZ 4 /* word size in bytes */
@@ -533,9 +534,6 @@ char *infile, *outfile = "a.out";
 char tfilename[] = "/tmp/asXXXXXX";
 int line; /* Source line number */
 int xflags, Xflag, uflag;
-int stlength; /* Symbol table size in bytes */
-int stalign;  /* Symbol table alignment */
-unsigned tbase, dbase, adbase, ctbase, dtbase, bbase;
 struct nlist stab[STSIZE];
 unsigned char stabsegm[STSIZE];
 unsigned commalign[STSIZE];
@@ -567,7 +565,8 @@ unsigned char hilo_read_gap[MAXSEGM];
 struct reloc relabs = { RABS }; /* absolute relocation */
 struct asm_section sections[MAXSEGM];
 int maxsegm = SABS + 1;
-int elf_output;
+const int elf_output = 1;
+unsigned tbase, dbase, adbase, ctbase, dtbase, bbase;
 
 int expr_flags;      /* flags set by getexpr */
 #define EXPR_GPREL 1 /* gp relative relocation */
@@ -608,7 +607,7 @@ void uerror(char *fmt, ...)
  */
 unsigned fgetword(FILE *f)
 {
-    return aout_get32(f);
+    return endianio_get32(f);
 }
 
 /*
@@ -616,7 +615,7 @@ unsigned fgetword(FILE *f)
  */
 void fputword(unsigned w, FILE *f)
 {
-    aout_put32(w, f);
+    endianio_put32(w, f);
 }
 
 /*
@@ -626,10 +625,10 @@ void fgetrel(FILE *f, struct reloc *r)
 {
     r->flags = getc(f);
     if ((r->flags & RSMASK) == REXT) {
-        r->index = aout_get24(f);
+        r->index = endianio_get24(f);
     }
     if ((r->flags & RFMASK) == RHIGH16 || (r->flags & RFMASK) == RHIGH16S) {
-        r->offset = aout_get16(f);
+        r->offset = endianio_get16(f);
     }
 }
 
@@ -643,34 +642,14 @@ unsigned fputrel(struct reloc *r, FILE *f)
 
     putc(r->flags, f);
     if ((r->flags & RSMASK) == REXT) {
-        aout_put24(r->index, f);
+        endianio_put24(r->index, f);
         nbytes += 3;
     }
     if ((r->flags & RFMASK) == RHIGH16 || (r->flags & RFMASK) == RHIGH16S) {
-        aout_put16(r->offset, f);
+        endianio_put16(r->offset, f);
         nbytes += 2;
     }
     return nbytes;
-}
-
-/*
- * Write the a.out header to the file.
- */
-void fputhdr(struct exec *filhdr, FILE *coutb)
-{
-    aout_write_exec(coutb, filhdr);
-}
-
-/*
- * Emit the nlist record for the symbol.
- */
-void fputsym(struct nlist *s, FILE *file)
-{
-    struct nlist out;
-
-    out = *s;
-    out.n_type &= ~N_LOC;
-    aout_write_sym(file, &out);
 }
 
 size_t xstrlen(const char *s)
@@ -910,7 +889,7 @@ set_reloc_segment(struct reloc *r, int format, int segment)
     if (segment == SEXT) {
         r->flags |= REXT;
         r->index = extref;
-    } else if (elf_output && segment != SABS) {
+    } else if (segment != SABS) {
         r->flags |= REXT;
         r->index = SECTION_RELOC_INDEX_BASE + segment;
     } else {
@@ -1384,10 +1363,6 @@ void setsection(const char *secname, unsigned flags, int has_flags,
 {
     int newsegm;
 
-    if (!elf_output) {
-        switchsection(section_from_name_aout(secname));
-        return;
-    }
     if (!has_flags)
         flags = default_section_flags(secname);
     if (!has_type)
@@ -1836,7 +1811,7 @@ int getterm()
             return (SEXT);
         }
         intval = stab[cval].n_value;
-        if (elf_output && ty != N_ABS)
+        if (ty != N_ABS)
             return stabsegm[cval];
         return (section_from_nlist_type(ty));
     case '.':
@@ -3351,7 +3326,6 @@ void pass1()
     register int clex;
     int cval, tval, csegm, nbytes, symidx;
     register unsigned addr;
-    unsigned a, bits;
 
     segm = STEXT;
     prev_segm = STEXT;
@@ -3362,40 +3336,20 @@ void pass1()
         case LEOF:
         done:
             reorder_flush();
-            if (elf_output) {
+            {
                 int s;
                 for (s = 0; s < maxsegm; s++) {
-                    unsigned a, bits;
+                    unsigned section_align, section_bits;
 
                     if (!valid_section(s))
                         continue;
-                    a = sections[s].align;
-                    for (bits = 0; (1U << bits) < a; bits++)
+                    section_align = sections[s].align;
+                    for (section_bits = 0;
+                        (1U << section_bits) < section_align; section_bits++)
                         ;
                     segm = s;
-                    align(bits);
+                    align(section_bits);
                 }
-            } else {
-                segm = STEXT;
-                align(text_align_bits);
-                /*
-                 * a.out stores writable data and read-only data in one data
-                 * segment.  Preserve the alignment requested by .rodata at
-                 * that otherwise invisible boundary.
-                 */
-                segm = SDATA;
-                a = sections[SSTRNG].align;
-                for (bits = 0; (1U << bits) < a; bits++)
-                    ;
-                align(bits);
-                segm = SSTRNG;
-                align(2);
-                segm = SCTORS;
-                align(2);
-                segm = SDTORS;
-                align(2);
-                segm = SBSS;
-                align(2);
             }
             return;
         case LEOL:
@@ -3879,15 +3833,14 @@ void define_rebsd_metadata_symbol(const char *sym, unsigned value)
 
 void middle()
 {
-    register int i, snum, nbytes;
+    register int i, nbytes;
 
     if (count[SCTORS] || count[SDTORS]) {
         define_rebsd_metadata_symbol(REBSD_CTORS_SIZE_SYM, count[SCTORS]);
         define_rebsd_metadata_symbol(REBSD_DTORS_SIZE_SYM, count[SDTORS]);
     }
 
-    stlength = 0;
-    for (snum = 0, i = 0; i < stabfree; i++) {
+    for (i = 0; i < stabfree; i++) {
         switch (stab[i].n_type) {
         case N_UNDF:
             /* Without -u option, undefined symbol is considered external */
@@ -3907,38 +3860,8 @@ void middle()
             count[SBSS] += nbytes;
             break;
         }
-        if (xflags)
-            newindex[i] = snum;
-
-        if (!xflags || (stab[i].n_type & N_EXT) ||
-            is_rebsd_metadata_symbol(&stab[i]) ||
-            (Xflag && !IS_LOCAL(&stab[i]))) {
-            stlength += 2 + WORDSZ + stab[i].n_len;
-            snum++;
-        }
     }
-    stalign = WORDSZ - stlength % WORDSZ;
-    stlength += stalign;
     line = 0;
-}
-
-void makeheader(int rtsize, int rdsize)
-{
-    struct exec hdr;
-
-    /* Align BSS size. */
-    count[SBSS] = (count[SBSS] + WORDSZ - 1) & ~(WORDSZ - 1);
-
-    hdr.a_midmag = RMAGIC;
-    hdr.a_text = count[STEXT];
-    hdr.a_data = count[SDATA] + count[SSTRNG] + count[SCTORS] + count[SDTORS];
-    hdr.a_bss = count[SBSS];
-    hdr.a_reltext = rtsize;
-    hdr.a_reldata = rdsize;
-    hdr.a_syms = stlength;
-    hdr.a_entry = 0;
-    fseek(stdout, 0, 0);
-    fputhdr(&hdr, stdout);
 }
 
 unsigned relocate(unsigned opcode, unsigned offset, struct reloc *relinfo)
@@ -4175,13 +4098,13 @@ elf_write_bytes(const void *data, unsigned len, FILE *f)
 void
 elf_put16(unsigned value, FILE *f)
 {
-    aout_put16(value, f);
+    endianio_put16(value, f);
 }
 
 void
 elf_put32(unsigned value, FILE *f)
 {
-    aout_put32(value, f);
+    endianio_put32(value, f);
 }
 
 void
@@ -4654,7 +4577,7 @@ makeelf(void)
     ehdr.e_ident[2] = ELFMAG2;
     ehdr.e_ident[3] = ELFMAG3;
     ehdr.e_ident[4] = ELFCLASS32;
-    ehdr.e_ident[EI_DATA] = aout_is_big_endian() ? ELFDATA2MSB : ELFDATA2LSB;
+    ehdr.e_ident[EI_DATA] = endianio_is_big_endian() ? ELFDATA2MSB : ELFDATA2LSB;
     ehdr.e_ident[6] = EV_CURRENT;
     ehdr.e_type = ET_REL;
     ehdr.e_machine = EM_MIPS;
@@ -4705,81 +4628,18 @@ makeelf(void)
 
 void pass2()
 {
-    register int i;
     register unsigned h;
 
-    if (elf_output) {
-        for (segm = 0; segm < maxsegm; segm++) {
-            FILE *sfd, *rfd;
+    for (segm = 0; segm < maxsegm; segm++) {
+        FILE *sfd, *rfd;
 
-            if (!elf_section_should_output(segm) || !section_has_contents(segm))
-                continue;
-            sfd = fopen(tfilename, "w+");
-            if (!sfd)
-                uerror("cannot open %s", tfilename);
-            unlink(tfilename);
-            rfd = fopen(tfilename, "w+");
-            if (!rfd)
-                uerror("cannot open %s", tfilename);
-            unlink(tfilename);
-
-            rewind(sfile[segm]);
-            rewind(rfile[segm]);
-            for (h = 0; h < count[segm]; h += WORDSZ) {
-                struct reloc relinfo;
-                unsigned word = fgetword(sfile[segm]);
-                fgetrel(rfile[segm], &relinfo);
-                word = makeword(word, &relinfo, h);
-                fputword(word, sfd);
-                fputrel(&relinfo, rfd);
-            }
-            fclose(sfile[segm]);
-            fclose(rfile[segm]);
-            sfile[segm] = sfd;
-            rfile[segm] = rfd;
-        }
-        makeelf();
-        return;
-    }
-
-    tbase = 0;
-    dbase = tbase + count[STEXT];
-    adbase = dbase + count[SDATA];
-    ctbase = adbase + count[SSTRNG];
-    dtbase = ctbase + count[SCTORS];
-    bbase = dtbase + count[SDTORS];
-
-    /* Adjust indexes in symbol name */
-    for (i = 0; i < stabfree; i++) {
-        switch (stab[i].n_type & N_TYPE) {
-        case N_UNDF:
-        case N_ABS:
-            break;
-        case N_TEXT:
-            stab[i].n_value += tbase;
-            break;
-        case N_DATA:
-            stab[i].n_value += dbase;
-            break;
-        case N_STRNG:
-            stab[i].n_value += adbase;
-            stab[i].n_type += N_DATA - N_STRNG;
-            break;
-        case N_CTORS:
-            stab[i].n_value += ctbase;
-            break;
-        case N_DTORS:
-            stab[i].n_value += dtbase;
-            break;
-        case N_BSS:
-            stab[i].n_value += bbase;
-            break;
-        }
-    }
-    fseek(stdout, sizeof(struct exec), 0);
-    for (segm = STEXT; segm < SBSS; segm++) {
-        /* Need to rewrite a relocation file. */
-        FILE *rfd = fopen(tfilename, "w+");
+        if (!elf_section_should_output(segm) || !section_has_contents(segm))
+            continue;
+        sfd = fopen(tfilename, "w+");
+        if (!sfd)
+            uerror("cannot open %s", tfilename);
+        unlink(tfilename);
+        rfd = fopen(tfilename, "w+");
         if (!rfd)
             uerror("cannot open %s", tfilename);
         unlink(tfilename);
@@ -4791,12 +4651,15 @@ void pass2()
             unsigned word = fgetword(sfile[segm]);
             fgetrel(rfile[segm], &relinfo);
             word = makeword(word, &relinfo, h);
-            fputword(word, stdout);
+            fputword(word, sfd);
             fputrel(&relinfo, rfd);
         }
+        fclose(sfile[segm]);
         fclose(rfile[segm]);
+        sfile[segm] = sfd;
         rfile[segm] = rfd;
     }
+    makeelf();
 }
 
 /*
@@ -4889,33 +4752,17 @@ unsigned alignreloc(unsigned nbytes)
     return nbytes;
 }
 
-void makesymtab()
-{
-    register int i;
-
-    for (i = 0; i < stabfree; i++) {
-        if (!xflags || (stab[i].n_type & N_EXT) ||
-            is_rebsd_metadata_symbol(&stab[i]) ||
-            (Xflag && stab[i].n_name[0] != 'L')) {
-            fputsym(&stab[i], stdout);
-        }
-    }
-    while (stalign--)
-        putchar(0);
-}
-
 void usage()
 {
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  as [--elf|--aout] [-gkuvxX] [-O[level]] [-EL|-EB] [-o outfile] [infile]\n");
+    fprintf(stderr, "  as [--elf] [-gkuvxX] [-O[level]] [-EL|-EB] [-o outfile] [infile]\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -o filename     Set output file name, default a.out\n");
     fprintf(stderr, "  -u              Treat undefined names as error\n");
     fprintf(stderr, "  -x              Discard local symbols\n");
     fprintf(stderr, "  -X              Discard locals starting with 'L' or '.'\n");
     fprintf(stderr, "  -EL, -EB        Select output byte order\n");
-    fprintf(stderr, "  --elf           Write ELF32 MIPS relocatable object\n");
-    fprintf(stderr, "  --aout          Write legacy ReBSD a.out relocatable object\n");
+    fprintf(stderr, "  --elf           Write ELF32 MIPS relocatable object (default)\n");
     fprintf(stderr, "  -O2             Safely fill a restricted set of branch delay slots\n");
     fprintf(stderr, "  -mips3, -march=vr4300\n");
     fprintf(stderr, "                  Select VR4300 ISA checks and 8-byte text alignment\n");
@@ -4926,18 +4773,13 @@ void usage()
 
 static void target_info(void)
 {
-    printf("rebsd-as target_big_endian=%d target_vr4300_default=%d elf_default=%d\n",
+    printf("rebsd-as target_big_endian=%d target_vr4300_default=%d format=elf\n",
 #ifdef TARGET_BIG_ENDIAN
         1,
 #else
         0,
 #endif
 #ifdef TARGET_VR4300
-        1,
-#else
-        0,
-#endif
-#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
         1
 #else
         0
@@ -4950,20 +4792,14 @@ int main(int argc, char *argv[])
     register int i;
     register char *cp;
     int ofile = 0;
-    unsigned rtsize, rdsize;
-
 #ifdef TARGET_BIG_ENDIAN
-    aout_set_big_endian(1);
+    endianio_set_big_endian(1);
 #else
-    aout_set_big_endian(0);
+    endianio_set_big_endian(0);
 #endif
 #ifdef TARGET_VR4300
     set_cpu_vr4300(1);
 #endif
-#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
-    elf_output = 1;
-#endif
-
     /*
      * Parse options.
      */
@@ -4973,12 +4809,10 @@ int main(int argc, char *argv[])
             return 0;
         }
         if (strcmp(argv[i], "--elf") == 0) {
-            elf_output = 1;
             continue;
         }
         if (strcmp(argv[i], "--aout") == 0) {
-            elf_output = 0;
-            continue;
+            uerror("a.out output is no longer supported");
         }
         if (strcmp(argv[i], "-march=vr4300") == 0 ||
             strcmp(argv[i], "-mips3") == 0) {
@@ -5072,9 +4906,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'E': /* -EL, -EB - endianness */
                     if (cp[1] == 'L')
-                        aout_set_big_endian(0);
+                        endianio_set_big_endian(0);
                     else if (cp[1] == 'B')
-                        aout_set_big_endian(1);
+                        endianio_set_big_endian(1);
                     else
                         uerror("bad endian option");
                     while (*++cp)
@@ -5110,16 +4944,5 @@ int main(int argc, char *argv[])
     pass1();                   /* First pass */
     middle();                  /* Prepare symbol table */
     pass2();                   /* Second pass */
-    if (elf_output)
-        return 0;
-    rtsize = makereloc(STEXT); /* Emit relocation info: text */
-    rtsize = alignreloc(rtsize);
-    rdsize = makereloc(SDATA);    /* data */
-    rdsize += makereloc(SSTRNG);  /* rodata */
-    rdsize += makereloc(SCTORS);  /* constructors */
-    rdsize += makereloc(SDTORS);  /* destructors */
-    rdsize = alignreloc(rdsize);
-    makesymtab();               /* Emit symbol table */
-    makeheader(rtsize, rdsize); /* Write a.out header */
     return 0;
 }

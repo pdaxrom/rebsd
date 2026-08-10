@@ -11,7 +11,6 @@
 #define SHSIZE      64
 #define SHPATHLEN   64
 #define STRLEN      32
-#include "exec_aout.h"
 #include "exec_elf.h"
 
 struct vmspace;
@@ -29,7 +28,6 @@ struct exec_params {
     char **userenvp;
     union {
         char sh[SHSIZE];
-        struct exec aout;
         struct elf_ehdr elf;
     } hdr;                      /* head of file to exec */
     int hdr_len;                /* number of bytes valid in image_header */
@@ -49,8 +47,6 @@ struct exec_params {
             int stoffset;       /* String table file pos */
             char str[STRLEN];
         } elf;
-        struct {
-        } aout;
     };
 
     gid_t gid;
@@ -83,7 +79,6 @@ int exec_check(struct exec_params *epp);
 int exec_setupstack(unsigned entryaddr, struct exec_params *epp);
 void exec_alloc_freeall(struct exec_params *epp);
 void *exec_alloc(int size, int ru, struct exec_params *epp);
-int exec_estab(struct exec_params *epp);
 int exec_save_args(struct exec_params *epp);
 int exec_stack_size(struct exec_params *epp, unsigned *size);
 void exec_clear(struct exec_params *epp);
@@ -92,6 +87,6 @@ void execv(void);
 void execve(void);
 
 #else /* KERNEL */
-#include <sys/exec_aout.h>
+#include <sys/exec_elf.h>
 #endif
 #endif

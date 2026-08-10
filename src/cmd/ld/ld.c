@@ -5144,7 +5144,7 @@ elf_parse_args(int argc, char **argv)
             continue;
         }
         if (strcmp(a, "--aout") == 0)
-            continue;
+            error(2, "a.out output is no longer supported");
         if (strcmp(a, "-m") == 0) {
             if (++i >= argc)
                 error(2, "-m: argument missing");
@@ -5256,6 +5256,7 @@ elf_main(int argc, char **argv)
 {
     int i;
 
+    collectlibdirs(argc, argv);
     elf_parse_args(argc, argv);
     if (!elf_target_machine)
         error(2, "ELF link has no input machine type; use -m");
@@ -5281,212 +5282,6 @@ elf_main(int argc, char **argv)
     return 0;
 }
 
-enum {
-    LD_PROBE_UNKNOWN,
-    LD_PROBE_AOUT,
-    LD_PROBE_ELF,
-};
-
-static int
-ld_probe_image(unsigned char *data, unsigned size)
-{
-    int best, big;
-    struct exec ex;
-
-    if (size >= 4 && data[0] == ELFMAG0 && data[1] == ELFMAG1 &&
-        data[2] == ELFMAG2 && data[3] == ELFMAG3)
-        return LD_PROBE_ELF;
-    if (elf_is_archive_image(data, size)) {
-        unsigned off = SARMAG;
-
-        best = LD_PROBE_UNKNOWN;
-        while (off + sizeof(struct ar_hdr) <= size) {
-            struct ar_hdr *hdr = (struct ar_hdr *)(data + off);
-            unsigned arsize, dataoff, objoff, objsize, next;
-            int kind;
-
-            if (strncmp(hdr->ar_fmag, ARFMAG, sizeof(ARFMAG) - 1) != 0)
-                break;
-            arsize = (unsigned)elf_ar_atol(hdr->ar_size, sizeof(hdr->ar_size));
-            dataoff = off + sizeof(struct ar_hdr);
-            if (!elf_range_ok(size, dataoff, arsize))
-                break;
-            objoff = dataoff;
-            objsize = arsize;
-            if (strncmp(hdr->ar_name, AR_EFMT1, sizeof(AR_EFMT1) - 1) == 0) {
-                unsigned namelen = (unsigned)atoi(hdr->ar_name +
-                    sizeof(AR_EFMT1) - 1);
-                if (namelen > objsize)
-                    break;
-                objoff += namelen;
-                objsize -= namelen;
-            }
-            kind = ld_probe_image(data + objoff, objsize);
-            if (kind == LD_PROBE_ELF)
-                return kind;
-            if (kind == LD_PROBE_AOUT)
-                best = kind;
-            next = dataoff + arsize + (arsize & 1);
-            if (next <= off || next > size + 1)
-                break;
-            off = next;
-        }
-        return best;
-    }
-    if (size >= sizeof(struct exec)) {
-        big = aout_is_big_endian();
-        ex.a_midmag = elf_get32p(data, big);
-        if (!N_BADMAG(ex))
-            return LD_PROBE_AOUT;
-    }
-    return LD_PROBE_UNKNOWN;
-}
-
-static int
-ld_probe_file(const char *path)
-{
-    FILE *f;
-    unsigned char *data;
-    long len;
-    int kind;
-
-    f = fopen(path, "r");
-    if (!f)
-        return LD_PROBE_UNKNOWN;
-    fseek(f, 0, SEEK_END);
-    len = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (len < 0) {
-        fclose(f);
-        return LD_PROBE_UNKNOWN;
-    }
-    data = malloc(len ? (unsigned)len : 1);
-    if (!data)
-        error(2, "out of memory");
-    if (len && fread(data, 1, len, f) != (size_t)len) {
-        free(data);
-        fclose(f);
-        return LD_PROBE_UNKNOWN;
-    }
-    fclose(f);
-    kind = ld_probe_image(data, (unsigned)len);
-    free(data);
-    return kind;
-}
-
-static char *
-ld_find_library_quiet(const char *name)
-{
-    char *path;
-    int i;
-
-    for (i = 0; i < nlibdirs; i++) {
-        path = makelibpath(libdirs[i], name);
-        if (access(path, R_OK) == 0)
-            return path;
-        free(path);
-    }
-    for (i = 0; stdlibdirs[i]; i++) {
-        path = makesyslibpath(stdlibdirs[i], name);
-        if (access(path, R_OK) == 0)
-            return path;
-        free(path);
-    }
-    return 0;
-}
-
-static int
-ld_args_want_elf(int argc, char **argv)
-{
-    int i, kind, saw_elf, saw_aout, force_elf, force_aout;
-
-    saw_elf = saw_aout = force_elf = force_aout = 0;
-    collectlibdirs(argc, argv);
-    for (i = 1; i < argc; i++) {
-        char *a = argv[i];
-
-        if (strcmp(a, "--elf") == 0) {
-            force_elf = 1;
-            continue;
-        }
-        if (strcmp(a, "--aout") == 0) {
-            force_aout = 1;
-            continue;
-        }
-        if (strcmp(a, "-EL") == 0) {
-            elf_select_endian(0, "-EL");
-            continue;
-        }
-        if (strcmp(a, "-EB") == 0) {
-            elf_select_endian(1, "-EB");
-            continue;
-        }
-        if (strcmp(a, "-m") == 0) {
-            force_elf = 1;
-            if (++i < argc)
-                elf_select_emulation(argv[i]);
-            continue;
-        }
-        if (strncmp(a, "-m", 2) == 0 && a[2]) {
-            force_elf = 1;
-            elf_select_emulation(a + 2);
-            continue;
-        }
-        if (strcmp(a, "-z") == 0) {
-            i++;
-            continue;
-        }
-        if (strcmp(a, "--sysroot") == 0 || strcmp(a, "-o") == 0 ||
-            strcmp(a, "-e") == 0 || strcmp(a, "-T") == 0 ||
-            strcmp(a, "-L") == 0 || strcmp(a, "-u") == 0) {
-            i++;
-            continue;
-        }
-        if (strncmp(a, "--sysroot=", 10) == 0 || strncmp(a, "-T", 2) == 0 ||
-            strncmp(a, "-L", 2) == 0)
-            continue;
-        if (strcmp(a, "-l") == 0) {
-            char *path;
-
-            if (++i >= argc)
-                break;
-            path = ld_find_library_quiet(argv[i]);
-            if (!path)
-                continue;
-            kind = ld_probe_file(path);
-            free(path);
-        } else if (strncmp(a, "-l", 2) == 0) {
-            char *path = ld_find_library_quiet(a + 2);
-
-            if (!path)
-                continue;
-            kind = ld_probe_file(path);
-            free(path);
-        } else if (a[0] == '-') {
-            continue;
-        } else {
-            kind = ld_probe_file(a);
-        }
-        if (kind == LD_PROBE_ELF)
-            saw_elf = 1;
-        else if (kind == LD_PROBE_AOUT)
-            saw_aout = 1;
-    }
-    if (force_elf)
-        return 1;
-    if (force_aout)
-        return 0;
-    if (saw_elf)
-        return 1;
-    if (saw_aout)
-        return 0;
-#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
-    return 1;
-#else
-    return 0;
-#endif
-}
-
 int main(int argc, char **argv)
 {
     ld_program = argv[0];
@@ -5499,7 +5294,7 @@ int main(int argc, char **argv)
 
     if (argc == 1) {
         printf("Usage:\n");
-        printf("  ld [--elf|--aout] [-sSxXrdtv] [-EL|-EB] [--sysroot dir|--sysroot=dir] [-L dir] [-o file] [-lname] [-u name] [-e name] [-Taddr|-T script] file...\n");
+        printf("  ld [--elf] [-sSxXrdtv] [-EL|-EB] [--sysroot dir|--sysroot=dir] [-L dir] [-o file] [-lname] [-u name] [-e name] [-T script] file...\n");
         printf("Options:\n");
         printf("  -o filename     Set output file name, default a.out\n");
         printf("  -L dirname      Add a library search directory\n");
@@ -5507,8 +5302,7 @@ int main(int argc, char **argv)
         printf("  -llibname       Search for library libname\n");
         printf("  -u symbol       Start with undefined reference to symbol\n");
         printf("  -e symbol       Set start address\n");
-        printf("  -Taddress       Set address of .text segment, default %#x\n", basaddr);
-        printf("  -T script       Read linker script; a.out uses ENTRY() and initial . address\n");
+        printf("  -T script       Read an ELF linker script\n");
         printf("  -s              Discard all symbols\n");
         printf("  -S              Discard all symbols except locals and globals\n");
         printf("  -x              Discard local symbols\n");
@@ -5517,8 +5311,7 @@ int main(int argc, char **argv)
         printf("  -d              Force common symbols to be defined\n");
         printf("  -t              Increase trace verbosity (up to 3)\n");
         printf("  -v              Enable verbose diagnostics\n");
-        printf("  --elf           Link ELF32 MIPS or i386 objects\n");
-        printf("  --aout          Link legacy ReBSD a.out objects\n");
+        printf("  --elf           Link ELF32 MIPS or i386 objects (default)\n");
         printf("  -m emulation    Select elf_i386 or a MIPS ELF32 emulation\n");
         exit(4);
     }
@@ -5527,44 +5320,5 @@ int main(int argc, char **argv)
     if (signal(SIGTERM, SIG_IGN) != SIG_IGN)
         signal(SIGTERM, delexit);
 
-    if (ld_args_want_elf(argc, argv))
-        return elf_main(argc, argv);
-
-    /*
-     * First pass: compute lengths of segments, symbol name table
-     * and entry address.
-     */
-    collectlibdirs(argc, argv);
-    pass1(argc, argv);
-    filname = 0;
-
-    /*
-     * Compute name table.
-     */
-    middle();
-
-    /*
-     * Create temporary files.
-     */
-    setupout();
-
-    /*
-     * Second pass: relocation.
-     */
-    pass2(argc, argv);
-
-    /*
-     * Flush buffers, write a header.
-     */
-    finishout();
-
-    if (!ofilfnd) {
-        unlink("a.out");
-        if (link("l.out", "a.out") < 0)
-            perror("a.out");
-        ofilename = "a.out";
-    }
-    delarg = errlev;
-    delexit(0);
-    return (0);
+    return elf_main(argc, argv);
 }

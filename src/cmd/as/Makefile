@@ -9,7 +9,7 @@ CMD_PARENT_SRC  = $(if $(REBSD_SRCDIR),$(REBSD_SRCDIR)/..,..)
 CFLAGS		+= -Werror -Wall -Os
 LDFLAGS         +=
 
-OBJS            = as.o aoutio.o
+OBJS            = as.o endianio.o
 MAN             = as.0
 MANSRC          = as.1
 
@@ -23,7 +23,7 @@ as:             ${OBJS}
 		${SIZE} as.elf
 		${ELF2AOUT} as.elf $@ && rm as.elf
 
-aoutio.o:       $(CMD_PARENT_SRC)/aoutio.c $(CMD_PARENT_SRC)/aoutio.h
+endianio.o:     $(CMD_PARENT_SRC)/endianio.c $(CMD_PARENT_SRC)/endianio.h
 		${CC} ${CFLAGS} -c -o $@ $<
 
 $(MAN):         $(MANSRC)

@@ -5,11 +5,7 @@
  */
 
 /* common cpp predefines */
-#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
 #define PCC_REBSD_CPP_FORMAT "-D__ELF__",
-#else
-#define PCC_REBSD_CPP_FORMAT
-#endif
 
 #define CPPADD	{ \
 	"-T", \
@@ -198,11 +194,7 @@
 #define STARTLABEL	"_start"
 #define TARGET_NO_ABICALLS
 
-#ifdef REBSD_TOOLCHAIN_ELF_DEFAULT
 #define PCC_REBSD_EXEC_FORMAT "--elf"
-#else
-#define PCC_REBSD_EXEC_FORMAT "--aout"
-#endif
 
 #define PCC_SETUP_AS_ARGS { \
 	strlist_append(&assembler_flags, PCC_REBSD_EXEC_FORMAT); \

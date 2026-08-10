@@ -20,9 +20,8 @@
 #include <sys/file.h>
 #include <sys/types.h>
 #endif
-#include <a.out.h>
+#include <nlist.h>
 #include <ar.h>
-#include "../aoutio.h"
 #include <elf32.h>
 
 #ifdef CROSS
@@ -36,10 +35,7 @@ CHDR chdr;
 char gflg, nflg, oflg, pflg, uflg, rflg = 1, archive;
 char **xargv;
 
-union {
-    char mag_armag[SARMAG + 1];
-    struct exec mag_exp;
-} mag_un;
+char mag_armag[SARMAG + 1];
 
 int narg, errs;
 
@@ -135,11 +131,6 @@ off_t nextel(FILE *af, off_t off)
         return 0;
     off += sizeof(struct ar_hdr) + chdr.size + (chdr.lname & 1);
     return off;
-}
-
-unsigned int fgetword(FILE *f)
-{
-    return aout_get32(f);
 }
 
 int compare(const void *, const void *);
@@ -405,35 +396,6 @@ elf_namelist(FILE *fi, off_t base)
     return 1;
 }
 
-/*
- * Read a symbol table entry.
- * Return a number of bytes read, or -1 on EOF.
- * Format of symbol record:
- *  1 byte: length of name in bytes
- *  1 byte: type of symbol (N_UNDF, N_ABS, N_TEXT, etc)
- *  4 bytes: value
- *  N bytes: name
- */
-int fgetsym(FILE *fi, char *name, unsigned *value, unsigned short *type)
-{
-    register int len;
-    unsigned nbytes;
-
-    len = getc(fi);
-    if (len <= 0)
-        return -1;
-    *type = getc(fi);
-    *value = fgetword(fi);
-    nbytes = len + 6;
-    if (name) {
-        while (len-- > 0)
-            *name++ = getc(fi);
-        *name = '\0';
-    } else
-        fseek(fi, len, SEEK_CUR);
-    return nbytes;
-}
-
 int compare(const void *arg1, const void *arg2)
 {
     const struct nlist *p1 = arg1;
@@ -526,22 +488,19 @@ void namelist()
     setbuf(fi, ibuf);
 
     off = 0;
-    if (fread(mag_un.mag_armag, 1, SARMAG, fi) != SARMAG) {
+    if (fread(mag_armag, 1, SARMAG, fi) != SARMAG) {
         error(0, "read error");
         goto out;
     }
 
-    if (strncmp(mag_un.mag_armag, ARMAG, SARMAG) == 0) {
+    if (strncmp(mag_armag, ARMAG, SARMAG) == 0) {
         archive++;
         off = SARMAG;
     } else {
         rewind(fi);
         if (!elf_read_ehdr_at(fi, 0, &eh, &ele)) {
-            rewind(fi);
-            if (!aout_read_exec(fi, &mag_un.mag_exp) || N_BADMAG(mag_un.mag_exp)) {
-                error(0, "bad format");
-                goto out;
-            }
+            error(0, "bad ELF format");
+            goto out;
         }
     }
     rewind(fi);
@@ -553,80 +512,10 @@ void namelist()
     }
 
     do {
-        off_t o, curpos;
-        register int i, n;
-        struct nlist *symp = NULL;
+        off_t curpos;
 
         curpos = ftell(fi);
-        if (elf_namelist(fi, curpos))
-            continue;
-        fseek(fi, curpos, SEEK_SET);
-        if (!aout_read_exec(fi, &mag_un.mag_exp))
-            continue;
-        if (N_BADMAG(mag_un.mag_exp))
-            continue;
-
-        o = N_SYMOFF(mag_un.mag_exp);
-        fseek(fi, curpos + o, SEEK_SET);
-        n = mag_un.mag_exp.a_syms;
-        if (n == 0) {
-            error(0, "no name list");
-            continue;
-        }
-
-        i = 0;
-        while (n > 0) {
-            unsigned value;
-            unsigned short type;
-
-            int c = fgetsym(fi, 0, &value, &type);
-            if (c <= 0)
-                break;
-            n -= c;
-            if (gflg && (type & N_EXT) == 0)
-                continue;
-            if (uflg && (type & N_TYPE) == N_UNDF && value != 0)
-                continue;
-            i++;
-        }
-
-        fseek(fi, curpos + o, SEEK_SET);
-        symp = (struct nlist *)malloc((i + 1) * sizeof(struct nlist));
-        if (symp == 0)
-            error(1, "out of memory");
-        i = 0;
-        n = mag_un.mag_exp.a_syms;
-        while (n > 0) {
-            char name[256];
-
-            int c = fgetsym(fi, name, &symp[i].n_value, &symp[i].n_type);
-            if (c <= 0)
-                break;
-            n -= c;
-            if (gflg && (symp[i].n_type & N_EXT) == 0)
-                continue;
-            if (uflg && (symp[i].n_type & N_TYPE) == N_UNDF && symp[i].n_value != 0)
-                continue;
-
-            symp[i].n_name = malloc(c - 5);
-            if (!symp[i].n_name)
-                error(1, "out of memory");
-            strcpy(symp[i].n_name, name);
-            i++;
-        }
-
-        if (pflg == 0)
-            qsort(symp, i, sizeof(struct nlist), compare);
-        if ((archive || narg > 1) && oflg == 0)
-            printf("\n%s:\n", archive ? chdr.name : *xargv);
-
-        psyms(symp, i);
-        if (symp) {
-            for (n = 0; n < i; n++)
-                free(symp[n].n_name);
-            free((char *)symp);
-            symp = NULL;
-        }
+        (void)elf_namelist(fi, curpos);
     } while (archive && (off = nextel(fi, off)) != 0);
 out:
     fclose(fi);
@@ -634,12 +523,6 @@ out:
 
 int main(int argc, char **argv)
 {
-#ifdef TARGET_BIG_ENDIAN
-    aout_set_big_endian(1);
-#else
-    aout_set_big_endian(0);
-#endif
-
     if (--argc > 0 && argv[1][0] == '-' && argv[1][1] != 0) {
         argv++;
         while (*++*argv)
@@ -662,20 +545,10 @@ int main(int argc, char **argv)
             case 'o':
                 oflg++;
                 continue;
-            case 'E':
-                if ((*argv)[1] == 'L')
-                    aout_set_big_endian(0);
-                else if ((*argv)[1] == 'B')
-                    aout_set_big_endian(1);
-                else
-                    goto usage;
-                while ((*argv)[1])
-                    ++*argv;
-                continue;
             case 'h':
             usage:
                 fprintf(stderr, "Usage:\n");
-                fprintf(stderr, "  nm [-gunrpo] [-EL|-EB] file...\n");
+                fprintf(stderr, "  nm [-gunrpo] file...\n");
                 fprintf(stderr, "Options:\n");
                 fprintf(stderr, "  -g      Display only external symbols\n");
                 fprintf(stderr, "  -u      Display only undefined symbols\n");

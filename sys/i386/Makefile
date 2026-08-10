@@ -153,6 +153,11 @@ I386_PCC_SMOKE_BUILD = $(I386_PCC_WORK)/smoke
 I386_PCC_LIBC_ABI_SMOKE = $(I386_PCC_SMOKE_BUILD)/libc-abi-smoke
 I386_PCC_LINPACK_SMOKE = $(I386_PCC_SMOKE_BUILD)/linpack-pcc
 I386_PCC_COMPILER_BENCH = $(I386_PCC_SMOKE_BUILD)/compiler-bench-pcc
+I386_GCC_LINPACK_BUILD = $(CURDIR)/i386-gcc-linpack.$(USERLAND_COMPILER)
+I386_GCC_LINPACK_OBJ = $(I386_GCC_LINPACK_BUILD)/linpack-gcc.o
+I386_GCC_LINPACK = $(I386_GCC_LINPACK_BUILD)/linpack-gcc
+I386_GCC_LINPACK_ROOTFS_STAMP = \
+    $(I386_ROOTFS_STAGE)/.linpack-gcc.$(USERLAND_COMPILER)
 I386_PCC_SRCS = $(I386_PCC_BUILD_SCRIPT) \
                 $(TOPSRC)/src/dev/pcc/Makefile.native \
                 $(TOPSRC)/src/dev/pcc/native-config.h \
@@ -222,6 +227,13 @@ I386_USERLAND_LDFLAGS = -nostartfiles \
                         -L$(abspath $(I386_PCC_SYSLIB))
 I386_USERLAND_COMPILER_RUNTIME = libpcc
 I386_USERLAND_EXTRA_DEPS = $(I386_PCC_TOOLCHAIN_STAMP)
+endif
+ifeq ($(USERLAND_COMPILER),gcc)
+I386_GCC_LINPACK_RUNTIME_DIR = $(I386_USERLAND_SRC)
+I386_GCC_LINPACK_RUNTIME_STAMP = $(I386_USERLAND_STAMP)
+else
+I386_GCC_LINPACK_RUNTIME_DIR = $(I386_PCC_BOOTSTRAP_SRC)
+I386_GCC_LINPACK_RUNTIME_STAMP = $(I386_PCC_BOOTSTRAP_STAMP)
 endif
 I386_USERLAND_SRCS = $(shell find $(TOPSRC)/src -type f \
                        \( -name '*.[chS]' -o -name Makefile \) 2>/dev/null)
@@ -342,7 +354,7 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o fpu.o \
                    nullzero.o \
                    vm_vnode.o \
                    disk_bootstrap.o \
-                   exec_aout.o exec_conf.o exec_elf.o exec_elf_loader.o \
+                   exec_conf.o exec_elf.o exec_elf_loader.o \
                    exec_script.o exec_subr.o kern_exec.o init_process.o \
                    rootfs_image.o \
                    init_sysent.o kern_tables.o stubs.o kern_machdep.o \
@@ -713,8 +725,25 @@ $(I386_PCC_STAGE_STAMP): $(I386_USERLAND_STAMP) \
 	    $(I386_ROOTFS_STAGE)/root/compiler-bench-pcc
 	touch $@
 
+$(I386_GCC_LINPACK_ROOTFS_STAMP): $(I386_USERLAND_STAMP) \
+	    $(I386_GCC_LINPACK_RUNTIME_STAMP) \
+	    $(REBSD_PCC_SMOKE_ROOT)/linpack.c $(I386_USER_LDSCRIPT)
+	rm -rf $(I386_GCC_LINPACK_BUILD)
+	mkdir -p $(I386_GCC_LINPACK_BUILD)
+	$(I386_GCC_USERLAND_CC) -O2 -c \
+	    $(REBSD_PCC_SMOKE_ROOT)/linpack.c -o $(I386_GCC_LINPACK_OBJ)
+	$(I386_GCC_LD) --nmagic -z noexecstack \
+	    -T$(abspath $(I386_USER_LDSCRIPT)) \
+	    $(abspath $(I386_GCC_LINPACK_RUNTIME_DIR)/crt0.o) \
+	    $(I386_GCC_LINPACK_OBJ) \
+	    -L$(abspath $(I386_GCC_LINPACK_RUNTIME_DIR)) \
+	    -o $(I386_GCC_LINPACK) -lm -lc
+	cp -p $(I386_GCC_LINPACK) $(I386_ROOTFS_STAGE)/root/linpack-gcc
+	chmod 0775 $(I386_ROOTFS_STAGE)/root/linpack-gcc
+	touch $@
+
 $(I386_ROOTFS_STAGE)/.userland: $(I386_USERLAND_STAMP) \
-	    $(I386_ROOTFS_PCC_DEPS)
+	    $(I386_ROOTFS_PCC_DEPS) $(I386_GCC_LINPACK_ROOTFS_STAMP)
 	test -x $(I386_ROOTFS_STAGE)/sbin/init
 	test -L $(I386_ROOTFS_STAGE)/etc/init
 	test -L $(I386_ROOTFS_STAGE)/etc/telinit
@@ -1231,7 +1260,7 @@ init_main.o: $(TOPSRC)/sys/kernel/init_main.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-exec_aout.o exec_conf.o exec_elf.o exec_script.o kern_exec.o \
+exec_conf.o exec_elf.o exec_script.o kern_exec.o \
 kern_tables.o kern_machdep.o kern_mman.o kern_prot2.o kern_sysctl.o \
 kern_sysv_shm.o: %.o: \
 	    $(TOPSRC)/sys/kernel/%.c \
@@ -1827,6 +1856,7 @@ clean:
 	rm -rf $(I386_USERLAND_BUILD)
 	rm -rf $(I386_PCC_WORK)
 	rm -rf $(I386_PCC_BOOTSTRAP_BUILD)
+	rm -rf $(I386_GCC_LINPACK_BUILD)
 	rm -rf .deps
 	rm -f $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	rmdir $(I386_GEN_INCLUDE) 2>/dev/null || true

@@ -4,9 +4,18 @@ REBSD_TOPSRC ?= $(abspath $(CURDIR)/$(REBSD_TOPSRC_REL))
 REBSD_OBJMAKE = $(REBSD_TOPSRC)/tools/build/objmake.sh
 
 REBSD_PROFILE_BOARD = $(if $(BOARD),$(BOARD),$(if $(TARGET_PLATFORM),$(TARGET_PLATFORM),default))
+ifneq ($(strip $(N64_BUILD_CONFIG)),)
+ifeq ($(REBSD_PROFILE_BOARD),n64)
+REBSD_N64_PROFILE_CONFIG = $(REBSD_TOPSRC)/sys/mips/n64/configs/$(N64_BUILD_CONFIG).mk
+ifeq ($(wildcard $(REBSD_N64_PROFILE_CONFIG)),)
+$(error unknown N64_BUILD_CONFIG '$(N64_BUILD_CONFIG)')
+endif
+include $(REBSD_N64_PROFILE_CONFIG)
+endif
+endif
 REBSD_DEFAULT_CPU = $(if $(filter n64 malta64,$(REBSD_PROFILE_BOARD)),vr4300,$(if $(filter malta maltael ci20,$(REBSD_PROFILE_BOARD)),mips32r2,default))
 REBSD_DEFAULT_ENDIAN = $(if $(filter maltael ci20,$(REBSD_PROFILE_BOARD)),little,$(if $(filter n64 malta malta64,$(REBSD_PROFILE_BOARD)),big,default))
-REBSD_DEFAULT_EXEC = $(if $(filter n64,$(REBSD_PROFILE_BOARD)),aout,$(if $(filter malta malta64 maltael ci20,$(REBSD_PROFILE_BOARD)),elf,default))
+REBSD_DEFAULT_EXEC = $(if $(filter n64 malta malta64 maltael ci20,$(REBSD_PROFILE_BOARD)),elf,default)
 REBSD_PROFILE_KERNEL = $(if $(KERNEL_COMPILER),$(KERNEL_COMPILER),gcc)
 REBSD_PROFILE_USER = $(if $(USERLAND_COMPILER),$(USERLAND_COMPILER),gcc)
 REBSD_PROFILE_CPU = $(if $(N64_USERLAND_CPU),$(N64_USERLAND_CPU),$(if $(MIPS_ROOTFS_CPU),$(MIPS_ROOTFS_CPU),$(REBSD_DEFAULT_CPU)))

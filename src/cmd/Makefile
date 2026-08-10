@@ -10,7 +10,7 @@ CFLAGS          += -Werror
 
 # Programs that live in subdirectories, and have makefiles of their own.
 # /bin
-SUBDIR_ALL	= adb adc-demo aout ar as awk basic calendar chflags \
+SUBDIR_ALL	= adb adc-demo ar as awk basic calendar chflags \
                   chpass dc diff emg env fdisk find fold forth \
                   fstat glcdtest hostname id la ld ls login make \
                   man md5 med more netstat nm passwd pdc picoc ping portio printf pwm \
@@ -123,8 +123,8 @@ vm_memory.o: vm_memory.c vm_memory.h
 %.c: %.y
 		$(YACC) $(YFLAGS) -o $@ $<
 
-size strip: %: %.o aoutio.o
-		$(LD) $(LDFLAGS) -o $@.elf $@.o aoutio.o $(LIBS)
+size strip: %: %.o
+		$(LD) $(LDFLAGS) -o $@.elf $@.o $(LIBS)
 		$(OBJDUMP) -S $@.elf > $@.dis
 		$(SIZE) $@.elf
 		$(ELF2AOUT) $@.elf $@ && /bin/rm $@.elf
@@ -139,9 +139,6 @@ file: file.c
 		$(OBJDUMP) -S file.elf > file.dis
 		$(SIZE) file.elf
 		$(ELF2AOUT) file.elf file && /bin/rm file.elf
-
-aoutio.o:	aoutio.c aoutio.h
-		$(CC) $(CFLAGS) -c $<
 
 $(SCRIPT): %: %.sh
 		install -c $< $@

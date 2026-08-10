@@ -15,7 +15,6 @@ LDSCRIPT ?= mips-user.ld
 CRT0 ?= crt0.o
 LIBDIR ?= .
 PCC_ARCH ?= mips
-PCC_EXEC_FORMAT ?= elf
 HOSTCC ?= cc
 BISON ?= bison
 FLEX ?= flex
@@ -107,15 +106,7 @@ else
 $(error Unsupported PCC_ARCH=$(PCC_ARCH))
 endif
 
-ifeq ($(PCC_EXEC_FORMAT),elf)
-EXEC_DEFINE = -DREBSD_TOOLCHAIN_ELF_DEFAULT
 LD_EXEC_FLAG = --elf
-else ifeq ($(PCC_EXEC_FORMAT),aout)
-EXEC_DEFINE =
-LD_EXEC_FLAG = --aout
-else
-$(error Unsupported PCC_EXEC_FORMAT=$(PCC_EXEC_FORMAT))
-endif
 
 ifeq ($(HOST_BYTE_ORDER),big)
 HOST_ENDIAN_CONFIG = \#define HOST_BIG_ENDIAN 1
@@ -139,7 +130,7 @@ COMMON_INCLUDES = -I$(PCC_SRC)/mip -I$(PCC_SRC)/arch/$(ARCH_DIR) \
                   -I$(PCC_SRC)/os/rebsd -I$(PCC_SRC)/common
 TARGET_ARCH = -march=$(PCC_CPU) $(FLOAT_FLAG) $(TARGET_ENDIAN_FLAG)
 TARGET_CFLAGS = $(TARGET_ARCH) -Os -fno-builtin -fno-stack-protector \
-                -fcommon $(COMMON_DEFS) $(EXEC_DEFINE) $(CPU_DEFINE) \
+                -fcommon $(COMMON_DEFS) $(CPU_DEFINE) \
                 $(FLOAT_DEFINE) -I$(dir $(TARGET_CONFIG)) $(COMMON_INCLUDES)
 HOST_CFLAGS = -O2 $(COMMON_DEFS) -DPCC_DEBUGFP_NATIVE_STRTOLD \
               -I$(dir $(HOST_CONFIG)) $(COMMON_INCLUDES)

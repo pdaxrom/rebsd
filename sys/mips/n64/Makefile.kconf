@@ -82,7 +82,7 @@ PARAM := $(filter-out -DPTY_ENABLED -DPTY_NUNITS=% \
 PARAM += -DN64_MINIMAL_UART_ONLY -DN64_CART_UART_ONLY
 N64_ENABLE_ROMFS = 0
 endif
-N64_ROOTFS_KBYTES ?= $(if $(filter pcc,$(USERLAND_COMPILER)),32768,16384)
+N64_ROOTFS_KBYTES ?= $(if $(filter pcc,$(USERLAND_COMPILER)),32768,24576)
 N64_ROOTFS_COMMON_DIR ?= $(TOPSRC)/sys/mips/rootfs
 N64_ROOTFS_BOARD_DIR ?= $(TOPSRC)/sys/mips/n64/rootfs
 N64_ROOTFS_MANIFEST ?= $(TOPSRC)/sys/mips/rootfs.manifest
@@ -98,7 +98,7 @@ N64_ROOTFS_BASE_STAMP = $(N64_ROOTFS_STAGE)/.base
 N64_ROOTFS_USER_STAMP = $(N64_ROOTFS_STAGE)/.userland.$(USERLAND_COMPILER).$(N64_USERLAND_ABI)
 N64_ROOTFS_USER_COMPAT_STAMP = $(N64_ROOTFS_STAGE)/.userland
 N64_ROOTFS_WHATIS = $(N64_ROOTFS_USR_SHARE)/man/whatis
-N64_USR_BIN_FILES = aout apropos ar as awk basename basic cal calendar cb chgrp \
+N64_USR_BIN_FILES = apropos ar as awk basename basic cal calendar cb chgrp \
                     cmp col comm compress deco diff diskspeed du ed egrep \
                     emg env fbset fbview fgrep file find fold forth free grep \
                     groups head hostid id iostat join last ld man matrix-as-vr4300 \
@@ -138,17 +138,17 @@ N64_NATIVE_HOST_INCLUDE = $(N64_NATIVE_TOOLS)/include
 N64_NATIVE_HOST_INCLUDE_STAMP = $(N64_NATIVE_HOST_INCLUDE)/.stamp
 N64_NATIVE_AS = $(N64_NATIVE_TOOLS)/as
 N64_NATIVE_LD = $(N64_NATIVE_TOOLS)/ld
-N64_NATIVE_AOUT_AR = $(N64_NATIVE_TOOLS)/ar
-N64_NATIVE_AOUT_RANLIB = $(N64_NATIVE_TOOLS)/ranlib
-N64_NATIVE_AOUT_NM = $(N64_NATIVE_TOOLS)/nm
-N64_NATIVE_AOUT_SIZE = $(N64_NATIVE_TOOLS)/size
-N64_NATIVE_AOUT_STRIP = $(N64_NATIVE_TOOLS)/strip
+N64_NATIVE_AR = $(N64_NATIVE_TOOLS)/ar
+N64_NATIVE_RANLIB = $(N64_NATIVE_TOOLS)/ranlib
+N64_NATIVE_NM = $(N64_NATIVE_TOOLS)/nm
+N64_NATIVE_SIZE = $(N64_NATIVE_TOOLS)/size
+N64_NATIVE_STRIP = $(N64_NATIVE_TOOLS)/strip
 N64_NATIVE_CRT0_SRC = $(TOPSRC)/lib/startup/crt0.s
 N64_NATIVE_CC_SCRIPT = $(TOPSRC)/sys/mips/tools/mips-native-cc.sh
 N64_HOST_PORTABLECC_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-host-portablecc.sh
 N64_NATIVE_AS_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-as-vr4300.sh
 N64_NATIVE_AS_MATRIX_SCRIPT = $(TOPSRC)/sys/mips/n64/native/matrix-as-vr4300.sh
-N64_NATIVE_AOUT_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-aout-toolchain.sh
+N64_NATIVE_ELF_SMOKE_SCRIPT = $(TOPSRC)/sys/mips/n64/native/smoke-elf-toolchain.sh
 N64_VR4300_HILO_CHECK = $(TOPSRC)/sys/mips/n64/native/check-vr4300-hilo.sh
 N64_ASYNC_EPILOGUE_CHECK = $(TOPSRC)/sys/mips/n64/native/check-mips-async-epilogue.sh
 N64_VR4300_ORDER_CHECK = python3 $(TOPSRC)/sys/mips/n64/native/check-vr4300-order.py
@@ -260,7 +260,7 @@ N64_NATIVE_TARGET_FLAGS = $(N64_USERLAND_ENDIAN_CPP) -DTARGET_VR4300 \
 N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(N64_NATIVE_AS_SMOKE_SCRIPT) \
                        $(N64_NATIVE_AS_MATRIX_SCRIPT) \
-                       $(N64_NATIVE_AOUT_SMOKE_SCRIPT) \
+                       $(N64_NATIVE_ELF_SMOKE_SCRIPT) \
                        $(TOPSRC)/src/cmd/as/as.c \
                        $(TOPSRC)/src/cmd/ld/ld.c \
                        $(TOPSRC)/src/cmd/ar/append.c \
@@ -286,7 +286,9 @@ N64_NATIVE_TOOL_SRCS = $(N64_NATIVE_MKHOSTINCLUDE) $(N64_NATIVE_CC_SCRIPT) \
                        $(TOPSRC)/include/elf32.h \
                        $(TOPSRC)/include/nlist.h \
                        $(TOPSRC)/include/ranlib.h \
-                       $(TOPSRC)/include/sys/exec_aout.h
+                       $(TOPSRC)/src/cmd/endianio.c \
+                       $(TOPSRC)/src/cmd/endianio.h \
+                       $(TOPSRC)/src/cmd/reloc.h
 N64_NATIVE_RUNTIME_SRCS = $(N64_NATIVE_TOOL_SRCS) $(MIPS_INCLUDE_SRCS) \
                           $(N64_NATIVE_CRT0_SRC) $(N64_LIBC_SRCS) \
                           $(N64_LIBM_SRCS) $(N64_LIBPCC_SRCS) \
@@ -299,7 +301,7 @@ N64_SRC_SUBDIRS = cmd
 N64_CMD_NONE = __n64_none__
 N64_CMD_SUBDIRS = basic calendar chown chroot compress date2 deco dhclient diff emg env fbset \
                   fbview find fold forth fsck fstat getty hostname id ifconfig inetd init \
-                  aout ar as ld login ls make man md5 med mkfs mknod \
+                  ar as ld login ls make man md5 med mkfs mknod \
                   mkpasswd mount more n64input netstat nm ntpdate pdc picoc ping printf pstat ptytest \
                   ranlib reboot renice retroforth rgbled romfsctl route sed setty \
                   sh shutdown sl smux stty sysctl tcl telnet \
@@ -354,8 +356,8 @@ endif
 ifeq ($(filter $(N64_USERLAND_ENDIAN),$(N64_USERLAND_ENDIANS)),)
 $(error Unsupported N64_USERLAND_ENDIAN=$(N64_USERLAND_ENDIAN); expected one of $(N64_USERLAND_ENDIANS))
 endif
-N64_USERLAND_EXEC_FORMAT ?= $(if $(MIPS_ROOTFS_EXEC_FORMAT),$(MIPS_ROOTFS_EXEC_FORMAT),aout)
-N64_USERLAND_EXEC_FORMATS = aout elf
+N64_USERLAND_EXEC_FORMAT ?= $(if $(MIPS_ROOTFS_EXEC_FORMAT),$(MIPS_ROOTFS_EXEC_FORMAT),elf)
+N64_USERLAND_EXEC_FORMATS = elf
 ifneq ($(MIPS_ROOTFS_EXEC_FORMAT),)
 ifneq ($(N64_USERLAND_EXEC_FORMAT),$(MIPS_ROOTFS_EXEC_FORMAT))
 $(error N64_USERLAND_EXEC_FORMAT=$(N64_USERLAND_EXEC_FORMAT) conflicts with MIPS_ROOTFS_EXEC_FORMAT=$(MIPS_ROOTFS_EXEC_FORMAT))
@@ -397,7 +399,7 @@ N64_USERLAND_INCLUDES = -I$(abspath $(TOPSRC)/sys/mips/n64/include) \
                         -I$(abspath $(TOPSRC)/include)
 
 N64_MINIMAL_ROOTFS_CMD_SUBDIRS = fstat getty hostname init login ls mkfs mkswap mount netstat ramctl reboot sh stty \
-    swapon swapoff sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),aout ar as date2 \
+    swapon swapoff sysctl test $(if $(filter 1,$(N64_MINIMAL_PCC_SMOKE)),ar as date2 \
     ld make md5 nm pstat ranlib sed) \
     $(if $(filter 1,$(N64_MINIMAL_USBNET_DEBUG)),dhclient ifconfig ping route sed)
 N64_MINIMAL_ROOTFS_CMD_STDS = cat chmod cmp iostat mkdir ps rm sleep strace \
@@ -514,27 +516,6 @@ MIPS_ROOTFS_PROFILE := \
 N64_ROOTFS_NATIVE_PCC ?= 1
 MIPS_ROOTFS_NATIVE_PCC := $(N64_ROOTFS_NATIVE_PCC)
 MIPS_ROOTFS_LINPACK_GCC := 1
-ifeq ($(USERLAND_COMPILER).$(N64_USERLAND_EXEC_FORMAT),pcc.aout)
-N64_LINPACK_GCC_RUNTIME_DIR = n64-linpack-gcc-runtime.$(N64_USERLAND_ABI)
-N64_LINPACK_GCC_RUNTIME_TREE = $(N64_LINPACK_GCC_RUNTIME_DIR)/tree
-N64_LINPACK_GCC_RUNTIME_STAMP = $(N64_LINPACK_GCC_RUNTIME_DIR)/.built
-N64_LINPACK_GCC_RUNTIME_CC = MIPS_NATIVE_TOPSRC=$(abspath $(N64_LINPACK_GCC_RUNTIME_TREE)) \
-    MIPS_NATIVE_AS=$(abspath $(MIPS_NATIVE_AS)) MIPS_NATIVE_PREFIX=$(N64_PREFIX) \
-    MIPS_NATIVE_CPU=$(N64_USERLAND_CPU) MIPS_NATIVE_FLOAT=$(N64_USERLAND_FLOAT) \
-    MIPS_NATIVE_ENDIAN=$(N64_USERLAND_ENDIAN) \
-    $(abspath $(MIPS_NATIVE_CC_SCRIPT)) \
-    -I$(abspath $(N64_LINPACK_GCC_RUNTIME_TREE)/sys/mips/include)
-MIPS_LINPACK_GCC_COMPILE = MIPS_NATIVE_TOPSRC=$(abspath $(TOPSRC)) \
-    MIPS_NATIVE_AS=$(abspath $(MIPS_NATIVE_AS)) MIPS_NATIVE_PREFIX=$(N64_PREFIX) \
-    MIPS_NATIVE_CPU=$(N64_USERLAND_CPU) MIPS_NATIVE_FLOAT=$(N64_USERLAND_FLOAT) \
-    MIPS_NATIVE_ENDIAN=$(N64_USERLAND_ENDIAN) \
-    $(abspath $(MIPS_NATIVE_CC_SCRIPT))
-MIPS_LINPACK_GCC_LINK = $(MIPS_NATIVE_LD) -X -d -e _start \
-    $(abspath $(N64_LINPACK_GCC_RUNTIME_DIR)/crt0.o)
-MIPS_LINPACK_GCC_LIBDIR = $(abspath $(N64_LINPACK_GCC_RUNTIME_DIR))
-MIPS_LINPACK_GCC_LINK_FORMAT = aout
-MIPS_LINPACK_GCC_DEPS = $(N64_LINPACK_GCC_RUNTIME_STAMP)
-endif
 MIPS_ROOTFS_TARGET_PLATFORM = n64
 MIPS_ROOTFS_CONTRACT_LABEL = \
     n64-$(if $(filter 1,$(N64_MINIMAL_ROOTFS)),minimal,full)
@@ -623,11 +604,11 @@ N64_NATIVE_HOST_INCLUDE = $(MIPS_NATIVE_HOST_INCLUDE)
 N64_NATIVE_HOST_INCLUDE_STAMP = $(MIPS_NATIVE_HOST_INCLUDE_STAMP)
 N64_NATIVE_AS = $(MIPS_NATIVE_AS)
 N64_NATIVE_LD = $(MIPS_NATIVE_LD)
-N64_NATIVE_AOUT_AR = $(MIPS_NATIVE_AOUT_AR)
-N64_NATIVE_AOUT_RANLIB = $(MIPS_NATIVE_AOUT_RANLIB)
-N64_NATIVE_AOUT_NM = $(MIPS_NATIVE_AOUT_NM)
-N64_NATIVE_AOUT_SIZE = $(MIPS_NATIVE_AOUT_SIZE)
-N64_NATIVE_AOUT_STRIP = $(MIPS_NATIVE_AOUT_STRIP)
+N64_NATIVE_AR = $(MIPS_NATIVE_AR)
+N64_NATIVE_RANLIB = $(MIPS_NATIVE_RANLIB)
+N64_NATIVE_NM = $(MIPS_NATIVE_NM)
+N64_NATIVE_SIZE = $(MIPS_NATIVE_SIZE)
+N64_NATIVE_STRIP = $(MIPS_NATIVE_STRIP)
 N64_NATIVE_STAMP = $(MIPS_NATIVE_STAMP)
 N64_NATIVE_LIBS = $(MIPS_NATIVE_LIBS)
 N64_NATIVE_SOFTFLOAT_LIBS = $(MIPS_NATIVE_SOFTFLOAT_LIBS)
@@ -655,57 +636,6 @@ N64_LINPACK_SMOKE_MANIFEST = $(MIPS_LINPACK_SMOKE_MANIFEST)
 N64_LINPACK_ROOTFS_STAMP = $(MIPS_LINPACK_ROOTFS_STAMP)
 N64_COMPILER_BENCH_ROOTFS_STAMP = $(MIPS_COMPILER_BENCH_ROOTFS_STAMP)
 
-ifeq ($(USERLAND_COMPILER).$(N64_USERLAND_EXEC_FORMAT),pcc.aout)
-N64_LINPACK_GCC_LIBC_MAKE = $(MAKE) -C $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libc \
-	TARGET_PLATFORM=n64 MIPS_ROOTFS_CPU=$(N64_USERLAND_CPU) \
-	MIPS_ROOTFS_ENDIAN=$(N64_USERLAND_ENDIAN) \
-	N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
-	CC="$(N64_LINPACK_GCC_RUNTIME_CC)" \
-	AS="$(N64_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c" \
-	AR="$(abspath $(MIPS_NATIVE_AOUT_AR))" \
-	RANLIB="$(abspath $(MIPS_NATIVE_AOUT_RANLIB))" \
-	LIBC_COMPILER_RUNTIME=libc
-N64_LINPACK_GCC_LIBM_MAKE = $(MAKE) -C $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libm \
-	TARGET_PLATFORM=n64 MIPS_ROOTFS_CPU=$(N64_USERLAND_CPU) \
-	MIPS_ROOTFS_ENDIAN=$(N64_USERLAND_ENDIAN) \
-	N64_USER_LDSCRIPT=$(abspath $(N64_USER_LDSCRIPT)) \
-	CC="$(N64_LINPACK_GCC_RUNTIME_CC)" \
-	AS="$(N64_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c" \
-	AR="$(abspath $(MIPS_NATIVE_AOUT_AR))" \
-	RANLIB="$(abspath $(MIPS_NATIVE_AOUT_RANLIB))"
-
-$(N64_LINPACK_GCC_RUNTIME_STAMP): $(MIPS_NATIVE_CRT0_SRC) \
-    $(MIPS_LIBC_SRCS) $(MIPS_LIBM_SRCS) $(MIPS_INCLUDE_SRCS) \
-    $(MIPS_NATIVE_CC_SCRIPT) $(MIPS_NATIVE_AS) $(MIPS_NATIVE_LD) \
-    $(MIPS_NATIVE_AOUT_AR) $(MIPS_NATIVE_AOUT_RANLIB) \
-    $(TOPSRC)/target.mk $(TOPSRC)/target-mips.mk $(TOPSRC)/target-n64.mk
-	rm -rf $(N64_LINPACK_GCC_RUNTIME_DIR)
-	mkdir -p $(N64_LINPACK_GCC_RUNTIME_TREE)/src \
-	    $(N64_LINPACK_GCC_RUNTIME_TREE)/sys/mips/n64
-	cp -pR $(TOPSRC)/include $(N64_LINPACK_GCC_RUNTIME_TREE)/
-	cp -pR $(TOPSRC)/sys/include $(N64_LINPACK_GCC_RUNTIME_TREE)/sys/
-	cp -p $(TOPSRC)/sys/mips/*.h \
-	    $(N64_LINPACK_GCC_RUNTIME_TREE)/sys/mips/
-	cp -p $(TOPSRC)/sys/mips/n64/*.h \
-	    $(N64_LINPACK_GCC_RUNTIME_TREE)/sys/mips/n64/
-	cp -pR $(TOPSRC)/sys/mips/n64/include \
-	    $(N64_LINPACK_GCC_RUNTIME_TREE)/sys/mips/n64/
-	cp -pR $(TOPSRC)/src/libc $(TOPSRC)/src/libm \
-	    $(N64_LINPACK_GCC_RUNTIME_TREE)/src/
-	cp -p $(TOPSRC)/target.mk $(TOPSRC)/target-mips.mk \
-	    $(TOPSRC)/target-n64.mk $(N64_LINPACK_GCC_RUNTIME_TREE)/
-	$(N64_LINPACK_GCC_RUNTIME_CC) -x assembler-with-cpp -c \
-	    -o $(N64_LINPACK_GCC_RUNTIME_DIR)/crt0.o $(MIPS_NATIVE_CRT0_SRC)
-	$(N64_LINPACK_GCC_LIBC_MAKE) clean
-	$(N64_LINPACK_GCC_LIBC_MAKE) all
-	$(MIPS_NATIVE_AOUT_RANLIB) $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libc.a
-	$(N64_LINPACK_GCC_LIBM_MAKE) clean
-	$(N64_LINPACK_GCC_LIBM_MAKE) all
-	cp -p $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libc.a \
-	    $(N64_LINPACK_GCC_RUNTIME_TREE)/src/libm.a \
-	    $(N64_LINPACK_GCC_RUNTIME_DIR)/
-	touch $@
-endif
 N64_STAGE0_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),stage0_n64cart_uart.o,stage0_console_null.o)
 N64_STAGE0_OBJS = stage0.o stage0_loader.o $(N64_STAGE0_CONSOLE_OBJS)
 N64_PREFLIGHT_CONSOLE_OBJS = $(if $(filter n64cart_uart.o,$(OBJS)),preflight_n64cart_uart.o,console_null.o)
@@ -726,8 +656,6 @@ NM              = $(N64_PREFIX)nm
 N64_TOOL        = $(N64_TOOLCHAIN)/bin/n64tool
 N64_ROM_PI_TOOL = $(N64_BOARD_SRC)/native/set-rom-pi-pulse.py
 FSUTIL          = $(OBJTOP)/tools/fsutil/fsutil
-ELF2AOUT        = $(OBJTOP)/tools/elf2aout/elf2aout
-
 DEPFLAGS        = -MT $@ -MP -MD -MF .deps/$*.dep
 CPPFLAGS        = -I. -I$(TOPSRC)/include -I$(TOPSRC)/sys \
                   ${PARAM} -DKERNEL -DN64 -DMIPS \
@@ -1281,7 +1209,7 @@ ifeq ($(N64_MINIMAL_PCC_SMOKE),1)
 	for lib in libc.a libm.a libpcc.a; do \
 	    $(MIPS_PCC_RANLIB) $(N64_MINIMAL_ROOTFS_STAGE)/usr/lib/$$lib; \
 	done
-	for bin in aout ar as cmp ld make nm ranlib size; do \
+	for bin in ar as cmp ld make nm ranlib size; do \
 	    if [ -e $(N64_MINIMAL_ROOTFS_STAGE)/bin/$$bin ]; then \
 	        mv -f $(N64_MINIMAL_ROOTFS_STAGE)/bin/$$bin \
 	            $(N64_MINIMAL_ROOTFS_STAGE)/usr/bin/$$bin; \
@@ -1395,7 +1323,7 @@ pcc-debug-image:
 
 pcc-hw-test-stage: $(N64_ROOTFS_BUILD_MANIFEST) $(N64_LINPACK_ROOTFS_STAMP) \
     $(MIPS_PCC_PROVIDER_DEPS) \
-    $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_AOUT_AR) \
+    $(N64_NATIVE_AS) $(N64_NATIVE_LD) $(N64_NATIVE_AR) \
     $(N64_LINPACK_SMOKE_SCRIPT) $(N64_LINPACK_SMOKE_SRC) \
     $(N64_PCC_REGRESS_SCRIPT) $(N64_PCC_TEST_SRCS)
 	python3 $(N64_LINPACK_SMOKE_SCRIPT) stage \

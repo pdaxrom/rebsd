@@ -4,16 +4,13 @@
  * specifies the terms and conditions for redistribution.
  */
 #include <stdio.h>
-#include <a.out.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include "aoutio.h"
 #include <elf32.h>
 
-struct  exec head;
 int status;
 
 static int
@@ -189,7 +186,6 @@ strip(char *name)
 {
     register int f = -1;
     Elf32_Ehdr eh;
-    long size;
     int le;
 
     f = open(name, O_RDWR);
@@ -198,33 +194,12 @@ strip(char *name)
         status = 1;
         goto out;
     }
-    if (elf_read_ehdr_fd(f, &eh, &le)) {
-        strip_elf(name, f, &eh, le);
-        goto out;
-    }
-    (void) lseek(f, (off_t)0, SEEK_SET);
-    if (!aout_read_exec_fd(f, &head) || N_BADMAG(head)) {
-        printf("strip: %s not in a.out or ELF format\n", name);
+    if (!elf_read_ehdr_fd(f, &eh, &le)) {
+        printf("strip: %s not in ELF format\n", name);
         status = 1;
         goto out;
     }
-    if (head.a_syms == 0 && (head.a_magic) != RMAGIC)
-        goto out;
-
-    size = N_DATOFF(head) + head.a_data;
-    if (ftruncate(f, size) < 0) {
-        fprintf(stderr, "strip: ");
-        perror(name);
-        status = 1;
-        goto out;
-    }
-    head.a_midmag = OMAGIC;
-    head.a_reltext = 0;
-    head.a_reldata = 0;
-    head.a_syms = 0;
-    (void) lseek(f, (off_t)0, SEEK_SET);
-    if (!aout_write_exec_fd(f, &head))
-            /* ignore */;
+    strip_elf(name, f, &eh, le);
 out:
     if (f >= 0)
         close(f);
@@ -235,26 +210,12 @@ main(int argc, char *argv[])
 {
     register int i;
 
-#ifdef TARGET_BIG_ENDIAN
-    aout_set_big_endian(1);
-#else
-    aout_set_big_endian(0);
-#endif
-
-    while ((i = getopt(argc, argv, "hE:")) != EOF) {
+    while ((i = getopt(argc, argv, "h")) != EOF) {
         switch(i) {
-        case 'E':
-            if (optarg[0] == 'L' && optarg[1] == 0)
-                aout_set_big_endian(0);
-            else if (optarg[0] == 'B' && optarg[1] == 0)
-                aout_set_big_endian(1);
-            else
-                goto usage;
-            break;
         case 'h':
         default:
 usage:                  fprintf(stderr, "Usage:\n");
-            fprintf(stderr, "  strip [-EL|-EB] file...\n");
+            fprintf(stderr, "  strip file...\n");
             return(1);
         }
     }

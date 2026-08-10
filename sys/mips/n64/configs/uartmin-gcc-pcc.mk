@@ -1,8 +1,8 @@
 #
-# Minimal N64 hardware-test image: one GCC-built kernel and GCC userland.
+# Minimal N64 hardware-test image: GCC kernel and PCC userland.
 #
 KERNEL_COMPILER := gcc
-USERLAND_COMPILER := gcc
+USERLAND_COMPILER := pcc
 N64_USERLAND_CPU := vr4300
 N64_USERLAND_FLOAT := hard
 N64_USERLAND_ENDIAN := big
@@ -11,6 +11,7 @@ N64_MINIMAL_UART_ONLY := 1
 N64_MINIMAL_ROOTFS := 1
 N64_MINIMAL_PCC_SMOKE := 1
 N64_ROOTFS_NATIVE_PCC := 1
+MIPS_ROOTFS_NATIVE_PCC := 1
 
 N64_USB_GDB := 0
 N64_RESET_DUMP := 1

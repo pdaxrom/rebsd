@@ -2,11 +2,9 @@
  * size
  */
 #include <stdio.h>
-#include <a.out.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "aoutio.h"
 #include <elf32.h>
 
 int header;
@@ -156,33 +154,17 @@ elf_size(FILE *f, unsigned *text, unsigned *data, unsigned *bss)
 
 int main(int argc, char **argv)
 {
-    struct exec buf;
     long sum;
     unsigned text, data, bss;
     int nfiles, ch, err = 0;
     FILE *f;
 
-#ifdef TARGET_BIG_ENDIAN
-    aout_set_big_endian(1);
-#else
-    aout_set_big_endian(0);
-#endif
-
-    while ((ch = getopt(argc, argv, "hE:")) != EOF) {
+    while ((ch = getopt(argc, argv, "h")) != EOF) {
         switch (ch) {
-        case 'E':
-            if (optarg[0] == 'L' && optarg[1] == 0)
-                aout_set_big_endian(0);
-            else if (optarg[0] == 'B' && optarg[1] == 0)
-                aout_set_big_endian(1);
-            else
-                goto usage;
-            break;
         case 'h':
         default:
-usage:
             fprintf(stderr, "Usage:\n");
-            fprintf(stderr, "  size [-EL|-EB] file...\n");
+            fprintf(stderr, "  size file...\n");
             return (1);
         }
     }
@@ -200,19 +182,11 @@ usage:
             err++;
             continue;
         }
-        if (elf_size(f, &text, &data, &bss)) {
-            /* done */
-        } else {
-            rewind(f);
-            if (!aout_read_exec(f, &buf) || N_BADMAG(buf)) {
-                printf("size: %s not an object file\n", *argv);
-                fclose(f);
-                err++;
-                continue;
-            }
-            text = buf.a_text;
-            data = buf.a_data;
-            bss = buf.a_bss;
+        if (!elf_size(f, &text, &data, &bss)) {
+            printf("size: %s not an ELF object file\n", *argv);
+            fclose(f);
+            err++;
+            continue;
         }
         if (header == 0) {
             printf("text\tdata\tbss\tdec\thex\n");

@@ -1,108 +1,203 @@
 /*
- * Copyright (c) 1989 The Regents of the University of California.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms are permitted
- * provided that: (1) source distributions retain this entire copyright
- * notice and comment, and (2) distributions including binaries display
- * the following acknowledgement:  ``This product includes software
- * developed by the University of California, Berkeley and its contributors''
- * in the documentation or other materials provided with the distribution
- * and in all advertising materials mentioning features or use of this
- * software. Neither the name of the University nor the names of its
- * contributors may be used to endorse or promote products derived
- * from this software without specific prior written permission.
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ * Look up symbols in a 32-bit ELF object.
  */
 #include <sys/types.h>
-#include <sys/file.h>
-#include <a.out.h>
+#include <elf32.h>
+#include <nlist.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#define	ISVALID(p)	(p->n_name && p->n_name[0])
+#define ISVALID(p) ((p)->n_name && (p)->n_name[0])
 
 static unsigned
-nlist_getword(FILE *fp)
+get16(const unsigned char *p, int little)
 {
-	unsigned char b[4];
+    if (little)
+        return p[0] | ((unsigned)p[1] << 8);
+    return ((unsigned)p[0] << 8) | p[1];
+}
 
-	if (fread(b, 1, sizeof(b), fp) != sizeof(b))
-		return 0;
-#ifdef TARGET_BIG_ENDIAN
-	return ((unsigned)b[0] << 24) | ((unsigned)b[1] << 16) |
-	    ((unsigned)b[2] << 8) | b[3];
-#else
-	return b[0] | ((unsigned)b[1] << 8) | ((unsigned)b[2] << 16) |
-	    ((unsigned)b[3] << 24);
-#endif
+static unsigned
+get32(const unsigned char *p, int little)
+{
+    if (little)
+        return p[0] | ((unsigned)p[1] << 8) |
+            ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
+    return ((unsigned)p[0] << 24) | ((unsigned)p[1] << 16) |
+        ((unsigned)p[2] << 8) | p[3];
+}
+
+static int
+read_at(FILE *fp, unsigned off, void *buf, unsigned size)
+{
+    return fseek(fp, (off_t)off, SEEK_SET) == 0 &&
+        fread(buf, 1, size, fp) == size;
+}
+
+static int
+read_shdr(FILE *fp, unsigned shoff, unsigned shentsize, unsigned index,
+    int little, Elf32_Shdr *sh)
+{
+    unsigned char b[40];
+
+    if (shentsize < sizeof(b) ||
+        !read_at(fp, shoff + index * shentsize, b, sizeof(b)))
+        return 0;
+    sh->sh_name = get32(b + 0, little);
+    sh->sh_type = get32(b + 4, little);
+    sh->sh_flags = get32(b + 8, little);
+    sh->sh_addr = get32(b + 12, little);
+    sh->sh_offset = get32(b + 16, little);
+    sh->sh_size = get32(b + 20, little);
+    sh->sh_link = get32(b + 24, little);
+    sh->sh_info = get32(b + 28, little);
+    sh->sh_addralign = get32(b + 32, little);
+    sh->sh_entsize = get32(b + 36, little);
+    return 1;
+}
+
+static unsigned short
+symbol_type(const Elf32_Sym *sym, const Elf32_Shdr *sections,
+    unsigned section_count)
+{
+    unsigned type, bind;
+
+    if (sym->st_shndx == SHN_UNDEF)
+        type = N_UNDF;
+    else if (sym->st_shndx == SHN_ABS)
+        type = N_ABS;
+    else if (sym->st_shndx == SHN_COMMON)
+        type = N_COMM;
+    else if (sym->st_shndx >= section_count)
+        type = N_ABS;
+    else if (sections[sym->st_shndx].sh_type == SHT_NOBITS)
+        type = N_BSS;
+    else if (sections[sym->st_shndx].sh_flags & SHF_WRITE)
+        type = N_DATA;
+    else
+        type = N_TEXT;
+
+    bind = ELF_ST_BIND(sym->st_info);
+    if (bind == STB_GLOBAL)
+        type |= N_EXT;
+    else if (bind == STB_WEAK)
+        type |= N_EXT | N_WEAK;
+    return type;
 }
 
 int
 nlist(char *name, struct nlist *list)
 {
-	register struct nlist *p;
-	struct exec ebuf;
-	register FILE *fsym;
-	off_t symbol_offset, symbol_size;
-	int entries, len, maxlen, type;
-	register int c;
-	register unsigned value;
-	char sbuf[128];
+    unsigned char ehdr[52], rawsym[16];
+    Elf32_Shdr *sections, symtab, strtab;
+    FILE *fp;
+    struct nlist *request;
+    unsigned machine, shoff, shentsize, shnum, symtab_index;
+    unsigned sym_entsize, sym_count, request_count, i, request_index;
+    int little, missing;
+    unsigned char *matched;
+    char *strings;
 
-	entries = -1;
+    fp = fopen(name, "r");
+    if (fp == NULL)
+        return -1;
+    sections = NULL;
+    strings = NULL;
+    matched = NULL;
+    missing = -1;
 
-	if (!(fsym = fopen(name, "r")))
-		return(-1);
-	if (fread((char *)&ebuf, 1, sizeof(ebuf), fsym) != sizeof (ebuf) ||
-	    N_BADMAG(ebuf))
-		goto done;
+    if (!read_at(fp, 0, ehdr, sizeof(ehdr)) ||
+        ehdr[0] != ELFMAG0 || ehdr[1] != ELFMAG1 ||
+        ehdr[2] != ELFMAG2 || ehdr[3] != ELFMAG3 ||
+        ehdr[4] != ELFCLASS32 ||
+        (ehdr[EI_DATA] != ELFDATA2LSB &&
+         ehdr[EI_DATA] != ELFDATA2MSB))
+        goto done;
+    little = ehdr[EI_DATA] == ELFDATA2LSB;
+    machine = get16(ehdr + 18, little);
+    shoff = get32(ehdr + 32, little);
+    shentsize = get16(ehdr + 46, little);
+    shnum = get16(ehdr + 48, little);
+    if ((machine != EM_MIPS && machine != EM_386) || shoff == 0 ||
+        shnum == 0 || shentsize < sizeof(Elf32_Shdr))
+        goto done;
 
-	symbol_offset = N_SYMOFF(ebuf);
-	symbol_size = ebuf.a_syms;
-	if (fseek(fsym, symbol_offset, L_SET))
-		goto done;
+    sections = malloc(shnum * sizeof(*sections));
+    if (sections == NULL)
+        goto done;
+    symtab_index = shnum;
+    for (i = 0; i < shnum; i++) {
+        if (!read_shdr(fp, shoff, shentsize, i, little, &sections[i]))
+            goto done;
+        if (sections[i].sh_type == SHT_SYMTAB)
+            symtab_index = i;
+    }
+    if (symtab_index == shnum)
+        goto done;
+    symtab = sections[symtab_index];
+    if (symtab.sh_link >= shnum ||
+        sections[symtab.sh_link].sh_type != SHT_STRTAB)
+        goto done;
+    strtab = sections[symtab.sh_link];
+    if (strtab.sh_size == 0)
+        goto done;
+    strings = malloc(strtab.sh_size);
+    if (strings == NULL ||
+        !read_at(fp, strtab.sh_offset, strings, strtab.sh_size))
+        goto done;
 
-	/*
-	 * clean out any left-over information for all valid entries.
-	 * Type and value defined to be 0 if not found; historical
-	 * versions cleared other and desc as well.  Also figure out
-	 * the largest string length so don't read any more of the
-	 * string table than we have to.
-	 */
-	for (p = list, entries = maxlen = 0; ISVALID(p); ++p, ++entries) {
-		p->n_type = 0;
-		p->n_value = 0;
-		if ((len = strlen(p->n_name)) > maxlen)
-			maxlen = len;
-	}
-	if (++maxlen > sizeof(sbuf)) {		/* for the NULL */
-		(void)fprintf(stderr, "nlist: sym 2 big\n");
-		entries = -1;
-		goto done;
-	}
+    for (request = list, request_count = 0; ISVALID(request); request++) {
+        request->n_type = 0;
+        request->n_value = 0;
+        request_count++;
+    }
+    matched = calloc(request_count ? request_count : 1, 1);
+    if (matched == NULL)
+        goto done;
+    missing = request_count;
+    sym_entsize = symtab.sh_entsize ? symtab.sh_entsize : sizeof(rawsym);
+    if (sym_entsize < sizeof(rawsym)) {
+        missing = -1;
+        goto done;
+    }
+    sym_count = symtab.sh_size / sym_entsize;
+    for (i = 0; i < sym_count && missing != 0; i++) {
+        Elf32_Sym sym;
 
-	for (; symbol_size; symbol_size -= len + 6) {
-                len = getc (fsym);
-                if (len <= 0)
-			break;
+        if (!read_at(fp, symtab.sh_offset + i * sym_entsize,
+            rawsym, sizeof(rawsym))) {
+            missing = -1;
+            goto done;
+        }
+        sym.st_name = get32(rawsym + 0, little);
+        sym.st_value = get32(rawsym + 4, little);
+        sym.st_size = get32(rawsym + 8, little);
+        sym.st_info = rawsym[12];
+        sym.st_other = rawsym[13];
+        sym.st_shndx = get16(rawsym + 14, little);
+        if (sym.st_name == 0 || sym.st_name >= strtab.sh_size ||
+            memchr(strings + sym.st_name, 0,
+                strtab.sh_size - sym.st_name) == NULL)
+            continue;
+        for (request = list, request_index = 0; ISVALID(request);
+            request++, request_index++) {
+            if (matched[request_index])
+                continue;
+            if (strcmp(request->n_name, strings + sym.st_name) != 0)
+                continue;
+            request->n_value = sym.st_value;
+            request->n_type = symbol_type(&sym, sections, shnum);
+            matched[request_index] = 1;
+            missing--;
+            break;
+        }
+    }
 
-                type = getc (fsym);
-                value = nlist_getword(fsym);
-                for (c=0; c<len && c<maxlen; c++)
-                        sbuf [c] = getc (fsym);
-                sbuf [c] = '\0';
-
-		for (p = list; ISVALID(p); p++)
-			if (strcmp(p->n_name, sbuf) == 0) {
-				p->n_value = value;
-				p->n_type = type;
-				if (!--entries)
-					goto done;
-			}
-	}
-done:	(void)fclose(fsym);
-	return(entries);
+done:
+    free(matched);
+    free(strings);
+    free(sections);
+    fclose(fp);
+    return missing;
 }
