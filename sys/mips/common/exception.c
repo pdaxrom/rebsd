@@ -199,6 +199,14 @@ exception_frame_gpr_high(const int *frame, unsigned word)
 extern int pmap_md_icache_tag_diagnostics(vm_vaddr_t, unsigned *,
     unsigned *, unsigned *);
 extern void mips_cp0_diagnostics(unsigned *);
+extern volatile unsigned n64_icache_fault_sequence;
+extern volatile unsigned n64_icache_fault_pc;
+extern volatile unsigned n64_icache_fault_tags[1024];
+
+#define N64_ICACHE_DIAG_SIZE    16384u
+#define N64_ICACHE_DIAG_LINE    32u
+
+static void n64_dump_user_mapping(const char *, unsigned);
 
 static unsigned
 mips_restore_diagnostic(unsigned offset)
@@ -319,7 +327,7 @@ n64_dump_user_stack(unsigned sp, unsigned fp)
 }
 
 static void
-n64_dump_user_code(unsigned pc)
+n64_dump_user_code(const char *label, unsigned pc)
 {
     unsigned cached;
     unsigned current;
@@ -335,10 +343,47 @@ n64_dump_user_code(unsigned pc)
         uncached = 0;
         error = n64_user_fault_read_vaddr(current, &paddr, &cached,
             &uncached);
-        printf("N64_USER_FAULT code rel=%d vaddr=%08x error=%d "
+        printf("N64_USER_FAULT code=%s rel=%d vaddr=%08x error=%d "
             "paddr=%08x cached=%08x uncached=%08x\n",
-            word, current, error, paddr, cached, uncached);
+            label, word, current, error, paddr, cached, uncached);
     }
+}
+
+static void
+n64_dump_early_icache_tag(const char *label, unsigned vaddr,
+    unsigned faultpc)
+{
+    unsigned index;
+    unsigned cached;
+    unsigned paddr;
+    unsigned sequence;
+    unsigned taghi;
+    unsigned taglo;
+    unsigned uncached;
+    int map_error;
+
+    sequence = n64_icache_fault_sequence;
+    if (sequence == 0 || n64_icache_fault_pc != faultpc) {
+        printf("N64_USER_FAULT early-icache=%s vaddr=%08x "
+            "available=0 sequence=%u snapshot_pc=%08x\n",
+            label, vaddr, sequence, n64_icache_fault_pc);
+        return;
+    }
+    index = (vaddr & (N64_ICACHE_DIAG_SIZE - 1)) /
+        N64_ICACHE_DIAG_LINE;
+    taglo = n64_icache_fault_tags[index * 2];
+    taghi = n64_icache_fault_tags[index * 2 + 1];
+    paddr = 0;
+    cached = 0;
+    uncached = 0;
+    map_error = n64_user_fault_read_vaddr(vaddr & ~3u, &paddr,
+        &cached, &uncached);
+    printf("N64_USER_FAULT early-icache=%s vaddr=%08x index=%u "
+        "sequence=%u taglo=%08x taghi=%08x ptag=%05x state=%u "
+        "map_error=%d paddr=%08x expected_ptag=%05x\n",
+        label, vaddr, index, sequence, taglo, taghi,
+        (taglo >> 8) & 0x000fffffu, (taglo >> 6) & 3u,
+        map_error, paddr, map_error == 0 ? paddr >> 12 : 0);
 }
 
 static void
@@ -358,6 +403,44 @@ n64_dump_user_icache_tag(unsigned pc)
         "taglo=%08x taghi=%08x ptag=%05x state=%u\n",
         pc, index_address, error, taglo, taghi,
         (taglo >> 8) & 0x000fffffu, (taglo >> 6) & 3u);
+}
+
+static void
+n64_dump_user_call_target(const int *frame, unsigned faultpc)
+{
+    unsigned callsite;
+    unsigned cached;
+    unsigned instruction;
+    unsigned paddr;
+    unsigned target;
+    unsigned uncached;
+    int error;
+
+    if (frame[FRAME_RA] < 8u)
+        return;
+    callsite = frame[FRAME_RA] - 8u;
+    paddr = 0;
+    cached = 0;
+    uncached = 0;
+    error = n64_user_fault_read_vaddr(callsite, &paddr, &cached,
+        &uncached);
+    printf("N64_USER_FAULT callsite vaddr=%08x error=%d paddr=%08x "
+        "cached=%08x uncached=%08x\n",
+        callsite, error, paddr, cached, uncached);
+    n64_dump_early_icache_tag("callsite", callsite, faultpc);
+    n64_dump_user_icache_tag(callsite);
+    n64_dump_user_mapping("callsite", callsite);
+    if (error != 0 || cached != uncached || (cached >> 26) != 3u)
+        return;
+    instruction = cached;
+    target = ((callsite + NBPW) & 0xf0000000u) |
+        ((instruction & 0x03ffffffu) << 2);
+    printf("N64_USER_FAULT direct-call instruction=%08x target=%08x\n",
+        instruction, target);
+    n64_dump_user_code("call-target", target);
+    n64_dump_early_icache_tag("call-target", target, faultpc);
+    n64_dump_user_icache_tag(target);
+    n64_dump_user_mapping("call-target", target);
 }
 
 static void
@@ -703,8 +786,10 @@ n64_dump_user_fault(const char *kind, int *frame, unsigned rawcause,
         ramcomp_error == 0 ? ramcomp.rcs_phys_units : 0);
     n64_dump_restore_diagnostics();
     n64_dump_exception_history();
-    n64_dump_user_code(faultpc);
+    n64_dump_user_code("faultpc", faultpc);
+    n64_dump_early_icache_tag("faultpc", faultpc, faultpc);
     n64_dump_user_icache_tag(faultpc);
+    n64_dump_user_call_target(frame, faultpc);
     n64_dump_user_stack(frame[FRAME_SP], frame[FRAME_FP]);
     n64_dump_user_mapping("pc", faultpc);
     if (badvaddr != faultpc)

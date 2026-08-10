@@ -169,16 +169,27 @@ main(void)
     if (MIPS_LEGACY_USER_BYTES != 0x00400000u ||
         MIPS_USER_MAXMEM <= MIPS_LEGACY_USER_BYTES ||
         MIPS_USER_VADDR_END != MIPS_USER_VADDR_START +
-        MIPS_USER_MAXMEM) {
-        fprintf(stderr, "Ci20 user geometry is not decoupled\n");
+        MIPS_USER_MAXMEM ||
+        CI20_HIGH_TLB_PAGE_SIZE != 0x01000000u ||
+        CI20_HIGH_TLB_PAIR_SIZE != 0x02000000u ||
+        CI20_HIGH_TLB_INDEX != MIPS_USER_TLB_PAIRS) {
+        fprintf(stderr, "Ci20 user/TLB geometry does not match\n");
         return 1;
     }
 #if defined(TEST_CI20_1G)
     if (CI20_HIGH_RAM_BYTES != 0x30000000u ||
+        CI20_HIGH_TLB_ENTRIES != 24u ||
+        CI20_WIRED_ENTRIES != 26u ||
+        CI20_HIGH_TLB_ENTRIES * CI20_HIGH_TLB_PAIR_SIZE !=
+        CI20_HIGH_RAM_BYTES ||
+        CI20_HIGH_RAM_VADDR_START + CI20_HIGH_RAM_BYTES !=
+        CI20_HIGH_RAM_VADDR_END ||
         check_map(0x40000000u, ci20_1g_map,
         sizeof(ci20_1g_map) / sizeof(ci20_1g_map[0])) != 0)
 #else
     if (CI20_HIGH_RAM_BYTES != 0 ||
+        CI20_HIGH_TLB_ENTRIES != 0 ||
+        CI20_WIRED_ENTRIES != MIPS_USER_TLB_PAIRS ||
         check_map(0x10000000u, ci20_256m_map,
         sizeof(ci20_256m_map) / sizeof(ci20_256m_map[0])) != 0)
 #endif

@@ -22,7 +22,7 @@
 #define PMAP_MD_ASID_MASK       0x000000ffu
 #define PMAP_MD_ENTRYHI_MASK    0xffffe0ffu
 #ifdef CI20
-#define PMAP_MD_PERMANENT_WIRED 4u
+#define PMAP_MD_PERMANENT_WIRED CI20_WIRED_ENTRIES
 #else
 #define PMAP_MD_PERMANENT_WIRED 0u
 #endif
@@ -36,6 +36,7 @@ extern unsigned pmap_md_legacy_user_entries(void);
 #endif
 #define PMAP_MD_ICACHE_LINE     32u
 #ifdef N64
+#define PMAP_MD_DCACHE_SIZE     (8u * 1024u)
 #define PMAP_MD_ICACHE_SIZE     (16u * 1024u)
 #endif
 
@@ -370,11 +371,13 @@ pmap_md_sync(void)
     asm volatile ("sync" ::: "memory");
 }
 
+#ifndef N64
 static void
 pmap_md_dcache_writeback_invalidate(unsigned address)
 {
     asm volatile ("cache 0x15, 0(%0)" :: "r" (address) : "memory");
 }
+#endif
 
 static void
 pmap_md_dcache_invalidate(unsigned address)
@@ -382,7 +385,7 @@ pmap_md_dcache_invalidate(unsigned address)
     asm volatile ("cache 0x11, 0(%0)" :: "r" (address) : "memory");
 }
 
-#ifndef CI20
+#if !defined(CI20) && !defined(N64)
 static void
 pmap_md_icache_invalidate(unsigned address)
 {
@@ -391,6 +394,18 @@ pmap_md_icache_invalidate(unsigned address)
 #endif
 
 #ifdef N64
+static void
+pmap_md_dcache_index_writeback_invalidate(unsigned address)
+{
+    asm volatile ("cache 0x01, 0(%0)" :: "r" (address) : "memory");
+}
+
+static void
+pmap_md_icache_index_invalidate(unsigned address)
+{
+    asm volatile ("cache 0x00, 0(%0)" :: "r" (address) : "memory");
+}
+
 int
 pmap_md_icache_tag_diagnostics(vm_vaddr_t vaddr, unsigned *index_address,
     unsigned *taglo, unsigned *taghi)
@@ -439,17 +454,25 @@ pmap_md_range_sync(vm_paddr_t paddr, vm_size_t size, unsigned operations)
         return EINVAL;
     pmap_md_sync();
     if ((operations & PMAP_SYNC_DATA) != 0) {
+#ifdef N64
         /*
-         * Cached MIPS user mappings obey pmap_cache_alias_mask(), so their
-         * virtual cache index is identical to this KSEG0 direct-map index.
-         * Hit operations therefore synchronize exactly the requested
-         * physical range without sweeping unrelated cache contents.
+         * A page can be released from an ELF segment and reused at a new
+         * virtual address while an older VR4300 D-cache colour still owns
+         * a dirty line.  A hit operation through KSEG0 cannot find that
+         * line.  Sweep every index before the physical page is reused so
+         * no delayed write-back can overwrite the new page contents.
          */
+        address = PMAP_MD_KSEG0_BASE;
+        end = address + PMAP_MD_DCACHE_SIZE;
+        for (; address < end; address += PMAP_MD_DCACHE_LINE)
+            pmap_md_dcache_index_writeback_invalidate(address);
+#else
         address = (unsigned)mapping & ~(PMAP_MD_DCACHE_LINE - 1);
         end = ((unsigned)mapping + size + PMAP_MD_DCACHE_LINE - 1) &
             ~(PMAP_MD_DCACHE_LINE - 1);
         for (; address < end; address += PMAP_MD_DCACHE_LINE)
             pmap_md_dcache_writeback_invalidate(address);
+#endif
         pmap_md_sync();
     }
     if ((operations & PMAP_INVALIDATE_DATA) != 0) {
@@ -464,6 +487,17 @@ pmap_md_range_sync(vm_paddr_t paddr, vm_size_t size, unsigned operations)
 #ifdef CI20
         /* A KSEG0 hit cannot match an XBurst user-VA I-cache tag. */
         pmap_md_icache_index_invalidate();
+#elif defined(N64)
+        /*
+         * The direct-mapped VR4300 I-cache has four virtual colours per
+         * VM page.  Invalidate every index when a page becomes executable
+         * so recycled ELF text cannot execute a historical alias.
+         */
+        address = PMAP_MD_KSEG0_BASE;
+        end = address + PMAP_MD_ICACHE_SIZE;
+        for (; address < end; address += PMAP_MD_ICACHE_LINE)
+            pmap_md_icache_index_invalidate(address);
+        pmap_md_sync();
 #else
         address = (unsigned)mapping & ~(PMAP_MD_ICACHE_LINE - 1);
         end = ((unsigned)mapping + size + PMAP_MD_ICACHE_LINE - 1) &

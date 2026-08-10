@@ -20,10 +20,6 @@ extern char _mips_tlb_refill_vector_end[];
 
 #define CI20_TLB_ENTRIES        32
 #define MIPS_USER_TLB_INDEX     0
-#define CI20_HIGH_TLB_INDEX     MIPS_USER_TLB_PAIRS
-#define CI20_HIGH_TLB_ENTRIES   2
-#define CI20_WIRED_ENTRIES      (MIPS_USER_TLB_PAIRS + \
-                                  CI20_HIGH_TLB_ENTRIES)
 #define MIPS_VECTOR_TLB_REFILL  0x00000000u
 #define MIPS_VECTOR_XTLB_REFILL 0x00000080u
 #define MIPS_VECTOR_CACHE_ERROR 0x00000100u
@@ -149,7 +145,15 @@ mips_tlb_entrylo(unsigned phys)
 static void
 mips_tlb_init(void)
 {
+    unsigned entrylo0;
+    unsigned entrylo1;
     unsigned i;
+    unsigned offset;
+    unsigned remaining;
+
+#if CI20_WIRED_ENTRIES >= CI20_TLB_ENTRIES
+#error Ci20 wired mappings leave no replaceable TLB entries
+#endif
 
     mips_write_c0_register(C0_WIRED, 0, 0);
     for (i = 0; i < CI20_TLB_ENTRIES; ++i) {
@@ -167,20 +171,22 @@ mips_tlb_init(void)
         mips_tlb_entrylo(MIPS_USER_PHYS_START + MIPS_USER_TLB_PAIR_SIZE +
             MIPS_USER_TLB_PAGE_SIZE));
     /*
-     * XBurst1 only directly maps the first 512 MiB through KSEG0/KSEG1.
-     * Keep the discontiguous 768 MiB Ci20 high bank permanently cached in
-     * KSEG2 using 256 MiB pages.  The second half of the last pair is
-     * deliberately invalid because the board ends at physical 0x60000000.
+     * XBurst1 implements the MIPS 4KE TLB contract, whose largest legal
+     * page is 16 MiB.  Map the discontiguous high bank with 32 MiB pairs;
+     * larger PageMask values have undefined hardware behaviour.
      */
-    mips_tlb_write_indexed(CI20_HIGH_TLB_INDEX, TLB_PAGEMASK_256M,
-        CI20_HIGH_RAM_VADDR_START,
-        mips_tlb_entrylo_cache(CI20_HIGH_RAM_PHYS_START, TLB_CACHE_CNC),
-        mips_tlb_entrylo_cache(CI20_HIGH_RAM_PHYS_START + CI20_SIZE_256M,
-            TLB_CACHE_CNC));
-    mips_tlb_write_indexed(CI20_HIGH_TLB_INDEX + 1, TLB_PAGEMASK_256M,
-        CI20_HIGH_RAM_VADDR_START + 2 * CI20_SIZE_256M,
-        mips_tlb_entrylo_cache(CI20_HIGH_RAM_PHYS_START +
-            2 * CI20_SIZE_256M, TLB_CACHE_CNC), 0);
+    for (i = 0; i < CI20_HIGH_TLB_ENTRIES; ++i) {
+        offset = i * CI20_HIGH_TLB_PAIR_SIZE;
+        remaining = CI20_HIGH_RAM_BYTES - offset;
+        entrylo0 = mips_tlb_entrylo_cache(CI20_HIGH_RAM_PHYS_START +
+            offset, TLB_CACHE_CNC);
+        entrylo1 = remaining > CI20_HIGH_TLB_PAGE_SIZE ?
+            mips_tlb_entrylo_cache(CI20_HIGH_RAM_PHYS_START + offset +
+                CI20_HIGH_TLB_PAGE_SIZE, TLB_CACHE_CNC) : 0;
+        mips_tlb_write_indexed(CI20_HIGH_TLB_INDEX + i,
+            TLB_PAGEMASK_16M, CI20_HIGH_RAM_VADDR_START + offset,
+            entrylo0, entrylo1);
+    }
     mips_write_c0_register(C0_WIRED, 0, CI20_WIRED_ENTRIES);
 }
 

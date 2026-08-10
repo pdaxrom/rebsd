@@ -483,6 +483,60 @@ mips_exception_entry:
         mfc0    $k0, $14
         sw      $k0, (16+FRAME_PC*4)($sp)
 
+#ifdef N64
+        /*
+         * An instruction-fetch miss at an unmapped user PC can be the
+         * consequence of executing a stale or incorrectly tagged I-cache
+         * line.  Snapshot every I-cache tag before the C exception path can
+         * replace the user lines with kernel text.  All registers used here
+         * have already been saved in the exception frame.
+         */
+        mfc0    $k0, $13
+        andi    $k0, $k0, CA_EXC_CODE
+        addiu   $k0, $k0, -CA_TLBL
+        bnez    $k0, 2f
+        nop
+        mfc0    $k0, $8
+        bltz    $k0, 2f
+        nop
+        mfc0    $k1, $14
+        beq     $k0, $k1, 3f
+        nop
+        addiu   $k1, $k1, 4
+        bne     $k0, $k1, 2f
+        nop
+        mfc0    $k1, $13
+        bgez    $k1, 2f
+        nop
+3:
+        mfc0    $t0, $28
+        mfc0    $t1, $29
+        la      $t2, n64_icache_fault_tags
+        li      $t3, 0x80000000
+        li      $t4, 512
+4:
+        cache   0x04, 0($t3)
+        nop
+        mfc0    $t5, $28
+        mfc0    $t6, $29
+        sw      $t5, 0($t2)
+        sw      $t6, 4($t2)
+        addiu   $t2, $t2, 8
+        addiu   $t3, $t3, 32
+        addiu   $t4, $t4, -1
+        bnez    $t4, 4b
+        nop
+        mtc0    $t0, $28
+        mtc0    $t1, $29
+        la      $t2, n64_icache_fault_pc
+        sw      $k0, 0($t2)
+        la      $t2, n64_icache_fault_sequence
+        lw      $t3, 0($t2)
+        addiu   $t3, $t3, 1
+        sw      $t3, 0($t2)
+2:
+#endif
+
         addiu   $a0, $sp, 16
         jal     exception
         nop
@@ -735,6 +789,20 @@ mips_cp0_diagnostics:
         jr      $ra
         nop
         .end    mips_cp0_diagnostics
+
+#ifdef N64
+        .section .bss,"aw",@nobits
+        .align  4
+        .globl  n64_icache_fault_sequence
+n64_icache_fault_sequence:
+        .space  4
+        .globl  n64_icache_fault_pc
+n64_icache_fault_pc:
+        .space  4
+        .globl  n64_icache_fault_tags
+n64_icache_fault_tags:
+        .space  4096
+#endif
 
 #if defined(N64_USB_GDB) || defined(N64_RESET_DUMP)
         .section .bss,"aw",@nobits

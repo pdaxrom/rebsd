@@ -63,6 +63,15 @@
 #define MIPS_USER_TLB_PAIRS            2
 #define MIPS_LEGACY_USER_BYTES         (MIPS_USER_TLB_PAIRS * \
                                          MIPS_USER_TLB_PAIR_SIZE)
+#define CI20_HIGH_TLB_PAGE_SIZE        CI20_SIZE_16M
+#define CI20_HIGH_TLB_PAIR_SIZE        (2 * CI20_HIGH_TLB_PAGE_SIZE)
+#define CI20_HIGH_TLB_INDEX            MIPS_USER_TLB_PAIRS
+#define CI20_HIGH_TLB_ENTRIES          \
+                                        ((CI20_HIGH_RAM_BYTES + \
+                                          CI20_HIGH_TLB_PAIR_SIZE - 1) / \
+                                         CI20_HIGH_TLB_PAIR_SIZE)
+#define CI20_WIRED_ENTRIES             (MIPS_USER_TLB_PAIRS + \
+                                         CI20_HIGH_TLB_ENTRIES)
 #define MIPS_USER_MAXMEM               CI20_SIZE_64M
 #define MIPS_USER_VADDR_END            (MIPS_USER_VADDR_START + MIPS_USER_MAXMEM)
 #define MIPS_USER_GP_OFFSET            0x00007ff0
