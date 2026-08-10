@@ -689,13 +689,27 @@ the board-specific generated/appended manifest.
 - [x] Keep `ucall`, `ufetch`, and `ustore` as `ENOSYS` on N64; the PIC32
   implementation is board/autoconfig-specific and should not be reused as an
   N64 ABI
-- [x] Hardware smoke-test `/sbin/reboot`; current N64 code syncs buffers,
-  disables interrupt sources, and jumps back to resident stage0 at
-  `0x80300000` for a software restart, then reaches both `ttyS0` and
-  `console` getty login prompts again
+- [x] Historical hardware smoke-test `/sbin/reboot` through resident stage0
+  and the later cartridge flash barrier on Expansion Pak hardware. These runs
+  predated the CDC ECM service in the full kernel.
+- [x] Quiesce the active N64cart USB controller before flash shutdown and the
+  reboot handoff, using the same `USBCFG: 0 -> RESET -> 0` finish sequence as
+  the local N64cart implementation.
+- [x] Replace the partial resident-stage0 reboot with the complete ROM IPL3
+  warm chain-load already used by the local N64cart menu: copy ROM
+  `0x40..0x0fff` to SP DMEM, restore the production IPL2 register contract,
+  pass reset type 1, and let IPL3 clear RDRAM/caches and reload the ROM ELF.
+- [x] Repeat `/sbin/reboot` on Expansion Pak hardware with the current full
+  GCC-kernel/PCC-userland image. The final ROM IPL3 path was reported to reboot
+  normally on Expansion Pak hardware on 2026-08-10.
+- [ ] Restore the full stage0 image contract on a base 4 MiB console. The
+  current image extends beyond physical `0x00340000`, where the established
+  4 MiB framebuffer alias overwrites it. The required memory-layout policy
+  change remains unselected pending explicit approval.
 - [x] Do not implement a true hardware reset path for now; local libdragon and
   n64cart sources handle reset button pre-NMI but do not expose a safe
-  software cold-reset primitive, so N64 uses the stage0 software restart
+  software cold-reset primitive, so N64 uses production IPL3's established
+  software warm chain-load instead
 
 ## Video Framebuffer And System Console
 

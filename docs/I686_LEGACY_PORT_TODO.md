@@ -1,8 +1,10 @@
 # i686 legacy-port completion checklist
 
 Status: software-complete on branch `finish_legacy_port`, 2026-08-10.
-The primary i686, Ci20 and N64 hardware candidates were subsequently reported
-passing their operator-run acceptance checks on 2026-08-10.
+The primary i686, Ci20 and N64 Expansion Pak hardware candidates were
+subsequently reported passing their operator-run acceptance checks on
+2026-08-10. N64 acceptance was completed after reboot was changed to re-enter
+the production ROM IPL3 warm path.
 
 This checklist closes the currently declared ReBSD target: a uniprocessor
 i686 PC with legacy BIOS, Linux/x86 boot protocol 2.02 or GRUB Legacy,
@@ -73,8 +75,9 @@ swap devices; changing the root policy is not part of this work.
 - [x] Verify cold boot and persistent filesystem/RTC state after power loss.
 - [x] Run the Ci20 halt, watchdog reboot, RTC poweroff/wake and persistence
       checks on physical hardware.
-- [x] Boot the final N64 GCC-kernel/PCC-userland ROM and run its physical
-      acceptance checks.
+- [x] Repeat the final N64 GCC-kernel/PCC-userland physical acceptance after
+      the active CDC ECM controller is quiesced and reboot re-enters the
+      production ROM IPL3 warm path.
 - [ ] Run the legacy image on a second physical BIOS i686-class PC if one is
       available.
 - [ ] Record complete serial/VGA logs and any chipset-specific failure before

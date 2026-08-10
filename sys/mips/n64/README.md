@@ -1041,26 +1041,38 @@ prompt.
 ## Reboot Path
 
 `boot()`/`reboot(2)` on N64 no longer only prints the reboot request and spins.
-For a normal reboot, the kernel syncs pending buffers, forces the n64cart flash
-interface to finish any pending SPI flash write/erase, restores idle quad-ROM
-mode with chip-select high, disables N64 interrupt sources, and jumps back to
-the resident stage0 entry at `0x80300000`.
+For a normal reboot, the kernel syncs pending buffers, stops the active N64cart
+USB controller with the cartridge's documented `USBCFG` finish sequence,
+forces the n64cart flash interface to finish any pending SPI flash write/erase,
+restores idle quad-ROM mode with chip-select high, disables N64 interrupt
+sources, copies the production IPL3 body from cartridge ROM `0x40..0x0fff`
+back to SP DMEM, and enters it through the standard IPL2 register contract
+with the reset type set to warm.  IPL3 then takes its established warm path:
+it detects the initialized RDRAM, clears RDRAM and both CPU caches, loads the
+ROM ELF again, and transfers control to stage0 and the embedded kernel.
 The system UFS root is mounted read-only, so the N64 reboot path does not force
 the root superblock dirty before `sync()`. The cartridge ROMFS mount at `/cart`
 is writable by default; ROMFS unmount and reboot both wait for the flash WIP bit
-to clear before reboot jumps back to stage0.
+to clear before reboot reads IPL3 from ROM.
 
-This is a software restart through the ROM-loaded stage0 image, not a full
-console hardware reset.  Plain `reboot` and `halt` first request System V
+This is a software warm chain-load through the ROM bootstrap, not a full
+console hardware reset.  It follows the same IPL3 chain-load contract used by
+the local N64cart menu and does not poke undocumented reset registers.  Plain
+`reboot` and `halt` first request System V
 runlevels 6 and 0 respectively.  `init` stops supervised gettys before
 running `/etc/rc6.d` or `/etc/rc0.d`; the final script performs the direct
 kernel operation with `reboot -q` or `halt -q`.  The N64 halt path then disables
 interrupts and stops the CPU in a `wait` loop without respawning login prompts.
 
-Hardware smoke-test passed on Expansion Pak hardware: `/sbin/reboot` syncs,
-jumps through stage0, reloads the kernel, detects `0x00800000` RDRAM, mounts
-the ROM rootfs, starts `init`, and reaches both `ttyS0` and `console` getty
-login prompts.
+The resident-stage0 reboot and the later flash barrier each passed historical
+Expansion Pak hardware tests.  Those tests predated the CDC ECM service in the
+full kernel.  The full-profile reboot test was reopened after the active USB
+controller was found not to have a shutdown path.  The first corrected run
+proved that USB shutdown lets resident stage0 finish, but the reloaded kernel
+then stopped before its first banner.  The final path keeps the same documented
+`0 -> RESET -> 0` USB finish sequence and replaces the partial resident restart
+with the complete production-IPL3 warm chain-load.  This path was reported to
+reboot normally on Expansion Pak hardware on 2026-08-10.
 
 The local libdragon and n64cart sources handle the console reset button as a
 pre-NMI event. They do not provide a software cold-reset primitive that is safe
@@ -1077,7 +1089,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 ```
 0x00000000..0x000fffff  kernel, vectors, bootstrap u area
 0x00100000..0x002fffff  VM page pool after bootstrap
-0x00300000..0x0033ffff  resident stage0/restart image
+0x00300000..0x0033ffff  stage0 image
 0x00340000..0x0037ffff  stage0/early 320x240x16 framebuffer alias
 0x00380000..0x003fffff  VM page pool
 ```
@@ -1087,7 +1099,7 @@ The first-stage memory map is centralized in `sys/mips/n64/layout.h`.
 ```
 0x00000000..0x000fffff  kernel, vectors, bootstrap u area
 0x00100000..0x002fffff  VM page pool after bootstrap
-0x00300000..0x0037ffff  resident stage0/restart image
+0x00300000..0x0037ffff  stage0 image
 0x00380000..0x007fffff  VM page pool after bootstrap
 ```
 
@@ -1173,7 +1185,7 @@ physical 0x00100000..0x004fffff
 Each entry uses two 1 MiB pages through `TLB_PAGEMASK_1M`.  These entries are
 bootstrap compatibility mappings only.  They are removed before process 1
 runs; the physical pages then belong to the normal VM allocator except for the
-resident stage0/restart range.
+stage0 range.
 
 The VM bootstrap invalidates those temporary entries, resets `C0_Wired`, and
 uses per-process 4 KiB pmap entries with ASIDs for normal execution. The
@@ -2205,8 +2217,8 @@ Build and generated data:
 - The kernel and user ABI remain 32-bit o32; a 64-bit kernel/userland ABI is
   outside the current low-memory N64 target.
 - The default swap device is a volatile compressed RAM block device.
-- Reboot is a software restart through the resident stage0 image, not a full
-  hardware reset.
+- Reboot is a software warm chain-load through the production ROM IPL3, not a
+  full hardware reset.
 - `/dev/mem`, `/dev/kmem`, `ucall`, `ufetch`, and `ustore` are intentionally
   disabled on N64.
 - Console input and cartridge UART input are timer-polled; the stock cartridge

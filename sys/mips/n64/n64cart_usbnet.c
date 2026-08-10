@@ -1183,6 +1183,31 @@ n64usb_hw_start(void)
     n64usb_usb_mode(0);
 }
 
+void
+n64cart_usb_shutdown(void)
+{
+    int saved_status;
+
+    if (!n64usb_pi_enter(&saved_status))
+        panic("n64cart USB PI lock");
+
+    /*
+     * Match the N64cart usb_device_finish() hardware contract.  Disabling
+     * the cartridge interrupt before resetting the controller prevents the
+     * old USB instance from remaining active while stage0 reloads the kernel.
+     * The final zero releases reset but leaves both USB and CART/IP3 disabled;
+     * the next kernel's n64usb_hw_start() performs a clean initialization.
+     */
+    n64usb_write_phys(N64CART_USBCFG_PHYS, 0);
+    n64usb_write_phys(N64CART_USBCFG_PHYS, N64CART_USB_RESET);
+    n64usb_write_phys(N64CART_USBCFG_PHYS, 0);
+    n64usb_initialized = 0;
+    n64usb_configured = 0;
+    n64usb_tx_usb_busy = 0;
+
+    n64usb_pi_leave(saved_status);
+}
+
 #if !N64USB_GDB
 int
 usbn_hw_init(int unit, unsigned char *enaddr)

@@ -10,6 +10,9 @@
 #include <machine/n64.h>
 #include <machine/n64int.h>
 #include <machine/n64pi.h>
+#if defined(USBNET_ENABLED) || defined(N64_USB_GDB)
+#include <machine/n64cart_usb.h>
+#endif
 #ifdef N64_RESET_DUMP
 #include <machine/n64reset.h>
 #endif
@@ -336,10 +339,13 @@ copyin(caddr_t from, caddr_t to, u_int nbytes)
 void
 boot(dev_t dev, int howto)
 {
-    void (*stage0)(void) = (void (*)(void))N64_STAGE0_VADDR;
+    unsigned tv_type;
 
     boot_sync_filesystems(howto);
 
+#if defined(USBNET_ENABLED) || defined(N64_USB_GDB)
+    n64cart_usb_shutdown();
+#endif
 #if defined(N64CART_ENABLED) && !defined(N64_CART_UART_ONLY)
     n64cart_flash_shutdown();
 #endif
@@ -356,9 +362,9 @@ boot(dev_t dev, int howto)
             asm volatile ("wait");
     }
 
-    printf("restarting through stage0\n");
+    tv_type = *(volatile unsigned *)
+        N64_PHYS_TO_KSEG1(N64_BOOT_TV_TYPE_ADDR);
+    printf("restarting through ROM IPL3\n");
     n64_sync_memory();
-    stage0();
-    for (;;)
-        asm volatile ("wait");
+    n64_rom_restart(tv_type);
 }

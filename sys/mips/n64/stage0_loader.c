@@ -20,6 +20,9 @@ typedef unsigned int uintptr;
 #define N64_DCACHE_LINE_SIZE    16u
 #define N64_ICACHE_LINE_SIZE    32u
 #define N64_SP_DMEM_BOOTINFO_FLAGS_ADDR  0xa4000004u
+#define N64_BOOT_TV_TYPE_ADDR            0xa0000300u
+#define N64_BOOTINFO_TV_SHIFT            16u
+#define N64_BOOTINFO_TV_MASK             0xffu
 #define N64_BOOTINFO_RESET_SHIFT         8u
 #define N64_BOOTINFO_RESET_MASK          0xffu
 #define N64_RESET_TYPE_ADDR              0xa000030cu
@@ -117,9 +120,15 @@ publish_reset_type(void)
         (volatile u32 *)N64_SP_DMEM_BOOTINFO_FLAGS_ADDR;
     volatile u32 *const reset_type =
         (volatile u32 *)N64_RESET_TYPE_ADDR;
+    volatile u32 *const tv_type =
+        (volatile u32 *)N64_BOOT_TV_TYPE_ADDR;
+    u32 flags;
     u32 value;
 
-    value = (*boot_flags >> N64_BOOTINFO_RESET_SHIFT) &
+    flags = *boot_flags;
+    *tv_type = (flags >> N64_BOOTINFO_TV_SHIFT) &
+        N64_BOOTINFO_TV_MASK;
+    value = (flags >> N64_BOOTINFO_RESET_SHIFT) &
         N64_BOOTINFO_RESET_MASK;
     *reset_type = value;
     return value;

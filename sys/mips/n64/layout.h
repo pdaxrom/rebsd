@@ -7,14 +7,14 @@
  * 4 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, bootstrap u area
  *   0x00100000..0x002fffff  VM page pool after bootstrap
- *   0x00300000..0x0033ffff  resident stage0/restart image
+ *   0x00300000..0x0033ffff  stage0 image
  *   0x00340000..0x0037ffff  stage0/320x240x16 framebuffer alias
  *   0x00380000..0x003fffff  VM page pool
  *
  * 8 MiB system:
  *   0x00000000..0x000fffff  kernel, vectors, bootstrap u area
  *   0x00100000..0x002fffff  VM page pool after bootstrap
- *   0x00300000..0x0037ffff  resident stage0/restart image
+ *   0x00300000..0x0037ffff  stage0 image
  *   0x00380000..0x007fffff  VM page pool after bootstrap
  *
  * N64 RAM disks and VI framebuffers are dynamic VM allocations and therefore

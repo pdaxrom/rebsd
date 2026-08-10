@@ -6,6 +6,7 @@
 #define N64_RDRAM_THRESHOLD_4M  (N64_RDRAM_SIZE_4M - 0x40000u)
 #define N64_RDRAM_THRESHOLD_8M  (N64_RDRAM_SIZE_8M - 0x40000u)
 #define N64_BOOT_MEM_SIZE_ADDR  0x00000318u
+#define N64_BOOT_TV_TYPE_ADDR   0x00000300u
 #define N64_RDRAM_PROBE_4M      (N64_RDRAM_SIZE_4M - 16u)
 #define N64_RDRAM_PROBE_8M      (N64_RDRAM_SIZE_8M - 16u)
 
@@ -17,6 +18,7 @@
 
 #ifndef __ASSEMBLER__
 unsigned n64_rdram_size(void);
+void n64_rom_restart(unsigned) __attribute__((noreturn));
 #endif
 
 #endif
