@@ -69,7 +69,10 @@ res_mkquery(int op, char *dname, int class, int type, char *data, int datalen,
 			if (res_init() == -1)
 				return(-1);
 		if (_res.defdname[0] != '\0') {
-			(void)sprintf(dnbuf, "%s.%s", dname, _res.defdname);
+			n = snprintf(dnbuf, sizeof(dnbuf), "%s.%s", dname,
+			    _res.defdname);
+			if (n < 0 || n >= (int)sizeof(dnbuf))
+				return (-1);
 			dname = dnbuf;
 		}
 	}
