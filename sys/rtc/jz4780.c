@@ -10,13 +10,26 @@
 
 #define JZ_RTC_CTRL             0x00u
 #define JZ_RTC_SECONDS          0x04u
+#define JZ_RTC_HIBERNATE        0x20u
+#define JZ_RTC_WAKEUP_FILTER    0x24u
+#define JZ_RTC_RESET_COUNTER    0x28u
 #define JZ_RTC_SCRATCHPAD       0x34u
 #define JZ_RTC_WENR             0x3cu
 #define JZ_RTC_CTRL_WRDY        (1u << 7)
+#define JZ_RTC_CTRL_SELEXC      (1u << 1)
+#define JZ_RTC_HIBERNATE_PD     (1u << 0)
 #define JZ_RTC_WENR_WEN         (1u << 31)
 #define JZ_RTC_WENR_MAGIC       0xa55au
 #define JZ_RTC_SCRATCH_MAGIC    0x12345678u
 #define JZ_RTC_WAIT_US          1000u
+
+/*
+ * The JZ4780 hibernate input is the required 32768 Hz RTCLK.  Match the
+ * established Ci20 shutdown contract: require a 100 ms assertion on WKUP_
+ * and hold hibernate reset for the minimum 2048 RTCLK cycles (62.5 ms).
+ */
+#define JZ_RTC_WAKEUP_FILTER_100MS 0x00000cc0u
+#define JZ_RTC_RESET_62MS          0x00000000u
 
 static unsigned
 jz_read(struct jz4780_rtc_softc *sc, unsigned reg)
@@ -101,6 +114,30 @@ jz_settime(struct todr_chip_handle *handle,
     if (error != 0)
         return error;
     return jz_write(sc, JZ_RTC_SCRATCHPAD, JZ_RTC_SCRATCH_MAGIC);
+}
+
+int
+jz4780_rtc_poweroff(struct jz4780_rtc_softc *sc)
+{
+    int error;
+
+    if (sc == 0 || sc->sc_io == 0 || sc->sc_io->read == 0 ||
+        sc->sc_io->write == 0 || sc->sc_io->delay_us == 0)
+        return EINVAL;
+    error = jz_wait_mask(sc, JZ_RTC_CTRL, JZ_RTC_CTRL_WRDY);
+    if (error != 0)
+        return error;
+    /* Hibernate cannot run from the divided EXCLK after main power drops. */
+    if ((jz_read(sc, JZ_RTC_CTRL) & JZ_RTC_CTRL_SELEXC) != 0)
+        return EOPNOTSUPP;
+    error = jz_write(sc, JZ_RTC_WAKEUP_FILTER,
+        JZ_RTC_WAKEUP_FILTER_100MS);
+    if (error != 0)
+        return error;
+    error = jz_write(sc, JZ_RTC_RESET_COUNTER, JZ_RTC_RESET_62MS);
+    if (error != 0)
+        return error;
+    return jz_write(sc, JZ_RTC_HIBERNATE, JZ_RTC_HIBERNATE_PD);
 }
 
 int

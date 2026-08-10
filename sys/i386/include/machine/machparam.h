@@ -91,6 +91,7 @@ i386_intr_restore(int state)
 
 void idle(void);
 void clkstart(void);
+void udelay(unsigned usec);
 #endif
 
 #define splbio()        i386_intr_disable()

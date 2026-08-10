@@ -6,20 +6,18 @@
 #include <sys/inode.h>
 #include <sys/memdev.h>
 #include <sys/systm.h>
+#include <sys/pty.h>
 
 #include <disk/disk.h>
 #include <disk/romdisk.h>
 #include <input/mousevar.h>
+#include <machine/devmajors.h>
 
 #include "romdisk.h"
 #include "ramdisk.h"
 
 #define I386_SDISK_MAJOR 2
 #define I386_WDISK_MAJOR 3
-#define I386_MOUSE_MAJOR 2
-#define I386_RSDISK_MAJOR 3
-#define I386_RWDISK_MAJOR 4
-
 static void
 i386_nostrategy(struct buf *bp)
 {
@@ -78,13 +76,16 @@ const int nblkdev = sizeof(bdevsw) / sizeof(bdevsw[0]) - 1;
 
 const struct cdevsw cdevsw[] = {
     {
+#if I386_CONSOLE_MAJOR != 0
+#error Wrong I386_CONSOLE_MAJOR value
+#endif
         cnopen, cnclose, cnread, cnwrite,
         cnioctl, nullstop, cnttys, cnselect,
         i386_nostrategy, i386_console_raw_read,
         i386_console_raw_write, 0
     },
     {
-#if MEM_MAJOR != 1
+#if I386_MEM_MAJOR != 1 || MEM_MAJOR != I386_MEM_MAJOR
 #error Wrong MEM_MAJOR value
 #endif
         memdev_nullzero_open, memdev_nullzero_open,
@@ -115,6 +116,40 @@ const struct cdevsw cdevsw[] = {
         disk_wd_cdev_open, disk_wd_cdev_close, disk_wd_cdev_read,
         disk_wd_cdev_write, disk_wd_cdev_ioctl, nullstop, 0, seltrue,
         disk_wd_bdev_strategy, 0, 0, 0
+    },
+    {
+#if I386_TTY_MAJOR != 5
+#error Wrong I386_TTY_MAJOR value
+#endif
+        syopen, nullopen, syread, sywrite,
+        syioctl, nullstop, 0, syselect,
+        i386_nostrategy, 0, 0, 0
+    },
+    {
+        noopen, noopen, norw, norw,
+        noioctl, nullstop, 0, seltrue,
+        i386_nostrategy, 0, 0, 0
+    },
+    {
+        noopen, noopen, norw, norw,
+        noioctl, nullstop, 0, seltrue,
+        i386_nostrategy, 0, 0, 0
+    },
+    {
+#if I386_PTS_MAJOR != 8
+#error Wrong I386_PTS_MAJOR value
+#endif
+        ptsopen, ptsclose, ptsread, ptswrite,
+        ptyioctl, nullstop, pt_tty, ptcselect,
+        i386_nostrategy, 0, 0, 0
+    },
+    {
+#if I386_PTC_MAJOR != 9
+#error Wrong I386_PTC_MAJOR value
+#endif
+        ptcopen, ptcclose, ptcread, ptcwrite,
+        ptyioctl, nullstop, pt_tty, ptcselect,
+        i386_nostrategy, 0, 0, 0
     },
     { 0 }
 };

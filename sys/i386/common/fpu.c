@@ -4,11 +4,8 @@
 #include <sys/user.h>
 
 #include "fpu.h"
+#include "cpu.h"
 #include "interrupt.h"
-
-#define I386_CPUID_FEATURE_FPU       0x00000001u
-#define I386_CPUID_FEATURE_FXSR      0x01000000u
-#define I386_CPUID_FEATURE_SSE       0x02000000u
 
 #define I386_CR0_MP                  0x00000002u
 #define I386_CR0_EM                  0x00000004u
@@ -20,22 +17,6 @@
 
 static struct i386_fpu_state i386_fpu_initial_state;
 static int i386_fpu_ready;
-
-static unsigned
-i386_cpuid_features(void)
-{
-    unsigned eax;
-    unsigned ebx;
-    unsigned ecx;
-    unsigned edx;
-
-    eax = 1;
-    __asm__ volatile ("cpuid"
-        : "+a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx));
-    (void)ebx;
-    (void)ecx;
-    return edx;
-}
 
 static void
 i386_fpu_save(struct i386_fpu_state *state)
@@ -67,7 +48,7 @@ i386_fpu_init(void)
     unsigned mxcsr;
 #endif
 
-    features = i386_cpuid_features();
+    features = i386_cpu_info()->ci_features;
     if ((features & I386_CPUID_FEATURE_FPU) == 0)
         return ENODEV;
 #ifdef I386_SSE_ENABLED

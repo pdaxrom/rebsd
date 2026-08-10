@@ -2,6 +2,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/proc.h>
+#include <sys/systm.h>
 
 #include "interrupt.h"
 #include "io.h"
@@ -14,6 +15,17 @@
 
 static volatile i386_u32 i386_timer_ticks;
 static i386_u32 i386_pit_divisor;
+
+static i386_u32
+i386_pit_count(void)
+{
+    i386_u32 count;
+
+    i386_outb(PIT_COMMAND, PIT_CHANNEL_0_LATCH);
+    count = i386_inb(PIT_CHANNEL_0);
+    count |= (i386_u32)i386_inb(PIT_CHANNEL_0) << 8;
+    return count == 0 ? i386_pit_divisor : count;
+}
 
 static void
 i386_pit_init(void)
@@ -37,9 +49,7 @@ i386_microtime(struct timeval *tv, u_int tick_usec)
 
     if (tv == 0 || tick_usec == 0 || i386_pit_divisor == 0)
         return;
-    i386_outb(PIT_COMMAND, PIT_CHANNEL_0_LATCH);
-    count = i386_inb(PIT_CHANNEL_0);
-    count |= (i386_u32)i386_inb(PIT_CHANNEL_0) << 8;
+    count = i386_pit_count();
     if (i386_pic_irq_pending(I386_IRQ_TIMER))
         usec = tick_usec - 1u;
     else {
@@ -54,6 +64,33 @@ i386_microtime(struct timeval *tv, u_int tick_usec)
     if (tv->tv_usec >= 1000000L) {
         tv->tv_sec += tv->tv_usec / 1000000L;
         tv->tv_usec %= 1000000L;
+    }
+}
+
+void
+udelay(unsigned usec)
+{
+    i386_u32 current;
+    i386_u32 elapsed;
+    i386_u32 previous;
+    i386_u32 target;
+
+    if (usec == 0)
+        return;
+    if (i386_pit_divisor == 0)
+        panic("udelay before clkstart");
+
+    target = (i386_u32)(((unsigned long long)PIT_INPUT_HZ * usec +
+        999999u) / 1000000u);
+    previous = i386_pit_count();
+    elapsed = 0;
+    while (elapsed < target) {
+        current = i386_pit_count();
+        if (current <= previous)
+            elapsed += previous - current;
+        else
+            elapsed += previous + i386_pit_divisor - current;
+        previous = current;
     }
 }
 

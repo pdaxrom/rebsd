@@ -266,6 +266,9 @@ void    umask (void);           /* XXX */
 /* 2.4 processes */
 void    ptrace (void);
 
+/* Machine-independent filesystem phase of the MD boot(9) contract. */
+void    boot_sync_filesystems (int howto);
+
 void    profil (void);          /* 'cuz sys calls are interruptible */
 void    vhangup (void);         /* should just do in exit (void) */
 void    vfork (void);           /* awaiting fork w/ copy on write */

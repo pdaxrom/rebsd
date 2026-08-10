@@ -311,3 +311,47 @@ minor 0
 cdev /dev/mouse1
 major 2
 minor 1
+
+cdev /dev/tty
+major 5
+minor 0
+
+cdev /dev/ttyp0
+major 8
+minor 0
+mode 0666
+
+cdev /dev/ttyp1
+major 8
+minor 1
+mode 0666
+
+cdev /dev/ttyp2
+major 8
+minor 2
+mode 0666
+
+cdev /dev/ttyp3
+major 8
+minor 3
+mode 0666
+
+cdev /dev/ptyp0
+major 9
+minor 0
+mode 0666
+
+cdev /dev/ptyp1
+major 9
+minor 1
+mode 0666
+
+cdev /dev/ptyp2
+major 9
+minor 2
+mode 0666
+
+cdev /dev/ptyp3
+major 9
+minor 3
+mode 0666

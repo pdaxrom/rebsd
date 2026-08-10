@@ -87,7 +87,8 @@ I686_CPPFLAGS  += -DDMA_ENABLED -DDISK_ENABLED -DUSB_ENABLED \
                   -DRTL8169_ENABLED \
                   -DI386_RTC_ENABLED \
                   -DI386_FPU_ENABLED \
-                  -DINET_ENABLED -DINET -DSUPERVISOR
+                  -DINET_ENABLED -DINET -DUNIXDOMAIN_ENABLED -DUNIXDOMAIN \
+                  -DPTY_ENABLED -DPTY_NUNITS=4 -DSUPERVISOR
 
 I386_SSE ?= 0
 ifeq ($(I386_SSE),1)
@@ -158,6 +159,14 @@ I386_GCC_LINPACK_OBJ = $(I386_GCC_LINPACK_BUILD)/linpack-gcc.o
 I386_GCC_LINPACK = $(I386_GCC_LINPACK_BUILD)/linpack-gcc
 I386_GCC_LINPACK_ROOTFS_STAMP = \
     $(I386_ROOTFS_STAGE)/.linpack-gcc.$(USERLAND_COMPILER)
+I386_UNIXDOMAIN_SMOKE_SRC = \
+    $(TOPSRC)/sys/tests/net/rootfs/unixdomain-smoke.c
+I386_UNIXDOMAIN_SMOKE_BUILD = \
+    $(CURDIR)/i386-unixdomain-smoke.$(USERLAND_COMPILER)
+I386_UNIXDOMAIN_SMOKE_OBJ = $(I386_UNIXDOMAIN_SMOKE_BUILD)/unixdomain-smoke.o
+I386_UNIXDOMAIN_SMOKE = $(I386_UNIXDOMAIN_SMOKE_BUILD)/unixdomain-smoke
+I386_UNIXDOMAIN_SMOKE_ROOTFS_STAMP = \
+    $(I386_ROOTFS_STAGE)/.unixdomain-smoke.$(USERLAND_COMPILER)
 I386_PCC_SRCS = $(I386_PCC_BUILD_SCRIPT) \
                 $(TOPSRC)/src/dev/pcc/Makefile.native \
                 $(TOPSRC)/src/dev/pcc/native-config.h \
@@ -321,6 +330,7 @@ VM_CORE_OBJS     = vm_map.o vm_object.o vm_shm.o vm_sysv_shm.o \
                    vmspace.o vmspace_access.o vmspace_fault.o \
                    vmspace_fault_api.o vmspace_fault_validate.o
 INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
+                   uipc_usrreq.o \
                    uipc_socket.o uipc_socket2.o uipc_syscalls.o \
                    af.o if.o if_ether.o if_loop.o raw_cb.o raw_usrreq.o route.o \
                    in.o in_pcb.o in_proto.o ip_icmp.o ip_input.o \
@@ -329,7 +339,7 @@ INET_OBJS        = sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o \
                    udp_usrreq.o in_cksum.o net_glue.o netinit.o
 I386_RUNTIME_OBJS = divdi3.o divmoddi4.o moddi3.o udivdi3.o \
                     udivmoddi4.o umoddi3.o
-KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o fpu.o \
+KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o cpu.o fpu.o \
                    early_console.o vtconsole.o interrupt.o tss.o syscall.o \
                    signal.o user_return.o trap.o \
                    pic.o pit.o pci_core.o pciide.o i386_pci.o \
@@ -364,7 +374,8 @@ KERNEL_OBJS      = entry.o interrupt_entry.o context.o privilege.o fpu.o \
                    kern_sysctl.o kern_sysv_shm.o sys_process.o \
                    init_main.o kern_synch.o kern_clock.o subr_prf.o \
                    subr_msgbuf.o subr_rmap.o \
-                   tty.o tty_subr.o vm_sched.o vm_swp.o scheduler.o vers.o \
+                   tty.o tty_subr.o tty_tty.o tty_pty.o \
+                   vm_sched.o vm_swp.o scheduler.o vers.o \
                    copyio.o vm_machdep.o \
                    config.o ioconf.o swapunix.o sysctl.o \
                    vm_param.o \
@@ -383,26 +394,22 @@ $(KERNEL_OBJS) setup.o: | .deps
 
 .DEFAULT_GOAL := all
 
-.PHONY: all kernel bios-image toolchain-check rootfs-smoke ide-smoke \
+.PHONY: all kernel toolchain-check kconfig-inventory \
+	rootfs-smoke ide-smoke \
 	pcc-host-smoke pcc-smoke-runtime \
 	fat-mount-smoke \
 	ide-pio-smoke ide-dma-smoke ide-auto-smoke \
 	ramdisk-smoke \
-	bios-image-smoke ide-absent-smoke bios-ide-absent-smoke \
-	usb-mass-storage-smoke bios-usb-mass-storage-smoke \
+	ide-absent-smoke usb-mass-storage-smoke \
 	usb-mass-storage-ide-absent-smoke \
-	bios-usb-mass-storage-ide-absent-smoke \
-	ohci-keyboard-smoke bios-ohci-keyboard-smoke \
-	ohci-mouse-smoke bios-ohci-mouse-smoke \
-	uhci-keyboard-smoke bios-uhci-keyboard-smoke \
-	uhci-mouse-smoke bios-uhci-mouse-smoke \
-	ps2-input-smoke ide-dma-ps2-input-smoke bios-ps2-input-smoke \
-	uhci-mass-storage-smoke bios-uhci-mass-storage-smoke \
+	ohci-keyboard-smoke ohci-mouse-smoke \
+	uhci-keyboard-smoke uhci-mouse-smoke \
+	ps2-input-smoke ide-dma-ps2-input-smoke \
+	uhci-mass-storage-smoke \
 	uhci-mass-storage-ide-absent-smoke \
-	bios-uhci-mass-storage-ide-absent-smoke \
-	usb-combined-smoke bios-usb-combined-smoke \
-	run run-serial debug boot-smoke init-halt-smoke bios-boot-smoke \
-	boot-smoke-matrix clean
+	usb-combined-smoke \
+	run run-serial debug boot-smoke init-halt-smoke \
+	trap-smoke exception-smoke stability-smoke boot-smoke-matrix clean
 
 .PHONY: FORCE
 FORCE:
@@ -411,12 +418,18 @@ all: toolchain-check kernel
 
 kernel: rebsd-i686.bzimg
 
-bios-image: rebsd-i686-bios-floppy.img
-
 toolchain-check:
 	$(PYTHON) $(I386_TOOLS_SRC)/toolchain-check.py \
 	    --prefix $(I686_PREFIX) \
 	    --work-dir $(TOPOBJ)/tmp/i686-toolchain-check
+
+kconfig-inventory: $(KCONFIG)
+	rm -rf i386-kconfig-inventory
+	mkdir -p i386-kconfig-inventory
+	cd i386-kconfig-inventory && \
+	    $(abspath $(KCONFIG)) $(abspath $(I386_PC_SRC)/Config)
+	$(MAKE) -C i386-kconfig-inventory \
+	    TOPSRC=$(abspath $(TOPSRC)) inventory
 
 setup.o: $(I386_BOOT_SRC)/setup.S
 	$(CC) $(I686_ASFLAGS) -DSETUP_SECTS=$(SETUP_SECTS) -c $< -o $@
@@ -448,8 +461,14 @@ privilege.o: $(I386_COMMON_SRC)/privilege.S $(I386_SRC)/include/context.h
 	    -c $< -o $@
 
 fpu.o: $(I386_COMMON_SRC)/fpu.c $(I386_SRC)/include/fpu.h \
+	    $(I386_SRC)/include/cpu.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(TOPSRC)/sys/include/user.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+cpu.o: $(I386_COMMON_SRC)/cpu.c $(I386_SRC)/include/cpu.h \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
@@ -742,8 +761,23 @@ $(I386_GCC_LINPACK_ROOTFS_STAMP): $(I386_USERLAND_STAMP) \
 	chmod 0775 $(I386_ROOTFS_STAGE)/root/linpack-gcc
 	touch $@
 
+$(I386_UNIXDOMAIN_SMOKE_ROOTFS_STAMP): $(I386_USERLAND_STAMP) \
+	    $(I386_UNIXDOMAIN_SMOKE_SRC) $(I386_USERLAND_EXTRA_DEPS) \
+	    $(I386_USER_LDSCRIPT)
+	rm -rf $(I386_UNIXDOMAIN_SMOKE_BUILD)
+	mkdir -p $(I386_UNIXDOMAIN_SMOKE_BUILD)
+	$(I386_USERLAND_CC) -O2 -c $(I386_UNIXDOMAIN_SMOKE_SRC) \
+	    -o $(I386_UNIXDOMAIN_SMOKE_OBJ)
+	$(I386_USERLAND_LD) $(I386_USERLAND_LDFLAGS) \
+	    -o $(I386_UNIXDOMAIN_SMOKE) $(I386_UNIXDOMAIN_SMOKE_OBJ) -lc
+	cp -p $(I386_UNIXDOMAIN_SMOKE) \
+	    $(I386_ROOTFS_STAGE)/root/unixdomain-smoke
+	chmod 0775 $(I386_ROOTFS_STAGE)/root/unixdomain-smoke
+	touch $@
+
 $(I386_ROOTFS_STAGE)/.userland: $(I386_USERLAND_STAMP) \
-	    $(I386_ROOTFS_PCC_DEPS) $(I386_GCC_LINPACK_ROOTFS_STAMP)
+	    $(I386_ROOTFS_PCC_DEPS) $(I386_GCC_LINPACK_ROOTFS_STAMP) \
+	    $(I386_UNIXDOMAIN_SMOKE_ROOTFS_STAMP)
 	test -x $(I386_ROOTFS_STAGE)/sbin/init
 	test -L $(I386_ROOTFS_STAGE)/etc/init
 	test -L $(I386_ROOTFS_STAGE)/etc/telinit
@@ -755,6 +789,8 @@ $(I386_ROOTFS_STAGE)/.userland: $(I386_USERLAND_STAMP) \
 	test -x $(I386_ROOTFS_STAGE)/libexec/getty
 	test -x $(I386_ROOTFS_STAGE)/bin/login
 	test -x $(I386_ROOTFS_STAGE)/bin/ls
+	test -x $(I386_ROOTFS_STAGE)/usr/bin/ptytest
+	test -x $(I386_ROOTFS_STAGE)/root/unixdomain-smoke
 	touch $@
 
 $(I386_ROOTFS_MANIFEST): $(I386_ROOTFS_STAGE)/.userland \
@@ -940,7 +976,7 @@ umsmap.o ums.o ehci.o ohci.o uhci.o umass_bbb.o umass.o: %.o: \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
-sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o uipc_socket.o \
+sys_socket.o uipc_domain.o uipc_mbuf.o uipc_proto.o uipc_usrreq.o uipc_socket.o \
 uipc_socket2.o uipc_syscalls.o: %.o: $(TOPSRC)/sys/kernel/%.c \
 	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
 	$(CC) $(I686_INET_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
@@ -1424,6 +1460,18 @@ tty_subr.o: $(TOPSRC)/sys/kernel/tty_subr.c \
 	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
 	    -c $< -o $@
 
+tty_tty.o: $(TOPSRC)/sys/kernel/tty_tty.c \
+	    $(TOPSRC)/sys/include/conf.h $(TOPSRC)/sys/include/tty.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
+tty_pty.o: $(TOPSRC)/sys/kernel/tty_pty.c \
+	    $(TOPSRC)/sys/include/pty.h $(TOPSRC)/sys/include/tty.h \
+	    | $(I386_GEN_INCLUDE)/sys $(I386_GEN_INCLUDE)/machine
+	$(CC) $(I686_CFLAGS) $(I686_CPPFLAGS) $(I386_VM_INCLUDES) \
+	    -c $< -o $@
+
 scheduler.o: $(I386_PC_SRC)/scheduler.c \
 	    $(I386_SRC)/include/boot.h \
 	    $(I386_SRC)/include/machine/machparam.h \
@@ -1546,7 +1594,8 @@ vmspace_bootstrap.o: $(I386_PC_SRC)/vmspace_bootstrap.c \
 	    -c $< -o $@
 
 boot_main.o: $(I386_PC_SRC)/boot_main.c \
-	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/fpu.h \
+	    $(I386_SRC)/include/boot.h $(I386_SRC)/include/cpu.h \
+	    $(I386_SRC)/include/fpu.h \
 	    $(I386_SRC)/include/interrupt.h \
 	    $(I386_SRC)/include/memory.h $(I386_SRC)/include/paging.h \
 	    $(I386_SRC)/include/syscall.h \
@@ -1570,19 +1619,6 @@ rebsd-i686.bzimg: setup.bin rebsd-i686.bin \
 	    $(I386_TOOLS_SRC)/mkboot.py
 	$(PYTHON) $(I386_TOOLS_SRC)/mkboot.py \
 	    --setup setup.bin --kernel rebsd-i686.bin --output $@
-
-rebsd-i686-bios-floppy.img: rebsd-i686.bzimg \
-	    $(I386_TOOLS_SRC)/mkbios.py
-	$(PYTHON) $(I386_TOOLS_SRC)/mkbios.py \
-	    --kernel $< --output $@
-
-bios-image-smoke: rebsd-i686.bzimg rebsd-i686-bios-floppy.img
-	$(PYTHON) $(I386_TOOLS_SRC)/mkbios.py \
-	    --kernel rebsd-i686.bzimg \
-	    --output rebsd-i686-bios-floppy.check.img
-	cmp rebsd-i686-bios-floppy.img \
-	    rebsd-i686-bios-floppy.check.img
-	rm -f rebsd-i686-bios-floppy.check.img
 
 ide-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -1660,30 +1696,39 @@ boot-smoke: rebsd-i686.bzimg
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $<
 
+trap-smoke: rebsd-i686.bzimg
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --expect-exception divide
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --expect-exception gp
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --expect-exception page
+
+exception-smoke: trap-smoke
+
+stability-smoke: rebsd-i686.bzimg rootfs.img
+	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
+	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
+	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
+	    --disk rootfs.img --ata-mode dma --usb-disk rootfs.img \
+	    --ps2-keyboard --ps2-mouse --stability-smoke --timeout 180
+
 init-halt-smoke: rebsd-i686.bzimg
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --halt-smoke --timeout 20
 
-bios-boot-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --disk rootfs.img
-
 usb-mass-storage-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk rootfs.img --usb-disk rootfs.img --timeout 20
-
-bios-usb-mass-storage-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk rootfs.img --usb-disk rootfs.img --timeout 20
 
 usb-mass-storage-ide-absent-smoke: rebsd-i686.bzimg rootfs.img
@@ -1692,25 +1737,10 @@ usb-mass-storage-ide-absent-smoke: rebsd-i686.bzimg rootfs.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --usb-disk rootfs.img --expect-no-disk --timeout 20
 
-bios-usb-mass-storage-ide-absent-smoke: \
-	    rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --usb-disk rootfs.img --expect-no-disk --timeout 20
-
 ohci-keyboard-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk rootfs.img --ohci-keyboard --timeout 20
-
-bios-ohci-keyboard-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk rootfs.img --ohci-keyboard --timeout 20
 
 ohci-mouse-smoke: rebsd-i686.bzimg rootfs.img
@@ -1719,37 +1749,16 @@ ohci-mouse-smoke: rebsd-i686.bzimg rootfs.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk rootfs.img --ohci-mouse --timeout 20
 
-bios-ohci-mouse-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --disk rootfs.img --ohci-mouse --timeout 20
-
 uhci-keyboard-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk rootfs.img --uhci-keyboard --timeout 20
 
-bios-uhci-keyboard-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --disk rootfs.img --uhci-keyboard --timeout 20
-
 uhci-mouse-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk rootfs.img --uhci-mouse --timeout 20
-
-bios-uhci-mouse-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk rootfs.img --uhci-mouse --timeout 20
 
 ps2-input-smoke: rebsd-i686.bzimg rootfs.img
@@ -1765,24 +1774,10 @@ ide-dma-ps2-input-smoke: rebsd-i686.bzimg rootfs.img
 	    --disk rootfs.img --ata-mode dma \
 	    --ps2-keyboard --ps2-mouse --timeout 20
 
-bios-ps2-input-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --disk rootfs.img --ps2-keyboard --ps2-mouse --timeout 20
-
 uhci-mass-storage-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
-	    --disk rootfs.img --uhci-disk rootfs.img --timeout 20
-
-bios-uhci-mass-storage-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
 	    --disk rootfs.img --uhci-disk rootfs.img --timeout 20
 
 uhci-mass-storage-ide-absent-smoke: rebsd-i686.bzimg rootfs.img
@@ -1791,35 +1786,12 @@ uhci-mass-storage-ide-absent-smoke: rebsd-i686.bzimg rootfs.img
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --uhci-disk rootfs.img --expect-no-disk --timeout 20
 
-bios-uhci-mass-storage-ide-absent-smoke: \
-	    rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --uhci-disk rootfs.img --expect-no-disk --timeout 20
-
 usb-combined-smoke: rebsd-i686.bzimg rootfs.img
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
 	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
 	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) --kernel $< \
 	    --disk rootfs.img --usb-disk rootfs.img --ohci-keyboard \
 	    --timeout 20
-
-bios-usb-combined-smoke: rebsd-i686-bios-floppy.img rootfs.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --disk rootfs.img --usb-disk rootfs.img --ohci-keyboard \
-	    --timeout 20
-
-bios-ide-absent-smoke: rebsd-i686-bios-floppy.img
-	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
-	    --qemu $(QEMU_I386) --machine $(QEMU_MACHINE) \
-	    --cpu $(QEMU_CPU) --memory $(QEMU_MEMORY) \
-	    --bios-image rebsd-i686-bios-floppy.img \
-	    --expect-no-disk
 
 ide-absent-smoke: rebsd-i686.bzimg
 	$(PYTHON) $(I386_TOOLS_SRC)/qemu-boot-smoke.py \
@@ -1847,8 +1819,6 @@ clean:
 	    $(I386_ROOTFS_BASE_STAMP) \
 	    $(I386_USERLAND_STAMP) \
 	    $(I386_PCC_STAGE_STAMP) \
-	    rebsd-i686-bios-floppy.img \
-	    rebsd-i686-bios-floppy.check.img \
 	    $(KERNEL_OBJS) rebsd-i686.elf rebsd-i686.bin \
 	    rebsd-i686.bzimg rebsd-i686.map
 	rm -rf $(I386_ROOTFS_STAGE)

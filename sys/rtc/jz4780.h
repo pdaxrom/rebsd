@@ -21,5 +21,6 @@ struct jz4780_rtc_softc {
 
 int jz4780_rtc_attach(struct jz4780_rtc_softc *, const char *,
     const struct jz4780_rtc_io *, void *, int);
+int jz4780_rtc_poweroff(struct jz4780_rtc_softc *);
 
 #endif

@@ -2,6 +2,7 @@ TOPSRC		= $(shell cd ../../../..; pwd)
 include $(TOPSRC)/target.mk
 
 ASFLAGS		+= $(DEFS)
+ASFLAGS		+= $(if $(REBSD_SRCDIR),-I$(REBSD_SRCDIR),)
 CFLAGS		+= -Os
 
 ASMOBJS		= _exit.o _brk.o getpgrp.o pipe.o ptrace.o sigaction.o

@@ -1,58 +1,202 @@
-# The early Makefile directly links vm_param, vm_phys and vm_page so the
-# allocator can be validated before the full kernel configuration is enabled.
-# vm_map/vm_object/vmspace, i386 copy I/O, the u-area allocator, context
-# switch, fork/init frames, ring-3/TSS, int 0x80 ABI, production-numbered
-# sysent bootstrap prefix, i386 signal frame, user-return work loop and
-# generic process table/process 1 with its persistent CPL3
-# production-syscall probe, common UFS-root-backed ELF32 /sbin/init and
-# exec-compatible user stack are linked by the early Makefile together with
-# user trap-to-signal translation, generic kern_synch run queue/scheduler
-# and generic newproc with production fork syscall.  Read-only
-# open/read/lseek/close use the common VFS and descriptor paths, including
-# shared offsets across fork and early exit teardown.  The embedded UFS root
-# is exposed by the common read-only romdisk block driver at major 0 minor 0.
-# Remaining machine-independent files are connected as the diagnostic
-# bootstrap is replaced by normal common startup.
-kernel/cons.c                   standard
-console/vtconsole.c            standard
-kernel/nullzero.c               standard
-kernel/subr_msgbuf.c            standard
+# Complete source inventory for the legacy BIOS i686 kernel.
+#
+# Machine-independent services remain in their common owners.  The i386
+# entries below are limited to the CPU ABI, boot, interrupts, memory mapping
+# and legacy-PC hardware adapters.  Generated sources (ioconf.c, swapunix.c,
+# vers.c and the embedded rootfs object) are intentionally not listed.
+
+# Common kernel, VFS, process, signal, scheduler and tty services.
+kernel/exec_conf.c              standard
+kernel/exec_elf.c               standard
+kernel/exec_elf_loader.c        standard
+kernel/exec_script.c            standard
+kernel/exec_subr.c              standard
+kernel/init_main.c              standard
+kernel/init_process.c           standard
+kernel/init_sysent.c            standard
+kernel/kern_tables.c            standard
+kernel/kern_clock.c             standard
+kernel/kern_descrip.c           standard
+kernel/kern_exec.c              standard
+kernel/kern_exit.c              standard
+kernel/kern_fork.c              standard
+kernel/kern_machdep.c           standard
+kernel/kern_mman.c              standard
+kernel/kern_proc.c              standard
+kernel/kern_prot.c              standard
+kernel/kern_prot2.c             standard
+kernel/kern_resource.c          standard
+kernel/kern_shm.c               standard
+kernel/kern_sig.c               standard
+kernel/kern_sig2.c              standard
+kernel/kern_subr.c              standard
+kernel/kern_synch.c             standard
+kernel/kern_sysctl.c            standard
+kernel/kern_sysv_shm.c          standard
+kernel/kern_time.c              standard
+kernel/libkern.c                standard
+kernel/stubs.c                  standard
 kernel/subr_dma.c               optional dma
+kernel/subr_msgbuf.c            standard
+kernel/subr_prf.c               standard
+kernel/subr_rmap.c              standard
 kernel/sys_fifo.c               standard
-i386/common/fpu.c               optional i386_fpu
+kernel/sys_generic.c            standard
+kernel/sys_inode.c              standard
+kernel/sys_pipe.c               standard
+kernel/sys_process.c            standard
+kernel/tty.c                    standard
+kernel/tty_pty.c                optional pty
+kernel/tty_subr.c               standard
+kernel/tty_tty.c                standard
+kernel/ufs_alloc.c              standard
+kernel/ufs_bio.c                standard
+kernel/ufs_bmap.c               standard
+kernel/ufs_fio.c                standard
+kernel/ufs_inode.c              standard
+kernel/ufs_mount.c              standard
+kernel/ufs_namei.c              standard
+kernel/ufs_subr.c               standard
+kernel/ufs_syscalls.c           standard
+kernel/ufs_syscalls2.c          standard
+kernel/vfs_vnops.c              standard
+kernel/vm_sched.c               standard
+kernel/vm_swp.c                 standard
 kernel/clock_subr.c             standard
+kernel/cons.c                   standard
+kernel/nullzero.c               standard
 kernel/todr.c                   standard
+
+# Common VM.
+vm/swap_linux.c                 standard
+vm/vm_map.c                     standard
+vm/vm_object.c                  standard
+vm/vm_page.c                    standard
+vm/vm_param.c                   standard
+vm/vm_phys.c                    standard
+vm/vm_shm.c                     standard
+vm/vm_sysv_shm.c                standard
+vm/vm_vnode.c                   standard
+vm/vmspace.c                    standard
+vm/vmspace_access.c             standard
+vm/vmspace_fault.c              standard
+vm/vmspace_fault_api.c          standard
+vm/vmspace_fault_validate.c     standard
+
+# Common block, filesystem, RTC, console and input layers.
+console/vtconsole.c             standard
+disk/disk_subr.c                optional disk
+disk/disk.c                     optional disk
+disk/ramcomp.c                  standard
+disk/ramdisk.c                  standard
+disk/romdisk.c                  standard
+fs/fat/fat_subr.c               optional fat
+fs/fat/fat_vfs.c                optional fat
+input/kbdmap.c                  optional ukbd i8042
+input/mouse.c                   optional i8042 ums
+input/ps2.c                     optional i8042
 rtc/mc146818.c                  optional i386_rtc
+
+# Common USB stack.
+usb/ehci.c                      optional ehci
+usb/ohci.c                      optional ohci
+usb/uhci.c                      optional uhci
+usb/uhub.c                      optional uhub
+usb/ukbd_decode.c               optional ukbd
+usb/ukbd.c                      optional ukbd
+usb/umass_bbb.c                 optional umass
+usb/umass.c                     optional umass
+usb/umsmap.c                    optional ums
+usb/ums.c                       optional ums
+usb/usb_core.c                  optional usb
+usb/usb_service.c               optional usb
+usb/usb_subr.c                  optional usb
+usb/usb_task.c                  optional usb
+
+# Common socket and IPv4 stack.
+kernel/sys_socket.c             optional inet
+kernel/uipc_domain.c            optional inet
+kernel/uipc_mbuf.c              optional inet
+kernel/uipc_proto.c             optional inet
+kernel/uipc_socket.c            optional inet
+kernel/uipc_socket2.c           optional inet
+kernel/uipc_syscalls.c          optional inet
+kernel/uipc_usrreq.c            optional unixdomain
+net/af.c                        optional inet
+net/if.c                        optional inet
+net/if_loop.c                   optional inet
+net/in_cksum.c                  optional inet
+net/net_glue.c                  optional inet
+net/netinit.c                   optional inet
+net/raw_cb.c                    optional inet
+net/raw_usrreq.c                optional inet
+net/route.c                     optional inet
+netinet/if_ether.c              optional ether
+netinet/in.c                    optional inet
+netinet/in_pcb.c                optional inet
+netinet/in_proto.c              optional inet
+netinet/ip_icmp.c               optional inet
+netinet/ip_input.c              optional inet
+netinet/ip_output.c             optional inet
+netinet/raw_ip.c                optional inet
+netinet/tcp_debug.c             optional inet
+netinet/tcp_input.c             optional inet
+netinet/tcp_output.c            optional inet
+netinet/tcp_subr.c              optional inet
+netinet/tcp_timer.c             optional inet
+netinet/tcp_usrreq.c            optional inet
+netinet/udp_usrreq.c            optional inet
+
+# Common PCI and network-device layers.
 pci/pci.c                       optional pc
 pci/pciide.c                    optional pc disk dma
 pci/rtl8169.c                   optional rtl8169
 pci/if_re.c                     optional rtl8169
-netinet/if_ether.c              optional ether
-input/kbdmap.c                  optional ukbd i8042
-input/ps2.c                     optional i8042
-input/mouse.c                   optional i8042 ums
-disk/disk_subr.c                optional disk
-disk/disk.c                     optional disk
-disk/romdisk.c                  standard
-disk/ramdisk.c                  standard
-usb/usb_subr.c                  optional usb
-usb/usb_core.c                  optional usb
-usb/usb_service.c               optional usb
-usb/usb_task.c                  optional usb
-usb/uhub.c                      optional uhub
-usb/ukbd_decode.c               optional ukbd
-usb/ukbd.c                      optional ukbd
-usb/umsmap.c                    optional ums
-usb/ums.c                       optional ums
-usb/ehci.c                      optional ehci
-usb/ohci.c                      optional ohci
-usb/uhci.c                      optional uhci
-usb/umass_bbb.c                 optional umass
-usb/umass.c                     optional umass
+
+# i386 CPU ABI and machine-dependent boundaries.
+i386/boot/entry.S               standard compile-with "${COMPILE_S}"
+i386/boot/interrupt_entry.S     standard compile-with "${COMPILE_S}"
+i386/common/context.S           standard compile-with "${COMPILE_S}"
+i386/common/privilege.S         standard compile-with "${COMPILE_S}"
+i386/common/copyio.c            standard
+i386/common/cpu.c               standard
+i386/common/fpu.c               optional i386_fpu
+i386/common/pmap.c              standard
+i386/common/signal.c            standard
+i386/common/syscall.c           standard
+i386/common/trap.c              standard
+i386/common/user_return.c       standard
+i386/common/vm_machdep.c        standard
+
+# Legacy-PC board adapters and hardware.
+i386/pc/boot_main.c             standard
+i386/pc/config.c                standard
+i386/pc/devsw.c                 standard
+i386/pc/disk_bootstrap.c        standard
 i386/pc/dma.c                   optional dma
-i386/pc/pci.c                   optional pc
+i386/pc/early_console.c         standard
 i386/pc/i8042.c                 optional i8042
-i386/pc/usb_pci.c               optional usb ehci ohci uhci
-i386/pc/romdisk.c               standard
+i386/pc/ide.c                   optional disk
+i386/pc/interrupt.c             standard
+i386/pc/memory.c                standard
+i386/pc/paging.c                standard
+i386/pc/pci.c                   optional pc
+i386/pc/pic.c                   standard
+i386/pc/pit.c                   standard
 i386/pc/ramdisk.c               standard
+i386/pc/romdisk.c               standard
 i386/pc/rtc.c                   optional i386_rtc
+i386/pc/scheduler.c             standard
+i386/pc/sysctl.c                standard
+i386/pc/tss.c                   standard
+i386/pc/usb_pci.c               optional usb ehci ohci uhci
+i386/pc/vm_phys_board.c         standard
+i386/pc/vmspace_bootstrap.c     standard
+
+# Freestanding 64-bit arithmetic helpers required by the i386 kernel.
+../src/libc/runtime/divdi3.c    standard
+../src/libc/runtime/divmoddi4.c standard
+../src/libc/runtime/moddi3.c    standard
+../src/libc/runtime/udivdi3.c   standard
+../src/libc/runtime/udivmoddi4.c standard
+../src/libc/runtime/umoddi3.c   standard

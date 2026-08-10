@@ -214,6 +214,9 @@ test_pcf8563(void)
 
 struct jz_fake {
     unsigned regs[32];
+    unsigned write_reg[16];
+    unsigned write_value[16];
+    unsigned write_count;
 };
 
 static unsigned
@@ -227,6 +230,12 @@ static void
 jz_fake_write(void *cookie, unsigned reg, unsigned value)
 {
     struct jz_fake *fake = cookie;
+
+    if (fake->write_count < 16u) {
+        fake->write_reg[fake->write_count] = reg;
+        fake->write_value[fake->write_count] = value;
+    }
+    fake->write_count++;
     if (reg == 0x3c && value == 0xa55a)
         fake->regs[reg / 4u] = 1u << 31;
     else
@@ -274,6 +283,21 @@ test_jz4780(void)
     CHECK(fake.regs[0x34 / 4] == 0x12345678);
     dt.dt_year = 2107;
     CHECK(attached->todr_settime_ymdhms(attached, &dt) == EOVERFLOW);
+
+    fake.write_count = 0;
+    fake.regs[0] |= 1u << 1;
+    CHECK(jz4780_rtc_poweroff(&sc) == EOPNOTSUPP);
+    CHECK(fake.write_count == 0);
+    fake.regs[0] &= ~(1u << 1);
+    CHECK(jz4780_rtc_poweroff(&sc) == 0);
+    CHECK(fake.write_count == 6);
+    CHECK(fake.write_reg[0] == 0x3c && fake.write_value[0] == 0xa55a);
+    CHECK(fake.write_reg[1] == 0x24 && fake.write_value[1] == 0x0cc0);
+    CHECK(fake.write_reg[2] == 0x3c && fake.write_value[2] == 0xa55a);
+    CHECK(fake.write_reg[3] == 0x28 && fake.write_value[3] == 0);
+    CHECK(fake.write_reg[4] == 0x3c && fake.write_value[4] == 0xa55a);
+    CHECK(fake.write_reg[5] == 0x20 && fake.write_value[5] == 1);
+    CHECK(jz4780_rtc_poweroff(0) == EINVAL);
     return 0;
 }
 

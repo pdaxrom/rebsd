@@ -1,8 +1,10 @@
 # ReBSD i686/BIOS port
 
-This is the GCC-only port for legacy BIOS PCs.  The first physical target is
-the IBM PC 300GL 6563-W4G: Pentium III, VIA Apollo Pro 133, AGP, IDE-CF and
-no floppy drive.
+This is the uniprocessor i686 port for legacy BIOS PCs.  The kernel is built
+with the strict GCC/binutils i686 toolchain; userland can be built with GCC
+or PCC, and the default full root image includes the target-native PCC
+toolchain and its runtime tests.  The first physical target is the IBM PC 300GL
+6563-W4G: Pentium III, VIA Apollo Pro 133, AGP, IDE-CF and no floppy drive.
 
 The normal kernel now enters the machine-independent `init_main`, mounts the
 embedded read-only UFS through the common romdisk/VFS/UFS path, creates
@@ -18,7 +20,11 @@ Use a separate object directory:
 ```sh
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc kernel
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc rootfs-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc kconfig-inventory
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc boot-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc trap-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc stability-smoke
+make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc pcc-smoke-runtime
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc \
     ide-pio-smoke ide-dma-smoke ide-auto-smoke
 make -C sys/i386 BOARD=pc O=/work/rebsd-build/i686-pc ps2-input-smoke
@@ -32,7 +38,8 @@ then runs representative programs from the full root filesystem (`ls`,
 `netstat`).  It verifies the common `/dev/null` and `/dev/zero` operations,
 requires the writable UFS `/dev/ram0` filesystem to be mounted on `/var`,
 requires `lo0` to own `127.0.0.1` and completes an ICMP echo exchange through
-that address:
+that address.  It also proves `/dev/tty`, both ends of PTY units 0 and 3,
+AF_UNIX stream pathname sockets, stream `socketpair` and pathname datagrams:
 
 ```text
 embedded UFS -> common init_main -> proc1 -> /sbin/init
@@ -130,13 +137,15 @@ consoles.  The mouse publishes events through `/dev/mouse0`.  The OHCI and
 UHCI mouse gates use the same machine-independent mouse queue and
 `/dev/mouse1`; only the transport-specific decoders differ.
 
-The 16 MiB root image is built deterministically by the existing
-`tools/fsutil`.  Its GCC userland uses the shared full-rootfs profile in
+The 24 MiB root image is built deterministically by the existing
+`tools/fsutil`.  Its userland uses the shared full-rootfs profile in
 `mk/rootfs-userland.mk`: the normal libraries, administrative tools, shells,
 editors, network utilities, diagnostics, manual pages and the existing common
 account/profile/network configuration.  MIPS boards consume that same profile
-and add only their architecture-specific tools.  PCC remains enabled for the
-N64 and MIPS board images, but is deliberately absent from i686.
+and add only their architecture-specific tools.  The i686 userland compiler
+is selected with `USERLAND_COMPILER=gcc` or `USERLAND_COMPILER=pcc`.  With the
+default `I386_ROOTFS_NATIVE_PCC=1`, `/usr/bin/cc`, `/usr/bin/pcc`, the target
+compiler passes and the common PCC smoke workload are installed in the image.
 
 The embedded root filesystem is read-only by policy during bring-up.  As on
 Ci20 and N64, `/var` is a writable UFS filesystem created at boot on the
@@ -162,10 +171,12 @@ For diagnostics, `ata=pio` forces the fallback path and `ata=dma` requires
 DMA attachment.  These are selections of the same driver, not separate
 compatibility implementations.
 
-`rebsd-i686.bzimg` is the only installation artifact produced by the default
-build and the only image copied to target machines.  The separate raw-floppy
-target is retained solely as an explicitly requested loader regression; it is
-not part of `all` and is not a release or hardware-gate artifact.
+`rebsd-i686.bzimg` is the only installation artifact and the only image copied
+to target machines.  The historical 1.44 MiB raw-floppy artifact, native CHS
+loader and its QEMU targets were removed after the embedded image grew to
+25.5 MiB.  The sole physical legacy-BIOS boot contract is GRUB Legacy loading
+the standard Linux/x86-protocol image; no replacement image format or boot
+source is implied.
 
 ## Architecture boundary
 
@@ -174,6 +185,12 @@ IDT/PIC/PIT, TSS/context frames, COM1/VGA primitives, i8042 port and IRQ
 transport, PCI configuration mechanism 1 and resource/INTx mapping, legacy
 ATA compatibility-port and IRQ14 attachment, USB
 host-controller attachment and the `int 0x80` register adapter.
+
+Early CPUID qualification rejects processors below family 6 or without CMOV
+and CX8, matching the actual `-march=i686` code-generation contract.  The
+vendor, family, model and stepping are printed before normal machine startup.
+The optional `I386_SSE=1` mode additionally requires FXSR and SSE before it
+selects the separately tested FXSAVE context format.
 
 All policy and reusable subsystems remain in common code: VM, scheduler,
 process lifecycle, exec, signal policy, syscall handlers, console/TTY,
@@ -194,7 +211,28 @@ and early paging maps the complete kernel rather than assuming a 4 MiB image.
 User physical pages are still demand allocated; the virtual-address boundary
 does not reserve 32 MiB of RAM per process.
 
-PCC is not part of the i686 build and must not be changed.
+The character-device ABI preserves console major 0, memory major 1, mouse
+major 2, raw disk major 4 and block disk major 3.  `/dev/tty` is appended at
+character major 5; common PTY slaves use major 8 and masters major 9, with
+four configured units.  AF_UNIX is the common `uipc_usrreq` implementation;
+there is no i386-private terminal or socket subsystem.
+
+`trap-smoke` selects three deterministic boot diagnostics on the production
+IDT: divide error, general protection and CR0.WP page fault.  Each must reach
+the normal exception report and panic path.  `stability-smoke` combines
+repeated fork/exec and filesystem activity, VM pattern pressure, IDE DMA, USB
+mass-storage reads, PS/2 keyboard/mouse activity and loopback traffic in one
+bounded QEMU run.
+
+Shutdown enters the common filesystem synchronization path before the MD
+terminal action.  The current legacy hardware boundary implements an
+interrupt-disabled HLT loop.  No reset-port or firmware poweroff mechanism is
+selected by the established port yet, so reboot and poweroff remain explicitly
+unsupported instead of being emulated by an i386 workaround.
+
+ACPI, Local/I/O APIC, SMP, MSI, HPET/TSC policy, UEFI, PAE/highmem, AHCI,
+NVMe and xHCI are outside this legacy target.  Their ownership and common MD
+contracts require a separate design audit after physical-hardware results.
 
 ## IBM 6563-W4G hardware gate
 

@@ -1,5 +1,18 @@
 # План портирования ReBSD на i686/BIOS
 
+Примечание 2026-08-10: это хронологический журнал bring-up, поэтому ранние
+формулировки про GCC-only, отсутствующие process calls и «следующий
+инкремент» ниже не являются текущим списком работ.  Актуальная граница и
+приёмка legacy-порта находятся в `docs/I686_LEGACY_PORT_TODO.md` и
+`sys/i386/README.md`.  Текущий kernel собирается GCC, userland — GCC или PCC,
+а default rootfs содержит native PCC.  Общие PTY, `/dev/tty` и AF_UNIX
+подключены; CPUID и production trap gates восстановлены.  ACPI/APIC/SMP и
+аппаратные механизмы reset/poweroff остаются явно неподдерживаемыми до
+отдельного аудита после проверок на физическом железе.  Исторический raw-floppy/native
+CHS loader и его `bios-*` QEMU gates удалены 2026-08-10 с явным одобрением:
+штатный `rebsd-i686.bzimg` вырос до 25.5 MiB и загружается на физическом BIOS
+PC исключительно существующим GRUB Legacy.
+
 Статус: IBM 6563-W4G hardware gate завершён 2026-08-04. Текущий QEMU и
 аппаратный path всегда используют встроенный read-only UFS root через общий
 romdisk major 0 minor 0 и общие VFS/UFS/inode-exec владельцы. IDE публикуется

@@ -66,6 +66,9 @@ int ptsopen(dev_t dev, int flag, int mode)
     register struct tty *tp;
     int error;
 
+    (void)flag;
+    (void)mode;
+
 #ifdef lint
     npty = npty;
 #endif
@@ -92,6 +95,9 @@ int ptsopen(dev_t dev, int flag, int mode)
 int ptsclose(dev_t dev, int flag, int mode)
 {
     register struct tty *tp;
+
+    (void)flag;
+    (void)mode;
 
     tp = &pt_tty[minor(dev)];
     ttyclose(tp);
@@ -197,6 +203,9 @@ int ptcopen(dev_t dev, int flag, int mode)
     register struct tty *tp;
     struct pt_ioctl *pti;
 
+    (void)flag;
+    (void)mode;
+
     if (minor(dev) >= PTY_NUNITS)
         return (ENXIO);
     tp = &pt_tty[minor(dev)];
@@ -214,6 +223,9 @@ int ptcopen(dev_t dev, int flag, int mode)
 int ptcclose(dev_t dev, int flag, int mode)
 {
     register struct tty *tp;
+
+    (void)flag;
+    (void)mode;
 
     tp = &pt_tty[minor(dev)];
     ttymodem(tp, 0);

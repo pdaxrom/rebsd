@@ -5,9 +5,10 @@
 #include <console/vtconsole.h>
 #include <machine/console.h>
 #include <machine/machparam.h>
-#include <sys/reboot.h>
-#include <sys/tty.h>
 #include <sys/types.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
+#include <sys/tty.h>
 
 #define COM1_BASE       0x03f8u
 #define COM_DATA        0u
@@ -228,6 +229,7 @@ void
 boot(dev_t dev, int howto)
 {
     (void)dev;
+    boot_sync_filesystems(howto);
     __asm__ volatile ("cli");
     if ((howto & RB_HALT) == 0)
         i386_early_puts("reboot: unsupported\n");

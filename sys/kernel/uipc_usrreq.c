@@ -33,7 +33,10 @@ ino_t unp_ino;			/* prototype for fake inode numbers */
 extern void unpdisc(), unpgc1();
 extern int fadjust();
 
-#ifdef MIPS
+/*
+ * ReBSD uses the flat-kernel implementations of these historical segmented
+ * kernel adapters on every current architecture.
+ */
 #define SKcall(func, nbytes, ...)	func(__VA_ARGS__)
 #define FPFETCH(fp, fpp)		fpfetch(fp, fpp)
 #define FPFLAGS(fp, set, clear)		fpflags(fp, set, clear)
@@ -42,7 +45,6 @@ extern int fadjust();
 	unpbind(path, len, ipp, unpsock)
 #define UNPCONN(path, len, so2, ipp)	unpconn(path, len, so2, ipp)
 #define UNPDET(ip)			unpdet(ip)
-#endif
 
 /*ARGSUSED*/
 void

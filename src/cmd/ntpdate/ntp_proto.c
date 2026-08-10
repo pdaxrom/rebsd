@@ -59,9 +59,11 @@ ntp_timeval_to_unix_usec(const struct timeval *tv)
 void
 ntp_unix_usec_to_timeval(long long value, struct timeval *tv)
 {
+    struct timeval zero = { 0 };
     long long seconds;
     long remainder;
 
+    *tv = zero;
     seconds = value / USEC_PER_SEC;
     remainder = (long)(value % USEC_PER_SEC);
     if (remainder < 0) {
@@ -70,7 +72,6 @@ ntp_unix_usec_to_timeval(long long value, struct timeval *tv)
     }
     tv->tv_sec = (time_t)seconds;
     tv->tv_usec = remainder;
-    tv->tv_pad = 0;
 }
 
 void

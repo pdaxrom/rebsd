@@ -10,7 +10,6 @@
 #include <machine/layout.h>
 
 extern int boothowto;
-extern int waittime;
 
 extern char _end[];
 extern char _mips_exception_vector[];
@@ -27,6 +26,20 @@ extern char _mips_tlb_refill_vector_end[];
 #define MIPS_VECTOR_INTERRUPT   0x00000200u
 #define MIPS_DCACHE_LINE        32u
 #define MIPS_ICACHE_LINE        32u
+
+#define CI20_TCU_BASE           0xb0002000u
+#define CI20_WDT_TDR            0x00u
+#define CI20_WDT_TCER           0x04u
+#define CI20_WDT_TCNT           0x08u
+#define CI20_WDT_TCSR           0x0cu
+#define CI20_TCU_TSCR           0x3cu
+#define CI20_WDT_TCSR_EXT_EN    (1u << 2)
+#define CI20_WDT_TCSR_DIV4      (1u << 3)
+#define CI20_WDT_CLOCK_STOP     (1u << 16)
+#define CI20_WDT_ENABLE         1u
+#define CI20_WDT_4MS_TICKS      48000u
+
+extern int ci20_rtc_poweroff(void);
 
 static void
 early_puts(const char *s)
@@ -53,6 +66,30 @@ static void
 mips_sync_memory(void)
 {
     asm volatile ("sync" ::: "memory");
+}
+
+static void
+ci20_watchdog_reboot(void)
+{
+    volatile unsigned char *wdt_enable;
+    volatile unsigned short *wdt_count;
+    volatile unsigned short *wdt_data;
+    volatile unsigned short *wdt_status;
+    volatile unsigned *tcu_stop_clear;
+
+    wdt_data = (volatile unsigned short *)(CI20_TCU_BASE + CI20_WDT_TDR);
+    wdt_enable = (volatile unsigned char *)(CI20_TCU_BASE + CI20_WDT_TCER);
+    wdt_count = (volatile unsigned short *)(CI20_TCU_BASE + CI20_WDT_TCNT);
+    wdt_status = (volatile unsigned short *)(CI20_TCU_BASE + CI20_WDT_TCSR);
+    tcu_stop_clear = (volatile unsigned *)(CI20_TCU_BASE + CI20_TCU_TSCR);
+
+    /* Official Ci20 U-Boot contract: 48 MHz EXTAL / 4, reset after 4 ms. */
+    *wdt_status = CI20_WDT_TCSR_DIV4 | CI20_WDT_TCSR_EXT_EN;
+    *wdt_count = 0;
+    *wdt_data = CI20_WDT_4MS_TICKS;
+    *tcu_stop_clear = CI20_WDT_CLOCK_STOP;
+    *wdt_enable = CI20_WDT_ENABLE;
+    mips_sync_memory();
 }
 
 static void
@@ -299,36 +336,22 @@ copyin(caddr_t from, caddr_t to, u_int nbytes)
 void
 boot(dev_t dev, int howto)
 {
-    if ((howto & RB_NOSYNC) == 0 && waittime < 0 && bfreelist[0].b_forw) {
-        struct fs *fp;
-        struct buf *bp;
-        int iter, nbusy;
+    int error;
 
-        fp = getfs(rootdev);
-        if (fp && !fp->fs_ronly)
-            fp->fs_fmod = 1;
-        waittime = 0;
-        printf("syncing disks... ");
-        (void)splnet();
-        sync();
-        for (iter = 0; iter < 20; iter++) {
-            nbusy = 0;
-            for (bp = &buf[NBUF]; --bp >= buf; )
-                if (bp->b_flags & B_BUSY)
-                    nbusy++;
-            if (nbusy == 0)
-                break;
-            printf("%d ", nbusy);
-            udelay(40000L * iter);
-        }
-        printf("done\n");
-    }
+    boot_sync_filesystems(howto);
 
     (void)splhigh();
-    if (howto & RB_HALT)
+    if (howto & RB_POWEROFF) {
+        printf("powering off\n");
+        error = ci20_rtc_poweroff();
+        if (error != 0)
+            printf("poweroff failed, error=%d; halted\n", error);
+    } else if (howto & RB_HALT) {
         printf("halted\n");
-    else
-        printf("reboot requested, halted\n");
+    } else {
+        printf("rebooting\n");
+        ci20_watchdog_reboot();
+    }
     for (;;)
         asm volatile ("wait");
 }

@@ -1,5 +1,23 @@
 # i386 machine-dependent integration audit
 
+Актуализация 2026-08-10: normal legacy-порт использует полный общий kernel,
+а ранние bring-up пункты ниже сохранены как журнал интеграции.  Kconfig
+инвентарь теперь перечисляет все 176 выбранных негенерируемых source-файлов;
+канонический `sys/i386/Makefile` по-прежнему владеет BIOS payload, embedded
+UFS и воспроизводимой userland/PCC сборкой, не создавая второй kernel path.
+
+I386 MD граница дополнена только аппаратными контрактами: ранняя CPUID
+квалификация i686 (family 6+, CMOV, CX8), PIT-backed `udelay`, общий shutdown
+sync перед HLT, и четыре PTY через общие `tty_pty`/`tty_tty`.  `/dev/tty`
+имеет новый major 5, PTY slave/master сохраняют общие majors 8/9.  AF_UNIX
+использует общий `kernel/uipc_usrreq.c`; pathname stream, `socketpair` и
+pathname datagram проверяются в normal QEMU rootfs.
+
+Production exception gate снова покрывает #DE, #GP и CR0.WP #PF через
+обычные IDT/trap/panic владельцы.  ACPI/APIC/SMP и выбор PC reset/poweroff
+механизма не выводятся из QEMU и не входят в этот MD контракт без отдельного
+согласования.
+
 Статус: generic allocator, публичный i386 pmap, vmspace fault path,
 `copyin/copyout/copyinstr`, i386 u-area allocator, kernel context switch,
 fork/init frames, проверяемый ring-3 entry и `int 0x80` register ABI
@@ -95,10 +113,11 @@ i386-копий USB, HID, input или storage code:
   `ehci_softc`, `ohci_softc` и `uhci_softc`;
 - `pc/interrupt.c` предоставляет разделяемую 8259 IRQ registration boundary.
 
-Direct и BIOS QEMU smoke проверяют варианты IDE `sd0` + USB `sd1` и USB
-`sd0` без IDE, OHCI/UHCI attach общих HID boot keyboard/mouse drivers и
-i8042 keyboard/mouse traffic. Во всех случаях root остаётся общим romdisk
-`(0,0)`.
+Linux-protocol QEMU smoke проверяет варианты IDE + USB и USB без IDE,
+OHCI/UHCI attach общих HID boot keyboard/mouse drivers и i8042
+keyboard/mouse traffic. Во всех случаях root остаётся общим romdisk `(0,0)`.
+Физический legacy-BIOS contract использует тот же `rebsd-i686.bzimg` через
+GRUB Legacy; отдельный raw-floppy/native-INT13 path удалён.
 
 ## Console boundary
 
@@ -139,7 +158,9 @@ Machine headers задают только i386 ABI и hardware contracts; общ
 loader получает ELF32, little-endian и `EM_386` из
 `machine/elf_machdep.h`.
 
-PCC не входит в этот список и остаётся нетронутым.
+Kernel остаётся GCC-сборкой.  Userland выбирает GCC либо PCC; default full
+i686 rootfs включает native PCC и общий PCC runtime smoke, как и текущие
+полные MIPS images.
 
 ## Следующий integration gate
 

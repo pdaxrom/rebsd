@@ -21,6 +21,8 @@ service         pc
 service         ether   1
 service         "rtl8169"
 service         inet
+service         pty     4
+service         unixdomain
 service         ehci
 service         ohci
 service         uhci

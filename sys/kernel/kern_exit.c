@@ -4,6 +4,9 @@
  * specifies the terms and conditions for redistribution.
  */
 #include <sys/param.h>
+#include <sys/buf.h>
+#include <sys/fs.h>
+#include <sys/reboot.h>
 #include <sys/systm.h>
 #include <sys/map.h>
 #include <sys/user.h>
@@ -14,6 +17,43 @@
 #include <sys/wait.h>
 #include <sys/kernel.h>
 #include <vm/vmspace.h>
+
+extern int waittime;
+
+/*
+ * Complete the machine-independent part of boot(9).  The terminal hardware
+ * action remains the responsibility of the MD boot() implementation.
+ */
+void
+boot_sync_filesystems(int howto)
+{
+    struct fs *fp;
+    struct buf *bp;
+    int iter, nbusy;
+
+    if ((howto & RB_NOSYNC) != 0 || waittime >= 0 ||
+        bfreelist[0].b_forw == 0)
+        return;
+
+    fp = getfs(rootdev);
+    if (fp && !fp->fs_ronly)
+        fp->fs_fmod = 1;
+    waittime = 0;
+    printf("syncing disks... ");
+    (void)splnet();
+    sync();
+    for (iter = 0; iter < 20; iter++) {
+        nbusy = 0;
+        for (bp = &buf[NBUF]; --bp >= buf; )
+            if (bp->b_flags & B_BUSY)
+                nbusy++;
+        if (nbusy == 0)
+            break;
+        printf("%d ", nbusy);
+        udelay(40000L * iter);
+    }
+    printf("done\n");
+}
 
 /*
  * Notify parent that vfork child is finished with parent's data.  Called

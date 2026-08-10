@@ -1,4 +1,5 @@
 #include "boot.h"
+#include "cpu.h"
 #include "fpu.h"
 #include "interrupt.h"
 #include "memory.h"
@@ -66,6 +67,29 @@ i386_boot_command_line(void)
     return i386_boot_command_line_saved;
 }
 
+int
+i386_boot_command_has(const char *token)
+{
+    const char *command;
+    const char *wanted;
+
+    command = i386_boot_command_line_saved;
+    while (*command != '\0') {
+        while (*command == ' ')
+            ++command;
+        wanted = token;
+        while (*wanted != '\0' && *command == *wanted) {
+            ++command;
+            ++wanted;
+        }
+        if (*wanted == '\0' && (*command == '\0' || *command == ' '))
+            return 1;
+        while (*command != '\0' && *command != ' ')
+            ++command;
+    }
+    return 0;
+}
+
 static void
 i386_boot_fatal(const char *message)
 {
@@ -78,20 +102,25 @@ i386_boot_fatal(const char *message)
 void
 startup(void)
 {
+    const struct i386_cpu_info *cpu;
+
     i386_early_console_init();
     i386_boot_save_command_line();
     i386_early_puts("REBSD_I686_BOOT\n");
-    i386_early_puts("cpu: i686\n");
+    if (i386_cpu_init() != 0)
+        i386_boot_fatal("cpu: unsupported (need i686 CMOV/CX8)");
+    cpu = i386_cpu_info();
+    i386_early_puts("cpu: i686 vendor=");
+    i386_early_puts(cpu->ci_vendor);
+    i386_early_puts(" family=");
+    i386_early_put_hex32(cpu->ci_family);
+    i386_early_puts(" model=");
+    i386_early_put_hex32(cpu->ci_model);
+    i386_early_puts(" stepping=");
+    i386_early_put_hex32(cpu->ci_stepping);
+    i386_early_putc('\n');
     i386_early_puts("boot: linux-x86-2.02\n");
-    if (i386_boot_byte(I386_BOOT_PARAMS_LOADER_TYPE) ==
-        I386_BOOT_LOADER_BIOS &&
-        i386_boot_byte(I386_BOOT_PARAMS_EXT_LOADER_VER) ==
-        I386_BOOT_LOADER_BIOS_VER &&
-        i386_boot_byte(I386_BOOT_PARAMS_EXT_LOADER_TYPE) ==
-        I386_BOOT_LOADER_BIOS_EXT)
-        i386_early_puts("boot-loader: bios-int13\n");
-    else
-        i386_early_puts("boot-loader: linux-protocol\n");
+    i386_early_puts("boot-loader: linux-protocol\n");
 
     if (i386_boot_byte(I386_BOOT_PARAMS_E820_COUNT) == 0)
         i386_boot_fatal("memory-map: failed");
@@ -121,6 +150,23 @@ startup(void)
     i386_memory_handoff();
     i386_early_puts("memory-normalized: ok\n");
     i386_early_puts("paging: on\n");
+
+    if (i386_boot_command_has("rebsd.trap=divide")) {
+        __asm__ volatile (
+            "movl $1, %%eax\n"
+            "xorl %%edx, %%edx\n"
+            "xorl %%ecx, %%ecx\n"
+            "divl %%ecx"
+            : : : "eax", "ecx", "edx", "cc");
+    }
+    if (i386_boot_command_has("rebsd.trap=gp")) {
+        __asm__ volatile (
+            "movw $0xffff, %%ax\n"
+            "movw %%ax, %%ds"
+            : : : "eax", "memory");
+    }
+    if (i386_boot_command_has("rebsd.trap=page"))
+        i386_paging_page_fault_selftest();
 
     if (i386_syscall_install_production() != 0)
         i386_boot_fatal("syscall-production: failed");

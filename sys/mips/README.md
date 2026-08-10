@@ -72,6 +72,28 @@ under `sys/rtc` and are reusable by other boards.  A successful
 `settimeofday` writes every writable attached RTC so the primary and fallback
 remain synchronized.
 
+## Ci20 shutdown contract
+
+Ci20 uses the common `boot_sync_filesystems()` phase before every terminal
+action.  Plain `halt` then disables interrupts and remains in the intentional
+XBurst `WAIT` loop.  Plain `reboot` programs the JZ4780 watchdog with the
+same 48 MHz EXTAL, divide-by-four and 4 ms sequence used by the official
+Ci20 U-Boot, returning the whole SoC to U-Boot rather than resetting only
+the selected CPU core.
+
+`poweroff` uses the JZ4780 RTC hibernate controller through the common
+`sys/rtc/jz4780.c` owner.  It requires the Ci20 32768 Hz RTC input, programs
+the established 100 ms active-low wake-button filter and minimum 62.5 ms
+hibernate-reset interval, then asserts `HCR.PD` so the SoC `PWRON` output
+switches off main board power.  A write/clock qualification failure is
+reported and falls back to the terminal halt loop; it must not silently arm
+the watchdog instead.
+
+Software build and fake-register gates cover the write ordering.  Physical
+acceptance still requires UART captures of `halt`, `reboot` returning through
+U-Boot, `poweroff`, and wake through the Ci20 `WKUP_N` button, with persistent
+filesystem and RTC state checked after each transition.
+
 ## Minimal rootfs regression matrix
 
 Every filesystem image is checked for the boot-critical files (`init`, `sh`,

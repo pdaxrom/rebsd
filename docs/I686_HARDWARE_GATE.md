@@ -3,7 +3,9 @@
 ## Current acceptance status
 
 The IBM 6563-W4G hardware gate was completed on 2026-08-04 with the normal
-`rebsd-i686.bzimg` artifact.  The verified configuration uses the embedded
+`rebsd-i686.bzimg` artifact.  That result is the historical baseline; the
+`finish_legacy_port` image still requires the repeat recorded in
+`docs/I686_LEGACY_PORT_TODO.md`.  The verified configuration uses the embedded
 read-only UFS root, writable IDE `wd0`/`rwd0`, USB mass-storage `sd0`/`rsd0`,
 writable `/var` on `/dev/ram0`, and `lo0` independently of physical Ethernet.
 
@@ -39,11 +41,11 @@ partition `(hd0,2)`.
 участвуют в выборе root. На IBM это пока повторять не требуется. QEMU EHCI
 USB Mass Storage уже подключён через существующие USB core/`umass`/generic
 disk владельцы на major 2: с IDE он получает `sd1`, без IDE — `sd0`.
-Общие OHCI и `ukbd` подключены отдельными direct/BIOS QEMU gates для
-HID устройств на платах с OHCI controller. Общий UHCI HCD теперь проходит
-direct/BIOS QEMU с PIIX3 boot keyboard, boot mouse и mass storage, включая
-режим без IDE; host fake-I/O gate отдельно проверяет low-speed TD flags.
-i8042 keyboard/mouse также проходят direct/BIOS QEMU с реальными IRQ1/IRQ12.
+Общие OHCI и `ukbd` подключены Linux-protocol QEMU gates для HID устройств
+на платах с OHCI controller. Общий UHCI HCD проходит QEMU с PIIX3 boot
+keyboard, boot mouse и mass storage, включая режим без IDE; host fake-I/O
+gate отдельно проверяет low-speed TD flags. i8042 keyboard/mouse также
+проходят QEMU с реальными IRQ1/IRQ12.
 Следующий input gate уже требует реальный i8042 и VIA USB IBM; storage gate
 остаётся отдельной read-only проверкой. Как на Ci20 и N64, writable `/var`
 создаётся при каждой загрузке как UFS на общем RAM block driver; i686

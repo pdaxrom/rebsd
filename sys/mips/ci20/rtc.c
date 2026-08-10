@@ -45,6 +45,12 @@ static const struct jz4780_rtc_io ci20_rtc_io = {
     ci20_rtc_delay,
 };
 
+int
+ci20_rtc_poweroff(void)
+{
+    return jz4780_rtc_poweroff(&ci20_internal_rtc);
+}
+
 void
 ci20_rtcattach(int unit)
 {

@@ -62,6 +62,10 @@ CORE_MARKERS = (
     "REBSD_I686_NETSTAT_OK",
     "REBSD_I686_LOOPBACK_OK",
     "REBSD_I686_TIME64_2040",
+    "REBSD_I686_DEVTTY_OK",
+    "REBSD_I686_PTY_OK",
+    "unixdomain socket smoke ok",
+    "REBSD_I686_UNIXDOMAIN_OK",
     "FIFO_SMOKE_PASS",
     "REBSD_I686_TELINIT_Q_OK",
     "REBSD_I686_CHKCONFIG_OK",
@@ -77,6 +81,34 @@ FORBIDDEN_MARKERS = (
     "PANIC:",
     "panic:",
 )
+
+EXCEPTION_MARKERS = {
+    "divide": (
+        "REBSD_I686_BOOT",
+        "cpu: i686",
+        "interrupts: idt,pic ready",
+        "paging: on",
+        "exception: vector=0x00000000 error=0x00000000",
+        "PANIC: cpu exception",
+    ),
+    "gp": (
+        "REBSD_I686_BOOT",
+        "cpu: i686",
+        "interrupts: idt,pic ready",
+        "paging: on",
+        "exception: vector=0x0000000d error=",
+        "PANIC: cpu exception",
+    ),
+    "page": (
+        "REBSD_I686_BOOT",
+        "cpu: i686",
+        "interrupts: idt,pic ready",
+        "paging: on",
+        "exception: vector=0x0000000e error=0x00000003",
+        " cr2=",
+        "PANIC: cpu exception",
+    ),
+}
 
 IDE_COMMON_MARKERS = (
     "ide-primary-master: ata",
@@ -218,9 +250,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--machine", required=True)
     parser.add_argument("--cpu", required=True)
     parser.add_argument("--memory", default="64M")
-    image = parser.add_mutually_exclusive_group(required=True)
-    image.add_argument("--kernel", type=pathlib.Path)
-    image.add_argument("--bios-image", type=pathlib.Path)
+    parser.add_argument("--kernel", required=True, type=pathlib.Path)
     parser.add_argument("--disk", type=pathlib.Path)
     parser.add_argument("--fat-mount-smoke", action="store_true")
     parser.add_argument("--expect-fat-limited", action="store_true")
@@ -240,6 +270,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ps2-keyboard", action="store_true")
     parser.add_argument("--ps2-mouse", action="store_true")
     parser.add_argument("--halt-smoke", action="store_true")
+    parser.add_argument("--stability-smoke", action="store_true")
+    parser.add_argument("--expect-exception", choices=tuple(EXCEPTION_MARKERS))
     parser.add_argument("--pcc-smoke", action="store_true")
     parser.add_argument("--pcc-ccom-stress-count", type=int, default=100)
     parser.add_argument("--expect-no-disk", action="store_true")
@@ -258,8 +290,6 @@ def parse_args() -> argparse.Namespace:
         parser.error("--ide-write-smoke requires --disk")
     if args.swap_smoke and args.disk is None:
         parser.error("--swap-smoke requires --disk")
-    if args.bios_image is not None and args.ata_mode != "auto":
-        parser.error("forced ATA modes require direct --kernel boot")
     if sum(
         (
             args.uhci_keyboard,
@@ -272,6 +302,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("only one USB mass-storage device is supported")
     if args.pcc_ccom_stress_count < 1:
         parser.error("--pcc-ccom-stress-count must be positive")
+    if args.stability_smoke and (
+        args.disk is None or args.usb_disk is None
+    ):
+        parser.error("--stability-smoke requires --disk and --usb-disk")
     return args
 
 
@@ -303,22 +337,14 @@ def qemu_command(
         "-nic",
         "none",
     ]
-    if args.kernel is not None:
-        command.extend(["-kernel", str(args.kernel)])
-        if args.ata_mode != "auto":
-            command.extend(["-append", f"ata={args.ata_mode}"])
-    else:
-        command.extend(
-            [
-                "-drive",
-                (
-                    f"file={args.bios_image},format=raw,if=floppy,index=0,"
-                    "readonly=on"
-                ),
-                "-boot",
-                "order=a",
-            ]
-        )
+    command.extend(["-kernel", str(args.kernel)])
+    append = []
+    if args.ata_mode != "auto":
+        append.append(f"ata={args.ata_mode}")
+    if args.expect_exception:
+        append.append(f"rebsd.trap={args.expect_exception}")
+    if append:
+        command.extend(["-append", " ".join(append)])
     if args.disk is not None:
         command.extend(
             [
@@ -383,11 +409,9 @@ def qemu_command(
 
 
 def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
-    markers = CORE_MARKERS + (
-        "boot-loader: bios-int13"
-        if args.bios_image is not None
-        else "boot-loader: linux-protocol",
-    )
+    if args.expect_exception:
+        return EXCEPTION_MARKERS[args.expect_exception]
+    markers = CORE_MARKERS + ("boot-loader: linux-protocol",)
     if args.disk is None:
         markers += ("ide-primary-master: none",)
     else:
@@ -435,7 +459,11 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
             markers += ("fat0: FAT16",)
     if args.usb_disk is not None:
         markers += USB_MASS_STORAGE_MARKERS
-        markers += ("sd0: 32768 512-byte sectors (16384 KB), removable",)
+        usb_bytes = args.usb_disk.stat().st_size
+        markers += (
+            f"sd0: {usb_bytes // 512} 512-byte sectors "
+            f"({usb_bytes // 1024} KB), removable",
+        )
     if args.ohci_keyboard:
         markers += OHCI_KEYBOARD_MARKERS
     if args.ohci_mouse:
@@ -446,7 +474,11 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         markers += UHCI_MOUSE_MARKERS
     if args.uhci_disk is not None:
         markers += UHCI_MASS_STORAGE_MARKERS
-        markers += ("sd0: 32768 512-byte sectors (16384 KB), removable",)
+        usb_bytes = args.uhci_disk.stat().st_size
+        markers += (
+            f"sd0: {usb_bytes // 512} 512-byte sectors "
+            f"({usb_bytes // 1024} KB), removable",
+        )
     if (
         args.usb_disk is not None
         or args.ohci_keyboard
@@ -458,6 +490,18 @@ def expected_markers(args: argparse.Namespace) -> tuple[str, ...]:
         markers += ("Bus 001 Device 001: ID ",)
     if args.pcc_smoke:
         markers += ("native pcc smoke ok", "PCC_SMOKE_ALL_OK")
+    if args.halt_smoke:
+        markers += ("syncing disks... done", "halted")
+    if args.ps2_mouse:
+        markers += ("mouse0: input active",)
+    if args.stability_smoke:
+        markers += (
+            "runtime-stress: sweep ok",
+            "VM_PRESSURE_OK",
+            "REBSD_I686_STABILITY_USB_IO_OK",
+            "REBSD_I686_STABILITY_NET_OK",
+            "REBSD_I686_STABILITY_OK",
+        )
     return markers
 
 
@@ -604,6 +648,21 @@ def main() -> None:
             b"\r\nREBSD_I686_LOOPBACK_OK\r\n",
         ),
         (
+            b"/bin/echo REBSD_I686_DEVTTY_OK >/dev/tty\n",
+            b"\r\nREBSD_I686_DEVTTY_OK\r\n",
+        ),
+        (
+            b"/usr/bin/ptytest 0 && /usr/bin/ptytest 3 && "
+            b"echo REBSD_I686_PTY_OK\n",
+            b"\r\nREBSD_I686_PTY_OK\r\n",
+        ),
+        (
+            b"/root/unixdomain-smoke && "
+            b"echo REBSD_I686_UNIXDOMAIN_OK\n",
+            b"\r\nunixdomain socket smoke ok\r\n"
+            b"REBSD_I686_UNIXDOMAIN_OK\r\n",
+        ),
+        (
             b"/usr/bin/fifo-smoke basic && echo FIFO_BASIC_PASS\n",
             b"\r\nFIFO_BASIC_PASS\r\n",
         ),
@@ -643,6 +702,33 @@ def main() -> None:
                     "/root/pcc-smoke-all.sh\n"
                 ).encode("ascii"),
                 b"\r\nPCC_SMOKE_ALL_OK\r\n",
+            ),
+        )
+    if args.stability_smoke:
+        commands += (
+            (
+                b"/root/runtime-stress.sh quick && "
+                b"echo REBSD_I686_STABILITY_PROCESS_OK\n",
+                b"\r\nREBSD_I686_STABILITY_PROCESS_OK\r\n",
+            ),
+            (
+                b"/usr/bin/vm-pressure-smoke -r -p 1536 -n 3 && "
+                b"echo REBSD_I686_STABILITY_VM_OK\n",
+                b"\r\nREBSD_I686_STABILITY_VM_OK\r\n",
+            ),
+            (
+                b"/bin/dd if=/dev/rsd0 of=/dev/null bs=512 count=128 && "
+                b"echo REBSD_I686_STABILITY_USB_IO_OK\n",
+                b"\r\nREBSD_I686_STABILITY_USB_IO_OK\r\n",
+            ),
+            (
+                b"/usr/bin/ping -n -c 8 127.0.0.1 && "
+                b"echo REBSD_I686_STABILITY_NET_OK\n",
+                b"\r\nREBSD_I686_STABILITY_NET_OK\r\n",
+            ),
+            (
+                b"/bin/sync && echo REBSD_I686_STABILITY_OK\n",
+                b"\r\nREBSD_I686_STABILITY_OK\r\n",
             ),
         )
     if args.disk is not None:
@@ -784,6 +870,13 @@ def main() -> None:
             chunk = os.read(process.stdout.fileno(), 4096)
             if chunk:
                 output_bytes.extend(chunk)
+        if args.expect_exception:
+            if b"PANIC: cpu exception\r\n" in output_bytes:
+                completed = True
+                break
+            if process.poll() is not None:
+                break
+            continue
         if not login_sent and b"login: " in output_bytes:
             if args.ps2_keyboard:
                 assert monitor is not None
@@ -916,12 +1009,18 @@ def main() -> None:
         raise SystemExit(
             "qemu-boot-smoke: missing serial markers: " + ", ".join(missing)
         )
-    forbidden = [marker for marker in FORBIDDEN_MARKERS if marker in output]
+    forbidden = [
+        marker for marker in FORBIDDEN_MARKERS
+        if marker in output and not args.expect_exception
+    ]
     if forbidden:
         raise SystemExit(
             "qemu-boot-smoke: forbidden serial markers: "
             + ", ".join(forbidden)
         )
+    if args.expect_exception:
+        print("qemu-boot-smoke: ok")
+        return
     if args.halt_smoke:
         halt_output = output_bytes[halt_output_start:].decode(
             "utf-8", errors="replace"
