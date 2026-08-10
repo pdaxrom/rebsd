@@ -42,8 +42,7 @@ current users.
 - Every common-kernel change made by a port must be checked by that port's
   gates and by existing architectures' builds or tests appropriate to the
   change.
-- Keep PCC enabled for N64 and the other MIPS boards.  Do not enable or add
-  PCC to the i686 port; i686 uses its GCC toolchain.
+- Keep PCC enabled for N64 and the other MIPS boards.
 
 ## No-workaround gate
 
