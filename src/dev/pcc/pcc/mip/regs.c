@@ -132,7 +132,9 @@ typedef struct regw {
 	int r_nclass[NUMCLASS+1];	/* count of adjacent classes */
 	struct regw *r_alias;		/* aliased temporary */
 	int r_color;		/* final node color */
-	int r_spillreg;		/* base register for an existing spill slot */
+#ifdef TARGET_SEPARATE_SPILL_BASE
+	int r_spillbase;		/* base register for an existing spill slot */
+#endif
 	struct regw *r_onlist;	/* which work list this node belongs to */
 	MOVL *r_moveList;	/* moves associated with this node */
 	int nodnum;		/* Human-readable node number */
@@ -2816,13 +2818,32 @@ longtemp(NODE *p, void *arg)
 #ifdef MYLONGTEMP
 		MYLONGTEMP(p, w);
 #endif
-		if (w->r_spillreg == 0) {
+#ifdef TARGET_SEPARATE_SPILL_BASE
+		if (w->r_spillbase == 0) {
 			before = p2maxautooff;
 			w->r_color = freetemp(szty(p->n_type));
 			optstats_note_spill_slot((unsigned)(p2maxautooff - before));
-			w->r_spillreg = FPREG; /* XXX - assumption? */
+			w->r_spillbase = FPREG; /* XXX - assumption? */
 		}
-		storemod(p, w->r_color, w->r_spillreg);
+		storemod(p, w->r_color, w->r_spillbase);
+#else
+		/*
+		 * r_class normally holds the register class.  During leaf
+		 * rewriting it is reused as the base register for an existing
+		 * stack slot (see temparg()).  Do not treat a raw class value as
+		 * a base register; otherwise CLASSA becomes register 1, which is
+		 * $at on MIPS.
+		 */
+		if (w->r_class >= CLASSA && w->r_class <= CLASSG)
+			w->r_class = 0;
+		if (w->r_class == 0) {
+			before = p2maxautooff;
+			w->r_color = freetemp(szty(p->n_type));
+			optstats_note_spill_slot((unsigned)(p2maxautooff - before));
+			w->r_class = FPREG; /* XXX - assumption? */
+		}
+		storemod(p, w->r_color, w->r_class);
+#endif
 		break;
 	}
 }
@@ -3244,8 +3265,13 @@ temparg(struct interpass *ipole, REGW *w)
  *
  * Be careful to not destroy the basic block structure in the first scan.
  */
+#ifdef TARGET_REGALLOC_SINGLE_REMAT_PASS
 static int
 RewriteProgram(struct interpass *ip, int allow_remat, int *did_remat)
+#else
+static int
+RewriteProgram(struct interpass *ip)
+#endif
 {
 	REGW shortregs, longregs, saveregs, *next, *q;
 	REGW *w;
@@ -3289,8 +3315,12 @@ RewriteProgram(struct interpass *ip, int allow_remat, int *did_remat)
 #endif
 	rwtyp = 0;
 	remat_done = 0;
+#ifdef TARGET_REGALLOC_SINGLE_REMAT_PASS
 	for (w = DLIST_NEXT(&longregs, link);
 	    allow_remat && w != &longregs; w = next) {
+#else
+	for (w = DLIST_NEXT(&longregs, link); w != &longregs; w = next) {
+#endif
 		next = DLIST_NEXT(w, link);
 		si = &sblock[w - nblock];
 		if ((si->flags & SPILL_REMATERIALIZABLE) == 0 ||
@@ -3298,7 +3328,9 @@ RewriteProgram(struct interpass *ip, int allow_remat, int *did_remat)
 			continue;
 		DLIST_REMOVE(w, link);
 		remat_done = 1;
+#ifdef TARGET_REGALLOC_SINGLE_REMAT_PASS
 		*did_remat = 1;
+#endif
 		optstats_note_rematerialized();
 	}
 
@@ -3311,7 +3343,11 @@ RewriteProgram(struct interpass *ip, int allow_remat, int *did_remat)
 	}
 	if (!DLIST_ISEMPTY(&longregs, link)) {
 		DLIST_FOREACH(w, &longregs, link) {
-			w->r_spillreg = xtemps ? temparg(ip, w) : 0;
+#ifdef TARGET_SEPARATE_SPILL_BASE
+			w->r_spillbase = xtemps ? temparg(ip, w) : 0;
+#else
+			w->r_class = xtemps ? temparg(ip, w) : 0;
+#endif
 		}
 		leafrewrite(ip, &longregs);
 		if (!remat_done)
@@ -3396,7 +3432,10 @@ ngenregs(struct p2env *p2e)
 	int i, j, tbits;
 	int uu[NPERMREG] = { -1 };
 	int xnsavregs[NPERMREG];
-	int beenhere = 0, did_remat, remat_used = 0;
+	int beenhere = 0;
+#ifdef TARGET_REGALLOC_SINGLE_REMAT_PASS
+	int did_remat, remat_used = 0;
+#endif
 	TWORD type;
 
 	DLIST_INIT(&lunused, link);
@@ -3555,13 +3594,19 @@ onlyperm: /* XXX - should not have to redo all */
 	RPRINTIP(ipole);
 
 	if (!WLISTEMPTY(spilledNodes)) {
+#ifdef TARGET_REGALLOC_SINGLE_REMAT_PASS
 		did_remat = 0;
 		switch (RewriteProgram(ipole, remat_used == 0, &did_remat)) {
+#else
+		switch (RewriteProgram(ipole)) {
+#endif
 		case ONLYPERM:
 			goto onlyperm;
 		case SMALL:
+#ifdef TARGET_REGALLOC_SINGLE_REMAT_PASS
 			if (did_remat)
 				remat_used = 1;
+#endif
 			optimize(p2e);
 			if (beenhere++ == MAXLOOP)
 				comperr("cannot color graph - COLORMAP() bug?");

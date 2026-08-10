@@ -148,6 +148,13 @@ typedef long long OFFSZ;
 
 /* Definitions mostly used in pass2 */
 
+#if defined(os_rebsd)
+#define TARGET_REGALLOC_SINGLE_REMAT_PASS 1
+#define TARGET_DELTEMP_PRESERVE_ADDRESS_TYPE 1
+/* i386 register-class IDs overlap the machine register number namespace. */
+#define TARGET_SEPARATE_SPILL_BASE 1
+#endif
+
 #define BYTEOFF(x)	((x)&03)
 #define wdal(k)		(BYTEOFF(k)==0)
 

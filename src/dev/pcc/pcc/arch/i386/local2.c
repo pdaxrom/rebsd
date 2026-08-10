@@ -1152,6 +1152,11 @@ mycanon(NODE *p)
 }
 
 void
+myoptim_pre(struct interpass *ip)
+{
+}
+
+void
 myoptim(struct interpass *ip)
 {
 }
@@ -1550,4 +1555,3 @@ int xasmconstregs(char *s)
 			return xcr[i].num;
 	return -1;
 }
-

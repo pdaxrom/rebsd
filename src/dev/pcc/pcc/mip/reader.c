@@ -765,15 +765,11 @@ pass2_compile(struct interpass *ip)
 
 	fixxasm(p2e); /* setup for extended asm */
 
-#ifdef TARGET_HAS_MYOPTIM_PRE
 	myoptim_pre(&p2e->ipole);
-#endif
 	p2regalloc_done = 0;
 	optimize(p2e);
 	optstats_capture_cfg(p2e);
-#ifdef TARGET_HAS_MYOPTIM_PRE
 	myoptim_pre(&p2e->ipole);
-#endif
 	ngenregs(p2e);
 	p2regalloc_done = 1;
 	myoptim(&p2e->ipole);
@@ -1495,7 +1491,9 @@ deltemp(NODE *p, void *arg)
 {
 	int (*aor)[2] = arg;
 	NODE *l;
+#ifdef TARGET_DELTEMP_PRESERVE_ADDRESS_TYPE
 	TWORD t;
+#endif
 
 	if (p->n_op == TEMP) {
 		if (aor[regno(p)][0] == 0) {
@@ -1509,18 +1507,21 @@ deltemp(NODE *p, void *arg)
 		p->n_op = PLUS;
 		l = p->n_left;
 		l->n_op = REG;
-		/*
-		 * Keep the type of the address expression.  The backing OREG may
-		 * use a scalar storage type after TEMP lowering, which must not
-		 * turn (for example) a pointer-to-structure into unsigned *.
-		 */
+#ifdef TARGET_DELTEMP_PRESERVE_ADDRESS_TYPE
 		l->n_type = p->n_type;
+#else
+		l->n_type = INCREF(l->n_type);
+#endif
 		p->n_right = mklnode(ICON, getlval(l), 0, INT);
 	} else if (p->n_op == ADDROF && p->n_left->n_op == UMUL) {
+#ifdef TARGET_DELTEMP_PRESERVE_ADDRESS_TYPE
 		t = p->n_type;
+#endif
 		l = p->n_left;
 		*p = *p->n_left->n_left;
+#ifdef TARGET_DELTEMP_PRESERVE_ADDRESS_TYPE
 		p->n_type = t;
+#endif
 		nfree(l->n_left);
 		nfree(l);
 	}
